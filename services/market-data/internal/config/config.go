@@ -1,0 +1,374 @@
+package config
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type ProviderSettings struct {
+	Enabled   bool `json:"enabled"`
+	Quote     bool `json:"quote"`
+	DailyBars bool `json:"daily_bars"`
+}
+
+type Config struct {
+	HTTPAddr                string
+	APIKey                  string
+	RequestTimeout          time.Duration
+	ProviderTimeout         time.Duration
+	ProviderRetries         int
+	CircuitFailureThreshold int
+	CircuitCooldown         time.Duration
+	QuoteCacheTTL           time.Duration
+	BarsCacheTTL            time.Duration
+	DefaultDailyBars        int
+	MaxDailyBars            int
+	Adjustment              string
+	ProviderPriority        []string
+	ProviderSettings        map[string]ProviderSettings
+	ProvidersConfigPath     string
+	EastmoneyQuoteURL       string
+	EastmoneyKlineURL       string
+	TencentQuoteURL         string
+	TencentKlineURL         string
+	TencentNoneKlineURL     string
+	QuoteRetention          time.Duration
+	RedisAddr               string
+	RedisUsername           string
+	RedisPassword           string
+	RedisDB                 int
+	MySQLDSN                string
+	AutoMigrate             bool
+	AllowNoStorage          bool
+}
+
+type providerFile struct {
+	ProviderPriority []string                    `json:"provider_priority"`
+	AdjustmentBasis  string                      `json:"adjustment_basis"`
+	Providers        map[string]ProviderSettings `json:"providers"`
+}
+
+func Load() (Config, error) {
+	if err := validateEnvironment(); err != nil {
+		return Config{}, err
+	}
+	defaults := providerFile{
+		ProviderPriority: []string{"eastmoney", "tencent"},
+		AdjustmentBasis:  "forward_adjusted",
+		Providers: map[string]ProviderSettings{
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true},
+			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
+		},
+	}
+	file := defaults
+	explicitConfigPath := strings.TrimSpace(os.Getenv("MARKET_DATA_PROVIDERS_CONFIG")) != ""
+	configPath := get("MARKET_DATA_PROVIDERS_CONFIG", "configs/providers.json")
+	if raw, err := os.ReadFile(configPath); err == nil {
+		var supplied providerFile
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&supplied); err != nil {
+			return Config{}, fmt.Errorf("parse providers config %s: %w", configPath, err)
+		}
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
+		}
+		for name := range supplied.Providers {
+			if name != "eastmoney" && name != "tencent" {
+				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
+			}
+		}
+		if len(supplied.ProviderPriority) > 0 {
+			file.ProviderPriority = supplied.ProviderPriority
+		}
+		if strings.TrimSpace(supplied.AdjustmentBasis) != "" {
+			file.AdjustmentBasis = supplied.AdjustmentBasis
+		}
+		for name, settings := range supplied.Providers {
+			file.Providers[name] = settings
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Config{}, fmt.Errorf("read providers config %s: %w", configPath, err)
+	} else if explicitConfigPath {
+		return Config{}, fmt.Errorf("MARKET_DATA_PROVIDERS_CONFIG was explicitly set to %q but the file does not exist", configPath)
+	}
+
+	priority := file.ProviderPriority
+	if v := strings.TrimSpace(os.Getenv("MARKET_DATA_PROVIDER_PRIORITY")); v != "" {
+		priority = splitList(v)
+	}
+	settings := make(map[string]ProviderSettings, len(file.Providers))
+	for name, value := range file.Providers {
+		settings[name] = value
+	}
+	settings["eastmoney"] = overrideProvider("EASTMONEY", settings["eastmoney"])
+	settings["tencent"] = overrideProvider("TENCENT", settings["tencent"])
+
+	cfg := Config{
+		HTTPAddr:                get("MARKET_DATA_HTTP_ADDR", ":8091"),
+		APIKey:                  strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY")),
+		RequestTimeout:          duration("MARKET_DATA_REQUEST_TIMEOUT", 110*time.Second),
+		ProviderTimeout:         duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
+		ProviderRetries:         integer("MARKET_DATA_PROVIDER_RETRIES", 1),
+		CircuitFailureThreshold: integer("MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD", 3),
+		CircuitCooldown:         duration("MARKET_DATA_CIRCUIT_COOLDOWN", 45*time.Second),
+		QuoteCacheTTL:           duration("MARKET_DATA_QUOTE_CACHE_TTL", 15*time.Second),
+		BarsCacheTTL:            duration("MARKET_DATA_BARS_CACHE_TTL", 10*time.Minute),
+		DefaultDailyBars:        integer("MARKET_DATA_DEFAULT_DAILY_BARS", 120),
+		MaxDailyBars:            integer("MARKET_DATA_MAX_DAILY_BARS", 1000),
+		Adjustment:              get("MARKET_DATA_DEFAULT_ADJUSTMENT", file.AdjustmentBasis),
+		ProviderPriority:        priority,
+		ProviderSettings:        settings,
+		ProvidersConfigPath:     configPath,
+		EastmoneyQuoteURL:       get("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://push2.eastmoney.com/api/qt/stock/get"),
+		EastmoneyKlineURL:       get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
+		TencentQuoteURL:         get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
+		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
+		TencentNoneKlineURL:     get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),
+		QuoteRetention:          duration("MARKET_DATA_QUOTE_RETENTION", 30*24*time.Hour),
+		RedisAddr:               strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_ADDR")),
+		RedisUsername:           strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_USERNAME")),
+		RedisPassword:           os.Getenv("MARKET_DATA_REDIS_PASSWORD"),
+		RedisDB:                 integer("MARKET_DATA_REDIS_DB", 0),
+		MySQLDSN:                strings.TrimSpace(os.Getenv("MARKET_DATA_MYSQL_DSN")),
+		AutoMigrate:             boolEnv("MARKET_DATA_DB_AUTO_MIGRATE", true),
+		AllowNoStorage:          boolEnv("MARKET_DATA_ALLOW_NO_STORAGE", false),
+	}
+	if !validSecret(cfg.APIKey) {
+		return cfg, errors.New("MARKET_DATA_API_KEY must be a non-placeholder secret with at least 32 characters")
+	}
+	for name, endpoint := range map[string]string{
+		"MARKET_DATA_EASTMONEY_QUOTE_URL":    cfg.EastmoneyQuoteURL,
+		"MARKET_DATA_EASTMONEY_KLINE_URL":    cfg.EastmoneyKlineURL,
+		"MARKET_DATA_TENCENT_QUOTE_URL":      cfg.TencentQuoteURL,
+		"MARKET_DATA_TENCENT_KLINE_URL":      cfg.TencentKlineURL,
+		"MARKET_DATA_TENCENT_NONE_KLINE_URL": cfg.TencentNoneKlineURL,
+	} {
+		if err := validateEndpointURL(name, endpoint); err != nil {
+			return cfg, err
+		}
+	}
+	if !cfg.AllowNoStorage {
+		if cfg.MySQLDSN == "" {
+			return cfg, errors.New("MARKET_DATA_MYSQL_DSN is required; set MARKET_DATA_ALLOW_NO_STORAGE=true only for local no-storage smoke tests")
+		}
+		if cfg.RedisAddr == "" {
+			return cfg, errors.New("MARKET_DATA_REDIS_ADDR is required; set MARKET_DATA_ALLOW_NO_STORAGE=true only for local no-storage smoke tests")
+		}
+	}
+	if cfg.ProviderRetries < 0 || cfg.ProviderRetries > 5 {
+		return cfg, errors.New("MARKET_DATA_PROVIDER_RETRIES must be between 0 and 5")
+	}
+	if cfg.CircuitFailureThreshold < 1 || cfg.CircuitFailureThreshold > 100 {
+		return cfg, errors.New("MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD must be between 1 and 100")
+	}
+	if cfg.CircuitCooldown < time.Second {
+		return cfg, errors.New("MARKET_DATA_CIRCUIT_COOLDOWN must be at least 1s")
+	}
+	if cfg.QuoteRetention < 24*time.Hour {
+		return cfg, errors.New("MARKET_DATA_QUOTE_RETENTION must be at least 24h")
+	}
+	if cfg.MaxDailyBars < 20 || cfg.MaxDailyBars > 2000 {
+		return cfg, errors.New("MARKET_DATA_MAX_DAILY_BARS must be in 20..2000")
+	}
+	if cfg.DefaultDailyBars < 20 || cfg.DefaultDailyBars > cfg.MaxDailyBars {
+		return cfg, errors.New("MARKET_DATA_DEFAULT_DAILY_BARS must be between 20 and MARKET_DATA_MAX_DAILY_BARS")
+	}
+	if cfg.Adjustment != "forward_adjusted" && cfg.Adjustment != "backward_adjusted" && cfg.Adjustment != "none" {
+		return cfg, fmt.Errorf("invalid adjustment basis %q", cfg.Adjustment)
+	}
+	if len(cfg.ProviderPriority) == 0 {
+		return cfg, errors.New("provider_priority must contain at least one provider")
+	}
+	seen := map[string]bool{}
+	quoteReady, barsReady := false, false
+	quoteProviderCount, barProviderCount := 0, 0
+	for _, name := range cfg.ProviderPriority {
+		if name != "eastmoney" && name != "tencent" {
+			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
+		}
+		if seen[name] {
+			return cfg, fmt.Errorf("duplicate provider %q in priority list", name)
+		}
+		seen[name] = true
+		p := cfg.ProviderSettings[name]
+		if p.Enabled && p.Quote {
+			quoteReady = true
+			quoteProviderCount++
+		}
+		if p.Enabled && p.DailyBars {
+			barsReady = true
+			barProviderCount++
+		}
+	}
+	if !quoteReady && !barsReady {
+		return cfg, errors.New("at least one quote or daily-bar provider capability must be enabled")
+	}
+	quoteBudget := minimumProviderRequestBudget(cfg.ProviderTimeout, cfg.ProviderRetries, quoteProviderCount)
+	barsBudget := minimumProviderRequestBudget(cfg.ProviderTimeout, cfg.ProviderRetries, barProviderCount)
+	minimumRequestTimeout := quoteBudget
+	if barsBudget > minimumRequestTimeout {
+		minimumRequestTimeout = barsBudget
+	}
+	// Bundle currently fetches daily bars and quote sequentially. Its worst-case
+	// budget is the sum, not the larger of the two independent endpoint budgets.
+	bundleBudget := time.Duration(0)
+	if quoteProviderCount > 0 && barProviderCount > 0 {
+		bundleBudget = quoteBudget + barsBudget
+	}
+	if bundleBudget > minimumRequestTimeout {
+		minimumRequestTimeout = bundleBudget
+	}
+	if cfg.RequestTimeout < minimumRequestTimeout {
+		return cfg, fmt.Errorf("MARKET_DATA_REQUEST_TIMEOUT must be at least %s (quote=%s, daily_bars=%s, sequential_bundle=%s) for provider timeout %s and %d retries; increase the request timeout or reduce retry settings", minimumRequestTimeout, quoteBudget, barsBudget, bundleBudget, cfg.ProviderTimeout, cfg.ProviderRetries)
+	}
+	return cfg, nil
+}
+
+func minimumProviderRequestBudget(providerTimeout time.Duration, retries, providerCount int) time.Duration {
+	if providerCount <= 0 {
+		return time.Second
+	}
+	backoff := time.Duration(0)
+	for attempt := 0; attempt < retries; attempt++ {
+		delay := 100 * time.Millisecond
+		for step := 0; step < attempt && delay < time.Second; step++ {
+			delay *= 2
+		}
+		if delay > time.Second {
+			delay = time.Second
+		}
+		backoff += delay
+	}
+	// Add a one-second margin for provider parsing, failover and response writing.
+	return time.Duration(providerCount*(retries+1))*providerTimeout + time.Duration(providerCount)*backoff + time.Second
+}
+
+func validateEndpointURL(name, raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u == nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("%s must be an absolute http(s) endpoint URL without credentials, query, or fragment", name)
+	}
+	return nil
+}
+
+func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
+	p.Enabled = boolEnv("MARKET_DATA_"+prefix+"_ENABLED", p.Enabled)
+	p.Quote = boolEnv("MARKET_DATA_"+prefix+"_QUOTE_ENABLED", p.Quote)
+	p.DailyBars = boolEnv("MARKET_DATA_"+prefix+"_DAILY_BARS_ENABLED", p.DailyBars)
+	return p
+}
+
+func splitList(s string) []string {
+	out := []string{}
+	for _, v := range strings.Split(s, ",") {
+		v = strings.ToLower(strings.TrimSpace(v))
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+func get(k, d string) string {
+	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+		return v
+	}
+	return d
+}
+func duration(k string, d time.Duration) time.Duration {
+	if s := strings.TrimSpace(os.Getenv(k)); s != "" {
+		v, e := time.ParseDuration(s)
+		if e != nil || v <= 0 {
+			return d
+		}
+		return v
+	}
+	return d
+}
+func integer(k string, d int) int {
+	if s := strings.TrimSpace(os.Getenv(k)); s != "" {
+		v, e := strconv.Atoi(s)
+		if e == nil {
+			return v
+		}
+	}
+	return d
+}
+func boolEnv(k string, d bool) bool {
+	if s := strings.TrimSpace(os.Getenv(k)); s != "" {
+		v, e := strconv.ParseBool(s)
+		if e == nil {
+			return v
+		}
+	}
+	return d
+}
+
+func validateEnvironment() error {
+	for _, key := range []string{
+		"MARKET_DATA_REQUEST_TIMEOUT", "MARKET_DATA_PROVIDER_TIMEOUT",
+		"MARKET_DATA_CIRCUIT_COOLDOWN", "MARKET_DATA_QUOTE_CACHE_TTL", "MARKET_DATA_BARS_CACHE_TTL", "MARKET_DATA_QUOTE_RETENTION",
+	} {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			d, err := time.ParseDuration(value)
+			if err != nil || d < time.Millisecond {
+				return fmt.Errorf("%s must be a Go duration of at least 1ms, got %q", key, value)
+			}
+		}
+	}
+	for _, key := range []string{
+		"MARKET_DATA_DEFAULT_DAILY_BARS", "MARKET_DATA_MAX_DAILY_BARS", "MARKET_DATA_REDIS_DB",
+		"MARKET_DATA_PROVIDER_RETRIES", "MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD",
+	} {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				return fmt.Errorf("%s must be an integer, got %q", key, value)
+			}
+			if key == "MARKET_DATA_REDIS_DB" && n < 0 {
+				return errors.New("MARKET_DATA_REDIS_DB must not be negative")
+			}
+			if key == "MARKET_DATA_PROVIDER_RETRIES" && (n < 0 || n > 5) {
+				return errors.New("MARKET_DATA_PROVIDER_RETRIES must be between 0 and 5")
+			}
+			if key == "MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD" && (n < 1 || n > 100) {
+				return errors.New("MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD must be between 1 and 100")
+			}
+		}
+	}
+	for _, key := range []string{
+		"MARKET_DATA_DB_AUTO_MIGRATE", "MARKET_DATA_EASTMONEY_ENABLED",
+		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
+		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
+		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
+	} {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			if _, err := strconv.ParseBool(value); err != nil {
+				return fmt.Errorf("%s must be a boolean, got %q", key, value)
+			}
+		}
+	}
+	return nil
+}
+
+func validSecret(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) < 32 {
+		return false
+	}
+	lower := strings.ToLower(value)
+	for _, marker := range []string{"replace-with", "change-me", "changeme", "your-secret", "example-secret"} {
+		if strings.Contains(lower, marker) {
+			return false
+		}
+	}
+	return true
+}

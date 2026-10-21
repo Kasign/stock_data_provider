@@ -1,0 +1,321 @@
+package httpapi
+
+import (
+	"context"
+	"crypto/subtle"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/service"
+)
+
+type Server struct {
+	apiKey            string
+	defaultAdjustment string
+	maxBars           int
+	requestTimeout    time.Duration
+	svc               *service.DataService
+	sources           []model.SourceStatus
+	logger            *slog.Logger
+}
+type errorBody struct {
+	Error struct {
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id,omitempty"`
+	} `json:"error"`
+}
+
+func New(apiKey, defaultAdjustment string, svc *service.DataService, providers []provider.Provider, logger *slog.Logger) *Server {
+	return NewWithConfig(apiKey, defaultAdjustment, svc, providers, providers, providers, 2000, 110*time.Second, logger)
+}
+
+// NewWithCapabilities is kept for aggregate Provider callers. New deployments
+// should use NewWithCapabilityInterfaces to register independent capabilities.
+func NewWithCapabilities(apiKey, defaultAdjustment string, svc *service.DataService, allProviders, quoteProviders, barProviders []provider.Provider, maxBars int, logger *slog.Logger) *Server {
+	return NewWithConfig(apiKey, defaultAdjustment, svc, allProviders, quoteProviders, barProviders, maxBars, 110*time.Second, logger)
+}
+
+func NewWithConfig(apiKey, defaultAdjustment string, svc *service.DataService, allProviders, quoteProviders, barProviders []provider.Provider, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
+	all := make([]provider.NamedProvider, 0, len(allProviders))
+	quotes := make([]provider.QuoteProvider, 0, len(quoteProviders))
+	bars := make([]provider.DailyBarProvider, 0, len(barProviders))
+	for _, p := range allProviders {
+		all = append(all, p)
+	}
+	for _, p := range quoteProviders {
+		quotes = append(quotes, p)
+	}
+	for _, p := range barProviders {
+		bars = append(bars, p)
+	}
+	return NewWithCapabilityInterfaces(apiKey, defaultAdjustment, svc, all, quotes, bars, maxBars, requestTimeout, logger)
+}
+
+func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.DataService, allProviders []provider.NamedProvider, quoteProviders []provider.QuoteProvider, barProviders []provider.DailyBarProvider, maxBars int, requestTimeout time.Duration, logger *slog.Logger) *Server {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if maxBars <= 0 || maxBars > 2000 {
+		maxBars = 2000
+	}
+	quoteEnabled, barsEnabled := map[string]bool{}, map[string]bool{}
+	for _, p := range quoteProviders {
+		quoteEnabled[p.Name()] = true
+	}
+	for _, p := range barProviders {
+		barsEnabled[p.Name()] = true
+	}
+	known := map[string]bool{}
+	for _, p := range allProviders {
+		known[p.Name()] = true
+	}
+	names := make([]string, 0, len(known))
+	for name := range known {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	sources := make([]model.SourceStatus, 0, len(names))
+	for _, name := range names {
+		sources = append(sources, model.SourceStatus{Name: name, Enabled: true, QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name]})
+	}
+	if requestTimeout <= 0 {
+		requestTimeout = 110 * time.Second
+	}
+	return &Server{apiKey: apiKey, defaultAdjustment: defaultAdjustment, maxBars: maxBars, requestTimeout: requestTimeout, svc: svc, sources: sources, logger: logger}
+}
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health/live", s.live)
+	mux.HandleFunc("GET /health/ready", s.ready)
+	mux.Handle("GET /api/v1/quotes/{symbol}", s.auth(http.HandlerFunc(s.quote)))
+	mux.Handle("GET /api/v1/bars/{symbol}/daily", s.auth(http.HandlerFunc(s.bars)))
+	mux.Handle("GET /api/v1/bundles/{symbol}", s.auth(http.HandlerFunc(s.bundle)))
+	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
+	return securityHeaders(s.timeoutContext(s.requestTimeout, s.requestID(mux)))
+}
+func (s *Server) live(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]any{"status": "ok", "service": "market-data", "time": time.Now().UTC()})
+}
+func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	if err := s.svc.Ready(ctx); err != nil {
+		writeErr(w, 503, "DEPENDENCY_UNAVAILABLE", "market-data dependencies are not ready", requestID(r))
+		return
+	}
+	writeJSON(w, 200, map[string]any{"status": "ready", "service": "market-data"})
+}
+func (s *Server) quote(w http.ResponseWriter, r *http.Request) {
+	q, cacheHit, err := s.svc.Quote(r.Context(), r.PathValue("symbol"))
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	if cacheHit {
+		w.Header().Set("X-Cache", "HIT")
+	} else {
+		w.Header().Set("X-Cache", "MISS")
+	}
+	writeJSON(w, 200, q)
+}
+func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
+	rawSymbol := r.PathValue("symbol")
+	symbol, symbolErr := normalize.NormalizeSymbol(rawSymbol)
+	if symbolErr != nil {
+		writeErr(w, 400, "VALIDATION_ERROR", symbolErr.Error(), requestID(r))
+		return
+	}
+	start := r.URL.Query().Get("start")
+	end := r.URL.Query().Get("end")
+	limit := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		var n int
+		if _, err := fmtSscan(v, &n); err != nil || n < 1 || n > s.maxBars {
+			writeErr(w, 400, "VALIDATION_ERROR", "limit must be an integer between 1 and configured maxBars", requestID(r))
+			return
+		}
+		limit = n
+	}
+	adjustment := r.URL.Query().Get("adjustment")
+	if adjustment == "" {
+		adjustment = s.defaultAdjustment
+	}
+	basis, err := normalize.Adjustment(adjustment)
+	if err != nil {
+		writeErr(w, 400, "VALIDATION_ERROR", err.Error(), requestID(r))
+		return
+	}
+	bars, hit, warnings, err := s.svc.DailyBars(r.Context(), symbol, start, end, limit, basis)
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	if hit {
+		w.Header().Set("X-Cache", "HIT")
+	} else {
+		w.Header().Set("X-Cache", "MISS")
+	}
+	quality := model.QualityValid
+	if len(warnings) > 0 {
+		quality = model.QualityDegraded
+	}
+	for _, b := range bars {
+		if b.QualityStatus != model.QualityValid {
+			quality = model.QualityDegraded
+			break
+		}
+	}
+	writeJSON(w, 200, map[string]any{"symbol": symbol, "period": "1d", "adjustment_basis": basis, "volume_unit": "shares", "amount_unit": "CNY", "quality_status": quality, "warnings": warnings, "bars": bars})
+}
+func (s *Server) bundle(w http.ResponseWriter, r *http.Request) {
+	lookback := 0
+	if v := r.URL.Query().Get("lookback_days"); v != "" {
+		if _, err := fmtSscan(v, &lookback); err != nil || lookback < 20 || lookback > s.maxBars {
+			writeErr(w, 400, "VALIDATION_ERROR", "lookback_days must be between 20 and configured maxBars", requestID(r))
+			return
+		}
+	}
+	asOfRaw := strings.TrimSpace(r.URL.Query().Get("as_of"))
+	var asOf time.Time
+	provided := asOfRaw != ""
+	var err error
+	if provided {
+		asOf, err = time.Parse(time.RFC3339, asOfRaw)
+		if err != nil {
+			writeErr(w, 400, "VALIDATION_ERROR", "as_of must be RFC3339 with timezone", requestID(r))
+			return
+		}
+	}
+	adjustment := r.URL.Query().Get("adjustment")
+	if adjustment == "" {
+		adjustment = s.defaultAdjustment
+	}
+	basis, err := normalize.Adjustment(adjustment)
+	if err != nil {
+		writeErr(w, 400, "VALIDATION_ERROR", err.Error(), requestID(r))
+		return
+	}
+	b, err := s.svc.Bundle(r.Context(), r.PathValue("symbol"), lookback, asOf, provided, basis)
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	writeJSON(w, 200, b)
+}
+func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]any{"sources": s.sources, "normalization_version": normalize.Version})
+}
+func (s *Server) auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := strings.TrimSpace(r.Header.Get("X-API-Key"))
+		if token == "" {
+			a := strings.TrimSpace(r.Header.Get("Authorization"))
+			if strings.HasPrefix(a, "Bearer ") {
+				token = strings.TrimSpace(strings.TrimPrefix(a, "Bearer "))
+			}
+		}
+		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.apiKey)) != 1 {
+			writeErr(w, 401, "AUTH_REQUIRED", "valid API key required", requestID(r))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+func (s *Server) timeoutContext(timeout time.Duration, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer cancel()
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (s *Server) requestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if !validRequestID(id) {
+			id = newRequestID()
+		}
+		w.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id)))
+	})
+}
+
+type requestIDKey struct{}
+
+func requestID(r *http.Request) string { v, _ := r.Context().Value(requestIDKey{}).(string); return v }
+func newRequestID() string             { return time.Now().UTC().Format("20060102T150405.000000000Z") }
+func validRequestID(value string) bool {
+	if value == "" || len(value) > 128 {
+		return false
+	}
+	for _, r := range value {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' || r == ':') {
+			return false
+		}
+	}
+	return true
+}
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		status = http.StatusInternalServerError
+		body = []byte(`{"error":{"code":"INTERNAL_ERROR","message":"response serialization failed"}}`)
+	} else {
+		body = append(body, '\n')
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
+}
+func writeErr(w http.ResponseWriter, status int, code, message, id string) {
+	var b errorBody
+	b.Error.Code = code
+	b.Error.Message = message
+	b.Error.RequestID = id
+	writeJSON(w, status, b)
+}
+func writeDomainErr(w http.ResponseWriter, err error, id string) {
+	msg := err.Error()
+	status := 502
+	code := "PROVIDER_BAD_RESPONSE"
+	if strings.Contains(msg, "invalid A-share symbol") || strings.Contains(msg, "B-share code") || strings.Contains(msg, "exchange suffix") || strings.Contains(msg, "invalid start date") || strings.Contains(msg, "invalid end date") || strings.Contains(msg, "must not be after") || strings.Contains(msg, "must not be in the future") || strings.Contains(msg, "unsupported adjustment") || strings.Contains(msg, "cannot infer exchange") {
+		status = 400
+		code = "VALIDATION_ERROR"
+	} else if strings.Contains(msg, "no enabled quote provider") || strings.Contains(msg, "no enabled daily-bar provider") {
+		status = 503
+		code = "PROVIDER_UNAVAILABLE"
+	} else if errors.Is(err, context.DeadlineExceeded) {
+		status = 504
+		code = "PROVIDER_TIMEOUT"
+	} else if errors.Is(err, context.Canceled) {
+		status = 408
+		code = "REQUEST_CANCELED"
+	}
+	writeErr(w, status, code, msg, id)
+}
+
+// fmtSscan is separated to keep input parsing constrained to a single integer.
+func fmtSscan(value string, out *int) (int, error) {
+	n, err := strconv.Atoi(value)
+	if err == nil {
+		*out = n
+	}
+	return n, err
+}

@@ -1,0 +1,356 @@
+package provider
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+)
+
+const eastmoneyVersion = "eastmoney-stock-api-v1"
+
+type Eastmoney struct {
+	client   *http.Client
+	quoteURL string
+	klineURL string
+}
+
+func NewEastmoney(timeout time.Duration, quoteURL, klineURL string) *Eastmoney {
+	if quoteURL == "" {
+		quoteURL = "https://push2.eastmoney.com/api/qt/stock/get"
+	}
+	if klineURL == "" {
+		klineURL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+	}
+	return &Eastmoney{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL}
+}
+func (p *Eastmoney) Name() string { return "eastmoney" }
+
+func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	secid, err := eastmoneySecID(symbol)
+	if err != nil {
+		return nil, err
+	}
+	q := url.Values{}
+	q.Set("secid", secid)
+	q.Set("fields", "f43,f44,f45,f46,f47,f48,f50,f57,f58,f60,f86,f169,f170,f168")
+	q.Set("fltt", "2") // request formatted prices in yuan and percentages in percentage points
+	q.Set("invt", "2")
+	q.Set("_", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	var payload struct {
+		RC   *int                       `json:"rc"`
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if err := p.getJSON(ctx, p.quoteURL, q, &payload); err != nil {
+		return nil, err
+	}
+	if payload.RC != nil && *payload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney quote provider error rc=%d", *payload.RC)
+	}
+	if payload.Data == nil {
+		return nil, errors.New("eastmoney returned an empty quote")
+	}
+	getString := func(key string) string {
+		var s string
+		if json.Unmarshal(payload.Data[key], &s) == nil {
+			return s
+		}
+		var n json.Number
+		dec := json.NewDecoder(strings.NewReader(string(payload.Data[key])))
+		dec.UseNumber()
+		if dec.Decode(&n) == nil {
+			return n.String()
+		}
+		return ""
+	}
+	reportedSymbol := strings.TrimSpace(getString("f57"))
+	if reportedSymbol != "" {
+		canonical, canonicalErr := normalize.NormalizeSymbol(reportedSymbol)
+		if canonicalErr != nil || canonical != symbol {
+			return nil, fmt.Errorf("Eastmoney quote symbol mismatch: requested %s got %q", symbol, reportedSymbol)
+		}
+	}
+	getNumber := func(key string) (*float64, error) {
+		s := getString(key)
+		if s == "" || s == "-" || s == "null" {
+			return nil, nil
+		}
+		v, e := strconv.ParseFloat(s, 64)
+		if e != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+			return nil, fmt.Errorf("invalid Eastmoney numeric field %s", key)
+		}
+		return &v, nil
+	}
+	price, err := getNumber("f43")
+	if err != nil {
+		return nil, err
+	}
+	high, err := getNumber("f44")
+	if err != nil {
+		return nil, err
+	}
+	low, err := getNumber("f45")
+	if err != nil {
+		return nil, err
+	}
+	open, err := getNumber("f46")
+	if err != nil {
+		return nil, err
+	}
+	prev, err := getNumber("f60")
+	if err != nil {
+		return nil, err
+	}
+	change, err := getNumber("f169")
+	if err != nil {
+		return nil, err
+	}
+	pct, err := getNumber("f170")
+	if err != nil {
+		return nil, err
+	}
+	rawVol, err := getNumber("f47")
+	if err != nil {
+		return nil, err
+	}
+	var volume *int64
+	var volumePtr *float64
+	if rawVol != nil {
+		shares, conversionErr := normalize.HandsToShares(*rawVol)
+		if conversionErr != nil {
+			return nil, fmt.Errorf("normalize Eastmoney quote volume: %w", conversionErr)
+		}
+		volume = &shares
+		volumePtr = rawVol
+	}
+	rawAmount, err := getNumber("f48")
+	if err != nil {
+		return nil, err
+	}
+	amount := rawAmount // Eastmoney quote amount is CNY
+	volumeRatio, err := getNumber("f50")
+	if err != nil {
+		return nil, err
+	}
+	turnoverRate, err := getNumber("f168")
+	if err != nil {
+		return nil, err
+	}
+	name := getString("f58")
+	providerTime := parseEastmoneyTime(getString("f86"))
+	quote := &model.Quote{Symbol: symbol, Name: name, CurrentPrice: price, Change: change, ChangePercent: pct, Open: open, High: high, Low: low, PrevClose: prev, Volume: volume, Amount: amount, VolumeRatio: volumeRatio, TurnoverRate: turnoverRate, QuoteTime: providerTime, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), Source: p.Name(), SourceVersion: eastmoneyVersion, RawVolume: volumePtr, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "f48"), VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+	if reportedSymbol == "" {
+		quote.QualityStatus = model.QualityDegraded
+		quote.QualityReasons = append(quote.QualityReasons, "provider_symbol_missing_assumed_from_request")
+	}
+	if providerTime == nil {
+		quote.QualityStatus = model.QualityDegraded
+		quote.QualityReasons = append(quote.QualityReasons, "provider_timestamp_missing")
+	}
+	if name == "" {
+		quote.QualityReasons = append(quote.QualityReasons, "name_missing")
+		quote.QualityStatus = model.QualityDegraded
+	}
+	return quote, nil
+}
+
+func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	secid, err := eastmoneySecID(symbol)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 400
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+	beg := "0"
+	if startDate != "" {
+		t, e := time.Parse("2006-01-02", startDate)
+		if e != nil {
+			return nil, fmt.Errorf("invalid start date: %w", e)
+		}
+		beg = t.Format("20060102")
+	}
+	end := "20500101"
+	if endDate != "" {
+		t, e := time.Parse("2006-01-02", endDate)
+		if e != nil {
+			return nil, fmt.Errorf("invalid end date: %w", e)
+		}
+		end = t.Format("20060102")
+	}
+	fqt := "1"
+	basis := adjustment
+	switch adjustment {
+	case model.AdjustmentForward:
+		fqt = "1"
+	case model.AdjustmentBackward:
+		fqt = "2"
+	case model.AdjustmentNone:
+		fqt = "0"
+	default:
+		return nil, fmt.Errorf("unsupported adjustment basis %q", adjustment)
+	}
+	q := url.Values{}
+	q.Set("secid", secid)
+	q.Set("fields1", "f1,f2,f3,f4,f5,f6")
+	q.Set("fields2", "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61")
+	q.Set("klt", "101")
+	q.Set("fqt", fqt)
+	q.Set("beg", beg)
+	q.Set("end", end)
+	q.Set("lmt", strconv.Itoa(limit))
+	q.Set("_", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	var payload struct {
+		RC   *int `json:"rc"`
+		Data *struct {
+			Code   string   `json:"code"`
+			Name   string   `json:"name"`
+			KLines []string `json:"klines"`
+		} `json:"data"`
+	}
+	if err := p.getJSON(ctx, p.klineURL, q, &payload); err != nil {
+		return nil, err
+	}
+	if payload.RC != nil && *payload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney daily-bars provider error rc=%d", *payload.RC)
+	}
+	if payload.Data == nil {
+		return nil, errors.New("eastmoney returned empty daily bars")
+	}
+	if reported := strings.TrimSpace(payload.Data.Code); reported != "" {
+		reportedSymbol, normalizeErr := normalize.NormalizeSymbol(reported)
+		if normalizeErr != nil || reportedSymbol != symbol {
+			return nil, fmt.Errorf("Eastmoney daily-bars symbol mismatch: requested %s got %q", symbol, reported)
+		}
+	}
+	out := make([]model.DailyBar, 0, len(payload.Data.KLines))
+	for _, line := range payload.Data.KLines {
+		parts := strings.Split(line, ",")
+		if len(parts) < 7 {
+			continue
+		}
+		open, e1 := strconv.ParseFloat(parts[1], 64)
+		closeV, e2 := strconv.ParseFloat(parts[2], 64)
+		high, e3 := strconv.ParseFloat(parts[3], 64)
+		low, e4 := strconv.ParseFloat(parts[4], 64)
+		rawVol, e5 := strconv.ParseFloat(parts[5], 64)
+		amount, e6 := strconv.ParseFloat(parts[6], 64)
+		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || e6 != nil ||
+			!finiteNumber(open) || !finiteNumber(closeV) || !finiteNumber(high) || !finiteNumber(low) || !finiteNumber(amount) || amount < 0 {
+			continue
+		}
+		shares, conversionErr := normalize.HandsToShares(rawVol)
+		if conversionErr != nil {
+			continue
+		}
+		amountValue := amount
+		rawVolume := rawVol
+		rawAmount := amount
+		bar := model.DailyBar{Symbol: symbol, TradeDate: parts[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: &amountValue, AdjustmentBasis: basis, Source: p.Name(), SourceVersion: eastmoneyVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rawVolume, RawVolumeUnit: "hands", RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "kline_field_6", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+		if len(parts) > 8 {
+			if pct, e := strconv.ParseFloat(parts[8], 64); e == nil {
+				bar.ChangePercent = &pct
+			}
+		}
+		out = append(out, bar)
+	}
+	if len(out) == 0 {
+		return nil, errors.New("eastmoney daily bar response contains no parsable bars")
+	}
+	return out, nil
+}
+
+func (p *Eastmoney) getJSON(ctx context.Context, base string, params url.Values, out any) error {
+	u, err := url.Parse(base)
+	if err != nil {
+		return err
+	}
+	u.RawQuery = params.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; MarketDataService/1.0)")
+	req.Header.Set("Referer", "https://quote.eastmoney.com/")
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("eastmoney request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("eastmoney HTTP status %d", resp.StatusCode)
+	}
+	body, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
+	if err != nil {
+		return fmt.Errorf("read Eastmoney payload: %w", err)
+	}
+	if err := decodeSingleJSON(body, out); err != nil {
+		return fmt.Errorf("decode Eastmoney JSON: %w", err)
+	}
+	return nil
+}
+
+func eastmoneySecID(symbol string) (string, error) {
+	p := strings.Split(symbol, ".")
+	code := p[0]
+	exchange := ""
+	if len(p) == 2 {
+		exchange = p[1]
+	}
+	if exchange == "" {
+		symbol2, err := normalize.NormalizeSymbol(code)
+		if err != nil {
+			return "", err
+		}
+		exchange = strings.Split(symbol2, ".")[1]
+	}
+	switch exchange {
+	case "SH":
+		return "1." + code, nil
+	case "SZ":
+		return "0." + code, nil
+	case "BJ":
+		return "0." + code, nil
+	default:
+		return "", fmt.Errorf("unsupported A-share exchange %q", exchange)
+	}
+}
+
+func parseEastmoneyTime(s string) *time.Time {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "-" {
+		return nil
+	}
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	for _, layout := range []string{"20060102150405", "200601021504", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if t, e := time.ParseInLocation(layout, s, loc); e == nil {
+			t = t.UTC()
+			return &t
+		}
+	}
+	return nil
+}
+
+func finiteNumber(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }

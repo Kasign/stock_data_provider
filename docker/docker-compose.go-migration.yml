@@ -1,0 +1,87 @@
+# Optional, separately deployable Go services. Run from the repository root.
+# Copy root .env for the still-legacy Python bridge, go-core/.env and
+# services/market-data/.env independently. Never commit those files.
+# docker compose -f docker/docker-compose.yml -f docker/docker-compose.go-migration.yml --profile go-migration up -d
+services:
+  python-bridge:
+    profiles: ["go-migration"]
+    build:
+      context: ..
+      dockerfile: python_bridge/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      PYTHONPATH: /app
+      TZ: Asia/Shanghai
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../reports:/app/reports
+      - ../strategies:/app/strategies:ro
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=3).read()"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  market-data:
+    profiles: ["go-migration"]
+    build:
+      context: ../services/market-data
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../services/market-data/.env
+    environment:
+      MARKET_DATA_HTTP_ADDR: :8091
+      TZ: Asia/Shanghai
+    expose:
+      - "8091"
+    networks:
+      - default
+      - panel-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8091/health/ready >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  go-core:
+    profiles: ["go-migration"]
+    build:
+      context: ../go-core
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../go-core/.env
+    environment:
+      HTTP_ADDR: :8088
+      PYTHON_BRIDGE_BASE_URL: http://python-bridge:8090
+      MARKET_DATA_BASE_URL: http://market-data:8091
+      TZ: Asia/Shanghai
+    depends_on:
+      python-bridge:
+        condition: service_healthy
+      market-data:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8088/healthz >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    ports:
+      - "127.0.0.1:18088:8088"
+    networks:
+      - default
+      - panel-network
+
+networks:
+  panel-network:
+    external: true
+    name: 1panel-network

@@ -1,0 +1,365 @@
+openapi: 3.1.0
+info:
+  title: DSA Go/Python Internal Bridge
+  version: 1.0.0
+  description: >-
+    Private network contract between go-core and python_bridge. This is not a public API.
+    All POST endpoints except health require X-Python-Bridge-Token on Python and
+    X-Go-Core-Token on the Go core endpoints. The Go stock-analysis request defaults
+    search_news to true when omitted; callers can send false to disable it.
+servers:
+  - url: http://python-bridge:8090
+security:
+  - BridgeToken: []
+paths:
+  /healthz:
+    get:
+      servers:
+        - url: http://python-bridge:8090
+        - url: http://go-core:8088
+      security: []
+      summary: Liveness check for either internal service
+      responses:
+        '200':
+          description: Running
+  /ready:
+    get:
+      servers:
+        - url: http://go-core:8088
+      security: []
+      summary: Go Core readiness including Python bridge reachability
+      responses:
+        '200': {description: Ready}
+        '503': {description: Dependency not ready}
+  /internal/v1/capabilities:
+    get:
+      servers:
+        - url: http://go-core:8088
+      security:
+        - GoCoreToken: []
+      summary: List Go Core API and workflow capabilities
+      responses:
+        '200': {description: Capability metadata}
+        '401': {description: Invalid Go Core token}
+  /internal/v1/analysis/stock:
+    post:
+      servers:
+        - url: http://go-core:8088
+      security:
+        - GoCoreToken: []
+      summary: Compatibility endpoint for one stock analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stock_code]
+              properties:
+                stock_code: {type: string, minLength: 1, maxLength: 32}
+                query_id: {type: string, maxLength: 128}
+                report_type: {type: string, default: detailed}
+                as_of: {type: [string, 'null'], format: date-time}
+                lookback_days: {type: integer, minimum: 0, maximum: 400, default: 60}
+                notify: {type: boolean, default: false}
+                search_news: {type: [boolean, 'null'], default: true}
+                report_language: {type: string, enum: [zh, en, ko], default: zh}
+      responses:
+        '200': {description: Stock workflow response with stage trace}
+        '401': {description: Invalid Go Core token}
+        '422': {description: Invalid stock request}
+        '502': {description: Workflow dependency failed}
+  /internal/v1/analysis/stocks:
+    post:
+      servers:
+        - url: http://go-core:8088
+      security:
+        - GoCoreToken: []
+      summary: Sequential batch stock analysis with per-stock success/failure results
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stock_codes]
+              properties:
+                stock_codes:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+                  items: {type: string, minLength: 1, maxLength: 32}
+                query_id: {type: string, maxLength: 128}
+                report_type: {type: string, default: detailed}
+                as_of: {type: [string, 'null'], format: date-time}
+                lookback_days: {type: integer, minimum: 0, maximum: 400, default: 60}
+                notify: {type: boolean, default: false}
+                search_news: {type: [boolean, 'null'], default: true}
+                report_language: {type: string, enum: [zh, en, ko], default: zh}
+      responses:
+        '200': {description: Batch result; individual failures are returned in failures}
+        '401': {description: Invalid Go Core token}
+        '422': {description: Invalid batch request}
+  /internal/v1/analysis/market-review:
+    post:
+      servers:
+        - url: http://go-core:8088
+      security:
+        - GoCoreToken: []
+      summary: Execute the Go-coordinated regional market-review workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                region: {type: string, enum: [cn, hk, us, jp, kr], default: cn}
+                query_id: {type: string, maxLength: 128}
+                as_of: {type: [string, 'null'], format: date-time}
+                notify: {type: boolean, default: false}
+                report_language: {type: string, enum: [zh, en, ko], default: zh}
+      responses:
+        '200': {description: Market review response with stage trace}
+        '401': {description: Invalid Go Core token}
+        '422': {description: Invalid request}
+        '502': {description: Workflow dependency failed}
+  /internal/v1/market-data/stock-bundle:
+    post:
+      summary: Fetch stock raw-data bundle through existing Python providers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stock_code]
+              properties:
+                stock_code: {type: string, minLength: 1, maxLength: 32}
+                lookback_days: {type: integer, minimum: 20, maximum: 400, default: 60}
+                as_of: {type: [string, 'null'], format: date-time}
+      responses:
+        '200': {description: Stock bundle}
+        '401': {description: Invalid bridge token}
+        '502': {description: Provider returned an invalid payload}
+  /internal/v1/market-data/stock-auxiliary:
+    post:
+      summary: Fetch legacy chip/fundamental/board enrichments; skips latest-only fields for historical point-in-time requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stock_code]
+              properties:
+                stock_code: {type: string, minLength: 1, maxLength: 32}
+                lookback_days: {type: integer, minimum: 20, maximum: 400, default: 60}
+                as_of: {type: [string, 'null'], format: date-time}
+      responses:
+        '200': {description: Optional auxiliary context and warnings}
+        '401': {description: Invalid bridge token}
+        '503': {description: Python capability unavailable}
+  /internal/v1/market-data/market-overview:
+    post:
+      summary: Fetch the latest normalized market overview (legacy adapter does not support historical snapshots)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                region: {type: string, enum: [cn, hk, us, jp, kr], default: cn}
+                as_of: {type: [string, 'null'], format: date-time, description: Workflow reference time; the current legacy provider returns the latest snapshot only.}
+
+      responses:
+        '200': {description: Market overview}
+  /internal/v1/search/stock-news:
+    post:
+      summary: Search stock-related news
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stock_code]
+              properties:
+                stock_code: {type: string}
+                stock_name: {type: string, default: ''}
+                max_results: {type: integer, minimum: 1, maximum: 20, default: 8}
+      responses:
+        '200': {description: News items}
+  /internal/v1/search/market-news:
+    post:
+      summary: Search regional market news
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegionRequest'}
+      responses:
+        '200': {description: News items}
+  /internal/v1/llm/analyze-stock:
+    post:
+      summary: Call the existing Python analysis model on a Go-built context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [context, query_id]
+              properties:
+                context: {type: object, additionalProperties: true}
+                news_context: {type: string}
+                report_type: {type: string, default: detailed}
+                query_id: {type: string, minLength: 1, maxLength: 128}
+                analysis_context_pack_summary: {type: string}
+                report_language: {type: string, enum: [zh, en, ko], default: zh}
+                search_performed: {type: boolean, default: false}
+                news_result_count: {type: [integer, 'null'], minimum: 0}
+                news_evidence_present: {type: boolean, default: false}
+      responses:
+        '200': {description: Structured analysis result with legacy postprocessing and news-evidence metadata}
+  /internal/v1/llm/generate-market-review:
+    post:
+      summary: Generate market-review prose using existing Python prompt/model code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [overview, region, query_id]
+              properties:
+                overview: {type: object, additionalProperties: true}
+                news: {type: array, items: {type: object, additionalProperties: true}}
+                region: {type: string, enum: [cn, hk, us, jp, kr]}
+                query_id: {type: string}
+                report_language: {type: string, default: zh}
+      responses:
+        '200': {description: Markdown market review}
+  /internal/v1/persistence/daily-bars:
+    post:
+      summary: Persist normalized daily bars into the legacy stock_daily table
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stock_code, bars]
+              properties:
+                stock_code: {type: string, minLength: 1, maxLength: 32}
+                source: {type: string, default: unknown}
+                bars:
+                  type: array
+                  maxItems: 400
+                  items:
+                    type: object
+                    required: [date, open, high, low, close, volume, amount]
+                    properties:
+                      date: {type: string, format: date}
+                      open: {type: number, exclusiveMinimum: 0}
+                      high: {type: number, exclusiveMinimum: 0}
+                      low: {type: number, exclusiveMinimum: 0}
+                      close: {type: number, exclusiveMinimum: 0}
+                      volume: {type: number, minimum: 0}
+                      amount: {type: number, minimum: 0}
+                      pct_chg: {type: number, default: 0}
+                      missing_fields:
+                        type: array
+                        items: {type: string, enum: [volume, amount, pct_chg]}
+                        description: Optional fields listed here were unavailable in the provider result and must be persisted as SQL NULL, not interpreted as zero.
+      responses:
+        '200': {description: Persisted row count}
+        '401': {description: Invalid bridge token}
+  /internal/v1/persistence/stock-analysis:
+    post:
+      summary: Persist Go-coordinated stock analysis through the existing Python repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [result, context, query_id]
+              properties:
+                result: {type: object, additionalProperties: true}
+                context: {type: object, additionalProperties: true}
+                legacy_context: {type: object, additionalProperties: true}
+                analysis_context_pack_summary: {type: string}
+                report_type: {type: string, default: detailed}
+                query_id: {type: string}
+      responses:
+        '200': {description: Saved history ID}
+  /internal/v1/persistence/market-review:
+    post:
+      summary: Persist market-review history with existing schema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [report, region, query_id]
+              properties:
+                report: {type: string}
+                region: {type: string, enum: [cn, hk, us, jp, kr]}
+                query_id: {type: string}
+                overview: {type: object, additionalProperties: true}
+      responses:
+        '200': {description: Saved history ID}
+  /internal/v1/notification/stock-analysis:
+    post:
+      summary: Send a stock-analysis notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [result]
+              properties:
+                result: {type: object, additionalProperties: true}
+                report_type: {type: string, default: detailed}
+                query_id: {type: string}
+                dedup_key: {type: string, maxLength: 256, description: Per-stock idempotency key; distinct stock codes in one batch must not collide.}
+      responses:
+        '200': {description: Notification dispatch result}
+  /internal/v1/notification/market-review:
+    post:
+      summary: Send a market-review notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [report, query_id]
+              properties:
+                report: {type: string}
+                region: {type: string, default: cn}
+                query_id: {type: string}
+      responses:
+        '200': {description: Notification dispatch result}
+components:
+  securitySchemes:
+    BridgeToken:
+      type: apiKey
+      in: header
+      name: X-Python-Bridge-Token
+    GoCoreToken:
+      type: apiKey
+      in: header
+      name: X-Go-Core-Token
+  schemas:
+    RegionRequest:
+      type: object
+      required: [region]
+      properties:
+        region: {type: string, enum: [cn, hk, us, jp, kr], default: cn}
+        as_of: {type: [string, 'null'], format: date-time, description: Optional workflow reference time; only market overview currently consumes it as metadata because the provider returns latest/current data.}

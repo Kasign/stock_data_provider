@@ -1,0 +1,228 @@
+openapi: 3.0.3
+info:
+  title: Go Market Data Service
+  version: 1.0.2
+  description: >-
+    A-share market-data API. Standard volume is shares; amount is CNY; prices are
+    CNY/share. Provider event time, fetch time, normalization time, adjustment
+    basis, source and quality metadata remain explicit.
+servers:
+  - url: http://market-data:8091
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+    QualityStatus:
+      type: string
+      enum: [valid, degraded, stale, invalid, unknown]
+    AdjustmentBasis:
+      type: string
+      enum: [none, forward_adjusted, backward_adjusted, unknown]
+    RequestAdjustmentBasis:
+      type: string
+      description: unknown is a response state, not a valid request parameter.
+      enum: [none, forward_adjusted, backward_adjusted]
+    Quote:
+      type: object
+      required: [symbol, current_price, open, high, low, prev_close, volume, quote_time, fetched_at, normalized_at, source, volume_unit, amount_unit, adjustment_basis, quality_status, normalization_version]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        name: {type: string}
+        current_price: {type: number, nullable: true, description: CNY/share}
+        change: {type: number, nullable: true, description: CNY/share}
+        change_percent: {type: number, nullable: true, description: Percentage points; 1.25 means 1.25%}
+        open: {type: number, nullable: true, description: CNY/share}
+        high: {type: number, nullable: true, description: CNY/share}
+        low: {type: number, nullable: true, description: CNY/share}
+        prev_close: {type: number, nullable: true, description: CNY/share}
+        volume: {type: integer, format: int64, nullable: true, description: Shares}
+        amount: {type: number, nullable: true, description: CNY}
+        volume_ratio: {type: number, nullable: true, description: Provider volume ratio; null when unsupported}
+        turnover_rate: {type: number, nullable: true, description: Percentage points; 1.25 means 1.25%}
+        quote_time: {type: string, format: date-time, nullable: true, description: Provider quote timestamp; never use fetch time as a replacement}
+        fetched_at: {type: string, format: date-time}
+        normalized_at: {type: string, format: date-time}
+        source: {type: string}
+        source_version: {type: string}
+        request_id: {type: string}
+        raw_volume: {type: number, nullable: true}
+        raw_volume_unit: {type: string}
+        raw_amount: {type: number, nullable: true}
+        raw_amount_unit: {type: string}
+        raw_amount_field: {type: string, description: Provider field used for the raw amount, for auditability}
+        volume_unit: {type: string, enum: [shares]}
+        amount_unit: {type: string, enum: [CNY]}
+        adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+        fallback_from: {type: string}
+        fallback_reason: {type: string}
+        normalization_version: {type: string}
+    DailyBar:
+      type: object
+      required: [symbol, trade_date, period, open, high, low, close, volume, adjustment_basis, source, fetched_at, normalized_at, volume_unit, amount_unit, quality_status, normalization_version]
+      properties:
+        symbol: {type: string}
+        trade_date: {type: string, format: date}
+        period: {type: string, enum: [1d]}
+        is_partial: {type: boolean}
+        open: {type: number, description: CNY/share}
+        high: {type: number, description: CNY/share}
+        low: {type: number, description: CNY/share}
+        close: {type: number, description: CNY/share}
+        volume: {type: integer, format: int64, nullable: true, description: Shares}
+        amount: {type: number, nullable: true, description: CNY}
+        change_percent: {type: number, nullable: true, description: Percentage points}
+        adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
+        adjustment_reference_date: {type: string, format: date}
+        source: {type: string}
+        source_version: {type: string}
+        provider_timestamp: {type: string, format: date-time, nullable: true}
+        fetched_at: {type: string, format: date-time}
+        normalized_at: {type: string, format: date-time}
+        raw_volume: {type: number, nullable: true}
+        raw_volume_unit: {type: string}
+        raw_amount: {type: number, nullable: true}
+        raw_amount_unit: {type: string}
+        raw_amount_field: {type: string, description: Provider field used for the raw amount, for auditability}
+        volume_unit: {type: string, enum: [shares]}
+        amount_unit: {type: string, enum: [CNY]}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+        fallback_from: {type: string}
+        fallback_reason: {type: string}
+        request_id: {type: string}
+        normalization_version: {type: string}
+    DailyBarsResponse:
+      type: object
+      required: [symbol, period, adjustment_basis, volume_unit, amount_unit, quality_status, warnings, bars]
+      properties:
+        symbol: {type: string}
+        period: {type: string, enum: [1d]}
+        adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
+        volume_unit: {type: string, enum: [shares]}
+        amount_unit: {type: string, enum: [CNY]}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        warnings: {type: array, items: {type: string}}
+        bars: {type: array, items: {$ref: '#/components/schemas/DailyBar'}}
+    Bundle:
+      type: object
+      required: [symbol, daily_bars, sources, warnings, snapshot_id, analysis_reference_time, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        name: {type: string}
+        quote: {$ref: '#/components/schemas/Quote'}
+        daily_bars: {type: array, items: {$ref: '#/components/schemas/DailyBar'}}
+        sources:
+          type: object
+          additionalProperties: {type: string}
+        warnings: {type: array, items: {type: string}}
+        snapshot_id: {type: string}
+        analysis_reference_time: {type: string, format: date-time}
+        fetched_at: {type: string, format: date-time, description: Completion time after all bundle fetches have finished}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+    SourceStatus:
+      type: object
+      required: [name, enabled, quote_capable, daily_bar_capable]
+      properties:
+        name: {type: string}
+        enabled: {type: boolean}
+        quote_capable: {type: boolean}
+        daily_bar_capable: {type: boolean}
+    DataSourcesResponse:
+      type: object
+      required: [sources, normalization_version]
+      properties:
+        sources: {type: array, items: {$ref: '#/components/schemas/SourceStatus'}}
+        normalization_version: {type: string}
+security:
+  - ApiKey: []
+  - BearerAuth: []
+paths:
+  /health/live:
+    get:
+      security: []
+      responses:
+        '200': {description: Service process is live}
+  /health/ready:
+    get:
+      security: []
+      responses:
+        '200': {description: Configured dependencies are ready}
+        '503': {description: Configured dependencies are not ready}
+  /api/v1/quotes/{symbol}:
+    get:
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Normalized real-time quote
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Quote'}
+        '400': {description: Invalid symbol}
+        '401': {description: API key required}
+        '502': {description: All quote providers returned errors}
+        '504': {description: All quote providers timed out}
+  /api/v1/bars/{symbol}/daily:
+    get:
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+        - {name: start, in: query, schema: {type: string, format: date}}
+        - {name: end, in: query, schema: {type: string, format: date}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 2000}}
+        - {name: adjustment, in: query, schema: {$ref: '#/components/schemas/RequestAdjustmentBasis'}}
+      responses:
+        '200':
+          description: Daily bar collection
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DailyBarsResponse'}
+        '400': {description: Invalid symbol, date range, limit or adjustment}
+        '401': {description: API key required}
+        '502': {description: All providers failed}
+        '503': {description: No daily-bar provider enabled}
+        '504': {description: All providers timed out}
+  /api/v1/bundles/{symbol}:
+    get:
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+        - {name: lookback_days, in: query, schema: {type: integer, minimum: 20, maximum: 2000}}
+        - {name: adjustment, in: query, schema: {$ref: '#/components/schemas/RequestAdjustmentBasis'}}
+        - {name: as_of, in: query, description: RFC3339 cutoff time; latest quote is omitted for historical cutoffs, schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: Quote and daily-bar bundle with data quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Bundle'}
+        '400': {description: Invalid symbol, date range or adjustment}
+        '401': {description: API key required}
+        '502': {description: Providers failed}
+        '504': {description: Providers timed out}
+  /api/v1/data-sources:
+    get:
+      responses:
+        '200':
+          description: Registered data source capability status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DataSourcesResponse'}
+        '401': {description: API key required}

@@ -1,0 +1,8 @@
+{
+  "provider_priority": ["eastmoney", "tencent"],
+  "adjustment_basis": "forward_adjusted",
+  "providers": {
+    "eastmoney": {"enabled": true, "quote": true, "daily_bars": true},
+    "tencent": {"enabled": true, "quote": true, "daily_bars": true}
+  }
+}
