@@ -145,8 +145,11 @@ func parseHeader(header []byte) (messageType string, bodyLength int, err error) 
 	if len(parts) != 3 {
 		return "", 0, errors.New("malformed BaoStock message header")
 	}
-	if strings.TrimSpace(parts[0]) == "" || len(parts[1]) != 2 {
-		return "", 0, fmt.Errorf("invalid BaoStock version/message type in header: %q", string(header))
+	if parts[0] != clientProtocolVersion {
+		return "", 0, fmt.Errorf("unsupported BaoStock protocol version %q (expected %q)", parts[0], clientProtocolVersion)
+	}
+	if len(parts[1]) != 2 {
+		return "", 0, fmt.Errorf("invalid BaoStock message type %q", parts[1])
 	}
 	length, parseErr := strconv.Atoi(parts[2])
 	if parseErr != nil || length < 0 {

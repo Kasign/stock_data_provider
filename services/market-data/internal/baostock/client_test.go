@@ -40,6 +40,18 @@ func TestEncodeFrameCountsUTF8BytesAndValidatesCRC(t *testing.T) {
 	}
 }
 
+
+func TestParseHeaderRejectsUnknownProtocolVersion(t *testing.T) {
+	header := []byte(fmt.Sprintf("99.9.99%s%s%s%010d", messageSplit, messageLoginResponse, messageSplit, 0))
+	if len(header) != 21 {
+		t.Fatalf("test header has %d bytes, expected 21", len(header))
+	}
+	_, _, err := parseHeader(header)
+	if err == nil || !strings.Contains(err.Error(), "unsupported BaoStock protocol version") {
+		t.Fatalf("expected unknown protocol version error, got %v", err)
+	}
+}
+
 func TestQueryDailyKLinesHandlesLoginCompressedQueryAndLogout(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

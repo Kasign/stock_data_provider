@@ -7,7 +7,7 @@
 
 ## 1. 决策摘要
 
-**将 BaoStock 纳入下一阶段优先评估和实施计划，但暂不标记为生产可用 Provider。** 当前 NAS 宿主机已经验证 public-api.baostock.com 可解析，并能连接 TCP 10030；登录、查询、字段完整性、复权口径和 Docker 网络内的实际调用尚未验证。
+**BaoStock 原生 Go 协议客户端与 DailyBarProvider 已实现，当前进入真实容器协议和数据契约验收阶段，尚不标记为生产可用 Provider。** NAS 宿主机已经验证 public-api.baostock.com 可解析，并能连接 TCP 10030；容器内登录、查询、字段完整性和复权口径尚未验证。
 
 BaoStock 最合适的第一阶段用途是历史日 K 及其明确声明的成交量、成交额和复权字段；后续再评估其支持的部分财务指标、复权因子、除权除息、证券基础资料、行业分类和指数成分数据。它不能替代实时行情、新闻公告、龙虎榜、板块资金流和筹码数据等全部能力。
 
@@ -97,9 +97,8 @@ BaoStock 官方维护的公开 API 使用 Python 客户端。仓库目标是 Go 
 - MARKET_DATA_BAOSTOCK_PORT（默认 10030）
 - MARKET_DATA_BAOSTOCK_CONNECT_TIMEOUT
 - MARKET_DATA_BAOSTOCK_REQUEST_TIMEOUT
-- MARKET_DATA_BAOSTOCK_MAX_CONCURRENCY
 
-具体变量进入生产配置前，应与现有 Config/ProviderSettings 结构统一命名，并有默认值、范围检查和 README 示例。
+当前 Go 客户端使用单个长连接并通过互斥门禁串行化请求，实际并发上限固定为 1，以避免共享 socket 的响应串线；因此暂不提供 `MARKET_DATA_BAOSTOCK_MAX_CONCURRENCY`。未来若实现独立连接池，再增设该变量并覆盖连接池并发测试。
 
 ### 4.4 集成与质量验收
 
@@ -129,8 +128,8 @@ BaoStock 官方维护的公开 API 使用 Python 客户端。仓库目标是 Go 
 | 阶段 | 任务 | 验收条件 |
 |---|---|---|
 | 0 | 保持当前服务稳定，保留东方财富故障诊断与腾讯复权校验 | 不降低现有数据质量门禁，不更改未复权/前复权语义 |
-| 1 | 在目标 Docker 网络完成 BaoStock Go 协议探测与真实登录查询 | TCP、登录、查询、登出、分页和错误处理均验证 |
-| 2 | 增加 Go BaoStock DailyBarProvider 与单元/集成测试 | 两只代表性股票的三种复权请求符合契约，成交量/成交额单位正确 |
+| 1 | Go 原生 TCP 协议客户端（已实现） | CI 模拟服务测试已通过；等待目标 Docker 网络的真实登录、查询、分页、登出与错误处理验收 |
+| 2 | Go BaoStock DailyBarProvider、配置与单元测试（已实现，默认关闭） | 等待 600519.SH、688981.SH 三种复权的真实数据与字段单位对账；通过后再决定启用 |
 | 3 | 更新 Provider 配置、数据源能力列表、健康状态和逐能力路由 | 未启用、超时、无数据与复权能力不匹配时能正确回退并解释原因 |
 | 4 | 增加复权算法元数据并做来源一致性检查 | 能识别 BaoStock 与其他源不同的复权算法，不跨源拼接 |
 | 5 | 接入 BaoStock 支持的财务/基础资料/行业/指数能力 | 每种能力有独立模型、Provider 开关、单位、时间与数据质量测试 |
