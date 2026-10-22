@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"regexp"
@@ -235,7 +236,7 @@ func TestLiveProbeCaptureRedactsRedirectQueryValues(t *testing.T) {
 
 	capture := &liveProbeCapture{}
 	client := &http.Client{
-		Transport: capture.transport(),
+		Transport:     capture.transport(),
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	resp, err := client.Get(server.URL + "/quote")
