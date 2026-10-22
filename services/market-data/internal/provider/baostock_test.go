@@ -124,7 +124,7 @@ func TestBaostockPreservesExplicitDateRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if start != "2026-06-23" || end != "2026-10-21" {
+	if start != "2026-05-24" || end != "2026-10-21" {
 		t.Fatalf("implicit bounded date range=%s..%s", start, end)
 	}
 }

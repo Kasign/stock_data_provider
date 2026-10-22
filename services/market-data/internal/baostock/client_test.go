@@ -84,6 +84,9 @@ func TestQueryDailyKLinesHandlesLoginCompressedQueryAndLogout(t *testing.T) {
 					serverErr <- fmt.Errorf("query has %d fields, expected 10", len(requestParts))
 					return
 				}
+				// The upstream Python client retains the configured session user ID.
+				// The user_id echoed by login is result metadata, not a replacement
+				// for the identity used in subsequent query and logout requests.
 				if requestParts[1] != "anonymous" || requestParts[2] != "1" ||
 					requestParts[4] != "sh.600519" || requestParts[8] != "d" || requestParts[9] != "2" {
 					serverErr <- fmt.Errorf("unexpected query body %q", body)
@@ -104,6 +107,11 @@ func TestQueryDailyKLinesHandlesLoginCompressedQueryAndLogout(t *testing.T) {
 					return
 				}
 			case messageLogoutRequest:
+				logoutParts := strings.Split(body, messageSplit)
+				if len(logoutParts) != 3 || logoutParts[1] != "anonymous" {
+					serverErr <- fmt.Errorf("logout must use configured session user ID, got %q", body)
+					return
+				}
 				if err := writeAll(conn, responseFrameForTest(messageLogoutResponse, "0\x01success\x01logout", false)); err != nil {
 					serverErr <- err
 					return

@@ -141,7 +141,7 @@ func (c *Client) QueryDailyKLines(ctx context.Context, code, startDate, endDate,
 			return nil, fmt.Errorf("BaoStock daily K-line page %d: %w", pageNumber, err)
 		}
 		if messageType == messageException {
-			return nil, responseStatusError(responseBody)
+			return nil, protocolExceptionError(responseBody)
 		}
 		if messageType != messageCompressed {
 			c.dropConnectionLocked()
@@ -237,7 +237,7 @@ func (c *Client) ensureLoggedInLocked(ctx context.Context) error {
 	}
 	if messageType == messageException {
 		c.dropConnectionLocked()
-		return responseStatusError(responseBody)
+		return protocolExceptionError(responseBody)
 	}
 	if messageType != messageLoginResponse {
 		c.dropConnectionLocked()
@@ -407,8 +407,19 @@ func equalFields(got, want []string) bool {
 
 func responseStatusError(body string) error {
 	parts := strings.Split(body, messageSplit)
-	if len(parts) >= 2 {
-		return fmt.Errorf("BaoStock server error code=%s message=%s", parts[0], parts[1])
+	if len(parts) < 2 {
+		return fmt.Errorf("BaoStock status response is malformed: %s", body)
 	}
-	return fmt.Errorf("BaoStock server error: %s", body)
+	if parts[0] == "0" {
+		return nil
+	}
+	return fmt.Errorf("BaoStock server error code=%s message=%s", parts[0], parts[1])
+}
+
+func protocolExceptionError(body string) error {
+	parts := strings.SplitN(body, messageSplit, 2)
+	if len(parts) == 2 {
+		return fmt.Errorf("BaoStock protocol exception code=%s message=%s", parts[0], parts[1])
+	}
+	return fmt.Errorf("BaoStock protocol exception: %s", body)
 }
