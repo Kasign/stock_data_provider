@@ -53,14 +53,21 @@ MX 相关接口：
 
 ### 数据源扩展评估（2026-10-22）
 
-- BaoStock 已进入下一阶段优先评估：NAS 宿主机 DNS 与 TCP 10030 连接已通过；Docker 容器内连接、登录、真实查询和数据契约验收仍未完成，因此尚未加入生产 Provider。
+- BaoStock 原生 Go TCP 客户端与 DailyBarProvider 已实现，包含登录、CRC 校验、压缩帧、分页和单位/复权标记；默认仍禁用。CI 模拟服务测试不代表真实上游通过。NAS 宿主机 DNS/TCP 已通过，容器内真实登录、查询和数据契约验收仍未完成。
 - BaoStock 首期定位为历史日 K 备用源，后续按独立能力评估部分财务指标、复权因子、除权除息、股票基础信息、行业分类及指数成分；不把它当作实时行情、新闻公告、龙虎榜、市场资金流的全能来源。
-- 接入目标为 Go 原生 TCP 客户端，先核实帧协议、CRC/压缩响应、分页、登录会话和错误码；不在生产采集路径引入 Python 运行时。
+- 接入采用 Go 原生 TCP 客户端，不在生产采集路径引入 Python 运行时。上线门槛仍包括真实容器登录、查询、分页、登出和错误码验证；默认关闭。
 - 官方文档指出其前复权算法可能与同花顺、通达信等不同。数据模型和验收计划必须记录复权算法与来源，不能把同名的前复权序列自动视为数值等价。
 - 东方财富在 NAS 的实时行情和历史 K 线请求都出现 Empty reply，容器访问历史 K 线还出现 Network unreachable；具体原因尚未证实。当前作为环境访问故障跟踪，不能解释为服务商不支持相关股票。
 - 腾讯对贵州茅台的前复权 K 线和对中芯国际的未复权 K 线已经完成实际解析验证；中芯国际本次腾讯响应未提供 qfqday，因此不复权数据不得作为前复权兜底。
 
 详细验收步骤、能力分工、候选数据源成本/权限条件见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)。
+
+### BaoStock Go 实现阶段（2026-10-22）
+
+- 已新增独立 internal/baostock 协议包与 provider.Baostock；协议包负责会话串行化、TCP 帧、CRC32、96 类型 zlib 响应、分页和上下文 deadline。
+- Provider 只实现 DailyBarProvider。成交量标准单位为股、成交额标准单位为人民币元；成交额缺失时保持 null/unknown/degraded，不估算成交额。
+- 新增 adjustment_method=baostock_pct_change，标明其复权算法，避免只靠 forward_adjusted 标签就认定与其他来源数值完全相等。
+- Provider 配置已经注册，但 MARKET_DATA_BAOSTOCK_ENABLED 默认 false。启用前必须在目标容器完成真实登录、查询和逐日口径验收。
 
 ## 3. 构建与自动化测试状态
 

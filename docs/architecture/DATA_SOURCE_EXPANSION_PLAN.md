@@ -14,7 +14,7 @@ BaoStock 最合适的第一阶段用途是历史日 K 及其明确声明的成�
 实施遵循以下约束：
 
 1. Provider 的能力按域注册；不要求只提供历史 K 线的源实现 QuoteProvider。
-2. 在真实登录、真实查询和质量验收通过前，不得把 BaoStock 加入生产 Provider 顺序。
+2. 配置和 Provider 注册已接入，但在真实登录、真实查询和质量验收通过前，必须保持 MARKET_DATA_BAOSTOCK_ENABLED=false，不得将其视为生产可用源。
 3. 同一响应中的 K 线必须来自单一 Provider、同一请求复权口径；不得拼接不同源或把未复权数据标为前复权。
 4. 统一的 forward_adjusted / backward_adjusted 只描述复权方向，不足以表示各数据源的复权算法。对复权序列还应记录具体的 adjustment_method 与可确认的参考日期。
 5. 免费公共服务不等于承诺 SLA 或无频率限制。应使用有限并发、连接复用、缓存、退避及可观测的 Provider 熔断，不对未知的服务端限制自行编造数字。
@@ -139,7 +139,7 @@ BaoStock 官方维护的公开 API 使用 Python 客户端。仓库目标是 Go 
 
 ## 6. 发布决策
 
-在 BaoStock 的 Go 客户端完成真实登录和查询前，本次结论只是“适合加入计划并优先验证”，不是“已经证明生产稳定”。
+BaoStock 的 Go 客户端和 DailyBarProvider 已实现；在 NAS 容器完成真实登录、查询和逐日数据验收前，本次状态只是“代码已实现，等待生产验收”，不是“已经证明生产稳定”。
 
 发布前必须确认：
 
@@ -149,6 +149,17 @@ BaoStock 官方维护的公开 API 使用 Python 客户端。仓库目标是 Go 
 - 请求失败不会返回另一复权口径的伪装数据；
 - 访问规则、低频策略、熔断和健康状态已经实现；
 - CI 测试、真实上游集成测试和部署环境 smoke test 分别通过。
+
+### 当前代码实现状态（2026-10-22）
+
+已完成 Go 原生 TCP client 与日 K Provider 第一轮实现。模拟服务测试覆盖登录、压缩响应、CRC 与查询流程；配置默认关闭。仍需在真实 NAS 容器完成协议互通和实际数据对账。
+
+启用验收建议：
+
+1. 临时设置 MARKET_DATA_BAOSTOCK_ENABLED=true、MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED=true，并保持 MARKET_DATA_BAOSTOCK_QUOTE_ENABLED=false；确保 MARKET_DATA_PROVIDER_PRIORITY 包含 baostock。
+2. 从 stock-market-data 容器请求 600519.SH 前复权和 688981.SH 不复权日 K，检查 source=baostock、复权算法标签、成交量/成交额与质量警告。
+3. 分别验证两只股票前复权、后复权与不复权；对比同一日期、同一 adjust flag 的数据。供应商复权算法不同，跨源对账应区分未复权价格和复权序列，不能只依赖前复权名称。
+4. 若登录/查询、质量校验或 CI 未通过，先修复并保持关闭；未完成真实验收前可将启用开关恢复为 false。
 
 ## 7. 参考资料
 

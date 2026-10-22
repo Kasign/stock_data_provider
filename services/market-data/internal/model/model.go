@@ -71,6 +71,7 @@ type DailyBar struct {
 	Amount            *float64        `json:"amount"`
 	ChangePercent     *float64        `json:"change_percent"`
 	AdjustmentBasis   AdjustmentBasis `json:"adjustment_basis"`
+	AdjustmentMethod  string          `json:"adjustment_method,omitempty"`
 	AdjustmentRefDate string          `json:"adjustment_reference_date,omitempty"`
 	Source            string          `json:"source"`
 	SourceVersion     string          `json:"source_version,omitempty"`

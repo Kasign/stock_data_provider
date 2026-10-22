@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/baostock"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/cache"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/config"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/httpapi"
@@ -59,10 +60,21 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 		c = redis
 	}
+	baostockClient := baostock.NewClient(baostock.Config{
+		Host: cfg.BaostockHost, Port: cfg.BaostockPort,
+		UserID: cfg.BaostockUserID, Password: cfg.BaostockPassword,
+		ConnectTimeout: cfg.BaostockConnectTimeout, RequestTimeout: cfg.BaostockRequestTimeout,
+	})
+	defer func() {
+		if err := baostockClient.Close(); err != nil {
+			logger.Warn("关闭 BaoStock 客户端失败", "error", err)
+		}
+	}()
 	available := map[string]provider.NamedProvider{
 		"eastmoney": provider.NewEastmoneyConfigured(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyUT),
-		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
-		"sina":      provider.NewSina(cfg.ProviderTimeout, cfg.SinaQuoteURL),
+		"baostock": provider.NewBaostock(baostockClient),
+		"tencent": provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
+		"sina": provider.NewSina(cfg.ProviderTimeout, cfg.SinaQuoteURL),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))

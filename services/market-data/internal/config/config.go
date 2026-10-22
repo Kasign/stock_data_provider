@@ -45,6 +45,12 @@ type Config struct {
 	TencentKlineURL         string
 	TencentNoneKlineURL     string
 	SinaQuoteURL            string
+	BaostockHost            string
+	BaostockPort            int
+	BaostockUserID          string
+	BaostockPassword        string
+	BaostockConnectTimeout  time.Duration
+	BaostockRequestTimeout  time.Duration
 	MXEnabled               bool
 	MXAPIKey                string
 	MXAPIURL                string
@@ -70,11 +76,12 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "tencent", "sina"},
+		ProviderPriority: []string{"eastmoney", "baostock", "tencent", "sina"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
+			"baostock":  {Enabled: false, Quote: false, DailyBars: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: false},
 		},
 	}
@@ -92,7 +99,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "tencent" && name != "sina" {
+			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -122,6 +129,10 @@ func Load() (Config, error) {
 	settings["eastmoney"] = overrideProvider("EASTMONEY", settings["eastmoney"])
 	settings["tencent"] = overrideProvider("TENCENT", settings["tencent"])
 	settings["sina"] = overrideProvider("SINA", settings["sina"])
+	settings["baostock"] = overrideProvider("BAOSTOCK", settings["baostock"])
+	if settings["baostock"].Quote {
+		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
+	}
 
 	cfg := Config{
 		HTTPAddr:                get("MARKET_DATA_HTTP_ADDR", ":8091"),
@@ -146,6 +157,12 @@ func Load() (Config, error) {
 		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
 		TencentNoneKlineURL:     get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),
 		SinaQuoteURL:            get("MARKET_DATA_SINA_QUOTE_URL", "https://hq.sinajs.cn/list="),
+		BaostockHost:            get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
+		BaostockPort:            integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
+		BaostockUserID:          get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),
+		BaostockPassword:        get("MARKET_DATA_BAOSTOCK_PASSWORD", "123456"),
+		BaostockConnectTimeout:  duration("MARKET_DATA_BAOSTOCK_CONNECT_TIMEOUT", 5*time.Second),
+		BaostockRequestTimeout:  duration("MARKET_DATA_BAOSTOCK_REQUEST_TIMEOUT", 15*time.Second),
 		MXEnabled:               boolEnv("MARKET_DATA_MX_ENABLED", false),
 		MXAPIKey:                firstNonEmpty(os.Getenv("MARKET_DATA_MX_API_KEY"), os.Getenv("MX_APIKEY")),
 		MXAPIURL:                get("MARKET_DATA_MX_API_URL", "https://mkapi2.dfcfs.com/finskillshub/api/claw/query"),
@@ -218,7 +235,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "tencent" && name != "sina" {
+		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {
@@ -423,7 +440,8 @@ func boolEnv(k string, d bool) bool {
 func validateEnvironment() error {
 	for _, key := range []string{
 		"MARKET_DATA_REQUEST_TIMEOUT", "MARKET_DATA_PROVIDER_TIMEOUT",
-		"MARKET_DATA_CIRCUIT_COOLDOWN", "MARKET_DATA_QUOTE_CACHE_TTL", "MARKET_DATA_BARS_CACHE_TTL", "MARKET_DATA_QUOTE_RETENTION",
+		"MARKET_DATA_BAOSTOCK_CONNECT_TIMEOUT", "MARKET_DATA_BAOSTOCK_REQUEST_TIMEOUT",
+		"MARKET_DATA_CIRCUIT_COOLDOWN, "MARKET_DATA_QUOTE_CACHE_TTL", "MARKET_DATA_BARS_CACHE_TTL", "MARKET_DATA_QUOTE_RETENTION",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 			d, err := time.ParseDuration(value)
@@ -434,6 +452,7 @@ func validateEnvironment() error {
 	}
 	for _, key := range []string{
 		"MARKET_DATA_DEFAULT_DAILY_BARS", "MARKET_DATA_MAX_DAILY_BARS", "MARKET_DATA_REDIS_DB",
+		"MARKET_DATA_BAOSTOCK_PORT",
 		"MARKET_DATA_PROVIDER_RETRIES", "MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
@@ -443,6 +462,9 @@ func validateEnvironment() error {
 			}
 			if key == "MARKET_DATA_REDIS_DB" && n < 0 {
 				return errors.New("MARKET_DATA_REDIS_DB must not be negative")
+			}
+			if key == "MARKET_DATA_BAOSTOCK_PORT" && (n < 1 || n > 65535) {
+				return errors.New("MARKET_DATA_BAOSTOCK_PORT must be an integer between 1 and 65535")
 			}
 			if key == "MARKET_DATA_PROVIDER_RETRIES" && (n < 0 || n > 5) {
 				return errors.New("MARKET_DATA_PROVIDER_RETRIES must be between 0 and 5")
@@ -454,6 +476,7 @@ func validateEnvironment() error {
 	}
 	for _, key := range []string{
 		"MARKET_DATA_DB_AUTO_MIGRATE", "MARKET_DATA_EASTMONEY_ENABLED",
+		"MARKET_DATA_BAOSTOCK_ENABLED", "MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",

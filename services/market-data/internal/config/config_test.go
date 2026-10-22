@@ -347,3 +347,53 @@ func TestLoadUsesSharedMarketDataAdjustmentWhenServiceOverrideIsUnset(t *testing
 		t.Fatalf("adjustment=%q, want shared MARKET_DATA_ADJUSTMENT value none", cfg.Adjustment)
 	}
 }
+
+
+func TestLoadBaoStockIsOptInAndDailyBarsOnly(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,tencent")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "3s")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "30s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "0")
+	t.Setenv("MARKET_DATA_BAOSTOCK_ENABLED", "")
+	t.Setenv("MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["baostock"].Enabled {
+		t.Fatal("BaoStock must remain disabled by default until real upstream tests pass")
+	}
+	if cfg.BaostockHost != "public-api.baostock.com" || cfg.BaostockPort != 10030 {
+		t.Fatalf("unexpected BaoStock endpoint: %s:%d", cfg.BaostockHost, cfg.BaostockPort)
+	}
+
+	t.Setenv("MARKET_DATA_BAOSTOCK_ENABLED", "true")
+	t.Setenv("MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED", "true")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("opt-in BaoStock config should load: %v", err)
+	}
+	if !cfg.ProviderSettings["baostock"].Enabled || !cfg.ProviderSettings["baostock"].DailyBars || cfg.ProviderSettings["baostock"].Quote {
+		t.Fatalf("unexpected BaoStock capabilities: %+v", cfg.ProviderSettings["baostock"])
+	}
+
+	t.Setenv("MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("BaoStock quote capability must fail fast until implemented")
+	}
+}
+
+func TestLoadRejectsInvalidBaoStockPort(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_BAOSTOCK_PORT", "70000")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid BaoStock port must fail configuration loading")
+	}
+}
