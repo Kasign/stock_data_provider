@@ -3,11 +3,13 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +20,44 @@ import (
 )
 
 const liveProbeBodySampleLimit = 2048
+
+var liveProbeURLQuery = regexp.MustCompile(\`(?i)(https?://[^\\s"?]+)\\?[^\\s"']*\`)
+
+func liveProbeErrorSummary(err error) (string, string) {
+	if err == nil {
+		return "unknown", "provider returned an unspecified error"
+	}
+	kind := "provider_error"
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		kind = "timeout"
+	case errors.Is(err, context.Canceled):
+		kind = "canceled"
+	default:
+		lower := strings.ToLower(err.Error())
+		switch {
+		case strings.Contains(lower, "network is unreachable"),
+			strings.Contains(lower, "no route to host"),
+			strings.Contains(lower, "connection refused"),
+			strings.Contains(lower, "dial tcp"):
+			kind = "network_connect"
+		case strings.Contains(lower, "eof"):
+			kind = "connection_closed"
+		case strings.Contains(lower, "http status"):
+			kind = "http_status"
+		case strings.Contains(lower, "decode"),
+			strings.Contains(lower, "no parsable"),
+			strings.Contains(lower, "empty"):
+			kind = "empty_or_unparseable_response"
+		}
+	}
+	message := liveProbeURLQuery.ReplaceAllString(err.Error(), \`$1?[query redacted]\`)
+	if len(message) > 500 {
+		message = message[:500] + "…"
+	}
+	return kind, message
+}
+
 
 type liveProbeReport struct {
 	GeneratedAt string              `json:"generated_at"`
@@ -95,7 +135,7 @@ func (t liveProbeCaptureTransport) RoundTrip(request *http.Request) (*http.Respo
 
 	response, err := t.base.RoundTrip(request)
 	if err != nil {
-		_, message := providerFailureSummary(err)
+		_, message := liveProbeErrorSummary(err)
 		record.TransportError = message
 		return nil, err
 	}
@@ -219,7 +259,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		switch {
 		case callErr != nil:
 			result.Status = "failed"
-			result.ErrorKind, result.Error = providerFailureSummary(callErr)
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
 			failures = append(failures, providerName+" quote: "+result.ErrorKind+" ("+result.Error+")")
 		case quote == nil:
 			result.Status = "invalid"
@@ -280,7 +320,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		switch {
 		case callErr != nil:
 			result.Status = "failed"
-			result.ErrorKind, result.Error = providerFailureSummary(callErr)
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
 			failures = append(failures, providerName+" daily_bars "+string(basis)+": "+result.ErrorKind+" ("+result.Error+")")
 		case len(bars) == 0:
 			result.Status = "invalid"
