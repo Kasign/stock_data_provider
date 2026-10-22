@@ -188,6 +188,14 @@ Sina 当前只实现 QuoteProvider，不提供日 K。既有 fixture 测试覆�
 
 这些单测使用本地 `httptest` fixture，只能验证解析规则，不能证明新浪公网接口在 NAS 容器中的实时可用性。真实验收时应单独启用 Sina 报价能力，检查新鲜的 `source=sina` 结果、报价时间、成交量单位和成交额质量标记；不能把 MariaDB 的 `stale` 回退记录视为新浪实时取数成功。
 
+## 5.8 GitHub Actions 真实 Provider 探测方式
+
+新增工作流 `.github/workflows/live-provider-smoke.yml`，在相关 PR 更新时自动执行，也可从 GitHub Actions 页面手动触发。该工作流使用项目实际 Go Provider 访问公开接口，探测新浪/腾讯报价、腾讯不复权与前复权日 K、东方财富报价与前复权日 K、BaoStock 前复权日 K；将结构化解析结果和截断后的原始 HTTP 响应片段输出到 Actions 日志，并上传 `live-provider-report` artifact。报告隐藏完整 URL 查询串，不需要个人 API Key。单次低频探测失败不会阻断常规 CI。
+
+运行结果必须按供应商分别解读：成功请求中包含 `source`、时间、成交量/成交额单位、质量状态与最新几条 K 线；失败则记录 HTTP 状态或网络错误类型。Tencent K 线缺少经验证的成交额时，`amount=null` / `degraded` 是当前已知的数据契约限制，不应直接判定请求失败。
+
+**GitHub Runner 的网络与 NAS 不同**。该工作流可以回答“GitHub 托管环境实际收到了什么”，但不能替代 NAS 网络和真实部署回归。报告中的 HTTP 响应样本有字节数上限，目的是便于快速判断协议/字段，不作为完整上游原始响应存档。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。

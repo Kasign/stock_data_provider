@@ -1,0 +1,56 @@
+name: Live provider probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      quote_symbol:
+        description: "A-share symbol for real-time quote probes, e.g. 600519.SH"
+        required: false
+        default: "600519.SH"
+        type: string
+  pull_request:
+    paths:
+      - ".github/workflows/live-provider-smoke.yml"
+      - "services/market-data/internal/provider/**"
+      - "services/market-data/internal/baostock/**"
+      - "services/market-data/internal/model/**"
+
+permissions:
+  contents: read
+
+jobs:
+  live-provider-probe:
+    name: Probe real public provider responses
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Provider networks can rate-limit or block hosted runners; this diagnostic must not gate normal CI.
+    continue-on-error: true
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+      - name: Query public providers and capture sanitized responses
+        env:
+          MARKET_DATA_LIVE_PROVIDER_TESTS: "1"
+          LIVE_PROVIDER_REPORT_PATH: ${{ github.workspace }}/live-provider-report.json
+          LIVE_PROBE_QUOTE_SYMBOL: ${{ github.event.inputs.quote_symbol || '600519.SH' }}
+        working-directory: services/market-data
+        run: go test -run '^TestLiveProviderProbe$' -count=1 -v ./internal/provider
+      - name: Print probe report
+        if: always()
+        run: |
+          if [[ -f live-provider-report.json ]]; then
+            cat live-provider-report.json
+          else
+            echo "No report file was produced; inspect the test step logs."
+          fi
+      - name: Upload real-provider report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-provider-report
+          path: live-provider-report.json
+          if-no-files-found: warn
