@@ -67,6 +67,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 
 	fetchedAt := time.Now().UTC()
 	out := make([]model.DailyBar, 0, len(rows))
+	seenDates := make(map[string]struct{}, len(rows))
 	for index, row := range rows {
 		tradeDate := strings.TrimSpace(row.Date)
 		if _, err := time.Parse("2006-01-02", tradeDate); err != nil {
@@ -75,6 +76,11 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		if tradeDate < start || tradeDate > end {
 			return nil, fmt.Errorf("BaoStock row %d date %s is outside requested range %s..%s", index, tradeDate, start, end)
 		}
+		// 同一交易日只允许一根日 K；重复记录通常意味着上游分页或协议数据异常。
+		if _, exists := seenDates[tradeDate]; exists {
+			return nil, fmt.Errorf("BaoStock returned duplicate trade date %s", tradeDate)
+		}
+		seenDates[tradeDate] = struct{}{}
 		returnedSymbol, err := baostockReturnedSymbol(row.Code)
 		if err != nil {
 			return nil, fmt.Errorf("BaoStock row %d has invalid code %q: %w", index, row.Code, err)
@@ -101,6 +107,11 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		closePrice, err := parseBaoStockNumber(row.Close, "close", tradeDate, true)
 		if err != nil {
 			return nil, err
+		}
+		// OHLC 必须满足最低价不高于最高价，开盘价和收盘价都落在当日区间内。
+		// 检查失败时整批拒绝，避免把异常报价标记为 valid 或混入其他来源的数据。
+		if low > high || open < low || open > high || closePrice < low || closePrice > high {
+			return nil, fmt.Errorf("BaoStock OHLC invariant failed on %s: open=%g high=%g low=%g close=%g", tradeDate, open, high, low, closePrice)
 		}
 		rawVolumeValue, err := parseBaoStockNumber(row.Volume, "volume", tradeDate, false)
 		if err != nil {

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,5 +127,49 @@ func TestBaostockPreservesExplicitDateRange(t *testing.T) {
 	}
 	if start != "2026-05-24" || end != "2026-10-21" {
 		t.Fatalf("implicit bounded date range=%s..%s", start, end)
+	}
+}
+
+func TestBaostockRejectsInvalidOHLC(t *testing.T) {
+	tests := []struct {
+		name  string
+		open  string
+		high  string
+		low   string
+		close string
+	}{
+		{name: "open above high", open: "10.3", high: "10.2", low: "9.8", close: "10.1"},
+		{name: "low above high", open: "10.0", high: "9.9", low: "10.1", close: "10.0"},
+		{name: "close below low", open: "10.0", high: "10.2", low: "9.8", close: "9.7"},
+		{name: "close above high", open: "10.0", high: "10.2", low: "9.8", close: "10.3"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &fakeBaostockClient{rows: []baostock.DailyKLine{{
+				Date: "2026-10-21", Code: "sh.600519",
+				Open: tc.open, High: tc.high, Low: tc.low, Close: tc.close,
+				Volume: "1000", Amount: "10000", AdjustFlag: "2",
+			}}}
+			p := NewBaostock(client)
+			_, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-01", "2026-10-21", 20, model.AdjustmentForward)
+			if err == nil || !strings.Contains(err.Error(), "OHLC invariant") {
+				t.Fatalf("异常 OHLC 必须被拒绝，实际错误：%v", err)
+			}
+		})
+	}
+}
+
+func TestBaostockRejectsDuplicateTradeDates(t *testing.T) {
+	row := baostock.DailyKLine{
+		Date: "2026-10-21", Code: "sh.600519",
+		Open: "10.0", High: "10.2", Low: "9.8", Close: "10.1",
+		Volume: "1000", Amount: "10000", AdjustFlag: "2",
+	}
+	client := &fakeBaostockClient{rows: []baostock.DailyKLine{row, row}}
+	p := NewBaostock(client)
+	_, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-01", "2026-10-21", 20, model.AdjustmentForward)
+	if err == nil || !strings.Contains(err.Error(), "duplicate trade date") {
+		t.Fatalf("重复交易日必须被拒绝，实际错误：%v", err)
 	}
 }

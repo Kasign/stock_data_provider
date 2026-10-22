@@ -273,3 +273,293 @@ func responseFrameForTest(messageType, body string, compressed bool) []byte {
 	frame = append(frame, cdataTerminator...)
 	return frame
 }
+
+func readBaoStockRequestForTest(reader *bufio.Reader) (string, string, error) {
+	frame, err := reader.ReadBytes('\n')
+	if err != nil {
+		return "", "", err
+	}
+	return parseRequestForTest(bytes.TrimSuffix(frame, []byte{'\n'}))
+}
+
+func serveBaoStockLoginForTest(conn net.Conn, reader *bufio.Reader) error {
+	messageType, body, err := readBaoStockRequestForTest(reader)
+	if err != nil {
+		return err
+	}
+	if messageType != messageLoginRequest || !strings.HasPrefix(body, "login\x01anonymous\x01123456\x010") {
+		return fmt.Errorf("unexpected login request type/body: %q %q", messageType, body)
+	}
+	return writeAll(conn, responseFrameForTest(messageLoginResponse, "0\x01success\x01login\x01server-session", false))
+}
+
+func klinePageResponseForTest(pageNumber, pageSize int, rows [][]string) []byte {
+	payload, _ := json.Marshal(map[string]any{"record": rows})
+	body := strings.Join([]string{
+		"0", "success", "query_history_k_data_plus", "anonymous",
+		strconv.Itoa(pageNumber), strconv.Itoa(pageSize), string(payload),
+		"sh.600519", dailyKLineFields, "2026-10-01", "2026-10-21", "d", "2",
+	}, messageSplit)
+	return responseFrameForTest(messageCompressed, body, true)
+}
+
+func validTestKLineRowForDate(date string) []string {
+	return []string{date, "sh.600519", "10.0", "10.2", "9.8", "10.1", "9.9",
+		"1000", "10000", "2", "0.1", "1", "1.0", "0"}
+}
+
+func TestQueryDailyKLinesPaginatesAndAcceptsEmptyLastPage(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverErr <- acceptErr
+			return
+		}
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		if err := serveBaoStockLoginForTest(conn, reader); err != nil {
+			serverErr <- err
+			return
+		}
+		// 用较小的响应 pageSize 模拟分页边界，避免测试生成一万条重复样本。
+		for pageNumber := 1; pageNumber <= 3; pageNumber++ {
+			messageType, body, err := readBaoStockRequestForTest(reader)
+			if err != nil {
+				serverErr <- err
+				return
+			}
+			parts := strings.Split(body, messageSplit)
+			if messageType != messageHistoryRequest || len(parts) != 10 || parts[2] != strconv.Itoa(pageNumber) {
+				serverErr <- fmt.Errorf("unexpected page request: type=%q body=%q", messageType, body)
+				return
+			}
+			var rows [][]string
+			switch pageNumber {
+			case 1:
+				rows = [][]string{validTestKLineRowForDate("2026-10-20")}
+			case 2:
+				rows = [][]string{validTestKLineRowForDate("2026-10-21")}
+			case 3:
+				// 空的最后一页应结束分页，但不能丢弃之前已收到的记录。
+				rows = [][]string{}
+			}
+			if err := writeAll(conn, klinePageResponseForTest(pageNumber, 1, rows)); err != nil {
+				serverErr <- err
+				return
+			}
+		}
+		messageType, _, err := readBaoStockRequestForTest(reader)
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		if messageType != messageLogoutRequest {
+			serverErr <- fmt.Errorf("expected logout after completed query, got %q", messageType)
+			return
+		}
+		if err := writeAll(conn, responseFrameForTest(messageLogoutResponse, "0\x01success\x01logout", false)); err != nil {
+			serverErr <- err
+			return
+		}
+		serverErr <- nil
+	}()
+
+	host, portText, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second})
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	rows, err := client.QueryDailyKLines(ctx, "sh.600519", "2026-10-01", "2026-10-21", "2")
+	if err != nil {
+		t.Fatalf("分页查询失败：%v", err)
+	}
+	if len(rows) != 2 || rows[0].Date != "2026-10-20" || rows[1].Date != "2026-10-21" {
+		t.Fatalf("分页结果丢失或顺序错误：%+v", rows)
+	}
+	if err := client.Close(); err != nil {
+		t.Fatalf("登出失败：%v", err)
+	}
+	if err := <-serverErr; err != nil {
+		t.Fatalf("模拟 BaoStock 服务端失败：%v", err)
+	}
+}
+
+func TestQueryDailyKLinesReturnsUpstreamError(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverErr <- acceptErr
+			return
+		}
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		if err := serveBaoStockLoginForTest(conn, reader); err != nil {
+			serverErr <- err
+			return
+		}
+		messageType, _, err := readBaoStockRequestForTest(reader)
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		if messageType != messageHistoryRequest {
+			serverErr <- fmt.Errorf("expected history request, got %q", messageType)
+			return
+		}
+		// 服务端业务错误走压缩响应通道，客户端必须保留错误码/错误信息。
+		if err := writeAll(conn, responseFrameForTest(messageCompressed, "1\x01invalid date range", true)); err != nil {
+			serverErr <- err
+			return
+		}
+		messageType, _, err = readBaoStockRequestForTest(reader)
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		if messageType != messageLogoutRequest {
+			serverErr <- fmt.Errorf("expected logout after provider error, got %q", messageType)
+			return
+		}
+		if err := writeAll(conn, responseFrameForTest(messageLogoutResponse, "0\x01success\x01logout", false)); err != nil {
+			serverErr <- err
+			return
+		}
+		serverErr <- nil
+	}()
+
+	host, portText, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err = client.QueryDailyKLines(ctx, "sh.600519", "2026-10-01", "2026-10-21", "2")
+	if err == nil || !strings.Contains(err.Error(), "code=1") || !strings.Contains(err.Error(), "invalid date range") {
+		t.Fatalf("应返回上游错误码与原因，实际错误：%v", err)
+	}
+	if err := client.Close(); err != nil {
+		t.Fatalf("上游错误后登出失败：%v", err)
+	}
+	if err := <-serverErr; err != nil {
+		t.Fatalf("模拟 BaoStock 服务端失败：%v", err)
+	}
+}
+
+func TestQueryDailyKLinesReconnectsAfterConnectionDrops(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		// 第一个会话在收到查询后断开连接，模拟上游重置长连接。
+		first, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverErr <- acceptErr
+			return
+		}
+		firstReader := bufio.NewReader(first)
+		if err := serveBaoStockLoginForTest(first, firstReader); err != nil {
+			_ = first.Close()
+			serverErr <- err
+			return
+		}
+		messageType, _, err := readBaoStockRequestForTest(firstReader)
+		if err != nil || messageType != messageHistoryRequest {
+			_ = first.Close()
+			serverErr <- fmt.Errorf("expected first history request, type=%q err=%v", messageType, err)
+			return
+		}
+		_ = first.Close()
+
+		// 后续调用必须新建 TCP 连接、重新登录，再继续读取日 K。
+		second, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverErr <- acceptErr
+			return
+		}
+		defer second.Close()
+		secondReader := bufio.NewReader(second)
+		if err := serveBaoStockLoginForTest(second, secondReader); err != nil {
+			serverErr <- err
+			return
+		}
+		messageType, _, err = readBaoStockRequestForTest(secondReader)
+		if err != nil || messageType != messageHistoryRequest {
+			serverErr <- fmt.Errorf("expected second history request, type=%q err=%v", messageType, err)
+			return
+		}
+		if err := writeAll(second, klinePageResponseForTest(1, defaultPageSize, [][]string{validTestKLineRowForDate("2026-10-21")})); err != nil {
+			serverErr <- err
+			return
+		}
+		messageType, _, err = readBaoStockRequestForTest(secondReader)
+		if err != nil || messageType != messageLogoutRequest {
+			serverErr <- fmt.Errorf("expected logout after reconnected query, type=%q err=%v", messageType, err)
+			return
+		}
+		if err := writeAll(second, responseFrameForTest(messageLogoutResponse, "0\x01success\x01logout", false)); err != nil {
+			serverErr <- err
+			return
+		}
+		serverErr <- nil
+	}()
+
+	host, portText, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second})
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	if _, err := client.QueryDailyKLines(ctx, "sh.600519", "2026-10-01", "2026-10-21", "2"); err == nil {
+		t.Fatal("断线的首次查询应明确返回错误，不能伪造成功数据")
+	}
+	rows, err := client.QueryDailyKLines(ctx, "sh.600519", "2026-10-01", "2026-10-21", "2")
+	if err != nil {
+		t.Fatalf("断线后的下一次调用应重新连接并成功查询：%v", err)
+	}
+	if len(rows) != 1 || rows[0].Date != "2026-10-21" {
+		t.Fatalf("重连后的结果异常：%+v", rows)
+	}
+	if err := client.Close(); err != nil {
+		t.Fatalf("重连后的登出失败：%v", err)
+	}
+	if err := <-serverErr; err != nil {
+		t.Fatalf("模拟 BaoStock 服务端失败：%v", err)
+	}
+}
