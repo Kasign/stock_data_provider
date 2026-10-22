@@ -326,4 +326,3 @@ func TestTencentDailyBarsRejectsMissingRequestedAdjustedSeries(t *testing.T) {
 		})
 	}
 }
-

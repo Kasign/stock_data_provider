@@ -180,7 +180,7 @@ Tencent Go Provider 当前单测覆盖成交额缺失时保持 null/unknown/degr
 - `adjustment=backward_adjusted` 应向调整 endpoint 请求 `hfq`，并读取 `hfqday`；
 - 若请求的复权数组缺失，即使响应含 `day`，也必须报错，不能将不复权价格冒充调整后价格。
 
-对应自动化用例为 `TestTencentDailyBarsUsesRequestedAdjustmentEndpointAndPayloadKey` 与 `TestTencentDailyBarsRejectsMissingRequestedAdjustedSeries`，使用本地 `httptest` fixture 断言接口、参数、响应字段映射与复权缺失保护。这些测试不是对 Tencent 线上服务可达性、当日数据覆盖或成交额真实性的证明。Tencent 独立单源验收仍待部署环境恢复正常配置后执行。
+对应自动化用例为 `TestTencentDailyBarsUsesRequestedAdjustmentEndpointAndPayloadKey` 与 `TestTencentDailyBarsRejectsMissingRequestedAdjustedSeries`，使用本地 `httptest` fixture 断言接口、参数、响应字段映射与复权缺失保护。这些测试不是对 Tencent 线上服务可达性、当日数据覆盖或成交额真实性的证明。Tencent 独立单源验收仍待部署环境恢复正常配置后执行。实际测试应选用近期且尚未在 MariaDB 保存的交易日（例如 `2026-10-22`），并用新的 `limit` 避开既有缓存；请求成功必须看到本次新鲜数据的 `source=tencent` 和接近当前请求时间的 `fetched_at`。Tencent 日 K 当前没有经过验证的成交额字段，故 `amount=null` 与 `quality_status=degraded` 是预期限制；如果响应为 `stale` 且带 `provider_unavailable_served_from_mariadb`，只能说明数据库兜底生效，不能判定 Tencent 独立验收通过。
 
 ## 6. 下一步验收顺序
 
