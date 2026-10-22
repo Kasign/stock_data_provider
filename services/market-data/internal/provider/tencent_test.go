@@ -149,6 +149,9 @@ func TestTencentBarsExplicitlyMarkMissingAmount(t *testing.T) {
 	if bars[0].Amount != nil {
 		t.Fatal("Tencent K-line amount must be unknown, not zero")
 	}
+	if bars[0].AmountUnit != "unknown" {
+		t.Fatalf("Tencent K-line without amount must not claim an amount unit, got %q", bars[0].AmountUnit)
+	}
 }
 
 func TestTencentBarsIgnoresObjectExtraFieldAndValidatesOptionalAmount(t *testing.T) {

@@ -140,7 +140,7 @@ func TestValidateAndSortBarsRejectsNonFiniteChangePercentAndDegradesMissingAmoun
 	volume := int64(1000)
 	nan := math.NaN()
 	bars := []model.DailyBar{
-		{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: nil, ChangePercent: nil, AdjustmentBasis: model.AdjustmentForward, Source: "tencent", VolumeUnit: "shares", AmountUnit: "", QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: nil, ChangePercent: nil, AdjustmentBasis: model.AdjustmentForward, Source: "tencent", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
 		{Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: ptrFloat(10000), ChangePercent: &nan, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
 	}
 	got, warnings := ValidateAndSortBars("600519.SH", bars, "", "", 10)

@@ -281,7 +281,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 	if err != nil {
 		return nil, false, err
 	}
-	key := "md:v3:quote:" + symbol
+	key := "md:v4:quote:" + symbol
 	if data, ok, e := s.cache.Get(ctx, key); e == nil && ok {
 		var q model.Quote
 		if json.Unmarshal(data, &q) == nil {
@@ -452,7 +452,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 	if basis != model.AdjustmentNone && basis != model.AdjustmentForward && basis != model.AdjustmentBackward {
 		return nil, false, nil, fmt.Errorf("unsupported adjustment basis %q", basis)
 	}
-	key := fmt.Sprintf("md:v3:bars:%s:%s:%s:%s:%d", symbol, start, end, basis, limit)
+	key := fmt.Sprintf("md:v4:bars:%s:%s:%s:%s:%d", symbol, start, end, basis, limit)
 	if data, ok, e := s.cache.Get(ctx, key); e == nil && ok {
 		var v struct {
 			Bars     []model.DailyBar `json:"bars"`

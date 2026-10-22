@@ -12,7 +12,7 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
-const Version = "3"
+const Version = "4"
 
 var symbolPattern = regexp.MustCompile(`^[0-9]{6}(\.(SH|SZ|BJ))?$`)
 
@@ -259,9 +259,8 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			if b.QualityStatus == model.QualityValid || b.QualityStatus == "" {
 				b.QualityStatus = model.QualityDegraded
 			}
-			if strings.TrimSpace(b.AmountUnit) == "" {
-				b.AmountUnit = "unknown"
-			}
+			// AmountUnit describes the actual amount value. A provider cannot assert CNY when amount is null.
+			b.AmountUnit = "unknown"
 			b.QualityReasons = appendReasonUnique(b.QualityReasons, "amount_missing_from_provider")
 			b.QualityReasons = appendReasonUnique(b.QualityReasons, "amount_unit_unknown_because_amount_missing")
 		} else if b.AmountUnit != "CNY" {
