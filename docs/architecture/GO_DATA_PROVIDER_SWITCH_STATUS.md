@@ -4,7 +4,7 @@
 > 当前分支：`feat/full-go-data-providers-api-switch`  
 > 当前定位：分阶段迁移；不是全 Python 去依赖的最终版本。
 
-完整设计见 [Go 行情数据服务迁移方案](./GO_MARKET_DATA_MIGRATION_PLAN.md)，数据源扩展顺序与真实验收门槛见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)，Review 与警示见 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md)，数据域明细见 [Python Provider 到 Go 迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)。
+完整设计见 [Go 行情数据服务迁移方案](./GO_MARKET_DATA_MIGRATION_PLAN.md)，数据源扩展顺序与真实验收门槛见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)，真实 NAS 取数、故障回退与 Eastmoney 网络故障证据见 [数据源真实环境验收与故障排查记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)，Review 与警示见 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md)，数据域明细见 [Python Provider 到 Go 迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)。
 
 ## 1. 当前已实现
 
@@ -23,7 +23,7 @@
 | 能力 | Provider | 状态 |
 |---|---|---|
 | 实时行情 | 东方财富、腾讯、新浪 | Go API 主链路；新浪仅报价 |
-| 日线 K 线 | 东方财富、腾讯、BaoStock（默认关闭） | 东方财富/腾讯保持现有路由；BaoStock Go Provider 已注册，真实容器验收前不进入生产路由 |
+| 日线 K 线 | 东方财富、腾讯、BaoStock（代码默认关闭） | BaoStock 已通过首轮真实 NAS 日 K 样本、故障回退及 MariaDB 不复权回退测试；其他 Provider 仍需独立验收，Eastmoney 网络故障待定位 |
 | 筹码分布 | 妙想 MX_API | 已新增可选 SupplementProvider、HTTP 路由和缓存；默认关闭 |
 | 个股主力资金流 | 妙想 MX_API | 已新增可选 SupplementProvider、HTTP 路由和缓存；5/10 日合计必须有完整观测 |
 
@@ -43,22 +43,22 @@ MX 相关接口：
 
 ## 2. 明确尚未完成
 
-- 原 Python Provider 的完整替换仍未完成：Efinance、AkShare、Pytdx、Tushare、TickFlow、YFinance、Longbridge、Futu、Finnhub、Alpha Vantage 等仍需逐一对照上游源码、权限、优先级、单位和失败语义；BaoStock 已有 Go 日 K 代码，但仍待真实环境验收。
+- 原 Python Provider 的完整替换仍未完成：Efinance、AkShare、Pytdx、Tushare、TickFlow、YFinance、Longbridge、Futu、Finnhub、Alpha Vantage 等仍需逐一对照上游源码、权限、优先级、单位和失败语义；BaoStock 已有首轮真实日 K 验收，仍需持续扩大样本并观察稳定性。
 - 全市场指数/广度、行业/概念板块、涨停池、财务、完整资金流口径、龙虎榜、新闻公告等 Go 原生数据域未全部实现。
 - `go-core` 的 market overview/新闻/LLM/部分持久化及通知仍有 Python bridge 依赖。
 - 同花顺接入尚未实现，已列入计划；参考仓库 [Kasign/Financial-API](https://github.com/Kasign/Financial-API)，必须先核验真实 API 权限、速率限制和字段口径。
 - 已实现 MariaDB `analysis_tasks`、有界 Go Worker、`POST /api/v1/analysis/tasks` 的 202 + task_id、任务状态查询和 `after_sequence` 阶段事件轮询；SSE、取消、自动重试与前端状态展示仍未完成。重启时遗留的 running 任务会显式标记为 `worker_interrupted`，不自动重跑。
-- 尚未在目标服务器验证真实供应商连接、MariaDB/Redis 权限和 Docker Compose 完整部署；CI 绿色不能替代真实网络验收。
+- 已完成一部分真实 Provider 请求及 MariaDB/Redis 链路验证，但目标环境的完整生产回归仍未完成；CI 绿色不能替代真实网络和端到端验收。
 
 
 ### 数据源扩展评估（2026-10-22）
 
-- BaoStock 原生 Go TCP 客户端与 DailyBarProvider 已实现，包含登录、CRC 校验、压缩帧、分页和单位/复权标记；默认仍禁用。CI 模拟服务测试不代表真实上游通过。NAS 宿主机 DNS/TCP 已通过，容器内真实登录、查询和数据契约验收仍未完成。
+- BaoStock 原生 Go TCP 客户端与 DailyBarProvider 已实现，包含登录、CRC 校验、压缩帧、分页和单位/复权标记；代码默认仍禁用。2026-10-22 的真实 NAS 测试已获得 600519.SH、688981.SH、000001.SZ、600036.SH 等多个样本，返回 source=baostock、quality_status=valid，并通过多源回退及 MariaDB 不复权回退验证。完整证据见[真实环境验收记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。
 - BaoStock 首期定位为历史日 K 备用源，后续按独立能力评估部分财务指标、复权因子、除权除息、股票基础信息、行业分类及指数成分；不把它当作实时行情、新闻公告、龙虎榜、市场资金流的全能来源。
 - 接入采用 Go 原生 TCP 客户端，不在生产采集路径引入 Python 运行时。上线门槛仍包括真实容器登录、查询、分页、登出和错误码验证；默认关闭。
 - 官方文档指出其前复权算法可能与同花顺、通达信等不同。数据模型和验收计划必须记录复权算法与来源，不能把同名的前复权序列自动视为数值等价。
-- 东方财富在 NAS 的实时行情和历史 K 线请求都出现 Empty reply，容器访问历史 K 线还出现 Network unreachable；具体原因尚未证实。当前作为环境访问故障跟踪，不能解释为服务商不支持相关股票。
-- 腾讯对贵州茅台的前复权 K 线和对中芯国际的未复权 K 线已经完成实际解析验证；中芯国际本次腾讯响应未提供 qfqday，因此不复权数据不得作为前复权兜底。
+- Eastmoney 故障于 2026-10-22 进一步复现：容器可访问百度 HTTPS；两个 Eastmoney 域名根路径可建立 HTTPS 并返回 404，但真实历史 K 线接口在连接部分解析到的 IP 时出现 Network unreachable。根因未确定，不能断言运营商封锁或域名整体被封。详情见[真实环境验收记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。
+- Tencent 已作为 BaoStock 故障回退源成功返回 600036.SH 日 K 样本，但成交额缺失被标记 degraded；仍需独立单源验收。未复权数据不得作为前复权兜底。
 
 详细验收步骤、能力分工、候选数据源成本/权限条件见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)。
 
@@ -98,9 +98,10 @@ go vet ./...
 
 ## 4. 下一步顺序
 
-1. 在 stock-market-data 容器内完成 BaoStock DNS/TCP、真实登录、查询、分页和登出验收；Go 原生客户端与 DailyBarProvider 已实现，但模拟协议测试不能替代真实上游验证。
-2. 对 600519.SH 与 688981.SH 做前复权、后复权和不复权的字段、日期覆盖、成交量/成交额单位及复权算法验收；通过后才启用 BaoStock 日 K 备用路由。
-3. 持续跟踪东方财富 Empty reply / 容器 Network unreachable 的真实环境故障；不能把访问失败当作标的不支持，也不能让该故障绕过质量门禁。
+1. 用户恢复测试前的 .env 并重新创建 market-data 后，确认 BaoStock 正常路由恢复；首轮真实样本已通过，后续继续扩大交易日、停牌/无数据日期和更长历史范围的验收。
+2. 独立测试 Tencent 日 K：只启用 Tencent，先验收不复权数据日期覆盖、OHLC、成交量/成交额单位和质量标记，再按真实响应测试复权能力；缺失成交额或未复权价格不得伪装成完整前复权数据。
+3. 独立测试 Sina 报价能力；当前 Sina 是 QuoteProvider，不应误当作日 K Provider。
+4. 持续跟踪 Eastmoney 历史行情接口 Network unreachable；根因未确定，按[真实环境验收记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)保存证据并待后续排查。
 4. 依据 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md) 分别推进财务、基础资料、行业/指数、市场广度、板块、龙虎榜和新闻公告数据域；Tushare/THS 的权限、费用及速率先核实后再决定接入。
 5. 在真实环境继续验收 MX/API 与 MariaDB/Redis，并按原计划推进异步任务表/Worker/202 + task_id/状态与事件轮询，随后再实现 SSE 和前端状态展示。
 6. 按 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md) 推进日志字段统一和其余未迁移能力。
