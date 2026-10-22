@@ -122,7 +122,7 @@ redis_enabled=true
 - 对 `600036.SH` 查询 `2026-10-19` 至 `2026-10-21`、`adjustment=none`、`limit=9`，请求返回 HTTP 200、`X-Cache: MISS`，但数据是 MariaDB 返回的 Tencent 历史记录：`source=tencent`、`quality_status=stale`，记录中的 fetched_at 为 `2026-10-22T10:24:22.933983463Z` 左右。
 - 该响应记录里的 `fallback_reason` 包含此前 BaoStock 连接拒绝和 Eastmoney EOF，它属于已存储记录的 metadata；不能将其直接视为本次 HTTP 请求的实时错误。
 - 对 `2026-10-22` 单日请求（`limit=11`、`adjustment=none`）返回 HTTP 502，说明 Eastmoney 没有交付本次请求可用的数据，但当时没有保存其响应体，故尚不能精确区分网络失败、HTTP 错误、空 payload 或响应解析/契约校验错误。
-- 过滤 `docker compose logs --since=15m --tail=300 market-data` 得到的相关日志只有服务启动信息，没有打印 provider 逐次失败原因。下一轮应同时保存 HTTP 错误响应体，并考虑在 Go 服务中增加不含 URL 查询串/凭据的 provider 失败结构化日志。
+- 当时过滤 `docker compose logs --since=15m --tail=300 market-data` 只得到服务启动信息，没有逐次 provider 错误。这直接促成分支后续提交增加结构化日志：`market data provider failed`，包含 `fetch_id`、`capability`、`symbol`、`provider`、`error_kind` 和已清理 URL 查询串的 `error`。该改动已经添加单元测试并通过 `services/market-data` 的 CI 测试、race detector 与 vet；需等包含该提交的镜像实际部署后，运行时才会输出这些新日志。下一轮仍需同时保存 HTTP 错误响应体。
 
 ### 5.3 原始域名与接口探测
 
