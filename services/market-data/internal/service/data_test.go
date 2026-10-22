@@ -710,4 +710,3 @@ func TestProviderFailureSummaryClassifiesNetworkUnavailable(t *testing.T) {
 		t.Fatalf("expected sanitized failure message to preserve network symptom, got %q", message)
 	}
 }
-
