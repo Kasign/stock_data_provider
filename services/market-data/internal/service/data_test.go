@@ -686,3 +686,28 @@ func TestDailyBarsFallbackWarningsExposeMissingAmount(t *testing.T) {
 		t.Fatalf("expected response-level fallback and missing-amount warnings, got %v", warnings)
 	}
 }
+
+func TestProviderFailureSummaryRedactsURLQuery(t *testing.T) {
+	err := errors.New(`eastmoney request: Get "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.600036&ut=public-token": EOF`)
+	kind, message := providerFailureSummary(err)
+	if kind != "connection_closed" {
+		t.Fatalf("error kind = %q, want connection_closed", kind)
+	}
+	if strings.Contains(message, "public-token") || strings.Contains(message, "secid=1.600036") {
+		t.Fatalf("provider error message leaked URL query parameters: %q", message)
+	}
+	if !strings.Contains(message, "https://push2his.eastmoney.com/api/qt/stock/kline/get?[query redacted]") {
+		t.Fatalf("expected endpoint path to remain visible with query redacted, got %q", message)
+	}
+}
+
+func TestProviderFailureSummaryClassifiesNetworkUnavailable(t *testing.T) {
+	kind, message := providerFailureSummary(errors.New("dial tcp 61.129.129.199:443: connect: Network unreachable"))
+	if kind != "network_connect" {
+		t.Fatalf("error kind = %q, want network_connect", kind)
+	}
+	if !strings.Contains(message, "Network unreachable") {
+		t.Fatalf("expected sanitized failure message to preserve network symptom, got %q", message)
+	}
+}
+
