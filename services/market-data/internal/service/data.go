@@ -331,8 +331,8 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			if errors.Is(e, context.DeadlineExceeded) {
 				timeoutFailures++
 			}
-			s.logProviderFailure(fetchID, "quote", symbol, p.Name(), e)
-			errs = append(errs, p.Name()+": "+e.Error())
+			safeError := s.logProviderFailure(fetchID, "quote", symbol, p.Name(), e)
+			errs = append(errs, p.Name()+": "+safeError)
 			continue
 		}
 		if q == nil {
@@ -520,8 +520,8 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			if errors.Is(e, context.DeadlineExceeded) {
 				timeoutFailures++
 			}
-			s.logProviderFailure(fetchID, "daily_bars", symbol, p.Name(), e)
-			errs = append(errs, p.Name()+": "+e.Error())
+			safeError := s.logProviderFailure(fetchID, "daily_bars", symbol, p.Name(), e)
+			errs = append(errs, p.Name()+": "+safeError)
 			continue
 		}
 		if len(bars) == 0 {
@@ -1049,7 +1049,7 @@ func providerFailureSummary(err error) (kind, message string) {
 	return kind, message
 }
 
-func (s *DataService) logProviderFailure(fetchID, capability, symbol, providerName string, err error) {
+func (s *DataService) logProviderFailure(fetchID, capability, symbol, providerName string, err error) string {
 	kind, message := providerFailureSummary(err)
 	s.logger.Warn("market data provider failed",
 		"fetch_id", fetchID,
@@ -1059,6 +1059,7 @@ func (s *DataService) logProviderFailure(fetchID, capability, symbol, providerNa
 		"error_kind", kind,
 		"error", message,
 	)
+	return message
 }
 
 func dedupeStrings(values []string) []string {
