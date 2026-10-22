@@ -1,114 +1,51 @@
-# Go 服务部署就绪代码 Review
+# Go 服务部署就绪 Review
 
 > Review 日期：2026-10-22  
-> 目标分支：`feat/full-go-data-providers-api-switch`  
-> Review 范围：Go 行情服务、Go 分析 API、Dockerfile、Compose、环境变量与首次部署流程。
+> 分支：`feat/full-go-data-providers-api-switch`  
+> 目标：降低首次部署的配置与构建风险；真实服务器验收仍以实际运行结果为准。
 
 ## 1. Review 结论
 
-**静态代码与 Go 自动化测试通过后，建议按本文的预检脚本进行首次部署；不能仅凭 CI 承诺真实服务器必然一次成功。** 真实部署还依赖当前服务器上的 Docker 网络、数据库是否存在、账号权限、Redis 密码和行情供应商网络。
+根 Go 分析 API 与原生 Go `market-data` 服务在 CI 中已通过 Go 格式检查、测试、竞态检测、`go vet`，并且两个 Docker 镜像均成功构建。GitHub Actions 运行 [#153](https://github.com/Kasign/stock_data_provider/actions/runs/39715484029) 还通过了 `docker compose config --quiet` 和部署脚本语法检查。
 
-本分支包含根 Go 分析 API 和原生 Go market-data 两个部署服务。该 Compose 文件不启动 `go-core` 或 Python bridge；当前根 API 的行情与日 K 不依赖 Python 行情 fallback。
+这证明代码可以编译、Compose 文件可解析；**不等于目标服务器上的数据库权限、Redis 认证、Docker 网络和外部行情供应商已经通过端到端测试**。
 
-## 2. 本轮重点核查与修正
+本 Compose 只启动两个 Go 服务，不启动 `go-core` 或 Python bridge。当前分析 API 的实时行情和日 K 由 Go market-data 服务提供。
 
-| 项目 | Review 结果 |
+## 2. Review 重点
+
+| 项目 | 结果与注意事项 |
 |---|---|
-| Go 模块测试 | 根 module、`go-core`、`services/market-data` 的格式检查、测试、race 和 vet 已在既有 CI 运行 #147 通过 |
-| Docker 实际构建 | 之前 CI 没有构建两个 Dockerfile。本轮已把 Compose 语法检查和两个镜像构建加入 CI，结果以本分支最新 Actions 运行记录为准 |
-| Compose 配置输入 | 两个容器共用同一个 `MARKET_DATA_API_KEY`；行情服务可使用拆分后的 `MARKET_DATA_DB_*`，旧 `MARKET_DATA_MYSQL_DSN` 暂时兼容 |
-| 数据库/Redis 复用 | 两个容器连接现有 `1panel-network` 内服务，不应再建第二套数据库容器 |
-| 宿主机端口安全 | 分析 API 没有内置用户认证，宿主机映射已限制为 `127.0.0.1:8092`，避免直接绑定公网网卡 |
-| MariaDB 凭据 | 分析 API 使用 MySQL 驱动原生 Connector，不把密码拼入 DSN 字符串；新增测试覆盖包含 `@`、`:`、`/`、`?`、`#`、`&`、`# Go 服务部署就绪代码 Review
+| Go 代码 | 根 module、`go-core`、`services/market-data` 通过 gofmt、测试、race 和 vet |
+| Docker 构建 | 两个生产 Dockerfile 均在 CI 中构建成功 |
+| 数据库配置 | 分析 API 使用 `DB_*`；行情服务使用 `MARKET_DATA_DB_*`，可暂时兼容旧 `MARKET_DATA_MYSQL_DSN` |
+| Redis 配置 | 分析 API 使用 `REDIS_*`；行情服务使用 `MARKET_DATA_REDIS_*` |
+| 网络 | 两个容器连接现有 `1panel-network`，不额外部署 MariaDB/Redis |
+| 端口安全 | 分析 API 的宿主机映射绑定在 `127.0.0.1:8092`；对公网开放前仍需 OpenResty 鉴权和来源限制 |
+| 部署脚本 | `scripts/deploy-go.sh` 会检查 Compose、构建镜像、启动容器、等待健康检查并在失败时打印日志 |
 
-> Review 日期：2026-10-22  
-> 目标分支：`feat/full-go-data-providers-api-switch`  
-> Review 范围：Go 行情服务、Go 分析 API、Dockerfile、Compose、环境变量与首次部署流程。
+## 3. 部署前必须确认
 
-## 1. Review 结论
+1. Docker 网络 `1panel-network` 已存在，MariaDB 和 Redis 容器已接入该网络。
+2. 目标 MariaDB 数据库（例如 `stock_analysis_server`）已经创建。自动迁移只创建本项目的数据表，不会创建数据库本身。
+3. DB 用户、密码、数据库名和服务地址正确。开启 `DB_AUTO_MIGRATE=true` 或 `MARKET_DATA_DB_AUTO_MIGRATE=true` 时，相应账号要有建表权限；已有表结构需要升级时也要有相应变更权限。
+4. 两个 Go 服务必须使用相同的 `MARKET_DATA_API_KEY`，且密钥至少 32 个字符、不能是占位值。
+5. Redis 地址和密码可以连接现有实例；如果 Redis 使用 ACL 用户名，还应设置行情服务的 `MARKET_DATA_REDIS_USERNAME`。
+6. 如果使用旧 `MARKET_DATA_MYSQL_DSN`，仅在所有 `MARKET_DATA_DB_HOST/PORT/USER/PASSWORD/NAME/CHARSET/TIMEZONE` 拆分字段都未设置时才会走兼容路径。新配置建议使用拆分字段，避免 DSN 中的特殊字符问题。
 
-**静态代码与 Go 自动化测试通过后，建议按本文的预检脚本进行首次部署；不能仅凭 CI 承诺真实服务器必然一次成功。** 真实部署还依赖当前服务器上的 Docker 网络、数据库是否存在、账号权限、Redis 密码和行情供应商网络。
+### 你当前配置里必须先处理的项目
 
-本分支包含根 Go 分析 API 和原生 Go market-data 两个部署服务。该 Compose 文件不启动 `go-core` 或 Python bridge；当前根 API 的行情与日 K 不依赖 Python 行情 fallback。
+你前面贴出的 `MARKET_DATA_API_KEY=change_me` 若是服务器上的实际值，就会导致两个 Go 服务启动失败。运行部署脚本前，在服务器执行：
 
-## 2. 本轮重点核查与修正
+```bash
+openssl rand -hex 32
+```
 
-| 项目 | Review 结果 |
-|---|---|
-| Go 模块测试 | 根 module、`go-core`、`services/market-data` 的格式检查、测试、race 和 vet 已在既有 CI 运行 #147 通过 |
-| Docker 实际构建 | 之前 CI 没有构建两个 Dockerfile。本轮已把 Compose 语法检查和两个镜像构建加入 CI，结果以本分支最新 Actions 运行记录为准 |
-| Compose 配置输入 | 两个容器共用同一个 `MARKET_DATA_API_KEY`；行情服务可使用拆分后的 `MARKET_DATA_DB_*`，旧 `MARKET_DATA_MYSQL_DSN` 暂时兼容 |
-| 数据库/Redis 复用 | 两个容器连接现有 `1panel-network` 内服务，不应再建第二套数据库容器 |
-、`%` 的凭据 |
-| 构建上下文 | 根目录与 `services/market-data` 分别有 `.dockerignore`，避免把本地 `.env` 带入 Docker 构建上下文 |
-| 部署可操作性 | 新增 `scripts/deploy-go.sh`，按顺序检查配置、构建、启动并等待健康状态；失败会输出最近日志 |
+把生成的值填入根目录 `.env` 的 `MARKET_DATA_API_KEY`。不要把密钥贴到聊天或提交到 Git。已有真实 `.env` 时不要用模板覆盖。
 
-## 3. 部署前必须满足的条件
-
-1. 已存在 Docker 网络 `1panel-network`，现有 MariaDB 与 Redis 容器已加入该网络。
-2. MariaDB 数据库本身必须预先存在；自动迁移只创建表，不会自动创建数据库。
-3. `.env` 中的 MariaDB 数据库名、账号、密码和服务主机名都是真实值；不能直接使用 `.env.example` 中的占位值。
-4. `MARKET_DATA_API_KEY` 是不少于 32 个字符的随机密钥；两个 Go 服务必须使用同一值。
-5. 如果 `DB_AUTO_MIGRATE=true` 和 `MARKET_DATA_DB_AUTO_MIGRATE=true`，对应账号必须对目标数据库有建表和变更表结构所需的权限。没有权限时服务会在启动/就绪检查阶段失败。
-6. `MARKET_DATA_REDIS_ADDR` 与 `REDIS_ADDR` 应使用网络内可解析的 Redis 地址；两个变量可使用相同地址及密码，也可以单独配置。
-7. 密码如果包含 `# Go 服务部署就绪代码 Review
-
-> Review 日期：2026-10-22  
-> 目标分支：`feat/full-go-data-providers-api-switch`  
-> Review 范围：Go 行情服务、Go 分析 API、Dockerfile、Compose、环境变量与首次部署流程。
-
-## 1. Review 结论
-
-**静态代码与 Go 自动化测试通过后，建议按本文的预检脚本进行首次部署；不能仅凭 CI 承诺真实服务器必然一次成功。** 真实部署还依赖当前服务器上的 Docker 网络、数据库是否存在、账号权限、Redis 密码和行情供应商网络。
-
-本分支包含根 Go 分析 API 和原生 Go market-data 两个部署服务。该 Compose 文件不启动 `go-core` 或 Python bridge；当前根 API 的行情与日 K 不依赖 Python 行情 fallback。
-
-## 2. 本轮重点核查与修正
-
-| 项目 | Review 结果 |
-|---|---|
-| Go 模块测试 | 根 module、`go-core`、`services/market-data` 的格式检查、测试、race 和 vet 已在既有 CI 运行 #147 通过 |
-| Docker 实际构建 | 之前 CI 没有构建两个 Dockerfile。本轮已把 Compose 语法检查和两个镜像构建加入 CI，结果以本分支最新 Actions 运行记录为准 |
-| Compose 配置输入 | 两个容器共用同一个 `MARKET_DATA_API_KEY`；行情服务可使用拆分后的 `MARKET_DATA_DB_*`，旧 `MARKET_DATA_MYSQL_DSN` 暂时兼容 |
-| 数据库/Redis 复用 | 两个容器连接现有 `1panel-network` 内服务，不应再建第二套数据库容器 |
-| 宿主机端口安全 | 分析 API 没有内置用户认证，宿主机映射已限制为 `127.0.0.1:8092`，避免直接绑定公网网卡 |
-| MariaDB 凭据 | 分析 API 使用 MySQL 驱动原生 Connector，不把密码拼入 DSN 字符串；新增测试覆盖包含 `@`、`:`、`/`、`?`、`#`、`&`、`# Go 服务部署就绪代码 Review
-
-> Review 日期：2026-10-22  
-> 目标分支：`feat/full-go-data-providers-api-switch`  
-> Review 范围：Go 行情服务、Go 分析 API、Dockerfile、Compose、环境变量与首次部署流程。
-
-## 1. Review 结论
-
-**静态代码与 Go 自动化测试通过后，建议按本文的预检脚本进行首次部署；不能仅凭 CI 承诺真实服务器必然一次成功。** 真实部署还依赖当前服务器上的 Docker 网络、数据库是否存在、账号权限、Redis 密码和行情供应商网络。
-
-本分支包含根 Go 分析 API 和原生 Go market-data 两个部署服务。该 Compose 文件不启动 `go-core` 或 Python bridge；当前根 API 的行情与日 K 不依赖 Python 行情 fallback。
-
-## 2. 本轮重点核查与修正
-
-| 项目 | Review 结果 |
-|---|---|
-| Go 模块测试 | 根 module、`go-core`、`services/market-data` 的格式检查、测试、race 和 vet 已在既有 CI 运行 #147 通过 |
-| Docker 实际构建 | 之前 CI 没有构建两个 Dockerfile。本轮已把 Compose 语法检查和两个镜像构建加入 CI，结果以本分支最新 Actions 运行记录为准 |
-| Compose 配置输入 | 两个容器共用同一个 `MARKET_DATA_API_KEY`；行情服务可使用拆分后的 `MARKET_DATA_DB_*`，旧 `MARKET_DATA_MYSQL_DSN` 暂时兼容 |
-| 数据库/Redis 复用 | 两个容器连接现有 `1panel-network` 内服务，不应再建第二套数据库容器 |
-、`%` 的凭据 |
-| 构建上下文 | 根目录与 `services/market-data` 分别有 `.dockerignore`，避免把本地 `.env` 带入 Docker 构建上下文 |
-| 部署可操作性 | 新增 `scripts/deploy-go.sh`，按顺序检查配置、构建、启动并等待健康状态；失败会输出最近日志 |
-
-## 3. 部署前必须满足的条件
-
-1. 已存在 Docker 网络 `1panel-network`，现有 MariaDB 与 Redis 容器已加入该网络。
-2. MariaDB 数据库本身必须预先存在；自动迁移只创建表，不会自动创建数据库。
-3. `.env` 中的 MariaDB 数据库名、账号、密码和服务主机名都是真实值；不能直接使用 `.env.example` 中的占位值。
-4. `MARKET_DATA_API_KEY` 是不少于 32 个字符的随机密钥；两个 Go 服务必须使用同一值。
-5. 如果 `DB_AUTO_MIGRATE=true` 和 `MARKET_DATA_DB_AUTO_MIGRATE=true`，对应账号必须对目标数据库有建表和变更表结构所需的权限。没有权限时服务会在启动/就绪检查阶段失败。
-6. `MARKET_DATA_REDIS_ADDR` 与 `REDIS_ADDR` 应使用网络内可解析的 Redis 地址；两个变量可使用相同地址及密码，也可以单独配置。
-、`#` 或空格，应在 `.env` 中使用单引号包裹完整值，避免 Compose 插值或行内注释解析改变密码；不要把真实凭据提交到 Git。
+若数据库密码包含 `$` 或 `#` 等特殊字符，建议在 `.env` 里用单引号包裹完整值，避免 Compose 插值或注释解析改变密码。
 
 ## 4. 推荐的一次性部署流程
-
-如果服务器已经有 `.env`，**不要复制模板覆盖它**。先把其中过时的 `MARKET_DATA_MYSQL_DSN` 迁移为 `MARKET_DATA_DB_HOST/PORT/USER/PASSWORD/NAME/CHARSET/TIMEZONE` 更清晰；如需先验证旧配置，且没有设置任何拆分连接字段，当前代码仍暂时兼容旧 DSN。
 
 在仓库根目录执行：
 
@@ -116,9 +53,9 @@
 bash ./scripts/deploy-go.sh
 ```
 
-脚本会检查 Docker/Compose、根目录 `.env` 和 `1panel-network`；用静默模式检查 Compose 配置，不把解析后的密钥打印到终端；构建两个镜像、启动服务并等待容器健康；最后请求 `/healthz` 与 `/readyz`。失败时输出最近日志帮助定位连接、密钥、权限和配置问题。
+脚本会检查 Docker / Compose、根目录 `.env` 和 `1panel-network`，以静默模式检查 Compose 配置，构建两个镜像、启动服务并等待健康状态，最后检查 `/healthz` 和 `/readyz`。失败时会打印服务日志。
 
-## 5. 部署后验收
+部署后可再次检查：
 
 ```bash
 docker compose -f docker-compose.go.yml ps
@@ -128,21 +65,23 @@ curl -fsS http://127.0.0.1:8092/readyz
 docker exec stock-market-data wget -qO- http://127.0.0.1:8091/health/ready
 ```
 
-再用 market-data 容器中实际注入的 API Key 请求一次真实行情，确认上游网络工作正常：
+## 5. 验证真实行情链路
+
+健康检查成功只能证明服务、MariaDB 和 Redis 就绪；它不证明供应商当时可以返回有效行情。继续从 market-data 容器中调用真实行情与日 K：
 
 ```bash
 docker exec stock-market-data sh -lc 'wget -qO- --header="X-API-Key: ${MARKET_DATA_API_KEY}" "http://127.0.0.1:8091/api/v1/quotes/600519.SH"'
 docker exec stock-market-data sh -lc 'wget -qO- --header="X-API-Key: ${MARKET_DATA_API_KEY}" "http://127.0.0.1:8091/api/v1/bars/600519.SH/daily?limit=30&adjustment=forward_adjusted"'
 ```
 
-真实行情端点还受外部供应商网络、限流和交易时段影响；健康检查成功表示服务与 DB/Redis 已就绪，不等于所有数据源当时都能返回有效行情。
+如果真实行情请求失败，检查供应商网络、限流、返回质量和服务日志；不要因为 `/readyz` 通过就认定行情源一定可用。部分数据域仍未迁移至 Go，分析结果出现 `partial` 也不一定代表部署失败。
 
-## 6. 外网与 OpenResty 注意事项
+## 6. OpenResty 与对外访问
 
-- 当前分析 API 没有内置用户认证；`127.0.0.1:8092` 只限制宿主机端口绑定，不能代替反向代理鉴权。
-- 如果 OpenResty 容器加入 `1panel-network`，上游使用 `http://stock-analysis-go:8092`；如果没有加入网络，应先配置网络连通性，不要把容器内的 `127.0.0.1:8092` 当作 Go API 地址。
-- 对公网开放域名之前，必须通过 OpenResty 配置 HTTPS、认证和来源限制。
+- 宿主机进程可以通过 `http://127.0.0.1:8092` 访问分析 API。
+- 如果 OpenResty 是连接到 `1panel-network` 的容器，上游地址使用 `http://stock-analysis-go:8092`。
+- 当前分析 API 没有内置用户认证。对公网开放前，必须在 OpenResty 设置 HTTPS、鉴权和来源限制；不要直接把 API 端口暴露到公网。
 
-## 7. 尚未被自动化测试覆盖的外部条件
+## 7. 验收边界
 
-CI 能验证 Go 代码、Compose 语法和 Docker 镜像构建，但无法替代目标服务器上的真实 MariaDB migration、账号授权、Redis 认证、网络 DNS、供应商响应和端到端分析请求。部署脚本完成后，仍要执行本节的健康检查和真实行情 smoke test。市场广度、板块、财务、龙虎榜、新闻公告等数据域也尚未全部迁移到 Go；这不阻止两个容器启动，但可能使部分分析结果处于 `partial` 状态。
+CI #153 覆盖了 Go 测试、Compose 解析与 Docker 构建；它无法验证你的生产数据库是否存在、实际凭据是否正确、账号授权、Redis 认证、容器网络 DNS 或行情供应商网络。完成部署脚本和真实行情 smoke test 后，才算完成目标服务器的首次部署验收。
