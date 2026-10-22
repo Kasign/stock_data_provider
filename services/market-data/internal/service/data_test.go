@@ -254,7 +254,7 @@ func TestQuoteDoesNotReturnStaleCacheWithoutAttemptingRefresh(t *testing.T) {
 	old := time.Now().Add(-25 * time.Hour).UTC()
 	stale.QuoteTime = &old
 	payload, _ := json.Marshal(stale)
-	mem.values["md:v3:quote:600519.SH"] = payload
+	mem.values["md:v4:quote:600519.SH"] = payload
 	fresh := validQuote("tencent")
 	s := New([]provider.Provider{fakeProvider{name: "tencent", quote: fresh}}, mem, nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	got, cacheHit, err := s.Quote(context.Background(), "600519.SH")
@@ -329,7 +329,7 @@ func TestDailyBarsRejectsCacheWithWrongAdjustmentBasis(t *testing.T) {
 	amt := float64(100000)
 	cached := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amt, AdjustmentBasis: model.AdjustmentBackward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
 	payload, _ := json.Marshal(map[string]any{"bars": cached, "warnings": []string{}})
-	mem.values["md:v3:bars:600519.SH:::forward_adjusted:120"] = payload
+	mem.values["md:v4:bars:600519.SH:::forward_adjusted:120"] = payload
 	providerVol := int64(20000)
 	providerAmt := float64(200000)
 	p := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &providerVol, Amount: &providerAmt, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
@@ -377,7 +377,7 @@ func TestQuoteCacheReturnsCanonicalSymbol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem.values["md:v3:quote:600519.SH"] = payload
+	mem.values["md:v4:quote:600519.SH"] = payload
 	s := New(nil, mem, nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	got, hit, err := s.Quote(context.Background(), "600519.SH")
 	if err != nil {
@@ -448,7 +448,7 @@ func TestQuoteCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem.values["md:v3:quote:600519.SH"] = payload
+	mem.values["md:v4:quote:600519.SH"] = payload
 	fresh := validQuote("tencent")
 	s := New([]provider.Provider{fakeProvider{name: "tencent", quote: fresh}}, mem, nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	got, hit, err := s.Quote(context.Background(), "600519.SH")
@@ -469,7 +469,7 @@ func TestDailyBarsCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem.values["md:v3:bars:600519.SH:::forward_adjusted:120"] = payload
+	mem.values["md:v4:bars:600519.SH:::forward_adjusted:120"] = payload
 	providerBar := old
 	providerBar.Source = "tencent"
 	providerBar.NormalizationVer = normalize.Version
