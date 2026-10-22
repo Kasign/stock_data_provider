@@ -21,7 +21,7 @@ import (
 
 const liveProbeBodySampleLimit = 2048
 
-var liveProbeURLQuery = regexp.MustCompile(\`(?i)(https?://[^\\s"?]+)\\?[^\\s"']*\`)
+var liveProbeURLQuery = regexp.MustCompile(`(?i)(https?://[^\s"?]+)\?[^\s"']*`)
 
 func liveProbeErrorSummary(err error) (string, string) {
 	if err == nil {
@@ -51,7 +51,7 @@ func liveProbeErrorSummary(err error) (string, string) {
 			kind = "empty_or_unparseable_response"
 		}
 	}
-	message := liveProbeURLQuery.ReplaceAllString(err.Error(), \`$1?[query redacted]\`)
+	message := liveProbeURLQuery.ReplaceAllString(err.Error(), `$1?[query redacted]`)
 	if len(message) > 500 {
 		message = message[:500] + "…"
 	}
@@ -212,6 +212,30 @@ func liveProbeDailyContractError(bars []model.DailyBar, providerName, symbol str
 		}
 	}
 	return ""
+}
+
+func TestLiveProbeErrorSummaryRedactsURLQuery(t *testing.T) {
+	err := fmt.Errorf(`tencent request: Get "https://example.invalid/quote?token=secret&symbol=600519": EOF`)
+	kind, message := liveProbeErrorSummary(err)
+	if kind != "connection_closed" {
+		t.Fatalf("error kind = %q, want connection_closed", kind)
+	}
+	if strings.Contains(message, "secret") || strings.Contains(message, "symbol=600519") {
+		t.Fatalf("provider URL query parameters leaked: %q", message)
+	}
+	if !strings.Contains(message, "https://example.invalid/quote?[query redacted]") {
+		t.Fatalf("sanitized endpoint path missing: %q", message)
+	}
+}
+
+func TestLiveProbeErrorSummaryClassifiesNetworkUnavailable(t *testing.T) {
+	kind, message := liveProbeErrorSummary(fmt.Errorf("dial tcp 61.129.129.199:443: connect: Network unreachable"))
+	if kind != "network_connect" {
+		t.Fatalf("error kind = %q, want network_connect", kind)
+	}
+	if !strings.Contains(message, "Network unreachable") {
+		t.Fatalf("network symptom was not preserved: %q", message)
+	}
 }
 
 func TestLiveProviderProbe(t *testing.T) {
