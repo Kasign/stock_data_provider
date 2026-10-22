@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
 )
@@ -136,6 +137,27 @@ func TestLoadDefaultTimeoutCoversDefaultTwoProviderRetryBudget(t *testing.T) {
 	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
 	if _, err := Load(); err != nil {
 		t.Fatalf("default request timeout should allow both configured providers to be tried: %v", err)
+	}
+}
+
+func TestLoadDefaultTimeoutCoversBaoStockFailoverBudget(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,tencent,sina")
+	t.Setenv("MARKET_DATA_BAOSTOCK_ENABLED", "true")
+	t.Setenv("MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "false")
+	t.Setenv("MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("default request timeout should cover BaoStock failover budget: %v", err)
+	}
+	if cfg.RequestTimeout < 3*time.Minute {
+		t.Fatalf("default request timeout=%s, want at least 3m for BaoStock-enabled failover", cfg.RequestTimeout)
 	}
 }
 
