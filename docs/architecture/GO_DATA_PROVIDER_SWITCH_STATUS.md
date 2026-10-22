@@ -98,10 +98,9 @@ go vet ./...
 
 ## 4. 下一步顺序
 
-1. 用户恢复测试前的 .env 并重新创建 market-data 后，确认 BaoStock 正常路由恢复；首轮真实样本已通过，后续继续扩大交易日、停牌/无数据日期和更长历史范围的验收。
+1. 用户恢复测试前的 `.env` 并重新创建 `market-data` 后，确认 BaoStock 正常路由恢复；首轮真实样本已通过，后续继续扩大交易日、停牌/无数据日期和更长历史范围的验收。
 2. 独立测试 Tencent 日 K：只启用 Tencent，先验收不复权数据日期覆盖、OHLC、成交量/成交额单位和质量标记，再按真实响应测试复权能力；缺失成交额或未复权价格不得伪装成完整前复权数据。
 3. 独立测试 Sina 报价能力；当前 Sina 是 QuoteProvider，不应误当作日 K Provider。
-4. 持续跟踪 Eastmoney 历史行情接口 Network unreachable；根因未确定，按[真实环境验收记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)保存证据并待后续排查。
-4. 依据 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md) 分别推进财务、基础资料、行业/指数、市场广度、板块、龙虎榜和新闻公告数据域；Tushare/THS 的权限、费用及速率先核实后再决定接入。
-5. 在真实环境继续验收 MX/API 与 MariaDB/Redis，并按原计划推进异步任务表/Worker/202 + task_id/状态与事件轮询，随后再实现 SSE 和前端状态展示。
-6. 按 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md) 推进日志字段统一和其余未迁移能力。
+4. 持续跟踪 Eastmoney 历史行情接口 `Network unreachable`；根因未确定，按[真实环境验收记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)保存证据并待后续排查。
+5. 接着按[数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)分域推进财务、基础资料、行业/指数、市场广度、板块、龙虎榜和新闻公告数据域；Tushare/THS 的权限、费用及速率先核实再接入。
+6. 完成实际部署版本的 Provider 错误日志验证，以及 MariaDB/Redis 权限、缓存新鲜度、健康检查与 Docker Compose 端到端回归；之后继续实现 SSE 和前端任务进度展示。
