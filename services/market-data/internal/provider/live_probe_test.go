@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -31,14 +32,21 @@ func liveProbeErrorSummary(err error) (string, string) {
 		return "unknown", "provider returned an unspecified error"
 	}
 	kind := "provider_error"
+	var networkErr net.Error
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		kind = "timeout"
 	case errors.Is(err, context.Canceled):
 		kind = "canceled"
+	case errors.As(err, &networkErr) && networkErr.Timeout():
+		kind = "timeout"
 	default:
 		lower := strings.ToLower(err.Error())
 		switch {
+		case strings.Contains(lower, "i/o timeout"),
+			strings.Contains(lower, "timed out"),
+			strings.Contains(lower, "timeout"):
+			kind = "timeout"
 		case strings.Contains(lower, "network is unreachable"),
 			strings.Contains(lower, "no route to host"),
 			strings.Contains(lower, "connection refused"),
@@ -276,6 +284,21 @@ func TestLiveProbeErrorSummaryRedactsURLQuery(t *testing.T) {
 	}
 	if !strings.Contains(message, "https://example.invalid/quote?[query redacted]") {
 		t.Fatalf("sanitized endpoint path missing: %q", message)
+	}
+}
+
+func TestLiveProbeErrorSummaryClassifiesNetworkTimeout(t *testing.T) {
+	err := fmt.Errorf("BaoStock login: receive response: %w", &net.OpError{
+		Op:  "read",
+		Net: "tcp",
+		Err: os.ErrDeadlineExceeded,
+	})
+	kind, message := liveProbeErrorSummary(err)
+	if kind != "timeout" {
+		t.Fatalf("error kind = %q, want timeout", kind)
+	}
+	if !strings.Contains(message, "timeout") {
+		t.Fatalf("timeout symptom was not preserved: %q", message)
 	}
 }
 
