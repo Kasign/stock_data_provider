@@ -360,16 +360,17 @@ func resolveMySQLDSN(allowNoStorage bool) (string, error) {
 		return "", fmt.Errorf("MARKET_DATA_DB_TIMEZONE must be a valid IANA timezone: %w", err)
 	}
 
-	driverConfig := mysqlDriver.Config{
-		User:      user,
-		Passwd:    password,
-		Net:       "tcp",
-		Addr:      net.JoinHostPort(host, strconv.Itoa(port)),
-		DBName:    database,
-		Params:    map[string]string{"charset": charset},
-		ParseTime: true,
-		Loc:       location,
-	}
+	// Start from the driver's defaults. A zero-value Config disables
+	// AllowNativePasswords and breaks MariaDB users using mysql_native_password.
+	driverConfig := mysqlDriver.NewConfig()
+	driverConfig.User = user
+	driverConfig.Passwd = password
+	driverConfig.Net = "tcp"
+	driverConfig.Addr = net.JoinHostPort(host, strconv.Itoa(port))
+	driverConfig.DBName = database
+	driverConfig.Params = map[string]string{"charset": charset}
+	driverConfig.ParseTime = true
+	driverConfig.Loc = location
 	return driverConfig.FormatDSN(), nil
 }
 

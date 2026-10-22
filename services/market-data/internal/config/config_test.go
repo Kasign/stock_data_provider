@@ -284,6 +284,9 @@ func TestLoadBuildsMySQLDSNFromSeparateServiceSettings(t *testing.T) {
 	if parsed.User != "stock_analysis_server" || parsed.Passwd != "test-db-password" {
 		t.Fatalf("unexpected generated DSN user/password: user=%q passwordPresent=%t", parsed.User, parsed.Passwd != "")
 	}
+	if !parsed.AllowNativePasswords {
+		t.Fatal("generated DSN must preserve the MySQL driver's default native-password authentication support")
+	}
 	if parsed.Addr != "Mariadb:3306" || parsed.DBName != "stock_analysis_server" {
 		t.Fatalf("unexpected generated DSN target: address=%q database=%q", parsed.Addr, parsed.DBName)
 	}
