@@ -154,7 +154,7 @@ func TestTencentBarsExplicitlyMarkMissingAmount(t *testing.T) {
 	}
 }
 
-func TestTencentBarsIgnoresObjectExtraFieldAndValidatesOptionalAmount(t *testing.T) {
+func TestTencentBarsNeverTreatsTrailingFieldsAsAmount(t *testing.T) {
 	responses := []string{
 		`{"data":{"sh600519":{"qfqday":[["2026-10-20","1321.01","1331.88","1335.00","1316.14","34136",{"corporate_action":"metadata"}]]}}}`,
 		`{"data":{"sh600519":{"qfqday":[["2026-10-20","1321.01","1331.88","1335.00","1316.14","34136","4525398959.00"]]}}}`,
@@ -171,11 +171,23 @@ func TestTencentBarsIgnoresObjectExtraFieldAndValidatesOptionalAmount(t *testing
 		if len(bars) != 1 || *bars[0].Volume != 3413600 {
 			t.Fatalf("fixture %d should preserve row, got %+v", i, bars)
 		}
-		if i == 0 && bars[0].Amount != nil {
-			t.Fatal("opaque optional metadata must not be interpreted as amount")
+		if bars[0].Amount != nil || bars[0].RawAmount != nil {
+			t.Fatalf("undocumented trailing fields must never be treated as turnover, got %+v", bars[0])
 		}
-		if i == 1 && (bars[0].Amount == nil || *bars[0].Amount != 4525398959) {
-			t.Fatalf("numeric plausible amount should be retained, got %+v", bars[0])
+		if bars[0].AmountUnit != "unknown" || bars[0].RawAmountUnit != "" || bars[0].RawAmountField != "" {
+			t.Fatalf("unknown trailing field must not get fabricated amount metadata: %+v", bars[0])
+		}
+		if bars[0].QualityStatus != model.QualityDegraded {
+			t.Fatalf("Tencent K-line without a verified amount must be degraded, got %+v", bars[0])
+		}
+		foundReason := false
+		for _, reason := range bars[0].QualityReasons {
+			if reason == "tencent_daily_kline_has_no_verified_amount_field" {
+				foundReason = true
+			}
+		}
+		if !foundReason {
+			t.Fatalf("missing explicit Tencent amount limitation: %+v", bars[0].QualityReasons)
 		}
 	}
 }
@@ -200,7 +212,7 @@ func TestTencentStarMarketDailyVolumeAlreadyInShares(t *testing.T) {
 	if bars[0].RawVolumeUnit != "shares" || bars[0].VolumeUnit != "shares" {
 		t.Fatalf("STAR market raw and normalized volume unit metadata must both be shares, got raw=%q normalized=%q", bars[0].RawVolumeUnit, bars[0].VolumeUnit)
 	}
-	if bars[0].Amount == nil || *bars[0].Amount != 887000000 {
-		t.Fatalf("expected consistent amount, got %+v", bars[0].Amount)
+	if bars[0].Amount != nil || bars[0].AmountUnit != "unknown" {
+		t.Fatalf("undocumented trailing numeric field must not be interpreted as amount, got %+v", bars[0])
 	}
 }

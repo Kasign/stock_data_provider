@@ -273,38 +273,15 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		if strings.HasPrefix(code, "688") || strings.HasPrefix(code, "689") {
 			rawVolumeUnit = "shares"
 		}
+		// Tencent's public front-end K-line payload has six observed fields:
+		// date, open, close, high, low and volume. There is no official public
+		// field contract for trailing values, so never infer turnover from row[6].
+		// Missing amount must remain explicit rather than being fabricated.
 		var rawAmount *float64
 		var amount *float64
-		if len(row) > 6 {
-			if rawAmountText, ok := jsonScalarText(row[6]); ok {
-				if candidate, parseErr := strconv.ParseFloat(rawAmountText, 64); parseErr == nil && !math.IsNaN(candidate) && !math.IsInf(candidate, 0) && candidate >= 0 {
-					averagePriceOK := candidate == 0 && shares == 0
-					if candidate > 0 && shares > 0 {
-						// Turnover/volume stay on the raw trading basis, while qfq/hfq
-						// OHLC can be adjusted. Compare only for unadjusted candles.
-						averagePriceOK = adjustment != model.AdjustmentNone
-						if adjustment == model.AdjustmentNone {
-							average := candidate / float64(shares)
-							averagePriceOK = average >= low*0.5 && average <= high*2
-						}
-					}
-					if averagePriceOK {
-						amount = &candidate
-						rawAmount = &candidate
-					}
-				}
-			}
-		}
-		quality := model.QualityValid
-		reasons := []string(nil)
-		if amount == nil {
-			quality = model.QualityDegraded
-			reasons = append(reasons, "amount_missing_or_unconfirmed_from_provider")
-		}
+		quality := model.QualityDegraded
+		reasons := []string{"tencent_daily_kline_has_no_verified_amount_field"}
 		amountUnit := "unknown"
-		if amount != nil {
-			amountUnit = "CNY"
-		}
 		b := model.DailyBar{Symbol: symbol, TradeDate: vals[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: amount, AdjustmentBasis: adjustment, Source: p.Name(), SourceVersion: tencentVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "kline_field_6"), VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version}
 		out = append(out, b)
 	}
@@ -415,20 +392,6 @@ func optionalUnitName(value *float64, unit string) string {
 		return ""
 	}
 	return unit
-}
-
-func jsonScalarText(raw json.RawMessage) (string, bool) {
-	var text string
-	if err := json.Unmarshal(raw, &text); err == nil {
-		return strings.TrimSpace(text), strings.TrimSpace(text) != ""
-	}
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.UseNumber()
-	var number json.Number
-	if err := decoder.Decode(&number); err == nil {
-		return number.String(), true
-	}
-	return "", false
 }
 
 func optionalUnit(value *float64, unit string) string {

@@ -642,3 +642,47 @@ func TestCallerCancellationDoesNotTripDailyBarCircuitBreaker(t *testing.T) {
 		t.Fatalf("caller cancellation must not count as provider failure: %+v", state)
 	}
 }
+
+func TestDailyBarsFallbackWarningsExposeMissingAmount(t *testing.T) {
+	volume := int64(3351400)
+	primary := fakeProvider{name: "eastmoney", barsErr: errors.New("temporary EOF")}
+	fallback := fakeProvider{
+		name: "tencent",
+		bars: []model.DailyBar{{
+			Symbol: "600519.SH", TradeDate: "2026-10-21", Period: "1d",
+			Open: 1331.88, High: 1331.98, Low: 1302.36, Close: 1309.69,
+			Volume: &volume, Amount: nil, AdjustmentBasis: model.AdjustmentForward,
+			Source: "tencent", VolumeUnit: "shares", AmountUnit: "unknown",
+			QualityStatus:  model.QualityDegraded,
+			QualityReasons: []string{"tencent_daily_kline_has_no_verified_amount_field"},
+		}},
+	}
+	s := NewConfiguredWithResilience(
+		[]provider.Provider{primary, fallback},
+		[]provider.Provider{primary, fallback},
+		[]provider.Provider{primary, fallback},
+		cache.NewDisabled(), nil, time.Second, time.Second, 1, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second},
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	bars, cacheHit, warnings, err := s.DailyBars(
+		context.Background(), "600519.SH", "2026-10-21", "2026-10-21", 1, model.AdjustmentForward,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cacheHit || len(bars) != 1 || bars[0].Source != "tencent" {
+		t.Fatalf("expected the Tencent fallback candle, hit=%v bars=%+v", cacheHit, bars)
+	}
+	if bars[0].Amount != nil || bars[0].AmountUnit != "unknown" || bars[0].QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing turnover must remain explicit and degraded, got %+v", bars[0])
+	}
+	foundFallback, foundAmountMissing := false, false
+	for _, warning := range warnings {
+		foundFallback = foundFallback || warning == "daily_bar_provider_fallback_used"
+		foundAmountMissing = foundAmountMissing || warning == "daily_bar_amount_missing_from_selected_provider"
+	}
+	if !foundFallback || !foundAmountMissing {
+		t.Fatalf("expected response-level fallback and missing-amount warnings, got %v", warnings)
+	}
+}

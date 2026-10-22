@@ -588,6 +588,18 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, p.Name()+" response failed bar validation")
 			continue
 		}
+		// Surface material source/field limitations at the response level too;
+		// callers should not need to inspect every candle to discover fallback.
+		if i > 0 {
+			warnings = append(warnings, "daily_bar_provider_fallback_used")
+		}
+		for _, bar := range bars {
+			if bar.Amount == nil {
+				warnings = append(warnings, "daily_bar_amount_missing_from_selected_provider")
+				break
+			}
+		}
+		warnings = dedupeStrings(warnings)
 		if !coverageSufficient(start, end, limit, len(bars)) {
 			s.breaker.Failure(breakerKey)
 			warning := fmt.Sprintf("%s returned partial daily-bar coverage: requested %d bars, validated %d; tried fallback providers before using this degraded series", p.Name(), limit, len(bars))
