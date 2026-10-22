@@ -41,6 +41,36 @@ func TestValidateAndSortBars(t *testing.T) {
 	}
 }
 
+func TestInvalidOHLCWarningIncludesDroppedRowContext(t *testing.T) {
+	volume := int64(1000)
+	bad := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 11, High: 10, Low: 9, Close: 9.5, Volume: &volume,
+		AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+	}
+	got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{bad}, "", "2026-10-22", 10)
+	if len(got) != 0 || !containsWarning(warnings, "invalid_ohlc_bar_dropped") {
+		t.Fatalf("invalid OHLC row should be dropped, got bars=%+v warnings=%v", got, warnings)
+	}
+	wantDetail := "invalid_ohlc_bar_detail:trade_date=2026-10-20,open=11,high=10,low=9,close=9.5"
+	if !containsWarning(warnings, wantDetail) {
+		t.Fatalf("expected row-level OHLC diagnostic %q, got %v", wantDetail, warnings)
+	}
+}
+
+func TestBarWarningsDistinguishTruncationFromQualityLoss(t *testing.T) {
+	if HasQualityDegradingBarWarnings([]string{"bars_truncated_to_limit"}) {
+		t.Fatal("intentional result cap must not degrade otherwise valid bars")
+	}
+	if !HasQualityDegradingBarWarnings([]string{"invalid_ohlc_bar_dropped", "bars_truncated_to_limit"}) {
+		t.Fatal("invalid OHLC data must still degrade the result")
+	}
+	if !HasQualityDegradingBarWarnings([]string{"provider_unavailable_served_from_mariadb"}) {
+		t.Fatal("stale provider fallback must degrade the result")
+	}
+}
+
 func TestAdjustedBarsDoNotCompareUnadjustedTurnoverToAdjustedOHLC(t *testing.T) {
 	volume := int64(1000)
 	amount := 100000.0 // implied raw traded price 100; adjusted candle is around 10.

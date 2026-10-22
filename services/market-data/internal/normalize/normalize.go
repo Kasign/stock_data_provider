@@ -179,6 +179,7 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 	}
 	seen := map[string]bool{}
 	valid := make([]model.DailyBar, 0, len(bars))
+	ohlcDiagnosticCount := 0
 	for _, b := range bars {
 		if _, err := time.Parse("2006-01-02", b.TradeDate); err != nil {
 			warnings = append(warnings, "invalid_trade_date_dropped")
@@ -197,6 +198,14 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 		}
 		if !finite(b.Open) || !finite(b.High) || !finite(b.Low) || !finite(b.Close) || b.Open <= 0 || b.High <= 0 || b.Low <= 0 || b.Close <= 0 || b.Low > b.High || b.Open < b.Low || b.Open > b.High || b.Close < b.Low || b.Close > b.High {
 			warnings = append(warnings, "invalid_ohlc_bar_dropped")
+			// Keep the stable warning code and add bounded context so operators can
+			// identify the source row without logging or returning the raw response.
+			if ohlcDiagnosticCount < 5 {
+				warnings = append(warnings, fmt.Sprintf("invalid_ohlc_bar_detail:trade_date=%s,open=%v,high=%v,low=%v,close=%v", b.TradeDate, b.Open, b.High, b.Low, b.Close))
+			} else if ohlcDiagnosticCount == 5 {
+				warnings = append(warnings, "invalid_ohlc_bar_details_truncated")
+			}
+			ohlcDiagnosticCount++
 			continue
 		}
 		if b.Volume == nil || *b.Volume < 0 {
@@ -281,6 +290,18 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 		warnings = append(warnings, "bars_truncated_to_limit")
 	}
 	return valid, unique(warnings)
+}
+
+// HasQualityDegradingBarWarnings distinguishes data-quality warnings from the
+// informational notice emitted when a response is capped to the requested limit.
+func HasQualityDegradingBarWarnings(warnings []string) bool {
+	for _, warning := range warnings {
+		if warning == "" || warning == "bars_truncated_to_limit" {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }

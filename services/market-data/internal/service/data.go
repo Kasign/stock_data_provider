@@ -734,7 +734,7 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		bundle.Warnings = append(bundle.Warnings, "historical_adjusted_bars_may_use_current_corporate_action_factors; point_in_time_adjustment_not_verified")
 		bundle.QualityStatus = model.QualityDegraded
 	}
-	if len(warnings) > 0 {
+	if normalize.HasQualityDegradingBarWarnings(warnings) {
 		bundle.QualityStatus = model.QualityDegraded
 	}
 	if len(bars) > 0 {

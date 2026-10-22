@@ -130,7 +130,7 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		turnoverRate = &parsed
 	}
 	rv := rawVol
-	q := &model.Quote{Symbol: symbol, Name: fields[1], CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: amount, TurnoverRate: turnoverRate, QuoteTime: qtime, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), Source: p.Name(), SourceVersion: tencentVersion, RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+	q := &model.Quote{Symbol: symbol, Name: fields[1], CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: amount, TurnoverRate: turnoverRate, QuoteTime: qtime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), Source: p.Name(), SourceVersion: tencentVersion, RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 	if reportedSymbol == "" {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_symbol_missing_assumed_from_request")

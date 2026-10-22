@@ -46,6 +46,12 @@ func TestTencentQuoteNormalizesVolumeAndAmount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if q.QuoteTime == nil || q.QuoteTime.In(time.FixedZone("CST", 8*3600)).Format("2006-01-02 15:04:05") != "2026-10-21 11:28:02" {
+		t.Fatalf("unexpected Tencent provider timestamp: %#v", q.QuoteTime)
+	}
+	if q.QuoteTimeSemantics != "provider_snapshot_time" {
+		t.Fatalf("quote time semantics=%q, want provider_snapshot_time", q.QuoteTimeSemantics)
+	}
 	if *q.Volume != 3413600 {
 		t.Fatalf("volume=%d", *q.Volume)
 	}

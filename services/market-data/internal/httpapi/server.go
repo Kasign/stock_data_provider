@@ -168,7 +168,7 @@ func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Cache", "MISS")
 	}
 	quality := model.QualityValid
-	if len(warnings) > 0 {
+	if normalize.HasQualityDegradingBarWarnings(warnings) {
 		quality = model.QualityDegraded
 	}
 	for _, b := range bars {

@@ -34,6 +34,9 @@ func TestEastmoneyQuoteNormalizesUnitsAndProviderTime(t *testing.T) {
 	if q.QuoteTime == nil || q.QuoteTime.In(time.FixedZone("CST", 8*3600)).Hour() != 11 {
 		t.Fatalf("unexpected quote time %#v", q.QuoteTime)
 	}
+	if q.QuoteTimeSemantics != "provider_snapshot_time" {
+		t.Fatalf("quote time semantics=%q, want provider_snapshot_time", q.QuoteTimeSemantics)
+	}
 	if q.VolumeUnit != "shares" || q.RawVolumeUnit != "hands" {
 		t.Fatalf("unit metadata wrong: %+v", q)
 	}

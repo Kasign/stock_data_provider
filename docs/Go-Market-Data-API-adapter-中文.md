@@ -77,7 +77,7 @@ MARKET_DATA_DB_AUTO_MIGRATE=true
 
 - 原始成交量以“股”归一化；成交额以人民币金额单位读取。没有的数据保留为空，不填零。
 - 每根 K 线保留来源、来源版本、抓取时间、复权口径和供应商质量标记。若 Provider 没给出来源或复权口径，则明确标记未知。
-- 行情使用上游 quote_time；缺失/无法解析的时间、晚于请求分析时点的行情会被丢弃。
+- 行情使用上游 `quote_time`；该值是供应商报告的快照/更新时间，不保证等于最近成交时间，并通过 `quote_time_semantics=provider_snapshot_time` 显式标注。`fetched_at` 是服务采集时间。缺失/无法解析的时间、晚于请求分析时点的行情会被丢弃。
 - 日 K 的同日数据在中国市场本地时区 15:05 之前不作为已完成日 K 使用；未来日期和 OHLC 不合法的记录会被过滤。
 - 市场数据服务尚未提供严格定义的 publication available_at，因此采集器会在来源诊断里明确标记该字段缺失，质量状态为 partial；历史回放继续 fail-closed。
 - 一条日 K 的供应商时间不等于它当时已对市场参与者可用的时间。不能将 fetched_at 冒充 available_at，也不能只因字段已经是 forward_adjusted 就宣称获得了严格的无前视偏差历史数据。

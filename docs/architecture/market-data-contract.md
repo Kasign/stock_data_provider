@@ -12,7 +12,8 @@
 | `volume` | 成交量 | 股 |
 | `amount` | 成交额 | CNY（人民币元） |
 | `trade_date` | 交易所交易日，不是 UTC 零点时间戳 | `YYYY-MM-DD` |
-| `quote_time` / `provider_timestamp` | 可用时的供应商行情时间 | 带时区的 RFC3339 时间戳 |
+| `quote_time` | 供应商报告的行情快照/更新时间；不保证是最近成交时间 | 带时区的 RFC3339 时间戳 |
+| `quote_time_semantics` | 时间字段语义；当前供应商统一标记为 `provider_snapshot_time` | 枚举字符串 |
 | `fetched_at` | 本服务接收到数据的时间 | UTC RFC3339 时间戳 |
 | `normalized_at` | 本服务完成标准化的时间 | UTC RFC3339 时间戳 |
 
@@ -41,7 +42,7 @@
 ## 时间语义与未完成 K 线
 
 - `trade_date` 是日期，不是时间戳。
-- `quote_time` 由供应商提供或为空。`fetched_at` 只表示本地接收时刻。
+- `quote_time` 由供应商提供或为空，当前表示供应商报告的行情快照/更新时间，不保证等于最近一笔成交时间；`quote_time_semantics=provider_snapshot_time` 显式标注该语义。`fetched_at` 只表示本地采集时刻，分析任务的排队/执行时长不能改变供应商原始时间。
 - 盘中供应商行情超过新鲜度门限时应标记 `stale`；明显超前于本机时间的供应商时间应标记 `degraded`。缓存命中同样必须做新鲜度检查。
 - 如果在本地市场收盘前获取当日 K 线，应标记为 partial。对收盘前时点的历史 `as_of` 查询，应排除该日期后来才形成的完整 K 线。目前用 `Asia/Shanghai` 时钟估算收盘，并未接入权威交易所交易日历，因此节假日/临时休市等情况仍是已知限制。
 - 对仅提供当前快照的筹码、财务或板块数据，当请求的 `as_of` 是历史时点时，不得将当前结果倒灌至过去；应显式说明该字段缺失/不适用。
