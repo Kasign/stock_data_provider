@@ -216,3 +216,114 @@ func TestTencentStarMarketDailyVolumeAlreadyInShares(t *testing.T) {
 		t.Fatalf("undocumented trailing numeric field must not be interpreted as amount, got %+v", bars[0])
 	}
 }
+
+func TestTencentDailyBarsUsesRequestedAdjustmentEndpointAndPayloadKey(t *testing.T) {
+	type requestRecord struct {
+		path  string
+		param string
+	}
+	var requests []requestRecord
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		param := r.URL.Query().Get("param")
+		requests = append(requests, requestRecord{path: r.URL.Path, param: param})
+		switch r.URL.Path {
+		case "/none":
+			if param != "sh600036,day,2026-10-19,2026-10-21,8" {
+				http.Error(w, "unexpected unadjusted parameters", http.StatusBadRequest)
+				return
+			}
+		case "/adjusted":
+			if param != "sh600036,day,2026-10-19,2026-10-21,8,qfq" &&
+				param != "sh600036,day,2026-10-19,2026-10-21,8,hfq" {
+				http.Error(w, "unexpected adjusted parameters", http.StatusBadRequest)
+				return
+			}
+		default:
+			http.NotFound(w, r)
+			return
+		}
+
+		fmt.Fprint(w, `{"data":{"sh600036":{
+			"day":[["2026-10-20","42.95","42.52","43.13","42.18","760948"]],
+			"qfqday":[["2026-10-20","43.40","43.05","43.60","43.10","760948"]],
+			"hfqday":[["2026-10-20","91.40","90.50","92.00","90.00","760948"]]
+		}}}`)
+	}))
+	defer srv.Close()
+
+	p := NewTencentConfigured(2*time.Second, srv.URL+"/quote", srv.URL+"/adjusted", srv.URL+"/none")
+	tests := []struct {
+		name       string
+		basis      model.AdjustmentBasis
+		wantPath   string
+		wantParam  string
+		wantClose  float64
+	}{
+		{
+			name:      "none uses plain endpoint and day key",
+			basis:     model.AdjustmentNone,
+			wantPath:  "/none",
+			wantParam: "sh600036,day,2026-10-19,2026-10-21,8",
+			wantClose: 42.52,
+		},
+		{
+			name:      "forward adjusted uses qfq parameter and qfqday key",
+			basis:     model.AdjustmentForward,
+			wantPath:  "/adjusted",
+			wantParam: "sh600036,day,2026-10-19,2026-10-21,8,qfq",
+			wantClose: 43.05,
+		},
+		{
+			name:      "backward adjusted uses hfq parameter and hfqday key",
+			basis:     model.AdjustmentBackward,
+			wantPath:  "/adjusted",
+			wantParam: "sh600036,day,2026-10-19,2026-10-21,8,hfq",
+			wantClose: 90.50,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bars, err := p.FetchDailyBars(context.Background(), "600036.SH", "2026-10-19", "2026-10-21", 8, tc.basis)
+			if err != nil {
+				t.Fatalf("FetchDailyBars returned error: %v", err)
+			}
+			if len(bars) != 1 {
+				t.Fatalf("bar count=%d, want 1", len(bars))
+			}
+			if bars[0].AdjustmentBasis != tc.basis {
+				t.Fatalf("adjustment basis=%q, want %q", bars[0].AdjustmentBasis, tc.basis)
+			}
+			if bars[0].Close != tc.wantClose {
+				t.Fatalf("close=%v, want %v", bars[0].Close, tc.wantClose)
+			}
+			if bars[0].Amount != nil || bars[0].AmountUnit != "unknown" || bars[0].QualityStatus != model.QualityDegraded {
+				t.Fatalf("unverified Tencent K-line amount must remain unknown/degraded, got %+v", bars[0])
+			}
+			if *bars[0].Volume != 76094800 || bars[0].RawVolumeUnit != "hands" {
+				t.Fatalf("unexpected volume normalization: volume=%v raw_unit=%q", bars[0].Volume, bars[0].RawVolumeUnit)
+			}
+		})
+		if got := requests[len(requests)-1]; got.path != tc.wantPath || got.param != tc.wantParam {
+			t.Fatalf("request path/param=%q/%q, want %q/%q", got.path, got.param, tc.wantPath, tc.wantParam)
+		}
+	}
+}
+
+func TestTencentDailyBarsRejectsMissingRequestedAdjustedSeries(t *testing.T) {
+	for _, basis := range []model.AdjustmentBasis{model.AdjustmentForward, model.AdjustmentBackward} {
+		t.Run(string(basis), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, `{"data":{"sh600036":{"day":[["2026-10-20","42.95","42.52","43.13","42.18","760948"]]}}}`)
+			}))
+			defer srv.Close()
+
+			p := NewTencentConfigured(2*time.Second, srv.URL+"/quote", srv.URL+"/adjusted", srv.URL+"/none")
+			if _, err := p.FetchDailyBars(context.Background(), "600036.SH", "2026-10-19", "2026-10-21", 8, basis); err == nil {
+				t.Fatal("missing requested adjusted series must return an error instead of using unadjusted day data")
+			}
+		})
+	}
+}
+

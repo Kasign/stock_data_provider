@@ -171,6 +171,17 @@ ut=<public front-end token configured by provider code>
 5. 增加 provider 失败结构化日志：至少记录 provider、能力、symbol、错误类别、耗时和 request ID；不要记录 API Key、完整带查询参数的 URL 或响应正文中的敏感字段。
 6. 根因明确前，保持 Eastmoney 状态为“未通过/待调查”，不要把网络不可达解释成股票不支持或服务商永久不可用。
 
+## 5.6 Tencent Provider 自动化契约测试边界
+
+Tencent Go Provider 当前单测覆盖成交额缺失时保持 null/unknown/degraded、拒绝把未文档化的 K 线尾字段解释为成交额、普通 A 股成交量按“手”转“股”、科创板样本成交量以“股”处理等规则。本轮新增的测试继续固定三种请求口径：
+
+- `adjustment=none` 应请求不复权 endpoint，并读取 `day`；
+- `adjustment=forward_adjusted` 应向调整 endpoint 请求 `qfq)，并读取 `qfqday`；
+- `adjustment=backward_adjusted` 应向调整 endpoint 请求 `hfq)，并读取 `hfqday`；
+- 若请求的复权数组缺失，即使响应含 `day`，也必须报错，不能将不复权价格冒充调整后价格。
+
+这些是使用本地 `httptest` fixture 的自动化契约测试，不是对 Tencent 线上服务可达性、当日数据覆盖或成交额真实性的证明。Tencent 独立单源验收仍待部署环境恢复正常配置后执行。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
