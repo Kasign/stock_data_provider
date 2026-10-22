@@ -7,7 +7,7 @@
 
 ## 1. 决策摘要
 
-**BaoStock 原生 Go 协议客户端与 DailyBarProvider 已实现，当前进入真实容器协议和数据契约验收阶段，尚不标记为生产可用 Provider。** NAS 宿主机已经验证 public-api.baostock.com 可解析，并能连接 TCP 10030；容器内登录、查询、字段完整性和复权口径尚未验证。
+**BaoStock 原生 Go 协议客户端与 DailyBarProvider 已完成一轮真实 NAS 容器验收，真实日 K 查询、字段归一化、多日范围与多复权口径样本均已通过。** 故障回退与 MariaDB 不复权历史回退也已通过实际请求验证；这并不代表所有数据源或所有证券/日期均已完成验收。当前真实测试细节与待处理问题统一记录在[数据源真实环境验收与故障排查记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。
 
 BaoStock 最合适的第一阶段用途是历史日 K 及其明确声明的成交量、成交额和复权字段；后续再评估其支持的部分财务指标、复权因子、除权除息、证券基础资料、行业分类和指数成分数据。它不能替代实时行情、新闻公告、龙虎榜、板块资金流和筹码数据等全部能力。
 
@@ -26,13 +26,13 @@ BaoStock 最合适的第一阶段用途是历史日 K 及其明确声明的成�
 |---|---|---|
 | BaoStock DNS | NAS 宿主机解析到 114.94.20.42 | DNS 当前可用，地址可能变化 |
 | BaoStock TCP | NAS 宿主机连接 public-api.baostock.com:10030 成功 | 当前宿主机网络可达，尚未证明应用层可用或长期稳定 |
-| BaoStock 容器网络 | 尚未在 stock-market-data 容器完成测试 | 待验证 |
-| BaoStock 登录及 K 线查询 | 尚未执行真实协议查询 | 待验证，不能标记生产可用 |
-| 东方财富实时行情与历史 K 线 | NAS 宿主机请求均观察到 Empty reply；容器访问历史 K 线曾出现 Network unreachable | 当前运行环境访问异常；原因尚未证实，不应断言服务商不支持标的 |
+| BaoStock 容器网络及协议 | 容器内已完成实际 BaoStock 日 K 请求，返回多证券/日期记录 | 已通过首轮真实请求，需继续扩大样本并观察稳定性 |
+| BaoStock 登录及 K 线查询 | 已在实际服务请求中获得真实日 K，source=baostock，quality_status=valid | 首轮通过；不代表 SLA 或全部证券范围保证 |
+| 东方财富实时行情与历史 K 线 | 容器访问百度 HTTPS 为 200；Eastmoney 两个域名根路径的 HTTPS 可建立连接并返回 404；历史 K 线真实接口对部分解析到的 IPv4（101.42.128.173、61.129.129.199）返回 Network unreachable；宿主机根路径访问 14.103.188.89 成功建立连接并返回 404 | 故障保持待调查；目前证据不能证明域名整体被封，详细证据及排查步骤见[真实验收与故障排查记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md) |
 | 腾讯贵州茅台日 K | 原始响应含 qfqday，Go 解析得到 OHLC 与成交量正确 | 已验证一个普通 A 股样本 |
 | 腾讯中芯国际前复权 | 两个腾讯入口对本次请求均只返回 day、未返回 qfqday；adjustment=none 的 Go 结果与原始成交量一致 | 本次前复权要求不满足；未复权解析与科创板成交量单位转换通过 |
 
-东方财富的空响应属于传输/上游响应阶段的问题，不是 JSON 字段解析错误。应保留错误细节和健康状态，不能把“当前请求失败”自动推断为“服务商永久不支持该股票”。
+东方财富历史行情当前在目标环境中存在连接阶段异常；由于真实行情接口尚未收到完整响应，本轮不能断言这是 JSON 解析问题或数据不支持。应保留错误细节和健康状态，不能把“当前请求失败”自动推断为“服务商永久不支持该股票”。
 
 ## 3. 扩展数据源分工
 
@@ -151,14 +151,16 @@ BaoStock 的 Go 客户端和 DailyBarProvider 已实现；在 NAS 容器完成�
 
 ### 当前代码实现状态（2026-10-22）
 
-已完成 Go 原生 TCP client 与日 K Provider 第一轮实现。模拟服务测试覆盖登录、压缩响应、CRC 与查询流程；配置默认关闭。仍需在真实 NAS 容器完成协议互通和实际数据对账。
+Go 原生 TCP client 与日 K Provider 已完成首轮真实容器取数：600519.SH、688981.SH、000001.SZ、600036.SH 的样本查询通过，返回 source=baostock、quality_status=valid 的结果，并已验证不复权数据库回退与多源故障回退。真实测试输出、数值样本与故障注入证据见[数据源真实环境验收与故障排查记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。
+
+BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。Eastmoney 接口网络异常原因未定位，不能据此判断域名整体被封。
 
 启用验收建议：
 
-1. 临时设置 MARKET_DATA_BAOSTOCK_ENABLED=true、MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED=true，并保持 MARKET_DATA_BAOSTOCK_QUOTE_ENABLED=false；确保 MARKET_DATA_PROVIDER_PRIORITY 包含 baostock。
-2. 从 stock-market-data 容器请求 600519.SH 前复权和 688981.SH 不复权日 K，检查 source=baostock、复权算法标签、成交量/成交额与质量警告。
-3. 分别验证两只股票前复权、后复权与不复权；对比同一日期、同一 adjust flag 的数据。供应商复权算法不同，跨源对账应区分未复权价格和复权序列，不能只依赖前复权名称。
-4. 若登录/查询、质量校验或 CI 未通过，先修复并保持关闭；未完成真实验收前可将启用开关恢复为 false。
+1. BaoStock 真实查询已有首轮通过证据；继续增加日期区间、证券类型、停牌/无数据日期与复权样本，并保留低频请求。
+2. 检查 source=baostock、复权算法标签、成交量/成交额与质量警告；对比时区分未复权价格和不同来源的复权算法。
+3. 保持 Eastmoney 根因待调查，不因失败绕过数据质量门禁。
+4. 任何扩展都要在真实请求、质量校验与 CI 通过后再评估路由；尚未验收的数据域不得标记为生产可用。
 
 ## 7. 参考资料
 
