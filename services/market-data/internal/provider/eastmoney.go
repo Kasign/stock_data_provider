@@ -19,20 +19,37 @@ import (
 
 const eastmoneyVersion = "eastmoney-stock-api-v1"
 
+// defaultEastmoneyUT is the public web token commonly used by Eastmoney front-end clients.
+// It is not a user credential or private API key; deployments can override it if Eastmoney rotates it.
+const defaultEastmoneyUT = "7eea3edcaed734bea9cbfc24409ed989"
+
 type Eastmoney struct {
 	client   *http.Client
 	quoteURL string
 	klineURL string
+	ut       string
 }
 
 func NewEastmoney(timeout time.Duration, quoteURL, klineURL string) *Eastmoney {
+	return NewEastmoneyConfigured(timeout, quoteURL, klineURL, "")
+}
+
+// NewEastmoneyConfigured allows the public Eastmoney front-end token to be overridden without changing endpoint URLs.
+func NewEastmoneyConfigured(timeout time.Duration, quoteURL, klineURL, ut string) *Eastmoney {
+	if timeout <= 0 {
+		timeout = 12 * time.Second
+	}
 	if quoteURL == "" {
 		quoteURL = "https://push2.eastmoney.com/api/qt/stock/get"
 	}
 	if klineURL == "" {
 		klineURL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 	}
-	return &Eastmoney{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL}
+	ut = strings.TrimSpace(ut)
+	if ut == "" {
+		ut = defaultEastmoneyUT
+	}
+	return &Eastmoney{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, ut: ut}
 }
 func (p *Eastmoney) Name() string { return "eastmoney" }
 
@@ -220,6 +237,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	q.Set("beg", beg)
 	q.Set("end", end)
 	q.Set("lmt", strconv.Itoa(limit))
+	q.Set("ut", p.ut)
 	q.Set("_", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	var payload struct {
 		RC   *int `json:"rc"`
@@ -291,8 +309,9 @@ func (p *Eastmoney) getJSON(ctx context.Context, base string, params url.Values,
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; MarketDataService/1.0)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 	req.Header.Set("Referer", "https://quote.eastmoney.com/")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("eastmoney request: %w", err)

@@ -45,7 +45,9 @@ func TestEastmoneyQuoteNormalizesUnitsAndProviderTime(t *testing.T) {
 	}
 }
 func TestEastmoneyDailyBarsNormalizesHandToShare(t *testing.T) {
+	utCh := make(chan string, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		utCh <- r.URL.Query().Get("ut")
 		fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":["2026-10-20,1321.01,1331.88,1335.00,1316.14,34136,4525398959,1.42,0.81,10.87,0.23"]}}`)
 	}))
 	defer srv.Close()
@@ -65,6 +67,16 @@ func TestEastmoneyDailyBarsNormalizesHandToShare(t *testing.T) {
 	}
 	if bars[0].AdjustmentBasis != model.AdjustmentForward {
 		t.Fatalf("basis=%s", bars[0].AdjustmentBasis)
+	}
+	if got := <-utCh; got != defaultEastmoneyUT {
+		t.Fatalf("Eastmoney K-line request ut=%q, want default public token", got)
+	}
+}
+
+func TestEastmoneyConfiguredUTOverridesDefault(t *testing.T) {
+	p := NewEastmoneyConfigured(time.Second, "", "", "  rotated-public-token  ")
+	if p.ut != "rotated-public-token" {
+		t.Fatalf("configured Eastmoney ut=%q, want trimmed override", p.ut)
 	}
 }
 

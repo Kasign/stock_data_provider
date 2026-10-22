@@ -40,6 +40,7 @@ type Config struct {
 	ProvidersConfigPath     string
 	EastmoneyQuoteURL       string
 	EastmoneyKlineURL       string
+	EastmoneyUT             string
 	TencentQuoteURL         string
 	TencentKlineURL         string
 	TencentNoneKlineURL     string
@@ -140,6 +141,7 @@ func Load() (Config, error) {
 		ProvidersConfigPath:     configPath,
 		EastmoneyQuoteURL:       get("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://push2.eastmoney.com/api/qt/stock/get"),
 		EastmoneyKlineURL:       get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
+		EastmoneyUT:             get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:         get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
 		TencentNoneKlineURL:     get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),

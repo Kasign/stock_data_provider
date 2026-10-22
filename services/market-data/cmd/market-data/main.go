@@ -60,7 +60,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		c = redis
 	}
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoney(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL),
+		"eastmoney": provider.NewEastmoneyConfigured(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyUT),
 		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
 		"sina":      provider.NewSina(cfg.ProviderTimeout, cfg.SinaQuoteURL),
 	}
