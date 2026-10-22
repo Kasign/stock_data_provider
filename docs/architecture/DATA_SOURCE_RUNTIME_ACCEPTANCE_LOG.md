@@ -230,13 +230,45 @@ GitHub Actions 证据：
 | Eastmoney 主报价端点 | HTTP 302，重定向到 `push2delay.eastmoney.com/api/qt/stock/get` | 按当前 Provider 不跟随重定向的策略，结果仍标记失败。报告只记录重定向主机/路径和 query key 名（`_`、`fields`、`fltt`、`invt`、`secid`），没有记录 query value。该证据本身不足以要求改动生产重定向策略。 |
 | Eastmoney 延迟行情域直连 | HTTP 200，JSON `rc=0`；解析出“招商银行”、现价 41.82、成交量 98,924,400 股、成交额 CNY 4,140,322,738 | Provider 返回成功，但质量为 degraded，原因是缺少可验证的报价时间戳（`provider_timestamp_missing`）。这证明该次直接请求可取数，不等同于主端点重定向策略已验证。 |
 | Eastmoney 前复权日 K | HTTP 200，JSON `rc=0`；19 根 K 线，日期从 2026-09-17 到 2026-10-21 | OHLC、成交量和成交额均解析；样本状态 valid。只证明该次 GitHub Runner 请求成功。 |
-| BaoStock 前复权日 K | 向 `114.94.20.42:10030` 登录读取时发生约 20 秒 socket `i/o timeout`，没有拿到数据响应 | **GitHub Runner 网络/读取超时**，不是 HTTP 状态码或行情解析错误，也不能推翻 NAS 端先前通过 TCP 10030 登录并取数的实测。该次报告的 `error_kind=provider_error` 未准确反映底层超时，本次后续修复将补全超时分类并重新运行探测。 |
+| BaoStock 前复权日 K | 向 `114.94.20.42:10030` 登录读取时发生约 20 秒 socket `i/o timeout`，没有拿到数据响应 | **GitHub Runner 网络/读取超时**，不是 HTTP 状态码或行情解析错误，也不能推翻 NAS 端先前通过 TCP 10030 登录并取数的实测。该次报告的 `error_kind=provider_error` 未准确反映底层超时，后续已在提交 `b81a1812080edecb556ec369162fcdb96fc753e4` 中修复超时分类，并在第 5.11 节记录复验结果。 |
 
 ### 5.10.2 报告与安全审查说明
 
 - 结构化行情字段（如新浪已解码的名称）是解析结果；HTTP `body_sample` 是从原始响应截取并转成可写入 JSON 的有限长度样本。对 GB18030 非 UTF-8 原始字节，该样本会出现替换字符，因此不能把它当作字节级原始响应存档。报告同时保留响应字节数和 Content-Type，便于解释这一点。
 - 捕获器不记录请求 URL 的 query value；重定向仅输出目标 host/path 和排序后的 query 参数名。错误摘要中的 URL query value 同样脱敏。
 - 本地 `httptest` 单测证明的是解码、契约、错误分类和脱敏逻辑；GitHub Runner 日志与 artifact 证明的是该时刻托管 Runner 收到的真实响应；NAS 端实测只以 NAS 自己的日志/API/数据库证据为准。三种证据不能互相替代。
+
+
+## 5.11 GitHub Actions 三次探测与超时分类修复复验（2026-10-22 20:53，Asia/Shanghai）
+
+复验提交：`b81a1812080edecb556ec369162fcdb96fc753e4`（`fix: 正确识别真实探测的网络读取超时`）。该提交增加 `net.Error.Timeout()`、`i/o timeout` 等超时识别，并添加 `TestLiveProbeErrorSummaryClassifiesNetworkTimeout`。最新普通 CI 和真实探测已重新运行。
+
+- 普通 Go CI：[Go test suite #200](https://github.com/Kasign/stock_data_provider/actions/runs/39782109950)，workflow conclusion 为 **success**。根模块、`go-core`、`services/market-data` 中 gofmt、普通测试、race detector、vet 均通过；Compose、部署脚本语法及两个 Go Docker 镜像构建均通过。
+- 真实探测：[Live provider probe #9](https://github.com/Kasign/stock_data_provider/actions/runs/39782109968)。workflow 的整体 conclusion 是 success，但 **探测 job 本身为 failure**，因为探测测试报告 3 项失败并返回非零退出码；job 的 `continue-on-error: true` 使工作流整体仍显示 success。
+- Artifact：[live-provider-report（artifact 12427112267）](https://github.com/Kasign/stock_data_provider/actions/runs/39782109968/artifacts/12427112267)，压缩包 3,504 字节，GitHub 元数据 SHA-256 为 `2da84dbb03ed5b2ed62ae4fdad58e68fad0f5e5b76cf1bead317c1df38fb0590`。已通过 GitHub Actions artifact 下载并解析内部 `live-provider-report.json`，报告文件大小 19,090 字节，生成时间 `2026-10-22T20:53:50+08:00`。该 JSON SHA-256 为 `66d698fb801d8b35929d3bef692e4da0a4abeb06771595a84a1190ce91a3633c`。
+
+### 5.11.1 修复后真实结果
+
+| Provider / 能力 | 本轮观测 | 结论 |
+|---|---|---|
+| Sina 报价 | HTTP 200；GB18030 名称正确解析；贵州茅台现价 1318.49、成交量 4,249,133 股、成交额 CNY 5,576,216,948；质量 valid | 编码修复再次通过真实响应验证。 |
+| Tencent 报价 | HTTP 200；现价 1318.49；成交量单位仍需指标推断 | 数据返回成功但质量 degraded，原因与成交量单位推断及量比字段契约有关。 |
+| Tencent 不复权/前复权日 K | 两个请求均 HTTP 200，各返回 8 根；前复权使用 `qfqday` | 解析成功；成交额保持 null、单位 unknown、质量 degraded，这是已知且刻意保守的数据契约。 |
+| Eastmoney 主报价 | HTTP 302，目标为 `push2delay.eastmoney.com/api/qt/stock/get` | 仍按 `http_status` 记失败。没有据此改变生产端重定向策略。只记录重定向 host/path 和 query key 名，不记录 query values。 |
+| Eastmoney 延迟行情域直连报价 | HTTP 200；`rc=0`；招商银行现价 41.82、成交量 98,924,400 股、成交额 CNY 4,140,322,738 | 数据返回成功但质量 degraded，原因是缺少可验证的报价时间戳（`provider_timestamp_missing`）。 |
+| Eastmoney 前复权日 K | 本轮连接返回 EOF；没有 HTTP 状态、响应正文或可解析 K 线 | 分类为 `connection_closed`，属于传输连接中断，不是解析/质量门禁失败。上一次实测该接口 HTTP 200、19 根且质量 valid；两轮结果说明接口可达性存在波动，不能只挑选成功样本或宣称稳定。 |
+| BaoStock 前复权日 K | 对 `114.94.20.42:10030` 登录读取约 20 秒后 `i/o timeout` | 现在正确记录 `error_kind=timeout`。这是 GitHub Runner 的网络读取超时，不是 HTTP 状态或行情解析失败；不否定 NAS 曾成功登录并取数的独立证据。 |
+
+### 5.11.2 分类与验收边界
+
+本轮真实报告将失败分为三类：Eastmoney 主报价是收到 HTTP 302（HTTP 状态/重定向策略问题）；Eastmoney 日 K 是连接后 EOF（传输连接被关闭，未收到 HTTP 状态）；BaoStock 是 socket 读取超时（网络/读取超时）。三者不能笼统归为“接口解析失败”。
+
+截至本轮，自动化契约测试、GitHub Runner 实测和 NAS 运行实测仍为三种独立证据：
+1. 自动化测试通过，证明 Go 代码、错误分类、脱敏和质量契约符合测试；
+2. GitHub Runner 可重复取得新浪、腾讯、Eastmoney 延迟报价和部分 Eastmoney 历史 K 线，但并非每个端点每轮都成功；
+3. BaoStock 的 NAS 成功取数证据属于 NAS 网络环境，本轮 GitHub Runner timeout 不能替代或推翻它。若要再次证明 NAS 当前可用，需要 NAS 侧带时间戳的 API/服务日志或数据库新鲜记录。
+
+不将 Tencent 的 amount=null/degraded 视为错误，不把 Eastmoney 302 直接改成自动跟随，不把任意一次 Eastmoney EOF 推广为整个 Eastmoney 不可用。后续应继续采集独立请求结果与运行环境证据。
 
 ## 6. 下一步验收顺序
 
