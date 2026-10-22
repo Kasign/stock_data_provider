@@ -314,11 +314,11 @@ func TestLiveProviderProbe(t *testing.T) {
 		DailySymbol: dailySymbol,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Results:     make([]liveProbeResult, 0, 7),
+		Results:     make([]liveProbeResult, 0, 8),
 	}
 	var failures []string
 
-	runQuote := func(providerName, symbol string, client *http.Client, call func(context.Context) (*model.Quote, error)) {
+	runQuote := func(providerName, expectedSource, symbol string, client *http.Client, call func(context.Context) (*model.Quote, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
 			client.Transport = capture.transport()
@@ -340,7 +340,7 @@ func TestLiveProviderProbe(t *testing.T) {
 			result.Status = "invalid"
 			result.Error = "provider returned a nil quote without an error"
 			failures = append(failures, providerName+" quote: nil result")
-		case quote.Symbol != symbol || quote.Source != providerName:
+		case quote.Symbol != symbol || quote.Source != expectedSource:
 			result.Status = "invalid"
 			result.Quote = quote
 			result.Error = fmt.Sprintf("identity mismatch: symbol=%q source=%q", quote.Symbol, quote.Source)
@@ -421,12 +421,12 @@ func TestLiveProviderProbe(t *testing.T) {
 	}
 
 	sina := NewSina(12*time.Second, "")
-	runQuote("sina", quoteSymbol, sina.client, func(ctx context.Context) (*model.Quote, error) {
+	runQuote("sina", "sina", quoteSymbol, sina.client, func(ctx context.Context) (*model.Quote, error) {
 		return sina.FetchQuote(ctx, quoteSymbol)
 	})
 
 	tencent := NewTencent(12 * time.Second)
-	runQuote("tencent", quoteSymbol, tencent.client, func(ctx context.Context) (*model.Quote, error) {
+	runQuote("tencent", "tencent", quoteSymbol, tencent.client, func(ctx context.Context) (*model.Quote, error) {
 		return tencent.FetchQuote(ctx, quoteSymbol)
 	})
 	runDaily("tencent", dailySymbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
@@ -437,8 +437,12 @@ func TestLiveProviderProbe(t *testing.T) {
 	})
 
 	eastmoney := NewEastmoney(12*time.Second, "", "")
-	runQuote("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.Quote, error) {
+	runQuote("eastmoney", "eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoney.FetchQuote(ctx, dailySymbol)
+	})
+	eastmoneyDelay := NewEastmoneyConfigured(12*time.Second, "https://push2delay.eastmoney.com/api/qt/stock/get", "", "")
+	runQuote("eastmoney-delay", "eastmoney", dailySymbol, eastmoneyDelay.client, func(ctx context.Context) (*model.Quote, error) {
+		return eastmoneyDelay.FetchQuote(ctx, dailySymbol)
 	})
 	runDaily("eastmoney", dailySymbol, model.AdjustmentForward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
