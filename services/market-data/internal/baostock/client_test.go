@@ -40,7 +40,6 @@ func TestEncodeFrameCountsUTF8BytesAndValidatesCRC(t *testing.T) {
 	}
 }
 
-
 func TestParseHeaderRejectsUnknownProtocolVersion(t *testing.T) {
 	header := []byte(fmt.Sprintf("99.9.99%s%s%s%010d", messageSplit, messageLoginResponse, messageSplit, 0))
 	if len(header) != 21 {
