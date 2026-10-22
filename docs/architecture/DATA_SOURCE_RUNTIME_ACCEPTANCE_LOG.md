@@ -182,6 +182,12 @@ Tencent Go Provider 当前单测覆盖成交额缺失时保持 null/unknown/degr
 
 对应自动化用例为 `TestTencentDailyBarsUsesRequestedAdjustmentEndpointAndPayloadKey` 与 `TestTencentDailyBarsRejectsMissingRequestedAdjustedSeries`，使用本地 `httptest` fixture 断言接口、参数、响应字段映射与复权缺失保护。这些测试不是对 Tencent 线上服务可达性、当日数据覆盖或成交额真实性的证明。Tencent 独立单源验收仍待部署环境恢复正常配置后执行。实际测试应选用近期且尚未在 MariaDB 保存的交易日（例如 `2026-10-22`），并用新的 `limit` 避开既有缓存；请求成功必须看到本次新鲜数据的 `source=tencent` 和接近当前请求时间的 `fetched_at`。Tencent 日 K 当前没有经过验证的成交额字段，故 `amount=null` 与 `quality_status=degraded` 是预期限制；如果响应为 `stale` 且带 `provider_unavailable_served_from_mariadb`，只能说明数据库兜底生效，不能判定 Tencent 独立验收通过。
 
+## 5.7 Sina 实时报价契约测试边界
+
+Sina 当前只实现 QuoteProvider，不提供日 K。既有 fixture 测试覆盖原始成交量按“股”保存、人民币成交额解析、时间按中国时区解释后存 UTC，以及不支持交易所后缀拒绝逻辑。本轮补充 `TestSinaMissingOrInvalidAmountDoesNotClaimRawFieldMetadata`，覆盖成交额缺失/非法时保持 `Amount=null`、`RawAmount=null`、单位为 `unknown`、`RawAmountField` 为空并标记 `degraded` 的契约。
+
+这些单测使用本地 `httptest` fixture，只能验证解析规则，不能证明新浪公网接口在 NAS 容器中的实时可用性。真实验收时应单独启用 Sina 报价能力，检查新鲜的 `source=sina` 结果、报价时间、成交量单位和成交额质量标记；不能把 MariaDB 的 `stale` 回退记录视为新浪实时取数成功。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
