@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -132,6 +133,47 @@ func (b *liveProbeCaptureBody) Close() error {
 	return err
 }
 
+func liveProbeDailyContractError(bars []model.DailyBar, providerName, symbol string, basis model.AdjustmentBasis, startDate, endDate string) string {
+	seenDates := make(map[string]struct{}, len(bars))
+	for index, bar := range bars {
+		if bar.Source != providerName || bar.Symbol != symbol {
+			return fmt.Sprintf("bar %d identity mismatch: symbol=%q source=%q", index, bar.Symbol, bar.Source)
+		}
+		if bar.AdjustmentBasis != basis {
+			return fmt.Sprintf("bar %d adjustment mismatch: requested=%q got=%q", index, basis, bar.AdjustmentBasis)
+		}
+		if _, err := time.Parse("2006-01-02", bar.TradeDate); err != nil {
+			return fmt.Sprintf("bar %d has invalid trade date %q", index, bar.TradeDate)
+		}
+		if bar.TradeDate < startDate || bar.TradeDate > endDate {
+			return fmt.Sprintf("bar %d trade date %s falls outside requested range %s..%s", index, bar.TradeDate, startDate, endDate)
+		}
+		if _, exists := seenDates[bar.TradeDate]; exists {
+			return fmt.Sprintf("duplicate trade date %s", bar.TradeDate)
+		}
+		seenDates[bar.TradeDate] = struct{}{}
+		if bar.Volume == nil || *bar.Volume < 0 {
+			return fmt.Sprintf("bar %s has missing or negative volume", bar.TradeDate)
+		}
+		prices := []float64{bar.Open, bar.High, bar.Low, bar.Close}
+		for _, value := range prices {
+			if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
+				return fmt.Sprintf("bar %s has invalid OHLC value", bar.TradeDate)
+			}
+		}
+		if bar.Low > bar.High || bar.Open < bar.Low || bar.Open > bar.High || bar.Close < bar.Low || bar.Close > bar.High {
+			return fmt.Sprintf("bar %s violates OHLC range invariant", bar.TradeDate)
+		}
+		if bar.Amount == nil && bar.QualityStatus == model.QualityValid {
+			return fmt.Sprintf("bar %s has no amount but quality is marked valid", bar.TradeDate)
+		}
+		if bar.Amount == nil && bar.RawAmountField != "" {
+			return fmt.Sprintf("bar %s has no amount but raw amount field metadata is present", bar.TradeDate)
+		}
+	}
+	return ""
+}
+
 func TestLiveProviderProbe(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_PROVIDER_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_PROVIDER_TESTS=1 to call real public provider endpoints")
@@ -183,11 +225,31 @@ func TestLiveProviderProbe(t *testing.T) {
 			result.Status = "invalid"
 			result.Error = "provider returned a nil quote without an error"
 			failures = append(failures, providerName+" quote: nil result")
+		case quote.Symbol != symbol || quote.Source != providerName:
+			result.Status = "invalid"
+			result.Quote = quote
+			result.Error = fmt.Sprintf("identity mismatch: symbol=%q source=%q", quote.Symbol, quote.Source)
+			failures = append(failures, providerName+" quote: identity mismatch")
 		case quote.CurrentPrice == nil || quote.Volume == nil:
 			result.Status = "invalid"
 			result.Quote = quote
 			result.Error = "quote response is missing current_price or volume"
 			failures = append(failures, providerName+" quote: incomplete required fields")
+		case math.IsNaN(*quote.CurrentPrice) || math.IsInf(*quote.CurrentPrice, 0) || *quote.CurrentPrice <= 0 || *quote.Volume < 0:
+			result.Status = "invalid"
+			result.Quote = quote
+			result.Error = "quote response has an invalid price or volume"
+			failures = append(failures, providerName+" quote: invalid numeric fields")
+		case quote.Amount == nil && (quote.RawAmount != nil || quote.RawAmountField != ""):
+			result.Status = "invalid"
+			result.Quote = quote
+			result.Error = "missing amount still has raw amount value/field metadata"
+			failures = append(failures, providerName+" quote: inconsistent amount metadata")
+		case quote.Amount == nil && quote.QualityStatus == model.QualityValid:
+			result.Status = "invalid"
+			result.Quote = quote
+			result.Error = "amount is missing but quote quality is marked valid"
+			failures = append(failures, providerName+" quote: missing amount not marked degraded")
 		default:
 			result.Status = "returned"
 			result.Quote = quote
@@ -211,6 +273,10 @@ func TestLiveProviderProbe(t *testing.T) {
 			Adjustment: basis, ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot(),
 			BarCount: len(bars),
 		}
+		contractError := ""
+		if callErr == nil && len(bars) > 0 {
+			contractError = liveProbeDailyContractError(bars, providerName, symbol, basis, startDate, endDate)
+		}
 		switch {
 		case callErr != nil:
 			result.Status = "failed"
@@ -220,6 +286,11 @@ func TestLiveProviderProbe(t *testing.T) {
 			result.Status = "invalid"
 			result.Error = "provider returned an empty bar series without an error"
 			failures = append(failures, providerName+" daily_bars "+string(basis)+": empty result")
+		case contractError != "":
+			result.Status = "invalid"
+			result.Error = contractError
+			failures = append(failures, providerName+" daily_bars "+string(basis)+": "+contractError)
+			result.SampleBars = append([]model.DailyBar(nil), bars...)
 		default:
 			result.Status = "returned"
 			// Providers normally return rows in ascending date order. Keep the newest three samples in the report.
@@ -272,12 +343,9 @@ func TestLiveProviderProbe(t *testing.T) {
 	if marshalErr != nil {
 		t.Errorf("marshal live provider report: %v", marshalErr)
 	} else {
-		t.Logf("LIVE_PROVIDER_REPORT_BEGIN
-%s
-LIVE_PROVIDER_REPORT_END", encoded)
+		t.Logf("LIVE_PROVIDER_REPORT_BEGIN\n%s\nLIVE_PROVIDER_REPORT_END", encoded)
 		if outputPath := strings.TrimSpace(os.Getenv("LIVE_PROVIDER_REPORT_PATH")); outputPath != "" {
-			if writeErr := os.WriteFile(outputPath, append(encoded, '
-'), 0o644); writeErr != nil {
+			if writeErr := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); writeErr != nil {
 				t.Errorf("write live provider report: %v", writeErr)
 			}
 		}

@@ -192,7 +192,7 @@ Sina 当前只实现 QuoteProvider，不提供日 K。既有 fixture 测试覆�
 
 新增工作流 `.github/workflows/live-provider-smoke.yml`，在相关 PR 更新时自动执行，也可从 GitHub Actions 页面手动触发。该工作流使用项目实际 Go Provider 访问公开接口，探测新浪/腾讯报价、腾讯不复权与前复权日 K、东方财富报价与前复权日 K、BaoStock 前复权日 K；将结构化解析结果和截断后的原始 HTTP 响应片段输出到 Actions 日志，并上传 `live-provider-report` artifact。报告隐藏完整 URL 查询串，不需要个人 API Key。单次低频探测失败不会阻断常规 CI。
 
-运行结果必须按供应商分别解读：成功请求中包含 `source`、时间、成交量/成交额单位、质量状态与最新几条 K 线；失败则记录 HTTP 状态或网络错误类型。Tencent K 线缺少经验证的成交额时，`amount=null` / `degraded` 是当前已知的数据契约限制，不应直接判定请求失败。
+探测测试除记录真实返回外，还会校验报价的 symbol/source/价格/成交量与缺失成交额元数据，并校验 K 线的标的、来源、请求复权口径、日期范围、重复日期、OHLC 与成交量/成交额质量语义；契约异常会在报告中标记为 invalid。运行结果必须按供应商分别解读：成功请求中包含 `source`、时间、成交量/成交额单位、质量状态与最新几条 K 线；失败则记录 HTTP 状态或网络错误类型。Tencent K 线缺少经验证的成交额时，`amount=null` / `degraded` 是当前已知的数据契约限制，不应直接判定请求失败。
 
 **GitHub Runner 的网络与 NAS 不同**。该工作流可以回答“GitHub 托管环境实际收到了什么”，但不能替代 NAS 网络和真实部署回归。报告中的 HTTP 响应样本有字节数上限，目的是便于快速判断协议/字段，不作为完整上游原始响应存档。
 
