@@ -82,8 +82,14 @@ func readResponse(reader *bufio.Reader) (string, string, error) {
 		if len(trailer) < 3 || trailer[0] != 0x01 {
 			return "", "", errors.New("compressed BaoStock response is missing CRC trailer")
 		}
-		if err := verifyCRC(header[:], compressedBody, strings.TrimSpace(string(trailer[1:]))); err != nil {
-			return "", "", err
+		// BaoStock's live type-96 responses carry a numeric CRC trailer that does not
+		// match CRC32(header || compressedBody). Rejecting that comparison prevents all
+		// live K-line queries from reaching the zlib decoder. Validate the trailer's
+		// shape, then rely on zlib's checksum while fully reading the decompressed body.
+		// Uncompressed responses still use strict verifyCRC below.
+		crcText := strings.TrimSpace(string(trailer[1:]))
+		if _, err := strconv.ParseUint(crcText, 10, 32); err != nil {
+			return "", "", fmt.Errorf("invalid BaoStock CRC32 %q", crcText)
 		}
 		terminator := make([]byte, len(cdataTerminator))
 		if _, err := io.ReadFull(reader, terminator); err != nil {

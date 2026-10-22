@@ -183,6 +183,56 @@ func TestReadResponseRejectsBadCRC(t *testing.T) {
 	}
 }
 
+func TestReadCompressedResponseAcceptsValidZlibWithMismatchedWireCRC(t *testing.T) {
+	body := "0\x01success\x01query_history_k_data_plus\x01anonymous"
+	frame := responseFrameForTest(messageCompressed, body, true)
+	_, bodyLength, err := parseHeader(frame[:21])
+	if err != nil {
+		t.Fatal(err)
+	}
+	separator := 21 + bodyLength
+	if separator >= len(frame) || frame[separator] != 0x01 {
+		t.Fatal("compressed response has no CRC separator")
+	}
+	crcStart := separator + 1
+	newlineOffset := bytes.IndexByte(frame[crcStart:], '\n')
+	if newlineOffset <= 0 {
+		t.Fatal("compressed response has no CRC trailer")
+	}
+	crcEnd := crcStart + newlineOffset
+	if frame[crcEnd-1] == '0' {
+		frame[crcEnd-1] = '1'
+	} else {
+		frame[crcEnd-1] = '0'
+	}
+
+	messageType, got, err := readResponse(bufio.NewReader(bytes.NewReader(frame)))
+	if err != nil {
+		t.Fatalf("valid zlib payload should survive non-matching wire CRC: %v", err)
+	}
+	if messageType != messageCompressed || got != body {
+		t.Fatalf("unexpected response: type=%q body=%q", messageType, got)
+	}
+}
+
+func TestReadCompressedResponseRejectsMalformedCRCText(t *testing.T) {
+	frame := responseFrameForTest(messageCompressed, "0\x01success", true)
+	_, bodyLength, err := parseHeader(frame[:21])
+	if err != nil {
+		t.Fatal(err)
+	}
+	separator := 21 + bodyLength
+	if separator >= len(frame) || frame[separator] != 0x01 || separator+1 >= len(frame) {
+		t.Fatal("compressed response has no CRC trailer")
+	}
+	frame[separator+1] = 'x'
+
+	_, _, err = readResponse(bufio.NewReader(bytes.NewReader(frame)))
+	if err == nil || !strings.Contains(err.Error(), "invalid BaoStock CRC32") {
+		t.Fatalf("expected malformed CRC trailer error, got %v", err)
+	}
+}
+
 func parseRequestForTest(frame []byte) (string, string, error) {
 	messageType, bodyLength, err := parseHeader(frame[:21])
 	if err != nil {

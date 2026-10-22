@@ -19,7 +19,7 @@
 
 ## BaoStock 日 K 数据源（新增，默认关闭）
 
-BaoStock 通过 TCP 长连接访问 public-api.baostock.com:10030。当前代码实现登录、CRC 校验、96 类型 zlib 压缩响应、分页和日 K 字段标准化；Provider 只提供历史日 K，不提供实时行情。Provider 默认关闭，模拟协议测试不等于真实上游登录和查询已通过。
+BaoStock 通过 TCP 长连接访问 public-api.baostock.com:10030。当前代码实现登录、请求/非压缩响应 CRC 校验、96 类型 zlib 压缩响应解码、分页和日 K 字段标准化；对压缩响应检查 CRC 字段格式并依靠 zlib 校验数据完整性，以兼容线上返回的压缩帧。Provider 只提供历史日 K，不提供实时行情。Provider 默认关闭，模拟协议测试不等于真实上游登录和查询已通过。
 
 启用前需要从 stock-market-data 容器真实验证 600519.SH 与 688981.SH 的前复权（flag 2）、后复权（flag 1）和不复权（flag 3），检查价格、成交量（股）、成交额（人民币元）、停牌和日期覆盖。BaoStock 的涨跌幅复权算法可能与其他来源不同，因此返回字段 adjustment_method 会标记 baostock_pct_change；同名 forward_adjusted 不代表不同来源的绝对价格一定等价。当前未验收的北交所代码会被明确拒绝。
 
