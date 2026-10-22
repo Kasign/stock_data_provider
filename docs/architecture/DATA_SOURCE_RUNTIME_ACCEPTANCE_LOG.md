@@ -176,11 +176,11 @@ ut=<public front-end token configured by provider code>
 Tencent Go Provider 当前单测覆盖成交额缺失时保持 null/unknown/degraded、拒绝把未文档化的 K 线尾字段解释为成交额、普通 A 股成交量按“手”转“股”、科创板样本成交量以“股”处理等规则。本轮新增的测试继续固定三种请求口径：
 
 - `adjustment=none` 应请求不复权 endpoint，并读取 `day`；
-- `adjustment=forward_adjusted` 应向调整 endpoint 请求 `qfq)，并读取 `qfqday`；
-- `adjustment=backward_adjusted` 应向调整 endpoint 请求 `hfq)，并读取 `hfqday`；
+- `adjustment=forward_adjusted` 应向调整 endpoint 请求 `qfq`，并读取 `qfqday`；
+- `adjustment=backward_adjusted` 应向调整 endpoint 请求 `hfq`，并读取 `hfqday`；
 - 若请求的复权数组缺失，即使响应含 `day`，也必须报错，不能将不复权价格冒充调整后价格。
 
-这些是使用本地 `httptest` fixture 的自动化契约测试，不是对 Tencent 线上服务可达性、当日数据覆盖或成交额真实性的证明。Tencent 独立单源验收仍待部署环境恢复正常配置后执行。
+对应自动化用例为 `TestTencentDailyBarsUsesRequestedAdjustmentEndpointAndPayloadKey` 与 `TestTencentDailyBarsRejectsMissingRequestedAdjustedSeries`，使用本地 `httptest` fixture 断言接口、参数、响应字段映射与复权缺失保护。这些测试不是对 Tencent 线上服务可达性、当日数据覆盖或成交额真实性的证明。Tencent 独立单源验收仍待部署环境恢复正常配置后执行。
 
 ## 6. 下一步验收顺序
 

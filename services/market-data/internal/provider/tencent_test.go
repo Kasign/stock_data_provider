@@ -254,11 +254,11 @@ func TestTencentDailyBarsUsesRequestedAdjustmentEndpointAndPayloadKey(t *testing
 
 	p := NewTencentConfigured(2*time.Second, srv.URL+"/quote", srv.URL+"/adjusted", srv.URL+"/none")
 	tests := []struct {
-		name       string
-		basis      model.AdjustmentBasis
-		wantPath   string
-		wantParam  string
-		wantClose  float64
+		name      string
+		basis     model.AdjustmentBasis
+		wantPath  string
+		wantParam string
+		wantClose float64
 	}{
 		{
 			name:      "none uses plain endpoint and day key",
