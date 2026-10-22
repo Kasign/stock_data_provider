@@ -133,6 +133,18 @@ func (c Config) mysqlDriverConfig() (*mysqlDriver.Config, error) {
 		driverConfig.Loc = location
 		delete(values, "loc")
 	}
+	if raw, ok := values["charset"]; ok {
+		if len(raw) != 1 || strings.TrimSpace(raw[0]) == "" {
+			return nil, fmt.Errorf("DB_PARAMS charset must be specified once and must not be empty")
+		}
+		// charset is a driver option, not a MariaDB session variable. Putting it
+		// in Config.Params makes the driver execute SET charset = 'utf8mb4',
+		// which fails with MariaDB error 1193 (Unknown system variable).
+		if err := driverConfig.Apply(mysqlDriver.Charset(strings.TrimSpace(raw[0]), "")); err != nil {
+			return nil, fmt.Errorf("DB_PARAMS charset is invalid: %w", err)
+		}
+		delete(values, "charset")
+	}
 	for name, items := range values {
 		if len(items) != 1 {
 			return nil, fmt.Errorf("DB_PARAMS value %q must be specified once", name)

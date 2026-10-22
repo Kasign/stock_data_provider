@@ -1,6 +1,7 @@
 package mysqlredis
 
 import (
+	"strings"
 	"testing"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
@@ -30,8 +31,14 @@ func TestMySQLDriverConfigPreservesSpecialCharactersInCredentials(t *testing.T) 
 	if driverConfig.Net != "tcp" || driverConfig.Addr != "Mariadb:3306" || driverConfig.DBName != "stock_analysis" {
 		t.Fatalf("unexpected database target: network=%q address=%q database=%q", driverConfig.Net, driverConfig.Addr, driverConfig.DBName)
 	}
-	if !driverConfig.ParseTime || driverConfig.Loc.String() != "UTC" || driverConfig.Params["charset"] != "utf8mb4" {
-		t.Fatalf("DB_PARAMS not applied correctly: parseTime=%t location=%q params=%v", driverConfig.ParseTime, driverConfig.Loc, driverConfig.Params)
+	if !driverConfig.ParseTime || driverConfig.Loc.String() != "UTC" {
+		t.Fatalf("DB_PARAMS parseTime/loc not applied correctly: parseTime=%t location=%q", driverConfig.ParseTime, driverConfig.Loc)
+	}
+	if _, ok := driverConfig.Params["charset"]; ok {
+		t.Fatal("charset must be configured as a driver option, not a MariaDB session variable")
+	}
+	if !strings.Contains(driverConfig.FormatDSN(), "charset=utf8mb4") {
+		t.Fatalf("charset option was not preserved by driver config: %s", driverConfig.FormatDSN())
 	}
 	if !driverConfig.AllowNativePasswords || !driverConfig.CheckConnLiveness {
 		t.Fatal("driver-native config should preserve the MySQL driver's secure/default connection behavior")
