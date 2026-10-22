@@ -270,6 +270,37 @@ GitHub Actions 证据：
 
 不将 Tencent 的 amount=null/degraded 视为错误，不把 Eastmoney 302 直接改成自动跟随，不把任意一次 Eastmoney EOF 推广为整个 Eastmoney 不可用。后续应继续采集独立请求结果与运行环境证据。
 
+## 5.12 BaoStock 协议回归与生产数据契约防护（2026-10-22）
+
+本轮代码提交：[ae451a3](https://github.com/Kasign/stock_data_provider/commit/ae451a3b55d99c2cddf58249b2c8e054b5deb52d)，提交信息为 `fix: 强化 BaoStock 日K数据校验与会话恢复`。
+
+### 5.12.1 本次开发
+
+- BaoStock 日 K 适配器现在拒绝重复交易日期，并验证 `low <= high`、`low <= open <= high`、`low <= close <= high`。违反规则时整批返回明确错误，避免异常记录被标为 `valid`。
+- 新增表驱动单测覆盖开盘价超过最高价、最低价超过最高价、收盘价超出日内范围，以及同一交易日重复记录。
+- 新增本地 TCP 模拟集成测试，覆盖连续分页直到空末页、上游查询错误码/消息正确返回、连接在查询中途断开后下一次独立调用重新连接并登录、成功查询及登出。
+- 这些测试均连接本机临时 TCP listener，不依赖真实 BaoStock 服务或公网可达性，因此可以稳定在 GitHub Actions 中执行。
+
+### 5.12.2 GitHub Actions 验证
+
+- 普通 Go CI：[Go test suite #202](https://github.com/Kasign/stock_data_provider/actions/runs/39784141286) 结论为 **success**。根模块、`go-core`、`services/market-data` 的 gofmt、普通测试、race detector、vet 均通过；Compose 校验、部署脚本语法与两个 Go Docker 镜像构建均通过。
+- 真实 Provider 探测：[Live provider probe #11](https://github.com/Kasign/stock_data_provider/actions/runs/39784141342)。工作流整体显示 success，但探测 job 本身为 **failure**，因为它将两项真实探测错误汇总后返回非零退出码；`continue-on-error: true` 只防止这个诊断 job 阻断普通 CI，不代表所有供应商通过。
+- Artifact：[live-provider-report（12428630735）](https://github.com/Kasign/stock_data_provider/actions/runs/39784141342/artifacts/12428630735)，压缩包 4,320 字节，GitHub 元数据 SHA-256 为 `c165fd9a3f9599e403177b0ee9e52e01549168a9e0cd4845eeba890f2e04b7d3`。日志和 artifact 的结构化结果一致。
+
+### 5.12.3 本轮真实 Runner 结果
+
+| Provider / 能力 | GitHub Runner 结果 | 解释 |
+|---|---|---|
+| Sina 报价 | HTTP 200；名称为“贵州茅台”，价格 1318.49；质量 valid | 编码与解析路径成功 |
+| Tencent 报价 | HTTP 200；返回价格；质量 degraded | 成交量单位仍依赖指标推断 |
+| Tencent 不复权/前复权日 K | HTTP 200，各返回 8 根 | 成交额仍为 null/degraded，符合当前保守契约 |
+| Eastmoney 主报价 | HTTP 302，重定向到 `push2delay.eastmoney.com/api/qt/stock/get` | Provider 当前不自动跟随，按 HTTP 状态失败记录 |
+| Eastmoney 延迟行情域报价 | HTTP 200，招商银行现价 41.82 | 返回成功但缺少可信时间戳，质量 degraded |
+| Eastmoney 前复权日 K | HTTP 200，19 根 | 本轮解析及样本质量 valid；与上一轮 EOF 说明网络结果有波动 |
+| BaoStock 日 K | TCP 连接 `public-api.baostock.com:10030` 超时 | GitHub Runner 连接超时，不是协议解析失败；不推翻此前 NAS 真实取数证据 |
+
+本轮关闭的是“自动化协议边界完全没有测试”的缺口；没有关闭 BaoStock 目标网络稳定性、更多日期/证券覆盖、停牌/非交易日行为与 NAS 端持续可用性验收。测试通过与供应商连通是两个独立结论。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
