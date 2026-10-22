@@ -8,8 +8,10 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -58,41 +60,42 @@ func liveProbeErrorSummary(err error) (string, string) {
 	return kind, message
 }
 
-
 type liveProbeReport struct {
-	GeneratedAt string              `json:"generated_at"`
-	Runner      string              `json:"runner"`
-	QuoteSymbol string              `json:"quote_symbol"`
-	DailySymbol string              `json:"daily_symbol"`
-	StartDate   string              `json:"start_date"`
-	EndDate     string              `json:"end_date"`
-	Results     []liveProbeResult   `json:"results"`
-	Failures    []string            `json:"failures,omitempty"`
+	GeneratedAt string            `json:"generated_at"`
+	Runner      string            `json:"runner"`
+	QuoteSymbol string            `json:"quote_symbol"`
+	DailySymbol string            `json:"daily_symbol"`
+	StartDate   string            `json:"start_date"`
+	EndDate     string            `json:"end_date"`
+	Results     []liveProbeResult `json:"results"`
+	Failures    []string          `json:"failures,omitempty"`
 }
 
 type liveProbeResult struct {
-	Provider    string                   `json:"provider"`
-	Capability  string                   `json:"capability"`
-	Symbol      string                   `json:"symbol"`
-	Adjustment  model.AdjustmentBasis    `json:"adjustment,omitempty"`
-	Status      string                   `json:"status"`
-	ErrorKind   string                   `json:"error_kind,omitempty"`
-	Error       string                   `json:"error,omitempty"`
-	ElapsedMS   int64                    `json:"elapsed_ms"`
-	Quote       *model.Quote             `json:"quote,omitempty"`
-	BarCount    int                      `json:"bar_count,omitempty"`
-	SampleBars  []model.DailyBar         `json:"sample_bars,omitempty"`
-	HTTP        []liveProbeHTTPResponse  `json:"http_responses,omitempty"`
+	Provider   string                  `json:"provider"`
+	Capability string                  `json:"capability"`
+	Symbol     string                  `json:"symbol"`
+	Adjustment model.AdjustmentBasis   `json:"adjustment,omitempty"`
+	Status     string                  `json:"status"`
+	ErrorKind  string                  `json:"error_kind,omitempty"`
+	Error      string                  `json:"error,omitempty"`
+	ElapsedMS  int64                   `json:"elapsed_ms"`
+	Quote      *model.Quote            `json:"quote,omitempty"`
+	BarCount   int                     `json:"bar_count,omitempty"`
+	SampleBars []model.DailyBar        `json:"sample_bars,omitempty"`
+	HTTP       []liveProbeHTTPResponse `json:"http_responses,omitempty"`
 }
 
 type liveProbeHTTPResponse struct {
-	Endpoint          string `json:"endpoint"`
-	StatusCode        int    `json:"status_code,omitempty"`
-	ContentType       string `json:"content_type,omitempty"`
-	TransportError    string `json:"transport_error,omitempty"`
-	BodyBytesObserved int64  `json:"body_bytes_observed,omitempty"`
-	BodyTruncated     bool   `json:"body_truncated,omitempty"`
-	BodySample        string `json:"body_sample,omitempty"`
+	Endpoint          string   `json:"endpoint"`
+	StatusCode        int      `json:"status_code,omitempty"`
+	ContentType       string   `json:"content_type,omitempty"`
+	TransportError    string   `json:"transport_error,omitempty"`
+	RedirectEndpoint  string   `json:"redirect_endpoint,omitempty"`
+	RedirectQueryKeys []string `json:"redirect_query_keys,omitempty"`
+	BodyBytesObserved int64    `json:"body_bytes_observed,omitempty"`
+	BodyTruncated     bool     `json:"body_truncated,omitempty"`
+	BodySample        string   `json:"body_sample,omitempty"`
 	rawSample         []byte
 }
 
@@ -141,6 +144,16 @@ func (t liveProbeCaptureTransport) RoundTrip(request *http.Request) (*http.Respo
 	}
 	record.StatusCode = response.StatusCode
 	record.ContentType = response.Header.Get("Content-Type")
+	if location := strings.TrimSpace(response.Header.Get("Location")); location != "" {
+		if parsed, parseErr := url.Parse(location); parseErr == nil {
+			redirectURL := request.URL.ResolveReference(parsed)
+			record.RedirectEndpoint = redirectURL.Host + redirectURL.EscapedPath()
+			for key := range redirectURL.Query() {
+				record.RedirectQueryKeys = append(record.RedirectQueryKeys, key)
+			}
+			sort.Strings(record.RedirectQueryKeys)
+		}
+	}
 	response.Body = &liveProbeCaptureBody{ReadCloser: response.Body, record: record}
 	return response, nil
 }
@@ -212,6 +225,43 @@ func liveProbeDailyContractError(bars []model.DailyBar, providerName, symbol str
 		}
 	}
 	return ""
+}
+
+func TestLiveProbeCaptureRedactsRedirectQueryValues(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://redirect.example.invalid/path?token=secret&symbol=600036&mode=full", http.StatusFound)
+	}))
+	defer server.Close()
+
+	capture := &liveProbeCapture{}
+	client := &http.Client{
+		Transport: capture.transport(),
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, err := client.Get(server.URL + "/quote")
+	if err != nil {
+		t.Fatalf("GET redirect fixture: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	responses := capture.snapshot()
+	if len(responses) != 1 {
+		t.Fatalf("captured response count=%d, want 1", len(responses))
+	}
+	got := responses[0]
+	if got.StatusCode != http.StatusFound {
+		t.Fatalf("status=%d, want %d", got.StatusCode, http.StatusFound)
+	}
+	if got.RedirectEndpoint != "redirect.example.invalid/path" {
+		t.Fatalf("redirect endpoint=%q", got.RedirectEndpoint)
+	}
+	if strings.Join(got.RedirectQueryKeys, ",") != "mode,symbol,token" {
+		t.Fatalf("redirect query keys=%v", got.RedirectQueryKeys)
+	}
+	encoded, _ := json.Marshal(got)
+	if strings.Contains(string(encoded), "secret") || strings.Contains(string(encoded), "600036") {
+		t.Fatalf("redirect query values leaked into probe report: %s", encoded)
+	}
 }
 
 func TestLiveProbeErrorSummaryRedactsURLQuery(t *testing.T) {

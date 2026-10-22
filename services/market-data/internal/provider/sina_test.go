@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"golang.org/x/text/encoding/htmlindex"
 )
 
 func TestSinaFetchQuoteNormalizesSharesAndAmount(t *testing.T) {
@@ -58,6 +59,50 @@ func TestSinaFetchQuoteNormalizesSharesAndAmount(t *testing.T) {
 	}
 	if quote.QuoteTime == nil || quote.QuoteTime.Format("2006-01-02 15:04:05") != "2026-10-21 07:00:00" {
 		t.Fatalf("provider time should be interpreted as China Standard Time then stored in UTC: %v", quote.QuoteTime)
+	}
+}
+
+func TestSinaFetchQuoteDecodesGB18030Name(t *testing.T) {
+	fields := make([]string, 32)
+	fields[0] = "贵州茅台"
+	fields[1] = "1303.21"
+	fields[2] = "1309.69"
+	fields[3] = "1318.49"
+	fields[4] = "1322.00"
+	fields[5] = "1296.00"
+	fields[8] = "4249133"
+	fields[9] = "5576216948"
+	fields[30] = "2026-10-22"
+	fields[31] = "15:34:59"
+
+	payload := fmt.Sprintf("var hq_str_sh600519=\"%s\";\n", strings.Join(fields, ","))
+	encoding, err := htmlindex.Get("gb18030")
+	if err != nil {
+		t.Fatalf("get GB18030 encoder: %v", err)
+	}
+	body, err := encoding.NewEncoder().Bytes([]byte(payload))
+	if err != nil {
+		t.Fatalf("encode GB18030 fixture: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=GB18030")
+		if _, writeErr := w.Write(body); writeErr != nil {
+			t.Errorf("write fixture response: %v", writeErr)
+		}
+	}))
+	defer server.Close()
+
+	p := NewSina(0, server.URL+"/list=")
+	quote, err := p.FetchQuote(context.Background(), "600519.SH")
+	if err != nil {
+		t.Fatalf("FetchQuote returned error: %v", err)
+	}
+	if quote.Name != "贵州茅台" {
+		t.Fatalf("decoded name=%q, want 贵州茅台", quote.Name)
+	}
+	if quote.QualityStatus != model.QualityValid {
+		t.Fatalf("valid GB18030 name should not degrade quote quality, got status=%q reasons=%v", quote.QualityStatus, quote.QualityReasons)
 	}
 }
 

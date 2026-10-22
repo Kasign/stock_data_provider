@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"golang.org/x/text/encoding/htmlindex"
 )
 
 const sinaVersion = "sina-finance-quote-v1"
@@ -78,6 +80,7 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 	if len(body) > maxSinaResponseBytes {
 		return nil, errors.New("Sina quote response exceeds 1 MiB")
 	}
+	body = decodeSinaResponseBody(body, resp.Header.Get("Content-Type"))
 
 	text := strings.TrimSpace(string(body))
 	start := strings.Index(text, "=\"")
@@ -91,7 +94,7 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 	}
 
 	name := strings.TrimSpace(fields[0])
-	// 新浪旧接口有时返回 GBK 编码，即使 HTTP 客户端按 UTF-8 处理也可能出现乱码。若名称编码无效，就不将该名称暴露给调用方；价格和成交量字段为 ASCII，仍可独立校验。
+	// 先按 HTTP Content-Type 解码响应字符集；若上游未声明或声明了未知字符集，则保留原字节，并通过 UTF-8 校验将无效名称降级处理。
 	if !utf8.ValidString(name) {
 		name = ""
 	}
@@ -192,6 +195,29 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 		QualityReasons: reasons, NormalizationVer: normalize.Version,
 	}
 	return quote, nil
+}
+
+func decodeSinaResponseBody(body []byte, contentType string) []byte {
+	if strings.TrimSpace(contentType) == "" {
+		return body
+	}
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return body
+	}
+	charset := strings.TrimSpace(params["charset"])
+	if charset == "" {
+		return body
+	}
+	encoding, err := htmlindex.Get(charset)
+	if err != nil {
+		return body
+	}
+	decoded, err := encoding.NewDecoder().Bytes(body)
+	if err != nil {
+		return body
+	}
+	return decoded
 }
 
 func sinaCode(symbol string) (string, error) {
