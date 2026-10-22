@@ -1004,7 +1004,6 @@ func applyQuoteFreshness(q *model.Quote, now time.Time) {
 	}
 }
 
-
 // providerFailureURLQuery redacts query parameters from URLs embedded in HTTP client errors.
 // Provider URLs often include public tokens or request-specific fields; logs only need the endpoint and failure type.
 var providerFailureURLQuery = regexp.MustCompile(`(?i)(https?://[^\s"?]+)\?[^\s"']*`)
