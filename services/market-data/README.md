@@ -90,7 +90,7 @@ curl -H "X-API-Key: $MARKET_DATA_API_KEY" http://127.0.0.1:8091/api/v1/quotes/60
 curl -H "X-API-Key: $MARKET_DATA_API_KEY" "http://127.0.0.1:8091/api/v1/bars/600519.SH/daily?limit=30&adjustment=forward_adjusted"
 ```
 
-检查价格、来源、供应商时间、`volume_unit=shares`、`amount_unit=CNY`、复权口径和质量警告。真实供应商 smoke test 仍必须在部署环境执行；单元测试使用可控的 mock 响应，并不能证明当前网络可用，也不能替代对供应商真实字段口径的核验。
+检查价格、来源、供应商时间、`volume_unit=shares`、`amount_unit=CNY`、复权口径和质量警告。未指定起始日期时，东方财富适配器会按请求条数计算一个有限的历史回溯区间（每条 K 线 4 个自然日并额外增加 30 天缓冲），避免扫描全历史时把远古区间外的异常复权价格混入本次质量警告；显式传入的起始/结束日期仍优先遵守。真实供应商 smoke test 仍必须在部署环境执行；单元测试使用可控的 mock 响应，并不能证明当前网络可用，也不能替代对供应商真实字段口径的核验。
 
 ## 容错策略
 

@@ -19,6 +19,11 @@ import (
 
 const eastmoneyVersion = "eastmoney-stock-api-v1"
 
+// Bound implicit historical requests so old out-of-window rows do not pollute
+// quality warnings when callers only want the most recent N trading bars.
+const eastmoneyLookbackDaysPerBar = 4
+const eastmoneyLookbackBufferDays = 30
+
 // defaultEastmoneyUT is the public web token commonly used by Eastmoney front-end clients.
 // It is not a user credential or private API key; deployments can override it if Eastmoney rotates it.
 const defaultEastmoneyUT = "7eea3edcaed734bea9cbfc24409ed989"
@@ -200,21 +205,9 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	if limit > 2000 {
 		limit = 2000
 	}
-	beg := "0"
-	if startDate != "" {
-		t, e := time.Parse("2006-01-02", startDate)
-		if e != nil {
-			return nil, fmt.Errorf("invalid start date: %w", e)
-		}
-		beg = t.Format("20060102")
-	}
-	end := "20500101"
-	if endDate != "" {
-		t, e := time.Parse("2006-01-02", endDate)
-		if e != nil {
-			return nil, fmt.Errorf("invalid end date: %w", e)
-		}
-		end = t.Format("20060102")
+	beg, end, err := eastmoneyDateRange(startDate, endDate, limit, time.Now())
+	if err != nil {
+		return nil, err
 	}
 	fqt := "1"
 	basis := adjustment
@@ -297,6 +290,46 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		return nil, errors.New("eastmoney daily bar response contains no parsable bars")
 	}
 	return out, nil
+}
+
+// eastmoneyDateRange preserves explicit caller ranges. When no start date is
+// specified, it asks for a bounded lookback large enough to normally cover the
+// requested trading-bar limit, while avoiding an unnecessary all-history scan.
+// Four calendar days per requested bar plus a 30-day buffer accommodates
+// weekends, exchange holidays, and short suspensions without relying on lmt alone.
+func eastmoneyDateRange(startDate, endDate string, limit int, now time.Time) (string, string, error) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	if limit <= 0 {
+		limit = 400
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+
+	end := now.In(loc)
+	if endDate != "" {
+		parsed, parseErr := time.ParseInLocation("2006-01-02", endDate, loc)
+		if parseErr != nil {
+			return "", "", fmt.Errorf("invalid end date: %w", parseErr)
+		}
+		end = parsed
+	}
+
+	start := end.AddDate(0, 0, -(limit*eastmoneyLookbackDaysPerBar + eastmoneyLookbackBufferDays))
+	if startDate != "" {
+		parsed, parseErr := time.ParseInLocation("2006-01-02", startDate, loc)
+		if parseErr != nil {
+			return "", "", fmt.Errorf("invalid start date: %w", parseErr)
+		}
+		start = parsed
+	}
+	if start.After(end) {
+		return "", "", errors.New("start date must not be after end date")
+	}
+	return start.Format("20060102"), end.Format("20060102"), nil
 }
 
 func (p *Eastmoney) getJSON(ctx context.Context, base string, params url.Values, out any) error {

@@ -73,6 +73,36 @@ func TestEastmoneyDailyBarsNormalizesHandToShare(t *testing.T) {
 	}
 }
 
+func TestEastmoneyDailyBarsBoundsImplicitStartDate(t *testing.T) {
+	type requestRange struct {
+		beg string
+		end string
+		lmt string
+		ut  string
+	}
+	requests := make(chan requestRange, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		requests <- requestRange{beg: q.Get("beg"), end: q.Get("end"), lmt: q.Get("lmt"), ut: q.Get("ut")}
+		fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":["2026-10-20,1321.01,1331.88,1335.00,1316.14,34136,4525398959,1.42,0.81,10.87,0.23"]}}`)
+	}))
+	defer srv.Close()
+	p := NewEastmoney(2*time.Second, srv.URL, srv.URL)
+	if _, err := p.FetchDailyBars(context.Background(), "600519.SH", "", "2026-10-21", 30, model.AdjustmentForward); err != nil {
+		t.Fatal(err)
+	}
+	got := <-requests
+	if got.beg != "20260524" {
+		t.Fatalf("implicit beg=%q, want bounded lookback 20260524", got.beg)
+	}
+	if got.end != "20261021" || got.lmt != "30" {
+		t.Fatalf("unexpected request range end/limit: %+v", got)
+	}
+	if got.ut != defaultEastmoneyUT {
+		t.Fatalf("request ut=%q, want default public token", got.ut)
+	}
+}
+
 func TestEastmoneyConfiguredUTOverridesDefault(t *testing.T) {
 	p := NewEastmoneyConfigured(time.Second, "", "", "  rotated-public-token  ")
 	if p.ut != "rotated-public-token" {
