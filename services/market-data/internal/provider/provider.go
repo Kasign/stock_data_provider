@@ -6,15 +6,12 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
-// NamedProvider is the smallest capability required for provider discovery and
-// diagnostics. New providers do not need to implement unrelated data methods.
+// NamedProvider 是数据源发现与诊断所需的最小接口。新增 Provider 不需要实现与自身无关的数据能力。
 type NamedProvider interface {
 	Name() string
 }
 
-// QuoteProvider and DailyBarProvider are independent capability interfaces. The
-// aggregate Provider remains for backward compatibility with the first two
-// implementations, while the service can register quote-only/bar-only adapters.
+// QuoteProvider 与 DailyBarProvider 是独立的能力接口。聚合 Provider 为原有实现保留兼容性；服务也可以分别注册仅支持行情或仅支持日 K 的适配器。
 type QuoteProvider interface {
 	NamedProvider
 	FetchQuote(ctx context.Context, symbol string) (*model.Quote, error)
@@ -28,4 +25,11 @@ type DailyBarProvider interface {
 type Provider interface {
 	QuoteProvider
 	DailyBarProvider
+}
+
+// SupplementProvider 用于承载可选补充数据，这类能力不会进入实时行情或日 K 的兜底链。
+type SupplementProvider interface {
+	NamedProvider
+	FetchChipDistribution(ctx context.Context, symbol string) (*model.ChipDistribution, error)
+	FetchCapitalFlow(ctx context.Context, symbol string) (*model.CapitalFlow, error)
 }

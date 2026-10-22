@@ -2,7 +2,8 @@
 
 **文档版本：** V1.1  
 **制定日期：** 2026-10-21  
-**目标项目：** `stock_analysis_server` 及其后续分析服务  
+**目标仓库：** [Kasign/stock_data_provider](https://github.com/Kasign/stock_data_provider)  
+**上游参考：** [ZhuLinsen/daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis)（用于盘点原 Python Provider 和业务能力；不代表当前仓库已包含其全部实现）  
 **参考仓库：** [ZhuLinsen/daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis)  
 **核心决策：** 同一 Git 仓库、两个独立 Go 服务、代码与配置物理隔离、独立构建与部署。
 
@@ -658,3 +659,35 @@ API 边界可以暂时接受旧式的 `600519` 输入，但应在边界归一化
 8. 最后退役过渡兼容层，并完善运维监控。
 
 **最终原则：一个仓库管理项目，两个服务各自独立；一个统一的数据契约管理口径，所有 Provider 都必须遵守；只有通过质量校验且满足具体分析用途的数据，才能进入分析决策。**
+
+
+---
+
+## 19. 2026-10-21 设计补充：Provider 迁移、日志及任务进度
+
+本节为当前仓库的实施补充；主设计的双服务隔离、统一数据契约、渐进切流和质量门禁仍然有效。当前代码状态应以以下文档为准：
+
+- [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md)
+- [日志与任务步骤进度方案](./LOGGING_AND_TASK_PROGRESS_PLAN.md)
+- [Go Provider 迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)
+- [Go 数据源切换进度](./GO_DATA_PROVIDER_SWITCH_STATUS.md)
+
+### 19.1 同花顺（THS）候选源
+
+将 [Kasign/Financial-API](https://github.com/Kasign/Financial-API) 纳入待评估的同花顺接入参考。该仓库描述了通过 REST API、MCP、CLI、Python 接入同花顺金融数据的能力；这不是对每个账户权限、配额或字段口径的保证。
+
+建议顺序：先验证 API Key、服务条款、速率限制和端点清单；再优先对比最新行情/日 K，之后才评估指数/板块、财务、交易日历、涨跌停/炸板/连板、龙虎榜等独立数据域。分钟 K、tick、海外行情、宏观数据、新闻公告原文或研报不应在没有官方文档证据时宣称支持。
+
+实现时新增独立 THS Provider 与环境变量，默认关闭；按能力注册，而不是强制每个源实现所有接口。只有经过真实样本对账、单位/时点/复权契约测试和错误场景测试的能力才能进入 fallback 顺序。
+
+### 19.2 结构化日志与可观测性
+
+所有服务逐步统一 JSON structured logging；request_id、run_id/task_id、service、operation/stage、provider/dataset、status、duration、quality/fallback 是必须字段。日志只输出安全摘要，不能默认打印请求体、响应体、密钥、完整 watchlist 或 LLM prompt。数据库 stage event 继续作为可追溯审计记录。
+
+### 19.3 实时任务步骤状态
+
+当前同步分析 API 与已持久化的 stage events 不能完整满足“任务运行中显示每一步”的 UX。下一阶段应在保留同步兼容 API 的基础上增加异步任务表、有限 worker、POST 202 + task_id、task 状态查询和 after_sequence 事件轮询；SSE 可作为后续提升。状态必须来自实际阶段事件，不能估算或编造百分比。
+
+### 19.4 提交与验收纪律
+
+每项完整模块功能在代码、配置、测试、部署变量、中文说明齐备后再作为单个 feature commit；文档独立翻译和进度更新应汇总成一组文档提交，不要每改一页就提交。根模块、go-core、services/market-data 三个 Go module 都必须运行测试、竞态检测与 vet；任何 Provider 扩展都要附真实字段契约或脱敏 fixture、失败/限流/缺字段覆盖和质量说明。

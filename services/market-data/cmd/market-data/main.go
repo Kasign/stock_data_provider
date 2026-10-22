@@ -22,6 +22,7 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel(os.Getenv("LOG_LEVEL"))}))
+	slog.SetDefault(logger)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, logger); err != nil {
@@ -58,9 +59,10 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 		c = redis
 	}
-	available := map[string]provider.Provider{
+	available := map[string]provider.NamedProvider{
 		"eastmoney": provider.NewEastmoney(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL),
 		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
+		"sina":      provider.NewSina(cfg.ProviderTimeout, cfg.SinaQuoteURL),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))
@@ -76,19 +78,36 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 		allProviders = append(allProviders, p)
 		if settings.Quote {
-			quoteProviders = append(quoteProviders, p)
+			quoteProvider, ok := p.(provider.QuoteProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for quotes but does not implement QuoteProvider", name)
+			}
+			quoteProviders = append(quoteProviders, quoteProvider)
 		}
 		if settings.DailyBars {
-			barProviders = append(barProviders, p)
+			barProvider, ok := p.(provider.DailyBarProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for daily bars but does not implement DailyBarProvider", name)
+			}
+			barProviders = append(barProviders, barProvider)
 		}
 	}
 	if len(allProviders) == 0 {
 		return errors.New("provider priority has no enabled providers")
 	}
 	ds := service.NewWithCapabilities(allProviders, quoteProviders, barProviders, c, store, cfg.QuoteCacheTTL, cfg.BarsCacheTTL, cfg.DefaultDailyBars, cfg.MaxDailyBars, service.ResilienceConfig{Retries: cfg.ProviderRetries, CircuitFailureThreshold: cfg.CircuitFailureThreshold, CircuitCooldown: cfg.CircuitCooldown}, logger)
+	supplementProviders := make([]provider.SupplementProvider, 0, 1)
+	if cfg.MXEnabled {
+		mx, mxErr := provider.NewMiaoXiang(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout)
+		if mxErr != nil {
+			return fmt.Errorf("configure MiaoXiang supplemental provider: %w", mxErr)
+		}
+		supplementProviders = append(supplementProviders, mx)
+	}
+	ds.SetSupplementProviders(supplementProviders)
 	handler := httpapi.NewWithCapabilityInterfaces(cfg.APIKey, cfg.Adjustment, ds, allProviders, quoteProviders, barProviders, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
-	logger.Info("market-data service starting", "addr", cfg.HTTPAddr, "providers", strings.Join(providerNames(allProviders), ","), "quote_providers", strings.Join(providerNames(quoteProviders), ","), "daily_bar_providers", strings.Join(providerNames(barProviders), ","), "mariadb_enabled", store != nil, "redis_enabled", cfg.RedisAddr != "", "adjustment", cfg.Adjustment)
+	logger.Info("market-data service starting", "addr", cfg.HTTPAddr, "providers", strings.Join(providerNames(allProviders), ","), "quote_providers", strings.Join(providerNames(quoteProviders), ","), "daily_bar_providers", strings.Join(providerNames(barProviders), ","), "mariadb_enabled", store != nil, "redis_enabled", cfg.RedisAddr != "", "adjustment", cfg.Adjustment, "mx_enabled", cfg.MXEnabled)
 	errCh := make(chan error, 1)
 	go func() { errCh <- server.ListenAndServe() }()
 	select {

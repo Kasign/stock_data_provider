@@ -9,7 +9,7 @@
 - `Store` 实现主流程需要的 `app.RunStore` 与 `app.SnapshotStore` 接口，并提供结果查询、审计事件查询和读穿缓存；主流程无需直接依赖 SQL 或 Redis 客户端。
 - `cmd/storage-check` 检查 MariaDB/Redis 连接并按配置执行迁移。
 
-MariaDB 是持久化事实源；Redis 仅作为结果/快照及通用缓存，不应存放唯一副本，也不应把缓存命中当成数据质量验证。当前 Python 行情仍由数据适配器直接请求；不会通过缓存绕过主流程的数据质量门禁。
+MariaDB 是持久化事实源；Redis 仅作为结果/快照及通用缓存，不应存放唯一副本，也不应把缓存命中当成数据质量验证。根目录主 API 的实时行情与日 K 现通过原生 Go market-data 服务获取；`go-core` 仍通过 Python bridge 调用尚未迁移的部分市场概况、新闻、LLM 和辅助能力。缓存不能绕过主流程的数据质量门禁。
 
 ## 2. 配置 `.env`
 

@@ -101,7 +101,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/bars/{symbol}/daily", s.auth(http.HandlerFunc(s.bars)))
 	mux.Handle("GET /api/v1/bundles/{symbol}", s.auth(http.HandlerFunc(s.bundle)))
 	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
-	return securityHeaders(s.timeoutContext(s.requestTimeout, s.requestID(mux)))
+	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))
+	mux.Handle("GET /api/v1/stocks/{symbol}/capital-flow", s.auth(http.HandlerFunc(s.capitalFlow)))
+	return securityHeaders(s.requestID(s.accessLog(s.timeoutContext(s.requestTimeout, mux))))
 }
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"status": "ok", "service": "market-data", "time": time.Now().UTC()})
@@ -213,7 +215,82 @@ func (s *Server) bundle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, b)
 }
 func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"sources": s.sources, "normalization_version": normalize.Version})
+	sources := append([]model.SourceStatus(nil), s.sources...)
+	if s.svc != nil {
+		for _, p := range s.svc.SupplementProviders() {
+			sources = append(sources, model.SourceStatus{Name: p.Name(), Enabled: true, ChipCapable: true, CapitalFlowCapable: true})
+		}
+	}
+	sort.Slice(sources, func(i, j int) bool { return sources[i].Name < sources[j].Name })
+	writeJSON(w, 200, map[string]any{"sources": sources, "normalization_version": normalize.Version})
+}
+
+func (s *Server) chipDistribution(w http.ResponseWriter, r *http.Request) {
+	item, hit, err := s.svc.ChipDistribution(r.Context(), r.PathValue("symbol"))
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	setCacheHeader(w, hit)
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) capitalFlow(w http.ResponseWriter, r *http.Request) {
+	item, hit, err := s.svc.CapitalFlow(r.Context(), r.PathValue("symbol"))
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	setCacheHeader(w, hit)
+	writeJSON(w, http.StatusOK, item)
+}
+
+func setCacheHeader(w http.ResponseWriter, hit bool) {
+	if hit {
+		w.Header().Set("X-Cache", "HIT")
+		return
+	}
+	w.Header().Set("X-Cache", "MISS")
+}
+
+// accessLog 只记录请求元数据和响应体字节数，不记录正文、查询参数或密钥。
+func (s *Server) accessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		recorder := &statusRecorder{ResponseWriter: w}
+		next.ServeHTTP(recorder, r)
+		s.logger.Info("http request completed", "service", "market-data", "request_id", requestID(r),
+			"method", r.Method, "path", boundedLogPath(r.URL.Path), "status_code", recorder.status,
+			"duration_ms", time.Since(started).Milliseconds(), "response_bytes", recorder.bytes)
+	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (w *statusRecorder) WriteHeader(code int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+func (w *statusRecorder) Write(data []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	n, err := w.ResponseWriter.Write(data)
+	w.bytes += n
+	return n, err
+}
+func boundedLogPath(path string) string {
+	if len(path) > 160 {
+		return path[:160]
+	}
+	return path
 }
 func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -298,7 +375,7 @@ func writeDomainErr(w http.ResponseWriter, err error, id string) {
 	if strings.Contains(msg, "invalid A-share symbol") || strings.Contains(msg, "B-share code") || strings.Contains(msg, "exchange suffix") || strings.Contains(msg, "invalid start date") || strings.Contains(msg, "invalid end date") || strings.Contains(msg, "must not be after") || strings.Contains(msg, "must not be in the future") || strings.Contains(msg, "unsupported adjustment") || strings.Contains(msg, "cannot infer exchange") {
 		status = 400
 		code = "VALIDATION_ERROR"
-	} else if strings.Contains(msg, "no enabled quote provider") || strings.Contains(msg, "no enabled daily-bar provider") {
+	} else if strings.Contains(msg, "no enabled") && strings.Contains(msg, "provider") {
 		status = 503
 		code = "PROVIDER_UNAVAILABLE"
 	} else if errors.Is(err, context.DeadlineExceeded) {

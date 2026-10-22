@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	mysqlDriver "github.com/go-sql-driver/mysql"
 )
 
 func setDefaultProviderConfig(t *testing.T) {
@@ -26,6 +28,7 @@ func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_DEFAULT_ADJUSTMENT", "")
+	t.Setenv("MARKET_DATA_ADJUSTMENT", "")
 	t.Setenv("MARKET_DATA_EASTMONEY_ENABLED", "")
 	cfg, err := Load()
 	if err != nil {
@@ -187,5 +190,157 @@ func TestSplitListDoesNotDuplicateProviderNames(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("splitList[%d]=%q want %q (all=%v)", i, got[i], want[i], got)
 		}
+	}
+}
+
+func TestLoadSinaQuoteOnlyProvider(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "providers.json")
+	data := `{"provider_priority":["eastmoney","tencent","sina"],"adjustment_basis":"forward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":true,"daily_bars":true},"tencent":{"enabled":true,"quote":true,"daily_bars":true},"sina":{"enabled":true,"quote":true,"daily_bars":false}}}`
+	if err := os.WriteFile(file, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "130s")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_SINA_ENABLED", "")
+	t.Setenv("MARKET_DATA_SINA_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_SINA_DAILY_BARS_ENABLED", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.ProviderPriority) != 3 || cfg.ProviderPriority[2] != "sina" {
+		t.Fatalf("provider priority=%v", cfg.ProviderPriority)
+	}
+	sina := cfg.ProviderSettings["sina"]
+	if !sina.Enabled || !sina.Quote || sina.DailyBars {
+		t.Fatalf("Sina must be enabled for quotes only: %+v", sina)
+	}
+	if cfg.SinaQuoteURL != "https://hq.sinajs.cn/list=" {
+		t.Fatalf("unexpected Sina quote URL %q", cfg.SinaQuoteURL)
+	}
+}
+
+func TestLoadMiaoXiangSupplementIsOptInAndKeyGuarded(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_MX_ENABLED", "")
+	t.Setenv("MARKET_DATA_MX_API_KEY", "")
+	t.Setenv("MX_APIKEY", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("default config should load with MX disabled: %v", err)
+	}
+	if cfg.MXEnabled || cfg.MXAPIKey != "" {
+		t.Fatalf("MX should be disabled by default: enabled=%t keyPresent=%t", cfg.MXEnabled, cfg.MXAPIKey != "")
+	}
+
+	t.Setenv("MARKET_DATA_MX_ENABLED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("enabling MX without an API key must fail fast")
+	}
+	t.Setenv("MARKET_DATA_MX_API_KEY", "mx-test-key-12345678")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("MX with explicit key should load: %v", err)
+	}
+	if !cfg.MXEnabled || cfg.MXAPIKey != "mx-test-key-12345678" {
+		t.Fatalf("MX opt-in config not applied: enabled=%t key=%q", cfg.MXEnabled, cfg.MXAPIKey)
+	}
+	t.Setenv("MARKET_DATA_MX_API_KEY", "replace-with-a-placeholder-key")
+	if _, err := Load(); err == nil {
+		t.Fatal("MX placeholder key must be rejected")
+	}
+}
+
+func TestLoadBuildsMySQLDSNFromSeparateServiceSettings(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "false")
+	t.Setenv("MARKET_DATA_MYSQL_DSN", "")
+	t.Setenv("MARKET_DATA_DB_HOST", "Mariadb")
+	t.Setenv("MARKET_DATA_DB_PORT", "3306")
+	t.Setenv("MARKET_DATA_DB_USER", "stock_analysis_server")
+	t.Setenv("MARKET_DATA_DB_PASSWORD", "test-db-password")
+	t.Setenv("MARKET_DATA_DB_NAME", "stock_analysis_server")
+	t.Setenv("MARKET_DATA_DB_CHARSET", "utf8mb4")
+	t.Setenv("MARKET_DATA_DB_TIMEZONE", "UTC")
+	t.Setenv("MARKET_DATA_REDIS_ADDR", "Redis:6379")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := mysqlDriver.ParseDSN(cfg.MySQLDSN)
+	if err != nil {
+		t.Fatalf("generated DSN is invalid: %v", err)
+	}
+	if parsed.User != "stock_analysis_server" || parsed.Passwd != "test-db-password" {
+		t.Fatalf("unexpected generated DSN user/password: user=%q passwordPresent=%t", parsed.User, parsed.Passwd != "")
+	}
+	if parsed.Addr != "Mariadb:3306" || parsed.DBName != "stock_analysis_server" {
+		t.Fatalf("unexpected generated DSN target: address=%q database=%q", parsed.Addr, parsed.DBName)
+	}
+	if !parsed.ParseTime || parsed.Loc.String() != "UTC" || parsed.Params["charset"] != "utf8mb4" {
+		t.Fatalf("unexpected generated DSN options: parseTime=%t location=%q params=%v", parsed.ParseTime, parsed.Loc, parsed.Params)
+	}
+}
+
+func TestLoadKeepsLegacyMySQLDSNAsTemporaryFallback(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "false")
+	t.Setenv("MARKET_DATA_DB_HOST", "")
+	t.Setenv("MARKET_DATA_DB_PORT", "")
+	t.Setenv("MARKET_DATA_DB_USER", "")
+	t.Setenv("MARKET_DATA_DB_PASSWORD", "")
+	t.Setenv("MARKET_DATA_DB_NAME", "")
+	t.Setenv("MARKET_DATA_DB_CHARSET", "")
+	t.Setenv("MARKET_DATA_DB_TIMEZONE", "")
+	legacy := "legacy_user:legacy_password@tcp(Mariadb:3306)/legacy_db?charset=utf8mb4&parseTime=true&loc=UTC"
+	t.Setenv("MARKET_DATA_MYSQL_DSN", legacy)
+	t.Setenv("MARKET_DATA_REDIS_ADDR", "Redis:6379")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MySQLDSN != legacy {
+		t.Fatalf("legacy DSN fallback mismatch: got %q want legacy DSN", cfg.MySQLDSN)
+	}
+}
+
+func TestLoadRejectsInvalidMarketDataDBPort(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_DB_HOST", "Mariadb")
+	t.Setenv("MARKET_DATA_DB_PORT", "not-a-port")
+	t.Setenv("MARKET_DATA_DB_USER", "stock_analysis_server")
+	t.Setenv("MARKET_DATA_DB_NAME", "stock_analysis_server")
+	t.Setenv("MARKET_DATA_MYSQL_DSN", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid MARKET_DATA_DB_PORT must be rejected")
+	}
+}
+
+func TestLoadUsesSharedMarketDataAdjustmentWhenServiceOverrideIsUnset(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_DEFAULT_ADJUSTMENT", "")
+	t.Setenv("MARKET_DATA_ADJUSTMENT", "none")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Adjustment != "none" {
+		t.Fatalf("adjustment=%q, want shared MARKET_DATA_ADJUSTMENT value none", cfg.Adjustment)
 	}
 }

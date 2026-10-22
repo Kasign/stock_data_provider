@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	mysqlDriver "github.com/go-sql-driver/mysql"
 )
 
 type ProviderSettings struct {
@@ -40,6 +43,11 @@ type Config struct {
 	TencentQuoteURL         string
 	TencentKlineURL         string
 	TencentNoneKlineURL     string
+	SinaQuoteURL            string
+	MXEnabled               bool
+	MXAPIKey                string
+	MXAPIURL                string
+	MXAPITimeout            time.Duration
 	QuoteRetention          time.Duration
 	RedisAddr               string
 	RedisUsername           string
@@ -61,11 +69,12 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "tencent"},
+		ProviderPriority: []string{"eastmoney", "tencent", "sina"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
+			"sina":      {Enabled: true, Quote: true, DailyBars: false},
 		},
 	}
 	file := defaults
@@ -82,7 +91,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "tencent" {
+			if name != "eastmoney" && name != "tencent" && name != "sina" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -111,11 +120,12 @@ func Load() (Config, error) {
 	}
 	settings["eastmoney"] = overrideProvider("EASTMONEY", settings["eastmoney"])
 	settings["tencent"] = overrideProvider("TENCENT", settings["tencent"])
+	settings["sina"] = overrideProvider("SINA", settings["sina"])
 
 	cfg := Config{
 		HTTPAddr:                get("MARKET_DATA_HTTP_ADDR", ":8091"),
 		APIKey:                  strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY")),
-		RequestTimeout:          duration("MARKET_DATA_REQUEST_TIMEOUT", 110*time.Second),
+		RequestTimeout:          duration("MARKET_DATA_REQUEST_TIMEOUT", 130*time.Second),
 		ProviderTimeout:         duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
 		ProviderRetries:         integer("MARKET_DATA_PROVIDER_RETRIES", 1),
 		CircuitFailureThreshold: integer("MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD", 3),
@@ -124,7 +134,7 @@ func Load() (Config, error) {
 		BarsCacheTTL:            duration("MARKET_DATA_BARS_CACHE_TTL", 10*time.Minute),
 		DefaultDailyBars:        integer("MARKET_DATA_DEFAULT_DAILY_BARS", 120),
 		MaxDailyBars:            integer("MARKET_DATA_MAX_DAILY_BARS", 1000),
-		Adjustment:              get("MARKET_DATA_DEFAULT_ADJUSTMENT", file.AdjustmentBasis),
+		Adjustment:              get("MARKET_DATA_DEFAULT_ADJUSTMENT", get("MARKET_DATA_ADJUSTMENT", file.AdjustmentBasis)),
 		ProviderPriority:        priority,
 		ProviderSettings:        settings,
 		ProvidersConfigPath:     configPath,
@@ -133,14 +143,23 @@ func Load() (Config, error) {
 		TencentQuoteURL:         get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
 		TencentNoneKlineURL:     get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),
+		SinaQuoteURL:            get("MARKET_DATA_SINA_QUOTE_URL", "https://hq.sinajs.cn/list="),
+		MXEnabled:               boolEnv("MARKET_DATA_MX_ENABLED", false),
+		MXAPIKey:                firstNonEmpty(os.Getenv("MARKET_DATA_MX_API_KEY"), os.Getenv("MX_APIKEY")),
+		MXAPIURL:                get("MARKET_DATA_MX_API_URL", "https://mkapi2.dfcfs.com/finskillshub/api/claw/query"),
+		MXAPITimeout:            duration("MARKET_DATA_MX_API_TIMEOUT", 10*time.Second),
 		QuoteRetention:          duration("MARKET_DATA_QUOTE_RETENTION", 30*24*time.Hour),
 		RedisAddr:               strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_ADDR")),
 		RedisUsername:           strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_USERNAME")),
 		RedisPassword:           os.Getenv("MARKET_DATA_REDIS_PASSWORD"),
 		RedisDB:                 integer("MARKET_DATA_REDIS_DB", 0),
-		MySQLDSN:                strings.TrimSpace(os.Getenv("MARKET_DATA_MYSQL_DSN")),
 		AutoMigrate:             boolEnv("MARKET_DATA_DB_AUTO_MIGRATE", true),
 		AllowNoStorage:          boolEnv("MARKET_DATA_ALLOW_NO_STORAGE", false),
+	}
+	var dsnErr error
+	cfg.MySQLDSN, dsnErr = resolveMySQLDSN(cfg.AllowNoStorage)
+	if dsnErr != nil {
+		return cfg, dsnErr
 	}
 	if !validSecret(cfg.APIKey) {
 		return cfg, errors.New("MARKET_DATA_API_KEY must be a non-placeholder secret with at least 32 characters")
@@ -151,14 +170,19 @@ func Load() (Config, error) {
 		"MARKET_DATA_TENCENT_QUOTE_URL":      cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":      cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL": cfg.TencentNoneKlineURL,
+		"MARKET_DATA_SINA_QUOTE_URL":         cfg.SinaQuoteURL,
+		"MARKET_DATA_MX_API_URL":             cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {
 			return cfg, err
 		}
 	}
+	if cfg.MXEnabled && !validMiaoXiangKey(cfg.MXAPIKey) {
+		return cfg, errors.New("MARKET_DATA_MX_ENABLED=true requires a non-placeholder MARKET_DATA_MX_API_KEY or MX_APIKEY")
+	}
 	if !cfg.AllowNoStorage {
 		if cfg.MySQLDSN == "" {
-			return cfg, errors.New("MARKET_DATA_MYSQL_DSN is required; set MARKET_DATA_ALLOW_NO_STORAGE=true only for local no-storage smoke tests")
+			return cfg, errors.New("MARKET_DATA_DB_HOST, MARKET_DATA_DB_USER and MARKET_DATA_DB_NAME are required; the legacy MARKET_DATA_MYSQL_DSN is temporarily supported; set MARKET_DATA_ALLOW_NO_STORAGE=true only for local no-storage smoke tests")
 		}
 		if cfg.RedisAddr == "" {
 			return cfg, errors.New("MARKET_DATA_REDIS_ADDR is required; set MARKET_DATA_ALLOW_NO_STORAGE=true only for local no-storage smoke tests")
@@ -192,7 +216,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "tencent" {
+		if name != "eastmoney" && name != "tencent" && name != "sina" {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {
@@ -277,6 +301,87 @@ func splitList(s string) []string {
 	}
 	return out
 }
+func validMiaoXiangKey(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) < 8 {
+		return false
+	}
+	lower := strings.ToLower(value)
+	for _, marker := range []string{"replace-with", "change-me", "changeme", "your-key", "example-key", "placeholder"} {
+		if strings.Contains(lower, marker) {
+			return false
+		}
+	}
+	return true
+}
+
+// resolveMySQLDSN builds the driver DSN from separate service-specific settings.
+// The legacy DSN is accepted temporarily for existing deployments, but new
+// configurations should use MARKET_DATA_DB_HOST/PORT/USER/PASSWORD/NAME.
+func resolveMySQLDSN(allowNoStorage bool) (string, error) {
+	host := strings.TrimSpace(os.Getenv("MARKET_DATA_DB_HOST"))
+	portText := strings.TrimSpace(os.Getenv("MARKET_DATA_DB_PORT"))
+	user := strings.TrimSpace(os.Getenv("MARKET_DATA_DB_USER"))
+	password := os.Getenv("MARKET_DATA_DB_PASSWORD")
+	database := strings.TrimSpace(os.Getenv("MARKET_DATA_DB_NAME"))
+	charset := strings.TrimSpace(os.Getenv("MARKET_DATA_DB_CHARSET"))
+	timezone := strings.TrimSpace(os.Getenv("MARKET_DATA_DB_TIMEZONE"))
+
+	hasSeparatedConfig := host != "" || portText != "" || user != "" || password != "" || database != "" || charset != "" || timezone != ""
+	if !hasSeparatedConfig {
+		if legacyDSN := strings.TrimSpace(os.Getenv("MARKET_DATA_MYSQL_DSN")); legacyDSN != "" {
+			return legacyDSN, nil
+		}
+		if allowNoStorage {
+			return "", nil
+		}
+		return "", errors.New("MARKET_DATA_DB_HOST, MARKET_DATA_DB_USER and MARKET_DATA_DB_NAME are required")
+	}
+
+	if host == "" || user == "" || database == "" {
+		return "", errors.New("MARKET_DATA_DB_HOST, MARKET_DATA_DB_USER and MARKET_DATA_DB_NAME must not be empty")
+	}
+	port := 3306
+	if portText != "" {
+		parsed, err := strconv.Atoi(portText)
+		if err != nil || parsed < 1 || parsed > 65535 {
+			return "", errors.New("MARKET_DATA_DB_PORT must be an integer between 1 and 65535")
+		}
+		port = parsed
+	}
+	if charset == "" {
+		charset = "utf8mb4"
+	}
+	if timezone == "" {
+		timezone = "UTC"
+	}
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return "", fmt.Errorf("MARKET_DATA_DB_TIMEZONE must be a valid IANA timezone: %w", err)
+	}
+
+	driverConfig := mysqlDriver.Config{
+		User:      user,
+		Passwd:    password,
+		Net:       "tcp",
+		Addr:      net.JoinHostPort(host, strconv.Itoa(port)),
+		DBName:    database,
+		Params:    map[string]string{"charset": charset},
+		ParseTime: true,
+		Loc:       location,
+	}
+	return driverConfig.FormatDSN(), nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func get(k, d string) string {
 	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
 		return v
@@ -348,7 +453,8 @@ func validateEnvironment() error {
 		"MARKET_DATA_DB_AUTO_MIGRATE", "MARKET_DATA_EASTMONEY_ENABLED",
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
-		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
+		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
+		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 			if _, err := strconv.ParseBool(value); err != nil {

@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
-  title: DSA Go/Python Internal Bridge
+  title: DSA Go/Python 内部桥接接口
   version: 1.0.0
   description: >-
-    Private network contract between go-core and python_bridge. This is not a public API.
-    All POST endpoints except health require X-Python-Bridge-Token on Python and
-    X-Go-Core-Token on the Go core endpoints. The Go stock-analysis request defaults
-    search_news to true when omitted; callers can send false to disable it.
+    go-core 与 python_bridge 之间的内部网络契约，不是公共 API。
+    除健康检查外，所有 POST 接口都需要鉴权：Python 端使用 X-Python-Bridge-Token，
+    Go Core 端使用 X-Go-Core-Token。Go 个股分析请求在省略时默认
+    search_news=true；调用方可显式传 false 关闭新闻搜索。
 servers:
   - url: http://python-bridge:8090
 security:
@@ -18,36 +18,36 @@ paths:
         - url: http://python-bridge:8090
         - url: http://go-core:8088
       security: []
-      summary: Liveness check for either internal service
+      summary: 检查任一内部服务是否存活
       responses:
         '200':
-          description: Running
+          description: 服务正在运行
   /ready:
     get:
       servers:
         - url: http://go-core:8088
       security: []
-      summary: Go Core readiness including Python bridge reachability
+      summary: 检查 Go Core 就绪状态及 Python bridge 连通性
       responses:
-        '200': {description: Ready}
-        '503': {description: Dependency not ready}
+        '200': {description: 服务已就绪}
+        '503': {description: 依赖服务尚未就绪}
   /internal/v1/capabilities:
     get:
       servers:
         - url: http://go-core:8088
       security:
         - GoCoreToken: []
-      summary: List Go Core API and workflow capabilities
+      summary: 列出 Go Core API 和工作流能力
       responses:
-        '200': {description: Capability metadata}
-        '401': {description: Invalid Go Core token}
+        '200': {description: 能力元数据}
+        '401': {description: Go Core 访问令牌无效}
   /internal/v1/analysis/stock:
     post:
       servers:
         - url: http://go-core:8088
       security:
         - GoCoreToken: []
-      summary: Compatibility endpoint for one stock analysis
+      summary: 单只股票分析兼容接口
       requestBody:
         required: true
         content:
@@ -65,17 +65,17 @@ paths:
                 search_news: {type: [boolean, 'null'], default: true}
                 report_language: {type: string, enum: [zh, en, ko], default: zh}
       responses:
-        '200': {description: Stock workflow response with stage trace}
+        '200': {description: 个股工作流结果与阶段跟踪信息}
         '401': {description: Invalid Go Core token}
-        '422': {description: Invalid stock request}
-        '502': {description: Workflow dependency failed}
+        '422': {description: 个股分析请求无效}
+        '502': {description: 工作流依赖调用失败}
   /internal/v1/analysis/stocks:
     post:
       servers:
         - url: http://go-core:8088
       security:
         - GoCoreToken: []
-      summary: Sequential batch stock analysis with per-stock success/failure results
+      summary: 按顺序批量分析股票，并分别返回每只股票的成功或失败结果
       requestBody:
         required: true
         content:
@@ -98,16 +98,16 @@ paths:
                 search_news: {type: [boolean, 'null'], default: true}
                 report_language: {type: string, enum: [zh, en, ko], default: zh}
       responses:
-        '200': {description: Batch result; individual failures are returned in failures}
+        '200': {description: 批量分析结果；单只股票失败信息放在 failures 字段}
         '401': {description: Invalid Go Core token}
-        '422': {description: Invalid batch request}
+        '422': {description: 批量分析请求无效}
   /internal/v1/analysis/market-review:
     post:
       servers:
         - url: http://go-core:8088
       security:
         - GoCoreToken: []
-      summary: Execute the Go-coordinated regional market-review workflow
+      summary: 执行由 Go 编排的区域市场复盘工作流
       requestBody:
         required: true
         content:
@@ -121,13 +121,13 @@ paths:
                 notify: {type: boolean, default: false}
                 report_language: {type: string, enum: [zh, en, ko], default: zh}
       responses:
-        '200': {description: Market review response with stage trace}
+        '200': {description: 市场复盘结果与阶段跟踪信息}
         '401': {description: Invalid Go Core token}
-        '422': {description: Invalid request}
+        '422': {description: 请求参数无效}
         '502': {description: Workflow dependency failed}
   /internal/v1/market-data/stock-bundle:
     post:
-      summary: Fetch stock raw-data bundle through existing Python providers
+      summary: 通过现有 Python 数据源获取个股原始数据包
       requestBody:
         required: true
         content:
@@ -140,12 +140,12 @@ paths:
                 lookback_days: {type: integer, minimum: 20, maximum: 400, default: 60}
                 as_of: {type: [string, 'null'], format: date-time}
       responses:
-        '200': {description: Stock bundle}
-        '401': {description: Invalid bridge token}
-        '502': {description: Provider returned an invalid payload}
+        '200': {description: 个股数据包}
+        '401': {description: Bridge 访问令牌无效}
+        '502': {description: 数据源返回的载荷格式无效}
   /internal/v1/market-data/stock-auxiliary:
     post:
-      summary: Fetch legacy chip/fundamental/board enrichments; skips latest-only fields for historical point-in-time requests
+      summary: 获取旧版筹码、基本面和所属板块补充数据；历史时点请求会跳过仅支持最新快照的字段
       requestBody:
         required: true
         content:
@@ -158,12 +158,12 @@ paths:
                 lookback_days: {type: integer, minimum: 20, maximum: 400, default: 60}
                 as_of: {type: [string, 'null'], format: date-time}
       responses:
-        '200': {description: Optional auxiliary context and warnings}
+        '200': {description: 可选辅助上下文与告警}
         '401': {description: Invalid bridge token}
-        '503': {description: Python capability unavailable}
+        '503': {description: Python 对应能力当前不可用}
   /internal/v1/market-data/market-overview:
     post:
-      summary: Fetch the latest normalized market overview (legacy adapter does not support historical snapshots)
+      summary: 获取最新标准化市场概览（旧适配器不支持历史时点快照）
       requestBody:
         required: true
         content:
@@ -172,13 +172,13 @@ paths:
               type: object
               properties:
                 region: {type: string, enum: [cn, hk, us, jp, kr], default: cn}
-                as_of: {type: [string, 'null'], format: date-time, description: Workflow reference time; the current legacy provider returns the latest snapshot only.}
+                as_of: {type: [string, 'null'], format: date-time, description: 工作流参考时间；当前旧数据源只返回最新快照。}
 
       responses:
-        '200': {description: Market overview}
+        '200': {description: 市场概览}
   /internal/v1/search/stock-news:
     post:
-      summary: Search stock-related news
+      summary: 搜索个股相关新闻
       requestBody:
         required: true
         content:
@@ -191,10 +191,10 @@ paths:
                 stock_name: {type: string, default: ''}
                 max_results: {type: integer, minimum: 1, maximum: 20, default: 8}
       responses:
-        '200': {description: News items}
+        '200': {description: 新闻条目}
   /internal/v1/search/market-news:
     post:
-      summary: Search regional market news
+      summary: 搜索区域市场新闻
       requestBody:
         required: true
         content:
@@ -204,7 +204,7 @@ paths:
         '200': {description: News items}
   /internal/v1/llm/analyze-stock:
     post:
-      summary: Call the existing Python analysis model on a Go-built context
+      summary: 使用 Go 构建的上下文调用现有 Python 分析模型
       requestBody:
         required: true
         content:
@@ -223,10 +223,10 @@ paths:
                 news_result_count: {type: [integer, 'null'], minimum: 0}
                 news_evidence_present: {type: boolean, default: false}
       responses:
-        '200': {description: Structured analysis result with legacy postprocessing and news-evidence metadata}
+        '200': {description: 结构化分析结果，包含旧版后处理与新闻证据元数据}
   /internal/v1/llm/generate-market-review:
     post:
-      summary: Generate market-review prose using existing Python prompt/model code
+      summary: 使用现有 Python 提示词和模型代码生成市场复盘文本
       requestBody:
         required: true
         content:
@@ -241,10 +241,10 @@ paths:
                 query_id: {type: string}
                 report_language: {type: string, default: zh}
       responses:
-        '200': {description: Markdown market review}
+        '200': {description: Markdown 格式的市场复盘报告}
   /internal/v1/persistence/daily-bars:
     post:
-      summary: Persist normalized daily bars into the legacy stock_daily table
+      summary: 将标准化日 K 写入旧版 stock_daily 表
       requestBody:
         required: true
         content:
@@ -273,13 +273,13 @@ paths:
                       missing_fields:
                         type: array
                         items: {type: string, enum: [volume, amount, pct_chg]}
-                        description: Optional fields listed here were unavailable in the provider result and must be persisted as SQL NULL, not interpreted as zero.
+                        description: 数据源结果中缺失的可选字段必须保存为 SQL NULL，不得解释为 0。
       responses:
-        '200': {description: Persisted row count}
+        '200': {description: 已持久化的行数}
         '401': {description: Invalid bridge token}
   /internal/v1/persistence/stock-analysis:
     post:
-      summary: Persist Go-coordinated stock analysis through the existing Python repository
+      summary: 通过现有 Python Repository 持久化由 Go 编排的个股分析结果
       requestBody:
         required: true
         content:
@@ -295,10 +295,10 @@ paths:
                 report_type: {type: string, default: detailed}
                 query_id: {type: string}
       responses:
-        '200': {description: Saved history ID}
+        '200': {description: 已保存的历史记录 ID}
   /internal/v1/persistence/market-review:
     post:
-      summary: Persist market-review history with existing schema
+      summary: 使用现有数据结构保存市场复盘历史
       requestBody:
         required: true
         content:
@@ -315,7 +315,7 @@ paths:
         '200': {description: Saved history ID}
   /internal/v1/notification/stock-analysis:
     post:
-      summary: Send a stock-analysis notification
+      summary: 发送个股分析通知
       requestBody:
         required: true
         content:
@@ -327,12 +327,12 @@ paths:
                 result: {type: object, additionalProperties: true}
                 report_type: {type: string, default: detailed}
                 query_id: {type: string}
-                dedup_key: {type: string, maxLength: 256, description: Per-stock idempotency key; distinct stock codes in one batch must not collide.}
+                dedup_key: {type: string, maxLength: 256, description: 按股票区分的幂等键；同一批次中的不同股票代码不能使用相同键。}
       responses:
-        '200': {description: Notification dispatch result}
+        '200': {description: 通知发送结果}
   /internal/v1/notification/market-review:
     post:
-      summary: Send a market-review notification
+      summary: 发送市场复盘通知
       requestBody:
         required: true
         content:
@@ -362,4 +362,4 @@ components:
       required: [region]
       properties:
         region: {type: string, enum: [cn, hk, us, jp, kr], default: cn}
-        as_of: {type: [string, 'null'], format: date-time, description: Optional workflow reference time; only market overview currently consumes it as metadata because the provider returns latest/current data.}
+        as_of: {type: [string, 'null'], format: date-time, description: 可选的工作流参考时间；当前只有市场概览会将其作为元数据，因为底层数据源仅返回最新数据。}

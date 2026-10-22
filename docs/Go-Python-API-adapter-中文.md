@@ -1,5 +1,7 @@
 # Go 接入 daily_stock_analysis Python API（中文）
 
+> **迁移状态（2026-10-21）：本文描述的是保留的旧 Python 适配器，不是主 API 当前的数据链路。** 根目录 cmd/analysis-api 已切换到原生 Go market-data API，参见 docs/Go-Market-Data-API-adapter-中文.md。此文档仅供维护 cmd/pythonapi-smoke、旧适配代码与迁移对照使用；不要按照本文把 PYTHON_API_* 重新配置为主服务依赖。
+
 ## 1. 目标与状态
 
 本模块将现有 `ZhuLinsen/daily_stock_analysis` Python 服务作为第一阶段数据提供方。Go 侧不直接调用 AkShare、Tushare 等第三方源，而是复用 Python 项目已经维护的数据源优先级、fallback、缓存和质量诊断能力。

@@ -1,51 +1,61 @@
-# Market Data Canonical Contract
+# 行情数据统一契约
 
-This is the normalization contract for `services/market-data` and the data consumed by `go-core`. Provider adapters must keep source-native values and units in their raw metadata and normalize once before returning data.
+本文定义 `services/market-data` 的标准化规则及 `go-core` 消费的数据契约。Provider 适配器必须先保留供应商原始值与原始单位，并在行情服务的规范化边界执行一次转换；分析服务不得再次猜测或重复换算。
 
-## Canonical units
+## 标准单位
 
-| Field | Canonical type/meaning | Canonical unit |
+| 字段 | 标准含义 | 标准单位 |
 |---|---|---|
-| `current_price`, `open`, `high`, `low`, `prev_close`, `close` | Price per share | CNY/share |
-| `change` | Price change per share | CNY/share |
-| `change_percent` / `change_percent` in analysis | Percentage points (`1.25` means 1.25%) | % |
-| `volume` | Trade volume | shares |
-| `amount` | Turnover | CNY |
-| `trade_date` | Exchange trading date, not a UTC-midnight timestamp | `YYYY-MM-DD` |
-| `quote_time` / `provider_timestamp` | Provider data time, if present | RFC3339 timestamp with zone |
-| `fetched_at` | Received by this service | UTC RFC3339 timestamp |
-| `normalized_at` | Canonicalized by this service | UTC RFC3339 timestamp |
+| `current_price`、`open`、`high`、`low`、`prev_close`、`close` | 每股价格 | CNY/股 |
+| `change` | 每股涨跌金额 | CNY/股 |
+| `change_percent` | 涨跌百分比；数值 `1.25` 表示上涨 1.25% | 百分点（%） |
+| `volume` | 成交量 | 股 |
+| `amount` | 成交额 | CNY（人民币元） |
+| `trade_date` | 交易所交易日，不是 UTC 零点时间戳 | `YYYY-MM-DD` |
+| `quote_time` / `provider_timestamp` | 可用时的供应商行情时间 | 带时区的 RFC3339 时间戳 |
+| `fetched_at` | 本服务接收到数据的时间 | UTC RFC3339 时间戳 |
+| `normalized_at` | 本服务完成标准化的时间 | UTC RFC3339 时间戳 |
 
-## Required provenance
+## 必须保留的来源信息
 
-Every normalized quote/bar must carry the actual leaf provider name, source version, fetch and normalization timestamps, raw value/unit metadata where provided, normalized units, adjustment basis, quality status and quality reasons. `daily_stock_analysis_api` is a transport/API name, not an acceptable leaf-provider value. Missing provider timestamps remain null; the system must not substitute `fetched_at`.
+每条标准化行情或 K 线应保留实际的底层 Provider 名称、Provider 版本、抓取和标准化时间、可获得的原始值/单位、标准化单位、复权基准、质量状态和质量原因。`daily_stock_analysis_api` 这类传输/API 名称不能充当底层数据源名称。
 
-## Unit conversion rules
+供应商没有提供行情时间时必须保留为 null，不能用 `fetched_at` 冒充行情发生时间。同样，当前数据的抓取时间不等于它首次对市场参与者可用的时间；若分析依赖严格时点无前视条件，必须单独提供可审计的 `available_at` 或 publication time。
 
-- Provider adapters document their raw `volume` unit. Convert hands to shares exactly once (`1 hand = 100 shares` for ordinary A-share equity trades) only when the provider contract says the raw value is hands.
-- Amount is converted to CNY according to each provider's published/observed field contract. Do not convert a CNY value again.
-- Keep original number and original unit in `raw_volume`, `raw_volume_unit`, `raw_amount`, and `raw_amount_unit` for audit.
-- Never infer an unknown unit from magnitude. Use source contract, explicit configuration or mark the field/record unknown and prevent unsafe downstream use.
-- Quote sanity check uses `amount / volume` as an approximate average traded price. Gross mismatch against OHLC is rejected and invokes provider fallback; no arbitrary x100 correction is applied.
+## 单位换算规则
 
-## Adjustment rules
+- Provider 适配器必须注明原始成交量单位。只有源契约明确表示成交量为“手”时，才能按普通 A 股交易中 1 手 = 100 股换算；明确以股为单位的字段不得再乘 100。
+- 成交额按供应商字段契约转换成 CNY。已经是人民币元的值不再换算。
+- 若数据源提供原始值，应在 `raw_volume`、`raw_volume_unit`、`raw_amount`、`raw_amount_unit` 等字段保留，供审计与差异定位。
+- 不得仅凭数值大小猜测未知单位。无法证明单位时，应标记 unknown/degraded，并阻止依赖该字段的高风险分析。
+- 可以使用 `amount / volume` 对成交均价做合理性检查。若与 OHLC 明显矛盾，应拒绝该 Provider 结果并转向已配置的下一个 Provider；禁止自动执行未经来源证明的 x100 或 x0.01 修正。
 
-Allowed history values: `none`, `forward_adjusted`, `backward_adjusted`, `unknown`. `unknown` is a valid observation state but cannot be a requested API basis. Never combine daily candles from different bases in one indicator series. Real-time quotes are marked `none`; when those coexist with adjusted daily history, the bundle is degraded and both the warning and raw quote are preserved. The analysis context must keep its reference price on the daily-bar basis unless a verified conversion factor exists.
+## 复权规则
 
-Historical forward/backward adjusted provider responses can be recomputed using corporate actions known at the current request time. This first version does not maintain point-in-time adjustment factors; historical `as_of` bundles therefore carry an explicit warning. Do not use these outputs for claiming leak-free historical backtests. A future point-in-time adjustment-factor/snapshot store is required for that.
+允许的历史行情复权基准为 `none`、`forward_adjusted`、`backward_adjusted` 和观测状态 `unknown`。其中 `unknown` 代表数据源无法确认口径，不能作为 API 的请求复权值。
 
-## Time and partial bars
+同一技术指标序列中不得混用不同复权口径。实时行情标记为 `none`；若实时价与复权日 K 同时存在，组合结果必须降级并保留警告与原始报价，除非系统有已验证的换算因子可以统一口径。分析价格应以日 K 的口径为准。
 
-- `trade_date` is a date, not a timestamp.
-- `quote_time` is supplied by the provider or null. `fetched_at` is local receipt time, not market-event time.
-- During live sessions, old provider timestamps become `stale`; timestamps too far in the future become `degraded`. Freshness checks run on cache hits as well as provider responses.
-- Daily bars fetched before the local market close for the current trade date are marked partial. Historical `as_of` queries before close exclude that date's eventual completed candle. This implementation estimates session close using the `Asia/Shanghai` clock, not an authoritative exchange calendar; holiday-aware session state remains future work.
-- Latest-only chip/fundamental/board snapshots are skipped when `as_of` refers to a historical moment, to prevent current auxiliary data from leaking backward in time. These fields are then explicitly missing.
+供应商返回的前/后复权历史可能使用本次请求时已知的公司行动因子重新计算。当前版本没有保存严格时点的复权因子，因此对历史 `as_of` 请求要返回显式警告；不得声称这些数据可用于无前视偏差历史回测。未来需要建设时点复权因子与快照存储。
 
-## Quality states
+## 时间语义与未完成 K 线
 
-`valid`, `degraded`, `stale`, `invalid`, `unknown`. Quality is purpose-specific: a quote may still be suitable for display while its unknown volume unit prohibits volume-based analysis. Missing amount stays null through the Go bridge and is represented in legacy analysis maps as null, never as zero.
+- `trade_date` 是日期，不是时间戳。
+- `quote_time` 由供应商提供或为空。`fetched_at` 只表示本地接收时刻。
+- 盘中供应商行情超过新鲜度门限时应标记 `stale`；明显超前于本机时间的供应商时间应标记 `degraded`。缓存命中同样必须做新鲜度检查。
+- 如果在本地市场收盘前获取当日 K 线，应标记为 partial。对收盘前时点的历史 `as_of` 查询，应排除该日期后来才形成的完整 K 线。目前用 `Asia/Shanghai` 时钟估算收盘，并未接入权威交易所交易日历，因此节假日/临时休市等情况仍是已知限制。
+- 对仅提供当前快照的筹码、财务或板块数据，当请求的 `as_of` 是历史时点时，不得将当前结果倒灌至过去；应显式说明该字段缺失/不适用。
 
-## Current implementation boundary
+## 质量状态
 
-Implemented here: Eastmoney and Tencent real-time quotes and daily K-lines; source priority/failover; bounded retries with exponential backoff; per-provider/per-capability circuit breakers; normalized units and validation; JSON HTTP contract; Redis cache; optional MariaDB persistence; Go-core HTTP adapter; Python auxiliary bridge. Not yet implemented: all remaining Python providers; native Go finance, industry/breadth, fund-flow, chip, LHB and news collectors; point-in-time corporate action factors/calendar; real-service integration tests against the deployment's MariaDB/Redis and live endpoints.
+允许的质量状态包括 `valid`、`degraded`、`stale`、`invalid` 和 `unknown`。质量是否可用取决于下游目的：行情可以满足展示需求，但如果成交量单位未知，则不能用于依赖成交量的分析。
+
+缺失成交额必须保持 null。经过 Go bridge 进入历史 Python 消费者的 map 时，也必须继续表示为 null，而不是 0。
+
+补充数据（如 MX 的筹码分布和个股资金流）还应保留 Provider 版本、快照日期、金额单位和质量原因。若无法证明精确发布时间/可用时间，即使表格字段完整，也不能标记为完全 valid。
+
+## 当前实现边界
+
+目前实现：东方财富/腾讯的实时行情与日 K、新浪实时行情兜底、Provider 优先级与兜底、有限重试、按 Provider/能力隔离的熔断、单位规范化与校验、JSON HTTP 契约、Redis 缓存、可选 MariaDB 持久化、Go-core HTTP 适配器、Python 辅助 bridge，以及默认关闭的 MX 筹码/资金流补充接口。
+
+尚未完整实现：所有原 Python Provider 的迁移、完整指数/全市场广度、行业/概念板块、财务、涨停池、龙虎榜、新闻公告、严格时点公司行动因子/交易日历、基于部署目标 MariaDB/Redis 与实时供应商的端到端集成测试。不能仅因某个数据域已经有 HTTP 路由，就认定其已具备生产质量的数据来源和口径。

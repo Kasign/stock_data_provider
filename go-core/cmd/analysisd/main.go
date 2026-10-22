@@ -49,23 +49,22 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	}
 	nativeMarketDataURL := strings.TrimSpace(os.Getenv("MARKET_DATA_BASE_URL"))
 	nativeMarketDataKey := strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY"))
-	nativeMarketDataRequired := boolEnv("MARKET_DATA_REQUIRED", nativeMarketDataURL != "")
-	if nativeMarketDataRequired && nativeMarketDataURL == "" {
-		return errors.New("MARKET_DATA_REQUIRED=true but MARKET_DATA_BASE_URL is empty")
+	if nativeMarketDataURL == "" {
+		return errors.New("MARKET_DATA_BASE_URL is required: stock quotes and daily K-lines must be served by Go; Python data fallback is disabled")
 	}
 	var nativeMarketData *marketdatahttp.Client
 	if nativeMarketDataURL != "" {
 		if !validSecret(nativeMarketDataKey) {
 			return errors.New("MARKET_DATA_API_KEY must be a non-placeholder secret with at least 32 characters")
 		}
-		nativeMarketData, err = marketdatahttp.NewClient(nativeMarketDataURL, nativeMarketDataKey, durationEnv("MARKET_DATA_REQUEST_TIMEOUT", 115*time.Second))
+		nativeMarketData, err = marketdatahttp.NewClient(nativeMarketDataURL, nativeMarketDataKey, durationEnv("MARKET_DATA_REQUEST_TIMEOUT", 135*time.Second))
 		if err != nil {
 			return err
 		}
 	}
-	marketData := pythonbridge.NewMarketDataAdapter(client)
-	if nativeMarketData != nil {
-		marketData = pythonbridge.NewMarketDataAdapterWithNative(client, nativeMarketData, nativeMarketDataRequired)
+	marketData, err := pythonbridge.NewGoMarketDataAdapter(nativeMarketData, client)
+	if err != nil {
+		return err
 	}
 	search := pythonbridge.NewSearchAdapter(client)
 	analyzer := pythonbridge.NewAnalyzerAdapter(client)
@@ -80,14 +79,14 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			if err := client.Health(checkCtx); err != nil {
 				return err
 			}
-			if nativeMarketDataRequired && nativeMarketData != nil {
-				return nativeMarketData.Health(checkCtx)
+			if err := nativeMarketData.Health(checkCtx); err != nil {
+				return err
 			}
 			return nil
 		},
 	}, stockFlow, marketFlow, logger)
 	httpServer := &http.Server{Addr: addr, Handler: server.Handler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 0, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 1 << 20}
-	logger.Info("Go analysis core starting", "addr", addr, "python_bridge", bridgeURL, "market_data", nativeMarketDataURL, "market_data_required", nativeMarketDataRequired)
+	logger.Info("Go analysis core starting", "addr", addr, "python_bridge", bridgeURL, "market_data", nativeMarketDataURL, "market_data_required", true)
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.ListenAndServe() }()
 	select {

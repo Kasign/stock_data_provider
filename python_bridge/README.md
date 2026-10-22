@@ -1,22 +1,27 @@
-# Python capability bridge
+# Python 能力桥接服务
 
-This package is a separate Python integration surface, not a second analysis workflow. It calls existing repository modules on behalf of Go and converts their values into the versioned JSON contract at `docs/architecture/python-bridge.openapi.yaml`.
+该模块是 Go 调用现有 Python 能力的独立边界，不是第二套分析流程。它封装当前仓库里的模块，并将返回值转换为版本化 JSON 契约；契约文件位于 `docs/architecture/python-bridge.openapi.yaml`。
 
-## Run from repository root
+## 在仓库根目录启动
 
 ```bash
 export PYTHON_BRIDGE_TOKEN="$(openssl rand -hex 32)"
 uvicorn python_bridge.capability_app:app --host 127.0.0.1 --port 8090
 ```
 
-For Docker, use the opt-in `docker/docker-compose.go-migration.yml` overlay with the existing compose file. The bridge does not publish a host port.
+Docker 部署时使用可选的 `docker/docker-compose.go-migration.yml` overlay 与现有 Compose 配置组合。Bridge 不发布宿主机端口。
 
-## Endpoints
+## 接口与鉴权
 
-The liveness route `/healthz` has no authentication. All `/internal/v1/*` capability routes require `X-Python-Bridge-Token`. The bridge fails closed if the token is missing, shorter than 32 characters, still a template placeholder, or incorrect. Generate a separate random token for each service boundary; place the same bridge token in root `.env` and `go-core/.env`.
+- `GET /healthz`：存活检查，不需要鉴权。
+- `/internal/v1/*`：所有能力接口均要求 `X-Python-Bridge-Token`。
+- 如果 token 缺失、少于 32 个字符、仍为模板占位符或与配置不一致，服务会拒绝请求。
+- 每条服务边界使用独立的随机 token；Go 与 Python bridge 的配置中必须使用同一个 bridge token，不要与 Go API 的 token 混用。
 
-The Go-side Python HTTP client lives only in `go-core/internal/adapters/pythonbridge/`. Existing Python callers of Go must use `go_core_client.py`, never build URLs independently. `GO_CORE_ENABLED` defaults to `false` so merely adding these files cannot unexpectedly change production routing.
+Go 侧的 Python HTTP 客户端仅位于 `go-core/internal/adapters/pythonbridge/`。已有 Python 调用 Go 的场景必须使用 `go_core_client.py`，不要在多个模块中重复拼接 URL。`GO_CORE_ENABLED` 默认是 `false`，避免仅添加文件就意外改变生产流量路由。
 
-## Compatibility note
+## 兼容性边界
 
-The bridge wraps existing interfaces such as `DataFetcherManager`, `GeminiAnalyzer`, `MarketAnalyzer`, `AnalysisRepository`, and `NotificationService`. Existing upstream package signatures can evolve; bridge contract tests and live smoke tests must run against the pinned repository commit before production cutover.
+Bridge 包装现有接口，如 `DataFetcherManager`、`GeminiAnalyzer`、`MarketAnalyzer`、`AnalysisRepository` 和 `NotificationService`。上游模块的函数签名可能变化；在生产切换前，必须使用固定的上游版本运行 bridge 契约测试和真实 HTTP smoke test。
+
+Bridge 是迁移阶段的兼容适配层，不代表所有 Python 能力已经迁移完成。已由 Go 原生 market-data 服务实现的行情与日 K 不应再经该 bridge 重复获取；只有尚未具备 Go 原生实现的能力才继续走 Python bridge，并须在数据来源、单位、时间和质量方面显式记录缺口。

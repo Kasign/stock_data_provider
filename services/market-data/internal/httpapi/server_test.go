@@ -116,3 +116,39 @@ func TestFutureAsOfIsValidationError(t *testing.T) {
 		t.Fatalf("unexpected error code: %s", w.Body.String())
 	}
 }
+
+type quoteOnlyCapabilityFake struct{}
+
+func (quoteOnlyCapabilityFake) Name() string { return "sina" }
+func (quoteOnlyCapabilityFake) FetchQuote(context.Context, string) (*model.Quote, error) {
+	return nil, nil
+}
+
+func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
+	p := quoteOnlyCapabilityFake{}
+	h := NewWithCapabilityInterfaces(
+		"secret", "forward_adjusted", nil,
+		[]provider.NamedProvider{p},
+		[]provider.QuoteProvider{p},
+		nil, 2000, time.Second, nil,
+	).Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{
+		"\"name\":\"sina\"",
+		"\"quote_capable\":true",
+		"\"daily_bar_capable\":false",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("data-sources response missing %s: %s", want, body)
+		}
+	}
+}

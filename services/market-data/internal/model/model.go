@@ -104,8 +104,40 @@ type Bundle struct {
 }
 
 type SourceStatus struct {
-	Name            string `json:"name"`
-	Enabled         bool   `json:"enabled"`
-	QuoteCapable    bool   `json:"quote_capable"`
-	DailyBarCapable bool   `json:"daily_bar_capable"`
+	Name               string `json:"name"`
+	Enabled            bool   `json:"enabled"`
+	QuoteCapable       bool   `json:"quote_capable"`
+	DailyBarCapable    bool   `json:"daily_bar_capable"`
+	ChipCapable        bool   `json:"chip_capable,omitempty"`
+	CapitalFlowCapable bool   `json:"capital_flow_capable,omitempty"`
+}
+
+// ChipDistribution 表示妙想补充接口返回的筹码快照。上游用百分比表示的比例字段会归一化为 [0,1] 小数。
+type ChipDistribution struct {
+	Symbol          string        `json:"symbol"`
+	Date            string        `json:"date,omitempty"`
+	AverageCost     float64       `json:"average_cost"`
+	SourceVersion   string        `json:"source_version,omitempty"`
+	ProfitRatio     *float64      `json:"profit_ratio,omitempty"`
+	Concentration90 *float64      `json:"concentration_90,omitempty"`
+	Concentration70 *float64      `json:"concentration_70,omitempty"`
+	Source          string        `json:"source"`
+	ProviderDate    string        `json:"provider_date,omitempty"`
+	FetchedAt       time.Time     `json:"fetched_at"`
+	QualityStatus   QualityStatus `json:"quality_status"`
+	QualityReasons  []string      `json:"quality_reasons,omitempty"`
+}
+
+// CapitalFlow 表示以人民币元计量的妙想个股资金流摘要。只有所需观测值全部可用时，才会填充 5/10 日合计字段。
+type CapitalFlow struct {
+	Symbol         string        `json:"symbol"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	MainNetInflow  *float64      `json:"main_net_inflow_yuan,omitempty"`
+	Inflow5D       *float64      `json:"inflow_5d_yuan,omitempty"`
+	Inflow10D      *float64      `json:"inflow_10d_yuan,omitempty"`
+	Observations   int           `json:"observations"`
+	Source         string        `json:"source"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
 }

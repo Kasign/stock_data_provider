@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -18,18 +19,19 @@ import (
 )
 
 type DataService struct {
-	providers      []provider.NamedProvider
-	quoteProviders []provider.QuoteProvider
-	barProviders   []provider.DailyBarProvider
-	maxBars        int
-	retries        int
-	breaker        *circuitBreaker
-	cache          cache.Cache
-	store          *repository.Store
-	quoteTTL       time.Duration
-	barsTTL        time.Duration
-	defaultBars    int
-	logger         *slog.Logger
+	providers           []provider.NamedProvider
+	quoteProviders      []provider.QuoteProvider
+	barProviders        []provider.DailyBarProvider
+	supplementProviders []provider.SupplementProvider
+	maxBars             int
+	retries             int
+	breaker             *circuitBreaker
+	cache               cache.Cache
+	store               *repository.Store
+	quoteTTL            time.Duration
+	barsTTL             time.Duration
+	defaultBars         int
+	logger              *slog.Logger
 }
 
 func New(providers []provider.Provider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars int, logger *slog.Logger) *DataService {
@@ -93,6 +95,171 @@ func NewWithCapabilities(allProviders []provider.NamedProvider, quoteProviders [
 func (s *DataService) Providers() []provider.NamedProvider {
 	return append([]provider.NamedProvider(nil), s.providers...)
 }
+
+// SetSupplementProviders 注册显式启用的非价格类补充数据源。
+// 此类 Provider 不会被加入实时行情或日 K 的兜底链。
+func (s *DataService) SetSupplementProviders(providers []provider.SupplementProvider) {
+	s.supplementProviders = append([]provider.SupplementProvider(nil), providers...)
+}
+
+func (s *DataService) SupplementProviders() []provider.SupplementProvider {
+	return append([]provider.SupplementProvider(nil), s.supplementProviders...)
+}
+
+func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*model.ChipDistribution, bool, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, false, err
+	}
+	key := "md:v1:chip:" + symbol
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var item model.ChipDistribution
+		if json.Unmarshal(data, &item) == nil && item.Symbol == symbol && item.AverageCost > 0 && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
+			return &item, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("chip cache read failed", "error", cacheErr)
+	}
+	if len(s.supplementProviders) == 0 {
+		return nil, false, errors.New("no enabled chip-distribution provider")
+	}
+	var failures []string
+	for _, p := range s.supplementProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		item, fetchErr := p.FetchChipDistribution(ctx, symbol)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if item == nil {
+			failures = append(failures, p.Name()+": empty chip-distribution response")
+			continue
+		}
+		itemSymbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
+		if symbolErr != nil || itemSymbol != symbol || item.AverageCost <= 0 || !isFiniteSupplement(item.AverageCost) {
+			failures = append(failures, p.Name()+": chip response failed symbol or average-cost validation")
+			continue
+		}
+		ratioInvalid := false
+		for _, ratio := range []*float64{item.ProfitRatio, item.Concentration90, item.Concentration70} {
+			if ratio != nil && (!isFiniteSupplement(*ratio) || *ratio < 0 || *ratio > 1) {
+				ratioInvalid = true
+				break
+			}
+		}
+		if ratioInvalid {
+			failures = append(failures, p.Name()+": chip response contains a ratio outside [0,1]")
+			continue
+		}
+		item.Symbol = symbol
+		item.Source = p.Name()
+		if strings.TrimSpace(item.SourceVersion) == "" {
+			item.SourceVersion = "unknown"
+		}
+		if item.FetchedAt.IsZero() {
+			item.FetchedAt = time.Now().UTC()
+		}
+		if item.QualityStatus == "" {
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
+		}
+		if encoded, encodeErr := json.Marshal(item); encodeErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, encoded, 5*time.Minute); cacheErr != nil {
+				s.logger.Warn("chip cache write failed", "error", cacheErr)
+			}
+		}
+		return item, false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	return nil, false, fmt.Errorf("all chip-distribution providers failed: %s", strings.Join(failures, " | "))
+}
+
+func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model.CapitalFlow, bool, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, false, err
+	}
+	key := "md:v1:capital-flow:" + symbol
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var item model.CapitalFlow
+		if json.Unmarshal(data, &item) == nil && item.Symbol == symbol && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
+			return &item, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("capital-flow cache read failed", "error", cacheErr)
+	}
+	if len(s.supplementProviders) == 0 {
+		return nil, false, errors.New("no enabled capital-flow provider")
+	}
+	var failures []string
+	for _, p := range s.supplementProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		item, fetchErr := p.FetchCapitalFlow(ctx, symbol)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if item == nil {
+			failures = append(failures, p.Name()+": empty capital-flow response")
+			continue
+		}
+		itemSymbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
+		if symbolErr != nil || itemSymbol != symbol {
+			failures = append(failures, p.Name()+": capital-flow response symbol mismatch")
+			continue
+		}
+		for _, value := range []*float64{item.MainNetInflow, item.Inflow5D, item.Inflow10D} {
+			if value != nil && !isFiniteSupplement(*value) {
+				symbolErr = errors.New("non-finite capital-flow amount")
+				break
+			}
+		}
+		if symbolErr != nil {
+			failures = append(failures, p.Name()+": capital-flow amount validation failed")
+			continue
+		}
+		item.Symbol = symbol
+		item.Source = p.Name()
+		if strings.TrimSpace(item.SourceVersion) == "" {
+			item.SourceVersion = "unknown"
+		}
+		if item.FetchedAt.IsZero() {
+			item.FetchedAt = time.Now().UTC()
+		}
+		if item.QualityStatus == "" {
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
+		}
+		if encoded, encodeErr := json.Marshal(item); encodeErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, encoded, 5*time.Minute); cacheErr != nil {
+				s.logger.Warn("capital-flow cache write failed", "error", cacheErr)
+			}
+		}
+		return item, false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	return nil, false, fmt.Errorf("all capital-flow providers failed: %s", strings.Join(failures, " | "))
+}
+
+func appendReason(reasons []string, value string) []string {
+	for _, reason := range reasons {
+		if reason == value {
+			return reasons
+		}
+	}
+	return append(reasons, value)
+}
+
+func isFiniteSupplement(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
+
 func (s *DataService) QuoteProviders() []provider.QuoteProvider {
 	return append([]provider.QuoteProvider(nil), s.quoteProviders...)
 }

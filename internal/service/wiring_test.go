@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"example.com/stock-analysis-flow/internal/adapters/marketdata"
 	"example.com/stock-analysis-flow/internal/adapters/pythonapi"
 	"example.com/stock-analysis-flow/internal/analysis/domain"
 )
@@ -132,5 +133,91 @@ func TestUniverseResolverRejectsNonSixDigitSymbols(t *testing.T) {
 	_, err := r.Resolve(context.Background(), domain.RunRequest{AsOf: time.Now(), UniverseID: "u", Symbols: []string{"600519.SH"}})
 	if err == nil {
 		t.Fatal("expected suffixed symbol to be rejected; this adapter expects six digit A-share codes")
+	}
+}
+
+func TestRunnerWithMarketDataStoresUsesNativeGoAPI(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asOf := time.Date(2026, 10, 20, 15, 5, 0, 0, loc)
+	const apiKey = "01234567890123456789012345678901"
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/quotes/600519.SH", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != apiKey {
+			t.Errorf("native market-data API key missing")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"symbol": "600519.SH", "name": "贵州茅台", "current_price": 120.0,
+			"change": 1.0, "change_percent": 0.84, "open": 119.0, "high": 121.0,
+			"low": 118.0, "prev_close": 119.0, "volume": 10000, "amount": 1200000,
+			"quote_time": "2026-10-20T07:00:00Z", "fetched_at": "2026-10-20T07:00:01Z",
+			"source": "eastmoney", "source_version": "v1", "quality_status": "valid",
+			"quality_reasons": []string{}, "volume_unit": "shares", "amount_unit": "CNY",
+			"adjustment_basis": "none",
+		})
+	})
+	mux.HandleFunc("/api/v1/bars/600519.SH/daily", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != apiKey {
+			t.Errorf("native market-data API key missing")
+		}
+		if r.URL.Query().Get("adjustment") != "forward_adjusted" {
+			t.Errorf("unexpected adjustment query %q", r.URL.RawQuery)
+		}
+		rows := make([]map[string]any, 0, 21)
+		for i := 20; i >= 0; i-- {
+			closePrice := float64(100 + 20 - i)
+			rows = append(rows, map[string]any{
+				"symbol": "600519.SH", "trade_date": asOf.AddDate(0, 0, -i).Format("2006-01-02"),
+				"period": "1d", "open": closePrice * 0.995, "high": closePrice * 1.01,
+				"low": closePrice * 0.99, "close": closePrice, "volume": 10000 + i,
+				"amount": 1000000 + i, "change_percent": 0.1,
+				"adjustment_basis": "forward_adjusted", "source": "eastmoney",
+				"source_version": "v1", "provider_timestamp": "2026-10-20T07:00:00Z",
+				"fetched_at": "2026-10-20T07:00:01Z", "normalized_at": "2026-10-20T07:00:01Z",
+				"volume_unit": "shares", "amount_unit": "CNY", "quality_status": "valid",
+				"quality_reasons": []string{},
+			})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"symbol": "600519.SH", "period": "1d", "adjustment_basis": "forward_adjusted",
+			"volume_unit": "shares", "amount_unit": "CNY", "quality_status": "valid",
+			"warnings": []string{}, "bars": rows,
+		})
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	cfg := marketdata.DefaultConfig()
+	cfg.BaseURL = server.URL
+	cfg.APIKey = apiKey
+	cfg.IndexSymbols = nil
+	store := &memoryStore{}
+	runner, err := NewRunnerWithMarketDataStores(cfg, store, store)
+	if err != nil {
+		t.Fatalf("wire native Go market-data runner: %v", err)
+	}
+	result, err := runner.Run(context.Background(), domain.RunRequest{
+		RunID: "native-market-data-run", TaskType: domain.TaskPostMarketScan, AsOf: asOf,
+		UniverseID: "test-universe", Symbols: []string{"600519"}, PortfolioID: "unconfigured",
+		MarketID: "CN-A", StrategyIDs: []string{StrategyTrendFollowing},
+		StrategyConfigVersion: "strategy-v1", RiskConfigVersion: "risk-v1",
+		TradingRulesVersion: "rules-v1", DataPolicyVersion: "quality-v1",
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !result.Quality.CorePass {
+		t.Fatalf("expected core quality gate pass, issues=%+v", result.Quality.Issues)
+	}
+	if result.Status != domain.RunStatusPartial {
+		t.Fatalf("expected partial status due missing precise available_at metadata, got %s", result.Status)
+	}
+	if len(result.Signals) != 1 {
+		t.Fatalf("expected one trend candidate from Go market-data API, got %d", len(result.Signals))
+	}
+	if store.raw != 1 || store.market != 1 || store.portfolio != 1 {
+		t.Fatalf("expected raw/market/portfolio persistence, got %d/%d/%d", store.raw, store.market, store.portfolio)
 	}
 }

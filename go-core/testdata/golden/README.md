@@ -1,10 +1,11 @@
-# Golden fixtures
+# Golden 样例数据说明
 
-Store sanitized historical inputs and baseline outputs here before switching a production entrypoint.
-The initial scaffold intentionally does not contain copied real-user stock data. Add fixtures only after
-removing tokens, account data, personal watchlists, and provider identifiers that should not be committed.
+在将生产入口切换到 Go 之前，应在此目录存放脱敏后的历史输入和基准输出。当前仓库骨架不会复制真实用户的股票数据；只有在移除 token、账户信息、个人自选股和不应提交的供应商标识后，才能加入样例。
 
-Recommended fixture groups:
-- `stock/`: code, normalized daily bars, quote, chip/fundamental blocks, prior Python analysis result.
-- `market/`: region, market overview, news items, prior Python market-review result.
-- `expected/`: Go-derived deterministic indicators, normalized context quality and output contract checks.
+建议按以下目录分类：
+
+- `stock/`：证券代码、标准化日 K、实时行情、筹码/财务数据块及原 Python 个股分析结果。
+- `market/`：市场区域、市场概览、新闻条目及原 Python 市场复盘结果。
+- `expected/`：由 Go 生成的确定性指标、规范化上下文质量结果及 API 输出契约断言。
+
+黄金样例用于比对新旧实现的字段、单位、状态和确定性计算，不能将样例响应伪装成实时供应商数据。更新基准输出时要说明来源、生成代码版本、分析时点和差异原因，并由 Review 人员确认。
