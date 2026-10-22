@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	mysqlDriver "github.com/go-sql-driver/mysql"
 )
 
 type Config struct {
@@ -82,12 +84,62 @@ func LoadConfigFromEnv() (Config, error) {
 	return c, nil
 }
 
-func (c Config) MySQLDSN() string {
-	params := strings.TrimPrefix(c.DBParams, "?")
-	if params == "" {
-		params = "charset=utf8mb4&parseTime=true&loc=UTC"
+// mysqlDriverConfig builds a driver-native config. Keeping credentials as fields
+// avoids parsing a DSN string when passwords contain reserved characters.
+func (c Config) mysqlDriverConfig() (*mysqlDriver.Config, error) {
+	if strings.TrimSpace(c.DBHost) == "" || strings.TrimSpace(c.DBUser) == "" || strings.TrimSpace(c.DBName) == "" {
+		return nil, fmt.Errorf("DB_HOST, DB_USER and DB_NAME must not be empty")
 	}
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s", c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName, params)
+	if c.DBPort < 1 || c.DBPort > 65535 {
+		return nil, fmt.Errorf("DB_PORT must be between 1 and 65535")
+	}
+
+	rawParams := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(c.DBParams), "?"))
+	if rawParams == "" {
+		rawParams = "charset=utf8mb4&parseTime=true&loc=UTC"
+	}
+	values, err := url.ParseQuery(rawParams)
+	if err != nil {
+		return nil, fmt.Errorf("DB_PARAMS must be valid query parameters: %w", err)
+	}
+
+	driverConfig := mysqlDriver.NewConfig()
+	driverConfig.User = c.DBUser
+	driverConfig.Passwd = c.DBPassword
+	driverConfig.Net = "tcp"
+	driverConfig.Addr = net.JoinHostPort(c.DBHost, strconv.Itoa(c.DBPort))
+	driverConfig.DBName = c.DBName
+	driverConfig.Params = make(map[string]string, len(values))
+
+	if raw, ok := values["parseTime"]; ok {
+		if len(raw) != 1 {
+			return nil, fmt.Errorf("DB_PARAMS parseTime must be specified once")
+		}
+		parseTime, err := strconv.ParseBool(raw[0])
+		if err != nil {
+			return nil, fmt.Errorf("DB_PARAMS parseTime must be true or false")
+		}
+		driverConfig.ParseTime = parseTime
+		delete(values, "parseTime")
+	}
+	if raw, ok := values["loc"]; ok {
+		if len(raw) != 1 {
+			return nil, fmt.Errorf("DB_PARAMS loc must be specified once")
+		}
+		location, err := time.LoadLocation(raw[0])
+		if err != nil {
+			return nil, fmt.Errorf("DB_PARAMS loc must be a valid IANA time zone: %w", err)
+		}
+		driverConfig.Loc = location
+		delete(values, "loc")
+	}
+	for name, items := range values {
+		if len(items) != 1 {
+			return nil, fmt.Errorf("DB_PARAMS value %q must be specified once", name)
+		}
+		driverConfig.Params[name] = items[0]
+	}
+	return driverConfig, nil
 }
 
 func (c Config) RedisKey(key string) string { return c.RedisKeyPrefix + strings.TrimLeft(key, ":") }

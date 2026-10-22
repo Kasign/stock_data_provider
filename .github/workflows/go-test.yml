@@ -10,6 +10,11 @@ on:
       - 'go-core/**'
       - 'services/market-data/**'
       - '.github/workflows/go-test.yml'
+      - '.env.example'
+      - '.dockerignore'
+      - 'Dockerfile'
+      - 'docker-compose.go.yml'
+      - 'scripts/**'
   push:
     branches: [main]
     paths:
@@ -20,6 +25,11 @@ on:
       - 'go-core/**'
       - 'services/market-data/**'
       - '.github/workflows/go-test.yml'
+      - '.env.example'
+      - '.dockerignore'
+      - 'Dockerfile'
+      - 'docker-compose.go.yml'
+      - 'scripts/**'
 
 permissions:
   contents: read
@@ -66,3 +76,21 @@ jobs:
       - name: Run go vet
         working-directory: ${{ matrix.module }}
         run: go vet ./...
+
+  container-build:
+    name: Validate Compose and build Docker images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Prepare example environment file
+        run: cp .env.example .env
+      - name: Validate Docker Compose configuration
+        run: docker compose -f docker-compose.go.yml config --quiet
+      - name: Check deploy script syntax
+        run: bash -n scripts/deploy-go.sh
+      - name: Build Go market-data image
+        run: docker build --tag stock-market-data:ci --file services/market-data/Dockerfile services/market-data
+      - name: Build Go analysis API image
+        run: docker build --tag stock-analysis-go:ci --file Dockerfile .

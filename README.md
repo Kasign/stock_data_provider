@@ -17,7 +17,8 @@
 - `internal/adapters/storage/mysqlredis`：MariaDB 运行/事件/快照/结果持久化，Redis 结果与快照缓存。
 - `internal/analysis`：主流程 Runner、领域对象、模块注册与分析引擎。
 - `internal/service`：当前 MVP 的真实依赖装配、基础标准化/数据门禁、市场与个股趋势分析。
-- `internal/platform/httpapi`：同步与异步 HTTP API、请求参数校验与测试。\n- `internal/platform/taskqueue`：MariaDB 持久化任务队列、有界 Worker、状态查询和事件增量读取。
+- `internal/platform/httpapi`：同步与异步 HTTP API、请求参数校验与测试。
+- `internal/platform/taskqueue`：MariaDB 持久化任务队列、有界 Worker、状态查询和事件增量读取。
 
 ## 快速启动
 
@@ -189,14 +190,36 @@ FROM analysis_tasks ORDER BY created_at DESC LIMIT 20;
 
 ## Docker 部署
 
-提供 `Dockerfile` 和 `docker-compose.go.yml`。Compose 会同时启动 `market-data` 与 `stock-analysis-go` 两个 Go 服务。先将 `.env.example` 复制为 `.env`，生成同一个不少于 32 字符的随机 `MARKET_DATA_API_KEY` 给两个服务使用，分别设置 `MARKET_DATA_DB_*` / `MARKET_DATA_REDIS_*` 与分析 API 的 `DB_*` / `REDIS_*` 连接字段，指向 `1panel-network` 上现有的 MariaDB 与 Redis，然后：
+提供 `Dockerfile`、`docker-compose.go.yml` 和一键部署检查脚本。Compose 会同时启动 `market-data` 与 `stock-analysis-go` 两个 Go 服务，复用 `1panel-network` 上现有的 MariaDB/Redis。
+
+先检查根目录是否已有 `.env`；**已有就不要覆盖**。只有第一次配置且 `.env` 不存在时才执行：
 
 ```bash
-docker compose -f docker-compose.go.yml up -d --build
-docker compose -f docker-compose.go.yml logs -f stock-analysis-go
+cp .env.example .env
+nano .env
+openssl rand -hex 32
 ```
 
-`market-data` 服务复用现有 MariaDB/Redis，不需要再部署数据库容器。Compose 自动将分析 API 指向 `http://market-data:8091`；不要在 API 容器中填 `127.0.0.1:8091`。另外根 API 的 `DB_HOST`、`REDIS_ADDR` 也必须配置为容器网络可解析的现有服务名。若用宿主机进程运行 `go run ./cmd/analysis-api`，则将 `MARKET_DATA_BASE_URL` 改为 `http://127.0.0.1:8091`，并先单独启动 market-data 服务。
+将随机生成的至少 32 字符密钥填入 `MARKET_DATA_API_KEY`，两个服务共用这一项。将示例中的数据库/Redis 用户名、密码、数据库名和主机名改成服务器中的真实配置。自动建表时，两套 DB 账号都需要目标数据库的建表/变更权限。若密码包含 `$` 或 `#` 等特殊字符，建议在 `.env` 中使用单引号包裹整个值，避免 Compose 变量插值或注释解析改变密码。
+
+然后执行统一预检、构建、启动和健康检查：
+
+```bash
+bash ./scripts/deploy-go.sh
+```
+
+脚本会检查 `.env`、Docker Compose 配置和 `1panel-network`，构建两个镜像、启动服务，并等待两个容器健康后检查 `/healthz` 与 `/readyz`。失败时会输出相关容器日志。也可以单独查看：
+
+```bash
+docker compose -f docker-compose.go.yml ps
+docker compose -f docker-compose.go.yml logs --since=10m market-data stock-analysis-go
+curl -fsS http://127.0.0.1:8092/healthz
+curl -fsS http://127.0.0.1:8092/readyz
+```
+
+**端口安全说明：** `8092` 只绑定宿主机回环地址 `127.0.0.1`，不会直接监听所有外网网卡。宿主机可通过 `127.0.0.1:8092` 测试；若 1Panel 的 OpenResty 容器加入同一个 `1panel-network`，反向代理上游应使用 `http://stock-analysis-go:8092`，不要在 OpenResty 容器中使用 `127.0.0.1:8092`。当前分析 API 没有内置用户认证，对外发布域名之前仍须在 OpenResty 配置鉴权与来源限制，不能仅依赖 HTTPS。
+
+Compose 会将分析 API 指向容器网络内的 `http://market-data:8091`；不要在分析 API 容器里把该地址设置成 `127.0.0.1:8091`。若直接在宿主机运行 `go run ./cmd/analysis-api`，才将 `MARKET_DATA_BASE_URL` 改为 `http://127.0.0.1:8091` 并先启动 market-data。
 
 ## 当前边界
 

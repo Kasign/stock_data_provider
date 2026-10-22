@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
 
 	"example.com/stock-analysis-flow/internal/adapters/storage"
@@ -24,10 +24,15 @@ type Store struct {
 }
 
 func Open(ctx context.Context, cfg Config) (*Store, error) {
-	db, err := sql.Open("mysql", cfg.MySQLDSN())
+	driverConfig, err := cfg.mysqlDriverConfig()
 	if err != nil {
-		return nil, fmt.Errorf("open MariaDB: %w", err)
+		return nil, fmt.Errorf("configure MariaDB connection: %w", err)
 	}
+	connector, err := mysqlDriver.NewConnector(driverConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create MariaDB connector: %w", err)
+	}
+	db := sql.OpenDB(connector)
 	db.SetMaxOpenConns(cfg.DBMaxOpenConns)
 	db.SetMaxIdleConns(cfg.DBMaxIdleConns)
 	db.SetConnMaxLifetime(cfg.DBConnMaxLifetime)
