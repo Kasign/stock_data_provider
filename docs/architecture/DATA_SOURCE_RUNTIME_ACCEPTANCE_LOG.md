@@ -209,6 +209,35 @@ Sina 当前只实现 QuoteProvider，不提供日 K。既有 fixture 测试覆�
 
 同时修复了探测代码自身先前的编译/格式问题。GitHub Runner 探测只能证明该 Runner 的观测；上线验收仍需同时保留 NAS 上的真实请求证据。
 
+
+## 5.10 GitHub Actions 二次真实探测与报告核验（2026-10-22 20:42，Asia/Shanghai）
+
+本轮以目标分支当时的 HEAD `dae377cb2433cd6f3e048eabc1109295e1f5f65e` 运行真实 Provider 探测。报告生成时间为 `2026-10-22T20:42:14+08:00`，查询标的为报价 `600519.SH`、日 K `600036.SH`，日 K 日期窗口为 `2026-09-17` 至 `2026-10-21`。
+
+GitHub Actions 证据：
+- 普通 Go CI：运行 [Go test suite #198](https://github.com/Kasign/stock_data_provider/actions/runs/39780490359)，根模块、`go-core`、`services/market-data` 的 gofmt、测试、race detector、vet，以及 Compose 配置校验和两个镜像构建均通过。
+- 真实探测：运行 [Live provider probe #7](https://github.com/Kasign/stock_data_provider/actions/runs/39780490231)。探测 job 本身结论为 **failure**，因为代码以非零退出码报告两项真实探测失败；工作流运行整体显示 success 是因为 job 设置了 `continue-on-error: true`，不应解释为全部 Provider 探测通过。
+- Artifact：GitHub Actions 已上传并可下载 [live-provider-report（artifact 12427245200）](https://github.com/Kasign/stock_data_provider/actions/runs/39780490231/artifacts/12427245200)。压缩包大小 4,337 字节，包含 23,426 字节的 `live-provider-report.json`；GitHub artifact 元数据记录的压缩包 SHA-256 为 `d47c93431dec34366321e1b727e762b8afa9a0fc3ca076918a3f2edb1723e598`。日志与 artifact 中的结构化结果相互对应。
+
+### 5.10.1 本轮 Runner 观测
+
+| Provider / 能力 | GitHub Runner 真实结果 | 质量与结论 |
+|---|---|---|
+| Sina 实时报价 | HTTP 200；声明 `charset=GB18030`；名称正确解析为“贵州茅台”；现价 1318.49；成交量 4,249,133 股；成交额 CNY 5,576,216,948 | `quality_status=valid`。此前的名称解码问题在该次实际响应中已修复。 |
+| Tencent 实时报价 | HTTP 200；现价 1318.49；原始成交量 42,491 手 | 返回成功但为 `degraded`；成交量单位依据指标推断，且该接口不支持当前契约中的量比。 |
+| Tencent 不复权日 K | HTTP 200；返回 8 根 K 线，日期覆盖 2026-10-12 至 2026-10-21 | 请求和解析成功；成交额仍为 null、单位 unknown、质量 degraded。不能将响应中未验证的字段伪装成日 K 成交额。 |
+| Tencent 前复权日 K | HTTP 200；返回 8 根 K 线，读取 `qfqday` | 与不复权序列一样，成交额 null/degraded 是当前保守数据契约，不代表 HTTP 或解析失败。 |
+| Eastmoney 主报价端点 | HTTP 302，重定向到 `push2delay.eastmoney.com/api/qt/stock/get` | 按当前 Provider 不跟随重定向的策略，结果仍标记失败。报告只记录重定向主机/路径和 query key 名（`_`、`fields`、`fltt`、`invt`、`secid`），没有记录 query value。该证据本身不足以要求改动生产重定向策略。 |
+| Eastmoney 延迟行情域直连 | HTTP 200，JSON `rc=0`；解析出“招商银行”、现价 41.82、成交量 98,924,400 股、成交额 CNY 4,140,322,738 | Provider 返回成功，但质量为 degraded，原因是缺少可验证的报价时间戳（`provider_timestamp_missing`）。这证明该次直接请求可取数，不等同于主端点重定向策略已验证。 |
+| Eastmoney 前复权日 K | HTTP 200，JSON `rc=0`；19 根 K 线，日期从 2026-09-17 到 2026-10-21 | OHLC、成交量和成交额均解析；样本状态 valid。只证明该次 GitHub Runner 请求成功。 |
+| BaoStock 前复权日 K | 向 `114.94.20.42:10030` 登录读取时发生约 20 秒 socket `i/o timeout`，没有拿到数据响应 | **GitHub Runner 网络/读取超时**，不是 HTTP 状态码或行情解析错误，也不能推翻 NAS 端先前通过 TCP 10030 登录并取数的实测。该次报告的 `error_kind=provider_error` 未准确反映底层超时，本次后续修复将补全超时分类并重新运行探测。 |
+
+### 5.10.2 报告与安全审查说明
+
+- 结构化行情字段（如新浪已解码的名称）是解析结果；HTTP `body_sample` 是从原始响应截取并转成可写入 JSON 的有限长度样本。对 GB18030 非 UTF-8 原始字节，该样本会出现替换字符，因此不能把它当作字节级原始响应存档。报告同时保留响应字节数和 Content-Type，便于解释这一点。
+- 捕获器不记录请求 URL 的 query value；重定向仅输出目标 host/path 和排序后的 query 参数名。错误摘要中的 URL query value 同样脱敏。
+- 本地 `httptest` 单测证明的是解码、契约、错误分类和脱敏逻辑；GitHub Runner 日志与 artifact 证明的是该时刻托管 Runner 收到的真实响应；NAS 端实测只以 NAS 自己的日志/API/数据库证据为准。三种证据不能互相替代。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
