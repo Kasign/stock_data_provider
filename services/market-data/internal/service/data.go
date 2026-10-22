@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -330,6 +331,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			if errors.Is(e, context.DeadlineExceeded) {
 				timeoutFailures++
 			}
+			s.logProviderFailure(fetchID, "quote", symbol, p.Name(), e)
 			errs = append(errs, p.Name()+": "+e.Error())
 			continue
 		}
@@ -518,6 +520,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			if errors.Is(e, context.DeadlineExceeded) {
 				timeoutFailures++
 			}
+			s.logProviderFailure(fetchID, "daily_bars", symbol, p.Name(), e)
 			errs = append(errs, p.Name()+": "+e.Error())
 			continue
 		}
@@ -999,6 +1002,64 @@ func applyQuoteFreshness(q *model.Quote, now time.Time) {
 		q.QualityStatus = model.QualityStale
 		appendReasonOnce(&q.QualityReasons, "quote_older_than_24_hours_outside_trading_clock")
 	}
+}
+
+
+// providerFailureURLQuery redacts query parameters from URLs embedded in HTTP client errors.
+// Provider URLs often include public tokens or request-specific fields; logs only need the endpoint and failure type.
+var providerFailureURLQuery = regexp.MustCompile(`(?i)(https?://[^\s"?]+)\?[^\s"']*`)
+
+func providerFailureSummary(err error) (kind, message string) {
+	if err == nil {
+		return "unknown", "provider returned an unspecified error"
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		kind = "timeout"
+	case errors.Is(err, context.Canceled):
+		kind = "canceled"
+	default:
+		lower := strings.ToLower(err.Error())
+		switch {
+		case strings.Contains(lower, "network is unreachable"),
+			strings.Contains(lower, "no route to host"),
+			strings.Contains(lower, "connection refused"),
+			strings.Contains(lower, "dial tcp"):
+			kind = "network_connect"
+		case strings.Contains(lower, "eof"):
+			kind = "connection_closed"
+		case strings.Contains(lower, "http status"):
+			kind = "http_status"
+		case strings.Contains(lower, "empty"),
+			strings.Contains(lower, "no parsable"),
+			strings.Contains(lower, "empty daily-bar response"):
+			kind = "empty_or_unparseable_response"
+		case strings.Contains(lower, "validation"),
+			strings.Contains(lower, "symbol mismatch"),
+			strings.Contains(lower, "contract"):
+			kind = "data_contract"
+		default:
+			kind = "provider_error"
+		}
+	}
+	message = providerFailureURLQuery.ReplaceAllString(err.Error(), `$1?[query redacted]`)
+	const maxMessageLength = 500
+	if len(message) > maxMessageLength {
+		message = message[:maxMessageLength] + "…"
+	}
+	return kind, message
+}
+
+func (s *DataService) logProviderFailure(fetchID, capability, symbol, providerName string, err error) {
+	kind, message := providerFailureSummary(err)
+	s.logger.Warn("market data provider failed",
+		"fetch_id", fetchID,
+		"capability", capability,
+		"symbol", symbol,
+		"provider", providerName,
+		"error_kind", kind,
+		"error", message,
+	)
 }
 
 func dedupeStrings(values []string) []string {
