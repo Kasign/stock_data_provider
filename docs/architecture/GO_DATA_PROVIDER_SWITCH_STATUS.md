@@ -4,7 +4,7 @@
 > 当前分支：`feat/full-go-data-providers-api-switch`  
 > 当前定位：分阶段迁移；不是全 Python 去依赖的最终版本。
 
-完整设计见 [Go 行情数据服务迁移方案](./GO_MARKET_DATA_MIGRATION_PLAN.md)，Review 与警示见 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md)，数据域明细见 [Python Provider 到 Go 迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)。
+完整设计见 [Go 行情数据服务迁移方案](./GO_MARKET_DATA_MIGRATION_PLAN.md)，数据源扩展顺序与真实验收门槛见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)，Review 与警示见 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md)，数据域明细见 [Python Provider 到 Go 迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)。
 
 ## 1. 当前已实现
 
@@ -50,6 +50,18 @@ MX 相关接口：
 - 已实现 MariaDB `analysis_tasks`、有界 Go Worker、`POST /api/v1/analysis/tasks` 的 202 + task_id、任务状态查询和 `after_sequence` 阶段事件轮询；SSE、取消、自动重试与前端状态展示仍未完成。重启时遗留的 running 任务会显式标记为 `worker_interrupted`，不自动重跑。
 - 尚未在目标服务器验证真实供应商连接、MariaDB/Redis 权限和 Docker Compose 完整部署；CI 绿色不能替代真实网络验收。
 
+
+### 数据源扩展评估（2026-10-22）
+
+- BaoStock 已进入下一阶段优先评估：NAS 宿主机 DNS 与 TCP 10030 连接已通过；Docker 容器内连接、登录、真实查询和数据契约验收仍未完成，因此尚未加入生产 Provider。
+- BaoStock 首期定位为历史日 K 备用源，后续按独立能力评估部分财务指标、复权因子、除权除息、股票基础信息、行业分类及指数成分；不把它当作实时行情、新闻公告、龙虎榜、市场资金流的全能来源。
+- 接入目标为 Go 原生 TCP 客户端，先核实帧协议、CRC/压缩响应、分页、登录会话和错误码；不在生产采集路径引入 Python 运行时。
+- 官方文档指出其前复权算法可能与同花顺、通达信等不同。数据模型和验收计划必须记录复权算法与来源，不能把同名的前复权序列自动视为数值等价。
+- 东方财富在 NAS 的实时行情和历史 K 线请求都出现 Empty reply，容器访问历史 K 线还出现 Network unreachable；具体原因尚未证实。当前作为环境访问故障跟踪，不能解释为服务商不支持相关股票。
+- 腾讯对贵州茅台的前复权 K 线和对中芯国际的未复权 K 线已经完成实际解析验证；中芯国际本次腾讯响应未提供 qfqday，因此不复权数据不得作为前复权兜底。
+
+详细验收步骤、能力分工、候选数据源成本/权限条件见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)。
+
 ## 3. 构建与自动化测试状态
 
 GitHub Actions 运行 [39583673094（run #84）](https://github.com/Kasign/stock_data_provider/actions/runs/39583673094) 已在根 module、`go-core` 和 `services/market-data` 三个模块中分别通过 `go test ./...`、`go test -race ./...` 和 `go vet ./...`。该运行验证了最新 Go 源码，包括 MX 配置与接口、请求 ID/JSON 日志和中文注释调整。
@@ -77,7 +89,9 @@ go vet ./...
 
 ## 4. 下一步顺序
 
-1. 在真实环境做 MX/API 与 MariaDB/Redis smoke test，并记录实际权限、字段单位与质量状态。
-2. 按迁移矩阵逐项增加市场广度、板块和财务等 Go 数据域；每个数据域先冻结契约再实现。
-3. 在目标环境验收异步任务表/Worker/202 + task_id/状态与事件轮询，随后再实现 SSE 和前端状态展示。
-4. 按 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md) 推进日志字段统一、THS Provider 与剩余数据域迁移。
+1. 先从 stock-market-data 容器测试 BaoStock DNS/TCP，再实现并验证 Go 原生登录、查询、分页和登出；未通过真实查询前不把它列为生产可用源。
+2. 对 600519.SH 与 688981.SH 做 BaoStock 三种复权口径的字段、日期覆盖、成交量/成交额单位及复权算法验收，通过后再将其注册为日 K 备用 Provider。
+3. 持续跟踪东方财富 Empty reply / 容器 Network unreachable 的真实环境故障；不能把访问失败当作标的不支持，也不能让该故障绕过质量门禁。
+4. 依据 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md) 分别推进财务、基础资料、行业/指数、市场广度、板块、龙虎榜和新闻公告数据域；Tushare/THS 的权限、费用及速率先核实后再决定接入。
+5. 在真实环境继续验收 MX/API 与 MariaDB/Redis，并按原计划推进异步任务表/Worker/202 + task_id/状态与事件轮询，随后再实现 SSE 和前端状态展示。
+6. 按 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md) 推进日志字段统一和其余未迁移能力。

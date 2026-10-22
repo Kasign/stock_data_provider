@@ -2,6 +2,8 @@
 
 > 本文按上游 `ZhuLinsen/daily_stock_analysis/data_provider/base.py` 的 `DataFetcherManager._init_default_fetchers`、核心数据方法以及 `src/market_analyzer.py` 中的市场概览调用整理。该原始 Python 目录未完整复制到当前仓库，因此每个未迁移项目都必须以该上游源码为准逐项对照；本表不是“已迁移”的声明。
 
+本矩阵与 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md) 配套维护；该计划优先按能力与真实验收状态安排新源，不将联网测试通过等同于生产接入完成。
+
 ## 1. 数据源注册清单
 
 | 原 Python 数据源 | 原注册条件 / 默认位置 | 主要市场或用途 | 当前 Go 对应 | 状态 |
@@ -9,7 +11,7 @@
 | EfinanceFetcher | 默认启用；默认优先级 P0 | A 股行情、日线及部分市场统计/排行榜能力 | 无 | 未迁移 |
 | AkshareFetcher | 默认启用；默认 P1 | A 股行情、日线、筹码/财务/板块等按方法覆盖能力 | 无 | 未迁移 |
 | PytdxFetcher | 默认启用；默认 P2 | A 股实时行情、历史行情 | 无 | 未迁移 |
-| BaostockFetcher | 默认启用；默认 P3 | A 股历史日线、财务相关能力 | 无 | 未迁移 |
+| BaostockFetcher | 原 Python 默认 P3；Go 计划按历史 K 线优先候选单独验收 | A 股历史日线、部分财务、复权因子、除权除息、基础资料/行业/指数成分（按官方 API 能力逐项验证） | Go 原生 TCP Provider 计划中；NAS 宿主机 DNS/TCP 已通过，容器、登录和实际查询未验收 | 优先实施候选，未迁移、不可用于生产 |
 | YfinanceFetcher | 默认启用；默认 P4；海外股票与指数的专用路径 | 美股 / 海外行情与历史数据、部分基本面数据 | 无 | 未迁移 |
 | TencentFetcher | 默认启用；默认 P5 | A 股行情与日线兜底 | 原生 Go Tencent Provider | 已迁移部分行情能力，口径仍需逐项对照 |
 | TushareFetcher | 仅配置 `TUSHARE_TOKEN` 后注册；初始化成功后可提升到高优先级 | A 股行情、市场统计、财务及其他 Token 授权数据 | 无 | 可选源，未迁移 |
@@ -66,6 +68,12 @@
 4. **差异对照**：以原 Python 与 Go 的同一请求、同一数据时点进行差异测试。不能把不同时间点的行情差异误报成标准化错误；也不能将两套结果不同简单判定为 Go 正确。
 5. **切换调用方**：为旧 API 的每个路由建立 Go 兼容适配器，比对 HTTP method/path/query/body/response/error/status；没有覆盖的路由先保留明确的过渡桥接，并将使用量和失败原因记录到日志。
 6. **删除 Python 运行时依赖**：只有当所有被使用的能力已切换、兼容测试通过、部署环境验收完成后，才能删除对应 Python provider 代码与 bridge 路由。LLM、通知等非数据源能力不应随行情 Provider 一起误删。
+
+## 5.1 数据源扩展说明（2026-10-22）
+
+BaoStock 的详细 Go 接入、按能力分工和验收条件见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)。在完成容器内真实登录/查询、字段单位/复权口径验证和 CI 前，不能把 BaoStock 标记为已接入，也不能将其加入线上 Provider 路由。
+
+当前东方财富在用户 NAS 的实时行情与历史 K 线调用均出现 Empty reply；腾讯中芯国际样本未返回 qfqday。因此后续日 K 路由应以“请求所需复权口径 + Provider 当前能力 + 数据质量”为准，不应仅按静态优先级选择任何返回了 K 线的源。
 
 ## 5. 本轮状态
 

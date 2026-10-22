@@ -237,4 +237,5 @@ Compose 会将分析 API 指向容器网络内的 `http://market-data:8091`；�
 - 当前架构 Review 与后续修改约束：`docs/architecture/ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md`
 - 结构化日志和任务步骤状态：`docs/architecture/LOGGING_AND_TASK_PROGRESS_PLAN.md`
 - Go 数据源切换进度：`docs/architecture/GO_DATA_PROVIDER_SWITCH_STATUS.md`
+- 数据源扩展计划（含 BaoStock Go 原生接入及真实验收门槛）：`docs/architecture/DATA_SOURCE_EXPANSION_PLAN.md`
 - 同花顺候选接入参考：`https://github.com/Kasign/Financial-API`。当前仅进入规划，尚未接入生产链路。
