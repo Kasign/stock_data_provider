@@ -61,9 +61,12 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		c = redis
 	}
 	baostockClient := baostock.NewClient(baostock.Config{
-		Host: cfg.BaostockHost, Port: cfg.BaostockPort,
-		UserID: cfg.BaostockUserID, Password: cfg.BaostockPassword,
-		ConnectTimeout: cfg.BaostockConnectTimeout, RequestTimeout: cfg.BaostockRequestTimeout,
+		Host:           cfg.BaostockHost,
+		Port:           cfg.BaostockPort,
+		UserID:         cfg.BaostockUserID,
+		Password:       cfg.BaostockPassword,
+		ConnectTimeout: cfg.BaostockConnectTimeout,
+		RequestTimeout: cfg.BaostockRequestTimeout,
 	})
 	defer func() {
 		if err := baostockClient.Close(); err != nil {
@@ -72,9 +75,9 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	}()
 	available := map[string]provider.NamedProvider{
 		"eastmoney": provider.NewEastmoneyConfigured(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyUT),
-		"baostock": provider.NewBaostock(baostockClient),
-		"tencent": provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
-		"sina": provider.NewSina(cfg.ProviderTimeout, cfg.SinaQuoteURL),
+		"baostock":  provider.NewBaostock(baostockClient),
+		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
+		"sina":      provider.NewSina(cfg.ProviderTimeout, cfg.SinaQuoteURL),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))

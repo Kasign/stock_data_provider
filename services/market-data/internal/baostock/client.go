@@ -14,12 +14,12 @@ import (
 )
 
 const (
-	defaultHost     = "public-api.baostock.com"
-	defaultPort     = 10030
-	defaultUserID   = "anonymous"
-	defaultPassword = "123456"
-	defaultPageSize = 10000
-	maxQueryRows    = 100000
+	defaultHost      = "public-api.baostock.com"
+	defaultPort      = 10030
+	defaultUserID    = "anonymous"
+	defaultPassword  = "123456"
+	defaultPageSize  = 10000
+	maxQueryRows     = 100000
 	dailyKLineFields = "date,code,open,high,low,close,preclose,volume,amount,adjustflag,turn,tradestatus,pctChg,isST"
 )
 
