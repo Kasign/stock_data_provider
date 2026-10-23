@@ -1,8 +1,34 @@
+function escapeMarkdownText(value) {
+  return String(value)
+    .replace(/\r?\n/g, " / ")
+    .replace(/\\/g, "\\\\")
+    .replace(/([\x60*_{}()\[\]#+.!|<>~])/g, "\\$1");
+}
+
+function inlineJson(value) {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) return "未报告";
+  const longestTicks = [...serialized.matchAll(/\x60+/g)]
+    .reduce((longest, match) => Math.max(longest, match[0].length), 0);
+  const fence = "\x60".repeat(longestTicks + 1);
+  return fence + serialized + fence;
+}
+
 function valueText(value) {
   if (value === null || value === undefined || value === "") return "未报告";
   if (typeof value === "boolean") return value ? "是" : "否";
-  const output = typeof value === "object" ? JSON.stringify(value) : String(value);
-  return output.replace(/\r?\n/g, " / ").replace(/\|/g, "\\|");
+  if (typeof value === "object") {
+    try {
+      return inlineJson(value);
+    } catch {
+      return escapeMarkdownText(String(value));
+    }
+  }
+  return escapeMarkdownText(value);
+}
+
+function collectionCount(value) {
+  return Array.isArray(value) ? String(value.length) : "未报告";
 }
 
 function pushFields(lines, record, fields) {
@@ -11,8 +37,16 @@ function pushFields(lines, record, fields) {
 
 function pushCollection(lines, title, values, fields, getTitle) {
   lines.push("", "## " + title, "");
-  if (!Array.isArray(values) || values.length === 0) {
-    lines.push("本次 Run 未返回相关数据。");
+  if (values === null || values === undefined) {
+    lines.push("本次 Run 未报告相关数据（字段缺失或 null）。");
+    return;
+  }
+  if (!Array.isArray(values)) {
+    lines.push("本次 Run 返回的集合格式无效，未展示。");
+    return;
+  }
+  if (values.length === 0) {
+    lines.push("本次 Run 明确返回空集合。");
     return;
   }
   values.forEach((item, index) => {
@@ -39,6 +73,14 @@ export function buildRunResultMarkdown(result = {}) {
     "- 开始时间：" + valueText(result.started_at),
     "- 结束时间：" + valueText(result.finished_at), "",
     "> 本文件按服务端返回的结构化结果生成。没有返回的字段会标为“未报告”；本报告不构成交易建议。",
+    "", "## 结果摘要", "",
+    "- 核心质量门禁：" + valueText(quality.core_pass),
+    "- 是否部分数据：" + valueText(quality.partial),
+    "- 市场状态：" + valueText(market.regime),
+    "- 因子记录数：" + collectionCount(result.factors),
+    "- 候选信号数：" + collectionCount(result.signals),
+    "- 交易计划数：" + collectionCount(result.plans),
+    "- 警告条数：" + collectionCount(result.warnings),
     "", "## 市场状态", ""
   ];
   pushFields(lines, market, [
