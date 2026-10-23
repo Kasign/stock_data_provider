@@ -249,3 +249,41 @@ test("mobile navigation drawer restores readable labels and can close via overla
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.sidebar\.is-open \{ transform: translateX\(0\); \}/);
   assert.match(stylesheet, /\.mobile-nav-overlay:not\(\[hidden\]\)/);
 });
+
+
+test("global navigation exposes all planned pages with hash routing and accessible active state", () => {
+  const views = ["market", "tasks", "notifications", "chat", "screening", "alerts", "settings"];
+  for (const view of views) {
+    assert.match(html, new RegExp('data-view="' + view + '"'), "navigation link missing: " + view);
+    assert.match(html, new RegExp('id="' + view + '-view"'), "page shell missing: " + view);
+  }
+  assert.match(app, /const VIEW_META = Object\.freeze\(/);
+  assert.match(app, /window\.addEventListener\("hashchange"/);
+  assert.match(app, /setAttribute\("aria-current", "page"\)/);
+  assert.match(html, /id="topbar-notifications"/, "topbar shortcut must exist without a fabricated count");
+  assert.doesNotMatch(html, /id="notification-count"/, "no unread badge without a real notification API");
+});
+
+test("new feature pages display unavailable states rather than production mock records", () => {
+  for (const id of ["notifications-view", "chat-view", "screening-view", "alerts-view", "settings-view"]) {
+    assert.match(html, new RegExp('id="' + id + '"'));
+  }
+  assert.match(html, /通知收件箱暂不可用/);
+  assert.match(html, /不会展示模拟通知/);
+  assert.match(html, /不会用单次分析报告冒充多轮 AI 对话/);
+  assert.match(html, /不能提交，不会产生模拟结果/);
+  assert.match(html, /不会在浏览器里假保存规则/);
+  assert.match(html, /服务端配置 API 待接入/);
+  assert.match(html, /密码\/权限、服务器 \.env 导入导出需要认证/);
+  assert.match(html, /data-theme-value="dark"/);
+  assert.match(html, /data-theme-value="light"/);
+  assert.match(app, /persistTheme\(button\.dataset\.themeValue\)/);
+  assert.match(app, /state\.view === "tasks" && state\.taskId/);
+});
+
+test("new page layouts have responsive grids and disabled-state affordances", () => {
+  assert.match(stylesheet, /\.feature-card-grid\s*\{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(stylesheet, /@media \(max-width: 800px\)[\s\S]*?\.settings-card-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.feature-form-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.match(stylesheet, /button:disabled, input:disabled, select:disabled, textarea:disabled/);
+});

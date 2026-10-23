@@ -414,15 +414,41 @@ function getQuerySymbol() {
   return normalizeSymbol($("#symbol-input").value);
 }
 
-function setView(view) {
-  state.view = view === "tasks" ? "tasks" : "market";
-  $("#market-view").hidden = state.view !== "market";
-  $("#tasks-view").hidden = state.view !== "tasks";
-  document.querySelectorAll(".nav-link").forEach((button) => {
-    button.classList.toggle("active", button.dataset.view === state.view);
+const VIEW_META = Object.freeze({
+  market: { title: "行情总览" },
+  tasks: { title: "任务与运行流" },
+  notifications: { title: "通知中心" },
+  chat: { title: "问股工作台" },
+  screening: { title: "条件选股" },
+  alerts: { title: "告警中心" },
+  settings: { title: "设置中心" }
+});
+
+function setView(view, { updateHash = true } = {}) {
+  const nextView = Object.hasOwn(VIEW_META, view) ? view : "market";
+  state.view = nextView;
+  document.querySelectorAll(".view").forEach((section) => {
+    section.hidden = section.id !== nextView + "-view";
   });
-  setText("#breadcrumb-current", state.view === "market" ? "行情工作台" : "分析任务");
-  setText("#view-title", state.view === "market" ? "行情工作台" : "分析任务");
+  document.querySelectorAll(".nav-link").forEach((button) => {
+    const active = button.dataset.view === nextView;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+  const title = VIEW_META[nextView].title;
+  setText("#breadcrumb-current", title);
+  setText("#view-title", title);
+  document.title = title + " · Stock Data Console";
+  if (updateHash && window.location.hash !== "#" + nextView) window.location.hash = nextView;
+}
+
+function syncSettingsThemeButtons(theme = readTheme()) {
+  document.querySelectorAll("[data-theme-value]").forEach((button) => {
+    const active = button.dataset.themeValue === theme;
+    button.setAttribute("aria-pressed", String(active));
+    button.classList.toggle("is-selected", active);
+  });
 }
 
 
@@ -1507,6 +1533,19 @@ document.addEventListener("keydown", (event) => {
 window.addEventListener("resize", () => {
   if (window.innerWidth > 600) setMobileNavigationOpen(false);
 });
+window.addEventListener("hashchange", () => {
+  setView(window.location.hash.slice(1), { updateHash: false });
+});
+$("#topbar-notifications").addEventListener("click", () => setView("notifications"));
+$("#settings-open-connection").addEventListener("click", openSettings);
+document.querySelectorAll("[data-theme-value]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const theme = persistTheme(button.dataset.themeValue);
+    applyTheme(theme);
+    syncThemeControl(theme);
+    syncSettingsThemeButtons(theme);
+  });
+});
 document.querySelectorAll(".nav-link").forEach((button) => {
   button.addEventListener("click", () => {
     setView(button.dataset.view);
@@ -1526,7 +1565,7 @@ $("#refresh-button").addEventListener("click", async () => {
   if (state.view === "market") {
     await refreshSources();
     if (state.settings.apiKey) await runQuoteQuery();
-  } else if (state.taskId) {
+  } else if (state.view === "tasks" && state.taskId) {
     stopTaskPolling();
     const generation = state.pollGeneration;
     await pollTask(generation);
@@ -1637,7 +1676,8 @@ renderRecentTasks();
 renderWatchlist();
 configureDateInputs();
 resetSupplementPanel("");
-setView("market");
+setView(window.location.hash.slice(1), { updateHash: false });
+syncSettingsThemeButtons(readTheme());
 void refreshServices();
 void refreshSources();
 const restoredTask = restoreLastTask();

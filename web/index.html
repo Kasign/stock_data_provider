@@ -19,9 +19,15 @@
           <span class="brand-copy"><strong>Market Console</strong><small>GO DATA PLATFORM</small></span>
         </a>
         <div class="side-label">工作台</div>
+        <div class="side-label">工作台</div>
         <nav class="side-nav" aria-label="主导航">
-          <button class="nav-link active" type="button" data-view="market"><span class="nav-icon">◫</span><span>行情工作台</span></button>
-          <button class="nav-link" type="button" data-view="tasks"><span class="nav-icon">↗</span><span>分析任务</span><span class="nav-count">GO</span></button>
+          <button class="nav-link active" type="button" data-view="market" aria-current="page"><span class="nav-icon" aria-hidden="true">◫</span><span>行情总览</span></button>
+          <button class="nav-link" type="button" data-view="tasks"><span class="nav-icon" aria-hidden="true">↗</span><span>任务与运行流</span></button>
+          <button class="nav-link" type="button" data-view="notifications"><span class="nav-icon" aria-hidden="true">♧</span><span>通知中心</span></button>
+          <button class="nav-link" type="button" data-view="chat"><span class="nav-icon" aria-hidden="true">✦</span><span>问股</span></button>
+          <button class="nav-link" type="button" data-view="screening"><span class="nav-icon" aria-hidden="true">⌕</span><span>选股</span></button>
+          <button class="nav-link" type="button" data-view="alerts"><span class="nav-icon" aria-hidden="true">⚑</span><span>告警</span></button>
+          <button class="nav-link" type="button" data-view="settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>设置中心</span></button>
         </nav>
         <div class="sidebar-bottom">
           <div class="side-label">服务状态</div>
@@ -39,6 +45,7 @@
           <div class="breadcrumb"><span>Stock Data Provider</span><span class="breadcrumb-sep">/</span><strong id="breadcrumb-current">行情工作台</strong></div>
           <div class="topbar-actions">
             <span class="environment-chip"><span class="status-dot" id="connection-dot"></span><span id="connection-label">等待连接</span></span>
+            <button class="text-button topbar-notifications" id="topbar-notifications" type="button" aria-label="打开通知中心">通知</button>
             <button class="icon-button" id="refresh-button" type="button" aria-label="刷新数据" title="刷新数据">↻</button>
             <button class="icon-button theme-toggle" id="theme-toggle" type="button" aria-label="切换主题" aria-pressed="false" title="当前深色主题；点击切换至浅色主题"><span id="theme-toggle-icon" aria-hidden="true">☼</span><span class="theme-toggle-label" id="theme-toggle-label">浅色</span></button>
             <button class="avatar-button" id="open-settings" type="button" aria-label="连接设置" title="连接设置">⚙</button>
@@ -207,6 +214,120 @@
             </section>
           </div>
           <section class="panel contract-panel"><div class="panel-heading"><div><h2>运行边界</h2><p>当前 Go 分析接口公开的能力</p></div></div><div class="boundary-grid"><div><span>01</span><strong>异步任务</strong><p>任务先写入 MariaDB，再由 Worker 执行。</p></div><div><span>02</span><strong>事件读取</strong><p>仅展示已持久化阶段事件，排队时列表可以为空。</p></div><div><span>03</span><strong>风险门禁</strong><p>当前分析为可解释的基线流程，不代表成熟交易策略。</p></div></div></section>
+        </section>
+
+        <section class="view feature-view" id="notifications-view" hidden aria-labelledby="notifications-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">ACTIVITY / 03</p><h1 id="notifications-title">通知中心</h1><p class="page-subtitle">查看分析、告警和系统通知。通知列表、已读状态与未读数必须来自服务端。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable">接口尚未接入</span></div>
+          </div>
+          <section class="panel feature-callout" role="status" aria-live="polite">
+            <span class="feature-callout-icon" aria-hidden="true">i</span>
+            <div><h2>通知收件箱暂不可用</h2><p>当前 Go 服务没有通知收件箱、未读状态或通知历史 API。这里不会展示模拟通知，也不会生成未读角标。通知渠道配置与真实单渠道测试规划在设置中心。</p></div>
+          </section>
+          <section class="panel feature-empty-panel" aria-labelledby="notifications-empty-title">
+            <div class="feature-empty-icon" aria-hidden="true">▤</div>
+            <h2 id="notifications-empty-title">暂时无法读取通知记录</h2>
+            <p>这不是“通知数量为 0”的服务端确认，而是通知查询接口尚未提供。</p>
+            <div class="feature-meta"><span>所需后端能力</span><span>通知列表 · 已读状态 · 分类/状态筛选</span></div>
+          </section>
+        </section>
+
+        <section class="view feature-view" id="chat-view" hidden aria-labelledby="chat-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">RESEARCH / 04</p><h1 id="chat-title">问股工作台</h1><p class="page-subtitle">规划多轮对话、股票上下文和策略追问；只有服务端真实响应才会作为模型回答展示。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable">Agent API 待接入</span></div>
+          </div>
+          <div class="chat-layout">
+            <section class="panel chat-sessions-panel" aria-labelledby="chat-sessions-title">
+              <div class="panel-heading"><div><h2 id="chat-sessions-title">会话</h2><p>会话列表由后端提供</p></div></div>
+              <div class="feature-empty compact"><div class="feature-empty-icon" aria-hidden="true">▤</div><strong>会话 API 尚未接入</strong><p>当前不会创建或保存虚构会话。</p></div>
+              <button class="button button-secondary" type="button" disabled aria-disabled="true">新建会话（待接入）</button>
+            </section>
+            <section class="panel chat-conversation-panel" aria-labelledby="chat-conversation-title">
+              <div class="panel-heading"><div><h2 id="chat-conversation-title">策略问股</h2><p>行情上下文、策略清单和聊天内容均须来自真实接口</p></div><span class="availability-pill is-unavailable">暂不可用</span></div>
+              <div class="feature-empty chat-empty"><div class="feature-empty-icon" aria-hidden="true">✦</div><h3>连接对话服务后开始研究</h3><p>尚未接入 Chat、会话、流式响应和服务端停止 API。不会用单次分析报告冒充多轮 AI 对话。</p></div>
+              <form class="chat-composer" aria-label="问股输入（暂不可用）">
+                <label class="field"><span>问题</span><textarea id="chat-composer-input" rows="3" placeholder="等待问股接口接入" disabled aria-describedby="chat-composer-help"></textarea></label>
+                <div class="chat-composer-footer"><span id="chat-composer-help">服务端接口接入前，发送操作不可用。</span><button class="button button-primary" type="button" disabled aria-disabled="true">发送问题</button></div>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view feature-view" id="screening-view" hidden aria-labelledby="screening-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">DISCOVERY / 05</p><h1 id="screening-title">条件选股</h1><p class="page-subtitle">选股需要独立策略、筛选条件和候选解释接口，不能用单股或多股分析任务代替。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable">选股 API 待接入</span></div>
+          </div>
+          <section class="panel feature-callout" role="status" aria-live="polite">
+            <span class="feature-callout-icon" aria-hidden="true">i</span>
+            <div><h2>当前没有可调用的选股引擎</h2><p>后端尚未提供策略清单、筛选任务、候选结果或选股历史。以下表单只展示规划范围，不能提交，不会产生模拟结果。</p></div>
+          </section>
+          <section class="panel feature-form-panel" aria-labelledby="screening-config-title">
+            <div class="panel-heading"><div><h2 id="screening-config-title">扫描条件</h2><p>选项需由后端 schema / 策略清单确定</p></div><span class="availability-pill is-unavailable">不可提交</span></div>
+            <div class="feature-form-grid">
+              <label class="field"><span>市场</span><select disabled aria-disabled="true"><option>等待市场能力接口</option></select></label>
+              <label class="field"><span>股票池</span><select disabled aria-disabled="true"><option>等待股票池接口</option></select></label>
+              <label class="field"><span>策略</span><select disabled aria-disabled="true"><option>等待策略清单接口</option></select></label>
+              <label class="field"><span>候选上限</span><input type="number" disabled aria-disabled="true" placeholder="由后端契约定义" /></label>
+            </div>
+            <div class="feature-action-row"><span class="field-hint">只有后端支持的策略和参数才能开放选择。</span><button class="button button-primary" type="button" disabled aria-disabled="true">提交扫描（待接入）</button></div>
+          </section>
+          <section class="panel feature-empty-panel" aria-labelledby="screening-results-title">
+            <div class="panel-heading"><div><h2 id="screening-results-title">候选结果与历史</h2><p>代码、解释、质量与时间需由服务端返回</p></div><span class="availability-pill is-unavailable">暂无接口</span></div>
+            <div class="feature-empty compact"><div class="feature-empty-icon" aria-hidden="true">⌕</div><strong>无法读取候选结果</strong><p>这是接口缺失状态，不代表扫描已完成或候选为空。</p></div>
+          </section>
+        </section>
+
+        <section class="view feature-view" id="alerts-view" hidden aria-labelledby="alerts-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">MONITORING / 06</p><h1 id="alerts-title">告警中心</h1><p class="page-subtitle">告警规则、规则触发历史和通知投递尝试是三类不同记录，需要服务端持久化和调度支持。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable">告警 API 待接入</span><button class="button button-primary" type="button" disabled aria-disabled="true">新增规则</button></div>
+          </div>
+          <section class="feature-card-grid" aria-label="告警能力状态">
+            <article class="panel feature-summary-card"><span class="feature-card-label">告警规则</span><strong>—</strong><p>规则列表接口不可用</p><span class="availability-pill is-unavailable">待接入</span></article>
+            <article class="panel feature-summary-card"><span class="feature-card-label">触发记录</span><strong>—</strong><p>触发历史接口不可用</p><span class="availability-pill is-unavailable">待接入</span></article>
+            <article class="panel feature-summary-card"><span class="feature-card-label">通知尝试</span><strong>—</strong><p>投递诊断接口不可用</p><span class="availability-pill is-unavailable">待接入</span></article>
+          </section>
+          <section class="panel feature-empty-panel" aria-labelledby="alerts-empty-title">
+            <div class="feature-empty-icon" aria-hidden="true">⚑</div>
+            <h2 id="alerts-empty-title">暂不能管理告警规则</h2>
+            <p>当前页面不会在浏览器里假保存规则、启停状态或删除操作，也不会展示模拟触发历史。</p>
+            <div class="feature-meta"><span>所需后端能力</span><span>规则 CRUD · 评估调度 · 冷却去重 · 触发/投递持久化</span></div>
+          </section>
+        </section>
+
+        <section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">PREFERENCES / 07</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">区分浏览器偏好、当前浏览器的连接凭据和服务端配置。不同类型的数据有不同保存边界。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable">服务端配置 API 待接入</span></div>
+          </div>
+          <section class="settings-section" aria-labelledby="settings-display-title">
+            <div class="settings-section-heading"><div><h2 id="settings-display-title">显示偏好</h2><p>主题仅影响当前 WebUI 的视觉，不会修改服务器配置。</p></div><span class="availability-pill is-local">本地偏好</span></div>
+            <div class="panel settings-theme-panel">
+              <div><strong>颜色主题</strong><p>选择深色或浅色。该偏好保存在当前浏览器；浏览器禁用存储时仅对当前页面会话生效。</p></div>
+              <div class="settings-theme-options" role="group" aria-label="颜色主题">
+                <button class="button button-secondary" type="button" data-theme-value="dark" aria-pressed="false">深色主题</button>
+                <button class="button button-secondary" type="button" data-theme-value="light" aria-pressed="false">浅色主题</button>
+              </div>
+            </div>
+          </section>
+          <section class="settings-section" aria-labelledby="settings-connection-title">
+            <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务</h2><p>连接路径与行情 API Key 由浏览器设置；不会写入服务器 .env。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
+            <div class="panel settings-connection-card"><div><strong>行情与分析 API</strong><p>可检查服务状态并编辑同源代理路径、行情 API Key。密钥不是用户登录认证。</p></div><button class="button button-secondary" id="settings-open-connection" type="button">打开连接设置</button></div>
+          </section>
+          <section class="settings-section" aria-labelledby="settings-server-title">
+            <div class="settings-section-heading"><div><h2 id="settings-server-title">服务端配置</h2><p>以下类别仅显示产品范围，不允许在没有服务端 API 时保存。</p></div><span class="availability-pill is-unavailable">只读说明</span></div>
+            <div class="settings-card-grid">
+              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">◎</div><div><h3>数据源</h3><p>Provider 能力可以在行情总览读取；服务器数据源配置和启停接口待接入。</p></div><span class="availability-pill is-readonly">部分只读</span></article>
+              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">✦</div><div><h3>AI 与问股</h3><p>模型渠道、策略和 Agent 配置尚无服务端 schema / 保存接口。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
+              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">♧</div><div><h3>通知渠道</h3><p>渠道配置、密钥遮蔽和单渠道真实测试接口尚未接入。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
+              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">◷</div><div><h3>任务调度</h3><p>运行计划、启停和调度状态需要服务端接口。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
+              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">⌕</div><div><h3>选股</h3><p>默认市场、策略和筛选参数只能在选股服务契约明确后开放。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
+              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">⚿</div><div><h3>系统安全与备份</h3><p>密码/权限、服务器 .env 导入导出需要认证、审计、配置版本冲突和安全写入 API。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
+            </div>
+          </section>
         </section>
 
         <footer class="page-footer"><span>Stock Data Provider · Go API</span><span>行情与分析结果仅供研究；数据质量与时点限制须独立评估。</span></footer>
