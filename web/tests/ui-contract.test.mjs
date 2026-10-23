@@ -2,13 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/analysis/domain/types.go", import.meta.url), "utf8"),
   readFile(new URL("../../docs/architecture/analysis-tasks.openapi.yaml", import.meta.url), "utf8"),
-  readFile(new URL("../src/recent-tasks.js", import.meta.url), "utf8")
+  readFile(new URL("../src/recent-tasks.js", import.meta.url), "utf8"),
+  readFile(new URL("../styles.css", import.meta.url), "utf8")
 ]);
 
 test("static DOM IDs referenced by the WebUI exist and are unique", () => {
@@ -71,4 +72,16 @@ test("polling pauses on permanent API errors and Run reads use bounded, stale-sa
   assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId/);
   assert.match(app, /state\.runResultGeneration \+= 1/);
   assert.match(app, /isRetryableApiError\(error\)/);
+});
+
+
+test("structured analysis results use readable typography and mobile-safe layouts", () => {
+  assert.match(stylesheet, /\.task-result-metric small \{[^}]*font-size: 11px/);
+  assert.match(stylesheet, /\.task-result-metric strong \{[^}]*font-size: 14px/);
+  assert.match(stylesheet, /\.analysis-result-block > h3 \{[^}]*font-size: 14px/);
+  assert.match(stylesheet, /\.analysis-result-fields dt \{[^}]*font-size: 11px/);
+  assert.match(stylesheet, /\.analysis-result-fields dd \{[^}]*font-size: 12px/);
+  assert.match(stylesheet, /\.task-result-actions \.text-button \{[^}]*font-size: 11px/);
+  assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.analysis-result-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.match(stylesheet, /overflow-wrap: anywhere/);
 });
