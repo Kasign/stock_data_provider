@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  analysisHealth,
   createAnalysisTask,
   getAnalysisRun,
   getAnalysisTaskEvents,
-  getQuote
+  getDailyBars,
+  getDataSources,
+  getQuote,
+  marketHealth
 } from "../src/api.js";
 
 function jsonResponse(body, status = 200, headers = {}) {
@@ -73,6 +77,86 @@ test("preserves structured server error code, HTTP status and request ID", async
         assert.equal(error.status, 409);
         assert.equal(error.code, "run_not_finished");
         assert.equal(error.requestId, "req-webui-123");
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("uses the current health, provider and daily-bars routes with market-only API-key attachment", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), ...init });
+    return jsonResponse({ status: "ok", items: [] });
+  };
+  try {
+    const settings = {
+      marketBase: "/market-api",
+      analysisBase: "/analysis-api",
+      apiKey: "market-secret"
+    };
+    await marketHealth(settings);
+    await analysisHealth(settings);
+    await getDataSources(settings);
+    await getDailyBars(settings, "600519.SH", { limit: 120, adjustment: "forward_adjusted" });
+
+    assert.equal(requests[0].url, "/market-api/health/ready");
+    assert.equal(requests[1].url, "/analysis-api/readyz");
+    assert.equal(requests[2].url, "/market-api/api/v1/data-sources");
+    assert.equal(requests[3].url, "/market-api/api/v1/bars/600519.SH/daily?limit=120&adjustment=forward_adjusted");
+    assert.equal(Object.hasOwn(requests[0].headers, "X-API-Key"), false);
+    assert.equal(Object.hasOwn(requests[1].headers, "X-API-Key"), false);
+    assert.equal(requests[2].headers["X-API-Key"], "market-secret");
+    assert.equal(requests[3].headers["X-API-Key"], "market-secret");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("preserves bounded diagnostics for non-JSON reverse-proxy errors", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("upstream unavailable ".repeat(50), {
+    status: 502,
+    statusText: "Bad Gateway",
+    headers: { "Content-Type": "text/plain", "X-Request-ID": "req-proxy-502" }
+  });
+  try {
+    await assert.rejects(
+      getQuote({ marketBase: "/market-api", apiKey: "market-secret" }, "600519.SH"),
+      (error) => {
+        assert.equal(error.status, 502);
+        assert.equal(error.code, "http_error");
+        assert.equal(error.requestId, "req-proxy-502");
+        assert.ok(error.message.length <= 500, "proxy response text should be bounded");
+        assert.match(error.message, /upstream unavailable/);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("prefers request IDs from the structured error envelope when both forms exist", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => jsonResponse({
+    error: {
+      code: "task_not_found",
+      message: "task does not exist",
+      request_id: "req-from-body"
+    }
+  }, 404, { "X-Request-ID": "req-from-header" });
+  try {
+    await assert.rejects(
+      getAnalysisRun({ analysisBase: "/analysis-api" }, "missing-run"),
+      (error) => {
+        assert.equal(error.status, 404);
+        assert.equal(error.code, "task_not_found");
+        assert.equal(error.requestId, "req-from-body");
         return true;
       }
     );
