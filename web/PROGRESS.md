@@ -221,10 +221,10 @@
 - 真实视觉验收：本环境无法运行实际浏览器截图；移动端/桌面截图 review 尚未完成。NAS/Docker/OpenResty 端到端联调未执行。
 
 
-## Issue #4 — Task 详情抽屉与真实运行流时间线（已定位首轮测试失败，修复后复验）
+## Issue #4 — Task 详情抽屉与真实运行流时间线（Node/CI 验证通过，真实环境待验收）
 - 最近任务仍仅来源于浏览器内 task/run 引用；点击某条引用会切换到任务页、通过现有 API 恢复 Task 和事件，再打开右侧运行流抽屉。新建任务收到真实服务端 Task ID 后自动打开抽屉；抽屉可通过关闭按钮、遮罩或 Escape 关闭，关闭不停止服务端任务/本地轮询。
 - 抽屉分别显示 Task 状态与 Run 状态。Task 已返回的 `created_at` / `started_at` / `finished_at`、Task ID、Run ID、标的、阶段与错误码直接取服务端字段；缺失值不按客户端时钟补造。
 - 阶段事件按现有 sequence 排序，并沿用 `after_sequence` 续读；只在响应真实携带 `duration_ms` 或 `error_code` 时展示对应信息。没有 DAG API，不显示假进度百分比或推算耗时。
 - 更新 `web/API_CONTRACT.md`，只记录目前已有的 Task/StageEvent/RunResult 路由与展示边界，没有新增后端契约。
 - Review 顺便清理了 Issue #3 导航区重复的“工作台”分组标题。
-- 自动化验证：WebUI checks [#39942197604](https://github.com/Kasign/stock_data_provider/actions/runs/39942197604) 和第二轮 [#39942345586](https://github.com/Kasign/stock_data_provider/actions/runs/39942345586) 均在新测试块失败（每轮 67/68 通过）：首轮把 `after_sequence` 检查到了 app.js，第二轮又假设排序回调形参名为 `item`。真实代码使用 `(a, b) => a.sequence - b.sequence`；现在改为断言排序表达式本身，API 游标仍检查 `apiClient`。JS 语法检查通过，镜像构建因测试失败未运行；修复后的 Actions 仍需核验。NAS/Docker/OpenResty 联调与浏览器截图未执行。
+- 自动化验证：WebUI checks [#39942477418](https://github.com/Kasign/stock_data_provider/actions/runs/39942477418) 对最终功能提交 `23879eca559a2b9a197d34a7a2fd437f53691894` 成功：68/68 项 Node 测试通过，JavaScript 语法检查和 Nginx 镜像构建均通过。先前 #39942197604 与 #39942345586 的失败是两条新增契约断言分别错误定位游标参数文件、假定排序回调变量名；均已修复并重新验收。NAS/Docker/OpenResty 联调与浏览器截图未执行。

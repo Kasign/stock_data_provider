@@ -99,3 +99,12 @@
 ## Issue #4 第二轮 CI 诊断（2026-10-23）
 - 第二轮 WebUI checks [#39942345586](https://github.com/Kasign/stock_data_provider/actions/runs/39942345586) 仍为 67/68 测试通过；唯一失败依旧在新增的源码契约测试中，断言期待 `item.sequence - b.sequence`，而现有事件列表使用 `(a, b) => a.sequence - b.sequence` 排序。不是生产代码排序失败。
 - 已把测试改成匹配排序表达式本身；`after_sequence` 检查仍针对 `apiClient`。等下一次 CI 结果再判断通过，不能把语法检查通过误算成整个测试通过。
+
+
+## Issue #4 验收结果（最新核验）
+- 功能提交：`23879eca559a2b9a197d34a7a2fd437f53691894`；WebUI checks [#39942477418](https://github.com/Kasign/stock_data_provider/actions/runs/39942477418) 成功，Node 测试 68/68 通过，JS 语法检查与 Nginx image build 均通过。
+- 两次早期失败 #39942197604 和 #39942345586 都是新测试的源代码定位/形参名称假设不准确；已改为核对 `api.js` 的 `after_sequence` 请求参数和真实的 `(a, b) => a.sequence - b.sequence` 表达式，并由成功的 CI 复验。
+- 数据 PR #1 已更新至 `366f20df60c24bc04e26193110b00e5ab93d7f0a`（Open，未合并）。当前对应 Go suite [#39942050736](https://github.com/Kasign/stock_data_provider/actions/runs/39942050736) 与 Live Provider probe [#39942050842](https://github.com/Kasign/stock_data_provider/actions/runs/39942050842) 均成功；先前 `38193c1e` 的失败流水线不是最新状态。
+- PR #2 仍 Open、未合并；本节记录的功能 head 是 `23879eca`，base SHA 仍是 `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`，在此快照上 mergeable=true。明确禁止合并。
+- 运行流只呈现现有 Task、StageEvent、RunResult 的真实数据；时间只读 Task 返回的 started/finished 时间，耗时/错误码只在 event 返回时显示。无服务端 Task list/DAG；最近任务列表仍只是浏览器本地 task/run 引用。
+- 自动化通过不代表视觉验收与实机集成：本轮没有实际浏览器截图，也未执行 NAS/Docker/OpenResty 到 Go 服务/MariaDB/Redis 的端到端验证。
