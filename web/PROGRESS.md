@@ -227,4 +227,4 @@
 - 阶段事件按现有 sequence 排序，并沿用 `after_sequence` 续读；只在响应真实携带 `duration_ms` 或 `error_code` 时展示对应信息。没有 DAG API，不显示假进度百分比或推算耗时。
 - 更新 `web/API_CONTRACT.md`，只记录目前已有的 Task/StageEvent/RunResult 路由与展示边界，没有新增后端契约。
 - Review 顺便清理了 Issue #3 导航区重复的“工作台”分组标题。
-- 自动化验证：WebUI checks [#39942197604](https://github.com/Kasign/stock_data_provider/actions/runs/39942197604) 首轮失败，68 项测试中 67 项通过；新增事件测试将 `after_sequence` 错误地对照 `app.js`，而该 HTTP 参数由现有 `api.js` 组装。日志已定位并已把断言改为核对 `apiClient`；新的 Actions 结果尚待确认。语法检查通过，镜像构建因测试失败未运行。NAS/Docker/OpenResty 联调与浏览器截图未执行。
+- 自动化验证：WebUI checks [#39942197604](https://github.com/Kasign/stock_data_provider/actions/runs/39942197604) 和第二轮 [#39942345586](https://github.com/Kasign/stock_data_provider/actions/runs/39942345586) 均在新测试块失败（每轮 67/68 通过）：首轮把 `after_sequence` 检查到了 app.js，第二轮又假设排序回调形参名为 `item`。真实代码使用 `(a, b) => a.sequence - b.sequence`；现在改为断言排序表达式本身，API 游标仍检查 `apiClient`。JS 语法检查通过，镜像构建因测试失败未运行；修复后的 Actions 仍需核验。NAS/Docker/OpenResty 联调与浏览器截图未执行。

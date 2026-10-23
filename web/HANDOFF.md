@@ -94,3 +94,8 @@
 ## Issue #4 首轮 CI 诊断（2026-10-23）
 - WebUI checks [#39942197604](https://github.com/Kasign/stock_data_provider/actions/runs/39942197604) 对提交 `395e0f647a7a44fdbb2c06492dfb763fa533bd23` 失败；JS 语法检查通过，Node 测试为 67/68 通过，Nginx build 因测试阶段失败未运行。
 - 唯一失败为新增 UI 契约测试将 `after_sequence` 检查在 `app.js` 上执行；该参数在 `web/src/api.js` 的事件请求中组装，所以断言应针对测试已读取的 `apiClient` 源码。此测试误判已在修正提交中更改；必须等待新的 GitHub Actions 成功后才能记为通过。
+
+
+## Issue #4 第二轮 CI 诊断（2026-10-23）
+- 第二轮 WebUI checks [#39942345586](https://github.com/Kasign/stock_data_provider/actions/runs/39942345586) 仍为 67/68 测试通过；唯一失败依旧在新增的源码契约测试中，断言期待 `item.sequence - b.sequence`，而现有事件列表使用 `(a, b) => a.sequence - b.sequence` 排序。不是生产代码排序失败。
+- 已把测试改成匹配排序表达式本身；`after_sequence` 检查仍针对 `apiClient`。等下一次 CI 结果再判断通过，不能把语法检查通过误算成整个测试通过。
