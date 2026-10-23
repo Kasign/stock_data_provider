@@ -24,6 +24,19 @@ export function parseSymbols(input) {
   return normalized;
 }
 
+// Go analysis currently accepts six-digit A-share codes only. Do not use this
+// normalizer for market-data queries, which may require an exchange suffix.
+export function normalizeAnalysisSymbol(input) {
+  return normalizeSymbol(input).slice(0, 6);
+}
+
+export function parseAnalysisSymbols(input) {
+  const symbols = [...new Set(parseSymbols(input).map(normalizeAnalysisSymbol))];
+  if (!symbols.length) throw new Error("请至少输入一只股票代码。");
+  if (symbols.length > 100) throw new Error("一次最多分析 100 只股票。");
+  return symbols;
+}
+
 export function formatPrice(value, digits = 2) {
   const number = Number(value);
   if (value === null || value === undefined || value === "" || !Number.isFinite(number)) return "—";
@@ -82,4 +95,16 @@ export function taskStatusLabel(status) {
     failed: "执行失败"
   };
   return map[String(status ?? "").toLowerCase()] || String(status || "未知状态");
+}
+
+export function runStatusLabel(status) {
+  const map = {
+    running: "分析中",
+    completed: "分析完成",
+    blocked_data_quality: "数据质量阻断",
+    rejected_request: "请求被拒绝",
+    partial: "部分结果",
+    failed: "分析失败"
+  };
+  return map[String(status ?? "").toLowerCase()] || String(status || "未知运行状态");
 }

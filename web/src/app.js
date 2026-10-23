@@ -19,20 +19,29 @@ import {
   formatDateTime,
   formatPercent,
   formatPrice,
+  normalizeAnalysisSymbol,
   normalizeBasePath,
+  parseAnalysisSymbols,
   normalizeSymbol,
-  parseSymbols,
   qualityLabel,
+  runStatusLabel,
   taskStatusLabel
 } from "./format.js";
 
 const $ = (selector) => document.querySelector(selector);
+const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
+const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
 const state = {
   settings: loadSettings(),
   view: "market",
   quote: null,
   bars: [],
   taskId: "",
+  runId: "",
+  taskSymbols: [],
+  taskType: "post_market_scan",
+  taskStatus: "",
+  lastRunResult: null,
   taskSequence: 0,
   taskEvents: new Map(),
   pollTimer: null,
@@ -44,6 +53,23 @@ const state = {
 function setText(selector, value) {
   const target = $(selector);
   if (target) target.textContent = value == null || value === "" ? "—" : String(value);
+}
+
+function persistTaskReference() {
+  if (!state.taskId) return;
+  const record = {
+    task_id: state.taskId,
+    run_id: state.runId || "",
+    symbols: state.taskSymbols,
+    task_type: state.taskType,
+    status: state.taskStatus,
+    saved_at: new Date().toISOString()
+  };
+  try {
+    localStorage.setItem(TASK_REFERENCE_KEY, JSON.stringify(record));
+  } catch {
+    // Storage can be disabled or full; the current page session should still work.
+  }
 }
 
 function setNotice(message, kind = "info") {
@@ -310,6 +336,9 @@ async function runQuoteQuery(event) {
 }
 
 function renderTask(task) {
+  state.taskStatus = task.status || state.taskStatus;
+  if (task.run_id) state.runId = task.run_id;
+  persistTaskReference();
   setQualityPill($("#task-status-pill"), task.status === "succeeded" ? "valid" : task.status === "partial" ? "degraded" : task.status === "failed" ? "invalid" : "unknown", taskStatusLabel(task.status));
   $("#task-empty").hidden = true;
   $("#task-detail").hidden = false;
@@ -321,7 +350,7 @@ function renderTask(task) {
   const message = task.error_message || task.failure_code || "";
   $("#task-error").hidden = !message;
   $("#task-error").textContent = message;
-  $("#task-poll-label").textContent = ["succeeded", "partial", "failed"].includes(task.status) ? "任务已结束" : "每 2.5 秒轮询服务端状态";
+  $("#task-poll-label").textContent = TERMINAL_TASK_STATUSES.has(task.status) ? "任务已结束" : "每 2.5 秒轮询服务端状态";
 }
 
 function renderTaskEvents() {
@@ -356,13 +385,93 @@ function renderTaskEvents() {
   });
 }
 
+function resultDisplayValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (Array.isArray(value)) return value.length ? value.map(resultDisplayValue).join("、") : "无";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function createResultSection(root, title, description = "") {
+  const section = document.createElement("section");
+  section.className = "analysis-result-block";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  section.append(heading);
+  if (description) {
+    const detail = document.createElement("p");
+    detail.textContent = description;
+    section.append(detail);
+  }
+  const grid = document.createElement("div");
+  grid.className = "analysis-result-grid";
+  section.append(grid);
+  root.append(section);
+  return grid;
+}
+
+function appendResultEmpty(parent, message) {
+  const empty = document.createElement("div");
+  empty.className = "analysis-result-empty";
+  empty.textContent = message;
+  parent.append(empty);
+}
+
+function appendResultCard(parent, title, fields, badgeText = "", badgeTone = "") {
+  const card = document.createElement("article");
+  card.className = "analysis-result-card";
+  const heading = document.createElement("div");
+  heading.className = "analysis-result-card-heading";
+  const titleNode = document.createElement("strong");
+  titleNode.textContent = title;
+  heading.append(titleNode);
+  if (badgeText) {
+    const badge = document.createElement("span");
+    badge.className = "analysis-result-badge" + (badgeTone ? " " + badgeTone : "");
+    badge.textContent = badgeText;
+    heading.append(badge);
+  }
+  card.append(heading);
+  const details = document.createElement("dl");
+  details.className = "analysis-result-fields";
+  fields.forEach(([label, value]) => {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = resultDisplayValue(value);
+    details.append(term, description);
+  });
+  if (fields.length) card.append(details);
+  parent.append(card);
+  return card;
+}
+
+function resultPairs(record, fields) {
+  return fields.map(([label, key, transform]) => [
+    label,
+    typeof transform === "function" ? transform(record?.[key]) : record?.[key]
+  ]);
+}
+
 function renderTaskResult(result) {
+  state.lastRunResult = result;
+  state.runId = result.run_id || state.runId;
+  persistTaskReference();
+
+  const quality = result.quality || {};
+  const factors = Array.isArray(result.factors) ? result.factors : [];
+  const signals = Array.isArray(result.signals) ? result.signals : [];
+  const plans = Array.isArray(result.plans) ? result.plans : [];
+  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
   const metrics = [
-    ["运行状态", result.status || "未报告"],
-    ["质量门禁", result.quality?.core_pass === true ? "通过" : result.quality?.core_pass === false ? "未通过" : "未报告"],
-    ["候选信号", Array.isArray(result.signals) ? result.signals.length : "—"],
-    ["计划数量", Array.isArray(result.plans) ? result.plans.length : "—"],
-    ["警告数量", Array.isArray(result.warnings) ? result.warnings.length : 0]
+    ["运行状态", runStatusLabel(result.status)],
+    ["核心质量门禁", quality.core_pass === true ? "通过" : quality.core_pass === false ? "未通过" : "未报告"],
+    ["分析时点", result.request?.as_of || result.market_state?.as_of || result.started_at || "未报告"],
+    ["因子数量", Array.isArray(result.factors) ? factors.length : "未报告"],
+    ["候选信号", Array.isArray(result.signals) ? signals.length : "未报告"],
+    ["计划数量", Array.isArray(result.plans) ? plans.length : "未报告"],
+    ["警告数量", Array.isArray(result.warnings) ? warnings.length : "未报告"]
   ];
   const metricRoot = $("#task-result-metrics");
   metricRoot.replaceChildren();
@@ -377,42 +486,173 @@ function renderTaskResult(result) {
     metricRoot.append(card);
   });
 
-  const signalsRoot = $("#task-result-signals");
-  signalsRoot.replaceChildren();
-  const signals = Array.isArray(result.signals) ? result.signals : [];
-  signals.forEach((signal, index) => {
-    const item = document.createElement("article");
-    item.className = "signal-result-card";
-    const heading = document.createElement("strong");
-    heading.textContent = signal.symbol || signal.stock_code || signal.code || signal.name || ("候选信号 " + (index + 1));
-    const detail = document.createElement("p");
-    detail.textContent = [
-      signal.action || signal.direction || signal.signal_type || signal.decision,
-      signal.score == null ? "" : ("评分 " + signal.score),
-      signal.confidence == null ? "" : ("置信度 " + signal.confidence),
-      signal.reason || signal.rationale || signal.message
-    ].filter(Boolean).join(" · ") || "详细字段请查看完整 Run JSON。";
-    item.append(heading, detail);
-    signalsRoot.append(item);
-  });
-  if (!signals.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty-row";
-    empty.textContent = "本次运行没有返回候选信号；请结合质量门禁、警告与原始结果判断原因。";
-    signalsRoot.append(empty);
+  const root = $("#task-result-structured");
+  root.replaceChildren();
+
+  const overview = createResultSection(root, "本次分析概况");
+  appendResultCard(overview, "分析请求", [
+    ["标的", result.request?.symbols],
+    ["任务类型", result.request?.task_type],
+    ["市场", result.request?.market_id],
+    ["分析时点", result.request?.as_of],
+    ["时点模式", result.request?.as_of_mode],
+    ["策略", result.request?.strategy_ids],
+    ["策略配置版本", result.request?.strategy_config_version],
+    ["风险配置版本", result.request?.risk_config_version]
+  ]);
+  appendResultCard(overview, "运行信息", [
+    ["Run ID", result.run_id],
+    ["状态", runStatusLabel(result.status)],
+    ["开始时间", result.started_at],
+    ["结束时间", result.finished_at],
+    ["Universe Snapshot", result.universe?.id],
+    ["数据快照", result.raw_snapshot_id],
+    ["市场快照", result.market_snapshot_id],
+    ["质量策略版本", quality.policy_version]
+  ]);
+
+  const marketGrid = createResultSection(root, "市场状态", "展示后端返回的市场状态、指标与证据；不会在前端自行推导大盘结论。");
+  if (result.market_state && Object.keys(result.market_state).length) {
+    const market = result.market_state;
+    appendResultCard(marketGrid, market.regime || "市场状态", [
+      ["状态", market.regime],
+      ["有效时点", market.as_of],
+      ["算法版本", market.algorithm_version],
+      ["指标", market.metrics],
+      ["证据", market.evidence]
+    ]);
+  } else {
+    appendResultEmpty(marketGrid, "本次 Run 未返回 market_state。");
+  }
+
+  const qualityGrid = createResultSection(root, "数据质量与策略门禁", "缺失字段保留为未报告，不把未知值当作 0 或通过。");
+  appendResultCard(qualityGrid, "质量报告", [
+    ["核心门禁", quality.core_pass === true ? "通过" : quality.core_pass === false ? "未通过" : "未报告"],
+    ["部分数据", quality.partial],
+    ["检查时间", quality.checked_at],
+    ["策略资格", quality.strategy_eligible],
+    ["策略阻断原因", quality.strategy_blockers],
+    ["质量策略版本", quality.policy_version]
+  ], quality.core_pass === true ? "核心门禁通过" : quality.core_pass === false ? "核心门禁未通过" : "状态未知",
+  quality.core_pass === true ? "is-allowed" : quality.core_pass === false ? "is-blocked" : "");
+  const issues = Array.isArray(quality.issues) ? quality.issues : [];
+  if (issues.length) {
+    issues.forEach((issue, index) => {
+      appendResultCard(qualityGrid, issue.message || issue.code || ("质量问题 " + (index + 1)), resultPairs(issue, [
+        ["严重程度", "severity"], ["问题代码", "code"], ["数据集", "dataset"],
+        ["标的", "symbol"], ["字段", "field"], ["策略", "strategy_id"]
+      ]), issue.severity || "");
+    });
+  } else {
+    appendResultEmpty(qualityGrid, "没有返回 quality.issues；这不等同于所有可选数据都完整。");
+  }
+
+  const factorGrid = createResultSection(root, "分析因子", "显示实际计算结果、输入质量和证据引用。");
+  if (factors.length) {
+    factors.forEach((factor, index) => {
+      appendResultCard(factorGrid, factor.factor_id || ("因子 " + (index + 1)), resultPairs(factor, [
+        ["标的", "symbol"], ["因子版本", "factor_version"], ["因子值", "value"],
+        ["单位", "unit"], ["有效时点", "as_of"], ["输入质量", "input_quality"],
+        ["缺失原因", "missing_reason"], ["证据引用", "evidence_refs"]
+      ]), factor.input_quality || "");
+    });
+  } else {
+    appendResultEmpty(factorGrid, "本次 Run 未返回分析因子。");
+  }
+
+  const signalGrid = createResultSection(root, "候选信号", "这些是分析引擎生成的候选信号，不是自动交易指令。");
+  if (signals.length) {
+    signals.forEach((signal, index) => {
+      appendResultCard(signalGrid, (signal.symbol || "标的未报告") + " · " + (signal.direction || "方向未报告"), resultPairs(signal, [
+        ["信号 ID", "id"], ["策略", "strategy_id"], ["策略版本", "strategy_version"],
+        ["信号时间", "signal_at"], ["参考价格", "reference_price"],
+        ["有效截止", "valid_until"], ["预期持有天数", "expected_hold_days"],
+        ["入场规则", "entry_rule"], ["退出规则", "exit_rule"],
+        ["失效规则", "invalidation_rule"], ["证据引用", "evidence_refs"],
+        ["扩展属性", "attributes"]
+      ]), signal.strategy_id || ("候选 " + (index + 1)));
+    });
+  } else {
+    appendResultEmpty(signalGrid, "本次 Run 未生成候选信号；请同时查看质量门禁、拒绝原因及警告。");
+  }
+
+  const renderDecisions = (title, values) => {
+    const grid = createResultSection(root, title);
+    if (!Array.isArray(values) || !values.length) {
+      appendResultEmpty(grid, "本次 Run 未返回 " + title + " 决策。");
+      return;
+    }
+    values.forEach((decision, index) => {
+      appendResultCard(grid, decision.signal_id || (title + " " + (index + 1)), resultPairs(decision, [
+        ["允许", "allowed"], ["阻断/通过原因", "reasons"],
+        ["规则 ID", "rule_ids"], ["规则版本", "rule_refs"]
+      ]), decision.allowed === true ? "允许" : decision.allowed === false ? "阻断" : "未报告",
+      decision.allowed === true ? "is-allowed" : decision.allowed === false ? "is-blocked" : "");
+    });
+  };
+  renderDecisions("可交易性检查", result.tradability);
+  renderDecisions("风险检查", result.risk);
+
+  const plansGrid = createResultSection(root, "交易计划", "仅呈现后端实际生成的计划；页面不会自行补造价格或数量。");
+  if (plans.length) {
+    plans.forEach((plan, index) => {
+      appendResultCard(plansGrid, (plan.symbol || "标的未报告") + " · " + (plan.side || "方向未报告"), resultPairs(plan, [
+        ["信号 ID", "signal_id"], ["数量", "quantity"], ["参考价格", "reference_price"],
+        ["止损价", "stop_price"], ["目标价", "target_price"],
+        ["最早执行时间", "earliest_execute_at"], ["过期时间", "expire_at"],
+        ["风险预算", "risk_budget"], ["成本估算", "cost_estimate"], ["规则版本", "rule_version"]
+      ]), "计划 " + (index + 1));
+    });
+  } else {
+    appendResultEmpty(plansGrid, "没有返回交易计划。请检查下方的计划拒绝、质量和风险决策。");
+  }
+
+  const rejectionsGrid = createResultSection(root, "计划拒绝原因");
+  const rejections = Array.isArray(result.planning_rejections) ? result.planning_rejections : [];
+  if (rejections.length) {
+    rejections.forEach((rejection, index) => {
+      appendResultCard(rejectionsGrid, rejection.signal_id || ("拒绝项 " + (index + 1)), resultPairs(rejection, [
+        ["信号 ID", "signal_id"], ["拒绝原因", "reasons"]
+      ]), "未生成计划", "is-blocked");
+    });
+  } else {
+    appendResultEmpty(rejectionsGrid, "本次 Run 未返回 planning_rejections。");
+  }
+
+  const executionGrid = createResultSection(root, "执行评估");
+  const execution = result.execution_assessment || {};
+  appendResultCard(executionGrid, "评估模型", resultPairs(execution, [["模型版本", "model_version"], ["警告", "warnings"]]));
+  const orders = Array.isArray(execution.orders) ? execution.orders : [];
+  if (orders.length) {
+    orders.forEach((order, index) => {
+      appendResultCard(executionGrid, order.signal_id || ("订单评估 " + (index + 1)), resultPairs(order, [
+        ["状态", "status"], ["请求数量", "requested_quantity"], ["已成交数量", "filled_quantity"],
+        ["剩余数量", "remaining_quantity"], ["原因", "reason"]
+      ]), order.status || "");
+    });
+  } else {
+    appendResultEmpty(executionGrid, "没有返回订单执行评估记录；不应将其理解为已成交。");
+  }
+
+  const failure = result.failure;
+  if (failure) {
+    const failureGrid = createResultSection(root, "运行失败信息");
+    appendResultCard(failureGrid, failure.message || "分析失败", resultPairs(failure, [
+      ["错误代码", "code"], ["失败阶段", "stage"], ["消息", "message"]
+    ]), failure.code || "Failure", "is-blocked");
   }
 
   const warningRoot = $("#task-result-warnings");
   warningRoot.replaceChildren();
-  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
   warningRoot.hidden = warnings.length === 0;
   warnings.forEach((warning) => {
     const line = document.createElement("p");
     line.textContent = String(warning);
     warningRoot.append(line);
   });
+
   $("#task-result-json").textContent = JSON.stringify(result, null, 2);
-  $("#task-result-note").textContent = "Run ID：" + (result.run_id || "—") + " · 状态：" + (result.status || "未报告") + "。当前结果只用于工程验证与研究，不构成交易建议。";
+  $("#task-result-note").textContent = "Run ID：" + (result.run_id || state.runId || "—") + " · 状态：" + runStatusLabel(result.status) + "。结果以 Go API 返回为准，仅供研究与工程验证，不构成交易建议。";
   $("#task-result-section").hidden = false;
 }
 
@@ -422,10 +662,12 @@ async function loadTaskRunResult(runId, expectedTaskId) {
   try {
     const result = await getAnalysisRun(state.settings, runId);
     if (state.taskId !== expectedTaskId) return;
+    state.runId = result.run_id || runId;
+    persistTaskReference();
     renderTaskResult(result);
   } catch (error) {
     if (state.taskId !== expectedTaskId) return;
-    $("#task-result-note").textContent = "读取结果失败：" + errorMessage(error) + "。可点击“立即刷新状态”重试。";
+    $("#task-result-note").textContent = "读取结果失败：" + errorMessage(error) + "。可点击“重新读取结果”或“立即刷新状态”重试。";
   }
 }
 
@@ -451,9 +693,10 @@ async function pollTask(generation = state.pollGeneration) {
       state.taskSequence = Math.max(state.taskSequence, Number(event.sequence) || 0);
     }
     renderTaskEvents();
-    if (["succeeded", "partial", "failed"].includes(task.status)) {
+    if (TERMINAL_TASK_STATUSES.has(task.status)) {
       stopTaskPolling();
-      if (task.run_id) void loadTaskRunResult(task.run_id, taskId);
+      const runId = task.run_id || state.runId;
+      if (runId) void loadTaskRunResult(runId, taskId);
       return;
     }
     state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
@@ -468,7 +711,7 @@ async function createTask(event) {
   event.preventDefault();
   let symbols;
   try {
-    symbols = parseSymbols($("#task-symbols").value);
+    symbols = parseAnalysisSymbols($("#task-symbols").value);
   } catch (error) {
     window.alert(error.message);
     return;
@@ -481,11 +724,16 @@ async function createTask(event) {
   const idempotencyKey = $("#idempotency-key").value.trim();
   stopTaskPolling();
   state.taskId = "";
+  state.runId = "";
+  state.taskSymbols = symbols;
+  state.taskType = taskType;
+  state.taskStatus = "";
+  state.lastRunResult = null;
   state.taskSequence = 0;
   state.taskEvents.clear();
   $("#task-result-section").hidden = true;
   $("#task-result-metrics").replaceChildren();
-  $("#task-result-signals").replaceChildren();
+  $("#task-result-structured").replaceChildren();
   $("#task-result-warnings").replaceChildren();
 
   try {
@@ -493,13 +741,15 @@ async function createTask(event) {
     const task = response.task || response;
     if (!task.task_id) throw new Error("接口返回成功，但响应中缺少 task.task_id。");
     state.taskId = task.task_id;
+    state.runId = task.run_id || "";
+    persistTaskReference();
     renderTask(task);
     renderTaskEvents();
     const generation = state.pollGeneration;
-    if (!["succeeded", "partial", "failed"].includes(task.status)) {
+    if (!TERMINAL_TASK_STATUSES.has(task.status)) {
       state.pollTimer = window.setTimeout(() => pollTask(generation), 500);
-    } else if (task.run_id) {
-      void loadTaskRunResult(task.run_id, task.task_id);
+    } else if (task.run_id || state.runId) {
+      void loadTaskRunResult(task.run_id || state.runId, task.task_id);
     }
   } catch (error) {
     $("#task-empty").hidden = false;
@@ -509,6 +759,75 @@ async function createTask(event) {
     button.disabled = false;
     button.innerHTML = '创建并跟踪任务 <span>→</span>';
   }
+}
+
+function startQuoteAnalysis() {
+  let symbol;
+  try {
+    symbol = normalizeAnalysisSymbol(state.quote?.symbol || getQuerySymbol());
+  } catch (error) {
+    setNotice(error.message, "danger");
+    return;
+  }
+  $("#task-symbols").value = symbol;
+  $("#task-type").value = "post_market_scan";
+  setView("tasks");
+  $("#task-form").requestSubmit();
+}
+
+function restoreLastTask() {
+  let record;
+  try {
+    record = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
+  } catch {
+    return false;
+  }
+  if (!record || typeof record.task_id !== "string" || !record.task_id.trim()) return false;
+
+  state.taskId = record.task_id;
+  state.runId = typeof record.run_id === "string" ? record.run_id : "";
+  state.taskSymbols = Array.isArray(record.symbols) ? record.symbols : [];
+  state.taskType = record.task_type || "post_market_scan";
+  state.taskStatus = record.status || "";
+  $("#task-symbols").value = state.taskSymbols.join(", ") || "600519";
+  if (["post_market_scan", "watchlist_scan", "position_review"].includes(state.taskType)) {
+    $("#task-type").value = state.taskType;
+  }
+  $("#task-empty").hidden = true;
+  $("#task-detail").hidden = false;
+  $("#task-result-section").hidden = !state.runId;
+  setText("#task-id-value", state.taskId);
+  setText("#task-run-id", state.runId);
+  setText("#task-current-stage", "正在恢复上次任务");
+  $("#task-poll-label").textContent = "正在从服务端恢复状态与阶段事件…";
+  setView("tasks");
+  state.taskSequence = 0;
+  state.taskEvents.clear();
+  renderTaskEvents();
+  const generation = state.pollGeneration;
+  void pollTask(generation);
+  return true;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall through when the clipboard API exists without permission.
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("浏览器未允许复制，请手动展开原始 JSON 后复制。");
 }
 
 function openSettings() {
@@ -553,6 +872,7 @@ document.querySelectorAll(".nav-link").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 $("#quote-form").addEventListener("submit", runQuoteQuery);
+$("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#reload-sources").addEventListener("click", refreshSources);
 $("#refresh-button").addEventListener("click", async () => {
   await refreshServices();
@@ -576,6 +896,46 @@ $("#refresh-task").addEventListener("click", () => {
   const generation = state.pollGeneration;
   void pollTask(generation);
 });
+$("#reload-run-result").addEventListener("click", () => {
+  if (state.taskId && state.runId) void loadTaskRunResult(state.runId, state.taskId);
+});
+$("#copy-run-json").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  if (!state.lastRunResult) return;
+  try {
+    await copyText(JSON.stringify(state.lastRunResult, null, 2));
+    button.textContent = "已复制";
+  } catch (error) {
+    $("#task-result-note").textContent = error.message;
+    return;
+  }
+  window.setTimeout(() => { button.textContent = "复制 JSON"; }, 1500);
+});
+$("#copy-task-diagnostic").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const result = state.lastRunResult || {};
+  const diagnostic = {
+    task_id: state.taskId || null,
+    task_status: state.taskStatus || null,
+    run_id: state.runId || null,
+    symbols: state.taskSymbols,
+    task_type: state.taskType,
+    run_status: result.status || null,
+    as_of: result.request?.as_of || null,
+    quality: result.quality || null,
+    failure: result.failure || null,
+    warnings: result.warnings || [],
+    events: [...state.taskEvents.values()].sort((a, b) => a.sequence - b.sequence)
+  };
+  try {
+    await copyText(JSON.stringify(diagnostic, null, 2));
+    button.textContent = "已复制";
+  } catch (error) {
+    $("#task-result-note").textContent = error.message;
+    return;
+  }
+  window.setTimeout(() => { button.textContent = "复制诊断"; }, 1500);
+});
 $("#copy-task-id").addEventListener("click", async () => {
   if (!state.taskId) return;
   try {
@@ -590,8 +950,9 @@ $("#copy-task-id").addEventListener("click", async () => {
 setView("market");
 void refreshServices();
 void refreshSources();
-if (state.settings.apiKey) {
+const restoredTask = restoreLastTask();
+if (!restoredTask && state.settings.apiKey) {
   void runQuoteQuery();
-} else {
+} else if (!restoredTask) {
   setText("#query-hint", "尚未配置行情 API Key。点击右上角设置按钮后填写 MARKET_DATA_API_KEY。");
 }

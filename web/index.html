@@ -61,7 +61,7 @@
           <div class="notice" id="market-notice" role="status" aria-live="polite" hidden></div>
 
           <section class="quote-section">
-            <div class="section-heading"><div><h2 id="quote-title">贵州茅台 <span>600519.SH</span></h2><p id="quote-subtitle">实时快照与行情质量</p></div><div id="quote-quality" class="quality-pill quality-unknown">尚未查询</div></div>
+            <div class="section-heading"><div><h2 id="quote-title">贵州茅台 <span>600519.SH</span></h2><p id="quote-subtitle">实时快照与行情质量</p></div><div class="quote-heading-actions"><div id="quote-quality" class="quality-pill quality-unknown">尚未查询</div><button class="button button-secondary" id="analyze-quote-button" type="button">分析当前股票 <span>→</span></button></div></div>
             <div class="metric-grid" id="metric-grid">
               <article class="metric-card metric-primary"><div class="metric-label">最新价</div><div class="metric-value" id="metric-price">—</div><div class="metric-foot" id="metric-change">等待行情</div></article>
               <article class="metric-card"><div class="metric-label">成交额</div><div class="metric-value" id="metric-amount">—</div><div class="metric-foot">人民币 CNY</div></article>
@@ -127,10 +127,10 @@
                 <div class="event-heading"><h3>阶段事件</h3><span>按持久化序号增量读取</span></div>
                 <div id="task-events" class="event-list"><div class="empty-row">等待服务端阶段事件。</div></div>
                 <section id="task-result-section" class="task-result-section" hidden>
-                  <div class="event-heading"><h3>分析结果</h3><span>读取已保存的 Run 结果</span></div>
+                  <div class="event-heading result-heading"><div><h3>分析结果</h3><span>读取已保存的 Run 结果</span></div><div class="task-result-actions"><button class="text-button" id="reload-run-result" type="button">重新读取结果</button><button class="text-button" id="copy-run-json" type="button">复制 JSON</button><button class="text-button" id="copy-task-diagnostic" type="button">复制诊断</button></div></div>
                   <p class="task-result-note" id="task-result-note">任务完成后自动读取结果。</p>
                   <div class="task-result-metrics" id="task-result-metrics"></div>
-                  <div class="signal-result-list" id="task-result-signals"></div>
+                  <div class="analysis-result-sections" id="task-result-structured"></div>
                   <div class="task-result-warnings" id="task-result-warnings" hidden></div>
                   <details class="raw-result"><summary>查看完整 Run JSON</summary><pre id="task-result-json"></pre></details>
                 </section>
