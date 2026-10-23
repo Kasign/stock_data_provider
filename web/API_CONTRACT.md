@@ -23,12 +23,33 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 | Go 行情 | `GET /market-api/health/ready` | 不附加 API Key | 行情服务就绪检查 |
 | Go 行情 | `GET /market-api/api/v1/data-sources` | `X-API-Key` | 读取 Provider 能力/状态 |
 | Go 行情 | `GET /market-api/api/v1/quotes/{symbol}` | `X-API-Key`；股票代码作为路径段 | 查询实时行情 |
-| Go 行情 | `GET /market-api/api/v1/bars/{symbol}/daily?limit=120&adjustment=forward_adjusted` | `X-API-Key`；`limit`、`adjustment` 可配置 | 查询历史日 K |
+| Go 行情 | `GET /market-api/api/v1/bars/{symbol}/daily?limit=120&adjustment=forward_adjusted&start=2026-10-01&end=2026-10-23` | `X-API-Key`；`limit`、`adjustment` 可配置；`start`、`end` 可选 | 查询历史日 K；日期参数会原样传至现有行情 API |
 | Go 分析 | `GET /analysis-api/readyz` | 不附加行情 API Key | 分析服务就绪检查 |
 | Go 分析 | `POST /analysis-api/api/v1/analysis/tasks` | JSON；可选 `Idempotency-Key` | 创建异步分析任务 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}` | task ID 作为路径段 | 查询任务状态 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}/events?after_sequence=0&limit=100` | 增量事件游标与单页条数 | 获取持久化阶段事件 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | run ID 作为路径段 | 获取结构化分析结果 |
+
+## 日 K 日期范围参数
+
+现有行情 API 的日 K 路由已支持可选 `start=YYYY-MM-DD` 与 `end=YYYY-MM-DD` 参数。WebUI 仅在用户填写日期时附加相应参数；不填时不发送空值，使用后端现有默认行为。日期范围仍受 `limit` 和后端允许的日期校验约束，前端按 `Asia/Shanghai` 当日检查未来日期与起止顺序。复权口径始终通过原有 `adjustment` 参数传递并在返回后展示。
+
+## 后端待议：历史分析列表 API 建议（不是现有接口）
+
+当前已存在按 ID 读取 Run 的 `GET /api/v1/analysis/runs/{run_id}`，但没有可供 WebUI 使用的服务端历史列表接口。浏览器端最近列表只保存少量 task/run 引用，不应据此声称具有跨设备历史、服务器检索或回放功能。
+
+为支持后续的历史筛选与比较，建议由后端独立任务评估以下集合接口。**此处是需求草案，不代表接口已经实现，也不应由当前 WebUI PR 修改后端：**
+
+```http
+GET /api/v1/analysis/runs?symbol=600519&status=completed&task_type=post_market_scan&from=2026-10-01T00:00:00Z&to=2026-10-23T00:00:00Z&limit=20&cursor=<opaque>
+```
+
+建议约束：
+
+- 默认每页 20 条、最大 100 条；使用 opaque cursor 稳定分页，并按创建/开始时间倒序、Run ID 次序稳定打破并列。
+- 每条列表摘要至少包含 `run_id`、关联 `task_id`（如可用）、`status`、`task_type`、`symbols`、`started_at`、`finished_at`、`quality.core_pass`、`quality.partial` 与失败代码；不在列表中重复返回完整 RunResult。
+- 筛选字段按后端现有 Run/Task 持久化字段确认；时间范围统一按带时区 RFC3339 解释。后端需说明数据保留策略、鉴权范围及记录是否已持久化。
+- 点击一条历史摘要后仍通过已有 `GET /api/v1/analysis/runs/{run_id}` 读取完整报告；没有新 API 与持久化保证之前，前端只提供浏览器本地的最近任务引用。
 
 ## 已固定的前端调用行为
 

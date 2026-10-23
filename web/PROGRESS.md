@@ -102,3 +102,12 @@
 - 接入已有 bars API 的可选 `start`/`end` 参数，并按 Asia/Shanghai 当日进行前端校验；保留 `limit` 作为结果数量上限，复权口径依旧由原选项和后端返回值决定。
 - 修复日 K 请求失败后旧股票图表可能继续显示的问题，失败时清空旧 K 线并展示诊断提示。
 - 新增独立 SVG chart 单元测试、日期参数 API 路由测试、UI DOM/CSS 契约测试。本批 GitHub Actions 结果待确认；未将 CI 视为真实 NAS/1Panel 联调。
+
+
+## 日 K 图表升级 — CI 验证结果
+
+- 提交：[`4008203b`](https://github.com/Kasign/stock_data_provider/commit/4008203b056ca11038093b855b547ea6b312985a)。
+- GitHub Actions：[WebUI checks #39906212815](https://github.com/Kasign/stock_data_provider/actions/runs/39906212815) 成功：42 项 Node 测试通过（0 失败），JavaScript 语法检查通过，Nginx 镜像构建通过。
+- 收盘线/蜡烛图切换、OHLC 与成交量柱、悬停详情、日期范围请求参数、缺失字段与无效 OHLC 边界测试均已覆盖。
+- 本验证只覆盖前端模块契约及构建；尚未对 NAS/1Panel 真实行情做字段、复权、访问控制和浏览器交互验收。
+- 下一项依赖后端能力：分析历史列表 API。前端在 API 真正落地前不会伪造服务端历史、回放或跨设备同步。
