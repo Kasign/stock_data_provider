@@ -225,6 +225,7 @@ type MarketBreadthSnapshot struct {
 	AmountCoverageCount int           `json:"amount_coverage_count"`
 	Source              string        `json:"source"`
 	SourceVersion       string        `json:"source_version,omitempty"`
+	ProviderReportDate  string        `json:"provider_report_date,omitempty"`
 	FetchedAt           time.Time     `json:"fetched_at"`
 	QualityStatus       QualityStatus `json:"quality_status"`
 	QualityReasons      []string      `json:"quality_reasons,omitempty"`
