@@ -402,12 +402,32 @@ func parseEastmoneyTime(s string) *time.Time {
 	if s == "" || s == "-" {
 		return nil
 	}
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	// 常见响应将 f86 编码为上海本地时间；遇到数字型 Unix 时间戳时再按秒/毫秒处理。
 	for _, layout := range []string{"20060102150405", "200601021504", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
-		if t, e := time.ParseInLocation(layout, s, loc); e == nil {
+		if t, parseErr := time.ParseInLocation(layout, s, loc); parseErr == nil {
 			t = t.UTC()
 			return &t
 		}
+	}
+	if epoch, parseErr := strconv.ParseInt(s, 10, 64); parseErr == nil {
+		var t time.Time
+		switch len(s) {
+		case 10:
+			t = time.Unix(epoch, 0).UTC()
+		case 13:
+			t = time.UnixMilli(epoch).UTC()
+		default:
+			return nil
+		}
+		// 避免把任意十位数字或明显错误的时间值当成有效报价时间。
+		if t.Year() < 2000 || t.After(time.Now().Add(24*time.Hour)) {
+			return nil
+		}
+		return &t
 	}
 	return nil
 }

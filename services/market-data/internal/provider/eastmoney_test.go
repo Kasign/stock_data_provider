@@ -46,6 +46,41 @@ func TestEastmoneyQuoteNormalizesUnitsAndProviderTime(t *testing.T) {
 		t.Fatalf("volume ratio/turnover rate must survive the provider contract: ratio=%v turnover=%v", q.VolumeRatio, q.TurnoverRate)
 	}
 }
+func TestEastmoneyQuoteAcceptsNumericUnixSecondsTimestamp(t *testing.T) {
+	timestamp := time.Now().UTC().Add(-time.Minute).Unix()
+	body := fmt.Sprintf(`{"rc":0,"data":{"f43":41.76,"f44":42.09,"f45":41.66,"f46":41.70,"f47":125595,"f48":525556667,"f57":"600036","f58":"招商银行","f60":41.82,"f86":%d,"f169":-0.06,"f170":-0.14,"f50":2.85,"f168":0.06}}`, timestamp)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, body)
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(2*time.Second, server.URL, server.URL)
+	q, err := p.FetchQuote(context.Background(), "600036.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Unix(timestamp, 0).UTC()
+	if q.QuoteTime == nil || !q.QuoteTime.Equal(want) {
+		t.Fatalf("numeric Unix seconds should be parsed exactly, got %#v want %s", q.QuoteTime, want)
+	}
+	if q.QualityStatus != model.QualityValid {
+		t.Fatalf("a complete quote with a valid numeric timestamp should not be degraded: %+v", q)
+	}
+}
+
+func TestParseEastmoneyTimeSupportsUnixSecondsAndMilliseconds(t *testing.T) {
+	want := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	for _, raw := range []string{
+		fmt.Sprintf("%d", want.Unix()),
+		fmt.Sprintf("%d", want.UnixMilli()),
+	} {
+		got := parseEastmoneyTime(raw)
+		if got == nil || !got.Equal(want) {
+			t.Errorf("parseEastmoneyTime(%q)=%v, want %s", raw, got, want)
+		}
+	}
+}
+
 func TestEastmoneyQuoteRejectsInvalidPriceContract(t *testing.T) {
 	responses := []string{
 		`{"rc":0,"data":{"f43":0,"f44":1331.98,"f45":1312.00,"f46":1331.88,"f47":34136,"f48":4525398959,"f57":"600519","f58":"贵州茅台","f60":1331.88,"f86":"202610211128","f169":-18.57,"f170":-1.394}}`,
