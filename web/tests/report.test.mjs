@@ -1,21 +1,77 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildRunResultFilename, buildRunResultMarkdown } from "../src/report.js";
+import { runResultFixtures } from "./fixtures/run-results.mjs";
 
-test("exports a readable report from actual result fields and marks missing data", () => {
-  const markdown = buildRunResultMarkdown({
-    run_id: "run-abc",
-    status: "blocked_data_quality",
-    request: { symbols: ["600519"], task_type: "post_market_scan", as_of: "2026-10-23T09:30:00+08:00" },
-    quality: { core_pass: false, issues: [{ code: "quote_missing", message: "No quote" }] },
-    signals: [],
-    warnings: ["daily bars unavailable"]
-  });
-  assert.match(markdown, /run-abc/);
-  assert.match(markdown, /数据质量与策略门禁/);
-  assert.match(markdown, /quote_missing/);
+test("exports every modeled Go RunResult state from deterministic fixtures", () => {
+  const scenarios = [
+    ["completed", runResultFixtures.completed],
+    ["empty completed", runResultFixtures.emptyCompleted],
+    ["partial", runResultFixtures.partial],
+    ["blocked quality", runResultFixtures.blockedDataQuality],
+    ["rejected request", runResultFixtures.rejectedRequest],
+    ["failed", runResultFixtures.failed]
+  ];
+
+  for (const [label, result] of scenarios) {
+    const markdown = buildRunResultMarkdown(result);
+    assert.ok(markdown.includes("- Run ID：" + result.run_id), label + " should retain its Run ID");
+    assert.ok(markdown.includes("- 运行状态：" + result.status), label + " should retain the server status");
+    assert.match(markdown, /数据质量与策略门禁/, label + " should include the quality section");
+    assert.match(markdown, /不构成交易建议/, label + " should retain the disclaimer");
+  }
+});
+
+test("completed results preserve actual structured fields including gates, rules and execution quantities", () => {
+  const markdown = buildRunResultMarkdown(runResultFixtures.completed);
+
+  assert.match(markdown, /核心门禁：是/);
+  assert.match(markdown, /策略资格：\{"trend_following":true\}/);
+  assert.match(markdown, /策略阻断原因：\{\}/);
+  assert.match(markdown, /因子 ID：ma_distance/);
+  assert.match(markdown, /入场规则：合成测试规则：条件 A 成立/);
+  assert.match(markdown, /可交易性检查/);
+  assert.match(markdown, /风险检查/);
+  assert.match(markdown, /参考价格：1326/);
+  assert.match(markdown, /已成交数量：0/);
+  assert.match(markdown, /没有连接或执行真实交易/);
+});
+
+test("empty and partial results distinguish empty collections from missing fields", () => {
+  const emptyMarkdown = buildRunResultMarkdown(runResultFixtures.emptyCompleted);
+  assert.match(emptyMarkdown, /本次 Run 未返回相关数据/);
+  assert.doesNotMatch(emptyMarkdown, /策略资格：\{"trend_following":false\}/);
+  assert.doesNotMatch(emptyMarkdown, /信号数：0/);
+
+  const partialMarkdown = buildRunResultMarkdown(runResultFixtures.partial);
+  assert.match(partialMarkdown, /运行状态：partial/);
+  assert.match(partialMarkdown, /是否部分数据：是/);
+  assert.match(partialMarkdown, /质量问题：.*optional_dataset_missing/);
+  assert.match(partialMarkdown, /因子值：未报告/);
+  assert.match(partialMarkdown, /缺失原因：上游未提供成交量字段/);
+  assert.match(partialMarkdown, /策略阻断原因：.*可选数据不完整/);
+  assert.match(partialMarkdown, /未生成计划/);
+});
+
+test("quality-blocked results expose the gate failure instead of suggesting a plan", () => {
+  const markdown = buildRunResultMarkdown(runResultFixtures.blockedDataQuality);
+
+  assert.match(markdown, /运行状态：blocked_data_quality/);
+  assert.match(markdown, /核心门禁：否/);
+  assert.match(markdown, /required_quote_missing/);
+  assert.match(markdown, /缺少必需的实时行情/);
   assert.match(markdown, /本次 Run 未返回相关数据/);
-  assert.match(markdown, /不构成交易建议/);
+  assert.doesNotMatch(markdown, /### 600519 · buy/);
+});
+
+test("rejected and failed runs export the server failure code, stage and message", () => {
+  for (const result of [runResultFixtures.rejectedRequest, runResultFixtures.failed]) {
+    const markdown = buildRunResultMarkdown(result);
+    assert.match(markdown, /运行失败信息/);
+    assert.match(markdown, new RegExp("错误代码：" + result.failure.code));
+    assert.match(markdown, new RegExp("失败阶段：" + result.failure.stage));
+    assert.ok(markdown.includes("消息：" + result.failure.message));
+  }
 });
 
 test("creates safe, deterministic filenames from symbols and timestamps", () => {
