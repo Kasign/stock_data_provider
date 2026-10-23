@@ -118,31 +118,31 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if reported := strings.TrimSpace(row.Symbol); reported != "" && reported != symbol[:6] {
 		return nil, fmt.Errorf("Netease quote symbol mismatch: requested %s got %q", symbol, reported)
 	}
-	price, err := parseNeteaseNumber(row.Price)
+	price, err := parseNeteaseNumber(string(row.Price))
 	if err != nil || price <= 0 {
 		return nil, errors.New("Netease quote current price is missing or invalid")
 	}
-	openV, err := parseNeteaseNumber(row.Open)
+	openV, err := parseNeteaseNumber(string(row.Open))
 	if err != nil || openV <= 0 {
 		return nil, errors.New("Netease quote open price is missing or invalid")
 	}
-	highV, err := parseNeteaseNumber(row.High)
+	highV, err := parseNeteaseNumber(string(row.High))
 	if err != nil || highV <= 0 {
 		return nil, errors.New("Netease quote high price is missing or invalid")
 	}
-	lowV, err := parseNeteaseNumber(row.Low)
+	lowV, err := parseNeteaseNumber(string(row.Low))
 	if err != nil || lowV <= 0 {
 		return nil, errors.New("Netease quote low price is missing or invalid")
 	}
-	prevClose, err := parseNeteaseNumber(row.YestClose)
+	prevClose, err := parseNeteaseNumber(string(row.YestClose))
 	if err != nil || prevClose <= 0 {
 		return nil, errors.New("Netease quote previous close is missing or invalid")
 	}
-	change, err := parseNeteaseNumber(row.Updown)
+	change, err := parseNeteaseNumber(string(row.Updown))
 	if err != nil {
 		return nil, errors.New("Netease quote change is missing or invalid")
 	}
-	percentRatio, err := parseNeteaseNumber(row.Percent)
+	percentRatio, err := parseNeteaseNumber(string(row.Percent))
 	if err != nil {
 		return nil, errors.New("Netease quote percent is missing or invalid")
 	}
@@ -150,7 +150,7 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if !finiteNumber(changePercent) || math.Abs(changePercent) > 1000 {
 		return nil, errors.New("Netease quote percent is outside a plausible numeric range")
 	}
-	rawVolume, volumeErr := parseNeteaseNumber(row.Volume)
+	rawVolume, volumeErr := parseNeteaseNumber(string(row.Volume))
 	var volume *int64
 	if volumeErr == nil {
 		converted, convertErr := normalize.RawSharesToInt64(rawVolume)
@@ -158,7 +158,7 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 			volume = &converted
 		}
 	}
-	rawAmount, amountErr := parseNeteaseNumber(row.Turnover)
+	rawAmount, amountErr := parseNeteaseNumber(string(row.Turnover))
 	var amount *float64
 	if amountErr == nil && rawAmount >= 0 && finiteNumber(rawAmount) {
 		amount = &rawAmount
@@ -172,9 +172,9 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		Volume: volume, Amount: amount, QuoteTime: quoteTime,
 		QuoteTimeSemantics: "provider_snapshot_time",
 		FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: neteaseQuoteVersion,
-		RawVolume: float64PointerIfValid(rawVolume, volumeErr == nil), RawVolumeUnit: optionalUnit(volume, "shares"),
+		RawVolume: float64PointerIfValid(rawVolume, volumeErr == nil), RawVolumeUnit: optionalVolumeUnit(volume, "shares"),
 		RawAmount: float64PointerIfValid(rawAmount, amountErr == nil), RawAmountUnit: optionalUnit(amount, "CNY"),
-		RawAmountField: "turnover", VolumeUnit: optionalUnit(volume, "shares"),
+		RawAmountField: "turnover", VolumeUnit: optionalVolumeUnit(volume, "shares"),
 		AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone,
 		QualityStatus: model.QualityValid, NormalizationVer: normalize.Version,
 	}
@@ -238,7 +238,7 @@ func decodeNeteaseJSONP(body []byte) ([]byte, error) {
 	if trailing != "" && trailing != ";" {
 		return nil, errors.New("unexpected content after JSONP callback")
 	}
-	return []byte(strings.TrimSpace(text[open+1:close])), nil
+	return []byte(strings.TrimSpace(text[open+1 : close])), nil
 }
 
 func parseNeteaseQuoteTime(raw string) *time.Time {
@@ -568,4 +568,12 @@ func neteaseDateRange(startDate, endDate string, limit int, now time.Time) (time
 		return time.Time{}, time.Time{}, errors.New("Netease start date must not be after end date")
 	}
 	return start, end, nil
+}
+
+
+func optionalVolumeUnit(value *int64, unit string) string {
+	if value == nil {
+		return "unknown"
+	}
+	return unit
 }

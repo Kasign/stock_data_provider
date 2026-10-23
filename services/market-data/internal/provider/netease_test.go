@@ -148,7 +148,7 @@ func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
 
 func TestNeteaseFetchQuoteRejectsWrongSymbolAndMalformedJSONP(t *testing.T) {
 	for name, payload := range map[string]string{
-		"wrong symbol": "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600000\",\"name\":\"wrong\",\"price\":42,\"percent\":0.01,\"updown\":1,\"open\":41,\"high\":43,\"low\":40,\"yestclose\":41,\"volume\":100,\"turnover\":4200,\"time\":\"2026/10/23 11:00:00\"}});",
+		"wrong symbol":    "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600000\",\"name\":\"wrong\",\"price\":42,\"percent\":0.01,\"updown\":1,\"open\":41,\"high\":43,\"low\":40,\"yestclose\":41,\"volume\":100,\"turnover\":4200,\"time\":\"2026/10/23 11:00:00\"}});",
 		"malformed JSONP": "{\"0600036\":{}}",
 	} {
 		t.Run(name, func(t *testing.T) {
