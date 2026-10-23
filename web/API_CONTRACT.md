@@ -80,6 +80,8 @@ GET /api/v1/analysis/runs?symbol=600519&status=completed&task_type=post_market_s
 - Task：`queued`、`running`、`succeeded`、`partial`、`failed`。
 - Run：`running`、`completed`、`blocked_data_quality`、`rejected_request`、`partial`、`failed`。
 
+Task 状态表示异步任务的处理结果，Run 状态表示分析结果本身，两者不能混用。当前 Go Worker 的终态映射为：Run `completed` 或 `blocked_data_quality` 映射为 Task `succeeded`；Run `partial` 映射为 Task `partial`；Run `failed` 或 `rejected_request` 映射为 Task `failed`。特别是 `rejected_request` 即使成功生成了拒绝报告，也不能将 Task 标记为成功。
+
 阶段事件采用 `after_sequence` 增量读取，后端返回的事件为空时不表示任务已完成；页面也不根据阶段数计算假百分比。创建任务时使用可选的 `Idempotency-Key`，便于同一请求在网络重试时避免重复创建。
 
 ## 重试与资源失效处理（WebUI 行为）

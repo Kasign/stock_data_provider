@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -11,7 +11,8 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../src/recent-tasks.js", import.meta.url), "utf8"),
   readFile(new URL("../styles.css", import.meta.url), "utf8"),
   readFile(new URL("../src/watchlist.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/api.js", import.meta.url), "utf8")
+  readFile(new URL("../src/api.js", import.meta.url), "utf8"),
+  readFile(new URL("../../internal/platform/taskqueue/queue.go", import.meta.url), "utf8")
 ]);
 
 function finalCssRuleBody(selector) {
@@ -64,6 +65,13 @@ test("task/event endpoint parameters and status vocabulary remain grounded in th
   for (const status of ["running", "completed", "blocked_data_quality", "rejected_request", "partial", "failed"]) {
     assert.match(format, new RegExp("\\b" + status + "\\s*:"), "run status " + status + " must have a UI label");
   }
+});
+
+test("Go rejected Run status maps to a failed task instead of false success", () => {
+  assert.match(domain, /RunStatusRejected\\s+RunStatus\\s*=\\s*"rejected_request"/);
+  const mapper = taskQueue.match(/func taskStatusForRun\\(status domain\\.RunStatus\\) string \\{[\\s\\S]*?\\n\\}/)?.[0] || "";
+  assert.ok(mapper, "Go task queue must have an explicit Run-to-Task status mapper");
+  assert.match(mapper, /case domain\\.RunStatusFailed,\\s*domain\\.RunStatusRejected:\\s*return "failed"/);
 });
 
 
