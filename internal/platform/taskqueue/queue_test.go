@@ -31,6 +31,27 @@ func TestSameRequestIgnoresRunID(t *testing.T) {
 	}
 }
 
+func TestTaskStatusForRun(t *testing.T) {
+	tests := []struct {
+		name   string
+		status domain.RunStatus
+		want   string
+	}{
+		{name: "completed run succeeds", status: domain.RunStatusCompleted, want: "succeeded"},
+		{name: "quality-blocked run still has a completed task", status: domain.RunStatusBlocked, want: "succeeded"},
+		{name: "partial run remains partial", status: domain.RunStatusPartial, want: "partial"},
+		{name: "failed run fails task", status: domain.RunStatusFailed, want: "failed"},
+		{name: "rejected request fails task", status: domain.RunStatusRejected, want: "failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := taskStatusForRun(tt.status); got != tt.want {
+				t.Fatalf("taskStatusForRun(%q) = %q, want %q", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSafeMessageRemovesControlsAndBoundsLength(t *testing.T) {
 	got := safeMessage("provider\nfailed\x00" + strings.Repeat("x", 400))
 	if len(got) > 300 {
