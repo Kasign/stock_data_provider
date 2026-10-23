@@ -70,7 +70,7 @@ func TestNeteaseUnitCrossCheckInfersHandsOnlyWhenUnambiguous(t *testing.T) {
 	if shares != 100000 || rawUnit != "hands_inferred" || amount == nil || amountUnit != "CNY" || quality != model.QualityDegraded || len(reasons) == 0 {
 		t.Fatalf("unexpected inferred-hands interpretation: shares=%d rawUnit=%s amount=%v amountUnit=%s quality=%s reasons=%v", shares, rawUnit, amount, amountUnit, quality, reasons)
 	}
-	shares, rawUnit, amount, amountUnit, quality, reasons = neteaseValidateTradingUnits(100000, 420000000, 41, 43)
+	shares, rawUnit, amount, amountUnit, quality, reasons = neteaseValidateTradingUnits(100000, 4200000000, 41, 43)
 	if amount != nil || amountUnit != "unknown" || rawUnit != "unknown" || quality != model.QualityDegraded || len(reasons) == 0 {
 		t.Fatalf("inconsistent amount must not be trusted: shares=%d rawUnit=%s amount=%v amountUnit=%s quality=%s reasons=%v", shares, rawUnit, amount, amountUnit, quality, reasons)
 	}
