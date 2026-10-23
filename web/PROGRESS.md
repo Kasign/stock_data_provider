@@ -196,3 +196,5 @@
 - 新增 `tests/theme.test.mjs`，覆盖主题值校验、持久化、存储读写异常和 root theme 应用；UI 契约测试增加主题和移动抽屉检查。
 - 本功能不增加数据端依赖；自动化验证只证明源码/模块行为，未代替 iPhone/Android 浏览器的真实交互验收。
 - 管理员密码和真实服务端 `.env` 导入/导出暂不实现：当前服务没有相应契约，必须先增加后端认证/配置管理能力，不可使用 localStorage 做密码保护或声称浏览器导入会修改 NAS 文件。
+
+- 对应 CI：[WebUI checks #39936585174](https://github.com/Kasign/stock_data_provider/actions/runs/39936585174) 成功：62 项 Node 测试通过（0 失败），JavaScript 语法检查和 Nginx 镜像构建通过。主题/移动导航真实设备体验仍待 NAS 部署后人工验收。
