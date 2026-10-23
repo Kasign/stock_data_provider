@@ -121,3 +121,14 @@ WebUI 提供一个**手动触发**的补充数据面板，调用现有接口：
 - `GET /api/v1/stocks/{symbol}/capital-flow`：使用 `main_net_inflow_yuan`、`inflow_5d_yuan`、`inflow_10d_yuan`、`observations`、`source`、`source_version`、`fetched_at`、`quality_status` 和 `quality_reasons` 等服务端字段。
 
 筹码比例字段由后端规范化为 `[0,1]` 小数，UI 仅将其乘以 100 后格式化为百分比，不重新计算筹码数据。资金流以人民币元展示，空的 5/10 日汇总仍显示“—”。两个请求并行且独立呈现：其中一个接口失败不会覆盖另一个成功结果，也不会中断行情查询、日 K 或分析流程。面板不会自动请求，避免未启用的补充 Provider 在主流程中引入额外请求或等待。
+
+
+## API 与数据库的职责边界
+
+WebUI 只通过同源 HTTP 路径调用 Go 服务，Nginx 根据路径把请求转发到行情服务或分析服务。浏览器端不会直接连接 MariaDB 或 Redis，也没有单独的 WebUI 数据库。
+
+- **浏览器 `localStorage`**：只保存行情 API Key、最多 50 条自选股（代码/自定义名称/更新时间）与最多 10 条最近任务引用（task/run ID、标的、类型、状态、更新时间）。不保存完整 RunResult、报告正文或分析过程事件。
+- **Go 行情服务**：通过自己的配置连接 Provider、MariaDB 和 Redis。WebUI 的请求本身不会直接写数据库；行情数据是否由后端持久化/缓存取决于具体端点实现。
+- **Go 分析服务**：异步任务先写入 MariaDB，阶段事件、分析结果与快照由后端持久化；Redis 作为缓存使用，MariaDB 是最终事实源。WebUI 通过 API 查询这些服务端记录。
+
+本地移除最近任务、清空自选股或清除站点数据，只会改变浏览器本地状态；不会删除服务端任务、RunResult 或数据库记录。

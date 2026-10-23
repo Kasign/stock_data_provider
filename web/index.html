@@ -213,6 +213,12 @@
       <form method="dialog" id="settings-form">
         <div class="dialog-heading"><div><p class="eyebrow">CONNECTION</p><h2 id="settings-title">连接与密钥设置</h2></div><button class="icon-button" value="cancel" aria-label="关闭设置">×</button></div>
         <p class="dialog-intro">默认路径由 WebUI 的 Nginx 反向代理转发。密钥只保存在当前浏览器 localStorage，不写入仓库或服务端配置。</p>
+        <section class="storage-boundary" aria-labelledby="storage-boundary-title">
+          <h3 id="storage-boundary-title">API 和数据分别存在哪里？</h3>
+          <p><strong>当前 WebUI：</strong>只负责页面和请求转发，不直连数据库。API Key、自选股和最近任务引用保存在当前浏览器；最近任务列表最多 10 条，不保存完整报告。</p>
+          <p><strong>Go 行情服务：</strong>负责请求和归一化行情 Provider 数据，按自身配置使用独立的 MariaDB/Redis。具体行情记录是否持久化取决于后端接口实现。</p>
+          <p><strong>Go 分析服务：</strong>分析任务、阶段事件、Run 结果及快照由后端持久化到 MariaDB；Redis 用于缓存结果/快照，MariaDB 是最终事实源。</p>
+        </section>
         <label class="field"><span>行情 API 路径</span><input id="market-base-input" value="/market-api" required /></label>
         <label class="field"><span>行情服务 API Key</span><input id="market-key-input" type="password" autocomplete="new-password" placeholder="填写 MARKET_DATA_API_KEY" /></label>
         <label class="field"><span>分析 API 路径</span><input id="analysis-base-input" value="/analysis-api" required /></label>

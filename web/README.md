@@ -60,3 +60,14 @@ npm test
 npm run check
 docker build -t stock_analysis_web:local .
 ~~~
+
+
+## API 与数据保存位置
+
+WebUI 本身是静态 HTML/CSS/JavaScript，由 Nginx 提供页面和同源反向代理；它不连接数据库，也不会通过网页代码直接写 MariaDB/Redis。
+
+- 浏览器本地：行情 API Key、最多 50 个自选股、最近 10 条任务引用存于该浏览器的 `localStorage`。最近任务只保存 task/run ID、标的、类型、状态和更新时间，不保存完整报告。换浏览器或清除站点数据后这些本地项不会自动同步。
+- Go 行情服务：通过 `/market-api` 提供健康状态、Provider 列表、实时行情、日 K、筹码分布和资金流等端点。行情服务使用自己的 MariaDB/Redis 配置；具体请求是否会写入持久化表，由后端端点逻辑决定。
+- Go 分析服务：通过 `/analysis-api` 创建任务、读取状态与阶段事件、读取结构化 RunResult。分析任务、阶段事件、运行结果和快照由后端持久化到 MariaDB；Redis 用于结果/快照缓存，MariaDB 是最终事实源。
+
+所以，API 是 WebUI 与 Go 服务之间的 HTTP 接口，不是“存在 web 页面里”的数据存储。WebUI 只保留少量浏览器设置/引用；分析结果是否进入数据库，由 Go 后端负责。

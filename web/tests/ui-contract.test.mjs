@@ -136,6 +136,18 @@ test("supplemental chip and capital-flow research remains opt-in and independent
 });
 
 
+test("global typography has a readable baseline and key UI text is not undersized", () => {
+  assert.match(stylesheet, /Global readability pass/);
+  assert.match(stylesheet, /body \{ font-size: 15px; line-height: 1\.65; \}/);
+  assert.match(stylesheet, /font-size: 12px !important/);
+  assert.match(stylesheet, /\.table-scroll td \{ font-size: 13px !important; \}/);
+  assert.match(stylesheet, /\.analysis-result-fields dd \{ font-size: 13px !important; \}/);
+  for (const id of ["storage-boundary-title", "market-base-input", "market-key-input", "analysis-base-input"]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "settings section must include " + id);
+  }
+  assert.match(stylesheet, /\.storage-boundary p \{[^}]*font-size: 13px;[^}]*line-height: 1\.75/);
+});
+
 test("recent analysis history supports search, single removal and local-only clearing", () => {
   for (const id of ["recent-analysis-search", "clear-recent-analysis", "recent-analysis-feedback", "recent-analysis-list"]) {
     assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);

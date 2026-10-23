@@ -437,3 +437,142 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
   .recent-analysis-tools { align-items: stretch; flex-direction: column; }
   .recent-analysis-clear { width: 100%; }
 }
+
+
+/* Global readability pass: minimum 12px support text, 13px secondary copy. */
+body { font-size: 15px; line-height: 1.65; }
+.brand-copy small { font-size: 12px !important; }
+.side-label { font-size: 12px !important; }
+.nav-count { font-size: 12px !important; }
+.mini-service strong { font-size: 13px !important; }
+.mini-service small { font-size: 12px !important; }
+.sidebar-footnote { font-size: 12px !important; }
+.breadcrumb { font-size: 13px !important; }
+.environment-chip { font-size: 12px !important; }
+.eyebrow { font-size: 12px !important; }
+.page-subtitle { font-size: 13px !important; }
+.last-updated { font-size: 12px !important; }
+.last-updated strong { font-size: 12px !important; }
+.panel-kicker { font-size: 13px !important; }
+.panel-muted { font-size: 12px !important; }
+.field { font-size: 12px !important; }
+.button { font-size: 13px !important; }
+.query-hint { font-size: 12px !important; }
+.section-heading h2 span { font-size: 13px !important; }
+.section-heading p, .panel-heading p { font-size: 12px !important; }
+.quality-pill { font-size: 12px !important; }
+.metric-label { font-size: 12px !important; }
+.metric-foot { font-size: 12px !important; }
+.panel-heading p { font-size: 12px !important; }
+.chart-legend { font-size: 12px !important; }
+.chart-summary span { font-size: 12px !important; }
+.chart-axis-label { font-size: 12px !important; }
+.chart-empty { font-size: 13px !important; }
+.chart-foot { font-size: 12px !important; }
+.source-summary { font-size: 12px !important; }
+.source-version { font-size: 12px !important; }
+.source-main strong { font-size: 13px !important; }
+.source-main small { font-size: 12px !important; }
+.source-state { font-size: 12px !important; }
+.text-button { font-size: 12px !important; }
+.table-meta { font-size: 12px !important; }
+th { font-size: 12px !important; }
+td { font-size: 12px !important; }
+.mini-quality { font-size: 12px !important; }
+.table-footer { font-size: 12px !important; }
+.page-footer { font-size: 12px !important; }
+.soft-badge { font-size: 12px !important; }
+.inline-callout { font-size: 12px !important; }
+.task-empty strong { font-size: 13px !important; }
+.task-empty span { font-size: 12px !important; }
+.task-id-row > span { font-size: 12px !important; }
+.task-id-row code { font-size: 12px !important; }
+.task-facts small { font-size: 12px !important; }
+.task-facts strong { font-size: 13px !important; }
+.task-error { font-size: 12px !important; }
+.event-heading h3 { font-size: 13px !important; }
+.event-heading span { font-size: 12px !important; }
+.event-status { font-size: 12px !important; }
+.event-body strong { font-size: 12px !important; }
+.event-body p { font-size: 12px !important; }
+.event-row > small { font-size: 12px !important; }
+.task-actions > span { font-size: 12px !important; }
+.boundary-grid span { font-size: 12px !important; }
+.boundary-grid strong { font-size: 13px !important; }
+.boundary-grid p { font-size: 12px !important; }
+.empty-row { font-size: 12px !important; }
+.dialog-intro { font-size: 13px !important; }
+.security-note { font-size: 12px !important; }
+.settings-feedback { font-size: 12px !important; }
+.task-result-note { font-size: 12px !important; }
+.task-result-metric small { font-size: 13px !important; }
+.signal-result-card strong { font-size: 12px !important; }
+.signal-result-card p { font-size: 12px !important; }
+.task-result-warnings p { font-size: 13px !important; }
+.raw-result { font-size: 12px !important; }
+.raw-result pre { font-size: 12px !important; }
+.quote-heading-actions .button { font-size: 12px !important; }
+.analysis-result-block > p { font-size: 13px !important; }
+.analysis-result-badge { font-size: 12px !important; }
+.analysis-result-fields dt { font-size: 13px !important; }
+.analysis-result-fields dd { font-size: 13px !important; }
+.analysis-result-empty { font-size: 13px !important; }
+.task-result-actions .text-button { font-size: 13px !important; }
+.recent-analysis-item-main strong { font-size: 12px !important; }
+.recent-analysis-item-main small { font-size: 12px !important; }
+.recent-analysis-item-status { font-size: 12px !important; }
+.watchlist-panel .panel-heading p { font-size: 13px !important; }
+.watchlist-name-field { font-size: 13px !important; }
+.watchlist-item-meta { font-size: 12px !important; }
+.watchlist-action { font-size: 13px !important; }
+.watchlist-feedback { font-size: 13px !important; }
+.chart-view-button { font-size: 13px !important; }
+.chart-volume-unavailable { font-size: 12px !important; }
+.supplemental-heading p { font-size: 13px !important; }
+.supplemental-heading .button { font-size: 13px !important; }
+.supplemental-context { font-size: 12px !important; }
+.supplemental-feedback { font-size: 13px !important; }
+.supplemental-card-heading small { font-size: 12px !important; }
+.supplement-quality { font-size: 12px !important; }
+.supplemental-fields dt { font-size: 13px !important; }
+.supplemental-fields dd { font-size: 13px !important; }
+.supplemental-reasons { font-size: 12px !important; }
+.supplemental-error { font-size: 13px !important; }
+.recent-analysis-search { font-size: 13px !important; }
+.recent-analysis-feedback { font-size: 13px !important; }
+.recent-analysis-remove { font-size: 12px !important; }
+.brand-copy small { font-size: 11px !important; }
+.field input, .field select, .field textarea, .recent-analysis-search input { font-size: 14px; }
+.button { font-size: 13px; }
+.text-button { font-size: 12px; }
+.table-scroll th { font-size: 12px !important; }
+.table-scroll td { font-size: 13px !important; }
+.analysis-result-fields dt { font-size: 12px !important; }
+.analysis-result-fields dd { font-size: 13px !important; }
+.analysis-result-empty { font-size: 13px !important; }
+.raw-result pre { font-size: 12px !important; line-height: 1.7; }
+@media (max-width: 600px) {
+  .main-area { padding-left: 12px; padding-right: 12px; }
+  .search-panel { gap: 15px; }
+  .query-form { min-width: 0; flex-wrap: wrap; }
+  .query-form .field:not(.symbol-field), .query-form .field.date-range-field { flex: 1 1 calc(50% - 8px); }
+  .section-heading, .panel-heading { gap: 10px; }
+  .metric-grid { gap: 8px; }
+  .metric-card { padding: 12px; }
+}
+
+
+/* Explain the service/database boundary directly beside connection settings. */
+.storage-boundary { margin: 14px 0 16px; padding: 13px 14px; border: 1px solid #2b4251; border-radius: 9px; background: rgba(14, 25, 35, .88); }
+.storage-boundary h3 { margin: 0 0 8px; color: #dbe7ee; font-size: 14px; line-height: 1.5; }
+.storage-boundary p { margin: 7px 0 0; color: #a6b8c6; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
+.storage-boundary strong { color: #e0ebf1; font-weight: 650; }
+.settings-dialog { max-height: calc(100vh - 24px); overflow-y: auto; }
+
+
+/* Explain the service/database boundary directly beside connection settings. */
+.storage-boundary { margin: 14px 0 16px; padding: 13px 14px; border: 1px solid #2b4251; border-radius: 9px; background: rgba(14, 25, 35, .88); }
+.storage-boundary h3 { margin: 0 0 8px; color: #dbe7ee; font-size: 14px; line-height: 1.5; }
+.storage-boundary p { margin: 7px 0 0; color: #a6b8c6; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
+.storage-boundary strong { color: #e0ebf1; font-weight: 650; }
+.settings-dialog { max-height: calc(100vh - 24px); overflow-y: auto; }
