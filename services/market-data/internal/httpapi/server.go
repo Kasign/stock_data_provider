@@ -249,8 +249,15 @@ func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) indexQuotes(w http.ResponseWriter, r *http.Request) {
 	snapshot, cacheHit, err := s.svc.IndexQuotes(r.Context())
-	if err != nil { writeDomainErr(w, err, requestID(r)); return }
-	if cacheHit { w.Header().Set("X-Market-Data-Cache", "HIT") } else { w.Header().Set("X-Market-Data-Cache", "MISS") }
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	if cacheHit {
+		w.Header().Set("X-Market-Data-Cache", "HIT")
+	} else {
+		w.Header().Set("X-Market-Data-Cache", "MISS")
+	}
 	writeJSON(w, http.StatusOK, snapshot)
 }
 func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {

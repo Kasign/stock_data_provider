@@ -785,7 +785,6 @@ func appendUniqueEastmoneyReason(reasons []string, reason string) []string {
 	return append(reasons, reason)
 }
 
-
 type eastmoneyIndexDefinition struct {
 	Symbol string
 	Code   string
@@ -814,14 +813,14 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	params := url.Values{
 		"secids": {strings.Join(secids, ",")},
 		"fields": {"f2,f3,f4,f6,f12,f13,f14,f15,f16,f17,f18,f86"},
-		"fltt": {"2"}, "invt": {"2"}, "ut": {p.ut},
+		"fltt":   {"2"}, "invt": {"2"}, "ut": {p.ut},
 		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 	}
 	var payload struct {
-		RC *int `json:"rc"`
+		RC   *int `json:"rc"`
 		Data *struct {
-			Total int `json:"total"`
-			Diff []map[string]json.RawMessage `json:"diff"`
+			Total int                          `json:"total"`
+			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
 	if err := p.getJSON(ctx, p.indexURL, params, &payload); err != nil {
@@ -839,7 +838,9 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	for _, raw := range payload.Data.Diff {
 		market, code := parseEastmoneyBoardString(raw, "f13"), parseEastmoneyBoardString(raw, "f12")
 		definition, ok := definitions[market+"."+code]
-		if !ok { continue }
+		if !ok {
+			continue
+		}
 		if seen[definition.Symbol] {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "duplicate_index_row_dropped")
@@ -871,7 +872,9 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		} else {
 			quoteTimeSemantics = "provider_snapshot_time"
 		}
-		if len(reasons) > 0 { snapshot.QualityStatus = model.QualityDegraded }
+		if len(reasons) > 0 {
+			snapshot.QualityStatus = model.QualityDegraded
+		}
 		for _, reason := range reasons {
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, reason)
 		}
@@ -882,20 +885,28 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			Amount: amount, AmountUnit: amountUnit, QuoteTime: quoteTime, QuoteTimeSemantics: quoteTimeSemantics,
 			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt, QualityStatus: model.QualityValid, QualityReasons: reasons,
 		}
-		if len(reasons) > 0 { item.QualityStatus = model.QualityDegraded }
+		if len(reasons) > 0 {
+			item.QualityStatus = model.QualityDegraded
+		}
 		snapshot.Items = append(snapshot.Items, item)
 		seen[definition.Symbol] = true
 	}
-	if len(snapshot.Items) == 0 { return nil, errors.New("Eastmoney index quote rows failed index-code and price validation") }
+	if len(snapshot.Items) == 0 {
+		return nil, errors.New("Eastmoney index quote rows failed index-code and price validation")
+	}
 	if len(snapshot.Items) != len(eastmoneyCoreIndexDefinitions) {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_core_index_rows_missing")
 	}
 	bySymbol := make(map[string]model.MarketIndexQuote, len(snapshot.Items))
-	for _, item := range snapshot.Items { bySymbol[item.Symbol] = item }
+	for _, item := range snapshot.Items {
+		bySymbol[item.Symbol] = item
+	}
 	ordered := make([]model.MarketIndexQuote, 0, len(snapshot.Items))
 	for _, index := range eastmoneyCoreIndexDefinitions {
-		if item, ok := bySymbol[index.Symbol]; ok { ordered = append(ordered, item) }
+		if item, ok := bySymbol[index.Symbol]; ok {
+			ordered = append(ordered, item)
+		}
 	}
 	snapshot.Items = ordered
 	return snapshot, nil

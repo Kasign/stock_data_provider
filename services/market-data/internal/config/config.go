@@ -208,7 +208,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_EASTMONEY_KLINE_URL":          cfg.EastmoneyKlineURL,
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_URL":    cfg.EastmoneyStockBasicURL,
 		"MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL": cfg.EastmoneySectorRankingURL,
-		"MARKET_DATA_EASTMONEY_INDEX_URL": cfg.EastmoneyIndexURL,
+		"MARKET_DATA_EASTMONEY_INDEX_URL":          cfg.EastmoneyIndexURL,
 		"MARKET_DATA_TENCENT_QUOTE_URL":            cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":            cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL":       cfg.TencentNoneKlineURL,

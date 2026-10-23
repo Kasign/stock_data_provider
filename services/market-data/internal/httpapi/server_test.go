@@ -22,7 +22,7 @@ func (httpFakeProvider) Name() string { return "eastmoney" }
 func (httpFakeProvider) FetchIndexQuotes(_ context.Context) (*model.IndexQuoteSnapshot, error) {
 	now := time.Now().UTC()
 	price, change, pct, amount := 3200.5, 24.5, 0.8, 123456789.0
-	return &model.IndexQuoteSnapshot{Source:"eastmoney", SourceVersion:"test", FetchedAt:now, QualityStatus:model.QualityDegraded, QualityReasons:[]string{"provider_snapshot_timestamp_not_exposed"}, Items:[]model.MarketIndexQuote{{Symbol:"000001.SH", Code:"000001", Name:"上证指数", LatestPrice:&price, Change:&change, ChangePercent:&pct, Amount:&amount, AmountUnit:"CNY", Source:"eastmoney", SourceVersion:"test", FetchedAt:now, QualityStatus:model.QualityDegraded, QualityReasons:[]string{"provider_snapshot_timestamp_not_exposed"}}}}, nil
+	return &model.IndexQuoteSnapshot{Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"}, Items: []model.MarketIndexQuote{{Symbol: "000001.SH", Code: "000001", Name: "上证指数", LatestPrice: &price, Change: &change, ChangePercent: &pct, Amount: &amount, AmountUnit: "CNY", Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"}}}}, nil
 }
 func (httpFakeProvider) FetchSectorRankings(_ context.Context, category string, _ int) (*model.SectorRankingSnapshot, error) {
 	now := time.Now().UTC()
@@ -243,20 +243,28 @@ func TestSectorRankingEndpointSeparatesIndustryAndConcept(t *testing.T) {
 	}
 }
 
-
 func TestMarketIndicesEndpointUsesDedicatedIndexCapability(t *testing.T) {
 	p := httpFakeProvider{}
-	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, service.ResilienceConfig{Retries:0, CircuitFailureThreshold:3, CircuitCooldown:time.Second}, nil)
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetIndexQuoteProviders([]provider.IndexQuoteProvider{p})
 	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).Handler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/indices", nil)
 	req.Header.Set("X-API-Key", "secret")
-	w := httptest.NewRecorder(); h.ServeHTTP(w, req)
-	if w.Code != http.StatusOK { t.Fatalf("status=%d body=%s", w.Code, w.Body.String()) }
-	for _, want := range []string{`"symbol":"000001.SH"`, `"name":"上证指数"`, `"amount_unit":"CNY"`, `"quality_status":"degraded"`} {
-		if !strings.Contains(w.Body.String(), want) { t.Fatalf("index snapshot missing %s: %s", want, w.Body.String()) }
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil); req.Header.Set("X-API-Key", "secret")
-	w = httptest.NewRecorder(); h.ServeHTTP(w, req)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"index_quote_capable":true`) { t.Fatalf("data sources missing index capability: status=%d body=%s", w.Code, w.Body.String()) }
+	for _, want := range []string{`"symbol":"000001.SH"`, `"name":"上证指数"`, `"amount_unit":"CNY"`, `"quality_status":"degraded"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("index snapshot missing %s: %s", want, w.Body.String())
+		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"index_quote_capable":true`) {
+		t.Fatalf("data sources missing index capability: status=%d body=%s", w.Code, w.Body.String())
+	}
 }

@@ -589,14 +589,19 @@ func TestEastmoneySectorRankingURLAndCapabilityAreConfigurable(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyIndexEndpointAndCapabilityAreConfigurable(t *testing.T) {
-	t.Setenv("MARKET_DATA_API_KEY","test-api-key-that-is-at-least-32-characters")
-	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE","true")
-	t.Setenv("MARKET_DATA_EASTMONEY_INDEX_URL","https://example.test/indices")
-	t.Setenv("MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED","true")
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_INDEX_URL", "https://example.test/indices")
+	t.Setenv("MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "true")
 	cfg, err := Load()
-	if err != nil { t.Fatal(err) }
-	if cfg.EastmoneyIndexURL!="https://example.test/indices" { t.Fatalf("unexpected index endpoint %q",cfg.EastmoneyIndexURL) }
-	if !cfg.ProviderSettings["eastmoney"].IndexQuotes { t.Fatal("index-quote environment override should enable capability") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EastmoneyIndexURL != "https://example.test/indices" {
+		t.Fatalf("unexpected index endpoint %q", cfg.EastmoneyIndexURL)
+	}
+	if !cfg.ProviderSettings["eastmoney"].IndexQuotes {
+		t.Fatal("index-quote environment override should enable capability")
+	}
 }

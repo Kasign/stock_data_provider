@@ -495,25 +495,33 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-	
 	runIndexQuotes := func(providerName string, client *http.Client, call func(context.Context) (*model.IndexQuoteSnapshot, error)) {
 		capture := &liveProbeCapture{}
-		if client != nil { client.Transport = capture.transport() }
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second); defer cancel()
-		started := time.Now(); item, callErr := call(ctx)
-		result := liveProbeResult{Provider:providerName, Capability:"index_quotes", ElapsedMS:time.Since(started).Milliseconds(), HTTP:capture.snapshot()}
+		if client != nil {
+			client.Transport = capture.transport()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := call(ctx)
+		result := liveProbeResult{Provider: providerName, Capability: "index_quotes", ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
 		switch {
 		case callErr != nil:
-			result.Status="failed"; result.ErrorKind,result.Error=liveProbeErrorSummary(callErr); failures=append(failures,providerName+" index_quotes: "+result.ErrorKind+" ("+result.Error+")")
-		case item==nil || len(item.Items)==0 || item.Source!=providerName:
-			result.Status,result.Error,result.IndexQuotes="invalid","index-quote source/item contract mismatch",item; failures=append(failures,providerName+" index_quotes: contract mismatch")
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, providerName+" index_quotes: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil || len(item.Items) == 0 || item.Source != providerName:
+			result.Status, result.Error, result.IndexQuotes = "invalid", "index-quote source/item contract mismatch", item
+			failures = append(failures, providerName+" index_quotes: contract mismatch")
 		default:
-			result.Status,result.IndexQuotes="returned",item
+			result.Status, result.IndexQuotes = "returned", item
 		}
-		report.Results=append(report.Results,result); encoded,_:=json.Marshal(result); t.Logf("LIVE_PROVIDER_RESULT %s",encoded)
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
+	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
 			client.Transport = capture.transport()

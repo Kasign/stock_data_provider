@@ -123,46 +123,79 @@ func (s *DataService) IndexQuoteProviders() []provider.IndexQuoteProvider {
 	return append([]provider.IndexQuoteProvider(nil), s.indexQuoteProviders...)
 }
 func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
-	if snapshot == nil || len(snapshot.Items) == 0 { return errors.New("index-quote provider returned an empty snapshot") }
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() { return errors.New("index-quote source or fetched_at is missing") }
-	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded { return fmt.Errorf("index-quote snapshot quality %q is unsupported", snapshot.QualityStatus) }
+	if snapshot == nil || len(snapshot.Items) == 0 {
+		return errors.New("index-quote provider returned an empty snapshot")
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("index-quote source or fetched_at is missing")
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("index-quote snapshot quality %q is unsupported", snapshot.QualityStatus)
+	}
 	seen := make(map[string]bool, len(snapshot.Items))
 	for _, item := range snapshot.Items {
-		if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" { return errors.New("index-quote row has missing symbol/code/name") }
-		if item.Source != snapshot.Source || item.FetchedAt.IsZero() || item.LatestPrice == nil || item.ChangePercent == nil { return errors.New("index-quote row failed source, fetched_at or required-value validation") }
-		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded { return fmt.Errorf("index-quote quality %q is unsupported", item.QualityStatus) }
-		if seen[item.Symbol] { return fmt.Errorf("duplicate index symbol %q", item.Symbol) }
+		if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
+			return errors.New("index-quote row has missing symbol/code/name")
+		}
+		if item.Source != snapshot.Source || item.FetchedAt.IsZero() || item.LatestPrice == nil || item.ChangePercent == nil {
+			return errors.New("index-quote row failed source, fetched_at or required-value validation")
+		}
+		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
+			return fmt.Errorf("index-quote quality %q is unsupported", item.QualityStatus)
+		}
+		if seen[item.Symbol] {
+			return fmt.Errorf("duplicate index symbol %q", item.Symbol)
+		}
 		seen[item.Symbol] = true
 	}
 	return nil
 }
 func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, bool, error) {
-	if ctx == nil { ctx = context.Background() }
-	if err := ctx.Err(); err != nil { return nil, false, err }
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	const ttl = 15 * time.Second
 	const key = "md:v1:index-quotes:core"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexQuoteSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshot(&cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl { return &cached, true, nil }
+		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshot(&cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+			return &cached, true, nil
+		}
 	} else if cacheErr != nil {
 		s.logger.Warn("index quote cache read failed", "error", cacheErr)
 	}
-	if len(s.indexQuoteProviders) == 0 { return nil, false, errors.New("no enabled index-quote provider") }
+	if len(s.indexQuoteProviders) == 0 {
+		return nil, false, errors.New("no enabled index-quote provider")
+	}
 	var failures []string
 	for _, p := range s.indexQuoteProviders {
-		if err := ctx.Err(); err != nil { return nil, false, err }
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
 		snapshot, fetchErr := p.FetchIndexQuotes(ctx)
-		if fetchErr != nil { failures = append(failures, p.Name()+": "+fetchErr.Error()); continue }
-		if err := validateIndexQuoteSnapshot(snapshot); err != nil { failures = append(failures, p.Name()+": "+err.Error()); continue }
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateIndexQuoteSnapshot(snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil { s.logger.Warn("index quote cache write failed", "error", cacheErr) }
-		} else { s.logger.Warn("index quote cache encode failed", "error", marshalErr) }
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+				s.logger.Warn("index quote cache write failed", "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("index quote cache encode failed", "error", marshalErr)
+		}
 		return snapshot, false, nil
 	}
 	return nil, false, fmt.Errorf("all index-quote providers failed: %s", strings.Join(failures, "; "))
 }
-
 
 func validateSectorRankingSnapshot(category string, limit int, snapshot *model.SectorRankingSnapshot) error {
 	if snapshot == nil {
