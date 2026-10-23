@@ -60,7 +60,6 @@ func NewSinaConfigured(timeout time.Duration, quoteURL, klineURL string) *Sina {
 
 func (p *Sina) Name() string { return "sina" }
 
-
 // FetchDailyBars 读取新浪历史日 K。该端点没有可验证的复权参数和成交额字段，
 // 因此只接受 none 口径，成交额缺失必须标记 degraded，不推算金额。
 func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
@@ -283,7 +282,6 @@ func sinaKlineDataLength(start, end time.Time, limit int) int {
 	}
 	return estimate
 }
-
 
 func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)

@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"time"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"golang.org/x/text/encoding/htmlindex"
