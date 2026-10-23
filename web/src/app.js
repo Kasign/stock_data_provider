@@ -12,7 +12,7 @@ import {
   marketHealth,
   saveSettings
 } from "./api.js";
-import { renderCloseChart } from "./chart.js";
+import { normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart } from "./chart.js";
 import { readRecentTasks, upsertRecentTask } from "./recent-tasks.js";
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
@@ -42,6 +42,8 @@ const state = {
   view: "market",
   quote: null,
   bars: [],
+  chartView: "close",
+  chartMeta: { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" },
   taskId: "",
   runId: "",
   taskSymbols: [],
@@ -359,8 +361,49 @@ function makeCell(value, className = "") {
   return cell;
 }
 
+function renderChartView() {
+  const isCandles = state.chartView === "candles";
+  $("#chart-view-close").classList.toggle("is-active", !isCandles);
+  $("#chart-view-close").setAttribute("aria-pressed", String(!isCandles));
+  $("#chart-view-candles").classList.toggle("is-active", isCandles);
+  $("#chart-view-candles").setAttribute("aria-pressed", String(isCandles));
+  $("#chart-title").textContent = isCandles ? "OHLC K 线与成交量" : "收盘价走势";
+  $("#chart-legend").classList.toggle("chart-legend-candles", isCandles);
+  setText("#chart-legend-label", isCandles ? "涨跌 K 线 · 成交量" : "收盘价");
+  $("#close-chart").setAttribute("aria-label", isCandles ? "OHLC K 线与成交量" : "收盘价走势");
+  setText("#chart-caption", `${state.chartMeta.adjustmentBasis} · ${state.bars.length} 根 · 按交易日期升序`);
+
+  const drawn = isCandles
+    ? renderCandlestickVolumeChart($("#close-chart"), state.bars, state.chartMeta)
+    : renderCloseChart($("#close-chart"), state.bars);
+  $("#chart-empty").hidden = drawn;
+  if (!drawn) {
+    $("#chart-empty").textContent = !state.bars.length
+      ? "查询行情后显示历史走势"
+      : isCandles ? "没有可绘制的完整 OHLC K 线。" : "至少需要两根有效收盘价数据。";
+  }
+
+  const validBars = normalizeDailyBars(state.bars).filter((bar) => bar.close !== null);
+  const latest = validBars[validBars.length - 1];
+  setText("#chart-last-close", latest ? formatPrice(latest.close) : "—");
+  setText("#chart-last-date", latest ? `截至 ${formatDate(latest.date)} · ${validBars.length} 根有效收盘数据` : "暂无有效收盘价");
+  setText("#chart-quality-note", qualityLabel(state.chartMeta.qualityStatus));
+}
+
+function setChartView(view) {
+  if (view !== "close" && view !== "candles") return;
+  state.chartView = view;
+  renderChartView();
+}
+
 function renderBars(response) {
   state.bars = Array.isArray(response.bars) ? response.bars : [];
+  state.chartMeta = {
+    adjustmentBasis: String(response.adjustment_basis || "unknown"),
+    volumeUnit: String(response.volume_unit || ""),
+    amountUnit: String(response.amount_unit || ""),
+    qualityStatus: response.quality_status || "unknown"
+  };
   const bars = state.bars;
   const tbody = $("#bars-body");
   tbody.replaceChildren();
@@ -398,12 +441,7 @@ function renderBars(response) {
       tbody.append(row);
     });
   }
-
-  const drawn = renderCloseChart($("#close-chart"), bars);
-  $("#chart-empty").hidden = drawn;
-  setText("#chart-last-close", bars.length ? formatPrice(bars[bars.length - 1].close) : "—");
-  setText("#chart-last-date", bars.length ? `截至 ${formatDate(bars[bars.length - 1].trade_date)}` : "暂无日 K 数据");
-  setText("#chart-quality-note", qualityLabel(response.quality_status));
+  renderChartView();
 }
 
 function renderSources(payload) {
@@ -488,13 +526,35 @@ async function refreshSources() {
   }
 }
 
+function shanghaiDateKey(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(value);
+  const fields = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return fields.year + "-" + fields.month + "-" + fields.day;
+}
+
+function configureDateInputs() {
+  const today = shanghaiDateKey();
+  $("#bar-start-date").max = today;
+  $("#bar-end-date").max = today;
+}
+
 async function runQuoteQuery(event) {
   event?.preventDefault();
   if (state.isQuerying) return;
   let symbol;
+  let startDate;
+  let endDate;
   try {
     symbol = getQuerySymbol();
     state.settings.marketBase = normalizeBasePath(state.settings.marketBase, "/market-api");
+    startDate = $("#bar-start-date").value;
+    endDate = $("#bar-end-date").value;
+    const today = shanghaiDateKey();
+    if (startDate && endDate && startDate > endDate) throw new Error("开始日期不能晚于结束日期。");
+    if (startDate && startDate > today) throw new Error("开始日期不能晚于上海时区的今天。");
+    if (endDate && endDate > today) throw new Error("结束日期不能晚于上海时区的今天。");
   } catch (error) {
     setNotice(error.message, "danger");
     return;
@@ -515,7 +575,7 @@ async function runQuoteQuery(event) {
   const adjustment = $("#adjustment").value;
   const [quoteResult, barsResult] = await Promise.allSettled([
     getQuote(state.settings, symbol),
-    getDailyBars(state.settings, symbol, { limit, adjustment })
+    getDailyBars(state.settings, symbol, { limit, adjustment, start: startDate, end: endDate })
   ]);
 
   if (quoteResult.status === "fulfilled") {
@@ -534,13 +594,15 @@ async function runQuoteQuery(event) {
       setNotice(`日 K 已返回 ${(barsResult.value.bars || []).length} 根，质量状态：${qualityLabel(barsResult.value.quality_status)}。${warnings.length ? `提示：${warnings.join("；")}` : ""}`, "warning");
     }
   } else {
+    renderBars({ symbol, bars: [], adjustment_basis: adjustment, quality_status: "unknown", warnings: ["日 K 查询失败：" + errorMessage(barsResult.reason)] });
     setText("#bars-meta", "查询失败");
-    setText("#chart-quality-note", "日 K 查询失败");
+    $("#chart-empty").textContent = "日 K 查询失败，旧标的图表已清除。";
+    $("#chart-empty").hidden = false;
     if (quoteResult.status === "fulfilled") setNotice(`实时行情已返回，日 K 查询失败：${errorMessage(barsResult.reason)}`, "warning");
   }
 
   setText("#last-updated", new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()));
-  setText("#query-hint", `请求标的：${symbol} · 日 K 上限：${limit} · 复权口径：${adjustment}`);
+  setText("#query-hint", `请求标的：${symbol} · 日 K 上限：${limit} · 复权口径：${adjustment} · 日期：${startDate || "起始不限"} 至 ${endDate || "截至今天"}`);
   state.isQuerying = false;
   $("#quote-form").classList.remove("is-loading");
   $("#quote-form button[type='submit']").disabled = false;
@@ -1126,6 +1188,8 @@ document.querySelectorAll(".nav-link").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 $("#quote-form").addEventListener("submit", runQuoteQuery);
+$("#chart-view-close").addEventListener("click", () => setChartView("close"));
+$("#chart-view-candles").addEventListener("click", () => setChartView("candles"));
 $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
@@ -1233,6 +1297,7 @@ $("#copy-task-id").addEventListener("click", async () => {
 
 renderRecentTasks();
 renderWatchlist();
+configureDateInputs();
 setView("market");
 void refreshServices();
 void refreshSources();

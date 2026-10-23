@@ -103,3 +103,18 @@ test("browser-local watchlist is wired to existing query/analysis flows and stor
   assert.match(stylesheet, /\.watchlist-item\s*\{/);
   assert.match(stylesheet, /@media \(max-width: 800px\)[\s\S]*?\.watchlist-list \{ grid-template-columns: minmax\(0, 1fr\); \}/);
 });
+
+
+test("daily chart exposes close/candle modes, optional date filters and adjustment basis", () => {
+  for (const id of ["bar-start-date", "bar-end-date", "chart-title", "chart-view-close", "chart-view-candles", "chart-legend-label"]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "chart/date control must exist: " + id);
+  }
+  assert.match(app, /function renderChartView\(\)/);
+  assert.match(app, /renderCandlestickVolumeChart\(\$\("#close-chart"\), state\.bars, state\.chartMeta\)/);
+  assert.match(app, /function shanghaiDateKey\(/);
+  assert.match(app, /开始日期不能晚于结束日期/);
+  assert.match(app, /日 K 查询失败，旧标的图表已清除/);
+  assert.match(stylesheet, /\.chart-candle-body/);
+  assert.match(stylesheet, /\.chart-volume-bar/);
+  assert.match(stylesheet, /\.chart-view-button\.is-active/);
+});

@@ -53,6 +53,8 @@
               <label class="field symbol-field"><span>股票代码</span><input id="symbol-input" name="symbol" value="600519.SH" placeholder="如 600519.SH" maxlength="12" autocomplete="off" required /></label>
               <label class="field"><span>日 K 条数</span><select id="bar-limit" name="limit"><option value="60">近 60 根</option><option value="120" selected>近 120 根</option><option value="250">近 250 根</option></select></label>
               <label class="field"><span>复权口径</span><select id="adjustment" name="adjustment"><option value="forward_adjusted" selected>前复权</option><option value="backward_adjusted">后复权</option><option value="none">不复权</option></select></label>
+              <label class="field date-range-field"><span>开始日期（可选）</span><input id="bar-start-date" type="date" /></label>
+              <label class="field date-range-field"><span>结束日期（可选）</span><input id="bar-end-date" type="date" /></label>
               <button class="button button-primary query-button" type="submit"><span>⌕</span> 查询行情</button>
               <button class="button button-secondary query-watchlist-button" id="add-to-watchlist-button" type="button" title="将当前输入的股票代码加入本地自选">＋ 加入自选</button>
             </form>
@@ -80,7 +82,15 @@
 
           <div class="content-grid">
             <section class="panel chart-panel">
-              <div class="panel-heading"><div><h2>收盘价走势</h2><p id="chart-caption">日 K 数据 · 按交易日期升序展示</p></div><div class="chart-legend"><span></span>收盘价</div></div>
+              <div class="panel-heading chart-panel-heading"><div><h2 id="chart-title">收盘价走势</h2><p id="chart-caption">日 K 数据 · 按交易日期升序展示</p></div>
+                <div class="chart-heading-actions">
+                  <div class="chart-legend" id="chart-legend"><span></span><span id="chart-legend-label">收盘价</span></div>
+                  <div class="chart-view-toggle" role="group" aria-label="图表类型">
+                    <button class="chart-view-button is-active" id="chart-view-close" type="button" aria-pressed="true">收盘线</button>
+                    <button class="chart-view-button" id="chart-view-candles" type="button" aria-pressed="false">K 线 + 成交量</button>
+                  </div>
+                </div>
+              </div>
               <div class="chart-summary"><strong id="chart-last-close">—</strong><span id="chart-last-date">等待日 K 数据</span></div>
               <div class="chart-wrap" id="chart-wrap">
                 <svg id="close-chart" viewBox="0 0 760 260" role="img" aria-label="收盘价走势" preserveAspectRatio="xMidYMid meet"></svg>

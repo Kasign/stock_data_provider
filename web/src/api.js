@@ -73,8 +73,10 @@ export function getDataSources(settings) {
 export function getQuote(settings, symbol, signal) {
   return request(settings.marketBase, `/api/v1/quotes/${encodeURIComponent(symbol)}`, { apiKey: settings.apiKey, signal });
 }
-export function getDailyBars(settings, symbol, { limit = 120, adjustment = "forward_adjusted" } = {}, signal) {
+export function getDailyBars(settings, symbol, { limit = 120, adjustment = "forward_adjusted", start = "", end = "" } = {}, signal) {
   const query = new URLSearchParams({ limit: String(limit), adjustment });
+  if (start) query.set("start", start);
+  if (end) query.set("end", end);
   return request(settings.marketBase, `/api/v1/bars/${encodeURIComponent(symbol)}/daily?${query}`, { apiKey: settings.apiKey, signal });
 }
 export function createAnalysisTask(settings, payload, idempotencyKey = "") {

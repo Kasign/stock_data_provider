@@ -112,6 +112,15 @@ test("uses the current health, provider and daily-bars routes with market-only A
     assert.equal(Object.hasOwn(requests[1].headers, "X-API-Key"), false);
     assert.equal(requests[2].headers["X-API-Key"], "market-secret");
     assert.equal(requests[3].headers["X-API-Key"], "market-secret");
+
+    await getDailyBars(settings, "600519.SH", {
+      limit: 60, adjustment: "none", start: "2026-10-01", end: "2026-10-23"
+    });
+    assert.equal(
+      requests[4].url,
+      "/market-api/api/v1/bars/600519.SH/daily?limit=60&adjustment=none&start=2026-10-01&end=2026-10-23"
+    );
+    assert.equal(requests[4].headers["X-API-Key"], "market-secret");
   } finally {
     globalThis.fetch = originalFetch;
   }
