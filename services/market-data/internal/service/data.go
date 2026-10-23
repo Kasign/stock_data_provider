@@ -20,26 +20,26 @@ import (
 )
 
 type DataService struct {
-	providers              []provider.NamedProvider
-	quoteProviders         []provider.QuoteProvider
-	barProviders           []provider.DailyBarProvider
-	stockBasicProviders    []provider.StockBasicProvider
-	sectorRankingProviders []provider.SectorRankingProvider
-	indexQuoteProviders    []provider.IndexQuoteProvider
-	marketBreadthProviders []provider.MarketBreadthProvider
-	limitPoolProviders     []provider.LimitPoolProvider
+	providers                []provider.NamedProvider
+	quoteProviders           []provider.QuoteProvider
+	barProviders             []provider.DailyBarProvider
+	stockBasicProviders      []provider.StockBasicProvider
+	sectorRankingProviders   []provider.SectorRankingProvider
+	indexQuoteProviders      []provider.IndexQuoteProvider
+	marketBreadthProviders   []provider.MarketBreadthProvider
+	limitPoolProviders       []provider.LimitPoolProvider
 	stockBoardsProviders     []provider.StockBoardsProvider
 	tradingCalendarProviders []provider.TradingCalendarProvider
 	supplementProviders      []provider.SupplementProvider
-	maxBars                int
-	retries                int
-	breaker                *circuitBreaker
-	cache                  cache.Cache
-	store                  *repository.Store
-	quoteTTL               time.Duration
-	barsTTL                time.Duration
-	defaultBars            int
-	logger                 *slog.Logger
+	maxBars                  int
+	retries                  int
+	breaker                  *circuitBreaker
+	cache                    cache.Cache
+	store                    *repository.Store
+	quoteTTL                 time.Duration
+	barsTTL                  time.Duration
+	defaultBars              int
+	logger                   *slog.Logger
 }
 
 func New(providers []provider.Provider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars int, logger *slog.Logger) *DataService {

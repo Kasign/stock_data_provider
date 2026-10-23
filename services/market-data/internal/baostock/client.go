@@ -195,18 +195,31 @@ func (c *Client) QueryTradeDates(ctx context.Context, startDate, endDate string)
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := c.acquire(ctx); err != nil { return nil, err }
+	if err := c.acquire(ctx); err != nil {
+		return nil, err
+	}
 	defer c.release()
-	if err := c.ensureLoggedInLocked(ctx); err != nil { return nil, err }
+	if err := c.ensureLoggedInLocked(ctx); err != nil {
+		return nil, err
+	}
 
 	rows := make([]TradeDate, 0, 32)
 	seen := make(map[string]struct{})
 	for pageNumber := 1; pageNumber <= 100; pageNumber++ {
-		if err := ctx.Err(); err != nil { return nil, err }
-		requestBody := strings.Join([]string{"query_trade_dates", c.userID, strconv.Itoa(pageNumber), strconv.Itoa(defaultPageSize), startDate, endDate}, messageSplit)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		requestBody := strings.Join([]string{
+			"query_trade_dates", c.userID, strconv.Itoa(pageNumber),
+			strconv.Itoa(defaultPageSize), startDate, endDate,
+		}, messageSplit)
 		messageType, responseBody, err := c.exchangeLocked(ctx, messageTradeDateRequest, requestBody)
-		if err != nil { return nil, fmt.Errorf("BaoStock trading-calendar page %d: %w", pageNumber, err) }
-		if messageType == messageException { return nil, protocolExceptionError(responseBody) }
+		if err != nil {
+			return nil, fmt.Errorf("BaoStock trading-calendar page %d: %w", pageNumber, err)
+		}
+		if messageType == messageException {
+			return nil, protocolExceptionError(responseBody)
+		}
 		if messageType != messageTradeDateResponse {
 			c.dropConnectionLocked()
 			return nil, fmt.Errorf("unexpected BaoStock trading-calendar response type %q", messageType)
@@ -216,7 +229,9 @@ func (c *Client) QueryTradeDates(ctx context.Context, startDate, endDate string)
 			c.dropConnectionLocked()
 			return nil, fmt.Errorf("decode BaoStock trading-calendar page %d: %w", pageNumber, err)
 		}
-		if page.errorCode != "0" { return nil, fmt.Errorf("BaoStock trading-calendar query rejected: code=%s message=%s", page.errorCode, page.errorMessage) }
+		if page.errorCode != "0" {
+			return nil, fmt.Errorf("BaoStock trading-calendar query rejected: code=%s message=%s", page.errorCode, page.errorMessage)
+		}
 		if !equalFields(page.fields, []string{"calendar_date", "is_trading_day"}) {
 			c.dropConnectionLocked()
 			return nil, fmt.Errorf("BaoStock trading-calendar fields mismatch: got %q", strings.Join(page.fields, ","))
@@ -228,15 +243,23 @@ func (c *Client) QueryTradeDates(ctx context.Context, startDate, endDate string)
 			if len(rows) > 0 && row.Date <= rows[len(rows)-1].Date {
 				return nil, fmt.Errorf("BaoStock trading-calendar rows are duplicate or unsorted at %s", row.Date)
 			}
-			if _, ok := seen[row.Date]; ok { return nil, fmt.Errorf("BaoStock trading-calendar returned duplicate date %s", row.Date) }
+			if _, ok := seen[row.Date]; ok {
+				return nil, fmt.Errorf("BaoStock trading-calendar returned duplicate date %s", row.Date)
+			}
 			seen[row.Date] = struct{}{}
 			rows = append(rows, row)
 		}
-		if len(rows) > maxQueryRows { return nil, fmt.Errorf("BaoStock trading-calendar query exceeded safety row limit %d", maxQueryRows) }
+		if len(rows) > maxQueryRows {
+			return nil, fmt.Errorf("BaoStock trading-calendar query exceeded safety row limit %d", maxQueryRows)
+		}
 		pageSize := page.pageSize
-		if pageSize <= 0 { pageSize = defaultPageSize }
+		if pageSize <= 0 {
+			pageSize = defaultPageSize
+		}
 		if len(page.rows) < pageSize {
-			if len(rows) == 0 { return nil, errors.New("BaoStock returned no trading-calendar rows") }
+			if len(rows) == 0 {
+				return nil, errors.New("BaoStock returned no trading-calendar rows")
+			}
 			return rows, nil
 		}
 	}
@@ -244,19 +267,25 @@ func (c *Client) QueryTradeDates(ctx context.Context, startDate, endDate string)
 }
 
 type tradeDatePage struct {
-	errorCode string
+	errorCode    string
 	errorMessage string
-	pageSize int
-	fields []string
-	rows []TradeDate
+	pageSize     int
+	fields       []string
+	rows         []TradeDate
 }
 
 func parseTradeDatePage(body string) (tradeDatePage, error) {
 	parts := strings.Split(body, messageSplit)
-	if len(parts) < 2 { return tradeDatePage{}, errors.New("trading-calendar response has fewer than two status fields") }
+	if len(parts) < 2 {
+		return tradeDatePage{}, errors.New("trading-calendar response has fewer than two status fields")
+	}
 	page := tradeDatePage{errorCode: parts[0], errorMessage: parts[1]}
-	if page.errorCode != "0" { return page, nil }
-	if len(parts) < 10 { return tradeDatePage{}, fmt.Errorf("successful trading-calendar response has only %d fields", len(parts)) }
+	if page.errorCode != "0" {
+		return page, nil
+	}
+	if len(parts) < 10 {
+		return tradeDatePage{}, fmt.Errorf("successful trading-calendar response has only %d fields", len(parts))
+	}
 	page.pageSize, _ = strconv.Atoi(strings.TrimSpace(parts[5]))
 	page.fields = strings.Split(parts[9], ",")
 	if !equalFields(page.fields, []string{"calendar_date", "is_trading_day"}) {
@@ -266,21 +295,35 @@ func parseTradeDatePage(body string) (tradeDatePage, error) {
 	if strings.TrimSpace(parts[6]) != "" {
 		decoder := json.NewDecoder(strings.NewReader(parts[6]))
 		decoder.UseNumber()
-		if err := decoder.Decode(&payload); err != nil { return tradeDatePage{}, fmt.Errorf("parse trading-calendar record JSON: %w", err) }
+		if err := decoder.Decode(&payload); err != nil {
+			return tradeDatePage{}, fmt.Errorf("parse trading-calendar record JSON: %w", err)
+		}
 	}
 	var records [][]json.RawMessage
 	if raw := payload["record"]; len(raw) > 0 {
-		if err := json.Unmarshal(raw, &records); err != nil { return tradeDatePage{}, fmt.Errorf("parse trading-calendar rows: %w", err) }
+		if err := json.Unmarshal(raw, &records); err != nil {
+			return tradeDatePage{}, fmt.Errorf("parse trading-calendar rows: %w", err)
+		}
 	}
 	for i, raw := range records {
-		if len(raw) != 2 { return tradeDatePage{}, fmt.Errorf("trading-calendar row %d has %d columns, expected 2", i, len(raw)) }
+		if len(raw) != 2 {
+			return tradeDatePage{}, fmt.Errorf("trading-calendar row %d has %d columns, expected 2", i, len(raw))
+		}
 		date, err := decodeCell(raw[0])
-		if err != nil { return tradeDatePage{}, fmt.Errorf("trading-calendar row %d date: %w", i, err) }
-		if _, err := time.Parse("2006-01-02", date); err != nil { return tradeDatePage{}, fmt.Errorf("trading-calendar row %d has invalid date %q", i, date) }
+		if err != nil {
+			return tradeDatePage{}, fmt.Errorf("trading-calendar row %d date: %w", i, err)
+		}
+		if _, err := time.Parse("2006-01-02", date); err != nil {
+			return tradeDatePage{}, fmt.Errorf("trading-calendar row %d has invalid date %q", i, date)
+		}
 		flagText, err := decodeCell(raw[1])
-		if err != nil { return tradeDatePage{}, fmt.Errorf("trading-calendar row %d flag: %w", i, err) }
+		if err != nil {
+			return tradeDatePage{}, fmt.Errorf("trading-calendar row %d flag: %w", i, err)
+		}
 		flag, err := strconv.Atoi(strings.TrimSpace(flagText))
-		if err != nil || (flag != 0 && flag != 1) { return tradeDatePage{}, fmt.Errorf("trading-calendar row %d has invalid is_trading_day %q", i, flagText) }
+		if err != nil || (flag != 0 && flag != 1) {
+			return tradeDatePage{}, fmt.Errorf("trading-calendar row %d has invalid is_trading_day %q", i, flagText)
+		}
 		page.rows = append(page.rows, TradeDate{Date: date, IsTradingDay: flag == 1})
 	}
 	return page, nil

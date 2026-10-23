@@ -261,19 +261,19 @@ type LimitPoolSnapshot struct {
 }
 
 type SourceStatus struct {
-	Name                 string `json:"name"`
-	Enabled              bool   `json:"enabled"`
-	QuoteCapable         bool   `json:"quote_capable"`
-	DailyBarCapable      bool   `json:"daily_bar_capable"`
-	StockBasicCapable    bool   `json:"stock_basic_capable,omitempty"`
-	SectorRankingCapable bool   `json:"sector_ranking_capable,omitempty"`
-	IndexQuoteCapable    bool   `json:"index_quote_capable,omitempty"`
-	MarketBreadthCapable bool   `json:"market_breadth_capable,omitempty"`
-	LimitPoolCapable     bool   `json:"limit_pool_capable,omitempty"`
-	StockBoardsCapable     bool `json:"stock_boards_capable,omitempty"`
-	TradingCalendarCapable bool `json:"trading_calendar_capable,omitempty"`
-	ChipCapable            bool `json:"chip_capable,omitempty"`
-	CapitalFlowCapable   bool   `json:"capital_flow_capable,omitempty"`
+	Name                   string `json:"name"`
+	Enabled                bool   `json:"enabled"`
+	QuoteCapable           bool   `json:"quote_capable"`
+	DailyBarCapable        bool   `json:"daily_bar_capable"`
+	StockBasicCapable      bool   `json:"stock_basic_capable,omitempty"`
+	SectorRankingCapable   bool   `json:"sector_ranking_capable,omitempty"`
+	IndexQuoteCapable      bool   `json:"index_quote_capable,omitempty"`
+	MarketBreadthCapable   bool   `json:"market_breadth_capable,omitempty"`
+	LimitPoolCapable       bool   `json:"limit_pool_capable,omitempty"`
+	StockBoardsCapable     bool   `json:"stock_boards_capable,omitempty"`
+	TradingCalendarCapable bool   `json:"trading_calendar_capable,omitempty"`
+	ChipCapable            bool   `json:"chip_capable,omitempty"`
+	CapitalFlowCapable     bool   `json:"capital_flow_capable,omitempty"`
 }
 
 // ChipDistribution 表示妙想补充接口返回的筹码快照。上游用百分比表示的比例字段会归一化为 [0,1] 小数。

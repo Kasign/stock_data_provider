@@ -17,14 +17,14 @@ import (
 )
 
 type ProviderSettings struct {
-	Enabled        bool `json:"enabled"`
-	Quote          bool `json:"quote"`
-	DailyBars      bool `json:"daily_bars"`
-	StockBasic     bool `json:"stock_basic"`
-	SectorRankings bool `json:"sector_rankings"`
-	IndexQuotes    bool `json:"index_quotes"`
-	MarketBreadth  bool `json:"market_breadth"`
-	LimitPools     bool `json:"limit_pools"`
+	Enabled         bool `json:"enabled"`
+	Quote           bool `json:"quote"`
+	DailyBars       bool `json:"daily_bars"`
+	StockBasic      bool `json:"stock_basic"`
+	SectorRankings  bool `json:"sector_rankings"`
+	IndexQuotes     bool `json:"index_quotes"`
+	MarketBreadth   bool `json:"market_breadth"`
+	LimitPools      bool `json:"limit_pools"`
 	StockBoards     bool `json:"stock_boards"`
 	TradingCalendar bool `json:"trading_calendar"`
 }

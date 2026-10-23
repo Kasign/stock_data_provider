@@ -13,18 +13,19 @@ import (
 )
 
 const (
-	clientProtocolVersion = "00.9.10"
-	maxFrameBytes         = 64 << 20
-	messageSplit          = "\x01"
-	messageLoginRequest   = "00"
-	messageLoginResponse  = "01"
-	messageLogoutRequest  = "02"
-	messageLogoutResponse = "03"
-	messageException        = "04"
+	clientProtocolVersion    = "00.9.10"
+	maxFrameBytes            = 64 << 20
+	messageSplit             = "\x01"
+	messageLoginRequest      = "00"
+	messageLoginResponse     = "01"
+	messageLogoutRequest     = "02"
+	messageLogoutResponse    = "03"
+	messageException         = "04"
 	messageTradeDateRequest  = "33"
 	messageTradeDateResponse = "34"
-	messageHistoryRequest   = "95"
-	messageCompressed     = "96"
+	messageHistoryRequest    = "95"
+	messageCompressed        = "96"
+
 )
 
 var cdataTerminator = []byte("<![CDATA[]]>\n")
