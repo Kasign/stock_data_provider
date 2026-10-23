@@ -145,6 +145,11 @@ test("supplemental chip and capital-flow research remains opt-in and independent
 });
 
 
+test("dynamic API and browser-local data are not rendered through HTML strings", () => {
+  assert.doesNotMatch(app, /\.innerHTML\s*=|insertAdjacentHTML|outerHTML|document\.write/, "use textContent and DOM nodes instead of HTML string sinks");
+  assert.doesNotMatch(watchlistModule, /innerHTML|insertAdjacentHTML|outerHTML/);
+});
+
 test("analysis task submission prevents concurrent duplicate requests and releases the guard", () => {
   assert.match(app, /isCreatingTask: false/);
   assert.match(app, /async function createTask\(event\)[\s\S]*?event\.preventDefault\(\);[\s\S]*?if \(state\.isCreatingTask\)[\s\S]*?分析任务正在提交[\s\S]*?return;[\s\S]*?state\.isCreatingTask = true;[\s\S]*?parseAnalysisSymbols/);
@@ -165,10 +170,11 @@ test("market API key help identifies who generates it and where it must be confi
 
 test("market API key visibility is opt-in and resets when settings close", () => {
   assert.match(html, /id="market-key-input" type="password"/);
-  assert.match(html, /id="toggle-market-key-visibility"[^>]*aria-controls="market-key-input"[^>]*aria-pressed="false"/);
+  assert.match(html, /id="toggle-market-key-visibility"[^>]*aria-controls="market-key-input"[^>]*aria-pressed="false"[^>]*aria-label="切换行情 API Key 明文显示"/);
   assert.match(app, /function setMarketKeyVisibility\(visible\)[\s\S]*?input\.type = visible \? "text" : "password"/);
   assert.match(app, /\$\("#toggle-market-key-visibility"\)\.addEventListener\("click",[\s\S]*?setMarketKeyVisibility/);
   assert.match(app, /\$\("#settings-dialog"\)\.addEventListener\("close", \(\) => setMarketKeyVisibility\(false\)\)/);
+  assert.doesNotMatch(app, /button\.setAttribute\("aria-label"/, "toggle button accessible name should remain stable while aria-pressed reports its state");
   assert.match(app, /function openSettings\(\)[\s\S]*?setMarketKeyVisibility\(false\)/);
   assert.match(stylesheet, /\.secret-input-row/);
   assert.match(stylesheet, /\.secret-visibility-toggle:focus-visible/);

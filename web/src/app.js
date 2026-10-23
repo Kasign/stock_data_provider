@@ -1330,7 +1330,10 @@ async function createTask(event) {
   } finally {
     state.isCreatingTask = false;
     button.disabled = false;
-    button.innerHTML = '创建并跟踪任务 <span>→</span>';
+    button.replaceChildren(document.createTextNode("创建并跟踪任务 "));
+    const arrow = document.createElement("span");
+    arrow.textContent = "→";
+    button.append(arrow);
   }
 }
 
@@ -1423,7 +1426,6 @@ function setMarketKeyVisibility(visible) {
   input.type = visible ? "text" : "password";
   button.textContent = visible ? "隐藏" : "显示";
   button.setAttribute("aria-pressed", String(visible));
-  button.setAttribute("aria-label", visible ? "隐藏行情 API Key" : "显示行情 API Key");
 }
 
 function openSettings() {
