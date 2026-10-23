@@ -338,6 +338,36 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 - GitHub Runner 结果只证明在该次 Runner 网络环境、该时间窗口中真实请求可达；与模拟测试以及 NAS 容器实测是不同的证据类型。仍需目标容器的带时间戳请求日志完成部署侧验收。
 - 下一阶段继续验证 BaoStock 的停牌/无数据日期、更长日期范围及重复/缺失记录；Eastmoney 应持续记录主报价 302/502 和延迟域表现，腾讯成交额仍保持未知，未验证的单位不得猜测。
 
+## 5.14 东方财富 Unix 时间戳兼容与最新验证（2026-10-23）
+
+### 5.14.1 问题与修复
+
+实时响应显示 `f86` 有时为数字型 Unix 秒时间戳（例如 `1792719731`），而非常见的 `YYYYMMDDHHmm` / `YYYYMMDDHHmmss` 字符串。旧解析器无法识别数字时间，因此即使响应包含时间，也会追加 `provider_timestamp_missing` 并将报价降级。
+
+提交 [`619522a6`](https://github.com/Kasign/stock_data_provider/commit/619522a62a69e73b566336e9ec19584be00bb26e) 已支持常见上海本地时间格式、10 位 Unix 秒和 13 位 Unix 毫秒；并拒绝明显早于 2000 年或晚于当前时间 24 小时以上的数字值。回归测试覆盖数字时间完整报价、秒/毫秒解析、合理性边界，以及报价质量门禁。
+
+### 5.14.2 GitHub 自动化验证
+
+- [Go test suite #208](https://github.com/Kasign/stock_data_provider/actions/runs/39885682985) 结论为 **success**：根模块、`go-core` 和 `services/market-data` 的格式检查、单测、竞态测试、`go vet` 全部通过；Compose 校验和 Docker 镜像构建也通过。
+- [Live provider probe #17](https://github.com/Kasign/stock_data_provider/actions/runs/39885682979) 的 Provider 探测 job 为 **success**。Artifact：[live-provider-report #12472601632](https://github.com/Kasign/stock_data_provider/actions/runs/39885682979/artifacts/12472601632)，4,476 bytes，SHA-256 `9cea73b2a24595e6fb14f5ebb4fc0b98366101aae2cbe67373aab4ad1a5d01f1`。
+
+### 5.14.3 实时 Provider 结果
+
+| Provider / 能力 | 实测结果 | 质量与解释 |
+|---|---|---|
+| Sina 报价 | 成功，约 960 ms | `valid`，包含可解析报价时间 |
+| Tencent 报价 | 成功，约 1,311 ms | `degraded`；仍保留供应商字段/成交量口径的不确定项 |
+| Tencent 不复权日 K | 8 根，约 1,257 ms | `degraded`；未确认成交额字段不做推断 |
+| Tencent 前复权日 K | 8 根，约 191 ms | `degraded`；同一成交额契约限制 |
+| Eastmoney 主报价 | 第一个端点 HTTP 302，安全跳转至 `push2delay.eastmoney.com` 后 HTTP 200；约 2,087 ms | `valid`；`f86` 数字型 Unix 时间被解析，quote_time 为 `2026-10-23T01:44:47Z` |
+| Eastmoney 延迟域报价 | HTTP 200，约 279 ms | `valid`，quote_time 成功解析 |
+| Eastmoney 前复权日 K | 8 根，约 991 ms | `valid` |
+| BaoStock 前复权日 K | 8 根，约 1,603 ms | `valid`；与请求 `limit=8` 一致 |
+
+### 5.14.4 边界
+
+更早的探测 #14 中两个 Eastmoney 报价入口曾返回 HTTP 502，但 #17 又成功；这说明公共端点存在时段/网络波动，不能声称时间戳修复解决了 502，也不能以一次成功证明稳定性。Tencent 的 degraded 是质量契约状态，不是请求失败；不能为追求 valid 而臆造成交额。GitHub Runner 真实返回仍不替代 NAS 容器端独立验收。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。

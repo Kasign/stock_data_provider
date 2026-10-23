@@ -179,6 +179,10 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 
 代码变更按功能分组提交：[行情契约与东方财富重定向](https://github.com/Kasign/stock_data_provider/commit/91eff930fcfee919f3707658f697dedba8156369)、[修正前复权测试样本](https://github.com/Kasign/stock_data_provider/commit/f5725e1a606ee2f00aaa434dc63e5b28f76c9031)、[BaoStock 条数上限](https://github.com/Kasign/stock_data_provider/commit/3e94fdd353320b8059382604a1afc0c738206520)。[Go CI #206](https://github.com/Kasign/stock_data_provider/actions/runs/39885215590) 全部通过；[真实 Provider 探测 #15](https://github.com/Kasign/stock_data_provider/actions/runs/39885215595) 的探测 job 通过。按第 5.13 节保留真实端点结果和质量状态。
 
+#### 东方财富报价时间戳兼容（2026-10-23）
+
+真实报价 payload 中，`f86` 除了常见的 `YYYYMMDDHHmm` / `YYYYMMDDHHmmss` 字符串，也出现过数字型 Unix 秒时间戳。提交 [`619522a6`](https://github.com/Kasign/stock_data_provider/commit/619522a62a69e73b566336e9ec19584be00bb26e) 让解析器兼容 10 位秒和 13 位毫秒时间戳，并检查时间值的合理范围；对应测试覆盖原格式、秒/毫秒转换和完整报价契约。最新 [实时探测 #17](https://github.com/Kasign/stock_data_provider/actions/runs/39885682979) 中，东方财富主报价经历 HTTP 302 后跟随官方 HTTPS 重定向到延迟域 HTTP 200，报价时间成功解析，quality 从缺少时间戳时的 degraded 恢复为 valid；延迟域直连也返回 valid。更早的探测仍出现 502，因此继续将上游稳定性视为待观察项，而不是认为单次成功等于稳定。
+
 ## 7. 参考资料
 
 - [BaoStock 官方网站](https://www.baostock.com/)
