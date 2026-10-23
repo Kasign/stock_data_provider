@@ -176,7 +176,7 @@ func TestSinaMissingOrInvalidAmountDoesNotClaimRawFieldMetadata(t *testing.T) {
 }
 
 func TestSinaFetchDailyBarsNormalizesUnadjustedRows(t *testing.T) {
-	payload := []byte([{"day":"2026-10-21","open":"10.0","high":"11.0","low":"9.0","close":"10.5","volume":"10000"},{"day":"2026-10-20","open":10,"high":11,"low":9,"close":10.2,"volume":5000}])
+	payload := []byte(`[{"day":"2026-10-21","open":"10.0","high":"11.0","low":"9.0","close":"10.5","volume":"10000"},{"day":"2026-10-20","open":10,"high":11,"low":9,"close":10.2,"volume":5000}]`)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		if query.Get("symbol") != "sh600036" || query.Get("scale") != "240" || query.Get("ma") != "no" {
