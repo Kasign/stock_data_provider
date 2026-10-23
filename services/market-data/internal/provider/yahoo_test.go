@@ -94,8 +94,8 @@ func yahooQuoteFixture(t *testing.T, reportedSymbol string, includeOpen bool) ([
 					"regularMarketPrice":   42.35,
 					"regularMarketDayHigh": 42.38,
 					"regularMarketDayLow":  41.57,
-					"regularMarketVolume": int64(56829700),
-					"chartPreviousClose":  41.82,
+					"regularMarketVolume":  int64(56829700),
+					"chartPreviousClose":   41.82,
 				},
 				"timestamp": timestamps,
 				"indicators": map[string]any{

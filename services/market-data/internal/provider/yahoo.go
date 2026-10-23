@@ -199,7 +199,7 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 		FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: yahooFinanceQuoteVersion,
 		RawVolume: rawVolume, RawVolumeUnit: optionalVolumeUnit(volume, "shares"),
 		RawAmountUnit: "unknown",
-		VolumeUnit: optionalVolumeUnit(volume, "shares"), AmountUnit: "unknown",
+		VolumeUnit:    optionalVolumeUnit(volume, "shares"), AmountUnit: "unknown",
 		AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_amount_unavailable"}, NormalizationVer: normalize.Version,
 	}
