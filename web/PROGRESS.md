@@ -147,9 +147,12 @@
 - 代码提交：[`ddb580b2`](https://github.com/Kasign/stock_data_provider/commit/ddb580b22ee99753cbab2556caaabc31e3308030)。实际浏览器排版与 NAS/1Panel 后端联调仍需部署后验收。
 
 
-## 分析任务重复提交保护 — 本批待 CI
+## 分析任务重复提交保护 — CI 验证结果
 
 - 增加 `state.isCreatingTask` 锁，在表单事件处理器入口立即设置，阻止快速重复触发创建请求。
 - 输入格式校验失败会释放锁；网络成功/失败统一在 `finally` 释放并恢复提交按钮，避免卡死。
 - 保留并测试可选 `Idempotency-Key` 请求头透传。前端锁只能防止当前页面内的并发重复请求，跨网络重试仍需调用方复用幂等键。
-- 新增任务创建防重复提交源码契约测试；本批 CI 结果待回填。
+- 新增任务创建防重复提交源码契约测试。GitHub Actions [WebUI checks #39928330146](https://github.com/Kasign/stock_data_provider/actions/runs/39928330146) 成功：50 项 Node 测试通过（0 失败），JavaScript 语法检查与 Nginx 镜像构建成功。
+
+
+- 代码提交：[`c87c4dba`](https://github.com/Kasign/stock_data_provider/commit/c87c4dba75b04595d5f0a899ea4a0dbde6a33a4b)。此锁只覆盖当前页面的并发提交；网络中断后用户应复用幂等键确认服务端是否已接收任务。
