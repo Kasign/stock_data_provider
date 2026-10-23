@@ -50,6 +50,12 @@ type MarketBreadthProvider interface {
 	FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error)
 }
 
+// StockBoardsProvider returns board membership associated with one A-share.
+type StockBoardsProvider interface {
+	NamedProvider
+	FetchStockBoards(ctx context.Context, symbol string) (*model.StockBoardSnapshot, error)
+}
+
 type LimitPoolProvider interface {
 	NamedProvider
 	FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error)

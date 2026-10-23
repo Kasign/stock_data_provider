@@ -28,6 +28,7 @@ type DataService struct {
 	indexQuoteProviders    []provider.IndexQuoteProvider
 	marketBreadthProviders []provider.MarketBreadthProvider
 	limitPoolProviders     []provider.LimitPoolProvider
+	stockBoardsProviders   []provider.StockBoardsProvider
 	supplementProviders    []provider.SupplementProvider
 	maxBars                int
 	retries                int
@@ -210,6 +211,12 @@ func (s *DataService) SetLimitPoolProviders(providers []provider.LimitPoolProvid
 }
 func (s *DataService) LimitPoolProviders() []provider.LimitPoolProvider {
 	return append([]provider.LimitPoolProvider(nil), s.limitPoolProviders...)
+}
+func (s *DataService) SetStockBoardsProviders(providers []provider.StockBoardsProvider) {
+	s.stockBoardsProviders = append([]provider.StockBoardsProvider(nil), providers...)
+}
+func (s *DataService) StockBoardsProviders() []provider.StockBoardsProvider {
+	return append([]provider.StockBoardsProvider(nil), s.stockBoardsProviders...)
 }
 
 func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
@@ -616,6 +623,148 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		return item, false, nil
 	}
 	return nil, false, fmt.Errorf("all stock-basic providers failed: %s", strings.Join(failures, "; "))
+}
+
+func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapshot) error {
+	if snapshot == nil {
+		return errors.New("stock-boards provider returned an empty snapshot")
+	}
+	returnedSymbol, err := normalize.NormalizeSymbol(snapshot.Symbol)
+	if err != nil || returnedSymbol != symbol {
+		return fmt.Errorf("stock-boards symbol mismatch: requested %s, returned %q", symbol, snapshot.Symbol)
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("stock-boards source or fetched_at is missing")
+	}
+	if snapshot.Total < 0 || snapshot.Total > 1000 || len(snapshot.Items) > snapshot.Total {
+		return errors.New("stock-boards total/items count is invalid")
+	}
+	if !snapshot.HasData {
+		if snapshot.Total != 0 || len(snapshot.Items) != 0 || snapshot.QualityStatus != model.QualityUnknown {
+			return errors.New("empty stock-board response must remain unknown, not a verified zero-membership result")
+		}
+		return nil
+	}
+	if snapshot.Total == 0 || len(snapshot.Items) == 0 || snapshot.Total != len(snapshot.Items) {
+		return errors.New("stock-boards coverage is incomplete")
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("stock-boards quality status %q is unsupported", snapshot.QualityStatus)
+	}
+	seen := make(map[string]struct{}, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
+			return errors.New("stock-board item is missing code or name")
+		}
+		if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
+			return errors.New("stock-board item source or fetched_at mismatch")
+		}
+		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
+			return fmt.Errorf("stock-board quality status %q is unsupported", item.QualityStatus)
+		}
+		if seen[item.Code] {
+			return fmt.Errorf("duplicate stock-board code %q", item.Code)
+		}
+		seen[item.Code] = struct{}{}
+		if item.ChangePercent != nil && (math.IsNaN(*item.ChangePercent) || math.IsInf(*item.ChangePercent, 0)) {
+			return fmt.Errorf("stock-board %s has invalid change percent", item.Code)
+		}
+	}
+	return nil
+}
+
+// StockBoards obtains board membership without mixing it into quote or daily-bar fallback.
+func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model.StockBoardSnapshot, bool, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, false, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const positiveTTL = 12 * time.Hour
+	const emptyTTL = 5 * time.Minute
+	key := "md:v1:stock-boards:" + symbol
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.StockBoardSnapshot
+		if json.Unmarshal(data, &cached) == nil && validateStockBoardsSnapshot(symbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+			ttl := positiveTTL
+			if !cached.HasData {
+				ttl = emptyTTL
+			}
+			if time.Since(cached.FetchedAt) < ttl {
+				return &cached, true, nil
+			}
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("stock-boards cache read failed", "symbol", symbol, "error", cacheErr)
+	}
+	if len(s.stockBoardsProviders) == 0 {
+		return nil, false, errors.New("no enabled stock-boards provider")
+	}
+	var failures []string
+	for _, p := range s.stockBoardsProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		item, fetchErr := p.FetchStockBoards(ctx, symbol)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if item == nil {
+			failures = append(failures, p.Name()+": empty stock-boards response")
+			continue
+		}
+		if item.Source == "" {
+			item.Source = p.Name()
+		}
+		if item.FetchedAt.IsZero() {
+			item.FetchedAt = time.Now().UTC()
+		}
+		for index := range item.Items {
+			if item.Items[index].Source == "" {
+				item.Items[index].Source = p.Name()
+			}
+			if item.Items[index].FetchedAt.IsZero() {
+				item.Items[index].FetchedAt = item.FetchedAt
+			}
+			if item.Items[index].SourceVersion == "" {
+				item.Items[index].SourceVersion = item.SourceVersion
+			}
+			if item.Items[index].QualityStatus == "" || item.Items[index].QualityStatus == model.QualityUnknown {
+				item.Items[index].QualityStatus = model.QualityDegraded
+				item.Items[index].QualityReasons = appendReason(item.Items[index].QualityReasons, "provider_quality_not_reported")
+			}
+		}
+		if item.QualityStatus == "" {
+			if item.HasData {
+				item.QualityStatus = model.QualityDegraded
+				item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_not_reported")
+			} else {
+				item.QualityStatus = model.QualityUnknown
+			}
+		}
+		if err := validateStockBoardsSnapshot(symbol, item); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if item.HasData {
+			payload, marshalErr := json.Marshal(item)
+			if marshalErr == nil {
+				if cacheErr := s.cache.Set(ctx, key, payload, positiveTTL); cacheErr != nil {
+					s.logger.Warn("stock-boards cache write failed", "symbol", symbol, "error", cacheErr)
+				}
+			} else {
+				s.logger.Warn("stock-boards cache encode failed", "symbol", symbol, "error", marshalErr)
+			}
+		}
+		return item, false, nil
+	}
+	return nil, false, fmt.Errorf("all stock-boards providers failed: %s", strings.Join(failures, "; "))
 }
 
 // SetSupplementProviders 注册显式启用的非价格类补充数据源。

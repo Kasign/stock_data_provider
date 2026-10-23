@@ -38,7 +38,7 @@
 | 行业板块涨跌榜 `get_sector_rankings` | 新增独立 `SectorRankingProvider`、东方财富 CLIST 适配器及 `GET /api/v1/market/sectors?type=industry` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
 | 概念 / 题材涨跌榜 `get_concept_rankings` | 复用板块 ranking 契约、使用独立概念过滤条件；API 为 `GET /api/v1/market/sectors?type=concept` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
 | 涨停池 get_limit_up_pool、跌停池、炸板池 | 新增 LimitPoolProvider、东方财富 push2ex 三类池端点及 GET /api/v1/market/limit-pools?type=up|down|broken | 本次代码已加，真实 Runner 契约和日期行为待 CI。请求日期与 qdate 分开保存；空池标为 unknown，不视为已确认零；生产开关关闭 |
-| 个股所属板块 `get_belong_boards` | 无 | 需要个股-板块关系和类型元数据 |
+| 个股所属板块 `get_belong_boards` | 新增独立 `StockBoardsProvider`、东方财富 `slist/get` 适配器与 `GET /api/v1/stocks/{symbol}/boards` | 接口、模型、独立开关、缓存及自动化测试已加入；源端未可靠提供板块类型，质量降级；真实 Runner 与 NAS/Docker 验收待完成 |
 | 筹码分布 `get_chip_distribution` | 可选 Go MX API 路由和缓存 | 精确 publication available_at 仍缺失；输出降级质量，历史 as_of 不得倒灌 |
 | 基本面 `get_fundamental_context` | 无 | 必须区分报告期、披露日、财务指标单位、来源、缺失字段和适用市场 |
 | 个股资金流 `get_capital_flow_context` | 可选 Go MX API 路由；字段按人民币元规范化，5/10 日累计要求完整观测 | 自然语言查询返回的指标需要验证字段标签/单位；缺值不补零，精确 available_at 未实现 |
@@ -46,7 +46,7 @@
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
 | 新闻 / 公告 | Go 分析服务仍通过 Python bridge 的新闻搜索 / 能力接口 | 尚未建立 Go 原生搜索、公告数据契约与来源/发布时间/抓取时间模型 |
 
-当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`、`GET /api/v1/market/breadth`、`GET /api/v1/market/limit-pools?type=up|down|broken`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。Profile、板块 ranking、市场广度和涨跌停池均有独立能力接口/配置；新增市场级能力默认关闭，待真实 Runner 全量覆盖和 NAS/Docker 环境验收后再启用。板块 ranking 和市场广度在供应商缺少可验证快照时点时标记 `degraded`，筹码和资金流只在 `MARKET_DATA_MX_ENABLED=true` 且 MX API Key 配置有效时启用。这不代表其他数据域已经切换到 Go。
+当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/stocks/{symbol}/boards`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`、`GET /api/v1/market/breadth`、`GET /api/v1/market/limit-pools?type=up|down|broken`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。Profile、板块 ranking、市场广度和涨跌停池均有独立能力接口/配置；新增市场级能力默认关闭，待真实 Runner 全量覆盖和 NAS/Docker 环境验收后再启用。板块 ranking 和市场广度在供应商缺少可验证快照时点时标记 `degraded`，筹码和资金流只在 `MARKET_DATA_MX_ENABLED=true` 且 MX API Key 配置有效时启用。这不代表其他数据域已经切换到 Go。
 
 ## 3. Go Provider 设计要求
 

@@ -42,6 +42,16 @@ func (httpFakeProvider) FetchSectorRankings(_ context.Context, category string, 
 func (httpFakeProvider) FetchStockBasic(_ context.Context, symbol string) (*model.StockBasic, error) {
 	return &model.StockBasic{Symbol: symbol, Name: "测试证券", IPODate: "2000-01-01", SecurityType: 1, SecurityTypeLabel: "stock", ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid}, nil
 }
+func (httpFakeProvider) FetchStockBoards(_ context.Context, symbol string) (*model.StockBoardSnapshot, error) {
+	now := time.Now().UTC()
+	change := 1.25
+	return &model.StockBoardSnapshot{
+		Symbol: symbol, Total: 1, HasData: true,
+		Items: []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Source: "eastmoney", SourceVersion: "test-stock-boards-v1", FetchedAt: now,
+		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}, nil
+}
 func (httpFakeProvider) FetchQuote(context.Context, string) (*model.Quote, error) {
 	p := 10.0
 	open := 9.8
@@ -236,6 +246,27 @@ func TestDomesticMarketBreadthAndLimitPoolRoutes(t *testing.T) {
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"market_breadth_capable":true`) || !strings.Contains(w.Body.String(), `"limit_pool_capable":true`) {
 		t.Fatalf("market capabilities missing: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestStockBoardsRouteAndCapabilityAdvertisement(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/boards", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"symbol":"600519.SH"`) || !strings.Contains(w.Body.String(), `"code":"BK0477"`) {
+		t.Fatalf("stock-boards route status=%d body=%s", w.Code, w.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"stock_boards_capable":true`) {
+		t.Fatalf("data-sources must advertise stock boards: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 

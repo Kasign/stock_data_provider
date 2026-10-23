@@ -25,6 +25,7 @@ type ProviderSettings struct {
 	IndexQuotes    bool `json:"index_quotes"`
 	MarketBreadth  bool `json:"market_breadth"`
 	LimitPools     bool `json:"limit_pools"`
+	StockBoards    bool `json:"stock_boards"`
 }
 
 type Config struct {
@@ -50,6 +51,7 @@ type Config struct {
 	EastmoneyIndexURL         string
 	EastmoneyMarketStocksURL  string
 	EastmoneyLimitPoolBaseURL string
+	EastmoneyStockBoardsURL   string
 	EastmoneyUT               string
 	TencentQuoteURL           string
 	TencentKlineURL           string
@@ -93,7 +95,7 @@ func Load() (Config, error) {
 		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: false, IndexQuotes: false, MarketBreadth: false, LimitPools: false},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: false, IndexQuotes: false, MarketBreadth: false, LimitPools: false, StockBoards: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
@@ -174,6 +176,7 @@ func Load() (Config, error) {
 		EastmoneyIndexURL:         get("MARKET_DATA_EASTMONEY_INDEX_URL", "https://push2.eastmoney.com/api/qt/ulist.np/get"),
 		EastmoneyMarketStocksURL:  get("MARKET_DATA_EASTMONEY_MARKET_STOCKS_URL", "https://push2delay.eastmoney.com/api/qt/clist/get"),
 		EastmoneyLimitPoolBaseURL: get("MARKET_DATA_EASTMONEY_LIMIT_POOL_BASE_URL", "https://push2ex.eastmoney.com"),
+		EastmoneyStockBoardsURL:   get("MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL", "https://push2.eastmoney.com/api/qt/slist/get"),
 		EastmoneyUT:               get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:           get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:           get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
@@ -217,6 +220,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_EASTMONEY_INDEX_URL":           cfg.EastmoneyIndexURL,
 		"MARKET_DATA_EASTMONEY_MARKET_STOCKS_URL":   cfg.EastmoneyMarketStocksURL,
 		"MARKET_DATA_EASTMONEY_LIMIT_POOL_BASE_URL": cfg.EastmoneyLimitPoolBaseURL,
+		"MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL":    cfg.EastmoneyStockBoardsURL,
 		"MARKET_DATA_TENCENT_QUOTE_URL":             cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":             cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL":        cfg.TencentNoneKlineURL,
@@ -346,6 +350,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.IndexQuotes = boolEnv("MARKET_DATA_"+prefix+"_INDEX_QUOTES_ENABLED", p.IndexQuotes)
 	p.MarketBreadth = boolEnv("MARKET_DATA_"+prefix+"_MARKET_BREADTH_ENABLED", p.MarketBreadth)
 	p.LimitPools = boolEnv("MARKET_DATA_"+prefix+"_LIMIT_POOLS_ENABLED", p.LimitPools)
+	p.StockBoards = boolEnv("MARKET_DATA_"+prefix+"_STOCK_BOARDS_ENABLED", p.StockBoards)
 	return p
 }
 
@@ -519,7 +524,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED",
 		"MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "MARKET_DATA_EASTMONEY_MARKET_BREADTH_ENABLED",
-		"MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED",
+		"MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED", "MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
 		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",

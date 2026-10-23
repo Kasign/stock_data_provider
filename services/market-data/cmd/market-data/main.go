@@ -74,7 +74,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 	}()
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfiguredWithDomesticMarketData(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyUT),
+		"eastmoney": provider.NewEastmoneyConfiguredWithStockBoards(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyUT),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
 		"sina":      provider.NewSinaConfigured(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL),
@@ -89,6 +89,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	indexQuoteProviders := make([]provider.IndexQuoteProvider, 0, len(available))
 	marketBreadthProviders := make([]provider.MarketBreadthProvider, 0, len(available))
 	limitPoolProviders := make([]provider.LimitPoolProvider, 0, len(available))
+	stockBoardsProviders := make([]provider.StockBoardsProvider, 0, len(available))
 	for _, name := range cfg.ProviderPriority {
 		p, ok := available[name]
 		if !ok {
@@ -148,6 +149,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			}
 			limitPoolProviders = append(limitPoolProviders, capability)
 		}
+		if settings.StockBoards {
+			capability, ok := p.(provider.StockBoardsProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for stock boards but does not implement StockBoardsProvider", name)
+			}
+			stockBoardsProviders = append(stockBoardsProviders, capability)
+		}
 	}
 	if len(allProviders) == 0 {
 		return errors.New("provider priority has no enabled providers")
@@ -167,6 +175,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	ds.SetIndexQuoteProviders(indexQuoteProviders)
 	ds.SetMarketBreadthProviders(marketBreadthProviders)
 	ds.SetLimitPoolProviders(limitPoolProviders)
+	ds.SetStockBoardsProviders(stockBoardsProviders)
 	handler := httpapi.NewWithCapabilityInterfaces(cfg.APIKey, cfg.Adjustment, ds, allProviders, quoteProviders, barProviders, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
 	logger.Info("market-data service starting", "addr", cfg.HTTPAddr, "providers", strings.Join(providerNames(allProviders), ","), "quote_providers", strings.Join(providerNames(quoteProviders), ","), "daily_bar_providers", strings.Join(providerNames(barProviders), ","), "mariadb_enabled", store != nil, "redis_enabled", cfg.RedisAddr != "", "adjustment", cfg.Adjustment, "mx_enabled", cfg.MXEnabled)

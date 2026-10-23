@@ -138,6 +138,37 @@ components:
         analysis_reference_time: {type: string, format: date-time}
         fetched_at: {type: string, format: date-time, description: Completion time after all bundle fetches have finished}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
+    StockBoard:
+      type: object
+      required: [code, name, source, fetched_at, quality_status]
+      properties:
+        code: {type: string, description: Eastmoney board code, for example BK0477}
+        name: {type: string}
+        change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    StockBoardSnapshot:
+      type: object
+      required: [symbol, total, has_data, items, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        total: {type: integer, minimum: 0}
+        has_data: {type: boolean, description: False means the provider returned an ambiguous empty list, not confirmed zero memberships}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/StockBoard'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
     StockBasic:
       type: object
       required: [symbol, name, security_type, security_type_label, listing_status, listing_status_label, source, fetched_at, quality_status, normalization_version]
@@ -297,6 +328,9 @@ components:
         stock_basic_capable: {type: boolean}
         sector_ranking_capable: {type: boolean}
         index_quote_capable: {type: boolean}
+        market_breadth_capable: {type: boolean}
+        limit_pool_capable: {type: boolean}
+        stock_boards_capable: {type: boolean}
     DataSourcesResponse:
       type: object
       required: [sources, normalization_version]
@@ -396,6 +430,22 @@ paths:
         '401': {description: API key required}
         '502': {description: All stock-basic providers failed}
         '503': {description: No stock-basic provider enabled}
+  /api/v1/stocks/{symbol}/boards:
+    get:
+      summary: Get the boards associated with one A-share
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Board membership snapshot; quality is degraded when the provider exposes no verifiable snapshot time
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockBoardSnapshot'}
+        '400': {description: Invalid symbol}
+        '401': {description: API key required}
+        '502': {description: All stock-boards providers failed or returned incomplete data}
+        '503': {description: No stock-boards provider enabled}
+
   /api/v1/market/sectors:
     get:
       summary: Get live industry or concept board rankings

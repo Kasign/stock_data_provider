@@ -88,6 +88,7 @@ type liveProbeResult struct {
 	IndexQuotes      *model.IndexQuoteSnapshot    `json:"index_quotes,omitempty"`
 	MarketBreadth    *model.MarketBreadthSnapshot `json:"market_breadth,omitempty"`
 	LimitPool        *model.LimitPoolSnapshot     `json:"limit_pool,omitempty"`
+	StockBoards      *model.StockBoardSnapshot    `json:"stock_boards,omitempty"`
 	PoolType         string                       `json:"pool_type,omitempty"`
 	Symbol           string                       `json:"symbol"`
 	Adjustment       model.AdjustmentBasis        `json:"adjustment,omitempty"`
@@ -469,6 +470,35 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
+	runStockBoards := func(providerName, symbol string, client *http.Client, call func(context.Context) (*model.StockBoardSnapshot, error)) {
+		capture := &liveProbeCapture{}
+		if client != nil {
+			client.Transport = capture.transport()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := call(ctx)
+		result := liveProbeResult{Provider: providerName, Capability: "stock_boards", Symbol: symbol, ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, providerName+" stock_boards: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil || item.Symbol != symbol || item.Source != providerName:
+			result.Status, result.Error, result.StockBoards = "invalid", "stock-board symbol/source contract mismatch", item
+			failures = append(failures, providerName+" stock_boards: contract mismatch")
+		case !item.HasData || len(item.Items) == 0 || item.Total != len(item.Items):
+			result.Status, result.Error, result.StockBoards = "invalid", "stock-board membership response is empty or incomplete", item
+			failures = append(failures, providerName+" stock_boards: empty or incomplete result")
+		default:
+			result.Status, result.StockBoards = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
 	runSectorRankings := func(providerName, category string, client *http.Client, call func(context.Context) (*model.SectorRankingSnapshot, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
@@ -761,6 +791,9 @@ func TestLiveProviderProbe(t *testing.T) {
 	eastmoney := NewEastmoney(12*time.Second, "", "")
 	runStockBasic("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBasic, error) {
 		return eastmoney.FetchStockBasic(ctx, dailySymbol)
+	})
+	runStockBoards("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBoardSnapshot, error) {
+		return eastmoney.FetchStockBoards(ctx, dailySymbol)
 	})
 	runSectorRankings("eastmoney", "industry", eastmoney.client, func(ctx context.Context) (*model.SectorRankingSnapshot, error) {
 		return eastmoney.FetchSectorRankings(ctx, "industry", 10)

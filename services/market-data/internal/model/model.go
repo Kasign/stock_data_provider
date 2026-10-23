@@ -106,6 +106,30 @@ type Bundle struct {
 	QualityStatus         QualityStatus     `json:"quality_status"`
 }
 
+// StockBoard represents one board membership returned for a security. ChangePercent uses percentage points.
+type StockBoard struct {
+	Code           string        `json:"code"`
+	Name           string        `json:"name"`
+	ChangePercent  *float64      `json:"change_percent,omitempty"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
+type StockBoardSnapshot struct {
+	Symbol         string        `json:"symbol"`
+	Total          int           `json:"total"`
+	HasData        bool          `json:"has_data"`
+	Items          []StockBoard  `json:"items"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
 // StockBasic 是低频证券身份信息。IPODate 为兼容 profile 服务保留，语义对应供应商给出的上市日期。
 type StockBasic struct {
 	Symbol             string        `json:"symbol"`
@@ -246,6 +270,7 @@ type SourceStatus struct {
 	IndexQuoteCapable    bool   `json:"index_quote_capable,omitempty"`
 	MarketBreadthCapable bool   `json:"market_breadth_capable,omitempty"`
 	LimitPoolCapable     bool   `json:"limit_pool_capable,omitempty"`
+	StockBoardsCapable   bool   `json:"stock_boards_capable,omitempty"`
 	ChipCapable          bool   `json:"chip_capable,omitempty"`
 	CapitalFlowCapable   bool   `json:"capital_flow_capable,omitempty"`
 }

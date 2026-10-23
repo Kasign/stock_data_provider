@@ -90,6 +90,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	indexQuoteEnabled := map[string]bool{}
 	marketBreadthEnabled := map[string]bool{}
 	limitPoolEnabled := map[string]bool{}
+	stockBoardsEnabled := map[string]bool{}
 	if svc != nil {
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
@@ -106,6 +107,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.LimitPoolProviders() {
 			limitPoolEnabled[p.Name()] = true
 		}
+		for _, p := range svc.StockBoardsProviders() {
+			stockBoardsEnabled[p.Name()] = true
+		}
 	}
 	for _, name := range names {
 		sources = append(sources, model.SourceStatus{
@@ -113,6 +117,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name],
 			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
+			StockBoardsCapable: stockBoardsEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -133,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/market/breadth", s.auth(http.HandlerFunc(s.marketBreadth)))
 	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
+	mux.Handle("GET /api/v1/stocks/{symbol}/boards", s.auth(http.HandlerFunc(s.stockBoards)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/capital-flow", s.auth(http.HandlerFunc(s.capitalFlow)))
 	return securityHeaders(s.requestID(s.accessLog(s.timeoutContext(s.requestTimeout, mux))))
@@ -364,6 +370,16 @@ func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("X-Market-Data-Cache", "MISS")
 	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) stockBoards(w http.ResponseWriter, r *http.Request) {
+	item, hit, err := s.svc.StockBoards(r.Context(), r.PathValue("symbol"))
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	setCacheHeader(w, hit)
 	writeJSON(w, http.StatusOK, item)
 }
 

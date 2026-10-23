@@ -30,6 +30,7 @@ const defaultEastmoneyUT = "7eea3edcaed734bea9cbfc24409ed989"
 const defaultEastmoneyStockBasicURL = "https://datacenter.eastmoney.com/securities/api/data/v1/get"
 const defaultEastmoneySectorRankingURL = "https://push2.eastmoney.com/api/qt/clist/get"
 const defaultEastmoneyIndexURL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
+const defaultEastmoneyStockBoardsURL = "https://push2.eastmoney.com/api/qt/slist/get"
 
 type Eastmoney struct {
 	client           *http.Client
@@ -40,6 +41,7 @@ type Eastmoney struct {
 	indexURL         string
 	marketStocksURL  string
 	limitPoolBaseURL string
+	stockBoardsURL   string
 	ut               string
 }
 
@@ -68,6 +70,11 @@ func NewEastmoneyConfiguredWithIndices(timeout time.Duration, quoteURL, klineURL
 }
 
 func NewEastmoneyConfiguredWithDomesticMarketData(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketStocksURL, limitPoolBaseURL, ut string) *Eastmoney {
+	return NewEastmoneyConfiguredWithStockBoards(timeout, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketStocksURL, limitPoolBaseURL, "", ut)
+}
+
+// NewEastmoneyConfiguredWithStockBoards configures the per-security board-membership endpoint independently.
+func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketStocksURL, limitPoolBaseURL, stockBoardsURL, ut string) *Eastmoney {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -94,16 +101,103 @@ func NewEastmoneyConfiguredWithDomesticMarketData(timeout time.Duration, quoteUR
 	if limitPoolBaseURL == "" {
 		limitPoolBaseURL = "https://push2ex.eastmoney.com"
 	}
+	if stockBoardsURL == "" {
+		stockBoardsURL = defaultEastmoneyStockBoardsURL
+	}
 	ut = strings.TrimSpace(ut)
 	if ut == "" {
 		ut = defaultEastmoneyUT
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketStocksURL: marketStocksURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketStocksURL: marketStocksURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, ut: ut,
 	}
 }
 func (p *Eastmoney) Name() string { return "eastmoney" }
+
+// FetchStockBoards returns the board memberships associated with one security via Eastmoney's slist endpoint.
+func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*model.StockBoardSnapshot, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	secID, err := eastmoneySecID(symbol)
+	if err != nil {
+		return nil, err
+	}
+	params := url.Values{
+		"forcect": {"1"},
+		"spt":     {"3"},
+		"fields":  {"f1,f12,f152,f3,f14,f128,f136"},
+		"pi":      {"0"},
+		"pz":      {"1000"},
+		"po":      {"1"},
+		"fid":     {"f3"},
+		"fid0":    {"f4003"},
+		"invt":    {"2"},
+		"secid":   {secID},
+		"ut":      {p.ut},
+		"_":       {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	}
+	var payload struct {
+		RC   *int `json:"rc"`
+		Data *struct {
+			Total int                          `json:"total"`
+			Diff  []map[string]json.RawMessage `json:"diff"`
+		} `json:"data"`
+	}
+	if err := p.getJSONWithRetry(ctx, p.stockBoardsURL, params, &payload, 6*time.Second); err != nil {
+		return nil, fmt.Errorf("Eastmoney stock boards request: %w", err)
+	}
+	if payload.RC != nil && *payload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney stock boards provider error rc=%d", *payload.RC)
+	}
+	if payload.Data == nil {
+		return nil, errors.New("Eastmoney stock boards response has no data object")
+	}
+	if payload.Data.Total < 0 || payload.Data.Total > 1000 {
+		return nil, fmt.Errorf("Eastmoney stock boards returned unsupported total %d", payload.Data.Total)
+	}
+	if payload.Data.Total != len(payload.Data.Diff) {
+		return nil, fmt.Errorf("Eastmoney stock boards coverage incomplete: received %d of %d rows", len(payload.Data.Diff), payload.Data.Total)
+	}
+	now := time.Now().UTC()
+	snapshot := &model.StockBoardSnapshot{
+		Symbol: symbol, Total: payload.Data.Total, HasData: payload.Data.Total > 0,
+		Items: make([]model.StockBoard, 0, len(payload.Data.Diff)),
+		Source: p.Name(), SourceVersion: "eastmoney-slist-stock-boards-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+	if !snapshot.HasData {
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = []string{"provider_returned_empty_board_list_cannot_distinguish_no_membership_from_unavailable_data"}
+		return snapshot, nil
+	}
+	seen := make(map[string]struct{}, len(payload.Data.Diff))
+	for index, row := range payload.Data.Diff {
+		code, name := parseEastmoneyBoardString(row, "f12"), parseEastmoneyBoardString(row, "f14")
+		if code == "" || name == "" {
+			return nil, fmt.Errorf("Eastmoney stock-board row %d has an empty code or name", index)
+		}
+		if _, exists := seen[code]; exists {
+			return nil, fmt.Errorf("Eastmoney stock boards contains duplicate board code %s", code)
+		}
+		seen[code] = struct{}{}
+		change := parseEastmoneyBoardNumber(row, "f3")
+		reasons := []string{"provider_snapshot_timestamp_not_exposed"}
+		if change == nil {
+			reasons = append(reasons, "provider_board_change_percent_missing")
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_board_change_percent_missing")
+		}
+		snapshot.Items = append(snapshot.Items, model.StockBoard{
+			Code: code, Name: name, ChangePercent: change, Source: p.Name(),
+			SourceVersion: snapshot.SourceVersion, FetchedAt: now,
+			QualityStatus: model.QualityDegraded, QualityReasons: reasons,
+		})
+	}
+	return snapshot, nil
+}
 
 // FetchStockBasic retrieves low-frequency A-share identity and listing metadata from Eastmoney F10.
 func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*model.StockBasic, error) {

@@ -26,6 +26,60 @@ func TestEastmoneyMarketBreadthDefaultsToDelayHost(t *testing.T) {
 	}
 }
 
+func TestEastmoneyFetchStockBoardsMapsBoardItems(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/slist/get" {
+			http.NotFound(w, r)
+			return
+		}
+		query := r.URL.Query()
+		for key, want := range map[string]string{
+			"secid": "1.600519", "pz": "1000", "pi": "0", "forcect": "1", "spt": "3",
+			"fields": "f1,f12,f152,f3,f14,f128,f136", "fid": "f3", "fid0": "f4003",
+		} {
+			if got := query.Get(key); got != want {
+				t.Errorf("%s=%q want %q", key, got, want)
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
+			"total": 2, "diff": []map[string]any{
+				{"f12": "BK0477", "f14": "酿酒行业", "f3": 1.25},
+				{"f12": "BK0896", "f14": "白酒", "f3": 2.5},
+			},
+		}})
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithStockBoards(2*time.Second, "", "", "", "", "", "", "", server.URL+"/slist/get", "")
+	got, err := p.FetchStockBoards(context.Background(), "600519.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Symbol != "600519.SH" || !got.HasData || got.Total != 2 || len(got.Items) != 2 {
+		t.Fatalf("unexpected stock boards snapshot: %+v", got)
+	}
+	if got.Items[0].Code != "BK0477" || got.Items[0].Name != "酿酒行业" || got.Items[0].ChangePercent == nil || *got.Items[0].ChangePercent != 1.25 {
+		t.Fatalf("unexpected first board: %+v", got.Items[0])
+	}
+	if got.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") {
+		t.Fatalf("timestamp quality downgrade missing: %+v", got)
+	}
+}
+
+func TestEastmoneyFetchStockBoardsKeepsEmptyResultUnknown(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{"total": 0, "diff": []any{}}})
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithStockBoards(2*time.Second, "", "", "", "", "", "", "", server.URL+"/slist/get", "")
+	got, err := p.FetchStockBoards(context.Background(), "600519.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.HasData || got.Total != 0 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("empty board list must remain unknown: %+v", got)
+	}
+}
+
 func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/clist/get" {

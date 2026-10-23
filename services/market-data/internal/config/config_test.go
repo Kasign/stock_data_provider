@@ -572,6 +572,23 @@ func TestEastmoneyStockBasicURLAndCapabilityCanBeConfigured(t *testing.T) {
 	}
 }
 
+func TestEastmoneyStockBoardsURLAndCapabilityAreConfigurable(t *testing.T) {
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL", "https://example.test/slist")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EastmoneyStockBoardsURL != "https://example.test/slist" {
+		t.Fatalf("unexpected stock-boards endpoint %q", cfg.EastmoneyStockBoardsURL)
+	}
+	if !cfg.ProviderSettings["eastmoney"].StockBoards {
+		t.Fatal("stock-boards environment override should enable capability")
+	}
+}
+
 func TestEastmoneySectorRankingURLAndCapabilityAreConfigurable(t *testing.T) {
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
