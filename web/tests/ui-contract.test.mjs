@@ -34,7 +34,7 @@ test("structured result renderer uses fields declared by Go RunResult", () => {
     "warnings"
   ];
   for (const field of requiredFields) {
-    assert.match(domain, new RegExp('json:"' + field + '"'), "Go domain model must declare " + field);
+    assert.match(domain, new RegExp('json:"' + field + '(?:,[^"]*)?"'), "Go domain model must declare " + field);
     assert.ok(app.includes("result." + field), "WebUI must render result." + field);
   }
   assert.doesNotMatch(app, /signal\.(score|confidence|rationale|reason)\b/, "do not display fields absent from CandidateSignal");
