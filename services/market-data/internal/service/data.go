@@ -662,7 +662,7 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("stock-board quality status %q is unsupported", item.QualityStatus)
 		}
-		if seen[item.Code] {
+		if _, exists := seen[item.Code]; exists {
 			return fmt.Errorf("duplicate stock-board code %q", item.Code)
 		}
 		seen[item.Code] = struct{}{}
