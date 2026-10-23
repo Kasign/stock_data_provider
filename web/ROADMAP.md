@@ -239,5 +239,5 @@ P2 中的项目不是承诺全部实现；应根据单股分析使用情况、�
 - 报告明确区分集合字段缺失或为 null、明确返回空数组、返回非数组类型三类情况。新增测试覆盖缺失集合、null、格式错误、Markdown 标题/HTML/强调/反引号/竖线等边界。
 - API 错误消息统一限制为最多 500 个字符；保留 HTTP 状态、错误码与请求 ID，并兼容 JSON 字符串错误响应。补充超长 JSON 错误消息及字符串响应测试。
 - 自动化测试基于确定性 Go RunResult 形状 fixture 与 fetch 响应替身，不代表真实后端数据或 NAS/1Panel 联调；没有新增或假定任何服务端接口。
-- 开始本批之前开发分支 HEAD 为 `b22f00f4a6f821b4edccb0007e16fef35afe8316`，对应 WebUI checks [#39933160719](https://github.com/Kasign/stock_data_provider/actions/runs/39933160719) 成功。后续提交产生的本批 CI 结果以 PR #2 的最新 Checks 为准。
+- 开始本批之前开发分支 HEAD 为 `b22f00f4a6f821b4edccb0007e16fef35afe8316`，对应 WebUI checks [#39933160719](https://github.com/Kasign/stock_data_provider/actions/runs/39933160719) 成功。本批代码与测试对应的 [WebUI checks #39934244200](https://github.com/Kasign/stock_data_provider/actions/runs/39934244200) 已通过：56 项 Node 测试全通过，JavaScript 语法检查与 Nginx 镜像构建成功。此 CI 不代表真实 NAS/1Panel 联调通过。
 
