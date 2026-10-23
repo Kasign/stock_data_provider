@@ -216,12 +216,16 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 
 func parseEastmoneyProfileDate(value string) (string, error) {
 	value = strings.TrimSpace(value)
-	if value == "" || value == "-" || strings.EqualFold(value, "null") { return "", nil }
+	if value == "" || value == "-" || strings.EqualFold(value, "null") {
+		return "", nil
+	}
 	for _, layout := range []string{
 		"2006-01-02", "2006-01-02 15:04:05", "2006-01-02T15:04:05",
 		"2006/01/02", "20060102", time.RFC3339,
 	} {
-		if parsed, err := time.Parse(layout, value); err == nil { return parsed.Format("2006-01-02"), nil }
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed.Format("2006-01-02"), nil
+		}
 	}
 	return "", fmt.Errorf("eastmoney stock-basic date %q has an unsupported format", value)
 }
