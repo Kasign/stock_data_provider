@@ -215,7 +215,8 @@ test("recent analysis history supports search, single removal and local-only cle
 test("light/dark theme is accessible, persisted locally, and independent of backend APIs", async () => {
   const module = await readFile(new URL("../src/theme.js", import.meta.url), "utf8");
   assert.match(html, /name="color-scheme" content="light dark"/);
-  assert.match(html, /id="theme-toggle"[^>]*aria-label="切换至浅色主题"[^>]*aria-pressed="false"/);
+  assert.match(html, /id="theme-toggle"[^>]*aria-label="切换主题"[^>]*aria-pressed="false"/);
+  assert.match(app, /setAttribute\("aria-label", "切换主题"\)/);
   assert.match(html, /id="theme-toggle-icon"/);
   assert.match(html, /id="theme-toggle-label"/);
   assert.match(app, /import \{ applyTheme, persistTheme, readTheme \} from "\.\/theme\.js"/);

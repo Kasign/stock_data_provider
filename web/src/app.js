@@ -79,9 +79,9 @@ function syncThemeControl(theme) {
   const targetLabel = target === "light" ? "浅色" : "深色";
   $("#theme-toggle-icon").textContent = target === "light" ? "☼" : "☾";
   $("#theme-toggle-label").textContent = targetLabel;
-  $("#theme-toggle").setAttribute("aria-label", "切换至" + targetLabel + "主题");
+  $("#theme-toggle").setAttribute("aria-label", "切换主题");
   $("#theme-toggle").setAttribute("aria-pressed", String(current === "light"));
-  $("#theme-toggle").title = "切换至" + targetLabel + "主题";
+  $("#theme-toggle").title = "当前" + (current === "light" ? "浅色" : "深色") + "主题；点击切换至" + targetLabel + "主题";
 }
 
 function setMobileNavigationOpen(open) {
