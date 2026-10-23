@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,12 @@ import (
 	"testing"
 	"time"
 )
+
+type domesticMarketRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTripper domesticMarketRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return roundTripper(req)
+}
 
 func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +56,40 @@ func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T)
 	}
 }
 
+
+func TestEastmoneyFetchMarketBreadthFallsBackToDelayHostOnHTTP502(t *testing.T) {
+	var primaryCalls, delayCalls atomic.Int32
+	p := NewEastmoneyConfiguredWithDomesticMarketData(
+		2*time.Second, "", "", "", "", "",
+		"https://push2.eastmoney.com/api/qt/clist/get", "", "",
+	)
+	p.client.Transport = domesticMarketRoundTripper(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Hostname() {
+		case "push2.eastmoney.com":
+			primaryCalls.Add(1)
+			return &http.Response{Status: "502 Bad Gateway", StatusCode: http.StatusBadGateway, Header: make(http.Header), Body: http.NoBody, Request: req}, nil
+		case "push2delay.eastmoney.com":
+			delayCalls.Add(1)
+			body := `{"rc":0,"data":{"total":1,"diff":[{"f12":"600519","f13":1,"f14":"贵州茅台","f3":1.2,"f6":120.0}]}}`
+			return &http.Response{
+				Status: "200 OK", StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body)), Request: req,
+			}, nil
+		default:
+			return nil, fmt.Errorf("unexpected host %q", req.URL.Hostname())
+		}
+	})
+	got, err := p.FetchMarketBreadth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if primaryCalls.Load() != 2 || delayCalls.Load() != 1 {
+		t.Fatalf("expected two primary attempts and one delay fallback; primary=%d delay=%d", primaryCalls.Load(), delayCalls.Load())
+	}
+	if got.CoveredSecurities != 1 || got.AdvancingCount != 1 {
+		t.Fatalf("unexpected market-breadth fallback snapshot: %+v", got)
+	}
+}
 
 func TestEastmoneyFetchMarketBreadthDoesNotExposePartialAmountTotal(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +160,11 @@ func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
 }
 
 func TestEastmoneyFetchLimitPoolTypeDateAndFields(t *testing.T) {
-	for _, tc := range []struct{ poolType, path string }{{"up", "/getTopicZTPool"}, {"down", "/getTopicDTPool"}, {"broken", "/getTopicZBPool"}} {
+	for _, tc := range []struct{ poolType, path, sort string }{
+		{"up", "/getTopicZTPool", "fbt:asc"},
+		{"down", "/getTopicDTPool", "fund:asc"},
+		{"broken", "/getTopicZBPool", "fbt:asc"},
+	} {
 		t.Run(tc.poolType, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != tc.path {
@@ -130,6 +175,9 @@ func TestEastmoneyFetchLimitPoolTypeDateAndFields(t *testing.T) {
 				}
 				if r.URL.Query().Get("pagesize") != "10" {
 					t.Errorf("pagesize=%s", r.URL.Query().Get("pagesize"))
+				}
+				if got := r.URL.Query().Get("sort"); got != tc.sort {
+					t.Errorf("sort=%s, want %s", got, tc.sort)
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
 					"tc": 1, "qdate": 20261023, "pool": []map[string]any{{
@@ -153,7 +201,6 @@ func TestEastmoneyFetchLimitPoolTypeDateAndFields(t *testing.T) {
 		})
 	}
 }
-
 
 func TestEastmoneyFetchLimitPoolRetriesInconsistentPartialPayload(t *testing.T) {
 	var requests atomic.Int32

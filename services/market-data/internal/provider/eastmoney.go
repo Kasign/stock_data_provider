@@ -966,7 +966,24 @@ const eastmoneyMarketUniverseFilter = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:8
 const eastmoneyMarketBreadthPageSize = 5000
 const eastmoneyMarketBreadthMaxSecurities = 12000
 
+func eastmoneyMarketStocksFallbackURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "https" || !strings.EqualFold(strings.TrimSuffix(u.Hostname(), "."), "push2.eastmoney.com") {
+		return ""
+	}
+	if !strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), "/api/qt/clist/get") {
+		return ""
+	}
+	port := u.Port()
+	u.Host = "push2delay.eastmoney.com"
+	if port != "" {
+		u.Host += ":" + port
+	}
+	return u.String()
+}
+
 func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error) {
+	marketListURL := p.marketStocksURL
 	type marketListPayload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
@@ -983,8 +1000,16 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 			"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		}
 		var payload marketListPayload
-		if err := p.getJSONWithRetry(ctx, p.marketStocksURL, params, &payload, 6*time.Second); err != nil {
-			return nil, fmt.Errorf("Eastmoney market breadth page %d: %w", page, err)
+		if requestErr := p.getJSONWithRetry(ctx, marketListURL, params, &payload, 6*time.Second); requestErr != nil {
+			fallbackURL := eastmoneyMarketStocksFallbackURL(marketListURL)
+			if fallbackURL == "" {
+				return nil, fmt.Errorf("Eastmoney market breadth page %d: %w", page, requestErr)
+			}
+			payload = marketListPayload{}
+			if fallbackErr := p.getJSONWithRetry(ctx, fallbackURL, params, &payload, 6*time.Second); fallbackErr != nil {
+				return nil, fmt.Errorf("Eastmoney market breadth page %d: primary endpoint failed (%v); delay fallback failed: %w", page, requestErr, fallbackErr)
+			}
+			marketListURL = fallbackURL
 		}
 		if payload.RC != nil && *payload.RC != 0 {
 			return nil, fmt.Errorf("Eastmoney market breadth provider error rc=%d", *payload.RC)
@@ -1113,9 +1138,14 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	if limit > 100 {
 		return nil, errors.New("limit-pool limit must not exceed 100")
 	}
+	sortField := "fbt:asc"
+	if poolType == "down" {
+		// The DTPool endpoint has returned tc>0/pool=[] with fbt:asc; fund:asc returns its rows.
+		sortField = "fund:asc"
+	}
 	params := url.Values{
 		"ut": {p.ut}, "dpt": {"wz.ztzt"}, "Pageindex": {"0"}, "pagesize": {strconv.Itoa(limit)},
-		"sort": {"fbt:asc"}, "date": {date.Format("20060102")},
+		"sort": {sortField}, "date": {date.Format("20060102")},
 		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 	}
 	var payload struct {
