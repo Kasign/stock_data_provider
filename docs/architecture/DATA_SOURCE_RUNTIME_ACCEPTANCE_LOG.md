@@ -475,6 +475,14 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 - 新浪实时报价 HTTP 200 且样本质量 `valid`；新浪日 K、腾讯报价/日 K、Yahoo 报价/日 K 均返回可解析数据。新浪日 K、腾讯相关能力和 Yahoo 按各自字段契约降级；Yahoo 报价继续保持 `amount=null`、`amount_unit=unknown`、`quality=degraded`。东方财富、BaoStock 前复权日 K 本轮各返回 8 根且质量 `valid`。
 - 网易两个能力在普通 probe 中继续 `skipped`（之前真实测试已证实 DNS 失败 / CSV HTTP 502）；MX_API 筹码和资金流也仍为 `skipped / 未验证`，因为 Actions 没有可用的 `MX_APIKEY`。这些不会因为当前 probe job 绿色而转为已接通。板块 ranking 的生产开关仍默认关闭，直至完成目标 NAS/Docker 环境验收。
 
+## 5.20 东方财富核心指数实时行情（2026-10-23）
+
+- 新增独立 `IndexQuoteProvider`，请求白名单内的上证指数、深证成指、创业板指、沪深300、上证50、中证500、科创50；指数代码不经过个股 `NormalizeSymbol`，避免 `000001.SH` 按个股规则被误识别成深交所股票。
+- 使用东方财富批量指数端点 `/api/qt/ulist.np/get`，按 `f12/f13` 严格匹配指数代码和市场；字段包括最新价、涨跌幅/额、开高低、昨收、成交额与供应商时间字段。缺失成交额保留 `amount=null`、`amount_unit=unknown`。
+- [Live provider probe #39906844130](https://github.com/Kasign/stock_data_provider/actions/runs/39906844130) 对该能力的首次真实请求返回 HTTP 302 重定向到 `push2delay.eastmoney.com`，随后 HTTP 200 JSON，并通过白名单代码及核心字段校验，返回 7 个指数。端点的 `f86` 在本次响应里是数值型行情字段而非可解析时间戳，所以快照质量为 `degraded`，原因包含 `provider_snapshot_timestamp_not_exposed`；没有将本地 `fetched_at` 冒充行情时间。该轮其他能力失败导致工作流失败，不能把单一能力通过等同于整条工作流全通过。
+- 格式修复提交 `74ea496` 后，完整 Go CI [#39907221645](https://github.com/Kasign/stock_data_provider/actions/runs/39907221645) 的所有 job 通过；对应真实 Provider probe [#39907221646](https://github.com/Kasign/stock_data_provider/actions/runs/39907221646) 也通过。指数能力仍保持独立开关 `MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED=false`，本次通过只证明 GitHub Runner 当时可达，不等于目标 NAS/Docker 网络已验收。
+- 当前接口为 `GET /api/v1/market/indices`，使用 15 秒缓存。指数日 K、完整市场广度、官方交易日历和各指数专用回退路径仍未完成；本能力不补齐这些缺口。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。

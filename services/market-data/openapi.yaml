@@ -195,6 +195,45 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
+    MarketIndexQuote:
+      type: object
+      required: [symbol, code, name, amount_unit, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, description: Allow-listed index symbol, not normalized as an equity symbol}
+        code: {type: string}
+        name: {type: string}
+        latest_price: {type: number, nullable: true}
+        change: {type: number, nullable: true}
+        change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
+        open: {type: number, nullable: true}
+        high: {type: number, nullable: true}
+        low: {type: number, nullable: true}
+        prev_close: {type: number, nullable: true}
+        amount: {type: number, nullable: true}
+        amount_unit: {type: string, enum: [CNY, unknown]}
+        quote_time: {type: string, format: date-time, nullable: true}
+        quote_time_semantics: {type: string}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    IndexQuoteSnapshot:
+      type: object
+      required: [items, source, fetched_at, quality_status]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/MarketIndexQuote'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
     SourceStatus:
       type: object
       required: [name, enabled, quote_capable, daily_bar_capable]
@@ -205,6 +244,7 @@ components:
         daily_bar_capable: {type: boolean}
         stock_basic_capable: {type: boolean}
         sector_ranking_capable: {type: boolean}
+        index_quote_capable: {type: boolean}
     DataSourcesResponse:
       type: object
       required: [sources, normalization_version]
@@ -324,3 +364,18 @@ paths:
         '401': {description: API key required}
         '502': {description: All sector-ranking providers failed}
         '503': {description: No sector-ranking provider enabled}
+
+  /api/v1/market/indices:
+    get:
+      summary: Get quotes for an allow-listed set of core market indices
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Index quote snapshot with explicit source and quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexQuoteSnapshot'}
+        '401': {description: API key required}
+        '502': {description: All index-quote providers failed}
+        '503': {description: No index-quote provider enabled}

@@ -32,7 +32,8 @@
 |---|---|---|
 | 个股实时行情 `get_realtime_quote` | Eastmoney、Tencent、Sina（仅报价） | Sina 不提供日 K；原 Fetcher 的字段补齐、市场路由和所有可选源尚未复刻 |
 | 日线历史 `get_daily_data` | Eastmoney、Tencent | 尚未迁移 Efinance / AkShare / Pytdx / Baostock / Tushare / TickFlow / YFinance / Longbridge 等来源、指数专用链和市场路由 |
-| 指数日线 / 指数实时报价 | 有少量底层 Provider 能处理的场景，但完整指数专用路由未迁移 | 原 Python 对裸指数代码、带交易所后缀的指数代码和各市场有独立识别/路由逻辑 |
+| 指数实时报价 | 新增独立 `IndexQuoteProvider`、东方财富 `ulist.np/get` 适配器与 `GET /api/v1/market/indices`，仅覆盖 7 个白名单核心指数 | GitHub Runner 实测返回 7 条；源端点未提供可解析的行情时间，输出 `degraded`；默认关闭，目标部署容器仍待验收 |
+| 指数日线 | 现有底层 Provider 可能支持部分指数 K 线，但完整指数专用路由未迁移 | 原 Python 对裸指数代码、带交易所后缀的指数代码和各市场有独立识别/路由逻辑，尚未完成逐项对照 |
 | 市场涨跌统计 `get_market_stats` | 无 | 上涨、下跌、平盘、涨停、跌停、总成交额必须来自同一市场范围、同一数据时点；不得用自选股横截面伪装全市场统计 |
 | 行业板块涨跌榜 `get_sector_rankings` | 新增独立 `SectorRankingProvider`、东方财富 CLIST 适配器及 `GET /api/v1/market/sectors?type=industry` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
 | 概念 / 题材涨跌榜 `get_concept_rankings` | 复用板块 ranking 契约、使用独立概念过滤条件；API 为 `GET /api/v1/market/sectors?type=concept` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
@@ -45,7 +46,7 @@
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
 | 新闻 / 公告 | Go 分析服务仍通过 Python bridge 的新闻搜索 / 能力接口 | 尚未建立 Go 原生搜索、公告数据契约与来源/发布时间/抓取时间模型 |
 
-当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/market/sectors?type=industry|concept`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。Profile 与板块 ranking 有独立能力接口/配置；板块 ranking 默认关闭并固定标记 `degraded`，筹码和资金流只在 `MARKET_DATA_MX_ENABLED=true` 且 MX API Key 配置有效时启用。这不代表其他数据域已经切换到 Go。
+当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。Profile 与板块 ranking 有独立能力接口/配置；板块 ranking 默认关闭并固定标记 `degraded`，筹码和资金流只在 `MARKET_DATA_MX_ENABLED=true` 且 MX API Key 配置有效时启用。这不代表其他数据域已经切换到 Go。
 
 ## 3. Go Provider 设计要求
 
