@@ -2,7 +2,7 @@ function escapeMarkdownText(value) {
   return String(value)
     .replace(/\r?\n/g, " / ")
     .replace(/\\/g, "\\\\")
-    .replace(/([\x60*_{}()\[\]#+.!|<>~])/g, "\\$1");
+    .replace(/([\x60*_{}\[\]|<>~])/g, "\\$1");
 }
 
 function inlineJson(value) {
