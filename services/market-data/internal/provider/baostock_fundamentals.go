@@ -203,7 +203,6 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 	return snapshot, nil
 }
 
-
 // appendFundamentalReason appends a quality reason only once.
 func appendFundamentalReason(reasons []string, reason string) []string {
 	for _, existing := range reasons {
