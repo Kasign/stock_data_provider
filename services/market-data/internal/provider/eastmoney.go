@@ -43,6 +43,7 @@ type Eastmoney struct {
 	marketBreadthURL string
 	limitPoolBaseURL string
 	stockBoardsURL   string
+	dragonTigerURL   string
 	ut               string
 }
 
@@ -111,7 +112,7 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, ut: ut,
 	}
 }
 func (p *Eastmoney) Name() string { return "eastmoney" }
@@ -825,7 +826,7 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
-	if err := p.getJSON(ctx, p.sectorRankingURL, params, &payload); err != nil {
+	if err := p.getJSONWithRetry(ctx, p.sectorRankingURL, params, &payload, 6*time.Second); err != nil {
 		return nil, fmt.Errorf("eastmoney sector ranking request: %w", err)
 	}
 	if payload.RC != nil && *payload.RC != 0 {

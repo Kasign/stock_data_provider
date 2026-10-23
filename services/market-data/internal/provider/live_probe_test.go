@@ -88,6 +88,7 @@ type liveProbeResult struct {
 	IndexQuotes      *model.IndexQuoteSnapshot      `json:"index_quotes,omitempty"`
 	MarketBreadth    *model.MarketBreadthSnapshot   `json:"market_breadth,omitempty"`
 	LimitPool        *model.LimitPoolSnapshot       `json:"limit_pool,omitempty"`
+	DragonTiger      *model.DragonTigerSnapshot     `json:"dragon_tiger,omitempty"`
 	StockBoards      *model.StockBoardSnapshot      `json:"stock_boards,omitempty"`
 	TradingCalendar  *model.TradingCalendarSnapshot `json:"trading_calendar,omitempty"`
 	PoolType         string                         `json:"pool_type,omitempty"`
@@ -664,6 +665,36 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
+	runDragonTiger := func(eastmoney *Eastmoney, tradeDate string) {
+		capture := &liveProbeCapture{}
+		eastmoney.client.Transport = capture.transport()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := eastmoney.FetchDragonTiger(ctx, tradeDate, 1, 100)
+		result := liveProbeResult{Provider: eastmoney.Name(), Capability: "dragon_tiger", ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, "eastmoney dragon_tiger: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil || item.TradeDate != tradeDate || item.Source != "eastmoney":
+			result.Status, result.Error, result.DragonTiger = "invalid", "dragon-tiger date/source contract mismatch", item
+			failures = append(failures, "eastmoney dragon_tiger: identity mismatch")
+		case !item.HasData:
+			// 空结果可能是非交易日或盘后报告尚未发布，不代表已确认零上榜。
+			result.Status, result.DragonTiger = "empty", item
+		case item.Total < item.Returned || item.Returned != len(item.Items) || item.Returned == 0 || item.Pages < 1:
+			result.Status, result.Error, result.DragonTiger = "invalid", "dragon-tiger count/page contract mismatch", item
+			failures = append(failures, "eastmoney dragon_tiger: incomplete page contract")
+		default:
+			result.Status, result.DragonTiger = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
 	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
@@ -862,6 +893,7 @@ func TestLiveProviderProbe(t *testing.T) {
 	for _, poolType := range []string{"up", "down", "broken"} {
 		runLimitPool(eastmoney, poolType, now.Format("2006-01-02"))
 	}
+	runDragonTiger(eastmoney, now.AddDate(0, 0, -1).Format("2006-01-02"))
 	runQuote("eastmoney", "eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoney.FetchQuote(ctx, dailySymbol)
 	})

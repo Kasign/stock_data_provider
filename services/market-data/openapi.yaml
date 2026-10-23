@@ -344,6 +344,48 @@ components:
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
+    DragonTigerItem:
+      type: object
+      required: [symbol, code, name, trade_date, source, source_version, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string}
+        name: {type: string}
+        trade_date: {type: string, format: date}
+        change_percent: {type: number, nullable: true, description: Percentage points}
+        close_price_cny: {type: number, nullable: true, description: CNY/share}
+        net_buy_amount_cny: {type: number, nullable: true, description: Net buying amount in CNY; negative values are valid}
+        buy_amount_cny: {type: number, nullable: true, description: Buying amount in CNY}
+        sell_amount_cny: {type: number, nullable: true, description: Selling amount in CNY}
+        deal_amount_cny: {type: number, nullable: true, description: Turnover amount in CNY}
+        deal_amount_ratio: {type: number, nullable: true, description: Percentage points}
+        reason: {type: string}
+        explanation: {type: string}
+        security_type_code: {type: string}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    DragonTigerSnapshot:
+      type: object
+      required: [trade_date, page, page_size, total, pages, returned, has_data, has_more, items, source, fetched_at, quality_status]
+      properties:
+        trade_date: {type: string, format: date}
+        provider_report_date: {type: string, format: date, nullable: true}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1}
+        total: {type: integer, minimum: 0, description: Provider-reported rows across pages}
+        pages: {type: integer, minimum: 0}
+        returned: {type: integer, minimum: 0, description: Actual row count in this page}
+        has_data: {type: boolean, description: False means no provider records currently returned, not a verified zero}
+        has_more: {type: boolean}
+        items: {type: array, items: {$ref: '#/components/schemas/DragonTigerItem'}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     LimitPoolItem:
       type: object
       required: [symbol, code, name, change_percent, source, fetched_at, quality_status]
@@ -391,6 +433,7 @@ components:
         market_breadth_capable: {type: boolean}
         limit_pool_capable: {type: boolean}
         stock_boards_capable: {type: boolean}
+        dragon_tiger_capable: {type: boolean}
     DataSourcesResponse:
       type: object
       required: [sources, normalization_version]
@@ -594,6 +637,23 @@ paths:
         '401': {description: API key required}
         '502': {description: Provider returned incomplete or invalid data}
         '503': {description: No market breadth provider enabled}
+  /api/v1/market/dragon-tiger:
+    get:
+      summary: 获取指定交易日龙虎榜盘后分页
+      description: 金额为人民币元，涨跌幅和成交占比为百分点。源端未提供精确快照时间时保持 degraded；空报表为 unknown，不证明当日零上榜。
+      parameters:
+        - {name: date, in: query, required: false, description: 默认中国时区当日；盘后报告可能尚未发布, schema: {type: string, format: date}}
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 1}}
+        - {name: page_size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+      responses:
+        '200':
+          description: 龙虎榜分页；has_data=false 时质量为 unknown
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DragonTigerSnapshot'}
+        '400': {description: Invalid date or page parameters}
+        '401': {description: API key required}
+        '502': {description: Provider returned invalid or unavailable data}
   /api/v1/market/limit-pools:
     get:
       summary: Get limit-up, limit-down or broken-board pool

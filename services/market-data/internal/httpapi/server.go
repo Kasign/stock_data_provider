@@ -90,6 +90,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	indexQuoteEnabled := map[string]bool{}
 	marketBreadthEnabled := map[string]bool{}
 	limitPoolEnabled := map[string]bool{}
+	dragonTigerEnabled := map[string]bool{}
 	stockBoardsEnabled := map[string]bool{}
 	tradingCalendarEnabled := map[string]bool{}
 	fundamentalsEnabled := map[string]bool{}
@@ -109,6 +110,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.LimitPoolProviders() {
 			limitPoolEnabled[p.Name()] = true
 		}
+		for _, p := range svc.DragonTigerProviders() {
+			dragonTigerEnabled[p.Name()] = true
+		}
 		for _, p := range svc.StockBoardsProviders() {
 			stockBoardsEnabled[p.Name()] = true
 		}
@@ -126,7 +130,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
-			FundamentalsCapable: fundamentalsEnabled[name],
+			FundamentalsCapable: fundamentalsEnabled[name], DragonTigerCapable: dragonTigerEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -146,6 +150,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/market/indices", s.auth(http.HandlerFunc(s.indexQuotes)))
 	mux.Handle("GET /api/v1/market/breadth", s.auth(http.HandlerFunc(s.marketBreadth)))
 	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
+	mux.Handle("GET /api/v1/market/dragon-tiger", s.auth(http.HandlerFunc(s.dragonTiger)))
 	mux.Handle("GET /api/v1/market/trading-calendar", s.auth(http.HandlerFunc(s.tradingCalendar)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/boards", s.auth(http.HandlerFunc(s.stockBoards)))
@@ -368,6 +373,31 @@ func (s *Server) limitPool(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Cache", "MISS")
 	}
 	writeJSON(w, http.StatusOK, snapshot)
+}
+
+func (s *Server) dragonTiger(w http.ResponseWriter, r *http.Request) {
+	date := strings.TrimSpace(r.URL.Query().Get("date"))
+	if date != "" {
+		if parsed, err := time.Parse("2006-01-02", date); err != nil || parsed.Format("2006-01-02") != date {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "date must use YYYY-MM-DD", requestID(r)); return
+		}
+	}
+	page := 1
+	if raw := r.URL.Query().Get("page"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 1000 { writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page must be between 1 and 1000", requestID(r)); return }
+		page = n
+	}
+	pageSize := 100
+	if raw := r.URL.Query().Get("page_size"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 500 { writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page_size must be between 1 and 500", requestID(r)); return }
+		pageSize = n
+	}
+	item, hit, err := s.svc.DragonTiger(r.Context(), date, page, pageSize)
+	if err != nil { writeDomainErr(w, err, requestID(r)); return }
+	setCacheHeader(w, hit)
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {

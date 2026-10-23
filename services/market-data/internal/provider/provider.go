@@ -62,6 +62,11 @@ type LimitPoolProvider interface {
 }
 
 // TradingCalendarProvider returns explicit trading-day flags for an inclusive range.
+type DragonTigerProvider interface {
+	NamedProvider
+	FetchDragonTiger(ctx context.Context, tradeDate string, page, pageSize int) (*model.DragonTigerSnapshot, error)
+}
+
 type TradingCalendarProvider interface {
 	NamedProvider
 	FetchTradingCalendar(ctx context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error)

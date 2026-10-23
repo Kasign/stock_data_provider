@@ -18,7 +18,7 @@
       "index_quotes": false,
       "market_breadth": false,
       "limit_pools": false,
-      "stock_boards": false
+      "stock_boards": false, "dragon_tiger": false
     },
     "baostock": {
       "enabled": true,

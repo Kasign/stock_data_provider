@@ -52,6 +52,18 @@ func (httpFakeProvider) FetchStockBoards(_ context.Context, symbol string) (*mod
 		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}, nil
 }
+func (httpFakeProvider) FetchDragonTiger(_ context.Context, tradeDate string, page, pageSize int) (*model.DragonTigerSnapshot, error) {
+	now := time.Now().UTC()
+	netBuy, buy, sell, closePrice, change := 123456.0, 234567.0, 111111.0, 10.25, 2.5
+	item := model.DragonTigerItem{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", TradeDate: tradeDate,
+		ChangePercent: &change, ClosePrice: &closePrice, NetBuyAmountCNY: &netBuy, BuyAmountCNY: &buy, SellAmountCNY: &sell,
+		Reason: "日涨幅偏离值达到7%", Source: "eastmoney", SourceVersion: "test", FetchedAt: now,
+		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"}}
+	return &model.DragonTigerSnapshot{TradeDate: tradeDate, ProviderReportDate: tradeDate, Page: page, PageSize: pageSize, Total: 1, Pages: 1,
+		Returned: 1, HasData: true, HasMore: false, Items: []model.DragonTigerItem{item}, Source: "eastmoney", SourceVersion: "test",
+		FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"}}, nil
+}
+
 func (httpFakeProvider) FetchQuote(context.Context, string) (*model.Quote, error) {
 	p := 10.0
 	open := 9.8
@@ -268,6 +280,36 @@ func TestStockBoardsRouteAndCapabilityAdvertisement(t *testing.T) {
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"stock_boards_capable":true`) {
 		t.Fatalf("data-sources must advertise stock boards: status=%d body=%s", w.Code, w.Body.String())
 	}
+}
+
+func TestDragonTigerEndpointUsesDedicatedCapabilityAndAdvertisesIt(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetDragonTigerProviders([]provider.DragonTigerProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/dragon-tiger?date=2026-10-22&page=1&page_size=50", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder(); h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK { t.Fatalf("status=%d body=%s", w.Code, w.Body.String()) }
+	for _, want := range []string{`"trade_date":"2026-10-22"`, `"net_buy_amount_cny":123456`, `"quality_status":"degraded"`} {
+		if !strings.Contains(w.Body.String(), want) { t.Fatalf("response missing %s: %s", want, w.Body.String()) }
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder(); h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"dragon_tiger_capable":true`) { t.Fatalf("data sources missing capability: status=%d body=%s", w.Code, w.Body.String()) }
+}
+
+func TestDragonTigerRejectsInvalidPagination(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetDragonTigerProviders([]provider.DragonTigerProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/dragon-tiger?page=0", nil); req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder(); h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) { t.Fatalf("invalid page should be rejected: status=%d body=%s", w.Code, w.Body.String()) }
 }
 
 func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {

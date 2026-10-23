@@ -103,3 +103,12 @@ BaoStock 的详细 Go 接入、按能力分工和验收条件见 [数据源扩�
 - **妙想 MX_API**：筹码分布和资金流因没有显式开启 live tests / MX_APIKEY 而 skipped，不是通过，也不一定表示 Provider 失败。
 
 所有未通过目标部署验收的新增能力继续保持独立开关默认关闭。此报告只构成一次 GitHub 托管 Runner 实测，不代表生产 SLA 或所有交易日、证券、分页的完整性证明。
+
+
+| 龙虎榜 `get_dragon_tiger_context` | Go 新增独立 `DragonTigerProvider`、东方财富数据中心 `RPT_DAILYBILLBOARD_DETAILSNEW`，`GET /api/v1/market/dragon-tiger?date=YYYY-MM-DD&page=1&page_size=100` | 2026-10-23 首次完成 Provider/API/契约测试接入；默认关闭，Runner 实测和 NAS/Docker 实测待新 CI。报告只有交易日，没有精确快照时间；空列表 unknown；金额为 CNY 元且缺字段保留 null。 |
+
+## 下一批数据域优先级更新（2026-10-23）
+
+1. 龙虎榜进入 Go 原生接入批次，但在 GitHub Actions 真实接口探测与 NAS/Docker 实测之前不生产启用。
+2. 东方财富行业/概念榜在 Runner #101 再次遇到 HTTP 502。本批切换到统一有限重试（至多 3 次、带退避），并添加 HTTP 502 后恢复的 httptest 回归测试；连续 502 仍应记为真实源失败。
+3. 后续补齐公告/新闻，先对照 Python 入口、发布时间/公告日期、去重 ID、分页覆盖与源链接，避免重复实现。海外源保持暂停。

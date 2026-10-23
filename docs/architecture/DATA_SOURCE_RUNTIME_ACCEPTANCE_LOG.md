@@ -564,3 +564,11 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - 妙想筹码/资金流因未设置 opt-in 测试和 MX_APIKEY 而 skipped。未配置真实 Key 时不能声称这两项已完成联调。
 
 本轮失败问题与后续重点：Go CI #290 因 services/market-data/internal/config/config_test.go 重复声明 TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly 而失败，Docker image build 因同一测试编译错误而失败；修复后仍需重新运行完整 Go CI。东方财富 502/302 集中记录于 [Issue #6](https://github.com/Kasign/stock_data_provider/issues/6)。
+
+
+## 8. 国内龙虎榜 Go 原生接入与 Probe #101（2026-10-23）
+
+- Go CI #291（HEAD `366f20df60c24bc04e26193110b00e5ab93d7f0a`）最终所有 jobs 成功：Go 核心、市场数据服务、根测试、Compose 校验与 Docker 镜像构建通过；解决了重复测试声明导致的编译和镜像失败。
+- Live Provider Probe #101 的核心探测步骤仍失败，但 workflow 总结显示 success，因此按 job 内步骤和 `live-provider-report` artifact 验收。东方财富行业/概念榜再次遇到 HTTP 502（Issue #6）；本批使用有限退避重试并加回归测试。
+- 新增龙虎榜 Provider、分页模型、服务校验与 `GET /api/v1/market/dragon-tiger` 路由；限定交易日，保留供应商 count/pages 与实际返回行数；金额为人民币元，净买额允许负值，缺失金额不补零。无精确源端快照时间时质量 degraded；空报表为 unknown，不误报当日无上榜。
+- 本批龙虎榜尚未完成 Runner 实测和 NAS/Docker 部署验收；独立配置 `MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED` 默认 false，不可标记生产可用。妙想 MX_API 因 Key/opt-in 未满足仍为 skipped，BaoStock 财务指标不在 Probe #101 结果中。
