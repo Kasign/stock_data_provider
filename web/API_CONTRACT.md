@@ -115,6 +115,29 @@ docker build --tag stock_analysis_web:local .
 CI 通过仅验证前端契约测试、JavaScript 语法和镜像构建；真实上游可达性、生产 API Key 与单股分析业务语义仍需 NAS/1Panel 联调确认。
 
 
+
+## 联调验收状态矩阵
+
+以下状态区分源码核对、自动化测试与真实部署验收。**CI 通过不等于 NAS 上的 WebUI 已与运行中的 Go 服务完成端到端联调。**
+
+| 项目 | 已由源码/自动化覆盖 | 仍需 NAS / Docker 实测 |
+|---|---|---|
+| 实时行情 | 已核对浏览器请求路径、X-API-Key、Nginx /market-api/ 转发、Go quote 路由和 Quote JSON 字段；WebUI 单元测试检查请求 URL 与请求头 | 在真实 WebUI 上查询一只有效 A 股，确认数据源、行情时点、价格、质量状态与错误提示均来自运行中的服务；检查无效/缺失 Key、Provider 超时及市场休市时行为 |
+| 历史日 K | 已核对 limit、adjustment、可选 start/end 参数，以及响应的 bars、adjustment_basis、quality_status 和 warnings；有 URL 构造测试 | 在真实服务验证无日期范围与有日期范围、不同复权口径、日期边界、空结果及 Provider 错误；确认表格、图表日期顺序和质量警告一致 |
+| Provider 状态 | 已核对 GET /api/v1/data-sources 的 {sources, normalization_version} 包装和能力字段；前端按 enabled、quote_capable、daily_bar_capable 等字段渲染 | 确认部署配置加载后的 Provider 清单、启用开关和补充能力与实际容器配置一致。该接口是注册/启用能力清单，不应解读为对每个 Provider 的实时可用性探测 |
+| 异步分析任务 | 已核对创建任务 202 / 幂等重放 200、{task,status_url,events_url} 包装、Task 状态结构、事件增量游标及错误信封；Go 单元测试和 WebUI 契约测试覆盖状态映射与请求路径 | 从 WebUI 实际创建任务，核对数据库持久化、排队/运行/终态；验证同一幂等键重放、冲突键 409、队列满 429、缺失任务 404 与服务不可用 |
+| 阶段事件 | 已核对 after_sequence、limit、next_after_sequence，并确认空事件数组不能表示任务已完成；Go HTTP 测试覆盖增量读取 | 在真实 Worker 生命周期内验证事件可继续增量读取、序号递增、队列阶段为空时 UI 不误判完成，以及切换任务后旧轮询不会覆盖新页面 |
+| 分析报告 | 已核对 GET /api/v1/analysis/runs/{run_id} 与 Go RunResult JSON 字段，前端结构化展示直接读取返回字段；Run 未完成时 409 run_not_finished 可触发有限重试 | 从已结束任务读取真实 Run，核对任务与 Run 状态、质量门禁、市场状态、因子、信号、风险/可交易性、计划、拒绝原因、警告及原始 JSON；核对 409 后最终结果、404 和失败状态的呈现 |
+| 反向代理与部署 | Nginx 配置、同源路径、容器镜像构建已由源码/CI 覆盖 | 在真实 Docker 网络确认 market-data:8091 与 stock-analysis-go:8092 上游 DNS/端口、外部 OpenResty 路径重写、容器健康状态、真实 API Key 配置及请求 ID 诊断 |
+
+### 已验证边界
+
+- **源码核对完成**：本表列出的路径、参数和响应字段来自当前 Git 分支的客户端、Nginx、Go Handler 与领域结构体，而非从 fixture 推断。
+- **自动化已通过**：当前数据分支上的 Go test suite 与 Live Provider probe 对提交 7e47aec66cb000cf403ed0cfbbcbadfe655467a3 均显示成功；此前 WebUI 基线 CI 也通过。新增加的 WebUI 回归测试应以最新提交的 Actions 结果为准。
+- **NAS/Docker 端到端仍待执行**：GitHub-hosted runner 的 Provider probe 不验证你的 NAS 上的容器网络、环境变量、OpenResty 路由、数据库持久化或真实 WebUI 行为。未取得这些运行结果前，不应标记为“真实服务已联调通过”。
+- **认证/配置管理不在本轮**：当前 WebUI 的行情 API Key 存在浏览器本地；它不是用户登录系统，也不会修改服务器 .env。密码设置/删除及服务器 .env 导入导出需要独立的后端认证、权限、审计和安全配置接口。
+
+
 ## 个股补充研究接口
 
 WebUI 提供一个**手动触发**的补充数据面板，调用现有接口：
