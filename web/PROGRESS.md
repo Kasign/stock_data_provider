@@ -49,3 +49,11 @@
 - 服务端分页历史列表、跨设备自选股和同股历史报告对比，需要后端 API 及明确比较口径。
 - 行业/题材、市场广度、新闻、财务、资金流、筹码等信息，只有后端实际返回且质量可判定时才展示。
 - 条件选股、Agent、回测、告警、持仓管理等不属于当前单股分析闭环的前置工作。
+
+
+## 任务恢复与本地存储边界回归
+
+- 新增任务恢复源码契约测试：损坏/无效引用被拒绝，激活记录会停止旧轮询、重置事件游标并从服务端重新拉取状态；异步请求响应必须验证当前 task/generation，避免旧任务覆盖新任务。
+- 新增本地历史安全测试：最近任务存储只保留 task/run 引用白名单字段，不会把报告正文、RunResult 或 API Key 写入 localStorage。
+- 上一批 [CI #39897407071](https://github.com/Kasign/stock_data_provider/actions/runs/39897407071) 已通过 22 项测试；本批新增 2 项测试。当前分支最新 CI 请以 [PR #2 Checks](https://github.com/Kasign/stock_data_provider/pull/2) 为准。
+- 这些是 Node 层的回归测试，不替代 NAS/1Panel 下的真实浏览器刷新、断网和过期 task/run 验收。

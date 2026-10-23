@@ -37,3 +37,26 @@ test("storage failures do not throw or create bogus history entries", () => {
     task_id: "task-a", run_id: "", symbols: [], task_type: "post_market_scan", status: "", updated_at: ""
   }]);
 });
+
+
+test("stores only task references and excludes report payloads and secrets", () => {
+  const storage = makeStorage();
+  const input = {
+    task_id: "task-safe",
+    run_id: "run-safe",
+    symbols: ["600519"],
+    status: "succeeded",
+    report: "private report body",
+    result: { quality: { core_pass: true } },
+    api_key: "private-api-key",
+    settings: { apiKey: "private-api-key" }
+  };
+  const records = upsertRecentTask(input, storage);
+  const stored = JSON.parse(storage.getItem(RECENT_TASKS_KEY));
+
+  assert.deepEqual(Object.keys(stored[0]).sort(), [
+    "run_id", "status", "symbols", "task_id", "task_type", "updated_at"
+  ].sort());
+  assert.equal(records[0].task_id, "task-safe");
+  assert.doesNotMatch(storage.getItem(RECENT_TASKS_KEY), /private report body|private-api-key|quality/);
+});
