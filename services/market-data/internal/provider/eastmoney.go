@@ -1220,7 +1220,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		if market == "1" {
 			suffix = ".SH"
 		}
-		if strings.HasPrefix(code, "8") || strings.HasPrefix(code, "4") {
+		if strings.HasPrefix(code, "8") || strings.HasPrefix(code, "4") || strings.HasPrefix(code, "920") {
 			suffix = ".BJ"
 		}
 		symbol := code + suffix

@@ -202,6 +202,26 @@ func TestEastmoneyFetchLimitPoolTypeDateAndFields(t *testing.T) {
 	}
 }
 
+
+func TestEastmoneyFetchLimitPoolMapsBeijing920CodeToBJ(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
+			"tc": 1, "qdate": 20261023, "pool": []map[string]any{{
+				"c": "920285", "m": 0, "n": "N远大", "zdp": 20.0, "lbc": 1,
+			}},
+		}})
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchLimitPool(context.Background(), "up", "2026-10-23", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Items) != 1 || got.Items[0].Symbol != "920285.BJ" {
+		t.Fatalf("Beijing stock with 920 prefix mapped incorrectly: %+v", got.Items)
+	}
+}
+
 func TestEastmoneyFetchLimitPoolRetriesInconsistentPartialPayload(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
