@@ -2,9 +2,11 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +46,60 @@ func TestEastmoneyQuoteNormalizesUnitsAndProviderTime(t *testing.T) {
 		t.Fatalf("volume ratio/turnover rate must survive the provider contract: ratio=%v turnover=%v", q.VolumeRatio, q.TurnoverRate)
 	}
 }
+func TestEastmoneyQuoteRejectsInvalidPriceContract(t *testing.T) {
+	responses := []string{
+		`{"rc":0,"data":{"f43":0,"f44":1331.98,"f45":1312.00,"f46":1331.88,"f47":34136,"f48":4525398959,"f57":"600519","f58":"贵州茅台","f60":1331.88,"f86":"202610211128","f169":-18.57,"f170":-1.394}}`,
+		`{"rc":0,"data":{"f43":1335.00,"f44":1331.98,"f45":1312.00,"f46":1331.88,"f47":34136,"f48":4525398959,"f57":"600519","f58":"贵州茅台","f60":1331.88,"f86":"202610211128","f169":3.12,"f170":0.234}}`,
+	}
+	for i, body := range responses {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
+		p := NewEastmoney(2*time.Second, server.URL, server.URL)
+		if _, err := p.FetchQuote(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), "quote data contract") {
+			server.Close()
+			t.Fatalf("fixture %d: expected invalid quote contract error, got %v", i, err)
+		}
+		server.Close()
+	}
+}
+
+func TestEastmoneyRedirectPolicyAllowsOnlyHTTPSFirstPartyHosts(t *testing.T) {
+	source := &http.Request{URL: &url.URL{Scheme: "https", Host: "push2.eastmoney.com"}}
+	allowed := &http.Request{URL: &url.URL{Scheme: "https", Host: "push2delay.eastmoney.com"}}
+	if err := eastmoneyRedirectPolicy(allowed, []*http.Request{source}); err != nil {
+		t.Fatalf("trusted Eastmoney HTTPS redirect should be followed: %v", err)
+	}
+	for _, target := range []*url.URL{
+		{Scheme: "https", Host: "eastmoney.com.attacker.invalid"},
+		{Scheme: "http", Host: "push2delay.eastmoney.com"},
+		{Scheme: "https", Host: "attacker.invalid"},
+	} {
+		err := eastmoneyRedirectPolicy(&http.Request{URL: target}, []*http.Request{source})
+		if !errors.Is(err, http.ErrUseLastResponse) {
+			t.Fatalf("unsafe redirect target %s should not be followed, got %v", target, err)
+		}
+	}
+	if err := eastmoneyRedirectPolicy(allowed, []*http.Request{source, source, source}); err == nil {
+		t.Fatal("redirect loops must be capped")
+	}
+}
+
+func TestEastmoneyDoesNotFollowExternalRedirect(t *testing.T) {
+	var targetHits int
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { targetHits++ }))
+	defer target.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/steal", http.StatusFound)
+	}))
+	defer source.Close()
+	p := NewEastmoney(2*time.Second, source.URL, source.URL)
+	if _, err := p.FetchQuote(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), "HTTP status 302") {
+		t.Fatalf("external redirect should remain an HTTP status error, got %v", err)
+	}
+	if targetHits != 0 {
+		t.Fatalf("external redirect target was contacted %d time(s)", targetHits)
+	}
+}
+
 func TestEastmoneyDailyBarsNormalizesHandToShare(t *testing.T) {
 	utCh := make(chan string, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +126,32 @@ func TestEastmoneyDailyBarsNormalizesHandToShare(t *testing.T) {
 	}
 	if got := <-utCh; got != defaultEastmoneyUT {
 		t.Fatalf("Eastmoney K-line request ut=%q, want default public token", got)
+	}
+}
+
+func TestEastmoneyDailyBarsSortsAndDropsDuplicateOutOfRangeAndInvalidRows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":[
+			"2026-10-21,10.0,10.2,10.3,9.9,100,1020000,1.42,0.81,10.87,0.23",
+			"2026-10-19,9.8,10.0,10.1,9.7,100,990000,1.42,0.81,10.87,0.23",
+			"2026-10-21,10.0,10.1,10.3,9.9,100,1010000,1.42,0.81,10.87,0.23",
+			"2026-10-18,9.5,9.6,9.7,9.4,100,960000,1.42,0.81,10.87,0.23",
+			"2026-10-20,10.0,10.5,10.4,9.9,100,1050000,1.42,0.81,10.87,0.23"
+		]}}`)
+	}))
+	defer server.Close()
+	p := NewEastmoney(2*time.Second, server.URL, server.URL)
+	bars, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-19", "2026-10-21", 8, model.AdjustmentForward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 2 || bars[0].TradeDate != "2026-10-19" || bars[1].TradeDate != "2026-10-21" {
+		t.Fatalf("bars must be unique, in-range, and sorted ascending: %+v", bars)
+	}
+	for _, bar := range bars {
+		if bar.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(bar.QualityReasons, ","), "provider_response_contract_warning") {
+			t.Fatalf("filtered upstream rows must degrade accepted rows: %+v", bar)
+		}
 	}
 }
 

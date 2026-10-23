@@ -155,6 +155,9 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		q.QualityReasons = append(q.QualityReasons, "provider_timestamp_missing")
 	}
 	q.QualityReasons = append(q.QualityReasons, "volume_ratio_unsupported_by_tencent_quote_contract")
+	if err := normalize.ValidateQuote(q); err != nil {
+		return nil, fmt.Errorf("Tencent quote data contract: %w", err)
+	}
 	return q, nil
 }
 
@@ -226,8 +229,10 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		return nil, fmt.Errorf("decode Tencent %s rows: %w", key, err)
 	}
 	out := make([]model.DailyBar, 0, len(rows))
+	rejectedRows := 0
 	for _, row := range rows {
 		if len(row) < 6 {
+			rejectedRows++
 			continue
 		}
 		// Only the first six columns are mandatory and stable across Tencent
@@ -253,6 +258,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			}
 		}
 		if !valid {
+			rejectedRows++
 			continue
 		}
 		open, e1 := strconv.ParseFloat(vals[1], 64)
@@ -260,11 +266,13 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		high, e3 := strconv.ParseFloat(vals[3], 64)
 		low, e4 := strconv.ParseFloat(vals[4], 64)
 		rawVol, e5 := strconv.ParseFloat(vals[5], 64)
-		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || math.IsNaN(open) || math.IsInf(open, 0) || math.IsNaN(closeV) || math.IsInf(closeV, 0) || math.IsNaN(high) || math.IsInf(high, 0) || math.IsNaN(low) || math.IsInf(low, 0) {
+		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || !finiteNumber(open) || !finiteNumber(closeV) || !finiteNumber(high) || !finiteNumber(low) {
+			rejectedRows++
 			continue
 		}
 		shares, conversionErr := tencentDailyVolumeToShares(rawVol, symbol)
 		if conversionErr != nil {
+			rejectedRows++
 			continue
 		}
 		rv := rawVol
@@ -286,10 +294,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		out = append(out, b)
 	}
 
-	if len(out) == 0 {
-		return nil, errors.New("tencent returned no parsable daily bars")
-	}
-	return out, nil
+	return normalizeProviderDailyBars(symbol, start, end, limit, out, rejectedRows)
 }
 
 // Tencent quote payloads expose turnover at field 35's price/volume/amount

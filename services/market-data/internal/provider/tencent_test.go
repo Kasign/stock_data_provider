@@ -131,6 +131,38 @@ func TestTencentQuoteVolumeMarksFallbackAssumption(t *testing.T) {
 	}
 }
 
+func TestTencentQuoteRejectsInvalidPriceContract(t *testing.T) {
+	tests := []struct {
+		name  string
+		price string
+		high  string
+	}{
+		{name: "non-finite current price", price: "NaN", high: "10.5"},
+		{name: "current price above high", price: "10.8", high: "10.5"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fields := make([]string, 60)
+			for i := range fields {
+				fields[i] = "0"
+			}
+			fields[1], fields[2] = "Test", "600519"
+			fields[3], fields[4], fields[5], fields[6] = tc.price, "9.8", "10.0", "1000"
+			fields[30], fields[31], fields[32], fields[33], fields[34] = "20261021112802", "0.4", "4.08", tc.high, "9.5"
+			fields[35] = "10.2/1000/1020000"
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, "v_sh600519=\"%s\";", strings.Join(fields, "~"))
+			}))
+			defer server.Close()
+			p := NewTencent(2 * time.Second)
+			p.quoteURL = server.URL + "/quote"
+			if _, err := p.FetchQuote(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), "quote data contract") {
+				t.Fatalf("expected invalid quote contract error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestTencentBarsExplicitlyMarkMissingAmount(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"data":{"sh600519":{"qfqday":[["2026-10-20","1321.01","1331.88","1335.00","1316.14","34136"]]}}}`)
@@ -307,6 +339,33 @@ func TestTencentDailyBarsUsesRequestedAdjustmentEndpointAndPayloadKey(t *testing
 		})
 		if got := requests[len(requests)-1]; got.path != tc.wantPath || got.param != tc.wantParam {
 			t.Fatalf("request path/param=%q/%q, want %q/%q", got.path, got.param, tc.wantPath, tc.wantParam)
+		}
+	}
+}
+
+func TestTencentDailyBarsSortsAndDropsDuplicateOutOfRangeAndInvalidRows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"data":{"sh600519":{"qfqday":[
+			["2026-10-21","10.0","10.2","10.3","9.9","100"],
+			["2026-10-19","9.8","10.0","10.1","9.7","100"],
+			["2026-10-21","10.0","10.1","10.3","9.9","100"],
+			["2026-10-18","9.5","9.6","9.7","9.4","100"],
+			["2026-10-20","10.0","10.5","10.4","9.9","100"]
+		]}}}`)
+	}))
+	defer server.Close()
+	p := NewTencent(2 * time.Second)
+	p.klineURL, p.noneKlineURL = server.URL, server.URL
+	bars, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-19", "2026-10-21", 8, model.AdjustmentForward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 2 || bars[0].TradeDate != "2026-10-19" || bars[1].TradeDate != "2026-10-21" {
+		t.Fatalf("bars must be unique, in-range, and sorted ascending: %+v", bars)
+	}
+	for _, bar := range bars {
+		if bar.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(bar.QualityReasons, ","), "provider_response_contract_warning") {
+			t.Fatalf("filtered upstream rows must degrade accepted rows: %+v", bar)
 		}
 	}
 }

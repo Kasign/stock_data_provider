@@ -54,7 +54,7 @@ func NewEastmoneyConfigured(timeout time.Duration, quoteURL, klineURL, ut string
 	if ut == "" {
 		ut = defaultEastmoneyUT
 	}
-	return &Eastmoney{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, ut: ut}
+	return &Eastmoney{client: &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy}, quoteURL: quoteURL, klineURL: klineURL, ut: ut}
 }
 func (p *Eastmoney) Name() string { return "eastmoney" }
 
@@ -187,6 +187,9 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		quote.QualityReasons = append(quote.QualityReasons, "name_missing")
 		quote.QualityStatus = model.QualityDegraded
 	}
+	if err := normalize.ValidateQuote(quote); err != nil {
+		return nil, fmt.Errorf("Eastmoney quote data contract: %w", err)
+	}
 	return quote, nil
 }
 
@@ -256,9 +259,11 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		}
 	}
 	out := make([]model.DailyBar, 0, len(payload.Data.KLines))
+	rejectedRows := 0
 	for _, line := range payload.Data.KLines {
 		parts := strings.Split(line, ",")
 		if len(parts) < 7 {
+			rejectedRows++
 			continue
 		}
 		open, e1 := strconv.ParseFloat(parts[1], 64)
@@ -269,10 +274,12 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		amount, e6 := strconv.ParseFloat(parts[6], 64)
 		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || e6 != nil ||
 			!finiteNumber(open) || !finiteNumber(closeV) || !finiteNumber(high) || !finiteNumber(low) || !finiteNumber(amount) || amount < 0 {
+			rejectedRows++
 			continue
 		}
 		shares, conversionErr := normalize.HandsToShares(rawVol)
 		if conversionErr != nil {
+			rejectedRows++
 			continue
 		}
 		amountValue := amount
@@ -286,10 +293,10 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		}
 		out = append(out, bar)
 	}
-	if len(out) == 0 {
-		return nil, errors.New("eastmoney daily bar response contains no parsable bars")
-	}
-	return out, nil
+	// 使用实际发给上游的查询区间（包括自动计算的回溯起始日）过滤结果。
+	startISO := beg[:4] + "-" + beg[4:6] + "-" + beg[6:]
+	endISO := end[:4] + "-" + end[4:6] + "-" + end[6:]
+	return normalizeProviderDailyBars(symbol, startISO, endISO, limit, out, rejectedRows)
 }
 
 // eastmoneyDateRange preserves explicit caller ranges. When no start date is
@@ -406,3 +413,20 @@ func parseEastmoneyTime(s string) *time.Time {
 }
 
 func finiteNumber(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
+
+// eastmoneyRedirectPolicy 只跟随 HTTPS 下的东方财富自有域名重定向，兼容 push2 -> push2delay 的行情调度。
+func eastmoneyRedirectPolicy(req *http.Request, via []*http.Request) error {
+	if len(via) >= 3 {
+		return errors.New("Eastmoney redirect limit exceeded")
+	}
+	if req.URL.Scheme == "https" && isEastmoneyHostname(req.URL.Hostname()) {
+		return nil
+	}
+	// 对外部域名和 HTTPS 降级到 HTTP 的跳转，不发送第二次请求。
+	return http.ErrUseLastResponse
+}
+
+func isEastmoneyHostname(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	return host == "eastmoney.com" || strings.HasSuffix(host, ".eastmoney.com")
+}

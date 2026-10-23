@@ -194,6 +194,9 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 		AdjustmentBasis: model.AdjustmentNone, QualityStatus: quality,
 		QualityReasons: reasons, NormalizationVer: normalize.Version,
 	}
+	if err := normalize.ValidateQuote(quote); err != nil {
+		return nil, fmt.Errorf("Sina quote data contract: %w", err)
+	}
 	return quote, nil
 }
 
