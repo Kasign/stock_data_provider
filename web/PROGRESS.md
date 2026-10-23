@@ -135,10 +135,13 @@
 - 代码提交：[`230ac4f1`](https://github.com/Kasign/stock_data_provider/commit/230ac4f16ffa4c48fe24692ee947632ca5dcc027)。CI 只验证源码和镜像构建；搜索、清理与刷新恢复的真实浏览器交互仍需部署后验收。
 
 
-## 全局字号可读性与 API/持久化边界说明 — 本批待 CI
+## 全局字号可读性与 API/持久化边界说明 — CI 验证结果
 
 - 全局字体基线由 13px 提升至 15px；原来 9–10px 的辅助文字提升至至少 12px，原来 11–12px 的标签/次级正文提升到 13px。表格正文、表单控件、报告字段与原始 JSON 查看区分别设定可读字号。
 - 调整小屏下搜索表单、指标卡和报告内容间距，避免字号放大后控件挤压；保留图表、状态标识和密集数据区的独立布局。
 - 在连接设置中加入“API 和数据分别存在哪里”的说明：WebUI 不直连数据库；浏览器只保存 API Key、自选股和最近任务引用；Go 分析服务将任务/阶段事件/结果/快照持久化到 MariaDB，Redis 是缓存；行情数据持久化由行情服务端点决定。
 - README 与 API 契约同步补充数据流及持久化边界，避免把 WebUI localStorage 误解成服务端分析历史。
-- 新增字号基线与设置区内容的 UI 契约测试；本批 GitHub Actions 结果待回填。
+- 新增字号基线与设置区内容的 UI 契约测试。GitHub Actions [WebUI checks #39927566854](https://github.com/Kasign/stock_data_provider/actions/runs/39927566854) 成功：49 项 Node 测试通过（0 失败），JavaScript 语法检查和 Nginx 镜像构建通过。
+
+
+- 代码提交：[`ddb580b2`](https://github.com/Kasign/stock_data_provider/commit/ddb580b22ee99753cbab2556caaabc31e3308030)。实际浏览器排版与 NAS/1Panel 后端联调仍需部署后验收。
