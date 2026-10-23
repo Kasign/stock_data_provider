@@ -51,6 +51,55 @@ func TestParseHeaderRejectsUnknownProtocolVersion(t *testing.T) {
 	}
 }
 
+func TestQueryTradeDatesHandlesLoginQueryAndLogout(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil { t.Fatal(err) }
+	defer listener.Close()
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil { serverErr <- err; return }
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		if err := serveBaoStockLoginForTest(conn, reader); err != nil { serverErr <- err; return }
+		messageType, body, err := readBaoStockRequestForTest(reader)
+		if err != nil { serverErr <- err; return }
+		parts := strings.Split(body, messageSplit)
+		if messageType != messageTradeDateRequest || len(parts) != 6 || parts[0] != "query_trade_dates" ||
+			parts[1] != "anonymous" || parts[2] != "1" || parts[3] != strconv.Itoa(defaultPageSize) ||
+			parts[4] != "2026-10-22" || parts[5] != "2026-10-24" {
+			serverErr <- fmt.Errorf("unexpected trading-calendar request type=%q body=%q", messageType, body); return
+		}
+		raw, err := json.Marshal(map[string]any{"record": [][]string{{"2026-10-22","1"},{"2026-10-23","1"},{"2026-10-24","0"}}})
+		if err != nil { serverErr <- err; return }
+		responseBody := strings.Join([]string{"0","success","query_trade_dates","anonymous","1",strconv.Itoa(defaultPageSize),string(raw),"2026-10-22","2026-10-24","calendar_date,is_trading_day"}, messageSplit)
+		if err := writeAll(conn, responseFrameForTest(messageTradeDateResponse, responseBody, false)); err != nil { serverErr <- err; return }
+		messageType, body, err = readBaoStockRequestForTest(reader)
+		if err != nil { serverErr <- err; return }
+		if messageType != messageLogoutRequest || !strings.HasPrefix(body, "logout\x01anonymous\x01") {
+			serverErr <- fmt.Errorf("expected logout after trading-calendar query, got type=%q body=%q", messageType, body); return
+		}
+		if err := writeAll(conn, responseFrameForTest(messageLogoutResponse, "0\x01success\x01logout", false)); err != nil { serverErr <- err; return }
+		serverErr <- nil
+	}()
+	host, portText, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil { t.Fatal(err) }
+	port, err := strconv.Atoi(portText)
+	if err != nil { t.Fatal(err) }
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	rows, err := client.QueryTradeDates(ctx, "2026-10-22", "2026-10-24")
+	if err != nil { t.Fatal(err) }
+	if len(rows) != 3 || rows[0].Date != "2026-10-22" || !rows[0].IsTradingDay ||
+		rows[1].Date != "2026-10-23" || !rows[1].IsTradingDay ||
+		rows[2].Date != "2026-10-24" || rows[2].IsTradingDay {
+		t.Fatalf("unexpected trading-calendar rows: %+v", rows)
+	}
+	if err := client.Close(); err != nil { t.Fatal(err) }
+	if err := <-serverErr; err != nil { t.Fatalf("mock BaoStock server failed: %v", err) }
+}
+
 func TestQueryDailyKLinesHandlesLoginCompressedQueryAndLogout(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
