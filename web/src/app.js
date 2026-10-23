@@ -1417,9 +1417,19 @@ async function copyText(text) {
   if (!copied) throw new Error("浏览器未允许复制，请手动展开原始 JSON 后复制。");
 }
 
+function setMarketKeyVisibility(visible) {
+  const input = $("#market-key-input");
+  const button = $("#toggle-market-key-visibility");
+  input.type = visible ? "text" : "password";
+  button.textContent = visible ? "隐藏" : "显示";
+  button.setAttribute("aria-pressed", String(visible));
+  button.setAttribute("aria-label", visible ? "隐藏行情 API Key" : "显示行情 API Key");
+}
+
 function openSettings() {
   $("#market-base-input").value = state.settings.marketBase;
   $("#market-key-input").value = state.settings.apiKey;
+  setMarketKeyVisibility(false);
   $("#analysis-base-input").value = state.settings.analysisBase;
   $("#settings-feedback").textContent = "";
   $("#settings-dialog").showModal();
@@ -1480,6 +1490,10 @@ $("#refresh-button").addEventListener("click", async () => {
 $("#open-settings").addEventListener("click", openSettings);
 $("#open-settings-side").addEventListener("click", openSettings);
 $("#save-settings").addEventListener("click", saveSettingsFromForm);
+$("#toggle-market-key-visibility").addEventListener("click", () => {
+  setMarketKeyVisibility($("#market-key-input").type === "password");
+});
+$("#settings-dialog").addEventListener("close", () => setMarketKeyVisibility(false));
 $("#clear-settings").addEventListener("click", clearLocalSettings);
 $("#task-form").addEventListener("submit", createTask);
 $("#refresh-task").addEventListener("click", () => {

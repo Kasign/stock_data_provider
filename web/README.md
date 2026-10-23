@@ -7,7 +7,7 @@
 - **行情工作台**：Go market-data 服务健康检查、Provider 能力、实时行情、历史日 K 曲线/表格、质量警告。
 - **分析任务**：提交 Go 异步任务，读取任务状态与持久化阶段事件。任务状态由服务端返回，前端不计算虚假的百分比。
 - **最近分析与报告导出**：当前浏览器内保留最近 10 条 task/run 引用，点击即可从现有接口恢复状态和结果；结果支持下载 Markdown 与 JSON。该列表不是服务端历史，不跨浏览器同步，也不缓存完整报告。
-- **连接设置**：配置同源 API 路径、行情服务 API Key。API Key 仅保存在当前浏览器的 localStorage，不写入 HTML、镜像或仓库。
+- **连接设置**：配置同源 API 路径、行情服务 API Key。API Key 默认掩码显示，可临时切换为明文核对；关闭设置窗口后自动重新隐藏。密钥仅保存在当前浏览器的 localStorage，不写入 HTML、镜像或仓库。
 
 界面参考 Kasign/daily_stock_analysis 的仪表盘组织方式，但保持依赖轻、目录独立与 Provider 数据契约对齐。
 
@@ -81,4 +81,4 @@ WebUI 本身是静态 HTML/CSS/JavaScript，由 Nginx 提供页面和同源反�
 openssl rand -hex 32
 ```
 
-把生成的同一个值写入部署仓库根目录的 `.env` 中的 `MARKET_DATA_API_KEY`，供 `market-data` 与 `stock-analysis-go` 两个 Go 服务共用，并按部署流程重启/重建 Go 服务。随后把完全相同的值填入 WebUI「连接与密钥设置」的行情 API Key 输入框。WebUI 只会把该值保存到当前浏览器的 `localStorage`，并在请求受保护的行情端点时以 `X-API-Key` 发送；它不会创建密钥，也不会修改服务器的 `.env`。不要把真实密钥提交到 Git。
+把生成的同一个值写入部署仓库根目录的 `.env` 中的 `MARKET_DATA_API_KEY`，供 `market-data` 与 `stock-analysis-go` 两个 Go 服务共用，并按部署流程重启/重建 Go 服务。随后把完全相同的值填入 WebUI「连接与密钥设置」的行情 API Key 输入框。WebUI 只会把该值保存到当前浏览器的 `localStorage`，并在请求受保护的行情端点时以 `X-API-Key` 发送；它不会创建密钥，也不会修改服务器的 `.env`。输入框默认掩码显示，点击“显示”可临时核对密钥，关闭设置窗口后会自动重新隐藏。不要把真实密钥提交到 Git。

@@ -541,7 +541,7 @@ td { font-size: 12px !important; }
 .recent-analysis-search { font-size: 13px !important; }
 .recent-analysis-feedback { font-size: 13px !important; }
 .recent-analysis-remove { font-size: 12px !important; }
-.brand-copy small { font-size: 11px !important; }
+.brand-copy small { font-size: 12px !important; }
 .field input, .field select, .field textarea, .recent-analysis-search input { font-size: 14px; }
 .button { font-size: 13px; }
 .text-button { font-size: 12px; }
@@ -576,3 +576,10 @@ td { font-size: 12px !important; }
 /* Clarify that the market API key is a deployment secret shared with the Go services. */
 .field-hint { margin: -2px 0 14px; color: #a6b8c6; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
 .field-hint code { color: #d5e8f1; font-size: 12px; }
+
+
+/* Allow verifying a long API key without leaving it exposed after closing settings. */
+.secret-input-row { display: flex; align-items: stretch; gap: 8px; width: 100%; min-width: 0; }
+.secret-input-row input { flex: 1 1 auto; width: 100%; min-width: 0; }
+.secret-input-row .secret-visibility-toggle { flex: 0 0 52px; min-height: 38px; padding: 4px 8px; border: 1px solid #314654; border-radius: 7px; color: #b5d9cf; background: #172531; font-size: 12px; }
+.secret-input-row .secret-visibility-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

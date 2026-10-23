@@ -165,3 +165,11 @@
 - Review 清理了设置区重复的 CSS 规则；连接设置页和 README/API 契约已补充密钥归属、生成方式与存储边界。
 - GitHub Actions [WebUI checks #39929408226](https://github.com/Kasign/stock_data_provider/actions/runs/39929408226) 通过：51 项 Node 测试全部通过（0 失败），JS 语法检查与 Nginx 镜像构建成功。
 - 代码提交：[`07797f2f`](https://github.com/Kasign/stock_data_provider/commit/07797f2f67486e1d9f552632c1fd467357617ff3)。
+
+
+## API Key 输入体验与 CSS 回归 Review（本批）
+
+- 行情 API Key 默认以密码样式遮蔽；用户主动点击“显示”后才呈现明文，关闭设置对话框（取消、保存或 Esc）后自动恢复遮蔽。按钮包含 `aria-controls`、`aria-pressed` 和动态无障碍名称，键盘焦点有可见边框。
+- 修正品牌副标题在字号全局覆盖中被后置规则降回 11px 的问题，保持至少 12px。
+- 修正字号回归测试的误判方式：测试现在读取指定选择器最后一条 CSS 声明，避免只匹配前面的旧规则而无法检查实际生效的字号。
+- GitHub Actions 验证结果待本次提交完成后回填。此改动未触及 API、数据源与服务端密钥存储；真实浏览器的键盘/窗口关闭行为仍待部署验收。

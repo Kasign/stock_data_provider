@@ -14,6 +14,15 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../src/api.js", import.meta.url), "utf8")
 ]);
 
+function finalCssRuleBody(selector) {
+  const start = stylesheet.lastIndexOf(selector);
+  assert.notEqual(start, -1, "stylesheet should contain " + selector);
+  const open = stylesheet.indexOf("{", start + selector.length);
+  const close = stylesheet.indexOf("}", open + 1);
+  assert.ok(open > start && close > open, "stylesheet should have a complete rule for " + selector);
+  return stylesheet.slice(open + 1, close);
+}
+
 test("static DOM IDs referenced by the WebUI exist and are unique", () => {
   const htmlIds = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(htmlIds.length, new Set(htmlIds).size, "HTML must not contain duplicate id attributes");
@@ -154,10 +163,24 @@ test("market API key help identifies who generates it and where it must be confi
   assert.equal((stylesheet.match(/Explain the service\/database boundary directly beside connection settings/g) || []).length, 1, "settings boundary CSS should not be duplicated");
 });
 
+test("market API key visibility is opt-in and resets when settings close", () => {
+  assert.match(html, /id="market-key-input" type="password"/);
+  assert.match(html, /id="toggle-market-key-visibility"[^>]*aria-controls="market-key-input"[^>]*aria-pressed="false"/);
+  assert.match(app, /function setMarketKeyVisibility\(visible\)[\s\S]*?input\.type = visible \? "text" : "password"/);
+  assert.match(app, /\$\("#toggle-market-key-visibility"\)\.addEventListener\("click",[\s\S]*?setMarketKeyVisibility/);
+  assert.match(app, /\$\("#settings-dialog"\)\.addEventListener\("close", \(\) => setMarketKeyVisibility\(false\)\)/);
+  assert.match(app, /function openSettings\(\)[\s\S]*?setMarketKeyVisibility\(false\)/);
+  assert.match(stylesheet, /\.secret-input-row/);
+  assert.match(stylesheet, /\.secret-visibility-toggle:focus-visible/);
+});
+
 test("global typography has a readable baseline and key UI text is not undersized", () => {
   assert.match(stylesheet, /Global readability pass/);
   assert.match(stylesheet, /body \{ font-size: 15px; line-height: 1\.65; \}/);
-  assert.match(stylesheet, /font-size: 12px !important/);
+  assert.match(finalCssRuleBody(".brand-copy small"), /font-size: 12px !important;/, "brand subtitle should not be shrunk below the readability baseline");
+  assert.match(finalCssRuleBody(".task-result-metric small"), /font-size: 13px !important;/, "check the final rule, not an earlier CSS declaration");
+  assert.match(finalCssRuleBody(".analysis-result-fields dt"), /font-size: 12px !important;/);
+  assert.match(finalCssRuleBody(".task-result-actions .text-button"), /font-size: 13px !important;/);
   assert.match(stylesheet, /\.table-scroll td \{ font-size: 13px !important; \}/);
   assert.match(stylesheet, /\.analysis-result-fields dd \{ font-size: 13px !important; \}/);
   for (const id of ["storage-boundary-title", "market-base-input", "market-key-input", "analysis-base-input"]) {
