@@ -85,8 +85,14 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	}
 	sort.Strings(names)
 	sources := make([]model.SourceStatus, 0, len(names))
+	stockBasicEnabled := map[string]bool{}
+	if svc != nil {
+		for _, p := range svc.StockBasicProviders() {
+			stockBasicEnabled[p.Name()] = true
+		}
+	}
 	for _, name := range names {
-		sources = append(sources, model.SourceStatus{Name: name, Enabled: true, QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name]})
+		sources = append(sources, model.SourceStatus{Name: name, Enabled: true, QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name], StockBasicCapable: stockBasicEnabled[name]})
 	}
 	if requestTimeout <= 0 {
 		requestTimeout = 110 * time.Second
@@ -101,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/bars/{symbol}/daily", s.auth(http.HandlerFunc(s.bars)))
 	mux.Handle("GET /api/v1/bundles/{symbol}", s.auth(http.HandlerFunc(s.bundle)))
 	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
+	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic))
 	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/capital-flow", s.auth(http.HandlerFunc(s.capitalFlow)))
 	return securityHeaders(s.requestID(s.accessLog(s.timeoutContext(s.requestTimeout, mux))))
@@ -223,6 +230,20 @@ func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(sources, func(i, j int) bool { return sources[i].Name < sources[j].Name })
 	writeJSON(w, 200, map[string]any{"sources": sources, "normalization_version": normalize.Version})
+}
+
+func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
+	item, hit, err := s.svc.StockBasic(r.Context(), r.PathValue("symbol"))
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	if hit {
+		w.Header().Set("X-Market-Data-Cache", "HIT")
+	} else {
+		w.Header().Set("X-Market-Data-Cache", "MISS")
+	}
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (s *Server) chipDistribution(w http.ResponseWriter, r *http.Request) {

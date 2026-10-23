@@ -23,6 +23,7 @@ type DataService struct {
 	providers           []provider.NamedProvider
 	quoteProviders      []provider.QuoteProvider
 	barProviders        []provider.DailyBarProvider
+	stockBasicProviders []provider.StockBasicProvider
 	supplementProviders []provider.SupplementProvider
 	maxBars             int
 	retries             int
@@ -95,6 +96,132 @@ func NewWithCapabilities(allProviders []provider.NamedProvider, quoteProviders [
 
 func (s *DataService) Providers() []provider.NamedProvider {
 	return append([]provider.NamedProvider(nil), s.providers...)
+}
+
+func (s *DataService) SetStockBasicProviders(providers []provider.StockBasicProvider) {
+	s.stockBasicProviders = append([]provider.StockBasicProvider(nil), providers...)
+}
+
+func (s *DataService) StockBasicProviders() []provider.StockBasicProvider {
+	return append([]provider.StockBasicProvider(nil), s.stockBasicProviders...)
+}
+
+func validateStockBasic(symbol string, item *model.StockBasic) error {
+	if item == nil {
+		return errors.New("stock-basic provider returned an empty response")
+	}
+	canonical, err := normalize.NormalizeSymbol(item.Symbol)
+	if err != nil || canonical != symbol {
+		return fmt.Errorf("stock-basic symbol mismatch: requested %s, got %q", symbol, item.Symbol)
+	}
+	if strings.TrimSpace(item.Name) == "" {
+		return errors.New("stock-basic name is empty")
+	}
+	if item.SecurityType < 1 || item.SecurityType > 4 {
+		return fmt.Errorf("stock-basic security type %d is unsupported", item.SecurityType)
+	}
+	if item.ListingStatus != 0 && item.ListingStatus != 1 {
+		return fmt.Errorf("stock-basic listing status %d is unsupported", item.ListingStatus)
+	}
+	for field, value := range map[string]string{"ipo_date": item.IPODate, "out_date": item.OutDate} {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", value); err != nil {
+			return fmt.Errorf("stock-basic %s %q is invalid", field, value)
+		}
+	}
+	if strings.TrimSpace(item.Source) == "" {
+		return errors.New("stock-basic source is missing")
+	}
+	if item.FetchedAt.IsZero() {
+		return errors.New("stock-basic fetched_at is missing")
+	}
+	return nil
+}
+
+// StockBasic loads security identity and listing data from independent stock-basic providers.
+func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.StockBasic, bool, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, false, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = 24 * time.Hour
+	key := "md:v1:stock-basic:" + symbol
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var item model.StockBasic
+		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil &&
+			item.QualityStatus == model.QualityValid && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < ttl {
+			return &item, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("stock-basic cache read failed", "symbol", symbol, "error", cacheErr)
+	}
+	if len(s.stockBasicProviders) == 0 {
+		return nil, false, errors.New("no enabled stock-basic provider")
+	}
+	var failures []string
+	for _, p := range s.stockBasicProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		item, fetchErr := p.FetchStockBasic(ctx, symbol)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if item == nil {
+			failures = append(failures, p.Name()+": empty stock-basic response")
+			continue
+		}
+		returnedSymbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
+		if symbolErr != nil || returnedSymbol != symbol {
+			failures = append(failures, p.Name()+": stock-basic symbol mismatch")
+			continue
+		}
+		if item.Source == "" {
+			item.Source = p.Name()
+		}
+		if item.FetchedAt.IsZero() {
+			item.FetchedAt = time.Now().UTC()
+		}
+		if item.SecurityTypeLabel == "" {
+			item.SecurityTypeLabel = map[int]string{1: "stock", 2: "index", 3: "other", 4: "convertible_bond"}[item.SecurityType]
+		}
+		if item.ListingStatusLabel == "" {
+			item.ListingStatusLabel = map[int]string{0: "delisted", 1: "listed"}[item.ListingStatus]
+		}
+		if item.QualityStatus == "" || item.QualityStatus == model.QualityUnknown {
+			item.QualityStatus = model.QualityValid
+		}
+		if item.NormalizationVer == "" {
+			item.NormalizationVer = normalize.Version
+		}
+		if err := validateStockBasic(symbol, item); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if item.QualityStatus != model.QualityValid {
+			failures = append(failures, p.Name()+": stock-basic quality status is not valid")
+			continue
+		}
+		payload, marshalErr := json.Marshal(item)
+		if marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+				s.logger.Warn("stock-basic cache write failed", "symbol", symbol, "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("stock-basic cache encode failed", "symbol", symbol, "error", marshalErr)
+		}
+		return item, false, nil
+	}
+	return nil, false, fmt.Errorf("all stock-basic providers failed: %s", strings.Join(failures, "; "))
 }
 
 // SetSupplementProviders 注册显式启用的非价格类补充数据源。

@@ -19,6 +19,9 @@ import (
 type httpFakeProvider struct{}
 
 func (httpFakeProvider) Name() string { return "eastmoney" }
+func (httpFakeProvider) FetchStockBasic(_ context.Context, symbol string) (*model.StockBasic, error) {
+	return &model.StockBasic{Symbol: symbol, Name: "测试证券", IPODate: "2000-01-01", SecurityType: 1, SecurityTypeLabel: "stock", ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid}, nil
+}
 func (httpFakeProvider) FetchQuote(context.Context, string) (*model.Quote, error) {
 	p := 10.0
 	open := 9.8
@@ -122,6 +125,27 @@ type quoteOnlyCapabilityFake struct{}
 func (quoteOnlyCapabilityFake) Name() string { return "sina" }
 func (quoteOnlyCapabilityFake) FetchQuote(context.Context, string) (*model.Quote, error) {
 	return nil, nil
+}
+
+func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities(
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p},
+		cache.NewDisabled(), nil, time.Second, time.Second, time.Minute, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil,
+	)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
+	).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/profile", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK { t.Fatalf("status=%d body=%s", w.Code, w.Body.String()) }
+	for _, want := range []string{"\"symbol\":\"600519.SH\"", "\"name\":\"测试证券\"", "\"stock_basic_capable\":true"} {
+		if !strings.Contains(w.Body.String(), want) { t.Fatalf("profile response missing %s: %s", want, w.Body.String()) }
+	}
 }
 
 func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
