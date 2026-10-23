@@ -1197,7 +1197,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	pageSize := eastmoneyMarketBreadthPageSize
 	if len(first.Data.Rows) > 0 && len(first.Data.Rows) < pageSize && len(first.Data.Rows) < total {
 		// Some public gateways cap pz. Derive page size from the first page and verify every subsequent page.
-		pageSize = len(first.Data.Rows
+		pageSize = len(first.Data.Rows)
 	}
 	if len(first.Data.Rows) == 0 {
 		return nil, errors.New("Eastmoney market breadth returned an empty first page")
