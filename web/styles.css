@@ -611,10 +611,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   }
   .sidebar.is-open { transform: translateX(0); }
   .sidebar .brand { justify-content: flex-start; padding: 0 8px 25px; }
-  .sidebar .brand-copy, .sidebar .side-label, .sidebar .nav-link > span:not(.nav-icon),
-  .sidebar .sidebar-bottom .mini-service > span:last-child, .sidebar .settings-link span,
-  .sidebar .sidebar-footnote { display: initial; }
   .sidebar .brand-copy, .sidebar .sidebar-bottom .mini-service > span:last-child { display: flex; }
+  .sidebar .side-label, .sidebar .sidebar-footnote { display: block; }
+  .sidebar .nav-link > span:not(.nav-icon), .sidebar .settings-link span { display: inline; }
   .sidebar .nav-link { justify-content: flex-start; padding: 0 12px; }
   .sidebar .mini-service { justify-content: flex-start; padding: 10px; }
   .sidebar .settings-link { justify-content: flex-start; padding: 13px 10px; }
@@ -763,3 +762,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 :root[data-theme="light"] .recent-analysis-remove:hover { color: #b92f41; background: #fff0f2; border-color: #f0c5cb; }
 :root[data-theme="light"] .boundary-grid > div { border-color: #e1e9ee; }
 :root[data-theme="light"] .settings-dialog::backdrop { background: rgba(35, 52, 65, .32); }
+
+
+/* Keep readability baselines explicit after theme-specific color rules. */
+:root[data-theme="light"] .brand-copy small { font-size: 12px !important; }
+:root[data-theme="light"] .task-result-metric small { font-size: 13px !important; }
+:root[data-theme="light"] .analysis-result-fields dt { font-size: 12px !important; color: #65798a; }
+:root[data-theme="light"] .task-result-actions .text-button { font-size: 13px !important; }
