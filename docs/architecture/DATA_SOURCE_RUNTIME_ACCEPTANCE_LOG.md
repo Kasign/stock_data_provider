@@ -454,8 +454,8 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 
 - 本轮起点 HEAD：`9a1d49b3ab262d3604214d5655f894eb482c6de0`（`test: 修正股票资料接口契约断言`）。该提交链已引入 StockBasic 服务与 HTTP 路由，但漏提交 `StockBasicProvider`、`model.StockBasic`、`ProviderSettings.StockBasic` 等支撑类型，且 `internal/httpapi/server_test.go` 存在 gofmt 门禁错误，因此不能视为可编译可用。
 - 本轮补齐 `StockBasicProvider` 能力接口和响应模型；东方财富通过 `RPT_PCF10_ORG_ISSUEINFO` F10 数据查询简称、上市日期及可用的退市日期字段，严格核对返回证券代码，缺数据和代码不匹配均视为失败。新端点由 `MARKET_DATA_EASTMONEY_STOCK_BASIC_URL` 配置，不与实时报价或日 K 复用端点。能力可用 `MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED` 独立开关。
-- 新增 mock HTTP 契约测试和真实 Runner probe。真实探测需单独查看 `stock_basic` 的 `LIVE_PROVIDER_RESULT` 与 Provider job 结论，不能以 workflow 的 `continue-on-error` 总体成功代替；新 HEAD 实测前不记录为真实接通。
-- 同步修正 Profile API 测试的 gofmt 门禁。提交后补写对应 Go CI 各 job 结果、Live Provider probe 单项结果以及仍待实测的 MX_API/网易状态。
+- 新增 mock HTTP 契约测试和真实 Runner probe。Live provider probe [#39901894675](https://github.com/Kasign/stock_data_provider/actions/runs/39901894675) 在提交 `91fb1f8798b1b925f96926336efc61ac2492e1ec` 上实际请求 F10 接口，两次响应均为 HTTP 200，返回 `600036.SH`、名称“招商银行”、上市日期 `2002-04-09`，证券代码与基础资料契约校验通过；该项可以标记为 **GitHub Runner 实测通过**，但尚未代表目标 NAS / Docker 环境通过。
+- 同一 HEAD 的 Go CI [#39901894665](https://github.com/Kasign/stock_data_provider/actions/runs/39901894665) 格式门禁通过，之后 `services/market-data/internal/httpapi` 测试编译失败：Profile 测试调用 `service.NewWithCapabilities` 多传了一个 `time.Duration` 参数。本次统一修正参数后重跑；不能将此前 CI 标记为通过。
 
 ## 6. 下一步验收顺序
 

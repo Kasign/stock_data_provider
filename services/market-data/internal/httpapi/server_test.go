@@ -131,7 +131,7 @@ func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.NewWithCapabilities(
 		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p},
-		cache.NewDisabled(), nil, time.Second, time.Second, time.Minute, 120, 2000,
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil,
 	)
 	svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
