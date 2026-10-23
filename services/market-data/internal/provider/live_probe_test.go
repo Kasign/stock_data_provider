@@ -244,6 +244,31 @@ func liveProbeDailyContractError(bars []model.DailyBar, providerName, symbol str
 	return ""
 }
 
+func TestLiveProbeDailyContractRejectsLimitAndUnsortedBars(t *testing.T) {
+	volume := int64(1000)
+	makeBar := func(date string) model.DailyBar {
+		return model.DailyBar{
+			Symbol: "600036.SH", TradeDate: date, Period: "1d",
+			Open: 10, High: 11, Low: 9, Close: 10.5,
+			Volume: &volume, VolumeUnit: "shares", AmountUnit: "unknown",
+			AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
+			QualityStatus: model.QualityDegraded,
+		}
+	}
+	older, newer := makeBar("2026-10-20"), makeBar("2026-10-21")
+	const startDate, endDate = "2026-10-19", "2026-10-22"
+
+	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 1); !strings.Contains(got, "above requested limit") {
+		t.Fatalf("expected limit violation, got %q", got)
+	}
+	if got := liveProbeDailyContractError([]model.DailyBar{newer, older}, "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); !strings.Contains(got, "not sorted ascending") {
+		t.Fatalf("expected unsorted bar violation, got %q", got)
+	}
+	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); got != "" {
+		t.Fatalf("valid ordered bars should pass the shared contract, got %q", got)
+	}
+}
+
 func TestLiveProbeCaptureRedactsRedirectQueryValues(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "https://redirect.example.invalid/path?token=secret&symbol=600036&mode=full", http.StatusFound)
