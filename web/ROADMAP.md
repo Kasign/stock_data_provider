@@ -230,3 +230,14 @@ P2 中的项目不是承诺全部实现；应根据单股分析使用情况、�
 - GitHub Actions [WebUI checks #39933160719](https://github.com/Kasign/stock_data_provider/actions/runs/39933160719) 已通过：53 项 Node 测试、JS 语法检查与 Nginx 镜像构建全部成功。
 
 - 安全 Review 将任务按钮恢复文案改为 DOM 节点创建，并增加前端契约测试，防止重新引入 HTML 字符串注入点；密钥显示按钮保持固定无障碍名称，由 `aria-pressed` 表示当前状态。
+
+
+## 本批：Markdown 导出可读性、RunResult 集合边界与 API 错误保护
+
+- Markdown 报告新增摘要区，集中显示服务端已有的质量门禁、部分数据状态、市场状态及因子/信号/计划/警告记录数；计数只对真实数组计算，不把缺失字段显示为 0。
+- 结构化对象/数组使用行内 JSON 代码格式，普通服务端字符串转义 Markdown 控制字符并将换行压平，避免字段值意外改变报告标题、列表或链接的排版。
+- 报告明确区分集合字段缺失或为 null、明确返回空数组、返回非数组类型三类情况。新增测试覆盖缺失集合、null、格式错误、Markdown 标题/HTML/强调/反引号/竖线等边界。
+- API 错误消息统一限制为最多 500 个字符；保留 HTTP 状态、错误码与请求 ID，并兼容 JSON 字符串错误响应。补充超长 JSON 错误消息及字符串响应测试。
+- 自动化测试基于确定性 Go RunResult 形状 fixture 与 fetch 响应替身，不代表真实后端数据或 NAS/1Panel 联调；没有新增或假定任何服务端接口。
+- 开始本批之前开发分支 HEAD 为 `b22f00f4a6f821b4edccb0007e16fef35afe8316`，对应 WebUI checks [#39933160719](https://github.com/Kasign/stock_data_provider/actions/runs/39933160719) 成功。后续提交产生的本批 CI 结果以 PR #2 的最新 Checks 为准。
+
