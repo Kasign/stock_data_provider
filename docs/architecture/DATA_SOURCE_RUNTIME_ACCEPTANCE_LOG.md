@@ -457,6 +457,15 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 - 新增 mock HTTP 契约测试和真实 Runner probe。Live provider probe [#39901894675](https://github.com/Kasign/stock_data_provider/actions/runs/39901894675) 在提交 `91fb1f8798b1b925f96926336efc61ac2492e1ec` 上实际请求 F10 接口，两次响应均为 HTTP 200，返回 `600036.SH`、名称“招商银行”、上市日期 `2002-04-09`，证券代码与基础资料契约校验通过；该项可以标记为 **GitHub Runner 实测通过**，但尚未代表目标 NAS / Docker 环境通过。
 - 同一 HEAD 的 Go CI [#39901894665](https://github.com/Kasign/stock_data_provider/actions/runs/39901894665) 格式门禁通过，之后 `services/market-data/internal/httpapi` 测试编译失败：Profile 测试调用 `service.NewWithCapabilities` 多传了一个 `time.Duration` 参数。本次统一修正参数后重跑；不能将此前 CI 标记为通过。
 
+## 5.19 东方财富行业 / 概念板块排名与实时探测结果（2026-10-23）
+
+- 新增独立 `SectorRankingProvider`，通过 `https://push2.eastmoney.com/api/qt/clist/get` 分别请求行业过滤 `m:90+t:2+f:!50` 与概念过滤 `m:90+t:3+f:!50`，API 为 `GET /api/v1/market/sectors?type=industry|concept&limit=10`。字段包括板块代码/名称、涨跌额与涨跌幅、成交额、上涨/下跌家数和领涨股。成交额单位为人民币元；缺少的字段保留为 null/unknown，不填零。
+- GitHub Runner 实测见 [Live provider probe #39905085321](https://github.com/Kasign/stock_data_provider/actions/runs/39905085321)，对应板块代码提交 `f1f62671f0b5939a796279b76b694e5a74f6f2bf`。行业接口 HTTP 302 重定向至 `push2delay.eastmoney.com/api/qt/clist/get` 后 HTTP 200 JSON，返回 10 条、总量 496；样本包括 `BK1347`（纺织鞋类制造，涨幅 5.46%）与 `BK1499`（医美服务，涨幅 4.32%）。概念接口同样 HTTP 302→200，返回 10 条、总量 516；样本包括 `BK1754`（2026三季报首亏，涨幅 4.00%）与 `BK1630`（昨日首板，涨幅 3.68%）。这些数值是该次 Runner 查询时点的快照，不是恒定值。
+- 两种板块快照均标记 `quality_status=degraded`、原因 `provider_snapshot_timestamp_not_exposed`：上游未提供可验证的行情数据时间，本地 `fetched_at` 不可冒充供应商快照时间。虽然这轮已证明 CLIST 响应可解析和关键字段可用，但不代表板块行情的时间新鲜度达到盘中交易决策的完整验收标准；`MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED=false` 继续作为默认值。
+- 同一探测轮中，东方财富个股主报价和延迟报价都返回 HTTP 502 HTML，实际 Provider job 因这两项失败；工作流总状态因 `continue-on-error` 仍显示 success。不可把整条工作流的 success 解读为所有 Provider 能力都通过。
+- 同一 HEAD 的 Go CI [#39905085083](https://github.com/Kasign/stock_data_provider/actions/runs/39905085083) 曾因新增 8 个 Go 文件未通过 `gofmt` 门禁，测试步骤没有执行。之后提交 `42e6360` / `59caf3f` 仅修正格式，不改变 Provider 行为；它们对应的全量 Go CI 需要以各自 HEAD 的后续运行记录为准，不继承早先 HEAD 的测试状态。
+- 网易真实行情仍是 DNS 失败 / 历史 CSV HTTP 502，所以保持关闭；MX_API 因 GitHub Actions 的 `MX_APIKEY` 仍不可用，保持 `skipped / 未验证`，不得标记接通。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。

@@ -138,6 +138,63 @@ components:
         analysis_reference_time: {type: string, format: date-time}
         fetched_at: {type: string, format: date-time, description: Completion time after all bundle fetches have finished}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
+    StockBasic:
+      type: object
+      required: [symbol, name, security_type, security_type_label, listing_status, listing_status_label, source, fetched_at, quality_status, normalization_version]
+      properties:
+        symbol: {type: string}
+        name: {type: string}
+        ipo_date: {type: string, format: date}
+        out_date: {type: string, format: date}
+        security_type: {type: integer}
+        security_type_label: {type: string}
+        listing_status: {type: integer}
+        listing_status_label: {type: string}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        normalization_version: {type: string}
+    SectorRanking:
+      type: object
+      required: [rank, code, name, category, amount_unit, source, fetched_at, quality_status]
+      properties:
+        rank: {type: integer}
+        code: {type: string}
+        name: {type: string}
+        category: {type: string, enum: [industry, concept]}
+        latest_price: {type: number, nullable: true}
+        change: {type: number, nullable: true}
+        change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
+        amount: {type: number, nullable: true}
+        amount_unit: {type: string, enum: [CNY, unknown]}
+        advancing_count: {type: integer, nullable: true}
+        declining_count: {type: integer, nullable: true}
+        leading_stock: {type: string}
+        leader_change_percent: {type: number, nullable: true}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    SectorRankingSnapshot:
+      type: object
+      required: [category, total, items, source, fetched_at, quality_status]
+      properties:
+        category: {type: string, enum: [industry, concept]}
+        total: {type: integer}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/SectorRanking'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
     SourceStatus:
       type: object
       required: [name, enabled, quote_capable, daily_bar_capable]
@@ -146,6 +203,8 @@ components:
         enabled: {type: boolean}
         quote_capable: {type: boolean}
         daily_bar_capable: {type: boolean}
+        stock_basic_capable: {type: boolean}
+        sector_ranking_capable: {type: boolean}
     DataSourcesResponse:
       type: object
       required: [sources, normalization_version]
@@ -226,3 +285,42 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DataSourcesResponse'}
         '401': {description: API key required}
+
+  /api/v1/stocks/{symbol}/profile:
+    get:
+      summary: Get single-security identity and listing metadata
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Stock identity from the configured stock-basic provider
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockBasic'}
+        '400': {description: Invalid symbol}
+        '401': {description: API key required}
+        '502': {description: All stock-basic providers failed}
+        '503': {description: No stock-basic provider enabled}
+  /api/v1/market/sectors:
+    get:
+      summary: Get live industry or concept board rankings
+      parameters:
+        - name: type
+          in: query
+          schema: {type: string, enum: [industry, concept], default: industry}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+      responses:
+        '200':
+          description: Current provider ranking snapshot with source and quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SectorRankingSnapshot'}
+        '400': {description: Invalid sector type or limit}
+        '401': {description: API key required}
+        '502': {description: All sector-ranking providers failed}
+        '503': {description: No sector-ranking provider enabled}
