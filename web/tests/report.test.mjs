@@ -68,7 +68,7 @@ test("empty and partial results distinguish empty collections from missing field
 test("quality-blocked results expose the gate failure instead of suggesting a plan", () => {
   const markdown = buildRunResultMarkdown(runResultFixtures.blockedDataQuality);
 
-  assert.match(markdown, /运行状态：blocked_data_quality/);
+  assert.ok(markdown.includes("- 运行状态：blocked\\_data\\_quality"));
   assert.match(markdown, /核心门禁：否/);
   assert.match(markdown, /required_quote_missing/);
   assert.match(markdown, /缺少必需的实时行情/);
@@ -104,7 +104,7 @@ test("escapes server-provided Markdown text and renders objects as code", () => 
   const result = {
     ...runResultFixtures.completed,
     request: { ...runResultFixtures.completed.request, task_type: "__inject__ **bold**" },
-    warnings: ["## Fake heading\\n<script>alert(1)</script>", "`ticks` | pipe"]
+    warnings: ["## Fake heading" + String.fromCharCode(10) + "<script>alert(1)</script>", "`ticks` | pipe"]
   };
   const markdown = buildRunResultMarkdown(result);
   assert.doesNotMatch(markdown, /^## Fake heading/m);
