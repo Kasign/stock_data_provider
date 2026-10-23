@@ -7,15 +7,15 @@
 
 - 仓库：https://github.com/Kasign/stock_data_provider
 - WebUI 分支：feat/webui-market-data-console
-- WebUI HEAD：37b5b6cc1c94d6e43d52cf67779110b6ddc79a66
+- 本批开始前 WebUI HEAD：`4b2ae6190a2c7e54cb7628ba2183cf352c642d74`（本批代码提交后应重新核实最新 HEAD）。
 - 数据分支：feat/full-go-data-providers-api-switch
-- 数据分支 HEAD：7e47aec66cb000cf403ed0cfbbcbadfe655467a3
+- 本批开始前数据分支 PR #1 HEAD：`38193c1e9360e8f7293eabf45403565dad33e594`（Open，未合并；base `main`）。
 - PR #2：https://github.com/Kasign/stock_data_provider/pull/2，Open、未合并，mergeable=true；head 是 WebUI 分支，base 是数据分支。
-- 最新已核实 WebUI CI：https://github.com/Kasign/stock_data_provider/actions/runs/39938663988，针对 37b5b6c，语法检查、Node tests、Nginx 镜像构建均成功。
-- 最新已核实 Go test suite：https://github.com/Kasign/stock_data_provider/actions/runs/39938228769，针对 7e47aec，成功。
-- 最新已核实 Live Provider probe：https://github.com/Kasign/stock_data_provider/actions/runs/39938228772，针对 7e47aec，成功。它不是 NAS/1Panel 端到端验证。
+- Issue #3 导航与页面骨架提交 `4b2ae6190a2c7e54cb7628ba2183cf352c642d74` 的 WebUI checks [#39941562678](https://github.com/Kasign/stock_data_provider/actions/runs/39941562678) 已成功，JavaScript 语法、Node 测试、Nginx 镜像构建均通过。
+- 数据分支最新 Go test suite [#39941383763](https://github.com/Kasign/stock_data_provider/actions/runs/39941383763)（head `38193c1e`）失败：`services/market-data` 单元测试失败，构建 Go market-data 镜像失败；Go core 和根包测试通过。
+- 数据分支 Live Provider probe [#39941383744](https://github.com/Kasign/stock_data_provider/actions/runs/39941383744)（head `38193c1e`）成功；它不是 NAS/1Panel 端到端验证。
 - 近期 Go 修复提交：7e47aec66cb000cf403ed0cfbbcbadfe655467a3，修正 Run rejected_request 错误映射为 Task failed，并增加状态映射测试。
-- 近期 WebUI 规划前提交：37b5b6cc1c94d6e43d52cf67779110b6ddc79a66，增加异步任务契约回归测试和联调状态矩阵。
+- 最新 WebUI 功能提交（Issue #3）：`4b2ae6190a2c7e54cb7628ba2183cf352c642d74`，增加统一导航、hash 路由、页面不可用态和响应式样式；本批 Issue #4 继续增强 Task/Run 运行流抽屉。
 
 ## 规划文档和 Issue
 
@@ -80,3 +80,12 @@
 - 后端 API 缺口维持不变：没有通用服务器配置写入/密码/.env 管理、通知收件箱、Agent Chat/SSE/取消、选股策略/候选/历史、告警规则/触发/通知尝试 API；已存在的 Task/StageEvent/Run API 供 #4 使用。不要新增虚假的 API 路径。
 - 验证必须分三类报告：源码/契约核对；GitHub Actions 的 JS check、Node tests、Nginx 镜像构建；实际浏览器截图与 NAS/Docker/OpenResty 联调。CI 成功不代表后两类验收通过。
 - 下一步严格按 backlog：先完善 #4 任务详情抽屉/真实事件时间线，再 #5 设置中心、#7 通知中心、#8 问股、#9 选股、#10 告警；每批逻辑成组提交、Review、补测和复查 Actions。
+
+
+## Issue #4 更新（2026-10-23；本批新提交的 Actions 待回填）
+- Issue #3 的 WebUI workflow 已在提交 `4b2ae619` 上通过，执行步骤包括 JavaScript syntax check、Node unit tests 与 Nginx image build；并非真实浏览器截图验收。
+- Issue #4 把原有 Task 状态/事件面板迁入可访问的右侧 dialog 抽屉，现有 Task API 继续负责数据。点击最近任务会重新拉取真实状态并打开抽屉；创建新 Task 得到实际 task_id 后自动打开。关闭抽屉不代表取消后端任务。
+- Task 和 Run 状态单独呈现；started/finished 时间与错误诊断只读服务端字段。事件仅显示真实返回的耗时/错误码，保留 sequence 排序、after_sequence 增量读取和既有 stale-response generation 防护。
+- 本批同时移除重复的侧栏分组标题；未改 Go、Provider、数据源选择或其他业务逻辑。
+- 本批开始前重新核实：PR #2 Open/未合并/mergeable=true，head `4b2ae619...`、base SHA 字段仍是 `7e47aec...`；数据 PR #1 Open/未合并，head `38193c1e...`。数据分支最近 Go suite 失败（market-data tests 与镜像构建），Live Provider probe 通过；与 WebUI workflow 分开处理。
+- 后续验证分开记录：GitHub Actions 检查 / Node 源级测试 / Nginx 镜像构建；真实浏览器截图；NAS/Docker/OpenResty 与 MariaDB/Redis 联调。

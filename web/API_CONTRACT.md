@@ -30,6 +30,7 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 | Go 分析 | `POST /analysis-api/api/v1/analysis/tasks` | JSON；可选 `Idempotency-Key` | 创建异步分析任务 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}` | task ID 作为路径段 | 查询任务状态 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}/events?after_sequence=0&limit=100` | 增量事件游标与单页条数 | 获取持久化阶段事件 |
+| Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | Run ID 作为路径段 | 读取单个 RunResult；运行未结束时现有接口可能返回 409 `run_not_finished` |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | run ID 作为路径段 | 获取结构化分析结果 |
 
 ## 日 K 日期范围参数
@@ -162,3 +163,14 @@ WebUI 只通过同源 HTTP 路径调用 Go 服务，Nginx 根据路径把请求�
 ### 行情服务 API Key 由谁生成
 
 `MARKET_DATA_API_KEY` 是部署管理员自行生成的内部服务访问密钥，不是行情 Provider 的个人 API Key，也不是 WebUI 自动签发的令牌。建议在部署服务器上通过 `openssl rand -hex 32` 生成，并把同一值配置给 `market-data` 和 `stock-analysis-go` 的 `MARKET_DATA_API_KEY` 环境变量。WebUI 的设置项只将该值保存在浏览器 `localStorage`，调用受保护的行情路由时发送 `X-API-Key`；它不会更新后端配置。该共享 Key 不等于用户登录鉴权，公网访问仍必须额外配置访问控制。
+
+
+## 任务运行流前端呈现边界（Issue #4）
+
+本功能复用现有 Task、StageEvent 与 RunResult 接口，不增加后端路由：
+
+- Task 状态使用现有的 `queued`、`running`、`succeeded`、`partial`、`failed`；Run 状态单独使用现有的 `running`、`completed`、`blocked_data_quality`、`rejected_request`、`partial`、`failed`。不能把 Task 的成功映射直接显示成 Run 已完成。
+- Task 元数据按当前 OpenAPI/JSON 读取 `task_id`、`run_id`、`task_type`、`current_stage`、`completed_stages`、`created_at`、`started_at`、`finished_at`、`failure_code`、`error_message`。可选时间戳缺失时显示未报告，不从浏览器时间推算任务开始/结束。
+- StageEvent 以服务端 `sequence` 排序并用现有 `after_sequence` 增量续读。仅当事件真实提供 `duration_ms` 时显示耗时，不根据前端接收时刻反推；只有返回真实 `error_code` 时才显示该字段。
+- 运行流是线性时间线，不构造未由 API 提供的 DAG、进度百分比或实时推送。空事件列表只表示当前没有读到持久化事件，不代表任务完成。
+- 当前没有服务端 Task 列表 API。可重新打开和刷新恢复的是浏览器本地保存的 task/run 引用；这不是跨设备的服务端历史。详情打开后仍通过既有 Task / StageEvent / RunResult 接口重新读取。

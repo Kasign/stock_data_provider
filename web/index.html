@@ -19,7 +19,6 @@
           <span class="brand-copy"><strong>Market Console</strong><small>GO DATA PLATFORM</small></span>
         </a>
         <div class="side-label">工作台</div>
-        <div class="side-label">工作台</div>
         <nav class="side-nav" aria-label="主导航">
           <button class="nav-link active" type="button" data-view="market" aria-current="page"><span class="nav-icon" aria-hidden="true">◫</span><span>行情总览</span></button>
           <button class="nav-link" type="button" data-view="tasks"><span class="nav-icon" aria-hidden="true">↗</span><span>任务与运行流</span></button>
@@ -192,12 +191,28 @@
                 <p id="task-create-feedback" class="task-error" hidden></p>
               </form>
             </section>
+          </div>
+          <dialog class="run-flow-dialog" id="run-flow-dialog" aria-labelledby="run-flow-title">
             <section class="panel task-status-panel">
-              <div class="panel-heading"><div><h2>任务状态</h2><p>当前会话最新任务</p></div><span class="quality-pill quality-unknown" id="task-status-pill">尚无任务</span></div>
+              <div class="panel-heading run-flow-header">
+                <div class="run-flow-title-group"><p class="eyebrow">TASK / RUN DETAILS</p><h2 id="run-flow-title">任务运行流</h2><p id="task-symbols-value">尚未选择任务</p></div>
+                <div class="run-flow-header-actions">
+                  <span class="quality-pill quality-unknown" id="task-status-pill">尚无任务</span>
+                  <span class="availability-pill is-readonly" id="task-run-status-pill">尚未关联 Run</span>
+                  <button class="icon-button run-flow-close" id="close-run-flow-dialog" type="button" aria-label="关闭任务运行流" title="关闭任务运行流" autofocus>×</button>
+                </div>
+              </div>
               <div class="task-empty" id="task-empty"><div class="empty-icon">↗</div><strong>尚未选择任务</strong><span>提交任务后，这里会显示队列状态与阶段事件。</span></div>
               <div id="task-detail" hidden>
                 <div class="task-id-row"><span>Task ID</span><code id="task-id-value">—</code><button class="text-button" id="copy-task-id" type="button">复制</button></div>
-                <div class="task-facts"><div><small>关联 Run ID</small><strong id="task-run-id">—</strong></div><div><small>当前阶段</small><strong id="task-current-stage">等待执行</strong></div><div><small>已完成阶段</small><strong id="task-completed">0</strong></div><div><small>创建时间</small><strong id="task-created">—</strong></div></div>
+                <div class="task-facts">
+                  <div><small>关联 Run ID</small><strong id="task-run-id">—</strong></div>
+                  <div><small>当前阶段</small><strong id="task-current-stage">等待执行</strong></div>
+                  <div><small>已完成阶段</small><strong id="task-completed">未报告</strong></div>
+                  <div><small>创建时间</small><strong id="task-created">—</strong></div>
+                  <div><small>开始时间</small><strong id="task-started">—</strong></div>
+                  <div><small>结束时间</small><strong id="task-finished">—</strong></div>
+                </div>
                 <div id="task-error" class="task-error" hidden></div>
                 <div class="event-heading"><h3>阶段事件</h3><span>按持久化序号增量读取</span></div>
                 <div id="task-events" class="event-list"><div class="empty-row">等待服务端阶段事件。</div></div>
@@ -212,7 +227,7 @@
                 <div class="task-actions"><button class="button button-secondary" id="refresh-task" type="button">立即刷新状态</button><span id="task-poll-label">未轮询</span></div>
               </div>
             </section>
-          </div>
+          </dialog>
           <section class="panel contract-panel"><div class="panel-heading"><div><h2>运行边界</h2><p>当前 Go 分析接口公开的能力</p></div></div><div class="boundary-grid"><div><span>01</span><strong>异步任务</strong><p>任务先写入 MariaDB，再由 Worker 执行。</p></div><div><span>02</span><strong>事件读取</strong><p>仅展示已持久化阶段事件，排队时列表可以为空。</p></div><div><span>03</span><strong>风险门禁</strong><p>当前分析为可解释的基线流程，不代表成熟交易策略。</p></div></div></section>
         </section>
 

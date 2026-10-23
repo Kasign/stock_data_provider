@@ -287,3 +287,26 @@ test("new page layouts have responsive grids and disabled-state affordances", ()
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.feature-form-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   assert.match(stylesheet, /button:disabled, input:disabled, select:disabled, textarea:disabled/);
 });
+
+
+test("task detail opens an accessible run-flow drawer with separate Task and Run states", () => {
+  for (const id of ["run-flow-dialog", "run-flow-title", "close-run-flow-dialog", "task-status-pill", "task-run-status-pill", "task-created", "task-started", "task-finished", "task-symbols-value"]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "run-flow field is missing: " + id);
+  }
+  assert.match(html, /<dialog class="run-flow-dialog" id="run-flow-dialog"/);
+  assert.match(app, /function openRunFlowDrawer\(\)[\s\S]*?dialog\.showModal\(\)/);
+  assert.match(app, /function activateTaskReference\(record\)[\s\S]*?openRunFlowDrawer\(\)[\s\S]*?pollTask\(state\.pollGeneration\)/);
+  assert.match(app, /function renderTask\(task\)[\s\S]*?task\.started_at[\s\S]*?task\.finished_at/);
+  assert.match(app, /function renderRunStatus\(status = ""\)[\s\S]*?runStatusLabel\(normalized\)/);
+  assert.match(app, /function renderTaskResult\(result\)[\s\S]*?renderRunStatus\(result\.status \|\| ""\)/);
+  assert.match(app, /close-run-flow-dialog/);
+});
+
+test("run-flow events expose only server-provided durations and diagnostics", () => {
+  assert.match(app, /event\.duration_ms !== undefined && event\.duration_ms !== null/);
+  assert.match(app, /event\.error_code/);
+  assert.match(app, /metaParts\.join\(" · "\)/);
+  assert.match(app, /after_sequence/);
+  assert.match(app, /item\.sequence - b\.sequence/);
+  assert.doesNotMatch(app, /completed_stages\s*\/\s*total_stages|progressPercent|fakeDAG/i);
+});

@@ -427,6 +427,8 @@ const VIEW_META = Object.freeze({
 function setView(view, { updateHash = true } = {}) {
   const nextView = Object.hasOwn(VIEW_META, view) ? view : "market";
   state.view = nextView;
+  const runFlowDialog = $("#run-flow-dialog");
+  if (nextView !== "tasks" && runFlowDialog?.open) runFlowDialog.close();
   document.querySelectorAll(".view").forEach((section) => {
     section.hidden = section.id !== nextView + "-view";
   });
@@ -918,21 +920,49 @@ async function runQuoteQuery(event) {
   $("#quote-form button[type='submit']").disabled = false;
 }
 
+function renderRunStatus(status = "") {
+  const target = $("#task-run-status-pill");
+  const normalized = String(status || "").toLowerCase();
+  const label = normalized ? runStatusLabel(normalized) : state.runId ? "等待 Run 结果" : "尚未关联 Run";
+  const tone = normalized === "completed"
+    ? "is-local"
+    : ["partial", "blocked_data_quality", "rejected_request", "failed"].includes(normalized)
+      ? "is-unavailable"
+      : "is-readonly";
+  target.className = "availability-pill " + tone;
+  target.textContent = label;
+  target.title = normalized || "Run 尚未返回状态";
+  target.dataset.runStatus = normalized || "unknown";
+}
+
+function openRunFlowDrawer() {
+  const dialog = $("#run-flow-dialog");
+  if (!dialog.open) dialog.showModal();
+}
+
 function renderTask(task) {
   state.taskStatus = task.status || state.taskStatus;
   if (task.run_id) state.runId = task.run_id;
+  if (task.task_type) state.taskType = task.task_type;
+  if (Array.isArray(task.symbols)) state.taskSymbols = task.symbols;
   persistTaskReference();
   setQualityPill($("#task-status-pill"), task.status === "succeeded" ? "valid" : task.status === "partial" ? "degraded" : task.status === "failed" ? "invalid" : "unknown", taskStatusLabel(task.status));
+  renderRunStatus(state.lastRunResult?.status || "");
   $("#task-empty").hidden = true;
   $("#task-detail").hidden = false;
   setText("#task-id-value", task.task_id || state.taskId);
-  setText("#task-run-id", task.run_id);
+  setText("#task-symbols-value", (state.taskSymbols.length ? state.taskSymbols.join(", ") : "标的未报告") + " · " + (state.taskType || "任务类型未报告"));
+  setText("#task-run-id", task.run_id || state.runId);
   setText("#task-current-stage", task.current_stage || (task.status === "queued" ? "等待 Worker" : "未报告"));
   setText("#task-completed", task.completed_stages ?? "未报告");
   setText("#task-created", formatDateTime(task.created_at));
-  const message = task.error_message || task.failure_code || "";
-  $("#task-error").hidden = !message;
-  $("#task-error").textContent = message;
+  setText("#task-started", formatDateTime(task.started_at));
+  setText("#task-finished", formatDateTime(task.finished_at));
+  const failureCode = task.failure_code || "";
+  const message = task.error_message || "";
+  const diagnostics = [message, failureCode ? "错误代码：" + failureCode : ""].filter(Boolean).join(" · ");
+  $("#task-error").hidden = !diagnostics;
+  $("#task-error").textContent = diagnostics;
   $("#task-poll-label").textContent = TERMINAL_TASK_STATUSES.has(task.status) ? "任务已结束" : "每 2.5 秒轮询服务端状态";
 }
 
@@ -961,8 +991,20 @@ function renderTaskEvents() {
     const detail = document.createElement("p");
     detail.textContent = event.message || event.status || "服务端事件";
     body.append(title, detail);
+    if (event.error_code) {
+      const diagnostic = document.createElement("p");
+      diagnostic.className = "event-diagnostic";
+      diagnostic.textContent = "错误代码：" + String(event.error_code);
+      body.append(diagnostic);
+    }
     const meta = document.createElement("small");
-    meta.textContent = `#${item.sequence} · ${formatDateTime(event.at)}`;
+    const metaParts = [`#${item.sequence}`, formatDateTime(event.at)];
+    if (event.duration_ms !== undefined && event.duration_ms !== null && event.duration_ms !== "" &&
+        Number.isFinite(Number(event.duration_ms)) && Number(event.duration_ms) >= 0) {
+      const durationMs = Number(event.duration_ms);
+      metaParts.push(durationMs >= 1000 ? (durationMs / 1000).toFixed(2) + " 秒" : durationMs + " 毫秒");
+    }
+    meta.textContent = metaParts.join(" · ");
     row.append(icon, body, meta);
     list.append(row);
   });
@@ -1040,6 +1082,7 @@ function resultPairs(record, fields) {
 function renderTaskResult(result) {
   state.lastRunResult = result;
   state.runId = result.run_id || state.runId;
+  renderRunStatus(result.status || "");
   persistTaskReference();
 
   const quality = result.quality || {};
@@ -1365,6 +1408,7 @@ async function createTask(event) {
     feedback.hidden = true;
     renderTask(task);
     renderTaskEvents();
+    openRunFlowDrawer();
     const generation = state.pollGeneration;
     if (!TERMINAL_TASK_STATUSES.has(task.status)) {
       state.pollTimer = window.setTimeout(() => pollTask(generation), 500);
@@ -1432,6 +1476,8 @@ function activateTaskReference(record) {
   setText("#task-current-stage", "正在恢复任务");
   $("#task-poll-label").textContent = "正在从服务端恢复状态与阶段事件…";
   setView("tasks");
+  renderRunStatus("");
+  openRunFlowDrawer();
   renderTaskEvents();
   persistTaskReference();
   void pollTask(state.pollGeneration);
@@ -1537,6 +1583,10 @@ window.addEventListener("hashchange", () => {
   setView(window.location.hash.slice(1), { updateHash: false });
 });
 $("#topbar-notifications").addEventListener("click", () => setView("notifications"));
+$("#close-run-flow-dialog").addEventListener("click", () => $("#run-flow-dialog").close());
+$("#run-flow-dialog").addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) event.currentTarget.close();
+});
 $("#settings-open-connection").addEventListener("click", openSettings);
 document.querySelectorAll("[data-theme-value]").forEach((button) => {
   button.addEventListener("click", () => {

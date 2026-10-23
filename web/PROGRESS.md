@@ -211,11 +211,20 @@
 - 新聊天恢复源：web/HANDOFF.md。每个批次结束时更新此文件及 PRODUCT_BACKLOG.md 的执行状态；不要强推、不改写旧历史、不合并 PR #2。
 
 
-## Issue #3 — 全局布局、导航与视觉骨架（源码修改已提交，验证状态待回填）
+## Issue #3 — 全局布局、导航与视觉骨架（自动化验证通过，浏览器视觉验收待完成）
 - 从重新核实的 WebUI 提交 `f8c8921764a3ccfe9531c0565a8844e0e9c70aba` 开始实施；未按旧 HANDOFF 里的过期 HEAD 继续工作。
 - 建立七项导航（行情总览、任务与运行流、通知、问股、选股、告警、设置），通过 URL hash 支持直接打开页面与浏览器前进/后退；活动导航同步 `aria-current`。
 - 新增通知、问股、选股、告警、设置的 UI 骨架；缺少后端 API 时清楚展示待接入状态，禁用会造成误解的提交操作，不展示模拟通知、模型回复、候选或告警历史。
 - 设置页区分本地主题偏好、浏览器连接配置与服务端配置；主题继续走现有主题模块，API 路径/行情 Key 仍通过原连接设置弹窗处理，不声称写入服务器。
 - 为新页面补充统一状态徽标、说明面板、空态、表单栅格和响应式样式。保留原生 HTML/CSS/JavaScript ES Modules；未修改 Go、Provider、分析 Runner 或 Python bridge。
-- 自动化覆盖：新增导航/hash/可访问活动态、缺少接口时不生成假数据、响应式样式契约测试。提交后需要以新提交的 WebUI Actions 结果为准。
+- 自动化覆盖：新增导航/hash/可访问活动态、缺少接口时不生成假数据、响应式样式契约测试。GitHub Actions [WebUI checks #39941562678](https://github.com/Kasign/stock_data_provider/actions/runs/39941562678) 成功，JavaScript 语法检查、Node 测试与 Nginx 镜像构建全部通过。
 - 真实视觉验收：本环境无法运行实际浏览器截图；移动端/桌面截图 review 尚未完成。NAS/Docker/OpenResty 端到端联调未执行。
+
+
+## Issue #4 — Task 详情抽屉与真实运行流时间线（源码修改已提交，Actions 待回填）
+- 最近任务仍仅来源于浏览器内 task/run 引用；点击某条引用会切换到任务页、通过现有 API 恢复 Task 和事件，再打开右侧运行流抽屉。新建任务收到真实服务端 Task ID 后自动打开抽屉；抽屉可通过关闭按钮、遮罩或 Escape 关闭，关闭不停止服务端任务/本地轮询。
+- 抽屉分别显示 Task 状态与 Run 状态。Task 已返回的 `created_at` / `started_at` / `finished_at`、Task ID、Run ID、标的、阶段与错误码直接取服务端字段；缺失值不按客户端时钟补造。
+- 阶段事件按现有 sequence 排序，并沿用 `after_sequence` 续读；只在响应真实携带 `duration_ms` 或 `error_code` 时展示对应信息。没有 DAG API，不显示假进度百分比或推算耗时。
+- 更新 `web/API_CONTRACT.md`，只记录目前已有的 Task/StageEvent/RunResult 路由与展示边界，没有新增后端契约。
+- Review 顺便清理了 Issue #3 导航区重复的“工作台”分组标题。
+- 自动化验证：新增抽屉状态分离、时间字段与可选事件耗时的源码契约测试；新的 WebUI Actions 结果待查询后回填。NAS/Docker/OpenResty 真实联调与实际浏览器截图仍未执行。
