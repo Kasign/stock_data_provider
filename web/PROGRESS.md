@@ -198,3 +198,14 @@
 - 管理员密码和真实服务端 `.env` 导入/导出暂不实现：当前服务没有相应契约，必须先增加后端认证/配置管理能力，不可使用 localStorage 做密码保护或声称浏览器导入会修改 NAS 文件。
 
 - 对应 CI：[WebUI checks #39936585174](https://github.com/Kasign/stock_data_provider/actions/runs/39936585174) 成功：62 项 Node 测试通过（0 失败），JavaScript 语法检查和 Nginx 镜像构建通过。主题/移动导航真实设备体验仍待 NAS 部署后人工验收。
+
+
+## WebUI 功能扩展规划与接力状态（2026-10-23）
+
+- 已核对参考仓库 daily_stock_analysis 的 Home、Settings、Chat、StockScreening、Alerts、RunFlow 和相关 API 模块，比较结论见 web/PRODUCT_BACKLOG.md。
+- 已建立功能任务 Issue：#3 全局布局、#4 任务运行流、#5 设置中心、#7 通知中心、#8 问股、#9 选股、#10 告警。
+- 当前 WebUI 分支基线为 37b5b6cc1c94d6e43d52cf67779110b6ddc79a66；数据分支为 7e47aec66cb000cf403ed0cfbbcbadfe655467a3；PR #2 保持 Open/未合并。
+- WebUI CI 39938663988、Go test suite 39938228769、Live Provider probe 39938228772 均已核实成功；这些结果不是 NAS/1Panel 真实联调结果。
+- 当前接口可以支撑行情、日 K、Provider 清单、单个异步 Task、StageEvent 和 RunResult。通用配置管理、通知收件箱、Agent Chat、选股引擎和告警后端接口未核实到，不允许假装其已可用。
+- 下一步建议从 Issue #3 做全局布局/导航审查，随后先做现有 API 可以支撑的任务详情/运行流，再做设置/通知 UI，并按产品清单推进问股、选股、告警。
+- 新聊天恢复源：web/HANDOFF.md。每个批次结束时更新此文件及 PRODUCT_BACKLOG.md 的执行状态；不要强推、不改写旧历史、不合并 PR #2。
