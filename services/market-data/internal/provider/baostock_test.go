@@ -84,6 +84,39 @@ func TestBaostockMissingAmountIsDegradedAndNeverEstimated(t *testing.T) {
 	}
 }
 
+func TestBaostockDailyBarsSortsAndRespectsLimitWithExplicitRange(t *testing.T) {
+	client := &fakeBaostockClient{rows: []baostock.DailyKLine{
+		{
+			Date: "2026-10-21", Code: "sh.600519", Open: "11", High: "12", Low: "10", Close: "11.5",
+			Volume: "1100", Amount: "12650", AdjustFlag: "2",
+		},
+		{
+			Date: "2026-10-19", Code: "sh.600519", Open: "10", High: "11", Low: "9", Close: "10.5",
+			Volume: "1000", Amount: "10500", AdjustFlag: "2",
+		},
+		{
+			Date: "2026-10-20", Code: "sh.600519", Open: "10.5", High: "11.5", Low: "10", Close: "11",
+			Volume: "1000", Amount: "11000", AdjustFlag: "2",
+		},
+	}}
+	p := NewBaostock(client)
+	bars, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-19", "2026-10-21", 2, model.AdjustmentForward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 2 {
+		t.Fatalf("explicit date range must still respect limit=2, got %d rows: %+v", len(bars), bars)
+	}
+	if bars[0].TradeDate != "2026-10-20" || bars[1].TradeDate != "2026-10-21" {
+		t.Fatalf("expected newest two bars sorted ascending, got %s, %s", bars[0].TradeDate, bars[1].TradeDate)
+	}
+	for _, bar := range bars {
+		if bar.QualityStatus != model.QualityValid {
+			t.Fatalf("intentional limit truncation must not degrade otherwise valid data, got %+v", bar)
+		}
+	}
+}
+
 func TestBaostockRejectsAdjustmentMismatch(t *testing.T) {
 	client := &fakeBaostockClient{rows: []baostock.DailyKLine{{
 		Date: "2026-10-21", Code: "sh.600519", Open: "10", High: "10.2",
