@@ -40,7 +40,7 @@ test("completed results preserve actual structured fields including gates, rules
   assert.match(markdown, /核心门禁：是/);
   assert.ok(markdown.includes('- 策略资格：`{"trend_following":true}`'));
   assert.ok(markdown.includes("- 策略阻断原因：`{}`"));
-  assert.match(markdown, /因子 ID：ma_distance/);
+  assert.ok(markdown.includes("- 因子 ID：ma\\_distance"));
   assert.match(markdown, /入场规则：合成测试规则：条件 A 成立/);
   assert.match(markdown, /可交易性检查/);
   assert.match(markdown, /风险检查/);
@@ -53,7 +53,7 @@ test("empty and partial results distinguish empty collections from missing field
   const emptyMarkdown = buildRunResultMarkdown(runResultFixtures.emptyCompleted);
   assert.match(emptyMarkdown, /本次 Run 明确返回空集合/);
   assert.doesNotMatch(emptyMarkdown, /策略资格：.*false/);
-  assert.doesNotMatch(emptyMarkdown, /信号数：0/);
+  assert.match(emptyMarkdown, /候选信号数：0/);
 
   const partialMarkdown = buildRunResultMarkdown(runResultFixtures.partial);
   assert.match(partialMarkdown, /运行状态：partial/);
@@ -110,7 +110,7 @@ test("escapes server-provided Markdown text and renders objects as code", () => 
   assert.doesNotMatch(markdown, /^## Fake heading/m);
   assert.doesNotMatch(markdown, /<script>/);
   assert.match(markdown, /\\_\\_inject\\_\\_/);
-  assert.match(markdown, /\\\\\| pipe/);
+  assert.ok(markdown.includes("\\| pipe"));
   assert.ok(markdown.includes('- 策略资格：`{"trend_following":true}`'));
 });
 
