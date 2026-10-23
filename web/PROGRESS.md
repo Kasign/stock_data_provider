@@ -175,3 +175,14 @@
 - GitHub Actions [WebUI checks #39933160719](https://github.com/Kasign/stock_data_provider/actions/runs/39933160719) 通过：53 项 Node 测试全部通过（0 失败），JavaScript 语法检查和 Nginx 镜像构建通过。此改动未触及 API、数据源与服务端密钥存储；真实浏览器的键盘/窗口关闭行为仍待部署验收。
 
 - 安全 Review 清理任务按钮恢复文案时残留的固定 `innerHTML` 赋值，改用 DOM 节点；增加回归测试，禁止页面将 API/浏览器数据通过 HTML 字符串插入。
+
+
+## Markdown 导出与 API 错误诊断边界（本批实现）
+
+- 报告顶部新增结果摘要；对缺失字段不推算记录数，也不生成交易判断。
+- Markdown 导出现在对服务端普通字符串中的换行和 Markdown 特殊字符做转义；对象和数组使用行内 JSON 代码格式，减少导出内容打乱文档结构的风险。
+- RunResult 集合分别呈现“字段缺失或 null”“明确空数组”“错误的非数组类型”，不会把不同数据状态统一成“未返回”。
+- 错误响应的消息、错误码、请求 ID 分别限制长度；补充大体积结构化错误消息和 JSON 字符串响应测试。
+- 验证类型：Node 单元测试使用固定合成 RunResult 和模拟 fetch 响应；这只验证前端边界行为。真实字段比对、真实 API 错误协议、刷新恢复和浏览器布局仍须 NAS/1Panel 环境验收。
+- 基线回查：开发分支在本批开始前为 `b22f00f4a6f821b4edccb0007e16fef35afe8316`，对应 WebUI checks [#39933160719](https://github.com/Kasign/stock_data_provider/actions/runs/39933160719) 成功；本批提交后的最新 CI 尚需复核。目标分支 HEAD 已更新至 `8b30ac2df1faf001e10bf586c82e0bf21d24190e`，PR 仍保持独立开放，未执行合并。
+
