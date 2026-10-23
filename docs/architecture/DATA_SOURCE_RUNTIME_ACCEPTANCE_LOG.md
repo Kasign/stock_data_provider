@@ -551,3 +551,16 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Provider Probe 新增了日历结果契约检查。只有记录中出现 `capability=trading_calendar`、`status=returned` 且完整覆盖请求日期，才可认为该 Runner 本次实测成功；如果前序 BaoStock 连接失败，日历探测明确记为 `skipped`，不会额外发起一次重复超时请求。目标 NAS/Docker 环境仍需实测，功能开关保持关闭。
 
 当前修复后的最新 HEAD 尚需以其自身 Go CI 与 Runner 日志进行最终验收，不能沿用早前失败记录，也不能把工作流表层 success 等同于所有 Provider 都通过。
+
+
+## 7. GitHub 托管 Runner 国内 Provider 补充验收（2026-10-23）
+
+- Run：[Live Provider Probe #100](https://github.com/Kasign/stock_data_provider/actions/runs/39941383744)，HEAD 38193c1e9360e8f7293eabf45403565dad33e594；job 成功，报告 artifact 为 live-provider-report。这是 GitHub 托管 Runner 的外部接口探测，不是 NAS/Docker 验收。
+- 报告中新浪、腾讯、东方财富、BaoStock 的日 K 请求以及 BaoStock 交易日历请求均返回；日 K 每种能力本轮只采样 8 根，不能据此确认完整日期覆盖。新浪与腾讯日 K 的成交额为 null；腾讯原始成交量按手转换为股，BaoStock 返回成交量股、成交额人民币元。Yahoo 可返回行情/K 线但成交额缺失，继续保持默认关闭；网易请求遇到 HTTP 502，本轮被跳过。
+- 东方财富核心指数返回 7 条、行业/概念榜各返回 10 条、个股所属板块返回 26 项。部分 push2 请求先 HTTP 302，再经 push2delay.eastmoney.com 返回 HTTP 200；板块、指数及个股板块由于源端快照时间不可核验而 degraded。
+- 市场广度返回上涨 4,406、下跌 854、平盘 117，供应商报告计数总量为 5,377；全量证券全集尚未与独立证券主数据核对，成交额字段不可用，因此 quality_status 为 degraded，不能作为已验收的全市场指标直接供策略使用。
+- 涨停/跌停/炸板池供应商报告总数依次为 82/6/12，但涨停池本轮报告只带回 30 个样本项。缺少源端快照时间，仍需核对分页/总量语义及交易日归属。
+- BaoStock 交易日历在本轮 7 天窗口查询成功，但历史探测曾超时，且尚未完成 NAS/Docker 对照；季度财务指标不在本轮报告结果中，因此没有真实 Runner 证据。
+- 妙想筹码/资金流因未设置 opt-in 测试和 MX_APIKEY 而 skipped。未配置真实 Key 时不能声称这两项已完成联调。
+
+本轮失败问题与后续重点：Go CI #290 因 services/market-data/internal/config/config_test.go 重复声明 TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly 而失败，Docker image build 因同一测试编译错误而失败；修复后仍需重新运行完整 Go CI。东方财富 502/302 集中记录于 [Issue #6](https://github.com/Kasign/stock_data_provider/issues/6)。
