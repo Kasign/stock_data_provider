@@ -44,7 +44,6 @@ func NewYahooFinance(timeout time.Duration, chartURL string) *YahooFinance {
 
 func (p *YahooFinance) Name() string { return "yahoo" }
 
-
 // FetchQuote uses Yahoo's public chart endpoint as an optional intraday snapshot.
 // It is not an official SLA-backed API; because turnover amount is unavailable,
 // returned quotes are always degraded and this provider is disabled by default.
@@ -105,7 +104,7 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 					RegularMarketVolume  *int64  `json:"regularMarketVolume"`
 					ChartPreviousClose   float64 `json:"chartPreviousClose"`
 				} `json:"meta"`
-				Timestamp []int64 `json:"timestamp"`
+				Timestamp  []int64 `json:"timestamp"`
 				Indicators struct {
 					Quote []struct {
 						Open []*float64 `json:"open"`
@@ -199,7 +198,7 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 		QuoteTime: &quoteTime, QuoteTimeSemantics: "provider_snapshot_time",
 		FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: yahooFinanceQuoteVersion,
 		RawVolume: rawVolume, RawVolumeUnit: optionalVolumeUnit(volume, "shares"),
-		RawAmountUnit: "unknown", RawAmountField: "unavailable",
+		RawAmountUnit: "unknown",
 		VolumeUnit: optionalVolumeUnit(volume, "shares"), AmountUnit: "unknown",
 		AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_amount_unavailable"}, NormalizationVer: normalize.Version,

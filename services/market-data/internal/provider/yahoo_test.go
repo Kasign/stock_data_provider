@@ -69,7 +69,6 @@ func yahooFixture(t *testing.T, includeAdjusted bool, reportedSymbol string) (*h
 	return server, timestamps
 }
 
-
 func yahooQuoteFixture(t *testing.T, reportedSymbol string, includeOpen bool) ([]byte, []int64) {
 	t.Helper()
 	loc := yahooChinaLocation()
@@ -88,15 +87,15 @@ func yahooQuoteFixture(t *testing.T, reportedSymbol string, includeOpen bool) ([
 		"chart": map[string]any{
 			"result": []any{map[string]any{
 				"meta": map[string]any{
-					"symbol": reportedSymbol,
-					"longName": "China Merchants Bank Co., Ltd.",
-					"shortName": "CHINA MERCHANTS BANK",
-					"regularMarketTime": timestamps[1],
-					"regularMarketPrice": 42.35,
+					"symbol":               reportedSymbol,
+					"longName":             "China Merchants Bank Co., Ltd.",
+					"shortName":            "CHINA MERCHANTS BANK",
+					"regularMarketTime":    timestamps[1],
+					"regularMarketPrice":   42.35,
 					"regularMarketDayHigh": 42.38,
-					"regularMarketDayLow": 41.57,
+					"regularMarketDayLow":  41.57,
 					"regularMarketVolume": int64(56829700),
-					"chartPreviousClose": 41.82,
+					"chartPreviousClose":  41.82,
 				},
 				"timestamp": timestamps,
 				"indicators": map[string]any{
@@ -165,7 +164,7 @@ func TestYahooFinanceFetchQuoteRejectsWrongTickerAndMissingIntradayOpen(t *testi
 		open   bool
 	}{
 		"ticker mismatch": {"600000.SS", true},
-		"missing open":   {"600036.SS", false},
+		"missing open":    {"600036.SS", false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			payload, _ := yahooQuoteFixture(t, fixture.symbol, fixture.open)
