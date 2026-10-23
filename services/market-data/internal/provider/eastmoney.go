@@ -576,7 +576,7 @@ func (p *Eastmoney) getJSON(ctx context.Context, base string, params url.Values,
 }
 
 func (p *Eastmoney) getJSONWithRetry(ctx context.Context, base string, params url.Values, out any, attemptTimeout time.Duration) error {
-	const maxAttempts = 2
+	const maxAttempts = 3
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		requestCtx, cancel := context.WithTimeout(ctx, attemptTimeout)

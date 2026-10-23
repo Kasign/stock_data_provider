@@ -83,8 +83,8 @@ func TestEastmoneyFetchMarketBreadthFallsBackToDelayHostOnHTTP502(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if primaryCalls.Load() != 2 || delayCalls.Load() != 1 {
-		t.Fatalf("expected two primary attempts and one delay fallback; primary=%d delay=%d", primaryCalls.Load(), delayCalls.Load())
+	if primaryCalls.Load() != 3 || delayCalls.Load() != 1 {
+		t.Fatalf("expected three primary attempts and one delay fallback; primary=%d delay=%d", primaryCalls.Load(), delayCalls.Load())
 	}
 	if got.CoveredSecurities != 1 || got.AdvancingCount != 1 {
 		t.Fatalf("unexpected market-breadth fallback snapshot: %+v", got)
@@ -141,7 +141,7 @@ func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
 			"rc": 0,
 			"data": map[string]any{
 				"total": 1,
-				"diff": []map[string]any{{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.2, "f6": 12.0}},
+				"diff":  []map[string]any{{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.2, "f6": 12.0}},
 			},
 		})
 	}))
