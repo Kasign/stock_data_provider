@@ -466,6 +466,15 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 - 同一 HEAD 的 Go CI [#39905085083](https://github.com/Kasign/stock_data_provider/actions/runs/39905085083) 曾因新增 8 个 Go 文件未通过 `gofmt` 门禁，测试步骤没有执行。之后提交 `42e6360` / `59caf3f` 仅修正格式，不改变 Provider 行为；它们对应的全量 Go CI 需要以各自 HEAD 的后续运行记录为准，不继承早先 HEAD 的测试状态。
 - 网易真实行情仍是 DNS 失败 / 历史 CSV HTTP 502，所以保持关闭；MX_API 因 GitHub Actions 的 `MX_APIKEY` 仍不可用，保持 `skipped / 未验证`，不得标记接通。
 
+### 最新复验：Go CI 与真实 Provider（2026-10-23）
+
+- 最新完整 Go CI 为 [#39905678476](https://github.com/Kasign/stock_data_provider/actions/runs/39905678476)，对应 HEAD `bbcb34ff44c104a688b00a87176a55e2e4b6009c`。根模块、`go-core`、`services/market-data` 测试均通过，Compose 配置校验、部署脚本语法检查、market-data 与 analysis API 两个 Go 镜像构建均通过。此前 #39905085083、#39905355956、#39905514554 和 #39905617416 的失败均被定位为 `services/market-data/internal/config/config.go` 的 `gofmt` 对齐门禁；已修正后，当前 HEAD 的所有 CI job 均成功。
+- 最新真实 Provider probe 为 [#39905678555](https://github.com/Kasign/stock_data_provider/actions/runs/39905678555)，同样对应 HEAD `bbcb34f`。实际运行的 14 条 Provider/能力结果全部为 `returned`，探测 job 本身通过；这仅证明该次 Runner 请求成功，不等同于部署环境或长期 SLA 验收。
+- 东方财富 F10 基础资料 HTTP 200，返回 `600036.SH`、招商银行、上市日期 `2002-04-09`，质量 `valid`。行业与概念板块端点均为 HTTP 302 跳转至 `push2delay.eastmoney.com` 后 HTTP 200 JSON：行业返回 10 条、总量 496；概念返回 10 条、总量 516。两者固定 `degraded`，原因是 `provider_snapshot_timestamp_not_exposed`。本次样本包括行业 `BK1295` 其他数字媒体（涨幅 9.07%）以及概念 `BK1754` 2026三季报首亏（涨幅 4.96%）；排名和百分比会随市场时点变化。
+- 本次东方财富个股主报价先 HTTP 302 转向延迟行情域，后 HTTP 200，延迟报价直连也 HTTP 200，样本价格均为 41.86、成交额约 32.32 亿元，质量 `valid`。前一轮 #39905085321 的两个报价端点返回 HTTP 502，说明该入口有间歇性波动，不能把单次 502 当成永久不可用。
+- 新浪实时报价 HTTP 200 且样本质量 `valid`；新浪日 K、腾讯报价/日 K、Yahoo 报价/日 K 均返回可解析数据。新浪日 K、腾讯相关能力和 Yahoo 按各自字段契约降级；Yahoo 报价继续保持 `amount=null`、`amount_unit=unknown`、`quality=degraded`。东方财富、BaoStock 前复权日 K 本轮各返回 8 根且质量 `valid`。
+- 网易两个能力在普通 probe 中继续 `skipped`（之前真实测试已证实 DNS 失败 / CSV HTTP 502）；MX_API 筹码和资金流也仍为 `skipped / 未验证`，因为 Actions 没有可用的 `MX_APIKEY`。这些不会因为当前 probe job 绿色而转为已接通。板块 ranking 的生产开关仍默认关闭，直至完成目标 NAS/Docker 环境验收。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
