@@ -21,17 +21,10 @@ func (roundTripper domesticMarketRoundTripper) RoundTrip(req *http.Request) (*ht
 	return roundTripper(req)
 }
 
-func TestEastmoneyMarketBreadthDefaultsToBulkEndpoint(t *testing.T) {
+func TestEastmoneyMarketBreadthDefaultsToDistributionEndpoint(t *testing.T) {
 	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", "", "", "")
-	if p.marketStocksURL != "https://82.push2.eastmoney.com/api/qt/clist/get" {
-		t.Fatalf("market breadth default endpoint = %q", p.marketStocksURL)
-	}
-}
-
-func TestEastmoneyMarketBreadthFallbackMapsBulkHostToDelayHost(t *testing.T) {
-	got := eastmoneyMarketStocksFallbackURL("https://82.push2.eastmoney.com/api/qt/clist/get")
-	if got != "https://push2delay.eastmoney.com/api/qt/clist/get" {
-		t.Fatalf("fallback URL = %q", got)
+	if p.marketBreadthURL != "https://push2ex.eastmoney.com/getTopicZDFenBu" {
+		t.Fatalf("market breadth default endpoint = %q", p.marketBreadthURL)
 	}
 }
 
@@ -99,154 +92,68 @@ func TestEastmoneyFetchStockBoardsKeepsEmptyResultUnknown(t *testing.T) {
 	}
 }
 
-func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T) {
+func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/clist/get" {
+		if r.URL.Path != "/getTopicZDFenBu" {
 			http.NotFound(w, r)
 			return
 		}
-		if r.URL.Query().Get("pz") != "20000" {
-			t.Errorf("pz=%s", r.URL.Query().Get("pz"))
+		if r.URL.Query().Get("dpt") != "wz.ztzt" {
+			t.Errorf("dpt=%q", r.URL.Query().Get("dpt"))
 		}
-		if r.URL.Query().Get("fid") != "f12" {
-			t.Errorf("fid=%s, want stable sort by security code", r.URL.Query().Get("fid"))
-		}
-		if got := r.URL.Query().Get("np"); got != "2" {
-			t.Errorf("np=%s, want 2 for bulk result", got)
+		if r.URL.Query().Get("ut") == "" {
+			t.Error("expected public Eastmoney token")
 		}
 		payload := map[string]any{"rc": 0, "data": map[string]any{
-			"total": 3, "diff": map[string]any{
-				"0": map[string]any{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.5, "f6": 100.5},
-				"1": map[string]any{"f12": "000001", "f13": 0, "f14": "平安银行", "f3": -0.5, "f6": 200.0},
-				"2": map[string]any{"f12": "601398", "f13": 1, "f14": "工商银行", "f3": 0.0, "f6": 300.0},
+			"qdate": 20261023,
+			"fenbu": []map[string]int{
+				{"-11": 2}, {"-2": 3}, {"-1": 10}, {"0": 5}, {"1": 20}, {"11": 4},
 			},
 		}}
 		_ = json.NewEncoder(w).Encode(payload)
 	}))
 	defer server.Close()
-	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/clist/get", server.URL, "")
+	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", "", "")
 	got, err := p.FetchMarketBreadth(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.TotalSecurities != 3 || got.CoveredSecurities != 3 || got.AdvancingCount != 1 || got.DecliningCount != 1 || got.UnchangedCount != 1 || got.UnclassifiedCount != 0 {
-		t.Fatalf("unexpected counts: %+v", got)
+	if got.ProviderReportDate != "2026-10-23" {
+		t.Fatalf("provider report date = %q", got.ProviderReportDate)
 	}
-	if got.TotalAmountCNY == nil || *got.TotalAmountCNY != 600.5 || got.AmountCoverageCount != 3 {
-		t.Fatalf("unexpected amount coverage: %+v", got)
+	if got.TotalSecurities != 44 || got.CoveredSecurities != 44 || got.AdvancingCount != 24 || got.DecliningCount != 15 || got.UnchangedCount != 5 || got.UnclassifiedCount != 0 {
+		t.Fatalf("unexpected distribution counts: %+v", got)
 	}
-	if got.QualityStatus != "degraded" || !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") {
-		t.Fatalf("missing timestamp downgrade: %+v", got)
+	if got.TotalAmountCNY != nil || got.AmountCoverageCount != 0 {
+		t.Fatalf("distribution endpoint must not invent turnover: %+v", got)
 	}
-}
-
-func TestEastmoneyFetchMarketBreadthFallsBackToDelayHostOnHTTP502(t *testing.T) {
-	var primaryCalls, delayCalls atomic.Int32
-	p := NewEastmoneyConfiguredWithDomesticMarketData(
-		2*time.Second, "", "", "", "", "",
-		"https://push2.eastmoney.com/api/qt/clist/get", "", "",
-	)
-	p.client.Transport = domesticMarketRoundTripper(func(req *http.Request) (*http.Response, error) {
-		switch req.URL.Hostname() {
-		case "push2.eastmoney.com":
-			primaryCalls.Add(1)
-			return &http.Response{Status: "502 Bad Gateway", StatusCode: http.StatusBadGateway, Header: make(http.Header), Body: http.NoBody, Request: req}, nil
-		case "push2delay.eastmoney.com":
-			delayCalls.Add(1)
-			body := `{"rc":0,"data":{"total":1,"diff":[{"f12":"600519","f13":1,"f14":"贵州茅台","f3":1.2,"f6":120.0}]}}`
-			return &http.Response{
-				Status: "200 OK", StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}},
-				Body: io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body)), Request: req,
-			}, nil
-		default:
-			return nil, fmt.Errorf("unexpected host %q", req.URL.Hostname())
-		}
-	})
-	got, err := p.FetchMarketBreadth(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if primaryCalls.Load() != 3 || delayCalls.Load() != 1 {
-		t.Fatalf("expected three primary attempts and one delay fallback; primary=%d delay=%d", primaryCalls.Load(), delayCalls.Load())
-	}
-	if got.CoveredSecurities != 1 || got.AdvancingCount != 1 {
-		t.Fatalf("unexpected market-breadth fallback snapshot: %+v", got)
+	if got.QualityStatus != model.QualityDegraded ||
+		!strings.Contains(strings.Join(got.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") ||
+		!strings.Contains(strings.Join(got.QualityReasons, ","), "provider_market_amount_unavailable_from_distribution_endpoint") {
+		t.Fatalf("missing conservative quality metadata: %+v", got)
 	}
 }
 
-func TestEastmoneyFetchMarketBreadthDoesNotExposePartialAmountTotal(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
-			"total": 2,
-			"diff": []map[string]any{
-				{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.2, "f6": 120.0},
-				{"f12": "000001", "f13": 0, "f14": "平安银行", "f3": -0.2},
-			},
-		}})
-	}))
-	defer server.Close()
-	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/clist/get", server.URL, "")
-	got, err := p.FetchMarketBreadth(context.Background())
-	if err != nil {
-		t.Fatal(err)
+func TestEastmoneyFetchMarketBreadthRejectsInvalidDistribution(t *testing.T) {
+	cases := map[string]string{
+		"missing-data": `{"rc":0,"data":{"qdate":20261023}}`,
+		"empty-buckets": `{"rc":0,"data":{"qdate":20261023,"fenbu":[]}}`,
+		"bad-date": `{"rc":0,"data":{"qdate":"today","fenbu":[{"1":3}]}}`,
+		"bad-key": `{"rc":0,"data":{"qdate":20261023,"fenbu":[{"12":3}]}}`,
+		"negative-count": `{"rc":0,"data":{"qdate":20261023,"fenbu":[{"1":-3}]}}`,
+		"duplicate-bucket": `{"rc":0,"data":{"qdate":20261023,"fenbu":[{"1":3},{"1":4}]}`,
 	}
-	if got.AmountCoverageCount != 1 || got.TotalAmountCNY != nil {
-		t.Fatalf("partial market amount must not be summed as a total: %+v", got)
-	}
-	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_market_amount_incomplete") {
-		t.Fatalf("missing amount coverage quality reason: %+v", got.QualityReasons)
-	}
-}
-
-func TestEastmoneyFetchMarketBreadthRejectsIncompleteCoverage(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{"total": 3, "diff": []map[string]any{
-			{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.0, "f6": 100.0},
-			{"f12": "000001", "f13": 0, "f14": "平安银行", "f3": -1.0, "f6": 200.0},
-		}}})
-	}))
-	defer server.Close()
-	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/clist/get", server.URL, "")
-	_, err := p.FetchMarketBreadth(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "incomplete") {
-		t.Fatalf("expected incomplete coverage error, got %v", err)
-	}
-}
-
-func TestEastmoneyFetchMarketBreadthPaginatesCompleteCoverage(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/clist/get" {
-			http.NotFound(w, r)
-			return
-		}
-		if got := r.URL.Query().Get("pz"); got != "20000" && got != "2" {
-			t.Errorf("unexpected page size %q", got)
-		}
-		var rows []map[string]any
-		switch r.URL.Query().Get("pn") {
-		case "1":
-			rows = []map[string]any{
-				{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.5, "f6": 100.0},
-				{"f12": "000001", "f13": 0, "f14": "平安银行", "f3": -0.5, "f6": 200.0},
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.WriteString(w, body)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", "", "")
+			if _, err := p.FetchMarketBreadth(context.Background()); err == nil {
+				t.Fatalf("expected invalid distribution %s to be rejected", name)
 			}
-		case "2":
-			rows = []map[string]any{{"f12": "601398", "f13": 1, "f14": "工商银行", "f3": 0.0, "f6": 300.0}}
-		default:
-			t.Errorf("unexpected page number %q", r.URL.Query().Get("pn"))
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{"total": 3, "diff": rows}})
-	}))
-	defer server.Close()
-	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/clist/get", server.URL, "")
-	got, err := p.FetchMarketBreadth(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.TotalSecurities != 3 || got.CoveredSecurities != 3 || got.AdvancingCount != 1 || got.DecliningCount != 1 || got.UnchangedCount != 1 {
-		t.Fatalf("unexpected paginated market breadth: %+v", got)
-	}
-	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_pages_not_atomic") {
-		t.Fatalf("multi-page non-atomic quality reason missing: %+v", got.QualityReasons)
+		})
 	}
 }
 
@@ -257,16 +164,12 @@ func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"rc": 0,
-			"data": map[string]any{
-				"total": 1,
-				"diff":  []map[string]any{{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.2, "f6": 12.0}},
-			},
-		})
+		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
+			"qdate": 20261023, "fenbu": []map[string]int{{"-1": 2}, {"0": 1}, {"1": 3}},
+		}})
 	}))
 	defer server.Close()
-	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/clist/get", server.URL, "")
+	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", "", "")
 	got, err := p.FetchMarketBreadth(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -274,7 +177,7 @@ func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
 	if requests.Load() != 2 {
 		t.Fatalf("expected one retry after transient 502, got %d requests", requests.Load())
 	}
-	if got.CoveredSecurities != 1 || got.AdvancingCount != 1 {
+	if got.CoveredSecurities != 6 || got.AdvancingCount != 3 || got.DecliningCount != 2 || got.UnchangedCount != 1 {
 		t.Fatalf("unexpected retry result: %+v", got)
 	}
 }

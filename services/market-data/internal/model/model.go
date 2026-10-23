@@ -163,6 +163,7 @@ type SectorRanking struct {
 	LeadingStock        string        `json:"leading_stock,omitempty"`
 	LeaderChangePercent *float64      `json:"leader_change_percent,omitempty"`
 	Source              string        `json:"source"`
+	ProviderReportDate  string        `json:"provider_report_date,omitempty"`
 	SourceVersion       string        `json:"source_version,omitempty"`
 	FetchedAt           time.Time     `json:"fetched_at"`
 	QualityStatus       QualityStatus `json:"quality_status"`

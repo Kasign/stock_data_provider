@@ -40,7 +40,7 @@ type Eastmoney struct {
 	stockBasicURL    string
 	sectorRankingURL string
 	indexURL         string
-	marketStocksURL  string
+	marketBreadthURL  string
 	limitPoolBaseURL string
 	stockBoardsURL   string
 	ut               string
@@ -70,12 +70,12 @@ func NewEastmoneyConfiguredWithIndices(timeout time.Duration, quoteURL, klineURL
 	return NewEastmoneyConfiguredWithDomesticMarketData(timeout, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, "", "", ut)
 }
 
-func NewEastmoneyConfiguredWithDomesticMarketData(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketStocksURL, limitPoolBaseURL, ut string) *Eastmoney {
-	return NewEastmoneyConfiguredWithStockBoards(timeout, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketStocksURL, limitPoolBaseURL, "", ut)
+func NewEastmoneyConfiguredWithDomesticMarketData(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketBreadthURL, limitPoolBaseURL, ut string) *Eastmoney {
+	return NewEastmoneyConfiguredWithStockBoards(timeout, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketBreadthURL, limitPoolBaseURL, "", ut)
 }
 
 // NewEastmoneyConfiguredWithStockBoards configures the per-security board-membership endpoint independently.
-func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketStocksURL, limitPoolBaseURL, stockBoardsURL, ut string) *Eastmoney {
+func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketBreadthURL, limitPoolBaseURL, stockBoardsURL, ut string) *Eastmoney {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -94,10 +94,10 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	if indexURL == "" {
 		indexURL = defaultEastmoneyIndexURL
 	}
-	if marketStocksURL == "" {
+	if marketBreadthURL == "" {
 		// Use the delay host directly for broad pagination; the primary CLIST host redirects here
 		// anyway, and extra failed redirect/fallback attempts can aggravate transient rate limiting.
-		marketStocksURL = "https://82.push2.eastmoney.com/api/qt/clist/get"
+		marketBreadthURL = "https://push2ex.eastmoney.com/getTopicZDFenBu"
 	}
 	if limitPoolBaseURL == "" {
 		limitPoolBaseURL = "https://push2ex.eastmoney.com"
@@ -111,7 +111,7 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketStocksURL: marketStocksURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, ut: ut,
 	}
 }
 func (p *Eastmoney) Name() string { return "eastmoney" }
@@ -1141,147 +1141,93 @@ func eastmoneyMarketStocksFallbackURL(rawURL string) string {
 }
 
 func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error) {
-	marketListURL := p.marketStocksURL
-	type marketListPayload struct {
+	params := url.Values{
+		"dpt": {"wz.ztzt"},
+		"ut":  {p.ut},
+		"_":   {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	}
+	var payload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
-			Total int                          `json:"total"`
-			Diff  json.RawMessage              `json:"diff"`
-			Rows  []map[string]json.RawMessage `json:"-"`
+			QDate json.RawMessage              `json:"qdate"`
+			Fenbu []map[string]json.RawMessage `json:"fenbu"`
 		} `json:"data"`
 	}
-	fetchPage := func(page, pageSize int) (*marketListPayload, error) {
-		params := url.Values{
-			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(pageSize)}, "po": {"1"}, "np": {"2"},
-			// Sort by stable security code; sorting by live percentage change can move symbols between pages.
-			"fid": {"f12"}, "fs": {eastmoneyMarketUniverseFilter},
-			"fields": {"f3,f6,f12,f13,f14"}, "fltt": {"2"}, "invt": {"2"}, "ut": {p.ut},
-			"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
-		}
-		var payload marketListPayload
-		if requestErr := p.getJSONWithRetry(ctx, marketListURL, params, &payload, 6*time.Second); requestErr != nil {
-			fallbackURL := eastmoneyMarketStocksFallbackURL(marketListURL)
-			if fallbackURL == "" {
-				return nil, fmt.Errorf("Eastmoney market breadth page %d: %w", page, requestErr)
-			}
-			payload = marketListPayload{}
-			if fallbackErr := p.getJSONWithRetry(ctx, fallbackURL, params, &payload, 6*time.Second); fallbackErr != nil {
-				return nil, fmt.Errorf("Eastmoney market breadth page %d: primary endpoint failed (%v); delay fallback failed: %w", page, requestErr, fallbackErr)
-			}
-			marketListURL = fallbackURL
-		}
-		if payload.RC != nil && *payload.RC != 0 {
-			return nil, fmt.Errorf("Eastmoney market breadth provider error rc=%d", *payload.RC)
-		}
-		if payload.Data == nil {
-			return nil, errors.New("Eastmoney market breadth returned no data object")
-		}
-		rows, decodeErr := decodeEastmoneyBoardRows(payload.Data.Diff)
-		if decodeErr != nil {
-			return nil, fmt.Errorf("decode Eastmoney market breadth rows: %w", decodeErr)
-		}
-		payload.Data.Rows = rows
-		return &payload, nil
+	if err := p.getJSONWithRetry(ctx, p.marketBreadthURL, params, &payload, 8*time.Second); err != nil {
+		return nil, fmt.Errorf("Eastmoney market-breadth distribution request: %w", err)
 	}
-	first, err := fetchPage(1, eastmoneyMarketBreadthPageSize)
-	if err != nil {
-		return nil, err
+	if payload.RC != nil && *payload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney market-breadth distribution provider error rc=%d", *payload.RC)
 	}
-	total := first.Data.Total
-	if total <= 0 {
-		return nil, errors.New("Eastmoney market breadth returned a non-positive universe count")
+	if payload.Data == nil || len(payload.Data.Fenbu) == 0 {
+		return nil, errors.New("Eastmoney market-breadth distribution returned no fenbu buckets")
 	}
-	if total > eastmoneyMarketBreadthMaxSecurities {
-		return nil, fmt.Errorf("Eastmoney market breadth universe %d exceeds safety cap %d", total, eastmoneyMarketBreadthMaxSecurities)
+	qdate := parseEastmoneyBoardString(map[string]json.RawMessage{"qdate": payload.Data.QDate}, "qdate")
+	reportDate := ""
+	if len(qdate) == 8 {
+		if parsed, err := time.Parse("20060102", qdate); err == nil {
+			reportDate = parsed.Format("2006-01-02")
+		}
 	}
-	pageSize := eastmoneyMarketBreadthPageSize
-	if len(first.Data.Rows) > 0 && len(first.Data.Rows) < pageSize && len(first.Data.Rows) < total {
-		// Some public gateways cap pz. Derive page size from the first page and verify every subsequent page.
-		pageSize = len(first.Data.Rows)
-	}
-	if len(first.Data.Rows) == 0 {
-		return nil, errors.New("Eastmoney market breadth returned an empty first page")
-	}
-	rows := make([]map[string]json.RawMessage, 0, total)
-	rows = append(rows, first.Data.Rows...)
-	pageCount := 1
-	for page := 2; len(rows) < total; page++ {
-		if page > (eastmoneyMarketBreadthMaxSecurities/pageSize)+1 {
-			return nil, errors.New("Eastmoney market breadth exceeded page safety limit")
-		}
-		timer := time.NewTimer(time.Second)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
-		}
-		next, fetchErr := fetchPage(page, pageSize)
-		if fetchErr != nil {
-			return nil, fetchErr
-		}
-		if next.Data.Total != total {
-			return nil, fmt.Errorf("Eastmoney market universe changed during pagination: first total=%d page %d total=%d", total, page, next.Data.Total)
-		}
-		expected := pageSize
-		if remaining := total - len(rows); remaining < expected {
-			expected = remaining
-		}
-		if len(next.Data.Rows) != expected {
-			return nil, fmt.Errorf("Eastmoney market breadth page %d is incomplete: received %d of %d rows", page, len(next.Data.Rows), expected)
-		}
-		rows = append(rows, next.Data.Rows...)
-		pageCount++
-	}
-	if len(rows) != total {
-		return nil, fmt.Errorf("Eastmoney market breadth coverage incomplete: received %d of %d rows", len(rows), total)
+	if reportDate == "" {
+		return nil, errors.New("Eastmoney market-breadth distribution has an invalid or missing qdate")
 	}
 
-	fetchedAt := time.Now().UTC()
 	snapshot := &model.MarketBreadthSnapshot{
-		Market: "cn_a_share", TotalSecurities: total, CoveredSecurities: len(rows),
-		Source: p.Name(), SourceVersion: "eastmoney-clist-market-breadth-v1",
-		FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
-		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		Market: "cn_a_share",
+		Source: p.Name(),
+		SourceVersion: "eastmoney-push2ex-zdfenbu-v1",
+		ProviderReportDate: reportDate,
+		FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{
+			"provider_snapshot_timestamp_not_exposed",
+			"provider_market_amount_unavailable_from_distribution_endpoint",
+			"provider_distribution_population_not_verified_against_security_master",
+		},
 	}
-	if pageCount > 1 {
-		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_pages_not_atomic")
+	seenBuckets := make(map[int]struct{}, len(payload.Data.Fenbu))
+	total := 0
+	for rowIndex, bucket := range payload.Data.Fenbu {
+		if len(bucket) != 1 {
+			return nil, fmt.Errorf("Eastmoney market-breadth bucket %d must contain exactly one range/count pair", rowIndex)
+		}
+		for rawKey, rawCount := range bucket {
+			key, err := strconv.Atoi(rawKey)
+			if err != nil || key < -11 || key > 11 {
+				return nil, fmt.Errorf("Eastmoney market-breadth bucket %d has invalid range key %q", rowIndex, rawKey)
+			}
+			if _, exists := seenBuckets[key]; exists {
+				return nil, fmt.Errorf("Eastmoney market-breadth distribution contains duplicate range %d", key)
+			}
+			seenBuckets[key] = struct{}{}
+			value := parseEastmoneyBoardNumber(map[string]json.RawMessage{"count": rawCount}, "count")
+			if value == nil || *value < 0 || math.Trunc(*value) != *value || *value > float64(eastmoneyMarketBreadthMaxSecurities) {
+				return nil, fmt.Errorf("Eastmoney market-breadth bucket %d has invalid count", key)
+			}
+			count := int(*value)
+			total += count
+			switch {
+			case key > 0:
+				snapshot.AdvancingCount += count
+			case key < 0:
+				snapshot.DecliningCount += count
+			default:
+				snapshot.UnchangedCount += count
+			}
+		}
 	}
-	seen := make(map[string]struct{}, len(rows))
-	amountSum, amountCount := 0.0, 0
-	for i, row := range rows {
-		code, market := parseEastmoneyBoardString(row, "f12"), parseEastmoneyBoardString(row, "f13")
-		if code == "" || (market != "0" && market != "1") {
-			return nil, fmt.Errorf("Eastmoney market breadth row %d has invalid security identity", i)
-		}
-		key := market + "." + code
-		if _, exists := seen[key]; exists {
-			return nil, fmt.Errorf("Eastmoney market breadth contains duplicate security %s", key)
-		}
-		seen[key] = struct{}{}
-		change := parseEastmoneyBoardNumber(row, "f3")
-		switch {
-		case change == nil:
-			snapshot.UnclassifiedCount++
-			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_change_percent_missing")
-		case *change > 0:
-			snapshot.AdvancingCount++
-		case *change < 0:
-			snapshot.DecliningCount++
-		default:
-			snapshot.UnchangedCount++
-		}
-		if amount := parseEastmoneyBoardNumber(row, "f6"); amount != nil && *amount >= 0 {
-			amountSum += *amount
-			amountCount++
-		}
+	if total <= 0 {
+		return nil, errors.New("Eastmoney market-breadth distribution count is not positive")
 	}
-	snapshot.AmountCoverageCount = amountCount
-	if amountCount == total {
-		snapshot.TotalAmountCNY = &amountSum
-	} else {
-		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_market_amount_incomplete")
+	if total > eastmoneyMarketBreadthMaxSecurities {
+		return nil, fmt.Errorf("Eastmoney market-breadth distribution count %d exceeds safety cap %d", total, eastmoneyMarketBreadthMaxSecurities)
 	}
+	snapshot.TotalSecurities = total
+	snapshot.CoveredSecurities = total
+	snapshot.UnclassifiedCount = 0
+	snapshot.AmountCoverageCount = 0
+	snapshot.TotalAmountCNY = nil
 	return snapshot, nil
 }
 

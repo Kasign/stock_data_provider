@@ -147,6 +147,7 @@ components:
         change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
         source: {type: string}
         source_version: {type: string}
+        provider_report_date: {type: string, format: date, description: Source report date; not an exact snapshot time}
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons:
@@ -296,8 +297,8 @@ components:
       required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, amount_coverage_count, source, fetched_at, quality_status]
       properties:
         market: {type: string, enum: [cn_a_share]}
-        total_securities: {type: integer, minimum: 1}
-        covered_securities: {type: integer, minimum: 1, description: Must equal total_securities or response is rejected}
+        total_securities: {type: integer, minimum: 1, description: Sum of source change-distribution bucket counts; not independently verified against a security master}
+        covered_securities: {type: integer, minimum: 1, description: Count represented by provider distribution buckets; equals total_securities}
         advancing_count: {type: integer, minimum: 0}
         declining_count: {type: integer, minimum: 0}
         unchanged_count: {type: integer, minimum: 0}
@@ -526,8 +527,8 @@ paths:
         '503': {description: No trading-calendar provider enabled}
   /api/v1/market/breadth:
     get:
-      summary: Get full-universe A-share market breadth
-      description: Aggregates the provider-reported Shanghai/Shenzhen/Beijing A-share universe and rejects partial coverage. Quality is degraded when the source exposes no verifiable snapshot time.
+      summary: Get Eastmoney A-share market-breadth distribution
+      description: Aggregates Eastmoney market-wide change-distribution buckets. total_securities is the sum of returned bucket counts, not an independently verified security-master count. Total amount remains null because the distribution endpoint does not provide market turnover. Quality is degraded because the source exposes a report date but no verifiable intraday snapshot timestamp.
       responses:
         '200':
           description: Market breadth including universe coverage and data quality
