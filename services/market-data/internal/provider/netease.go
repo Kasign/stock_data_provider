@@ -184,7 +184,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			Open: openV, High: highV, Low: lowV, Close: closeV,
 			Volume: &shares, Amount: amount, AdjustmentBasis: model.AdjustmentNone,
 			AdjustmentMethod: "netease_raw_ohlc_no_adjustment",
-			Source: p.Name(), SourceVersion: neteaseVersion,
+			Source:           p.Name(), SourceVersion: neteaseVersion,
 			FetchedAt: now, NormalizedAt: now, RawVolume: &rawVolumeCopy,
 			RawVolumeUnit: volumeUnit, RawAmount: &rawAmountCopy, RawAmountUnit: amountUnit,
 			RawAmountField: "VATURNOVER", VolumeUnit: "shares", AmountUnit: amountUnit,
