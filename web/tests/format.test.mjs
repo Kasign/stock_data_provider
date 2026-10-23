@@ -4,6 +4,7 @@ import {
   describeApiError,
   formatPercent,
   formatPrice,
+  isRetryableApiError,
   normalizeAnalysisSymbol,
   normalizeBasePath,
   normalizeSymbol,
@@ -83,4 +84,25 @@ test("formats API errors without assuming every 401 is a market API-key problem"
   assert.match(runError, /run result is not ready/);
   assert.match(runError, /HTTP 409/);
   assert.match(runError, /request_id=req-run-pending/);
+});
+
+
+test("classifies transient request failures separately from permanent client errors", () => {
+  for (const error of [
+    new Error("network offline"),
+    { status: 408 },
+    { status: 409, code: "run_not_finished" },
+    { status: 425 },
+    { status: 429 },
+    { status: 500 },
+    { status: 502 },
+    { status: 503 },
+    { status: 504 }
+  ]) {
+    assert.equal(isRetryableApiError(error), true, "should retry " + JSON.stringify(error));
+  }
+
+  for (const status of [400, 401, 403, 404, 405, 413, 415]) {
+    assert.equal(isRetryableApiError({ status }), false, "should stop retrying HTTP " + status);
+  }
 });

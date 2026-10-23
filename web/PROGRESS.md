@@ -57,3 +57,11 @@
 - 新增本地历史安全测试：最近任务存储只保留 task/run 引用白名单字段，不会把报告正文、RunResult 或 API Key 写入 localStorage。
 - 上一批 [CI #39897407071](https://github.com/Kasign/stock_data_provider/actions/runs/39897407071) 已通过 22 项测试；本批新增 2 项测试。当前分支最新 CI 请以 [PR #2 Checks](https://github.com/Kasign/stock_data_provider/pull/2) 为准。
 - 这些是 Node 层的回归测试，不替代 NAS/1Panel 下的真实浏览器刷新、断网和过期 task/run 验收。
+
+
+## 任务状态错误与 Run 结果重试
+
+- 任务状态轮询现区分暂时性网络/服务错误与不可重试的普通 4xx。对 401/403/404 等配置/资源问题停止定时轮询并提示手动重试入口，避免无效任务 ID 导致持续请求。
+- Run 结果读取对暂时性错误最多自动重试 3 次（1 秒、2.5 秒、5 秒）；切换任务或发起新读取时，旧重试循环失效。
+- 新增可重试错误分类单元测试与任务轮询/Run 结果恢复契约测试。
+- 以上是前端错误恢复策略，不会重新创建任务，也不改变 Go API 的错误协议或业务状态。

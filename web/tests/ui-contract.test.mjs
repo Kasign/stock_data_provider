@@ -63,3 +63,12 @@ test("task restoration validates local references and guards stale asynchronous 
   assert.match(app, /if \(TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?stopTaskPolling\(\);[\s\S]*?if \(runId\) void loadTaskRunResult\(runId, taskId\);/);
   assert.match(recentTaskModule, /return \{[\s\S]*?task_id: record\.task_id\.trim\(\)[\s\S]*?status: typeof record\.status === "string" \? record\.status : ""/);
 });
+
+
+test("polling pauses on permanent API errors and Run reads use bounded, stale-safe retries", () => {
+  assert.match(app, /if \(!isRetryableApiError\(error\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
+  assert.match(app, /const RUN_RESULT_RETRY_DELAYS_MS = \[1000, 2500, 5000\]/);
+  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId/);
+  assert.match(app, /state\.runResultGeneration \+= 1/);
+  assert.match(app, /isRetryableApiError\(error\)/);
+});

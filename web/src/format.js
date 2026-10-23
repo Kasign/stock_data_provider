@@ -110,6 +110,15 @@ export function runStatusLabel(status) {
 }
 
 
+// Retry network failures and HTTP conditions that are commonly transient.
+// Other 4xx responses are permanent until the user fixes configuration or the resource ID.
+export function isRetryableApiError(error) {
+  const status = Number(error?.status);
+  if (!Number.isFinite(status) || status <= 0) return true;
+  if ([408, 409, 425, 429].includes(status)) return true;
+  return status >= 500;
+}
+
 export function describeApiError(error, fallback = "请求失败") {
   const status = Number(error?.status);
   let message;

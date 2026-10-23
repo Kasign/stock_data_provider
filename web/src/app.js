@@ -22,6 +22,7 @@ import {
   formatDateTime,
   formatPercent,
   formatPrice,
+  isRetryableApiError,
   normalizeAnalysisSymbol,
   normalizeBasePath,
   parseAnalysisSymbols,
@@ -34,6 +35,7 @@ import {
 const $ = (selector) => document.querySelector(selector);
 const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
 const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
+const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
 const state = {
   settings: loadSettings(),
   view: "market",
@@ -45,6 +47,7 @@ const state = {
   taskType: "post_market_scan",
   taskStatus: "",
   lastRunResult: null,
+  runResultGeneration: 0,
   taskSequence: 0,
   taskEvents: new Map(),
   pollTimer: null,
@@ -721,17 +724,34 @@ function renderTaskResult(result) {
 }
 
 async function loadTaskRunResult(runId, expectedTaskId) {
+  const generation = ++state.runResultGeneration;
+  let retries = 0;
   $("#task-result-section").hidden = false;
   $("#task-result-note").textContent = "正在读取已保存的 Run 结果…";
-  try {
-    const result = await getAnalysisRun(state.settings, runId);
-    if (state.taskId !== expectedTaskId) return;
-    state.runId = result.run_id || runId;
-    persistTaskReference();
-    renderTaskResult(result);
-  } catch (error) {
-    if (state.taskId !== expectedTaskId) return;
-    $("#task-result-note").textContent = "读取结果失败：" + errorMessage(error) + "。可点击“重新读取结果”或“立即刷新状态”重试。";
+
+  while (true) {
+    if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId) return;
+    try {
+      const result = await getAnalysisRun(state.settings, runId);
+      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId) return;
+      state.runId = result.run_id || runId;
+      persistTaskReference();
+      renderTaskResult(result);
+      return;
+    } catch (error) {
+      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId) return;
+      const delay = RUN_RESULT_RETRY_DELAYS_MS[retries];
+      if (delay !== undefined && isRetryableApiError(error)) {
+        retries += 1;
+        $("#task-result-note").textContent =
+          `Run 结果暂时不可读（${errorMessage(error)}），将在 ${delay / 1000} 秒后重试（${retries}/${RUN_RESULT_RETRY_DELAYS_MS.length}）…`;
+        await new Promise((resolve) => window.setTimeout(resolve, delay));
+        continue;
+      }
+      $("#task-result-note").textContent =
+        "读取结果失败：" + errorMessage(error) + "。可点击“重新读取结果”或“立即刷新状态”重试。";
+      return;
+    }
   }
 }
 
@@ -766,7 +786,12 @@ async function pollTask(generation = state.pollGeneration) {
     state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
   } catch (error) {
     if (generation !== state.pollGeneration) return;
-    $("#task-poll-label").textContent = `状态刷新失败：${errorMessage(error)}`;
+    if (!isRetryableApiError(error)) {
+      $("#task-poll-label").textContent =
+        `自动刷新已暂停：${errorMessage(error)}。请检查权限、API 配置或任务 ID，再点击“立即刷新状态”重试。`;
+      return;
+    }
+    $("#task-poll-label").textContent = `状态刷新失败：${errorMessage(error)}，5 秒后自动重试…`;
     state.pollTimer = window.setTimeout(() => pollTask(generation), 5000);
   }
 }
@@ -791,6 +816,7 @@ async function createTask(event) {
   const taskType = $("#task-type").value;
   const payload = { task_type: taskType, symbols };
   const idempotencyKey = $("#idempotency-key").value.trim();
+  state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = "";
   state.runId = "";
@@ -848,6 +874,7 @@ function startQuoteAnalysis() {
 
 function activateTaskReference(record) {
   if (!record || typeof record.task_id !== "string" || !record.task_id.trim()) return false;
+  state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = record.task_id;
   state.runId = typeof record.run_id === "string" ? record.run_id : "";
