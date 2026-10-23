@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -136,12 +135,12 @@ func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) 
 
 func TestEastmoneyFetchMarketBreadthRejectsInvalidDistribution(t *testing.T) {
 	cases := map[string]string{
-		"missing-data": `{"rc":0,"data":{"qdate":20261023}}`,
-		"empty-buckets": `{"rc":0,"data":{"qdate":20261023,"fenbu":[]}}`,
-		"bad-date": `{"rc":0,"data":{"qdate":"today","fenbu":[{"1":3}]}}`,
-		"bad-key": `{"rc":0,"data":{"qdate":20261023,"fenbu":[{"12":3}]}}`,
-		"negative-count": `{"rc":0,"data":{"qdate":20261023,"fenbu":[{"1":-3}]}}`,
-		"duplicate-bucket": `{"rc":0,"data":{"qdate":20261023,"fenbu":[{"1":3},{"1":4}]}`,
+		"missing-data":     `{"rc":0,"data":{"qdate":20261023}}`,
+		"empty-buckets":    `{"rc":0,"data":{"qdate":20261023,"fenbu":[]}}`,
+		"bad-date":         `{"rc":0,"data":{"qdate":"today","fenbu":[{"1":3}]}}`,
+		"bad-key":          `{"rc":0,"data":{"qdate":20261023,"fenbu":[{"12":3}]}}`,
+		"negative-count":   `{"rc":0,"data":{"qdate":20261023,"fenbu":[{"1":-3}]}}`,
+		"duplicate-bucket": `{"rc":0,"data":{"qdate":20261023,"fenbu":[{"1":3},{"1":4}]}}`,
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {

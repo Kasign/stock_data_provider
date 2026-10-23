@@ -1174,12 +1174,12 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	}
 
 	snapshot := &model.MarketBreadthSnapshot{
-		Market: "cn_a_share",
-		Source: p.Name(),
-		SourceVersion: "eastmoney-push2ex-zdfenbu-v1",
+		Market:             "cn_a_share",
+		Source:             p.Name(),
+		SourceVersion:      "eastmoney-push2ex-zdfenbu-v1",
 		ProviderReportDate: reportDate,
-		FetchedAt: time.Now().UTC(),
-		QualityStatus: model.QualityDegraded,
+		FetchedAt:          time.Now().UTC(),
+		QualityStatus:      model.QualityDegraded,
 		QualityReasons: []string{
 			"provider_snapshot_timestamp_not_exposed",
 			"provider_market_amount_unavailable_from_distribution_endpoint",
