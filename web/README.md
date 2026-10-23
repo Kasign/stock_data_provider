@@ -71,3 +71,14 @@ WebUI 本身是静态 HTML/CSS/JavaScript，由 Nginx 提供页面和同源反�
 - Go 分析服务：通过 `/analysis-api` 创建任务、读取状态与阶段事件、读取结构化 RunResult。分析任务、阶段事件、运行结果和快照由后端持久化到 MariaDB；Redis 用于结果/快照缓存，MariaDB 是最终事实源。
 
 所以，API 是 WebUI 与 Go 服务之间的 HTTP 接口，不是“存在 web 页面里”的数据存储。WebUI 只保留少量浏览器设置/引用；分析结果是否进入数据库，由 Go 后端负责。
+
+
+### 行情 API Key 的生成与配置
+
+`MARKET_DATA_API_KEY` 不是数据源厂商提供的账号 Key，也不是由 WebUI 自动创建的；它是部署管理员为保护行情服务而生成的内部共享密钥。可在服务器终端运行：
+
+```bash
+openssl rand -hex 32
+```
+
+把生成的同一个值写入部署仓库根目录的 `.env` 中的 `MARKET_DATA_API_KEY`，供 `market-data` 与 `stock-analysis-go` 两个 Go 服务共用，并按部署流程重启/重建 Go 服务。随后把完全相同的值填入 WebUI「连接与密钥设置」的行情 API Key 输入框。WebUI 只会把该值保存到当前浏览器的 `localStorage`，并在请求受保护的行情端点时以 `X-API-Key` 发送；它不会创建密钥，也不会修改服务器的 `.env`。不要把真实密钥提交到 Git。

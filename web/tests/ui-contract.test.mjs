@@ -144,6 +144,16 @@ test("analysis task submission prevents concurrent duplicate requests and releas
   assert.match(apiClient, /headersKey \? \{ "Idempotency-Key": headersKey \} : \{\}/);
 });
 
+test("market API key help identifies who generates it and where it must be configured", () => {
+  assert.match(html, /id="market-key-help"/);
+  assert.match(html, /部署管理员自行生成/);
+  assert.match(html, /MARKET_DATA_API_KEY/);
+  assert.match(html, /openssl rand -hex 32/);
+  assert.match(html, /不会自动修改服务器配置或生成后端密钥/);
+  assert.match(stylesheet, /\.field-hint \{[^}]*font-size: 13px;[^}]*line-height: 1\.75/);
+  assert.equal((stylesheet.match(/Explain the service\/database boundary directly beside connection settings/g) || []).length, 1, "settings boundary CSS should not be duplicated");
+});
+
 test("global typography has a readable baseline and key UI text is not undersized", () => {
   assert.match(stylesheet, /Global readability pass/);
   assert.match(stylesheet, /body \{ font-size: 15px; line-height: 1\.65; \}/);

@@ -132,3 +132,8 @@ WebUI 只通过同源 HTTP 路径调用 Go 服务，Nginx 根据路径把请求�
 - **Go 分析服务**：异步任务先写入 MariaDB，阶段事件、分析结果与快照由后端持久化；Redis 作为缓存使用，MariaDB 是最终事实源。WebUI 通过 API 查询这些服务端记录。
 
 本地移除最近任务、清空自选股或清除站点数据，只会改变浏览器本地状态；不会删除服务端任务、RunResult 或数据库记录。
+
+
+### 行情服务 API Key 由谁生成
+
+`MARKET_DATA_API_KEY` 是部署管理员自行生成的内部服务访问密钥，不是行情 Provider 的个人 API Key，也不是 WebUI 自动签发的令牌。建议在部署服务器上通过 `openssl rand -hex 32` 生成，并把同一值配置给 `market-data` 和 `stock-analysis-go` 的 `MARKET_DATA_API_KEY` 环境变量。WebUI 的设置项只将该值保存在浏览器 `localStorage`，调用受保护的行情路由时发送 `X-API-Key`；它不会更新后端配置。该共享 Key 不等于用户登录鉴权，公网访问仍必须额外配置访问控制。

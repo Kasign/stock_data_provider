@@ -220,7 +220,8 @@
           <p><strong>Go 分析服务：</strong>分析任务、阶段事件、Run 结果及快照由后端持久化到 MariaDB；Redis 用于缓存结果/快照，MariaDB 是最终事实源。</p>
         </section>
         <label class="field"><span>行情 API 路径</span><input id="market-base-input" value="/market-api" required /></label>
-        <label class="field"><span>行情服务 API Key</span><input id="market-key-input" type="password" autocomplete="new-password" placeholder="填写 MARKET_DATA_API_KEY" /></label>
+        <label class="field"><span>行情服务 API Key</span><input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写 MARKET_DATA_API_KEY" /></label>
+        <p class="field-hint" id="market-key-help">这是部署管理员自行生成的服务访问密钥，不是第三方行情 Provider 的密钥。将同一个值配置为部署仓库根目录 .env 中的 MARKET_DATA_API_KEY（Go 行情服务与分析服务共用），可在服务器终端执行 <code>openssl rand -hex 32</code> 生成。这里仅保存到当前浏览器 localStorage，不会自动修改服务器配置或生成后端密钥。</p>
         <label class="field"><span>分析 API 路径</span><input id="analysis-base-input" value="/analysis-api" required /></label>
         <div class="security-note">安全提示：不要将带有 API Key 的浏览器会话分享给他人。对公网部署前，应在 OpenResty 或身份认证层增加访问控制；行情服务密钥本身不等于用户认证。</div>
         <div class="dialog-actions"><button class="button button-secondary" id="clear-settings" type="button">清除本地设置</button><span class="grow"></span><button class="button button-secondary" value="cancel">取消</button><button class="button button-primary" id="save-settings" value="save" type="button">保存设置</button></div>

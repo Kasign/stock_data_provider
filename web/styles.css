@@ -570,9 +570,9 @@ td { font-size: 12px !important; }
 .settings-dialog { max-height: calc(100vh - 24px); overflow-y: auto; }
 
 
-/* Explain the service/database boundary directly beside connection settings. */
-.storage-boundary { margin: 14px 0 16px; padding: 13px 14px; border: 1px solid #2b4251; border-radius: 9px; background: rgba(14, 25, 35, .88); }
-.storage-boundary h3 { margin: 0 0 8px; color: #dbe7ee; font-size: 14px; line-height: 1.5; }
-.storage-boundary p { margin: 7px 0 0; color: #a6b8c6; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
-.storage-boundary strong { color: #e0ebf1; font-weight: 650; }
-.settings-dialog { max-height: calc(100vh - 24px); overflow-y: auto; }
+
+
+
+/* Clarify that the market API key is a deployment secret shared with the Go services. */
+.field-hint { margin: -2px 0 14px; color: #a6b8c6; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
+.field-hint code { color: #d5e8f1; font-size: 12px; }
