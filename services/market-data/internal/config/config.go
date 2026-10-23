@@ -172,7 +172,7 @@ func Load() (Config, error) {
 		EastmoneyStockBasicURL:    get("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://datacenter.eastmoney.com/securities/api/data/v1/get"),
 		EastmoneySectorRankingURL: get("MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL", "https://push2.eastmoney.com/api/qt/clist/get"),
 		EastmoneyIndexURL:         get("MARKET_DATA_EASTMONEY_INDEX_URL", "https://push2.eastmoney.com/api/qt/ulist.np/get"),
-		EastmoneyMarketStocksURL:  get("MARKET_DATA_EASTMONEY_MARKET_STOCKS_URL", "https://push2.eastmoney.com/api/qt/clist/get"),
+		EastmoneyMarketStocksURL:  get("MARKET_DATA_EASTMONEY_MARKET_STOCKS_URL", "https://push2delay.eastmoney.com/api/qt/clist/get"),
 		EastmoneyLimitPoolBaseURL: get("MARKET_DATA_EASTMONEY_LIMIT_POOL_BASE_URL", "https://push2ex.eastmoney.com"),
 		EastmoneyUT:               get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:           get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),

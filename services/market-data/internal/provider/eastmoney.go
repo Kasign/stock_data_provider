@@ -87,7 +87,9 @@ func NewEastmoneyConfiguredWithDomesticMarketData(timeout time.Duration, quoteUR
 		indexURL = defaultEastmoneyIndexURL
 	}
 	if marketStocksURL == "" {
-		marketStocksURL = "https://push2.eastmoney.com/api/qt/clist/get"
+		// Use the delay host directly for broad pagination; the primary CLIST host redirects here
+		// anyway, and extra failed redirect/fallback attempts can aggravate transient rate limiting.
+		marketStocksURL = "https://push2delay.eastmoney.com/api/qt/clist/get"
 	}
 	if limitPoolBaseURL == "" {
 		limitPoolBaseURL = "https://push2ex.eastmoney.com"
@@ -589,7 +591,9 @@ func (p *Eastmoney) getJSONWithRetry(ctx context.Context, base string, params ur
 		if attempt == maxAttempts || ctx.Err() != nil || !isRetryableEastmoneyRequestError(err) {
 			return err
 		}
-		timer := time.NewTimer(time.Duration(attempt) * 350 * time.Millisecond)
+		// Public quote gateways can briefly rate-limit large market-list pages. Spread retries
+		// out rather than issuing a burst of requests to the same redirected host.
+		timer := time.NewTimer(time.Duration(attempt) * 700 * time.Millisecond)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

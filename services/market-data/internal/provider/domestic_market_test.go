@@ -19,6 +19,13 @@ func (roundTripper domesticMarketRoundTripper) RoundTrip(req *http.Request) (*ht
 	return roundTripper(req)
 }
 
+func TestEastmoneyMarketBreadthDefaultsToDelayHost(t *testing.T) {
+	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", "", "", "")
+	if p.marketStocksURL != "https://push2delay.eastmoney.com/api/qt/clist/get" {
+		t.Fatalf("market breadth default endpoint = %q", p.marketStocksURL)
+	}
+}
+
 func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/clist/get" {
@@ -201,7 +208,6 @@ func TestEastmoneyFetchLimitPoolTypeDateAndFields(t *testing.T) {
 		})
 	}
 }
-
 
 func TestEastmoneyFetchLimitPoolMapsBeijing920CodeToBJ(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
