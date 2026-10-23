@@ -156,3 +156,12 @@
 
 
 - 代码提交：[`c87c4dba`](https://github.com/Kasign/stock_data_provider/commit/c87c4dba75b04595d5f0a899ea4a0dbde6a33a4b)。此锁只覆盖当前页面的并发提交；网络中断后用户应复用幂等键确认服务端是否已接收任务。
+
+
+## API Key 配置说明与样式 Review — CI 验证结果
+
+- 明确 `MARKET_DATA_API_KEY` 由部署管理员生成，不是行情 Provider 的个人 Key，也不是 WebUI 自动创建的令牌；推荐在部署服务器执行 `openssl rand -hex 32` 生成。
+- Go 行情服务和 Go 分析服务共用部署环境中的 `MARKET_DATA_API_KEY`；WebUI 只把相同值保存在当前浏览器 `localStorage`，并在受保护的行情请求中通过 `X-API-Key` 发送，不会写入后端 `.env` 或数据库。
+- Review 清理了设置区重复的 CSS 规则；连接设置页和 README/API 契约已补充密钥归属、生成方式与存储边界。
+- GitHub Actions [WebUI checks #39929408226](https://github.com/Kasign/stock_data_provider/actions/runs/39929408226) 通过：51 项 Node 测试全部通过（0 失败），JS 语法检查与 Nginx 镜像构建成功。
+- 代码提交：[`07797f2f`](https://github.com/Kasign/stock_data_provider/commit/07797f2f67486e1d9f552632c1fd467357617ff3)。
