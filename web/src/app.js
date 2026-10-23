@@ -62,11 +62,14 @@ function persistTaskReference() {
     run_id: state.runId || "",
     symbols: state.taskSymbols,
     task_type: state.taskType,
-    status: state.taskStatus,
-    saved_at: new Date().toISOString()
+    status: state.taskStatus
   };
+  const serialized = JSON.stringify(record);
   try {
-    localStorage.setItem(TASK_REFERENCE_KEY, JSON.stringify(record));
+    // renderTask runs on every poll; avoid synchronous writes when nothing changed.
+    if (localStorage.getItem(TASK_REFERENCE_KEY) !== serialized) {
+      localStorage.setItem(TASK_REFERENCE_KEY, serialized);
+    }
   } catch {
     // Storage can be disabled or full; the current page session should still work.
   }
@@ -938,13 +941,14 @@ $("#copy-task-diagnostic").addEventListener("click", async (event) => {
 });
 $("#copy-task-id").addEventListener("click", async () => {
   if (!state.taskId) return;
+  const button = $("#copy-task-id");
   try {
-    await navigator.clipboard.writeText(state.taskId);
-    $("#copy-task-id").textContent = "已复制";
-    window.setTimeout(() => { $("#copy-task-id").textContent = "复制"; }, 1400);
+    await copyText(state.taskId);
+    button.textContent = "已复制";
   } catch {
-    $("#copy-task-id").textContent = state.taskId;
+    button.textContent = "复制失败";
   }
+  window.setTimeout(() => { button.textContent = "复制"; }, 1600);
 });
 
 setView("market");
