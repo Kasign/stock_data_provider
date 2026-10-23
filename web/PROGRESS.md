@@ -15,7 +15,9 @@
 | 任务状态与 Run 状态 | 已实现 | 分别解释异步任务状态与 Run 状态，包括 blocked_data_quality、rejected_request 等后端状态。 |
 | 刷新后恢复最近任务 | 已实现，待浏览器联调 | 浏览器 localStorage 仅保存最近一项 task/run ID、标的、任务类型与状态，重新打开页面后通过现有 task/events/run 接口恢复。 |
 | 手动读取和诊断 | 已实现，待浏览器验收 | 提供重新读取 Run、复制完整 JSON、复制任务/质量/失败/事件诊断内容的入口。 |
-| 前端单元测试 | 三轮验证通过 | 已覆盖股票代码/状态格式化、DOM ID 引用、Go RunResult 字段映射、任务/Run 状态、任务请求体/幂等键、事件分页参数、行情密钥与分析请求隔离及错误响应；第三轮 [WebUI CI #39894969470](https://github.com/Kasign/stock_data_provider/actions/runs/39894969470) 全部通过。 |
+| 最近分析列表 | 本轮新增，CI 待验证 | 当前浏览器内保存最近 10 条 task/run 引用；点击记录会通过现有 task/events/run 接口恢复，不保存完整报告，也不是服务端历史。 |
+| 报告下载 | 本轮新增，CI 待验证 | 增加结构化 Markdown 与原始 JSON 下载，文件名使用标的和分析时点；不增加后端接口。 |
+| 前端单元测试 | 已覆盖股票代码/状态格式化、DOM ID 引用、Go RunResult 字段映射、任务/Run 状态、任务请求体/幂等键、事件分页参数、行情密钥与分析请求隔离及错误响应；第三轮 [WebUI CI #39894969470](https://github.com/Kasign/stock_data_provider/actions/runs/39894969470) 全部通过。 |
 
 ## 第二轮 Review 修正
 
@@ -23,6 +25,13 @@
 - Task ID 复制复用统一剪贴板工具，浏览器不支持或权限不足时可尝试降级复制。
 - 新增 UI 契约测试，检查 app.js 引用的静态 DOM ID 是否存在且无重复，并检查结构化结果字段与 Go domain JSON 字段对齐，防止误用不存在的 signal score/confidence 字段。
 - 增加 API 客户端自动化测试，验证创建任务的请求体/幂等键、事件增量查询参数、行情 API Key 与分析 API 的隔离，以及服务端错误码/请求 ID 的保留；仅测试现有调用，不改后端 API 契约。
+
+## 本轮 WebUI 扩展
+
+- 增加浏览器本地“最近分析”列表，最多 10 条，可选择记录并恢复服务端 task/run 状态；为旧版本仅保存单条任务的 localStorage 记录增加迁移。
+- 增加 Markdown 报告与原始 JSON 下载；Markdown 导出明确标记未报告字段，不生成额外评分、置信度或交易结论。
+- 新增最近任务存储单元测试和 Markdown/文件名测试。新增功能的 GitHub CI 验证待回填。
+- 本地记录可能因浏览器存储被清除而消失；记录引用已过期或服务端不可用时，仍需通过界面错误信息判断，不能将其视为服务端归档。
 
 ## 明确待完成
 
@@ -46,6 +55,6 @@
 
 ## 验收结果
 
-- GitHub Actions：首轮 [#39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836)、第二轮 [#39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741) 与第三轮 [#39894969470](https://github.com/Kasign/stock_data_provider/actions/runs/39894969470) 均通过。
+- GitHub Actions：之前三轮检查通过；本轮新增最近分析及报告导出的 CI 结果待回填。
 - NAS / 1Panel 真实联调：待执行。
 - 三类真实数据响应：待执行。

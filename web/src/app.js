@@ -76,7 +76,22 @@ function persistTaskReference() {
       task_type: previous.task_type || "post_market_scan",
       status: previous.status || ""
     }) : "";
-    if (previousComparable === comparable) return;
+    if (previousComparable === comparable) {
+      // Migrate the legacy single-task reference into the new local history once.
+      const historyItem = safeReadRecentTasks().find((item) => item.task_id === record.task_id);
+      const historyComparable = historyItem ? JSON.stringify({
+        task_id: historyItem.task_id,
+        run_id: historyItem.run_id || "",
+        symbols: Array.isArray(historyItem.symbols) ? historyItem.symbols : [],
+        task_type: historyItem.task_type || "post_market_scan",
+        status: historyItem.status || ""
+      }) : "";
+      if (historyComparable !== comparable) {
+        record.updated_at = previous?.updated_at || new Date().toISOString();
+        renderRecentTasks(upsertRecentTask(record, localStorage));
+      }
+      return;
+    }
     record.updated_at = new Date().toISOString();
     localStorage.setItem(TASK_REFERENCE_KEY, JSON.stringify(record));
     renderRecentTasks(upsertRecentTask(record, localStorage));
