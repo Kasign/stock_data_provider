@@ -321,7 +321,7 @@ func (s *Server) limitPool(w http.ResponseWriter,r *http.Request) {
 	writeJSON(w,http.StatusOK,snapshot)
 }
 
-func (s *Server) stockBasicfunc (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
+func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
 	item, hit, err := s.svc.StockBasic(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))

@@ -569,7 +569,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		report.Results=append(report.Results,result);encoded,_:=json.Marshal(result);t.Logf("LIVE_PROVIDER_RESULT %s",encoded)
 	}
 
-	runDaily := func(	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
+	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
 			client.Transport = capture.transport()

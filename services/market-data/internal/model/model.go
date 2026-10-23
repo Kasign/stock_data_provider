@@ -237,7 +237,7 @@ type LimitPoolSnapshot struct {
 	QualityReasons     []string        `json:"quality_reasons,omitempty"`
 }
 
-type SourceStatus struct {type SourceStatus struct {
+type SourceStatus struct {
 	Name                 string `json:"name"`
 	Enabled              bool   `json:"enabled"`
 	QuoteCapable         bool   `json:"quote_capable"`
