@@ -490,3 +490,12 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 3. 独立测试新浪报价与历史日 K：报价用 quote endpoint；日 K 仅接受 `adjustment=none`，验证目标容器网络、来源路由和 amount unknown/degraded 处理。
 4. Eastmoney 保持待调查；等后续具备时间再按第 5.5 节排查。
 5. 最后进行完整回归：优先级与故障切换、缓存、MariaDB 写入/回退、质量降级、服务配置恢复和日志关联。
+
+
+## 5.21 国内市场广度与涨跌停池（实现已加，真实验收待 CI）
+
+新增独立 MarketBreadthProvider 与 LimitPoolProvider，均只对市场级 API 提供数据，不加入个股报价或日 K 兜底链。
+
+- 市场广度通过东方财富全市场证券列表分页读取并校验证券身份、重复项和完整覆盖；上涨/下跌/平盘/缺失涨跌幅的分类计数必须合计等于证券总数。成交额只有在每条证券记录都有可用金额时才输出总值，否则返回 null 与覆盖数。供应商没有可验证快照时间时质量降级。
+- 涨停、跌停、炸板池使用独立 push2ex 端点。响应 qdate 仅作诊断字段，trade_date 保留请求日期；空列表保持 has_data=false、quality_status=unknown，避免把非交易日或供应商数据不可用误判为零事件。
+- MARKET_DATA_EASTMONEY_MARKET_BREADTH_ENABLED 与 MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED 默认关闭。真实 Runner 结果及目标 NAS/Docker 验收必须在对应流程执行后补记。

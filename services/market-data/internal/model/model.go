@@ -188,7 +188,56 @@ type IndexQuoteSnapshot struct {
 	QualityReasons []string           `json:"quality_reasons,omitempty"`
 }
 
-type SourceStatus struct {
+
+type MarketBreadthSnapshot struct {
+	Market              string        `json:"market"`
+	TotalSecurities     int           `json:"total_securities"`
+	CoveredSecurities   int           `json:"covered_securities"`
+	AdvancingCount      int           `json:"advancing_count"`
+	DecliningCount      int           `json:"declining_count"`
+	UnchangedCount      int           `json:"unchanged_count"`
+	UnclassifiedCount   int           `json:"unclassified_count"`
+	TotalAmountCNY      *float64      `json:"total_amount_cny"`
+	AmountCoverageCount int           `json:"amount_coverage_count"`
+	Source              string        `json:"source"`
+	SourceVersion       string        `json:"source_version,omitempty"`
+	FetchedAt           time.Time     `json:"fetched_at"`
+	QualityStatus       QualityStatus `json:"quality_status"`
+	QualityReasons      []string      `json:"quality_reasons,omitempty"`
+}
+
+type LimitPoolItem struct {
+	Symbol            string        `json:"symbol"`
+	Code              string        `json:"code"`
+	Name              string        `json:"name"`
+	ChangePercent     *float64      `json:"change_percent"`
+	FirstTouchTime    string        `json:"first_touch_time,omitempty"`
+	LastTouchTime     string        `json:"last_touch_time,omitempty"`
+	ConsecutiveBoards *int          `json:"consecutive_boards,omitempty"`
+	BrokenCount       *int          `json:"broken_count,omitempty"`
+	Industry          string        `json:"industry,omitempty"`
+	Source            string        `json:"source"`
+	SourceVersion     string        `json:"source_version,omitempty"`
+	FetchedAt         time.Time     `json:"fetched_at"`
+	QualityStatus     QualityStatus `json:"quality_status"`
+	QualityReasons    []string      `json:"quality_reasons,omitempty"`
+}
+
+type LimitPoolSnapshot struct {
+	PoolType           string          `json:"type"`
+	TradeDate          string          `json:"trade_date"`
+	ProviderReportDate string          `json:"provider_report_date,omitempty"`
+	Total              int             `json:"total"`
+	HasData            bool            `json:"has_data"`
+	Items              []LimitPoolItem `json:"items"`
+	Source             string          `json:"source"`
+	SourceVersion      string          `json:"source_version,omitempty"`
+	FetchedAt          time.Time       `json:"fetched_at"`
+	QualityStatus      QualityStatus   `json:"quality_status"`
+	QualityReasons     []string        `json:"quality_reasons,omitempty"`
+}
+
+type SourceStatus struct {type SourceStatus struct {
 	Name                 string `json:"name"`
 	Enabled              bool   `json:"enabled"`
 	QuoteCapable         bool   `json:"quote_capable"`
@@ -196,6 +245,8 @@ type SourceStatus struct {
 	StockBasicCapable    bool   `json:"stock_basic_capable,omitempty"`
 	SectorRankingCapable bool   `json:"sector_ranking_capable,omitempty"`
 	IndexQuoteCapable    bool   `json:"index_quote_capable,omitempty"`
+	MarketBreadthCapable bool   `json:"market_breadth_capable,omitempty"`
+	LimitPoolCapable     bool   `json:"limit_pool_capable,omitempty"`
 	ChipCapable          bool   `json:"chip_capable,omitempty"`
 	CapitalFlowCapable   bool   `json:"capital_flow_capable,omitempty"`
 }

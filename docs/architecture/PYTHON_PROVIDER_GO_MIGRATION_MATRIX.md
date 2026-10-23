@@ -34,10 +34,10 @@
 | 日线历史 `get_daily_data` | Eastmoney、Tencent | 尚未迁移 Efinance / AkShare / Pytdx / Baostock / Tushare / TickFlow / YFinance / Longbridge 等来源、指数专用链和市场路由 |
 | 指数实时报价 | 新增独立 `IndexQuoteProvider`、东方财富 `ulist.np/get` 适配器与 `GET /api/v1/market/indices`，仅覆盖 7 个白名单核心指数 | GitHub Runner 实测返回 7 条；源端点未提供可解析的行情时间，输出 `degraded`；默认关闭，目标部署容器仍待验收 |
 | 指数日线 | 现有底层 Provider 可能支持部分指数 K 线，但完整指数专用路由未迁移 | 原 Python 对裸指数代码、带交易所后缀的指数代码和各市场有独立识别/路由逻辑，尚未完成逐项对照 |
-| 市场涨跌统计 `get_market_stats` | 无 | 上涨、下跌、平盘、涨停、跌停、总成交额必须来自同一市场范围、同一数据时点；不得用自选股横截面伪装全市场统计 |
+| 市场涨跌统计 get_market_stats | 新增 MarketBreadthProvider、东方财富全市场分页统计及 GET /api/v1/market/breadth | 本次代码已加，真实 Runner 全量覆盖验证待 CI。总证券数必须等于覆盖数，分类计数闭合；成交额仅在全量字段齐全时输出；无可验证快照时点标记 degraded，生产开关关闭 |
 | 行业板块涨跌榜 `get_sector_rankings` | 新增独立 `SectorRankingProvider`、东方财富 CLIST 适配器及 `GET /api/v1/market/sectors?type=industry` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
 | 概念 / 题材涨跌榜 `get_concept_rankings` | 复用板块 ranking 契约、使用独立概念过滤条件；API 为 `GET /api/v1/market/sectors?type=concept` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
-| 涨停池 `get_limit_up_pool` | 无 | 需要交易日、涨停判定规则、ST / 创业板 / 科创板 / 北交所差异及来源说明 |
+| 涨停池 get_limit_up_pool、跌停池、炸板池 | 新增 LimitPoolProvider、东方财富 push2ex 三类池端点及 GET /api/v1/market/limit-pools?type=up|down|broken | 本次代码已加，真实 Runner 契约和日期行为待 CI。请求日期与 qdate 分开保存；空池标为 unknown，不视为已确认零；生产开关关闭 |
 | 个股所属板块 `get_belong_boards` | 无 | 需要个股-板块关系和类型元数据 |
 | 筹码分布 `get_chip_distribution` | 可选 Go MX API 路由和缓存 | 精确 publication available_at 仍缺失；输出降级质量，历史 as_of 不得倒灌 |
 | 基本面 `get_fundamental_context` | 无 | 必须区分报告期、披露日、财务指标单位、来源、缺失字段和适用市场 |

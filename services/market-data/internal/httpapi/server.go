@@ -88,6 +88,8 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	stockBasicEnabled := map[string]bool{}
 	sectorRankingEnabled := map[string]bool{}
 	indexQuoteEnabled := map[string]bool{}
+	marketBreadthEnabled := map[string]bool{}
+	limitPoolEnabled := map[string]bool{}
 	if svc != nil {
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
@@ -95,16 +97,16 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.SectorRankingProviders() {
 			sectorRankingEnabled[p.Name()] = true
 		}
-		for _, p := range svc.IndexQuoteProviders() {
-			indexQuoteEnabled[p.Name()] = true
-		}
+		for _, p := range svc.IndexQuoteProviders() { indexQuoteEnabled[p.Name()] = true }
+		for _, p := range svc.MarketBreadthProviders() { marketBreadthEnabled[p.Name()] = true }
+		for _, p := range svc.LimitPoolProviders() { limitPoolEnabled[p.Name()] = true }
 	}
 	for _, name := range names {
 		sources = append(sources, model.SourceStatus{
 			Name: name, Enabled: true,
 			QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name],
 			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
-			IndexQuoteCapable: indexQuoteEnabled[name],
+			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -122,6 +124,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
 	mux.Handle("GET /api/v1/market/sectors", s.auth(http.HandlerFunc(s.sectorRankings)))
 	mux.Handle("GET /api/v1/market/indices", s.auth(http.HandlerFunc(s.indexQuotes)))
+	mux.Handle("GET /api/v1/market/breadth", s.auth(http.HandlerFunc(s.marketBreadth)))
+	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/capital-flow", s.auth(http.HandlerFunc(s.capitalFlow)))
@@ -291,7 +295,33 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, snapshot)
 }
 
-func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
+
+func (s *Server) marketBreadth(w http.ResponseWriter,r *http.Request) {
+	snapshot,cacheHit,err:=s.svc.MarketBreadth(r.Context())
+	if err!=nil { writeDomainErr(w,err,requestID(r));return }
+	if cacheHit { w.Header().Set("X-Cache","HIT") } else { w.Header().Set("X-Cache","MISS") }
+	writeJSON(w,http.StatusOK,snapshot)
+}
+
+func (s *Server) limitPool(w http.ResponseWriter,r *http.Request) {
+	poolType:=strings.TrimSpace(r.URL.Query().Get("type"))
+	if poolType=="" { poolType="up" }
+	date:=strings.TrimSpace(r.URL.Query().Get("date"))
+	if date!="" { if _,err:=time.Parse("2006-01-02",date);err!=nil { writeErr(w,http.StatusBadRequest,"VALIDATION_ERROR","date must use YYYY-MM-DD",requestID(r));return } }
+	limit:=30
+	if raw:=r.URL.Query().Get("limit");raw!="" {
+		n,err:=strconv.Atoi(raw)
+		if err!=nil || n<1 || n>100 { writeErr(w,http.StatusBadRequest,"VALIDATION_ERROR","limit must be between 1 and 100",requestID(r));return }
+		limit=n
+	}
+	if poolType!="up" && poolType!="down" && poolType!="broken" { writeErr(w,http.StatusBadRequest,"VALIDATION_ERROR","type must be up, down or broken",requestID(r));return }
+	snapshot,cacheHit,err:=s.svc.LimitPool(r.Context(),poolType,date,limit)
+	if err!=nil { writeDomainErr(w,err,requestID(r));return }
+	if cacheHit { w.Header().Set("X-Cache","HIT") } else { w.Header().Set("X-Cache","MISS") }
+	writeJSON(w,http.StatusOK,snapshot)
+}
+
+func (s *Server) stockBasicfunc (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
 	item, hit, err := s.svc.StockBasic(r.Context(), r.PathValue("symbol"))
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))

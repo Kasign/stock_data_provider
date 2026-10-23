@@ -86,6 +86,9 @@ type liveProbeResult struct {
 	SectorType       string                       `json:"sector_type,omitempty"`
 	SectorRankings   *model.SectorRankingSnapshot `json:"sector_rankings,omitempty"`
 	IndexQuotes      *model.IndexQuoteSnapshot    `json:"index_quotes,omitempty"`
+	MarketBreadth    *model.MarketBreadthSnapshot `json:"market_breadth,omitempty"`
+	LimitPool        *model.LimitPoolSnapshot     `json:"limit_pool,omitempty"`
+	PoolType         string                       `json:"pool_type,omitempty"`
 	Symbol           string                       `json:"symbol"`
 	Adjustment       model.AdjustmentBasis        `json:"adjustment,omitempty"`
 	Status           string                       `json:"status"`
@@ -521,7 +524,52 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
+
+	runMarketBreadth := func(eastmoney *Eastmoney) {
+		capture:=&liveProbeCapture{}; eastmoney.client.Transport=capture.transport()
+		ctx,cancel:=context.WithTimeout(context.Background(),30*time.Second);defer cancel()
+		started:=time.Now(); item,callErr:=eastmoney.FetchMarketBreadth(ctx)
+		result:=liveProbeResult{Provider:eastmoney.Name(),Capability:"market_breadth",ElapsedMS:time.Since(started).Milliseconds(),HTTP:capture.snapshot()}
+		switch {
+		case callErr!=nil:
+			result.Status="failed";result.ErrorKind,result.Error=liveProbeErrorSummary(callErr)
+			failures=append(failures,"eastmoney market_breadth: "+result.ErrorKind+" ("+result.Error+")")
+		case item==nil:
+			result.Status,result.Error="invalid","market-breadth provider returned nil"
+			failures=append(failures,"eastmoney market_breadth: nil snapshot")
+		case item.Source!="eastmoney" || item.TotalSecurities<=0 || item.CoveredSecurities!=item.TotalSecurities || item.AdvancingCount+item.DecliningCount+item.UnchangedCount+item.UnclassifiedCount!=item.CoveredSecurities:
+			result.Status,result.Error,result.MarketBreadth="invalid","market-breadth coverage/count contract mismatch",item
+			failures=append(failures,"eastmoney market_breadth: coverage/count contract mismatch")
+		default:
+			result.Status,result.MarketBreadth="returned",item
+		}
+		report.Results=append(report.Results,result);encoded,_:=json.Marshal(result);t.Logf("LIVE_PROVIDER_RESULT %s",encoded)
+	}
+	runLimitPool := func(eastmoney *Eastmoney,poolType,tradeDate string) {
+		capture:=&liveProbeCapture{};eastmoney.client.Transport=capture.transport()
+		ctx,cancel:=context.WithTimeout(context.Background(),15*time.Second);defer cancel()
+		started:=time.Now();item,callErr:=eastmoney.FetchLimitPool(ctx,poolType,tradeDate,30)
+		result:=liveProbeResult{Provider:eastmoney.Name(),Capability:"limit_pool",PoolType:poolType,ElapsedMS:time.Since(started).Milliseconds(),HTTP:capture.snapshot()}
+		switch {
+		case callErr!=nil:
+			result.Status="failed";result.ErrorKind,result.Error=liveProbeErrorSummary(callErr)
+			failures=append(failures,"eastmoney limit_pool/"+poolType+": "+result.ErrorKind+" ("+result.Error+")")
+		case item==nil || item.PoolType!=poolType || item.TradeDate!=tradeDate || item.Source!="eastmoney":
+			result.Status,result.Error,result.LimitPool="invalid","limit-pool identity contract mismatch",item
+			failures=append(failures,"eastmoney limit_pool/"+poolType+": identity mismatch")
+		case item.HasData && len(item.Items)==0:
+			result.Status,result.Error,result.LimitPool="invalid","has_data=true but item list is empty",item
+			failures=append(failures,"eastmoney limit_pool/"+poolType+": empty items despite has_data")
+		case !item.HasData:
+			// Empty may mean non-trading date or unavailable source, never a verified zero count.
+			result.Status,result.LimitPool="empty",item
+		default:
+			result.Status,result.LimitPool="returned",item
+		}
+		report.Results=append(report.Results,result);encoded,_:=json.Marshal(result);t.Logf("LIVE_PROVIDER_RESULT %s",encoded)
+	}
+
+	runDaily := func(	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
 			client.Transport = capture.transport()
@@ -712,6 +760,8 @@ func TestLiveProviderProbe(t *testing.T) {
 	runIndexQuotes("eastmoney", eastmoney.client, func(ctx context.Context) (*model.IndexQuoteSnapshot, error) {
 		return eastmoney.FetchIndexQuotes(ctx)
 	})
+	runMarketBreadth(eastmoney)
+	for _, poolType := range []string{"up","down","broken"} { runLimitPool(eastmoney,poolType,now.Format("2006-01-02")) }
 	runQuote("eastmoney", "eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoney.FetchQuote(ctx, dailySymbol)
 	})

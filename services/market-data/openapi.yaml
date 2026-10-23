@@ -234,7 +234,59 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
-    SourceStatus:
+
+    MarketBreadthSnapshot:
+      type: object
+      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, amount_coverage_count, source, fetched_at, quality_status]
+      properties:
+        market: {type: string, enum: [cn_a_share]}
+        total_securities: {type: integer, minimum: 1}
+        covered_securities: {type: integer, minimum: 1, description: Must equal total_securities or response is rejected}
+        advancing_count: {type: integer, minimum: 0}
+        declining_count: {type: integer, minimum: 0}
+        unchanged_count: {type: integer, minimum: 0}
+        unclassified_count: {type: integer, minimum: 0}
+        total_amount_cny: {type: number, nullable: true, description: Null unless amount fields cover the full universe}
+        amount_coverage_count: {type: integer, minimum: 0}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    LimitPoolItem:
+      type: object
+      required: [symbol, code, name, change_percent, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string}
+        name: {type: string}
+        change_percent: {type: number, description: Percentage points; 10 means 10 percent}
+        first_touch_time: {type: string, description: Provider HH:MM:SS value when exposed}
+        last_touch_time: {type: string, description: Provider HH:MM:SS value when exposed}
+        consecutive_boards: {type: integer, nullable: true}
+        broken_count: {type: integer, nullable: true}
+        industry: {type: string}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    LimitPoolSnapshot:
+      type: object
+      required: [type, trade_date, total, has_data, items, source, fetched_at, quality_status]
+      properties:
+        type: {type: string, enum: [up, down, broken]}
+        trade_date: {type: string, format: date, description: Requested date, not overwritten by provider qdate}
+        provider_report_date: {type: string, format: date, nullable: true, description: Provider report date for diagnostics}
+        total: {type: integer, minimum: 0, description: Provider-reported pool count}
+        has_data: {type: boolean, description: False means unknown or unavailable, not a verified zero}
+        items: {type: array, items: {$ref: '#/components/schemas/LimitPoolItem'}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    SourceStatus:    SourceStatus:
       type: object
       required: [name, enabled, quote_capable, daily_bar_capable]
       properties:
@@ -379,3 +431,34 @@ paths:
         '401': {description: API key required}
         '502': {description: All index-quote providers failed}
         '503': {description: No index-quote provider enabled}
+
+  /api/v1/market/breadth:
+    get:
+      summary: Get full-universe A-share market breadth
+      description: Aggregates the provider-reported Shanghai/Shenzhen/Beijing A-share universe and rejects partial coverage. Quality is degraded when the source exposes no verifiable snapshot time.
+      responses:
+        '200':
+          description: Market breadth including universe coverage and data quality
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketBreadthSnapshot'}
+        '401': {description: API key required}
+        '502': {description: Provider returned incomplete or invalid data}
+        '503': {description: No market breadth provider enabled}
+  /api/v1/market/limit-pools:
+    get:
+      summary: Get limit-up, limit-down or broken-board pool
+      parameters:
+        - {name: type, in: query, schema: {type: string, enum: [up, down, broken], default: up}}
+        - {name: date, in: query, description: Query date in Shanghai time, defaults to today's calendar date, schema: {type: string, format: date}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 30}}
+      responses:
+        '200':
+          description: Pool snapshot; has_data=false is unknown/unavailable rather than a verified zero count
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LimitPoolSnapshot'}
+        '400': {description: Invalid type, date or limit}
+        '401': {description: API key required}
+        '502': {description: Provider failed or returned invalid data}
+        '503': {description: No limit-pool provider enabled}
