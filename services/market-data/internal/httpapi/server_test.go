@@ -204,7 +204,6 @@ func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
 	}
 }
 
-
 func TestSectorRankingEndpointSeparatesIndustryAndConcept(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.NewWithCapabilities(

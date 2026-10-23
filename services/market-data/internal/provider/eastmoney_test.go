@@ -305,9 +305,8 @@ func TestEastmoneyFetchStockBasicRejectsMismatchedOrEmptyRows(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
-	for _, tc := range []struct { category, filter string }{
+	for _, tc := range []struct{ category, filter string }{
 		{"industry", "m:90+t:2+f:!50"},
 		{"concept", "m:90+t:3+f:!50"},
 	} {
@@ -320,7 +319,9 @@ func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
 			defer server.Close()
 			p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
 			snapshot, err := p.FetchSectorRankings(context.Background(), tc.category, 5)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			if got.Get("fs") != tc.filter || got.Get("pz") != "5" || got.Get("fid") != "f3" {
 				t.Fatalf("unexpected CLIST request: %v", got)
 			}

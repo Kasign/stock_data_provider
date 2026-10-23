@@ -25,52 +25,52 @@ type ProviderSettings struct {
 }
 
 type Config struct {
-	HTTPAddr                string
-	APIKey                  string
-	RequestTimeout          time.Duration
-	ProviderTimeout         time.Duration
-	ProviderRetries         int
-	CircuitFailureThreshold int
-	CircuitCooldown         time.Duration
-	QuoteCacheTTL           time.Duration
-	BarsCacheTTL            time.Duration
-	DefaultDailyBars        int
-	MaxDailyBars            int
-	Adjustment              string
-	ProviderPriority        []string
-	ProviderSettings        map[string]ProviderSettings
-	ProvidersConfigPath     string
-	EastmoneyQuoteURL       string
-	EastmoneyKlineURL       string
+	HTTPAddr                  string
+	APIKey                    string
+	RequestTimeout            time.Duration
+	ProviderTimeout           time.Duration
+	ProviderRetries           int
+	CircuitFailureThreshold   int
+	CircuitCooldown           time.Duration
+	QuoteCacheTTL             time.Duration
+	BarsCacheTTL              time.Duration
+	DefaultDailyBars          int
+	MaxDailyBars              int
+	Adjustment                string
+	ProviderPriority          []string
+	ProviderSettings          map[string]ProviderSettings
+	ProvidersConfigPath       string
+	EastmoneyQuoteURL         string
+	EastmoneyKlineURL         string
 	EastmoneyStockBasicURL    string
 	EastmoneySectorRankingURL string
 	EastmoneyUT               string
-	TencentQuoteURL         string
-	TencentKlineURL         string
-	TencentNoneKlineURL     string
-	SinaQuoteURL            string
-	SinaKlineURL            string
-	YahooChartURL           string
-	NeteaseHistoryURL       string
-	NeteaseQuoteURL         string
-	BaostockHost            string
-	BaostockPort            int
-	BaostockUserID          string
-	BaostockPassword        string
-	BaostockConnectTimeout  time.Duration
-	BaostockRequestTimeout  time.Duration
-	MXEnabled               bool
-	MXAPIKey                string
-	MXAPIURL                string
-	MXAPITimeout            time.Duration
-	QuoteRetention          time.Duration
-	RedisAddr               string
-	RedisUsername           string
-	RedisPassword           string
-	RedisDB                 int
-	MySQLDSN                string
-	AutoMigrate             bool
-	AllowNoStorage          bool
+	TencentQuoteURL           string
+	TencentKlineURL           string
+	TencentNoneKlineURL       string
+	SinaQuoteURL              string
+	SinaKlineURL              string
+	YahooChartURL             string
+	NeteaseHistoryURL         string
+	NeteaseQuoteURL           string
+	BaostockHost              string
+	BaostockPort              int
+	BaostockUserID            string
+	BaostockPassword          string
+	BaostockConnectTimeout    time.Duration
+	BaostockRequestTimeout    time.Duration
+	MXEnabled                 bool
+	MXAPIKey                  string
+	MXAPIURL                  string
+	MXAPITimeout              time.Duration
+	QuoteRetention            time.Duration
+	RedisAddr                 string
+	RedisUsername             string
+	RedisPassword             string
+	RedisDB                   int
+	MySQLDSN                  string
+	AutoMigrate               bool
+	AllowNoStorage            bool
 }
 
 type providerFile struct {
@@ -161,8 +161,8 @@ func Load() (Config, error) {
 		ProviderPriority:        priority,
 		ProviderSettings:        settings,
 		ProvidersConfigPath:     configPath,
-		EastmoneyQuoteURL:       get("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://push2.eastmoney.com/api/qt/stock/get"),
-		EastmoneyKlineURL:       get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
+		EastmoneyQuoteURL:          get("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://push2.eastmoney.com/api/qt/stock/get"),
+		EastmoneyKlineURL:          get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
 		EastmoneyStockBasicURL:    get("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://datacenter.eastmoney.com/securities/api/data/v1/get"),
 		EastmoneySectorRankingURL: get("MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL", "https://push2.eastmoney.com/api/qt/clist/get"),
 		EastmoneyUT:               get("MARKET_DATA_EASTMONEY_UT", ""),
@@ -201,18 +201,18 @@ func Load() (Config, error) {
 		return cfg, errors.New("MARKET_DATA_API_KEY must be a non-placeholder secret with at least 32 characters")
 	}
 	for name, endpoint := range map[string]string{
-		"MARKET_DATA_EASTMONEY_QUOTE_URL":       cfg.EastmoneyQuoteURL,
-		"MARKET_DATA_EASTMONEY_KLINE_URL":       cfg.EastmoneyKlineURL,
-		"MARKET_DATA_EASTMONEY_STOCK_BASIC_URL": cfg.EastmoneyStockBasicURL,
+		"MARKET_DATA_EASTMONEY_QUOTE_URL":           cfg.EastmoneyQuoteURL,
+		"MARKET_DATA_EASTMONEY_KLINE_URL":           cfg.EastmoneyKlineURL,
+		"MARKET_DATA_EASTMONEY_STOCK_BASIC_URL":     cfg.EastmoneyStockBasicURL,
 		"MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL": cfg.EastmoneySectorRankingURL,
-		"MARKET_DATA_TENCENT_QUOTE_URL":         cfg.TencentQuoteURL,
-		"MARKET_DATA_TENCENT_KLINE_URL":         cfg.TencentKlineURL,
-		"MARKET_DATA_TENCENT_NONE_KLINE_URL":    cfg.TencentNoneKlineURL,
-		"MARKET_DATA_SINA_QUOTE_URL":            cfg.SinaQuoteURL,
-		"MARKET_DATA_SINA_KLINE_URL":            cfg.SinaKlineURL,
-		"MARKET_DATA_YAHOO_CHART_URL":           cfg.YahooChartURL,
-		"MARKET_DATA_NETEASE_HISTORY_URL":       cfg.NeteaseHistoryURL,
-		"MARKET_DATA_MX_API_URL":                cfg.MXAPIURL,
+		"MARKET_DATA_TENCENT_QUOTE_URL":             cfg.TencentQuoteURL,
+		"MARKET_DATA_TENCENT_KLINE_URL":             cfg.TencentKlineURL,
+		"MARKET_DATA_TENCENT_NONE_KLINE_URL":        cfg.TencentNoneKlineURL,
+		"MARKET_DATA_SINA_QUOTE_URL":                cfg.SinaQuoteURL,
+		"MARKET_DATA_SINA_KLINE_URL":                cfg.SinaKlineURL,
+		"MARKET_DATA_YAHOO_CHART_URL":               cfg.YahooChartURL,
+		"MARKET_DATA_NETEASE_HISTORY_URL":            cfg.NeteaseHistoryURL,
+		"MARKET_DATA_MX_API_URL":                     cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {
 			return cfg, err

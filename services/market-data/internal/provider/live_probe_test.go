@@ -86,18 +86,18 @@ type liveProbeResult struct {
 	SectorType       string                       `json:"sector_type,omitempty"`
 	SectorRankings   *model.SectorRankingSnapshot `json:"sector_rankings,omitempty"`
 	Symbol           string                       `json:"symbol"`
-	Adjustment       model.AdjustmentBasis   `json:"adjustment,omitempty"`
-	Status           string                  `json:"status"`
-	ErrorKind        string                  `json:"error_kind,omitempty"`
-	Error            string                  `json:"error,omitempty"`
-	ElapsedMS        int64                   `json:"elapsed_ms"`
-	Quote            *model.Quote            `json:"quote,omitempty"`
-	StockBasic       *model.StockBasic       `json:"stock_basic,omitempty"`
-	BarCount         int                     `json:"bar_count,omitempty"`
-	SampleBars       []model.DailyBar        `json:"sample_bars,omitempty"`
-	ChipDistribution *model.ChipDistribution `json:"chip_distribution,omitempty"`
-	CapitalFlow      *model.CapitalFlow      `json:"capital_flow,omitempty"`
-	HTTP             []liveProbeHTTPResponse `json:"http_responses,omitempty"`
+	Adjustment       model.AdjustmentBasis        `json:"adjustment,omitempty"`
+	Status           string                       `json:"status"`
+	ErrorKind        string                       `json:"error_kind,omitempty"`
+	Error            string                       `json:"error,omitempty"`
+	ElapsedMS        int64                        `json:"elapsed_ms"`
+	Quote            *model.Quote                 `json:"quote,omitempty"`
+	StockBasic       *model.StockBasic            `json:"stock_basic,omitempty"`
+	BarCount         int                          `json:"bar_count,omitempty"`
+	SampleBars       []model.DailyBar             `json:"sample_bars,omitempty"`
+	ChipDistribution *model.ChipDistribution      `json:"chip_distribution,omitempty"`
+	CapitalFlow      *model.CapitalFlow           `json:"capital_flow,omitempty"`
+	HTTP             []liveProbeHTTPResponse      `json:"http_responses,omitempty"`
 }
 
 type liveProbeHTTPResponse struct {
@@ -465,7 +465,6 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-	
 	runSectorRankings := func(providerName, category string, client *http.Client, call func(context.Context) (*model.SectorRankingSnapshot, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
@@ -495,7 +494,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
+	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
 			client.Transport = capture.transport()

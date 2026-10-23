@@ -241,7 +241,6 @@ func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"sources": sources, "normalization_version": normalize.Version})
 }
 
-
 func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 	category := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
 	if category == "" {

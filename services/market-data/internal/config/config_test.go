@@ -572,7 +572,6 @@ func TestEastmoneyStockBasicURLAndCapabilityCanBeConfigured(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneySectorRankingURLAndCapabilityAreConfigurable(t *testing.T) {
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")

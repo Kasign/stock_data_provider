@@ -20,21 +20,21 @@ import (
 )
 
 type DataService struct {
-	providers           []provider.NamedProvider
-	quoteProviders      []provider.QuoteProvider
-	barProviders        []provider.DailyBarProvider
+	providers              []provider.NamedProvider
+	quoteProviders         []provider.QuoteProvider
+	barProviders           []provider.DailyBarProvider
 	stockBasicProviders    []provider.StockBasicProvider
 	sectorRankingProviders []provider.SectorRankingProvider
 	supplementProviders    []provider.SupplementProvider
-	maxBars             int
-	retries             int
-	breaker             *circuitBreaker
-	cache               cache.Cache
-	store               *repository.Store
-	quoteTTL            time.Duration
-	barsTTL             time.Duration
-	defaultBars         int
-	logger              *slog.Logger
+	maxBars                int
+	retries                int
+	breaker                *circuitBreaker
+	cache                  cache.Cache
+	store                  *repository.Store
+	quoteTTL               time.Duration
+	barsTTL                time.Duration
+	defaultBars            int
+	logger                 *slog.Logger
 }
 
 func New(providers []provider.Provider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars int, logger *slog.Logger) *DataService {
@@ -207,7 +207,6 @@ func (s *DataService) SectorRankings(ctx context.Context, rawCategory string, li
 	}
 	return nil, false, fmt.Errorf("all sector-ranking providers failed: %s", strings.Join(failures, "; "))
 }
-
 
 func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if item == nil {

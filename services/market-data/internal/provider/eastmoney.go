@@ -75,7 +75,7 @@ func NewEastmoneyConfiguredWithMarketData(timeout time.Duration, quoteURL, kline
 		ut = defaultEastmoneyUT
 	}
 	return &Eastmoney{
-		client: &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
+		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
 		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, ut: ut,
 	}
 }
@@ -633,7 +633,6 @@ func isEastmoneyHostname(host string) bool {
 	return host == "eastmoney.com" || strings.HasSuffix(host, ".eastmoney.com")
 }
 
-
 func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, error) {
 	category := strings.ToLower(strings.TrimSpace(rawCategory))
 	filters := map[string]string{
@@ -675,10 +674,11 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.SectorRankingSnapshot{
 		Category: category, Total: payload.Data.Total, Source: p.Name(),
-		SourceVersion: "eastmoney-sector-clist-v1", FetchedAt: fetchedAt,
-		QualityStatus: model.QualityDegraded,
+		SourceVersion:  "eastmoney-sector-clist-v1",
+		FetchedAt:      fetchedAt,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
-		Items: make([]model.SectorRanking, 0, len(payload.Data.Diff)),
+		Items:          make([]model.SectorRanking, 0, len(payload.Data.Diff)),
 	}
 	for _, raw := range payload.Data.Diff {
 		code := parseEastmoneyBoardString(raw, "f12")
