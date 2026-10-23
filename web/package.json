@@ -1,0 +1,11 @@
+{
+  "name": "stock-data-provider-webui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Lightweight browser dashboard for the Go stock data provider APIs",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check src/api.js && node --check src/format.js && node --check src/chart.js && node --check src/app.js"
+  }
+}
