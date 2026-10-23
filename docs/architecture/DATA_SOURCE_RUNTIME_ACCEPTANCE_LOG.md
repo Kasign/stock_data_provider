@@ -388,6 +388,21 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 
 截至本轮，本 Go 服务现有数据能力都已进入统一测试框架：新浪报价、腾讯报价/日 K、东方财富报价/日 K、BaoStock 日 K、妙想筹码/资金流（真实请求要求独立 Key）。Tushare、同花顺、Efinance、AkShare、Pytdx、YFinance 以及新闻公告、财务、板块、龙虎榜等并未都存在本仓库的 Go Adapter；它们仍属于待接入的数据源或数据域，不能只改配置就标为“已接入”。后续按域新增 Adapter 时，应沿用同一结果结构和数据契约测试。
 
+### 5.15.4 恢复常规自动探测后的复验（2026-10-23）
+
+为避免自动消耗 MX API 配额，已撤销临时 branch-push 触发器；当前只有手动运行工作流并勾选 `include_mx` 才会调用妙想接口。统一 Provider 契约测试和日 K 上限测试仍保留在普通 CI。
+
+- [Go test suite #214](https://github.com/Kasign/stock_data_provider/actions/runs/39887930886) 已全部通过：三个 Go 模块的测试/race/vet、Compose 校验、部署脚本和两套 Go 镜像构建均成功。
+- [Live provider probe #24](https://github.com/Kasign/stock_data_provider/actions/runs/39887930885) 的真实 Provider job 成功，八项公开行情/日 K 请求均返回：
+  - Sina 报价：`valid`，包含已解析的报价时间。
+  - Tencent 报价：returned / `degraded`；不复权与前复权日 K 各 8 根 / `degraded`，成交额仍未确认。
+  - Eastmoney 主报价：官方重定向从 HTTP 302 到延迟域 HTTP 200，`quote_time` 解析成功，`valid`。
+  - Eastmoney 延迟域报价：HTTP 200，`valid` 且含 `quote_time`。
+  - Eastmoney 前复权日 K：8 根 / `valid`；BaoStock 前复权日 K：8 根 / `valid`。
+- Artifact：[live-provider-report #12473805201](https://github.com/Kasign/stock_data_provider/actions/runs/39887930885/artifacts/12473805201)，4,526 bytes，GitHub 元数据 SHA-256 为 `79109c2c2794b1693abab5657c9a29579c9bd904761bf94b6928db91e35841d8`。
+- 同日的一次性 push 探测 [#22](https://github.com/Kasign/stock_data_provider/actions/runs/39887647358) 曾遇到 Eastmoney 两个报价入口的 TLS 握手超时，并显示 MX API key missing；稍后的 #24 Eastmoney 又恢复成功。这是对公共端点波动的再次实证，不应把 #22 解释为持久性代码回归。
+- 妙想筹码与资金流尚未完成线上验收：在一次性 push 事件中，环境里没有可用的 `MARKET_DATA_MX_API_KEY`，两项报告都明确记录 `MX API key is missing`，没有对 MX 端点执行查询。需要核对 GitHub Actions Secret `MX_APIKEY` 的配置与该工作流的访问权限，再手动运行并勾选 `include_mx`；没有这一步前不可标记为已验证。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
