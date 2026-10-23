@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, domain, openapi] = await Promise.all([
+const [html, app, format, domain, openapi] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/format.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/analysis/domain/types.go", import.meta.url), "utf8"),
   readFile(new URL("../../docs/architecture/analysis-tasks.openapi.yaml", import.meta.url), "utf8")
 ]);
@@ -43,9 +44,9 @@ test("task/event endpoint parameters and status vocabulary remain grounded in th
   assert.match(openapi, /name:\s*after_sequence/);
   assert.match(openapi, /name:\s*limit/);
   for (const status of ["queued", "running", "succeeded", "partial", "failed"]) {
-    assert.ok(app.includes('"' + status + '"'), "task status " + status + " must be handled by WebUI");
+    assert.match(format, new RegExp("\\b" + status + "\\s*:"), "task status " + status + " must have a UI label");
   }
-  for (const status of ["completed", "blocked_data_quality", "rejected_request"]) {
-    assert.ok(app.includes('"' + status + '"'), "run status " + status + " must be handled by WebUI");
+  for (const status of ["running", "completed", "blocked_data_quality", "rejected_request", "partial", "failed"]) {
+    assert.match(format, new RegExp("\\b" + status + "\\s*:"), "run status " + status + " must have a UI label");
   }
 });
