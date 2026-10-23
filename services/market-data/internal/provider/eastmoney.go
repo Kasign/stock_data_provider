@@ -164,7 +164,7 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 	now := time.Now().UTC()
 	snapshot := &model.StockBoardSnapshot{
 		Symbol: symbol, Total: payload.Data.Total, HasData: payload.Data.Total > 0,
-		Items: make([]model.StockBoard, 0, len(payload.Data.Diff)),
+		Items:  make([]model.StockBoard, 0, len(payload.Data.Diff)),
 		Source: p.Name(), SourceVersion: "eastmoney-slist-stock-boards-v1",
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},

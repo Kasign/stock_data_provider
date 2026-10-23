@@ -711,7 +711,6 @@ func TestProviderFailureSummaryClassifiesNetworkUnavailable(t *testing.T) {
 	}
 }
 
-
 type stockBoardsFakeProvider struct {
 	snapshot *model.StockBoardSnapshot
 	err      error
@@ -727,7 +726,7 @@ func TestStockBoardsValidatesIdentityAndReturnsSnapshot(t *testing.T) {
 	change := 1.25
 	snapshot := &model.StockBoardSnapshot{
 		Symbol: "600519.SH", Total: 1, HasData: true,
-		Items: []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Items:  []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		Source: "eastmoney", SourceVersion: "test-stock-boards-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}

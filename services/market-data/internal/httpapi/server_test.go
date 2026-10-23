@@ -47,7 +47,7 @@ func (httpFakeProvider) FetchStockBoards(_ context.Context, symbol string) (*mod
 	change := 1.25
 	return &model.StockBoardSnapshot{
 		Symbol: symbol, Total: 1, HasData: true,
-		Items: []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Items:  []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		Source: "eastmoney", SourceVersion: "test-stock-boards-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}, nil
