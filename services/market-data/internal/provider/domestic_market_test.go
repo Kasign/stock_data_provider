@@ -74,8 +74,8 @@ func TestEastmoneyFetchLimitPoolTypeDateAndFields(t *testing.T) {
 					t.Errorf("pagesize=%s", r.URL.Query().Get("pagesize"))
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
-					"tc": 1, "qdate": "20261023", "pool": []map[string]any{{
-						"c": "600519", "m": 1, "n": "贵州茅台", "zdp": 10.0, "lbc": 2, "fbt": "093025", "lbt": "145500", "zbc": 1, "hybk": "白酒",
+					"tc": 1, "qdate": 20261023, "pool": []map[string]any{{
+						"c": "600519", "m": 1, "n": "贵州茅台", "zdp": 10.0, "lbc": 2, "fbt": 93025, "lbt": 145500, "zbc": 1, "hybk": "白酒",
 					}},
 				}})
 			}))
@@ -98,7 +98,7 @@ func TestEastmoneyFetchLimitPoolTypeDateAndFields(t *testing.T) {
 
 func TestEastmoneyFetchLimitPoolDoesNotClaimEmptyResponseIsZeroEvents(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{"tc": 0, "qdate": "20261023", "pool": []any{}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{"tc": 0, "qdate": 20261023, "pool": []any{}}})
 	}))
 	defer server.Close()
 	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", "", server.URL, "")

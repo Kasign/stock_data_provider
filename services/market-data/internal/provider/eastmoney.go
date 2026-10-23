@@ -575,6 +575,44 @@ func (p *Eastmoney) getJSON(ctx context.Context, base string, params url.Values,
 	return nil
 }
 
+func (p *Eastmoney) getJSONWithRetry(ctx context.Context, base string, params url.Values, out any, attemptTimeout time.Duration) error {
+	const maxAttempts = 2
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		requestCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
+		err := p.getJSON(requestCtx, base, params, out)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if attempt == maxAttempts || ctx.Err() != nil || !isRetryableEastmoneyRequestError(err) {
+			return err
+		}
+		timer := time.NewTimer(time.Duration(attempt) * 350 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return lastErr
+}
+
+func isRetryableEastmoneyRequestError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	for _, fragment := range []string{"http status 429", "http status 500", "http status 502", "http status 503", "http status 504", "timeout", "timed out", "deadline exceeded", "unexpected eof", "connection reset", "connection refused", "server closed", "temporary"} {
+		if strings.Contains(message, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
 func eastmoneySecID(symbol string) (string, error) {
 	p := strings.Split(symbol, ".")
 	code := p[0]
@@ -944,7 +982,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 			"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		}
 		var payload marketListPayload
-		if err := p.getJSON(ctx, p.marketStocksURL, params, &payload); err != nil {
+		if err := p.getJSONWithRetry(ctx, p.marketStocksURL, params, &payload, 6*time.Second); err != nil {
 			return nil, fmt.Errorf("Eastmoney market breadth page %d: %w", page, err)
 		}
 		if payload.RC != nil && *payload.RC != 0 {
@@ -980,7 +1018,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		if page > (eastmoneyMarketBreadthMaxSecurities/pageSize)+1 {
 			return nil, errors.New("Eastmoney market breadth exceeded page safety limit")
 		}
-		timer := time.NewTimer(180 * time.Millisecond)
+		timer := time.NewTimer(350 * time.Millisecond)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -1078,11 +1116,11 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		RC   *int `json:"rc"`
 		Data *struct {
 			Total int                          `json:"tc"`
-			QDate string                       `json:"qdate"`
+			QDate json.RawMessage            `json:"qdate"`
 			Pool  []map[string]json.RawMessage `json:"pool"`
 		} `json:"data"`
 	}
-	if err := p.getJSON(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload); err != nil {
+	if err := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); err != nil {
 		return nil, fmt.Errorf("Eastmoney %s limit-pool request: %w", poolType, err)
 	}
 	if payload.RC != nil && *payload.RC != 0 {
@@ -1093,7 +1131,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	}
 	fetchedAt, requestedDate := time.Now().UTC(), date.Format("2006-01-02")
 	snapshot := &model.LimitPoolSnapshot{
-		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(payload.Data.QDate),
+		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(strings.Trim(strings.TrimSpace(string(payload.Data.QDate)), `"`)),
 		Total: payload.Data.Total, HasData: payload.Data.Total > 0 && len(payload.Data.Pool) > 0,
 		Items: make([]model.LimitPoolItem, 0, len(payload.Data.Pool)), Source: p.Name(),
 		SourceVersion: "eastmoney-push2ex-limit-pool-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
@@ -1143,7 +1181,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 
 func parseEastmoneyLimitTime(value string) string {
 	value = strings.TrimSpace(value)
-	if len(value) != 6 {
+	if len(value) == 0 || len(value) > 6 {
 		return ""
 	}
 	for _, r := range value {
@@ -1151,6 +1189,7 @@ func parseEastmoneyLimitTime(value string) string {
 			return ""
 		}
 	}
+	value = strings.Repeat("0", 6-len(value)) + value
 	return value[:2] + ":" + value[2:4] + ":" + value[4:]
 }
 
