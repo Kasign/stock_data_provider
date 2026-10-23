@@ -393,14 +393,7 @@ func (q *Queue) execute(parent context.Context, task claimedTask, workerID int) 
 	if err != nil {
 		status, failureCode, message = "failed", "analysis_failed", "analysis execution failed; inspect server logs using task_id and run_id"
 	} else {
-		switch string(result.Status) {
-		case "partial":
-			status = "partial"
-		case "failed", "rejected":
-			status = "failed"
-		default:
-			status = "succeeded"
-		}
+		status = taskStatusForRun(result.Status)
 		if result.Failure != nil {
 			failureCode = result.Failure.Code
 			message = "analysis did not complete successfully; inspect stage events for details"
@@ -415,6 +408,18 @@ func (q *Queue) execute(parent context.Context, task claimedTask, workerID int) 
 		slog.Error("保存异步任务终态失败", "component", "taskqueue", "task_id", task.taskID, "run_id", task.runID, "error", err.Error())
 	}
 	slog.Info("异步分析任务结束", "component", "taskqueue", "task_id", task.taskID, "run_id", task.runID, "status", status, "duration_ms", time.Since(started).Milliseconds(), "failure_code", failureCode)
+}
+
+// taskStatusForRun 将 Run 的终态映射为异步 Task 状态。Run 被拒绝时，Task 不能误报为 succeeded。
+func taskStatusForRun(status domain.RunStatus) string {
+	switch status {
+	case domain.RunStatusPartial:
+		return "partial"
+	case domain.RunStatusFailed, domain.RunStatusRejected:
+		return "failed"
+	default:
+		return "succeeded"
+	}
 }
 
 func (q *Queue) finish(ctx context.Context, taskID, status, failureCode, message string) error {
