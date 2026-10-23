@@ -35,3 +35,28 @@ export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
   }
   return records;
 }
+
+export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS) {
+  if (typeof taskId !== "string" || !taskId.trim()) return readRecentTasks(storage, limit);
+  const target = taskId.trim();
+  const records = readRecentTasks(storage, limit).filter((item) => item.task_id !== target);
+  try {
+    storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
+  } catch {
+    // Keep the current page usable when browser storage is unavailable.
+  }
+  return records;
+}
+
+export function clearRecentTasks(storage) {
+  try {
+    storage.removeItem(RECENT_TASKS_KEY);
+  } catch {
+    try {
+      storage.setItem(RECENT_TASKS_KEY, "[]");
+    } catch {
+      // Browser storage may be disabled; clearing is best-effort.
+    }
+  }
+  return [];
+}

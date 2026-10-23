@@ -15,7 +15,7 @@ import {
   saveSettings
 } from "./api.js";
 import { normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart } from "./chart.js";
-import { readRecentTasks, upsertRecentTask } from "./recent-tasks.js";
+import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask } from "./recent-tasks.js";
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
@@ -61,7 +61,8 @@ const state = {
   sourceCount: 0,
   supplementGeneration: 0,
   supplementSymbol: "",
-  supplementLoading: false
+  supplementLoading: false,
+  suppressedHistoryTaskId: ""
 };
 
 function setText(selector, value) {
@@ -70,7 +71,7 @@ function setText(selector, value) {
 }
 
 function persistTaskReference() {
-  if (!state.taskId) return;
+  if (!state.taskId || state.suppressedHistoryTaskId === state.taskId) return;
   const record = {
     task_id: state.taskId,
     run_id: state.runId || "",
@@ -115,20 +116,37 @@ function persistTaskReference() {
 function renderRecentTasks(records = safeReadRecentTasks()) {
   const root = $("#recent-analysis-list");
   root.replaceChildren();
-  const items = Array.isArray(records) ? records : [];
-  setText("#recent-analysis-count", items.length + " / 10");
-  if (!items.length) {
+  const allItems = Array.isArray(records) ? records : [];
+  const search = $("#recent-analysis-search").value.trim().toLocaleLowerCase();
+  const items = search ? allItems.filter((record) => [
+    record.task_id,
+    record.run_id,
+    ...(record.symbols || []),
+    record.task_type,
+    record.status,
+    taskStatusLabel(record.status),
+    record.updated_at
+  ].some((value) => String(value || "").toLocaleLowerCase().includes(search))) : allItems;
+  setText("#recent-analysis-count", allItems.length + " / 10");
+
+  if (!allItems.length || !items.length) {
     const empty = document.createElement("div");
     empty.className = "empty-row";
-    empty.textContent = "完成一次分析后，这里会显示最近任务。";
+    empty.textContent = !allItems.length
+      ? "完成一次分析后，这里会显示最近任务。"
+      : "没有匹配项，请调整关键词或清除搜索。";
     root.append(empty);
     return;
   }
+
   items.forEach((record) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "recent-analysis-item";
-    button.dataset.taskId = record.task_id;
+    const item = document.createElement("article");
+    item.className = "recent-analysis-item";
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "recent-analysis-open";
+    open.dataset.openTaskId = record.task_id;
     const main = document.createElement("span");
     main.className = "recent-analysis-item-main";
     const title = document.createElement("strong");
@@ -139,8 +157,17 @@ function renderRecentTasks(records = safeReadRecentTasks()) {
     status.className = "recent-analysis-item-status";
     status.textContent = taskStatusLabel(record.status);
     main.append(title, detail);
-    button.append(main, status);
-    root.append(button);
+    open.append(main, status);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "recent-analysis-remove";
+    remove.dataset.removeTaskId = record.task_id;
+    remove.textContent = "移除";
+    remove.setAttribute("aria-label", "从本地列表移除任务 " + record.task_id);
+
+    item.append(open, remove);
+    root.append(item);
   });
 }
 
@@ -150,6 +177,46 @@ function safeReadRecentTasks() {
   } catch {
     return [];
   }
+}
+
+function setRecentTasksFeedback(message, kind = "info") {
+  const target = $("#recent-analysis-feedback");
+  target.hidden = !message;
+  target.className = "recent-analysis-feedback" + (message ? " is-" + kind : "");
+  target.textContent = message;
+}
+
+function removeRecentTaskReference(taskId) {
+  let remaining = [];
+  try {
+    remaining = removeRecentTask(taskId, localStorage);
+  } catch {
+    remaining = safeReadRecentTasks();
+  }
+  try {
+    const last = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
+    if (last?.task_id === taskId) localStorage.removeItem(TASK_REFERENCE_KEY);
+  } catch {
+    // Local history is optional and must not interrupt task controls.
+  }
+  if (state.taskId === taskId) state.suppressedHistoryTaskId = taskId;
+  renderRecentTasks(remaining);
+  setRecentTasksFeedback("已从当前浏览器移除该任务引用；服务端任务和报告不会被删除。");
+}
+
+function clearRecentTaskHistory() {
+  if (!window.confirm("清空当前浏览器保存的最近任务引用？不会删除服务端任务或报告。")) return;
+  const currentTaskId = state.taskId;
+  let remaining = [];
+  try {
+    remaining = clearRecentTasks(localStorage);
+    localStorage.removeItem(TASK_REFERENCE_KEY);
+  } catch {
+    remaining = [];
+  }
+  state.suppressedHistoryTaskId = currentTaskId;
+  renderRecentTasks(remaining);
+  setRecentTasksFeedback("本地最近任务列表已清空；当前页面中的任务不会被取消，服务端记录未删除。");
 }
 
 
@@ -1234,6 +1301,7 @@ async function createTask(event) {
     const response = await createAnalysisTask(state.settings, payload, idempotencyKey);
     const task = response.task || response;
     if (!task.task_id) throw new Error("接口返回成功，但响应中缺少 task.task_id。");
+    state.suppressedHistoryTaskId = "";
     state.taskId = task.task_id;
     state.runId = task.run_id || "";
     persistTaskReference();
@@ -1277,6 +1345,7 @@ function startQuoteAnalysis() {
 
 function activateTaskReference(record) {
   if (!record || typeof record.task_id !== "string" || !record.task_id.trim()) return false;
+  state.suppressedHistoryTaskId = "";
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = record.task_id;
@@ -1410,10 +1479,17 @@ $("#refresh-task").addEventListener("click", () => {
   const generation = state.pollGeneration;
   void pollTask(generation);
 });
+$("#recent-analysis-search").addEventListener("input", () => renderRecentTasks());
+$("#clear-recent-analysis").addEventListener("click", clearRecentTaskHistory);
 $("#recent-analysis-list").addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-task-id]");
-  if (!button) return;
-  const record = safeReadRecentTasks().find((item) => item.task_id === button.dataset.taskId);
+  const removeButton = event.target.closest("button[data-remove-task-id]");
+  if (removeButton) {
+    removeRecentTaskReference(removeButton.dataset.removeTaskId);
+    return;
+  }
+  const openButton = event.target.closest("button[data-open-task-id]");
+  if (!openButton) return;
+  const record = safeReadRecentTasks().find((item) => item.task_id === openButton.dataset.openTaskId);
   if (record) activateTaskReference(record);
 });
 $("#reload-run-result").addEventListener("click", () => {

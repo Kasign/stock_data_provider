@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, upsertRecentTask } from "../src/recent-tasks.js";
+import { clearRecentTasks, MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, removeRecentTask, upsertRecentTask } from "../src/recent-tasks.js";
 
 function makeStorage(seed = {}) {
   const values = new Map(Object.entries(seed));
   return {
     getItem(key) { return values.has(key) ? values.get(key) : null; },
-    setItem(key, value) { values.set(key, String(value)); }
+    setItem(key, value) { values.set(key, String(value)); },
+    removeItem(key) { values.delete(key); }
   };
 }
 
@@ -59,4 +60,38 @@ test("stores only task references and excludes report payloads and secrets", () 
   ].sort());
   assert.equal(records[0].task_id, "task-safe");
   assert.doesNotMatch(storage.getItem(RECENT_TASKS_KEY), /private report body|private-api-key|quality/);
+});
+
+
+test("removes only the selected task reference and preserves remaining order", () => {
+  const storage = makeStorage();
+  upsertRecentTask({ task_id: "task-a" }, storage);
+  upsertRecentTask({ task_id: "task-b" }, storage);
+  upsertRecentTask({ task_id: "task-c" }, storage);
+
+  const items = removeRecentTask("task-b", storage);
+  assert.deepEqual(items.map((item) => item.task_id), ["task-c", "task-a"]);
+  assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-c", "task-a"]);
+  assert.deepEqual(removeRecentTask("", storage).map((item) => item.task_id), ["task-c", "task-a"]);
+});
+
+test("clears local task references without touching unrelated storage keys", () => {
+  const storage = makeStorage({ unrelated: "keep-me" });
+  upsertRecentTask({ task_id: "task-a" }, storage);
+  upsertRecentTask({ task_id: "task-b" }, storage);
+
+  assert.deepEqual(clearRecentTasks(storage), []);
+  assert.deepEqual(readRecentTasks(storage), []);
+  assert.equal(storage.getItem("unrelated"), "keep-me");
+  assert.equal(storage.getItem(RECENT_TASKS_KEY), null);
+});
+
+test("remove and clear operations tolerate disabled browser storage", () => {
+  const storage = {
+    getItem() { throw new Error("storage disabled"); },
+    setItem() { throw new Error("storage disabled"); },
+    removeItem() { throw new Error("storage disabled"); }
+  };
+  assert.deepEqual(removeRecentTask("task-a", storage), []);
+  assert.deepEqual(clearRecentTasks(storage), []);
 });

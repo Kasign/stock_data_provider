@@ -134,3 +134,19 @@ test("supplemental chip and capital-flow research remains opt-in and independent
   assert.match(stylesheet, /\.supplemental-grid/);
   assert.match(stylesheet, /\.supplement-quality-degraded/);
 });
+
+
+test("recent analysis history supports search, single removal and local-only clearing", () => {
+  for (const id of ["recent-analysis-search", "clear-recent-analysis", "recent-analysis-feedback", "recent-analysis-list"]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);
+  }
+  assert.match(app, /function renderRecentTasks\([\s\S]*?recent-analysis-search[\s\S]*?record\.task_id[\s\S]*?taskStatusLabel\(record\.status\)/);
+  assert.match(app, /function removeRecentTaskReference\(taskId\)[\s\S]*?removeRecentTask\(taskId, localStorage\)[\s\S]*?服务端任务和报告不会被删除/);
+  assert.match(app, /function clearRecentTaskHistory\(\)[\s\S]*?window\.confirm\([\s\S]*?clearRecentTasks\(localStorage\)[\s\S]*?服务端记录未删除/);
+  assert.match(app, /state\.suppressedHistoryTaskId === state\.taskId/);
+  assert.match(app, /if \(state\.taskId === taskId\) state\.suppressedHistoryTaskId = taskId/);
+  assert.match(recentTaskModule, /export function removeRecentTask\(/);
+  assert.match(recentTaskModule, /export function clearRecentTasks\(/);
+  assert.match(stylesheet, /\.recent-analysis-search input:focus/);
+  assert.match(stylesheet, /\.recent-analysis-remove:hover/);
+});
