@@ -463,3 +463,30 @@ func TestLoadRejectsYahooQuoteCapability(t *testing.T) {
 		t.Fatal("Yahoo Finance must not be configured as a quote provider")
 	}
 }
+
+
+func TestLoadSinaDailyBarsCanBeEnabled(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "3m")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_SINA_ENABLED", "true")
+	t.Setenv("MARKET_DATA_SINA_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_SINA_DAILY_BARS_ENABLED", "true")
+	t.Setenv("MARKET_DATA_SINA_KLINE_URL", "https://example.test/kline")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sina := cfg.ProviderSettings["sina"]
+	if !sina.Enabled || !sina.Quote || !sina.DailyBars {
+		t.Fatalf("Sina should expose quote and daily bars when opted in: %+v", sina)
+	}
+	if cfg.SinaKlineURL != "https://example.test/kline" {
+		t.Fatalf("Sina K-line endpoint was not loaded: %q", cfg.SinaKlineURL)
+	}
+}

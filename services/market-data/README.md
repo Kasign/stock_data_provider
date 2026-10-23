@@ -4,8 +4,9 @@
 
 ## 当前实现范围
 
-- 实时行情 Provider：东方财富、腾讯、新浪（新浪仅提供实时行情能力）。
-- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新增 Yahoo Finance 日 K 适配器，默认关闭，等待目标网络实测后再考虑进入生产回退链。BaoStock 已纳入默认日 K 回退链，仍仅支持日 K。
+- 实时行情 Provider：东方财富、腾讯、新浪。
+- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新浪新增原始日 K（只支持 `none`），Yahoo Finance 日 K 已完成 GitHub Actions 真实响应验证但默认关闭。BaoStock 为日 K 备用源。
+
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表，以及可选补充数据接口。
 - 标准单位：`volume` 为股，`amount` 为人民币元，价格为元/股；`trade_date` 是交易日。`quote_time` 是供应商报告的行情快照/更新时间，不一定等于最近一笔成交时间；新增的 `quote_time_semantics=provider_snapshot_time` 明确该语义。`fetched_at` 是本服务采集时间，`normalized_at` 是标准化时间，三者不能互相替代。
@@ -32,6 +33,13 @@ GitHub Actions 已连续完成真实登录/查询探测，且此前已有 NAS �
 因此，使用腾讯作为日 K 兜底时，`amount` 保持 `null`、单根 K 线的 `amount_unit` 为 `unknown`，并标记数据质量降级。服务也会在顶层 `warnings` 报告使用了兜底源或成交额缺失。禁止用 `收盘价 × 成交量` 或 OHLC 平均价估算值伪装成真实成交额；成交额敏感的量价分析必须先检查数据质量，必要时等待具备可信成交额的来源恢复。
 
 腾讯公开前端接口不是稳定的官方开发者 API 合约。成交量的原始单位转换仍需持续通过其他数据源交叉核验，不能将当前观察到的字段布局视为永久保证。
+
+## 新浪历史日 K（仅不复权）
+
+- 通过可配置的新浪历史日 K JSON endpoint 查询沪深 A 股：`MARKET_DATA_SINA_KLINE_URL` 默认指向 `CN_MarketData.getKLineData`；时间周期参数固定为日 K（`scale=240`）。
+- 该端点未提供可验证的复权参数，因此只接受 `adjustment=none`；请求前/后复权时明确返回不支持，不会把原始价格伪装成复权价格。
+- 该端点未提供经验证的成交额字段，`amount` 保持 `null`、`amount_unit=unknown`，质量标记为 `degraded`；响应也不回显股票代码，报告会保留身份校验限制。
+- 新浪接口单次历史回看最多 1023 条；若触及上限且无法覆盖请求起始日期，适配器返回明确错误，不静默接受不完整区间。真实请求结果以 GitHub Actions 探测和目标部署网络持续复验。
 
 ## Yahoo Finance 日 K（默认关闭）
 

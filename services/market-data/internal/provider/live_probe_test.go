@@ -370,7 +370,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		DailySymbol: dailySymbol,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Results:     make([]liveProbeResult, 0, 11),
+		Results:     make([]liveProbeResult, 0, 12),
 	}
 	var failures []string
 
@@ -592,6 +592,9 @@ func TestLiveProviderProbe(t *testing.T) {
 	sina := NewSina(12*time.Second, "")
 	runQuote("sina", "sina", quoteSymbol, sina.client, func(ctx context.Context) (*model.Quote, error) {
 		return sina.FetchQuote(ctx, quoteSymbol)
+	})
+	runDaily("sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return sina.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
 	})
 
 	tencent := NewTencent(12 * time.Second)

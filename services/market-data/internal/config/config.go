@@ -45,6 +45,7 @@ type Config struct {
 	TencentKlineURL         string
 	TencentNoneKlineURL     string
 	SinaQuoteURL            string
+	SinaKlineURL            string
 	YahooChartURL           string
 	BaostockHost            string
 	BaostockPort            int
@@ -83,7 +84,7 @@ func Load() (Config, error) {
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true},
-			"sina":      {Enabled: true, Quote: true, DailyBars: false},
+			"sina":      {Enabled: true, Quote: true, DailyBars: true},
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: true},
 		},
 	}
@@ -163,6 +164,7 @@ func Load() (Config, error) {
 		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
 		TencentNoneKlineURL:     get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),
 		SinaQuoteURL:            get("MARKET_DATA_SINA_QUOTE_URL", "https://hq.sinajs.cn/list="),
+		SinaKlineURL:            get("MARKET_DATA_SINA_KLINE_URL", "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"),
 		YahooChartURL:           get("MARKET_DATA_YAHOO_CHART_URL", "https://query1.finance.yahoo.com/v8/finance/chart"),
 		BaostockHost:            get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
 		BaostockPort:            integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
@@ -197,6 +199,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_TENCENT_KLINE_URL":      cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL": cfg.TencentNoneKlineURL,
 		"MARKET_DATA_SINA_QUOTE_URL":         cfg.SinaQuoteURL,
+		"MARKET_DATA_SINA_KLINE_URL":         cfg.SinaKlineURL,
 		"MARKET_DATA_YAHOO_CHART_URL":        cfg.YahooChartURL,
 		"MARKET_DATA_MX_API_URL":             cfg.MXAPIURL,
 	} {
@@ -488,6 +491,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
+		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
