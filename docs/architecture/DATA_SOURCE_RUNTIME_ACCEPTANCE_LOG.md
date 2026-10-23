@@ -388,10 +388,166 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 
 截至本轮，本 Go 服务现有数据能力都已进入统一测试框架：新浪报价、腾讯报价/日 K、东方财富报价/日 K、BaoStock 日 K、妙想筹码/资金流（真实请求要求独立 Key）。Tushare、同花顺、Efinance、AkShare、Pytdx、YFinance 以及新闻公告、财务、板块、龙虎榜等并未都存在本仓库的 Go Adapter；它们仍属于待接入的数据源或数据域，不能只改配置就标为“已接入”。后续按域新增 Adapter 时，应沿用同一结果结构和数据契约测试。
 
+### 5.15.4 恢复常规自动探测后的复验（2026-10-23）
+
+为避免自动消耗 MX API 配额，已撤销临时 branch-push 触发器；当前只有手动运行工作流并勾选 `include_mx` 才会调用妙想接口。统一 Provider 契约测试和日 K 上限测试仍保留在普通 CI。
+
+- [Go test suite #214](https://github.com/Kasign/stock_data_provider/actions/runs/39887930886) 已全部通过：三个 Go 模块的测试/race/vet、Compose 校验、部署脚本和两套 Go 镜像构建均成功。
+- [Live provider probe #24](https://github.com/Kasign/stock_data_provider/actions/runs/39887930885) 的真实 Provider job 成功，八项公开行情/日 K 请求均返回：
+  - Sina 报价：`valid`，包含已解析的报价时间。
+  - Tencent 报价：returned / `degraded`；不复权与前复权日 K 各 8 根 / `degraded`，成交额仍未确认。
+  - Eastmoney 主报价：官方重定向从 HTTP 302 到延迟域 HTTP 200，`quote_time` 解析成功，`valid`。
+  - Eastmoney 延迟域报价：HTTP 200，`valid` 且含 `quote_time`。
+  - Eastmoney 前复权日 K：8 根 / `valid`；BaoStock 前复权日 K：8 根 / `valid`。
+- Artifact：[live-provider-report #12473805201](https://github.com/Kasign/stock_data_provider/actions/runs/39887930885/artifacts/12473805201)，4,526 bytes，GitHub 元数据 SHA-256 为 `79109c2c2794b1693abab5657c9a29579c9bd904761bf94b6928db91e35841d8`。
+- 同日的一次性 push 探测 [#22](https://github.com/Kasign/stock_data_provider/actions/runs/39887647358) 曾遇到 Eastmoney 两个报价入口的 TLS 握手超时，并显示 MX API key missing；稍后的 #24 Eastmoney 又恢复成功。这是对公共端点波动的再次实证，不应把 #22 解释为持久性代码回归。
+- 妙想筹码与资金流尚未完成线上验收：在一次性 push 事件中，环境里没有可用的 `MARKET_DATA_MX_API_KEY`，两项报告都明确记录 `MX API key is missing`，没有对 MX 端点执行查询。需要核对 GitHub Actions Secret `MX_APIKEY` 的配置与该工作流的访问权限，再手动运行并勾选 `include_mx`；没有这一步前不可标记为已验证。
+
+## 5.16 新增 Yahoo Finance 与新浪历史日 K 能力（2026-10-23）
+
+### 5.16.1 代码与契约
+
+- Yahoo Finance 新增原生 Go Chart JSON 适配器，支持沪深 A 股历史日 K 与明确记录的复权参考日；默认关闭，不进入默认生产回退链，原因是端点属于非官方公开接口且缺少可核验的 A 股成交额。
+- 新浪从报价 Provider 扩展为报价 + 历史日 K Provider，历史 K 线 endpoint 独立配置为 `MARKET_DATA_SINA_KLINE_URL`。新浪日 K 只接受 `adjustment=none`；请求前/后复权会明确返回不支持，不把原始价格冒充复权序列。
+- 新浪与 Yahoo 日 K 都不提供可核验的成交额字段，`amount=null`、`amount_unit=unknown` 并固定降级；新浪 K 线接口不回显证券代码，因此额外记录 `provider_symbol_not_echoed_by_kline_response`。
+- 新增 Yahoo / 新浪的 mock JSON、复权与日期边界、符号校验、配置开关测试；统一真实 Provider probe 同时覆盖新浪原始日 K 和 Yahoo 前复权日 K。
+- 本轮实现与配置已分别提交：[`3c5f3e8`](https://github.com/Kasign/stock_data_provider/commit/3c5f3e8f573a732b7a58b2a02dba7b7144f44cb8)（Yahoo adapter）、[`2b88b89`](https://github.com/Kasign/stock_data_provider/commit/2b88b892b5cc5af0a11552f7fbb2d102467e917b)（Sina adapter）；随后修复测试 JSON、gofmt 与扩展 provider 后的配置超时预算。
+
+### 5.16.2 Go CI
+
+- [Go test suite #39891606308](https://github.com/Kasign/stock_data_provider/actions/runs/39891606308) 在提交 `393edb896bc14e6a805e218fb5dd7e53c43a111e` 上成功。根模块、`go-core`、`services/market-data` 测试均通过，包含竞态检测、`go vet`、Compose 校验与 Docker 镜像构建。
+- 此次过程中 CI 先后捕获测试 JSON 字面量语法错误、三处 `gofmt` 差异和新增日 K Provider 导致旧测试的请求超时预算不足，均已按测试日志修正；最终成功结果对应修正后的提交，而不是中间失败提交。
+
+### 5.16.3 GitHub Runner 实测
+
+最新 [Live provider probe #39891606288](https://github.com/Kasign/stock_data_provider/actions/runs/39891606288) 的工作流总体为 success，但 Provider 探测内部仍记录一次东方财富主报价 TLS handshake timeout；诊断 job 配置 `continue-on-error`，因此必须查看单项记录，不能把整体绿色解释成全部上游请求都成功。Artifact：[live-provider-report #12475072085](https://github.com/Kasign/stock_data_provider/actions/runs/39891606288/artifacts/12475072085)，6,517 bytes，GitHub 元数据 SHA-256 为 `243f7251e1f52cbfb2bc20ff5e64f362eb48694c2ddc2d83bed9cb487af3b377`。
+
+| Provider / 能力 | 实测结果 | 解释 |
+|---|---|---|
+| 新浪实时行情 | HTTP 200，报价字段和时间可解析，当前样本质量 valid | 此处仍是实时行情端点，不与历史 K 线端点混用 |
+| 新浪原始日 K | HTTP 200，返回 8 根；2026-10-20 至 2026-10-22 的成交量分别为 76,094,847、74,818,026、98,924,396 股 | 日期升序与 limit 正常；样本量与 BaoStock 逐日一致，腾讯在换算到股后相差少量整数精度；缺成交额/证券代码回显，固定 degraded |
+| Yahoo Finance 前复权日 K | HTTP 200，返回 8 根，成交量与 BaoStock 样本一致 | `forward_adjusted` 及参考日有明确标记；成交额缺失、固定 degraded，默认关闭 |
+| Eastmoney 主报价 | 本轮 TLS handshake timeout | 其他 Eastmoney 接口同轮可以返回，属于端点/网络不稳定，不据单轮判定适配器不可用 |
+| Eastmoney 延迟报价/前复权日 K | 报价 HTTP 200；前复权日 K 返回 8 根且质量 valid | 同一时间窗口内延迟域可用，仍需持续观察主入口重定向后的网络稳定性 |
+| Tencent 日 K | 不复权与前复权各返回 8 根 | 缺成交额，固定 degraded |
+| BaoStock 前复权日 K | 返回 8 根且质量 valid | 金额和股数可供交叉校验，GitHub Runner 网络成功不替代部署容器验收 |
+| MX_API | skipped / 未请求 | Actions 环境仍无可用 `MX_APIKEY`，筹码和资金流不能标记为线上验证通过 |
+
+### 5.16.4 使用与未完成项
+
+- 新浪日 K 可以给 `adjustment=none` 的请求提供可选回退；对前复权或后复权请求必须让新浪返回不支持并继续回退其他源。
+- Yahoo 保持默认关闭，只有在目标 NAS/Docker 环境验证可达并确认消费方接受 `degraded` / amount unknown 后再考虑启用。两项新数据源都不可单独支撑依赖成交额的资金流、量价金额判断。
+- 本轮没有完成财务报表、新闻公告、板块/指数广度、龙虎榜等数据域，也没有接入所有路线图候选源；这些仍需按数据域逐项实现 Go Adapter 与来源质量契约。
+- GitHub Runner 实测只证明对应时刻的公网响应。目标 NAS 的供应商网络、实际服务路由和持久化端到端仍需单独验收。
+
+## 5.17 网易实时行情 JSONP 与历史 CSV 的独立验收（2026-10-23）
+
+- 网易历史 CSV endpoint `quotes.money.163.com/service/chddata.html` 在 GitHub Runner 连续返回 HTTP 502 + HTML（不是 CSV），因此该日 K 能力不通过真实验收，默认保持关闭。
+- 新增独立的网易实时 JSONP 端点 `api.money.126.net/data/feed/{code},money.api`，按 `price/percent/updown/open/high/low/yestclose/volume/turnover/time` 字段实现 QuoteProvider。契约测试覆盖 percent 比例到百分点换算、JSONP callback 包装、证券代码回显、成交量股数、成交额人民币元和供应商快照时间。
+- GitHub Actions 实测：Live provider probe #39894680276（提交 `2314710d8e214737500483d70c613cd37a324859`）对实时端点报 `dial tcp: lookup api.money.126.net on 127.0.0.53:53: no such host`；同轮历史 CSV 返回 HTTP 502 + HTML，东方财富历史 K 线出现 EOF。该轮实际 Provider job 失败，不能将 NetEase 报价或历史日 K 标记为已接通。
+- 最新常规探测 [Live provider probe #39895301747](https://github.com/Kasign/stock_data_provider/actions/runs/39895301747) 对应提交 `46a59919716ece18c8547da3108acebd22c0e7b1`。实际 Provider job 仍为 failure（工作流因 `continue-on-error` 显示 success），本轮 Yahoo 日 K 返回 8 根且质量 degraded、BaoStock 返回 8 根且质量 valid、Eastmoney 日 K 返回 8 根且质量 valid、Sina 报价与日 K均返回、Tencent 报价与日 K均返回；Eastmoney 主报价及 delay 报价两端点同轮均返回 HTTP 502。
+- 本次报告 artifact [live-provider-report #12475823907](https://github.com/Kasign/stock_data_provider/actions/runs/39895301747/artifacts/12475823907)，6,520 bytes，SHA-256 `dc83abfe0d0ebe1c9ec19641caf465fe1332542719a32098b1723e8c1b12b3aa`。NetEase 报价与历史 CSV 在本轮常规探测中都按新策略记录为 `skipped`；先前 #39894680276 的主动实测已确认报价 DNS 失败、历史 CSV HTTP 502。
+- 为避免可选候选端点持续污染其他 Provider 的日常健康报告，默认 probe 将 NetEase 两项记录为 `skipped`；仅 workflow_dispatch 勾选 `include_netease=true` 才重试。应用配置仍默认 `MARKET_DATA_NETEASE_ENABLED=false`，历史日 K 能力默认关闭。
+- `MARKET_DATA_NETEASE_ENABLED` 默认为 false；启用服务端报价还需设置 `MARKET_DATA_NETEASE_QUOTE_ENABLED=true`。根配置样例保持 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`，直至 CSV 返回真实数据。
+
+## 5.18 东方财富 F10 股票基础资料与 Profile API（2026-10-23）
+
+- 本轮起点 HEAD：`9a1d49b3ab262d3604214d5655f894eb482c6de0`（`test: 修正股票资料接口契约断言`）。该提交链已引入 StockBasic 服务与 HTTP 路由，但漏提交 `StockBasicProvider`、`model.StockBasic`、`ProviderSettings.StockBasic` 等支撑类型，且 `internal/httpapi/server_test.go` 存在 gofmt 门禁错误，因此不能视为可编译可用。
+- 本轮补齐 `StockBasicProvider` 能力接口和响应模型；东方财富通过 `RPT_PCF10_ORG_ISSUEINFO` F10 数据查询简称、上市日期及可用的退市日期字段，严格核对返回证券代码，缺数据和代码不匹配均视为失败。新端点由 `MARKET_DATA_EASTMONEY_STOCK_BASIC_URL` 配置，不与实时报价或日 K 复用端点。能力可用 `MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED` 独立开关。
+- 新增 mock HTTP 契约测试和真实 Runner probe。Live provider probe [#39901894675](https://github.com/Kasign/stock_data_provider/actions/runs/39901894675) 在提交 `91fb1f8798b1b925f96926336efc61ac2492e1ec` 上实际请求 F10 接口，两次响应均为 HTTP 200，返回 `600036.SH`、名称“招商银行”、上市日期 `2002-04-09`，证券代码与基础资料契约校验通过；该项可以标记为 **GitHub Runner 实测通过**，但尚未代表目标 NAS / Docker 环境通过。
+- 同一 HEAD 的 Go CI [#39901894665](https://github.com/Kasign/stock_data_provider/actions/runs/39901894665) 格式门禁通过，之后 `services/market-data/internal/httpapi` 测试编译失败：Profile 测试调用 `service.NewWithCapabilities` 多传了一个 `time.Duration` 参数。本次统一修正参数后重跑；不能将此前 CI 标记为通过。
+
+## 5.19 东方财富行业 / 概念板块排名与实时探测结果（2026-10-23）
+
+- 新增独立 `SectorRankingProvider`，通过 `https://push2.eastmoney.com/api/qt/clist/get` 分别请求行业过滤 `m:90+t:2+f:!50` 与概念过滤 `m:90+t:3+f:!50`，API 为 `GET /api/v1/market/sectors?type=industry|concept&limit=10`。字段包括板块代码/名称、涨跌额与涨跌幅、成交额、上涨/下跌家数和领涨股。成交额单位为人民币元；缺少的字段保留为 null/unknown，不填零。
+- GitHub Runner 实测见 [Live provider probe #39905085321](https://github.com/Kasign/stock_data_provider/actions/runs/39905085321)，对应板块代码提交 `f1f62671f0b5939a796279b76b694e5a74f6f2bf`。行业接口 HTTP 302 重定向至 `push2delay.eastmoney.com/api/qt/clist/get` 后 HTTP 200 JSON，返回 10 条、总量 496；样本包括 `BK1347`（纺织鞋类制造，涨幅 5.46%）与 `BK1499`（医美服务，涨幅 4.32%）。概念接口同样 HTTP 302→200，返回 10 条、总量 516；样本包括 `BK1754`（2026三季报首亏，涨幅 4.00%）与 `BK1630`（昨日首板，涨幅 3.68%）。这些数值是该次 Runner 查询时点的快照，不是恒定值。
+- 两种板块快照均标记 `quality_status=degraded`、原因 `provider_snapshot_timestamp_not_exposed`：上游未提供可验证的行情数据时间，本地 `fetched_at` 不可冒充供应商快照时间。虽然这轮已证明 CLIST 响应可解析和关键字段可用，但不代表板块行情的时间新鲜度达到盘中交易决策的完整验收标准；`MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED=false` 继续作为默认值。
+- 同一探测轮中，东方财富个股主报价和延迟报价都返回 HTTP 502 HTML，实际 Provider job 因这两项失败；工作流总状态因 `continue-on-error` 仍显示 success。不可把整条工作流的 success 解读为所有 Provider 能力都通过。
+- 同一 HEAD 的 Go CI [#39905085083](https://github.com/Kasign/stock_data_provider/actions/runs/39905085083) 曾因新增 8 个 Go 文件未通过 `gofmt` 门禁，测试步骤没有执行。之后提交 `42e6360` / `59caf3f` 仅修正格式，不改变 Provider 行为；它们对应的全量 Go CI 需要以各自 HEAD 的后续运行记录为准，不继承早先 HEAD 的测试状态。
+- 网易真实行情仍是 DNS 失败 / 历史 CSV HTTP 502，所以保持关闭；MX_API 因 GitHub Actions 的 `MX_APIKEY` 仍不可用，保持 `skipped / 未验证`，不得标记接通。
+
+### 最新复验：Go CI 与真实 Provider（2026-10-23）
+
+- 最新完整 Go CI 为 [#39905678476](https://github.com/Kasign/stock_data_provider/actions/runs/39905678476)，对应 HEAD `bbcb34ff44c104a688b00a87176a55e2e4b6009c`。根模块、`go-core`、`services/market-data` 测试均通过，Compose 配置校验、部署脚本语法检查、market-data 与 analysis API 两个 Go 镜像构建均通过。此前 #39905085083、#39905355956、#39905514554 和 #39905617416 的失败均被定位为 `services/market-data/internal/config/config.go` 的 `gofmt` 对齐门禁；已修正后，当前 HEAD 的所有 CI job 均成功。
+- 最新真实 Provider probe 为 [#39905678555](https://github.com/Kasign/stock_data_provider/actions/runs/39905678555)，同样对应 HEAD `bbcb34f`。实际运行的 14 条 Provider/能力结果全部为 `returned`，探测 job 本身通过；这仅证明该次 Runner 请求成功，不等同于部署环境或长期 SLA 验收。
+- 东方财富 F10 基础资料 HTTP 200，返回 `600036.SH`、招商银行、上市日期 `2002-04-09`，质量 `valid`。行业与概念板块端点均为 HTTP 302 跳转至 `push2delay.eastmoney.com` 后 HTTP 200 JSON：行业返回 10 条、总量 496；概念返回 10 条、总量 516。两者固定 `degraded`，原因是 `provider_snapshot_timestamp_not_exposed`。本次样本包括行业 `BK1295` 其他数字媒体（涨幅 9.07%）以及概念 `BK1754` 2026三季报首亏（涨幅 4.96%）；排名和百分比会随市场时点变化。
+- 本次东方财富个股主报价先 HTTP 302 转向延迟行情域，后 HTTP 200，延迟报价直连也 HTTP 200，样本价格均为 41.86、成交额约 32.32 亿元，质量 `valid`。前一轮 #39905085321 的两个报价端点返回 HTTP 502，说明该入口有间歇性波动，不能把单次 502 当成永久不可用。
+- 新浪实时报价 HTTP 200 且样本质量 `valid`；新浪日 K、腾讯报价/日 K、Yahoo 报价/日 K 均返回可解析数据。新浪日 K、腾讯相关能力和 Yahoo 按各自字段契约降级；Yahoo 报价继续保持 `amount=null`、`amount_unit=unknown`、`quality=degraded`。东方财富、BaoStock 前复权日 K 本轮各返回 8 根且质量 `valid`。
+- 网易两个能力在普通 probe 中继续 `skipped`（之前真实测试已证实 DNS 失败 / CSV HTTP 502）；MX_API 筹码和资金流也仍为 `skipped / 未验证`，因为 Actions 没有可用的 `MX_APIKEY`。这些不会因为当前 probe job 绿色而转为已接通。板块 ranking 的生产开关仍默认关闭，直至完成目标 NAS/Docker 环境验收。
+
+## 5.20 东方财富核心指数实时行情（2026-10-23）
+
+- 新增独立 `IndexQuoteProvider`，请求白名单内的上证指数、深证成指、创业板指、沪深300、上证50、中证500、科创50；指数代码不经过个股 `NormalizeSymbol`，避免 `000001.SH` 按个股规则被误识别成深交所股票。
+- 使用东方财富批量指数端点 `/api/qt/ulist.np/get`，按 `f12/f13` 严格匹配指数代码和市场；字段包括最新价、涨跌幅/额、开高低、昨收、成交额与供应商时间字段。缺失成交额保留 `amount=null`、`amount_unit=unknown`。
+- [Live provider probe #39906844130](https://github.com/Kasign/stock_data_provider/actions/runs/39906844130) 对该能力的首次真实请求返回 HTTP 302 重定向到 `push2delay.eastmoney.com`，随后 HTTP 200 JSON，并通过白名单代码及核心字段校验，返回 7 个指数。端点的 `f86` 在本次响应里是数值型行情字段而非可解析时间戳，所以快照质量为 `degraded`，原因包含 `provider_snapshot_timestamp_not_exposed`；没有将本地 `fetched_at` 冒充行情时间。该轮其他能力失败导致工作流失败，不能把单一能力通过等同于整条工作流全通过。
+- 格式修复提交 `74ea496` 后，完整 Go CI [#39907221645](https://github.com/Kasign/stock_data_provider/actions/runs/39907221645) 的所有 job 通过；对应真实 Provider probe [#39907221646](https://github.com/Kasign/stock_data_provider/actions/runs/39907221646) 也通过。指数能力仍保持独立开关 `MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED=false`，本次通过只证明 GitHub Runner 当时可达，不等于目标 NAS/Docker 网络已验收。
+- 当前接口为 `GET /api/v1/market/indices`，使用 15 秒缓存。指数日 K、完整市场广度、官方交易日历和各指数专用回退路径仍未完成；本能力不补齐这些缺口。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
 2. 在仅启用 Tencent 日 K 的独立配置下验证 `adjustment=none`（并按接口真实能力测试复权请求），检查来源、成交量单位、成交额、日期覆盖和数据质量标记。
-3. 独立测试 Sina 报价能力；不将其误认为日 K Provider，因为当前实现中 Sina 仅配置为 QuoteProvider。
+3. 独立测试新浪报价与历史日 K：报价用 quote endpoint；日 K 仅接受 `adjustment=none`，验证目标容器网络、来源路由和 amount unknown/degraded 处理。
 4. Eastmoney 保持待调查；等后续具备时间再按第 5.5 节排查。
 5. 最后进行完整回归：优先级与故障切换、缓存、MariaDB 写入/回退、质量降级、服务配置恢复和日志关联。
+
+
+## 5.21 国内市场广度与涨跌停池（实现已加，真实验收待 CI）
+
+新增独立 MarketBreadthProvider 与 LimitPoolProvider，均只对市场级 API 提供数据，不加入个股报价或日 K 兜底链。
+
+- 市场广度通过东方财富全市场证券列表分页读取并校验证券身份、重复项和完整覆盖；上涨/下跌/平盘/缺失涨跌幅的分类计数必须合计等于证券总数。成交额只有在每条证券记录都有可用金额时才输出总值，否则返回 null 与覆盖数。供应商没有可验证快照时间时质量降级。
+- 涨停、跌停、炸板池使用独立 push2ex 端点。响应 qdate 仅作诊断字段，trade_date 保留请求日期；空列表保持 has_data=false、quality_status=unknown，避免把非交易日或供应商数据不可用误判为零事件。
+- MARKET_DATA_EASTMONEY_MARKET_BREADTH_ENABLED 与 MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED 默认关闭。真实 Runner 结果及目标 NAS/Docker 验收必须在对应流程执行后补记。
+
+
+## 5.22 国内市场广度和涨跌停池首次真实探测复核（2026-10-23）
+
+基线 commit `5466ef1c8b8df980502d3993c04049a73963a822` 的 GitHub Actions Live Provider Probe #39912333395 含有两类国内市场实测结果，需与工作流整体结论区分：该工作流的探测 job 实际失败，不能视为全量数据源通过。
+
+- **市场广度**：东方财富 CLIST 首页从 `push2.eastmoney.com` 重定向至 `push2delay.eastmoney.com` 后 HTTP 200，首屏声称证券总数为 5,925；但当时探测器只给全量分页 30 秒，超时前未完成覆盖校验。因此不能把首屏返回或此超时表述为全市场统计已验收。
+- **涨停池 / 炸板池**：当次分别返回有明细的池数据（报告的总数为 72 和 13），记录质量仍为 `degraded`，原因是上游没有可验证的原子快照时间。
+- **跌停池**：HTTP 200 响应出现 `tc=9` 但 `pool=[]` 的不一致组合。旧逻辑拒绝该响应，没有伪造为零跌停；新修正将对这种非空总数/空明细做一次有界重试，若仍不一致则继续报错。
+- **本批修正**：全市场分页改按证券代码排序，降低实时涨跌幅变化造成跨页重复/遗漏的风险；主域 CLIST 连续失败时有限回退到 `push2delay.eastmoney.com`，成功后后续页继续走该域；跨页结果额外标记 `provider_pages_not_atomic`；探测预算放宽到 180 秒；广度缓存延长至 90 秒。跌停池改用 `sort=fund:asc`（该 endpoint 与涨停池的 `fbt:asc` 行为不同），并保留一次有界重试，若仍为 `tc>0/pool=[]` 则继续报错。对应测试同时覆盖主域失败回退、部分成交额、临时 502 重试和持续不完整池响应。
+
+本节记录的是修正前实际观测和本批修正内容，不是修正后的通过声明。新提交的 Go CI、完整 Runner 探测以及目标 NAS/Docker 环境验收仍需分别确认。市场广度和涨跌停池生产开关继续保持关闭。
+
+
+## 5.23 国内市场第二轮真实探测结果（2026-10-23）
+
+[Go test suite #39915426194](https://github.com/Kasign/stock_data_provider/actions/runs/39915426194) 的根模块和 `go-core` 测试通过；`services/market-data` 的测试与镜像构建被 `domestic_market_test.go` 的 gofmt 格式门禁挡住，因此这一轮尚不能据此认定 market-data 单元测试全部通过。
+
+[Live provider probe #39915426198](https://github.com/Kasign/stock_data_provider/actions/runs/39915426198) 的探测任务实际失败（工作流整体绿色来自 `continue-on-error`）：
+
+- **市场广度**：`push2.eastmoney.com/api/qt/clist/get` 两次都返回 HTTP 502；未取得可完成全市场覆盖校验的快照。
+- **涨停池 / 炸板池**：本次返回有明细的池，分别报告总数 82 和 12；仍因无可验证上游快照时间而降级。
+- **跌停池**：`getTopicDTPool` 两次都返回 `tc=6,pool=[]`。保守校验正确拒绝该不完整结果，没有返回“0 只跌停”。
+
+随后提交 `6805ceec753bd7eb4302e2af0f1361ec4dc57485` 为 CLIST 增加到 `push2delay.eastmoney.com` 的有限回退，并将跌停池排序独立设置为 `fund:asc`；该提交还在真实探测之前修正了这一文件中的冗余空行。以上修复是否有效，以后续该提交之后的 CI 和实测报告为准，不能沿用旧探测结果宣称通过。生产开关继续关闭。
+
+
+## 5.24 延迟域回退和跌停池排序实测（2026-10-23）
+
+[Live provider probe #39916080475](https://github.com/Kasign/stock_data_provider/actions/runs/39916080475) 已编译并执行上一提交中的回退逻辑，得到以下实际结果：
+
+- **涨停池**：HTTP 200，报告总数 82，本次按 API 请求限制返回 30 条明细。
+- **跌停池**：HTTP 200，返回总数 6、明细 6 条。将 `getTopicDTPool` 的排序参数切换为 `fund:asc` 后，此次不再出现 `tc>0,pool=[]`。
+- **炸板池**：HTTP 200，报告总数与返回明细均为 12。
+- **市场广度**：首个 `push2` 请求发生 HTTP 502 后回退到 `push2delay`，前几页成功；随后延迟域在分页过程中仍间歇性 HTTP 502，页面 5 的有限重试耗尽，未形成全市场完整快照。因此此能力仍未通过全量验收。
+- **其他同时探测的国内能力**：新浪、腾讯报价和日 K、东方财富股票基础资料、行业/概念板块榜、指数报价、东方财富个股报价及 BaoStock 日 K 均有返回记录；东方财富个股日 K 本次发生 TLS handshake timeout。可逐项查看该运行的脱敏结果，不能把某一项失败推广到所有能力，也不能将整份探测标记为完全通过。
+
+市场广度本批继续将瞬时 HTTP 5xx / 超时重试上限从 2 次提高到 3 次；这是有限重试而非无限重试。新的 Go CI 和 Runner 探测仍待当前提交验证。市场广度和涨跌停池生产开关保持关闭。
+
+
+## 5.25 涨跌停池证券代码归属补正（2026-10-23）
+
+最新真实涨停池探测在返回样本中出现了北交所 `920xxx` 代码（例如 `920285`）。旧归一化仅将 `4xxxxxx/8xxxxxx` 前缀映射到 `.BJ`，因此会错误地把该批较新的北交所代码标为深交所。当前修正将 `920` 前缀也映射到 `.BJ`，并增加真实响应形态的契约回归测试。该修正只涉及证券代码归属，不改变上游返回计数。仍需当前 HEAD 的 Go CI 确认通过；所有新增国内市场开关保持关闭，直到目标 NAS/Docker 联调。
+
+
+## 5.26 国内交易日历 Go 接入与验收边界（2026-10-23）
+
+本轮分支新增 BaoStock 原生 TCP 交易日历协议（消息类型 33/34）、独立 `TradingCalendarProvider`、`GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD`、日期完整覆盖校验、缓存及独立默认关闭开关 `MARKET_DATA_BAOSTOCK_TRADING_CALENDAR_ENABLED=false`。本地协议测试用于验证请求与字段解析，不能替代对 BaoStock 上游的真实响应验证。
+
+GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Provider Probe 新增了日历结果契约检查。只有记录中出现 `capability=trading_calendar`、`status=returned` 且完整覆盖请求日期，才可认为该 Runner 本次实测成功；如果前序 BaoStock 连接失败，日历探测明确记为 `skipped`，不会额外发起一次重复超时请求。目标 NAS/Docker 环境仍需实测，功能开关保持关闭。
+
+当前修复后的最新 HEAD 尚需以其自身 Go CI 与 Runner 日志进行最终验收，不能沿用早前失败记录，也不能把工作流表层 success 等同于所有 Provider 都通过。

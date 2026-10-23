@@ -710,3 +710,46 @@ func TestProviderFailureSummaryClassifiesNetworkUnavailable(t *testing.T) {
 		t.Fatalf("expected sanitized failure message to preserve network symptom, got %q", message)
 	}
 }
+
+type stockBoardsFakeProvider struct {
+	snapshot *model.StockBoardSnapshot
+	err      error
+}
+
+func (f stockBoardsFakeProvider) Name() string { return "eastmoney" }
+func (f stockBoardsFakeProvider) FetchStockBoards(context.Context, string) (*model.StockBoardSnapshot, error) {
+	return f.snapshot, f.err
+}
+
+func TestStockBoardsValidatesIdentityAndReturnsSnapshot(t *testing.T) {
+	now := time.Now().UTC()
+	change := 1.25
+	snapshot := &model.StockBoardSnapshot{
+		Symbol: "600519.SH", Total: 1, HasData: true,
+		Items:  []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Source: "eastmoney", SourceVersion: "test-stock-boards-v1", FetchedAt: now,
+		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+	p := stockBoardsFakeProvider{snapshot: snapshot}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
+	got, hit, err := svc.StockBoards(context.Background(), "600519")
+	if err != nil || hit {
+		t.Fatalf("StockBoards returned hit=%v err=%v", hit, err)
+	}
+	if got.Symbol != "600519.SH" || !got.HasData || got.Total != 1 || got.Items[0].Code != "BK0477" {
+		t.Fatalf("unexpected stock boards result: %+v", got)
+	}
+}
+
+func TestStockBoardsRejectsProviderSymbolMismatch(t *testing.T) {
+	now := time.Now().UTC()
+	snapshot := &model.StockBoardSnapshot{Symbol: "000001.SZ", Total: 1, HasData: true, Items: []model.StockBoard{{Code: "BK1", Name: "测试", Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}}, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}
+	p := stockBoardsFakeProvider{snapshot: snapshot}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
+	_, _, err := svc.StockBoards(context.Background(), "600519.SH")
+	if err == nil || !strings.Contains(err.Error(), "all stock-boards providers failed") {
+		t.Fatalf("expected stock-board identity mismatch, got %v", err)
+	}
+}

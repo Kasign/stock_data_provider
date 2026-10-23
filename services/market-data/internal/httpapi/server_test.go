@@ -19,6 +19,39 @@ import (
 type httpFakeProvider struct{}
 
 func (httpFakeProvider) Name() string { return "eastmoney" }
+func (httpFakeProvider) FetchIndexQuotes(_ context.Context) (*model.IndexQuoteSnapshot, error) {
+	now := time.Now().UTC()
+	price, change, pct, amount := 3200.5, 24.5, 0.8, 123456789.0
+	return &model.IndexQuoteSnapshot{Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"}, Items: []model.MarketIndexQuote{{Symbol: "000001.SH", Code: "000001", Name: "上证指数", LatestPrice: &price, Change: &change, ChangePercent: &pct, Amount: &amount, AmountUnit: "CNY", Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"}}}}, nil
+}
+func (httpFakeProvider) FetchSectorRankings(_ context.Context, category string, _ int) (*model.SectorRankingSnapshot, error) {
+	now := time.Now().UTC()
+	pct, price, amount := 2.4, 123.45, 987654321.0
+	return &model.SectorRankingSnapshot{
+		Category: category, Total: 1, Source: "eastmoney", SourceVersion: "test",
+		FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		Items: []model.SectorRanking{{
+			Rank: 1, Code: "BK0475", Name: "测试板块", Category: category,
+			LatestPrice: &price, ChangePercent: &pct, Amount: &amount, AmountUnit: "CNY",
+			Source: "eastmoney", SourceVersion: "test", FetchedAt: now,
+			QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		}},
+	}, nil
+}
+func (httpFakeProvider) FetchStockBasic(_ context.Context, symbol string) (*model.StockBasic, error) {
+	return &model.StockBasic{Symbol: symbol, Name: "测试证券", IPODate: "2000-01-01", SecurityType: 1, SecurityTypeLabel: "stock", ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid}, nil
+}
+func (httpFakeProvider) FetchStockBoards(_ context.Context, symbol string) (*model.StockBoardSnapshot, error) {
+	now := time.Now().UTC()
+	change := 1.25
+	return &model.StockBoardSnapshot{
+		Symbol: symbol, Total: 1, HasData: true,
+		Items:  []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Source: "eastmoney", SourceVersion: "test-stock-boards-v1", FetchedAt: now,
+		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}, nil
+}
 func (httpFakeProvider) FetchQuote(context.Context, string) (*model.Quote, error) {
 	p := 10.0
 	open := 9.8
@@ -37,6 +70,29 @@ func (httpFakeProvider) FetchDailyBars(context.Context, string, string, string, 
 	a := 1000000.0
 	return []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 9.8, High: 10.5, Low: 9.7, Close: 10, Volume: &v, Amount: &a, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}, nil
 }
+
+func (httpFakeProvider) FetchMarketBreadth(_ context.Context) (*model.MarketBreadthSnapshot, error) {
+	now := time.Now().UTC()
+	amount := 1000000.0
+	return &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+		AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
+		TotalAmountCNY: &amount, AmountCoverageCount: 3, Source: "eastmoney",
+		SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}, nil
+}
+func (httpFakeProvider) FetchLimitPool(_ context.Context, poolType, tradeDate string, _ int) (*model.LimitPoolSnapshot, error) {
+	now := time.Now().UTC()
+	change := 10.0
+	return &model.LimitPoolSnapshot{
+		PoolType: poolType, TradeDate: tradeDate, Total: 1, HasData: true,
+		Items:  []model.LimitPoolItem{{Symbol: "600519.SH", Code: "600519", Name: "测试证券", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}, nil
+}
+
 func TestAuthIsRequiredForDataRoutes(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -124,6 +180,96 @@ func (quoteOnlyCapabilityFake) FetchQuote(context.Context, string) (*model.Quote
 	return nil, nil
 }
 
+func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities(
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p},
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil,
+	)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
+	).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/profile", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{"\"symbol\":\"600519.SH\"", "\"name\":\"测试证券\""} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("profile response missing %s: %s", want, w.Body.String())
+		}
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "\"stock_basic_capable\":true") {
+		t.Fatalf("data-sources must advertise the independent stock-basic capability: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestDomesticMarketBreadthAndLimitPoolRoutes(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetMarketBreadthProviders([]provider.MarketBreadthProvider{p})
+	svc.SetLimitPoolProviders([]provider.LimitPoolProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/breadth", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"advancing_count":1`) || !strings.Contains(w.Body.String(), `"covered_securities":3`) {
+		t.Fatalf("breadth route status=%d body=%s", w.Code, w.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/market/limit-pools?type=up&date=2026-10-23&limit=10", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"type":"up"`) || !strings.Contains(w.Body.String(), `"trade_date":"2026-10-23"`) {
+		t.Fatalf("limit-pool route status=%d body=%s", w.Code, w.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/market/limit-pools?type=invalid", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+		t.Fatalf("invalid pool type status=%d body=%s", w.Code, w.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"market_breadth_capable":true`) || !strings.Contains(w.Body.String(), `"limit_pool_capable":true`) {
+		t.Fatalf("market capabilities missing: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestStockBoardsRouteAndCapabilityAdvertisement(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600519.SH/boards", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"symbol":"600519.SH"`) || !strings.Contains(w.Body.String(), `"code":"BK0477"`) {
+		t.Fatalf("stock-boards route status=%d body=%s", w.Code, w.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"stock_boards_capable":true`) {
+		t.Fatalf("data-sources must advertise stock boards: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
 	p := quoteOnlyCapabilityFake{}
 	h := NewWithCapabilityInterfaces(
@@ -150,5 +296,65 @@ func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("data-sources response missing %s: %s", want, body)
 		}
+	}
+}
+
+func TestSectorRankingEndpointSeparatesIndustryAndConcept(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities(
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p},
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil,
+	)
+	svc.SetSectorRankingProviders([]provider.SectorRankingProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
+	).Handler()
+	for _, category := range []string{"industry", "concept"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type="+category+"&limit=5", nil)
+		req.Header.Set("X-API-Key", "secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("category=%s status=%d body=%s", category, w.Code, w.Body.String())
+		}
+		for _, want := range []string{`"category":"` + category + `"`, `"code":"BK0475"`, `"amount_unit":"CNY"`, `"quality_status":"degraded"`} {
+			if !strings.Contains(w.Body.String(), want) {
+				t.Fatalf("category=%s response missing %s: %s", category, want, w.Body.String())
+			}
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type=all", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+		t.Fatalf("invalid sector category should be rejected, got status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestMarketIndicesEndpointUsesDedicatedIndexCapability(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetIndexQuoteProviders([]provider.IndexQuoteProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/indices", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{`"symbol":"000001.SH"`, `"name":"上证指数"`, `"amount_unit":"CNY"`, `"quality_status":"degraded"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("index snapshot missing %s: %s", want, w.Body.String())
+		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"index_quote_capable":true`) {
+		t.Fatalf("data sources missing index capability: status=%d body=%s", w.Code, w.Body.String())
 	}
 }

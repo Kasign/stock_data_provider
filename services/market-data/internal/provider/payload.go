@@ -97,3 +97,10 @@ func appendProviderQualityReason(reasons []string, reason string) []string {
 	}
 	return append(reasons, reason)
 }
+
+func optionalVolumeUnit(value *int64, unit string) string {
+	if value == nil {
+		return "unknown"
+	}
+	return unit
+}

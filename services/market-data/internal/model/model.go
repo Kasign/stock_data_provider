@@ -106,13 +106,176 @@ type Bundle struct {
 	QualityStatus         QualityStatus     `json:"quality_status"`
 }
 
+// StockBoard represents one board membership returned for a security. ChangePercent uses percentage points.
+type StockBoard struct {
+	Code           string        `json:"code"`
+	Name           string        `json:"name"`
+	ChangePercent  *float64      `json:"change_percent,omitempty"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
+type StockBoardSnapshot struct {
+	Symbol         string        `json:"symbol"`
+	Total          int           `json:"total"`
+	HasData        bool          `json:"has_data"`
+	Items          []StockBoard  `json:"items"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
+// StockBasic 是低频证券身份信息。IPODate 为兼容 profile 服务保留，语义对应供应商给出的上市日期。
+type StockBasic struct {
+	Symbol             string        `json:"symbol"`
+	Name               string        `json:"name"`
+	IPODate            string        `json:"ipo_date,omitempty"`
+	OutDate            string        `json:"out_date,omitempty"`
+	SecurityType       int           `json:"security_type"`
+	SecurityTypeLabel  string        `json:"security_type_label"`
+	ListingStatus      int           `json:"listing_status"`
+	ListingStatusLabel string        `json:"listing_status_label"`
+	Source             string        `json:"source"`
+	SourceVersion      string        `json:"source_version,omitempty"`
+	FetchedAt          time.Time     `json:"fetched_at"`
+	QualityStatus      QualityStatus `json:"quality_status"`
+	NormalizationVer   string        `json:"normalization_version"`
+}
+
+// SectorRanking 表示行业/概念板块的即时排名。涨跌幅单位为百分点，成交额单位为人民币元。
+type SectorRanking struct {
+	Rank                int           `json:"rank"`
+	Code                string        `json:"code"`
+	Name                string        `json:"name"`
+	Category            string        `json:"category"`
+	LatestPrice         *float64      `json:"latest_price,omitempty"`
+	Change              *float64      `json:"change,omitempty"`
+	ChangePercent       *float64      `json:"change_percent,omitempty"`
+	Amount              *float64      `json:"amount,omitempty"`
+	AmountUnit          string        `json:"amount_unit"`
+	AdvancingCount      *int          `json:"advancing_count,omitempty"`
+	DecliningCount      *int          `json:"declining_count,omitempty"`
+	LeadingStock        string        `json:"leading_stock,omitempty"`
+	LeaderChangePercent *float64      `json:"leader_change_percent,omitempty"`
+	Source              string        `json:"source"`
+	ProviderReportDate  string        `json:"provider_report_date,omitempty"`
+	SourceVersion       string        `json:"source_version,omitempty"`
+	FetchedAt           time.Time     `json:"fetched_at"`
+	QualityStatus       QualityStatus `json:"quality_status"`
+	QualityReasons      []string      `json:"quality_reasons,omitempty"`
+}
+
+type SectorRankingSnapshot struct {
+	Category       string          `json:"category"`
+	Total          int             `json:"total"`
+	Items          []SectorRanking `json:"items"`
+	Source         string          `json:"source"`
+	SourceVersion  string          `json:"source_version,omitempty"`
+	FetchedAt      time.Time       `json:"fetched_at"`
+	QualityStatus  QualityStatus   `json:"quality_status"`
+	QualityReasons []string        `json:"quality_reasons,omitempty"`
+}
+
+// MarketIndexQuote is an index snapshot, not an equity quote. Index symbols use an independent allow-listed namespace.
+type MarketIndexQuote struct {
+	Symbol             string        `json:"symbol"`
+	Code               string        `json:"code"`
+	Name               string        `json:"name"`
+	LatestPrice        *float64      `json:"latest_price,omitempty"`
+	Change             *float64      `json:"change,omitempty"`
+	ChangePercent      *float64      `json:"change_percent,omitempty"`
+	Open               *float64      `json:"open,omitempty"`
+	High               *float64      `json:"high,omitempty"`
+	Low                *float64      `json:"low,omitempty"`
+	PrevClose          *float64      `json:"prev_close,omitempty"`
+	Amount             *float64      `json:"amount,omitempty"`
+	AmountUnit         string        `json:"amount_unit"`
+	QuoteTime          *time.Time    `json:"quote_time,omitempty"`
+	QuoteTimeSemantics string        `json:"quote_time_semantics,omitempty"`
+	Source             string        `json:"source"`
+	SourceVersion      string        `json:"source_version,omitempty"`
+	FetchedAt          time.Time     `json:"fetched_at"`
+	QualityStatus      QualityStatus `json:"quality_status"`
+	QualityReasons     []string      `json:"quality_reasons,omitempty"`
+}
+
+type IndexQuoteSnapshot struct {
+	Items          []MarketIndexQuote `json:"items"`
+	Source         string             `json:"source"`
+	SourceVersion  string             `json:"source_version,omitempty"`
+	FetchedAt      time.Time          `json:"fetched_at"`
+	QualityStatus  QualityStatus      `json:"quality_status"`
+	QualityReasons []string           `json:"quality_reasons,omitempty"`
+}
+
+type MarketBreadthSnapshot struct {
+	Market              string        `json:"market"`
+	TotalSecurities     int           `json:"total_securities"`
+	CoveredSecurities   int           `json:"covered_securities"`
+	AdvancingCount      int           `json:"advancing_count"`
+	DecliningCount      int           `json:"declining_count"`
+	UnchangedCount      int           `json:"unchanged_count"`
+	UnclassifiedCount   int           `json:"unclassified_count"`
+	TotalAmountCNY      *float64      `json:"total_amount_cny"`
+	AmountCoverageCount int           `json:"amount_coverage_count"`
+	Source              string        `json:"source"`
+	SourceVersion       string        `json:"source_version,omitempty"`
+	ProviderReportDate  string        `json:"provider_report_date,omitempty"`
+	FetchedAt           time.Time     `json:"fetched_at"`
+	QualityStatus       QualityStatus `json:"quality_status"`
+	QualityReasons      []string      `json:"quality_reasons,omitempty"`
+}
+
+type LimitPoolItem struct {
+	Symbol            string        `json:"symbol"`
+	Code              string        `json:"code"`
+	Name              string        `json:"name"`
+	ChangePercent     *float64      `json:"change_percent"`
+	FirstTouchTime    string        `json:"first_touch_time,omitempty"`
+	LastTouchTime     string        `json:"last_touch_time,omitempty"`
+	ConsecutiveBoards *int          `json:"consecutive_boards,omitempty"`
+	BrokenCount       *int          `json:"broken_count,omitempty"`
+	Industry          string        `json:"industry,omitempty"`
+	Source            string        `json:"source"`
+	SourceVersion     string        `json:"source_version,omitempty"`
+	FetchedAt         time.Time     `json:"fetched_at"`
+	QualityStatus     QualityStatus `json:"quality_status"`
+	QualityReasons    []string      `json:"quality_reasons,omitempty"`
+}
+
+type LimitPoolSnapshot struct {
+	PoolType           string          `json:"type"`
+	TradeDate          string          `json:"trade_date"`
+	ProviderReportDate string          `json:"provider_report_date,omitempty"`
+	Total              int             `json:"total"`
+	HasData            bool            `json:"has_data"`
+	Items              []LimitPoolItem `json:"items"`
+	Source             string          `json:"source"`
+	SourceVersion      string          `json:"source_version,omitempty"`
+	FetchedAt          time.Time       `json:"fetched_at"`
+	QualityStatus      QualityStatus   `json:"quality_status"`
+	QualityReasons     []string        `json:"quality_reasons,omitempty"`
+}
+
 type SourceStatus struct {
-	Name               string `json:"name"`
-	Enabled            bool   `json:"enabled"`
-	QuoteCapable       bool   `json:"quote_capable"`
-	DailyBarCapable    bool   `json:"daily_bar_capable"`
-	ChipCapable        bool   `json:"chip_capable,omitempty"`
-	CapitalFlowCapable bool   `json:"capital_flow_capable,omitempty"`
+	Name                   string `json:"name"`
+	Enabled                bool   `json:"enabled"`
+	QuoteCapable           bool   `json:"quote_capable"`
+	DailyBarCapable        bool   `json:"daily_bar_capable"`
+	StockBasicCapable      bool   `json:"stock_basic_capable,omitempty"`
+	SectorRankingCapable   bool   `json:"sector_ranking_capable,omitempty"`
+	IndexQuoteCapable      bool   `json:"index_quote_capable,omitempty"`
+	MarketBreadthCapable   bool   `json:"market_breadth_capable,omitempty"`
+	LimitPoolCapable       bool   `json:"limit_pool_capable,omitempty"`
+	StockBoardsCapable     bool   `json:"stock_boards_capable,omitempty"`
+	TradingCalendarCapable bool   `json:"trading_calendar_capable,omitempty"`
+	ChipCapable            bool   `json:"chip_capable,omitempty"`
+	CapitalFlowCapable     bool   `json:"capital_flow_capable,omitempty"`
 }
 
 // ChipDistribution 表示妙想补充接口返回的筹码快照。上游用百分比表示的比例字段会归一化为 [0,1] 小数。

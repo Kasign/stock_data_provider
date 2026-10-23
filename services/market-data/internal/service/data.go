@@ -20,19 +20,26 @@ import (
 )
 
 type DataService struct {
-	providers           []provider.NamedProvider
-	quoteProviders      []provider.QuoteProvider
-	barProviders        []provider.DailyBarProvider
-	supplementProviders []provider.SupplementProvider
-	maxBars             int
-	retries             int
-	breaker             *circuitBreaker
-	cache               cache.Cache
-	store               *repository.Store
-	quoteTTL            time.Duration
-	barsTTL             time.Duration
-	defaultBars         int
-	logger              *slog.Logger
+	providers                []provider.NamedProvider
+	quoteProviders           []provider.QuoteProvider
+	barProviders             []provider.DailyBarProvider
+	stockBasicProviders      []provider.StockBasicProvider
+	sectorRankingProviders   []provider.SectorRankingProvider
+	indexQuoteProviders      []provider.IndexQuoteProvider
+	marketBreadthProviders   []provider.MarketBreadthProvider
+	limitPoolProviders       []provider.LimitPoolProvider
+	stockBoardsProviders     []provider.StockBoardsProvider
+	tradingCalendarProviders []provider.TradingCalendarProvider
+	supplementProviders      []provider.SupplementProvider
+	maxBars                  int
+	retries                  int
+	breaker                  *circuitBreaker
+	cache                    cache.Cache
+	store                    *repository.Store
+	quoteTTL                 time.Duration
+	barsTTL                  time.Duration
+	defaultBars              int
+	logger                   *slog.Logger
 }
 
 func New(providers []provider.Provider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars int, logger *slog.Logger) *DataService {
@@ -95,6 +102,676 @@ func NewWithCapabilities(allProviders []provider.NamedProvider, quoteProviders [
 
 func (s *DataService) Providers() []provider.NamedProvider {
 	return append([]provider.NamedProvider(nil), s.providers...)
+}
+
+func (s *DataService) SetStockBasicProviders(providers []provider.StockBasicProvider) {
+	s.stockBasicProviders = append([]provider.StockBasicProvider(nil), providers...)
+}
+
+func (s *DataService) StockBasicProviders() []provider.StockBasicProvider {
+	return append([]provider.StockBasicProvider(nil), s.stockBasicProviders...)
+}
+
+func (s *DataService) SetSectorRankingProviders(providers []provider.SectorRankingProvider) {
+	s.sectorRankingProviders = append([]provider.SectorRankingProvider(nil), providers...)
+}
+
+func (s *DataService) SectorRankingProviders() []provider.SectorRankingProvider {
+	return append([]provider.SectorRankingProvider(nil), s.sectorRankingProviders...)
+}
+
+func (s *DataService) SetIndexQuoteProviders(providers []provider.IndexQuoteProvider) {
+	s.indexQuoteProviders = append([]provider.IndexQuoteProvider(nil), providers...)
+}
+func (s *DataService) IndexQuoteProviders() []provider.IndexQuoteProvider {
+	return append([]provider.IndexQuoteProvider(nil), s.indexQuoteProviders...)
+}
+func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
+	if snapshot == nil || len(snapshot.Items) == 0 {
+		return errors.New("index-quote provider returned an empty snapshot")
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("index-quote source or fetched_at is missing")
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("index-quote snapshot quality %q is unsupported", snapshot.QualityStatus)
+	}
+	seen := make(map[string]bool, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
+			return errors.New("index-quote row has missing symbol/code/name")
+		}
+		if item.Source != snapshot.Source || item.FetchedAt.IsZero() || item.LatestPrice == nil || item.ChangePercent == nil {
+			return errors.New("index-quote row failed source, fetched_at or required-value validation")
+		}
+		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
+			return fmt.Errorf("index-quote quality %q is unsupported", item.QualityStatus)
+		}
+		if seen[item.Symbol] {
+			return fmt.Errorf("duplicate index symbol %q", item.Symbol)
+		}
+		seen[item.Symbol] = true
+	}
+	return nil
+}
+func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = 15 * time.Second
+	const key = "md:v1:index-quotes:core"
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.IndexQuoteSnapshot
+		if json.Unmarshal(data, &cached) == nil && validateIndexQuoteSnapshot(&cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+			return &cached, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("index quote cache read failed", "error", cacheErr)
+	}
+	if len(s.indexQuoteProviders) == 0 {
+		return nil, false, errors.New("no enabled index-quote provider")
+	}
+	var failures []string
+	for _, p := range s.indexQuoteProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchIndexQuotes(ctx)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateIndexQuoteSnapshot(snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		payload, marshalErr := json.Marshal(snapshot)
+		if marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+				s.logger.Warn("index quote cache write failed", "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("index quote cache encode failed", "error", marshalErr)
+		}
+		return snapshot, false, nil
+	}
+	return nil, false, fmt.Errorf("all index-quote providers failed: %s", strings.Join(failures, "; "))
+}
+
+func (s *DataService) SetMarketBreadthProviders(providers []provider.MarketBreadthProvider) {
+	s.marketBreadthProviders = append([]provider.MarketBreadthProvider(nil), providers...)
+}
+func (s *DataService) MarketBreadthProviders() []provider.MarketBreadthProvider {
+	return append([]provider.MarketBreadthProvider(nil), s.marketBreadthProviders...)
+}
+func (s *DataService) SetLimitPoolProviders(providers []provider.LimitPoolProvider) {
+	s.limitPoolProviders = append([]provider.LimitPoolProvider(nil), providers...)
+}
+func (s *DataService) LimitPoolProviders() []provider.LimitPoolProvider {
+	return append([]provider.LimitPoolProvider(nil), s.limitPoolProviders...)
+}
+func (s *DataService) SetStockBoardsProviders(providers []provider.StockBoardsProvider) {
+	s.stockBoardsProviders = append([]provider.StockBoardsProvider(nil), providers...)
+}
+func (s *DataService) StockBoardsProviders() []provider.StockBoardsProvider {
+	return append([]provider.StockBoardsProvider(nil), s.stockBoardsProviders...)
+}
+func (s *DataService) SetTradingCalendarProviders(providers []provider.TradingCalendarProvider) {
+	s.tradingCalendarProviders = append([]provider.TradingCalendarProvider(nil), providers...)
+}
+func (s *DataService) TradingCalendarProviders() []provider.TradingCalendarProvider {
+	return append([]provider.TradingCalendarProvider(nil), s.tradingCalendarProviders...)
+}
+
+func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
+	if snapshot == nil {
+		return errors.New("market-breadth provider returned an empty snapshot")
+	}
+	if snapshot.Market != "cn_a_share" {
+		return fmt.Errorf("unsupported market-breadth market %q", snapshot.Market)
+	}
+	if snapshot.TotalSecurities <= 0 || snapshot.CoveredSecurities != snapshot.TotalSecurities {
+		return fmt.Errorf("market-breadth coverage mismatch: covered=%d total=%d", snapshot.CoveredSecurities, snapshot.TotalSecurities)
+	}
+	counts := snapshot.AdvancingCount + snapshot.DecliningCount + snapshot.UnchangedCount + snapshot.UnclassifiedCount
+	if snapshot.AdvancingCount < 0 || snapshot.DecliningCount < 0 || snapshot.UnchangedCount < 0 || snapshot.UnclassifiedCount < 0 || counts != snapshot.CoveredSecurities {
+		return errors.New("market-breadth category counts do not reconcile to covered securities")
+	}
+	if snapshot.AmountCoverageCount < 0 || snapshot.AmountCoverageCount > snapshot.CoveredSecurities {
+		return errors.New("market-breadth amount coverage is invalid")
+	}
+	if snapshot.AmountCoverageCount == snapshot.CoveredSecurities {
+		if snapshot.TotalAmountCNY == nil || math.IsNaN(*snapshot.TotalAmountCNY) || math.IsInf(*snapshot.TotalAmountCNY, 0) || *snapshot.TotalAmountCNY < 0 {
+			return errors.New("market-breadth amount invalid despite complete amount coverage")
+		}
+	} else if snapshot.TotalAmountCNY != nil {
+		return errors.New("partial market-breadth amount coverage must not expose a total amount")
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("market-breadth source or fetched_at is missing")
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("market-breadth quality status %q is unsupported", snapshot.QualityStatus)
+	}
+	return nil
+}
+
+func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = 90 * time.Second
+	const key = "md:v1:market-breadth:cn-a-share"
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.MarketBreadthSnapshot
+		if json.Unmarshal(data, &cached) == nil && validateMarketBreadth(&cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+			return &cached, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("market breadth cache read failed", "error", cacheErr)
+	}
+	if len(s.marketBreadthProviders) == 0 {
+		return nil, false, errors.New("no enabled market-breadth provider")
+	}
+	var failures []string
+	for _, p := range s.marketBreadthProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchMarketBreadth(ctx)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateMarketBreadth(snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if data, err := json.Marshal(snapshot); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+				s.logger.Warn("market breadth cache write failed", "error", cacheErr)
+			}
+		}
+		return snapshot, false, nil
+	}
+	return nil, false, fmt.Errorf("all market-breadth providers failed: %s", strings.Join(failures, "; "))
+}
+
+func normalizeLimitPoolDate(rawDate string) (string, error) {
+	rawDate = strings.TrimSpace(rawDate)
+	if rawDate == "" {
+		loc, err := time.LoadLocation("Asia/Shanghai")
+		if err != nil {
+			loc = time.FixedZone("CST", 8*60*60)
+		}
+		return time.Now().In(loc).Format("2006-01-02"), nil
+	}
+	parsed, err := time.Parse("2006-01-02", rawDate)
+	if err != nil {
+		return "", fmt.Errorf("invalid limit-pool date %q: expected YYYY-MM-DD", rawDate)
+	}
+	return parsed.Format("2006-01-02"), nil
+}
+
+func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *model.LimitPoolSnapshot) error {
+	if snapshot == nil {
+		return errors.New("limit-pool provider returned an empty snapshot")
+	}
+	if snapshot.PoolType != poolType || snapshot.TradeDate != tradeDate {
+		return fmt.Errorf("limit-pool identity mismatch: requested %s/%s got %s/%s", poolType, tradeDate, snapshot.PoolType, snapshot.TradeDate)
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("limit-pool source or fetched_at is missing")
+	}
+	if snapshot.Total < 0 || len(snapshot.Items) > limit {
+		return errors.New("limit-pool total is negative or item count exceeds requested limit")
+	}
+	if snapshot.HasData {
+		if snapshot.Total <= 0 || len(snapshot.Items) == 0 {
+			return errors.New("limit-pool claims data but has no total/items")
+		}
+		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+			return fmt.Errorf("limit-pool quality status %q is unsupported", snapshot.QualityStatus)
+		}
+		seen := make(map[string]bool, len(snapshot.Items))
+		for _, item := range snapshot.Items {
+			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.ChangePercent == nil {
+				return errors.New("limit-pool item missing required fields")
+			}
+			if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
+				return errors.New("limit-pool item source or fetched_at mismatch")
+			}
+			if seen[item.Symbol] {
+				return fmt.Errorf("limit-pool duplicate symbol %q", item.Symbol)
+			}
+			seen[item.Symbol] = true
+		}
+		return nil
+	}
+	if snapshot.Total != 0 || len(snapshot.Items) != 0 || snapshot.QualityStatus != model.QualityUnknown {
+		return errors.New("empty limit pool must remain unknown, not a confirmed zero-event pool")
+	}
+	return nil
+}
+
+func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, limit int) (*model.LimitPoolSnapshot, bool, error) {
+	poolType := strings.ToLower(strings.TrimSpace(rawType))
+	if poolType == "" {
+		poolType = "up"
+	}
+	if poolType != "up" && poolType != "down" && poolType != "broken" {
+		return nil, false, fmt.Errorf("unsupported limit-pool type %q; want up, down or broken", rawType)
+	}
+	date, err := normalizeLimitPoolDate(rawDate)
+	if err != nil {
+		return nil, false, err
+	}
+	if limit == 0 {
+		limit = 30
+	}
+	if limit < 1 || limit > 100 {
+		return nil, false, errors.New("limit-pool limit must be between 1 and 100")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = time.Minute
+	key := fmt.Sprintf("md:v1:limit-pool:%s:%s:%d", poolType, date, limit)
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.LimitPoolSnapshot
+		if json.Unmarshal(data, &cached) == nil && validateLimitPoolSnapshot(poolType, date, limit, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+			return &cached, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("limit pool cache read failed", "type", poolType, "date", date, "error", cacheErr)
+	}
+	if len(s.limitPoolProviders) == 0 {
+		return nil, false, errors.New("no enabled limit-pool provider")
+	}
+	var failures []string
+	for _, p := range s.limitPoolProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchLimitPool(ctx, poolType, date, limit)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateLimitPoolSnapshot(poolType, date, limit, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if data, err := json.Marshal(snapshot); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+				s.logger.Warn("limit pool cache write failed", "type", poolType, "date", date, "error", cacheErr)
+			}
+		}
+		return snapshot, false, nil
+	}
+	return nil, false, fmt.Errorf("all limit-pool providers failed: %s", strings.Join(failures, "; "))
+}
+
+func validateSectorRankingSnapshot(category string, limit int, snapshot *model.SectorRankingSnapshot) error {
+	if snapshot == nil {
+		return errors.New("sector-ranking provider returned an empty response")
+	}
+	if snapshot.Category != category {
+		return fmt.Errorf("sector-ranking category mismatch: requested %s, got %q", category, snapshot.Category)
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("sector-ranking source or fetched_at is missing")
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("sector-ranking quality status %q is unsupported", snapshot.QualityStatus)
+	}
+	if len(snapshot.Items) == 0 || len(snapshot.Items) > limit {
+		return fmt.Errorf("sector-ranking item count %d is outside 1..%d", len(snapshot.Items), limit)
+	}
+	seen := make(map[string]bool, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.Category != category {
+			return errors.New("sector-ranking item has missing code/name or mismatched category")
+		}
+		if item.Source != snapshot.Source {
+			return errors.New("sector-ranking item source differs from its snapshot source")
+		}
+		if item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
+			return errors.New("sector-ranking item has invalid retrieval time or quality status")
+		}
+		if seen[item.Code] {
+			return fmt.Errorf("sector-ranking duplicate board code %q", item.Code)
+		}
+		seen[item.Code] = true
+	}
+	return nil
+}
+
+func (s *DataService) SectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, bool, error) {
+	category := strings.ToLower(strings.TrimSpace(rawCategory))
+	if category != "industry" && category != "concept" {
+		return nil, false, fmt.Errorf("unsupported sector category %q; want industry or concept", rawCategory)
+	}
+	if limit == 0 {
+		limit = 10
+	}
+	if limit < 1 || limit > 100 {
+		return nil, false, errors.New("sector ranking limit must be between 1 and 100")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = time.Minute
+	key := fmt.Sprintf("md:v1:sector-ranking:%s:%d", category, limit)
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.SectorRankingSnapshot
+		if json.Unmarshal(data, &cached) == nil && validateSectorRankingSnapshot(category, limit, &cached) == nil &&
+			time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+			return &cached, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("sector-ranking cache read failed", "category", category, "error", cacheErr)
+	}
+	if len(s.sectorRankingProviders) == 0 {
+		return nil, false, errors.New("no enabled sector-ranking provider")
+	}
+	var failures []string
+	for _, p := range s.sectorRankingProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchSectorRankings(ctx, category, limit)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateSectorRankingSnapshot(category, limit, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		payload, marshalErr := json.Marshal(snapshot)
+		if marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+				s.logger.Warn("sector-ranking cache write failed", "category", category, "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("sector-ranking cache encode failed", "category", category, "error", marshalErr)
+		}
+		return snapshot, false, nil
+	}
+	return nil, false, fmt.Errorf("all sector-ranking providers failed: %s", strings.Join(failures, "; "))
+}
+
+func validateStockBasic(symbol string, item *model.StockBasic) error {
+	if item == nil {
+		return errors.New("stock-basic provider returned an empty response")
+	}
+	canonical, err := normalize.NormalizeSymbol(item.Symbol)
+	if err != nil || canonical != symbol {
+		return fmt.Errorf("stock-basic symbol mismatch: requested %s, got %q", symbol, item.Symbol)
+	}
+	if strings.TrimSpace(item.Name) == "" {
+		return errors.New("stock-basic name is empty")
+	}
+	if item.SecurityType < 1 || item.SecurityType > 4 {
+		return fmt.Errorf("stock-basic security type %d is unsupported", item.SecurityType)
+	}
+	if item.ListingStatus != 0 && item.ListingStatus != 1 {
+		return fmt.Errorf("stock-basic listing status %d is unsupported", item.ListingStatus)
+	}
+	for field, value := range map[string]string{"ipo_date": item.IPODate, "out_date": item.OutDate} {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", value); err != nil {
+			return fmt.Errorf("stock-basic %s %q is invalid", field, value)
+		}
+	}
+	if strings.TrimSpace(item.Source) == "" {
+		return errors.New("stock-basic source is missing")
+	}
+	if item.FetchedAt.IsZero() {
+		return errors.New("stock-basic fetched_at is missing")
+	}
+	return nil
+}
+
+// StockBasic loads security identity and listing data from independent stock-basic providers.
+func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.StockBasic, bool, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, false, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = 24 * time.Hour
+	key := "md:v1:stock-basic:" + symbol
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var item model.StockBasic
+		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil &&
+			item.QualityStatus == model.QualityValid && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < ttl {
+			return &item, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("stock-basic cache read failed", "symbol", symbol, "error", cacheErr)
+	}
+	if len(s.stockBasicProviders) == 0 {
+		return nil, false, errors.New("no enabled stock-basic provider")
+	}
+	var failures []string
+	for _, p := range s.stockBasicProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		item, fetchErr := p.FetchStockBasic(ctx, symbol)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if item == nil {
+			failures = append(failures, p.Name()+": empty stock-basic response")
+			continue
+		}
+		returnedSymbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
+		if symbolErr != nil || returnedSymbol != symbol {
+			failures = append(failures, p.Name()+": stock-basic symbol mismatch")
+			continue
+		}
+		if item.Source == "" {
+			item.Source = p.Name()
+		}
+		if item.FetchedAt.IsZero() {
+			item.FetchedAt = time.Now().UTC()
+		}
+		if item.SecurityTypeLabel == "" {
+			item.SecurityTypeLabel = map[int]string{1: "stock", 2: "index", 3: "other", 4: "convertible_bond"}[item.SecurityType]
+		}
+		if item.ListingStatusLabel == "" {
+			item.ListingStatusLabel = map[int]string{0: "delisted", 1: "listed"}[item.ListingStatus]
+		}
+		if item.QualityStatus == "" || item.QualityStatus == model.QualityUnknown {
+			item.QualityStatus = model.QualityValid
+		}
+		if item.NormalizationVer == "" {
+			item.NormalizationVer = normalize.Version
+		}
+		if err := validateStockBasic(symbol, item); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if item.QualityStatus != model.QualityValid {
+			failures = append(failures, p.Name()+": stock-basic quality status is not valid")
+			continue
+		}
+		payload, marshalErr := json.Marshal(item)
+		if marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+				s.logger.Warn("stock-basic cache write failed", "symbol", symbol, "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("stock-basic cache encode failed", "symbol", symbol, "error", marshalErr)
+		}
+		return item, false, nil
+	}
+	return nil, false, fmt.Errorf("all stock-basic providers failed: %s", strings.Join(failures, "; "))
+}
+
+func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapshot) error {
+	if snapshot == nil {
+		return errors.New("stock-boards provider returned an empty snapshot")
+	}
+	returnedSymbol, err := normalize.NormalizeSymbol(snapshot.Symbol)
+	if err != nil || returnedSymbol != symbol {
+		return fmt.Errorf("stock-boards symbol mismatch: requested %s, returned %q", symbol, snapshot.Symbol)
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("stock-boards source or fetched_at is missing")
+	}
+	if snapshot.Total < 0 || snapshot.Total > 1000 || len(snapshot.Items) > snapshot.Total {
+		return errors.New("stock-boards total/items count is invalid")
+	}
+	if !snapshot.HasData {
+		if snapshot.Total != 0 || len(snapshot.Items) != 0 || snapshot.QualityStatus != model.QualityUnknown {
+			return errors.New("empty stock-board response must remain unknown, not a verified zero-membership result")
+		}
+		return nil
+	}
+	if snapshot.Total == 0 || len(snapshot.Items) == 0 || snapshot.Total != len(snapshot.Items) {
+		return errors.New("stock-boards coverage is incomplete")
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("stock-boards quality status %q is unsupported", snapshot.QualityStatus)
+	}
+	seen := make(map[string]struct{}, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
+			return errors.New("stock-board item is missing code or name")
+		}
+		if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
+			return errors.New("stock-board item source or fetched_at mismatch")
+		}
+		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
+			return fmt.Errorf("stock-board quality status %q is unsupported", item.QualityStatus)
+		}
+		if _, exists := seen[item.Code]; exists {
+			return fmt.Errorf("duplicate stock-board code %q", item.Code)
+		}
+		seen[item.Code] = struct{}{}
+		if item.ChangePercent != nil && (math.IsNaN(*item.ChangePercent) || math.IsInf(*item.ChangePercent, 0)) {
+			return fmt.Errorf("stock-board %s has invalid change percent", item.Code)
+		}
+	}
+	return nil
+}
+
+// StockBoards obtains board membership without mixing it into quote or daily-bar fallback.
+func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model.StockBoardSnapshot, bool, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, false, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const positiveTTL = 12 * time.Hour
+	const emptyTTL = 5 * time.Minute
+	key := "md:v1:stock-boards:" + symbol
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.StockBoardSnapshot
+		if json.Unmarshal(data, &cached) == nil && validateStockBoardsSnapshot(symbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+			ttl := positiveTTL
+			if !cached.HasData {
+				ttl = emptyTTL
+			}
+			if time.Since(cached.FetchedAt) < ttl {
+				return &cached, true, nil
+			}
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("stock-boards cache read failed", "symbol", symbol, "error", cacheErr)
+	}
+	if len(s.stockBoardsProviders) == 0 {
+		return nil, false, errors.New("no enabled stock-boards provider")
+	}
+	var failures []string
+	for _, p := range s.stockBoardsProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		item, fetchErr := p.FetchStockBoards(ctx, symbol)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if item == nil {
+			failures = append(failures, p.Name()+": empty stock-boards response")
+			continue
+		}
+		if item.Source == "" {
+			item.Source = p.Name()
+		}
+		if item.FetchedAt.IsZero() {
+			item.FetchedAt = time.Now().UTC()
+		}
+		for index := range item.Items {
+			if item.Items[index].Source == "" {
+				item.Items[index].Source = p.Name()
+			}
+			if item.Items[index].FetchedAt.IsZero() {
+				item.Items[index].FetchedAt = item.FetchedAt
+			}
+			if item.Items[index].SourceVersion == "" {
+				item.Items[index].SourceVersion = item.SourceVersion
+			}
+			if item.Items[index].QualityStatus == "" || item.Items[index].QualityStatus == model.QualityUnknown {
+				item.Items[index].QualityStatus = model.QualityDegraded
+				item.Items[index].QualityReasons = appendReason(item.Items[index].QualityReasons, "provider_quality_not_reported")
+			}
+		}
+		if item.QualityStatus == "" {
+			if item.HasData {
+				item.QualityStatus = model.QualityDegraded
+				item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_not_reported")
+			} else {
+				item.QualityStatus = model.QualityUnknown
+			}
+		}
+		if err := validateStockBoardsSnapshot(symbol, item); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if item.HasData {
+			payload, marshalErr := json.Marshal(item)
+			if marshalErr == nil {
+				if cacheErr := s.cache.Set(ctx, key, payload, positiveTTL); cacheErr != nil {
+					s.logger.Warn("stock-boards cache write failed", "symbol", symbol, "error", cacheErr)
+				}
+			} else {
+				s.logger.Warn("stock-boards cache encode failed", "symbol", symbol, "error", marshalErr)
+			}
+		}
+		return item, false, nil
+	}
+	return nil, false, fmt.Errorf("all stock-boards providers failed: %s", strings.Join(failures, "; "))
 }
 
 // SetSupplementProviders 注册显式启用的非价格类补充数据源。

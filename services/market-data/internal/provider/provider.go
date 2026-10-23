@@ -27,7 +27,47 @@ type Provider interface {
 	DailyBarProvider
 }
 
-// SupplementProvider 用于承载可选补充数据，这类能力不会进入实时行情或日 K 的兜底链。
+// StockBasicProvider 获取证券身份、上市日期等低频基础资料，不参与实时行情和日 K 兜底链。
+type StockBasicProvider interface {
+	NamedProvider
+	FetchStockBasic(ctx context.Context, symbol string) (*model.StockBasic, error)
+}
+
+// SectorRankingProvider 提供行业/概念板块的实时排名快照，不参与个股行情回退链。
+type SectorRankingProvider interface {
+	NamedProvider
+	FetchSectorRankings(ctx context.Context, category string, limit int) (*model.SectorRankingSnapshot, error)
+}
+
+// IndexQuoteProvider provides quotes for a separately allow-listed core index set.
+type IndexQuoteProvider interface {
+	NamedProvider
+	FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, error)
+}
+
+type MarketBreadthProvider interface {
+	NamedProvider
+	FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error)
+}
+
+// StockBoardsProvider returns board membership associated with one A-share.
+type StockBoardsProvider interface {
+	NamedProvider
+	FetchStockBoards(ctx context.Context, symbol string) (*model.StockBoardSnapshot, error)
+}
+
+type LimitPoolProvider interface {
+	NamedProvider
+	FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error)
+}
+
+// TradingCalendarProvider returns explicit trading-day flags for an inclusive range.
+type TradingCalendarProvider interface {
+	NamedProvider
+	FetchTradingCalendar(ctx context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error)
+}
+
+// SupplementProvider 用于承载可选补充数据// SupplementProvider 用于承载可选补充数据，这类能力不会进入实时行情或日 K 的兜底链。
 type SupplementProvider interface {
 	NamedProvider
 	FetchChipDistribution(ctx context.Context, symbol string) (*model.ChipDistribution, error)

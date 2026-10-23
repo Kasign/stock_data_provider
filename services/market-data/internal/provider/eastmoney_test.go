@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -246,5 +247,176 @@ func TestEastmoneyRejectsKlineSymbolMismatch(t *testing.T) {
 	p := NewEastmoney(2*time.Second, srv.URL, srv.URL)
 	if _, err := p.FetchDailyBars(context.Background(), "600519", "2026-10-01", "2026-10-21", 100, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "symbol mismatch") {
 		t.Fatalf("expected symbol mismatch error, got %v", err)
+	}
+}
+
+func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
+	var gotQueries []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQueries = append(gotQueries, r.URL.Query())
+		if r.Header.Get("Referer") != "https://emweb.securities.eastmoney.com/" {
+			t.Errorf("unexpected profile referer %q", r.Header.Get("Referer"))
+		}
+		if r.URL.Query().Get("reportName") == "RPT_PCF10_ORG_ISSUEINFO" {
+			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","LISTING_DATE":"2001-08-27 00:00:00","OUT_DATE":null}]}}`)
+			return
+		}
+		fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","STR_NAMEA":"贵州茅台","ORG_NAME":"贵州茅台酒股份有限公司"}]}}`)
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, "", "", server.URL, "")
+	item, err := p.FetchStockBasic(context.Background(), "600519")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.Symbol != "600519.SH" || item.Name != "贵州茅台" || item.IPODate != "2001-08-27" {
+		t.Fatalf("unexpected stock-basic response: %+v", item)
+	}
+	if item.Source != "eastmoney" || item.QualityStatus != model.QualityValid || item.NormalizationVer == "" {
+		t.Fatalf("missing source/quality/normalization metadata: %+v", item)
+	}
+	if len(gotQueries) != 2 || gotQueries[0].Get("reportName") != "RPT_PCF10_ORG_ISSUEINFO" || gotQueries[1].Get("reportName") != "RPT_F10_BASIC_ORGINFO" {
+		t.Fatalf("unexpected F10 requests: %+v", gotQueries)
+	}
+	for _, query := range gotQueries {
+		if query.Get("filter") != `(SECUCODE="600519.SH")` || query.Get("pageSize") != "1" {
+			t.Fatalf("unexpected F10 query: %v", query)
+		}
+	}
+}
+
+func TestEastmoneyFetchStockBasicRejectsMismatchedOrEmptyRows(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, want string
+	}{
+		{"mismatch", `{"result":{"data":[{"SECUCODE":"000001.SZ","SECURITY_NAME_ABBR":"wrong"}]}}`, "symbol mismatch"},
+		{"empty", `{"result":{"data":[]}}`, "no row"},
+		{"missing name", `{"result":{"data":[{"SECUCODE":"600519.SH","LISTING_DATE":"2001-08-27"}]}}`, "name is empty"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, "", "", server.URL, "")
+			if _, err := p.FetchStockBasic(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q error, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
+	for _, tc := range []struct{ category, filter string }{
+		{"industry", "m:90+t:2+f:!50"},
+		{"concept", "m:90+t:3+f:!50"},
+	} {
+		t.Run(tc.category, func(t *testing.T) {
+			var got url.Values
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = r.URL.Query()
+				fmt.Fprint(w, `{"rc":0,"data":{"total":120,"diff":[{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12}]}}`)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+			snapshot, err := p.FetchSectorRankings(context.Background(), tc.category, 5)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Get("fs") != tc.filter || got.Get("pz") != "5" || got.Get("fid") != "f3" {
+				t.Fatalf("unexpected CLIST request: %v", got)
+			}
+			if len(snapshot.Items) != 1 || snapshot.Category != tc.category || snapshot.Total != 120 {
+				t.Fatalf("unexpected snapshot metadata: %+v", snapshot)
+			}
+			item := snapshot.Items[0]
+			if item.Code != "BK0475" || item.Name != "电池" || item.LeadingStock != "宁德时代" {
+				t.Fatalf("unexpected board identity: %+v", item)
+			}
+			if item.ChangePercent == nil || *item.ChangePercent != 2.3 || item.Amount == nil || *item.Amount != 123456789 || item.AmountUnit != "CNY" {
+				t.Fatalf("unexpected normalized price/amount fields: %+v", item)
+			}
+			if item.AdvancingCount == nil || *item.AdvancingCount != 15 || item.DecliningCount == nil || *item.DecliningCount != 7 {
+				t.Fatalf("unexpected advancing/declining counts: %+v", item)
+			}
+			if snapshot.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(snapshot.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") {
+				t.Fatalf("provider timestamp is not exposed; snapshot must be degraded: %+v", snapshot)
+			}
+		})
+	}
+}
+
+func TestEastmoneyFetchSectorRankingsRejectsInvalidCategoryAndProviderCode(t *testing.T) {
+	p := NewEastmoney(2*time.Second, "", "")
+	if _, err := p.FetchSectorRankings(context.Background(), "all", 5); err == nil {
+		t.Fatal("unsupported category must be rejected")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":-1,"data":null}`)
+	}))
+	defer server.Close()
+	p = NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+	if _, err := p.FetchSectorRankings(context.Background(), "industry", 5); err == nil || !strings.Contains(err.Error(), "rc=-1") {
+		t.Fatalf("expected provider rc error, got %v", err)
+	}
+}
+
+func TestEastmoneyFetchIndexQuotesParsesAllowListedCoreIndexes(t *testing.T) {
+	var got url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query()
+		rows := make([]map[string]any, 0, len(eastmoneyCoreIndexDefinitions))
+		for i, idx := range eastmoneyCoreIndexDefinitions {
+			rows = append(rows, map[string]any{"f2": 3200.5 + float64(i), "f3": 0.8, "f4": 24.5, "f6": 123456789.0, "f12": idx.Code, "f13": idx.Market, "f14": idx.Name, "f15": 3210.0, "f16": 3180.0, "f17": 3190.0, "f18": 3176.0, "f86": "202610231500"})
+		}
+		body, err := json.Marshal(map[string]any{"rc": 0, "data": map[string]any{"total": len(rows), "diff": rows}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+	snapshot, err := p.FetchIndexQuotes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Get("secids") != "1.000001,0.399001,0.399006,1.000300,1.000016,1.000905,1.000688" {
+		t.Fatalf("requested secids=%q", got.Get("secids"))
+	}
+	if got.Get("fields") == "" || got.Get("fltt") != "2" {
+		t.Fatalf("missing quote controls: %v", got)
+	}
+	if len(snapshot.Items) != len(eastmoneyCoreIndexDefinitions) {
+		t.Fatalf("items=%d", len(snapshot.Items))
+	}
+	if snapshot.Items[0].Symbol != "000001.SH" || snapshot.Items[0].Name != "上证指数" || snapshot.Items[0].LatestPrice == nil || *snapshot.Items[0].LatestPrice != 3200.5 {
+		t.Fatalf("unexpected index quote: %+v", snapshot.Items[0])
+	}
+	if snapshot.Items[0].QualityStatus != model.QualityValid || snapshot.Items[0].QuoteTime == nil {
+		t.Fatalf("complete quote should be valid: %+v", snapshot.Items[0])
+	}
+}
+
+func TestEastmoneyFetchIndexQuotesPreservesMissingAmountAsDegraded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"total":1,"diff":[{"f2":3200.5,"f3":0.8,"f4":24.5,"f12":"000001","f13":1,"f14":"上证指数"}]}}`)
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+	snapshot, err := p.FetchIndexQuotes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Items) != 1 {
+		t.Fatalf("items=%d", len(snapshot.Items))
+	}
+	item := snapshot.Items[0]
+	if item.Amount != nil || item.AmountUnit != "unknown" || item.QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing amount contract violated: %+v", item)
+	}
+	if snapshot.QualityStatus != model.QualityDegraded {
+		t.Fatalf("partial snapshot must degrade: %+v", snapshot)
 	}
 }

@@ -13,6 +13,11 @@ on:
         required: false
         default: false
         type: boolean
+      include_netease:
+        description: "Retry optional NetEase quote and historical CSV endpoints"
+        required: false
+        default: false
+        type: boolean
   pull_request:
     paths:
       - ".github/workflows/live-provider-smoke.yml"
@@ -46,6 +51,7 @@ jobs:
           LIVE_PROVIDER_REPORT_PATH: ${{ github.workspace }}/live-provider-report.json
           LIVE_PROBE_QUOTE_SYMBOL: ${{ github.event.inputs.quote_symbol || '600519.SH' }}
           MARKET_DATA_LIVE_MX_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_mx && '1' || '0' }}
+          MARKET_DATA_LIVE_NETEASE_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_netease && '1' || '0' }}
           MARKET_DATA_MX_API_KEY: ${{ secrets.MX_APIKEY }}
           MARKET_DATA_MX_API_URL: https://mkapi2.dfcfs.com/finskillshub/api/claw/query
         working-directory: services/market-data

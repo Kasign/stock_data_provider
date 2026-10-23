@@ -17,52 +17,69 @@ import (
 )
 
 type ProviderSettings struct {
-	Enabled   bool `json:"enabled"`
-	Quote     bool `json:"quote"`
-	DailyBars bool `json:"daily_bars"`
+	Enabled         bool `json:"enabled"`
+	Quote           bool `json:"quote"`
+	DailyBars       bool `json:"daily_bars"`
+	StockBasic      bool `json:"stock_basic"`
+	SectorRankings  bool `json:"sector_rankings"`
+	IndexQuotes     bool `json:"index_quotes"`
+	MarketBreadth   bool `json:"market_breadth"`
+	LimitPools      bool `json:"limit_pools"`
+	StockBoards     bool `json:"stock_boards"`
+	TradingCalendar bool `json:"trading_calendar"`
 }
 
 type Config struct {
-	HTTPAddr                string
-	APIKey                  string
-	RequestTimeout          time.Duration
-	ProviderTimeout         time.Duration
-	ProviderRetries         int
-	CircuitFailureThreshold int
-	CircuitCooldown         time.Duration
-	QuoteCacheTTL           time.Duration
-	BarsCacheTTL            time.Duration
-	DefaultDailyBars        int
-	MaxDailyBars            int
-	Adjustment              string
-	ProviderPriority        []string
-	ProviderSettings        map[string]ProviderSettings
-	ProvidersConfigPath     string
-	EastmoneyQuoteURL       string
-	EastmoneyKlineURL       string
-	EastmoneyUT             string
-	TencentQuoteURL         string
-	TencentKlineURL         string
-	TencentNoneKlineURL     string
-	SinaQuoteURL            string
-	BaostockHost            string
-	BaostockPort            int
-	BaostockUserID          string
-	BaostockPassword        string
-	BaostockConnectTimeout  time.Duration
-	BaostockRequestTimeout  time.Duration
-	MXEnabled               bool
-	MXAPIKey                string
-	MXAPIURL                string
-	MXAPITimeout            time.Duration
-	QuoteRetention          time.Duration
-	RedisAddr               string
-	RedisUsername           string
-	RedisPassword           string
-	RedisDB                 int
-	MySQLDSN                string
-	AutoMigrate             bool
-	AllowNoStorage          bool
+	HTTPAddr                  string
+	APIKey                    string
+	RequestTimeout            time.Duration
+	ProviderTimeout           time.Duration
+	ProviderRetries           int
+	CircuitFailureThreshold   int
+	CircuitCooldown           time.Duration
+	QuoteCacheTTL             time.Duration
+	BarsCacheTTL              time.Duration
+	DefaultDailyBars          int
+	MaxDailyBars              int
+	Adjustment                string
+	ProviderPriority          []string
+	ProviderSettings          map[string]ProviderSettings
+	ProvidersConfigPath       string
+	EastmoneyQuoteURL         string
+	EastmoneyKlineURL         string
+	EastmoneyStockBasicURL    string
+	EastmoneySectorRankingURL string
+	EastmoneyIndexURL         string
+	EastmoneyMarketStocksURL  string
+	EastmoneyLimitPoolBaseURL string
+	EastmoneyStockBoardsURL   string
+	EastmoneyUT               string
+	TencentQuoteURL           string
+	TencentKlineURL           string
+	TencentNoneKlineURL       string
+	SinaQuoteURL              string
+	SinaKlineURL              string
+	YahooChartURL             string
+	NeteaseHistoryURL         string
+	NeteaseQuoteURL           string
+	BaostockHost              string
+	BaostockPort              int
+	BaostockUserID            string
+	BaostockPassword          string
+	BaostockConnectTimeout    time.Duration
+	BaostockRequestTimeout    time.Duration
+	MXEnabled                 bool
+	MXAPIKey                  string
+	MXAPIURL                  string
+	MXAPITimeout              time.Duration
+	QuoteRetention            time.Duration
+	RedisAddr                 string
+	RedisUsername             string
+	RedisPassword             string
+	RedisDB                   int
+	MySQLDSN                  string
+	AutoMigrate               bool
+	AllowNoStorage            bool
 }
 
 type providerFile struct {
@@ -76,13 +93,15 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "tencent", "sina"},
+		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: false, IndexQuotes: false, MarketBreadth: false, LimitPools: false, StockBoards: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
-			"baostock":  {Enabled: true, Quote: false, DailyBars: true},
-			"sina":      {Enabled: true, Quote: true, DailyBars: false},
+			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: false},
+			"sina":      {Enabled: true, Quote: true, DailyBars: true},
+			"yahoo":     {Enabled: false, Quote: false, DailyBars: true},
+			"netease":   {Enabled: false, Quote: false, DailyBars: true},
 		},
 	}
 	file := defaults
@@ -99,7 +118,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" {
+			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -129,51 +148,62 @@ func Load() (Config, error) {
 	settings["eastmoney"] = overrideProvider("EASTMONEY", settings["eastmoney"])
 	settings["tencent"] = overrideProvider("TENCENT", settings["tencent"])
 	settings["sina"] = overrideProvider("SINA", settings["sina"])
+	settings["yahoo"] = overrideProvider("YAHOO", settings["yahoo"])
+	settings["netease"] = overrideProvider("NETEASE", settings["netease"])
 	settings["baostock"] = overrideProvider("BAOSTOCK", settings["baostock"])
 	if settings["baostock"].Quote {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
 	}
-
 	cfg := Config{
-		HTTPAddr:                get("MARKET_DATA_HTTP_ADDR", ":8091"),
-		APIKey:                  strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY")),
-		RequestTimeout:          duration("MARKET_DATA_REQUEST_TIMEOUT", 3*time.Minute),
-		ProviderTimeout:         duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
-		ProviderRetries:         integer("MARKET_DATA_PROVIDER_RETRIES", 1),
-		CircuitFailureThreshold: integer("MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD", 3),
-		CircuitCooldown:         duration("MARKET_DATA_CIRCUIT_COOLDOWN", 45*time.Second),
-		QuoteCacheTTL:           duration("MARKET_DATA_QUOTE_CACHE_TTL", 15*time.Second),
-		BarsCacheTTL:            duration("MARKET_DATA_BARS_CACHE_TTL", 10*time.Minute),
-		DefaultDailyBars:        integer("MARKET_DATA_DEFAULT_DAILY_BARS", 120),
-		MaxDailyBars:            integer("MARKET_DATA_MAX_DAILY_BARS", 1000),
-		Adjustment:              get("MARKET_DATA_DEFAULT_ADJUSTMENT", get("MARKET_DATA_ADJUSTMENT", file.AdjustmentBasis)),
-		ProviderPriority:        priority,
-		ProviderSettings:        settings,
-		ProvidersConfigPath:     configPath,
-		EastmoneyQuoteURL:       get("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://push2.eastmoney.com/api/qt/stock/get"),
-		EastmoneyKlineURL:       get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
-		EastmoneyUT:             get("MARKET_DATA_EASTMONEY_UT", ""),
-		TencentQuoteURL:         get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
-		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
-		TencentNoneKlineURL:     get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),
-		SinaQuoteURL:            get("MARKET_DATA_SINA_QUOTE_URL", "https://hq.sinajs.cn/list="),
-		BaostockHost:            get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
-		BaostockPort:            integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
-		BaostockUserID:          get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),
-		BaostockPassword:        get("MARKET_DATA_BAOSTOCK_PASSWORD", "123456"),
-		BaostockConnectTimeout:  duration("MARKET_DATA_BAOSTOCK_CONNECT_TIMEOUT", 5*time.Second),
-		BaostockRequestTimeout:  duration("MARKET_DATA_BAOSTOCK_REQUEST_TIMEOUT", 15*time.Second),
-		MXEnabled:               boolEnv("MARKET_DATA_MX_ENABLED", false),
-		MXAPIKey:                firstNonEmpty(os.Getenv("MARKET_DATA_MX_API_KEY"), os.Getenv("MX_APIKEY")),
-		MXAPIURL:                get("MARKET_DATA_MX_API_URL", "https://mkapi2.dfcfs.com/finskillshub/api/claw/query"),
-		MXAPITimeout:            duration("MARKET_DATA_MX_API_TIMEOUT", 10*time.Second),
-		QuoteRetention:          duration("MARKET_DATA_QUOTE_RETENTION", 30*24*time.Hour),
-		RedisAddr:               strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_ADDR")),
-		RedisUsername:           strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_USERNAME")),
-		RedisPassword:           os.Getenv("MARKET_DATA_REDIS_PASSWORD"),
-		RedisDB:                 integer("MARKET_DATA_REDIS_DB", 0),
-		AutoMigrate:             boolEnv("MARKET_DATA_DB_AUTO_MIGRATE", true),
-		AllowNoStorage:          boolEnv("MARKET_DATA_ALLOW_NO_STORAGE", false),
+		HTTPAddr:                  get("MARKET_DATA_HTTP_ADDR", ":8091"),
+		APIKey:                    strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY")),
+		RequestTimeout:            duration("MARKET_DATA_REQUEST_TIMEOUT", 3*time.Minute),
+		ProviderTimeout:           duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
+		ProviderRetries:           integer("MARKET_DATA_PROVIDER_RETRIES", 1),
+		CircuitFailureThreshold:   integer("MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD", 3),
+		CircuitCooldown:           duration("MARKET_DATA_CIRCUIT_COOLDOWN", 45*time.Second),
+		QuoteCacheTTL:             duration("MARKET_DATA_QUOTE_CACHE_TTL", 15*time.Second),
+		BarsCacheTTL:              duration("MARKET_DATA_BARS_CACHE_TTL", 10*time.Minute),
+		DefaultDailyBars:          integer("MARKET_DATA_DEFAULT_DAILY_BARS", 120),
+		MaxDailyBars:              integer("MARKET_DATA_MAX_DAILY_BARS", 1000),
+		Adjustment:                get("MARKET_DATA_DEFAULT_ADJUSTMENT", get("MARKET_DATA_ADJUSTMENT", file.AdjustmentBasis)),
+		ProviderPriority:          priority,
+		ProviderSettings:          settings,
+		ProvidersConfigPath:       configPath,
+		EastmoneyQuoteURL:         get("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://push2.eastmoney.com/api/qt/stock/get"),
+		EastmoneyKlineURL:         get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
+		EastmoneyStockBasicURL:    get("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://datacenter.eastmoney.com/securities/api/data/v1/get"),
+		EastmoneySectorRankingURL: get("MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL", "https://push2.eastmoney.com/api/qt/clist/get"),
+		EastmoneyIndexURL:         get("MARKET_DATA_EASTMONEY_INDEX_URL", "https://push2.eastmoney.com/api/qt/ulist.np/get"),
+		EastmoneyMarketStocksURL:  get("MARKET_DATA_EASTMONEY_MARKET_STOCKS_URL", "https://push2ex.eastmoney.com/getTopicZDFenBu"),
+		EastmoneyLimitPoolBaseURL: get("MARKET_DATA_EASTMONEY_LIMIT_POOL_BASE_URL", "https://push2ex.eastmoney.com"),
+		EastmoneyStockBoardsURL:   get("MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL", "https://push2.eastmoney.com/api/qt/slist/get"),
+		EastmoneyUT:               get("MARKET_DATA_EASTMONEY_UT", ""),
+		TencentQuoteURL:           get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
+		TencentKlineURL:           get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
+		TencentNoneKlineURL:       get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),
+		SinaQuoteURL:              get("MARKET_DATA_SINA_QUOTE_URL", "https://hq.sinajs.cn/list="),
+		SinaKlineURL:              get("MARKET_DATA_SINA_KLINE_URL", "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"),
+		YahooChartURL:             get("MARKET_DATA_YAHOO_CHART_URL", "https://query1.finance.yahoo.com/v8/finance/chart"),
+		NeteaseHistoryURL:         get("MARKET_DATA_NETEASE_HISTORY_URL", "https://quotes.money.163.com/service/chddata.html"),
+		NeteaseQuoteURL:           get("MARKET_DATA_NETEASE_QUOTE_URL", "https://api.money.126.net/data/feed"),
+		BaostockHost:              get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
+		BaostockPort:              integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
+		BaostockUserID:            get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),
+		BaostockPassword:          get("MARKET_DATA_BAOSTOCK_PASSWORD", "123456"),
+		BaostockConnectTimeout:    duration("MARKET_DATA_BAOSTOCK_CONNECT_TIMEOUT", 5*time.Second),
+		BaostockRequestTimeout:    duration("MARKET_DATA_BAOSTOCK_REQUEST_TIMEOUT", 15*time.Second),
+		MXEnabled:                 boolEnv("MARKET_DATA_MX_ENABLED", false),
+		MXAPIKey:                  firstNonEmpty(os.Getenv("MARKET_DATA_MX_API_KEY"), os.Getenv("MX_APIKEY")),
+		MXAPIURL:                  get("MARKET_DATA_MX_API_URL", "https://mkapi2.dfcfs.com/finskillshub/api/claw/query"),
+		MXAPITimeout:              duration("MARKET_DATA_MX_API_TIMEOUT", 10*time.Second),
+		QuoteRetention:            duration("MARKET_DATA_QUOTE_RETENTION", 30*24*time.Hour),
+		RedisAddr:                 strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_ADDR")),
+		RedisUsername:             strings.TrimSpace(os.Getenv("MARKET_DATA_REDIS_USERNAME")),
+		RedisPassword:             os.Getenv("MARKET_DATA_REDIS_PASSWORD"),
+		RedisDB:                   integer("MARKET_DATA_REDIS_DB", 0),
+		AutoMigrate:               boolEnv("MARKET_DATA_DB_AUTO_MIGRATE", true),
+		AllowNoStorage:            boolEnv("MARKET_DATA_ALLOW_NO_STORAGE", false),
 	}
 	var dsnErr error
 	cfg.MySQLDSN, dsnErr = resolveMySQLDSN(cfg.AllowNoStorage)
@@ -184,13 +214,22 @@ func Load() (Config, error) {
 		return cfg, errors.New("MARKET_DATA_API_KEY must be a non-placeholder secret with at least 32 characters")
 	}
 	for name, endpoint := range map[string]string{
-		"MARKET_DATA_EASTMONEY_QUOTE_URL":    cfg.EastmoneyQuoteURL,
-		"MARKET_DATA_EASTMONEY_KLINE_URL":    cfg.EastmoneyKlineURL,
-		"MARKET_DATA_TENCENT_QUOTE_URL":      cfg.TencentQuoteURL,
-		"MARKET_DATA_TENCENT_KLINE_URL":      cfg.TencentKlineURL,
-		"MARKET_DATA_TENCENT_NONE_KLINE_URL": cfg.TencentNoneKlineURL,
-		"MARKET_DATA_SINA_QUOTE_URL":         cfg.SinaQuoteURL,
-		"MARKET_DATA_MX_API_URL":             cfg.MXAPIURL,
+		"MARKET_DATA_EASTMONEY_QUOTE_URL":           cfg.EastmoneyQuoteURL,
+		"MARKET_DATA_EASTMONEY_KLINE_URL":           cfg.EastmoneyKlineURL,
+		"MARKET_DATA_EASTMONEY_STOCK_BASIC_URL":     cfg.EastmoneyStockBasicURL,
+		"MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL":  cfg.EastmoneySectorRankingURL,
+		"MARKET_DATA_EASTMONEY_INDEX_URL":           cfg.EastmoneyIndexURL,
+		"MARKET_DATA_EASTMONEY_MARKET_STOCKS_URL":   cfg.EastmoneyMarketStocksURL,
+		"MARKET_DATA_EASTMONEY_LIMIT_POOL_BASE_URL": cfg.EastmoneyLimitPoolBaseURL,
+		"MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL":    cfg.EastmoneyStockBoardsURL,
+		"MARKET_DATA_TENCENT_QUOTE_URL":             cfg.TencentQuoteURL,
+		"MARKET_DATA_TENCENT_KLINE_URL":             cfg.TencentKlineURL,
+		"MARKET_DATA_TENCENT_NONE_KLINE_URL":        cfg.TencentNoneKlineURL,
+		"MARKET_DATA_SINA_QUOTE_URL":                cfg.SinaQuoteURL,
+		"MARKET_DATA_SINA_KLINE_URL":                cfg.SinaKlineURL,
+		"MARKET_DATA_YAHOO_CHART_URL":               cfg.YahooChartURL,
+		"MARKET_DATA_NETEASE_HISTORY_URL":           cfg.NeteaseHistoryURL,
+		"MARKET_DATA_MX_API_URL":                    cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {
 			return cfg, err
@@ -235,7 +274,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" {
+		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {
@@ -307,6 +346,13 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.Enabled = boolEnv("MARKET_DATA_"+prefix+"_ENABLED", p.Enabled)
 	p.Quote = boolEnv("MARKET_DATA_"+prefix+"_QUOTE_ENABLED", p.Quote)
 	p.DailyBars = boolEnv("MARKET_DATA_"+prefix+"_DAILY_BARS_ENABLED", p.DailyBars)
+	p.StockBasic = boolEnv("MARKET_DATA_"+prefix+"_STOCK_BASIC_ENABLED", p.StockBasic)
+	p.SectorRankings = boolEnv("MARKET_DATA_"+prefix+"_SECTOR_RANKINGS_ENABLED", p.SectorRankings)
+	p.IndexQuotes = boolEnv("MARKET_DATA_"+prefix+"_INDEX_QUOTES_ENABLED", p.IndexQuotes)
+	p.MarketBreadth = boolEnv("MARKET_DATA_"+prefix+"_MARKET_BREADTH_ENABLED", p.MarketBreadth)
+	p.LimitPools = boolEnv("MARKET_DATA_"+prefix+"_LIMIT_POOLS_ENABLED", p.LimitPools)
+	p.StockBoards = boolEnv("MARKET_DATA_"+prefix+"_STOCK_BOARDS_ENABLED", p.StockBoards)
+	p.TradingCalendar = boolEnv("MARKET_DATA_"+prefix+"_TRADING_CALENDAR_ENABLED", p.TradingCalendar)
 	return p
 }
 
@@ -478,8 +524,12 @@ func validateEnvironment() error {
 		"MARKET_DATA_DB_AUTO_MIGRATE", "MARKET_DATA_EASTMONEY_ENABLED",
 		"MARKET_DATA_BAOSTOCK_ENABLED", "MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
+		"MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED",
+		"MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "MARKET_DATA_EASTMONEY_MARKET_BREADTH_ENABLED",
+		"MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED", "MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
+		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {

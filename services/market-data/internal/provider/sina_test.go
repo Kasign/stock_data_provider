@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"golang.org/x/text/encoding/htmlindex"
@@ -170,5 +172,58 @@ func TestSinaMissingOrInvalidAmountDoesNotClaimRawFieldMetadata(t *testing.T) {
 				t.Fatalf("missing amount quality reason, got %v", quote.QualityReasons)
 			}
 		})
+	}
+}
+
+func TestSinaFetchDailyBarsNormalizesUnadjustedRows(t *testing.T) {
+	payload := []byte(`[{"day":"2026-10-21","open":"10.0","high":"11.0","low":"9.0","close":"10.5","volume":"10000"},{"day":"2026-10-20","open":10,"high":11,"low":9,"close":10.2,"volume":5000}]`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		if query.Get("symbol") != "sh600036" || query.Get("scale") != "240" || query.Get("ma") != "no" {
+			t.Errorf("unexpected Sina K-line query: %v", query)
+		}
+		if n, err := strconv.Atoi(query.Get("datalen")); err != nil || n < 32 || n > maxSinaKlineBars {
+			t.Errorf("unexpected Sina datalen %q, err=%v", query.Get("datalen"), err)
+		}
+		if r.Header.Get("Referer") == "" {
+			t.Error("expected a Sina-compatible Referer")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	p := NewSinaConfigured(0, "http://127.0.0.1:1/unused", server.URL)
+	bars, err := p.FetchDailyBars(context.Background(), "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
+	if err != nil {
+		t.Fatalf("FetchDailyBars returned error: %v", err)
+	}
+	if len(bars) != 2 || bars[0].TradeDate != "2026-10-20" || bars[1].TradeDate != "2026-10-21" {
+		t.Fatalf("bars were not sorted/filtered correctly: %+v", bars)
+	}
+	if *bars[0].Volume != 5000 || *bars[1].Volume != 10000 || bars[0].VolumeUnit != "shares" {
+		t.Fatalf("Sina K-line volume must remain in shares: %+v", bars)
+	}
+	if bars[0].Amount != nil || bars[0].AmountUnit != "unknown" || bars[0].QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing turnover amount must remain unknown/degraded: %+v", bars[0])
+	}
+	if bars[0].AdjustmentBasis != model.AdjustmentNone || bars[0].AdjustmentMethod != "sina_raw_ohlc_no_adjustment" {
+		t.Fatalf("Sina must explicitly label the unadjusted basis: %+v", bars[0])
+	}
+}
+
+func TestSinaFetchDailyBarsRejectsUnverifiedAdjustmentAndDateRange(t *testing.T) {
+	p := NewSinaConfigured(0, "http://127.0.0.1:1/unused", "http://127.0.0.1:1/kline")
+	if _, err := p.FetchDailyBars(context.Background(), "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "only supports verified adjustment basis") {
+		t.Fatalf("expected explicit unsupported-adjustment error, got %v", err)
+	}
+	if _, err := p.FetchDailyBars(context.Background(), "600036.SH", "2026-10-22", "2026-10-21", 8, model.AdjustmentNone); err == nil || !strings.Contains(err.Error(), "must not be after") {
+		t.Fatalf("expected reversed date-range error, got %v", err)
+	}
+	if _, _, err := sinaDailyDateRange("bad-date", "2026-10-21", 8, time.Now()); err == nil {
+		t.Fatal("invalid start date must be rejected")
+	}
+	if _, _, err := sinaDailyDateRange("2026-10-20", "bad-date", 8, time.Now()); err == nil {
+		t.Fatal("invalid end date must be rejected")
 	}
 }

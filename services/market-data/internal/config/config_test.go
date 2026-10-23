@@ -427,3 +427,198 @@ func TestLoadRejectsInvalidBaoStockPort(t *testing.T) {
 		t.Fatal("invalid BaoStock port must fail configuration loading")
 	}
 }
+
+func TestLoadYahooFinanceDailyBarsCanBeOptedIn(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "4m")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_YAHOO_ENABLED", "true")
+	t.Setenv("MARKET_DATA_YAHOO_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_YAHOO_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_YAHOO_CHART_URL", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	yahoo := cfg.ProviderSettings["yahoo"]
+	if !yahoo.Enabled || yahoo.Quote || !yahoo.DailyBars {
+		t.Fatalf("Yahoo must be enabled for daily bars only: %+v", yahoo)
+	}
+	if cfg.YahooChartURL != "https://query1.finance.yahoo.com/v8/finance/chart" {
+		t.Fatalf("unexpected Yahoo chart endpoint %q", cfg.YahooChartURL)
+	}
+}
+
+func TestLoadYahooQuoteCanBeOptedInAndDailyBarsCanBeDisabled(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "5m")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_YAHOO_ENABLED", "true")
+	t.Setenv("MARKET_DATA_YAHOO_QUOTE_ENABLED", "true")
+	t.Setenv("MARKET_DATA_YAHOO_DAILY_BARS_ENABLED", "false")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	yahoo := cfg.ProviderSettings["yahoo"]
+	if !yahoo.Enabled || !yahoo.Quote || yahoo.DailyBars {
+		t.Fatalf("Yahoo quote-only configuration should be accepted: %+v", yahoo)
+	}
+}
+
+func TestLoadSinaDailyBarsCanBeEnabled(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "4m")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_SINA_ENABLED", "true")
+	t.Setenv("MARKET_DATA_SINA_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_SINA_DAILY_BARS_ENABLED", "true")
+	t.Setenv("MARKET_DATA_SINA_KLINE_URL", "https://example.test/kline")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sina := cfg.ProviderSettings["sina"]
+	if !sina.Enabled || !sina.Quote || !sina.DailyBars {
+		t.Fatalf("Sina should expose quote and daily bars when opted in: %+v", sina)
+	}
+	if cfg.SinaKlineURL != "https://example.test/kline" {
+		t.Fatalf("Sina K-line endpoint was not loaded: %q", cfg.SinaKlineURL)
+	}
+}
+
+func TestLoadNeteaseDailyBarsIsOptInAndEndpointConfigurable(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina,netease")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "5m")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_NETEASE_ENABLED", "true")
+	t.Setenv("MARKET_DATA_NETEASE_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_NETEASE_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_NETEASE_HISTORY_URL", "https://example.test/history")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	netease := cfg.ProviderSettings["netease"]
+	if !netease.Enabled || netease.Quote || !netease.DailyBars {
+		t.Fatalf("Netease must expose daily bars only when enabled: %+v", netease)
+	}
+	if cfg.NeteaseHistoryURL != "https://example.test/history" {
+		t.Fatalf("unexpected Netease endpoint %q", cfg.NeteaseHistoryURL)
+	}
+}
+
+func TestLoadNeteaseQuoteCanBeEnabledAndEndpointConfigured(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina,netease")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "5m")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_NETEASE_ENABLED", "true")
+	t.Setenv("MARKET_DATA_NETEASE_QUOTE_ENABLED", "true")
+	t.Setenv("MARKET_DATA_NETEASE_DAILY_BARS_ENABLED", "false")
+	t.Setenv("MARKET_DATA_NETEASE_QUOTE_URL", "https://example.test/quote")
+	t.Setenv("MARKET_DATA_NETEASE_HISTORY_URL", "https://example.test/history")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	netease := cfg.ProviderSettings["netease"]
+	if !netease.Enabled || !netease.Quote || netease.DailyBars {
+		t.Fatalf("Netease capabilities not configured as expected: %+v", netease)
+	}
+	if cfg.NeteaseQuoteURL != "https://example.test/quote" {
+		t.Fatalf("unexpected Netease quote endpoint %q", cfg.NeteaseQuoteURL)
+	}
+}
+
+func TestEastmoneyStockBasicURLAndCapabilityCanBeConfigured(t *testing.T) {
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://example.test/f10")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "false")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EastmoneyStockBasicURL != "https://example.test/f10" {
+		t.Fatalf("stock-basic URL=%q", cfg.EastmoneyStockBasicURL)
+	}
+	if cfg.ProviderSettings["eastmoney"].StockBasic {
+		t.Fatalf("stock-basic override must disable capability: %+v", cfg.ProviderSettings["eastmoney"])
+	}
+}
+
+func TestEastmoneyStockBoardsURLAndCapabilityAreConfigurable(t *testing.T) {
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL", "https://example.test/slist")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EastmoneyStockBoardsURL != "https://example.test/slist" {
+		t.Fatalf("unexpected stock-boards endpoint %q", cfg.EastmoneyStockBoardsURL)
+	}
+	if !cfg.ProviderSettings["eastmoney"].StockBoards {
+		t.Fatal("stock-boards environment override should enable capability")
+	}
+}
+
+func TestEastmoneySectorRankingURLAndCapabilityAreConfigurable(t *testing.T) {
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL", "https://example.test/clist")
+	t.Setenv("MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EastmoneySectorRankingURL != "https://example.test/clist" {
+		t.Fatalf("unexpected sector-ranking endpoint %q", cfg.EastmoneySectorRankingURL)
+	}
+	if !cfg.ProviderSettings["eastmoney"].SectorRankings {
+		t.Fatal("sector-ranking environment override should enable the capability")
+	}
+}
+
+func TestEastmoneyIndexEndpointAndCapabilityAreConfigurable(t *testing.T) {
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_INDEX_URL", "https://example.test/indices")
+	t.Setenv("MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EastmoneyIndexURL != "https://example.test/indices" {
+		t.Fatalf("unexpected index endpoint %q", cfg.EastmoneyIndexURL)
+	}
+	if !cfg.ProviderSettings["eastmoney"].IndexQuotes {
+		t.Fatal("index-quote environment override should enable capability")
+	}
+}

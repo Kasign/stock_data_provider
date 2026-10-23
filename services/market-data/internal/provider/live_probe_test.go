@@ -81,20 +81,29 @@ type liveProbeReport struct {
 }
 
 type liveProbeResult struct {
-	Provider         string                  `json:"provider"`
-	Capability       string                  `json:"capability"`
-	Symbol           string                  `json:"symbol"`
-	Adjustment       model.AdjustmentBasis   `json:"adjustment,omitempty"`
-	Status           string                  `json:"status"`
-	ErrorKind        string                  `json:"error_kind,omitempty"`
-	Error            string                  `json:"error,omitempty"`
-	ElapsedMS        int64                   `json:"elapsed_ms"`
-	Quote            *model.Quote            `json:"quote,omitempty"`
-	BarCount         int                     `json:"bar_count,omitempty"`
-	SampleBars       []model.DailyBar        `json:"sample_bars,omitempty"`
-	ChipDistribution *model.ChipDistribution `json:"chip_distribution,omitempty"`
-	CapitalFlow      *model.CapitalFlow      `json:"capital_flow,omitempty"`
-	HTTP             []liveProbeHTTPResponse `json:"http_responses,omitempty"`
+	Provider         string                         `json:"provider"`
+	Capability       string                         `json:"capability"`
+	SectorType       string                         `json:"sector_type,omitempty"`
+	SectorRankings   *model.SectorRankingSnapshot   `json:"sector_rankings,omitempty"`
+	IndexQuotes      *model.IndexQuoteSnapshot      `json:"index_quotes,omitempty"`
+	MarketBreadth    *model.MarketBreadthSnapshot   `json:"market_breadth,omitempty"`
+	LimitPool        *model.LimitPoolSnapshot       `json:"limit_pool,omitempty"`
+	StockBoards      *model.StockBoardSnapshot      `json:"stock_boards,omitempty"`
+	TradingCalendar  *model.TradingCalendarSnapshot `json:"trading_calendar,omitempty"`
+	PoolType         string                         `json:"pool_type,omitempty"`
+	Symbol           string                         `json:"symbol,omitempty"`
+	Adjustment       model.AdjustmentBasis          `json:"adjustment,omitempty"`
+	Status           string                         `json:"status"`
+	ErrorKind        string                         `json:"error_kind,omitempty"`
+	Error            string                         `json:"error,omitempty"`
+	ElapsedMS        int64                          `json:"elapsed_ms"`
+	Quote            *model.Quote                   `json:"quote,omitempty"`
+	StockBasic       *model.StockBasic              `json:"stock_basic,omitempty"`
+	BarCount         int                            `json:"bar_count,omitempty"`
+	SampleBars       []model.DailyBar               `json:"sample_bars,omitempty"`
+	ChipDistribution *model.ChipDistribution        `json:"chip_distribution,omitempty"`
+	CapitalFlow      *model.CapitalFlow             `json:"capital_flow,omitempty"`
+	HTTP             []liveProbeHTTPResponse        `json:"http_responses,omitempty"`
 }
 
 type liveProbeHTTPResponse struct {
@@ -345,6 +354,59 @@ func TestLiveProbeErrorSummaryClassifiesNetworkUnavailable(t *testing.T) {
 	}
 }
 
+func liveProbeTradingCalendarContractError(snapshot *model.TradingCalendarSnapshot, startDate, endDate string) string {
+	if snapshot == nil {
+		return "provider returned an empty trading-calendar snapshot"
+	}
+	start, startErr := time.Parse("2006-01-02", startDate)
+	end, endErr := time.Parse("2006-01-02", endDate)
+	if startErr != nil || endErr != nil || start.After(end) {
+		return "invalid trading-calendar probe range"
+	}
+	expected := int(end.Sub(start)/(24*time.Hour)) + 1
+	if snapshot.Market != "cn_a_share" || snapshot.StartDate != startDate || snapshot.EndDate != endDate {
+		return "trading-calendar market/date-range identity mismatch"
+	}
+	if snapshot.TotalDays != expected || len(snapshot.Items) != expected {
+		return fmt.Sprintf("trading-calendar coverage mismatch: total=%d items=%d expected=%d", snapshot.TotalDays, len(snapshot.Items), expected)
+	}
+	tradingDays := 0
+	for index, item := range snapshot.Items {
+		wantDate := start.AddDate(0, 0, index).Format("2006-01-02")
+		if item.Date != wantDate {
+			return fmt.Sprintf("trading-calendar row %d date mismatch: got %s want %s", index, item.Date, wantDate)
+		}
+		if item.IsTradingDay {
+			tradingDays++
+		}
+	}
+	if tradingDays != snapshot.TradingDays {
+		return fmt.Sprintf("trading-calendar trading-days mismatch: got %d calculated %d", snapshot.TradingDays, tradingDays)
+	}
+	if snapshot.Source != "baostock" || snapshot.FetchedAt.IsZero() {
+		return "trading-calendar source or fetched_at is missing"
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Sprintf("unexpected trading-calendar quality %q", snapshot.QualityStatus)
+	}
+	return ""
+}
+
+func TestLiveTradingCalendarContractRejectsGaps(t *testing.T) {
+	snapshot := &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: "2026-10-22", EndDate: "2026-10-24",
+		TotalDays: 3, TradingDays: 2, Source: "baostock", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityDegraded,
+		Items: []model.TradingCalendarDay{
+			{Date: "2026-10-22", IsTradingDay: true},
+			{Date: "2026-10-24", IsTradingDay: false},
+		},
+	}
+	if got := liveProbeTradingCalendarContractError(snapshot, "2026-10-22", "2026-10-24"); !strings.Contains(got, "coverage mismatch") {
+		t.Fatalf("expected coverage mismatch, got %q", got)
+	}
+}
+
 func TestLiveProviderProbe(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_PROVIDER_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_PROVIDER_TESTS=1 to call real public provider endpoints")
@@ -370,7 +432,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		DailySymbol: dailySymbol,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Results:     make([]liveProbeResult, 0, 10),
+		Results:     make([]liveProbeResult, 0, 15),
 	}
 	var failures []string
 
@@ -424,6 +486,178 @@ func TestLiveProviderProbe(t *testing.T) {
 		default:
 			result.Status = "returned"
 			result.Quote = quote
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
+	runStockBasic := func(providerName, symbol string, client *http.Client, call func(context.Context) (*model.StockBasic, error)) {
+		capture := &liveProbeCapture{}
+		if client != nil {
+			client.Transport = capture.transport()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := call(ctx)
+		result := liveProbeResult{Provider: providerName, Capability: "stock_basic", Symbol: symbol, ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, providerName+" stock_basic: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil:
+			result.Status, result.Error = "invalid", "provider returned an empty stock-basic response"
+			failures = append(failures, providerName+" stock_basic: nil result")
+		case item.Symbol != symbol || item.Source != providerName || strings.TrimSpace(item.Name) == "":
+			result.Status, result.Error, result.StockBasic = "invalid", "stock-basic identity/name contract mismatch", item
+			failures = append(failures, providerName+" stock_basic: contract mismatch")
+		case item.QualityStatus != model.QualityValid:
+			result.Status, result.Error, result.StockBasic = "invalid", "stock-basic quality must be valid for this identity endpoint", item
+			failures = append(failures, providerName+" stock_basic: invalid quality")
+		default:
+			result.Status, result.StockBasic = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
+	runStockBoards := func(providerName, symbol string, client *http.Client, call func(context.Context) (*model.StockBoardSnapshot, error)) {
+		capture := &liveProbeCapture{}
+		if client != nil {
+			client.Transport = capture.transport()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := call(ctx)
+		result := liveProbeResult{Provider: providerName, Capability: "stock_boards", Symbol: symbol, ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, providerName+" stock_boards: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil || item.Symbol != symbol || item.Source != providerName:
+			result.Status, result.Error, result.StockBoards = "invalid", "stock-board symbol/source contract mismatch", item
+			failures = append(failures, providerName+" stock_boards: contract mismatch")
+		case !item.HasData || len(item.Items) == 0 || item.Total != len(item.Items):
+			result.Status, result.Error, result.StockBoards = "invalid", "stock-board membership response is empty or incomplete", item
+			failures = append(failures, providerName+" stock_boards: empty or incomplete result")
+		default:
+			result.Status, result.StockBoards = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
+	runSectorRankings := func(providerName, category string, client *http.Client, call func(context.Context) (*model.SectorRankingSnapshot, error)) {
+		capture := &liveProbeCapture{}
+		if client != nil {
+			client.Transport = capture.transport()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := call(ctx)
+		result := liveProbeResult{
+			Provider: providerName, Capability: "sector_rankings", SectorType: category,
+			ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot(),
+		}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, providerName+" sector_rankings/"+category+": "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil || item.Category != category || item.Source != providerName || len(item.Items) == 0:
+			result.Status, result.Error, result.SectorRankings = "invalid", "sector-ranking category, source, or item contract mismatch", item
+			failures = append(failures, providerName+" sector_rankings/"+category+": contract mismatch")
+		default:
+			result.Status, result.SectorRankings = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
+	runIndexQuotes := func(providerName string, client *http.Client, call func(context.Context) (*model.IndexQuoteSnapshot, error)) {
+		capture := &liveProbeCapture{}
+		if client != nil {
+			client.Transport = capture.transport()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := call(ctx)
+		result := liveProbeResult{Provider: providerName, Capability: "index_quotes", ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, providerName+" index_quotes: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil || len(item.Items) == 0 || item.Source != providerName:
+			result.Status, result.Error, result.IndexQuotes = "invalid", "index-quote source/item contract mismatch", item
+			failures = append(failures, providerName+" index_quotes: contract mismatch")
+		default:
+			result.Status, result.IndexQuotes = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
+	runMarketBreadth := func(eastmoney *Eastmoney) {
+		capture := &liveProbeCapture{}
+		eastmoney.client.Transport = capture.transport()
+		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := eastmoney.FetchMarketBreadth(ctx)
+		result := liveProbeResult{Provider: eastmoney.Name(), Capability: "market_breadth", ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, "eastmoney market_breadth: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil:
+			result.Status, result.Error = "invalid", "market-breadth provider returned nil"
+			failures = append(failures, "eastmoney market_breadth: nil snapshot")
+		case item.Source != "eastmoney" || item.TotalSecurities <= 0 || item.CoveredSecurities != item.TotalSecurities || item.AdvancingCount+item.DecliningCount+item.UnchangedCount+item.UnclassifiedCount != item.CoveredSecurities:
+			result.Status, result.Error, result.MarketBreadth = "invalid", "market-breadth coverage/count contract mismatch", item
+			failures = append(failures, "eastmoney market_breadth: coverage/count contract mismatch")
+		default:
+			result.Status, result.MarketBreadth = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+	runLimitPool := func(eastmoney *Eastmoney, poolType, tradeDate string) {
+		capture := &liveProbeCapture{}
+		eastmoney.client.Transport = capture.transport()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := eastmoney.FetchLimitPool(ctx, poolType, tradeDate, 30)
+		result := liveProbeResult{Provider: eastmoney.Name(), Capability: "limit_pool", PoolType: poolType, ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, "eastmoney limit_pool/"+poolType+": "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil || item.PoolType != poolType || item.TradeDate != tradeDate || item.Source != "eastmoney":
+			result.Status, result.Error, result.LimitPool = "invalid", "limit-pool identity contract mismatch", item
+			failures = append(failures, "eastmoney limit_pool/"+poolType+": identity mismatch")
+		case item.HasData && len(item.Items) == 0:
+			result.Status, result.Error, result.LimitPool = "invalid", "has_data=true but item list is empty", item
+			failures = append(failures, "eastmoney limit_pool/"+poolType+": empty items despite has_data")
+		case !item.HasData:
+			// Empty may mean non-trading date or unavailable source, never a verified zero count.
+			result.Status, result.LimitPool = "empty", item
+		default:
+			result.Status, result.LimitPool = "returned", item
 		}
 		report.Results = append(report.Results, result)
 		encoded, _ := json.Marshal(result)
@@ -593,6 +827,9 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("sina", "sina", quoteSymbol, sina.client, func(ctx context.Context) (*model.Quote, error) {
 		return sina.FetchQuote(ctx, quoteSymbol)
 	})
+	runDaily("sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return sina.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+	})
 
 	tencent := NewTencent(12 * time.Second)
 	runQuote("tencent", "tencent", quoteSymbol, tencent.client, func(ctx context.Context) (*model.Quote, error) {
@@ -606,6 +843,25 @@ func TestLiveProviderProbe(t *testing.T) {
 	})
 
 	eastmoney := NewEastmoney(12*time.Second, "", "")
+	runStockBasic("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBasic, error) {
+		return eastmoney.FetchStockBasic(ctx, dailySymbol)
+	})
+	runStockBoards("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBoardSnapshot, error) {
+		return eastmoney.FetchStockBoards(ctx, dailySymbol)
+	})
+	runSectorRankings("eastmoney", "industry", eastmoney.client, func(ctx context.Context) (*model.SectorRankingSnapshot, error) {
+		return eastmoney.FetchSectorRankings(ctx, "industry", 10)
+	})
+	runSectorRankings("eastmoney", "concept", eastmoney.client, func(ctx context.Context) (*model.SectorRankingSnapshot, error) {
+		return eastmoney.FetchSectorRankings(ctx, "concept", 10)
+	})
+	runIndexQuotes("eastmoney", eastmoney.client, func(ctx context.Context) (*model.IndexQuoteSnapshot, error) {
+		return eastmoney.FetchIndexQuotes(ctx)
+	})
+	runMarketBreadth(eastmoney)
+	for _, poolType := range []string{"up", "down", "broken"} {
+		runLimitPool(eastmoney, poolType, now.Format("2006-01-02"))
+	}
 	runQuote("eastmoney", "eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoney.FetchQuote(ctx, dailySymbol)
 	})
@@ -619,9 +875,66 @@ func TestLiveProviderProbe(t *testing.T) {
 
 	baostockClient := baostock.NewClient(baostock.Config{ConnectTimeout: 8 * time.Second, RequestTimeout: 20 * time.Second})
 	baostockProvider := NewBaostock(baostockClient)
+	beforeBaoStockDaily := len(report.Results)
 	runDaily("baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
 		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
+	dailyProbePassed := len(report.Results) > beforeBaoStockDaily &&
+		report.Results[len(report.Results)-1].Provider == "baostock" &&
+		report.Results[len(report.Results)-1].Capability == "daily_bars" &&
+		report.Results[len(report.Results)-1].Status == "returned"
+	calendarStart := now.AddDate(0, 0, -6).Format("2006-01-02")
+	calendarEnd := now.Format("2006-01-02")
+	calendarResult := liveProbeResult{Provider: "baostock", Capability: "trading_calendar"}
+	if dailyProbePassed {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		started := time.Now()
+		snapshot, callErr := baostockProvider.FetchTradingCalendar(ctx, calendarStart, calendarEnd)
+		cancel()
+		calendarResult.ElapsedMS = time.Since(started).Milliseconds()
+		calendarResult.TradingCalendar = snapshot
+		switch {
+		case callErr != nil:
+			calendarResult.Status = "failed"
+			calendarResult.ErrorKind, calendarResult.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, "baostock trading_calendar: "+calendarResult.ErrorKind+" ("+calendarResult.Error+")")
+		case liveProbeTradingCalendarContractError(snapshot, calendarStart, calendarEnd) != "":
+			calendarResult.Status = "invalid"
+			calendarResult.Error = liveProbeTradingCalendarContractError(snapshot, calendarStart, calendarEnd)
+			failures = append(failures, "baostock trading_calendar: "+calendarResult.Error)
+		default:
+			calendarResult.Status = "returned"
+		}
+	} else {
+		calendarResult.Status = "skipped"
+		calendarResult.Error = "skipped because BaoStock daily-bar probe could not establish a working TCP session; no duplicate timeout request was sent"
+	}
+	report.Results = append(report.Results, calendarResult)
+	calendarJSON, _ := json.Marshal(calendarResult)
+	t.Logf("LIVE_PROVIDER_RESULT %s", calendarJSON)
+	yahoo := NewYahooFinance(12*time.Second, "")
+	runQuote("yahoo", "yahoo", quoteSymbol, yahoo.client, func(ctx context.Context) (*model.Quote, error) {
+		return yahoo.FetchQuote(ctx, quoteSymbol)
+	})
+	runDaily("yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
+	})
+
+	if os.Getenv("MARKET_DATA_LIVE_NETEASE_TESTS") == "1" {
+		netease := NewNetease(12*time.Second, "")
+		runQuote("netease", "netease", quoteSymbol, netease.client, func(ctx context.Context) (*model.Quote, error) {
+			return netease.FetchQuote(ctx, quoteSymbol)
+		})
+		runDaily("netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+	} else {
+		report.Results = append(report.Results,
+			liveProbeResult{Provider: "netease", Capability: "quote", Symbol: quoteSymbol, Status: "skipped", Error: "NetEase quote endpoint DNS resolution failed in hosted runners; set MARKET_DATA_LIVE_NETEASE_TESTS=1 to retry"},
+			liveProbeResult{Provider: "netease", Capability: "daily_bars", Symbol: dailySymbol, Adjustment: model.AdjustmentNone, Status: "skipped", Error: "NetEase historical CSV endpoint returned HTTP 502; set MARKET_DATA_LIVE_NETEASE_TESTS=1 to retry"},
+		)
+	}
+
 	if closeErr := baostockClient.Close(); closeErr != nil {
 		t.Logf("LIVE_PROVIDER_CLEANUP warning provider=baostock error=%q", closeErr.Error())
 	}

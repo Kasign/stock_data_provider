@@ -74,14 +74,23 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 	}()
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfigured(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyUT),
+		"eastmoney": provider.NewEastmoneyConfiguredWithStockBoards(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyUT),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
-		"sina":      provider.NewSina(cfg.ProviderTimeout, cfg.SinaQuoteURL),
+		"sina":      provider.NewSinaConfigured(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL),
+		"yahoo":     provider.NewYahooFinance(cfg.ProviderTimeout, cfg.YahooChartURL),
+		"netease":   provider.NewNeteaseConfigured(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))
 	barProviders := make([]provider.DailyBarProvider, 0, len(available))
+	stockBasicProviders := make([]provider.StockBasicProvider, 0, len(available))
+	sectorRankingProviders := make([]provider.SectorRankingProvider, 0, len(available))
+	indexQuoteProviders := make([]provider.IndexQuoteProvider, 0, len(available))
+	marketBreadthProviders := make([]provider.MarketBreadthProvider, 0, len(available))
+	limitPoolProviders := make([]provider.LimitPoolProvider, 0, len(available))
+	stockBoardsProviders := make([]provider.StockBoardsProvider, 0, len(available))
+	tradingCalendarProviders := make([]provider.TradingCalendarProvider, 0, len(available))
 	for _, name := range cfg.ProviderPriority {
 		p, ok := available[name]
 		if !ok {
@@ -106,6 +115,55 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			}
 			barProviders = append(barProviders, barProvider)
 		}
+		if settings.StockBasic {
+			stockBasicProvider, ok := p.(provider.StockBasicProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for stock basics but does not implement StockBasicProvider", name)
+			}
+			stockBasicProviders = append(stockBasicProviders, stockBasicProvider)
+		}
+		if settings.SectorRankings {
+			sectorRankingProvider, ok := p.(provider.SectorRankingProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for sector rankings but does not implement SectorRankingProvider", name)
+			}
+			sectorRankingProviders = append(sectorRankingProviders, sectorRankingProvider)
+		}
+		if settings.IndexQuotes {
+			indexQuoteProvider, ok := p.(provider.IndexQuoteProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for index quotes but does not implement IndexQuoteProvider", name)
+			}
+			indexQuoteProviders = append(indexQuoteProviders, indexQuoteProvider)
+		}
+		if settings.MarketBreadth {
+			capability, ok := p.(provider.MarketBreadthProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for market breadth but does not implement MarketBreadthProvider", name)
+			}
+			marketBreadthProviders = append(marketBreadthProviders, capability)
+		}
+		if settings.LimitPools {
+			capability, ok := p.(provider.LimitPoolProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for limit pools but does not implement LimitPoolProvider", name)
+			}
+			limitPoolProviders = append(limitPoolProviders, capability)
+		}
+		if settings.StockBoards {
+			capability, ok := p.(provider.StockBoardsProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for stock boards but does not implement StockBoardsProvider", name)
+			}
+			stockBoardsProviders = append(stockBoardsProviders, capability)
+		}
+		if settings.TradingCalendar {
+			capability, ok := p.(provider.TradingCalendarProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for trading calendar but does not implement TradingCalendarProvider", name)
+			}
+			tradingCalendarProviders = append(tradingCalendarProviders, capability)
+		}
 	}
 	if len(allProviders) == 0 {
 		return errors.New("provider priority has no enabled providers")
@@ -120,6 +178,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		supplementProviders = append(supplementProviders, mx)
 	}
 	ds.SetSupplementProviders(supplementProviders)
+	ds.SetStockBasicProviders(stockBasicProviders)
+	ds.SetSectorRankingProviders(sectorRankingProviders)
+	ds.SetIndexQuoteProviders(indexQuoteProviders)
+	ds.SetMarketBreadthProviders(marketBreadthProviders)
+	ds.SetLimitPoolProviders(limitPoolProviders)
+	ds.SetStockBoardsProviders(stockBoardsProviders)
+	ds.SetTradingCalendarProviders(tradingCalendarProviders)
 	handler := httpapi.NewWithCapabilityInterfaces(cfg.APIKey, cfg.Adjustment, ds, allProviders, quoteProviders, barProviders, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
 	logger.Info("market-data service starting", "addr", cfg.HTTPAddr, "providers", strings.Join(providerNames(allProviders), ","), "quote_providers", strings.Join(providerNames(quoteProviders), ","), "daily_bar_providers", strings.Join(providerNames(barProviders), ","), "mariadb_enabled", store != nil, "redis_enabled", cfg.RedisAddr != "", "adjustment", cfg.Adjustment, "mx_enabled", cfg.MXEnabled)
