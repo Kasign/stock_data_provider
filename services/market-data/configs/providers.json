@@ -2,7 +2,7 @@
   "provider_priority": ["eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"],
   "adjustment_basis": "forward_adjusted",
   "providers": {
-    "eastmoney": { "enabled": true, "quote": true, "daily_bars": true, "stock_basic": true, "sector_rankings": false },
+    "eastmoney": { "enabled": true, "quote": true, "daily_bars": true, "stock_basic": true, "sector_rankings": false, "index_quotes": false },
     "baostock": { "enabled": true, "quote": false, "daily_bars": true },
     "yahoo": { "enabled": false, "quote": false, "daily_bars": true },
     "tencent": { "enabled": true, "quote": true, "daily_bars": true },

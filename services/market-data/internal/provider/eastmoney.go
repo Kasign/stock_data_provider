@@ -29,6 +29,7 @@ const eastmoneyLookbackBufferDays = 30
 const defaultEastmoneyUT = "7eea3edcaed734bea9cbfc24409ed989"
 const defaultEastmoneyStockBasicURL = "https://datacenter.eastmoney.com/securities/api/data/v1/get"
 const defaultEastmoneySectorRankingURL = "https://push2.eastmoney.com/api/qt/clist/get"
+const defaultEastmoneyIndexURL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
 
 type Eastmoney struct {
 	client           *http.Client
@@ -36,6 +37,7 @@ type Eastmoney struct {
 	klineURL         string
 	stockBasicURL    string
 	sectorRankingURL string
+	indexURL         string
 	ut               string
 }
 
@@ -55,6 +57,11 @@ func NewEastmoneyConfiguredWithStockBasic(timeout time.Duration, quoteURL, kline
 
 // NewEastmoneyConfiguredWithMarketData configures independent F10 and sector-ranking endpoints.
 func NewEastmoneyConfiguredWithMarketData(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, ut string) *Eastmoney {
+	return NewEastmoneyConfiguredWithIndices(timeout, quoteURL, klineURL, stockBasicURL, sectorRankingURL, "", ut)
+}
+
+// NewEastmoneyConfiguredWithIndices configures independent F10, board ranking and index endpoints.
+func NewEastmoneyConfiguredWithIndices(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, ut string) *Eastmoney {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -70,13 +77,16 @@ func NewEastmoneyConfiguredWithMarketData(timeout time.Duration, quoteURL, kline
 	if sectorRankingURL == "" {
 		sectorRankingURL = defaultEastmoneySectorRankingURL
 	}
+	if indexURL == "" {
+		indexURL = defaultEastmoneyIndexURL
+	}
 	ut = strings.TrimSpace(ut)
 	if ut == "" {
 		ut = defaultEastmoneyUT
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, ut: ut,
 	}
 }
 func (p *Eastmoney) Name() string { return "eastmoney" }
@@ -773,4 +783,120 @@ func appendUniqueEastmoneyReason(reasons []string, reason string) []string {
 		}
 	}
 	return append(reasons, reason)
+}
+
+
+type eastmoneyIndexDefinition struct {
+	Symbol string
+	Code   string
+	SecID  string
+	Market string
+	Name   string
+}
+
+var eastmoneyCoreIndexDefinitions = []eastmoneyIndexDefinition{
+	{Symbol: "000001.SH", Code: "000001", SecID: "1.000001", Market: "1", Name: "上证指数"},
+	{Symbol: "399001.SZ", Code: "399001", SecID: "0.399001", Market: "0", Name: "深证成指"},
+	{Symbol: "399006.SZ", Code: "399006", SecID: "0.399006", Market: "0", Name: "创业板指"},
+	{Symbol: "000300.SH", Code: "000300", SecID: "1.000300", Market: "1", Name: "沪深300"},
+	{Symbol: "000016.SH", Code: "000016", SecID: "1.000016", Market: "1", Name: "上证50"},
+	{Symbol: "000905.SH", Code: "000905", SecID: "1.000905", Market: "1", Name: "中证500"},
+	{Symbol: "000688.SH", Code: "000688", SecID: "1.000688", Market: "1", Name: "科创50"},
+}
+
+func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, error) {
+	secids := make([]string, 0, len(eastmoneyCoreIndexDefinitions))
+	definitions := make(map[string]eastmoneyIndexDefinition, len(eastmoneyCoreIndexDefinitions))
+	for _, index := range eastmoneyCoreIndexDefinitions {
+		secids = append(secids, index.SecID)
+		definitions[index.Market+"."+index.Code] = index
+	}
+	params := url.Values{
+		"secids": {strings.Join(secids, ",")},
+		"fields": {"f2,f3,f4,f6,f12,f13,f14,f15,f16,f17,f18,f86"},
+		"fltt": {"2"}, "invt": {"2"}, "ut": {p.ut},
+		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	}
+	var payload struct {
+		RC *int `json:"rc"`
+		Data *struct {
+			Total int `json:"total"`
+			Diff []map[string]json.RawMessage `json:"diff"`
+		} `json:"data"`
+	}
+	if err := p.getJSON(ctx, p.indexURL, params, &payload); err != nil {
+		return nil, fmt.Errorf("Eastmoney index quote request: %w", err)
+	}
+	if payload.RC != nil && *payload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney index quote provider error rc=%d", *payload.RC)
+	}
+	if payload.Data == nil || len(payload.Data.Diff) == 0 {
+		return nil, errors.New("Eastmoney index quote returned no rows")
+	}
+	fetchedAt := time.Now().UTC()
+	snapshot := &model.IndexQuoteSnapshot{Source: p.Name(), SourceVersion: "eastmoney-ulist-index-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityValid, Items: make([]model.MarketIndexQuote, 0, len(eastmoneyCoreIndexDefinitions))}
+	seen := make(map[string]bool, len(eastmoneyCoreIndexDefinitions))
+	for _, raw := range payload.Data.Diff {
+		market, code := parseEastmoneyBoardString(raw, "f13"), parseEastmoneyBoardString(raw, "f12")
+		definition, ok := definitions[market+"."+code]
+		if !ok { continue }
+		if seen[definition.Symbol] {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "duplicate_index_row_dropped")
+			continue
+		}
+		name := parseEastmoneyBoardString(raw, "f14")
+		if name == "" {
+			name = definition.Name
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_name_missing_used_allowlisted_name")
+		}
+		price, changePercent := parseEastmoneyBoardNumber(raw, "f2"), parseEastmoneyBoardNumber(raw, "f3")
+		if price == nil || changePercent == nil {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_required_price_field_missing")
+			continue
+		}
+		reasons := []string{}
+		amount := parseEastmoneyBoardNumber(raw, "f6")
+		amountUnit := "CNY"
+		if amount == nil {
+			amountUnit = "unknown"
+			reasons = append(reasons, "provider_amount_missing")
+		}
+		quoteTime := parseEastmoneyTime(parseEastmoneyBoardString(raw, "f86"))
+		quoteTimeSemantics := ""
+		if quoteTime == nil {
+			reasons = append(reasons, "provider_snapshot_timestamp_not_exposed")
+		} else {
+			quoteTimeSemantics = "provider_snapshot_time"
+		}
+		if len(reasons) > 0 { snapshot.QualityStatus = model.QualityDegraded }
+		for _, reason := range reasons {
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, reason)
+		}
+		item := model.MarketIndexQuote{
+			Symbol: definition.Symbol, Code: definition.Code, Name: name,
+			LatestPrice: price, Change: parseEastmoneyBoardNumber(raw, "f4"), ChangePercent: changePercent,
+			Open: parseEastmoneyBoardNumber(raw, "f17"), High: parseEastmoneyBoardNumber(raw, "f15"), Low: parseEastmoneyBoardNumber(raw, "f16"), PrevClose: parseEastmoneyBoardNumber(raw, "f18"),
+			Amount: amount, AmountUnit: amountUnit, QuoteTime: quoteTime, QuoteTimeSemantics: quoteTimeSemantics,
+			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt, QualityStatus: model.QualityValid, QualityReasons: reasons,
+		}
+		if len(reasons) > 0 { item.QualityStatus = model.QualityDegraded }
+		snapshot.Items = append(snapshot.Items, item)
+		seen[definition.Symbol] = true
+	}
+	if len(snapshot.Items) == 0 { return nil, errors.New("Eastmoney index quote rows failed index-code and price validation") }
+	if len(snapshot.Items) != len(eastmoneyCoreIndexDefinitions) {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_core_index_rows_missing")
+	}
+	bySymbol := make(map[string]model.MarketIndexQuote, len(snapshot.Items))
+	for _, item := range snapshot.Items { bySymbol[item.Symbol] = item }
+	ordered := make([]model.MarketIndexQuote, 0, len(snapshot.Items))
+	for _, index := range eastmoneyCoreIndexDefinitions {
+		if item, ok := bySymbol[index.Symbol]; ok { ordered = append(ordered, item) }
+	}
+	snapshot.Items = ordered
+	return snapshot, nil
 }

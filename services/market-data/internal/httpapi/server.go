@@ -87,6 +87,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	sources := make([]model.SourceStatus, 0, len(names))
 	stockBasicEnabled := map[string]bool{}
 	sectorRankingEnabled := map[string]bool{}
+	indexQuoteEnabled := map[string]bool{}
 	if svc != nil {
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
@@ -94,12 +95,16 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.SectorRankingProviders() {
 			sectorRankingEnabled[p.Name()] = true
 		}
+		for _, p := range svc.IndexQuoteProviders() {
+			indexQuoteEnabled[p.Name()] = true
+		}
 	}
 	for _, name := range names {
 		sources = append(sources, model.SourceStatus{
 			Name: name, Enabled: true,
 			QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name],
 			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
+			IndexQuoteCapable: indexQuoteEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -116,6 +121,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/bundles/{symbol}", s.auth(http.HandlerFunc(s.bundle)))
 	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
 	mux.Handle("GET /api/v1/market/sectors", s.auth(http.HandlerFunc(s.sectorRankings)))
+	mux.Handle("GET /api/v1/market/indices", s.auth(http.HandlerFunc(s.indexQuotes)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/capital-flow", s.auth(http.HandlerFunc(s.capitalFlow)))
@@ -241,6 +247,12 @@ func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"sources": sources, "normalization_version": normalize.Version})
 }
 
+func (s *Server) indexQuotes(w http.ResponseWriter, r *http.Request) {
+	snapshot, cacheHit, err := s.svc.IndexQuotes(r.Context())
+	if err != nil { writeDomainErr(w, err, requestID(r)); return }
+	if cacheHit { w.Header().Set("X-Market-Data-Cache", "HIT") } else { w.Header().Set("X-Market-Data-Cache", "MISS") }
+	writeJSON(w, http.StatusOK, snapshot)
+}
 func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 	category := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
 	if category == "" {

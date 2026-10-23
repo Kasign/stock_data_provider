@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -358,4 +359,40 @@ func TestEastmoneyFetchSectorRankingsRejectsInvalidCategoryAndProviderCode(t *te
 	if _, err := p.FetchSectorRankings(context.Background(), "industry", 5); err == nil || !strings.Contains(err.Error(), "rc=-1") {
 		t.Fatalf("expected provider rc error, got %v", err)
 	}
+}
+
+
+func TestEastmoneyFetchIndexQuotesParsesAllowListedCoreIndexes(t *testing.T) {
+	var got url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query()
+		rows := make([]map[string]any, 0, len(eastmoneyCoreIndexDefinitions))
+		for i, idx := range eastmoneyCoreIndexDefinitions {
+			rows = append(rows, map[string]any{"f2":3200.5+float64(i), "f3":0.8, "f4":24.5, "f6":123456789.0, "f12":idx.Code, "f13":idx.Market, "f14":idx.Name, "f15":3210.0, "f16":3180.0, "f17":3190.0, "f18":3176.0, "f86":"202610231500"})
+		}
+		body, err := json.Marshal(map[string]any{"rc":0, "data":map[string]any{"total":len(rows), "diff":rows}})
+		if err != nil { t.Fatal(err) }
+		w.Header().Set("Content-Type","application/json"); _, _ = w.Write(body)
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+	snapshot, err := p.FetchIndexQuotes(context.Background())
+	if err != nil { t.Fatal(err) }
+	if got.Get("secids") != "1.000001,0.399001,0.399006,1.000300,1.000016,1.000905,1.000688" { t.Fatalf("requested secids=%q", got.Get("secids")) }
+	if got.Get("fields")=="" || got.Get("fltt")!="2" { t.Fatalf("missing quote controls: %v", got) }
+	if len(snapshot.Items)!=len(eastmoneyCoreIndexDefinitions) { t.Fatalf("items=%d",len(snapshot.Items)) }
+	if snapshot.Items[0].Symbol!="000001.SH" || snapshot.Items[0].Name!="上证指数" || snapshot.Items[0].LatestPrice==nil || *snapshot.Items[0].LatestPrice!=3200.5 { t.Fatalf("unexpected index quote: %+v",snapshot.Items[0]) }
+	if snapshot.Items[0].QualityStatus!=model.QualityValid || snapshot.Items[0].QuoteTime==nil { t.Fatalf("complete quote should be valid: %+v",snapshot.Items[0]) }
+}
+
+func TestEastmoneyFetchIndexQuotesPreservesMissingAmountAsDegraded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"rc":0,"data":{"total":1,"diff":[{"f2":3200.5,"f3":0.8,"f4":24.5,"f12":"000001","f13":1,"f14":"上证指数"}]}}`) }))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+	snapshot, err := p.FetchIndexQuotes(context.Background())
+	if err != nil { t.Fatal(err) }
+	if len(snapshot.Items)!=1 { t.Fatalf("items=%d",len(snapshot.Items)) }
+	item:=snapshot.Items[0]
+	if item.Amount!=nil || item.AmountUnit!="unknown" || item.QualityStatus!=model.QualityDegraded { t.Fatalf("missing amount contract violated: %+v",item) }
+	if snapshot.QualityStatus!=model.QualityDegraded { t.Fatalf("partial snapshot must degrade: %+v",snapshot) }
 }

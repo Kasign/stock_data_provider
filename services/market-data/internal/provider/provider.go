@@ -39,6 +39,12 @@ type SectorRankingProvider interface {
 	FetchSectorRankings(ctx context.Context, category string, limit int) (*model.SectorRankingSnapshot, error)
 }
 
+// IndexQuoteProvider provides quotes for a separately allow-listed core index set.
+type IndexQuoteProvider interface {
+	NamedProvider
+	FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, error)
+}
+
 // SupplementProvider 用于承载可选补充数据，这类能力不会进入实时行情或日 K 的兜底链。
 type SupplementProvider interface {
 	NamedProvider

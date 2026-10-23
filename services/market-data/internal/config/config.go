@@ -22,6 +22,7 @@ type ProviderSettings struct {
 	DailyBars      bool `json:"daily_bars"`
 	StockBasic     bool `json:"stock_basic"`
 	SectorRankings bool `json:"sector_rankings"`
+	IndexQuotes    bool `json:"index_quotes"`
 }
 
 type Config struct {
@@ -44,6 +45,7 @@ type Config struct {
 	EastmoneyKlineURL         string
 	EastmoneyStockBasicURL    string
 	EastmoneySectorRankingURL string
+	EastmoneyIndexURL         string
 	EastmoneyUT               string
 	TencentQuoteURL           string
 	TencentKlineURL           string
@@ -87,7 +89,7 @@ func Load() (Config, error) {
 		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: false},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: false, IndexQuotes: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
@@ -165,6 +167,7 @@ func Load() (Config, error) {
 		EastmoneyKlineURL:         get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
 		EastmoneyStockBasicURL:    get("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://datacenter.eastmoney.com/securities/api/data/v1/get"),
 		EastmoneySectorRankingURL: get("MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL", "https://push2.eastmoney.com/api/qt/clist/get"),
+		EastmoneyIndexURL:         get("MARKET_DATA_EASTMONEY_INDEX_URL", "https://push2.eastmoney.com/api/qt/ulist.np/get"),
 		EastmoneyUT:               get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:           get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:           get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
@@ -205,6 +208,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_EASTMONEY_KLINE_URL":          cfg.EastmoneyKlineURL,
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_URL":    cfg.EastmoneyStockBasicURL,
 		"MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL": cfg.EastmoneySectorRankingURL,
+		"MARKET_DATA_EASTMONEY_INDEX_URL": cfg.EastmoneyIndexURL,
 		"MARKET_DATA_TENCENT_QUOTE_URL":            cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":            cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL":       cfg.TencentNoneKlineURL,
@@ -331,6 +335,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.DailyBars = boolEnv("MARKET_DATA_"+prefix+"_DAILY_BARS_ENABLED", p.DailyBars)
 	p.StockBasic = boolEnv("MARKET_DATA_"+prefix+"_STOCK_BASIC_ENABLED", p.StockBasic)
 	p.SectorRankings = boolEnv("MARKET_DATA_"+prefix+"_SECTOR_RANKINGS_ENABLED", p.SectorRankings)
+	p.IndexQuotes = boolEnv("MARKET_DATA_"+prefix+"_INDEX_QUOTES_ENABLED", p.IndexQuotes)
 	return p
 }
 
@@ -503,6 +508,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_BAOSTOCK_ENABLED", "MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED",
+		"MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
 		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",

@@ -156,6 +156,38 @@ type SectorRankingSnapshot struct {
 	QualityReasons []string        `json:"quality_reasons,omitempty"`
 }
 
+// MarketIndexQuote is an index snapshot, not an equity quote. Index symbols use an independent allow-listed namespace.
+type MarketIndexQuote struct {
+	Symbol             string        `json:"symbol"`
+	Code               string        `json:"code"`
+	Name               string        `json:"name"`
+	LatestPrice        *float64      `json:"latest_price,omitempty"`
+	Change             *float64      `json:"change,omitempty"`
+	ChangePercent      *float64      `json:"change_percent,omitempty"`
+	Open               *float64      `json:"open,omitempty"`
+	High               *float64      `json:"high,omitempty"`
+	Low                *float64      `json:"low,omitempty"`
+	PrevClose          *float64      `json:"prev_close,omitempty"`
+	Amount             *float64      `json:"amount,omitempty"`
+	AmountUnit         string        `json:"amount_unit"`
+	QuoteTime          *time.Time    `json:"quote_time,omitempty"`
+	QuoteTimeSemantics string        `json:"quote_time_semantics,omitempty"`
+	Source             string        `json:"source"`
+	SourceVersion      string        `json:"source_version,omitempty"`
+	FetchedAt          time.Time     `json:"fetched_at"`
+	QualityStatus      QualityStatus `json:"quality_status"`
+	QualityReasons     []string      `json:"quality_reasons,omitempty"`
+}
+
+type IndexQuoteSnapshot struct {
+	Items          []MarketIndexQuote `json:"items"`
+	Source         string             `json:"source"`
+	SourceVersion  string             `json:"source_version,omitempty"`
+	FetchedAt      time.Time          `json:"fetched_at"`
+	QualityStatus  QualityStatus      `json:"quality_status"`
+	QualityReasons []string           `json:"quality_reasons,omitempty"`
+}
+
 type SourceStatus struct {
 	Name                 string `json:"name"`
 	Enabled              bool   `json:"enabled"`
@@ -163,6 +195,7 @@ type SourceStatus struct {
 	DailyBarCapable      bool   `json:"daily_bar_capable"`
 	StockBasicCapable    bool   `json:"stock_basic_capable,omitempty"`
 	SectorRankingCapable bool   `json:"sector_ranking_capable,omitempty"`
+	IndexQuoteCapable    bool   `json:"index_quote_capable,omitempty"`
 	ChipCapable          bool   `json:"chip_capable,omitempty"`
 	CapitalFlowCapable   bool   `json:"capital_flow_capable,omitempty"`
 }
