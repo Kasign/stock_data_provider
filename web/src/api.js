@@ -98,3 +98,17 @@ export function getAnalysisTaskEvents(settings, taskId, afterSequence = 0) {
   const query = new URLSearchParams({ after_sequence: String(afterSequence), limit: "100" });
   return request(settings.analysisBase, `/api/v1/analysis/tasks/${encodeURIComponent(taskId)}/events?${query}`);
 }
+
+export function getChipDistribution(settings, symbol, signal) {
+  return request(settings.marketBase, `/api/v1/stocks/${encodeURIComponent(symbol)}/chip-distribution`, {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getCapitalFlow(settings, symbol, signal) {
+  return request(settings.marketBase, `/api/v1/stocks/${encodeURIComponent(symbol)}/capital-flow`, {
+    apiKey: settings.apiKey,
+    signal
+  });
+}

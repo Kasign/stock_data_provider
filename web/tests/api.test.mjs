@@ -6,6 +6,8 @@ import {
   getAnalysisRun,
   getAnalysisTaskEvents,
   getDailyBars,
+  getChipDistribution,
+  getCapitalFlow,
   getDataSources,
   getQuote,
   marketHealth
@@ -169,6 +171,36 @@ test("prefers request IDs from the structured error envelope when both forms exi
         return true;
       }
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("reads existing chip-distribution and capital-flow endpoints with the market API key", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), ...init });
+    if (String(url).includes("chip-distribution")) {
+      return jsonResponse({ symbol: "600519.SH", average_cost: 1234.5, profit_ratio: 0.62, source: "fixture", quality_status: "degraded" });
+    }
+    return jsonResponse({ symbol: "600519.SH", main_net_inflow_yuan: 1500000, inflow_5d_yuan: null, observations: 1, source: "fixture", quality_status: "valid" });
+  };
+  try {
+    const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+    const [chip, flow] = await Promise.all([
+      getChipDistribution(settings, "600519.SH"),
+      getCapitalFlow(settings, "600519.SH")
+    ]);
+    assert.equal(chip.average_cost, 1234.5);
+    assert.equal(flow.main_net_inflow_yuan, 1500000);
+    assert.deepEqual(requests.map((item) => item.url).sort(), [
+      "/market-api/api/v1/stocks/600519.SH/capital-flow",
+      "/market-api/api/v1/stocks/600519.SH/chip-distribution"
+    ]);
+    assert.ok(requests.every((item) => item.headers["X-API-Key"] === "market-secret"));
+    assert.ok(requests.every((item) => item.credentials === "same-origin"));
   } finally {
     globalThis.fetch = originalFetch;
   }

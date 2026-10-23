@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -10,7 +10,8 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../../docs/architecture/analysis-tasks.openapi.yaml", import.meta.url), "utf8"),
   readFile(new URL("../src/recent-tasks.js", import.meta.url), "utf8"),
   readFile(new URL("../styles.css", import.meta.url), "utf8"),
-  readFile(new URL("../src/watchlist.js", import.meta.url), "utf8")
+  readFile(new URL("../src/watchlist.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/api.js", import.meta.url), "utf8")
 ]);
 
 test("static DOM IDs referenced by the WebUI exist and are unique", () => {
@@ -117,4 +118,19 @@ test("daily chart exposes close/candle modes, optional date filters and adjustme
   assert.match(stylesheet, /\.chart-candle-body/);
   assert.match(stylesheet, /\.chart-volume-bar/);
   assert.match(stylesheet, /\.chart-view-button\.is-active/);
+});
+
+
+test("supplemental chip and capital-flow research remains opt-in and independently reports each result", () => {
+  for (const id of ["load-supplemental-button", "supplemental-feedback", "chip-quality", "chip-error", "chip-profit-ratio", "flow-quality", "flow-error", "flow-main-inflow", "flow-inflow-5d", "flow-inflow-10d"]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "supplemental field must exist: " + id);
+  }
+  assert.match(apiClient, /\/api\/v1\/stocks\/\$\{encodeURIComponent\(symbol\)\}\/chip-distribution/);
+  assert.match(apiClient, /\/api\/v1\/stocks\/\$\{encodeURIComponent\(symbol\)\}\/capital-flow/);
+  assert.match(app, /Promise\.allSettled\(\[[\s\S]*?getChipDistribution\(state\.settings, symbol\)[\s\S]*?getCapitalFlow\(state\.settings, symbol\)/);
+  assert.match(app, /function formatRatioPercent\(value\)/);
+  assert.match(app, /function renderSupplementError\(kind, error\)/);
+  assert.match(app, /resetSupplementPanel\(symbol\)/);
+  assert.match(stylesheet, /\.supplemental-grid/);
+  assert.match(stylesheet, /\.supplement-quality-degraded/);
 });

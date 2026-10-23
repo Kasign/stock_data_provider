@@ -24,6 +24,8 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 | Go 行情 | `GET /market-api/api/v1/data-sources` | `X-API-Key` | 读取 Provider 能力/状态 |
 | Go 行情 | `GET /market-api/api/v1/quotes/{symbol}` | `X-API-Key`；股票代码作为路径段 | 查询实时行情 |
 | Go 行情 | `GET /market-api/api/v1/bars/{symbol}/daily?limit=120&adjustment=forward_adjusted&start=2026-10-01&end=2026-10-23` | `X-API-Key`；`limit`、`adjustment` 可配置；`start`、`end` 可选 | 查询历史日 K；日期参数会原样传至现有行情 API |
+| Go 行情 | `GET /market-api/api/v1/stocks/{symbol}/chip-distribution` | `X-API-Key` | 按需读取个股筹码分布；字段可缺失，按接口返回的质量状态和原因展示 |
+| Go 行情 | `GET /market-api/api/v1/stocks/{symbol}/capital-flow` | `X-API-Key` | 按需读取个股资金流；5/10 日汇总可能为空，不能前端补造 |
 | Go 分析 | `GET /analysis-api/readyz` | 不附加行情 API Key | 分析服务就绪检查 |
 | Go 分析 | `POST /analysis-api/api/v1/analysis/tasks` | JSON；可选 `Idempotency-Key` | 创建异步分析任务 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}` | task ID 作为路径段 | 查询任务状态 |
@@ -109,3 +111,13 @@ docker build --tag stock_analysis_web:local .
 ```
 
 CI 通过仅验证前端契约测试、JavaScript 语法和镜像构建；真实上游可达性、生产 API Key 与单股分析业务语义仍需 NAS/1Panel 联调确认。
+
+
+## 个股补充研究接口
+
+WebUI 提供一个**手动触发**的补充数据面板，调用现有接口：
+
+- `GET /api/v1/stocks/{symbol}/chip-distribution`：使用 `symbol`、`date` / `provider_date`、`average_cost`、`profit_ratio`、`concentration_90`、`concentration_70`、`source`、`source_version`、`fetched_at`、`quality_status` 和 `quality_reasons` 等服务端字段。
+- `GET /api/v1/stocks/{symbol}/capital-flow`：使用 `main_net_inflow_yuan`、`inflow_5d_yuan`、`inflow_10d_yuan`、`observations`、`source`、`source_version`、`fetched_at`、`quality_status` 和 `quality_reasons` 等服务端字段。
+
+筹码比例字段由后端规范化为 `[0,1]` 小数，UI 仅将其乘以 100 后格式化为百分比，不重新计算筹码数据。资金流以人民币元展示，空的 5/10 日汇总仍显示“—”。两个请求并行且独立呈现：其中一个接口失败不会覆盖另一个成功结果，也不会中断行情查询、日 K 或分析流程。面板不会自动请求，避免未启用的补充 Provider 在主流程中引入额外请求或等待。

@@ -116,6 +116,43 @@
             </div>
             <div class="table-footer"><span id="bars-warning">显示最近交易日，最新日期在前</span><span id="bars-adjustment">复权口径 —</span></div>
           </section>
+          <section class="panel supplemental-panel" aria-labelledby="supplemental-title">
+            <div class="panel-heading supplemental-heading">
+              <div><h2 id="supplemental-title">个股补充研究数据</h2><p>按需读取后端现有的筹码分布与个股资金流接口；不参与行情主流程，也不推导买卖结论。</p></div>
+              <button class="button button-secondary" id="load-supplemental-button" type="button">加载补充数据</button>
+            </div>
+            <div class="supplemental-context"><span id="supplemental-target">当前标的：尚未选择</span><span>独立接口 · 各自标注来源、时间和质量</span></div>
+            <p class="supplemental-feedback" id="supplemental-feedback" role="status" aria-live="polite" hidden></p>
+            <div class="supplemental-grid">
+              <article class="supplemental-card" aria-labelledby="chip-card-title">
+                <div class="supplemental-card-heading"><div><h3 id="chip-card-title">筹码分布</h3><small id="chip-symbol">尚未查询</small></div><span class="supplement-quality supplemental-quality-unknown" id="chip-quality">未加载</span></div>
+                <dl class="supplemental-fields">
+                  <dt>平均成本</dt><dd id="chip-average-cost">—</dd>
+                  <dt>获利比例</dt><dd id="chip-profit-ratio">—</dd>
+                  <dt>90% 筹码集中度</dt><dd id="chip-concentration-90">—</dd>
+                  <dt>70% 筹码集中度</dt><dd id="chip-concentration-70">—</dd>
+                  <dt>数据日期</dt><dd id="chip-date">—</dd>
+                  <dt>数据来源</dt><dd id="chip-source">—</dd>
+                  <dt>获取时间</dt><dd id="chip-fetched-at">—</dd>
+                </dl>
+                <div class="supplemental-reasons" id="chip-reasons"><p>加载后显示后端返回的质量原因。</p></div>
+                <p class="supplemental-error" id="chip-error" hidden></p>
+              </article>
+              <article class="supplemental-card" aria-labelledby="flow-card-title">
+                <div class="supplemental-card-heading"><div><h3 id="flow-card-title">个股资金流</h3><small id="flow-symbol">尚未查询</small></div><span class="supplement-quality supplemental-quality-unknown" id="flow-quality">未加载</span></div>
+                <dl class="supplemental-fields">
+                  <dt>主力净流入</dt><dd id="flow-main-inflow">—</dd>
+                  <dt>近 5 日净流入</dt><dd id="flow-inflow-5d">—</dd>
+                  <dt>近 10 日净流入</dt><dd id="flow-inflow-10d">—</dd>
+                  <dt>有效观测数</dt><dd id="flow-observations">—</dd>
+                  <dt>数据来源</dt><dd id="flow-source">—</dd>
+                  <dt>获取时间</dt><dd id="flow-fetched-at">—</dd>
+                </dl>
+                <div class="supplemental-reasons" id="flow-reasons"><p>加载后显示后端返回的质量原因。</p></div>
+                <p class="supplemental-error" id="flow-error" hidden></p>
+              </article>
+            </div>
+          </section>
         </section>
 
         <section class="view" id="tasks-view" hidden>
