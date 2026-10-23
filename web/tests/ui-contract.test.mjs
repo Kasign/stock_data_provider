@@ -306,7 +306,7 @@ test("run-flow events expose only server-provided durations and diagnostics", ()
   assert.match(app, /event\.duration_ms !== undefined && event\.duration_ms !== null/);
   assert.match(app, /event\.error_code/);
   assert.match(app, /metaParts\.join\(" · "\)/);
-  assert.match(app, /after_sequence/);
+  assert.match(apiClient, /after_sequence/);
   assert.match(app, /item\.sequence - b\.sequence/);
   assert.doesNotMatch(app, /completed_stages\s*\/\s*total_stages|progressPercent|fakeDAG/i);
 });

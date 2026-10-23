@@ -89,3 +89,8 @@
 - 本批同时移除重复的侧栏分组标题；未改 Go、Provider、数据源选择或其他业务逻辑。
 - 本批开始前重新核实：PR #2 Open/未合并/mergeable=true，head `4b2ae619...`、base SHA 字段仍是 `7e47aec...`；数据 PR #1 Open/未合并，head `38193c1e...`。数据分支最近 Go suite 失败（market-data tests 与镜像构建），Live Provider probe 通过；与 WebUI workflow 分开处理。
 - 后续验证分开记录：GitHub Actions 检查 / Node 源级测试 / Nginx 镜像构建；真实浏览器截图；NAS/Docker/OpenResty 与 MariaDB/Redis 联调。
+
+
+## Issue #4 首轮 CI 诊断（2026-10-23）
+- WebUI checks [#39942197604](https://github.com/Kasign/stock_data_provider/actions/runs/39942197604) 对提交 `395e0f647a7a44fdbb2c06492dfb763fa533bd23` 失败；JS 语法检查通过，Node 测试为 67/68 通过，Nginx build 因测试阶段失败未运行。
+- 唯一失败为新增 UI 契约测试将 `after_sequence` 检查在 `app.js` 上执行；该参数在 `web/src/api.js` 的事件请求中组装，所以断言应针对测试已读取的 `apiClient` 源码。此测试误判已在修正提交中更改；必须等待新的 GitHub Actions 成功后才能记为通过。
