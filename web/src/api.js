@@ -50,12 +50,17 @@ async function request(base, path, { apiKey = "", method = "GET", body, signal, 
     try { data = JSON.parse(text); } catch { data = { message: text.slice(0, 500) }; }
   }
   if (!response.ok) {
-    const error = data?.error;
-    const message = error?.message || data?.message || `HTTP ${response.status} ${response.statusText}`;
-    const failure = new Error(message);
+    const error = data && typeof data === "object" ? data.error : undefined;
+    const rawMessage = error?.message
+      || (typeof error === "string" ? error : "")
+      || (typeof data === "string" ? data : "")
+      || data?.message
+      || `HTTP ${response.status} ${response.statusText}`;
+    // Bound diagnostics even when a valid JSON error envelope contains an oversized message.
+    const failure = new Error(String(rawMessage).slice(0, 500));
     failure.status = response.status;
-    failure.code = error?.code || data?.code || "http_error";
-    failure.requestId = error?.request_id || response.headers.get("X-Request-ID") || "";
+    failure.code = String(error?.code || data?.code || "http_error").slice(0, 120);
+    failure.requestId = String(error?.request_id || response.headers.get("X-Request-ID") || "").slice(0, 200);
     throw failure;
   }
   return data ?? {};
