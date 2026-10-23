@@ -123,14 +123,48 @@ type StockBasic struct {
 	NormalizationVer   string        `json:"normalization_version"`
 }
 
+// SectorRanking 表示行业/概念板块的即时排名。涨跌幅单位为百分点，成交额单位为人民币元。
+type SectorRanking struct {
+	Rank                int           `json:"rank"`
+	Code                string        `json:"code"`
+	Name                string        `json:"name"`
+	Category            string        `json:"category"`
+	LatestPrice         *float64      `json:"latest_price,omitempty"`
+	Change              *float64      `json:"change,omitempty"`
+	ChangePercent       *float64      `json:"change_percent,omitempty"`
+	Amount              *float64      `json:"amount,omitempty"`
+	AmountUnit          string        `json:"amount_unit"`
+	AdvancingCount      *int          `json:"advancing_count,omitempty"`
+	DecliningCount      *int          `json:"declining_count,omitempty"`
+	LeadingStock        string        `json:"leading_stock,omitempty"`
+	LeaderChangePercent *float64      `json:"leader_change_percent,omitempty"`
+	Source              string        `json:"source"`
+	SourceVersion       string        `json:"source_version,omitempty"`
+	FetchedAt           time.Time     `json:"fetched_at"`
+	QualityStatus       QualityStatus `json:"quality_status"`
+	QualityReasons      []string      `json:"quality_reasons,omitempty"`
+}
+
+type SectorRankingSnapshot struct {
+	Category       string          `json:"category"`
+	Total          int             `json:"total"`
+	Items          []SectorRanking `json:"items"`
+	Source         string          `json:"source"`
+	SourceVersion  string          `json:"source_version,omitempty"`
+	FetchedAt      time.Time       `json:"fetched_at"`
+	QualityStatus  QualityStatus   `json:"quality_status"`
+	QualityReasons []string        `json:"quality_reasons,omitempty"`
+}
+
 type SourceStatus struct {
-	Name               string `json:"name"`
-	Enabled            bool   `json:"enabled"`
-	QuoteCapable       bool   `json:"quote_capable"`
-	DailyBarCapable    bool   `json:"daily_bar_capable"`
-	StockBasicCapable  bool   `json:"stock_basic_capable,omitempty"`
-	ChipCapable        bool   `json:"chip_capable,omitempty"`
-	CapitalFlowCapable bool   `json:"capital_flow_capable,omitempty"`
+	Name                 string `json:"name"`
+	Enabled              bool   `json:"enabled"`
+	QuoteCapable         bool   `json:"quote_capable"`
+	DailyBarCapable      bool   `json:"daily_bar_capable"`
+	StockBasicCapable    bool   `json:"stock_basic_capable,omitempty"`
+	SectorRankingCapable bool   `json:"sector_ranking_capable,omitempty"`
+	ChipCapable          bool   `json:"chip_capable,omitempty"`
+	CapitalFlowCapable   bool   `json:"capital_flow_capable,omitempty"`
 }
 
 // ChipDistribution 表示妙想补充接口返回的筹码快照。上游用百分比表示的比例字段会归一化为 [0,1] 小数。

@@ -304,3 +304,57 @@ func TestEastmoneyFetchStockBasicRejectsMismatchedOrEmptyRows(t *testing.T) {
 		})
 	}
 }
+
+
+func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
+	for _, tc := range []struct { category, filter string }{
+		{"industry", "m:90+t:2+f:!50"},
+		{"concept", "m:90+t:3+f:!50"},
+	} {
+		t.Run(tc.category, func(t *testing.T) {
+			var got url.Values
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = r.URL.Query()
+				fmt.Fprint(w, `{"rc":0,"data":{"total":120,"diff":[{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12}]}}`)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+			snapshot, err := p.FetchSectorRankings(context.Background(), tc.category, 5)
+			if err != nil { t.Fatal(err) }
+			if got.Get("fs") != tc.filter || got.Get("pz") != "5" || got.Get("fid") != "f3" {
+				t.Fatalf("unexpected CLIST request: %v", got)
+			}
+			if len(snapshot.Items) != 1 || snapshot.Category != tc.category || snapshot.Total != 120 {
+				t.Fatalf("unexpected snapshot metadata: %+v", snapshot)
+			}
+			item := snapshot.Items[0]
+			if item.Code != "BK0475" || item.Name != "电池" || item.LeadingStock != "宁德时代" {
+				t.Fatalf("unexpected board identity: %+v", item)
+			}
+			if item.ChangePercent == nil || *item.ChangePercent != 2.3 || item.Amount == nil || *item.Amount != 123456789 || item.AmountUnit != "CNY" {
+				t.Fatalf("unexpected normalized price/amount fields: %+v", item)
+			}
+			if item.AdvancingCount == nil || *item.AdvancingCount != 15 || item.DecliningCount == nil || *item.DecliningCount != 7 {
+				t.Fatalf("unexpected advancing/declining counts: %+v", item)
+			}
+			if snapshot.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(snapshot.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") {
+				t.Fatalf("provider timestamp is not exposed; snapshot must be degraded: %+v", snapshot)
+			}
+		})
+	}
+}
+
+func TestEastmoneyFetchSectorRankingsRejectsInvalidCategoryAndProviderCode(t *testing.T) {
+	p := NewEastmoney(2*time.Second, "", "")
+	if _, err := p.FetchSectorRankings(context.Background(), "all", 5); err == nil {
+		t.Fatal("unsupported category must be rejected")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":-1,"data":null}`)
+	}))
+	defer server.Close()
+	p = NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+	if _, err := p.FetchSectorRankings(context.Background(), "industry", 5); err == nil || !strings.Contains(err.Error(), "rc=-1") {
+		t.Fatalf("expected provider rc error, got %v", err)
+	}
+}

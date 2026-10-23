@@ -33,6 +33,12 @@ type StockBasicProvider interface {
 	FetchStockBasic(ctx context.Context, symbol string) (*model.StockBasic, error)
 }
 
+// SectorRankingProvider 提供行业/概念板块的实时排名快照，不参与个股行情回退链。
+type SectorRankingProvider interface {
+	NamedProvider
+	FetchSectorRankings(ctx context.Context, category string, limit int) (*model.SectorRankingSnapshot, error)
+}
+
 // SupplementProvider 用于承载可选补充数据，这类能力不会进入实时行情或日 K 的兜底链。
 type SupplementProvider interface {
 	NamedProvider

@@ -81,9 +81,11 @@ type liveProbeReport struct {
 }
 
 type liveProbeResult struct {
-	Provider         string                  `json:"provider"`
-	Capability       string                  `json:"capability"`
-	Symbol           string                  `json:"symbol"`
+	Provider         string                       `json:"provider"`
+	Capability       string                       `json:"capability"`
+	SectorType       string                       `json:"sector_type,omitempty"`
+	SectorRankings   *model.SectorRankingSnapshot `json:"sector_rankings,omitempty"`
+	Symbol           string                       `json:"symbol"`
 	Adjustment       model.AdjustmentBasis   `json:"adjustment,omitempty"`
 	Status           string                  `json:"status"`
 	ErrorKind        string                  `json:"error_kind,omitempty"`
@@ -463,7 +465,37 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
+	
+	runSectorRankings := func(providerName, category string, client *http.Client, call func(context.Context) (*model.SectorRankingSnapshot, error)) {
+		capture := &liveProbeCapture{}
+		if client != nil {
+			client.Transport = capture.transport()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := call(ctx)
+		result := liveProbeResult{
+			Provider: providerName, Capability: "sector_rankings", SectorType: category,
+			ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot(),
+		}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, providerName+" sector_rankings/"+category+": "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil || item.Category != category || item.Source != providerName || len(item.Items) == 0:
+			result.Status, result.Error, result.SectorRankings = "invalid", "sector-ranking category, source, or item contract mismatch", item
+			failures = append(failures, providerName+" sector_rankings/"+category+": contract mismatch")
+		default:
+			result.Status, result.SectorRankings = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
+runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
 			client.Transport = capture.transport()
@@ -644,6 +676,12 @@ func TestLiveProviderProbe(t *testing.T) {
 	eastmoney := NewEastmoney(12*time.Second, "", "")
 	runStockBasic("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBasic, error) {
 		return eastmoney.FetchStockBasic(ctx, dailySymbol)
+	})
+	runSectorRankings("eastmoney", "industry", eastmoney.client, func(ctx context.Context) (*model.SectorRankingSnapshot, error) {
+		return eastmoney.FetchSectorRankings(ctx, "industry", 10)
+	})
+	runSectorRankings("eastmoney", "concept", eastmoney.client, func(ctx context.Context) (*model.SectorRankingSnapshot, error) {
+		return eastmoney.FetchSectorRankings(ctx, "concept", 10)
 	})
 	runQuote("eastmoney", "eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoney.FetchQuote(ctx, dailySymbol)

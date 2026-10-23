@@ -23,8 +23,9 @@ type DataService struct {
 	providers           []provider.NamedProvider
 	quoteProviders      []provider.QuoteProvider
 	barProviders        []provider.DailyBarProvider
-	stockBasicProviders []provider.StockBasicProvider
-	supplementProviders []provider.SupplementProvider
+	stockBasicProviders    []provider.StockBasicProvider
+	sectorRankingProviders []provider.SectorRankingProvider
+	supplementProviders    []provider.SupplementProvider
 	maxBars             int
 	retries             int
 	breaker             *circuitBreaker
@@ -105,6 +106,108 @@ func (s *DataService) SetStockBasicProviders(providers []provider.StockBasicProv
 func (s *DataService) StockBasicProviders() []provider.StockBasicProvider {
 	return append([]provider.StockBasicProvider(nil), s.stockBasicProviders...)
 }
+
+func (s *DataService) SetSectorRankingProviders(providers []provider.SectorRankingProvider) {
+	s.sectorRankingProviders = append([]provider.SectorRankingProvider(nil), providers...)
+}
+
+func (s *DataService) SectorRankingProviders() []provider.SectorRankingProvider {
+	return append([]provider.SectorRankingProvider(nil), s.sectorRankingProviders...)
+}
+
+func validateSectorRankingSnapshot(category string, limit int, snapshot *model.SectorRankingSnapshot) error {
+	if snapshot == nil {
+		return errors.New("sector-ranking provider returned an empty response")
+	}
+	if snapshot.Category != category {
+		return fmt.Errorf("sector-ranking category mismatch: requested %s, got %q", category, snapshot.Category)
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("sector-ranking source or fetched_at is missing")
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("sector-ranking quality status %q is unsupported", snapshot.QualityStatus)
+	}
+	if len(snapshot.Items) == 0 || len(snapshot.Items) > limit {
+		return fmt.Errorf("sector-ranking item count %d is outside 1..%d", len(snapshot.Items), limit)
+	}
+	seen := make(map[string]bool, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.Category != category {
+			return errors.New("sector-ranking item has missing code/name or mismatched category")
+		}
+		if item.Source != snapshot.Source {
+			return errors.New("sector-ranking item source differs from its snapshot source")
+		}
+		if item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
+			return errors.New("sector-ranking item has invalid retrieval time or quality status")
+		}
+		if seen[item.Code] {
+			return fmt.Errorf("sector-ranking duplicate board code %q", item.Code)
+		}
+		seen[item.Code] = true
+	}
+	return nil
+}
+
+func (s *DataService) SectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, bool, error) {
+	category := strings.ToLower(strings.TrimSpace(rawCategory))
+	if category != "industry" && category != "concept" {
+		return nil, false, fmt.Errorf("unsupported sector category %q; want industry or concept", rawCategory)
+	}
+	if limit == 0 {
+		limit = 10
+	}
+	if limit < 1 || limit > 100 {
+		return nil, false, errors.New("sector ranking limit must be between 1 and 100")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = time.Minute
+	key := fmt.Sprintf("md:v1:sector-ranking:%s:%d", category, limit)
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.SectorRankingSnapshot
+		if json.Unmarshal(data, &cached) == nil && validateSectorRankingSnapshot(category, limit, &cached) == nil &&
+			time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+			return &cached, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("sector-ranking cache read failed", "category", category, "error", cacheErr)
+	}
+	if len(s.sectorRankingProviders) == 0 {
+		return nil, false, errors.New("no enabled sector-ranking provider")
+	}
+	var failures []string
+	for _, p := range s.sectorRankingProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchSectorRankings(ctx, category, limit)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateSectorRankingSnapshot(category, limit, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		payload, marshalErr := json.Marshal(snapshot)
+		if marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+				s.logger.Warn("sector-ranking cache write failed", "category", category, "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("sector-ranking cache encode failed", "category", category, "error", marshalErr)
+		}
+		return snapshot, false, nil
+	}
+	return nil, false, fmt.Errorf("all sector-ranking providers failed: %s", strings.Join(failures, "; "))
+}
+
 
 func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if item == nil {

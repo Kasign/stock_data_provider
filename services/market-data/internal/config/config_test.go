@@ -571,3 +571,21 @@ func TestEastmoneyStockBasicURLAndCapabilityCanBeConfigured(t *testing.T) {
 		t.Fatalf("stock-basic override must disable capability: %+v", cfg.ProviderSettings["eastmoney"])
 	}
 }
+
+
+func TestEastmoneySectorRankingURLAndCapabilityAreConfigurable(t *testing.T) {
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL", "https://example.test/clist")
+	t.Setenv("MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EastmoneySectorRankingURL != "https://example.test/clist" {
+		t.Fatalf("unexpected sector-ranking endpoint %q", cfg.EastmoneySectorRankingURL)
+	}
+	if !cfg.ProviderSettings["eastmoney"].SectorRankings {
+		t.Fatal("sector-ranking environment override should enable the capability")
+	}
+}

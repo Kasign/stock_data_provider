@@ -86,13 +86,21 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	sort.Strings(names)
 	sources := make([]model.SourceStatus, 0, len(names))
 	stockBasicEnabled := map[string]bool{}
+	sectorRankingEnabled := map[string]bool{}
 	if svc != nil {
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
 		}
+		for _, p := range svc.SectorRankingProviders() {
+			sectorRankingEnabled[p.Name()] = true
+		}
 	}
 	for _, name := range names {
-		sources = append(sources, model.SourceStatus{Name: name, Enabled: true, QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name], StockBasicCapable: stockBasicEnabled[name]})
+		sources = append(sources, model.SourceStatus{
+			Name: name, Enabled: true,
+			QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name],
+			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
+		})
 	}
 	if requestTimeout <= 0 {
 		requestTimeout = 110 * time.Second
@@ -107,6 +115,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/bars/{symbol}/daily", s.auth(http.HandlerFunc(s.bars)))
 	mux.Handle("GET /api/v1/bundles/{symbol}", s.auth(http.HandlerFunc(s.bundle)))
 	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
+	mux.Handle("GET /api/v1/market/sectors", s.auth(http.HandlerFunc(s.sectorRankings)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/capital-flow", s.auth(http.HandlerFunc(s.capitalFlow)))
@@ -230,6 +239,38 @@ func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(sources, func(i, j int) bool { return sources[i].Name < sources[j].Name })
 	writeJSON(w, 200, map[string]any{"sources": sources, "normalization_version": normalize.Version})
+}
+
+
+func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
+	category := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
+	if category == "" {
+		category = "industry"
+	}
+	if category != "industry" && category != "concept" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "type must be industry or concept", requestID(r))
+		return
+	}
+	limit := 10
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil || parsed < 1 || parsed > 100 {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "limit must be an integer between 1 and 100", requestID(r))
+			return
+		}
+		limit = parsed
+	}
+	snapshot, cacheHit, err := s.svc.SectorRankings(r.Context(), category, limit)
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	if cacheHit {
+		w.Header().Set("X-Market-Data-Cache", "HIT")
+	} else {
+		w.Header().Set("X-Market-Data-Cache", "MISS")
+	}
+	writeJSON(w, http.StatusOK, snapshot)
 }
 
 func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {

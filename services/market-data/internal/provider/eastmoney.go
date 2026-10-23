@@ -28,13 +28,15 @@ const eastmoneyLookbackBufferDays = 30
 // It is not a user credential or private API key; deployments can override it if Eastmoney rotates it.
 const defaultEastmoneyUT = "7eea3edcaed734bea9cbfc24409ed989"
 const defaultEastmoneyStockBasicURL = "https://datacenter.eastmoney.com/securities/api/data/v1/get"
+const defaultEastmoneySectorRankingURL = "https://push2.eastmoney.com/api/qt/clist/get"
 
 type Eastmoney struct {
-	client        *http.Client
-	quoteURL      string
-	klineURL      string
-	stockBasicURL string
-	ut            string
+	client           *http.Client
+	quoteURL         string
+	klineURL         string
+	stockBasicURL    string
+	sectorRankingURL string
+	ut               string
 }
 
 func NewEastmoney(timeout time.Duration, quoteURL, klineURL string) *Eastmoney {
@@ -48,6 +50,11 @@ func NewEastmoneyConfigured(timeout time.Duration, quoteURL, klineURL, ut string
 
 // NewEastmoneyConfiguredWithStockBasic configures the independent F10 security-identity endpoint.
 func NewEastmoneyConfiguredWithStockBasic(timeout time.Duration, quoteURL, klineURL, stockBasicURL, ut string) *Eastmoney {
+	return NewEastmoneyConfiguredWithMarketData(timeout, quoteURL, klineURL, stockBasicURL, "", ut)
+}
+
+// NewEastmoneyConfiguredWithMarketData configures independent F10 and sector-ranking endpoints.
+func NewEastmoneyConfiguredWithMarketData(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, ut string) *Eastmoney {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -60,13 +67,16 @@ func NewEastmoneyConfiguredWithStockBasic(timeout time.Duration, quoteURL, kline
 	if stockBasicURL == "" {
 		stockBasicURL = defaultEastmoneyStockBasicURL
 	}
+	if sectorRankingURL == "" {
+		sectorRankingURL = defaultEastmoneySectorRankingURL
+	}
 	ut = strings.TrimSpace(ut)
 	if ut == "" {
 		ut = defaultEastmoneyUT
 	}
 	return &Eastmoney{
-		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, ut: ut,
+		client: &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, ut: ut,
 	}
 }
 func (p *Eastmoney) Name() string { return "eastmoney" }
@@ -621,4 +631,146 @@ func eastmoneyRedirectPolicy(req *http.Request, via []*http.Request) error {
 func isEastmoneyHostname(host string) bool {
 	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
 	return host == "eastmoney.com" || strings.HasSuffix(host, ".eastmoney.com")
+}
+
+
+func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, error) {
+	category := strings.ToLower(strings.TrimSpace(rawCategory))
+	filters := map[string]string{
+		"industry": "m:90+t:2+f:!50",
+		"concept":  "m:90+t:3+f:!50",
+	}
+	filter, ok := filters[category]
+	if !ok {
+		return nil, fmt.Errorf("unsupported sector category %q; want industry or concept", rawCategory)
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		return nil, errors.New("sector ranking limit must not exceed 100")
+	}
+	params := url.Values{
+		"pn": {"1"}, "pz": {strconv.Itoa(limit)}, "po": {"1"}, "np": {"1"},
+		"ut": {p.ut}, "fltt": {"2"}, "invt": {"2"}, "fid": {"f3"},
+		"fs": {filter}, "fields": {"f2,f3,f4,f6,f12,f14,f104,f105,f128,f136"},
+		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	}
+	var payload struct {
+		RC   *int `json:"rc"`
+		Data *struct {
+			Total int                          `json:"total"`
+			Diff  []map[string]json.RawMessage `json:"diff"`
+		} `json:"data"`
+	}
+	if err := p.getJSON(ctx, p.sectorRankingURL, params, &payload); err != nil {
+		return nil, fmt.Errorf("eastmoney sector ranking request: %w", err)
+	}
+	if payload.RC != nil && *payload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney sector ranking provider error rc=%d", *payload.RC)
+	}
+	if payload.Data == nil || len(payload.Data.Diff) == 0 {
+		return nil, errors.New("Eastmoney sector ranking returned no rows")
+	}
+	fetchedAt := time.Now().UTC()
+	snapshot := &model.SectorRankingSnapshot{
+		Category: category, Total: payload.Data.Total, Source: p.Name(),
+		SourceVersion: "eastmoney-sector-clist-v1", FetchedAt: fetchedAt,
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		Items: make([]model.SectorRanking, 0, len(payload.Data.Diff)),
+	}
+	for _, raw := range payload.Data.Diff {
+		code := parseEastmoneyBoardString(raw, "f12")
+		name := parseEastmoneyBoardString(raw, "f14")
+		changePercent := parseEastmoneyBoardNumber(raw, "f3")
+		if code == "" || name == "" || changePercent == nil {
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_rows_failed_required_field_validation")
+			continue
+		}
+		reasons := []string{"provider_snapshot_timestamp_not_exposed"}
+		amount := parseEastmoneyBoardNumber(raw, "f6")
+		amountUnit := "CNY"
+		if amount == nil {
+			amountUnit = "unknown"
+			reasons = append(reasons, "provider_amount_missing")
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_amount_missing")
+		}
+		snapshot.Items = append(snapshot.Items, model.SectorRanking{
+			Rank: len(snapshot.Items) + 1, Code: code, Name: name, Category: category,
+			LatestPrice: parseEastmoneyBoardNumber(raw, "f2"), Change: parseEastmoneyBoardNumber(raw, "f4"),
+			ChangePercent: changePercent, Amount: amount, AmountUnit: amountUnit,
+			AdvancingCount: parseEastmoneyBoardInteger(raw, "f104"), DecliningCount: parseEastmoneyBoardInteger(raw, "f105"),
+			LeadingStock: parseEastmoneyBoardString(raw, "f128"), LeaderChangePercent: parseEastmoneyBoardNumber(raw, "f136"),
+			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt,
+			QualityStatus: model.QualityDegraded, QualityReasons: reasons,
+		})
+	}
+	if len(snapshot.Items) == 0 {
+		return nil, errors.New("Eastmoney sector ranking rows failed code/name/change-percent validation")
+	}
+	if snapshot.Total <= 0 {
+		snapshot.Total = len(snapshot.Items)
+	}
+	if len(snapshot.Items) < len(payload.Data.Diff) {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_rows_dropped_after_validation")
+	}
+	return snapshot, nil
+}
+
+func parseEastmoneyBoardString(row map[string]json.RawMessage, key string) string {
+	raw, ok := row[key]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var value string
+	if json.Unmarshal(raw, &value) == nil {
+		return strings.TrimSpace(value)
+	}
+	return strings.TrimSpace(strings.Trim(string(raw), `"`))
+}
+
+func parseEastmoneyBoardNumber(row map[string]json.RawMessage, key string) *float64 {
+	raw, ok := row[key]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var value float64
+	if err := json.Unmarshal(raw, &value); err == nil {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return nil
+		}
+		return &value
+	}
+	var textValue string
+	if err := json.Unmarshal(raw, &textValue); err != nil {
+		textValue = strings.TrimSpace(strings.Trim(string(raw), `"`))
+	}
+	textValue = strings.TrimSpace(textValue)
+	if textValue == "" || textValue == "-" || strings.EqualFold(textValue, "null") {
+		return nil
+	}
+	value, err := strconv.ParseFloat(textValue, 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil
+	}
+	return &value
+}
+
+func parseEastmoneyBoardInteger(row map[string]json.RawMessage, key string) *int {
+	value := parseEastmoneyBoardNumber(row, key)
+	if value == nil {
+		return nil
+	}
+	integer := int(*value)
+	return &integer
+}
+
+func appendUniqueEastmoneyReason(reasons []string, reason string) []string {
+	for _, existing := range reasons {
+		if existing == reason {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
 }

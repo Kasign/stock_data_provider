@@ -17,10 +17,11 @@ import (
 )
 
 type ProviderSettings struct {
-	Enabled    bool `json:"enabled"`
-	Quote      bool `json:"quote"`
-	DailyBars  bool `json:"daily_bars"`
-	StockBasic bool `json:"stock_basic"`
+	Enabled        bool `json:"enabled"`
+	Quote          bool `json:"quote"`
+	DailyBars      bool `json:"daily_bars"`
+	StockBasic     bool `json:"stock_basic"`
+	SectorRankings bool `json:"sector_rankings"`
 }
 
 type Config struct {
@@ -41,8 +42,9 @@ type Config struct {
 	ProvidersConfigPath     string
 	EastmoneyQuoteURL       string
 	EastmoneyKlineURL       string
-	EastmoneyStockBasicURL  string
-	EastmoneyUT             string
+	EastmoneyStockBasicURL    string
+	EastmoneySectorRankingURL string
+	EastmoneyUT               string
 	TencentQuoteURL         string
 	TencentKlineURL         string
 	TencentNoneKlineURL     string
@@ -85,7 +87,7 @@ func Load() (Config, error) {
 		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
@@ -161,8 +163,9 @@ func Load() (Config, error) {
 		ProvidersConfigPath:     configPath,
 		EastmoneyQuoteURL:       get("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://push2.eastmoney.com/api/qt/stock/get"),
 		EastmoneyKlineURL:       get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
-		EastmoneyStockBasicURL:  get("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://datacenter.eastmoney.com/securities/api/data/v1/get"),
-		EastmoneyUT:             get("MARKET_DATA_EASTMONEY_UT", ""),
+		EastmoneyStockBasicURL:    get("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://datacenter.eastmoney.com/securities/api/data/v1/get"),
+		EastmoneySectorRankingURL: get("MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL", "https://push2.eastmoney.com/api/qt/clist/get"),
+		EastmoneyUT:               get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:         get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
 		TencentNoneKlineURL:     get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),
@@ -201,6 +204,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_EASTMONEY_QUOTE_URL":       cfg.EastmoneyQuoteURL,
 		"MARKET_DATA_EASTMONEY_KLINE_URL":       cfg.EastmoneyKlineURL,
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_URL": cfg.EastmoneyStockBasicURL,
+		"MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL": cfg.EastmoneySectorRankingURL,
 		"MARKET_DATA_TENCENT_QUOTE_URL":         cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":         cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL":    cfg.TencentNoneKlineURL,
@@ -326,6 +330,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.Quote = boolEnv("MARKET_DATA_"+prefix+"_QUOTE_ENABLED", p.Quote)
 	p.DailyBars = boolEnv("MARKET_DATA_"+prefix+"_DAILY_BARS_ENABLED", p.DailyBars)
 	p.StockBasic = boolEnv("MARKET_DATA_"+prefix+"_STOCK_BASIC_ENABLED", p.StockBasic)
+	p.SectorRankings = boolEnv("MARKET_DATA_"+prefix+"_SECTOR_RANKINGS_ENABLED", p.SectorRankings)
 	return p
 }
 
@@ -497,6 +502,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_DB_AUTO_MIGRATE", "MARKET_DATA_EASTMONEY_ENABLED",
 		"MARKET_DATA_BAOSTOCK_ENABLED", "MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
+		"MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
 		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",

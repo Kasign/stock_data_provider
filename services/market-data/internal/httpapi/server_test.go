@@ -19,6 +19,21 @@ import (
 type httpFakeProvider struct{}
 
 func (httpFakeProvider) Name() string { return "eastmoney" }
+func (httpFakeProvider) FetchSectorRankings(_ context.Context, category string, _ int) (*model.SectorRankingSnapshot, error) {
+	now := time.Now().UTC()
+	pct, price, amount := 2.4, 123.45, 987654321.0
+	return &model.SectorRankingSnapshot{
+		Category: category, Total: 1, Source: "eastmoney", SourceVersion: "test",
+		FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		Items: []model.SectorRanking{{
+			Rank: 1, Code: "BK0475", Name: "测试板块", Category: category,
+			LatestPrice: &price, ChangePercent: &pct, Amount: &amount, AmountUnit: "CNY",
+			Source: "eastmoney", SourceVersion: "test", FetchedAt: now,
+			QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		}},
+	}, nil
+}
 func (httpFakeProvider) FetchStockBasic(_ context.Context, symbol string) (*model.StockBasic, error) {
 	return &model.StockBasic{Symbol: symbol, Name: "测试证券", IPODate: "2000-01-01", SecurityType: 1, SecurityTypeLabel: "stock", ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid}, nil
 }
@@ -186,5 +201,40 @@ func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("data-sources response missing %s: %s", want, body)
 		}
+	}
+}
+
+
+func TestSectorRankingEndpointSeparatesIndustryAndConcept(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities(
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p},
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil,
+	)
+	svc.SetSectorRankingProviders([]provider.SectorRankingProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
+	).Handler()
+	for _, category := range []string{"industry", "concept"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type="+category+"&limit=5", nil)
+		req.Header.Set("X-API-Key", "secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("category=%s status=%d body=%s", category, w.Code, w.Body.String())
+		}
+		for _, want := range []string{`"category":"` + category + `"`, `"code":"BK0475"`, `"amount_unit":"CNY"`, `"quality_status":"degraded"`} {
+			if !strings.Contains(w.Body.String(), want) {
+				t.Fatalf("category=%s response missing %s: %s", category, want, w.Body.String())
+			}
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type=all", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+		t.Fatalf("invalid sector category should be rejected, got status=%d body=%s", w.Code, w.Body.String())
 	}
 }
