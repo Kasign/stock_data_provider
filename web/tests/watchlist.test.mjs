@@ -38,7 +38,8 @@ test("rejects malformed symbols and sanitizes optional names", () => {
   const added = addWatchlistSymbol("300750.SZ", "  宁德\u0000时代  ", storage, "2026-10-23T00:00:00Z");
   assert.equal(added.valid, true);
   assert.equal(added.items[0].name, "宁德时代");
-  assert.equal(addWatchlistSymbol("600001.SH", "x".repeat(50), storage).items[1].name.length, 32);
+  const longAlias = addWatchlistSymbol("600001.SH", "x".repeat(50), storage);
+  assert.equal(longAlias.items.find((item) => item.symbol === "600001.SH").name.length, 32);
 });
 
 test("renames and removes entries without retaining unrelated properties", () => {
