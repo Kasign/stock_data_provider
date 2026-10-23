@@ -623,32 +623,46 @@ func TestEastmoneyIndexEndpointAndCapabilityAreConfigurable(t *testing.T) {
 	}
 }
 
-
 func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "")
 	cfg, err := Load()
-	if err != nil { t.Fatal(err) }
-	if cfg.ProviderSettings["baostock"].Fundamentals { t.Fatal("fundamentals must stay disabled until target deployment acceptance") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["baostock"].Fundamentals {
+		t.Fatal("fundamentals must stay disabled until target deployment acceptance")
+	}
 	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "true")
 	cfg, err = Load()
-	if err != nil { t.Fatal(err) }
-	if !cfg.ProviderSettings["baostock"].Fundamentals { t.Fatal("explicit opt-in must enable fundamentals") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ProviderSettings["baostock"].Fundamentals {
+		t.Fatal("explicit opt-in must enable fundamentals")
+	}
 }
 
-
 func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "")
 	cfg, err := Load()
-	if err != nil { t.Fatal(err) }
-	if cfg.ProviderSettings["baostock"].Fundamentals { t.Fatal("fundamentals must stay disabled until target deployment acceptance") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["baostock"].Fundamentals {
+		t.Fatal("fundamentals must stay disabled until target deployment acceptance")
+	}
 	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "true")
 	cfg, err = Load()
-	if err != nil { t.Fatal(err) }
-	if !cfg.ProviderSettings["baostock"].Fundamentals { t.Fatal("explicit opt-in must enable fundamentals") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ProviderSettings["baostock"].Fundamentals {
+		t.Fatal("explicit opt-in must enable fundamentals")
+	}
 }

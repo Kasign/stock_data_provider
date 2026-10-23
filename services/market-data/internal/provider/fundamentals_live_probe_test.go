@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/baostock"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
 func TestLiveProviderProbeQuarterlyFundamentals(t *testing.T) {
@@ -30,7 +31,9 @@ func TestLiveProviderProbeQuarterlyFundamentals(t *testing.T) {
 		"year": 2026, "quarter": 2, "elapsed_ms": time.Since(started).Milliseconds(),
 		"status": "failed",
 	}
-	if snapshot != nil { result["fundamentals"] = snapshot }
+	if snapshot != nil {
+		result["fundamentals"] = snapshot
+	}
 	if err != nil {
 		kind, message := liveProbeErrorSummary(err)
 		result["error_kind"], result["error"] = kind, message
@@ -48,11 +51,17 @@ func TestLiveProviderProbeQuarterlyFundamentals(t *testing.T) {
 	wantDate := "2026-06-30"
 	seen := map[string]bool{}
 	for _, section := range snapshot.Sections {
-		if seen[section.Category] { t.Fatalf("duplicate fundamentals category %q", section.Category) }
+		if seen[section.Category] {
+			t.Fatalf("duplicate fundamentals category %q", section.Category)
+		}
 		seen[section.Category] = true
-		if section.HasData && section.ReportDate != wantDate { t.Fatalf("category %s report_date=%s want=%s", section.Category, section.ReportDate, wantDate) }
+		if section.HasData && section.ReportDate != wantDate {
+			t.Fatalf("category %s report_date=%s want=%s", section.Category, section.ReportDate, wantDate)
+		}
 		if section.HasData && section.PublicationDate != "" {
-			if _, parseErr := time.Parse("2006-01-02", section.PublicationDate); parseErr != nil { t.Fatalf("category %s invalid publication date %q", section.Category, section.PublicationDate) }
+			if _, parseErr := time.Parse("2006-01-02", section.PublicationDate); parseErr != nil {
+				t.Fatalf("category %s invalid publication date %q", section.Category, section.PublicationDate)
+			}
 		}
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {

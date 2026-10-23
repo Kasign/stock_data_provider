@@ -39,7 +39,7 @@ func TestFundamentalsRouteRequiresExplicitPeriod(t *testing.T) {
 	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{p})
 	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
 	for _, tc := range []struct {
-		path string
+		path   string
 		status int
 	}{
 		{"/api/v1/stocks/600519/fundamentals", http.StatusBadRequest},

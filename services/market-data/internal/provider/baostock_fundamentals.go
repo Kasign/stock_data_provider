@@ -111,7 +111,7 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 	snapshot := &model.FundamentalsSnapshot{
 		Symbol: symbol, Year: year, Quarter: quarter,
 		Sections: make([]model.FundamentalSection, 0, len(quarterlyFundamentalMappings)),
-		Source: p.Name(), SourceVersion: "baostock-quarterly-financial-v1",
+		Source:   p.Name(), SourceVersion: "baostock-quarterly-financial-v1",
 		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityUnknown,
 	}
 	queryErrors := 0
@@ -151,13 +151,13 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 			raw := strings.TrimSpace(record.Fields[metric.SourceField])
 			if raw == "" {
 				degraded = true
-				section.QualityReasons = appendReason(section.QualityReasons, "one_or_more_metrics_missing")
+				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_missing")
 				continue
 			}
 			value, parseErr := strconv.ParseFloat(raw, 64)
 			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) {
 				degraded = true
-				section.QualityReasons = appendReason(section.QualityReasons, "one_or_more_metrics_invalid")
+				section.QualityReasons = appendFundamentalReason(section.QualityReasons, "one_or_more_metrics_invalid")
 				continue
 			}
 			section.Metrics = append(section.Metrics, model.FundamentalMetric{
@@ -167,7 +167,7 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 		section.HasData = len(section.Metrics) > 0
 		if !section.HasData {
 			degraded = true
-			section.QualityReasons = appendReason(section.QualityReasons, "no_numeric_metrics_available")
+			section.QualityReasons = appendFundamentalReason(section.QualityReasons, "no_numeric_metrics_available")
 		} else {
 			snapshot.HasData = true
 		}
@@ -201,4 +201,15 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 		snapshot.QualityReasons = []string{"no_financial_records_for_requested_period"}
 	}
 	return snapshot, nil
+}
+
+
+// appendFundamentalReason appends a quality reason only once.
+func appendFundamentalReason(reasons []string, reason string) []string {
+	for _, existing := range reasons {
+		if existing == reason {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
 }

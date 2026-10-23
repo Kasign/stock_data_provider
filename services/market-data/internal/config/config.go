@@ -27,7 +27,7 @@ type ProviderSettings struct {
 	LimitPools      bool `json:"limit_pools"`
 	StockBoards     bool `json:"stock_boards"`
 	TradingCalendar bool `json:"trading_calendar"`
-	Fundamentals bool `json:"fundamentals"`
+	Fundamentals    bool `json:"fundamentals"`
 }
 
 type Config struct {
