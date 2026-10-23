@@ -489,3 +489,30 @@ func TestLoadSinaDailyBarsCanBeEnabled(t *testing.T) {
 		t.Fatalf("Sina K-line endpoint was not loaded: %q", cfg.SinaKlineURL)
 	}
 }
+
+
+func TestLoadNeteaseDailyBarsIsOptInAndEndpointConfigurable(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina,netease")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "5m")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_NETEASE_ENABLED", "true")
+	t.Setenv("MARKET_DATA_NETEASE_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_NETEASE_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_NETEASE_HISTORY_URL", "https://example.test/history")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	netease := cfg.ProviderSettings["netease"]
+	if !netease.Enabled || netease.Quote || !netease.DailyBars {
+		t.Fatalf("Netease must expose daily bars only when enabled: %+v", netease)
+	}
+	if cfg.NeteaseHistoryURL != "https://example.test/history" {
+		t.Fatalf("unexpected Netease endpoint %q", cfg.NeteaseHistoryURL)
+	}
+}

@@ -370,7 +370,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		DailySymbol: dailySymbol,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Results:     make([]liveProbeResult, 0, 12),
+		Results:     make([]liveProbeResult, 0, 13),
 	}
 	var failures []string
 
@@ -628,6 +628,11 @@ func TestLiveProviderProbe(t *testing.T) {
 	yahoo := NewYahooFinance(12*time.Second, "")
 	runDaily("yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
+	})
+
+	netease := NewNetease(12*time.Second, "")
+	runDaily("netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
 	})
 
 	if closeErr := baostockClient.Close(); closeErr != nil {

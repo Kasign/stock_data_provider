@@ -47,6 +47,7 @@ type Config struct {
 	SinaQuoteURL            string
 	SinaKlineURL            string
 	YahooChartURL           string
+	NeteaseHistoryURL       string
 	BaostockHost            string
 	BaostockPort            int
 	BaostockUserID          string
@@ -78,7 +79,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina"},
+		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true},
@@ -86,6 +87,7 @@ func Load() (Config, error) {
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: true},
+			"netease":   {Enabled: false, Quote: false, DailyBars: true},
 		},
 	}
 	file := defaults
@@ -102,7 +104,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" {
+			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -133,6 +135,7 @@ func Load() (Config, error) {
 	settings["tencent"] = overrideProvider("TENCENT", settings["tencent"])
 	settings["sina"] = overrideProvider("SINA", settings["sina"])
 	settings["yahoo"] = overrideProvider("YAHOO", settings["yahoo"])
+	settings["netease"] = overrideProvider("NETEASE", settings["netease"])
 	settings["baostock"] = overrideProvider("BAOSTOCK", settings["baostock"])
 	if settings["baostock"].Quote {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
@@ -166,6 +169,7 @@ func Load() (Config, error) {
 		SinaQuoteURL:            get("MARKET_DATA_SINA_QUOTE_URL", "https://hq.sinajs.cn/list="),
 		SinaKlineURL:            get("MARKET_DATA_SINA_KLINE_URL", "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"),
 		YahooChartURL:           get("MARKET_DATA_YAHOO_CHART_URL", "https://query1.finance.yahoo.com/v8/finance/chart"),
+		NeteaseHistoryURL:       get("MARKET_DATA_NETEASE_HISTORY_URL", "https://quotes.money.163.com/service/chddata.html"),
 		BaostockHost:            get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
 		BaostockPort:            integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
 		BaostockUserID:          get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),
@@ -201,6 +205,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_SINA_QUOTE_URL":         cfg.SinaQuoteURL,
 		"MARKET_DATA_SINA_KLINE_URL":         cfg.SinaKlineURL,
 		"MARKET_DATA_YAHOO_CHART_URL":        cfg.YahooChartURL,
+		"MARKET_DATA_NETEASE_HISTORY_URL":    cfg.NeteaseHistoryURL,
 		"MARKET_DATA_MX_API_URL":             cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {

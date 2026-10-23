@@ -5,7 +5,7 @@
 ## 当前实现范围
 
 - 实时行情 Provider：东方财富、腾讯、新浪。
-- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新浪新增原始日 K（只支持 `none`），Yahoo Finance 日 K 已完成 GitHub Actions 真实响应验证但默认关闭。BaoStock 为日 K 备用源。
+- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新浪新增原始日 K（只支持 `none`），Yahoo Finance 已完成 GitHub Actions 实测且默认关闭；网易财经 CSV 日 K 已实现，正在通过 GitHub Actions 验证、默认关闭。BaoStock 为默认日 K 备用源。
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表，以及可选补充数据接口。
@@ -40,6 +40,13 @@ GitHub Actions 已连续完成真实登录/查询探测，且此前已有 NAS �
 - 该端点未提供可验证的复权参数，因此只接受 `adjustment=none`；请求前/后复权时明确返回不支持，不会把原始价格伪装成复权价格。
 - 该端点未提供经验证的成交额字段，`amount` 保持 `null`、`amount_unit=unknown`，质量标记为 `degraded`；响应也不回显股票代码，报告会保留身份校验限制。
 - 新浪接口单次历史回看最多 1023 条；若触及上限且无法覆盖请求起始日期，适配器返回明确错误，不静默接受不完整区间。真实请求结果以 GitHub Actions 探测和目标部署网络持续复验。
+
+## 网易财经历史日 K（默认关闭）
+
+- 通过 `MARKET_DATA_NETEASE_HISTORY_URL`（默认 `https://quotes.money.163.com/service/chddata.html`）下载公开 CSV；适配器按 GBK/UTF-8 解码并根据中文表头定位开高低收、成交量、成交金额，不依赖 Python 或 API Key。
+- 仅支持已验证的 `adjustment=none`；前复权/后复权请求会明确返回不支持。来源为非正式下载接口，默认关闭，只有完成目标网络验收后才通过 `MARKET_DATA_NETEASE_ENABLED=true` 启用。
+- 对成交额和成交量做内在一致性检查：以 `成交金额 / 成交量` 对照当日最低/最高价，只有单位解释唯一且均价处于 OHLC 附近时才保留可信金额；无法匹配或存在歧义时 `amount` 保持 `null`、金额单位 `unknown`，并标记 `degraded`。不会用收盘价乘成交量估算成交额。
+- 真实探测结果与响应不稳定情况记录在 `docs/architecture/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md`；当前默认关闭，不加入生产默认回退链。
 
 ## Yahoo Finance 日 K（默认关闭）
 
