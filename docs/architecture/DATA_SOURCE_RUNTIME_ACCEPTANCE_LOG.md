@@ -403,10 +403,47 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 - 同日的一次性 push 探测 [#22](https://github.com/Kasign/stock_data_provider/actions/runs/39887647358) 曾遇到 Eastmoney 两个报价入口的 TLS 握手超时，并显示 MX API key missing；稍后的 #24 Eastmoney 又恢复成功。这是对公共端点波动的再次实证，不应把 #22 解释为持久性代码回归。
 - 妙想筹码与资金流尚未完成线上验收：在一次性 push 事件中，环境里没有可用的 `MARKET_DATA_MX_API_KEY`，两项报告都明确记录 `MX API key is missing`，没有对 MX 端点执行查询。需要核对 GitHub Actions Secret `MX_APIKEY` 的配置与该工作流的访问权限，再手动运行并勾选 `include_mx`；没有这一步前不可标记为已验证。
 
+## 5.16 新增 Yahoo Finance 与新浪历史日 K 能力（2026-10-23）
+
+### 5.16.1 代码与契约
+
+- Yahoo Finance 新增原生 Go Chart JSON 适配器，支持沪深 A 股历史日 K 与明确记录的复权参考日；默认关闭，不进入默认生产回退链，原因是端点属于非官方公开接口且缺少可核验的 A 股成交额。
+- 新浪从报价 Provider 扩展为报价 + 历史日 K Provider，历史 K 线 endpoint 独立配置为 `MARKET_DATA_SINA_KLINE_URL`。新浪日 K 只接受 `adjustment=none`；请求前/后复权会明确返回不支持，不把原始价格冒充复权序列。
+- 新浪与 Yahoo 日 K 都不提供可核验的成交额字段，`amount=null`、`amount_unit=unknown` 并固定降级；新浪 K 线接口不回显证券代码，因此额外记录 `provider_symbol_not_echoed_by_kline_response`。
+- 新增 Yahoo / 新浪的 mock JSON、复权与日期边界、符号校验、配置开关测试；统一真实 Provider probe 同时覆盖新浪原始日 K 和 Yahoo 前复权日 K。
+- 本轮实现与配置已分别提交：[`3c5f3e8`](https://github.com/Kasign/stock_data_provider/commit/3c5f3e8f573a732b7a58b2a02dba7b7144f44cb8)（Yahoo adapter）、[`2b88b89`](https://github.com/Kasign/stock_data_provider/commit/2b88b892b5cc5af0a11552f7fbb2d102467e917b)（Sina adapter）；随后修复测试 JSON、gofmt 与扩展 provider 后的配置超时预算。
+
+### 5.16.2 Go CI
+
+- [Go test suite #39891606308](https://github.com/Kasign/stock_data_provider/actions/runs/39891606308) 在提交 `393edb896bc14e6a805e218fb5dd7e53c43a111e` 上成功。根模块、`go-core`、`services/market-data` 测试均通过，包含竞态检测、`go vet`、Compose 校验与 Docker 镜像构建。
+- 此次过程中 CI 先后捕获测试 JSON 字面量语法错误、三处 `gofmt` 差异和新增日 K Provider 导致旧测试的请求超时预算不足，均已按测试日志修正；最终成功结果对应修正后的提交，而不是中间失败提交。
+
+### 5.16.3 GitHub Runner 实测
+
+最新 [Live provider probe #39891606288](https://github.com/Kasign/stock_data_provider/actions/runs/39891606288) 的工作流总体为 success，但 Provider 探测内部仍记录一次东方财富主报价 TLS handshake timeout；诊断 job 配置 `continue-on-error`，因此必须查看单项记录，不能把整体绿色解释成全部上游请求都成功。Artifact：[live-provider-report #12475072085](https://github.com/Kasign/stock_data_provider/actions/runs/39891606288/artifacts/12475072085)，6,517 bytes，GitHub 元数据 SHA-256 为 `243f7251e1f52cbfb2bc20ff5e64f362eb48694c2ddc2d83bed9cb487af3b377`。
+
+| Provider / 能力 | 实测结果 | 解释 |
+|---|---|---|
+| 新浪实时行情 | HTTP 200，报价字段和时间可解析，当前样本质量 valid | 此处仍是实时行情端点，不与历史 K 线端点混用 |
+| 新浪原始日 K | HTTP 200，返回 8 根；2026-10-20 至 2026-10-22 的成交量分别为 76,094,847、74,818,026、98,924,396 股 | 日期升序与 limit 正常；样本量与 BaoStock 逐日一致，腾讯在换算到股后相差少量整数精度；缺成交额/证券代码回显，固定 degraded |
+| Yahoo Finance 前复权日 K | HTTP 200，返回 8 根，成交量与 BaoStock 样本一致 | `forward_adjusted` 及参考日有明确标记；成交额缺失、固定 degraded，默认关闭 |
+| Eastmoney 主报价 | 本轮 TLS handshake timeout | 其他 Eastmoney 接口同轮可以返回，属于端点/网络不稳定，不据单轮判定适配器不可用 |
+| Eastmoney 延迟报价/前复权日 K | 报价 HTTP 200；前复权日 K 返回 8 根且质量 valid | 同一时间窗口内延迟域可用，仍需持续观察主入口重定向后的网络稳定性 |
+| Tencent 日 K | 不复权与前复权各返回 8 根 | 缺成交额，固定 degraded |
+| BaoStock 前复权日 K | 返回 8 根且质量 valid | 金额和股数可供交叉校验，GitHub Runner 网络成功不替代部署容器验收 |
+| MX_API | skipped / 未请求 | Actions 环境仍无可用 `MX_APIKEY`，筹码和资金流不能标记为线上验证通过 |
+
+### 5.16.4 使用与未完成项
+
+- 新浪日 K 可以给 `adjustment=none` 的请求提供可选回退；对前复权或后复权请求必须让新浪返回不支持并继续回退其他源。
+- Yahoo 保持默认关闭，只有在目标 NAS/Docker 环境验证可达并确认消费方接受 `degraded` / amount unknown 后再考虑启用。两项新数据源都不可单独支撑依赖成交额的资金流、量价金额判断。
+- 本轮没有完成财务报表、新闻公告、板块/指数广度、龙虎榜等数据域，也没有接入所有路线图候选源；这些仍需按数据域逐项实现 Go Adapter 与来源质量契约。
+- GitHub Runner 实测只证明对应时刻的公网响应。目标 NAS 的供应商网络、实际服务路由和持久化端到端仍需单独验收。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
 2. 在仅启用 Tencent 日 K 的独立配置下验证 `adjustment=none`（并按接口真实能力测试复权请求），检查来源、成交量单位、成交额、日期覆盖和数据质量标记。
-3. 独立测试 Sina 报价能力；不将其误认为日 K Provider，因为当前实现中 Sina 仅配置为 QuoteProvider。
+3. 独立测试新浪报价与历史日 K：报价用 quote endpoint；日 K 仅接受 `adjustment=none`，验证目标容器网络、来源路由和 amount unknown/degraded 处理。
 4. Eastmoney 保持待调查；等后续具备时间再按第 5.5 节排查。
 5. 最后进行完整回归：优先级与故障切换、缓存、MariaDB 写入/回退、质量降级、服务配置恢复和日志关联。

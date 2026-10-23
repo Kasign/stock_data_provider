@@ -1,6 +1,6 @@
 # Go 数据服务迁移状态与验收边界
 
-> 更新时间：2026-10-22  
+> 更新时间：2026-10-23  
 > 当前分支：`feat/full-go-data-providers-api-switch`  
 > 当前定位：分阶段迁移；不是全 Python 去依赖的最终版本。
 
@@ -43,7 +43,7 @@ MX 相关接口：
 
 ## 2. 明确尚未完成
 
-- 原 Python Provider 的完整替换仍未完成：Efinance、AkShare、Pytdx、Tushare、TickFlow、YFinance、Longbridge、Futu、Finnhub、Alpha Vantage 等仍需逐一对照上游源码、权限、优先级、单位和失败语义；BaoStock 已有首轮真实日 K 验收，仍需持续扩大样本并观察稳定性。
+- 原 Python Provider 的完整替换仍未完成：Efinance、AkShare、Pytdx、Tushare、TickFlow、Longbridge、Futu、Finnhub、Alpha Vantage 等仍需逐一对照上游源码、权限、优先级、单位和失败语义；Yahoo Finance Chart API 已有独立的可选 Go 日 K adapter，但不等于 YFinance 的全部能力已迁移。BaoStock 和新浪已取得真实日 K 样本，仍需持续扩大样本并观察稳定性。
 - 全市场指数/广度、行业/概念板块、涨停池、财务、完整资金流口径、龙虎榜、新闻公告等 Go 原生数据域未全部实现。
 - `go-core` 的 market overview/新闻/LLM/部分持久化及通知仍有 Python bridge 依赖。
 - 同花顺接入尚未实现，已列入计划；参考仓库 [Kasign/Financial-API](https://github.com/Kasign/Financial-API)，必须先核验真实 API 权限、速率限制和字段口径。
@@ -113,7 +113,7 @@ go vet ./...
 
 1. 用户恢复测试前的 `.env` 并重新创建 `market-data` 后，确认 BaoStock 正常路由恢复；首轮真实样本已通过，后续继续扩大交易日、停牌/无数据日期和更长历史范围的验收。
 2. 独立测试 Tencent 日 K：只启用 Tencent，先验收不复权数据日期覆盖、OHLC、成交量/成交额单位和质量标记，再按真实响应测试复权能力；缺失成交额或未复权价格不得伪装成完整前复权数据。
-3. 独立测试 Sina 报价能力；当前 Sina 是 QuoteProvider，不应误当作日 K Provider。
+3. 独立测试新浪报价与日 K：日 K 当前只支持 `adjustment=none`，且 amount unknown/degraded；目标 NAS/Docker 网络和服务实际路由仍需验收。
 4. 持续跟踪 Eastmoney 历史行情接口 `Network unreachable`；根因未确定，按[真实环境验收记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)保存证据并待后续排查。
 5. 接着按[数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)分域推进财务、基础资料、行业/指数、市场广度、板块、龙虎榜和新闻公告数据域；Tushare/THS 的权限、费用及速率先核实再接入。
 6. 完成实际部署版本的 Provider 错误日志验证，以及 MariaDB/Redis 权限、缓存新鲜度、健康检查与 Docker Compose 端到端回归；之后继续实现 SSE 和前端任务进度展示。
