@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -57,6 +58,36 @@ func TestEastmoneyFetchMarketBreadthRejectsIncompleteCoverage(t *testing.T) {
 	_, err := p.FetchMarketBreadth(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "incomplete") {
 		t.Fatalf("expected incomplete coverage error, got %v", err)
+	}
+}
+
+
+func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests.Add(1) == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"rc": 0,
+			"data": map[string]any{
+				"total": 1,
+				"diff": []map[string]any{{"f12":"600519","f13":1,"f14":"贵州茅台","f3":1.2,"f6":12.0}},
+			},
+		})
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/clist/get", server.URL, "")
+	got, err := p.FetchMarketBreadth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests.Load() != 2 {
+		t.Fatalf("expected one retry after transient 502, got %d requests", requests.Load())
+	}
+	if got.CoveredSecurities != 1 || got.AdvancingCount != 1 {
+		t.Fatalf("unexpected retry result: %+v", got)
 	}
 }
 

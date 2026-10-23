@@ -1116,7 +1116,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		RC   *int `json:"rc"`
 		Data *struct {
 			Total int                          `json:"tc"`
-			QDate json.RawMessage            `json:"qdate"`
+			QDate json.RawMessage              `json:"qdate"`
 			Pool  []map[string]json.RawMessage `json:"pool"`
 		} `json:"data"`
 	}
