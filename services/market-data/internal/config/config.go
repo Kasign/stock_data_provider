@@ -161,7 +161,7 @@ func Load() (Config, error) {
 		ProvidersConfigPath:     configPath,
 		EastmoneyQuoteURL:       get("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://push2.eastmoney.com/api/qt/stock/get"),
 		EastmoneyKlineURL:       get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
-		EastmoneyStockBasicURL:  get("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", defaultEastmoneyStockBasicURL),
+		EastmoneyStockBasicURL:  get("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://datacenter.eastmoney.com/securities/api/data/v1/get"),
 		EastmoneyUT:             get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:         get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
