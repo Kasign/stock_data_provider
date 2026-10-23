@@ -171,7 +171,7 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		Open: &openV, High: &highV, Low: &lowV, PrevClose: &prevClose,
 		Volume: volume, Amount: amount, QuoteTime: quoteTime,
 		QuoteTimeSemantics: "provider_snapshot_time",
-		FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: neteaseQuoteVersion,
+		FetchedAt:          now, NormalizedAt: now, Source: p.Name(), SourceVersion: neteaseQuoteVersion,
 		RawVolume: float64PointerIfValid(rawVolume, volumeErr == nil), RawVolumeUnit: optionalVolumeUnit(volume, "shares"),
 		RawAmount: float64PointerIfValid(rawAmount, amountErr == nil), RawAmountUnit: optionalUnit(amount, "CNY"),
 		RawAmountField: "turnover", VolumeUnit: optionalVolumeUnit(volume, "shares"),
@@ -569,7 +569,6 @@ func neteaseDateRange(startDate, endDate string, limit int, now time.Time) (time
 	}
 	return start, end, nil
 }
-
 
 func optionalVolumeUnit(value *int64, unit string) string {
 	if value == nil {
