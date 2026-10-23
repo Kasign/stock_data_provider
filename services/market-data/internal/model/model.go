@@ -188,7 +188,6 @@ type IndexQuoteSnapshot struct {
 	QualityReasons []string           `json:"quality_reasons,omitempty"`
 }
 
-
 type MarketBreadthSnapshot struct {
 	Market              string        `json:"market"`
 	TotalSecurities     int           `json:"total_securities"`

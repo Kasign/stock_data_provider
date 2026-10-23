@@ -199,7 +199,6 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 	return nil, false, fmt.Errorf("all index-quote providers failed: %s", strings.Join(failures, "; "))
 }
 
-
 func (s *DataService) SetMarketBreadthProviders(providers []provider.MarketBreadthProvider) {
 	s.marketBreadthProviders = append([]provider.MarketBreadthProvider(nil), providers...)
 }
@@ -214,8 +213,12 @@ func (s *DataService) LimitPoolProviders() []provider.LimitPoolProvider {
 }
 
 func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
-	if snapshot == nil { return errors.New("market-breadth provider returned an empty snapshot") }
-	if snapshot.Market != "cn_a_share" { return fmt.Errorf("unsupported market-breadth market %q", snapshot.Market) }
+	if snapshot == nil {
+		return errors.New("market-breadth provider returned an empty snapshot")
+	}
+	if snapshot.Market != "cn_a_share" {
+		return fmt.Errorf("unsupported market-breadth market %q", snapshot.Market)
+	}
 	if snapshot.TotalSecurities <= 0 || snapshot.CoveredSecurities != snapshot.TotalSecurities {
 		return fmt.Errorf("market-breadth coverage mismatch: covered=%d total=%d", snapshot.CoveredSecurities, snapshot.TotalSecurities)
 	}
@@ -223,99 +226,185 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 	if snapshot.AdvancingCount < 0 || snapshot.DecliningCount < 0 || snapshot.UnchangedCount < 0 || snapshot.UnclassifiedCount < 0 || counts != snapshot.CoveredSecurities {
 		return errors.New("market-breadth category counts do not reconcile to covered securities")
 	}
-	if snapshot.AmountCoverageCount < 0 || snapshot.AmountCoverageCount > snapshot.CoveredSecurities { return errors.New("market-breadth amount coverage is invalid") }
+	if snapshot.AmountCoverageCount < 0 || snapshot.AmountCoverageCount > snapshot.CoveredSecurities {
+		return errors.New("market-breadth amount coverage is invalid")
+	}
 	if snapshot.AmountCoverageCount == snapshot.CoveredSecurities {
-		if snapshot.TotalAmountCNY == nil || math.IsNaN(*snapshot.TotalAmountCNY) || math.IsInf(*snapshot.TotalAmountCNY,0) || *snapshot.TotalAmountCNY < 0 {
+		if snapshot.TotalAmountCNY == nil || math.IsNaN(*snapshot.TotalAmountCNY) || math.IsInf(*snapshot.TotalAmountCNY, 0) || *snapshot.TotalAmountCNY < 0 {
 			return errors.New("market-breadth amount invalid despite complete amount coverage")
 		}
-	} else if snapshot.TotalAmountCNY != nil { return errors.New("partial market-breadth amount coverage must not expose a total amount") }
-	if strings.TrimSpace(snapshot.Source)=="" || snapshot.FetchedAt.IsZero() { return errors.New("market-breadth source or fetched_at is missing") }
-	if snapshot.QualityStatus!=model.QualityValid && snapshot.QualityStatus!=model.QualityDegraded { return fmt.Errorf("market-breadth quality status %q is unsupported",snapshot.QualityStatus) }
+	} else if snapshot.TotalAmountCNY != nil {
+		return errors.New("partial market-breadth amount coverage must not expose a total amount")
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("market-breadth source or fetched_at is missing")
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("market-breadth quality status %q is unsupported", snapshot.QualityStatus)
+	}
 	return nil
 }
 
 func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, bool, error) {
-	if ctx==nil { ctx=context.Background() }
-	if err:=ctx.Err();err!=nil { return nil,false,err }
-	const ttl=15*time.Second
-	const key="md:v1:market-breadth:cn-a-share"
-	if data,ok,cacheErr:=s.cache.Get(ctx,key);cacheErr==nil && ok {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = 15 * time.Second
+	const key = "md:v1:market-breadth:cn-a-share"
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketBreadthSnapshot
-		if json.Unmarshal(data,&cached)==nil && validateMarketBreadth(&cached)==nil && time.Since(cached.FetchedAt)>=0 && time.Since(cached.FetchedAt)<ttl { return &cached,true,nil }
-	} else if cacheErr!=nil { s.logger.Warn("market breadth cache read failed","error",cacheErr) }
-	if len(s.marketBreadthProviders)==0 { return nil,false,errors.New("no enabled market-breadth provider") }
+		if json.Unmarshal(data, &cached) == nil && validateMarketBreadth(&cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+			return &cached, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("market breadth cache read failed", "error", cacheErr)
+	}
+	if len(s.marketBreadthProviders) == 0 {
+		return nil, false, errors.New("no enabled market-breadth provider")
+	}
 	var failures []string
-	for _,p:=range s.marketBreadthProviders {
-		if err:=ctx.Err();err!=nil { return nil,false,err }
-		snapshot,fetchErr:=p.FetchMarketBreadth(ctx)
-		if fetchErr!=nil { failures=append(failures,p.Name()+": "+fetchErr.Error());continue }
-		if err:=validateMarketBreadth(snapshot);err!=nil { failures=append(failures,p.Name()+": "+err.Error());continue }
-		if data,err:=json.Marshal(snapshot);err==nil { if cacheErr:=s.cache.Set(ctx,key,data,ttl);cacheErr!=nil { s.logger.Warn("market breadth cache write failed","error",cacheErr) } }
-		return snapshot,false,nil
+	for _, p := range s.marketBreadthProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchMarketBreadth(ctx)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateMarketBreadth(snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if data, err := json.Marshal(snapshot); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+				s.logger.Warn("market breadth cache write failed", "error", cacheErr)
+			}
+		}
+		return snapshot, false, nil
 	}
-	return nil,false,fmt.Errorf("all market-breadth providers failed: %s",strings.Join(failures,"; "))
+	return nil, false, fmt.Errorf("all market-breadth providers failed: %s", strings.Join(failures, "; "))
 }
 
-func normalizeLimitPoolDate(rawDate string) (string,error) {
-	rawDate=strings.TrimSpace(rawDate)
-	if rawDate=="" {
-		loc,err:=time.LoadLocation("Asia/Shanghai")
-		if err!=nil { loc=time.FixedZone("CST",8*60*60) }
-		return time.Now().In(loc).Format("2006-01-02"),nil
+func normalizeLimitPoolDate(rawDate string) (string, error) {
+	rawDate = strings.TrimSpace(rawDate)
+	if rawDate == "" {
+		loc, err := time.LoadLocation("Asia/Shanghai")
+		if err != nil {
+			loc = time.FixedZone("CST", 8*60*60)
+		}
+		return time.Now().In(loc).Format("2006-01-02"), nil
 	}
-	parsed,err:=time.Parse("2006-01-02",rawDate)
-	if err!=nil { return "",fmt.Errorf("invalid limit-pool date %q: expected YYYY-MM-DD",rawDate) }
-	return parsed.Format("2006-01-02"),nil
+	parsed, err := time.Parse("2006-01-02", rawDate)
+	if err != nil {
+		return "", fmt.Errorf("invalid limit-pool date %q: expected YYYY-MM-DD", rawDate)
+	}
+	return parsed.Format("2006-01-02"), nil
 }
 
-func validateLimitPoolSnapshot(poolType,tradeDate string,limit int,snapshot *model.LimitPoolSnapshot) error {
-	if snapshot==nil { return errors.New("limit-pool provider returned an empty snapshot") }
-	if snapshot.PoolType!=poolType || snapshot.TradeDate!=tradeDate { return fmt.Errorf("limit-pool identity mismatch: requested %s/%s got %s/%s",poolType,tradeDate,snapshot.PoolType,snapshot.TradeDate) }
-	if strings.TrimSpace(snapshot.Source)=="" || snapshot.FetchedAt.IsZero() { return errors.New("limit-pool source or fetched_at is missing") }
-	if snapshot.Total<0 || len(snapshot.Items)>limit { return errors.New("limit-pool total is negative or item count exceeds requested limit") }
+func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *model.LimitPoolSnapshot) error {
+	if snapshot == nil {
+		return errors.New("limit-pool provider returned an empty snapshot")
+	}
+	if snapshot.PoolType != poolType || snapshot.TradeDate != tradeDate {
+		return fmt.Errorf("limit-pool identity mismatch: requested %s/%s got %s/%s", poolType, tradeDate, snapshot.PoolType, snapshot.TradeDate)
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("limit-pool source or fetched_at is missing")
+	}
+	if snapshot.Total < 0 || len(snapshot.Items) > limit {
+		return errors.New("limit-pool total is negative or item count exceeds requested limit")
+	}
 	if snapshot.HasData {
-		if snapshot.Total<=0 || len(snapshot.Items)==0 { return errors.New("limit-pool claims data but has no total/items") }
-		if snapshot.QualityStatus!=model.QualityValid && snapshot.QualityStatus!=model.QualityDegraded { return fmt.Errorf("limit-pool quality status %q is unsupported",snapshot.QualityStatus) }
-		seen:=make(map[string]bool,len(snapshot.Items))
-		for _,item:=range snapshot.Items {
-			if strings.TrimSpace(item.Symbol)=="" || strings.TrimSpace(item.Code)=="" || strings.TrimSpace(item.Name)=="" || item.ChangePercent==nil { return errors.New("limit-pool item missing required fields") }
-			if item.Source!=snapshot.Source || item.FetchedAt.IsZero() { return errors.New("limit-pool item source or fetched_at mismatch") }
-			if seen[item.Symbol] { return fmt.Errorf("limit-pool duplicate symbol %q",item.Symbol) }
-			seen[item.Symbol]=true
+		if snapshot.Total <= 0 || len(snapshot.Items) == 0 {
+			return errors.New("limit-pool claims data but has no total/items")
+		}
+		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+			return fmt.Errorf("limit-pool quality status %q is unsupported", snapshot.QualityStatus)
+		}
+		seen := make(map[string]bool, len(snapshot.Items))
+		for _, item := range snapshot.Items {
+			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.ChangePercent == nil {
+				return errors.New("limit-pool item missing required fields")
+			}
+			if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
+				return errors.New("limit-pool item source or fetched_at mismatch")
+			}
+			if seen[item.Symbol] {
+				return fmt.Errorf("limit-pool duplicate symbol %q", item.Symbol)
+			}
+			seen[item.Symbol] = true
 		}
 		return nil
 	}
-	if snapshot.Total!=0 || len(snapshot.Items)!=0 || snapshot.QualityStatus!=model.QualityUnknown { return errors.New("empty limit pool must remain unknown, not a confirmed zero-event pool") }
+	if snapshot.Total != 0 || len(snapshot.Items) != 0 || snapshot.QualityStatus != model.QualityUnknown {
+		return errors.New("empty limit pool must remain unknown, not a confirmed zero-event pool")
+	}
 	return nil
 }
 
-func (s *DataService) LimitPool(ctx context.Context,rawType,rawDate string,limit int) (*model.LimitPoolSnapshot,bool,error) {
-	poolType:=strings.ToLower(strings.TrimSpace(rawType))
-	if poolType=="" { poolType="up" }
-	if poolType!="up" && poolType!="down" && poolType!="broken" { return nil,false,fmt.Errorf("unsupported limit-pool type %q; want up, down or broken",rawType) }
-	date,err:=normalizeLimitPoolDate(rawDate)
-	if err!=nil { return nil,false,err }
-	if limit==0 { limit=30 }
-	if limit<1 || limit>100 { return nil,false,errors.New("limit-pool limit must be between 1 and 100") }
-	if ctx==nil { ctx=context.Background() }
-	if err:=ctx.Err();err!=nil { return nil,false,err }
-	const ttl=time.Minute
-	key:=fmt.Sprintf("md:v1:limit-pool:%s:%s:%d",poolType,date,limit)
-	if data,ok,cacheErr:=s.cache.Get(ctx,key);cacheErr==nil && ok {
-		var cached model.LimitPoolSnapshot
-		if json.Unmarshal(data,&cached)==nil && validateLimitPoolSnapshot(poolType,date,limit,&cached)==nil && time.Since(cached.FetchedAt)>=0 && time.Since(cached.FetchedAt)<ttl { return &cached,true,nil }
-	} else if cacheErr!=nil { s.logger.Warn("limit pool cache read failed","type",poolType,"date",date,"error",cacheErr) }
-	if len(s.limitPoolProviders)==0 { return nil,false,errors.New("no enabled limit-pool provider") }
-	var failures []string
-	for _,p:=range s.limitPoolProviders {
-		if err:=ctx.Err();err!=nil { return nil,false,err }
-		snapshot,fetchErr:=p.FetchLimitPool(ctx,poolType,date,limit)
-		if fetchErr!=nil { failures=append(failures,p.Name()+": "+fetchErr.Error());continue }
-		if err:=validateLimitPoolSnapshot(poolType,date,limit,snapshot);err!=nil { failures=append(failures,p.Name()+": "+err.Error());continue }
-		if data,err:=json.Marshal(snapshot);err==nil { if cacheErr:=s.cache.Set(ctx,key,data,ttl);cacheErr!=nil { s.logger.Warn("limit pool cache write failed","type",poolType,"date",date,"error",cacheErr) } }
-		return snapshot,false,nil
+func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, limit int) (*model.LimitPoolSnapshot, bool, error) {
+	poolType := strings.ToLower(strings.TrimSpace(rawType))
+	if poolType == "" {
+		poolType = "up"
 	}
-	return nil,false,fmt.Errorf("all limit-pool providers failed: %s",strings.Join(failures,"; "))
+	if poolType != "up" && poolType != "down" && poolType != "broken" {
+		return nil, false, fmt.Errorf("unsupported limit-pool type %q; want up, down or broken", rawType)
+	}
+	date, err := normalizeLimitPoolDate(rawDate)
+	if err != nil {
+		return nil, false, err
+	}
+	if limit == 0 {
+		limit = 30
+	}
+	if limit < 1 || limit > 100 {
+		return nil, false, errors.New("limit-pool limit must be between 1 and 100")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = time.Minute
+	key := fmt.Sprintf("md:v1:limit-pool:%s:%s:%d", poolType, date, limit)
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.LimitPoolSnapshot
+		if json.Unmarshal(data, &cached) == nil && validateLimitPoolSnapshot(poolType, date, limit, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+			return &cached, true, nil
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("limit pool cache read failed", "type", poolType, "date", date, "error", cacheErr)
+	}
+	if len(s.limitPoolProviders) == 0 {
+		return nil, false, errors.New("no enabled limit-pool provider")
+	}
+	var failures []string
+	for _, p := range s.limitPoolProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchLimitPool(ctx, poolType, date, limit)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateLimitPoolSnapshot(poolType, date, limit, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if data, err := json.Marshal(snapshot); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+				s.logger.Warn("limit pool cache write failed", "type", poolType, "date", date, "error", cacheErr)
+			}
+		}
+		return snapshot, false, nil
+	}
+	return nil, false, fmt.Errorf("all limit-pool providers failed: %s", strings.Join(failures, "; "))
 }
 
 func validateSectorRankingSnapshot(category string, limit int, snapshot *model.SectorRankingSnapshot) error {

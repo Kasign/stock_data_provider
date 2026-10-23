@@ -924,17 +924,16 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	return snapshot, nil
 }
 
-
 const eastmoneyMarketUniverseFilter = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
 const eastmoneyMarketBreadthPageSize = 5000
 const eastmoneyMarketBreadthMaxSecurities = 12000
 
 func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error) {
 	type marketListPayload struct {
-		RC *int `json:"rc"`
+		RC   *int `json:"rc"`
 		Data *struct {
-			Total int `json:"total"`
-			Diff []map[string]json.RawMessage `json:"diff"`
+			Total int                          `json:"total"`
+			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
 	fetchPage := func(page, pageSize int) (*marketListPayload, error) {
@@ -948,39 +947,65 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		if err := p.getJSON(ctx, p.marketStocksURL, params, &payload); err != nil {
 			return nil, fmt.Errorf("Eastmoney market breadth page %d: %w", page, err)
 		}
-		if payload.RC != nil && *payload.RC != 0 { return nil, fmt.Errorf("Eastmoney market breadth provider error rc=%d", *payload.RC) }
-		if payload.Data == nil { return nil, errors.New("Eastmoney market breadth returned no data object") }
+		if payload.RC != nil && *payload.RC != 0 {
+			return nil, fmt.Errorf("Eastmoney market breadth provider error rc=%d", *payload.RC)
+		}
+		if payload.Data == nil {
+			return nil, errors.New("Eastmoney market breadth returned no data object")
+		}
 		return &payload, nil
 	}
 	first, err := fetchPage(1, eastmoneyMarketBreadthPageSize)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	total := first.Data.Total
-	if total <= 0 { return nil, errors.New("Eastmoney market breadth returned a non-positive universe count") }
-	if total > eastmoneyMarketBreadthMaxSecurities { return nil, fmt.Errorf("Eastmoney market breadth universe %d exceeds safety cap %d", total, eastmoneyMarketBreadthMaxSecurities) }
+	if total <= 0 {
+		return nil, errors.New("Eastmoney market breadth returned a non-positive universe count")
+	}
+	if total > eastmoneyMarketBreadthMaxSecurities {
+		return nil, fmt.Errorf("Eastmoney market breadth universe %d exceeds safety cap %d", total, eastmoneyMarketBreadthMaxSecurities)
+	}
 	pageSize := eastmoneyMarketBreadthPageSize
 	if len(first.Data.Diff) > 0 && len(first.Data.Diff) < pageSize && len(first.Data.Diff) < total {
 		// Some public gateways cap pz. Derive page size from the first page and verify every subsequent page.
 		pageSize = len(first.Data.Diff)
 	}
-	if len(first.Data.Diff) == 0 { return nil, errors.New("Eastmoney market breadth returned an empty first page") }
+	if len(first.Data.Diff) == 0 {
+		return nil, errors.New("Eastmoney market breadth returned an empty first page")
+	}
 	rows := make([]map[string]json.RawMessage, 0, total)
 	rows = append(rows, first.Data.Diff...)
 	for page := 2; len(rows) < total; page++ {
-		if page > (eastmoneyMarketBreadthMaxSecurities/pageSize)+1 { return nil, errors.New("Eastmoney market breadth exceeded page safety limit") }
+		if page > (eastmoneyMarketBreadthMaxSecurities/pageSize)+1 {
+			return nil, errors.New("Eastmoney market breadth exceeded page safety limit")
+		}
 		timer := time.NewTimer(180 * time.Millisecond)
 		select {
-		case <-ctx.Done(): timer.Stop(); return nil, ctx.Err()
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
 		case <-timer.C:
 		}
 		next, fetchErr := fetchPage(page, pageSize)
-		if fetchErr != nil { return nil, fetchErr }
-		if next.Data.Total != total { return nil, fmt.Errorf("Eastmoney market universe changed during pagination: first total=%d page %d total=%d", total, page, next.Data.Total) }
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		if next.Data.Total != total {
+			return nil, fmt.Errorf("Eastmoney market universe changed during pagination: first total=%d page %d total=%d", total, page, next.Data.Total)
+		}
 		expected := pageSize
-		if remaining := total-len(rows); remaining < expected { expected = remaining }
-		if len(next.Data.Diff) != expected { return nil, fmt.Errorf("Eastmoney market breadth page %d is incomplete: received %d of %d rows", page, len(next.Data.Diff), expected) }
+		if remaining := total - len(rows); remaining < expected {
+			expected = remaining
+		}
+		if len(next.Data.Diff) != expected {
+			return nil, fmt.Errorf("Eastmoney market breadth page %d is incomplete: received %d of %d rows", page, len(next.Data.Diff), expected)
+		}
 		rows = append(rows, next.Data.Diff...)
 	}
-	if len(rows) != total { return nil, fmt.Errorf("Eastmoney market breadth coverage incomplete: received %d of %d rows", len(rows), total) }
+	if len(rows) != total {
+		return nil, fmt.Errorf("Eastmoney market breadth coverage incomplete: received %d of %d rows", len(rows), total)
+	}
 
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.MarketBreadthSnapshot{
@@ -993,23 +1018,35 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	amountSum, amountCount := 0.0, 0
 	for i, row := range rows {
 		code, market := parseEastmoneyBoardString(row, "f12"), parseEastmoneyBoardString(row, "f13")
-		if code == "" || (market != "0" && market != "1") { return nil, fmt.Errorf("Eastmoney market breadth row %d has invalid security identity", i) }
-		key := market+"."+code
-		if _, exists := seen[key]; exists { return nil, fmt.Errorf("Eastmoney market breadth contains duplicate security %s", key) }
+		if code == "" || (market != "0" && market != "1") {
+			return nil, fmt.Errorf("Eastmoney market breadth row %d has invalid security identity", i)
+		}
+		key := market + "." + code
+		if _, exists := seen[key]; exists {
+			return nil, fmt.Errorf("Eastmoney market breadth contains duplicate security %s", key)
+		}
 		seen[key] = struct{}{}
 		change := parseEastmoneyBoardNumber(row, "f3")
 		switch {
 		case change == nil:
 			snapshot.UnclassifiedCount++
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_change_percent_missing")
-		case *change > 0: snapshot.AdvancingCount++
-		case *change < 0: snapshot.DecliningCount++
-		default: snapshot.UnchangedCount++
+		case *change > 0:
+			snapshot.AdvancingCount++
+		case *change < 0:
+			snapshot.DecliningCount++
+		default:
+			snapshot.UnchangedCount++
 		}
-		if amount := parseEastmoneyBoardNumber(row, "f6"); amount != nil && *amount >= 0 { amountSum += *amount; amountCount++ }
+		if amount := parseEastmoneyBoardNumber(row, "f6"); amount != nil && *amount >= 0 {
+			amountSum += *amount
+			amountCount++
+		}
 	}
 	snapshot.AmountCoverageCount = amountCount
-	if amountCount == total { snapshot.TotalAmountCNY = &amountSum } else {
+	if amountCount == total {
+		snapshot.TotalAmountCNY = &amountSum
+	} else {
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_market_amount_incomplete")
 	}
 	return snapshot, nil
@@ -1017,76 +1054,113 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 
 func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error) {
 	poolType = strings.ToLower(strings.TrimSpace(poolType))
-	endpoints := map[string]string{"up":"getTopicZTPool", "down":"getTopicDTPool", "broken":"getTopicZBPool"}
+	endpoints := map[string]string{"up": "getTopicZTPool", "down": "getTopicDTPool", "broken": "getTopicZBPool"}
 	endpointPath, ok := endpoints[poolType]
-	if !ok { return nil, fmt.Errorf("unsupported limit-pool type %q; want up, down or broken", poolType) }
+	if !ok {
+		return nil, fmt.Errorf("unsupported limit-pool type %q; want up, down or broken", poolType)
+	}
 	date, err := time.Parse("2006-01-02", tradeDate)
-	if err != nil { return nil, fmt.Errorf("invalid limit-pool trade date %q: expected YYYY-MM-DD", tradeDate) }
-	if limit <= 0 { limit = 30 }
-	if limit > 100 { return nil, errors.New("limit-pool limit must not exceed 100") }
+	if err != nil {
+		return nil, fmt.Errorf("invalid limit-pool trade date %q: expected YYYY-MM-DD", tradeDate)
+	}
+	if limit <= 0 {
+		limit = 30
+	}
+	if limit > 100 {
+		return nil, errors.New("limit-pool limit must not exceed 100")
+	}
 	params := url.Values{
 		"ut": {p.ut}, "dpt": {"wz.ztzt"}, "Pageindex": {"0"}, "pagesize": {strconv.Itoa(limit)},
 		"sort": {"fbt:asc"}, "date": {date.Format("20060102")},
 		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 	}
 	var payload struct {
-		RC *int `json:"rc"`
+		RC   *int `json:"rc"`
 		Data *struct {
-			Total int `json:"tc"`
-			QDate string `json:"qdate"`
-			Pool []map[string]json.RawMessage `json:"pool"`
+			Total int                          `json:"tc"`
+			QDate string                       `json:"qdate"`
+			Pool  []map[string]json.RawMessage `json:"pool"`
 		} `json:"data"`
 	}
-	if err := p.getJSON(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload); err != nil { return nil, fmt.Errorf("Eastmoney %s limit-pool request: %w", poolType, err) }
-	if payload.RC != nil && *payload.RC != 0 { return nil, fmt.Errorf("Eastmoney %s limit-pool provider error rc=%d", poolType, *payload.RC) }
-	if payload.Data == nil { return nil, errors.New("Eastmoney limit-pool response has no data object") }
+	if err := p.getJSON(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload); err != nil {
+		return nil, fmt.Errorf("Eastmoney %s limit-pool request: %w", poolType, err)
+	}
+	if payload.RC != nil && *payload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney %s limit-pool provider error rc=%d", poolType, *payload.RC)
+	}
+	if payload.Data == nil {
+		return nil, errors.New("Eastmoney limit-pool response has no data object")
+	}
 	fetchedAt, requestedDate := time.Now().UTC(), date.Format("2006-01-02")
 	snapshot := &model.LimitPoolSnapshot{
 		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(payload.Data.QDate),
 		Total: payload.Data.Total, HasData: payload.Data.Total > 0 && len(payload.Data.Pool) > 0,
-		Items: make([]model.LimitPoolItem,0,len(payload.Data.Pool)), Source:p.Name(),
-		SourceVersion:"eastmoney-push2ex-limit-pool-v1", FetchedAt:fetchedAt, QualityStatus:model.QualityDegraded,
-		QualityReasons:[]string{"provider_snapshot_timestamp_not_exposed","requested_trade_date_is_authoritative"},
+		Items: make([]model.LimitPoolItem, 0, len(payload.Data.Pool)), Source: p.Name(),
+		SourceVersion: "eastmoney-push2ex-limit-pool-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed", "requested_trade_date_is_authoritative"},
 	}
-	if payload.Data.Total==0 && len(payload.Data.Pool)==0 {
-		snapshot.QualityStatus=model.QualityUnknown
-		snapshot.QualityReasons=[]string{"provider_returned_empty_pool_cannot_distinguish_zero_events_from_unavailable_date"}
-		return snapshot,nil
+	if payload.Data.Total == 0 && len(payload.Data.Pool) == 0 {
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = []string{"provider_returned_empty_pool_cannot_distinguish_zero_events_from_unavailable_date"}
+		return snapshot, nil
 	}
-	if payload.Data.Total<=0 || len(payload.Data.Pool)==0 { return nil,errors.New("Eastmoney limit-pool total/pool mismatch") }
-	if len(payload.Data.Pool)>limit { return nil,fmt.Errorf("Eastmoney limit-pool returned %d rows above requested limit %d",len(payload.Data.Pool),limit) }
-	seen:=make(map[string]struct{},len(payload.Data.Pool))
-	for index,raw:=range payload.Data.Pool {
-		code,name,market:=parseEastmoneyBoardString(raw,"c"),parseEastmoneyBoardString(raw,"n"),parseEastmoneyBoardString(raw,"m")
-		change:=parseEastmoneyBoardNumber(raw,"zdp")
-		if code=="" || name=="" || (market!="0" && market!="1") || change==nil { return nil,fmt.Errorf("Eastmoney limit-pool row %d failed code/name/market/change validation",index) }
-		suffix:=".SZ"; if market=="1" { suffix=".SH" }
-		if strings.HasPrefix(code,"8") || strings.HasPrefix(code,"4") { suffix=".BJ" }
-		symbol:=code+suffix
-		if _,exists:=seen[symbol];exists { return nil,fmt.Errorf("Eastmoney limit-pool contains duplicate symbol %s",symbol) }
-		seen[symbol]=struct{}{}
-		snapshot.Items=append(snapshot.Items,model.LimitPoolItem{
-			Symbol:symbol,Code:code,Name:name,ChangePercent:change,
-			FirstTouchTime:parseEastmoneyLimitTime(parseEastmoneyBoardString(raw,"fbt")),
-			LastTouchTime:parseEastmoneyLimitTime(parseEastmoneyBoardString(raw,"lbt")),
-			ConsecutiveBoards:parseEastmoneyBoardInteger(raw,"lbc"),BrokenCount:parseEastmoneyBoardInteger(raw,"zbc"),
-			Industry:parseEastmoneyBoardString(raw,"hybk"),Source:p.Name(),SourceVersion:snapshot.SourceVersion,
-			FetchedAt:fetchedAt,QualityStatus:model.QualityDegraded,QualityReasons:[]string{"provider_snapshot_timestamp_not_exposed"},
+	if payload.Data.Total <= 0 || len(payload.Data.Pool) == 0 {
+		return nil, errors.New("Eastmoney limit-pool total/pool mismatch")
+	}
+	if len(payload.Data.Pool) > limit {
+		return nil, fmt.Errorf("Eastmoney limit-pool returned %d rows above requested limit %d", len(payload.Data.Pool), limit)
+	}
+	seen := make(map[string]struct{}, len(payload.Data.Pool))
+	for index, raw := range payload.Data.Pool {
+		code, name, market := parseEastmoneyBoardString(raw, "c"), parseEastmoneyBoardString(raw, "n"), parseEastmoneyBoardString(raw, "m")
+		change := parseEastmoneyBoardNumber(raw, "zdp")
+		if code == "" || name == "" || (market != "0" && market != "1") || change == nil {
+			return nil, fmt.Errorf("Eastmoney limit-pool row %d failed code/name/market/change validation", index)
+		}
+		suffix := ".SZ"
+		if market == "1" {
+			suffix = ".SH"
+		}
+		if strings.HasPrefix(code, "8") || strings.HasPrefix(code, "4") {
+			suffix = ".BJ"
+		}
+		symbol := code + suffix
+		if _, exists := seen[symbol]; exists {
+			return nil, fmt.Errorf("Eastmoney limit-pool contains duplicate symbol %s", symbol)
+		}
+		seen[symbol] = struct{}{}
+		snapshot.Items = append(snapshot.Items, model.LimitPoolItem{
+			Symbol: symbol, Code: code, Name: name, ChangePercent: change,
+			FirstTouchTime:    parseEastmoneyLimitTime(parseEastmoneyBoardString(raw, "fbt")),
+			LastTouchTime:     parseEastmoneyLimitTime(parseEastmoneyBoardString(raw, "lbt")),
+			ConsecutiveBoards: parseEastmoneyBoardInteger(raw, "lbc"), BrokenCount: parseEastmoneyBoardInteger(raw, "zbc"),
+			Industry: parseEastmoneyBoardString(raw, "hybk"), Source: p.Name(), SourceVersion: snapshot.SourceVersion,
+			FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 		})
 	}
-	return snapshot,nil
+	return snapshot, nil
 }
 
 func parseEastmoneyLimitTime(value string) string {
-	value=strings.TrimSpace(value)
-	if len(value)!=6 { return "" }
-	for _,r:=range value { if r<'0' || r>'9' { return "" } }
-	return value[:2]+":"+value[2:4]+":"+value[4:]
+	value = strings.TrimSpace(value)
+	if len(value) != 6 {
+		return ""
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return value[:2] + ":" + value[2:4] + ":" + value[4:]
 }
 
 func normalizeEastmoneyCompactDate(value string) string {
-	value=strings.TrimSpace(value)
-	if len(value)!=8 { return "" }
-	if parsed,err:=time.Parse("20060102",value);err==nil { return parsed.Format("2006-01-02") }
+	value = strings.TrimSpace(value)
+	if len(value) != 8 {
+		return ""
+	}
+	if parsed, err := time.Parse("20060102", value); err == nil {
+		return parsed.Format("2006-01-02")
+	}
 	return ""
 }

@@ -129,17 +129,23 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 		if settings.IndexQuotes {
 			indexQuoteProvider, ok := p.(provider.IndexQuoteProvider)
-			if !ok { return fmt.Errorf("provider %q is configured for index quotes but does not implement IndexQuoteProvider", name) }
+			if !ok {
+				return fmt.Errorf("provider %q is configured for index quotes but does not implement IndexQuoteProvider", name)
+			}
 			indexQuoteProviders = append(indexQuoteProviders, indexQuoteProvider)
 		}
 		if settings.MarketBreadth {
 			capability, ok := p.(provider.MarketBreadthProvider)
-			if !ok { return fmt.Errorf("provider %q is configured for market breadth but does not implement MarketBreadthProvider", name) }
+			if !ok {
+				return fmt.Errorf("provider %q is configured for market breadth but does not implement MarketBreadthProvider", name)
+			}
 			marketBreadthProviders = append(marketBreadthProviders, capability)
 		}
 		if settings.LimitPools {
 			capability, ok := p.(provider.LimitPoolProvider)
-			if !ok { return fmt.Errorf("provider %q is configured for limit pools but does not implement LimitPoolProvider", name) }
+			if !ok {
+				return fmt.Errorf("provider %q is configured for limit pools but does not implement LimitPoolProvider", name)
+			}
 			limitPoolProviders = append(limitPoolProviders, capability)
 		}
 	}
