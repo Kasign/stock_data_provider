@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,18 +21,29 @@ import (
 )
 
 const neteaseVersion = "netease-history-csv-v1"
+const neteaseQuoteVersion = "netease-finance-quote-v1"
+const maxNeteaseQuoteBytes = 1 << 20
 const neteaseFields = "TCLOSE;HIGH;LOW;TOPEN;LCLOSE;CHG;PCHG;TURNOVER;VOTURNOVER;VATURNOVER"
 
 // Netease reads public historical CSV. The endpoint is unofficial and provides
 // raw, unadjusted OHLC only; the adapter remains disabled by default.
+
 type Netease struct {
 	client     *http.Client
+	quoteURL   string
 	historyURL string
 }
 
 func NewNetease(timeout time.Duration, historyURL string) *Netease {
+	return NewNeteaseConfigured(timeout, "", historyURL)
+}
+
+func NewNeteaseConfigured(timeout time.Duration, quoteURL, historyURL string) *Netease {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
+	}
+	if strings.TrimSpace(quoteURL) == "" {
+		quoteURL = "https://api.money.126.net/data/feed"
 	}
 	if strings.TrimSpace(historyURL) == "" {
 		historyURL = "https://quotes.money.163.com/service/chddata.html"
@@ -43,11 +55,231 @@ func NewNetease(timeout time.Duration, historyURL string) *Netease {
 				return http.ErrUseLastResponse
 			},
 		},
+		quoteURL:   strings.TrimRight(strings.TrimSpace(quoteURL), "/"),
 		historyURL: strings.TrimSpace(historyURL),
 	}
 }
 
 func (p *Netease) Name() string { return "netease" }
+
+// FetchQuote uses NetEase's JSONP quote endpoint and validates the provider echo.
+func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	code, err := neteaseCode(symbol)
+	if err != nil {
+		return nil, err
+	}
+	endpoint, err := url.Parse(p.quoteURL + "/" + code + ",money.api")
+	if err != nil {
+		return nil, fmt.Errorf("parse Netease quote endpoint: %w", err)
+	}
+	query := endpoint.Query()
+	query.Set("callback", "_ntes_quote_callback")
+	endpoint.RawQuery = query.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build Netease quote request: %w", err)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; MarketDataProvider/1.0)")
+	req.Header.Set("Accept", "application/javascript,application/json,*/*")
+	req.Header.Set("Referer", "https://money.163.com/")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Netease quote request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("Netease quote HTTP status %d", resp.StatusCode)
+	}
+	body, err := readBoundedBody(resp.Body, maxNeteaseQuoteBytes)
+	if err != nil {
+		return nil, fmt.Errorf("read Netease quote response: %w", err)
+	}
+	jsonBody, err := decodeNeteaseJSONP(body)
+	if err != nil {
+		return nil, fmt.Errorf("decode Netease quote JSONP: %w", err)
+	}
+	var payload map[string]neteaseQuoteRow
+	if err := json.Unmarshal(jsonBody, &payload); err != nil {
+		return nil, fmt.Errorf("parse Netease quote JSON: %w", err)
+	}
+	row, ok := payload[code]
+	if !ok {
+		return nil, fmt.Errorf("Netease quote response does not contain requested code %s", code)
+	}
+	if reported := strings.TrimSpace(row.Code); reported != "" && reported != code {
+		return nil, fmt.Errorf("Netease quote code mismatch: requested %s got %q", code, reported)
+	}
+	if reported := strings.TrimSpace(row.Symbol); reported != "" && reported != symbol[:6] {
+		return nil, fmt.Errorf("Netease quote symbol mismatch: requested %s got %q", symbol, reported)
+	}
+	price, err := parseNeteaseNumber(row.Price)
+	if err != nil || price <= 0 {
+		return nil, errors.New("Netease quote current price is missing or invalid")
+	}
+	openV, err := parseNeteaseNumber(row.Open)
+	if err != nil || openV <= 0 {
+		return nil, errors.New("Netease quote open price is missing or invalid")
+	}
+	highV, err := parseNeteaseNumber(row.High)
+	if err != nil || highV <= 0 {
+		return nil, errors.New("Netease quote high price is missing or invalid")
+	}
+	lowV, err := parseNeteaseNumber(row.Low)
+	if err != nil || lowV <= 0 {
+		return nil, errors.New("Netease quote low price is missing or invalid")
+	}
+	prevClose, err := parseNeteaseNumber(row.YestClose)
+	if err != nil || prevClose <= 0 {
+		return nil, errors.New("Netease quote previous close is missing or invalid")
+	}
+	change, err := parseNeteaseNumber(row.Updown)
+	if err != nil {
+		return nil, errors.New("Netease quote change is missing or invalid")
+	}
+	percentRatio, err := parseNeteaseNumber(row.Percent)
+	if err != nil {
+		return nil, errors.New("Netease quote percent is missing or invalid")
+	}
+	changePercent := percentRatio * 100
+	if !finiteNumber(changePercent) || math.Abs(changePercent) > 1000 {
+		return nil, errors.New("Netease quote percent is outside a plausible numeric range")
+	}
+	rawVolume, volumeErr := parseNeteaseNumber(row.Volume)
+	var volume *int64
+	if volumeErr == nil {
+		converted, convertErr := normalize.RawSharesToInt64(rawVolume)
+		if convertErr == nil {
+			volume = &converted
+		}
+	}
+	rawAmount, amountErr := parseNeteaseNumber(row.Turnover)
+	var amount *float64
+	if amountErr == nil && rawAmount >= 0 && finiteNumber(rawAmount) {
+		amount = &rawAmount
+	}
+	quoteTime := parseNeteaseQuoteTime(firstNonEmptyString(row.Time, row.Update))
+	now := time.Now().UTC()
+	q := &model.Quote{
+		Symbol: symbol, Name: strings.TrimSpace(row.Name),
+		CurrentPrice: &price, Change: &change, ChangePercent: &changePercent,
+		Open: &openV, High: &highV, Low: &lowV, PrevClose: &prevClose,
+		Volume: volume, Amount: amount, QuoteTime: quoteTime,
+		QuoteTimeSemantics: "provider_snapshot_time",
+		FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: neteaseQuoteVersion,
+		RawVolume: float64PointerIfValid(rawVolume, volumeErr == nil), RawVolumeUnit: optionalUnit(volume, "shares"),
+		RawAmount: float64PointerIfValid(rawAmount, amountErr == nil), RawAmountUnit: optionalUnit(amount, "CNY"),
+		RawAmountField: "turnover", VolumeUnit: optionalUnit(volume, "shares"),
+		AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone,
+		QualityStatus: model.QualityValid, NormalizationVer: normalize.Version,
+	}
+	if strings.TrimSpace(row.Symbol) == "" && strings.TrimSpace(row.Code) == "" {
+		q.QualityStatus = model.QualityDegraded
+		q.QualityReasons = append(q.QualityReasons, "provider_symbol_missing_assumed_from_request")
+	}
+	if volume == nil {
+		q.QualityStatus = model.QualityDegraded
+		q.QualityReasons = append(q.QualityReasons, "volume_missing_or_invalid")
+	}
+	if amount == nil {
+		q.QualityStatus = model.QualityDegraded
+		q.QualityReasons = append(q.QualityReasons, "amount_missing_or_invalid")
+	}
+	if quoteTime == nil {
+		q.QualityStatus = model.QualityDegraded
+		q.QualityReasons = append(q.QualityReasons, "provider_timestamp_missing")
+	}
+	if q.Name == "" {
+		q.QualityStatus = model.QualityDegraded
+		q.QualityReasons = append(q.QualityReasons, "provider_name_missing")
+	}
+	if err := normalize.ValidateQuote(q); err != nil {
+		return nil, fmt.Errorf("Netease quote data contract: %w", err)
+	}
+	return q, nil
+}
+
+type neteaseQuoteRow struct {
+	Code      string          `json:"code"`
+	Symbol    string          `json:"symbol"`
+	Name      string          `json:"name"`
+	Price     json.RawMessage `json:"price"`
+	Percent   json.RawMessage `json:"percent"`
+	Updown    json.RawMessage `json:"updown"`
+	Open      json.RawMessage `json:"open"`
+	High      json.RawMessage `json:"high"`
+	Low       json.RawMessage `json:"low"`
+	YestClose json.RawMessage `json:"yestclose"`
+	Volume    json.RawMessage `json:"volume"`
+	Turnover  json.RawMessage `json:"turnover"`
+	Time      string          `json:"time"`
+	Update    string          `json:"update"`
+}
+
+func decodeNeteaseJSONP(body []byte) ([]byte, error) {
+	text := strings.TrimSpace(string(body))
+	open := strings.IndexByte(text, '(')
+	close := strings.LastIndexByte(text, ')')
+	if open <= 0 || close <= open {
+		return nil, errors.New("JSONP callback wrapper is missing")
+	}
+	callback := strings.TrimSpace(text[:open])
+	for _, r := range callback {
+		if !(r == '_' || r == '.' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return nil, errors.New("JSONP callback name contains invalid characters")
+		}
+	}
+	trailing := strings.TrimSpace(text[close+1:])
+	if trailing != "" && trailing != ";" {
+		return nil, errors.New("unexpected content after JSONP callback")
+	}
+	return []byte(strings.TrimSpace(text[open+1:close])), nil
+}
+
+func parseNeteaseQuoteTime(raw string) *time.Time {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	for _, layout := range []string{"2006/01/02 15:04:05", "2006-01-02 15:04:05", time.RFC3339} {
+		var parsed time.Time
+		var parseErr error
+		if layout == time.RFC3339 {
+			parsed, parseErr = time.Parse(layout, raw)
+		} else {
+			parsed, parseErr = time.ParseInLocation(layout, raw, loc)
+		}
+		if parseErr == nil {
+			return &parsed
+		}
+	}
+	return nil
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func float64PointerIfValid(value float64, ok bool) *float64 {
+	if !ok || !finiteNumber(value) {
+		return nil
+	}
+	return &value
+}
 
 func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)

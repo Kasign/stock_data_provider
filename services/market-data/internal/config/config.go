@@ -48,6 +48,7 @@ type Config struct {
 	SinaKlineURL            string
 	YahooChartURL           string
 	NeteaseHistoryURL       string
+	NeteaseQuoteURL         string
 	BaostockHost            string
 	BaostockPort            int
 	BaostockUserID          string
@@ -170,6 +171,7 @@ func Load() (Config, error) {
 		SinaKlineURL:            get("MARKET_DATA_SINA_KLINE_URL", "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"),
 		YahooChartURL:           get("MARKET_DATA_YAHOO_CHART_URL", "https://query1.finance.yahoo.com/v8/finance/chart"),
 		NeteaseHistoryURL:       get("MARKET_DATA_NETEASE_HISTORY_URL", "https://quotes.money.163.com/service/chddata.html"),
+		NeteaseQuoteURL:         get("MARKET_DATA_NETEASE_QUOTE_URL", "https://api.money.126.net/data/feed"),
 		BaostockHost:            get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
 		BaostockPort:            integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
 		BaostockUserID:          get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),

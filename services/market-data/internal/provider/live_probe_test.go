@@ -370,7 +370,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		DailySymbol: dailySymbol,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Results:     make([]liveProbeResult, 0, 13),
+		Results:     make([]liveProbeResult, 0, 14),
 	}
 	var failures []string
 
@@ -631,6 +631,9 @@ func TestLiveProviderProbe(t *testing.T) {
 	})
 
 	netease := NewNetease(12*time.Second, "")
+	runQuote("netease", "netease", quoteSymbol, netease.client, func(ctx context.Context) (*model.Quote, error) {
+		return netease.FetchQuote(ctx, quoteSymbol)
+	})
 	runDaily("netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
 	})

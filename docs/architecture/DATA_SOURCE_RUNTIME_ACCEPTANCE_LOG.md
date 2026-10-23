@@ -440,6 +440,13 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 - 本轮没有完成财务报表、新闻公告、板块/指数广度、龙虎榜等数据域，也没有接入所有路线图候选源；这些仍需按数据域逐项实现 Go Adapter 与来源质量契约。
 - GitHub Runner 实测只证明对应时刻的公网响应。目标 NAS 的供应商网络、实际服务路由和持久化端到端仍需单独验收。
 
+## 5.17 网易实时行情 JSONP 与历史 CSV 的独立验收（2026-10-23）
+
+- 网易历史 CSV endpoint `quotes.money.163.com/service/chddata.html` 在 GitHub Runner 连续返回 HTTP 502 + HTML（不是 CSV），因此该日 K 能力不通过真实验收，默认保持关闭。
+- 新增独立的网易实时 JSONP 端点 `api.money.126.net/data/feed/{code},money.api`，按 `price/percent/updown/open/high/low/yestclose/volume/turnover/time` 字段实现 QuoteProvider。契约测试覆盖 percent 比例到百分点换算、JSONP callback 包装、证券代码回显、成交量股数、成交额人民币元和供应商快照时间。
+- 最新提交后的实时端点真实结果将在相应 GitHub Actions run 完成后补记；即使报价成功，也只证明报价端点在对应时刻可用，不会解除历史 CSV 的 502 状态。
+- `MARKET_DATA_NETEASE_ENABLED` 默认为 false；启用服务端报价还需设置 `MARKET_DATA_NETEASE_QUOTE_ENABLED=true`。根配置样例保持 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`，直至 CSV 返回真实数据。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。

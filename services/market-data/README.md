@@ -5,7 +5,8 @@
 ## 当前实现范围
 
 - 实时行情 Provider：东方财富、腾讯、新浪。
-- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新浪新增原始日 K（只支持 `none`），Yahoo Finance 已完成 GitHub Actions 实测且默认关闭；网易财经 CSV 日 K 已实现，正在通过 GitHub Actions 验证、默认关闭。BaoStock 为默认日 K 备用源。
+- 实时行情 Provider：东方财富、腾讯、新浪；网易财经实时 JSONP QuoteProvider 已实现，待 GitHub Runner 真实端点实测，默认关闭。
+- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新浪新增原始日 K（只支持 `none`），Yahoo Finance 已完成 GitHub Actions 实测且默认关闭；网易财经 CSV 日 K 的解析与单位检查已有单测，但公网连续返回 502，不能标记为已接通且默认关闭。BaoStock 为默认日 K 备用源。
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表，以及可选补充数据接口。
@@ -40,6 +41,13 @@ GitHub Actions 已连续完成真实登录/查询探测，且此前已有 NAS �
 - 该端点未提供可验证的复权参数，因此只接受 `adjustment=none`；请求前/后复权时明确返回不支持，不会把原始价格伪装成复权价格。
 - 该端点未提供经验证的成交额字段，`amount` 保持 `null`、`amount_unit=unknown`，质量标记为 `degraded`；响应也不回显股票代码，报告会保留身份校验限制。
 - 新浪接口单次历史回看最多 1023 条；若触及上限且无法覆盖请求起始日期，适配器返回明确错误，不静默接受不完整区间。真实请求结果以 GitHub Actions 探测和目标部署网络持续复验。
+
+## 网易财经实时行情（默认关闭）
+
+- 报价端点独立配置为 `MARKET_DATA_NETEASE_QUOTE_URL`（默认 `https://api.money.126.net/data/feed`），解包 JSONP 后再解析 JSON；不依赖 API Key 或 Python。
+- 实时端点独立返回 `price/open/high/low/yestclose/volume/turnover/time`；`percent` 是比例值，会乘以 100 转换为系统统一百分点。证券代码回显与报价更新时间必须通过契约校验。
+- 启用需显式设置 `MARKET_DATA_NETEASE_ENABLED=true` 与 `MARKET_DATA_NETEASE_QUOTE_ENABLED=true`。实时接口探测通过前，保持关闭。
+- 历史 CSV endpoint 多次返回 502，因此即使实时报价可用，历史日 K 也应继续单独关闭。
 
 ## 网易财经历史日 K（默认关闭）
 

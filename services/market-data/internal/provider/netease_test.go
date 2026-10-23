@@ -106,3 +106,69 @@ func TestNeteaseCSVRejectsMissingRequiredColumns(t *testing.T) {
 		t.Fatalf("expected missing-column error, got %v", err)
 	}
 }
+
+func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
+	payload := "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600036\",\"name\":\"招商银行\",\"price\":42.35,\"percent\":0.0127,\"updown\":0.53,\"open\":41.70,\"high\":42.38,\"low\":41.57,\"yestclose\":41.82,\"volume\":568297,\"turnover\":2386858667,\"time\":\"2026/10/23 11:07:58\",\"update\":\"2026/10/23 11:07:59\"}});"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/0600036,money.api") {
+			t.Errorf("unexpected Netease quote path %q", r.URL.Path)
+		}
+		if r.URL.Query().Get("callback") != "_ntes_quote_callback" {
+			t.Errorf("missing expected callback query: %v", r.URL.Query())
+		}
+		if r.Header.Get("Referer") == "" {
+			t.Error("expected Netease Referer header")
+		}
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	p := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")
+	q, err := p.FetchQuote(context.Background(), "600036.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Symbol != "600036.SH" || q.Name != "招商银行" || q.Source != "netease" {
+		t.Fatalf("unexpected quote identity: %+v", q)
+	}
+	if q.CurrentPrice == nil || *q.CurrentPrice != 42.35 || q.ChangePercent == nil || *q.ChangePercent != 1.27 {
+		t.Fatalf("percent ratio was not normalized to percentage points: %+v", q)
+	}
+	if q.Volume == nil || *q.Volume != 568297 || q.Amount == nil || *q.Amount != 2386858667 {
+		t.Fatalf("unexpected volume/amount: %+v", q)
+	}
+	if q.VolumeUnit != "shares" || q.AmountUnit != "CNY" || q.RawAmountField != "turnover" {
+		t.Fatalf("missing quote units/field metadata: %+v", q)
+	}
+	if q.QuoteTime == nil || q.QualityStatus != model.QualityValid {
+		t.Fatalf("timestamp or quality status incorrect: %+v", q)
+	}
+}
+
+func TestNeteaseFetchQuoteRejectsWrongSymbolAndMalformedJSONP(t *testing.T) {
+	for name, payload := range map[string]string{
+		"wrong symbol": "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600000\",\"name\":\"wrong\",\"price\":42,\"percent\":0.01,\"updown\":1,\"open\":41,\"high\":43,\"low\":40,\"yestclose\":41,\"volume\":100,\"turnover\":4200,\"time\":\"2026/10/23 11:00:00\"}});",
+		"malformed JSONP": "{\"0600036\":{}}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(payload))
+			}))
+			defer server.Close()
+			p := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")
+			if _, err := p.FetchQuote(context.Background(), "600036.SH"); err == nil {
+				t.Fatal("expected invalid quote response to be rejected")
+			}
+		})
+	}
+}
+
+func TestNeteaseQuoteTimestampParser(t *testing.T) {
+	if parseNeteaseQuoteTime("2026/10/23 11:07:58") == nil {
+		t.Fatal("expected NetEase local quote timestamp to parse")
+	}
+	if parseNeteaseQuoteTime("not-a-time") != nil {
+		t.Fatal("invalid timestamp must return nil")
+	}
+}
