@@ -112,7 +112,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 				Meta struct {
 					Symbol string `json:"symbol"`
 				} `json:"meta"`
-				Timestamp []int64 `json:"timestamp"`
+				Timestamp  []int64 `json:"timestamp"`
 				Indicators struct {
 					Quote []struct {
 						Open   []*float64 `json:"open"`
@@ -254,7 +254,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 			FetchedAt: now, NormalizedAt: now, RawVolume: &rawVolume,
 			RawVolumeUnit: "shares", RawAmountUnit: "unknown", VolumeUnit: "shares",
 			AmountUnit: "unknown", QualityStatus: model.QualityDegraded,
-			QualityReasons: []string{"provider_amount_unavailable"},
+			QualityReasons:   []string{"provider_amount_unavailable"},
 			NormalizationVer: normalize.Version,
 		}
 		if adjustment == model.AdjustmentNone {

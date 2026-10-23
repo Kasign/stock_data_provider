@@ -25,10 +25,10 @@ func yahooFixture(t *testing.T, includeAdjusted bool, reportedSymbol string) (*h
 	}
 	indicators := map[string]any{
 		"quote": []any{map[string]any{
-			"open": []float64{10, 11},
-			"high": []float64{11, 12},
-			"low": []float64{9, 10},
-			"close": []float64{10, 11},
+			"open":   []float64{10, 11},
+			"high":   []float64{11, 12},
+			"low":    []float64{9, 10},
+			"close":  []float64{10, 11},
 			"volume": []int64{1000, 2000},
 		}},
 	}
@@ -40,8 +40,8 @@ func yahooFixture(t *testing.T, includeAdjusted bool, reportedSymbol string) (*h
 	payload := map[string]any{
 		"chart": map[string]any{
 			"result": []any{map[string]any{
-				"meta": map[string]any{"symbol": reportedSymbol, "exchangeTimezoneName": "Asia/Shanghai"},
-				"timestamp": timestamps,
+				"meta":       map[string]any{"symbol": reportedSymbol, "exchangeTimezoneName": "Asia/Shanghai"},
+				"timestamp":  timestamps,
 				"indicators": indicators,
 			}},
 			"error": nil,

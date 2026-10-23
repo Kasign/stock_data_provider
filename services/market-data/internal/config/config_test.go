@@ -428,7 +428,6 @@ func TestLoadRejectsInvalidBaoStockPort(t *testing.T) {
 	}
 }
 
-
 func TestLoadYahooFinanceDailyBarsCanBeOptedIn(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
