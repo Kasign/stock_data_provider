@@ -198,17 +198,17 @@ func Load() (Config, error) {
 		return cfg, errors.New("MARKET_DATA_API_KEY must be a non-placeholder secret with at least 32 characters")
 	}
 	for name, endpoint := range map[string]string{
-		"MARKET_DATA_EASTMONEY_QUOTE_URL":    cfg.EastmoneyQuoteURL,
-		"MARKET_DATA_EASTMONEY_KLINE_URL":    cfg.EastmoneyKlineURL,
+		"MARKET_DATA_EASTMONEY_QUOTE_URL":       cfg.EastmoneyQuoteURL,
+		"MARKET_DATA_EASTMONEY_KLINE_URL":       cfg.EastmoneyKlineURL,
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_URL": cfg.EastmoneyStockBasicURL,
-		"MARKET_DATA_TENCENT_QUOTE_URL":      cfg.TencentQuoteURL,
-		"MARKET_DATA_TENCENT_KLINE_URL":      cfg.TencentKlineURL,
-		"MARKET_DATA_TENCENT_NONE_KLINE_URL": cfg.TencentNoneKlineURL,
-		"MARKET_DATA_SINA_QUOTE_URL":         cfg.SinaQuoteURL,
-		"MARKET_DATA_SINA_KLINE_URL":         cfg.SinaKlineURL,
-		"MARKET_DATA_YAHOO_CHART_URL":        cfg.YahooChartURL,
-		"MARKET_DATA_NETEASE_HISTORY_URL":    cfg.NeteaseHistoryURL,
-		"MARKET_DATA_MX_API_URL":             cfg.MXAPIURL,
+		"MARKET_DATA_TENCENT_QUOTE_URL":         cfg.TencentQuoteURL,
+		"MARKET_DATA_TENCENT_KLINE_URL":         cfg.TencentKlineURL,
+		"MARKET_DATA_TENCENT_NONE_KLINE_URL":    cfg.TencentNoneKlineURL,
+		"MARKET_DATA_SINA_QUOTE_URL":            cfg.SinaQuoteURL,
+		"MARKET_DATA_SINA_KLINE_URL":            cfg.SinaKlineURL,
+		"MARKET_DATA_YAHOO_CHART_URL":           cfg.YahooChartURL,
+		"MARKET_DATA_NETEASE_HISTORY_URL":       cfg.NeteaseHistoryURL,
+		"MARKET_DATA_MX_API_URL":                cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {
 			return cfg, err

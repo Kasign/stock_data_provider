@@ -555,14 +555,19 @@ func TestLoadNeteaseQuoteCanBeEnabledAndEndpointConfigured(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyStockBasicURLAndCapabilityCanBeConfigured(t *testing.T) {
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", "https://example.test/f10")
 	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "false")
 	cfg, err := Load()
-	if err != nil { t.Fatal(err) }
-	if cfg.EastmoneyStockBasicURL != "https://example.test/f10" { t.Fatalf("stock-basic URL=%q", cfg.EastmoneyStockBasicURL) }
-	if cfg.ProviderSettings["eastmoney"].StockBasic { t.Fatalf("stock-basic override must disable capability: %+v", cfg.ProviderSettings["eastmoney"]) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EastmoneyStockBasicURL != "https://example.test/f10" {
+		t.Fatalf("stock-basic URL=%q", cfg.EastmoneyStockBasicURL)
+	}
+	if cfg.ProviderSettings["eastmoney"].StockBasic {
+		t.Fatalf("stock-basic override must disable capability: %+v", cfg.ProviderSettings["eastmoney"])
+	}
 }

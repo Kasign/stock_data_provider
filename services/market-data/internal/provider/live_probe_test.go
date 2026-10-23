@@ -433,7 +433,9 @@ func TestLiveProviderProbe(t *testing.T) {
 
 	runStockBasic := func(providerName, symbol string, client *http.Client, call func(context.Context) (*model.StockBasic, error)) {
 		capture := &liveProbeCapture{}
-		if client != nil { client.Transport = capture.transport() }
+		if client != nil {
+			client.Transport = capture.transport()
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		started := time.Now()

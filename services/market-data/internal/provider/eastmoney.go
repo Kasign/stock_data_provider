@@ -65,7 +65,7 @@ func NewEastmoneyConfiguredWithStockBasic(timeout time.Duration, quoteURL, kline
 		ut = defaultEastmoneyUT
 	}
 	return &Eastmoney{
-		client: &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
+		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
 		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, ut: ut,
 	}
 }
@@ -74,70 +74,141 @@ func (p *Eastmoney) Name() string { return "eastmoney" }
 // FetchStockBasic retrieves low-frequency A-share identity and listing metadata from Eastmoney F10.
 func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*model.StockBasic, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
-	if err != nil { return nil, err }
-	params := url.Values{
-		"reportName": {"RPT_PCF10_ORG_ISSUEINFO"},
-		"columns": {"ALL"}, "quoteColumns": {""},
-		"filter": {fmt.Sprintf(`(SECUCODE="%s")`, symbol)},
-		"pageNumber": {"1"}, "pageSize": {"1"},
-		"sortTypes": {""}, "sortColumns": {""},
-		"source": {"HSF10"}, "client": {"PC"},
-		"v": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	if err != nil {
+		return nil, err
 	}
-	var payload struct {
-		Result *struct {
-			Data []map[string]json.RawMessage `json:"data"`
-		} `json:"result"`
+
+	fetchRow := func(reportName string) (map[string]json.RawMessage, error) {
+		params := url.Values{
+			"reportName": {reportName},
+			"columns":    {"ALL"},
+			"quoteColumns": {""},
+			"filter": {fmt.Sprintf(`(SECUCODE="%s")`, symbol)},
+			"pageNumber": {"1"},
+			"pageSize": {"1"},
+			"sortTypes": {""},
+			"sortColumns": {""},
+			"source": {"HSF10"},
+			"client": {"PC"},
+			"v": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		}
+		var payload struct {
+			Result *struct {
+				Data []map[string]json.RawMessage `json:"data"`
+			} `json:"result"`
+		}
+		u, err := url.Parse(p.stockBasicURL)
+		if err != nil {
+			return nil, fmt.Errorf("eastmoney stock-basic endpoint URL: %w", err)
+		}
+		u.RawQuery = params.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+		req.Header.Set("Referer", "https://emweb.securities.eastmoney.com/")
+		req.Header.Set("Origin", "https://emweb.securities.eastmoney.com")
+		req.Header.Set("Accept", "application/json, text/plain, */*")
+		resp, err := p.client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("eastmoney stock-basic request: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+			return nil, fmt.Errorf("eastmoney stock-basic HTTP status %d", resp.StatusCode)
+		}
+		body, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
+		if err != nil {
+			return nil, fmt.Errorf("read Eastmoney stock-basic payload: %w", err)
+		}
+		if err := decodeSingleJSON(body, &payload); err != nil {
+			return nil, fmt.Errorf("decode Eastmoney stock-basic JSON: %w", err)
+		}
+		if payload.Result == nil || len(payload.Result.Data) == 0 {
+			return nil, fmt.Errorf("eastmoney stock-basic report %s returned no row for %s", reportName, symbol)
+		}
+		row := payload.Result.Data[0]
+		field := func(name string) string {
+			raw, ok := row[name]
+			if !ok || len(raw) == 0 || string(raw) == "null" {
+				return ""
+			}
+			var value string
+			if json.Unmarshal(raw, &value) == nil {
+				return strings.TrimSpace(value)
+			}
+			return strings.TrimSpace(strings.Trim(string(raw), `"`))
+		}
+		providerSymbol := field("SECUCODE")
+		if providerSymbol == "" {
+			providerSymbol = field("SECURITY_CODE")
+			if len(providerSymbol) == 6 {
+				if strings.HasPrefix(providerSymbol, "6") {
+					providerSymbol += ".SH"
+				} else if strings.HasPrefix(providerSymbol, "0") || strings.HasPrefix(providerSymbol, "3") {
+					providerSymbol += ".SZ"
+				}
+			}
+		}
+		canonical, symbolErr := normalize.NormalizeSymbol(providerSymbol)
+		if symbolErr != nil || canonical != symbol {
+			return nil, fmt.Errorf("eastmoney stock-basic symbol mismatch in %s: requested %s, returned %q", reportName, symbol, providerSymbol)
+		}
+		return row, nil
 	}
-	u, err := url.Parse(p.stockBasicURL)
-	if err != nil { return nil, fmt.Errorf("eastmoney stock-basic endpoint URL: %w", err) }
-	u.RawQuery = params.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil { return nil, err }
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", "https://emweb.securities.eastmoney.com/")
-	req.Header.Set("Origin", "https://emweb.securities.eastmoney.com")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	resp, err := p.client.Do(req)
-	if err != nil { return nil, fmt.Errorf("eastmoney stock-basic request: %w", err) }
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("eastmoney stock-basic HTTP status %d", resp.StatusCode)
-	}
-	body, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
-	if err != nil { return nil, fmt.Errorf("read Eastmoney stock-basic payload: %w", err) }
-	if err := decodeSingleJSON(body, &payload); err != nil { return nil, fmt.Errorf("decode Eastmoney stock-basic JSON: %w", err) }
-	if payload.Result == nil || len(payload.Result.Data) == 0 {
-		return nil, fmt.Errorf("eastmoney stock-basic returned no row for %s", symbol)
-	}
-	row := payload.Result.Data[0]
-	field := func(name string) string {
+
+	readField := func(row map[string]json.RawMessage, name string) string {
 		raw, ok := row[name]
-		if !ok || len(raw) == 0 || string(raw) == "null" { return "" }
+		if !ok || len(raw) == 0 || string(raw) == "null" {
+			return ""
+		}
 		var value string
-		if json.Unmarshal(raw, &value) == nil { return strings.TrimSpace(value) }
+		if json.Unmarshal(raw, &value) == nil {
+			return strings.TrimSpace(value)
+		}
 		return strings.TrimSpace(strings.Trim(string(raw), `"`))
 	}
-	providerSymbol := field("SECUCODE")
-	if providerSymbol == "" { providerSymbol = field("SECURITY_CODE") }
-	canonical, symbolErr := normalize.NormalizeSymbol(providerSymbol)
-	if symbolErr != nil || canonical != symbol {
-		return nil, fmt.Errorf("eastmoney stock-basic symbol mismatch: requested %s, returned %q", symbol, providerSymbol)
+
+	// 发行信息表有上市日期，但没有稳定的 A 股简称字段。
+	issueRow, err := fetchRow("RPT_PCF10_ORG_ISSUEINFO")
+	if err != nil {
+		return nil, err
 	}
-	name := field("SECURITY_NAME_ABBR")
-	if name == "" { return nil, fmt.Errorf("eastmoney stock-basic name is empty for %s", symbol) }
-	ipoDate, err := parseEastmoneyProfileDate(field("LISTING_DATE"))
-	if err != nil { return nil, err }
-	outDate, err := parseEastmoneyProfileDate(field("OUT_DATE"))
-	if err != nil { return nil, err }
+	name := readField(issueRow, "SECURITY_NAME_ABBR")
+	if name == "" {
+		// 公司概况表提供 STR_NAMEA/ORG_NAME；独立查询避免把股票代码误当成名称。
+		orgRow, orgErr := fetchRow("RPT_F10_BASIC_ORGINFO")
+		if orgErr != nil {
+			return nil, orgErr
+		}
+		for _, key := range []string{"STR_NAMEA", "SECURITY_NAME_ABBR", "ORG_NAME"} {
+			if name = readField(orgRow, key); name != "" {
+				break
+			}
+		}
+	}
+	if name == "" {
+		return nil, fmt.Errorf("eastmoney stock-basic name is empty for %s", symbol)
+	}
+	ipoDate, err := parseEastmoneyProfileDate(readField(issueRow, "LISTING_DATE"))
+	if err != nil {
+		return nil, err
+	}
+	outDate, err := parseEastmoneyProfileDate(readField(issueRow, "OUT_DATE"))
+	if err != nil {
+		return nil, err
+	}
 	status, statusLabel := 1, "listed"
-	if outDate != "" { status, statusLabel = 0, "delisted" }
+	if outDate != "" {
+		status, statusLabel = 0, "delisted"
+	}
 	return &model.StockBasic{
 		Symbol: symbol, Name: name, IPODate: ipoDate, OutDate: outDate,
 		SecurityType: 1, SecurityTypeLabel: "stock",
 		ListingStatus: status, ListingStatusLabel: statusLabel,
-		Source: p.Name(), SourceVersion: "eastmoney-f10-issueinfo-v1",
+		Source: p.Name(), SourceVersion: "eastmoney-f10-issueinfo-orginfo-v1",
 		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
 		NormalizationVer: normalize.Version,
 	}, nil

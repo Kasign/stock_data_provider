@@ -251,32 +251,57 @@ func TestEastmoneyRejectsKlineSymbolMismatch(t *testing.T) {
 
 
 func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
-	var gotQuery url.Values
+	var gotQueries []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.Query()
-		if r.Header.Get("Referer") != "https://emweb.securities.eastmoney.com/" { t.Errorf("unexpected profile referer %q", r.Header.Get("Referer")) }
-		fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","SECURITY_NAME_ABBR":"贵州茅台","LISTING_DATE":"2001-08-27 00:00:00","OUT_DATE":null}]}}`)
+		gotQueries = append(gotQueries, r.URL.Query())
+		if r.Header.Get("Referer") != "https://emweb.securities.eastmoney.com/" {
+			t.Errorf("unexpected profile referer %q", r.Header.Get("Referer"))
+		}
+		if r.URL.Query().Get("reportName") == "RPT_PCF10_ORG_ISSUEINFO" {
+			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","LISTING_DATE":"2001-08-27 00:00:00","OUT_DATE":null}]}}`)
+			return
+		}
+		fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","STR_NAMEA":"贵州茅台","ORG_NAME":"贵州茅台酒股份有限公司"}]}}`)
 	}))
 	defer server.Close()
 	p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, "", "", server.URL, "")
 	item, err := p.FetchStockBasic(context.Background(), "600519")
-	if err != nil { t.Fatal(err) }
-	if item.Symbol != "600519.SH" || item.Name != "贵州茅台" || item.IPODate != "2001-08-27" { t.Fatalf("unexpected stock-basic response: %+v", item) }
-	if item.Source != "eastmoney" || item.QualityStatus != model.QualityValid || item.NormalizationVer == "" { t.Fatalf("missing source/quality/normalization metadata: %+v", item) }
-	if gotQuery.Get("reportName") != "RPT_PCF10_ORG_ISSUEINFO" || gotQuery.Get("filter") != `(SECUCODE="600519.SH")` || gotQuery.Get("pageSize") != "1" { t.Fatalf("unexpected F10 query: %v", gotQuery) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.Symbol != "600519.SH" || item.Name != "贵州茅台" || item.IPODate != "2001-08-27" {
+		t.Fatalf("unexpected stock-basic response: %+v", item)
+	}
+	if item.Source != "eastmoney" || item.QualityStatus != model.QualityValid || item.NormalizationVer == "" {
+		t.Fatalf("missing source/quality/normalization metadata: %+v", item)
+	}
+	if len(gotQueries) != 2 || gotQueries[0].Get("reportName") != "RPT_PCF10_ORG_ISSUEINFO" || gotQueries[1].Get("reportName") != "RPT_F10_BASIC_ORGINFO" {
+		t.Fatalf("unexpected F10 requests: %+v", gotQueries)
+	}
+	for _, query := range gotQueries {
+		if query.Get("filter") != `(SECUCODE="600519.SH")` || query.Get("pageSize") != "1" {
+			t.Fatalf("unexpected F10 query: %v", query)
+		}
+	}
 }
 
 func TestEastmoneyFetchStockBasicRejectsMismatchedOrEmptyRows(t *testing.T) {
-	for _, tc := range []struct { name, body, want string }{
+	for _, tc := range []struct {
+		name, body, want string
+	}{
 		{"mismatch", `{"result":{"data":[{"SECUCODE":"000001.SZ","SECURITY_NAME_ABBR":"wrong"}]}}`, "symbol mismatch"},
 		{"empty", `{"result":{"data":[]}}`, "no row"},
-		{"missing name", `{"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_NAME_ABBR":""}]}}`, "name is empty"},
+		{"missing name", `{"result":{"data":[{"SECUCODE":"600519.SH","LISTING_DATE":"2001-08-27"}]}}`, "name is empty"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, tc.body) }))
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, tc.body)
+			}))
 			defer server.Close()
 			p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, "", "", server.URL, "")
-			if _, err := p.FetchStockBasic(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), tc.want) { t.Fatalf("expected %q error, got %v", tc.want, err) }
+			if _, err := p.FetchStockBasic(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q error, got %v", tc.want, err)
+			}
 		})
 	}
 }
