@@ -152,6 +152,34 @@ test("preserves bounded diagnostics for non-JSON reverse-proxy errors", async ()
   }
 });
 
+test("bounds oversized JSON error messages and keeps plain JSON string diagnostics", async () => {
+  const originalFetch = globalThis.fetch;
+  const cases = [
+    { body: { error: { code: "upstream_error", message: "x".repeat(800) } }, expectedLength: 500 },
+    { body: "upstream says unavailable", expectedMessage: "upstream says unavailable" }
+  ];
+  try {
+    for (const item of cases) {
+      globalThis.fetch = async () => new Response(JSON.stringify(item.body), {
+        status: 502,
+        statusText: "Bad Gateway",
+        headers: { "Content-Type": "application/json" }
+      });
+      await assert.rejects(
+        getAnalysisRun({ analysisBase: "/analysis-api" }, "run-error"),
+        (error) => {
+          assert.equal(error.status, 502);
+          if (item.expectedLength) assert.equal(error.message.length, item.expectedLength);
+          if (item.expectedMessage) assert.equal(error.message, item.expectedMessage);
+          return true;
+        }
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("prefers request IDs from the structured error envelope when both forms exist", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => jsonResponse({
