@@ -145,10 +145,18 @@ func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	for _, want := range []string{"\"symbol\":\"600519.SH\"", "\"name\":\"测试证券\"", "\"stock_basic_capable\":true"} {
+	for _, want := range []string{"\"symbol\":\"600519.SH\"", "\"name\":\"测试证券\""} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("profile response missing %s: %s", want, w.Body.String())
 		}
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "\"stock_basic_capable\":true") {
+		t.Fatalf("data-sources must advertise the independent stock-basic capability: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 
