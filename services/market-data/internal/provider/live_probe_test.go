@@ -81,20 +81,20 @@ type liveProbeReport struct {
 }
 
 type liveProbeResult struct {
-	Provider   string                  `json:"provider"`
-	Capability string                  `json:"capability"`
-	Symbol     string                  `json:"symbol"`
-	Adjustment model.AdjustmentBasis   `json:"adjustment,omitempty"`
-	Status     string                  `json:"status"`
-	ErrorKind  string                  `json:"error_kind,omitempty"`
-	Error      string                  `json:"error,omitempty"`
-	ElapsedMS  int64                   `json:"elapsed_ms"`
+	Provider         string                  `json:"provider"`
+	Capability       string                  `json:"capability"`
+	Symbol           string                  `json:"symbol"`
+	Adjustment       model.AdjustmentBasis   `json:"adjustment,omitempty"`
+	Status           string                  `json:"status"`
+	ErrorKind        string                  `json:"error_kind,omitempty"`
+	Error            string                  `json:"error,omitempty"`
+	ElapsedMS        int64                   `json:"elapsed_ms"`
 	Quote            *model.Quote            `json:"quote,omitempty"`
 	BarCount         int                     `json:"bar_count,omitempty"`
-	SampleBars       []model.DailyBar         `json:"sample_bars,omitempty"`
-	ChipDistribution *model.ChipDistribution  `json:"chip_distribution,omitempty"`
-	CapitalFlow      *model.CapitalFlow       `json:"capital_flow,omitempty"`
-	HTTP       []liveProbeHTTPResponse `json:"http_responses,omitempty"`
+	SampleBars       []model.DailyBar        `json:"sample_bars,omitempty"`
+	ChipDistribution *model.ChipDistribution `json:"chip_distribution,omitempty"`
+	CapitalFlow      *model.CapitalFlow      `json:"capital_flow,omitempty"`
+	HTTP             []liveProbeHTTPResponse `json:"http_responses,omitempty"`
 }
 
 type liveProbeHTTPResponse struct {
