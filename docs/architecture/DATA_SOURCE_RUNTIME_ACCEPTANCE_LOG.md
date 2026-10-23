@@ -511,3 +511,16 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 - **本批修正**：全市场分页改按证券代码排序，降低实时涨跌幅变化造成跨页重复/遗漏的风险；主域 CLIST 连续失败时有限回退到 `push2delay.eastmoney.com`，成功后后续页继续走该域；跨页结果额外标记 `provider_pages_not_atomic`；探测预算放宽到 180 秒；广度缓存延长至 90 秒。跌停池改用 `sort=fund:asc`（该 endpoint 与涨停池的 `fbt:asc` 行为不同），并保留一次有界重试，若仍为 `tc>0/pool=[]` 则继续报错。对应测试同时覆盖主域失败回退、部分成交额、临时 502 重试和持续不完整池响应。
 
 本节记录的是修正前实际观测和本批修正内容，不是修正后的通过声明。新提交的 Go CI、完整 Runner 探测以及目标 NAS/Docker 环境验收仍需分别确认。市场广度和涨跌停池生产开关继续保持关闭。
+
+
+## 5.23 国内市场第二轮真实探测结果（2026-10-23）
+
+[Go test suite #39915426194](https://github.com/Kasign/stock_data_provider/actions/runs/39915426194) 的根模块和 `go-core` 测试通过；`services/market-data` 的测试与镜像构建被 `domestic_market_test.go` 的 gofmt 格式门禁挡住，因此这一轮尚不能据此认定 market-data 单元测试全部通过。
+
+[Live provider probe #39915426198](https://github.com/Kasign/stock_data_provider/actions/runs/39915426198) 的探测任务实际失败（工作流整体绿色来自 `continue-on-error`）：
+
+- **市场广度**：`push2.eastmoney.com/api/qt/clist/get` 两次都返回 HTTP 502；未取得可完成全市场覆盖校验的快照。
+- **涨停池 / 炸板池**：本次返回有明细的池，分别报告总数 82 和 12；仍因无可验证上游快照时间而降级。
+- **跌停池**：`getTopicDTPool` 两次都返回 `tc=6,pool=[]`。保守校验正确拒绝该不完整结果，没有返回“0 只跌停”。
+
+随后提交 `6805ceec753bd7eb4302e2af0f1361ec4dc57485` 为 CLIST 增加到 `push2delay.eastmoney.com` 的有限回退，并将跌停池排序独立设置为 `fund:asc`；该提交还在真实探测之前修正了这一文件中的冗余空行。以上修复是否有效，以后续该提交之后的 CI 和实测报告为准，不能沿用旧探测结果宣称通过。生产开关继续关闭。

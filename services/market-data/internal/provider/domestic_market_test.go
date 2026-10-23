@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -55,7 +56,6 @@ func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T)
 		t.Fatalf("missing timestamp downgrade: %+v", got)
 	}
 }
-
 
 func TestEastmoneyFetchMarketBreadthFallsBackToDelayHostOnHTTP502(t *testing.T) {
 	var primaryCalls, delayCalls atomic.Int32
