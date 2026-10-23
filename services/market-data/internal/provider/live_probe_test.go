@@ -370,7 +370,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		DailySymbol: dailySymbol,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Results:     make([]liveProbeResult, 0, 10),
+		Results:     make([]liveProbeResult, 0, 11),
 	}
 	var failures []string
 
@@ -622,6 +622,11 @@ func TestLiveProviderProbe(t *testing.T) {
 	runDaily("baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
 		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
+	yahoo := NewYahooFinance(12*time.Second, "")
+	runDaily("yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
+	})
+
 	if closeErr := baostockClient.Close(); closeErr != nil {
 		t.Logf("LIVE_PROVIDER_CLEANUP warning provider=baostock error=%q", closeErr.Error())
 	}

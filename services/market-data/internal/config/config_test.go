@@ -427,3 +427,40 @@ func TestLoadRejectsInvalidBaoStockPort(t *testing.T) {
 		t.Fatal("invalid BaoStock port must fail configuration loading")
 	}
 }
+
+
+func TestLoadYahooFinanceDailyBarsCanBeOptedIn(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "3m")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_YAHOO_ENABLED", "true")
+	t.Setenv("MARKET_DATA_YAHOO_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_YAHOO_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_YAHOO_CHART_URL", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	yahoo := cfg.ProviderSettings["yahoo"]
+	if !yahoo.Enabled || yahoo.Quote || !yahoo.DailyBars {
+		t.Fatalf("Yahoo must be enabled for daily bars only: %+v", yahoo)
+	}
+	if cfg.YahooChartURL != "https://query1.finance.yahoo.com/v8/finance/chart" {
+		t.Fatalf("unexpected Yahoo chart endpoint %q", cfg.YahooChartURL)
+	}
+}
+
+func TestLoadRejectsYahooQuoteCapability(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_YAHOO_QUOTE_ENABLED", "true")
+	if _, err := Load(); err == nil {
+		t.Fatal("Yahoo Finance must not be configured as a quote provider")
+	}
+}

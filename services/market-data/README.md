@@ -5,7 +5,7 @@
 ## 当前实现范围
 
 - 实时行情 Provider：东方财富、腾讯、新浪（新浪仅提供实时行情能力）。
-- 日线 K 线 Provider：东方财富、BaoStock、腾讯。BaoStock 已纳入默认日 K 回退链，仍仅支持日 K；目标部署环境须继续单独验收。
+- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新增 Yahoo Finance 日 K 适配器，默认关闭，等待目标网络实测后再考虑进入生产回退链。BaoStock 已纳入默认日 K 回退链，仍仅支持日 K。
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表，以及可选补充数据接口。
 - 标准单位：`volume` 为股，`amount` 为人民币元，价格为元/股；`trade_date` 是交易日。`quote_time` 是供应商报告的行情快照/更新时间，不一定等于最近一笔成交时间；新增的 `quote_time_semantics=provider_snapshot_time` 明确该语义。`fetched_at` 是本服务采集时间，`normalized_at` 是标准化时间，三者不能互相替代。
@@ -32,6 +32,13 @@ GitHub Actions 已连续完成真实登录/查询探测，且此前已有 NAS �
 因此，使用腾讯作为日 K 兜底时，`amount` 保持 `null`、单根 K 线的 `amount_unit` 为 `unknown`，并标记数据质量降级。服务也会在顶层 `warnings` 报告使用了兜底源或成交额缺失。禁止用 `收盘价 × 成交量` 或 OHLC 平均价估算值伪装成真实成交额；成交额敏感的量价分析必须先检查数据质量，必要时等待具备可信成交额的来源恢复。
 
 腾讯公开前端接口不是稳定的官方开发者 API 合约。成交量的原始单位转换仍需持续通过其他数据源交叉核验，不能将当前观察到的字段布局视为永久保证。
+
+## Yahoo Finance 日 K（默认关闭）
+
+- 通过 Yahoo Finance 的公开 Chart JSON endpoint 直接获取沪深 A 股历史日 K，不依赖 Python 或 API Key；上海股票代码转换为 Yahoo 的 .SS 后缀，深圳使用 .SZ，暂不支持北交所。
+- 该端点不是有 SLA 的官方开发者 API，因此配置默认关闭：确认目标 NAS/Docker 网络及历史数据可用性后，再设置 `MARKET_DATA_YAHOO_ENABLED=true`。优先级配置已预留 `yahoo`，可按需调整 `MARKET_DATA_PROVIDER_PRIORITY`。
+- Yahoo 不提供此接口可核验的 A 股成交额字段，`amount` 保持 `null`、`amount_unit=unknown`，K 线质量明确为 `degraded`。金额/量价敏感分析不可将其当作完整成交额数据源。
+- `forward_adjusted` 使用 `adjclose/close` 比率并以请求区间最后一根有效 K 线为参考日；`backward_adjusted` 以请求区间第一根有效 K 线为参考日重设比例。返回 `adjustment_method` 和参考日期，避免把不同算法的同名复权序列误认为完全等价。`none` 使用原始 OHLC。
 
 ## 配置隔离
 

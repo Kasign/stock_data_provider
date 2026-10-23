@@ -45,6 +45,7 @@ type Config struct {
 	TencentKlineURL         string
 	TencentNoneKlineURL     string
 	SinaQuoteURL            string
+	YahooChartURL           string
 	BaostockHost            string
 	BaostockPort            int
 	BaostockUserID          string
@@ -76,13 +77,14 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "tencent", "sina"},
+		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: false},
+			"yahoo":     {Enabled: false, Quote: false, DailyBars: true},
 		},
 	}
 	file := defaults
@@ -99,7 +101,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" {
+			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -129,9 +131,13 @@ func Load() (Config, error) {
 	settings["eastmoney"] = overrideProvider("EASTMONEY", settings["eastmoney"])
 	settings["tencent"] = overrideProvider("TENCENT", settings["tencent"])
 	settings["sina"] = overrideProvider("SINA", settings["sina"])
+	settings["yahoo"] = overrideProvider("YAHOO", settings["yahoo"])
 	settings["baostock"] = overrideProvider("BAOSTOCK", settings["baostock"])
 	if settings["baostock"].Quote {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
+	}
+	if settings["yahoo"].Quote {
+		return Config{}, errors.New("Yahoo Finance currently supports daily bars only; disable MARKET_DATA_YAHOO_QUOTE_ENABLED")
 	}
 
 	cfg := Config{
@@ -157,6 +163,7 @@ func Load() (Config, error) {
 		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
 		TencentNoneKlineURL:     get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),
 		SinaQuoteURL:            get("MARKET_DATA_SINA_QUOTE_URL", "https://hq.sinajs.cn/list="),
+		YahooChartURL:           get("MARKET_DATA_YAHOO_CHART_URL", "https://query1.finance.yahoo.com/v8/finance/chart"),
 		BaostockHost:            get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
 		BaostockPort:            integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
 		BaostockUserID:          get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),
@@ -190,6 +197,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_TENCENT_KLINE_URL":      cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL": cfg.TencentNoneKlineURL,
 		"MARKET_DATA_SINA_QUOTE_URL":         cfg.SinaQuoteURL,
+		"MARKET_DATA_YAHOO_CHART_URL":        cfg.YahooChartURL,
 		"MARKET_DATA_MX_API_URL":             cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {
@@ -235,7 +243,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" {
+		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {

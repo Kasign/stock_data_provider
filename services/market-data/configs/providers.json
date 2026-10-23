@@ -1,9 +1,10 @@
 {
-  "provider_priority": ["eastmoney", "baostock", "tencent", "sina"],
+  "provider_priority": ["eastmoney", "baostock", "yahoo", "tencent", "sina"],
   "adjustment_basis": "forward_adjusted",
   "providers": {
     "eastmoney": { "enabled": true, "quote": true, "daily_bars": true },
     "baostock": { "enabled": true, "quote": false, "daily_bars": true },
+    "yahoo": { "enabled": false, "quote": false, "daily_bars": true },
     "tencent": { "enabled": true, "quote": true, "daily_bars": true },
     "sina": { "enabled": true, "quote": true, "daily_bars": false }
   }

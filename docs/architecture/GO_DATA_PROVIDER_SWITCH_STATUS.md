@@ -23,7 +23,7 @@
 | 能力 | Provider | 状态 |
 |---|---|---|
 | 实时行情 | 东方财富、腾讯、新浪 | Go API 主链路；新浪仅报价 |
-| 日线 K 线 | 东方财富、BaoStock、腾讯 | BaoStock 已进入默认日 K 回退链；目标容器需继续扩大真实日期与复权验收，Eastmoney 网络端点仍需持续观察 |
+| 日线 K 线 | 东方财富、BaoStock、腾讯、Yahoo Finance（可选） | BaoStock 已进入默认日 K 回退链；Yahoo Finance Go 日 K 适配器已新增但默认关闭，待 GitHub Actions 真实返回与目标容器网络验收；缺成交额时固定 degraded |
 | 筹码分布 | 妙想 MX_API | 已新增可选 SupplementProvider、HTTP 路由和缓存；默认关闭 |
 | 个股主力资金流 | 妙想 MX_API | 已新增可选 SupplementProvider、HTTP 路由和缓存；5/10 日合计必须有完整观测 |
 
