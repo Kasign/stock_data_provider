@@ -14,6 +14,7 @@ import {
 } from "./api.js";
 import { renderCloseChart } from "./chart.js";
 import { readRecentTasks, upsertRecentTask } from "./recent-tasks.js";
+import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
   describeApiError,
@@ -142,6 +143,149 @@ function safeReadRecentTasks() {
   } catch {
     return [];
   }
+}
+
+
+function setWatchlistFeedback(message, kind = "info") {
+  const target = $("#watchlist-feedback");
+  target.hidden = !message;
+  target.textContent = message;
+  target.className = "watchlist-feedback" + (message ? " watchlist-feedback-" + kind : "");
+}
+
+function safeReadWatchlist() {
+  try {
+    return readWatchlist(localStorage);
+  } catch {
+    return [];
+  }
+}
+
+function renderWatchlist(records = safeReadWatchlist()) {
+  const root = $("#watchlist-list");
+  root.replaceChildren();
+  const items = Array.isArray(records) ? records : [];
+  setText("#watchlist-count", items.length + " / " + MAX_WATCHLIST_ITEMS);
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = "暂无自选股。可先在上方输入代码，再点击“加入自选”。";
+    root.append(empty);
+    return;
+  }
+
+  items.forEach((record) => {
+    const row = document.createElement("article");
+    row.className = "watchlist-item";
+    const main = document.createElement("div");
+    main.className = "watchlist-item-main";
+
+    const symbol = document.createElement("strong");
+    symbol.className = "watchlist-symbol";
+    symbol.textContent = record.symbol;
+
+    const aliasLabel = document.createElement("label");
+    aliasLabel.className = "watchlist-name-field";
+    const aliasCaption = document.createElement("span");
+    aliasCaption.textContent = "自定义名称";
+    const aliasInput = document.createElement("input");
+    aliasInput.type = "text";
+    aliasInput.className = "watchlist-name-input";
+    aliasInput.maxLength = 32;
+    aliasInput.value = record.name === record.symbol ? "" : record.name;
+    aliasInput.placeholder = "可选，最多 32 字";
+    aliasInput.setAttribute("aria-label", record.symbol + " 的自定义名称");
+    aliasInput.addEventListener("change", () => {
+      try {
+        renderWatchlist(renameWatchlistSymbol(record.symbol, aliasInput.value, localStorage));
+        setWatchlistFeedback("已保存 " + record.symbol + " 的自定义名称。");
+      } catch {
+        setWatchlistFeedback("浏览器存储不可用，无法保存自选名称。", "error");
+      }
+    });
+
+    const meta = document.createElement("small");
+    meta.className = "watchlist-item-meta";
+    meta.textContent = "添加/更新于 " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录");
+    aliasLabel.append(aliasCaption, aliasInput);
+    main.append(symbol, aliasLabel, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "watchlist-actions";
+    for (const [action, label] of [["query", "查行情"], ["analyze", "分析"], ["remove", "移除"]]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "watchlist-action" + (action === "remove" ? " watchlist-action-muted" : "");
+      button.dataset.watchlistAction = action;
+      button.dataset.symbol = record.symbol;
+      button.textContent = label;
+      if (action === "remove") button.setAttribute("aria-label", "移除自选 " + record.symbol);
+      actions.append(button);
+    }
+    row.append(main, actions);
+    root.append(row);
+  });
+}
+
+function addCurrentSymbolToWatchlist() {
+  let symbol;
+  try {
+    symbol = normalizeSymbol($("#symbol-input").value);
+  } catch (error) {
+    setWatchlistFeedback(error.message, "error");
+    return;
+  }
+
+  let defaultName = symbol;
+  if (state.quote?.name && state.quote?.symbol) {
+    try {
+      if (normalizeSymbol(state.quote.symbol) === symbol) defaultName = state.quote.name;
+    } catch {
+      // A malformed server display symbol must not block saving the user-entered symbol.
+    }
+  }
+
+  try {
+    const result = addWatchlistSymbol(symbol, defaultName, localStorage);
+    if (!result.valid) {
+      setWatchlistFeedback("股票代码格式无效，未加入自选。", "error");
+      return;
+    }
+    renderWatchlist(result.items);
+    setWatchlistFeedback(result.added ? "已将 " + symbol + " 加入本地自选。" : symbol + " 已在自选列表中，已更新时间。");
+  } catch {
+    setWatchlistFeedback("浏览器本地存储不可用，无法保存自选股。", "error");
+  }
+}
+
+function handleWatchlistAction(event) {
+  const button = event.target.closest("button[data-watchlist-action]");
+  if (!button) return;
+  const symbol = button.dataset.symbol;
+  const action = button.dataset.watchlistAction;
+
+  if (action === "remove") {
+    try {
+      renderWatchlist(removeWatchlistSymbol(symbol, localStorage));
+      setWatchlistFeedback("已从本地自选中移除 " + symbol + "。");
+    } catch {
+      setWatchlistFeedback("浏览器本地存储不可用，无法移除自选股。", "error");
+    }
+    return;
+  }
+
+  if (action === "query") {
+    if (state.isQuerying) {
+      setWatchlistFeedback("当前行情查询尚未完成，请稍后再选择其他标的。", "error");
+      return;
+    }
+    $("#symbol-input").value = symbol;
+    setView("market");
+    void runQuoteQuery();
+    return;
+  }
+
+  if (action === "analyze") startAnalysisForSymbol(symbol);
 }
 
 function setNotice(message, kind = "info") {
@@ -858,10 +1002,10 @@ async function createTask(event) {
   }
 }
 
-function startQuoteAnalysis() {
+function startAnalysisForSymbol(input) {
   let symbol;
   try {
-    symbol = normalizeAnalysisSymbol(state.quote?.symbol || getQuerySymbol());
+    symbol = normalizeAnalysisSymbol(input);
   } catch (error) {
     setNotice(error.message, "danger");
     return;
@@ -870,6 +1014,10 @@ function startQuoteAnalysis() {
   $("#task-type").value = "post_market_scan";
   setView("tasks");
   $("#task-form").requestSubmit();
+}
+
+function startQuoteAnalysis() {
+  startAnalysisForSymbol(state.quote?.symbol || $("#symbol-input").value);
 }
 
 function activateTaskReference(record) {
@@ -979,6 +1127,8 @@ document.querySelectorAll(".nav-link").forEach((button) => {
 });
 $("#quote-form").addEventListener("submit", runQuoteQuery);
 $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
+$("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
+$("#watchlist-list").addEventListener("click", handleWatchlistAction);
 $("#reload-sources").addEventListener("click", refreshSources);
 $("#refresh-button").addEventListener("click", async () => {
   await refreshServices();
@@ -1082,6 +1232,7 @@ $("#copy-task-id").addEventListener("click", async () => {
 });
 
 renderRecentTasks();
+renderWatchlist();
 setView("market");
 void refreshServices();
 void refreshSources();

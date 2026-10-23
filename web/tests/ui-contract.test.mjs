@@ -2,14 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/analysis/domain/types.go", import.meta.url), "utf8"),
   readFile(new URL("../../docs/architecture/analysis-tasks.openapi.yaml", import.meta.url), "utf8"),
   readFile(new URL("../src/recent-tasks.js", import.meta.url), "utf8"),
-  readFile(new URL("../styles.css", import.meta.url), "utf8")
+  readFile(new URL("../styles.css", import.meta.url), "utf8"),
+  readFile(new URL("../src/watchlist.js", import.meta.url), "utf8")
 ]);
 
 test("static DOM IDs referenced by the WebUI exist and are unique", () => {
@@ -84,4 +85,21 @@ test("structured analysis results use readable typography and mobile-safe layout
   assert.match(stylesheet, /\.task-result-actions \.text-button \{[^}]*font-size: 11px/);
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.analysis-result-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   assert.match(stylesheet, /overflow-wrap: anywhere/);
+});
+
+
+test("browser-local watchlist is wired to existing query/analysis flows and stores only references", () => {
+  for (const id of ["add-to-watchlist-button", "watchlist-count", "watchlist-feedback", "watchlist-list"]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "watchlist control must exist: " + id);
+  }
+  assert.match(app, /function renderWatchlist\(/);
+  assert.match(app, /addWatchlistSymbol\(symbol, defaultName, localStorage\)/);
+  assert.match(app, /removeWatchlistSymbol\(symbol, localStorage\)/);
+  assert.match(app, /renameWatchlistSymbol\(record\.symbol, aliasInput\.value, localStorage\)/);
+  assert.match(app, /function startAnalysisForSymbol\(input\)/);
+  assert.match(app, /state\.isQuerying[\s\S]*?当前行情查询尚未完成/);
+  assert.match(watchlistModule, /WATCHLIST_KEY/);
+  assert.doesNotMatch(watchlistModule, /apiKey|runResult|report\s*:/i, "watchlist persistence must not include secrets or report payloads");
+  assert.match(stylesheet, /\.watchlist-item\s*\{/);
+  assert.match(stylesheet, /@media \(max-width: 800px\)[\s\S]*?\.watchlist-list \{ grid-template-columns: minmax\(0, 1fr\); \}/);
 });
