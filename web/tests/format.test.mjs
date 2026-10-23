@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  describeApiError,
   formatPercent,
   formatPrice,
   normalizeAnalysisSymbol,
@@ -57,4 +58,29 @@ test("maps Go RunResult statuses separately from asynchronous task statuses", ()
   assert.equal(runStatusLabel("blocked_data_quality"), "数据质量阻断");
   assert.equal(runStatusLabel("rejected_request"), "请求被拒绝");
   assert.equal(taskStatusLabel("succeeded"), "执行成功");
+});
+
+
+test("formats API errors without assuming every 401 is a market API-key problem", () => {
+  const authError = describeApiError({
+    status: 401,
+    code: "auth_required",
+    requestId: "req-401",
+    message: "unauthorized"
+  });
+  assert.match(authError, /接口认证失败/);
+  assert.match(authError, /HTTP 401/);
+  assert.match(authError, /code=auth_required/);
+  assert.match(authError, /request_id=req-401/);
+  assert.doesNotMatch(authError, /行情 API Key/);
+
+  const runError = describeApiError({
+    status: 409,
+    code: "run_not_finished",
+    requestId: "req-run-pending",
+    message: "run result is not ready"
+  });
+  assert.match(runError, /run result is not ready/);
+  assert.match(runError, /HTTP 409/);
+  assert.match(runError, /request_id=req-run-pending/);
 });

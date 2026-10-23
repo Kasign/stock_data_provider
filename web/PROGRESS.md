@@ -58,3 +58,11 @@
 - GitHub Actions：已通过四轮检查，最新一轮 [#39895905854](https://github.com/Kasign/stock_data_provider/actions/runs/39895905854) 覆盖最近分析与 Markdown/JSON 导出。
 - NAS / 1Panel 真实联调：待执行。
 - 三类真实数据响应：待执行。
+
+
+## 下一轮前端错误与缺失数据修正
+
+- 统一 HTTP 错误展示：401 不再一律解释为行情 API Key 问题；显示 HTTP 状态、服务端错误码和 request ID（若返回）。
+- 分析任务创建/输入校验失败改为任务页面内联提示，避免使用阻断式 alert。
+- 任务未返回 completed_stages 时显示“未报告”，不再把缺失值显示为 0。
+- 对应回归测试已加入；本轮提交 CI 结果待回填。

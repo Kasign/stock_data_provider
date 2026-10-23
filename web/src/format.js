@@ -108,3 +108,28 @@ export function runStatusLabel(status) {
   };
   return map[String(status ?? "").toLowerCase()] || String(status || "未知运行状态");
 }
+
+
+export function describeApiError(error, fallback = "请求失败") {
+  const status = Number(error?.status);
+  let message;
+  if (status === 401) {
+    message = "接口认证失败，请检查当前服务的认证与反向代理配置。";
+  } else if (status === 403) {
+    message = "当前请求被服务拒绝，请检查访问权限。";
+  } else if (status === 404) {
+    message = "接口或资源不存在，请检查 API 路径、服务版本及资源 ID。";
+  } else if (status === 502 || status === 503 || status === 504) {
+    message = error?.message || "后端服务暂不可用。";
+  } else {
+    message = error?.message || fallback;
+  }
+
+  const details = [];
+  if (Number.isFinite(status) && status > 0) details.push("HTTP " + status);
+  const code = String(error?.code || "").trim();
+  if (code && code !== "http_error") details.push("code=" + code);
+  const requestId = String(error?.requestId || "").trim();
+  if (requestId) details.push("request_id=" + requestId);
+  return details.length ? message + "（" + details.join("；") + "）" : message;
+}

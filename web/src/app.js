@@ -16,6 +16,7 @@ import { renderCloseChart } from "./chart.js";
 import { readRecentTasks, upsertRecentTask } from "./recent-tasks.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
+  describeApiError,
   formatCompact,
   formatDate,
   formatDateTime,
@@ -161,12 +162,7 @@ function setQualityPill(target, status, customText = "") {
 }
 
 function errorMessage(error) {
-  if (error?.status === 401) return "行情 API Key 无效或未填写，请打开连接设置检查密钥。";
-  if (error?.status === 404) return "接口不存在，请确认 API 路径及服务版本。";
-  if (error?.status === 502 || error?.status === 503 || error?.status === 504) {
-    return `${error.message || "服务暂不可用"}（HTTP ${error.status}）`;
-  }
-  return error?.message || "请求失败，请检查服务状态与浏览器网络面板。";
+  return describeApiError(error, "请求失败，请检查服务状态与浏览器网络面板。");
 }
 
 function getQuerySymbol() {
@@ -413,7 +409,7 @@ function renderTask(task) {
   setText("#task-id-value", task.task_id || state.taskId);
   setText("#task-run-id", task.run_id);
   setText("#task-current-stage", task.current_stage || (task.status === "queued" ? "等待 Worker" : "未报告"));
-  setText("#task-completed", task.completed_stages ?? 0);
+  setText("#task-completed", task.completed_stages ?? "未报告");
   setText("#task-created", formatDateTime(task.created_at));
   const message = task.error_message || task.failure_code || "";
   $("#task-error").hidden = !message;
@@ -781,9 +777,14 @@ async function createTask(event) {
   try {
     symbols = parseAnalysisSymbols($("#task-symbols").value);
   } catch (error) {
-    window.alert(error.message);
+    const feedback = $("#task-create-feedback");
+    feedback.hidden = false;
+    feedback.textContent = error.message;
     return;
   }
+  const feedback = $("#task-create-feedback");
+  feedback.hidden = true;
+  feedback.textContent = "";
   const button = $("#create-task-button");
   button.disabled = true;
   button.textContent = "正在写入任务队列…";
@@ -811,6 +812,7 @@ async function createTask(event) {
     state.taskId = task.task_id;
     state.runId = task.run_id || "";
     persistTaskReference();
+    feedback.hidden = true;
     renderTask(task);
     renderTaskEvents();
     const generation = state.pollGeneration;
@@ -822,7 +824,8 @@ async function createTask(event) {
   } catch (error) {
     $("#task-empty").hidden = false;
     $("#task-detail").hidden = true;
-    window.alert(`创建任务失败：${errorMessage(error)}`);
+    feedback.hidden = false;
+    feedback.textContent = "创建任务失败：" + errorMessage(error);
   } finally {
     button.disabled = false;
     button.innerHTML = '创建并跟踪任务 <span>→</span>';

@@ -38,6 +38,8 @@ test("structured result renderer uses fields declared by Go RunResult", () => {
     assert.ok(app.includes("result." + field), "WebUI must render result." + field);
   }
   assert.doesNotMatch(app, /signal\.(score|confidence|rationale|reason)\b/, "do not display fields absent from CandidateSignal");
+  assert.doesNotMatch(app, /completed_stages\s*\?\?\s*0/, "missing stage counts must not be fabricated as zero");
+  assert.match(html, /id="task-create-feedback"/, "task submission errors should be shown inline");
 });
 
 test("task/event endpoint parameters and status vocabulary remain grounded in the API contract", () => {

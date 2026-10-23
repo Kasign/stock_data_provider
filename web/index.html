@@ -119,6 +119,7 @@
                 <label class="field"><span>幂等键（可选）</span><input id="idempotency-key" maxlength="128" placeholder="留空则由服务器正常创建" /></label>
                 <div class="inline-callout"><strong>注意</strong><span>目前分析流程属于工程 MVP。数据质量门禁可能将结果标记为 partial 或阻断；请勿将其视为交易建议。</span></div>
                 <button class="button button-primary" id="create-task-button" type="submit">创建并跟踪任务 <span>→</span></button>
+                <p id="task-create-feedback" class="task-error" hidden></p>
               </form>
             </section>
             <section class="panel task-status-panel">
