@@ -21,10 +21,17 @@ func (roundTripper domesticMarketRoundTripper) RoundTrip(req *http.Request) (*ht
 	return roundTripper(req)
 }
 
-func TestEastmoneyMarketBreadthDefaultsToDelayHost(t *testing.T) {
+func TestEastmoneyMarketBreadthDefaultsToBulkEndpoint(t *testing.T) {
 	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", "", "", "")
-	if p.marketStocksURL != "https://push2delay.eastmoney.com/api/qt/clist/get" {
+	if p.marketStocksURL != "https://82.push2.eastmoney.com/api/qt/clist/get" {
 		t.Fatalf("market breadth default endpoint = %q", p.marketStocksURL)
+	}
+}
+
+func TestEastmoneyMarketBreadthFallbackMapsBulkHostToDelayHost(t *testing.T) {
+	got := eastmoneyMarketStocksFallbackURL("https://82.push2.eastmoney.com/api/qt/clist/get")
+	if got != "https://push2delay.eastmoney.com/api/qt/clist/get" {
+		t.Fatalf("fallback URL = %q", got)
 	}
 }
 
@@ -98,11 +105,14 @@ func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T)
 			http.NotFound(w, r)
 			return
 		}
-		if r.URL.Query().Get("pz") != "500" {
+		if r.URL.Query().Get("pz") != "20000" {
 			t.Errorf("pz=%s", r.URL.Query().Get("pz"))
 		}
 		if r.URL.Query().Get("fid") != "f12" {
 			t.Errorf("fid=%s, want stable sort by security code", r.URL.Query().Get("fid"))
+		}
+		if got := r.URL.Query().Get("np"); got != "2" {
+			t.Errorf("np=%s, want 2 for bulk result", got)
 		}
 		payload := map[string]any{"rc": 0, "data": map[string]any{
 			"total": 3, "diff": []map[string]any{
@@ -209,7 +219,7 @@ func TestEastmoneyFetchMarketBreadthPaginatesCompleteCoverage(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		if got := r.URL.Query().Get("pz"); got != "500" && got != "2" {
+		if got := r.URL.Query().Get("pz"); got != "20000" && got != "2" {
 			t.Errorf("unexpected page size %q", got)
 		}
 		var rows []map[string]any

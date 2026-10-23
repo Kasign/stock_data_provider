@@ -97,7 +97,7 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	if marketStocksURL == "" {
 		// Use the delay host directly for broad pagination; the primary CLIST host redirects here
 		// anyway, and extra failed redirect/fallback attempts can aggravate transient rate limiting.
-		marketStocksURL = "https://push2delay.eastmoney.com/api/qt/clist/get"
+		marketStocksURL = "https://82.push2.eastmoney.com/api/qt/clist/get"
 	}
 	if limitPoolBaseURL == "" {
 		limitPoolBaseURL = "https://push2ex.eastmoney.com"
@@ -1115,15 +1115,21 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 }
 
 const eastmoneyMarketUniverseFilter = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
-const eastmoneyMarketBreadthPageSize = 500
+const eastmoneyMarketBreadthPageSize = 20000
 const eastmoneyMarketBreadthMaxSecurities = 12000
 
 func eastmoneyMarketStocksFallbackURL(rawURL string) string {
 	u, err := url.Parse(rawURL)
-	if err != nil || u.Scheme != "https" || !strings.EqualFold(strings.TrimSuffix(u.Hostname(), "."), "push2.eastmoney.com") {
+	if err != nil || u.Scheme != "https" {
 		return ""
 	}
 	if !strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), "/api/qt/clist/get") {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSuffix(u.Hostname(), ".")) {
+	case "push2.eastmoney.com", "82.push2.eastmoney.com":
+		// 82.push2 is the bulk-query candidate; use the delay hostname only as fallback.
+	default:
 		return ""
 	}
 	port := u.Port()
@@ -1145,7 +1151,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	}
 	fetchPage := func(page, pageSize int) (*marketListPayload, error) {
 		params := url.Values{
-			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(pageSize)}, "po": {"1"}, "np": {"1"},
+			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(pageSize)}, "po": {"1"}, "np": {"2"},
 			// Sort by stable security code; sorting by live percentage change can move symbols between pages.
 			"fid": {"f12"}, "fs": {eastmoneyMarketUniverseFilter},
 			"fields": {"f3,f6,f12,f13,f14"}, "fltt": {"2"}, "invt": {"2"}, "ut": {p.ut},
