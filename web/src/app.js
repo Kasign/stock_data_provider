@@ -13,6 +13,8 @@ import {
   saveSettings
 } from "./api.js";
 import { renderCloseChart } from "./chart.js";
+import { readRecentTasks, upsertRecentTask } from "./recent-tasks.js";
+import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
   formatCompact,
   formatDate,
@@ -64,14 +66,62 @@ function persistTaskReference() {
     task_type: state.taskType,
     status: state.taskStatus
   };
-  const serialized = JSON.stringify(record);
+  const comparable = JSON.stringify(record);
   try {
-    // renderTask runs on every poll; avoid synchronous writes when nothing changed.
-    if (localStorage.getItem(TASK_REFERENCE_KEY) !== serialized) {
-      localStorage.setItem(TASK_REFERENCE_KEY, serialized);
-    }
+    const previous = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
+    const previousComparable = previous ? JSON.stringify({
+      task_id: previous.task_id,
+      run_id: previous.run_id || "",
+      symbols: Array.isArray(previous.symbols) ? previous.symbols : [],
+      task_type: previous.task_type || "post_market_scan",
+      status: previous.status || ""
+    }) : "";
+    if (previousComparable === comparable) return;
+    record.updated_at = new Date().toISOString();
+    localStorage.setItem(TASK_REFERENCE_KEY, JSON.stringify(record));
+    renderRecentTasks(upsertRecentTask(record, localStorage));
   } catch {
     // Storage can be disabled or full; the current page session should still work.
+  }
+}
+
+function renderRecentTasks(records = safeReadRecentTasks()) {
+  const root = $("#recent-analysis-list");
+  root.replaceChildren();
+  const items = Array.isArray(records) ? records : [];
+  setText("#recent-analysis-count", items.length + " / 10");
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = "完成一次分析后，这里会显示最近任务。";
+    root.append(empty);
+    return;
+  }
+  items.forEach((record) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "recent-analysis-item";
+    button.dataset.taskId = record.task_id;
+    const main = document.createElement("span");
+    main.className = "recent-analysis-item-main";
+    const title = document.createElement("strong");
+    title.textContent = record.symbols?.join(", ") || "标的未记录";
+    const detail = document.createElement("small");
+    detail.textContent = (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") + " · " + record.task_id;
+    const status = document.createElement("span");
+    status.className = "recent-analysis-item-status";
+    status.textContent = taskStatusLabel(record.status);
+    main.append(title, detail);
+    button.append(main, status);
+    root.append(button);
+  });
+}
+
+function safeReadRecentTasks() {
+  try {
+    return readRecentTasks(localStorage);
+  } catch {
+    return [];
   }
 }
 
@@ -778,6 +828,38 @@ function startQuoteAnalysis() {
   $("#task-form").requestSubmit();
 }
 
+function activateTaskReference(record) {
+  if (!record || typeof record.task_id !== "string" || !record.task_id.trim()) return false;
+  stopTaskPolling();
+  state.taskId = record.task_id;
+  state.runId = typeof record.run_id === "string" ? record.run_id : "";
+  state.taskSymbols = Array.isArray(record.symbols) ? record.symbols : [];
+  state.taskType = record.task_type || "post_market_scan";
+  state.taskStatus = record.status || "";
+  state.lastRunResult = null;
+  state.taskSequence = 0;
+  state.taskEvents.clear();
+  $("#task-symbols").value = state.taskSymbols.join(", ") || "600519";
+  if (["post_market_scan", "watchlist_scan", "position_review"].includes(state.taskType)) {
+    $("#task-type").value = state.taskType;
+  }
+  $("#task-empty").hidden = true;
+  $("#task-detail").hidden = false;
+  $("#task-result-section").hidden = true;
+  $("#task-result-metrics").replaceChildren();
+  $("#task-result-structured").replaceChildren();
+  $("#task-result-warnings").replaceChildren();
+  setText("#task-id-value", state.taskId);
+  setText("#task-run-id", state.runId);
+  setText("#task-current-stage", "正在恢复任务");
+  $("#task-poll-label").textContent = "正在从服务端恢复状态与阶段事件…";
+  setView("tasks");
+  renderTaskEvents();
+  persistTaskReference();
+  void pollTask(state.pollGeneration);
+  return true;
+}
+
 function restoreLastTask() {
   let record;
   try {
@@ -785,31 +867,7 @@ function restoreLastTask() {
   } catch {
     return false;
   }
-  if (!record || typeof record.task_id !== "string" || !record.task_id.trim()) return false;
-
-  state.taskId = record.task_id;
-  state.runId = typeof record.run_id === "string" ? record.run_id : "";
-  state.taskSymbols = Array.isArray(record.symbols) ? record.symbols : [];
-  state.taskType = record.task_type || "post_market_scan";
-  state.taskStatus = record.status || "";
-  $("#task-symbols").value = state.taskSymbols.join(", ") || "600519";
-  if (["post_market_scan", "watchlist_scan", "position_review"].includes(state.taskType)) {
-    $("#task-type").value = state.taskType;
-  }
-  $("#task-empty").hidden = true;
-  $("#task-detail").hidden = false;
-  $("#task-result-section").hidden = !state.runId;
-  setText("#task-id-value", state.taskId);
-  setText("#task-run-id", state.runId);
-  setText("#task-current-stage", "正在恢复上次任务");
-  $("#task-poll-label").textContent = "正在从服务端恢复状态与阶段事件…";
-  setView("tasks");
-  state.taskSequence = 0;
-  state.taskEvents.clear();
-  renderTaskEvents();
-  const generation = state.pollGeneration;
-  void pollTask(generation);
-  return true;
+  return activateTaskReference(record);
 }
 
 async function copyText(text) {
@@ -899,6 +957,12 @@ $("#refresh-task").addEventListener("click", () => {
   const generation = state.pollGeneration;
   void pollTask(generation);
 });
+$("#recent-analysis-list").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-task-id]");
+  if (!button) return;
+  const record = safeReadRecentTasks().find((item) => item.task_id === button.dataset.taskId);
+  if (record) activateTaskReference(record);
+});
 $("#reload-run-result").addEventListener("click", () => {
   if (state.taskId && state.runId) void loadTaskRunResult(state.runId, state.taskId);
 });
@@ -939,6 +1003,27 @@ $("#copy-task-diagnostic").addEventListener("click", async (event) => {
   }
   window.setTimeout(() => { button.textContent = "复制诊断"; }, 1500);
 });
+function downloadTextFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+$("#download-run-json").addEventListener("click", () => {
+  if (!state.lastRunResult) return;
+  downloadTextFile(JSON.stringify(state.lastRunResult, null, 2), buildRunResultFilename(state.lastRunResult, "json"), "application/json;charset=utf-8");
+});
+$("#download-run-markdown").addEventListener("click", () => {
+  if (!state.lastRunResult) return;
+  downloadTextFile(buildRunResultMarkdown(state.lastRunResult), buildRunResultFilename(state.lastRunResult, "md"), "text/markdown;charset=utf-8");
+});
 $("#copy-task-id").addEventListener("click", async () => {
   if (!state.taskId) return;
   const button = $("#copy-task-id");
@@ -951,6 +1036,7 @@ $("#copy-task-id").addEventListener("click", async () => {
   window.setTimeout(() => { button.textContent = "复制"; }, 1600);
 });
 
+renderRecentTasks();
 setView("market");
 void refreshServices();
 void refreshSources();
