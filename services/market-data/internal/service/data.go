@@ -252,7 +252,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
-	const ttl = 15 * time.Second
+	const ttl = 90 * time.Second
 	const key = "md:v1:market-breadth:cn-a-share"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketBreadthSnapshot

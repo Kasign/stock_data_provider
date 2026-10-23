@@ -977,7 +977,8 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	fetchPage := func(page, pageSize int) (*marketListPayload, error) {
 		params := url.Values{
 			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(pageSize)}, "po": {"1"}, "np": {"1"},
-			"fid": {"f3"}, "fs": {eastmoneyMarketUniverseFilter},
+			// Sort by stable security code; sorting by live percentage change can move symbols between pages.
+			"fid": {"f12"}, "fs": {eastmoneyMarketUniverseFilter},
 			"fields": {"f3,f6,f12,f13,f14"}, "fltt": {"2"}, "invt": {"2"}, "ut": {p.ut},
 			"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		}
@@ -1014,6 +1015,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	}
 	rows := make([]map[string]json.RawMessage, 0, total)
 	rows = append(rows, first.Data.Diff...)
+	pageCount := 1
 	for page := 2; len(rows) < total; page++ {
 		if page > (eastmoneyMarketBreadthMaxSecurities/pageSize)+1 {
 			return nil, errors.New("Eastmoney market breadth exceeded page safety limit")
@@ -1040,6 +1042,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 			return nil, fmt.Errorf("Eastmoney market breadth page %d is incomplete: received %d of %d rows", page, len(next.Data.Diff), expected)
 		}
 		rows = append(rows, next.Data.Diff...)
+		pageCount++
 	}
 	if len(rows) != total {
 		return nil, fmt.Errorf("Eastmoney market breadth coverage incomplete: received %d of %d rows", len(rows), total)
@@ -1051,6 +1054,9 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		Source: p.Name(), SourceVersion: "eastmoney-clist-market-breadth-v1",
 		FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+	if pageCount > 1 {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_pages_not_atomic")
 	}
 	seen := make(map[string]struct{}, len(rows))
 	amountSum, amountCount := 0.0, 0
@@ -1128,6 +1134,31 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	}
 	if payload.Data == nil {
 		return nil, errors.New("Eastmoney limit-pool response has no data object")
+	}
+	// push2ex can briefly report a non-empty total while omitting all pool rows (full=0).
+	// Retry this semantic partial response once; never reinterpret tc>0 with no rows as an empty pool.
+	if payload.Data.Total > 0 && len(payload.Data.Pool) == 0 {
+		firstTotal := payload.Data.Total
+		timer := time.NewTimer(350 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+		payload.RC, payload.Data = nil, nil
+		if retryErr := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); retryErr != nil {
+			return nil, fmt.Errorf("Eastmoney %s limit-pool partial response (tc=%d, pool empty); retry failed: %w", poolType, firstTotal, retryErr)
+		}
+		if payload.RC != nil && *payload.RC != 0 {
+			return nil, fmt.Errorf("Eastmoney %s limit-pool provider error after partial-response retry rc=%d", poolType, *payload.RC)
+		}
+		if payload.Data == nil {
+			return nil, errors.New("Eastmoney limit-pool retry returned no data object")
+		}
+		if payload.Data.Total > 0 && len(payload.Data.Pool) == 0 {
+			return nil, fmt.Errorf("Eastmoney %s limit-pool total/pool mismatch after retry (tc=%d, first tc=%d, pool empty)", poolType, payload.Data.Total, firstTotal)
+		}
 	}
 	fetchedAt, requestedDate := time.Now().UTC(), date.Format("2006-01-02")
 	snapshot := &model.LimitPoolSnapshot{

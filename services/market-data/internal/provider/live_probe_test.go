@@ -527,7 +527,7 @@ func TestLiveProviderProbe(t *testing.T) {
 	runMarketBreadth := func(eastmoney *Eastmoney) {
 		capture := &liveProbeCapture{}
 		eastmoney.client.Transport = capture.transport()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 		defer cancel()
 		started := time.Now()
 		item, callErr := eastmoney.FetchMarketBreadth(ctx)
