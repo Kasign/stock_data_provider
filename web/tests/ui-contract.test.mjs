@@ -15,7 +15,7 @@ test("static DOM IDs referenced by the WebUI exist and are unique", () => {
 
   const idSet = new Set(htmlIds);
   const staticSelectors = [...app.matchAll(/\$\(["']#([a-zA-Z][\w-]*)["']\)/g)].map((match) => match[1]);
-  const missing = [...new Set(staticSelectors.filter((id) => !idSet.has(id))];
+  const missing = [...new Set(staticSelectors.filter((id) => !idSet.has(id)))];
   assert.deepEqual(missing, [], "app.js references missing static DOM IDs: " + missing.join(", "));
 });
 
