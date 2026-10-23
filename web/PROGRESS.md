@@ -15,9 +15,10 @@
 | 任务状态与 Run 状态 | 已实现 | 分别解释异步任务状态与 Run 状态，包括 blocked_data_quality、rejected_request 等后端状态。 |
 | 刷新后恢复最近任务 | 已实现，待浏览器联调 | 浏览器 localStorage 仅保存最近一项 task/run ID、标的、任务类型与状态，重新打开页面后通过现有 task/events/run 接口恢复。 |
 | 手动读取和诊断 | 已实现，待浏览器验收 | 提供重新读取 Run、复制完整 JSON、复制任务/质量/失败/事件诊断内容的入口。 |
-| 最近分析列表 | 本轮新增，CI 待验证 | 当前浏览器内保存最近 10 条 task/run 引用；点击记录会通过现有 task/events/run 接口恢复，不保存完整报告，也不是服务端历史。 |
-| 报告下载 | 本轮新增，CI 待验证 | 增加结构化 Markdown 与原始 JSON 下载，文件名使用标的和分析时点；不增加后端接口。 |
-| 前端单元测试 | 通过（18 项测试） | 覆盖股票代码/状态格式化、DOM ID 引用、Go RunResult 字段映射、任务/Run 状态、任务请求体/幂等键、事件分页参数、密钥隔离、错误响应、最近任务存储与报告导出；第四轮 [WebUI CI #39895905854](https://github.com/Kasign/stock_data_provider/actions/runs/39895905854) 全部通过。 |
+| 最近分析列表 | 已实现并通过 CI | 当前浏览器内保存最近 10 条 task/run 引用；点击记录会通过现有 task/events/run 接口恢复，不保存完整报告，也不是服务端历史。验证见 [WebUI CI #39895905854](https://github.com/Kasign/stock_data_provider/actions/runs/39895905854)。 |
+| 报告下载 | 已实现并通过 CI | 增加结构化 Markdown 与原始 JSON 下载，文件名使用标的和分析时点；不增加后端接口。验证见 [WebUI CI #39895905854](https://github.com/Kasign/stock_data_provider/actions/runs/39895905854)。 |
+| 错误与缺失值反馈 | 已实现并通过 CI | 401 错误不再默认指向行情 API Key；反馈包含 HTTP 状态、服务端错误码及 request ID（若有），任务创建失败改为页面内联提示，缺失 completed_stages 显示“未报告”。验证见 [WebUI CI #39896321052](https://github.com/Kasign/stock_data_provider/actions/runs/39896321052)。 |
+| 前端单元测试 | 通过（19 项测试） | 覆盖股票代码/状态格式化、DOM ID 引用、Go RunResult 字段映射、任务/Run 状态、任务请求体/幂等键、事件分页参数、密钥隔离、错误响应、最近任务存储和报告导出；最新 [WebUI CI #39896321052](https://github.com/Kasign/stock_data_provider/actions/runs/39896321052) 全部通过。 |
 
 ## 第二轮 Review 修正
 
@@ -31,11 +32,12 @@
 - 增加浏览器本地“最近分析”列表，最多 10 条，可选择记录并恢复服务端 task/run 状态；为旧版本仅保存单条任务的 localStorage 记录增加迁移。
 - 增加 Markdown 报告与原始 JSON 下载；Markdown 导出明确标记未报告字段，不生成额外评分、置信度或交易结论。
 - 新增最近任务存储单元测试和 Markdown/文件名测试。第四轮 [WebUI CI #39895905854](https://github.com/Kasign/stock_data_provider/actions/runs/39895905854) 已通过：JS 语法检查、18 项 Node 测试和 Docker 镜像构建均成功。
+- 新增统一 API 错误描述与任务创建内联错误提示；未知的 completed_stages 不显示为 0。第五轮 [WebUI CI #39896321052](https://github.com/Kasign/stock_data_provider/actions/runs/39896321052) 已通过：JS 语法检查、19 项 Node 测试和 Docker 镜像构建均成功。
 - 本地记录可能因浏览器存储被清除而消失；记录引用已过期或服务端不可用时，仍需通过界面错误信息判断，不能将其视为服务端归档。
 
 ## 明确待完成
 
-1. **GitHub 验证：已完成**。首轮实现 [#39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836)、第二轮 Review [#39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741)、第三轮 API 测试 [#39894969470](https://github.com/Kasign/stock_data_provider/actions/runs/39894969470) 和第四轮本地历史/报告导出 [#39895905854](https://github.com/Kasign/stock_data_provider/actions/runs/39895905854) 均通过；第四轮包含 JS 语法检查、18 项 Node 测试与 Docker 镜像构建。
+1. **GitHub 验证：已完成**。首轮实现 [#39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836)、第二轮 Review [#39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741)、第三轮 API 测试 [#39894969470](https://github.com/Kasign/stock_data_provider/actions/runs/39894969470)、第四轮本地历史/报告导出 [#39895905854](https://github.com/Kasign/stock_data_provider/actions/runs/39895905854) 和第五轮错误/缺失值修正 [#39896321052](https://github.com/Kasign/stock_data_provider/actions/runs/39896321052) 均通过；最新轮包含 JS 语法检查、19 项 Node 测试与 Docker 镜像构建。
 2. **NAS / 1Panel 真实端到端联调**：在真实 Docker 网络里验证 stock_analysis_web 的 /analysis-api 代理、任务提交、task/run 关联、阶段事件、Run 读取和 API 错误显示。
 3. **真实数据场景验收**：至少检查正常数据、部分可选数据缺失/质量降级、后端暂不可用三类情况；逐项比对页面与原始 JSON。
 4. **浏览器刷新恢复验收**：分别测运行中、已完成、部分成功/失败任务刷新；核实浏览器存储被禁用、task/run 已被清理、暂时断网时的表现。
@@ -55,7 +57,7 @@
 
 ## 验收结果
 
-- GitHub Actions：已通过四轮检查，最新一轮 [#39895905854](https://github.com/Kasign/stock_data_provider/actions/runs/39895905854) 覆盖最近分析与 Markdown/JSON 导出。
+- GitHub Actions：已通过五轮检查，最新一轮 [#39896321052](https://github.com/Kasign/stock_data_provider/actions/runs/39896321052) 覆盖统一错误诊断与缺失值处理。
 - NAS / 1Panel 真实联调：待执行。
 - 三类真实数据响应：待执行。
 
