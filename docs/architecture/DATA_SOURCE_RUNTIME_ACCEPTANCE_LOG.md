@@ -368,6 +368,26 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 
 更早的探测 #14 中两个 Eastmoney 报价入口曾返回 HTTP 502，但 #17 又成功；这说明公共端点存在时段/网络波动，不能声称时间戳修复解决了 502，也不能以一次成功证明稳定性。Tencent 的 degraded 是质量契约状态，不是请求失败；不能为追求 valid 而臆造成交额。GitHub Runner 真实返回仍不替代 NAS 容器端独立验收。
 
+## 5.15 五类已实现 Provider 统一实测矩阵与 MX 密钥阻塞（2026-10-23）
+
+### 5.15.1 统一自动化覆盖
+
+- 已扩展 `TestLiveProviderProbe`，一次运行依次探测新浪报价、腾讯报价/不复权日 K/前复权日 K、东方财富主报价/延迟报价/前复权日 K、BaoStock 前复权日 K，并在一份结构化 JSON 报告中列出每项能力的返回状态、耗时、质量、K 线数量、脱敏 HTTP 响应。
+- 日 K 实测契约现在还会检查：交易日期可解析、来源/证券/复权口径一致、日期不超范围、无重复日期、升序排列、数量不超过请求 limit、OHLC 合法、缺少成交额不能被标记为 valid。
+- MX_API 的筹码分布和个股资金流也已加入同一个报告的独立能力项。由于 MX 使用独立 Key、请求配额与 300ms 级串行准入，普通 PR 探测默认记录为 skipped；只有手动运行 Live provider probe 并显式设置 `include_mx=true` 才应发出这两次真实请求。已撤销为了诊断而临时增加的 branch-push 触发器，避免后续提交自动消耗 MX 配额。
+
+### 5.15.2 Go CI 与当前真实上游结果
+
+- [Go test suite #212](https://github.com/Kasign/stock_data_provider/actions/runs/39887486551) 结论为 **success**：根模块、`go-core`、`services/market-data` 的测试/race/vet 与 Compose、部署脚本检查及 Docker 镜像构建均通过。
+- [Live provider probe #22](https://github.com/Kasign/stock_data_provider/actions/runs/39887647358) 的工作流总体显示 success，但真实 Provider job 为 **failure**（该 job 配置了 `continue-on-error`，工作流绿色不代表所有 Provider 通过）。本轮报告 Artifact：[live-provider-report #12472528946](https://github.com/Kasign/stock_data_provider/actions/runs/39887647358/artifacts/12472528946)，4,277 bytes，GitHub 元数据 SHA-256 为 `61e5a906ba2b6170005b92573a481a2f85d3b1328a6cadc312546ac06095c69f`。
+- 本轮真实结果：新浪报价返回 valid；腾讯报价与两种日 K 返回但降级（成交额/字段口径仍未完全验证）；东方财富前复权日 K 返回 8 根有效 K 线；BaoStock 前复权日 K 返回 8 根有效 K 线。东方财富主报价和延迟域报价本轮均遇到 TLS handshake timeout，但较早的 #20/#21 中曾成功；此属于端点/Runner 网络波动，不能因此判定解析器失效，也不能因历史成功声称其稳定。
+- MX 的两条报告记录均为 `status=failed`、`error=MX API key is missing`，没有向 MX 端点发出查询。此次以 branch push 触发后仍未从 Actions 环境拿到 `MX_APIKEY`，所以**不能称为妙想线上验证通过**。要完成这一项，需要确认仓库 GitHub Actions Secrets 中存在名为 `MX_APIKEY` 的可用 secret，然后从工作流页面手动执行并勾选 `include_mx`。密钥值不写入代码或日志。
+- 先前 [Live provider probe #20](https://github.com/Kasign/stock_data_provider/actions/runs/39887133839) 已将所有八项公开报价/日 K 请求验证为 returned，且东方财富主/延迟报价的 Unix 时间戳已解析为 valid；#22 的超时体现公网调用存在波动，而不是持续性通过/失败保证。
+
+### 5.15.3 接入范围边界
+
+截至本轮，本 Go 服务现有数据能力都已进入统一测试框架：新浪报价、腾讯报价/日 K、东方财富报价/日 K、BaoStock 日 K、妙想筹码/资金流（真实请求要求独立 Key）。Tushare、同花顺、Efinance、AkShare、Pytdx、YFinance 以及新闻公告、财务、板块、龙虎榜等并未都存在本仓库的 Go Adapter；它们仍属于待接入的数据源或数据域，不能只改配置就标为“已接入”。后续按域新增 Adapter 时，应沿用同一结果结构和数据契约测试。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
