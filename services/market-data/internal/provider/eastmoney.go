@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -142,8 +143,8 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 	var payload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
-			Total int                          `json:"total"`
-			Diff  []map[string]json.RawMessage `json:"diff"`
+			Total int             `json:"total"`
+			Diff  json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
 	if err := p.getJSONWithRetry(ctx, p.stockBoardsURL, params, &payload, 6*time.Second); err != nil {
@@ -158,13 +159,17 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 	if payload.Data.Total < 0 || payload.Data.Total > 1000 {
 		return nil, fmt.Errorf("Eastmoney stock boards returned unsupported total %d", payload.Data.Total)
 	}
-	if payload.Data.Total != len(payload.Data.Diff) {
-		return nil, fmt.Errorf("Eastmoney stock boards coverage incomplete: received %d of %d rows", len(payload.Data.Diff), payload.Data.Total)
+	rows, err := decodeEastmoneyBoardRows(payload.Data.Diff)
+	if err != nil {
+		return nil, fmt.Errorf("decode Eastmoney stock-board rows: %w", err)
+	}
+	if payload.Data.Total != len(rows) {
+		return nil, fmt.Errorf("Eastmoney stock boards coverage incomplete: received %d of %d rows", len(rows), payload.Data.Total)
 	}
 	now := time.Now().UTC()
 	snapshot := &model.StockBoardSnapshot{
 		Symbol: symbol, Total: payload.Data.Total, HasData: payload.Data.Total > 0,
-		Items:  make([]model.StockBoard, 0, len(payload.Data.Diff)),
+		Items:  make([]model.StockBoard, 0, len(rows)),
 		Source: p.Name(), SourceVersion: "eastmoney-slist-stock-boards-v1",
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
@@ -174,8 +179,8 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 		snapshot.QualityReasons = []string{"provider_returned_empty_board_list_cannot_distinguish_no_membership_from_unavailable_data"}
 		return snapshot, nil
 	}
-	seen := make(map[string]struct{}, len(payload.Data.Diff))
-	for index, row := range payload.Data.Diff {
+	seen := make(map[string]struct{}, len(rows))
+	for index, row := range rows {
 		code, name := parseEastmoneyBoardString(row, "f12"), parseEastmoneyBoardString(row, "f14")
 		if code == "" || name == "" {
 			return nil, fmt.Errorf("Eastmoney stock-board row %d has an empty code or name", index)
@@ -874,6 +879,55 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_rows_dropped_after_validation")
 	}
 	return snapshot, nil
+}
+
+// decodeEastmoneyBoardRows accepts array payloads and Eastmoney's indexed-object shape
+// ({"0": {...}, "1": {...}}). Numeric index ordering is preserved explicitly because
+// Go map iteration order is intentionally unspecified.
+func decodeEastmoneyBoardRows(raw json.RawMessage) ([]map[string]json.RawMessage, error) {
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "null" {
+		return nil, nil
+	}
+	switch value[0] {
+	case '[':
+		var rows []map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &rows); err != nil {
+			return nil, err
+		}
+		return rows, nil
+	case '{':
+		var indexed map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &indexed); err != nil {
+			return nil, err
+		}
+		keys := make([]string, 0, len(indexed))
+		for key := range indexed {
+			if _, err := strconv.Atoi(key); err != nil {
+				return nil, fmt.Errorf("unexpected non-numeric row key %q", key)
+			}
+			keys = append(keys, key)
+		}
+		sort.Slice(keys, func(i, j int) bool {
+			a, _ := strconv.Atoi(keys[i])
+			b, _ := strconv.Atoi(keys[j])
+			return a < b
+		})
+		rows := make([]map[string]json.RawMessage, 0, len(keys))
+		for _, key := range keys {
+			var row map[string]json.RawMessage
+			if err := json.Unmarshal(indexed[key], &row); err != nil {
+				return nil, fmt.Errorf("row %s: %w", key, err)
+			}
+			if row == nil {
+				return nil, fmt.Errorf("row %s is not a JSON object", key)
+			}
+			rows = append(rows, row)
+		}
+		return rows, nil
+	default:
+		return nil, fmt.Errorf("expected JSON array or indexed object")
+	}
 }
 
 func parseEastmoneyBoardString(row map[string]json.RawMessage, key string) string {

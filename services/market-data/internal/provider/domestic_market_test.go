@@ -44,9 +44,9 @@ func TestEastmoneyFetchStockBoardsMapsBoardItems(t *testing.T) {
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
-			"total": 2, "diff": []map[string]any{
-				{"f12": "BK0477", "f14": "酿酒行业", "f3": 1.25},
-				{"f12": "BK0896", "f14": "白酒", "f3": 2.5},
+			"total": 2, "diff": map[string]any{
+				"0": map[string]any{"f12": "BK0477", "f14": "酿酒行业", "f3": 1.25},
+				"1": map[string]any{"f12": "BK0896", "f14": "白酒", "f3": 2.5},
 			},
 		}})
 	}))
@@ -64,6 +64,16 @@ func TestEastmoneyFetchStockBoardsMapsBoardItems(t *testing.T) {
 	}
 	if got.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") {
 		t.Fatalf("timestamp quality downgrade missing: %+v", got)
+	}
+}
+
+func TestDecodeEastmoneyBoardRowsSupportsArrayPayload(t *testing.T) {
+	rows, err := decodeEastmoneyBoardRows(json.RawMessage(`[{"f12":"BK0477"},{"f12":"BK0896"}]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || parseEastmoneyBoardString(rows[0], "f12") != "BK0477" || parseEastmoneyBoardString(rows[1], "f12") != "BK0896" {
+		t.Fatalf("unexpected decoded rows: %+v", rows)
 	}
 }
 
