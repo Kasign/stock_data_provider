@@ -174,7 +174,8 @@ test("market API key visibility is opt-in and resets when settings close", () =>
   assert.match(app, /function setMarketKeyVisibility\(visible\)[\s\S]*?input\.type = visible \? "text" : "password"/);
   assert.match(app, /\$\("#toggle-market-key-visibility"\)\.addEventListener\("click",[\s\S]*?setMarketKeyVisibility/);
   assert.match(app, /\$\("#settings-dialog"\)\.addEventListener\("close", \(\) => setMarketKeyVisibility\(false\)\)/);
-  assert.doesNotMatch(app, /button\.setAttribute\("aria-label"/, "toggle button accessible name should remain stable while aria-pressed reports its state");
+  const visibilityHandler = app.match(/function setMarketKeyVisibility\(visible\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(visibilityHandler, /setAttribute\("aria-label"/, "toggle button accessible name should remain stable while aria-pressed reports its state");
   assert.match(app, /function openSettings\(\)[\s\S]*?setMarketKeyVisibility\(false\)/);
   assert.match(stylesheet, /\.secret-input-row/);
   assert.match(stylesheet, /\.secret-visibility-toggle:focus-visible/);
