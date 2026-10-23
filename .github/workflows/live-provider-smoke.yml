@@ -13,6 +13,18 @@ on:
         required: false
         default: false
         type: boolean
+  # 临时增加分支 push 触发器，以在 secrets 可用的受控事件中完成一次 MX 真实验收；结果归档后会移除此触发器。
+  push:
+    branches:
+      - feat/full-go-data-providers-api-switch
+    paths:
+      - ".github/workflows/live-provider-smoke.yml"
+      - "services/market-data/internal/provider/**"
+      - "services/market-data/internal/baostock/**"
+      - "services/market-data/internal/model/**"
+      - "services/market-data/configs/**"
+      - "services/market-data/.env.example"
+      - ".env.example"
   pull_request:
     paths:
       - ".github/workflows/live-provider-smoke.yml"
@@ -45,7 +57,7 @@ jobs:
           MARKET_DATA_LIVE_PROVIDER_TESTS: "1"
           LIVE_PROVIDER_REPORT_PATH: ${{ github.workspace }}/live-provider-report.json
           LIVE_PROBE_QUOTE_SYMBOL: ${{ github.event.inputs.quote_symbol || '600519.SH' }}
-          MARKET_DATA_LIVE_MX_TESTS: "1"
+          MARKET_DATA_LIVE_MX_TESTS: ${{ github.event_name == 'push' && '1' || (github.event_name == 'workflow_dispatch' && inputs.include_mx && '1' || '0') }}
           MARKET_DATA_MX_API_KEY: ${{ secrets.MX_APIKEY }}
           MARKET_DATA_MX_API_URL: https://mkapi2.dfcfs.com/finskillshub/api/claw/query
         working-directory: services/market-data
