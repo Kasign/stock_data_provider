@@ -15,7 +15,7 @@
 | 任务状态与 Run 状态 | 已实现 | 分别解释异步任务状态与 Run 状态，包括 blocked_data_quality、rejected_request 等后端状态。 |
 | 刷新后恢复最近任务 | 已实现，待浏览器联调 | 浏览器 localStorage 仅保存最近一项 task/run ID、标的、任务类型与状态，重新打开页面后通过现有 task/events/run 接口恢复。 |
 | 手动读取和诊断 | 已实现，待浏览器验收 | 提供重新读取 Run、复制完整 JSON、复制任务/质量/失败/事件诊断内容的入口。 |
-| 前端单元测试 | 首轮通过，补充契约测试待 CI | 已覆盖分析代码归一化、交易所后缀与分析请求分离、重复股票归一化、Run 状态标签；本轮增加页面 DOM 引用及 Go RunResult 字段契约检查。 |
+| 前端单元测试 | 两轮验证通过 | 除股票代码与状态格式化测试外，新增 DOM ID 唯一性/引用检查、Go RunResult 字段检查和任务/Run 状态映射检查；第二轮 [WebUI CI #39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741) 全部通过。 |
 
 ## 第二轮 Review 修正
 
@@ -25,7 +25,7 @@
 
 ## 明确待完成
 
-1. **GitHub 验证**：首轮提交 3c8ae824 的 [WebUI checks #39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836) 已通过；本轮 Review 修正提交仍需重新执行 CI。
+1. **GitHub 验证：已完成**。首轮实现提交 3c8ae824 的 [WebUI checks #39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836) 与第二轮 Review 修正提交 610881e 的 [WebUI checks #39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741) 均通过；覆盖 JS 语法、10 项 Node 测试和 Docker 镜像构建。
 2. **NAS / 1Panel 真实端到端联调**：在真实 Docker 网络里验证 stock_analysis_web 的 /analysis-api 代理、任务提交、task/run 关联、阶段事件、Run 读取和 API 错误显示。
 3. **真实数据场景验收**：至少检查正常数据、部分可选数据缺失/质量降级、后端暂不可用三类情况；逐项比对页面与原始 JSON。
 4. **浏览器刷新恢复验收**：分别测运行中、已完成、部分成功/失败任务刷新；核实浏览器存储被禁用、task/run 已被清理、暂时断网时的表现。
@@ -45,6 +45,6 @@
 
 ## 验收结果
 
-- GitHub Actions：已通过 [WebUI checks #39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836)，验证对象为实现提交 3c8ae824ae3351cca3b6077d0bcc42a4d49c1252。
+- GitHub Actions：已通过首轮 [#39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836) 及第二轮 [#39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741)；第二轮包含新增的 UI/Go 数据契约测试。
 - NAS / 1Panel 真实联调：待执行。
 - 三类真实数据响应：待执行。
