@@ -92,7 +92,7 @@ type liveProbeResult struct {
 	TradingCalendar  *model.TradingCalendarSnapshot `json:"trading_calendar,omitempty"`
 	PoolType         string                         `json:"pool_type,omitempty"`
 	Symbol           string                         `json:"symbol,omitempty"`
-	Adjustment       model.AdjustmentBasis           `json:"adjustment,omitempty"`
+	Adjustment       model.AdjustmentBasis          `json:"adjustment,omitempty"`
 	Status           string                         `json:"status"`
 	ErrorKind        string                         `json:"error_kind,omitempty"`
 	Error            string                         `json:"error,omitempty"`

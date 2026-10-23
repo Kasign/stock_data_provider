@@ -98,7 +98,7 @@ func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T)
 			http.NotFound(w, r)
 			return
 		}
-		if r.URL.Query().Get("pz") != "1000" {
+		if r.URL.Query().Get("pz") != "500" {
 			t.Errorf("pz=%s", r.URL.Query().Get("pz"))
 		}
 		if r.URL.Query().Get("fid") != "f12" {
@@ -200,6 +200,43 @@ func TestEastmoneyFetchMarketBreadthRejectsIncompleteCoverage(t *testing.T) {
 	_, err := p.FetchMarketBreadth(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "incomplete") {
 		t.Fatalf("expected incomplete coverage error, got %v", err)
+	}
+}
+
+func TestEastmoneyFetchMarketBreadthPaginatesCompleteCoverage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/clist/get" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("pz"); got != "500" && got != "2" {
+			t.Errorf("unexpected page size %q", got)
+		}
+		var rows []map[string]any
+		switch r.URL.Query().Get("pn") {
+		case "1":
+			rows = []map[string]any{
+				{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.5, "f6": 100.0},
+				{"f12": "000001", "f13": 0, "f14": "平安银行", "f3": -0.5, "f6": 200.0},
+			}
+		case "2":
+			rows = []map[string]any{{"f12": "601398", "f13": 1, "f14": "工商银行", "f3": 0.0, "f6": 300.0}}
+		default:
+			t.Errorf("unexpected page number %q", r.URL.Query().Get("pn"))
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{"total": 3, "diff": rows}})
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/clist/get", server.URL, "")
+	got, err := p.FetchMarketBreadth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalSecurities != 3 || got.CoveredSecurities != 3 || got.AdvancingCount != 1 || got.DecliningCount != 1 || got.UnchangedCount != 1 {
+		t.Fatalf("unexpected paginated market breadth: %+v", got)
+	}
+	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_pages_not_atomic") {
+		t.Fatalf("multi-page non-atomic quality reason missing: %+v", got.QualityReasons)
 	}
 }
 

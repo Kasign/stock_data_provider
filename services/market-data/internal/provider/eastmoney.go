@@ -1115,7 +1115,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 }
 
 const eastmoneyMarketUniverseFilter = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
-const eastmoneyMarketBreadthPageSize = 1000
+const eastmoneyMarketBreadthPageSize = 500
 const eastmoneyMarketBreadthMaxSecurities = 12000
 
 func eastmoneyMarketStocksFallbackURL(rawURL string) string {
@@ -1197,7 +1197,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		if page > (eastmoneyMarketBreadthMaxSecurities/pageSize)+1 {
 			return nil, errors.New("Eastmoney market breadth exceeded page safety limit")
 		}
-		timer := time.NewTimer(600 * time.Millisecond)
+		timer := time.NewTimer(time.Second)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
