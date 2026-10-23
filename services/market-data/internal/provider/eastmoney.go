@@ -40,7 +40,7 @@ type Eastmoney struct {
 	stockBasicURL    string
 	sectorRankingURL string
 	indexURL         string
-	marketBreadthURL  string
+	marketBreadthURL string
 	limitPoolBaseURL string
 	stockBoardsURL   string
 	ut               string
