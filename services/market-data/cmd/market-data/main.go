@@ -74,7 +74,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 	}()
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfigured(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyUT),
+		"eastmoney": provider.NewEastmoneyConfiguredWithStockBasic(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneyUT),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
 		"sina":      provider.NewSinaConfigured(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL),

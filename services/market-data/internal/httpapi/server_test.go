@@ -142,9 +142,13 @@ func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
 	req.Header.Set("X-API-Key", "secret")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
-	if w.Code != http.StatusOK { t.Fatalf("status=%d body=%s", w.Code, w.Body.String()) }
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
 	for _, want := range []string{"\"symbol\":\"600519.SH\"", "\"name\":\"测试证券\"", "\"stock_basic_capable\":true"} {
-		if !strings.Contains(w.Body.String(), want) { t.Fatalf("profile response missing %s: %s", want, w.Body.String()) }
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("profile response missing %s: %s", want, w.Body.String())
+		}
 	}
 }
 

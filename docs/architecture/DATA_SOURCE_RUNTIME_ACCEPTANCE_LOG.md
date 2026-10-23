@@ -450,6 +450,13 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 - 为避免可选候选端点持续污染其他 Provider 的日常健康报告，默认 probe 将 NetEase 两项记录为 `skipped`；仅 workflow_dispatch 勾选 `include_netease=true` 才重试。应用配置仍默认 `MARKET_DATA_NETEASE_ENABLED=false`，历史日 K 能力默认关闭。
 - `MARKET_DATA_NETEASE_ENABLED` 默认为 false；启用服务端报价还需设置 `MARKET_DATA_NETEASE_QUOTE_ENABLED=true`。根配置样例保持 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`，直至 CSV 返回真实数据。
 
+## 5.18 东方财富 F10 股票基础资料与 Profile API（2026-10-23）
+
+- 本轮起点 HEAD：`9a1d49b3ab262d3604214d5655f894eb482c6de0`（`test: 修正股票资料接口契约断言`）。该提交链已引入 StockBasic 服务与 HTTP 路由，但漏提交 `StockBasicProvider`、`model.StockBasic`、`ProviderSettings.StockBasic` 等支撑类型，且 `internal/httpapi/server_test.go` 存在 gofmt 门禁错误，因此不能视为可编译可用。
+- 本轮补齐 `StockBasicProvider` 能力接口和响应模型；东方财富通过 `RPT_PCF10_ORG_ISSUEINFO` F10 数据查询简称、上市日期及可用的退市日期字段，严格核对返回证券代码，缺数据和代码不匹配均视为失败。新端点由 `MARKET_DATA_EASTMONEY_STOCK_BASIC_URL` 配置，不与实时报价或日 K 复用端点。能力可用 `MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED` 独立开关。
+- 新增 mock HTTP 契约测试和真实 Runner probe。真实探测需单独查看 `stock_basic` 的 `LIVE_PROVIDER_RESULT` 与 Provider job 结论，不能以 workflow 的 `continue-on-error` 总体成功代替；新 HEAD 实测前不记录为真实接通。
+- 同步修正 Profile API 测试的 gofmt 门禁。提交后补写对应 Go CI 各 job 结果、Live Provider probe 单项结果以及仍待实测的 MX_API/网易状态。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。

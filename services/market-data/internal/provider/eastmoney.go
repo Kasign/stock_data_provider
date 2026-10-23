@@ -27,12 +27,14 @@ const eastmoneyLookbackBufferDays = 30
 // defaultEastmoneyUT is the public web token commonly used by Eastmoney front-end clients.
 // It is not a user credential or private API key; deployments can override it if Eastmoney rotates it.
 const defaultEastmoneyUT = "7eea3edcaed734bea9cbfc24409ed989"
+const defaultEastmoneyStockBasicURL = "https://datacenter.eastmoney.com/securities/api/data/v1/get"
 
 type Eastmoney struct {
-	client   *http.Client
-	quoteURL string
-	klineURL string
-	ut       string
+	client        *http.Client
+	quoteURL      string
+	klineURL      string
+	stockBasicURL string
+	ut            string
 }
 
 func NewEastmoney(timeout time.Duration, quoteURL, klineURL string) *Eastmoney {
@@ -41,6 +43,11 @@ func NewEastmoney(timeout time.Duration, quoteURL, klineURL string) *Eastmoney {
 
 // NewEastmoneyConfigured allows the public Eastmoney front-end token to be overridden without changing endpoint URLs.
 func NewEastmoneyConfigured(timeout time.Duration, quoteURL, klineURL, ut string) *Eastmoney {
+	return NewEastmoneyConfiguredWithStockBasic(timeout, quoteURL, klineURL, "", ut)
+}
+
+// NewEastmoneyConfiguredWithStockBasic configures the independent F10 security-identity endpoint.
+func NewEastmoneyConfiguredWithStockBasic(timeout time.Duration, quoteURL, klineURL, stockBasicURL, ut string) *Eastmoney {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -50,13 +57,103 @@ func NewEastmoneyConfigured(timeout time.Duration, quoteURL, klineURL, ut string
 	if klineURL == "" {
 		klineURL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 	}
+	if stockBasicURL == "" {
+		stockBasicURL = defaultEastmoneyStockBasicURL
+	}
 	ut = strings.TrimSpace(ut)
 	if ut == "" {
 		ut = defaultEastmoneyUT
 	}
-	return &Eastmoney{client: &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy}, quoteURL: quoteURL, klineURL: klineURL, ut: ut}
+	return &Eastmoney{
+		client: &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, ut: ut,
+	}
 }
 func (p *Eastmoney) Name() string { return "eastmoney" }
+
+// FetchStockBasic retrieves low-frequency A-share identity and listing metadata from Eastmoney F10.
+func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*model.StockBasic, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil { return nil, err }
+	params := url.Values{
+		"reportName": {"RPT_PCF10_ORG_ISSUEINFO"},
+		"columns": {"ALL"}, "quoteColumns": {""},
+		"filter": {fmt.Sprintf(`(SECUCODE="%s")`, symbol)},
+		"pageNumber": {"1"}, "pageSize": {"1"},
+		"sortTypes": {""}, "sortColumns": {""},
+		"source": {"HSF10"}, "client": {"PC"},
+		"v": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	}
+	var payload struct {
+		Result *struct {
+			Data []map[string]json.RawMessage `json:"data"`
+		} `json:"result"`
+	}
+	u, err := url.Parse(p.stockBasicURL)
+	if err != nil { return nil, fmt.Errorf("eastmoney stock-basic endpoint URL: %w", err) }
+	u.RawQuery = params.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil { return nil, err }
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://emweb.securities.eastmoney.com/")
+	req.Header.Set("Origin", "https://emweb.securities.eastmoney.com")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	resp, err := p.client.Do(req)
+	if err != nil { return nil, fmt.Errorf("eastmoney stock-basic request: %w", err) }
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("eastmoney stock-basic HTTP status %d", resp.StatusCode)
+	}
+	body, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
+	if err != nil { return nil, fmt.Errorf("read Eastmoney stock-basic payload: %w", err) }
+	if err := decodeSingleJSON(body, &payload); err != nil { return nil, fmt.Errorf("decode Eastmoney stock-basic JSON: %w", err) }
+	if payload.Result == nil || len(payload.Result.Data) == 0 {
+		return nil, fmt.Errorf("eastmoney stock-basic returned no row for %s", symbol)
+	}
+	row := payload.Result.Data[0]
+	field := func(name string) string {
+		raw, ok := row[name]
+		if !ok || len(raw) == 0 || string(raw) == "null" { return "" }
+		var value string
+		if json.Unmarshal(raw, &value) == nil { return strings.TrimSpace(value) }
+		return strings.TrimSpace(strings.Trim(string(raw), `"`))
+	}
+	providerSymbol := field("SECUCODE")
+	if providerSymbol == "" { providerSymbol = field("SECURITY_CODE") }
+	canonical, symbolErr := normalize.NormalizeSymbol(providerSymbol)
+	if symbolErr != nil || canonical != symbol {
+		return nil, fmt.Errorf("eastmoney stock-basic symbol mismatch: requested %s, returned %q", symbol, providerSymbol)
+	}
+	name := field("SECURITY_NAME_ABBR")
+	if name == "" { return nil, fmt.Errorf("eastmoney stock-basic name is empty for %s", symbol) }
+	ipoDate, err := parseEastmoneyProfileDate(field("LISTING_DATE"))
+	if err != nil { return nil, err }
+	outDate, err := parseEastmoneyProfileDate(field("OUT_DATE"))
+	if err != nil { return nil, err }
+	status, statusLabel := 1, "listed"
+	if outDate != "" { status, statusLabel = 0, "delisted" }
+	return &model.StockBasic{
+		Symbol: symbol, Name: name, IPODate: ipoDate, OutDate: outDate,
+		SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: status, ListingStatusLabel: statusLabel,
+		Source: p.Name(), SourceVersion: "eastmoney-f10-issueinfo-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+		NormalizationVer: normalize.Version,
+	}, nil
+}
+
+func parseEastmoneyProfileDate(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "-" || strings.EqualFold(value, "null") { return "", nil }
+	for _, layout := range []string{
+		"2006-01-02", "2006-01-02 15:04:05", "2006-01-02T15:04:05",
+		"2006/01/02", "20060102", time.RFC3339,
+	} {
+		if parsed, err := time.Parse(layout, value); err == nil { return parsed.Format("2006-01-02"), nil }
+	}
+	return "", fmt.Errorf("eastmoney stock-basic date %q has an unsupported format", value)
+}
 
 func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)

@@ -27,6 +27,12 @@ type Provider interface {
 	DailyBarProvider
 }
 
+// StockBasicProvider 获取证券身份、上市日期等低频基础资料，不参与实时行情和日 K 兜底链。
+type StockBasicProvider interface {
+	NamedProvider
+	FetchStockBasic(ctx context.Context, symbol string) (*model.StockBasic, error)
+}
+
 // SupplementProvider 用于承载可选补充数据，这类能力不会进入实时行情或日 K 的兜底链。
 type SupplementProvider interface {
 	NamedProvider

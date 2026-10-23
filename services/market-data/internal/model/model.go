@@ -106,11 +106,29 @@ type Bundle struct {
 	QualityStatus         QualityStatus     `json:"quality_status"`
 }
 
+// StockBasic 是低频证券身份信息。IPODate 为兼容 profile 服务保留，语义对应供应商给出的上市日期。
+type StockBasic struct {
+	Symbol             string        `json:"symbol"`
+	Name               string        `json:"name"`
+	IPODate            string        `json:"ipo_date,omitempty"`
+	OutDate            string        `json:"out_date,omitempty"`
+	SecurityType       int           `json:"security_type"`
+	SecurityTypeLabel  string        `json:"security_type_label"`
+	ListingStatus      int           `json:"listing_status"`
+	ListingStatusLabel string        `json:"listing_status_label"`
+	Source             string        `json:"source"`
+	SourceVersion      string        `json:"source_version,omitempty"`
+	FetchedAt          time.Time     `json:"fetched_at"`
+	QualityStatus      QualityStatus `json:"quality_status"`
+	NormalizationVer   string        `json:"normalization_version"`
+}
+
 type SourceStatus struct {
 	Name               string `json:"name"`
 	Enabled            bool   `json:"enabled"`
 	QuoteCapable       bool   `json:"quote_capable"`
 	DailyBarCapable    bool   `json:"daily_bar_capable"`
+	StockBasicCapable  bool   `json:"stock_basic_capable,omitempty"`
 	ChipCapable        bool   `json:"chip_capable,omitempty"`
 	CapitalFlowCapable bool   `json:"capital_flow_capable,omitempty"`
 }

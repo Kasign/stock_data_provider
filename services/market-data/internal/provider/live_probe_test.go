@@ -90,6 +90,7 @@ type liveProbeResult struct {
 	Error            string                  `json:"error,omitempty"`
 	ElapsedMS        int64                   `json:"elapsed_ms"`
 	Quote            *model.Quote            `json:"quote,omitempty"`
+	StockBasic       *model.StockBasic       `json:"stock_basic,omitempty"`
 	BarCount         int                     `json:"bar_count,omitempty"`
 	SampleBars       []model.DailyBar        `json:"sample_bars,omitempty"`
 	ChipDistribution *model.ChipDistribution `json:"chip_distribution,omitempty"`
@@ -430,6 +431,36 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
+	runStockBasic := func(providerName, symbol string, client *http.Client, call func(context.Context) (*model.StockBasic, error)) {
+		capture := &liveProbeCapture{}
+		if client != nil { client.Transport = capture.transport() }
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := call(ctx)
+		result := liveProbeResult{Provider: providerName, Capability: "stock_basic", Symbol: symbol, ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, providerName+" stock_basic: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil:
+			result.Status, result.Error = "invalid", "provider returned an empty stock-basic response"
+			failures = append(failures, providerName+" stock_basic: nil result")
+		case item.Symbol != symbol || item.Source != providerName || strings.TrimSpace(item.Name) == "":
+			result.Status, result.Error, result.StockBasic = "invalid", "stock-basic identity/name contract mismatch", item
+			failures = append(failures, providerName+" stock_basic: contract mismatch")
+		case item.QualityStatus != model.QualityValid:
+			result.Status, result.Error, result.StockBasic = "invalid", "stock-basic quality must be valid for this identity endpoint", item
+			failures = append(failures, providerName+" stock_basic: invalid quality")
+		default:
+			result.Status, result.StockBasic = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
 	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
@@ -609,6 +640,9 @@ func TestLiveProviderProbe(t *testing.T) {
 	})
 
 	eastmoney := NewEastmoney(12*time.Second, "", "")
+	runStockBasic("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBasic, error) {
+		return eastmoney.FetchStockBasic(ctx, dailySymbol)
+	})
 	runQuote("eastmoney", "eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoney.FetchQuote(ctx, dailySymbol)
 	})

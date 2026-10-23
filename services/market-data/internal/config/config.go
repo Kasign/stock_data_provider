@@ -17,9 +17,10 @@ import (
 )
 
 type ProviderSettings struct {
-	Enabled   bool `json:"enabled"`
-	Quote     bool `json:"quote"`
-	DailyBars bool `json:"daily_bars"`
+	Enabled    bool `json:"enabled"`
+	Quote      bool `json:"quote"`
+	DailyBars  bool `json:"daily_bars"`
+	StockBasic bool `json:"stock_basic"`
 }
 
 type Config struct {
@@ -40,6 +41,7 @@ type Config struct {
 	ProvidersConfigPath     string
 	EastmoneyQuoteURL       string
 	EastmoneyKlineURL       string
+	EastmoneyStockBasicURL  string
 	EastmoneyUT             string
 	TencentQuoteURL         string
 	TencentKlineURL         string
@@ -83,7 +85,7 @@ func Load() (Config, error) {
 		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
@@ -159,6 +161,7 @@ func Load() (Config, error) {
 		ProvidersConfigPath:     configPath,
 		EastmoneyQuoteURL:       get("MARKET_DATA_EASTMONEY_QUOTE_URL", "https://push2.eastmoney.com/api/qt/stock/get"),
 		EastmoneyKlineURL:       get("MARKET_DATA_EASTMONEY_KLINE_URL", "https://push2his.eastmoney.com/api/qt/stock/kline/get"),
+		EastmoneyStockBasicURL:  get("MARKET_DATA_EASTMONEY_STOCK_BASIC_URL", defaultEastmoneyStockBasicURL),
 		EastmoneyUT:             get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:         get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:         get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
@@ -197,6 +200,7 @@ func Load() (Config, error) {
 	for name, endpoint := range map[string]string{
 		"MARKET_DATA_EASTMONEY_QUOTE_URL":    cfg.EastmoneyQuoteURL,
 		"MARKET_DATA_EASTMONEY_KLINE_URL":    cfg.EastmoneyKlineURL,
+		"MARKET_DATA_EASTMONEY_STOCK_BASIC_URL": cfg.EastmoneyStockBasicURL,
 		"MARKET_DATA_TENCENT_QUOTE_URL":      cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":      cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL": cfg.TencentNoneKlineURL,
@@ -321,6 +325,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.Enabled = boolEnv("MARKET_DATA_"+prefix+"_ENABLED", p.Enabled)
 	p.Quote = boolEnv("MARKET_DATA_"+prefix+"_QUOTE_ENABLED", p.Quote)
 	p.DailyBars = boolEnv("MARKET_DATA_"+prefix+"_DAILY_BARS_ENABLED", p.DailyBars)
+	p.StockBasic = boolEnv("MARKET_DATA_"+prefix+"_STOCK_BASIC_ENABLED", p.StockBasic)
 	return p
 }
 
