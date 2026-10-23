@@ -169,6 +169,31 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
+    TradingCalendarDay:
+      type: object
+      required: [date, is_trading_day]
+      properties:
+        date: {type: string, format: date}
+        is_trading_day: {type: boolean, description: Explicit provider flag; false is a non-trading day, not a missing row}
+    TradingCalendarSnapshot:
+      type: object
+      required: [market, start_date, end_date, total_days, trading_days, items, source, fetched_at, quality_status]
+      properties:
+        market: {type: string, enum: [cn_a_share]}
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        total_days: {type: integer, minimum: 1}
+        trading_days: {type: integer, minimum: 0}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/TradingCalendarDay'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
     StockBasic:
       type: object
       required: [symbol, name, security_type, security_type_label, listing_status, listing_status_label, source, fetched_at, quality_status, normalization_version]
@@ -482,6 +507,23 @@ paths:
         '502': {description: All index-quote providers failed}
         '503': {description: No index-quote provider enabled}
 
+  /api/v1/market/trading-calendar:
+    get:
+      summary: Get the explicit A-share trading calendar for an inclusive date range
+      description: Returns one row for every calendar date, including weekends and holidays. The endpoint rejects missing date coverage and does not infer trading days from weekdays.
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: Complete trading-calendar range and source quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TradingCalendarSnapshot'}
+        '400': {description: Invalid or excessive date range}
+        '401': {description: API key required}
+        '502': {description: All trading-calendar providers failed or returned incomplete data}
+        '503': {description: No trading-calendar provider enabled}
   /api/v1/market/breadth:
     get:
       summary: Get full-universe A-share market breadth

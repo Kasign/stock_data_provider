@@ -91,6 +91,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	marketBreadthEnabled := map[string]bool{}
 	limitPoolEnabled := map[string]bool{}
 	stockBoardsEnabled := map[string]bool{}
+	tradingCalendarEnabled := map[string]bool{}
 	if svc != nil {
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
@@ -110,6 +111,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.StockBoardsProviders() {
 			stockBoardsEnabled[p.Name()] = true
 		}
+		for _, p := range svc.TradingCalendarProviders() {
+			tradingCalendarEnabled[p.Name()] = true
+		}
 	}
 	for _, name := range names {
 		sources = append(sources, model.SourceStatus{
@@ -117,7 +121,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name],
 			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
-			StockBoardsCapable: stockBoardsEnabled[name],
+			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -137,6 +141,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/market/indices", s.auth(http.HandlerFunc(s.indexQuotes)))
 	mux.Handle("GET /api/v1/market/breadth", s.auth(http.HandlerFunc(s.marketBreadth)))
 	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
+	mux.Handle("GET /api/v1/market/trading-calendar", s.auth(http.HandlerFunc(s.tradingCalendar)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/boards", s.auth(http.HandlerFunc(s.stockBoards)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))

@@ -10,6 +10,20 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
 )
 
+type tradingCalendarTestCache struct {
+	items map[string][]byte
+}
+func (c *tradingCalendarTestCache) Get(_ context.Context, key string) ([]byte, bool, error) {
+	value, ok := c.items[key]
+	return value, ok, nil
+}
+func (c *tradingCalendarTestCache) Set(_ context.Context, key string, value []byte, _ time.Duration) error {
+	if c.items == nil { c.items = map[string][]byte{} }
+	c.items[key] = append([]byte(nil), value...)
+	return nil
+}
+func (*tradingCalendarTestCache) Ping(context.Context) error { return nil }
+
 type testTradingCalendarProvider struct {
 	snapshot *model.TradingCalendarSnapshot
 	err error
@@ -30,7 +44,7 @@ func validTestTradingCalendar() *model.TradingCalendarSnapshot {
 }
 func TestTradingCalendarRequiresCompleteExplicitDateCoverage(t *testing.T) {
 	p := &testTradingCalendarProvider{snapshot: validTestTradingCalendar()}
-	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewMemory(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, &tradingCalendarTestCache{items: map[string][]byte{}}, nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
 	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{p})
 	got, hit, err := svc.TradingCalendar(context.Background(), "2026-10-22", "2026-10-24")
 	if err != nil || hit { t.Fatalf("calendar failed on first fetch: hit=%v err=%v", hit, err) }
