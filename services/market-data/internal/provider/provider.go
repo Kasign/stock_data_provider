@@ -61,6 +61,12 @@ type LimitPoolProvider interface {
 	FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error)
 }
 
+// TradingCalendarProvider returns explicit trading-day flags for an inclusive range.
+type TradingCalendarProvider interface {
+	NamedProvider
+	FetchTradingCalendar(ctx context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error)
+}
+
 // SupplementProvider 用于承载可选补充数据// SupplementProvider 用于承载可选补充数据，这类能力不会进入实时行情或日 K 的兜底链。
 type SupplementProvider interface {
 	NamedProvider

@@ -270,8 +270,9 @@ type SourceStatus struct {
 	IndexQuoteCapable    bool   `json:"index_quote_capable,omitempty"`
 	MarketBreadthCapable bool   `json:"market_breadth_capable,omitempty"`
 	LimitPoolCapable     bool   `json:"limit_pool_capable,omitempty"`
-	StockBoardsCapable   bool   `json:"stock_boards_capable,omitempty"`
-	ChipCapable          bool   `json:"chip_capable,omitempty"`
+	StockBoardsCapable     bool `json:"stock_boards_capable,omitempty"`
+	TradingCalendarCapable bool `json:"trading_calendar_capable,omitempty"`
+	ChipCapable            bool `json:"chip_capable,omitempty"`
 	CapitalFlowCapable   bool   `json:"capital_flow_capable,omitempty"`
 }
 
