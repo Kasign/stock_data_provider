@@ -27,6 +27,7 @@ type ProviderSettings struct {
 	LimitPools      bool `json:"limit_pools"`
 	StockBoards     bool `json:"stock_boards"`
 	TradingCalendar bool `json:"trading_calendar"`
+	Fundamentals bool `json:"fundamentals"`
 }
 
 type Config struct {
@@ -98,7 +99,7 @@ func Load() (Config, error) {
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: false, IndexQuotes: false, MarketBreadth: false, LimitPools: false, StockBoards: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
-			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: false},
+			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: false, Fundamentals: false},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: true},
 			"netease":   {Enabled: false, Quote: false, DailyBars: true},
@@ -353,6 +354,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.LimitPools = boolEnv("MARKET_DATA_"+prefix+"_LIMIT_POOLS_ENABLED", p.LimitPools)
 	p.StockBoards = boolEnv("MARKET_DATA_"+prefix+"_STOCK_BOARDS_ENABLED", p.StockBoards)
 	p.TradingCalendar = boolEnv("MARKET_DATA_"+prefix+"_TRADING_CALENDAR_ENABLED", p.TradingCalendar)
+	p.Fundamentals = boolEnv("MARKET_DATA_"+prefix+"_FUNDAMENTALS_ENABLED", p.Fundamentals)
 	return p
 }
 

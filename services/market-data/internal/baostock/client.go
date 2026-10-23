@@ -59,6 +59,164 @@ type TradeDate struct {
 	IsTradingDay bool
 }
 
+// QuarterlyFinancialRecord stores one BaoStock financial row without changing numeric scale.
+type QuarterlyFinancialRecord struct {
+	Code            string
+	PublicationDate string
+	ReportDate      string
+	Fields          map[string]string
+}
+
+type financialQuerySpec struct {
+	method       string
+	requestType  string
+	responseType string
+	fields       []string
+}
+
+const quarterlyFinancialPageSize = 1000
+
+var quarterlyFinancialSpecs = map[string]financialQuerySpec{
+	"profitability": {
+		method: "query_profit_data", requestType: messageProfitRequest, responseType: messageProfitResponse,
+		fields: []string{"code", "pubDate", "statDate", "roeAvg", "npMargin", "gpMargin", "netProfit", "epsTTM", "MBRevenue", "totalShare", "liqaShare"},
+	},
+	"operating": {
+		method: "query_operation_data", requestType: messageOperationRequest, responseType: messageOperationResponse,
+		fields: []string{"code", "pubDate", "statDate", "NRTurnRatio", "NRTurnDays", "INVTurnRatio", "INVTurnDays", "CATurnRatio", "AssetTurnRatio"},
+	},
+	"growth": {
+		method: "query_growth_data", requestType: messageGrowthRequest, responseType: messageGrowthResponse,
+		fields: []string{"code", "pubDate", "statDate", "YOYEquity", "YOYAsset", "YOYNI", "YOYEPSBasic", "YOYPNI"},
+	},
+	"dupont": {
+		method: "query_dupont_data", requestType: messageDupontRequest, responseType: messageDupontResponse,
+		fields: []string{"code", "pubDate", "statDate", "dupontROE", "dupontAssetStoEquity", "dupontAssetTurn", "dupontPnitoni", "dupontNitogr", "dupontTaxBurden", "dupontIntburden", "dupontEbittogr"},
+	},
+	"solvency": {
+		method: "query_balance_data", requestType: messageBalanceRequest, responseType: messageBalanceResponse,
+		fields: []string{"code", "pubDate", "statDate", "currentRatio", "quickRatio", "cashRatio", "YOYLiability", "liabilityToAsset", "assetToEquity"},
+	},
+	"cash_flow": {
+		method: "query_cash_flow_data", requestType: messageCashFlowRequest, responseType: messageCashFlowResponse,
+		fields: []string{"code", "pubDate", "statDate", "CAToAsset", "NCAToAsset", "tangibleAssetToAsset", "ebitToInterest", "CFOToOR", "CFOToNP", "CFOToGr"},
+	},
+}
+
+// QueryQuarterlyFinancialData retrieves one security/report-period/category from BaoStock.
+// An empty response returns (nil, nil), never a synthetic zero-valued record.
+func (c *Client) QueryQuarterlyFinancialData(ctx context.Context, code, category string, year, quarter int) (*QuarterlyFinancialRecord, error) {
+	spec, ok := quarterlyFinancialSpecs[category]
+	if !ok {
+		return nil, fmt.Errorf("unsupported BaoStock financial category %q", category)
+	}
+	code = strings.TrimSpace(code)
+	codeParts := strings.Split(code, ".")
+	if len(codeParts) != 2 || (codeParts[0] != "sh" && codeParts[0] != "sz") || len(codeParts[1]) != 6 {
+		return nil, fmt.Errorf("invalid BaoStock financial security code %q", code)
+	}
+	if year < 2007 || year > time.Now().Year() {
+		return nil, fmt.Errorf("BaoStock financial year %d is outside supported range 2007..%d", year, time.Now().Year())
+	}
+	if quarter < 1 || quarter > 4 {
+		return nil, fmt.Errorf("BaoStock financial quarter %d is outside 1..4", quarter)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := c.acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer c.release()
+	if err := c.ensureLoggedInLocked(ctx); err != nil {
+		return nil, err
+	}
+	requestBody := strings.Join([]string{
+		spec.method, c.userID, "1", strconv.Itoa(quarterlyFinancialPageSize),
+		code, strconv.Itoa(year), strconv.Itoa(quarter),
+	}, messageSplit)
+	messageType, responseBody, err := c.exchangeLocked(ctx, spec.requestType, requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("BaoStock %s: %w", spec.method, err)
+	}
+	if messageType == messageException {
+		return nil, protocolExceptionError(responseBody)
+	}
+	if messageType != spec.responseType {
+		c.dropConnectionLocked()
+		return nil, fmt.Errorf("unexpected BaoStock %s response type %q", spec.method, messageType)
+	}
+	return parseQuarterlyFinancialPage(responseBody, spec, c.userID, code, year, quarter)
+}
+
+func parseQuarterlyFinancialPage(body string, spec financialQuerySpec, userID, code string, year, quarter int) (*QuarterlyFinancialRecord, error) {
+	parts := strings.Split(body, messageSplit)
+	if len(parts) < 11 {
+		return nil, fmt.Errorf("BaoStock %s response has only %d fields", spec.method, len(parts))
+	}
+	if parts[0] != "0" {
+		return nil, fmt.Errorf("BaoStock %s query rejected: code=%s message=%s", spec.method, parts[0], parts[1])
+	}
+	if parts[2] != spec.method || parts[3] != userID || parts[4] != "1" {
+		return nil, fmt.Errorf("BaoStock %s response metadata mismatch", spec.method)
+	}
+	if pageSize, err := strconv.Atoi(strings.TrimSpace(parts[5])); err != nil || pageSize <= 0 {
+		return nil, fmt.Errorf("BaoStock %s response has invalid page size %q", spec.method, parts[5])
+	}
+	if strings.TrimSpace(parts[7]) != code || strings.TrimSpace(parts[8]) != strconv.Itoa(year) || strings.TrimSpace(parts[9]) != strconv.Itoa(quarter) {
+		return nil, fmt.Errorf("BaoStock %s response security/period metadata mismatch", spec.method)
+	}
+	if got := strings.Split(parts[10], ","); !equalFields(got, spec.fields) {
+		return nil, fmt.Errorf("BaoStock %s response fields mismatch: got %q", spec.method, strings.Join(got, ","))
+	}
+	var payload map[string]json.RawMessage
+	if raw := strings.TrimSpace(parts[6]); raw != "" && raw != "null" {
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		decoder.UseNumber()
+		if err := decoder.Decode(&payload); err != nil {
+			return nil, fmt.Errorf("BaoStock %s parse record JSON: %w", spec.method, err)
+		}
+	}
+	var rows [][]json.RawMessage
+	if payload != nil && len(payload["record"]) > 0 {
+		if err := json.Unmarshal(payload["record"], &rows); err != nil {
+			return nil, fmt.Errorf("BaoStock %s parse financial rows: %w", spec.method, err)
+		}
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	if len(rows) != 1 {
+		return nil, fmt.Errorf("BaoStock %s returned %d rows for one security/report period", spec.method, len(rows))
+	}
+	if len(rows[0]) != len(spec.fields) {
+		return nil, fmt.Errorf("BaoStock %s row has %d columns; expected %d", spec.method, len(rows[0]), len(spec.fields))
+	}
+	values := make(map[string]string, len(spec.fields))
+	for i, raw := range rows[0] {
+		value, err := decodeCell(raw)
+		if err != nil {
+			return nil, fmt.Errorf("BaoStock %s column %s: %w", spec.method, spec.fields[i], err)
+		}
+		values[spec.fields[i]] = value
+	}
+	if strings.TrimSpace(values["code"]) != code {
+		return nil, fmt.Errorf("BaoStock %s row security mismatch: requested %s, got %q", spec.method, code, values["code"])
+	}
+	statDate := strings.TrimSpace(values["statDate"])
+	periodEnd := time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	if statDate != periodEnd {
+		return nil, fmt.Errorf("BaoStock %s report date %q does not match requested period end %s", spec.method, statDate, periodEnd)
+	}
+	publicationDate := strings.TrimSpace(values["pubDate"])
+	if publicationDate != "" {
+		if _, err := time.Parse("2006-01-02", publicationDate); err != nil {
+			return nil, fmt.Errorf("BaoStock %s invalid publication date %q", spec.method, publicationDate)
+		}
+	}
+	return &QuarterlyFinancialRecord{Code: code, PublicationDate: publicationDate, ReportDate: statDate, Fields: values}, nil
+}
+
 // Client serializes operations over one stateful TCP session so requests and
 // responses cannot interleave on the same socket.
 type Client struct {

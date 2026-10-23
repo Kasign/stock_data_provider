@@ -660,3 +660,59 @@ func TestQueryDailyKLinesReconnectsAfterConnectionDrops(t *testing.T) {
 		t.Fatalf("模拟 BaoStock 服务端失败：%v", err)
 	}
 }
+
+
+func TestQueryQuarterlyFinancialDataHandlesLoginQueryAndLogout(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil { t.Fatal(err) }
+	defer listener.Close()
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil { serverErr <- err; return }
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		if err := serveBaoStockLoginForTest(conn, reader); err != nil { serverErr <- err; return }
+		messageType, body, err := readBaoStockRequestForTest(reader)
+		if err != nil { serverErr <- err; return }
+		parts := strings.Split(body, messageSplit)
+		if messageType != messageProfitRequest || len(parts) != 7 ||
+			parts[0] != "query_profit_data" || parts[1] != "anonymous" || parts[2] != "1" ||
+			parts[3] != strconv.Itoa(quarterlyFinancialPageSize) || parts[4] != "sh.600519" || parts[5] != "2026" || parts[6] != "2" {
+			serverErr <- fmt.Errorf("unexpected financial request type=%q body=%q", messageType, body); return
+		}
+		row := []string{"sh.600519", "2026-08-29", "2026-06-30", "0.074617", "0.342179", "0.25", "28522000000.000000", "1.939029", "83354000000.000000", "28103763899.00", "28103763899.00"}
+		raw, err := json.Marshal(map[string]any{"record": [][]string{row}})
+		if err != nil { serverErr <- err; return }
+		fields := strings.Join(quarterlyFinancialSpecs["profitability"].fields, ",")
+		body = strings.Join([]string{"0", "success", "query_profit_data", "anonymous", "1", strconv.Itoa(quarterlyFinancialPageSize), string(raw), "sh.600519", "2026", "2", fields}, messageSplit)
+		if err := writeAll(conn, responseFrameForTest(messageProfitResponse, body, false)); err != nil { serverErr <- err; return }
+		messageType, body, err = readBaoStockRequestForTest(reader)
+		if err != nil { serverErr <- err; return }
+		if messageType != messageLogoutRequest || !strings.HasPrefix(body, "logout\x01anonymous\x01") { serverErr <- fmt.Errorf("expected logout; got %q %q",messageType,body); return }
+		if err := writeAll(conn, responseFrameForTest(messageLogoutResponse, "0\x01success\x01logout", false)); err != nil { serverErr <- err; return }
+		serverErr <- nil
+	}()
+	host, portText, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil { t.Fatal(err) }
+	port, err := strconv.Atoi(portText)
+	if err != nil { t.Fatal(err) }
+	client := NewClient(Config{Host: host, Port: port, ConnectTimeout: time.Second, RequestTimeout: time.Second})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	record, err := client.QueryQuarterlyFinancialData(ctx, "sh.600519", "profitability", 2026, 2)
+	if err != nil { t.Fatal(err) }
+	if record == nil || record.Code != "sh.600519" || record.ReportDate != "2026-06-30" || record.PublicationDate != "2026-08-29" {
+		t.Fatalf("unexpected financial row: %+v", record)
+	}
+	if record.Fields["netProfit"] != "28522000000.000000" || record.Fields["roeAvg"] != "0.074617" { t.Fatalf("raw values changed: %+v", record.Fields) }
+	if err := client.Close(); err != nil { t.Fatal(err) }
+	if err := <-serverErr; err != nil { t.Fatalf("mock BaoStock server failed: %v", err) }
+}
+
+func TestQueryQuarterlyFinancialDataRejectsInvalidInputsBeforeNetworkIO(t *testing.T) {
+	c := NewClient(Config{})
+	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "missing", 2026, 2); err == nil { t.Fatal("unsupported category should fail") }
+	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "profitability", 2026, 5); err == nil { t.Fatal("invalid quarter should fail") }
+	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "600519.SH", "profitability", 2026, 2); err == nil { t.Fatal("wire-format symbol should be required") }
+}

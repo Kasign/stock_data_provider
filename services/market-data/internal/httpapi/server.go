@@ -92,6 +92,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	limitPoolEnabled := map[string]bool{}
 	stockBoardsEnabled := map[string]bool{}
 	tradingCalendarEnabled := map[string]bool{}
+	fundamentalsEnabled := map[string]bool{}
 	if svc != nil {
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
@@ -114,6 +115,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.TradingCalendarProviders() {
 			tradingCalendarEnabled[p.Name()] = true
 		}
+		for _, p := range svc.FundamentalsProviders() {
+			fundamentalsEnabled[p.Name()] = true
+		}
 	}
 	for _, name := range names {
 		sources = append(sources, model.SourceStatus{
@@ -122,6 +126,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
+			FundamentalsCapable: fundamentalsEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -144,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/market/trading-calendar", s.auth(http.HandlerFunc(s.tradingCalendar)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/boards", s.auth(http.HandlerFunc(s.stockBoards)))
+	mux.Handle("GET /api/v1/stocks/{symbol}/fundamentals", s.auth(http.HandlerFunc(s.fundamentals)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/capital-flow", s.auth(http.HandlerFunc(s.capitalFlow)))
 	return securityHeaders(s.requestID(s.accessLog(s.timeoutContext(s.requestTimeout, mux))))

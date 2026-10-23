@@ -1,12 +1,51 @@
 {
-  "provider_priority": ["eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"],
+  "provider_priority": [
+    "eastmoney",
+    "baostock",
+    "yahoo",
+    "tencent",
+    "sina",
+    "netease"
+  ],
   "adjustment_basis": "forward_adjusted",
   "providers": {
-    "eastmoney": { "enabled": true, "quote": true, "daily_bars": true, "stock_basic": true, "sector_rankings": false, "index_quotes": false, "market_breadth": false, "limit_pools": false, "stock_boards": false },
-    "baostock": { "enabled": true, "quote": false, "daily_bars": true, "trading_calendar": false },
-    "yahoo": { "enabled": false, "quote": false, "daily_bars": true },
-    "tencent": { "enabled": true, "quote": true, "daily_bars": true },
-    "sina": { "enabled": true, "quote": true, "daily_bars": true },
-    "netease": { "enabled": false, "quote": false, "daily_bars": false }
+    "eastmoney": {
+      "enabled": true,
+      "quote": true,
+      "daily_bars": true,
+      "stock_basic": true,
+      "sector_rankings": false,
+      "index_quotes": false,
+      "market_breadth": false,
+      "limit_pools": false,
+      "stock_boards": false
+    },
+    "baostock": {
+      "enabled": true,
+      "quote": false,
+      "daily_bars": true,
+      "trading_calendar": false,
+      "fundamentals": false
+    },
+    "yahoo": {
+      "enabled": false,
+      "quote": false,
+      "daily_bars": true
+    },
+    "tencent": {
+      "enabled": true,
+      "quote": true,
+      "daily_bars": true
+    },
+    "sina": {
+      "enabled": true,
+      "quote": true,
+      "daily_bars": true
+    },
+    "netease": {
+      "enabled": false,
+      "quote": false,
+      "daily_bars": false
+    }
   }
 }

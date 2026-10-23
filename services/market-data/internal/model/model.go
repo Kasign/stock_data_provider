@@ -262,6 +262,37 @@ type LimitPoolSnapshot struct {
 	QualityReasons     []string        `json:"quality_reasons,omitempty"`
 }
 
+type FundamentalMetric struct {
+	Key         string  `json:"key"`
+	Name        string  `json:"name"`
+	Value       float64 `json:"value"`
+	Unit        string  `json:"unit"`
+	SourceField string  `json:"source_field"`
+}
+
+type FundamentalSection struct {
+	Category        string              `json:"category"`
+	ReportDate      string              `json:"report_date,omitempty"`
+	PublicationDate string              `json:"publication_date,omitempty"`
+	HasData         bool                `json:"has_data"`
+	Metrics         []FundamentalMetric `json:"metrics"`
+	QualityStatus   QualityStatus       `json:"quality_status"`
+	QualityReasons  []string            `json:"quality_reasons,omitempty"`
+}
+
+type FundamentalsSnapshot struct {
+	Symbol         string               `json:"symbol"`
+	Year           int                  `json:"year"`
+	Quarter        int                  `json:"quarter"`
+	HasData        bool                 `json:"has_data"`
+	Sections       []FundamentalSection `json:"sections"`
+	Source         string               `json:"source"`
+	SourceVersion  string               `json:"source_version,omitempty"`
+	FetchedAt      time.Time            `json:"fetched_at"`
+	QualityStatus  QualityStatus        `json:"quality_status"`
+	QualityReasons []string             `json:"quality_reasons,omitempty"`
+}
+
 type SourceStatus struct {
 	Name                   string `json:"name"`
 	Enabled                bool   `json:"enabled"`
@@ -274,6 +305,7 @@ type SourceStatus struct {
 	LimitPoolCapable       bool   `json:"limit_pool_capable,omitempty"`
 	StockBoardsCapable     bool   `json:"stock_boards_capable,omitempty"`
 	TradingCalendarCapable bool   `json:"trading_calendar_capable,omitempty"`
+	FundamentalsCapable    bool   `json:"fundamentals_capable,omitempty"`
 	ChipCapable            bool   `json:"chip_capable,omitempty"`
 	CapitalFlowCapable     bool   `json:"capital_flow_capable,omitempty"`
 }

@@ -138,6 +138,40 @@ components:
         analysis_reference_time: {type: string, format: date-time}
         fetched_at: {type: string, format: date-time, description: Completion time after all bundle fetches have finished}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
+    FundamentalMetric:
+      type: object
+      required: [key, name, value, unit, source_field]
+      properties:
+        key: {type: string}
+        name: {type: string}
+        value: {type: number}
+        unit: {type: string}
+        source_field: {type: string}
+    FundamentalSection:
+      type: object
+      required: [category, has_data, metrics, quality_status]
+      properties:
+        category: {type: string, enum: [profitability, operating, growth, solvency, cash_flow, dupont]}
+        report_date: {type: string, format: date}
+        publication_date: {type: string, format: date, description: Use for point-in-time analysis}
+        has_data: {type: boolean}
+        metrics: {type: array, items: {$ref: '#/components/schemas/FundamentalMetric'}}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    FundamentalsSnapshot:
+      type: object
+      required: [symbol, year, quarter, has_data, sections, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        year: {type: integer}
+        quarter: {type: integer, minimum: 1, maximum: 4}
+        has_data: {type: boolean}
+        sections: {type: array, items: {$ref: '#/components/schemas/FundamentalSection'}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     StockBoard:
       type: object
       required: [code, name, source, fetched_at, quality_status]
@@ -456,6 +490,28 @@ paths:
         '401': {description: API key required}
         '502': {description: All stock-basic providers failed}
         '503': {description: No stock-basic provider enabled}
+  /api/v1/stocks/{symbol}/fundamentals:
+    get:
+      summary: Get quarterly financial indicators
+      description: >-
+        Returns six groups of BaoStock quarterly indicators for an explicit report period. report_date is the
+        financial period end; publication_date is the disclosure date. Values preserve provider-native numeric scale.
+        Historical analysis must exclude metrics published after the analysis reference time. This is an indicators API,
+        not a complete financial-statement line-item API.
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+        - {name: year, in: query, required: true, schema: {type: integer, minimum: 2007}}
+        - {name: quarter, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 4}}
+      responses:
+        '200':
+          description: Quarterly financial indicators
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FundamentalsSnapshot'}
+        '400': {description: Invalid symbol, report year or quarter}
+        '401': {description: API key required}
+        '502': {description: Provider failed or returned invalid financial data}
+        '503': {description: No fundamentals provider enabled}
   /api/v1/stocks/{symbol}/boards:
     get:
       summary: Get the boards associated with one A-share

@@ -41,7 +41,7 @@
 | 个股所属板块 `get_belong_boards` | 新增独立 `StockBoardsProvider`、东方财富 `slist/get` 适配器与 `GET /api/v1/stocks/{symbol}/boards` | 接口、模型、独立开关、缓存及自动化测试已加入；源端未可靠提供板块类型，质量降级；真实 Runner 与 NAS/Docker 验收待完成 |
 | 交易日历 | 新增独立 `TradingCalendarProvider`，通过 BaoStock TCP `query_trade_dates` 和 `GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD` | 新增本地 TCP 协议模拟、完整日期覆盖校验、缓存、OpenAPI 与独立开关；默认关闭。GitHub Runner 上 BaoStock TCP 连接/读取曾超时，真实日历响应和 NAS/Docker 验收未完成 |
 | 筹码分布 `get_chip_distribution` | 可选 Go MX API 路由和缓存 | 精确 publication available_at 仍缺失；输出降级质量，历史 as_of 不得倒灌 |
-| 基本面 `get_fundamental_context` | 无 | 必须区分报告期、披露日、财务指标单位、来源、缺失字段和适用市场 |
+| 基本面 `get_fundamental_context` | 新增 BaoStock 原生 TCP 季频指标 Provider 与 `GET /api/v1/stocks/{symbol}/fundamentals?year=YYYY&quarter=N`，覆盖盈利、营运、成长、偿债、现金流、杜邦六组指标 | 指标层首批迁移，不是完整财务报表或原 Python fundamental context 的替代；报告期与披露日期独立输出，保留原始值和单位，缺失不补零；默认关闭，真实 Runner 与 NAS/Docker 验收待完成 |
 | 个股资金流 `get_capital_flow_context` | 可选 Go MX API 路由；字段按人民币元规范化，5/10 日累计要求完整观测 | 自然语言查询返回的指标需要验证字段标签/单位；缺值不补零，精确 available_at 未实现 |
 | 龙虎榜 `get_dragon_tiger_context` | 无 | 必须保留交易日、上榜原因、营业部/机构口径及金额单位 |
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
@@ -82,3 +82,8 @@ BaoStock 的详细 Go 接入、按能力分工和验收条件见 [数据源扩�
 本分支已增加 Sina 报价专用 Go Provider 和测试；GitHub Actions 的三个 Go 模块（根模块、`go-core`、`services/market-data`）的测试、竞态检测与 `go vet` 已在最近一次 CI 运行中通过。
 
 根目录 `cmd/analysis-api` 已改为调用 `internal/adapters/marketdata`，实时行情和日 K 主采集链路不再依赖 Python API；旧 `internal/adapters/pythonapi` 包仍保留给 pythonapi-smoke、迁移对照和旧测试，当前主 API 不调用该包。尚未完成：逐一移植原 Python 的全部 Fetcher 与其他数据域；`go-core` 的市场概况、新闻、LLM、持久化与通知等能力仍有 Python bridge 依赖；尚未进行目标服务器上的真实供应商、MariaDB / Redis、Docker Compose 端到端验收。请勿将本阶段作为完全去 Python 化的最终发布。
+
+
+## 国内季度财务指标第一阶段（真实 Provider 验收待完成）
+
+已新增 BaoStock 原生 TCP 的六组季度指标能力：`GET /api/v1/stocks/{symbol}/fundamentals?year=YYYY&quarter=N`。范围是盈利能力、营运能力、成长能力、偿债能力、现金流量与杜邦指标。此能力保持 `MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED=false` 默认关闭；它不是完整财务报表 API。历史分析必须用 `publication_date` 排除分析参考时间之后才披露的数据。GitHub Runner 真实协议复验与目标 NAS/Docker 验收完成前，不标记为生产可用。东方财富公开接口问题统一记录在 `docs/architecture/EASTMONEY_DEFERRED_ISSUES.md` 与 [Issue #6](https://github.com/Kasign/stock_data_provider/issues/6)，本轮不分散处理。

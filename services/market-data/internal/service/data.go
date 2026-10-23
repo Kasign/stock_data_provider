@@ -30,6 +30,7 @@ type DataService struct {
 	limitPoolProviders       []provider.LimitPoolProvider
 	stockBoardsProviders     []provider.StockBoardsProvider
 	tradingCalendarProviders []provider.TradingCalendarProvider
+	fundamentalsProviders    []provider.FundamentalsProvider
 	supplementProviders      []provider.SupplementProvider
 	maxBars                  int
 	retries                  int
