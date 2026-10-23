@@ -69,6 +69,119 @@ func yahooFixture(t *testing.T, includeAdjusted bool, reportedSymbol string) (*h
 	return server, timestamps
 }
 
+
+func yahooQuoteFixture(t *testing.T, reportedSymbol string, includeOpen bool) ([]byte, []int64) {
+	t.Helper()
+	loc := yahooChinaLocation()
+	timestamps := []int64{
+		time.Date(2026, 10, 23, 9, 30, 0, 0, loc).Unix(),
+		time.Date(2026, 10, 23, 9, 31, 0, 0, loc).Unix(),
+	}
+	var openValues []*float64
+	if includeOpen {
+		first, second := 41.70, 42.10
+		openValues = []*float64{&first, &second}
+	} else {
+		openValues = []*float64{nil, nil}
+	}
+	payload := map[string]any{
+		"chart": map[string]any{
+			"result": []any{map[string]any{
+				"meta": map[string]any{
+					"symbol": reportedSymbol,
+					"longName": "China Merchants Bank Co., Ltd.",
+					"shortName": "CHINA MERCHANTS BANK",
+					"regularMarketTime": timestamps[1],
+					"regularMarketPrice": 42.35,
+					"regularMarketDayHigh": 42.38,
+					"regularMarketDayLow": 41.57,
+					"regularMarketVolume": int64(56829700),
+					"chartPreviousClose": 41.82,
+				},
+				"timestamp": timestamps,
+				"indicators": map[string]any{
+					"quote": []any{map[string]any{
+						"open": openValues,
+					}},
+				},
+			}},
+			"error": nil,
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body, timestamps
+}
+
+func TestYahooFinanceFetchQuoteParsesIntradayChart(t *testing.T) {
+	payload, timestamps := yahooQuoteFixture(t, "600036.SS", true)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/600036.SS") {
+			t.Errorf("unexpected Yahoo quote path %q", r.URL.Path)
+		}
+		if r.URL.Query().Get("range") != "1d" || r.URL.Query().Get("interval") != "1m" {
+			t.Errorf("Yahoo quote must request intraday one-day chart, got %v", r.URL.Query())
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	p := NewYahooFinance(2*time.Second, server.URL)
+	q, err := p.FetchQuote(context.Background(), "600036.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Symbol != "600036.SH" || q.Name != "China Merchants Bank Co., Ltd." || q.Source != "yahoo" {
+		t.Fatalf("unexpected quote identity: %+v", q)
+	}
+	if q.CurrentPrice == nil || math.Abs(*q.CurrentPrice-42.35) > 1e-8 ||
+		q.Open == nil || math.Abs(*q.Open-41.70) > 1e-8 ||
+		q.High == nil || math.Abs(*q.High-42.38) > 1e-8 ||
+		q.Low == nil || math.Abs(*q.Low-41.57) > 1e-8 ||
+		q.PrevClose == nil || math.Abs(*q.PrevClose-41.82) > 1e-8 {
+		t.Fatalf("unexpected Yahoo quote OHLC: %+v", q)
+	}
+	if q.Change == nil || math.Abs(*q.Change-0.53) > 1e-8 ||
+		q.ChangePercent == nil || math.Abs(*q.ChangePercent-(0.53/41.82*100)) > 1e-8 {
+		t.Fatalf("unexpected change fields: %+v", q)
+	}
+	if q.Volume == nil || *q.Volume != 56829700 || q.VolumeUnit != "shares" {
+		t.Fatalf("Yahoo realtime volume should be shares: %+v", q)
+	}
+	if q.Amount != nil || q.AmountUnit != "unknown" || q.QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing turnover amount must be degraded, not inferred: %+v", q)
+	}
+	if q.QuoteTime == nil || q.QuoteTime.Unix() != timestamps[1] || q.QuoteTimeSemantics != "provider_snapshot_time" {
+		t.Fatalf("missing or incorrect provider timestamp: %+v", q)
+	}
+}
+
+func TestYahooFinanceFetchQuoteRejectsWrongTickerAndMissingIntradayOpen(t *testing.T) {
+	for name, fixture := range map[string]struct {
+		symbol string
+		open   bool
+	}{
+		"ticker mismatch": {"600000.SS", true},
+		"missing open":   {"600036.SS", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			payload, _ := yahooQuoteFixture(t, fixture.symbol, fixture.open)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write(payload)
+			}))
+			defer server.Close()
+			p := NewYahooFinance(2*time.Second, server.URL)
+			if _, err := p.FetchQuote(context.Background(), "600036.SH"); err == nil {
+				t.Fatal("expected invalid Yahoo quote response to be rejected")
+			}
+		})
+	}
+}
+
 func TestYahooFinanceForwardAdjustmentIsRebasedToRequestedEnd(t *testing.T) {
 	server, _ := yahooFixture(t, true, "600036.SS")
 	defer server.Close()

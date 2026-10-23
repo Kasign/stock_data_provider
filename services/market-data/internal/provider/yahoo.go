@@ -17,6 +17,7 @@ import (
 )
 
 const yahooFinanceVersion = "yahoo-finance-chart-v1"
+const yahooFinanceQuoteVersion = "yahoo-finance-chart-quote-v1"
 
 // YahooFinance 使用 Yahoo Finance 公开 Chart JSON endpoint，仅提供历史日 K。
 // 该 endpoint 并非有 SLA 的官方开发者 API；配置默认关闭，成交额缺失必须降级。
@@ -42,6 +43,175 @@ func NewYahooFinance(timeout time.Duration, chartURL string) *YahooFinance {
 }
 
 func (p *YahooFinance) Name() string { return "yahoo" }
+
+
+// FetchQuote uses Yahoo's public chart endpoint as an optional intraday snapshot.
+// It is not an official SLA-backed API; because turnover amount is unavailable,
+// returned quotes are always degraded and this provider is disabled by default.
+func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	ticker, err := yahooFinanceTicker(symbol)
+	if err != nil {
+		return nil, err
+	}
+	endpoint := strings.TrimRight(strings.TrimSpace(p.chartURL), "/") + "/" + url.PathEscape(ticker)
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("parse Yahoo Finance quote endpoint: %w", err)
+	}
+	query := u.Query()
+	query.Set("range", "1d")
+	query.Set("interval", "1m")
+	query.Set("events", "div,splits")
+	query.Set("includeAdjustedClose", "true")
+	u.RawQuery = query.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build Yahoo Finance quote request: %w", err)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Referer", "https://finance.yahoo.com/")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Yahoo Finance quote request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("Yahoo Finance quote HTTP status %d", resp.StatusCode)
+	}
+	body, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
+	if err != nil {
+		return nil, fmt.Errorf("read Yahoo Finance quote payload: %w", err)
+	}
+
+	var payload struct {
+		Chart struct {
+			Result []struct {
+				Meta struct {
+					Symbol               string  `json:"symbol"`
+					LongName             string  `json:"longName"`
+					ShortName            string  `json:"shortName"`
+					RegularMarketTime    int64   `json:"regularMarketTime"`
+					RegularMarketPrice   float64 `json:"regularMarketPrice"`
+					RegularMarketDayHigh float64 `json:"regularMarketDayHigh"`
+					RegularMarketDayLow  float64 `json:"regularMarketDayLow"`
+					RegularMarketVolume  *int64  `json:"regularMarketVolume"`
+					ChartPreviousClose   float64 `json:"chartPreviousClose"`
+				} `json:"meta"`
+				Timestamp []int64 `json:"timestamp"`
+				Indicators struct {
+					Quote []struct {
+						Open []*float64 `json:"open"`
+					} `json:"quote"`
+				} `json:"indicators"`
+			} `json:"result"`
+			Error *struct {
+				Code        string `json:"code"`
+				Description string `json:"description"`
+			} `json:"error"`
+		} `json:"chart"`
+	}
+	if err := decodeSingleJSON(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode Yahoo Finance quote JSON: %w", err)
+	}
+	if payload.Chart.Error != nil {
+		return nil, fmt.Errorf("Yahoo Finance quote provider error %s: %s", payload.Chart.Error.Code, payload.Chart.Error.Description)
+	}
+	if len(payload.Chart.Result) != 1 {
+		return nil, errors.New("Yahoo Finance returned no single quote result")
+	}
+	result := payload.Chart.Result[0]
+	if reported := strings.TrimSpace(result.Meta.Symbol); reported != "" && !strings.EqualFold(reported, ticker) {
+		return nil, fmt.Errorf("Yahoo Finance quote ticker mismatch: requested %s got %q", ticker, reported)
+	}
+	meta := result.Meta
+	if meta.RegularMarketTime <= 0 || !finiteNumber(meta.RegularMarketPrice) || meta.RegularMarketPrice <= 0 ||
+		!finiteNumber(meta.RegularMarketDayHigh) || meta.RegularMarketDayHigh <= 0 ||
+		!finiteNumber(meta.RegularMarketDayLow) || meta.RegularMarketDayLow <= 0 ||
+		!finiteNumber(meta.ChartPreviousClose) || meta.ChartPreviousClose <= 0 {
+		return nil, errors.New("Yahoo Finance quote is missing required finite price metadata")
+	}
+	if meta.RegularMarketVolume == nil || *meta.RegularMarketVolume < 0 {
+		return nil, errors.New("Yahoo Finance quote has missing or invalid regular-market volume")
+	}
+	if meta.RegularMarketDayLow > meta.RegularMarketDayHigh {
+		return nil, errors.New("Yahoo Finance quote day low is greater than day high")
+	}
+
+	loc := yahooChinaLocation()
+	quoteTime := time.Unix(meta.RegularMarketTime, 0).UTC()
+	quoteDay := quoteTime.In(loc).Format("2006-01-02")
+	openIndex := -1
+	var openPrice float64
+	if len(result.Indicators.Quote) > 0 {
+		openValues := result.Indicators.Quote[0].Open
+		for i, timestamp := range result.Timestamp {
+			if i >= len(openValues) || openValues[i] == nil {
+				continue
+			}
+			if time.Unix(timestamp, 0).In(loc).Format("2006-01-02") != quoteDay {
+				continue
+			}
+			value := *openValues[i]
+			if !finiteNumber(value) || value <= 0 {
+				continue
+			}
+			if openIndex < 0 || timestamp < result.Timestamp[openIndex] {
+				openIndex = i
+				openPrice = value
+			}
+		}
+	}
+	if openIndex < 0 {
+		return nil, fmt.Errorf("Yahoo Finance quote has no valid intraday open for provider quote date %s", quoteDay)
+	}
+	change := meta.RegularMarketPrice - meta.ChartPreviousClose
+	changePercent := change / meta.ChartPreviousClose * 100
+	if !finiteNumber(changePercent) || math.Abs(changePercent) > 1000 {
+		return nil, errors.New("Yahoo Finance quote percent change is outside a plausible numeric range")
+	}
+
+	var volume *int64
+	var rawVolume *float64
+	if meta.RegularMarketVolume != nil && *meta.RegularMarketVolume >= 0 {
+		v := *meta.RegularMarketVolume
+		volume = &v
+		raw := float64(v)
+		rawVolume = &raw
+	}
+	name := strings.TrimSpace(meta.LongName)
+	if name == "" {
+		name = strings.TrimSpace(meta.ShortName)
+	}
+	now := time.Now().UTC()
+	q := &model.Quote{
+		Symbol: symbol, Name: name,
+		CurrentPrice: &meta.RegularMarketPrice, Change: &change, ChangePercent: &changePercent,
+		Open: &openPrice, High: &meta.RegularMarketDayHigh, Low: &meta.RegularMarketDayLow,
+		PrevClose: &meta.ChartPreviousClose, Volume: volume, Amount: nil,
+		QuoteTime: &quoteTime, QuoteTimeSemantics: "provider_snapshot_time",
+		FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: yahooFinanceQuoteVersion,
+		RawVolume: rawVolume, RawVolumeUnit: optionalVolumeUnit(volume, "shares"),
+		RawAmountUnit: "unknown", RawAmountField: "unavailable",
+		VolumeUnit: optionalVolumeUnit(volume, "shares"), AmountUnit: "unknown",
+		AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_amount_unavailable"}, NormalizationVer: normalize.Version,
+	}
+	if name == "" {
+		q.QualityReasons = append(q.QualityReasons, "provider_name_missing")
+	}
+	if err := normalize.ValidateQuote(q); err != nil {
+		return nil, fmt.Errorf("Yahoo Finance quote data contract: %w", err)
+	}
+	return q, nil
+}
 
 func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)

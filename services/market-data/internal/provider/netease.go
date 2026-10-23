@@ -569,10 +569,3 @@ func neteaseDateRange(startDate, endDate string, limit int, now time.Time) (time
 	}
 	return start, end, nil
 }
-
-func optionalVolumeUnit(value *int64, unit string) string {
-	if value == nil {
-		return "unknown"
-	}
-	return unit
-}

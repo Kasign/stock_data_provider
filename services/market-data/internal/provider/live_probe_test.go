@@ -370,7 +370,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		DailySymbol: dailySymbol,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Results:     make([]liveProbeResult, 0, 14),
+		Results:     make([]liveProbeResult, 0, 15),
 	}
 	var failures []string
 
@@ -626,6 +626,9 @@ func TestLiveProviderProbe(t *testing.T) {
 		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 	yahoo := NewYahooFinance(12*time.Second, "")
+	runQuote("yahoo", "yahoo", quoteSymbol, yahoo.client, func(ctx context.Context) (*model.Quote, error) {
+		return yahoo.FetchQuote(ctx, quoteSymbol)
+	})
 	runDaily("yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})

@@ -141,10 +141,6 @@ func Load() (Config, error) {
 	if settings["baostock"].Quote {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
 	}
-	if settings["yahoo"].Quote {
-		return Config{}, errors.New("Yahoo Finance currently supports daily bars only; disable MARKET_DATA_YAHOO_QUOTE_ENABLED")
-	}
-
 	cfg := Config{
 		HTTPAddr:                get("MARKET_DATA_HTTP_ADDR", ":8091"),
 		APIKey:                  strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY")),

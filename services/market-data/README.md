@@ -4,7 +4,7 @@
 
 ## 当前实现范围
 
-- 实时行情 Provider：东方财富、腾讯、新浪；网易财经实时 JSONP QuoteProvider 已实现，但 GitHub Runner 对 `api.money.126.net` 的 DNS 解析失败，默认关闭。
+- 实时行情 Provider：东方财富、腾讯、新浪；新增 Yahoo Finance Chart 实时快照能力（默认关闭且固定 degraded，因缺成交额）；网易财经实时 JSONP QuoteProvider 已实现但 GitHub Runner 对 `api.money.126.net` 的 DNS 解析失败，默认关闭。
 - 日线 K 线 Provider：东方财富、BaoStock、腾讯；新浪新增原始日 K（只支持 `none`），Yahoo Finance 已完成 GitHub Actions 实测且默认关闭；网易财经 CSV 日 K 的解析与单位检查有单测，但公网连续返回 HTTP 502，未接通且默认关闭。BaoStock 为默认日 K 备用源。
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
@@ -54,6 +54,12 @@ GitHub Actions 已连续完成真实登录/查询探测，且此前已有 NAS �
 - 仅支持已验证的 `adjustment=none`；前复权/后复权请求会明确返回不支持。来源为非正式下载接口，默认关闭，只有完成目标网络验收后才通过 `MARKET_DATA_NETEASE_ENABLED=true` 启用。
 - 对成交额和成交量做内在一致性检查：以 `成交金额 / 成交量` 对照当日最低/最高价，只有单位解释唯一且均价处于 OHLC 附近时才保留可信金额；无法匹配或存在歧义时 `amount` 保持 `null`、金额单位 `unknown`，并标记 `degraded`。不会用收盘价乘成交量估算成交额。
 - 真实探测结果与响应不稳定情况记录在 `docs/architecture/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md`；当前默认关闭，不加入生产默认回退链。
+
+## Yahoo Finance 实时行情（默认关闭）
+
+- 使用同一个公开 Chart JSON endpoint，以 `range=1d&interval=1m` 请求当前/最近交易日分钟序列，开盘价从该报价时间所属交易日的第一条有效分钟开盘提取；当前价、日内高低、前收、成交量与更新时间取供应商元数据。
+- 报价时间记录为 `regularMarketTime`，变动额与涨跌幅由当前价和该请求区间的前收计算。成交额字段不可用，`amount=null`、`amount_unit=unknown`，结果固定 `degraded`，不可作为资金流或成交额敏感判断的唯一数据源。
+- 此接口与 Yahoo 历史日 K 同属非官方公开接口、无 SLA；默认仍设置 `MARKET_DATA_YAHOO_ENABLED=false`。启用报价时需同时打开 `MARKET_DATA_YAHOO_QUOTE_ENABLED=true`；上线前先在目标 NAS/Docker 网络验证延迟与快照新鲜度。
 
 ## Yahoo Finance 日 K（默认关闭）
 

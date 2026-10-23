@@ -454,13 +454,25 @@ func TestLoadYahooFinanceDailyBarsCanBeOptedIn(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsYahooQuoteCapability(t *testing.T) {
+func TestLoadYahooQuoteCanBeOptedInAndDailyBarsCanBeDisabled(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,yahoo,tencent,sina")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "5m")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_YAHOO_ENABLED", "true")
 	t.Setenv("MARKET_DATA_YAHOO_QUOTE_ENABLED", "true")
-	if _, err := Load(); err == nil {
-		t.Fatal("Yahoo Finance must not be configured as a quote provider")
+	t.Setenv("MARKET_DATA_YAHOO_DAILY_BARS_ENABLED", "false")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	yahoo := cfg.ProviderSettings["yahoo"]
+	if !yahoo.Enabled || !yahoo.Quote || yahoo.DailyBars {
+		t.Fatalf("Yahoo quote-only configuration should be accepted: %+v", yahoo)
 	}
 }
 
