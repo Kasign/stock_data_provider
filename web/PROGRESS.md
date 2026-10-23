@@ -15,7 +15,7 @@
 | 任务状态与 Run 状态 | 已实现 | 分别解释异步任务状态与 Run 状态，包括 blocked_data_quality、rejected_request 等后端状态。 |
 | 刷新后恢复最近任务 | 已实现，待浏览器联调 | 浏览器 localStorage 仅保存最近一项 task/run ID、标的、任务类型与状态，重新打开页面后通过现有 task/events/run 接口恢复。 |
 | 手动读取和诊断 | 已实现，待浏览器验收 | 提供重新读取 Run、复制完整 JSON、复制任务/质量/失败/事件诊断内容的入口。 |
-| 前端单元测试 | 前两轮通过，API 客户端测试待 CI | 已覆盖股票代码/状态格式化、DOM ID 引用、Go RunResult 字段映射、任务/Run 状态；本轮新增请求体、事件分页、密钥隔离和错误响应测试。 |
+| 前端单元测试 | 三轮验证通过 | 已覆盖股票代码/状态格式化、DOM ID 引用、Go RunResult 字段映射、任务/Run 状态、任务请求体/幂等键、事件分页参数、行情密钥与分析请求隔离及错误响应；第三轮 [WebUI CI #39894969470](https://github.com/Kasign/stock_data_provider/actions/runs/39894969470) 全部通过。 |
 
 ## 第二轮 Review 修正
 
@@ -26,7 +26,7 @@
 
 ## 明确待完成
 
-1. **GitHub 验证：已完成**。首轮实现提交 3c8ae824 的 [WebUI checks #39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836) 与第二轮 Review 修正提交 610881e 的 [WebUI checks #39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741) 均通过；覆盖 JS 语法、10 项 Node 测试和 Docker 镜像构建。
+1. **GitHub 验证：已完成**。首轮实现提交 3c8ae824 的 [WebUI checks #39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836)、第二轮 Review 修正提交 610881e 的 [WebUI checks #39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741) 和第三轮 API 客户端测试提交 6da5d5f 的 [WebUI checks #39894969470](https://github.com/Kasign/stock_data_provider/actions/runs/39894969470) 均通过；覆盖 JS 语法、13 项 Node 测试与 Docker 镜像构建。
 2. **NAS / 1Panel 真实端到端联调**：在真实 Docker 网络里验证 stock_analysis_web 的 /analysis-api 代理、任务提交、task/run 关联、阶段事件、Run 读取和 API 错误显示。
 3. **真实数据场景验收**：至少检查正常数据、部分可选数据缺失/质量降级、后端暂不可用三类情况；逐项比对页面与原始 JSON。
 4. **浏览器刷新恢复验收**：分别测运行中、已完成、部分成功/失败任务刷新；核实浏览器存储被禁用、task/run 已被清理、暂时断网时的表现。
@@ -46,6 +46,6 @@
 
 ## 验收结果
 
-- GitHub Actions：首轮 [#39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836) 和第二轮 [#39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741) 均通过；本轮新增 API 客户端测试的 CI 结果待回填。
+- GitHub Actions：首轮 [#39893969836](https://github.com/Kasign/stock_data_provider/actions/runs/39893969836)、第二轮 [#39894703741](https://github.com/Kasign/stock_data_provider/actions/runs/39894703741) 与第三轮 [#39894969470](https://github.com/Kasign/stock_data_provider/actions/runs/39894969470) 均通过。
 - NAS / 1Panel 真实联调：待执行。
 - 三类真实数据响应：待执行。
