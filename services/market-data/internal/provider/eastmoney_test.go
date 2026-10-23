@@ -249,7 +249,6 @@ func TestEastmoneyRejectsKlineSymbolMismatch(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	var gotQueries []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

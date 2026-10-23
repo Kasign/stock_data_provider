@@ -80,17 +80,17 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 
 	fetchRow := func(reportName string) (map[string]json.RawMessage, error) {
 		params := url.Values{
-			"reportName": {reportName},
-			"columns":    {"ALL"},
+			"reportName":   {reportName},
+			"columns":      {"ALL"},
 			"quoteColumns": {""},
-			"filter": {fmt.Sprintf(`(SECUCODE="%s")`, symbol)},
-			"pageNumber": {"1"},
-			"pageSize": {"1"},
-			"sortTypes": {""},
-			"sortColumns": {""},
-			"source": {"HSF10"},
-			"client": {"PC"},
-			"v": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+			"filter":       {fmt.Sprintf(`(SECUCODE="%s")`, symbol)},
+			"pageNumber":   {"1"},
+			"pageSize":     {"1"},
+			"sortTypes":    {""},
+			"sortColumns":  {""},
+			"source":       {"HSF10"},
+			"client":       {"PC"},
+			"v":            {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		}
 		var payload struct {
 			Result *struct {
