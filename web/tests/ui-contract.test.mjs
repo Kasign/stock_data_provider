@@ -136,6 +136,14 @@ test("supplemental chip and capital-flow research remains opt-in and independent
 });
 
 
+test("analysis task submission prevents concurrent duplicate requests and releases the guard", () => {
+  assert.match(app, /isCreatingTask: false/);
+  assert.match(app, /async function createTask\(event\)[\s\S]*?event\.preventDefault\(\);[\s\S]*?if \(state\.isCreatingTask\)[\s\S]*?分析任务正在提交[\s\S]*?return;[\s\S]*?state\.isCreatingTask = true;[\s\S]*?parseAnalysisSymbols/);
+  assert.match(app, /catch \(error\) \{\s*state\.isCreatingTask = false;[\s\S]*?return;/);
+  assert.match(app, /finally \{\s*state\.isCreatingTask = false;[\s\S]*?button\.disabled = false;/);
+  assert.match(apiClient, /headersKey \? \{ "Idempotency-Key": headersKey \} : \{\}/);
+});
+
 test("global typography has a readable baseline and key UI text is not undersized", () => {
   assert.match(stylesheet, /Global readability pass/);
   assert.match(stylesheet, /body \{ font-size: 15px; line-height: 1\.65; \}/);

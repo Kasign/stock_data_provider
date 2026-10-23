@@ -51,6 +51,7 @@ const state = {
   taskSymbols: [],
   taskType: "post_market_scan",
   taskStatus: "",
+  isCreatingTask: false,
   lastRunResult: null,
   runResultGeneration: 0,
   taskSequence: 0,
@@ -1264,16 +1265,23 @@ async function pollTask(generation = state.pollGeneration) {
 
 async function createTask(event) {
   event.preventDefault();
+  const feedback = $("#task-create-feedback");
+  if (state.isCreatingTask) {
+    feedback.hidden = false;
+    feedback.textContent = "分析任务正在提交，请等待本次请求完成后再创建下一项。";
+    return;
+  }
+  state.isCreatingTask = true;
+
   let symbols;
   try {
     symbols = parseAnalysisSymbols($("#task-symbols").value);
   } catch (error) {
-    const feedback = $("#task-create-feedback");
+    state.isCreatingTask = false;
     feedback.hidden = false;
     feedback.textContent = error.message;
     return;
   }
-  const feedback = $("#task-create-feedback");
   feedback.hidden = true;
   feedback.textContent = "";
   const button = $("#create-task-button");
@@ -1320,6 +1328,7 @@ async function createTask(event) {
     feedback.hidden = false;
     feedback.textContent = "创建任务失败：" + errorMessage(error);
   } finally {
+    state.isCreatingTask = false;
     button.disabled = false;
     button.innerHTML = '创建并跟踪任务 <span>→</span>';
   }
