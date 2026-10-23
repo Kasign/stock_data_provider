@@ -168,6 +168,17 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 
 本轮代码提交 `ae451a3b55d99c2cddf58249b2c8e054b5deb52d` 作为一批提交，包含 BaoStock 日 K 适配器的重复日期/OHLC 防护，以及本地 TCP 集成测试。自动化覆盖分页和空末页、上游查询错误返回、断线后下一次独立调用重新连接登录/查询/登出。Go CI #202 全部通过；GitHub Runner 真实探测仍有独立的上游访问失败，详见[真实环境验收记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。这代表协议测试覆盖已加强，不代表 BaoStock 在所有网络环境都稳定。
 
+### 多源行情契约与验收补充（2026-10-23）
+
+本轮在 BaoStock 之外，继续收紧新浪、腾讯、东方财富的报价和日 K 数据契约：
+
+- 新浪、腾讯、东方财富报价在 Provider 返回前统一调用 `normalize.ValidateQuote`，拒绝非有限数值、关键价格缺失、OHLC 不一致及成交量单位不符合标准的结果。报价源返回不完整字段时不能简单标记为 valid。
+- 腾讯和东方财富日 K 走共享归一化流程：验证/排序交易日期、剔除重复日期、请求范围外日期、非法 OHLC 和不可解析行，强制遵守返回条数上限。若上游同批次存在坏行，保留的结果会明确降级并附质量原因；腾讯未确认的日 K 成交额继续保持 null/unknown/degraded，不推断尾部字段为成交额。
+- 东方财富报价仅允许 HTTPS 下的 `eastmoney.com` 官方域名重定向，限制跳转次数；拒绝外部域名跳转及 HTTPS 降级到 HTTP。主报价从 `push2.eastmoney.com` 跳到 `push2delay.eastmoney.com` 时可继续请求，但公开端点仍有瞬时 502，不能把一次成功认定为稳定可用。
+- BaoStock 日 K 现在与其他源一致执行 `limit` 上限并按交易日升序返回；真实探测中以显式日期区间请求 8 根的回归问题已修复。
+
+代码变更按功能分组提交：[行情契约与东方财富重定向](https://github.com/Kasign/stock_data_provider/commit/91eff930fcfee919f3707658f697dedba8156369)、[修正前复权测试样本](https://github.com/Kasign/stock_data_provider/commit/f5725e1a606ee2f00aaa434dc63e5b28f76c9031)、[BaoStock 条数上限](https://github.com/Kasign/stock_data_provider/commit/3e94fdd353320b8059382604a1afc0c738206520)。[Go CI #206](https://github.com/Kasign/stock_data_provider/actions/runs/39885215590) 全部通过；[真实 Provider 探测 #15](https://github.com/Kasign/stock_data_provider/actions/runs/39885215595) 的探测 job 通过。按第 5.13 节保留真实端点结果和质量状态。
+
 ## 7. 参考资料
 
 - [BaoStock 官方网站](https://www.baostock.com/)

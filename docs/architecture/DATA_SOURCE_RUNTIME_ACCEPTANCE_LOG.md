@@ -301,6 +301,43 @@ GitHub Actions 证据：
 
 本轮关闭的是“自动化协议边界完全没有测试”的缺口；没有关闭 BaoStock 目标网络稳定性、更多日期/证券覆盖、停牌/非交易日行为与 NAS 端持续可用性验收。测试通过与供应商连通是两个独立结论。
 
+## 5.13 多源报价契约、日 K 统一归一化与最新真实探测（2026-10-23）
+
+### 5.13.1 代码改进
+
+- 报价边界：Sina、Tencent、Eastmoney 的报价在返回前调用 `normalize.ValidateQuote`，对关键价格、OHLC、成交量/成交额单位和数值合法性做统一校验。
+- 日 K 质量：Tencent 与 Eastmoney 共用 `normalizeProviderDailyBars`，按交易日期升序返回并遵守调用方 limit；过滤重复、范围外、非法 OHLC 和无法解析的行。若返回中夹有坏行，保留结果会标记为 degraded，并写入 `provider_response_contract_warning` 和可适用的 `provider_rows_rejected_during_parse`。
+- 安全重定向：Eastmoney 仅跟随 HTTPS 下官方 `*.eastmoney.com` 域名，不跟随外站和 HTTPS 到 HTTP 的降级跳转，最多允许有限次数的跳转。
+- BaoStock：原先在显式日期范围时会返回范围内全部交易日，即使调用方的 `limit=8` 也可能返回 19 根。提交 `3e94fdd3` 改为共享排序与 limit 归一化；已加测试保障保留最新 N 根且结果按日期升序，单纯截断不会降级数据质量。
+
+### 5.13.2 代码 CI 验收
+
+- [Go test suite #206](https://github.com/Kasign/stock_data_provider/actions/runs/39885215590) 结论为 **success**。根模块、`go-core` 和 `services/market-data` 的格式、单测、竞态测试、`go vet` 全部通过；Compose 校验及 Go Docker 镜像构建也通过。
+- CI #204 曾因腾讯前复权测试样本本身违反 OHLC（收盘价 43.05、最低价 43.10）而失败。修复提交 `f5725e1a` 只将夹具最低价调为 43.00，没有放松生产校验，随后 #205 通过；BaoStock limit 改动的完整验收见 #206。
+
+### 5.13.3 GitHub Runner 真实 Provider 探测 #15
+
+本次 [Live provider probe #15](https://github.com/Kasign/stock_data_provider/actions/runs/39885215595) 的 Provider 探测 job 结论为 **success**，八项请求都返回数据：
+
+| Provider / 能力 | 实测结果 | 质量与解释 |
+|---|---|---|
+| Sina 报价 | 返回成功，约 883 ms | `valid` |
+| Tencent 报价 | 返回成功，约 1,078 ms | `degraded`；保留字段不确定项 |
+| Tencent 不复权日 K | 8 根，约 1,256 ms | `degraded`；成交额字段未确认，保持 null/unknown |
+| Tencent 前复权日 K | 8 根，约 169 ms | `degraded`；同一成交额契约限制 |
+| Eastmoney 主报价 | 返回成功，约 2,029 ms | `degraded`；不因可解析就提升为 valid |
+| Eastmoney 延迟域报价 | 返回成功，约 267 ms | `degraded`；缺少可验证报价时间戳时保留降级 |
+| Eastmoney 前复权日 K | 8 根，约 837 ms | `valid` |
+| BaoStock 前复权日 K | 8 根，约 1,501 ms | `valid`；limit 上限已生效 |
+
+Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_data_provider/actions/runs/39885215595/artifacts/12472037706)，4,516 bytes，GitHub 元数据 SHA-256 为 `0d691ca31b6049623caabcd3dca3ab0be2a84bb77df91387539fca50abbce5ff`。
+
+### 5.13.4 结果边界与下一步
+
+- [探测 #14](https://github.com/Kasign/stock_data_provider/actions/runs/39884929219) 的两个 Eastmoney 报价请求曾分别返回 HTTP 502；#15 同一代码线在稍后的窗口里又都成功。此差异应解释为上游/网络端点波动，不能声称重定向代码“修复了 502”，也不能仅凭成功轮次宣称稳定。
+- GitHub Runner 结果只证明在该次 Runner 网络环境、该时间窗口中真实请求可达；与模拟测试以及 NAS 容器实测是不同的证据类型。仍需目标容器的带时间戳请求日志完成部署侧验收。
+- 下一阶段继续验证 BaoStock 的停牌/无数据日期、更长日期范围及重复/缺失记录；Eastmoney 应持续记录主报价 302/502 和延迟域表现，腾讯成交额仍保持未知，未验证的单位不得猜测。
+
 ## 6. 下一步验收顺序
 
 1. 用户恢复测试前的 `.env`，重新创建 `market-data` 容器，并复测 BaoStock 正常取数。
