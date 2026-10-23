@@ -115,10 +115,10 @@ func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T)
 			t.Errorf("np=%s, want 2 for bulk result", got)
 		}
 		payload := map[string]any{"rc": 0, "data": map[string]any{
-			"total": 3, "diff": []map[string]any{
-				{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.5, "f6": 100.5},
-				{"f12": "000001", "f13": 0, "f14": "平安银行", "f3": -0.5, "f6": 200.0},
-				{"f12": "601398", "f13": 1, "f14": "工商银行", "f3": 0.0, "f6": 300.0},
+			"total": 3, "diff": map[string]any{
+				"0": map[string]any{"f12": "600519", "f13": 1, "f14": "贵州茅台", "f3": 1.5, "f6": 100.5},
+				"1": map[string]any{"f12": "000001", "f13": 0, "f14": "平安银行", "f3": -0.5, "f6": 200.0},
+				"2": map[string]any{"f12": "601398", "f13": 1, "f14": "工商银行", "f3": 0.0, "f6": 300.0},
 			},
 		}}
 		_ = json.NewEncoder(w).Encode(payload)

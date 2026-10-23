@@ -1195,15 +1195,15 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		return nil, fmt.Errorf("Eastmoney market breadth universe %d exceeds safety cap %d", total, eastmoneyMarketBreadthMaxSecurities)
 	}
 	pageSize := eastmoneyMarketBreadthPageSize
-	if len(first.Data.Rows) > 0 && len(first.Data.Rows) < pageSize && len(first.Data.Diff) < total {
+	if len(first.Data.Rows) > 0 && len(first.Data.Rows) < pageSize && len(first.Data.Rows) < total {
 		// Some public gateways cap pz. Derive page size from the first page and verify every subsequent page.
-		pageSize = len(first.Data.Diff)
+		pageSize = len(first.Data.Rows
 	}
-	if len(first.Data.Diff) == 0 {
+	if len(first.Data.Rows) == 0 {
 		return nil, errors.New("Eastmoney market breadth returned an empty first page")
 	}
 	rows := make([]map[string]json.RawMessage, 0, total)
-	rows = append(rows, first.Data.Diff...)
+	rows = append(rows, first.Data.Rows...)
 	pageCount := 1
 	for page := 2; len(rows) < total; page++ {
 		if page > (eastmoneyMarketBreadthMaxSecurities/pageSize)+1 {
@@ -1230,7 +1230,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		if len(next.Data.Rows) != expected {
 			return nil, fmt.Errorf("Eastmoney market breadth page %d is incomplete: received %d of %d rows", page, len(next.Data.Rows), expected)
 		}
-		rows = append(rows, next.Data.Diff...)
+		rows = append(rows, next.Data.Rows...)
 		pageCount++
 	}
 	if len(rows) != total {
