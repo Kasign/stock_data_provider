@@ -89,9 +89,11 @@ type liveProbeResult struct {
 	ErrorKind  string                  `json:"error_kind,omitempty"`
 	Error      string                  `json:"error,omitempty"`
 	ElapsedMS  int64                   `json:"elapsed_ms"`
-	Quote      *model.Quote            `json:"quote,omitempty"`
-	BarCount   int                     `json:"bar_count,omitempty"`
-	SampleBars []model.DailyBar        `json:"sample_bars,omitempty"`
+	Quote            *model.Quote            `json:"quote,omitempty"`
+	BarCount         int                     `json:"bar_count,omitempty"`
+	SampleBars       []model.DailyBar         `json:"sample_bars,omitempty"`
+	ChipDistribution *model.ChipDistribution  `json:"chip_distribution,omitempty"`
+	CapitalFlow      *model.CapitalFlow       `json:"capital_flow,omitempty"`
 	HTTP       []liveProbeHTTPResponse `json:"http_responses,omitempty"`
 }
 
@@ -195,7 +197,10 @@ func (b *liveProbeCaptureBody) Close() error {
 	return err
 }
 
-func liveProbeDailyContractError(bars []model.DailyBar, providerName, symbol string, basis model.AdjustmentBasis, startDate, endDate string) string {
+func liveProbeDailyContractError(bars []model.DailyBar, providerName, symbol string, basis model.AdjustmentBasis, startDate, endDate string, limit int) string {
+	if limit > 0 && len(bars) > limit {
+		return fmt.Sprintf("provider returned %d bars above requested limit %d", len(bars), limit)
+	}
 	seenDates := make(map[string]struct{}, len(bars))
 	for index, bar := range bars {
 		if bar.Source != providerName || bar.Symbol != symbol {
@@ -209,6 +214,9 @@ func liveProbeDailyContractError(bars []model.DailyBar, providerName, symbol str
 		}
 		if bar.TradeDate < startDate || bar.TradeDate > endDate {
 			return fmt.Sprintf("bar %d trade date %s falls outside requested range %s..%s", index, bar.TradeDate, startDate, endDate)
+		}
+		if index > 0 && bar.TradeDate < bars[index-1].TradeDate {
+			return fmt.Sprintf("bars are not sorted ascending at index %d: %s follows %s", index, bar.TradeDate, bars[index-1].TradeDate)
 		}
 		if _, exists := seenDates[bar.TradeDate]; exists {
 			return fmt.Sprintf("duplicate trade date %s", bar.TradeDate)
@@ -337,7 +345,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		DailySymbol: dailySymbol,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Results:     make([]liveProbeResult, 0, 8),
+		Results:     make([]liveProbeResult, 0, 10),
 	}
 	var failures []string
 
@@ -413,7 +421,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		}
 		contractError := ""
 		if callErr == nil && len(bars) > 0 {
-			contractError = liveProbeDailyContractError(bars, providerName, symbol, basis, startDate, endDate)
+			contractError = liveProbeDailyContractError(bars, providerName, symbol, basis, startDate, endDate, 8)
 		}
 		switch {
 		case callErr != nil:
@@ -441,6 +449,119 @@ func TestLiveProviderProbe(t *testing.T) {
 		report.Results = append(report.Results, result)
 		encoded, _ := json.Marshal(result)
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
+	runChip := func(mx *MiaoXiang, symbol string) {
+		capture := &liveProbeCapture{}
+		mx.client.Transport = capture.transport()
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := mx.FetchChipDistribution(ctx, symbol)
+		result := liveProbeResult{
+			Provider: mx.Name(), Capability: "chip_distribution", Symbol: symbol,
+			ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot(),
+		}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, "miaoxiang chip_distribution: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil:
+			result.Status = "invalid"
+			result.Error = "MX API returned a nil chip distribution without an error"
+			failures = append(failures, "miaoxiang chip_distribution: nil result")
+		case item.Symbol != symbol || item.Source != mx.Name() || !finiteNumber(item.AverageCost) || item.AverageCost <= 0:
+			result.Status = "invalid"
+			result.ChipDistribution = item
+			result.Error = "MX chip distribution identity or average-cost contract is invalid"
+			failures = append(failures, "miaoxiang chip_distribution: contract mismatch")
+		case item.QualityStatus == model.QualityInvalid:
+			result.Status = "invalid"
+			result.ChipDistribution = item
+			result.Error = "MX chip distribution was marked invalid quality"
+			failures = append(failures, "miaoxiang chip_distribution: invalid quality")
+		default:
+			// 妙想缺少明确可用时间，degraded 是预期结果，不能要求它伪装成 valid。
+			result.Status = "returned"
+			result.ChipDistribution = item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
+	runFlow := func(mx *MiaoXiang, symbol string) {
+		capture := &liveProbeCapture{}
+		mx.client.Transport = capture.transport()
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := mx.FetchCapitalFlow(ctx, symbol)
+		result := liveProbeResult{
+			Provider: mx.Name(), Capability: "capital_flow", Symbol: symbol,
+			ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot(),
+		}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, "miaoxiang capital_flow: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil:
+			result.Status = "invalid"
+			result.Error = "MX API returned a nil capital-flow response without an error"
+			failures = append(failures, "miaoxiang capital_flow: nil result")
+		case item.Symbol != symbol || item.Source != mx.Name() || item.Observations < 0:
+			result.Status = "invalid"
+			result.CapitalFlow = item
+			result.Error = "MX capital-flow identity or observation count is invalid"
+			failures = append(failures, "miaoxiang capital_flow: contract mismatch")
+		case item.QualityStatus == model.QualityInvalid:
+			result.Status = "invalid"
+			result.CapitalFlow = item
+			result.Error = "MX capital flow was marked invalid quality"
+			failures = append(failures, "miaoxiang capital_flow: invalid quality")
+		case item.MainNetInflow != nil && !finiteNumber(*item.MainNetInflow),
+			item.Inflow5D != nil && !finiteNumber(*item.Inflow5D),
+			item.Inflow10D != nil && !finiteNumber(*item.Inflow10D):
+			result.Status = "invalid"
+			result.CapitalFlow = item
+			result.Error = "MX capital flow contains a non-finite amount"
+			failures = append(failures, "miaoxiang capital_flow: non-finite amount")
+		default:
+			result.Status = "returned"
+			result.CapitalFlow = item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
+	runMX := strings.TrimSpace(os.Getenv("MARKET_DATA_LIVE_MX_TESTS")) == "1"
+	mxAPIKey := strings.TrimSpace(os.Getenv("MARKET_DATA_MX_API_KEY"))
+	if mxAPIKey == "" {
+		mxAPIKey = strings.TrimSpace(os.Getenv("MX_APIKEY"))
+	}
+	if runMX {
+		if mxAPIKey == "" {
+			failures = append(failures, "miaoxiang: live test explicitly enabled but MX API key is missing")
+			report.Results = append(report.Results,
+				liveProbeResult{Provider: "miaoxiang", Capability: "chip_distribution", Symbol: dailySymbol, Status: "failed", Error: "MX API key is missing"},
+				liveProbeResult{Provider: "miaoxiang", Capability: "capital_flow", Symbol: dailySymbol, Status: "failed", Error: "MX API key is missing"})
+		} else if mx, mxErr := NewMiaoXiang(mxAPIKey, strings.TrimSpace(os.Getenv("MARKET_DATA_MX_API_URL")), 20*time.Second); mxErr != nil {
+			failures = append(failures, "miaoxiang: configure live probe failed: "+mxErr.Error())
+			report.Results = append(report.Results,
+				liveProbeResult{Provider: "miaoxiang", Capability: "chip_distribution", Symbol: dailySymbol, Status: "failed", Error: "MX API configuration rejected"},
+				liveProbeResult{Provider: "miaoxiang", Capability: "capital_flow", Symbol: dailySymbol, Status: "failed", Error: "MX API configuration rejected"})
+		} else {
+			runChip(mx, dailySymbol)
+			runFlow(mx, dailySymbol)
+		}
+	} else {
+		// MX API 有独立 Key/调用配额，普通 PR CI 明确记录为 skipped，不偷偷消耗线上请求额度。
+		report.Results = append(report.Results,
+			liveProbeResult{Provider: "miaoxiang", Capability: "chip_distribution", Symbol: dailySymbol, Status: "skipped", Error: "set MARKET_DATA_LIVE_MX_TESTS=1 and provide MX_APIKEY to run the opt-in live probe"},
+			liveProbeResult{Provider: "miaoxiang", Capability: "capital_flow", Symbol: dailySymbol, Status: "skipped", Error: "set MARKET_DATA_LIVE_MX_TESTS=1 and provide MX_APIKEY to run the opt-in live probe"})
 	}
 
 	sina := NewSina(12*time.Second, "")

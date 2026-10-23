@@ -81,7 +81,7 @@ func Load() (Config, error) {
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
-			"baostock":  {Enabled: false, Quote: false, DailyBars: true},
+			"baostock":  {Enabled: true, Quote: false, DailyBars: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: false},
 		},
 	}

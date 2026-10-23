@@ -370,7 +370,7 @@ func TestLoadUsesSharedMarketDataAdjustmentWhenServiceOverrideIsUnset(t *testing
 	}
 }
 
-func TestLoadBaoStockIsOptInAndDailyBarsOnly(t *testing.T) {
+func TestLoadBaoStockEnabledByDefaultAndDailyBarsOnly(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
@@ -386,11 +386,20 @@ func TestLoadBaoStockIsOptInAndDailyBarsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ProviderSettings["baostock"].Enabled {
-		t.Fatal("BaoStock must remain disabled by default until real upstream tests pass")
+	if !cfg.ProviderSettings["baostock"].Enabled || !cfg.ProviderSettings["baostock"].DailyBars || cfg.ProviderSettings["baostock"].Quote {
+		t.Fatalf("BaoStock should be enabled as a daily-bar fallback only by default: %+v", cfg.ProviderSettings["baostock"])
 	}
 	if cfg.BaostockHost != "public-api.baostock.com" || cfg.BaostockPort != 10030 {
 		t.Fatalf("unexpected BaoStock endpoint: %s:%d", cfg.BaostockHost, cfg.BaostockPort)
+	}
+
+	t.Setenv("MARKET_DATA_BAOSTOCK_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("explicit BaoStock disable should load: %v", err)
+	}
+	if cfg.ProviderSettings["baostock"].Enabled {
+		t.Fatal("explicit environment disable must override default configuration")
 	}
 
 	t.Setenv("MARKET_DATA_BAOSTOCK_ENABLED", "true")

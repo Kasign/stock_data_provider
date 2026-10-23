@@ -5,7 +5,7 @@
 ## 当前实现范围
 
 - 实时行情 Provider：东方财富、腾讯、新浪（新浪仅提供实时行情能力）。
-- 日线 K 线 Provider：东方财富、腾讯；新增 BaoStock 原生 Go TCP Provider，默认关闭，完成真实上游验收后才可启用。
+- 日线 K 线 Provider：东方财富、BaoStock、腾讯。BaoStock 已纳入默认日 K 回退链，仍仅支持日 K；目标部署环境须继续单独验收。
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表，以及可选补充数据接口。
 - 标准单位：`volume` 为股，`amount` 为人民币元，价格为元/股；`trade_date` 是交易日。`quote_time` 是供应商报告的行情快照/更新时间，不一定等于最近一笔成交时间；新增的 `quote_time_semantics=provider_snapshot_time` 明确该语义。`fetched_at` 是本服务采集时间，`normalized_at` 是标准化时间，三者不能互相替代。
@@ -17,13 +17,13 @@
 
 本阶段尚未完整迁移财务报表、指数/全市场广度、板块排名、龙虎榜、新闻公告等数据域。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
 
-## BaoStock 日 K 数据源（新增，默认关闭）
+## BaoStock 日 K 数据源（默认启用的备用源）
 
 BaoStock 通过 TCP 长连接访问 public-api.baostock.com:10030。当前代码实现登录、请求/非压缩响应 CRC 校验、96 类型 zlib 压缩响应解码、分页和日 K 字段标准化；对压缩响应检查 CRC 字段格式并依靠 zlib 校验数据完整性，以兼容线上返回的压缩帧。Provider 只提供历史日 K，不提供实时行情。Provider 默认关闭，模拟协议测试不等于真实上游登录和查询已通过。
 
-启用前需要从 stock-market-data 容器真实验证 600519.SH 与 688981.SH 的前复权（flag 2）、后复权（flag 1）和不复权（flag 3），检查价格、成交量（股）、成交额（人民币元）、停牌和日期覆盖。BaoStock 的涨跌幅复权算法可能与其他来源不同，因此返回字段 adjustment_method 会标记 baostock_pct_change；同名 forward_adjusted 不代表不同来源的绝对价格一定等价。当前未验收的北交所代码会被明确拒绝。
+GitHub Actions 已连续完成真实登录/查询探测，且此前已有 NAS 真实取数记录；当前默认将其纳入日 K 备用链。仍需要从目标 stock-market-data 容器继续验证 600519.SH 与 688981.SH 的前复权（flag 2）、后复权（flag 1）和不复权（flag 3），检查价格、成交量（股）、成交额（人民币元）、停牌和日期覆盖。BaoStock 的涨跌幅复权算法可能与其他来源不同，因此返回字段 adjustment_method 会标记 baostock_pct_change；同名 forward_adjusted 不代表不同来源的绝对价格一定等价。当前未验收的北交所代码会被明确拒绝。
 
-启用时需要同时设置 MARKET_DATA_BAOSTOCK_ENABLED=true、MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED=true，并确保 MARKET_DATA_PROVIDER_PRIORITY 中包含 baostock；保持 MARKET_DATA_BAOSTOCK_QUOTE_ENABLED=false。不得将未复权数据伪装为前复权，也不得跨来源拼接成混合 K 线。
+默认配置已设置 MARKET_DATA_BAOSTOCK_ENABLED=true、MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED=true，并且 MARKET_DATA_PROVIDER_PRIORITY 包含 baostock；可通过设置 MARKET_DATA_BAOSTOCK_ENABLED=false 显式关闭，必须保持 MARKET_DATA_BAOSTOCK_QUOTE_ENABLED=false。不得将未复权数据伪装为前复权，也不得跨来源拼接成混合 K 线。
 
 ## 腾讯日 K 数据限制
 
