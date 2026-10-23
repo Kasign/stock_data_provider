@@ -1,3 +1,4 @@
+import { applyTheme, persistTheme, readTheme } from "./theme.js";
 import {
   analysisHealth,
   clearSettings,
@@ -69,6 +70,28 @@ const state = {
 function setText(selector, value) {
   const target = $(selector);
   if (target) target.textContent = value == null || value === "" ? "—" : String(value);
+}
+
+
+function syncThemeControl(theme) {
+  const current = theme === "light" ? "light" : "dark";
+  const target = current === "dark" ? "light" : "dark";
+  const targetLabel = target === "light" ? "浅色" : "深色";
+  $("#theme-toggle-icon").textContent = target === "light" ? "☼" : "☾";
+  $("#theme-toggle-label").textContent = targetLabel;
+  $("#theme-toggle").setAttribute("aria-label", "切换至" + targetLabel + "主题");
+  $("#theme-toggle").setAttribute("aria-pressed", String(current === "light"));
+  $("#theme-toggle").title = "切换至" + targetLabel + "主题";
+}
+
+function setMobileNavigationOpen(open) {
+  const isOpen = Boolean(open) && window.innerWidth <= 600;
+  $(".sidebar").classList.toggle("is-open", isOpen);
+  $("#mobile-nav-overlay").hidden = !isOpen;
+  document.body.classList.toggle("mobile-nav-open", isOpen);
+  $("#mobile-menu-toggle").setAttribute("aria-expanded", String(isOpen));
+  $("#mobile-menu-toggle").setAttribute("aria-label", isOpen ? "关闭导航" : "打开导航");
+  $("#mobile-menu-toggle").title = isOpen ? "关闭导航" : "打开导航";
 }
 
 function persistTaskReference() {
@@ -1467,8 +1490,28 @@ function clearLocalSettings() {
   applySettings(next);
 }
 
+syncThemeControl(readTheme());
+$("#theme-toggle").addEventListener("click", () => {
+  const nextTheme = readTheme() === "dark" ? "light" : "dark";
+  persistTheme(nextTheme);
+  applyTheme(nextTheme);
+  syncThemeControl(nextTheme);
+});
+$("#mobile-menu-toggle").addEventListener("click", () => {
+  setMobileNavigationOpen(!$(".sidebar").classList.contains("is-open"));
+});
+$("#mobile-nav-overlay").addEventListener("click", () => setMobileNavigationOpen(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") setMobileNavigationOpen(false);
+});
+window.addEventListener("resize", () => {
+  if (window.innerWidth > 600) setMobileNavigationOpen(false);
+});
 document.querySelectorAll(".nav-link").forEach((button) => {
-  button.addEventListener("click", () => setView(button.dataset.view));
+  button.addEventListener("click", () => {
+    setView(button.dataset.view);
+    setMobileNavigationOpen(false);
+  });
 });
 $("#quote-form").addEventListener("submit", runQuoteQuery);
 $("#load-supplemental-button").addEventListener("click", loadSupplementalData);

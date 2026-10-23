@@ -210,3 +210,33 @@ test("recent analysis history supports search, single removal and local-only cle
   assert.match(stylesheet, /\.recent-analysis-search input:focus/);
   assert.match(stylesheet, /\.recent-analysis-remove:hover/);
 });
+
+
+test("light/dark theme is accessible, persisted locally, and independent of backend APIs", async () => {
+  const module = await readFile(new URL("../src/theme.js", import.meta.url), "utf8");
+  assert.match(html, /name="color-scheme" content="light dark"/);
+  assert.match(html, /id="theme-toggle"[^>]*aria-label="切换至浅色主题"[^>]*aria-pressed="false"/);
+  assert.match(html, /id="theme-toggle-icon"/);
+  assert.match(html, /id="theme-toggle-label"/);
+  assert.match(app, /import \{ applyTheme, persistTheme, readTheme \} from "\.\/theme\.js"/);
+  assert.match(app, /\$\("#theme-toggle"\)\.addEventListener\("click"/);
+  assert.match(stylesheet, /:root\[data-theme="light"\]\s*\{/);
+  assert.match(stylesheet, /--bg:\s*#f3f6f9/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.settings-dialog/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.analysis-result-card/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.raw-result pre/);
+  assert.match(module, /stock-provider-webui\.theme\.v1/);
+  assert.doesNotMatch(module, /fetch\(|\/api\//, "theme preference must not call backend APIs");
+});
+
+test("mobile navigation drawer restores readable labels and can close via overlay or Escape", () => {
+  for (const id of ["mobile-menu-toggle", "mobile-nav-overlay", "primary-sidebar"]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "mobile navigation element must exist: " + id);
+  }
+  assert.match(html, /id="mobile-menu-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="primary-sidebar"/);
+  assert.match(app, /function setMobileNavigationOpen\(open\)/);
+  assert.match(app, /\$\("#mobile-nav-overlay"\)\.addEventListener\("click", \(\) => setMobileNavigationOpen\(false\)\)/);
+  assert.match(app, /if \(event\.key === "Escape"\) setMobileNavigationOpen\(false\)/);
+  assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.sidebar\.is-open \{ transform: translateX\(0\); \}/);
+  assert.match(stylesheet, /\.mobile-nav-overlay:not\(\[hidden\]\)/);
+});

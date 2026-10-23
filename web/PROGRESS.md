@@ -186,3 +186,13 @@
 - 验证类型：Node 单元测试使用固定合成 RunResult 和模拟 fetch 响应；这只验证前端边界行为。真实字段比对、真实 API 错误协议、刷新恢复和浏览器布局仍须 NAS/1Panel 环境验收。
 - 基线回查：开发分支在本批开始前为 `b22f00f4a6f821b4edccb0007e16fef35afe8316`，对应 WebUI checks [#39933160719](https://github.com/Kasign/stock_data_provider/actions/runs/39933160719) 成功。本批代码与测试对应的 [WebUI checks #39934244200](https://github.com/Kasign/stock_data_provider/actions/runs/39934244200) 已成功：56 项 Node 测试全通过，JavaScript 语法检查及 Nginx 镜像构建通过。目标分支后续进展以 PR 检查结果为准；本 CI 不是 NAS/1Panel 真实环境验收。PR 仍保持独立开放，未执行合并。
 
+
+
+## 主题切换与移动端体验（本批）
+
+- 新增深色/浅色可切换主题，主题模块独立于数据 API；偏好只写入浏览器主题键，localStorage 不可用时仍能应用本次选择。
+- 轻主题调整常用页面表面、输入框、指标卡、日 K 表格、结构化报告、质量状态与设置弹窗的颜色对比度。
+- 手机宽度下侧边栏改为抽屉导航：支持打开/关闭、遮罩关闭、Esc 关闭和导航后自动关闭，不再占用固定的 67px 内容宽度。
+- 新增 `tests/theme.test.mjs`，覆盖主题值校验、持久化、存储读写异常和 root theme 应用；UI 契约测试增加主题和移动抽屉检查。
+- 本功能不增加数据端依赖；自动化验证只证明源码/模块行为，未代替 iPhone/Android 浏览器的真实交互验收。
+- 管理员密码和真实服务端 `.env` 导入/导出暂不实现：当前服务没有相应契约，必须先增加后端认证/配置管理能力，不可使用 localStorage 做密码保护或声称浏览器导入会修改 NAS 文件。
