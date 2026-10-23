@@ -108,7 +108,7 @@ func TestNeteaseCSVRejectsMissingRequiredColumns(t *testing.T) {
 }
 
 func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
-	payload := "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600036\",\"name\":\"招商银行\",\"price\":42.35,\"percent\":0.0127,\"updown\":0.53,\"open\":41.70,\"high\":42.38,\"low\":41.57,\"yestclose\":41.82,\"volume\":568297,\"turnover\":2386858667,\"time\":\"2026/10/23 11:07:58\",\"update\":\"2026/10/23 11:07:59\"}});"
+	payload := "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600036\",\"name\":\"招商银行\",\"price\":42.35,\"percent\":0.0127,\"updown\":0.53,\"open\":41.70,\"high\":42.38,\"low\":41.57,\"yestclose\":41.82,\"volume\":56829700,\"turnover\":2386858667,\"time\":\"2026/10/23 11:07:58\",\"update\":\"2026/10/23 11:07:59\"}});"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/0600036,money.api") {
 			t.Errorf("unexpected Netease quote path %q", r.URL.Path)
@@ -135,7 +135,7 @@ func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
 	if q.CurrentPrice == nil || *q.CurrentPrice != 42.35 || q.ChangePercent == nil || *q.ChangePercent != 1.27 {
 		t.Fatalf("percent ratio was not normalized to percentage points: %+v", q)
 	}
-	if q.Volume == nil || *q.Volume != 568297 || q.Amount == nil || *q.Amount != 2386858667 {
+	if q.Volume == nil || *q.Volume != 56829700 || q.Amount == nil || *q.Amount != 2386858667 {
 		t.Fatalf("unexpected volume/amount: %+v", q)
 	}
 	if q.VolumeUnit != "shares" || q.AmountUnit != "CNY" || q.RawAmountField != "turnover" {

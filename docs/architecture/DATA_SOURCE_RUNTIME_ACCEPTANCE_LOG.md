@@ -444,7 +444,8 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 
 - 网易历史 CSV endpoint `quotes.money.163.com/service/chddata.html` 在 GitHub Runner 连续返回 HTTP 502 + HTML（不是 CSV），因此该日 K 能力不通过真实验收，默认保持关闭。
 - 新增独立的网易实时 JSONP 端点 `api.money.126.net/data/feed/{code},money.api`，按 `price/percent/updown/open/high/low/yestclose/volume/turnover/time` 字段实现 QuoteProvider。契约测试覆盖 percent 比例到百分点换算、JSONP callback 包装、证券代码回显、成交量股数、成交额人民币元和供应商快照时间。
-- 最新提交后的实时端点真实结果将在相应 GitHub Actions run 完成后补记；即使报价成功，也只证明报价端点在对应时刻可用，不会解除历史 CSV 的 502 状态。
+- GitHub Actions 实测：Live provider probe #39894680276（提交 `2314710d8e214737500483d70c613cd37a324859`）对实时端点报 `dial tcp: lookup api.money.126.net on 127.0.0.53:53: no such host`；同轮历史 CSV 返回 HTTP 502 + HTML，东方财富历史 K 线出现 EOF。该轮实际 Provider job 失败，不能将 NetEase 报价或历史日 K 标记为已接通。
+- 为避免可选候选端点持续污染其他 Provider 的日常健康报告，默认 probe 将 NetEase 两项记录为 `skipped`；仅 workflow_dispatch 勾选 `include_netease=true` 才重试。应用配置仍默认 `MARKET_DATA_NETEASE_ENABLED=false`，历史日 K 能力默认关闭。
 - `MARKET_DATA_NETEASE_ENABLED` 默认为 false；启用服务端报价还需设置 `MARKET_DATA_NETEASE_QUOTE_ENABLED=true`。根配置样例保持 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`，直至 CSV 返回真实数据。
 
 ## 6. 下一步验收顺序

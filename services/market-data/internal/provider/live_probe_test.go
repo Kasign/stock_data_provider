@@ -630,13 +630,20 @@ func TestLiveProviderProbe(t *testing.T) {
 		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 
-	netease := NewNetease(12*time.Second, "")
-	runQuote("netease", "netease", quoteSymbol, netease.client, func(ctx context.Context) (*model.Quote, error) {
-		return netease.FetchQuote(ctx, quoteSymbol)
-	})
-	runDaily("netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
-		return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
-	})
+	if os.Getenv("MARKET_DATA_LIVE_NETEASE_TESTS") == "1" {
+		netease := NewNetease(12*time.Second, "")
+		runQuote("netease", "netease", quoteSymbol, netease.client, func(ctx context.Context) (*model.Quote, error) {
+			return netease.FetchQuote(ctx, quoteSymbol)
+		})
+		runDaily("netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+	} else {
+		report.Results = append(report.Results,
+			liveProbeResult{Provider: "netease", Capability: "quote", Symbol: quoteSymbol, Status: "skipped", Error: "NetEase quote endpoint DNS resolution failed in hosted runners; set MARKET_DATA_LIVE_NETEASE_TESTS=1 to retry"},
+			liveProbeResult{Provider: "netease", Capability: "daily_bars", Symbol: dailySymbol, Adjustment: model.AdjustmentNone, Status: "skipped", Error: "NetEase historical CSV endpoint returned HTTP 502; set MARKET_DATA_LIVE_NETEASE_TESTS=1 to retry"},
+		)
+	}
 
 	if closeErr := baostockClient.Close(); closeErr != nil {
 		t.Logf("LIVE_PROVIDER_CLEANUP warning provider=baostock error=%q", closeErr.Error())

@@ -7,6 +7,6 @@
     "yahoo": { "enabled": false, "quote": false, "daily_bars": true },
     "tencent": { "enabled": true, "quote": true, "daily_bars": true },
     "sina": { "enabled": true, "quote": true, "daily_bars": true },
-    "netease": { "enabled": false, "quote": true, "daily_bars": true }
+    "netease": { "enabled": false, "quote": false, "daily_bars": false }
   }
 }

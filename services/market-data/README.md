@@ -4,9 +4,8 @@
 
 ## 当前实现范围
 
-- 实时行情 Provider：东方财富、腾讯、新浪。
-- 实时行情 Provider：东方财富、腾讯、新浪；网易财经实时 JSONP QuoteProvider 已实现，待 GitHub Runner 真实端点实测，默认关闭。
-- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新浪新增原始日 K（只支持 `none`），Yahoo Finance 已完成 GitHub Actions 实测且默认关闭；网易财经 CSV 日 K 的解析与单位检查已有单测，但公网连续返回 502，不能标记为已接通且默认关闭。BaoStock 为默认日 K 备用源。
+- 实时行情 Provider：东方财富、腾讯、新浪；网易财经实时 JSONP QuoteProvider 已实现，但 GitHub Runner 对 `api.money.126.net` 的 DNS 解析失败，默认关闭。
+- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新浪新增原始日 K（只支持 `none`），Yahoo Finance 已完成 GitHub Actions 实测且默认关闭；网易财经 CSV 日 K 的解析与单位检查有单测，但公网连续返回 HTTP 502，未接通且默认关闭。BaoStock 为默认日 K 备用源。
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表，以及可选补充数据接口。
@@ -44,9 +43,9 @@ GitHub Actions 已连续完成真实登录/查询探测，且此前已有 NAS �
 
 ## 网易财经实时行情（默认关闭）
 
-- 报价端点独立配置为 `MARKET_DATA_NETEASE_QUOTE_URL`（默认 `https://api.money.126.net/data/feed`），解包 JSONP 后再解析 JSON；不依赖 API Key 或 Python。
+- 报价端点独立配置为 `MARKET_DATA_NETEASE_QUOTE_URL`（默认 `https://api.money.126.net/data/feed`），解包 JSONP 后再解析 JSON；不依赖 API Key 或 Python。GitHub Runner 实测该域名 DNS 解析失败，因此它目前只是候选实现，不属于已接通的可用来源。
 - 实时端点独立返回 `price/open/high/low/yestclose/volume/turnover/time`；`percent` 是比例值，会乘以 100 转换为系统统一百分点。证券代码回显与报价更新时间必须通过契约校验。
-- 启用需显式设置 `MARKET_DATA_NETEASE_ENABLED=true` 与 `MARKET_DATA_NETEASE_QUOTE_ENABLED=true`。实时接口探测通过前，保持关闭。
+- 启用需显式设置 `MARKET_DATA_NETEASE_ENABLED=true` 与 `MARKET_DATA_NETEASE_QUOTE_ENABLED=true`。在 DNS/接口可达性重新验证前，保持关闭。
 - 历史 CSV endpoint 多次返回 502，因此即使实时报价可用，历史日 K 也应继续单独关闭。
 
 ## 网易财经历史日 K（默认关闭）
