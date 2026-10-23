@@ -184,5 +184,5 @@
 - RunResult 集合分别呈现“字段缺失或 null”“明确空数组”“错误的非数组类型”，不会把不同数据状态统一成“未返回”。
 - 错误响应的消息、错误码、请求 ID 分别限制长度；补充大体积结构化错误消息和 JSON 字符串响应测试。
 - 验证类型：Node 单元测试使用固定合成 RunResult 和模拟 fetch 响应；这只验证前端边界行为。真实字段比对、真实 API 错误协议、刷新恢复和浏览器布局仍须 NAS/1Panel 环境验收。
-- 基线回查：开发分支在本批开始前为 `b22f00f4a6f821b4edccb0007e16fef35afe8316`，对应 WebUI checks [#39933160719](https://github.com/Kasign/stock_data_provider/actions/runs/39933160719) 成功；本批提交后的最新 CI 尚需复核。目标分支 HEAD 已更新至 `8b30ac2df1faf001e10bf586c82e0bf21d24190e`，PR 仍保持独立开放，未执行合并。
+- 基线回查：开发分支在本批开始前为 `b22f00f4a6f821b4edccb0007e16fef35afe8316`，对应 WebUI checks [#39933160719](https://github.com/Kasign/stock_data_provider/actions/runs/39933160719) 成功。本批代码与测试对应的 [WebUI checks #39934244200](https://github.com/Kasign/stock_data_provider/actions/runs/39934244200) 已成功：56 项 Node 测试全通过，JavaScript 语法检查及 Nginx 镜像构建通过。目标分支后续进展以 PR 检查结果为准；本 CI 不是 NAS/1Panel 真实环境验收。PR 仍保持独立开放，未执行合并。
 
