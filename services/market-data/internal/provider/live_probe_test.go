@@ -88,9 +88,10 @@ type liveProbeResult struct {
 	IndexQuotes      *model.IndexQuoteSnapshot    `json:"index_quotes,omitempty"`
 	MarketBreadth    *model.MarketBreadthSnapshot `json:"market_breadth,omitempty"`
 	LimitPool        *model.LimitPoolSnapshot     `json:"limit_pool,omitempty"`
-	StockBoards      *model.StockBoardSnapshot    `json:"stock_boards,omitempty"`
-	PoolType         string                       `json:"pool_type,omitempty"`
-	Symbol           string                       `json:"symbol"`
+	StockBoards      *model.StockBoardSnapshot      `json:"stock_boards,omitempty"`
+	TradingCalendar  *model.TradingCalendarSnapshot `json:"trading_calendar,omitempty"`
+	PoolType         string                         `json:"pool_type,omitempty"`
+	Symbol           string                         `json:"symbol,omitempty"`
 	Adjustment       model.AdjustmentBasis        `json:"adjustment,omitempty"`
 	Status           string                       `json:"status"`
 	ErrorKind        string                       `json:"error_kind,omitempty"`
@@ -350,6 +351,59 @@ func TestLiveProbeErrorSummaryClassifiesNetworkUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(message, "Network unreachable") {
 		t.Fatalf("network symptom was not preserved: %q", message)
+	}
+}
+
+func liveProbeTradingCalendarContractError(snapshot *model.TradingCalendarSnapshot, startDate, endDate string) string {
+	if snapshot == nil {
+		return "provider returned an empty trading-calendar snapshot"
+	}
+	start, startErr := time.Parse("2006-01-02", startDate)
+	end, endErr := time.Parse("2006-01-02", endDate)
+	if startErr != nil || endErr != nil || start.After(end) {
+		return "invalid trading-calendar probe range"
+	}
+	expected := int(end.Sub(start)/(24*time.Hour)) + 1
+	if snapshot.Market != "cn_a_share" || snapshot.StartDate != startDate || snapshot.EndDate != endDate {
+		return "trading-calendar market/date-range identity mismatch"
+	}
+	if snapshot.TotalDays != expected || len(snapshot.Items) != expected {
+		return fmt.Sprintf("trading-calendar coverage mismatch: total=%d items=%d expected=%d", snapshot.TotalDays, len(snapshot.Items), expected)
+	}
+	tradingDays := 0
+	for index, item := range snapshot.Items {
+		wantDate := start.AddDate(0, 0, index).Format("2006-01-02")
+		if item.Date != wantDate {
+			return fmt.Sprintf("trading-calendar row %d date mismatch: got %s want %s", index, item.Date, wantDate)
+		}
+		if item.IsTradingDay {
+			tradingDays++
+		}
+	}
+	if tradingDays != snapshot.TradingDays {
+		return fmt.Sprintf("trading-calendar trading-days mismatch: got %d calculated %d", snapshot.TradingDays, tradingDays)
+	}
+	if snapshot.Source != "baostock" || snapshot.FetchedAt.IsZero() {
+		return "trading-calendar source or fetched_at is missing"
+	}
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		return fmt.Sprintf("unexpected trading-calendar quality %q", snapshot.QualityStatus)
+	}
+	return ""
+}
+
+func TestLiveTradingCalendarContractRejectsGaps(t *testing.T) {
+	snapshot := &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: "2026-10-22", EndDate: "2026-10-24",
+		TotalDays: 3, TradingDays: 2, Source: "baostock", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityDegraded,
+		Items: []model.TradingCalendarDay{
+			{Date: "2026-10-22", IsTradingDay: true},
+			{Date: "2026-10-24", IsTradingDay: false},
+		},
+	}
+	if got := liveProbeTradingCalendarContractError(snapshot, "2026-10-22", "2026-10-24"); !strings.Contains(got, "coverage mismatch") {
+		t.Fatalf("expected coverage mismatch, got %q", got)
 	}
 }
 
@@ -821,9 +875,43 @@ func TestLiveProviderProbe(t *testing.T) {
 
 	baostockClient := baostock.NewClient(baostock.Config{ConnectTimeout: 8 * time.Second, RequestTimeout: 20 * time.Second})
 	baostockProvider := NewBaostock(baostockClient)
+	beforeBaoStockDaily := len(report.Results)
 	runDaily("baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
 		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
+	dailyProbePassed := len(report.Results) > beforeBaoStockDaily &&
+		report.Results[len(report.Results)-1].Provider == "baostock" &&
+		report.Results[len(report.Results)-1].Capability == "daily_bars" &&
+		report.Results[len(report.Results)-1].Status == "returned"
+	calendarStart := now.AddDate(0, 0, -6).Format("2006-01-02")
+	calendarEnd := now.Format("2006-01-02")
+	calendarResult := liveProbeResult{Provider: "baostock", Capability: "trading_calendar"}
+	if dailyProbePassed {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		started := time.Now()
+		snapshot, callErr := baostockProvider.FetchTradingCalendar(ctx, calendarStart, calendarEnd)
+		cancel()
+		calendarResult.ElapsedMS = time.Since(started).Milliseconds()
+		calendarResult.TradingCalendar = snapshot
+		switch {
+		case callErr != nil:
+			calendarResult.Status = "failed"
+			calendarResult.ErrorKind, calendarResult.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, "baostock trading_calendar: "+calendarResult.ErrorKind+" ("+calendarResult.Error+")")
+		case liveProbeTradingCalendarContractError(snapshot, calendarStart, calendarEnd) != "":
+			calendarResult.Status = "invalid"
+			calendarResult.Error = liveProbeTradingCalendarContractError(snapshot, calendarStart, calendarEnd)
+			failures = append(failures, "baostock trading_calendar: "+calendarResult.Error)
+		default:
+			calendarResult.Status = "returned"
+		}
+	} else {
+		calendarResult.Status = "skipped"
+		calendarResult.Error = "skipped because BaoStock daily-bar probe could not establish a working TCP session; no duplicate timeout request was sent"
+	}
+	report.Results = append(report.Results, calendarResult)
+	calendarJSON, _ := json.Marshal(calendarResult)
+	t.Logf("LIVE_PROVIDER_RESULT %s", calendarJSON)
 	yahoo := NewYahooFinance(12*time.Second, "")
 	runQuote("yahoo", "yahoo", quoteSymbol, yahoo.client, func(ctx context.Context) (*model.Quote, error) {
 		return yahoo.FetchQuote(ctx, quoteSymbol)

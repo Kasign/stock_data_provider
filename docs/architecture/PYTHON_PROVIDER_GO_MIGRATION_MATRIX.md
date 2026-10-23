@@ -34,11 +34,12 @@
 | 日线历史 `get_daily_data` | Eastmoney、Tencent | 尚未迁移 Efinance / AkShare / Pytdx / Baostock / Tushare / TickFlow / YFinance / Longbridge 等来源、指数专用链和市场路由 |
 | 指数实时报价 | 新增独立 `IndexQuoteProvider`、东方财富 `ulist.np/get` 适配器与 `GET /api/v1/market/indices`，仅覆盖 7 个白名单核心指数 | GitHub Runner 实测返回 7 条；源端点未提供可解析的行情时间，输出 `degraded`；默认关闭，目标部署容器仍待验收 |
 | 指数日线 | 现有底层 Provider 可能支持部分指数 K 线，但完整指数专用路由未迁移 | 原 Python 对裸指数代码、带交易所后缀的指数代码和各市场有独立识别/路由逻辑，尚未完成逐项对照 |
-| 市场涨跌统计 get_market_stats | 新增 MarketBreadthProvider、东方财富全市场分页统计及 GET /api/v1/market/breadth | 本次代码已加，真实 Runner 全量覆盖验证待 CI。总证券数必须等于覆盖数，分类计数闭合；成交额仅在全量字段齐全时输出；无可验证快照时点标记 degraded，生产开关关闭 |
+| 市场涨跌统计 get_market_stats | 新增 MarketBreadthProvider、东方财富全市场分页统计及 GET /api/v1/market/breadth | 2026-10-23 GitHub Runner 多次探测 CLIST HTTP 502，尚未取得满足完整覆盖校验的全市场响应；默认关闭，不使用自选股横截面冒充全市场统计 |
 | 行业板块涨跌榜 `get_sector_rankings` | 新增独立 `SectorRankingProvider`、东方财富 CLIST 适配器及 `GET /api/v1/market/sectors?type=industry` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
 | 概念 / 题材涨跌榜 `get_concept_rankings` | 复用板块 ranking 契约、使用独立概念过滤条件；API 为 `GET /api/v1/market/sectors?type=concept` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
-| 涨停池 get_limit_up_pool、跌停池、炸板池 | 新增 LimitPoolProvider、东方财富 push2ex 三类池端点及 GET /api/v1/market/limit-pools?type=up|down|broken | 本次代码已加，真实 Runner 契约和日期行为待 CI。请求日期与 qdate 分开保存；空池标为 unknown，不视为已确认零；生产开关关闭 |
+| 涨停池 get_limit_up_pool、跌停池、炸板池 | 新增 LimitPoolProvider、东方财富 push2ex 三类池端点及 GET /api/v1/market/limit-pools?type=up|down|broken | GitHub Runner 上三类端点曾均返回 HTTP 200；仍需用交易日历验证日期语义并完成 NAS/Docker 实测；上游快照时间缺失时质量降级，默认关闭 |
 | 个股所属板块 `get_belong_boards` | 新增独立 `StockBoardsProvider`、东方财富 `slist/get` 适配器与 `GET /api/v1/stocks/{symbol}/boards` | 接口、模型、独立开关、缓存及自动化测试已加入；源端未可靠提供板块类型，质量降级；真实 Runner 与 NAS/Docker 验收待完成 |
+| 交易日历 | 新增独立 `TradingCalendarProvider`，通过 BaoStock TCP `query_trade_dates` 和 `GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD` | 新增本地 TCP 协议模拟、完整日期覆盖校验、缓存、OpenAPI 与独立开关；默认关闭。GitHub Runner 上 BaoStock TCP 连接/读取曾超时，真实日历响应和 NAS/Docker 验收未完成 |
 | 筹码分布 `get_chip_distribution` | 可选 Go MX API 路由和缓存 | 精确 publication available_at 仍缺失；输出降级质量，历史 as_of 不得倒灌 |
 | 基本面 `get_fundamental_context` | 无 | 必须区分报告期、披露日、财务指标单位、来源、缺失字段和适用市场 |
 | 个股资金流 `get_capital_flow_context` | 可选 Go MX API 路由；字段按人民币元规范化，5/10 日累计要求完整观测 | 自然语言查询返回的指标需要验证字段标签/单位；缺值不补零，精确 available_at 未实现 |
@@ -46,7 +47,7 @@
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
 | 新闻 / 公告 | Go 分析服务仍通过 Python bridge 的新闻搜索 / 能力接口 | 尚未建立 Go 原生搜索、公告数据契约与来源/发布时间/抓取时间模型 |
 
-当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/stocks/{symbol}/boards`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`、`GET /api/v1/market/breadth`、`GET /api/v1/market/limit-pools?type=up|down|broken`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。Profile、板块 ranking、市场广度和涨跌停池均有独立能力接口/配置；新增市场级能力默认关闭，待真实 Runner 全量覆盖和 NAS/Docker 环境验收后再启用。板块 ranking 和市场广度在供应商缺少可验证快照时点时标记 `degraded`，筹码和资金流只在 `MARKET_DATA_MX_ENABLED=true` 且 MX API Key 配置有效时启用。这不代表其他数据域已经切换到 Go。
+当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/stocks/{symbol}/boards`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`、`GET /api/v1/market/breadth`、`GET /api/v1/market/limit-pools?type=up|down|broken`、`GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。这些新增能力保持独立路由/开关；未通过 NAS/Docker 验收的能力默认关闭。
 
 ## 3. Go Provider 设计要求
 
@@ -55,7 +56,7 @@
 - `NamedProvider`：名称、版本和健康状态；
 - `QuoteProvider`：实时行情；
 - `DailyBarProvider`：历史 K 线；
-- 后续新增明确独立的能力接口：`IndexProvider`、`MarketBreadthProvider`、`SectorRankingProvider`、`ChipDistributionProvider`、`FundamentalsProvider`、`CapitalFlowProvider`、`DragonTigerProvider`、`LimitUpPoolProvider`、`NewsProvider`。
+- 后续新增明确独立的能力接口：`IndexProvider`、`MarketBreadthProvider`、`SectorRankingProvider`、`TradingCalendarProvider`、`ChipDistributionProvider`、`FundamentalsProvider`、`CapitalFlowProvider`、`DragonTigerProvider`、`LimitUpPoolProvider`、`NewsProvider`。
 
 不同能力应有独立数据模型、配置开关、超时 / 重试预算、熔断状态和测试；不能因一个供应商只支持报价就被排除，也不能把其日 K 能力默认为可用。
 

@@ -25,7 +25,6 @@ const (
 	messageTradeDateResponse = "34"
 	messageHistoryRequest    = "95"
 	messageCompressed        = "96"
-
 )
 
 var cdataTerminator = []byte("<![CDATA[]]>\n")

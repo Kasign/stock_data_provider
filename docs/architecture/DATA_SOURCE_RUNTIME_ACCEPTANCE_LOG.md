@@ -542,3 +542,12 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 ## 5.25 涨跌停池证券代码归属补正（2026-10-23）
 
 最新真实涨停池探测在返回样本中出现了北交所 `920xxx` 代码（例如 `920285`）。旧归一化仅将 `4xxxxxx/8xxxxxx` 前缀映射到 `.BJ`，因此会错误地把该批较新的北交所代码标为深交所。当前修正将 `920` 前缀也映射到 `.BJ`，并增加真实响应形态的契约回归测试。该修正只涉及证券代码归属，不改变上游返回计数。仍需当前 HEAD 的 Go CI 确认通过；所有新增国内市场开关保持关闭，直到目标 NAS/Docker 联调。
+
+
+## 5.26 国内交易日历 Go 接入与验收边界（2026-10-23）
+
+本轮分支新增 BaoStock 原生 TCP 交易日历协议（消息类型 33/34）、独立 `TradingCalendarProvider`、`GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD`、日期完整覆盖校验、缓存及独立默认关闭开关 `MARKET_DATA_BAOSTOCK_TRADING_CALENDAR_ENABLED=false`。本地协议测试用于验证请求与字段解析，不能替代对 BaoStock 上游的真实响应验证。
+
+GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Provider Probe 新增了日历结果契约检查。只有记录中出现 `capability=trading_calendar`、`status=returned` 且完整覆盖请求日期，才可认为该 Runner 本次实测成功；如果前序 BaoStock 连接失败，日历探测明确记为 `skipped`，不会额外发起一次重复超时请求。目标 NAS/Docker 环境仍需实测，功能开关保持关闭。
+
+当前修复后的最新 HEAD 尚需以其自身 Go CI 与 Runner 日志进行最终验收，不能沿用早前失败记录，也不能把工作流表层 success 等同于所有 Provider 都通过。
