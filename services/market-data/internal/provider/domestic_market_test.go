@@ -98,7 +98,7 @@ func TestEastmoneyFetchMarketBreadthAggregatesFullReturnedUniverse(t *testing.T)
 			http.NotFound(w, r)
 			return
 		}
-		if r.URL.Query().Get("pz") != "5000" {
+		if r.URL.Query().Get("pz") != "1000" {
 			t.Errorf("pz=%s", r.URL.Query().Get("pz"))
 		}
 		if r.URL.Query().Get("fid") != "f12" {
