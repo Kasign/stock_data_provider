@@ -1146,7 +1146,8 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		RC   *int `json:"rc"`
 		Data *struct {
 			Total int                          `json:"total"`
-			Diff  []map[string]json.RawMessage `json:"diff"`
+			Diff  json.RawMessage              `json:"diff"`
+			Rows  []map[string]json.RawMessage `json:"-"`
 		} `json:"data"`
 	}
 	fetchPage := func(page, pageSize int) (*marketListPayload, error) {
@@ -1175,6 +1176,11 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		if payload.Data == nil {
 			return nil, errors.New("Eastmoney market breadth returned no data object")
 		}
+		rows, decodeErr := decodeEastmoneyBoardRows(payload.Data.Diff)
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode Eastmoney market breadth rows: %w", decodeErr)
+		}
+		payload.Data.Rows = rows
 		return &payload, nil
 	}
 	first, err := fetchPage(1, eastmoneyMarketBreadthPageSize)
@@ -1189,7 +1195,7 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		return nil, fmt.Errorf("Eastmoney market breadth universe %d exceeds safety cap %d", total, eastmoneyMarketBreadthMaxSecurities)
 	}
 	pageSize := eastmoneyMarketBreadthPageSize
-	if len(first.Data.Diff) > 0 && len(first.Data.Diff) < pageSize && len(first.Data.Diff) < total {
+	if len(first.Data.Rows) > 0 && len(first.Data.Rows) < pageSize && len(first.Data.Diff) < total {
 		// Some public gateways cap pz. Derive page size from the first page and verify every subsequent page.
 		pageSize = len(first.Data.Diff)
 	}
@@ -1221,8 +1227,8 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		if remaining := total - len(rows); remaining < expected {
 			expected = remaining
 		}
-		if len(next.Data.Diff) != expected {
-			return nil, fmt.Errorf("Eastmoney market breadth page %d is incomplete: received %d of %d rows", page, len(next.Data.Diff), expected)
+		if len(next.Data.Rows) != expected {
+			return nil, fmt.Errorf("Eastmoney market breadth page %d is incomplete: received %d of %d rows", page, len(next.Data.Rows), expected)
 		}
 		rows = append(rows, next.Data.Diff...)
 		pageCount++
