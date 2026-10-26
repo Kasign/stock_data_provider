@@ -251,3 +251,11 @@
 
 
 - Issue #7 首轮 WebUI checks [#40256844942](https://github.com/Kasign/stock_data_provider/actions/runs/40256844942) 中 74/75 项 Node 测试通过，JS 语法检查通过，Nginx 镜像构建因测试失败跳过。唯一失败是沿用旧文案精确匹配“不会展示模拟通知”，而页面文案调整为“不会生成模拟通知”；已放宽为接受这两种等价表达，等待重新验收。
+
+
+## Issue #8 — 问股工作台与上下文状态（本批已提交，CI 待回填）
+- 问股页拆分会话栏、股票上下文、策略/分析模式、对话状态、消息操作与输入栏；明确呈现服务端 Chat API 缺失，当前不展示假会话或模型回答。
+- 增加基于当前页面最近一次成功真实行情响应的股票上下文摘要；进入问股页时同步当前行情上下文，用户可以清除。不会从旧会话/浏览器历史中恢复上下文，也不会将上下文发送到任何模型。
+- 新增 loading / empty / unavailable / error / loaded 五态状态函数，生产初始化固定为 unavailable。新会话、策略选择、发送、停止、复制、导出和重试按钮均保持禁用，直到后端 API/权限/取消契约存在。
+- 新增 `web/src/chat-state.js`、`web/tests/chat-state.test.mjs` 与 UI 契约测试；语法检查包含新模块。没有新增 Chat API，也没有使用 localStorage 保存假会话或消息。
+- 本批 CI 结果待核验；实际浏览器的流式体验/移动端输入栏，以及 NAS/Docker Chat API 联调尚未执行。

@@ -153,3 +153,11 @@
 - 当前 PR #2 Open、未合并，已验证 head `b5ed8af4851c1723b9df5e1e509c6bdb64768a48`；base SHA 仍为 `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。PR #1 Open、未合并，当前 head `b927362fc6482863b0085dbaaa5c4a0f156e10c6`；Go suite [#40256492883](https://github.com/Kasign/stock_data_provider/actions/runs/40256492883) 与 Live provider probe [#40256492893](https://github.com/Kasign/stock_data_provider/actions/runs/40256492893) 成功。
 - 通知 API 仍不存在；生产页只会显示 unavailable，不生成未读数/虚构通知。浏览器视觉验收和 NAS/Docker 联调仍未执行。
 - 下一项 Issue #8 将继续建设问股界面状态与股票上下文展示，保持发送禁用直到后端 Chat API 契约存在。
+
+
+## Issue #8 本批交接（2026-10-26，CI 待回填）
+- 本批开始核对的 PR #2 head：`af918da0484f872664e0ab1aa099c488b8558cd7`，Open、未合并；PR #2 base SHA 字段仍为 `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。该 head 的 WebUI checks [#40256998908](https://github.com/Kasign/stock_data_provider/actions/runs/40256998908) 已成功。
+- Issue #8 新增问股工作台布局和 Chat 五态状态函数。真实 Chat API、session CRUD、streaming、cancel/stop、策略清单都不存在，所以生产页面只显示 unavailable；发送/停止/策略/会话/复制/导出/重试均禁用。
+- 股票上下文只来自当前页面最后一次成功行情查询的 state.quote，进入问股页时显示，且用户可以清除；没有从旧聊天或 localStorage 恢复上下文，也不将其发送至服务端。
+- 新增 `web/src/chat-state.js`、`web/tests/chat-state.test.mjs`，package check 纳入新 JS 模块。CI 需对本批提交 SHA 核验后再回填结果。
+- 浏览器视觉与移动端实际测试、NAS/Docker/OpenResty Chat API 联调未执行。

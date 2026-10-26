@@ -1,6 +1,7 @@
 import { applyTheme, persistTheme, readTheme } from "./theme.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { resolveNotificationViewState } from "./notification-state.js";
+import { resolveChatViewState } from "./chat-state.js";
 import {
   analysisHealth,
   clearSettings,
@@ -68,7 +69,8 @@ const state = {
   supplementGeneration: 0,
   supplementSymbol: "",
   supplementLoading: false,
-  suppressedHistoryTaskId: ""
+  suppressedHistoryTaskId: "",
+  chatStockContext: null
 };
 
 function setText(selector, value) {
@@ -424,6 +426,37 @@ function renderNotificationState(snapshot) {
   return current;
 }
 
+function renderChatState(snapshot) {
+  const current = resolveChatViewState(snapshot);
+  document.querySelectorAll("[data-chat-state]").forEach((node) => {
+    node.hidden = node.dataset.chatState !== current;
+  });
+  const status = $("#chat-capability-status");
+  status.textContent = current === "unavailable" ? "Agent API 待接入"
+    : current === "loading" ? "正在载入"
+    : current === "error" ? "会话读取失败"
+    : current === "empty" ? "空会话" : "会话已载入";
+  status.className = "availability-pill " + (current === "loaded" || current === "empty" ? "is-readonly" : "is-unavailable");
+  return current;
+}
+
+function renderChatStockContext() {
+  const context = state.chatStockContext;
+  setText("#chat-stock-context", context ? (context.name ? context.name + " · " : "") + context.symbol : "未选择股票上下文");
+  setText("#chat-stock-context-status", context
+    ? "来自当前页面最近一次成功的真实行情查询。此上下文仅用于本页临时 UI 状态，尚未发送到任何模型。"
+    : "没有股票上下文；为避免串用旧会话，不会自动复用历史上下文。");
+  $("#chat-clear-context").disabled = !context;
+  $("#chat-clear-context").setAttribute("aria-disabled", String(!context));
+}
+
+function syncChatStockContextFromMarket() {
+  state.chatStockContext = state.quote && typeof state.quote.symbol === "string" && state.quote.symbol.trim()
+    ? { symbol: state.quote.symbol.trim(), name: String(state.quote.name || state.quote.symbol).trim() }
+    : null;
+  renderChatStockContext();
+}
+
 function errorMessage(error) {
   return describeApiError(error, "请求失败，请检查服务状态与浏览器网络面板。");
 }
@@ -445,6 +478,7 @@ const VIEW_META = Object.freeze({
 function setView(view, { updateHash = true } = {}) {
   const nextView = Object.hasOwn(VIEW_META, view) ? view : "market";
   state.view = nextView;
+  if (nextView === "chat") syncChatStockContextFromMarket();
   const runFlowDialog = $("#run-flow-dialog");
   if (nextView !== "tasks" && runFlowDialog?.open) runFlowDialog.close();
   document.querySelectorAll(".view").forEach((section) => {
@@ -658,6 +692,7 @@ async function loadSupplementalData() {
 
 function renderQuote(quote) {
   state.quote = quote;
+  if (state.view === "chat") syncChatStockContextFromMarket();
   const symbol = quote.symbol || getQuerySymbol();
   setText("#quote-title", `${quote.name || symbol}  ${symbol}`);
   setText("#quote-subtitle", `来源：${quote.source || "未知"} · 标准化版本：${quote.normalization_version || "—"}`);
@@ -1663,6 +1698,10 @@ window.addEventListener("hashchange", () => {
   setView(window.location.hash.slice(1), { updateHash: false });
 });
 $("#topbar-notifications").addEventListener("click", () => setView("notifications"));
+$("#chat-clear-context").addEventListener("click", () => {
+  state.chatStockContext = null;
+  renderChatStockContext();
+});
 $("#close-run-flow-dialog").addEventListener("click", () => $("#run-flow-dialog").close());
 $("#run-flow-dialog").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.close();
@@ -1832,6 +1871,8 @@ $("#copy-task-id").addEventListener("click", async () => {
 });
 
 renderNotificationState({ supported: false });
+renderChatState({ supported: false });
+renderChatStockContext();
 renderRecentTasks();
 renderWatchlist();
 configureDateInputs();

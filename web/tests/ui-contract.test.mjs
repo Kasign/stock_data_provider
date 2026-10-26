@@ -351,3 +351,26 @@ test("notification center exposes explicit five-state UI without fake unread cou
   assert.match(app, /renderNotificationState\(\{ supported: false \}\)/);
   assert.doesNotMatch(html, /notification-count|unread-count|未读\\s*\\d+/i);
 });
+
+
+test("chat workbench has context isolation and no production mock replies", () => {
+  for (const id of [
+    "chat-session-list-state", "chat-new-session", "chat-stock-context", "chat-clear-context",
+    "chat-mode-select", "chat-message-list", "chat-composer-input", "chat-send", "chat-stop",
+    "chat-copy-message", "chat-export-session", "chat-retry-message"
+  ]) assert.match(html, new RegExp('id="' + id + '"'), "missing chat control: " + id);
+  for (const state of ["loading", "empty", "unavailable", "error", "loaded"]) {
+    assert.match(html, new RegExp('data-chat-state="' + state + '"'));
+  }
+  assert.match(html, /不会用单次分析报告冒充多轮 AI 对话/);
+  assert.match(html, /不会自动复用历史上下文/);
+  assert.match(app, /function renderChatState\(snapshot\)[\s\S]*?resolveChatViewState\(snapshot\)/);
+  assert.match(app, /function syncChatStockContextFromMarket\(\)[\s\S]*?state\.quote && typeof state\.quote\.symbol/);
+  assert.match(app, /if \(nextView === "chat"\) syncChatStockContextFromMarket\(\)/);
+  assert.match(app, /state\.chatStockContext = null;[\s\S]*?renderChatStockContext\(\)/);
+  assert.match(app, /renderChatState\(\{ supported: false \}\)/);
+  assert.match(html, /id="chat-send" type="button" disabled/);
+  assert.match(html, /id="chat-stop" type="button" disabled/);
+  assert.match(html, /id="chat-mode-select" disabled/);
+  assert.doesNotMatch(app, /CHAT_SESSION_KEY|localStorage.*chat/i);
+});

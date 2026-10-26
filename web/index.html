@@ -272,21 +272,48 @@
 
         <section class="view feature-view" id="chat-view" hidden aria-labelledby="chat-title">
           <div class="page-heading">
-            <div><p class="eyebrow">RESEARCH / 04</p><h1 id="chat-title">问股工作台</h1><p class="page-subtitle">规划多轮对话、股票上下文和策略追问；只有服务端真实响应才会作为模型回答展示。</p></div>
-            <div class="feature-status"><span class="availability-pill is-unavailable">Agent API 待接入</span></div>
+            <div><p class="eyebrow">RESEARCH / 04</p><h1 id="chat-title">问股工作台</h1><p class="page-subtitle">在接入真实 Chat API 后支持多轮问答、股票上下文和策略研究；只有服务端返回的消息才会显示为模型回答。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable" id="chat-capability-status">Agent API 待接入</span></div>
           </div>
           <div class="chat-layout">
-            <section class="panel chat-sessions-panel" aria-labelledby="chat-sessions-title">
-              <div class="panel-heading"><div><h2 id="chat-sessions-title">会话</h2><p>会话列表由后端提供</p></div></div>
-              <div class="feature-empty compact"><div class="feature-empty-icon" aria-hidden="true">▤</div><strong>会话 API 尚未接入</strong><p>当前不会创建或保存虚构会话。</p></div>
-              <button class="button button-secondary" type="button" disabled aria-disabled="true">新建会话（待接入）</button>
-            </section>
+            <aside class="panel chat-sessions-panel" aria-labelledby="chat-sessions-title">
+              <div class="panel-heading"><div><h2 id="chat-sessions-title">会话</h2><p>会话列表需要服务端持久化</p></div><span class="availability-pill is-unavailable" id="chat-session-status">不可用</span></div>
+              <button class="button button-primary" id="chat-new-session" type="button" disabled aria-disabled="true">＋ 新建会话（待接入）</button>
+              <div class="chat-session-list-state" id="chat-session-list-state" role="status" aria-live="polite">
+                <span class="feature-empty-icon" aria-hidden="true">▤</span><strong>会话 API 尚未接入</strong><p>当前不会在浏览器里假建、删除或保存会话。</p>
+              </div>
+              <div id="chat-session-list" class="chat-session-list" hidden></div>
+            </aside>
+
             <section class="panel chat-conversation-panel" aria-labelledby="chat-conversation-title">
-              <div class="panel-heading"><div><h2 id="chat-conversation-title">策略问股</h2><p>行情上下文、策略清单和聊天内容均须来自真实接口</p></div><span class="availability-pill is-unavailable">暂不可用</span></div>
-              <div class="feature-empty chat-empty"><div class="feature-empty-icon" aria-hidden="true">✦</div><h3>连接对话服务后开始研究</h3><p>尚未接入 Chat、会话、流式响应和服务端停止 API。不会用单次分析报告冒充多轮 AI 对话。</p></div>
-              <form class="chat-composer" aria-label="问股输入（暂不可用）">
-                <label class="field"><span>问题</span><textarea id="chat-composer-input" rows="3" placeholder="等待问股接口接入" disabled aria-describedby="chat-composer-help"></textarea></label>
-                <div class="chat-composer-footer"><span id="chat-composer-help">服务端接口接入前，发送操作不可用。</span><button class="button button-primary" type="button" disabled aria-disabled="true">发送问题</button></div>
+              <div class="chat-panel-header">
+                <div><h2 id="chat-conversation-title">策略问股</h2><p>上下文与模式必须绑定当前会话，不沿用其他会话的旧响应。</p></div>
+                <span class="availability-pill is-unavailable">服务端待接入</span>
+              </div>
+              <div class="chat-context-strip">
+                <div class="chat-context-copy"><span class="chat-field-label">股票上下文</span><strong id="chat-stock-context">未选择股票上下文</strong><p id="chat-stock-context-status">从行情页进入后，可引用当前已查询的真实标的；不会复用上次会话的旧上下文。</p></div>
+                <button class="button button-secondary" id="chat-clear-context" type="button" disabled aria-disabled="true">清除上下文</button>
+              </div>
+              <div class="chat-mode-row">
+                <label class="field"><span>分析模式 / 策略</span><select id="chat-mode-select" disabled aria-disabled="true"><option>等待服务端策略清单</option></select></label>
+                <span class="field-hint">没有策略接口时，不预置虚构的可用模型或策略。</span>
+              </div>
+
+              <div class="chat-transcript" aria-label="对话消息">
+                <div class="chat-state" data-chat-state="loading" hidden role="status" aria-live="polite"><span class="chat-state-icon" aria-hidden="true">◌</span><strong>正在载入会话</strong><p>正在请求真实会话与消息记录。</p></div>
+                <div class="chat-state" data-chat-state="empty" hidden><span class="chat-state-icon" aria-hidden="true">✦</span><strong>新会话尚无消息</strong><p>发送首条消息后，真实对话会显示在这里。</p></div>
+                <div class="chat-state" data-chat-state="unavailable" role="status" aria-live="polite"><span class="chat-state-icon" aria-hidden="true">⊘</span><strong>对话服务尚未接入</strong><p>当前 Go API 没有 Chat、会话、流式响应或服务端停止端点。不会用单次分析报告冒充多轮 AI 对话。</p><span class="availability-pill is-unavailable">无法发送</span></div>
+                <div class="chat-state" data-chat-state="error" hidden role="alert"><span class="chat-state-icon" aria-hidden="true">!</span><strong>会话读取失败</strong><p id="chat-error-message">请求错误与诊断将在真实 API 接入后显示。</p><button class="button button-secondary" id="chat-retry" type="button" disabled aria-disabled="true">重试（待接入）</button></div>
+                <div id="chat-message-list" class="chat-message-list" data-chat-state="loaded" hidden aria-live="polite"></div>
+              </div>
+              <div class="chat-message-actions" aria-label="消息操作">
+                <button class="text-button" id="chat-copy-message" type="button" disabled aria-disabled="true">复制回复（待接入）</button>
+                <button class="text-button" id="chat-export-session" type="button" disabled aria-disabled="true">导出会话（待接入）</button>
+                <button class="text-button" id="chat-retry-message" type="button" disabled aria-disabled="true">重试回答（待接入）</button>
+              </div>
+              <form class="chat-composer" id="chat-composer-form" aria-label="问股输入（暂不可用）">
+                <label class="field"><span>问题</span><textarea id="chat-composer-input" rows="3" maxlength="8000" placeholder="等待问股接口接入" disabled aria-describedby="chat-composer-help"></textarea></label>
+                <div class="chat-composer-footer"><span id="chat-composer-help">发送与停止操作需要真实会话 ID 和服务端取消语义。</span><div class="chat-submit-actions"><button class="button button-secondary" id="chat-stop" type="button" disabled aria-disabled="true">停止（待接入）</button><button class="button button-primary" id="chat-send" type="button" disabled aria-disabled="true">发送问题</button></div></div>
               </form>
             </section>
           </div>
