@@ -346,11 +346,8 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 	} else if cacheErr != nil {
 		s.logger.Warn("index daily-bars cache read failed", "symbol", indexSymbol, "error", cacheErr)
 	}
-	if len(s.indexCatalogProviders) == 0 {
-		return nil, false, errors.New("no enabled index-catalog provider")
-	}
 	var failures []string
-	for _, p := range s.indexCatalogProviders {
+	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
