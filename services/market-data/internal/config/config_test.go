@@ -705,3 +705,25 @@ func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) 
 		t.Fatal("explicit opt-in must enable fundamentals")
 	}
 }
+
+func TestLoadAcceptsXueqiuInProviderPriority(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "providers.json")
+	data := `{"provider_priority":["eastmoney","tencent","xueqiu"],"adjustment_basis":"forward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":true,"daily_bars":true},"tencent":{"enabled":true,"quote":true,"daily_bars":true},"xueqiu":{"enabled":false,"hot_rankings":false}}}`
+	if err := os.WriteFile(file, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "")
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_XUEQIU_ENABLED", "")
+	t.Setenv("MARKET_DATA_XUEQIU_HOT_RANKINGS_ENABLED", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("configured Xueqiu priority should be accepted even when its capability is disabled: %v", err)
+	}
+	if len(cfg.ProviderPriority) != 3 || cfg.ProviderPriority[2] != "xueqiu" {
+		t.Fatalf("provider priority=%v, want [eastmoney tencent xueqiu]", cfg.ProviderPriority)
+	}
+}
