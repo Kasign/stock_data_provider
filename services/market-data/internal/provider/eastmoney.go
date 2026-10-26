@@ -819,7 +819,6 @@ func isEastmoneyHostname(host string) bool {
 	return host == "eastmoney.com" || strings.HasSuffix(host, ".eastmoney.com")
 }
 
-
 const (
 	eastmoneyStockSearchIndexTTL   = 6 * time.Hour
 	eastmoneyStockSearchPageSize   = 5000

@@ -486,7 +486,6 @@ func TestMarketIndicesEndpointUsesDedicatedIndexCapability(t *testing.T) {
 	}
 }
 
-
 func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p},

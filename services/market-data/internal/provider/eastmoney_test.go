@@ -447,7 +447,6 @@ func TestEastmoneyFetchIndexQuotesPreservesMissingAmountAsDegraded(t *testing.T)
 	}
 }
 
-
 func TestEastmoneySearchStocksUsesAndCachesRealDirectoryShape(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

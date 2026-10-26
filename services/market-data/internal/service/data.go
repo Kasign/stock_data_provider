@@ -808,7 +808,6 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 	return nil, false, fmt.Errorf("all stock-basic providers failed: %s", strings.Join(failures, "; "))
 }
 
-
 func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit int) (*model.StockSearchSnapshot, error) {
 	query := strings.TrimSpace(rawQuery)
 	if query == "" {
