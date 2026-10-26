@@ -26,9 +26,27 @@ func (s *Server) indexCatalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, snapshot)
 }
 
+func validateIndexProviderSource(rawSource string) (string, string) {
+	source := strings.ToLower(strings.TrimSpace(rawSource))
+	if source == "" {
+		return "", ""
+	}
+	switch source {
+	case "hithink", "tushare":
+		return source, ""
+	default:
+		return "", "source must be hithink or tushare"
+	}
+}
+
 func (s *Server) indexConstituents(w http.ResponseWriter, r *http.Request) {
 	indexSymbol := strings.TrimSpace(r.PathValue("symbol"))
-	snapshot, cacheHit, err := s.svc.IndexConstituents(r.Context(), indexSymbol)
+	source, validationErr := validateIndexProviderSource(r.URL.Query().Get("source"))
+	if validationErr != "" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", validationErr, requestID(r))
+		return
+	}
+	snapshot, cacheHit, err := s.svc.IndexConstituentsFromSource(r.Context(), indexSymbol, source)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return
@@ -68,7 +86,12 @@ func (s *Server) indexDailyBars(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", validationErr, requestID(r))
 		return
 	}
-	snapshot, cacheHit, err := s.svc.IndexDailyBars(r.Context(), r.PathValue("symbol"), start, end)
+	source, sourceErr := validateIndexProviderSource(r.URL.Query().Get("source"))
+	if sourceErr != "" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", sourceErr, requestID(r))
+		return
+	}
+	snapshot, cacheHit, err := s.svc.IndexDailyBarsFromSource(r.Context(), r.PathValue("symbol"), start, end, source)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return

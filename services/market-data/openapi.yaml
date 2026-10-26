@@ -989,6 +989,7 @@ paths:
         - ApiKeyAuth: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
+        - {name: source, in: query, required: false, description: Pin the provider to the source returned by the index catalog; omitted means configured priority fallback, schema: {type: string, enum: [hithink, tushare]}}
       responses:
         '200':
           description: 指数成分股票目录及来源质量
@@ -1009,6 +1010,7 @@ paths:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
         - {name: end, in: query, required: true, schema: {type: string, format: date}}
+        - {name: source, in: query, required: false, description: Pin the provider to the source returned by the index catalog; omitted means configured priority fallback, schema: {type: string, enum: [hithink, tushare]}}
       responses:
         '200':
           description: 指数历史日线及来源质量

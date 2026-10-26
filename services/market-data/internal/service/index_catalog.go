@@ -50,6 +50,20 @@ func validIndexCatalogTag(raw string) (string, error) {
 	}
 }
 
+func (s *DataService) indexCatalogProvidersForSource(rawSource string) ([]provider.IndexCatalogProvider, string, error) {
+	source := strings.ToLower(strings.TrimSpace(rawSource))
+	if source == "" {
+		return s.indexCatalogProviders, "auto", nil
+	}
+	for _, candidate := range s.indexCatalogProviders {
+		name := strings.ToLower(strings.TrimSpace(candidate.Name()))
+		if name == source {
+			return []provider.IndexCatalogProvider{candidate}, name, nil
+		}
+	}
+	return nil, source, fmt.Errorf("no enabled index-catalog provider named %q", source)
+}
+
 func validSnapshotQuality(q model.QualityStatus) bool {
 	return q == model.QualityValid || q == model.QualityDegraded || q == model.QualityUnknown
 }
@@ -183,11 +197,8 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 	} else if cacheErr != nil {
 		s.logger.Warn("index catalog cache read failed", "tag", tag, "error", cacheErr)
 	}
-	if len(s.indexCatalogProviders) == 0 {
-		return nil, false, errors.New("no enabled index-catalog provider")
-	}
 	var failures []string
-	for _, p := range s.indexCatalogProviders {
+	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -217,6 +228,10 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 }
 
 func (s *DataService) IndexConstituents(ctx context.Context, rawIndexSymbol string) (*model.IndexConstituentSnapshot, bool, error) {
+	return s.IndexConstituentsFromSource(ctx, rawIndexSymbol, "")
+}
+
+func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexSymbol, rawSource string) (*model.IndexConstituentSnapshot, bool, error) {
 	indexSymbol, err := canonicalIndexSymbol(rawIndexSymbol)
 	if err != nil {
 		return nil, false, err
@@ -227,7 +242,14 @@ func (s *DataService) IndexConstituents(ctx context.Context, rawIndexSymbol stri
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
-	key := "md:v1:index-constituents:" + indexSymbol
+	providers, sourceKey, sourceErr := s.indexCatalogProvidersForSource(rawSource)
+	if sourceErr != nil {
+		return nil, false, sourceErr
+	}
+	if len(providers) == 0 {
+		return nil, false, errors.New("no enabled index-catalog provider")
+	}
+	key := fmt.Sprintf("md:v2:index-constituents:%s:%s", sourceKey, indexSymbol)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexConstituentSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
@@ -242,11 +264,8 @@ func (s *DataService) IndexConstituents(ctx context.Context, rawIndexSymbol stri
 	} else if cacheErr != nil {
 		s.logger.Warn("index constituents cache read failed", "symbol", indexSymbol, "error", cacheErr)
 	}
-	if len(s.indexCatalogProviders) == 0 {
-		return nil, false, errors.New("no enabled index-catalog provider")
-	}
 	var failures []string
-	for _, p := range s.indexCatalogProviders {
+	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -276,6 +295,10 @@ func (s *DataService) IndexConstituents(ctx context.Context, rawIndexSymbol stri
 }
 
 func (s *DataService) IndexDailyBars(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate string) (*model.IndexDailyBarsSnapshot, bool, error) {
+	return s.IndexDailyBarsFromSource(ctx, rawIndexSymbol, rawStartDate, rawEndDate, "")
+}
+
+func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate, rawSource string) (*model.IndexDailyBarsSnapshot, bool, error) {
 	indexSymbol, err := canonicalIndexSymbol(rawIndexSymbol)
 	if err != nil {
 		return nil, false, err
@@ -301,7 +324,14 @@ func (s *DataService) IndexDailyBars(ctx context.Context, rawIndexSymbol, rawSta
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
-	key := fmt.Sprintf("md:v1:index-daily-bars:%s:%s:%s", indexSymbol, startDate, endDate)
+	providers, sourceKey, sourceErr := s.indexCatalogProvidersForSource(rawSource)
+	if sourceErr != nil {
+		return nil, false, sourceErr
+	}
+	if len(providers) == 0 {
+		return nil, false, errors.New("no enabled index-catalog provider")
+	}
+	key := fmt.Sprintf("md:v2:index-daily-bars:%s:%s:%s:%s", sourceKey, indexSymbol, startDate, endDate)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexDailyBarsSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
