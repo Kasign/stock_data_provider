@@ -77,7 +77,8 @@
       "valuations": false,
       "limit_pools": false,
       "dragon_tiger": false,
-      "announcements": false
+      "announcements": false,
+      "index_catalog": false
     },
     "tickflow": {
       "enabled": true,

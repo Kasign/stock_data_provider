@@ -12,9 +12,9 @@ func (s *Server) indexCatalog(w http.ResponseWriter, r *http.Request) {
 		tag = "cn_concept"
 	}
 	switch tag {
-	case "cn_concept", "region", "tszs", "industry":
+	case "cn_concept", "region", "tszs", "industry", "tushare":
 	default:
-		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "tag must be cn_concept, region, tszs or industry", requestID(r))
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "tag must be cn_concept, region, tszs, industry or tushare", requestID(r))
 		return
 	}
 	snapshot, cacheHit, err := s.svc.IndexCatalog(r.Context(), tag)

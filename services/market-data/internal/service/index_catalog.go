@@ -26,8 +26,8 @@ func (s *DataService) IndexCatalogProviders() []provider.IndexCatalogProvider {
 func canonicalIndexSymbol(raw string) (string, error) {
 	value := strings.ToUpper(strings.TrimSpace(raw))
 	parts := strings.Split(value, ".")
-	if len(parts) != 2 || (parts[1] != "TI" && parts[1] != "SH" && parts[1] != "SZ") || len(parts[0]) != 6 {
-		return "", fmt.Errorf("index symbol must be six digits with .TI/.SH/.SZ suffix: %q", raw)
+	if len(parts) != 2 || (parts[1] != "TI" && parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "CSI") || len(parts[0]) != 6 {
+		return "", fmt.Errorf("index symbol must be six digits with .TI/.SH/.SZ/.CSI suffix: %q", raw)
 	}
 	for _, r := range parts[0] {
 		if r < '0' || r > '9' {
@@ -43,10 +43,10 @@ func validIndexCatalogTag(raw string) (string, error) {
 		tag = "cn_concept"
 	}
 	switch tag {
-	case "cn_concept", "region", "tszs", "industry":
+	case "cn_concept", "region", "tszs", "industry", "tushare":
 		return tag, nil
 	default:
-		return "", fmt.Errorf("tag must be cn_concept, region, tszs or industry")
+		return "", fmt.Errorf("tag must be cn_concept, region, tszs, industry or tushare")
 	}
 }
 

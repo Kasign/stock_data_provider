@@ -861,6 +861,64 @@ paths:
         '502': {description: All sector-ranking providers failed}
         '503': {description: No sector-ranking provider enabled}
 
+  /api/v1/market/index-catalog:
+    get:
+      summary: 获取同花顺或 Tushare 国内指数目录
+      description: tag=tushare 返回 Tushare index_basic 目录；其他 tag 由兼容的同花顺 Provider 提供。Tushare 指数代码保留 .SH/.SZ/.CSI 后缀。
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - {name: tag, in: query, required: false, schema: {type: string, enum: [cn_concept, region, tszs, industry, tushare], default: cn_concept}}
+      responses:
+        '200':
+          description: 指数/板块目录和来源质量
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexCatalogSnapshot'}
+        '400': {description: Invalid index catalog tag}
+        '401': {description: API key required}
+        '502': {description: All index catalog providers failed}
+        '503': {description: No index catalog provider enabled}
+
+  /api/v1/market/indices/{symbol}/constituents:
+    get:
+      summary: 获取指定指数最近可用的成分股快照
+      description: Tushare 返回最近可用权重日，可能滞后于当前交易日；同花顺返回当前成分快照。
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
+      responses:
+        '200':
+          description: 指数成分股票目录及来源质量
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexConstituentSnapshot'}
+        '401': {description: API key required}
+        '502': {description: All index constituent providers failed}
+        '503': {description: No index catalog provider enabled}
+
+  /api/v1/market/indices/{symbol}/daily:
+    get:
+      summary: 获取指定指数的历史日线
+      description: Tushare 日线成交量以手为单位，成交额按千元换算为人民币元。
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: 指数历史日线及来源质量
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexDailyBarsSnapshot'}
+        '400': {description: Invalid date range or index symbol}
+        '401': {description: API key required}
+        '502': {description: All index daily-bar providers failed}
+        '503': {description: No index catalog provider enabled}
+
   /api/v1/market/indices:
     get:
       summary: Get quotes for an allow-listed set of core market indices

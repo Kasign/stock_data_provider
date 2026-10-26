@@ -307,3 +307,8 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - `popular` 对应 `/api/a-share/special-data/hot-stock-list?period=day`，`surge` 对应 `/api/a-share/special-data/skyrocket-list?period=day`。这些端点提供榜单字段，但不保证行情快照；Go 模型新增 `heat`、`rank_trend` 和可选 `provider_time`，不补造价格或涨跌幅。
 - 榜单按数据延迟/非交易信号处理，整体保持 `degraded`；供应商时间戳若存在，只表示数据准备时间。空榜单保持 `unknown`，不等于已证实无人上榜。
 - 启用条件：`MARKET_DATA_HITHINK_ENABLED=true`、`MARKET_DATA_HITHINK_API_KEY` 和 `MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED=true`；该能力默认关闭。本轮未运行测试或 CI。
+
+
+### Tushare 指数数据能力接入（2026-10-26）
+
+已增加 Go 原生 `index_basic`、`index_weight`、`index_daily` Provider 适配器，与同花顺的概念/行业指数目录分开标记；Tushare 目录使用 `tag=tushare`。指数成分只代表最近可用权重快照，指数日线保留 Tushare 成交量的“手”单位并将成交额千元转换为人民币元。该能力默认关闭，因账号权限、数据更新时点和单位仍需统一验收。
