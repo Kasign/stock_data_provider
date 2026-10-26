@@ -180,6 +180,14 @@ test("changing market API credentials invalidates old stock-search suggestions",
   assert.match(app, /function cancelStockSearchRequest\(\)[\s\S]*?state\.stockSearchGeneration \+= 1;/);
 });
 
+test("service health and provider-list refreshes ignore superseded responses", () => {
+  assert.match(app, /let serviceRefreshGeneration = 0;/);
+  assert.match(app, /let sourceRefreshGeneration = 0;/);
+  assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, stale: true \};/);
+  assert.match(app, /async function refreshSources\(\) \{[\s\S]*?const generation = \+\+sourceRefreshGeneration;[\s\S]*?if \(generation !== sourceRefreshGeneration\) return;/);
+  assert.match(app, /if \(result\.stale\) \{[\s\S]*?已忽略旧检查结果/);
+});
+
 test("filter changes clear stale errors even when a prior query returned no data", () => {
   assert.match(app, /function handleQuoteCriteriaChange\([^)]*\) \{\s*cancelQuoteQuery\(\{ clearResults: true,[\s\S]*?\}\);\s*\}/);
 });

@@ -91,6 +91,8 @@ function taskEventStatusTone(statusKey) {
 
 const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
 let initialConnectionDraft = null;
+let serviceRefreshGeneration = 0;
+let sourceRefreshGeneration = 0;
 
 const state = {
   settings: loadSettings(),
@@ -1422,19 +1424,22 @@ function renderSources(payload) {
 }
 
 async function refreshServices() {
+  const generation = ++serviceRefreshGeneration;
+  const settings = state.settings;
   const checks = await Promise.allSettled([
-    marketHealth(state.settings),
-    analysisHealth(state.settings)
+    marketHealth(settings),
+    analysisHealth(settings)
   ]);
   const marketOK = checks[0].status === "fulfilled";
   const analysisOK = checks[1].status === "fulfilled";
+  if (generation !== serviceRefreshGeneration) return { marketOK, analysisOK, stale: true };
   setServiceStatus("market", marketOK, marketOK ? "就绪" : "不可用");
   setServiceStatus("analysis", analysisOK, analysisOK ? "就绪" : "不可用");
   $("#connection-dot").classList.toggle("is-online", marketOK && analysisOK);
   $("#connection-dot").classList.toggle("is-offline", !marketOK && !analysisOK);
   setText("#connection-label", marketOK && analysisOK ? "服务已连接" : marketOK || analysisOK ? "部分连接" : "连接异常");
   if (!marketOK && checks[0].reason) setText("#query-hint", errorMessage(checks[0].reason));
-  return { marketOK, analysisOK };
+  return { marketOK, analysisOK, stale: false };
 }
 
 async function checkConnectionFromSettings() {
@@ -1446,6 +1451,11 @@ async function checkConnectionFromSettings() {
   output.className = "settings-inline-status";
   try {
     const result = await refreshServices();
+    if (result.stale) {
+      output.textContent = "连接配置已变化，已忽略旧检查结果，请重新检查。";
+      output.className = "settings-inline-status is-warning";
+      return;
+    }
     output.textContent = (result.marketOK ? "行情 API 就绪" : "行情 API 不可用") + "；" +
       (result.analysisOK ? "分析 API 就绪" : "分析 API 不可用") +
       "。健康检查不验证 Provider 的每次真实请求。";
@@ -1460,7 +1470,10 @@ async function checkConnectionFromSettings() {
 }
 
 async function refreshSources() {
-  if (!state.settings.apiKey) {
+  const generation = ++sourceRefreshGeneration;
+  const settings = state.settings;
+  if (!settings.apiKey) {
+    if (generation !== sourceRefreshGeneration) return;
     const list = $("#data-source-list");
     list.replaceChildren();
     const hint = document.createElement("div");
@@ -1472,9 +1485,11 @@ async function refreshSources() {
     return;
   }
   try {
-    const payload = await getDataSources(state.settings);
+    const payload = await getDataSources(settings);
+    if (generation !== sourceRefreshGeneration) return;
     renderSources(payload);
   } catch (error) {
+    if (generation !== sourceRefreshGeneration) return;
     const list = $("#data-source-list");
     list.replaceChildren();
     const hint = document.createElement("div");
