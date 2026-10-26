@@ -2625,6 +2625,10 @@ function applySettings(nextSettings) {
       symbol: $("#symbol-input").value.trim(),
       message: "行情连接配置已变更，旧快照已清除，请重新加载。"
     });
+    cancelStockSearchRequest();
+    state.stockSearchResults = [];
+    $("#stock-search-results").replaceChildren();
+    hideStockSearch();
   }
   initialConnectionDraft = null;
   $("#settings-dialog").close();

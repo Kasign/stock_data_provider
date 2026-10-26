@@ -175,6 +175,11 @@ test("stock research clears stale snapshots on reload, request errors, and missi
   assert.match(stockResearch, /if\(!append\)setQuality\("announcements-quality","invalid","读取失败"\)/);
 });
 
+test("changing market API credentials invalidates old stock-search suggestions", () => {
+  assert.match(app, /function applySettings\(nextSettings\) \{[\s\S]*?previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase[\s\S]*?cancelStockSearchRequest\(\);[\s\S]*?state\.stockSearchResults = \[\];[\s\S]*?\$\("#stock-search-results"\)\.replaceChildren\(\);[\s\S]*?hideStockSearch\(\);/);
+  assert.match(app, /function cancelStockSearchRequest\(\)[\s\S]*?state\.stockSearchGeneration \+= 1;/);
+});
+
 test("main quote query invalidates old snapshots when the symbol or filters change", () => {
   assert.match(app, /quoteQueryGeneration: 0/);
   assert.match(app, /function cancelQuoteQuery\(/);
