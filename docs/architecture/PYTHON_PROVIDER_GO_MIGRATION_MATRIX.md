@@ -146,3 +146,8 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 - 原生搜索按 `NEWS_STRATEGY_PROFILE`（ultra_short/short/medium/long = 1/3/7/30 天）与 `NEWS_MAX_AGE_DAYS` 的较小值筛选。来源发布时间无法解析、超出时效、无标题/无有效 HTTP(S) URL 的记录不会作为有效新闻返回；URL 与标题去重后按个股直接相关程度排序。
 - 如果未配置原生源，或者所有源都没有符合时效与数据契约的结果，继续使用原 Python Bridge 搜索。这样可以先切流验证，而不把新增代码等同于已经完全去 Python 化。
 - 本阶段只提供国内个股/市场新闻的首批原生采集；没有完整移植 Python 的垃圾信息过滤、官方媒体白名单、复杂语言排序和多维情报检索策略。Go CI / Runner 结果通过前，不把该阶段标为生产验收完成。
+
+
+## 原生新闻搜索真实探测开关（2026-10-26）
+
+`.github/workflows/live-provider-smoke.yml` 增加了 Go 原生新闻搜索的独立探测步骤：将 GitHub Secrets `BOCHA_API_KEYS` 与/或 `SEARXNG_BASE_URLS` 注入 Runner，实际查询贵州茅台近期期新闻并上传 `live-news-report` artifact。没有配置凭据时报告状态为 `skipped`，不会误报为接口通过。该探测与 market-data 的行情/龙虎榜/公告探测分开；即使搜索请求通过，也只代表当前配置源的单个查询窗口，不代表新闻覆盖率或长期可用性。

@@ -623,3 +623,10 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - 原生链新增 Bocha + 显式配置的自建 SearXNG，包含来源 URL、标题、源端发布时间、独立检索时间、时效过滤、重复记录去除、基础个股相关度排序及 10 分钟内存缓存。
 - 配置使用现有 Python 兼容环境名 `BOCHA_API_KEYS`、`SEARXNG_BASE_URLS`、`NEWS_MAX_AGE_DAYS`、`NEWS_STRATEGY_PROFILE`。原生搜索未配置或没有合格结果时仍回退 Python Bridge；分析器、存储、通知等其他 Bridge 能力不在本批次范围内。
 - 本批代码含 HTTP 模拟测试，覆盖 Bocha 请求契约、SearXNG 日期过滤/去重、Python Bridge 回退与缓存。当前提交未经过自身 CI，不能写成已通过；海外来源、原 Python 的复杂反垃圾准入与真实搜索 API 额度/网络验收仍待后续逐项补齐。
+
+
+## 16. Go 原生新闻搜索 Runner 探测设置（2026-10-26）
+
+- 新增 `TestLiveNativeNewsSearch`，受 `GO_NATIVE_NEWS_LIVE_TESTS=1` 控制；从现有 `BOCHA_API_KEYS`、`SEARXNG_BASE_URLS` 配置实际查询贵州茅台的最新新闻，并输出独立 `live-news-report.json`。
+- Live provider workflow 仅在仓库配置了相应 GitHub Secrets 时才会真正请求源站；没有凭据会输出 `skipped`，不能把跳过写成通过。该探测不把搜索引擎返回的空结果当作数据完整性失败，但会把所有已配置源均报错作为探测失败。
+- 本文记录为探测框架已加入；需要最新 HEAD 的 CI 与 live-provider-smoke workflow 运行结果，才能报告实际调用成功或被跳过。
