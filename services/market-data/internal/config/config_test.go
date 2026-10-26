@@ -203,6 +203,17 @@ func TestLoadRejectsMalformedProviderEndpointURL(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsMalformedNeteaseQuoteEndpointURL(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_NETEASE_QUOTE_URL", "file:///tmp/netease-quote")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("non-http NetEase quote endpoint must fail during configuration validation")
+	}
+}
+
 func TestLoadRejectsProviderEndpointWithInlineQuery(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
