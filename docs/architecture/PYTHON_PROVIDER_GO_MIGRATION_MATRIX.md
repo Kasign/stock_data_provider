@@ -31,7 +31,7 @@
 | 数据能力 / 原管理器入口 | 当前 Go 实现 | 当前缺口 |
 |---|---|---|
 | 个股实时行情 `get_realtime_quote` | Eastmoney、Tencent、Sina；Yahoo 为显式关闭的可选源 | GitHub Runner #100 中新浪、腾讯、东方财富均返回报价；腾讯和 Yahoo 因字段/成交额契约限制为 degraded，Yahoo 默认关闭；仍需逐项对照原 Fetcher 的字段补齐与市场路由 |
-| 日线历史 `get_daily_data` | Eastmoney、Tencent、Sina、BaoStock；Yahoo、网易已实现但默认关闭 | GitHub Runner #100 对 Eastmoney、Tencent（none/qfq）、Sina（none）、BaoStock（qfq）和 Yahoo（qfq）各返回 8 根样本 K 线；新浪/腾讯/Yahoo 缺可核验成交额时保持 null/unknown/degraded；网易探测本次因 HTTP 502 被跳过；仍未迁移 Efinance / AkShare / Pytdx / Tushare / TickFlow / Longbridge 等来源、指数专用链和市场路由 |
+| 日线历史 `get_daily_data` | Eastmoney、Tencent、Sina、BaoStock；Yahoo 默认关闭，网易当前配置启用为后置回退但目标网络未验收 | GitHub Runner #100 对 Eastmoney、Tencent（none/qfq）、Sina（none）、BaoStock（qfq）和 Yahoo（qfq）各返回 8 根样本 K 线；新浪/腾讯/Yahoo 缺可核验成交额时保持 null/unknown/degraded；网易探测本次因 HTTP 502 被跳过；仍未迁移 Efinance / AkShare / Pytdx / Tushare / TickFlow / Longbridge 等来源、指数专用链和市场路由 |
 | 指数实时报价 | 新增独立 `IndexQuoteProvider`、东方财富 `ulist.np/get` 适配器与 `GET /api/v1/market/indices`，仅覆盖 7 个白名单核心指数 | GitHub Runner #100 返回 7 条；接口发生 302 后跳转至 delay 域名并返回 200，源端未提供可解析行情时间，输出 degraded；默认关闭，目标部署容器仍待验收 |
 | 指数目录 / 成分 / 日线 | Hithink 专用指数目录、当前成分和历史日线；新增 Tushare index_basic、index_weight、index_daily，通过 tag=tushare 选择独立代码空间 | Hithink 使用 .TI/.SH/.SZ，Tushare 使用 .SH/.SZ/.CSI；当前成分按最近可用权重快照，日线成交量保留手、成交额从千元换算成人民币元；能力默认关闭并待统一验收 |
 | 市场涨跌统计 get_market_stats | Go MarketBreadthProvider 通过东方财富 getTopicZDFenBu 汇总涨跌分布，并通过 getTopicZTPool/getTopicDTPool 按同一报告日补充涨跌停总数；API 为 GET /api/v1/market/breadth | 上涨/下跌/平盘来自分布桶；涨停/跌停总数仅在独立池接口报告日期与分布日期一致时返回，获取失败或日期不一致返回 null。总成交额暂不输出（total_amount_cny=null），避免将缺失/部分金额误报为全市场合计；证券全集仍未用主数据独立校验，无源端精确快照时间，质量 degraded，待统一测试 |
@@ -96,7 +96,7 @@ BaoStock 的详细 Go 接入、按能力分工和验收条件见 [数据源扩�
 来源：[Live Provider Probe #100](https://github.com/Kasign/stock_data_provider/actions/runs/39941383744) 的 live-provider-report artifact（采样行情 600519.SH、日 K 600036.SH；报告请求区间 2026-09-18 至 2026-10-22）。本轮 artifact 的 K 线能力每次仅返回 8 根样本，不能据此证明完整区间覆盖率。
 
 - **报价**：新浪、腾讯、东方财富均返回；Yahoo 也返回但成交额缺失。新浪返回股数与人民币成交额字段；腾讯按其字段契约保留质量降级原因。各源时间戳不同，不可将抓取时间作为行情源时间，也不可直接视为同一时点进行价差判断。
-- **日 K**：新浪不复权、腾讯不复权/前复权、东方财富前复权、BaoStock 前复权和 Yahoo 前复权均返回样本。新浪、腾讯、Yahoo 的成交额缺失保持 null；未核验的金额不能通过价格乘成交量补造。网易本轮探测因 HTTP 502 被跳过，当前 Provider 默认关闭。
+- **日 K**：新浪不复权、腾讯不复权/前复权、东方财富前复权、BaoStock 前复权和 Yahoo 前复权均返回样本。新浪、腾讯、Yahoo 的成交额缺失保持 null；未核验的金额不能通过价格乘成交量补造。网易历史 CSV 曾返回 HTTP 502，因此不能视为已验收；当前配置仍启用为后置回退，目标部署若不希望使用可设置 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`。
 - **东方财富行业/概念榜、核心指数、个股板块**：本轮均返回数据；多个 push2 端点出现 302 并跳转至 push2delay 后得到 200。榜单和指数因源端快照时间不可核验而降级；个股板块返回 26 项，同样降级。相关 502/302 与请求诊断仍统一追踪于 [Issue #6](https://github.com/Kasign/stock_data_provider/issues/6)。
 - **市场广度**：返回 5,377 个计数记录，其中上涨 4,406、下跌 854、平盘 117；但证券全集未与证券主数据核对、源端快照时间缺失，且该端点不提供市场成交额，输出 degraded。不得仅因覆盖计数等于供应商报告总数就宣称完整全市场覆盖。
 - **涨跌停/炸板池**：本轮返回涨停池、跌停池、炸板池；上游报告总数依次为 82、6、12，涨停池样本只返回 30 项。各项缺少源端快照时间；默认仍关闭。
