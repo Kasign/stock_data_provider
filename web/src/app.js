@@ -119,6 +119,11 @@ const state = {
   pollTimer: null,
   pollGeneration: 0,
   isQuerying: false,
+  quoteQueryGeneration: 0,
+  quoteQueryController: null,
+  quoteQueryKey: "",
+  quoteQueryInput: "",
+  lastQueryInput: "",
   stockSearchTimer: null,
   stockSearchController: null,
   stockSearchGeneration: 0,
@@ -147,10 +152,6 @@ function setText(selector, value) {
 }
 
 function selectStockFromMarket(item, source = "市场榜单") {
-  if (state.isQuerying) {
-    setText("#query-hint", "当前行情查询仍在执行，请稍后再从" + source + "跳转。");
-    return;
-  }
   const symbol = String(item?.symbol || "").trim();
   if (!symbol) return;
   $("#symbol-input").value = symbol;
@@ -467,10 +468,6 @@ function handleWatchlistAction(event) {
   }
 
   if (action === "query") {
-    if (state.isQuerying) {
-      setWatchlistFeedback("当前行情查询尚未完成，请稍后再选择其他标的。", "error");
-      return;
-    }
     $("#symbol-input").value = symbol;
     setView("market");
     void runQuoteQuery();
@@ -636,7 +633,7 @@ function scheduleStockSearch() {
 }
 
 function chooseStockSearchResult(item) {
-  if (!item || state.isQuerying) return;
+  if (!item) return;
   cancelStockSearchRequest();
   state.selectedStockSearchItem = item;
   $("#symbol-input").value = item.symbol;
@@ -1503,62 +1500,155 @@ function configureDateInputs() {
   $("#bar-end-date").max = today;
 }
 
+function clearBarsDisplay(symbol, message = "当前条件尚无日 K 结果。") {
+  state.bars = [];
+  state.chartMeta = { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" };
+  const tbody = $("#bars-body");
+  tbody.replaceChildren();
+  const row = document.createElement("tr");
+  const cell = makeCell(message);
+  cell.colSpan = 9;
+  cell.className = "table-empty";
+  row.append(cell);
+  tbody.append(row);
+  setText("#bars-meta", "未加载");
+  setText("#bars-caption", `标准化 OHLC · ${symbol || "尚未选择"} · 未加载`);
+  setText("#bars-adjustment", "复权口径 —");
+  setText("#bars-warning", message);
+  renderTechnicalSummary(calculateTechnicalIndicators([]));
+  renderChartView();
+  $("#chart-empty").textContent = message;
+  $("#chart-empty").hidden = false;
+}
+
+function clearMarketQueryResults(symbol, message) {
+  const label = String(symbol || "").trim() || "当前标的";
+  clearQuoteDisplay(label, "failed");
+  clearBarsDisplay(label, message || "当前查询条件已变化，尚未读取新数据。");
+  clearBundleSnapshotMetadata();
+  setText("#last-updated", "—");
+  setText("#query-hint", message || "当前查询条件已变化，旧行情快照已清除。");
+  setNotice("", "info");
+  let normalizedSymbol = "";
+  try { normalizedSymbol = normalizeSymbol(label); } catch {}
+  resetSupplementPanel(normalizedSymbol);
+  stockResearch.invalidate(message || "当前查询条件已变化，请重新加载个股研究资料。");
+}
+
+function releaseQuoteQueryControls() {
+  $("#load-supplemental-button").disabled = !state.supplementSymbol || state.supplementLoading;
+  $("#quote-form").classList.remove("is-loading");
+  $("#quote-form button[type='submit']").disabled = false;
+}
+
+function cancelQuoteQuery({ clearResults = false, symbol = "", message = "当前行情查询已取消。" } = {}) {
+  const wasActive = state.isQuerying || Boolean(state.quoteQueryController);
+  if (wasActive) state.quoteQueryGeneration += 1;
+  const controller = state.quoteQueryController;
+  state.quoteQueryController = null;
+  state.quoteQueryKey = "";
+  state.isQuerying = false;
+  if (controller) controller.abort();
+  releaseQuoteQueryControls();
+  if (clearResults) {
+    clearMarketQueryResults(symbol || $("#symbol-input").value.trim(), message);
+    state.lastQueryInput = "";
+  }
+}
+
+function quoteQueryKey(symbol, startDate, endDate, limit, adjustment) {
+  return JSON.stringify([symbol, startDate, endDate, limit, adjustment, normalizeBasePath(state.settings.marketBase, "/market-api")]);
+}
+
+function handleQuoteCriteriaChange(message = "查询条件已变化，旧行情与日 K 已清除，请重新查询。") {
+  if (state.isQuerying || state.quote || state.bars.length || state.bundleSnapshot) {
+    cancelQuoteQuery({ clearResults: true, symbol: $("#symbol-input").value.trim(), message });
+  }
+}
+
+function handleSymbolInputChange() {
+  const current = $("#symbol-input").value.trim();
+  const activeInputChanged = state.isQuerying && current !== state.quoteQueryInput;
+  const displayedResultChanged = Boolean(state.lastQueryInput) && current !== state.lastQueryInput;
+  if (activeInputChanged || displayedResultChanged) {
+    cancelQuoteQuery({
+      clearResults: true,
+      symbol: current,
+      message: "标的输入已变化，旧行情、日 K 和相关研究快照已清除。请选择/确认新股票后重新查询。"
+    });
+  }
+}
+
 async function runQuoteQuery(event) {
   event?.preventDefault();
-  if (state.isQuerying) return;
   let symbol;
   let startDate;
   let endDate;
+  let limit;
+  let adjustment;
   try {
     symbol = getQuerySymbol();
     state.settings.marketBase = normalizeBasePath(state.settings.marketBase, "/market-api");
     startDate = $("#bar-start-date").value;
     endDate = $("#bar-end-date").value;
+    limit = Number($("#bar-limit").value) || 120;
+    adjustment = $("#adjustment").value;
     const today = shanghaiDateKey();
     if (startDate && endDate && startDate > endDate) throw new Error("开始日期不能晚于结束日期。");
     if (startDate && startDate > today) throw new Error("开始日期不能晚于上海时区的今天。");
     if (endDate && endDate > today) throw new Error("结束日期不能晚于上海时区的今天。");
   } catch (error) {
+    cancelQuoteQuery({ clearResults: true, symbol: $("#symbol-input").value.trim(), message: error.message });
     setNotice(error.message, "danger");
     return;
   }
-  resetSupplementPanel(symbol);
+  const requestKey = quoteQueryKey(symbol, startDate, endDate, limit, adjustment);
+  if (state.isQuerying && state.quoteQueryKey === requestKey) return;
+  if (state.isQuerying) cancelQuoteQuery();
   if (!state.settings.apiKey) {
+    cancelQuoteQuery({ clearResults: true, symbol, message: "请先在连接与密钥设置中配置行情 API Key。" });
     setNotice("请先打开“连接与密钥设置”，填写行情服务的 MARKET_DATA_API_KEY。", "warning");
     $("#settings-dialog").showModal();
     return;
   }
 
+  const generation = ++state.quoteQueryGeneration;
+  const controller = new AbortController();
+  state.quoteQueryController = controller;
+  state.quoteQueryKey = requestKey;
+  state.quoteQueryInput = $("#symbol-input").value.trim();
+  state.lastQueryInput = state.quoteQueryInput;
   state.isQuerying = true;
+  resetSupplementPanel(symbol);
   $("#load-supplemental-button").disabled = true;
   $("#quote-form").classList.add("is-loading");
   $("#quote-form button[type='submit']").disabled = true;
   setNotice("", "info");
   setText("#query-hint", `正在查询 ${symbol} 的实时行情与日 K…`);
-  clearQuoteDisplay(symbol, "loading");
-  clearBundleSnapshotMetadata();
-
-  const limit = Number($("#bar-limit").value) || 120;
-  const adjustment = $("#adjustment").value;
   let bundleResponse = null;
   let quoteResult;
   let barsResult;
   let usedLegacyBundleFallback = false;
 
-  if (!startDate && !endDate) {
-    // No custom date range: prefer one backend snapshot for a consistent quote + daily-bar view.
-    try {
-      bundleResponse = await getMarketBundle(state.settings, symbol, {
-        lookbackDays: Math.min(2000, Math.max(20, limit)),
-        adjustment
-      });
-    } catch (error) {
+  try {
+    clearQuoteDisplay(symbol, "loading");
+    clearBarsDisplay(symbol, "正在读取本次日 K，尚无新结果。");
+    clearBundleSnapshotMetadata();
+    if (!startDate && !endDate) {
+      // No custom date range: prefer one backend snapshot for a consistent quote + daily-bar view.
+      try {
+        bundleResponse = await getMarketBundle(state.settings, symbol, {
+          lookbackDays: Math.min(2000, Math.max(20, limit)),
+          adjustment
+        }, controller.signal);
+      } catch (error) {
+      if (controller.signal.aborted || generation !== state.quoteQueryGeneration) return;
       if (error.status === 404) {
         // Older deployed servers may not expose Bundle yet. Only this case falls back to two requests.
         usedLegacyBundleFallback = true;
         [quoteResult, barsResult] = await Promise.allSettled([
-          getQuote(state.settings, symbol),
-          getDailyBars(state.settings, symbol, { limit, adjustment })
+          getQuote(state.settings, symbol, controller.signal),
+          getDailyBars(state.settings, symbol, { limit, adjustment }, controller.signal)
         ]);
       } else {
         // Avoid retrying all providers through two endpoints after an aggregate Bundle failure.
@@ -1569,11 +1659,12 @@ async function runQuoteQuery(event) {
   } else {
     // Bundle has no start/end query parameters; honor explicit date ranges with the existing daily-bars API.
     [quoteResult, barsResult] = await Promise.allSettled([
-      getQuote(state.settings, symbol),
-      getDailyBars(state.settings, symbol, { limit, adjustment, start: startDate, end: endDate })
+      getQuote(state.settings, symbol, controller.signal),
+      getDailyBars(state.settings, symbol, { limit, adjustment, start: startDate, end: endDate }, controller.signal)
     ]);
   }
 
+  if (controller.signal.aborted || generation !== state.quoteQueryGeneration) return;
   if (bundleResponse) {
     renderBundleSnapshotMetadata(bundleResponse);
     const bundleBars = Array.isArray(bundleResponse.daily_bars) ? bundleResponse.daily_bars : [];
@@ -1636,12 +1727,20 @@ async function runQuoteQuery(event) {
     ? " · 当前服务未提供 Bundle 接口，已回退为两次独立请求"
     : "";
   setText("#query-hint", `请求标的：${symbol} · 日 K 上限：${limit} · 复权口径：${adjustment} · 日期：${startDate || "起始不限"} 至 ${endDate || "截至今天"}${compatibilityHint}`);
-  state.isQuerying = false;
-  $("#load-supplemental-button").disabled = !state.supplementSymbol || state.supplementLoading;
-  $("#quote-form").classList.remove("is-loading");
-  $("#quote-form button[type='submit']").disabled = false;
+  } catch (error) {
+    if (!controller.signal.aborted && generation === state.quoteQueryGeneration) {
+      clearMarketQueryResults(symbol, "本次行情结果无法展示，旧快照已清除。");
+      setNotice("行情查询结果处理失败：" + errorMessage(error), "danger");
+    }
+  } finally {
+    if (generation === state.quoteQueryGeneration) {
+      state.isQuerying = false;
+      state.quoteQueryController = null;
+      state.quoteQueryKey = "";
+      releaseQuoteQueryControls();
+    }
+  }
 }
-
 function renderRunStatus(status = "") {
   const target = $("#task-run-status-pill");
   const normalized = String(status || "").toLowerCase();
@@ -2521,7 +2620,11 @@ function applySettings(nextSettings) {
   const previousSettings = state.settings;
   state.settings = nextSettings;
   if (previousSettings.apiKey !== nextSettings.apiKey || previousSettings.marketBase !== nextSettings.marketBase) {
-    stockResearch.invalidate("行情连接配置已变更，请重新加载个股研究资料。");
+    cancelQuoteQuery({
+      clearResults: true,
+      symbol: $("#symbol-input").value.trim(),
+      message: "行情连接配置已变更，旧快照已清除，请重新加载。"
+    });
   }
   initialConnectionDraft = null;
   $("#settings-dialog").close();
@@ -2635,9 +2738,15 @@ $("#symbol-input").addEventListener("compositionend", () => {
   scheduleStockSearch();
 });
 $("#symbol-input").addEventListener("input", () => {
+  handleSymbolInputChange();
   const current = $("#symbol-input").value.trim();
   if (state.selectedStockSearchItem?.symbol !== current) state.selectedStockSearchItem = null;
   if (!state.stockSearchComposing) scheduleStockSearch();
+});
+["bar-start-date", "bar-end-date", "bar-limit", "adjustment"].forEach((id) => {
+  $("#" + id).addEventListener("change", () => {
+    handleQuoteCriteriaChange("日期范围、日 K 上限或复权口径已变化，旧行情与 K 线已清除，请重新查询。");
+  });
 });
 $("#symbol-input").addEventListener("keydown", handleStockSearchKeydown);
 $("#stock-search-results").addEventListener("mousedown", (event) => {

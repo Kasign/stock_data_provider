@@ -168,6 +168,18 @@ test("stock research clears stale snapshots on reload, request errors, and missi
   assert.match(stockResearch, /if\(!append\)setQuality\("announcements-quality","invalid","读取失败"\)/);
 });
 
+test("main quote query invalidates old snapshots when the symbol or filters change", () => {
+  assert.match(app, /quoteQueryGeneration: 0/);
+  assert.match(app, /function cancelQuoteQuery\(/);
+  assert.match(app, /function clearBarsDisplay\(/);
+  assert.match(app, /handleSymbolInputChange\(\)/);
+  assert.match(app, /handleQuoteCriteriaChange\(/);
+  assert.match(app, /controller\.signal\.aborted \|\| generation !== state\.quoteQueryGeneration/);
+  assert.match(app, /getDailyBars\(state\.settings, symbol, \{ limit, adjustment \}, controller\.signal\)/);
+  assert.match(app, /clearMarketQueryResults\(symbol, "本次行情结果无法展示，旧快照已清除。"\)/);
+  assert.match(app, /行情连接配置已变更，旧快照已清除，请重新加载。/);
+});
+
 test("dynamic API and browser-local data are not rendered through HTML strings", () => {
   assert.doesNotMatch(app, /\.innerHTML\s*=|insertAdjacentHTML|outerHTML|document\.write/, "use textContent and DOM nodes instead of HTML string sinks");
   assert.doesNotMatch(watchlistModule, /innerHTML|insertAdjacentHTML|outerHTML/);
