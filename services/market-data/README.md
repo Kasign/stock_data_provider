@@ -4,7 +4,7 @@
 
 ## 当前实现范围
 
-- 国内实时行情 Provider：东方财富、腾讯、新浪、Pytdx、网易财经；Pytdx 使用通达信协议的 Go 原生客户端作为末位回退源，无法保证公共行情服务器始终可连。Yahoo Finance 保留兼容代码但从默认优先级移除、所有能力默认关闭。
+- 国内实时行情 Provider：东方财富、腾讯、新浪、Pytdx、网易财经；Pytdx 使用通达信协议的 Go 原生客户端作为末位回退源，可通过 `MARKET_DATA_PYTDX_HOSTS` 配置逗号分隔的国内 TDX 服务器（`host` 或 `host:port`），连接按有限数量候选轮换并使用单地址超时。公共行情服务器仍不保证长期可连。Yahoo Finance 保留兼容代码但从默认优先级移除、所有能力默认关闭。
 - 国内日线 K 线 Provider：东方财富、BaoStock、TickFlow（免费历史日 K，有频率限制）、Pytdx、腾讯、新浪（仅 `none` 复权口径）、网易财经（仅 `none` 复权口径）；Tushare Pro 是另一个可选 Go HTTP Provider，需用户 Token，默认关闭且当前只支持原始不复权日 K。Pytdx 可通过通达信除权事件计算前/后复权，但与其他供应商复权因子的等价性需后续集中对账。TickFlow 实时行情仅在提供 API Key 并显式开启 quote 能力时可用。网易接口曾在 Runner 遇到 DNS / HTTP 502，现纳入国内回退配置，后续统一验收其网络可用性和质量。
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。

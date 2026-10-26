@@ -70,6 +70,7 @@ type Config struct {
 	TushareToken              string
 	TushareAPIURL             string
 	TickFlowAPIKey            string
+	PytdxHosts                []string
 	TickFlowAPIURL            string
 	TickFlowFreeAPIURL        string
 	BaostockHost              string
@@ -210,6 +211,7 @@ func Load() (Config, error) {
 		TickFlowAPIKey:            firstNonEmpty(os.Getenv("MARKET_DATA_TICKFLOW_API_KEY"), os.Getenv("TICKFLOW_API_KEY")),
 		TickFlowAPIURL:            get("MARKET_DATA_TICKFLOW_API_URL", get("TICKFLOW_BASE_URL", "https://api.tickflow.org")),
 		TickFlowFreeAPIURL:        get("MARKET_DATA_TICKFLOW_FREE_API_URL", get("TICKFLOW_FREE_BASE_URL", "https://free-api.tickflow.org")),
+		PytdxHosts:                splitList(get("MARKET_DATA_PYTDX_HOSTS", "")),
 		BaostockHost:              get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
 		BaostockPort:              integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
 		BaostockUserID:            get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),

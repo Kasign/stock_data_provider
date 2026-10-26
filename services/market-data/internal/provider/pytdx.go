@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/injoyai/ios"
 	"github.com/injoyai/tdx"
 	"github.com/injoyai/tdx/protocol"
 
@@ -29,13 +31,24 @@ type Pytdx struct {
 	timeout  time.Duration
 	rateMu   sync.Mutex
 	lastCall time.Time
+	hosts []string
+	hostIndex int
 }
 
-func NewPytdx(timeout time.Duration) *Pytdx {
+func NewPytdx(timeout time.Duration, configuredHosts ...string) *Pytdx {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
-	return &Pytdx{timeout: timeout}
+	hosts := make([]string, 0, len(configuredHosts))
+	for _, host := range configuredHosts {
+		if host = strings.TrimSpace(host); host != "" {
+			hosts = append(hosts, host)
+		}
+	}
+	if len(hosts) == 0 {
+		hosts = append(hosts, tdx.Hosts...)
+	}
+	return &Pytdx{timeout: timeout, hosts: hosts}
 }
 
 func (p *Pytdx) Name() string { return "pytdx" }
@@ -47,7 +60,48 @@ func (p *Pytdx) dial(ctx context.Context) (*tdx.Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	client, err := tdx.DialDefault()
+	if len(p.hosts) == 0 {
+		return nil, errors.New("Pytdx has no configured domestic quote servers")
+	}
+	dialTimeout := p.timeout
+	if dialTimeout > 1500*time.Millisecond {
+		dialTimeout = 1500 * time.Millisecond
+	}
+	// Each dial attempt checks only a small, rotating subset. A dead public server
+	// cannot stall a request while the library walks its entire built-in host list.
+	dial := func(dialCtx context.Context) (ios.ReadWriteCloser, string, error) {
+		p.rateMu.Lock()
+		start := p.hostIndex % len(p.hosts)
+		attempts := min(6, len(p.hosts))
+		p.hostIndex = (start + attempts) % len(p.hosts)
+		p.rateMu.Unlock()
+
+		var lastErr error
+		for i := 0; i < attempts; i++ {
+			if err := dialCtx.Err(); err != nil {
+				return nil, "", err
+			}
+			host := strings.TrimSpace(p.hosts[(start+i)%len(p.hosts)])
+			if host == "" {
+				continue
+			}
+			address := host
+			if _, _, err := net.SplitHostPort(address); err != nil {
+				address = net.JoinHostPort(strings.Trim(address, "[]"), "7709")
+			}
+			dialer := net.Dialer{Timeout: dialTimeout}
+			conn, err := dialer.DialContext(dialCtx, "tcp", address)
+			if err == nil {
+				return conn, address, nil
+			}
+			lastErr = err
+		}
+		if lastErr == nil {
+			lastErr = errors.New("no valid host in configured Pytdx server list")
+		}
+		return nil, "", fmt.Errorf("unable to connect to a configured TDX server: %w", lastErr)
+	}
+	client, err := tdx.DialWith(dial, tdx.WithRedial(), tdx.WithLevel(tdx.LevelError))
 	if err != nil {
 		return nil, fmt.Errorf("Pytdx connect to domestic quote server: %w", err)
 	}
