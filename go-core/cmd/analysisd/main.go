@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/marketdatahttp"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/pythonbridge"
 	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/newssearch"
+	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/pythonbridge"
 	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/application"
 	httptransport "github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/transport/http"
 )
