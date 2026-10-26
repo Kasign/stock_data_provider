@@ -25,21 +25,23 @@ type DragonTigerItem struct {
 	QualityReasons   []string      `json:"quality_reasons,omitempty"`
 }
 
-// DragonTigerSnapshot 表示指定交易日的龙虎榜分页。Total/Pages 是供应商计数，Items 仅对应请求页。
+// DragonTigerSnapshot 表示指定交易日的龙虎榜分页。Total/Pages 是供应商原始计数，Items 仅对应本页通过 A 股过滤的记录。
 type DragonTigerSnapshot struct {
-	TradeDate          string            `json:"trade_date"`
-	ProviderReportDate string            `json:"provider_report_date,omitempty"`
-	Page               int               `json:"page"`
-	PageSize           int               `json:"page_size"`
-	Total              int               `json:"total"`
-	Pages              int               `json:"pages"`
-	Returned           int               `json:"returned"`
-	HasData            bool              `json:"has_data"`
-	HasMore            bool              `json:"has_more"`
-	Items              []DragonTigerItem `json:"items"`
-	Source             string            `json:"source"`
-	SourceVersion      string            `json:"source_version"`
-	FetchedAt          time.Time         `json:"fetched_at"`
-	QualityStatus      QualityStatus     `json:"quality_status"`
-	QualityReasons     []string          `json:"quality_reasons,omitempty"`
+	TradeDate              string            `json:"trade_date"`
+	ProviderReportDate     string            `json:"provider_report_date,omitempty"`
+	Page                   int               `json:"page"`
+	PageSize               int               `json:"page_size"`
+	Total                  int               `json:"total"`
+	Pages                  int               `json:"pages"`
+	Returned               int               `json:"returned"`
+	SourceReturned         int               `json:"source_returned"`
+	ExcludedNonAShareCount int               `json:"excluded_non_a_share_count"`
+	HasData                bool              `json:"has_data"`
+	HasMore                bool              `json:"has_more"`
+	Items                  []DragonTigerItem `json:"items"`
+	Source                 string            `json:"source"`
+	SourceVersion          string            `json:"source_version"`
+	FetchedAt              time.Time         `json:"fetched_at"`
+	QualityStatus          QualityStatus     `json:"quality_status"`
+	QualityReasons         []string          `json:"quality_reasons,omitempty"`
 }

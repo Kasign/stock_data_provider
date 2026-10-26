@@ -580,3 +580,11 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - Live Provider Probe #104 外层 workflow 显示 `success`，但内部 `Query public providers and capture sanitized responses` 步骤失败，且本轮没有上传报告 artifact。故按实际测试步骤认定本轮真实探测未通过。
 - 龙虎榜请求实际返回 HTTP 200，响应体为 `{"version":null,"result":null,"success":false,"message":"返回数据为空","code":9201}`；当时请求日为 2026-10-25（星期日），因此不能据此断定接口不可用。此前解析器未识别无数据 envelope，错误地报为缺少 `result/count`。
 - 后续修复将明确的 `code=9201/message=返回数据为空` 映射为 `quality_status=unknown`、短缓存空报表，并从 BaoStock 交易日历选择最近一个已结束的交易日进行真实探测。该修复已进入下一提交，但尚未通过其自身 CI 与 Runner，不能宣称龙虎榜真实接口已验收。
+
+
+## 10. 龙虎榜混合证券过滤与计数契约（2026-10-26）
+
+- Live Provider Probe #107 的端点请求返回 HTTP 200，针对交易日历选出的 2026-10-23 获取到两页龙虎榜数据。单页解析在第 48 条失败的原因为 `SECURITY_CODE=113711`、`SECUCODE=113711.SH`、`SECURITY_TYPE_CODE=060`：这是常青转债而非 A 股普通股票；上游的交易所后缀与股票代码前缀规则不兼容，不能篡改成 A 股代码。
+- 本批只过滤已明确识别的 `SECURITY_TYPE_CODE=060` 可转债行，并保留供应商 `total/pages`；新增 `source_returned`、`returned`、`excluded_non_a_share_count` 三个计数，要求原始页行数 = 可用 A 股行数 + 被排除非 A 股行数。
+- 只含非 A 股证券的页返回 `quality_status=unknown`、`has_data=false`，仍保留 source page/has_more 信息，不误标为零上榜。混合页保留符合 A 股身份的行并附加排除质量原因。
+- 上述修改还未由自身 commit 的 Go CI/真实 Probe 验证；DragonTiger Provider 依旧独立开关默认关闭，NAS/Docker 部署验收仍未完成。

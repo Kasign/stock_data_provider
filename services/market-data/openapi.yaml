@@ -369,7 +369,7 @@ components:
         quality_reasons: {type: array, items: {type: string}}
     DragonTigerSnapshot:
       type: object
-      required: [trade_date, page, page_size, total, pages, returned, has_data, has_more, items, source, fetched_at, quality_status]
+      required: [trade_date, page, page_size, total, pages, returned, source_returned, excluded_non_a_share_count, has_data, has_more, items, source, fetched_at, quality_status]
       properties:
         trade_date: {type: string, format: date}
         provider_report_date: {type: string, format: date, nullable: true}
@@ -377,8 +377,10 @@ components:
         page_size: {type: integer, minimum: 1}
         total: {type: integer, minimum: 0, description: Provider-reported rows across pages}
         pages: {type: integer, minimum: 0}
-        returned: {type: integer, minimum: 0, description: Actual row count in this page}
-        has_data: {type: boolean, description: False means no provider records currently returned, not a verified zero}
+        returned: {type: integer, minimum: 0, description: Accepted A-share stock rows in this provider page}
+        source_returned: {type: integer, minimum: 0, description: Raw records returned by the provider for this page before filtering non-A-share products}
+        excluded_non_a_share_count: {type: integer, minimum: 0, description: Known non-A-share records, such as convertible bonds, excluded from returned items}
+        has_data: {type: boolean, description: False means no supported A-share row on this page; inspect excluded count and has_more}
         has_more: {type: boolean}
         items: {type: array, items: {$ref: '#/components/schemas/DragonTigerItem'}}
         source: {type: string}

@@ -67,7 +67,8 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		// 该响应表示“当前没有可用报表”，不能伪造成经过确认的零上榜。
 		if payload.Code == 9201 && strings.TrimSpace(payload.Message) == "返回数据为空" {
 			return &model.DragonTigerSnapshot{
-				TradeDate: tradeDate, Page: page, PageSize: pageSize,
+				TradeDate: tradeDate, Page: page, PageSize: pageSize, Total: 0, Pages: 0,
+				Returned: 0, SourceReturned: 0, ExcludedNonAShareCount: 0, HasData: false, HasMore: false,
 				Items: []model.DragonTigerItem{}, Source: p.Name(),
 				SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: time.Now().UTC(),
 				QualityStatus:  model.QualityUnknown,
@@ -93,8 +94,9 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 			return nil, errors.New("Eastmoney dragon-tiger reported zero total with non-empty rows")
 		}
 		return &model.DragonTigerSnapshot{
-			TradeDate: tradeDate, Page: page, PageSize: pageSize, Items: []model.DragonTigerItem{},
-			Source: p.Name(), SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: time.Now().UTC(),
+			TradeDate: tradeDate, Page: page, PageSize: pageSize, Total: 0, Pages: 0,
+			Returned: 0, SourceReturned: 0, ExcludedNonAShareCount: 0, HasData: false, HasMore: false,
+			Items: []model.DragonTigerItem{}, Source: p.Name(), SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: time.Now().UTC(),
 			QualityStatus:  model.QualityUnknown,
 			QualityReasons: []string{"provider_returned_empty_report_cannot_distinguish_no_events_from_unavailable_or_not_yet_published"},
 		}, nil
@@ -115,18 +117,29 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.DragonTigerSnapshot{
 		TradeDate: tradeDate, ProviderReportDate: tradeDate,
-		Page: page, PageSize: pageSize, Total: total, Pages: pages, Returned: len(payload.Result.Data),
-		HasData: true, HasMore: page < pages, Items: make([]model.DragonTigerItem, 0, len(payload.Result.Data)),
+		Page: page, PageSize: pageSize, Total: total, Pages: pages,
+		Returned: 0, SourceReturned: len(payload.Result.Data), ExcludedNonAShareCount: 0,
+		HasData: false, HasMore: page < pages, Items: make([]model.DragonTigerItem, 0, len(payload.Result.Data)),
 		Source: p.Name(), SourceVersion: "eastmoney-datacenter-dragon-tiger-v1",
 		FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 	}
 	for index, raw := range payload.Result.Data {
+		securityType := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_TYPE_CODE"))
+		date := normalizeDragonTigerDate(parseEastmoneyBoardString(raw, "TRADE_DATE"))
+		if date != tradeDate {
+			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d trade date %q does not match requested date %q", index, date, tradeDate)
+		}
+		if securityType == "060" {
+			// 东方财富龙虎榜返回中包含可转债（例如代码 113711），不能把它混入 A 股股票分析。
+			// 保留供应商原始总数与分页，并单独统计排除行数。
+			snapshot.ExcludedNonAShareCount++
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_non_a_share_security_rows_excluded")
+			continue
+		}
 		code := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_CODE"))
 		symbol, normalizedCode, symbolErr := eastmoneyDragonTigerSymbol(raw, code)
-		date := normalizeDragonTigerDate(parseEastmoneyBoardString(raw, "TRADE_DATE"))
 		name := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_NAME_ABBR"))
 		securityCode := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECUCODE"))
-		securityType := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_TYPE_CODE"))
 		if symbolErr != nil {
 			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d has unsupported security identity: code=%q secucode=%q security_type=%q: %w", index, code, securityCode, securityType, symbolErr)
 		}
@@ -164,7 +177,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 			Symbol: symbol, Code: normalizedCode, Name: name, TradeDate: date,
 			ChangePercent: changePercent, ClosePrice: closePrice, NetBuyAmountCNY: netBuy,
 			BuyAmountCNY: buy, SellAmountCNY: sell, DealAmountCNY: deal, DealAmountRatio: dealRatio,
-			Reason: reason, Explanation: explanation, SecurityTypeCode: strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_TYPE_CODE")),
+			Reason: reason, Explanation: explanation, SecurityTypeCode: securityType,
 			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt,
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		}
@@ -173,8 +186,18 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		}
 		snapshot.Items = append(snapshot.Items, item)
 	}
-	if snapshot.Returned != len(snapshot.Items) {
-		return nil, errors.New("Eastmoney dragon-tiger decoded row count mismatch")
+	if snapshot.ExcludedNonAShareCount > 0 {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_non_a_share_security_rows_excluded")
+	}
+	snapshot.Returned = len(snapshot.Items)
+	snapshot.HasData = snapshot.Returned > 0
+	if !snapshot.HasData {
+		// 当前供应商页可能只含可转债等非 A 股数据，不能当作“没有上榜股票”的确证。
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_page_contains_no_supported_a_share_rows")
+	}
+	if snapshot.SourceReturned != snapshot.Returned+snapshot.ExcludedNonAShareCount {
+		return nil, errors.New("Eastmoney dragon-tiger source/accepted/excluded row counts do not reconcile")
 	}
 	return snapshot, nil
 }

@@ -117,3 +117,10 @@ BaoStock 的详细 Go 接入、按能力分工和验收条件见 [数据源扩�
 ## 龙虎榜首次真实端点响应与探测日期修正（2026-10-26）
 
 Live Provider Probe #104 的内部探测步骤失败于龙虎榜：请求实际返回 HTTP 200，但 JSON 为 `{"result":null,"success":false,"message":"返回数据为空","code":9201}`。这次请求日是 2026-10-25（星期日），不是有效交易日；不能把它计为接口稳定性失败，也不能将该空响应解读为已确认零上榜。Provider 现在将明确的 9201 空报表保留为 `quality_status=unknown`，Runner 改为从 BaoStock 交易日历选择最近一个已结束的交易日后再测；新逻辑待下一轮真实 Runner 验收。
+
+
+## 龙虎榜证券范围与分页质量计数（2026-10-26）
+
+Live Provider Probe #107 请求 2026-10-23 的真实东方财富龙虎榜后，发现供应商报表的第 48 条为 `113711.SH`、`SECURITY_TYPE_CODE=060`。东方财富债券页面明确列出 113711 为常青转债（可转债），而龙虎榜页面会在“全部”视图中混合显示个股和可转债；因此不能将该记录强行标准化为 A 股普通股票（[东方财富常青转债页面](https://quote.eastmoney.com/bond/sh113711.html)，[东方财富龙虎榜说明页](https://datapc.eastmoney.com/emdatacenter/ranking/index)）。
+
+现在 API 将 `total/pages` 解释为供应商原始报表计数，另行返回 `source_returned`（本页原始行数）、`returned`（过滤后符合 A 股股票契约的本页行数）、`excluded_non_a_share_count`（已识别并排除的非 A 股证券数）。三者必须满足 `source_returned = returned + excluded_non_a_share_count`。已识别可转债会加入 `provider_non_a_share_security_rows_excluded` 质量原因；若某页只有被排除的非 A 股证券，返回 unknown 空页及保留的 has_more 分页信息，不得把它说成当日全市场没有股票上榜。该修复等待当前 HEAD 的 Go CI 和新一轮真实 Runner 结果。

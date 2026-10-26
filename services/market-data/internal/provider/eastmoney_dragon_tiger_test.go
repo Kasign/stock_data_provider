@@ -38,7 +38,7 @@ func TestEastmoneyFetchDragonTigerPreservesUnitsDateAndPagination(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.TradeDate != "2026-10-22" || got.ProviderReportDate != "2026-10-22" || got.Page != 2 || got.PageSize != 1 || got.Total != 3 || got.Pages != 3 || got.Returned != 1 || !got.HasMore {
+	if got.TradeDate != "2026-10-22" || got.ProviderReportDate != "2026-10-22" || got.Page != 2 || got.PageSize != 1 || got.Total != 3 || got.Pages != 3 || got.SourceReturned != 1 || got.Returned != 1 || got.ExcludedNonAShareCount != 0 || !got.HasMore {
 		t.Fatalf("unexpected dragon-tiger snapshot: %+v", got)
 	}
 	if got.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") {
@@ -81,6 +81,65 @@ func TestEastmoneyFetchDragonTigerRejectsRowsForDifferentTradeDate(t *testing.T)
 	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
 	if _, err := p.FetchDragonTiger(context.Background(), "2026-10-22", 1, 100); err == nil {
 		t.Fatal("provider must reject rows for a different trade date")
+	}
+}
+
+func TestEastmoneyFetchDragonTigerExcludesConvertibleBondRecords(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":2,"data":[
+			{"SECURITY_CODE":"600519","SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-10-23 00:00:00","CLOSE_PRICE":"1313.31","CHANGE_RATE":"1.25","BILLBOARD_NET_AMT":"123456.78","BILLBOARD_BUY_AMT":"234567.89","BILLBOARD_SELL_AMT":"111111.11","BILLBOARD_DEAL_AMT":"345678.90","DEAL_AMOUNT_RATIO":"2.4","EXPLAIN":"日涨幅偏离值达到7%","SECURITY_TYPE_CODE":"058001001"},
+			{"SECURITY_CODE":"113711","SECUCODE":"113711.SH","SECURITY_NAME_ABBR":"N常青转","TRADE_DATE":"2026-10-23 00:00:00","CLOSE_PRICE":"137.93","CHANGE_RATE":"37.93","BILLBOARD_NET_AMT":"7284700","BILLBOARD_BUY_AMT":"32062300","BILLBOARD_SELL_AMT":"24777600","BILLBOARD_DEAL_AMT":"90319700","DEAL_AMOUNT_RATIO":"62.93","EXPLAIN":"可转债上市首日交易公开信息","SECURITY_TYPE_CODE":"060"}
+		]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchDragonTiger(context.Background(), "2026-10-23", 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 2 || got.Pages != 1 || got.SourceReturned != 2 || got.Returned != 1 || got.ExcludedNonAShareCount != 1 || !got.HasData {
+		t.Fatalf("provider/source row counts were not preserved: %+v", got)
+	}
+	if len(got.Items) != 1 || got.Items[0].Symbol != "600519.SH" {
+		t.Fatalf("only the valid A-share row should remain: %+v", got.Items)
+	}
+	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_non_a_share_security_rows_excluded") {
+		t.Fatalf("non-A-share exclusion should be visible in quality reasons: %+v", got.QualityReasons)
+	}
+}
+
+func TestEastmoneyFetchDragonTigerBondOnlyPageRemainsUnknown(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":1,"data":[{"SECURITY_CODE":"113711","SECUCODE":"113711.SH","SECURITY_NAME_ABBR":"N常青转","TRADE_DATE":"2026-10-23 00:00:00","BILLBOARD_NET_AMT":"7284700","BILLBOARD_BUY_AMT":"32062300","BILLBOARD_SELL_AMT":"24777600","BILLBOARD_DEAL_AMT":"90319700","DEAL_AMOUNT_RATIO":"62.93","EXPLAIN":"可转债上市首日交易公开信息","SECURITY_TYPE_CODE":"060"}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchDragonTiger(context.Background(), "2026-10-23", 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.HasData || got.Total != 1 || got.Pages != 1 || got.SourceReturned != 1 ||
+		got.Returned != 0 || got.ExcludedNonAShareCount != 1 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("bond-only provider page must be unknown, not a confirmed empty stock report: %+v", got)
+	}
+}
+
+func TestEastmoneyFetchDragonTigerBondOnlyPageRemainsUnknown(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":1,"data":[{"SECURITY_CODE":"113711","SECUCODE":"113711.SH","SECURITY_NAME_ABBR":"N常青转","TRADE_DATE":"2026-10-23 00:00:00","BILLBOARD_NET_AMT":"7284700","BILLBOARD_BUY_AMT":"32062300","BILLBOARD_SELL_AMT":"24777600","BILLBOARD_DEAL_AMT":"90319700","DEAL_AMOUNT_RATIO":"62.93","EXPLAIN":"可转债上市首日交易公开信息","SECURITY_TYPE_CODE":"060"}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchDragonTiger(context.Background(), "2026-10-23", 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.HasData || got.Total != 1 || got.Pages != 1 || got.SourceReturned != 1 ||
+		got.Returned != 0 || got.ExcludedNonAShareCount != 1 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("bond-only provider page must be unknown, not a confirmed empty stock report: %+v", got)
 	}
 }
 

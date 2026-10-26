@@ -718,11 +718,14 @@ func TestLiveProviderProbe(t *testing.T) {
 		case item == nil || item.TradeDate != tradeDate || item.Source != "eastmoney":
 			result.Status, result.Error, result.DragonTiger = "invalid", "dragon-tiger date/source contract mismatch", item
 			failures = append(failures, "eastmoney dragon_tiger: identity mismatch")
+		case item.Total < item.SourceReturned || item.SourceReturned != item.Returned+item.ExcludedNonAShareCount || item.Returned != len(item.Items):
+			result.Status, result.Error, result.DragonTiger = "invalid", "dragon-tiger source/accepted/excluded count mismatch", item
+			failures = append(failures, "eastmoney dragon_tiger: source/accepted/excluded count mismatch")
 		case !item.HasData:
-			// 空结果可能是非交易日或盘后报告尚未发布，不代表已确认零上榜。
+			// 当前源分页可能只含非 A 股记录；保持 unknown，不把它归为确定的零上榜。
 			result.Status, result.DragonTiger = "empty", item
-		case item.Total < item.Returned || item.Returned != len(item.Items) || item.Returned == 0 || item.Pages < 1:
-			result.Status, result.Error, result.DragonTiger = "invalid", "dragon-tiger count/page contract mismatch", item
+		case item.Total < item.Returned || item.Returned == 0 || item.Pages < 1:
+			result.Status, result.Error, result.DragonTiger = "invalid", "dragon-tiger page contract mismatch", item
 			failures = append(failures, "eastmoney dragon_tiger: incomplete page contract")
 		default:
 			result.Status, result.DragonTiger = "returned", item

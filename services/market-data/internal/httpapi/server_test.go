@@ -64,7 +64,7 @@ func (httpFakeProvider) FetchDragonTiger(_ context.Context, tradeDate string, pa
 	}
 	return &model.DragonTigerSnapshot{
 		TradeDate: tradeDate, ProviderReportDate: tradeDate, Page: page, PageSize: pageSize,
-		Total: 1, Pages: 1, Returned: 1, HasData: true, HasMore: false,
+		Total: 1, Pages: 1, Returned: 1, SourceReturned: 1, ExcludedNonAShareCount: 0, HasData: true, HasMore: false,
 		Items: []model.DragonTigerItem{item}, Source: "eastmoney", SourceVersion: "test",
 		FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}, nil

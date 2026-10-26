@@ -455,11 +455,15 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
 		return errors.New("dragon-tiger source or fetched_at is missing")
 	}
-	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize {
-		return errors.New("dragon-tiger totals or returned count are invalid")
+	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.SourceReturned < 0 ||
+		snapshot.ExcludedNonAShareCount < 0 || snapshot.Returned != len(snapshot.Items) ||
+		snapshot.Returned > snapshot.SourceReturned ||
+		snapshot.SourceReturned != snapshot.Returned+snapshot.ExcludedNonAShareCount {
+		return errors.New("dragon-tiger totals or source/accepted/excluded row counts are invalid")
 	}
 	if snapshot.HasData {
-		if snapshot.Total <= 0 || snapshot.Pages <= 0 || snapshot.Returned == 0 || snapshot.Total < snapshot.Returned {
+		if snapshot.Total <= 0 || snapshot.Pages <= 0 || snapshot.Returned == 0 ||
+			snapshot.SourceReturned == 0 || snapshot.Total < snapshot.SourceReturned {
 			return errors.New("dragon-tiger totals/items are inconsistent")
 		}
 		if snapshot.ProviderReportDate != tradeDate {
@@ -500,8 +504,19 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 		}
 		return nil
 	}
-	if snapshot.Total != 0 || snapshot.Pages != 0 || snapshot.Returned != 0 || len(snapshot.Items) != 0 || snapshot.HasMore || snapshot.QualityStatus != model.QualityUnknown {
-		return errors.New("empty dragon-tiger report must remain unknown, not a confirmed zero-event report")
+	if snapshot.Total == 0 {
+		if snapshot.Pages != 0 || snapshot.SourceReturned != 0 || snapshot.Returned != 0 ||
+			snapshot.ExcludedNonAShareCount != 0 || len(snapshot.Items) != 0 || snapshot.HasMore ||
+			snapshot.QualityStatus != model.QualityUnknown {
+			return errors.New("empty dragon-tiger report must remain unknown, not a confirmed zero-event report")
+		}
+		return nil
+	}
+	// 供应商页可能全部属于可转债等非 A 股品种。允许返回 unknown 空页，但必须明确记录全部被排除且保留分页元数据。
+	if snapshot.Pages <= 0 || snapshot.SourceReturned <= 0 || snapshot.Returned != 0 ||
+		snapshot.ExcludedNonAShareCount != snapshot.SourceReturned || len(snapshot.Items) != 0 ||
+		snapshot.QualityStatus != model.QualityUnknown || snapshot.HasMore != (page < snapshot.Pages) {
+		return errors.New("empty supported-A-share page has inconsistent source counts or must remain unknown")
 	}
 	return nil
 }
