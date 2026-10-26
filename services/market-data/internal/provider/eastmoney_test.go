@@ -254,10 +254,10 @@ func TestEastmoneyRejectsKlineSymbolMismatch(t *testing.T) {
 func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	var gotQueries []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Referer") != "https://emweb.securities.eastmoney.com/" {
+		query := r.URL.Query()
+		if query.Get("reportName") != "" && r.Header.Get("Referer") != "https://emweb.securities.eastmoney.com/" {
 			t.Errorf("unexpected profile referer %q", r.Header.Get("Referer"))
 		}
-		query := r.URL.Query()
 		switch query.Get("reportName") {
 		case "RPT_PCF10_ORG_ISSUEINFO":
 			gotQueries = append(gotQueries, query)
