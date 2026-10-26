@@ -215,3 +215,12 @@
 - 告警页将规则 CRUD、单次评估结果、触发历史和投递尝试分开。当前无相应后端 API；所有规则修改/测试/筛选操作禁用，生产页状态固定为 unavailable，不存虚假规则、不展示模拟触发/发送成功、错误码或耗时。
 - 本节写入时 PR #2 仍 Open/未合并，head `43b5f4d1b3f9510fd56512c242f9ac8fbc0ddc18`、base `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。PR #1 head 已更新到 `8c6eef2dab65d59a02d31e67b03b030b9fa79f9a`，仍 Open/未合并；该数据提交的 Go suite [#40258059581](https://github.com/Kasign/stock_data_provider/actions/runs/40258059581) 失败在 `services/market-data` gofmt 检查和 market-data 镜像构建；Live probe [#40258059378](https://github.com/Kasign/stock_data_provider/actions/runs/40258059378) 成功。这是独立数据分支工作，本 WebUI 批次未触碰数据源代码。
 - 浏览器桌面/移动端截图与实际交互验收、NAS/Docker/OpenResty 到告警调度/数据库/通知渠道的端到端联调仍未完成。Issue #3/#4/#5/#7/#8/#9/#10 的源码和 CI 阶段已按顺序推进；尚欠全局视觉 Review 与真实部署验收。
+
+
+## Issue #11／#12 最新交接（2026-10-26）
+
+- 本轮开始时 WebUI HEAD 为 `c3c7dfdea36c7d4eac0fe363280555efaccd6944`，PR #2 继续保持 Open/未合并。
+- 股票搜索：数据分支增加真实证券目录搜索接口，返回证券身份元数据而不是行情；目录缓存、并发刷新、过期目录降级和输入参数边界由 Go 服务处理。前端新增无障碍建议列表、中文输入法支持、键盘/鼠标选择与旧响应保护。部署到尚未包含新 API 的版本时，UI 会明确提示更新服务。
+- 数据分支目前 HEAD `f5b719f9c506b64aae63effe71b314a19f7c45ba`；对应 Go suite #40260305214 和 Live Provider probe #40260305265 成功。现有 probe 不代表已经对中文搜索本身做了真实上游核验，需要新增专项 probe 或对实际部署发起一次接口请求。
+- Run Flow 对标 `daily_stock_analysis`：当前服务没有真实 DAG snapshot/SSE API，Issue #12 分两步处理：先提升现有真实时间线的摘要、事件/节点详情与错误定位；服务端阶段注册表与 topology snapshot 准备好后，再实现真正节点图。禁止虚构依赖边、百分比或取消成功。
+- 当前 NAS 已部署，不再把通用部署重复验证当作阻塞；只记录新功能的具体端点/交互验收结果。PR #2 不合并，不强推、不改写历史；WebUI 只修改 `web/**` 与相关检查配置。

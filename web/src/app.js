@@ -16,6 +16,7 @@ import {
   getCapitalFlow,
   getDataSources,
   getQuote,
+  searchStocks,
   loadSettings,
   marketHealth,
   saveSettings
@@ -67,6 +68,13 @@ const state = {
   pollTimer: null,
   pollGeneration: 0,
   isQuerying: false,
+  stockSearchTimer: null,
+  stockSearchController: null,
+  stockSearchGeneration: 0,
+  stockSearchComposing: false,
+  stockSearchResults: [],
+  stockSearchActiveIndex: -1,
+  selectedStockSearchItem: null,
   sourceCount: 0,
   supplementGeneration: 0,
   supplementSymbol: "",
@@ -343,6 +351,9 @@ function addCurrentSymbolToWatchlist() {
   }
 
   let defaultName = symbol;
+  if (state.selectedStockSearchItem?.symbol === symbol && state.selectedStockSearchItem.name) {
+    defaultName = state.selectedStockSearchItem.name;
+  }
   if (state.quote?.name && state.quote?.symbol) {
     try {
       if (normalizeSymbol(state.quote.symbol) === symbol) defaultName = state.quote.name;
@@ -399,6 +410,218 @@ function setNotice(message, kind = "info") {
   notice.textContent = message;
   notice.className = `notice notice-${kind}`;
   notice.hidden = !message;
+}
+
+
+function cancelStockSearchRequest() {
+  if (state.stockSearchTimer) {
+    clearTimeout(state.stockSearchTimer);
+    state.stockSearchTimer = null;
+  }
+  if (state.stockSearchController) {
+    state.stockSearchController.abort();
+    state.stockSearchController = null;
+  }
+  state.stockSearchGeneration += 1;
+}
+
+function hideStockSearch() {
+  const dropdown = $("#stock-search-dropdown");
+  const input = $("#symbol-input");
+  if (dropdown) dropdown.hidden = true;
+  if (input) {
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  }
+  state.stockSearchActiveIndex = -1;
+}
+
+function setStockSearchMessage(message, { show = true } = {}) {
+  const dropdown = $("#stock-search-dropdown");
+  const status = $("#stock-search-status");
+  const results = $("#stock-search-results");
+  if (!dropdown || !status || !results) return;
+  status.textContent = message;
+  dropdown.hidden = !show;
+  $("#symbol-input").setAttribute("aria-expanded", String(show));
+}
+
+function updateStockSearchActiveOption() {
+  const input = $("#symbol-input");
+  const results = $("#stock-search-results");
+  if (!input || !results) return;
+  const options = results.querySelectorAll("[data-stock-search-index]");
+  options.forEach((option, index) => {
+    option.setAttribute("aria-selected", String(index === state.stockSearchActiveIndex));
+  });
+  const active = results.querySelector('[aria-selected="true"]');
+  if (active) {
+    input.setAttribute("aria-activedescendant", active.id);
+    active.scrollIntoView?.({ block: "nearest" });
+  } else {
+    input.removeAttribute("aria-activedescendant");
+  }
+}
+
+function renderStockSearchResults(items, stale = false) {
+  const root = $("#stock-search-results");
+  if (!root) return;
+  root.replaceChildren();
+  state.stockSearchResults = Array.isArray(items) ? items.filter((item) =>
+    item && typeof item.symbol === "string" && typeof item.code === "string"
+    && typeof item.name === "string" && typeof item.exchange === "string"
+  ) : [];
+  state.stockSearchActiveIndex = -1;
+  state.stockSearchResults.forEach((item, index) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "stock-search-option";
+    option.id = "stock-search-option-" + state.stockSearchGeneration + "-" + index;
+    option.dataset.stockSearchIndex = String(index);
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", "false");
+
+    const main = document.createElement("span");
+    main.className = "stock-search-option-main";
+    const name = document.createElement("span");
+    name.className = "stock-search-option-name";
+    name.textContent = item.name;
+    const symbol = document.createElement("span");
+    symbol.className = "stock-search-option-symbol";
+    symbol.textContent = item.symbol;
+    main.append(name, symbol);
+
+    const exchange = document.createElement("span");
+    exchange.className = "stock-search-option-exchange";
+    exchange.textContent = item.exchange;
+    option.append(main, exchange);
+    root.append(option);
+  });
+  const status = stale
+    ? "证券目录刷新暂时失败，以下为缓存目录结果，请留意数据时效。"
+    : "找到 " + state.stockSearchResults.length + " 条匹配结果。";
+  setStockSearchMessage(status, { show: true });
+  updateStockSearchActiveOption();
+}
+
+async function loadStockSearch(query, generation) {
+  const controller = new AbortController();
+  state.stockSearchController = controller;
+  try {
+    const snapshot = await searchStocks(state.settings, query, { limit: 10, signal: controller.signal });
+    if (generation !== state.stockSearchGeneration || $("#symbol-input").value.trim() !== query) return;
+    const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
+    if (!items.length) {
+      state.stockSearchResults = [];
+      $("#stock-search-results").replaceChildren();
+      setStockSearchMessage("没有匹配的股票，请检查名称或代码。", { show: true });
+      return;
+    }
+    renderStockSearchResults(items, snapshot.quality_status === "stale");
+  } catch (error) {
+    if (controller.signal.aborted || generation !== state.stockSearchGeneration) return;
+    state.stockSearchResults = [];
+    $("#stock-search-results").replaceChildren();
+    const message = error.status === 404
+      ? "当前部署的行情服务尚未提供股票搜索接口，请更新 market-data 服务后再使用。"
+      : error.status === 401 || error.status === 403
+        ? "行情服务 API Key 验证失败，请检查连接与密钥设置。"
+        : "股票搜索失败：" + errorMessage(error);
+    setStockSearchMessage(message, { show: true });
+  } finally {
+    if (generation === state.stockSearchGeneration) state.stockSearchController = null;
+  }
+}
+
+function scheduleStockSearch() {
+  if (state.stockSearchTimer) clearTimeout(state.stockSearchTimer);
+  if (state.stockSearchController) {
+    state.stockSearchController.abort();
+    state.stockSearchController = null;
+  }
+  const generation = ++state.stockSearchGeneration;
+  state.stockSearchResults = [];
+  state.stockSearchActiveIndex = -1;
+  $("#stock-search-results").replaceChildren();
+
+  const query = $("#symbol-input").value.trim();
+  if (!query) {
+    setStockSearchMessage("", { show: false });
+    return;
+  }
+  if (!state.settings.apiKey) {
+    setStockSearchMessage("请先在连接与密钥设置中配置行情服务 API Key。", { show: true });
+    return;
+  }
+  setStockSearchMessage("正在搜索证券目录…", { show: true });
+  state.stockSearchTimer = setTimeout(() => {
+    state.stockSearchTimer = null;
+    void loadStockSearch(query, generation);
+  }, 260);
+}
+
+function chooseStockSearchResult(item) {
+  if (!item || state.isQuerying) return;
+  cancelStockSearchRequest();
+  state.selectedStockSearchItem = item;
+  $("#symbol-input").value = item.symbol;
+  hideStockSearch();
+  setText("#query-hint", "已选择 " + item.name + "（" + item.symbol + "），正在加载行情与日 K。");
+  void runQuoteQuery();
+}
+
+function handleStockSearchKeydown(event) {
+  if (event.key === "Escape") {
+    if (!$("#stock-search-dropdown").hidden) {
+      event.preventDefault();
+      cancelStockSearchRequest();
+      hideStockSearch();
+    }
+    return;
+  }
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    if ($("#stock-search-dropdown").hidden || !state.stockSearchResults.length) return;
+    event.preventDefault();
+    const delta = event.key === "ArrowDown" ? 1 : -1;
+    const length = state.stockSearchResults.length;
+    state.stockSearchActiveIndex = state.stockSearchActiveIndex < 0
+      ? (delta > 0 ? 0 : length - 1)
+      : (state.stockSearchActiveIndex + delta + length) % length;
+    updateStockSearchActiveOption();
+    return;
+  }
+  if (event.key === "Enter" && !$("#stock-search-dropdown").hidden) {
+    if (state.stockSearchResults.length === 1) {
+      event.preventDefault();
+      chooseStockSearchResult(state.stockSearchResults[0]);
+    } else if (state.stockSearchActiveIndex >= 0) {
+      event.preventDefault();
+      chooseStockSearchResult(state.stockSearchResults[state.stockSearchActiveIndex]);
+    } else if (state.stockSearchResults.length > 1) {
+      event.preventDefault();
+      setStockSearchMessage("找到多条匹配结果，请先用方向键选择一只股票。", { show: true });
+    }
+  }
+}
+
+function handleQuoteFormSubmit(event) {
+  const raw = $("#symbol-input").value.trim();
+  try {
+    normalizeSymbol(raw);
+    cancelStockSearchRequest();
+    hideStockSearch();
+    void runQuoteQuery(event);
+  } catch {
+    event.preventDefault();
+    if (state.stockSearchResults.length === 1) {
+      chooseStockSearchResult(state.stockSearchResults[0]);
+    } else if (state.stockSearchResults.length > 1) {
+      setStockSearchMessage("找到多条匹配结果，请选择要查询的股票。", { show: true });
+    } else {
+      scheduleStockSearch();
+      setStockSearchMessage("请从搜索结果中选择股票，再查询行情。", { show: true });
+    }
+  }
 }
 
 function setServiceStatus(prefix, ok, text) {
@@ -1852,7 +2075,35 @@ document.querySelectorAll(".nav-link").forEach((button) => {
     setMobileNavigationOpen(false);
   });
 });
-$("#quote-form").addEventListener("submit", runQuoteQuery);
+$("#quote-form").addEventListener("submit", handleQuoteFormSubmit);
+$("#symbol-input").addEventListener("compositionstart", () => {
+  state.stockSearchComposing = true;
+  cancelStockSearchRequest();
+});
+$("#symbol-input").addEventListener("compositionend", () => {
+  state.stockSearchComposing = false;
+  scheduleStockSearch();
+});
+$("#symbol-input").addEventListener("input", () => {
+  const current = $("#symbol-input").value.trim();
+  if (state.selectedStockSearchItem?.symbol !== current) state.selectedStockSearchItem = null;
+  if (!state.stockSearchComposing) scheduleStockSearch();
+});
+$("#symbol-input").addEventListener("keydown", handleStockSearchKeydown);
+$("#stock-search-results").addEventListener("mousedown", (event) => {
+  if (event.target.closest("[data-stock-search-index]")) event.preventDefault();
+});
+$("#stock-search-results").addEventListener("click", (event) => {
+  const option = event.target.closest("[data-stock-search-index]");
+  if (!option) return;
+  const index = Number(option.dataset.stockSearchIndex);
+  chooseStockSearchResult(state.stockSearchResults[index]);
+});
+document.addEventListener("click", (event) => {
+  if (event.target.closest(".symbol-field")) return;
+  cancelStockSearchRequest();
+  hideStockSearch();
+});
 $("#load-supplemental-button").addEventListener("click", loadSupplementalData);
 $("#chart-view-close").addEventListener("click", () => setChartView("close"));
 $("#chart-view-candles").addEventListener("click", () => setChartView("candles"));

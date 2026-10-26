@@ -60,7 +60,14 @@
           <section class="search-panel panel">
             <div class="search-intro"><div class="panel-kicker">标的查询</div><div class="panel-muted">输入 A 股代码，查看标准化后的上游数据</div></div>
             <form class="query-form" id="quote-form">
-              <label class="field symbol-field"><span>股票代码</span><input id="symbol-input" name="symbol" value="600519.SH" placeholder="如 600519.SH" maxlength="12" autocomplete="off" required /></label>
+              <div class="field symbol-field">
+                <label for="symbol-input">股票名称 / 代码</label>
+                <input id="symbol-input" name="symbol" value="600519.SH" placeholder="如 贵州茅台 / 600519.SH" maxlength="64" autocomplete="off" aria-autocomplete="list" aria-controls="stock-search-results" aria-expanded="false" aria-describedby="stock-search-status" required />
+                <div class="stock-search-dropdown" id="stock-search-dropdown" hidden>
+                  <div class="stock-search-status" id="stock-search-status" role="status" aria-live="polite"></div>
+                  <div class="stock-search-results" id="stock-search-results" role="listbox" aria-label="股票搜索结果"></div>
+                </div>
+              </div>
               <label class="field"><span>日 K 条数</span><select id="bar-limit" name="limit"><option value="60">近 60 根</option><option value="120" selected>近 120 根</option><option value="250">近 250 根</option></select></label>
               <label class="field"><span>复权口径</span><select id="adjustment" name="adjustment"><option value="forward_adjusted" selected>前复权</option><option value="backward_adjusted">后复权</option><option value="none">不复权</option></select></label>
               <label class="field date-range-field"><span>开始日期（可选）</span><input id="bar-start-date" type="date" /></label>

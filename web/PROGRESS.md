@@ -281,3 +281,12 @@
 
 
 - Issue #10 首轮 WebUI checks [#40257878022](https://github.com/Kasign/stock_data_provider/actions/runs/40257878022) 中 85/86 项 Node tests 通过；JS 语法检查通过，Nginx 构建因测试失败跳过。唯一失败为通用源码契约测试仍要求旧告警文案“不会在浏览器里假保存规则”，新页面的说明是“不会假保存规则”；已同步断言，等待重新验收。
+
+
+## Issue #11 — 中文股票名称/代码搜索（实现已提交，验收进行中）
+
+- 数据分支新增独立 `StockSearchProvider`、证券目录快照模型、受 API Key 保护的 `GET /api/v1/stocks/search?q=...&limit=...`、名称/代码匹配排序、6 小时进程缓存、并发刷新合并、旧目录降级和回归测试。
+- WebUI 批次新增 API client、下拉自动补全、中文输入法处理、方向键/Enter/Esc/鼠标选择、请求取消/过期响应保护，并在搜索接口未部署（404）、鉴权失败、空结果、错误与缓存目录降级时显示实际状态。
+- 数据分支后端提交：`2118cfb945aaa0562e7b7e6480eb62b84cd68f51`；格式修复提交：`f5b719f9c506b64aae63effe71b314a19f7c45ba`。Go suite [#40260305214](https://github.com/Kasign/stock_data_provider/actions/runs/40260305214) 与现有 Live Provider probe [#40260305265](https://github.com/Kasign/stock_data_provider/actions/runs/40260305265) 均成功。Live probe 当前尚未专项验证中文搜索端点的真实返回。
+- WebUI 自动化、当前 Actions 与专门真实目录探测的最终结果将随后续 Actions 回填；NAS 已部署事实不需要重新做全量部署验收，新增接口只需做本功能的部署后探测。
+

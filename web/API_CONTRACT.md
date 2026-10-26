@@ -174,3 +174,16 @@ WebUI 只通过同源 HTTP 路径调用 Go 服务，Nginx 根据路径把请求�
 - StageEvent 以服务端 `sequence` 排序并用现有 `after_sequence` 增量续读。仅当事件真实提供 `duration_ms` 时显示耗时，不根据前端接收时刻反推；只有返回真实 `error_code` 时才显示该字段。
 - 运行流是线性时间线，不构造未由 API 提供的 DAG、进度百分比或实时推送。空事件列表只表示当前没有读到持久化事件，不代表任务完成。
 - 当前没有服务端 Task 列表 API。可重新打开和刷新恢复的是浏览器本地保存的 task/run 引用；这不是跨设备的服务端历史。详情打开后仍通过既有 Task / StageEvent / RunResult 接口重新读取。
+
+
+## 按中文名称/代码搜索证券（Issue #11）
+
+新增接口在数据分支 PR #1 中实现，WebUI 分支可独立开发并在部署未更新时明确提示接口不可用。部署版本尚未包含该接口时，搜索请求返回的 404 会显示“请更新 market-data 服务”，不会回退到硬编码股票清单。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/stocks/search?q=贵州茅台&limit=10` | 按中文名称、代码或标准证券代码搜索 A 股目录 |
+
+请求必须提供 `X-API-Key` 或 `Authorization: Bearer`。参数 `q` 会去除首尾空白，不能为空，最多 64 个 Unicode 字符；`limit` 默认 10，允许 1–50。成功响应包含 `query`、`total`、`items`、`source`、`source_version`、`fetched_at`、`quality_status` 与可选 `quality_reasons`。每个结果包含规范化的 `symbol`（如 `600519.SH`）、`code`、`name`、`exchange`。
+
+证券身份来自真实的东方财富 A 股证券目录字段，名称/代码匹配排序为精确匹配、前缀匹配、包含匹配；不会返回行情价格。`fetched_at` 是目录采集时间，不代表实时报价时间。目录按进程缓存 6 小时并合并并发刷新；刷新失败但有旧目录时返回 `quality_status=stale` 和原因，目录不完整则标记降级，无任何可用目录时返回 Provider 错误。前端通过防抖、取消旧请求和响应代次校验，避免慢请求覆盖用户最新输入；支持中文输入法、方向键、Enter、Esc 与鼠标选择。

@@ -75,6 +75,10 @@ export function analysisHealth(settings) {
 export function getDataSources(settings) {
   return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey });
 }
+export function searchStocks(settings, query, { limit = 10, signal } = {}) {
+  const params = new URLSearchParams({ q: String(query ?? "").trim(), limit: String(limit) });
+  return request(settings.marketBase, `/api/v1/stocks/search?${params}`, { apiKey: settings.apiKey, signal });
+}
 export function getQuote(settings, symbol, signal) {
   return request(settings.marketBase, `/api/v1/quotes/${encodeURIComponent(symbol)}`, { apiKey: settings.apiKey, signal });
 }

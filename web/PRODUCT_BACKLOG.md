@@ -145,3 +145,15 @@
 4. 更新 API_CONTRACT.md（只记真实接口；建议接口标注为草案）及 PROGRESS.md。
 5. 本地/CI 自动化验证通过；按功能需要安排实际浏览器与 NAS/Docker 实测。
 6. Review 不再发现阻断问题后才进入下一个批次；PR #2 保持未合并，除非你之后明确决定。
+
+
+### P1：中文名称股票搜索入口
+
+- [Issue #11](https://github.com/Kasign/stock_data_provider/issues/11) — 已实现真实目录搜索的 Go API 契约和服务端能力；WebUI 增加名称/代码自动补全，接入结果后沿用已有行情、日 K、自选与分析操作。
+- 验收重点：精确/模糊匹配、多结果和空结果、API Key、旧服务 404、上游故障/旧目录降级、请求取消、中文输入法、键盘可访问性。搜索结果不得写死在前端或冒充实时行情。
+- WebUI 与数据服务是分支独立交付：部署旧数据服务时，应显示搜索接口未接入提示；不可仅凭前端 CI 通过就认为 NAS 实际搜索已联调。
+
+### P1：分析任务 Run Flow 拓扑与节点诊断
+
+- [Issue #12](https://github.com/Kasign/stock_data_provider/issues/12) — 参考 `daily_stock_analysis` 的 Summary Bar、流程节点图、节点详情和事件列表交互。先升级当前真实线性事件流的摘要/详情，再由数据分支提供稳定的阶段注册表与 flow snapshot API 后绘制真正 DAG。
+- 当前 Task/StageEvent/RunResult API 不包含经验证的 DAG 边和实时流端点；禁止从事件顺序猜依赖、显示虚假进度百分比或伪造取消操作。

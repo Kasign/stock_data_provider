@@ -439,3 +439,20 @@ test("alert center separates rule CRUD, evaluation state, trigger history and de
   assert.match(html, /id="alert-rule-test" type="button" disabled/);
   assert.doesNotMatch(app, /alert.*localStorage/i);
 });
+
+
+test("stock-name autocomplete uses the real market API and accessible, stale-safe controls", () => {
+  assert.match(html, /aria-autocomplete="list"/);
+  assert.match(html, /id="stock-search-results"[^>]*role="listbox"/);
+  assert.match(html, /id="stock-search-status"[^>]*role="status"/);
+  assert.match(apiClient, /export function searchStocks\(/);
+  assert.match(app, /function scheduleStockSearch\(\)/);
+  assert.match(app, /new AbortController\(\)/);
+  assert.match(app, /generation !== state\.stockSearchGeneration/);
+  assert.match(app, /addEventListener\("compositionstart"/);
+  assert.match(app, /addEventListener\("compositionend"/);
+  assert.match(app, /function chooseStockSearchResult\(/);
+  assert.match(app, /error\.status === 404/);
+  assert.match(stylesheet, /\.stock-search-option/);
+  assert.doesNotMatch(app, /localStorage[^\n]*stockSearch/i, "stock results must come from the API, not browser-side mock data");
+});

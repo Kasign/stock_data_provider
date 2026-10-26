@@ -10,6 +10,7 @@ import {
   getCapitalFlow,
   getDataSources,
   getQuote,
+  searchStocks,
   marketHealth
 } from "../src/api.js";
 
@@ -229,6 +230,34 @@ test("reads existing chip-distribution and capital-flow endpoints with the marke
     ]);
     assert.ok(requests.every((item) => item.headers["X-API-Key"] === "market-secret"));
     assert.ok(requests.every((item) => item.credentials === "same-origin"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("searches stocks by Chinese name through the authenticated market API and forwards cancellation", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url: String(url), ...init };
+    return jsonResponse({
+      query: "贵州茅台",
+      total: 1,
+      items: [{ symbol: "600519.SH", code: "600519", name: "贵州茅台", exchange: "SH" }]
+    });
+  };
+  const controller = new AbortController();
+  try {
+    const result = await searchStocks(
+      { marketBase: "/market-api", apiKey: "market-secret" },
+      " 贵州茅台 ",
+      { limit: 10, signal: controller.signal }
+    );
+    assert.equal(request.url, "/market-api/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10");
+    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.signal, controller.signal);
+    assert.equal(result.items[0].symbol, "600519.SH");
   } finally {
     globalThis.fetch = originalFetch;
   }
