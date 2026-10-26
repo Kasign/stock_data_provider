@@ -980,7 +980,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		return nil, errors.New("Tushare 龙虎榜 page_size 必须在 1..100")
 	}
 	table, err := p.fetchCapabilityTable(ctx, "top_list", map[string]string{"trade_date": compactDate},
-		"trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,net_amount,net_rate,amount_rate,reason")
+		"trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason")
 	if err != nil {
 		return nil, err
 	}
