@@ -1350,69 +1350,139 @@ type tushareWeightedConstituent struct {
 // FetchIndexConstituents returns the most recent monthly weight snapshot available in four months.
 func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol string) (*model.IndexConstituentSnapshot, error) {
 	indexSymbol, err := canonicalTushareIndexSymbol(rawIndexSymbol)
-	if err != nil { return nil, err }
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
-	nowLocal := time.Now().In(loc)
-	start := time.Date(nowLocal.Year(), nowLocal.Month(), 1, 0, 0, 0, 0, loc).AddDate(0, -4, 0)
-	table, err := p.fetchCapabilityTable(ctx, "index_weight", map[string]string{
-		"index_code": indexSymbol, "start_date": start.Format("20060102"), "end_date": nowLocal.Format("20060102"),
-	}, "index_code,con_code,trade_date,weight")
-	if err != nil { return nil, err }
-	latestDate := ""
-	latest := make([]tushareWeightedConstituent, 0, len(table.rows))
-	for index, row := range table.rows {
-		codeRaw, readErr := table.stringValue(row, "index_code")
-		if readErr != nil { return nil, readErr }
-		code, symbolErr := canonicalTushareIndexSymbol(codeRaw)
-		if symbolErr != nil || code != indexSymbol { return nil, fmt.Errorf("Tushare 指数成分第 %d 行指数代码不匹配", index) }
-		dateRaw, readErr := table.stringValue(row, "trade_date")
-		if readErr != nil { return nil, readErr }
-		date, dateErr := tushareISODate(dateRaw)
-		if dateErr != nil || date > nowLocal.Format("2006-01-02") {
-			return nil, fmt.Errorf("Tushare 指数成分第 %d 行日期无效或位于未来", index)
-		}
-		constituentRaw, readErr := table.stringValue(row, "con_code")
-		if readErr != nil { return nil, readErr }
-		constituent, symbolErr := normalize.NormalizeSymbol(constituentRaw)
-		if symbolErr != nil || !isTushareAShareSymbol(constituent) { continue }
-		weight, readErr := table.optionalFloat(row, "weight")
-		if readErr != nil { return nil, readErr }
-		if weight != nil && (*weight < 0 || math.IsNaN(*weight) || math.IsInf(*weight, 0)) {
-			return nil, fmt.Errorf("Tushare 指数成分第 %d 行权重无效", index)
-		}
-		if date > latestDate { latestDate = date; latest = latest[:0] }
-		if date == latestDate { latest = append(latest, tushareWeightedConstituent{symbol: constituent, weight: weight}) }
+	if err != nil {
+		return nil, err
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	nowLocal := time.Now().In(loc)
+	today := nowLocal.Format("2006-01-02")
+	monthStart := time.Date(nowLocal.Year(), nowLocal.Month(), 1, 0, 0, 0, 0, loc)
+
+	// index_weight is monthly data. Query one month at a time from newest to
+	// oldest; a single multi-month request can hit upstream result limits and
+	// silently omit members from the newest snapshot.
+	latestDate := ""
+	latest := make([]tushareWeightedConstituent, 0)
+	reasons := []string{"provider_constituent_date_is_latest_available_weight_snapshot_not_intraday"}
+	foundMonth := false
+	for monthOffset := 0; monthOffset < 4; monthOffset++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		windowStart := monthStart.AddDate(0, -monthOffset, 0)
+		windowEnd := windowStart.AddDate(0, 1, -1)
+		startCompact := windowStart.Format("20060102")
+		endCompact := windowEnd.Format("20060102")
+		table, fetchErr := p.fetchCapabilityTable(ctx, "index_weight", map[string]string{
+			"index_code": indexSymbol, "start_date": startCompact, "end_date": endCompact,
+		}, "index_code,con_code,trade_date,weight")
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		if len(table.rows) >= 5000 {
+			reasons = appendTushareReason(reasons, "provider_monthly_index_weight_result_is_large_and_may_be_truncated")
+		}
+
+		monthLatestDate := ""
+		monthLatest := make([]tushareWeightedConstituent, 0, len(table.rows))
+		for index, row := range table.rows {
+			codeRaw, readErr := table.stringValue(row, "index_code")
+			if readErr != nil {
+				return nil, readErr
+			}
+			code, symbolErr := canonicalTushareIndexSymbol(codeRaw)
+			if symbolErr != nil || code != indexSymbol {
+				return nil, fmt.Errorf("Tushare 指数成分第 %d 行指数代码不匹配", index)
+			}
+			dateRaw, readErr := table.stringValue(row, "trade_date")
+			if readErr != nil {
+				return nil, readErr
+			}
+			date, dateErr := tushareISODate(dateRaw)
+			if dateErr != nil || date < windowStart.Format("2006-01-02") || date > windowEnd.Format("2006-01-02") || date > today {
+				return nil, fmt.Errorf("Tushare 指数成分第 %d 行日期无效或超出查询月份", index)
+			}
+			constituentRaw, readErr := table.stringValue(row, "con_code")
+			if readErr != nil {
+				return nil, readErr
+			}
+			constituent, symbolErr := normalize.NormalizeSymbol(constituentRaw)
+			if symbolErr != nil || !isTushareAShareSymbol(constituent) {
+				continue
+			}
+			weight, readErr := table.optionalFloat(row, "weight")
+			if readErr != nil {
+				return nil, readErr
+			}
+			if weight != nil && (*weight < 0 || math.IsNaN(*weight) || math.IsInf(*weight, 0)) {
+				return nil, fmt.Errorf("Tushare 指数成分第 %d 行权重无效", index)
+			}
+			if date > monthLatestDate {
+				monthLatestDate = date
+				monthLatest = monthLatest[:0]
+			}
+			if date == monthLatestDate {
+				monthLatest = append(monthLatest, tushareWeightedConstituent{symbol: constituent, weight: weight})
+			}
+		}
+		if len(monthLatest) > 0 {
+			latestDate = monthLatestDate
+			latest = monthLatest
+			foundMonth = true
+			break
+		}
+	}
+
 	now := time.Now().UTC()
-	if latestDate == "" || len(latest) == 0 {
+	if !foundMonth || latestDate == "" || len(latest) == 0 {
 		return &model.IndexConstituentSnapshot{
 			IndexSymbol: indexSymbol, Items: []model.IndexConstituent{}, Total: 0, Source: p.Name(),
 			SourceVersion: tushareIndexConstituentVersion, FetchedAt: now, QualityStatus: model.QualityUnknown,
-			QualityReasons: []string{"provider_has_no_constituent_snapshot_in_recent_four_months"},
+			QualityReasons: appendTushareReason(reasons, "provider_has_no_constituent_snapshot_in_recent_four_months"),
 		}, nil
 	}
 	// index_weight gives constituent codes but not names; enrich in one stock_basic call.
 	basic, err := p.fetchCapabilityTable(ctx, "stock_basic", map[string]string{"list_status": "L"}, "ts_code,name")
-	if err != nil { return nil, fmt.Errorf("Tushare 指数成分名称补充失败: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("Tushare 指数成分名称补充失败: %w", err)
+	}
 	names := make(map[string]string, len(basic.rows))
 	for index, row := range basic.rows {
 		rawSymbol, readErr := basic.stringValue(row, "ts_code")
-		if readErr != nil { return nil, readErr }
+		if readErr != nil {
+			return nil, readErr
+		}
 		symbol, symbolErr := normalize.NormalizeSymbol(rawSymbol)
-		if symbolErr != nil { continue }
+		if symbolErr != nil {
+			continue
+		}
 		name, readErr := basic.stringValue(row, "name")
-		if readErr != nil { return nil, readErr }
+		if readErr != nil {
+			return nil, readErr
+		}
 		if strings.TrimSpace(name) != "" {
-			if _, duplicate := names[symbol]; duplicate { return nil, fmt.Errorf("Tushare 股票目录第 %d 行出现重复代码 %s", index, symbol) }
+			if _, duplicate := names[symbol]; duplicate {
+				return nil, fmt.Errorf("Tushare 股票目录第 %d 行出现重复代码 %s", index, symbol)
+			}
 			names[symbol] = name
 		}
 	}
 	items := make([]model.IndexConstituent, 0, len(latest))
 	seen := make(map[string]struct{}, len(latest))
-	reasons := []string{"provider_constituent_date_is_latest_available_weight_snapshot_not_intraday"}
 	for _, entry := range latest {
-		if _, duplicate := seen[entry.symbol]; duplicate { return nil, fmt.Errorf("Tushare 指数成分 %s 在最新快照中重复", entry.symbol) }
+		if _, duplicate := seen[entry.symbol]; duplicate {
+			return nil, fmt.Errorf("Tushare 指数成分 %s 在最新快照中重复", entry.symbol)
+		}
 		seen[entry.symbol] = struct{}{}
 		name, ok := names[entry.symbol]
 		if !ok {
@@ -1422,7 +1492,9 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 		items = append(items, model.IndexConstituent{Symbol: entry.symbol, Code: strings.Split(entry.symbol, ".")[0], Name: name, WeightPercent: entry.weight})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Symbol < items[j].Symbol })
-	if len(items) == 0 { return nil, errors.New("Tushare 指数成分有代码但无法从股票目录解析任何名称") }
+	if len(items) == 0 {
+		return nil, errors.New("Tushare 指数成分有代码但无法从股票目录解析任何名称")
+	}
 	return &model.IndexConstituentSnapshot{
 		IndexSymbol: indexSymbol, ProviderReportDate: latestDate, Items: items, Total: len(items), Source: p.Name(),
 		SourceVersion: tushareIndexConstituentVersion, FetchedAt: now,
