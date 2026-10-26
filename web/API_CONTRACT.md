@@ -255,3 +255,13 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 当前数据分支 `feat/full-go-data-providers-api-switch` 的 `services/market-data/internal/httpapi/server.go` 已注册此路由，响应定义可见 Go 模型 `ValuationSnapshot` / `ValuationItem`；数据分支已在提交 [`c37270a`](https://github.com/Kasign/stock_data_provider/commit/c37270a41a593488767982e5da819d99ba9f2189) 中补齐该路由及 `ValuationSnapshot` / `ValuationItem` Schema，同时修复了 `SourceStatus` 声明并补齐相关 Provider 能力字段。旧部署仍可能返回 404；无启用估值 Provider 时会返回 503。旧部署可能返回 404，前端会提示更新 market-data；无启用估值 Provider 时会显示服务端 503，不伪造指标。
 
 响应快照包含 `requested_symbols`、`total`、`items`、可选 `missing_symbols`、可选 `provider_timestamp`、`source`、`fetched_at`、`quality_status` 和质量原因。每只股票的指标字段为 `pe_ttm`、`pe_mrq`、`pb_mrq`、`ps_ttm`、`pcf_ttm`，可以为 null 或负数；前端保留该语义，不补零，不据此生成买卖信号。
+
+
+## 个股筹码分布与资金流 API
+
+| 请求 | 数据解释 |
+|---|---|
+| GET /market-api/api/v1/stocks/{symbol}/chip-distribution | 返回单只 A 股的平均持仓成本、可用的 90%/70% 成本区间、获利比例与成本集中度，并带来源、数据日期、获取时间和质量原因。比例字段由服务归一化为 0–1，UI 显示为百分比；可选字段缺失时不补零。 |
+| GET /market-api/api/v1/stocks/{symbol}/capital-flow | 返回主力净流入、可用的 5/10 日净流入合计、实际观测数量、来源、获取时间和质量原因。金额单位为人民币元；5/10 日合计只有在必需观测值完整时才会填充。 |
+
+以上路由已在 Go Handler 注册，并已在数据分支提交 b02eb41 中补入 services/market-data/openapi.yaml。这些补充接口由用户单独触发，不阻塞实时行情或日 K；Provider 未启用时显示真实服务端错误，不使用静态样本代替。

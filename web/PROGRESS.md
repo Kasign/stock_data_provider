@@ -401,3 +401,12 @@
 - Provider 能力明细新增 `fundamentals_capable` 与 `valuation_capable`，仅在后端字段显式为 true 时展示。
 - 数据分支已通过提交 [`c37270a`](https://github.com/Kasign/stock_data_provider/commit/c37270a41a593488767982e5da819d99ba9f2189) 补齐估值路由与响应 Schema；WebUI 合约现已与之同步。旧部署可能返回 404，Provider 未启用时按真实 503 展示，不生成假指标。
 - 本轮未运行测试或触发 CI。
+
+
+## 2026-10-26 — 个股筹码分布与资金流摘要
+
+- 接入已有 Go 行情接口 /api/v1/stocks/{symbol}/chip-distribution 与 /api/v1/stocks/{symbol}/capital-flow，新增独立加载卡片。
+- 筹码卡展示平均成本、90%/70% 成本区间、获利比例与成本集中度；0–1 比例在 UI 转为百分数，成本单位标注为人民币元/股。
+- 资金流卡展示主力净流入、5/10 日净流入合计与 Provider 观测数量，金额以人民币元展示。可选空值保持“未提供”，不补零。
+- Provider 能力清单新增筹码分布与资金流字段；接口契约已由数据分支提交 b02eb41 补入 OpenAPI。
+- 本轮未运行测试或触发 CI。

@@ -1,4 +1,4 @@
-import { getMarketValuations, getStockAnnouncements, getStockBoards, getStockFundamentals, getStockProfile } from "./api.js";
+import { getCapitalFlow, getChipDistribution, getMarketValuations, getStockAnnouncements, getStockBoards, getStockFundamentals, getStockProfile } from "./api.js";
 import { describeApiError, formatDateTime, formatPercent, qualityLabel } from "./format.js";
 const $=(s)=>document.querySelector(s);
 const QUALITY=["valid","degraded","stale","invalid","unknown"];
@@ -14,23 +14,25 @@ function responseError(err){if(Number(err?.status)===404)return "当前部署的
 function safeAnnouncementUrl(raw){try{const url=new URL(String(raw||""));return url.protocol==="https:"&&(url.hostname==="eastmoney.com"||url.hostname.endsWith(".eastmoney.com"))?url.href:"";}catch{return "";}}
 function currentYearAndQuarter(){const now=new Date();let year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3);if(quarter===0){year-=1;quarter=4;}return {year,quarter};}
 export function bindStockResearch(getSettings,getSymbol){
- const state={symbol:"",generation:{profile:0,boards:0,fundamentals:0,announcements:0,valuations:0},controllers:{},announcementPage:0,announcementHasMore:false,announcementLoading:false};
+ const state={symbol:"",generation:{profile:0,boards:0,fundamentals:0,announcements:0,valuations:0,chip:0,capitalFlow:0},controllers:{},announcementPage:0,announcementHasMore:false,announcementLoading:false};
  function resolvedSymbol(){try{return String(getSymbol?.()||"").trim();}catch{return "";}}
  function abort(key){state.controllers[key]?.abort();delete state.controllers[key];state.generation[key]++;}
  function reset(symbol){
   Object.keys(state.generation).forEach(abort);state.symbol=symbol;state.announcementPage=0;state.announcementHasMore=false;state.announcementLoading=false;
   setText("stock-research-target",symbol?"当前标的："+symbol:"请先输入代码，或从中文名称搜索结果中选择股票");
-  ["profile-quality","boards-quality","fundamentals-quality","announcements-quality","valuations-quality"].forEach(id=>setQuality(id,"unknown","未加载"));
-  setText("stock-profile-symbol",symbol||"尚未选择");setText("stock-boards-symbol",symbol||"尚未选择");setText("fundamentals-symbol",symbol||"尚未选择");setText("announcements-symbol",symbol||"尚未选择");setText("valuations-symbol",symbol||"尚未选择");
+  ["profile-quality","boards-quality","fundamentals-quality","announcements-quality","valuations-quality","chip-quality","capital-flow-quality"].forEach(id=>setQuality(id,"unknown","未加载"));
+  setText("stock-profile-symbol",symbol||"尚未选择");setText("stock-boards-symbol",symbol||"尚未选择");setText("fundamentals-symbol",symbol||"尚未选择");setText("announcements-symbol",symbol||"尚未选择");setText("valuations-symbol",symbol||"尚未选择");setText("chip-symbol",symbol||"尚未选择");setText("capital-flow-symbol",symbol||"尚未选择");
   $("#stock-profile-fields").replaceChildren(el("p","stock-research-empty","选择股票并加载后显示上市资料。"));
   $("#stock-board-list").replaceChildren(el("p","stock-research-empty","加载后显示所属行业与概念板块。"));
   $("#fundamentals-content").replaceChildren(el("p","stock-research-empty","选择报告期并加载财务指标。"));
   $("#valuation-content").replaceChildren(el("p","stock-research-empty","选择股票并读取估值指标。"));
+  $("#chip-distribution-content").replaceChildren(el("p","stock-research-empty","选择股票并读取筹码分布。"));
+  $("#capital-flow-content").replaceChildren(el("p","stock-research-empty","选择股票并读取资金流摘要。"));
   $("#announcement-list").replaceChildren(el("p","stock-research-empty","加载后显示数据源返回的公告。"));
-  ["stock-profile-error","stock-boards-error","fundamentals-error","announcements-error","valuations-error"].forEach(id=>setError(id,""));
+  ["stock-profile-error","stock-boards-error","fundamentals-error","announcements-error","valuations-error","chip-error","capital-flow-error"].forEach(id=>setError(id,""));
   setText("stock-research-feedback",symbol?"标的已切换；请重新加载对应资料，避免沿用上一只股票的结果。":"请先输入代码，或从中文名称搜索结果中选择股票。");
-  ["stock-profile-reasons","stock-boards-reasons","fundamentals-reasons","announcements-reasons"].forEach(id=>reasons(id,[]));
-  setText("stock-profile-meta","");setText("stock-boards-meta","");setText("fundamentals-meta","");setText("announcements-meta","");setText("valuations-meta","");
+  ["stock-profile-reasons","stock-boards-reasons","fundamentals-reasons","announcements-reasons","chip-reasons","capital-flow-reasons"].forEach(id=>reasons(id,[]));
+  setText("stock-profile-meta","");setText("stock-boards-meta","");setText("fundamentals-meta","");setText("announcements-meta","");setText("valuations-meta","");setText("chip-meta","");setText("capital-flow-meta","");
   $("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="加载更多公告";
  }
  function syncSymbol(){
@@ -42,8 +44,8 @@ export function bindStockResearch(getSettings,getSymbol){
   abort(key);const seq=state.generation[key],symbol=state.symbol;
   if(!symbol)return false;
   const settings=typeof getSettings==="function"?getSettings():null;
-  const ids={profile:"profile-quality",boards:"boards-quality",fundamentals:"fundamentals-quality",valuations:"valuations-quality"};
-  const errorIds={profile:"stock-profile-error",boards:"stock-boards-error",fundamentals:"fundamentals-error",valuations:"valuations-error"};
+  const ids={profile:"profile-quality",boards:"boards-quality",fundamentals:"fundamentals-quality",valuations:"valuations-quality",chip:"chip-quality",capitalFlow:"capital-flow-quality"};
+  const errorIds={profile:"stock-profile-error",boards:"stock-boards-error",fundamentals:"fundamentals-error",valuations:"valuations-error",chip:"chip-error",capitalFlow:"capital-flow-error"};
   setError(errorIds[key],"");
   if(!settings?.apiKey){setQuality(ids[key],"unknown","需配置 Key");setError(errorIds[key],"请先在连接与密钥设置中配置行情 API Key。");return false;}
   setQuality(ids[key],"unknown","读取中…");
@@ -165,6 +167,74 @@ export function bindStockResearch(getSettings,getSymbol){
   setText("valuations-meta","来源 "+(item?.source||data.source||"未报告")+" · 供应商时间 "+(data.provider_timestamp?formatDateTime(data.provider_timestamp):"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at)+missing);
   if(!item)reasons("valuations-reasons",data.quality_reasons);
  }
+ function fractionPercent(value){
+  if(value===null||value===undefined||value===""||!Number.isFinite(Number(value)))return "未提供";
+  return formatNumber(Number(value)*100)+"%";
+ }
+ function costBand(low,high){
+  const lower=low===null||low===undefined||low===""?"未提供":formatNumber(low);
+  const upper=high===null||high===undefined||high===""?"未提供":formatNumber(high);
+  if(lower==="未提供"&&upper==="未提供")return "未提供";
+  return lower+" – "+upper+" 元";
+ }
+ function formatYuan(value){
+  if(value===null||value===undefined||value===""||!Number.isFinite(Number(value)))return "未提供";
+  const amount=Number(value);
+  return (amount>0?"+":"")+new Intl.NumberFormat("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount)+" 元";
+ }
+ async function loadChipDistribution(){
+  const symbol=syncSymbol();
+  if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return;}
+  const button=$("#load-chip-distribution");
+  button.disabled=true;button.textContent="读取中…";
+  try{
+   const ok=await fetchOne("chip",(settings,sym,signal)=>getChipDistribution(settings,sym,signal),renderChipDistribution);
+   if(ok)setText("stock-research-feedback","筹码分布快照已返回；请参考数据日期、质量状态及来源说明。");
+  }finally{button.disabled=false;button.textContent="读取筹码分布";}
+ }
+ function renderChipDistribution(data,symbol){
+  setText("chip-symbol",data.symbol||symbol);setQuality("chip-quality",data.quality_status);
+  const root=$("#chip-distribution-content");root.replaceChildren();
+  const metrics=[
+   ["平均持仓成本",data.average_cost===null||data.average_cost===undefined?"未提供":formatNumber(data.average_cost)+" 元"],
+   ["90% 成本区间",costBand(data.cost_90_low,data.cost_90_high)],
+   ["70% 成本区间",costBand(data.cost_70_low,data.cost_70_high)],
+   ["获利比例",fractionPercent(data.profit_ratio)],
+   ["90% 成本集中度",fractionPercent(data.concentration_90)],
+   ["70% 成本集中度",fractionPercent(data.concentration_70)]
+  ];
+  const grid=el("div","stock-supplement-metric-grid");
+  metrics.forEach(([label,value])=>{const item=el("div","stock-supplement-metric");item.append(el("span","",label),el("strong","",value));grid.append(item);});
+  root.append(grid);
+  setText("chip-meta","来源 "+(data.source||"未报告")+" · 数据日期 "+(data.date||"未报告")+" · 供应商日期 "+(data.provider_date||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+  reasons("chip-reasons",data.quality_reasons);
+ }
+ async function loadCapitalFlow(){
+  const symbol=syncSymbol();
+  if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return;}
+  const button=$("#load-capital-flow");
+  button.disabled=true;button.textContent="读取中…";
+  try{
+   const ok=await fetchOne("capitalFlow",(settings,sym,signal)=>getCapitalFlow(settings,sym,signal),renderCapitalFlow);
+   if(ok)setText("stock-research-feedback","资金流摘要已返回；请参考统计口径、观测数与质量状态。");
+  }finally{button.disabled=false;button.textContent="读取资金流";}
+ }
+ function renderCapitalFlow(data,symbol){
+  setText("capital-flow-symbol",data.symbol||symbol);setQuality("capital-flow-quality",data.quality_status);
+  const root=$("#capital-flow-content");root.replaceChildren();
+  const observations=Number(data.observations);
+  const metrics=[
+   ["主力净流入",formatYuan(data.main_net_inflow_yuan)],
+   ["5 日净流入合计",formatYuan(data.inflow_5d_yuan)],
+   ["10 日净流入合计",formatYuan(data.inflow_10d_yuan)],
+   ["观测数量",Number.isSafeInteger(observations)&&observations>=0?observations+" 条":"未报告"]
+  ];
+  const grid=el("div","stock-supplement-metric-grid");
+  metrics.forEach(([label,value])=>{const item=el("div","stock-supplement-metric");item.append(el("span","",label),el("strong","",value));grid.append(item);});
+  root.append(grid);
+  setText("capital-flow-meta","来源 "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+  reasons("capital-flow-reasons",data.quality_reasons);
+ }
  function renderFundamentals(data,symbol){
   setText("fundamentals-symbol",data.symbol||symbol);setQuality("fundamentals-quality",data.quality_status);
   const root=$("#fundamentals-content");root.replaceChildren();
@@ -193,6 +263,8 @@ export function bindStockResearch(getSettings,getSymbol){
  $("#load-stock-research")?.addEventListener("click",()=>{void loadResearch();});
  $("#load-fundamentals")?.addEventListener("click",()=>{void loadFundamentals();});
  $("#load-valuations")?.addEventListener("click",()=>{void loadValuations();});
+ $("#load-chip-distribution")?.addEventListener("click",()=>{void loadChipDistribution();});
+ $("#load-capital-flow")?.addEventListener("click",()=>{void loadCapitalFlow();});
  $("#load-more-announcements")?.addEventListener("click",()=>{void loadAnnouncements(true);});
  $("#symbol-input")?.addEventListener("input",()=>{syncSymbol();});
  $("#quote-form")?.addEventListener("submit",()=>{syncSymbol();});
