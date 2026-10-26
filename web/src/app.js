@@ -145,7 +145,8 @@ function syncThemeControl(theme) {
   $("#theme-toggle").title = "当前" + (current === "light" ? "浅色" : "深色") + "主题；点击切换至" + targetLabel + "主题";
 }
 
-function setMobileNavigationOpen(open) {
+function setMobileNavigationOpen(open, { restoreFocus = false } = {}) {
+  const wasOpen = $(".sidebar").classList.contains("is-open");
   const isOpen = Boolean(open) && window.innerWidth <= 600;
   $(".sidebar").classList.toggle("is-open", isOpen);
   $("#mobile-nav-overlay").hidden = !isOpen;
@@ -153,6 +154,7 @@ function setMobileNavigationOpen(open) {
   $("#mobile-menu-toggle").setAttribute("aria-expanded", String(isOpen));
   $("#mobile-menu-toggle").setAttribute("aria-label", isOpen ? "关闭导航" : "打开导航");
   $("#mobile-menu-toggle").title = isOpen ? "关闭导航" : "打开导航";
+  if (wasOpen && !isOpen && restoreFocus) $("#mobile-menu-toggle").focus();
 }
 
 function persistTaskReference() {
@@ -879,6 +881,14 @@ function setView(view, { updateHash = true } = {}) {
   setText("#breadcrumb-current", title);
   setText("#view-title", title);
   document.title = title + " · Stock Data Console";
+  if (previousView !== nextView) {
+    window.scrollTo(0, 0);
+    const heading = document.querySelector("#" + nextView + "-view h1");
+    if (heading) {
+      heading.setAttribute("tabindex", "-1");
+      heading.focus({ preventScroll: true });
+    }
+  }
   if (updateHash && window.location.hash !== "#" + nextView) window.location.hash = nextView;
 }
 
@@ -2315,9 +2325,9 @@ $("#theme-toggle").addEventListener("click", () => {
 $("#mobile-menu-toggle").addEventListener("click", () => {
   setMobileNavigationOpen(!$(".sidebar").classList.contains("is-open"));
 });
-$("#mobile-nav-overlay").addEventListener("click", () => setMobileNavigationOpen(false));
+$("#mobile-nav-overlay").addEventListener("click", () => setMobileNavigationOpen(false, { restoreFocus: true }));
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setMobileNavigationOpen(false);
+  if (event.key === "Escape") setMobileNavigationOpen(false, { restoreFocus: true });
 });
 window.addEventListener("resize", () => {
   if (window.innerWidth > 600) setMobileNavigationOpen(false);

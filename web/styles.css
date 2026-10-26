@@ -1487,3 +1487,38 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   .run-flow-dialog .event-row > small { grid-column: 2; max-width: none; font-size: 11px !important; }
   .run-flow-dialog .event-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
 }
+
+
+/* Global navigation accessibility: skip link, stable route focus, and reduced motion. */
+.skip-link {
+  position: fixed;
+  z-index: 1000;
+  top: 10px;
+  left: 10px;
+  transform: translateY(calc(-100% - 16px));
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-raised);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .28);
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: transform .15s ease;
+}
+.skip-link:focus {
+  transform: translateY(0);
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+#main-content:focus { outline: none; }
+#main-content h1:focus { outline: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

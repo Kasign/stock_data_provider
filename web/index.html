@@ -12,6 +12,7 @@
     <script type="module" src="/src/app.js"></script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">跳转到主内容</a>
     <div class="app-shell">
       <aside class="sidebar" id="primary-sidebar">
         <a class="brand" href="/" aria-label="Stock Data Console home">
@@ -38,7 +39,7 @@
       </aside>
       <button class="mobile-nav-overlay" id="mobile-nav-overlay" type="button" aria-label="关闭导航" hidden></button>
 
-      <main class="main-area">
+      <main class="main-area" id="main-content" tabindex="-1">
         <header class="topbar">
           <button class="icon-button mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" aria-controls="primary-sidebar" title="打开导航">☰</button>
           <div class="breadcrumb"><span>Stock Data Provider</span><span class="breadcrumb-sep">/</span><strong id="breadcrumb-current">行情工作台</strong></div>
