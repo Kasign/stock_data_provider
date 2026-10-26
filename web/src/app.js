@@ -70,6 +70,25 @@ const TASK_EVENT_STATUS_LABELS = Object.freeze({
   unknown: "状态未报告",
   other: "其他状态"
 });
+
+function taskEventStatusKey(status) {
+  const normalized = String(status || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+  return Object.prototype.hasOwnProperty.call(TASK_EVENT_STATUS_LABELS, normalized)
+    ? normalized
+    : normalized ? "other" : "unknown";
+}
+
+function taskEventStatusLabel(status, statusKey = taskEventStatusKey(status)) {
+  return statusKey === "other" ? String(status) : TASK_EVENT_STATUS_LABELS[statusKey];
+}
+
+function taskEventStatusTone(statusKey) {
+  if (["succeeded", "success", "completed"].includes(statusKey)) return "is-local";
+  if (["failed", "error", "blocked", "rejected"].includes(statusKey)) return "is-error";
+  if (["degraded", "partial"].includes(statusKey)) return "is-warning";
+  return "is-readonly";
+}
+
 const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
 let initialConnectionDraft = null;
 
@@ -1358,12 +1377,10 @@ function renderSources(payload) {
     ["valuation_capable", "个股估值指标"],
     ["hot_ranking_capable", "个股人气榜/飙升榜"],
     ["chip_capable", "筹码分布"],
-    ["capital_flow_capable", "资金流摘要"],
+    ["capital_flow_capable", "个股资金流"],
     ["announcements_capable", "个股公告"],
     ["dragon_tiger_capable", "龙虎榜"],
-    ["trading_calendar_capable", "交易日历"],
-    ["chip_capable", "筹码分布"],
-    ["capital_flow_capable", "个股资金流"]
+    ["trading_calendar_capable", "交易日历"]
   ];
 
   sources.forEach((source) => {
@@ -1685,13 +1702,17 @@ function renderSelectedTaskEvent(item) {
   $("#task-event-detail-title").textContent = label + " · #" + (Number.isFinite(sequence) ? sequence : "未报告");
   $("#task-event-detail-message").textContent = event.message || "服务端未提供事件说明。";
   const status = $("#task-event-detail-status");
-  status.textContent = event.status || "状态未报告";
-  status.className = "availability-pill " + (event.status === "failed" || event.status === "error" ? "is-unavailable" : "is-readonly");
+  const statusKey = taskEventStatusKey(event.status);
+  const statusLabel = taskEventStatusLabel(event.status, statusKey);
+  status.textContent = statusLabel;
+  status.className = "availability-pill " + taskEventStatusTone(statusKey);
+  status.title = event.status || "服务端未报告状态";
+  status.dataset.eventStatus = statusKey;
 
   const fields = [
     ["服务端序号", Number.isFinite(sequence) ? sequence : null],
     ["阶段键", event.stage || event.name],
-    ["事件状态", event.status],
+    ["事件状态", statusLabel],
     ["服务端时间", event.at ? formatDateTime(event.at) : null],
     ["错误代码", event.error_code]
   ];
@@ -1768,8 +1789,8 @@ function renderTaskEvents() {
   if (!hasSelected) {
     const priority = [...events].reverse().find((item) => {
       const event = item.event && typeof item.event === "object" ? item.event : item;
-      const status = String(event.status || "").toLowerCase();
-      return /fail|error|block|reject|degrad|partial|running|started/.test(status);
+      const status = taskEventStatusKey(event.status);
+      return ["failed", "error", "blocked", "rejected", "degraded", "partial", "running", "started", "in-progress", "in_progress", "processing"].includes(status);
     });
     state.selectedTaskEventSequence = Number((priority || events[events.length - 1]).sequence);
   }
@@ -1778,11 +1799,8 @@ function renderTaskEvents() {
     const event = item.event && typeof item.event === "object" ? item.event : item;
     const sequence = Number(item.sequence);
     const selected = sequence === Number(state.selectedTaskEventSequence);
-    const rawStatus = String(event.status || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
-    const statusKey = Object.prototype.hasOwnProperty.call(TASK_EVENT_STATUS_LABELS, rawStatus)
-      ? rawStatus
-      : event.status ? "other" : "unknown";
-    const statusLabel = statusKey === "other" ? String(event.status) : TASK_EVENT_STATUS_LABELS[statusKey];
+    const statusKey = taskEventStatusKey(event.status);
+    const statusLabel = taskEventStatusLabel(event.status, statusKey);
     const row = document.createElement("button");
     row.type = "button";
     row.className = "event-row event-row-" + statusKey;

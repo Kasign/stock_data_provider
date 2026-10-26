@@ -312,6 +312,27 @@ test("run-flow events expose only server-provided durations and diagnostics", ()
 });
 
 
+test("provider capability definitions expose each backend capability once", () => {
+  const definitionBlock = app.match(/const capabilityDefinitions = \[([\s\S]*?)\n  \];/);
+  assert.ok(definitionBlock, "provider capability definitions must remain explicit");
+  const keys = [...definitionBlock[1].matchAll(/\["([^"]+)",\s*"[^"]+"\]/g)].map((match) => match[1]);
+  assert.equal(new Set(keys).size, keys.length, "one capability must not render multiple labels");
+  assert.equal(keys.filter((key) => key === "chip_capable").length, 1);
+  assert.equal(keys.filter((key) => key === "capital_flow_capable").length, 1);
+});
+
+test("run-flow event details share normalized status labels and tones with the timeline", () => {
+  assert.match(app, /function taskEventStatusKey\(status\)/);
+  assert.match(app, /function taskEventStatusLabel\(status, statusKey = taskEventStatusKey\(status\)\)/);
+  assert.match(app, /function taskEventStatusTone\(statusKey\)/);
+  assert.match(app, /status\.textContent = taskEventStatusLabel\(event\.status, statusKey\)/);
+  assert.match(app, /\["事件状态", statusLabel\]/);
+  assert.match(app, /const statusKey = taskEventStatusKey\(event\.status\)/);
+  assert.match(stylesheet, /\.availability-pill\.is-error/);
+  assert.match(stylesheet, /\.availability-pill\.is-warning/);
+});
+
+
 test("settings center groups configuration by ownership and prevents fake server writes", () => {
   for (const id of [
     "settings-display-section", "settings-connection-section", "settings-basic-section",

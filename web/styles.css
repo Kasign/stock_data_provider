@@ -798,6 +798,16 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   color: var(--accent); border-color: color-mix(in srgb, var(--accent) 34%, var(--border)); background: var(--accent-soft);
 }
 .availability-pill.is-readonly { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 32%, var(--border)); }
+.availability-pill.is-error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 9%, var(--panel));
+}
+.availability-pill.is-warning {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--border));
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
 .feature-callout { display: flex; align-items: flex-start; gap: 14px; padding: 20px 22px; border-color: color-mix(in srgb, var(--warning) 24%, var(--border)); }
 .feature-callout-icon {
   display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border-radius: 10px;
