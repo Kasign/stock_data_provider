@@ -75,6 +75,17 @@ export function analysisHealth(settings) {
 export function getDataSources(settings) {
   return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey });
 }
+export function getMarketValuations(settings, symbols, signal) {
+  const normalizedSymbols = Array.isArray(symbols) ? symbols.map((item) => String(item ?? "").trim()).filter(Boolean) : [];
+  if (!normalizedSymbols.length || normalizedSymbols.length > 100) {
+    return Promise.reject(new Error("估值查询需要 1–100 个规范 A 股代码。"));
+  }
+  const query = new URLSearchParams({ symbols: normalizedSymbols.join(",") });
+  return request(settings.marketBase, `/api/v1/market/valuations?${query}`, {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
 export function getMarketIndices(settings, signal) { return request(settings.marketBase, "/api/v1/market/indices", { apiKey: settings.apiKey, signal }); }
 export function getMarketBreadth(settings, signal) { return request(settings.marketBase, "/api/v1/market/breadth", { apiKey: settings.apiKey, signal }); }
 export function getMarketSectors(settings, { type = "industry", limit = 10, signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit)});return request(settings.marketBase,"/api/v1/market/sectors?"+query.toString(),{apiKey:settings.apiKey,signal}); }

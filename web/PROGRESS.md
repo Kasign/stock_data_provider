@@ -392,3 +392,12 @@
 - 区分临时失败与永久失败：临时失败 5 秒后重试；事件接口永久失败时暂停重复事件请求但继续轮询任务状态，并保留手动刷新重试入口。
 - 新建/恢复任务时重置事件错误状态；当 Task 查询永久失败时暂停轮询，避免用事件端点的成功响应冒充任务仍然有效。
 - 本轮按要求未运行测试或触发 CI。
+
+
+## 2026-10-26 — 接入个股估值快照
+
+- 新增真实 `GET /api/v1/market/valuations?symbols=...` 客户端与个股研究区估值卡片，展示 PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM。
+- 每项指标分别展示，null/缺失显示“未提供”，不补零；保留负值、质量原因、来源、供应商时间、采集时间及未返回标的提示。
+- Provider 能力明细新增 `fundamentals_capable` 与 `valuation_capable`，仅在后端字段显式为 true 时展示。
+- 经核对，当前数据分支 Go Handler 已注册估值路由，但 `services/market-data/openapi.yaml` 尚未记录；已在 WebUI API 合约中标注这个文档差异。Provider 未启用时按真实 503 展示，不生成假指标。
+- 本轮未运行测试或触发 CI。

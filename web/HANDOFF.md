@@ -315,3 +315,12 @@
 - events 可手动重试；每次新建任务或恢复本地 task 引用时清除旧事件错误/暂停标记。
 - StageEvent 必须是正整数 sequence 才合并；按 sequence map 覆盖重复事件并只用合法序号推进游标。
 - 本轮未运行测试或 CI；待统一验收临时/永久接口错误、任务终态与坏序号回包。
+
+
+## 2026-10-26 — 个股估值 API 接入
+
+- 个股研究新增估值卡片与独立“读取估值指标”操作，调用 `/api/v1/market/valuations?symbols={canonical_symbol}`。
+- 展示 PE TTM、PE MRQ、PB MRQ、PS TTM、PCF TTM 及源端质量、来源时间；缺失/null 不转为零。负倍数保持真实数值，不根据估值指标生成买卖判断。
+- Provider 能力清单加入季度财务和估值能力字段。
+- 注意：当前数据分支已在 server.go 注册估值路由，但 OpenAPI 文档未记录；若部署版本较旧会收到 404，若没有启用估值 Provider 则会收到 503。前端分别展示对应错误。
+- 本批未运行测试或 CI。

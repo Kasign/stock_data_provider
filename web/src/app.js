@@ -1313,6 +1313,8 @@ function renderSources(payload) {
     ["market_breadth_capable", "市场涨跌分布"],
     ["limit_pool_capable", "涨跌停池"],
     ["stock_boards_capable", "个股所属板块"],
+    ["fundamentals_capable", "季度财务指标"],
+    ["valuation_capable", "个股估值指标"],
     ["announcements_capable", "个股公告"],
     ["dragon_tiger_capable", "龙虎榜"],
     ["trading_calendar_capable", "交易日历"],
