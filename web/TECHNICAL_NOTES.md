@@ -59,7 +59,7 @@ X-API-Key: <由现有设置提供>
 - `503`：没有启用相应 Provider 或服务暂不可用，应按后端错误提示处理。
 - `502` 或网络错误：显示请求错误和 API 返回的状态/请求标识（如有），不生成本地示例记录来填充榜单。
 - 用户切换榜单或再次刷新时，旧请求会被 AbortController 取消；被取消的旧请求不得覆盖当前结果。
-- Provider 能力列表只在数据源回包将 `hot_ranking_capable` 显式标记为 true 时显示支持。字段缺失不等于 true，也不等于整个服务不可用。
+- Provider 能力列表只在数据源回包将 `hot_ranking_capable` 显式标记为 true 时显示支持。数据分支的 `services/market-data/openapi.yaml` 已在提交 [`5bcc05f`](https://github.com/Kasign/stock_data_provider/commit/5bcc05f1db5114828dbbce947841cbc521e079a9) 中补上该字段，保持 JSON 响应与 OpenAPI Schema 一致。字段缺失不等于 true，也不等于整个服务不可用。
 
 ## 5. 扩展约定
 
