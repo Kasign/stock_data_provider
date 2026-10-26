@@ -215,3 +215,11 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 已将 Provider 名称支持判断集中到 `isSupportedProviderName`，让供应商配置对象校验和优先级列表校验共用同一份允许名单，避免两处名单继续漂移。雪球仍保持默认关闭；允许它出现在优先级列表不代表会启用其能力。
 - 已新增 `TestLoadAcceptsXueqiuInProviderPriority` 回归测试源码，覆盖“优先级含雪球、雪球能力关闭时，配置仍可加载”的场景。
 - 本次仅做代码与配置静态审查，没有运行 Go 测试、构建、GitHub Actions 或实时 Provider 请求。该修复尚需用户后续统一回归确认。
+
+
+## 5. 2026-10-26 静态 Review 补充：Provider 能力开关校验
+
+- 原有布尔环境变量校验需要手工维护完整名单。部分能力开关（例如 `MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED`、`MARKET_DATA_BAOSTOCK_TRADING_CALENDAR_ENABLED`）未被覆盖，填入 `sometimes` 等非法值时，`boolEnv` 会静默保留 JSON/代码默认值，导致部署人员以为配置已生效。
+- 现在按支持的 Provider 名称与能力后缀统一校验所有 Provider 能力布尔环境变量；原有全局布尔项校验仍保留。未来添加能力开关时，即使未单独补入静态校验清单，也会被该规则覆盖。
+- 已新增 `TestLoadRejectsInvalidBooleanForProviderCapability` 回归测试源码，覆盖 BaoStock 财务指标开关的非法值。测试尚未执行，留待统一回归。
+- 本次修改只改配置校验、回归测试源码和文档，没有运行测试、构建、CI 或真实数据请求。
