@@ -272,6 +272,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_SINA_KLINE_URL":                cfg.SinaKlineURL,
 		"MARKET_DATA_YAHOO_CHART_URL":               cfg.YahooChartURL,
 		"MARKET_DATA_NETEASE_HISTORY_URL":           cfg.NeteaseHistoryURL,
+		"MARKET_DATA_NETEASE_QUOTE_URL":             cfg.NeteaseQuoteURL,
 		"MARKET_DATA_TUSHARE_API_URL":                cfg.TushareAPIURL,
 		"MARKET_DATA_HITHINK_BASE_URL":               cfg.HithinkBaseURL,
 		"MARKET_DATA_XUEQIU_BASE_URL":                cfg.XueqiuBaseURL,
