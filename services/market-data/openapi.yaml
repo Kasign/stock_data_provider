@@ -458,6 +458,8 @@ components:
         change: {type: number, nullable: true, description: Price change in CNY/share}
         change_percent: {type: number, nullable: true, description: Percentage points; 10 means 10 percent}
         rank_change: {type: integer, nullable: true, description: Surge ranking's provider-reported rank movement; sign follows upstream semantics}
+        heat: {type: number, nullable: true, description: Provider-reported ranking heat; scale is provider-defined}
+        rank_trend: {type: string, nullable: true, description: Provider-reported ranking trend label}
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
@@ -470,6 +472,7 @@ components:
         type: {type: string, enum: [popular, surge]}
         total: {type: integer, minimum: 0, description: Number of rows returned in this response, not the full A-share universe}
         items: {type: array, items: {$ref: '#/components/schemas/HotRankingItem'}}
+        provider_time: {type: string, format: date-time, nullable: true, description: Provider data-ready timestamp when present; not a guaranteed exact quote time}
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
@@ -901,8 +904,8 @@ paths:
         '503': {description: No market breadth provider enabled}
   /api/v1/market/hot-stocks:
     get:
-      summary: Get Eastmoney individual-stock popularity or surge ranking
-      description: Source exposes no independently verifiable snapshot timestamp, so successful snapshots are marked degraded. total counts rows returned by this bounded response, not all securities in the market.
+      summary: Get domestic individual-stock popularity or surge ranking
+      description: Eastmoney is preferred; optional Tonghuashun provides the same daily ranking contract as a fallback. Ranking data may be delayed, so successful snapshots remain degraded. total counts rows returned in this bounded response, not all securities in the market.
       parameters:
         - {name: type, in: query, required: false, schema: {type: string, enum: [popular, surge], default: popular}}
         - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}

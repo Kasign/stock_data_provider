@@ -450,6 +450,8 @@ type HotRankingItem struct {
 	Change         *float64      `json:"change,omitempty"`
 	ChangePercent  *float64      `json:"change_percent,omitempty"`
 	RankChange     *int          `json:"rank_change,omitempty"`
+	Heat           *float64      `json:"heat,omitempty"`
+	RankTrend      string        `json:"rank_trend,omitempty"`
 	Source         string        `json:"source"`
 	SourceVersion  string        `json:"source_version,omitempty"`
 	FetchedAt      time.Time     `json:"fetched_at"`
@@ -457,11 +459,12 @@ type HotRankingItem struct {
 	QualityReasons []string      `json:"quality_reasons,omitempty"`
 }
 
-// HotRankingSnapshot 表示人气榜或飙升榜的有界排名快照。上游不提供可校验的快照时间，默认质量为 degraded。
+// HotRankingSnapshot 表示人气榜或飙升榜的有界排名快照。ProviderTime 为可选的数据准备时间，不等同于精确行情时点；延迟榜单保持 degraded。
 type HotRankingSnapshot struct {
 	RankingType    string           `json:"type"`
 	Total          int              `json:"total"`
 	Items          []HotRankingItem `json:"items"`
+	ProviderTime   *time.Time       `json:"provider_time,omitempty"`
 	Source         string           `json:"source"`
 	SourceVersion  string           `json:"source_version,omitempty"`
 	FetchedAt      time.Time        `json:"fetched_at"`

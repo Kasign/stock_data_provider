@@ -177,12 +177,12 @@ curl -H "X-API-Key: $MARKET_DATA_API_KEY" "http://127.0.0.1:8091/api/v1/bars/600
 - 优先使用 Go 原生东方财富 Provider；若请求失败，会继续尝试已启用的妙想补充 Provider。可通过 `MARKET_DATA_EASTMONEY_CHIP_DISTRIBUTION_ENABLED=false` 关闭此实现。
 - 由于东方财富日 K 响应未给出筹码指标的独立快照时间，结果始终标记 `degraded`，并携带最新交易日与原因；该计算属于算法迁移，不宣称原始筹码分布端点或历史筹码序列已直接可用。
 
-### 人气榜与飙升榜（Go 原生，东方财富）
+### 人气榜与飙升榜（Go 原生，东方财富 + 可选同花顺回退）
 
 - API：`GET /api/v1/market/hot-stocks?type=popular&limit=10`；将 `type=surge` 切换为飙升榜。
-- Provider 使用东方财富 `getAllCurrentList`（人气榜）和 `getAllHisRcList`（飙升榜）读取排名，再通过东方财富行情接口补充股票名称、最新价和涨跌幅。上游查询最多 100 条排名，不全市场扫描。
-- 榜单上游没有可核验的快照时间，因此结果为 `degraded`；行情补充不完整时保留排名并标记缺失原因。空列表不会解释为已核验的零条上榜。
-- 通过 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED=false` 可关闭该能力；默认启用。未引入海外数据源。
+- 默认优先使用东方财富 `getAllCurrentList` / `getAllHisRcList` 并补充最新价与涨跌幅。显式启用同花顺后，回退源使用 `/api/a-share/special-data/hot-stock-list?period=day` 和 `/api/a-share/special-data/skyrocket-list?period=day`；保留同花顺原始 `heat`、`rank_change`、`rank_trend`，不伪造行情价格。
+- 榜单数据可能延迟，响应保持 `degraded`；同花顺 `provider_time` 代表数据准备时间，不保证是精确行情时点。空列表标记 `unknown`，不解释为已核验的零条上榜。
+- 同花顺能力默认关闭；需同时设置 `MARKET_DATA_HITHINK_ENABLED=true`、有效 `MARKET_DATA_HITHINK_API_KEY` 和 `MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED=true`。东方财富能力可通过 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED=false` 关闭。未引入海外数据源。
 ### 个股 profile 扩展字段（Efinance get_base_info 迁移）
 
 `GET /api/v1/stocks/{symbol}/profile` 除证券身份和上市信息外，还返回可空的动态市盈率、市净率、行业、总市值、流通市值、板块编号、ROE、净利率、净利润和毛利率，字段来自 Efinance `get_base_info()` 使用的东方财富行情字段。

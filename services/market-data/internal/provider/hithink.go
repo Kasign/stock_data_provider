@@ -420,7 +420,135 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 	return snapshot, nil
 }
 
-// FetchLimitPool maps the THS limit-up pool. The API does not expose separate down-limit or broken-board pools.
+// FetchLimitPool maps the THS up/down/broken limit pools. Amount units remain provider-defined.
+// FetchHotStocks maps the THS daily popularity or surge list into the shared ranking contract.
+// The provider ranking is delayed and must not be treated as an executable real-time trading signal.
+func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit int) (*model.HotRankingSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺人气榜接口需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	rankingType = strings.ToLower(strings.TrimSpace(rankingType))
+	endpoint := ""
+	switch rankingType {
+	case "popular":
+		endpoint = "/api/a-share/special-data/hot-stock-list"
+	case "surge":
+		endpoint = "/api/a-share/special-data/skyrocket-list"
+	default:
+		return nil, fmt.Errorf("不支持的同花顺榜单类型 %q；可选 popular/surge", rankingType)
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		return nil, errors.New("同花顺榜单条数不能超过 100")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	query := url.Values{"period": []string{"day"}}
+	raw, err := p.get(ctx, endpoint, query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺%s请求失败: %w", map[string]string{"popular": "人气榜", "surge": "飙升榜"}[rankingType], err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Timestamp *int64 `json:"timestamp"`
+		Item      []map[string]json.RawMessage `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺%s失败: %w", map[string]string{"popular": "人气榜", "surge": "飙升榜"}[rankingType], err)
+	}
+	if len(data.Item) > 5000 {
+		return nil, errors.New("同花顺榜单响应超过 5000 项安全上限")
+	}
+	now := time.Now().UTC()
+	sourceVersion := hithinkVersion + "-hot-ranking-v1"
+	snapshot := &model.HotRankingSnapshot{
+		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, min(limit, len(data.Item))),
+		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal"},
+	}
+	if data.Timestamp != nil && *data.Timestamp > 0 {
+		candidate := time.UnixMilli(*data.Timestamp).UTC()
+		if !candidate.After(now.Add(5*time.Minute)) && !candidate.Before(now.AddDate(-10, 0, 0)) {
+			snapshot.ProviderTime = &candidate
+		}
+	}
+	if snapshot.ProviderTime == nil {
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_ranking_timestamp_missing_or_invalid")
+	}
+	if len(data.Item) == 0 {
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "empty_hot_ranking_cannot_confirm_zero_rows")
+		return snapshot, nil
+	}
+
+	seen := make(map[string]struct{}, min(limit, len(data.Item)))
+	for index, row := range data.Item {
+		if len(snapshot.Items) >= limit {
+			break
+		}
+		symbol, symbolErr := hithinkDomesticSymbol(hithinkFieldString(row, "thscode"))
+		if symbolErr != nil {
+			return nil, fmt.Errorf("同花顺榜单第 %d 行证券代码无效: %w", index, symbolErr)
+		}
+		code := hithinkFieldString(row, "ticker")
+		if code == "" {
+			code = strings.Split(symbol, ".")[0]
+		}
+		if code != strings.Split(symbol, ".")[0] {
+			return nil, fmt.Errorf("同花顺榜单第 %d 行 ticker 与 thscode 不一致", index)
+		}
+		rankValue := hithinkFieldNumber(row, "rank")
+		if rankValue == nil || *rankValue < 1 || math.Trunc(*rankValue) != *rankValue || *rankValue > 1000000 {
+			return nil, fmt.Errorf("同花顺榜单第 %d 行排名无效", index)
+		}
+		if _, duplicate := seen[symbol]; duplicate {
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_hot_ranking_symbol_dropped")
+			continue
+		}
+		seen[symbol] = struct{}{}
+		name := hithinkFieldString(row, "name")
+		itemReasons := []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal"}
+		if snapshot.ProviderTime == nil {
+			itemReasons = append(itemReasons, "provider_ranking_timestamp_missing_or_invalid")
+		}
+		if name == "" {
+			itemReasons = append(itemReasons, "provider_stock_name_missing")
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_stock_names_missing")
+		}
+		rank := int(*rankValue)
+		var rankChange *int
+		if value := hithinkFieldNumber(row, "rank_change"); value != nil &&
+			math.Trunc(*value) == *value && *value >= -1000000 && *value <= 1000000 {
+			v := int(*value)
+			rankChange = &v
+		}
+		item := model.HotRankingItem{
+			Rank: rank, Symbol: symbol, Code: code, Name: name,
+			Heat: hithinkFieldNumber(row, "heat"),
+			RankChange: rankChange, RankTrend: hithinkFieldString(row, "rank_trend"),
+			Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
+			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
+		}
+		snapshot.Items = append(snapshot.Items, item)
+	}
+	snapshot.Total = len(snapshot.Items)
+	if snapshot.Total == 0 {
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "no_valid_hot_ranking_rows")
+	}
+	return snapshot, nil
+}
+
 func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("同花顺 HTTP client 未配置")

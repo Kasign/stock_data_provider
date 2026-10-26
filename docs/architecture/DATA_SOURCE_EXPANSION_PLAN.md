@@ -273,7 +273,7 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 
 ### 仍未等价迁移的国内能力
 
-- **人气榜/飙升榜**：AkShare 的 `stock_hot_rank_em` 和 `stock_hot_up_em` 已经由 Go 原生 `HotRankingProvider` 对接东方财富端点；快照时间缺失时保持 degraded，雪球关注榜回退仍未迁移。
+- **人气榜/飙升榜**：AkShare 的 `stock_hot_rank_em` 和 `stock_hot_up_em` 已由 Go 原生 `HotRankingProvider` 对接东方财富；另有可选同花顺回退端点。榜单仍有延迟且不作为实时交易信号，雪球关注榜回退仍未迁移。
 - **个股基本资料扩展字段**：已将 Efinance `get_base_info` 的动态 PE/PB、行业、总市值、流通市值、板块编号、ROE、净利率、净利润和毛利率映射到 Go `StockBasic`。这些当前 profile 字段无独立上游时间戳，整体质量标记 degraded；与季度财务报表分开，不拼造成无披露日期的历史财务值。
 - **统计口径差异**：Python 市场统计会自行推断涨跌停计数，Go 当前分为市场广度和涨跌停池接口；字段名相似不代表语义完全等价。
 - 海外市场本轮按既定范围暂缓，不在国内数据域迁移完成前引入。
@@ -299,3 +299,11 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - 统一模型扩展最新价、跌停首次/末次触及时间、炸板开板次数、换手率和供应商成交额字段；旧客户端字段保持兼容，新增字段均为可选。
 - 数据仍保持 `degraded`：同花顺金额/成交额单位未在当前接口契约中明确，快照时间缺失或请求日期与上游时间不一致会显示质量原因。该能力只在显式启用 `MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED=true` 后参与回退链。
 - 本轮未运行测试或 CI；真实 API 账号权限、非交易日空池语义与目标容器访问由后续统一验收。
+
+
+### 同花顺人气榜与飙升榜后备源（2026-10-26）
+
+- 复用已有 `HotRankingProvider` 和 `GET /api/v1/market/hot-stocks?type=popular|surge&limit=100`，不新增一套榜单路由。东方财富仍为默认优先数据源，同花顺只在显式启用后加入源优先级回退链。
+- `popular` 对应 `/api/a-share/special-data/hot-stock-list?period=day`，`surge` 对应 `/api/a-share/special-data/skyrocket-list?period=day`。这些端点提供榜单字段，但不保证行情快照；Go 模型新增 `heat`、`rank_trend` 和可选 `provider_time`，不补造价格或涨跌幅。
+- 榜单按数据延迟/非交易信号处理，整体保持 `degraded`；供应商时间戳若存在，只表示数据准备时间。空榜单保持 `unknown`，不等于已证实无人上榜。
+- 启用条件：`MARKET_DATA_HITHINK_ENABLED=true`、`MARKET_DATA_HITHINK_API_KEY` 和 `MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED=true`；该能力默认关闭。本轮未运行测试或 CI。

@@ -37,7 +37,8 @@
       "dragon_tiger": false,
       "fundamentals": false,
       "valuations": false,
-      "index_catalog": false
+      "index_catalog": false,
+      "hot_rankings": false
     },
     "baostock": {
       "enabled": true,
