@@ -14,7 +14,7 @@
 | BaostockFetcher | 原 Python 默认 P3；Go 按历史 K 线优先候选 | A 股历史日线优先；财务、复权因子、除权除息、基础资料/行业/指数成分按 API 能力逐项扩展 | Go 原生 TCP 客户端与 DailyBarProvider 已实现；NAS Docker 容器已真实登录/查询，并覆盖多个证券及前复权、后复权、不复权样本；GitHub Runner #100 又返回 8 根样本日 K | 日 K 已有目标容器首轮实测，可作为受限回退源；仍需持续观察稳定性和更多证券/日期范围，不能外推为全覆盖或 SLA；财务指标、交易日历独立开关仍默认关闭 |
 | YfinanceFetcher | 默认启用；默认 P4；海外股票与指数的专用路径 | 美股 / 海外行情与历史数据、部分基本面数据 | 无 | 未迁移 |
 | TencentFetcher | 默认启用；默认 P5 | A 股行情与日线兜底 | 原生 Go Tencent Provider | 已迁移部分行情能力，口径仍需逐项对照 |
-| TushareFetcher | 仅配置 `TUSHARE_TOKEN` / `MARKET_DATA_TUSHARE_TOKEN` 且显式开启后注册 | A 股原始日线；其他行情、市场统计和财务能力依账号权限扩展 | Go 原生 HTTP `Tushare` DailyBarProvider（默认关闭，只支持 `none`） | 首批日 K 接口已接入代码；需用户 Token 与对应权限，未做统一测试，不宣称生产可用 |
+| TushareFetcher | 仅配置 `TUSHARE_TOKEN` / `MARKET_DATA_TUSHARE_TOKEN` 且显式开启后注册 | A 股原始日线、证券基础资料、交易日历、季度财务指标、批量估值；接口依账号积分/权限开放 | Go 原生 HTTP `Tushare` Provider：DailyBar、StockBasic、TradingCalendar、Fundamentals、Valuation（默认关闭） | 代码与独立能力路由已接入；日线只支持 `none`；估值保留报告日期但无精确快照时间、PCF 未覆盖；未统一测试，不宣称生产可用 |
 | TickFlowFetcher | 免费 API 可免 Key 读取历史日 K；实时行情需 `TICKFLOW_API_KEY` 且显式开启 quote 能力 | 国内 SH/SZ/BJ 实时行情、日线 K 线 | Go 原生 REST `TickFlow` Provider（免费日 K 默认启用，行情默认关闭） | 已接入 API client 和手→股单位标准化；暂未统一测试，免费源频率限制与 Key 权限需后续验收 |
 | MiaoxiangFetcher（妙想 / MX_API） | 仅配置 `MX_APIKEY` 后注册；默认优先级 6 | 筹码分布及个股资金流等第三方补充数据 | Go `MiaoXiang`（独立 SupplementProvider，显式 opt-in） | 已迁移首批筹码/资金流字段；尚缺真实 MX Key 联调与精确 publication availability |
 | LongbridgeFetcher | 仅配置 Longbridge OAuth / 旧凭据后注册 | 美股 / 港股行情及日线兜底 | 无 | 可选源，未迁移 |
@@ -39,12 +39,13 @@
 | 概念 / 题材涨跌榜 `get_concept_rankings` | 复用板块 ranking 契约、使用独立概念过滤条件；API 为 `GET /api/v1/market/sectors?type=concept` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
 | 涨停池 get_limit_up_pool、跌停池、炸板池 | 新增 LimitPoolProvider、东方财富 push2ex 三类池端点及 GET /api/v1/market/limit-pools?type=up|down|broken | GitHub Runner #100 三类端点均返回 200，报告总数分别为涨停 82、跌停 6、炸板 12（涨停池本次只返回 30 条样本项）；请求交易日为 2026-10-23，源端没有可核验快照时间，质量 degraded；默认关闭，NAS/Docker 与跨交易日语义验证未完成 |
 | 个股所属板块 `get_belong_boards` | 新增独立 `StockBoardsProvider`、东方财富 `slist/get` 适配器与 `GET /api/v1/stocks/{symbol}/boards` | GitHub Runner #100 对 600036.SH 返回 26 个板块项；302 → delay 域名 200；源端没有可核验快照时间且板块类型语义仍有限，结果 degraded；默认关闭，NAS/Docker 验收待完成 |
-| 交易日历 | 新增独立 `TradingCalendarProvider`，通过 BaoStock TCP `query_trade_dates` 和 `GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD` | GitHub Runner #100 成功返回 2026-10-17 至 2026-10-23 的 7 个日历日；此前 Runner 有连接/读取超时记录，且源端时间元数据缺失；默认关闭，需多轮重试及 NAS/Docker 验收 |
+| 交易日历 | 新增独立 `TradingCalendarProvider`，通过 BaoStock TCP `query_trade_dates` 和可选 Tushare Pro `trade_cal`，统一使用 `GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD` | BaoStock 已有首轮真实样本；Tushare Go 实现已加入代码但默认关闭，需配置有效 Token 与接口权限；两者均须满足连续自然日覆盖契约，待统一验收 |
 | 筹码分布 `get_chip_distribution` | 可选 Go MX API 路由和缓存 | 精确 publication available_at 仍缺失；输出降级质量，历史 as_of 不得倒灌 |
-| 基本面 `get_fundamental_context` | 新增 BaoStock 原生 TCP 季频指标 Provider 与 `GET /api/v1/stocks/{symbol}/fundamentals?year=YYYY&quarter=N`，覆盖盈利、营运、成长、偿债、现金流、杜邦六组指标 | 指标层首批迁移，不是完整财务报表或原 Python fundamental context 的替代；报告期与披露日期独立输出，保留原始值和单位，缺失不补零；默认关闭，真实 Runner 与 NAS/Docker 验收待完成 |
+| 基本面 `get_fundamental_context` | BaoStock 与可选 Tushare Pro `fina_indicator` 均提供 Go 原生 `FundamentalsProvider`，复用 `GET /api/v1/stocks/{symbol}/fundamentals?year=YYYY&quarter=N` | 按季度输出盈利、营运、成长、偿债、现金流、杜邦六组指标，保留报告期与公告日期；Tushare 需要对应积分权限，两个 Provider 都待统一验收；并非完整财务报表或原 Python 上下文的等价替代 |
 | 个股资金流 `get_capital_flow_context` | 可选 Go MX API 路由；字段按人民币元规范化，5/10 日累计要求完整观测 | 自然语言查询返回的指标需要验证字段标签/单位；缺值不补零，精确 available_at 未实现 |
 | 龙虎榜 `get_dragon_tiger_context` | 无 | 必须保留交易日、上榜原因、营业部/机构口径及金额单位 |
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
+| 批量估值 | 可选 Tushare daily_basic Go Provider 与 GET /api/v1/market/valuations?symbols=... | 按最近已完成交易日返回 PE/PB/PS；不支持的 PCF 保持 null，并返回 provider_report_date；缺少精确更新时间时 quality 为 degraded；默认关闭，需 Token/积分权限，待统一验收 |
 | 股票名称 / 代码搜索 | 独立 `StockSearchProvider`，东方财富 CLIST 证券目录与 6 小时缓存，API `GET /api/v1/stocks/search?q=贵州茅台&limit=10` | 实测已证实目录源 HTTP 200 并报告 5,925 条证券，但首轮 `pz=5000`、次轮 `pz=1000` 都遇到服务端分页上限低于请求值，代码因此只扫描首页并漏掉“贵州茅台”。当前调整为每页 100 条、最多 100 页，并新增后续页匹配回归测试；待 Go CI 与真实 Runner 再验收 |
 | 新闻 / 公告 | 单股公告为 Go 原生东方财富 Provider/API；Go Core 已接入 Bocha 优先、自建 SearXNG 备选的国内新闻搜索链，并在未配置/无合格结果时回退 Python Bridge | Go CI #310 全部通过；Live Probe #115 的新闻搜索步骤因没有 `BOCHA_API_KEYS` 或 `SEARXNG_BASE_URLS` 而明确 `skipped`，不能视为真实源站验收。仍未覆盖 Python 的全部搜索源、复杂反垃圾准入和完整语言策略 |
 

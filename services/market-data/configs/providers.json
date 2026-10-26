@@ -70,7 +70,11 @@
     "tushare": {
       "enabled": false,
       "quote": false,
-      "daily_bars": false
+      "daily_bars": false,
+      "stock_basic": false,
+      "trading_calendar": false,
+      "fundamentals": false,
+      "valuations": false
     },
     "tickflow": {
       "enabled": true,

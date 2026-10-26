@@ -580,6 +580,10 @@ components:
           type: array
           items: {type: string}
           description: Requested canonical symbols not returned by the provider; omitted when none
+        provider_report_date:
+          type: string
+          format: date
+          description: Trading/report date supplied by the provider; not an exact snapshot timestamp
         provider_timestamp:
           type: string
           format: date-time

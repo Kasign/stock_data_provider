@@ -120,7 +120,7 @@ func Load() (Config, error) {
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
 			"netease":   {Enabled: true, Quote: true, DailyBars: true},
-			"tushare":   {Enabled: false, Quote: false, DailyBars: false},
+			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, Fundamentals: false, Valuations: false},
 			"tickflow":  {Enabled: true, Quote: false, DailyBars: true},
 			"pytdx":     {Enabled: true, Quote: true, DailyBars: true},
 		},
