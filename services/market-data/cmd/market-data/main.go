@@ -86,6 +86,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	barProviders := make([]provider.DailyBarProvider, 0, len(available))
 	stockBasicProviders := make([]provider.StockBasicProvider, 0, len(available))
 	stockSearchProviders := make([]provider.StockSearchProvider, 0, len(available))
+	activeProviders := make(map[string]provider.NamedProvider, len(available))
 	sectorRankingProviders := make([]provider.SectorRankingProvider, 0, len(available))
 	indexQuoteProviders := make([]provider.IndexQuoteProvider, 0, len(available))
 	marketBreadthProviders := make([]provider.MarketBreadthProvider, 0, len(available))
@@ -105,9 +106,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			continue
 		}
 		allProviders = append(allProviders, p)
-		if searchProvider, ok := p.(provider.StockSearchProvider); ok {
-			stockSearchProviders = append(stockSearchProviders, searchProvider)
-		}
+		activeProviders[name] = p
 		if settings.Quote {
 			quoteProvider, ok := p.(provider.QuoteProvider)
 			if !ok {
@@ -192,6 +191,25 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			}
 			fundamentalsProviders = append(fundamentalsProviders, capability)
 		}
+	}
+	// 股票搜索使用独立的源优先级：腾讯 Smartbox 按关键词检索，避免冷启动时扫描全市场目录；东方财富保留为后备。
+	searchPriority := []string{"tencent", "eastmoney"}
+	searchPriority = append(searchPriority, cfg.ProviderPriority...)
+	seenSearchProviders := make(map[string]struct{}, len(searchPriority))
+	for _, name := range searchPriority {
+		if _, seen := seenSearchProviders[name]; seen {
+			continue
+		}
+		seenSearchProviders[name] = struct{}{}
+		p, enabled := activeProviders[name]
+		if !enabled {
+			continue
+		}
+		searchProvider, ok := p.(provider.StockSearchProvider)
+		if !ok {
+			continue
+		}
+		stockSearchProviders = append(stockSearchProviders, searchProvider)
 	}
 	if len(allProviders) == 0 {
 		return errors.New("provider priority has no enabled providers")
