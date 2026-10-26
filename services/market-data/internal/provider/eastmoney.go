@@ -821,8 +821,10 @@ func isEastmoneyHostname(host string) bool {
 
 const (
 	eastmoneyStockSearchIndexTTL   = 6 * time.Hour
-	eastmoneyStockSearchPageSize   = 5000
-	eastmoneyStockSearchMaxPages   = 4
+	// Eastmoney caps CLIST result pages below the requested 5000 rows. Using 1000
+	// matches the endpoint's actual paging window and lets the directory continue.
+	eastmoneyStockSearchPageSize   = 1000
+	eastmoneyStockSearchMaxPages   = 10
 	eastmoneyStockSearchRetryDelay = 30 * time.Second
 )
 

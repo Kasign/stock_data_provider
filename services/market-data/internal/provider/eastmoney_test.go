@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -444,6 +445,67 @@ func TestEastmoneyFetchIndexQuotesPreservesMissingAmountAsDegraded(t *testing.T)
 	}
 	if snapshot.QualityStatus != model.QualityDegraded {
 		t.Fatalf("partial snapshot must degrade: %+v", snapshot)
+	}
+}
+
+
+
+// TestEastmoneySearchStocksContinuesAfterProviderPageCap ensures a query match on a later
+// page is not hidden when Eastmoney returns fewer rows than the previously requested 5000.
+func TestEastmoneySearchStocksContinuesAfterProviderPageCap(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		page, err := strconv.Atoi(r.URL.Query().Get("pn"))
+		if err != nil {
+			t.Errorf("invalid page number: %v", err)
+		}
+		if got := r.URL.Query().Get("pz"); got != "1000" {
+			t.Errorf("page size=%q want 1000", got)
+		}
+		if r.URL.Query().Get("fields") != "f12,f13,f14" {
+			t.Errorf("unexpected search fields: %s", r.URL.RawQuery)
+		}
+		rows := make([]map[string]any, 0)
+		start, end := (page-1)*1000, page*1000
+		if end > 1005 {
+			end = 1005
+		}
+		for index := start; index < end; index++ {
+			code := fmt.Sprintf("%06d", 300000+index)
+			name := fmt.Sprintf("测试股票%d", index)
+			market := 0
+			if index%2 == 0 {
+				market = 1
+			}
+			if index == 1000 {
+				code, name, market = "600519", "贵州茅台", 1
+			}
+			rows = append(rows, map[string]any{"f12": code, "f13": market, "f14": name})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"rc": 0,
+			"data": map[string]any{"total": 1005, "diff": rows},
+		}); err != nil {
+			t.Errorf("encode page: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	p := &Eastmoney{client: server.Client(), stockListURL: server.URL, ut: "test-token"}
+	got, err := p.SearchStocks(context.Background(), "贵州茅台", 10)
+	if err != nil {
+		t.Fatalf("SearchStocks returned error: %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("directory should fetch both 1000-row pages, got %d requests", requests)
+	}
+	if got.Total != 1 || len(got.Items) != 1 || got.Items[0].Symbol != "600519.SH" || got.Items[0].Name != "贵州茅台" {
+		t.Fatalf("later-page Chinese name match was lost: %+v", got)
+	}
+	if got.QualityStatus != model.QualityValid || len(got.QualityReasons) != 0 {
+		t.Fatalf("complete multi-page directory should have valid quality: %+v", got)
 	}
 }
 
