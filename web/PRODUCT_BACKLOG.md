@@ -99,6 +99,7 @@
 ### P2：问股工作台
 
 - [ ] **问股 UI 与 Chat API 契约** — [Issue #8](https://github.com/Kasign/stock_data_provider/issues/8)
+  - 进度：问股工作台、股票上下文隔离与五态框架的源码/CI 完成；WebUI checks [#40257299173](https://github.com/Kasign/stock_data_provider/actions/runs/40257299173) 通过（78/78 Node tests、JS syntax、Nginx build）。Chat API 尚未接入，发送操作保持禁用。
   - 对话、会话、新会话、股票上下文、策略区域、消息复制/导出、流式状态与停止状态。
   - 先实现可审查的 UI 和状态转换；真实发送必须等 Chat API 契约和服务端实现。
 

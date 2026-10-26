@@ -167,3 +167,11 @@
 - WebUI checks [#40257236494](https://github.com/Kasign/stock_data_provider/actions/runs/40257236494) 中 78 项 Node tests 77 项通过；JS 语法检查通过，Nginx build 因测试失败而跳过。
 - 唯一失败为上下文安全文案断言：契约测试期望“不会自动复用历史上下文”，而页面首版写“不会复用上次会话的旧上下文”。页面文案已改成同时明确“不会自动复用历史上下文，也不会把旧会话的股票上下文带入新会话”；这是 UI 文案同步，不涉及新后端/API。
 - 修复提交后的 WebUI Actions 必须全绿，才能确认 Issue #8 自动化验收通过。
+
+
+## Issue #8 最终验收（2026-10-26）
+- 问股功能提交 `12996063025387818fff969d8d02b674403cd6e9` 引入 Chat UI/状态模型与当前行情上下文；修正文案提交 `0107256d975a6e2a324889d194b95b854480f17e` 同步上下文隔离提示。
+- WebUI checks [#40257299173](https://github.com/Kasign/stock_data_provider/actions/runs/40257299173) 成功：78/78 Node tests、JavaScript syntax check、Nginx image build 均通过。首轮 #40257236494 的单条失败是 UI 文案断言不一致，已修复复验。
+- 当前仍没有 Chat/session/stream/cancel API。问股页面只展示 unavailable，发送、停止、策略、会话、复制、导出与重试操作禁用。股票上下文只取当前页面真实行情 state，不持久化或跨会话恢复。
+- 本节记录时 PR #2 Open/未合并，head `0107256d975a6e2a324889d194b95b854480f17e`，base SHA `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。PR #1 当前 head `b7bc88499e7491446e5250abfbc3da112012b4b5`，Open/未合并；不得将数据 PR merge into WebUI 或反向合并。
+- 真实浏览器/移动端验收与 NAS/Docker/OpenResty Chat API 联调未执行。下一项进行 Issue #9 选股 UI，严禁用普通多股票分析任务伪装选股候选。
