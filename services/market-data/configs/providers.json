@@ -2,6 +2,7 @@
   "provider_priority": [
     "eastmoney",
     "baostock",
+    "tushare",
     "tencent",
     "sina",
     "netease"
@@ -47,6 +48,11 @@
       "enabled": true,
       "quote": true,
       "daily_bars": true
+    },
+    "tushare": {
+      "enabled": false,
+      "quote": false,
+      "daily_bars": false
     }
   }
 }

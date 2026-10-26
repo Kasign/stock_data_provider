@@ -5,12 +5,12 @@
 ## 当前实现范围
 
 - 国内实时行情 Provider：东方财富、腾讯、新浪、网易财经；Yahoo Finance 的代码仍保留，但作为海外来源从默认 Provider 优先级移除并保持关闭。
-- 国内日线 K 线 Provider：东方财富、BaoStock、腾讯、新浪（仅 `none` 复权口径）、网易财经（仅 `none` 复权口径）。网易接口曾在 GitHub Runner 遇到 DNS / HTTP 502，现纳入国内回退配置，后续统一验收其网络可用性和质量；不会因开启配置就将失败响应当作有效数据。
+- 国内日线 K 线 Provider：东方财富、BaoStock、腾讯、新浪（仅 `none` 复权口径）、网易财经（仅 `none` 复权口径）；新增可选 Tushare Pro 原生 Go HTTP Provider，需用户 Token，默认关闭且当前只支持原始不复权日 K。网易接口曾在 GitHub Runner 遇到 DNS / HTTP 502，现纳入国内回退配置，后续统一验收其网络可用性和质量；不会因开启配置就将失败响应当作有效数据。
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表、证券名称/代码搜索，以及可选补充数据接口。
 - 证券搜索：`GET /api/v1/stocks/search?q=贵州茅台&limit=10`，以真实 A 股证券目录按中文名称或代码匹配，返回标准 `symbol`、代码、名称与交易所，不返回虚构/推算行情。目录在进程内缓存 6 小时，每次最多返回 50 条结果；目录刷新失败但有旧目录时会明确标记 `quality_status=stale` 与质量原因，没有可用目录时返回 Provider 错误。
-- 标准单位：`volume` 为股，`amount` 为人民币元，价格为元/股；`trade_date` 是交易日。`quote_time` 是供应商报告的行情快照/更新时间，不一定等于最近一笔成交时间；新增的 `quote_time_semantics=provider_snapshot_time` 明确该语义。`fetched_at` 是本服务采集时间，`normalized_at` 是标准化时间，三者不能互相替代。
+- 标准单位：`volume` 为股，`amount` 为人民币元，价格为元/股；Tushare 原始日 K 的 `vol` 按手换算为股，`amount` 按千元换算为人民币元，原始字段/单位仍单独保留；`trade_date` 是交易日。`quote_time` 是供应商报告的行情快照/更新时间，不一定等于最近一笔成交时间；新增的 `quote_time_semantics=provider_snapshot_time` 明确该语义。`fetched_at` 是本服务采集时间，`normalized_at` 是标准化时间，三者不能互相替代。
 - 复权参数只能是 `none`、`forward_adjusted` 或 `backward_adjusted`。`unknown` 只用于说明数据未知，不是可请求的复权类型。
 - 标准化行情与 K 线保留底层 Provider 名称、版本、原始单位、抓取/标准化时间、复权口径、兜底诊断和质量原因。不能依据数值大小猜测单位，不能随意执行 100 倍价格修正。
 - Redis 缓存命中同样要检查新鲜度；盘中旧行情可能降级为 `stale`。供应商的快照/更新时间与 `fetched_at` 的差值应结合交易时段解释，不能仅凭异步任务开始或结束时间替换供应商时间。

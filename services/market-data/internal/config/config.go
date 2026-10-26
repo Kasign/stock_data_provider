@@ -67,6 +67,8 @@ type Config struct {
 	YahooChartURL             string
 	NeteaseHistoryURL         string
 	NeteaseQuoteURL           string
+	TushareToken              string
+	TushareAPIURL             string
 	BaostockHost              string
 	BaostockPort              int
 	BaostockUserID            string
@@ -98,7 +100,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "tencent", "sina", "netease"},
+		ProviderPriority: []string{"eastmoney", "baostock", "tushare", "tencent", "sina", "netease"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true},
@@ -107,6 +109,7 @@ func Load() (Config, error) {
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
 			"netease":   {Enabled: true, Quote: true, DailyBars: true},
+			"tushare":   {Enabled: false, Quote: false, DailyBars: false},
 		},
 	}
 	file := defaults
@@ -123,7 +126,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" {
+			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -156,6 +159,7 @@ func Load() (Config, error) {
 	settings["yahoo"] = overrideProvider("YAHOO", settings["yahoo"])
 	settings["netease"] = overrideProvider("NETEASE", settings["netease"])
 	settings["baostock"] = overrideProvider("BAOSTOCK", settings["baostock"])
+	settings["tushare"] = overrideProvider("TUSHARE", settings["tushare"])
 	if settings["baostock"].Quote {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
 	}
@@ -194,6 +198,8 @@ func Load() (Config, error) {
 		YahooChartURL:             get("MARKET_DATA_YAHOO_CHART_URL", "https://query1.finance.yahoo.com/v8/finance/chart"),
 		NeteaseHistoryURL:         get("MARKET_DATA_NETEASE_HISTORY_URL", "https://quotes.money.163.com/service/chddata.html"),
 		NeteaseQuoteURL:           get("MARKET_DATA_NETEASE_QUOTE_URL", "https://api.money.126.net/data/feed"),
+		TushareToken:              firstNonEmpty(os.Getenv("MARKET_DATA_TUSHARE_TOKEN"), os.Getenv("TUSHARE_TOKEN")),
+		TushareAPIURL:             get("MARKET_DATA_TUSHARE_API_URL", get("TUSHARE_HTTP_URL", "https://api.tushare.pro")),
 		BaostockHost:              get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
 		BaostockPort:              integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
 		BaostockUserID:            get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),
@@ -238,11 +244,18 @@ func Load() (Config, error) {
 		"MARKET_DATA_SINA_KLINE_URL":                cfg.SinaKlineURL,
 		"MARKET_DATA_YAHOO_CHART_URL":               cfg.YahooChartURL,
 		"MARKET_DATA_NETEASE_HISTORY_URL":           cfg.NeteaseHistoryURL,
+		"MARKET_DATA_TUSHARE_API_URL":                cfg.TushareAPIURL,
 		"MARKET_DATA_MX_API_URL":                    cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {
 			return cfg, err
 		}
+	}
+	if cfg.ProviderSettings["tushare"].Enabled && strings.TrimSpace(cfg.TushareToken) == "" {
+		return cfg, errors.New("MARKET_DATA_TUSHARE_ENABLED=true requires MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN")
+	}
+	if cfg.ProviderSettings["tushare"].Quote {
+		return cfg, errors.New("Tushare currently supports daily bars only; disable MARKET_DATA_TUSHARE_QUOTE_ENABLED")
 	}
 	if cfg.MXEnabled && !validMiaoXiangKey(cfg.MXAPIKey) {
 		return cfg, errors.New("MARKET_DATA_MX_ENABLED=true requires a non-placeholder MARKET_DATA_MX_API_KEY or MX_APIKEY")
@@ -283,7 +296,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" {
+		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {
@@ -543,6 +556,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
 		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",
 		"MARKET_DATA_NETEASE_ENABLED", "MARKET_DATA_NETEASE_QUOTE_ENABLED", "MARKET_DATA_NETEASE_DAILY_BARS_ENABLED",
+		"MARKET_DATA_TUSHARE_ENABLED", "MARKET_DATA_TUSHARE_QUOTE_ENABLED", "MARKET_DATA_TUSHARE_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
