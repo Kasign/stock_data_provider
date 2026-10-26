@@ -151,6 +151,24 @@ func TestLoadDefaultTimeoutCoversDefaultTwoProviderRetryBudget(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultTimeoutCoversFullDefaultProviderChain(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,tickflow,tencent,sina,netease,pytdx")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("default request timeout should cover the complete enabled quote and daily-bar failover chain: %v", err)
+	}
+	if cfg.RequestTimeout < 5*time.Minute {
+		t.Fatalf("default request timeout=%s, want at least 5m for the complete provider chain", cfg.RequestTimeout)
+	}
+}
+
 func TestLoadDefaultTimeoutCoversBaoStockFailoverBudget(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
