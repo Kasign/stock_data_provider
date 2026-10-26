@@ -202,3 +202,8 @@
 - 告警页将规则 CRUD、评估结论、触发历史、通知投递尝试分开呈现。当前服务没有规则 CRUD/后台调度/触发/投递 API，写操作与筛选禁用且状态统一 unavailable；不伪造规则或发送结果。
 - 新增 `web/src/alert-state.js`、`web/tests/alert-state.test.mjs`，覆盖 capability/evaluation/collection states；生产页默认 `supported:false`。
 - 本批 CI 结果需按最新提交 SHA 核验并回填。浏览器真实布局与 NAS/Docker/OpenResty 端到端告警/投递联调未完成。
+
+
+## Issue #10 首轮 CI 诊断（2026-10-26）
+- WebUI checks [#40257878022](https://github.com/Kasign/stock_data_provider/actions/runs/40257878022) 中 86 项 Node tests 85 项通过；JS 语法检查通过，Nginx build 因测试失败跳过。
+- 唯一失败是沿用旧文案的通用契约测试要求“不会在浏览器里假保存规则”，而新页面使用“不会假保存规则”。已将断言改为匹配实际不可用边界说明；修复提交的完整 Actions 必须全绿后再记录验收通过。

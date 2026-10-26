@@ -278,3 +278,6 @@
 - 新增 capability 模型（enabled/disabled/unknown/unavailable/loading/error）、evaluation 模型（triggered/not-triggered/evaluation-error/degraded/skipped 等）和规则/历史/投递集合五态；缺数据/过期状态与未触发分开呈现。
 - 新增 `web/src/alert-state.js`、`web/tests/alert-state.test.mjs` 与 UI 契约测试；package check 纳入新模块。当前生产页初始化为 `supported:false`，未新增后端 API。
 - 本批 CI 结果待核验；实际浏览器视觉验收与 NAS/Docker/OpenResty 后台触发、冷却去重、投递诊断联调尚未执行。
+
+
+- Issue #10 首轮 WebUI checks [#40257878022](https://github.com/Kasign/stock_data_provider/actions/runs/40257878022) 中 85/86 项 Node tests 通过；JS 语法检查通过，Nginx 构建因测试失败跳过。唯一失败为通用源码契约测试仍要求旧告警文案“不会在浏览器里假保存规则”，新页面的说明是“不会假保存规则”；已同步断言，等待重新验收。
