@@ -27,6 +27,7 @@ export function bindStockResearch(getSettings,getSymbol){
   $("#fundamentals-content").replaceChildren(el("p","stock-research-empty","选择报告期并加载财务指标。"));
   $("#announcement-list").replaceChildren(el("p","stock-research-empty","加载后显示数据源返回的公告。"));
   ["stock-profile-error","stock-boards-error","fundamentals-error","announcements-error"].forEach(id=>setError(id,""));
+  setText("stock-research-feedback",symbol?"标的已切换；请重新加载对应资料，避免沿用上一只股票的结果。":"请先输入代码，或从中文名称搜索结果中选择股票。");
   ["stock-profile-reasons","stock-boards-reasons","fundamentals-reasons","announcements-reasons"].forEach(id=>reasons(id,[]));
   setText("stock-profile-meta","");setText("stock-boards-meta","");setText("fundamentals-meta","");setText("announcements-meta","");
   $("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="加载更多公告";
@@ -40,8 +41,10 @@ export function bindStockResearch(getSettings,getSymbol){
   abort(key);const seq=state.generation[key],symbol=state.symbol;
   if(!symbol)return false;
   const settings=typeof getSettings==="function"?getSettings():null;
-  if(!settings?.apiKey){setError(key==="profile"?"stock-profile-error":key==="boards"?"stock-boards-error":"fundamentals-error","请先在连接与密钥设置中配置行情 API Key。");return false;}
   const ids={profile:"profile-quality",boards:"boards-quality",fundamentals:"fundamentals-quality"};
+  const errorIds={profile:"stock-profile-error",boards:"stock-boards-error",fundamentals:"fundamentals-error"};
+  setError(errorIds[key],"");
+  if(!settings?.apiKey){setQuality(ids[key],"unknown","需配置 Key");setError(errorIds[key],"请先在连接与密钥设置中配置行情 API Key。");return false;}
   setQuality(ids[key],"unknown","读取中…");
   const ctl=new AbortController();state.controllers[key]=ctl;
   try{const data=await request(settings,symbol,ctl.signal);if(ctl.signal.aborted||seq!==state.generation[key]||symbol!==state.symbol)return false;render(data,symbol);return true;}
