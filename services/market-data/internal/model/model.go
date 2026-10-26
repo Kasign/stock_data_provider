@@ -267,11 +267,15 @@ type LimitPoolItem struct {
 	Symbol            string        `json:"symbol"`
 	Code              string        `json:"code"`
 	Name              string        `json:"name"`
+	LastPrice         *float64      `json:"last_price,omitempty"`
 	ChangePercent     *float64      `json:"change_percent"`
 	FirstTouchTime    string        `json:"first_touch_time,omitempty"`
 	LastTouchTime     string        `json:"last_touch_time,omitempty"`
 	ConsecutiveBoards *int          `json:"consecutive_boards,omitempty"`
 	BrokenCount       *int          `json:"broken_count,omitempty"`
+	OpenTimes         *int          `json:"open_times,omitempty"`
+	TurnoverRatioPercent *float64   `json:"turnover_ratio_percent,omitempty"`
+	Turnover          *float64      `json:"turnover,omitempty"`
 	SealMoney          *float64      `json:"seal_money,omitempty"`
 	MaxSealMoney       *float64      `json:"max_seal_money,omitempty"`
 	ProviderAmountUnit string        `json:"provider_amount_unit,omitempty"`

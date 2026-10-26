@@ -426,18 +426,28 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return nil, errors.New("同花顺 HTTP client 未配置")
 	}
 	if p.apiKey == "" {
-		return nil, errors.New("同花顺涨停池接口需要配置 MARKET_DATA_HITHINK_API_KEY")
+		return nil, errors.New("同花顺涨跌停池接口需要配置 MARKET_DATA_HITHINK_API_KEY")
 	}
+
 	poolType = strings.ToLower(strings.TrimSpace(poolType))
-	if poolType != "up" {
-		return nil, fmt.Errorf("同花顺当前只支持涨停池 up；%q 应回退到其他支持 down/broken 的数据源", poolType)
+	endpoint, sortField, sortDir := "", "", ""
+	switch poolType {
+	case "up":
+		endpoint, sortField, sortDir = "/api/a-share/special-data/limit-up-pool", "limit_up_time", "asc"
+	case "down":
+		endpoint, sortField, sortDir = "/api/a-share/special-data/limit-down-pool", "last_limit_time", "desc"
+	case "broken":
+		endpoint, sortField, sortDir = "/api/a-share/special-data/limit-break-pool", "price_change_ratio_pct", "desc"
+	default:
+		return nil, fmt.Errorf("不支持的同花顺涨跌停池类型 %q；可选 up/down/broken", poolType)
 	}
 	if limit <= 0 {
 		limit = 30
 	}
 	if limit > 100 {
-		return nil, errors.New("同花顺涨停池单页条数不能超过 100")
+		return nil, errors.New("同花顺涨跌停池单页条数不能超过 100")
 	}
+
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		loc = time.FixedZone("CST", 8*60*60)
@@ -448,25 +458,25 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 	}
 	date, err := time.Parse("2006-01-02", rawDate)
 	if err != nil || date.Format("2006-01-02") != rawDate {
-		return nil, fmt.Errorf("无效的同花顺涨停池交易日 %q，应为 YYYY-MM-DD", tradeDate)
+		return nil, fmt.Errorf("无效的同花顺涨跌停池交易日 %q，应为 YYYY-MM-DD", tradeDate)
 	}
 	if rawDate > time.Now().In(loc).Format("2006-01-02") {
-		return nil, errors.New("同花顺涨停池交易日不能晚于今日")
+		return nil, errors.New("同花顺涨跌停池交易日不能晚于今日")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	dateMS := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc).UnixMilli()
 	query := url.Values{
-		"date_ms": []string{strconv.FormatInt(dateMS, 10)},
-		"page": []string{"1"},
-		"size": []string{strconv.Itoa(limit)},
-		"sort_field": []string{"limit_up_time"},
-		"sort_dir": []string{"asc"},
+		"date_ms":   []string{strconv.FormatInt(dateMS, 10)},
+		"page":      []string{"1"},
+		"size":      []string{strconv.Itoa(limit)},
+		"sort_field": []string{sortField},
+		"sort_dir":   []string{sortDir},
 	}
-	raw, err := p.get(ctx, "/api/a-share/special-data/limit-up-pool", query)
+	raw, err := p.get(ctx, endpoint, query)
 	if err != nil {
-		return nil, fmt.Errorf("同花顺涨停池请求失败: %w", err)
+		return nil, fmt.Errorf("同花顺 %s 池请求失败: %w", map[string]string{"up": "涨停", "down": "跌停", "broken": "炸板"}[poolType], err)
 	}
 	dataRaw, err := hithinkResponseData(raw)
 	if err != nil {
@@ -483,15 +493,22 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		Item []map[string]json.RawMessage `json:"item"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
-		return nil, fmt.Errorf("解析同花顺涨停池失败: %w", err)
+		return nil, fmt.Errorf("解析同花顺 %s 池失败: %w", map[string]string{"up": "涨停", "down": "跌停", "broken": "炸板"}[poolType], err)
 	}
 	if data.Pagination == nil || data.Pagination.Total == nil || *data.Pagination.Total < 0 {
-		return nil, errors.New("同花顺涨停池响应缺少有效 pagination.total")
+		return nil, errors.New("同花顺涨跌停池响应缺少有效 pagination.total")
 	}
 	total := *data.Pagination.Total
 	if len(data.Item) > limit || total < len(data.Item) {
-		return nil, fmt.Errorf("同花顺涨停池分页计数不一致: total=%d items=%d limit=%d", total, len(data.Item), limit)
+		return nil, fmt.Errorf("同花顺 %s 池分页计数不一致: total=%d items=%d limit=%d", poolType, total, len(data.Item), limit)
 	}
+	if data.Pagination.Page != nil && *data.Pagination.Page != 1 {
+		return nil, fmt.Errorf("同花顺 %s 池返回页码不匹配: requested=1 returned=%d", poolType, *data.Pagination.Page)
+	}
+	if data.Pagination.Size != nil && (*data.Pagination.Size < len(data.Item) || *data.Pagination.Size > 100) {
+		return nil, fmt.Errorf("同花顺 %s 池返回的分页 size 无效: %d", poolType, *data.Pagination.Size)
+	}
+
 	now := time.Now().UTC()
 	reportDate := rawDate
 	if data.Timestamp != nil && *data.Timestamp > 0 {
@@ -500,72 +517,133 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 			reportDate = sourceDate
 		}
 	}
+	sourceVersion := hithinkVersion + "-limit-" + poolType + "-pool-v2"
 	snapshot := &model.LimitPoolSnapshot{
-		PoolType: "up", TradeDate: rawDate, ProviderReportDate: reportDate, Total: total,
+		PoolType: poolType, TradeDate: rawDate, ProviderReportDate: reportDate, Total: total,
 		HasData: len(data.Item) > 0, Items: make([]model.LimitPoolItem, 0, len(data.Item)),
-		Source: p.Name(), SourceVersion: hithinkVersion + "-limit-up-pool-v1",
+		Source: p.Name(), SourceVersion: sourceVersion,
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
-		QualityReasons: []string{"provider_amount_units_not_explicitly_documented", "limit_up_time_mapped_to_first_touch_time"},
+		QualityReasons: []string{"provider_amount_units_not_explicitly_documented"},
+	}
+	if poolType == "up" {
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "limit_up_time_mapped_to_first_touch_time")
 	}
 	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
 	}
+	if data.Timestamp != nil && *data.Timestamp > 0 && time.UnixMilli(*data.Timestamp).In(loc).Format("2006-01-02") != rawDate {
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_date_differs_from_requested_trade_date")
+	}
 	if total == 0 && len(data.Item) == 0 {
 		snapshot.HasData = false
 		snapshot.QualityStatus = model.QualityUnknown
-		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "empty_limit_up_pool_cannot_distinguish_no_events_from_unavailable_or_non_trading_day")
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "empty_limit_pool_cannot_distinguish_no_events_from_unavailable_or_non_trading_day")
 		return snapshot, nil
 	}
 	if total > 0 && len(data.Item) == 0 {
-		return nil, fmt.Errorf("同花顺涨停池 total=%d 但当前页没有返回数据", total)
+		return nil, fmt.Errorf("同花顺 %s 池 total=%d 但当前页没有返回数据", poolType, total)
 	}
+
 	for index, row := range data.Item {
 		rawSymbol := hithinkFieldString(row, "thscode")
 		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
 		if symbolErr != nil {
-			return nil, fmt.Errorf("同花顺涨停池第 %d 行证券代码无效: %w", index, symbolErr)
+			return nil, fmt.Errorf("同花顺 %s 池第 %d 行证券代码无效: %w", poolType, index, symbolErr)
 		}
 		code := hithinkFieldString(row, "ticker")
 		if code == "" {
 			code = strings.Split(symbol, ".")[0]
 		}
 		if code != strings.Split(symbol, ".")[0] {
-			return nil, fmt.Errorf("同花顺涨停池第 %d 行代码不匹配: symbol=%s ticker=%s", index, symbol, code)
+			return nil, fmt.Errorf("同花顺 %s 池第 %d 行代码不匹配: symbol=%s ticker=%s", poolType, index, symbol, code)
 		}
 		name := hithinkFieldString(row, "name")
 		if name == "" {
-			return nil, fmt.Errorf("同花顺涨停池第 %d 行缺少证券名称", index)
+			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少证券名称", poolType, index)
 		}
 		change := hithinkFieldNumber(row, "price_change_ratio_pct")
 		if change == nil {
-			return nil, fmt.Errorf("同花顺涨停池第 %d 行缺少有效涨跌幅", index)
+			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少有效涨跌幅", poolType, index)
+		}
+
+		lastPrice := hithinkFieldNumber(row, "last_price")
+		if lastPrice != nil && !hithinkPositiveFinite(*lastPrice) {
+			lastPrice = nil
+		}
+		if poolType != "up" && lastPrice == nil {
+			return nil, fmt.Errorf("同花顺 %s 池第 %d 行缺少有效最新价", poolType, index)
 		}
 		var consecutive *int
-		if value := hithinkFieldNumber(row, "continue_day_cnt"); value != nil &&
-			*value >= 0 && math.Trunc(*value) == *value && *value <= 1000 {
-			v := int(*value)
-			consecutive = &v
+		if poolType == "up" {
+			if value := hithinkFieldNumber(row, "continue_day_cnt"); value != nil &&
+				*value >= 0 && math.Trunc(*value) == *value && *value <= 1000 {
+				v := int(*value)
+				consecutive = &v
+			}
 		}
-		firstTouch := hithinkFieldString(row, "limit_up_time")
+		firstTouch, lastTouch := "", ""
+		switch poolType {
+		case "up":
+			firstTouch = hithinkFieldString(row, "limit_up_time")
+		case "down":
+			firstTouch = hithinkFieldString(row, "first_limit_time")
+			lastTouch = hithinkFieldString(row, "last_limit_time")
+		}
+
 		var sealMoney, maxSealMoney *float64
-		if value := hithinkFieldNumber(row, "seal_money"); value != nil && *value >= 0 {
-			sealMoney = value
+		if poolType == "up" {
+			if value := hithinkFieldNumber(row, "seal_money"); value != nil && *value >= 0 {
+				sealMoney = value
+			}
+			if value := hithinkFieldNumber(row, "max_seal_money"); value != nil && *value >= 0 {
+				maxSealMoney = value
+			}
 		}
-		if value := hithinkFieldNumber(row, "max_seal_money"); value != nil && *value >= 0 {
-			maxSealMoney = value
+		var turnoverRatio, turnover *float64
+		if value := hithinkFieldNumber(row, "turnover_ratio_pct"); value != nil && *value >= 0 {
+			turnoverRatio = value
 		}
+		if poolType == "broken" {
+			if value := hithinkFieldNumber(row, "turnover"); value != nil && *value >= 0 {
+				turnover = value
+			}
+		}
+		var openTimes *int
+		if poolType == "broken" {
+			if value := hithinkFieldNumber(row, "open_times"); value != nil &&
+				*value >= 0 && math.Trunc(*value) == *value && *value <= 1000000 {
+				v := int(*value)
+				openTimes = &v
+			}
+		}
+
 		itemReasons := []string{"provider_amount_unit_not_explicitly_documented"}
-		if data.Timestamp == nil || *data.Timestamp <= 0 {
+		if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
 			itemReasons = append(itemReasons, "provider_snapshot_timestamp_missing_or_invalid")
 		}
-		if firstTouch == "" {
+		if poolType == "up" && firstTouch == "" {
 			itemReasons = append(itemReasons, "provider_limit_up_time_missing")
 		}
+		if poolType == "down" && (firstTouch == "" || lastTouch == "") {
+			itemReasons = append(itemReasons, "provider_limit_down_time_missing")
+		}
+		if poolType == "broken" && openTimes == nil {
+			itemReasons = append(itemReasons, "provider_open_times_missing_or_invalid")
+		}
+		if poolType == "broken" && turnover == nil {
+			itemReasons = append(itemReasons, "provider_turnover_missing_or_invalid")
+		}
+		if turnoverRatio == nil && (poolType == "down" || poolType == "broken") {
+			itemReasons = append(itemReasons, "provider_turnover_ratio_missing_or_invalid")
+		}
+
 		snapshot.Items = append(snapshot.Items, model.LimitPoolItem{
 			Symbol: symbol, Code: code, Name: name, ChangePercent: change,
-			FirstTouchTime: firstTouch, ConsecutiveBoards: consecutive,
-			SealMoney: sealMoney, MaxSealMoney: maxSealMoney, ProviderAmountUnit: "provider_defined",
-			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: now,
+			LastPrice: lastPrice, FirstTouchTime: firstTouch, LastTouchTime: lastTouch,
+			ConsecutiveBoards: consecutive, SealMoney: sealMoney, MaxSealMoney: maxSealMoney,
+			OpenTimes: openTimes, TurnoverRatioPercent: turnoverRatio, Turnover: turnover,
+			ProviderAmountUnit: "provider_defined",
+			Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		})
 	}

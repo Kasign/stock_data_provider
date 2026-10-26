@@ -483,7 +483,12 @@ components:
         code: {type: string}
         name: {type: string}
         change_percent: {type: number, description: Percentage points; 10 means 10 percent}
-        first_touch_time: {type: string, description: Provider HH:MM:SS value when exposed}
+        last_price: {type: number, nullable: true, description: Latest provider price in CNY/share when available}
+        first_touch_time: {type: string, description: First limit touch time as reported by the provider}
+        last_touch_time: {type: string, description: Last limit touch time as reported by the provider}
+        open_times: {type: integer, nullable: true, description: Number of limit-up board openings for broken-board pool only}
+        turnover_ratio_percent: {type: number, nullable: true, description: Provider-reported turnover ratio in percentage points}
+        turnover: {type: number, nullable: true, description: Provider-reported turnover value; consult provider_amount_unit}
         last_touch_time: {type: string, description: Provider HH:MM:SS value when exposed}
         consecutive_boards: {type: integer, nullable: true}
         broken_count: {type: integer, nullable: true}

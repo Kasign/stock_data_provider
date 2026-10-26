@@ -17,7 +17,7 @@
 - 历史 `as_of` 查询会排除当日尚未完成的日 K，并明确提示复权历史可能包含之后发生的公司行动因子。本服务尚未建立严格的时点复权因子库，因此不能声称历史回测完全无前视偏差。
 - 本地 smoke 模式可不连接数据库；生产部署应复用现有 MariaDB/Redis，不要为了本服务额外启动一套数据库容器。
 
-东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告及筹码分布已纳入 Go 原生能力链路；筹码分布通过最近 120 根未复权日 K 与换手率计算，因上游不提供独立快照时间而标记 degraded。同花顺另提供可选指数/板块目录、当前成分股、指数历史日 K、指数快照、最近一年交易日历、财务指标、三张财务报表、涨停池、龙虎榜和批量估值快照（PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM）。指数时间戳缺失时降级；交易日历只返回开市日期、非交易日需推断；报表按目标报告期精确匹配；龙虎榜金额保留为 provider_defined 单位，未被误标成人民币元；相关能力均由独立开关控制且默认关闭。TickFlow、Tushare、Pytdx 也已接入可选国内行情/日 K 能力。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；个股 profile 已补齐动态 PE/PB、行业、总市值/流通市值、板块编号、ROE、净利率、净利润、毛利率等扩展字段；人气榜/飙升榜已由独立 API 接入，质量保持 degraded 因上游不提供快照时间。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
+东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告及筹码分布已纳入 Go 原生能力链路；筹码分布通过最近 120 根未复权日 K 与换手率计算，因上游不提供独立快照时间而标记 degraded。同花顺另提供可选指数/板块目录、当前成分股、指数历史日 K、指数快照、最近一年交易日历、财务指标、三张财务报表、涨停/跌停/炸板池、龙虎榜和批量估值快照（PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM）。指数时间戳缺失时降级；交易日历只返回开市日期、非交易日需推断；报表按目标报告期精确匹配；龙虎榜金额保留为 provider_defined 单位，未被误标成人民币元；相关能力均由独立开关控制且默认关闭。TickFlow、Tushare、Pytdx 也已接入可选国内行情/日 K 能力。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；个股 profile 已补齐动态 PE/PB、行业、总市值/流通市值、板块编号、ROE、净利率、净利润、毛利率等扩展字段；人气榜/飙升榜已由独立 API 接入，质量保持 degraded 因上游不提供快照时间。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
 
 ## BaoStock 日 K 数据源（默认启用的备用源）
 
@@ -190,3 +190,10 @@ curl -H "X-API-Key: $MARKET_DATA_API_KEY" "http://127.0.0.1:8091/api/v1/bars/600
 - 估值、利润率与收益率按上游原值输出：PE/PB/ROE/净利率/毛利率不做比例换算，不把缺失值填成 0；市值和净利润单位为人民币元。
 - 这些是当前市场 profile 字段，不等同于有明确报告期与披露日期的季度财务指标。上游未给出每个字段可验证的快照时间，因此响应整体标记为 `degraded`，并返回 `quality_reasons`。
 - 退市/上市日期等身份信息仍使用独立 F10 查询；若扩展行情请求失败，仍返回可用的身份信息与降级原因，不把整个 profile 误报为完全失败。
+
+### 同花顺跌停池与炸板池补齐（2026-10-26）
+
+- 同花顺 `Hithink` Provider 现在通过现有 `LimitPoolProvider` 能力同时调用涨停池、跌停池和炸板池；路由分别为 `/api/a-share/special-data/limit-up-pool`、`/api/a-share/special-data/limit-down-pool` 和 `/api/a-share/special-data/limit-break-pool`。
+- 统一接口继续使用 `GET /api/v1/market/limit-pools?type=up|down|broken&date=YYYY-MM-DD&limit=30`。同花顺分页固定请求第一页，limit 最大 100；若当前第一页为空但上游 total 大于零，则视为契约错误，不返回误导性空列表。
+- 新增可选字段 `last_price`、`first_touch_time`、`last_touch_time`、`open_times`、`turnover_ratio_percent` 和 `turnover`。跌停池映射首次/末次触及时间，炸板池保留开板次数与成交额原值。
+- 同花顺相关金额/成交额字段仍为 `provider_defined`，不转换成 CNY；时间戳缺失、响应日期不匹配和字段缺失都会保留降级原因。该能力复用 `MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED`，默认关闭。本轮没有运行测试或 CI。

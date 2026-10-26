@@ -242,7 +242,7 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 
 ### 同花顺涨停池与龙虎榜（2026-10-26）
 
-- 涨停池使用 `/api/a-share/special-data/limit-up-pool`，显式指定交易日、页码与 size；接口只支持 up 池，down/broken 会返回明确不支持错误，以便继续走其他 Provider 的回退路径。
+- 涨跌停池通过同一 `LimitPoolProvider` 接入三类官方端点：涨停 `/api/a-share/special-data/limit-up-pool`、跌停 `/api/a-share/special-data/limit-down-pool`、炸板 `/api/a-share/special-data/limit-break-pool`。适配器只读取第一页，最高 100 条；缺少最新价、证券身份或必需涨跌幅时拒绝错误数据，未知金额单位保持 `provider_defined`。
 - 龙虎榜使用 `/api/a-share/special-data/dragon-tiger-list?board_type=all`，支持最近一年内的指定交易日；因为官方响应不提供分页参数，Go 适配器在内存中按统一接口做分页。
 - 同花顺特别数据文档没有明示金额字段单位；新增通用 `provider_*_value` 字段和 `provider_amount_unit=provider_defined`，不把这些金额伪装成 CNY。相关结果保持 degraded。
 - 通过 `MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED=true` 与 `MARKET_DATA_HITHINK_DRAGON_TIGER_ENABLED=true` 分别开启，两项默认关闭且需要同花顺 API Key。本轮未运行测试。
@@ -292,3 +292,10 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - PE/PB 与百分比字段使用上游原值；市场/流通市值与净利润单位按人民币元解释。缺失和无效值保留为 `null`，不补 0。
 - 因行情接口没有每个 profile 字段的独立时间戳，返回整体标记 `degraded`；季度 fundamentals 仍负责带报告期与披露日期的财务指标，不与 profile 当前字段混合成 point-in-time 财务数据。
 - 身份/上市日期来自 Eastmoney F10；扩展行情请求失败不丢弃已经取得的身份信息，而是返回降级原因。本轮未运行测试或 CI。
+
+### 同花顺跌停池与炸板池扩展（2026-10-26）
+
+- Go 适配器现在支持 `up/down/broken` 三类池，并按各端点的有效排序字段固定请求第一页，避免把不同池的字段名混用。
+- 统一模型扩展最新价、跌停首次/末次触及时间、炸板开板次数、换手率和供应商成交额字段；旧客户端字段保持兼容，新增字段均为可选。
+- 数据仍保持 `degraded`：同花顺金额/成交额单位未在当前接口契约中明确，快照时间缺失或请求日期与上游时间不一致会显示质量原因。该能力只在显式启用 `MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED=true` 后参与回退链。
+- 本轮未运行测试或 CI；真实 API 账号权限、非交易日空池语义与目标容器访问由后续统一验收。

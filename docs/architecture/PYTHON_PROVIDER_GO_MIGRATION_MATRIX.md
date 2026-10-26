@@ -152,3 +152,10 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 ## 原生新闻搜索真实探测开关（2026-10-26）
 
 `.github/workflows/live-provider-smoke.yml` 增加了 Go 原生新闻搜索的独立探测步骤：将 GitHub Secrets `BOCHA_API_KEYS` 与/或 `SEARXNG_BASE_URLS` 注入 Runner，实际查询贵州茅台近期期新闻并上传 `live-news-report` artifact。没有配置凭据时报告状态为 `skipped`，不会误报为接口通过。该探测与 market-data 的行情/龙虎榜/公告探测分开；即使搜索请求通过，也只代表当前配置源的单个查询窗口，不代表新闻覆盖率或长期可用性。
+
+
+### 同花顺三类涨跌停池补齐（2026-10-26）
+
+- `LimitPoolProvider` 的同花顺实现已覆盖涨停、跌停和炸板三个端点，不再将 `down/broken` 当成“不支持”而直接回退。
+- 三种池共用 `GET /api/v1/market/limit-pools` 入口，分别保留涨跌幅、最新价、触及时间、开板次数、换手率等适用字段；只请求第一页，避免在公共接口上执行大范围分页扫描。
+- 金额字段继续按供应商定义单位输出，不能误认为人民币元；上游时间戳不足或字段缺失时保留 `degraded` 质量标记。代码已更新，测试和真实端点验收留待统一执行。
