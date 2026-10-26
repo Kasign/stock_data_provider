@@ -153,7 +153,7 @@ components:
       properties:
         category: {type: string, enum: [profitability, operating, growth, solvency, cash_flow, dupont]}
         report_date: {type: string, format: date}
-        publication_date: {type: string, format: date, description: Use for point-in-time analysis}
+        publication_date: {type: string, format: date, description: Disclosure date for the selected provider revision; not an as_of historical revision selector}
         has_data: {type: boolean}
         metrics: {type: array, items: {$ref: '#/components/schemas/FundamentalMetric'}}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
@@ -840,10 +840,12 @@ paths:
     get:
       summary: Get quarterly financial indicators
       description: >-
-        Returns six groups of BaoStock quarterly indicators for an explicit report period. report_date is the
-        financial period end; publication_date is the disclosure date. Values preserve provider-native numeric scale.
-        Historical analysis must exclude metrics published after the analysis reference time. This is an indicators API,
-        not a complete financial-statement line-item API.
+        Returns six groups of quarterly indicators for an explicit report period. report_date is the financial
+        period end; publication_date is the disclosure date of the selected provider revision. The endpoint returns the
+        latest revision available from the provider for that report period and has no as_of parameter or historical
+        restatement reconstruction. For point-in-time analysis, ignore values whose publication_date is after the
+        strategy reference date; this can omit the value rather than recover an earlier revision. Values preserve
+        provider-native numeric scale. This is an indicators API, not a complete financial-statement line-item API.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: year, in: query, required: true, schema: {type: integer, minimum: 2007}}
