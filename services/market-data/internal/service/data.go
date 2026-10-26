@@ -29,6 +29,7 @@ type DataService struct {
 	marketBreadthProviders   []provider.MarketBreadthProvider
 	limitPoolProviders       []provider.LimitPoolProvider
 	dragonTigerProviders     []provider.DragonTigerProvider
+	announcementProviders   []provider.AnnouncementProvider
 	stockBoardsProviders     []provider.StockBoardsProvider
 	tradingCalendarProviders []provider.TradingCalendarProvider
 	fundamentalsProviders    []provider.FundamentalsProvider

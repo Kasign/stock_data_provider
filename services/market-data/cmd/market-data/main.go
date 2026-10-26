@@ -74,7 +74,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 	}()
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfiguredWithDragonTiger(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyUT),
+		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
 		"sina":      provider.NewSinaConfigured(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL),
@@ -90,6 +90,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	marketBreadthProviders := make([]provider.MarketBreadthProvider, 0, len(available))
 	limitPoolProviders := make([]provider.LimitPoolProvider, 0, len(available))
 	dragonTigerProviders := make([]provider.DragonTigerProvider, 0, len(available))
+	announcementProviders := make([]provider.AnnouncementProvider, 0, len(available))
 	stockBoardsProviders := make([]provider.StockBoardsProvider, 0, len(available))
 	tradingCalendarProviders := make([]provider.TradingCalendarProvider, 0, len(available))
 	fundamentalsProviders := make([]provider.FundamentalsProvider, 0, len(available))
@@ -152,6 +153,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			}
 			limitPoolProviders = append(limitPoolProviders, capability)
 		}
+		if settings.Announcements {
+			capability, ok := p.(provider.AnnouncementProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for announcements but does not implement AnnouncementProvider", name)
+			}
+			announcementProviders = append(announcementProviders, capability)
+		}
 		if settings.DragonTiger {
 			capability, ok := p.(provider.DragonTigerProvider)
 			if !ok {
@@ -200,6 +208,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	ds.SetMarketBreadthProviders(marketBreadthProviders)
 	ds.SetLimitPoolProviders(limitPoolProviders)
 	ds.SetDragonTigerProviders(dragonTigerProviders)
+	ds.SetAnnouncementProviders(announcementProviders)
 	ds.SetStockBoardsProviders(stockBoardsProviders)
 	ds.SetTradingCalendarProviders(tradingCalendarProviders)
 	ds.SetFundamentalsProviders(fundamentalsProviders)

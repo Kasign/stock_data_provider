@@ -229,6 +229,53 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
+    StockAnnouncement:
+      type: object
+      required: [article_id, symbol, title, announcement_date, source, source_version, fetched_at, quality_status]
+      properties:
+        article_id: {type: string, description: Eastmoney art_code, unique within an announcement feed}
+        symbol: {type: string}
+        stock_name: {type: string}
+        title: {type: string}
+        title_chinese: {type: string}
+        title_english: {type: string}
+        category_code: {type: string}
+        category: {type: string}
+        announcement_date: {type: string, format: date, description: Source notice_date; separate from fetch time}
+        published_at: {type: string, format: date-time, nullable: true, description: Parsed from source display_time only; absent when source supplies no exact time}
+        display_time: {type: string, description: Original source display_time text}
+        sort_date: {type: string, description: Original source ordering timestamp}
+        ei_time: {type: string, description: Original Eastmoney eiTime metadata}
+        language: {type: string}
+        source_type: {type: string}
+        source_url: {type: string, format: uri, description: Official article detail URL assembled from verified stock code and art_code}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time, description: Retrieval time; never used as announcement publishing time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    StockAnnouncementSnapshot:
+      type: object
+      required: [symbol, start_date, end_date, page, page_size, total, pages, returned, has_data, has_more, items, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0, description: Source-reported total hits across date range}
+        pages: {type: integer, minimum: 0}
+        returned: {type: integer, minimum: 0, description: Records on this page}
+        has_data: {type: boolean, description: False plus quality unknown means source returned no records, not proof that no announcements exist}
+        has_more: {type: boolean}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/StockAnnouncement'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     StockBasic:
       type: object
       required: [symbol, name, security_type, security_type_label, listing_status, listing_status_label, source, fetched_at, quality_status, normalization_version]
@@ -435,6 +482,7 @@ components:
         market_breadth_capable: {type: boolean}
         limit_pool_capable: {type: boolean}
         stock_boards_capable: {type: boolean}
+        announcements_capable: {type: boolean}
         dragon_tiger_capable: {type: boolean}
     DataSourcesResponse:
       type: object
@@ -517,6 +565,28 @@ paths:
               schema: {$ref: '#/components/schemas/DataSourcesResponse'}
         '401': {description: API key required}
 
+  /api/v1/stocks/{symbol}/announcements:
+    get:
+      summary: 获取单只 A 股指定日期区间内的公告
+      description: >-
+        查询东方财富公告列表。start_date/end_date 包含首尾，最多 366 天；缺省日期范围为中国时区最近 7 个日历日。
+        announcement_date、published_at 与 fetched_at 分别表示源端公告日期、源端展示时间（可解析时）和采集时间。
+        空列表为 quality unknown，不表示已证明该区间没有公告。公告能力独立配置，默认关闭。
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string, example: 600036.SH}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, maximum: 1000, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Announcement page with source publication metadata and quality
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockAnnouncementSnapshot'}
+        '400': {description: Invalid symbol, date range or pagination}
+        '401': {description: API key required}
+        '502': {description: Provider unavailable or returned inconsistent data}
   /api/v1/stocks/{symbol}/profile:
     get:
       summary: Get single-security identity and listing metadata

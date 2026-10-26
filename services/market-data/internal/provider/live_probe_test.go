@@ -89,6 +89,7 @@ type liveProbeResult struct {
 	MarketBreadth    *model.MarketBreadthSnapshot   `json:"market_breadth,omitempty"`
 	LimitPool        *model.LimitPoolSnapshot       `json:"limit_pool,omitempty"`
 	DragonTiger      *model.DragonTigerSnapshot     `json:"dragon_tiger,omitempty"`
+	Announcements    *model.StockAnnouncementSnapshot `json:"announcements,omitempty"`
 	StockBoards      *model.StockBoardSnapshot      `json:"stock_boards,omitempty"`
 	TradingCalendar  *model.TradingCalendarSnapshot `json:"trading_calendar,omitempty"`
 	PoolType         string                         `json:"pool_type,omitempty"`
@@ -562,6 +563,35 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
+	runStockAnnouncements := func(eastmoney *Eastmoney, symbol, startDate, endDate string) {
+		capture := &liveProbeCapture{}
+		eastmoney.client.Transport = capture.transport()
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		started := time.Now()
+		item, callErr := eastmoney.FetchStockAnnouncements(ctx, symbol, startDate, endDate, 1, 20)
+		result := liveProbeResult{Provider: eastmoney.Name(), Capability: "stock_announcements", Symbol: symbol, ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot()}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, "eastmoney stock_announcements: "+result.ErrorKind+" ("+result.Error+")")
+		case item == nil || item.Symbol != symbol || item.StartDate != startDate || item.EndDate != endDate || item.Source != "eastmoney":
+			result.Status, result.Error, result.Announcements = "invalid", "announcement snapshot identity mismatch", item
+			failures = append(failures, "eastmoney stock_announcements: identity mismatch")
+		case item.Total == 0 && !item.HasData && item.QualityStatus == model.QualityUnknown:
+			result.Status, result.Announcements = "empty", item
+		case item.Total < 0 || item.Pages < 1 || item.Returned != len(item.Items) || item.Returned == 0 || item.Total < item.Returned:
+			result.Status, result.Error, result.Announcements = "invalid", "announcement page counters are inconsistent", item
+			failures = append(failures, "eastmoney stock_announcements: page counters inconsistent")
+		default:
+			result.Status, result.Announcements = "returned", item
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
 	runStockBoards := func(providerName, symbol string, client *http.Client, call func(context.Context) (*model.StockBoardSnapshot, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
@@ -917,6 +947,9 @@ func TestLiveProviderProbe(t *testing.T) {
 	runStockBasic("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBasic, error) {
 		return eastmoney.FetchStockBasic(ctx, dailySymbol)
 	})
+	announcementStart := now.AddDate(0, 0, -7).Format("2006-01-02")
+	announcementEnd := now.AddDate(0, 0, -1).Format("2006-01-02")
+	runStockAnnouncements(eastmoney, dailySymbol, announcementStart, announcementEnd)
 	runStockBoards("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBoardSnapshot, error) {
 		return eastmoney.FetchStockBoards(ctx, dailySymbol)
 	})

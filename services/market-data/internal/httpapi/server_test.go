@@ -70,6 +70,24 @@ func (httpFakeProvider) FetchDragonTiger(_ context.Context, tradeDate string, pa
 	}, nil
 }
 
+func (httpFakeProvider) FetchStockAnnouncements(_ context.Context, rawSymbol, startDate, endDate string, page, pageSize int) (*model.StockAnnouncementSnapshot, error) {
+	now := time.Now().UTC()
+	published := time.Date(2026, 10, 23, 10, 30, 0, 0, time.UTC)
+	item := model.StockAnnouncement{
+		ArticleID: "AN202610231234567890", Symbol: rawSymbol, StockName: "招商银行",
+		Title: "招商银行第三季度报告", Category: "定期报告", AnnouncementDate: "2026-10-23",
+		PublishedAt: &published, DisplayTime: "2026-10-23 18:30:00",
+		SourceURL: "https://data.eastmoney.com/notices/detail/600036/AN202610231234567890.html",
+		Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	return &model.StockAnnouncementSnapshot{
+		Symbol: rawSymbol, StartDate: startDate, EndDate: endDate, Page: page, PageSize: pageSize,
+		Total: 1, Pages: 1, Returned: 1, HasData: true, HasMore: false,
+		Items: []model.StockAnnouncement{item}, Source: "eastmoney", SourceVersion: "test",
+		FetchedAt: now, QualityStatus: model.QualityValid,
+	}, nil
+}
+
 func (httpFakeProvider) FetchQuote(context.Context, string) (*model.Quote, error) {
 	p := 10.0
 	open := 9.8
@@ -327,6 +345,48 @@ func TestDragonTigerRejectsInvalidPagination(t *testing.T) {
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
 		t.Fatalf("invalid page should be rejected: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestStockAnnouncementsEndpointAndCapabilityAdvertisement(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetAnnouncementProviders([]provider.AnnouncementProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600036.SH/announcements?start_date=2026-10-20&end_date=2026-10-26", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{`"article_id":"AN202610231234567890"`, `"announcement_date":"2026-10-23"`, `"source_url":"https://data.eastmoney.com/notices/detail/600036/AN202610231234567890.html"`, `"quality_status":"valid"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("announcement response missing %s: %s", want, w.Body.String())
+		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"announcements_capable":true`) {
+		t.Fatalf("data sources should advertise announcements: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestStockAnnouncementsRejectsInvalidPagination(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetAnnouncementProviders([]provider.AnnouncementProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600036/announcements?page_size=101", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+		t.Fatalf("invalid announcement page_size should be rejected: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 

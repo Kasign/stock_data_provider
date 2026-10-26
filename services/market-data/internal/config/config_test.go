@@ -648,6 +648,42 @@ func TestEastmoneyDragonTigerURLAndCapabilityAreConfigurable(t *testing.T) {
 	}
 }
 
+func TestEastmoneyAnnouncementsDefaultOffAndEndpointConfigurable(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED", "")
+	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_URL", "https://example.test/api/security/ann")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["eastmoney"].Announcements {
+		t.Fatal("announcements must remain disabled until target deployment acceptance")
+	}
+	if cfg.EastmoneyAnnouncementsURL != "https://example.test/api/security/ann" {
+		t.Fatalf("unexpected announcement endpoint %q", cfg.EastmoneyAnnouncementsURL)
+	}
+
+	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED", "true")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ProviderSettings["eastmoney"].Announcements {
+		t.Fatal("explicit opt-in should enable the announcements capability")
+	}
+	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["eastmoney"].Announcements {
+		t.Fatal("explicit false must disable announcements")
+	}
+}
+
 func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")

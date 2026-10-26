@@ -44,6 +44,7 @@ type Eastmoney struct {
 	limitPoolBaseURL string
 	stockBoardsURL   string
 	dragonTigerURL   string
+	announcementURL  string
 	ut               string
 }
 
@@ -112,9 +113,18 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, ut: ut,
 	}
 }
+// NewEastmoneyConfiguredWithAnnouncements adds an independently configurable A-share announcement endpoint.
+func NewEastmoneyConfiguredWithAnnouncements(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketBreadthURL, limitPoolBaseURL, stockBoardsURL, dragonTigerURL, announcementURL, ut string) *Eastmoney {
+	p := NewEastmoneyConfiguredWithDragonTiger(timeout, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketBreadthURL, limitPoolBaseURL, stockBoardsURL, dragonTigerURL, ut)
+	if strings.TrimSpace(announcementURL) != "" {
+		p.announcementURL = strings.TrimSpace(announcementURL)
+	}
+	return p
+}
+
 func (p *Eastmoney) Name() string { return "eastmoney" }
 
 // FetchStockBoards returns the board memberships associated with one security via Eastmoney's slist endpoint.

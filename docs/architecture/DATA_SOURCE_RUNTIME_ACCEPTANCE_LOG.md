@@ -594,3 +594,10 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 
 - 提交 `cc62788d83e821ea1cc682330c6f183f4fb60ad5` 的 Go CI/真实探测未能进入外部数据验证：Provider 测试文件重复声明了 `TestEastmoneyFetchDragonTigerBondOnlyPageRemainsUnknown`，市场数据测试和探测在编译阶段失败。这是测试装配错误，不是行情端点故障。
 - 已删除重复定义，保留一份纯可转债页回归测试；以随后提交触发的 CI 与真实 Runner 结果作为新验收依据。
+
+
+## 12. 国内公告 Provider 首批接入（2026-10-26）
+
+- Go CI #299 与真实 Provider Probe #109 已通过，证明前序龙虎榜改动在该 HEAD 的单测、race、vet、Compose 与 Docker 镜像构建通过；真实探测返回 2026-10-23 龙虎榜源端计数 101、两页，第一页 100 条原始记录中返回 97 条 A 股、排除 3 条可转债。此结果只验收第一页并保持 degraded，不代表全分页或 NAS/Docker 部署验收。
+- 当前批次新增 Go 原生公告 Provider/API：按股票、公告日期区间和页码查询，保留 art_code、notice_date、display_time、sort_date、eiTime；published_at 只从可解析的源端 display_time 生成，采集时间独立存放。空列表标 unknown；缺精确显示时间保留 null 并降级。
+- 通用 Python 新闻搜索仍为 Python Bridge：Bocha/Tavily/Brave/SearXNG 的回退、时间过滤、排序和结果准入尚未等价迁移。公告 Provider 使用 `MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED=false` 独立开关，未完成当前 HEAD 的 Runner 与目标 NAS/Docker 验收前不生产启用。

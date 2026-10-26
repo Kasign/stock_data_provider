@@ -67,6 +67,12 @@ type DragonTigerProvider interface {
 	FetchDragonTiger(ctx context.Context, tradeDate string, page, pageSize int) (*model.DragonTigerSnapshot, error)
 }
 
+// AnnouncementProvider 获取单只 A 股在明确公告日期区间内的公告列表。
+type AnnouncementProvider interface {
+	NamedProvider
+	FetchStockAnnouncements(ctx context.Context, symbol, startDate, endDate string, page, pageSize int) (*model.StockAnnouncementSnapshot, error)
+}
+
 type TradingCalendarProvider interface {
 	NamedProvider
 	FetchTradingCalendar(ctx context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error)
