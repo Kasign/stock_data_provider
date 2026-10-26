@@ -11,8 +11,8 @@ func (s *Server) hotStocks(w http.ResponseWriter, r *http.Request) {
 	if rankingType == "" {
 		rankingType = "popular"
 	}
-	if rankingType != "popular" && rankingType != "surge" {
-		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "type must be popular or surge", requestID(r))
+	if rankingType != "popular" && rankingType != "surge" && rankingType != "followers" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "type must be popular, surge or followers", requestID(r))
 		return
 	}
 	limit := 10

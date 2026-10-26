@@ -461,7 +461,7 @@ type HotRankingItem struct {
 	QualityReasons []string      `json:"quality_reasons,omitempty"`
 }
 
-// HotRankingSnapshot 表示人气榜或飙升榜的有界排名快照。ProviderTime 为可选的数据准备时间，不等同于精确行情时点；延迟榜单保持 degraded。
+// HotRankingSnapshot 表示人气榜、飙升榜或关注榜的有界排名快照。ProviderTime 为可选的数据准备时间，不等同于精确行情时点；延迟榜单保持 degraded。
 type HotRankingSnapshot struct {
 	RankingType    string           `json:"type"`
 	Total          int              `json:"total"`

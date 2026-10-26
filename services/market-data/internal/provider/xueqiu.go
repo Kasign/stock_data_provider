@@ -180,7 +180,7 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		return nil, errors.New("雪球 HTTP client 未配置")
 	}
 	rankingType = strings.ToLower(strings.TrimSpace(rankingType))
-	if rankingType != "popular" && rankingType != "surge" {
+	if rankingType != "popular" && rankingType != "surge" && rankingType != "followers" {
 		return nil, fmt.Errorf("雪球不支持榜单类型 %q", rankingType)
 	}
 	if limit <= 0 {
@@ -194,6 +194,9 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 	query := url.Values{}
 	query.Set("size", strconv.Itoa(requestLimit))
 	query.Set("type", "10")
+	if rankingType == "followers" {
+		query.Set("type", "12")
+	}
 	if rankingType == "surge" {
 		path = "/v5/stock/screener/quote/list.json"
 		query.Set("market", "CN")

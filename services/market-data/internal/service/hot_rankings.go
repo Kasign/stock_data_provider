@@ -68,8 +68,8 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 	if rankingType == "" {
 		rankingType = "popular"
 	}
-	if rankingType != "popular" && rankingType != "surge" {
-		return nil, false, errors.New("hot-ranking type must be popular or surge")
+	if rankingType != "popular" && rankingType != "surge" && rankingType != "followers" {
+		return nil, false, errors.New("hot-ranking type must be popular, surge or followers")
 	}
 	if limit == 0 {
 		limit = 10
