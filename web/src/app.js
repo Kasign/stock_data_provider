@@ -24,6 +24,7 @@ import {
 import { normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart } from "./chart.js";
 import { bindMarketOverview } from "./market-overview.js";
 import { bindStockResearch } from "./stock-research.js";
+import { bindMarketActivity } from "./market-activity.js";
 import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask } from "./recent-tasks.js";
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
@@ -89,6 +90,21 @@ const state = {
 
 const marketOverview = bindMarketOverview(() => state.settings);
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
+const marketActivity = bindMarketActivity(
+  () => state.settings,
+  (item) => {
+    if (state.isQuerying) { setText("#query-hint", "当前行情查询仍在执行，请稍后再从龙虎榜跳转。"); return; }
+    const symbol = String(item?.symbol || "").trim();
+    if (!symbol) return;
+    $("#symbol-input").value = symbol;
+    state.selectedStockSearchItem = { symbol, name: item.name || symbol };
+    cancelStockSearchRequest();
+    hideStockSearch();
+    stockResearch.syncSymbol();
+    setText("#query-hint", "已从龙虎榜选择 " + (item.name || symbol) + "，正在加载实时行情与日 K。");
+    void runQuoteQuery();
+  }
+);
 
 function setText(selector, value) {
   const target = $(selector);
@@ -824,6 +840,7 @@ function setView(view, { updateHash = true } = {}) {
   const previousView = state.view;
   state.view = nextView;
   if (nextView === "market" && previousView !== "market") void marketOverview.refresh();
+  if (nextView === "market" && previousView !== "market") void marketActivity.refresh();
   if (nextView === "chat") syncChatStockContextFromMarket();
   const runFlowDialog = $("#run-flow-dialog");
   if (nextView !== "tasks" && runFlowDialog?.open) runFlowDialog.close();
@@ -2095,6 +2112,7 @@ function applySettings(nextSettings) {
   void refreshServices();
   void refreshSources();
   void marketOverview.refresh();
+  void marketActivity.refresh();
   if (state.view === "market" && state.settings.apiKey) void runQuoteQuery();
 }
 
@@ -2232,6 +2250,7 @@ $("#refresh-button").addEventListener("click", async () => {
   if (state.view === "market") {
     await refreshSources();
     await marketOverview.refresh();
+    await marketActivity.refresh();
     if (state.settings.apiKey) await runQuoteQuery();
   } else if (state.view === "tasks" && state.taskId) {
     stopTaskPolling();
@@ -2373,6 +2392,7 @@ syncSettingsThemeButtons(readTheme());
 void refreshServices();
 void refreshSources();
 void marketOverview.refresh();
+void marketActivity.refresh();
 const restoredTask = restoreLastTask();
 if (!restoredTask && state.settings.apiKey) {
   void runQuoteQuery();

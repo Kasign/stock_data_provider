@@ -67,6 +67,30 @@
             </div>
           </section>
 
+          <section class="panel market-activity-panel" aria-labelledby="market-activity-title">
+            <div class="panel-heading"><div><h2 id="market-activity-title">市场活动与交易日历</h2><p>使用后端龙虎榜与显式交易日历。龙虎榜盘后数据可能延迟发布；交易日不通过星期规则推算。</p></div><span class="soft-badge">真实数据接口</span></div>
+            <div class="market-activity-grid">
+              <section class="market-activity-widget" aria-labelledby="dragon-tiger-title">
+                <div class="market-activity-heading"><div><h3 id="dragon-tiger-title">龙虎榜</h3><p>金额为人民币元；涨跌幅及成交占比使用百分点口径。</p></div><span id="dragon-tiger-quality" class="quality-pill quality-unknown">未加载</span></div>
+                <div class="market-activity-controls"><label>交易日期<input type="date" id="dragon-tiger-date" /></label><button class="button button-secondary" id="load-dragon-tiger" type="button">查询龙虎榜</button></div>
+                <p class="supplemental-error" id="dragon-tiger-error" hidden></p>
+                <div class="table-scroll market-activity-table"><table><thead><tr><th>股票</th><th>涨跌幅</th><th>净买入</th><th>成交额</th><th>上榜原因</th><th>质量</th></tr></thead><tbody id="dragon-tiger-body"><tr><td colspan="6" class="table-empty">等待龙虎榜数据。</td></tr></tbody></table></div>
+                <p class="market-widget-meta" id="dragon-tiger-meta"></p><ul class="market-quality-reasons" id="dragon-tiger-reasons" hidden></ul>
+                <div class="market-activity-footer"><span>每页 50 条，可按服务端分页继续加载。</span><button class="button button-secondary" id="dragon-tiger-next" type="button" hidden>加载下一页</button></div>
+              </section>
+              <section class="market-activity-widget" aria-labelledby="trading-calendar-title">
+                <div class="market-activity-heading"><div><h3 id="trading-calendar-title">A 股交易日历</h3><p>交易/休市状态来自 Provider 明确返回的逐日标记。</p></div><span id="trading-calendar-quality" class="quality-pill quality-unknown">未加载</span></div>
+                <div class="calendar-month-navigation"><button class="icon-button" id="calendar-previous-month" type="button" aria-label="上个月">‹</button><strong id="calendar-month-label">当前月份</strong><button class="icon-button" id="calendar-current-month" type="button">本月</button><button class="icon-button" id="calendar-next-month" type="button" aria-label="下个月">›</button></div>
+                <div class="market-activity-controls calendar-range-controls"><label>开始日期<input type="date" id="calendar-start-date" /></label><label>结束日期<input type="date" id="calendar-end-date" /></label><button class="button button-secondary" id="load-trading-calendar" type="button">查询范围</button></div>
+                <p class="supplemental-error" id="trading-calendar-error" hidden></p>
+                <div class="trading-calendar-weekdays" aria-hidden="true"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+                <div class="trading-calendar-grid" id="trading-calendar-grid"><p class="market-empty-state">等待交易日历。</p></div>
+                <p class="market-widget-meta" id="trading-calendar-meta"></p><ul class="market-quality-reasons" id="trading-calendar-reasons" hidden></ul>
+                <p class="stock-research-footnote">覆盖不完整时会显示警告；请勿将不完整日历用于交易日判断。</p>
+              </section>
+            </div>
+          </section>
+
           <section class="search-panel panel">
             <div class="search-intro"><div class="panel-kicker">标的查询</div><div class="panel-muted">输入 A 股代码，查看标准化后的上游数据</div></div>
             <form class="query-form" id="quote-form">

@@ -248,3 +248,10 @@
 - 真实端点：/api/v1/stocks/{symbol}/profile、/boards、/fundamentals?year=&quarter=、/announcements?page=&page_size=。
 - 财务报告期与披露日期分开显示；公告分页与外链来源验证已接入；has_data=false 和 quality unknown 不转成“没有数据”或数值 0。
 - 本批未运行测试或 CI；待用户对已部署 market-data 的 Provider 开关和端点执行统一验证。PR #2 继续保持 Open/未合并。
+
+## 2026-10-26 — 龙虎榜与交易日历交接
+
+- 新增龙虎榜查询、服务端分页，以及点击 A 股记录跳转至现有实时行情和日 K。
+- 新增交易日历范围查询、上月/本月/下月快捷切换、来源时间与覆盖数量核对；只展示后端明确的交易日标记，不推断节假日。
+- API：/api/v1/market/dragon-tiger、/api/v1/market/trading-calendar。未发布、接口缺失、Provider 不可用和覆盖不完整均有说明。
+- 本批未运行测试或触发 CI，PR #2 继续保持 Open/未合并。

@@ -223,3 +223,12 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 | GET /market-api/api/v1/stocks/{symbol}/announcements?page=1&page_size=20 | 默认查询中国时区最近 7 个日历日；响应包含源端公告日期、可解析时才存在的发布时间、采集时间、质量状态及 source_url。空列表和 unknown 质量不证明没有公告；分页使用 has_more。 |
 
 个股研究区按需加载，不阻塞报价、日 K 或分析任务。每个请求独立处理认证失败、Provider 未启用、旧服务 404、空数据和质量降级；公告链接仅允许 HTTPS 的 Eastmoney 官方域名。
+
+## 龙虎榜与交易日历 API
+
+| 请求 | 参数与数据解释 |
+|---|---|
+| GET /market-api/api/v1/market/dragon-tiger?date=2026-10-26&page=1&page_size=50 | 日期可省略（默认中国时区当日）；page 从 1 开始，page_size 为 1–500。展示 A 股明细、净买入/成交金额（人民币元）、涨跌幅及成交占比（百分点）、上榜原因、质量与获取时间。source_returned 和 excluded_non_a_share_count 用于解释源端原始记录及被过滤的非 A 股产品；has_data=false 不等于确认当日无人上榜。 |
+| GET /market-api/api/v1/market/trading-calendar?start=2026-10-01&end=2026-10-31 | start/end 必填、闭区间。页面展示服务端逐日 is_trading_day 标记，不以星期几推断交易状态，并核对 items 数量与 total_days 的一致性。 |
+
+龙虎榜支持服务端分页，并可跳转到已有个股行情查询。交易日历支持指定范围和月份快捷切换。Provider 未启用、旧服务缺少接口或源端尚未发布数据时明确显示状态。
