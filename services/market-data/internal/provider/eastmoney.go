@@ -1881,8 +1881,6 @@ func parseEastmoneyBoardInteger(row map[string]json.RawMessage, key string) *int
 	return &integer
 }
 
-
-
 type eastmoneyIndexDefinition struct {
 	Symbol string
 	Code   string
