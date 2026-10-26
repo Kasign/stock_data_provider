@@ -230,3 +230,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 当所有 Provider 都无法达到最低 K 线覆盖阈值时，服务会尝试保留质量降级的最佳部分序列。旧逻辑只按返回条数选择；若两家 Provider 返回相同条数，优先级更高但最新交易日更早的那组会一直胜出。
 - 现在先选经过验证的较长序列；条数相同时再比较最新交易日，优先保留更新的那组；条数和最新交易日都相同时维持现有 Provider 优先级，避免不必要的切换。
 - 已新增 `TestPreferPartialBarsChoosesNewestSeriesWhenCountsTie` 回归测试源码，覆盖相同条数的更新/过时序列、较长序列及相同候选保留规则。测试尚未执行。
+
+
+## 7. 2026-10-26 静态 Review 补充：网易报价端点配置校验
+
+- 配置中已支持 `MARKET_DATA_NETEASE_QUOTE_URL`，但启动时的上游 URL 校验表只覆盖了网易历史 CSV 地址，遗漏了实时报价地址。错误的 `file://` 等协议因此不会在配置加载阶段被拒绝。
+- 已把网易报价 URL 纳入统一 `validateEndpointURL` 检查，并新增 `TestLoadRejectsMalformedNeteaseQuoteEndpointURL` 回归测试源码。验证只检查配置形态，不代表目标上游当前可达。
+- 本次测试源码没有执行；没有运行 CI、构建或实时 Provider 请求。
