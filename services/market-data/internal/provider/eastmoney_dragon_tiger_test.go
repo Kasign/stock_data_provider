@@ -126,23 +126,6 @@ func TestEastmoneyFetchDragonTigerBondOnlyPageRemainsUnknown(t *testing.T) {
 	}
 }
 
-func TestEastmoneyFetchDragonTigerBondOnlyPageRemainsUnknown(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"result":{"pages":1,"count":1,"data":[{"SECURITY_CODE":"113711","SECUCODE":"113711.SH","SECURITY_NAME_ABBR":"N常青转","TRADE_DATE":"2026-10-23 00:00:00","BILLBOARD_NET_AMT":"7284700","BILLBOARD_BUY_AMT":"32062300","BILLBOARD_SELL_AMT":"24777600","BILLBOARD_DEAL_AMT":"90319700","DEAL_AMOUNT_RATIO":"62.93","EXPLAIN":"可转债上市首日交易公开信息","SECURITY_TYPE_CODE":"060"}]}}`)
-	}))
-	defer server.Close()
-
-	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
-	got, err := p.FetchDragonTiger(context.Background(), "2026-10-23", 1, 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.HasData || got.Total != 1 || got.Pages != 1 || got.SourceReturned != 1 ||
-		got.Returned != 0 || got.ExcludedNonAShareCount != 1 || got.QualityStatus != model.QualityUnknown {
-		t.Fatalf("bond-only provider page must be unknown, not a confirmed empty stock report: %+v", got)
-	}
-}
-
 func TestEastmoneyFetchDragonTigerTreatsCode9201AsUnknownEmptyReport(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"version":null,"result":null,"success":false,"message":"返回数据为空","code":9201}`)

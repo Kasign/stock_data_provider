@@ -588,3 +588,9 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - 本批只过滤已明确识别的 `SECURITY_TYPE_CODE=060` 可转债行，并保留供应商 `total/pages`；新增 `source_returned`、`returned`、`excluded_non_a_share_count` 三个计数，要求原始页行数 = 可用 A 股行数 + 被排除非 A 股行数。
 - 只含非 A 股证券的页返回 `quality_status=unknown`、`has_data=false`，仍保留 source page/has_more 信息，不误标为零上榜。混合页保留符合 A 股身份的行并附加排除质量原因。
 - 上述修改还未由自身 commit 的 Go CI/真实 Probe 验证；DragonTiger Provider 依旧独立开关默认关闭，NAS/Docker 部署验收仍未完成。
+
+
+## 11. 可转债过滤回归测试整理（2026-10-26）
+
+- 提交 `cc62788d83e821ea1cc682330c6f183f4fb60ad5` 的 Go CI/真实探测未能进入外部数据验证：Provider 测试文件重复声明了 `TestEastmoneyFetchDragonTigerBondOnlyPageRemainsUnknown`，市场数据测试和探测在编译阶段失败。这是测试装配错误，不是行情端点故障。
+- 已删除重复定义，保留一份纯可转债页回归测试；以随后提交触发的 CI 与真实 Runner 结果作为新验收依据。
