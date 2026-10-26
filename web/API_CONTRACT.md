@@ -198,3 +198,17 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 - 默认优先选中近期的失败、错误、阻断、降级或运行中事件；用户选择在同一组事件轮询更新时保持。该排序只改善诊断入口，不表示阶段依赖关系。
 - 事件列表以键盘可访问的按钮呈现，使用真实事件序号做选择；不把事件序列转换成 DAG，不显示虚假百分比，也不提供目前不存在的取消任务操作。
 - 下一阶段完整图形化 Run Flow 仍依赖数据服务明确的 Stage Registry 和持久化 Flow Snapshot API，边关系必须来自真实 Runner 定义。
+
+
+## 市场概览新增 API（真实行情服务端点）
+
+市场概览使用四个互相独立的只读请求。浏览器使用同源 /market-api/ 前缀，Nginx 转发至 Go market-data；四个端点均要求行情 API Key，并通过 X-API-Key 发送。
+
+| 请求 | 参数和展示边界 |
+|---|---|
+| GET /market-api/api/v1/market/indices | 显示 items、latest_price、change、change_percent、quote_time、source、fetched_at、quality_status；change_percent 使用百分点口径。 |
+| GET /market-api/api/v1/market/breadth | 显示上涨/下跌/平盘/未分类家数、total_securities、covered_securities、来源/时间/质量。total_securities 是来源分布桶汇总，不是经证券主数据独立核验的总量；未提供全市场成交额时明确显示未提供。 |
+| GET /market-api/api/v1/market/sectors?type=industry&limit=10 | type=industry/concept，limit 默认 10、范围 1–100；按服务端排名展示，涨跌幅使用百分点。 |
+| GET /market-api/api/v1/market/limit-pools?type=up&limit=30 | type=up/down/broken，limit 默认 30、范围 1–100，date 可选；has_data=false 不能解释为 0 只股票。 |
+
+各模块独立处理加载、空/缺字段、认证错误、接口 404 和上游失败。旧版 market-data 返回 404 时仅该模块提示升级服务；质量等级、来源时间和质量原因保留真实后端值。

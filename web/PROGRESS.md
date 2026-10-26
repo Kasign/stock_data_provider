@@ -300,3 +300,12 @@
 - 全宽图形化 DAG 还未实现：当前 API 未提供可信的依赖边/flow snapshot；后续先在数据分支做 Stage Registry 与持久化 Flow Snapshot，再绘制真正节点图。没有新增假进度百分比或取消功能。
 - 股票搜索 WebUI 提交 `b2a30049e2f70b4009c2ff3ab9179adad299cb9f` 的 WebUI checks [#40260695238](https://github.com/Kasign/stock_data_provider/actions/runs/40260695238) 已成功；数据分支 Go suite [#40260305214](https://github.com/Kasign/stock_data_provider/actions/runs/40260305214) 与通用 Provider probe [#40260305265](https://github.com/Kasign/stock_data_provider/actions/runs/40260305265) 成功。该通用 probe 尚非中文搜索专项探测。
 - 本批 Run Flow UI 自动化与 CI 待本功能提交后回填；NAS 已部署，不重复开展全量部署测试，只记录新的搜索/运行流功能具体联调结果。
+
+
+## Issue #13 — 市场概览真实数据接入（源码批次）
+
+- 行情总览新增核心指数、市场涨跌分布、行业/概念排行、涨停/跌停/炸板池四个数据区；使用行情服务已有只读 API。
+- 新增独立 src/market-overview.js，支持独立加载、刷新、请求取消和代次保护；筛选变更只刷新对应模块。
+- 区分 API Key 未配置、加载中、404、认证错误、请求失败、空/缺字段和质量降级；市场广度与涨跌停池遵守源端 unknown/has_data 语义，不将未知转换成 0。
+- 展示真实来源、快照时间、质量等级和质量原因；无 mock 数据和前端交易判断。
+- 本批按要求未运行测试或启动 CI；后续由用户统一测试，真实 API 回包待部署版本确认。

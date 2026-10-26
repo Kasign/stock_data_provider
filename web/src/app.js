@@ -22,6 +22,7 @@ import {
   saveSettings
 } from "./api.js";
 import { normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart } from "./chart.js";
+import { bindMarketOverview } from "./market-overview.js";
 import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask } from "./recent-tasks.js";
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
@@ -84,6 +85,8 @@ const state = {
   suppressedHistoryTaskId: "",
   chatStockContext: null
 };
+
+const marketOverview = bindMarketOverview(() => state.settings);
 
 function setText(selector, value) {
   const target = $(selector);
@@ -816,7 +819,9 @@ const VIEW_META = Object.freeze({
 
 function setView(view, { updateHash = true } = {}) {
   const nextView = Object.hasOwn(VIEW_META, view) ? view : "market";
+  const previousView = state.view;
   state.view = nextView;
+  if (nextView === "market" && previousView !== "market") void marketOverview.refresh();
   if (nextView === "chat") syncChatStockContextFromMarket();
   const runFlowDialog = $("#run-flow-dialog");
   if (nextView !== "tasks" && runFlowDialog?.open) runFlowDialog.close();
@@ -2087,6 +2092,7 @@ function applySettings(nextSettings) {
   $("#settings-dialog").close();
   void refreshServices();
   void refreshSources();
+  void marketOverview.refresh();
   if (state.view === "market" && state.settings.apiKey) void runQuoteQuery();
 }
 
@@ -2223,6 +2229,7 @@ $("#refresh-button").addEventListener("click", async () => {
   await refreshServices();
   if (state.view === "market") {
     await refreshSources();
+    await marketOverview.refresh();
     if (state.settings.apiKey) await runQuoteQuery();
   } else if (state.view === "tasks" && state.taskId) {
     stopTaskPolling();
@@ -2363,6 +2370,7 @@ setView(window.location.hash.slice(1), { updateHash: false });
 syncSettingsThemeButtons(readTheme());
 void refreshServices();
 void refreshSources();
+void marketOverview.refresh();
 const restoredTask = restoreLastTask();
 if (!restoredTask && state.settings.apiKey) {
   void runQuoteQuery();

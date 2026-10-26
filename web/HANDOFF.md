@@ -233,3 +233,11 @@
 - 完整 DAG Flow 仍待数据层的阶段注册表和持久化 topology snapshot API，不能只在前端仿画视觉图。
 - 股票搜索的后端提交 `2118cfb945aaa0562e7b7e6480eb62b84cd68f51`、格式修复 `f5b719f9c506b64aae63effe71b314a19f7c45ba` 的 Go suite [#40260305214](https://github.com/Kasign/stock_data_provider/actions/runs/40260305214) 与通用 Live Provider probe [#40260305265](https://github.com/Kasign/stock_data_provider/actions/runs/40260305265) 均成功；尚未专项核验真实中文搜索结果。
 - PR #2 持续保持 Open/未合并；提交前再次核对 HEAD，避免覆盖并行更新。
+
+
+## 2026-10-26 — 市场概览功能交接
+
+- 行情总览新增核心指数、A 股涨跌分布、行业/概念排行、涨停/跌停/炸板池。
+- 新增 src/market-overview.js 与 API client 方法；模块独立加载和错误处理，筛选变更只刷新对应模块。旧服务 404 时提示更新 market-data。
+- 后端接口：/api/v1/market/indices、/api/v1/market/breadth、/api/v1/market/sectors、/api/v1/market/limit-pools。展示源端时间和质量字段，不使用 mock 数据。
+- 本批未运行测试或主动启动 CI；PR #2 保持 Open/未合并。

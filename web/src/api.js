@@ -75,6 +75,11 @@ export function analysisHealth(settings) {
 export function getDataSources(settings) {
   return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey });
 }
+export function getMarketIndices(settings, signal) { return request(settings.marketBase, "/api/v1/market/indices", { apiKey: settings.apiKey, signal }); }
+export function getMarketBreadth(settings, signal) { return request(settings.marketBase, "/api/v1/market/breadth", { apiKey: settings.apiKey, signal }); }
+export function getMarketSectors(settings, { type = "industry", limit = 10, signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit)});return request(settings.marketBase,"/api/v1/market/sectors?"+query.toString(),{apiKey:settings.apiKey,signal}); }
+export function getMarketLimitPool(settings, { type = "up", limit = 30, date = "", signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit)});if(date)query.set("date",date);return request(settings.marketBase,"/api/v1/market/limit-pools?"+query.toString(),{apiKey:settings.apiKey,signal}); }
+
 export function searchStocks(settings, query, { limit = 10, signal } = {}) {
   const params = new URLSearchParams({ q: String(query ?? "").trim(), limit: String(limit) });
   return request(settings.marketBase, `/api/v1/stocks/search?${params}`, { apiKey: settings.apiKey, signal });
