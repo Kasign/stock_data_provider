@@ -601,3 +601,10 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - Go CI #299 与真实 Provider Probe #109 已通过，证明前序龙虎榜改动在该 HEAD 的单测、race、vet、Compose 与 Docker 镜像构建通过；真实探测返回 2026-10-23 龙虎榜源端计数 101、两页，第一页 100 条原始记录中返回 97 条 A 股、排除 3 条可转债。此结果只验收第一页并保持 degraded，不代表全分页或 NAS/Docker 部署验收。
 - 当前批次新增 Go 原生公告 Provider/API：按股票、公告日期区间和页码查询，保留 art_code、notice_date、display_time、sort_date、eiTime；published_at 只从可解析的源端 display_time 生成，采集时间独立存放。空列表标 unknown；缺精确显示时间保留 null 并降级。
 - 通用 Python 新闻搜索仍为 Python Bridge：Bocha/Tavily/Brave/SearXNG 的回退、时间过滤、排序和结果准入尚未等价迁移。公告 Provider 使用 `MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED=false` 独立开关，未完成当前 HEAD 的 Runner 与目标 NAS/Docker 验收前不生产启用。
+
+
+## 13. 公告端点真实发布时间格式（2026-10-26）
+
+- Live Provider Probe #112 的内部探测步骤成功调用东方财富公告接口，HTTP 200，`total_hits=2`、`pages=1`、`returned=2`。对象为 600036.SH，日期窗口 2026-10-19 至 2026-10-25；两条记录的公告日期分别是 2026-10-24 和 2026-10-21，源端 `display_time` 是 `2026-10-23 17:20:42:715` 和 `2026-10-20 17:32:45:870`。
+- 上述响应证实旧解析器漏识别“秒:毫秒”格式，因而把两个真实的展示时间标记为缺失，并将质量降级。现新增该格式解析与毫秒精度单测；原始 display_time 仍原样保留，published_at 从源端时间解析，fetched_at 仍是独立采集时间。日期单值仍不转换为精确发布时间。
+- 上一轮 Go CI #302 失败于 `live_probe_test.go` 结构体的重复右括号；修复后仍出现 `server_test.go` 一处字段对齐问题。后续提交已处理这些编译/格式问题，但最终验收仍以新 HEAD 的 Go CI 和 Probe 为准。

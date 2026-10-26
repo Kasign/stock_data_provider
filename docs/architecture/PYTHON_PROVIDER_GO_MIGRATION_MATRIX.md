@@ -133,3 +133,8 @@ Live Provider Probe #107 请求 2026-10-23 的真实东方财富龙虎榜后，�
 - Go 原生公告 Provider 只覆盖东方财富单只股票公告列表，不代表通用新闻搜索已迁移。
 - 原 Python `search_stock_news` 仍通过可配置 Bocha/Tavily/Brave/SearXNG 搜索源执行回退、时效过滤、语言/相关度排序及结果准入；Go `SearchAdapter` 目前仍调用 Python Bridge。后续 Go 原生新闻搜索需逐项对照这些行为和搜索源配置，不能用单一公告端点取代市场新闻/新闻检索。
 - Python `get_dragon_tiger_context` 返回基本面上下文中的龙虎榜标记/近期上榜摘要，当前 Go 原生详细龙虎榜分页不自动等价于该字段；后续需用真实数据对照 `is_on_list/recent_count/latest_date`。
+
+
+## 公告发布时间毫秒格式的真实 Runner 修正（2026-10-26）
+
+Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_data_provider/actions/runs/40258376973)）对东方财富公告端点完成 HTTP 200 请求，返回 600036.SH 在 2026-10-19 至 2026-10-25 区间的 2 条公告，源端 `total_hits=2`、第一页 `returned=2`。实际 `display_time` 值包含 `2026-10-23 17:20:42:715` 和 `2026-10-20 17:32:45:870`，其毫秒使用冒号分隔；旧解析器因此把真实源端发布时间误判为缺失。Provider 现在在严格识别“末尾三位数字”的情况下，将该冒号规范化为小数点再解析，不改变 API 返回的原始 `display_time`；纯日期仍然不会被伪造为发布时间。该修正待新的 Go CI 与真实 Runner 再次验收。

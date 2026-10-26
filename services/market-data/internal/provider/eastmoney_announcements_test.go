@@ -86,6 +86,14 @@ func TestEastmoneyAnnouncementDisplayTimeParserDoesNotUseNoticeDateAsTimestamp(t
 	if got := eastmoneyAnnouncementTime("2026-10-23 18:30:00"); got == nil || got.In(time.FixedZone("CST", 8*3600)).Hour() != 18 {
 		t.Fatalf("provider display time was not parsed: %v", got)
 	}
+	got := eastmoneyAnnouncementTime("2026-10-23 17:20:42:715")
+	if got == nil {
+		t.Fatal("Eastmoney colon-separated milliseconds must parse as a source publication time")
+	}
+	local := got.In(time.FixedZone("CST", 8*3600))
+	if local.Hour() != 17 || local.Minute() != 20 || local.Second() != 42 || local.Nanosecond() != 715000000 {
+		t.Fatalf("milliseconds or source timezone were lost: got %s", local.Format("15:04:05.000"))
+	}
 	if strings.TrimSpace(eastmoneyAnnouncementURL("600036", "AN123")) == "" {
 		t.Fatal("article URL pattern should be available")
 	}

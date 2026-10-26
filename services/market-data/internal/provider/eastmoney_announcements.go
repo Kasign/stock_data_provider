@@ -67,11 +67,28 @@ func eastmoneyAnnouncementTime(raw string) *time.Time {
 	if raw == "" || raw == "-" {
 		return nil
 	}
+	// 东方财富 display_time/eiTime 偶尔以“秒:毫秒”返回（例如 17:20:42:715）。
+	// 只规范化末尾恰好 3 位数字的冒号分隔毫秒，不影响时区偏移中的冒号。
+	if index := strings.LastIndex(raw, ":"); index >= 0 && len(raw)-index == 4 {
+		milliseconds := raw[index+1:]
+		if len(milliseconds) == 3 {
+			validDigits := true
+			for _, digit := range milliseconds {
+				if digit < '0' || digit > '9' {
+					validDigits = false
+					break
+				}
+			}
+			if validDigits {
+				raw = raw[:index] + "." + milliseconds
+			}
+		}
+	}
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		loc = time.FixedZone("CST", 8*60*60)
 	}
-	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05", "2006-01-02 15:04", "2006/01/02 15:04:05"} {
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.000", "2006-01-02 15:04:05", "2006-01-02 15:04", "2006/01/02 15:04:05"} {
 		var parsed time.Time
 		if layout == time.RFC3339Nano {
 			parsed, err = time.Parse(layout, raw)
