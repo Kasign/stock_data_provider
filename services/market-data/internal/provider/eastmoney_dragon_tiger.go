@@ -51,8 +51,8 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 	}
 	var payload struct {
 		Result *struct {
-			Pages *int                        `json:"pages"`
-			Count *int                        `json:"count"`
+			Pages *int                         `json:"pages"`
+			Count *int                         `json:"count"`
 			Data  []map[string]json.RawMessage `json:"data"`
 		} `json:"result"`
 	}

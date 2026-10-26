@@ -429,7 +429,6 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	return nil, false, fmt.Errorf("all limit-pool providers failed: %s", strings.Join(failures, "; "))
 }
 
-
 func normalizeDragonTigerDate(rawDate string) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
 	if rawDate == "" {
