@@ -411,7 +411,7 @@ test("screening workbench distinguishes unavailable capability from disabled and
 
 test("alert center separates rule CRUD, evaluation state, trigger history and delivery attempts", () => {
   for (const id of [
-    "alert-capability-pill", "alert-rule-name", "alert-rule-scope", "alert-rule-type",
+    "alert-capability-pill", "alert-rules-status-pill", "alert-rule-name", "alert-rule-scope", "alert-rule-type",
     "alert-rule-threshold", "alert-rule-severity", "alert-rule-enabled", "alert-rule-submit",
     "alert-rule-test", "alert-evaluation-status-pill", "alert-history-symbol", "alert-history-rule",
     "alert-history-status", "alert-history-list", "alert-delivery-status-pill", "alert-delivery-list"

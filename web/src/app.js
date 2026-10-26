@@ -561,10 +561,6 @@ function renderAlertEvaluation(snapshot) {
 function renderAlertCollection(snapshot, field, selector, pillSelector, summarySelector, label) {
   const current = resolveAlertCollectionState(snapshot, field);
   document.querySelectorAll(selector).forEach((node) => {
-    node.hidden = node.dataset[selector.slice(1).replace(/\[data-([a-z-]+)-state\]/, "$1State")] === current;
-  });
-  // Use exact data attributes instead of relying on the CSS selector parser's dataset key conversion.
-  document.querySelectorAll(selector).forEach((node) => {
     const stateKey = node.getAttribute("data-alert-" + label + "-state");
     node.hidden = stateKey !== current;
   });
@@ -1996,7 +1992,7 @@ renderScreeningTask({ supported: false });
 renderScreeningCandidates({ supported: false });
 renderScreeningHistory({ supported: false });
 renderAlertCapability({ supported: false });
-renderAlertCollection({ supported: false }, "rules", "[data-alert-rules-state]", "#alert-capability-pill", "#alert-summary-rule-count", "rules");
+renderAlertCollection({ supported: false }, "rules", "[data-alert-rules-state]", "#alert-rules-status-pill", "#alert-summary-rule-count", "rules");
 renderAlertEvaluation({ supported: false });
 renderAlertCollection({ supported: false }, "items", "[data-alert-history-state]", "#alert-history-status-pill", "#alert-summary-trigger-count", "history");
 renderAlertCollection({ supported: false }, "attempts", "[data-alert-delivery-state]", "#alert-delivery-status-pill", "#alert-summary-delivery-count", "delivery");
