@@ -1561,9 +1561,7 @@ function quoteQueryKey(symbol, startDate, endDate, limit, adjustment) {
 }
 
 function handleQuoteCriteriaChange(message = "查询条件已变化，旧行情与日 K 已清除，请重新查询。") {
-  if (state.isQuerying || state.quote || state.bars.length || state.bundleSnapshot) {
-    cancelQuoteQuery({ clearResults: true, symbol: $("#symbol-input").value.trim(), message });
-  }
+  cancelQuoteQuery({ clearResults: true, symbol: $("#symbol-input").value.trim(), message });
 }
 
 function handleSymbolInputChange() {

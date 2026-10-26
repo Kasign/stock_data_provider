@@ -180,6 +180,10 @@ test("changing market API credentials invalidates old stock-search suggestions",
   assert.match(app, /function cancelStockSearchRequest\(\)[\s\S]*?state\.stockSearchGeneration \+= 1;/);
 });
 
+test("filter changes clear stale errors even when a prior query returned no data", () => {
+  assert.match(app, /function handleQuoteCriteriaChange\([^)]*\) \{\s*cancelQuoteQuery\(\{ clearResults: true,[\s\S]*?\}\);\s*\}/);
+});
+
 test("main quote query invalidates old snapshots when the symbol or filters change", () => {
   assert.match(app, /quoteQueryGeneration: 0/);
   assert.match(app, /function cancelQuoteQuery\(/);
