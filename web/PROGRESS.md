@@ -267,3 +267,6 @@
 - 生产初始化显式为 `supported:false`，所有市场/股票池/策略/筛选表单、扫描刷新/提交、候选过滤、历史翻页及候选相关操作禁用。没有真实 API 时不展示静态股票、假分数、虚构任务状态或“0 条”空结果。
 - 新增 `web/src/screening-state.js`、`web/tests/screening-state.test.mjs` 与 UI 契约测试，语法检查包含新模块；未使用普通多股票分析任务代替条件选股，也未改 Go API。
 - 本批 WebUI Actions 结果待核验；真实浏览器视觉检查和 NAS/Docker/OpenResty 选股后端联调未执行。
+
+
+- Issue #9 首轮 WebUI checks [#40257548521](https://github.com/Kasign/stock_data_provider/actions/runs/40257548521) 中 81/82 项 Node tests 通过；JS 语法检查通过，Nginx 构建因测试失败跳过。唯一失败为通用回归测试仍要求旧选股占位文案，已将断言同步为当前“不能提交扫描，也不会用普通分析任务伪装成选股”的边界说明，修复后需重新验收。

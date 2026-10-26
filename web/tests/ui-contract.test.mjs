@@ -271,7 +271,7 @@ test("new feature pages display unavailable states rather than production mock r
   assert.match(html, /通知收件箱暂不可用/);
   assert.match(html, /不会(?:展示|生成)模拟通知/);
   assert.match(html, /不会用单次分析报告冒充多轮 AI 对话/);
-  assert.match(html, /不能提交，不会产生模拟结果/);
+  assert.match(html, /不能提交扫描，也不会用普通分析任务伪装成选股/);
   assert.match(html, /不会在浏览器里假保存规则/);
   assert.match(html, /服务端配置 API 待接入/);
   assert.match(html, /服务端密码、权限、\.env、备份和恢复涉及认证/);

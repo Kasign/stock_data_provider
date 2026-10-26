@@ -182,3 +182,8 @@
 - Issue #9 将选股能力、任务、候选结果、热点和历史分开建模。当前没有真实 strategy/schema/scan/candidate/history API，生产页按 `supported:false` 展示 unavailable，所有写操作与筛选/翻页禁用。
 - 新增 `web/src/screening-state.js` 与 `web/tests/screening-state.test.mjs`，覆盖 enabled/disabled/unknown/unavailable/loading/error、任务状态和 collection 状态。生产页面不显示股票代码、候选分数或模拟选股理由。
 - 本批 CI 结果待对新提交 SHA 核验后回填；真实浏览器和 NAS/Docker/OpenResty 验收未执行。
+
+
+## Issue #9 首轮 CI 诊断（2026-10-26）
+- WebUI checks [#40257548521](https://github.com/Kasign/stock_data_provider/actions/runs/40257548521) 中 82 项 Node tests 81 项通过；语法检查通过，Nginx image build 因测试失败跳过。
+- 唯一失败是旧的通用 UI 契约测试要求文案“不能提交，不会产生模拟结果”，新的选股页面将边界说明具体化为“不能提交扫描，也不会用普通分析任务伪装成选股”。已更新断言，未修改后端或生产逻辑；修复后的 Actions 仍需全绿。
