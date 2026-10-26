@@ -48,6 +48,27 @@ import {
 const $ = (selector) => document.querySelector(selector);
 const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
 const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
+const TASK_EVENT_STATUS_LABELS = Object.freeze({
+  succeeded: "已完成",
+  success: "已完成",
+  completed: "已完成",
+  failed: "失败",
+  error: "异常",
+  blocked: "已阻断",
+  rejected: "已拒绝",
+  degraded: "已降级",
+  partial: "部分完成",
+  running: "运行中",
+  started: "已启动",
+  "in-progress": "运行中",
+  in_progress: "运行中",
+  processing: "处理中",
+  queued: "排队中",
+  pending: "等待中",
+  skipped: "已跳过",
+  unknown: "状态未报告",
+  other: "其他状态"
+});
 const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
 let initialConnectionDraft = null;
 
@@ -1539,22 +1560,42 @@ function renderTaskEvents() {
     const event = item.event && typeof item.event === "object" ? item.event : item;
     const sequence = Number(item.sequence);
     const selected = sequence === Number(state.selectedTaskEventSequence);
+    const rawStatus = String(event.status || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+    const statusKey = Object.prototype.hasOwnProperty.call(TASK_EVENT_STATUS_LABELS, rawStatus)
+      ? rawStatus
+      : event.status ? "other" : "unknown";
+    const statusLabel = statusKey === "other" ? String(event.status) : TASK_EVENT_STATUS_LABELS[statusKey];
     const row = document.createElement("button");
     row.type = "button";
-    row.className = "event-row";
+    row.className = "event-row event-row-" + statusKey;
     row.dataset.taskEventSequence = String(item.sequence);
     row.setAttribute("aria-pressed", String(selected));
+    row.setAttribute("aria-label", "阶段：" + (event.stage || event.name || "分析阶段") + "；状态：" + statusLabel + "；事件序号：" + item.sequence);
+
     const icon = document.createElement("span");
-    icon.className = "event-status event-status-" + String(event.status || "unknown").toLowerCase();
-    icon.textContent = event.status === "succeeded" ? "✓" : event.status === "failed" || event.status === "error" ? "!" : event.status === "skipped" ? "–" : "·";
+    icon.className = "event-status event-status-" + statusKey;
+    icon.textContent = ["succeeded", "success", "completed"].includes(statusKey)
+      ? "✓"
+      : ["failed", "error", "blocked", "rejected"].includes(statusKey)
+        ? "!"
+        : statusKey === "skipped" ? "–"
+          : ["running", "started", "in-progress", "in_progress", "processing"].includes(statusKey) ? "↻" : "·";
+
     const body = document.createElement("span");
     body.className = "event-body";
     const title = document.createElement("strong");
     title.textContent = event.stage || event.name || "分析阶段";
+    const heading = document.createElement("span");
+    heading.className = "event-row-heading";
+    const stateBadge = document.createElement("span");
+    stateBadge.className = "event-state-label";
+    stateBadge.textContent = statusLabel;
+    heading.append(title, stateBadge);
+
     const detail = document.createElement("span");
     detail.className = "event-row-message";
-    detail.textContent = event.message || event.status || "服务端事件未提供描述";
-    body.append(title, detail);
+    detail.textContent = event.message || "服务端事件未提供描述";
+    body.append(heading, detail);
     if (event.error_code) {
       const diagnostic = document.createElement("span");
       diagnostic.className = "event-diagnostic";

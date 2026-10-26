@@ -159,11 +159,13 @@
 - 当前 Task/StageEvent/RunResult API 不包含经验证的 DAG 边和实时流端点；禁止从事件顺序猜依赖、显示虚假进度百分比或伪造取消操作。
 
 
-### Issue #12 — Run Flow 增强，Phase 1 已实现
+### Issue #12 — Run Flow 增强（Phase 1 + 视觉增强 Phase 1.1）
 
-- 在已有 Task/Run 双状态、StageEvent 时间线与 RunResult 之上增加摘要栏、可点击事件、失败/降级/运行中事件优先定位、真实事件字段与原始 JSON 诊断。
-- 当前分支没有真实拓扑快照 API，因此此阶段不生成 DAG 节点/边、不显示估算进度、不假装取消任务；完整图形阶段仍需数据层 Stage Registry/Flow Snapshot。
-- 功能提交与 CI 验收结果见 `web/PROGRESS.md` 和 `web/HANDOFF.md`。
+- Phase 1 已提供 Task/Run 双状态、事件摘要、可点击事件、失败/降级/运行中事件优先定位、真实事件字段和原始 JSON 诊断。
+- Phase 1.1 将事件展示强化为线性时间线，包含状态徽标、节点连接线、选中态、诊断提示、服务端时间/序号层次及窄屏布局。
+- 当前 API 没有可信的拓扑快照或依赖边，因此不会绘制 DAG、猜测依赖、显示估算进度或伪造取消任务；完整图形仍需数据层 Stage Registry/Flow Snapshot。
+- 本批未执行测试或 CI；真实浏览器/部署视觉验收留待用户统一测试。后续记录见 `web/PROGRESS.md` 和 `web/HANDOFF.md`。
+
 
 
 ### Issue #13 — 行情总览市场背景（本批源码完成）

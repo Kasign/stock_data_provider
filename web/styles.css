@@ -1294,3 +1294,196 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .source-capability-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;line-height:1.5}
 .source-capability-tag{display:inline-flex;align-items:center;padding:4px 6px;border:1px solid var(--border);border-radius:5px;color:var(--text-soft);background:var(--panel-raised);font-size:9px;white-space:normal}
 .source-capability-empty{color:var(--text-dim);font-size:10px;line-height:1.6;overflow-wrap:anywhere}
+
+
+/* Run Flow visual pass: linear persisted-event timeline, status hierarchy, and responsive metadata. */
+.run-flow-dialog .event-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+}
+.run-flow-dialog .event-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 0 12px;
+  width: 100%;
+  margin: 0;
+  padding: 14px 12px 14px 4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.run-flow-dialog .event-row:not(:last-child)::before {
+  position: absolute;
+  z-index: 0;
+  top: 31px;
+  bottom: -17px;
+  left: 15px;
+  width: 1px;
+  background: var(--border);
+  content: "";
+  pointer-events: none;
+}
+.run-flow-dialog .event-row:hover {
+  border-color: var(--border);
+  background: var(--panel);
+}
+.run-flow-dialog .event-row[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.run-flow-dialog .event-row:focus-visible { position: relative; outline-offset: -2px; }
+.run-flow-dialog .event-status {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  color: var(--text-soft);
+  background: var(--panel-raised);
+  box-shadow: 0 0 0 1px var(--border);
+  font-size: 12px;
+  font-weight: 700;
+}
+.run-flow-dialog .event-status-succeeded,
+.run-flow-dialog .event-status-success,
+.run-flow-dialog .event-status-completed {
+  color: var(--accent);
+  background: var(--panel);
+}
+.run-flow-dialog .event-status-failed,
+.run-flow-dialog .event-status-error,
+.run-flow-dialog .event-status-blocked,
+.run-flow-dialog .event-status-rejected {
+  color: var(--danger);
+  background: var(--panel);
+}
+.run-flow-dialog .event-status-running,
+.run-flow-dialog .event-status-started,
+.run-flow-dialog .event-status-in-progress,
+.run-flow-dialog .event-status-in_progress,
+.run-flow-dialog .event-status-processing {
+  color: var(--blue);
+  background: var(--panel);
+}
+.run-flow-dialog .event-status-partial,
+.run-flow-dialog .event-status-degraded,
+.run-flow-dialog .event-status-queued,
+.run-flow-dialog .event-status-pending {
+  color: var(--warning);
+  background: var(--panel);
+}
+.run-flow-dialog .event-body { display: block; min-width: 0; padding-top: 2px; }
+.run-flow-dialog .event-row-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.run-flow-dialog .event-body strong {
+  color: var(--text);
+  font-size: 13px !important;
+  font-weight: 650;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.run-flow-dialog .event-state-label {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-soft);
+  background: var(--panel);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.run-flow-dialog .event-row-succeeded .event-state-label,
+.run-flow-dialog .event-row-success .event-state-label,
+.run-flow-dialog .event-row-completed .event-state-label {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.run-flow-dialog .event-row-failed .event-state-label,
+.run-flow-dialog .event-row-error .event-state-label,
+.run-flow-dialog .event-row-blocked .event-state-label,
+.run-flow-dialog .event-row-rejected .event-state-label {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, var(--panel));
+}
+.run-flow-dialog .event-row-running .event-state-label,
+.run-flow-dialog .event-row-started .event-state-label,
+.run-flow-dialog .event-row-in-progress .event-state-label,
+.run-flow-dialog .event-row-in_progress .event-state-label,
+.run-flow-dialog .event-row-processing .event-state-label {
+  border-color: color-mix(in srgb, var(--blue) 40%, var(--border));
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 9%, var(--panel));
+}
+.run-flow-dialog .event-row-partial .event-state-label,
+.run-flow-dialog .event-row-degraded .event-state-label,
+.run-flow-dialog .event-row-queued .event-state-label,
+.run-flow-dialog .event-row-pending .event-state-label {
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 9%, var(--panel));
+}
+.run-flow-dialog .event-row-message {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-soft);
+  font-size: 12px !important;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.run-flow-dialog .event-diagnostic {
+  margin: 7px 0 0;
+  padding: 7px 9px;
+  border-left: 2px solid var(--danger);
+  border-radius: 0 6px 6px 0;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 7%, var(--panel));
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.run-flow-dialog .event-row > small {
+  grid-column: 2;
+  display: block;
+  max-width: none;
+  margin-top: 8px;
+  color: var(--text-dim);
+  font-size: 11px !important;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.run-flow-dialog .event-heading { align-items: center; justify-content: space-between; gap: 12px; }
+.run-flow-dialog .event-heading h3 { font-size: 14px !important; }
+.run-flow-dialog .event-heading span { color: var(--text-soft); font-size: 12px !important; }
+@media (max-width: 600px) {
+  .run-flow-dialog .event-row { grid-template-columns: 24px minmax(0, 1fr); gap: 0 9px; padding: 12px 6px 12px 2px; }
+  .run-flow-dialog .event-row:not(:last-child)::before { left: 13px; top: 29px; bottom: -15px; }
+  .run-flow-dialog .event-row > small { grid-column: 2; max-width: none; font-size: 11px !important; }
+  .run-flow-dialog .event-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
+}
