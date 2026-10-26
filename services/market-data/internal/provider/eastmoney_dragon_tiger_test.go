@@ -102,4 +102,3 @@ func TestEastmoneyFetchDragonTigerTreatsCode9201AsUnknownEmptyReport(t *testing.
 		t.Fatalf("response code should be retained in quality reasons: %+v", got.QualityReasons)
 	}
 }
-
