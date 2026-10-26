@@ -1058,6 +1058,10 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		if readErr != nil {
 			return nil, readErr
 		}
+		deal, readErr := table.optionalFloat(row, "l_amount")
+		if readErr != nil {
+			return nil, readErr
+		}
 		net, readErr := table.optionalFloat(row, "net_amount")
 		if readErr != nil {
 			return nil, readErr
@@ -1078,7 +1082,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		base.Items = append(base.Items, model.DragonTigerItem{
 			Symbol: symbol, Code: strings.Split(symbol, ".")[0], Name: name, TradeDate: tradeDate,
 			ChangePercent: change, ClosePrice: closePrice,
-			ProviderBuyValue: buy, ProviderSellValue: sell, ProviderNetValue: net,
+			ProviderBuyValue: buy, ProviderSellValue: sell, ProviderDealValue: deal, ProviderNetValue: net,
 			ProviderNetRate: netRate, ProviderAmountUnit: "provider_defined",
 			DealAmountRatio: amountRate, Reason: strings.TrimSpace(reason),
 			Source: p.Name(), SourceVersion: "tushare-top-list-v1", FetchedAt: now,

@@ -501,6 +501,17 @@ components:
         sell_amount_cny: {type: number, nullable: true, description: Selling amount in CNY}
         deal_amount_cny: {type: number, nullable: true, description: Turnover amount in CNY}
         deal_amount_ratio: {type: number, nullable: true, description: Percentage points}
+        provider_buy_value: {type: number, nullable: true, description: Raw provider buy amount; currency unit may be undocumented}
+        provider_sell_value: {type: number, nullable: true, description: Raw provider sell amount; currency unit may be undocumented}
+        provider_deal_value: {type: number, nullable: true, description: Raw provider turnover amount; currency unit may be undocumented}
+        provider_net_value: {type: number, nullable: true, description: Raw provider net amount; currency unit may be undocumented}
+        provider_net_rate: {type: number, nullable: true, description: Raw provider net rate; unit follows provider contract}
+        provider_org_net_value: {type: number, nullable: true, description: Raw provider organization net amount; currency unit may be undocumented}
+        provider_hot_money_net_value: {type: number, nullable: true, description: Raw provider hot-money net amount; currency unit may be undocumented}
+        provider_amount_unit: {type: string, nullable: true, description: Provider-reported currency unit or provider_defined when not verified}
+        hot_rank: {type: integer, nullable: true}
+        range_days: {type: integer, nullable: true}
+        concepts: {type: array, items: {type: string}}
         reason: {type: string}
         explanation: {type: string}
         security_type_code: {type: string}

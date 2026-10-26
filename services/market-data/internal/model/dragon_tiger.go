@@ -19,6 +19,7 @@ type DragonTigerItem struct {
 	// Keep them separate from the *_CNY fields until source units are formally verified.
 	ProviderBuyValue        *float64  `json:"provider_buy_value,omitempty"`
 	ProviderSellValue       *float64  `json:"provider_sell_value,omitempty"`
+	ProviderDealValue       *float64  `json:"provider_deal_value,omitempty"`
 	ProviderNetValue        *float64  `json:"provider_net_value,omitempty"`
 	ProviderNetRate         *float64  `json:"provider_net_rate,omitempty"`
 	ProviderOrgNetValue     *float64  `json:"provider_org_net_value,omitempty"`

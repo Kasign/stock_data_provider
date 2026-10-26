@@ -160,3 +160,8 @@ Tushare 指数目录通过 `MARKET_DATA_TUSHARE_ENABLED=true`、`MARKET_DATA_TUS
 ### 指数成分报告日、权重与 OpenAPI 契约补齐（2026-10-26）
 
 Tushare `index_weight` 适配现在将选择的最新权重报告日与逐证券权重写入响应（`provider_report_date`、`weight_percent`），避免丢失可用于解释成分快照时点的来源信息。指数目录、成分和历史日线的 OpenAPI schema 已补齐；热度榜 schema 同步加入 `followers` 类型。以上仅为代码/契约补齐，未运行测试或 CI。
+
+
+### 龙虎榜原始成交金额字段保留（2026-10-26，待统一验收）
+
+Tushare `top_list.l_amount` 现在独立映射为 `provider_deal_value`，与买入、卖出、净额等原始字段一并保留，避免单位尚未确认时错误写入人民币元字段。OpenAPI 同步描述供应商专用金额、比例及排名元数据。尚未运行测试；字段映射待统一验收。
