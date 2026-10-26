@@ -237,3 +237,11 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 配置中已支持 `MARKET_DATA_NETEASE_QUOTE_URL`，但启动时的上游 URL 校验表只覆盖了网易历史 CSV 地址，遗漏了实时报价地址。错误的 `file://` 等协议因此不会在配置加载阶段被拒绝。
 - 已把网易报价 URL 纳入统一 `validateEndpointURL` 检查，并新增 `TestLoadRejectsMalformedNeteaseQuoteEndpointURL` 回归测试源码。验证只检查配置形态，不代表目标上游当前可达。
 - 本次测试源码没有执行；没有运行 CI、构建或实时 Provider 请求。
+
+
+## 8. 2026-10-26 静态 Review 补充：默认 Provider 链的超时预算
+
+- 默认配置启用的个股报价 Provider 共 5 个、日 K Provider 共 7 个；按照每次请求 12 秒、每个 Provider 重试 1 次以及 Bundle 先取日 K 再取报价的执行方式，配置加载时计算的顺序预算约为 291.2 秒。原代码默认值和 `.env.example` 的 `MARKET_DATA_REQUEST_TIMEOUT=3m` 低于该预算，导致默认配置会因超时预算不足而拒绝启动。
+- 已将 market-data 的默认请求超时和 `.env.example` 统一调整为 `5m`，可覆盖上述静态预算并留有少量额外余量；若增加默认 Provider 数量、提高单源超时或重试次数，仍需重新评估预算。实际环境若显式设置了更短的 `MARKET_DATA_REQUEST_TIMEOUT`，启动校验仍会拒绝不足的配置。
+- 已新增 `TestLoadDefaultTimeoutCoversFullDefaultProviderChain` 回归测试源码，覆盖完整启用链的默认预算。测试尚未执行。
+- 注意：该预算是 market-data 服务端的保守上限计算，不代表每次正常行情请求都会耗时五分钟；分析 API 自身的 `ANALYSIS_TIMEOUT` 仍是独立的总任务上限。
