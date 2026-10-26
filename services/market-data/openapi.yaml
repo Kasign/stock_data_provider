@@ -468,7 +468,46 @@ components:
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
-    SourceStatus:    SourceStatus:
+    ValuationItem:
+      type: object
+      required: [symbol, code, pe_ttm, pe_mrq, pb_mrq, ps_ttm, pcf_ttm, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string, example: "600519"}
+        name: {type: string}
+        pe_ttm: {type: number, nullable: true, description: Price-to-earnings ratio on trailing twelve-month earnings; may be negative or null}
+        pe_mrq: {type: number, nullable: true, description: Price-to-earnings ratio on most recent quarter basis; may be negative or null}
+        pb_mrq: {type: number, nullable: true, description: Price-to-book ratio on most recent quarter basis; may be null}
+        ps_ttm: {type: number, nullable: true, description: Price-to-sales ratio on trailing twelve-month basis; may be negative or null}
+        pcf_ttm: {type: number, nullable: true, description: Price-to-cash-flow ratio on trailing twelve-month basis; may be negative or null}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    ValuationSnapshot:
+      type: object
+      required: [requested_symbols, total, items, source, fetched_at, quality_status]
+      properties:
+        requested_symbols:
+          type: array
+          items: {type: string, example: 600519.SH}
+        total: {type: integer, minimum: 0, description: Number of returned valuation records}
+        items: {type: array, items: {$ref: '#/components/schemas/ValuationItem'}}
+        missing_symbols:
+          type: array
+          items: {type: string}
+          description: Requested canonical symbols not returned by the provider; omitted when none
+        provider_timestamp:
+          type: string
+          format: date-time
+          description: Latest valid provider time among the valuation metrics; does not mean each metric was updated at this time
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    SourceStatus:
       type: object
       required: [name, enabled, quote_capable, daily_bar_capable]
       properties:
@@ -482,8 +521,13 @@ components:
         market_breadth_capable: {type: boolean}
         limit_pool_capable: {type: boolean}
         stock_boards_capable: {type: boolean}
+        fundamentals_capable: {type: boolean}
+        valuation_capable: {type: boolean}
         announcements_capable: {type: boolean}
         dragon_tiger_capable: {type: boolean}
+        trading_calendar_capable: {type: boolean}
+        chip_capable: {type: boolean}
+        capital_flow_capable: {type: boolean}
     DataSourcesResponse:
       type: object
       required: [sources, normalization_version]
@@ -642,6 +686,33 @@ paths:
         '401': {description: API key required}
         '502': {description: All stock-boards providers failed or returned incomplete data}
         '503': {description: No stock-boards provider enabled}
+
+  /api/v1/market/valuations:
+    get:
+      summary: Get valuation snapshots for up to 100 A-share symbols
+      description: >-
+        Returns provider-reported valuation ratios. Individual metrics can be null or negative; null is missing data, not zero.
+        provider_timestamp is the latest valid provider timestamp among the valuation metrics and does not imply that every
+        metric was updated at that exact time. The endpoint validates symbols, canonicalizes six-digit A-share codes and
+        returns missing_symbols for requested symbols omitted by the provider.
+      parameters:
+        - name: symbols
+          in: query
+          required: true
+          description: Comma-separated list of 1–100 six-digit A-share codes; SH/SZ/BJ suffixes are accepted and canonicalized.
+          schema:
+            type: string
+            example: 600519.SH,000001.SZ
+      responses:
+        '200':
+          description: Batch valuation snapshot with per-symbol and aggregate quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ValuationSnapshot'}
+        '400': {description: Missing symbols, more than 100 raw entries, empty tokens, or invalid/B-share symbol}
+        '401': {description: API key required}
+        '502': {description: All valuation providers failed or returned invalid data}
+        '503': {description: No valuation provider enabled}
 
   /api/v1/market/sectors:
     get:
