@@ -854,6 +854,10 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 		if dateErr != nil || rowDate != tradeDate {
 			return nil, fmt.Errorf("Tushare 涨跌停池日期不匹配: requested=%s returned=%q", tradeDate, rowDateRaw)
 		}
+		rowLimitType, readErr := table.stringValue(row, "limit")
+		if readErr != nil || rowLimitType != limitType {
+			return nil, fmt.Errorf("Tushare 涨跌停池类型不匹配: requested=%s returned=%q", limitType, rowLimitType)
+		}
 		rawSymbol, readErr := table.stringValue(row, "ts_code")
 		if readErr != nil {
 			return nil, readErr
@@ -976,7 +980,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		return nil, errors.New("Tushare 龙虎榜 page_size 必须在 1..100")
 	}
 	table, err := p.fetchCapabilityTable(ctx, "top_list", map[string]string{"trade_date": compactDate},
-		"trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,float_values,reason")
+		"trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,net_amount,net_rate,amount_rate,reason")
 	if err != nil {
 		return nil, err
 	}
@@ -1054,10 +1058,6 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		if readErr != nil {
 			return nil, readErr
 		}
-		deal, readErr := table.optionalFloat(row, "l_amount")
-		if readErr != nil {
-			return nil, readErr
-		}
 		net, readErr := table.optionalFloat(row, "net_amount")
 		if readErr != nil {
 			return nil, readErr
@@ -1070,17 +1070,20 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		if readErr != nil {
 			return nil, readErr
 		}
+		reason, readErr := table.stringValue(row, "reason")
+		if readErr != nil {
+			return nil, readErr
+		}
 		itemReasons := []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"}
 		base.Items = append(base.Items, model.DragonTigerItem{
 			Symbol: symbol, Code: strings.Split(symbol, ".")[0], Name: name, TradeDate: tradeDate,
 			ChangePercent: change, ClosePrice: closePrice,
 			ProviderBuyValue: buy, ProviderSellValue: sell, ProviderNetValue: net,
 			ProviderNetRate: netRate, ProviderAmountUnit: "provider_defined",
-			DealAmountRatio: amountRate, Reason: strings.TrimSpace(mustTushareString(table, row, "reason")),
+			DealAmountRatio: amountRate, Reason: strings.TrimSpace(reason),
 			Source: p.Name(), SourceVersion: "tushare-top-list-v1", FetchedAt: now,
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		})
-		_ = deal
 	}
 	base.Returned = len(base.Items)
 	if total >= 10000 {
@@ -1093,14 +1096,6 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	base.HasData = true
 	base.QualityStatus = model.QualityDegraded
 	return base, nil
-}
-
-func mustTushareString(table *tushareTable, row []json.RawMessage, field string) string {
-	value, err := table.stringValue(row, field)
-	if err != nil {
-		return ""
-	}
-	return value
 }
 
 func parseTusharePublishedTime(raw string) *time.Time {
