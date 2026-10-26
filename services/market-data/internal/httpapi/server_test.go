@@ -78,7 +78,7 @@ func (httpFakeProvider) FetchStockAnnouncements(_ context.Context, rawSymbol, st
 		Title: "招商银行第三季度报告", Category: "定期报告", AnnouncementDate: "2026-10-23",
 		PublishedAt: &published, DisplayTime: "2026-10-23 18:30:00",
 		SourceURL: "https://data.eastmoney.com/notices/detail/600036/AN202610231234567890.html",
-		Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityValid,
+		Source:    "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityValid,
 	}
 	return &model.StockAnnouncementSnapshot{
 		Symbol: rawSymbol, StartDate: startDate, EndDate: endDate, Page: page, PageSize: pageSize,
