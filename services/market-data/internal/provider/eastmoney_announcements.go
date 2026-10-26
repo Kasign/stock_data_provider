@@ -39,15 +39,15 @@ type eastmoneyAnnouncementRow struct {
 		Code string `json:"column_code"`
 		Name string `json:"column_name"`
 	} `json:"columns"`
-	DisplayTime json.RawMessage `json:"display_time"`
-	EITime      json.RawMessage `json:"eiTime"`
-	NoticeDate  json.RawMessage `json:"notice_date"`
-	SortDate    json.RawMessage `json:"sort_date"`
-	Language    json.RawMessage `json:"language"`
-	SourceType  json.RawMessage `json:"source_type"`
-	Title       string          `json:"title"`
-	TitleChinese string         `json:"title_ch"`
-	TitleEnglish string         `json:"title_en"`
+	DisplayTime  json.RawMessage `json:"display_time"`
+	EITime       json.RawMessage `json:"eiTime"`
+	NoticeDate   json.RawMessage `json:"notice_date"`
+	SortDate     json.RawMessage `json:"sort_date"`
+	Language     json.RawMessage `json:"language"`
+	SourceType   json.RawMessage `json:"source_type"`
+	Title        string          `json:"title"`
+	TitleChinese string          `json:"title_ch"`
+	TitleEnglish string          `json:"title_en"`
 }
 
 func eastmoneyAnnouncementScalar(raw json.RawMessage) string {
@@ -92,7 +92,6 @@ func eastmoneyAnnouncementURL(stockCode, articleID string) string {
 	return "https://data.eastmoney.com/notices/detail/" + url.PathEscape(stockCode) + "/" + url.PathEscape(articleID) + ".html"
 }
 
-// NewEastmoneyConfiguredWithAnnouncements 为公告列表端点单独配置 URL，空值使用公开默认端点。
 // FetchStockAnnouncements 获取单只 A 股在含首尾日期的公告列表。
 // 源端公告日期、展示时间和采集时间分别保存；不构造虚假的发布时间。
 func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, startDate, endDate string, page, pageSize int) (*model.StockAnnouncementSnapshot, error) {
@@ -250,7 +249,7 @@ func emptyEastmoneyAnnouncementSnapshot(symbol, startDate, endDate string, page,
 		Symbol: symbol, StartDate: startDate, EndDate: endDate, Page: page, PageSize: pageSize,
 		Total: 0, Pages: 0, Returned: 0, HasData: false, HasMore: false, Items: []model.StockAnnouncement{},
 		Source: "eastmoney", SourceVersion: "eastmoney-announcement-v1", FetchedAt: time.Now().UTC(),
-		QualityStatus: model.QualityUnknown,
+		QualityStatus:  model.QualityUnknown,
 		QualityReasons: []string{"provider_returned_empty_announcement_list_not_confirmed_as_no_announcements"},
 	}
 }

@@ -81,32 +81,32 @@ type liveProbeReport struct {
 }
 
 type liveProbeResult struct {
-	Provider         string                         `json:"provider"`
-	Capability       string                         `json:"capability"`
-	SectorType       string                         `json:"sector_type,omitempty"`
-	SectorRankings   *model.SectorRankingSnapshot   `json:"sector_rankings,omitempty"`
-	IndexQuotes      *model.IndexQuoteSnapshot      `json:"index_quotes,omitempty"`
-	MarketBreadth    *model.MarketBreadthSnapshot   `json:"market_breadth,omitempty"`
-	LimitPool        *model.LimitPoolSnapshot       `json:"limit_pool,omitempty"`
-	DragonTiger      *model.DragonTigerSnapshot     `json:"dragon_tiger,omitempty"`
+	Provider         string                           `json:"provider"`
+	Capability       string                           `json:"capability"`
+	SectorType       string                           `json:"sector_type,omitempty"`
+	SectorRankings   *model.SectorRankingSnapshot     `json:"sector_rankings,omitempty"`
+	IndexQuotes      *model.IndexQuoteSnapshot        `json:"index_quotes,omitempty"`
+	MarketBreadth    *model.MarketBreadthSnapshot     `json:"market_breadth,omitempty"`
+	LimitPool        *model.LimitPoolSnapshot         `json:"limit_pool,omitempty"`
+	DragonTiger      *model.DragonTigerSnapshot       `json:"dragon_tiger,omitempty"`
 	Announcements    *model.StockAnnouncementSnapshot `json:"announcements,omitempty"`
-	StockBoards      *model.StockBoardSnapshot      `json:"stock_boards,omitempty"`
-	TradingCalendar  *model.TradingCalendarSnapshot `json:"trading_calendar,omitempty"`
-	PoolType         string                         `json:"pool_type,omitempty"`
-	Symbol           string                         `json:"symbol,omitempty"`
-	Adjustment       model.AdjustmentBasis          `json:"adjustment,omitempty"`
-	Status           string                         `json:"status"`
-	ErrorKind        string                         `json:"error_kind,omitempty"`
-	Error            string                         `json:"error,omitempty"`
-	ElapsedMS        int64                          `json:"elapsed_ms"`
-	Quote            *model.Quote                   `json:"quote,omitempty"`
-	StockBasic       *model.StockBasic              `json:"stock_basic,omitempty"`
-	BarCount         int                            `json:"bar_count,omitempty"`
-	SampleBars       []model.DailyBar               `json:"sample_bars,omitempty"`
-	ChipDistribution *model.ChipDistribution        `json:"chip_distribution,omitempty"`
-	CapitalFlow      *model.CapitalFlow             `json:"capital_flow,omitempty"`
-	HTTP             []liveProbeHTTPResponse        `json:"http_responses,omitempty"`
-}
+	StockBoards      *model.StockBoardSnapshot        `json:"stock_boards,omitempty"`
+	TradingCalendar  *model.TradingCalendarSnapshot   `json:"trading_calendar,omitempty"`
+	PoolType         string                           `json:"pool_type,omitempty"`
+	Symbol           string                           `json:"symbol,omitempty"`
+	Adjustment       model.AdjustmentBasis            `json:"adjustment,omitempty"`
+	Status           string                           `json:"status"`
+	ErrorKind        string                           `json:"error_kind,omitempty"`
+	Error            string                           `json:"error,omitempty"`
+	ElapsedMS        int64                            `json:"elapsed_ms"`
+	Quote            *model.Quote                     `json:"quote,omitempty"`
+	StockBasic       *model.StockBasic                `json:"stock_basic,omitempty"`
+	BarCount         int                              `json:"bar_count,omitempty"`
+	SampleBars       []model.DailyBar                 `json:"sample_bars,omitempty"`
+	ChipDistribution *model.ChipDistribution          `json:"chip_distribution,omitempty"`
+	CapitalFlow      *model.CapitalFlow               `json:"capital_flow,omitempty"`
+	HTTP             []liveProbeHTTPResponse          `json:"http_responses,omitempty"`
+}}
 
 type liveProbeHTTPResponse struct {
 	Endpoint          string   `json:"endpoint"`
