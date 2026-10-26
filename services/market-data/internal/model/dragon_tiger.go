@@ -41,5 +41,5 @@ type DragonTigerSnapshot struct {
 	SourceVersion      string            `json:"source_version"`
 	FetchedAt          time.Time         `json:"fetched_at"`
 	QualityStatus      QualityStatus     `json:"quality_status"`
-	QualityReasons     []string           `json:"quality_reasons,omitempty"`
+	QualityReasons     []string          `json:"quality_reasons,omitempty"`
 }

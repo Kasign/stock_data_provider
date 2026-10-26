@@ -379,23 +379,33 @@ func (s *Server) dragonTiger(w http.ResponseWriter, r *http.Request) {
 	date := strings.TrimSpace(r.URL.Query().Get("date"))
 	if date != "" {
 		if parsed, err := time.Parse("2006-01-02", date); err != nil || parsed.Format("2006-01-02") != date {
-			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "date must use YYYY-MM-DD", requestID(r)); return
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "date must use YYYY-MM-DD", requestID(r))
+			return
 		}
 	}
 	page := 1
 	if raw := r.URL.Query().Get("page"); raw != "" {
 		n, err := strconv.Atoi(raw)
-		if err != nil || n < 1 || n > 1000 { writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page must be between 1 and 1000", requestID(r)); return }
+		if err != nil || n < 1 || n > 1000 {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page must be between 1 and 1000", requestID(r))
+			return
+		}
 		page = n
 	}
 	pageSize := 100
 	if raw := r.URL.Query().Get("page_size"); raw != "" {
 		n, err := strconv.Atoi(raw)
-		if err != nil || n < 1 || n > 500 { writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page_size must be between 1 and 500", requestID(r)); return }
+		if err != nil || n < 1 || n > 500 {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page_size must be between 1 and 500", requestID(r))
+			return
+		}
 		pageSize = n
 	}
 	item, hit, err := s.svc.DragonTiger(r.Context(), date, page, pageSize)
-	if err != nil { writeDomainErr(w, err, requestID(r)); return }
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
 	setCacheHeader(w, hit)
 	writeJSON(w, http.StatusOK, item)
 }

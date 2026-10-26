@@ -629,15 +629,23 @@ func TestEastmoneyDragonTigerURLAndCapabilityAreConfigurable(t *testing.T) {
 	t.Setenv("MARKET_DATA_EASTMONEY_DRAGON_TIGER_URL", "https://example.test/api/data/v1/get")
 	t.Setenv("MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED", "true")
 	cfg, err := Load()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cfg.EastmoneyDragonTigerURL != "https://example.test/api/data/v1/get" {
 		t.Fatalf("unexpected dragon-tiger endpoint %q", cfg.EastmoneyDragonTigerURL)
 	}
-	if !cfg.ProviderSettings["eastmoney"].DragonTiger { t.Fatal("dragon-tiger override should enable capability") }
+	if !cfg.ProviderSettings["eastmoney"].DragonTiger {
+		t.Fatal("dragon-tiger override should enable capability")
+	}
 	t.Setenv("MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED", "false")
 	cfg, err = Load()
-	if err != nil { t.Fatal(err) }
-	if cfg.ProviderSettings["eastmoney"].DragonTiger { t.Fatal("dragon-tiger should be disabled explicitly") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["eastmoney"].DragonTiger {
+		t.Fatal("dragon-tiger should be disabled explicitly")
+	}
 }
 
 func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) {

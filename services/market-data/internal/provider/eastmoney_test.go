@@ -358,11 +358,18 @@ func TestEastmoneyFetchSectorRankingsRetriesTemporary502(t *testing.T) {
 		fmt.Fprint(w, `{"rc":0,"data":{"total":1,"diff":[{"f2":12.5,"f3":1.25,"f4":0.15,"f6":100000,"f12":"BK0475","f14":"测试板块","f104":2,"f105":1}]}}`)
 	}))
 	defer server.Close()
+
 	p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
 	snapshot, err := p.FetchSectorRankings(context.Background(), "industry", 5)
-	if err != nil { t.Fatal(err) }
-	if attempts != 2 { t.Fatalf("request attempts=%d want 2", attempts) }
-	if len(snapshot.Items) != 1 || snapshot.Items[0].Code != "BK0475" { t.Fatalf("unexpected sector response: %+v", snapshot) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("request attempts=%d want 2", attempts)
+	}
+	if len(snapshot.Items) != 1 || snapshot.Items[0].Code != "BK0475" {
+		t.Fatalf("unexpected sector response after retry: %+v", snapshot)
+	}
 }
 
 func TestEastmoneyFetchSectorRankingsRejectsInvalidCategoryAndProviderCode(t *testing.T) {

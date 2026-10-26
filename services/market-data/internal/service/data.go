@@ -434,40 +434,70 @@ func normalizeDragonTigerDate(rawDate string) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
 	if rawDate == "" {
 		loc, err := time.LoadLocation("Asia/Shanghai")
-		if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+		if err != nil {
+			loc = time.FixedZone("CST", 8*60*60)
+		}
 		return time.Now().In(loc).Format("2006-01-02"), nil
 	}
 	parsed, err := time.Parse("2006-01-02", rawDate)
-	if err != nil || parsed.Format("2006-01-02") != rawDate { return "", fmt.Errorf("invalid dragon-tiger date %q: expected YYYY-MM-DD", rawDate) }
+	if err != nil || parsed.Format("2006-01-02") != rawDate {
+		return "", fmt.Errorf("invalid dragon-tiger date %q: expected YYYY-MM-DD", rawDate)
+	}
 	return parsed.Format("2006-01-02"), nil
 }
 
 func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot *model.DragonTigerSnapshot) error {
-	if snapshot == nil { return errors.New("dragon-tiger provider returned an empty snapshot") }
+	if snapshot == nil {
+		return errors.New("dragon-tiger provider returned an empty snapshot")
+	}
 	if snapshot.TradeDate != tradeDate || snapshot.Page != page || snapshot.PageSize != pageSize {
 		return fmt.Errorf("dragon-tiger request identity mismatch: wanted %s/%d/%d, got %s/%d/%d", tradeDate, page, pageSize, snapshot.TradeDate, snapshot.Page, snapshot.PageSize)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() { return errors.New("dragon-tiger source or fetched_at is missing") }
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("dragon-tiger source or fetched_at is missing")
+	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize {
 		return errors.New("dragon-tiger totals or returned count are invalid")
 	}
 	if snapshot.HasData {
-		if snapshot.Total <= 0 || snapshot.Pages <= 0 || snapshot.Returned == 0 || snapshot.Total < snapshot.Returned { return errors.New("dragon-tiger totals/items are inconsistent") }
-		if snapshot.ProviderReportDate != tradeDate { return errors.New("dragon-tiger provider report date does not match requested trade date") }
-		if snapshot.HasMore != (page < snapshot.Pages) { return errors.New("dragon-tiger has_more does not match provider page count") }
-		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded { return fmt.Errorf("dragon-tiger quality status %q is unsupported", snapshot.QualityStatus) }
+		if snapshot.Total <= 0 || snapshot.Pages <= 0 || snapshot.Returned == 0 || snapshot.Total < snapshot.Returned {
+			return errors.New("dragon-tiger totals/items are inconsistent")
+		}
+		if snapshot.ProviderReportDate != tradeDate {
+			return errors.New("dragon-tiger provider report date does not match requested trade date")
+		}
+		if snapshot.HasMore != (page < snapshot.Pages) {
+			return errors.New("dragon-tiger has_more does not match provider page count")
+		}
+		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+			return fmt.Errorf("dragon-tiger quality status %q is unsupported", snapshot.QualityStatus)
+		}
 		seen := make(map[string]struct{}, len(snapshot.Items))
 		for _, item := range snapshot.Items {
-			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.TradeDate != tradeDate { return errors.New("dragon-tiger item is missing identity fields or has mismatched trade date") }
-			if item.Source != snapshot.Source || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) { return errors.New("dragon-tiger item source, fetched_at, or quality is invalid") }
+			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.TradeDate != tradeDate {
+				return errors.New("dragon-tiger item is missing identity fields or has mismatched trade date")
+			}
+			if item.Source != snapshot.Source || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
+				return errors.New("dragon-tiger item source, fetched_at, or quality is invalid")
+			}
 			key := item.Symbol + "|" + item.Reason + "|" + item.Explanation
-			if _, ok := seen[key]; ok { return fmt.Errorf("dragon-tiger contains duplicate row %q", key) }
+			if _, ok := seen[key]; ok {
+				return fmt.Errorf("dragon-tiger contains duplicate row %q", key)
+			}
 			seen[key] = struct{}{}
 			for _, value := range []*float64{item.BuyAmountCNY, item.SellAmountCNY, item.DealAmountCNY, item.NetBuyAmountCNY, item.ClosePrice, item.ChangePercent, item.DealAmountRatio} {
-				if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) { return errors.New("dragon-tiger item contains a non-finite numeric value") }
+				if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+					return errors.New("dragon-tiger item contains a non-finite numeric value")
+				}
 			}
-			for _, value := range []*float64{item.BuyAmountCNY, item.SellAmountCNY, item.DealAmountCNY} { if value != nil && *value < 0 { return errors.New("dragon-tiger buy/sell/deal amount cannot be negative") } }
-			if item.ClosePrice != nil && *item.ClosePrice <= 0 { return errors.New("dragon-tiger close price must be positive when present") }
+			for _, value := range []*float64{item.BuyAmountCNY, item.SellAmountCNY, item.DealAmountCNY} {
+				if value != nil && *value < 0 {
+					return errors.New("dragon-tiger buy/sell/deal amount cannot be negative")
+				}
+			}
+			if item.ClosePrice != nil && *item.ClosePrice <= 0 {
+				return errors.New("dragon-tiger close price must be positive when present")
+			}
 		}
 		return nil
 	}
@@ -480,31 +510,63 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 // DragonTiger 获取指定交易日的龙虎榜分页。盘后报表未发布时，空结果保留为 unknown。
 func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pageSize int) (*model.DragonTigerSnapshot, bool, error) {
 	date, err := normalizeDragonTigerDate(rawDate)
-	if err != nil { return nil, false, err }
-	if page < 1 || page > 1000 { return nil, false, errors.New("dragon-tiger page must be between 1 and 1000") }
-	if pageSize < 1 || pageSize > 500 { return nil, false, errors.New("dragon-tiger page size must be between 1 and 500") }
-	if ctx == nil { ctx = context.Background() }
-	if err := ctx.Err(); err != nil { return nil, false, err }
+	if err != nil {
+		return nil, false, err
+	}
+	if page < 1 || page > 1000 {
+		return nil, false, errors.New("dragon-tiger page must be between 1 and 1000")
+	}
+	if pageSize < 1 || pageSize > 500 {
+		return nil, false, errors.New("dragon-tiger page size must be between 1 and 500")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	const ttl = 5 * time.Minute
 	const emptyTTL = 30 * time.Second
 	key := fmt.Sprintf("md:v1:dragon-tiger:%s:%d:%d", date, page, pageSize)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.DragonTigerSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateDragonTigerSnapshot(date, page, pageSize, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
-			expiry := ttl; if !cached.HasData { expiry = emptyTTL }
-			if time.Since(cached.FetchedAt) < expiry { return &cached, true, nil }
+			expiry := ttl
+			if !cached.HasData {
+				expiry = emptyTTL
+			}
+			if time.Since(cached.FetchedAt) < expiry {
+				return &cached, true, nil
+			}
 		}
-	} else if cacheErr != nil { s.logger.Warn("dragon-tiger cache read failed", "date", date, "page", page, "error", cacheErr) }
-	if len(s.dragonTigerProviders) == 0 { return nil, false, errors.New("no enabled dragon-tiger provider") }
+	} else if cacheErr != nil {
+		s.logger.Warn("dragon-tiger cache read failed", "date", date, "page", page, "error", cacheErr)
+	}
+	if len(s.dragonTigerProviders) == 0 {
+		return nil, false, errors.New("no enabled dragon-tiger provider")
+	}
 	var failures []string
 	for _, p := range s.dragonTigerProviders {
-		if err := ctx.Err(); err != nil { return nil, false, err }
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
 		snapshot, fetchErr := p.FetchDragonTiger(ctx, date, page, pageSize)
-		if fetchErr != nil { failures = append(failures, p.Name()+": "+fetchErr.Error()); continue }
-		if err := validateDragonTigerSnapshot(date, page, pageSize, snapshot); err != nil { failures = append(failures, p.Name()+": "+err.Error()); continue }
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateDragonTigerSnapshot(date, page, pageSize, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
 		if data, marshalErr := json.Marshal(snapshot); marshalErr == nil {
-			expiry := ttl; if !snapshot.HasData { expiry = emptyTTL }
-			if cacheErr := s.cache.Set(ctx, key, data, expiry); cacheErr != nil { s.logger.Warn("dragon-tiger cache write failed", "date", date, "page", page, "error", cacheErr) }
+			expiry := ttl
+			if !snapshot.HasData {
+				expiry = emptyTTL
+			}
+			if cacheErr := s.cache.Set(ctx, key, data, expiry); cacheErr != nil {
+				s.logger.Warn("dragon-tiger cache write failed", "date", date, "page", page, "error", cacheErr)
+			}
 		}
 		return snapshot, false, nil
 	}

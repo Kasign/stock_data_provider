@@ -44,8 +44,8 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 	}
 	params := url.Values{
 		"reportName": {"RPT_DAILYBILLBOARD_DETAILSNEW"},
-		"columns": {"SECURITY_CODE,SECUCODE,SECURITY_NAME_ABBR,TRADE_DATE,EXPLAIN,EXPLANATION,CLOSE_PRICE,CHANGE_RATE,BILLBOARD_NET_AMT,BILLBOARD_BUY_AMT,BILLBOARD_SELL_AMT,BILLBOARD_DEAL_AMT,DEAL_AMOUNT_RATIO,SECURITY_TYPE_CODE"},
-		"filter": {"(TRADE_DATE='" + tradeDate + "')"},
+		"columns":    {"SECURITY_CODE,SECUCODE,SECURITY_NAME_ABBR,TRADE_DATE,EXPLAIN,EXPLANATION,CLOSE_PRICE,CHANGE_RATE,BILLBOARD_NET_AMT,BILLBOARD_BUY_AMT,BILLBOARD_SELL_AMT,BILLBOARD_DEAL_AMT,DEAL_AMOUNT_RATIO,SECURITY_TYPE_CODE"},
+		"filter":     {"(TRADE_DATE='" + tradeDate + "')"},
 		"pageNumber": {strconv.Itoa(page)}, "pageSize": {strconv.Itoa(pageSize)},
 		"sortColumns": {"BILLBOARD_NET_AMT"}, "sortTypes": {"-1"}, "source": {"WEB"}, "client": {"WEB"},
 	}
@@ -78,7 +78,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		return &model.DragonTigerSnapshot{
 			TradeDate: tradeDate, Page: page, PageSize: pageSize, Items: []model.DragonTigerItem{},
 			Source: p.Name(), SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: time.Now().UTC(),
-			QualityStatus: model.QualityUnknown,
+			QualityStatus:  model.QualityUnknown,
 			QualityReasons: []string{"provider_returned_empty_report_cannot_distinguish_no_events_from_unavailable_or_not_yet_published"},
 		}, nil
 	}
@@ -146,7 +146,9 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt,
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		}
-		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, itemReasons...)
+		for _, reason := range itemReasons {
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, reason)
+		}
 		snapshot.Items = append(snapshot.Items, item)
 	}
 	if snapshot.Returned != len(snapshot.Items) {
