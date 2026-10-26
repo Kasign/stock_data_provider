@@ -399,5 +399,5 @@
 - 新增真实 `GET /api/v1/market/valuations?symbols=...` 客户端与个股研究区估值卡片，展示 PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM。
 - 每项指标分别展示，null/缺失显示“未提供”，不补零；保留负值、质量原因、来源、供应商时间、采集时间及未返回标的提示。
 - Provider 能力明细新增 `fundamentals_capable` 与 `valuation_capable`，仅在后端字段显式为 true 时展示。
-- 经核对，当前数据分支 Go Handler 已注册估值路由，但 `services/market-data/openapi.yaml` 尚未记录；已在 WebUI API 合约中标注这个文档差异。Provider 未启用时按真实 503 展示，不生成假指标。
+- 数据分支已通过提交 [`c37270a`](https://github.com/Kasign/stock_data_provider/commit/c37270a41a593488767982e5da819d99ba9f2189) 补齐估值路由与响应 Schema；WebUI 合约现已与之同步。旧部署可能返回 404，Provider 未启用时按真实 503 展示，不生成假指标。
 - 本轮未运行测试或触发 CI。

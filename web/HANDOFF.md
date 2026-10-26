@@ -322,5 +322,5 @@
 - 个股研究新增估值卡片与独立“读取估值指标”操作，调用 `/api/v1/market/valuations?symbols={canonical_symbol}`。
 - 展示 PE TTM、PE MRQ、PB MRQ、PS TTM、PCF TTM 及源端质量、来源时间；缺失/null 不转为零。负倍数保持真实数值，不根据估值指标生成买卖判断。
 - Provider 能力清单加入季度财务和估值能力字段。
-- 注意：当前数据分支已在 server.go 注册估值路由，但 OpenAPI 文档未记录；若部署版本较旧会收到 404，若没有启用估值 Provider 则会收到 503。前端分别展示对应错误。
+- 数据分支提交 [`c37270a`](https://github.com/Kasign/stock_data_provider/commit/c37270a41a593488767982e5da819d99ba9f2189) 已将估值路由和响应 Schema 加入 `services/market-data/openapi.yaml`。若部署版本较旧会收到 404，若没有启用估值 Provider 则会收到 503；前端分别展示对应错误。
 - 本批未运行测试或 CI。

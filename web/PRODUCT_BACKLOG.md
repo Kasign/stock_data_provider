@@ -258,6 +258,6 @@
 - [x] 接入真实批量估值快照接口，展示 PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM。
 - [x] 明确保留空值/负值语义、未返回标的、质量原因与供应商/采集时间。
 - [x] Provider 能力列表补充季度财务及估值能力声明。
-- [ ] 数据分支需补充 `services/market-data/openapi.yaml` 估值路由 schema；旧部署/Provider 未启用状态由用户统一实测。
+- [x] 数据分支已在提交 [`c37270a`](https://github.com/Kasign/stock_data_provider/commit/c37270a41a593488767982e5da819d99ba9f2189) 补齐 `services/market-data/openapi.yaml` 估值路由及 Schema；旧部署/Provider 未启用状态仍待用户统一实测。
 - [ ] 用户统一验收真实 Provider 回包、缓存与多指标空值。
 - 本批未运行测试、未触发 CI。

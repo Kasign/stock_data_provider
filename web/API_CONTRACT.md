@@ -246,12 +246,12 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 
 行情总览的数据源面板按接口实际返回的布尔字段逐项显示 Provider 声明的能力：实时行情、日 K、证券档案、行业/概念排行、核心指数、市场涨跌分布、涨跌停池、个股所属板块、季度财务指标、个股估值指标、公告、龙虎榜、交易日历、筹码分布与个股资金流。字段缺失或 false 时不显示为已支持；它只表示当前回包未声明对应能力，不等于服务整体不可用。Provider 的启用状态与具体能力分开呈现。
 
-## 个股估值快照（由 Go Handler 注册，OpenAPI 文件待数据分支补齐）
+## 个股估值快照
 
 | 方法 | 路径 | 参数 |
 |---|---|---|
 | GET | `/market-api/api/v1/market/valuations?symbols=600519.SH` | `symbols` 为逗号分隔的 1–100 个规范 A 股代码，每个代码需带 SH/SZ/BJ 后缀。 |
 
-当前数据分支 `feat/full-go-data-providers-api-switch` 的 `services/market-data/internal/httpapi/server.go` 已注册此路由，响应定义可见 Go 模型 `ValuationSnapshot` / `ValuationItem`；但 `services/market-data/openapi.yaml` 尚未列出该路由，属于数据分支文档待补项。旧部署可能返回 404，前端会提示更新 market-data；无启用估值 Provider 时会显示服务端 503，不伪造指标。
+当前数据分支 `feat/full-go-data-providers-api-switch` 的 `services/market-data/internal/httpapi/server.go` 已注册此路由，响应定义可见 Go 模型 `ValuationSnapshot` / `ValuationItem`；数据分支已在提交 [`c37270a`](https://github.com/Kasign/stock_data_provider/commit/c37270a41a593488767982e5da819d99ba9f2189) 中补齐该路由及 `ValuationSnapshot` / `ValuationItem` Schema，同时修复了 `SourceStatus` 声明并补齐相关 Provider 能力字段。旧部署仍可能返回 404；无启用估值 Provider 时会返回 503。旧部署可能返回 404，前端会提示更新 market-data；无启用估值 Provider 时会显示服务端 503，不伪造指标。
 
 响应快照包含 `requested_symbols`、`total`、`items`、可选 `missing_symbols`、可选 `provider_timestamp`、`source`、`fetched_at`、`quality_status` 和质量原因。每只股票的指标字段为 `pe_ttm`、`pe_mrq`、`pb_mrq`、`ps_ttm`、`pcf_ttm`，可以为 null 或负数；前端保留该语义，不补零，不据此生成买卖信号。
