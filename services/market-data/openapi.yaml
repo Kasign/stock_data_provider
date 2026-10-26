@@ -597,6 +597,7 @@ components:
         stock_boards_capable: {type: boolean}
         fundamentals_capable: {type: boolean}
         valuation_capable: {type: boolean}
+        hot_ranking_capable: {type: boolean}
         announcements_capable: {type: boolean}
         dragon_tiger_capable: {type: boolean}
         trading_calendar_capable: {type: boolean}
