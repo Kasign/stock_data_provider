@@ -646,4 +646,12 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 
 - Live Provider Probe #123 对 `GET push2.eastmoney.com/api/qt/clist/get` 发起真实请求，先 HTTP 302 跳转至 `push2delay.eastmoney.com`，随后 HTTP 200。响应报告证券目录 `data.total=5925`，但请求 `pz=5000` 时实际行数不足 5,000，旧实现将其误判为最后一页；查询“贵州茅台”因此得到 0 个匹配项，质量原因包含 `provider_directory_incomplete`。将 `pz` 改为 1,000 后，源站依然返回不足请求行数的一页，说明上限低于 1,000。
 - 现在按实测 100 条页大小分页，最大 100 页（安全覆盖 10,000 行），而不是在第一页行数小于请求 `pz` 时提前退出；真实探测等待 4 分钟内完成整目录加载后再校验是否命中 `600519.SH`。新增模拟 205 条目录、目标股票位于第二页、要求请求 3 页的回归测试。
-- 本修正尚未由自身 Go CI 与真实 Runner 验证，不能写为已解决；前一提交的 Go CI #314 失败于两个文件的 gofmt，真实 Probe #124 仍在使用 1,000 条请求大小，且继续得到空匹配。以新提交结果为准。
+- 此分页修正确实由 Go CI #318 与 Live Provider Probe #128 验证：东方财富搜索“贵州茅台”返回 `600519.SH`，质量为 `valid`。源端目录共 5,925 条，实测按 100 条分页读取 60 页，共 120 次 HTTP 响应（每页先 302 跳转、随后 200），冷启动耗时 34.574 秒。分页逻辑现可正确命中结果，但全目录扫描仍不适合作为在线中文搜索的首选路径。
+## 19. 腾讯 Smartbox 中文名称搜索快速路径真实验收（2026-10-26）
+
+- 当前代码 HEAD `6ab7080b56a9b8debe583a5697f2f8247c4a7d3c` 的 Go CI #318（[run 40266288452](https://github.com/Kasign/stock_data_provider/actions/runs/40266288452)）全部通过：Go 单测、race detector、go vet、gofmt、Compose 配置校验和 Docker 镜像构建均成功。
+- Live Provider Probe #128（[run 40266288429](https://github.com/Kasign/stock_data_provider/actions/runs/40266288429)）的报告 `failures` 为空。腾讯 Smartbox `smartbox.gtimg.cn/s3/` 在 HTTP 200 下用 602 ms 返回“贵州茅台”→`600519.SH`；该响应把中文名放在 JavaScript Unicode 转义中，解析器已还原并新增回归测试。
+- Smartbox 未提供权威的匹配总数，快路径结果标记为 `quality_status=degraded`、原因 `provider_search_total_not_reported`；这表示条目成功解析，但不声称结果集完整。腾讯请求失败或没有匹配的 A 股记录时，服务层继续尝试东方财富后备源。
+- 同一次 Runner 直接探测东方财富对照结果，返回相同的 `600519.SH` 且质量为 `valid`，但耗时 34.574 秒，产生 120 次 HTTP 响应（60 次 302 跳转、60 次 200）。本样本下腾讯快路径约快 57 倍；这是单次 Runner 样本，不构成 SLA 或所有关键词的完整性证明。
+- 股票搜索专用优先级现在为腾讯、东方财富、其余已启用 Provider；实时行情和日 K 的原有 Provider 顺序不变。此验证覆盖真实 Provider 调用与自动化检查，尚未替代目标 NAS/Docker 部署和服务 HTTP 端到端验收。
+- 同一 Live Provider Probe 中，原生新闻搜索因未配置 `BOCHA_API_KEYS` / `SEARXNG_BASE_URLS` 被跳过；这不能视为真实新闻源已验证。
