@@ -921,6 +921,18 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .run-flow-dialog .task-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .run-flow-dialog .task-facts > div { min-width: 0; }
 .run-flow-dialog .task-facts strong { overflow-wrap: anywhere; }
+.task-events-read-status {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 34%, var(--border));
+  border-radius: 9px;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.task-events-read-status[hidden] { display: none !important; }
 .event-diagnostic { margin: 7px 0 0; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
 .run-flow-dialog .event-row > small { max-width: 150px; line-height: 1.6; text-align: right; overflow-wrap: anywhere; }
 :root[data-theme="light"] .run-flow-dialog .task-status-panel { box-shadow: -18px 0 46px rgba(26, 47, 61, .1); }

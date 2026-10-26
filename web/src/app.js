@@ -1675,7 +1675,9 @@ function renderTaskFlowSummary() {
     latestEvent.textContent = "未报告";
   } else {
     const events = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
-    eventsCount.textContent = events.length ? String(events.length) : "暂无持久化事件";
+    eventsCount.textContent = state.taskEventsError
+      ? events.length ? `${events.length} 条（读取异常）` : "读取失败"
+      : events.length ? String(events.length) : "暂无持久化事件";
     const last = events.length ? events[events.length - 1] : null;
     const lastEvent = last?.event && typeof last.event === "object" ? last.event : last;
     latestEvent.textContent = lastEvent?.at ? formatDateTime(lastEvent.at) : "未报告";
@@ -1768,6 +1770,13 @@ function renderTask(task) {
 }
 
 function renderTaskEvents() {
+  const readStatus = $("#task-events-read-status");
+  if (readStatus) {
+    readStatus.hidden = !state.taskEventsError;
+    readStatus.textContent = state.taskEventsError
+      ? "阶段事件读取提示：" + state.taskEventsError + "。已保留当前可用事件；任务状态可独立刷新。"
+      : "";
+  }
   const list = $("#task-events");
   list.replaceChildren();
   const events = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
@@ -1775,7 +1784,7 @@ function renderTaskEvents() {
     const empty = document.createElement("div");
     empty.className = "empty-row";
     empty.textContent = state.taskEventsError
-      ? "阶段事件读取失败：" + state.taskEventsError + "。任务状态仍可独立刷新；点击“立即刷新状态”可重试。"
+      ? "当前没有可显示的阶段事件。请查看上方读取提示；任务状态仍可独立刷新，点击“立即刷新状态”可重试。"
       : state.taskEventsLoaded
         ? "服务端目前没有持久化阶段事件。排队期间事件数组可以为空。"
         : "等待服务端阶段事件读取。";
@@ -2750,16 +2759,28 @@ $("#copy-task-diagnostic").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   const result = state.lastRunResult || {};
   const diagnostic = {
+    captured_at_client: new Date().toISOString(),
     task_id: state.taskId || null,
     task_status: state.taskStatus || null,
+    task_error: $("#task-error").textContent.trim() || null,
+    task_poll_status: $("#task-poll-label").textContent || null,
     run_id: state.runId || null,
+    run_status: result.status || null,
+    run_result_read_status: $("#task-result-note").textContent || null,
     symbols: state.taskSymbols,
     task_type: state.taskType,
-    run_status: result.status || null,
     as_of: result.request?.as_of || null,
     quality: result.quality || null,
     failure: result.failure || null,
     warnings: result.warnings || [],
+    event_read_status: {
+      loaded: state.taskEventsLoaded,
+      unavailable: state.taskEventsUnavailable,
+      last_error: state.taskEventsError || null,
+      known_event_count: state.taskEvents.size,
+      after_sequence: state.taskSequence
+    },
+    selected_event_sequence: state.selectedTaskEventSequence,
     events: [...state.taskEvents.values()].sort((a, b) => a.sequence - b.sequence)
   };
   try {

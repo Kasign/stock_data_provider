@@ -312,6 +312,18 @@ test("run-flow events expose only server-provided durations and diagnostics", ()
 });
 
 
+test("run-flow keeps cached events explicit during read errors and exports diagnostic context", () => {
+  assert.match(html, /id="task-events-read-status"[^>]*role="status"[^>]*aria-live="polite"/);
+  assert.match(app, /const readStatus = \$\("#task-events-read-status"\)/);
+  assert.match(app, /已保留当前可用事件/);
+  assert.match(app, /eventsCount\.textContent = state\.taskEventsError[\s\S]*?读取失败/);
+  assert.match(app, /task_error:\s*\$\("#task-error"\)\.textContent\.trim\(\) \|\| null/);
+  assert.match(app, /task_poll_status:\s*\$\("#task-poll-label"\)\.textContent \|\| null/);
+  assert.match(app, /event_read_status:\s*\{[\s\S]*?last_error:\s*state\.taskEventsError \|\| null[\s\S]*?known_event_count:\s*state\.taskEvents\.size/);
+  assert.match(stylesheet, /\.task-events-read-status/);
+});
+
+
 test("provider capability definitions expose each backend capability once", () => {
   const definitionBlock = app.match(/const capabilityDefinitions = \[([\s\S]*?)\n  \];/);
   assert.ok(definitionBlock, "provider capability definitions must remain explicit");
