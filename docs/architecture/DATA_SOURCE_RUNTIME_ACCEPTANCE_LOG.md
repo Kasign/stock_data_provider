@@ -616,3 +616,10 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - Live Provider Probe #114：[run 40258631152](https://github.com/Kasign/stock_data_provider/actions/runs/40258631152) 的核心探测步骤成功，报告 artifact `live-provider-report`（ID `12623945324`）已上传。
 - 对 `600036.SH` 查询 `2026-10-19` 至 `2026-10-25`，东方财富返回 HTTP 200、`total_hits=2`、`pages=1`、`returned=2`。两条公告的源端 `display_time` 分别为 `2026-10-23 17:20:42:715` 和 `2026-10-20 17:32:45:870`；新增解析支持“秒:毫秒”，正确解析 `published_at`，同时保留原始 `display_time`、独立 `announcement_date` 及 `fetched_at`。这两条样本的条目与快照质量状态均为 `valid`。
 - 此验收只证明 GitHub 托管 Runner 上的一只股票、一个日期窗口和第一页；没有证明全市场公告覆盖、任意分页稳定性、生产 SLA，也没有完成 NAS/Docker 部署验收。公告 Provider 的独立开关仍默认关闭。
+
+
+## 15. 国内优先的 Go 原生新闻搜索首批实现（待 CI 验收，2026-10-26）
+
+- 原生链新增 Bocha + 显式配置的自建 SearXNG，包含来源 URL、标题、源端发布时间、独立检索时间、时效过滤、重复记录去除、基础个股相关度排序及 10 分钟内存缓存。
+- 配置使用现有 Python 兼容环境名 `BOCHA_API_KEYS`、`SEARXNG_BASE_URLS`、`NEWS_MAX_AGE_DAYS`、`NEWS_STRATEGY_PROFILE`。原生搜索未配置或没有合格结果时仍回退 Python Bridge；分析器、存储、通知等其他 Bridge 能力不在本批次范围内。
+- 本批代码含 HTTP 模拟测试，覆盖 Bocha 请求契约、SearXNG 日期过滤/去重、Python Bridge 回退与缓存。当前提交未经过自身 CI，不能写成已通过；海外来源、原 Python 的复杂反垃圾准入与真实搜索 API 额度/网络验收仍待后续逐项补齐。

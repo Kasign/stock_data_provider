@@ -45,7 +45,7 @@
 | 个股资金流 `get_capital_flow_context` | 可选 Go MX API 路由；字段按人民币元规范化，5/10 日累计要求完整观测 | 自然语言查询返回的指标需要验证字段标签/单位；缺值不补零，精确 available_at 未实现 |
 | 龙虎榜 `get_dragon_tiger_context` | 无 | 必须保留交易日、上榜原因、营业部/机构口径及金额单位 |
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
-| 新闻 / 公告 | Go 分析服务仍通过 Python bridge 的新闻搜索 / 能力接口 | 尚未建立 Go 原生搜索、公告数据契约与来源/发布时间/抓取时间模型 |
+| 新闻 / 公告 | 单股公告已新增 Go 原生东方财富 Provider/API；通用新闻搜索本批新增 Go 原生 Bocha + 自建 SearXNG 搜索链，Python Bridge 保留兼容回退 | 公告真实 Runner 已验收；原生搜索待当前提交的 Go CI 与 HTTP 模拟测试通过。仅凭代码新增不代表生产启用或新闻搜索与 Python 策略完全等价；海外搜索源和复杂准入策略先不扩展 |
 
 当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/stocks/{symbol}/boards`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`、`GET /api/v1/market/breadth`、`GET /api/v1/market/limit-pools?type=up|down|broken`、`GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。这些新增能力保持独立路由/开关；未通过 NAS/Docker 验收的能力默认关闭。
 
@@ -138,3 +138,11 @@ Live Provider Probe #107 请求 2026-10-23 的真实东方财富龙虎榜后，�
 ## 公告发布时间毫秒格式的真实 Runner 修正（2026-10-26）
 
 Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_data_provider/actions/runs/40258376973)）对东方财富公告端点完成 HTTP 200 请求，返回 600036.SH 在 2026-10-19 至 2026-10-25 区间的 2 条公告，源端 `total_hits=2`、第一页 `returned=2`。实际 `display_time` 值包含 `2026-10-23 17:20:42:715` 和 `2026-10-20 17:32:45:870`，其毫秒使用冒号分隔；旧解析器因此把真实源端发布时间误判为缺失。Provider 现在在严格识别“末尾三位数字”的情况下，将该冒号规范化为小数点再解析，不改变 API 返回的原始 `display_time`；纯日期仍然不会被伪造为发布时间。该修正待新的 Go CI 与真实 Runner 再次验收。
+
+
+## 国内优先的 Go 原生新闻搜索第一阶段（2026-10-26）
+
+- Go 核心新增可配置的国内优先搜索链：Bocha API 优先，自建 SearXNG 为后备；凭据沿用 `BOCHA_API_KEYS` 和 `SEARXNG_BASE_URLS`。公共 SearXNG 自动发现不启用，避免将随机公开实例当作可靠生产依赖。
+- 原生搜索按 `NEWS_STRATEGY_PROFILE`（ultra_short/short/medium/long = 1/3/7/30 天）与 `NEWS_MAX_AGE_DAYS` 的较小值筛选。来源发布时间无法解析、超出时效、无标题/无有效 HTTP(S) URL 的记录不会作为有效新闻返回；URL 与标题去重后按个股直接相关程度排序。
+- 如果未配置原生源，或者所有源都没有符合时效与数据契约的结果，继续使用原 Python Bridge 搜索。这样可以先切流验证，而不把新增代码等同于已经完全去 Python 化。
+- 本阶段只提供国内个股/市场新闻的首批原生采集；没有完整移植 Python 的垃圾信息过滤、官方媒体白名单、复杂语言排序和多维情报检索策略。Go CI / Runner 结果通过前，不把该阶段标为生产验收完成。
