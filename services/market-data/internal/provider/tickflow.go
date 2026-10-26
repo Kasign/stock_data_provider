@@ -54,10 +54,10 @@ func NewTickFlowConfigured(timeout time.Duration, apiURL, freeAPIURL, apiKey str
 		freeAPIURL = "https://free-api.tickflow.org"
 	}
 	return &TickFlow{
-		client: &http.Client{Timeout: timeout},
-		apiURL: strings.TrimRight(strings.TrimSpace(apiURL), "/"),
+		client:     &http.Client{Timeout: timeout},
+		apiURL:     strings.TrimRight(strings.TrimSpace(apiURL), "/"),
 		freeAPIURL: strings.TrimRight(strings.TrimSpace(freeAPIURL), "/"),
-		apiKey: strings.TrimSpace(apiKey),
+		apiKey:     strings.TrimSpace(apiKey),
 	}
 }
 
@@ -220,12 +220,12 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	startMS := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc).UnixMilli()
 	endMS := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), loc).UnixMilli()
 	params := url.Values{
-		"symbol": []string{symbol},
-		"period": []string{"1d"},
-		"count": []string{strconv.Itoa(limit)},
+		"symbol":     []string{symbol},
+		"period":     []string{"1d"},
+		"count":      []string{strconv.Itoa(limit)},
 		"start_time": []string{strconv.FormatInt(startMS, 10)},
-		"end_time": []string{strconv.FormatInt(endMS, 10)},
-		"adjust": []string{adjust},
+		"end_time":   []string{strconv.FormatInt(endMS, 10)},
+		"adjust":     []string{adjust},
 	}
 	raw, err := p.getJSON(ctx, baseURL, "/v1/klines", params, authenticated)
 	if err != nil {
@@ -237,12 +237,12 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 	}
 	var data struct {
 		Timestamp []json.RawMessage `json:"timestamp"`
-		Open []json.RawMessage `json:"open"`
-		High []json.RawMessage `json:"high"`
-		Low []json.RawMessage `json:"low"`
-		Close []json.RawMessage `json:"close"`
-		Volume []json.RawMessage `json:"volume"`
-		Amount []json.RawMessage `json:"amount"`
+		Open      []json.RawMessage `json:"open"`
+		High      []json.RawMessage `json:"high"`
+		Low       []json.RawMessage `json:"low"`
+		Close     []json.RawMessage `json:"close"`
+		Volume    []json.RawMessage `json:"volume"`
+		Amount    []json.RawMessage `json:"amount"`
 		PrevClose []json.RawMessage `json:"prev_close"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
@@ -274,13 +274,21 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		}
 		seen[tradeDate] = struct{}{}
 		open, err := tickflowFloat(data.Open[i])
-		if err != nil { return nil, fmt.Errorf("TickFlow invalid open on %s", tradeDate) }
+		if err != nil {
+			return nil, fmt.Errorf("TickFlow invalid open on %s", tradeDate)
+		}
 		high, err := tickflowFloat(data.High[i])
-		if err != nil { return nil, fmt.Errorf("TickFlow invalid high on %s", tradeDate) }
+		if err != nil {
+			return nil, fmt.Errorf("TickFlow invalid high on %s", tradeDate)
+		}
 		low, err := tickflowFloat(data.Low[i])
-		if err != nil { return nil, fmt.Errorf("TickFlow invalid low on %s", tradeDate) }
+		if err != nil {
+			return nil, fmt.Errorf("TickFlow invalid low on %s", tradeDate)
+		}
 		closePrice, err := tickflowFloat(data.Close[i])
-		if err != nil { return nil, fmt.Errorf("TickFlow invalid close on %s", tradeDate) }
+		if err != nil {
+			return nil, fmt.Errorf("TickFlow invalid close on %s", tradeDate)
+		}
 		if !tickflowPositiveFinite(open) || !tickflowPositiveFinite(high) || !tickflowPositiveFinite(low) || !tickflowPositiveFinite(closePrice) ||
 			low > high || open < low || open > high || closePrice < low || closePrice > high {
 			return nil, fmt.Errorf("TickFlow OHLC invariant failed on %s", tradeDate)
@@ -290,7 +298,9 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			return nil, fmt.Errorf("TickFlow has invalid volume on %s", tradeDate)
 		}
 		volume, err := normalize.HandsToShares(rawVolume)
-		if err != nil { return nil, fmt.Errorf("normalize TickFlow volume on %s: %w", tradeDate, err) }
+		if err != nil {
+			return nil, fmt.Errorf("normalize TickFlow volume on %s: %w", tradeDate, err)
+		}
 
 		var amount, rawAmount *float64
 		amountUnit, rawAmountUnit, rawAmountField := "unknown", "", ""
@@ -311,13 +321,13 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		if i < len(data.PrevClose) {
 			prev, parseErr := tickflowFloat(data.PrevClose[i])
 			if parseErr == nil && prev > 0 {
-				value := (closePrice-prev)/prev*100
+				value := (closePrice - prev) / prev * 100
 				pct = &value
 			}
 		} else if i > 0 {
 			prev, parseErr := tickflowFloat(data.Close[i-1])
 			if parseErr == nil && prev > 0 {
-				value := (closePrice-prev)/prev*100
+				value := (closePrice - prev) / prev * 100
 				pct = &value
 			}
 		}
@@ -331,7 +341,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			Open: open, High: high, Low: low, Close: closePrice, Volume: &volume,
 			Amount: amount, ChangePercent: pct, AdjustmentBasis: adjustment,
 			AdjustmentMethod: "tickflow_api_" + adjust,
-			Source: p.Name(), SourceVersion: tickflowVersion,
+			Source:           p.Name(), SourceVersion: tickflowVersion,
 			FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
 			RawVolume: &rawVolumeCopy, RawVolumeUnit: "hands",
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
@@ -344,16 +354,26 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 }
 
 func (p *TickFlow) getJSON(ctx context.Context, baseURL, path string, query url.Values, authenticated bool) ([]byte, error) {
-	if ctx == nil { ctx = context.Background() }
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	endpoint := strings.TrimRight(strings.TrimSpace(baseURL), "/") + path
-	if len(query) > 0 { endpoint += "?" + query.Encode() }
+	if len(query) > 0 {
+		endpoint += "?" + query.Encode()
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "MarketDataService/1.0")
-	if authenticated && p.apiKey != "" { req.Header.Set("x-api-key", p.apiKey) }
+	if authenticated && p.apiKey != "" {
+		req.Header.Set("x-api-key", p.apiKey)
+	}
 	resp, err := p.client.Do(req)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("HTTP status %d", resp.StatusCode)
@@ -370,7 +390,8 @@ func (p *TickFlow) waitForFreeRateLimit(ctx context.Context) error {
 			timer := time.NewTimer(delay)
 			defer timer.Stop()
 			select {
-			case <-ctx.Done(): return ctx.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			case <-timer.C:
 			}
 		}
@@ -381,7 +402,9 @@ func (p *TickFlow) waitForFreeRateLimit(ctx context.Context) error {
 
 func tickflowDomesticSymbol(raw string) (string, error) {
 	symbol, err := normalize.NormalizeSymbol(raw)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	parts := strings.Split(symbol, ".")
 	if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") {
 		return "", fmt.Errorf("TickFlow Go adapter only accepts domestic SH/SZ/BJ securities, got %q", raw)
@@ -391,23 +414,33 @@ func tickflowDomesticSymbol(raw string) (string, error) {
 
 func tickflowResponseData(raw []byte) (json.RawMessage, error) {
 	var envelope struct {
-		Code *int `json:"code"`
-		Message string `json:"message"`
-		Msg string `json:"msg"`
-		Error string `json:"error"`
-		Data json.RawMessage `json:"data"`
+		Code    *int            `json:"code"`
+		Message string          `json:"message"`
+		Msg     string          `json:"msg"`
+		Error   string          `json:"error"`
+		Data    json.RawMessage `json:"data"`
 	}
-	if err := json.Unmarshal(raw, &envelope); err != nil { return nil, fmt.Errorf("decode TickFlow response envelope: %w", err) }
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, fmt.Errorf("decode TickFlow response envelope: %w", err)
+	}
 	if envelope.Code != nil && *envelope.Code != 0 {
 		message := strings.TrimSpace(envelope.Message)
-		if message == "" { message = strings.TrimSpace(envelope.Msg) }
-		if message == "" { message = strings.TrimSpace(envelope.Error) }
+		if message == "" {
+			message = strings.TrimSpace(envelope.Msg)
+		}
+		if message == "" {
+			message = strings.TrimSpace(envelope.Error)
+		}
 		return nil, fmt.Errorf("TickFlow provider error code=%d: %s", *envelope.Code, message)
 	}
-	if strings.TrimSpace(envelope.Error) != "" { return nil, fmt.Errorf("TickFlow provider error: %s", strings.TrimSpace(envelope.Error)) }
+	if strings.TrimSpace(envelope.Error) != "" {
+		return nil, fmt.Errorf("TickFlow provider error: %s", strings.TrimSpace(envelope.Error))
+	}
 	if len(bytesTrim(envelope.Data)) == 0 || string(bytesTrim(envelope.Data)) == "null" {
 		msg := strings.TrimSpace(envelope.Message)
-		if msg == "" { msg = strings.TrimSpace(envelope.Msg) }
+		if msg == "" {
+			msg = strings.TrimSpace(envelope.Msg)
+		}
 		return nil, fmt.Errorf("TickFlow response has no data: %s", msg)
 	}
 	return envelope.Data, nil
@@ -415,10 +448,14 @@ func tickflowResponseData(raw []byte) (json.RawMessage, error) {
 
 func tickflowFloat(raw json.RawMessage) (float64, error) {
 	raw = json.RawMessage(bytesTrim(raw))
-	if len(raw) == 0 || string(raw) == "null" { return 0, errors.New("empty TickFlow number") }
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0, errors.New("empty TickFlow number")
+	}
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
-		if strings.TrimSpace(s) == "" { return 0, errors.New("empty TickFlow number") }
+		if strings.TrimSpace(s) == "" {
+			return 0, errors.New("empty TickFlow number")
+		}
 		return strconv.ParseFloat(strings.TrimSpace(s), 64)
 	}
 	return strconv.ParseFloat(string(raw), 64)

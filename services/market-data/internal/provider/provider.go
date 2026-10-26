@@ -90,7 +90,7 @@ type FundamentalsProvider interface {
 	FetchFundamentals(ctx context.Context, symbol string, year, quarter int) (*model.FundamentalsSnapshot, error)
 }
 
- // IndexCatalogProvider 提供同花顺指数/板块目录、当前成分股和指数历史日线。
+// IndexCatalogProvider 提供同花顺指数/板块目录、当前成分股和指数历史日线。
 // 该接口使用独立的指数代码空间（.TI/.SH/.SZ），不进入个股 K 线回退链。
 type IndexCatalogProvider interface {
 	NamedProvider

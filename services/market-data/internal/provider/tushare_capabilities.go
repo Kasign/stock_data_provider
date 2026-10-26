@@ -121,8 +121,8 @@ func (p *Tushare) fetchCapabilityTable(ctx context.Context, apiName string, para
 		return nil, fmt.Errorf("读取 Tushare %s 响应失败: %w", apiName, err)
 	}
 	var envelope struct {
-		Code *int    `json:"code"`
-		Msg  string  `json:"msg"`
+		Code *int   `json:"code"`
+		Msg  string `json:"msg"`
 		Data *struct {
 			Fields []string            `json:"fields"`
 			Items  [][]json.RawMessage `json:"items"`
@@ -302,7 +302,7 @@ func (p *Tushare) FetchStockBasic(ctx context.Context, rawSymbol string) (*model
 		ListingStatus: listingStatus, ListingStatusLabel: listingLabel,
 		Industry: industry, Source: p.Name(), SourceVersion: tushareStockBasicVersion,
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
-		QualityReasons: []string{"tushare_stock_basic_does_not_include_current_valuation_metrics", "provider_exact_snapshot_time_not_exposed"},
+		QualityReasons:   []string{"tushare_stock_basic_does_not_include_current_valuation_metrics", "provider_exact_snapshot_time_not_exposed"},
 		NormalizationVer: normalize.Version,
 	}, nil
 }
@@ -757,7 +757,6 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	}, nil
 }
 
-
 // isTushareAShareSymbol excludes B shares, funds and non-equity instruments from A-share event feeds.
 func isTushareAShareSymbol(symbol string) bool {
 	parts := strings.Split(symbol, ".")
@@ -941,7 +940,7 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 			PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: tradeDate,
 			Total: 0, HasData: false, Items: []model.LimitPoolItem{},
 			Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
-			QualityStatus: model.QualityUnknown,
+			QualityStatus:  model.QualityUnknown,
 			QualityReasons: append(reasons, "empty_limit_pool_cannot_confirm_zero_events_or_unavailable_source"),
 		}, nil
 	}
@@ -995,7 +994,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		Total: total, Pages: pages, SourceReturned: 0, ExcludedNonAShareCount: 0,
 		HasData: false, HasMore: false, Items: []model.DragonTigerItem{},
 		Source: p.Name(), SourceVersion: "tushare-top-list-v1", FetchedAt: now,
-		QualityStatus: model.QualityUnknown,
+		QualityStatus:  model.QualityUnknown,
 		QualityReasons: []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"},
 	}
 	if total == 0 {
@@ -1280,7 +1279,6 @@ func (p *Tushare) FetchStockAnnouncements(ctx context.Context, rawSymbol, rawSta
 	}, nil
 }
 
-
 const tushareIndexCatalogVersion = "tushare-index-basic-v1"
 const tushareIndexConstituentVersion = "tushare-index-weight-v1"
 const tushareIndexDailyVersion = "tushare-index-daily-v1"
@@ -1302,27 +1300,41 @@ func canonicalTushareIndexSymbol(raw string) (string, error) {
 // FetchIndexCatalog reads Tushare's official index directory using a distinct tag.
 func (p *Tushare) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.IndexCatalogSnapshot, error) {
 	tag := strings.ToLower(strings.TrimSpace(rawTag))
-	if tag == "" { tag = "cn_concept" }
-	if tag != "tushare" { return nil, fmt.Errorf("Tushare 指数目录仅支持 tag=tushare，收到 %q", rawTag) }
+	if tag == "" {
+		tag = "cn_concept"
+	}
+	if tag != "tushare" {
+		return nil, fmt.Errorf("Tushare 指数目录仅支持 tag=tushare，收到 %q", rawTag)
+	}
 	table, err := p.fetchCapabilityTable(ctx, "index_basic", map[string]string{},
 		"ts_code,name,market,publisher,category,base_date,list_date,exp_date")
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	items := make([]model.IndexCatalogItem, 0, len(table.rows))
 	seen := make(map[string]struct{}, len(table.rows))
 	reasons := []string{"provider_index_catalog_has_no_precise_snapshot_timestamp"}
 	for index, row := range table.rows {
 		rawSymbol, readErr := table.stringValue(row, "ts_code")
-		if readErr != nil { return nil, readErr }
+		if readErr != nil {
+			return nil, readErr
+		}
 		symbol, symbolErr := canonicalTushareIndexSymbol(rawSymbol)
 		if symbolErr != nil {
 			reasons = appendTushareReason(reasons, "provider_index_catalog_contains_unmapped_codes")
 			continue
 		}
 		name, readErr := table.stringValue(row, "name")
-		if readErr != nil { return nil, readErr }
-		if strings.TrimSpace(name) == "" { return nil, fmt.Errorf("Tushare 指数目录第 %d 行缺少名称", index) }
-		if _, duplicate := seen[symbol]; duplicate { return nil, fmt.Errorf("Tushare 指数目录返回重复代码 %s", symbol) }
+		if readErr != nil {
+			return nil, readErr
+		}
+		if strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("Tushare 指数目录第 %d 行缺少名称", index)
+		}
+		if _, duplicate := seen[symbol]; duplicate {
+			return nil, fmt.Errorf("Tushare 指数目录返回重复代码 %s", symbol)
+		}
 		seen[symbol] = struct{}{}
 		items = append(items, model.IndexCatalogItem{Symbol: symbol, Name: name, Tag: tag})
 	}
@@ -1506,75 +1518,123 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 // is normalized from the documented thousand-CNY unit.
 func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate string) (*model.IndexDailyBarsSnapshot, error) {
 	indexSymbol, err := canonicalTushareIndexSymbol(rawIndexSymbol)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	startCompact, err := tushareCompactDate(rawStartDate)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	endCompact, err := tushareCompactDate(rawEndDate)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	start, _ := time.Parse("20060102", startCompact)
 	end, _ := time.Parse("20060102", endCompact)
-	if start.After(end) || end.After(start.AddDate(10, 0, 0)) { return nil, errors.New("Tushare 指数日 K 日期范围无效或超过 10 年") }
+	if start.After(end) || end.After(start.AddDate(10, 0, 0)) {
+		return nil, errors.New("Tushare 指数日 K 日期范围无效或超过 10 年")
+	}
 	table, err := p.fetchCapabilityTable(ctx, "index_daily", map[string]string{
 		"ts_code": indexSymbol, "start_date": startCompact, "end_date": endCompact,
 	}, "ts_code,trade_date,open,high,low,close,pct_chg,vol,amount")
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	items := make([]model.IndexDailyBar, 0, len(table.rows))
 	seen := make(map[string]struct{}, len(table.rows))
 	snapshotReasons := []string{}
 	for index, row := range table.rows {
 		rawCode, readErr := table.stringValue(row, "ts_code")
-		if readErr != nil { return nil, readErr }
+		if readErr != nil {
+			return nil, readErr
+		}
 		code, symbolErr := canonicalTushareIndexSymbol(rawCode)
-		if symbolErr != nil || code != indexSymbol { return nil, fmt.Errorf("Tushare 指数日 K 第 %d 行指数代码不匹配", index) }
+		if symbolErr != nil || code != indexSymbol {
+			return nil, fmt.Errorf("Tushare 指数日 K 第 %d 行指数代码不匹配", index)
+		}
 		dateRaw, readErr := table.stringValue(row, "trade_date")
-		if readErr != nil { return nil, readErr }
+		if readErr != nil {
+			return nil, readErr
+		}
 		date, dateErr := tushareISODate(dateRaw)
 		if dateErr != nil || date < start.Format("2006-01-02") || date > end.Format("2006-01-02") {
 			return nil, fmt.Errorf("Tushare 指数日 K 第 %d 行交易日无效或超出范围", index)
 		}
-		if _, duplicate := seen[date]; duplicate { return nil, fmt.Errorf("Tushare 指数日 K 存在重复交易日 %s", date) }
+		if _, duplicate := seen[date]; duplicate {
+			return nil, fmt.Errorf("Tushare 指数日 K 存在重复交易日 %s", date)
+		}
 		seen[date] = struct{}{}
 		requiredPrice := func(field string) (float64, error) {
 			value, fieldErr := table.optionalFloat(row, field)
-			if fieldErr != nil { return 0, fieldErr }
+			if fieldErr != nil {
+				return 0, fieldErr
+			}
 			if value == nil || *value <= 0 || math.IsNaN(*value) || math.IsInf(*value, 0) {
 				return 0, fmt.Errorf("Tushare 指数日 K %s 缺少有效的 %s", date, field)
 			}
 			return *value, nil
 		}
 		openPrice, fieldErr := requiredPrice("open")
-		if fieldErr != nil { return nil, fieldErr }
+		if fieldErr != nil {
+			return nil, fieldErr
+		}
 		highPrice, fieldErr := requiredPrice("high")
-		if fieldErr != nil { return nil, fieldErr }
+		if fieldErr != nil {
+			return nil, fieldErr
+		}
 		lowPrice, fieldErr := requiredPrice("low")
-		if fieldErr != nil { return nil, fieldErr }
+		if fieldErr != nil {
+			return nil, fieldErr
+		}
 		closePrice, fieldErr := requiredPrice("close")
-		if fieldErr != nil { return nil, fieldErr }
+		if fieldErr != nil {
+			return nil, fieldErr
+		}
 		if lowPrice > highPrice || openPrice < lowPrice || openPrice > highPrice || closePrice < lowPrice || closePrice > highPrice {
 			return nil, fmt.Errorf("Tushare 指数日 K %s 的 OHLC 不满足数据契约", date)
 		}
 		rowReasons := []string{}
 		var volume *int64
 		rawVolume, fieldErr := table.optionalFloat(row, "vol")
-		if fieldErr != nil { return nil, fieldErr }
+		if fieldErr != nil {
+			return nil, fieldErr
+		}
 		if rawVolume == nil || *rawVolume < 0 || math.Trunc(*rawVolume) != *rawVolume || *rawVolume > float64(math.MaxInt64) {
 			rowReasons = appendTushareReason(rowReasons, "provider_index_volume_missing_or_invalid")
-		} else { value := int64(*rawVolume); volume = &value }
+		} else {
+			value := int64(*rawVolume)
+			volume = &value
+		}
 		var amount *float64
 		rawAmount, fieldErr := table.optionalFloat(row, "amount")
-		if fieldErr != nil { return nil, fieldErr }
+		if fieldErr != nil {
+			return nil, fieldErr
+		}
 		if rawAmount == nil || *rawAmount < 0 || math.IsNaN(*rawAmount) || math.IsInf(*rawAmount, 0) || *rawAmount > math.MaxFloat64/1000 {
 			rowReasons = appendTushareReason(rowReasons, "provider_index_amount_missing_or_invalid")
-		} else { value := *rawAmount * 1000; amount = &value }
+		} else {
+			value := *rawAmount * 1000
+			amount = &value
+		}
 		change, fieldErr := table.optionalFloat(row, "pct_chg")
-		if fieldErr != nil { return nil, fieldErr }
-		for _, reason := range rowReasons { snapshotReasons = appendTushareReason(snapshotReasons, reason) }
+		if fieldErr != nil {
+			return nil, fieldErr
+		}
+		for _, reason := range rowReasons {
+			snapshotReasons = appendTushareReason(snapshotReasons, reason)
+		}
 		barQuality := model.QualityValid
-		if len(rowReasons) > 0 { barQuality = model.QualityDegraded }
+		if len(rowReasons) > 0 {
+			barQuality = model.QualityDegraded
+		}
 		volumeUnit, amountUnit := "hands", "CNY"
-		if volume == nil { volumeUnit = "unknown" }
-		if amount == nil { amountUnit = "unknown" }
+		if volume == nil {
+			volumeUnit = "unknown"
+		}
+		if amount == nil {
+			amountUnit = "unknown"
+		}
 		items = append(items, model.IndexDailyBar{
 			IndexSymbol: indexSymbol, TradeDate: date, Open: openPrice, High: highPrice, Low: lowPrice, Close: closePrice,
 			ChangePercent: change, Volume: volume, Amount: amount, VolumeUnit: volumeUnit, AmountUnit: amountUnit,
@@ -1592,8 +1652,12 @@ func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawSt
 		}, nil
 	}
 	quality := model.QualityValid
-	if len(snapshotReasons) > 0 || len(table.rows) >= 8000 { quality = model.QualityDegraded }
-	if len(table.rows) >= 8000 { snapshotReasons = appendTushareReason(snapshotReasons, "provider_index_daily_response_may_be_capped_at_8000_rows") }
+	if len(snapshotReasons) > 0 || len(table.rows) >= 8000 {
+		quality = model.QualityDegraded
+	}
+	if len(table.rows) >= 8000 {
+		snapshotReasons = appendTushareReason(snapshotReasons, "provider_index_daily_response_may_be_capped_at_8000_rows")
+	}
 	return &model.IndexDailyBarsSnapshot{
 		IndexSymbol: indexSymbol, StartDate: start.Format("2006-01-02"), EndDate: end.Format("2006-01-02"),
 		Items: items, Total: len(items), Source: p.Name(), SourceVersion: tushareIndexDailyVersion,

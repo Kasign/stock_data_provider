@@ -25,34 +25,34 @@ type chipDistributionSource interface {
 }
 
 type DataService struct {
-	providers                []provider.NamedProvider
-	quoteProviders           []provider.QuoteProvider
-	barProviders             []provider.DailyBarProvider
-	stockBasicProviders      []provider.StockBasicProvider
-	stockSearchProviders     []provider.StockSearchProvider
-	sectorRankingProviders   []provider.SectorRankingProvider
-	indexQuoteProviders      []provider.IndexQuoteProvider
-	marketBreadthProviders   []provider.MarketBreadthProvider
-	limitPoolProviders       []provider.LimitPoolProvider
-	dragonTigerProviders     []provider.DragonTigerProvider
-	announcementProviders    []provider.AnnouncementProvider
-	stockBoardsProviders     []provider.StockBoardsProvider
-	tradingCalendarProviders []provider.TradingCalendarProvider
-	fundamentalsProviders    []provider.FundamentalsProvider
-	valuationProviders       []provider.ValuationProvider
-	indexCatalogProviders    []provider.IndexCatalogProvider
+	providers                 []provider.NamedProvider
+	quoteProviders            []provider.QuoteProvider
+	barProviders              []provider.DailyBarProvider
+	stockBasicProviders       []provider.StockBasicProvider
+	stockSearchProviders      []provider.StockSearchProvider
+	sectorRankingProviders    []provider.SectorRankingProvider
+	indexQuoteProviders       []provider.IndexQuoteProvider
+	marketBreadthProviders    []provider.MarketBreadthProvider
+	limitPoolProviders        []provider.LimitPoolProvider
+	dragonTigerProviders      []provider.DragonTigerProvider
+	announcementProviders     []provider.AnnouncementProvider
+	stockBoardsProviders      []provider.StockBoardsProvider
+	tradingCalendarProviders  []provider.TradingCalendarProvider
+	fundamentalsProviders     []provider.FundamentalsProvider
+	valuationProviders        []provider.ValuationProvider
+	indexCatalogProviders     []provider.IndexCatalogProvider
 	chipDistributionProviders []provider.ChipDistributionProvider
 	hotRankingProviders       []provider.HotRankingProvider
-	supplementProviders      []provider.SupplementProvider
-	maxBars                  int
-	retries                  int
-	breaker                  *circuitBreaker
-	cache                    cache.Cache
-	store                    *repository.Store
-	quoteTTL                 time.Duration
-	barsTTL                  time.Duration
-	defaultBars              int
-	logger                   *slog.Logger
+	supplementProviders       []provider.SupplementProvider
+	maxBars                   int
+	retries                   int
+	breaker                   *circuitBreaker
+	cache                     cache.Cache
+	store                     *repository.Store
+	quoteTTL                  time.Duration
+	barsTTL                   time.Duration
+	defaultBars               int
+	logger                    *slog.Logger
 }
 
 func New(providers []provider.Provider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars int, logger *slog.Logger) *DataService {
@@ -732,8 +732,12 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 			return fmt.Errorf("stock-basic %s is non-finite", field)
 		}
 	}
-	if item.MarketCapCNY != nil && *item.MarketCapCNY < 0 { return errors.New("stock-basic market_cap_cny must not be negative") }
-	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 { return errors.New("stock-basic float_market_cap_cny must not be negative") }
+	if item.MarketCapCNY != nil && *item.MarketCapCNY < 0 {
+		return errors.New("stock-basic market_cap_cny must not be negative")
+	}
+	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 {
+		return errors.New("stock-basic float_market_cap_cny must not be negative")
+	}
 	if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("stock-basic quality status %q is unsupported", item.QualityStatus)
 	}
@@ -765,8 +769,12 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		var item model.StockBasic
 		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 {
 			maxAge := ttl
-			if item.QualityStatus == model.QualityDegraded { maxAge = degradedTTL }
-			if time.Since(item.FetchedAt) < maxAge { return &item, true, nil }
+			if item.QualityStatus == model.QualityDegraded {
+				maxAge = degradedTTL
+			}
+			if time.Since(item.FetchedAt) < maxAge {
+				return &item, true, nil
+			}
 		}
 	} else if cacheErr != nil {
 		s.logger.Warn("stock-basic cache read failed", "symbol", symbol, "error", cacheErr)
@@ -816,7 +824,9 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			continue
 		}
 		cacheTTL := ttl
-		if item.QualityStatus == model.QualityDegraded { cacheTTL = degradedTTL }
+		if item.QualityStatus == model.QualityDegraded {
+			cacheTTL = degradedTTL
+		}
 		payload, marshalErr := json.Marshal(item)
 		if marshalErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, payload, cacheTTL); cacheErr != nil {
@@ -1817,8 +1827,8 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 // ranges as fallback candidates. Exhausted fallback candidates are returned only
 // as degraded data, never silently treated as complete.
 // preferPartialBars keeps the largest validated partial series and, on ties,
- // chooses the series with the newest trade date. Equal coverage and recency
- // preserve provider priority by retaining the existing candidate.
+// chooses the series with the newest trade date. Equal coverage and recency
+// preserve provider priority by retaining the existing candidate.
 func preferPartialBars(candidate, current []model.DailyBar) bool {
 	if len(candidate) == 0 {
 		return false

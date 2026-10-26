@@ -82,17 +82,17 @@ test("Go rejected Run status maps to a failed task instead of false success", ()
 test("task restoration validates local references and guards stale asynchronous responses", () => {
   assert.match(app, /function restoreLastTask\(\)[\s\S]*?JSON\.parse\(localStorage\.getItem\(TASK_REFERENCE_KEY\) \|\| "null"\)[\s\S]*?catch \{[\s\S]*?return false;[\s\S]*?return activateTaskReference\(record\);/);
   assert.match(app, /function activateTaskReference\(record\)[\s\S]*?if \(!record \|\| typeof record\.task_id !== "string" \|\| !record\.task_id\.trim\(\)\) return false;[\s\S]*?stopTaskPolling\(\);[\s\S]*?state\.taskEvents\.clear\(\);[\s\S]*?void pollTask\(state\.pollGeneration\);/);
-  assert.match(app, /if \(generation !== state\.pollGeneration \|\| taskId !== state\.taskId\) return;/);
-  assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId\) return;/);
+  assert.match(app, /if \(generation !== state\.pollGeneration \|\| taskId !== state\.taskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
+  assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
   assert.match(app, /if \(TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?stopTaskPolling\(\);[\s\S]*?if \(runId\) void loadTaskRunResult\(runId, taskId\);/);
   assert.match(recentTaskModule, /return \{[\s\S]*?task_id: record\.task_id\.trim\(\)[\s\S]*?status: typeof record\.status === "string" \? record\.status : ""/);
 });
 
 
 test("polling pauses on permanent API errors and Run reads use bounded, stale-safe retries", () => {
-  assert.match(app, /if \(!isRetryableApiError\(error\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
+  assert.match(app, /if \(taskError && !isRetryableApiError\(taskError\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
   assert.match(app, /const RUN_RESULT_RETRY_DELAYS_MS = \[1000, 2500, 5000\]/);
-  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId/);
+  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /state\.runResultGeneration \+= 1/);
   assert.match(app, /isRetryableApiError\(error\)/);
 });
@@ -119,7 +119,7 @@ test("browser-local watchlist is wired to existing query/analysis flows and stor
   assert.match(app, /removeWatchlistSymbol\(symbol, localStorage\)/);
   assert.match(app, /renameWatchlistSymbol\(record\.symbol, aliasInput\.value, localStorage\)/);
   assert.match(app, /function startAnalysisForSymbol\(input\)/);
-  assert.match(app, /state\.isQuerying[\s\S]*?当前行情查询尚未完成/);
+  assert.match(app, /state\.isQuerying[\s\S]*?主行情查询尚未完成/);
   assert.match(watchlistModule, /WATCHLIST_KEY/);
   assert.doesNotMatch(watchlistModule, /apiKey|runResult|report\s*:/i, "watchlist persistence must not include secrets or report payloads");
   assert.match(stylesheet, /\.watchlist-item\s*\{/);
@@ -144,7 +144,7 @@ test("daily chart exposes close/candle modes, optional date filters and adjustme
     assert.match(html, new RegExp('id="' + id + '"'), "chart/date control must exist: " + id);
   }
   assert.match(app, /function renderChartView\(\)/);
-  assert.match(app, /renderCandlestickVolumeChart\(\$\("#close-chart"\), state\.bars, state\.chartMeta\)/);
+  assert.match(app, /renderCandlestickVolumeChart\(\$\("#close-chart"\),state\.bars,chartOptions\)/);
   assert.match(app, /function shanghaiDateKey\(/);
   assert.match(app, /开始日期不能晚于结束日期/);
   assert.match(app, /日 K 查询失败，旧标的图表已清除/);
@@ -207,7 +207,7 @@ test("task polling and saved task references are scoped to the analysis API base
   assert.match(app, /function invalidateActiveTaskForAnalysisBaseChange\(/);
   assert.match(app, /if \(analysisBaseChanged\) invalidateActiveTaskForAnalysisBaseChange\(/);
   assert.match(app, /endpointGeneration !== state\.analysisConnectionGeneration/);
-  assert.match(app, /analysis_base: state\.taskAnalysisBase \|\| state\.settings\.analysisBase/);
+  assert.match(app, /const taskAnalysisBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase;[\s\S]*?analysis_base: taskAnalysisBase/);
   assert.match(app, /旧任务不再自动轮询/);
   assert.match(app, /if \(requestedBase !== state\.settings\.analysisBase\)/);
   assert.match(recentTaskModule, /analysis_base: typeof record\.analysis_base === "string"/);
@@ -218,7 +218,7 @@ test("service health and provider-list refreshes ignore superseded responses", (
   assert.match(app, /let sourceRefreshGeneration = 0;/);
   assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, stale: true \};/);
   assert.match(app, /async function refreshSources\(\) \{[\s\S]*?const generation = \+\+sourceRefreshGeneration;[\s\S]*?if \(generation !== sourceRefreshGeneration\) return;/);
-  assert.match(app, /if \(result\.stale\) \{[\s\S]*?已忽略旧检查结果/);
+  assert.match(app, /if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, stale: true \};[\s\S]*?setServiceStatus\("market"/);
 });
 
 test("filter changes clear stale errors even when a prior query returned no data", () => {
@@ -293,7 +293,7 @@ test("recent analysis history supports search, single removal and local-only cle
     assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);
   }
   assert.match(app, /function renderRecentTasks\([\s\S]*?recent-analysis-search[\s\S]*?record\.task_id[\s\S]*?taskStatusLabel\(record\.status\)/);
-  assert.match(app, /function removeRecentTaskReference\(taskId\)[\s\S]*?removeRecentTask\(taskId, localStorage\)[\s\S]*?服务端任务和报告不会被删除/);
+  assert.match(app, /function removeRecentTaskReference\(taskId, analysisBase = ""\)[\s\S]*?removeRecentTask\(taskId, localStorage, undefined, analysisBase\)[\s\S]*?服务端任务和报告不会被删除/);
   assert.match(app, /function clearRecentTaskHistory\(\)[\s\S]*?window\.confirm\([\s\S]*?clearRecentTasks\(localStorage\)[\s\S]*?服务端记录未删除/);
   assert.match(app, /state\.suppressedHistoryTaskId === state\.taskId/);
   assert.match(app, /if \(state\.taskId === taskId\) state\.suppressedHistoryTaskId = taskId/);
@@ -327,7 +327,7 @@ test("mobile navigation drawer restores readable labels and can close via overla
     assert.match(html, new RegExp('id="' + id + '"'), "mobile navigation element must exist: " + id);
   }
   assert.match(html, /id="mobile-menu-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="primary-sidebar"/);
-  assert.match(app, /function setMobileNavigationOpen\(open\)/);
+  assert.match(app, /function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\)/);
   assert.match(app, /\$\("#mobile-nav-overlay"\)\.addEventListener\("click", \(\) => setMobileNavigationOpen\(false\)\)/);
   assert.match(app, /if \(event\.key === "Escape"\) setMobileNavigationOpen\(false\)/);
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.sidebar\.is-open \{ transform: translateX\(0\); \}/);
@@ -434,7 +434,7 @@ test("run-flow event details share normalized status labels and tones with the t
   assert.match(app, /function taskEventStatusKey\(status\)/);
   assert.match(app, /function taskEventStatusLabel\(status, statusKey = taskEventStatusKey\(status\)\)/);
   assert.match(app, /function taskEventStatusTone\(statusKey\)/);
-  assert.match(app, /status\.textContent = taskEventStatusLabel\(event\.status, statusKey\)/);
+  assert.match(app, /status\.textContent = statusLabel/);
   assert.match(app, /\["事件状态", statusLabel\]/);
   assert.match(app, /const statusKey = taskEventStatusKey\(event\.status\)/);
   assert.match(stylesheet, /\.availability-pill\.is-error/);

@@ -367,7 +367,7 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		ListingStatus: status, ListingStatusLabel: statusLabel,
 		Source: p.Name(), SourceVersion: "eastmoney-f10-market-profile-v2",
 		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
-		QualityReasons: []string{"market_profile_timestamp_not_exposed"},
+		QualityReasons:   []string{"market_profile_timestamp_not_exposed"},
 		NormalizationVer: normalize.Version,
 	}
 
@@ -379,14 +379,14 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		return item, nil
 	}
 	quoteParams := url.Values{
-		"secid": []string{secid},
+		"secid":  []string{secid},
 		"fields": []string{"f57,f58,f162,f167,f127,f116,f117,f198,f173,f187,f105,f186"},
-		"fltt": []string{"2"},
-		"invt": []string{"2"},
-		"ut": []string{p.ut},
+		"fltt":   []string{"2"},
+		"invt":   []string{"2"},
+		"ut":     []string{p.ut},
 	}
 	var quotePayload struct {
-		RC *int `json:"rc"`
+		RC   *int                       `json:"rc"`
 		Data map[string]json.RawMessage `json:"data"`
 	}
 	if quoteErr := p.getJSONWithRetry(ctx, p.quoteURL, quoteParams, &quotePayload, 8*time.Second); quoteErr != nil {
@@ -628,20 +628,20 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 }
 
 type eastmoneyChipKline struct {
-	date string
-	open float64
-	close float64
-	high float64
-	low float64
+	date         string
+	open         float64
+	close        float64
+	high         float64
+	low          float64
 	turnoverRate float64
 }
 
 // FetchChipDistribution 在 Go 中复刻 AkShare 的 CYQCalculator 核心指标计算。
 // 东方财富未提供筹码分布的独立快照时间，因此返回值保守标记为 degraded。
 const (
-	eastmoneyHotRankURL = "https://emappdata.eastmoney.com/stockrank/getAllCurrentList"
+	eastmoneyHotRankURL  = "https://emappdata.eastmoney.com/stockrank/getAllCurrentList"
 	eastmoneyHotSurgeURL = "https://emappdata.eastmoney.com/stockrank/getAllHisRcList"
-	eastmoneyHotAppID = "appId01"
+	eastmoneyHotAppID    = "appId01"
 	eastmoneyHotGlobalID = "786e4c21-70dc-435a-93bb-38"
 )
 
@@ -682,10 +682,10 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 	}
 
 	type rankedCode struct {
-		symbol string
-		code string
-		secid string
-		rank int
+		symbol     string
+		code       string
+		secid      string
+		rank       int
 		rankChange *int
 	}
 	ranked := make([]rankedCode, 0, min(limit, len(rankRows)))
@@ -731,7 +731,7 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 		"secids": []string{strings.Join(secids, ",")},
 	}
 	var quotePayload struct {
-		RC *int `json:"rc"`
+		RC   *int `json:"rc"`
 		Data *struct {
 			Diff []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
@@ -757,14 +757,14 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, len(ranked)),
 		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed"},
 	}
 	for _, ranking := range ranked {
 		item := model.HotRankingItem{
 			Rank: ranking.rank, Symbol: ranking.symbol, Code: ranking.code, RankChange: ranking.rankChange,
 			Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
-			QualityStatus: model.QualityDegraded,
+			QualityStatus:  model.QualityDegraded,
 			QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed"},
 		}
 		quote, exists := quotes[ranking.code]
@@ -796,11 +796,11 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 
 func (p *Eastmoney) fetchHotRankingRows(ctx context.Context, endpoint string) ([]map[string]json.RawMessage, error) {
 	payload := map[string]any{
-		"appId": eastmoneyHotAppID,
-		"globalId": eastmoneyHotGlobalID,
+		"appId":      eastmoneyHotAppID,
+		"globalId":   eastmoneyHotGlobalID,
 		"marketType": "",
-		"pageNo": 1,
-		"pageSize": 100,
+		"pageNo":     1,
+		"pageSize":   100,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -827,9 +827,9 @@ func (p *Eastmoney) fetchHotRankingRows(ctx context.Context, endpoint string) ([
 						reqErr = fmt.Errorf("read Eastmoney hot-ranking response: %w", readErr)
 					} else {
 						var envelope struct {
-							Code *int `json:"code"`
-							Message string `json:"message"`
-							Data []map[string]json.RawMessage `json:"data"`
+							Code    *int                         `json:"code"`
+							Message string                       `json:"message"`
+							Data    []map[string]json.RawMessage `json:"data"`
 						}
 						if decodeErr := decodeSingleJSON(raw, &envelope); decodeErr != nil {
 							reqErr = fmt.Errorf("decode Eastmoney hot-ranking response: %w", decodeErr)
@@ -947,9 +947,9 @@ func (p *Eastmoney) FetchChipDistribution(ctx context.Context, rawSymbol string)
 		"_":       []string{strconv.FormatInt(time.Now().UnixMilli(), 10)},
 	}
 	var payload struct {
-		RC *int `json:"rc"`
+		RC   *int `json:"rc"`
 		Data *struct {
-			Code string `json:"code"`
+			Code   string   `json:"code"`
 			KLines []string `json:"klines"`
 		} `json:"data"`
 	}
@@ -1021,13 +1021,13 @@ func (p *Eastmoney) FetchChipDistribution(ctx context.Context, rawSymbol string)
 }
 
 type eastmoneyChipMetrics struct {
-	averageCost float64
-	profitRatio float64
-	cost90Low float64
-	cost90High float64
+	averageCost     float64
+	profitRatio     float64
+	cost90Low       float64
+	cost90High      float64
 	concentration90 float64
-	cost70Low float64
-	cost70High float64
+	cost70Low       float64
+	cost70High      float64
 	concentration70 float64
 }
 
@@ -1075,13 +1075,13 @@ func calculateEastmoneyChipMetrics(rows []eastmoneyChipKline) (eastmoneyChipMetr
 				if math.Abs(averagePrice-row.low) < 1e-8 {
 					chips[j] += groupFactor * turnover
 				} else {
-					chips[j] += (currentPrice-row.low)/(averagePrice-row.low) * groupFactor * turnover
+					chips[j] += (currentPrice - row.low) / (averagePrice - row.low) * groupFactor * turnover
 				}
 			} else {
 				if math.Abs(row.high-averagePrice) < 1e-8 {
 					chips[j] += groupFactor * turnover
 				} else {
-					chips[j] += (row.high-currentPrice)/(row.high-averagePrice) * groupFactor * turnover
+					chips[j] += (row.high - currentPrice) / (row.high - averagePrice) * groupFactor * turnover
 				}
 			}
 		}

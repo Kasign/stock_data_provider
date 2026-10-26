@@ -964,8 +964,12 @@ function syncSettingsThemeButtons(theme = readTheme()) {
 }
 
 
+function supplementalElementId(kind, field) {
+  return kind === "chip" ? "supplement-chip-" + field : kind + "-" + field;
+}
+
 function clearSupplementReasons(kind, message = "尚未返回质量原因。") {
-  const root = $("#"+kind+"-reasons");
+  const root = $("#"+supplementalElementId(kind, "reasons"));
   root.replaceChildren();
   const line = document.createElement("p");
   line.textContent = message;
@@ -973,7 +977,7 @@ function clearSupplementReasons(kind, message = "尚未返回质量原因。") {
 }
 
 function setSupplementQuality(kind, status, label = "") {
-  const node = $("#"+kind+"-quality");
+  const node = $("#"+supplementalElementId(kind, "quality"));
   const normalized = String(status || "unknown").toLowerCase();
   node.className = "supplement-quality supplement-quality-" + (["valid","degraded","stale","invalid","unknown"].includes(normalized) ? normalized : "unknown");
   node.textContent = label || qualityLabel(normalized);
@@ -984,10 +988,10 @@ function clearSupplementCard(kind, symbolLabel = "尚未查询") {
     ? ["chip-average-cost","chip-profit-ratio","chip-concentration-90","chip-concentration-70","chip-date","chip-source","chip-fetched-at"]
     : ["flow-main-inflow","flow-inflow-5d","flow-inflow-10d","flow-observations","flow-source","flow-fetched-at"];
   ids.forEach((id) => setText("#"+id, "—"));
-  setText("#"+kind+"-symbol", symbolLabel);
+  setText("#"+supplementalElementId(kind, "symbol"), symbolLabel);
   setSupplementQuality(kind, "unknown", "未加载");
   clearSupplementReasons(kind, "加载后显示后端返回的质量原因。");
-  const errorNode = $("#"+kind+"-error");
+  const errorNode = $("#"+supplementalElementId(kind, "error"));
   errorNode.hidden = true;
   errorNode.textContent = "";
 }
@@ -1021,7 +1025,7 @@ function formatSignedYuan(value) {
 }
 
 function renderSupplementReasons(kind, reasons) {
-  const root = $("#"+kind+"-reasons");
+  const root = $("#"+supplementalElementId(kind, "reasons"));
   root.replaceChildren();
   if (!Array.isArray(reasons) || !reasons.length) {
     const line = document.createElement("p");
@@ -1037,7 +1041,7 @@ function renderSupplementReasons(kind, reasons) {
 }
 
 function renderChipDistribution(data, symbol) {
-  setText("#chip-symbol", data.symbol || symbol);
+  setText("#supplement-chip-symbol", data.symbol || symbol);
   setText("#chip-average-cost", Number(data.average_cost) > 0 ? formatPrice(data.average_cost) : "未报告");
   setText("#chip-profit-ratio", formatRatioPercent(data.profit_ratio));
   setText("#chip-concentration-90", formatRatioPercent(data.concentration_90));
@@ -1047,8 +1051,8 @@ function renderChipDistribution(data, symbol) {
   setText("#chip-fetched-at", data.fetched_at ? formatDateTime(data.fetched_at) : "未报告");
   setSupplementQuality("chip", data.quality_status);
   renderSupplementReasons("chip", data.quality_reasons);
-  $("#chip-error").hidden = true;
-  $("#chip-error").textContent = "";
+  $("#supplement-chip-error").hidden = true;
+  $("#supplement-chip-error").textContent = "";
 }
 
 function renderCapitalFlow(data, symbol) {
@@ -1066,7 +1070,7 @@ function renderCapitalFlow(data, symbol) {
 }
 
 function renderSupplementError(kind, error) {
-  const node = $("#"+kind+"-error");
+  const node = $("#"+supplementalElementId(kind, "error"));
   node.hidden = false;
   node.textContent = errorMessage(error);
   setSupplementQuality(kind, "unknown", "接口不可用");

@@ -17,23 +17,23 @@ import (
 )
 
 type ProviderSettings struct {
-	Enabled         bool `json:"enabled"`
-	Quote           bool `json:"quote"`
-	DailyBars       bool `json:"daily_bars"`
-	StockBasic      bool `json:"stock_basic"`
-	SectorRankings  bool `json:"sector_rankings"`
-	IndexQuotes     bool `json:"index_quotes"`
-	MarketBreadth   bool `json:"market_breadth"`
-	LimitPools      bool `json:"limit_pools"`
-	StockBoards     bool `json:"stock_boards"`
-	TradingCalendar bool `json:"trading_calendar"`
-	Fundamentals    bool `json:"fundamentals"`
-	Valuations      bool `json:"valuations"`
-	IndexCatalog    bool `json:"index_catalog"`
+	Enabled          bool `json:"enabled"`
+	Quote            bool `json:"quote"`
+	DailyBars        bool `json:"daily_bars"`
+	StockBasic       bool `json:"stock_basic"`
+	SectorRankings   bool `json:"sector_rankings"`
+	IndexQuotes      bool `json:"index_quotes"`
+	MarketBreadth    bool `json:"market_breadth"`
+	LimitPools       bool `json:"limit_pools"`
+	StockBoards      bool `json:"stock_boards"`
+	TradingCalendar  bool `json:"trading_calendar"`
+	Fundamentals     bool `json:"fundamentals"`
+	Valuations       bool `json:"valuations"`
+	IndexCatalog     bool `json:"index_catalog"`
 	ChipDistribution bool `json:"chip_distribution"`
-	HotRankings       bool `json:"hot_rankings"`
-	DragonTiger     bool `json:"dragon_tiger"`
-	Announcements   bool `json:"announcements"`
+	HotRankings      bool `json:"hot_rankings"`
+	DragonTiger      bool `json:"dragon_tiger"`
+	Announcements    bool `json:"announcements"`
 }
 
 type Config struct {
@@ -75,8 +75,8 @@ type Config struct {
 	TushareAPIURL             string
 	HithinkBaseURL            string
 	HithinkAPIKey             string
-	XueqiuBaseURL              string
-	XueqiuCookie               string
+	XueqiuBaseURL             string
+	XueqiuCookie              string
 	TickFlowAPIKey            string
 	PytdxHosts                []string
 	TickFlowAPIURL            string
@@ -273,11 +273,11 @@ func Load() (Config, error) {
 		"MARKET_DATA_YAHOO_CHART_URL":               cfg.YahooChartURL,
 		"MARKET_DATA_NETEASE_HISTORY_URL":           cfg.NeteaseHistoryURL,
 		"MARKET_DATA_NETEASE_QUOTE_URL":             cfg.NeteaseQuoteURL,
-		"MARKET_DATA_TUSHARE_API_URL":                cfg.TushareAPIURL,
-		"MARKET_DATA_HITHINK_BASE_URL":               cfg.HithinkBaseURL,
-		"MARKET_DATA_XUEQIU_BASE_URL":                cfg.XueqiuBaseURL,
-		"MARKET_DATA_TICKFLOW_API_URL":               cfg.TickFlowAPIURL,
-		"MARKET_DATA_TICKFLOW_FREE_API_URL":          cfg.TickFlowFreeAPIURL,
+		"MARKET_DATA_TUSHARE_API_URL":               cfg.TushareAPIURL,
+		"MARKET_DATA_HITHINK_BASE_URL":              cfg.HithinkBaseURL,
+		"MARKET_DATA_XUEQIU_BASE_URL":               cfg.XueqiuBaseURL,
+		"MARKET_DATA_TICKFLOW_API_URL":              cfg.TickFlowAPIURL,
+		"MARKET_DATA_TICKFLOW_FREE_API_URL":         cfg.TickFlowFreeAPIURL,
 		"MARKET_DATA_MX_API_URL":                    cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {

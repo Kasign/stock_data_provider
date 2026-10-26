@@ -28,10 +28,10 @@ const (
 // Pytdx 使用通达信协议的 Go 客户端获取国内 A 股行情和日 K。
 // 使用原生 Go 客户端，不在生产请求路径中启动 Python。
 type Pytdx struct {
-	timeout  time.Duration
-	rateMu   sync.Mutex
-	lastCall time.Time
-	hosts []string
+	timeout   time.Duration
+	rateMu    sync.Mutex
+	lastCall  time.Time
+	hosts     []string
 	hostIndex int
 }
 
@@ -198,30 +198,30 @@ func (p *Pytdx) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote,
 	}
 	rawVolumeCopy := rawVolume
 	return &model.Quote{
-		Symbol: symbol,
-		CurrentPrice: &current,
-		Change: &change,
-		ChangePercent: &changePercent,
-		Open: &open,
-		High: &high,
-		Low: &low,
-		PrevClose: &prevClose,
-		Volume: &volume,
-		Amount: amount,
-		FetchedAt: now,
-		NormalizedAt: now,
-		Source: p.Name(),
-		SourceVersion: pytdxVersion,
-		RawVolume: &rawVolumeCopy,
-		RawVolumeUnit: "hands",
-		RawAmount: rawAmount,
-		RawAmountUnit: rawAmountUnit,
-		RawAmountField: rawAmountField,
-		VolumeUnit: "shares",
-		AmountUnit: amountUnit,
-		AdjustmentBasis: model.AdjustmentNone,
-		QualityStatus: quality,
-		QualityReasons: reasons,
+		Symbol:           symbol,
+		CurrentPrice:     &current,
+		Change:           &change,
+		ChangePercent:    &changePercent,
+		Open:             &open,
+		High:             &high,
+		Low:              &low,
+		PrevClose:        &prevClose,
+		Volume:           &volume,
+		Amount:           amount,
+		FetchedAt:        now,
+		NormalizedAt:     now,
+		Source:           p.Name(),
+		SourceVersion:    pytdxVersion,
+		RawVolume:        &rawVolumeCopy,
+		RawVolumeUnit:    "hands",
+		RawAmount:        rawAmount,
+		RawAmountUnit:    rawAmountUnit,
+		RawAmountField:   rawAmountField,
+		VolumeUnit:       "shares",
+		AmountUnit:       amountUnit,
+		AdjustmentBasis:  model.AdjustmentNone,
+		QualityStatus:    quality,
+		QualityReasons:   reasons,
 		NormalizationVer: normalize.Version,
 	}, nil
 }
@@ -404,31 +404,31 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		rawVolumeCopy := rawVolume
 		rawAmountCopy := amountValue
 		out = append(out, model.DailyBar{
-			Symbol: symbol,
-			TradeDate: tradeDate,
-			Period: "1d",
-			Open: open,
-			High: high,
-			Low: low,
-			Close: closePrice,
-			Volume: &volume,
-			Amount: &amountValue,
-			ChangePercent: changePercent,
-			AdjustmentBasis: adjustment,
+			Symbol:           symbol,
+			TradeDate:        tradeDate,
+			Period:           "1d",
+			Open:             open,
+			High:             high,
+			Low:              low,
+			Close:            closePrice,
+			Volume:           &volume,
+			Amount:           &amountValue,
+			ChangePercent:    changePercent,
+			AdjustmentBasis:  adjustment,
 			AdjustmentMethod: adjustmentMethod,
-			Source: p.Name(),
-			SourceVersion: pytdxVersion,
-			FetchedAt: fetchedAt,
-			NormalizedAt: time.Now().UTC(),
-			RawVolume: &rawVolumeCopy,
-			RawVolumeUnit: "hands",
-			RawAmount: &rawAmountCopy,
-			RawAmountUnit: "CNY",
-			RawAmountField: "amount",
-			VolumeUnit: "shares",
-			AmountUnit: "CNY",
-			QualityStatus: quality,
-			QualityReasons: reasons,
+			Source:           p.Name(),
+			SourceVersion:    pytdxVersion,
+			FetchedAt:        fetchedAt,
+			NormalizedAt:     time.Now().UTC(),
+			RawVolume:        &rawVolumeCopy,
+			RawVolumeUnit:    "hands",
+			RawAmount:        &rawAmountCopy,
+			RawAmountUnit:    "CNY",
+			RawAmountField:   "amount",
+			VolumeUnit:       "shares",
+			AmountUnit:       "CNY",
+			QualityStatus:    quality,
+			QualityReasons:   reasons,
 			NormalizationVer: normalize.Version,
 		})
 	}

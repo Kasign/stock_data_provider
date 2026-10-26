@@ -86,10 +86,10 @@ func (p *Hithink) SearchStocks(ctx context.Context, queryText string, limit int)
 	}
 	var data struct {
 		Item []struct {
-			THSCode  string `json:"thscode"`
-			Ticker   string `json:"ticker"`
-			Name     string `json:"name"`
-			Exchange string `json:"exchange"`
+			THSCode   string `json:"thscode"`
+			Ticker    string `json:"ticker"`
+			Name      string `json:"name"`
+			Exchange  string `json:"exchange"`
 			AssetType string `json:"asset_type"`
 		} `json:"item"`
 	}
@@ -185,7 +185,7 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 	}
 	var data struct {
 		Timestamp *int64 `json:"timestamp"`
-		Item []struct {
+		Item      []struct {
 			THSCode       string   `json:"thscode"`
 			Name          string   `json:"name"`
 			LastPrice     *float64 `json:"last_price"`
@@ -206,14 +206,14 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 	}
 	now := time.Now().UTC()
 	snapshot := &model.IndexQuoteSnapshot{
-		Items: make([]model.MarketIndexQuote, 0, len(hithinkCoreIndexDefinitions)),
+		Items:  make([]model.MarketIndexQuote, 0, len(hithinkCoreIndexDefinitions)),
 		Source: p.Name(), SourceVersion: hithinkVersion, FetchedAt: now, QualityStatus: model.QualityValid,
 	}
 	var quoteTime *time.Time
 	quoteTimeSemantics := ""
 	if data.Timestamp != nil && *data.Timestamp > 0 {
 		value := time.UnixMilli(*data.Timestamp).UTC()
-		if !value.After(now.Add(5*time.Minute)) {
+		if !value.After(now.Add(5 * time.Minute)) {
 			quoteTime = &value
 			quoteTimeSemantics = "provider_snapshot_time"
 		}
@@ -357,9 +357,9 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 	}
 	var data struct {
 		Timestamp *int64 `json:"timestamp"`
-		Item []struct {
+		Item      []struct {
 			DateMS *int64 `json:"date_ms"`
-			Date string `json:"date"`
+			Date   string `json:"date"`
 		} `json:"item"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
@@ -411,7 +411,7 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
 		TotalDays: totalDays, TradingDays: tradingDays, Items: items,
 		Source: p.Name(), SourceVersion: hithinkVersion, FetchedAt: time.Now().UTC(),
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_returns_trading_days_only_non_trading_dates_inferred"},
 	}
 	if data.Timestamp == nil || *data.Timestamp <= 0 {
@@ -459,7 +459,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 		return nil, err
 	}
 	var data struct {
-		Timestamp *int64 `json:"timestamp"`
+		Timestamp *int64                       `json:"timestamp"`
 		Item      []map[string]json.RawMessage `json:"item"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
@@ -473,7 +473,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, min(limit, len(data.Item))),
 		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal"},
 	}
 	if data.Timestamp != nil && *data.Timestamp > 0 {
@@ -534,7 +534,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 		}
 		item := model.HotRankingItem{
 			Rank: rank, Symbol: symbol, Code: code, Name: name,
-			Heat: hithinkFieldNumber(row, "heat"),
+			Heat:       hithinkFieldNumber(row, "heat"),
 			RankChange: rankChange, RankTrend: hithinkFieldString(row, "rank_trend"),
 			Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
@@ -596,9 +596,9 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 	}
 	dateMS := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc).UnixMilli()
 	query := url.Values{
-		"date_ms":   []string{strconv.FormatInt(dateMS, 10)},
-		"page":      []string{"1"},
-		"size":      []string{strconv.Itoa(limit)},
+		"date_ms":    []string{strconv.FormatInt(dateMS, 10)},
+		"page":       []string{"1"},
+		"size":       []string{strconv.Itoa(limit)},
 		"sort_field": []string{sortField},
 		"sort_dir":   []string{sortDir},
 	}
@@ -611,12 +611,12 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return nil, err
 	}
 	var data struct {
-		Timestamp *int64 `json:"timestamp"`
+		Timestamp  *int64 `json:"timestamp"`
 		Pagination *struct {
 			Total *int `json:"total"`
 			Pages *int `json:"pages"`
-			Size *int `json:"size"`
-			Page *int `json:"page"`
+			Size  *int `json:"size"`
+			Page  *int `json:"page"`
 		} `json:"pagination"`
 		Item []map[string]json.RawMessage `json:"item"`
 	}
@@ -771,7 +771,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 			ConsecutiveBoards: consecutive, SealMoney: sealMoney, MaxSealMoney: maxSealMoney,
 			OpenTimes: openTimes, TurnoverRatioPercent: turnoverRatio, Turnover: turnover,
 			ProviderAmountUnit: "provider_defined",
-			Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
+			Source:             p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		})
 	}
@@ -825,13 +825,13 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		return nil, err
 	}
 	var data struct {
-		Timestamp *int64 `json:"timestamp"`
-		BoardType string `json:"board_type"`
-		TradeDate string `json:"trade_date"`
-		Count *int `json:"count"`
-		StockCount *int `json:"stock_count"`
+		Timestamp  *int64                       `json:"timestamp"`
+		BoardType  string                       `json:"board_type"`
+		TradeDate  string                       `json:"trade_date"`
+		Count      *int                         `json:"count"`
+		StockCount *int                         `json:"stock_count"`
 		StockItems []map[string]json.RawMessage `json:"stock_items"`
-	} 
+	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
 		return nil, fmt.Errorf("解析同花顺龙虎榜失败: %w", err)
 	}
@@ -864,7 +864,7 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 		Page: page, PageSize: pageSize, Total: total, Pages: pages,
 		SourceReturned: len(data.StockItems), Items: []model.DragonTigerItem{},
 		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_amount_units_not_explicitly_documented", "hot_money_detail_not_represented_in_shared_stock_pagination"},
 	}
 	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
@@ -1018,9 +1018,9 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 	}
 	var data struct {
 		Timestamp *int64 `json:"timestamp"`
-		Item []struct {
+		Item      []struct {
 			THSCode string `json:"thscode"`
-			Name string `json:"name"`
+			Name    string `json:"name"`
 		} `json:"item"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
@@ -1091,10 +1091,10 @@ func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	}
 	var data struct {
 		Timestamp *int64 `json:"timestamp"`
-		Item []struct {
+		Item      []struct {
 			THSCode string `json:"thscode"`
-			Ticker string `json:"ticker"`
-			Name string `json:"name"`
+			Ticker  string `json:"ticker"`
+			Name    string `json:"name"`
 		} `json:"item"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
@@ -1184,10 +1184,10 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 	startMS := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc).UnixMilli()
 	endMS := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), loc).UnixMilli()
 	query := url.Values{
-		"thscode": []string{indexSymbol},
+		"thscode":  []string{indexSymbol},
 		"interval": []string{"1d"},
-		"start": []string{strconv.FormatInt(startMS, 10)},
-		"end": []string{strconv.FormatInt(endMS, 10)},
+		"start":    []string{strconv.FormatInt(startMS, 10)},
+		"end":      []string{strconv.FormatInt(endMS, 10)},
 	}
 	raw, err := p.get(ctx, "/api/a-share-index/prices/historical", query)
 	if err != nil {
@@ -1199,14 +1199,14 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 	}
 	var data struct {
 		Timestamp *int64 `json:"timestamp"`
-		Item []struct {
-			DateMS *int64 `json:"date_ms"`
-			OpenPrice *float64 `json:"open_price"`
-			HighPrice *float64 `json:"high_price"`
-			LowPrice *float64 `json:"low_price"`
+		Item      []struct {
+			DateMS     *int64   `json:"date_ms"`
+			OpenPrice  *float64 `json:"open_price"`
+			HighPrice  *float64 `json:"high_price"`
+			LowPrice   *float64 `json:"low_price"`
 			ClosePrice *float64 `json:"close_price"`
-			Volume *float64 `json:"volume"`
-			Turnover *float64 `json:"turnover"`
+			Volume     *float64 `json:"volume"`
+			Turnover   *float64 `json:"turnover"`
 		} `json:"item"`
 	}
 	if err := json.Unmarshal(dataRaw, &data); err != nil {
@@ -1219,7 +1219,7 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 	sourceVersion := hithinkVersion + "-index-daily-bars-v1"
 	snapshot := &model.IndexDailyBarsSnapshot{
 		IndexSymbol: indexSymbol, StartDate: startText, EndDate: endText,
-		Items: make([]model.IndexDailyBar, 0, len(data.Item)),
+		Items:  make([]model.IndexDailyBar, 0, len(data.Item)),
 		Source: p.Name(), SourceVersion: sourceVersion,
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
@@ -1332,7 +1332,7 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		return nil, err
 	}
 	var data struct {
-		Timestamp *int64                      `json:"timestamp"`
+		Timestamp *int64                       `json:"timestamp"`
 		Total     *int                         `json:"total"`
 		Item      []map[string]json.RawMessage `json:"item"`
 	}
@@ -1345,8 +1345,8 @@ func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	now := time.Now().UTC()
 	snapshot := &model.ValuationSnapshot{
 		RequestedSymbols: append([]string(nil), symbols...),
-		Items: make([]model.ValuationItem, 0, len(data.Item)),
-		Source: p.Name(), SourceVersion: hithinkVersion + "-valuation-snapshot-v1",
+		Items:            make([]model.ValuationItem, 0, len(data.Item)),
+		Source:           p.Name(), SourceVersion: hithinkVersion + "-valuation-snapshot-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
 	if data.Timestamp != nil && *data.Timestamp > 0 {
@@ -1540,30 +1540,30 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		amountUnit, rawAmountUnit, rawAmountField = "unknown", "", ""
 	}
 	return &model.Quote{
-		Symbol: symbol,
-		CurrentPrice: item.LastPrice,
-		Change: &change,
-		ChangePercent: &changePercent,
-		Open: item.OpenPrice,
-		High: item.HighPrice,
-		Low: item.LowPrice,
-		PrevClose: item.PreviousPrice,
-		Volume: volume,
-		Amount: amount,
-		FetchedAt: now,
-		NormalizedAt: now,
-		Source: p.Name(),
-		SourceVersion: hithinkVersion,
-		RawVolume: rawVolume,
-		RawVolumeUnit: volumeUnit,
-		RawAmount: rawAmount,
-		RawAmountUnit: rawAmountUnit,
-		RawAmountField: rawAmountField,
-		VolumeUnit: volumeUnit,
-		AmountUnit: amountUnit,
-		AdjustmentBasis: model.AdjustmentNone,
-		QualityStatus: quality,
-		QualityReasons: qualityReason,
+		Symbol:           symbol,
+		CurrentPrice:     item.LastPrice,
+		Change:           &change,
+		ChangePercent:    &changePercent,
+		Open:             item.OpenPrice,
+		High:             item.HighPrice,
+		Low:              item.LowPrice,
+		PrevClose:        item.PreviousPrice,
+		Volume:           volume,
+		Amount:           amount,
+		FetchedAt:        now,
+		NormalizedAt:     now,
+		Source:           p.Name(),
+		SourceVersion:    hithinkVersion,
+		RawVolume:        rawVolume,
+		RawVolumeUnit:    volumeUnit,
+		RawAmount:        rawAmount,
+		RawAmountUnit:    rawAmountUnit,
+		RawAmountField:   rawAmountField,
+		VolumeUnit:       volumeUnit,
+		AmountUnit:       amountUnit,
+		AdjustmentBasis:  model.AdjustmentNone,
+		QualityStatus:    quality,
+		QualityReasons:   qualityReason,
 		NormalizationVer: normalize.Version,
 	}, nil
 }
@@ -1696,13 +1696,13 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		return nil, err
 	}
 	var data struct {
-		THSCode string `json:"thscode"`
-		Report  string `json:"report"`
+		THSCode   string `json:"thscode"`
+		Report    string `json:"report"`
 		Abilities []struct {
-			Ability string `json:"ability"`
+			Ability    string `json:"ability"`
 			Indicators []struct {
-				IndexID string `json:"index_id"`
-				Value json.RawMessage `json:"value"`
+				IndexID string          `json:"index_id"`
+				Value   json.RawMessage `json:"value"`
 			} `json:"indicators"`
 		} `json:"abilities"`
 	}
@@ -1720,7 +1720,7 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	snapshot := &model.FundamentalsSnapshot{
 		Symbol: symbol, Year: year, Quarter: quarter,
 		Sections: make([]model.FundamentalSection, 0, len(data.Abilities)),
-		Source: p.Name(), SourceVersion: hithinkVersion,
+		Source:   p.Name(), SourceVersion: hithinkVersion,
 		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"publication_date_not_exposed_by_provider", "indicator_units_not_exposed_by_provider"},
 	}
@@ -1728,8 +1728,8 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		category := hithinkFundamentalCategory(ability.Ability)
 		section := model.FundamentalSection{
 			Category: category, ReportDate: reportDate,
-			Metrics: make([]model.FundamentalMetric, 0, len(ability.Indicators)),
-			QualityStatus: model.QualityDegraded,
+			Metrics:        make([]model.FundamentalMetric, 0, len(ability.Indicators)),
+			QualityStatus:  model.QualityDegraded,
 			QualityReasons: []string{"publication_date_not_exposed_by_provider", "metric_unit_not_exposed_by_provider"},
 		}
 		invalidValueCount := 0
@@ -1925,7 +1925,7 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 	}
 	section := model.FundamentalSection{
 		Category: category, ReportDate: targetReportDate,
-		Metrics: make([]model.FundamentalMetric, 0, len(hithinkStatementFields[category])),
+		Metrics:       make([]model.FundamentalMetric, 0, len(hithinkStatementFields[category])),
 		QualityStatus: model.QualityValid,
 	}
 	reportDateMS, ok := hithinkParseFundamentalValue(selected["report_date_ms"])
@@ -1985,14 +1985,14 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 		}
 		var data struct {
 			Timestamp *int64 `json:"timestamp"`
-			Item []struct {
-				DateMS      *int64   `json:"date_ms"`
-				OpenPrice   *float64 `json:"open_price"`
-				HighPrice   *float64 `json:"high_price"`
-				LowPrice    *float64 `json:"low_price"`
-				ClosePrice  *float64 `json:"close_price"`
-				Volume      *float64 `json:"volume"`
-				Turnover    *float64 `json:"turnover"`
+			Item      []struct {
+				DateMS     *int64   `json:"date_ms"`
+				OpenPrice  *float64 `json:"open_price"`
+				HighPrice  *float64 `json:"high_price"`
+				LowPrice   *float64 `json:"low_price"`
+				ClosePrice *float64 `json:"close_price"`
+				Volume     *float64 `json:"volume"`
+				Turnover   *float64 `json:"turnover"`
 			} `json:"item"`
 		}
 		if err := json.Unmarshal(dataRaw, &data); err != nil {
@@ -2047,9 +2047,9 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 				Symbol: symbol, TradeDate: tradeDate, Period: "1d",
 				Open: open, High: high, Low: low, Close: closePrice,
 				Volume: volume, Amount: amount,
-				AdjustmentBasis: model.AdjustmentBasis(hithinkAdjustmentBasis(adjust)),
+				AdjustmentBasis:  model.AdjustmentBasis(hithinkAdjustmentBasis(adjust)),
 				AdjustmentMethod: "hithink_api_" + adjust,
-				Source: p.Name(), SourceVersion: hithinkVersion,
+				Source:           p.Name(), SourceVersion: hithinkVersion,
 				FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
 				RawVolume: rawVolume, RawVolumeUnit: "shares",
 				RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,

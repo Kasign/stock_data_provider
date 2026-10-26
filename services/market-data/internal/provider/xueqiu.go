@@ -267,7 +267,7 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, min(requestLimit, len(rows))),
 		Source: p.Name(), SourceVersion: xueqiuVersion, FetchedAt: now,
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal"},
 	}
 	if providerTime != nil {

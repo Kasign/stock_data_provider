@@ -155,7 +155,6 @@ func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) 
 	}
 }
 
-
 func TestEastmoneyFetchMarketBreadthDoesNotMixLimitCountsAcrossDates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -220,7 +219,9 @@ func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/getTopicZTPool" || r.URL.Path == "/getTopicDTPool" {
 			count, change := 2, 10.0
-			if r.URL.Path == "/getTopicDTPool" { count, change = 1, -10.0 }
+			if r.URL.Path == "/getTopicDTPool" {
+				count, change = 1, -10.0
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{"tc": count, "qdate": 20261023, "pool": []map[string]any{{"c": "600519", "m": 1, "n": "贵州茅台", "zdp": change}}}})
 			return
 		}

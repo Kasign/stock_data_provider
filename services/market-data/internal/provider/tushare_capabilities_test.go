@@ -134,7 +134,6 @@ func TestTushareIndexConstituentsFallsBackToPreviousMonth(t *testing.T) {
 	}
 }
 
-
 func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {

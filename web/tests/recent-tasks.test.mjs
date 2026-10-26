@@ -56,7 +56,7 @@ test("stores only task references and excludes report payloads and secrets", () 
   const stored = JSON.parse(storage.getItem(RECENT_TASKS_KEY));
 
   assert.deepEqual(Object.keys(stored[0]).sort(), [
-    "run_id", "status", "symbols", "task_id", "task_type", "updated_at"
+    "analysis_base", "run_id", "status", "symbols", "task_id", "task_type", "updated_at
   ].sort());
   assert.equal(records[0].task_id, "task-safe");
   assert.doesNotMatch(storage.getItem(RECENT_TASKS_KEY), /private report body|private-api-key|quality/);
