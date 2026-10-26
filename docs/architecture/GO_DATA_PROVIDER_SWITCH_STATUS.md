@@ -155,3 +155,8 @@ Tushare 指数目录通过 `MARKET_DATA_TUSHARE_ENABLED=true`、`MARKET_DATA_TUS
 ### 雪球关注榜能力补充（2026-10-26，待统一验收）
 
 `GET /api/v1/market/hot-stocks?type=followers` 使用现有榜单 Provider 路由，雪球通过 `type=12` 返回关注榜。东方财富和同花顺未实现该榜单类型时会返回能力不支持，由路由继续尝试下一个 Provider。需要启用 Xueqiu 后备；测试和真实上游响应留到统一验收。
+
+
+### 指数成分报告日、权重与 OpenAPI 契约补齐（2026-10-26）
+
+Tushare `index_weight` 适配现在将选择的最新权重报告日与逐证券权重写入响应（`provider_report_date`、`weight_percent`），避免丢失可用于解释成分快照时点的来源信息。指数目录、成分和历史日线的 OpenAPI schema 已补齐；热度榜 schema 同步加入 `followers` 类型。以上仅为代码/契约补齐，未运行测试或 CI。

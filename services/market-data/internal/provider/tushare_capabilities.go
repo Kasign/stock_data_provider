@@ -1338,7 +1338,10 @@ func (p *Tushare) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 	}, nil
 }
 
-type tushareWeightedConstituent struct { symbol string }
+type tushareWeightedConstituent struct {
+	symbol string
+	weight *float64
+}
 
 // FetchIndexConstituents returns the most recent monthly weight snapshot available in four months.
 func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol string) (*model.IndexConstituentSnapshot, error) {
@@ -1375,7 +1378,7 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 			return nil, fmt.Errorf("Tushare 指数成分第 %d 行权重无效", index)
 		}
 		if date > latestDate { latestDate = date; latest = latest[:0] }
-		if date == latestDate { latest = append(latest, tushareWeightedConstituent{symbol: constituent}) }
+		if date == latestDate { latest = append(latest, tushareWeightedConstituent{symbol: constituent, weight: weight}) }
 	}
 	now := time.Now().UTC()
 	if latestDate == "" || len(latest) == 0 {
@@ -1412,12 +1415,12 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 			reasons = appendTushareReason(reasons, "one_or_more_constituent_names_missing_from_current_stock_directory")
 			continue
 		}
-		items = append(items, model.IndexConstituent{Symbol: entry.symbol, Code: strings.Split(entry.symbol, ".")[0], Name: name})
+		items = append(items, model.IndexConstituent{Symbol: entry.symbol, Code: strings.Split(entry.symbol, ".")[0], Name: name, WeightPercent: entry.weight})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Symbol < items[j].Symbol })
 	if len(items) == 0 { return nil, errors.New("Tushare 指数成分有代码但无法从股票目录解析任何名称") }
 	return &model.IndexConstituentSnapshot{
-		IndexSymbol: indexSymbol, Items: items, Total: len(items), Source: p.Name(),
+		IndexSymbol: indexSymbol, ProviderReportDate: latestDate, Items: items, Total: len(items), Source: p.Name(),
 		SourceVersion: tushareIndexConstituentVersion, FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 	}, nil

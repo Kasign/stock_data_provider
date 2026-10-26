@@ -388,15 +388,17 @@ type IndexCatalogSnapshot struct {
 
 // IndexConstituent 是指数/板块当前包含的一只 A 股，不代表历史成分变更记录。
 type IndexConstituent struct {
-	Symbol string `json:"symbol"`
-	Code   string `json:"code"`
-	Name   string `json:"name"`
+	Symbol        string   `json:"symbol"`
+	Code          string   `json:"code"`
+	Name          string   `json:"name"`
+	WeightPercent *float64 `json:"weight_percent,omitempty"`
 }
 
 // IndexConstituentSnapshot 为指定指数或板块的当前成分股快照。
 type IndexConstituentSnapshot struct {
-	IndexSymbol    string             `json:"index_symbol"`
-	Items          []IndexConstituent `json:"items"`
+	IndexSymbol        string             `json:"index_symbol"`
+	ProviderReportDate string             `json:"provider_report_date,omitempty"`
+	Items              []IndexConstituent `json:"items"`
 	Total          int                `json:"total"`
 	ProviderTime   *time.Time         `json:"provider_time,omitempty"`
 	Source         string             `json:"source"`

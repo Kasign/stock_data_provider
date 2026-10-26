@@ -85,11 +85,20 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index constituent snapshot source, timestamp or quality invalid")
 	}
+	if snapshot.ProviderReportDate != "" {
+		date, err := time.Parse("2006-01-02", snapshot.ProviderReportDate)
+		if err != nil || date.Format("2006-01-02") != snapshot.ProviderReportDate {
+			return errors.New("index constituent provider_report_date is invalid")
+		}
+	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
 	for _, item := range snapshot.Items {
 		symbol, err := normalize.NormalizeSymbol(item.Symbol)
 		if err != nil || symbol != item.Symbol || strings.TrimSpace(item.Name) == "" || item.Code != strings.Split(symbol, ".")[0] {
 			return errors.New("index constituent contains invalid symbol/code/name")
+		}
+		if item.WeightPercent != nil && (math.IsNaN(*item.WeightPercent) || math.IsInf(*item.WeightPercent, 0) || *item.WeightPercent < 0 || *item.WeightPercent > 100) {
+			return errors.New("index constituent weight_percent must be between 0 and 100 when present")
 		}
 		if _, exists := seen[symbol]; exists {
 			return fmt.Errorf("duplicate index constituent %s", symbol)
