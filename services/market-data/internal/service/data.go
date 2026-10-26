@@ -1609,7 +1609,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				}
 				appendReasonOnce(&bars[j].QualityReasons, "daily_bar_coverage_below_threshold")
 			}
-			if len(bars) > len(bestPartial) {
+			if preferPartialBars(bars, bestPartial) {
 				bestPartial = append([]model.DailyBar(nil), bars...)
 				bestPartialWarnings = append([]string(nil), warnings...)
 			}
@@ -1816,6 +1816,22 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 // deliberately accounts for exchange holidays while treating visibly truncated
 // ranges as fallback candidates. Exhausted fallback candidates are returned only
 // as degraded data, never silently treated as complete.
+// preferPartialBars keeps the largest validated partial series and, on ties,
+ // chooses the series with the newest trade date. Equal coverage and recency
+ // preserve provider priority by retaining the existing candidate.
+func preferPartialBars(candidate, current []model.DailyBar) bool {
+	if len(candidate) == 0 {
+		return false
+	}
+	if len(current) == 0 || len(candidate) > len(current) {
+		return true
+	}
+	if len(candidate) < len(current) {
+		return false
+	}
+	return candidate[len(candidate)-1].TradeDate > current[len(current)-1].TradeDate
+}
+
 func coverageSufficient(start, end string, requested, returned int) bool {
 	if returned <= 0 {
 		return false
