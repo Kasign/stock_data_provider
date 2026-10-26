@@ -55,7 +55,11 @@ func (t *tushareTable) optionalFloat(row []json.RawMessage, field string) (*floa
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) || bytes.Equal(raw, []byte("""")) {
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, nil
+	}
+	var emptyString string
+	if json.Unmarshal(raw, &emptyString) == nil && strings.TrimSpace(emptyString) == "" {
 		return nil, nil
 	}
 	value, err := tushareRawFloat(raw)
