@@ -15,7 +15,7 @@
 | YfinanceFetcher | 默认启用；默认 P4；海外股票与指数的专用路径 | 美股 / 海外行情与历史数据、部分基本面数据 | 无 | 未迁移 |
 | TencentFetcher | 默认启用；默认 P5 | A 股行情与日线兜底 | 原生 Go Tencent Provider | 已迁移部分行情能力，口径仍需逐项对照 |
 | TushareFetcher | 仅配置 `TUSHARE_TOKEN` / `MARKET_DATA_TUSHARE_TOKEN` 且显式开启后注册 | A 股原始日线；其他行情、市场统计和财务能力依账号权限扩展 | Go 原生 HTTP `Tushare` DailyBarProvider（默认关闭，只支持 `none`） | 首批日 K 接口已接入代码；需用户 Token 与对应权限，未做统一测试，不宣称生产可用 |
-| TickFlowFetcher | 仅配置 `TICKFLOW_API_KEY` 后注册；优先级可配置，默认 2 | 批量日线/行情以及基于 universe quote 计算的市场涨跌统计 | 无 | 可选源，未迁移 |
+| TickFlowFetcher | 免费 API 可免 Key 读取历史日 K；实时行情需 `TICKFLOW_API_KEY` 且显式开启 quote 能力 | 国内 SH/SZ/BJ 实时行情、日线 K 线 | Go 原生 REST `TickFlow` Provider（免费日 K 默认启用，行情默认关闭） | 已接入 API client 和手→股单位标准化；暂未统一测试，免费源频率限制与 Key 权限需后续验收 |
 | MiaoxiangFetcher（妙想 / MX_API） | 仅配置 `MX_APIKEY` 后注册；默认优先级 6 | 筹码分布及个股资金流等第三方补充数据 | Go `MiaoXiang`（独立 SupplementProvider，显式 opt-in） | 已迁移首批筹码/资金流字段；尚缺真实 MX Key 联调与精确 publication availability |
 | LongbridgeFetcher | 仅配置 Longbridge OAuth / 旧凭据后注册 | 美股 / 港股行情及日线兜底 | 无 | 可选源，未迁移 |
 | FutuFetcher | 检测到 Futu OpenD 端点配置后注册 | 港股等 Futu 支持市场 | 无 | 可选源，未迁移 |

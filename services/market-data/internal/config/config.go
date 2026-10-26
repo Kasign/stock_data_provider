@@ -69,6 +69,9 @@ type Config struct {
 	NeteaseQuoteURL           string
 	TushareToken              string
 	TushareAPIURL             string
+	TickFlowAPIKey            string
+	TickFlowAPIURL            string
+	TickFlowFreeAPIURL        string
 	BaostockHost              string
 	BaostockPort              int
 	BaostockUserID            string
@@ -100,7 +103,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "tushare", "tencent", "sina", "netease"},
+		ProviderPriority: []string{"eastmoney", "baostock", "tushare", "tickflow", "tencent", "sina", "netease"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true},
@@ -110,6 +113,7 @@ func Load() (Config, error) {
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
 			"netease":   {Enabled: true, Quote: true, DailyBars: true},
 			"tushare":   {Enabled: false, Quote: false, DailyBars: false},
+			"tickflow":  {Enabled: true, Quote: false, DailyBars: true},
 		},
 	}
 	file := defaults
@@ -126,7 +130,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" {
+			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -160,6 +164,7 @@ func Load() (Config, error) {
 	settings["netease"] = overrideProvider("NETEASE", settings["netease"])
 	settings["baostock"] = overrideProvider("BAOSTOCK", settings["baostock"])
 	settings["tushare"] = overrideProvider("TUSHARE", settings["tushare"])
+	settings["tickflow"] = overrideProvider("TICKFLOW", settings["tickflow"])
 	if settings["baostock"].Quote {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
 	}
@@ -200,6 +205,9 @@ func Load() (Config, error) {
 		NeteaseQuoteURL:           get("MARKET_DATA_NETEASE_QUOTE_URL", "https://api.money.126.net/data/feed"),
 		TushareToken:              firstNonEmpty(os.Getenv("MARKET_DATA_TUSHARE_TOKEN"), os.Getenv("TUSHARE_TOKEN")),
 		TushareAPIURL:             get("MARKET_DATA_TUSHARE_API_URL", get("TUSHARE_HTTP_URL", "https://api.tushare.pro")),
+		TickFlowAPIKey:            firstNonEmpty(os.Getenv("MARKET_DATA_TICKFLOW_API_KEY"), os.Getenv("TICKFLOW_API_KEY")),
+		TickFlowAPIURL:            get("MARKET_DATA_TICKFLOW_API_URL", get("TICKFLOW_BASE_URL", "https://api.tickflow.org")),
+		TickFlowFreeAPIURL:        get("MARKET_DATA_TICKFLOW_FREE_API_URL", get("TICKFLOW_FREE_BASE_URL", "https://free-api.tickflow.org")),
 		BaostockHost:              get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
 		BaostockPort:              integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
 		BaostockUserID:            get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),
@@ -245,6 +253,8 @@ func Load() (Config, error) {
 		"MARKET_DATA_YAHOO_CHART_URL":               cfg.YahooChartURL,
 		"MARKET_DATA_NETEASE_HISTORY_URL":           cfg.NeteaseHistoryURL,
 		"MARKET_DATA_TUSHARE_API_URL":                cfg.TushareAPIURL,
+		"MARKET_DATA_TICKFLOW_API_URL":               cfg.TickFlowAPIURL,
+		"MARKET_DATA_TICKFLOW_FREE_API_URL":          cfg.TickFlowFreeAPIURL,
 		"MARKET_DATA_MX_API_URL":                    cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {
@@ -253,6 +263,9 @@ func Load() (Config, error) {
 	}
 	if cfg.ProviderSettings["tushare"].Enabled && strings.TrimSpace(cfg.TushareToken) == "" {
 		return cfg, errors.New("MARKET_DATA_TUSHARE_ENABLED=true requires MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN")
+	}
+	if cfg.ProviderSettings["tickflow"].Quote && strings.TrimSpace(cfg.TickFlowAPIKey) == "" {
+		return cfg, errors.New("MARKET_DATA_TICKFLOW_QUOTE_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY")
 	}
 	if cfg.ProviderSettings["tushare"].Quote {
 		return cfg, errors.New("Tushare currently supports daily bars only; disable MARKET_DATA_TUSHARE_QUOTE_ENABLED")
@@ -296,7 +309,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" {
+		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {
@@ -557,6 +570,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",
 		"MARKET_DATA_NETEASE_ENABLED", "MARKET_DATA_NETEASE_QUOTE_ENABLED", "MARKET_DATA_NETEASE_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TUSHARE_ENABLED", "MARKET_DATA_TUSHARE_QUOTE_ENABLED", "MARKET_DATA_TUSHARE_DAILY_BARS_ENABLED",
+		"MARKET_DATA_TICKFLOW_ENABLED", "MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {

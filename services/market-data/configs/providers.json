@@ -3,6 +3,7 @@
     "eastmoney",
     "baostock",
     "tushare",
+    "tickflow",
     "tencent",
     "sina",
     "netease"
@@ -53,6 +54,11 @@
       "enabled": false,
       "quote": false,
       "daily_bars": false
+    },
+    "tickflow": {
+      "enabled": true,
+      "quote": false,
+      "daily_bars": true
     }
   }
 }
