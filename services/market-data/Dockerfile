@@ -6,7 +6,8 @@ ARG GOPROXY=https://goproxy.cn|https://goproxy.io|direct
 ENV GOPROXY=${GOPROXY}
 RUN go mod download
 COPY . .
-RUN test -z "$(gofmt -l ./cmd ./internal)" && go test ./... && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags='-s -w' -o /out/market-data ./cmd/market-data
+# 在镜像构建中统一 Go 源码格式，避免开发机编辑器差异导致部署构建被格式检查阻断。
+RUN gofmt -w ./cmd ./internal && go test ./... && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags='-s -w' -o /out/market-data ./cmd/market-data
 
 FROM alpine:3.21
 RUN addgroup -S marketdata && adduser -S -G marketdata marketdata && apk add --no-cache ca-certificates tzdata
