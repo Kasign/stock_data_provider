@@ -1,6 +1,6 @@
 # WebUI 当前 API 集成契约
 
-更新日期：2026-10-23
+更新日期：2026-10-26
 
 ## 结论
 
@@ -265,3 +265,12 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 | GET /market-api/api/v1/stocks/{symbol}/capital-flow | 返回主力净流入、可用的 5/10 日净流入合计、实际观测数量、来源、获取时间和质量原因。金额单位为人民币元；5/10 日合计只有在必需观测值完整时才会填充。 |
 
 以上路由已在 Go Handler 注册，并已在数据分支提交 b02eb41 中补入 services/market-data/openapi.yaml。这些补充接口由用户单独触发，不阻塞实时行情或日 K；Provider 未启用时显示真实服务端错误，不使用静态样本代替。
+
+
+## 个股人气榜与飙升榜
+
+| 方法与路径 | 参数 / 响应说明 |
+|---|---|
+| `GET /market-api/api/v1/market/hot-stocks?type=popular&limit=20` | `type` 支持 `popular`（人气榜）与 `surge`（飙升榜）；`limit` 范围 1–100。响应包含 Provider 的 `rank`、股票代码和名称、可选最新价/涨跌、可选 `rank_change`、来源、采集时间和质量信息。 |
+
+该接口已由数据分支 `services/market-data/openapi.yaml` 描述并由 Go Handler 注册。它是有界榜单，`total` 只表示本次返回的记录数，不能当作全市场覆盖率。上游没有可独立核验的行情快照时间，因此成功快照可能仍为 `degraded`；`fetched_at` 是采集时间，不应冒充行情发生时间。前端原样展示 `rank_change` 的源端数值，不推断正负号代表名次上升或下降。

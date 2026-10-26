@@ -410,3 +410,12 @@
 - 资金流卡展示主力净流入、5/10 日净流入合计与 Provider 观测数量，金额以人民币元展示。可选空值保持“未提供”，不补零。
 - Provider 能力清单新增筹码分布与资金流字段；接口契约已由数据分支提交 b02eb41 补入 OpenAPI。
 - 本轮未运行测试或触发 CI。
+
+
+## 2026-10-26 — 市场总览新增个股人气榜与飙升榜
+
+- 接入已注册的 `GET /api/v1/market/hot-stocks?type=popular|surge&limit=20`，可切换人气榜/飙升榜。
+- 展示源端排名、名称/代码、可用的最新价/涨跌额、涨跌幅与源端排名变化；点击股票复用统一行情查询回调。
+- 请求使用独立 AbortController 和 generation，切换榜单/重复刷新时取消旧请求，避免旧响应覆盖新选择。
+- Provider 能力面板新增 `hot_ranking_capable`；技术边界与接口参数已记录在 `web/TECHNICAL_NOTES.md` 和 `web/API_CONTRACT.md`。
+- 本轮未运行测试或触发 CI。
