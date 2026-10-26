@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -13,7 +13,8 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../src/watchlist.js", import.meta.url), "utf8"),
   readFile(new URL("../src/api.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/platform/taskqueue/queue.go", import.meta.url), "utf8"),
-  readFile(new URL("../src/market-activity.js", import.meta.url), "utf8")
+  readFile(new URL("../src/market-activity.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/stock-research.js", import.meta.url), "utf8")
 ]);
 
 function finalCssRuleBody(selector) {
@@ -153,6 +154,19 @@ test("supplemental chip and capital-flow research remains opt-in and independent
   assert.match(stylesheet, /\.supplement-quality-degraded/);
 });
 
+
+test("stock research clears stale snapshots on reload, request errors, and missing API key", () => {
+  assert.match(stockResearch, /function clearPanel\(/);
+  assert.match(stockResearch, /function markApiKeyRequired\(/);
+  assert.match(stockResearch, /function invalidate\(/);
+  assert.match(stockResearch, /clearPanel\(key,"正在读取本次请求，尚无新结果。"/);
+  assert.match(stockResearch, /setQuality\(panel\.quality,"invalid","读取失败"\)/);
+  assert.match(stockResearch, /if\(!settings\?\.apiKey\)\{markApiKeyRequired\(\);return false;\}/);
+  assert.match(stockResearch, /clearPanel\("announcements","正在读取本次公告，尚无新结果。"/);
+  assert.match(stockResearch, /valuations-reasons/);
+  assert.match(app, /stockResearch\.invalidate\(/);
+  assert.match(stockResearch, /if\(!append\)setQuality\("announcements-quality","invalid","读取失败"\)/);
+});
 
 test("dynamic API and browser-local data are not rendered through HTML strings", () => {
   assert.doesNotMatch(app, /\.innerHTML\s*=|insertAdjacentHTML|outerHTML|document\.write/, "use textContent and DOM nodes instead of HTML string sinks");

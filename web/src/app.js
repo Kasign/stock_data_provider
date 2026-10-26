@@ -2518,7 +2518,11 @@ function closeSettingsWithGuard() {
 }
 
 function applySettings(nextSettings) {
+  const previousSettings = state.settings;
   state.settings = nextSettings;
+  if (previousSettings.apiKey !== nextSettings.apiKey || previousSettings.marketBase !== nextSettings.marketBase) {
+    stockResearch.invalidate("行情连接配置已变更，请重新加载个股研究资料。");
+  }
   initialConnectionDraft = null;
   $("#settings-dialog").close();
   void refreshServices();
