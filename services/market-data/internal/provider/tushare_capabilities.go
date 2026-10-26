@@ -3,11 +3,16 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -749,5 +754,529 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		ProviderReportDate: tradeDate, ProviderTimestamp: nil, Source: p.Name(),
 		SourceVersion: tushareValuationVersion, FetchedAt: now,
 		QualityStatus: status, QualityReasons: snapshotReasons,
+	}, nil
+}
+
+
+// isTushareAShareSymbol excludes B shares, funds and non-equity instruments from A-share event feeds.
+func isTushareAShareSymbol(symbol string) bool {
+	parts := strings.Split(symbol, ".")
+	if len(parts) != 2 || len(parts[0]) != 6 {
+		return false
+	}
+	code := parts[0]
+	switch parts[1] {
+	case "SH":
+		for _, prefix := range []string{"600", "601", "603", "605", "688", "689"} {
+			if strings.HasPrefix(code, prefix) {
+				return true
+			}
+		}
+	case "SZ":
+		for _, prefix := range []string{"000", "001", "002", "003", "300", "301"} {
+			if strings.HasPrefix(code, prefix) {
+				return true
+			}
+		}
+	case "BJ":
+		return strings.HasPrefix(code, "4") || strings.HasPrefix(code, "8") || strings.HasPrefix(code, "92")
+	}
+	return false
+}
+
+func tushareOptionalInt(table *tushareTable, row []json.RawMessage, field string) (*int, error) {
+	value, err := table.optionalFloat(row, field)
+	if err != nil || value == nil {
+		return nil, err
+	}
+	if math.Trunc(*value) != *value || *value < 0 || *value > 10000000 {
+		return nil, fmt.Errorf("Tushare 字段 %s 不是有效非负整数", field)
+	}
+	result := int(*value)
+	return &result, nil
+}
+
+// FetchLimitPool supplements Eastmoney/THS limit-up, limit-down and broken-board pools with Tushare limit_list_d.
+func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate string, limit int) (*model.LimitPoolSnapshot, error) {
+	poolType := strings.ToLower(strings.TrimSpace(rawPoolType))
+	if poolType == "" {
+		poolType = "up"
+	}
+	limitType := ""
+	switch poolType {
+	case "up":
+		limitType = "U"
+	case "down":
+		limitType = "D"
+	case "broken":
+		limitType = "Z"
+	default:
+		return nil, fmt.Errorf("Tushare 不支持涨跌停池类型 %q；可选 up/down/broken", rawPoolType)
+	}
+	if limit <= 0 {
+		limit = 30
+	}
+	if limit > 100 {
+		return nil, errors.New("Tushare 涨跌停池单页条数不能超过 100")
+	}
+	tradeDate := strings.TrimSpace(rawTradeDate)
+	if tradeDate == "" {
+		loc, err := time.LoadLocation("Asia/Shanghai")
+		if err != nil {
+			loc = time.FixedZone("CST", 8*60*60)
+		}
+		tradeDate = time.Now().In(loc).Format("2006-01-02")
+	}
+	compactDate, err := tushareCompactDate(tradeDate)
+	if err != nil {
+		return nil, err
+	}
+	parsedDate, _ := time.Parse("20060102", compactDate)
+	tradeDate = parsedDate.Format("2006-01-02")
+	table, err := p.fetchCapabilityTable(ctx, "limit_list_d", map[string]string{
+		"trade_date": compactDate, "limit_type": limitType,
+	}, "trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit")
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	allItems := make([]model.LimitPoolItem, 0, len(table.rows))
+	reasons := []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"}
+	if len(table.rows) >= 2500 {
+		reasons = appendTushareReason(reasons, "provider_response_may_be_capped_at_2500_rows")
+	}
+	for index, row := range table.rows {
+		rowDateRaw, readErr := table.stringValue(row, "trade_date")
+		if readErr != nil {
+			return nil, readErr
+		}
+		rowDate, dateErr := tushareISODate(rowDateRaw)
+		if dateErr != nil || rowDate != tradeDate {
+			return nil, fmt.Errorf("Tushare 涨跌停池日期不匹配: requested=%s returned=%q", tradeDate, rowDateRaw)
+		}
+		rawSymbol, readErr := table.stringValue(row, "ts_code")
+		if readErr != nil {
+			return nil, readErr
+		}
+		symbol, symbolErr := normalize.NormalizeSymbol(rawSymbol)
+		if symbolErr != nil {
+			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行证券代码无效: %q", index, rawSymbol)
+		}
+		if !isTushareAShareSymbol(symbol) {
+			continue
+		}
+		name, readErr := table.stringValue(row, "name")
+		if readErr != nil || strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行缺少证券名称", index)
+		}
+		change, readErr := table.optionalFloat(row, "pct_chg")
+		if readErr != nil || change == nil {
+			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行缺少有效涨跌幅", index)
+		}
+		closePrice, readErr := table.optionalFloat(row, "close")
+		if readErr != nil {
+			return nil, readErr
+		}
+		if closePrice != nil && *closePrice <= 0 {
+			closePrice = nil
+		}
+		industry, readErr := table.stringValue(row, "industry")
+		if readErr != nil {
+			return nil, readErr
+		}
+		firstTime, readErr := table.stringValue(row, "first_time")
+		if readErr != nil {
+			return nil, readErr
+		}
+		lastTime, readErr := table.stringValue(row, "last_time")
+		if readErr != nil {
+			return nil, readErr
+		}
+		amount, readErr := table.optionalFloat(row, "amount")
+		if readErr != nil {
+			return nil, readErr
+		}
+		sealMoney, readErr := table.optionalFloat(row, "fd_amount")
+		if readErr != nil {
+			return nil, readErr
+		}
+		turnoverRatio, readErr := table.optionalFloat(row, "turnover_ratio")
+		if readErr != nil {
+			return nil, readErr
+		}
+		openTimes, readErr := tushareOptionalInt(table, row, "open_times")
+		if readErr != nil {
+			return nil, readErr
+		}
+		var consecutive *int
+		if poolType == "up" {
+			consecutive, readErr = tushareOptionalInt(table, row, "limit_times")
+			if readErr != nil {
+				return nil, readErr
+			}
+		}
+		itemReasons := []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"}
+		if poolType == "up" && firstTime == "" {
+			itemReasons = appendTushareReason(itemReasons, "provider_first_limit_time_missing")
+		}
+		if poolType != "broken" && turnoverRatio == nil {
+			itemReasons = appendTushareReason(itemReasons, "provider_turnover_ratio_missing")
+		}
+		allItems = append(allItems, model.LimitPoolItem{
+			Symbol: symbol, Code: strings.Split(symbol, ".")[0], Name: name,
+			LastPrice: closePrice, ChangePercent: change,
+			FirstTouchTime: firstTime, LastTouchTime: lastTime,
+			ConsecutiveBoards: consecutive, OpenTimes: openTimes, TurnoverRatioPercent: turnoverRatio,
+			Turnover: amount, SealMoney: sealMoney, ProviderAmountUnit: "provider_defined", Industry: industry,
+			Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
+			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
+		})
+	}
+	if len(allItems) == 0 {
+		return &model.LimitPoolSnapshot{
+			PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: tradeDate,
+			Total: 0, HasData: false, Items: []model.LimitPoolItem{},
+			Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
+			QualityStatus: model.QualityUnknown,
+			QualityReasons: append(reasons, "empty_limit_pool_cannot_confirm_zero_events_or_unavailable_source"),
+		}, nil
+	}
+	total := len(allItems)
+	if len(allItems) > limit {
+		allItems = allItems[:limit]
+	}
+	return &model.LimitPoolSnapshot{
+		PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: tradeDate,
+		Total: total, HasData: true, Items: allItems,
+		Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
+		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
+	}, nil
+}
+
+// FetchDragonTiger returns one page of top_list rows and keeps unverified currency fields out of *_CNY values.
+func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, page, pageSize int) (*model.DragonTigerSnapshot, error) {
+	tradeDate := strings.TrimSpace(rawTradeDate)
+	if tradeDate == "" {
+		loc, err := time.LoadLocation("Asia/Shanghai")
+		if err != nil {
+			loc = time.FixedZone("CST", 8*60*60)
+		}
+		tradeDate = time.Now().In(loc).Format("2006-01-02")
+	}
+	compactDate, err := tushareCompactDate(tradeDate)
+	if err != nil {
+		return nil, err
+	}
+	parsedDate, _ := time.Parse("20060102", compactDate)
+	tradeDate = parsedDate.Format("2006-01-02")
+	if page < 1 || page > 1000 {
+		return nil, errors.New("Tushare 龙虎榜 page 必须在 1..1000")
+	}
+	if pageSize < 1 || pageSize > 100 {
+		return nil, errors.New("Tushare 龙虎榜 page_size 必须在 1..100")
+	}
+	table, err := p.fetchCapabilityTable(ctx, "top_list", map[string]string{"trade_date": compactDate},
+		"trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,float_values,reason")
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	total := len(table.rows)
+	pages := 0
+	if total > 0 {
+		pages = (total + pageSize - 1) / pageSize
+	}
+	base := &model.DragonTigerSnapshot{
+		TradeDate: tradeDate, ProviderReportDate: tradeDate, Page: page, PageSize: pageSize,
+		Total: total, Pages: pages, SourceReturned: 0, ExcludedNonAShareCount: 0,
+		HasData: false, HasMore: false, Items: []model.DragonTigerItem{},
+		Source: p.Name(), SourceVersion: "tushare-top-list-v1", FetchedAt: now,
+		QualityStatus: model.QualityUnknown,
+		QualityReasons: []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"},
+	}
+	if total == 0 {
+		base.QualityReasons = appendTushareReason(base.QualityReasons, "empty_dragon_tiger_report_cannot_confirm_zero_events_or_unavailable_source")
+		return base, nil
+	}
+	if page > pages {
+		return nil, fmt.Errorf("Tushare 龙虎榜请求页 %d 超出总页数 %d", page, pages)
+	}
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	rows := table.rows[start:end]
+	base.SourceReturned = len(rows)
+	base.HasMore = page < pages
+	base.Items = make([]model.DragonTigerItem, 0, len(rows))
+	for index, row := range rows {
+		rowDateRaw, readErr := table.stringValue(row, "trade_date")
+		if readErr != nil {
+			return nil, readErr
+		}
+		rowDate, dateErr := tushareISODate(rowDateRaw)
+		if dateErr != nil || rowDate != tradeDate {
+			return nil, fmt.Errorf("Tushare 龙虎榜日期不匹配: requested=%s returned=%q", tradeDate, rowDateRaw)
+		}
+		rawSymbol, readErr := table.stringValue(row, "ts_code")
+		if readErr != nil {
+			return nil, readErr
+		}
+		symbol, symbolErr := normalize.NormalizeSymbol(rawSymbol)
+		if symbolErr != nil {
+			return nil, fmt.Errorf("Tushare 龙虎榜第 %d 行证券代码无效: %q", start+index, rawSymbol)
+		}
+		if !isTushareAShareSymbol(symbol) {
+			base.ExcludedNonAShareCount++
+			continue
+		}
+		name, readErr := table.stringValue(row, "name")
+		if readErr != nil || strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("Tushare 龙虎榜第 %d 行缺少证券名称", start+index)
+		}
+		closePrice, readErr := table.optionalFloat(row, "close")
+		if readErr != nil {
+			return nil, readErr
+		}
+		if closePrice != nil && *closePrice <= 0 {
+			closePrice = nil
+		}
+		change, readErr := table.optionalFloat(row, "pct_change")
+		if readErr != nil {
+			return nil, readErr
+		}
+		buy, readErr := table.optionalFloat(row, "l_buy")
+		if readErr != nil {
+			return nil, readErr
+		}
+		sell, readErr := table.optionalFloat(row, "l_sell")
+		if readErr != nil {
+			return nil, readErr
+		}
+		deal, readErr := table.optionalFloat(row, "l_amount")
+		if readErr != nil {
+			return nil, readErr
+		}
+		net, readErr := table.optionalFloat(row, "net_amount")
+		if readErr != nil {
+			return nil, readErr
+		}
+		netRate, readErr := table.optionalFloat(row, "net_rate")
+		if readErr != nil {
+			return nil, readErr
+		}
+		amountRate, readErr := table.optionalFloat(row, "amount_rate")
+		if readErr != nil {
+			return nil, readErr
+		}
+		itemReasons := []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"}
+		base.Items = append(base.Items, model.DragonTigerItem{
+			Symbol: symbol, Code: strings.Split(symbol, ".")[0], Name: name, TradeDate: tradeDate,
+			ChangePercent: change, ClosePrice: closePrice,
+			ProviderBuyValue: buy, ProviderSellValue: sell, ProviderNetValue: net,
+			ProviderNetRate: netRate, ProviderAmountUnit: "provider_defined",
+			DealAmountRatio: amountRate, Reason: strings.TrimSpace(mustTushareString(table, row, "reason")),
+			Source: p.Name(), SourceVersion: "tushare-top-list-v1", FetchedAt: now,
+			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
+		})
+		_ = deal
+	}
+	base.Returned = len(base.Items)
+	if total >= 10000 {
+		base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_response_may_be_capped_at_10000_rows")
+	}
+	if base.Returned == 0 {
+		base.QualityStatus = model.QualityUnknown
+		return base, nil
+	}
+	base.HasData = true
+	base.QualityStatus = model.QualityDegraded
+	return base, nil
+}
+
+func mustTushareString(table *tushareTable, row []json.RawMessage, field string) string {
+	value, err := table.stringValue(row, field)
+	if err != nil {
+		return ""
+	}
+	return value
+}
+
+func parseTusharePublishedTime(raw string) *time.Time {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05", "2006/01/02 15:04:05", "2006-01-02 15:04"} {
+		var parsed time.Time
+		if layout == time.RFC3339Nano {
+			parsed, err = time.Parse(layout, value)
+		} else {
+			parsed, err = time.ParseInLocation(layout, value, loc)
+		}
+		if err == nil {
+			parsed = parsed.UTC()
+			return &parsed
+		}
+	}
+	return nil
+}
+
+// FetchStockAnnouncements uses the separately permissioned anns_d endpoint and locally paginates its bounded result set.
+func (p *Tushare) FetchStockAnnouncements(ctx context.Context, rawSymbol, rawStartDate, rawEndDate string, page, pageSize int) (*model.StockAnnouncementSnapshot, error) {
+	symbol, err := tushareExchangeCode(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	startDate, endDate := strings.TrimSpace(rawStartDate), strings.TrimSpace(rawEndDate)
+	startCompact, err := tushareCompactDate(startDate)
+	if err != nil {
+		return nil, err
+	}
+	endCompact, err := tushareCompactDate(endDate)
+	if err != nil {
+		return nil, err
+	}
+	start, _ := time.Parse("20060102", startCompact)
+	end, _ := time.Parse("20060102", endCompact)
+	startDate, endDate = start.Format("2006-01-02"), end.Format("2006-01-02")
+	if start.After(end) || end.Sub(start) > 365*24*time.Hour {
+		return nil, errors.New("Tushare 公告日期范围无效或超过 366 天")
+	}
+	if page < 1 || page > 1000 {
+		return nil, errors.New("Tushare 公告 page 必须在 1..1000")
+	}
+	if pageSize < 1 || pageSize > 100 {
+		return nil, errors.New("Tushare 公告 page_size 必须在 1..100")
+	}
+	table, err := p.fetchCapabilityTable(ctx, "anns_d", map[string]string{
+		"ts_code": symbol, "start_date": startCompact, "end_date": endCompact,
+	}, "ann_date,ts_code,name,title,url,rec_time")
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	allItems := make([]model.StockAnnouncement, 0, len(table.rows))
+	seen := make(map[string]struct{}, len(table.rows))
+	snapshotReasons := []string{}
+	for index, row := range table.rows {
+		rawCode, readErr := table.stringValue(row, "ts_code")
+		if readErr != nil {
+			return nil, readErr
+		}
+		rowSymbol, symbolErr := normalize.NormalizeSymbol(rawCode)
+		if symbolErr != nil || rowSymbol != symbol {
+			return nil, fmt.Errorf("Tushare 公告第 %d 行股票代码不匹配: %q", index, rawCode)
+		}
+		dateRaw, readErr := table.stringValue(row, "ann_date")
+		if readErr != nil {
+			return nil, readErr
+		}
+		annDate, dateErr := tushareISODate(dateRaw)
+		if dateErr != nil {
+			return nil, fmt.Errorf("Tushare 公告第 %d 行日期无效: %w", index, dateErr)
+		}
+		if annDate < startDate || annDate > endDate {
+			return nil, fmt.Errorf("Tushare 公告返回范围外日期 %s", annDate)
+		}
+		title, readErr := table.stringValue(row, "title")
+		if readErr != nil {
+			return nil, readErr
+		}
+		if strings.TrimSpace(title) == "" {
+			return nil, fmt.Errorf("Tushare 公告第 %d 行缺少标题", index)
+		}
+		sourceURL, readErr := table.stringValue(row, "url")
+		if readErr != nil {
+			return nil, readErr
+		}
+		parsedURL, urlErr := url.Parse(strings.TrimSpace(sourceURL))
+		if urlErr != nil || (parsedURL.Scheme != "https" && parsedURL.Scheme != "http") || parsedURL.Host == "" {
+			return nil, fmt.Errorf("Tushare 公告第 %d 行来源 URL 无效", index)
+		}
+		stockName, readErr := table.stringValue(row, "name")
+		if readErr != nil {
+			return nil, readErr
+		}
+		displayTime, readErr := table.stringValue(row, "rec_time")
+		if readErr != nil {
+			return nil, readErr
+		}
+		publishedAt := parseTusharePublishedTime(displayTime)
+		hashInput := symbol + "|" + annDate + "|" + strings.TrimSpace(title) + "|" + strings.TrimSpace(sourceURL)
+		hash := sha256.Sum256([]byte(hashInput))
+		articleID := "tushare-" + hex.EncodeToString(hash[:12])
+		if _, duplicate := seen[articleID]; duplicate {
+			continue
+		}
+		seen[articleID] = struct{}{}
+		itemQuality := model.QualityValid
+		itemReasons := []string{}
+		if publishedAt == nil {
+			itemQuality = model.QualityDegraded
+			itemReasons = append(itemReasons, "provider_publish_time_missing_or_unparseable")
+			snapshotReasons = appendTushareReason(snapshotReasons, "provider_publish_time_missing_or_unparseable")
+		}
+		allItems = append(allItems, model.StockAnnouncement{
+			ArticleID: articleID, Symbol: symbol, StockName: stockName, Title: strings.TrimSpace(title),
+			AnnouncementDate: annDate, PublishedAt: publishedAt, DisplayTime: displayTime,
+			SourceURL: strings.TrimSpace(sourceURL), Source: p.Name(), SourceVersion: "tushare-anns-d-v1",
+			FetchedAt: now, QualityStatus: itemQuality, QualityReasons: itemReasons,
+		})
+	}
+	if len(table.rows) >= 2000 {
+		snapshotReasons = appendTushareReason(snapshotReasons, "provider_response_may_be_capped_at_2000_rows")
+	}
+	sort.SliceStable(allItems, func(i, j int) bool {
+		if allItems[i].AnnouncementDate != allItems[j].AnnouncementDate {
+			return allItems[i].AnnouncementDate > allItems[j].AnnouncementDate
+		}
+		if allItems[i].PublishedAt != nil && allItems[j].PublishedAt != nil {
+			return allItems[i].PublishedAt.After(*allItems[j].PublishedAt)
+		}
+		return false
+	})
+	total := len(allItems)
+	pages := 0
+	if total > 0 {
+		pages = (total + pageSize - 1) / pageSize
+	}
+	if total == 0 {
+		return &model.StockAnnouncementSnapshot{
+			Symbol: symbol, StartDate: startDate, EndDate: endDate, Page: page, PageSize: pageSize,
+			Total: 0, Pages: 0, Returned: 0, HasData: false, HasMore: false,
+			Items: []model.StockAnnouncement{}, Source: p.Name(), SourceVersion: "tushare-anns-d-v1",
+			FetchedAt: now, QualityStatus: model.QualityUnknown,
+			QualityReasons: appendTushareReason(snapshotReasons, "empty_announcement_query_cannot_confirm_no_announcements_or_unavailable_source"),
+		}, nil
+	}
+	if page > pages {
+		return nil, fmt.Errorf("Tushare 公告请求页 %d 超出总页数 %d", page, pages)
+	}
+	startIndex := (page - 1) * pageSize
+	endIndex := startIndex + pageSize
+	if endIndex > total {
+		endIndex = total
+	}
+	items := allItems[startIndex:endIndex]
+	quality := model.QualityValid
+	if len(snapshotReasons) > 0 {
+		quality = model.QualityDegraded
+	}
+	for _, item := range items {
+		if item.QualityStatus != model.QualityValid {
+			quality = model.QualityDegraded
+		}
+	}
+	return &model.StockAnnouncementSnapshot{
+		Symbol: symbol, StartDate: startDate, EndDate: endDate, Page: page, PageSize: pageSize,
+		Total: total, Pages: pages, Returned: len(items), HasData: true, HasMore: page < pages,
+		Items: items, Source: p.Name(), SourceVersion: "tushare-anns-d-v1",
+		FetchedAt: now, QualityStatus: quality, QualityReasons: snapshotReasons,
 	}, nil
 }

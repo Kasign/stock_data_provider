@@ -14,7 +14,7 @@
 | BaostockFetcher | 原 Python 默认 P3；Go 按历史 K 线优先候选 | A 股历史日线优先；财务、复权因子、除权除息、基础资料/行业/指数成分按 API 能力逐项扩展 | Go 原生 TCP 客户端与 DailyBarProvider 已实现；NAS Docker 容器已真实登录/查询，并覆盖多个证券及前复权、后复权、不复权样本；GitHub Runner #100 又返回 8 根样本日 K | 日 K 已有目标容器首轮实测，可作为受限回退源；仍需持续观察稳定性和更多证券/日期范围，不能外推为全覆盖或 SLA；财务指标、交易日历独立开关仍默认关闭 |
 | YfinanceFetcher | 默认启用；默认 P4；海外股票与指数的专用路径 | 美股 / 海外行情与历史数据、部分基本面数据 | 无 | 未迁移 |
 | TencentFetcher | 默认启用；默认 P5 | A 股行情与日线兜底 | 原生 Go Tencent Provider | 已迁移部分行情能力，口径仍需逐项对照 |
-| TushareFetcher | 仅配置 `TUSHARE_TOKEN` / `MARKET_DATA_TUSHARE_TOKEN` 且显式开启后注册 | A 股原始日线、证券基础资料、交易日历、季度财务指标、批量估值；接口依账号积分/权限开放 | Go 原生 HTTP `Tushare` Provider：DailyBar、StockBasic、TradingCalendar、Fundamentals、Valuation（默认关闭） | 代码与独立能力路由已接入；日线只支持 `none`；估值保留报告日期但无精确快照时间、PCF 未覆盖；未统一测试，不宣称生产可用 |
+| TushareFetcher | 仅配置 `TUSHARE_TOKEN` / `MARKET_DATA_TUSHARE_TOKEN` 且显式开启后注册 | A 股原始日线、证券基础资料、交易日历、季度财务指标、批量估值、涨跌停池、龙虎榜与公告；权限依接口而异 | Go 原生 HTTP `Tushare` Provider：DailyBar、StockBasic、TradingCalendar、Fundamentals、Valuation、LimitPool、DragonTiger、Announcement（默认关闭） | 接口与独立能力路由已接入；日线只支持 `none`；估值保留报告日期但无精确快照时间且 PCF 未覆盖；事件金额按 provider_defined 保留；公告依赖单独开通权限；未统一测试，不宣称生产可用 |
 | TickFlowFetcher | 免费 API 可免 Key 读取历史日 K；实时行情需 `TICKFLOW_API_KEY` 且显式开启 quote 能力 | 国内 SH/SZ/BJ 实时行情、日线 K 线 | Go 原生 REST `TickFlow` Provider（免费日 K 默认启用，行情默认关闭） | 已接入 API client 和手→股单位标准化；暂未统一测试，免费源频率限制与 Key 权限需后续验收 |
 | MiaoxiangFetcher（妙想 / MX_API） | 仅配置 `MX_APIKEY` 后注册；默认优先级 6 | 筹码分布及个股资金流等第三方补充数据 | Go `MiaoXiang`（独立 SupplementProvider，显式 opt-in） | 已迁移首批筹码/资金流字段；尚缺真实 MX Key 联调与精确 publication availability |
 | LongbridgeFetcher | 仅配置 Longbridge OAuth / 旧凭据后注册 | 美股 / 港股行情及日线兜底 | 无 | 可选源，未迁移 |

@@ -74,7 +74,10 @@
       "stock_basic": false,
       "trading_calendar": false,
       "fundamentals": false,
-      "valuations": false
+      "valuations": false,
+      "limit_pools": false,
+      "dragon_tiger": false,
+      "announcements": false
     },
     "tickflow": {
       "enabled": true,
