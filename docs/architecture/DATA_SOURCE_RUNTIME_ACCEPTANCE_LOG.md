@@ -640,3 +640,10 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - HEAD `f5b719f9c506b64aae63effe71b314a19f7c45ba` 的 Go CI run [40260305214](https://github.com/Kasign/stock_data_provider/actions/runs/40260305214) 已全部通过；Live Provider Probe run [40260305265](https://github.com/Kasign/stock_data_provider/actions/runs/40260305265) 的 workflow 也成功，但既有测试尚未覆盖中文名称证券目录查询，因此不能将其视为 stock-search 的真实 API 验收。
 - 现新增真实探测：通过 Eastmoney `StockSearchProvider` 查询“贵州茅台”，要求结果包含 `600519.SH`，并记录源端总数、目录质量、分页网络请求以及实际耗时。该接口不需要 API Key；结果以新提交触发的 Runner 报告为准。
 - 当前新闻搜索的真实探测步骤已运行，但该次 Runner 日志明确提示没有 `BOCHA_API_KEYS` 或 `SEARXNG_BASE_URLS`，故没有请求外部搜索服务。该步骤是 skipped 而不是失败，也不代表真实新闻源已经通过。
+
+
+## 18. 中文名称搜索发现 CLIST 页大小上限（2026-10-26）
+
+- Live Provider Probe #123 对 `GET push2.eastmoney.com/api/qt/clist/get` 发起真实请求，先 HTTP 302 跳转至 `push2delay.eastmoney.com`，随后 HTTP 200。响应报告证券目录 `data.total=5925`，但请求 `pz=5000` 时实际行数不足 5,000，旧实现将其误判为最后一页；查询“贵州茅台”因此得到 0 个匹配项，质量原因包含 `provider_directory_incomplete`。将 `pz` 改为 1,000 后，源站依然返回不足请求行数的一页，说明上限低于 1,000。
+- 现在按实测 100 条页大小分页，最大 100 页（安全覆盖 10,000 行），而不是在第一页行数小于请求 `pz` 时提前退出；真实探测等待 4 分钟内完成整目录加载后再校验是否命中 `600519.SH`。新增模拟 205 条目录、目标股票位于第二页、要求请求 3 页的回归测试。
+- 本修正尚未由自身 Go CI 与真实 Runner 验证，不能写为已解决；前一提交的 Go CI #314 失败于两个文件的 gofmt，真实 Probe #124 仍在使用 1,000 条请求大小，且继续得到空匹配。以新提交结果为准。

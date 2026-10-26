@@ -567,7 +567,7 @@ func TestLiveProviderProbe(t *testing.T) {
 	runStockSearch := func(eastmoney *Eastmoney, query, expectedSymbol string) {
 		capture := &liveProbeCapture{}
 		eastmoney.client.Transport = capture.transport()
-		ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
 		started := time.Now()
 		snapshot, callErr := eastmoney.SearchStocks(ctx, query, 10)
