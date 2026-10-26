@@ -564,7 +564,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-	runStockSearch := func(searchProvider provider.StockSearchProvider, client *http.Client, query, expectedSymbol string, timeout time.Duration) {
+	runStockSearch := func(searchProvider StockSearchProvider, client *http.Client, query, expectedSymbol string, timeout time.Duration) {
 		capture := &liveProbeCapture{}
 		if client != nil {
 			client.Transport = capture.transport()
