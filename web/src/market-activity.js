@@ -9,6 +9,7 @@ function monthRange(offset=0){const p=chinaParts(),d=new Date(Date.UTC(Number(p.
 function badge(id,label,status="unknown"){const n=$("#"+id);if(!n)return;const q=QUALITY.includes(String(status).toLowerCase())?String(status).toLowerCase():"unknown";n.className="quality-pill quality-"+q;n.textContent=label||qualityLabel(q);}
 function meta(id,value){const n=$("#"+id);if(n)n.textContent=value||"";}
 function errorBox(id,message){const n=$("#"+id);if(n){n.hidden=!message;n.textContent=message||"";}}
+function clearReasons(id){const n=$("#"+id);if(n){n.replaceChildren();n.hidden=true;}}
 function messageRow(root,message,span){root.replaceChildren();const tr=document.createElement("tr"),td=el("td","table-empty",message);td.colSpan=span;tr.append(td);root.append(tr);}
 function cell(row,value,cls=""){row.append(el("td",cls,value===null||value===undefined||value===""?"—":value));}
 function amount(v){if(v===null||v===undefined||v===""||!Number.isFinite(Number(v)))return "—";const n=Number(v);return (n>0?"+":n<0?"−":"")+formatCompact(Math.abs(n))+" 元";}
@@ -37,12 +38,32 @@ export function bindMarketActivity(getSettings,onSelectStock){
  }
  async function loadDragon({append=false}={}){
   abort("dragon");const seq=generation.dragon,cfg=settings();
-  if(!cfg?.apiKey){messageRow($("#dragon-tiger-body"),"请先配置行情 API Key。",6);badge("dragon-tiger-quality","需配置 Key");errorBox("dragon-tiger-error","");meta("dragon-tiger-meta","");$("#dragon-tiger-next").hidden=true;return;}
-  if(!append){dragonPage=1;dragonHasMore=false;dragonDate=$("#dragon-tiger-date").value;messageRow($("#dragon-tiger-body"),"正在读取龙虎榜…",6);$("#dragon-tiger-next").hidden=true;}
-  else{$("#dragon-tiger-next").disabled=true;$("#dragon-tiger-next").textContent="正在加载…";}
+  if(!cfg?.apiKey){
+   messageRow($("#dragon-tiger-body"),"请先配置行情 API Key。",6);
+   badge("dragon-tiger-quality","需配置 Key");
+   errorBox("dragon-tiger-error","");
+   meta("dragon-tiger-meta","");
+   clearReasons("dragon-tiger-reasons");
+   dragonHasMore=false;$("#dragon-tiger-next").hidden=true;$("#dragon-tiger-next").disabled=true;
+   return;
+  }
+  if(!append){
+   dragonPage=1;dragonHasMore=false;dragonDate=$("#dragon-tiger-date").value;
+   messageRow($("#dragon-tiger-body"),"正在读取龙虎榜…",6);
+   badge("dragon-tiger-quality","加载中","unknown");meta("dragon-tiger-meta","");
+   clearReasons("dragon-tiger-reasons");$("#dragon-tiger-next").hidden=true;
+  } else {$("#dragon-tiger-next").disabled=true;$("#dragon-tiger-next").textContent="正在加载…";}
   errorBox("dragon-tiger-error","");const ctl=new AbortController();controllers.dragon=ctl;
   try{const data=await getMarketDragonTiger(cfg,{date:dragonDate,page:append?dragonPage+1:1,pageSize:50,signal:ctl.signal});if(ctl.signal.aborted||seq!==generation.dragon)return;renderDragon(data,append);}
-  catch(e){if(ctl.signal.aborted||seq!==generation.dragon)return;badge("dragon-tiger-quality","读取失败","invalid");errorBox("dragon-tiger-error",errorMessage(e));if(!append)messageRow($("#dragon-tiger-body"),"龙虎榜暂不可用，请查看错误说明后重试。",6);}
+  catch(e){
+   if(ctl.signal.aborted||seq!==generation.dragon)return;
+   errorBox("dragon-tiger-error",errorMessage(e));
+   if(!append){
+    badge("dragon-tiger-quality","读取失败","invalid");meta("dragon-tiger-meta","");
+    clearReasons("dragon-tiger-reasons");
+    messageRow($("#dragon-tiger-body"),"龙虎榜暂不可用，请查看错误说明后重试。",6);
+   }
+  }
   finally{if(generation.dragon===seq){delete controllers.dragon;$("#dragon-tiger-next").disabled=!dragonHasMore;$("#dragon-tiger-next").textContent=dragonHasMore?"加载下一页":"没有更多页";}}
  }
  function setMonth(offset){monthOffset=offset;const range=monthRange(offset);$("#calendar-start-date").value=range.start;$("#calendar-end-date").value=range.end;meta("calendar-month-label",range.start.slice(0,7));}
@@ -61,14 +82,39 @@ export function bindMarketActivity(getSettings,onSelectStock){
  }
  async function loadCalendar(){
   abort("calendar");const seq=generation.calendar,cfg=settings(),start=$("#calendar-start-date").value,end=$("#calendar-end-date").value;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||start>end){errorBox("trading-calendar-error","请选择有效日期，并确保开始日期不晚于结束日期。");return;}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||start>end){
+   const message="请选择有效日期，并确保开始日期不晚于结束日期。";
+   errorBox("trading-calendar-error",message);badge("trading-calendar-quality","日期无效","invalid");
+   meta("trading-calendar-meta","");clearReasons("trading-calendar-reasons");
+   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return;
+  }
   const a=Date.parse(start+"T00:00:00Z"),b=Date.parse(end+"T00:00:00Z");
-  if(!Number.isFinite(a)||!Number.isFinite(b)||b-a>366*86400000){errorBox("trading-calendar-error","日期区间最多 367 个自然日，请缩小范围。");return;}
-  if(!cfg?.apiKey){errorBox("trading-calendar-error","请先在连接与密钥设置中配置行情 API Key。");badge("trading-calendar-quality","需配置 Key");return;}
-  errorBox("trading-calendar-error","");meta("calendar-month-label",start.slice(0,7)+(start.slice(0,7)===end.slice(0,7)?"":" — "+end.slice(0,7)));
+  if(!Number.isFinite(a)||!Number.isFinite(b)||b-a>366*86400000){
+   const message="日期区间最多 367 个自然日，请缩小范围。";
+   errorBox("trading-calendar-error",message);badge("trading-calendar-quality","日期范围无效","invalid");
+   meta("trading-calendar-meta","");clearReasons("trading-calendar-reasons");
+   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return;
+  }
+  if(!cfg?.apiKey){
+   const message="请先在连接与密钥设置中配置行情 API Key。";
+   errorBox("trading-calendar-error",message);badge("trading-calendar-quality","需配置 Key");
+   meta("trading-calendar-meta","数据未读取 · 需要 API Key");clearReasons("trading-calendar-reasons");
+   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return;
+  }
+  errorBox("trading-calendar-error","");
+  meta("calendar-month-label",start.slice(0,7)+(start.slice(0,7)===end.slice(0,7)?"":" — "+end.slice(0,7)));
+  badge("trading-calendar-quality","加载中","unknown");
+  meta("trading-calendar-meta","请求 "+start+" 至 "+end+" · 正在读取");
+  clearReasons("trading-calendar-reasons");
   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","正在读取交易日历…"));const ctl=new AbortController();controllers.calendar=ctl;
   try{const data=await getTradingCalendar(cfg,{start,end,signal:ctl.signal});if(ctl.signal.aborted||seq!==generation.calendar)return;renderCalendar(data);}
-  catch(e){if(ctl.signal.aborted||seq!==generation.calendar)return;badge("trading-calendar-quality","读取失败","invalid");errorBox("trading-calendar-error",errorMessage(e));$("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","交易日历暂不可用，请查看错误说明后重试。"));}
+  catch(e){
+   if(ctl.signal.aborted||seq!==generation.calendar)return;
+   badge("trading-calendar-quality","读取失败","invalid");errorBox("trading-calendar-error",errorMessage(e));
+   meta("trading-calendar-meta","请求 "+start+" 至 "+end+" · 本次未返回数据");
+   clearReasons("trading-calendar-reasons");
+   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","交易日历暂不可用，请查看错误说明后重试。"));
+  }
   finally{if(generation.calendar===seq)delete controllers.calendar;}
  }
  const today=chinaParts();$("#dragon-tiger-date").value=dateKey(today.year,today.month,today.day);setMonth(0);

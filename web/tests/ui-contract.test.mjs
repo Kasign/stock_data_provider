@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -12,7 +12,8 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../styles.css", import.meta.url), "utf8"),
   readFile(new URL("../src/watchlist.js", import.meta.url), "utf8"),
   readFile(new URL("../src/api.js", import.meta.url), "utf8"),
-  readFile(new URL("../../internal/platform/taskqueue/queue.go", import.meta.url), "utf8")
+  readFile(new URL("../../internal/platform/taskqueue/queue.go", import.meta.url), "utf8"),
+  readFile(new URL("../src/market-activity.js", import.meta.url), "utf8")
 ]);
 
 function finalCssRuleBody(selector) {
@@ -321,6 +322,17 @@ test("run-flow keeps cached events explicit during read errors and exports diagn
   assert.match(app, /task_poll_status:\s*\$\("#task-poll-label"\)\.textContent \|\| null/);
   assert.match(app, /event_read_status:\s*\{[\s\S]*?last_error:\s*state\.taskEventsError \|\| null[\s\S]*?known_event_count:\s*state\.taskEvents\.size/);
   assert.match(stylesheet, /\.task-events-read-status/);
+});
+
+
+test("market activity clears stale calendar state for invalid input, missing key, loading, and failure", () => {
+  assert.match(marketActivity, /function clearReasons\(id\)/);
+  assert.match(marketActivity, /日期无效[\s\S]*?meta\("trading-calendar-meta",""\)[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);
+  assert.match(marketActivity, /需配置 Key[\s\S]*?数据未读取 · 需要 API Key[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);
+  assert.match(marketActivity, /正在读取交易日历…[\s\S]*?badge\("trading-calendar-quality","加载中","unknown"\)/);
+  assert.match(marketActivity, /本次未返回数据[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);
+  assert.match(marketActivity, /if\(!append\)[\s\S]*?加载中[\s\S]*?meta\("dragon-tiger-meta",""\)/);
+  assert.match(marketActivity, /if\(!append\)[\s\S]*?龙虎榜暂不可用[\s\S]*?meta\("dragon-tiger-meta",""\)/);
 });
 
 
