@@ -174,7 +174,7 @@ func xueqiuRows(raw json.RawMessage) ([]map[string]json.RawMessage, error) {
 }
 
 // FetchHotStocks adapts Xueqiu's public hot-stock list as a fallback.
-// "surge" uses one-hour ranking-change order and is not fully equivalent to Eastmoney hot-up.
+// "surge" uses the documented market-wide percentage-mover ordering as a proxy, not Eastmoney hot-up.
 func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit int) (*model.HotRankingSnapshot, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("雪球 HTTP client 未配置")
@@ -201,9 +201,9 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		path = "/v5/stock/screener/quote/list.json"
 		query.Set("market", "CN")
 		query.Set("order", "desc")
-		query.Set("order_by", "rank_change")
+		query.Set("order_by", "percent")
 		query.Set("page", "1")
-		query.Set("type", "hot_1h")
+		query.Set("type", "sh_sz")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -276,7 +276,7 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
 	}
 	if rankingType == "surge" {
-		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "xueqiu_surge_uses_one_hour_rank_change_proxy_not_eastmoney_hot_up_equivalent")
+		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "xueqiu_surge_uses_percentage_mover_proxy_not_eastmoney_hot_up_equivalent")
 	}
 	if len(rows) > requestLimit {
 		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "provider_returned_more_rows_than_requested")
@@ -329,7 +329,7 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 			itemReasons = appendTushareReason(itemReasons, "provider_snapshot_timestamp_missing_or_invalid")
 		}
 		if rankingType == "surge" {
-			itemReasons = appendTushareReason(itemReasons, "xueqiu_surge_uses_one_hour_rank_change_proxy_not_eastmoney_hot_up_equivalent")
+			itemReasons = appendTushareReason(itemReasons, "xueqiu_surge_uses_percentage_mover_proxy_not_eastmoney_hot_up_equivalent")
 		}
 		snapshot.Items = append(snapshot.Items, model.HotRankingItem{
 			Rank: len(snapshot.Items) + 1, Symbol: symbol, Code: strings.Split(symbol, ".")[0],

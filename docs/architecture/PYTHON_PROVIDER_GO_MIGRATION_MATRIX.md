@@ -172,7 +172,7 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 
 ### 雪球热度榜备用源（2026-10-26，待统一验收）
 
-新增独立 `Xueqiu` `HotRankingProvider`，作为东方财富和可选同花顺之后的最后回退源。人气榜使用雪球 `/v5/stock/hot_stock/list.json?type=10`；飙升榜使用雪球 `/v5/stock/screener/quote/list.json` 的一小时热度榜并按排名变化排序。这是可用性折中，不等价于东方财富的飙升榜，所以响应明确携带降级原因。雪球可能要求有效登录 Cookie；该变量默认留空、默认关闭，不记录 Cookie，也不在代码仓库保存真实值。
+新增独立 `Xueqiu` `HotRankingProvider`，作为东方财富和可选同花顺之后的最后回退源。人气榜使用雪球 `/v5/stock/hot_stock/list.json?type=10`；飙升榜使用雪球 `/v5/stock/screener/quote/list.json` 的全市场涨幅排序。这是可用性折中，不等价于东方财富的飙升榜，所以响应明确携带降级原因。雪球可能要求有效登录 Cookie；该变量默认留空、默认关闭，不记录 Cookie，也不在代码仓库保存真实值。
 
 
 ### 雪球关注榜 API 补齐（2026-10-26，待统一验收）
