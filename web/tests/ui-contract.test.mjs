@@ -181,7 +181,7 @@ test("market API key visibility is opt-in and resets when settings close", () =>
   assert.match(html, /id="toggle-market-key-visibility"[^>]*aria-controls="market-key-input"[^>]*aria-pressed="false"[^>]*aria-label="切换行情 API Key 明文显示"/);
   assert.match(app, /function setMarketKeyVisibility\(visible\)[\s\S]*?input\.type = visible \? "text" : "password"/);
   assert.match(app, /\$\("#toggle-market-key-visibility"\)\.addEventListener\("click",[\s\S]*?setMarketKeyVisibility/);
-  assert.match(app, /\$\("#settings-dialog"\)\.addEventListener\("close", \(\) => setMarketKeyVisibility\(false\)\)/);
+  assert.match(app, /\$\("#settings-dialog"\)\.addEventListener\("close", \(\) => \{[\s\S]*?setMarketKeyVisibility\(false\);[\s\S]*?initialConnectionDraft = null;[\s\S]*?\}\)/);
   const visibilityHandler = app.match(/function setMarketKeyVisibility\(visible\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.doesNotMatch(visibilityHandler, /setAttribute\("aria-label"/, "toggle button accessible name should remain stable while aria-pressed reports its state");
   assert.match(app, /function openSettings\(\)[\s\S]*?setMarketKeyVisibility\(false\)/);
@@ -274,7 +274,7 @@ test("new feature pages display unavailable states rather than production mock r
   assert.match(html, /不能提交，不会产生模拟结果/);
   assert.match(html, /不会在浏览器里假保存规则/);
   assert.match(html, /服务端配置 API 待接入/);
-  assert.match(html, /密码\/权限、服务器 \.env 导入导出需要认证/);
+  assert.match(html, /服务端密码、权限、\.env、备份和恢复涉及认证/);
   assert.match(html, /data-theme-value="dark"/);
   assert.match(html, /data-theme-value="light"/);
   assert.match(app, /persistTheme\(button\.dataset\.themeValue\)/);

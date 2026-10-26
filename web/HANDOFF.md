@@ -118,3 +118,9 @@
 - 通用服务器配置、模型/Agent、通知渠道、调度、选股配置、密码/备份没有真实 API，相关按钮禁用且不写 localStorage。
 - 新增 `web/src/settings-draft.js` 与 `web/tests/settings-draft.test.mjs`；`package.json` 的语法检查包含新模块。CI 结果需对本批提交 SHA 核验并回填。
 - 真实浏览器/移动端截图、键盘/Escape 走查及 NAS/Docker/OpenResty 联调未执行。
+
+
+## Issue #5 首轮 CI 诊断（2026-10-26）
+- WebUI checks [#40256527920](https://github.com/Kasign/stock_data_provider/actions/runs/40256527920) 失败，72 项 Node tests 中 69 项通过；JS 语法检查通过，Nginx image build 未执行。
+- 三项失败都是旧测试对文案或实现形式的绑定：market API key help 没有新的环境变量名说明；close 事件从单行回调变成带状态重置的块回调；旧安全说明已被分组式设置中心取代。已更新断言并在帮助文案补充变量名与“不自动修改服务器配置或生成后端密钥”的界限，仍明确 Key 不回显。
+- 修复提交后的 WebUI Actions 必须完全通过后再继续后续功能批次。

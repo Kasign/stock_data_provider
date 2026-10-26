@@ -237,3 +237,6 @@
 - 新增 `web/src/settings-draft.js` 和 `web/tests/settings-draft.test.mjs`，覆盖变更判断、留空保留/替换 Key、非法远程路径拒绝；UI 契约测试覆盖九个分组、健康检查、离开保护与服务端禁用态。
 - 服务端基础设置、AI 模型、通知、调度、选股、密码/服务器 .env/备份没有对应 API，因此相关控件明确禁用，不写入 localStorage，不产生假成功反馈。
 - 未修改 Go、Provider、分析任务或真实后端路由。真实浏览器截图、键盘/焦点走查及 NAS/Docker/OpenResty 联调未执行。
+
+
+- Issue #5 首轮 WebUI checks [#40256527920](https://github.com/Kasign/stock_data_provider/actions/runs/40256527920) 失败：72 项测试中 69 项通过，JS 语法检查通过，Nginx 镜像构建因测试失败跳过。三项均为源码契约测试未跟随新 UI：帮助文案缺少当前环境变量名，关闭事件测试要求旧的一行监听器写法，通用未接入页面测试要求旧设置页安全说明。已按新文案/新行为修正测试，不改变生产后端契约；下一次 Actions 需复验。

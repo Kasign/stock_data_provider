@@ -438,7 +438,7 @@
             <button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button>
           </div>
         </div>
-        <p class="field-hint" id="market-key-help">这是部署管理员自行生成的服务访问密钥，不是第三方行情 Provider 的密钥。这里只保存到当前浏览器 localStorage，不会自动修改服务器配置。已配置的 Key 不会回显；留空表示保留当前值，输入新值表示替换。需要删除时请使用“清除本地设置”。部署端可在服务器终端执行 <code>openssl rand -hex 32</code> 生成密钥。</p>
+        <p class="field-hint" id="market-key-help">这是部署管理员自行生成的服务访问密钥，不是第三方行情 Provider 的密钥。部署环境变量名为 MARKET_DATA_API_KEY；这里只保存到当前浏览器 localStorage，不会自动修改服务器配置或生成后端密钥。已配置的 Key 不会回显；留空表示保留当前值，输入新值表示替换。需要删除时请使用“清除本地设置”。部署端可在服务器终端执行 <code>openssl rand -hex 32</code> 生成密钥。</p>
         <label class="field"><span>分析 API 路径</span><input id="analysis-base-input" value="/analysis-api" required /></label>
         <div class="security-note">安全提示：不要将带有 API Key 的浏览器会话分享给他人。对公网部署前，应在 OpenResty 或身份认证层增加访问控制；行情服务密钥本身不等于用户认证。</div>
         <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>存在未保存的连接配置更改。</p>
