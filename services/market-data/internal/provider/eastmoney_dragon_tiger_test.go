@@ -83,3 +83,23 @@ func TestEastmoneyFetchDragonTigerRejectsRowsForDifferentTradeDate(t *testing.T)
 		t.Fatal("provider must reject rows for a different trade date")
 	}
 }
+
+func TestEastmoneyFetchDragonTigerTreatsCode9201AsUnknownEmptyReport(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"version":null,"result":null,"success":false,"message":"返回数据为空","code":9201}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchDragonTiger(context.Background(), "2026-10-25", 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.HasData || got.Total != 0 || got.Returned != 0 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("code 9201 must remain an unknown empty report: %+v", got)
+	}
+	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_empty_response_code_9201") {
+		t.Fatalf("response code should be retained in quality reasons: %+v", got.QualityReasons)
+	}
+}
+

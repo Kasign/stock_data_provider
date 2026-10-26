@@ -408,6 +408,43 @@ func TestLiveTradingCalendarContractRejectsGaps(t *testing.T) {
 	}
 }
 
+func liveProbeDragonTigerTradeDate(now time.Time, calendar *model.TradingCalendarSnapshot) string {
+	today := now.Format("2006-01-02")
+	best := ""
+	if calendar != nil {
+		for _, day := range calendar.Items {
+			if day.IsTradingDay && day.Date < today && day.Date > best {
+				best = day.Date
+			}
+		}
+	}
+	if best != "" {
+		return best
+	}
+	// 当 BaoStock 日历探测不可用时，退回到上一个工作日；节假日的准确性仍以日历为准。
+	candidate := now.AddDate(0, 0, -1)
+	for candidate.Weekday() == time.Saturday || candidate.Weekday() == time.Sunday {
+		candidate = candidate.AddDate(0, 0, -1)
+	}
+	return candidate.Format("2006-01-02")
+}
+
+func TestLiveProbeDragonTigerDateUsesLastTradingDay(t *testing.T) {
+	now := time.Date(2026, 10, 26, 9, 50, 0, 0, time.FixedZone("CST", 8*60*60))
+	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+		{Date: "2026-10-23", IsTradingDay: true},
+		{Date: "2026-10-24", IsTradingDay: false},
+		{Date: "2026-10-25", IsTradingDay: false},
+		{Date: "2026-10-26", IsTradingDay: true},
+	}}
+	if got := liveProbeDragonTigerTradeDate(now, calendar); got != "2026-10-23" {
+		t.Fatalf("dragon-tiger trade date=%s, want 2026-10-23", got)
+	}
+	if got := liveProbeDragonTigerTradeDate(now, nil); got != "2026-10-23" {
+		t.Fatalf("weekday fallback trade date=%s, want 2026-10-23", got)
+	}
+}
+
 func TestLiveProviderProbe(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_PROVIDER_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_PROVIDER_TESTS=1 to call real public provider endpoints")
@@ -893,7 +930,6 @@ func TestLiveProviderProbe(t *testing.T) {
 	for _, poolType := range []string{"up", "down", "broken"} {
 		runLimitPool(eastmoney, poolType, now.Format("2006-01-02"))
 	}
-	runDragonTiger(eastmoney, now.AddDate(0, 0, -1).Format("2006-01-02"))
 	runQuote("eastmoney", "eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoney.FetchQuote(ctx, dailySymbol)
 	})
@@ -915,7 +951,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		report.Results[len(report.Results)-1].Provider == "baostock" &&
 		report.Results[len(report.Results)-1].Capability == "daily_bars" &&
 		report.Results[len(report.Results)-1].Status == "returned"
-	calendarStart := now.AddDate(0, 0, -6).Format("2006-01-02")
+	calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
 	calendarEnd := now.Format("2006-01-02")
 	calendarResult := liveProbeResult{Provider: "baostock", Capability: "trading_calendar"}
 	if dailyProbePassed {
@@ -942,6 +978,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		calendarResult.Error = "skipped because BaoStock daily-bar probe could not establish a working TCP session; no duplicate timeout request was sent"
 	}
 	report.Results = append(report.Results, calendarResult)
+	runDragonTiger(eastmoney, liveProbeDragonTigerTradeDate(now, calendarResult.TradingCalendar))
 	calendarJSON, _ := json.Marshal(calendarResult)
 	t.Logf("LIVE_PROVIDER_RESULT %s", calendarJSON)
 	yahoo := NewYahooFinance(12*time.Second, "")

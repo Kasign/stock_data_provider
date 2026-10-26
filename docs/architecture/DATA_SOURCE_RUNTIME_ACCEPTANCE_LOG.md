@@ -572,3 +572,11 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - Live Provider Probe #101 的核心探测步骤仍失败，但 workflow 总结显示 success，因此按 job 内步骤和 `live-provider-report` artifact 验收。东方财富行业/概念榜再次遇到 HTTP 502（Issue #6）；本批使用有限退避重试并加回归测试。
 - 新增龙虎榜 Provider、分页模型、服务校验与 `GET /api/v1/market/dragon-tiger` 路由；限定交易日，保留供应商 count/pages 与实际返回行数；金额为人民币元，净买额允许负值，缺失金额不补零。无精确源端快照时间时质量 degraded；空报表为 unknown，不误报当日无上榜。
 - 本批龙虎榜尚未完成 Runner 实测和 NAS/Docker 部署验收；独立配置 `MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED` 默认 false，不可标记生产可用。妙想 MX_API 因 Key/opt-in 未满足仍为 skipped，BaoStock 财务指标不在 Probe #101 结果中。
+
+
+## 9. 龙虎榜真实接口首轮结果与日期修正（2026-10-26）
+
+- Go CI #294（HEAD `2f247400e18f647120526cdfd37ea5160223b9f0`）的市场数据单测、Go Core 测试与根目录测试均通过，Compose 配置校验通过；市场数据镜像构建尚在运行中，不能写成整轮 CI 已通过。
+- Live Provider Probe #104 外层 workflow 显示 `success`，但内部 `Query public providers and capture sanitized responses` 步骤失败，且本轮没有上传报告 artifact。故按实际测试步骤认定本轮真实探测未通过。
+- 龙虎榜请求实际返回 HTTP 200，响应体为 `{"version":null,"result":null,"success":false,"message":"返回数据为空","code":9201}`；当时请求日为 2026-10-25（星期日），因此不能据此断定接口不可用。此前解析器未识别无数据 envelope，错误地报为缺少 `result/count`。
+- 后续修复将明确的 `code=9201/message=返回数据为空` 映射为 `quality_status=unknown`、短缓存空报表，并从 BaoStock 交易日历选择最近一个已结束的交易日进行真实探测。该修复已进入下一提交，但尚未通过其自身 CI 与 Runner，不能宣称龙虎榜真实接口已验收。
