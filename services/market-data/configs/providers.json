@@ -31,6 +31,8 @@
       "daily_bars": false,
       "index_quotes": false,
       "trading_calendar": false,
+      "limit_pools": false,
+      "dragon_tiger": false,
       "fundamentals": false
     },
     "baostock": {

@@ -15,6 +15,18 @@ type DragonTigerItem struct {
 	SellAmountCNY    *float64      `json:"sell_amount_cny,omitempty"`
 	DealAmountCNY    *float64      `json:"deal_amount_cny,omitempty"`
 	DealAmountRatio  *float64      `json:"deal_amount_ratio,omitempty"`
+	// The THS API exposes these values without an explicit currency unit in its public field table.
+	// Keep them separate from the *_CNY fields until source units are formally verified.
+	ProviderBuyValue        *float64  `json:"provider_buy_value,omitempty"`
+	ProviderSellValue       *float64  `json:"provider_sell_value,omitempty"`
+	ProviderNetValue        *float64  `json:"provider_net_value,omitempty"`
+	ProviderNetRate         *float64  `json:"provider_net_rate,omitempty"`
+	ProviderOrgNetValue     *float64  `json:"provider_org_net_value,omitempty"`
+	ProviderHotMoneyNetValue *float64 `json:"provider_hot_money_net_value,omitempty"`
+	ProviderAmountUnit      string    `json:"provider_amount_unit,omitempty"`
+	HotRank                 *int      `json:"hot_rank,omitempty"`
+	RangeDays               *int      `json:"range_days,omitempty"`
+	Concepts                []string  `json:"concepts,omitempty"`
 	Reason           string        `json:"reason,omitempty"`
 	Explanation      string        `json:"explanation,omitempty"`
 	SecurityTypeCode string        `json:"security_type_code,omitempty"`

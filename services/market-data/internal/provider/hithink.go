@@ -420,6 +420,342 @@ func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate s
 	return snapshot, nil
 }
 
+// FetchLimitPool maps the THS limit-up pool. The API does not expose separate down-limit or broken-board pools.
+func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺涨停池接口需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	poolType = strings.ToLower(strings.TrimSpace(poolType))
+	if poolType != "up" {
+		return nil, fmt.Errorf("同花顺当前只支持涨停池 up；%q 应回退到其他支持 down/broken 的数据源", poolType)
+	}
+	if limit <= 0 {
+		limit = 30
+	}
+	if limit > 100 {
+		return nil, errors.New("同花顺涨停池单页条数不能超过 100")
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	rawDate := strings.TrimSpace(tradeDate)
+	if rawDate == "" {
+		rawDate = time.Now().In(loc).Format("2006-01-02")
+	}
+	date, err := time.Parse("2006-01-02", rawDate)
+	if err != nil || date.Format("2006-01-02") != rawDate {
+		return nil, fmt.Errorf("无效的同花顺涨停池交易日 %q，应为 YYYY-MM-DD", tradeDate)
+	}
+	if rawDate > time.Now().In(loc).Format("2006-01-02") {
+		return nil, errors.New("同花顺涨停池交易日不能晚于今日")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	dateMS := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc).UnixMilli()
+	query := url.Values{
+		"date_ms": []string{strconv.FormatInt(dateMS, 10)},
+		"page": []string{"1"},
+		"size": []string{strconv.Itoa(limit)},
+		"sort_field": []string{"limit_up_time"},
+		"sort_dir": []string{"asc"},
+	}
+	raw, err := p.get(ctx, "/api/a-share/special-data/limit-up-pool", query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺涨停池请求失败: %w", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Timestamp *int64 `json:"timestamp"`
+		Pagination *struct {
+			Total *int `json:"total"`
+			Pages *int `json:"pages"`
+			Size *int `json:"size"`
+			Page *int `json:"page"`
+		} `json:"pagination"`
+		Item []map[string]json.RawMessage `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺涨停池失败: %w", err)
+	}
+	if data.Pagination == nil || data.Pagination.Total == nil || *data.Pagination.Total < 0 {
+		return nil, errors.New("同花顺涨停池响应缺少有效 pagination.total")
+	}
+	total := *data.Pagination.Total
+	if len(data.Item) > limit || total < len(data.Item) {
+		return nil, fmt.Errorf("同花顺涨停池分页计数不一致: total=%d items=%d limit=%d", total, len(data.Item), limit)
+	}
+	now := time.Now().UTC()
+	reportDate := rawDate
+	if data.Timestamp != nil && *data.Timestamp > 0 {
+		sourceDate := time.UnixMilli(*data.Timestamp).In(loc).Format("2006-01-02")
+		if sourceDate == rawDate {
+			reportDate = sourceDate
+		}
+	}
+	snapshot := &model.LimitPoolSnapshot{
+		PoolType: "up", TradeDate: rawDate, ProviderReportDate: reportDate, Total: total,
+		HasData: len(data.Item) > 0, Items: make([]model.LimitPoolItem, 0, len(data.Item)),
+		Source: p.Name(), SourceVersion: hithinkVersion + "-limit-up-pool-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_amount_units_not_explicitly_documented", "limit_up_time_mapped_to_first_touch_time"},
+	}
+	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
+	}
+	if total == 0 && len(data.Item) == 0 {
+		snapshot.HasData = false
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "empty_limit_up_pool_cannot_distinguish_no_events_from_unavailable_or_non_trading_day")
+		return snapshot, nil
+	}
+	if total > 0 && len(data.Item) == 0 {
+		return nil, fmt.Errorf("同花顺涨停池 total=%d 但当前页没有返回数据", total)
+	}
+	for index, row := range data.Item {
+		rawSymbol := hithinkFieldString(row, "thscode")
+		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
+		if symbolErr != nil {
+			return nil, fmt.Errorf("同花顺涨停池第 %d 行证券代码无效: %w", index, symbolErr)
+		}
+		code := hithinkFieldString(row, "ticker")
+		if code == "" {
+			code = strings.Split(symbol, ".")[0]
+		}
+		if code != strings.Split(symbol, ".")[0] {
+			return nil, fmt.Errorf("同花顺涨停池第 %d 行代码不匹配: symbol=%s ticker=%s", index, symbol, code)
+		}
+		name := hithinkFieldString(row, "name")
+		if name == "" {
+			return nil, fmt.Errorf("同花顺涨停池第 %d 行缺少证券名称", index)
+		}
+		change := hithinkFieldNumber(row, "price_change_ratio_pct")
+		if change == nil {
+			return nil, fmt.Errorf("同花顺涨停池第 %d 行缺少有效涨跌幅", index)
+		}
+		var consecutive *int
+		if value := hithinkFieldNumber(row, "continue_day_cnt"); value != nil &&
+			*value >= 0 && math.Trunc(*value) == *value && *value <= 1000 {
+			v := int(*value)
+			consecutive = &v
+		}
+		firstTouch := hithinkFieldString(row, "limit_up_time")
+		var sealMoney, maxSealMoney *float64
+		if value := hithinkFieldNumber(row, "seal_money"); value != nil && *value >= 0 {
+			sealMoney = value
+		}
+		if value := hithinkFieldNumber(row, "max_seal_money"); value != nil && *value >= 0 {
+			maxSealMoney = value
+		}
+		itemReasons := []string{"provider_amount_unit_not_explicitly_documented"}
+		if data.Timestamp == nil || *data.Timestamp <= 0 {
+			itemReasons = append(itemReasons, "provider_snapshot_timestamp_missing_or_invalid")
+		}
+		if firstTouch == "" {
+			itemReasons = append(itemReasons, "provider_limit_up_time_missing")
+		}
+		snapshot.Items = append(snapshot.Items, model.LimitPoolItem{
+			Symbol: symbol, Code: code, Name: name, ChangePercent: change,
+			FirstTouchTime: firstTouch, ConsecutiveBoards: consecutive,
+			SealMoney: sealMoney, MaxSealMoney: maxSealMoney, ProviderAmountUnit: "provider_defined",
+			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: now,
+			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
+		})
+	}
+	return snapshot, nil
+}
+
+// FetchDragonTiger maps the THS A-share stock rows into the shared paginated response.
+// Provider-specific money values are preserved separately with unit=provider_defined; *_CNY fields remain unset.
+func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, pageSize int) (*model.DragonTigerSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺龙虎榜接口需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	if page < 1 || page > 1000 {
+		return nil, errors.New("同花顺龙虎榜 page 必须在 1..1000")
+	}
+	if pageSize < 1 || pageSize > 500 {
+		return nil, errors.New("同花顺龙虎榜 page_size 必须在 1..500")
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	rawDate := strings.TrimSpace(tradeDate)
+	if rawDate != "" {
+		date, parseErr := time.Parse("2006-01-02", rawDate)
+		if parseErr != nil || date.Format("2006-01-02") != rawDate {
+			return nil, fmt.Errorf("无效的同花顺龙虎榜交易日 %q，应为 YYYY-MM-DD", tradeDate)
+		}
+		today := time.Now().In(loc).Format("2006-01-02")
+		firstSupported := time.Now().In(loc).AddDate(-1, 0, 0).Format("2006-01-02")
+		if rawDate < firstSupported || rawDate > today {
+			return nil, errors.New("同花顺龙虎榜显式交易日需位于最近一年且不能晚于今日")
+		}
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	query := url.Values{"board_type": []string{"all"}}
+	if rawDate != "" {
+		query.Set("date", rawDate)
+	}
+	raw, err := p.get(ctx, "/api/a-share/special-data/dragon-tiger-list", query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺龙虎榜请求失败: %w", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Timestamp *int64 `json:"timestamp"`
+		BoardType string `json:"board_type"`
+		TradeDate string `json:"trade_date"`
+		Count *int `json:"count"`
+		StockCount *int `json:"stock_count"`
+		StockItems []map[string]json.RawMessage `json:"stock_items"`
+	} 
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺龙虎榜失败: %w", err)
+	}
+	responseDate := strings.TrimSpace(data.TradeDate)
+	if responseDate == "" {
+		return nil, errors.New("同花顺龙虎榜响应缺少 trade_date")
+	}
+	parsedResponseDate, err := time.Parse("2006-01-02", responseDate)
+	if err != nil || parsedResponseDate.Format("2006-01-02") != responseDate {
+		return nil, fmt.Errorf("同花顺龙虎榜返回了无效交易日 %q", responseDate)
+	}
+	if rawDate != "" && rawDate != responseDate {
+		return nil, fmt.Errorf("同花顺龙虎榜交易日不匹配: requested=%s returned=%s", rawDate, responseDate)
+	}
+	total := len(data.StockItems)
+	if data.StockCount != nil {
+		if *data.StockCount < 0 || *data.StockCount != len(data.StockItems) {
+			return nil, fmt.Errorf("同花顺龙虎榜 stock_count 与 stock_items 不一致: declared=%d items=%d", *data.StockCount, len(data.StockItems))
+		}
+		total = *data.StockCount
+	}
+	now := time.Now().UTC()
+	sourceVersion := hithinkVersion + "-dragon-tiger-v1"
+	pages := 0
+	if total > 0 {
+		pages = (total + pageSize - 1) / pageSize
+	}
+	snapshot := &model.DragonTigerSnapshot{
+		TradeDate: responseDate, ProviderReportDate: responseDate,
+		Page: page, PageSize: pageSize, Total: total, Pages: pages,
+		SourceReturned: len(data.StockItems), Items: []model.DragonTigerItem{},
+		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_amount_units_not_explicitly_documented", "hot_money_detail_not_represented_in_shared_stock_pagination"},
+	}
+	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
+	}
+	if total == 0 {
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "empty_dragon_tiger_report_cannot_distinguish_no_events_from_unavailable_or_not_yet_published")
+		return snapshot, nil
+	}
+	if pages == 0 || page > pages {
+		return nil, fmt.Errorf("同花顺龙虎榜请求页 %d 超出总页数 %d", page, pages)
+	}
+	startIndex := (page - 1) * pageSize
+	endIndex := min(startIndex+pageSize, total)
+	if startIndex >= len(data.StockItems) {
+		return nil, fmt.Errorf("同花顺龙虎榜请求页 %d 超出了当前返回数据", page)
+	}
+	snapshot.HasMore = page < pages
+	snapshot.HasData = true
+	for index, row := range data.StockItems[startIndex:endIndex] {
+		rawSymbol := hithinkFieldString(row, "thscode")
+		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
+		if symbolErr != nil {
+			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行证券代码无效: %w", startIndex+index, symbolErr)
+		}
+		code := hithinkFieldString(row, "ticker")
+		if code == "" {
+			code = strings.Split(symbol, ".")[0]
+		}
+		if code != strings.Split(symbol, ".")[0] {
+			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行代码不匹配", startIndex+index)
+		}
+		name := hithinkFieldString(row, "name")
+		if name == "" {
+			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行缺少证券名称", startIndex+index)
+		}
+		change := hithinkFieldNumber(row, "change")
+		buy := hithinkFieldNumber(row, "buy_value")
+		sell := hithinkFieldNumber(row, "sell_value")
+		net := hithinkFieldNumber(row, "net_value")
+		netRate := hithinkFieldNumber(row, "net_rate")
+		orgNet := hithinkFieldNumber(row, "org_net_value")
+		hotNet := hithinkFieldNumber(row, "hot_money_net_value")
+		hotRank := hithinkFieldInteger(row, "hot_rank")
+		rangeDays := hithinkFieldInteger(row, "range_days")
+		if buy != nil && *buy < 0 || sell != nil && *sell < 0 {
+			return nil, fmt.Errorf("同花顺龙虎榜第 %d 行买入/卖出金额不能为负", startIndex+index)
+		}
+		var concepts []string
+		if rawConcepts, ok := row["concept_list"]; ok && len(rawConcepts) > 0 {
+			_ = json.Unmarshal(rawConcepts, &concepts)
+		}
+		itemReasons := []string{"provider_amount_unit_not_explicitly_documented"}
+		if data.Timestamp == nil || *data.Timestamp <= 0 {
+			itemReasons = append(itemReasons, "provider_snapshot_timestamp_missing_or_invalid")
+		}
+		item := model.DragonTigerItem{
+			Symbol: symbol, Code: code, Name: name, TradeDate: responseDate,
+			ChangePercent: change, Reason: hithinkFieldString(row, "limit_reason"),
+			ProviderBuyValue: buy, ProviderSellValue: sell, ProviderNetValue: net, ProviderNetRate: netRate,
+			ProviderOrgNetValue: orgNet, ProviderHotMoneyNetValue: hotNet, ProviderAmountUnit: "provider_defined",
+			HotRank: hotRank, RangeDays: rangeDays, Concepts: concepts,
+			Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
+			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
+		}
+		snapshot.Items = append(snapshot.Items, item)
+	}
+	snapshot.Returned = len(snapshot.Items)
+	return snapshot, nil
+}
+
+func hithinkFieldString(row map[string]json.RawMessage, key string) string {
+	var value string
+	if json.Unmarshal(row[key], &value) == nil {
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+
+func hithinkFieldNumber(row map[string]json.RawMessage, key string) *float64 {
+	value, ok := hithinkParseFundamentalValue(row[key])
+	if !ok || math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil
+	}
+	return &value
+}
+
+func hithinkFieldInteger(row map[string]json.RawMessage, key string) *int {
+	value := hithinkFieldNumber(row, key)
+	if value == nil || math.Trunc(*value) != *value || *value < 0 || *value > 1000000 {
+		return nil
+	}
+	result := int(*value)
+	return &result
+}
+
 func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("同花顺 HTTP client 未配置")

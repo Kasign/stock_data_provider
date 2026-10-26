@@ -239,3 +239,10 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - 报表字段保留来源字段名、显示名称、单位和披露日期；对上游缺失/非法值不补零，且把对应报表段落降级。
 - 一个报表端点失败时保留其他报表和财务指标已取到的数据，并把失败段落标为 degraded；只有用户显式启用同花顺 fundamentals 时才会发出这些请求。
 - 当前只映射官方公开契约列出的基础报表字段；完整字段覆盖与数据权限仍待后续统一验收。本次未运行测试。
+
+### 同花顺涨停池与龙虎榜（2026-10-26）
+
+- 涨停池使用 `/api/a-share/special-data/limit-up-pool`，显式指定交易日、页码与 size；接口只支持 up 池，down/broken 会返回明确不支持错误，以便继续走其他 Provider 的回退路径。
+- 龙虎榜使用 `/api/a-share/special-data/dragon-tiger-list?board_type=all`，支持最近一年内的指定交易日；因为官方响应不提供分页参数，Go 适配器在内存中按统一接口做分页。
+- 同花顺特别数据文档没有明示金额字段单位；新增通用 `provider_*_value` 字段和 `provider_amount_unit=provider_defined`，不把这些金额伪装成 CNY。相关结果保持 degraded。
+- 通过 `MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED=true` 与 `MARKET_DATA_HITHINK_DRAGON_TIGER_ENABLED=true` 分别开启，两项默认关闭且需要同花顺 API Key。本轮未运行测试。

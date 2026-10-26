@@ -261,6 +261,9 @@ type LimitPoolItem struct {
 	LastTouchTime     string        `json:"last_touch_time,omitempty"`
 	ConsecutiveBoards *int          `json:"consecutive_boards,omitempty"`
 	BrokenCount       *int          `json:"broken_count,omitempty"`
+	SealMoney          *float64      `json:"seal_money,omitempty"`
+	MaxSealMoney       *float64      `json:"max_seal_money,omitempty"`
+	ProviderAmountUnit string        `json:"provider_amount_unit,omitempty"`
 	Industry          string        `json:"industry,omitempty"`
 	Source            string        `json:"source"`
 	SourceVersion     string        `json:"source_version,omitempty"`
