@@ -240,3 +240,11 @@
 
 
 - 首轮 WebUI checks [#40256527920](https://github.com/Kasign/stock_data_provider/actions/runs/40256527920) 因三项旧源码契约断言失败（69/72 通过）未执行镜像构建；已修正文案/回调形式相关断言并复验成功。最终 WebUI checks [#40256618763](https://github.com/Kasign/stock_data_provider/actions/runs/40256618763) 全部通过：72/72 项 Node 测试、JavaScript 语法检查、Nginx 镜像构建均成功。浏览器真实交互与 NAS/Docker/OpenResty 联调仍未执行。
+
+
+## Issue #7 — 通知中心 UI 与五态模型（本批已提交，CI 待回填）
+- 通知页面补齐分类/状态/关键词筛选、刷新入口、通知列表和详情区域；因为通知 API 不存在，筛选、刷新、标记已读/未读均禁用，不展示静态通知、计数或投递成功记录。
+- 新增 loading / empty / unavailable / error / loaded 五态的纯函数状态解析与页面呈现框架。当前初始化明确走 unavailable；空数组只有在未来 API 真正返回时才会解释为 empty。
+- 顶栏只保留通知入口，不显示未读数。通知收件箱与设置中的渠道配置、告警中的通知投递尝试分离。
+- 新增 `web/src/notification-state.js`、`web/tests/notification-state.test.mjs` 和 UI 契约测试；语法检查包含新模块。后端 API 缺口未改变，也未添加模拟请求或 fixtures 到生产页面。
+- 本批 CI 状态待回填；浏览器实际布局及 NAS/Docker 真实通知 API 联调尚未执行。

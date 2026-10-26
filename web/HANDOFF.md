@@ -132,3 +132,11 @@
 - Issue #5 源码与 CI 阶段完成。尚缺实际浏览器/移动端截图、键盘/焦点走查和 NAS/Docker/OpenResty 的端到端联调；不得标记为真实环境验收已完成。
 - 本节写入时 PR #2 仍 Open、未合并，head `2c09afc56714a4082056db2f8e5e8f75969240f6`；base SHA 字段仍为 `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。数据 PR #1 当前 head `b927362fc6482863b0085dbaaa5c4a0f156e10c6`，Open、未合并；具体最新 Actions 以 GitHub 页面复核。
 - 下一步执行 Issue #7 通知中心 UI：真实 API 未接入，因此筛选、读状态、计数和历史均不得产生虚构结果；缺少 API 时显示可解释的 unavailable 状态。
+
+
+## Issue #7 本批交接（2026-10-26，CI 待回填）
+- 实施前重新核实 PR #2 head `1fa1f423bb627748df9e683648c7c0e28c656103`，Open/未合并；其文档提交 WebUI checks #40256730067 在开始时仍处于运行中。PR #1 head `b927362fc6482863b0085dbaaa5c4a0f156e10c6`，Open/未合并；对应 Go suite #40256492883 与 Live probe #40256492893 均成功。
+- 重新读取参考项目当前 `main` 的 `docs/notifications.md` 与页面目录。参考库通知能力涉及渠道、路由、降噪和发送；当前仓库没有收件箱、未读状态/计数及通知投递历史查询接口。
+- 本批 UI 仅呈现真实能力缺失：筛选、刷新、详情读写状态操作禁用；不会以“0 条”误报通知为空，不会产生未读角标或模拟记录。
+- 新增五态状态模型，当前生产页固定从 `supported:false` 解析为 unavailable。其余状态仅为接入真实 API 后的状态框架和纯函数测试，不表示真实通知端点已经存在。
+- 本批源码与 CI 状态待最终 Actions 结果确认；浏览器真实截图与 NAS/Docker/OpenResty 联调未完成。

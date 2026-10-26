@@ -233,19 +233,41 @@
 
         <section class="view feature-view" id="notifications-view" hidden aria-labelledby="notifications-title">
           <div class="page-heading">
-            <div><p class="eyebrow">ACTIVITY / 03</p><h1 id="notifications-title">通知中心</h1><p class="page-subtitle">查看分析、告警和系统通知。通知列表、已读状态与未读数必须来自服务端。</p></div>
-            <div class="feature-status"><span class="availability-pill is-unavailable">接口尚未接入</span></div>
+            <div><p class="eyebrow">ACTIVITY / 03</p><h1 id="notifications-title">通知中心</h1><p class="page-subtitle">集中查看分析、告警和系统通知。通知记录、已读状态与未读数必须由服务端提供。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable" id="notification-capability-status">通知 API 尚未接入</span></div>
           </div>
           <section class="panel feature-callout" role="status" aria-live="polite">
             <span class="feature-callout-icon" aria-hidden="true">i</span>
-            <div><h2>通知收件箱暂不可用</h2><p>当前 Go 服务没有通知收件箱、未读状态或通知历史 API。这里不会展示模拟通知，也不会生成未读角标。通知渠道配置与真实单渠道测试规划在设置中心。</p></div>
+            <div><h2>通知收件箱暂不可用</h2><p>当前 Go 服务没有通知收件箱、未读计数或已读状态 API。页面不会生成模拟通知、虚假未读角标或伪造的发送成功记录。通知渠道配置与真实单渠道测试属于设置中心；告警投递尝试属于告警诊断。</p></div>
           </section>
-          <section class="panel feature-empty-panel" aria-labelledby="notifications-empty-title">
-            <div class="feature-empty-icon" aria-hidden="true">▤</div>
-            <h2 id="notifications-empty-title">暂时无法读取通知记录</h2>
-            <p>这不是“通知数量为 0”的服务端确认，而是通知查询接口尚未提供。</p>
-            <div class="feature-meta"><span>所需后端能力</span><span>通知列表 · 已读状态 · 分类/状态筛选</span></div>
+          <section class="panel notification-toolbar" aria-label="通知筛选条件">
+            <div class="notification-toolbar-heading"><div><h2>筛选通知</h2><p>接口接入后可按来源类别、状态与关键词筛选。</p></div><button class="button button-secondary" id="refresh-notifications" type="button" disabled aria-disabled="true">刷新（待接入）</button></div>
+            <div class="notification-filter-grid">
+              <label class="field"><span>通知类别</span><select id="notification-category-filter" disabled aria-disabled="true"><option>等待通知 API</option></select></label>
+              <label class="field"><span>通知状态</span><select id="notification-status-filter" disabled aria-disabled="true"><option>等待通知 API</option></select></label>
+              <label class="field notification-search-field"><span>关键词</span><input id="notification-search" type="search" disabled aria-disabled="true" placeholder="标题、来源或诊断内容" /></label>
+            </div>
+            <p class="field-hint">筛选和刷新目前不可执行，因为没有真实通知数据源；不会以“0 条通知”冒充服务端空结果。</p>
           </section>
+          <div class="notifications-layout">
+            <section class="panel notification-list-panel" aria-labelledby="notification-list-title">
+              <div class="panel-heading"><div><h2 id="notification-list-title">通知记录</h2><p>按服务端时间倒序；来源包含分析、告警、系统与发送失败。</p></div><span class="availability-pill is-unavailable" id="notification-list-status">尚未加载</span></div>
+              <div class="notification-state" data-notification-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取通知</strong><p>正在向通知 API 请求最新记录。</p></div>
+              <div class="notification-state" data-notification-state="empty" hidden><span class="notification-state-mark" aria-hidden="true">▤</span><strong>服务端没有匹配的通知</strong><p>只有收到真实 API 的空数组后，才会展示此状态。</p></div>
+              <div class="notification-state" data-notification-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>通知接口尚未提供</strong><p>这是能力不可用状态，不代表服务器通知总数为零。</p><span class="availability-pill is-unavailable">后端待接入</span></div>
+              <div class="notification-state" data-notification-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>通知读取失败</strong><p id="notification-error-message">请检查服务状态与请求诊断。</p><button class="button button-secondary" id="retry-notifications" type="button" disabled aria-disabled="true">重试（待接入）</button></div>
+              <div class="notification-record-list" id="notification-record-list" data-notification-state="loaded" hidden aria-live="polite"></div>
+            </section>
+            <aside class="panel notification-detail-panel" aria-labelledby="notification-detail-title">
+              <div class="panel-heading"><div><h2 id="notification-detail-title">通知详情</h2><p>阅读状态与详情只有服务端 API 支持后才可变更。</p></div></div>
+              <div id="notification-detail-empty" class="notification-detail-empty"><span class="notification-state-mark" aria-hidden="true">↖</span><strong>尚未选择通知</strong><p>真实记录接入后，选中一条通知即可查看详情、来源和时间。</p></div>
+              <div id="notification-detail-content" class="notification-detail-content" hidden>
+                <dl><dt>标题</dt><dd id="notification-detail-subject">—</dd><dt>来源</dt><dd id="notification-detail-source">—</dd><dt>级别</dt><dd id="notification-detail-severity">—</dd><dt>时间</dt><dd id="notification-detail-time">—</dd><dt>状态</dt><dd id="notification-detail-status">—</dd></dl>
+                <div class="notification-detail-actions"><button class="button button-secondary" type="button" disabled aria-disabled="true">标记已读（待接入）</button><button class="button button-secondary" type="button" disabled aria-disabled="true">标记未读（待接入）</button></div>
+              </div>
+              <p class="notification-detail-boundary">已读、未读及详情查看状态当前没有服务器持久化支持；不会只在浏览器里假保存。</p>
+            </aside>
+          </div>
         </section>
 
         <section class="view feature-view" id="chat-view" hidden aria-labelledby="chat-title">

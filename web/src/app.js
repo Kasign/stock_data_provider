@@ -1,5 +1,6 @@
 import { applyTheme, persistTheme, readTheme } from "./theme.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
+import { resolveNotificationViewState } from "./notification-state.js";
 import {
   analysisHealth,
   clearSettings,
@@ -407,6 +408,20 @@ function setServiceStatus(prefix, ok, text) {
 function setQualityPill(target, status, customText = "") {
   target.className = `quality-pill quality-${String(status || "unknown").toLowerCase()}`;
   target.textContent = customText || qualityLabel(status);
+}
+
+function renderNotificationState(snapshot) {
+  const current = resolveNotificationViewState(snapshot);
+  document.querySelectorAll("[data-notification-state]").forEach((node) => {
+    node.hidden = node.dataset.notificationState !== current;
+  });
+  const status = $("#notification-list-status");
+  status.textContent = current === "unavailable" ? "接口尚未接入"
+    : current === "loading" ? "正在加载"
+    : current === "error" ? "读取失败"
+    : current === "empty" ? "无匹配记录" : "已加载";
+  status.className = "availability-pill " + (current === "loaded" || current === "empty" ? "is-readonly" : "is-unavailable");
+  return current;
 }
 
 function errorMessage(error) {
@@ -1816,6 +1831,7 @@ $("#copy-task-id").addEventListener("click", async () => {
   window.setTimeout(() => { button.textContent = "复制"; }, 1600);
 });
 
+renderNotificationState({ supported: false });
 renderRecentTasks();
 renderWatchlist();
 configureDateInputs();

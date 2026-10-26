@@ -333,3 +333,21 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /Never echo the persisted API key into the input DOM/);
   assert.doesNotMatch(app, /\$\("#market-key-input"\)\.value = state\.settings\.apiKey/);
 });
+
+
+test("notification center exposes explicit five-state UI without fake unread counts or records", () => {
+  for (const state of ["loading", "empty", "unavailable", "error", "loaded"]) {
+    assert.match(html, new RegExp('data-notification-state="' + state + '"'));
+  }
+  assert.match(html, /id="notification-category-filter"[^>]*disabled/);
+  assert.match(html, /id="notification-status-filter"[^>]*disabled/);
+  assert.match(html, /id="notification-search" type="search" disabled/);
+  assert.match(html, /id="refresh-notifications"[^>]*disabled/);
+  assert.match(html, /id="notification-detail-empty"/);
+  assert.match(html, /id="notification-detail-content"[^>]*hidden/);
+  assert.match(html, /不会生成模拟通知、虚假未读角标/);
+  assert.match(html, /不会只在浏览器里假保存/);
+  assert.match(app, /function renderNotificationState\(snapshot\)[\s\S]*?resolveNotificationViewState\(snapshot\)/);
+  assert.match(app, /renderNotificationState\(\{ supported: false \}\)/);
+  assert.doesNotMatch(html, /notification-count|unread-count|未读\\s*\\d+/i);
+});
