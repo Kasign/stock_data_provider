@@ -140,10 +140,21 @@ type StockBasic struct {
 	SecurityTypeLabel  string        `json:"security_type_label"`
 	ListingStatus      int           `json:"listing_status"`
 	ListingStatusLabel string        `json:"listing_status_label"`
+	DynamicPE          *float64      `json:"pe_dynamic,omitempty"`
+	PB                 *float64      `json:"pb,omitempty"`
+	Industry           string        `json:"industry,omitempty"`
+	MarketCapCNY       *float64      `json:"market_cap_cny,omitempty"`
+	FloatMarketCapCNY  *float64      `json:"float_market_cap_cny,omitempty"`
+	BoardCode          string        `json:"board_code,omitempty"`
+	ROEPercent         *float64      `json:"roe_percent,omitempty"`
+	NetProfitMarginPercent *float64  `json:"net_profit_margin_percent,omitempty"`
+	NetProfitCNY       *float64      `json:"net_profit_cny,omitempty"`
+	GrossMarginPercent *float64      `json:"gross_margin_percent,omitempty"`
 	Source             string        `json:"source"`
 	SourceVersion      string        `json:"source_version,omitempty"`
 	FetchedAt          time.Time     `json:"fetched_at"`
 	QualityStatus      QualityStatus `json:"quality_status"`
+	QualityReasons     []string      `json:"quality_reasons,omitempty"`
 	NormalizationVer   string        `json:"normalization_version"`
 }
 

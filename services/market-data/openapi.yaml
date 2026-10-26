@@ -288,10 +288,21 @@ components:
         security_type_label: {type: string}
         listing_status: {type: integer}
         listing_status_label: {type: string}
+        pe_dynamic: {type: number, nullable: true, description: Dynamic price-to-earnings ratio; negative or missing values are preserved}
+        pb: {type: number, nullable: true, description: Price-to-book ratio; may be missing}
+        industry: {type: string, nullable: true}
+        market_cap_cny: {type: number, nullable: true, description: Total market capitalization in CNY}
+        float_market_cap_cny: {type: number, nullable: true, description: Floating market capitalization in CNY}
+        board_code: {type: string, nullable: true, description: Eastmoney board code}
+        roe_percent: {type: number, nullable: true, description: Return on equity in percentage points}
+        net_profit_margin_percent: {type: number, nullable: true, description: Net profit margin in percentage points}
+        net_profit_cny: {type: number, nullable: true, description: Net profit amount in CNY as reported by the current market-profile endpoint}
+        gross_margin_percent: {type: number, nullable: true, description: Gross margin in percentage points}
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
         normalization_version: {type: string}
     SectorRanking:
       type: object
@@ -696,7 +707,8 @@ paths:
         '502': {description: Provider unavailable or returned inconsistent data}
   /api/v1/stocks/{symbol}/profile:
     get:
-      summary: Get single-security identity and listing metadata
+      summary: Get single-security identity, listing metadata and current market-profile fields
+      description: PE/PB, industry, market capitalization, ROE, margins and net profit come from Eastmoney quote fields. The upstream does not expose a verifiable timestamp for these fields, so profile quality is degraded; use quarterly fundamentals for report-period and publication-date semantics.
       parameters:
         - name: symbol
           in: path

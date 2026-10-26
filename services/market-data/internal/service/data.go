@@ -724,6 +724,16 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 			return fmt.Errorf("stock-basic %s %q is invalid", field, value)
 		}
 	}
+	for field, value := range map[string]*float64{"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY, "float_market_cap_cny": item.FloatMarketCapCNY, "roe_percent": item.ROEPercent, "net_profit_margin_percent": item.NetProfitMarginPercent, "net_profit_cny": item.NetProfitCNY, "gross_margin_percent": item.GrossMarginPercent} {
+		if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+			return fmt.Errorf("stock-basic %s is non-finite", field)
+		}
+	}
+	if item.MarketCapCNY != nil && *item.MarketCapCNY < 0 { return errors.New("stock-basic market_cap_cny must not be negative") }
+	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 { return errors.New("stock-basic float_market_cap_cny must not be negative") }
+	if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("stock-basic quality status %q is unsupported", item.QualityStatus)
+	}
 	if strings.TrimSpace(item.Source) == "" {
 		return errors.New("stock-basic source is missing")
 	}
@@ -746,12 +756,14 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		return nil, false, err
 	}
 	const ttl = 24 * time.Hour
+	const degradedTTL = 5 * time.Minute
 	key := "md:v1:stock-basic:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.StockBasic
-		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil &&
-			item.QualityStatus == model.QualityValid && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < ttl {
-			return &item, true, nil
+		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 {
+			maxAge := ttl
+			if item.QualityStatus == model.QualityDegraded { maxAge = degradedTTL }
+			if time.Since(item.FetchedAt) < maxAge { return &item, true, nil }
 		}
 	} else if cacheErr != nil {
 		s.logger.Warn("stock-basic cache read failed", "symbol", symbol, "error", cacheErr)
@@ -800,13 +812,11 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if item.QualityStatus != model.QualityValid {
-			failures = append(failures, p.Name()+": stock-basic quality status is not valid")
-			continue
-		}
+		cacheTTL := ttl
+		if item.QualityStatus == model.QualityDegraded { cacheTTL = degradedTTL }
 		payload, marshalErr := json.Marshal(item)
 		if marshalErr == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, cacheTTL); cacheErr != nil {
 				s.logger.Warn("stock-basic cache write failed", "symbol", symbol, "error", cacheErr)
 			}
 		} else {

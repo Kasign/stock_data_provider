@@ -274,7 +274,7 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 ### 仍未等价迁移的国内能力
 
 - **人气榜/飙升榜**：AkShare 的 `stock_hot_rank_em` 和 `stock_hot_up_em` 已经由 Go 原生 `HotRankingProvider` 对接东方财富端点；快照时间缺失时保持 degraded，雪球关注榜回退仍未迁移。
-- **个股基本资料扩展字段**：Efinance `get_base_info` 返回的 ROE、净利率、总市值、流通市值和估值等字段没有形成统一的 Go 个股概览模型。现有 profile/季度财务/批量估值有不同时间与口径，不能拼成一个无时间说明的对象。
+- **个股基本资料扩展字段**：已将 Efinance `get_base_info` 的动态 PE/PB、行业、总市值、流通市值、板块编号、ROE、净利率、净利润和毛利率映射到 Go `StockBasic`。这些当前 profile 字段无独立上游时间戳，整体质量标记 degraded；与季度财务报表分开，不拼造成无披露日期的历史财务值。
 - **统计口径差异**：Python 市场统计会自行推断涨跌停计数，Go 当前分为市场广度和涨跌停池接口；字段名相似不代表语义完全等价。
 - 海外市场本轮按既定范围暂缓，不在国内数据域迁移完成前引入。
 
@@ -286,3 +286,9 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - 新增 `GET /api/v1/market/hot-stocks?type=popular|surge&limit=10`，上限 100 条；榜单能力独立于行情和 K 线 fallback。
 - 校验股票代码、排名、重复项和行情数值。行情映射缺失时保留排名条目并降级；由于来源没有可信快照时间，正常响应仍为 `degraded`。
 - 通过 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED=true|false` 控制，默认开启；新增独立短缓存，减少重复请求。本次未运行测试或 CI。
+### Efinance get_base_info 个股 profile 字段迁移（2026-10-26）
+
+- 用 Go 原生东方财富行情字段补齐 `StockBasic` 的动态 PE、PB、行业、总市值、流通市值、板块编号、ROE、净利率、净利润、毛利率，对应 Efinance `EASTMONEY_BASE_INFO_FIELDS`（f162/f167/f127/f116/f117/f198/f173/f187/f105/f186）。
+- PE/PB 与百分比字段使用上游原值；市场/流通市值与净利润单位按人民币元解释。缺失和无效值保留为 `null`，不补 0。
+- 因行情接口没有每个 profile 字段的独立时间戳，返回整体标记 `degraded`；季度 fundamentals 仍负责带报告期与披露日期的财务指标，不与 profile 当前字段混合成 point-in-time 财务数据。
+- 身份/上市日期来自 Eastmoney F10；扩展行情请求失败不丢弃已经取得的身份信息，而是返回降级原因。本轮未运行测试或 CI。

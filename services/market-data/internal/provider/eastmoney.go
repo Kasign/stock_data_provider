@@ -361,14 +361,119 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	if outDate != "" {
 		status, statusLabel = 0, "delisted"
 	}
-	return &model.StockBasic{
+	item := &model.StockBasic{
 		Symbol: symbol, Name: name, IPODate: ipoDate, OutDate: outDate,
 		SecurityType: 1, SecurityTypeLabel: "stock",
 		ListingStatus: status, ListingStatusLabel: statusLabel,
-		Source: p.Name(), SourceVersion: "eastmoney-f10-issueinfo-orginfo-v1",
-		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+		Source: p.Name(), SourceVersion: "eastmoney-f10-market-profile-v2",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"market_profile_timestamp_not_exposed"},
 		NormalizationVer: normalize.Version,
-	}, nil
+	}
+
+	// Efinance get_base_info() uses the same Eastmoney quote endpoint and field mapping.
+	// The response has no independently verifiable snapshot timestamp; do not mark this profile as fully valid.
+	secid, secidErr := eastmoneySecID(symbol)
+	if secidErr != nil {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_symbol_not_supported_by_quote_endpoint")
+		return item, nil
+	}
+	quoteParams := url.Values{
+		"secid": []string{secid},
+		"fields": []string{"f57,f58,f162,f167,f127,f116,f117,f198,f173,f187,f105,f186"},
+		"fltt": []string{"2"},
+		"invt": []string{"2"},
+		"ut": []string{p.ut},
+	}
+	var quotePayload struct {
+		RC *int `json:"rc"`
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if quoteErr := p.getJSONWithRetry(ctx, p.quoteURL, quoteParams, &quotePayload, 8*time.Second); quoteErr != nil {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_request_failed")
+		return item, nil
+	}
+	if quotePayload.RC != nil && *quotePayload.RC != 0 {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_provider_error")
+		return item, nil
+	}
+	if len(quotePayload.Data) == 0 {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_data_missing")
+		return item, nil
+	}
+	sourceCode := readEastmoneyField(quotePayload.Data, "f57")
+	if sourceCode != "" && sourceCode != strings.Split(symbol, ".")[0] {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_security_code_mismatch")
+		return item, nil
+	}
+	itemName := readEastmoneyField(quotePayload.Data, "f58")
+	if itemName != "" && itemName != name {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_name_differs_from_f10_identity")
+	}
+	item.DynamicPE = parseEastmoneyProfileNumber(quotePayload.Data["f162"])
+	item.PB = parseEastmoneyProfileNumber(quotePayload.Data["f167"])
+	item.Industry = readEastmoneyField(quotePayload.Data, "f127")
+	item.MarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f116"])
+	item.FloatMarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f117"])
+	item.BoardCode = readEastmoneyField(quotePayload.Data, "f198")
+	item.ROEPercent = parseEastmoneyProfileNumber(quotePayload.Data["f173"])
+	item.NetProfitMarginPercent = parseEastmoneyProfileNumber(quotePayload.Data["f187"])
+	item.NetProfitCNY = parseEastmoneyProfileNumber(quotePayload.Data["f105"])
+	item.GrossMarginPercent = parseEastmoneyProfileNumber(quotePayload.Data["f186"])
+
+	for key, value := range map[string]*float64{
+		"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY,
+		"float_market_cap_cny": item.FloatMarketCapCNY, "roe_percent": item.ROEPercent,
+		"net_profit_margin_percent": item.NetProfitMarginPercent, "net_profit_cny": item.NetProfitCNY,
+		"gross_margin_percent": item.GrossMarginPercent,
+	} {
+		if value == nil {
+			item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_"+key+"_missing_or_invalid")
+		}
+	}
+	if item.MarketCapCNY != nil && *item.MarketCapCNY < 0 {
+		item.MarketCapCNY = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_market_cap_cny_negative")
+	}
+	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 {
+		item.FloatMarketCapCNY = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_float_market_cap_cny_negative")
+	}
+	if item.Industry == "" {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_industry_missing")
+	}
+	if item.BoardCode == "" {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_board_code_missing")
+	}
+	return item, nil
+}
+
+func readEastmoneyField(row map[string]json.RawMessage, name string) string {
+	raw, ok := row[name]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var value string
+	if json.Unmarshal(raw, &value) == nil {
+		return strings.TrimSpace(value)
+	}
+	return strings.TrimSpace(strings.Trim(string(raw), `"`))
+}
+
+func parseEastmoneyProfileNumber(raw json.RawMessage) *float64 {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	value := strings.TrimSpace(strings.Trim(string(raw), `"`))
+	if value == "" || value == "-" || strings.EqualFold(value, "null") {
+		return nil
+	}
+	n, err := strconv.ParseFloat(value, 64)
+	if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+		return nil
+	}
+	result := n
+	return &result
 }
 
 func parseEastmoneyProfileDate(value string) (string, error) {
