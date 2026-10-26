@@ -134,13 +134,14 @@ export function bindStockResearch(getSettings,getSymbol){
   }finally{button.disabled=false;button.textContent="读取估值指标";}
  }
  function renderValuations(data,symbol){
-  setText("valuations-symbol",data.requested_symbols?.[0]||symbol);
+  const requestedSymbol=String(data.requested_symbols?.[0]||symbol);
+  setText("valuations-symbol",requestedSymbol);
   setQuality("valuations-quality",data.quality_status);
   const root=$("#valuation-content");root.replaceChildren();
   const items=Array.isArray(data.items)?data.items.filter(item=>item&&typeof item==="object"):[];
-  const item=items.find(value=>String(value.symbol||"")===symbol)||items[0];
+  const item=items.find(value=>String(value.symbol||"")===requestedSymbol)||items[0];
   if(!item){
-   const message=Array.isArray(data.missing_symbols)&&data.missing_symbols.includes(symbol)
+   const message=Array.isArray(data.missing_symbols)&&data.missing_symbols.includes(requestedSymbol)
     ?"服务端未返回该标的估值记录；不会将缺失记录解释为 0。"
     :"估值接口返回成功，但没有可展示的估值项目。";
    root.append(el("p","stock-research-empty",message));
