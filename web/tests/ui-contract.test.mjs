@@ -441,7 +441,9 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /closeSettingsWithGuard/);
   assert.match(app, /event\.preventDefault\(\);[\s\S]*?closeSettingsWithGuard\(\)/);
   assert.match(app, /mergeConnectionDraft\(readConnectionDraft\(\), state\.settings\)/);
-  assert.match(app, /function checkConnectionFromSettings\(\)[\s\S]*?await refreshServices\(\)/);
+  assert.match(app, /async function checkConnectionFromSettings\(\)[\s\S]*?const settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);[\s\S]*?Promise\.allSettled\(\[[\s\S]*?marketHealth\(settingsToCheck\)[\s\S]*?analysisHealth\(settingsToCheck\)/);
+  assert.match(app, /currentDraft\.marketBase !== testedDraft\.marketBase \|\| currentDraft\.analysisBase !== testedDraft\.analysisBase/);
+  assert.match(app, /不会更改全局连接状态/);
   assert.match(html, /服务端配置 API 待接入/);
   assert.match(html, /服务器 \.env/);
   assert.match(html, /导出服务器配置（待接入）/);

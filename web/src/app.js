@@ -1463,21 +1463,31 @@ async function refreshServices() {
 async function checkConnectionFromSettings() {
   const button = $("#settings-check-connection");
   const output = $("#settings-connection-check");
+  const testedDraft = readConnectionDraft();
   button.disabled = true;
   button.textContent = "检查中…";
-  output.textContent = "正在请求行情与分析服务健康检查…";
+  output.textContent = "正在测试表单中的行情与分析 API 地址；本次检查不会保存配置…";
   output.className = "settings-inline-status";
   try {
-    const result = await refreshServices();
-    if (result.stale) {
-      output.textContent = "连接配置已变化，已忽略旧检查结果，请重新检查。";
+    // Use the draft values, not the previously saved settings; health checks never persist the draft.
+    const settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
+    const [marketResult, analysisResult] = await Promise.allSettled([
+      marketHealth(settingsToCheck),
+      analysisHealth(settingsToCheck)
+    ]);
+    const currentDraft = readConnectionDraft();
+    if (currentDraft.marketBase !== testedDraft.marketBase || currentDraft.analysisBase !== testedDraft.analysisBase) {
+      output.textContent = "检查期间连接地址已再次修改，已忽略旧结果，请使用当前地址重新检查。";
       output.className = "settings-inline-status is-warning";
       return;
     }
-    output.textContent = (result.marketOK ? "行情 API 就绪" : "行情 API 不可用") + "；" +
-      (result.analysisOK ? "分析 API 就绪" : "分析 API 不可用") +
-      "。健康检查不验证 Provider 的每次真实请求。";
-    output.className = "settings-inline-status " + (result.marketOK && result.analysisOK ? "is-success" : "is-warning");
+    const marketOK = marketResult.status === "fulfilled";
+    const analysisOK = analysisResult.status === "fulfilled";
+    const marketMessage = marketOK ? "行情 API 就绪" : "行情 API 不可用（" + errorMessage(marketResult.reason) + "）";
+    const analysisMessage = analysisOK ? "分析 API 就绪" : "分析 API 不可用（" + errorMessage(analysisResult.reason) + "）";
+    output.textContent = "表单地址检查结果（尚未保存）：" + marketMessage + "；" + analysisMessage +
+      "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。";
+    output.className = "settings-inline-status " + (marketOK && analysisOK ? "is-success" : "is-warning");
   } catch (error) {
     output.textContent = "连接检查失败：" + errorMessage(error);
     output.className = "settings-inline-status is-warning";

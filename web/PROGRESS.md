@@ -545,3 +545,9 @@
 - `scripts/deploy-go.sh` 改为构建并等待三个服务健康；Go 与 WebUI 工作流中的 Compose 路径、镜像标签和部署契约测试源码已同步。
 - 既有 `.env` 不会被覆盖。升级时需调整 `MARKET_DATA_BASE_URL`、`MARKET_DATA_SERVICE_NAME` 与 `ANALYSIS_SERVICE_NAME`，并按 README 的一次性步骤移除旧 Go 应用容器。
 - 本批未运行测试、未构建镜像、未触发 GitHub Actions；Compose 解析、三镜像构建、实际服务发现、端口与浏览器代理仍待后续统一验收。
+
+## 2026-10-26 设置页与 Task Flow 静态 Review
+
+- 发现并修正设置页“检查连接”使用已保存地址而非表单草稿的问题。现在会检查用户当前编辑的两个 API 地址，结果会标明“尚未保存”，并且不会覆盖全局健康状态；检查期间地址若再次变化，旧结果会被忽略。
+- Task/Run 轮询、Run 结果重试和切换 analysis base 的状态保护已做静态核对：请求前捕获 endpoint/generation，响应与重试前校验当前任务和连接；切换地址不会把旧 task ID 发给新服务。
+- 该 Review 仅为源码检查与测试用例更新，未运行任何测试、镜像构建或 GitHub Actions。
