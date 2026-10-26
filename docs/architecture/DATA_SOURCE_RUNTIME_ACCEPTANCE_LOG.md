@@ -630,3 +630,6 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - 新增 `TestLiveNativeNewsSearch`，受 `GO_NATIVE_NEWS_LIVE_TESTS=1` 控制；从现有 `BOCHA_API_KEYS`、`SEARXNG_BASE_URLS` 配置实际查询贵州茅台的最新新闻，并输出独立 `live-news-report.json`。
 - Live provider workflow 仅在仓库配置了相应 GitHub Secrets 时才会真正请求源站；没有凭据会输出 `skipped`，不能把跳过写成通过。该探测不把搜索引擎返回的空结果当作数据完整性失败，但会把所有已配置源均报错作为探测失败。
 - 本文记录为探测框架已加入；需要最新 HEAD 的 CI 与 live-provider-smoke workflow 运行结果，才能报告实际调用成功或被跳过。
+
+
+- 补充说明：首次编辑 live-provider workflow 时，新增探测步骤误插入现有 run 命令，导致该工作流检查没有创建 job；该次结果不表示真实新闻 API 失败。已重写 workflow 步骤结构，后续以新 HEAD 的完整 Go CI 与工作流报告作为验收依据。

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/domain"
 )
 
 type liveNewsSample struct {
@@ -100,4 +99,3 @@ func writeLiveNewsReport(t *testing.T, report liveNewsReport) {
 	}
 }
 
-var _ = domain.NewsItem{}
