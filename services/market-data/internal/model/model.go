@@ -341,6 +341,7 @@ type ValuationItem struct {
 	Name           string        `json:"name,omitempty"`
 	PETTM          *float64      `json:"pe_ttm"`
 	PEMRQ          *float64      `json:"pe_mrq"`
+	PEStatic       *float64      `json:"pe_static"`
 	PBMRQ          *float64      `json:"pb_mrq"`
 	PSTTM          *float64      `json:"ps_ttm"`
 	PCFTTM         *float64      `json:"pcf_ttm"`

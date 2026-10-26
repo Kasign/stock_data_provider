@@ -685,7 +685,7 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	}
 	bySymbol := make(map[string]values, len(table.rows))
 	now := time.Now().UTC()
-	snapshotReasons := []string{"provider_exact_snapshot_time_not_exposed", "provider_pcf_ttm_not_supported_by_tushare_daily_basic"}
+	snapshotReasons := []string{"provider_exact_snapshot_time_not_exposed", "provider_pcf_ttm_not_supported_by_tushare_daily_basic", "provider_pe_mrq_not_supported_by_tushare_daily_basic"}
 	for index, row := range table.rows {
 		rawSymbol, readErr := table.stringValue(row, "ts_code")
 		if readErr != nil {
@@ -709,7 +709,7 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		if dateErr != nil || rowDate != tradeDate {
 			return nil, fmt.Errorf("Tushare daily_basic 日期不匹配: requested=%s returned=%q", tradeDate, rowDateRaw)
 		}
-		pe, readErr := table.optionalFloat(row, "pe")
+		peStatic, readErr := table.optionalFloat(row, "pe")
 		if readErr != nil {
 			return nil, readErr
 		}
@@ -725,13 +725,13 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		if readErr != nil {
 			return nil, readErr
 		}
-		itemReasons := []string{"provider_exact_snapshot_time_not_exposed", "provider_pcf_ttm_not_supported_by_tushare_daily_basic"}
-		if pe == nil || peTTM == nil || pb == nil || psTTM == nil {
+		itemReasons := []string{"provider_exact_snapshot_time_not_exposed", "provider_pcf_ttm_not_supported_by_tushare_daily_basic", "provider_pe_mrq_not_supported_by_tushare_daily_basic"}
+		if peStatic == nil || peTTM == nil || pb == nil || psTTM == nil {
 			itemReasons = appendTushareReason(itemReasons, "one_or_more_valuation_metrics_missing")
 		}
 		bySymbol[symbol] = values{item: model.ValuationItem{
 			Symbol: symbol, Code: strings.Split(symbol, ".")[0],
-			PETTM: peTTM, PEMRQ: pe, PBMRQ: pb, PSTTM: psTTM, PCFTTM: nil,
+			PETTM: peTTM, PEMRQ: nil, PEStatic: peStatic, PBMRQ: pb, PSTTM: psTTM, PCFTTM: nil,
 			Source: p.Name(), SourceVersion: tushareValuationVersion, FetchedAt: now,
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		}}

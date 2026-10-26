@@ -133,3 +133,71 @@ func TestTushareIndexConstituentsFallsBackToPreviousMonth(t *testing.T) {
 		t.Fatalf("unexpected previous-month constituent snapshot: %+v", got)
 	}
 }
+
+
+func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().In(location)
+	reference := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	if now.Hour() < 18 {
+		reference = reference.AddDate(0, 0, -1)
+	}
+	tradeDate := reference.Format("20060102")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		switch request.APIName {
+		case "trade_cal":
+			writeTushareTestTable(w, []string{"exchange", "cal_date", "is_open"}, [][]any{{"SSE", tradeDate, 1}})
+		case "daily_basic":
+			if request.Params["trade_date"] != tradeDate {
+				t.Errorf("daily_basic trade_date = %q, want %q", request.Params["trade_date"], tradeDate)
+			}
+			writeTushareTestTable(w, []string{"ts_code", "trade_date", "pe", "pe_ttm", "pb", "ps_ttm"}, [][]any{
+				{"600519.SH", tradeDate, 22.5, 18.4, 6.1, 7.2},
+			})
+		default:
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected api", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := provider.FetchValuations(context.Background(), []string{"600519.SH"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 1 || len(got.Items) != 1 {
+		t.Fatalf("unexpected valuation snapshot: %+v", got)
+	}
+	item := got.Items[0]
+	if item.PEStatic == nil || *item.PEStatic != 22.5 {
+		t.Fatalf("expected source-native static PE, got %+v", item.PEStatic)
+	}
+	if item.PEMRQ != nil {
+		t.Fatalf("Tushare daily_basic pe must not be labelled pe_mrq, got %+v", item.PEMRQ)
+	}
+	if item.PETTM == nil || *item.PETTM != 18.4 {
+		t.Fatalf("expected TTM PE to remain mapped, got %+v", item.PETTM)
+	}
+	if !containsTushareReason(item.QualityReasons, "provider_pe_mrq_not_supported_by_tushare_daily_basic") {
+		t.Fatalf("expected missing-MRQ quality reason, got %+v", item.QualityReasons)
+	}
+}
+
+func containsTushareReason(reasons []string, target string) bool {
+	for _, reason := range reasons {
+		if reason == target {
+			return true
+		}
+	}
+	return false
+}

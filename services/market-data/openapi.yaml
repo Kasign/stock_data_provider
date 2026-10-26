@@ -650,13 +650,14 @@ components:
         quality_reasons: {type: array, items: {type: string}}
     ValuationItem:
       type: object
-      required: [symbol, code, pe_ttm, pe_mrq, pb_mrq, ps_ttm, pcf_ttm, source, fetched_at, quality_status]
+      required: [symbol, code, pe_ttm, pe_mrq, pe_static, pb_mrq, ps_ttm, pcf_ttm, source, fetched_at, quality_status]
       properties:
         symbol: {type: string, example: 600519.SH}
         code: {type: string, example: "600519"}
         name: {type: string}
         pe_ttm: {type: number, nullable: true, description: Price-to-earnings ratio on trailing twelve-month earnings; may be negative or null}
         pe_mrq: {type: number, nullable: true, description: Price-to-earnings ratio on most recent quarter basis; may be negative or null}
+        pe_static: {type: number, nullable: true, description: Provider-native P/E based on net profit (for Tushare daily_basic pe); not equivalent to pe_mrq}
         pb_mrq: {type: number, nullable: true, description: Price-to-book ratio on most recent quarter basis; may be null}
         ps_ttm: {type: number, nullable: true, description: Price-to-sales ratio on trailing twelve-month basis; may be negative or null}
         pcf_ttm: {type: number, nullable: true, description: Price-to-cash-flow ratio on trailing twelve-month basis; may be negative or null}
