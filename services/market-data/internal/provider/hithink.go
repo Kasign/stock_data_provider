@@ -140,6 +140,286 @@ func (p *Hithink) SearchStocks(ctx context.Context, queryText string, limit int)
 	return snapshot, nil
 }
 
+type hithinkIndexDefinition struct {
+	Symbol string
+	Code   string
+	Name   string
+}
+
+var hithinkCoreIndexDefinitions = []hithinkIndexDefinition{
+	{Symbol: "000001.SH", Code: "000001", Name: "上证指数"},
+	{Symbol: "399001.SZ", Code: "399001", Name: "深证成指"},
+	{Symbol: "399006.SZ", Code: "399006", Name: "创业板指"},
+	{Symbol: "000300.SH", Code: "000300", Name: "沪深300"},
+	{Symbol: "000016.SH", Code: "000016", Name: "上证50"},
+	{Symbol: "000905.SH", Code: "000905", Name: "中证500"},
+	{Symbol: "000688.SH", Code: "000688", Name: "科创50"},
+}
+
+// FetchIndexQuotes 查询固定白名单核心指数，绝不发送无 thscodes 的全市场请求。
+func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺指数行情接口需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	symbols := make([]string, 0, len(hithinkCoreIndexDefinitions))
+	allowed := make(map[string]hithinkIndexDefinition, len(hithinkCoreIndexDefinitions))
+	for _, definition := range hithinkCoreIndexDefinitions {
+		symbols = append(symbols, definition.Symbol)
+		allowed[definition.Symbol] = definition
+	}
+	query := url.Values{}
+	query.Set("thscodes", strings.Join(symbols, ","))
+	raw, err := p.get(ctx, "/api/a-share-index/prices/snapshot", query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺指数行情请求失败: %w", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Timestamp *int64 `json:"timestamp"`
+		Item []struct {
+			THSCode       string   `json:"thscode"`
+			Name          string   `json:"name"`
+			LastPrice     *float64 `json:"last_price"`
+			PriceChange   *float64 `json:"price_change"`
+			ChangeRatio   *float64 `json:"price_change_ratio_pct"`
+			OpenPrice     *float64 `json:"open_price"`
+			HighPrice     *float64 `json:"high_price"`
+			LowPrice      *float64 `json:"low_price"`
+			PreviousPrice *float64 `json:"prev_price"`
+			Turnover      *float64 `json:"turnover"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺指数行情失败: %w", err)
+	}
+	if len(data.Item) == 0 {
+		return nil, errors.New("同花顺指数行情未返回任何记录")
+	}
+	now := time.Now().UTC()
+	snapshot := &model.IndexQuoteSnapshot{
+		Items: make([]model.MarketIndexQuote, 0, len(hithinkCoreIndexDefinitions)),
+		Source: p.Name(), SourceVersion: hithinkVersion, FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	var quoteTime *time.Time
+	quoteTimeSemantics := ""
+	if data.Timestamp != nil && *data.Timestamp > 0 {
+		value := time.UnixMilli(*data.Timestamp).UTC()
+		if !value.After(now.Add(5*time.Minute)) {
+			quoteTime = &value
+			quoteTimeSemantics = "provider_snapshot_time"
+		}
+	}
+	if quoteTime == nil {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
+	}
+	bySymbol := make(map[string]model.MarketIndexQuote, len(hithinkCoreIndexDefinitions))
+	seen := make(map[string]struct{}, len(hithinkCoreIndexDefinitions))
+	for _, item := range data.Item {
+		symbol := strings.ToUpper(strings.TrimSpace(item.THSCode))
+		definition, ok := allowed[symbol]
+		if !ok {
+			continue
+		}
+		if _, duplicate := seen[symbol]; duplicate {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_index_row_dropped")
+			continue
+		}
+		seen[symbol] = struct{}{}
+		if item.LastPrice == nil || item.PreviousPrice == nil || item.OpenPrice == nil || item.HighPrice == nil || item.LowPrice == nil ||
+			!hithinkPositiveFinite(*item.LastPrice) || !hithinkPositiveFinite(*item.PreviousPrice) ||
+			!hithinkPositiveFinite(*item.OpenPrice) || !hithinkPositiveFinite(*item.HighPrice) || !hithinkPositiveFinite(*item.LowPrice) ||
+			*item.LowPrice > *item.HighPrice || *item.OpenPrice < *item.LowPrice || *item.OpenPrice > *item.HighPrice ||
+			*item.LastPrice < *item.LowPrice || *item.LastPrice > *item.HighPrice {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_index_rows_have_invalid_required_prices")
+			continue
+		}
+		change := *item.LastPrice - *item.PreviousPrice
+		if item.PriceChange != nil && hithinkFinite(*item.PriceChange) {
+			change = *item.PriceChange
+		}
+		changePercent := change / *item.PreviousPrice * 100
+		if item.ChangeRatio != nil && hithinkFinite(*item.ChangeRatio) {
+			changePercent = *item.ChangeRatio
+		}
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			name = definition.Name
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_name_missing_used_allowlisted_name")
+		}
+		var amount *float64
+		amountUnit := "unknown"
+		reasons := []string{}
+		if quoteTime == nil {
+			reasons = append(reasons, "provider_snapshot_timestamp_missing_or_invalid")
+		}
+		if item.Turnover != nil && hithinkNonNegativeFinite(*item.Turnover) {
+			value := *item.Turnover
+			amount = &value
+			amountUnit = "CNY"
+		} else {
+			reasons = append(reasons, "provider_amount_missing_or_invalid")
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_amount_missing_or_invalid")
+		}
+		itemQuality := model.QualityValid
+		if len(reasons) > 0 {
+			itemQuality = model.QualityDegraded
+			snapshot.QualityStatus = model.QualityDegraded
+		}
+		bySymbol[symbol] = model.MarketIndexQuote{
+			Symbol: symbol, Code: definition.Code, Name: name,
+			LatestPrice: item.LastPrice, Change: &change, ChangePercent: &changePercent,
+			Open: item.OpenPrice, High: item.HighPrice, Low: item.LowPrice, PrevClose: item.PreviousPrice,
+			Amount: amount, AmountUnit: amountUnit, QuoteTime: quoteTime, QuoteTimeSemantics: quoteTimeSemantics,
+			Source: p.Name(), SourceVersion: hithinkVersion, FetchedAt: now,
+			QualityStatus: itemQuality, QualityReasons: reasons,
+		}
+	}
+	for _, definition := range hithinkCoreIndexDefinitions {
+		item, ok := bySymbol[definition.Symbol]
+		if !ok {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_allowlisted_indices_missing")
+			continue
+		}
+		snapshot.Items = append(snapshot.Items, item)
+	}
+	if len(snapshot.Items) == 0 {
+		return nil, errors.New("同花顺指数行情未返回可用的核心指数记录")
+	}
+	return snapshot, nil
+}
+
+func appendUniqueHithinkReason(reasons []string, reason string) []string {
+	for _, item := range reasons {
+		if item == reason {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
+}
+
+// FetchTradingCalendar 调用同花顺滚动一年日历。上游只列开市日期，非交易日由适配器推断并降级。
+func (p *Hithink) FetchTradingCalendar(ctx context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺交易日历接口需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	start, err := time.Parse("2006-01-02", strings.TrimSpace(startDate))
+	if err != nil {
+		return nil, fmt.Errorf("无效的同花顺交易日历起始日期 %q", startDate)
+	}
+	end, err := time.Parse("2006-01-02", strings.TrimSpace(endDate))
+	if err != nil {
+		return nil, fmt.Errorf("无效的同花顺交易日历结束日期 %q", endDate)
+	}
+	if start.After(end) {
+		return nil, errors.New("同花顺交易日历起始日期不能晚于结束日期")
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	nowCN := time.Now().In(loc)
+	todayDate := nowCN.Format("2006-01-02")
+	firstSupportedDate := nowCN.AddDate(-1, 0, 0).Format("2006-01-02")
+	if startDate < firstSupportedDate || endDate > todayDate {
+		return nil, errors.New("同花顺交易日历仅覆盖 Asia/Shanghai 最近一年至今日；该区间应回退到支持完整日期范围的数据源")
+	}
+	if int(end.Sub(start)/(24*time.Hour))+1 > 3660 {
+		return nil, errors.New("同花顺交易日历请求区间不能超过 3660 天")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	raw, err := p.get(ctx, "/api/a-share/calendar/trading-days", nil)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺交易日历请求失败: %w", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Timestamp *int64 `json:"timestamp"`
+		Item []struct {
+			DateMS *int64 `json:"date_ms"`
+			Date string `json:"date"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺交易日历失败: %w", err)
+	}
+	if len(data.Item) == 0 {
+		return nil, errors.New("同花顺交易日历返回空的交易日列表")
+	}
+	tradingDates := make(map[string]struct{}, len(data.Item))
+	for index, item := range data.Item {
+		dateText := strings.TrimSpace(item.Date)
+		var parsed time.Time
+		if dateText != "" {
+			parsed, err = time.Parse("20060102", dateText)
+			if err != nil {
+				parsed, err = time.Parse("2006-01-02", dateText)
+			}
+		} else if item.DateMS != nil && *item.DateMS > 0 {
+			parsed = time.UnixMilli(*item.DateMS).In(loc)
+		} else {
+			return nil, fmt.Errorf("同花顺交易日历第 %d 项缺少有效日期", index)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("同花顺交易日历第 %d 项日期无效", index)
+		}
+		date := parsed.In(loc).Format("2006-01-02")
+		if date < firstSupportedDate || date > todayDate {
+			return nil, fmt.Errorf("同花顺交易日历返回了超出滚动一年范围的日期 %s", date)
+		}
+		if _, duplicate := tradingDates[date]; duplicate {
+			return nil, fmt.Errorf("同花顺交易日历返回重复日期 %s", date)
+		}
+		tradingDates[date] = struct{}{}
+	}
+	startLocal := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc)
+	endLocal := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, loc)
+	totalDays := int(endLocal.Sub(startLocal)/(24*time.Hour)) + 1
+	items := make([]model.TradingCalendarDay, 0, totalDays)
+	tradingDays := 0
+	for current := startLocal; !current.After(endLocal); current = current.AddDate(0, 0, 1) {
+		date := current.Format("2006-01-02")
+		_, isTradingDay := tradingDates[date]
+		if isTradingDay {
+			tradingDays++
+		}
+		items = append(items, model.TradingCalendarDay{Date: date, IsTradingDay: isTradingDay})
+	}
+	snapshot := &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
+		TotalDays: totalDays, TradingDays: tradingDays, Items: items,
+		Source: p.Name(), SourceVersion: hithinkVersion, FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_returns_trading_days_only_non_trading_dates_inferred"},
+	}
+	if data.Timestamp == nil || *data.Timestamp <= 0 {
+		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_snapshot_timestamp_missing")
+	}
+	return snapshot, nil
+}
+
 func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("同花顺 HTTP client 未配置")

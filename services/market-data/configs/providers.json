@@ -1,8 +1,8 @@
 {
   "provider_priority": [
     "eastmoney",
-    "hithink",
     "baostock",
+    "hithink",
     "tushare",
     "tickflow",
     "tencent",
@@ -29,6 +29,8 @@
       "enabled": false,
       "quote": false,
       "daily_bars": false,
+      "index_quotes": false,
+      "trading_calendar": false,
       "fundamentals": false
     },
     "baostock": {
