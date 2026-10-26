@@ -489,7 +489,7 @@ components:
         open_times: {type: integer, nullable: true, description: Number of limit-up board openings for broken-board pool only}
         turnover_ratio_percent: {type: number, nullable: true, description: Provider-reported turnover ratio in percentage points}
         turnover: {type: number, nullable: true, description: Provider-reported turnover value; consult provider_amount_unit}
-        last_touch_time: {type: string, description: Provider HH:MM:SS value when exposed}
+        provider_amount_unit: {type: string, description: Unit of provider-sourced money fields; provider_defined does not mean CNY}
         consecutive_boards: {type: integer, nullable: true}
         broken_count: {type: integer, nullable: true}
         industry: {type: string}
