@@ -1,21 +1,49 @@
 # WebUI 任务交接上下文
 
-最后更新：2026-10-23
-用途：在新的 ChatGPT 对话中恢复 stock_data_provider WebUI 产品扩展工作。
+最后更新：2026-10-26
+用途：从新对话恢复 stock_data_provider WebUI 产品扩展与阶段 Review。
 
-## 当前 GitHub 真值（重新验证后记录）
+## 当前 GitHub 真值（本轮开始时重新核实）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 分支：feat/webui-market-data-console
-- 本批开始前 WebUI HEAD：`4b2ae6190a2c7e54cb7628ba2183cf352c642d74`（本批代码提交后应重新核实最新 HEAD）。
-- 数据分支：feat/full-go-data-providers-api-switch
-- 本批开始前数据分支 PR #1 HEAD：`38193c1e9360e8f7293eabf45403565dad33e594`（Open，未合并；base `main`）。
-- PR #2：https://github.com/Kasign/stock_data_provider/pull/2，Open、未合并，mergeable=true；head 是 WebUI 分支，base 是数据分支。
-- Issue #3 导航与页面骨架提交 `4b2ae6190a2c7e54cb7628ba2183cf352c642d74` 的 WebUI checks [#39941562678](https://github.com/Kasign/stock_data_provider/actions/runs/39941562678) 已成功，JavaScript 语法、Node 测试、Nginx 镜像构建均通过。
-- 数据分支最新 Go test suite [#39941383763](https://github.com/Kasign/stock_data_provider/actions/runs/39941383763)（head `38193c1e`）失败：`services/market-data` 单元测试失败，构建 Go market-data 镜像失败；Go core 和根包测试通过。
-- 数据分支 Live Provider probe [#39941383744](https://github.com/Kasign/stock_data_provider/actions/runs/39941383744)（head `38193c1e`）成功；它不是 NAS/1Panel 端到端验证。
-- 近期 Go 修复提交：7e47aec66cb000cf403ed0cfbbcbadfe655467a3，修正 Run rejected_request 错误映射为 Task failed，并增加状态映射测试。
-- 最新 WebUI 功能提交（Issue #3）：`4b2ae6190a2c7e54cb7628ba2183cf352c642d74`，增加统一导航、hash 路由、页面不可用态和响应式样式；本批 Issue #4 继续增强 Task/Run 运行流抽屉。
+- WebUI 分支：feat/webui-market-data-console；本轮开始时 HEAD：3743d7b8a610fcda9b1348ecefbc9a754e1d0706。
+- PR #2：https://github.com/Kasign/stock_data_provider/pull/2，Open、未合并；head 与上述 WebUI HEAD 一致；base 为 feat/full-go-data-providers-api-switch。
+- 数据分支：feat/full-go-data-providers-api-switch；本轮开始时 HEAD：26f428a427a9f7d43299de267c1e3bd2b38d294e。
+- PR #1：https://github.com/Kasign/stock_data_provider/pull/1，Open、未合并；head 与上述数据分支 HEAD 一致；base 为 main。
+- 分支 HEAD 和 PR 状态必须在每次后续编辑前重新核对，不依赖此处记录当作实时真值。
+
+## 本轮已交付且尚未做运行时验收的事项
+
+- 共享状态契约已添加到数据分支：https://github.com/Kasign/stock_data_provider/blob/5776313e7b50648ea0e7d741c7eb1c02b8d20758/docs/architecture/WEBUI_DATA_STATE_CONTRACT.md。数据层新功能开发前须先阅读它，再对照领域契约与 OpenAPI。
+- WebUI 主行情、日 K、股票搜索、市场总览、健康检查、Provider 清单已补充请求序号/generation 与旧响应保护。
+- Task/Run 与 analysis_base 绑定；切换分析 API 路径后停止旧轮询、清理旧活动结果，并保留带来源地址的最近任务引用，避免将旧 task ID 发给新服务。
+- 运行容器和 Compose 服务名统一为 stock-analysis-web。依赖服务名通过仓库根目录 .env 注入：MARKET_DATA_SERVICE_NAME 与 ANALYSIS_SERVICE_NAME。默认只绑定 127.0.0.1:8093。
+- PR #2 描述已更新以反映容器名、根目录 .env 和跨层状态约定。
+- 本轮按用户要求没有运行测试、镜像构建或 GitHub Actions。源码 Review 不等于测试通过或真实部署验收。
+
+## 当前数据层缺口与前端行为
+
+现有接口包括行情健康检查、Provider 清单、实时行情、日 K 与部分个股补充数据，以及分析服务就绪、创建 Task、查询 Task、阶段事件和单个 RunResult。
+
+未核实到持久通知收件箱、Agent Chat/会话/流式/取消、选股策略/扫描/候选/历史、告警规则 CRUD/后台评估/触发/投递查询、通用服务端配置写入、服务端任务列表或 Run Flow DAG 快照 API。
+
+这些页面保留可审阅的 UI 和状态模型，但生产页面必须继续显示后端不可用并禁用真实写操作；不能用 localStorage 冒充服务端状态，也不能把 fixture 当成生产数据。各项资源与最小契约要求见 web/API_CONTRACT.md 中的“未接入功能的后端契约需求”。
+
+## 每个批次的工作方式
+
+1. 编辑前重新查询 WebUI 与数据分支 HEAD、PR 状态和最近提交。
+2. 直接读取实际客户端、Nginx、Go Handler/领域类型与 OpenAPI，不能仅依据 fixture 推断契约。
+3. 先规划一组逻辑完整的修改，再按功能成组提交；不逐文件提交。
+4. 更新 web/PROGRESS.md 与 web/TECHNICAL_NOTES.md，维护状态、部署约定和跨层依赖。
+5. 按当前用户要求，不运行测试、CI 或镜像构建，并在总结中明确说明；只报告实际完成的源码 Review。
+6. 不合并 PR、不强推、不重写历史；后端能力缺口先记录为契约/依赖，不夹带 Go 源码修改。
+7. 在主要模块完成后做整体 Review，再由用户统一测试并在 NAS/Docker/OpenResty 上验收。
+
+## 下一步执行指令
+
+继续检查通知、问股、选股、告警和设置模块的当前状态模型、共享状态语义与文档一致性。页面骨架/状态模型已基本存在，真正的能力缺口在后端契约；先将缺口和最小验收要求写清楚，不新增假接口，也不提前启用按钮。之后继续跨模块源码 Review，合适节点汇总问题与后续数据层依赖。
+
+历史续接记录保留在下文以供参考；其中标记的旧 HEAD、旧 PR base 和旧 CI SHA 不是当前 GitHub 真值。
 
 ## 规划文档和 Issue
 
@@ -52,7 +80,7 @@
 - 第一项新增功能优先完成统一布局/导航，再完成基于现有真实 Task API 的详情/运行流时间线；之后设置中心与通知 UI，再依次问股、选股、告警。
 - 对运行流当前只做真实 StageEvent 线性时间线；没有后端拓扑时不得画虚假 DAG 或虚假进度百分比。
 
-## 每个批次的工作方式
+## 历史协作约定（2026-10-23；如与顶部约定冲突，以顶部为准）
 
 1. 开始前重新查询两个分支 HEAD、PR #2 状态、最近 commits、Actions 状态，不沿用旧状态。
 2. 直接读取源码与 Go Handler/领域类型核对契约；不要仅基于 fixture 设计前端。
@@ -62,14 +90,14 @@
 6. 更新 web/PROGRESS.md 与本文件，记录哪些是源码核实、测试覆盖、真实 NAS 联调。
 7. 不合并 PR #2，不强推、不重写旧历史。后端功能缺口写成独立契约/issue，不改无关数据源逻辑。
 
-## 下一步执行指令
+## 历史执行指令（2026-10-23）
 
-从 Issue #3 开始：读取当前 HTML/CSS/app.js 全量结构，做一次页面信息架构和布局审查，计划需要修改的模块，然后成组实现统一导航与公共状态组件；新增视图先用明确的 unavailable/empty UI，不加入假数据。之后按 PRODUCT_BACKLOG.md 的顺序推进 Issue #4、#5、#7、#8、#9、#10。每一批都 review、补测试、看 CI，再进入下一批。
+原先的“从 Issue #3 开始”计划已完成页面骨架阶段，不再作为当前下一步。当前下一步以交接文档顶部“下一步执行指令”为准。
 
 说明：ChatGPT 无法在本对话内监测上下文使用量、自动创建并切换到另一个聊天窗口，也不能在用户离线时继续后台执行。此文件作为 GitHub 持久化交接源；下次用户启动新聊天并粘贴交接指令后继续执行。
 
 
-## 最新续接状态（2026-10-23，重新核实）
+## 历史续接记录（2026-10-23；以下 SHA/CI 仅为当时记录，非当前状态）
 - 当前工作分支：`feat/webui-market-data-console`；本批基于 HEAD `f8c8921764a3ccfe9531c0565a8844e0e9c70aba` 修改。更新提交后的 HEAD 和 Actions 必须重新核实。
 - 数据分支 PR #1 当前 HEAD：`760be7ebcfaa82302800e879fadacb017577b1e0`；PR #1 Open、未合并，base 是 `main`。
 - PR #2 Open、未合并，head 在 WebUI 分支，base 字段当前仍记为数据分支提交 `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`；当前 mergeable=true。不得合并 PR #2，不得强推或重写历史。

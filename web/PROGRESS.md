@@ -4,7 +4,7 @@
 目标分支：`feat/webui-market-data-console`  
 范围：只修改 `web/` 前端、前端测试与相关文档；不改 Go API、数据源、数据库或任务契约。
 
-## 当前分支基线
+## 历史基线（2026-10-20；当前 GitHub 真值见 HANDOFF.md 顶部）
 
 - 当前处理基线：`36dc8bcae53598104e97fa81f1ecc88ad2e58b2b`。
 - 基线 GitHub Actions [#39896407950](https://github.com/Kasign/stock_data_provider/actions/runs/39896407950) 已通过：JavaScript 语法检查、19 项 Node 测试和 Nginx Docker 镜像构建。
@@ -29,7 +29,7 @@
 - 分析异步任务已有 OpenAPI 文档；行情端点与 Run 结果端点的完整统一契约仍有文档覆盖缺口。
 - 此 WebUI 分支不修改 Go 接口、不新增后端端点、不改变任务 payload。若发现不一致，应对照 Go 路由、领域类型和后端测试另行处理，不能让前端猜测或单方面重定义协议。
 
-## 本轮新增与自动化验证
+## 早期 API 调用契约测试记录（历史）
 
 - 为行情健康检查、分析健康检查、Provider 清单和日 K 请求增加调用契约测试，覆盖路径与行情 API Key 隔离。
 - 增加非 JSON 反向代理错误测试，检查 HTTP 状态、请求 ID 与错误文本长度限制。
@@ -38,7 +38,7 @@
 
 ## 尚待验收
 
-1. **NAS / 1Panel 真实联调**：确认 `stock_analysis_web` 在 `1panel-network` 内能访问 `market-data:8091` 和 `stock-analysis-go:8092`，并验证 API Key 传递与代理前缀剥离。
+1. **NAS / 1Panel 真实联调**：确认 `stock-analysis-web` 在 `1panel-network` 内能访问 `market-data:8091` 和 `stock-analysis-go:8092`，并验证 API Key 传递与代理前缀剥离。
 2. **真实数据场景**：逐项对照页面与原始 JSON，至少包含完整数据、可选数据缺失/质量降级、后端故障三种场景。
 3. **真实任务语义**：确认单个股票代码配合 `post_market_scan` 的行为与用户期望一致；结构化 RunResult 不能冒充完整自然语言研报。
 4. **刷新与失效任务**：验证运行中、已完成、部分成功/失败、后端记录已清理、暂时断网与浏览器存储不可用时的表现。
@@ -520,3 +520,12 @@
 - 若创建任务请求在用户修改地址期间才返回，会把有 task_id 的结果保存到原地址的最近任务记录，不覆盖新连接的活动任务；若请求失败，则明确提示旧连接的创建结果无法确认。
 - 从最近任务或上次记录恢复时检查来源地址；旧地址任务会标注“旧分析 API 地址”，阻止向当前不同地址发请求，切回原地址后可再次恢复。
 - 补充历史记录模块与 UI 契约测试源码；按要求未运行测试、未构建镜像、未触发 GitHub Actions。
+
+
+## 2026-10-26 — 跨层契约与未接入功能依赖梳理
+
+- 共享状态契约位于数据分支 docs/architecture/WEBUI_DATA_STATE_CONTRACT.md；数据层开发前应先阅读。WebUI 的完整接口与缺口映射补入 web/API_CONTRACT.md，明确哪些是已存在 API、哪些只是待审核的设计需求。
+- 重新核对通知、问股、选股、告警页面：UI 状态模型和 disabled/unavailable 边界已经存在，但相关持久后端 API 尚未接入；本批只完善契约/交接文档，不新增虚构 API 或生产 mock。
+- Task/Run 最近记录使用 analysis_base 区分来源；切换分析 API 地址时旧任务被隔离，而不是转发至新地址。见技术说明第 18 节。
+- 部署命名统一为 stock-analysis-web；依赖的 Docker 服务名通过根目录 .env 中的 MARKET_DATA_SERVICE_NAME、ANALYSIS_SERVICE_NAME 配置。
+- 按用户要求，本批未运行测试、CI 或镜像构建。后续继续跨模块 Review，主要模块检查完成后再整理一次整体 Review 清单。

@@ -5,6 +5,14 @@
 实现分支：feat/webui-market-data-console
 参考项目版本：ZhuLinsen/daily_stock_analysis，main = ec66bf46caf6993f673bd4be59c883754667b686
 
+## 本轮续接状态（2026-10-26）
+
+- 当前 WebUI 继续只覆盖 web/** 与专用工作流；PR #2 的目标分支是 feat/full-go-data-providers-api-switch，不修改 Go 数据源或数据库。
+- 通知中心、问股、选股与告警的页面结构和 unavailable/错误/空结果状态模型已经存在；当前没有可用的真实后端接口。生产页面继续禁用发送、创建规则、启动选股等操作，不使用测试 fixture 作为实时返回。
+- 跨层字段与请求状态约定见[共享状态契约](https://github.com/Kasign/stock_data_provider/blob/5776313e7b50648ea0e7d741c7eb1c02b8d20758/docs/architecture/WEBUI_DATA_STATE_CONTRACT.md)。通知、Chat、选股、告警和服务端设置所缺的资源及验收要求已补入 API_CONTRACT.md 的“未接入功能的后端契约需求”章节；其中是设计草案，不是已有接口路径。
+- 部署容器名为 stock-analysis-web。依赖服务名通过根目录 .env 中的 MARKET_DATA_SERVICE_NAME 和 ANALYSIS_SERVICE_NAME 配置，详见 README 与根目录 .env.example 的 WebUI 配置节。
+- 按当前协作安排，本批不运行测试/CI；下一阶段优先完成跨模块源码 Review 和状态/文档一致性核对，再等待用户统一实机验收。
+
 ## 1. 规划结论
 
 以 daily_stock_analysis 的 Web 产品能力作参考，不复制它的 React 技术栈，也不把其后端能力误认为本仓库已具备。我们的 WebUI 保持 web/ 独立目录、原生 HTML/CSS/JavaScript ES Modules、Nginx 同源代理及 Docker 部署。新功能可以先把页面、导航、表单、状态与交互做好；一旦涉及真实任务提交、配置保存、通知发送、聊天回答、选股候选、告警触发，就必须由真实 API 支撑。没有 API 的地方显示“后端接口待接入”，不得用 mock/fixture 冒充生产返回。
