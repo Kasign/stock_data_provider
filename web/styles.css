@@ -168,6 +168,12 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .task-form { display: grid; gap: 17px; margin-top: 21px; }
 .inline-callout { display: flex; gap: 10px; padding: 11px; border: 1px solid rgba(234, 184, 106, .16); border-radius: 8px; color: #b7a27f; background: rgba(234, 184, 106, .045); font-size: 10px; line-height: 1.65; }
 .inline-callout strong { color: #ebc17a; }
+.task-symbol-toolbar { display: flex; align-items: flex-start; gap: 12px; margin: -7px 0 14px; }
+.task-symbol-toolbar .button { flex: 0 0 auto; }
+.task-symbol-toolbar .field-hint { flex: 1; min-width: 0; margin: 0; }
+@media (max-width: 600px) {
+  .task-symbol-toolbar { flex-direction: column; align-items: flex-start; }
+}
 .task-form > .button { width: 100%; min-height: 41px; }
 .task-empty { display: flex; align-items: center; flex-direction: column; gap: 8px; padding: 68px 20px; color: #71869a; text-align: center; }
 .task-empty strong { margin-top: 7px; color: #cad7e0; font-size: 12px; }

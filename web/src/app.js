@@ -497,6 +497,24 @@ function handleWatchlistAction(event) {
   if (action === "analyze") startAnalysisForSymbol(symbol);
 }
 
+function fillTaskSymbolsFromWatchlist() {
+  const help = $("#task-symbol-help");
+  const records = safeReadWatchlist();
+  if (!records.length) {
+    help.textContent = "当前没有可载入的本地自选股，请先在行情页添加股票。";
+    return;
+  }
+
+  try {
+    const symbols = parseAnalysisSymbols(records.map((record) => record.symbol).join(","));
+    $("#task-symbols").value = symbols.join(", ");
+    $("#task-type").value = "watchlist_scan";
+    help.textContent = "已载入 " + symbols.length + " 只本地自选股到输入框；任务尚未提交。";
+  } catch (error) {
+    help.textContent = "无法载入本地自选股：" + error.message;
+  }
+}
+
 function setNotice(message, kind = "info") {
   const notice = $("#market-notice");
   notice.textContent = message;
@@ -2972,6 +2990,10 @@ $("#settings-dialog").addEventListener("close", () => {
 });
 $("#clear-settings").addEventListener("click", clearLocalSettings);
 $("#task-form").addEventListener("submit", createTask);
+$("#load-local-watchlist").addEventListener("click", fillTaskSymbolsFromWatchlist);
+$("#task-symbols").addEventListener("input", () => {
+  $("#task-symbol-help").textContent = "任务只分析输入框中的代码；载入本地自选股会替换当前输入内容。";
+});
 $("#refresh-task").addEventListener("click", () => {
   if (!state.taskId) return;
   state.taskEventsUnavailable = false;

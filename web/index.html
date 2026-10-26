@@ -289,10 +289,14 @@
             <section class="panel task-create-panel">
               <div class="panel-heading"><div><h2>创建分析任务</h2><p>当前接入基础 Go 分析主流程</p></div><span class="soft-badge">POST · 202</span></div>
               <form id="task-form" class="task-form">
-                <label class="field"><span>股票代码（最多 100 只）</span><textarea id="task-symbols" rows="3" placeholder="600519, 000001, 300750" required>600519</textarea></label>
-                <label class="field"><span>任务类型</span><select id="task-type"><option value="post_market_scan">盘后扫描</option><option value="watchlist_scan">自选股扫描</option><option value="position_review">持仓复核</option></select></label>
+                <label class="field"><span>本次分析股票（最多 100 只）</span><textarea id="task-symbols" rows="3" placeholder="600519, 000001, 300750" required>600519</textarea></label>
+                <div class="task-symbol-toolbar">
+                  <button class="button button-secondary" id="load-local-watchlist" type="button">载入本地自选股</button>
+                  <p class="field-hint" id="task-symbol-help" role="status" aria-live="polite">任务只分析输入框中的代码；载入本地自选股会替换当前输入内容。</p>
+                </div>
+                <label class="field"><span>任务类型</span><select id="task-type"><option value="post_market_scan">盘后扫描</option><option value="watchlist_scan">自选股扫描（使用下方清单）</option><option value="position_review" disabled>持仓复核（持仓账本接入后开放）</option></select></label>
                 <label class="field"><span>幂等键（可选）</span><input id="idempotency-key" maxlength="128" placeholder="留空则由服务器正常创建" /></label>
-                <div class="inline-callout"><strong>注意</strong><span>目前分析流程属于工程 MVP。数据质量门禁可能将结果标记为 partial 或阻断；请勿将其视为交易建议。</span></div>
+                <div class="inline-callout"><strong>能力边界</strong><span>任务只分析输入框中的代码；本地自选股可一键载入，但不会自动同步到服务端。当前没有真实持仓账本，因此“持仓复核”暂不可用。分析结果属于工程 MVP，可能被质量门禁标记为 partial 或阻断，不构成交易建议。</span></div>
                 <button class="button button-primary" id="create-task-button" type="submit">创建并跟踪任务 <span>→</span></button>
                 <p id="task-create-feedback" class="task-error" hidden></p>
               </form>

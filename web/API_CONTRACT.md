@@ -84,6 +84,12 @@ GET /api/v1/analysis/runs?symbol=600519&status=completed&task_type=post_market_s
 
 分析代码按现有 Go API 的六位 A 股代码规则规范化；行情查询可继续使用交易所后缀。前端不将 `post_market_scan` 改名成新任务类型，也不以 UI 标签代替后端业务语义。
 
+## 任务创建表单与当前能力边界
+
+- 任务请求使用表单输入框中的股票代码。WebUI 的“载入本地自选股”只从当前浏览器 `localStorage` 读取已有清单并填入表单，随后将任务类型设为 `watchlist_scan`；此操作不会自动提交任务，也不会把本地清单同步到服务端。
+- `position_review` 仍是后端定义的任务类型，但当前 WebUI 将其禁用。当前 `internal/service/wiring.go` 的组合提供器只返回零可用现金、零组合权益和版本 `unconfigured-no-paper-ledger-v1`，没有真实持仓账本，因而不能称为实际持仓复核。
+- 只有在后端接入并验证真实持仓/组合数据契约后，才应重新开放持仓复核入口。前端不通过空组合或固定占位结果模拟持仓信息。
+
 异步任务状态与 Run 状态是两个层级，必须分别解释：
 
 - Task：`queued`、`running`、`succeeded`、`partial`、`failed`。

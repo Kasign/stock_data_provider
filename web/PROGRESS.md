@@ -559,3 +559,10 @@
 - `scripts/deploy-go.sh` 增加构建前预检：核对已有 WebUI 容器的 `com.docker.compose.project.config_files` 标签是否指向当前根目录 Compose。若标签缺失或属于其他 Compose 文件，明确停止并要求人工确认，不自动删除旧容器。
 - README 与部署 Review/技术说明同步迁移原因、保护行为和处理方式；不会对 MariaDB/Redis 容器或数据做清理。
 - 按协作约定未运行测试、Compose 解析、Docker 构建或 GitHub Actions，留待用户统一验收。
+
+## 2026-10-26 — 分析任务类型与本地自选股契约校正
+
+- 任务表单增加“载入本地自选股”操作，利用已有浏览器清单填充本次任务代码，并将类型切换为 `watchlist_scan`；明确它不会自动提交任务或同步服务端自选股。
+- 将 `position_review` 选项禁用并标注“持仓账本接入后开放”。当前后端组合提供器返回零现金、零权益的未配置组合，而非真实持仓；不应让 UI 暗示已经支持持仓复核。
+- 补充跨层源码契约测试，核对表单状态、事件处理和后端组合提供器的当前边界，并更新 API 契约/技术说明。
+- 按协作约定未运行测试、Compose 解析、Docker 构建或 GitHub Actions，留待用户统一验收。

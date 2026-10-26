@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -15,7 +15,8 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../../internal/platform/taskqueue/queue.go", import.meta.url), "utf8"),
   readFile(new URL("../src/market-activity.js", import.meta.url), "utf8"),
   readFile(new URL("../src/stock-research.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/market-overview.js", import.meta.url), "utf8")
+  readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
+  readFile(new URL("../../internal/service/wiring.go", import.meta.url), "utf8")
 ]);
 
 function finalCssRuleBody(selector) {
@@ -125,6 +126,18 @@ test("browser-local watchlist is wired to existing query/analysis flows and stor
   assert.match(stylesheet, /@media \(max-width: 800px\)[\s\S]*?\.watchlist-list \{ grid-template-columns: minmax\(0, 1fr\); \}/);
 });
 
+
+test("analysis tasks can load the browser watchlist and withhold unavailable position review", () => {
+  assert.match(html, /id="load-local-watchlist"/);
+  assert.match(html, /id="task-symbol-help"[^>]*role="status"/);
+  assert.match(html, /<option value="watchlist_scan">自选股扫描（使用下方清单）<\/option>/);
+  assert.match(html, /<option value="position_review" disabled>持仓复核（持仓账本接入后开放）<\/option>/);
+  assert.match(app, /function fillTaskSymbolsFromWatchlist\(\)[\s\S]*?const records = safeReadWatchlist\(\)[\s\S]*?parseAnalysisSymbols\(records\.map\(\(record\) => record\.symbol\)\.join\(","\)\)[\s\S]*?\$\("#task-type"\)\.value = "watchlist_scan"/);
+  assert.match(app, /\$\("#load-local-watchlist"\)\.addEventListener\("click", fillTaskSymbolsFromWatchlist\)/);
+  assert.match(serviceWiring, /Version: "unconfigured-no-paper-ledger-v1"/);
+  assert.match(serviceWiring, /AvailableCash: 0, TotalEquity: 0/);
+  assert.match(app, /当前没有可载入的本地自选股/);
+});
 
 test("daily chart exposes close/candle modes, optional date filters and adjustment basis", () => {
   for (const id of ["bar-start-date", "bar-end-date", "chart-title", "chart-view-close", "chart-view-candles", "chart-legend-label"]) {
