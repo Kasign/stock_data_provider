@@ -329,7 +329,7 @@ test("mobile navigation drawer restores readable labels and can close via overla
   assert.match(html, /id="mobile-menu-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="primary-sidebar"/);
   assert.match(app, /function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\)/);
   assert.match(app, /\$\("#mobile-nav-overlay"\)\.addEventListener\("click", \(\) => setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)\)/);
-  assert.match(app, /if \(event\.key === "Escape"\) setMobileNavigationOpen\(false\)/);
+  assert.match(app, /if \(event\.key === "Escape"\) setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)/);
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.sidebar\.is-open \{ transform: translateX\(0\); \}/);
   assert.match(stylesheet, /\.mobile-nav-overlay:not\(\[hidden\]\)/);
 });

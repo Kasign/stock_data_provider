@@ -70,6 +70,10 @@ jobs:
       - name: Download dependencies
         working-directory: ${{ matrix.module }}
         run: go mod download
+      - name: Capture TDX module checksums
+        if: matrix.module == 'services/market-data'
+        working-directory: ${{ matrix.module }}
+        run: go mod download -json github.com/injoyai/tdx@v0.0.86
       - name: Run tests
         working-directory: ${{ matrix.module }}
         run: go test ./...
