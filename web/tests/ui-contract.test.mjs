@@ -180,6 +180,18 @@ test("changing market API credentials invalidates old stock-search suggestions",
   assert.match(app, /function cancelStockSearchRequest\(\)[\s\S]*?state\.stockSearchGeneration \+= 1;/);
 });
 
+test("task polling and saved task references are scoped to the analysis API base", () => {
+  assert.match(app, /taskAnalysisBase: ""/);
+  assert.match(app, /analysisConnectionGeneration: 0/);
+  assert.match(app, /function invalidateActiveTaskForAnalysisBaseChange\(/);
+  assert.match(app, /if \(analysisBaseChanged\) invalidateActiveTaskForAnalysisBaseChange\(/);
+  assert.match(app, /endpointGeneration !== state\.analysisConnectionGeneration/);
+  assert.match(app, /analysis_base: state\.taskAnalysisBase \|\| state\.settings\.analysisBase/);
+  assert.match(app, /旧任务不再自动轮询/);
+  assert.match(app, /if \(requestedBase !== state\.settings\.analysisBase\)/);
+  assert.match(recentTaskModule, /analysis_base: typeof record\.analysis_base === "string"/);
+});
+
 test("service health and provider-list refreshes ignore superseded responses", () => {
   assert.match(app, /let serviceRefreshGeneration = 0;/);
   assert.match(app, /let sourceRefreshGeneration = 0;/);

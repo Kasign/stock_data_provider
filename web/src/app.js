@@ -106,6 +106,8 @@ const state = {
   chartMeta: { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" },
   taskId: "",
   runId: "",
+  taskAnalysisBase: "",
+  analysisConnectionGeneration: 0,
   taskSymbols: [],
   taskType: "post_market_scan",
   taskStatus: "",
@@ -195,7 +197,8 @@ function persistTaskReference() {
     run_id: state.runId || "",
     symbols: state.taskSymbols,
     task_type: state.taskType,
-    status: state.taskStatus
+    status: state.taskStatus,
+    analysis_base: state.taskAnalysisBase || state.settings.analysisBase
   };
   const comparable = JSON.stringify(record);
   try {
@@ -205,7 +208,8 @@ function persistTaskReference() {
       run_id: previous.run_id || "",
       symbols: Array.isArray(previous.symbols) ? previous.symbols : [],
       task_type: previous.task_type || "post_market_scan",
-      status: previous.status || ""
+      status: previous.status || "",
+      analysis_base: previous.analysis_base || state.taskAnalysisBase || state.settings.analysisBase
     }) : "";
     if (previousComparable === comparable) {
       // Migrate the legacy single-task reference into the new local history once.
@@ -269,8 +273,11 @@ function renderRecentTasks(records = safeReadRecentTasks()) {
     main.className = "recent-analysis-item-main";
     const title = document.createElement("strong");
     title.textContent = record.symbols?.join(", ") || "标的未记录";
+    const recordAnalysisBase = String(record.analysis_base || state.settings.analysisBase);
+    const isOtherEndpoint = recordAnalysisBase !== state.settings.analysisBase;
+    open.dataset.openTaskBase = recordAnalysisBase;
     const detail = document.createElement("small");
-    detail.textContent = (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") + " · " + record.task_id;
+    detail.textContent = (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") + " · " + record.task_id + (isOtherEndpoint ? " · 旧分析 API 地址" : "");
     const status = document.createElement("span");
     status.className = "recent-analysis-item-status";
     status.textContent = taskStatusLabel(record.status);
@@ -281,6 +288,7 @@ function renderRecentTasks(records = safeReadRecentTasks()) {
     remove.type = "button";
     remove.className = "recent-analysis-remove";
     remove.dataset.removeTaskId = record.task_id;
+    remove.dataset.removeTaskBase = recordAnalysisBase;
     remove.textContent = "移除";
     remove.setAttribute("aria-label", "从本地列表移除任务 " + record.task_id);
 
@@ -304,20 +312,20 @@ function setRecentTasksFeedback(message, kind = "info") {
   target.textContent = message;
 }
 
-function removeRecentTaskReference(taskId) {
+function removeRecentTaskReference(taskId, analysisBase = "") {
   let remaining = [];
   try {
-    remaining = removeRecentTask(taskId, localStorage);
+    remaining = removeRecentTask(taskId, localStorage, undefined, analysisBase);
   } catch {
     remaining = safeReadRecentTasks();
   }
   try {
     const last = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
-    if (last?.task_id === taskId) localStorage.removeItem(TASK_REFERENCE_KEY);
+    if (last?.task_id === taskId && (!analysisBase || !last.analysis_base || last.analysis_base === analysisBase)) localStorage.removeItem(TASK_REFERENCE_KEY);
   } catch {
     // Local history is optional and must not interrupt task controls.
   }
-  if (state.taskId === taskId) state.suppressedHistoryTaskId = taskId;
+  if (state.taskId === taskId && (!analysisBase || state.taskAnalysisBase === analysisBase)) state.suppressedHistoryTaskId = taskId;
   renderRecentTasks(remaining);
   setRecentTasksFeedback("已从当前浏览器移除该任务引用；服务端任务和报告不会被删除。");
 }
@@ -2250,22 +2258,26 @@ function renderTaskResult(result) {
 }
 
 async function loadTaskRunResult(runId, expectedTaskId) {
+  const analysisBase = state.taskAnalysisBase || state.settings.analysisBase;
+  if (analysisBase !== state.settings.analysisBase || state.taskId !== expectedTaskId) return;
+  const requestSettings = { ...state.settings, analysisBase };
+  const endpointGeneration = state.analysisConnectionGeneration;
   const generation = ++state.runResultGeneration;
   let retries = 0;
   $("#task-result-section").hidden = false;
   $("#task-result-note").textContent = "正在读取已保存的 Run 结果…";
 
   while (true) {
-    if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId) return;
+    if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
     try {
-      const result = await getAnalysisRun(state.settings, runId);
-      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId) return;
+      const result = await getAnalysisRun(requestSettings, runId);
+      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
       state.runId = result.run_id || runId;
       persistTaskReference();
       renderTaskResult(result);
       return;
     } catch (error) {
-      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId) return;
+      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
       const delay = RUN_RESULT_RETRY_DELAYS_MS[retries];
       if (delay !== undefined && isRetryableApiError(error)) {
         retries += 1;
@@ -2290,14 +2302,18 @@ function stopTaskPolling() {
 async function pollTask(generation = state.pollGeneration) {
   if (!state.taskId || generation !== state.pollGeneration) return;
   const taskId = state.taskId;
+  const analysisBase = state.taskAnalysisBase || state.settings.analysisBase;
+  if (analysisBase !== state.settings.analysisBase) return;
+  const requestSettings = { ...state.settings, analysisBase };
+  const endpointGeneration = state.analysisConnectionGeneration;
   const eventRequest = state.taskEventsUnavailable
     ? Promise.resolve({ skipped: true })
-    : getAnalysisTaskEvents(state.settings, taskId, state.taskSequence);
+    : getAnalysisTaskEvents(requestSettings, taskId, state.taskSequence);
   const [taskResult, eventResult] = await Promise.allSettled([
-    getAnalysisTask(state.settings, taskId),
+    getAnalysisTask(requestSettings, taskId),
     eventRequest
   ]);
-  if (generation !== state.pollGeneration || taskId !== state.taskId) return;
+  if (generation !== state.pollGeneration || taskId !== state.taskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
 
   let task = null;
   let taskError = null;
@@ -2437,10 +2453,14 @@ async function createTask(event) {
   const taskType = $("#task-type").value;
   const payload = { task_type: taskType, symbols };
   const idempotencyKey = $("#idempotency-key").value.trim();
+  const requestAnalysisBase = state.settings.analysisBase;
+  const requestAnalysisGeneration = state.analysisConnectionGeneration;
+  const requestSettings = { ...state.settings, analysisBase: requestAnalysisBase };
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = "";
   state.runId = "";
+  state.taskAnalysisBase = requestAnalysisBase;
   state.taskSymbols = symbols;
   state.taskType = taskType;
   state.taskStatus = "";
@@ -2457,12 +2477,37 @@ async function createTask(event) {
   $("#task-result-warnings").replaceChildren();
 
   try {
-    const response = await createAnalysisTask(state.settings, payload, idempotencyKey);
+    const response = await createAnalysisTask(requestSettings, payload, idempotencyKey);
     const task = response.task || response;
+    if (requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase) {
+      if (task?.task_id) {
+        const endpointRecord = {
+          task_id: task.task_id,
+          run_id: task.run_id || "",
+          symbols: Array.isArray(task.symbols) ? task.symbols : symbols,
+          task_type: task.task_type || taskType,
+          status: task.status || "",
+          updated_at: new Date().toISOString(),
+          analysis_base: requestAnalysisBase
+        };
+        try { renderRecentTasks(upsertRecentTask(endpointRecord, localStorage)); } catch { renderRecentTasks(); }
+        setRecentTasksFeedback(
+          "任务已在旧分析 API 地址 " + requestAnalysisBase + " 创建，并已保存到最近分析列表。当前地址已改变；切回原地址后才能继续读取。",
+          "warning"
+        );
+        feedback.hidden = false;
+        feedback.textContent = "任务已在旧连接创建并记录；当前界面不会把它绑定到新分析 API。切回原地址后可从最近分析恢复。";
+      } else {
+        feedback.hidden = false;
+        feedback.textContent = "提交期间分析 API 地址已变化，返回中没有可用 task_id。无法在当前连接确认任务状态；请核实旧服务，避免盲目重复提交。";
+      }
+      return;
+    }
     if (!task.task_id) throw new Error("接口返回成功，但响应中缺少 task.task_id。");
     state.suppressedHistoryTaskId = "";
     state.taskId = task.task_id;
     state.runId = task.run_id || "";
+    state.taskAnalysisBase = requestAnalysisBase;
     persistTaskReference();
     feedback.hidden = true;
     renderTask(task);
@@ -2478,7 +2523,9 @@ async function createTask(event) {
     $("#task-empty").hidden = false;
     $("#task-detail").hidden = true;
     feedback.hidden = false;
-    feedback.textContent = "创建任务失败：" + errorMessage(error);
+    feedback.textContent = requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase
+      ? "分析 API 地址在提交期间已变化，无法确认旧连接是否创建了任务：" + errorMessage(error) + "。请核实旧服务后再决定是否重试。"
+      : "创建任务失败：" + errorMessage(error);
   } finally {
     state.isCreatingTask = false;
     button.disabled = false;
@@ -2509,11 +2556,21 @@ function startQuoteAnalysis() {
 
 function activateTaskReference(record) {
   if (!record || typeof record.task_id !== "string" || !record.task_id.trim()) return false;
+  const requestedBase = String(record.analysis_base || state.settings.analysisBase);
+  if (requestedBase !== state.settings.analysisBase) {
+    setRecentTasksFeedback(
+      "该任务属于分析 API 地址 " + requestedBase + "，当前地址是 " + state.settings.analysisBase +
+      "。已阻止向新地址读取旧 task_id；切回原地址后可以恢复此任务。",
+      "warning"
+    );
+    return false;
+  }
   state.suppressedHistoryTaskId = "";
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = record.task_id;
   state.runId = typeof record.run_id === "string" ? record.run_id : "";
+  state.taskAnalysisBase = requestedBase;
   state.taskSymbols = Array.isArray(record.symbols) ? record.symbols : [];
   state.taskType = record.task_type || "post_market_scan";
   state.taskStatus = record.status || "";
@@ -2629,9 +2686,52 @@ function closeSettingsWithGuard() {
   $("#settings-dialog").close();
 }
 
+function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
+  state.analysisConnectionGeneration += 1;
+  state.runResultGeneration += 1;
+  stopTaskPolling();
+  state.taskId = "";
+  state.runId = "";
+  state.taskAnalysisBase = "";
+  state.taskSymbols = [];
+  state.taskType = "post_market_scan";
+  state.taskStatus = "";
+  state.lastRunResult = null;
+  state.taskSequence = 0;
+  state.taskEvents.clear();
+  state.taskEventsLoaded = false;
+  state.taskEventsUnavailable = false;
+  state.taskEventsError = "";
+  state.selectedTaskEventSequence = null;
+  $("#task-empty").hidden = false;
+  $("#task-detail").hidden = true;
+  $("#task-result-section").hidden = true;
+  $("#task-result-metrics").replaceChildren();
+  $("#task-result-structured").replaceChildren();
+  $("#task-result-warnings").replaceChildren();
+  $("#task-poll-label").textContent = "分析 API 地址已变化，旧任务不再自动轮询。";
+  $("#task-create-feedback").hidden = false;
+  $("#task-create-feedback").textContent = "分析 API 地址已从 " + previousBase + " 改为 " + nextBase +
+    "。旧任务引用仍保留在最近分析列表；切回原地址后才能恢复，当前不会向新地址发送旧 task_id。";
+  renderTaskEvents();
+  renderTaskFlowSummary();
+  renderRecentTasks();
+  setRecentTasksFeedback(
+    "分析 API 地址已从 " + previousBase + " 改为 " + nextBase +
+    "。旧任务引用仍保留并标注来源地址；切回原地址后可恢复。",
+    "warning"
+  );
+}
+
 function applySettings(nextSettings) {
   const previousSettings = state.settings;
+  const analysisBaseChanged = previousSettings.analysisBase !== nextSettings.analysisBase;
+  if (analysisBaseChanged && state.taskId) {
+    if (!state.taskAnalysisBase) state.taskAnalysisBase = previousSettings.analysisBase;
+    persistTaskReference();
+  }
   state.settings = nextSettings;
+  if (analysisBaseChanged) invalidateActiveTaskForAnalysisBaseChange(previousSettings.analysisBase, nextSettings.analysisBase);
   if (previousSettings.apiKey !== nextSettings.apiKey || previousSettings.marketBase !== nextSettings.marketBase) {
     cancelQuoteQuery({
       clearResults: true,
@@ -2862,12 +2962,16 @@ $("#clear-recent-analysis").addEventListener("click", clearRecentTaskHistory);
 $("#recent-analysis-list").addEventListener("click", (event) => {
   const removeButton = event.target.closest("button[data-remove-task-id]");
   if (removeButton) {
-    removeRecentTaskReference(removeButton.dataset.removeTaskId);
+    removeRecentTaskReference(removeButton.dataset.removeTaskId, removeButton.dataset.removeTaskBase || "");
     return;
   }
   const openButton = event.target.closest("button[data-open-task-id]");
   if (!openButton) return;
-  const record = safeReadRecentTasks().find((item) => item.task_id === openButton.dataset.openTaskId);
+  const selectedBase = openButton.dataset.openTaskBase || state.settings.analysisBase;
+  const record = safeReadRecentTasks().find((item) =>
+    item.task_id === openButton.dataset.openTaskId &&
+    String(item.analysis_base || state.settings.analysisBase) === selectedBase
+  );
   if (record) activateTaskReference(record);
 });
 $("#reload-run-result").addEventListener("click", () => {

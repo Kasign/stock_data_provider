@@ -9,6 +9,7 @@ function normalizeRecord(record) {
     symbols: Array.isArray(record.symbols) ? record.symbols.filter((item) => typeof item === "string") : [],
     task_type: typeof record.task_type === "string" ? record.task_type : "post_market_scan",
     status: typeof record.status === "string" ? record.status : "",
+    analysis_base: typeof record.analysis_base === "string" ? record.analysis_base.trim() : "",
     updated_at: typeof record.updated_at === "string" ? record.updated_at : ""
   };
 }
@@ -26,7 +27,9 @@ export function readRecentTasks(storage, limit = MAX_RECENT_TASKS) {
 export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
   const normalized = normalizeRecord(record);
   if (!normalized) return readRecentTasks(storage, limit);
-  const records = [normalized, ...readRecentTasks(storage, limit).filter((item) => item.task_id !== normalized.task_id)]
+  const records = [normalized, ...readRecentTasks(storage, limit).filter((item) =>
+    item.task_id !== normalized.task_id || (item.analysis_base && item.analysis_base !== normalized.analysis_base)
+  )]
     .slice(0, Math.max(0, limit));
   try {
     storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
@@ -36,10 +39,12 @@ export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
   return records;
 }
 
-export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS) {
+export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, analysisBase = "") {
   if (typeof taskId !== "string" || !taskId.trim()) return readRecentTasks(storage, limit);
   const target = taskId.trim();
-  const records = readRecentTasks(storage, limit).filter((item) => item.task_id !== target);
+  const records = readRecentTasks(storage, limit).filter((item) =>
+    item.task_id !== target || (analysisBase && item.analysis_base && item.analysis_base !== analysisBase)
+  );
   try {
     storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
   } catch {

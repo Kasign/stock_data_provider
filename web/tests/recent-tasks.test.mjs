@@ -35,7 +35,7 @@ test("storage failures do not throw or create bogus history entries", () => {
   const storage = { getItem() { throw new Error("storage disabled"); }, setItem() { throw new Error("storage disabled"); } };
   assert.deepEqual(readRecentTasks(storage), []);
   assert.deepEqual(upsertRecentTask({ task_id: "task-a" }, storage), [{
-    task_id: "task-a", run_id: "", symbols: [], task_type: "post_market_scan", status: "", updated_at: ""
+    task_id: "task-a", run_id: "", symbols: [], task_type: "post_market_scan", status: "", updated_at: "", analysis_base: ""
   }]);
 });
 
