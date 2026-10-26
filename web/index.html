@@ -152,6 +152,11 @@
               <div class="panel-heading chart-panel-heading"><div><h2 id="chart-title">收盘价走势</h2><p id="chart-caption">日 K 数据 · 按交易日期升序展示</p></div>
                 <div class="chart-heading-actions">
                   <div class="chart-legend" id="chart-legend"><span></span><span id="chart-legend-label">收盘价</span></div>
+                  <div class="chart-overlay-controls" role="group" aria-label="移动均线叠加">
+                    <label><input type="checkbox" data-ma-period="5" checked /><span>MA5</span></label>
+                    <label><input type="checkbox" data-ma-period="20" checked /><span>MA20</span></label>
+                    <label><input type="checkbox" data-ma-period="60" /><span>MA60</span></label>
+                  </div>
                   <div class="chart-view-toggle" role="group" aria-label="图表类型">
                     <button class="chart-view-button is-active" id="chart-view-close" type="button" aria-pressed="true">收盘线</button>
                     <button class="chart-view-button" id="chart-view-candles" type="button" aria-pressed="false">K 线 + 成交量</button>
@@ -172,6 +177,36 @@
               <div class="source-list" id="data-source-list"><div class="empty-row">填写 API Key 后加载数据源列表。</div></div>
             </section>
           </div>
+
+          <section class="panel technical-panel" aria-labelledby="technical-indicators-title">
+            <div class="panel-heading technical-panel-heading">
+              <div><h2 id="technical-indicators-title">技术指标</h2><p>依据当前已加载的日 K 收盘价本地计算；样本不足时明确留空，不将指标解释为买卖建议。</p></div>
+              <span id="technical-indicator-status" class="availability-pill is-readonly">等待日 K 数据</span>
+            </div>
+            <div class="technical-metric-grid">
+              <article class="technical-metric-card"><div class="technical-metric-label">MA5 <span>短期均线</span></div><strong id="technical-ma-5">—</strong><small id="technical-ma-5-change">等待日 K</small></article>
+              <article class="technical-metric-card"><div class="technical-metric-label">MA20 <span>中期均线</span></div><strong id="technical-ma-20">—</strong><small id="technical-ma-20-change">等待日 K</small></article>
+              <article class="technical-metric-card"><div class="technical-metric-label">MA60 <span>长期均线</span></div><strong id="technical-ma-60">—</strong><small id="technical-ma-60-change">等待日 K</small></article>
+              <article class="technical-metric-card technical-rsi-metric"><div class="technical-metric-label">RSI(14) <span>相对强弱</span></div><strong id="technical-rsi-value">—</strong><small id="technical-rsi-state">至少需要 15 个有效收盘价</small></article>
+              <article class="technical-metric-card technical-macd-metric">
+                <div class="technical-metric-label">MACD(12,26,9) <span>DIF / DEA / 柱值</span></div>
+                <div class="technical-macd-values"><span>DIF <strong id="technical-macd-dif">—</strong></span><span>DEA <strong id="technical-macd-signal">—</strong></span><span>柱值 <strong id="technical-macd-histogram">—</strong></span></div>
+                <small id="technical-macd-state">通常需要至少 34 个有效收盘价形成完整信号线</small>
+              </article>
+            </div>
+            <div class="technical-chart-grid">
+              <section class="technical-chart-panel" aria-labelledby="technical-rsi-title">
+                <div class="technical-chart-heading"><h3 id="technical-rsi-title">RSI(14) 历史曲线</h3><span>参考线：30 / 70</span></div>
+                <div class="technical-chart-wrap"><svg id="technical-rsi-chart" class="technical-chart" viewBox="0 0 760 160" role="img" aria-label="RSI(14) 历史曲线"></svg><div id="technical-rsi-chart-empty" class="technical-chart-empty">日 K 样本不足，暂不能绘制 RSI。</div></div>
+              </section>
+              <section class="technical-chart-panel" aria-labelledby="technical-macd-title">
+                <div class="technical-chart-heading"><h3 id="technical-macd-title">MACD(12,26,9) 历史曲线</h3><span>柱值 = 2 × (DIF − DEA)</span></div>
+                <div class="technical-chart-legend"><span class="technical-legend-dif">DIF</span><span class="technical-legend-signal">DEA</span><span>柱体</span></div>
+                <div class="technical-chart-wrap"><svg id="technical-macd-chart" class="technical-chart" viewBox="0 0 760 160" role="img" aria-label="MACD(12,26,9) 历史曲线"></svg><div id="technical-macd-chart-empty" class="technical-chart-empty">日 K 样本不足，暂不能绘制 MACD。</div></div>
+              </section>
+            </div>
+            <p class="technical-sample-note" id="technical-sample-note">技术指标将在加载日 K 后计算。</p>
+          </section>
 
           <section class="panel bars-panel">
             <div class="panel-heading"><div><h2>历史日 K</h2><p id="bars-caption">标准化 OHLC · 复权口径与质量随行返回</p></div><div class="table-meta" id="bars-meta">0 根</div></div>

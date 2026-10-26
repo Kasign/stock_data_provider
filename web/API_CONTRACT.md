@@ -274,3 +274,15 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 | `GET /market-api/api/v1/market/hot-stocks?type=popular&limit=20` | `type` 支持 `popular`（人气榜）与 `surge`（飙升榜）；`limit` 范围 1–100。响应包含 Provider 的 `rank`、股票代码和名称、可选最新价/涨跌、可选 `rank_change`、来源、采集时间和质量信息。 |
 
 该接口已由数据分支 `services/market-data/openapi.yaml` 描述并由 Go Handler 注册。它是有界榜单，`total` 只表示本次返回的记录数，不能当作全市场覆盖率。上游没有可独立核验的行情快照时间，因此成功快照可能仍为 `degraded`；`fetched_at` 是采集时间，不应冒充行情发生时间。前端原样展示 `rank_change` 的源端数值，不推断正负号代表名次上升或下降。
+
+## 前端本地计算的技术指标（无新增 API）
+
+技术指标视图仅使用当前日 K 请求或 Bundle 已返回的 bars 收盘价计算，不发送额外 API 请求、不新增后端字段，也不把指标写入服务端。支持价格图叠加 MA5/MA20/MA60，并在独立面板展示 RSI(14)、MACD(12,26,9) 的数值和历史曲线。
+
+| 指标 | WebUI 口径 | 样本不足时 |
+|---|---|---|
+| MA5 / MA20 / MA60 | 最近 N 个有效收盘价的简单算术平均；叠加线按交易日期与现有日 K 对齐 | 显示“样本不足”，不绘制不存在的值 |
+| RSI(14) | 使用 14 个有效收盘价变化，采用 Wilder 平滑；首次可见至少需要 15 个有效收盘价 | 数值与曲线均显示样本不足提示 |
+| MACD(12,26,9) | EMA12 / EMA26 分别用首个 12 / 26 个有效收盘价的 SMA 初始化；DIF=EMA12−EMA26；DEA 对首个 9 个 DIF 取平均后采用 EMA 平滑；柱值=2×(DIF−DEA) | 完整 DEA/柱值通常需要至少 34 个有效收盘价 |
+
+缺失、null、非数值或非正价格不会当成 0。技术指标是基于当前服务返回序列的描述性统计，不具备 point-in-time 历史修订保证；页面明确提示不构成买卖信号。图表切换、均线显隐、RSI/MACD 曲线不影响后端请求 payload 或 RunResult。

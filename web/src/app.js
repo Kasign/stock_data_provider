@@ -22,7 +22,7 @@ import {
   marketHealth,
   saveSettings
 } from "./api.js";
-import { normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart } from "./chart.js";
+import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart, renderMACDChart, renderRSIChart } from "./chart.js";
 import { bindMarketOverview } from "./market-overview.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindMarketActivity } from "./market-activity.js";
@@ -80,6 +80,8 @@ const state = {
   bundleSnapshot: null,
   bars: [],
   chartView: "close",
+  movingAverages: [5, 20],
+  technicalRows: [],
   chartMeta: { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" },
   taskId: "",
   runId: "",
@@ -1209,6 +1211,39 @@ function makeCell(value, className = "") {
   return cell;
 }
 
+function renderTechnicalSummary(snapshot = calculateTechnicalIndicators(state.bars)) {
+  state.technicalRows = snapshot.rows;
+  const latest = snapshot.latest;
+  const close = latest?.close;
+  [5,20,60].forEach((period)=>{
+    const value=latest?.["ma"+period],valueNode=$("#technical-ma-"+period),deltaNode=$("#technical-ma-"+period+"-change");
+    valueNode.textContent=Number.isFinite(value)?value.toFixed(2):"样本不足";
+    deltaNode.classList.remove("positive","negative");
+    if(Number.isFinite(value)&&Number.isFinite(close)&&value!==0){
+      const delta=(close/value-1)*100;
+      deltaNode.textContent="收盘价距均线 "+(delta>0?"+":"")+delta.toFixed(2)+"%";
+      if(delta>0)deltaNode.classList.add("positive");
+      if(delta<0)deltaNode.classList.add("negative");
+    } else deltaNode.textContent="至少需要 "+period+" 个有效收盘价";
+  });
+  const rsi=latest?.rsi14;
+  $("#technical-rsi-value").textContent=Number.isFinite(rsi)?rsi.toFixed(2):"样本不足";
+  $("#technical-rsi-state").textContent=!Number.isFinite(rsi)?"RSI(14) 至少需要 15 个有效收盘价":rsi>=70?"处于 70 参考线上方":rsi<=30?"处于 30 参考线下方":"位于 30–70 参考区间";
+  $("#technical-rsi-state").classList.toggle("is-emphasis",Number.isFinite(rsi)&&(rsi>=70||rsi<=30));
+  [["dif",latest?.macdDif],["signal",latest?.macdSignal],["histogram",latest?.macdHistogram]].forEach(([key,value])=>{
+    $("#technical-macd-"+key).textContent=Number.isFinite(value)?value.toFixed(3):"—";
+  });
+  $("#technical-macd-state").textContent=Number.isFinite(latest?.macdHistogram)?"DIF / DEA / 柱值均已形成":"MACD 柱值通常需要至少 34 个有效收盘价";
+  setText("#technical-sample-note",snapshot.validCloseCount+" 根有效收盘价 · 当前页面本地计算 · 不构成买卖信号");
+  const hasRsi=renderRSIChart($("#technical-rsi-chart"),snapshot.rows);
+  const hasMacd=renderMACDChart($("#technical-macd-chart"),snapshot.rows);
+  $("#technical-rsi-chart-empty").hidden=hasRsi;
+  $("#technical-macd-chart-empty").hidden=hasMacd;
+  $("#technical-rsi-chart-empty").textContent=snapshot.validCloseCount<15?"有效收盘价不足 15 个，暂不能计算 RSI(14)。":"RSI 有效点不足，暂不能绘制曲线。";
+  $("#technical-macd-chart-empty").textContent=snapshot.validCloseCount<34?"有效收盘价不足 34 个，暂不能形成完整 MACD(12,26,9)。":"MACD 有效点不足，暂不能绘制曲线。";
+  $("#technical-indicator-status").textContent=snapshot.validCloseCount?snapshot.validCloseCount+" 根有效收盘价":"暂无日 K 数据";
+}
+
 function renderChartView() {
   const isCandles = state.chartView === "candles";
   $("#chart-view-close").classList.toggle("is-active", !isCandles);
@@ -1221,9 +1256,10 @@ function renderChartView() {
   $("#close-chart").setAttribute("aria-label", isCandles ? "OHLC K 线与成交量" : "收盘价走势");
   setText("#chart-caption", `${state.chartMeta.adjustmentBasis} · ${state.bars.length} 根 · 按交易日期升序`);
 
-  const drawn = isCandles
-    ? renderCandlestickVolumeChart($("#close-chart"), state.bars, state.chartMeta)
-    : renderCloseChart($("#close-chart"), state.bars);
+  const chartOptions={...state.chartMeta,movingAverages:state.movingAverages,indicatorRows:state.technicalRows};
+  const drawn=isCandles
+    ? renderCandlestickVolumeChart($("#close-chart"),state.bars,chartOptions)
+    : renderCloseChart($("#close-chart"),state.bars,chartOptions);
   $("#chart-empty").hidden = drawn;
   if (!drawn) {
     $("#chart-empty").textContent = !state.bars.length
@@ -1289,6 +1325,7 @@ function renderBars(response) {
       tbody.append(row);
     });
   }
+  renderTechnicalSummary(calculateTechnicalIndicators(state.bars));
   renderChartView();
 }
 
@@ -2610,6 +2647,14 @@ $("#copy-bundle-snapshot").addEventListener("click", async () => {
 });
 $("#chart-view-close").addEventListener("click", () => setChartView("close"));
 $("#chart-view-candles").addEventListener("click", () => setChartView("candles"));
+document.querySelectorAll("[data-ma-period]").forEach((control)=>{
+  control.addEventListener("change",()=>{
+    const period=Number(control.dataset.maPeriod);
+    if(![5,20,60].includes(period))return;
+    state.movingAverages=control.checked?[...new Set([...state.movingAverages,period])].sort((a,b)=>a-b):state.movingAverages.filter((item)=>item!==period);
+    renderChartView();
+  });
+});
 $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);

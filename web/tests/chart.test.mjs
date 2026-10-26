@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart } from "../src/chart.js";
+import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart, renderMACDChart, renderRSIChart } from "../src/chart.js";
 
 class FakeSvgNode {
   constructor(name) { this.name = name; this.attributes = {}; this.children = []; this.textContent = ""; }
@@ -77,5 +77,55 @@ test("can draw OHLC when volume is absent without inventing zero volume", () => 
     assert.equal(nodes.filter((node) => node.name === "rect" && (node.getAttribute("class") || "").startsWith("chart-volume-bar ")).length, 0);
     assert.ok(nodes.some((node) => node.name === "text" && node.textContent === "成交量未报告"));
     assert.ok(nodes.some((node) => node.name === "title" && node.textContent.includes("成交量 未报告")));
+  });
+});
+
+function risingBars(count,start=100) {
+  return Array.from({length:count},(_,index)=>{
+    const tradeDate=new Date(Date.UTC(2026,0,1+index)).toISOString().slice(0,10);
+    const close=start+index;
+    return {trade_date:tradeDate,open:close-0.5,high:close+1,low:close-1,close,volume:1000+index,amount:(1000+index)*close,adjustment_basis:"forward_adjusted",quality_status:"valid"};
+  });
+}
+test("computes moving averages, RSI and MACD only after sufficient valid close samples",()=>{
+  const snapshot=calculateTechnicalIndicators(risingBars(40));
+  assert.equal(snapshot.validCloseCount,40);
+  assert.equal(snapshot.latest.ma5,137);
+  assert.equal(snapshot.latest.ma20,129.5);
+  assert.equal(snapshot.latest.ma60,null);
+  assert.equal(snapshot.latest.rsi14,100);
+  assert.ok(Number.isFinite(snapshot.latest.macdDif));
+  assert.ok(Number.isFinite(snapshot.latest.macdSignal));
+  assert.ok(Number.isFinite(snapshot.latest.macdHistogram));
+  assert.equal(snapshot.requiredSamples.rsi14,15);
+  assert.equal(snapshot.requiredSamples.macdSignal,34);
+});
+test("does not turn missing daily closes into zero for technical indicators",()=>{
+  const bars=risingBars(16); bars[7].close=null;
+  const snapshot=calculateTechnicalIndicators(bars);
+  assert.equal(snapshot.validCloseCount,15);
+  assert.equal(snapshot.rows[7].close,null);
+  assert.equal(snapshot.rows[7].ma5,null);
+  assert.ok(Number.isFinite(snapshot.latest.rsi14));
+});
+test("moving-average overlays are rendered only for selected periods",()=>{
+  withFakeDocument(()=>{
+    const svg=new FakeSvgNode("svg"),bars=risingBars(25),rows=calculateTechnicalIndicators(bars).rows;
+    assert.equal(renderCloseChart(svg,bars,{movingAverages:[5,20],indicatorRows:rows}),true);
+    const classes=flatten(svg).map((node)=>node.attributes.class||"");
+    assert.ok(classes.some((value)=>value.includes("chart-moving-average-5")));
+    assert.ok(classes.some((value)=>value.includes("chart-moving-average-20")));
+    assert.ok(!classes.some((value)=>value.includes("chart-moving-average-60")));
+  });
+});
+test("RSI and MACD charts render calculated rows and report insufficient samples",()=>{
+  withFakeDocument(()=>{
+    const rows=calculateTechnicalIndicators(risingBars(40)).rows,rsiSvg=new FakeSvgNode("svg"),macdSvg=new FakeSvgNode("svg");
+    assert.equal(renderRSIChart(rsiSvg,rows),true);
+    assert.equal(renderMACDChart(macdSvg,rows),true);
+    assert.ok(flatten(rsiSvg).some((node)=>(node.attributes.class||"").includes("technical-rsi-line")));
+    assert.ok(flatten(macdSvg).some((node)=>(node.attributes.class||"").includes("technical-macd-bar")));
+    assert.equal(renderRSIChart(rsiSvg,calculateTechnicalIndicators(risingBars(10)).rows),false);
+    assert.equal(renderMACDChart(macdSvg,calculateTechnicalIndicators(risingBars(30)).rows),false);
   });
 });

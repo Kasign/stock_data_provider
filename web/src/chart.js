@@ -92,7 +92,161 @@ function candleTitle(point, options = {}) {
   return details.join(" | ");
 }
 
-export function renderCloseChart(svg, bars = []) {
+
+const TECHNICAL_MA_PERIODS = Object.freeze([5, 20, 60]);
+const RSI_PERIOD = 14;
+const MACD_FAST_PERIOD = 12;
+const MACD_SLOW_PERIOD = 26;
+const MACD_SIGNAL_PERIOD = 9;
+
+function average(values) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+}
+function rsiValue(averageGain, averageLoss) {
+  if (averageGain === null || averageLoss === null) return null;
+  if (averageLoss === 0) return averageGain === 0 ? 50 : 100;
+  return 100 - 100 / (1 + averageGain / averageLoss);
+}
+export function calculateTechnicalIndicators(bars = []) {
+  const normalized = normalizeDailyBars(bars);
+  const validCloses = [];
+  const gainSeed = [], lossSeed = [], ema12Seed = [], ema26Seed = [], signalSeed = [];
+  let previousClose = null, averageGain = null, averageLoss = null, ema12 = null, ema26 = null, signal = null;
+  const rows = normalized.map((bar) => {
+    const row = { date:bar.date, close:bar.close, ma5:null, ma20:null, ma60:null, rsi14:null, macdDif:null, macdSignal:null, macdHistogram:null };
+    if (bar.close === null) return row;
+    const close = bar.close;
+    validCloses.push(close);
+    TECHNICAL_MA_PERIODS.forEach((period) => {
+      if (validCloses.length >= period) row["ma" + period] = average(validCloses.slice(-period));
+    });
+    if (previousClose !== null) {
+      const change = close - previousClose, gain = Math.max(change, 0), loss = Math.max(-change, 0);
+      if (averageGain === null || averageLoss === null) {
+        gainSeed.push(gain); lossSeed.push(loss);
+        if (gainSeed.length === RSI_PERIOD) {
+          averageGain = average(gainSeed); averageLoss = average(lossSeed);
+          row.rsi14 = rsiValue(averageGain, averageLoss);
+        }
+      } else {
+        averageGain = (averageGain * (RSI_PERIOD - 1) + gain) / RSI_PERIOD;
+        averageLoss = (averageLoss * (RSI_PERIOD - 1) + loss) / RSI_PERIOD;
+        row.rsi14 = rsiValue(averageGain, averageLoss);
+      }
+    }
+    previousClose = close;
+    const sampleCount = validCloses.length;
+    if (sampleCount <= MACD_FAST_PERIOD) {
+      ema12Seed.push(close);
+      if (sampleCount === MACD_FAST_PERIOD) ema12 = average(ema12Seed);
+    } else ema12 += (2 / (MACD_FAST_PERIOD + 1)) * (close - ema12);
+    if (sampleCount <= MACD_SLOW_PERIOD) {
+      ema26Seed.push(close);
+      if (sampleCount === MACD_SLOW_PERIOD) ema26 = average(ema26Seed);
+    } else ema26 += (2 / (MACD_SLOW_PERIOD + 1)) * (close - ema26);
+    if (ema12 !== null && ema26 !== null) {
+      const dif = ema12 - ema26;
+      row.macdDif = dif;
+      if (signal === null) {
+        signalSeed.push(dif);
+        if (signalSeed.length === MACD_SIGNAL_PERIOD) signal = average(signalSeed);
+      } else signal += (2 / (MACD_SIGNAL_PERIOD + 1)) * (dif - signal);
+      if (signal !== null) {
+        row.macdSignal = signal;
+        row.macdHistogram = 2 * (dif - signal);
+      }
+    }
+    return row;
+  });
+  return {
+    rows,
+    latest: [...rows].reverse().find((row) => row.close !== null) || null,
+    validCloseCount: validCloses.length,
+    requiredSamples: { ma5:5, ma20:20, ma60:60, rsi14:15, macdDif:26, macdSignal:34 }
+  };
+}
+function normalizeMovingAveragePeriods(options) {
+  const requested = Array.isArray(options) ? options : options?.movingAverages;
+  if (!Array.isArray(requested)) return [];
+  return TECHNICAL_MA_PERIODS.filter((period) => requested.includes(period));
+}
+function buildMovingAverageContext(bars, points, options = {}) {
+  const periods = normalizeMovingAveragePeriods(options);
+  if (!periods.length) return { periods, byDate:new Map(), values:[] };
+  const rows = Array.isArray(options.indicatorRows) ? options.indicatorRows : calculateTechnicalIndicators(bars).rows;
+  const byDate = new Map(rows.map((row) => [row.date, row]));
+  const values = points.flatMap((point) => periods.map((period) => byDate.get(point.date)?.["ma" + period])
+    .filter((value) => Number.isFinite(value)));
+  return { periods, byDate, values };
+}
+function appendMovingAverageOverlays(svg, points, y, context) {
+  if (!context?.periods?.length) return;
+  context.periods.forEach((period) => {
+    let segment = [];
+    const flush = () => {
+      if (segment.length >= 2) {
+        svg.append(element("path", {
+          d:segment.map((point,index)=>(index ? "L " : "M ")+point.x.toFixed(2)+" "+point.y.toFixed(2)).join(" "),
+          class:"chart-moving-average chart-moving-average-"+period, "aria-label":"MA"+period
+        }));
+      } else if (segment.length === 1) {
+        svg.append(element("circle", {cx:segment[0].x,cy:segment[0].y,r:2.8,class:"chart-moving-average-point chart-moving-average-"+period,"aria-label":"MA"+period}));
+      }
+      segment = [];
+    };
+    points.forEach((point,index) => {
+      const value=context.byDate.get(point.date)?.["ma"+period];
+      if (!Number.isFinite(value)) { flush(); return; }
+      segment.push({x:Number(point.x ?? index),y:y(value)});
+    });
+    flush();
+  });
+}
+export function renderRSIChart(svg, indicatorRows = []) {
+  svg.replaceChildren(); svg.setAttribute("viewBox","0 0 760 160");
+  const points=indicatorRows.filter((row)=>Number.isFinite(row.rsi14));
+  if(points.length<2) return false;
+  const width=760,height=160,margin={left:38,right:14,top:10,bottom:27};
+  const plotWidth=width-margin.left-margin.right,plotHeight=height-margin.top-margin.bottom;
+  const x=(index)=>margin.left+index/(points.length-1)*plotWidth;
+  const y=(value)=>margin.top+(100-value)/100*plotHeight;
+  [30,50,70].forEach((value)=>{
+    const position=y(value);
+    svg.append(element("line",{x1:margin.left,y1:position,x2:width-margin.right,y2:position,class:value===30||value===70?"technical-rsi-reference":"chart-grid-line"}));
+    svg.append(element("text",{x:margin.left-7,y:position+4,"text-anchor":"end",class:"chart-axis-label"},String(value)));
+  });
+  const path=points.map((point,index)=>(index?"L ":"M ")+x(index).toFixed(2)+" "+y(point.rsi14).toFixed(2)).join(" ");
+  svg.append(element("path",{d:path,class:"technical-rsi-line"}));
+  const last=points.length-1;
+  svg.append(element("circle",{cx:x(last),cy:y(points[last].rsi14),r:3.5,class:"technical-rsi-point"}));
+  addDateLabels(svg,points,x,height-8);
+  return true;
+}
+export function renderMACDChart(svg, indicatorRows = []) {
+  svg.replaceChildren(); svg.setAttribute("viewBox","0 0 760 160");
+  const points=indicatorRows.filter((row)=>Number.isFinite(row.macdDif)&&Number.isFinite(row.macdSignal)&&Number.isFinite(row.macdHistogram));
+  if(points.length<2) return false;
+  const width=760,height=160,margin={left:38,right:14,bottom:27},plotWidth=width-margin.left-margin.right;
+  const centerY=75,halfHeight=54;
+  const x=(index)=>margin.left+index/(points.length-1)*plotWidth;
+  const maxAbs=Math.max(0.000001,...points.flatMap((point)=>[Math.abs(point.macdDif),Math.abs(point.macdSignal),Math.abs(point.macdHistogram)]));
+  const y=(value)=>centerY-value/maxAbs*halfHeight;
+  const barWidth=Math.max(2,Math.min(12,plotWidth/points.length*0.56));
+  svg.append(element("line",{x1:margin.left,y1:centerY,x2:width-margin.right,y2:centerY,class:"technical-macd-center"}));
+  points.forEach((point,index)=>{
+    const barY=y(point.macdHistogram);
+    svg.append(element("rect",{x:x(index)-barWidth/2,y:Math.min(centerY,barY),width:barWidth,height:Math.max(1,Math.abs(centerY-barY)),
+      class:"technical-macd-bar "+(point.macdHistogram>=0?"technical-macd-positive":"technical-macd-negative"),"data-date":point.date}));
+  });
+  const difPath=points.map((point,index)=>(index?"L ":"M ")+x(index).toFixed(2)+" "+y(point.macdDif).toFixed(2)).join(" ");
+  const signalPath=points.map((point,index)=>(index?"L ":"M ")+x(index).toFixed(2)+" "+y(point.macdSignal).toFixed(2)).join(" ");
+  svg.append(element("path",{d:difPath,class:"technical-macd-dif"}));
+  svg.append(element("path",{d:signalPath,class:"technical-macd-signal"}));
+  addDateLabels(svg,points,x,height-8);
+  return true;
+}
+
+export function renderCloseChart(svg, bars = [], options = {}) {
   svg.replaceChildren();
   svg.setAttribute("viewBox", "0 0 760 260");
   const points = normalizeDailyBars(bars).filter((bar) => bar.close !== null);
@@ -103,7 +257,9 @@ export function renderCloseChart(svg, bars = []) {
   const plotWidth = CHART_WIDTH - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
   const values = points.map((point) => point.close);
-  const range = paddedRange(Math.min(...values), Math.max(...values), 0.12);
+  const movingAverages = buildMovingAverageContext(bars, points, options);
+  const rangeValues = values.concat(movingAverages.values);
+  const range = paddedRange(Math.min(...rangeValues), Math.max(...rangeValues), 0.12);
   const x = (index) => margin.left + (index / (points.length - 1)) * plotWidth;
   const y = (value) => margin.top + ((range.max - value) / (range.max - range.min || 1)) * plotHeight;
 
@@ -125,6 +281,7 @@ export function renderCloseChart(svg, bars = []) {
   const area = `${path} L ${x(points.length - 1).toFixed(2)} ${(height - margin.bottom).toFixed(2)} L ${x(0).toFixed(2)} ${(height - margin.bottom).toFixed(2)} Z`;
   svg.append(element("path", { d: area, fill: "url(#close-area-gradient)" }));
   svg.append(element("path", { d: path, class: "chart-close-line" }));
+  appendMovingAverageOverlays(svg, points.map((point,index)=>({...point,x:x(index)})), y, movingAverages);
 
   points.forEach((point, index) => {
     const marker = element("circle", {
@@ -154,7 +311,10 @@ export function renderCandlestickVolumeChart(svg, bars = [], options = {}) {
   const margin = { left: 58, right: 20 };
   const plotWidth = CHART_WIDTH - margin.left - margin.right;
   const priceTop = 17, priceBottom = 194, volumeTop = 222, volumeBottom = 260;
-  const range = paddedRange(Math.min(...points.map((point) => point.low)), Math.max(...points.map((point) => point.high)), 0.08);
+  const movingAverages = buildMovingAverageContext(bars, points, options);
+  const lows = points.map((point)=>point.low).concat(movingAverages.values);
+  const highs = points.map((point)=>point.high).concat(movingAverages.values);
+  const range = paddedRange(Math.min(...lows), Math.max(...highs), 0.08);
   const y = (value) => priceTop + ((range.max - value) / (range.max - range.min || 1)) * (priceBottom - priceTop);
   const x = (index) => margin.left + (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth);
   const stepWidth = plotWidth / Math.max(1, points.length);
@@ -205,6 +365,7 @@ export function renderCandlestickVolumeChart(svg, bars = [], options = {}) {
     }));
     svg.append(group);
   });
+  appendMovingAverageOverlays(svg, points.map((point,index)=>({...point,x:x(index)})), y, movingAverages);
   addDateLabels(svg, points, x, 289);
   return true;
 }
