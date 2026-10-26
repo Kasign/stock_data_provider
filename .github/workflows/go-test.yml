@@ -13,7 +13,7 @@ on:
       - '.env.example'
       - '.dockerignore'
       - 'Dockerfile'
-      - 'docker-compose.go.yml'
+      - 'docker-compose.yml'
       - 'scripts/**'
   push:
     branches: [main]
@@ -28,7 +28,7 @@ on:
       - '.env.example'
       - '.dockerignore'
       - 'Dockerfile'
-      - 'docker-compose.go.yml'
+      - 'docker-compose.yml'
       - 'scripts/**'
 
 permissions:
@@ -90,10 +90,10 @@ jobs:
       - name: Prepare example environment file
         run: cp .env.example .env
       - name: Validate Docker Compose configuration
-        run: docker compose -f docker-compose.go.yml config --quiet
+        run: docker compose --env-file .env -f docker-compose.yml config --quiet
       - name: Check deploy script syntax
         run: bash -n scripts/deploy-go.sh
       - name: Build Go market-data image
-        run: docker build --tag stock-market-data:ci --file services/market-data/Dockerfile services/market-data
+        run: docker build --tag stock-analysis-data:ci --file services/market-data/Dockerfile services/market-data
       - name: Build Go analysis API image
-        run: docker build --tag stock-analysis-go:ci --file Dockerfile .
+        run: docker build --tag stock-analysis-server:ci --file Dockerfile .

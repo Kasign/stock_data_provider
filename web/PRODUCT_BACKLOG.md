@@ -1,0 +1,291 @@
+# WebUI 产品功能扩展与实施任务清单
+
+更新时间：2026-10-26
+目标仓库：Kasign/stock_data_provider
+实现分支：feat/webui-market-data-console
+参考项目版本：ZhuLinsen/daily_stock_analysis，main = ec66bf46caf6993f673bd4be59c883754667b686
+
+## 本轮续接状态（2026-10-26）
+
+- 当前 WebUI 继续只覆盖 web/** 与专用工作流；PR #2 的目标分支是 feat/full-go-data-providers-api-switch，不修改 Go 数据源或数据库。
+- 通知中心、问股、选股与告警的页面结构和 unavailable/错误/空结果状态模型已经存在；当前没有可用的真实后端接口。生产页面继续禁用发送、创建规则、启动选股等操作，不使用测试 fixture 作为实时返回。
+- 跨层字段与请求状态约定见[共享状态契约](https://github.com/Kasign/stock_data_provider/blob/5776313e7b50648ea0e7d741c7eb1c02b8d20758/docs/architecture/WEBUI_DATA_STATE_CONTRACT.md)。通知、Chat、选股、告警和服务端设置所缺的资源及验收要求已补入 API_CONTRACT.md 的“未接入功能的后端契约需求”章节；其中是设计草案，不是已有接口路径。
+- 部署容器名为 stock-analysis-web。依赖服务名通过根目录 .env 中的 MARKET_DATA_SERVICE_NAME 和 ANALYSIS_SERVICE_NAME 配置，详见 README 与根目录 .env.example 的 WebUI 配置节。
+- 按当前协作安排，本批不运行测试/CI；下一阶段优先完成跨模块源码 Review 和状态/文档一致性核对，再等待用户统一实机验收。
+
+## 1. 规划结论
+
+以 daily_stock_analysis 的 Web 产品能力作参考，不复制它的 React 技术栈，也不把其后端能力误认为本仓库已具备。我们的 WebUI 保持 web/ 独立目录、原生 HTML/CSS/JavaScript ES Modules、Nginx 同源代理及 Docker 部署。新功能可以先把页面、导航、表单、状态与交互做好；一旦涉及真实任务提交、配置保存、通知发送、聊天回答、选股候选、告警触发，就必须由真实 API 支撑。没有 API 的地方显示“后端接口待接入”，不得用 mock/fixture 冒充生产返回。
+
+参考源码入口：
+- [参考项目主页](https://github.com/ZhuLinsen/daily_stock_analysis)
+- [参考 Web 页面目录](https://github.com/ZhuLinsen/daily_stock_analysis/tree/main/apps/dsa-web/src/pages)
+- [参考设置页](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/apps/dsa-web/src/pages/SettingsPage.tsx)
+- [参考问股页](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/apps/dsa-web/src/pages/ChatPage.tsx)
+- [参考选股页](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/apps/dsa-web/src/pages/StockScreeningPage.tsx)
+- [参考告警页](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/apps/dsa-web/src/pages/AlertsPage.tsx)
+- [参考任务流面板](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowPanel.tsx)
+- [参考配置与 WebUI 说明](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md)
+- [参考通知能力说明](https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/notifications.md)
+
+## 2. 对比结果：参考库有、我们当前还没有的核心能力
+
+| 模块 | 参考库的主要体验 | 我们当前 WebUI | 本项目处理方式 |
+|---|---|---|---|
+| 全局布局与导航 | 有首页工作区、问股、选股、组合、决策信号、回测、告警、数据中心、用量和设置；有统一 Shell 和移动导航 | 主要是行情工作台、分析任务两个视图，另有连接设置对话框 | 优先完成导航、页面层级和公共状态样式；本轮只规划用户明确提出的功能，不同时复制组合/回测等全部模块 |
+| 首页/行情 | 历史、自选、今日工作区；可查询、发起分析、查看任务/历史 | 已有报价、日 K、Provider 能力、自选和最近分析 | 保留已有功能，改善布局与信息密度；服务端历史仍需后端列表 API |
+| 设置中心 | 按基础、数据源、AI 模型、通知、Agent、系统/调度等分组；配置 schema、校验、未保存变更保护、密钥遮蔽、测试与备份 | 目前仅有 API 路径和行情 API Key 设置，Key 存在当前浏览器 | 做分组式设置页 UI；本地偏好可本地保存，服务器配置须有真实 API 才可保存；密码/.env 管理不能假实现 |
+| 通知 | 设置中有渠道配置/单渠道测试；告警页里还有发送尝试记录 | 没有持久通知中心或通知发送 API | 新增通知中心视图、空/错误/不可用状态和角标规则；没有 API 时不显示虚假未读数或历史通知 |
+| 问股 | 多轮对话、会话列表、股票上下文、策略选择、流式响应、停止、导出/复制、追问上下文保护 | 没有 Agent Chat、会话或流式 API | UI 结构可先做，发送操作在真实 Chat API 接入前标记不可用；不返回固定假答案 |
+| 选股 | 市场/策略/参数、异步任务、候选股解释、热点主题、选股历史、候选联动单股分析 | 没有策略清单、选股任务和候选/历史 API | 先建设配置/候选/进度页面和状态模型；多股分析不等于条件选股，不可伪造候选 |
+| 告警 | 规则列表、创建/启停/删除、单次测试、触发历史、通知尝试诊断 | 没有告警规则与监控调度 API | UI 可先做，规则保存与触发历史须等后端持久化/调度 API |
+| 点击任务看运行流 | 任务项可打开 Run Flow；运行摘要、阶段图、事件列表、节点详情、刷新与诊断 | 有 Task 状态和 StageEvent 增量接口，但没有服务端任务列表和 DAG 拓扑快照 | 先实现真实事件时间线与任务详情抽屉；不绘制虚构拓扑或百分比 |
+| 视觉与可用性 | 共用设计 token、卡片、抽屉、表单、错误边界、移动端滚动与无障碍 | 已有主题、移动导航和基础 CSS，但页面仍偏密集，app.js 已较大 | 先定统一布局/设计 token，再逐页迁移；保持原生 JS，按功能拆模块，不做大规模技术栈重写 |
+
+## 3. 当前后端能力核实：哪些可以接，哪些必须先做 UI
+
+### 当前已有且可直接接入
+- 行情服务健康检查：GET /health/ready
+- Provider 清单/能力：GET /api/v1/data-sources
+- 实时行情：GET /api/v1/quotes/{symbol}
+- 历史日 K：GET /api/v1/bars/{symbol}/daily
+- 个股筹码分布与资金流：GET /api/v1/stocks/{symbol}/chip-distribution、GET /api/v1/stocks/{symbol}/capital-flow
+- 分析服务就绪：GET /readyz
+- 创建异步分析任务：POST /api/v1/analysis/tasks
+- 查询单个 Task 与阶段事件：GET /api/v1/analysis/tasks/{task_id}、GET /api/v1/analysis/tasks/{task_id}/events
+- 查询单个 Run 报告：GET /api/v1/analysis/runs/{run_id}
+
+已有调用的准确路径和字段继续以 web/API_CONTRACT.md、Go Handler、领域模型和测试为准。
+
+### 当前不存在、需独立后端任务/契约的能力
+- 通用服务端配置 schema/读取/保存/字段校验/配置版本冲突、密码与认证、服务器 .env 导入导出。
+- Agent 问股、会话历史、流式响应、服务端取消。
+- 选股状态、策略列表、扫描任务、候选列表、选股历史和热点主题。
+- 告警规则 CRUD、后台评估调度、触发历史、通知尝试查询。
+- 通知收件箱/未读状态/通知历史。
+- 服务端分析任务列表，以及参考库那种丰富的 Run Flow DAG/拓扑快照。
+
+在这些 API 到位前，页面应展示能力状态、空态和依赖说明；保存/运行按钮应禁用或说明尚不可用。不得只写 localStorage 后声称修改了服务器配置，也不得把 fixtures 送进生产页面。
+
+## 4. 执行顺序与任务 Issue
+
+优先级综合考虑你提出的产品需求、目前可复用的 API、真实数据依赖和全站样式一致性。建议一批完成后 Review、补测、按逻辑成组中文 commit，再复查 CI；不要按文件逐个提交。
+
+### P0：先建立一致的页面骨架
+
+- [ ] **全局布局、导航、响应式和共享状态组件** — [Issue #3](https://github.com/Kasign/stock_data_provider/issues/3)
+  - 导航：行情/总览、任务、通知、问股、选股、告警、设置。
+  - 共用页面标题、状态徽标、卡片、表格、表单、Toast、抽屉、加载/空/错误/未接入状态。
+  - 统一 CSS tokens、间距/字号、桌面密度、移动端菜单和滚动。
+  - 页面导航与浏览器返回可预测；关键操作有键盘支持和清晰状态反馈。
+  - 视觉验收覆盖 320/375/768/1280+ 宽度；不能只依靠 CSS 字符串测试或 CI 过关。
+
+### P1：优先完成功能上已有数据支撑的任务运行流
+
+- [ ] **点击任务进入任务运行流** — [Issue #4](https://github.com/Kasign/stock_data_provider/issues/4)
+  - 点击任务打开详情抽屉/页面，显示 Task 与 Run 的独立状态、ID、标的、时间、当前阶段、错误信息。
+  - 基于真实 sequence 增量事件形成时间线，支持手动刷新和刷新后恢复。
+  - 处理旧响应覆盖、事件去重、空事件、暂时性与永久性错误。
+  - 目前只做线性事件时间线。待后端提供拓扑数据后再加 DAG 图；当前不是服务端任务列表。
+
+### P1：设置中心先搭结构，再逐类别连真实能力
+
+- [ ] **设置页完整分组和配置安全边界** — [Issue #5](https://github.com/Kasign/stock_data_provider/issues/5)
+  - 进度：源码与 CI 完成。WebUI checks [#40256618763](https://github.com/Kasign/stock_data_provider/actions/runs/40256618763) 通过（72/72 Node tests、JS syntax、Nginx build）；真实浏览器和 NAS/Docker 联调待做。
+  - 连接、基础偏好、数据源、AI/问股、通知渠道、调度、选股、系统安全和备份分组。
+  - 未保存提醒、字段解释、校验、加载/错误/冲突/成功状态，密钥默认遮蔽。
+  - 仅纯 UI 偏好可本地保存；服务器配置须有 API。密码/.env 管理需后端认证和审计设计。
+
+### P1：通知能力的 UI 和配置入口
+
+- [ ] **通知中心与状态模型** — [Issue #7](https://github.com/Kasign/stock_data_provider/issues/7)
+  - 进度：通知列表/详情布局、筛选禁用态和五态模型的源码与 CI 已完成。WebUI checks [#40256904732](https://github.com/Kasign/stock_data_provider/actions/runs/40256904732) 通过（75/75 Node tests、JS syntax、Nginx build）；真实通知 API 尚未接入。
+  - 先设计消息列表、分类/状态筛选、详情和空态；顶栏角标只显示真实 API 提供的数据。
+  - 通知渠道配置与单渠道测试放在设置中心；告警投递尝试与通知收件箱分开。
+  - 没有持久通知 API 时，不生成真实未读数或历史记录。
+
+### P2：问股工作台
+
+- [ ] **问股 UI 与 Chat API 契约** — [Issue #8](https://github.com/Kasign/stock_data_provider/issues/8)
+  - 进度：问股工作台、股票上下文隔离与五态框架的源码/CI 完成；WebUI checks [#40257299173](https://github.com/Kasign/stock_data_provider/actions/runs/40257299173) 通过（78/78 Node tests、JS syntax、Nginx build）。Chat API 尚未接入，发送操作保持禁用。
+  - 对话、会话、新会话、股票上下文、策略区域、消息复制/导出、流式状态与停止状态。
+  - 先实现可审查的 UI 和状态转换；真实发送必须等 Chat API 契约和服务端实现。
+
+### P2：选股工作台
+
+- [ ] **选股表单、运行状态与候选结果** — [Issue #9](https://github.com/Kasign/stock_data_provider/issues/9)
+  - 进度：选股工作台与 capability/task/candidate/history 状态模型源码和 CI 已完成。WebUI checks [#40257622418](https://github.com/Kasign/stock_data_provider/actions/runs/40257622418) 通过（82/82 Node tests、JS syntax、Nginx build）；真实选股 API 尚未接入。
+  - 市场/股票池/策略/参数、提交前摘要、运行状态、候选解释和历史筛选。
+  - 策略列表/候选由后端提供；没有 API 时不能展示假候选，不用普通多股分析冒充筛选引擎。
+
+### P2：告警中心
+
+- [ ] **规则管理、触发历史与通知尝试** — [Issue #10](https://github.com/Kasign/stock_data_provider/issues/10)
+  - 进度：规则、评估、触发历史、投递尝试 UI 与状态模型源码/CI 完成。WebUI checks [#40258089134](https://github.com/Kasign/stock_data_provider/actions/runs/40258089134) 通过（86/86 Node tests、JS syntax、Nginx build）；告警后端 API 尚未接入。
+  - 规则类型/范围/阈值/级别/启停、单次测试、触发历史和投递诊断。
+  - 规则 CRUD、定时监控、冷却/去重、触发持久化及通知发送均需后端。
+  - 在真实后台 API 没完成前，把 UI 标记为未接入，不保存虚构规则。
+
+### P3：统一视觉 Review 和部署验收（贯穿以上批次）
+
+- [ ] 先在每次功能提交中自查布局，再在所有页面完成后做全局一致性 Review。
+- [ ] 检查桌面信息密度、字号、卡片层级、操作优先级、状态颜色语义、表格可扫读性、移动端触控与滚动、焦点/无障碍。
+- [ ] 对真实 API 错误、空返回、后端未启用、网络中断/恢复逐页验收。
+- [ ] 在 NAS/Docker/OpenResty 环境验证真实代理、API Key、数据库任务持久化和页面刷新恢复。
+- [ ] CI 成功只代表 CI 覆盖的检查通过，不等于 NAS 的真实集成完成。
+
+## 5. 视觉设计与代码结构原则
+
+- 页面目标是“直观、方便、信息能快速扫读”，不是做成信息块很多的监控大屏。一个页面只突出一个主要任务；次要配置分组折叠，危险操作与主操作分开。
+- 统一颜色语义：成功/可用、警告/降级、失败/阻断、未知/未接入保持稳定；不要仅靠颜色传达状态。
+- 正文以可读为先，辅助文本不能缩小到难阅读；桌面使用清晰的主内容宽度和合理留白，小屏幕切为单列/抽屉。
+- 统一所有请求状态：loading、empty、unavailable、error、loaded。错误可以重试时提供重试操作；永久错误不要无限轮询。
+- 继续原生 HTML/CSS/JS。不必立刻把整个 app.js 推倒重写；新增页面时按职责分出 pages/views、components、API adapter 与纯函数测试，逐步降低耦合。
+- 测试 fixtures 仅用于 CI，不是后端模拟服务，更不是生产备用数据；页面要显示能力不可用时必须如实说明。
+- 提交原则：按一组可独立 Review 的逻辑修改使用 feat/fix/docs/test 等类型，中文提交信息；提交后立即查询对应 HEAD 和 Actions 结果。
+
+## 6. 验收门槛（所有功能通用）
+
+每个功能批次需满足：
+1. 产品行为和数据契约先明确；UI 只呈现后端真实字段。
+2. 完成 UI 所有状态和响应式布局，不留可点击但无效的按钮。
+3. 覆盖成功、空、缺字段、错误、未启用、不可用、加载中和重试边界。
+4. 更新 API_CONTRACT.md（只记真实接口；建议接口标注为草案）及 PROGRESS.md。
+5. 本地/CI 自动化验证通过；按功能需要安排实际浏览器与 NAS/Docker 实测。
+6. Review 不再发现阻断问题后才进入下一个批次；PR #2 保持未合并，除非你之后明确决定。
+
+
+### P1：中文名称股票搜索入口
+
+- [Issue #11](https://github.com/Kasign/stock_data_provider/issues/11) — 已实现真实目录搜索的 Go API 契约和服务端能力；WebUI 增加名称/代码自动补全，接入结果后沿用已有行情、日 K、自选与分析操作。
+- 验收重点：精确/模糊匹配、多结果和空结果、API Key、旧服务 404、上游故障/旧目录降级、请求取消、中文输入法、键盘可访问性。搜索结果不得写死在前端或冒充实时行情。
+- WebUI 与数据服务是分支独立交付：部署旧数据服务时，应显示搜索接口未接入提示；不可仅凭前端 CI 通过就认为 NAS 实际搜索已联调。
+
+### P1：分析任务 Run Flow 拓扑与节点诊断
+
+- [Issue #12](https://github.com/Kasign/stock_data_provider/issues/12) — 参考 `daily_stock_analysis` 的 Summary Bar、流程节点图、节点详情和事件列表交互。先升级当前真实线性事件流的摘要/详情，再由数据分支提供稳定的阶段注册表与 flow snapshot API 后绘制真正 DAG。
+- 当前 Task/StageEvent/RunResult API 不包含经验证的 DAG 边和实时流端点；禁止从事件顺序猜依赖、显示虚假进度百分比或伪造取消操作。
+
+
+### Issue #12 — Run Flow 增强（Phase 1 + 视觉增强 Phase 1.1）
+
+- Phase 1 已提供 Task/Run 双状态、事件摘要、可点击事件、失败/降级/运行中事件优先定位、真实事件字段和原始 JSON 诊断。
+- Phase 1.1 将事件展示强化为线性时间线，包含状态徽标、节点连接线、选中态、诊断提示、服务端时间/序号层次及窄屏布局。
+- 当前 API 没有可信的拓扑快照或依赖边，因此不会绘制 DAG、猜测依赖、显示估算进度或伪造取消任务；完整图形仍需数据层 Stage Registry/Flow Snapshot。
+- 本批未执行测试或 CI；真实浏览器/部署视觉验收留待用户统一测试。后续记录见 `web/PROGRESS.md` 和 `web/HANDOFF.md`。
+
+
+
+### Issue #13 — 行情总览市场背景（本批源码完成）
+
+- [x] 接入核心指数、市场涨跌分布、行业/概念排行与涨跌停池四项已有只读 API。
+- [x] 独立显示来源、时间和质量状态，支持请求取消与筛选切换。
+- [x] 处理 404、未配置 Key、未知样本和 has_data=false，不用静态数据伪装真实回包。
+- [ ] 用户统一测试实际部署 API 及桌面/移动端交互；本批未运行测试。
+
+### Issue #14 — 个股档案、季度财务与公告（本批源码完成）
+
+- [x] 接入证券档案、板块归属、季度指标和公告分页真实 API。
+- [x] 增加报告期选择、报告日/披露日区分、公告时间/采集时间区分及质量状态。
+- [x] 对空公告/板块结果保持 unknown 语义，外链仅允许 HTTPS Eastmoney 域名。
+- [ ] 用户统一测试部署版本的 Provider 配置、接口返回与页面交互；本批未运行测试。
+
+### Issue #15 — 龙虎榜与交易日历（本批源码完成）
+
+- [x] 龙虎榜分页和 A 股记录跳转个股行情。
+- [x] 接入真实交易日历范围 API，以服务端逐日标记展示交易/休市。
+- [x] 增加月份快捷切换、日期范围查询、接口错误和质量/覆盖提示。
+- [ ] 用户统一测试实际 Provider 回包、分页和月份边界；本批未运行测试。
+
+### Issue #16 — Provider 能力明细（本批源码完成）
+
+- [x] 展示市场、个股研究和交易日历等已知 Provider 能力。
+- [x] 增加可展开能力标签，不以缺失字段冒充已支持。
+- [x] 修正数据源 API 失败后旧摘要未清除的问题。
+- [ ] 用户统一测试新旧 market-data 回包兼容性；本批未运行测试。
+
+### Issue #17 — 报价失败时避免旧行情残留（源码完成）
+
+- [x] 开始新一轮查询时清空旧标的实时行情并显示本次加载状态。
+- [x] 报价失败时清空所有报价卡片字段、来源和行情时间。
+- [x] 保留报价与日 K 分别成功/失败的能力，不让一端失败覆盖另一端成功数据。
+- [ ] 用户统一测试先成功查询 A 再查询失败标的 B 的情况，以及报价失败但日 K 成功时的显示。
+- 本批未运行测试、未触发 CI。
+
+
+### Issue #18 — 行情 Bundle 快照接入（源码完成）
+
+- [x] 未指定日 K 日期范围时优先读取同一 Bundle 响应中的报价、日 K、质量警告和快照元信息。
+- [x] 处理报价缺失但日 K 可用的部分回包。
+- [x] 仅在 Bundle 路由 404 时回退到两个独立接口；自定义日期范围继续用日 K 日期接口。
+- [ ] 用户统一测试 Bundle 与旧服务兼容、统一快照元数据及部分回包。
+- 本批未运行测试、未触发 CI。
+
+
+### Issue #19 — 全局导航键盘与焦点管理（源码完成）
+
+- [x] 新增“跳转到主内容”键盘入口。
+- [x] 路由切换时回到顶部并聚焦当前视图标题。
+- [x] 移动导航以 Escape 或遮罩关闭时恢复菜单按钮焦点。
+- [x] 遵循 prefers-reduced-motion 系统偏好。
+- [ ] 用户统一验收键盘导航、浏览器前进/后退、移动端抽屉行为。
+- 本批未运行测试、未触发 CI。
+
+
+### Issue #20 — 全站响应式布局一致性（源码完成）
+
+- [x] 限制主视图最大宽度并居中，避免超宽屏行宽过长。
+- [x] 统一页面标题/状态徽标/面板动作的收缩换行行为。
+- [x] 修正问股在窄平板尺寸下仍可能出现双栏的问题；会话栏在对话区后显示并取消 sticky。
+- [x] 通知过滤器在平板两列、手机单列；小屏统一主要卡片内边距。
+- [ ] 用户统一验收 320/375/600/768/900/1280/1600px 视口。
+- 本批未运行测试、未触发 CI。
+
+
+### Issue #21 — 行情 Bundle 快照诊断（源码完成）
+
+- [x] 独立展示完整快照 ID、分析参考时间、采集完成时间、整体质量与真实组件来源。
+- [x] 支持复制快照元数据 JSON，字段不包含 API Key。
+- [x] 新查询和旧服务回退时清除旧快照信息。
+- [ ] 用户统一验收无 Bundle、Bundle 缺报价、旧服务 404 以及复制失败等状态。
+- 本批未运行测试、未触发 CI。
+
+
+### Issue #22 — Task / StageEvent 轮询故障隔离（源码完成）
+
+- [x] Task 状态与事件请求独立处理，避免事件端点失败时丢弃成功的任务状态。
+- [x] 阶段事件按合法序号去重合并；坏序号不会推进增量游标。
+- [x] 临时失败自动重试，事件端点永久失败时暂停事件请求但保留任务状态轮询和手动重试入口。
+- [x] 新建/恢复任务时重置事件端点错误状态；永久 Task 查找失败时暂停轮询。
+- [ ] 用户统一验收两端单独失败、事件 404、临时 5xx、终态与坏序号回包。
+- 本批未运行测试、未触发 CI。
+
+
+### Issue #23 — 个股估值指标接入（源码完成）
+
+- [x] 接入真实批量估值快照接口，展示 PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM。
+- [x] 明确保留空值/负值语义、未返回标的、质量原因与供应商/采集时间。
+- [x] Provider 能力列表补充季度财务及估值能力声明。
+- [x] 数据分支已在提交 [`c37270a`](https://github.com/Kasign/stock_data_provider/commit/c37270a41a593488767982e5da819d99ba9f2189) 补齐 `services/market-data/openapi.yaml` 估值路由及 Schema；旧部署/Provider 未启用状态仍待用户统一实测。
+- [ ] 用户统一验收真实 Provider 回包、缓存与多指标空值。
+- 本批未运行测试、未触发 CI。
+
+
+### Issue #24 — 个股筹码分布与资金流摘要（源码完成）
+
+- [x] 接入现有筹码分布与资金流 API，分别按需读取。
+- [x] 展示成本区间、获利比例、成本集中度、净流入与观测数，并保留服务端质量状态、来源和获取时间。
+- [x] 保留可选数值缺失语义；筹码比例按 0–1 转为百分数，资金流单位标注为人民币元。
+- [x] 数据分支已在提交 b02eb41 补齐 OpenAPI 路由与 Schema。
+- [ ] 用户统一验收 Provider 未启用、旧服务 404、正常回包、空值和来源质量状态。
+- 本轮未运行测试、未触发 CI。
+
+
+### Issue #25 — 市场总览个股人气榜与飙升榜（源码完成）
+
+- [x] 接入真实 hot-stocks API，支持 popular / surge 两种榜单。
+- [x] 展示源端排名、可用价格字段、涨跌幅与源端排名变化。
+- [x] 点击榜单股票复用统一行情查询流程，并沿用当前查询中的防重复启动保护。
+- [x] Provider 能力面板增加 hot_ranking_capable；接口参数和数据解释写入 API 合约与技术说明。
+- [ ] 用户统一验收榜单类型切换、源端为空、401/404/503 和点击跳转行为。
+- 本轮未运行测试或触发 CI。

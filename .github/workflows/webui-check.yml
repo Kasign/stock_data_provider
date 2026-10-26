@@ -1,0 +1,45 @@
+name: WebUI checks
+
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'docker-compose.yml'
+      - '.env.example'
+      - 'scripts/deploy-go.sh'
+      - '.github/workflows/webui-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'docker-compose.yml'
+      - '.env.example'
+      - 'scripts/deploy-go.sh'
+      - '.github/workflows/webui-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  webui:
+    name: Validate WebUI source and container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Prepare example environment file
+        run: cp .env.example .env
+      - name: Validate unified Compose configuration
+        run: docker compose --env-file .env -f docker-compose.yml config --quiet
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        working-directory: web
+        run: npm run check
+      - name: Run unit tests
+        working-directory: web
+        run: npm test
+      - name: Build Nginx image
+        run: docker build --tag stock-analysis-web:ci --file web/Dockerfile web

@@ -190,9 +190,19 @@ FROM analysis_tasks ORDER BY created_at DESC LIMIT 20;
 
 ## Docker 部署
 
-提供 `Dockerfile`、`docker-compose.go.yml` 和一键部署检查脚本。Compose 会同时启动 `market-data` 与 `stock-analysis-go` 两个 Go 服务，复用 `1panel-network` 上现有的 MariaDB/Redis。
+仓库统一使用根目录 `docker-compose.yml`，一次定义并启动三个服务：
 
-先检查根目录是否已有 `.env`；**已有就不要覆盖**。只有第一次配置且 `.env` 不存在时才执行：
+| Compose 服务 / 容器名 | 作用 | 暴露端口 |
+|---|---|---|
+| `stock-analysis-data` | 原生 Go 行情 API | 仅容器网络 `8091` |
+| `stock-analysis-server` | Go 分析 API | 宿主机回环地址 `127.0.0.1:8092` |
+| `stock-analysis-web` | WebUI 与同源 Nginx 反向代理 | 默认宿主机回环地址 `127.0.0.1:8093` |
+
+三个服务连接已有外部 Docker 网络 `1panel-network`，复用该网络中的 MariaDB/Redis，不会额外创建数据库容器。根目录 `docker-compose.go.yml` 与 `web/docker-compose.yml` 已整合并移除，部署入口只保留根目录 Compose 文件。
+
+### 首次配置或升级旧部署
+
+首次配置时，只有在根目录 `.env` 不存在的情况下才复制模板；**已有 `.env` 不要覆盖**：
 
 ```bash
 cp .env.example .env
@@ -200,26 +210,38 @@ nano .env
 openssl rand -hex 32
 ```
 
-将随机生成的至少 32 字符密钥填入 `MARKET_DATA_API_KEY`，两个服务共用这一项。将示例中的数据库/Redis 用户名、密码、数据库名和主机名改成服务器中的真实配置。自动建表时，两套 DB 账号都需要目标数据库的建表/变更权限。若密码包含 `$` 或 `#` 等特殊字符，建议在 `.env` 中使用单引号包裹整个值，避免 Compose 变量插值或注释解析改变密码。
+将随机生成的至少 32 字符密钥填入 `MARKET_DATA_API_KEY`，行情与分析两个 Go 服务共用该值。检查真实数据库/Redis 地址、账号、密码和数据库名。若密码包含 `$` 或 `#` 等特殊字符，建议在 `.env` 中用单引号包裹完整值。
 
-然后执行统一预检、构建、启动和健康检查：
+从旧版拆分 Compose 升级时，保留现有 `.env`，并将服务名配置改为 `MARKET_DATA_BASE_URL=http://stock-analysis-data:8091`、`MARKET_DATA_SERVICE_NAME=stock-analysis-data`、`ANALYSIS_SERVICE_NAME=stock-analysis-server`。
+
+从旧版拆分 Compose 升级时，旧 Go 容器可能仍占用 `8092` 端口；旧版 `web/docker-compose.yml` 也可能留下同名的 `stock-analysis-web` 容器，即使容器已停止也会占用固定名称。先确认现有容器用途，再按一次性迁移命令移除旧应用容器。该命令只移除列出的应用容器，不会删除外部 MariaDB/Redis 数据。部署脚本会预检旧 Go 容器是否仍运行，并检查已有 `stock-analysis-web` 的 Compose 文件标签；遇到不属于根目录 Compose 的同名容器会在构建前停止，不会擅自删除：
+
+```bash
+docker rm -f stock-analysis-go stock-market-data stock-analysis-web 2>/dev/null || true
+```
+
+然后在仓库根目录执行统一预检、构建、启动和健康检查：
 
 ```bash
 bash ./scripts/deploy-go.sh
 ```
 
-脚本会检查 `.env`、Docker Compose 配置和 `1panel-network`，构建两个镜像、启动服务，并等待两个容器健康后检查 `/healthz` 与 `/readyz`。失败时会输出相关容器日志。也可以单独查看：
+部署后检查服务状态、日志与 API：
 
 ```bash
-docker compose -f docker-compose.go.yml ps
-docker compose -f docker-compose.go.yml logs --since=10m market-data stock-analysis-go
+docker compose --env-file .env ps
+docker compose --env-file .env logs --tail=100 stock-analysis-data stock-analysis-server stock-analysis-web
 curl -fsS http://127.0.0.1:8092/healthz
 curl -fsS http://127.0.0.1:8092/readyz
+curl -fsS http://127.0.0.1:8093/
 ```
 
-**端口安全说明：** `8092` 只绑定宿主机回环地址 `127.0.0.1`，不会直接监听所有外网网卡。宿主机可通过 `127.0.0.1:8092` 测试；若 1Panel 的 OpenResty 容器加入同一个 `1panel-network`，反向代理上游应使用 `http://stock-analysis-go:8092`，不要在 OpenResty 容器中使用 `127.0.0.1:8092`。当前分析 API 没有内置用户认证，对外发布域名之前仍须在 OpenResty 配置鉴权与来源限制，不能仅依赖 HTTPS。
+部署脚本会静默校验 Compose 配置，构建三个镜像，等待三个容器健康，并检查分析 API 的 `/healthz` 与 `/readyz`。失败时会输出各服务日志。真实数据库权限、Redis 认证及上游行情供应商的可用性仍需在目标服务器验收。
 
-Compose 会将分析 API 指向容器网络内的 `http://market-data:8091`；不要在分析 API 容器里把该地址设置成 `127.0.0.1:8091`。若直接在宿主机运行 `go run ./cmd/analysis-api`，才将 `MARKET_DATA_BASE_URL` 改为 `http://127.0.0.1:8091` 并先启动 market-data。
+**反向代理与安全：** 宿主机进程可访问 `127.0.0.1:8092`；同属 `1panel-network` 的 OpenResty 容器应使用 `http://stock-analysis-server:8092` 访问分析 API、`http://stock-analysis-web/` 访问 WebUI。行情 API 通过 WebUI 的 `/market-api/` 同源路径转发到 `stock-analysis-data:8091`。分析 API 当前没有内置用户认证，对公网发布域名之前仍须在 OpenResty 配置 HTTPS、鉴权和来源限制，不能只依赖 HTTPS。
+
+若直接在宿主机运行 `go run ./cmd/analysis-api` 而不是使用 Compose，才将 `MARKET_DATA_BASE_URL` 改为 `http://127.0.0.1:8091` 并确保行情服务已经启动。
+
 
 ## 当前边界
 
