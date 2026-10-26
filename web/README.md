@@ -14,25 +14,26 @@
 
 ## 部署（Docker / 1Panel）
 
-先确认 Go 两个服务已通过现有 docker-compose.go.yml 部署到外部 Docker 网络 1panel-network，并能分别通过网络别名 market-data:8091 和 stock-analysis-go:8092 访问。
+先确认 Go 两个服务已通过现有 `docker-compose.go.yml` 部署到外部 Docker 网络 `1panel-network`，并能分别通过网络服务名/别名 `market-data:8091` 与 `stock-analysis-go:8092` 访问。
 
-在仓库根目录执行：
+仓库根目录已有 Go 服务使用的 `.env.example`。其中 `WebUI reverse proxy targets` 一节列出了 `MARKET_DATA_SERVICE_NAME`、`ANALYSIS_SERVICE_NAME`、`WEBUI_BIND_ADDR` 与 `WEBUI_PORT`。从示例创建 `.env` 时会带上这些配置；若 `.env` 已存在，不要覆盖它，只需按需追加/修改这几个变量并保留其他数据库、Redis 与 API Key 配置。服务名按实际 Docker 网络别名修改。然后在仓库根目录执行：
 
 ~~~bash
-docker compose -f web/docker-compose.yml up -d --build
-docker compose -f web/docker-compose.yml ps
-docker compose -f web/docker-compose.yml logs --tail=100 stock_analysis_web
+docker compose --env-file .env -f web/docker-compose.yml up -d --build
+docker compose --env-file .env -f web/docker-compose.yml ps
+docker compose --env-file .env -f web/docker-compose.yml logs --tail=100 stock-analysis-web
+docker ps --filter name=stock-analysis-web
 curl -fsS http://127.0.0.1:8093/
 ~~~
 
-Compose 服务名和容器名统一为 **stock_analysis_web**。如果修改端口或监听地址，可在 shell 环境设置 WEBUI_PORT 和 WEBUI_BIND_ADDR。默认只绑定 127.0.0.1:8093；同在 1panel-network 网络的 OpenResty 可以通过 http://stock_analysis_web/ 访问前端。无需把两个后端 API 端口直接映射到公网。
+运行中的容器名和 Compose 服务名均为 **`stock-analysis-web`**。默认宿主机端口只绑定 `127.0.0.1:8093`；可在根目录 `.env` 中调整 `WEBUI_BIND_ADDR` 和 `WEBUI_PORT`，不需要把后端 API 端口映射到公网。
 
-首次打开页面，点击右上角设置，填写实际部署的 MARKET_DATA_API_KEY。默认 API 路径：
+两个 Nginx 上游服务名从根目录 `.env` 注入容器，并由官方 Nginx 镜像启动脚本生成站点配置：
 
-- /market-api：Nginx 转发至 market-data:8091，浏览器请求附带 X-API-Key。
-- /analysis-api：Nginx 转发至 stock-analysis-go:8092。
+- `MARKET_DATA_SERVICE_NAME=market-data`：转发 `/market-api/` 到 `服务名:8091`，浏览器请求附带 `X-API-Key`。
+- `ANALYSIS_SERVICE_NAME=stock-analysis-go`：转发 `/analysis-api/` 到 `服务名:8092`。
 
-若 Go 服务部署在其他 Docker 网络，需将本容器加入对应网络并将 nginx.conf 中的上游名称改为实际服务名；不要把 API Key 硬编码进 Nginx 配置或前端源文件。
+变量只填写 `1panel-network` 中可解析的 Docker 服务名/网络别名，不填协议、路径或端口。修改值后需重新创建/重建 WebUI 容器，使 Nginx 在启动时重新生成代理配置。其他服务名无需修改前端 JS。通过同一外部 Docker 网络访问时，OpenResty 可使用 `http://stock-analysis-web/` 代理页面。不要把 API Key 硬编码进 Nginx 配置或前端源文件。
 
 ## 本地调试
 
@@ -59,7 +60,7 @@ python3 -m http.server 8080 --directory web
 cd web
 npm test
 npm run check
-docker build -t stock_analysis_web:local .
+docker build -t stock-analysis-web:local .
 ~~~
 
 

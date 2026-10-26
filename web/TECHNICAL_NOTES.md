@@ -160,3 +160,13 @@ X-API-Key: <由现有设置提供>
 - 健康检查返回 `stale=true` 表示该次结果已被更晚的检查替代；设置页应提示已忽略旧结果，不能把旧连接的成功/失败状态展示为当前连接。
 - Provider 清单在缺少 Key 时立即清空；若此前已发出的请求晚到，generation 校验可防止它重新填回旧清单。
 - 当前只增加 UI 请求状态保护，不改变服务端健康端点、数据源 endpoint 或响应格式。测试源码已更新但按统一安排未执行。
+
+
+## 17. WebUI 部署命名与上游服务配置
+
+- WebUI 的 Compose 服务名和运行容器名统一为 `stock-analysis-web`，通过 Docker 网络名解析供 OpenResty 访问。
+- 上游服务名不再硬编码在 Nginx server 配置：`MARKET_DATA_SERVICE_NAME` 与 `ANALYSIS_SERVICE_NAME` 从仓库根目录 `.env` 通过 Compose 插值传入容器。
+- Nginx 主配置只包含全局设置和 `conf.d/*.conf`；站点配置位于 `default.conf.template`，由官方 Nginx 镜像的 envsubst 启动脚本生成。通过 `NGINX_ENVSUBST_FILTER` 仅替换两个上游主机变量，避免误替换 `$host`、`$uri` 等 Nginx 原生变量。
+- 仓库根目录 `.env.example` 是 Go 服务与 WebUI 共用的环境变量模板；WebUI 上游服务名与宿主机端口放在独立的 `WebUI reverse proxy targets` 小节中，实际部署时只需把该小节的值带入根目录 `.env`。不要覆盖现有密钥/存储配置。
+- 推荐显式使用 `docker compose --env-file .env -f web/docker-compose.yml ...`，确保 Compose 从仓库根目录读取同一份配置。修改上游服务名后需重建 WebUI 容器，让启动脚本生成新的代理配置。
+- 本次仅调整部署模板与文档，不改 Go API/数据库；部署契约测试源码已新增，按协作安排未运行。

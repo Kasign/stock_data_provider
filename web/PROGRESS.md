@@ -1,6 +1,6 @@
 # WebUI 实施进度
 
-更新时间：2026-10-23  
+更新时间：2026-10-26  
 目标分支：`feat/webui-market-data-console`  
 范围：只修改 `web/` 前端、前端测试与相关文档；不改 Go API、数据源、数据库或任务契约。
 
@@ -501,3 +501,12 @@
 - 为服务健康检查和 Provider 清单刷新分别增加 generation。API Key 或连接路径更新后，较早的健康检查/清单响应不能覆盖新连接状态；清除 Key 后旧清单也不能重新显示。
 - 设置页手动检查若被更新的检查请求取代，会明确标记结果已过期，不把旧连接的检查结果当成当前连接状态。
 - 不新增 API、后端字段或数据库结构；已补充 UI 契约测试源码。按约定未运行测试、未构建镜像、未触发 GitHub Actions。
+
+
+## 2026-10-26 — WebUI 容器命名与上游服务名环境化
+
+- Compose 服务名与运行容器名统一改为 `stock-analysis-web`，本机访问端口仍默认仅绑定 `127.0.0.1:8093`。
+- 在数据分支根目录 `.env.example` 新增 `WebUI reverse proxy targets` 配置节，给共享根目录 `.env` 的 WebUI 上游服务名与绑定端口提供模板：`MARKET_DATA_SERVICE_NAME` 与 `ANALYSIS_SERVICE_NAME`；保留已有 Go 服务的密钥、数据库和 Redis 配置，不要求覆盖原文件。
+- Nginx 将上游服务名从静态配置移入 `default.conf.template`，由官方 Nginx 启动阶段的 envsubst 生成配置，并通过变量过滤避免替换 Nginx 自身变量。
+- README 更新为显式传入根目录 `.env` 的部署命令、日志服务名、容器核验方式及上游别名修改说明。
+- 新增部署契约测试源码，覆盖 Compose 容器名、.env 变量注入、Nginx 模板过滤和文档示例。本批按要求未运行测试、未构建镜像、未触发 CI。

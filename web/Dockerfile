@@ -1,9 +1,13 @@
 FROM nginx:alpine
 
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY default.conf.template /etc/nginx/templates/default.conf.template
 COPY index.html /usr/share/nginx/html/index.html
 COPY styles.css /usr/share/nginx/html/styles.css
 COPY src/ /usr/share/nginx/html/src/
+
+# Only substitute backend host variables; preserve native Nginx variables such as $host and $uri.
+ENV NGINX_ENVSUBST_FILTER='^(MARKET_DATA_SERVICE_NAME|ANALYSIS_SERVICE_NAME)$'
 
 EXPOSE 80
 

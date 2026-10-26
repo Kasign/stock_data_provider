@@ -1,12 +1,15 @@
 services:
-  stock_analysis_web:
+  stock-analysis-web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: stock_analysis_web
+    container_name: stock-analysis-web
     restart: unless-stopped
     ports:
       - "${WEBUI_BIND_ADDR:-127.0.0.1}:${WEBUI_PORT:-8093}:80"
+    environment:
+      MARKET_DATA_SERVICE_NAME: ${MARKET_DATA_SERVICE_NAME:-market-data}
+      ANALYSIS_SERVICE_NAME: ${ANALYSIS_SERVICE_NAME:-stock-analysis-go}
     networks:
       - 1panel-network
     healthcheck:
