@@ -139,7 +139,7 @@ export function bindStockResearch(getSettings,getSymbol){
  function initPeriodSelectors(){
   const yearSelect=$("#fundamentals-year"),quarterSelect=$("#fundamentals-quarter");
   const currentYear=new Date().getFullYear();
-  for(let year=currentYear;year>=2007;year--)yearSelect.append(el("option","",String(year))).lastChild.value=String(year);
+  for(let year=currentYear;year>=2007;year--){const option=el("option","",String(year));option.value=String(year);yearSelect.append(option);}
   [1,2,3,4].forEach(q=>{const option=el("option","", "Q"+q);option.value=String(q);quarterSelect.append(option);});
   const period=currentYearAndQuarter();yearSelect.value=String(period.year);quarterSelect.value=String(period.quarter);
  }
