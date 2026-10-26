@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -14,7 +14,8 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../src/api.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/platform/taskqueue/queue.go", import.meta.url), "utf8"),
   readFile(new URL("../src/market-activity.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/stock-research.js", import.meta.url), "utf8")
+  readFile(new URL("../src/stock-research.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/market-overview.js", import.meta.url), "utf8")
 ]);
 
 function finalCssRuleBody(selector) {
@@ -154,6 +155,12 @@ test("supplemental chip and capital-flow research remains opt-in and independent
   assert.match(stylesheet, /\.supplement-quality-degraded/);
 });
 
+
+test("market overview refresh summary is protected from an older overlapping refresh", () => {
+  assert.match(marketOverview, /refreshGeneration=0/);
+  assert.match(marketOverview, /const currentGeneration=\+\+refreshGeneration/);
+  assert.match(marketOverview, /if\(currentGeneration!==refreshGeneration\)return/);
+});
 
 test("stock research clears stale snapshots on reload, request errors, and missing API key", () => {
   assert.match(stockResearch, /function clearPanel\(/);

@@ -79,7 +79,7 @@ function renderHotStocks(data) {
  qualityReasons("market-hot-stocks-reasons",data?.quality_reasons);
 }
 export function bindMarketOverview(getSettings,onSelectStock) {
- const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",poolType="up",hotType="popular";
+ const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",poolType="up",hotType="popular",refreshGeneration=0;
  function cancel(key){controllers[key]?.abort();delete controllers[key];generation[key]++;}
  async function load(key){cancel(key);const seq=generation[key],settings=typeof getSettings==="function"?getSettings():null;
   if(!settings?.apiKey){pending(key,"请先在连接与密钥设置中配置行情 API Key。","warning");return;}
@@ -88,7 +88,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    if(ctl.signal.aborted||generation[key]!==seq)return;if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data);else if(key==="pool")renderPool(data);else renderHotStocks(data);
   }catch(err){if(ctl.signal.aborted||generation[key]!==seq)return;pending(key,errorMessage(err),"error");}finally{if(generation[key]===seq)delete controllers[key];}
  }
- async function refresh(){const status=$("#market-overview-updated"),settings=typeof getSettings==="function"?getSettings():null;if(status)status.textContent=settings?.apiKey?"正在刷新各模块…":"配置行情 API Key 后加载市场概况";await Promise.all(KEYS.map(load));if(status&&settings?.apiKey)status.textContent="已尝试刷新；请查看各模块的来源时间与质量状态";}
+ async function refresh(){const currentGeneration=++refreshGeneration,status=$("#market-overview-updated"),settings=typeof getSettings==="function"?getSettings():null;if(status)status.textContent=settings?.apiKey?"正在刷新各模块…":"配置行情 API Key 后加载市场概况";await Promise.all(KEYS.map(load));if(currentGeneration!==refreshGeneration)return;if(status&&settings?.apiKey)status.textContent="已尝试刷新；请查看各模块的来源时间与质量状态";}
  $("#refresh-market-overview")?.addEventListener("click",()=>{void refresh();});
  document.querySelectorAll("[data-sector-type]").forEach(button=>button.addEventListener("click",()=>{sectorType=button.dataset.sectorType==="concept"?"concept":"industry";document.querySelectorAll("[data-sector-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("sectors");}));
  document.querySelectorAll("[data-pool-type]").forEach(button=>button.addEventListener("click",()=>{poolType=["up","down","broken"].includes(button.dataset.poolType)?button.dataset.poolType:"up";document.querySelectorAll("[data-pool-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("pool");}));
