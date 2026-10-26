@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
@@ -39,11 +41,23 @@ type Eastmoney struct {
 	klineURL         string
 	stockBasicURL    string
 	sectorRankingURL string
+	stockListURL     string
 	indexURL         string
 	marketBreadthURL string
 	limitPoolBaseURL string
 	stockBoardsURL   string
+	dragonTigerURL   string
+	announcementURL  string
 	ut               string
+
+	stockSearchMu         sync.Mutex
+	stockSearchIndex      []model.StockSearchItem
+	stockSearchFetchedAt  time.Time
+	stockSearchQuality    model.QualityStatus
+	stockSearchReasons    []string
+	stockSearchLoading    chan struct{}
+	stockSearchRetryAfter time.Time
+	stockSearchLastError  string
 }
 
 func NewEastmoney(timeout time.Duration, quoteURL, klineURL string) *Eastmoney {
@@ -111,9 +125,19 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, stockListURL: defaultEastmoneySectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, ut: ut,
 	}
 }
+
+// NewEastmoneyConfiguredWithAnnouncements adds an independently configurable A-share announcement endpoint.
+func NewEastmoneyConfiguredWithAnnouncements(timeout time.Duration, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketBreadthURL, limitPoolBaseURL, stockBoardsURL, dragonTigerURL, announcementURL, ut string) *Eastmoney {
+	p := NewEastmoneyConfiguredWithDragonTiger(timeout, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketBreadthURL, limitPoolBaseURL, stockBoardsURL, dragonTigerURL, ut)
+	if strings.TrimSpace(announcementURL) != "" {
+		p.announcementURL = strings.TrimSpace(announcementURL)
+	}
+	return p
+}
+
 func (p *Eastmoney) Name() string { return "eastmoney" }
 
 // FetchStockBoards returns the board memberships associated with one security via Eastmoney's slist endpoint.
@@ -337,14 +361,119 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	if outDate != "" {
 		status, statusLabel = 0, "delisted"
 	}
-	return &model.StockBasic{
+	item := &model.StockBasic{
 		Symbol: symbol, Name: name, IPODate: ipoDate, OutDate: outDate,
 		SecurityType: 1, SecurityTypeLabel: "stock",
 		ListingStatus: status, ListingStatusLabel: statusLabel,
-		Source: p.Name(), SourceVersion: "eastmoney-f10-issueinfo-orginfo-v1",
-		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+		Source: p.Name(), SourceVersion: "eastmoney-f10-market-profile-v2",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"market_profile_timestamp_not_exposed"},
 		NormalizationVer: normalize.Version,
-	}, nil
+	}
+
+	// Efinance get_base_info() uses the same Eastmoney quote endpoint and field mapping.
+	// The response has no independently verifiable snapshot timestamp; do not mark this profile as fully valid.
+	secid, secidErr := eastmoneySecID(symbol)
+	if secidErr != nil {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_symbol_not_supported_by_quote_endpoint")
+		return item, nil
+	}
+	quoteParams := url.Values{
+		"secid": []string{secid},
+		"fields": []string{"f57,f58,f162,f167,f127,f116,f117,f198,f173,f187,f105,f186"},
+		"fltt": []string{"2"},
+		"invt": []string{"2"},
+		"ut": []string{p.ut},
+	}
+	var quotePayload struct {
+		RC *int `json:"rc"`
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if quoteErr := p.getJSONWithRetry(ctx, p.quoteURL, quoteParams, &quotePayload, 8*time.Second); quoteErr != nil {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_request_failed")
+		return item, nil
+	}
+	if quotePayload.RC != nil && *quotePayload.RC != 0 {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_provider_error")
+		return item, nil
+	}
+	if len(quotePayload.Data) == 0 {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_data_missing")
+		return item, nil
+	}
+	sourceCode := readEastmoneyField(quotePayload.Data, "f57")
+	if sourceCode != "" && sourceCode != strings.Split(symbol, ".")[0] {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_security_code_mismatch")
+		return item, nil
+	}
+	itemName := readEastmoneyField(quotePayload.Data, "f58")
+	if itemName != "" && itemName != name {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_name_differs_from_f10_identity")
+	}
+	item.DynamicPE = parseEastmoneyProfileNumber(quotePayload.Data["f162"])
+	item.PB = parseEastmoneyProfileNumber(quotePayload.Data["f167"])
+	item.Industry = readEastmoneyField(quotePayload.Data, "f127")
+	item.MarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f116"])
+	item.FloatMarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f117"])
+	item.BoardCode = readEastmoneyField(quotePayload.Data, "f198")
+	item.ROEPercent = parseEastmoneyProfileNumber(quotePayload.Data["f173"])
+	item.NetProfitMarginPercent = parseEastmoneyProfileNumber(quotePayload.Data["f187"])
+	item.NetProfitCNY = parseEastmoneyProfileNumber(quotePayload.Data["f105"])
+	item.GrossMarginPercent = parseEastmoneyProfileNumber(quotePayload.Data["f186"])
+
+	for key, value := range map[string]*float64{
+		"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY,
+		"float_market_cap_cny": item.FloatMarketCapCNY, "roe_percent": item.ROEPercent,
+		"net_profit_margin_percent": item.NetProfitMarginPercent, "net_profit_cny": item.NetProfitCNY,
+		"gross_margin_percent": item.GrossMarginPercent,
+	} {
+		if value == nil {
+			item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_"+key+"_missing_or_invalid")
+		}
+	}
+	if item.MarketCapCNY != nil && *item.MarketCapCNY < 0 {
+		item.MarketCapCNY = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_market_cap_cny_negative")
+	}
+	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 {
+		item.FloatMarketCapCNY = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_float_market_cap_cny_negative")
+	}
+	if item.Industry == "" {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_industry_missing")
+	}
+	if item.BoardCode == "" {
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_board_code_missing")
+	}
+	return item, nil
+}
+
+func readEastmoneyField(row map[string]json.RawMessage, name string) string {
+	raw, ok := row[name]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var value string
+	if json.Unmarshal(raw, &value) == nil {
+		return strings.TrimSpace(value)
+	}
+	return strings.TrimSpace(strings.Trim(string(raw), `"`))
+}
+
+func parseEastmoneyProfileNumber(raw json.RawMessage) *float64 {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	value := strings.TrimSpace(strings.Trim(string(raw), `"`))
+	if value == "" || value == "-" || strings.EqualFold(value, "null") {
+		return nil
+	}
+	n, err := strconv.ParseFloat(value, 64)
+	if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+		return nil
+	}
+	result := n
+	return &result
 }
 
 func parseEastmoneyProfileDate(value string) (string, error) {
@@ -496,6 +625,516 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		return nil, fmt.Errorf("Eastmoney quote data contract: %w", err)
 	}
 	return quote, nil
+}
+
+type eastmoneyChipKline struct {
+	date string
+	open float64
+	close float64
+	high float64
+	low float64
+	turnoverRate float64
+}
+
+// FetchChipDistribution 在 Go 中复刻 AkShare 的 CYQCalculator 核心指标计算。
+// 东方财富未提供筹码分布的独立快照时间，因此返回值保守标记为 degraded。
+const (
+	eastmoneyHotRankURL = "https://emappdata.eastmoney.com/stockrank/getAllCurrentList"
+	eastmoneyHotSurgeURL = "https://emappdata.eastmoney.com/stockrank/getAllHisRcList"
+	eastmoneyHotAppID = "appId01"
+	eastmoneyHotGlobalID = "786e4c21-70dc-435a-93bb-38"
+)
+
+// FetchHotStocks maps the domestic Eastmoney popularity/surge ranking into a bounded, typed snapshot.
+// The ranking API exposes no trustworthy snapshot timestamp, so every successful result remains degraded.
+func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limit int) (*model.HotRankingSnapshot, error) {
+	rankingType = strings.ToLower(strings.TrimSpace(rankingType))
+	if rankingType == "" {
+		rankingType = "popular"
+	}
+	endpoint := ""
+	switch rankingType {
+	case "popular":
+		endpoint = eastmoneyHotRankURL
+	case "surge":
+		endpoint = eastmoneyHotSurgeURL
+	default:
+		return nil, fmt.Errorf("unsupported hot-ranking type %q; want popular or surge", rankingType)
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		return nil, errors.New("Eastmoney hot-ranking limit must be between 1 and 100")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rankRows, err := p.fetchHotRankingRows(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	if len(rankRows) == 0 {
+		return nil, errors.New("Eastmoney hot-ranking endpoint returned an empty list")
+	}
+	if len(rankRows) > 1000 {
+		return nil, errors.New("Eastmoney hot-ranking response exceeds 1000 rows")
+	}
+
+	type rankedCode struct {
+		symbol string
+		code string
+		secid string
+		rank int
+		rankChange *int
+	}
+	ranked := make([]rankedCode, 0, min(limit, len(rankRows)))
+	seen := make(map[string]struct{}, len(rankRows))
+	for index, row := range rankRows {
+		if len(ranked) >= limit {
+			break
+		}
+		rawCode := eastmoneyHotRowString(row, "sc")
+		symbol, code, secid, symbolErr := eastmoneyHotRankingSymbol(rawCode)
+		if symbolErr != nil {
+			return nil, fmt.Errorf("Eastmoney hot-ranking row %d has invalid security code: %w", index, symbolErr)
+		}
+		if _, duplicate := seen[symbol]; duplicate {
+			continue
+		}
+		seen[symbol] = struct{}{}
+		rank, ok := eastmoneyHotRowInt(row, "rk")
+		if !ok || rank < 1 {
+			return nil, fmt.Errorf("Eastmoney hot-ranking row %d has invalid rank", index)
+		}
+		var rankChange *int
+		if rankingType == "surge" {
+			if value, valid := eastmoneyHotRowInt(row, "hrc"); valid {
+				rankChange = &value
+			}
+		}
+		ranked = append(ranked, rankedCode{symbol: symbol, code: code, secid: secid, rank: rank, rankChange: rankChange})
+	}
+	if len(ranked) == 0 {
+		return nil, errors.New("Eastmoney hot-ranking response contains no supported A-share symbols")
+	}
+
+	secids := make([]string, 0, len(ranked))
+	for _, item := range ranked {
+		secids = append(secids, item.secid)
+	}
+	q := url.Values{
+		"ut":     []string{p.ut},
+		"fltt":   []string{"2"},
+		"invt":   []string{"2"},
+		"fields": []string{"f14,f3,f12,f2"},
+		"secids": []string{strings.Join(secids, ",")},
+	}
+	var quotePayload struct {
+		RC *int `json:"rc"`
+		Data *struct {
+			Diff []map[string]json.RawMessage `json:"diff"`
+		} `json:"data"`
+	}
+	if err := p.getJSONWithRetry(ctx, p.indexURL, q, &quotePayload, 8*time.Second); err != nil {
+		return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment failed: %w", err)
+	}
+	if quotePayload.RC != nil && *quotePayload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment provider error rc=%d", *quotePayload.RC)
+	}
+	if quotePayload.Data == nil {
+		return nil, errors.New("Eastmoney hot-ranking quote enrichment returned no data")
+	}
+	quotes := make(map[string]map[string]json.RawMessage, len(quotePayload.Data.Diff))
+	for _, row := range quotePayload.Data.Diff {
+		code := eastmoneyHotRowString(row, "f12")
+		if code != "" {
+			quotes[code] = row
+		}
+	}
+	now := time.Now().UTC()
+	sourceVersion := eastmoneyVersion + "-hot-ranking-v1"
+	snapshot := &model.HotRankingSnapshot{
+		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, len(ranked)),
+		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed"},
+	}
+	for _, ranking := range ranked {
+		item := model.HotRankingItem{
+			Rank: ranking.rank, Symbol: ranking.symbol, Code: ranking.code, RankChange: ranking.rankChange,
+			Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
+			QualityStatus: model.QualityDegraded,
+			QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed"},
+		}
+		quote, exists := quotes[ranking.code]
+		if !exists {
+			item.QualityReasons = append(item.QualityReasons, "quote_enrichment_missing")
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "one_or_more_quote_enrichment_rows_missing")
+		} else {
+			item.Name = eastmoneyHotRowString(quote, "f14")
+			if value, ok := eastmoneyHotRowFloat(quote, "f2"); ok && value > 0 {
+				item.LatestPrice = &value
+			}
+			if value, ok := eastmoneyHotRowFloat(quote, "f3"); ok {
+				item.ChangePercent = &value
+			}
+			if item.LatestPrice != nil && item.ChangePercent != nil {
+				change := *item.LatestPrice * *item.ChangePercent / 100
+				item.Change = &change
+			}
+			if item.Name == "" || item.LatestPrice == nil || item.ChangePercent == nil {
+				item.QualityReasons = append(item.QualityReasons, "quote_name_or_price_fields_missing")
+				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "one_or_more_quote_fields_missing")
+			}
+		}
+		snapshot.Items = append(snapshot.Items, item)
+	}
+	snapshot.Total = len(snapshot.Items)
+	return snapshot, nil
+}
+
+func (p *Eastmoney) fetchHotRankingRows(ctx context.Context, endpoint string) ([]map[string]json.RawMessage, error) {
+	payload := map[string]any{
+		"appId": eastmoneyHotAppID,
+		"globalId": eastmoneyHotGlobalID,
+		"marketType": "",
+		"pageNo": 1,
+		"pageSize": 100,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode Eastmoney hot-ranking request: %w", err)
+	}
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		requestCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		req, reqErr := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if reqErr == nil {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/plain, */*")
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+			req.Header.Set("Referer", "https://guba.eastmoney.com/rank/")
+			var resp *http.Response
+			resp, reqErr = p.client.Do(req)
+			if reqErr == nil {
+				if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+					_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+					reqErr = fmt.Errorf("Eastmoney hot-ranking HTTP status %d", resp.StatusCode)
+				} else {
+					raw, readErr := readBoundedBody(resp.Body, maxProviderPayloadBytes)
+					if readErr != nil {
+						reqErr = fmt.Errorf("read Eastmoney hot-ranking response: %w", readErr)
+					} else {
+						var envelope struct {
+							Code *int `json:"code"`
+							Message string `json:"message"`
+							Data []map[string]json.RawMessage `json:"data"`
+						}
+						if decodeErr := decodeSingleJSON(raw, &envelope); decodeErr != nil {
+							reqErr = fmt.Errorf("decode Eastmoney hot-ranking response: %w", decodeErr)
+						} else if envelope.Code != nil && *envelope.Code != 0 {
+							reqErr = fmt.Errorf("Eastmoney hot-ranking response code=%d: %s", *envelope.Code, strings.TrimSpace(envelope.Message))
+						} else if envelope.Data == nil {
+							reqErr = errors.New("Eastmoney hot-ranking response is missing data")
+						} else {
+							_ = resp.Body.Close()
+							cancel()
+							return envelope.Data, nil
+						}
+					}
+				}
+				_ = resp.Body.Close()
+			}
+		}
+		cancel()
+		lastErr = reqErr
+		if attempt == 3 || ctx.Err() != nil || (reqErr != nil && !isRetryableEastmoneyRequestError(reqErr)) {
+			return nil, fmt.Errorf("Eastmoney hot-ranking request failed: %w", lastErr)
+		}
+		timer := time.NewTimer(time.Duration(attempt) * 500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return nil, lastErr
+}
+
+func eastmoneyHotRankingSymbol(raw string) (symbol, code, secid string, err error) {
+	value := strings.ToUpper(strings.TrimSpace(raw))
+	if len(value) != 8 {
+		return "", "", "", fmt.Errorf("unexpected stock code %q", raw)
+	}
+	exchange, bare := value[:2], value[2:]
+	if exchange != "SH" && exchange != "SZ" {
+		return "", "", "", fmt.Errorf("unsupported market prefix in %q", raw)
+	}
+	for _, digit := range bare {
+		if digit < '0' || digit > '9' {
+			return "", "", "", fmt.Errorf("non-numeric stock code %q", raw)
+		}
+	}
+	market := "1"
+	if exchange == "SZ" {
+		market = "0"
+	}
+	return bare + "." + exchange, bare, market + "." + bare, nil
+}
+
+func eastmoneyHotRowString(row map[string]json.RawMessage, key string) string {
+	raw, ok := row[key]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var value string
+	if json.Unmarshal(raw, &value) == nil {
+		return strings.TrimSpace(value)
+	}
+	return strings.TrimSpace(strings.Trim(string(raw), `"`))
+}
+
+func eastmoneyHotRowFloat(row map[string]json.RawMessage, key string) (float64, bool) {
+	raw := eastmoneyHotRowString(row, key)
+	if raw == "" || raw == "-" {
+		return 0, false
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	return value, err == nil && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func eastmoneyHotRowInt(row map[string]json.RawMessage, key string) (int, bool) {
+	value, ok := eastmoneyHotRowFloat(row, key)
+	if !ok || math.Trunc(value) != value || value < -1000000 || value > 1000000 {
+		return 0, false
+	}
+	return int(value), true
+}
+
+func appendUniqueEastmoneyReason(reasons []string, reason string) []string {
+	for _, existing := range reasons {
+		if existing == reason {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
+}
+
+func (p *Eastmoney) FetchChipDistribution(ctx context.Context, rawSymbol string) (*model.ChipDistribution, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	secid, err := eastmoneySecID(symbol)
+	if err != nil {
+		return nil, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	query := url.Values{
+		"secid":   []string{secid},
+		"fields1": []string{"f1,f2,f3,f4,f5,f6"},
+		"fields2": []string{"f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"},
+		"klt":     []string{"101"},
+		"fqt":     []string{"0"},
+		"beg":     []string{"0"},
+		"end":     []string{time.Now().Format("20060102")},
+		"lmt":     []string{"210"},
+		"ut":      []string{p.ut},
+		"_":       []string{strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	}
+	var payload struct {
+		RC *int `json:"rc"`
+		Data *struct {
+			Code string `json:"code"`
+			KLines []string `json:"klines"`
+		} `json:"data"`
+	}
+	if err := p.getJSONWithRetry(ctx, p.klineURL, query, &payload, 8*time.Second); err != nil {
+		return nil, fmt.Errorf("Eastmoney chip-distribution daily bars request: %w", err)
+	}
+	if payload.RC != nil && *payload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney chip-distribution provider error rc=%d", *payload.RC)
+	}
+	if payload.Data == nil || len(payload.Data.KLines) == 0 {
+		return nil, errors.New("Eastmoney chip-distribution response has no daily bars")
+	}
+	if reported := strings.TrimSpace(payload.Data.Code); reported != "" {
+		reportedSymbol, normalizeErr := normalize.NormalizeSymbol(reported)
+		if normalizeErr != nil || reportedSymbol != symbol {
+			return nil, fmt.Errorf("Eastmoney chip-distribution symbol mismatch: requested %s got %q", symbol, reported)
+		}
+	}
+	rows := make([]eastmoneyChipKline, 0, len(payload.Data.KLines))
+	seen := make(map[string]struct{}, len(payload.Data.KLines))
+	for index, line := range payload.Data.KLines {
+		parts := strings.Split(line, ",")
+		if len(parts) < 11 {
+			return nil, fmt.Errorf("Eastmoney chip-distribution row %d lacks turnover-rate field", index)
+		}
+		date, dateErr := time.Parse("2006-01-02", strings.TrimSpace(parts[0]))
+		if dateErr != nil {
+			return nil, fmt.Errorf("Eastmoney chip-distribution row %d has invalid date", index)
+		}
+		dateText := date.Format("2006-01-02")
+		if _, exists := seen[dateText]; exists {
+			return nil, fmt.Errorf("Eastmoney chip-distribution has duplicate date %s", dateText)
+		}
+		seen[dateText] = struct{}{}
+		values := make([]float64, 0, 5)
+		for _, field := range []string{parts[1], parts[2], parts[3], parts[4], parts[10]} {
+			value, parseErr := strconv.ParseFloat(strings.TrimSpace(field), 64)
+			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+				return nil, fmt.Errorf("Eastmoney chip-distribution row %s has invalid price/turnover data", dateText)
+			}
+			values = append(values, value)
+		}
+		open, closeValue, high, low, turnoverRate := values[0], values[1], values[2], values[3], values[4]
+		if open <= 0 || closeValue <= 0 || high <= 0 || low <= 0 || low > high ||
+			open < low || open > high || closeValue < low || closeValue > high || turnoverRate < 0 {
+			return nil, fmt.Errorf("Eastmoney chip-distribution row %s violates OHLC/turnover constraints", dateText)
+		}
+		rows = append(rows, eastmoneyChipKline{date: dateText, open: open, close: closeValue, high: high, low: low, turnoverRate: turnoverRate})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].date < rows[j].date })
+	if len(rows) > 120 {
+		rows = rows[len(rows)-120:]
+	}
+	metrics, err := calculateEastmoneyChipMetrics(rows)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	return &model.ChipDistribution{
+		Symbol: symbol, Date: rows[len(rows)-1].date, ProviderDate: rows[len(rows)-1].date,
+		AverageCost: metrics.averageCost, ProfitRatio: &metrics.profitRatio,
+		Cost90Low: &metrics.cost90Low, Cost90High: &metrics.cost90High,
+		Cost70Low: &metrics.cost70Low, Cost70High: &metrics.cost70High,
+		Concentration90: &metrics.concentration90, Concentration70: &metrics.concentration70,
+		Source: p.Name(), SourceVersion: "eastmoney-cyq-go-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_chip_snapshot_timestamp_not_exposed", "chip_metrics_computed_from_latest_120_daily_bars"},
+	}, nil
+}
+
+type eastmoneyChipMetrics struct {
+	averageCost float64
+	profitRatio float64
+	cost90Low float64
+	cost90High float64
+	concentration90 float64
+	cost70Low float64
+	cost70High float64
+	concentration70 float64
+}
+
+func calculateEastmoneyChipMetrics(rows []eastmoneyChipKline) (eastmoneyChipMetrics, error) {
+	if len(rows) == 0 {
+		return eastmoneyChipMetrics{}, errors.New("cannot calculate chip distribution from an empty series")
+	}
+	minPrice, maxPrice := rows[0].low, rows[0].high
+	for _, row := range rows[1:] {
+		if row.low < minPrice {
+			minPrice = row.low
+		}
+		if row.high > maxPrice {
+			maxPrice = row.high
+		}
+	}
+	const factor = 150
+	accuracy := math.Max(0.01, (maxPrice-minPrice)/float64(factor-1))
+	chips := make([]float64, factor)
+	for _, row := range rows {
+		averagePrice := (row.open + row.close + row.high + row.low) / 4
+		turnover := math.Min(1, row.turnoverRate/100)
+		if turnover < 0 || math.IsNaN(turnover) || math.IsInf(turnover, 0) {
+			return eastmoneyChipMetrics{}, errors.New("invalid turnover ratio while calculating chip distribution")
+		}
+		for i := range chips {
+			chips[i] *= 1 - turnover
+		}
+		if row.high == row.low {
+			index := int(math.Floor((averagePrice - minPrice) / accuracy))
+			if index >= 0 && index < factor {
+				chips[index] += float64(factor-1) * turnover / 2
+			}
+			continue
+		}
+		highIndex := int(math.Floor((row.high - minPrice) / accuracy))
+		lowIndex := int(math.Ceil((row.low - minPrice) / accuracy))
+		groupFactor := 2 / (row.high - row.low)
+		for j := lowIndex; j <= highIndex; j++ {
+			if j < 0 || j >= factor {
+				continue
+			}
+			currentPrice := minPrice + accuracy*float64(j)
+			if currentPrice <= averagePrice {
+				if math.Abs(averagePrice-row.low) < 1e-8 {
+					chips[j] += groupFactor * turnover
+				} else {
+					chips[j] += (currentPrice-row.low)/(averagePrice-row.low) * groupFactor * turnover
+				}
+			} else {
+				if math.Abs(row.high-averagePrice) < 1e-8 {
+					chips[j] += groupFactor * turnover
+				} else {
+					chips[j] += (row.high-currentPrice)/(row.high-averagePrice) * groupFactor * turnover
+				}
+			}
+		}
+	}
+	total := 0.0
+	for i := range chips {
+		if chips[i] < 0 || math.IsNaN(chips[i]) || math.IsInf(chips[i], 0) {
+			return eastmoneyChipMetrics{}, errors.New("chip distribution produced an invalid density")
+		}
+		total += chips[i]
+	}
+	if total <= 0 || math.IsNaN(total) || math.IsInf(total, 0) {
+		return eastmoneyChipMetrics{}, errors.New("chip distribution has no accumulated turnover density")
+	}
+	costFor := func(target float64) float64 {
+		accumulated := 0.0
+		for i, value := range chips {
+			if accumulated+value > target {
+				return minPrice + float64(i)*accuracy
+			}
+			accumulated += value
+		}
+		return 0
+	}
+	out := eastmoneyChipMetrics{averageCost: costFor(total * 0.5)}
+	if out.averageCost <= 0 || math.IsNaN(out.averageCost) || math.IsInf(out.averageCost, 0) {
+		return eastmoneyChipMetrics{}, errors.New("chip distribution could not determine average cost")
+	}
+	below := 0.0
+	currentPrice := rows[len(rows)-1].close
+	for i, value := range chips {
+		if currentPrice >= minPrice+float64(i)*accuracy {
+			below += value
+		}
+	}
+	out.profitRatio = below / total
+	out.cost90Low = costFor(total * 0.05)
+	out.cost90High = costFor(total * 0.95)
+	out.cost70Low = costFor(total * 0.15)
+	out.cost70High = costFor(total * 0.85)
+	if out.cost90Low <= 0 || out.cost90High <= 0 || out.cost70Low <= 0 || out.cost70High <= 0 {
+		return eastmoneyChipMetrics{}, errors.New("chip distribution could not determine cost percentile bounds")
+	}
+	if denominator := out.cost90High + out.cost90Low; denominator > 0 {
+		out.concentration90 = (out.cost90High - out.cost90Low) / denominator
+	}
+	if denominator := out.cost70High + out.cost70Low; denominator > 0 {
+		out.concentration70 = (out.cost70High - out.cost70Low) / denominator
+	}
+	if out.profitRatio < 0 || out.profitRatio > 1 || out.concentration90 < 0 || out.concentration90 > 1 || out.concentration70 < 0 || out.concentration70 > 1 {
+		return eastmoneyChipMetrics{}, errors.New("chip distribution produced ratio outside [0,1]")
+	}
+	return out, nil
 }
 
 func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
@@ -796,6 +1435,270 @@ func isEastmoneyHostname(host string) bool {
 	return host == "eastmoney.com" || strings.HasSuffix(host, ".eastmoney.com")
 }
 
+const (
+	eastmoneyStockSearchIndexTTL = 6 * time.Hour
+	// Live provider testing shows the CLIST endpoint returns at most 100 rows per page,
+	// even when a much larger pz is requested. Walk every source page within a safety cap.
+	eastmoneyStockSearchPageSize   = 100
+	eastmoneyStockSearchMaxPages   = 100
+	eastmoneyStockSearchRetryDelay = 30 * time.Second
+)
+
+// SearchStocks searches Eastmoney's real A-share security directory by Chinese name or code.
+// The directory is cached for six hours so autocomplete does not trigger a full-market request
+// on every keystroke. The response intentionally contains identity only, not quote data.
+func (p *Eastmoney) SearchStocks(ctx context.Context, rawQuery string, limit int) (*model.StockSearchSnapshot, error) {
+	query := strings.TrimSpace(rawQuery)
+	if query == "" {
+		return nil, errors.New("stock-search query is required")
+	}
+	if len([]rune(query)) > 64 {
+		return nil, errors.New("stock-search query must not exceed 64 characters")
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		return nil, errors.New("stock-search limit must not exceed 50")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	items, fetchedAt, quality, reasons, stale, err := p.loadStockSearchIndex(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("eastmoney stock-search directory: %w", err)
+	}
+	needle := strings.ToLower(query)
+	type rankedItem struct {
+		item model.StockSearchItem
+		rank int
+	}
+	matches := make([]rankedItem, 0)
+	for _, item := range items {
+		name := strings.ToLower(item.Name)
+		code := strings.ToLower(item.Code)
+		symbol := strings.ToLower(item.Symbol)
+		rank := -1
+		switch {
+		case name == needle || code == needle || symbol == needle:
+			rank = 0
+		case strings.HasPrefix(name, needle) || strings.HasPrefix(code, needle) || strings.HasPrefix(symbol, needle):
+			rank = 1
+		case strings.Contains(name, needle) || strings.Contains(code, needle) || strings.Contains(symbol, needle):
+			rank = 2
+		}
+		if rank >= 0 {
+			matches = append(matches, rankedItem{item: item, rank: rank})
+		}
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].rank != matches[j].rank {
+			return matches[i].rank < matches[j].rank
+		}
+		if matches[i].item.Name != matches[j].item.Name {
+			return matches[i].item.Name < matches[j].item.Name
+		}
+		return matches[i].item.Symbol < matches[j].item.Symbol
+	})
+	if limit > len(matches) {
+		limit = len(matches)
+	}
+	results := make([]model.StockSearchItem, 0, limit)
+	for _, match := range matches[:limit] {
+		results = append(results, match.item)
+	}
+	if stale {
+		quality = model.QualityStale
+		reasons = appendUniqueEastmoneyReason(reasons, "provider_refresh_failed_cached_directory_used")
+	}
+	if quality == "" {
+		quality = model.QualityUnknown
+	}
+	return &model.StockSearchSnapshot{
+		Query: query, Total: len(matches), Items: results,
+		Source: p.Name(), SourceVersion: "eastmoney-stock-search-clist-v1",
+		FetchedAt: fetchedAt, QualityStatus: quality, QualityReasons: reasons,
+	}, nil
+}
+
+func (p *Eastmoney) loadStockSearchIndex(ctx context.Context) ([]model.StockSearchItem, time.Time, model.QualityStatus, []string, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, time.Time{}, model.QualityUnknown, nil, false, err
+		}
+		p.stockSearchMu.Lock()
+		cached := append([]model.StockSearchItem(nil), p.stockSearchIndex...)
+		fetchedAt := p.stockSearchFetchedAt
+		quality := p.stockSearchQuality
+		reasons := append([]string(nil), p.stockSearchReasons...)
+		age := time.Since(fetchedAt)
+		fresh := len(cached) > 0 && !fetchedAt.IsZero() && age >= 0 && age < eastmoneyStockSearchIndexTTL
+		if fresh {
+			p.stockSearchMu.Unlock()
+			return cached, fetchedAt, quality, reasons, false, nil
+		}
+		if loading := p.stockSearchLoading; loading != nil {
+			p.stockSearchMu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nil, time.Time{}, model.QualityUnknown, nil, false, ctx.Err()
+			case <-loading:
+				continue
+			}
+		}
+		if time.Now().Before(p.stockSearchRetryAfter) {
+			lastError := p.stockSearchLastError
+			p.stockSearchMu.Unlock()
+			if len(cached) > 0 {
+				return cached, fetchedAt, model.QualityStale, appendUniqueEastmoneyReason(reasons, "provider_refresh_failed_cached_directory_used"), true, nil
+			}
+			if lastError == "" {
+				lastError = "stock-search directory refresh is cooling down"
+			}
+			return nil, time.Time{}, model.QualityUnknown, nil, false, errors.New(lastError)
+		}
+		loading := make(chan struct{})
+		p.stockSearchLoading = loading
+		p.stockSearchMu.Unlock()
+
+		items, loadedQuality, loadedReasons, err := p.fetchStockSearchIndex(ctx)
+		now := time.Now().UTC()
+
+		p.stockSearchMu.Lock()
+		if err == nil {
+			p.stockSearchIndex = append([]model.StockSearchItem(nil), items...)
+			p.stockSearchFetchedAt = now
+			p.stockSearchQuality = loadedQuality
+			p.stockSearchReasons = append([]string(nil), loadedReasons...)
+			p.stockSearchRetryAfter = time.Time{}
+			p.stockSearchLastError = ""
+		} else {
+			p.stockSearchRetryAfter = now.Add(eastmoneyStockSearchRetryDelay)
+			p.stockSearchLastError = err.Error()
+		}
+		cached = append([]model.StockSearchItem(nil), p.stockSearchIndex...)
+		fetchedAt = p.stockSearchFetchedAt
+		quality = p.stockSearchQuality
+		reasons = append([]string(nil), p.stockSearchReasons...)
+		p.stockSearchLoading = nil
+		close(loading)
+		p.stockSearchMu.Unlock()
+
+		if err != nil {
+			if len(cached) > 0 && !fetchedAt.IsZero() {
+				return cached, fetchedAt, model.QualityStale, appendUniqueEastmoneyReason(reasons, "provider_refresh_failed_cached_directory_used"), true, nil
+			}
+			return nil, time.Time{}, model.QualityUnknown, nil, false, err
+		}
+		return items, now, quality, loadedReasons, false, nil
+	}
+}
+
+func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSearchItem, model.QualityStatus, []string, error) {
+	baseURL := strings.TrimSpace(p.stockListURL)
+	if baseURL == "" {
+		baseURL = defaultEastmoneySectorRankingURL
+	}
+	items := make([]model.StockSearchItem, 0, 6000)
+	seen := make(map[string]struct{}, 6000)
+	reasons := make([]string, 0)
+	quality := model.QualityValid
+	total := 0
+	for page := 1; page <= eastmoneyStockSearchMaxPages; page++ {
+		params := url.Values{
+			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(eastmoneyStockSearchPageSize)},
+			"po": {"1"}, "np": {"1"}, "ut": {p.ut}, "fltt": {"2"}, "invt": {"2"},
+			"fid": {"f3"}, "fs": {"m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"},
+			"fields": {"f12,f13,f14"}, "_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		}
+		var payload struct {
+			RC   *int `json:"rc"`
+			Data *struct {
+				Total int             `json:"total"`
+				Diff  json.RawMessage `json:"diff"`
+			} `json:"data"`
+		}
+		if err := p.getJSONWithRetry(ctx, baseURL, params, &payload, 6*time.Second); err != nil {
+			return nil, model.QualityUnknown, nil, err
+		}
+		if payload.RC != nil && *payload.RC != 0 {
+			return nil, model.QualityUnknown, nil, fmt.Errorf("Eastmoney stock-search provider error rc=%d", *payload.RC)
+		}
+		if payload.Data == nil {
+			return nil, model.QualityUnknown, nil, errors.New("Eastmoney stock-search response has no data")
+		}
+		if page == 1 {
+			total = payload.Data.Total
+			if total <= 0 {
+				return nil, model.QualityUnknown, nil, errors.New("Eastmoney stock-search directory is empty")
+			}
+			if total > eastmoneyStockSearchPageSize*eastmoneyStockSearchMaxPages {
+				return nil, model.QualityUnknown, nil, fmt.Errorf("Eastmoney stock-search directory total %d exceeds safety limit", total)
+			}
+		}
+		rows, err := decodeEastmoneyBoardRows(payload.Data.Diff)
+		if err != nil {
+			return nil, model.QualityUnknown, nil, fmt.Errorf("decode Eastmoney stock-search rows: %w", err)
+		}
+		if len(rows) == 0 {
+			if page == 1 {
+				return nil, model.QualityUnknown, nil, errors.New("Eastmoney stock-search directory returned no rows")
+			}
+			quality = model.QualityDegraded
+			reasons = appendUniqueEastmoneyReason(reasons, "provider_directory_page_missing")
+			break
+		}
+		for _, row := range rows {
+			code := parseEastmoneyBoardString(row, "f12")
+			name := parseEastmoneyBoardString(row, "f14")
+			if code == "" || name == "" {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
+				continue
+			}
+			symbol, normalizeErr := normalize.NormalizeSymbol(code)
+			if normalizeErr != nil {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
+				continue
+			}
+			parts := strings.Split(symbol, ".")
+			if len(parts) != 2 {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
+				continue
+			}
+			if _, exists := seen[symbol]; exists {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_duplicate_symbols_dropped")
+				continue
+			}
+			seen[symbol] = struct{}{}
+			items = append(items, model.StockSearchItem{Symbol: symbol, Code: parts[0], Name: name, Exchange: parts[1]})
+		}
+		if page*eastmoneyStockSearchPageSize >= total {
+			break
+		}
+		if len(rows) < eastmoneyStockSearchPageSize {
+			quality = model.QualityDegraded
+			reasons = appendUniqueEastmoneyReason(reasons, "provider_directory_incomplete")
+			break
+		}
+	}
+	if len(items) == 0 {
+		return nil, model.QualityUnknown, nil, errors.New("Eastmoney stock-search directory contained no valid A-share rows")
+	}
+	if len(items) < total {
+		quality = model.QualityDegraded
+		reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_or_directory_incomplete")
+	}
+	return items, quality, reasons, nil
+}
+
 func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, error) {
 	category := strings.ToLower(strings.TrimSpace(rawCategory))
 	filters := map[string]string{
@@ -825,7 +1728,7 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
-	if err := p.getJSON(ctx, p.sectorRankingURL, params, &payload); err != nil {
+	if err := p.getJSONWithRetry(ctx, p.sectorRankingURL, params, &payload, 6*time.Second); err != nil {
 		return nil, fmt.Errorf("eastmoney sector ranking request: %w", err)
 	}
 	if payload.RC != nil && *payload.RC != 0 {
@@ -1141,6 +2044,12 @@ func eastmoneyMarketStocksFallbackURL(rawURL string) string {
 }
 
 func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	params := url.Values{
 		"dpt": {"wz.ztzt"},
 		"ut":  {p.ut},
@@ -1228,7 +2137,45 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	snapshot.UnclassifiedCount = 0
 	snapshot.AmountCoverageCount = 0
 	snapshot.TotalAmountCNY = nil
+
+	// Limit-pool totals are separate upstream queries. Only attach them when the
+	// provider report date matches the breadth snapshot date; missing values stay nil.
+	upCount, upReason, err := p.fetchMarketBreadthLimitCount(ctx, "up", reportDate)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.LimitUpCount = upCount
+	if upReason != "" {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, upReason)
+	}
+	downCount, downReason, err := p.fetchMarketBreadthLimitCount(ctx, "down", reportDate)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.LimitDownCount = downCount
+	if downReason != "" {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, downReason)
+	}
 	return snapshot, nil
+}
+
+func (p *Eastmoney) fetchMarketBreadthLimitCount(ctx context.Context, poolType, reportDate string) (*int, string, error) {
+	pool, err := p.FetchLimitPool(ctx, poolType, reportDate, 1)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, "", ctxErr
+		}
+		return nil, "market_breadth_limit_" + poolType + "_count_unavailable", nil
+	}
+	if pool == nil || pool.ProviderReportDate != reportDate {
+		return nil, "market_breadth_limit_" + poolType + "_count_report_date_mismatch", nil
+	}
+	if !pool.HasData || pool.Total <= 0 {
+		// A source's empty pool is not sufficient evidence of zero events.
+		return nil, "market_breadth_limit_" + poolType + "_count_not_confirmed", nil
+	}
+	count := pool.Total
+	return &count, "", nil
 }
 
 func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error) {

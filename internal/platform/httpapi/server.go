@@ -43,7 +43,7 @@ func NewWithTasks(runner Runner, store Store, analysisTimeout time.Duration, tas
 		return nil, errors.New("http API runner and store are required")
 	}
 	if analysisTimeout <= 0 {
-		analysisTimeout = 3 * time.Minute
+		analysisTimeout = 5 * time.Minute
 	}
 	return &Server{runner: runner, store: store, tasks: tasks, analysisTimeout: analysisTimeout}, nil
 }

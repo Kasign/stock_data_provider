@@ -24,6 +24,7 @@ type Tencent struct {
 	quoteURL     string
 	klineURL     string
 	noneKlineURL string
+	searchURL    string
 }
 
 func NewTencent(timeout time.Duration) *Tencent {
@@ -43,7 +44,7 @@ func NewTencentConfigured(timeout time.Duration, quoteURL, klineURL, noneKlineUR
 	if noneKlineURL == "" {
 		noneKlineURL = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
 	}
-	return &Tencent{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL}
+	return &Tencent{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL, searchURL: defaultTencentStockSearchURL}
 }
 func (p *Tencent) Name() string { return "tencent" }
 

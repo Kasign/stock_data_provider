@@ -551,3 +551,107 @@ Artifact：[live-provider-report #12472037706](https://github.com/Kasign/stock_d
 GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Provider Probe 新增了日历结果契约检查。只有记录中出现 `capability=trading_calendar`、`status=returned` 且完整覆盖请求日期，才可认为该 Runner 本次实测成功；如果前序 BaoStock 连接失败，日历探测明确记为 `skipped`，不会额外发起一次重复超时请求。目标 NAS/Docker 环境仍需实测，功能开关保持关闭。
 
 当前修复后的最新 HEAD 尚需以其自身 Go CI 与 Runner 日志进行最终验收，不能沿用早前失败记录，也不能把工作流表层 success 等同于所有 Provider 都通过。
+
+
+## 7. GitHub 托管 Runner 国内 Provider 补充验收（2026-10-23）
+
+- Run：[Live Provider Probe #100](https://github.com/Kasign/stock_data_provider/actions/runs/39941383744)，HEAD 38193c1e9360e8f7293eabf45403565dad33e594；job 成功，报告 artifact 为 live-provider-report。这是 GitHub 托管 Runner 的外部接口探测，不是 NAS/Docker 验收。
+- 报告中新浪、腾讯、东方财富、BaoStock 的日 K 请求以及 BaoStock 交易日历请求均返回；日 K 每种能力本轮只采样 8 根，不能据此确认完整日期覆盖。新浪与腾讯日 K 的成交额为 null；腾讯原始成交量按手转换为股，BaoStock 返回成交量股、成交额人民币元。Yahoo 可返回行情/K 线但成交额缺失，继续保持默认关闭；网易请求遇到 HTTP 502，本轮被跳过。
+- 东方财富核心指数返回 7 条、行业/概念榜各返回 10 条、个股所属板块返回 26 项。部分 push2 请求先 HTTP 302，再经 push2delay.eastmoney.com 返回 HTTP 200；板块、指数及个股板块由于源端快照时间不可核验而 degraded。
+- 市场广度返回上涨 4,406、下跌 854、平盘 117，供应商报告计数总量为 5,377；全量证券全集尚未与独立证券主数据核对，成交额字段不可用，因此 quality_status 为 degraded，不能作为已验收的全市场指标直接供策略使用。
+- 涨停/跌停/炸板池供应商报告总数依次为 82/6/12，但涨停池本轮报告只带回 30 个样本项。缺少源端快照时间，仍需核对分页/总量语义及交易日归属。
+- BaoStock 交易日历在本轮 7 天窗口查询成功，但历史探测曾超时，且尚未完成 NAS/Docker 对照；季度财务指标不在本轮报告结果中，因此没有真实 Runner 证据。
+- 妙想筹码/资金流因未设置 opt-in 测试和 MX_APIKEY 而 skipped。未配置真实 Key 时不能声称这两项已完成联调。
+
+本轮失败问题与后续重点：Go CI #290 因 services/market-data/internal/config/config_test.go 重复声明 TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly 而失败，Docker image build 因同一测试编译错误而失败；修复后仍需重新运行完整 Go CI。东方财富 502/302 集中记录于 [Issue #6](https://github.com/Kasign/stock_data_provider/issues/6)。
+
+
+## 8. 国内龙虎榜 Go 原生接入与 Probe #101（2026-10-23）
+
+- Go CI #291（HEAD `366f20df60c24bc04e26193110b00e5ab93d7f0a`）最终所有 jobs 成功：Go 核心、市场数据服务、根测试、Compose 校验与 Docker 镜像构建通过；解决了重复测试声明导致的编译和镜像失败。
+- Live Provider Probe #101 的核心探测步骤仍失败，但 workflow 总结显示 success，因此按 job 内步骤和 `live-provider-report` artifact 验收。东方财富行业/概念榜再次遇到 HTTP 502（Issue #6）；本批使用有限退避重试并加回归测试。
+- 新增龙虎榜 Provider、分页模型、服务校验与 `GET /api/v1/market/dragon-tiger` 路由；限定交易日，保留供应商 count/pages 与实际返回行数；金额为人民币元，净买额允许负值，缺失金额不补零。无精确源端快照时间时质量 degraded；空报表为 unknown，不误报当日无上榜。
+- 本批龙虎榜尚未完成 Runner 实测和 NAS/Docker 部署验收；独立配置 `MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED` 默认 false，不可标记生产可用。妙想 MX_API 因 Key/opt-in 未满足仍为 skipped，BaoStock 财务指标不在 Probe #101 结果中。
+
+
+## 9. 龙虎榜真实接口首轮结果与日期修正（2026-10-26）
+
+- Go CI #294（HEAD `2f247400e18f647120526cdfd37ea5160223b9f0`）的市场数据单测、Go Core 测试与根目录测试均通过，Compose 配置校验通过；市场数据镜像构建尚在运行中，不能写成整轮 CI 已通过。
+- Live Provider Probe #104 外层 workflow 显示 `success`，但内部 `Query public providers and capture sanitized responses` 步骤失败，且本轮没有上传报告 artifact。故按实际测试步骤认定本轮真实探测未通过。
+- 龙虎榜请求实际返回 HTTP 200，响应体为 `{"version":null,"result":null,"success":false,"message":"返回数据为空","code":9201}`；当时请求日为 2026-10-25（星期日），因此不能据此断定接口不可用。此前解析器未识别无数据 envelope，错误地报为缺少 `result/count`。
+- 后续修复将明确的 `code=9201/message=返回数据为空` 映射为 `quality_status=unknown`、短缓存空报表，并从 BaoStock 交易日历选择最近一个已结束的交易日进行真实探测。该修复已进入下一提交，但尚未通过其自身 CI 与 Runner，不能宣称龙虎榜真实接口已验收。
+
+
+## 10. 龙虎榜混合证券过滤与计数契约（2026-10-26）
+
+- Live Provider Probe #107 的端点请求返回 HTTP 200，针对交易日历选出的 2026-10-23 获取到两页龙虎榜数据。单页解析在第 48 条失败的原因为 `SECURITY_CODE=113711`、`SECUCODE=113711.SH`、`SECURITY_TYPE_CODE=060`：这是常青转债而非 A 股普通股票；上游的交易所后缀与股票代码前缀规则不兼容，不能篡改成 A 股代码。
+- 本批只过滤已明确识别的 `SECURITY_TYPE_CODE=060` 可转债行，并保留供应商 `total/pages`；新增 `source_returned`、`returned`、`excluded_non_a_share_count` 三个计数，要求原始页行数 = 可用 A 股行数 + 被排除非 A 股行数。
+- 只含非 A 股证券的页返回 `quality_status=unknown`、`has_data=false`，仍保留 source page/has_more 信息，不误标为零上榜。混合页保留符合 A 股身份的行并附加排除质量原因。
+- 上述修改还未由自身 commit 的 Go CI/真实 Probe 验证；DragonTiger Provider 依旧独立开关默认关闭，NAS/Docker 部署验收仍未完成。
+
+
+## 11. 可转债过滤回归测试整理（2026-10-26）
+
+- 提交 `cc62788d83e821ea1cc682330c6f183f4fb60ad5` 的 Go CI/真实探测未能进入外部数据验证：Provider 测试文件重复声明了 `TestEastmoneyFetchDragonTigerBondOnlyPageRemainsUnknown`，市场数据测试和探测在编译阶段失败。这是测试装配错误，不是行情端点故障。
+- 已删除重复定义，保留一份纯可转债页回归测试；以随后提交触发的 CI 与真实 Runner 结果作为新验收依据。
+
+
+## 12. 国内公告 Provider 首批接入（2026-10-26）
+
+- Go CI #299 与真实 Provider Probe #109 已通过，证明前序龙虎榜改动在该 HEAD 的单测、race、vet、Compose 与 Docker 镜像构建通过；真实探测返回 2026-10-23 龙虎榜源端计数 101、两页，第一页 100 条原始记录中返回 97 条 A 股、排除 3 条可转债。此结果只验收第一页并保持 degraded，不代表全分页或 NAS/Docker 部署验收。
+- 当前批次新增 Go 原生公告 Provider/API：按股票、公告日期区间和页码查询，保留 art_code、notice_date、display_time、sort_date、eiTime；published_at 只从可解析的源端 display_time 生成，采集时间独立存放。空列表标 unknown；缺精确显示时间保留 null 并降级。
+- 通用 Python 新闻搜索仍为 Python Bridge：Bocha/Tavily/Brave/SearXNG 的回退、时间过滤、排序和结果准入尚未等价迁移。公告 Provider 使用 `MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED=false` 独立开关，未完成当前 HEAD 的 Runner 与目标 NAS/Docker 验收前不生产启用。
+
+
+## 13. 公告端点真实发布时间格式（2026-10-26）
+
+- Live Provider Probe #112 的内部探测步骤成功调用东方财富公告接口，HTTP 200，`total_hits=2`、`pages=1`、`returned=2`。对象为 600036.SH，日期窗口 2026-10-19 至 2026-10-25；两条记录的公告日期分别是 2026-10-24 和 2026-10-21，源端 `display_time` 是 `2026-10-23 17:20:42:715` 和 `2026-10-20 17:32:45:870`。
+- 上述响应证实旧解析器漏识别“秒:毫秒”格式，因而把两个真实的展示时间标记为缺失，并将质量降级。现新增该格式解析与毫秒精度单测；原始 display_time 仍原样保留，published_at 从源端时间解析，fetched_at 仍是独立采集时间。日期单值仍不转换为精确发布时间。
+- 上一轮 Go CI #302 失败于 `live_probe_test.go` 结构体的重复右括号；修复后仍出现 `server_test.go` 一处字段对齐问题。后续提交已处理这些编译/格式问题，但最终验收仍以新 HEAD 的 Go CI 和 Probe 为准。
+
+
+## 14. 公告 Provider 真实 Runner 验收（2026-10-26）
+
+- Go CI #304：[run 40258631137](https://github.com/Kasign/stock_data_provider/actions/runs/40258631137) 对提交 `0d4c85ecd5becb3d0c0b977558e91c5bdfc30e86` 全部通过，包括 Go tests、race detector、go vet、gofmt、Compose 配置校验和 Docker 镜像构建。
+- Live Provider Probe #114：[run 40258631152](https://github.com/Kasign/stock_data_provider/actions/runs/40258631152) 的核心探测步骤成功，报告 artifact `live-provider-report`（ID `12623945324`）已上传。
+- 对 `600036.SH` 查询 `2026-10-19` 至 `2026-10-25`，东方财富返回 HTTP 200、`total_hits=2`、`pages=1`、`returned=2`。两条公告的源端 `display_time` 分别为 `2026-10-23 17:20:42:715` 和 `2026-10-20 17:32:45:870`；新增解析支持“秒:毫秒”，正确解析 `published_at`，同时保留原始 `display_time`、独立 `announcement_date` 及 `fetched_at`。这两条样本的条目与快照质量状态均为 `valid`。
+- 此验收只证明 GitHub 托管 Runner 上的一只股票、一个日期窗口和第一页；没有证明全市场公告覆盖、任意分页稳定性、生产 SLA，也没有完成 NAS/Docker 部署验收。公告 Provider 的独立开关仍默认关闭。
+
+
+## 15. 国内优先的 Go 原生新闻搜索首批实现（待 CI 验收，2026-10-26）
+
+- 原生链新增 Bocha + 显式配置的自建 SearXNG，包含来源 URL、标题、源端发布时间、独立检索时间、时效过滤、重复记录去除、基础个股相关度排序及 10 分钟内存缓存。
+- 配置使用现有 Python 兼容环境名 `BOCHA_API_KEYS`、`SEARXNG_BASE_URLS`、`NEWS_MAX_AGE_DAYS`、`NEWS_STRATEGY_PROFILE`。原生搜索未配置或没有合格结果时仍回退 Python Bridge；分析器、存储、通知等其他 Bridge 能力不在本批次范围内。
+- 本批代码含 HTTP 模拟测试，覆盖 Bocha 请求契约、SearXNG 日期过滤/去重、Python Bridge 回退与缓存。当前提交未经过自身 CI，不能写成已通过；海外来源、原 Python 的复杂反垃圾准入与真实搜索 API 额度/网络验收仍待后续逐项补齐。
+
+
+## 16. Go 原生新闻搜索 Runner 探测设置（2026-10-26）
+
+- 新增 `TestLiveNativeNewsSearch`，受 `GO_NATIVE_NEWS_LIVE_TESTS=1` 控制；从现有 `BOCHA_API_KEYS`、`SEARXNG_BASE_URLS` 配置实际查询贵州茅台的最新新闻，并输出独立 `live-news-report.json`。
+- Live provider workflow 仅在仓库配置了相应 GitHub Secrets 时才会真正请求源站；没有凭据会输出 `skipped`，不能把跳过写成通过。该探测不把搜索引擎返回的空结果当作数据完整性失败，但会把所有已配置源均报错作为探测失败。
+- 本文记录为探测框架已加入；需要最新 HEAD 的 CI 与 live-provider-smoke workflow 运行结果，才能报告实际调用成功或被跳过。
+
+
+- 补充说明：首次编辑 live-provider workflow 时，新增探测步骤误插入现有 run 命令，导致该工作流检查没有创建 job；该次结果不表示真实新闻 API 失败。已重写 workflow 步骤结构，后续以新 HEAD 的完整 Go CI 与工作流报告作为验收依据。
+
+
+## 17. 中文股票名称搜索真实接口验收（2026-10-26）
+
+- HEAD `f5b719f9c506b64aae63effe71b314a19f7c45ba` 的 Go CI run [40260305214](https://github.com/Kasign/stock_data_provider/actions/runs/40260305214) 已全部通过；Live Provider Probe run [40260305265](https://github.com/Kasign/stock_data_provider/actions/runs/40260305265) 的 workflow 也成功，但既有测试尚未覆盖中文名称证券目录查询，因此不能将其视为 stock-search 的真实 API 验收。
+- 现新增真实探测：通过 Eastmoney `StockSearchProvider` 查询“贵州茅台”，要求结果包含 `600519.SH`，并记录源端总数、目录质量、分页网络请求以及实际耗时。该接口不需要 API Key；结果以新提交触发的 Runner 报告为准。
+- 当前新闻搜索的真实探测步骤已运行，但该次 Runner 日志明确提示没有 `BOCHA_API_KEYS` 或 `SEARXNG_BASE_URLS`，故没有请求外部搜索服务。该步骤是 skipped 而不是失败，也不代表真实新闻源已经通过。
+
+
+## 18. 中文名称搜索发现 CLIST 页大小上限（2026-10-26）
+
+- Live Provider Probe #123 对 `GET push2.eastmoney.com/api/qt/clist/get` 发起真实请求，先 HTTP 302 跳转至 `push2delay.eastmoney.com`，随后 HTTP 200。响应报告证券目录 `data.total=5925`，但请求 `pz=5000` 时实际行数不足 5,000，旧实现将其误判为最后一页；查询“贵州茅台”因此得到 0 个匹配项，质量原因包含 `provider_directory_incomplete`。将 `pz` 改为 1,000 后，源站依然返回不足请求行数的一页，说明上限低于 1,000。
+- 现在按实测 100 条页大小分页，最大 100 页（安全覆盖 10,000 行），而不是在第一页行数小于请求 `pz` 时提前退出；真实探测等待 4 分钟内完成整目录加载后再校验是否命中 `600519.SH`。新增模拟 205 条目录、目标股票位于第二页、要求请求 3 页的回归测试。
+- 此分页修正确实由 Go CI #318 与 Live Provider Probe #128 验证：东方财富搜索“贵州茅台”返回 `600519.SH`，质量为 `valid`。源端目录共 5,925 条，实测按 100 条分页读取 60 页，共 120 次 HTTP 响应（每页先 302 跳转、随后 200），冷启动耗时 34.574 秒。分页逻辑现可正确命中结果，但全目录扫描仍不适合作为在线中文搜索的首选路径。
+## 19. 腾讯 Smartbox 中文名称搜索快速路径真实验收（2026-10-26）
+
+- 当前代码 HEAD `6ab7080b56a9b8debe583a5697f2f8247c4a7d3c` 的 Go CI #318（[run 40266288452](https://github.com/Kasign/stock_data_provider/actions/runs/40266288452)）全部通过：Go 单测、race detector、go vet、gofmt、Compose 配置校验和 Docker 镜像构建均成功。
+- Live Provider Probe #128（[run 40266288429](https://github.com/Kasign/stock_data_provider/actions/runs/40266288429)）的报告 `failures` 为空。腾讯 Smartbox `smartbox.gtimg.cn/s3/` 在 HTTP 200 下用 602 ms 返回“贵州茅台”→`600519.SH`；该响应把中文名放在 JavaScript Unicode 转义中，解析器已还原并新增回归测试。
+- Smartbox 未提供权威的匹配总数，快路径结果标记为 `quality_status=degraded`、原因 `provider_search_total_not_reported`；这表示条目成功解析，但不声称结果集完整。腾讯请求失败或没有匹配的 A 股记录时，服务层继续尝试东方财富后备源。
+- 同一次 Runner 直接探测东方财富对照结果，返回相同的 `600519.SH` 且质量为 `valid`，但耗时 34.574 秒，产生 120 次 HTTP 响应（60 次 302 跳转、60 次 200）。本样本下腾讯快路径约快 57 倍；这是单次 Runner 样本，不构成 SLA 或所有关键词的完整性证明。
+- 股票搜索专用优先级现在为腾讯、东方财富、其余已启用 Provider；实时行情和日 K 的原有 Provider 顺序不变。此验证覆盖真实 Provider 调用与自动化检查，尚未替代目标 NAS/Docker 部署和服务 HTTP 端到端验收。
+- 同一 Live Provider Probe 中，原生新闻搜索因未配置 `BOCHA_API_KEYS` / `SEARXNG_BASE_URLS` 被跳过；这不能视为真实新闻源已验证。

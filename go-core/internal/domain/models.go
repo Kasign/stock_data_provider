@@ -139,6 +139,7 @@ type NewsItem struct {
 	URL         string  `json:"url,omitempty"`
 	Source      string  `json:"source,omitempty"`
 	PublishedAt string  `json:"published_at,omitempty"`
+	RetrievedAt string  `json:"retrieved_at,omitempty"`
 	Relevance   float64 `json:"relevance,omitempty"`
 }
 

@@ -41,7 +41,7 @@ BaoStock 最合适的第一阶段用途是历史日 K 及其明确声明的成�
 | 数据域 | 当前/候选来源 | 计划角色 | 接入限制 |
 |---|---|---|---|
 | 实时个股行情 | 腾讯、新浪、东方财富、Yahoo Finance（可选） | 保持现有 QuoteProvider；Yahoo 采用 Chart 1m 元数据与分钟开盘，默认关闭，因缺成交额固定 degraded | BaoStock 不作为实时行情源；东方财富在当前 NAS 上的访问故障尚未定位 |
-| 日线历史 K 线 | 东方财富、BaoStock、腾讯、新浪（仅不复权）、Yahoo Finance、网易财经 CSV（可选） | BaoStock 作为默认历史 K 线备用源；腾讯按复权口径兜底；新浪/网易只在 `none` 请求下使用；Yahoo 与网易默认关闭，完成目标网络验收前不进入默认回退链 | 验证交易日覆盖、成交量单位、成交额/价格关系与复权口径；新浪/Yahoo 缺可核验成交额，网易金额无法交叉验证时必须置 null/unknown/degraded |
+| 日线历史 K 线 | 东方财富、BaoStock、腾讯、新浪（仅不复权）、Yahoo Finance、网易财经 CSV（可选） | BaoStock 作为默认历史 K 线备用源；腾讯按复权口径兜底；新浪/网易只在 `none` 请求下使用；Yahoo 默认关闭；网易当前配置启用为后置回退，但目标网络稳定性未验收，部署方可通过能力开关禁用 | 验证交易日覆盖、成交量单位、成交额/价格关系与复权口径；新浪/Yahoo 缺可核验成交额，网易金额无法交叉验证时必须置 null/unknown/degraded |
 | 周线/月线历史 | BaoStock 候选 | 在日线 Provider 验收后扩展 | 单独测试聚合周期、最后交易日规则和日期覆盖 |
 | 部分财务指标 | BaoStock、后续可选 Tushare / THS | BaoStock 先覆盖官方文档有明确定义的财务数据集；Tushare/THS 依权限和成本另行评估 | 报告期、公告日、数据可用时间、单位和缺失值必须分别保存 |
 | 复权因子、除权除息 | BaoStock 候选 | 为复权检查、公司行动追踪和数据源对账提供补充 | 不得只以相同的前/后复权标签认定两个源的绝对价格等价 |
@@ -54,7 +54,7 @@ BaoStock 最合适的第一阶段用途是历史日 K 及其明确声明的成�
 
 - **Yahoo Finance：Go 日 K 与实时快照适配器均使用公开 Chart API，默认关闭。** GitHub Actions 已实测日 K 返回；实时快照以 `1d/1m` 序列提取当日开盘，quote 时间来自 provider 元数据。两种能力均因缺少可核验成交额固定 degraded，不可用于金额敏感分析；Chart API 没有 SLA，也不等同于 YFinance Python 库的完整能力。
 - **新浪历史日 K：与实时行情端点分开接入，支持可配置公开 JSON endpoint。** 当前只接受 `none` 口径；接口不回显证券代码且没有经验证的成交额，固定 `degraded`，历史响应最多 1023 条，不能用作复权数据源。
-- **网易财经历史 CSV：新增 Go adapter，默认关闭。** CSV 可请求成交量和成交金额字段，但该接口并非有 SLA 的官方开发者 API；适配器仅在成交额/成交量推导的成交均价落在当日 OHLC 区间附近时才接受金额单位；不匹配时 amount 保持 null / unit unknown / degraded。仅支持 `none`，在真实 Runner 与部署端点验收完成前不加入生产默认回退链。
+- **网易财经历史 CSV：新增 Go adapter，当前配置启用为后置回退，尚未完成目标网络验收。** CSV 可请求成交量和成交金额字段，但该接口并非有 SLA 的官方开发者 API；适配器仅在成交额/成交量推导的成交均价落在当日 OHLC 区间附近时才接受金额单位；不匹配时 amount 保持 null / unit unknown / degraded。仅支持 `none`；当前配置把它放在后置回退位，但真实 Runner 与部署端点尚未验收，不能将这种配置状态视为生产可用性验收。若部署方不接受未验收源参与回退，可设置 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`。
 - **Tushare Pro：可选、有权限条件的补充源。** 官方积分权限表显示，120 积分档只允许非复权日线等有限接口；财务、指标及其他数据需要更高积分或单独开通权限。因此，不把它作为“免费即可完整覆盖所有数据域”的默认方案。只有先确认具体账号的接口权限、请求频率和成本，再决定是否接入。
 - **AKShare / Efinance：以参考、差异对照为主，不直接作为 Go 服务的 Python 运行依赖。** 它们是采集/数据接口封装库，不等同于单一上游服务；不同函数可能依赖不同网站接口。若未来有必要，可针对已核验的上游接口实现独立 Go Adapter。
 - **Pytdx：保留为后续研究候选。** 在测试实际可用的行情服务器、连接稳定性、交易日覆盖和协议兼容前，不进入生产优先级。
@@ -194,3 +194,151 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - [BaoStock 协议社区参考（非官方，实施时须与官方客户端源码及真实响应核对）](https://github.com/millken/baostock/blob/main/BAOSTOCK_PROTOCOL.md)
 - [Tushare Pro 积分与频次权限表](https://tushare.pro/document/2?doc_id=290)
 - [Kasign Financial-API（同花顺候选参考）](https://github.com/Kasign/Financial-API)
+
+## 8. 国内原生 Provider 统一接线（待集中验收，2026-10-26）
+
+本批次按“国内数据源优先，海外来源暂不请求”的要求调整默认配置：
+- 默认优先级去掉 Yahoo Finance；Yahoo 代码保留但 `enabled=false`，其行情/日 K 不会进入默认请求链。
+- 东方财富默认开启行情、日 K、证券基础资料、行业/概念排名、指数、市场广度、涨跌停池、所属板块、龙虎榜和公告。
+- BaoStock 默认开启历史日 K、交易日历和季度基本面；仍不把它当作实时行情源。
+- 腾讯、新浪和网易财经纳入国内行情回退配置；新浪/网易的历史日 K 仅支持不复权口径，无法匹配请求的复权口径时必须返回错误并允许路由继续回退。
+- 妙想仍是需要显式 API Key 的补充源，不伪造凭据或在没有 Key 时开启；新闻搜索的 Bocha / SearXNG 也继续由各自凭据/URL 配置控制。
+- 本批先统一已有国内 Provider 的默认接线，再陆续新增 Tushare、TickFlow 与 Pytdx 原生 Go 适配器；代码均尚未统一测试，真实上游可用性、复权/单位契约和目标部署连通性统一留到后续测试。Efinance/Akshare 是 Python 多端点包装，当前仅覆盖其部分共享上游能力，未做逐函数等价迁移。
+
+## 9. 同花顺官方 A 股数据源首批接入（2026-10-26）
+
+- 默认服务地址为 `https://fuyao.aicubes.cn`，由 `MARKET_DATA_HITHINK_BASE_URL` 配置；API Key 从 `MARKET_DATA_HITHINK_API_KEY` 或 `HITHINK_FINANCE_API_KEY` 读取，只通过 `X-api-key` Header 发送。
+- Go 适配器覆盖官方行情快照和历史日 K 端点。日 K 支持 `none` / `forward` / `backward`，时间范围按小于十年的区间分段，offset 分页设置安全上限。
+- 指定单股行情接口不提供可用快照时间，所以返回的 Quote 会标记 `degraded`；缺失成交量/成交额、非法 OHLC、代码不匹配、越界日期及业务错误不会伪装成有效数据。
+- 同花顺是凭据和调用额度控制的可选国内源，默认禁用；财务报表、估值、交易日历、指数/板块和特色数据仍需后续按能力接入。
+- 本次只接入代码、配置与文档，没有运行测试；统一测试阶段再核实账号权限、分页、额度与真实数据质量。
+
+### 同花顺财务指标能力补充（2026-10-26）
+
+- 新增 `FundamentalsProvider` 对接：`GET /api/a-share/financials/indicators?thscode=...&report=YYYY-Q`，报告期可由 year/quarter 精确映射。
+- 五类能力块按供应商实际 `abilities[]` 结构解析，不假设它是以类别为键的对象。空值和非数值不补零。
+- 上游响应未提供可靠披露时间与每个指标的单位，字段保留供应商 `index_id` 作为 key/source_field，并将单位标记为 `provider_defined`；整体质量保持 `degraded`，不可直接作为严格 point-in-time 财务值。
+- 通过 `MARKET_DATA_HITHINK_FUNDAMENTALS_ENABLED=true` 显式启用；仍需具备财务指标端点权限的同花顺 API Key。本次未运行测试。
+
+### 同花顺证券目录搜索补充（2026-10-26）
+
+- 新增 `StockSearchProvider`，使用 `GET /api/meta/tickers/search` 按中文名称、代码或 THSCode 检索，显式限定 `asset_type=a-share`，不把指数、基金或外汇混入股票候选。
+- 返回的名称、代码、交易所均来自官方目录，不由本地规则猜测；无匹配、重复结果及无效代码均有明确处理。
+- 同花顺搜索回退与行情/日 K/财务能力共用 API Key，但只有将 `MARKET_DATA_HITHINK_ENABLED=true` 且配置 Key 后才会注册；当前不默认启用。
+- 本次仅更新实现与文档，没有运行测试。
+
+### 同花顺指数快照与交易日历（2026-10-26）
+
+- 新增核心指数白名单快照，只请求 7 个预设沪深指数，绝不调用未指定标的的全市场模式。来源时间戳缺失/不合理、价格/成交额缺失或返回列表不完整会显式降级。
+- 新增同花顺滚动一年交易日历回退；超出上游可用日期范围时返回错误，以便继续尝试 BaoStock。因上游只返回交易日，适配器生成的非交易日是推断结果，整体质量保持 `degraded`，不覆盖默认启用且数据契约更完整的 BaoStock 路径。
+- 通过 `MARKET_DATA_HITHINK_INDEX_QUOTES_ENABLED=true` 和 `MARKET_DATA_HITHINK_TRADING_CALENDAR_ENABLED=true` 分别启用；两项默认关闭且均需要同花顺 API Key。本次没有运行测试。
+
+### 同花顺三张财务报表（2026-10-26）
+
+- 在现有 `FundamentalsProvider` 中新增同花顺利润表、资产负债表、现金流量表接口调用，按 `period_end_ms` 对齐所请求的年度/季度末，避免返回相邻报告期。
+- 报表字段保留来源字段名、显示名称、单位和披露日期；对上游缺失/非法值不补零，且把对应报表段落降级。
+- 一个报表端点失败时保留其他报表和财务指标已取到的数据，并把失败段落标为 degraded；只有用户显式启用同花顺 fundamentals 时才会发出这些请求。
+- 当前只映射官方公开契约列出的基础报表字段；完整字段覆盖与数据权限仍待后续统一验收。本次未运行测试。
+
+### 同花顺涨停池与龙虎榜（2026-10-26）
+
+- 涨跌停池通过同一 `LimitPoolProvider` 接入三类官方端点：涨停 `/api/a-share/special-data/limit-up-pool`、跌停 `/api/a-share/special-data/limit-down-pool`、炸板 `/api/a-share/special-data/limit-break-pool`。适配器只读取第一页，最高 100 条；缺少最新价、证券身份或必需涨跌幅时拒绝错误数据，未知金额单位保持 `provider_defined`。
+- 龙虎榜使用 `/api/a-share/special-data/dragon-tiger-list?board_type=all`，支持最近一年内的指定交易日；因为官方响应不提供分页参数，Go 适配器在内存中按统一接口做分页。
+- 同花顺特别数据文档没有明示金额字段单位；新增通用 `provider_*_value` 字段和 `provider_amount_unit=provider_defined`，不把这些金额伪装成 CNY。相关结果保持 degraded。
+- 通过 `MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED=true` 与 `MARKET_DATA_HITHINK_DRAGON_TIGER_ENABLED=true` 分别开启，两项默认关闭且需要同花顺 API Key。本轮未运行测试。
+
+### 同花顺批量估值快照（2026-10-26）
+
+- 新增独立 `ValuationProvider` 能力，并通过 `MARKET_DATA_HITHINK_VALUATIONS_ENABLED=true` 控制。默认关闭；启用前必须同时设置 `MARKET_DATA_HITHINK_ENABLED=true` 和有效的同花顺 API Key。
+- 新增 `GET /api/v1/market/valuations?symbols=600519.SH,000001.SZ`，最多接受 100 个原始代码 token；必须使用带交易所后缀的 SH/SZ/BJ 股票代码，按输入顺序去重。
+- 返回 PE TTM、PE MRQ、PB MRQ、PS TTM、PCF TTM。上游的 `null` 与负数原样保留，源快照时间缺失、请求股票缺失或任何指标字段缺失都会标记 degraded/unknown。
+- 估值端点只查询指定的有限股票列表，不进行全市场扫描；无测试/CI 执行，本次只做实现及配置文档接线。
+
+### 同花顺指数/板块目录与指数历史日 K（2026-10-26）
+
+- 新增 `IndexCatalogProvider` 独立能力，不复用股票搜索、不把指数代码传入个股 K 线方法。
+- 目录按 `cn_concept`、`region`、`tszs`、`industry` 四类查询，同花顺无分页时设 30,000 项防护上限；当前成分股按单个指数/板块代码查询，只代表当前成分。
+- 指数/板块历史 K 线走专用 `/api/a-share-index/prices/historical`，日期范围最大十年；指数无复权语义，不暴露 adjustment 字段。时间戳缺失、成交量/成交额缺失会降级，异常 OHLC、越界日期与重复日期拒绝返回。
+- 新增路由 `GET /api/v1/market/index-catalog`、`GET /api/v1/market/indices/{symbol}/constituents`、`GET /api/v1/market/indices/{symbol}/daily`，统一使用现有缓存与 Provider 回退模式。
+- 通过 `MARKET_DATA_HITHINK_INDEX_CATALOG_ENABLED=true` 单独启用；默认关闭。本次未运行测试或 CI。
+
+## Efinance / AkShare 国内数据域迁移盘点（2026-10-26）
+
+### 已覆盖或可由独立 API 组合
+
+- **实时行情、历史日 K、指数行情、市场涨跌统计、行业/概念排行榜、个股所属板块、涨跌停池、龙虎榜、公告**：已有 Go 原生能力链路。Efinance/AkShare 原方法多数是对公开端点的封装，并不代表独立上游。
+- **指数/板块目录、当前成分股、指数/板块历史日 K**：新增同花顺独立接口；不混用股票代码归一化，也不使用个股复权语义。
+- **筹码分布**：新增东方财富 Go 原生计算，复刻 AkShare CYQCalculator 最新指标逻辑。输入为最近 120 根未复权日 K 与换手率，返回最新获利比例、平均成本、70%/90% 区间和集中度；由于上游没有该指标独立时间戳，质量为 degraded。
+- **增强数据 get_enhanced_data**：是日 K、行情、基本资料/板块或筹码的组合封装，不是单一上游。Go 用户可调用各自路由；目前没有一个将所有域一次聚合返回的完全等价接口。
+
+### 仍未等价迁移的国内能力
+
+- **人气榜/飙升榜/关注榜**：AkShare 的 `stock_hot_rank_em` 和 `stock_hot_up_em` 已由 Go 原生 `HotRankingProvider` 对接东方财富；另有可选同花顺回退端点和雪球关注榜后备。雪球 `surge` 以全市场涨幅排序做代理，明确 degraded，不宣称与东方财富飙升榜完全等价。榜单有延迟且不作为实时交易信号。
+- **个股基本资料扩展字段**：已将 Efinance `get_base_info` 的动态 PE/PB、行业、总市值、流通市值、板块编号、ROE、净利率、净利润和毛利率映射到 Go `StockBasic`。这些当前 profile 字段无独立上游时间戳，整体质量标记 degraded；与季度财务报表分开，不拼造成无披露日期的历史财务值。
+- **统计口径差异**：Python 市场统计会自行推断涨跌停计数，Go 当前分为市场广度和涨跌停池接口；字段名相似不代表语义完全等价。
+- 海外市场本轮按既定范围暂缓，不在国内数据域迁移完成前引入。
+
+本轮没有运行测试或 CI。榜单已作为独立能力接入；下一步保留给后续统一测试，并继续盘点 Efinance/AkShare 中无法通过现有接口组合等价迁移的国内数据能力。
+
+### 东方财富个股人气榜 / 飙升榜（2026-10-26）
+
+- 新增独立 `HotRankingProvider` 能力，调用东方财富 `getAllCurrentList`（人气榜）和 `getAllHisRcList`（飙升榜），然后用东方财富公开行情列表 API 补充名称、最新价与涨跌幅。
+- 新增 `GET /api/v1/market/hot-stocks?type=popular|surge&limit=10`，上限 100 条；榜单能力独立于行情和 K 线 fallback。
+- 校验股票代码、排名、重复项和行情数值。行情映射缺失时保留排名条目并降级；由于来源没有可信快照时间，正常响应仍为 `degraded`。
+- 通过 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED=true|false` 控制，默认开启；新增独立短缓存，减少重复请求。本次未运行测试或 CI。
+### Efinance get_base_info 个股 profile 字段迁移（2026-10-26）
+
+- 用 Go 原生东方财富行情字段补齐 `StockBasic` 的动态 PE、PB、行业、总市值、流通市值、板块编号、ROE、净利率、净利润、毛利率，对应 Efinance `EASTMONEY_BASE_INFO_FIELDS`（f162/f167/f127/f116/f117/f198/f173/f187/f105/f186）。
+- PE/PB 与百分比字段使用上游原值；市场/流通市值与净利润单位按人民币元解释。缺失和无效值保留为 `null`，不补 0。
+- 因行情接口没有每个 profile 字段的独立时间戳，返回整体标记 `degraded`；季度 fundamentals 仍负责带报告期与披露日期的财务指标，不与 profile 当前字段混合成 point-in-time 财务数据。
+- 身份/上市日期来自 Eastmoney F10；扩展行情请求失败不丢弃已经取得的身份信息，而是返回降级原因。本轮未运行测试或 CI。
+
+### 同花顺跌停池与炸板池扩展（2026-10-26）
+
+- Go 适配器现在支持 `up/down/broken` 三类池，并按各端点的有效排序字段固定请求第一页，避免把不同池的字段名混用。
+- 统一模型扩展最新价、跌停首次/末次触及时间、炸板开板次数、换手率和供应商成交额字段；旧客户端字段保持兼容，新增字段均为可选。
+- 数据仍保持 `degraded`：同花顺金额/成交额单位未在当前接口契约中明确，快照时间缺失或请求日期与上游时间不一致会显示质量原因。该能力只在显式启用 `MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED=true` 后参与回退链。
+- 本轮未运行测试或 CI；真实 API 账号权限、非交易日空池语义与目标容器访问由后续统一验收。
+
+
+### 同花顺人气榜与飙升榜后备源（2026-10-26）
+
+- 复用已有 `HotRankingProvider` 和 `GET /api/v1/market/hot-stocks?type=popular|surge&limit=100`，不新增一套榜单路由。东方财富仍为默认优先数据源，同花顺只在显式启用后加入源优先级回退链。
+- `popular` 对应 `/api/a-share/special-data/hot-stock-list?period=day`，`surge` 对应 `/api/a-share/special-data/skyrocket-list?period=day`。这些端点提供榜单字段，但不保证行情快照；Go 模型新增 `heat`、`rank_trend` 和可选 `provider_time`，不补造价格或涨跌幅。
+- 榜单按数据延迟/非交易信号处理，整体保持 `degraded`；供应商时间戳若存在，只表示数据准备时间。空榜单保持 `unknown`，不等于已证实无人上榜。
+- 启用条件：`MARKET_DATA_HITHINK_ENABLED=true`、`MARKET_DATA_HITHINK_API_KEY` 和 `MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED=true`；该能力默认关闭。本轮未运行测试或 CI。
+
+
+### Tushare 指数数据能力接入（2026-10-26）
+
+已增加 Go 原生 `index_basic`、`index_weight`、`index_daily` Provider 适配器，与同花顺的概念/行业指数目录分开标记；Tushare 目录使用 `tag=tushare`。指数成分只代表最近可用权重快照，指数日线保留 Tushare 成交量的“手”单位并将成交额千元转换为人民币元。该能力默认关闭，因账号权限、数据更新时点和单位仍需统一验收。
+
+
+### 雪球国内热度榜后备（2026-10-26）
+
+加入可选 Xueqiu Go Provider，仅覆盖现有热度排名接口。登录 Cookie 允许通过环境变量配置，但不提交真实 Cookie；默认关闭。Xueqiu 人气榜可作为后备，飙升榜使用全市场涨幅排序的代理口径并明确降级，避免误称与东方财富榜单等价。后续统一验收需确认是否无需 Cookie、真实字段映射、响应结构和频率限制。
+
+
+### 雪球关注榜 API 补齐（2026-10-26）
+
+热度榜路由新增 `type=followers`，使用雪球现有关注榜接口。它与 popular 人气榜、surge 全市场涨幅排序代理榜分开定义；不将关注量解释为短期涨幅或买入信号。
+
+
+### 市场广度 / 旧版 get_market_stats 口径差异（2026-10-26）
+
+市场广度现在补充按报告日对齐的涨停和跌停总数；各自来源日期不一致或上游无法确认时字段为 null。旧版统计还计算全市场成交额（亿元），Go 目前仍不输出该总额，因为现有分布端点不提供成交额。后续应单独接入全市场行情金额聚合并验证证券覆盖、单位、重复证券及停牌处理，再评估是否可视为等价迁移；禁止用涨停池分页数或不完整行情行求和冒充全市场成交额。
+
+
+### 指数成分接口的截断风险控制（2026-10-26）
+
+Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次请求中导致上游结果量增加。Go 适配器按月份从新到旧查询，在最近四个月内找到最新可用的成分月份后即停止，并对较大的单月结果保留降级提示。仍需统一验收不同规模指数是否能完整返回所有成分，不把“没有超过本地安全阈值”视为上游完整性证明。
+
+
+### 历史财务指标的 point-in-time 完整性
+
+当前 Go 财务指标 API 按报告期返回供应商最新可用版本，并保留该版本的公告日期；它不是历史修订版本数据库，也不接受 `as_of` 参数。历史策略必须排除公告日期晚于研究参考日期的数值，否则存在前视数据风险。若要重建旧时点原始值，后续需先验证上游历史修订记录可用性，再设计支持 `as_of` 的接口及缓存键；不可仅靠当前版本公告日期推算旧值。
+
+
+### 指数多 Provider 代码空间隔离
+
+指数目录来源与后续成分/日线来源必须一致。新接口允许在成分与日线请求中传入 `source=hithink|tushare`，以选择目录项所属 Provider；来源指定请求失败时不切换到另一个代码空间。调用方应以目录响应返回的 `source` 为准。未指定 source 仍采用既有优先级回退，供旧调用兼容。

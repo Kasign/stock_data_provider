@@ -26,6 +26,7 @@ on:
       - "services/market-data/internal/model/**"
       - "services/market-data/configs/**"
       - "services/market-data/.env.example"
+      - "go-core/**"
       - ".env.example"
 
 permissions:
@@ -45,7 +46,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.23.x"
-      - name: Query public providers and capture sanitized responses
+      - name: Query market-data providers and capture sanitized responses
         env:
           MARKET_DATA_LIVE_PROVIDER_TESTS: "1"
           LIVE_PROVIDER_REPORT_PATH: ${{ github.workspace }}/live-provider-report.json
@@ -56,18 +57,44 @@ jobs:
           MARKET_DATA_MX_API_URL: https://mkapi2.dfcfs.com/finskillshub/api/claw/query
         working-directory: services/market-data
         run: go test -run '^TestLiveProviderProbe$' -count=1 -v ./internal/provider
-      - name: Print probe report
+      - name: Print market-data probe report
         if: always()
         run: |
           if [[ -f live-provider-report.json ]]; then
             cat live-provider-report.json
           else
-            echo "No report file was produced; inspect the test step logs."
+            echo "No market-data report file was produced; inspect the probe step logs."
           fi
-      - name: Upload real-provider report
+      - name: Upload market-data report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: live-provider-report
           path: live-provider-report.json
+          if-no-files-found: warn
+      - name: Probe native news search when credentials are available
+        env:
+          GO_NATIVE_NEWS_LIVE_TESTS: "1"
+          GO_NEWS_LIVE_REPORT_PATH: ${{ github.workspace }}/live-news-report.json
+          BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
+          SEARXNG_BASE_URLS: ${{ secrets.SEARXNG_BASE_URLS }}
+          NEWS_MAX_AGE_DAYS: "3"
+          NEWS_STRATEGY_PROFILE: short
+          NEWS_SEARCH_TIMEOUT_SECONDS: "10"
+        working-directory: go-core
+        run: go test -run '^TestLiveNativeNewsSearch$' -count=1 -v ./internal/adapters/newssearch
+      - name: Print native news report
+        if: always()
+        run: |
+          if [[ -f live-news-report.json ]]; then
+            cat live-news-report.json
+          else
+            echo "No native-news report file was produced; inspect the probe step logs."
+          fi
+      - name: Upload native-news report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-news-report
+          path: live-news-report.json
           if-no-files-found: warn

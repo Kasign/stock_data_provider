@@ -64,6 +64,17 @@ func TestLoadRejectsInvalidDurationInsteadOfSilentlyDefaulting(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidBooleanForProviderCapability(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "sometimes")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid provider capability boolean must fail instead of silently using the default")
+	}
+}
+
 func TestLoadRejectsPlaceholderSecrets(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "replace-with-a-long-random-secret")
@@ -140,6 +151,24 @@ func TestLoadDefaultTimeoutCoversDefaultTwoProviderRetryBudget(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultTimeoutCoversFullDefaultProviderChain(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_REQUEST_TIMEOUT", "")
+	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
+	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "eastmoney,baostock,tickflow,tencent,sina,netease,pytdx")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("default request timeout should cover the complete enabled quote and daily-bar failover chain: %v", err)
+	}
+	if cfg.RequestTimeout < 5*time.Minute {
+		t.Fatalf("default request timeout=%s, want at least 5m for the complete provider chain", cfg.RequestTimeout)
+	}
+}
+
 func TestLoadDefaultTimeoutCoversBaoStockFailoverBudget(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
@@ -189,6 +218,17 @@ func TestLoadRejectsMalformedProviderEndpointURL(t *testing.T) {
 	t.Setenv("MARKET_DATA_TENCENT_QUOTE_URL", "file:///tmp/quote")
 	if _, err := Load(); err == nil {
 		t.Fatal("non-http provider endpoint must fail during configuration validation")
+	}
+}
+
+func TestLoadRejectsMalformedNeteaseQuoteEndpointURL(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_NETEASE_QUOTE_URL", "file:///tmp/netease-quote")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("non-http NetEase quote endpoint must fail during configuration validation")
 	}
 }
 
@@ -620,5 +660,110 @@ func TestEastmoneyIndexEndpointAndCapabilityAreConfigurable(t *testing.T) {
 	}
 	if !cfg.ProviderSettings["eastmoney"].IndexQuotes {
 		t.Fatal("index-quote environment override should enable capability")
+	}
+}
+
+func TestEastmoneyDragonTigerURLAndCapabilityAreConfigurable(t *testing.T) {
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_DRAGON_TIGER_URL", "https://example.test/api/data/v1/get")
+	t.Setenv("MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EastmoneyDragonTigerURL != "https://example.test/api/data/v1/get" {
+		t.Fatalf("unexpected dragon-tiger endpoint %q", cfg.EastmoneyDragonTigerURL)
+	}
+	if !cfg.ProviderSettings["eastmoney"].DragonTiger {
+		t.Fatal("dragon-tiger override should enable capability")
+	}
+	t.Setenv("MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["eastmoney"].DragonTiger {
+		t.Fatal("dragon-tiger should be disabled explicitly")
+	}
+}
+
+func TestEastmoneyAnnouncementsDefaultOffAndEndpointConfigurable(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED", "")
+	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_URL", "https://example.test/api/security/ann")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["eastmoney"].Announcements {
+		t.Fatal("announcements must remain disabled until target deployment acceptance")
+	}
+	if cfg.EastmoneyAnnouncementsURL != "https://example.test/api/security/ann" {
+		t.Fatalf("unexpected announcement endpoint %q", cfg.EastmoneyAnnouncementsURL)
+	}
+
+	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED", "true")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ProviderSettings["eastmoney"].Announcements {
+		t.Fatal("explicit opt-in should enable the announcements capability")
+	}
+	t.Setenv("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["eastmoney"].Announcements {
+		t.Fatal("explicit false must disable announcements")
+	}
+}
+
+func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["baostock"].Fundamentals {
+		t.Fatal("fundamentals must stay disabled until target deployment acceptance")
+	}
+	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "true")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ProviderSettings["baostock"].Fundamentals {
+		t.Fatal("explicit opt-in must enable fundamentals")
+	}
+}
+
+func TestLoadAcceptsXueqiuInProviderPriority(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "providers.json")
+	data := `{"provider_priority":["eastmoney","tencent","xueqiu"],"adjustment_basis":"forward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":true,"daily_bars":true},"tencent":{"enabled":true,"quote":true,"daily_bars":true},"xueqiu":{"enabled":false,"hot_rankings":false}}}`
+	if err := os.WriteFile(file, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
+	t.Setenv("MARKET_DATA_PROVIDER_PRIORITY", "")
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_XUEQIU_ENABLED", "")
+	t.Setenv("MARKET_DATA_XUEQIU_HOT_RANKINGS_ENABLED", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("configured Xueqiu priority should be accepted even when its capability is disabled: %v", err)
+	}
+	if len(cfg.ProviderPriority) != 3 || cfg.ProviderPriority[2] != "xueqiu" {
+		t.Fatalf("provider priority=%v, want [eastmoney tencent xueqiu]", cfg.ProviderPriority)
 	}
 }

@@ -19,17 +19,30 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/repository"
 )
 
+type chipDistributionSource interface {
+	provider.NamedProvider
+	FetchChipDistribution(context.Context, string) (*model.ChipDistribution, error)
+}
+
 type DataService struct {
 	providers                []provider.NamedProvider
 	quoteProviders           []provider.QuoteProvider
 	barProviders             []provider.DailyBarProvider
 	stockBasicProviders      []provider.StockBasicProvider
+	stockSearchProviders     []provider.StockSearchProvider
 	sectorRankingProviders   []provider.SectorRankingProvider
 	indexQuoteProviders      []provider.IndexQuoteProvider
 	marketBreadthProviders   []provider.MarketBreadthProvider
 	limitPoolProviders       []provider.LimitPoolProvider
+	dragonTigerProviders     []provider.DragonTigerProvider
+	announcementProviders    []provider.AnnouncementProvider
 	stockBoardsProviders     []provider.StockBoardsProvider
 	tradingCalendarProviders []provider.TradingCalendarProvider
+	fundamentalsProviders    []provider.FundamentalsProvider
+	valuationProviders       []provider.ValuationProvider
+	indexCatalogProviders    []provider.IndexCatalogProvider
+	chipDistributionProviders []provider.ChipDistributionProvider
+	hotRankingProviders       []provider.HotRankingProvider
 	supplementProviders      []provider.SupplementProvider
 	maxBars                  int
 	retries                  int
@@ -110,6 +123,14 @@ func (s *DataService) SetStockBasicProviders(providers []provider.StockBasicProv
 
 func (s *DataService) StockBasicProviders() []provider.StockBasicProvider {
 	return append([]provider.StockBasicProvider(nil), s.stockBasicProviders...)
+}
+
+func (s *DataService) SetStockSearchProviders(providers []provider.StockSearchProvider) {
+	s.stockSearchProviders = append([]provider.StockSearchProvider(nil), providers...)
+}
+
+func (s *DataService) StockSearchProviders() []provider.StockSearchProvider {
+	return append([]provider.StockSearchProvider(nil), s.stockSearchProviders...)
 }
 
 func (s *DataService) SetSectorRankingProviders(providers []provider.SectorRankingProvider) {
@@ -213,6 +234,12 @@ func (s *DataService) SetLimitPoolProviders(providers []provider.LimitPoolProvid
 func (s *DataService) LimitPoolProviders() []provider.LimitPoolProvider {
 	return append([]provider.LimitPoolProvider(nil), s.limitPoolProviders...)
 }
+func (s *DataService) SetDragonTigerProviders(providers []provider.DragonTigerProvider) {
+	s.dragonTigerProviders = append([]provider.DragonTigerProvider(nil), providers...)
+}
+func (s *DataService) DragonTigerProviders() []provider.DragonTigerProvider {
+	return append([]provider.DragonTigerProvider(nil), s.dragonTigerProviders...)
+}
 func (s *DataService) SetStockBoardsProviders(providers []provider.StockBoardsProvider) {
 	s.stockBoardsProviders = append([]provider.StockBoardsProvider(nil), providers...)
 }
@@ -235,6 +262,9 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 	}
 	if snapshot.TotalSecurities <= 0 || snapshot.CoveredSecurities != snapshot.TotalSecurities {
 		return fmt.Errorf("market-breadth coverage mismatch: covered=%d total=%d", snapshot.CoveredSecurities, snapshot.TotalSecurities)
+	}
+	if (snapshot.LimitUpCount != nil && *snapshot.LimitUpCount < 0) || (snapshot.LimitDownCount != nil && *snapshot.LimitDownCount < 0) {
+		return errors.New("market-breadth limit counts cannot be negative")
 	}
 	counts := snapshot.AdvancingCount + snapshot.DecliningCount + snapshot.UnchangedCount + snapshot.UnclassifiedCount
 	if snapshot.AdvancingCount < 0 || snapshot.DecliningCount < 0 || snapshot.UnchangedCount < 0 || snapshot.UnclassifiedCount < 0 || counts != snapshot.CoveredSecurities {
@@ -421,6 +451,164 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	return nil, false, fmt.Errorf("all limit-pool providers failed: %s", strings.Join(failures, "; "))
 }
 
+func normalizeDragonTigerDate(rawDate string) (string, error) {
+	rawDate = strings.TrimSpace(rawDate)
+	if rawDate == "" {
+		loc, err := time.LoadLocation("Asia/Shanghai")
+		if err != nil {
+			loc = time.FixedZone("CST", 8*60*60)
+		}
+		return time.Now().In(loc).Format("2006-01-02"), nil
+	}
+	parsed, err := time.Parse("2006-01-02", rawDate)
+	if err != nil || parsed.Format("2006-01-02") != rawDate {
+		return "", fmt.Errorf("invalid dragon-tiger date %q: expected YYYY-MM-DD", rawDate)
+	}
+	return parsed.Format("2006-01-02"), nil
+}
+
+func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot *model.DragonTigerSnapshot) error {
+	if snapshot == nil {
+		return errors.New("dragon-tiger provider returned an empty snapshot")
+	}
+	if snapshot.TradeDate != tradeDate || snapshot.Page != page || snapshot.PageSize != pageSize {
+		return fmt.Errorf("dragon-tiger request identity mismatch: wanted %s/%d/%d, got %s/%d/%d", tradeDate, page, pageSize, snapshot.TradeDate, snapshot.Page, snapshot.PageSize)
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("dragon-tiger source or fetched_at is missing")
+	}
+	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.SourceReturned < 0 ||
+		snapshot.ExcludedNonAShareCount < 0 || snapshot.Returned != len(snapshot.Items) ||
+		snapshot.Returned > snapshot.SourceReturned ||
+		snapshot.SourceReturned != snapshot.Returned+snapshot.ExcludedNonAShareCount {
+		return errors.New("dragon-tiger totals or source/accepted/excluded row counts are invalid")
+	}
+	if snapshot.HasData {
+		if snapshot.Total <= 0 || snapshot.Pages <= 0 || snapshot.Returned == 0 ||
+			snapshot.SourceReturned == 0 || snapshot.Total < snapshot.SourceReturned {
+			return errors.New("dragon-tiger totals/items are inconsistent")
+		}
+		if snapshot.ProviderReportDate != tradeDate {
+			return errors.New("dragon-tiger provider report date does not match requested trade date")
+		}
+		if snapshot.HasMore != (page < snapshot.Pages) {
+			return errors.New("dragon-tiger has_more does not match provider page count")
+		}
+		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+			return fmt.Errorf("dragon-tiger quality status %q is unsupported", snapshot.QualityStatus)
+		}
+		seen := make(map[string]struct{}, len(snapshot.Items))
+		for _, item := range snapshot.Items {
+			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.TradeDate != tradeDate {
+				return errors.New("dragon-tiger item is missing identity fields or has mismatched trade date")
+			}
+			if item.Source != snapshot.Source || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
+				return errors.New("dragon-tiger item source, fetched_at, or quality is invalid")
+			}
+			key := item.Symbol + "|" + item.Reason + "|" + item.Explanation
+			if _, ok := seen[key]; ok {
+				return fmt.Errorf("dragon-tiger contains duplicate row %q", key)
+			}
+			seen[key] = struct{}{}
+			for _, value := range []*float64{item.BuyAmountCNY, item.SellAmountCNY, item.DealAmountCNY, item.NetBuyAmountCNY, item.ClosePrice, item.ChangePercent, item.DealAmountRatio} {
+				if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+					return errors.New("dragon-tiger item contains a non-finite numeric value")
+				}
+			}
+			for _, value := range []*float64{item.BuyAmountCNY, item.SellAmountCNY, item.DealAmountCNY} {
+				if value != nil && *value < 0 {
+					return errors.New("dragon-tiger buy/sell/deal amount cannot be negative")
+				}
+			}
+			if item.ClosePrice != nil && *item.ClosePrice <= 0 {
+				return errors.New("dragon-tiger close price must be positive when present")
+			}
+		}
+		return nil
+	}
+	if snapshot.Total == 0 {
+		if snapshot.Pages != 0 || snapshot.SourceReturned != 0 || snapshot.Returned != 0 ||
+			snapshot.ExcludedNonAShareCount != 0 || len(snapshot.Items) != 0 || snapshot.HasMore ||
+			snapshot.QualityStatus != model.QualityUnknown {
+			return errors.New("empty dragon-tiger report must remain unknown, not a confirmed zero-event report")
+		}
+		return nil
+	}
+	// 供应商页可能全部属于可转债等非 A 股品种。允许返回 unknown 空页，但必须明确记录全部被排除且保留分页元数据。
+	if snapshot.Pages <= 0 || snapshot.SourceReturned <= 0 || snapshot.Returned != 0 ||
+		snapshot.ExcludedNonAShareCount != snapshot.SourceReturned || len(snapshot.Items) != 0 ||
+		snapshot.QualityStatus != model.QualityUnknown || snapshot.HasMore != (page < snapshot.Pages) {
+		return errors.New("empty supported-A-share page has inconsistent source counts or must remain unknown")
+	}
+	return nil
+}
+
+// DragonTiger 获取指定交易日的龙虎榜分页。盘后报表未发布时，空结果保留为 unknown。
+func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pageSize int) (*model.DragonTigerSnapshot, bool, error) {
+	date, err := normalizeDragonTigerDate(rawDate)
+	if err != nil {
+		return nil, false, err
+	}
+	if page < 1 || page > 1000 {
+		return nil, false, errors.New("dragon-tiger page must be between 1 and 1000")
+	}
+	if pageSize < 1 || pageSize > 500 {
+		return nil, false, errors.New("dragon-tiger page size must be between 1 and 500")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	const ttl = 5 * time.Minute
+	const emptyTTL = 30 * time.Second
+	key := fmt.Sprintf("md:v1:dragon-tiger:%s:%d:%d", date, page, pageSize)
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.DragonTigerSnapshot
+		if json.Unmarshal(data, &cached) == nil && validateDragonTigerSnapshot(date, page, pageSize, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+			expiry := ttl
+			if !cached.HasData {
+				expiry = emptyTTL
+			}
+			if time.Since(cached.FetchedAt) < expiry {
+				return &cached, true, nil
+			}
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("dragon-tiger cache read failed", "date", date, "page", page, "error", cacheErr)
+	}
+	if len(s.dragonTigerProviders) == 0 {
+		return nil, false, errors.New("no enabled dragon-tiger provider")
+	}
+	var failures []string
+	for _, p := range s.dragonTigerProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchDragonTiger(ctx, date, page, pageSize)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if err := validateDragonTigerSnapshot(date, page, pageSize, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if data, marshalErr := json.Marshal(snapshot); marshalErr == nil {
+			expiry := ttl
+			if !snapshot.HasData {
+				expiry = emptyTTL
+			}
+			if cacheErr := s.cache.Set(ctx, key, data, expiry); cacheErr != nil {
+				s.logger.Warn("dragon-tiger cache write failed", "date", date, "page", page, "error", cacheErr)
+			}
+		}
+		return snapshot, false, nil
+	}
+	return nil, false, fmt.Errorf("all dragon-tiger providers failed: %s", strings.Join(failures, "; "))
+}
+
 func validateSectorRankingSnapshot(category string, limit int, snapshot *model.SectorRankingSnapshot) error {
 	if snapshot == nil {
 		return errors.New("sector-ranking provider returned an empty response")
@@ -539,6 +727,16 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 			return fmt.Errorf("stock-basic %s %q is invalid", field, value)
 		}
 	}
+	for field, value := range map[string]*float64{"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY, "float_market_cap_cny": item.FloatMarketCapCNY, "roe_percent": item.ROEPercent, "net_profit_margin_percent": item.NetProfitMarginPercent, "net_profit_cny": item.NetProfitCNY, "gross_margin_percent": item.GrossMarginPercent} {
+		if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+			return fmt.Errorf("stock-basic %s is non-finite", field)
+		}
+	}
+	if item.MarketCapCNY != nil && *item.MarketCapCNY < 0 { return errors.New("stock-basic market_cap_cny must not be negative") }
+	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 { return errors.New("stock-basic float_market_cap_cny must not be negative") }
+	if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
+		return fmt.Errorf("stock-basic quality status %q is unsupported", item.QualityStatus)
+	}
 	if strings.TrimSpace(item.Source) == "" {
 		return errors.New("stock-basic source is missing")
 	}
@@ -561,12 +759,14 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		return nil, false, err
 	}
 	const ttl = 24 * time.Hour
+	const degradedTTL = 5 * time.Minute
 	key := "md:v1:stock-basic:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.StockBasic
-		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil &&
-			item.QualityStatus == model.QualityValid && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < ttl {
-			return &item, true, nil
+		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 {
+			maxAge := ttl
+			if item.QualityStatus == model.QualityDegraded { maxAge = degradedTTL }
+			if time.Since(item.FetchedAt) < maxAge { return &item, true, nil }
 		}
 	} else if cacheErr != nil {
 		s.logger.Warn("stock-basic cache read failed", "symbol", symbol, "error", cacheErr)
@@ -615,13 +815,11 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if item.QualityStatus != model.QualityValid {
-			failures = append(failures, p.Name()+": stock-basic quality status is not valid")
-			continue
-		}
+		cacheTTL := ttl
+		if item.QualityStatus == model.QualityDegraded { cacheTTL = degradedTTL }
 		payload, marshalErr := json.Marshal(item)
 		if marshalErr == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, cacheTTL); cacheErr != nil {
 				s.logger.Warn("stock-basic cache write failed", "symbol", symbol, "error", cacheErr)
 			}
 		} else {
@@ -630,6 +828,103 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		return item, false, nil
 	}
 	return nil, false, fmt.Errorf("all stock-basic providers failed: %s", strings.Join(failures, "; "))
+}
+
+func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit int) (*model.StockSearchSnapshot, error) {
+	query := strings.TrimSpace(rawQuery)
+	if query == "" {
+		return nil, errors.New("stock-search query is required")
+	}
+	if len([]rune(query)) > 64 {
+		return nil, errors.New("stock-search query must not exceed 64 characters")
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		return nil, errors.New("stock-search limit must not exceed 50")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(s.stockSearchProviders) == 0 {
+		return nil, errors.New("no enabled stock-search provider")
+	}
+	failures := make([]string, 0, len(s.stockSearchProviders))
+	for _, p := range s.stockSearchProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		snapshot, fetchErr := p.SearchStocks(ctx, query, limit)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot == nil {
+			failures = append(failures, p.Name()+": empty stock-search response")
+			continue
+		}
+		if snapshot.Source == "" {
+			snapshot.Source = p.Name()
+		}
+		if snapshot.Query == "" {
+			snapshot.Query = query
+		}
+		if snapshot.FetchedAt.IsZero() {
+			snapshot.FetchedAt = time.Now().UTC()
+		}
+		if snapshot.QualityStatus == "" {
+			snapshot.QualityStatus = model.QualityUnknown
+		}
+		if err := validateStockSearchSnapshot(query, limit, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		return snapshot, nil
+	}
+	return nil, fmt.Errorf("all stock-search providers failed: %s", strings.Join(failures, "; "))
+}
+
+func validateStockSearchSnapshot(query string, limit int, snapshot *model.StockSearchSnapshot) error {
+	if snapshot == nil {
+		return errors.New("stock-search provider returned an empty snapshot")
+	}
+	if strings.TrimSpace(snapshot.Query) != query {
+		return errors.New("stock-search query mismatch")
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("stock-search source or fetched_at is missing")
+	}
+	if snapshot.Total < 0 || snapshot.Total < len(snapshot.Items) || len(snapshot.Items) > limit {
+		return errors.New("stock-search total or item count is invalid")
+	}
+	switch snapshot.QualityStatus {
+	case model.QualityValid, model.QualityDegraded, model.QualityStale, model.QualityUnknown:
+	default:
+		return fmt.Errorf("stock-search quality status %q is unsupported", snapshot.QualityStatus)
+	}
+	seen := make(map[string]struct{}, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		if strings.TrimSpace(item.Name) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Exchange) == "" {
+			return errors.New("stock-search item has missing code, name or exchange")
+		}
+		symbol, err := normalize.NormalizeSymbol(item.Symbol)
+		if err != nil || symbol != item.Symbol {
+			return errors.New("stock-search item has an invalid normalized symbol")
+		}
+		parts := strings.Split(symbol, ".")
+		if len(parts) != 2 || item.Code != parts[0] || item.Exchange != parts[1] {
+			return errors.New("stock-search item symbol, code and exchange disagree")
+		}
+		if _, ok := seen[symbol]; ok {
+			return fmt.Errorf("stock-search provider returned duplicate symbol %q", symbol)
+		}
+		seen[symbol] = struct{}{}
+	}
+	return nil
 }
 
 func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapshot) error {
@@ -774,6 +1069,23 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 	return nil, false, fmt.Errorf("all stock-boards providers failed: %s", strings.Join(failures, "; "))
 }
 
+// SetChipDistributionProviders 注册独立的原生筹码分布 Provider。
+func (s *DataService) SetHotRankingProviders(providers []provider.HotRankingProvider) {
+	s.hotRankingProviders = append([]provider.HotRankingProvider(nil), providers...)
+}
+
+func (s *DataService) HotRankingProviders() []provider.HotRankingProvider {
+	return append([]provider.HotRankingProvider(nil), s.hotRankingProviders...)
+}
+
+func (s *DataService) SetChipDistributionProviders(providers []provider.ChipDistributionProvider) {
+	s.chipDistributionProviders = append([]provider.ChipDistributionProvider(nil), providers...)
+}
+
+func (s *DataService) ChipDistributionProviders() []provider.ChipDistributionProvider {
+	return append([]provider.ChipDistributionProvider(nil), s.chipDistributionProviders...)
+}
+
 // SetSupplementProviders 注册显式启用的非价格类补充数据源。
 // 此类 Provider 不会被加入实时行情或日 K 的兜底链。
 func (s *DataService) SetSupplementProviders(providers []provider.SupplementProvider) {
@@ -798,11 +1110,18 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 	} else if cacheErr != nil {
 		s.logger.Warn("chip cache read failed", "error", cacheErr)
 	}
-	if len(s.supplementProviders) == 0 {
+	chipProviders := make([]chipDistributionSource, 0, len(s.chipDistributionProviders)+len(s.supplementProviders))
+	for _, p := range s.chipDistributionProviders {
+		chipProviders = append(chipProviders, p)
+	}
+	for _, p := range s.supplementProviders {
+		chipProviders = append(chipProviders, p)
+	}
+	if len(chipProviders) == 0 {
 		return nil, false, errors.New("no enabled chip-distribution provider")
 	}
 	var failures []string
-	for _, p := range s.supplementProviders {
+	for _, p := range chipProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -1290,7 +1609,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				}
 				appendReasonOnce(&bars[j].QualityReasons, "daily_bar_coverage_below_threshold")
 			}
-			if len(bars) > len(bestPartial) {
+			if preferPartialBars(bars, bestPartial) {
 				bestPartial = append([]model.DailyBar(nil), bars...)
 				bestPartialWarnings = append([]string(nil), warnings...)
 			}
@@ -1497,6 +1816,22 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 // deliberately accounts for exchange holidays while treating visibly truncated
 // ranges as fallback candidates. Exhausted fallback candidates are returned only
 // as degraded data, never silently treated as complete.
+// preferPartialBars keeps the largest validated partial series and, on ties,
+ // chooses the series with the newest trade date. Equal coverage and recency
+ // preserve provider priority by retaining the existing candidate.
+func preferPartialBars(candidate, current []model.DailyBar) bool {
+	if len(candidate) == 0 {
+		return false
+	}
+	if len(current) == 0 || len(candidate) > len(current) {
+		return true
+	}
+	if len(candidate) < len(current) {
+		return false
+	}
+	return candidate[len(candidate)-1].TradeDate > current[len(current)-1].TradeDate
+}
+
 func coverageSufficient(start, end string, requested, returned int) bool {
 	if returned <= 0 {
 		return false

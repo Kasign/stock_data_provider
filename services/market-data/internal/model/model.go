@@ -140,11 +140,43 @@ type StockBasic struct {
 	SecurityTypeLabel  string        `json:"security_type_label"`
 	ListingStatus      int           `json:"listing_status"`
 	ListingStatusLabel string        `json:"listing_status_label"`
+	DynamicPE          *float64      `json:"pe_dynamic,omitempty"`
+	PB                 *float64      `json:"pb,omitempty"`
+	Industry           string        `json:"industry,omitempty"`
+	MarketCapCNY       *float64      `json:"market_cap_cny,omitempty"`
+	FloatMarketCapCNY  *float64      `json:"float_market_cap_cny,omitempty"`
+	BoardCode          string        `json:"board_code,omitempty"`
+	ROEPercent         *float64      `json:"roe_percent,omitempty"`
+	NetProfitMarginPercent *float64  `json:"net_profit_margin_percent,omitempty"`
+	NetProfitCNY       *float64      `json:"net_profit_cny,omitempty"`
+	GrossMarginPercent *float64      `json:"gross_margin_percent,omitempty"`
 	Source             string        `json:"source"`
 	SourceVersion      string        `json:"source_version,omitempty"`
 	FetchedAt          time.Time     `json:"fetched_at"`
 	QualityStatus      QualityStatus `json:"quality_status"`
+	QualityReasons     []string      `json:"quality_reasons,omitempty"`
 	NormalizationVer   string        `json:"normalization_version"`
+}
+
+// StockSearchItem 是证券目录搜索结果。它只描述证券身份，不包含实时行情价格。
+type StockSearchItem struct {
+	Symbol   string `json:"symbol"`
+	Code     string `json:"code"`
+	Name     string `json:"name"`
+	Exchange string `json:"exchange"`
+}
+
+// StockSearchSnapshot 是基于真实 Provider 证券目录进行的名称/代码查询结果。
+// FetchedAt 表示本服务获取目录的时间，不表示实时行情时间。
+type StockSearchSnapshot struct {
+	Query          string            `json:"query"`
+	Total          int               `json:"total"`
+	Items          []StockSearchItem `json:"items"`
+	Source         string            `json:"source"`
+	SourceVersion  string            `json:"source_version,omitempty"`
+	FetchedAt      time.Time         `json:"fetched_at"`
+	QualityStatus  QualityStatus     `json:"quality_status"`
+	QualityReasons []string          `json:"quality_reasons,omitempty"`
 }
 
 // SectorRanking 表示行业/概念板块的即时排名。涨跌幅单位为百分点，成交额单位为人民币元。
@@ -221,6 +253,8 @@ type MarketBreadthSnapshot struct {
 	DecliningCount      int           `json:"declining_count"`
 	UnchangedCount      int           `json:"unchanged_count"`
 	UnclassifiedCount   int           `json:"unclassified_count"`
+	LimitUpCount        *int          `json:"limit_up_count"`
+	LimitDownCount      *int          `json:"limit_down_count"`
 	TotalAmountCNY      *float64      `json:"total_amount_cny"`
 	AmountCoverageCount int           `json:"amount_coverage_count"`
 	Source              string        `json:"source"`
@@ -235,11 +269,18 @@ type LimitPoolItem struct {
 	Symbol            string        `json:"symbol"`
 	Code              string        `json:"code"`
 	Name              string        `json:"name"`
+	LastPrice         *float64      `json:"last_price,omitempty"`
 	ChangePercent     *float64      `json:"change_percent"`
 	FirstTouchTime    string        `json:"first_touch_time,omitempty"`
 	LastTouchTime     string        `json:"last_touch_time,omitempty"`
 	ConsecutiveBoards *int          `json:"consecutive_boards,omitempty"`
 	BrokenCount       *int          `json:"broken_count,omitempty"`
+	OpenTimes         *int          `json:"open_times,omitempty"`
+	TurnoverRatioPercent *float64   `json:"turnover_ratio_percent,omitempty"`
+	Turnover          *float64      `json:"turnover,omitempty"`
+	SealMoney          *float64      `json:"seal_money,omitempty"`
+	MaxSealMoney       *float64      `json:"max_seal_money,omitempty"`
+	ProviderAmountUnit string        `json:"provider_amount_unit,omitempty"`
 	Industry          string        `json:"industry,omitempty"`
 	Source            string        `json:"source"`
 	SourceVersion     string        `json:"source_version,omitempty"`
@@ -262,6 +303,182 @@ type LimitPoolSnapshot struct {
 	QualityReasons     []string        `json:"quality_reasons,omitempty"`
 }
 
+type FundamentalMetric struct {
+	Key         string  `json:"key"`
+	Name        string  `json:"name"`
+	Value       float64 `json:"value"`
+	Unit        string  `json:"unit"`
+	SourceField string  `json:"source_field"`
+}
+
+type FundamentalSection struct {
+	Category        string              `json:"category"`
+	ReportDate      string              `json:"report_date,omitempty"`
+	PublicationDate string              `json:"publication_date,omitempty"`
+	HasData         bool                `json:"has_data"`
+	Metrics         []FundamentalMetric `json:"metrics"`
+	QualityStatus   QualityStatus       `json:"quality_status"`
+	QualityReasons  []string            `json:"quality_reasons,omitempty"`
+}
+
+type FundamentalsSnapshot struct {
+	Symbol         string               `json:"symbol"`
+	Year           int                  `json:"year"`
+	Quarter        int                  `json:"quarter"`
+	HasData        bool                 `json:"has_data"`
+	Sections       []FundamentalSection `json:"sections"`
+	Source         string               `json:"source"`
+	SourceVersion  string               `json:"source_version,omitempty"`
+	FetchedAt      time.Time            `json:"fetched_at"`
+	QualityStatus  QualityStatus        `json:"quality_status"`
+	QualityReasons []string             `json:"quality_reasons,omitempty"`
+}
+
+ // ValuationItem 为单只 A 股的最新估值快照。指标允许为 null 或负数，不将缺失值补零。
+type ValuationItem struct {
+	Symbol         string        `json:"symbol"`
+	Code           string        `json:"code"`
+	Name           string        `json:"name,omitempty"`
+	PETTM          *float64      `json:"pe_ttm"`
+	PEMRQ          *float64      `json:"pe_mrq"`
+	PEStatic       *float64      `json:"pe_static"`
+	PBMRQ          *float64      `json:"pb_mrq"`
+	PSTTM          *float64      `json:"ps_ttm"`
+	PCFTTM         *float64      `json:"pcf_ttm"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
+// ValuationSnapshot 是一次批量估值查询。ProviderTimestamp 是供应商返回的五项估值中最新有效时间，
+// 不代表每个指标都在该时刻更新。MissingSymbols 记录未从供应商响应中返回的请求代码。
+type ValuationSnapshot struct {
+	RequestedSymbols   []string        `json:"requested_symbols"`
+	Total              int             `json:"total"`
+	Items              []ValuationItem `json:"items"`
+	MissingSymbols     []string        `json:"missing_symbols,omitempty"`
+	// ProviderReportDate 是供应商给出的估值数据日期；日期不等于精确快照时间。
+	ProviderReportDate string          `json:"provider_report_date,omitempty"`
+	ProviderTimestamp  *time.Time      `json:"provider_timestamp,omitempty"`
+	Source             string          `json:"source"`
+	SourceVersion      string          `json:"source_version,omitempty"`
+	FetchedAt          time.Time       `json:"fetched_at"`
+	QualityStatus      QualityStatus   `json:"quality_status"`
+	QualityReasons     []string        `json:"quality_reasons,omitempty"`
+}
+
+ // IndexCatalogItem 是一个同花顺指数或板块的目录项。
+type IndexCatalogItem struct {
+	Symbol string `json:"symbol"`
+	Name   string `json:"name"`
+	Tag    string `json:"tag"`
+}
+
+// IndexCatalogSnapshot 是某个目录类别的完整快照。上游没有分页，因此目录请求会限制最大记录数。
+type IndexCatalogSnapshot struct {
+	Tag            string             `json:"tag"`
+	Items          []IndexCatalogItem `json:"items"`
+	Total          int                `json:"total"`
+	ProviderTime   *time.Time         `json:"provider_time,omitempty"`
+	Source         string             `json:"source"`
+	SourceVersion  string             `json:"source_version,omitempty"`
+	FetchedAt      time.Time          `json:"fetched_at"`
+	QualityStatus  QualityStatus      `json:"quality_status"`
+	QualityReasons []string           `json:"quality_reasons,omitempty"`
+}
+
+// IndexConstituent 是指数/板块当前包含的一只 A 股，不代表历史成分变更记录。
+type IndexConstituent struct {
+	Symbol        string   `json:"symbol"`
+	Code          string   `json:"code"`
+	Name          string   `json:"name"`
+	WeightPercent *float64 `json:"weight_percent,omitempty"`
+}
+
+// IndexConstituentSnapshot 为指定指数或板块的当前成分股快照。
+type IndexConstituentSnapshot struct {
+	IndexSymbol        string             `json:"index_symbol"`
+	ProviderReportDate string             `json:"provider_report_date,omitempty"`
+	Items              []IndexConstituent `json:"items"`
+	Total          int                `json:"total"`
+	ProviderTime   *time.Time         `json:"provider_time,omitempty"`
+	Source         string             `json:"source"`
+	SourceVersion  string             `json:"source_version,omitempty"`
+	FetchedAt      time.Time          `json:"fetched_at"`
+	QualityStatus  QualityStatus      `json:"quality_status"`
+	QualityReasons []string           `json:"quality_reasons,omitempty"`
+}
+
+// IndexDailyBar 是指数/板块原始日线，不带复权字段，也不会参与个股 DailyBar 的调整逻辑。
+type IndexDailyBar struct {
+	IndexSymbol    string        `json:"index_symbol"`
+	TradeDate      string        `json:"trade_date"`
+	Open           float64       `json:"open"`
+	High           float64       `json:"high"`
+	Low            float64       `json:"low"`
+	Close          float64       `json:"close"`
+	ChangePercent  *float64      `json:"change_percent,omitempty"`
+	Volume         *int64        `json:"volume,omitempty"`
+	Amount         *float64      `json:"amount,omitempty"`
+	VolumeUnit     string        `json:"volume_unit"`
+	AmountUnit     string        `json:"amount_unit"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	ProviderTime   *time.Time    `json:"provider_time,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
+// IndexDailyBarsSnapshot 是单个指数/板块在指定日期范围的无复权日线快照。
+type IndexDailyBarsSnapshot struct {
+	IndexSymbol    string          `json:"index_symbol"`
+	StartDate      string          `json:"start_date"`
+	EndDate        string          `json:"end_date"`
+	Items          []IndexDailyBar `json:"items"`
+	Total          int             `json:"total"`
+	ProviderTime   *time.Time      `json:"provider_time,omitempty"`
+	Source         string          `json:"source"`
+	SourceVersion  string          `json:"source_version,omitempty"`
+	FetchedAt      time.Time       `json:"fetched_at"`
+	QualityStatus  QualityStatus   `json:"quality_status"`
+	QualityReasons []string        `json:"quality_reasons,omitempty"`
+}
+
+ // HotRankingItem 是东方财富个股人气榜或飙升榜中的一只股票。
+type HotRankingItem struct {
+	Rank           int           `json:"rank"`
+	Symbol         string        `json:"symbol"`
+	Code           string        `json:"code"`
+	Name           string        `json:"name,omitempty"`
+	LatestPrice    *float64      `json:"latest_price,omitempty"`
+	Change         *float64      `json:"change,omitempty"`
+	ChangePercent  *float64      `json:"change_percent,omitempty"`
+	RankChange     *int          `json:"rank_change,omitempty"`
+	Heat           *float64      `json:"heat,omitempty"`
+	RankTrend      string        `json:"rank_trend,omitempty"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
+// HotRankingSnapshot 表示人气榜、飙升榜或关注榜的有界排名快照。ProviderTime 为可选的数据准备时间，不等同于精确行情时点；延迟榜单保持 degraded。
+type HotRankingSnapshot struct {
+	RankingType    string           `json:"type"`
+	Total          int              `json:"total"`
+	Items          []HotRankingItem `json:"items"`
+	ProviderTime   *time.Time       `json:"provider_time,omitempty"`
+	Source         string           `json:"source"`
+	SourceVersion  string           `json:"source_version,omitempty"`
+	FetchedAt      time.Time        `json:"fetched_at"`
+	QualityStatus  QualityStatus    `json:"quality_status"`
+	QualityReasons []string         `json:"quality_reasons,omitempty"`
+}
+
 type SourceStatus struct {
 	Name                   string `json:"name"`
 	Enabled                bool   `json:"enabled"`
@@ -273,8 +490,14 @@ type SourceStatus struct {
 	MarketBreadthCapable   bool   `json:"market_breadth_capable,omitempty"`
 	LimitPoolCapable       bool   `json:"limit_pool_capable,omitempty"`
 	StockBoardsCapable     bool   `json:"stock_boards_capable,omitempty"`
+	DragonTigerCapable     bool   `json:"dragon_tiger_capable,omitempty"`
+	AnnouncementsCapable   bool   `json:"announcements_capable,omitempty"`
 	TradingCalendarCapable bool   `json:"trading_calendar_capable,omitempty"`
+	FundamentalsCapable    bool   `json:"fundamentals_capable,omitempty"`
+	ValuationCapable       bool   `json:"valuation_capable,omitempty"`
+	IndexCatalogCapable    bool   `json:"index_catalog_capable,omitempty"`
 	ChipCapable            bool   `json:"chip_capable,omitempty"`
+	HotRankingCapable      bool   `json:"hot_ranking_capable,omitempty"`
 	CapitalFlowCapable     bool   `json:"capital_flow_capable,omitempty"`
 }
 
@@ -283,6 +506,10 @@ type ChipDistribution struct {
 	Symbol          string        `json:"symbol"`
 	Date            string        `json:"date,omitempty"`
 	AverageCost     float64       `json:"average_cost"`
+	Cost90Low       *float64      `json:"cost_90_low,omitempty"`
+	Cost90High      *float64      `json:"cost_90_high,omitempty"`
+	Cost70Low       *float64      `json:"cost_70_low,omitempty"`
+	Cost70High      *float64      `json:"cost_70_high,omitempty"`
 	SourceVersion   string        `json:"source_version,omitempty"`
 	ProfitRatio     *float64      `json:"profit_ratio,omitempty"`
 	Concentration90 *float64      `json:"concentration_90,omitempty"`

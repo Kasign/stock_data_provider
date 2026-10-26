@@ -27,6 +27,13 @@ type ProviderSettings struct {
 	LimitPools      bool `json:"limit_pools"`
 	StockBoards     bool `json:"stock_boards"`
 	TradingCalendar bool `json:"trading_calendar"`
+	Fundamentals    bool `json:"fundamentals"`
+	Valuations      bool `json:"valuations"`
+	IndexCatalog    bool `json:"index_catalog"`
+	ChipDistribution bool `json:"chip_distribution"`
+	HotRankings       bool `json:"hot_rankings"`
+	DragonTiger     bool `json:"dragon_tiger"`
+	Announcements   bool `json:"announcements"`
 }
 
 type Config struct {
@@ -53,6 +60,8 @@ type Config struct {
 	EastmoneyMarketStocksURL  string
 	EastmoneyLimitPoolBaseURL string
 	EastmoneyStockBoardsURL   string
+	EastmoneyDragonTigerURL   string
+	EastmoneyAnnouncementsURL string
 	EastmoneyUT               string
 	TencentQuoteURL           string
 	TencentKlineURL           string
@@ -62,6 +71,16 @@ type Config struct {
 	YahooChartURL             string
 	NeteaseHistoryURL         string
 	NeteaseQuoteURL           string
+	TushareToken              string
+	TushareAPIURL             string
+	HithinkBaseURL            string
+	HithinkAPIKey             string
+	XueqiuBaseURL              string
+	XueqiuCookie               string
+	TickFlowAPIKey            string
+	PytdxHosts                []string
+	TickFlowAPIURL            string
+	TickFlowFreeAPIURL        string
 	BaostockHost              string
 	BaostockPort              int
 	BaostockUserID            string
@@ -93,15 +112,20 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"},
+		ProviderPriority: []string{"eastmoney", "baostock", "hithink", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx", "xueqiu"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: false, IndexQuotes: false, MarketBreadth: false, LimitPools: false, StockBoards: false},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, HotRankings: true},
+			"hithink":   {Enabled: false, Quote: false, DailyBars: false, IndexQuotes: false, TradingCalendar: false, LimitPools: false, DragonTiger: false, Fundamentals: false, Valuations: false, IndexCatalog: false, HotRankings: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
-			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: false},
+			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: true, Fundamentals: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
-			"yahoo":     {Enabled: false, Quote: false, DailyBars: true},
-			"netease":   {Enabled: false, Quote: false, DailyBars: true},
+			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
+			"netease":   {Enabled: true, Quote: true, DailyBars: true},
+			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false},
+			"tickflow":  {Enabled: true, Quote: false, DailyBars: true},
+			"pytdx":     {Enabled: true, Quote: true, DailyBars: true},
+			"xueqiu":    {Enabled: false, HotRankings: false},
 		},
 	}
 	file := defaults
@@ -118,7 +142,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" {
+			if !isSupportedProviderName(name) {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -146,18 +170,23 @@ func Load() (Config, error) {
 		settings[name] = value
 	}
 	settings["eastmoney"] = overrideProvider("EASTMONEY", settings["eastmoney"])
+	settings["hithink"] = overrideProvider("HITHINK", settings["hithink"])
 	settings["tencent"] = overrideProvider("TENCENT", settings["tencent"])
 	settings["sina"] = overrideProvider("SINA", settings["sina"])
 	settings["yahoo"] = overrideProvider("YAHOO", settings["yahoo"])
 	settings["netease"] = overrideProvider("NETEASE", settings["netease"])
 	settings["baostock"] = overrideProvider("BAOSTOCK", settings["baostock"])
+	settings["tushare"] = overrideProvider("TUSHARE", settings["tushare"])
+	settings["tickflow"] = overrideProvider("TICKFLOW", settings["tickflow"])
+	settings["pytdx"] = overrideProvider("PYTDX", settings["pytdx"])
+	settings["xueqiu"] = overrideProvider("XUEQIU", settings["xueqiu"])
 	if settings["baostock"].Quote {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
 	}
 	cfg := Config{
 		HTTPAddr:                  get("MARKET_DATA_HTTP_ADDR", ":8091"),
 		APIKey:                    strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY")),
-		RequestTimeout:            duration("MARKET_DATA_REQUEST_TIMEOUT", 3*time.Minute),
+		RequestTimeout:            duration("MARKET_DATA_REQUEST_TIMEOUT", 5*time.Minute),
 		ProviderTimeout:           duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
 		ProviderRetries:           integer("MARKET_DATA_PROVIDER_RETRIES", 1),
 		CircuitFailureThreshold:   integer("MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD", 3),
@@ -178,6 +207,8 @@ func Load() (Config, error) {
 		EastmoneyMarketStocksURL:  get("MARKET_DATA_EASTMONEY_MARKET_STOCKS_URL", "https://push2ex.eastmoney.com/getTopicZDFenBu"),
 		EastmoneyLimitPoolBaseURL: get("MARKET_DATA_EASTMONEY_LIMIT_POOL_BASE_URL", "https://push2ex.eastmoney.com"),
 		EastmoneyStockBoardsURL:   get("MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL", "https://push2.eastmoney.com/api/qt/slist/get"),
+		EastmoneyDragonTigerURL:   get("MARKET_DATA_EASTMONEY_DRAGON_TIGER_URL", "https://datacenter-web.eastmoney.com/api/data/v1/get"),
+		EastmoneyAnnouncementsURL: get("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_URL", "https://np-anotice-stock.eastmoney.com/api/security/ann"),
 		EastmoneyUT:               get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:           get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:           get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
@@ -187,6 +218,16 @@ func Load() (Config, error) {
 		YahooChartURL:             get("MARKET_DATA_YAHOO_CHART_URL", "https://query1.finance.yahoo.com/v8/finance/chart"),
 		NeteaseHistoryURL:         get("MARKET_DATA_NETEASE_HISTORY_URL", "https://quotes.money.163.com/service/chddata.html"),
 		NeteaseQuoteURL:           get("MARKET_DATA_NETEASE_QUOTE_URL", "https://api.money.126.net/data/feed"),
+		TushareToken:              firstNonEmpty(os.Getenv("MARKET_DATA_TUSHARE_TOKEN"), os.Getenv("TUSHARE_TOKEN")),
+		TushareAPIURL:             get("MARKET_DATA_TUSHARE_API_URL", get("TUSHARE_HTTP_URL", "https://api.tushare.pro")),
+		HithinkBaseURL:            get("MARKET_DATA_HITHINK_BASE_URL", "https://fuyao.aicubes.cn"),
+		XueqiuBaseURL:             get("MARKET_DATA_XUEQIU_BASE_URL", "https://stock.xueqiu.com"),
+		XueqiuCookie:              strings.TrimSpace(os.Getenv("MARKET_DATA_XUEQIU_COOKIE")),
+		HithinkAPIKey:             firstNonEmpty(os.Getenv("MARKET_DATA_HITHINK_API_KEY"), os.Getenv("HITHINK_FINANCE_API_KEY")),
+		TickFlowAPIKey:            firstNonEmpty(os.Getenv("MARKET_DATA_TICKFLOW_API_KEY"), os.Getenv("TICKFLOW_API_KEY")),
+		TickFlowAPIURL:            get("MARKET_DATA_TICKFLOW_API_URL", get("TICKFLOW_BASE_URL", "https://api.tickflow.org")),
+		TickFlowFreeAPIURL:        get("MARKET_DATA_TICKFLOW_FREE_API_URL", get("TICKFLOW_FREE_BASE_URL", "https://free-api.tickflow.org")),
+		PytdxHosts:                splitList(get("MARKET_DATA_PYTDX_HOSTS", "")),
 		BaostockHost:              get("MARKET_DATA_BAOSTOCK_HOST", "public-api.baostock.com"),
 		BaostockPort:              integer("MARKET_DATA_BAOSTOCK_PORT", 10030),
 		BaostockUserID:            get("MARKET_DATA_BAOSTOCK_USER_ID", "anonymous"),
@@ -222,6 +263,8 @@ func Load() (Config, error) {
 		"MARKET_DATA_EASTMONEY_MARKET_STOCKS_URL":   cfg.EastmoneyMarketStocksURL,
 		"MARKET_DATA_EASTMONEY_LIMIT_POOL_BASE_URL": cfg.EastmoneyLimitPoolBaseURL,
 		"MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL":    cfg.EastmoneyStockBoardsURL,
+		"MARKET_DATA_EASTMONEY_DRAGON_TIGER_URL":    cfg.EastmoneyDragonTigerURL,
+		"MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_URL":   cfg.EastmoneyAnnouncementsURL,
 		"MARKET_DATA_TENCENT_QUOTE_URL":             cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":             cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL":        cfg.TencentNoneKlineURL,
@@ -229,11 +272,29 @@ func Load() (Config, error) {
 		"MARKET_DATA_SINA_KLINE_URL":                cfg.SinaKlineURL,
 		"MARKET_DATA_YAHOO_CHART_URL":               cfg.YahooChartURL,
 		"MARKET_DATA_NETEASE_HISTORY_URL":           cfg.NeteaseHistoryURL,
+		"MARKET_DATA_NETEASE_QUOTE_URL":             cfg.NeteaseQuoteURL,
+		"MARKET_DATA_TUSHARE_API_URL":                cfg.TushareAPIURL,
+		"MARKET_DATA_HITHINK_BASE_URL":               cfg.HithinkBaseURL,
+		"MARKET_DATA_XUEQIU_BASE_URL":                cfg.XueqiuBaseURL,
+		"MARKET_DATA_TICKFLOW_API_URL":               cfg.TickFlowAPIURL,
+		"MARKET_DATA_TICKFLOW_FREE_API_URL":          cfg.TickFlowFreeAPIURL,
 		"MARKET_DATA_MX_API_URL":                    cfg.MXAPIURL,
 	} {
 		if err := validateEndpointURL(name, endpoint); err != nil {
 			return cfg, err
 		}
+	}
+	if cfg.ProviderSettings["hithink"].Enabled && strings.TrimSpace(cfg.HithinkAPIKey) == "" {
+		return cfg, errors.New("MARKET_DATA_HITHINK_ENABLED=true requires MARKET_DATA_HITHINK_API_KEY or HITHINK_FINANCE_API_KEY")
+	}
+	if cfg.ProviderSettings["tushare"].Enabled && strings.TrimSpace(cfg.TushareToken) == "" {
+		return cfg, errors.New("MARKET_DATA_TUSHARE_ENABLED=true requires MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN")
+	}
+	if cfg.ProviderSettings["tickflow"].Quote && strings.TrimSpace(cfg.TickFlowAPIKey) == "" {
+		return cfg, errors.New("MARKET_DATA_TICKFLOW_QUOTE_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY")
+	}
+	if cfg.ProviderSettings["tushare"].Quote {
+		return cfg, errors.New("Tushare currently supports daily bars only; disable MARKET_DATA_TUSHARE_QUOTE_ENABLED")
 	}
 	if cfg.MXEnabled && !validMiaoXiangKey(cfg.MXAPIKey) {
 		return cfg, errors.New("MARKET_DATA_MX_ENABLED=true requires a non-placeholder MARKET_DATA_MX_API_KEY or MX_APIKEY")
@@ -274,7 +335,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" {
+		if !isSupportedProviderName(name) {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {
@@ -352,8 +413,24 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.MarketBreadth = boolEnv("MARKET_DATA_"+prefix+"_MARKET_BREADTH_ENABLED", p.MarketBreadth)
 	p.LimitPools = boolEnv("MARKET_DATA_"+prefix+"_LIMIT_POOLS_ENABLED", p.LimitPools)
 	p.StockBoards = boolEnv("MARKET_DATA_"+prefix+"_STOCK_BOARDS_ENABLED", p.StockBoards)
+	p.DragonTiger = boolEnv("MARKET_DATA_"+prefix+"_DRAGON_TIGER_ENABLED", p.DragonTiger)
+	p.Announcements = boolEnv("MARKET_DATA_"+prefix+"_ANNOUNCEMENTS_ENABLED", p.Announcements)
 	p.TradingCalendar = boolEnv("MARKET_DATA_"+prefix+"_TRADING_CALENDAR_ENABLED", p.TradingCalendar)
+	p.Fundamentals = boolEnv("MARKET_DATA_"+prefix+"_FUNDAMENTALS_ENABLED", p.Fundamentals)
+	p.Valuations = boolEnv("MARKET_DATA_"+prefix+"_VALUATIONS_ENABLED", p.Valuations)
+	p.IndexCatalog = boolEnv("MARKET_DATA_"+prefix+"_INDEX_CATALOG_ENABLED", p.IndexCatalog)
+	p.ChipDistribution = boolEnv("MARKET_DATA_"+prefix+"_CHIP_DISTRIBUTION_ENABLED", p.ChipDistribution)
+	p.HotRankings = boolEnv("MARKET_DATA_"+prefix+"_HOT_RANKINGS_ENABLED", p.HotRankings)
 	return p
+}
+
+func isSupportedProviderName(name string) bool {
+	switch name {
+	case "eastmoney", "baostock", "tencent", "sina", "yahoo", "netease", "tushare", "tickflow", "pytdx", "hithink", "xueqiu":
+		return true
+	default:
+		return false
+	}
 }
 
 func splitList(s string) []string {
@@ -520,16 +597,48 @@ func validateEnvironment() error {
 			}
 		}
 	}
+	// 能力开关统一校验，避免新增 Provider 能力时遗漏环境变量校验，
+	// 造成非法布尔值被 boolEnv 静默忽略并回退到默认值。
+	providerNames := []string{"EASTMONEY", "BAOSTOCK", "TENCENT", "SINA", "YAHOO", "NETEASE", "TUSHARE", "TICKFLOW", "PYTDX", "HITHINK", "XUEQIU"}
+	providerBooleanSuffixes := []string{
+		"ENABLED", "QUOTE_ENABLED", "DAILY_BARS_ENABLED", "STOCK_BASIC_ENABLED",
+		"SECTOR_RANKINGS_ENABLED", "INDEX_QUOTES_ENABLED", "MARKET_BREADTH_ENABLED",
+		"LIMIT_POOLS_ENABLED", "STOCK_BOARDS_ENABLED", "DRAGON_TIGER_ENABLED",
+		"ANNOUNCEMENTS_ENABLED", "TRADING_CALENDAR_ENABLED", "FUNDAMENTALS_ENABLED",
+		"VALUATIONS_ENABLED", "INDEX_CATALOG_ENABLED", "CHIP_DISTRIBUTION_ENABLED",
+		"HOT_RANKINGS_ENABLED",
+	}
+	for _, providerName := range providerNames {
+		for _, suffix := range providerBooleanSuffixes {
+			key := "MARKET_DATA_" + providerName + "_" + suffix
+			if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+				if _, err := strconv.ParseBool(value); err != nil {
+					return fmt.Errorf("%s must be a boolean, got %q", key, value)
+				}
+			}
+		}
+	}
+
 	for _, key := range []string{
 		"MARKET_DATA_DB_AUTO_MIGRATE", "MARKET_DATA_EASTMONEY_ENABLED",
 		"MARKET_DATA_BAOSTOCK_ENABLED", "MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED",
-		"MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "MARKET_DATA_EASTMONEY_MARKET_BREADTH_ENABLED",
-		"MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED", "MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED",
+		"MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "MARKET_DATA_EASTMONEY_MARKET_BREADTH_ENABLED", "MARKET_DATA_EASTMONEY_CHIP_DISTRIBUTION_ENABLED", "MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED",
+		"MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED", "MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED", "MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED", "MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
 		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",
+		"MARKET_DATA_NETEASE_ENABLED", "MARKET_DATA_NETEASE_QUOTE_ENABLED", "MARKET_DATA_NETEASE_DAILY_BARS_ENABLED",
+		"MARKET_DATA_TUSHARE_ENABLED", "MARKET_DATA_TUSHARE_QUOTE_ENABLED", "MARKET_DATA_TUSHARE_DAILY_BARS_ENABLED",
+		"MARKET_DATA_TUSHARE_STOCK_BASIC_ENABLED", "MARKET_DATA_TUSHARE_TRADING_CALENDAR_ENABLED",
+		"MARKET_DATA_TUSHARE_FUNDAMENTALS_ENABLED", "MARKET_DATA_TUSHARE_VALUATIONS_ENABLED",
+		"MARKET_DATA_TUSHARE_LIMIT_POOLS_ENABLED", "MARKET_DATA_TUSHARE_DRAGON_TIGER_ENABLED",
+		"MARKET_DATA_TUSHARE_ANNOUNCEMENTS_ENABLED", "MARKET_DATA_TUSHARE_INDEX_CATALOG_ENABLED",
+		"MARKET_DATA_XUEQIU_ENABLED", "MARKET_DATA_XUEQIU_HOT_RANKINGS_ENABLED",
+		"MARKET_DATA_TICKFLOW_ENABLED", "MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED",
+		"MARKET_DATA_HITHINK_ENABLED", "MARKET_DATA_HITHINK_QUOTE_ENABLED", "MARKET_DATA_HITHINK_DAILY_BARS_ENABLED", "MARKET_DATA_HITHINK_FUNDAMENTALS_ENABLED", "MARKET_DATA_HITHINK_INDEX_QUOTES_ENABLED", "MARKET_DATA_HITHINK_TRADING_CALENDAR_ENABLED", "MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED", "MARKET_DATA_HITHINK_DRAGON_TIGER_ENABLED", "MARKET_DATA_HITHINK_VALUATIONS_ENABLED", "MARKET_DATA_HITHINK_INDEX_CATALOG_ENABLED", "MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED",
+		"MARKET_DATA_PYTDX_ENABLED", "MARKET_DATA_PYTDX_QUOTE_ENABLED", "MARKET_DATA_PYTDX_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {

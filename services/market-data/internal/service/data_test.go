@@ -561,6 +561,35 @@ func containsTestWarning(warnings []string, target string) bool {
 	return false
 }
 
+func TestPreferPartialBarsChoosesNewestSeriesWhenCountsTie(t *testing.T) {
+	current := []model.DailyBar{
+		{TradeDate: "2026-10-20"},
+		{TradeDate: "2026-10-21"},
+	}
+	newer := []model.DailyBar{
+		{TradeDate: "2026-10-21"},
+		{TradeDate: "2026-10-22"},
+	}
+	longerButOlder := []model.DailyBar{
+		{TradeDate: "2026-10-18"},
+		{TradeDate: "2026-10-19"},
+		{TradeDate: "2026-10-20"},
+	}
+
+	if !preferPartialBars(newer, current) {
+		t.Fatal("equal-size candidate with a newer trade date should replace the current partial series")
+	}
+	if preferPartialBars(current, newer) {
+		t.Fatal("older equal-size candidate must not replace the newer partial series")
+	}
+	if !preferPartialBars(longerButOlder, newer) {
+		t.Fatal("a longer validated partial series should win even when its newest date is older")
+	}
+	if preferPartialBars(current, current) {
+		t.Fatal("equal-size series with equal newest date should preserve the current provider-priority candidate")
+	}
+}
+
 func TestCoverageSufficientRejectsSparseLookback(t *testing.T) {
 	if coverageSufficient("", "2026-10-21", 120, 12) {
 		t.Fatal("sparse lookback should trigger fallback")

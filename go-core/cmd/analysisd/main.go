@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/marketdatahttp"
+	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/newssearch"
 	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/pythonbridge"
 	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/application"
 	httptransport "github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/transport/http"
@@ -66,7 +67,8 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	search := pythonbridge.NewSearchAdapter(client)
+	legacySearch := pythonbridge.NewSearchAdapter(client)
+	search := newssearch.NewFromEnv(legacySearch, logger)
 	analyzer := pythonbridge.NewAnalyzerAdapter(client)
 	persistence := pythonbridge.NewPersistenceAdapter(client)
 	notifier := pythonbridge.NewNotificationAdapter(client)
@@ -86,7 +88,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		},
 	}, stockFlow, marketFlow, logger)
 	httpServer := &http.Server{Addr: addr, Handler: server.Handler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 0, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 1 << 20}
-	logger.Info("Go analysis core starting", "addr", addr, "python_bridge", bridgeURL, "market_data", nativeMarketDataURL, "market_data_required", true)
+	logger.Info("Go analysis core starting", "addr", addr, "python_bridge", bridgeURL, "market_data", nativeMarketDataURL, "market_data_required", true, "native_news_providers", strings.Join(search.ProviderNames(), ","))
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.ListenAndServe() }()
 	select {

@@ -194,3 +194,18 @@ func writeAll(writer io.Writer, data []byte) error {
 	}
 	return nil
 }
+
+const (
+	messageProfitRequest     = "17"
+	messageProfitResponse    = "18"
+	messageOperationRequest  = "19"
+	messageOperationResponse = "20"
+	messageGrowthRequest     = "21"
+	messageGrowthResponse    = "22"
+	messageDupontRequest     = "23"
+	messageDupontResponse    = "24"
+	messageBalanceRequest    = "25"
+	messageBalanceResponse   = "26"
+	messageCashFlowRequest   = "27"
+	messageCashFlowResponse  = "28"
+)

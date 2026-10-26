@@ -90,8 +90,15 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	indexQuoteEnabled := map[string]bool{}
 	marketBreadthEnabled := map[string]bool{}
 	limitPoolEnabled := map[string]bool{}
+	dragonTigerEnabled := map[string]bool{}
+	announcementsEnabled := map[string]bool{}
 	stockBoardsEnabled := map[string]bool{}
 	tradingCalendarEnabled := map[string]bool{}
+	fundamentalsEnabled := map[string]bool{}
+	valuationEnabled := map[string]bool{}
+	indexCatalogEnabled := map[string]bool{}
+	chipEnabled := map[string]bool{}
+	hotRankingEnabled := map[string]bool{}
 	if svc != nil {
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
@@ -108,11 +115,32 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.LimitPoolProviders() {
 			limitPoolEnabled[p.Name()] = true
 		}
+		for _, p := range svc.DragonTigerProviders() {
+			dragonTigerEnabled[p.Name()] = true
+		}
+		for _, p := range svc.AnnouncementProviders() {
+			announcementsEnabled[p.Name()] = true
+		}
 		for _, p := range svc.StockBoardsProviders() {
 			stockBoardsEnabled[p.Name()] = true
 		}
 		for _, p := range svc.TradingCalendarProviders() {
 			tradingCalendarEnabled[p.Name()] = true
+		}
+		for _, p := range svc.FundamentalsProviders() {
+			fundamentalsEnabled[p.Name()] = true
+		}
+		for _, p := range svc.ValuationProviders() {
+			valuationEnabled[p.Name()] = true
+		}
+		for _, p := range svc.IndexCatalogProviders() {
+			indexCatalogEnabled[p.Name()] = true
+		}
+		for _, p := range svc.ChipDistributionProviders() {
+			chipEnabled[p.Name()] = true
+		}
+		for _, p := range svc.HotRankingProviders() {
+			hotRankingEnabled[p.Name()] = true
 		}
 	}
 	for _, name := range names {
@@ -122,6 +150,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
+			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], ChipCapable: chipEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -139,11 +168,20 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
 	mux.Handle("GET /api/v1/market/sectors", s.auth(http.HandlerFunc(s.sectorRankings)))
 	mux.Handle("GET /api/v1/market/indices", s.auth(http.HandlerFunc(s.indexQuotes)))
+	mux.Handle("GET /api/v1/market/valuations", s.auth(http.HandlerFunc(s.valuations)))
+	mux.Handle("GET /api/v1/market/index-catalog", s.auth(http.HandlerFunc(s.indexCatalog)))
+	mux.Handle("GET /api/v1/market/indices/{symbol}/constituents", s.auth(http.HandlerFunc(s.indexConstituents)))
+	mux.Handle("GET /api/v1/market/indices/{symbol}/daily", s.auth(http.HandlerFunc(s.indexDailyBars)))
 	mux.Handle("GET /api/v1/market/breadth", s.auth(http.HandlerFunc(s.marketBreadth)))
+	mux.Handle("GET /api/v1/market/hot-stocks", s.auth(http.HandlerFunc(s.hotStocks)))
 	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
+	mux.Handle("GET /api/v1/market/dragon-tiger", s.auth(http.HandlerFunc(s.dragonTiger)))
 	mux.Handle("GET /api/v1/market/trading-calendar", s.auth(http.HandlerFunc(s.tradingCalendar)))
+	mux.Handle("GET /api/v1/stocks/search", s.auth(http.HandlerFunc(s.searchStocks)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/boards", s.auth(http.HandlerFunc(s.stockBoards)))
+	mux.Handle("GET /api/v1/stocks/{symbol}/announcements", s.auth(http.HandlerFunc(s.stockAnnouncements)))
+	mux.Handle("GET /api/v1/stocks/{symbol}/fundamentals", s.auth(http.HandlerFunc(s.fundamentals)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/chip-distribution", s.auth(http.HandlerFunc(s.chipDistribution)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/capital-flow", s.auth(http.HandlerFunc(s.capitalFlow)))
 	return securityHeaders(s.requestID(s.accessLog(s.timeoutContext(s.requestTimeout, mux))))
@@ -364,6 +402,73 @@ func (s *Server) limitPool(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, snapshot)
 }
 
+func (s *Server) dragonTiger(w http.ResponseWriter, r *http.Request) {
+	date := strings.TrimSpace(r.URL.Query().Get("date"))
+	if date != "" {
+		if parsed, err := time.Parse("2006-01-02", date); err != nil || parsed.Format("2006-01-02") != date {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "date must use YYYY-MM-DD", requestID(r))
+			return
+		}
+	}
+	page := 1
+	if raw := r.URL.Query().Get("page"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 1000 {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page must be between 1 and 1000", requestID(r))
+			return
+		}
+		page = n
+	}
+	pageSize := 100
+	if raw := r.URL.Query().Get("page_size"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 500 {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page_size must be between 1 and 500", requestID(r))
+			return
+		}
+		pageSize = n
+	}
+	item, hit, err := s.svc.DragonTiger(r.Context(), date, page, pageSize)
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	setCacheHeader(w, hit)
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) searchStocks(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "q is required", requestID(r))
+		return
+	}
+	if len([]rune(query)) > 64 {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "q must not exceed 64 characters", requestID(r))
+		return
+	}
+	limit := 10
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil || parsed < 1 || parsed > 50 {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "limit must be between 1 and 50", requestID(r))
+			return
+		}
+		limit = parsed
+	}
+	snapshot, err := s.svc.SearchStocks(r.Context(), query, limit)
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	if snapshot.QualityStatus == model.QualityStale {
+		w.Header().Set("X-Market-Data-Cache", "STALE")
+	} else {
+		w.Header().Set("X-Market-Data-Cache", "HIT")
+	}
+	writeJSON(w, http.StatusOK, snapshot)
+}
+
 func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
 	item, hit, err := s.svc.StockBasic(r.Context(), r.PathValue("symbol"))
 	if err != nil {
@@ -376,6 +481,36 @@ func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Market-Data-Cache", "MISS")
 	}
 	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) stockAnnouncements(w http.ResponseWriter, r *http.Request) {
+	startDate := strings.TrimSpace(r.URL.Query().Get("start_date"))
+	endDate := strings.TrimSpace(r.URL.Query().Get("end_date"))
+	page := 1
+	if raw := r.URL.Query().Get("page"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 1000 {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page must be between 1 and 1000", requestID(r))
+			return
+		}
+		page = n
+	}
+	pageSize := 20
+	if raw := r.URL.Query().Get("page_size"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 100 {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "page_size must be between 1 and 100", requestID(r))
+			return
+		}
+		pageSize = n
+	}
+	snapshot, cacheHit, err := s.svc.StockAnnouncements(r.Context(), r.PathValue("symbol"), startDate, endDate, page, pageSize)
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	setCacheHeader(w, cacheHit)
+	writeJSON(w, http.StatusOK, snapshot)
 }
 
 func (s *Server) stockBoards(w http.ResponseWriter, r *http.Request) {

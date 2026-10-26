@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -346,6 +347,32 @@ func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
 	}
 }
 
+func TestEastmoneyFetchSectorRankingsRetriesTemporary502(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			fmt.Fprint(w, `{"error":"temporary gateway error"}`)
+			return
+		}
+		fmt.Fprint(w, `{"rc":0,"data":{"total":1,"diff":[{"f2":12.5,"f3":1.25,"f4":0.15,"f6":100000,"f12":"BK0475","f14":"测试板块","f104":2,"f105":1}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+	snapshot, err := p.FetchSectorRankings(context.Background(), "industry", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("request attempts=%d want 2", attempts)
+	}
+	if len(snapshot.Items) != 1 || snapshot.Items[0].Code != "BK0475" {
+		t.Fatalf("unexpected sector response after retry: %+v", snapshot)
+	}
+}
+
 func TestEastmoneyFetchSectorRankingsRejectsInvalidCategoryAndProviderCode(t *testing.T) {
 	p := NewEastmoney(2*time.Second, "", "")
 	if _, err := p.FetchSectorRankings(context.Background(), "all", 5); err == nil {
@@ -418,5 +445,99 @@ func TestEastmoneyFetchIndexQuotesPreservesMissingAmountAsDegraded(t *testing.T)
 	}
 	if snapshot.QualityStatus != model.QualityDegraded {
 		t.Fatalf("partial snapshot must degrade: %+v", snapshot)
+	}
+}
+
+// TestEastmoneySearchStocksContinuesAfterProviderPageCap ensures a query match on a later
+// page is not hidden when Eastmoney caps each CLIST page at 100 rows.
+func TestEastmoneySearchStocksContinuesAfterProviderPageCap(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		page, err := strconv.Atoi(r.URL.Query().Get("pn"))
+		if err != nil {
+			t.Errorf("invalid page number: %v", err)
+		}
+		if got := r.URL.Query().Get("pz"); got != "100" {
+			t.Errorf("page size=%q want 100", got)
+		}
+		if r.URL.Query().Get("fields") != "f12,f13,f14" {
+			t.Errorf("unexpected search fields: %s", r.URL.RawQuery)
+		}
+		rows := make([]map[string]any, 0)
+		start, end := (page-1)*eastmoneyStockSearchPageSize, page*eastmoneyStockSearchPageSize
+		if end > 205 {
+			end = 205
+		}
+		for index := start; index < end; index++ {
+			code := fmt.Sprintf("%06d", 300000+index)
+			name := fmt.Sprintf("测试股票%d", index)
+			market := 0
+			if index%2 == 0 {
+				market = 1
+			}
+			if index == 100 {
+				code, name, market = "600519", "贵州茅台", 1
+			}
+			rows = append(rows, map[string]any{"f12": code, "f13": market, "f14": name})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"rc":   0,
+			"data": map[string]any{"total": 205, "diff": rows},
+		}); err != nil {
+			t.Errorf("encode page: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	p := &Eastmoney{client: server.Client(), stockListURL: server.URL, ut: "test-token"}
+	got, err := p.SearchStocks(context.Background(), "贵州茅台", 10)
+	if err != nil {
+		t.Fatalf("SearchStocks returned error: %v", err)
+	}
+	if requests != 3 {
+		t.Fatalf("directory should fetch all 205 rows in three pages, got %d requests", requests)
+	}
+	if got.Total != 1 || len(got.Items) != 1 || got.Items[0].Symbol != "600519.SH" || got.Items[0].Name != "贵州茅台" {
+		t.Fatalf("later-page Chinese name match was lost: %+v", got)
+	}
+	if got.QualityStatus != model.QualityValid || len(got.QualityReasons) != 0 {
+		t.Fatalf("complete multi-page directory should have valid quality: %+v", got)
+	}
+}
+
+func TestEastmoneySearchStocksUsesAndCachesRealDirectoryShape(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Query().Get("fs") == "" || r.URL.Query().Get("fields") != "f12,f13,f14" {
+			t.Errorf("unexpected list request parameters: %s", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"rc":0,"data":{"total":3,"diff":[{"f12":"600519","f13":1,"f14":"贵州茅台"},{"f12":"300750","f13":0,"f14":"宁德时代"},{"f12":"000858","f13":0,"f14":"五粮液"}]}}`)
+	}))
+	defer server.Close()
+	p := &Eastmoney{client: server.Client(), stockListURL: server.URL, ut: "test-token"}
+
+	got, err := p.SearchStocks(context.Background(), "贵州茅台", 10)
+	if err != nil {
+		t.Fatalf("SearchStocks returned error: %v", err)
+	}
+	if got.Total != 1 || len(got.Items) != 1 {
+		t.Fatalf("unexpected exact-name search result: %+v", got)
+	}
+	if got.Items[0].Symbol != "600519.SH" || got.Items[0].Code != "600519" || got.Items[0].Name != "贵州茅台" || got.Items[0].Exchange != "SH" {
+		t.Fatalf("unexpected canonical result: %+v", got.Items[0])
+	}
+	byCode, err := p.SearchStocks(context.Background(), "300750", 10)
+	if err != nil {
+		t.Fatalf("SearchStocks by code returned error: %v", err)
+	}
+	if byCode.Total != 1 || byCode.Items[0].Symbol != "300750.SZ" || byCode.Items[0].Name != "宁德时代" {
+		t.Fatalf("unexpected code search result: %+v", byCode)
+	}
+	if requests != 1 {
+		t.Fatalf("directory should be fetched once and reused from cache, got %d requests", requests)
 	}
 }

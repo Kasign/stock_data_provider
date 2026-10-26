@@ -19,6 +19,13 @@ import (
 type httpFakeProvider struct{}
 
 func (httpFakeProvider) Name() string { return "eastmoney" }
+func (httpFakeProvider) SearchStocks(_ context.Context, query string, limit int) (*model.StockSearchSnapshot, error) {
+	items := []model.StockSearchItem{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", Exchange: "SH"}}
+	if limit < len(items) {
+		items = items[:limit]
+	}
+	return &model.StockSearchSnapshot{Query: query, Total: len(items), Items: items, Source: "eastmoney", SourceVersion: "test", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid}, nil
+}
 func (httpFakeProvider) FetchIndexQuotes(_ context.Context) (*model.IndexQuoteSnapshot, error) {
 	now := time.Now().UTC()
 	price, change, pct, amount := 3200.5, 24.5, 0.8, 123456789.0
@@ -52,6 +59,42 @@ func (httpFakeProvider) FetchStockBoards(_ context.Context, symbol string) (*mod
 		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}, nil
 }
+func (httpFakeProvider) FetchDragonTiger(_ context.Context, tradeDate string, page, pageSize int) (*model.DragonTigerSnapshot, error) {
+	now := time.Now().UTC()
+	netBuy, buy, sell, closePrice, change := 123456.0, 234567.0, 111111.0, 10.25, 2.5
+	item := model.DragonTigerItem{
+		Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", TradeDate: tradeDate,
+		ChangePercent: &change, ClosePrice: &closePrice, NetBuyAmountCNY: &netBuy,
+		BuyAmountCNY: &buy, SellAmountCNY: &sell, Reason: "日涨幅偏离值达到7%",
+		Source: "eastmoney", SourceVersion: "test", FetchedAt: now,
+		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+	return &model.DragonTigerSnapshot{
+		TradeDate: tradeDate, ProviderReportDate: tradeDate, Page: page, PageSize: pageSize,
+		Total: 1, Pages: 1, Returned: 1, SourceReturned: 1, ExcludedNonAShareCount: 0, HasData: true, HasMore: false,
+		Items: []model.DragonTigerItem{item}, Source: "eastmoney", SourceVersion: "test",
+		FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}, nil
+}
+
+func (httpFakeProvider) FetchStockAnnouncements(_ context.Context, rawSymbol, startDate, endDate string, page, pageSize int) (*model.StockAnnouncementSnapshot, error) {
+	now := time.Now().UTC()
+	published := time.Date(2026, 10, 23, 10, 30, 0, 0, time.UTC)
+	item := model.StockAnnouncement{
+		ArticleID: "AN202610231234567890", Symbol: rawSymbol, StockName: "招商银行",
+		Title: "招商银行第三季度报告", Category: "定期报告", AnnouncementDate: "2026-10-23",
+		PublishedAt: &published, DisplayTime: "2026-10-23 18:30:00",
+		SourceURL: "https://data.eastmoney.com/notices/detail/600036/AN202610231234567890.html",
+		Source:    "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	return &model.StockAnnouncementSnapshot{
+		Symbol: rawSymbol, StartDate: startDate, EndDate: endDate, Page: page, PageSize: pageSize,
+		Total: 1, Pages: 1, Returned: 1, HasData: true, HasMore: false,
+		Items: []model.StockAnnouncement{item}, Source: "eastmoney", SourceVersion: "test",
+		FetchedAt: now, QualityStatus: model.QualityValid,
+	}, nil
+}
+
 func (httpFakeProvider) FetchQuote(context.Context, string) (*model.Quote, error) {
 	p := 10.0
 	open := 9.8
@@ -270,6 +313,90 @@ func TestStockBoardsRouteAndCapabilityAdvertisement(t *testing.T) {
 	}
 }
 
+func TestDragonTigerEndpointUsesDedicatedCapabilityAndAdvertisesIt(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetDragonTigerProviders([]provider.DragonTigerProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/dragon-tiger?date=2026-10-22&page=1&page_size=50", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{`"trade_date":"2026-10-22"`, `"net_buy_amount_cny":123456`, `"quality_status":"degraded"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("response missing %s: %s", want, w.Body.String())
+		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"dragon_tiger_capable":true`) {
+		t.Fatalf("data sources missing capability: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestDragonTigerRejectsInvalidPagination(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetDragonTigerProviders([]provider.DragonTigerProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/dragon-tiger?page=0", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+		t.Fatalf("invalid page should be rejected: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestStockAnnouncementsEndpointAndCapabilityAdvertisement(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetAnnouncementProviders([]provider.AnnouncementProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600036.SH/announcements?start_date=2026-10-20&end_date=2026-10-26", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{`"article_id":"AN202610231234567890"`, `"announcement_date":"2026-10-23"`, `"source_url":"https://data.eastmoney.com/notices/detail/600036/AN202610231234567890.html"`, `"quality_status":"valid"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("announcement response missing %s: %s", want, w.Body.String())
+		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"announcements_capable":true`) {
+		t.Fatalf("data sources should advertise announcements: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestStockAnnouncementsRejectsInvalidPagination(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetAnnouncementProviders([]provider.AnnouncementProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/600036/announcements?page_size=101", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+		t.Fatalf("invalid announcement page_size should be rejected: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
 	p := quoteOnlyCapabilityFake{}
 	h := NewWithCapabilityInterfaces(
@@ -356,5 +483,52 @@ func TestMarketIndicesEndpointUsesDedicatedIndexCapability(t *testing.T) {
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"index_quote_capable":true`) {
 		t.Fatalf("data sources missing index capability: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p},
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockSearchProviders([]provider.StockSearchProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
+	).Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("missing API key status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{`"query":"贵州茅台"`, `"symbol":"600519.SH"`, `"code":"600519"`, `"name":"贵州茅台"`, `"exchange":"SH"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("stock-search response missing %s: %s", want, w.Body.String())
+		}
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+		t.Fatalf("empty query status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=51", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid limit status=%d body=%s", w.Code, w.Body.String())
 	}
 }
