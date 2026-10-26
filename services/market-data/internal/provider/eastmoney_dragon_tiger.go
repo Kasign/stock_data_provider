@@ -125,8 +125,13 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		symbol, normalizedCode, symbolErr := eastmoneyDragonTigerSymbol(raw, code)
 		date := normalizeDragonTigerDate(parseEastmoneyBoardString(raw, "TRADE_DATE"))
 		name := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_NAME_ABBR"))
-		if symbolErr != nil || code == "" || normalizedCode == "" || date != tradeDate || name == "" {
-			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d failed symbol/name/trade-date contract", index)
+		securityCode := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECUCODE"))
+		securityType := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_TYPE_CODE"))
+		if symbolErr != nil {
+			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d has unsupported security identity: code=%q secucode=%q security_type=%q: %w", index, code, securityCode, securityType, symbolErr)
+		}
+		if code == "" || normalizedCode == "" || date != tradeDate || name == "" {
+			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d violates identity/date contract: code=%q normalized_code=%q name=%q trade_date=%q requested_date=%q security_type=%q", index, code, normalizedCode, name, date, tradeDate, securityType)
 		}
 		itemReasons := []string{"provider_snapshot_timestamp_not_exposed"}
 		netBuy := parseEastmoneyBoardNumber(raw, "BILLBOARD_NET_AMT")
