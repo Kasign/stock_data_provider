@@ -180,6 +180,14 @@ test("changing market API credentials invalidates old stock-search suggestions",
   assert.match(app, /function cancelStockSearchRequest\(\)[\s\S]*?state\.stockSearchGeneration \+= 1;/);
 });
 
+test("recent-task suppression and migration are scoped to the analysis API base", () => {
+  assert.match(app, /suppressedHistoryTaskBase: ""/);
+  assert.match(app, /state\.suppressedHistoryTaskId === state\.taskId && state\.suppressedHistoryTaskBase === taskAnalysisBase/);
+  assert.match(app, /historyItem = safeReadRecentTasks\(\)\.find\(\(item\) =>\s*item\.task_id === record\.task_id &&\s*String\(item\.analysis_base \|\| taskAnalysisBase\) === taskAnalysisBase/);
+  assert.match(app, /analysis_base: historyItem\.analysis_base \|\| taskAnalysisBase/);
+  assert.match(app, /state\.suppressedHistoryTaskBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase/);
+});
+
 test("task polling and saved task references are scoped to the analysis API base", () => {
   assert.match(app, /taskAnalysisBase: ""/);
   assert.match(app, /analysisConnectionGeneration: 0/);

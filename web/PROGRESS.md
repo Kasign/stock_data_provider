@@ -529,3 +529,11 @@
 - Task/Run 最近记录使用 analysis_base 区分来源；切换分析 API 地址时旧任务被隔离，而不是转发至新地址。见技术说明第 18 节。
 - 部署命名统一为 stock-analysis-web；依赖的 Docker 服务名通过根目录 .env 中的 MARKET_DATA_SERVICE_NAME、ANALYSIS_SERVICE_NAME 配置。
 - 按用户要求，本批未运行测试、CI 或镜像构建。后续继续跨模块 Review，主要模块检查完成后再整理一次整体 Review 清单。
+
+
+## 2026-10-26 — 最近任务迁移与移除状态按 API 地址隔离
+
+- 二次 Review 发现，最近任务 ID 已按 analysis_base 区分，但“移除/清空历史”的抑制标记仍仅保存 task_id，且迁移检查按 ID 查找首条历史记录。
+- 抑制标记现在同时保存 analysis_base；相同 task_id 由不同分析 API 返回时，移除一个服务的引用不会误抑制另一服务的活动任务。
+- 本地历史迁移查找增加 endpoint 范围，并将 analysis_base 纳入比较；已存在且字段未变化的同一 endpoint 记录不会在每次轮询时反复触发 upsert。
+- 增加 UI 契约测试源码覆盖；按约定未运行测试、CI 或镜像构建。

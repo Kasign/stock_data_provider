@@ -140,6 +140,7 @@ const state = {
   supplementSymbol: "",
   supplementLoading: false,
   suppressedHistoryTaskId: "",
+  suppressedHistoryTaskBase: "",
   chatStockContext: null
 };
 
@@ -191,14 +192,15 @@ function setMobileNavigationOpen(open, { restoreFocus = false } = {}) {
 }
 
 function persistTaskReference() {
-  if (!state.taskId || state.suppressedHistoryTaskId === state.taskId) return;
+  const taskAnalysisBase = state.taskAnalysisBase || state.settings.analysisBase;
+  if (!state.taskId || (state.suppressedHistoryTaskId === state.taskId && state.suppressedHistoryTaskBase === taskAnalysisBase)) return;
   const record = {
     task_id: state.taskId,
     run_id: state.runId || "",
     symbols: state.taskSymbols,
     task_type: state.taskType,
     status: state.taskStatus,
-    analysis_base: state.taskAnalysisBase || state.settings.analysisBase
+    analysis_base: taskAnalysisBase
   };
   const comparable = JSON.stringify(record);
   try {
@@ -213,13 +215,17 @@ function persistTaskReference() {
     }) : "";
     if (previousComparable === comparable) {
       // Migrate the legacy single-task reference into the new local history once.
-      const historyItem = safeReadRecentTasks().find((item) => item.task_id === record.task_id);
+      const historyItem = safeReadRecentTasks().find((item) =>
+        item.task_id === record.task_id &&
+        String(item.analysis_base || taskAnalysisBase) === taskAnalysisBase
+      );
       const historyComparable = historyItem ? JSON.stringify({
         task_id: historyItem.task_id,
         run_id: historyItem.run_id || "",
         symbols: Array.isArray(historyItem.symbols) ? historyItem.symbols : [],
         task_type: historyItem.task_type || "post_market_scan",
-        status: historyItem.status || ""
+        status: historyItem.status || "",
+        analysis_base: historyItem.analysis_base || taskAnalysisBase
       }) : "";
       if (historyComparable !== comparable) {
         record.updated_at = previous?.updated_at || new Date().toISOString();
@@ -325,7 +331,10 @@ function removeRecentTaskReference(taskId, analysisBase = "") {
   } catch {
     // Local history is optional and must not interrupt task controls.
   }
-  if (state.taskId === taskId && (!analysisBase || state.taskAnalysisBase === analysisBase)) state.suppressedHistoryTaskId = taskId;
+  if (state.taskId === taskId && (!analysisBase || state.taskAnalysisBase === analysisBase)) {
+    state.suppressedHistoryTaskId = taskId;
+    state.suppressedHistoryTaskBase = state.taskAnalysisBase || state.settings.analysisBase;
+  }
   renderRecentTasks(remaining);
   setRecentTasksFeedback("已从当前浏览器移除该任务引用；服务端任务和报告不会被删除。");
 }
@@ -341,6 +350,7 @@ function clearRecentTaskHistory() {
     remaining = [];
   }
   state.suppressedHistoryTaskId = currentTaskId;
+  state.suppressedHistoryTaskBase = currentTaskId ? (state.taskAnalysisBase || state.settings.analysisBase) : "";
   renderRecentTasks(remaining);
   setRecentTasksFeedback("本地最近任务列表已清空；当前页面中的任务不会被取消，服务端记录未删除。");
 }
@@ -2505,6 +2515,7 @@ async function createTask(event) {
     }
     if (!task.task_id) throw new Error("接口返回成功，但响应中缺少 task.task_id。");
     state.suppressedHistoryTaskId = "";
+    state.suppressedHistoryTaskBase = "";
     state.taskId = task.task_id;
     state.runId = task.run_id || "";
     state.taskAnalysisBase = requestAnalysisBase;
@@ -2566,6 +2577,7 @@ function activateTaskReference(record) {
     return false;
   }
   state.suppressedHistoryTaskId = "";
+  state.suppressedHistoryTaskBase = "";
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = record.task_id;
