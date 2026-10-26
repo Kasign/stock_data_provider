@@ -84,7 +84,7 @@ test("task restoration validates local references and guards stale asynchronous 
   assert.match(app, /function activateTaskReference\(record\)[\s\S]*?if \(!record \|\| typeof record\.task_id !== "string" \|\| !record\.task_id\.trim\(\)\) return false;[\s\S]*?stopTaskPolling\(\);[\s\S]*?state\.taskEvents\.clear\(\);[\s\S]*?void pollTask\(state\.pollGeneration\);/);
   assert.match(app, /if \(generation !== state\.pollGeneration \|\| taskId !== state\.taskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
   assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
-  assert.match(app, /if \(TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?stopTaskPolling\(\);[\s\S]*?if \(runId\) void loadTaskRunResult\(runId, taskId\);/);
+  assert.match(app, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?stopTaskPolling\(\);[\s\S]*?const runId = task\.run_id \|\| state\.runId;[\s\S]*?if \(runId\) void loadTaskRunResult\(runId, taskId\);/);
   assert.match(recentTaskModule, /return \{[\s\S]*?task_id: record\.task_id\.trim\(\)[\s\S]*?status: typeof record\.status === "string" \? record\.status : ""/);
 });
 
@@ -296,7 +296,7 @@ test("recent analysis history supports search, single removal and local-only cle
   assert.match(app, /function removeRecentTaskReference\(taskId, analysisBase = ""\)[\s\S]*?removeRecentTask\(taskId, localStorage, undefined, analysisBase\)[\s\S]*?服务端任务和报告不会被删除/);
   assert.match(app, /function clearRecentTaskHistory\(\)[\s\S]*?window\.confirm\([\s\S]*?clearRecentTasks\(localStorage\)[\s\S]*?服务端记录未删除/);
   assert.match(app, /state\.suppressedHistoryTaskId === state\.taskId/);
-  assert.match(app, /if \(state\.taskId === taskId\) state\.suppressedHistoryTaskId = taskId/);
+  assert.match(app, /if \(state\.taskId === taskId && \(!analysisBase \|\| state\.taskAnalysisBase === analysisBase\)\) \{[\s\S]*?state\.suppressedHistoryTaskId = taskId/);
   assert.match(recentTaskModule, /export function removeRecentTask\(/);
   assert.match(recentTaskModule, /export function clearRecentTasks\(/);
   assert.match(stylesheet, /\.recent-analysis-search input:focus/);
@@ -328,7 +328,7 @@ test("mobile navigation drawer restores readable labels and can close via overla
   }
   assert.match(html, /id="mobile-menu-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="primary-sidebar"/);
   assert.match(app, /function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\)/);
-  assert.match(app, /\$\("#mobile-nav-overlay"\)\.addEventListener\("click", \(\) => setMobileNavigationOpen\(false\)\)/);
+  assert.match(app, /\$\("#mobile-nav-overlay"\)\.addEventListener\("click", \(\) => setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)\)/);
   assert.match(app, /if \(event\.key === "Escape"\) setMobileNavigationOpen\(false\)/);
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.sidebar\.is-open \{ transform: translateX\(0\); \}/);
   assert.match(stylesheet, /\.mobile-nav-overlay:not\(\[hidden\]\)/);
