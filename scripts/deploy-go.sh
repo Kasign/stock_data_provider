@@ -30,6 +30,17 @@ for legacy_container in stock-analysis-go stock-market-data; do
   fi
 done
 
+# An older web/docker-compose.yml could leave this fixed container name occupied.
+# Fail before build/up unless the existing container belongs to the canonical root Compose file.
+if docker inspect "$WEB_CONTAINER" >/dev/null 2>&1; then
+  web_compose_files="$(docker inspect --format='{{ index .Config.Labels "com.docker.compose.project.config_files" }}' "$WEB_CONTAINER" 2>/dev/null || true)"
+  canonical_compose_file="$ROOT_DIR/$COMPOSE_FILE"
+  if [[ "$web_compose_files" != *"$canonical_compose_file"* ]]; then
+    [[ "$web_compose_files" == "<no value>" ]] && web_compose_files="缺少 Compose 文件标签"
+    fail "检测到已有容器 $WEB_CONTAINER 不属于当前根目录 $COMPOSE_FILE（Compose 文件标签：$web_compose_files），可能是旧版 WebUI 容器占用固定容器名。请先确认该容器用途，再按 README 的一次性迁移步骤移除旧应用容器；脚本不会自动删除它。移除容器不会删除外部 MariaDB/Redis 数据。"
+  fi
+fi
+
 printf '[1/4] 检查统一 Docker Compose 配置……\n'
 # --quiet prevents the expanded configuration, including credentials, from being printed.
 docker compose --env-file .env -f "$COMPOSE_FILE" config --quiet

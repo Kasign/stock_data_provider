@@ -24,7 +24,7 @@
 | Redis 配置 | 分析 API 使用 `REDIS_*`；行情服务使用 `MARKET_DATA_REDIS_*` |
 | 网络 | 三个产品容器连接现有 `1panel-network`，不额外部署 MariaDB/Redis |
 | 端口安全 | 分析 API 的宿主机映射绑定在 `127.0.0.1:8092`；对公网开放前仍需 OpenResty 鉴权和来源限制 |
-| 部署脚本 | `scripts/deploy-go.sh` 会检查 Compose、构建镜像、启动容器、等待健康检查并在失败时打印日志 |
+| 部署脚本 | `scripts/deploy-go.sh` 会预检旧 Go 容器与同名旧 WebUI 容器、检查 Compose、构建镜像、启动容器、等待健康检查并在失败时打印日志；容器来源不明确时在构建前停止，不自动删除 |
 
 ## 3. 部署前必须确认
 
@@ -87,3 +87,12 @@ docker exec stock-analysis-data sh -lc 'wget -qO- --header="X-API-Key: ${MARKET_
 ## 7. 验收边界
 
 CI #153 覆盖了 Go 测试、Compose 解析与 Docker 构建；它无法验证你的生产数据库是否存在、实际凭据是否正确、账号授权、Redis 认证、容器网络 DNS 或行情供应商网络。完成部署脚本和真实行情 smoke test 后，才算完成目标服务器的首次部署验收。
+
+
+## 8. 旧 WebUI 容器名冲突预检
+
+旧版 `web/docker-compose.yml` 与统一后的根目录 `docker-compose.yml` 都使用固定容器名 `stock-analysis-web`。两者可能属于不同 Compose 项目；仅依赖 `docker compose up --remove-orphans` 不能保证清除另一个项目创建的同名容器。
+
+部署脚本现在会在配置解析、镜像构建之前读取已有 `stock-analysis-web` 的 `com.docker.compose.project.config_files` 标签。只有该标签包含当前仓库根目录的 `docker-compose.yml` 时才继续；标签缺失或指向其他 Compose 文件时会明确停止并提示人工检查迁移。脚本不会自动移除不明来源的容器，以免破坏用户仍在使用的旧服务。按 README 迁移步骤移除应用容器不会删除外部 MariaDB/Redis 数据。
+
+本次为静态源码与文档修正；按协作约定未运行测试、Compose 解析、Docker 构建或 GitHub Actions。

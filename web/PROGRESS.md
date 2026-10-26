@@ -551,3 +551,11 @@
 - 发现并修正设置页“检查连接”使用已保存地址而非表单草稿的问题。现在会检查用户当前编辑的两个 API 地址，结果会标明“尚未保存”，并且不会覆盖全局健康状态；检查期间地址若再次变化，旧结果会被忽略。
 - Task/Run 轮询、Run 结果重试和切换 analysis base 的状态保护已做静态核对：请求前捕获 endpoint/generation，响应与重试前校验当前任务和连接；切换地址不会把旧 task ID 发给新服务。
 - 该 Review 仅为源码检查与测试用例更新，未运行任何测试、镜像构建或 GitHub Actions。
+
+
+## 2026-10-26 — 统一部署迁移预检补强
+
+- 跨层 Review 发现旧版 `web/docker-compose.yml` 与根目录统一 Compose 都使用固定容器名 `stock-analysis-web`；独立 Compose 项目留下的旧容器可能不会被根 Compose 的孤儿清理自动处理。
+- `scripts/deploy-go.sh` 增加构建前预检：核对已有 WebUI 容器的 `com.docker.compose.project.config_files` 标签是否指向当前根目录 Compose。若标签缺失或属于其他 Compose 文件，明确停止并要求人工确认，不自动删除旧容器。
+- README 与部署 Review/技术说明同步迁移原因、保护行为和处理方式；不会对 MariaDB/Redis 容器或数据做清理。
+- 按协作约定未运行测试、Compose 解析、Docker 构建或 GitHub Actions，留待用户统一验收。

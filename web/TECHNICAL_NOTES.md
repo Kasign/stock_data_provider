@@ -210,3 +210,11 @@ X-API-Key: <由现有设置提供>
 - 设置页的“检查连接”直接对表单中的行情/分析 API 地址发起健康检查，不再复用全局 `refreshServices()`，因此不会把已保存地址的状态误当成新地址测试结果，也不会覆盖全局健康指示灯。
 - 健康检查只读、不保存连接配置。若请求尚未返回时用户再次修改了任一地址，将丢弃该次检查结果并提示重新检查；只有通过“保存”才会修改浏览器本地配置。
 - 本轮同步更新设置契约测试源码与进度记录；按协作约定未运行测试或触发 CI。
+
+
+## 22. 统一 Compose 升级的同名容器预检
+
+- 旧版 `web/docker-compose.yml` 和根目录统一 Compose 使用相同的固定容器名 `stock-analysis-web`。旧容器可能属于另一个 Compose 项目，且即使已停止仍可能阻止新容器创建。
+- `scripts/deploy-go.sh` 在 Compose 配置解析和镜像构建之前读取已有 WebUI 容器的 `com.docker.compose.project.config_files` 标签；仅当它指向当前仓库根目录 `docker-compose.yml` 时才继续。
+- 标签缺失、或显示旧 Compose 文件路径时，脚本会停止并给出人工迁移提示，不自动删除来源不明的容器。检查并移除旧应用容器不会删除外部 MariaDB/Redis 数据。
+- 此保护用于减少升级时固定容器名冲突；本次只做静态源码审查和文档更新，没有运行测试、Compose 解析、Docker 构建或 GitHub Actions。

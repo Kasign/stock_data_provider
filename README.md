@@ -214,7 +214,7 @@ openssl rand -hex 32
 
 从旧版拆分 Compose 升级时，保留现有 `.env`，并将服务名配置改为 `MARKET_DATA_BASE_URL=http://stock-analysis-data:8091`、`MARKET_DATA_SERVICE_NAME=stock-analysis-data`、`ANALYSIS_SERVICE_NAME=stock-analysis-server`。
 
-旧版 Go 应用容器可能仍占用 `8092` 端口，切换前需停止并移除旧 Go 容器；该命令只处理应用容器，不会删除外部 MariaDB/Redis 数据：
+从旧版拆分 Compose 升级时，旧 Go 容器可能仍占用 `8092` 端口；旧版 `web/docker-compose.yml` 也可能留下同名的 `stock-analysis-web` 容器，即使容器已停止也会占用固定名称。先确认现有容器用途，再按一次性迁移命令移除旧应用容器。该命令只移除列出的应用容器，不会删除外部 MariaDB/Redis 数据。部署脚本会预检旧 Go 容器是否仍运行，并检查已有 `stock-analysis-web` 的 Compose 文件标签；遇到不属于根目录 Compose 的同名容器会在构建前停止，不会擅自删除：
 
 ```bash
 docker rm -f stock-analysis-go stock-market-data stock-analysis-web 2>/dev/null || true
