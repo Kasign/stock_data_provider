@@ -195,3 +195,10 @@
 - 选股状态模块分别区分 capability（enabled/disabled/unknown/unavailable/error）、扫描任务状态、候选集合与历史集合状态。当前生产页面全部以 `supported:false` 初始化；无 API 时不生成候选、分数、扫描成功状态或“0 条”结果。
 - 本节写入时 PR #2 Open/未合并，head `c54b8d75137652a242d0f46598d36b8574737ce0`；base SHA `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。PR #1 当前 head `b7bc88499e7491446e5250abfbc3da112012b4b5`，仍 Open/未合并。
 - 真实浏览器视觉验收和 NAS/Docker/OpenResty 选股联调未做。下一步进入 Issue #10 告警规则/触发历史/通知投递尝试 UI，所有写操作继续在无 API 状态下禁用。
+
+
+## Issue #10 本批交接（2026-10-26，CI 待回填）
+- 本批开始时 PR #2 head `934ecc4292950ee650432f8f810cfac13b834c74`，Open、未合并，base SHA `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`；最近对应 WebUI checks #40257745847 在开始时排队中。
+- 告警页将规则 CRUD、评估结论、触发历史、通知投递尝试分开呈现。当前服务没有规则 CRUD/后台调度/触发/投递 API，写操作与筛选禁用且状态统一 unavailable；不伪造规则或发送结果。
+- 新增 `web/src/alert-state.js`、`web/tests/alert-state.test.mjs`，覆盖 capability/evaluation/collection states；生产页默认 `supported:false`。
+- 本批 CI 结果需按最新提交 SHA 核验并回填。浏览器真实布局与 NAS/Docker/OpenResty 端到端告警/投递联调未完成。

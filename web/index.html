@@ -401,20 +401,82 @@
 
         <section class="view feature-view" id="alerts-view" hidden aria-labelledby="alerts-title">
           <div class="page-heading">
-            <div><p class="eyebrow">MONITORING / 06</p><h1 id="alerts-title">告警中心</h1><p class="page-subtitle">告警规则、规则触发历史和通知投递尝试是三类不同记录，需要服务端持久化和调度支持。</p></div>
-            <div class="feature-status"><span class="availability-pill is-unavailable">告警 API 待接入</span><button class="button button-primary" type="button" disabled aria-disabled="true">新增规则</button></div>
+            <div><p class="eyebrow">MONITORING / 06</p><h1 id="alerts-title">告警中心</h1><p class="page-subtitle">规则配置、规则触发历史和通知投递尝试是三类不同数据，需分别由服务端持久化并提供查询接口。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable" id="alert-capability-pill">告警 API 尚未接入</span><button class="button button-primary" id="alert-new-rule" type="button" disabled aria-disabled="true">新增规则（待接入）</button></div>
           </div>
-          <section class="feature-card-grid" aria-label="告警能力状态">
-            <article class="panel feature-summary-card"><span class="feature-card-label">告警规则</span><strong>—</strong><p>规则列表接口不可用</p><span class="availability-pill is-unavailable">待接入</span></article>
-            <article class="panel feature-summary-card"><span class="feature-card-label">触发记录</span><strong>—</strong><p>触发历史接口不可用</p><span class="availability-pill is-unavailable">待接入</span></article>
-            <article class="panel feature-summary-card"><span class="feature-card-label">通知尝试</span><strong>—</strong><p>投递诊断接口不可用</p><span class="availability-pill is-unavailable">待接入</span></article>
+          <section class="panel feature-callout" role="status" aria-live="polite">
+            <span class="feature-callout-icon" aria-hidden="true">i</span>
+            <div><h2 id="alert-capability-title">告警规则与后台评估不可用</h2><p id="alert-capability-description">当前后端没有规则 CRUD、后台评估调度、触发记录或通知投递尝试查询 API。此页面不会假保存规则、显示模拟触发记录或虚构通知成功状态。</p></div>
           </section>
-          <section class="panel feature-empty-panel" aria-labelledby="alerts-empty-title">
-            <div class="feature-empty-icon" aria-hidden="true">⚑</div>
-            <h2 id="alerts-empty-title">暂不能管理告警规则</h2>
-            <p>当前页面不会在浏览器里假保存规则、启停状态或删除操作，也不会展示模拟触发历史。</p>
-            <div class="feature-meta"><span>所需后端能力</span><span>规则 CRUD · 评估调度 · 冷却去重 · 触发/投递持久化</span></div>
+          <section class="feature-card-grid alert-summary-grid" aria-label="告警数据摘要">
+            <article class="panel feature-summary-card"><span class="feature-card-label">告警规则</span><strong id="alert-summary-rule-count">—</strong><p>规则持久化 API 待接入</p><span class="availability-pill is-unavailable">不可用</span></article>
+            <article class="panel feature-summary-card"><span class="feature-card-label">触发历史</span><strong id="alert-summary-trigger-count">—</strong><p>评估与历史 API 待接入</p><span class="availability-pill is-unavailable">不可用</span></article>
+            <article class="panel feature-summary-card"><span class="feature-card-label">通知投递尝试</span><strong id="alert-summary-delivery-count">—</strong><p>投递诊断 API 待接入</p><span class="availability-pill is-unavailable">不可用</span></article>
           </section>
+
+          <section class="panel alert-rules-panel" aria-labelledby="alert-rules-title">
+            <div class="panel-heading"><div><h2 id="alert-rules-title">规则管理</h2><p>范围、规则类型、阈值、严重级别和启停状态都需要由真实规则 schema 定义。</p></div><span class="availability-pill is-unavailable">只读占位</span></div>
+            <form id="alert-rule-form" class="alert-rule-form" aria-label="告警规则表单（暂不可用）">
+              <div class="alert-rule-form-grid">
+                <label class="field"><span>规则名称</span><input id="alert-rule-name" type="text" disabled aria-disabled="true" placeholder="等待规则 API" /></label>
+                <label class="field"><span>监控范围</span><select id="alert-rule-scope" disabled aria-disabled="true"><option>等待范围 schema</option></select></label>
+                <label class="field"><span>规则类型</span><select id="alert-rule-type" disabled aria-disabled="true"><option>等待规则类型 schema</option></select></label>
+                <label class="field"><span>阈值 / 参数</span><input id="alert-rule-threshold" type="text" disabled aria-disabled="true" placeholder="等待字段类型与校验规则" /></label>
+                <label class="field"><span>严重级别</span><select id="alert-rule-severity" disabled aria-disabled="true"><option>等待严重级别 schema</option></select></label>
+                <label class="field"><span>规则状态</span><select id="alert-rule-enabled" disabled aria-disabled="true"><option>等待服务端状态字段</option></select></label>
+              </div>
+              <p class="field-hint">价格突破、涨跌幅、成交量、均线或 RSI/MACD 等规则类型仅为产品规划示例；没有服务端 schema 前不会把它们呈现为真实支持的类型。</p>
+              <div class="alert-rule-form-footer"><span class="field-hint">保存、启停、删除和单次测试需要服务端授权与审计。</span><div class="alert-rule-actions"><button class="button button-secondary" id="alert-rule-test" type="button" disabled aria-disabled="true">单次测试（待接入）</button><button class="button button-primary" id="alert-rule-submit" type="button" disabled aria-disabled="true">保存规则（待接入）</button></div></div>
+            </form>
+            <div class="alert-rule-list-state" data-alert-rules-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取规则</strong><p>规则列表由服务端提供。</p></div>
+            <div class="alert-rule-list-state" data-alert-rules-state="empty" hidden><span class="notification-state-mark" aria-hidden="true">▤</span><strong>没有已保存的告警规则</strong><p>只有收到真实 API 的空列表后才能显示此状态。</p></div>
+            <div class="alert-rule-list-state" data-alert-rules-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>规则读取失败</strong><p id="alert-rules-error">请求错误与诊断等待真实 API 接入后显示。</p></div>
+            <div class="alert-rule-list-state" data-alert-rules-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>规则管理 API 尚未提供</strong><p>不会在浏览器中假保存规则、启停状态或删除操作。</p></div>
+            <div class="alert-rule-list" id="alert-rule-list" data-alert-rules-state="loaded" hidden></div>
+          </section>
+
+          <section class="panel alert-evaluation-panel" aria-labelledby="alert-evaluation-title">
+            <div class="panel-heading"><div><h2 id="alert-evaluation-title">单次评估 / Dry Run</h2><p>triggered、not-triggered、evaluation-error、degraded 和 skipped 必须有明确含义，缺行情或过期数据不能静默当作未触发。</p></div><span class="availability-pill is-unavailable" id="alert-evaluation-status-pill">评估 API 待接入</span></div>
+            <div class="alert-evaluation-states">
+              <div class="alert-evaluation-state" data-alert-evaluation-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在评估规则</strong><p>评估结果由服务端返回。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="idle" hidden><span class="notification-state-mark" aria-hidden="true">—</span><strong>尚未执行评估</strong><p>只有支持的规则进入真实评估后才展示此状态。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="triggered" hidden><span class="notification-state-mark" aria-hidden="true">!</span><strong>规则已触发</strong><p>触发结论与采样数据必须来自评估 API。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="not-triggered" hidden><span class="notification-state-mark" aria-hidden="true">✓</span><strong>规则未触发</strong><p>仅在服务端明确返回未触发后显示。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="evaluation-error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>规则评估错误</strong><p>规则执行错误不得混成“未触发”。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="degraded" hidden role="status"><span class="notification-state-mark" aria-hidden="true">!</span><strong>评估结果降级</strong><p>行情质量、缺字段或过期状态由服务端明确标注。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="skipped" hidden><span class="notification-state-mark" aria-hidden="true">–</span><strong>本次评估已跳过</strong><p>缺少必要数据时不能静默报告为未触发。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>评估请求失败</strong><p id="alert-evaluation-error">请求诊断等待真实 API 接入后显示。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="unknown" hidden><span class="notification-state-mark" aria-hidden="true">?</span><strong>评估状态未知</strong><p>服务端返回了无法识别的状态。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>规则评估 API 尚未提供</strong><p>当前没有可执行的后台评估或 dry-run 端点。</p></div>
+            </div>
+          </section>
+
+          <div class="alert-history-layout">
+            <section class="panel alert-history-panel" aria-labelledby="alert-history-title">
+              <div class="panel-heading"><div><h2 id="alert-history-title">触发历史</h2><p>按时间、股票、规则、状态筛选服务端持久化触发记录。</p></div><span class="availability-pill is-unavailable" id="alert-history-status-pill">历史 API 待接入</span></div>
+              <div class="alert-history-filters">
+                <label class="field"><span>股票代码</span><input id="alert-history-symbol" type="search" disabled aria-disabled="true" placeholder="股票代码" /></label>
+                <label class="field"><span>规则</span><select id="alert-history-rule" disabled aria-disabled="true"><option>等待规则 API</option></select></label>
+                <label class="field"><span>状态</span><select id="alert-history-status" disabled aria-disabled="true"><option>等待历史 API</option></select></label>
+                <label class="field"><span>开始日期</span><input id="alert-history-from" type="date" disabled aria-disabled="true" /></label>
+              </div>
+              <div class="alert-history-state" data-alert-history-state="loading" hidden role="status" aria-live="polite"><strong>正在读取触发历史</strong></div>
+              <div class="alert-history-state" data-alert-history-state="empty" hidden><strong>没有匹配的触发记录</strong><p>只有服务端返回真实空列表后才显示。</p></div>
+              <div class="alert-history-state" data-alert-history-state="error" hidden role="alert"><strong>触发历史读取失败</strong></div>
+              <div class="alert-history-state" data-alert-history-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>触发历史 API 尚未提供</strong><p>不代表服务器没有触发记录。</p></div>
+              <div class="alert-history-list" id="alert-history-list" data-alert-history-state="loaded" hidden></div>
+            </section>
+
+            <section class="panel alert-delivery-panel" aria-labelledby="alert-delivery-title">
+              <div class="panel-heading"><div><h2 id="alert-delivery-title">通知投递尝试</h2><p>与通知中心的收件箱记录分开。</p></div><span class="availability-pill is-unavailable" id="alert-delivery-status-pill">投递 API 待接入</span></div>
+              <div class="alert-delivery-summary"><span>渠道</span><strong>—</strong><span>结果 / 错误码</span><strong>—</strong><span>耗时 / 诊断</span><strong>—</strong></div>
+              <div class="alert-delivery-state" data-alert-delivery-state="loading" hidden role="status" aria-live="polite"><strong>正在读取投递尝试</strong></div>
+              <div class="alert-delivery-state" data-alert-delivery-state="empty" hidden><strong>没有匹配的投递尝试</strong><p>只有真实 API 返回空列表后才可展示。</p></div>
+              <div class="alert-delivery-state" data-alert-delivery-state="error" hidden role="alert"><strong>通知投递记录读取失败</strong></div>
+              <div class="alert-delivery-state" data-alert-delivery-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>通知投递尝试 API 尚未提供</strong><p>不会展示模拟的“发送成功”、错误码或耗时。</p></div>
+              <div class="alert-delivery-list" id="alert-delivery-list" data-alert-delivery-state="loaded" hidden></div>
+            </section>
+          </div>
         </section>
 
         <section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">

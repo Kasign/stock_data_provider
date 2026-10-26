@@ -407,3 +407,35 @@ test("screening workbench distinguishes unavailable capability from disabled and
   assert.match(screeningView, /id="screening-submit" type="button" disabled/);
   assert.doesNotMatch(app, /screening.*localStorage/i);
 });
+
+
+test("alert center separates rule CRUD, evaluation state, trigger history and delivery attempts", () => {
+  for (const id of [
+    "alert-capability-pill", "alert-rule-name", "alert-rule-scope", "alert-rule-type",
+    "alert-rule-threshold", "alert-rule-severity", "alert-rule-enabled", "alert-rule-submit",
+    "alert-rule-test", "alert-evaluation-status-pill", "alert-history-symbol", "alert-history-rule",
+    "alert-history-status", "alert-history-list", "alert-delivery-status-pill", "alert-delivery-list"
+  ]) assert.match(html, new RegExp('id="' + id + '"'), "missing alert control: " + id);
+  for (const state of ["loading", "empty", "error", "unavailable", "loaded"]) {
+    assert.match(html, new RegExp('data-alert-rules-state="' + state + '"'));
+    assert.match(html, new RegExp('data-alert-history-state="' + state + '"'));
+    assert.match(html, new RegExp('data-alert-delivery-state="' + state + '"'));
+  }
+  for (const state of ["loading", "idle", "triggered", "not-triggered", "evaluation-error", "degraded", "skipped", "error", "unknown", "unavailable"]) {
+    assert.match(html, new RegExp('data-alert-evaluation-state="' + state + '"'));
+  }
+  const start = html.indexOf('id="alerts-view"');
+  const end = html.indexOf('id="settings-view"', start);
+  const alertsView = html.slice(start, end);
+  assert.match(alertsView, /不会假保存规则/);
+  assert.match(alertsView, /不能静默当作未触发/);
+  assert.match(alertsView, /不会展示模拟的“发送成功”/);
+  assert.doesNotMatch(alertsView, /600519|贵州茅台|示例规则|示例触发/);
+  assert.match(app, /function renderAlertCapability\(snapshot\)[\s\S]*?resolveAlertCapability\(snapshot\)/);
+  assert.match(app, /function renderAlertEvaluation\(snapshot\)[\s\S]*?resolveAlertEvaluationState\(snapshot\)/);
+  assert.match(app, /renderAlertCapability\(\{ supported: false \}\)/);
+  assert.match(app, /renderAlertEvaluation\(\{ supported: false \}\)/);
+  assert.match(html, /id="alert-rule-submit" type="button" disabled/);
+  assert.match(html, /id="alert-rule-test" type="button" disabled/);
+  assert.doesNotMatch(app, /alert.*localStorage/i);
+});

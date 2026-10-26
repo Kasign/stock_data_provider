@@ -3,6 +3,7 @@ import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.j
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
 import { resolveScreeningCapability, resolveScreeningTaskState, resolveScreeningCollectionState } from "./screening-state.js";
+import { resolveAlertCapability, resolveAlertEvaluationState, resolveAlertCollectionState } from "./alert-state.js";
 import {
   analysisHealth,
   clearSettings,
@@ -518,6 +519,59 @@ function renderScreeningHistory(snapshot) {
   const pill = $("#screening-history-status-pill");
   pill.textContent = current === "loaded" ? "历史已加载" : current === "empty" ? "无匹配历史" : current === "loading" ? "正在加载" : current === "error" ? "读取失败" : "历史 API 待接入";
   pill.className = "availability-pill " + (current === "loaded" || current === "empty" ? "is-readonly" : "is-unavailable");
+  return current;
+}
+
+function renderAlertCapability(snapshot) {
+  const current = resolveAlertCapability(snapshot);
+  const labels = { enabled: "告警能力已启用", disabled: "告警功能已关闭", unknown: "告警能力未知", unavailable: "告警 API 尚未接入", loading: "正在检查告警能力", error: "告警能力检查失败" };
+  const pill = $("#alert-capability-pill");
+  pill.textContent = labels[current] || labels.unknown;
+  pill.className = "availability-pill " + (current === "enabled" ? "is-local" : current === "disabled" ? "is-readonly" : "is-unavailable");
+  setText("#alert-capability-title", labels[current] || labels.unknown);
+  const descriptions = {
+    enabled: "服务端报告告警能力已启用；具体规则类型、写权限和评估能力仍需分别确认。",
+    disabled: "服务端明确报告告警功能已关闭；请求错误不能被解释为已关闭。",
+    unknown: "服务端没有返回可识别的告警能力状态。",
+    unavailable: "当前后端没有规则 CRUD、后台评估调度、触发记录或通知投递尝试查询 API。此页面不会假保存规则、显示模拟触发记录或虚构通知成功状态。",
+    loading: "正在请求服务端告警能力声明。",
+    error: "告警能力检查发生错误；错误不代表功能已经关闭。"
+  };
+  setText("#alert-capability-description", descriptions[current] || descriptions.unknown);
+  return current;
+}
+
+function renderAlertEvaluation(snapshot) {
+  const current = resolveAlertEvaluationState(snapshot);
+  document.querySelectorAll("[data-alert-evaluation-state]").forEach((node) => {
+    node.hidden = node.dataset.alertEvaluationState !== current;
+  });
+  const labels = {
+    idle: "尚未执行评估", loading: "正在评估", triggered: "规则已触发",
+    "not-triggered": "规则未触发", "evaluation-error": "评估执行错误",
+    degraded: "评估结果降级", skipped: "本次评估已跳过", error: "评估请求失败",
+    unavailable: "评估 API 待接入", unknown: "评估状态未知"
+  };
+  const pill = $("#alert-evaluation-status-pill");
+  pill.textContent = labels[current] || labels.unknown;
+  pill.className = "availability-pill " + (current === "triggered" ? "is-unavailable" : current === "not-triggered" ? "is-local" : "is-readonly");
+  return current;
+}
+
+function renderAlertCollection(snapshot, field, selector, pillSelector, summarySelector, label) {
+  const current = resolveAlertCollectionState(snapshot, field);
+  document.querySelectorAll(selector).forEach((node) => {
+    node.hidden = node.dataset[selector.slice(1).replace(/\[data-([a-z-]+)-state\]/, "$1State")] === current;
+  });
+  // Use exact data attributes instead of relying on the CSS selector parser's dataset key conversion.
+  document.querySelectorAll(selector).forEach((node) => {
+    const stateKey = node.getAttribute("data-alert-" + label + "-state");
+    node.hidden = stateKey !== current;
+  });
+  const pill = $(pillSelector);
+  pill.textContent = current === "loaded" ? "记录已加载" : current === "empty" ? "无匹配记录" : current === "loading" ? "正在加载" : current === "error" ? "读取失败" : "API 待接入";
+  pill.className = "availability-pill " + (current === "loaded" || current === "empty" ? "is-readonly" : "is-unavailable");
+  if (summarySelector) setText(summarySelector, current === "loaded" ? String(snapshot[field].length) : current === "empty" ? "0" : "—");
   return current;
 }
 
@@ -1941,6 +1995,11 @@ renderScreeningCapability({ supported: false });
 renderScreeningTask({ supported: false });
 renderScreeningCandidates({ supported: false });
 renderScreeningHistory({ supported: false });
+renderAlertCapability({ supported: false });
+renderAlertCollection({ supported: false }, "rules", "[data-alert-rules-state]", "#alert-capability-pill", "#alert-summary-rule-count", "rules");
+renderAlertEvaluation({ supported: false });
+renderAlertCollection({ supported: false }, "items", "[data-alert-history-state]", "#alert-history-status-pill", "#alert-summary-trigger-count", "history");
+renderAlertCollection({ supported: false }, "attempts", "[data-alert-delivery-state]", "#alert-delivery-status-pill", "#alert-summary-delivery-count", "delivery");
 renderRecentTasks();
 renderWatchlist();
 configureDateInputs();
