@@ -2044,6 +2044,12 @@ func eastmoneyMarketStocksFallbackURL(rawURL string) string {
 }
 
 func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	params := url.Values{
 		"dpt": {"wz.ztzt"},
 		"ut":  {p.ut},
@@ -2131,7 +2137,45 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	snapshot.UnclassifiedCount = 0
 	snapshot.AmountCoverageCount = 0
 	snapshot.TotalAmountCNY = nil
+
+	// Limit-pool totals are separate upstream queries. Only attach them when the
+	// provider report date matches the breadth snapshot date; missing values stay nil.
+	upCount, upReason, err := p.fetchMarketBreadthLimitCount(ctx, "up", reportDate)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.LimitUpCount = upCount
+	if upReason != "" {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, upReason)
+	}
+	downCount, downReason, err := p.fetchMarketBreadthLimitCount(ctx, "down", reportDate)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.LimitDownCount = downCount
+	if downReason != "" {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, downReason)
+	}
 	return snapshot, nil
+}
+
+func (p *Eastmoney) fetchMarketBreadthLimitCount(ctx context.Context, poolType, reportDate string) (*int, string, error) {
+	pool, err := p.FetchLimitPool(ctx, poolType, reportDate, 1)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, "", ctxErr
+		}
+		return nil, "market_breadth_limit_" + poolType + "_count_unavailable", nil
+	}
+	if pool == nil || pool.ProviderReportDate != reportDate {
+		return nil, "market_breadth_limit_" + poolType + "_count_report_date_mismatch", nil
+	}
+	if !pool.HasData || pool.Total <= 0 {
+		// A source's empty pool is not sufficient evidence of zero events.
+		return nil, "market_breadth_limit_" + poolType + "_count_not_confirmed", nil
+	}
+	count := pool.Total
+	return &count, "", nil
 }
 
 func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate string, limit int) (*model.LimitPoolSnapshot, error) {

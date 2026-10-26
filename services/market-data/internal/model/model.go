@@ -253,6 +253,8 @@ type MarketBreadthSnapshot struct {
 	DecliningCount      int           `json:"declining_count"`
 	UnchangedCount      int           `json:"unchanged_count"`
 	UnclassifiedCount   int           `json:"unclassified_count"`
+	LimitUpCount        *int          `json:"limit_up_count"`
+	LimitDownCount      *int          `json:"limit_down_count"`
 	TotalAmountCNY      *float64      `json:"total_amount_cny"`
 	AmountCoverageCount int           `json:"amount_coverage_count"`
 	Source              string        `json:"source"`

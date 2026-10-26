@@ -263,6 +263,9 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 	if snapshot.TotalSecurities <= 0 || snapshot.CoveredSecurities != snapshot.TotalSecurities {
 		return fmt.Errorf("market-breadth coverage mismatch: covered=%d total=%d", snapshot.CoveredSecurities, snapshot.TotalSecurities)
 	}
+	if (snapshot.LimitUpCount != nil && *snapshot.LimitUpCount < 0) || (snapshot.LimitDownCount != nil && *snapshot.LimitDownCount < 0) {
+		return errors.New("market-breadth limit counts cannot be negative")
+	}
 	counts := snapshot.AdvancingCount + snapshot.DecliningCount + snapshot.UnchangedCount + snapshot.UnclassifiedCount
 	if snapshot.AdvancingCount < 0 || snapshot.DecliningCount < 0 || snapshot.UnchangedCount < 0 || snapshot.UnclassifiedCount < 0 || counts != snapshot.CoveredSecurities {
 		return errors.New("market-breadth category counts do not reconcile to covered securities")

@@ -479,8 +479,11 @@ components:
         declining_count: {type: integer, minimum: 0}
         unchanged_count: {type: integer, minimum: 0}
         unclassified_count: {type: integer, minimum: 0}
+        limit_up_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-up pool endpoint, only when its report date matches the breadth report date; null means unknown}
+        limit_down_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-down pool endpoint, only when its report date matches the breadth report date; null means unknown}
         total_amount_cny: {type: number, nullable: true, description: Null unless amount fields cover the full universe}
         amount_coverage_count: {type: integer, minimum: 0}
+        provider_report_date: {type: string, format: date, description: Source report date for market breadth and limit-pool alignment}
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}

@@ -93,6 +93,25 @@ func TestEastmoneyFetchStockBoardsKeepsEmptyResultUnknown(t *testing.T) {
 
 func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/getTopicZTPool" || r.URL.Path == "/getTopicDTPool" {
+			if r.URL.Query().Get("date") != "20261023" || r.URL.Query().Get("pagesize") != "1" {
+				t.Errorf("limit-pool query date/pagesize = %q/%q", r.URL.Query().Get("date"), r.URL.Query().Get("pagesize"))
+			}
+			count := 82
+			change := 10.0
+			if r.URL.Path == "/getTopicDTPool" {
+				count, change = 6, -10.0
+				if r.URL.Query().Get("sort") != "fund:asc" {
+					t.Errorf("down-pool sort = %q", r.URL.Query().Get("sort"))
+				}
+			} else if r.URL.Query().Get("sort") != "fbt:asc" {
+				t.Errorf("up-pool sort = %q", r.URL.Query().Get("sort"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
+				"tc": count, "qdate": 20261023, "pool": []map[string]any{{"c": "600519", "m": 1, "n": "贵州茅台", "zdp": change}},
+			}})
+			return
+		}
 		if r.URL.Path != "/getTopicZDFenBu" {
 			http.NotFound(w, r)
 			return
@@ -112,7 +131,7 @@ func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) 
 		_ = json.NewEncoder(w).Encode(payload)
 	}))
 	defer server.Close()
-	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", "", "")
+	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", server.URL, "")
 	got, err := p.FetchMarketBreadth(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -122,6 +141,9 @@ func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) 
 	}
 	if got.TotalSecurities != 44 || got.CoveredSecurities != 44 || got.AdvancingCount != 24 || got.DecliningCount != 15 || got.UnchangedCount != 5 || got.UnclassifiedCount != 0 {
 		t.Fatalf("unexpected distribution counts: %+v", got)
+	}
+	if got.LimitUpCount == nil || *got.LimitUpCount != 82 || got.LimitDownCount == nil || *got.LimitDownCount != 6 {
+		t.Fatalf("expected date-aligned limit-up/down source totals, got %+v", got)
 	}
 	if got.TotalAmountCNY != nil || got.AmountCoverageCount != 0 {
 		t.Fatalf("distribution endpoint must not invent turnover: %+v", got)
@@ -157,9 +179,15 @@ func TestEastmoneyFetchMarketBreadthRejectsInvalidDistribution(t *testing.T) {
 }
 
 func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
-	var requests atomic.Int32
+	var breadthRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if requests.Add(1) == 1 {
+		if r.URL.Path == "/getTopicZTPool" || r.URL.Path == "/getTopicDTPool" {
+			count, change := 2, 10.0
+			if r.URL.Path == "/getTopicDTPool" { count, change = 1, -10.0 }
+			_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{"tc": count, "qdate": 20261023, "pool": []map[string]any{{"c": "600519", "m": 1, "n": "贵州茅台", "zdp": change}}}})
+			return
+		}
+		if breadthRequests.Add(1) == 1 {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
@@ -168,13 +196,13 @@ func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
 		}})
 	}))
 	defer server.Close()
-	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", "", "")
+	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", server.URL, "")
 	got, err := p.FetchMarketBreadth(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if requests.Load() != 2 {
-		t.Fatalf("expected one retry after transient 502, got %d requests", requests.Load())
+	if breadthRequests.Load() != 2 {
+		t.Fatalf("expected one retry after transient 502, got %d breadth requests", breadthRequests.Load())
 	}
 	if got.CoveredSecurities != 6 || got.AdvancingCount != 3 || got.DecliningCount != 2 || got.UnchangedCount != 1 {
 		t.Fatalf("unexpected retry result: %+v", got)
