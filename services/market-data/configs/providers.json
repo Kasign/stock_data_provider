@@ -24,7 +24,8 @@
       "stock_boards": true,
       "dragon_tiger": true,
       "announcements": true,
-      "chip_distribution": true
+      "chip_distribution": true,
+      "hot_rankings": true
     },
     "hithink": {
       "enabled": false,

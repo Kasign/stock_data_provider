@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -532,6 +533,290 @@ type eastmoneyChipKline struct {
 
 // FetchChipDistribution 在 Go 中复刻 AkShare 的 CYQCalculator 核心指标计算。
 // 东方财富未提供筹码分布的独立快照时间，因此返回值保守标记为 degraded。
+const (
+	eastmoneyHotRankURL = "https://emappdata.eastmoney.com/stockrank/getAllCurrentList"
+	eastmoneyHotSurgeURL = "https://emappdata.eastmoney.com/stockrank/getAllHisRcList"
+	eastmoneyHotAppID = "appId01"
+	eastmoneyHotGlobalID = "786e4c21-70dc-435a-93bb-38"
+)
+
+// FetchHotStocks maps the domestic Eastmoney popularity/surge ranking into a bounded, typed snapshot.
+// The ranking API exposes no trustworthy snapshot timestamp, so every successful result remains degraded.
+func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limit int) (*model.HotRankingSnapshot, error) {
+	rankingType = strings.ToLower(strings.TrimSpace(rankingType))
+	if rankingType == "" {
+		rankingType = "popular"
+	}
+	endpoint := ""
+	switch rankingType {
+	case "popular":
+		endpoint = eastmoneyHotRankURL
+	case "surge":
+		endpoint = eastmoneyHotSurgeURL
+	default:
+		return nil, fmt.Errorf("unsupported hot-ranking type %q; want popular or surge", rankingType)
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		return nil, errors.New("Eastmoney hot-ranking limit must be between 1 and 100")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rankRows, err := p.fetchHotRankingRows(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	if len(rankRows) == 0 {
+		return nil, errors.New("Eastmoney hot-ranking endpoint returned an empty list")
+	}
+	if len(rankRows) > 1000 {
+		return nil, errors.New("Eastmoney hot-ranking response exceeds 1000 rows")
+	}
+
+	type rankedCode struct {
+		symbol string
+		code string
+		secid string
+		rank int
+		rankChange *int
+	}
+	ranked := make([]rankedCode, 0, min(limit, len(rankRows)))
+	seen := make(map[string]struct{}, len(rankRows))
+	for index, row := range rankRows {
+		if len(ranked) >= limit {
+			break
+		}
+		rawCode := eastmoneyHotRowString(row, "sc")
+		symbol, code, secid, symbolErr := eastmoneyHotRankingSymbol(rawCode)
+		if symbolErr != nil {
+			return nil, fmt.Errorf("Eastmoney hot-ranking row %d has invalid security code: %w", index, symbolErr)
+		}
+		if _, duplicate := seen[symbol]; duplicate {
+			continue
+		}
+		seen[symbol] = struct{}{}
+		rank, ok := eastmoneyHotRowInt(row, "rk")
+		if !ok || rank < 1 {
+			return nil, fmt.Errorf("Eastmoney hot-ranking row %d has invalid rank", index)
+		}
+		var rankChange *int
+		if rankingType == "surge" {
+			if value, valid := eastmoneyHotRowInt(row, "hrc"); valid {
+				rankChange = &value
+			}
+		}
+		ranked = append(ranked, rankedCode{symbol: symbol, code: code, secid: secid, rank: rank, rankChange: rankChange})
+	}
+	if len(ranked) == 0 {
+		return nil, errors.New("Eastmoney hot-ranking response contains no supported A-share symbols")
+	}
+
+	secids := make([]string, 0, len(ranked))
+	for _, item := range ranked {
+		secids = append(secids, item.secid)
+	}
+	q := url.Values{
+		"ut":     []string{p.ut},
+		"fltt":   []string{"2"},
+		"invt":   []string{"2"},
+		"fields": []string{"f14,f3,f12,f2"},
+		"secids": []string{strings.Join(secids, ",")},
+	}
+	var quotePayload struct {
+		RC *int `json:"rc"`
+		Data *struct {
+			Diff []map[string]json.RawMessage `json:"diff"`
+		} `json:"data"`
+	}
+	if err := p.getJSONWithRetry(ctx, p.indexURL, q, &quotePayload, 8*time.Second); err != nil {
+		return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment failed: %w", err)
+	}
+	if quotePayload.RC != nil && *quotePayload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment provider error rc=%d", *quotePayload.RC)
+	}
+	if quotePayload.Data == nil {
+		return nil, errors.New("Eastmoney hot-ranking quote enrichment returned no data")
+	}
+	quotes := make(map[string]map[string]json.RawMessage, len(quotePayload.Data.Diff))
+	for _, row := range quotePayload.Data.Diff {
+		code := eastmoneyHotRowString(row, "f12")
+		if code != "" {
+			quotes[code] = row
+		}
+	}
+	now := time.Now().UTC()
+	sourceVersion := eastmoneyVersion + "-hot-ranking-v1"
+	snapshot := &model.HotRankingSnapshot{
+		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, len(ranked)),
+		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed"},
+	}
+	for _, ranking := range ranked {
+		item := model.HotRankingItem{
+			Rank: ranking.rank, Symbol: ranking.symbol, Code: ranking.code, RankChange: ranking.rankChange,
+			Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
+			QualityStatus: model.QualityDegraded,
+			QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed"},
+		}
+		quote, exists := quotes[ranking.code]
+		if !exists {
+			item.QualityReasons = append(item.QualityReasons, "quote_enrichment_missing")
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "one_or_more_quote_enrichment_rows_missing")
+		} else {
+			item.Name = eastmoneyHotRowString(quote, "f14")
+			if value, ok := eastmoneyHotRowFloat(quote, "f2"); ok && value > 0 {
+				item.LatestPrice = &value
+			}
+			if value, ok := eastmoneyHotRowFloat(quote, "f3"); ok {
+				item.ChangePercent = &value
+			}
+			if item.LatestPrice != nil && item.ChangePercent != nil {
+				change := *item.LatestPrice * *item.ChangePercent / 100
+				item.Change = &change
+			}
+			if item.Name == "" || item.LatestPrice == nil || item.ChangePercent == nil {
+				item.QualityReasons = append(item.QualityReasons, "quote_name_or_price_fields_missing")
+				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "one_or_more_quote_fields_missing")
+			}
+		}
+		snapshot.Items = append(snapshot.Items, item)
+	}
+	snapshot.Total = len(snapshot.Items)
+	return snapshot, nil
+}
+
+func (p *Eastmoney) fetchHotRankingRows(ctx context.Context, endpoint string) ([]map[string]json.RawMessage, error) {
+	payload := map[string]any{
+		"appId": eastmoneyHotAppID,
+		"globalId": eastmoneyHotGlobalID,
+		"marketType": "",
+		"pageNo": 1,
+		"pageSize": 100,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode Eastmoney hot-ranking request: %w", err)
+	}
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		requestCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		req, reqErr := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if reqErr == nil {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/plain, */*")
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+			req.Header.Set("Referer", "https://guba.eastmoney.com/rank/")
+			var resp *http.Response
+			resp, reqErr = p.client.Do(req)
+			if reqErr == nil {
+				if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+					_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+					reqErr = fmt.Errorf("Eastmoney hot-ranking HTTP status %d", resp.StatusCode)
+				} else {
+					raw, readErr := readBoundedBody(resp.Body, maxProviderPayloadBytes)
+					if readErr != nil {
+						reqErr = fmt.Errorf("read Eastmoney hot-ranking response: %w", readErr)
+					} else {
+						var envelope struct {
+							Code *int `json:"code"`
+							Message string `json:"message"`
+							Data []map[string]json.RawMessage `json:"data"`
+						}
+						if decodeErr := decodeSingleJSON(raw, &envelope); decodeErr != nil {
+							reqErr = fmt.Errorf("decode Eastmoney hot-ranking response: %w", decodeErr)
+						} else if envelope.Code != nil && *envelope.Code != 0 {
+							reqErr = fmt.Errorf("Eastmoney hot-ranking response code=%d: %s", *envelope.Code, strings.TrimSpace(envelope.Message))
+						} else if envelope.Data == nil {
+							reqErr = errors.New("Eastmoney hot-ranking response is missing data")
+						} else {
+							_ = resp.Body.Close()
+							cancel()
+							return envelope.Data, nil
+						}
+					}
+				}
+				_ = resp.Body.Close()
+			}
+		}
+		cancel()
+		lastErr = reqErr
+		if attempt == 3 || ctx.Err() != nil || (reqErr != nil && !isRetryableEastmoneyRequestError(reqErr)) {
+			return nil, fmt.Errorf("Eastmoney hot-ranking request failed: %w", lastErr)
+		}
+		timer := time.NewTimer(time.Duration(attempt) * 500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return nil, lastErr
+}
+
+func eastmoneyHotRankingSymbol(raw string) (symbol, code, secid string, err error) {
+	value := strings.ToUpper(strings.TrimSpace(raw))
+	if len(value) != 8 {
+		return "", "", "", fmt.Errorf("unexpected stock code %q", raw)
+	}
+	exchange, bare := value[:2], value[2:]
+	if exchange != "SH" && exchange != "SZ" {
+		return "", "", "", fmt.Errorf("unsupported market prefix in %q", raw)
+	}
+	for _, digit := range bare {
+		if digit < '0' || digit > '9' {
+			return "", "", "", fmt.Errorf("non-numeric stock code %q", raw)
+		}
+	}
+	market := "1"
+	if exchange == "SZ" {
+		market = "0"
+	}
+	return bare + "." + exchange, bare, market + "." + bare, nil
+}
+
+func eastmoneyHotRowString(row map[string]json.RawMessage, key string) string {
+	raw, ok := row[key]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var value string
+	if json.Unmarshal(raw, &value) == nil {
+		return strings.TrimSpace(value)
+	}
+	return strings.TrimSpace(strings.Trim(string(raw), `"`))
+}
+
+func eastmoneyHotRowFloat(row map[string]json.RawMessage, key string) (float64, bool) {
+	raw := eastmoneyHotRowString(row, key)
+	if raw == "" || raw == "-" {
+		return 0, false
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	return value, err == nil && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func eastmoneyHotRowInt(row map[string]json.RawMessage, key string) (int, bool) {
+	value, ok := eastmoneyHotRowFloat(row, key)
+	if !ok || math.Trunc(value) != value || value < -1000000 || value > 1000000 {
+		return 0, false
+	}
+	return int(value), true
+}
+
+func appendUniqueEastmoneyReason(reasons []string, reason string) []string {
+	for _, existing := range reasons {
+		if existing == reason {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
+}
+
 func (p *Eastmoney) FetchChipDistribution(ctx context.Context, rawSymbol string) (*model.ChipDistribution, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {

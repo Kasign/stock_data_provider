@@ -105,6 +105,12 @@ type ValuationProvider interface {
 	FetchValuations(ctx context.Context, symbols []string) (*model.ValuationSnapshot, error)
 }
 
+// HotRankingProvider 提供当前人气榜和飙升榜，不参与报价或个股历史 K 线回退。
+type HotRankingProvider interface {
+	NamedProvider
+	FetchHotStocks(ctx context.Context, rankingType string, limit int) (*model.HotRankingSnapshot, error)
+}
+
 // ChipDistributionProvider 提供独立筹码分布能力，不要求同时实现资金流。
 type ChipDistributionProvider interface {
 	NamedProvider

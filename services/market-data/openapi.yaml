@@ -435,6 +435,35 @@ components:
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
+    HotRankingItem:
+      type: object
+      required: [rank, symbol, code, source, source_version, fetched_at, quality_status]
+      properties:
+        rank: {type: integer, minimum: 1, description: Provider-assigned ranking position}
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string, example: "600519"}
+        name: {type: string, nullable: true}
+        latest_price: {type: number, nullable: true, description: Latest provider-enriched price in CNY/share}
+        change: {type: number, nullable: true, description: Price change in CNY/share}
+        change_percent: {type: number, nullable: true, description: Percentage points; 10 means 10 percent}
+        rank_change: {type: integer, nullable: true, description: Surge ranking's provider-reported rank movement; sign follows upstream semantics}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    HotRankingSnapshot:
+      type: object
+      required: [type, total, items, source, source_version, fetched_at, quality_status]
+      properties:
+        type: {type: string, enum: [popular, surge]}
+        total: {type: integer, minimum: 0, description: Number of rows returned in this response, not the full A-share universe}
+        items: {type: array, items: {$ref: '#/components/schemas/HotRankingItem'}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     LimitPoolItem:
       type: object
       required: [symbol, code, name, change_percent, source, fetched_at, quality_status]
@@ -780,6 +809,23 @@ paths:
         '401': {description: API key required}
         '502': {description: Provider returned incomplete or invalid data}
         '503': {description: No market breadth provider enabled}
+  /api/v1/market/hot-stocks:
+    get:
+      summary: Get Eastmoney individual-stock popularity or surge ranking
+      description: Source exposes no independently verifiable snapshot timestamp, so successful snapshots are marked degraded. total counts rows returned by this bounded response, not all securities in the market.
+      parameters:
+        - {name: type, in: query, required: false, schema: {type: string, enum: [popular, surge], default: popular}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+      responses:
+        '200':
+          description: Bounded ranking snapshot with price enrichment and data-quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HotRankingSnapshot'}
+        '400': {description: Invalid ranking type or limit}
+        '401': {description: API key required}
+        '502': {description: Provider returned invalid or unavailable data}
+        '503': {description: No hot-ranking provider enabled}
   /api/v1/market/dragon-tiger:
     get:
       summary: 获取指定交易日龙虎榜盘后分页

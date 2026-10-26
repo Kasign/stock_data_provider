@@ -17,7 +17,7 @@
 - 历史 `as_of` 查询会排除当日尚未完成的日 K，并明确提示复权历史可能包含之后发生的公司行动因子。本服务尚未建立严格的时点复权因子库，因此不能声称历史回测完全无前视偏差。
 - 本地 smoke 模式可不连接数据库；生产部署应复用现有 MariaDB/Redis，不要为了本服务额外启动一套数据库容器。
 
-东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告及筹码分布已纳入 Go 原生能力链路；筹码分布通过最近 120 根未复权日 K 与换手率计算，因上游不提供独立快照时间而标记 degraded。同花顺另提供可选指数/板块目录、当前成分股、指数历史日 K、指数快照、最近一年交易日历、财务指标、三张财务报表、涨停池、龙虎榜和批量估值快照（PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM）。指数时间戳缺失时降级；交易日历只返回开市日期、非交易日需推断；报表按目标报告期精确匹配；龙虎榜金额保留为 provider_defined 单位，未被误标成人民币元；相关能力均由独立开关控制且默认关闭。TickFlow、Tushare、Pytdx 也已接入可选国内行情/日 K 能力。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；人气榜和个股基本资料扩展字段仍有缺口。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
+东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告及筹码分布已纳入 Go 原生能力链路；筹码分布通过最近 120 根未复权日 K 与换手率计算，因上游不提供独立快照时间而标记 degraded。同花顺另提供可选指数/板块目录、当前成分股、指数历史日 K、指数快照、最近一年交易日历、财务指标、三张财务报表、涨停池、龙虎榜和批量估值快照（PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM）。指数时间戳缺失时降级；交易日历只返回开市日期、非交易日需推断；报表按目标报告期精确匹配；龙虎榜金额保留为 provider_defined 单位，未被误标成人民币元；相关能力均由独立开关控制且默认关闭。TickFlow、Tushare、Pytdx 也已接入可选国内行情/日 K 能力。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；个股基本资料扩展字段仍有缺口；人气榜/飙升榜已由独立 API 接入，质量保持 degraded 因上游不提供快照时间。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
 
 ## BaoStock 日 K 数据源（默认启用的备用源）
 
@@ -103,7 +103,8 @@ Redis 地址应是 `Redis:6379` 这样的主机和端口，而不是 URL。若�
 | GET | `/api/v1/bars/{symbol}/daily?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=120&adjustment=forward_adjusted` | 日线 K 线 |
 | GET | `/api/v1/bundles/{symbol}?lookback_days=120&adjustment=forward_adjusted&as_of=RFC3339` | 行情与 K 线组合 |
 | GET | `/api/v1/data-sources` | 已注册 Provider 与能力 |
-| GET | `/api/v1/stocks/{symbol}/chip-distribution` | 可选筹码分布；MX 未启用时返回 Provider 不可用 |
+| GET | `/api/v1/stocks/{symbol}/chip-distribution` | 东方财富 Go 原生筹码分布；失败后可回退 MX |
+| GET | `/api/v1/market/hot-stocks?type=popular&limit=10` | 东方财富个股人气榜/飙升榜；类型支持 `popular`、`surge` |
 | GET | `/api/v1/stocks/{symbol}/capital-flow` | 可选个股资金流；MX 未启用时返回 Provider 不可用 |
 
 证券代码支持 `600519`、`600519.SH`、`000001.SZ`、`430047.BJ` 等形式；无后缀代码会规范化为带交易所后缀的代码。当前腾讯 Provider 不提供北交所兜底。
@@ -175,3 +176,10 @@ curl -H "X-API-Key: $MARKET_DATA_API_KEY" "http://127.0.0.1:8091/api/v1/bars/600
 - 服务端从东方财富获取最新 210 根不复权日 K（至少需 120 根有效记录），按 AkShare `stock_cyq_em` 的 CYQCalculator 核心算法计算最新获利比例、平均成本、70%/90% 成本区间与集中度。
 - 优先使用 Go 原生东方财富 Provider；若请求失败，会继续尝试已启用的妙想补充 Provider。可通过 `MARKET_DATA_EASTMONEY_CHIP_DISTRIBUTION_ENABLED=false` 关闭此实现。
 - 由于东方财富日 K 响应未给出筹码指标的独立快照时间，结果始终标记 `degraded`，并携带最新交易日与原因；该计算属于算法迁移，不宣称原始筹码分布端点或历史筹码序列已直接可用。
+
+### 人气榜与飙升榜（Go 原生，东方财富）
+
+- API：`GET /api/v1/market/hot-stocks?type=popular&limit=10`；将 `type=surge` 切换为飙升榜。
+- Provider 使用东方财富 `getAllCurrentList`（人气榜）和 `getAllHisRcList`（飙升榜）读取排名，再通过东方财富行情接口补充股票名称、最新价和涨跌幅。上游查询最多 100 条排名，不全市场扫描。
+- 榜单上游没有可核验的快照时间，因此结果为 `degraded`；行情补充不完整时保留排名并标记缺失原因。空列表不会解释为已核验的零条上榜。
+- 通过 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED=false` 可关闭该能力；默认启用。未引入海外数据源。

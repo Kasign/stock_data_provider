@@ -425,6 +425,35 @@ type IndexDailyBarsSnapshot struct {
 	QualityReasons []string        `json:"quality_reasons,omitempty"`
 }
 
+ // HotRankingItem 是东方财富个股人气榜或飙升榜中的一只股票。
+type HotRankingItem struct {
+	Rank           int           `json:"rank"`
+	Symbol         string        `json:"symbol"`
+	Code           string        `json:"code"`
+	Name           string        `json:"name,omitempty"`
+	LatestPrice    *float64      `json:"latest_price,omitempty"`
+	Change         *float64      `json:"change,omitempty"`
+	ChangePercent  *float64      `json:"change_percent,omitempty"`
+	RankChange     *int          `json:"rank_change,omitempty"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
+// HotRankingSnapshot 表示人气榜或飙升榜的有界排名快照。上游不提供可校验的快照时间，默认质量为 degraded。
+type HotRankingSnapshot struct {
+	RankingType    string           `json:"type"`
+	Total          int              `json:"total"`
+	Items          []HotRankingItem `json:"items"`
+	Source         string           `json:"source"`
+	SourceVersion  string           `json:"source_version,omitempty"`
+	FetchedAt      time.Time        `json:"fetched_at"`
+	QualityStatus  QualityStatus    `json:"quality_status"`
+	QualityReasons []string         `json:"quality_reasons,omitempty"`
+}
+
 type SourceStatus struct {
 	Name                   string `json:"name"`
 	Enabled                bool   `json:"enabled"`
@@ -443,6 +472,7 @@ type SourceStatus struct {
 	ValuationCapable       bool   `json:"valuation_capable,omitempty"`
 	IndexCatalogCapable    bool   `json:"index_catalog_capable,omitempty"`
 	ChipCapable            bool   `json:"chip_capable,omitempty"`
+	HotRankingCapable      bool   `json:"hot_ranking_capable,omitempty"`
 	CapitalFlowCapable     bool   `json:"capital_flow_capable,omitempty"`
 }
 

@@ -273,9 +273,16 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 
 ### 仍未等价迁移的国内能力
 
-- **人气榜/飙升榜**：AkShare 的 `stock_hot_rank_em`、`stock_hot_up_em` 和雪球关注榜回退尚未接入 Go；需要独立榜单模型、源时间、榜单类型和限流/空榜语义。
+- **人气榜/飙升榜**：AkShare 的 `stock_hot_rank_em` 和 `stock_hot_up_em` 已经由 Go 原生 `HotRankingProvider` 对接东方财富端点；快照时间缺失时保持 degraded，雪球关注榜回退仍未迁移。
 - **个股基本资料扩展字段**：Efinance `get_base_info` 返回的 ROE、净利率、总市值、流通市值和估值等字段没有形成统一的 Go 个股概览模型。现有 profile/季度财务/批量估值有不同时间与口径，不能拼成一个无时间说明的对象。
 - **统计口径差异**：Python 市场统计会自行推断涨跌停计数，Go 当前分为市场广度和涨跌停池接口；字段名相似不代表语义完全等价。
 - 海外市场本轮按既定范围暂缓，不在国内数据域迁移完成前引入。
 
 本轮没有运行测试或 CI。下一项优先处理人气榜/飙升榜，将其做成独立可配置榜单能力。
+
+### 东方财富个股人气榜 / 飙升榜（2026-10-26）
+
+- 新增独立 `HotRankingProvider` 能力，调用东方财富 `getAllCurrentList`（人气榜）和 `getAllHisRcList`（飙升榜），然后用东方财富公开行情列表 API 补充名称、最新价与涨跌幅。
+- 新增 `GET /api/v1/market/hot-stocks?type=popular|surge&limit=10`，上限 100 条；榜单能力独立于行情和 K 线 fallback。
+- 校验股票代码、排名、重复项和行情数值。行情映射缺失时保留排名条目并降级；由于来源没有可信快照时间，正常响应仍为 `degraded`。
+- 通过 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED=true|false` 控制，默认开启；新增独立短缓存，减少重复请求。本次未运行测试或 CI。

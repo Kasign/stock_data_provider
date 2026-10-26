@@ -98,6 +98,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	valuationEnabled := map[string]bool{}
 	indexCatalogEnabled := map[string]bool{}
 	chipEnabled := map[string]bool{}
+	hotRankingEnabled := map[string]bool{}
 	if svc != nil {
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
@@ -138,6 +139,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.ChipDistributionProviders() {
 			chipEnabled[p.Name()] = true
 		}
+		for _, p := range svc.HotRankingProviders() {
+			hotRankingEnabled[p.Name()] = true
+		}
 	}
 	for _, name := range names {
 		sources = append(sources, model.SourceStatus{
@@ -146,7 +150,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
-			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], ChipCapable: chipEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
+			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], ChipCapable: chipEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -169,6 +173,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/market/indices/{symbol}/constituents", s.auth(http.HandlerFunc(s.indexConstituents)))
 	mux.Handle("GET /api/v1/market/indices/{symbol}/daily", s.auth(http.HandlerFunc(s.indexDailyBars)))
 	mux.Handle("GET /api/v1/market/breadth", s.auth(http.HandlerFunc(s.marketBreadth)))
+	mux.Handle("GET /api/v1/market/hot-stocks", s.auth(http.HandlerFunc(s.hotStocks)))
 	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
 	mux.Handle("GET /api/v1/market/dragon-tiger", s.auth(http.HandlerFunc(s.dragonTiger)))
 	mux.Handle("GET /api/v1/market/trading-calendar", s.auth(http.HandlerFunc(s.tradingCalendar)))
