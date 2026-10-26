@@ -116,3 +116,14 @@ func TestTencentStockSearchTermStripsExchangeSuffix(t *testing.T) {
 		}
 	}
 }
+
+func TestTencentSmartboxUnescapesUnicodeName(t *testing.T) {
+	raw := `v_hint="sh~600519~\u8d35\u5dde\u8305\u53f0~gzmt~GP-A"`
+	items, err := parseTencentSmartboxStocks([]byte(raw))
+	if err != nil {
+		t.Fatalf("parse Smartbox response: %v", err)
+	}
+	if len(items) != 1 || items[0].Name != "贵州茅台" || items[0].Symbol != "600519.SH" {
+		t.Fatalf("unexpected decoded Smartbox item: %+v", items)
+	}
+}

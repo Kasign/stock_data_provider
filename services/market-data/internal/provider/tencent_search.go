@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -147,6 +148,10 @@ func parseTencentSmartboxStocks(body []byte) ([]model.StockSearchItem, error) {
 		return nil, errors.New("v_hint payload is unterminated")
 	}
 	payload := text[start : start+end]
+	// 腾讯 Smartbox 在部分响应中会把中文名称写成 JavaScript Unicode 转义。
+	if decoded, decodeErr := strconv.Unquote("\"" + payload + "\""); decodeErr == nil {
+		payload = decoded
+	}
 	if strings.TrimSpace(payload) == "" {
 		return nil, errors.New("v_hint payload is empty")
 	}
