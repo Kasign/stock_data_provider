@@ -126,7 +126,7 @@ Live Provider Probe #107 请求 2026-10-23 的真实东方财富龙虎榜后，�
 现在 API 将 `total/pages` 解释为供应商原始报表计数，另行返回 `source_returned`（本页原始行数）、`returned`（过滤后符合 A 股股票契约的本页行数）、`excluded_non_a_share_count`（已识别并排除的非 A 股证券数）。三者必须满足 `source_returned = returned + excluded_non_a_share_count`。已识别可转债会加入 `provider_non_a_share_security_rows_excluded` 质量原因；若某页只有被排除的非 A 股证券，返回 unknown 空页及保留的 has_more 分页信息，不得把它说成当日全市场没有股票上榜。该修复等待当前 HEAD 的 Go CI 和新一轮真实 Runner 结果。
 
 
-| 单只 A 股公告列表 | 新增独立 `AnnouncementProvider`、东方财富 `/api/security/ann` 适配器与 `GET /api/v1/stocks/{symbol}/announcements` | 首批 Go 原生接入：按公告日期区间、分页查询；保留 art_code、notice_date、display_time、sort_date、eiTime 及源端总数；发布时间无法从 display_time 解析时保留 null 并降级。独立开关默认关闭，待最新 GitHub Runner 与 NAS/Docker 验收 |
+| 单只 A 股公告列表 | Go 原生 `AnnouncementProvider`、东方财富 `/api/security/ann` 及 `GET /api/v1/stocks/{symbol}/announcements` | GitHub Go CI #304 与真实 Provider Probe #114 通过。`600036.SH` 在 2026-10-19 至 2026-10-25 返回 `total_hits=2`、1 页、2 条记录；源端 `display_time` 的冒号毫秒格式已正确解析为 `published_at`，本轮样本质量为 valid。独立开关仍默认关闭；NAS/Docker 目标部署验收未完成 |
 
 ## 公告域和通用新闻搜索的迁移边界（2026-10-26）
 

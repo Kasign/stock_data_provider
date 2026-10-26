@@ -608,3 +608,11 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 - Live Provider Probe #112 的内部探测步骤成功调用东方财富公告接口，HTTP 200，`total_hits=2`、`pages=1`、`returned=2`。对象为 600036.SH，日期窗口 2026-10-19 至 2026-10-25；两条记录的公告日期分别是 2026-10-24 和 2026-10-21，源端 `display_time` 是 `2026-10-23 17:20:42:715` 和 `2026-10-20 17:32:45:870`。
 - 上述响应证实旧解析器漏识别“秒:毫秒”格式，因而把两个真实的展示时间标记为缺失，并将质量降级。现新增该格式解析与毫秒精度单测；原始 display_time 仍原样保留，published_at 从源端时间解析，fetched_at 仍是独立采集时间。日期单值仍不转换为精确发布时间。
 - 上一轮 Go CI #302 失败于 `live_probe_test.go` 结构体的重复右括号；修复后仍出现 `server_test.go` 一处字段对齐问题。后续提交已处理这些编译/格式问题，但最终验收仍以新 HEAD 的 Go CI 和 Probe 为准。
+
+
+## 14. 公告 Provider 真实 Runner 验收（2026-10-26）
+
+- Go CI #304：[run 40258631137](https://github.com/Kasign/stock_data_provider/actions/runs/40258631137) 对提交 `0d4c85ecd5becb3d0c0b977558e91c5bdfc30e86` 全部通过，包括 Go tests、race detector、go vet、gofmt、Compose 配置校验和 Docker 镜像构建。
+- Live Provider Probe #114：[run 40258631152](https://github.com/Kasign/stock_data_provider/actions/runs/40258631152) 的核心探测步骤成功，报告 artifact `live-provider-report`（ID `12623945324`）已上传。
+- 对 `600036.SH` 查询 `2026-10-19` 至 `2026-10-25`，东方财富返回 HTTP 200、`total_hits=2`、`pages=1`、`returned=2`。两条公告的源端 `display_time` 分别为 `2026-10-23 17:20:42:715` 和 `2026-10-20 17:32:45:870`；新增解析支持“秒:毫秒”，正确解析 `published_at`，同时保留原始 `display_time`、独立 `announcement_date` 及 `fetched_at`。这两条样本的条目与快照质量状态均为 `valid`。
+- 此验收只证明 GitHub 托管 Runner 上的一只股票、一个日期窗口和第一页；没有证明全市场公告覆盖、任意分页稳定性、生产 SLA，也没有完成 NAS/Docker 部署验收。公告 Provider 的独立开关仍默认关闭。
