@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
 )
 
 type liveNewsSample struct {
@@ -98,4 +97,3 @@ func writeLiveNewsReport(t *testing.T, report liveNewsReport) {
 		t.Errorf("write live news report: %v", err)
 	}
 }
-
