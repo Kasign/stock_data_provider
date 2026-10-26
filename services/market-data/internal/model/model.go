@@ -451,6 +451,10 @@ type ChipDistribution struct {
 	Symbol          string        `json:"symbol"`
 	Date            string        `json:"date,omitempty"`
 	AverageCost     float64       `json:"average_cost"`
+	Cost90Low       *float64      `json:"cost_90_low,omitempty"`
+	Cost90High      *float64      `json:"cost_90_high,omitempty"`
+	Cost70Low       *float64      `json:"cost_70_low,omitempty"`
+	Cost70High      *float64      `json:"cost_70_high,omitempty"`
 	SourceVersion   string        `json:"source_version,omitempty"`
 	ProfitRatio     *float64      `json:"profit_ratio,omitempty"`
 	Concentration90 *float64      `json:"concentration_90,omitempty"`

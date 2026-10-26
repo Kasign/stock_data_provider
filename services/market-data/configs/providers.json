@@ -23,7 +23,8 @@
       "limit_pools": true,
       "stock_boards": true,
       "dragon_tiger": true,
-      "announcements": true
+      "announcements": true,
+      "chip_distribution": true
     },
     "hithink": {
       "enabled": false,

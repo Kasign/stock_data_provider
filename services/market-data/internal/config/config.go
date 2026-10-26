@@ -30,6 +30,7 @@ type ProviderSettings struct {
 	Fundamentals    bool `json:"fundamentals"`
 	Valuations      bool `json:"valuations"`
 	IndexCatalog    bool `json:"index_catalog"`
+	ChipDistribution bool `json:"chip_distribution"`
 	DragonTiger     bool `json:"dragon_tiger"`
 	Announcements   bool `json:"announcements"`
 }
@@ -111,7 +112,7 @@ func Load() (Config, error) {
 		ProviderPriority: []string{"eastmoney", "baostock", "hithink", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true},
 			"hithink":   {Enabled: false, Quote: false, DailyBars: false, IndexQuotes: false, TradingCalendar: false, LimitPools: false, DragonTiger: false, Fundamentals: false, Valuations: false, IndexCatalog: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: true, Fundamentals: true},
@@ -409,6 +410,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.Fundamentals = boolEnv("MARKET_DATA_"+prefix+"_FUNDAMENTALS_ENABLED", p.Fundamentals)
 	p.Valuations = boolEnv("MARKET_DATA_"+prefix+"_VALUATIONS_ENABLED", p.Valuations)
 	p.IndexCatalog = boolEnv("MARKET_DATA_"+prefix+"_INDEX_CATALOG_ENABLED", p.IndexCatalog)
+	p.ChipDistribution = boolEnv("MARKET_DATA_"+prefix+"_CHIP_DISTRIBUTION_ENABLED", p.ChipDistribution)
 	return p
 }
 
@@ -581,7 +583,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_BAOSTOCK_ENABLED", "MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "MARKET_DATA_EASTMONEY_DAILY_BARS_ENABLED",
 		"MARKET_DATA_EASTMONEY_STOCK_BASIC_ENABLED", "MARKET_DATA_EASTMONEY_SECTOR_RANKINGS_ENABLED",
-		"MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "MARKET_DATA_EASTMONEY_MARKET_BREADTH_ENABLED",
+		"MARKET_DATA_EASTMONEY_INDEX_QUOTES_ENABLED", "MARKET_DATA_EASTMONEY_MARKET_BREADTH_ENABLED", "MARKET_DATA_EASTMONEY_CHIP_DISTRIBUTION_ENABLED",
 		"MARKET_DATA_EASTMONEY_LIMIT_POOLS_ENABLED", "MARKET_DATA_EASTMONEY_STOCK_BOARDS_ENABLED", "MARKET_DATA_EASTMONEY_DRAGON_TIGER_ENABLED", "MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_ENABLED",
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",

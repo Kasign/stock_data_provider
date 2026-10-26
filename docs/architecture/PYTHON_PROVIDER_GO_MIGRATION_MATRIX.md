@@ -8,8 +8,8 @@
 
 | 原 Python 数据源 | 原注册条件 / 默认位置 | 主要市场或用途 | 当前 Go 对应 | 状态 |
 |---|---|---|---|---|
-| EfinanceFetcher | Python wrapper；原方法多依赖东方财富/新浪公开端点 | A 股行情、日线及部分市场统计/排行榜能力 | Go 原生 Eastmoney/Sina/对应专项 API 覆盖部分重叠能力 | 未做 1:1 wrapper 迁移；需逐项列出残余字段/方法差异，不能假设全等价 |
-| AkshareFetcher | Python 多端点聚合库，不是单一上游；按需替代具体 endpoint | A 股行情、日线、筹码/财务/板块等按方法覆盖能力 | Go 原生 Eastmoney、BaoStock、TickFlow、Tencent 等覆盖部分共享能力 | 未做 1:1 wrapper 迁移；筹码/资金流和少数财务/市场方法仍有差异或需专用源 |
+| EfinanceFetcher | Python wrapper；日线/行情/基本资料/所属板块多经由东方财富 | A 股行情、日线、实时指数、涨跌统计、行业/概念排行、个股基本信息、所属板块、增强数据 | Go 原生报价/日线/指数/市场广度/板块排名/证券 profile/所属板块已覆盖相同核心域；enhanced_data 可由独立 API 组合 | 基础信息的 PE/PB/ROE/市值等扩展字段尚未形成完整 Go 个股概览模型；任意地区指数列表不保证 1:1 等价；未统一测试 |
+| AkshareFetcher | Python 多端点聚合库；A 股日线回退东方财富 → 新浪 → 腾讯；筹码分布调用 stock_cyq_em 并在本地用最近 120 根日 K 计算 | A 股行情、日线、指数历史、筹码分布、市场统计、行业/概念、涨停池、人气榜 | Go 原生 Eastmoney/Sina/Tencent 覆盖行情与日线，THS 覆盖指数目录/成分/历史日 K；Eastmoney Go 原生 CYQ 算法覆盖最新筹码快照，市场统计/板块/涨停池已有独立接口 | 多数核心数据域有对应 Go 路由；人气榜/飙升榜及个股基本资料扩展字段仍未等价迁移；筹码输出降级且仅为最新快照；未统一测试 |
 | PytdxFetcher | 国内行情/日 K 末位回退源，默认开启 | A 股实时行情、日线 K 线；支持通达信除权事件辅助前/后复权 | Go 原生 `github.com/injoyai/tdx` v0.0.86 Provider（QuoteProvider + DailyBarProvider） | 已接入代码与路由，未统一测试；连接/行情服务器可用性、复权契约待集中验收 |
 | BaostockFetcher | 原 Python 默认 P3；Go 按历史 K 线优先候选 | A 股历史日线优先；财务、复权因子、除权除息、基础资料/行业/指数成分按 API 能力逐项扩展 | Go 原生 TCP 客户端与 DailyBarProvider 已实现；NAS Docker 容器已真实登录/查询，并覆盖多个证券及前复权、后复权、不复权样本；GitHub Runner #100 又返回 8 根样本日 K | 日 K 已有目标容器首轮实测，可作为受限回退源；仍需持续观察稳定性和更多证券/日期范围，不能外推为全覆盖或 SLA；财务指标、交易日历独立开关仍默认关闭 |
 | YfinanceFetcher | 默认启用；默认 P4；海外股票与指数的专用路径 | 美股 / 海外行情与历史数据、部分基本面数据 | 无 | 未迁移 |

@@ -521,6 +521,232 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 	return quote, nil
 }
 
+type eastmoneyChipKline struct {
+	date string
+	open float64
+	close float64
+	high float64
+	low float64
+	turnoverRate float64
+}
+
+// FetchChipDistribution 在 Go 中复刻 AkShare 的 CYQCalculator 核心指标计算。
+// 东方财富未提供筹码分布的独立快照时间，因此返回值保守标记为 degraded。
+func (p *Eastmoney) FetchChipDistribution(ctx context.Context, rawSymbol string) (*model.ChipDistribution, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	secid, err := eastmoneySecID(symbol)
+	if err != nil {
+		return nil, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	query := url.Values{
+		"secid":   []string{secid},
+		"fields1": []string{"f1,f2,f3,f4,f5,f6"},
+		"fields2": []string{"f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"},
+		"klt":     []string{"101"},
+		"fqt":     []string{"0"},
+		"beg":     []string{"0"},
+		"end":     []string{time.Now().Format("20060102")},
+		"lmt":     []string{"210"},
+		"ut":      []string{p.ut},
+		"_":       []string{strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	}
+	var payload struct {
+		RC *int `json:"rc"`
+		Data *struct {
+			Code string `json:"code"`
+			KLines []string `json:"klines"`
+		} `json:"data"`
+	}
+	if err := p.getJSONWithRetry(ctx, p.klineURL, query, &payload, 8*time.Second); err != nil {
+		return nil, fmt.Errorf("Eastmoney chip-distribution daily bars request: %w", err)
+	}
+	if payload.RC != nil && *payload.RC != 0 {
+		return nil, fmt.Errorf("Eastmoney chip-distribution provider error rc=%d", *payload.RC)
+	}
+	if payload.Data == nil || len(payload.Data.KLines) == 0 {
+		return nil, errors.New("Eastmoney chip-distribution response has no daily bars")
+	}
+	if reported := strings.TrimSpace(payload.Data.Code); reported != "" {
+		reportedSymbol, normalizeErr := normalize.NormalizeSymbol(reported)
+		if normalizeErr != nil || reportedSymbol != symbol {
+			return nil, fmt.Errorf("Eastmoney chip-distribution symbol mismatch: requested %s got %q", symbol, reported)
+		}
+	}
+	rows := make([]eastmoneyChipKline, 0, len(payload.Data.KLines))
+	seen := make(map[string]struct{}, len(payload.Data.KLines))
+	for index, line := range payload.Data.KLines {
+		parts := strings.Split(line, ",")
+		if len(parts) < 11 {
+			return nil, fmt.Errorf("Eastmoney chip-distribution row %d lacks turnover-rate field", index)
+		}
+		date, dateErr := time.Parse("2006-01-02", strings.TrimSpace(parts[0]))
+		if dateErr != nil {
+			return nil, fmt.Errorf("Eastmoney chip-distribution row %d has invalid date", index)
+		}
+		dateText := date.Format("2006-01-02")
+		if _, exists := seen[dateText]; exists {
+			return nil, fmt.Errorf("Eastmoney chip-distribution has duplicate date %s", dateText)
+		}
+		seen[dateText] = struct{}{}
+		values := make([]float64, 0, 5)
+		for _, field := range []string{parts[1], parts[2], parts[3], parts[4], parts[10]} {
+			value, parseErr := strconv.ParseFloat(strings.TrimSpace(field), 64)
+			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+				return nil, fmt.Errorf("Eastmoney chip-distribution row %s has invalid price/turnover data", dateText)
+			}
+			values = append(values, value)
+		}
+		open, closeValue, high, low, turnoverRate := values[0], values[1], values[2], values[3], values[4]
+		if open <= 0 || closeValue <= 0 || high <= 0 || low <= 0 || low > high ||
+			open < low || open > high || closeValue < low || closeValue > high || turnoverRate < 0 {
+			return nil, fmt.Errorf("Eastmoney chip-distribution row %s violates OHLC/turnover constraints", dateText)
+		}
+		rows = append(rows, eastmoneyChipKline{date: dateText, open: open, close: closeValue, high: high, low: low, turnoverRate: turnoverRate})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].date < rows[j].date })
+	if len(rows) > 120 {
+		rows = rows[len(rows)-120:]
+	}
+	metrics, err := calculateEastmoneyChipMetrics(rows)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	return &model.ChipDistribution{
+		Symbol: symbol, Date: rows[len(rows)-1].date, ProviderDate: rows[len(rows)-1].date,
+		AverageCost: metrics.averageCost, ProfitRatio: &metrics.profitRatio,
+		Cost90Low: &metrics.cost90Low, Cost90High: &metrics.cost90High,
+		Cost70Low: &metrics.cost70Low, Cost70High: &metrics.cost70High,
+		Concentration90: &metrics.concentration90, Concentration70: &metrics.concentration70,
+		Source: p.Name(), SourceVersion: "eastmoney-cyq-go-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_chip_snapshot_timestamp_not_exposed", "chip_metrics_computed_from_latest_120_daily_bars"},
+	}, nil
+}
+
+type eastmoneyChipMetrics struct {
+	averageCost float64
+	profitRatio float64
+	cost90Low float64
+	cost90High float64
+	concentration90 float64
+	cost70Low float64
+	cost70High float64
+	concentration70 float64
+}
+
+func calculateEastmoneyChipMetrics(rows []eastmoneyChipKline) (eastmoneyChipMetrics, error) {
+	if len(rows) == 0 {
+		return eastmoneyChipMetrics{}, errors.New("cannot calculate chip distribution from an empty series")
+	}
+	minPrice, maxPrice := rows[0].low, rows[0].high
+	for _, row := range rows[1:] {
+		if row.low < minPrice {
+			minPrice = row.low
+		}
+		if row.high > maxPrice {
+			maxPrice = row.high
+		}
+	}
+	const factor = 150
+	accuracy := math.Max(0.01, (maxPrice-minPrice)/float64(factor-1))
+	chips := make([]float64, factor)
+	for _, row := range rows {
+		averagePrice := (row.open + row.close + row.high + row.low) / 4
+		turnover := math.Min(1, row.turnoverRate/100)
+		if turnover < 0 || math.IsNaN(turnover) || math.IsInf(turnover, 0) {
+			return eastmoneyChipMetrics{}, errors.New("invalid turnover ratio while calculating chip distribution")
+		}
+		for i := range chips {
+			chips[i] *= 1 - turnover
+		}
+		if row.high == row.low {
+			index := int(math.Floor((averagePrice - minPrice) / accuracy))
+			if index >= 0 && index < factor {
+				chips[index] += float64(factor-1) * turnover / 2
+			}
+			continue
+		}
+		highIndex := int(math.Floor((row.high - minPrice) / accuracy))
+		lowIndex := int(math.Ceil((row.low - minPrice) / accuracy))
+		groupFactor := 2 / (row.high - row.low)
+		for j := lowIndex; j <= highIndex; j++ {
+			if j < 0 || j >= factor {
+				continue
+			}
+			currentPrice := minPrice + accuracy*float64(j)
+			if currentPrice <= averagePrice {
+				if math.Abs(averagePrice-row.low) < 1e-8 {
+					chips[j] += groupFactor * turnover
+				} else {
+					chips[j] += (currentPrice-row.low)/(averagePrice-row.low) * groupFactor * turnover
+				}
+			} else {
+				if math.Abs(row.high-averagePrice) < 1e-8 {
+					chips[j] += groupFactor * turnover
+				} else {
+					chips[j] += (row.high-currentPrice)/(row.high-averagePrice) * groupFactor * turnover
+				}
+			}
+		}
+	}
+	total := 0.0
+	for i := range chips {
+		if chips[i] < 0 || math.IsNaN(chips[i]) || math.IsInf(chips[i], 0) {
+			return eastmoneyChipMetrics{}, errors.New("chip distribution produced an invalid density")
+		}
+		total += chips[i]
+	}
+	if total <= 0 || math.IsNaN(total) || math.IsInf(total, 0) {
+		return eastmoneyChipMetrics{}, errors.New("chip distribution has no accumulated turnover density")
+	}
+	costFor := func(target float64) float64 {
+		accumulated := 0.0
+		for i, value := range chips {
+			if accumulated+value > target {
+				return minPrice + float64(i)*accuracy
+			}
+			accumulated += value
+		}
+		return 0
+	}
+	out := eastmoneyChipMetrics{averageCost: costFor(total * 0.5)}
+	if out.averageCost <= 0 || math.IsNaN(out.averageCost) || math.IsInf(out.averageCost, 0) {
+		return eastmoneyChipMetrics{}, errors.New("chip distribution could not determine average cost")
+	}
+	below := 0.0
+	currentPrice := rows[len(rows)-1].close
+	for i, value := range chips {
+		if currentPrice >= minPrice+float64(i)*accuracy {
+			below += value
+		}
+	}
+	out.profitRatio = below / total
+	out.cost90Low = costFor(total * 0.05)
+	out.cost90High = costFor(total * 0.95)
+	out.cost70Low = costFor(total * 0.15)
+	out.cost70High = costFor(total * 0.85)
+	if out.cost90Low <= 0 || out.cost90High <= 0 || out.cost70Low <= 0 || out.cost70High <= 0 {
+		return eastmoneyChipMetrics{}, errors.New("chip distribution could not determine cost percentile bounds")
+	}
+	if denominator := out.cost90High + out.cost90Low; denominator > 0 {
+		out.concentration90 = (out.cost90High - out.cost90Low) / denominator
+	}
+	if denominator := out.cost70High + out.cost70Low; denominator > 0 {
+		out.concentration70 = (out.cost70High - out.cost70Low) / denominator
+	}
+	if out.profitRatio < 0 || out.profitRatio > 1 || out.concentration90 < 0 || out.concentration90 > 1 || out.concentration70 < 0 || out.concentration70 > 1 {
+		return eastmoneyChipMetrics{}, errors.New("chip distribution produced ratio outside [0,1]")
+	}
+	return out, nil
+}
+
 func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {

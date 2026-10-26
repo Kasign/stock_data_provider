@@ -19,6 +19,11 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/repository"
 )
 
+type chipDistributionSource interface {
+	provider.NamedProvider
+	FetchChipDistribution(context.Context, string) (*model.ChipDistribution, error)
+}
+
 type DataService struct {
 	providers                []provider.NamedProvider
 	quoteProviders           []provider.QuoteProvider
@@ -36,6 +41,7 @@ type DataService struct {
 	fundamentalsProviders    []provider.FundamentalsProvider
 	valuationProviders       []provider.ValuationProvider
 	indexCatalogProviders    []provider.IndexCatalogProvider
+	chipDistributionProviders []provider.ChipDistributionProvider
 	supplementProviders      []provider.SupplementProvider
 	maxBars                  int
 	retries                  int
@@ -1049,6 +1055,15 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 	return nil, false, fmt.Errorf("all stock-boards providers failed: %s", strings.Join(failures, "; "))
 }
 
+// SetChipDistributionProviders 注册独立的原生筹码分布 Provider。
+func (s *DataService) SetChipDistributionProviders(providers []provider.ChipDistributionProvider) {
+	s.chipDistributionProviders = append([]provider.ChipDistributionProvider(nil), providers...)
+}
+
+func (s *DataService) ChipDistributionProviders() []provider.ChipDistributionProvider {
+	return append([]provider.ChipDistributionProvider(nil), s.chipDistributionProviders...)
+}
+
 // SetSupplementProviders 注册显式启用的非价格类补充数据源。
 // 此类 Provider 不会被加入实时行情或日 K 的兜底链。
 func (s *DataService) SetSupplementProviders(providers []provider.SupplementProvider) {
@@ -1073,11 +1088,18 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 	} else if cacheErr != nil {
 		s.logger.Warn("chip cache read failed", "error", cacheErr)
 	}
-	if len(s.supplementProviders) == 0 {
+	chipProviders := make([]chipDistributionSource, 0, len(s.chipDistributionProviders)+len(s.supplementProviders))
+	for _, p := range s.chipDistributionProviders {
+		chipProviders = append(chipProviders, p)
+	}
+	for _, p := range s.supplementProviders {
+		chipProviders = append(chipProviders, p)
+	}
+	if len(chipProviders) == 0 {
 		return nil, false, errors.New("no enabled chip-distribution provider")
 	}
 	var failures []string
-	for _, p := range s.supplementProviders {
+	for _, p := range chipProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
