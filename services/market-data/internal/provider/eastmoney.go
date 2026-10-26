@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
@@ -39,6 +40,7 @@ type Eastmoney struct {
 	klineURL         string
 	stockBasicURL    string
 	sectorRankingURL string
+	stockListURL     string
 	indexURL         string
 	marketBreadthURL string
 	limitPoolBaseURL string
@@ -46,6 +48,15 @@ type Eastmoney struct {
 	dragonTigerURL   string
 	announcementURL  string
 	ut               string
+
+	stockSearchMu         sync.Mutex
+	stockSearchIndex      []model.StockSearchItem
+	stockSearchFetchedAt  time.Time
+	stockSearchQuality    model.QualityStatus
+	stockSearchReasons    []string
+	stockSearchLoading    chan struct{}
+	stockSearchRetryAfter time.Time
+	stockSearchLastError  string
 }
 
 func NewEastmoney(timeout time.Duration, quoteURL, klineURL string) *Eastmoney {
@@ -113,7 +124,7 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, stockListURL: defaultEastmoneySectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, ut: ut,
 	}
 }
 
@@ -806,6 +817,269 @@ func eastmoneyRedirectPolicy(req *http.Request, via []*http.Request) error {
 func isEastmoneyHostname(host string) bool {
 	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
 	return host == "eastmoney.com" || strings.HasSuffix(host, ".eastmoney.com")
+}
+
+
+const (
+	eastmoneyStockSearchIndexTTL   = 6 * time.Hour
+	eastmoneyStockSearchPageSize   = 5000
+	eastmoneyStockSearchMaxPages   = 4
+	eastmoneyStockSearchRetryDelay = 30 * time.Second
+)
+
+// SearchStocks searches Eastmoney's real A-share security directory by Chinese name or code.
+// The directory is cached for six hours so autocomplete does not trigger a full-market request
+// on every keystroke. The response intentionally contains identity only, not quote data.
+func (p *Eastmoney) SearchStocks(ctx context.Context, rawQuery string, limit int) (*model.StockSearchSnapshot, error) {
+	query := strings.TrimSpace(rawQuery)
+	if query == "" {
+		return nil, errors.New("stock-search query is required")
+	}
+	if len([]rune(query)) > 64 {
+		return nil, errors.New("stock-search query must not exceed 64 characters")
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		return nil, errors.New("stock-search limit must not exceed 50")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	items, fetchedAt, quality, reasons, stale, err := p.loadStockSearchIndex(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("eastmoney stock-search directory: %w", err)
+	}
+	needle := strings.ToLower(query)
+	type rankedItem struct {
+		item model.StockSearchItem
+		rank int
+	}
+	matches := make([]rankedItem, 0)
+	for _, item := range items {
+		name := strings.ToLower(item.Name)
+		code := strings.ToLower(item.Code)
+		symbol := strings.ToLower(item.Symbol)
+		rank := -1
+		switch {
+		case name == needle || code == needle || symbol == needle:
+			rank = 0
+		case strings.HasPrefix(name, needle) || strings.HasPrefix(code, needle) || strings.HasPrefix(symbol, needle):
+			rank = 1
+		case strings.Contains(name, needle) || strings.Contains(code, needle) || strings.Contains(symbol, needle):
+			rank = 2
+		}
+		if rank >= 0 {
+			matches = append(matches, rankedItem{item: item, rank: rank})
+		}
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].rank != matches[j].rank {
+			return matches[i].rank < matches[j].rank
+		}
+		if matches[i].item.Name != matches[j].item.Name {
+			return matches[i].item.Name < matches[j].item.Name
+		}
+		return matches[i].item.Symbol < matches[j].item.Symbol
+	})
+	if limit > len(matches) {
+		limit = len(matches)
+	}
+	results := make([]model.StockSearchItem, 0, limit)
+	for _, match := range matches[:limit] {
+		results = append(results, match.item)
+	}
+	if stale {
+		quality = model.QualityStale
+		reasons = appendUniqueEastmoneyReason(reasons, "provider_refresh_failed_cached_directory_used")
+	}
+	if quality == "" {
+		quality = model.QualityUnknown
+	}
+	return &model.StockSearchSnapshot{
+		Query: query, Total: len(matches), Items: results,
+		Source: p.Name(), SourceVersion: "eastmoney-stock-search-clist-v1",
+		FetchedAt: fetchedAt, QualityStatus: quality, QualityReasons: reasons,
+	}, nil
+}
+
+func (p *Eastmoney) loadStockSearchIndex(ctx context.Context) ([]model.StockSearchItem, time.Time, model.QualityStatus, []string, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, time.Time{}, model.QualityUnknown, nil, false, err
+		}
+		p.stockSearchMu.Lock()
+		cached := append([]model.StockSearchItem(nil), p.stockSearchIndex...)
+		fetchedAt := p.stockSearchFetchedAt
+		quality := p.stockSearchQuality
+		reasons := append([]string(nil), p.stockSearchReasons...)
+		age := time.Since(fetchedAt)
+		fresh := len(cached) > 0 && !fetchedAt.IsZero() && age >= 0 && age < eastmoneyStockSearchIndexTTL
+		if fresh {
+			p.stockSearchMu.Unlock()
+			return cached, fetchedAt, quality, reasons, false, nil
+		}
+		if loading := p.stockSearchLoading; loading != nil {
+			p.stockSearchMu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nil, time.Time{}, model.QualityUnknown, nil, false, ctx.Err()
+			case <-loading:
+				continue
+			}
+		}
+		if time.Now().Before(p.stockSearchRetryAfter) {
+			lastError := p.stockSearchLastError
+			p.stockSearchMu.Unlock()
+			if len(cached) > 0 {
+				return cached, fetchedAt, model.QualityStale, appendUniqueEastmoneyReason(reasons, "provider_refresh_failed_cached_directory_used"), true, nil
+			}
+			if lastError == "" {
+				lastError = "stock-search directory refresh is cooling down"
+			}
+			return nil, time.Time{}, model.QualityUnknown, nil, false, errors.New(lastError)
+		}
+		loading := make(chan struct{})
+		p.stockSearchLoading = loading
+		p.stockSearchMu.Unlock()
+
+		items, loadedQuality, loadedReasons, err := p.fetchStockSearchIndex(ctx)
+		now := time.Now().UTC()
+
+		p.stockSearchMu.Lock()
+		if err == nil {
+			p.stockSearchIndex = append([]model.StockSearchItem(nil), items...)
+			p.stockSearchFetchedAt = now
+			p.stockSearchQuality = loadedQuality
+			p.stockSearchReasons = append([]string(nil), loadedReasons...)
+			p.stockSearchRetryAfter = time.Time{}
+			p.stockSearchLastError = ""
+		} else {
+			p.stockSearchRetryAfter = now.Add(eastmoneyStockSearchRetryDelay)
+			p.stockSearchLastError = err.Error()
+		}
+		cached = append([]model.StockSearchItem(nil), p.stockSearchIndex...)
+		fetchedAt = p.stockSearchFetchedAt
+		quality = p.stockSearchQuality
+		reasons = append([]string(nil), p.stockSearchReasons...)
+		p.stockSearchLoading = nil
+		close(loading)
+		p.stockSearchMu.Unlock()
+
+		if err != nil {
+			if len(cached) > 0 && !fetchedAt.IsZero() {
+				return cached, fetchedAt, model.QualityStale, appendUniqueEastmoneyReason(reasons, "provider_refresh_failed_cached_directory_used"), true, nil
+			}
+			return nil, time.Time{}, model.QualityUnknown, nil, false, err
+		}
+		return items, now, quality, loadedReasons, false, nil
+	}
+}
+
+func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSearchItem, model.QualityStatus, []string, error) {
+	baseURL := strings.TrimSpace(p.stockListURL)
+	if baseURL == "" {
+		baseURL = defaultEastmoneySectorRankingURL
+	}
+	items := make([]model.StockSearchItem, 0, 6000)
+	seen := make(map[string]struct{}, 6000)
+	reasons := make([]string, 0)
+	quality := model.QualityValid
+	total := 0
+	for page := 1; page <= eastmoneyStockSearchMaxPages; page++ {
+		params := url.Values{
+			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(eastmoneyStockSearchPageSize)},
+			"po": {"1"}, "np": {"1"}, "ut": {p.ut}, "fltt": {"2"}, "invt": {"2"},
+			"fid": {"f3"}, "fs": {"m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"},
+			"fields": {"f12,f13,f14"}, "_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		}
+		var payload struct {
+			RC   *int `json:"rc"`
+			Data *struct {
+				Total int             `json:"total"`
+				Diff  json.RawMessage `json:"diff"`
+			} `json:"data"`
+		}
+		if err := p.getJSONWithRetry(ctx, baseURL, params, &payload, 6*time.Second); err != nil {
+			return nil, model.QualityUnknown, nil, err
+		}
+		if payload.RC != nil && *payload.RC != 0 {
+			return nil, model.QualityUnknown, nil, fmt.Errorf("Eastmoney stock-search provider error rc=%d", *payload.RC)
+		}
+		if payload.Data == nil {
+			return nil, model.QualityUnknown, nil, errors.New("Eastmoney stock-search response has no data")
+		}
+		if page == 1 {
+			total = payload.Data.Total
+			if total <= 0 {
+				return nil, model.QualityUnknown, nil, errors.New("Eastmoney stock-search directory is empty")
+			}
+			if total > eastmoneyStockSearchPageSize*eastmoneyStockSearchMaxPages {
+				return nil, model.QualityUnknown, nil, fmt.Errorf("Eastmoney stock-search directory total %d exceeds safety limit", total)
+			}
+		}
+		rows, err := decodeEastmoneyBoardRows(payload.Data.Diff)
+		if err != nil {
+			return nil, model.QualityUnknown, nil, fmt.Errorf("decode Eastmoney stock-search rows: %w", err)
+		}
+		if len(rows) == 0 {
+			if page == 1 {
+				return nil, model.QualityUnknown, nil, errors.New("Eastmoney stock-search directory returned no rows")
+			}
+			quality = model.QualityDegraded
+			reasons = appendUniqueEastmoneyReason(reasons, "provider_directory_page_missing")
+			break
+		}
+		for _, row := range rows {
+			code := parseEastmoneyBoardString(row, "f12")
+			name := parseEastmoneyBoardString(row, "f14")
+			if code == "" || name == "" {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
+				continue
+			}
+			symbol, normalizeErr := normalize.NormalizeSymbol(code)
+			if normalizeErr != nil {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
+				continue
+			}
+			parts := strings.Split(symbol, ".")
+			if len(parts) != 2 {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
+				continue
+			}
+			if _, exists := seen[symbol]; exists {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_duplicate_symbols_dropped")
+				continue
+			}
+			seen[symbol] = struct{}{}
+			items = append(items, model.StockSearchItem{Symbol: symbol, Code: parts[0], Name: name, Exchange: parts[1]})
+		}
+		if page*eastmoneyStockSearchPageSize >= total {
+			break
+		}
+		if len(rows) < eastmoneyStockSearchPageSize {
+			quality = model.QualityDegraded
+			reasons = appendUniqueEastmoneyReason(reasons, "provider_directory_incomplete")
+			break
+		}
+	}
+	if len(items) == 0 {
+		return nil, model.QualityUnknown, nil, errors.New("Eastmoney stock-search directory contained no valid A-share rows")
+	}
+	if len(items) < total {
+		quality = model.QualityDegraded
+		reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_or_directory_incomplete")
+	}
+	return items, quality, reasons, nil
 }
 
 func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, error) {

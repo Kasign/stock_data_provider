@@ -19,6 +19,13 @@ import (
 type httpFakeProvider struct{}
 
 func (httpFakeProvider) Name() string { return "eastmoney" }
+func (httpFakeProvider) SearchStocks(_ context.Context, query string, limit int) (*model.StockSearchSnapshot, error) {
+	items := []model.StockSearchItem{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", Exchange: "SH"}}
+	if limit < len(items) {
+		items = items[:limit]
+	}
+	return &model.StockSearchSnapshot{Query: query, Total: len(items), Items: items, Source: "eastmoney", SourceVersion: "test", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid}, nil
+}
 func (httpFakeProvider) FetchIndexQuotes(_ context.Context) (*model.IndexQuoteSnapshot, error) {
 	now := time.Now().UTC()
 	price, change, pct, amount := 3200.5, 24.5, 0.8, 123456789.0
@@ -476,5 +483,53 @@ func TestMarketIndicesEndpointUsesDedicatedIndexCapability(t *testing.T) {
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"index_quote_capable":true`) {
 		t.Fatalf("data sources missing index capability: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+
+func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *testing.T) {
+	p := httpFakeProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p},
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockSearchProviders([]provider.StockSearchProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
+	).Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("missing API key status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{`"query":"贵州茅台"`, `"symbol":"600519.SH"`, `"code":"600519"`, `"name":"贵州茅台"`, `"exchange":"SH"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("stock-search response missing %s: %s", want, w.Body.String())
+		}
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+		t.Fatalf("empty query status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=51", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid limit status=%d body=%s", w.Code, w.Body.String())
 	}
 }

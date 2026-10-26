@@ -85,6 +85,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))
 	barProviders := make([]provider.DailyBarProvider, 0, len(available))
 	stockBasicProviders := make([]provider.StockBasicProvider, 0, len(available))
+	stockSearchProviders := make([]provider.StockSearchProvider, 0, len(available))
 	sectorRankingProviders := make([]provider.SectorRankingProvider, 0, len(available))
 	indexQuoteProviders := make([]provider.IndexQuoteProvider, 0, len(available))
 	marketBreadthProviders := make([]provider.MarketBreadthProvider, 0, len(available))
@@ -104,6 +105,9 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			continue
 		}
 		allProviders = append(allProviders, p)
+		if searchProvider, ok := p.(provider.StockSearchProvider); ok {
+			stockSearchProviders = append(stockSearchProviders, searchProvider)
+		}
 		if settings.Quote {
 			quoteProvider, ok := p.(provider.QuoteProvider)
 			if !ok {
@@ -203,6 +207,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	}
 	ds.SetSupplementProviders(supplementProviders)
 	ds.SetStockBasicProviders(stockBasicProviders)
+	ds.SetStockSearchProviders(stockSearchProviders)
 	ds.SetSectorRankingProviders(sectorRankingProviders)
 	ds.SetIndexQuoteProviders(indexQuoteProviders)
 	ds.SetMarketBreadthProviders(marketBreadthProviders)

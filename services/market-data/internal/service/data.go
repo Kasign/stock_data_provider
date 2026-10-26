@@ -24,6 +24,7 @@ type DataService struct {
 	quoteProviders           []provider.QuoteProvider
 	barProviders             []provider.DailyBarProvider
 	stockBasicProviders      []provider.StockBasicProvider
+	stockSearchProviders     []provider.StockSearchProvider
 	sectorRankingProviders   []provider.SectorRankingProvider
 	indexQuoteProviders      []provider.IndexQuoteProvider
 	marketBreadthProviders   []provider.MarketBreadthProvider
@@ -113,6 +114,14 @@ func (s *DataService) SetStockBasicProviders(providers []provider.StockBasicProv
 
 func (s *DataService) StockBasicProviders() []provider.StockBasicProvider {
 	return append([]provider.StockBasicProvider(nil), s.stockBasicProviders...)
+}
+
+func (s *DataService) SetStockSearchProviders(providers []provider.StockSearchProvider) {
+	s.stockSearchProviders = append([]provider.StockSearchProvider(nil), providers...)
+}
+
+func (s *DataService) StockSearchProviders() []provider.StockSearchProvider {
+	return append([]provider.StockSearchProvider(nil), s.stockSearchProviders...)
 }
 
 func (s *DataService) SetSectorRankingProviders(providers []provider.SectorRankingProvider) {
@@ -797,6 +806,104 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		return item, false, nil
 	}
 	return nil, false, fmt.Errorf("all stock-basic providers failed: %s", strings.Join(failures, "; "))
+}
+
+
+func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit int) (*model.StockSearchSnapshot, error) {
+	query := strings.TrimSpace(rawQuery)
+	if query == "" {
+		return nil, errors.New("stock-search query is required")
+	}
+	if len([]rune(query)) > 64 {
+		return nil, errors.New("stock-search query must not exceed 64 characters")
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		return nil, errors.New("stock-search limit must not exceed 50")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(s.stockSearchProviders) == 0 {
+		return nil, errors.New("no enabled stock-search provider")
+	}
+	failures := make([]string, 0, len(s.stockSearchProviders))
+	for _, p := range s.stockSearchProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		snapshot, fetchErr := p.SearchStocks(ctx, query, limit)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot == nil {
+			failures = append(failures, p.Name()+": empty stock-search response")
+			continue
+		}
+		if snapshot.Source == "" {
+			snapshot.Source = p.Name()
+		}
+		if snapshot.Query == "" {
+			snapshot.Query = query
+		}
+		if snapshot.FetchedAt.IsZero() {
+			snapshot.FetchedAt = time.Now().UTC()
+		}
+		if snapshot.QualityStatus == "" {
+			snapshot.QualityStatus = model.QualityUnknown
+		}
+		if err := validateStockSearchSnapshot(query, limit, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		return snapshot, nil
+	}
+	return nil, fmt.Errorf("all stock-search providers failed: %s", strings.Join(failures, "; "))
+}
+
+func validateStockSearchSnapshot(query string, limit int, snapshot *model.StockSearchSnapshot) error {
+	if snapshot == nil {
+		return errors.New("stock-search provider returned an empty snapshot")
+	}
+	if strings.TrimSpace(snapshot.Query) != query {
+		return errors.New("stock-search query mismatch")
+	}
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("stock-search source or fetched_at is missing")
+	}
+	if snapshot.Total < 0 || snapshot.Total < len(snapshot.Items) || len(snapshot.Items) > limit {
+		return errors.New("stock-search total or item count is invalid")
+	}
+	switch snapshot.QualityStatus {
+	case model.QualityValid, model.QualityDegraded, model.QualityStale, model.QualityUnknown:
+	default:
+		return fmt.Errorf("stock-search quality status %q is unsupported", snapshot.QualityStatus)
+	}
+	seen := make(map[string]struct{}, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		if strings.TrimSpace(item.Name) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Exchange) == "" {
+			return errors.New("stock-search item has missing code, name or exchange")
+		}
+		symbol, err := normalize.NormalizeSymbol(item.Symbol)
+		if err != nil || symbol != item.Symbol {
+			return errors.New("stock-search item has an invalid normalized symbol")
+		}
+		parts := strings.Split(symbol, ".")
+		if len(parts) != 2 || item.Code != parts[0] || item.Exchange != parts[1] {
+			return errors.New("stock-search item symbol, code and exchange disagree")
+		}
+		if _, ok := seen[symbol]; ok {
+			return fmt.Errorf("stock-search provider returned duplicate symbol %q", symbol)
+		}
+		seen[symbol] = struct{}{}
+	}
+	return nil
 }
 
 func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapshot) error {

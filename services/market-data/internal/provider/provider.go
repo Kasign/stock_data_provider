@@ -33,6 +33,12 @@ type StockBasicProvider interface {
 	FetchStockBasic(ctx context.Context, symbol string) (*model.StockBasic, error)
 }
 
+// StockSearchProvider 从真实证券目录按名称或代码搜索股票，不承担实时行情查询。
+type StockSearchProvider interface {
+	NamedProvider
+	SearchStocks(ctx context.Context, query string, limit int) (*model.StockSearchSnapshot, error)
+}
+
 // SectorRankingProvider 提供行业/概念板块的实时排名快照，不参与个股行情回退链。
 type SectorRankingProvider interface {
 	NamedProvider

@@ -156,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
 	mux.Handle("GET /api/v1/market/dragon-tiger", s.auth(http.HandlerFunc(s.dragonTiger)))
 	mux.Handle("GET /api/v1/market/trading-calendar", s.auth(http.HandlerFunc(s.tradingCalendar)))
+	mux.Handle("GET /api/v1/stocks/search", s.auth(http.HandlerFunc(s.searchStocks)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/boards", s.auth(http.HandlerFunc(s.stockBoards)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/announcements", s.auth(http.HandlerFunc(s.stockAnnouncements)))
@@ -413,6 +414,38 @@ func (s *Server) dragonTiger(w http.ResponseWriter, r *http.Request) {
 	}
 	setCacheHeader(w, hit)
 	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) searchStocks(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "q is required", requestID(r))
+		return
+	}
+	if len([]rune(query)) > 64 {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "q must not exceed 64 characters", requestID(r))
+		return
+	}
+	limit := 10
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil || parsed < 1 || parsed > 50 {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "limit must be between 1 and 50", requestID(r))
+			return
+		}
+		limit = parsed
+	}
+	snapshot, err := s.svc.SearchStocks(r.Context(), query, limit)
+	if err != nil {
+		writeDomainErr(w, err, requestID(r))
+		return
+	}
+	if snapshot.QualityStatus == model.QualityStale {
+		w.Header().Set("X-Market-Data-Cache", "STALE")
+	} else {
+		w.Header().Set("X-Market-Data-Cache", "HIT")
+	}
+	writeJSON(w, http.StatusOK, snapshot)
 }
 
 func (s *Server) stockBasic(w http.ResponseWriter, r *http.Request) {

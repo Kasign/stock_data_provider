@@ -147,6 +147,27 @@ type StockBasic struct {
 	NormalizationVer   string        `json:"normalization_version"`
 }
 
+// StockSearchItem 是证券目录搜索结果。它只描述证券身份，不包含实时行情价格。
+type StockSearchItem struct {
+	Symbol   string `json:"symbol"`
+	Code     string `json:"code"`
+	Name     string `json:"name"`
+	Exchange string `json:"exchange"`
+}
+
+// StockSearchSnapshot 是基于真实 Provider 证券目录进行的名称/代码查询结果。
+// FetchedAt 表示本服务获取目录的时间，不表示实时行情时间。
+type StockSearchSnapshot struct {
+	Query          string            `json:"query"`
+	Total          int               `json:"total"`
+	Items          []StockSearchItem `json:"items"`
+	Source         string            `json:"source"`
+	SourceVersion  string            `json:"source_version,omitempty"`
+	FetchedAt      time.Time         `json:"fetched_at"`
+	QualityStatus  QualityStatus     `json:"quality_status"`
+	QualityReasons []string          `json:"quality_reasons,omitempty"`
+}
+
 // SectorRanking 表示行业/概念板块的即时排名。涨跌幅单位为百分点，成交额单位为人民币元。
 type SectorRanking struct {
 	Rank                int           `json:"rank"`
