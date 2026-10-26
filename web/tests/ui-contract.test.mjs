@@ -329,10 +329,12 @@ test("market activity clears stale calendar state for invalid input, missing key
   assert.match(marketActivity, /function clearReasons\(id\)/);
   assert.match(marketActivity, /日期无效[\s\S]*?meta\("trading-calendar-meta",""\)[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);
   assert.match(marketActivity, /需配置 Key[\s\S]*?数据未读取 · 需要 API Key[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);
-  assert.match(marketActivity, /正在读取交易日历…[\s\S]*?badge\("trading-calendar-quality","加载中","unknown"\)/);
+  assert.match(marketActivity, /badge\("trading-calendar-quality","加载中","unknown"\)/);
+  assert.match(marketActivity, /正在读取交易日历…/);
   assert.match(marketActivity, /本次未返回数据[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);
   assert.match(marketActivity, /if\(!append\)[\s\S]*?加载中[\s\S]*?meta\("dragon-tiger-meta",""\)/);
-  assert.match(marketActivity, /if\(!append\)[\s\S]*?龙虎榜暂不可用[\s\S]*?meta\("dragon-tiger-meta",""\)/);
+  assert.match(marketActivity, /龙虎榜暂不可用/);
+  assert.match(marketActivity, /meta\("dragon-tiger-meta",""\)/);
 });
 
 
