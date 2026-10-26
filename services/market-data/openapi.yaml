@@ -967,7 +967,7 @@ paths:
   /api/v1/market/hot-stocks:
     get:
       summary: Get domestic individual-stock popularity or surge ranking
-      description: Eastmoney is preferred; optional Tonghuashun provides the same daily ranking contract as a fallback. Ranking data may be delayed, so successful snapshots remain degraded. total counts rows returned in this bounded response, not all securities in the market.
+      description: Eastmoney is preferred, Tonghuashun is the next optional fallback, and Xueqiu is an opt-in last fallback. Xueqiu surge uses one-hour rank-change ordering as a proxy and is not equivalent to Eastmoney's hot-up list. Ranking data may be delayed, so successful snapshots remain degraded. total counts rows returned in this bounded response, not all securities in the market.
       parameters:
         - {name: type, in: query, required: false, schema: {type: string, enum: [popular, surge], default: popular}}
         - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}

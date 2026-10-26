@@ -84,6 +84,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		"tushare":   provider.NewTushareConfigured(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken),
 		"tickflow":  provider.NewTickFlowConfigured(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey),
 		"pytdx":     provider.NewPytdx(cfg.ProviderTimeout, cfg.PytdxHosts...),
+		"xueqiu":    provider.NewXueqiuConfigured(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))

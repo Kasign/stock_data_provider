@@ -75,6 +75,8 @@ type Config struct {
 	TushareAPIURL             string
 	HithinkBaseURL            string
 	HithinkAPIKey             string
+	XueqiuBaseURL              string
+	XueqiuCookie               string
 	TickFlowAPIKey            string
 	PytdxHosts                []string
 	TickFlowAPIURL            string
@@ -110,7 +112,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "hithink", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx"},
+		ProviderPriority: []string{"eastmoney", "baostock", "hithink", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx", "xueqiu"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, HotRankings: true},
@@ -123,6 +125,7 @@ func Load() (Config, error) {
 			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false},
 			"tickflow":  {Enabled: true, Quote: false, DailyBars: true},
 			"pytdx":     {Enabled: true, Quote: true, DailyBars: true},
+			"xueqiu":    {Enabled: false, HotRankings: false},
 		},
 	}
 	file := defaults
@@ -139,7 +142,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" && name != "hithink" {
+			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" && name != "hithink" && name != "xueqiu" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -176,6 +179,7 @@ func Load() (Config, error) {
 	settings["tushare"] = overrideProvider("TUSHARE", settings["tushare"])
 	settings["tickflow"] = overrideProvider("TICKFLOW", settings["tickflow"])
 	settings["pytdx"] = overrideProvider("PYTDX", settings["pytdx"])
+	settings["xueqiu"] = overrideProvider("XUEQIU", settings["xueqiu"])
 	if settings["baostock"].Quote {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
 	}
@@ -217,6 +221,8 @@ func Load() (Config, error) {
 		TushareToken:              firstNonEmpty(os.Getenv("MARKET_DATA_TUSHARE_TOKEN"), os.Getenv("TUSHARE_TOKEN")),
 		TushareAPIURL:             get("MARKET_DATA_TUSHARE_API_URL", get("TUSHARE_HTTP_URL", "https://api.tushare.pro")),
 		HithinkBaseURL:            get("MARKET_DATA_HITHINK_BASE_URL", "https://fuyao.aicubes.cn"),
+		XueqiuBaseURL:             get("MARKET_DATA_XUEQIU_BASE_URL", "https://stock.xueqiu.com"),
+		XueqiuCookie:              strings.TrimSpace(os.Getenv("MARKET_DATA_XUEQIU_COOKIE")),
 		HithinkAPIKey:             firstNonEmpty(os.Getenv("MARKET_DATA_HITHINK_API_KEY"), os.Getenv("HITHINK_FINANCE_API_KEY")),
 		TickFlowAPIKey:            firstNonEmpty(os.Getenv("MARKET_DATA_TICKFLOW_API_KEY"), os.Getenv("TICKFLOW_API_KEY")),
 		TickFlowAPIURL:            get("MARKET_DATA_TICKFLOW_API_URL", get("TICKFLOW_BASE_URL", "https://api.tickflow.org")),
@@ -268,6 +274,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_NETEASE_HISTORY_URL":           cfg.NeteaseHistoryURL,
 		"MARKET_DATA_TUSHARE_API_URL":                cfg.TushareAPIURL,
 		"MARKET_DATA_HITHINK_BASE_URL":               cfg.HithinkBaseURL,
+		"MARKET_DATA_XUEQIU_BASE_URL":                cfg.XueqiuBaseURL,
 		"MARKET_DATA_TICKFLOW_API_URL":               cfg.TickFlowAPIURL,
 		"MARKET_DATA_TICKFLOW_FREE_API_URL":          cfg.TickFlowFreeAPIURL,
 		"MARKET_DATA_MX_API_URL":                    cfg.MXAPIURL,
@@ -596,6 +603,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_TUSHARE_FUNDAMENTALS_ENABLED", "MARKET_DATA_TUSHARE_VALUATIONS_ENABLED",
 		"MARKET_DATA_TUSHARE_LIMIT_POOLS_ENABLED", "MARKET_DATA_TUSHARE_DRAGON_TIGER_ENABLED",
 		"MARKET_DATA_TUSHARE_ANNOUNCEMENTS_ENABLED", "MARKET_DATA_TUSHARE_INDEX_CATALOG_ENABLED",
+		"MARKET_DATA_XUEQIU_ENABLED", "MARKET_DATA_XUEQIU_HOT_RANKINGS_ENABLED",
 		"MARKET_DATA_TICKFLOW_ENABLED", "MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED",
 		"MARKET_DATA_HITHINK_ENABLED", "MARKET_DATA_HITHINK_QUOTE_ENABLED", "MARKET_DATA_HITHINK_DAILY_BARS_ENABLED", "MARKET_DATA_HITHINK_FUNDAMENTALS_ENABLED", "MARKET_DATA_HITHINK_INDEX_QUOTES_ENABLED", "MARKET_DATA_HITHINK_TRADING_CALENDAR_ENABLED", "MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED", "MARKET_DATA_HITHINK_DRAGON_TIGER_ENABLED", "MARKET_DATA_HITHINK_VALUATIONS_ENABLED", "MARKET_DATA_HITHINK_INDEX_CATALOG_ENABLED", "MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED",
 		"MARKET_DATA_PYTDX_ENABLED", "MARKET_DATA_PYTDX_QUOTE_ENABLED", "MARKET_DATA_PYTDX_DAILY_BARS_ENABLED",

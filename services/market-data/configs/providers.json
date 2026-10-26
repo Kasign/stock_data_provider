@@ -8,7 +8,8 @@
     "tencent",
     "sina",
     "netease",
-    "pytdx"
+    "pytdx",
+    "xueqiu"
   ],
   "adjustment_basis": "forward_adjusted",
   "providers": {
@@ -89,6 +90,10 @@
       "enabled": true,
       "quote": true,
       "daily_bars": true
+    },
+    "xueqiu": {
+      "enabled": false,
+      "hot_rankings": false
     }
   }
 }

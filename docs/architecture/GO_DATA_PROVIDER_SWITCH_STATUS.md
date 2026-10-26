@@ -143,3 +143,10 @@ go vet ./...
 新增可选 `IndexCatalogProvider`，提供官方指数目录、最近可用的指数成分权重快照和指数日线历史。接口使用 `/api/v1/market/index-catalog?tag=tushare`、`/api/v1/market/indices/{symbol}/constituents` 与 `/api/v1/market/indices/{symbol}/daily?start=YYYY-MM-DD&end=YYYY-MM-DD`；指数代码保留 `.SH/.SZ/.CSI` 后缀，不能与个股 K 线接口混用。
 
 Tushare 指数目录通过 `MARKET_DATA_TUSHARE_ENABLED=true`、`MARKET_DATA_TUSHARE_INDEX_CATALOG_ENABLED=true` 和有效 Token 显式开启。指数成分取最近可用权重日期，可能滞后于当前交易日；日线成交量保留手、成交额按千元转换成人民币元。本轮没有运行测试和真实请求，这些能力仍待统一验收。
+
+
+### 雪球人气榜回退接入（2026-10-26，待统一验收）
+
+新增可选 Go 原生 `Xueqiu` Provider，仅承载热度/人气排名，不加入个股报价或日 K 回退链。配置 `MARKET_DATA_XUEQIU_ENABLED=true` 与 `MARKET_DATA_XUEQIU_HOT_RANKINGS_ENABLED=true` 后，它才会进入既有榜单 Provider 链；需要登录态时可配置 `MARKET_DATA_XUEQIU_COOKIE`。该 Cookie 是敏感会话信息，不写入日志或仓库。
+
+雪球热门榜可补充人气排名；`surge` 使用一小时排名变化排序，属于近似榜单，不宣称与东方财富 hot-up 数据一致，保持 degraded。本轮未运行测试或真实请求。
