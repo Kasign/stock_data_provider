@@ -497,6 +497,40 @@ components:
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
+    ChipDistribution:
+      type: object
+      required: [symbol, average_cost, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        date: {type: string, format: date, nullable: true, description: Normalized chip snapshot date}
+        average_cost: {type: number, exclusiveMinimum: 0, description: Average holder cost in CNY/share}
+        cost_90_low: {type: number, nullable: true, description: Lower edge of the 90 percent cost band in CNY/share}
+        cost_90_high: {type: number, nullable: true, description: Upper edge of the 90 percent cost band in CNY/share}
+        cost_70_low: {type: number, nullable: true, description: Lower edge of the 70 percent cost band in CNY/share}
+        cost_70_high: {type: number, nullable: true, description: Upper edge of the 70 percent cost band in CNY/share}
+        source_version: {type: string}
+        profit_ratio: {type: number, nullable: true, minimum: 0, maximum: 1, description: Profit ratio normalized to a 0–1 fraction}
+        concentration_90: {type: number, nullable: true, minimum: 0, maximum: 1, description: 90 percent cost concentration normalized to a 0–1 fraction}
+        concentration_70: {type: number, nullable: true, minimum: 0, maximum: 1, description: 70 percent cost concentration normalized to a 0–1 fraction}
+        source: {type: string}
+        provider_date: {type: string, nullable: true, description: Original provider report date}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    CapitalFlow:
+      type: object
+      required: [symbol, observations, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        source_version: {type: string}
+        main_net_inflow_yuan: {type: number, nullable: true, description: Provider-reported main net inflow in CNY yuan}
+        inflow_5d_yuan: {type: number, nullable: true, description: Five-day net-inflow aggregate in CNY yuan when all required observations exist}
+        inflow_10d_yuan: {type: number, nullable: true, description: Ten-day net-inflow aggregate in CNY yuan when all required observations exist}
+        observations: {type: integer, minimum: 0, description: Number of observations used by the provider calculation}
+        source: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     ValuationItem:
       type: object
       required: [symbol, code, pe_ttm, pe_mrq, pb_mrq, ps_ttm, pcf_ttm, source, fetched_at, quality_status]
@@ -700,6 +734,44 @@ paths:
         '401': {description: API key required}
         '502': {description: Provider failed or returned invalid financial data}
         '503': {description: No fundamentals provider enabled}
+  /api/v1/stocks/{symbol}/chip-distribution:
+    get:
+      summary: Get a stock chip-distribution snapshot
+      description: >-
+        Returns the latest provider-backed cost distribution for one A-share. Profit ratio and concentration values
+        are normalized to fractions from 0 to 1 by the service. Missing optional values remain absent; the snapshot
+        includes provider/source date, fetch time, source and quality reasons. This endpoint is not a prediction signal.
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string, example: 600519.SH}}
+      responses:
+        '200':
+          description: Chip-distribution snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChipDistribution'}
+        '400': {description: Invalid or unsupported symbol}
+        '401': {description: API key required}
+        '502': {description: All chip-distribution providers failed or returned invalid data}
+        '503': {description: No chip-distribution provider enabled}
+  /api/v1/stocks/{symbol}/capital-flow:
+    get:
+      summary: Get a stock capital-flow summary
+      description: >-
+        Amounts are CNY yuan. Main net inflow is the provider's reported observation, not a complete order-book audit.
+        Five-day and ten-day aggregates are populated only when their required observations are available; missing
+        values remain absent. The snapshot includes observation count, source, fetch time and quality reasons.
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string, example: 600519.SH}}
+      responses:
+        '200':
+          description: Capital-flow summary with CNY yuan amounts
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CapitalFlow'}
+        '400': {description: Invalid or unsupported symbol}
+        '401': {description: API key required}
+        '502': {description: All capital-flow providers failed or returned invalid data}
+        '503': {description: No capital-flow provider enabled}
   /api/v1/stocks/{symbol}/boards:
     get:
       summary: Get the boards associated with one A-share
