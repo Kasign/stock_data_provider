@@ -246,3 +246,10 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - 龙虎榜使用 `/api/a-share/special-data/dragon-tiger-list?board_type=all`，支持最近一年内的指定交易日；因为官方响应不提供分页参数，Go 适配器在内存中按统一接口做分页。
 - 同花顺特别数据文档没有明示金额字段单位；新增通用 `provider_*_value` 字段和 `provider_amount_unit=provider_defined`，不把这些金额伪装成 CNY。相关结果保持 degraded。
 - 通过 `MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED=true` 与 `MARKET_DATA_HITHINK_DRAGON_TIGER_ENABLED=true` 分别开启，两项默认关闭且需要同花顺 API Key。本轮未运行测试。
+
+### 同花顺批量估值快照（2026-10-26）
+
+- 新增独立 `ValuationProvider` 能力，并通过 `MARKET_DATA_HITHINK_VALUATIONS_ENABLED=true` 控制。默认关闭；启用前必须同时设置 `MARKET_DATA_HITHINK_ENABLED=true` 和有效的同花顺 API Key。
+- 新增 `GET /api/v1/market/valuations?symbols=600519.SH,000001.SZ`，最多接受 100 个原始代码 token；必须使用带交易所后缀的 SH/SZ/BJ 股票代码，按输入顺序去重。
+- 返回 PE TTM、PE MRQ、PB MRQ、PS TTM、PCF TTM。上游的 `null` 与负数原样保留，源快照时间缺失、请求股票缺失或任何指标字段缺失都会标记 degraded/unknown。
+- 估值端点只查询指定的有限股票列表，不进行全市场扫描；无测试/CI 执行，本次只做实现及配置文档接线。

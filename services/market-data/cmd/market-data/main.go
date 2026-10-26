@@ -100,6 +100,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	stockBoardsProviders := make([]provider.StockBoardsProvider, 0, len(available))
 	tradingCalendarProviders := make([]provider.TradingCalendarProvider, 0, len(available))
 	fundamentalsProviders := make([]provider.FundamentalsProvider, 0, len(available))
+	valuationProviders := make([]provider.ValuationProvider, 0, len(available))
 	for _, name := range cfg.ProviderPriority {
 		p, ok := available[name]
 		if !ok {
@@ -195,6 +196,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			}
 			fundamentalsProviders = append(fundamentalsProviders, capability)
 		}
+		if settings.Valuations {
+			capability, ok := p.(provider.ValuationProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for valuations but does not implement ValuationProvider", name)
+			}
+			valuationProviders = append(valuationProviders, capability)
+		}
 	}
 	// 股票搜索使用独立的源优先级：腾讯 Smartbox 按关键词检索，避免冷启动时扫描全市场目录；东方财富保留为后备。
 	searchPriority := []string{"tencent", "eastmoney"}
@@ -239,6 +247,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	ds.SetStockBoardsProviders(stockBoardsProviders)
 	ds.SetTradingCalendarProviders(tradingCalendarProviders)
 	ds.SetFundamentalsProviders(fundamentalsProviders)
+	ds.SetValuationProviders(valuationProviders)
 	handler := httpapi.NewWithCapabilityInterfaces(cfg.APIKey, cfg.Adjustment, ds, allProviders, quoteProviders, barProviders, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
 	logger.Info("market-data service starting", "addr", cfg.HTTPAddr, "providers", strings.Join(providerNames(allProviders), ","), "quote_providers", strings.Join(providerNames(quoteProviders), ","), "daily_bar_providers", strings.Join(providerNames(barProviders), ","), "mariadb_enabled", store != nil, "redis_enabled", cfg.RedisAddr != "", "adjustment", cfg.Adjustment, "mx_enabled", cfg.MXEnabled)

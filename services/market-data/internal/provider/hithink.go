@@ -756,6 +756,144 @@ func hithinkFieldInteger(row map[string]json.RawMessage, key string) *int {
 	return &result
 }
 
+func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*model.ValuationSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺估值接口需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	if len(rawSymbols) == 0 || len(rawSymbols) > 100 {
+		return nil, errors.New("同花顺估值接口每次需要 1..100 个 A 股证券代码")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	symbols := make([]string, 0, len(rawSymbols))
+	seen := make(map[string]struct{}, len(rawSymbols))
+	for _, rawSymbol := range rawSymbols {
+		symbol, err := hithinkDomesticSymbol(rawSymbol)
+		if err != nil {
+			return nil, err
+		}
+		if _, duplicate := seen[symbol]; duplicate {
+			continue
+		}
+		seen[symbol] = struct{}{}
+		symbols = append(symbols, symbol)
+	}
+	if len(symbols) == 0 {
+		return nil, errors.New("同花顺估值接口没有有效证券代码")
+	}
+	query := url.Values{}
+	query.Set("thscodes", strings.Join(symbols, ","))
+	raw, err := p.get(ctx, "/api/a-share/valuations/snapshot", query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺批量估值请求失败: %w", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Timestamp *int64                      `json:"timestamp"`
+		Total     *int                         `json:"total"`
+		Item      []map[string]json.RawMessage `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺批量估值失败: %w", err)
+	}
+	if data.Total != nil && (*data.Total < 0 || *data.Total != len(data.Item)) {
+		return nil, fmt.Errorf("同花顺估值响应 total 与 item 数量不一致: total=%d items=%d", *data.Total, len(data.Item))
+	}
+	now := time.Now().UTC()
+	snapshot := &model.ValuationSnapshot{
+		RequestedSymbols: append([]string(nil), symbols...),
+		Items: make([]model.ValuationItem, 0, len(data.Item)),
+		Source: p.Name(), SourceVersion: hithinkVersion + "-valuation-snapshot-v1",
+		FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	if data.Timestamp != nil && *data.Timestamp > 0 {
+		timestamp := time.UnixMilli(*data.Timestamp).UTC()
+		if !timestamp.After(now.Add(5*time.Minute)) && !timestamp.Before(now.AddDate(-10, 0, 0)) {
+			snapshot.ProviderTimestamp = &timestamp
+		}
+	}
+	if snapshot.ProviderTimestamp == nil {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_valuation_timestamp_missing_or_invalid")
+	}
+	requested := make(map[string]struct{}, len(symbols))
+	for _, symbol := range symbols {
+		requested[symbol] = struct{}{}
+	}
+	bySymbol := make(map[string]model.ValuationItem, len(data.Item))
+	for rowIndex, row := range data.Item {
+		rawSymbol := hithinkFieldString(row, "thscode")
+		symbol, symbolErr := hithinkDomesticSymbol(rawSymbol)
+		if symbolErr != nil {
+			return nil, fmt.Errorf("同花顺估值第 %d 行证券代码无效: %w", rowIndex, symbolErr)
+		}
+		if _, ok := requested[symbol]; !ok {
+			return nil, fmt.Errorf("同花顺估值响应包含未请求代码 %s", symbol)
+		}
+		if _, duplicate := bySymbol[symbol]; duplicate {
+			return nil, fmt.Errorf("同花顺估值响应包含重复代码 %s", symbol)
+		}
+		code := hithinkFieldString(row, "ticker")
+		if code == "" {
+			code = strings.Split(symbol, ".")[0]
+		}
+		if code != strings.Split(symbol, ".")[0] {
+			return nil, fmt.Errorf("同花顺估值第 %d 行 ticker 与 thscode 不一致", rowIndex)
+		}
+		name := hithinkFieldString(row, "name")
+		itemReasons := make([]string, 0, 2)
+		if name == "" {
+			itemReasons = append(itemReasons, "provider_stock_name_missing")
+		}
+		pet := hithinkFieldNumber(row, "pe_ttm")
+		pem := hithinkFieldNumber(row, "pe_mrq")
+		pbm := hithinkFieldNumber(row, "pb_mrq")
+		pst := hithinkFieldNumber(row, "ps_ttm")
+		pcft := hithinkFieldNumber(row, "pcf_ttm")
+		if pet == nil || pem == nil || pbm == nil || pst == nil || pcft == nil {
+			itemReasons = append(itemReasons, "one_or_more_valuation_metrics_missing_or_invalid")
+		}
+		itemQuality := model.QualityValid
+		if len(itemReasons) > 0 {
+			itemQuality = model.QualityDegraded
+			snapshot.QualityStatus = model.QualityDegraded
+		}
+		bySymbol[symbol] = model.ValuationItem{
+			Symbol: symbol, Code: code, Name: name,
+			PETTM: pet, PEMRQ: pem, PBMRQ: pbm, PSTTM: pst, PCFTTM: pcft,
+			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: now,
+			QualityStatus: itemQuality, QualityReasons: itemReasons,
+		}
+	}
+	for _, symbol := range symbols {
+		item, ok := bySymbol[symbol]
+		if !ok {
+			snapshot.MissingSymbols = append(snapshot.MissingSymbols, symbol)
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_requested_symbols_missing_from_provider_response")
+			continue
+		}
+		snapshot.Items = append(snapshot.Items, item)
+	}
+	snapshot.Total = len(snapshot.Items)
+	if snapshot.Total == 0 {
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_returned_no_valuation_rows")
+	}
+	if data.Total == nil {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_total_missing")
+	}
+	return snapshot, nil
+}
+
 func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("同花顺 HTTP client 未配置")

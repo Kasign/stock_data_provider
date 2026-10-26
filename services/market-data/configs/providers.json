@@ -33,7 +33,8 @@
       "trading_calendar": false,
       "limit_pools": false,
       "dragon_tiger": false,
-      "fundamentals": false
+      "fundamentals": false,
+      "valuations": false
     },
     "baostock": {
       "enabled": true,

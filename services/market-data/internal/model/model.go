@@ -317,6 +317,38 @@ type FundamentalsSnapshot struct {
 	QualityReasons []string             `json:"quality_reasons,omitempty"`
 }
 
+ // ValuationItem 为单只 A 股的最新估值快照。指标允许为 null 或负数，不将缺失值补零。
+type ValuationItem struct {
+	Symbol         string        `json:"symbol"`
+	Code           string        `json:"code"`
+	Name           string        `json:"name,omitempty"`
+	PETTM          *float64      `json:"pe_ttm"`
+	PEMRQ          *float64      `json:"pe_mrq"`
+	PBMRQ          *float64      `json:"pb_mrq"`
+	PSTTM          *float64      `json:"ps_ttm"`
+	PCFTTM         *float64      `json:"pcf_ttm"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
+// ValuationSnapshot 是一次批量估值查询。ProviderTimestamp 是供应商返回的五项估值中最新有效时间，
+// 不代表每个指标都在该时刻更新。MissingSymbols 记录未从供应商响应中返回的请求代码。
+type ValuationSnapshot struct {
+	RequestedSymbols  []string        `json:"requested_symbols"`
+	Total             int             `json:"total"`
+	Items             []ValuationItem `json:"items"`
+	MissingSymbols    []string        `json:"missing_symbols,omitempty"`
+	ProviderTimestamp *time.Time      `json:"provider_timestamp,omitempty"`
+	Source            string          `json:"source"`
+	SourceVersion     string          `json:"source_version,omitempty"`
+	FetchedAt         time.Time       `json:"fetched_at"`
+	QualityStatus     QualityStatus   `json:"quality_status"`
+	QualityReasons    []string        `json:"quality_reasons,omitempty"`
+}
+
 type SourceStatus struct {
 	Name                   string `json:"name"`
 	Enabled                bool   `json:"enabled"`
@@ -332,6 +364,7 @@ type SourceStatus struct {
 	AnnouncementsCapable   bool   `json:"announcements_capable,omitempty"`
 	TradingCalendarCapable bool   `json:"trading_calendar_capable,omitempty"`
 	FundamentalsCapable    bool   `json:"fundamentals_capable,omitempty"`
+	ValuationCapable       bool   `json:"valuation_capable,omitempty"`
 	ChipCapable            bool   `json:"chip_capable,omitempty"`
 	CapitalFlowCapable     bool   `json:"capital_flow_capable,omitempty"`
 }

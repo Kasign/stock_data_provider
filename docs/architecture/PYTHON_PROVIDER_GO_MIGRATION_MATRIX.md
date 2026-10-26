@@ -21,7 +21,7 @@
 | FutuFetcher | 检测到 Futu OpenD 端点配置后注册 | 港股等 Futu 支持市场 | 无 | 可选源，未迁移 |
 | FinnhubFetcher | 仅配置 `FINNHUB_API_KEY` 后注册 | 以美股/海外股票为主的补充行情和历史数据 | 无 | 可选源，未迁移 |
 | AlphaVantageFetcher | 仅配置 `ALPHAVANTAGE_API_KEY` 后注册 | 以美股/海外股票为主的补充行情和历史数据 | 无 | 可选源，未迁移 |
-| 同花顺 / THS Financial-API | 通过 `MARKET_DATA_HITHINK_API_KEY` 或 `HITHINK_FINANCE_API_KEY` 配置；默认关闭，按能力显式开启 | A 股名称/代码搜索、行情快照、历史日 K、指数快照、最近一年交易日历、财务指标与三张财务报表 | Go 原生 REST `Hithink` Provider（StockSearchProvider + QuoteProvider + DailyBarProvider + IndexQuoteProvider + TradingCalendarProvider + FundamentalsProvider） | 已接入首批能力；指数时间缺失和交易日历非交易日推断会降级；财务指标缺单位/披露时间；报表按报告期匹配、缺失项不补零；涨停池仅支持 up，龙虎榜金额单位保留 provider_defined；指数历史 K 线、板块和更多特色数据仍待迁移；未统一测试 |
+| 同花顺 / THS Financial-API | 通过 `MARKET_DATA_HITHINK_API_KEY` 或 `HITHINK_FINANCE_API_KEY` 配置；默认关闭，按能力显式开启 | A 股名称/代码搜索、行情快照、历史日 K、指数快照、最近一年交易日历、财务指标与三张财务报表 | Go 原生 REST `Hithink` Provider（StockSearchProvider + QuoteProvider + DailyBarProvider + IndexQuoteProvider + TradingCalendarProvider + FundamentalsProvider） | 已接入首批能力；指数时间缺失和交易日历非交易日推断会降级；财务指标缺单位/披露时间；报表按报告期匹配、缺失项不补零；涨停池仅支持 up，龙虎榜金额单位保留 provider_defined；批量估值已接入，保留 null/负值并标记上游时间；指数历史 K 线、板块和更多特色数据仍待迁移；未统一测试 |
 | Akshare / YFinance fundamental adapters | 由基本面上下文聚合逻辑调用，不完全等同于行情 Fetcher 列表 | 财务与基本面指标 | 无 | 未迁移 |
 
 原 Python 管理器会按注册的 Fetcher 优先级排序，并针对市场类型、数据能力、可用性和失败状态采用不同的路由 / fallback 规则。因此，简单地把这张表映射成一个全局 Provider 顺序并不足以复现原行为。

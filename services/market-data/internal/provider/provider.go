@@ -90,6 +90,12 @@ type FundamentalsProvider interface {
 	FetchFundamentals(ctx context.Context, symbol string, year, quarter int) (*model.FundamentalsSnapshot, error)
 }
 
+ // ValuationProvider returns the latest PE/PB/PS/PCF snapshot for a bounded list of A-share symbols.
+type ValuationProvider interface {
+	NamedProvider
+	FetchValuations(ctx context.Context, symbols []string) (*model.ValuationSnapshot, error)
+}
+
 // SupplementProvider 用于承载可选补充数据// SupplementProvider 用于承载可选补充数据，这类能力不会进入实时行情或日 K 的兜底链。
 type SupplementProvider interface {
 	NamedProvider
