@@ -15,6 +15,7 @@ import {
   getChipDistribution,
   getCapitalFlow,
   getDataSources,
+  getMarketBundle,
   getQuote,
   searchStocks,
   loadSettings,
@@ -1399,37 +1400,101 @@ async function runQuoteQuery(event) {
 
   const limit = Number($("#bar-limit").value) || 120;
   const adjustment = $("#adjustment").value;
-  const [quoteResult, barsResult] = await Promise.allSettled([
-    getQuote(state.settings, symbol),
-    getDailyBars(state.settings, symbol, { limit, adjustment, start: startDate, end: endDate })
-  ]);
+  let bundleResponse = null;
+  let quoteResult;
+  let barsResult;
+  let usedLegacyBundleFallback = false;
 
-  if (quoteResult.status === "fulfilled") {
-    renderQuote(quoteResult.value);
-    if (quoteResult.value.quality_status && quoteResult.value.quality_status !== "valid") {
-      setNotice(`行情接口已返回数据，但质量状态为“${qualityLabel(quoteResult.value.quality_status)}”。请同时查看质量原因及数据源验收记录。`, "warning");
+  if (!startDate && !endDate) {
+    // No custom date range: prefer one backend snapshot for a consistent quote + daily-bar view.
+    try {
+      bundleResponse = await getMarketBundle(state.settings, symbol, {
+        lookbackDays: Math.min(2000, Math.max(20, limit)),
+        adjustment
+      });
+    } catch (error) {
+      if (error.status === 404) {
+        // Older deployed servers may not expose Bundle yet. Only this case falls back to two requests.
+        usedLegacyBundleFallback = true;
+        [quoteResult, barsResult] = await Promise.allSettled([
+          getQuote(state.settings, symbol),
+          getDailyBars(state.settings, symbol, { limit, adjustment })
+        ]);
+      } else {
+        // Avoid retrying all providers through two endpoints after an aggregate Bundle failure.
+        quoteResult = { status: "rejected", reason: error };
+        barsResult = { status: "rejected", reason: error };
+      }
     }
   } else {
-    clearQuoteDisplay(symbol, "failed");
-    setNotice(`实时行情查询失败：${errorMessage(quoteResult.reason)}`, "danger");
+    // Bundle has no start/end query parameters; honor explicit date ranges with the existing daily-bars API.
+    [quoteResult, barsResult] = await Promise.allSettled([
+      getQuote(state.settings, symbol),
+      getDailyBars(state.settings, symbol, { limit, adjustment, start: startDate, end: endDate })
+    ]);
   }
 
-  if (barsResult.status === "fulfilled") {
-    renderBars(barsResult.value);
-    const warnings = barsResult.value.warnings || [];
-    if (warnings.length || barsResult.value.quality_status !== "valid") {
-      setNotice(`日 K 已返回 ${(barsResult.value.bars || []).length} 根，质量状态：${qualityLabel(barsResult.value.quality_status)}。${warnings.length ? `提示：${warnings.join("；")}` : ""}`, "warning");
+  if (bundleResponse) {
+    const bundleBars = Array.isArray(bundleResponse.daily_bars) ? bundleResponse.daily_bars : [];
+    if (bundleResponse.quote && typeof bundleResponse.quote === "object") {
+      renderQuote(bundleResponse.quote);
+    } else {
+      clearQuoteDisplay(symbol, "failed");
+    }
+
+    const actualAdjustment = bundleBars.find((bar) => bar.adjustment_basis)?.adjustment_basis
+      || (bundleBars.length ? adjustment : "unknown");
+    renderBars({
+      symbol: bundleResponse.symbol || symbol,
+      bars: bundleBars,
+      adjustment_basis: actualAdjustment,
+      volume_unit: bundleBars[0]?.volume_unit || (bundleBars.length ? "shares" : ""),
+      amount_unit: bundleBars[0]?.amount_unit || (bundleBars.length ? "CNY" : ""),
+      quality_status: bundleResponse.quality_status || "unknown",
+      warnings: Array.isArray(bundleResponse.warnings) ? bundleResponse.warnings : []
+    });
+
+    const warnings = Array.isArray(bundleResponse.warnings) ? bundleResponse.warnings : [];
+    const quoteMissing = !(bundleResponse.quote && typeof bundleResponse.quote === "object");
+    const needsWarning = warnings.length > 0
+      || bundleResponse.quality_status !== "valid"
+      || (bundleResponse.quote?.quality_status && bundleResponse.quote.quality_status !== "valid");
+    if (quoteMissing) {
+      setNotice(`统一快照已返回 ${bundleBars.length} 根日 K，但没有返回实时行情。${warnings.length ? "提示：" + warnings.join("；") : ""}`, "warning");
+    } else if (needsWarning) {
+      setNotice(`统一行情快照质量状态：${qualityLabel(bundleResponse.quality_status)}。${warnings.length ? "提示：" + warnings.join("；") : ""}`, "warning");
     }
   } else {
-    renderBars({ symbol, bars: [], adjustment_basis: adjustment, quality_status: "unknown", warnings: ["日 K 查询失败：" + errorMessage(barsResult.reason)] });
-    setText("#bars-meta", "查询失败");
-    $("#chart-empty").textContent = "日 K 查询失败，旧标的图表已清除。";
-    $("#chart-empty").hidden = false;
-    if (quoteResult.status === "fulfilled") setNotice(`实时行情已返回，日 K 查询失败：${errorMessage(barsResult.reason)}`, "warning");
+    if (quoteResult.status === "fulfilled") {
+      renderQuote(quoteResult.value);
+      if (quoteResult.value.quality_status && quoteResult.value.quality_status !== "valid") {
+        setNotice(`行情接口已返回数据，但质量状态为“${qualityLabel(quoteResult.value.quality_status)}”。请同时查看质量原因及数据源验收记录。`, "warning");
+      }
+    } else {
+      clearQuoteDisplay(symbol, "failed");
+      setNotice(`实时行情查询失败：${errorMessage(quoteResult.reason)}`, "danger");
+    }
+
+    if (barsResult.status === "fulfilled") {
+      renderBars(barsResult.value);
+      const warnings = barsResult.value.warnings || [];
+      if (warnings.length || barsResult.value.quality_status !== "valid") {
+        setNotice(`日 K 已返回 ${(barsResult.value.bars || []).length} 根，质量状态：${qualityLabel(barsResult.value.quality_status)}。${warnings.length ? `提示：${warnings.join("；")}` : ""}`, "warning");
+      }
+    } else {
+      renderBars({ symbol, bars: [], adjustment_basis: adjustment, quality_status: "unknown", warnings: ["日 K 查询失败：" + errorMessage(barsResult.reason)] });
+      setText("#bars-meta", "查询失败");
+      $("#chart-empty").textContent = "日 K 查询失败，旧标的图表已清除。";
+      $("#chart-empty").hidden = false;
+      if (quoteResult.status === "fulfilled") setNotice(`实时行情已返回，日 K 查询失败：${errorMessage(barsResult.reason)}`, "warning");
+    }
   }
 
   setText("#last-updated", new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()));
-  setText("#query-hint", `请求标的：${symbol} · 日 K 上限：${limit} · 复权口径：${adjustment} · 日期：${startDate || "起始不限"} 至 ${endDate || "截至今天"}`);
+  const snapshotHint = bundleResponse
+    ? ` · 快照 ID：${String(bundleResponse.snapshot_id || "未报告").slice(0, 16)} · 分析参考时间：${bundleResponse.analysis_reference_time ? formatDateTime(bundleResponse.analysis_reference_time) : "未报告"}`
+    : usedLegacyBundleFallback ? " · 当前服务未提供 Bundle 接口，已回退为两次独立请求" : "";
+  setText("#query-hint", `请求标的：${symbol} · 日 K 上限：${limit} · 复权口径：${adjustment} · 日期：${startDate || "起始不限"} 至 ${endDate || "截至今天"}${snapshotHint}`);
   state.isQuerying = false;
   $("#load-supplemental-button").disabled = !state.supplementSymbol || state.supplementLoading;
   $("#quote-form").classList.remove("is-loading");

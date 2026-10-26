@@ -33,6 +33,14 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 | Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | Run ID 作为路径段 | 读取单个 RunResult；运行未结束时现有接口可能返回 409 `run_not_finished` |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | run ID 作为路径段 | 获取结构化分析结果 |
 
+## 行情 Bundle 与快照一致性
+
+- 未填写日 K 开始/结束日期时，WebUI 优先请求 `GET /market-api/api/v1/bundles/{symbol}?lookback_days=120&adjustment=forward_adjusted`，在一个响应中读取实时行情、日 K、质量警告、`snapshot_id` 与 `analysis_reference_time`。
+- `lookback_days` 依照服务端 OpenAPI 参数传递；WebUI 的回包适配以 `daily_bars` 为日 K 数组，并从返回 K 线的 `adjustment_basis` 展示实际复权口径。
+- Bundle 可成功但不包含 `quote`；此时保留真实日 K，报价区明确显示未取得实时报价，不用旧报价或虚构报价填充。
+- 只有 Bundle 路由返回 HTTP 404 时，才兼容旧服务并回退到 `/quotes/{symbol}` 与 `/bars/{symbol}/daily` 两个接口。其他 Bundle 错误不会立即再调用两套 Provider，避免无谓的重复负载。
+- 用户填写了日 K 日期范围时，Bundle 不支持 `start/end`，因此继续使用实时行情 + 带日期范围的日 K 两个现有接口；结果不展示 Bundle 快照 ID。
+
 ## 日 K 日期范围参数
 
 现有行情 API 的日 K 路由已支持可选 `start=YYYY-MM-DD` 与 `end=YYYY-MM-DD` 参数。WebUI 仅在用户填写日期时附加相应参数；不填时不发送空值，使用后端现有默认行为。日期范围仍受 `limit` 和后端允许的日期校验约束，前端按 `Asia/Shanghai` 当日检查未来日期与起止顺序。复权口径始终通过原有 `adjustment` 参数传递并在返回后展示。

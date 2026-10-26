@@ -92,6 +92,17 @@ export function searchStocks(settings, query, { limit = 10, signal } = {}) {
   const params = new URLSearchParams({ q: String(query ?? "").trim(), limit: String(limit) });
   return request(settings.marketBase, `/api/v1/stocks/search?${params}`, { apiKey: settings.apiKey, signal });
 }
+export function getMarketBundle(settings, symbol, { lookbackDays = 120, adjustment = "forward_adjusted", asOf = "" } = {}, signal) {
+  const query = new URLSearchParams({
+    lookback_days: String(lookbackDays),
+    adjustment
+  });
+  if (asOf) query.set("as_of", asOf);
+  return request(settings.marketBase, `/api/v1/bundles/${encodeURIComponent(symbol)}?${query}`, {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
 export function getQuote(settings, symbol, signal) {
   return request(settings.marketBase, `/api/v1/quotes/${encodeURIComponent(symbol)}`, { apiKey: settings.apiKey, signal });
 }
