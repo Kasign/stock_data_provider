@@ -1100,6 +1100,27 @@ function renderQuote(quote) {
   }
 }
 
+function clearQuoteDisplay(symbol, phase = "failed") {
+  state.quote = null;
+  if (state.view === "chat") syncChatStockContextFromMarket();
+
+  const isLoading = phase === "loading";
+  setText("#quote-title", `${symbol} · ${isLoading ? "正在查询行情" : "实时行情不可用"}`);
+  setText("#quote-subtitle", isLoading
+    ? "正在读取当前标的的实时快照。"
+    : "本次请求未取得实时报价；不会沿用之前标的的价格数据。");
+  setQualityPill($("#quote-quality"), "unknown", isLoading ? "查询中" : "未取得报价");
+  setText("#metric-price", "—");
+  setText("#metric-change", isLoading ? "等待本次行情" : "本次报价不可用");
+  $("#metric-change").classList.remove("positive", "negative");
+  setText("#metric-amount", "—");
+  setText("#metric-volume", "—");
+  setText("#metric-turnover", "—");
+  setText("#metric-volume-ratio", "量比 —");
+  setText("#metric-source", "—");
+  setText("#metric-quote-time", "行情时间未报告");
+}
+
 function makeCell(value, className = "") {
   const cell = document.createElement("td");
   if (className) cell.className = className;
@@ -1374,6 +1395,7 @@ async function runQuoteQuery(event) {
   $("#quote-form button[type='submit']").disabled = true;
   setNotice("", "info");
   setText("#query-hint", `正在查询 ${symbol} 的实时行情与日 K…`);
+  clearQuoteDisplay(symbol, "loading");
 
   const limit = Number($("#bar-limit").value) || 120;
   const adjustment = $("#adjustment").value;
@@ -1388,6 +1410,7 @@ async function runQuoteQuery(event) {
       setNotice(`行情接口已返回数据，但质量状态为“${qualityLabel(quoteResult.value.quality_status)}”。请同时查看质量原因及数据源验收记录。`, "warning");
     }
   } else {
+    clearQuoteDisplay(symbol, "failed");
     setNotice(`实时行情查询失败：${errorMessage(quoteResult.reason)}`, "danger");
   }
 
