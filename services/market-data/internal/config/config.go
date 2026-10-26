@@ -596,6 +596,28 @@ func validateEnvironment() error {
 			}
 		}
 	}
+	// 能力开关统一校验，避免新增 Provider 能力时遗漏环境变量校验，
+	// 造成非法布尔值被 boolEnv 静默忽略并回退到默认值。
+	providerNames := []string{"EASTMONEY", "BAOSTOCK", "TENCENT", "SINA", "YAHOO", "NETEASE", "TUSHARE", "TICKFLOW", "PYTDX", "HITHINK", "XUEQIU"}
+	providerBooleanSuffixes := []string{
+		"ENABLED", "QUOTE_ENABLED", "DAILY_BARS_ENABLED", "STOCK_BASIC_ENABLED",
+		"SECTOR_RANKINGS_ENABLED", "INDEX_QUOTES_ENABLED", "MARKET_BREADTH_ENABLED",
+		"LIMIT_POOLS_ENABLED", "STOCK_BOARDS_ENABLED", "DRAGON_TIGER_ENABLED",
+		"ANNOUNCEMENTS_ENABLED", "TRADING_CALENDAR_ENABLED", "FUNDAMENTALS_ENABLED",
+		"VALUATIONS_ENABLED", "INDEX_CATALOG_ENABLED", "CHIP_DISTRIBUTION_ENABLED",
+		"HOT_RANKINGS_ENABLED",
+	}
+	for _, providerName := range providerNames {
+		for _, suffix := range providerBooleanSuffixes {
+			key := "MARKET_DATA_" + providerName + "_" + suffix
+			if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+				if _, err := strconv.ParseBool(value); err != nil {
+					return fmt.Errorf("%s must be a boolean, got %q", key, value)
+				}
+			}
+		}
+	}
+
 	for _, key := range []string{
 		"MARKET_DATA_DB_AUTO_MIGRATE", "MARKET_DATA_EASTMONEY_ENABLED",
 		"MARKET_DATA_BAOSTOCK_ENABLED", "MARKET_DATA_BAOSTOCK_QUOTE_ENABLED", "MARKET_DATA_BAOSTOCK_DAILY_BARS_ENABLED",
