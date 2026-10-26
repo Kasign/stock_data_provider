@@ -91,6 +91,7 @@
 ### P1：通知能力的 UI 和配置入口
 
 - [ ] **通知中心与状态模型** — [Issue #7](https://github.com/Kasign/stock_data_provider/issues/7)
+  - 进度：通知列表/详情布局、筛选禁用态和五态模型的源码与 CI 已完成。WebUI checks [#40256904732](https://github.com/Kasign/stock_data_provider/actions/runs/40256904732) 通过（75/75 Node tests、JS syntax、Nginx build）；真实通知 API 尚未接入。
   - 先设计消息列表、分类/状态筛选、详情和空态；顶栏角标只显示真实 API 提供的数据。
   - 通知渠道配置与单渠道测试放在设置中心；告警投递尝试与通知收件箱分开。
   - 没有持久通知 API 时，不生成真实未读数或历史记录。

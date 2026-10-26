@@ -145,3 +145,11 @@
 ## Issue #7 首轮 CI 诊断（2026-10-26）
 - WebUI checks [#40256844942](https://github.com/Kasign/stock_data_provider/actions/runs/40256844942) 中 75 项 Node 测试 74 项通过；语法检查通过，Nginx build 因测试失败未执行。
 - 唯一失败是旧 UI 合约测试对文案的精确匹配：期望“不会展示模拟通知”，而新 UI 写“不会生成模拟通知”。断言已更新为接受这两个表达；后续提交 Actions 仍须全绿后再继续。
+
+
+## Issue #7 最终验收（2026-10-26）
+- 修复提交 `b5ed8af4851c1723b9df5e1e509c6bdb64768a48` 对应 WebUI checks [#40256904732](https://github.com/Kasign/stock_data_provider/actions/runs/40256904732) 全部成功：75/75 Node tests、JavaScript syntax check、Nginx image build 均通过。
+- 首轮 [#40256844942](https://github.com/Kasign/stock_data_provider/actions/runs/40256844942) 唯一失败是旧测试精确匹配“不会展示模拟通知”，现已兼容“不会生成模拟通知”文案并通过重跑。
+- 当前 PR #2 Open、未合并，已验证 head `b5ed8af4851c1723b9df5e1e509c6bdb64768a48`；base SHA 仍为 `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。PR #1 Open、未合并，当前 head `b927362fc6482863b0085dbaaa5c4a0f156e10c6`；Go suite [#40256492883](https://github.com/Kasign/stock_data_provider/actions/runs/40256492883) 与 Live provider probe [#40256492893](https://github.com/Kasign/stock_data_provider/actions/runs/40256492893) 成功。
+- 通知 API 仍不存在；生产页只会显示 unavailable，不生成未读数/虚构通知。浏览器视觉验收和 NAS/Docker 联调仍未执行。
+- 下一项 Issue #8 将继续建设问股界面状态与股票上下文展示，保持发送禁用直到后端 Chat API 契约存在。
