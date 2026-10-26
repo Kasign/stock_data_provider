@@ -6,7 +6,8 @@
     "tickflow",
     "tencent",
     "sina",
-    "netease"
+    "netease",
+    "pytdx"
   ],
   "adjustment_basis": "forward_adjusted",
   "providers": {
@@ -58,6 +59,11 @@
     "tickflow": {
       "enabled": true,
       "quote": false,
+      "daily_bars": true
+    },
+    "pytdx": {
+      "enabled": true,
+      "quote": true,
       "daily_bars": true
     }
   }

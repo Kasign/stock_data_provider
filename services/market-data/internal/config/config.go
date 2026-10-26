@@ -103,7 +103,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "tushare", "tickflow", "tencent", "sina", "netease"},
+		ProviderPriority: []string{"eastmoney", "baostock", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true},
@@ -114,6 +114,7 @@ func Load() (Config, error) {
 			"netease":   {Enabled: true, Quote: true, DailyBars: true},
 			"tushare":   {Enabled: false, Quote: false, DailyBars: false},
 			"tickflow":  {Enabled: true, Quote: false, DailyBars: true},
+			"pytdx":     {Enabled: true, Quote: true, DailyBars: true},
 		},
 	}
 	file := defaults
@@ -130,7 +131,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" {
+			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -165,6 +166,7 @@ func Load() (Config, error) {
 	settings["baostock"] = overrideProvider("BAOSTOCK", settings["baostock"])
 	settings["tushare"] = overrideProvider("TUSHARE", settings["tushare"])
 	settings["tickflow"] = overrideProvider("TICKFLOW", settings["tickflow"])
+	settings["pytdx"] = overrideProvider("PYTDX", settings["pytdx"])
 	if settings["baostock"].Quote {
 		return Config{}, errors.New("BaoStock currently supports daily bars only; disable MARKET_DATA_BAOSTOCK_QUOTE_ENABLED")
 	}
@@ -309,7 +311,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" {
+		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {
@@ -571,6 +573,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_NETEASE_ENABLED", "MARKET_DATA_NETEASE_QUOTE_ENABLED", "MARKET_DATA_NETEASE_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TUSHARE_ENABLED", "MARKET_DATA_TUSHARE_QUOTE_ENABLED", "MARKET_DATA_TUSHARE_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TICKFLOW_ENABLED", "MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED",
+		"MARKET_DATA_PYTDX_ENABLED", "MARKET_DATA_PYTDX_QUOTE_ENABLED", "MARKET_DATA_PYTDX_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
