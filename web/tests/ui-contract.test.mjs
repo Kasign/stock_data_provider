@@ -269,7 +269,7 @@ test("new feature pages display unavailable states rather than production mock r
     assert.match(html, new RegExp('id="' + id + '"'));
   }
   assert.match(html, /通知收件箱暂不可用/);
-  assert.match(html, /不会展示模拟通知/);
+  assert.match(html, /不会(?:展示|生成)模拟通知/);
   assert.match(html, /不会用单次分析报告冒充多轮 AI 对话/);
   assert.match(html, /不能提交，不会产生模拟结果/);
   assert.match(html, /不会在浏览器里假保存规则/);

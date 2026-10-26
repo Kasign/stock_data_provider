@@ -248,3 +248,6 @@
 - 顶栏只保留通知入口，不显示未读数。通知收件箱与设置中的渠道配置、告警中的通知投递尝试分离。
 - 新增 `web/src/notification-state.js`、`web/tests/notification-state.test.mjs` 和 UI 契约测试；语法检查包含新模块。后端 API 缺口未改变，也未添加模拟请求或 fixtures 到生产页面。
 - 本批 CI 状态待回填；浏览器实际布局及 NAS/Docker 真实通知 API 联调尚未执行。
+
+
+- Issue #7 首轮 WebUI checks [#40256844942](https://github.com/Kasign/stock_data_provider/actions/runs/40256844942) 中 74/75 项 Node 测试通过，JS 语法检查通过，Nginx 镜像构建因测试失败跳过。唯一失败是沿用旧文案精确匹配“不会展示模拟通知”，而页面文案调整为“不会生成模拟通知”；已放宽为接受这两种等价表达，等待重新验收。

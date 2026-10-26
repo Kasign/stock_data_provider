@@ -140,3 +140,8 @@
 - 本批 UI 仅呈现真实能力缺失：筛选、刷新、详情读写状态操作禁用；不会以“0 条”误报通知为空，不会产生未读角标或模拟记录。
 - 新增五态状态模型，当前生产页固定从 `supported:false` 解析为 unavailable。其余状态仅为接入真实 API 后的状态框架和纯函数测试，不表示真实通知端点已经存在。
 - 本批源码与 CI 状态待最终 Actions 结果确认；浏览器真实截图与 NAS/Docker/OpenResty 联调未完成。
+
+
+## Issue #7 首轮 CI 诊断（2026-10-26）
+- WebUI checks [#40256844942](https://github.com/Kasign/stock_data_provider/actions/runs/40256844942) 中 75 项 Node 测试 74 项通过；语法检查通过，Nginx build 因测试失败未执行。
+- 唯一失败是旧 UI 合约测试对文案的精确匹配：期望“不会展示模拟通知”，而新 UI 写“不会生成模拟通知”。断言已更新为接受这两个表达；后续提交 Actions 仍须全绿后再继续。
