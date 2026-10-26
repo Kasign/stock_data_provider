@@ -470,7 +470,7 @@ components:
 
     MarketBreadthSnapshot:
       type: object
-      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, amount_coverage_count, source, fetched_at, quality_status]
+      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, amount_coverage_count, source, fetched_at, quality_status]
       properties:
         market: {type: string, enum: [cn_a_share]}
         total_securities: {type: integer, minimum: 1, description: Sum of source change-distribution bucket counts; not independently verified against a security master}

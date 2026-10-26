@@ -155,6 +155,43 @@ func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) 
 	}
 }
 
+
+func TestEastmoneyFetchMarketBreadthDoesNotMixLimitCountsAcrossDates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/getTopicZDFenBu":
+			_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
+				"qdate": 20261023, "fenbu": []map[string]int{{"-1": 2}, {"0": 1}, {"1": 3}},
+			}})
+		case "/getTopicZTPool":
+			_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
+				"tc": 9, "qdate": 20261024, "pool": []map[string]any{{"c": "600519", "m": 1, "n": "贵州茅台", "zdp": 10.0}},
+			}})
+		case "/getTopicDTPool":
+			_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
+				"tc": 4, "qdate": 20261023, "pool": []map[string]any{{"c": "600519", "m": 1, "n": "贵州茅台", "zdp": -10.0}},
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", server.URL, "")
+	got, err := p.FetchMarketBreadth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LimitUpCount != nil {
+		t.Fatalf("must not mix a different report date into breadth snapshot: %+v", got)
+	}
+	if got.LimitDownCount == nil || *got.LimitDownCount != 4 {
+		t.Fatalf("expected same-date limit-down total, got %+v", got.LimitDownCount)
+	}
+	if !strings.Contains(strings.Join(got.QualityReasons, ","), "market_breadth_limit_up_count_report_date_mismatch") {
+		t.Fatalf("missing report-date mismatch quality reason: %+v", got.QualityReasons)
+	}
+}
+
 func TestEastmoneyFetchMarketBreadthRejectsInvalidDistribution(t *testing.T) {
 	cases := map[string]string{
 		"missing-data":     `{"rc":0,"data":{"qdate":20261023}}`,
