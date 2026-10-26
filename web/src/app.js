@@ -113,22 +113,11 @@ const state = {
   chatStockContext: null
 };
 
-const marketOverview = bindMarketOverview(() => state.settings);
+const marketOverview = bindMarketOverview(() => state.settings, (item, source) => selectStockFromMarket(item, source));
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
 const marketActivity = bindMarketActivity(
   () => state.settings,
-  (item) => {
-    if (state.isQuerying) { setText("#query-hint", "当前行情查询仍在执行，请稍后再从龙虎榜跳转。"); return; }
-    const symbol = String(item?.symbol || "").trim();
-    if (!symbol) return;
-    $("#symbol-input").value = symbol;
-    state.selectedStockSearchItem = { symbol, name: item.name || symbol };
-    cancelStockSearchRequest();
-    hideStockSearch();
-    stockResearch.syncSymbol();
-    setText("#query-hint", "已从龙虎榜选择 " + (item.name || symbol) + "，正在加载实时行情与日 K。");
-    void runQuoteQuery();
-  }
+  (item) => selectStockFromMarket(item, "龙虎榜")
 );
 
 function setText(selector, value) {
@@ -136,6 +125,21 @@ function setText(selector, value) {
   if (target) target.textContent = value == null || value === "" ? "—" : String(value);
 }
 
+function selectStockFromMarket(item, source = "市场榜单") {
+  if (state.isQuerying) {
+    setText("#query-hint", "当前行情查询仍在执行，请稍后再从" + source + "跳转。");
+    return;
+  }
+  const symbol = String(item?.symbol || "").trim();
+  if (!symbol) return;
+  $("#symbol-input").value = symbol;
+  state.selectedStockSearchItem = { symbol, name: item.name || symbol };
+  cancelStockSearchRequest();
+  hideStockSearch();
+  stockResearch.syncSymbol();
+  setText("#query-hint", "已从" + source + "选择 " + (item.name || symbol) + "，正在加载实时行情与日 K。");
+  void runQuoteQuery();
+}
 
 function syncThemeControl(theme) {
   const current = theme === "light" ? "light" : "dark";
@@ -1315,6 +1319,7 @@ function renderSources(payload) {
     ["stock_boards_capable", "个股所属板块"],
     ["fundamentals_capable", "季度财务指标"],
     ["valuation_capable", "个股估值指标"],
+    ["hot_ranking_capable", "个股人气榜/飙升榜"],
     ["chip_capable", "筹码分布"],
     ["capital_flow_capable", "资金流摘要"],
     ["announcements_capable", "个股公告"],

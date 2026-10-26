@@ -86,6 +86,12 @@ export function getMarketValuations(settings, symbols, signal) {
     signal
   });
 }
+export function getMarketHotStocks(settings, { type = "popular", limit = 10, signal } = {}) {
+  const rankingType = ["popular", "surge"].includes(String(type)) ? String(type) : "popular";
+  const boundedLimit = Math.max(1, Math.min(100, Math.trunc(Number(limit) || 10)));
+  const query = new URLSearchParams({ type: rankingType, limit: String(boundedLimit) });
+  return request(settings.marketBase, "/api/v1/market/hot-stocks?" + query.toString(), { apiKey: settings.apiKey, signal });
+}
 export function getMarketIndices(settings, signal) { return request(settings.marketBase, "/api/v1/market/indices", { apiKey: settings.apiKey, signal }); }
 export function getMarketBreadth(settings, signal) { return request(settings.marketBase, "/api/v1/market/breadth", { apiKey: settings.apiKey, signal }); }
 export function getMarketSectors(settings, { type = "industry", limit = 10, signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit)});return request(settings.marketBase,"/api/v1/market/sectors?"+query.toString(),{apiKey:settings.apiKey,signal}); }

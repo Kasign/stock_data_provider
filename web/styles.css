@@ -1687,3 +1687,16 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   .stock-supplement-toolbar .button { width: 100%; }
   .stock-supplement-metric-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+/* Provider-backed popularity and surge ranking. Rank movement retains upstream sign semantics. */
+.market-hot-stocks-widget { grid-column: 1 / -1; min-width: 0; }
+.market-hot-stocks-table { max-height: 430px; }
+.market-hot-stock-link { display: block; max-width: 100%; padding: 0; border: 0; color: inherit; text-align: left; background: transparent; cursor: pointer; }
+.market-hot-stock-link:hover .market-table-primary { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.market-hot-stock-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+.market-hot-stock-link:disabled { cursor: not-allowed; opacity: .6; }
+@media (max-width: 600px) {
+  .market-hot-stocks-widget { grid-column: auto; }
+  .market-hot-stocks-table table { min-width: 610px; }
+}
