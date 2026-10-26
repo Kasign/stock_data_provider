@@ -315,43 +315,114 @@
 
         <section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
           <div class="page-heading">
-            <div><p class="eyebrow">PREFERENCES / 07</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">区分浏览器偏好、当前浏览器的连接凭据和服务端配置。不同类型的数据有不同保存边界。</p></div>
+            <div><p class="eyebrow">PREFERENCES / 07</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">按配置归属分组。每项都标明是本地偏好、浏览器连接配置，还是需要服务端 API 的系统配置。</p></div>
             <div class="feature-status"><span class="availability-pill is-unavailable">服务端配置 API 待接入</span></div>
           </div>
-          <section class="settings-section" aria-labelledby="settings-display-title">
-            <div class="settings-section-heading"><div><h2 id="settings-display-title">显示偏好</h2><p>主题仅影响当前 WebUI 的视觉，不会修改服务器配置。</p></div><span class="availability-pill is-local">本地偏好</span></div>
-            <div class="panel settings-theme-panel">
-              <div><strong>颜色主题</strong><p>选择深色或浅色。该偏好保存在当前浏览器；浏览器禁用存储时仅对当前页面会话生效。</p></div>
-              <div class="settings-theme-options" role="group" aria-label="颜色主题">
-                <button class="button button-secondary" type="button" data-theme-value="dark" aria-pressed="false">深色主题</button>
-                <button class="button button-secondary" type="button" data-theme-value="light" aria-pressed="false">浅色主题</button>
-              </div>
+          <div class="settings-layout">
+            <nav class="settings-nav" aria-label="设置分组">
+              <button class="settings-nav-link is-active" type="button" data-settings-target="settings-display-section" aria-current="location">显示偏好</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-connection-section">连接与服务</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-basic-section">基础设置</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-data-source-section">数据源</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-ai-section">AI 与问股</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-notification-section">通知渠道</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-scheduler-section">任务调度</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-screening-section">选股</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-security-section">系统安全与备份</button>
+            </nav>
+            <div class="settings-content">
+              <section class="settings-section" id="settings-display-section" aria-labelledby="settings-display-title">
+                <div class="settings-section-heading"><div><h2 id="settings-display-title">显示偏好</h2><p>仅影响当前浏览器中的 WebUI 外观。</p></div><span class="availability-pill is-local">本地偏好</span></div>
+                <div class="panel settings-theme-panel">
+                  <div><strong>颜色主题</strong><p>深色或浅色主题保存在当前浏览器；存储被禁用时只影响当前页面会话，不会修改服务器配置。</p></div>
+                  <div class="settings-theme-options" role="group" aria-label="颜色主题">
+                    <button class="button button-secondary" type="button" data-theme-value="dark" aria-pressed="false">深色主题</button>
+                    <button class="button button-secondary" type="button" data-theme-value="light" aria-pressed="false">浅色主题</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-connection-section" aria-labelledby="settings-connection-title">
+                <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务状态</h2><p>健康检查确认 API 端点是否可响应，不代表每个 Provider 都实时可用。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
+                <div class="panel settings-connection-card">
+                  <div><strong>行情与分析 API</strong><p>同源路径与行情服务 API Key 由当前浏览器保存。API Key 是内部服务访问凭据，不是用户登录认证，也不会写入服务器 .env。</p>
+                    <p id="settings-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未执行连接检查。</p>
+                  </div>
+                  <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查连接</button><button class="button button-primary" id="settings-open-connection" type="button">编辑连接配置</button></div>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-basic-section" aria-labelledby="settings-basic-title">
+                <div class="settings-section-heading"><div><h2 id="settings-basic-title">基础设置</h2><p>默认市场、查询参数和分析默认值属于服务端产品配置；当前 API 没有对应配置 schema 或保存端点。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="feature-form-grid">
+                    <label class="field"><span>默认市场</span><select disabled aria-disabled="true"><option>等待服务端配置 schema</option></select></label>
+                    <label class="field"><span>默认日 K 范围</span><select disabled aria-disabled="true"><option>等待服务端配置 schema</option></select></label>
+                    <label class="field"><span>默认分析类型</span><select disabled aria-disabled="true"><option>等待服务端配置 schema</option></select></label>
+                    <label class="field"><span>时区</span><input disabled aria-disabled="true" value="Asia/Shanghai（当前页面日期校验）" /></label>
+                  </div>
+                  <p class="field-hint">这些字段是配置范围说明，不是已保存的服务器设置。服务端接口接入前不允许提交。</p>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-data-source-section" aria-labelledby="settings-data-source-title">
+                <div class="settings-section-heading"><div><h2 id="settings-data-source-title">数据源</h2><p>当前可读取后端注册的 Provider 清单与能力声明；注册信息不等同于实时请求成功。</p></div><span class="availability-pill is-readonly">已有只读接口</span></div>
+                <div class="panel settings-connection-card">
+                  <div><strong>数据源能力清单</strong><p>真实清单在行情总览显示。服务端没有通用的数据源启停、优先级编辑或密钥管理 API。</p></div>
+                  <button class="button button-secondary" id="settings-view-data-sources" type="button">查看数据源清单</button>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-ai-section" aria-labelledby="settings-ai-title">
+                <div class="settings-section-heading"><div><h2 id="settings-ai-title">AI 模型与问股</h2><p>模型提供商、Agent 策略、上下文和成本限制需要服务端 schema 与权限控制。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
+                <div class="panel settings-unavailable-panel">
+                  <h3>尚无模型配置 API</h3><p>不会在前端存储伪造的模型密钥或显示虚假的连通测试结果。接入后应提供脱敏回显、模型列表、配置版本和真实测试请求。</p>
+                  <button class="button button-secondary" type="button" disabled aria-disabled="true">测试模型连接（待接入）</button>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-notification-section" aria-labelledby="settings-notification-title">
+                <div class="settings-section-heading"><div><h2 id="settings-notification-title">通知渠道</h2><p>渠道配置、敏感凭据和单渠道投递测试应由服务端管理。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
+                <div class="panel settings-unavailable-panel">
+                  <h3>尚未接入渠道配置</h3><p>当前不能保存 Telegram、邮件或 Webhook 凭据，也不能模拟“测试成功”。通知收件箱和告警投递尝试是独立能力。</p>
+                  <button class="button button-secondary" type="button" disabled aria-disabled="true">添加通知渠道（待接入）</button>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-scheduler-section" aria-labelledby="settings-scheduler-title">
+                <div class="settings-section-heading"><div><h2 id="settings-scheduler-title">任务调度</h2><p>计划启停、执行时间、调度器健康状态与立即运行都必须有服务端状态与持久化。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
+                <div class="panel settings-unavailable-panel">
+                  <h3>尚无调度配置接口</h3><p>当前可通过任务页手动创建现有分析任务，但不能在这里配置周期任务或声称服务器调度已启用。</p>
+                  <button class="button button-secondary" type="button" disabled aria-disabled="true">编辑调度计划（待接入）</button>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-screening-section" aria-labelledby="settings-screening-title">
+                <div class="settings-section-heading"><div><h2 id="settings-screening-title">选股默认项</h2><p>默认策略、市场、候选上限和筛选条件必须与后端策略清单一致。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
+                <div class="panel settings-unavailable-panel">
+                  <h3>尚无选股配置 schema</h3><p>选股页面目前只说明能力缺口；不会将多股票分析任务当作条件筛选。</p>
+                  <button class="button button-secondary" type="button" disabled aria-disabled="true">保存选股默认项（待接入）</button>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-security-section" aria-labelledby="settings-security-title">
+                <div class="settings-section-heading"><div><h2 id="settings-security-title">系统安全与配置备份</h2><p>服务端密码、权限、.env、备份和恢复涉及认证、授权、审计、版本冲突与原子写入。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
+                <div class="panel settings-unavailable-panel">
+                  <h3>未开放服务器配置写入</h3><p>浏览器没有访问 NAS 文件系统的权限。这里不会假装设置/删除管理员密码，也不会用本地文件导入导出来冒充服务器备份。</p>
+                  <div class="settings-unavailable-actions"><button class="button button-secondary" type="button" disabled aria-disabled="true">更改管理员密码（待接入）</button><button class="button button-secondary" type="button" disabled aria-disabled="true">导出服务器配置（待接入）</button><button class="button button-secondary" type="button" disabled aria-disabled="true">导入服务器配置（待接入）</button></div>
+                </div>
+              </section>
             </div>
-          </section>
-          <section class="settings-section" aria-labelledby="settings-connection-title">
-            <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务</h2><p>连接路径与行情 API Key 由浏览器设置；不会写入服务器 .env。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
-            <div class="panel settings-connection-card"><div><strong>行情与分析 API</strong><p>可检查服务状态并编辑同源代理路径、行情 API Key。密钥不是用户登录认证。</p></div><button class="button button-secondary" id="settings-open-connection" type="button">打开连接设置</button></div>
-          </section>
-          <section class="settings-section" aria-labelledby="settings-server-title">
-            <div class="settings-section-heading"><div><h2 id="settings-server-title">服务端配置</h2><p>以下类别仅显示产品范围，不允许在没有服务端 API 时保存。</p></div><span class="availability-pill is-unavailable">只读说明</span></div>
-            <div class="settings-card-grid">
-              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">◎</div><div><h3>数据源</h3><p>Provider 能力可以在行情总览读取；服务器数据源配置和启停接口待接入。</p></div><span class="availability-pill is-readonly">部分只读</span></article>
-              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">✦</div><div><h3>AI 与问股</h3><p>模型渠道、策略和 Agent 配置尚无服务端 schema / 保存接口。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
-              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">♧</div><div><h3>通知渠道</h3><p>渠道配置、密钥遮蔽和单渠道真实测试接口尚未接入。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
-              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">◷</div><div><h3>任务调度</h3><p>运行计划、启停和调度状态需要服务端接口。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
-              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">⌕</div><div><h3>选股</h3><p>默认市场、策略和筛选参数只能在选股服务契约明确后开放。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
-              <article class="panel settings-category-card"><div class="settings-category-icon" aria-hidden="true">⚿</div><div><h3>系统安全与备份</h3><p>密码/权限、服务器 .env 导入导出需要认证、审计、配置版本冲突和安全写入 API。</p></div><span class="availability-pill is-unavailable">待接入</span></article>
-            </div>
-          </section>
+          </div>
         </section>
 
-        <footer class="page-footer"><span>Stock Data Provider · Go API</span><span>行情与分析结果仅供研究；数据质量与时点限制须独立评估。</span></footer>
+<footer class="page-footer"><span>Stock Data Provider · Go API</span><span>行情与分析结果仅供研究；数据质量与时点限制须独立评估。</span></footer>
       </main>
     </div>
 
     <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
       <form method="dialog" id="settings-form">
-        <div class="dialog-heading"><div><p class="eyebrow">CONNECTION</p><h2 id="settings-title">连接与密钥设置</h2></div><button class="icon-button" value="cancel" aria-label="关闭设置">×</button></div>
+        <div class="dialog-heading"><div><p class="eyebrow">CONNECTION</p><h2 id="settings-title">连接与密钥设置</h2></div><button class="icon-button" id="close-settings-dialog" type="button" aria-label="关闭设置">×</button></div>
         <p class="dialog-intro">默认路径由 WebUI 的 Nginx 反向代理转发。密钥只保存在当前浏览器 localStorage，不写入仓库或服务端配置。</p>
         <section class="storage-boundary" aria-labelledby="storage-boundary-title">
           <h3 id="storage-boundary-title">API 和数据分别存在哪里？</h3>
@@ -363,15 +434,16 @@
         <div class="field">
           <label for="market-key-input">行情服务 API Key</label>
           <div class="secret-input-row">
-            <input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写 MARKET_DATA_API_KEY" />
+            <input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写新 Key；留空保留已配置值" />
             <button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button>
           </div>
         </div>
-        <p class="field-hint" id="market-key-help">这是部署管理员自行生成的服务访问密钥，不是第三方行情 Provider 的密钥。将同一个值配置为部署仓库根目录 .env 中的 MARKET_DATA_API_KEY（Go 行情服务与分析服务共用），可在服务器终端执行 <code>openssl rand -hex 32</code> 生成。这里仅保存到当前浏览器 localStorage，不会自动修改服务器配置或生成后端密钥。</p>
+        <p class="field-hint" id="market-key-help">这是部署管理员自行生成的服务访问密钥，不是第三方行情 Provider 的密钥。这里只保存到当前浏览器 localStorage，不会自动修改服务器配置。已配置的 Key 不会回显；留空表示保留当前值，输入新值表示替换。需要删除时请使用“清除本地设置”。部署端可在服务器终端执行 <code>openssl rand -hex 32</code> 生成密钥。</p>
         <label class="field"><span>分析 API 路径</span><input id="analysis-base-input" value="/analysis-api" required /></label>
         <div class="security-note">安全提示：不要将带有 API Key 的浏览器会话分享给他人。对公网部署前，应在 OpenResty 或身份认证层增加访问控制；行情服务密钥本身不等于用户认证。</div>
-        <div class="dialog-actions"><button class="button button-secondary" id="clear-settings" type="button">清除本地设置</button><span class="grow"></span><button class="button button-secondary" value="cancel">取消</button><button class="button button-primary" id="save-settings" value="save" type="button">保存设置</button></div>
-        <p class="settings-feedback" id="settings-feedback" role="status"></p>
+        <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>存在未保存的连接配置更改。</p>
+        <div class="dialog-actions"><button class="button button-secondary" id="clear-settings" type="button">清除本地设置</button><span class="grow"></span><button class="button button-secondary" id="cancel-settings-dialog" type="button">取消</button><button class="button button-primary" id="save-settings" type="button">保存本地连接配置</button></div>
+        <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite"></p>
       </form>
     </dialog>
   </body>

@@ -228,3 +228,12 @@
 - 更新 `web/API_CONTRACT.md`，只记录目前已有的 Task/StageEvent/RunResult 路由与展示边界，没有新增后端契约。
 - Review 顺便清理了 Issue #3 导航区重复的“工作台”分组标题。
 - 自动化验证：WebUI checks [#39942477418](https://github.com/Kasign/stock_data_provider/actions/runs/39942477418) 对最终功能提交 `23879eca559a2b9a197d34a7a2fd437f53691894` 成功：68/68 项 Node 测试通过，JavaScript 语法检查和 Nginx 镜像构建均通过。先前 #39942197604 与 #39942345586 的失败是两条新增契约断言分别错误定位游标参数文件、假定排序回调变量名；均已修复并重新验收。NAS/Docker/OpenResty 联调与浏览器截图未执行。
+
+
+## Issue #5 — 分组设置中心与配置边界（源码修改已提交，CI 待回填）
+- 将设置页拆为九个有可访问导航的分组：显示偏好、连接与服务、基础设置、数据源、AI 与问股、通知渠道、任务调度、选股默认项、系统安全与备份；小屏下分组导航转为两列/三列布局。
+- 连接与服务新增真实健康检查按钮，调用现有行情/分析 health API 并展示两个独立结果。数据源快捷入口导航到已有的真实 Provider 清单，不宣称服务端配置可编辑。
+- 连接配置实现 dirty state、同源路径验证、保存错误反馈、取消/关闭/Escape 时未保存变更确认，以及清除本地连接配置的单独确认。打开设置时不回显已存 API Key；留空保留当前值，输入新值才替换。
+- 新增 `web/src/settings-draft.js` 和 `web/tests/settings-draft.test.mjs`，覆盖变更判断、留空保留/替换 Key、非法远程路径拒绝；UI 契约测试覆盖九个分组、健康检查、离开保护与服务端禁用态。
+- 服务端基础设置、AI 模型、通知、调度、选股、密码/服务器 .env/备份没有对应 API，因此相关控件明确禁用，不写入 localStorage，不产生假成功反馈。
+- 未修改 Go、Provider、分析任务或真实后端路由。真实浏览器截图、键盘/焦点走查及 NAS/Docker/OpenResty 联调未执行。

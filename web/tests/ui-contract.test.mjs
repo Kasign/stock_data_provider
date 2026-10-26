@@ -310,3 +310,26 @@ test("run-flow events expose only server-provided durations and diagnostics", ()
   assert.match(app, /\.sort\(\(a, b\) => a\.sequence - b\.sequence\)/);
   assert.doesNotMatch(app, /completed_stages\s*\/\s*total_stages|progressPercent|fakeDAG/i);
 });
+
+
+test("settings center groups configuration by ownership and prevents fake server writes", () => {
+  for (const id of [
+    "settings-display-section", "settings-connection-section", "settings-basic-section",
+    "settings-data-source-section", "settings-ai-section", "settings-notification-section",
+    "settings-scheduler-section", "settings-screening-section", "settings-security-section"
+  ]) assert.match(html, new RegExp('id="' + id + '"'));
+  assert.match(html, /data-settings-target="settings-security-section"/);
+  assert.match(app, /connectionDraftChanged\(initialConnectionDraft, readConnectionDraft\(\)\)/);
+  assert.match(app, /存在未保存的连接配置更改/);
+  assert.match(app, /closeSettingsWithGuard/);
+  assert.match(app, /event\.preventDefault\(\);[\s\S]*?closeSettingsWithGuard\(\)/);
+  assert.match(app, /mergeConnectionDraft\(readConnectionDraft\(\), state\.settings\)/);
+  assert.match(app, /function checkConnectionFromSettings\(\)[\s\S]*?await refreshServices\(\)/);
+  assert.match(html, /服务端配置 API 待接入/);
+  assert.match(html, /服务器 \.env/);
+  assert.match(html, /导出服务器配置（待接入）/);
+  assert.match(html, /更改管理员密码（待接入）/);
+  assert.match(html, /id="market-key-input" type="password"/);
+  assert.match(app, /Never echo the persisted API key into the input DOM/);
+  assert.doesNotMatch(app, /\$\("#market-key-input"\)\.value = state\.settings\.apiKey/);
+});

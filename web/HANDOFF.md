@@ -108,3 +108,13 @@
 - PR #2 仍 Open、未合并；本节记录的功能 head 是 `23879eca`，base SHA 仍是 `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`，在此快照上 mergeable=true。明确禁止合并。
 - 运行流只呈现现有 Task、StageEvent、RunResult 的真实数据；时间只读 Task 返回的 started/finished 时间，耗时/错误码只在 event 返回时显示。无服务端 Task list/DAG；最近任务列表仍只是浏览器本地 task/run 引用。
 - 自动化通过不代表视觉验收与实机集成：本轮没有实际浏览器截图，也未执行 NAS/Docker/OpenResty 到 Go 服务/MariaDB/Redis 的端到端验证。
+
+
+## Issue #5 本批交接（2026-10-26，CI 待回填）
+- 本批开始时重新核实 PR #2 head 为 `3ece8b0f1802b4979f08e20bf5264d15e2c4989b`，Open、未合并；base SHA 字段仍为 `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。本批开始前最新 WebUI checks #39942655031 对该 SHA 成功。
+- 数据 PR #1 已更新到 `2f247400e18f647120526cdfd37ea5160223b9f0`，Open、未合并；最新 Live provider probe #40256158208 成功，Go suite #40256158177 在开始时仍运行中，另一个较早 SHA `e4595f57` 的 Go suite #40256076386 失败。WebUI 本批不改数据分支。
+- Issue #5 建立九个设置分组、现有 health API 的连接检查、现有 Provider 清单快捷导航、连接配置草稿/未保存保护。
+- 打开设置时 API Key 不会从 state 填回 DOM；留空保留当前 Key，输入新值才替换，清除本地设置需确认。该 Key 仍只属于浏览器连接配置，不是用户认证，也不会写服务器 .env。
+- 通用服务器配置、模型/Agent、通知渠道、调度、选股配置、密码/备份没有真实 API，相关按钮禁用且不写 localStorage。
+- 新增 `web/src/settings-draft.js` 与 `web/tests/settings-draft.test.mjs`；`package.json` 的语法检查包含新模块。CI 结果需对本批提交 SHA 核验并回填。
+- 真实浏览器/移动端截图、键盘/Escape 走查及 NAS/Docker/OpenResty 联调未执行。

@@ -1,4 +1,5 @@
 import { applyTheme, persistTheme, readTheme } from "./theme.js";
+import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import {
   analysisHealth,
   clearSettings,
@@ -40,6 +41,8 @@ const $ = (selector) => document.querySelector(selector);
 const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
 const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
 const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
+let initialConnectionDraft = null;
+
 const state = {
   settings: loadSettings(),
   view: "market",
@@ -810,6 +813,28 @@ async function refreshServices() {
   return { marketOK, analysisOK };
 }
 
+async function checkConnectionFromSettings() {
+  const button = $("#settings-check-connection");
+  const output = $("#settings-connection-check");
+  button.disabled = true;
+  button.textContent = "检查中…";
+  output.textContent = "正在请求行情与分析服务健康检查…";
+  output.className = "settings-inline-status";
+  try {
+    const result = await refreshServices();
+    output.textContent = (result.marketOK ? "行情 API 就绪" : "行情 API 不可用") + "；" +
+      (result.analysisOK ? "分析 API 就绪" : "分析 API 不可用") +
+      "。健康检查不验证 Provider 的每次真实请求。";
+    output.className = "settings-inline-status " + (result.marketOK && result.analysisOK ? "is-success" : "is-warning");
+  } catch (error) {
+    output.textContent = "连接检查失败：" + errorMessage(error);
+    output.className = "settings-inline-status is-warning";
+  } finally {
+    button.disabled = false;
+    button.textContent = "重新检查";
+  }
+}
+
 async function refreshSources() {
   if (!state.settings.apiKey) {
     const list = $("#data-source-list");
@@ -1523,17 +1548,53 @@ function setMarketKeyVisibility(visible) {
   button.setAttribute("aria-pressed", String(visible));
 }
 
+function readConnectionDraft() {
+  return {
+    marketBase: $("#market-base-input").value,
+    analysisBase: $("#analysis-base-input").value,
+    apiKey: $("#market-key-input").value
+  };
+}
+
+function connectionDraftIsDirty() {
+  return connectionDraftChanged(initialConnectionDraft, readConnectionDraft());
+}
+
+function syncConnectionDraftState() {
+  const dirty = connectionDraftIsDirty();
+  $("#connection-dirty-state").hidden = !dirty;
+  $("#connection-dirty-state").textContent = dirty
+    ? "存在未保存更改。保存只会修改当前浏览器连接配置，不会更改服务器 .env。"
+    : "没有未保存的连接配置更改。";
+  $("#save-settings").disabled = !dirty;
+  return dirty;
+}
+
 function openSettings() {
   $("#market-base-input").value = state.settings.marketBase;
-  $("#market-key-input").value = state.settings.apiKey;
+  // Never echo the persisted API key into the input DOM, even though it is password-masked.
+  $("#market-key-input").value = "";
+  $("#market-key-input").placeholder = state.settings.apiKey
+    ? "已配置 Key；留空保留当前值"
+    : "填写 MARKET_DATA_API_KEY";
   setMarketKeyVisibility(false);
   $("#analysis-base-input").value = state.settings.analysisBase;
-  $("#settings-feedback").textContent = "";
+  $("#settings-feedback").textContent = state.settings.apiKey
+    ? "已保存的 Key 不会回显；留空会保留它。清除操作会删除当前浏览器保存的 Key。"
+    : "连接配置仅保存在当前浏览器。";
+  initialConnectionDraft = readConnectionDraft();
+  syncConnectionDraftState();
   $("#settings-dialog").showModal();
+}
+
+function closeSettingsWithGuard() {
+  if (connectionDraftIsDirty() && !window.confirm("存在未保存的连接配置更改。确定放弃这些更改并关闭吗？")) return;
+  $("#settings-dialog").close();
 }
 
 function applySettings(nextSettings) {
   state.settings = nextSettings;
+  initialConnectionDraft = null;
   $("#settings-dialog").close();
   void refreshServices();
   void refreshSources();
@@ -1541,12 +1602,15 @@ function applySettings(nextSettings) {
 }
 
 function saveSettingsFromForm() {
+  const form = $("#settings-form");
+  if (!form.reportValidity()) return;
+  if (!connectionDraftIsDirty()) {
+    $("#settings-feedback").textContent = "没有待保存的更改。";
+    return;
+  }
   try {
-    const next = saveSettings({
-      marketBase: normalizeBasePath($("#market-base-input").value, "/market-api"),
-      analysisBase: normalizeBasePath($("#analysis-base-input").value, "/analysis-api"),
-      apiKey: $("#market-key-input").value
-    });
+    const merged = mergeConnectionDraft(readConnectionDraft(), state.settings);
+    const next = saveSettings(merged);
     applySettings(next);
   } catch (error) {
     $("#settings-feedback").textContent = error.message;
@@ -1554,12 +1618,13 @@ function saveSettingsFromForm() {
 }
 
 function clearLocalSettings() {
-  const next = clearSettings();
-  $("#market-base-input").value = next.marketBase;
-  $("#analysis-base-input").value = next.analysisBase;
-  $("#market-key-input").value = "";
-  $("#settings-feedback").textContent = "已清除本浏览器保存的 API Key 与自定义路径。";
-  applySettings(next);
+  if (!window.confirm("确定清除当前浏览器保存的 API Key 与自定义 API 路径？这不会修改服务器 .env。")) return;
+  try {
+    const next = clearSettings();
+    applySettings(next);
+  } catch (error) {
+    $("#settings-feedback").textContent = "清除本地设置失败：" + error.message;
+  }
 }
 
 syncThemeControl(readTheme());
@@ -1588,6 +1653,23 @@ $("#run-flow-dialog").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
 $("#settings-open-connection").addEventListener("click", openSettings);
+$("#settings-check-connection").addEventListener("click", checkConnectionFromSettings);
+$("#settings-view-data-sources").addEventListener("click", () => {
+  setView("market");
+  window.requestAnimationFrame(() => $("#data-source-list").scrollIntoView({ behavior: "smooth", block: "center" }));
+});
+document.querySelectorAll("[data-settings-target]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const target = document.getElementById(button.dataset.settingsTarget);
+    if (!target) return;
+    document.querySelectorAll("[data-settings-target]").forEach((item) => {
+      item.classList.toggle("is-active", item === button);
+      if (item === button) item.setAttribute("aria-current", "location");
+      else item.removeAttribute("aria-current");
+    });
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+});
 document.querySelectorAll("[data-theme-value]").forEach((button) => {
   button.addEventListener("click", () => {
     const theme = persistTheme(button.dataset.themeValue);
@@ -1624,10 +1706,22 @@ $("#refresh-button").addEventListener("click", async () => {
 $("#open-settings").addEventListener("click", openSettings);
 $("#open-settings-side").addEventListener("click", openSettings);
 $("#save-settings").addEventListener("click", saveSettingsFromForm);
+$("#close-settings-dialog").addEventListener("click", closeSettingsWithGuard);
+$("#cancel-settings-dialog").addEventListener("click", closeSettingsWithGuard);
+$("#settings-form").addEventListener("input", syncConnectionDraftState);
+$("#settings-dialog").addEventListener("cancel", (event) => {
+  if (!connectionDraftIsDirty()) return;
+  event.preventDefault();
+  closeSettingsWithGuard();
+});
 $("#toggle-market-key-visibility").addEventListener("click", () => {
   setMarketKeyVisibility($("#market-key-input").type === "password");
 });
-$("#settings-dialog").addEventListener("close", () => setMarketKeyVisibility(false));
+$("#settings-dialog").addEventListener("close", () => {
+  setMarketKeyVisibility(false);
+  initialConnectionDraft = null;
+  $("#save-settings").disabled = false;
+});
 $("#clear-settings").addEventListener("click", clearLocalSettings);
 $("#task-form").addEventListener("submit", createTask);
 $("#refresh-task").addEventListener("click", () => {

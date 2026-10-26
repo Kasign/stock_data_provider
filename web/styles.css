@@ -922,3 +922,48 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   .run-flow-dialog .task-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .run-flow-dialog .event-row > small { max-width: 108px; font-size: 11px; }
 }
+
+
+/* Settings center: compact group navigation, clear ownership boundaries, and responsive forms. */
+.settings-layout { display: grid; grid-template-columns: minmax(170px, 220px) minmax(0, 1fr); align-items: start; gap: 20px; }
+.settings-nav {
+  position: sticky; top: 18px; display: flex; flex-direction: column; gap: 4px;
+  padding: 9px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel);
+}
+.settings-nav-link {
+  width: 100%; min-height: 39px; padding: 9px 11px; border: 1px solid transparent; border-radius: 8px;
+  color: var(--text-soft); background: transparent; text-align: left; font: inherit; font-size: 13px;
+}
+.settings-nav-link:hover { color: var(--text); background: var(--surface-soft); }
+.settings-nav-link.is-active, .settings-nav-link[aria-current="location"] {
+  color: var(--accent); border-color: color-mix(in srgb, var(--accent) 24%, transparent); background: var(--accent-soft); font-weight: 650;
+}
+.settings-content { min-width: 0; }
+.settings-content .settings-section { min-width: 0; scroll-margin-top: 18px; }
+.settings-inline-status { margin: 11px 0 0 !important; color: var(--text-dim) !important; font-size: 12px !important; line-height: 1.65; overflow-wrap: anywhere; }
+.settings-inline-status.is-success { color: var(--accent) !important; }
+.settings-inline-status.is-warning { color: var(--warning) !important; }
+.settings-connection-actions { display: flex; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
+.settings-config-panel, .settings-unavailable-panel { padding: 20px; min-width: 0; }
+.settings-unavailable-panel h3 { margin: 0 0 7px; font-size: 15px; }
+.settings-unavailable-panel > p { margin: 0 0 16px; color: var(--text-soft); font-size: 13px; line-height: 1.75; }
+.settings-unavailable-panel > .button { margin-top: 15px; }
+.settings-unavailable-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-dirty-state { margin: 12px 0 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--border)); border-radius: 8px; color: var(--warning); background: color-mix(in srgb, var(--warning) 7%, transparent); font-size: 13px; line-height: 1.6; }
+.settings-feedback { min-height: 1.5em; overflow-wrap: anywhere; }
+:root[data-theme="light"] .settings-nav { background: #fff; }
+:root[data-theme="light"] .settings-nav-link { color: #526575; }
+:root[data-theme="light"] .settings-nav-link.is-active, :root[data-theme="light"] .settings-nav-link[aria-current="location"] { color: var(--accent-strong); background: #e9f7f2; }
+@media (max-width: 900px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .settings-nav { position: static; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .settings-nav-link { padding: 8px; text-align: center; }
+}
+@media (max-width: 600px) {
+  .settings-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-nav-link { font-size: 12px; min-height: 36px; }
+  .settings-config-panel, .settings-unavailable-panel { padding: 16px; }
+  .settings-connection-actions { width: 100%; }
+  .settings-connection-actions .button { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: reduce) { .settings-content { scroll-behavior: auto; } }
