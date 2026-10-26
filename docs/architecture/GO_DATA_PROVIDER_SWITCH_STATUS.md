@@ -207,3 +207,11 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 ### 指数成分与日线的来源显式选择（2026-10-26）
 
 静态 Review 发现，指数目录支持 `tag=tushare`，但成分/日线原先只按代码走全局 Provider 优先级。启用同花顺与 Tushare 时，重叠的 `.SH/.SZ` 代码可能被另一个 Provider 优先处理，返回错误来源或错误代码语义。现为 `/constituents` 和 `/daily` 增加可选 `source=hithink|tushare`，建议调用方沿用目录响应中的 `source` 值；指定来源时只请求该 Provider，不跨来源回退。未指定时继续自动回退。缓存键升级并包含来源，避免同代码跨来源复用缓存。
+
+
+## 4. 2026-10-26 静态 Review 补充：Provider 优先级校验
+
+- 发现配置校验遗漏：内置 `provider_priority` 已包含 `xueqiu`，但优先级列表的白名单校验没有包含该名称。由于配置加载会先校验整个优先级列表，即使雪球功能默认关闭，也会在 Provider 装配之前报 `unknown provider "xueqiu" in priority list`，导致 market-data 服务启动失败。
+- 已将 Provider 名称支持判断集中到 `isSupportedProviderName`，让供应商配置对象校验和优先级列表校验共用同一份允许名单，避免两处名单继续漂移。雪球仍保持默认关闭；允许它出现在优先级列表不代表会启用其能力。
+- 已新增 `TestLoadAcceptsXueqiuInProviderPriority` 回归测试源码，覆盖“优先级含雪球、雪球能力关闭时，配置仍可加载”的场景。
+- 本次仅做代码与配置静态审查，没有运行 Go 测试、构建、GitHub Actions 或实时 Provider 请求。该修复尚需用户后续统一回归确认。
