@@ -186,7 +186,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		HTTPAddr:                  get("MARKET_DATA_HTTP_ADDR", ":8091"),
 		APIKey:                    strings.TrimSpace(os.Getenv("MARKET_DATA_API_KEY")),
-		RequestTimeout:            duration("MARKET_DATA_REQUEST_TIMEOUT", 3*time.Minute),
+		RequestTimeout:            duration("MARKET_DATA_REQUEST_TIMEOUT", 5*time.Minute),
 		ProviderTimeout:           duration("MARKET_DATA_PROVIDER_TIMEOUT", 12*time.Second),
 		ProviderRetries:           integer("MARKET_DATA_PROVIDER_RETRIES", 1),
 		CircuitFailureThreshold:   integer("MARKET_DATA_CIRCUIT_FAILURE_THRESHOLD", 3),
