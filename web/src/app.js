@@ -65,6 +65,8 @@ const state = {
   runResultGeneration: 0,
   taskSequence: 0,
   taskEvents: new Map(),
+  taskEventsLoaded: false,
+  selectedTaskEventSequence: null,
   pollTimer: null,
   pollGeneration: 0,
   isQuerying: false,
@@ -1352,6 +1354,76 @@ function openRunFlowDrawer() {
   if (!dialog.open) dialog.showModal();
 }
 
+
+function renderTaskFlowSummary() {
+  const eventsCount = $("#task-summary-event-count");
+  const latestEvent = $("#task-summary-latest-event");
+  const quality = $("#task-summary-quality");
+  const warningCount = $("#task-summary-warning-count");
+  if (!eventsCount || !latestEvent || !quality || !warningCount) return;
+
+  if (!state.taskEventsLoaded) {
+    eventsCount.textContent = state.taskId ? "等待事件读取" : "未选择任务";
+    latestEvent.textContent = "未报告";
+  } else {
+    const events = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
+    eventsCount.textContent = events.length ? String(events.length) : "暂无持久化事件";
+    const last = events.length ? events[events.length - 1] : null;
+    const lastEvent = last?.event && typeof last.event === "object" ? last.event : last;
+    latestEvent.textContent = lastEvent?.at ? formatDateTime(lastEvent.at) : "未报告";
+  }
+  const result = state.lastRunResult;
+  const corePass = result?.quality?.core_pass;
+  quality.textContent = corePass === true ? "通过" : corePass === false ? "未通过" : result ? "未报告" : "等待 Run 结果";
+  quality.className = "run-flow-summary-value " + (corePass === true ? "is-valid" : corePass === false ? "is-invalid" : "is-unknown");
+  const warnings = result?.warnings;
+  warningCount.textContent = Array.isArray(warnings) ? String(warnings.length) : result ? "未报告" : "等待 Run 结果";
+}
+
+function renderSelectedTaskEvent(item) {
+  const panel = $("#task-event-detail");
+  if (!panel) return;
+  if (!item) {
+    panel.hidden = true;
+    return;
+  }
+  const event = item.event && typeof item.event === "object" ? item.event : item;
+  panel.hidden = false;
+  const sequence = Number(item.sequence);
+  const label = event.stage || event.name || "阶段事件";
+  $("#task-event-detail-title").textContent = label + " · #" + (Number.isFinite(sequence) ? sequence : "未报告");
+  $("#task-event-detail-message").textContent = event.message || "服务端未提供事件说明。";
+  const status = $("#task-event-detail-status");
+  status.textContent = event.status || "状态未报告";
+  status.className = "availability-pill " + (event.status === "failed" || event.status === "error" ? "is-unavailable" : "is-readonly");
+
+  const fields = [
+    ["服务端序号", Number.isFinite(sequence) ? sequence : null],
+    ["阶段键", event.stage || event.name],
+    ["事件状态", event.status],
+    ["服务端时间", event.at ? formatDateTime(event.at) : null],
+    ["错误代码", event.error_code]
+  ];
+  if (event.duration_ms !== undefined && event.duration_ms !== null && event.duration_ms !== "" &&
+      Number.isFinite(Number(event.duration_ms)) && Number(event.duration_ms) >= 0) {
+    const durationMs = Number(event.duration_ms);
+    fields.push(["服务端耗时", durationMs >= 1000 ? (durationMs / 1000).toFixed(2) + " 秒" : durationMs + " 毫秒"]);
+  }
+  const root = $("#task-event-detail-fields");
+  root.replaceChildren();
+  fields.forEach(([labelText, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    const field = document.createElement("div");
+    field.className = "event-detail-field";
+    const caption = document.createElement("small");
+    caption.textContent = labelText;
+    const content = document.createElement("strong");
+    content.textContent = String(value);
+    field.append(caption, content);
+    root.append(field);
+  });
+  $("#task-event-json").textContent = JSON.stringify(item, null, 2);
+}
 function renderTask(task) {
   state.taskStatus = task.status || state.taskStatus;
   if (task.run_id) state.runId = task.run_id;
@@ -1376,41 +1448,63 @@ function renderTask(task) {
   $("#task-error").hidden = !diagnostics;
   $("#task-error").textContent = diagnostics;
   $("#task-poll-label").textContent = TERMINAL_TASK_STATUSES.has(task.status) ? "任务已结束" : "每 2.5 秒轮询服务端状态";
+  renderTaskFlowSummary();
 }
 
 function renderTaskEvents() {
   const list = $("#task-events");
   list.replaceChildren();
-  const events = [...state.taskEvents.values()].sort((a, b) => a.sequence - b.sequence);
+  const events = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
   if (!events.length) {
     const empty = document.createElement("div");
     empty.className = "empty-row";
-    empty.textContent = "尚无持久化阶段事件。排队期间事件数组可以为空。";
+    empty.textContent = state.taskEventsLoaded
+      ? "服务端目前没有持久化阶段事件。排队期间事件数组可以为空。"
+      : "等待服务端阶段事件读取。";
     list.append(empty);
+    renderSelectedTaskEvent(null);
+    renderTaskFlowSummary();
     return;
   }
+
+  const hasSelected = events.some((item) => Number(item.sequence) === Number(state.selectedTaskEventSequence));
+  if (!hasSelected) {
+    const priority = [...events].reverse().find((item) => {
+      const event = item.event && typeof item.event === "object" ? item.event : item;
+      const status = String(event.status || "").toLowerCase();
+      return /fail|error|block|reject|degrad|partial|running|started/.test(status);
+    });
+    state.selectedTaskEventSequence = Number((priority || events[events.length - 1]).sequence);
+  }
+
   events.forEach((item) => {
-    const event = item.event || {};
-    const row = document.createElement("div");
+    const event = item.event && typeof item.event === "object" ? item.event : item;
+    const sequence = Number(item.sequence);
+    const selected = sequence === Number(state.selectedTaskEventSequence);
+    const row = document.createElement("button");
+    row.type = "button";
     row.className = "event-row";
+    row.dataset.taskEventSequence = String(item.sequence);
+    row.setAttribute("aria-pressed", String(selected));
     const icon = document.createElement("span");
-    icon.className = `event-status event-status-${String(event.status || "unknown").toLowerCase()}`;
-    icon.textContent = event.status === "succeeded" ? "✓" : event.status === "failed" ? "!" : event.status === "skipped" ? "–" : "·";
-    const body = document.createElement("div");
+    icon.className = "event-status event-status-" + String(event.status || "unknown").toLowerCase();
+    icon.textContent = event.status === "succeeded" ? "✓" : event.status === "failed" || event.status === "error" ? "!" : event.status === "skipped" ? "–" : "·";
+    const body = document.createElement("span");
     body.className = "event-body";
     const title = document.createElement("strong");
     title.textContent = event.stage || event.name || "分析阶段";
-    const detail = document.createElement("p");
-    detail.textContent = event.message || event.status || "服务端事件";
+    const detail = document.createElement("span");
+    detail.className = "event-row-message";
+    detail.textContent = event.message || event.status || "服务端事件未提供描述";
     body.append(title, detail);
     if (event.error_code) {
-      const diagnostic = document.createElement("p");
+      const diagnostic = document.createElement("span");
       diagnostic.className = "event-diagnostic";
       diagnostic.textContent = "错误代码：" + String(event.error_code);
       body.append(diagnostic);
     }
     const meta = document.createElement("small");
-    const metaParts = [`#${item.sequence}`, formatDateTime(event.at)];
+    const metaParts = ["#" + item.sequence, formatDateTime(event.at)];
     if (event.duration_ms !== undefined && event.duration_ms !== null && event.duration_ms !== "" &&
         Number.isFinite(Number(event.duration_ms)) && Number(event.duration_ms) >= 0) {
       const durationMs = Number(event.duration_ms);
@@ -1420,6 +1514,10 @@ function renderTaskEvents() {
     row.append(icon, body, meta);
     list.append(row);
   });
+
+  const selected = events.find((item) => Number(item.sequence) === Number(state.selectedTaskEventSequence));
+  renderSelectedTaskEvent(selected || null);
+  renderTaskFlowSummary();
 }
 
 function resultDisplayValue(value) {
@@ -1495,6 +1593,7 @@ function renderTaskResult(result) {
   state.lastRunResult = result;
   state.runId = result.run_id || state.runId;
   renderRunStatus(result.status || "");
+  renderTaskFlowSummary();
   persistTaskReference();
 
   const quality = result.quality || {};
@@ -1743,6 +1842,7 @@ async function pollTask(generation = state.pollGeneration) {
     if (generation !== state.pollGeneration || taskId !== state.taskId) return;
     const task = taskPayload.task || taskPayload;
     renderTask(task);
+    state.taskEventsLoaded = true;
     for (const event of (eventPayload.events || [])) {
       state.taskEvents.set(event.sequence, event);
       state.taskSequence = Math.max(state.taskSequence, Number(event.sequence) || 0);
@@ -1804,6 +1904,8 @@ async function createTask(event) {
   state.lastRunResult = null;
   state.taskSequence = 0;
   state.taskEvents.clear();
+  state.taskEventsLoaded = false;
+  state.selectedTaskEventSequence = null;
   $("#task-result-section").hidden = true;
   $("#task-result-metrics").replaceChildren();
   $("#task-result-structured").replaceChildren();
@@ -2074,6 +2176,12 @@ document.querySelectorAll(".nav-link").forEach((button) => {
     setView(button.dataset.view);
     setMobileNavigationOpen(false);
   });
+});
+$("#task-events").addEventListener("click", (event) => {
+  const row = event.target.closest("button[data-task-event-sequence]");
+  if (!row) return;
+  state.selectedTaskEventSequence = Number(row.dataset.taskEventSequence);
+  renderTaskEvents();
 });
 $("#quote-form").addEventListener("submit", handleQuoteFormSubmit);
 $("#symbol-input").addEventListener("compositionstart", () => {

@@ -157,3 +157,10 @@
 
 - [Issue #12](https://github.com/Kasign/stock_data_provider/issues/12) — 参考 `daily_stock_analysis` 的 Summary Bar、流程节点图、节点详情和事件列表交互。先升级当前真实线性事件流的摘要/详情，再由数据分支提供稳定的阶段注册表与 flow snapshot API 后绘制真正 DAG。
 - 当前 Task/StageEvent/RunResult API 不包含经验证的 DAG 边和实时流端点；禁止从事件顺序猜依赖、显示虚假进度百分比或伪造取消操作。
+
+
+### Issue #12 — Run Flow 增强，Phase 1 已实现
+
+- 在已有 Task/Run 双状态、StageEvent 时间线与 RunResult 之上增加摘要栏、可点击事件、失败/降级/运行中事件优先定位、真实事件字段与原始 JSON 诊断。
+- 当前分支没有真实拓扑快照 API，因此此阶段不生成 DAG 节点/边、不显示估算进度、不假装取消任务；完整图形阶段仍需数据层 Stage Registry/Flow Snapshot。
+- 功能提交与 CI 验收结果见 `web/PROGRESS.md` 和 `web/HANDOFF.md`。

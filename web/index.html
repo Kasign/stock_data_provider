@@ -211,7 +211,13 @@
               </div>
               <div class="task-empty" id="task-empty"><div class="empty-icon">↗</div><strong>尚未选择任务</strong><span>提交任务后，这里会显示队列状态与阶段事件。</span></div>
               <div id="task-detail" hidden>
-                <div class="task-id-row"><span>Task ID</span><code id="task-id-value">—</code><button class="text-button" id="copy-task-id" type="button">复制</button></div>
+                <section class="run-flow-summary" id="task-flow-summary" aria-label="任务运行摘要">
+                <div><small>持久化阶段事件</small><strong id="task-summary-event-count">等待事件读取</strong></div>
+                <div><small>最新事件时间</small><strong id="task-summary-latest-event">未报告</strong></div>
+                <div><small>核心质量门禁</small><strong class="run-flow-summary-value is-unknown" id="task-summary-quality">等待 Run 结果</strong></div>
+                <div><small>分析警告数</small><strong id="task-summary-warning-count">等待 Run 结果</strong></div>
+              </section>
+              <div class="task-id-row"><span>Task ID</span><code id="task-id-value">—</code><button class="text-button" id="copy-task-id" type="button">复制</button></div>
                 <div class="task-facts">
                   <div><small>关联 Run ID</small><strong id="task-run-id">—</strong></div>
                   <div><small>当前阶段</small><strong id="task-current-stage">等待执行</strong></div>
@@ -221,8 +227,16 @@
                   <div><small>结束时间</small><strong id="task-finished">—</strong></div>
                 </div>
                 <div id="task-error" class="task-error" hidden></div>
-                <div class="event-heading"><h3>阶段事件</h3><span>按持久化序号增量读取</span></div>
+                <div class="event-heading"><h3>阶段事件</h3><span>点击事件查看服务端详情与诊断</span></div>
                 <div id="task-events" class="event-list"><div class="empty-row">等待服务端阶段事件。</div></div>
+                <section class="task-event-detail" id="task-event-detail" hidden aria-live="polite">
+                  <div class="event-detail-header">
+                    <div><h3 id="task-event-detail-title">阶段详情</h3><p id="task-event-detail-message">选择一个阶段事件查看服务端详情。</p></div>
+                    <span id="task-event-detail-status" class="availability-pill is-readonly">未选择</span>
+                  </div>
+                  <div class="event-detail-grid" id="task-event-detail-fields"></div>
+                  <details class="raw-result event-raw"><summary>查看此事件的原始 JSON</summary><pre id="task-event-json"></pre></details>
+                </section>
                 <section id="task-result-section" class="task-result-section" hidden>
                   <div class="event-heading result-heading"><div><h3>分析结果</h3><span>读取已保存的 Run 结果</span></div><div class="task-result-actions"><button class="text-button" id="reload-run-result" type="button">重新读取结果</button><button class="text-button" id="copy-run-json" type="button">复制 JSON</button><button class="text-button" id="copy-task-diagnostic" type="button">复制诊断</button><button class="text-button" id="download-run-markdown" type="button">下载 Markdown</button><button class="text-button" id="download-run-json" type="button">下载 JSON</button></div></div>
                   <p class="task-result-note" id="task-result-note">任务完成后自动读取结果。</p>

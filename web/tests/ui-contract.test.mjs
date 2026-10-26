@@ -456,3 +456,30 @@ test("stock-name autocomplete uses the real market API and accessible, stale-saf
   assert.match(stylesheet, /\.stock-search-option/);
   assert.doesNotMatch(app, /localStorage[^\n]*stockSearch/i, "stock results must come from the API, not browser-side mock data");
 });
+
+
+test("Run Flow summary and event diagnostics remain grounded in persisted Task, StageEvent and RunResult data", () => {
+  for (const id of [
+    "task-summary-event-count",
+    "task-summary-latest-event",
+    "task-summary-quality",
+    "task-summary-warning-count",
+    "task-event-detail",
+    "task-event-detail-fields",
+    "task-event-json"
+  ]) {
+    assert.match(html, new RegExp('id="' + id + '"'), "Run Flow must include " + id);
+  }
+  assert.match(app, /function renderTaskFlowSummary\(\)/);
+  assert.match(app, /function renderSelectedTaskEvent\(item\)/);
+  assert.match(app, /button\[data-task-event-sequence\]/);
+  assert.match(app, /state\.taskEventsLoaded/);
+  assert.match(app, /event\.duration_ms/);
+  assert.match(app, /event\.error_code/);
+  assert.match(app, /result\?\.quality\?\.core_pass/);
+  assert.match(app, /Array\.isArray\(warnings\)/);
+  assert.match(stylesheet, /\.run-flow-summary/);
+  assert.match(stylesheet, /\.event-row\[aria-pressed="true"\]/);
+  assert.doesNotMatch(app, /completed_stages\s*\/\s*\w+|progressPercent|100\s*\*\s*.*completed_stages/i,
+    "Run Flow must not infer or fabricate progress percentages");
+});

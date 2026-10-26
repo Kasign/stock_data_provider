@@ -187,3 +187,14 @@ WebUI 只通过同源 HTTP 路径调用 Go 服务，Nginx 根据路径把请求�
 请求必须提供 `X-API-Key` 或 `Authorization: Bearer`。参数 `q` 会去除首尾空白，不能为空，最多 64 个 Unicode 字符；`limit` 默认 10，允许 1–50。成功响应包含 `query`、`total`、`items`、`source`、`source_version`、`fetched_at`、`quality_status` 与可选 `quality_reasons`。每个结果包含规范化的 `symbol`（如 `600519.SH`）、`code`、`name`、`exchange`。
 
 证券身份来自真实的东方财富 A 股证券目录字段，名称/代码匹配排序为精确匹配、前缀匹配、包含匹配；不会返回行情价格。`fetched_at` 是目录采集时间，不代表实时报价时间。目录按进程缓存 6 小时并合并并发刷新；刷新失败但有旧目录时返回 `quality_status=stale` 和原因，目录不完整则标记降级，无任何可用目录时返回 Provider 错误。前端通过防抖、取消旧请求和响应代次校验，避免慢请求覆盖用户最新输入；支持中文输入法、方向键、Enter、Esc 与鼠标选择。
+
+
+## Run Flow 阶段增强（Issue #12 Phase 1）
+
+Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api/v1/analysis/tasks/{task_id}/events?after_sequence=N&limit=100` 与 `GET /api/v1/analysis/runs/{run_id}`，不新增后端路由。
+
+- 摘要栏中的事件数量和最新事件时间来自已成功读取的 StageEvent 集合；事件接口尚未成功读取时显示等待状态，不把它显示为 0 条。Run 未返回前，质量门禁和警告数显示等待结果。
+- 点击阶段事件可查看该事件的服务端序号、阶段标识、状态、事件时间、可选错误码/耗时与原始 JSON。没有服务端提供的字段就不显示，不通过浏览器时间推算耗时。
+- 默认优先选中近期的失败、错误、阻断、降级或运行中事件；用户选择在同一组事件轮询更新时保持。该排序只改善诊断入口，不表示阶段依赖关系。
+- 事件列表以键盘可访问的按钮呈现，使用真实事件序号做选择；不把事件序列转换成 DAG，不显示虚假百分比，也不提供目前不存在的取消任务操作。
+- 下一阶段完整图形化 Run Flow 仍依赖数据服务明确的 Stage Registry 和持久化 Flow Snapshot API，边关系必须来自真实 Runner 定义。

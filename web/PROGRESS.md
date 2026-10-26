@@ -290,3 +290,13 @@
 - 数据分支后端提交：`2118cfb945aaa0562e7b7e6480eb62b84cd68f51`；格式修复提交：`f5b719f9c506b64aae63effe71b314a19f7c45ba`。Go suite [#40260305214](https://github.com/Kasign/stock_data_provider/actions/runs/40260305214) 与现有 Live Provider probe [#40260305265](https://github.com/Kasign/stock_data_provider/actions/runs/40260305265) 均成功。Live probe 当前尚未专项验证中文搜索端点的真实返回。
 - WebUI 自动化、当前 Actions 与专门真实目录探测的最终结果将随后续 Actions 回填；NAS 已部署事实不需要重新做全量部署验收，新增接口只需做本功能的部署后探测。
 
+
+
+## Issue #12 — Run Flow 体验增强 Phase 1（当前批次）
+
+- 增加四项摘要：持久化事件读取状态/数量、最新事件时间、Run 核心质量门禁、分析警告数。事件查询没成功前不显示 0；Run 未返回时不把质量/警告当成真实零值。
+- 阶段事件改为键盘可操作的按钮，并与详情面板联动。默认把诊断焦点放在最新的失败/错误/阻断/降级/运行中事件；保留同一事件选择，不依据事件顺序推断依赖。
+- 详情展示真实序号、阶段、状态、时间、可选错误码和服务端耗时、事件 JSON。缺字段时不伪造耗时/错误；保持 Task 状态与 Run 状态独立。
+- 全宽图形化 DAG 还未实现：当前 API 未提供可信的依赖边/flow snapshot；后续先在数据分支做 Stage Registry 与持久化 Flow Snapshot，再绘制真正节点图。没有新增假进度百分比或取消功能。
+- 股票搜索 WebUI 提交 `b2a30049e2f70b4009c2ff3ab9179adad299cb9f` 的 WebUI checks [#40260695238](https://github.com/Kasign/stock_data_provider/actions/runs/40260695238) 已成功；数据分支 Go suite [#40260305214](https://github.com/Kasign/stock_data_provider/actions/runs/40260305214) 与通用 Provider probe [#40260305265](https://github.com/Kasign/stock_data_provider/actions/runs/40260305265) 成功。该通用 probe 尚非中文搜索专项探测。
+- 本批 Run Flow UI 自动化与 CI 待本功能提交后回填；NAS 已部署，不重复开展全量部署测试，只记录新的搜索/运行流功能具体联调结果。

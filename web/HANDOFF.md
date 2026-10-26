@@ -224,3 +224,12 @@
 - 数据分支目前 HEAD `f5b719f9c506b64aae63effe71b314a19f7c45ba`；对应 Go suite #40260305214 和 Live Provider probe #40260305265 成功。现有 probe 不代表已经对中文搜索本身做了真实上游核验，需要新增专项 probe 或对实际部署发起一次接口请求。
 - Run Flow 对标 `daily_stock_analysis`：当前服务没有真实 DAG snapshot/SSE API，Issue #12 分两步处理：先提升现有真实时间线的摘要、事件/节点详情与错误定位；服务端阶段注册表与 topology snapshot 准备好后，再实现真正节点图。禁止虚构依赖边、百分比或取消成功。
 - 当前 NAS 已部署，不再把通用部署重复验证当作阻塞；只记录新功能的具体端点/交互验收结果。PR #2 不合并，不强推、不改写历史；WebUI 只修改 `web/**` 与相关检查配置。
+
+
+## Issue #12 Run Flow Phase 1 — 最新状态（2026-10-26）
+
+- WebUI 当前分支已包含 Issue #11 中文名称/代码自动补全，提交 `b2a30049e2f70b4009c2ff3ab9179adad299cb9f` 的 WebUI checks [#40260695238](https://github.com/Kasign/stock_data_provider/actions/runs/40260695238) 成功。
+- 此批在原生 WebUI 内对现有 Run Flow 添加真实事件摘要、可选状态/时间字段、可点击事件选择、事件详情与原始 JSON；不推断依赖边或进度百分比。
+- 完整 DAG Flow 仍待数据层的阶段注册表和持久化 topology snapshot API，不能只在前端仿画视觉图。
+- 股票搜索的后端提交 `2118cfb945aaa0562e7b7e6480eb62b84cd68f51`、格式修复 `f5b719f9c506b64aae63effe71b314a19f7c45ba` 的 Go suite [#40260305214](https://github.com/Kasign/stock_data_provider/actions/runs/40260305214) 与通用 Live Provider probe [#40260305265](https://github.com/Kasign/stock_data_provider/actions/runs/40260305265) 均成功；尚未专项核验真实中文搜索结果。
+- PR #2 持续保持 Open/未合并；提交前再次核对 HEAD，避免覆盖并行更新。
