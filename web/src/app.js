@@ -1185,6 +1185,22 @@ function renderSources(payload) {
     return;
   }
 
+  const capabilityDefinitions = [
+    ["quote_capable", "实时行情"],
+    ["daily_bar_capable", "日 K"],
+    ["stock_basic_capable", "证券档案"],
+    ["sector_ranking_capable", "行业/概念排行"],
+    ["index_quote_capable", "核心指数"],
+    ["market_breadth_capable", "市场涨跌分布"],
+    ["limit_pool_capable", "涨跌停池"],
+    ["stock_boards_capable", "个股所属板块"],
+    ["announcements_capable", "个股公告"],
+    ["dragon_tiger_capable", "龙虎榜"],
+    ["trading_calendar_capable", "交易日历"],
+    ["chip_capable", "筹码分布"],
+    ["capital_flow_capable", "个股资金流"]
+  ];
+
   sources.forEach((source) => {
     const row = document.createElement("div");
     row.className = "source-row";
@@ -1194,14 +1210,30 @@ function renderSources(payload) {
     indicator.className = `source-indicator ${source.enabled ? "enabled" : "disabled"}`;
     const name = document.createElement("strong");
     name.textContent = source.name || "unknown";
+    const capabilities = capabilityDefinitions.filter(([key]) => source[key] === true);
     const detail = document.createElement("small");
-    const capabilities = [];
-    if (source.quote_capable) capabilities.push("实时行情");
-    if (source.daily_bar_capable) capabilities.push("日 K");
-    if (source.chip_capable) capabilities.push("筹码");
-    if (source.capital_flow_capable) capabilities.push("资金流");
-    detail.textContent = capabilities.length ? capabilities.join(" · ") : "未声明查询能力";
-    main.append(indicator, name, detail);
+    detail.textContent = capabilities.length ? `${capabilities.length} 项已声明能力` : "未声明查询能力";
+    const disclosure = document.createElement("details");
+    disclosure.className = "source-capabilities";
+    const summary = document.createElement("summary");
+    summary.textContent = "查看能力明细";
+    const listOfCapabilities = document.createElement("div");
+    listOfCapabilities.className = "source-capability-list";
+    if (capabilities.length) {
+      capabilities.forEach(([, label]) => {
+        const tag = document.createElement("span");
+        tag.className = "source-capability-tag";
+        tag.textContent = label;
+        listOfCapabilities.append(tag);
+      });
+    } else {
+      const emptyCapability = document.createElement("span");
+      emptyCapability.className = "source-capability-empty";
+      emptyCapability.textContent = "当前 API 未声明能力；不代表服务整体不可用。";
+      listOfCapabilities.append(emptyCapability);
+    }
+    disclosure.append(summary, listOfCapabilities);
+    main.append(indicator, name, detail, disclosure);
     const badge = document.createElement("span");
     badge.className = `source-state ${source.enabled ? "source-state-on" : "source-state-off"}`;
     badge.textContent = source.enabled ? "已注册" : "已禁用";
@@ -1270,6 +1302,8 @@ async function refreshSources() {
     hint.className = "empty-row error-text";
     hint.textContent = errorMessage(error);
     list.append(hint);
+    setText("#source-count", "—");
+    setText("#normalization-version", "归一化版本 —");
   }
 }
 
