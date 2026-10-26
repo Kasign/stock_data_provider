@@ -54,7 +54,7 @@ func main() {
 	if err != nil {
 		fatal("创建分析 Runner 失败", err)
 	}
-	analysisTimeout, err := service.EnvDuration("ANALYSIS_TIMEOUT", 3*time.Minute)
+	analysisTimeout, err := service.EnvDuration("ANALYSIS_TIMEOUT", 5*time.Minute)
 	if err != nil {
 		fatal("读取超时配置失败", err)
 	}
