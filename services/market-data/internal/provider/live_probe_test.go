@@ -106,7 +106,7 @@ type liveProbeResult struct {
 	ChipDistribution *model.ChipDistribution          `json:"chip_distribution,omitempty"`
 	CapitalFlow      *model.CapitalFlow               `json:"capital_flow,omitempty"`
 	HTTP             []liveProbeHTTPResponse          `json:"http_responses,omitempty"`
-}}
+}
 
 type liveProbeHTTPResponse struct {
 	Endpoint          string   `json:"endpoint"`
