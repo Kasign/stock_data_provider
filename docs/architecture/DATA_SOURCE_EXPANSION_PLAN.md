@@ -219,3 +219,10 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - 五类能力块按供应商实际 `abilities[]` 结构解析，不假设它是以类别为键的对象。空值和非数值不补零。
 - 上游响应未提供可靠披露时间与每个指标的单位，字段保留供应商 `index_id` 作为 key/source_field，并将单位标记为 `provider_defined`；整体质量保持 `degraded`，不可直接作为严格 point-in-time 财务值。
 - 通过 `MARKET_DATA_HITHINK_FUNDAMENTALS_ENABLED=true` 显式启用；仍需具备财务指标端点权限的同花顺 API Key。本次未运行测试。
+
+### 同花顺证券目录搜索补充（2026-10-26）
+
+- 新增 `StockSearchProvider`，使用 `GET /api/meta/tickers/search` 按中文名称、代码或 THSCode 检索，显式限定 `asset_type=a-share`，不把指数、基金或外汇混入股票候选。
+- 返回的名称、代码、交易所均来自官方目录，不由本地规则猜测；无匹配、重复结果及无效代码均有明确处理。
+- 同花顺搜索回退与行情/日 K/财务能力共用 API Key，但只有将 `MARKET_DATA_HITHINK_ENABLED=true` 且配置 Key 后才会注册；当前不默认启用。
+- 本次仅更新实现与文档，没有运行测试。

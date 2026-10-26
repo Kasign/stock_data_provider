@@ -21,7 +21,7 @@
 | FutuFetcher | 检测到 Futu OpenD 端点配置后注册 | 港股等 Futu 支持市场 | 无 | 可选源，未迁移 |
 | FinnhubFetcher | 仅配置 `FINNHUB_API_KEY` 后注册 | 以美股/海外股票为主的补充行情和历史数据 | 无 | 可选源，未迁移 |
 | AlphaVantageFetcher | 仅配置 `ALPHAVANTAGE_API_KEY` 后注册 | 以美股/海外股票为主的补充行情和历史数据 | 无 | 可选源，未迁移 |
-| 同花顺 / THS Financial-API | 通过 `MARKET_DATA_HITHINK_API_KEY` 或 `HITHINK_FINANCE_API_KEY` 配置；默认关闭，按能力显式开启 | A 股行情快照、历史日 K、单报告期财务指标（支持三种日 K 复权口径） | Go 原生 REST `Hithink` Provider（QuoteProvider + DailyBarProvider + FundamentalsProvider） | 首批行情/日 K/财务指标已接入代码；财务指标缺少精确披露时间与供应商单位元数据，故降级输出；完整财务报表、交易日历、指数/板块和特色数据仍待迁移；未统一测试 |
+| 同花顺 / THS Financial-API | 通过 `MARKET_DATA_HITHINK_API_KEY` 或 `HITHINK_FINANCE_API_KEY` 配置；默认关闭，按能力显式开启 | A 股证券名称检索、行情快照、历史日 K、单报告期财务指标（支持三种日 K 复权口径） | Go 原生 REST `Hithink` Provider（StockSearchProvider + QuoteProvider + DailyBarProvider + FundamentalsProvider） | 已接入首批名称/代码搜索、行情、日 K 和财务指标；财务指标缺少精确披露时间与供应商单位元数据，故降级输出；完整财务报表、交易日历、指数/板块和特色数据仍待迁移；未统一测试 |
 | Akshare / YFinance fundamental adapters | 由基本面上下文聚合逻辑调用，不完全等同于行情 Fetcher 列表 | 财务与基本面指标 | 无 | 未迁移 |
 
 原 Python 管理器会按注册的 Fetcher 优先级排序，并针对市场类型、数据能力、可用性和失败状态采用不同的路由 / fallback 规则。因此，简单地把这张表映射成一个全局 Provider 顺序并不足以复现原行为。

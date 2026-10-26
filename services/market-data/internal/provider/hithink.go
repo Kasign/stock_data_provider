@@ -51,6 +51,95 @@ func NewHithinkConfigured(timeout time.Duration, baseURL, apiKey string) *Hithin
 
 func (p *Hithink) Name() string { return "hithink" }
 
+// SearchStocks 可按中文名称、代码或 THSCode 查询 A 股证券目录；不返回或推算行情价格。
+func (p *Hithink) SearchStocks(ctx context.Context, queryText string, limit int) (*model.StockSearchSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺证券检索接口需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	queryText = strings.TrimSpace(queryText)
+	if queryText == "" {
+		return nil, errors.New("同花顺证券检索词不能为空")
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	query := url.Values{}
+	query.Set("q", queryText)
+	query.Set("asset_type", "a-share")
+	query.Set("limit", strconv.Itoa(limit))
+	raw, err := p.get(ctx, "/api/meta/tickers/search", query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺证券检索请求失败: %w", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Item []struct {
+			THSCode  string `json:"thscode"`
+			Ticker   string `json:"ticker"`
+			Name     string `json:"name"`
+			Exchange string `json:"exchange"`
+			AssetType string `json:"asset_type"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺证券目录失败: %w", err)
+	}
+	now := time.Now().UTC()
+	snapshot := &model.StockSearchSnapshot{
+		Query: queryText, Items: make([]model.StockSearchItem, 0, len(data.Item)),
+		Source: p.Name(), SourceVersion: hithinkVersion,
+		FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	seen := make(map[string]struct{}, len(data.Item))
+	for _, item := range data.Item {
+		if !strings.EqualFold(strings.TrimSpace(item.AssetType), "a-share") {
+			continue
+		}
+		symbol, symbolErr := hithinkDomesticSymbol(item.THSCode)
+		if symbolErr != nil {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = append(snapshot.QualityReasons, "one_or_more_provider_symbols_were_invalid")
+			continue
+		}
+		if _, exists := seen[symbol]; exists {
+			continue
+		}
+		seen[symbol] = struct{}{}
+		code := strings.TrimSpace(item.Ticker)
+		if code == "" {
+			code = strings.Split(symbol, ".")[0]
+		}
+		exchange := strings.ToUpper(strings.TrimSpace(item.Exchange))
+		if exchange == "" {
+			parts := strings.Split(symbol, ".")
+			if len(parts) == 2 {
+				exchange = parts[1]
+			}
+		}
+		snapshot.Items = append(snapshot.Items, model.StockSearchItem{
+			Symbol: symbol, Code: code, Name: strings.TrimSpace(item.Name), Exchange: exchange,
+		})
+	}
+	snapshot.Total = len(snapshot.Items)
+	if snapshot.Total == 0 {
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = append(snapshot.QualityReasons, "no_a_share_matches")
+	}
+	return snapshot, nil
+}
+
 func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("同花顺 HTTP client 未配置")
