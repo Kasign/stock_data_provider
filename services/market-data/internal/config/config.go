@@ -142,7 +142,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" && name != "hithink" && name != "xueqiu" {
+			if !isSupportedProviderName(name) {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -334,7 +334,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" && name != "hithink" {
+		if !isSupportedProviderName(name) {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {
@@ -421,6 +421,15 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.ChipDistribution = boolEnv("MARKET_DATA_"+prefix+"_CHIP_DISTRIBUTION_ENABLED", p.ChipDistribution)
 	p.HotRankings = boolEnv("MARKET_DATA_"+prefix+"_HOT_RANKINGS_ENABLED", p.HotRankings)
 	return p
+}
+
+func isSupportedProviderName(name string) bool {
+	switch name {
+	case "eastmoney", "baostock", "tencent", "sina", "yahoo", "netease", "tushare", "tickflow", "pytdx", "hithink", "xueqiu":
+		return true
+	default:
+		return false
+	}
 }
 
 func splitList(s string) []string {
