@@ -212,3 +212,14 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 | GET /market-api/api/v1/market/limit-pools?type=up&limit=30 | type=up/down/broken，limit 默认 30、范围 1–100，date 可选；has_data=false 不能解释为 0 只股票。 |
 
 各模块独立处理加载、空/缺字段、认证错误、接口 404 和上游失败。旧版 market-data 返回 404 时仅该模块提示升级服务；质量等级、来源时间和质量原因保留真实后端值。
+
+## 个股档案、板块、财务与公告 API
+
+| 请求 | 参数和说明 |
+|---|---|
+| GET /market-api/api/v1/stocks/{symbol}/profile | 证券主数据：证券类型、上市状态、上市/退市日期、来源和质量状态。 |
+| GET /market-api/api/v1/stocks/{symbol}/boards | 个股所属行业/概念板块；has_data=false 代表源端没有确认数据，不代表确认没有板块。 |
+| GET /market-api/api/v1/stocks/{symbol}/fundamentals?year=2026&quarter=2 | 显式财报年度与季度，返回按盈利、营运、成长、偿债、现金流和杜邦分类的指标。数值保留源端单位；report_date 与 publication_date 分开显示，历史研究应依据披露日期判断当时可见性。 |
+| GET /market-api/api/v1/stocks/{symbol}/announcements?page=1&page_size=20 | 默认查询中国时区最近 7 个日历日；响应包含源端公告日期、可解析时才存在的发布时间、采集时间、质量状态及 source_url。空列表和 unknown 质量不证明没有公告；分页使用 has_more。 |
+
+个股研究区按需加载，不阻塞报价、日 K 或分析任务。每个请求独立处理认证失败、Provider 未启用、旧服务 404、空数据和质量降级；公告链接仅允许 HTTPS 的 Eastmoney 官方域名。

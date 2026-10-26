@@ -23,6 +23,7 @@ import {
 } from "./api.js";
 import { normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart } from "./chart.js";
 import { bindMarketOverview } from "./market-overview.js";
+import { bindStockResearch } from "./stock-research.js";
 import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask } from "./recent-tasks.js";
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
@@ -87,6 +88,7 @@ const state = {
 };
 
 const marketOverview = bindMarketOverview(() => state.settings);
+const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
 
 function setText(selector, value) {
   const target = $(selector);

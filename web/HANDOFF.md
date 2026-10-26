@@ -241,3 +241,10 @@
 - 新增 src/market-overview.js 与 API client 方法；模块独立加载和错误处理，筛选变更只刷新对应模块。旧服务 404 时提示更新 market-data。
 - 后端接口：/api/v1/market/indices、/api/v1/market/breadth、/api/v1/market/sectors、/api/v1/market/limit-pools。展示源端时间和质量字段，不使用 mock 数据。
 - 本批未运行测试或主动启动 CI；PR #2 保持 Open/未合并。
+
+## 2026-10-26 — 个股研究功能交接
+
+- 行情页新增公司档案、所属行业/概念、季度财务指标和近期公告。
+- 真实端点：/api/v1/stocks/{symbol}/profile、/boards、/fundamentals?year=&quarter=、/announcements?page=&page_size=。
+- 财务报告期与披露日期分开显示；公告分页与外链来源验证已接入；has_data=false 和 quality unknown 不转成“没有数据”或数值 0。
+- 本批未运行测试或 CI；待用户对已部署 market-data 的 Provider 开关和端点执行统一验证。PR #2 继续保持 Open/未合并。
