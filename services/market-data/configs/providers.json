@@ -1,6 +1,7 @@
 {
   "provider_priority": [
     "eastmoney",
+    "hithink",
     "baostock",
     "tushare",
     "tickflow",
@@ -23,6 +24,11 @@
       "stock_boards": true,
       "dragon_tiger": true,
       "announcements": true
+    },
+    "hithink": {
+      "enabled": false,
+      "quote": false,
+      "daily_bars": false
     },
     "baostock": {
       "enabled": true,

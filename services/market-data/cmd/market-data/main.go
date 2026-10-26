@@ -75,6 +75,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	}()
 	available := map[string]provider.NamedProvider{
 		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT),
+		"hithink":   provider.NewHithinkConfigured(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
 		"sina":      provider.NewSinaConfigured(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL),

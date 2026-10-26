@@ -4,8 +4,8 @@
 
 ## 当前实现范围
 
-- 国内实时行情 Provider：东方财富、腾讯、新浪、Pytdx、网易财经；Pytdx 使用通达信协议的 Go 原生客户端作为末位回退源，可通过 `MARKET_DATA_PYTDX_HOSTS` 配置逗号分隔的国内 TDX 服务器（`host` 或 `host:port`），连接按有限数量候选轮换并使用单地址超时。公共行情服务器仍不保证长期可连。Yahoo Finance 保留兼容代码但从默认优先级移除、所有能力默认关闭。
-- 国内日线 K 线 Provider：东方财富、BaoStock、TickFlow（免费历史日 K，有频率限制）、Pytdx、腾讯、新浪（仅 `none` 复权口径）、网易财经（仅 `none` 复权口径）；Tushare Pro 是另一个可选 Go HTTP Provider，需用户 Token，默认关闭且当前只支持原始不复权日 K。Pytdx 可通过通达信除权事件计算前/后复权，但与其他供应商复权因子的等价性需后续集中对账。TickFlow 实时行情仅在提供 API Key 并显式开启 quote 能力时可用。网易接口曾在 Runner 遇到 DNS / HTTP 502，现纳入国内回退配置，后续统一验收其网络可用性和质量。
+- 国内实时行情 Provider：东方财富、同花顺（可选官方 API）、腾讯、新浪、Pytdx、网易财经；同花顺需 API Key 且默认关闭，Pytdx 使用通达信协议的 Go 原生客户端作为末位回退源，可通过 `MARKET_DATA_PYTDX_HOSTS` 配置逗号分隔的国内 TDX 服务器（`host` 或 `host:port`），连接按有限数量候选轮换并使用单地址超时。公共行情服务器仍不保证长期可连。Yahoo Finance 保留兼容代码但从默认优先级移除、所有能力默认关闭。
+- 国内日线 K 线 Provider：东方财富、同花顺（可选官方 API）、BaoStock、TickFlow（免费历史日 K，有频率限制）、Pytdx、腾讯、新浪（仅 `none` 复权口径）、网易财经（仅 `none` 复权口径）；Tushare Pro 是另一个可选 Go HTTP Provider，需用户 Token，默认关闭且当前只支持原始不复权日 K。同花顺需要 API Key，支持 `none`、`forward`、`backward` 三种日 K 口径，具体额度及账号权限以授权为准。Pytdx 可通过通达信除权事件计算前/后复权，但与其他供应商复权因子的等价性需后续集中对账。TickFlow 实时行情仅在提供 API Key 并显式开启 quote 能力时可用。
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表、证券名称/代码搜索，以及可选补充数据接口。
@@ -17,7 +17,7 @@
 - 历史 `as_of` 查询会排除当日尚未完成的日 K，并明确提示复权历史可能包含之后发生的公司行动因子。本服务尚未建立严格的时点复权因子库，因此不能声称历史回测完全无前视偏差。
 - 本地 smoke 模式可不连接数据库；生产部署应复用现有 MariaDB/Redis，不要为了本服务额外启动一套数据库容器。
 
-东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告，及 BaoStock 的交易日历/季度基本面已纳入默认配置的能力链路；TickFlow 已接入国内实时行情/日线 REST 能力（免费档仅日线，行情需要 Key），Tushare 已接入可选原始日线，Pytdx 已接入通达信协议行情/日 K 能力，均待统一验收。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；筹码/资金流和少数数据域仍有缺口。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
+东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告，及 BaoStock 的交易日历/季度基本面已纳入默认配置的能力链路；同花顺、TickFlow、Tushare、Pytdx 已接入可选国内行情/日 K 能力，但同花顺/Tushare 需要各自 API Key/Token，默认关闭。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；筹码/资金流和少数数据域仍有缺口。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
 
 ## BaoStock 日 K 数据源（默认启用的备用源）
 

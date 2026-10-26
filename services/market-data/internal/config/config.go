@@ -69,6 +69,8 @@ type Config struct {
 	NeteaseQuoteURL           string
 	TushareToken              string
 	TushareAPIURL             string
+	HithinkBaseURL            string
+	HithinkAPIKey             string
 	TickFlowAPIKey            string
 	PytdxHosts                []string
 	TickFlowAPIURL            string
@@ -104,10 +106,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx"},
+		ProviderPriority: []string{"eastmoney", "hithink", "baostock", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true},
+			"hithink":   {Enabled: false, Quote: false, DailyBars: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: true, Fundamentals: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
@@ -132,7 +135,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
 		for name := range supplied.Providers {
-			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" {
+			if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" && name != "hithink" {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
 			}
 		}
@@ -160,6 +163,7 @@ func Load() (Config, error) {
 		settings[name] = value
 	}
 	settings["eastmoney"] = overrideProvider("EASTMONEY", settings["eastmoney"])
+	settings["hithink"] = overrideProvider("HITHINK", settings["hithink"])
 	settings["tencent"] = overrideProvider("TENCENT", settings["tencent"])
 	settings["sina"] = overrideProvider("SINA", settings["sina"])
 	settings["yahoo"] = overrideProvider("YAHOO", settings["yahoo"])
@@ -208,6 +212,8 @@ func Load() (Config, error) {
 		NeteaseQuoteURL:           get("MARKET_DATA_NETEASE_QUOTE_URL", "https://api.money.126.net/data/feed"),
 		TushareToken:              firstNonEmpty(os.Getenv("MARKET_DATA_TUSHARE_TOKEN"), os.Getenv("TUSHARE_TOKEN")),
 		TushareAPIURL:             get("MARKET_DATA_TUSHARE_API_URL", get("TUSHARE_HTTP_URL", "https://api.tushare.pro")),
+		HithinkBaseURL:            get("MARKET_DATA_HITHINK_BASE_URL", "https://fuyao.aicubes.cn"),
+		HithinkAPIKey:             firstNonEmpty(os.Getenv("MARKET_DATA_HITHINK_API_KEY"), os.Getenv("HITHINK_FINANCE_API_KEY")),
 		TickFlowAPIKey:            firstNonEmpty(os.Getenv("MARKET_DATA_TICKFLOW_API_KEY"), os.Getenv("TICKFLOW_API_KEY")),
 		TickFlowAPIURL:            get("MARKET_DATA_TICKFLOW_API_URL", get("TICKFLOW_BASE_URL", "https://api.tickflow.org")),
 		TickFlowFreeAPIURL:        get("MARKET_DATA_TICKFLOW_FREE_API_URL", get("TICKFLOW_FREE_BASE_URL", "https://free-api.tickflow.org")),
@@ -257,6 +263,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_YAHOO_CHART_URL":               cfg.YahooChartURL,
 		"MARKET_DATA_NETEASE_HISTORY_URL":           cfg.NeteaseHistoryURL,
 		"MARKET_DATA_TUSHARE_API_URL":                cfg.TushareAPIURL,
+		"MARKET_DATA_HITHINK_BASE_URL":               cfg.HithinkBaseURL,
 		"MARKET_DATA_TICKFLOW_API_URL":               cfg.TickFlowAPIURL,
 		"MARKET_DATA_TICKFLOW_FREE_API_URL":          cfg.TickFlowFreeAPIURL,
 		"MARKET_DATA_MX_API_URL":                    cfg.MXAPIURL,
@@ -264,6 +271,9 @@ func Load() (Config, error) {
 		if err := validateEndpointURL(name, endpoint); err != nil {
 			return cfg, err
 		}
+	}
+	if cfg.ProviderSettings["hithink"].Enabled && strings.TrimSpace(cfg.HithinkAPIKey) == "" {
+		return cfg, errors.New("MARKET_DATA_HITHINK_ENABLED=true requires MARKET_DATA_HITHINK_API_KEY or HITHINK_FINANCE_API_KEY")
 	}
 	if cfg.ProviderSettings["tushare"].Enabled && strings.TrimSpace(cfg.TushareToken) == "" {
 		return cfg, errors.New("MARKET_DATA_TUSHARE_ENABLED=true requires MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN")
@@ -313,7 +323,7 @@ func Load() (Config, error) {
 	quoteReady, barsReady := false, false
 	quoteProviderCount, barProviderCount := 0, 0
 	for _, name := range cfg.ProviderPriority {
-		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" {
+		if name != "eastmoney" && name != "baostock" && name != "tencent" && name != "sina" && name != "yahoo" && name != "netease" && name != "tushare" && name != "tickflow" && name != "pytdx" && name != "hithink" {
 			return cfg, fmt.Errorf("unknown provider %q in priority list", name)
 		}
 		if seen[name] {
@@ -575,6 +585,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_NETEASE_ENABLED", "MARKET_DATA_NETEASE_QUOTE_ENABLED", "MARKET_DATA_NETEASE_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TUSHARE_ENABLED", "MARKET_DATA_TUSHARE_QUOTE_ENABLED", "MARKET_DATA_TUSHARE_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TICKFLOW_ENABLED", "MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED",
+		"MARKET_DATA_HITHINK_ENABLED", "MARKET_DATA_HITHINK_QUOTE_ENABLED", "MARKET_DATA_HITHINK_DAILY_BARS_ENABLED",
 		"MARKET_DATA_PYTDX_ENABLED", "MARKET_DATA_PYTDX_QUOTE_ENABLED", "MARKET_DATA_PYTDX_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {
