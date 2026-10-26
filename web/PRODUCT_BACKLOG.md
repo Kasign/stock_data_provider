@@ -1,6 +1,6 @@
 # WebUI 产品功能扩展与实施任务清单
 
-更新时间：2026-10-23
+更新时间：2026-10-26
 目标仓库：Kasign/stock_data_provider
 实现分支：feat/webui-market-data-console
 参考项目版本：ZhuLinsen/daily_stock_analysis，main = ec66bf46caf6993f673bd4be59c883754667b686
@@ -83,6 +83,7 @@
 ### P1：设置中心先搭结构，再逐类别连真实能力
 
 - [ ] **设置页完整分组和配置安全边界** — [Issue #5](https://github.com/Kasign/stock_data_provider/issues/5)
+  - 进度：源码与 CI 完成。WebUI checks [#40256618763](https://github.com/Kasign/stock_data_provider/actions/runs/40256618763) 通过（72/72 Node tests、JS syntax、Nginx build）；真实浏览器和 NAS/Docker 联调待做。
   - 连接、基础偏好、数据源、AI/问股、通知渠道、调度、选股、系统安全和备份分组。
   - 未保存提醒、字段解释、校验、加载/错误/冲突/成功状态，密钥默认遮蔽。
   - 仅纯 UI 偏好可本地保存；服务器配置须有 API。密码/.env 管理需后端认证和审计设计。

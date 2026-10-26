@@ -124,3 +124,11 @@
 - WebUI checks [#40256527920](https://github.com/Kasign/stock_data_provider/actions/runs/40256527920) 失败，72 项 Node tests 中 69 项通过；JS 语法检查通过，Nginx image build 未执行。
 - 三项失败都是旧测试对文案或实现形式的绑定：market API key help 没有新的环境变量名说明；close 事件从单行回调变成带状态重置的块回调；旧安全说明已被分组式设置中心取代。已更新断言并在帮助文案补充变量名与“不自动修改服务器配置或生成后端密钥”的界限，仍明确 Key 不回显。
 - 修复提交后的 WebUI Actions 必须完全通过后再继续后续功能批次。
+
+
+## Issue #5 最终验收（2026-10-26）
+- 功能提交 `8e34b25574e6d6502f51123510cd1fe900632f17` 的首轮 Actions #40256527920 曾失败，72 项中 69 项测试通过；三处失败是旧源码契约断言与新设置页面/回调的文案和结构不一致。
+- 修复提交 `2c09afc56714a4082056db2f8e5e8f75969240f6` 的 WebUI checks [#40256618763](https://github.com/Kasign/stock_data_provider/actions/runs/40256618763) 成功：72/72 Node tests 通过、JavaScript 语法检查通过、Nginx image build 成功。
+- Issue #5 源码与 CI 阶段完成。尚缺实际浏览器/移动端截图、键盘/焦点走查和 NAS/Docker/OpenResty 的端到端联调；不得标记为真实环境验收已完成。
+- 本节写入时 PR #2 仍 Open、未合并，head `2c09afc56714a4082056db2f8e5e8f75969240f6`；base SHA 字段仍为 `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。数据 PR #1 当前 head `b927362fc6482863b0085dbaaa5c4a0f156e10c6`，Open、未合并；具体最新 Actions 以 GitHub 页面复核。
+- 下一步执行 Issue #7 通知中心 UI：真实 API 未接入，因此筛选、读状态、计数和历史均不得产生虚构结果；缺少 API 时显示可解释的 unavailable 状态。

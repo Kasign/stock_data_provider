@@ -230,7 +230,7 @@
 - 自动化验证：WebUI checks [#39942477418](https://github.com/Kasign/stock_data_provider/actions/runs/39942477418) 对最终功能提交 `23879eca559a2b9a197d34a7a2fd437f53691894` 成功：68/68 项 Node 测试通过，JavaScript 语法检查和 Nginx 镜像构建均通过。先前 #39942197604 与 #39942345586 的失败是两条新增契约断言分别错误定位游标参数文件、假定排序回调变量名；均已修复并重新验收。NAS/Docker/OpenResty 联调与浏览器截图未执行。
 
 
-## Issue #5 — 分组设置中心与配置边界（源码修改已提交，CI 待回填）
+## Issue #5 — 分组设置中心与配置边界（CI 通过，实机验收待完成）
 - 将设置页拆为九个有可访问导航的分组：显示偏好、连接与服务、基础设置、数据源、AI 与问股、通知渠道、任务调度、选股默认项、系统安全与备份；小屏下分组导航转为两列/三列布局。
 - 连接与服务新增真实健康检查按钮，调用现有行情/分析 health API 并展示两个独立结果。数据源快捷入口导航到已有的真实 Provider 清单，不宣称服务端配置可编辑。
 - 连接配置实现 dirty state、同源路径验证、保存错误反馈、取消/关闭/Escape 时未保存变更确认，以及清除本地连接配置的单独确认。打开设置时不回显已存 API Key；留空保留当前值，输入新值才替换。
@@ -239,4 +239,4 @@
 - 未修改 Go、Provider、分析任务或真实后端路由。真实浏览器截图、键盘/焦点走查及 NAS/Docker/OpenResty 联调未执行。
 
 
-- Issue #5 首轮 WebUI checks [#40256527920](https://github.com/Kasign/stock_data_provider/actions/runs/40256527920) 失败：72 项测试中 69 项通过，JS 语法检查通过，Nginx 镜像构建因测试失败跳过。三项均为源码契约测试未跟随新 UI：帮助文案缺少当前环境变量名，关闭事件测试要求旧的一行监听器写法，通用未接入页面测试要求旧设置页安全说明。已按新文案/新行为修正测试，不改变生产后端契约；下一次 Actions 需复验。
+- 首轮 WebUI checks [#40256527920](https://github.com/Kasign/stock_data_provider/actions/runs/40256527920) 因三项旧源码契约断言失败（69/72 通过）未执行镜像构建；已修正文案/回调形式相关断言并复验成功。最终 WebUI checks [#40256618763](https://github.com/Kasign/stock_data_provider/actions/runs/40256618763) 全部通过：72/72 项 Node 测试、JavaScript 语法检查、Nginx 镜像构建均成功。浏览器真实交互与 NAS/Docker/OpenResty 联调仍未执行。
