@@ -137,7 +137,7 @@ CI 通过仅验证前端契约测试、JavaScript 语法和镜像构建；真实
 | 异步分析任务 | 已核对创建任务 202 / 幂等重放 200、{task,status_url,events_url} 包装、Task 状态结构、事件增量游标及错误信封；Go 单元测试和 WebUI 契约测试覆盖状态映射与请求路径 | 从 WebUI 实际创建任务，核对数据库持久化、排队/运行/终态；验证同一幂等键重放、冲突键 409、队列满 429、缺失任务 404 与服务不可用 |
 | 阶段事件 | 已核对 after_sequence、limit、next_after_sequence，并确认空事件数组不能表示任务已完成；Go HTTP 测试覆盖增量读取 | 在真实 Worker 生命周期内验证事件可继续增量读取、序号递增、队列阶段为空时 UI 不误判完成，以及切换任务后旧轮询不会覆盖新页面 |
 | 分析报告 | 已核对 GET /api/v1/analysis/runs/{run_id} 与 Go RunResult JSON 字段，前端结构化展示直接读取返回字段；Run 未完成时 409 run_not_finished 可触发有限重试 | 从已结束任务读取真实 Run，核对任务与 Run 状态、质量门禁、市场状态、因子、信号、风险/可交易性、计划、拒绝原因、警告及原始 JSON；核对 409 后最终结果、404 和失败状态的呈现 |
-| 反向代理与部署 | Nginx 配置、同源路径、容器镜像构建已由源码/CI 覆盖 | 在真实 Docker 网络确认默认服务别名 market-data:8091 与 stock-analysis-go:8092（或通过根目录 .env 的 MARKET_DATA_SERVICE_NAME 与 ANALYSIS_SERVICE_NAME 配置的实际别名）可解析、端口可达；再验证外部 OpenResty 路径重写、stock-analysis-web 容器健康状态、真实 API Key 配置及请求 ID 诊断 |
+| 反向代理与部署 | Nginx 配置、同源路径、容器镜像构建已由源码/CI 覆盖 | 在真实 Docker 网络确认默认服务别名 stock-analysis-data:8091 与 stock-analysis-server:8092（或通过根目录 .env 的 MARKET_DATA_SERVICE_NAME 与 ANALYSIS_SERVICE_NAME 配置的实际别名）可解析、端口可达；再验证外部 OpenResty 路径重写、stock-analysis-web 容器健康状态、真实 API Key 配置及请求 ID 诊断 |
 
 ### 已验证边界
 
@@ -170,7 +170,7 @@ WebUI 只通过同源 HTTP 路径调用 Go 服务，Nginx 根据路径把请求�
 
 ### 行情服务 API Key 由谁生成
 
-`MARKET_DATA_API_KEY` 是部署管理员自行生成的内部服务访问密钥，不是行情 Provider 的个人 API Key，也不是 WebUI 自动签发的令牌。建议在部署服务器上通过 `openssl rand -hex 32` 生成，并把同一值配置给 `market-data` 和 `stock-analysis-go` 的 `MARKET_DATA_API_KEY` 环境变量。WebUI 的设置项只将该值保存在浏览器 `localStorage`，调用受保护的行情路由时发送 `X-API-Key`；它不会更新后端配置。该共享 Key 不等于用户登录鉴权，公网访问仍必须额外配置访问控制。
+`MARKET_DATA_API_KEY` 是部署管理员自行生成的内部服务访问密钥，不是行情 Provider 的个人 API Key，也不是 WebUI 自动签发的令牌。建议在部署服务器上通过 `openssl rand -hex 32` 生成，并把同一值配置给 `stock-analysis-data` 和 `stock-analysis-server` 的 `MARKET_DATA_API_KEY` 环境变量。WebUI 的设置项只将该值保存在浏览器 `localStorage`，调用受保护的行情路由时发送 `X-API-Key`；它不会更新后端配置。该共享 Key 不等于用户登录鉴权，公网访问仍必须额外配置访问控制。
 
 
 ## 任务运行流前端呈现边界（Issue #4）

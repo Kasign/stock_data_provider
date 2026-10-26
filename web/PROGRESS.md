@@ -2,7 +2,7 @@
 
 更新时间：2026-10-26  
 目标分支：`feat/webui-market-data-console`  
-范围：只修改 `web/` 前端、前端测试与相关文档；不改 Go API、数据源、数据库或任务契约。
+范围：WebUI、部署 Compose/脚本、相关 CI 工作流与文档；不改 Go API、数据源、数据库或任务契约。
 
 ## 历史基线（2026-10-20；当前 GitHub 真值见 HANDOFF.md 顶部）
 
@@ -38,7 +38,7 @@
 
 ## 尚待验收
 
-1. **NAS / 1Panel 真实联调**：确认 `stock-analysis-web` 在 `1panel-network` 内能访问 `market-data:8091` 和 `stock-analysis-go:8092`，并验证 API Key 传递与代理前缀剥离。
+1. **NAS / 1Panel 真实联调**：确认 `stock-analysis-web` 在 `1panel-network` 内能访问 `stock-analysis-data:8091` 和 `stock-analysis-server:8092`，并验证 API Key 传递与代理前缀剥离。
 2. **真实数据场景**：逐项对照页面与原始 JSON，至少包含完整数据、可选数据缺失/质量降级、后端故障三种场景。
 3. **真实任务语义**：确认单个股票代码配合 `post_market_scan` 的行为与用户期望一致；结构化 RunResult 不能冒充完整自然语言研报。
 4. **刷新与失效任务**：验证运行中、已完成、部分成功/失败、后端记录已清理、暂时断网与浏览器存储不可用时的表现。
@@ -537,3 +537,11 @@
 - 抑制标记现在同时保存 analysis_base；相同 task_id 由不同分析 API 返回时，移除一个服务的引用不会误抑制另一服务的活动任务。
 - 本地历史迁移查找增加 endpoint 范围，并将 analysis_base 纳入比较；已存在且字段未变化的同一 endpoint 记录不会在每次轮询时反复触发 upsert。
 - 增加 UI 契约测试源码覆盖；按约定未运行测试、CI 或镜像构建。
+
+## 2026-10-26 统一 Compose 部署入口（源码更新，待统一验收）
+
+- 已将 `docker-compose.go.yml` 与 `web/docker-compose.yml` 的部署定义合并到根目录唯一的 `docker-compose.yml`；旧文件已从当前工作树移除，避免多个入口出现配置漂移。
+- Compose 服务名与容器名统一为 `stock-analysis-data`、`stock-analysis-server`、`stock-analysis-web`；行情 API 仅在 Docker 网络暴露，分析 API 与 WebUI 默认只绑定宿主机回环地址。
+- `scripts/deploy-go.sh` 改为构建并等待三个服务健康；Go 与 WebUI 工作流中的 Compose 路径、镜像标签和部署契约测试源码已同步。
+- 既有 `.env` 不会被覆盖。升级时需调整 `MARKET_DATA_BASE_URL`、`MARKET_DATA_SERVICE_NAME` 与 `ANALYSIS_SERVICE_NAME`，并按 README 的一次性步骤移除旧 Go 应用容器。
+- 本批未运行测试、未构建镜像、未触发 GitHub Actions；Compose 解析、三镜像构建、实际服务发现、端口与浏览器代理仍待后续统一验收。

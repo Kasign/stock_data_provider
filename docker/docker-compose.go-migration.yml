@@ -1,7 +1,7 @@
-# Optional, separately deployable Go services. Run from the repository root.
-# Copy root .env for the still-legacy Python bridge, go-core/.env and
-# services/market-data/.env independently. Never commit those files.
-# docker compose -f docker/docker-compose.yml -f docker/docker-compose.go-migration.yml --profile go-migration up -d
+# Optional legacy migration profile for Python bridge + go-core; separate from the unified root stack.
+# Do not combine this profile with root docker-compose.yml, which already runs stock-analysis-data.
+# Copy root .env for the Python bridge, go-core/.env and services/market-data/.env independently.
+# Run from the repository root: docker compose -f docker/docker-compose.go-migration.yml --profile go-migration up -d
 services:
   python-bridge:
     profiles: ["go-migration"]
@@ -28,7 +28,7 @@ services:
       retries: 3
       start_period: 40s
 
-  market-data:
+  stock-analysis-data:
     profiles: ["go-migration"]
     build:
       context: ../services/market-data
@@ -62,12 +62,12 @@ services:
     environment:
       HTTP_ADDR: :8088
       PYTHON_BRIDGE_BASE_URL: http://python-bridge:8090
-      MARKET_DATA_BASE_URL: http://market-data:8091
+      MARKET_DATA_BASE_URL: http://stock-analysis-data:8091
       TZ: Asia/Shanghai
     depends_on:
       python-bridge:
         condition: service_healthy
-      market-data:
+      stock-analysis-data:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8088/healthz >/dev/null || exit 1"]

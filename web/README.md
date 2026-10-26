@@ -14,26 +14,39 @@
 
 ## 部署（Docker / 1Panel）
 
-先确认 Go 两个服务已通过现有 `docker-compose.go.yml` 部署到外部 Docker 网络 `1panel-network`，并能分别通过网络服务名/别名 `market-data:8091` 与 `stock-analysis-go:8092` 访问。
+仓库使用根目录唯一的 `docker-compose.yml` 部署整套服务，包含 `stock-analysis-data`（行情 API）、`stock-analysis-server`（分析 API）和 `stock-analysis-web`（WebUI）。三个服务都加入外部网络 `1panel-network`，共享现有 MariaDB/Redis；不再分别执行 WebUI 与 Go 服务的 Compose 文件。
 
-仓库根目录已有 Go 服务使用的 `.env.example`。其中 `WebUI reverse proxy targets` 一节列出了 `MARKET_DATA_SERVICE_NAME`、`ANALYSIS_SERVICE_NAME`、`WEBUI_BIND_ADDR` 与 `WEBUI_PORT`。从示例创建 `.env` 时会带上这些配置；若 `.env` 已存在，不要覆盖它，只需按需追加/修改这几个变量并保留其他数据库、Redis 与 API Key 配置。服务名按实际 Docker 网络别名修改。然后在仓库根目录执行：
+根目录 `.env.example` 是唯一模板。首次创建 `.env` 时复制模板；若 `.env` 已存在，**不要覆盖整份文件**，只核对并修改下列配置，保留数据库/Redis 密码和 API Key：
 
-~~~bash
-docker compose --env-file .env -f web/docker-compose.yml up -d --build
-docker compose --env-file .env -f web/docker-compose.yml ps
-docker compose --env-file .env -f web/docker-compose.yml logs --tail=100 stock-analysis-web
+```dotenv
+MARKET_DATA_BASE_URL=http://stock-analysis-data:8091
+MARKET_DATA_SERVICE_NAME=stock-analysis-data
+ANALYSIS_SERVICE_NAME=stock-analysis-server
+WEBUI_BIND_ADDR=127.0.0.1
+WEBUI_PORT=8093
+```
+
+从旧版拆分 Compose 升级时，旧容器可能仍占用端口或保留旧 DNS 别名。按根目录 README 的一次性升级步骤停止并移除旧 Go 应用容器；此操作不删除外部 MariaDB/Redis 数据。
+
+在仓库根目录执行：
+
+```bash
+docker compose --env-file .env up -d --build
+docker compose --env-file .env ps
+docker compose --env-file .env logs --tail=100 stock-analysis-web
 docker ps --filter name=stock-analysis-web
 curl -fsS http://127.0.0.1:8093/
-~~~
+```
 
-运行中的容器名和 Compose 服务名均为 **`stock-analysis-web`**。默认宿主机端口只绑定 `127.0.0.1:8093`；可在根目录 `.env` 中调整 `WEBUI_BIND_ADDR` 和 `WEBUI_PORT`，不需要把后端 API 端口映射到公网。
+运行中的容器名和 Compose 服务名均为 **`stock-analysis-web`**。默认宿主机端口只绑定 `127.0.0.1:8093`；可在根目录 `.env` 中调整 `WEBUI_BIND_ADDR` 和 `WEBUI_PORT`。分析 API 只绑定 `127.0.0.1:8092`，行情 API 只在 Docker 网络内部提供 `8091`，无需把后端端口映射到公网。
 
-两个 Nginx 上游服务名从根目录 `.env` 注入容器，并由官方 Nginx 镜像启动脚本生成站点配置：
+两个 Nginx 上游服务名由根目录 Compose 注入，并在容器启动时生成站点配置：
 
-- `MARKET_DATA_SERVICE_NAME=market-data`：转发 `/market-api/` 到 `服务名:8091`，浏览器请求附带 `X-API-Key`。
-- `ANALYSIS_SERVICE_NAME=stock-analysis-go`：转发 `/analysis-api/` 到 `服务名:8092`。
+- `MARKET_DATA_SERVICE_NAME=stock-analysis-data`：将 `/market-api/` 转发到 `服务名:8091`，浏览器请求附带 `X-API-Key`。
+- `ANALYSIS_SERVICE_NAME=stock-analysis-server`：将 `/analysis-api/` 转发到 `服务名:8092`。
 
-变量只填写 `1panel-network` 中可解析的 Docker 服务名/网络别名，不填协议、路径或端口。修改值后需重新创建/重建 WebUI 容器，使 Nginx 在启动时重新生成代理配置。其他服务名无需修改前端 JS。通过同一外部 Docker 网络访问时，OpenResty 可使用 `http://stock-analysis-web/` 代理页面。不要把 API Key 硬编码进 Nginx 配置或前端源文件。
+变量只填写 `1panel-network` 中可解析的 Docker 服务名/网络别名，不填协议、路径或端口。修改后重建 `stock-analysis-web` 容器，使 Nginx 重新生成代理配置。通过同一外部网络访问时，OpenResty 可使用 `http://stock-analysis-web/` 代理页面。不要把 API Key 硬编码进 Nginx 配置或前端源文件。
+
 
 ## 本地调试
 
@@ -83,7 +96,7 @@ WebUI 本身是静态 HTML/CSS/JavaScript，由 Nginx 提供页面和同源反�
 openssl rand -hex 32
 ```
 
-把生成的同一个值写入部署仓库根目录的 `.env` 中的 `MARKET_DATA_API_KEY`，供 `market-data` 与 `stock-analysis-go` 两个 Go 服务共用，并按部署流程重启/重建 Go 服务。随后把完全相同的值填入 WebUI「连接与密钥设置」的行情 API Key 输入框。WebUI 只会把该值保存到当前浏览器的 `localStorage`，并在请求受保护的行情端点时以 `X-API-Key` 发送；它不会创建密钥，也不会修改服务器的 `.env`。输入框默认掩码显示，点击“显示”可临时核对密钥，关闭设置窗口后会自动重新隐藏。不要把真实密钥提交到 Git。
+把生成的同一个值写入部署仓库根目录的 `.env` 中的 `MARKET_DATA_API_KEY`，供 `stock-analysis-data` 与 `stock-analysis-server` 两个 Go 服务共用，并按部署流程重启/重建 Go 服务。随后把完全相同的值填入 WebUI「连接与密钥设置」的行情 API Key 输入框。WebUI 只会把该值保存到当前浏览器的 `localStorage`，并在请求受保护的行情端点时以 `X-API-Key` 发送；它不会创建密钥，也不会修改服务器的 `.env`。输入框默认掩码显示，点击“显示”可临时核对密钥，关闭设置窗口后会自动重新隐藏。不要把真实密钥提交到 Git。
 
 
 ## 当前尚不能仅靠 WebUI 实现的管理功能

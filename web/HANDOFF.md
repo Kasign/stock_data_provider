@@ -6,7 +6,7 @@
 ## 当前 GitHub 真值（本轮开始时重新核实）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 分支：feat/webui-market-data-console；本轮开始时 HEAD：3743d7b8a610fcda9b1348ecefbc9a754e1d0706。
+- WebUI 分支：feat/webui-market-data-console；本轮 Compose 整理前已同步数据分支，基线 HEAD：55b06976b9ac8dc63c797e107590addc3b46c601。
 - PR #2：https://github.com/Kasign/stock_data_provider/pull/2，Open、未合并；head 与上述 WebUI HEAD 一致；base 为 feat/full-go-data-providers-api-switch。
 - 数据分支：feat/full-go-data-providers-api-switch；本轮开始时 HEAD：26f428a427a9f7d43299de267c1e3bd2b38d294e。
 - PR #1：https://github.com/Kasign/stock_data_provider/pull/1，Open、未合并；head 与上述数据分支 HEAD 一致；base 为 main。
@@ -17,7 +17,7 @@
 - 共享状态契约已添加到数据分支：https://github.com/Kasign/stock_data_provider/blob/5776313e7b50648ea0e7d741c7eb1c02b8d20758/docs/architecture/WEBUI_DATA_STATE_CONTRACT.md。数据层新功能开发前须先阅读它，再对照领域契约与 OpenAPI。
 - WebUI 主行情、日 K、股票搜索、市场总览、健康检查、Provider 清单已补充请求序号/generation 与旧响应保护。
 - Task/Run 与 analysis_base 绑定；切换分析 API 路径后停止旧轮询、清理旧活动结果，并保留带来源地址的最近任务引用，避免将旧 task ID 发给新服务。
-- 运行容器和 Compose 服务名统一为 stock-analysis-web。依赖服务名通过仓库根目录 .env 注入：MARKET_DATA_SERVICE_NAME 与 ANALYSIS_SERVICE_NAME。默认只绑定 127.0.0.1:8093。
+- 统一部署入口调整为根目录 `docker-compose.yml`，服务名和容器名为 `stock-analysis-data`、`stock-analysis-server`、`stock-analysis-web`；依赖服务名通过根目录 `.env` 注入。默认宿主机映射仅绑定 `127.0.0.1:8092` 和 `127.0.0.1:8093`。
 - PR #2 描述已更新以反映容器名、根目录 .env 和跨层状态约定。
 - 本轮按用户要求没有运行测试、镜像构建或 GitHub Actions。源码 Review 不等于测试通过或真实部署验收。
 

@@ -4,13 +4,15 @@
 > 分支：`feat/full-go-data-providers-api-switch`  
 > 目标：降低首次部署的配置与构建风险；真实服务器验收仍以实际运行结果为准。
 
+> **当前状态（2026-10-26）**：部署入口已统一到根目录 `docker-compose.yml`，服务名为 `stock-analysis-data`、`stock-analysis-server`、`stock-analysis-web`。下方 CI #153 与旧 Compose 路径属于历史验收记录；统一后的 Compose 尚未重新解析、构建或实机验收。
+
 ## 1. Review 结论
 
 根 Go 分析 API 与原生 Go `market-data` 服务在 CI 中已通过 Go 格式检查、测试、竞态检测、`go vet`，并且两个 Docker 镜像均成功构建。GitHub Actions 运行 [#153](https://github.com/Kasign/stock_data_provider/actions/runs/39715484029) 还通过了 `docker compose config --quiet` 和部署脚本语法检查。
 
 这证明代码可以编译、Compose 文件可解析；**不等于目标服务器上的数据库权限、Redis 认证、Docker 网络和外部行情供应商已经通过端到端测试**。
 
-本 Compose 只启动两个 Go 服务，不启动 `go-core` 或 Python bridge。当前分析 API 的实时行情和日 K 由 Go market-data 服务提供。
+统一 Compose 启动 `stock-analysis-data`、`stock-analysis-server` 与 `stock-analysis-web` 三项服务；它不启动 `go-core` 或 Python bridge。分析 API 的实时行情和日 K 由 Go 行情服务提供。
 
 ## 2. Review 重点
 
@@ -20,7 +22,7 @@
 | Docker 构建 | 两个生产 Dockerfile 均在 CI 中构建成功 |
 | 数据库配置 | 分析 API 使用 `DB_*`；行情服务使用 `MARKET_DATA_DB_*`，可暂时兼容旧 `MARKET_DATA_MYSQL_DSN` |
 | Redis 配置 | 分析 API 使用 `REDIS_*`；行情服务使用 `MARKET_DATA_REDIS_*` |
-| 网络 | 两个容器连接现有 `1panel-network`，不额外部署 MariaDB/Redis |
+| 网络 | 三个产品容器连接现有 `1panel-network`，不额外部署 MariaDB/Redis |
 | 端口安全 | 分析 API 的宿主机映射绑定在 `127.0.0.1:8092`；对公网开放前仍需 OpenResty 鉴权和来源限制 |
 | 部署脚本 | `scripts/deploy-go.sh` 会检查 Compose、构建镜像、启动容器、等待健康检查并在失败时打印日志 |
 
@@ -53,16 +55,16 @@ openssl rand -hex 32
 bash ./scripts/deploy-go.sh
 ```
 
-脚本会检查 Docker / Compose、根目录 `.env` 和 `1panel-network`，以静默模式检查 Compose 配置，构建两个镜像、启动服务并等待健康状态，最后检查 `/healthz` 和 `/readyz`。失败时会打印服务日志。
+脚本会检查 Docker / Compose、根目录 `.env` 和 `1panel-network`，以静默模式检查 Compose 配置，构建三个镜像、启动服务并等待三个容器健康，最后检查 `/healthz` 和 `/readyz`。失败时会打印服务日志。
 
 部署后可再次检查：
 
 ```bash
-docker compose -f docker-compose.go.yml ps
-docker compose -f docker-compose.go.yml logs --since=10m market-data stock-analysis-go
+docker compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml logs --since=10m stock-analysis-data stock-analysis-server stock-analysis-web
 curl -fsS http://127.0.0.1:8092/healthz
 curl -fsS http://127.0.0.1:8092/readyz
-docker exec stock-market-data wget -qO- http://127.0.0.1:8091/health/ready
+docker exec stock-analysis-data wget -qO- http://127.0.0.1:8091/health/ready
 ```
 
 ## 5. 验证真实行情链路
@@ -70,8 +72,8 @@ docker exec stock-market-data wget -qO- http://127.0.0.1:8091/health/ready
 健康检查成功只能证明服务、MariaDB 和 Redis 就绪；它不证明供应商当时可以返回有效行情。继续从 market-data 容器中调用真实行情与日 K：
 
 ```bash
-docker exec stock-market-data sh -lc 'wget -qO- --header="X-API-Key: ${MARKET_DATA_API_KEY}" "http://127.0.0.1:8091/api/v1/quotes/600519.SH"'
-docker exec stock-market-data sh -lc 'wget -qO- --header="X-API-Key: ${MARKET_DATA_API_KEY}" "http://127.0.0.1:8091/api/v1/bars/600519.SH/daily?limit=30&adjustment=forward_adjusted"'
+docker exec stock-analysis-data sh -lc 'wget -qO- --header="X-API-Key: ${MARKET_DATA_API_KEY}" "http://127.0.0.1:8091/api/v1/quotes/600519.SH"'
+docker exec stock-analysis-data sh -lc 'wget -qO- --header="X-API-Key: ${MARKET_DATA_API_KEY}" "http://127.0.0.1:8091/api/v1/bars/600519.SH/daily?limit=30&adjustment=forward_adjusted"'
 ```
 
 如果真实行情请求失败，检查供应商网络、限流、返回质量和服务日志；不要因为 `/readyz` 通过就认定行情源一定可用。部分数据域仍未迁移至 Go，分析结果出现 `partial` 也不一定代表部署失败。
@@ -79,7 +81,7 @@ docker exec stock-market-data sh -lc 'wget -qO- --header="X-API-Key: ${MARKET_DA
 ## 6. OpenResty 与对外访问
 
 - 宿主机进程可以通过 `http://127.0.0.1:8092` 访问分析 API。
-- 如果 OpenResty 是连接到 `1panel-network` 的容器，上游地址使用 `http://stock-analysis-go:8092`。
+- 如果 OpenResty 是连接到 `1panel-network` 的容器，上游地址使用 `http://stock-analysis-server:8092`。
 - 当前分析 API 没有内置用户认证。对公网开放前，必须在 OpenResty 设置 HTTPS、鉴权和来源限制；不要直接把 API 端口暴露到公网。
 
 ## 7. 验收边界
