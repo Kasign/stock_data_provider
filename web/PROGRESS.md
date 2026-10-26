@@ -259,3 +259,11 @@
 - 新增 loading / empty / unavailable / error / loaded 五态状态函数，生产初始化固定为 unavailable。新会话、策略选择、发送、停止、复制、导出和重试按钮均保持禁用，直到后端 API/权限/取消契约存在。
 - 新增 `web/src/chat-state.js`、`web/tests/chat-state.test.mjs` 与 UI 契约测试；语法检查包含新模块。没有新增 Chat API，也没有使用 localStorage 保存假会话或消息。
 - 首轮 WebUI checks [#40257236494](https://github.com/Kasign/stock_data_provider/actions/runs/40257236494) 77/78 项通过；唯一失败为上下文安全文案与新契约测试不同步。已修改文案后，修复提交 `0107256d975a6e2a324889d194b95b854480f17e` 的 WebUI checks [#40257299173](https://github.com/Kasign/stock_data_provider/actions/runs/40257299173) 全部通过：78/78 项 Node 测试、JS 语法检查、Nginx 镜像构建成功。实际浏览器的流式体验/移动端输入栏以及 NAS/Docker Chat API 联调尚未执行。
+
+
+## Issue #9 — 条件选股工作台与状态模型（本批已提交，CI 待回填）
+- 将选股页扩展为能力状态、扫描条件、提交前摘要、扫描任务状态、候选结果、热点板块/题材及选股历史独立区域。
+- 将能力状态与扫描任务/候选/历史状态分开：分别展示 enabled/disabled/unknown/unavailable/error、任务 queued/running/completed/partial/failed 等状态，以及候选和历史的 loading/empty/unavailable/error/loaded 状态。
+- 生产初始化显式为 `supported:false`，所有市场/股票池/策略/筛选表单、扫描刷新/提交、候选过滤、历史翻页及候选相关操作禁用。没有真实 API 时不展示静态股票、假分数、虚构任务状态或“0 条”空结果。
+- 新增 `web/src/screening-state.js`、`web/tests/screening-state.test.mjs` 与 UI 契约测试，语法检查包含新模块；未使用普通多股票分析任务代替条件选股，也未改 Go API。
+- 本批 WebUI Actions 结果待核验；真实浏览器视觉检查和 NAS/Docker/OpenResty 选股后端联调未执行。

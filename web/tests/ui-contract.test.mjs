@@ -374,3 +374,36 @@ test("chat workbench has context isolation and no production mock replies", () =
   assert.match(html, /id="chat-mode-select" disabled/);
   assert.doesNotMatch(app, /CHAT_SESSION_KEY|localStorage.*chat/i);
 });
+
+
+test("screening workbench distinguishes unavailable capability from disabled and empty results", () => {
+  for (const id of [
+    "screening-capability-pill", "screening-summary-capability", "screening-summary-run",
+    "screening-summary-candidates", "screening-summary-last-run", "screening-market",
+    "screening-universe", "screening-strategy", "screening-candidate-limit", "screening-min-change",
+    "screening-min-turnover", "screening-submit", "screening-refresh-run", "screening-candidate-search",
+    "screening-quality-filter", "screening-candidate-list", "screening-history-list",
+    "screening-history-prev", "screening-history-next"
+  ]) assert.match(html, new RegExp('id="' + id + '"'), "missing screening element: " + id);
+  for (const state of ["loading", "idle", "queued", "running", "completed", "partial", "failed", "unknown", "error", "unavailable"]) {
+    assert.match(html, new RegExp('data-screening-run-state="' + state + '"'));
+  }
+  for (const state of ["loading", "empty", "error", "unavailable", "loaded"]) {
+    assert.match(html, new RegExp('data-screening-results-state="' + state + '"'));
+    assert.match(html, new RegExp('data-screening-history-state="' + state + '"'));
+  }
+  const start = html.indexOf('id="screening-view"');
+  const end = html.indexOf('id="alerts-view"', start);
+  const screeningView = html.slice(start, end);
+  assert.doesNotMatch(screeningView, /600519|贵州茅台|示例候选|模拟分数/);
+  assert.match(app, /function renderScreeningCapability\(snapshot\)[\s\S]*?resolveScreeningCapability\(snapshot\)/);
+  assert.match(app, /function renderScreeningTask\(snapshot\)[\s\S]*?resolveScreeningTaskState\(snapshot\)/);
+  assert.match(app, /function renderScreeningCandidates\(snapshot\)[\s\S]*?resolveScreeningCollectionState\(snapshot, "candidates"\)/);
+  assert.match(app, /function renderScreeningHistory\(snapshot\)[\s\S]*?resolveScreeningCollectionState\(snapshot, "items"\)/);
+  assert.match(app, /renderScreeningCapability\(\{ supported: false \}\)/);
+  assert.match(app, /renderScreeningTask\(\{ supported: false \}\)/);
+  assert.match(app, /renderScreeningCandidates\(\{ supported: false \}\)/);
+  assert.match(app, /renderScreeningHistory\(\{ supported: false \}\)/);
+  assert.match(screeningView, /id="screening-submit" type="button" disabled/);
+  assert.doesNotMatch(app, /screening.*localStorage/i);
+});

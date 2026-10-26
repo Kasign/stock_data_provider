@@ -1054,3 +1054,47 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   .chat-submit-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chat-submit-actions .button { width: 100%; }
 }
+
+
+/* Screening console: capability, task state, candidates and history remain distinct. */
+.screening-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin-bottom: 18px; }
+.screening-summary-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 17px; }
+.screening-summary-card > span { color: var(--text-soft); font-size: 12px; }
+.screening-summary-card > strong { font-size: 23px; line-height: 1.2; overflow-wrap: anywhere; }
+.screening-summary-card > p { margin: 0; color: var(--text-dim); font-size: 12px; line-height: 1.6; }
+.screening-form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.screening-request-summary { margin-top: 18px; padding: 13px 15px; border: 1px dashed var(--border); border-radius: 10px; background: var(--surface-soft); }
+.screening-request-summary strong { display: block; margin-bottom: 6px; font-size: 13px; }
+.screening-request-summary p { margin: 0; color: var(--text-soft); font-size: 13px; line-height: 1.7; }
+.screening-run-panel { padding: 19px; margin-top: 18px; }
+.screening-run-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+.screening-run-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 190px; padding: 23px 17px; text-align: center; }
+.screening-run-state[hidden], .screening-candidates-state[hidden], .screening-history-state[hidden], .screening-candidate-list[hidden], .screening-history-list[hidden] { display: none !important; }
+.screening-run-state strong, .screening-candidates-state strong, .screening-history-state strong { font-size: 14px; line-height: 1.6; }
+.screening-run-state p, .screening-candidates-state p, .screening-history-state p { max-width: 600px; margin: 0; color: var(--text-soft); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.screening-results-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(230px, .7fr); gap: 18px; align-items: start; margin-top: 18px; }
+.screening-candidates-panel, .screening-hot-topics-panel, .screening-history-panel { min-width: 0; padding: 19px; }
+.screening-results-filters, .screening-history-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 15px; }
+.screening-results-filters .field, .screening-history-filters .field { min-width: 0; }
+.screening-results-filters .field input, .screening-results-filters .field select, .screening-history-filters .field input, .screening-history-filters .field select { width: 100%; min-width: 0; }
+.screening-candidates-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 245px; padding: 24px 13px; text-align: center; }
+.screening-candidates-state.is-compact { min-height: 190px; }
+.screening-history-panel { margin-top: 18px; }
+.screening-history-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 130px; padding: 18px; text-align: center; }
+.screening-history-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--border-soft); color: var(--text-dim); font-size: 12px; }
+.screening-history-pagination > div { display: flex; gap: 8px; }
+:root[data-theme="light"] .screening-request-summary { background: #f8fafb; }
+@media (max-width: 1050px) {
+  .screening-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .screening-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .screening-results-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .screening-summary-grid, .screening-form-grid, .screening-results-filters, .screening-history-filters { grid-template-columns: minmax(0, 1fr); }
+  .screening-summary-card, .screening-candidates-panel, .screening-hot-topics-panel, .screening-history-panel, .screening-run-panel { padding: 14px; }
+  .screening-run-actions { justify-content: flex-start; }
+  .screening-run-actions .button { width: 100%; }
+  .screening-history-pagination { align-items: stretch; flex-direction: column; }
+  .screening-history-pagination > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .screening-history-pagination .button { width: 100%; }
+}

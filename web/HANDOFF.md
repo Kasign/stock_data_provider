@@ -175,3 +175,10 @@
 - 当前仍没有 Chat/session/stream/cancel API。问股页面只展示 unavailable，发送、停止、策略、会话、复制、导出与重试操作禁用。股票上下文只取当前页面真实行情 state，不持久化或跨会话恢复。
 - 本节记录时 PR #2 Open/未合并，head `0107256d975a6e2a324889d194b95b854480f17e`，base SHA `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。PR #1 当前 head `b7bc88499e7491446e5250abfbc3da112012b4b5`，Open/未合并；不得将数据 PR merge into WebUI 或反向合并。
 - 真实浏览器/移动端验收与 NAS/Docker/OpenResty Chat API 联调未执行。下一项进行 Issue #9 选股 UI，严禁用普通多股票分析任务伪装选股候选。
+
+
+## Issue #9 本批交接（2026-10-26，CI 待回填）
+- 本批开始时 PR #2 head `a192a040c51c8b71598abee43ccd34c2d2f57466`，Open/未合并，base SHA `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。问股功能对应 WebUI checks #40257299173 成功（78/78 tests）。
+- Issue #9 将选股能力、任务、候选结果、热点和历史分开建模。当前没有真实 strategy/schema/scan/candidate/history API，生产页按 `supported:false` 展示 unavailable，所有写操作与筛选/翻页禁用。
+- 新增 `web/src/screening-state.js` 与 `web/tests/screening-state.test.mjs`，覆盖 enabled/disabled/unknown/unavailable/loading/error、任务状态和 collection 状态。生产页面不显示股票代码、候选分数或模拟选股理由。
+- 本批 CI 结果待对新提交 SHA 核验后回填；真实浏览器和 NAS/Docker/OpenResty 验收未执行。

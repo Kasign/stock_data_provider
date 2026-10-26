@@ -2,6 +2,7 @@ import { applyTheme, persistTheme, readTheme } from "./theme.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
+import { resolveScreeningCapability, resolveScreeningTaskState, resolveScreeningCollectionState } from "./screening-state.js";
 import {
   analysisHealth,
   clearSettings,
@@ -455,6 +456,69 @@ function syncChatStockContextFromMarket() {
     ? { symbol: state.quote.symbol.trim(), name: String(state.quote.name || state.quote.symbol).trim() }
     : null;
   renderChatStockContext();
+}
+
+function renderScreeningCapability(snapshot) {
+  const current = resolveScreeningCapability(snapshot);
+  const labels = {
+    enabled: "选股能力已启用", disabled: "选股功能已关闭", unknown: "选股能力未知",
+    unavailable: "选股 API 尚未接入", loading: "正在检查选股能力", error: "选股能力检查失败"
+  };
+  const pill = $("#screening-capability-pill");
+  pill.textContent = labels[current] || labels.unknown;
+  pill.className = "availability-pill " + (current === "enabled" ? "is-local" : current === "disabled" ? "is-readonly" : "is-unavailable");
+  setText("#screening-summary-capability", current === "enabled" ? "已启用" : current === "disabled" ? "已关闭" : current === "unknown" ? "未知" : current === "loading" ? "检查中" : current === "error" ? "检查失败" : "不可用");
+  setText("#screening-capability-title", labels[current] || labels.unknown);
+  const descriptions = {
+    enabled: "服务端报告选股能力已启用。策略、表单 schema 和提交端点仍需分别确认。",
+    disabled: "服务端明确报告选股功能已关闭；不会将请求错误当作功能关闭。",
+    unknown: "服务端尚未返回选股能力状态。",
+    unavailable: "当前 Go 服务没有策略列表、筛选配置、扫描任务、候选结果或选股历史 API。不能提交扫描，也不会用普通分析任务伪装成选股。",
+    loading: "正在读取服务端选股能力声明。",
+    error: "选股能力检查发生错误；错误不代表功能已关闭。"
+  };
+  setText("#screening-capability-description", descriptions[current] || descriptions.unknown);
+  return current;
+}
+
+function renderScreeningTask(snapshot) {
+  const current = resolveScreeningTaskState(snapshot);
+  const labels = {
+    idle: "尚未发起扫描", queued: "扫描已排队", running: "扫描运行中",
+    completed: "扫描已完成", partial: "扫描部分完成", failed: "扫描失败",
+    unavailable: "任务 API 尚未接入", loading: "正在读取任务", error: "读取失败", unknown: "状态未知"
+  };
+  document.querySelectorAll("[data-screening-run-state]").forEach((node) => {
+    node.hidden = node.dataset.screeningRunState !== current;
+  });
+  const pill = $("#screening-run-status-pill");
+  pill.textContent = labels[current] || labels.unknown;
+  pill.className = "availability-pill " + (current === "completed" ? "is-local" : ["partial", "failed", "error"].includes(current) ? "is-unavailable" : "is-readonly");
+  setText("#screening-summary-run", current === "idle" ? "未开始" : labels[current] || "未知");
+  return current;
+}
+
+function renderScreeningCandidates(snapshot) {
+  const current = resolveScreeningCollectionState(snapshot, "candidates");
+  document.querySelectorAll("[data-screening-results-state]").forEach((node) => {
+    node.hidden = node.dataset.screeningResultsState !== current;
+  });
+  const pill = $("#screening-results-status-pill");
+  pill.textContent = current === "loaded" ? "候选已加载" : current === "empty" ? "无匹配候选" : current === "loading" ? "正在加载" : current === "error" ? "读取失败" : "候选 API 待接入";
+  pill.className = "availability-pill " + (current === "loaded" || current === "empty" ? "is-readonly" : "is-unavailable");
+  setText("#screening-summary-candidates", current === "loaded" ? String(snapshot.candidates.length) : current === "empty" ? "0" : "—");
+  return current;
+}
+
+function renderScreeningHistory(snapshot) {
+  const current = resolveScreeningCollectionState(snapshot, "items");
+  document.querySelectorAll("[data-screening-history-state]").forEach((node) => {
+    node.hidden = node.dataset.screeningHistoryState !== current;
+  });
+  const pill = $("#screening-history-status-pill");
+  pill.textContent = current === "loaded" ? "历史已加载" : current === "empty" ? "无匹配历史" : current === "loading" ? "正在加载" : current === "error" ? "读取失败" : "历史 API 待接入";
+  pill.className = "availability-pill " + (current === "loaded" || current === "empty" ? "is-readonly" : "is-unavailable");
+  return current;
 }
 
 function errorMessage(error) {
@@ -1873,6 +1937,10 @@ $("#copy-task-id").addEventListener("click", async () => {
 renderNotificationState({ supported: false });
 renderChatState({ supported: false });
 renderChatStockContext();
+renderScreeningCapability({ supported: false });
+renderScreeningTask({ supported: false });
+renderScreeningCandidates({ supported: false });
+renderScreeningHistory({ supported: false });
 renderRecentTasks();
 renderWatchlist();
 configureDateInputs();

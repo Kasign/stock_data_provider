@@ -6,6 +6,6 @@
   "description": "Lightweight browser dashboard for the Go stock data provider APIs",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check src/theme.js && node --check src/settings-draft.js && node --check src/notification-state.js && node --check src/chat-state.js && node --check src/api.js && node --check src/format.js && node --check src/chart.js && node --check src/recent-tasks.js && node --check src/watchlist.js && node --check src/report.js && node --check src/app.js"
+    "check": "node --check src/theme.js && node --check src/settings-draft.js && node --check src/notification-state.js && node --check src/chat-state.js && node --check src/screening-state.js && node --check src/api.js && node --check src/format.js && node --check src/chart.js && node --check src/recent-tasks.js && node --check src/watchlist.js && node --check src/report.js && node --check src/app.js"
   }
 }

@@ -321,26 +321,81 @@
 
         <section class="view feature-view" id="screening-view" hidden aria-labelledby="screening-title">
           <div class="page-heading">
-            <div><p class="eyebrow">DISCOVERY / 05</p><h1 id="screening-title">条件选股</h1><p class="page-subtitle">选股需要独立策略、筛选条件和候选解释接口，不能用单股或多股分析任务代替。</p></div>
-            <div class="feature-status"><span class="availability-pill is-unavailable">选股 API 待接入</span></div>
+            <div><p class="eyebrow">DISCOVERY / 05</p><h1 id="screening-title">条件选股</h1><p class="page-subtitle">条件选股需要独立策略清单、扫描任务与候选解释 API；多股票分析任务不是选股引擎。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable" id="screening-capability-pill">选股 API 尚未接入</span></div>
           </div>
           <section class="panel feature-callout" role="status" aria-live="polite">
             <span class="feature-callout-icon" aria-hidden="true">i</span>
-            <div><h2>当前没有可调用的选股引擎</h2><p>后端尚未提供策略清单、筛选任务、候选结果或选股历史。以下表单只展示规划范围，不能提交，不会产生模拟结果。</p></div>
+            <div><h2 id="screening-capability-title">选股能力当前不可用</h2><p id="screening-capability-description">当前 Go 服务没有策略列表、筛选配置、扫描任务、候选结果或选股历史 API。不能提交扫描，也不会用普通分析任务伪装成选股。</p></div>
           </section>
+
+          <section class="screening-summary-grid" aria-label="选股运行摘要">
+            <article class="panel screening-summary-card"><span>能力状态</span><strong id="screening-summary-capability">不可用</strong><p>服务端能力检查待接入</p></article>
+            <article class="panel screening-summary-card"><span>扫描状态</span><strong id="screening-summary-run">—</strong><p>无可读取的真实扫描任务</p></article>
+            <article class="panel screening-summary-card"><span>候选结果</span><strong id="screening-summary-candidates">—</strong><p>不会推算或预置候选数量</p></article>
+            <article class="panel screening-summary-card"><span>最近扫描</span><strong id="screening-summary-last-run">—</strong><p>历史接口尚未提供</p></article>
+          </section>
+
           <section class="panel feature-form-panel" aria-labelledby="screening-config-title">
-            <div class="panel-heading"><div><h2 id="screening-config-title">扫描条件</h2><p>选项需由后端 schema / 策略清单确定</p></div><span class="availability-pill is-unavailable">不可提交</span></div>
-            <div class="feature-form-grid">
-              <label class="field"><span>市场</span><select disabled aria-disabled="true"><option>等待市场能力接口</option></select></label>
-              <label class="field"><span>股票池</span><select disabled aria-disabled="true"><option>等待股票池接口</option></select></label>
-              <label class="field"><span>策略</span><select disabled aria-disabled="true"><option>等待策略清单接口</option></select></label>
-              <label class="field"><span>候选上限</span><input type="number" disabled aria-disabled="true" placeholder="由后端契约定义" /></label>
+            <div class="panel-heading"><div><h2 id="screening-config-title">扫描条件</h2><p>表单字段需由后端 schema 和真实策略清单定义。</p></div><span class="availability-pill is-unavailable">不可提交</span></div>
+            <div class="feature-form-grid screening-form-grid">
+              <label class="field"><span>市场</span><select id="screening-market" disabled aria-disabled="true"><option>等待市场能力接口</option></select></label>
+              <label class="field"><span>股票池</span><select id="screening-universe" disabled aria-disabled="true"><option>等待股票池接口</option></select></label>
+              <label class="field"><span>策略</span><select id="screening-strategy" disabled aria-disabled="true"><option>等待策略清单接口</option></select></label>
+              <label class="field"><span>候选数量上限</span><input id="screening-candidate-limit" type="number" disabled aria-disabled="true" placeholder="由服务端 schema 定义" /></label>
+              <label class="field"><span>最低涨跌幅（%）</span><input id="screening-min-change" type="number" disabled aria-disabled="true" placeholder="参数范围待后端定义" /></label>
+              <label class="field"><span>最低换手率（%）</span><input id="screening-min-turnover" type="number" disabled aria-disabled="true" placeholder="参数范围待后端定义" /></label>
             </div>
-            <div class="feature-action-row"><span class="field-hint">只有后端支持的策略和参数才能开放选择。</span><button class="button button-primary" type="button" disabled aria-disabled="true">提交扫描（待接入）</button></div>
+            <div class="screening-request-summary" id="screening-request-summary" role="status" aria-live="polite"><strong>提交前摘要</strong><p>尚不能生成扫描请求摘要。服务端提供策略及参数 schema 后，页面才会展示将要提交的真实参数。</p></div>
+            <div class="feature-action-row"><span class="field-hint">所有配置控件和提交动作均待真实选股 API 接入。</span><button class="button button-primary" id="screening-submit" type="button" disabled aria-disabled="true">提交扫描（待接入）</button></div>
           </section>
-          <section class="panel feature-empty-panel" aria-labelledby="screening-results-title">
-            <div class="panel-heading"><div><h2 id="screening-results-title">候选结果与历史</h2><p>代码、解释、质量与时间需由服务端返回</p></div><span class="availability-pill is-unavailable">暂无接口</span></div>
-            <div class="feature-empty compact"><div class="feature-empty-icon" aria-hidden="true">⌕</div><strong>无法读取候选结果</strong><p>这是接口缺失状态，不代表扫描已完成或候选为空。</p></div>
+
+          <section class="panel screening-run-panel" aria-labelledby="screening-run-title">
+            <div class="panel-heading"><div><h2 id="screening-run-title">扫描任务状态</h2><p>任务状态只能来自服务端扫描任务，而不是多股票分析任务。</p></div><div class="screening-run-actions"><span class="availability-pill is-unavailable" id="screening-run-status-pill">不可用</span><button class="button button-secondary" id="screening-refresh-run" type="button" disabled aria-disabled="true">刷新状态（待接入）</button></div></div>
+            <div class="screening-run-state" data-screening-run-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取扫描状态</strong><p>正在请求真实扫描任务状态。</p></div>
+            <div class="screening-run-state" data-screening-run-state="idle" hidden><span class="notification-state-mark" aria-hidden="true">—</span><strong>尚未发起扫描</strong><p>仅在选股 API 明确可用、用户提交真实请求后才展示此状态。</p></div>
+            <div class="screening-run-state" data-screening-run-state="queued" hidden><span class="notification-state-mark" aria-hidden="true">◷</span><strong>扫描已排队</strong><p>队列状态以服务端返回为准。</p></div>
+            <div class="screening-run-state" data-screening-run-state="running" hidden><span class="notification-state-mark" aria-hidden="true">◌</span><strong>扫描运行中</strong><p>不会根据耗时或阶段数生成虚假进度百分比。</p></div>
+            <div class="screening-run-state" data-screening-run-state="completed" hidden><span class="notification-state-mark" aria-hidden="true">✓</span><strong>扫描已完成</strong><p>只有服务端报告任务完成后才进入此状态。</p></div>
+            <div class="screening-run-state" data-screening-run-state="partial" hidden><span class="notification-state-mark" aria-hidden="true">!</span><strong>扫描部分完成</strong><p>部分结果及数据质量需由服务端解释。</p></div>
+            <div class="screening-run-state" data-screening-run-state="failed" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>扫描失败</strong><p id="screening-run-error">失败代码与诊断等待服务端响应。</p></div>
+            <div class="screening-run-state" data-screening-run-state="unknown" hidden><span class="notification-state-mark" aria-hidden="true">?</span><strong>扫描状态未知</strong><p>服务端未返回可识别状态。</p></div>
+            <div class="screening-run-state" data-screening-run-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>读取扫描状态失败</strong><p>请求错误与诊断等待真实 API 接入后显示。</p></div>
+            <div class="screening-run-state" data-screening-run-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>扫描任务 API 尚未提供</strong><p>这是接口不可用状态，不代表最近扫描失败或没有扫描历史。</p></div>
+          </section>
+
+          <div class="screening-results-layout">
+            <section class="panel screening-candidates-panel" aria-labelledby="screening-results-title">
+              <div class="panel-heading"><div><h2 id="screening-results-title">候选股票</h2><p>代码、名称、分数、筛选理由、来源、质量与时间须由后端返回。</p></div><span class="availability-pill is-unavailable" id="screening-results-status-pill">候选 API 待接入</span></div>
+              <div class="screening-results-filters">
+                <label class="field"><span>搜索候选</span><input id="screening-candidate-search" type="search" disabled aria-disabled="true" placeholder="股票代码或名称" /></label>
+                <label class="field"><span>数据质量</span><select id="screening-quality-filter" disabled aria-disabled="true"><option>等待候选 API</option></select></label>
+              </div>
+              <div class="screening-candidates-state" data-screening-results-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取候选结果</strong><p>候选数据来自服务端查询。</p></div>
+              <div class="screening-candidates-state" data-screening-results-state="empty" hidden><span class="notification-state-mark" aria-hidden="true">▤</span><strong>本次扫描没有匹配候选</strong><p>只有服务端返回真实空列表后，才会展示此状态。</p></div>
+              <div class="screening-candidates-state" data-screening-results-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>候选读取失败</strong><p id="screening-results-error">请求错误与诊断等待真实 API 接入后显示。</p><button class="button button-secondary" id="screening-retry-results" type="button" disabled aria-disabled="true">重试（待接入）</button></div>
+              <div class="screening-candidates-state" data-screening-results-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>候选结果 API 尚未提供</strong><p>不显示静态股票、虚构分数或示例选股理由。</p></div>
+              <div class="screening-candidate-list" id="screening-candidate-list" data-screening-results-state="loaded" hidden></div>
+            </section>
+            <section class="panel screening-hot-topics-panel" aria-labelledby="screening-hot-topics-title">
+              <div class="panel-heading"><div><h2 id="screening-hot-topics-title">热点板块 / 题材</h2><p>需要对应的实时行情接口。</p></div><span class="availability-pill is-unavailable">暂不可用</span></div>
+              <div class="screening-candidates-state is-compact"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>热点数据 API 尚未提供</strong><p>不会推断或静态展示热点排名。</p></div>
+            </section>
+          </div>
+
+          <section class="panel screening-history-panel" aria-labelledby="screening-history-title">
+            <div class="panel-heading"><div><h2 id="screening-history-title">选股历史</h2><p>历史分页与状态筛选需要服务端扫描记录。</p></div><span class="availability-pill is-unavailable" id="screening-history-status-pill">历史 API 待接入</span></div>
+            <div class="screening-history-filters">
+              <label class="field"><span>历史状态</span><select id="screening-history-status-filter" disabled aria-disabled="true"><option>等待历史 API</option></select></label>
+              <label class="field"><span>开始日期</span><input id="screening-history-from" type="date" disabled aria-disabled="true" /></label>
+              <label class="field"><span>结束日期</span><input id="screening-history-to" type="date" disabled aria-disabled="true" /></label>
+            </div>
+            <div class="screening-history-state" data-screening-history-state="loading" hidden role="status" aria-live="polite"><strong>正在读取选股历史</strong></div>
+            <div class="screening-history-state" data-screening-history-state="empty" hidden><strong>服务端没有匹配的历史记录</strong><p>只有接口返回真实空结果后才会显示。</p></div>
+            <div class="screening-history-state" data-screening-history-state="error" hidden role="alert"><strong>选股历史读取失败</strong></div>
+            <div class="screening-history-state" data-screening-history-state="unavailable" role="status" aria-live="polite"><strong>选股历史 API 尚未提供</strong><p>当前不能确认服务器是否存在历史任务。</p></div>
+            <div id="screening-history-list" class="screening-history-list" data-screening-history-state="loaded" hidden></div>
+            <div class="screening-history-pagination"><span>页码与总数等待服务端返回</span><div><button class="button button-secondary" id="screening-history-prev" type="button" disabled aria-disabled="true">上一页</button><button class="button button-secondary" id="screening-history-next" type="button" disabled aria-disabled="true">下一页</button></div></div>
           </section>
         </section>
 
