@@ -161,3 +161,9 @@
 - 股票上下文只来自当前页面最后一次成功行情查询的 state.quote，进入问股页时显示，且用户可以清除；没有从旧聊天或 localStorage 恢复上下文，也不将其发送至服务端。
 - 新增 `web/src/chat-state.js`、`web/tests/chat-state.test.mjs`，package check 纳入新 JS 模块。CI 需对本批提交 SHA 核验后再回填结果。
 - 浏览器视觉与移动端实际测试、NAS/Docker/OpenResty Chat API 联调未执行。
+
+
+## Issue #8 首轮 CI 诊断（2026-10-26）
+- WebUI checks [#40257236494](https://github.com/Kasign/stock_data_provider/actions/runs/40257236494) 中 78 项 Node tests 77 项通过；JS 语法检查通过，Nginx build 因测试失败而跳过。
+- 唯一失败为上下文安全文案断言：契约测试期望“不会自动复用历史上下文”，而页面首版写“不会复用上次会话的旧上下文”。页面文案已改成同时明确“不会自动复用历史上下文，也不会把旧会话的股票上下文带入新会话”；这是 UI 文案同步，不涉及新后端/API。
+- 修复提交后的 WebUI Actions 必须全绿，才能确认 Issue #8 自动化验收通过。

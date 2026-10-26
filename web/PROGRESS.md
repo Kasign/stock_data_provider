@@ -258,4 +258,4 @@
 - 增加基于当前页面最近一次成功真实行情响应的股票上下文摘要；进入问股页时同步当前行情上下文，用户可以清除。不会从旧会话/浏览器历史中恢复上下文，也不会将上下文发送到任何模型。
 - 新增 loading / empty / unavailable / error / loaded 五态状态函数，生产初始化固定为 unavailable。新会话、策略选择、发送、停止、复制、导出和重试按钮均保持禁用，直到后端 API/权限/取消契约存在。
 - 新增 `web/src/chat-state.js`、`web/tests/chat-state.test.mjs` 与 UI 契约测试；语法检查包含新模块。没有新增 Chat API，也没有使用 localStorage 保存假会话或消息。
-- 本批 CI 结果待核验；实际浏览器的流式体验/移动端输入栏，以及 NAS/Docker Chat API 联调尚未执行。
+- 首轮 WebUI checks [#40257236494](https://github.com/Kasign/stock_data_provider/actions/runs/40257236494) 为 77/78 项测试通过；唯一失败为 HTML 默认提示的上下文安全文案与新 UI 契约测试用词不同。已把文案统一为“不自动复用历史上下文，也不会把旧会话的股票上下文带入新会话”；JS 语法检查通过，镜像构建因测试失败跳过，修复后需要重新验收。实际浏览器的流式体验/移动端输入栏，以及 NAS/Docker Chat API 联调尚未执行。
