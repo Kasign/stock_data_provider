@@ -106,6 +106,7 @@
 ### P2：选股工作台
 
 - [ ] **选股表单、运行状态与候选结果** — [Issue #9](https://github.com/Kasign/stock_data_provider/issues/9)
+  - 进度：选股工作台与 capability/task/candidate/history 状态模型源码和 CI 已完成。WebUI checks [#40257622418](https://github.com/Kasign/stock_data_provider/actions/runs/40257622418) 通过（82/82 Node tests、JS syntax、Nginx build）；真实选股 API 尚未接入。
   - 市场/股票池/策略/参数、提交前摘要、运行状态、候选解释和历史筛选。
   - 策略列表/候选由后端提供；没有 API 时不能展示假候选，不用普通多股分析冒充筛选引擎。
 

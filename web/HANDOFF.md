@@ -187,3 +187,11 @@
 ## Issue #9 首轮 CI 诊断（2026-10-26）
 - WebUI checks [#40257548521](https://github.com/Kasign/stock_data_provider/actions/runs/40257548521) 中 82 项 Node tests 81 项通过；语法检查通过，Nginx image build 因测试失败跳过。
 - 唯一失败是旧的通用 UI 契约测试要求文案“不能提交，不会产生模拟结果”，新的选股页面将边界说明具体化为“不能提交扫描，也不会用普通分析任务伪装成选股”。已更新断言，未修改后端或生产逻辑；修复后的 Actions 仍需全绿。
+
+
+## Issue #9 最终验收（2026-10-26）
+- 选股 UI/状态模块提交 `29101f922d716f7cd5c120df1338be86243cc12b`，契约测试修复提交 `c54b8d75137652a242d0f46598d36b8574737ce0`。
+- 最终 WebUI checks [#40257622418](https://github.com/Kasign/stock_data_provider/actions/runs/40257622418) 全绿：82/82 Node tests、JavaScript syntax check、Nginx image build 均成功。首轮 #40257548521 的唯一失败是旧通用测试仍要求旧版选股占位文案；已更新测试并复验。
+- 选股状态模块分别区分 capability（enabled/disabled/unknown/unavailable/error）、扫描任务状态、候选集合与历史集合状态。当前生产页面全部以 `supported:false` 初始化；无 API 时不生成候选、分数、扫描成功状态或“0 条”结果。
+- 本节写入时 PR #2 Open/未合并，head `c54b8d75137652a242d0f46598d36b8574737ce0`；base SHA `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。PR #1 当前 head `b7bc88499e7491446e5250abfbc3da112012b4b5`，仍 Open/未合并。
+- 真实浏览器视觉验收和 NAS/Docker/OpenResty 选股联调未做。下一步进入 Issue #10 告警规则/触发历史/通知投递尝试 UI，所有写操作继续在无 API 状态下禁用。
