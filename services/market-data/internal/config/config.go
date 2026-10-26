@@ -98,15 +98,15 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	defaults := providerFile{
-		ProviderPriority: []string{"eastmoney", "baostock", "yahoo", "tencent", "sina", "netease"},
+		ProviderPriority: []string{"eastmoney", "baostock", "tencent", "sina", "netease"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: false, IndexQuotes: false, MarketBreadth: false, LimitPools: false, StockBoards: false, DragonTiger: false, Announcements: false},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
-			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: false, Fundamentals: false},
+			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: true, Fundamentals: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
-			"yahoo":     {Enabled: false, Quote: false, DailyBars: true},
-			"netease":   {Enabled: false, Quote: false, DailyBars: true},
+			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
+			"netease":   {Enabled: true, Quote: true, DailyBars: true},
 		},
 	}
 	file := defaults
@@ -542,6 +542,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_TENCENT_ENABLED", "MARKET_DATA_TENCENT_QUOTE_ENABLED",
 		"MARKET_DATA_TENCENT_DAILY_BARS_ENABLED", "MARKET_DATA_SINA_ENABLED", "MARKET_DATA_MX_ENABLED",
 		"MARKET_DATA_YAHOO_ENABLED", "MARKET_DATA_YAHOO_QUOTE_ENABLED", "MARKET_DATA_YAHOO_DAILY_BARS_ENABLED",
+		"MARKET_DATA_NETEASE_ENABLED", "MARKET_DATA_NETEASE_QUOTE_ENABLED", "MARKET_DATA_NETEASE_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {

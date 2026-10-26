@@ -4,8 +4,8 @@
 
 ## 当前实现范围
 
-- 实时行情 Provider：东方财富、腾讯、新浪；新增 Yahoo Finance Chart 实时快照能力（默认关闭且固定 degraded，因缺成交额）；网易财经实时 JSONP QuoteProvider 已实现但 GitHub Runner 对 `api.money.126.net` 的 DNS 解析失败，默认关闭。
-- 日线 K 线 Provider：东方财富、BaoStock、腾讯；新浪新增原始日 K（只支持 `none`），Yahoo Finance 已完成 GitHub Actions 实测且默认关闭；网易财经 CSV 日 K 的解析与单位检查有单测，但公网连续返回 HTTP 502，未接通且默认关闭。BaoStock 为默认日 K 备用源。
+- 国内实时行情 Provider：东方财富、腾讯、新浪、网易财经；Yahoo Finance 的代码仍保留，但作为海外来源从默认 Provider 优先级移除并保持关闭。
+- 国内日线 K 线 Provider：东方财富、BaoStock、腾讯、新浪（仅 `none` 复权口径）、网易财经（仅 `none` 复权口径）。网易接口曾在 GitHub Runner 遇到 DNS / HTTP 502，现纳入国内回退配置，后续统一验收其网络可用性和质量；不会因开启配置就将失败响应当作有效数据。
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表、证券名称/代码搜索，以及可选补充数据接口。
@@ -17,7 +17,7 @@
 - 历史 `as_of` 查询会排除当日尚未完成的日 K，并明确提示复权历史可能包含之后发生的公司行动因子。本服务尚未建立严格的时点复权因子库，因此不能声称历史回测完全无前视偏差。
 - 本地 smoke 模式可不连接数据库；生产部署应复用现有 MariaDB/Redis，不要为了本服务额外启动一套数据库容器。
 
-本阶段尚未完整迁移财务报表、指数/全市场广度、板块排名、龙虎榜、新闻公告等数据域。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
+东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告，及 BaoStock 的交易日历/季度基本面已纳入默认配置的能力链路；其质量仍受上游字段、权限、复权口径和可用性限制，需以实际响应的 `quality_status` 为准。Efinance、Akshare、Pytdx、Tushare、TickFlow 等原 Python 管理器中的独立 Provider 仍有 Go 接口迁移缺口，本轮先完成现有国内原生 Provider 的统一接线，后续继续实现缺失适配器。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
 
 ## BaoStock 日 K 数据源（默认启用的备用源）
 

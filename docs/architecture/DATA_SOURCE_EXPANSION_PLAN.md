@@ -194,3 +194,13 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - [BaoStock 协议社区参考（非官方，实施时须与官方客户端源码及真实响应核对）](https://github.com/millken/baostock/blob/main/BAOSTOCK_PROTOCOL.md)
 - [Tushare Pro 积分与频次权限表](https://tushare.pro/document/2?doc_id=290)
 - [Kasign Financial-API（同花顺候选参考）](https://github.com/Kasign/Financial-API)
+
+## 8. 国内原生 Provider 统一接线（待集中验收，2026-10-26）
+
+本批次按“国内数据源优先，海外来源暂不请求”的要求调整默认配置：
+- 默认优先级去掉 Yahoo Finance；Yahoo 代码保留但 `enabled=false`，其行情/日 K 不会进入默认请求链。
+- 东方财富默认开启行情、日 K、证券基础资料、行业/概念排名、指数、市场广度、涨跌停池、所属板块、龙虎榜和公告。
+- BaoStock 默认开启历史日 K、交易日历和季度基本面；仍不把它当作实时行情源。
+- 腾讯、新浪和网易财经纳入国内行情回退配置；新浪/网易的历史日 K 仅支持不复权口径，无法匹配请求的复权口径时必须返回错误并允许路由继续回退。
+- 妙想仍是需要显式 API Key 的补充源，不伪造凭据或在没有 Key 时开启；新闻搜索的 Bocha / SearXNG 也继续由各自凭据/URL 配置控制。
+- 本批只调整已有 Go Provider 的默认接线与部署模板，没有运行测试；真实上游可用性、数据质量和部署环境连通性统一安排在后续测试阶段。Efinance、Akshare、Pytdx、Tushare、TickFlow 等尚无 Go 原生适配器的国内来源不能因为这次配置变更就被视为已迁移。
