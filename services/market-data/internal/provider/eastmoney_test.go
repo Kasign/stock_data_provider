@@ -254,18 +254,23 @@ func TestEastmoneyRejectsKlineSymbolMismatch(t *testing.T) {
 func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	var gotQueries []url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQueries = append(gotQueries, r.URL.Query())
 		if r.Header.Get("Referer") != "https://emweb.securities.eastmoney.com/" {
 			t.Errorf("unexpected profile referer %q", r.Header.Get("Referer"))
 		}
-		if r.URL.Query().Get("reportName") == "RPT_PCF10_ORG_ISSUEINFO" {
+		query := r.URL.Query()
+		switch query.Get("reportName") {
+		case "RPT_PCF10_ORG_ISSUEINFO":
+			gotQueries = append(gotQueries, query)
 			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","LISTING_DATE":"2001-08-27 00:00:00","OUT_DATE":null}]}}`)
-			return
+		case "RPT_F10_BASIC_ORGINFO":
+			gotQueries = append(gotQueries, query)
+			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","STR_NAMEA":"贵州茅台","ORG_NAME":"贵州茅台酒股份有限公司"}]}}`)
+		default:
+			fmt.Fprint(w, `{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f162":25.1,"f167":8.2,"f127":"白酒","f116":1000000000000,"f117":900000000000,"f198":"BK0450","f173":25,"f187":50,"f105":80000000000,"f186":90}}`)
 		}
-		fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","STR_NAMEA":"贵州茅台","ORG_NAME":"贵州茅台酒股份有限公司"}]}}`)
 	}))
 	defer server.Close()
-	p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, "", "", server.URL, "")
+	p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, server.URL, "", server.URL, "")
 	item, err := p.FetchStockBasic(context.Background(), "600519")
 	if err != nil {
 		t.Fatal(err)
@@ -273,8 +278,16 @@ func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	if item.Symbol != "600519.SH" || item.Name != "贵州茅台" || item.IPODate != "2001-08-27" {
 		t.Fatalf("unexpected stock-basic response: %+v", item)
 	}
-	if item.Source != "eastmoney" || item.QualityStatus != model.QualityValid || item.NormalizationVer == "" {
+	if item.Source != "eastmoney" || item.QualityStatus != model.QualityDegraded || item.NormalizationVer == "" {
 		t.Fatalf("missing source/quality/normalization metadata: %+v", item)
+	}
+	for _, reason := range item.QualityReasons {
+		if reason == "market_profile_request_failed" {
+			t.Fatalf("local market-profile fixture unexpectedly failed: %+v", item.QualityReasons)
+		}
+	}
+	if item.DynamicPE == nil || *item.DynamicPE != 25.1 || item.Industry != "白酒" {
+		t.Fatalf("market-profile fields were not normalized: %+v", item)
 	}
 	if len(gotQueries) != 2 || gotQueries[0].Get("reportName") != "RPT_PCF10_ORG_ISSUEINFO" || gotQueries[1].Get("reportName") != "RPT_F10_BASIC_ORGINFO" {
 		t.Fatalf("unexpected F10 requests: %+v", gotQueries)

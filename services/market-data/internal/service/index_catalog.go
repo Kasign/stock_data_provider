@@ -197,6 +197,10 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 	} else if cacheErr != nil {
 		s.logger.Warn("index catalog cache read failed", "tag", tag, "error", cacheErr)
 	}
+	providers := s.indexCatalogProviders
+	if len(providers) == 0 {
+		return nil, false, errors.New("no enabled index-catalog provider")
+	}
 	var failures []string
 	for _, p := range providers {
 		if err := ctx.Err(); err != nil {

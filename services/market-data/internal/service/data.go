@@ -1080,14 +1080,6 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 }
 
 // SetChipDistributionProviders 注册独立的原生筹码分布 Provider。
-func (s *DataService) SetHotRankingProviders(providers []provider.HotRankingProvider) {
-	s.hotRankingProviders = append([]provider.HotRankingProvider(nil), providers...)
-}
-
-func (s *DataService) HotRankingProviders() []provider.HotRankingProvider {
-	return append([]provider.HotRankingProvider(nil), s.hotRankingProviders...)
-}
-
 func (s *DataService) SetChipDistributionProviders(providers []provider.ChipDistributionProvider) {
 	s.chipDistributionProviders = append([]provider.ChipDistributionProvider(nil), providers...)
 }
