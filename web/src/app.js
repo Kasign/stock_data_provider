@@ -77,6 +77,7 @@ const state = {
   settings: loadSettings(),
   view: "market",
   quote: null,
+  bundleSnapshot: null,
   bars: [],
   chartView: "close",
   chartMeta: { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" },
@@ -1085,6 +1086,69 @@ async function loadSupplementalData() {
   }
 }
 
+function clearBundleSnapshotMetadata() {
+  state.bundleSnapshot = null;
+  const root = $("#bundle-snapshot-strip");
+  if (root) root.hidden = true;
+  const feedback = $("#bundle-snapshot-feedback");
+  if (feedback) {
+    feedback.hidden = true;
+    feedback.textContent = "";
+  }
+  const sources = $("#bundle-snapshot-sources");
+  if (sources) sources.replaceChildren();
+}
+
+function renderBundleSnapshotMetadata(snapshot) {
+  state.bundleSnapshot = snapshot && typeof snapshot === "object" ? snapshot : null;
+  const root = $("#bundle-snapshot-strip");
+  if (!root) return;
+  if (!state.bundleSnapshot) {
+    clearBundleSnapshotMetadata();
+    return;
+  }
+  root.hidden = false;
+  setText("#bundle-snapshot-id", state.bundleSnapshot.snapshot_id || "未报告");
+  setText("#bundle-analysis-reference-time", state.bundleSnapshot.analysis_reference_time ? formatDateTime(state.bundleSnapshot.analysis_reference_time) : "未报告");
+  setText("#bundle-fetched-at", state.bundleSnapshot.fetched_at ? formatDateTime(state.bundleSnapshot.fetched_at) : "未报告");
+  setText("#bundle-quality-status", state.bundleSnapshot.quality_status ? qualityLabel(state.bundleSnapshot.quality_status) : "未报告");
+
+  const sourceRoot = $("#bundle-snapshot-sources");
+  sourceRoot.replaceChildren();
+  const sources = state.bundleSnapshot.sources && typeof state.bundleSnapshot.sources === "object"
+    ? Object.entries(state.bundleSnapshot.sources).filter(([key, value]) => key && value !== null && value !== undefined && String(value).trim())
+    : [];
+  if (!sources.length) {
+    const empty = document.createElement("span");
+    empty.className = "bundle-snapshot-source-empty";
+    empty.textContent = "服务端未报告组件来源明细。";
+    sourceRoot.append(empty);
+  } else {
+    const title = document.createElement("strong");
+    title.textContent = "组件来源";
+    sourceRoot.append(title);
+    sources.slice(0, 8).forEach(([key, value]) => {
+      const item = document.createElement("span");
+      item.className = "bundle-snapshot-source";
+      const label = document.createElement("small");
+      label.textContent = String(key);
+      const content = document.createElement("strong");
+      content.textContent = String(value);
+      item.append(label, content);
+      sourceRoot.append(item);
+    });
+    if (sources.length > 8) {
+      const more = document.createElement("span");
+      more.className = "bundle-snapshot-source-empty";
+      more.textContent = "另有 " + (sources.length - 8) + " 项来源，完整列表可通过复制元数据查看。";
+      sourceRoot.append(more);
+    }
+  }
+  const feedback = $("#bundle-snapshot-feedback");
+  feedback.hidden = true;
+  feedback.textContent = "";
+}
+
 function renderQuote(quote) {
   state.quote = quote;
   if (state.view === "chat") syncChatStockContextFromMarket();
@@ -1407,6 +1471,7 @@ async function runQuoteQuery(event) {
   setNotice("", "info");
   setText("#query-hint", `正在查询 ${symbol} 的实时行情与日 K…`);
   clearQuoteDisplay(symbol, "loading");
+  clearBundleSnapshotMetadata();
 
   const limit = Number($("#bar-limit").value) || 120;
   const adjustment = $("#adjustment").value;
@@ -1445,6 +1510,7 @@ async function runQuoteQuery(event) {
   }
 
   if (bundleResponse) {
+    renderBundleSnapshotMetadata(bundleResponse);
     const bundleBars = Array.isArray(bundleResponse.daily_bars) ? bundleResponse.daily_bars : [];
     if (bundleResponse.quote && typeof bundleResponse.quote === "object") {
       renderQuote(bundleResponse.quote);
@@ -1501,10 +1567,10 @@ async function runQuoteQuery(event) {
   }
 
   setText("#last-updated", new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()));
-  const snapshotHint = bundleResponse
-    ? ` · 快照 ID：${String(bundleResponse.snapshot_id || "未报告").slice(0, 16)} · 分析参考时间：${bundleResponse.analysis_reference_time ? formatDateTime(bundleResponse.analysis_reference_time) : "未报告"}`
-    : usedLegacyBundleFallback ? " · 当前服务未提供 Bundle 接口，已回退为两次独立请求" : "";
-  setText("#query-hint", `请求标的：${symbol} · 日 K 上限：${limit} · 复权口径：${adjustment} · 日期：${startDate || "起始不限"} 至 ${endDate || "截至今天"}${snapshotHint}`);
+  const compatibilityHint = usedLegacyBundleFallback
+    ? " · 当前服务未提供 Bundle 接口，已回退为两次独立请求"
+    : "";
+  setText("#query-hint", `请求标的：${symbol} · 日 K 上限：${limit} · 复权口径：${adjustment} · 日期：${startDate || "起始不限"} 至 ${endDate || "截至今天"}${compatibilityHint}`);
   state.isQuerying = false;
   $("#load-supplemental-button").disabled = !state.supplementSymbol || state.supplementLoading;
   $("#quote-form").classList.remove("is-loading");
@@ -2412,6 +2478,27 @@ document.addEventListener("click", (event) => {
   hideStockSearch();
 });
 $("#load-supplemental-button").addEventListener("click", loadSupplementalData);
+$("#copy-bundle-snapshot").addEventListener("click", async () => {
+  if (!state.bundleSnapshot) return;
+  const feedback = $("#bundle-snapshot-feedback");
+  const payload = {
+    symbol: state.bundleSnapshot.symbol || state.quote?.symbol || "",
+    snapshot_id: state.bundleSnapshot.snapshot_id || "",
+    analysis_reference_time: state.bundleSnapshot.analysis_reference_time || "",
+    fetched_at: state.bundleSnapshot.fetched_at || "",
+    quality_status: state.bundleSnapshot.quality_status || "unknown",
+    sources: state.bundleSnapshot.sources || {},
+    warnings: Array.isArray(state.bundleSnapshot.warnings) ? state.bundleSnapshot.warnings : []
+  };
+  try {
+    await copyText(JSON.stringify(payload, null, 2));
+    feedback.textContent = "快照元数据已复制，可附在问题报告中。";
+    feedback.hidden = false;
+  } catch (error) {
+    feedback.textContent = "复制失败：" + (error?.message || "浏览器未允许复制。");
+    feedback.hidden = false;
+  }
+});
 $("#chart-view-close").addEventListener("click", () => setChartView("close"));
 $("#chart-view-candles").addEventListener("click", () => setChartView("candles"));
 $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);

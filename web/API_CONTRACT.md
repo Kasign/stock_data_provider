@@ -36,6 +36,7 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 ## 行情 Bundle 与快照一致性
 
 - 未填写日 K 开始/结束日期时，WebUI 优先请求 `GET /market-api/api/v1/bundles/{symbol}?lookback_days=120&adjustment=forward_adjusted`，在一个响应中读取实时行情、日 K、质量警告、`snapshot_id` 与 `analysis_reference_time`。
+- 页面用独立信息栏展示完整 `snapshot_id`、分析参考时间、采集完成时间、整体质量与服务端 `sources` 字段；支持复制脱敏后的快照元数据 JSON（不含 API Key）。
 - `lookback_days` 依照服务端 OpenAPI 参数传递；WebUI 的回包适配以 `daily_bars` 为日 K 数组，并从返回 K 线的 `adjustment_basis` 展示实际复权口径。
 - Bundle 可成功但不包含 `quote`；此时保留真实日 K，报价区明确显示未取得实时报价，不用旧报价或虚构报价填充。
 - 只有 Bundle 路由返回 HTTP 404 时，才兼容旧服务并回退到 `/quotes/{symbol}` 与 `/bars/{symbol}/daily` 两个接口。其他 Bundle 错误不会立即再调用两套 Provider，避免无谓的重复负载。

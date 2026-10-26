@@ -111,6 +111,20 @@
               <button class="button button-secondary query-watchlist-button" id="add-to-watchlist-button" type="button" title="将当前输入的股票代码加入本地自选">＋ 加入自选</button>
             </form>
             <div class="query-hint" id="query-hint">需在“连接与密钥设置”中填写行情服务 API Key。</div>
+            <section class="bundle-snapshot-strip" id="bundle-snapshot-strip" hidden aria-label="本次行情快照元数据" aria-live="polite">
+              <div class="bundle-snapshot-heading">
+                <div><p class="panel-kicker">统一行情快照</p><p class="bundle-snapshot-description">实时行情与日 K 使用的服务端快照元数据，可复制用于问题定位。</p></div>
+                <button class="button button-secondary" id="copy-bundle-snapshot" type="button">复制快照元数据</button>
+              </div>
+              <div class="bundle-snapshot-metrics">
+                <div><small>快照 ID</small><code id="bundle-snapshot-id">—</code></div>
+                <div><small>分析参考时间</small><strong id="bundle-analysis-reference-time">未报告</strong></div>
+                <div><small>采集完成时间</small><strong id="bundle-fetched-at">未报告</strong></div>
+                <div><small>整体质量</small><strong id="bundle-quality-status">未报告</strong></div>
+              </div>
+              <div class="bundle-snapshot-sources" id="bundle-snapshot-sources"></div>
+              <p class="bundle-snapshot-feedback" id="bundle-snapshot-feedback" role="status" aria-live="polite" hidden></p>
+            </section>
           </section>
 
           <section class="panel watchlist-panel" aria-labelledby="watchlist-title">
