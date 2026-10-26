@@ -212,3 +212,10 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - 指定单股行情接口不提供可用快照时间，所以返回的 Quote 会标记 `degraded`；缺失成交量/成交额、非法 OHLC、代码不匹配、越界日期及业务错误不会伪装成有效数据。
 - 同花顺是凭据和调用额度控制的可选国内源，默认禁用；财务报表、估值、交易日历、指数/板块和特色数据仍需后续按能力接入。
 - 本次只接入代码、配置与文档，没有运行测试；统一测试阶段再核实账号权限、分页、额度与真实数据质量。
+
+### 同花顺财务指标能力补充（2026-10-26）
+
+- 新增 `FundamentalsProvider` 对接：`GET /api/a-share/financials/indicators?thscode=...&report=YYYY-Q`，报告期可由 year/quarter 精确映射。
+- 五类能力块按供应商实际 `abilities[]` 结构解析，不假设它是以类别为键的对象。空值和非数值不补零。
+- 上游响应未提供可靠披露时间与每个指标的单位，字段保留供应商 `index_id` 作为 key/source_field，并将单位标记为 `provider_defined`；整体质量保持 `degraded`，不可直接作为严格 point-in-time 财务值。
+- 通过 `MARKET_DATA_HITHINK_FUNDAMENTALS_ENABLED=true` 显式启用；仍需具备财务指标端点权限的同花顺 API Key。本次未运行测试。

@@ -281,6 +281,152 @@ func (p *Hithink) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, all, 0)
 }
 
+// FetchFundamentals 使用同花顺财务指标端点读取单个报告期的能力指标。
+// 官方响应不包含可确认的披露时间，也未为每个指标提供单位说明；因此缺失项不补零，完整性/时间可用性不满足要求时保持 degraded。
+func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year, quarter int) (*model.FundamentalsSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺财务指标接口需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	symbol, err := hithinkDomesticSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	nowYear := time.Now().Year()
+	if year < 2000 || year > nowYear {
+		return nil, fmt.Errorf("同花顺财务指标年份必须在 2000..%d", nowYear)
+	}
+	if quarter < 1 || quarter > 4 {
+		return nil, errors.New("同花顺财务指标季度必须为 1..4")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	report := fmt.Sprintf("%d-%d", year, quarter)
+	query := url.Values{}
+	query.Set("thscode", symbol)
+	query.Set("report", report)
+	raw, err := p.get(ctx, "/api/a-share/financials/indicators", query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺财务指标请求失败: %w", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		THSCode string `json:"thscode"`
+		Report  string `json:"report"`
+		Abilities []struct {
+			Ability string `json:"ability"`
+			Indicators []struct {
+				IndexID string `json:"index_id"`
+				Value json.RawMessage `json:"value"`
+			} `json:"indicators"`
+		} `json:"abilities"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺财务指标失败: %w", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(data.THSCode), symbol) {
+		return nil, fmt.Errorf("同花顺财务响应证券代码不匹配: requested=%s returned=%q", symbol, data.THSCode)
+	}
+	if strings.TrimSpace(data.Report) != report {
+		return nil, fmt.Errorf("同花顺财务响应报告期不匹配: requested=%s returned=%q", report, data.Report)
+	}
+
+	reportDate := time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	snapshot := &model.FundamentalsSnapshot{
+		Symbol: symbol, Year: year, Quarter: quarter,
+		Sections: make([]model.FundamentalSection, 0, len(data.Abilities)),
+		Source: p.Name(), SourceVersion: hithinkVersion,
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"publication_date_not_exposed_by_provider", "indicator_units_not_exposed_by_provider"},
+	}
+	for _, ability := range data.Abilities {
+		category := hithinkFundamentalCategory(ability.Ability)
+		section := model.FundamentalSection{
+			Category: category, ReportDate: reportDate,
+			Metrics: make([]model.FundamentalMetric, 0, len(ability.Indicators)),
+			QualityStatus: model.QualityDegraded,
+			QualityReasons: []string{"publication_date_not_exposed_by_provider", "metric_unit_not_exposed_by_provider"},
+		}
+		invalidValueCount := 0
+		for _, item := range ability.Indicators {
+			indexID := strings.TrimSpace(item.IndexID)
+			if indexID == "" {
+				invalidValueCount++
+				continue
+			}
+			value, ok := hithinkParseFundamentalValue(item.Value)
+			if !ok {
+				invalidValueCount++
+				continue
+			}
+			section.Metrics = append(section.Metrics, model.FundamentalMetric{
+				Key: indexID, Name: indexID, Value: value,
+				Unit: "provider_defined", SourceField: indexID,
+			})
+		}
+		section.HasData = len(section.Metrics) > 0
+		if invalidValueCount > 0 {
+			section.QualityReasons = append(section.QualityReasons, "one_or_more_metrics_missing_or_invalid")
+		}
+		if !section.HasData {
+			section.QualityReasons = append(section.QualityReasons, "no_numeric_metrics_available")
+		} else {
+			snapshot.HasData = true
+		}
+		snapshot.Sections = append(snapshot.Sections, section)
+	}
+	if !snapshot.HasData {
+		snapshot.QualityReasons = append(snapshot.QualityReasons, "no_numeric_metrics_for_requested_report")
+	}
+	return snapshot, nil
+}
+
+func hithinkParseFundamentalValue(raw json.RawMessage) (float64, bool) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return 0, false
+	}
+	var textValue string
+	if json.Unmarshal(raw, &textValue) == nil {
+		textValue = strings.TrimSpace(textValue)
+		if textValue == "" {
+			return 0, false
+		}
+		value, err := strconv.ParseFloat(textValue, 64)
+		return value, err == nil && hithinkFinite(value)
+	}
+	value, err := strconv.ParseFloat(trimmed, 64)
+	return value, err == nil && hithinkFinite(value)
+}
+
+func hithinkFundamentalCategory(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "growth":
+		return "growth"
+	case "profitability":
+		return "profitability"
+	case "solvency":
+		return "solvency"
+	case "operation":
+		return "operating"
+	case "cash-flow":
+		return "cash_flow"
+	default:
+		value := strings.ToLower(strings.TrimSpace(raw))
+		value = strings.ReplaceAll(value, "-", "_")
+		if value == "" {
+			return "other"
+		}
+		return value
+	}
+}
+
 func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, end time.Time, adjust string, loc *time.Location) ([]model.DailyBar, error) {
 	startMS := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc).UnixMilli()
 	endMS := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), loc).UnixMilli()

@@ -28,7 +28,8 @@
     "hithink": {
       "enabled": false,
       "quote": false,
-      "daily_bars": false
+      "daily_bars": false,
+      "fundamentals": false
     },
     "baostock": {
       "enabled": true,
