@@ -1522,3 +1522,103 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Consistent page frame and final responsive layout normalization. */
+.main-area { min-width: 0; }
+.view {
+  width: 100%;
+  max-width: 1680px;
+  min-width: 0;
+  margin-inline: auto;
+}
+.view > *, .page-heading > div, .panel-heading > div { min-width: 0; }
+.page-heading > .last-updated,
+.page-heading > .feature-status {
+  flex: 0 1 auto;
+  max-width: min(100%, 460px);
+}
+.feature-status { align-items: center; }
+.page-heading .feature-status .button { min-height: 36px; }
+.panel-heading { min-width: 0; }
+.panel-heading > :last-child { max-width: 100%; }
+.panel-heading .availability-pill,
+.panel-heading .quality-pill,
+.panel-heading .soft-badge { flex: 0 1 auto; }
+.feature-card-grid,
+.notifications-layout,
+.chat-layout,
+.settings-layout,
+.alert-history-layout,
+.screening-results-layout,
+.market-overview-detail-grid { min-width: 0; }
+.feature-card-grid > *,
+.notifications-layout > *,
+.chat-layout > *,
+.settings-layout > *,
+.alert-history-layout > *,
+.screening-results-layout > * { min-width: 0; }
+
+@media (min-width: 1500px) {
+  .main-area { padding-left: 38px; padding-right: 38px; }
+  .view { max-width: 1680px; }
+}
+@media (max-width: 1100px) {
+  .main-area { padding-left: 20px; padding-right: 20px; }
+  .page-heading { gap: 14px; }
+  .page-subtitle { max-width: 760px; }
+  .chat-layout { grid-template-columns: minmax(0, 1fr); }
+  .chat-sessions-panel { position: static; order: 2; }
+  .chat-conversation-panel { order: 1; }
+  .notification-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .main-area { padding-left: 18px; padding-right: 18px; }
+  .view { padding-top: 24px; }
+  .page-heading { align-items: flex-start; }
+  .page-heading > .last-updated,
+  .page-heading > .feature-status { max-width: 100%; }
+  .panel-heading { flex-wrap: wrap; }
+  .panel-heading > :last-child { margin-left: auto; }
+  .chat-layout { grid-template-columns: minmax(0, 1fr); }
+  .chat-sessions-panel { position: static; order: 2; }
+  .chat-conversation-panel { order: 1; }
+}
+@media (max-width: 600px) {
+  .main-area { padding-left: 12px; padding-right: 12px; }
+  .view { padding-top: 20px; padding-bottom: 16px; }
+  .page-heading { gap: 11px; margin-bottom: 16px; }
+  .page-heading > div:first-child { width: 100%; }
+  .page-heading .last-updated,
+  .page-heading .feature-status {
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+  .page-heading .feature-status { gap: 8px; }
+  .page-heading .feature-status .button { flex: 1 1 auto; }
+  .panel-heading { align-items: flex-start; gap: 9px; }
+  .panel-heading > :last-child { margin-left: 0; }
+  .panel-heading .availability-pill { white-space: normal; text-align: center; }
+  .feature-form-panel,
+  .notification-list-panel,
+  .notification-detail-panel,
+  .chat-sessions-panel,
+  .chat-conversation-panel,
+  .alert-rules-panel,
+  .alert-evaluation-panel,
+  .alert-history-panel,
+  .alert-delivery-panel { padding: 14px; }
+  .feature-action-row { align-items: stretch; flex-direction: column; }
+  .feature-action-row > .button { width: 100%; }
+  .notification-filter-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 380px) {
+  .main-area { padding-left: 9px; padding-right: 9px; }
+  .view { padding-top: 17px; }
+  .page-heading h1 { font-size: 23px; letter-spacing: -.5px; }
+  .feature-callout { gap: 10px; }
+  .feature-callout-icon { flex: 0 0 30px; }
+  .feature-card-grid { gap: 9px; }
+  .feature-summary-card { padding: 13px; }
+}
