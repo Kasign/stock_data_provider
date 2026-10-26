@@ -92,6 +92,8 @@ const state = {
   taskSequence: 0,
   taskEvents: new Map(),
   taskEventsLoaded: false,
+  taskEventsUnavailable: false,
+  taskEventsError: "",
   selectedTaskEventSequence: null,
   pollTimer: null,
   pollGeneration: 0,
@@ -1690,7 +1692,11 @@ function renderTask(task) {
   const diagnostics = [message, failureCode ? "错误代码：" + failureCode : ""].filter(Boolean).join(" · ");
   $("#task-error").hidden = !diagnostics;
   $("#task-error").textContent = diagnostics;
-  $("#task-poll-label").textContent = TERMINAL_TASK_STATUSES.has(task.status) ? "任务已结束" : "每 2.5 秒轮询服务端状态";
+  $("#task-poll-label").textContent = TERMINAL_TASK_STATUSES.has(task.status)
+    ? "任务已结束"
+    : state.taskEventsUnavailable
+      ? "任务状态每 2.5 秒刷新；阶段事件接口暂不可用，点击“立即刷新状态”可重新尝试。"
+      : "每 2.5 秒轮询服务端状态";
   renderTaskFlowSummary();
 }
 
@@ -1701,9 +1707,11 @@ function renderTaskEvents() {
   if (!events.length) {
     const empty = document.createElement("div");
     empty.className = "empty-row";
-    empty.textContent = state.taskEventsLoaded
-      ? "服务端目前没有持久化阶段事件。排队期间事件数组可以为空。"
-      : "等待服务端阶段事件读取。";
+    empty.textContent = state.taskEventsError
+      ? "阶段事件读取失败：" + state.taskEventsError + "。任务状态仍可独立刷新；点击“立即刷新状态”可重试。"
+      : state.taskEventsLoaded
+        ? "服务端目前没有持久化阶段事件。排队期间事件数组可以为空。"
+        : "等待服务端阶段事件读取。";
     list.append(empty);
     renderSelectedTaskEvent(null);
     renderTaskFlowSummary();
@@ -2097,37 +2105,124 @@ function stopTaskPolling() {
 async function pollTask(generation = state.pollGeneration) {
   if (!state.taskId || generation !== state.pollGeneration) return;
   const taskId = state.taskId;
-  try {
-    const [taskPayload, eventPayload] = await Promise.all([
-      getAnalysisTask(state.settings, taskId),
-      getAnalysisTaskEvents(state.settings, taskId, state.taskSequence)
-    ]);
-    if (generation !== state.pollGeneration || taskId !== state.taskId) return;
-    const task = taskPayload.task || taskPayload;
-    renderTask(task);
-    state.taskEventsLoaded = true;
-    for (const event of (eventPayload.events || [])) {
-      state.taskEvents.set(event.sequence, event);
-      state.taskSequence = Math.max(state.taskSequence, Number(event.sequence) || 0);
+  const eventRequest = state.taskEventsUnavailable
+    ? Promise.resolve({ skipped: true })
+    : getAnalysisTaskEvents(state.settings, taskId, state.taskSequence);
+  const [taskResult, eventResult] = await Promise.allSettled([
+    getAnalysisTask(state.settings, taskId),
+    eventRequest
+  ]);
+  if (generation !== state.pollGeneration || taskId !== state.taskId) return;
+
+  let task = null;
+  let taskError = null;
+  let eventError = null;
+  let eventsSkipped = false;
+
+  if (taskResult.status === "fulfilled") {
+    const payload = taskResult.value;
+    const candidate = payload?.task || payload;
+    if (!candidate || typeof candidate !== "object" || !candidate.status) {
+      taskError = new Error("任务状态接口返回了无法识别的响应。");
+    } else if (candidate.task_id && candidate.task_id !== taskId) {
+      taskError = new Error("任务状态接口返回了其他任务的结果，已忽略。");
+    } else {
+      task = candidate;
+      renderTask(task);
     }
-    renderTaskEvents();
-    if (TERMINAL_TASK_STATUSES.has(task.status)) {
-      stopTaskPolling();
-      const runId = task.run_id || state.runId;
-      if (runId) void loadTaskRunResult(runId, taskId);
-      return;
-    }
-    state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
-  } catch (error) {
-    if (generation !== state.pollGeneration) return;
-    if (!isRetryableApiError(error)) {
-      $("#task-poll-label").textContent =
-        `自动刷新已暂停：${errorMessage(error)}。请检查权限、API 配置或任务 ID，再点击“立即刷新状态”重试。`;
-      return;
-    }
-    $("#task-poll-label").textContent = `状态刷新失败：${errorMessage(error)}，5 秒后自动重试…`;
-    state.pollTimer = window.setTimeout(() => pollTask(generation), 5000);
+  } else {
+    taskError = taskResult.reason;
   }
+
+  if (eventResult.status === "fulfilled" && eventResult.value?.skipped === true) {
+    eventsSkipped = true;
+  } else if (eventResult.status === "fulfilled") {
+    const eventPayload = eventResult.value;
+    if (!eventPayload || typeof eventPayload !== "object" || !Array.isArray(eventPayload.events)) {
+      eventError = new Error("阶段事件接口返回的数据结构无效。");
+    } else if (eventPayload.task_id && eventPayload.task_id !== taskId) {
+      eventError = new Error("阶段事件接口返回了其他任务的事件，已忽略。");
+    } else {
+      state.taskEventsLoaded = true;
+      state.taskEventsError = "";
+      let malformedCount = 0;
+      for (const item of eventPayload.events) {
+        const sequence = Number(item?.sequence);
+        if (!item || typeof item !== "object" || !Number.isSafeInteger(sequence) || sequence < 1) {
+          malformedCount += 1;
+          continue;
+        }
+        const normalized = { ...item, sequence };
+        state.taskEvents.set(sequence, normalized);
+        state.taskSequence = Math.max(state.taskSequence, sequence);
+      }
+      if (malformedCount) {
+        state.taskEventsError = "服务端返回 " + malformedCount + " 条序号无效的事件，已忽略。";
+      }
+      renderTaskEvents();
+    }
+  } else {
+    eventError = eventResult.reason;
+  }
+
+  if (eventError) {
+    state.taskEventsError = errorMessage(eventError);
+    if (!isRetryableApiError(eventError)) state.taskEventsUnavailable = true;
+    renderTaskEvents();
+  }
+
+  // A permanent task lookup failure means the current task reference cannot be polled safely.
+  if (taskError && !isRetryableApiError(taskError)) {
+    stopTaskPolling();
+    $("#task-poll-label").textContent =
+      "自动刷新已暂停：任务状态读取失败：" + errorMessage(taskError) +
+      (eventError ? "；阶段事件读取失败：" + errorMessage(eventError) : "") +
+      "。请检查权限、API 配置或任务 ID，再点击“立即刷新状态”重试。";
+    return;
+  }
+
+  if (task && TERMINAL_TASK_STATUSES.has(task.status)) {
+    stopTaskPolling();
+    if (eventError) {
+      $("#task-poll-label").textContent =
+        "任务已结束；阶段事件读取失败：" + errorMessage(eventError) +
+        "。可点击“立即刷新状态”重新尝试读取事件。";
+    } else if (eventsSkipped) {
+      $("#task-poll-label").textContent = "任务已结束；阶段事件读取此前被暂停，可手动刷新重试。";
+    }
+    const runId = task.run_id || state.runId;
+    if (runId) void loadTaskRunResult(runId, taskId);
+    return;
+  }
+
+  if (taskError) {
+    $("#task-poll-label").textContent =
+      "任务状态刷新失败：" + errorMessage(taskError) +
+      (eventError ? "；阶段事件刷新失败：" + errorMessage(eventError) : "") +
+      "，5 秒后自动重试…";
+    state.pollTimer = window.setTimeout(() => pollTask(generation), 5000);
+    return;
+  }
+
+  if (eventError) {
+    if (isRetryableApiError(eventError)) {
+      $("#task-poll-label").textContent =
+        "任务状态已更新，但阶段事件读取失败：" + errorMessage(eventError) + "，5 秒后重试…";
+      state.pollTimer = window.setTimeout(() => pollTask(generation), 5000);
+    } else {
+      $("#task-poll-label").textContent =
+        "任务状态正常刷新；阶段事件接口暂不可用：" + errorMessage(eventError) +
+        "。已暂停事件请求以避免重复失败；点击“立即刷新状态”可重试。";
+      state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
+    }
+    return;
+  }
+
+  if (eventsSkipped) {
+    state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
+    return;
+  }
+  state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
 }
 
 async function createTask(event) {
@@ -2168,6 +2263,8 @@ async function createTask(event) {
   state.taskSequence = 0;
   state.taskEvents.clear();
   state.taskEventsLoaded = false;
+  state.taskEventsUnavailable = false;
+  state.taskEventsError = "";
   state.selectedTaskEventSequence = null;
   $("#task-result-section").hidden = true;
   $("#task-result-metrics").replaceChildren();
@@ -2238,6 +2335,9 @@ function activateTaskReference(record) {
   state.lastRunResult = null;
   state.taskSequence = 0;
   state.taskEvents.clear();
+  state.taskEventsLoaded = false;
+  state.taskEventsUnavailable = false;
+  state.taskEventsError = "";
   $("#task-symbols").value = state.taskSymbols.join(", ") || "600519";
   if (["post_market_scan", "watchlist_scan", "position_review"].includes(state.taskType)) {
     $("#task-type").value = state.taskType;
@@ -2541,6 +2641,7 @@ $("#clear-settings").addEventListener("click", clearLocalSettings);
 $("#task-form").addEventListener("submit", createTask);
 $("#refresh-task").addEventListener("click", () => {
   if (!state.taskId) return;
+  state.taskEventsUnavailable = false;
   stopTaskPolling();
   const generation = state.pollGeneration;
   void pollTask(generation);
