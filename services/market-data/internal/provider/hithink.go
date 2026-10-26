@@ -750,6 +750,36 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		}
 		snapshot.Sections = append(snapshot.Sections, section)
 	}
+	// 报表接口按年度/季度返回多期数据，按报告期末精确匹配，不把相邻期间误当作目标季度。
+	statementRequests := []struct {
+		path     string
+		category string
+	}{
+		{path: "/api/a-share/financials/income-statements", category: "income_statement"},
+		{path: "/api/a-share/financials/balance-sheets", category: "balance_sheet"},
+		{path: "/api/a-share/financials/cash-flow-statements", category: "cash_flow_statement"},
+	}
+	for _, request := range statementRequests {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		section, statementErr := p.fetchFinancialStatementSection(ctx, symbol, year, quarter, reportDate, request.path, request.category)
+		if statementErr != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, request.category+"_provider_unavailable")
+			section = model.FundamentalSection{
+				Category: request.category, ReportDate: reportDate,
+				Metrics: []model.FundamentalMetric{}, QualityStatus: model.QualityDegraded,
+				QualityReasons: []string{"provider_statement_unavailable_or_target_period_missing"},
+			}
+		}
+		if section.HasData {
+			snapshot.HasData = true
+		}
+		snapshot.Sections = append(snapshot.Sections, section)
+	}
 	if !snapshot.HasData {
 		snapshot.QualityReasons = append(snapshot.QualityReasons, "no_numeric_metrics_for_requested_report")
 	}
@@ -794,6 +824,128 @@ func hithinkFundamentalCategory(raw string) string {
 		}
 		return value
 	}
+}
+
+type hithinkStatementField struct {
+	Key  string
+	Name string
+	Unit string
+}
+
+var hithinkStatementFields = map[string][]hithinkStatementField{
+	"income_statement": {
+		{Key: "basic_eps", Name: "基本每股收益", Unit: "CNY/share"},
+		{Key: "operating_income", Name: "营业收入", Unit: "CNY"},
+		{Key: "operating_costs", Name: "营业成本", Unit: "CNY"},
+		{Key: "operating_expenses", Name: "营业支出", Unit: "CNY"},
+		{Key: "operating_profit", Name: "营业利润", Unit: "CNY"},
+		{Key: "profit_total", Name: "利润总额", Unit: "CNY"},
+		{Key: "net_profit", Name: "净利润", Unit: "CNY"},
+		{Key: "parent_holder_net_profit", Name: "归属于母公司所有者的净利润", Unit: "CNY"},
+		{Key: "income_tax_expense", Name: "所得税费用", Unit: "CNY"},
+		{Key: "interest_expenses", Name: "利息支出", Unit: "CNY"},
+		{Key: "manage_fee", Name: "管理费用", Unit: "CNY"},
+		{Key: "sales_fee", Name: "销售费用", Unit: "CNY"},
+		{Key: "research_and_development_expenses", Name: "研发费用", Unit: "CNY"},
+	},
+	"balance_sheet": {
+		{Key: "total_current_assets", Name: "流动资产合计", Unit: "CNY"},
+		{Key: "non_current_nets_total", Name: "非流动资产净值合计", Unit: "CNY"},
+		{Key: "assets_total", Name: "资产总计", Unit: "CNY"},
+		{Key: "total_debt", Name: "负债合计", Unit: "CNY"},
+		{Key: "holder_equity_total", Name: "所有者权益合计", Unit: "CNY"},
+		{Key: "cash", Name: "货币资金", Unit: "CNY"},
+		{Key: "accounts_receivable", Name: "应收账款", Unit: "CNY"},
+	},
+	"cash_flow_statement": {
+		{Key: "act_cash_flow_net", Name: "经营活动产生的现金流量净额", Unit: "CNY"},
+		{Key: "invest_cash_flow_net", Name: "投资活动产生的现金流量净额", Unit: "CNY"},
+		{Key: "financing_cash_flow_net", Name: "筹资活动产生的现金流量净额", Unit: "CNY"},
+		{Key: "cash_equivalents_net_addition", Name: "现金及现金等价物净增加额", Unit: "CNY"},
+		{Key: "pay_dividends_profits_interest_cash", Name: "分配股利、利润或偿付利息支付的现金", Unit: "CNY"},
+		{Key: "pay_fixed_assets_etc_cash", Name: "购建固定资产等支付的现金", Unit: "CNY"},
+	},
+}
+
+func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol string, year, quarter int, targetReportDate, endpoint, category string) (model.FundamentalSection, error) {
+	period := "quarterly"
+	if quarter == 4 {
+		period = "annual"
+	}
+	query := url.Values{}
+	query.Set("thscode", symbol)
+	query.Set("period", period)
+	query.Set("limit", "20")
+	raw, err := p.get(ctx, endpoint, query)
+	if err != nil {
+		return model.FundamentalSection{}, fmt.Errorf("同花顺 %s 请求失败: %w", category, err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return model.FundamentalSection{}, err
+	}
+	var data struct {
+		Item []map[string]json.RawMessage `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return model.FundamentalSection{}, fmt.Errorf("解析同花顺 %s 失败: %w", category, err)
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	var selected map[string]json.RawMessage
+	for _, row := range data.Item {
+		var rowSymbol string
+		if err := json.Unmarshal(row["thscode"], &rowSymbol); err != nil || !strings.EqualFold(strings.TrimSpace(rowSymbol), symbol) {
+			continue
+		}
+		endValue, ok := hithinkParseFundamentalValue(row["period_end_ms"])
+		if !ok || endValue <= 0 || endValue > float64(math.MaxInt64) {
+			continue
+		}
+		rowDate := time.UnixMilli(int64(endValue)).In(loc).Format("2006-01-02")
+		if rowDate == targetReportDate {
+			selected = row
+			break
+		}
+	}
+	if selected == nil {
+		return model.FundamentalSection{}, fmt.Errorf("同花顺 %s 未返回报告期末为 %s 的记录", category, targetReportDate)
+	}
+	section := model.FundamentalSection{
+		Category: category, ReportDate: targetReportDate,
+		Metrics: make([]model.FundamentalMetric, 0, len(hithinkStatementFields[category])),
+		QualityStatus: model.QualityValid,
+	}
+	reportDateMS, ok := hithinkParseFundamentalValue(selected["report_date_ms"])
+	if ok && reportDateMS > 0 && reportDateMS <= float64(math.MaxInt64) {
+		section.PublicationDate = time.UnixMilli(int64(reportDateMS)).In(loc).Format("2006-01-02")
+	} else {
+		section.QualityStatus = model.QualityDegraded
+		section.QualityReasons = append(section.QualityReasons, "publication_date_missing_or_invalid")
+	}
+	missingMetrics := 0
+	for _, field := range hithinkStatementFields[category] {
+		value, exists := hithinkParseFundamentalValue(selected[field.Key])
+		if !exists {
+			missingMetrics++
+			continue
+		}
+		section.Metrics = append(section.Metrics, model.FundamentalMetric{
+			Key: field.Key, Name: field.Name, Value: value, Unit: field.Unit, SourceField: field.Key,
+		})
+	}
+	section.HasData = len(section.Metrics) > 0
+	if missingMetrics > 0 {
+		section.QualityStatus = model.QualityDegraded
+		section.QualityReasons = append(section.QualityReasons, "one_or_more_statement_fields_missing_or_invalid")
+	}
+	if !section.HasData {
+		section.QualityStatus = model.QualityDegraded
+		section.QualityReasons = append(section.QualityReasons, "no_numeric_statement_fields_available")
+	}
+	return section, nil
 }
 
 func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, end time.Time, adjust string, loc *time.Location) ([]model.DailyBar, error) {
