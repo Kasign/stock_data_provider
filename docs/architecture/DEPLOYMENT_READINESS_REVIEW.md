@@ -4,11 +4,11 @@
 > 分支：`feat/full-go-data-providers-api-switch`  
 > 目标：降低首次部署的配置与构建风险；真实服务器验收仍以实际运行结果为准。
 
-> **当前状态（2026-10-26）**：部署入口已统一到根目录 `docker-compose.yml`，服务名为 `stock-analysis-data`、`stock-analysis-server`、`stock-analysis-web`。下方 CI #153 与旧 Compose 路径属于历史验收记录；统一后的 Compose 尚未重新解析、构建或实机验收。
+> **当前状态（2026-10-26，核验提交 `dc7b0c3`）**：部署入口已统一到根目录 `docker-compose.yml`，服务名为 `stock-analysis-data`、`stock-analysis-server`、`stock-analysis-web`。最新 Go 测试套件 [#40314002470](https://github.com/Kasign/stock_data_provider/actions/runs/40314002470)、WebUI 检查 [#40314002521](https://github.com/Kasign/stock_data_provider/actions/runs/40314002521) 和 Live provider probe [#40314002466](https://github.com/Kasign/stock_data_provider/actions/runs/40314002466) 均已通过。统一 Compose 解析、部署脚本语法检查、两个 Go 镜像构建、WebUI 单测与 Nginx 镜像构建均已在 CI 验证；目标服务器的实际部署与数据库/Redis/网络验收仍未完成。
 
 ## 1. Review 结论
 
-根 Go 分析 API 与原生 Go `market-data` 服务在 CI 中已通过 Go 格式检查、测试、竞态检测、`go vet`，并且两个 Docker 镜像均成功构建。GitHub Actions 运行 [#153](https://github.com/Kasign/stock_data_provider/actions/runs/39715484029) 还通过了 `docker compose config --quiet` 和部署脚本语法检查。
+在核验提交 `dc7b0c3` 上，Go 根 module、`go-core`、`services/market-data` 均通过 `gofmt`、`go test ./...`、`go test -race ./...` 和 `go vet ./...`。Go 测试套件 [#40314002470](https://github.com/Kasign/stock_data_provider/actions/runs/40314002470) 同时通过统一 Compose 配置解析、部署脚本 `bash -n`、行情 API 镜像与分析 API 镜像构建；WebUI 检查 [#40314002521](https://github.com/Kasign/stock_data_provider/actions/runs/40314002521) 通过 JavaScript 语法、单测和 Nginx 镜像构建。Live provider probe [#40314002466](https://github.com/Kasign/stock_data_provider/actions/runs/40314002466) 也通过。
 
 这证明代码可以编译、Compose 文件可解析；**不等于目标服务器上的数据库权限、Redis 认证、Docker 网络和外部行情供应商已经通过端到端测试**。
 
@@ -86,7 +86,7 @@ docker exec stock-analysis-data sh -lc 'wget -qO- --header="X-API-Key: ${MARKET_
 
 ## 7. 验收边界
 
-CI #153 覆盖了 Go 测试、Compose 解析与 Docker 构建；它无法验证你的生产数据库是否存在、实际凭据是否正确、账号授权、Redis 认证、容器网络 DNS 或行情供应商网络。完成部署脚本和真实行情 smoke test 后，才算完成目标服务器的首次部署验收。
+本次 CI 已覆盖 Go 测试、竞态检测、静态检查、统一 Compose 解析、部署脚本语法与两个 Go 镜像构建，并通过了独立 Live provider probe；它不代表目标服务器已经部署成功，也无法验证目标环境的真实数据库是否存在、账号授权、Redis 认证、`1panel-network` DNS、OpenResty 路由与安全策略。完成目标服务器上的部署脚本、容器健康检查及真实行情 smoke test 后，才算完成首次部署验收。
 
 
 ## 8. 旧 WebUI 容器名冲突预检
@@ -95,4 +95,4 @@ CI #153 覆盖了 Go 测试、Compose 解析与 Docker 构建；它无法验证�
 
 部署脚本现在会在配置解析、镜像构建之前读取已有 `stock-analysis-web` 的 `com.docker.compose.project.config_files` 标签。只有该标签包含当前仓库根目录的 `docker-compose.yml` 时才继续；标签缺失或指向其他 Compose 文件时会明确停止并提示人工检查迁移。脚本不会自动移除不明来源的容器，以免破坏用户仍在使用的旧服务。按 README 迁移步骤移除应用容器不会删除外部 MariaDB/Redis 数据。
 
-本次为静态源码与文档修正；按协作约定未运行测试、Compose 解析、Docker 构建或 GitHub Actions。
+2026-10-26 的 CI 在提交 `dc7b0c3` 上通过了 Go 测试套件、WebUI 检查和 Live provider probe。CI 验证的是构建与自动化检查，不替代目标服务器上的首次部署验收。
