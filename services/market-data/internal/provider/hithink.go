@@ -756,6 +756,336 @@ func hithinkFieldInteger(row map[string]json.RawMessage, key string) *int {
 	return &result
 }
 
+func hithinkIndexSymbol(raw string) (string, error) {
+	value := strings.ToUpper(strings.TrimSpace(raw))
+	parts := strings.Split(value, ".")
+	if len(parts) != 2 || (parts[1] != "TI" && parts[1] != "SH" && parts[1] != "SZ") || len(parts[0]) != 6 {
+		return "", fmt.Errorf("同花顺指数代码必须是六位代码加 .TI/.SH/.SZ 后缀，收到 %q", raw)
+	}
+	for _, r := range parts[0] {
+		if r < '0' || r > '9' {
+			return "", fmt.Errorf("同花顺指数代码必须是六位数字，收到 %q", raw)
+		}
+	}
+	return value, nil
+}
+
+func hithinkProviderTime(timestamp *int64, now time.Time) *time.Time {
+	if timestamp == nil || *timestamp <= 0 {
+		return nil
+	}
+	value := time.UnixMilli(*timestamp).UTC()
+	if value.After(now.Add(5*time.Minute)) || value.Before(now.AddDate(-10, 0, 0)) {
+		return nil
+	}
+	return &value
+}
+
+// FetchIndexCatalog retrieves one complete, non-paginated category from the THS index/board catalog.
+func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.IndexCatalogSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺指数/板块目录需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	tag := strings.ToLower(strings.TrimSpace(rawTag))
+	if tag == "" {
+		tag = "cn_concept"
+	}
+	switch tag {
+	case "cn_concept", "region", "tszs", "industry":
+	default:
+		return nil, fmt.Errorf("不支持的同花顺指数目录类别 %q；可选 cn_concept/region/tszs/industry", rawTag)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	query := url.Values{"tag": []string{tag}}
+	raw, err := p.get(ctx, "/api/a-share-index/catalog/ths-index-list", query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺指数/板块目录请求失败: %w", err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Timestamp *int64 `json:"timestamp"`
+		Item []struct {
+			THSCode string `json:"thscode"`
+			Name string `json:"name"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺指数/板块目录失败: %w", err)
+	}
+	if len(data.Item) == 0 {
+		return nil, fmt.Errorf("同花顺指数/板块目录 %s 返回空列表", tag)
+	}
+	if len(data.Item) > 30000 {
+		return nil, fmt.Errorf("同花顺指数/板块目录 %s 超过 30000 项安全上限", tag)
+	}
+	now := time.Now().UTC()
+	snapshot := &model.IndexCatalogSnapshot{
+		Tag: tag, Items: make([]model.IndexCatalogItem, 0, len(data.Item)),
+		Source: p.Name(), SourceVersion: hithinkVersion + "-index-catalog-v1",
+		FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	snapshot.ProviderTime = hithinkProviderTime(data.Timestamp, now)
+	if snapshot.ProviderTime == nil {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_catalog_timestamp_missing_or_invalid")
+	}
+	seen := make(map[string]struct{}, len(data.Item))
+	for index, row := range data.Item {
+		symbol, symbolErr := hithinkIndexSymbol(row.THSCode)
+		name := strings.TrimSpace(row.Name)
+		if symbolErr != nil || name == "" {
+			return nil, fmt.Errorf("同花顺指数/板块目录第 %d 项缺少有效代码或名称", index)
+		}
+		if _, exists := seen[symbol]; exists {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_catalog_symbol_dropped")
+			continue
+		}
+		seen[symbol] = struct{}{}
+		snapshot.Items = append(snapshot.Items, model.IndexCatalogItem{Symbol: symbol, Name: name, Tag: tag})
+	}
+	snapshot.Total = len(snapshot.Items)
+	if snapshot.Total == 0 {
+		return nil, fmt.Errorf("同花顺指数/板块目录 %s 没有可用记录", tag)
+	}
+	return snapshot, nil
+}
+
+// FetchIndexConstituents returns current membership only; the THS endpoint does not provide historical membership changes.
+func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol string) (*model.IndexConstituentSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺指数/板块成分股需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	indexSymbol, err := hithinkIndexSymbol(rawIndexSymbol)
+	if err != nil {
+		return nil, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	query := url.Values{"thscode": []string{indexSymbol}}
+	raw, err := p.get(ctx, "/api/a-share-index/constituents/ths-stock-list", query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺指数/板块 %s 成分股请求失败: %w", indexSymbol, err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Timestamp *int64 `json:"timestamp"`
+		Item []struct {
+			THSCode string `json:"thscode"`
+			Ticker string `json:"ticker"`
+			Name string `json:"name"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺成分股失败: %w", err)
+	}
+	if len(data.Item) > 10000 {
+		return nil, errors.New("同花顺成分股返回超过 10000 项安全上限")
+	}
+	now := time.Now().UTC()
+	snapshot := &model.IndexConstituentSnapshot{
+		IndexSymbol: indexSymbol, Items: make([]model.IndexConstituent, 0, len(data.Item)),
+		Source: p.Name(), SourceVersion: hithinkVersion + "-index-constituents-v1",
+		FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	snapshot.ProviderTime = hithinkProviderTime(data.Timestamp, now)
+	if snapshot.ProviderTime == nil {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_constituents_timestamp_missing_or_invalid")
+	}
+	seen := make(map[string]struct{}, len(data.Item))
+	for index, row := range data.Item {
+		symbol, symbolErr := hithinkDomesticSymbol(row.THSCode)
+		code := strings.TrimSpace(row.Ticker)
+		name := strings.TrimSpace(row.Name)
+		if symbolErr != nil || name == "" {
+			return nil, fmt.Errorf("同花顺成分股第 %d 项缺少有效股票代码或名称", index)
+		}
+		if code == "" {
+			code = strings.Split(symbol, ".")[0]
+		}
+		if code != strings.Split(symbol, ".")[0] {
+			return nil, fmt.Errorf("同花顺成分股第 %d 项 ticker 与 thscode 不一致", index)
+		}
+		if _, duplicate := seen[symbol]; duplicate {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_constituent_symbol_dropped")
+			continue
+		}
+		seen[symbol] = struct{}{}
+		snapshot.Items = append(snapshot.Items, model.IndexConstituent{Symbol: symbol, Code: code, Name: name})
+	}
+	snapshot.Total = len(snapshot.Items)
+	if snapshot.Total == 0 {
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_returned_empty_constituents_cannot_distinguish_empty_index_from_unavailable_data")
+	}
+	return snapshot, nil
+}
+
+// FetchIndexDailyBars reads the THS index/board daily history. Index series has no adjustment semantics.
+func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, startDate, endDate string) (*model.IndexDailyBarsSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("同花顺 HTTP client 未配置")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("同花顺指数/板块历史 K 线需要配置 MARKET_DATA_HITHINK_API_KEY")
+	}
+	indexSymbol, err := hithinkIndexSymbol(rawIndexSymbol)
+	if err != nil {
+		return nil, err
+	}
+	startText, endText := strings.TrimSpace(startDate), strings.TrimSpace(endDate)
+	start, err := time.Parse("2006-01-02", startText)
+	if err != nil || start.Format("2006-01-02") != startText {
+		return nil, fmt.Errorf("无效的同花顺指数日 K 起始日期 %q", startDate)
+	}
+	end, err := time.Parse("2006-01-02", endText)
+	if err != nil || end.Format("2006-01-02") != endText {
+		return nil, fmt.Errorf("无效的同花顺指数日 K 结束日期 %q", endDate)
+	}
+	if start.After(end) {
+		return nil, errors.New("同花顺指数日 K 起始日期不能晚于结束日期")
+	}
+	if end.After(start.AddDate(10, 0, 0)) {
+		return nil, errors.New("同花顺指数日 K 单次查询范围不能超过 10 年")
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	if endText > time.Now().In(loc).Format("2006-01-02") {
+		return nil, errors.New("同花顺指数日 K 结束日期不能晚于今日")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	startMS := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc).UnixMilli()
+	endMS := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), loc).UnixMilli()
+	query := url.Values{
+		"thscode": []string{indexSymbol},
+		"interval": []string{"1d"},
+		"start": []string{strconv.FormatInt(startMS, 10)},
+		"end": []string{strconv.FormatInt(endMS, 10)},
+	}
+	raw, err := p.get(ctx, "/api/a-share-index/prices/historical", query)
+	if err != nil {
+		return nil, fmt.Errorf("同花顺指数/板块 %s 历史 K 线请求失败: %w", indexSymbol, err)
+	}
+	dataRaw, err := hithinkResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Timestamp *int64 `json:"timestamp"`
+		Item []struct {
+			DateMS *int64 `json:"date_ms"`
+			OpenPrice *float64 `json:"open_price"`
+			HighPrice *float64 `json:"high_price"`
+			LowPrice *float64 `json:"low_price"`
+			ClosePrice *float64 `json:"close_price"`
+			Volume *float64 `json:"volume"`
+			Turnover *float64 `json:"turnover"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal(dataRaw, &data); err != nil {
+		return nil, fmt.Errorf("解析同花顺指数/板块历史 K 线失败: %w", err)
+	}
+	if len(data.Item) > 4000 {
+		return nil, errors.New("同花顺指数历史 K 线超过 4000 行安全上限")
+	}
+	now := time.Now().UTC()
+	sourceVersion := hithinkVersion + "-index-daily-bars-v1"
+	snapshot := &model.IndexDailyBarsSnapshot{
+		IndexSymbol: indexSymbol, StartDate: startText, EndDate: endText,
+		Items: make([]model.IndexDailyBar, 0, len(data.Item)),
+		Source: p.Name(), SourceVersion: sourceVersion,
+		FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	snapshot.ProviderTime = hithinkProviderTime(data.Timestamp, now)
+	if snapshot.ProviderTime == nil {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = append(snapshot.QualityReasons, "provider_index_history_timestamp_missing_or_invalid")
+	}
+	seen := make(map[string]struct{}, len(data.Item))
+	for index, row := range data.Item {
+		if row.DateMS == nil || row.OpenPrice == nil || row.HighPrice == nil || row.LowPrice == nil || row.ClosePrice == nil {
+			return nil, fmt.Errorf("同花顺指数日 K 第 %d 项缺少日期或 OHLC", index)
+		}
+		date := time.UnixMilli(*row.DateMS).In(loc).Format("2006-01-02")
+		if date < startText || date > endText {
+			return nil, fmt.Errorf("同花顺指数日 K 日期 %s 超出请求区间", date)
+		}
+		if _, duplicate := seen[date]; duplicate {
+			return nil, fmt.Errorf("同花顺指数日 K 返回重复日期 %s", date)
+		}
+		seen[date] = struct{}{}
+		open, high, low, closeValue := *row.OpenPrice, *row.HighPrice, *row.LowPrice, *row.ClosePrice
+		if !hithinkPositiveFinite(open) || !hithinkPositiveFinite(high) || !hithinkPositiveFinite(low) || !hithinkPositiveFinite(closeValue) ||
+			low > high || open < low || open > high || closeValue < low || closeValue > high {
+			return nil, fmt.Errorf("同花顺指数日 K %s 的 OHLC 不满足数据契约", date)
+		}
+		bar := model.IndexDailyBar{
+			IndexSymbol: indexSymbol, TradeDate: date,
+			Open: open, High: high, Low: low, Close: closeValue,
+			VolumeUnit: "shares", AmountUnit: "provider_defined",
+			Source: p.Name(), SourceVersion: sourceVersion, ProviderTime: snapshot.ProviderTime,
+			FetchedAt: now, QualityStatus: model.QualityValid,
+		}
+		if row.Volume != nil && hithinkNonNegativeFinite(*row.Volume) && math.Trunc(*row.Volume) == *row.Volume && *row.Volume <= float64(math.MaxInt64) {
+			volume := int64(*row.Volume)
+			bar.Volume = &volume
+		} else {
+			bar.QualityStatus = model.QualityDegraded
+			bar.QualityReasons = append(bar.QualityReasons, "provider_volume_missing_or_invalid")
+		}
+		if row.Turnover != nil && hithinkNonNegativeFinite(*row.Turnover) {
+			amount := *row.Turnover
+			bar.Amount = &amount
+		} else {
+			bar.QualityStatus = model.QualityDegraded
+			bar.QualityReasons = append(bar.QualityReasons, "provider_turnover_missing_or_invalid")
+		}
+		if snapshot.ProviderTime == nil {
+			bar.QualityStatus = model.QualityDegraded
+			bar.QualityReasons = append(bar.QualityReasons, "provider_index_history_timestamp_missing_or_invalid")
+		}
+		snapshot.Items = append(snapshot.Items, bar)
+	}
+	sort.Slice(snapshot.Items, func(i, j int) bool { return snapshot.Items[i].TradeDate < snapshot.Items[j].TradeDate })
+	for i := range snapshot.Items {
+		if i > 0 && snapshot.Items[i-1].Close > 0 {
+			change := (snapshot.Items[i].Close - snapshot.Items[i-1].Close) / snapshot.Items[i-1].Close * 100
+			snapshot.Items[i].ChangePercent = &change
+		}
+		if snapshot.Items[i].QualityStatus == model.QualityDegraded {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_index_bars_have_missing_values")
+		}
+	}
+	snapshot.Total = len(snapshot.Items)
+	if snapshot.Total == 0 {
+		snapshot.QualityStatus = model.QualityUnknown
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_returned_no_index_bars_for_requested_range")
+	}
+	return snapshot, nil
+}
+
 func (p *Hithink) FetchValuations(ctx context.Context, rawSymbols []string) (*model.ValuationSnapshot, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("同花顺 HTTP client 未配置")

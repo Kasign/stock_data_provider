@@ -29,6 +29,7 @@ type ProviderSettings struct {
 	TradingCalendar bool `json:"trading_calendar"`
 	Fundamentals    bool `json:"fundamentals"`
 	Valuations      bool `json:"valuations"`
+	IndexCatalog    bool `json:"index_catalog"`
 	DragonTiger     bool `json:"dragon_tiger"`
 	Announcements   bool `json:"announcements"`
 }
@@ -111,7 +112,7 @@ func Load() (Config, error) {
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true},
-			"hithink":   {Enabled: false, Quote: false, DailyBars: false, IndexQuotes: false, TradingCalendar: false, LimitPools: false, DragonTiger: false, Fundamentals: false, Valuations: false},
+			"hithink":   {Enabled: false, Quote: false, DailyBars: false, IndexQuotes: false, TradingCalendar: false, LimitPools: false, DragonTiger: false, Fundamentals: false, Valuations: false, IndexCatalog: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: true, Fundamentals: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
@@ -407,6 +408,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.TradingCalendar = boolEnv("MARKET_DATA_"+prefix+"_TRADING_CALENDAR_ENABLED", p.TradingCalendar)
 	p.Fundamentals = boolEnv("MARKET_DATA_"+prefix+"_FUNDAMENTALS_ENABLED", p.Fundamentals)
 	p.Valuations = boolEnv("MARKET_DATA_"+prefix+"_VALUATIONS_ENABLED", p.Valuations)
+	p.IndexCatalog = boolEnv("MARKET_DATA_"+prefix+"_INDEX_CATALOG_ENABLED", p.IndexCatalog)
 	return p
 }
 
@@ -587,7 +589,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_NETEASE_ENABLED", "MARKET_DATA_NETEASE_QUOTE_ENABLED", "MARKET_DATA_NETEASE_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TUSHARE_ENABLED", "MARKET_DATA_TUSHARE_QUOTE_ENABLED", "MARKET_DATA_TUSHARE_DAILY_BARS_ENABLED",
 		"MARKET_DATA_TICKFLOW_ENABLED", "MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED",
-		"MARKET_DATA_HITHINK_ENABLED", "MARKET_DATA_HITHINK_QUOTE_ENABLED", "MARKET_DATA_HITHINK_DAILY_BARS_ENABLED", "MARKET_DATA_HITHINK_FUNDAMENTALS_ENABLED", "MARKET_DATA_HITHINK_INDEX_QUOTES_ENABLED", "MARKET_DATA_HITHINK_TRADING_CALENDAR_ENABLED", "MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED", "MARKET_DATA_HITHINK_DRAGON_TIGER_ENABLED", "MARKET_DATA_HITHINK_VALUATIONS_ENABLED",
+		"MARKET_DATA_HITHINK_ENABLED", "MARKET_DATA_HITHINK_QUOTE_ENABLED", "MARKET_DATA_HITHINK_DAILY_BARS_ENABLED", "MARKET_DATA_HITHINK_FUNDAMENTALS_ENABLED", "MARKET_DATA_HITHINK_INDEX_QUOTES_ENABLED", "MARKET_DATA_HITHINK_TRADING_CALENDAR_ENABLED", "MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED", "MARKET_DATA_HITHINK_DRAGON_TIGER_ENABLED", "MARKET_DATA_HITHINK_VALUATIONS_ENABLED", "MARKET_DATA_HITHINK_INDEX_CATALOG_ENABLED",
 		"MARKET_DATA_PYTDX_ENABLED", "MARKET_DATA_PYTDX_QUOTE_ENABLED", "MARKET_DATA_PYTDX_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",
 	} {

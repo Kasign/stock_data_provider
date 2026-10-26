@@ -90,7 +90,16 @@ type FundamentalsProvider interface {
 	FetchFundamentals(ctx context.Context, symbol string, year, quarter int) (*model.FundamentalsSnapshot, error)
 }
 
- // ValuationProvider returns the latest PE/PB/PS/PCF snapshot for a bounded list of A-share symbols.
+ // IndexCatalogProvider 提供同花顺指数/板块目录、当前成分股和指数历史日线。
+// 该接口使用独立的指数代码空间（.TI/.SH/.SZ），不进入个股 K 线回退链。
+type IndexCatalogProvider interface {
+	NamedProvider
+	FetchIndexCatalog(ctx context.Context, tag string) (*model.IndexCatalogSnapshot, error)
+	FetchIndexConstituents(ctx context.Context, indexSymbol string) (*model.IndexConstituentSnapshot, error)
+	FetchIndexDailyBars(ctx context.Context, indexSymbol, startDate, endDate string) (*model.IndexDailyBarsSnapshot, error)
+}
+
+// ValuationProvider returns the latest PE/PB/PS/PCF snapshot for a bounded list of A-share symbols.
 type ValuationProvider interface {
 	NamedProvider
 	FetchValuations(ctx context.Context, symbols []string) (*model.ValuationSnapshot, error)

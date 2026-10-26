@@ -35,6 +35,7 @@ type DataService struct {
 	tradingCalendarProviders []provider.TradingCalendarProvider
 	fundamentalsProviders    []provider.FundamentalsProvider
 	valuationProviders       []provider.ValuationProvider
+	indexCatalogProviders    []provider.IndexCatalogProvider
 	supplementProviders      []provider.SupplementProvider
 	maxBars                  int
 	retries                  int

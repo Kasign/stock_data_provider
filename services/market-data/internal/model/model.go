@@ -349,6 +349,82 @@ type ValuationSnapshot struct {
 	QualityReasons    []string        `json:"quality_reasons,omitempty"`
 }
 
+ // IndexCatalogItem 是一个同花顺指数或板块的目录项。
+type IndexCatalogItem struct {
+	Symbol string `json:"symbol"`
+	Name   string `json:"name"`
+	Tag    string `json:"tag"`
+}
+
+// IndexCatalogSnapshot 是某个目录类别的完整快照。上游没有分页，因此目录请求会限制最大记录数。
+type IndexCatalogSnapshot struct {
+	Tag            string             `json:"tag"`
+	Items          []IndexCatalogItem `json:"items"`
+	Total          int                `json:"total"`
+	ProviderTime   *time.Time         `json:"provider_time,omitempty"`
+	Source         string             `json:"source"`
+	SourceVersion  string             `json:"source_version,omitempty"`
+	FetchedAt      time.Time          `json:"fetched_at"`
+	QualityStatus  QualityStatus      `json:"quality_status"`
+	QualityReasons []string           `json:"quality_reasons,omitempty"`
+}
+
+// IndexConstituent 是指数/板块当前包含的一只 A 股，不代表历史成分变更记录。
+type IndexConstituent struct {
+	Symbol string `json:"symbol"`
+	Code   string `json:"code"`
+	Name   string `json:"name"`
+}
+
+// IndexConstituentSnapshot 为指定指数或板块的当前成分股快照。
+type IndexConstituentSnapshot struct {
+	IndexSymbol    string             `json:"index_symbol"`
+	Items          []IndexConstituent `json:"items"`
+	Total          int                `json:"total"`
+	ProviderTime   *time.Time         `json:"provider_time,omitempty"`
+	Source         string             `json:"source"`
+	SourceVersion  string             `json:"source_version,omitempty"`
+	FetchedAt      time.Time          `json:"fetched_at"`
+	QualityStatus  QualityStatus      `json:"quality_status"`
+	QualityReasons []string           `json:"quality_reasons,omitempty"`
+}
+
+// IndexDailyBar 是指数/板块原始日线，不带复权字段，也不会参与个股 DailyBar 的调整逻辑。
+type IndexDailyBar struct {
+	IndexSymbol    string        `json:"index_symbol"`
+	TradeDate      string        `json:"trade_date"`
+	Open           float64       `json:"open"`
+	High           float64       `json:"high"`
+	Low            float64       `json:"low"`
+	Close          float64       `json:"close"`
+	ChangePercent  *float64      `json:"change_percent,omitempty"`
+	Volume         *int64        `json:"volume,omitempty"`
+	Amount         *float64      `json:"amount,omitempty"`
+	VolumeUnit     string        `json:"volume_unit"`
+	AmountUnit     string        `json:"amount_unit"`
+	Source         string        `json:"source"`
+	SourceVersion  string        `json:"source_version,omitempty"`
+	ProviderTime   *time.Time    `json:"provider_time,omitempty"`
+	FetchedAt      time.Time     `json:"fetched_at"`
+	QualityStatus  QualityStatus `json:"quality_status"`
+	QualityReasons []string      `json:"quality_reasons,omitempty"`
+}
+
+// IndexDailyBarsSnapshot 是单个指数/板块在指定日期范围的无复权日线快照。
+type IndexDailyBarsSnapshot struct {
+	IndexSymbol    string          `json:"index_symbol"`
+	StartDate      string          `json:"start_date"`
+	EndDate        string          `json:"end_date"`
+	Items          []IndexDailyBar `json:"items"`
+	Total          int             `json:"total"`
+	ProviderTime   *time.Time      `json:"provider_time,omitempty"`
+	Source         string          `json:"source"`
+	SourceVersion  string          `json:"source_version,omitempty"`
+	FetchedAt      time.Time       `json:"fetched_at"`
+	QualityStatus  QualityStatus   `json:"quality_status"`
+	QualityReasons []string        `json:"quality_reasons,omitempty"`
+}
+
 type SourceStatus struct {
 	Name                   string `json:"name"`
 	Enabled                bool   `json:"enabled"`
@@ -365,6 +441,7 @@ type SourceStatus struct {
 	TradingCalendarCapable bool   `json:"trading_calendar_capable,omitempty"`
 	FundamentalsCapable    bool   `json:"fundamentals_capable,omitempty"`
 	ValuationCapable       bool   `json:"valuation_capable,omitempty"`
+	IndexCatalogCapable    bool   `json:"index_catalog_capable,omitempty"`
 	ChipCapable            bool   `json:"chip_capable,omitempty"`
 	CapitalFlowCapable     bool   `json:"capital_flow_capable,omitempty"`
 }

@@ -34,7 +34,8 @@
       "limit_pools": false,
       "dragon_tiger": false,
       "fundamentals": false,
-      "valuations": false
+      "valuations": false,
+      "index_catalog": false
     },
     "baostock": {
       "enabled": true,

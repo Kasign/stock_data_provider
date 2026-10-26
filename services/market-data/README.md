@@ -17,7 +17,7 @@
 - 历史 `as_of` 查询会排除当日尚未完成的日 K，并明确提示复权历史可能包含之后发生的公司行动因子。本服务尚未建立严格的时点复权因子库，因此不能声称历史回测完全无前视偏差。
 - 本地 smoke 模式可不连接数据库；生产部署应复用现有 MariaDB/Redis，不要为了本服务额外启动一套数据库容器。
 
-东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告，及 BaoStock 的交易日历/季度基本面已纳入默认配置的能力链路；同花顺现已提供可选指数快照、最近一年交易日历、财务指标、三张财务报表、涨停池、龙虎榜和批量估值快照（PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM）。指数时间戳缺失时降级；交易日历只返回开市日期、非交易日需推断；报表按目标报告期精确匹配；龙虎榜金额保留为 provider_defined 单位，未被误标成人民币元；相关能力均由独立开关控制且默认关闭。TickFlow、Tushare、Pytdx 也已接入可选国内行情/日 K 能力。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；完整财务报表、筹码/资金流和少数数据域仍有缺口。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
+东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告，及 BaoStock 的交易日历/季度基本面已纳入默认配置的能力链路；同花顺另提供可选指数/板块目录、当前成分股、指数历史日 K、指数快照、最近一年交易日历、财务指标、三张财务报表、涨停池、龙虎榜和批量估值快照（PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM）。指数时间戳缺失时降级；交易日历只返回开市日期、非交易日需推断；报表按目标报告期精确匹配；龙虎榜金额保留为 provider_defined 单位，未被误标成人民币元；相关能力均由独立开关控制且默认关闭。TickFlow、Tushare、Pytdx 也已接入可选国内行情/日 K 能力。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；完整财务报表、筹码/资金流和少数数据域仍有缺口。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
 
 ## BaoStock 日 K 数据源（默认启用的备用源）
 
@@ -158,3 +158,13 @@ curl -H "X-API-Key: $MARKET_DATA_API_KEY" "http://127.0.0.1:8091/api/v1/bars/600
 ### BaoStock 真实上游持续验收
 
 当前配置默认设置 MARKET_DATA_BAOSTOCK_ENABLED=true。通过 1Panel 修改环境变量并重新部署后，使用当前日 K API 分别请求 600519.SH 前复权和 688981.SH 不复权。验收时检查 source=baostock、adjustment_method、成交量/成交额单位、quality_status 与 warnings；再对两只股票的三种复权口径做实际对账。若目标容器连通性或复权口径验收不通过，可将 MARKET_DATA_BAOSTOCK_ENABLED=false 显式关闭。
+
+### 同花顺指数与板块目录能力（默认关闭）
+
+同花顺 Provider 额外支持目录、当前成分股和指数/板块历史日 K，所有能力都需要先设置 `MARKET_DATA_HITHINK_ENABLED=true`、`MARKET_DATA_HITHINK_API_KEY`，并显式启用 `MARKET_DATA_HITHINK_INDEX_CATALOG_ENABLED=true`。
+
+- 目录：`GET /api/v1/market/index-catalog?tag=cn_concept`，`tag` 支持 `cn_concept`、`region`、`tszs`、`industry`。
+- 当前成分股：`GET /api/v1/market/indices/000300.SH/constituents` 或 `GET /api/v1/market/indices/886042.TI/constituents`。返回当前成分，不提供历史调入/调出序列。
+- 指数/板块日 K：`GET /api/v1/market/indices/000300.SH/daily?start=2025-01-01&end=2025-12-31`。每次查询一个指数/板块、日期范围不超过十年；指数没有复权概念，成交额单位保留为 `provider_defined`，不与已确认的人民币元字段混淆。
+
+这些新端点没有运行测试或 CI。目录与成分股来源时间戳缺失会显式降级；空响应不冒充完整数据；异常代码、重复日期、越界日 K 和不合法 OHLC 将被拒绝。

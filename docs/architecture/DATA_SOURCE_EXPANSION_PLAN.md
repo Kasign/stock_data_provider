@@ -253,3 +253,11 @@ BaoStock 保持有限范围验收状态；其他 Provider 仍需独立测试。E
 - 新增 `GET /api/v1/market/valuations?symbols=600519.SH,000001.SZ`，最多接受 100 个原始代码 token；必须使用带交易所后缀的 SH/SZ/BJ 股票代码，按输入顺序去重。
 - 返回 PE TTM、PE MRQ、PB MRQ、PS TTM、PCF TTM。上游的 `null` 与负数原样保留，源快照时间缺失、请求股票缺失或任何指标字段缺失都会标记 degraded/unknown。
 - 估值端点只查询指定的有限股票列表，不进行全市场扫描；无测试/CI 执行，本次只做实现及配置文档接线。
+
+### 同花顺指数/板块目录与指数历史日 K（2026-10-26）
+
+- 新增 `IndexCatalogProvider` 独立能力，不复用股票搜索、不把指数代码传入个股 K 线方法。
+- 目录按 `cn_concept`、`region`、`tszs`、`industry` 四类查询，同花顺无分页时设 30,000 项防护上限；当前成分股按单个指数/板块代码查询，只代表当前成分。
+- 指数/板块历史 K 线走专用 `/api/a-share-index/prices/historical`，日期范围最大十年；指数无复权语义，不暴露 adjustment 字段。时间戳缺失、成交量/成交额缺失会降级，异常 OHLC、越界日期与重复日期拒绝返回。
+- 新增路由 `GET /api/v1/market/index-catalog`、`GET /api/v1/market/indices/{symbol}/constituents`、`GET /api/v1/market/indices/{symbol}/daily`，统一使用现有缓存与 Provider 回退模式。
+- 通过 `MARKET_DATA_HITHINK_INDEX_CATALOG_ENABLED=true` 单独启用；默认关闭。本次未运行测试或 CI。
