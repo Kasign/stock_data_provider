@@ -1881,14 +1881,7 @@ func parseEastmoneyBoardInteger(row map[string]json.RawMessage, key string) *int
 	return &integer
 }
 
-func appendUniqueEastmoneyReason(reasons []string, reason string) []string {
-	for _, existing := range reasons {
-		if existing == reason {
-			return reasons
-		}
-	}
-	return append(reasons, reason)
-}
+
 
 type eastmoneyIndexDefinition struct {
 	Symbol string
