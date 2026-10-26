@@ -101,6 +101,7 @@ type liveProbeResult struct {
 	ElapsedMS        int64                            `json:"elapsed_ms"`
 	Quote            *model.Quote                     `json:"quote,omitempty"`
 	StockBasic       *model.StockBasic                `json:"stock_basic,omitempty"`
+	StockSearch      *model.StockSearchSnapshot       `json:"stock_search,omitempty"`
 	BarCount         int                              `json:"bar_count,omitempty"`
 	SampleBars       []model.DailyBar                 `json:"sample_bars,omitempty"`
 	ChipDistribution *model.ChipDistribution          `json:"chip_distribution,omitempty"`
@@ -563,6 +564,52 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
+	runStockSearch := func(eastmoney *Eastmoney, query, expectedSymbol string) {
+		capture := &liveProbeCapture{}
+		eastmoney.client.Transport = capture.transport()
+		ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
+		defer cancel()
+		started := time.Now()
+		snapshot, callErr := eastmoney.SearchStocks(ctx, query, 10)
+		result := liveProbeResult{
+			Provider: eastmoney.Name(), Capability: "stock_search", Symbol: expectedSymbol,
+			ElapsedMS: time.Since(started).Milliseconds(), HTTP: capture.snapshot(),
+		}
+		switch {
+		case callErr != nil:
+			result.Status = "failed"
+			result.ErrorKind, result.Error = liveProbeErrorSummary(callErr)
+			failures = append(failures, "eastmoney stock_search: "+result.ErrorKind+" ("+result.Error+")")
+		case snapshot == nil || snapshot.Query != query || snapshot.Source != eastmoney.Name() || snapshot.FetchedAt.IsZero():
+			result.Status, result.Error, result.StockSearch = "invalid", "stock-search snapshot identity/source/fetched_at mismatch", snapshot
+			failures = append(failures, "eastmoney stock_search: snapshot identity mismatch")
+		case snapshot.Total < len(snapshot.Items) || len(snapshot.Items) == 0:
+			result.Status, result.Error, result.StockSearch = "invalid", "stock-search total/items are inconsistent or empty", snapshot
+			failures = append(failures, "eastmoney stock_search: empty or inconsistent result")
+		default:
+			found := false
+			for _, item := range snapshot.Items {
+				if item.Symbol == expectedSymbol && item.Name != "" && item.Code != "" {
+					found = true
+					break
+				}
+			}
+			if !found {
+				result.Status, result.Error = "invalid", "known Chinese stock-name query did not return 600519.SH"
+				failures = append(failures, "eastmoney stock_search: expected 600519.SH was not returned")
+			} else if snapshot.QualityStatus == model.QualityInvalid || snapshot.QualityStatus == model.QualityUnknown {
+				result.Status, result.Error = "invalid", "stock-search result has unusable quality"
+				failures = append(failures, "eastmoney stock_search: unusable quality")
+			} else {
+				result.Status = "returned"
+			}
+			result.StockSearch = snapshot
+		}
+		report.Results = append(report.Results, result)
+		encoded, _ := json.Marshal(result)
+		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
+	}
+
 	runStockAnnouncements := func(eastmoney *Eastmoney, symbol, startDate, endDate string) {
 		capture := &liveProbeCapture{}
 		eastmoney.client.Transport = capture.transport()
@@ -947,6 +994,7 @@ func TestLiveProviderProbe(t *testing.T) {
 	runStockBasic("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBasic, error) {
 		return eastmoney.FetchStockBasic(ctx, dailySymbol)
 	})
+	runStockSearch(eastmoney, "贵州茅台", "600519.SH")
 	announcementStart := now.AddDate(0, 0, -7).Format("2006-01-02")
 	announcementEnd := now.AddDate(0, 0, -1).Format("2006-01-02")
 	runStockAnnouncements(eastmoney, dailySymbol, announcementStart, announcementEnd)

@@ -633,3 +633,10 @@ GitHub Runner 此前的 BaoStock 日 K 探测出现 TCP 读取超时；Live Prov
 
 
 - 补充说明：首次编辑 live-provider workflow 时，新增探测步骤误插入现有 run 命令，导致该工作流检查没有创建 job；该次结果不表示真实新闻 API 失败。已重写 workflow 步骤结构，后续以新 HEAD 的完整 Go CI 与工作流报告作为验收依据。
+
+
+## 17. 中文股票名称搜索真实接口验收（2026-10-26）
+
+- HEAD `f5b719f9c506b64aae63effe71b314a19f7c45ba` 的 Go CI run [40260305214](https://github.com/Kasign/stock_data_provider/actions/runs/40260305214) 已全部通过；Live Provider Probe run [40260305265](https://github.com/Kasign/stock_data_provider/actions/runs/40260305265) 的 workflow 也成功，但既有测试尚未覆盖中文名称证券目录查询，因此不能将其视为 stock-search 的真实 API 验收。
+- 现新增真实探测：通过 Eastmoney `StockSearchProvider` 查询“贵州茅台”，要求结果包含 `600519.SH`，并记录源端总数、目录质量、分页网络请求以及实际耗时。该接口不需要 API Key；结果以新提交触发的 Runner 报告为准。
+- 当前新闻搜索的真实探测步骤已运行，但该次 Runner 日志明确提示没有 `BOCHA_API_KEYS` 或 `SEARXNG_BASE_URLS`，故没有请求外部搜索服务。该步骤是 skipped 而不是失败，也不代表真实新闻源已经通过。

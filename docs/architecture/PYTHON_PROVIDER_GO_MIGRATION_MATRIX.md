@@ -45,7 +45,8 @@
 | 个股资金流 `get_capital_flow_context` | 可选 Go MX API 路由；字段按人民币元规范化，5/10 日累计要求完整观测 | 自然语言查询返回的指标需要验证字段标签/单位；缺值不补零，精确 available_at 未实现 |
 | 龙虎榜 `get_dragon_tiger_context` | 无 | 必须保留交易日、上榜原因、营业部/机构口径及金额单位 |
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
-| 新闻 / 公告 | 单股公告已新增 Go 原生东方财富 Provider/API；通用新闻搜索本批新增 Go 原生 Bocha + 自建 SearXNG 搜索链，Python Bridge 保留兼容回退 | 公告真实 Runner 已验收；原生搜索待当前提交的 Go CI 与 HTTP 模拟测试通过。仅凭代码新增不代表生产启用或新闻搜索与 Python 策略完全等价；海外搜索源和复杂准入策略先不扩展 |
+| 股票名称 / 代码搜索 | 新增独立 `StockSearchProvider`，使用东方财富 CLIST 证券目录和 6 小时缓存，API 为 `GET /api/v1/stocks/search?q=贵州茅台&limit=10` | 单测/HTTP 参数测试随 HEAD `f5b719f9` 的 Go CI 通过；尚未在真实 Runner 中直接查询中文名称并核实结果代码，下一步新增无 API Key 的真实探测。目录全集/分页上限仍需观察，不外推为证券主数据完整性 |
+| 新闻 / 公告 | 单股公告为 Go 原生东方财富 Provider/API；Go Core 已接入 Bocha 优先、自建 SearXNG 备选的国内新闻搜索链，并在未配置/无合格结果时回退 Python Bridge | Go CI #310 全部通过；Live Probe #115 的新闻搜索步骤因没有 `BOCHA_API_KEYS` 或 `SEARXNG_BASE_URLS` 而明确 `skipped`，不能视为真实源站验收。仍未覆盖 Python 的全部搜索源、复杂反垃圾准入和完整语言策略 |
 
 当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/stocks/{symbol}/boards`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`、`GET /api/v1/market/breadth`、`GET /api/v1/market/limit-pools?type=up|down|broken`、`GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。这些新增能力保持独立路由/开关；未通过 NAS/Docker 验收的能力默认关闭。
 
