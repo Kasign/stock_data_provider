@@ -12,7 +12,7 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 - [仓库 Go API README](../README.md)：服务拆分、异步任务调用示例、事件续读和 Run 查询说明。
 - [Go RunResult 领域模型](../internal/analysis/domain/types.go)：分析结果字段与 JSON 名称。
 - [WebUI API 客户端](./src/api.js)：本页面实际发出的请求路径、参数和请求头。
-- [WebUI Nginx 代理](./nginx.conf)：浏览器同源路径转发到两个 Go 服务的方式。
+- [WebUI Nginx 主配置](./nginx.conf) 与 [站点/上游模板](./default.conf.template)：主配置加载容器启动时生成的代理站点；根目录 .env 的 MARKET_DATA_SERVICE_NAME 与 ANALYSIS_SERVICE_NAME 决定实际的 Docker 上游服务名。
 
 ## 当前前端调用清单
 
@@ -30,8 +30,7 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 | Go 分析 | `POST /analysis-api/api/v1/analysis/tasks` | JSON；可选 `Idempotency-Key` | 创建异步分析任务 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}` | task ID 作为路径段 | 查询任务状态 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}/events?after_sequence=0&limit=100` | 增量事件游标与单页条数 | 获取持久化阶段事件 |
-| Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | Run ID 作为路径段 | 读取单个 RunResult；运行未结束时现有接口可能返回 409 `run_not_finished` |
-| Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | run ID 作为路径段 | 获取结构化分析结果 |
+| Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | Run ID 作为路径段 | 读取单个 RunResult，并作为结构化分析结果展示的数据源；运行未结束时现有接口可能返回 409 `run_not_finished` |
 
 ## 行情 Bundle 与快照一致性
 
@@ -138,7 +137,7 @@ CI 通过仅验证前端契约测试、JavaScript 语法和镜像构建；真实
 | 异步分析任务 | 已核对创建任务 202 / 幂等重放 200、{task,status_url,events_url} 包装、Task 状态结构、事件增量游标及错误信封；Go 单元测试和 WebUI 契约测试覆盖状态映射与请求路径 | 从 WebUI 实际创建任务，核对数据库持久化、排队/运行/终态；验证同一幂等键重放、冲突键 409、队列满 429、缺失任务 404 与服务不可用 |
 | 阶段事件 | 已核对 after_sequence、limit、next_after_sequence，并确认空事件数组不能表示任务已完成；Go HTTP 测试覆盖增量读取 | 在真实 Worker 生命周期内验证事件可继续增量读取、序号递增、队列阶段为空时 UI 不误判完成，以及切换任务后旧轮询不会覆盖新页面 |
 | 分析报告 | 已核对 GET /api/v1/analysis/runs/{run_id} 与 Go RunResult JSON 字段，前端结构化展示直接读取返回字段；Run 未完成时 409 run_not_finished 可触发有限重试 | 从已结束任务读取真实 Run，核对任务与 Run 状态、质量门禁、市场状态、因子、信号、风险/可交易性、计划、拒绝原因、警告及原始 JSON；核对 409 后最终结果、404 和失败状态的呈现 |
-| 反向代理与部署 | Nginx 配置、同源路径、容器镜像构建已由源码/CI 覆盖 | 在真实 Docker 网络确认 market-data:8091 与 stock-analysis-go:8092 上游 DNS/端口、外部 OpenResty 路径重写、容器健康状态、真实 API Key 配置及请求 ID 诊断 |
+| 反向代理与部署 | Nginx 配置、同源路径、容器镜像构建已由源码/CI 覆盖 | 在真实 Docker 网络确认默认服务别名 market-data:8091 与 stock-analysis-go:8092（或通过根目录 .env 的 MARKET_DATA_SERVICE_NAME 与 ANALYSIS_SERVICE_NAME 配置的实际别名）可解析、端口可达；再验证外部 OpenResty 路径重写、stock-analysis-web 容器健康状态、真实 API Key 配置及请求 ID 诊断 |
 
 ### 已验证边界
 
