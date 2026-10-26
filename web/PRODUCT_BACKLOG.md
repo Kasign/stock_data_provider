@@ -113,6 +113,7 @@
 ### P2：告警中心
 
 - [ ] **规则管理、触发历史与通知尝试** — [Issue #10](https://github.com/Kasign/stock_data_provider/issues/10)
+  - 进度：规则、评估、触发历史、投递尝试 UI 与状态模型源码/CI 完成。WebUI checks [#40258089134](https://github.com/Kasign/stock_data_provider/actions/runs/40258089134) 通过（86/86 Node tests、JS syntax、Nginx build）；告警后端 API 尚未接入。
   - 规则类型/范围/阈值/级别/启停、单次测试、触发历史和投递诊断。
   - 规则 CRUD、定时监控、冷却/去重、触发持久化及通知发送均需后端。
   - 在真实后台 API 没完成前，把 UI 标记为未接入，不保存虚构规则。

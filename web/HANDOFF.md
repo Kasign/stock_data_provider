@@ -207,3 +207,11 @@
 ## Issue #10 首轮 CI 诊断（2026-10-26）
 - WebUI checks [#40257878022](https://github.com/Kasign/stock_data_provider/actions/runs/40257878022) 中 86 项 Node tests 85 项通过；JS 语法检查通过，Nginx build 因测试失败跳过。
 - 唯一失败是沿用旧文案的通用契约测试要求“不会在浏览器里假保存规则”，而新页面使用“不会假保存规则”。已将断言改为匹配实际不可用边界说明；修复提交的完整 Actions 必须全绿后再记录验收通过。
+
+
+## Issue #10 最终验收（2026-10-26）
+- 告警功能提交 `8e62f77f8baa1b3508ca8cf6feedb082fa49bba9`；更新旧 UI 文案契约后的修复提交 `b159908cc716b7b1036bfc7d5ea764ff68ea23ce`；进一步源码 Review 清理提交 `43b5f4d1b3f9510fd56512c242f9ac8fbc0ddc18` 分离“告警能力”与“规则列表”徽标并去除重复 DOM 状态循环。
+- 最新 WebUI checks [#40258089134](https://github.com/Kasign/stock_data_provider/actions/runs/40258089134) 成功：86/86 Node tests、JavaScript syntax 与 Nginx image build 全部成功。首轮 #40257878022 仅有一条旧文案断言失败，修复提交 #40257952929 与最终 Review 提交均已通过 CI。
+- 告警页将规则 CRUD、单次评估结果、触发历史和投递尝试分开。当前无相应后端 API；所有规则修改/测试/筛选操作禁用，生产页状态固定为 unavailable，不存虚假规则、不展示模拟触发/发送成功、错误码或耗时。
+- 本节写入时 PR #2 仍 Open/未合并，head `43b5f4d1b3f9510fd56512c242f9ac8fbc0ddc18`、base `7e47aec66cb000cf403ed0cfbbcbadfe655467a3`。PR #1 head 已更新到 `8c6eef2dab65d59a02d31e67b03b030b9fa79f9a`，仍 Open/未合并；该数据提交的 Go suite [#40258059581](https://github.com/Kasign/stock_data_provider/actions/runs/40258059581) 失败在 `services/market-data` gofmt 检查和 market-data 镜像构建；Live probe [#40258059378](https://github.com/Kasign/stock_data_provider/actions/runs/40258059378) 成功。这是独立数据分支工作，本 WebUI 批次未触碰数据源代码。
+- 浏览器桌面/移动端截图与实际交互验收、NAS/Docker/OpenResty 到告警调度/数据库/通知渠道的端到端联调仍未完成。Issue #3/#4/#5/#7/#8/#9/#10 的源码和 CI 阶段已按顺序推进；尚欠全局视觉 Review 与真实部署验收。

@@ -272,12 +272,12 @@
 - Issue #9 首轮 WebUI checks [#40257548521](https://github.com/Kasign/stock_data_provider/actions/runs/40257548521) 中 81/82 项 Node tests 通过；JS 语法检查通过，Nginx 构建因测试失败跳过。唯一失败为通用回归测试仍要求旧选股占位文案，已将断言同步为当前“不能提交扫描，也不会用普通分析任务伪装成选股”的边界说明，修复后需重新验收。
 
 
-## Issue #10 — 告警规则、触发历史与投递尝试（本批已提交，CI 待回填）
+## Issue #10 — 告警规则、触发历史与投递尝试（CI 通过，实机验收待完成）
 - 告警中心拆分规则管理表单、单次评估/Dry Run、触发历史和通知投递尝试，不与通知中心收件箱混为一组。
 - 规则 CRUD/启停/删除/测试、历史筛选与刷新均禁用；不保存浏览器规则，不呈现示例规则或模拟触发记录/发送成功/错误耗时。
 - 新增 capability 模型（enabled/disabled/unknown/unavailable/loading/error）、evaluation 模型（triggered/not-triggered/evaluation-error/degraded/skipped 等）和规则/历史/投递集合五态；缺数据/过期状态与未触发分开呈现。
 - 新增 `web/src/alert-state.js`、`web/tests/alert-state.test.mjs` 与 UI 契约测试；package check 纳入新模块。当前生产页初始化为 `supported:false`，未新增后端 API。
-- 本批 CI 结果待核验；实际浏览器视觉验收与 NAS/Docker/OpenResty 后台触发、冷却去重、投递诊断联调尚未执行。
+- 首轮 WebUI checks [#40257878022](https://github.com/Kasign/stock_data_provider/actions/runs/40257878022) 中 85/86 项通过；唯一失败为旧通用 UI 契约对规则保存边界文案的精确匹配。复验修复提交 [#40257952929](https://github.com/Kasign/stock_data_provider/actions/runs/40257952929) 通过；源码 Review 随后分离了规则列表状态与整体能力徽标、清理重复 DOM 映射，最新 WebUI checks [#40258089134](https://github.com/Kasign/stock_data_provider/actions/runs/40258089134) 再次全绿：86/86 Node tests、JS syntax、Nginx build 均成功。实际浏览器视觉验收与 NAS/Docker/OpenResty 后台触发、冷却去重、投递诊断联调尚未执行。
 
 
 - Issue #10 首轮 WebUI checks [#40257878022](https://github.com/Kasign/stock_data_provider/actions/runs/40257878022) 中 85/86 项 Node tests 通过；JS 语法检查通过，Nginx 构建因测试失败跳过。唯一失败为通用源码契约测试仍要求旧告警文案“不会在浏览器里假保存规则”，新页面的说明是“不会假保存规则”；已同步断言，等待重新验收。
