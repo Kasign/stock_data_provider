@@ -304,7 +304,7 @@ func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
 		requestedEnd = request.Params["end_date"]
 		writeTushareTestTable(w,
 			[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
-			[][]any{{"600519.SH", tradeDate, 100.0, 101.0, 99.0, 100.5, 0.5, 100.0, 50000.0}},
+			[][]any{{"600519.SH", tradeDate, 100.0, 101.0, 99.0, 100.5, 0.5, 100.0, 1000.0}},
 		)
 	}))
 	defer server.Close()
