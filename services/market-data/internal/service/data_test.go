@@ -71,12 +71,12 @@ func validFundamentalsSnapshotForTest() *model.FundamentalsSnapshot {
 	sections := make([]model.FundamentalSection, 0, len(categories))
 	for _, category := range categories {
 		sections = append(sections, model.FundamentalSection{
-			Category: category,
-			HasData: true,
-			ReportDate: "2026-06-30",
+			Category:        category,
+			HasData:         true,
+			ReportDate:      "2026-06-30",
 			PublicationDate: "2026-08-29",
-			Metrics: []model.FundamentalMetric{{Key: "test_metric", Name: "测试指标", Value: 1, Unit: "ratio", SourceField: "testField"}},
-			QualityStatus: model.QualityValid,
+			Metrics:         []model.FundamentalMetric{{Key: "test_metric", Name: "测试指标", Value: 1, Unit: "ratio", SourceField: "testField"}},
+			QualityStatus:   model.QualityValid,
 		})
 	}
 	return &model.FundamentalsSnapshot{
@@ -122,7 +122,7 @@ func validValuationSnapshotForValidationTest() *model.ValuationSnapshot {
 	return &model.ValuationSnapshot{
 		RequestedSymbols: []string{symbol}, Total: 1, Items: []model.ValuationItem{item},
 		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
-		Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Source:             "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
 	}
 }
 
@@ -901,8 +901,8 @@ func TestQuoteCacheRejectsLegacyUnverifiedTencentVolume(t *testing.T) {
 		"volume_unit_unverified",
 	} {
 		q := &model.Quote{
-			QualityStatus: model.QualityDegraded,
-			QuoteTime:     &now,
+			QualityStatus:  model.QualityDegraded,
+			QuoteTime:      &now,
 			QualityReasons: []string{reason},
 		}
 		if quoteCacheEligible(q) {

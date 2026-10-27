@@ -740,7 +740,9 @@ func fundamentalsMap(snapshot wireFundamentalsSnapshot) map[string]any {
 // FetchedAt remains ingestion time and is never substituted for a source publication timestamp.
 func (c *Client) FetchStockAnnouncements(ctx context.Context, code, startDate, endDate string, page, pageSize int) (domain.StockAnnouncementSnapshot, error) {
 	symbol := strings.TrimSpace(code)
-	if symbol == "" { return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement symbol is required") }
+	if symbol == "" {
+		return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement symbol is required")
+	}
 	start, startErr := time.Parse("2006-01-02", strings.TrimSpace(startDate))
 	end, endErr := time.Parse("2006-01-02", strings.TrimSpace(endDate))
 	if startErr != nil || endErr != nil || start.Format("2006-01-02") != startDate || end.Format("2006-01-02") != endDate || start.After(end) {
@@ -756,7 +758,9 @@ func (c *Client) FetchStockAnnouncements(ctx context.Context, code, startDate, e
 	query.Set("page_size", fmt.Sprintf("%d", pageSize))
 	var wire wireStockAnnouncementSnapshot
 	path := "/api/v1/stocks/" + url.PathEscape(symbol) + "/announcements?" + query.Encode()
-	if err := c.get(ctx, path, &wire); err != nil { return domain.StockAnnouncementSnapshot{}, err }
+	if err := c.get(ctx, path, &wire); err != nil {
+		return domain.StockAnnouncementSnapshot{}, err
+	}
 	if !sameStockCode(symbol, wire.Symbol) || wire.StartDate != startDate || wire.EndDate != endDate || wire.Page != page || wire.PageSize != pageSize {
 		return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement response identity does not match the request")
 	}
@@ -807,17 +811,17 @@ func (c *Client) FetchStockAnnouncements(ctx context.Context, code, startDate, e
 			return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement source publication timestamp is zero")
 		}
 		items = append(items, domain.StockAnnouncement{
-			ArticleID:item.ArticleID, Symbol:item.Symbol, StockName:item.StockName, Title:item.Title, Category:item.Category,
-			AnnouncementDate:item.AnnouncementDate, PublishedAt:item.PublishedAt, SourceURL:item.SourceURL, Source:item.Source,
-			SourceVersion:item.SourceVersion, FetchedAt:item.FetchedAt, QualityStatus:item.QualityStatus,
-			QualityReasons:append([]string(nil), item.QualityReasons...),
+			ArticleID: item.ArticleID, Symbol: item.Symbol, StockName: item.StockName, Title: item.Title, Category: item.Category,
+			AnnouncementDate: item.AnnouncementDate, PublishedAt: item.PublishedAt, SourceURL: item.SourceURL, Source: item.Source,
+			SourceVersion: item.SourceVersion, FetchedAt: item.FetchedAt, QualityStatus: item.QualityStatus,
+			QualityReasons: append([]string(nil), item.QualityReasons...),
 		})
 	}
 	return domain.StockAnnouncementSnapshot{
-		Symbol:wire.Symbol, StartDate:wire.StartDate, EndDate:wire.EndDate, Page:wire.Page, PageSize:wire.PageSize,
-		Total:wire.Total, Pages:wire.Pages, Returned:wire.Returned, HasData:wire.HasData, HasMore:wire.HasMore,
-		Items:items, Source:wire.Source, SourceVersion:wire.SourceVersion, FetchedAt:wire.FetchedAt,
-		QualityStatus:wire.QualityStatus, QualityReasons:append([]string(nil), wire.QualityReasons...),
+		Symbol: wire.Symbol, StartDate: wire.StartDate, EndDate: wire.EndDate, Page: wire.Page, PageSize: wire.PageSize,
+		Total: wire.Total, Pages: wire.Pages, Returned: wire.Returned, HasData: wire.HasData, HasMore: wire.HasMore,
+		Items: items, Source: wire.Source, SourceVersion: wire.SourceVersion, FetchedAt: wire.FetchedAt,
+		QualityStatus: wire.QualityStatus, QualityReasons: append([]string(nil), wire.QualityReasons...),
 	}, nil
 }
 

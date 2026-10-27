@@ -37,7 +37,7 @@ func writeEastmoneyMarketTurnoverFixture(w http.ResponseWriter, total int, repor
 		})
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"rc": 0,
+		"rc":   0,
 		"data": map[string]any{"total": total, "diff": rows},
 	})
 }
@@ -293,7 +293,7 @@ func TestEastmoneyFetchMarketTurnoverAggregatesCompleteDateAlignedPages(t *testi
 			})
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"rc": 0,
+			"rc":   0,
 			"data": map[string]any{"total": total, "diff": rows},
 		})
 	}))
