@@ -1539,6 +1539,63 @@ func TestValidateIndexConstituentsRejectsFutureReportDate(t *testing.T) {
 	}
 }
 
+
+func TestIndexConstituentCoverageCountersAndLegacyDowngrade(t *testing.T) {
+	now := time.Now().UTC()
+	makeSnapshot := func() *model.IndexConstituentSnapshot {
+		return &model.IndexConstituentSnapshot{
+			IndexSymbol: "000300.SH", ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+			Items: []model.IndexConstituent{
+				{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"},
+				{Symbol: "000001.SZ", Code: "000001", Name: "平安银行"},
+			},
+			Total: 2, ProviderReturned: 3, ExcludedCount: 1,
+			Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			QualityReasons: []string{"one_or_more_constituent_names_missing_from_current_stock_directory"},
+		}
+	}
+
+	t.Run("consistent source counts", func(t *testing.T) {
+		if err := validateIndexConstituentsSnapshot("000300.SH", makeSnapshot()); err != nil {
+			t.Fatalf("consistent source/accepted/excluded counts must pass: %v", err)
+		}
+	})
+	t.Run("inconsistent source counts", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.ExcludedCount = 0
+		if err := validateIndexConstituentsSnapshot("000300.SH", snapshot); err == nil || !strings.Contains(err.Error(), "row counts are inconsistent") {
+			t.Fatalf("mismatched source counts must be rejected, got %v", err)
+		}
+	})
+	t.Run("excluded rows cannot be valid", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.QualityStatus = model.QualityValid
+		if err := validateIndexConstituentsSnapshot("000300.SH", snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
+			t.Fatalf("snapshot with excluded rows must not be valid, got %v", err)
+		}
+	})
+	t.Run("legacy snapshot is downgraded", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.ProviderReturned = 0
+		snapshot.ExcludedCount = 0
+		snapshot.QualityStatus = model.QualityValid
+		snapshot.QualityReasons = nil
+		markIndexConstituentCoverage(snapshot)
+		if snapshot.QualityStatus != model.QualityDegraded {
+			t.Fatalf("legacy snapshot without coverage metadata must be degraded, got %q", snapshot.QualityStatus)
+		}
+		found := false
+		for _, reason := range snapshot.QualityReasons {
+			if reason == "provider_constituent_source_coverage_unreported" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("legacy coverage reason missing: %+v", snapshot.QualityReasons)
+		}
+	})
+}
+
 func TestValidateIndexDailyBarsRejectsQualityAndUnitMismatch(t *testing.T) {
 	now := time.Now().UTC()
 	volume := int64(1000)

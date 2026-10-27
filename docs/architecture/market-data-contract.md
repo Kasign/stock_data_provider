@@ -132,3 +132,9 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 - Provider 侧默认值与 HTTP/Service 层保持一致，避免内部调用在未指定条数时意外退回 30 条。来源报告日期必须来自可信的供应商时间戳，不能用请求日期填充；格式错误或晚于中国市场当前日期的报告日期会被服务层拒绝。
 - 只要 `total > len(items)`，服务层就将涨跌停池快照降级为 `degraded`，附加 `provider_limit_pool_response_truncated`；新 Provider 回包和旧 Redis 缓存采用相同规则。即使条目本身字段有效，也不能把未返回的池子数据视为完整。
 - 提高默认返回条数只减少常见池子被默认截断的情况，并不保证任意数据源/交易日都完整；供应商总数、实际条数、质量状态和单位限制仍需由调用方共同判断。
+
+
+## 指数成分来源覆盖计数
+
+- `total` 与 `items` 表示规范化后实际返回的成分数量；`provider_returned` 表示来源在去重/名称补全前返回的候选成分条数；`excluded_count` 记录因重复或缺少可核验名称而被排除的候选条数。若 `provider_returned > 0`，必须满足 `provider_returned = total + excluded_count`。
+- 只要 `excluded_count > 0`，快照质量不得为 `valid`。旧缓存或旧 Provider 没有来源覆盖计数时，非空快照降级并附加 `provider_constituent_source_coverage_unreported`。这些字段描述当前来源快照的覆盖情况，并不代表历史成分生效日期已知。

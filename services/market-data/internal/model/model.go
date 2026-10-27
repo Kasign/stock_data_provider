@@ -403,6 +403,10 @@ type IndexConstituentSnapshot struct {
 	ProviderReportDate string             `json:"provider_report_date,omitempty"`
 	Items              []IndexConstituent `json:"items"`
 	Total              int                `json:"total"`
+	// ProviderReturned 表示所选来源在成分规范化/名称补全前返回的候选行数。
+	ProviderReturned int `json:"provider_returned"`
+	// ExcludedCount 记录来源已返回、但因重复或缺少可核验名称而未进入 Items 的行数。
+	ExcludedCount int `json:"excluded_count,omitempty"`
 	ProviderTime       *time.Time         `json:"provider_time,omitempty"`
 	Source             string             `json:"source"`
 	SourceVersion      string             `json:"source_version,omitempty"`

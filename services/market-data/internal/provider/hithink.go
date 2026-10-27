@@ -1109,6 +1109,7 @@ func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	now := time.Now().UTC()
 	snapshot := &model.IndexConstituentSnapshot{
 		IndexSymbol: indexSymbol, Items: make([]model.IndexConstituent, 0, len(data.Item)),
+		ProviderReturned: len(data.Item),
 		Source: p.Name(), SourceVersion: hithinkVersion + "-index-constituents-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
@@ -1132,6 +1133,7 @@ func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 			return nil, fmt.Errorf("同花顺成分股第 %d 项 ticker 与 thscode 不一致", index)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
+			snapshot.ExcludedCount++
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_constituent_symbol_dropped")
 			continue

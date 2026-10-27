@@ -105,6 +105,14 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index constituent snapshot source, timestamp or quality invalid")
 	}
+	if snapshot.ProviderReturned < 0 || snapshot.ExcludedCount < 0 ||
+		(snapshot.ProviderReturned > 0 && snapshot.ProviderReturned != snapshot.Total+snapshot.ExcludedCount) ||
+		(snapshot.ProviderReturned == 0 && snapshot.ExcludedCount > 0) {
+		return errors.New("index constituent source/accepted/excluded row counts are inconsistent")
+	}
+	if snapshot.ExcludedCount > 0 && snapshot.QualityStatus == model.QualityValid {
+		return errors.New("index constituent snapshot cannot be valid when source rows were excluded")
+	}
 	if snapshot.ProviderReportDate != "" {
 		date, err := time.Parse("2006-01-02", snapshot.ProviderReportDate)
 		if err != nil || date.Format("2006-01-02") != snapshot.ProviderReportDate {
@@ -138,6 +146,23 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 		return errors.New("empty index constituents must be marked unknown")
 	}
 	return nil
+}
+
+
+func markIndexConstituentCoverage(snapshot *model.IndexConstituentSnapshot) {
+	if snapshot == nil || snapshot.Total == 0 || snapshot.ProviderReturned > 0 {
+		return
+	}
+
+	// 兼容没有覆盖计数的旧缓存/旧 Provider，但不再把它们当作完整有效快照。
+	snapshot.QualityStatus = model.QualityDegraded
+	const reason = "provider_constituent_source_coverage_unreported"
+	for _, existing := range snapshot.QualityReasons {
+		if existing == reason {
+			return
+		}
+	}
+	snapshot.QualityReasons = append(snapshot.QualityReasons, reason)
 }
 
 func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snapshot *model.IndexDailyBarsSnapshot) error {
@@ -254,6 +279,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 		if json.Unmarshal(data, &cached) == nil && validateIndexCatalogSnapshot(tag, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			ttl := indexCatalogCacheTTL(&cached)
 			if time.Since(cached.FetchedAt) < ttl {
+				markIndexConstituentCoverage(&cached)
 				return &cached, true, nil
 			}
 		}
@@ -342,6 +368,7 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		markIndexConstituentCoverage(snapshot)
 		if payload, err := json.Marshal(snapshot); err == nil {
 			ttl := 30 * time.Minute
 			if snapshot.QualityStatus != model.QualityValid {

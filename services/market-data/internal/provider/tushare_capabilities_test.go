@@ -98,7 +98,7 @@ func TestTushareIndexConstituentsQueriesOnlyNewestAvailableMonth(t *testing.T) {
 	if weightRequests != 1 {
 		t.Fatalf("expected one monthly index_weight request, got %d", weightRequests)
 	}
-	if got.ProviderReportDate != now.Format("2006-01-02") || got.Total != 1 || got.Items[0].Symbol != "600519.SH" {
+	if got.ProviderReportDate != now.Format("2006-01-02") || got.Total != 1 || got.ProviderReturned != 1 || got.ExcludedCount != 0 || got.Items[0].Symbol != "600519.SH" {
 		t.Fatalf("unexpected index constituent snapshot: %+v", got)
 	}
 }

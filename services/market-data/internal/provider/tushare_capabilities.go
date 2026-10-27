@@ -1498,6 +1498,7 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	}
 	items := make([]model.IndexConstituent, 0, len(latest))
 	seen := make(map[string]struct{}, len(latest))
+	excludedCount := 0
 	for _, entry := range latest {
 		if _, duplicate := seen[entry.symbol]; duplicate {
 			return nil, fmt.Errorf("Tushare 指数成分 %s 在最新快照中重复", entry.symbol)
@@ -1505,6 +1506,7 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 		seen[entry.symbol] = struct{}{}
 		name, ok := names[entry.symbol]
 		if !ok {
+			excludedCount++
 			reasons = appendTushareReason(reasons, "one_or_more_constituent_names_missing_from_current_stock_directory")
 			continue
 		}
@@ -1515,7 +1517,8 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 		return nil, errors.New("Tushare 指数成分有代码但无法从股票目录解析任何名称")
 	}
 	return &model.IndexConstituentSnapshot{
-		IndexSymbol: indexSymbol, ProviderReportDate: latestDate, Items: items, Total: len(items), Source: p.Name(),
+		IndexSymbol: indexSymbol, ProviderReportDate: latestDate, Items: items, Total: len(items),
+		ProviderReturned: len(latest), ExcludedCount: excludedCount, Source: p.Name(),
 		SourceVersion: tushareIndexConstituentVersion, FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 	}, nil
