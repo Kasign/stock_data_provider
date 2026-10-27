@@ -438,3 +438,12 @@
 - 通用快速定位条已从 HTML、JS、CSS、测试中移除；旧 `market-data` hash 会迁移到首页。
 - 全局 CSS 处理清除失效导航快捷卡片与完全重复的顶层 CSS 规则，添加 Tab 响应式/焦点/减少动画样式。未高风险合并旧媒体查询，剩余 CSS 维护工作继续分区推进。
 - 下一步查看本提交后的 WebUI checks 和 Chromium 截图。CI 固定 503 后端，只验证布局/交互，不替代真实 API、主题及 NAS/1Panel 联调。
+
+
+## 2026-10-27 — 首页重整的最新 CI 与截图
+
+- 最新代码提交：`df43632894f50f36bab2f00f5bf65e8e90eef8ac`。
+- [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40444362551) 与 [Chromium browser smoke](https://github.com/Kasign/stock_data_provider/actions/runs/40444358365) 均通过。浏览器运行产物为 Actions Artifact `webui-browser-screenshots`（artifact ID `12707731742`）。
+- 首屏现在为完整大盘数据工作区；主 Tab 是大盘数据、个股分析、自选股。快速定位 DOM/滚动逻辑/CSS 已删除，市场榜单与龙虎榜、交易日历复用原有 API。
+- CI 截图中的中文方框来自 Runner 字体缺失。真实 API、深浅主题、键盘细节及 NAS/1Panel 联调仍需在部署环境确认。
+- PR #13 保持 Open/未合并。当前相对数据分支领先 21、落后 31；整合前必须再次比较分支差异并审查。
