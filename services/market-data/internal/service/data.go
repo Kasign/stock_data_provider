@@ -1538,7 +1538,10 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			if symbolErr == nil && cachedSymbol == symbol {
 				q.Symbol = cachedSymbol
 			}
-			if symbolErr == nil && cachedSymbol == symbol && q.NormalizationVer == normalize.Version && normalize.ValidateQuote(&q) == nil {
+			cacheNow := time.Now()
+			if symbolErr == nil && cachedSymbol == symbol && q.NormalizationVer == normalize.Version &&
+				serviceTimestampIsSane(q.FetchedAt, cacheNow) && serviceTimestampIsSane(q.NormalizedAt, cacheNow) &&
+				normalize.ValidateQuote(&q) == nil {
 				applyQuoteFreshness(&q, time.Now())
 				if quoteCacheEligible(&q) {
 					return &q, true, nil
@@ -1709,9 +1712,11 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		if json.Unmarshal(data, &v) == nil {
 			candidates := make([]model.DailyBar, 0, len(v.Bars))
 			contractMismatch := false
+			cacheNow := time.Now()
 			for _, bar := range v.Bars {
 				cachedSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
-				if symbolErr != nil || cachedSymbol != symbol || bar.AdjustmentBasis != basis || bar.NormalizationVer != normalize.Version {
+				if symbolErr != nil || cachedSymbol != symbol || bar.AdjustmentBasis != basis || bar.NormalizationVer != normalize.Version ||
+					!serviceTimestampIsSane(bar.FetchedAt, cacheNow) || !serviceTimestampIsSane(bar.NormalizedAt, cacheNow) {
 					contractMismatch = true
 					break
 				}
@@ -2214,6 +2219,11 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 }
 
 func newFetchID() string { return time.Now().UTC().Format("20060102T150405.000000000Z") }
+
+// serviceTimestampIsSane rejects missing/future service timestamps in persisted payloads.
+func serviceTimestampIsSane(value, now time.Time) bool {
+	return !value.IsZero() && !value.After(now.Add(5*time.Minute))
+}
 
 func quoteCacheEligible(q *model.Quote) bool {
 	if q == nil || q.QualityStatus == model.QualityStale || q.QualityStatus == model.QualityInvalid || q.QualityStatus == model.QualityUnknown {

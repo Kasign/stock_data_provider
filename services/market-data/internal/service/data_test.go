@@ -1676,3 +1676,62 @@ func TestDailyBarTimestampsAreStampedByService(t *testing.T) {
 		t.Fatalf("daily-bar normalized_at must use service normalization time: start=%s normalized_at=%s end=%s", start, bars[0].NormalizedAt, end)
 	}
 }
+
+
+func TestQuoteCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
+	mem := newMemoryCache()
+	cached := validQuote("eastmoney")
+	future := time.Now().UTC().Add(24 * time.Hour)
+	cached.FetchedAt = future
+	cached.NormalizedAt = future
+	payload, err := json.Marshal(cached)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v4:quote:600519.SH"] = payload
+
+	fresh := validQuote("tencent")
+	svc := New([]provider.Provider{fakeProvider{name: "tencent", quote: fresh}}, mem, nil, time.Second, time.Second, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hit || got.Source != "tencent" {
+		t.Fatalf("quote cache with future service timestamps must be bypassed: hit=%v source=%s", hit, got.Source)
+	}
+}
+
+func TestDailyBarsCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
+	mem := newMemoryCache()
+	volume := int64(1000)
+	amount := 10500.0
+	future := time.Now().UTC().Add(24 * time.Hour)
+	cached := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward,
+		Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY",
+		QualityStatus: model.QualityValid, NormalizationVer: normalize.Version,
+		FetchedAt: future, NormalizedAt: future,
+	}
+	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{cached}, "warnings": []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v4:bars:600519.SH:2026-10-20:2026-10-20:forward_adjusted:1"] = payload
+
+	providerBar := cached
+	providerBar.Source = "tencent"
+	providerBar.FetchedAt = time.Time{}
+	providerBar.NormalizedAt = time.Time{}
+	svc := New([]provider.Provider{fakeProvider{name: "tencent", bars: []model.DailyBar{providerBar}}}, mem, nil, time.Second, time.Minute, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hit || len(bars) != 1 || bars[0].Source != "tencent" {
+		t.Fatalf("daily-bar cache with future service timestamps must be bypassed: hit=%v bars=%+v", hit, bars)
+	}
+}
