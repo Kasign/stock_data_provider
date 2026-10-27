@@ -275,7 +275,7 @@ export function bindDataCenter(getSettings) {
       const allNormal = failed === 0 && unknown === 0;
       setBadge("#data-center-summary-status", allNormal ? "healthy" : failed ? "unhealthy" : "unknown",
         allNormal ? "检查完成" : failed ? "存在异常" : "部分状态未知");
-      setBadge("#data-center-last-check", "healthy", "检查于 " + timestamp);
+      setBadge("#data-center-last-check", "unknown", "检查于 " + timestamp);
       setText("#data-center-summary-message",
         failed
           ? "检查完成：发现服务端点或已明确报告的依赖异常/降级。请查看对应错误摘要与部署日志；其它检查已独立完成。"
