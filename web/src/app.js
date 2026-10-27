@@ -924,10 +924,50 @@ const VIEW_META = Object.freeze({
   settings: { title: "设置中心" }
 });
 
+const REFRESH_BUTTON_CONTEXT = Object.freeze({
+  market: {
+    label: "刷新当前行情数据",
+    title: "刷新市场概况、龙虎榜与交易日历、Provider 和当前个股行情。"
+  },
+  tasks: {
+    label: "刷新任务与连接状态",
+    title: "重新检查服务连接；若已选择任务，则重新读取任务状态与阶段事件。"
+  },
+  notifications: {
+    label: "检查服务连接（通知接口待接入）",
+    title: "通知中心 API 尚未接入；此操作只刷新行情与分析服务连接状态。"
+  },
+  chat: {
+    label: "检查服务连接（问股接口待接入）",
+    title: "问股 API 尚未接入；此操作只刷新行情与分析服务连接状态。"
+  },
+  screening: {
+    label: "检查服务连接（选股接口待接入）",
+    title: "选股任务与候选 API 尚未接入；此操作只刷新行情与分析服务连接状态。"
+  },
+  alerts: {
+    label: "检查服务连接（告警接口待接入）",
+    title: "告警规则与触发记录 API 尚未接入；此操作只刷新行情与分析服务连接状态。"
+  },
+  settings: {
+    label: "检查服务连接",
+    title: "重新检查已保存的行情/分析服务地址；未保存的地址请使用设置表单中的“检查连接”。"
+  }
+});
+
+function syncRefreshButtonContext() {
+  const button = $("#refresh-button");
+  if (!button) return;
+  const context = REFRESH_BUTTON_CONTEXT[state.view] || REFRESH_BUTTON_CONTEXT.market;
+  button.setAttribute("aria-label", context.label);
+  button.title = context.title;
+}
+
 function setView(view, { updateHash = true } = {}) {
   const nextView = Object.hasOwn(VIEW_META, view) ? view : "market";
   const previousView = state.view;
   state.view = nextView;
+  syncRefreshButtonContext();
   if (nextView === "market" && previousView !== "market") void marketOverview.refresh();
   if (nextView === "market" && previousView !== "market") void marketActivity.refresh();
   if (nextView === "chat") syncChatStockContextFromMarket();
@@ -3038,17 +3078,30 @@ $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
 $("#reload-sources").addEventListener("click", refreshSources);
+syncRefreshButtonContext();
 $("#refresh-button").addEventListener("click", async () => {
-  await refreshServices();
-  if (state.view === "market") {
-    await refreshSources();
-    await marketOverview.refresh();
-    await marketActivity.refresh();
-    if (state.settings.apiKey) await runQuoteQuery();
-  } else if (state.view === "tasks" && state.taskId) {
-    stopTaskPolling();
-    const generation = state.pollGeneration;
-    await pollTask(generation);
+  const button = $("#refresh-button");
+  if (button.disabled) return;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  button.title = "正在刷新当前页面…";
+  try {
+    await refreshServices();
+    if (state.view === "market") {
+      await refreshSources();
+      await marketOverview.refresh();
+      await marketActivity.refresh();
+      if (state.settings.apiKey) await runQuoteQuery();
+    } else if (state.view === "tasks" && state.taskId) {
+      stopTaskPolling();
+      const generation = state.pollGeneration;
+      await pollTask(generation);
+    }
+    // 其他页面尚无可刷新资源 API；按钮文案已明确说明本次只检查服务连接。
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    syncRefreshButtonContext();
   }
 });
 $("#open-settings").addEventListener("click", openSettings);

@@ -13,6 +13,17 @@
 - 部署容器名为 stock-analysis-web。依赖服务名通过根目录 .env 中的 MARKET_DATA_SERVICE_NAME 和 ANALYSIS_SERVICE_NAME 配置，详见 README 与根目录 .env.example 的 WebUI 配置节。
 - 按当前协作安排，本批不运行测试/CI；下一阶段优先完成跨模块源码 Review 和状态/文档一致性核对，再等待用户统一实机验收。
 
+
+## 2026-10-27 全站 Review 补充
+
+- [x] 顶栏刷新按钮按视图说明真实行为，未接入 API 的页面明确只检查服务健康状态。
+- [x] 防止顶栏刷新操作连点；使用 `aria-busy` 暴露进行中状态。
+- [x] 禁用控件光标语义与键盘焦点提示的基础修正。
+- [x] 保留真实数据边界：不新增假通知、假问股回答、假选股候选、假告警或虚构 Run Flow DAG。
+- [ ] 逐步整理 `styles.css` 的设计 token、基础控件和重复媒体查询，按页面分区集中修改。
+- [ ] 按 `web/REVIEW_CHECKLIST.md` 在真实浏览器覆盖 320/375/600/768/900/1280/1600 px，并在 NAS/1Panel 上做 API 代理和主题验收。
+- [ ] 待后端接口到位后，重新评估通知、问股、选股、告警及服务端设置的真实交互；在此之前保持禁用与能力边界文案。
+
 ## 1. 规划结论
 
 以 daily_stock_analysis 的 Web 产品能力作参考，不复制它的 React 技术栈，也不把其后端能力误认为本仓库已具备。我们的 WebUI 保持 web/ 独立目录、原生 HTML/CSS/JavaScript ES Modules、Nginx 同源代理及 Docker 部署。新功能可以先把页面、导航、表单、状态与交互做好；一旦涉及真实任务提交、配置保存、通知发送、聊天回答、选股候选、告警触发，就必须由真实 API 支撑。没有 API 的地方显示“后端接口待接入”，不得用 mock/fixture 冒充生产返回。

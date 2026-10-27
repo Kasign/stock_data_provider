@@ -8,7 +8,7 @@
 - 仓库：https://github.com/Kasign/stock_data_provider
 - WebUI 工作分支：`feat/webui-market-data-console`；编辑前 HEAD：`dce4b5b03d8c722fb13f73d72fa767b76ee703ca`。
 - WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，标题 `WebUI: improve market readability and refresh diagnostics`，状态 Open、未合并、mergeable；head 与 WebUI 分支一致，base 为 `feat/full-go-data-providers-api-switch`。
-- PR #13 最近一次已确认的 WebUI checks：[Actions #40434835833](https://github.com/Kasign/stock_data_provider/actions/runs/40434835833) 成功；该结果只对应当时的 HEAD，不代表本轮新提交已经通过。
+- 本轮开工时，基线 SHA `67aaf3f9fd1ba0bea99845eae601ecaf57a483cb` 对应的 WebUI checks [Actions #40436326291](https://github.com/Kasign/stock_data_provider/actions/runs/40436326291) 已成功；本轮新提交的 CI 需以提交后 Actions 实际结果为准。
 - PR #2 已关闭并合并，旧的 PR #2 HEAD 不再作为本轮基线。数据 PR #1 仍是独立变更流。
 - 本轮只提交到 WebUI 工作分支，改动限定在 `web/**`；不合并 PR、不更新数据分支、不修改 Go/Provider/数据库/API/Compose。
 - 本轮 Review 优先改善长行情页定位与全站信息可读性。真实浏览器与 NAS/Docker/OpenResty 实测仍由后续统一验收。
@@ -39,6 +39,17 @@
 5. 按当前用户要求，不运行测试、CI 或镜像构建，并在总结中明确说明；只报告实际完成的源码 Review。
 6. 不合并 PR、不强推、不重写历史；后端能力缺口先记录为契约/依赖，不夹带 Go 源码修改。
 7. 在主要模块完成后做整体 Review，再由用户统一测试并在 NAS/Docker/OpenResty 上验收。
+
+
+## 2026-10-27 全站易用性 Review 结果
+
+- Review 开始时远程 HEAD：`67aaf3f9fd1ba0bea99845eae601ecaf57a483cb`；PR #13 状态 Open、未合并、mergeable=true，base 为 `feat/full-go-data-providers-api-switch`。
+- 顶栏刷新按钮的名称/提示现随当前视图更新；在无通知、Chat、选股、告警 API 的页面明确告知只刷新服务连接状态。顶栏刷新操作增加禁用锁和 `aria-busy`，防止快速连点。
+- 禁用控件光标不再显示“等待中”；原生 `summary` 的键盘焦点样式纳入基础规则。
+- 全站检查项与待验收视口矩阵见 [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md)。
+- **尚未做真实浏览器 / NAS / Docker 验收。** 不将源码 Review 或基线 CI 当作新提交的运行时通过证明。
+- 下一步：核对本轮提交的实际 SHA 和 GitHub Actions；之后按 Review 清单集中验收。只改 `web/`，不合并 PR、不修改数据侧分支。
+
 
 ## 下一步执行指令
 

@@ -12,7 +12,7 @@
 body { min-width: 320px; margin: 0; background: var(--bg); color: var(--text); font-size: 13px; }
 button, input, select, textarea { font: inherit; }
 button { color: inherit; }
-button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 [hidden] { display: none !important; }
 .app-shell { min-height: 100vh; }
 .sidebar { width: 238px; position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; padding: 24px 15px 17px; background: #0c1219; border-right: 1px solid var(--border-soft); z-index: 5; }
@@ -74,7 +74,10 @@ h1 { margin: 0; color: #eef4f8; font-size: clamp(24px, 2.4vw, 31px); font-weight
 .query-form .field:not(.symbol-field) { flex: 0 0 120px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 37px; padding: 0 14px; border: 1px solid transparent; border-radius: 8px; font-size: 11px; font-weight: 650; cursor: pointer; transition: transform .12s, background .12s, border-color .12s; white-space: nowrap; }
 .button:active { transform: translateY(1px); }
-.button:disabled { opacity: .55; cursor: wait; }
+button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; }
+.button:disabled { opacity: .55; cursor: not-allowed; }
+.button:disabled:active { transform: none; }
+#refresh-button[aria-busy="true"] { cursor: progress; }
 .button-primary { color: #082019; background: var(--accent); box-shadow: 0 4px 13px rgba(51, 211, 164, .08); }
 .button-primary:hover:not(:disabled) { background: #69e4bd; }
 .button-secondary { border-color: #2a3b4a; color: #d4dfe7; background: #16212c; }
