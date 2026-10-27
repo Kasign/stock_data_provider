@@ -45,6 +45,16 @@ function safeError(error) {
     .filter(Boolean).join(" · ") || "未返回错误详情";
 }
 
+async function checkWebUI(_settings, signal) {
+  const response = await fetch(window.location.pathname || "/", { method: "GET", credentials: "same-origin", cache: "no-store", signal });
+  if (!response.ok) {
+    const error = new Error("WebUI 页面返回 HTTP " + response.status);
+    error.status = response.status;
+    throw error;
+  }
+  return { status: "ok" };
+}
+
 function probe(fn, settings, timeoutMs = 6000) {
   const controller = new AbortController();
   const started = performance.now();
@@ -188,6 +198,7 @@ export function bindDataCenter(getSettings) {
 
     try {
       const checks = await Promise.all([
+        probe(checkWebUI, settings),
         probe(marketLiveness, settings),
         probe(marketHealth, settings),
         probe(analysisLiveness, settings),
@@ -198,7 +209,12 @@ export function bindDataCenter(getSettings) {
       ]);
       if (current !== generation) return;
 
-      const [marketLive, marketReady, analysisLive, analysisReady, sources] = checks;
+      const [webUi, marketLive, marketReady, analysisLive, analysisReady, sources] = checks;
+      const webUiState = probeState(webUi);
+      setBadge("#data-service-webui-status", webUiState, webUiState === "healthy" ? "正常" : statusWord(webUiState));
+      setText("#data-service-webui-detail", webUi.ok
+        ? "当前页面路径请求成功 · " + webUi.durationMs + " ms · " + formatDateTime(new Date().toISOString())
+        : "当前页面路径检查失败 · " + safeError(webUi.error));
       const marketLiveState = showCheck("#data-service-market-live", marketLive);
       const marketReadyState = showCheck("#data-service-market-ready", marketReady, { ready: true });
       const analysisLiveState = showCheck("#data-service-analysis-live", analysisLive);
@@ -243,7 +259,7 @@ export function bindDataCenter(getSettings) {
         root.append(empty);
       }
 
-      const serviceStates = [marketLiveState, marketReadyState, analysisLiveState, analysisReadyState];
+      const serviceStates = [webUiState, marketLiveState, marketReadyState, analysisLiveState, analysisReadyState];
       const healthyServices = serviceStates.filter((status) => status === "healthy").length;
       const failedServices = serviceStates.filter((status) => status === "failed" || status === "timeout").length;
       const degradedServices = serviceStates.filter((status) => status === "degraded").length;
@@ -256,15 +272,15 @@ export function bindDataCenter(getSettings) {
       setText("#data-center-count-healthy", healthyServices + healthyDependencies);
       setText("#data-center-count-failed", failed);
       setText("#data-center-count-unknown", unknown);
-      const allNormal = failed === 0 && unknownDependencies === 0;
+      const allNormal = failed === 0 && unknown === 0;
       setBadge("#data-center-summary-status", allNormal ? "healthy" : failed ? "unhealthy" : "unknown",
         allNormal ? "检查完成" : failed ? "存在异常" : "部分状态未知");
       setBadge("#data-center-last-check", "healthy", "检查于 " + timestamp);
       setText("#data-center-summary-message",
         failed
           ? "检查完成：发现服务端点或已明确报告的依赖异常/降级。请查看对应错误摘要与部署日志；其它检查已独立完成。"
-          : unknownDependencies
-            ? "检查已完成，但有依赖状态无法确认。不能仅凭分析服务不可达就断定 MariaDB/Redis 故障。"
+          : unknown
+            ? "检查已完成，但有服务、依赖或 Provider 状态无法确认。不能仅凭分析服务不可达就断定 MariaDB/Redis 故障。"
             : "检查完成：当前健康检查端点可响应，且已报告的数据库/缓存依赖正常。Provider 能力清单仍只是配置声明，不代表逐 Provider 实测。");
     } catch (error) {
       setBadge("#data-center-summary-status", "failed", "检查过程异常");
