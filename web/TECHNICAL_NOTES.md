@@ -394,3 +394,8 @@ X-API-Key: <由现有设置提供>
 
 组件级 UI 契约测试防止这些规则回退到硬编码颜色。但 GitHub Actions 当前在 runner 分配前快速失败，新增断言尚未获得可执行 CI 的验证；部署浏览器仍需检查实际主题、键盘、API 错误状态和窄屏布局。
 
+
+
+### 占位文字的 CSS 级联约束
+
+表单、最近任务搜索和自选股别名输入的 placeholder 应统一使用 `--text-dim`。不要在共享规则之后添加独立的 `.watchlist-name-input::placeholder` 硬编码颜色声明：相同优先级下，后出现的规则会覆盖共享 token（尤其影响深色主题）。`web/tests/ui-contract.test.mjs` 会检查这类后置硬编码声明，防止主题可读性回归。
