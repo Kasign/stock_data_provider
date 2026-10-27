@@ -2083,11 +2083,11 @@ func (p *Eastmoney) fetchMarketTurnover(ctx context.Context, reportDate string) 
 			"_":      {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		}
 		var payload struct {
-			RC   *int \x60json:"rc"\x60
+			RC   *int `json:"rc"`
 			Data *struct {
-				Total int             \x60json:"total"\x60
-				Diff  json.RawMessage \x60json:"diff"\x60
-			} \x60json:"data"\x60
+				Total int             `json:"total"`
+				Diff  json.RawMessage `json:"diff"`
+			} `json:"data"`
 		}
 		if err := p.getJSONWithRetry(requestCtx, baseURL, params, &payload, 6*time.Second); err != nil {
 			if requestCtx.Err() != nil {
