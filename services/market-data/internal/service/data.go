@@ -1211,10 +1211,20 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 		var cached model.StockBoardSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateStockBoardsSnapshot(symbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			ttl := positiveTTL
+			cacheEligible := cached.HasData
 			if !cached.HasData {
 				ttl = emptyTTL
+				// 兼容旧版本缓存：未知空结果若未记录回退链耗尽，不得阻止新版本尝试其他 Provider。
+				fallbackExhausted := false
+				for _, reason := range cached.QualityReasons {
+					if reason == "stock_boards_fallback_exhausted_without_confirmed_membership" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				cacheEligible = fallbackExhausted || len(s.stockBoardsProviders) <= 1
 			}
-			if time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
 		}
@@ -1225,6 +1235,7 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 		return nil, false, errors.New("no enabled stock-boards provider")
 	}
 	var failures []string
+	var unknownEmpty *model.StockBoardSnapshot
 	for _, p := range s.stockBoardsProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -1271,21 +1282,33 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		// 正向板块归属可以缓存较长时间；未确认归属的 unknown 结果只短缓存，
-		// 避免空结果导致每次页面请求都重新访问上游，同时不把空结果解释为“确认无板块”。
-		cacheTTL := positiveTTL
 		if !item.HasData {
-			cacheTTL = emptyTTL
+			// 空成员列表只说明当前源无法确认归属，不代表没有所属板块；尝试后续 Provider。
+			unknownEmpty = item
+			failures = append(failures, p.Name()+": empty board membership is unknown, not confirmed zero")
+			continue
 		}
+		// 已确认有返回条目的快照可以缓存较长时间。
 		payload, marshalErr := json.Marshal(item)
 		if marshalErr == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, cacheTTL); cacheErr != nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, positiveTTL); cacheErr != nil {
 				s.logger.Warn("stock-boards cache write failed", "symbol", symbol, "error", cacheErr)
 			}
 		} else {
 			s.logger.Warn("stock-boards cache encode failed", "symbol", symbol, "error", marshalErr)
 		}
 		return item, false, nil
+	}
+	if unknownEmpty != nil {
+		// 只有回退链耗尽后才短缓存 unknown，且记录本次已尝试全部启用源。
+		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "stock_boards_fallback_exhausted_without_confirmed_membership")
+		payload, marshalErr := json.Marshal(unknownEmpty)
+		if marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, emptyTTL); cacheErr != nil {
+				s.logger.Warn("stock-boards unknown cache write failed", "symbol", symbol, "error", cacheErr)
+			}
+		}
+		return unknownEmpty, false, nil
 	}
 	return nil, false, fmt.Errorf("all stock-boards providers failed: %s", strings.Join(failures, "; "))
 }

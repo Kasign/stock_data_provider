@@ -632,3 +632,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - 有效的 `provider_report_date` 必须与请求的 `trade_date` 一致；返回其他日期的数据不能被贴上请求日期使用，服务层会拒绝该响应并继续 Provider 回退。若源端未暴露独立报告日期，现有契约允许调用方依据已校验的请求日期使用该快照，但仍保留供应商质量降级原因。
 - 已补充日期不匹配的验证测试源码；未执行测试、构建、CI 或真实 Provider 请求。
+
+
+### 个股所属板块未知空响应回退（2026-10-27）
+
+- `has_data=false` 的所属板块响应必须保持 `quality_unknown`，不能解释为已确认无板块。服务层现在会继续尝试下一个启用 Provider；只有全部尝试完后才返回 unknown，并记录 `stock_boards_fallback_exhausted_without_confirmed_membership`。
+- 仅在回退耗尽后缓存 unknown 结果 5 分钟；旧版没有记录“已耗尽回退链”的 unknown 缓存，在存在多个 Provider 时会被忽略，避免阻止新回退逻辑生效。已补相应测试源码，未运行。
