@@ -771,3 +771,67 @@ test("辅助说明、任务元信息和输入占位文字统一使用主题感�
   );
 });
 
+
+
+test("Run Flow 与结构化结果在浅色主题下使用可读的前景文字", () => {
+  const mainTextSelectors = [
+    ".task-empty strong",
+    ".task-id-row code",
+    ".task-facts strong",
+    ".event-body strong",
+    ".boundary-grid strong",
+    ".signal-result-card strong",
+    ".analysis-result-block > h3",
+    ".analysis-result-card-heading strong"
+  ];
+  for (const selector of mainTextSelectors) {
+    assert.match(
+      baseCssDeclarationBlock(selector),
+      /color:\s*var\(--text\)\s*;/,
+      selector + " must use the theme-aware primary text token"
+    );
+  }
+
+  const dimTextSelectors = [
+    ".task-empty",
+    ".task-id-row > span",
+    ".event-body p",
+    ".boundary-grid p",
+    ".task-result-note",
+    ".task-result-metric small",
+    ".signal-result-card p",
+    ".analysis-result-block > p",
+    ".analysis-result-fields dt",
+    ".analysis-result-empty",
+    ".raw-result",
+    ".empty-row",
+    ".table-empty",
+    ".query-hint",
+    ".metric-foot",
+    ".chart-empty",
+    ".chart-foot",
+    ".source-version",
+    ".source-main small",
+    ".table-footer",
+    ".page-footer",
+    ".recent-analysis-item-main small",
+    ".watchlist-item-meta",
+    ".supplemental-context",
+    ".supplemental-card-heading small",
+    ".supplemental-fields dt",
+    ".supplemental-reasons"
+  ];
+  for (const selector of dimTextSelectors) {
+    assert.match(
+      baseCssDeclarationBlock(selector),
+      /color:\s*var\(--text-dim\)\s*;/,
+      selector + " must use the theme-aware secondary text token"
+    );
+  }
+
+  assert.match(baseCssDeclarationBlock(".chart-axis-label"), /fill:\s*var\(--text-dim\)\s*;/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.analysis-result-badge\.is-allowed \{ color: #08765e; border-color: #b9e6d6; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.analysis-result-badge\.is-blocked \{ color: #b92f41; border-color: #f2c3c9; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.task-result-warnings/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.inline-callout strong \{ color: #80540b; \}/);
+});
