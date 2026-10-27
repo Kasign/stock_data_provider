@@ -690,3 +690,6 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - 证券搜索遇到 `quality_unknown` 或 `quality_stale` 的空结果时，不能据此认定证券不存在；服务层现在继续尝试下一个国内搜索源。若首源返回确定有效的空结果（例如完整有效证券目录中确实无匹配），仍可直接返回。
 - 只有未确认/过期的空匹配经过所有启用源后仍无确定结果时，才返回 `quality_unknown` 并附加 `stock_search_fallback_exhausted_without_confirmed_match`。已补测试源码，未运行。
+
+
+证券搜索过期匹配的回退补充（2026-10-27）：当首个 Provider 只能提供 `quality_stale` 的匹配项时，服务层暂存该快照并继续查询后续来源；如果后续没有更新的可用结果，才返回原过期结果，并增加 `stock_search_fallback_exhausted_using_stale_directory`，保留 stale 状态。

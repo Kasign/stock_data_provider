@@ -1088,6 +1088,7 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 	}
 	failures := make([]string, 0, len(s.stockSearchProviders))
 	var unknownEmpty *model.StockSearchSnapshot
+	var staleMatches *model.StockSearchSnapshot
 	for _, p := range s.stockSearchProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -1123,8 +1124,18 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 			failures = append(failures, p.Name()+": empty match from unconfirmed or stale stock directory")
 			continue
 		}
-		// 完整且非空的查询结果，或质量状态有效的确定空结果，均可直接返回。
+		if snapshot.QualityStatus == model.QualityStale {
+			// 旧目录有匹配项时保留为最终后备，但先尝试后续来源获取更新结果。
+			staleMatches = snapshot
+			failures = append(failures, p.Name()+": stale stock-search matches retained as fallback")
+			continue
+		}
+		// 完整且非空的查询结果，或质量状态有效/降级的确定空结果，均可直接返回。
 		return snapshot, nil
+	}
+	if staleMatches != nil {
+		staleMatches.QualityReasons = appendReason(staleMatches.QualityReasons, "stock_search_fallback_exhausted_using_stale_directory")
+		return staleMatches, nil
 	}
 	if unknownEmpty != nil {
 		unknownEmpty.QualityStatus = model.QualityUnknown
