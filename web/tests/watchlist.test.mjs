@@ -53,12 +53,17 @@ test("renames and removes entries without retaining unrelated properties", () =>
   }]));
 
   const renamed = renameWatchlistSymbol("600519.SH", "  核心观察  ", storage, "2026-10-23T04:00:00Z");
-  assert.equal(renamed[0].name, "核心观察");
-  assert.deepEqual(Object.keys(renamed[0]).sort(), ["name", "symbol", "updated_at"]);
+  assert.equal(renamed.valid, true);
+  assert.equal(renamed.persisted, true);
+  assert.equal(renamed.items[0].name, "核心观察");
+  assert.deepEqual(Object.keys(renamed.items[0]).sort(), ["name", "symbol", "updated_at"]);
   assert.doesNotMatch(storage.getItem(WATCHLIST_KEY), /must-not-persist|core_pass|result|api_key/);
 
   const removed = removeWatchlistSymbol("600519.SH", storage);
-  assert.deepEqual(removed, []);
+  assert.equal(removed.valid, true);
+  assert.equal(removed.removed, true);
+  assert.equal(removed.persisted, true);
+  assert.deepEqual(removed.items, []);
   assert.deepEqual(readWatchlist(storage), []);
 });
 
@@ -77,4 +82,28 @@ test("caps list size, skips malformed persisted entries and tolerates unavailabl
   assert.deepEqual(readWatchlist(brokenStorage), []);
   assert.doesNotThrow(() => addWatchlistSymbol("600519.SH", "贵州茅台", brokenStorage));
   assert.doesNotThrow(() => removeWatchlistSymbol("600519.SH", brokenStorage));
+});
+
+test("reports persistence failures without claiming browser data was saved", () => {
+  const seed = JSON.stringify([{ symbol: "600519.SH", name: "贵州茅台", updated_at: "2026-10-20T00:00:00Z" }]);
+  const storage = {
+    getItem() { return seed; },
+    setItem() { throw new Error("quota exceeded"); }
+  };
+
+  const added = addWatchlistSymbol("000001.SZ", "平安银行", storage, "2026-10-23T05:00:00Z");
+  assert.equal(added.valid, true);
+  assert.equal(added.persisted, false);
+  assert.deepEqual(added.items.map((item) => item.symbol), ["000001.SZ", "600519.SH"]);
+
+  const renamed = renameWatchlistSymbol("600519.SH", "核心观察", storage, "2026-10-23T06:00:00Z");
+  assert.equal(renamed.valid, true);
+  assert.equal(renamed.persisted, false);
+  assert.equal(renamed.items[0].name, "核心观察");
+
+  const removed = removeWatchlistSymbol("600519.SH", storage);
+  assert.equal(removed.valid, true);
+  assert.equal(removed.removed, true);
+  assert.equal(removed.persisted, false);
+  assert.deepEqual(removed.items.map((item) => item.symbol), []);
 });

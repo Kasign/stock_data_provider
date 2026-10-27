@@ -497,10 +497,17 @@ function renderWatchlist(records = safeReadWatchlist()) {
     aliasInput.setAttribute("aria-label", record.symbol + " 的自定义名称");
     aliasInput.addEventListener("change", () => {
       try {
-        renderWatchlist(renameWatchlistSymbol(record.symbol, aliasInput.value, localStorage));
-        setWatchlistFeedback("已保存 " + record.symbol + " 的自定义名称。");
+        const result = renameWatchlistSymbol(record.symbol, aliasInput.value, localStorage);
+        renderWatchlist(result.items);
+        if (!result.valid) {
+          setWatchlistFeedback("股票代码无效，未保存自定义名称。", "error");
+        } else if (result.persisted) {
+          setWatchlistFeedback("已保存 " + record.symbol + " 的自定义名称。");
+        } else {
+          setWatchlistFeedback(record.symbol + " 的名称已在当前页面临时更新，但浏览器存储不可用，刷新后可能丢失。", "warning");
+        }
       } catch {
-        setWatchlistFeedback("浏览器存储不可用，无法保存自选名称。", "error");
+        setWatchlistFeedback("自选名称更新失败，浏览器存储不可用。", "error");
       }
     });
 
@@ -616,6 +623,10 @@ function addCurrentSymbolToWatchlist() {
       return;
     }
     renderWatchlist(result.items);
+    if (!result.persisted) {
+      setWatchlistFeedback(symbol + " 已在当前页面临时加入自选，但浏览器存储不可用，刷新后可能丢失。", "warning");
+      return;
+    }
     setWatchlistFeedback(result.added ? "已将 " + symbol + " 加入本地自选。" : symbol + " 已在自选列表中，已更新时间。");
   } catch {
     setWatchlistFeedback("浏览器本地存储不可用，无法保存自选股。", "error");
@@ -630,10 +641,19 @@ function handleWatchlistAction(event) {
 
   if (action === "remove") {
     try {
-      renderWatchlist(removeWatchlistSymbol(symbol, localStorage));
-      setWatchlistFeedback("已从本地自选中移除 " + symbol + "。");
+      const result = removeWatchlistSymbol(symbol, localStorage);
+      renderWatchlist(result.items);
+      if (!result.valid) {
+        setWatchlistFeedback("股票代码无效，未修改自选列表。", "error");
+      } else if (!result.removed) {
+        setWatchlistFeedback(symbol + " 已不在当前自选列表中。");
+      } else if (result.persisted) {
+        setWatchlistFeedback("已从本地自选中移除 " + symbol + "。");
+      } else {
+        setWatchlistFeedback(symbol + " 已在当前页面临时移除，但浏览器存储不可用，刷新后可能恢复。", "warning");
+      }
     } catch {
-      setWatchlistFeedback("浏览器本地存储不可用，无法移除自选股。", "error");
+      setWatchlistFeedback("自选股移除失败，浏览器存储不可用。", "error");
     }
     return;
   }

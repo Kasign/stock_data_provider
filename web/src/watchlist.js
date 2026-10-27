@@ -26,8 +26,10 @@ function normalizeRecord(record) {
 function writeRecords(storage, records) {
   try {
     storage.setItem(WATCHLIST_KEY, JSON.stringify(records));
+    return true;
   } catch {
-    // Storage is optional. Callers can keep working for the current page session.
+    // 保留本次页面的操作结果，但明确告知调用方没有持久化成功。
+    return false;
   }
 }
 
@@ -65,25 +67,32 @@ export function addWatchlistSymbol(symbol, name, storage, updatedAt = new Date()
   };
   const items = [next, ...current.filter((item) => item.symbol !== next.symbol)]
     .slice(0, MAX_WATCHLIST_ITEMS);
-  writeRecords(storage, items);
-  return { items, added: !existing, valid: true };
+  const persisted = writeRecords(storage, items);
+  return { items, added: !existing, valid: true, persisted };
 }
 
 export function renameWatchlistSymbol(symbol, name, storage, updatedAt = new Date().toISOString()) {
   const normalizedSymbol = String(symbol ?? "").trim().toUpperCase();
   const current = readWatchlist(storage);
-  if (!SYMBOL_PATTERN.test(normalizedSymbol)) return current;
+  if (!SYMBOL_PATTERN.test(normalizedSymbol)) {
+    return { items: current, changed: false, valid: false, persisted: false };
+  }
+  const changed = current.some((item) => item.symbol === normalizedSymbol);
   const items = current.map((item) => item.symbol === normalizedSymbol
     ? { ...item, name: normalizeName(name, normalizedSymbol), updated_at: String(updatedAt || new Date().toISOString()) }
     : item);
-  writeRecords(storage, items);
-  return items;
+  const persisted = writeRecords(storage, items);
+  return { items, changed, valid: true, persisted };
 }
 
 export function removeWatchlistSymbol(symbol, storage) {
   const normalizedSymbol = String(symbol ?? "").trim().toUpperCase();
   const current = readWatchlist(storage);
+  if (!SYMBOL_PATTERN.test(normalizedSymbol)) {
+    return { items: current, removed: false, valid: false, persisted: false };
+  }
   const items = current.filter((item) => item.symbol !== normalizedSymbol);
-  writeRecords(storage, items);
-  return items;
+  const removed = items.length !== current.length;
+  const persisted = writeRecords(storage, items);
+  return { items, removed, valid: true, persisted };
 }

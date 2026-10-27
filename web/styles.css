@@ -519,6 +519,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .watchlist-action-muted { color: var(--text-dim); border-color: var(--border-soft); background: transparent; }
 .watchlist-feedback { margin: 0 0 10px; color: var(--text-dim); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 .watchlist-feedback-error { color: var(--negative); }
+.watchlist-feedback-warning { color: var(--warning); }
 @media (max-width: 800px) {
   .watchlist-list { grid-template-columns: minmax(0, 1fr); }
 }
@@ -952,6 +953,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 :root[data-theme="light"] .text-button, :root[data-theme="light"] .recent-analysis-item-status,
 :root[data-theme="light"] .watchlist-feedback, :root[data-theme="light"] .supplemental-context,
 :root[data-theme="light"] .supplemental-feedback, :root[data-theme="light"] .supplemental-reasons { color: var(--text-dim); }
+:root[data-theme="light"] .watchlist-feedback-warning { color: var(--warning); }
 :root[data-theme="light"] .text-button { color: var(--accent); }
 :root[data-theme="light"] .source-state-on, :root[data-theme="light"] .mini-quality-valid { color: #08765e; background: #e3f6ef; }
 :root[data-theme="light"] .source-state-off, :root[data-theme="light"] .mini-quality-unknown { color: #607383; background: #eef2f5; }
