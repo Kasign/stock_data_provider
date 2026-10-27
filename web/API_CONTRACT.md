@@ -354,3 +354,36 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 5. 只有真实部署确认路由已注册后，才把对应视图从 supported=false 切换到实际 API 能力；不能只因 mock/fixture 或静态断言存在就启用按钮。
 
 以上均为后续契约需求，不扩大当前 WebUI PR 的后端变更范围。
+
+
+## 2026-10-27 产品排版与新增数据需求登记
+
+本轮新的页面结构见 [UI_LAYOUT_PLAN.md](./UI_LAYOUT_PLAN.md)；当前未实现数据能力与后端诊断需求以 [DATA_CAPABILITY_GAPS.md](./DATA_CAPABILITY_GAPS.md) 为集中登记入口。
+
+下面是需求登记，**不代表路由已实现**：
+- 市场情绪历史快照与按交易日/时间范围查询；
+- 市场级资金净流入，以及板块级资金净流入；
+- 板块成交额排行的完整候选/排序/分页、板块近 5 日表现；
+- 通用全球指数目录/实时快照、币种、时区和交易日语义；
+- 面向研究列表的批量股票概览与统一 MA/成交活跃度字段；
+- 逐服务依赖、Provider 和 capability 的真实探测与最近结果。
+
+### 服务状态与 Provider 巡检（设计草案）
+
+现有实际接口：
+- 行情服务：`GET /health/live`、`GET /health/ready`、`GET /api/v1/data-sources`。
+- 分析服务：`GET /healthz`、`GET /readyz`；ready 响应可返回 MariaDB 和 Redis 的依赖状态。
+- `/api/v1/data-sources` 是 Provider 配置/能力清单，不是实时上游健康检测。
+
+为数据中心的“立即检查”后续设计一组受保护的诊断操作和最近结果读取能力。每条探测需要返回 service/dependency/provider/capability、状态、checked_at、耗时、安全错误摘要、最近成功时间（存在可信记录时）、source/version 和数据质量。Provider 的不同 capability 必须分别探测，不能因为行情接口成功就推断该 Provider 的公告、财务或资金流也正常。
+
+诊断操作必须限制并发、单项/总超时和频率；不能允许浏览器传入任意 URL、直连 MariaDB/Redis 或暴露密钥/Cookie/内部敏感地址。若分析服务不可达且无其他独立证据，数据库/Redis 状态显示 unknown，而不是推断为故障。以上均为需求草案，需先实现 Handler、模型/OpenAPI 与安全边界，再由 WebUI 接入。
+
+### 市场总览新增指标（设计草案）
+
+- 市场广度 `total_amount_cny` 与板块 `amount` 代表成交额，不等于资金净流入。
+- 市场情绪原始指标必须定义分子/分母、覆盖范围、交易日/采集时间及缺失语义。历史图表需要定时持久化快照，当前快照不得重复用作历史。
+- 板块多维排名需要明确维度、排序方向、完整候选集/总数、分页、报告日期、来源及质量；近 5 日表现依赖稳定的板块标识和历史数据。
+- 全球行情需要资产标识、交易所/市场、币种、时区、交易时段、当地交易日期、行情时间、延迟说明与质量。
+- 个股概览批量 API 需要明确证券集合/分页、批量字段、MA 算法版本、日 K 复权口径、最后有效交易日和逐标的质量状态。
+
