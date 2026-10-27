@@ -107,7 +107,18 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			} else if cached.QualityStatus == model.QualityUnknown {
 				ttl = 10 * time.Second
 			}
-			if time.Since(cached.FetchedAt) < ttl {
+			cacheEligible := len(cached.Items) > 0
+			if len(cached.Items) == 0 {
+				fallbackExhausted := false
+				for _, reason := range cached.QualityReasons {
+					if reason == "hot_ranking_fallback_exhausted_without_confirmed_data" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				cacheEligible = fallbackExhausted || len(s.hotRankingProviders) <= 1
+			}
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
 		}
@@ -118,6 +129,7 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 		return nil, false, errors.New("no enabled hot-ranking provider")
 	}
 	var failures []string
+	var unknownEmpty *model.HotRankingSnapshot
 	for _, p := range s.hotRankingProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -127,8 +139,14 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
-		if err := validateHotRankingSnapshot(rankingType, snapshot); err != nil {
+		if err := validateHotRankingSnapshot(rankingType, &snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if len(snapshot.Items) == 0 {
+			// 空榜只代表当前源无法确认排行结果，不应阻断后续来源。
+			unknownEmpty = snapshot
+			failures = append(failures, p.Name()+": hot-ranking result is empty and cannot be confirmed")
 			continue
 		}
 		encoded, encodeErr := json.Marshal(snapshot)
@@ -136,8 +154,6 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			ttl := 90 * time.Second
 			if snapshot.QualityStatus == model.QualityDegraded {
 				ttl = 30 * time.Second
-			} else if snapshot.QualityStatus == model.QualityUnknown {
-				ttl = 10 * time.Second
 			}
 			if cacheErr := s.cache.Set(ctx, key, encoded, ttl); cacheErr != nil {
 				s.logger.Warn("hot-ranking cache write failed", "type", rankingType, "error", cacheErr)
@@ -146,6 +162,16 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			s.logger.Warn("hot-ranking cache encode failed", "type", rankingType, "error", encodeErr)
 		}
 		return snapshot, false, nil
+	}
+	if unknownEmpty != nil {
+		unknownEmpty.QualityStatus = model.QualityUnknown
+		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "hot_ranking_fallback_exhausted_without_confirmed_data")
+		if encoded, encodeErr := json.Marshal(unknownEmpty); encodeErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, encoded, 10*time.Second); cacheErr != nil {
+				s.logger.Warn("hot-ranking unknown cache write failed", "type", rankingType, "error", cacheErr)
+			}
+		}
+		return unknownEmpty, false, nil
 	}
 	return nil, false, fmt.Errorf("all hot-ranking providers failed: %s", strings.Join(failures, "; "))
 }
