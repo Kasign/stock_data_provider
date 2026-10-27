@@ -64,7 +64,7 @@ function probe(fn, settings, timeoutMs = 6000) {
 function probeState(result, ready = false) {
   if (!result?.ok) return result?.timedOut ? "timeout" : "failed";
   const raw = String(result.data?.status || "").toLowerCase();
-  if (!raw || ["ok", "ready", "healthy"].includes(raw)) return "healthy";
+  if (!raw || ["ok", "ready", "healthy", "alive", "running"].includes(raw)) return "healthy";
   if (ready && ["degraded", "partial"].includes(raw)) return "degraded";
   return "degraded";
 }
@@ -251,8 +251,8 @@ export function bindDataCenter(getSettings) {
       const healthyDependencies = dependencyStates.filter((status) => status === "healthy").length;
       const failedDependencies = dependencyStates.filter((status) => status === "failed").length;
       const unknownDependencies = dependencyStates.filter((status) => status === "unknown").length;
-      const unknown = unknownDependencies + (!sources.ok ? 1 : 0);
-      const failed = failedServices + failedDependencies + degradedServices;
+      const unknown = unknownDependencies + (sources.skipped ? 1 : 0);
+      const failed = failedServices + failedDependencies + degradedServices + (!sources.ok && !sources.skipped ? 1 : 0);
       setText("#data-center-count-healthy", healthyServices + healthyDependencies);
       setText("#data-center-count-failed", failed);
       setText("#data-center-count-unknown", unknown);
