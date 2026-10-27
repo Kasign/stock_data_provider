@@ -308,7 +308,6 @@ func TestFetchStockAnnouncementsPreservesPublicationSemantics(t *testing.T) {
 	}
 }
 
-
 func TestFetchStockBundleBuildsDragonTigerSummaryWithQualityBoundary(t *testing.T) {
 	loc := time.FixedZone("CST", 8*60*60)
 	recentDate := time.Now().In(loc).AddDate(0, 0, -1).Format("2006-01-02")

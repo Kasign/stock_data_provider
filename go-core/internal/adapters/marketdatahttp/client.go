@@ -368,8 +368,8 @@ type stockAuxResult struct {
 	fundamentals   map[string]any
 	boards         []map[string]any
 	chip           *domain.ChipDistribution
-	capitalFlow   map[string]any
-	dragonTiger   map[string]any
+	capitalFlow    map[string]any
+	dragonTiger    map[string]any
 }
 
 func (c *Client) FetchStockBundle(ctx context.Context, code string, lookback int, asOf string) (domain.StockBundle, error) {
@@ -714,17 +714,26 @@ func (c *Client) fetchDragonTigerSummary(ctx context.Context, code string, bars 
 			hasIncompleteCoverage = true
 			summaryReasons = appendUniqueWarning(summaryReasons, "dragon_tiger_mixed_provider_sources")
 		}
-		if dateResult.fetchedAt.After(newestFetch) { newestFetch = dateResult.fetchedAt }
+		if dateResult.fetchedAt.After(newestFetch) {
+			newestFetch = dateResult.fetchedAt
+		}
 		for _, reason := range dateResult.qualityReasons {
 			summaryReasons = appendUniqueWarning(summaryReasons, reason)
 		}
 		matched := false
 		for _, item := range dateResult.items {
 			symbol := item.Symbol
-			if strings.TrimSpace(symbol) == "" { symbol = item.Code }
-			if sameStockCode(code, symbol) { matched = true; break }
+			if strings.TrimSpace(symbol) == "" {
+				symbol = item.Code
+			}
+			if sameStockCode(code, symbol) {
+				matched = true
+				break
+			}
 		}
-		if matched { matchedDates[dateResult.date] = struct{}{} }
+		if matched {
+			matchedDates[dateResult.date] = struct{}{}
+		}
 		if dateResult.complete && len(dateResult.items) > 0 {
 			coveredDates++
 		} else {
@@ -747,7 +756,11 @@ func (c *Client) fetchDragonTigerSummary(ctx context.Context, code string, bars 
 		summaryReasons = appendUniqueWarning(summaryReasons, "dragon_tiger_lookback_coverage_incomplete")
 	}
 	latestMatchDate := ""
-	for date := range matchedDates { if date > latestMatchDate { latestMatchDate = date } }
+	for date := range matchedDates {
+		if date > latestMatchDate {
+			latestMatchDate = date
+		}
+	}
 	qualityStatus := "unknown"
 	if coveredDates > 0 || len(matchedDates) > 0 {
 		qualityStatus = "degraded"
@@ -764,9 +777,15 @@ func (c *Client) fetchDragonTigerSummary(ctx context.Context, code string, bars 
 		"quality_status": qualityStatus, "quality_reasons": summaryReasons,
 		"source": source, "source_version": sourceVersion,
 	}
-	if !newestFetch.IsZero() { summary["fetched_at"] = newestFetch }
-	if latestIsOnList != nil { summary["is_on_list"] = *latestIsOnList }
-	if latestMatchDate != "" { summary["latest_date"] = latestMatchDate }
+	if !newestFetch.IsZero() {
+		summary["fetched_at"] = newestFetch
+	}
+	if latestIsOnList != nil {
+		summary["is_on_list"] = *latestIsOnList
+	}
+	if latestMatchDate != "" {
+		summary["latest_date"] = latestMatchDate
+	}
 	result.dragonTiger = summary
 	result.source, result.qualityStatus, result.qualityReasons = source, qualityStatus, summaryReasons
 	if qualityStatus == "unknown" {
@@ -779,19 +798,29 @@ func (c *Client) fetchDragonTigerSummary(ctx context.Context, code string, bars 
 
 func recentDragonTigerDates(bars []domain.DailyBar, limit int) []string {
 	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
 	today := time.Now().In(loc).Format("2006-01-02")
 	seen := make(map[string]struct{}, len(bars))
 	dates := make([]string, 0, len(bars))
 	for _, bar := range bars {
-		if bar.IsPartial || len(bar.Date) != 10 || bar.Date > today { continue }
-		if _, err := time.Parse("2006-01-02", bar.Date); err != nil { continue }
-		if _, exists := seen[bar.Date]; exists { continue }
+		if bar.IsPartial || len(bar.Date) != 10 || bar.Date > today {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", bar.Date); err != nil {
+			continue
+		}
+		if _, exists := seen[bar.Date]; exists {
+			continue
+		}
 		seen[bar.Date] = struct{}{}
 		dates = append(dates, bar.Date)
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
-	if limit > 0 && len(dates) > limit { dates = dates[:limit] }
+	if limit > 0 && len(dates) > limit {
+		dates = dates[:limit]
+	}
 	return dates
 }
 

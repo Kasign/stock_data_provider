@@ -224,7 +224,6 @@ func TestLegacyContextNullsMixedAdjustmentBasisPriceRows(t *testing.T) {
 	}
 }
 
-
 func TestToLegacyAnalyzerContextPassesThroughDragonTigerSummary(t *testing.T) {
 	summary := map[string]any{
 		"is_on_list": true, "recent_count": 2, "latest_date": "2026-10-26",
