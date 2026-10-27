@@ -122,6 +122,7 @@ go vet ./...
 ### Tushare 国内数据域扩展（2026-10-26，待统一验收）
 
 本轮在现有日 K Provider 基础上，新增 Go 原生 StockBasicProvider、TradingCalendarProvider、FundamentalsProvider 和 ValuationProvider。能力复用现有 Provider 注册、数据服务缓存与契约校验，不引入 Python 运行时依赖。
+日 K 响应也会拒绝空字段名和重复列名，避免供应商返回表头变化后发生列索引覆盖和字段错读；对应回归源码已补充，仍待统一执行。
 StockBasic 只接受 A 股普通股票代码；未知或缺失的上游市场分类直接拒绝，不再默认归类为“主板股票”，避免将 ETF/基金等非目标证券误报为普通股票。该防护已补回归测试源码，尚待统一执行。
 
 - 证券基础资料使用 stock_basic，输出名称、行业、市场、上市/退市日期与上市状态；不会从该端点臆造 PE/PB、市值或完整公司资料。

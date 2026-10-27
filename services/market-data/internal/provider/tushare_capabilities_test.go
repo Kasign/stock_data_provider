@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
 type tushareIndexWeightRequest struct {
@@ -27,6 +30,31 @@ func tushareTestMonthWindow(now time.Time, offset int) (string, string) {
 	first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, -offset, 0)
 	last := first.AddDate(0, 1, -1)
 	return first.Format("20060102"), last.Format("20060102")
+}
+
+func TestTushareDailyRejectsEmptyOrDuplicateFieldNames(t *testing.T) {
+	cases := []struct {
+		name   string
+		fields []string
+		want   string
+	}{
+		{name: "empty field name", fields: []string{"ts_code", "", "trade_date"}, want: "empty field name"},
+		{name: "duplicate field name", fields: []string{"ts_code", "trade_date", "ts_code"}, want: "duplicate field"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeTushareTestTable(w, tc.fields, [][]any{})
+			}))
+			defer server.Close()
+
+			provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+			_, err := provider.FetchDailyBars(context.Background(), "600519.SH", "2026-10-26", "2026-10-26", 10, model.AdjustmentNone)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("invalid Tushare response field table should be rejected, got %v", err)
+			}
+		})
+	}
 }
 
 func TestTushareIndexConstituentsQueriesOnlyNewestAvailableMonth(t *testing.T) {
