@@ -291,3 +291,25 @@ X-API-Key: <由现有设置提供>
 - `styles.css` 仍包含多阶段叠加的响应式规则与部分压缩书写块。后续应先确定 token/组件区块边界，再合并重复断点；本轮避免大面积选择器迁移，降低回归风险。
 
 源码 Review 后的视口和人工验收清单见 [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md)。本说明不代表已执行真实浏览器或 NAS 部署验收。
+
+
+## 7. 2026-10-27 页面职责与运行流布局
+
+### 页面职责
+
+- `market-view`：首页只保留市场核心指数和市场涨跌分布，快捷入口进入市场榜单、个股查询、自选股及分析任务。
+- `market-data-view`：行业/概念排行、涨跌停池、人气/飙升榜以及龙虎榜和交易日历。
+- `stocks-view`：股票名称/代码搜索、实时行情、日 K、指标、历史日 K 与 Provider 能力。
+- `watchlist-view`：只读写当前浏览器 localStorage 的本地自选股列表；它不是服务器持久列表。
+- `research-view`：公司档案、板块、财务、估值、筹码、资金流和公告。
+- `tasks-view`：异步任务与运行流；其余未接入 API 的页面仍显示能力边界。
+
+### 按当前视图刷新
+
+`bindMarketOverview.refresh(keys, statusSelector)` 支持按模块范围刷新：首页只查询 `indices/breadth`；市场数据页查询 `sectors/pool/hot`。原无参数 `refresh()` 仍可刷新全模块，用于显式批量刷新。各模块保留独立 AbortController/generation。
+
+### Run Flow 交互
+
+参考 [daily_stock_analysis 的 RunFlowPanel](https://github.com/Kasign/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowPanel.tsx)、[RunFlowSummaryBar](https://github.com/Kasign/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowSummaryBar.tsx) 和 [RunFlowEventList](https://github.com/Kasign/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowEventList.tsx) 的信息层级：顶部摘要、可筛选阶段列表、选中事件详情分别占据不同区域。当前项目的弹窗改为近全屏工作区，桌面端并排展示阶段时间线与详情，窄屏纵向排列。
+
+当前后端不提供可验证的 DAG 拓扑快照，所以只复用布局/交互，不复刻图节点与边。事件列表及选中详情只渲染真实阶段事件中的状态、阶段、时间、错误码和原始 JSON；事件缺失时明确展示空态。真实浏览器验收仍未完成。

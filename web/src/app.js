@@ -161,6 +161,7 @@ function setText(selector, value) {
 function selectStockFromMarket(item, source = "市场榜单") {
   const symbol = String(item?.symbol || "").trim();
   if (!symbol) return;
+  setView("stocks");
   $("#symbol-input").value = symbol;
   state.selectedStockSearchItem = { symbol, name: item.name || symbol };
   cancelStockSearchRequest();
@@ -491,7 +492,7 @@ function handleWatchlistAction(event) {
 
   if (action === "query") {
     $("#symbol-input").value = symbol;
-    setView("market");
+    setView("stocks");
     void runQuoteQuery();
     return;
   }
@@ -503,7 +504,7 @@ function fillTaskSymbolsFromWatchlist() {
   const help = $("#task-symbol-help");
   const records = safeReadWatchlist();
   if (!records.length) {
-    help.textContent = "当前没有可载入的本地自选股，请先在行情页添加股票。";
+    help.textContent = "当前没有可载入的本地自选股，请先在自选股页添加股票。";
     return;
   }
 
@@ -916,7 +917,11 @@ function getQuerySymbol() {
 
 const VIEW_META = Object.freeze({
   market: { title: "行情总览" },
-  tasks: { title: "任务与运行流" },
+  "market-data": { title: "市场数据" },
+  stocks: { title: "个股查询" },
+  watchlist: { title: "自选股" },
+  research: { title: "个股研究" },
+  tasks: { title: "分析任务" },
   notifications: { title: "通知中心" },
   chat: { title: "问股工作台" },
   screening: { title: "条件选股" },
@@ -925,34 +930,17 @@ const VIEW_META = Object.freeze({
 });
 
 const REFRESH_BUTTON_CONTEXT = Object.freeze({
-  market: {
-    label: "刷新当前行情数据",
-    title: "刷新市场概况、龙虎榜与交易日历、Provider 和当前个股行情。"
-  },
-  tasks: {
-    label: "刷新任务与连接状态",
-    title: "重新检查服务连接；若已选择任务，则重新读取任务状态与阶段事件。"
-  },
-  notifications: {
-    label: "检查服务连接（通知接口待接入）",
-    title: "通知中心 API 尚未接入；此操作只刷新行情与分析服务连接状态。"
-  },
-  chat: {
-    label: "检查服务连接（问股接口待接入）",
-    title: "问股 API 尚未接入；此操作只刷新行情与分析服务连接状态。"
-  },
-  screening: {
-    label: "检查服务连接（选股接口待接入）",
-    title: "选股任务与候选 API 尚未接入；此操作只刷新行情与分析服务连接状态。"
-  },
-  alerts: {
-    label: "检查服务连接（告警接口待接入）",
-    title: "告警规则与触发记录 API 尚未接入；此操作只刷新行情与分析服务连接状态。"
-  },
-  settings: {
-    label: "检查服务连接",
-    title: "重新检查已保存的行情/分析服务地址；未保存的地址请使用设置表单中的“检查连接”。"
-  }
+  market: { label: "刷新大盘摘要", title: "刷新核心指数与市场涨跌分布。市场榜单、龙虎榜和个股研究位于独立页面。" },
+  "market-data": { label: "刷新市场数据", title: "刷新行业/概念排行、涨跌停池、人气/飙升榜以及龙虎榜和交易日历。" },
+  stocks: { label: "重新查询个股行情", title: "使用当前输入的股票代码、日 K 数量、复权口径和日期范围重新查询。" },
+  watchlist: { label: "刷新自选股列表", title: "重新读取当前浏览器本地保存的自选股，不会向服务器同步列表。" },
+  research: { label: "刷新个股研究", title: "检查服务连接并重新加载当前标的的公司资料、财务、筹码与资金流。" },
+  tasks: { label: "刷新任务与连接状态", title: "重新检查服务连接；若已选择任务，则重新读取任务状态与阶段事件。" },
+  notifications: { label: "检查服务连接（通知接口待接入）", title: "通知中心 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  chat: { label: "检查服务连接（问股接口待接入）", title: "问股 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  screening: { label: "检查服务连接（选股接口待接入）", title: "选股任务与候选 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  alerts: { label: "检查服务连接（告警接口待接入）", title: "告警规则与触发记录 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  settings: { label: "检查服务连接", title: "重新检查已保存的行情/分析服务地址；未保存的地址请使用设置表单中的“检查连接”。" }
 });
 
 function syncRefreshButtonContext() {
@@ -963,13 +951,20 @@ function syncRefreshButtonContext() {
   button.title = context.title;
 }
 
-function setView(view, { updateHash = true } = {}) {
+function setView(view, { updateHash = true, refreshData = true } = {}) {
   const nextView = Object.hasOwn(VIEW_META, view) ? view : "market";
   const previousView = state.view;
   state.view = nextView;
   syncRefreshButtonContext();
-  if (nextView === "market" && previousView !== "market") void marketOverview.refresh();
-  if (nextView === "market" && previousView !== "market") void marketActivity.refresh();
+  if (refreshData && previousView !== nextView) {
+    if (nextView === "market") void marketOverview.refresh(["indices", "breadth"]);
+    else if (nextView === "market-data") {
+      void marketOverview.refresh(["sectors", "pool", "hot"], "#market-data-updated");
+      void marketActivity.refresh();
+    } else if (nextView === "stocks") void refreshSources();
+    else if (nextView === "watchlist") renderWatchlist();
+    else if (nextView === "research") stockResearch.syncSymbol();
+  }
   if (nextView === "chat") syncChatStockContextFromMarket();
   const runFlowDialog = $("#run-flow-dialog");
   if (nextView !== "tasks" && runFlowDialog?.open) runFlowDialog.close();
@@ -2862,10 +2857,14 @@ function applySettings(nextSettings) {
   initialConnectionDraft = null;
   $("#settings-dialog").close();
   void refreshServices();
-  void refreshSources();
-  void marketOverview.refresh();
-  void marketActivity.refresh();
-  if (state.view === "market" && state.settings.apiKey) void runQuoteQuery();
+  if (state.view === "market") void marketOverview.refresh(["indices", "breadth"]);
+  else if (state.view === "market-data") {
+    void marketOverview.refresh(["sectors", "pool", "hot"], "#market-data-updated");
+    void marketActivity.refresh();
+  } else if (state.view === "stocks") {
+    void refreshSources();
+    if (state.settings.apiKey) void runQuoteQuery();
+  }
 }
 
 function saveSettingsFromForm() {
@@ -2917,18 +2916,23 @@ window.addEventListener("hashchange", () => {
 
 const pageJumpButtons = Array.from(document.querySelectorAll(".page-jump-button[data-scroll-target]"));
 const pageJumpTargets = pageJumpButtons
-  .filter((button) => button.dataset.scrollTarget !== "market-view")
   .map((button) => ({ button, target: document.getElementById(button.dataset.scrollTarget) }))
-  .filter(({ target }) => target && target.closest("#market-view"));
+  .filter(({ target }) => target && target.closest(".view") && !target.classList.contains("view"));
 
 function syncPageJumpLocation() {
-  if (state.view !== "market" || pageJumpTargets.length === 0) return;
+  const currentViewId = state.view + "-view";
+  const currentTargets = pageJumpTargets.filter(({ target }) => target.closest(".view")?.id === currentViewId);
+  if (!currentTargets.length) return;
   let activeButton = null;
-  for (const entry of pageJumpTargets) {
+  for (const entry of currentTargets) {
     if (entry.target.getBoundingClientRect().top <= 150) activeButton = entry.button;
     else break;
   }
-  if (!activeButton && window.scrollY < 250) activeButton = pageJumpButtons[0];
+  if (!activeButton && window.scrollY < 250) {
+    activeButton = pageJumpButtons.find((button) =>
+      button.closest(".view")?.id === currentViewId && button.dataset.scrollTarget === currentViewId
+    ) || currentTargets[0].button;
+  }
   pageJumpButtons.forEach((button) => {
     const active = button === activeButton;
     button.classList.toggle("is-active", active);
@@ -2936,25 +2940,18 @@ function syncPageJumpLocation() {
     else button.removeAttribute("aria-current");
   });
 }
-
 pageJumpButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const target = document.getElementById(button.dataset.scrollTarget);
-    if (!target || (target.id !== "market-view" && !target.closest("#market-view"))) return;
+    if (!target || target.closest(".view")?.id !== state.view + "-view") return;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-    const heading = target.matches("h1, h2, h3, .panel-kicker")
-      ? target
-      : target.querySelector("h1, h2, h3, .panel-kicker");
-    if (heading) {
-      heading.setAttribute("tabindex", "-1");
-      heading.focus({ preventScroll: true });
-    }
+    const heading = target.matches("h1, h2, h3, .panel-kicker") ? target : target.querySelector("h1, h2, h3, .panel-kicker");
+    if (heading) { heading.setAttribute("tabindex", "-1"); heading.focus({ preventScroll: true }); }
     syncPageJumpLocation();
   });
 });
-window.addEventListener("scroll", syncPageJumpLocation, { passive: true });
-$("#topbar-notifications").addEventListener("click", () => setView("notifications"));
+window.addEventListener("scroll", syncPageJumpLocation, { passive: true });$("#topbar-notifications").addEventListener("click", () => setView("notifications"));
 $("#chat-clear-context").addEventListener("click", () => {
   state.chatStockContext = null;
   renderChatStockContext();
@@ -2992,6 +2989,12 @@ document.querySelectorAll("[data-theme-value]").forEach((button) => {
 document.querySelectorAll(".nav-link").forEach((button) => {
   button.addEventListener("click", () => {
     setView(button.dataset.view);
+    setMobileNavigationOpen(false);
+  });
+});
+document.querySelectorAll("[data-open-view]").forEach((button) => {
+  button.addEventListener("click", () => {
+    setView(button.dataset.openView);
     setMobileNavigationOpen(false);
   });
 });
@@ -3087,17 +3090,22 @@ $("#refresh-button").addEventListener("click", async () => {
   button.title = "正在刷新当前页面…";
   try {
     await refreshServices();
-    if (state.view === "market") {
-      await refreshSources();
-      await marketOverview.refresh();
+    if (state.view === "market") await marketOverview.refresh(["indices", "breadth"]);
+    else if (state.view === "market-data") {
+      await marketOverview.refresh(["sectors", "pool", "hot"], "#market-data-updated");
       await marketActivity.refresh();
+    } else if (state.view === "stocks") {
+      await refreshSources();
       if (state.settings.apiKey) await runQuoteQuery();
+    } else if (state.view === "watchlist") renderWatchlist();
+    else if (state.view === "research") {
+      $("#load-supplemental-button").click();
+      $("#load-stock-research").click();
     } else if (state.view === "tasks" && state.taskId) {
       stopTaskPolling();
       const generation = state.pollGeneration;
       await pollTask(generation);
     }
-    // 其他页面尚无可刷新资源 API；按钮文案已明确说明本次只检查服务连接。
   } finally {
     button.disabled = false;
     button.removeAttribute("aria-busy");
@@ -3254,15 +3262,18 @@ renderRecentTasks();
 renderWatchlist();
 configureDateInputs();
 resetSupplementPanel("");
-setView(window.location.hash.slice(1), { updateHash: false });
+setView(window.location.hash.slice(1), { updateHash: false, refreshData: false });
 syncSettingsThemeButtons(readTheme());
 void refreshServices();
-void refreshSources();
-void marketOverview.refresh();
-void marketActivity.refresh();
 const restoredTask = restoreLastTask();
-if (!restoredTask && state.settings.apiKey) {
-  void runQuoteQuery();
-} else if (!restoredTask) {
-  setText("#query-hint", "尚未配置行情 API Key。点击右上角设置按钮后填写 MARKET_DATA_API_KEY。");
+if (!restoredTask) {
+  if (state.view === "market") void marketOverview.refresh(["indices", "breadth"]);
+  else if (state.view === "market-data") {
+    void marketOverview.refresh(["sectors", "pool", "hot"], "#market-data-updated");
+    void marketActivity.refresh();
+  } else if (state.view === "stocks") {
+    void refreshSources();
+    if (state.settings.apiKey) void runQuoteQuery();
+    else setText("#query-hint", "尚未配置行情 API Key。点击右上角设置按钮后填写 MARKET_DATA_API_KEY。");
+  } else if (state.view === "research") stockResearch.syncSymbol();
 }
