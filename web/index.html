@@ -109,15 +109,7 @@
               <section class="market-overview-widget" aria-labelledby="market-limit-pools-title"><div class="market-overview-widget-heading"><div><h3 id="market-limit-pools-title">涨跌停池</h3><p>未知池状态不会解释为 0 只股票。</p></div><span id="market-pool-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-overview-tabs" role="group" aria-label="涨跌停池类别"><button type="button" data-pool-type="up" aria-pressed="true">涨停</button><button type="button" data-pool-type="down" aria-pressed="false">跌停</button><button type="button" data-pool-type="broken" aria-pressed="false">炸板</button></div><div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>股票</th><th>涨跌幅</th><th>连板</th><th>首封 / 末封</th><th>行业</th></tr></thead><tbody id="market-pool-body"><tr><td colspan="5" class="table-empty">等待涨跌停池。</td></tr></tbody></table></div><p class="market-widget-meta" id="market-pool-meta"></p><details class="market-quality-reasons" id="market-pool-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
               <section class="market-overview-widget market-hot-stocks-widget" aria-labelledby="market-hot-stocks-title"><div class="market-overview-widget-heading"><div><h3 id="market-hot-stocks-title">个股人气与飙升榜</h3><p>按 Provider 排名展示；采集时间不等于上游行情快照时间，排名本身不构成投资建议。</p></div><span id="market-hot-stocks-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-overview-tabs" role="group" aria-label="个股人气排行类别"><button type="button" data-hot-type="popular" aria-pressed="true">人气榜</button><button type="button" data-hot-type="surge" aria-pressed="false">飙升榜</button></div><div class="table-scroll market-overview-table-scroll market-hot-stocks-table"><table><thead><tr><th>排名</th><th>股票</th><th>最新价 / 涨跌额</th><th>涨跌幅</th><th>源端排名变化</th></tr></thead><tbody id="market-hot-stocks-body"><tr><td colspan="5" class="table-empty">等待个股人气榜。</td></tr></tbody></table></div><p class="market-widget-meta" id="market-hot-stocks-meta"></p><details class="market-quality-reasons" id="market-hot-stocks-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
             </div></section>
-                    <section class="panel market-extension-panel market-global-panel" id="global-market-panel" aria-labelledby="global-market-title">
-            <div class="panel-heading"><div><h2 id="global-market-title">全球市场联动</h2><p>用于观察主要海外指数及宏观资产的关联表现；国内 A 股核心行情优先。</p></div><span class="availability-pill is-unavailable">数据源待确认</span></div>
-            <div class="market-global-grid">
-              <article class="market-global-placeholder"><strong>亚太市场</strong><span>恒生、日经等指数 · 接口待接入</span></article>
-              <article class="market-global-placeholder"><strong>美国市场</strong><span>标普 500、纳斯达克等指数 · 接口待接入</span></article>
-              <article class="market-global-placeholder"><strong>宏观资产</strong><span>美元、黄金、原油等 · 视数据源支持情况决定</span></article>
-            </div>
-            <p class="market-widget-meta">正式接入后需同时显示当地交易日期、时区、币种、源端报价时间、采集时间和质量状态；不将不同时段的行情直接作同一时点比较。</p>
-          </section>
+                    
           <section class="panel market-activity-panel" id="market-activity-panel" aria-labelledby="market-activity-title">
             <div class="panel-heading"><div><h2 id="market-activity-title">市场活动与交易日历</h2><p>使用后端龙虎榜与显式交易日历。龙虎榜盘后数据可能延迟发布；交易日不通过星期规则推算。</p></div><span class="soft-badge">真实数据接口</span></div>
             <div class="market-activity-grid">
@@ -141,6 +133,16 @@
               </section>
             </div>
           </section>
+<section class="panel market-extension-panel market-global-panel" id="global-market-panel" aria-labelledby="global-market-title">
+            <div class="panel-heading"><div><h2 id="global-market-title">全球市场联动</h2><p>用于观察主要海外指数及宏观资产的关联表现；国内 A 股核心行情优先。</p></div><span class="availability-pill is-unavailable">数据源待确认</span></div>
+            <div class="market-global-grid">
+              <article class="market-global-placeholder"><strong>亚太市场</strong><span>恒生、日经等指数 · 接口待接入</span></article>
+              <article class="market-global-placeholder"><strong>美国市场</strong><span>标普 500、纳斯达克等指数 · 接口待接入</span></article>
+              <article class="market-global-placeholder"><strong>宏观资产</strong><span>美元、黄金、原油等 · 视数据源支持情况决定</span></article>
+            </div>
+            <p class="market-widget-meta">正式接入后需同时显示当地交易日期、时区、币种、源端报价时间、采集时间和质量状态；不将不同时段的行情直接作同一时点比较。</p>
+          </section>
+
         </section>
 
 
