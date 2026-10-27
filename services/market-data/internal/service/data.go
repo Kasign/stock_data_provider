@@ -1254,15 +1254,100 @@ func (s *DataService) SupplementProviders() []provider.SupplementProvider {
 	return append([]provider.SupplementProvider(nil), s.supplementProviders...)
 }
 
+func validateChipDistributionSnapshot(symbol string, item *model.ChipDistribution) error {
+	if item == nil {
+		return errors.New("chip-distribution response is empty")
+	}
+	canonical, err := normalize.NormalizeSymbol(item.Symbol)
+	if err != nil || canonical != symbol || item.Symbol != symbol {
+		return errors.New("chip-distribution symbol mismatch")
+	}
+	if item.AverageCost <= 0 || !isFiniteSupplement(item.AverageCost) {
+		return errors.New("chip-distribution average cost is invalid")
+	}
+	for _, value := range []*float64{item.Cost90Low, item.Cost90High, item.Cost70Low, item.Cost70High} {
+		if value != nil && (*value <= 0 || !isFiniteSupplement(*value)) {
+			return errors.New("chip-distribution cost range contains an invalid value")
+		}
+	}
+	if item.Cost90Low != nil && item.Cost90High != nil && *item.Cost90Low > *item.Cost90High {
+		return errors.New("chip-distribution 90% cost range is reversed")
+	}
+	if item.Cost70Low != nil && item.Cost70High != nil && *item.Cost70Low > *item.Cost70High {
+		return errors.New("chip-distribution 70% cost range is reversed")
+	}
+	for _, ratio := range []*float64{item.ProfitRatio, item.Concentration90, item.Concentration70} {
+		if ratio != nil && (!isFiniteSupplement(*ratio) || *ratio < 0 || *ratio > 1) {
+			return errors.New("chip-distribution ratio is outside [0,1]")
+		}
+	}
+	for _, date := range []string{item.Date, item.ProviderDate} {
+		if strings.TrimSpace(date) == "" {
+			continue
+		}
+		parsed, dateErr := time.Parse("2006-01-02", date)
+		if dateErr != nil || parsed.Format("2006-01-02") != date {
+			return errors.New("chip-distribution provider date is invalid")
+		}
+	}
+	if strings.TrimSpace(item.Source) == "" || item.FetchedAt.IsZero() {
+		return errors.New("chip-distribution source or fetched_at is missing")
+	}
+	if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded && item.QualityStatus != model.QualityUnknown {
+		return fmt.Errorf("chip-distribution quality %q is unsupported", item.QualityStatus)
+	}
+	return nil
+}
+
+func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
+	if item == nil {
+		return errors.New("capital-flow response is empty")
+	}
+	canonical, err := normalize.NormalizeSymbol(item.Symbol)
+	if err != nil || canonical != symbol || item.Symbol != symbol {
+		return errors.New("capital-flow symbol mismatch")
+	}
+	if strings.TrimSpace(item.Source) == "" || item.FetchedAt.IsZero() {
+		return errors.New("capital-flow source or fetched_at is missing")
+	}
+	if item.Observations < 0 {
+		return errors.New("capital-flow observation count cannot be negative")
+	}
+	if item.MainNetInflow != nil && item.Observations < 1 {
+		return errors.New("capital-flow main net inflow requires at least one observation")
+	}
+	if item.Inflow5D != nil && item.Observations < 5 {
+		return errors.New("capital-flow five-day sum requires at least five observations")
+	}
+	if item.Inflow10D != nil && item.Observations < 10 {
+		return errors.New("capital-flow ten-day sum requires at least ten observations")
+	}
+	for _, value := range []*float64{item.MainNetInflow, item.Inflow5D, item.Inflow10D} {
+		if value != nil && !isFiniteSupplement(*value) {
+			return errors.New("capital-flow amount is non-finite")
+		}
+	}
+	if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded && item.QualityStatus != model.QualityUnknown {
+		return fmt.Errorf("capital-flow quality %q is unsupported", item.QualityStatus)
+	}
+	return nil
+}
+
 func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*model.ChipDistribution, bool, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, false, err
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	key := "md:v1:chip:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.ChipDistribution
-		if json.Unmarshal(data, &item) == nil && item.Symbol == symbol && item.AverageCost > 0 && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
+		if json.Unmarshal(data, &item) == nil && validateChipDistributionSnapshot(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
 			return &item, true, nil
 		}
 	} else if cacheErr != nil {
@@ -1293,19 +1378,8 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 			continue
 		}
 		itemSymbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
-		if symbolErr != nil || itemSymbol != symbol || item.AverageCost <= 0 || !isFiniteSupplement(item.AverageCost) {
-			failures = append(failures, p.Name()+": chip response failed symbol or average-cost validation")
-			continue
-		}
-		ratioInvalid := false
-		for _, ratio := range []*float64{item.ProfitRatio, item.Concentration90, item.Concentration70} {
-			if ratio != nil && (!isFiniteSupplement(*ratio) || *ratio < 0 || *ratio > 1) {
-				ratioInvalid = true
-				break
-			}
-		}
-		if ratioInvalid {
-			failures = append(failures, p.Name()+": chip response contains a ratio outside [0,1]")
+		if symbolErr != nil || itemSymbol != symbol {
+			failures = append(failures, p.Name()+": chip response symbol mismatch")
 			continue
 		}
 		item.Symbol = symbol
@@ -1319,6 +1393,10 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
+		}
+		if err := validateChipDistributionSnapshot(symbol, item); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
 		}
 		if encoded, encodeErr := json.Marshal(item); encodeErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, encoded, 5*time.Minute); cacheErr != nil {
@@ -1338,10 +1416,16 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 	if err != nil {
 		return nil, false, err
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	key := "md:v1:capital-flow:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.CapitalFlow
-		if json.Unmarshal(data, &item) == nil && item.Symbol == symbol && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
+		if json.Unmarshal(data, &item) == nil && validateCapitalFlowSnapshot(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
 			return &item, true, nil
 		}
 	} else if cacheErr != nil {
@@ -1369,16 +1453,6 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 			failures = append(failures, p.Name()+": capital-flow response symbol mismatch")
 			continue
 		}
-		for _, value := range []*float64{item.MainNetInflow, item.Inflow5D, item.Inflow10D} {
-			if value != nil && !isFiniteSupplement(*value) {
-				symbolErr = errors.New("non-finite capital-flow amount")
-				break
-			}
-		}
-		if symbolErr != nil {
-			failures = append(failures, p.Name()+": capital-flow amount validation failed")
-			continue
-		}
 		item.Symbol = symbol
 		item.Source = p.Name()
 		if strings.TrimSpace(item.SourceVersion) == "" {
@@ -1390,6 +1464,10 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
+		}
+		if err := validateCapitalFlowSnapshot(symbol, item); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
 		}
 		if encoded, encodeErr := json.Marshal(item); encodeErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, encoded, 5*time.Minute); cacheErr != nil {
