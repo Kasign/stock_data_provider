@@ -277,6 +277,26 @@ components:
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
+    StockSearchItem:
+      type: object
+      required: [symbol, code, name, exchange]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string, example: '600519'}
+        name: {type: string, example: 贵州茅台}
+        exchange: {type: string, enum: [SH, SZ, BJ]}
+    StockSearchSnapshot:
+      type: object
+      required: [query, total, items, source, fetched_at, quality_status]
+      properties:
+        query: {type: string}
+        total: {type: integer, minimum: 0, description: Number of matching candidates reported/retained by the selected Provider; not the total number of listed A-share securities}
+        items: {type: array, items: {$ref: '#/components/schemas/StockSearchItem'}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time, description: Time the market-data service fetched the stock directory result; not a quote timestamp}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     StockBasic:
       type: object
       required: [symbol, name, security_type, security_type_label, listing_status, listing_status_label, source, fetched_at, quality_status, normalization_version]
@@ -797,6 +817,27 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DataSourcesResponse'}
         '401': {description: API key required}
+
+  /api/v1/stocks/search:
+    get:
+      summary: 搜索 A 股证券名称或代码
+      description: >-
+        查询已启用的国内证券搜索 Provider。q 支持中文名称、六位代码或带市场后缀的标准代码；
+        limit 控制返回条数，最多 50。结果是证券目录匹配候选，不是实时行情，fetched_at 不代表 quote_time。
+        未知或降级质量必须由调用方按 quality_status 与 quality_reasons 处理。
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 64}, description: Chinese name, six-digit code or normalized symbol}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 50, default: 10}}
+      responses:
+        '200':
+          description: Canonical A-share search candidates
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockSearchSnapshot'}
+        '400': {description: Empty/overlong query or invalid limit}
+        '401': {description: API key required}
+        '502': {description: All stock-search providers failed or returned invalid data}
+        '503': {description: No stock-search provider enabled}
 
   /api/v1/stocks/{symbol}/announcements:
     get:

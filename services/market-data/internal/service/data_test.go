@@ -141,6 +141,28 @@ func TestValidateFundamentalsSnapshotStillRequiresAllSixIndicatorGroups(t *testi
 	}
 }
 
+func TestFundamentalsRejectsFutureReportPeriodBeforeCacheOrProviderLookup(t *testing.T) {
+	now := time.Now().In(marketLocation())
+	today := now.Format("2006-01-02")
+	futureQuarter := 0
+	for quarter := 1; quarter <= 4; quarter++ {
+		if fundamentalPeriodEnd(now.Year(), quarter) > today {
+			futureQuarter = quarter
+			break
+		}
+	}
+	if futureQuarter == 0 {
+		t.Skip("no future report quarter remains in the current calendar year")
+	}
+
+	// 空服务用于确认门禁优先于缓存和 Provider 访问。
+	svc := &DataService{}
+	_, _, err := svc.Fundamentals(context.Background(), "600519.SH", now.Year(), futureQuarter)
+	if err == nil || !strings.Contains(err.Error(), "fundamental report period must not be in the future") {
+		t.Fatalf("future fundamentals period must be rejected before dependencies are accessed, got %v", err)
+	}
+}
+
 func valuationFloatPointerForValidationTest(value float64) *float64 { return &value }
 
 func validValuationSnapshotForValidationTest() *model.ValuationSnapshot {

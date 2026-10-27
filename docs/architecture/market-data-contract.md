@@ -142,3 +142,10 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 
 - `total` 与 `items` 表示规范化后实际返回的成分数量；`provider_returned` 表示来源在去重/名称补全前返回的候选成分条数；`excluded_count` 记录因重复或缺少可核验名称而被排除的候选条数。若 `provider_returned > 0`，必须满足 `provider_returned = total + excluded_count`。
 - 只要 `excluded_count > 0`，快照质量不得为 `valid`。旧缓存或旧 Provider 没有来源覆盖计数时，非空快照降级并附加 `provider_constituent_source_coverage_unreported`。这些字段描述当前来源快照的覆盖情况，并不代表历史成分生效日期已知。
+
+
+## A 股证券名称/代码搜索
+
+- `GET /api/v1/stocks/search?q=贵州茅台&limit=10` 使用已启用的 `StockSearchProvider` 链，当前优先腾讯 Smartbox、再尝试东方财富证券目录；查询长度为 1–64 个字符，返回条数为 1–50，默认 10。
+- `items` 中 `symbol`、`code`、`name` 与 `exchange` 必须一致；搜索结果只是证券目录候选，不应当作实时行情。`fetched_at` 是服务获取目录结果的时间，不是报价时间。
+- 若 Provider 未报告完整候选总量，或搜索结果质量不能确认，响应通过 `quality_status` / `quality_reasons` 显式降级；调用方不得根据搜索结果为空就断言证券不存在。

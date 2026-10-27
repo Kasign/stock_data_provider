@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -64,5 +65,38 @@ func TestFundamentalsRouteRequiresExplicitPeriod(t *testing.T) {
 			!strings.Contains(w.Body.String(), "\"source_field\":\"roeAvg\"")) {
 			t.Fatalf("fundamentals response contract incomplete: %s", w.Body.String())
 		}
+	}
+}
+
+func TestFundamentalsRouteRejectsFutureReportPeriod(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	now := time.Now().In(loc)
+	today := now.Format("2006-01-02")
+	futureQuarter := 0
+	for quarter := 1; quarter <= 4; quarter++ {
+		endDate := time.Date(now.Year(), time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+		if endDate > today {
+			futureQuarter = quarter
+			break
+		}
+	}
+	if futureQuarter == 0 {
+		t.Skip("no future report quarter remains in the current calendar year")
+	}
+
+	p := fundamentalsHTTPProvider{}
+	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{p})
+	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	path := fmt.Sprintf("/api/v1/stocks/600519/fundamentals?year=%d&quarter=%d", now.Year(), futureQuarter)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "fundamental report period must not be in the future") {
+		t.Fatalf("future fundamentals period status=%d body=%s", w.Code, w.Body.String())
 	}
 }

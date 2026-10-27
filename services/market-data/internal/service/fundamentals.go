@@ -133,6 +133,10 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 	if quarter < 1 || quarter > 4 {
 		return nil, false, errors.New("fundamental quarter must be between 1 and 4")
 	}
+	periodEnd := fundamentalPeriodEnd(year, quarter)
+	if periodEnd > time.Now().In(marketLocation()).Format("2006-01-02") {
+		return nil, false, errors.New("fundamental report period must not be in the future")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
