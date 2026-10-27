@@ -46,10 +46,18 @@ func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFo
 				case "000001.SZ":
 					current, previous = 9, 10
 				}
+				name := "测试A股"
+				switch symbol {
+				case "600000.SH":
+					name = "浦发银行"
+				case "000001.SZ":
+					name = "平安银行"
+				case "300001.SZ":
+					name = "创业板样本"
+				}
 				row := map[string]any{
-					"symbol": symbol, "last_price": current, "prev_close": previous,
+					"symbol": symbol, "name": name, "last_price": current, "prev_close": previous,
 					"open": current, "high": current, "low": current, "timestamp": timestamp,
-					"ext": map[string]any{"limit_up": 11.0, "limit_down": 9.0},
 				}
 				if symbol != omitAmountFor {
 					switch symbol {
@@ -120,5 +128,50 @@ func TestTickFlowFetchMarketBreadthDegradesMissingAmount(t *testing.T) {
 	}
 	if !containsTickFlowReason(got.QualityReasons, "provider_amount_missing_or_invalid") {
 		t.Fatalf("missing amount reason is not present: %+v", got.QualityReasons)
+	}
+}
+
+
+func TestTickFlowLimitRatioMatchesAShareRules(t *testing.T) {
+	cases := []struct {
+		name      string
+		symbol    string
+		stockName string
+		wantRatio float64
+		wantKnown bool
+	}{
+		{name: "Beijing new-format code", symbol: "920000.BJ", stockName: "普通股票", wantRatio: 0.30, wantKnown: true},
+		{name: "historical Beijing code", symbol: "830001.BJ", stockName: "普通股票", wantRatio: 0.30, wantKnown: true},
+		{name: "ChiNext", symbol: "300750.SZ", stockName: "普通股票", wantRatio: 0.20, wantKnown: true},
+		{name: "STAR Market", symbol: "688001.SH", stockName: "普通股票", wantRatio: 0.20, wantKnown: true},
+		{name: "ST main board", symbol: "600000.SH", stockName: "*ST示例", wantRatio: 0.05, wantKnown: true},
+		{name: "ordinary main board", symbol: "600000.SH", stockName: "浦发银行", wantRatio: 0.10, wantKnown: true},
+		{name: "main-board name missing", symbol: "600000.SH", stockName: "", wantKnown: false},
+		{name: "B share outside A-share contract", symbol: "900001.SH", stockName: "B股", wantKnown: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, known := tickflowLimitRatio(tc.symbol, tc.stockName)
+			if known != tc.wantKnown {
+				t.Fatalf("tickflowLimitRatio(%q, %q) known=%v, want %v", tc.symbol, tc.stockName, known, tc.wantKnown)
+			}
+			if known && got != tc.wantRatio {
+				t.Fatalf("tickflowLimitRatio(%q, %q)=%v, want %v", tc.symbol, tc.stockName, got, tc.wantRatio)
+			}
+		})
+	}
+}
+
+func TestTickFlowLimitPriceMatchesCentRoundingAndTolerance(t *testing.T) {
+	upper, upperTolerance, upperOK := tickflowLimitPrice(10.05, 0.10, true)
+	if !upperOK || upper != 11.06 || upperTolerance < 0.0049 || upperTolerance > 0.0051 {
+		t.Fatalf("unexpected upper limit calculation: price=%v tolerance=%v valid=%v", upper, upperTolerance, upperOK)
+	}
+	lower, lowerTolerance, lowerOK := tickflowLimitPrice(10.05, 0.10, false)
+	if !lowerOK || lower != 9.05 || lowerTolerance < 0.0049 || lowerTolerance > 0.0051 {
+		t.Fatalf("unexpected lower limit calculation: price=%v tolerance=%v valid=%v", lower, lowerTolerance, lowerOK)
+	}
+	if _, _, ok := tickflowLimitPrice(0, 0.10, true); ok {
+		t.Fatal("non-positive previous close must be rejected")
 	}
 }

@@ -458,24 +458,34 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 			degrade("provider_amount_missing_or_invalid")
 		}
 
-		// 涨跌停数仅在每一只证券都提供有效阈值且价格可用时发布，避免把缺阈值当作非涨停。
-		rawLimitUp, hasLimitUp := quote.Ext["limit_up"]
-		rawLimitDown, hasLimitDown := quote.Ext["limit_down"]
-		if !priceValid || !hasLimitUp || !hasLimitDown {
+		// TickFlow Quote 扩展字段不保证带涨跌停价，按原 Python 适配器的 A 股规则推导。
+		// 主板证券若缺少名称，就无法判断 ST 状态；此时不推测涨跌停比例。
+		if !priceValid {
 			limitCountsComplete = false
 			continue
 		}
-		limitUp, parseUpErr := tickflowFloat(rawLimitUp)
-		limitDown, parseDownErr := tickflowFloat(rawLimitDown)
-		if parseUpErr != nil || parseDownErr != nil || !tickflowPositiveFinite(limitUp) ||
-			!tickflowPositiveFinite(limitDown) || limitDown > limitUp {
+		name := strings.TrimSpace(quote.Name)
+		if name == "" {
+			if rawName, exists := quote.Ext["name"]; exists {
+				_ = json.Unmarshal(rawName, &name)
+				name = strings.TrimSpace(name)
+			}
+		}
+		ratio, ratioKnown := tickflowLimitRatio(symbol, name)
+		if !ratioKnown {
 			limitCountsComplete = false
 			continue
 		}
-		if *quote.LastPrice >= limitUp {
+		limitUp, limitUpTolerance, validLimitUp := tickflowLimitPrice(*quote.PrevClose, ratio, true)
+		limitDown, limitDownTolerance, validLimitDown := tickflowLimitPrice(*quote.PrevClose, ratio, false)
+		if !validLimitUp || !validLimitDown {
+			limitCountsComplete = false
+			continue
+		}
+		if math.Abs(*quote.LastPrice-limitUp) <= limitUpTolerance {
 			limitUpCount++
 		}
-		if *quote.LastPrice <= limitDown {
+		if math.Abs(*quote.LastPrice-limitDown) <= limitDownTolerance {
 			limitDownCount++
 		}
 	}
@@ -1222,3 +1232,58 @@ func tickflowProviderQuoteTime(timestamp int64, reference time.Time) *time.Time 
 	value := time.UnixMilli(timestamp).UTC()
 	return &value
 }
+ 
+// tickflowLimitRatio follows the domestic A-share limit rules used by the original Python adapter.
+// Beijing-market rules take precedence, followed by STAR/ChiNext, ST, then the main board.
+// Without a main-board name, ST status is unknown, so no limit ratio is inferred.
+func tickflowLimitRatio(symbol, name string) (float64, bool) {
+	code := strings.Split(strings.ToUpper(strings.TrimSpace(symbol)), ".")[0]
+	if len(code) != 6 {
+		return 0, false
+	}
+	for _, digit := range code {
+		if digit < '0' || digit > '9' {
+			return 0, false
+		}
+	}
+	if strings.HasPrefix(code, "900") {
+		return 0, false
+	}
+	for _, prefix := range []string{"92", "43", "81", "82", "83", "87", "88"} {
+		if strings.HasPrefix(code, prefix) {
+			return 0.30, true
+		}
+	}
+	if strings.HasPrefix(code, "688") || strings.HasPrefix(code, "300") {
+		return 0.20, true
+	}
+	name = strings.ToUpper(strings.TrimSpace(name))
+	if name == "" {
+		return 0, false
+	}
+	if strings.Contains(name, "ST") {
+		return 0.05, true
+	}
+	return 0.10, true
+}
+
+// tickflowLimitPrice reproduces the source adapter's cent-rounding and boundary tolerance.
+func tickflowLimitPrice(prevClose, ratio float64, upper bool) (float64, float64, bool) {
+	if !tickflowPositiveFinite(prevClose) || !tickflowPositiveFinite(ratio) || ratio >= 1 {
+		return 0, 0, false
+	}
+	rawPrice := prevClose * (1 - ratio)
+	if upper {
+		rawPrice = prevClose * (1 + ratio)
+	}
+	if !tickflowPositiveFinite(rawPrice) || math.IsInf(rawPrice*100, 0) {
+		return 0, 0, false
+	}
+	roundedPrice := math.Floor(rawPrice*100+0.5) / 100
+	tolerance := math.Round(math.Abs(rawPrice-roundedPrice)*1e10) / 1e10
+	if !tickflowPositiveFinite(roundedPrice) || math.IsNaN(tolerance) || math.IsInf(tolerance, 0) {
+		return 0, 0, false
+	}
+	return roundedPrice, tolerance, true
+}
+
