@@ -1,9 +1,16 @@
 name: WebUI browser smoke
 
 on:
+  pull_request:
+    branches:
+      - feat/full-go-data-providers-api-switch
+    paths:
+      - "web/**"
+      - ".github/workflows/webui-browser-smoke.yml"
   push:
     branches:
       - feat/webui-market-data-console
+      - feat/full-go-data-providers-api-switch
     paths:
       - "web/**"
       - ".github/workflows/webui-browser-smoke.yml"
