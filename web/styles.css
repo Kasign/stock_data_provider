@@ -2311,7 +2311,6 @@ td {
 .workspace-tabs ~ .view { padding-top: 8px; }
 #market-lists-panel,
 #market-activity-panel { margin-top: 16px; }
-#market-view .market-overview-updated { max-width: 340px; }
 @media (max-width: 600px) {
   .workspace-tabs { gap: 3px; margin-top: 12px; padding: 4px; }
   .workspace-tab { min-height: 40px; padding: 8px 5px; font-size: 12px; }

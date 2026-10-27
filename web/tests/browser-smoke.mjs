@@ -117,7 +117,9 @@ try {
     const menu = page.locator("#mobile-menu-toggle");
     for (const entry of viewNavigation) {
       const viewName = entry.name;
-      if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
+      if (entry.selector.startsWith(".nav-link") &&
+          await menu.isVisible() &&
+          (await menu.getAttribute("aria-expanded")) !== "true") {
         await menu.click();
       }
       const navigationButton = page.locator(entry.selector);
