@@ -8,6 +8,11 @@ import (
 )
 
 func (s *Server) fundamentals(w http.ResponseWriter, r *http.Request) {
+	// 当前财务接口不支持历史 as_of 修订版本重建；禁止静默忽略该参数。
+	if _, hasAsOf := r.URL.Query()["as_of"]; hasAsOf {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of is not supported; fundamentals return the latest available revision for the requested report period", requestID(r))
+		return
+	}
 	yearText, quarterText := strings.TrimSpace(r.URL.Query().Get("year")), strings.TrimSpace(r.URL.Query().Get("quarter"))
 	if yearText == "" || quarterText == "" {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "year and quarter are required; quarter must be 1..4", requestID(r))
