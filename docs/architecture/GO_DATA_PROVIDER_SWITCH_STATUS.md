@@ -644,3 +644,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - 龙虎榜的无数据报告或整页非 A 股项目被排除后形成的 `quality_unknown` 空页，不会立即终止后备源尝试。只有所有启用来源均已尝试且没有任何来源返回可用 A 股条目时，才返回 unknown 并增加 `dragon_tiger_fallback_exhausted_without_confirmed_data`。
 - 回退耗尽后保留 30 秒短缓存；多 Provider 场景会忽略不含回退耗尽标记的旧 unknown 缓存，防止旧逻辑挡住后备源。已补回归测试源码，未运行。
+
+
+### 财务指标与指数目录/成分股未知空响应回退（2026-10-27）
+
+- 财务指标 Provider 若返回合法但 `has_data=false` 的报告期快照、指数目录返回空 `unknown`，或指数成分股目录返回空 `unknown`，服务层会继续尝试其他已启用来源，不再让首源空结果掩盖后备数据。
+- 只有回退链耗尽时才返回 unknown，并分别增加 `fundamentals_fallback_exhausted_without_confirmed_data`、`index_catalog_fallback_exhausted_without_confirmed_data`、`index_constituents_fallback_exhausted_without_confirmed_data` 标记；未知空结果使用短缓存。多 Provider 场景会绕过旧版未记录回退耗尽标记的空缓存。
+- 本轮只更新源码、文档和测试源码，未执行测试、构建、CI 或真实 Provider 请求。

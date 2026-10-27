@@ -405,3 +405,6 @@ Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次
 
 
 龙虎榜分页回退补充：单一 Provider 的空报告或整页非 A 股被排除，不代表后续 Provider 也无可用 A 股数据。服务层现在继续尝试所有来源，再返回标有 `dragon_tiger_fallback_exhausted_without_confirmed_data` 的 unknown，并将其短缓存 30 秒；旧的未记录回退耗尽标记的缓存，在存在多个 Provider 时会被绕过。
+
+
+财务指标、指数目录和指数成分股目录也统一未知空结果回退语义：没有可确认的数据时继续尝试后备 Provider；全部来源尝试完仍为空，才返回 `quality_unknown` 并加回退耗尽标记。多 Provider 场景忽略旧版不带该标记的 unknown 空缓存，避免首源历史空缓存阻止回退。

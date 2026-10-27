@@ -148,7 +148,18 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		var cached model.FundamentalsSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateFundamentalsSnapshot(symbol, year, quarter, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			ttl := fundamentalsCacheTTL(&cached)
-			if time.Since(cached.FetchedAt) < ttl {
+			cacheEligible := cached.HasData
+			if !cached.HasData {
+				fallbackExhausted := false
+				for _, reason := range cached.QualityReasons {
+					if reason == "fundamentals_fallback_exhausted_without_confirmed_data" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				cacheEligible = fallbackExhausted || len(s.fundamentalsProviders) <= 1
+			}
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
 		}
@@ -159,6 +170,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		return nil, false, errors.New("no enabled fundamentals provider")
 	}
 	var failures []string
+	var unknownEmpty *model.FundamentalsSnapshot
 	for _, p := range s.fundamentalsProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -176,6 +188,11 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if !snapshot.HasData {
+			unknownEmpty = snapshot
+			failures = append(failures, p.Name()+": no report-period metrics")
+			continue
+		}
 		payload, err := json.Marshal(snapshot)
 		if err != nil {
 			s.logger.Warn("fundamentals cache encode failed", "symbol", symbol, "year", year, "quarter", quarter, "error", err)
@@ -186,6 +203,16 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 			}
 		}
 		return snapshot, false, nil
+	}
+	if unknownEmpty != nil {
+		unknownEmpty.QualityStatus = model.QualityUnknown
+		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "fundamentals_fallback_exhausted_without_confirmed_data")
+		if payload, err := json.Marshal(unknownEmpty); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, fundamentalsCacheTTL(unknownEmpty)); cacheErr != nil {
+				s.logger.Warn("fundamentals unknown cache write failed", "symbol", symbol, "year", year, "quarter", quarter, "error", cacheErr)
+			}
+		}
+		return unknownEmpty, false, nil
 	}
 	return nil, false, fmt.Errorf("all fundamentals providers failed: %s", strings.Join(failures, "; "))
 }
