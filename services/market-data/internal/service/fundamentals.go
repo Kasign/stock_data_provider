@@ -70,6 +70,9 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 				if dateErr != nil || publicationDate.Format("2006-01-02") != section.PublicationDate {
 					return fmt.Errorf("fundamentals section %s has invalid publication date", section.Category)
 				}
+				if section.PublicationDate < section.ReportDate {
+					return fmt.Errorf("fundamentals section %s publication date precedes the report period end", section.Category)
+				}
 				if section.PublicationDate > today {
 					return fmt.Errorf("fundamentals section %s publication date is in the future", section.Category)
 				}
