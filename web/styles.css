@@ -511,7 +511,6 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .watchlist-name-field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; color: #91a5b6; font-size: 11px; }
 .watchlist-name-input { width: 100%; min-width: 0; min-height: 31px; padding: 5px 8px; border: 1px solid #2a3b49; border-radius: 6px; color: #d3e0e8; background: #0c151e; font: inherit; }
 .watchlist-name-input:focus { border-color: #479d8a; outline: none; }
-.watchlist-name-input::placeholder { color: #5d7182; }
 .watchlist-item-meta { color: #788da0; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .watchlist-actions { display: flex; flex: 0 0 auto; flex-direction: column; gap: 6px; }
 .watchlist-action { min-height: 29px; padding: 4px 8px; border: 1px solid #314654; border-radius: 6px; color: #c9d8e2; background: #172531; font-size: 11px; cursor: pointer; }
