@@ -3055,9 +3055,8 @@ function validateBrowserDataPayload(payload) {
     if (!record || typeof record !== "object" || typeof record.task_id !== "string" || !record.task_id.trim()) {
       throw new Error("最近任务引用缺少有效 task_id。");
     }
-    const taskId = record.task_id.trim().slice(0, 200);
-    if (seenTasks.has(taskId)) throw new Error("最近任务引用包含重复 task_id：" + taskId);
-    seenTasks.add(taskId);
+    const taskId = record.task_id.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 200);
+    if (!taskId) throw new Error("最近任务引用中的 task_id 无效。");
     if (record.symbols !== undefined && !Array.isArray(record.symbols)) throw new Error("任务标的必须是数组。");
     const rawSymbols = Array.isArray(record.symbols) ? record.symbols : [];
     if (rawSymbols.length > 100 || rawSymbols.some((item) => typeof item !== "string")) {
@@ -3066,6 +3065,10 @@ function validateBrowserDataPayload(payload) {
     const analysisBase = typeof record.analysis_base === "string" && record.analysis_base.trim()
       ? normalizeBasePath(record.analysis_base, "/analysis-api")
       : "";
+    // 同一 task_id 可能由不同分析服务分别生成，身份由 task_id + analysis_base 共同决定。
+    const taskIdentity = JSON.stringify([taskId, analysisBase]);
+    if (seenTasks.has(taskIdentity)) throw new Error("最近任务引用包含重复的任务 ID 与服务地址：" + taskId);
+    seenTasks.add(taskIdentity);
     const safeString = (value, max = 200) => typeof value === "string"
       ? value.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, max)
       : "";
@@ -3110,6 +3113,11 @@ async function importBrowserDataFile(file) {
   const previous = new Map();
   try {
     storageKeys.forEach((key) => previous.set(key, localStorage.getItem(key)));
+  } catch (error) {
+    setBrowserDataFeedback("导入失败：无法读取当前浏览器配置，尚未执行写入。" + (error?.message || ""), "error");
+    return;
+  }
+  try {
     const nextSettings = saveSettings({
       marketBase: imported.marketBase,
       analysisBase: imported.analysisBase,
