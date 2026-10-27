@@ -471,3 +471,10 @@
 - 合并前最终 WebUI head 的 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40445577049) 与 [Chromium browser smoke](https://github.com/Kasign/stock_data_provider/actions/runs/40445576952) 均成功；重复触发的浏览器烟测 [#40445571267](https://github.com/Kasign/stock_data_provider/actions/runs/40445571267) 也成功。合并后以目标分支最新提交对应的 Actions 为准。
 - 验收边界：浏览器烟测将 API 请求固定为 503，覆盖布局、导航及响应式行为，不代表真实行情接口端到端通过；真实 API Key、数据回包、主题、键盘细节与 NAS/1Panel 联调仍需在已部署环境验证。CI Runner 的中文字体缺失会影响截图汉字展示，不应误判为用户浏览器字体问题。
 - 当前 Git 冲突风险已通过集成合并处理，PR #13 不再处于 Open 状态。后续不需要再合并同一个 PR；只需在部署环境集中验证真实 API 与页面交互。
+
+## 2026-10-27 — 独立的数据层 CI 阻塞项（非 PR #13 引入）
+
+- PR #13 合并后的 WebUI checks 与 Chromium smoke 均通过；但并行的数据侧 PR #1 Go suite [#40445663152](https://github.com/Kasign/stock_data_provider/actions/runs/40445663152) 未通过，当前重跑/更新基线结果以 [#40445769785](https://github.com/Kasign/stock_data_provider/actions/runs/40445769785) 为准。
+- market-data 镜像构建和 Go 语法检查指向 `services/market-data/internal/provider/eastmoney.go:2086-2090`：若干 Go struct tag 被写成字面量 `\x60json:...\x60`，而不是 Go tag 所需的反引号，造成 illegal character 和后续语法错误。
+- `go-core` 的 `gofmt` 检查也失败，涉及 `internal/adapters/marketdatahttp/client.go`、`client_test.go`、`internal/adapters/newssearch/search.go`、`search_test.go`、`internal/adapters/pythonbridge/adapters_test.go`、`internal/contextpack/build.go`、`internal/domain/models.go`。
+- 这些文件不属于 PR #13 的改动范围，因此本次没有把 Go/Provider 修复混入 WebUI 集成。数据层构建问题需要作为独立修复任务处理；不能把 PR #13 已成功合并理解为整个数据仓库 Go CI 已通过。

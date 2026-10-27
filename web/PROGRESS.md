@@ -674,3 +674,10 @@
 - 目标分支新增 34 个提交与 WebUI 变更的路径集合无重叠；大盘首页依赖的 7 类市场接口均在当前 market-data HTTP 路由中存在，主要字段和 OpenAPI/Go 模型相符。
 - 修复浏览器烟测工作流，让后续针对 `feat/full-go-data-providers-api-switch` 的 PR 和 push 也能触发 Chromium 检查。
 - 合并前 head `c0669d4` 的 WebUI checks 与 Chromium browser smoke 均通过。该烟测使用模拟 503 响应，不替代真实 Provider/API 联调；部署环境验收仍待完成。
+
+## 2026-10-27 — 集成后发现的数据侧 CI 阻塞项
+
+- PR #13 本身的 WebUI checks 与 Chromium browser smoke 均成功，但数据侧 PR #1 的 Go suite [#40445663152](https://github.com/Kasign/stock_data_provider/actions/runs/40445663152) 失败于 Go 格式检查与 market-data 镜像构建。
+- 已定位的语法错误：`services/market-data/internal/provider/eastmoney.go:2086-2090` 中结构体 JSON tag 使用字面量 `\x60`，Go 编译器报 illegal character；这不是 WebUI 改动造成的。
+- 另有 7 个 go-core 文件未通过 gofmt（清单见 `web/HANDOFF.md`）。作为独立数据层工作记录，暂不在 PR #13 中跨范围修改。
+- 待办：修复 Eastmoney struct tag 的反引号/语法问题，统一上述 Go 文件格式，再重新执行 Go suite 与 market-data 镜像构建。当前不得将整个数据层标记为构建通过。
