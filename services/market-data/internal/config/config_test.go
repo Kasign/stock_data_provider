@@ -553,7 +553,7 @@ func TestLoadYahooFinanceDailyBarsCanBeOptedIn(t *testing.T) {
 	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
 	t.Setenv("MARKET_DATA_YAHOO_ENABLED", "true")
 	t.Setenv("MARKET_DATA_YAHOO_QUOTE_ENABLED", "")
-	t.Setenv("MARKET_DATA_YAHOO_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_YAHOO_DAILY_BARS_ENABLED", "true")
 	t.Setenv("MARKET_DATA_YAHOO_CHART_URL", "")
 
 	cfg, err := Load()
@@ -626,8 +626,8 @@ func TestLoadNeteaseDailyBarsIsOptInAndEndpointConfigurable(t *testing.T) {
 	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
 	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
 	t.Setenv("MARKET_DATA_NETEASE_ENABLED", "true")
-	t.Setenv("MARKET_DATA_NETEASE_QUOTE_ENABLED", "")
-	t.Setenv("MARKET_DATA_NETEASE_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_NETEASE_QUOTE_ENABLED", "false")
+	t.Setenv("MARKET_DATA_NETEASE_DAILY_BARS_ENABLED", "true")
 	t.Setenv("MARKET_DATA_NETEASE_HISTORY_URL", "https://example.test/history")
 
 	cfg, err := Load()
@@ -799,7 +799,7 @@ func TestEastmoneyAnnouncementsDefaultOffAndEndpointConfigurable(t *testing.T) {
 	}
 }
 
-func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) {
+func TestBaoStockFundamentalsDefaultAndEnvironmentOverrides(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
@@ -808,8 +808,16 @@ func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !cfg.ProviderSettings["baostock"].Fundamentals {
+		t.Fatal("BaoStock fundamentals should follow the domestic provider defaults")
+	}
+	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cfg.ProviderSettings["baostock"].Fundamentals {
-		t.Fatal("fundamentals must stay disabled until target deployment acceptance")
+		t.Fatal("explicit false must disable fundamentals")
 	}
 	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "true")
 	cfg, err = Load()
@@ -817,7 +825,7 @@ func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) 
 		t.Fatal(err)
 	}
 	if !cfg.ProviderSettings["baostock"].Fundamentals {
-		t.Fatal("explicit opt-in must enable fundamentals")
+		t.Fatal("explicit true must enable fundamentals")
 	}
 }
 
