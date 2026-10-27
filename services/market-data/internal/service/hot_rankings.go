@@ -139,7 +139,7 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
-		if err := validateHotRankingSnapshot(rankingType, &snapshot); err != nil {
+		if err := validateHotRankingSnapshot(rankingType, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
