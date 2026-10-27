@@ -920,3 +920,28 @@ func TestLoadTickFlowMarketBreadthRequiresAPIKey(t *testing.T) {
 		t.Fatalf("TickFlow market breadth without API key must fail configuration validation, got %v", err)
 	}
 }
+
+
+func TestLoadTickFlowSectorRankingsRequiresAPIKey(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "providers.json")
+	data := "{\"provider_priority\":[\"tickflow\"],\"adjustment_basis\":\"forward_adjusted\",\"providers\":{\"tickflow\":{\"enabled\":true,\"quote\":false,\"daily_bars\":true,\"sector_rankings\":true,\"index_quotes\":false,\"market_breadth\":false}}}"
+	if err := os.WriteFile(file, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_TICKFLOW_API_KEY", "")
+	t.Setenv("TICKFLOW_API_KEY", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_SECTOR_RANKINGS_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED", "")
+
+	want := "MARKET_DATA_TICKFLOW_QUOTE_ENABLED, MARKET_DATA_TICKFLOW_SECTOR_RANKINGS_ENABLED, MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED or MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY"
+	if _, err := Load(); err == nil || err.Error() != want {
+		t.Fatalf("TickFlow sector rankings without API key must fail configuration validation, got %v", err)
+	}
+}

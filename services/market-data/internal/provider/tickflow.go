@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -496,6 +497,359 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	return snapshot, nil
 }
 
+
+func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, error) {
+	category := strings.ToLower(strings.TrimSpace(rawCategory))
+	if category != "industry" {
+		return nil, fmt.Errorf("TickFlow supports only SW1 industry rankings, got category %q", rawCategory)
+	}
+	if p == nil || p.client == nil {
+		return nil, errors.New("TickFlow HTTP client is not configured")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("TickFlow SW1 sector rankings require TICKFLOW_API_KEY")
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		return nil, errors.New("TickFlow SW1 sector ranking limit must not exceed 100")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// 从官方证券池目录发现 SW1 行业分类，避免硬编码行业列表。
+	universeListRaw, err := p.getJSON(ctx, p.apiURL, "/v1/universes", nil, true)
+	if err != nil {
+		return nil, fmt.Errorf("TickFlow universe-list request: %w", err)
+	}
+	universeListData, err := tickflowResponseData(universeListRaw)
+	if err != nil {
+		return nil, err
+	}
+	var universeSummaries []struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		SymbolCount int    `json:"symbol_count"`
+	}
+	if err := json.Unmarshal(universeListData, &universeSummaries); err != nil {
+		return nil, fmt.Errorf("decode TickFlow universe list: %w", err)
+	}
+	summaries := make(map[string]struct {
+		ID          string
+		Name        string
+		SymbolCount int
+	}, len(universeSummaries))
+	sw1IDs := make([]string, 0, 40)
+	for _, item := range universeSummaries {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+		if _, duplicate := summaries[id]; duplicate {
+			return nil, fmt.Errorf("TickFlow universe list contains duplicate ID %s", id)
+		}
+		summaries[id] = struct {
+			ID          string
+			Name        string
+			SymbolCount int
+		}{ID: id, Name: strings.TrimSpace(item.Name), SymbolCount: item.SymbolCount}
+		if strings.HasPrefix(id, "CN_Equity_SW1_") && strings.HasPrefix(strings.TrimSpace(item.Name), "SW1") {
+			sw1IDs = append(sw1IDs, id)
+		}
+	}
+	if len(sw1IDs) == 0 {
+		return nil, errors.New("TickFlow returned no CN_Equity_SW1_* universes")
+	}
+	sort.Strings(sw1IDs)
+
+	// 读取 A 股全集作为证券代码白名单，避免把海外证券或指数混入行业收益率。
+	universeRaw, err := p.getJSON(ctx, p.apiURL, "/v1/universes/CN_Equity_A", nil, true)
+	if err != nil {
+		return nil, fmt.Errorf("TickFlow A-share universe request: %w", err)
+	}
+	universeData, err := tickflowResponseData(universeRaw)
+	if err != nil {
+		return nil, err
+	}
+	var shareUniverse struct {
+		ID          string   `json:"id"`
+		SymbolCount int      `json:"symbol_count"`
+		Symbols     []string `json:"symbols"`
+	}
+	if err := json.Unmarshal(universeData, &shareUniverse); err != nil {
+		return nil, fmt.Errorf("decode TickFlow A-share universe: %w", err)
+	}
+	if shareUniverse.ID != "CN_Equity_A" || shareUniverse.SymbolCount <= 0 ||
+		len(shareUniverse.Symbols) != shareUniverse.SymbolCount {
+		return nil, fmt.Errorf("TickFlow A-share universe metadata is incomplete: id=%q count=%d symbols=%d",
+			shareUniverse.ID, shareUniverse.SymbolCount, len(shareUniverse.Symbols))
+	}
+	const maxUniverseSecurities = 20000
+	if shareUniverse.SymbolCount > maxUniverseSecurities {
+		return nil, fmt.Errorf("TickFlow A-share universe count %d exceeds safety limit %d",
+			shareUniverse.SymbolCount, maxUniverseSecurities)
+	}
+	expectedSymbols := make(map[string]struct{}, len(shareUniverse.Symbols))
+	for _, rawSymbol := range shareUniverse.Symbols {
+		symbol, normalizeErr := tickflowDomesticSymbol(rawSymbol)
+		if normalizeErr != nil {
+			return nil, fmt.Errorf("TickFlow A-share universe contains unsupported symbol %q: %w", rawSymbol, normalizeErr)
+		}
+		if _, duplicate := expectedSymbols[symbol]; duplicate {
+			return nil, fmt.Errorf("TickFlow A-share universe contains duplicate symbol %s", symbol)
+		}
+		expectedSymbols[symbol] = struct{}{}
+	}
+	if len(expectedSymbols) != shareUniverse.SymbolCount {
+		return nil, fmt.Errorf("TickFlow A-share universe unique count mismatch: expected=%d actual=%d",
+			shareUniverse.SymbolCount, len(expectedSymbols))
+	}
+
+	batchRaw, err := p.postJSON(ctx, p.apiURL, "/v1/universes/batch", map[string]any{"ids": sw1IDs}, true)
+	if err != nil {
+		return nil, fmt.Errorf("TickFlow SW1 universe-batch request: %w", err)
+	}
+	batchData, err := tickflowResponseData(batchRaw)
+	if err != nil {
+		return nil, err
+	}
+	var details map[string]struct {
+		ID          string   `json:"id"`
+		SymbolCount int      `json:"symbol_count"`
+		Symbols     []string `json:"symbols"`
+	}
+	if err := json.Unmarshal(batchData, &details); err != nil {
+		return nil, fmt.Errorf("decode TickFlow SW1 universe details: %w", err)
+	}
+	if len(details) != len(sw1IDs) {
+		return nil, fmt.Errorf("TickFlow SW1 detail coverage mismatch: returned=%d requested=%d", len(details), len(sw1IDs))
+	}
+
+	industrySymbols := make(map[string]map[string]struct{}, len(sw1IDs))
+	industryIDs := make(map[string]string, len(sw1IDs))
+	symbolIndustry := make(map[string]string, shareUniverse.SymbolCount)
+	for _, id := range sw1IDs {
+		summary := summaries[id]
+		detail, ok := details[id]
+		if !ok {
+			return nil, fmt.Errorf("TickFlow SW1 universe detail is missing %s", id)
+		}
+		if detail.ID != "" && detail.ID != id {
+			return nil, fmt.Errorf("TickFlow SW1 detail ID mismatch: requested=%s returned=%s", id, detail.ID)
+		}
+		if detail.SymbolCount <= 0 || len(detail.Symbols) != detail.SymbolCount {
+			return nil, fmt.Errorf("TickFlow SW1 universe %s is incomplete: count=%d symbols=%d",
+				id, detail.SymbolCount, len(detail.Symbols))
+		}
+		if summary.SymbolCount > 0 && summary.SymbolCount != detail.SymbolCount {
+			return nil, fmt.Errorf("TickFlow SW1 universe %s summary/detail count mismatch: summary=%d detail=%d",
+				id, summary.SymbolCount, detail.SymbolCount)
+		}
+		name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(summary.Name), "SW1"))
+		if name == "" {
+			return nil, fmt.Errorf("TickFlow SW1 universe %s has no industry name", id)
+		}
+		if existingID, exists := industryIDs[name]; exists && existingID != id {
+			return nil, fmt.Errorf("TickFlow SW1 universe IDs %s and %s share the same industry name %q", existingID, id, name)
+		}
+		if _, exists := industrySymbols[name]; !exists {
+			industrySymbols[name] = make(map[string]struct{}, len(detail.Symbols))
+			industryIDs[name] = id
+		}
+		seenIndustrySymbols := make(map[string]struct{}, len(detail.Symbols))
+		for _, rawSymbol := range detail.Symbols {
+			symbol, normalizeErr := tickflowDomesticSymbol(rawSymbol)
+			if normalizeErr != nil {
+				return nil, fmt.Errorf("TickFlow SW1 universe %s contains unsupported symbol %q: %w", id, rawSymbol, normalizeErr)
+			}
+			if _, duplicate := seenIndustrySymbols[symbol]; duplicate {
+				return nil, fmt.Errorf("TickFlow SW1 universe %s contains duplicate constituent %s", id, symbol)
+			}
+			seenIndustrySymbols[symbol] = struct{}{}
+			if _, allowed := expectedSymbols[symbol]; !allowed {
+				return nil, fmt.Errorf("TickFlow SW1 universe %s includes symbol %s outside CN_Equity_A", id, symbol)
+			}
+			if previousIndustry, exists := symbolIndustry[symbol]; exists && previousIndustry != name {
+				return nil, fmt.Errorf("TickFlow A-share %s belongs to multiple SW1 universes (%s, %s)",
+					symbol, previousIndustry, name)
+			}
+			symbolIndustry[symbol] = name
+			industrySymbols[name][symbol] = struct{}{}
+		}
+	}
+	if len(industrySymbols) == 0 {
+		return nil, errors.New("TickFlow SW1 universes contain no industry constituents")
+	}
+
+	quotesRaw, err := p.getJSON(ctx, p.apiURL, "/v1/quotes",
+		url.Values{"universes": []string{"CN_Equity_A"}}, true)
+	if err != nil {
+		return nil, fmt.Errorf("TickFlow A-share universe quotes request: %w", err)
+	}
+	quotesData, err := tickflowResponseData(quotesRaw)
+	if err != nil {
+		return nil, err
+	}
+	var quotes []tickflowQuotePayload
+	if err := json.Unmarshal(quotesData, &quotes); err != nil {
+		return nil, fmt.Errorf("decode TickFlow A-share quotes: %w", err)
+	}
+	if len(quotes) != shareUniverse.SymbolCount {
+		return nil, fmt.Errorf("TickFlow A-share quotes coverage mismatch: returned=%d universe=%d",
+			len(quotes), shareUniverse.SymbolCount)
+	}
+	quotesBySymbol := make(map[string]tickflowQuotePayload, len(quotes))
+	reportDate := ""
+	fetchedAt := time.Now().UTC()
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		location = time.FixedZone("CST", 8*60*60)
+	}
+	timestampIncomplete := false
+	for _, quote := range quotes {
+		symbol, normalizeErr := tickflowDomesticSymbol(quote.Symbol)
+		if normalizeErr != nil {
+			return nil, fmt.Errorf("TickFlow A-share quote has unsupported symbol %q: %w", quote.Symbol, normalizeErr)
+		}
+		if _, allowed := expectedSymbols[symbol]; !allowed {
+			return nil, fmt.Errorf("TickFlow returned quote for %s outside CN_Equity_A", symbol)
+		}
+		if _, duplicate := quotesBySymbol[symbol]; duplicate {
+			return nil, fmt.Errorf("TickFlow returned duplicate A-share quote for %s", symbol)
+		}
+		quotesBySymbol[symbol] = quote
+		quoteTime := tickflowProviderQuoteTime(quote.Timestamp, fetchedAt)
+		if quoteTime == nil {
+			timestampIncomplete = true
+			continue
+		}
+		date := quoteTime.In(location).Format("2006-01-02")
+		if reportDate == "" {
+			reportDate = date
+		} else if date != reportDate {
+			return nil, fmt.Errorf("TickFlow A-share quotes span multiple report dates: %s and %s", reportDate, date)
+		}
+	}
+	if len(quotesBySymbol) != shareUniverse.SymbolCount {
+		return nil, fmt.Errorf("TickFlow A-share unique quote coverage mismatch: returned=%d universe=%d",
+			len(quotesBySymbol), shareUniverse.SymbolCount)
+	}
+	if reportDate == "" {
+		return nil, errors.New("TickFlow A-share quotes contain no valid provider timestamp for an industry report date")
+	}
+	for symbol := range expectedSymbols {
+		if _, ok := quotesBySymbol[symbol]; !ok {
+			return nil, fmt.Errorf("TickFlow A-share quote is missing universe member %s", symbol)
+		}
+	}
+
+	type industryValue struct {
+		id              string
+		name            string
+		changeTotal     float64
+		changeCount     int
+		advancingCount  int
+		decliningCount  int
+		partialCoverage bool
+	}
+	industries := make([]industryValue, 0, len(industrySymbols))
+	for name, symbols := range industrySymbols {
+		value := industryValue{id: industryIDs[name], name: name}
+		for symbol := range symbols {
+			quote := quotesBySymbol[symbol]
+			last, prev := quote.LastPrice, quote.PrevClose
+			if last == nil || prev == nil || !tickflowPositiveFinite(*last) || !tickflowPositiveFinite(*prev) {
+				value.partialCoverage = true
+				continue
+			}
+			changePercent, hasChange := 0.0, false
+			if raw, exists := quote.Ext["change_pct"]; exists {
+				if parsed, parseErr := tickflowFloat(raw); parseErr == nil && !math.IsNaN(parsed) && !math.IsInf(parsed, 0) {
+					changePercent, hasChange = parsed*100, true
+				}
+			}
+			if !hasChange {
+				changePercent = (*last - *prev) / *prev * 100
+			}
+			if math.IsNaN(changePercent) || math.IsInf(changePercent, 0) {
+				value.partialCoverage = true
+				continue
+			}
+			value.changeTotal += changePercent
+			if math.IsNaN(value.changeTotal) || math.IsInf(value.changeTotal, 0) {
+				return nil, fmt.Errorf("TickFlow SW1 industry %s change average overflow", name)
+			}
+			value.changeCount++
+			switch {
+			case *last > *prev:
+				value.advancingCount++
+			case *last < *prev:
+				value.decliningCount++
+			}
+		}
+		if value.changeCount == 0 {
+			continue
+		}
+		industries = append(industries, value)
+	}
+	if len(industries) == 0 {
+		return nil, errors.New("TickFlow SW1 sector rankings contain no valid constituent quote changes")
+	}
+	sort.Slice(industries, func(i, j int) bool {
+		left := industries[i].changeTotal / float64(industries[i].changeCount)
+		right := industries[j].changeTotal / float64(industries[j].changeCount)
+		if left == right {
+			return industries[i].name < industries[j].name
+		}
+		return left > right
+	})
+	snapshot := &model.SectorRankingSnapshot{
+		Category: category, Total: len(industrySymbols), Source: p.Name(),
+		SourceVersion: tickflowVersion + "-sw1-sector-rankings-v1", FetchedAt: fetchedAt,
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{
+			"provider_snapshot_time_not_exposed_for_aggregated_sector",
+			"sector_change_percent_is_average_of_constituent_changes",
+			"sector_rankings_collected_non_atomically",
+		},
+		Items: make([]model.SectorRanking, 0, min(limit, len(industries))),
+	}
+	if timestampIncomplete {
+		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, "one_or_more_quote_timestamps_missing_or_invalid")
+	}
+	for i, item := range industries {
+		if i >= limit {
+			break
+		}
+		averageChange := item.changeTotal / float64(item.changeCount)
+		reasons := []string{
+			"sector_change_percent_is_average_of_constituent_changes",
+			"provider_snapshot_time_not_exposed_for_aggregated_sector",
+		}
+		if timestampIncomplete {
+			reasons = appendTickflowUniqueReason(reasons, "one_or_more_quote_timestamps_missing_or_invalid")
+		}
+		if item.partialCoverage {
+			reasons = appendTickflowUniqueReason(reasons, "sector_constituent_quote_coverage_partial")
+			snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, "one_or_more_industry_constituent_quotes_missing_or_invalid")
+		}
+		advancing, declining := item.advancingCount, item.decliningCount
+		snapshot.Items = append(snapshot.Items, model.SectorRanking{
+			Rank: i + 1, Code: item.id, Name: item.name, Category: category,
+			ChangePercent: &averageChange, AmountUnit: "unknown",
+			AdvancingCount: &advancing, DecliningCount: &declining,
+			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt,
+			ProviderReportDate: reportDate, QualityStatus: model.QualityDegraded, QualityReasons: reasons,
+		})
+	}
+	return snapshot, nil
+}
+
 func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("TickFlow HTTP client is not configured")
@@ -709,6 +1063,40 @@ func (p *TickFlow) getJSON(ctx context.Context, baseURL, path string, query url.
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP status %d", resp.StatusCode)
+	}
+	return readBoundedBody(resp.Body, maxProviderPayloadBytes)
+}
+
+
+func (p *TickFlow) postJSON(ctx context.Context, baseURL, path string, payload any, authenticated bool) ([]byte, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("TickFlow HTTP client is not configured")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode TickFlow request body: %w", err)
+	}
+	endpoint := strings.TrimRight(strings.TrimSpace(baseURL), "/") + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "MarketDataService/1.0")
+	if authenticated && p.apiKey != "" {
+		req.Header.Set("x-api-key", p.apiKey)
+	}
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("HTTP status %d", resp.StatusCode)
 	}
 	return readBoundedBody(resp.Body, maxProviderPayloadBytes)
