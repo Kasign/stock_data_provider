@@ -304,3 +304,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - 静态复核发现，腾讯行情时间解析器忽略 `time.LoadLocation("Asia/Shanghai")` 错误。极简容器缺少 zoneinfo 数据时，时间可能按 UTC 解释，造成快照时间偏移并影响新鲜度判定。
 - 现增加固定 UTC+8 回退，与新浪、网易解析器已有的时区降级策略保持一致；正常环境仍优先使用 IANA `Asia/Shanghai` 时区数据库。沿用既有本地夹具时间测试源码，不运行测试或真实请求。
+
+
+### 普通个股报价 OpenAPI 时间语义字段对齐（2026-10-27）
+
+- 对照 `internal/model.Quote` 与 OpenAPI `Quote` schema 时发现，Go 模型已输出可选的 `quote_time_semantics`，但普通个股报价 schema 遗漏该字段；指数报价 schema 已包含同名字段。
+- 已在 `services/market-data/openapi.yaml` 为个股 `Quote` 补入 `quote_time_semantics` 描述，明确这是供应商 `quote_time` 的语义，而不是采集时间。该字段保持可选，不改变已有 JSON 响应行为。
+- 本次仅更新契约文档和状态记录；未运行测试、构建、CI 或真实 Provider 请求。

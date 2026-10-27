@@ -57,6 +57,7 @@ components:
         volume_ratio: {type: number, nullable: true, description: Provider volume ratio; null when unsupported}
         turnover_rate: {type: number, nullable: true, description: Percentage points; 1.25 means 1.25%}
         quote_time: {type: string, format: date-time, nullable: true, description: Provider quote timestamp; never use fetch time as a replacement}
+        quote_time_semantics: {type: string, description: Semantics of quote_time reported by the provider, e.g. provider_snapshot_time}
         fetched_at: {type: string, format: date-time}
         normalized_at: {type: string, format: date-time}
         source: {type: string}
