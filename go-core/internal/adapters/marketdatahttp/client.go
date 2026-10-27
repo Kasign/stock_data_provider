@@ -639,6 +639,19 @@ func jsonObjectMap(input any) map[string]any {
 	return result
 }
 
+func appendUniqueWarning(warnings []string, warning string) []string {
+	warning = strings.TrimSpace(warning)
+	if warning == "" {
+		return warnings
+	}
+	for _, existing := range warnings {
+		if existing == warning {
+			return warnings
+		}
+	}
+	return append(warnings, warning)
+}
+
 func fundamentalsMap(snapshot wireFundamentalsSnapshot) map[string]any {
 	sections := make([]map[string]any, 0, len(snapshot.Sections))
 	metrics := make(map[string]any)
