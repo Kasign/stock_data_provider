@@ -417,3 +417,51 @@ func TestNativeNewsSearchAggregatesConfiguredProvidersAndDeduplicates(t *testing
 		t.Fatalf("expected 3 unique results after aggregation: %+v", items)
 	}
 }
+
+
+func TestStockSearchUsesFiveNewsDimensionsAndPreservesLabels(t *testing.T) {
+	date := freshDateString(1)
+	var mu sync.Mutex
+	queries := make(map[string]struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query().Get("q")
+		mu.Lock()
+		queries[query] = struct{}{}
+		mu.Unlock()
+		articleURL := "https://news.example.com/search?q=" + url.QueryEscape(query)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": []map[string]any{{
+			"title": query, "url": articleURL, "content": query, "publishedDate": date,
+		}}})
+	}))
+	defer server.Close()
+	searcher := New(Config{
+		SearXNGBaseURLs: []string{server.URL}, MaxAgeDays: 3, MaxSearches: 5,
+		StrategyProfile: "short", RequestTimeout: time.Second,
+	}, nil, testLogger())
+	items, err := searcher.SearchStockNews(context.Background(), "600036.SH", "招商银行", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 5 {
+		t.Fatalf("expected five distinct query-dimension results, got %d: %+v", len(items), items)
+	}
+	want := map[string]bool{"general": false, "financial": false, "regulatory": false, "business": false, "ownership": false}
+	for _, item := range items {
+		if _, ok := want[item.Dimension]; !ok {
+			t.Errorf("unexpected news dimension %q: %+v", item.Dimension, item)
+			continue
+		}
+		want[item.Dimension] = true
+	}
+	for dimension, found := range want {
+		if !found {
+			t.Errorf("missing query dimension %q", dimension)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(queries) != 5 {
+		t.Fatalf("expected 5 query variants, got %d: %#v", len(queries), queries)
+	}
+}

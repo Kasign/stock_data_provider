@@ -189,3 +189,12 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 - Brave 使用中国地区与简体中文偏好；只使用源端 published_date 或 page_age，不使用 page_fetched 推导文章发布时间。Tavily 请求新闻 topic 并要求返回源端发布日期。
 - 这批迁移 Provider 接口和聚合、质量门禁逻辑；不宣称与 Python 的多维 search_comprehensive_intel(max_searches=5) 完全等价。Python fallback 保留至后续核实调用覆盖率与真实部署表现。
 - 回归测试使用本地 HTTP fixture，尚未执行测试、构建、CI 或真实上游请求。
+
+
+## Go 原生新闻搜索多维查询第三阶段（2026-10-27）
+
+- 新增 NEWS_MAX_SEARCHES 配置。Go-core 生产环境通过 NewFromEnv 默认最多执行 5 个查询维度；直接构造 Config 时默认只执行 1 个查询，上限固定为 5。
+- 个股维度：通用消息、业绩/财报、监管/处罚、合同/业务、股东/持股；市场维度：通用市场新闻、宏观政策、指数/成交、IPO/并购、行业/产业政策。
+- 查询维度在多源之间轮转分配，减少调用成本；所有任务并行运行，结果保留 dimension 字段。公告候选使用 announcement 维度，并在同标题去重时优先保留公告源链接。
+- 新增五维查询与标签保留的本地 HTTP fixture 测试源码，未运行测试、构建、CI 或真实上游请求。
+- 这仍不等于 Python 的全部搜索策略完全等价；Python bridge fallback 暂时保留至统一验收和调用覆盖率核实完成。

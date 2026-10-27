@@ -181,6 +181,7 @@ type NewsItem struct {
 	PublishedAt string  `json:"published_at,omitempty"`
 	RetrievedAt string  `json:"retrieved_at,omitempty"`
 	Relevance   float64 `json:"relevance,omitempty"`
+	Dimension   string  `json:"dimension,omitempty"`
 }
 
 type TechnicalSnapshot struct {

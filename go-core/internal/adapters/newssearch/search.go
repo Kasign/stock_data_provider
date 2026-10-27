@@ -68,6 +68,7 @@ type Config struct {
 	MaxAgeDays         int
 	StrategyProfile    string
 	RequestTimeout     time.Duration
+	MaxSearches        int
 	CacheTTL           time.Duration
 	StockAnnouncements StockAnnouncementSource
 }
@@ -78,6 +79,7 @@ type Searcher struct {
 	fallback           ports.NewsSearcher
 	logger             *slog.Logger
 	windowDays         int
+	maxSearches        int
 	cacheTTL           time.Duration
 	trustedDomains     []string
 	blockedTerms       []string
@@ -103,7 +105,13 @@ type searchCandidate struct {
 	URL                       string
 	Source                    string
 	PublishedRaw              string
+	Dimension                 string
 	StockSpecificAnnouncement bool
+}
+
+type newsQueryPlan struct {
+	query     string
+	dimension string
 }
 
 type bochaProvider struct {
@@ -210,6 +218,12 @@ func New(cfg Config, fallback ports.NewsSearcher, logger *slog.Logger) *Searcher
 	if cfg.MaxAgeDays <= 0 {
 		cfg.MaxAgeDays = 3
 	}
+	if cfg.MaxSearches <= 0 {
+		cfg.MaxSearches = 1
+	}
+	if cfg.MaxSearches > 5 {
+		cfg.MaxSearches = 5
+	}
 	profileDays := map[string]int{"ultra_short": 1, "short": 3, "medium": 7, "long": 30}
 	profile := strings.ToLower(strings.TrimSpace(cfg.StrategyProfile))
 	if profile == "" {
@@ -230,7 +244,7 @@ func New(cfg Config, fallback ports.NewsSearcher, logger *slog.Logger) *Searcher
 	client := &http.Client{Timeout: cfg.RequestTimeout}
 	searcher := &Searcher{
 		client: client, fallback: fallback, logger: logger,
-		windowDays: windowDays, cacheTTL: cfg.CacheTTL, stockAnnouncements: cfg.StockAnnouncements,
+		windowDays: windowDays, maxSearches: cfg.MaxSearches, cacheTTL: cfg.CacheTTL, stockAnnouncements: cfg.StockAnnouncements,
 		trustedDomains: normalizeDomains(append(append([]string{}, defaultOfficialNewsDomains...), cfg.TrustedDomains...)),
 		blockedTerms:   normalizeTerms(append(append([]string{}, defaultNewsSpamTerms...), cfg.BlockedTerms...)),
 		cache:          make(map[string]cacheEntry),
@@ -272,7 +286,8 @@ func NewFromEnv(fallback ports.NewsSearcher, logger *slog.Logger, announcementSo
 		SearXNGBaseURLs:    splitCSV(os.Getenv("SEARXNG_BASE_URLS")),
 		TrustedDomains:     splitCSV(os.Getenv("GO_NEWS_TRUSTED_DOMAINS")),
 		BlockedTerms:       splitCSV(os.Getenv("GO_NEWS_BLOCKED_TERMS")),
-		MaxAgeDays:         positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
+		MaxAgeDays:      positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
+		MaxSearches:     positiveIntEnv("NEWS_MAX_SEARCHES", 5),
 		StrategyProfile:    envOr("NEWS_STRATEGY_PROFILE", "short"),
 		RequestTimeout:     time.Duration(positiveIntEnv("NEWS_SEARCH_TIMEOUT_SECONDS", 10)) * time.Second,
 	}
@@ -384,19 +399,29 @@ func (s *Searcher) searchNative(ctx context.Context, query, code, name string, l
 	if providerLimit > 50 {
 		providerLimit = 50
 	}
-
+	plans := s.buildQueryPlans(query, code, name)
 	type providerResult struct {
 		index      int
 		name       string
+		dimension  string
 		candidates []searchCandidate
 		err        error
 	}
-	results := make(chan providerResult, len(s.providers))
-	for index, provider := range s.providers {
-		index, provider := index, provider
+	results := make(chan providerResult, len(plans))
+	taskCount := 0
+	for index, plan := range plans {
+		if len(s.providers) == 0 {
+			break
+		}
+		provider := s.providers[index%len(s.providers)]
+		index, plan, provider := index, plan, provider
+		taskCount++
 		go func() {
-			raw, err := provider.Search(ctx, query, s.windowDays, providerLimit)
-			results <- providerResult{index: index, name: provider.Name(), candidates: raw, err: err}
+			raw, err := provider.Search(ctx, plan.query, s.windowDays, providerLimit)
+			for itemIndex := range raw {
+				raw[itemIndex].Dimension = plan.dimension
+			}
+			results <- providerResult{index: index, name: provider.Name(), dimension: plan.dimension, candidates: raw, err: err}
 		}()
 	}
 
@@ -425,25 +450,24 @@ func (s *Searcher) searchNative(ctx context.Context, query, code, name string, l
 		return announcementCandidates
 	}
 
-	byProvider := make([][]searchCandidate, len(s.providers))
-	failures := make([]string, 0, len(s.providers))
-	for received := 0; received < len(s.providers); received++ {
+	byQuery := make([][]searchCandidate, len(plans))
+	failures := make([]string, 0, taskCount)
+	for received := 0; received < taskCount; received++ {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case result := <-results:
 			if result.err != nil {
-				s.logger.Warn("native news provider request failed", "provider", result.name, "error", result.err)
-				failures = append(failures, result.name+": "+result.err.Error())
+				s.logger.Warn("native news provider request failed", "provider", result.name, "dimension", result.dimension, "error", result.err)
+				failures = append(failures, result.name+"/"+result.dimension+": "+result.err.Error())
 				continue
 			}
-			byProvider[result.index] = result.candidates
+			byQuery[result.index] = result.candidates
 		}
 	}
-
-	raw := make([]searchCandidate, 0, providerLimit*len(s.providers))
+	raw := make([]searchCandidate, 0, providerLimit*taskCount)
 	raw = append(raw, collectAnnouncements()...)
-	for _, candidates := range byProvider {
+	for _, candidates := range byQuery {
 		raw = append(raw, candidates...)
 	}
 	items := s.filterAndRank(raw, code, name)
@@ -454,6 +478,37 @@ func (s *Searcher) searchNative(ctx context.Context, query, code, name string, l
 		return nil, errors.New(strings.Join(failures, "; "))
 	}
 	return []domain.NewsItem{}, nil
+}
+
+func (s *Searcher) buildQueryPlans(baseQuery, code, name string) []newsQueryPlan {
+	plans := make([]newsQueryPlan, 0, 5)
+	if strings.TrimSpace(code) != "" || strings.TrimSpace(name) != "" {
+		stock := strings.TrimSpace(strings.Join([]string{strings.TrimSpace(name), strings.TrimSpace(code)}, " "))
+		plans = append(plans,
+			newsQueryPlan{query: baseQuery, dimension: "general"},
+			newsQueryPlan{query: stock + " 业绩 财报 预告 公告 分红 回购", dimension: "financial"},
+			newsQueryPlan{query: stock + " 监管 处罚 诉讼 交易所 公告", dimension: "regulatory"},
+			newsQueryPlan{query: stock + " 合同 中标 项目 合作 订单", dimension: "business"},
+			newsQueryPlan{query: stock + " 增持 减持 大股东 股权 股东", dimension: "ownership"},
+		)
+	} else {
+		base := strings.TrimSpace(baseQuery)
+		plans = append(plans,
+			newsQueryPlan{query: base, dimension: "general"},
+			newsQueryPlan{query: base + " 央行 证监会 财政部 宏观政策 利率", dimension: "policy"},
+			newsQueryPlan{query: base + " 上证指数 深证成指 创业板 成交额 涨跌停", dimension: "market_performance"},
+			newsQueryPlan{query: base + " IPO 新股 发行上市 并购重组", dimension: "listing_corporate_actions"},
+			newsQueryPlan{query: base + " 行业 板块 产业链 产业政策", dimension: "industry"},
+		)
+	}
+	maxSearches := s.maxSearches
+	if maxSearches < 1 {
+		maxSearches = 1
+	}
+	if maxSearches > len(plans) {
+		maxSearches = len(plans)
+	}
+	return plans[:maxSearches]
 }
 
 func (s *Searcher) fetchStockAnnouncementCandidates(ctx context.Context, code string) []searchCandidate {
@@ -499,7 +554,7 @@ func (s *Searcher) fetchStockAnnouncementCandidates(ctx context.Context, code st
 		snippet := strings.TrimSpace(strings.Join([]string{item.StockName, item.Category}, " "))
 		candidates = append(candidates, searchCandidate{
 			Title: item.Title, Snippet: snippet, URL: item.SourceURL, Source: item.Source,
-			PublishedRaw: published, StockSpecificAnnouncement: true,
+			PublishedRaw: published, Dimension: "announcement", StockSpecificAnnouncement: true,
 		})
 	}
 	return candidates
@@ -584,7 +639,7 @@ func (s *Searcher) filterAndRank(raw []searchCandidate, code, name string) []ran
 			item: domain.NewsItem{
 				Title: title, Summary: snippet, URL: articleURL, Source: source,
 				PublishedAt: published.Format("2006-01-02"), RetrievedAt: time.Now().UTC().Format(time.RFC3339Nano),
-				Relevance: float64(score),
+				Relevance: float64(score), Dimension: candidate.Dimension,
 			},
 			score: score, date: published, direct: direct,
 		})
