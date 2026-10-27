@@ -729,10 +729,20 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 		var cached model.DragonTigerSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateDragonTigerSnapshot(date, page, pageSize, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			expiry := ttl
+			cacheEligible := cached.HasData
 			if !cached.HasData {
 				expiry = emptyTTL
+				// 兼容旧缓存：未知空页若未记录回退链已耗尽，多 Provider 场景必须重新尝试后备源。
+				fallbackExhausted := false
+				for _, reason := range cached.QualityReasons {
+					if reason == "dragon_tiger_fallback_exhausted_without_confirmed_data" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				cacheEligible = fallbackExhausted || len(s.dragonTigerProviders) <= 1
 			}
-			if time.Since(cached.FetchedAt) < expiry {
+			if cacheEligible && time.Since(cached.FetchedAt) < expiry {
 				return &cached, true, nil
 			}
 		}
@@ -743,6 +753,7 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 		return nil, false, errors.New("no enabled dragon-tiger provider")
 	}
 	var failures []string
+	var unknownEmpty *model.DragonTigerSnapshot
 	for _, p := range s.dragonTigerProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -756,16 +767,28 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if !snapshot.HasData {
+			// 空报告或该页未保留 A 股都不能直接证明无可用龙虎榜数据；尝试后续 Provider。
+			unknownEmpty = snapshot
+			failures = append(failures, p.Name()+": no confirmed A-share dragon-tiger rows on this page")
+			continue
+		}
 		if data, marshalErr := json.Marshal(snapshot); marshalErr == nil {
-			expiry := ttl
-			if !snapshot.HasData {
-				expiry = emptyTTL
-			}
-			if cacheErr := s.cache.Set(ctx, key, data, expiry); cacheErr != nil {
+			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
 				s.logger.Warn("dragon-tiger cache write failed", "date", date, "page", page, "error", cacheErr)
 			}
 		}
 		return snapshot, false, nil
+	}
+	if unknownEmpty != nil {
+		// 回退链耗尽后才短缓存 unknown，防止旧的首源空缓存挡住其他来源。
+		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "dragon_tiger_fallback_exhausted_without_confirmed_data")
+		if data, marshalErr := json.Marshal(unknownEmpty); marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, data, emptyTTL); cacheErr != nil {
+				s.logger.Warn("dragon-tiger unknown cache write failed", "date", date, "page", page, "error", cacheErr)
+			}
+		}
+		return unknownEmpty, false, nil
 	}
 	return nil, false, fmt.Errorf("all dragon-tiger providers failed: %s", strings.Join(failures, "; "))
 }

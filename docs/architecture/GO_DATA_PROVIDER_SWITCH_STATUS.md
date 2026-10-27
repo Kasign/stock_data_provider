@@ -638,3 +638,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - `has_data=false` 的所属板块响应必须保持 `quality_unknown`，不能解释为已确认无板块。服务层现在会继续尝试下一个启用 Provider；只有全部尝试完后才返回 unknown，并记录 `stock_boards_fallback_exhausted_without_confirmed_membership`。
 - 仅在回退耗尽后缓存 unknown 结果 5 分钟；旧版没有记录“已耗尽回退链”的 unknown 缓存，在存在多个 Provider 时会被忽略，避免阻止新回退逻辑生效。已补相应测试源码，未运行。
+
+
+### 龙虎榜未知空页的 Provider 回退（2026-10-27）
+
+- 龙虎榜的无数据报告或整页非 A 股项目被排除后形成的 `quality_unknown` 空页，不会立即终止后备源尝试。只有所有启用来源均已尝试且没有任何来源返回可用 A 股条目时，才返回 unknown 并增加 `dragon_tiger_fallback_exhausted_without_confirmed_data`。
+- 回退耗尽后保留 30 秒短缓存；多 Provider 场景会忽略不含回退耗尽标记的旧 unknown 缓存，防止旧逻辑挡住后备源。已补回归测试源码，未运行。
