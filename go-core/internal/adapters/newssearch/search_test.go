@@ -319,7 +319,6 @@ func TestStockAnnouncementsWorkWithoutWebSearchProviders(t *testing.T) {
 	}
 }
 
-
 func TestTavilyProviderMapsSourcePublicationTime(t *testing.T) {
 	published := freshDateString(1) + "T09:30:00+08:00"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -327,7 +326,9 @@ func TestTavilyProviderMapsSourcePublicationTime(t *testing.T) {
 			t.Errorf("unexpected Tavily request: method=%s", r.Method)
 		}
 		var request map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil { t.Fatal(err) }
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
 		if request["topic"] != "news" || request["query"] != "招商银行 600036.SH 股票 最新消息" || request["include_published_date"] != true {
 			t.Errorf("unexpected Tavily payload: %#v", request)
 		}
@@ -340,8 +341,12 @@ func TestTavilyProviderMapsSourcePublicationTime(t *testing.T) {
 	defer server.Close()
 	searcher := New(Config{TavilyAPIKeys: []string{"tavily-test-key"}, TavilyEndpoint: server.URL}, nil, testLogger())
 	items, err := searcher.SearchStockNews(context.Background(), "600036.SH", "招商银行", 5)
-	if err != nil { t.Fatal(err) }
-	if len(items) != 1 || items[0].PublishedAt != freshDateString(1) { t.Fatalf("Tavily result/date not mapped: %+v", items) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].PublishedAt != freshDateString(1) {
+		t.Fatalf("Tavily result/date not mapped: %+v", items)
+	}
 }
 
 func TestBraveNewsProviderUsesChinaLanguageAndSourceDate(t *testing.T) {
@@ -360,7 +365,9 @@ func TestBraveNewsProviderUsesChinaLanguageAndSourceDate(t *testing.T) {
 	defer server.Close()
 	searcher := New(Config{BraveSearchAPIKeys: []string{"brave-test-key"}, BraveNewsEndpoint: server.URL}, nil, testLogger())
 	items, err := searcher.SearchStockNews(context.Background(), "600036.SH", "招商银行", 5)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(items) != 1 || items[0].Title != "招商银行业绩公告" {
 		t.Fatalf("Brave must reject results with only fetch timestamps: %+v", items)
 	}
@@ -371,7 +378,9 @@ func TestNativeNewsSearchAggregatesConfiguredProvidersAndDeduplicates(t *testing
 	var mu sync.Mutex
 	tavilyCalls, braveCalls := 0, 0
 	tavilyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock(); tavilyCalls++; mu.Unlock()
+		mu.Lock()
+		tavilyCalls++
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"results": []map[string]any{
 			{"title": "招商银行业绩公告 600036", "url": "https://finance.example.com/tavily/shared", "content": "来自 Tavily", "published_date": date},
@@ -380,7 +389,9 @@ func TestNativeNewsSearchAggregatesConfiguredProvidersAndDeduplicates(t *testing
 	}))
 	defer tavilyServer.Close()
 	braveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock(); braveCalls++; mu.Unlock()
+		mu.Lock()
+		braveCalls++
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"results": []map[string]any{
 			{"title": "招商银行业绩公告 600036", "url": "https://finance.example.com/brave/shared", "description": "重复标题", "page_age": date},
@@ -394,9 +405,15 @@ func TestNativeNewsSearchAggregatesConfiguredProvidersAndDeduplicates(t *testing
 		MaxAgeDays: 3, StrategyProfile: "short", RequestTimeout: time.Second,
 	}, nil, testLogger())
 	items, err := searcher.SearchStockNews(context.Background(), "600036.SH", "招商银行", 10)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	mu.Lock()
 	defer mu.Unlock()
-	if tavilyCalls != 1 || braveCalls != 1 { t.Fatalf("configured providers must each be called once: tavily=%d brave=%d", tavilyCalls, braveCalls) }
-	if len(items) != 3 { t.Fatalf("expected 3 unique results after aggregation: %+v", items) }
+	if tavilyCalls != 1 || braveCalls != 1 {
+		t.Fatalf("configured providers must each be called once: tavily=%d brave=%d", tavilyCalls, braveCalls)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected 3 unique results after aggregation: %+v", items)
+	}
 }

@@ -22,11 +22,11 @@ import (
 )
 
 const (
-	defaultBochaEndpoint = "https://api.bocha.cn/v1/web-search"
-	defaultTavilyEndpoint = "https://api.tavily.com/search"
+	defaultBochaEndpoint     = "https://api.bocha.cn/v1/web-search"
+	defaultTavilyEndpoint    = "https://api.tavily.com/search"
 	defaultBraveNewsEndpoint = "https://api.search.brave.com/res/v1/news/search"
-	defaultCacheTTL      = 10 * time.Minute
-	maxResponseBytes     = 4 << 20
+	defaultCacheTTL          = 10 * time.Minute
+	maxResponseBytes         = 4 << 20
 )
 
 // 官方监管、交易所和信息披露网站仅用于可信度加权；不把搜索结果限制为这些域名。
@@ -270,11 +270,11 @@ func NewFromEnv(fallback ports.NewsSearcher, logger *slog.Logger, announcementSo
 		BraveSearchAPIKeys: splitCSV(envOr("BRAVE_SEARCH_API_KEYS", envOr("BRAVE_SEARCH_API_KEY", os.Getenv("BRAVE_API_KEY")))),
 		BraveNewsEndpoint:  envOr("GO_NEWS_BRAVE_NEWS_ENDPOINT", defaultBraveNewsEndpoint),
 		SearXNGBaseURLs:    splitCSV(os.Getenv("SEARXNG_BASE_URLS")),
-		TrustedDomains:  splitCSV(os.Getenv("GO_NEWS_TRUSTED_DOMAINS")),
-		BlockedTerms:    splitCSV(os.Getenv("GO_NEWS_BLOCKED_TERMS")),
-		MaxAgeDays:      positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
-		StrategyProfile: envOr("NEWS_STRATEGY_PROFILE", "short"),
-		RequestTimeout:  time.Duration(positiveIntEnv("NEWS_SEARCH_TIMEOUT_SECONDS", 10)) * time.Second,
+		TrustedDomains:     splitCSV(os.Getenv("GO_NEWS_TRUSTED_DOMAINS")),
+		BlockedTerms:       splitCSV(os.Getenv("GO_NEWS_BLOCKED_TERMS")),
+		MaxAgeDays:         positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
+		StrategyProfile:    envOr("NEWS_STRATEGY_PROFILE", "short"),
+		RequestTimeout:     time.Duration(positiveIntEnv("NEWS_SEARCH_TIMEOUT_SECONDS", 10)) * time.Second,
 	}
 	if len(announcementSources) > 0 {
 		cfg.StockAnnouncements = announcementSources[0]
@@ -761,7 +761,6 @@ func (p *bochaProvider) Search(ctx context.Context, query string, days, limit in
 	}
 	return nil, fmt.Errorf("all configured Bocha keys failed: %s", strings.Join(failures, "; "))
 }
-
 
 func (p *tavilyProvider) Name() string { return "Tavily" }
 
