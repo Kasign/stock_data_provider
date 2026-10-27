@@ -7,7 +7,7 @@
 
 ## 2026-10-27 全站易用性 Review（自动化视口烟测已通过，人工/部署验收待做）
 
-- 本轮最初 Review 基线为 `67aaf3f9fd1ba0bea99845eae601ecaf57a483cb`；PR #13 仍为 Open、未合并。首页/Run Flow 与响应式修复已推进到 `42c6d413714c479cbabedd21f1b91980adf71bad`。
+- 初始源码 Review 基线曾为 `67aaf3f9fd1ba0bea99845eae601ecaf57a483cb`；本批复核基线更新至 `c0669d4c8a4e896623b9816ec58338912d242aaa`。PR #13 已于 2026-10-27 11:42（新加坡时间）合并；旧记录的 Open 状态已过期。
 - 顶栏刷新按钮现在根据当前页面更新无障碍名称与提示。行情页刷新行情资源；任务页刷新连接并在存在当前任务时重读任务；通知、问股、选股、告警与设置页明确说明此按钮只检查服务连接，避免把“健康检查”误认为页面数据刷新。
 - 刷新操作增加防连点锁与 `aria-busy` 状态；禁用控件改用“不可操作”光标，原生折叠标题补充键盘可见焦点样式。
 - 没有修改现有 API 契约与请求状态模型。行情总览、个股查询和个股研究的请求代次保护、旧数据清理，以及未接入功能的禁用状态均予以保留。
@@ -666,3 +666,13 @@
 - 最新功能与 CSS 提交 `a142c01ee05ca62a7d88f5290d4b860c040a4722` 的 [WebUI checks #40444716104](https://github.com/Kasign/stock_data_provider/actions/runs/40444716104) 和 [Chromium browser smoke #40444709585](https://github.com/Kasign/stock_data_provider/actions/runs/40444709585) 均成功。
 - 本轮对 39 处超过 200 字符的压缩 CSS 规则做了可读性格式化，格式化前后 token 序列一致；页面效果保持不变。原有响应式布局、选择器与声明值没有重排。
 - 浏览器截图中中文字体缺失的问题仅来自 GitHub Runner 环境；API 被固定为 503 的烟测不替代真实市场数据、主题及 NAS/1Panel 联调。
+
+
+## 2026-10-27 — 全站 Review 对比度与交接状态修正
+
+- 复核分支 HEAD：`c0669d4c8a4e896623b9816ec58338912d242aaa`；上一批对应的 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40445577049) 与 [Chromium browser smoke](https://github.com/Kasign/stock_data_provider/actions/runs/40445576952) 均成功。
+- 全局辅助文字 token 做了可读性校正：深色主题从 `#6e8194` 调整为 `#8296a8`，浅色主题从 `#65798a` 调整为 `#536777`；添加 WCAG AA 4.5:1 对比度回归检查覆盖四种常用背景 token。
+- 对请求生命周期做了源码核查：市场模块、公司资料/公告、龙虎榜与交易日历均有 generation/AbortController 保护；新查询先清理旧内容或呈现加载态，异常状态不会被解释为零数据。通知、问股、选股、告警仍未接入真实 API。
+- CSS 维护性：主题 token 改为多行清晰排列；保留已有组件与媒体查询顺序，未冒险合并跨区块断点。
+- PR #13 已合并；本批源代码完成后应从 `feat/webui-market-data-console` 创建新的独立 PR，保持 Open。当前尚未做 NAS/1Panel、真实数据源或人工主题/键盘验收。
+

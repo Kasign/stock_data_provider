@@ -3,15 +3,14 @@
 最后更新：2026-10-27
 用途：从新对话恢复 stock_data_provider WebUI 产品扩展与阶段 Review。
 
-## 当前 GitHub 状态（2026-10-27；状态须以 PR/Actions 实时页面为准）
+## 当前 GitHub 状态（2026-10-27 复核；后续以 GitHub 实时状态为准）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 工作分支：`feat/webui-market-data-console`；本次样式整理前已核实 HEAD：`42c6d413714c479cbabedd21f1b91980adf71bad`，提交后以 PR #13 最新 head SHA 为准。
-- WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，标题 `WebUI: improve market readability and refresh diagnostics`，状态 Open、未合并、mergeable；head 与 WebUI 分支一致，base 为 `feat/full-go-data-providers-api-switch`。
-- `42c6d41` 对应的 Chromium 视口烟测 [Actions #40441039966](https://github.com/Kasign/stock_data_provider/actions/runs/40441039966) 与 WebUI checks [Actions #40441045323](https://github.com/Kasign/stock_data_provider/actions/runs/40441045323) 均已成功；前者将 API 请求显式设为 503，不能替代真实 API/NAS 验收。后续样式整理提交的新 CI 需以新 HEAD 对应 Actions 为准。
-- PR #2 已关闭并合并，旧的 PR #2 HEAD 不再作为本轮基线。数据 PR #1 仍是独立变更流。
-- 本轮只提交到 WebUI 工作分支，改动限定在 `web/**`；不合并 PR、不更新数据分支、不修改 Go/Provider/数据库/API/Compose。
-- 本轮继续处理 CSS 可维护性与文档状态一致性；浏览器烟测已做自动化覆盖，深浅主题、键盘交互、真实后端与 NAS/Docker/OpenResty 仍由后续统一验收。
+- WebUI 工作分支：`feat/webui-market-data-console`；本批开始前核实 HEAD：`c0669d4c8a4e896623b9816ec58338912d242aaa`，对应树 SHA：`ef1d7a6c7cc3eb20a270f811fb7effff3eb7a94a`。
+- WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，标题 `WebUI: improve market readability and refresh diagnostics`，已于 2026-10-27 11:42（新加坡时间）合并；合并提交 `704476fa02b1ebcf98f27b0ffb5c1a858727d82c`。PR #13 不再承接新提交，后续 WebUI 改动须另建 PR 并保持 Open。
+- 基线提交的 [WebUI checks #40445577049](https://github.com/Kasign/stock_data_provider/actions/runs/40445577049) 与 [Chromium browser smoke #40445576952](https://github.com/Kasign/stock_data_provider/actions/runs/40445576952) 均成功。浏览器测试覆盖七种视口，但 API 固定返回 503，不能替代真实 API/NAS 验收。
+- 本轮只允许改动 `web/**`；不合并 PR、不更新数据分支、不修改 Go/Provider/数据库/API 契约/根 Compose。
+- 本轮源码已核查页面职责、未接入状态、请求代次与旧数据清理；辅助文字对比度修复及回归检查已纳入本批。人工深浅主题/键盘体验、真实后端与 NAS/Docker/OpenResty 仍待部署验收。
 
 ## 本轮已交付且尚未做运行时验收的事项
 
@@ -460,3 +459,11 @@
 - `a142c01ee05ca62a7d88f5290d4b860c040a4722` 的 WebUI checks [#40444716104](https://github.com/Kasign/stock_data_provider/actions/runs/40444716104) 与 Chromium browser smoke [#40444709585](https://github.com/Kasign/stock_data_provider/actions/runs/40444709585) 均成功。
 - CSS 格式化覆盖 39 处压缩规则，词法 token 序列一致；视觉规则值和层叠顺序未变更。后续仍避免无把握地把不同页面里的媒体查询合并。
 - PR #13 仍 Open、未合并；WebUI 分支相对数据分支目前分叉（领先 23、落后 31），在确认跨分支接口和文件差异前不直接合并。
+
+
+## 2026-10-27 — 全站 Review 复核交接
+
+- 最新复核基线为 `c0669d4c8a4e896623b9816ec58338912d242aaa`。PR #13 已合并；历史记录中关于其 Open 状态仅用于还原当时进度，不是当前真值。
+- 当前优先改进完成项：深浅主题辅助文字对比度与测试护栏；CSS 主题 token 可读性；检查市场总览、个股研究、龙虎榜/日历请求是否可能被旧响应覆盖；更新产品/进度/技术/Review 文档。
+- 当前仍未完成项：人工主题和键盘验收、真实 API 状态场景、NAS/1Panel/OpenResty 部署验收；历史 CSS 的 70 个媒体查询仍需分区维护，不做未经验证的全局合并。
+- 完成本批 commit 后，从 `feat/webui-market-data-console` 创建新 PR 指向 `feat/full-go-data-providers-api-switch`，保持 Open，不执行合并。提交前要再次读取分支 HEAD，并用 expected SHA 保护 ref。

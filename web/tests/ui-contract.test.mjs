@@ -683,3 +683,50 @@ test("collapsed sidebar navigation remains accessible and unavailable modules di
   assert.match(stylesheet, /\.nav-link-state\s*\{/);
   assert.match(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.nav-link-state\s*\{\s*display: none;/);
 });
+
+function parseThemeTokens(selector) {
+  const start = stylesheet.indexOf(selector);
+  assert.notEqual(start, -1, "CSS should declare theme token block: " + selector);
+  const open = stylesheet.indexOf("{", start);
+  const close = stylesheet.indexOf("}", open + 1);
+  assert.ok(open > start && close > open, "theme token block should be closed: " + selector);
+  return Object.fromEntries(
+    [...stylesheet.slice(open + 1, close).matchAll(/--([A-Za-z0-9_-]+)[ \t]*:[ \t]*(#[0-9a-fA-F]{6})[ \t]*;/g)]
+      .map((match) => [match[1], match[2]])
+  );
+}
+
+function relativeLuminance(hexColor) {
+  const channels = hexColor.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16) / 255);
+  const linear = channels.map((value) => value <= 0.04045
+    ? value / 12.92
+    : ((value + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastRatio(foreground, background) {
+  const a = relativeLuminance(foreground);
+  const b = relativeLuminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+test("深浅主题的辅助文字在常用背景上达到 WCAG AA 对比度", () => {
+  const themes = [
+    { name: "深色", selector: ":root {", surfaces: ["bg", "bg-elevated", "panel", "panel-raised"] },
+    { name: "浅色", selector: ':root[data-theme="light"] {', surfaces: ["bg", "bg-elevated", "panel", "panel-raised"] }
+  ];
+
+  for (const theme of themes) {
+    const tokens = parseThemeTokens(theme.selector);
+    for (const surface of theme.surfaces) {
+      assert.ok(tokens["text-dim"], theme.name + "主题必须声明辅助文字颜色");
+      assert.ok(tokens[surface], theme.name + "主题必须声明背景 token: " + surface);
+      const ratio = contrastRatio(tokens["text-dim"], tokens[surface]);
+      assert.ok(
+        ratio >= 4.5,
+        theme.name + "主题的 --text-dim 在 --" + surface + " 上对比度为 " + ratio.toFixed(2) + ":1，低于 4.5:1"
+      );
+    }
+  }
+});
+

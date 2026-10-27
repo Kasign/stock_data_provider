@@ -1,9 +1,25 @@
 :root {
   color-scheme: dark;
-  --bg: #0a0f15; --bg-elevated: #101720; --panel: #111a24; --panel-raised: #16212d;
-  --border: #233140; --border-soft: #1d2a37; --text: #eaf0f5; --text-soft: #9caec0;
-  --text-dim: #6e8194; --accent: #47d6ad; --accent-strong: #18ae86; --accent-soft: rgba(71, 214, 173, .11);
-  --blue: #7db8fa; --positive: #f17683; --negative: #55d6a6; --warning: #eab86a; --danger: #f0818a; --ma5: #eab86a; --ma20: #7db8fa; --ma60: #c79bff;
+  --bg: #0a0f15;
+  --bg-elevated: #101720;
+  --panel: #111a24;
+  --panel-raised: #16212d;
+  --border: #233140;
+  --border-soft: #1d2a37;
+  --text: #eaf0f5;
+  --text-soft: #9caec0;
+  --text-dim: #8296a8;
+  --accent: #47d6ad;
+  --accent-strong: #18ae86;
+  --accent-soft: rgba(71, 214, 173, .11);
+  --blue: #7db8fa;
+  --positive: #f17683;
+  --negative: #55d6a6;
+  --warning: #eab86a;
+  --danger: #f0818a;
+  --ma5: #eab86a;
+  --ma20: #7db8fa;
+  --ma60: #c79bff;
   --radius: 14px;
   font-family: Inter, "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-synthesis: none; text-rendering: optimizeLegibility;
@@ -851,7 +867,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   --border-soft: #e6edf2;
   --text: #172533;
   --text-soft: #465969;
-  --text-dim: #65798a;
+  --text-dim: #536777;
   --accent: #087f68;
   --accent-strong: #066b58;
   --accent-soft: rgba(8, 127, 104, .09);
