@@ -296,41 +296,27 @@
             <div class="table-scroll research-list-table-scroll"><table><thead><tr><th>股票</th><th>最新价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th><th>量比</th><th>MA5</th><th>MA20</th><th>数据质量</th><th>操作</th></tr></thead><tbody id="research-stock-list-body"><tr><td colspan="10" class="table-empty">当前没有自选股或已查询标的。</td></tr></tbody></table></div>
             <p class="market-widget-meta">未加载标的显示“未加载”，不自动对所有自选逐只请求；如需全市场/大量股票排序，需先增加批量股票概览 API。</p>
           </section>
-          <section class="panel supplemental-panel" id="stock-supplemental-panel" aria-labelledby="supplemental-title">
-            <div class="panel-heading supplemental-heading">
-              <div><h2 id="supplemental-title">个股补充研究数据</h2><p>按需读取后端现有的筹码分布与个股资金流接口；不参与行情主流程，也不推导买卖结论。</p></div>
-              <button class="button button-secondary" id="load-supplemental-button" type="button">加载补充数据</button>
+          <section class="panel research-overview-panel" id="research-overview-panel" aria-labelledby="research-overview-title">
+            <div class="panel-heading">
+              <div><h2 id="research-overview-title">当前研究标的</h2><p>报价、技术指标与专业资料按当前股票展示；未加载数据不会用旧标的快照填充。</p></div>
+              <span class="supplement-quality supplement-quality-unknown" id="research-overview-quality">未加载</span>
             </div>
-            <div class="supplemental-context"><span id="supplemental-target">当前标的：尚未选择</span><span>独立接口 · 各自标注来源、时间和质量</span></div>
-            <p class="supplemental-feedback" id="supplemental-feedback" role="status" aria-live="polite" hidden></p>
-            <div class="supplemental-grid">
-              <article class="supplemental-card" aria-labelledby="chip-card-title">
-                <div class="supplemental-card-heading"><div><h3 id="chip-card-title">筹码分布</h3><small id="supplement-chip-symbol">尚未查询</small></div><span class="supplement-quality supplemental-quality-unknown" id="supplement-chip-quality">未加载</span></div>
-                <dl class="supplemental-fields">
-                  <dt>平均成本</dt><dd id="chip-average-cost">—</dd>
-                  <dt>获利比例</dt><dd id="chip-profit-ratio">—</dd>
-                  <dt>90% 筹码集中度</dt><dd id="chip-concentration-90">—</dd>
-                  <dt>70% 筹码集中度</dt><dd id="chip-concentration-70">—</dd>
-                  <dt>数据日期</dt><dd id="chip-date">—</dd>
-                  <dt>数据来源</dt><dd id="chip-source">—</dd>
-                  <dt>获取时间</dt><dd id="chip-fetched-at">—</dd>
-                </dl>
-                <div class="supplemental-reasons" id="supplement-chip-reasons"><p>加载后显示后端返回的质量原因。</p></div>
-                <p class="supplemental-error" id="supplement-chip-error" hidden></p>
-              </article>
-              <article class="supplemental-card" aria-labelledby="flow-card-title">
-                <div class="supplemental-card-heading"><div><h3 id="flow-card-title">个股资金流</h3><small id="flow-symbol">尚未查询</small></div><span class="supplement-quality supplemental-quality-unknown" id="flow-quality">未加载</span></div>
-                <dl class="supplemental-fields">
-                  <dt>主力净流入</dt><dd id="flow-main-inflow">—</dd>
-                  <dt>近 5 日净流入</dt><dd id="flow-inflow-5d">—</dd>
-                  <dt>近 10 日净流入</dt><dd id="flow-inflow-10d">—</dd>
-                  <dt>有效观测数</dt><dd id="flow-observations">—</dd>
-                  <dt>数据来源</dt><dd id="flow-source">—</dd>
-                  <dt>获取时间</dt><dd id="flow-fetched-at">—</dd>
-                </dl>
-                <div class="supplemental-reasons" id="flow-reasons"><p>加载后显示后端返回的质量原因。</p></div>
-                <p class="supplemental-error" id="flow-error" hidden></p>
-              </article>
+            <div class="research-overview-context"><strong id="research-overview-symbol">尚未选择标的</strong><span id="research-overview-meta">行情时间、获取时间与来源将在实际回包后显示。</span></div>
+            <div class="research-overview-grid" aria-label="当前股票关键指标">
+              <article class="research-overview-metric"><span>最新价</span><strong id="research-overview-price">未加载</strong></article>
+              <article class="research-overview-metric"><span>涨跌额 / 涨跌幅</span><strong id="research-overview-change">未加载</strong></article>
+              <article class="research-overview-metric"><span>成交额</span><strong id="research-overview-amount">未加载</strong></article>
+              <article class="research-overview-metric"><span>换手率</span><strong id="research-overview-turnover">未加载</strong></article>
+              <article class="research-overview-metric"><span>量比</span><strong id="research-overview-volume-ratio">未加载</strong></article>
+              <article class="research-overview-metric"><span>MA5</span><strong id="research-overview-ma5">未加载</strong></article>
+              <article class="research-overview-metric"><span>MA20</span><strong id="research-overview-ma20">未加载</strong></article>
+              <article class="research-overview-metric"><span>行情来源</span><strong id="research-overview-source">未加载</strong></article>
+            </div>
+            <p class="research-overview-note" id="research-overview-note" role="status" aria-live="polite">从研究列表选择股票后，行情摘要会在本页展示；公司资料、财务、估值、资金、筹码和公告按需读取。</p>
+            <div class="research-overview-actions">
+              <button class="button button-secondary" id="research-open-chart" type="button">查看图表与完整日 K</button>
+              <button class="button button-secondary" id="research-add-watchlist" type="button">加入本地自选</button>
+              <button class="button button-primary" id="research-start-analysis" type="button">发起分析任务</button>
             </div>
           </section>
           <section class="panel stock-research-panel" id="stock-research-panel" aria-labelledby="stock-research-title">

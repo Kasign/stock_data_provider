@@ -12,8 +12,6 @@ import {
   getAnalysisTask,
   getAnalysisTaskEvents,
   getDailyBars,
-  getChipDistribution,
-  getCapitalFlow,
   getDataSources,
   getMarketBundle,
   getQuote,
@@ -140,9 +138,6 @@ const state = {
   stockSearchActiveIndex: -1,
   selectedStockSearchItem: null,
   sourceCount: 0,
-  supplementGeneration: 0,
-  supplementSymbol: "",
-  supplementLoading: false,
   suppressedHistoryTaskId: "",
   suppressedHistoryTaskBase: "",
   chatStockContext: null
@@ -389,8 +384,10 @@ function renderResearchStockList() {
   if (!items.length) {
     const tr = document.createElement("tr"), td = document.createElement("td");
     td.colSpan = 10; td.className = "table-empty";
-    td.textContent = "当前没有自选股或已查询标的。可以先搜索股票，或在行情页加入自选。";
-    tr.append(td); root.append(tr); setText("#research-list-scope", "当前浏览器 · 无标的"); return;
+    td.textContent = "当前没有自选股或已查询标的。可以先搜索股票，再回到本页查看研究详情。";
+    tr.append(td); root.append(tr); setText("#research-list-scope", "当前浏览器 · 无标的");
+    renderResearchOverview();
+    return;
   }
   const technicalSymbol = state.technicalSymbol;
   const latest = technicalSymbol && technicalSymbol === currentSymbol
@@ -423,10 +420,13 @@ function renderResearchStockList() {
     );
     const actionCell = document.createElement("td"), action = document.createElement("button");
     action.type = "button"; action.className = "button button-secondary research-list-action";
-    action.dataset.researchOpenSymbol = item.symbol; action.textContent = isCurrent ? "查看行情详情" : "加载行情";
+    action.dataset.researchOpenSymbol = item.symbol;
+    action.dataset.researchOpenName = item.name || item.symbol;
+    action.textContent = "查看详情";
     actionCell.append(action); tr.append(actionCell); root.append(tr);
   });
   setText("#research-list-scope", items.length + " 只 · 当前浏览器列表");
+  renderResearchOverview();
 }
 function safeReadWatchlist() {
   try {
@@ -1119,192 +1119,76 @@ function syncSettingsThemeButtons(theme = readTheme()) {
 }
 
 
-function supplementalElementId(kind, field) {
-  return kind === "chip" ? "supplement-chip-" + field : kind + "-" + field;
+function renderResearchOverview() {
+  if (!$("#research-overview-symbol")) return;
+  let symbol = "";
+  try { symbol = getQuerySymbol(); } catch {}
+  let quoteSymbol = "";
+  try { quoteSymbol = state.quote ? normalizeSymbol(state.quote.symbol || "") : ""; } catch {}
+  const quote = symbol && quoteSymbol === symbol ? state.quote : null;
+  const matched = Boolean(quote);
+  const quality = String(quote?.quality_status || "unknown").toLowerCase();
+  const qualityNode = $("#research-overview-quality");
+  qualityNode.className = "supplement-quality supplement-quality-" + (["valid","degraded","stale","invalid","unknown"].includes(quality) ? quality : "unknown");
+  qualityNode.textContent = matched ? qualityLabel(quality) : (symbol ? (state.isQuerying ? "查询中" : "未加载") : "未选择");
+  setText("#research-overview-symbol", symbol ? ((matched && quote.name ? quote.name + " · " : "") + symbol) : "尚未选择标的");
+  const meta = [];
+  if (matched) {
+    meta.push(quote.quote_time ? "行情时间 " + formatDateTime(quote.quote_time) : "行情时间未报告");
+    meta.push(quote.fetched_at ? "获取时间 " + formatDateTime(quote.fetched_at) : "获取时间未报告");
+    meta.push("质量 " + qualityLabel(quality));
+  } else meta.push(symbol ? (state.isQuerying ? "正在读取当前标的行情" : "尚无匹配报价") : "请先选择有效股票代码");
+  setText("#research-overview-meta", meta.join(" · "));
+  const display = (value, formatter) => !matched ? (symbol && state.isQuerying ? "读取中…" : "未加载") : (value == null || value === "" ? "未报告" : formatter(value));
+  setText("#research-overview-price", display(quote?.current_price, formatPrice));
+  const change = matched && quote.change != null ? formatPrice(quote.change) : "未报告";
+  const percent = matched && quote.change_percent != null ? formatPercent(quote.change_percent) : "未报告";
+  setText("#research-overview-change", matched ? change + " / " + percent : (symbol && state.isQuerying ? "读取中…" : "未加载"));
+  $("#research-overview-change").classList.toggle("positive", matched && Number(quote.change_percent) > 0);
+  $("#research-overview-change").classList.toggle("negative", matched && Number(quote.change_percent) < 0);
+  setText("#research-overview-amount", display(quote?.amount, formatCompact));
+  setText("#research-overview-turnover", display(quote?.turnover_rate, formatPercent));
+  setText("#research-overview-volume-ratio", display(quote?.volume_ratio, v => Number.isFinite(Number(v)) ? Number(v).toFixed(2) : "未报告"));
+  setText("#research-overview-source", matched ? (quote.source || "未报告") : (symbol && state.isQuerying ? "读取中…" : "未加载"));
+  let barsSymbol = "";
+  try { barsSymbol = normalizeSymbol(state.technicalSymbol || ""); } catch {}
+  const hasBars = Boolean(symbol && barsSymbol === symbol);
+  const latest = hasBars ? [...state.technicalRows].reverse().find(row => row && row.close != null) : null;
+  const technical = key => !hasBars ? (symbol && state.isQuerying ? "读取中…" : "未加载") : (Number.isFinite(latest?.[key]) ? latest[key].toFixed(2) : "数据不足");
+  setText("#research-overview-ma5", technical("ma5"));
+  setText("#research-overview-ma20", technical("ma20"));
+  const note = $("#research-overview-note");
+  const reasons = matched && Array.isArray(quote.quality_reasons) ? quote.quality_reasons.filter(Boolean) : [];
+  note.classList.toggle("is-warning", reasons.length > 0 || (matched && quality !== "valid"));
+  if (!symbol) note.textContent = "请先选择有效股票；未选择标的时不会展示上一只股票的快照。";
+  else if (!matched && state.isQuerying) note.textContent = "正在读取 " + symbol + " 的实时行情与日 K。";
+  else if (!matched) note.textContent = "当前标的尚无匹配行情。可从列表点击“查看详情”加载，或打开图表与日 K 页面查询。";
+  else if (reasons.length) note.textContent = "行情质量提示：" + reasons.join("；");
+  else if (quality !== "valid") note.textContent = "服务端未提供详细质量原因；当前质量为“" + qualityLabel(quality) + "”，请结合来源与时间判断。";
+  else note.textContent = "当前报价与所选股票匹配。MA5/MA20 仅基于当前股票有效日 K 计算；历史数据不足时不估算。";
+  ["research-open-chart","research-add-watchlist","research-start-analysis"].forEach(id => { const b = $("#"+id); if (b) b.disabled = !symbol; });
 }
-
-function clearSupplementReasons(kind, message = "尚未返回质量原因。") {
-  const root = $("#"+supplementalElementId(kind, "reasons"));
-  root.replaceChildren();
-  const line = document.createElement("p");
-  line.textContent = message;
-  root.append(line);
+function openResearchStock(symbol, name = "") {
+  let normalized;
+  try { normalized = normalizeSymbol(symbol); } catch (error) { setNotice(error.message, "danger"); return; }
+  let q = "", bars = "";
+  try { q = state.quote ? normalizeSymbol(state.quote.symbol || "") : ""; } catch {}
+  try { bars = state.technicalSymbol ? normalizeSymbol(state.technicalSymbol) : ""; } catch {}
+  const quoteMatches = q === normalized && Boolean(state.quote), barsMatch = bars === normalized;
+  $("#symbol-input").value = normalized;
+  state.selectedStockSearchItem = {symbol:normalized,name:name || normalized};
+  setView("research");
+  if (!quoteMatches || !barsMatch) void runQuoteQuery();
 }
-
-function setSupplementQuality(kind, status, label = "") {
-  const node = $("#"+supplementalElementId(kind, "quality"));
-  const normalized = String(status || "unknown").toLowerCase();
-  node.className = "supplement-quality supplement-quality-" + (["valid","degraded","stale","invalid","unknown"].includes(normalized) ? normalized : "unknown");
-  node.textContent = label || qualityLabel(normalized);
-}
-
-function clearSupplementCard(kind, symbolLabel = "尚未查询") {
-  const ids = kind === "chip"
-    ? ["chip-average-cost","chip-profit-ratio","chip-concentration-90","chip-concentration-70","chip-date","chip-source","chip-fetched-at"]
-    : ["flow-main-inflow","flow-inflow-5d","flow-inflow-10d","flow-observations","flow-source","flow-fetched-at"];
-  ids.forEach((id) => setText("#"+id, "—"));
-  setText("#"+supplementalElementId(kind, "symbol"), symbolLabel);
-  setSupplementQuality(kind, "unknown", "未加载");
-  clearSupplementReasons(kind, "加载后显示后端返回的质量原因。");
-  const errorNode = $("#"+supplementalElementId(kind, "error"));
-  errorNode.hidden = true;
-  errorNode.textContent = "";
-}
-
-function resetSupplementPanel(symbol) {
-  state.supplementGeneration += 1;
-  state.supplementSymbol = symbol || "";
-  state.supplementLoading = false;
-  setText("#supplemental-target", symbol ? "当前标的：" + symbol : "当前标的：尚未选择");
-  setText("#supplemental-feedback", "");
-  $("#supplemental-feedback").hidden = true;
-  $("#load-supplemental-button").disabled = !symbol;
-  $("#load-supplemental-button").textContent = "加载补充数据";
-  clearSupplementCard("chip", symbol || "尚未查询");
-  clearSupplementCard("flow", symbol || "尚未查询");
-}
-
-function formatRatioPercent(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < 0 || number > 1) return "超出接口约定";
-  return formatPercent(number * 100);
-}
-
-function formatSignedYuan(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "—";
-  const formatted = (number > 0 ? "+" : "") + formatCompact(number) + " 元";
-  return formatted;
-}
-
-function renderSupplementReasons(kind, reasons) {
-  const root = $("#"+supplementalElementId(kind, "reasons"));
-  root.replaceChildren();
-  if (!Array.isArray(reasons) || !reasons.length) {
-    const line = document.createElement("p");
-    line.textContent = "接口未返回质量原因；请结合质量状态与数据日期判断可用性。";
-    root.append(line);
-    return;
-  }
-  reasons.forEach((reason) => {
-    const line = document.createElement("p");
-    line.textContent = String(reason);
-    root.append(line);
-  });
-}
-
-function renderChipDistribution(data, symbol) {
-  setText("#supplement-chip-symbol", data.symbol || symbol);
-  setText("#chip-average-cost", Number(data.average_cost) > 0 ? formatPrice(data.average_cost) : "未报告");
-  setText("#chip-profit-ratio", formatRatioPercent(data.profit_ratio));
-  setText("#chip-concentration-90", formatRatioPercent(data.concentration_90));
-  setText("#chip-concentration-70", formatRatioPercent(data.concentration_70));
-  setText("#chip-date", data.date || data.provider_date ? formatDate(data.date || data.provider_date) : "未报告");
-  setText("#chip-source", [data.source, data.source_version].filter(Boolean).join(" · ") || "未报告");
-  setText("#chip-fetched-at", data.fetched_at ? formatDateTime(data.fetched_at) : "未报告");
-  setSupplementQuality("chip", data.quality_status);
-  renderSupplementReasons("chip", data.quality_reasons);
-  $("#supplement-chip-error").hidden = true;
-  $("#supplement-chip-error").textContent = "";
-}
-
-function renderCapitalFlow(data, symbol) {
-  setText("#flow-symbol", data.symbol || symbol);
-  setText("#flow-main-inflow", formatSignedYuan(data.main_net_inflow_yuan));
-  setText("#flow-inflow-5d", formatSignedYuan(data.inflow_5d_yuan));
-  setText("#flow-inflow-10d", formatSignedYuan(data.inflow_10d_yuan));
-  setText("#flow-observations", Number.isFinite(Number(data.observations)) ? String(data.observations) : "未报告");
-  setText("#flow-source", [data.source, data.source_version].filter(Boolean).join(" · ") || "未报告");
-  setText("#flow-fetched-at", data.fetched_at ? formatDateTime(data.fetched_at) : "未报告");
-  setSupplementQuality("flow", data.quality_status);
-  renderSupplementReasons("flow", data.quality_reasons);
-  $("#flow-error").hidden = true;
-  $("#flow-error").textContent = "";
-}
-
-function renderSupplementError(kind, error) {
-  const node = $("#"+supplementalElementId(kind, "error"));
-  node.hidden = false;
-  node.textContent = errorMessage(error);
-  setSupplementQuality(kind, "unknown", "接口不可用");
-  clearSupplementReasons(kind, "本次未获取到质量原因。");
-}
-
-async function loadSupplementalData() {
-  if (!state.settings.apiKey) {
-    const feedback = $("#supplemental-feedback");
-    feedback.hidden = false;
-    feedback.className = "supplemental-feedback is-warning";
-    feedback.textContent = "请先配置行情服务 API Key。";
-    $("#settings-dialog").showModal();
-    return;
-  }
-  if (state.isQuerying) {
-    const feedback = $("#supplemental-feedback");
-    feedback.hidden = false;
-    feedback.textContent = "主行情查询尚未完成，请稍后加载补充数据。";
-    feedback.className = "supplemental-feedback is-warning";
-    return;
-  }
-
+function openResearchChartView() {
   let symbol;
-  try {
-    symbol = getQuerySymbol();
-    state.settings.marketBase = normalizeBasePath(state.settings.marketBase, "/market-api");
-  } catch (error) {
-    const feedback = $("#supplemental-feedback");
-    feedback.hidden = false;
-    feedback.textContent = error.message;
-    feedback.className = "supplemental-feedback is-error";
-    return;
-  }
-
-  if (state.supplementLoading) return;
-  if (state.supplementSymbol !== symbol) resetSupplementPanel(symbol);
-  const generation = ++state.supplementGeneration;
-  state.supplementSymbol = symbol;
-  state.supplementLoading = true;
-  $("#load-supplemental-button").disabled = true;
-  $("#load-supplemental-button").textContent = "正在加载…";
-  setText("#supplemental-target", "当前标的：" + symbol);
-  const feedback = $("#supplemental-feedback");
-  feedback.hidden = false;
-  feedback.className = "supplemental-feedback";
-  feedback.textContent = "正在分别读取筹码分布和资金流；任一接口失败不会阻塞另一项结果。";
-  clearSupplementCard("chip", symbol);
-  clearSupplementCard("flow", symbol);
-  setSupplementQuality("chip", "unknown", "读取中…");
-  setSupplementQuality("flow", "unknown", "读取中…");
-
-  try {
-    const results = await Promise.allSettled([
-      getChipDistribution(state.settings, symbol),
-      getCapitalFlow(state.settings, symbol)
-    ]);
-    if (generation !== state.supplementGeneration || symbol !== state.supplementSymbol) return;
-
-    if (results[0].status === "fulfilled") renderChipDistribution(results[0].value, symbol);
-    else renderSupplementError("chip", results[0].reason);
-
-    if (results[1].status === "fulfilled") renderCapitalFlow(results[1].value, symbol);
-    else renderSupplementError("flow", results[1].reason);
-
-    const failed = results.filter((result) => result.status === "rejected").length;
-    feedback.className = "supplemental-feedback" + (failed ? " is-warning" : "");
-    feedback.textContent = failed === 0
-      ? "补充数据已返回。请分别检查各接口的数据日期、来源和质量状态；数值不代表交易建议。"
-      : failed === 1
-        ? "一项补充接口不可用，另一项结果已独立显示。请检查对应错误、请求 ID 和后端 Provider 配置。"
-        : "两项补充接口均未返回数据。请检查 API Key、服务版本和 Provider 是否启用；行情、日 K 与分析主流程不受此结果覆盖。";
-  } finally {
-    if (generation === state.supplementGeneration) {
-      state.supplementLoading = false;
-      $("#load-supplemental-button").disabled = !state.supplementSymbol;
-      $("#load-supplemental-button").textContent = "重新加载补充数据";
-    }
-  }
+  try { symbol = getQuerySymbol(); } catch (error) { setNotice(error.message, "danger"); return; }
+  let q = "", bars = "";
+  try { q = state.quote ? normalizeSymbol(state.quote.symbol || "") : ""; } catch {}
+  try { bars = state.technicalSymbol ? normalizeSymbol(state.technicalSymbol) : ""; } catch {}
+  const quoteMatches = q === symbol && Boolean(state.quote), barsMatch = bars === symbol;
+  setView("stocks");
+  if (!quoteMatches || !barsMatch) void runQuoteQuery();
 }
 
 function clearBundleSnapshotMetadata() {
@@ -1416,6 +1300,7 @@ function clearQuoteDisplay(symbol, phase = "failed") {
   setText("#metric-volume-ratio", "量比 —");
   setText("#metric-source", "—");
   setText("#metric-quote-time", "行情时间未报告");
+  renderResearchStockList();
 }
 
 function makeCell(value, className = "") {
@@ -1748,6 +1633,7 @@ function clearBarsDisplay(symbol, message = "当前条件尚无日 K 结果。")
   renderChartView();
   $("#chart-empty").textContent = message;
   $("#chart-empty").hidden = false;
+  renderResearchStockList();
 }
 
 function clearMarketQueryResults(symbol, message) {
@@ -1758,14 +1644,10 @@ function clearMarketQueryResults(symbol, message) {
   setText("#last-updated", "—");
   setText("#query-hint", message || "当前查询条件已变化，旧行情快照已清除。");
   setNotice("", "info");
-  let normalizedSymbol = "";
-  try { normalizedSymbol = normalizeSymbol(label); } catch {}
-  resetSupplementPanel(normalizedSymbol);
   stockResearch.invalidate(message || "当前查询条件已变化，请重新加载个股研究资料。");
 }
 
 function releaseQuoteQueryControls() {
-  $("#load-supplemental-button").disabled = !state.supplementSymbol || state.supplementLoading;
   $("#quote-form").classList.remove("is-loading");
   $("#quote-form button[type='submit']").disabled = false;
 }
@@ -1846,8 +1728,6 @@ async function runQuoteQuery(event) {
   state.quoteQueryInput = $("#symbol-input").value.trim();
   state.lastQueryInput = state.quoteQueryInput;
   state.isQuerying = true;
-  resetSupplementPanel(symbol);
-  $("#load-supplemental-button").disabled = true;
   $("#quote-form").classList.add("is-loading");
   $("#quote-form button[type='submit']").disabled = true;
   setNotice("", "info");
@@ -1964,6 +1844,7 @@ async function runQuoteQuery(event) {
       state.isQuerying = false;
       state.quoteQueryController = null;
       state.quoteQueryKey = "";
+      renderResearchOverview();
       releaseQuoteQueryControls();
     }
   }
@@ -3042,9 +2923,7 @@ $("#topbar-notifications").addEventListener("click", () => setView("notification
 $("#research-stock-list-body").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-research-open-symbol]");
   if (!button) return;
-  $("#symbol-input").value = button.dataset.researchOpenSymbol || "";
-  setView("stocks");
-  void runQuoteQuery();
+  openResearchStock(button.dataset.researchOpenSymbol || "", button.dataset.researchOpenName || "");
 });
 $("#chat-clear-context").addEventListener("click", () => {
   state.chatStockContext = null;
@@ -3054,6 +2933,13 @@ $("#close-run-flow-dialog").addEventListener("click", () => $("#run-flow-dialog"
 $("#run-flow-dialog").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
+$("#research-open-chart").addEventListener("click", openResearchChartView);
+$("#research-add-watchlist").addEventListener("click", () => {
+  addCurrentSymbolToWatchlist();
+  const feedback = $("#watchlist-feedback");
+  if (feedback?.textContent) setText("#research-overview-note", feedback.textContent);
+});
+$("#research-start-analysis").addEventListener("click", () => startAnalysisForSymbol($("#symbol-input").value));
 $("#settings-open-connection").addEventListener("click", openSettings);
 $("#settings-check-connection").addEventListener("click", checkConnectionFromSettings);
 $("#settings-view-data-sources").addEventListener("click", () => {
@@ -3138,7 +3024,6 @@ document.addEventListener("click", (event) => {
   cancelStockSearchRequest();
   hideStockSearch();
 });
-$("#load-supplemental-button").addEventListener("click", loadSupplementalData);
 $("#copy-bundle-snapshot").addEventListener("click", async () => {
   if (!state.bundleSnapshot) return;
   const feedback = $("#bundle-snapshot-feedback");
@@ -3189,8 +3074,7 @@ $("#refresh-button").addEventListener("click", async () => {
       if (state.settings.apiKey) await runQuoteQuery();
     } else if (state.view === "watchlist") renderWatchlist();
     else if (state.view === "research") {
-      $("#load-supplemental-button").click();
-      $("#load-stock-research").click();
+      await stockResearch.refresh();
       renderResearchStockList();
     } else if (state.view === "data") {
       await dataCenter.refresh();
@@ -3354,7 +3238,6 @@ renderAlertCollection({ supported: false }, "attempts", "[data-alert-delivery-st
 renderRecentTasks();
 renderWatchlist();
 configureDateInputs();
-resetSupplementPanel("");
 setView(window.location.hash.slice(1), { updateHash: false, refreshData: false });
 syncSettingsThemeButtons(readTheme());
 void refreshServices();
