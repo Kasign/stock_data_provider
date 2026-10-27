@@ -730,3 +730,39 @@ test("深浅主题的辅助文字在常用背景上达到 WCAG AA 对比度", ()
   }
 });
 
+function baseCssDeclarationBlock(selector) {
+  const escaped = selector.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
+  const match = stylesheet.match(new RegExp("(?:^|\\n)\\s*" + escaped + "\\s*\\{([^}]*)\\}"));
+  assert.ok(match, "stylesheet should declare " + selector);
+  return match[1];
+}
+
+test("辅助说明、任务元信息和输入占位文字统一使用主题感知的辅助文字 token", () => {
+  for (const selector of [
+    ".side-label",
+    ".sidebar-footnote",
+    ".task-facts small",
+    ".event-row > small",
+    ".task-actions > span"
+  ]) {
+    assert.match(
+      baseCssDeclarationBlock(selector),
+      /color:\s*var\(--text-dim\)\s*;/,
+      selector + " should inherit contrast-safe text color from the current theme"
+    );
+  }
+
+  assert.match(
+    stylesheet,
+    /\.field input::placeholder,\s*\.field textarea::placeholder,\s*\.recent-analysis-search input::placeholder,\s*\.watchlist-name-input::placeholder\s*\{[^}]*color:\s*var\(--text-dim\)/,
+    "form and local-search placeholders should use the shared contrast-safe token"
+  );
+  assert.match(
+    stylesheet,
+    /:root\[data-theme="light"\] \.field input::placeholder,[\s\S]*?\.watchlist-name-input::placeholder\s*\{\s*color:\s*var\(--text-dim\);/,
+    "light-theme placeholder overrides must not restore a low-contrast hard-coded color"
+  );
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.side-label \{ color: var\(--text-dim\); \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.sidebar-footnote \{ color: var\(--text-dim\); \}/);
+});
+

@@ -709,3 +709,12 @@
 - PR #14 已从冲突状态恢复为可合并，目标分支与工作分支的比较只涉及 `web/` 下 7 个文件；PR 仍 Open，没有合并。
 - 同步提交的 [WebUI checks #40455555464](https://github.com/Kasign/stock_data_provider/actions/runs/40455555464) 和 [Chromium smoke #40455555462](https://github.com/Kasign/stock_data_provider/actions/runs/40455555462) 均在执行步骤开始前失败；对应 Job 未提供 steps/logs。此前 push smoke [#40455549420](https://github.com/Kasign/stock_data_provider/actions/runs/40455549420) 亦如此。当前不能判定该提交的源码测试通过或失败，需后续有可执行 runner 的 Actions 结果再确认。
 
+
+
+## 2026-10-27 — 全站辅助文字对比度二轮复核
+
+- 在通用 token 由深色 `#6e8194` / 浅色 `#65798a` 调整为 `#8296a8` / `#536777` 后，继续修复仍绕过 token 的历史样式。
+- 侧栏分组标签/脚注、Run Flow 任务属性/事件元信息/任务操作说明，以及行情、最近任务、自选股输入占位文字现已统一采用 `--text-dim`；浅色模式也不再覆盖回低对比度的硬编码值。
+- `web/tests/ui-contract.test.mjs` 增加组件级规则约束；未改变布局断点、业务状态、请求流或 API 契约。
+- GitHub Actions 在新 HEAD 的先前重试仍然没有分配 runner，Job 的 runner ID 为 0 且无 steps/logs；不能据此确认源码测试通过或失败。真实浏览器与 NAS/1Panel 验收仍待用户部署后进行。
+
