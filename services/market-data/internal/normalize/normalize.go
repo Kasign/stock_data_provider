@@ -14,6 +14,11 @@ import (
 
 const Version = "4"
 
+const (
+	quoteChangeToleranceCNY       = 0.02
+	quoteChangePercentTolerancePP = 0.15
+)
+
 var symbolPattern = regexp.MustCompile(`^[0-9]{6}(\.(SH|SZ|BJ))?$`)
 
 func NormalizeSymbol(raw string) (string, error) {
@@ -124,6 +129,16 @@ func ValidateQuote(q *model.Quote) error {
 	for name, p := range map[string]*float64{"change": q.Change, "change_percent": q.ChangePercent, "volume_ratio": q.VolumeRatio, "turnover_rate": q.TurnoverRate} {
 		if p != nil && (!finite(*p) || ((name == "volume_ratio" || name == "turnover_rate") && *p < 0)) {
 			return fmt.Errorf("quote %s must be finite and non-negative when present", name)
+		}
+	}
+	expectedChange := *q.CurrentPrice - *q.PrevClose
+	if q.Change != nil && math.Abs(*q.Change-expectedChange) > quoteChangeToleranceCNY {
+		return errors.New("quote change is inconsistent with current_price minus prev_close")
+	}
+	if q.ChangePercent != nil {
+		expectedChangePercent := expectedChange / *q.PrevClose * 100
+		if !finite(expectedChangePercent) || math.Abs(*q.ChangePercent-expectedChangePercent) > quoteChangePercentTolerancePP {
+			return errors.New("quote change_percent is inconsistent with current_price and prev_close")
 		}
 	}
 	if q.Volume == nil || *q.Volume < 0 {
