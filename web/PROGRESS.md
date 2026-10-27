@@ -666,3 +666,11 @@
 - 最新功能与 CSS 提交 `a142c01ee05ca62a7d88f5290d4b860c040a4722` 的 [WebUI checks #40444716104](https://github.com/Kasign/stock_data_provider/actions/runs/40444716104) 和 [Chromium browser smoke #40444709585](https://github.com/Kasign/stock_data_provider/actions/runs/40444709585) 均成功。
 - 本轮对 39 处超过 200 字符的压缩 CSS 规则做了可读性格式化，格式化前后 token 序列一致；页面效果保持不变。原有响应式布局、选择器与声明值没有重排。
 - 浏览器截图中中文字体缺失的问题仅来自 GitHub Runner 环境；API 被固定为 503 的烟测不替代真实市场数据、主题及 NAS/1Panel 联调。
+
+
+## 2026-10-27 — PR #13 集成与合并
+
+- 已完成集成 Review 并合并 PR #13：`704476fa02b1ebcf98f27b0ffb5c1a858727d82c`。目标分支已包含最新 WebUI 首页布局、市场模块、CSS 整理、诊断信息与浏览器烟测。
+- 目标分支新增 34 个提交与 WebUI 变更的路径集合无重叠；大盘首页依赖的 7 类市场接口均在当前 market-data HTTP 路由中存在，主要字段和 OpenAPI/Go 模型相符。
+- 修复浏览器烟测工作流，让后续针对 `feat/full-go-data-providers-api-switch` 的 PR 和 push 也能触发 Chromium 检查。
+- 合并前 head `c0669d4` 的 WebUI checks 与 Chromium browser smoke 均通过。该烟测使用模拟 503 响应，不替代真实 Provider/API 联调；部署环境验收仍待完成。

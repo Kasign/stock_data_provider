@@ -460,3 +460,14 @@
 - `a142c01ee05ca62a7d88f5290d4b860c040a4722` 的 WebUI checks [#40444716104](https://github.com/Kasign/stock_data_provider/actions/runs/40444716104) 与 Chromium browser smoke [#40444709585](https://github.com/Kasign/stock_data_provider/actions/runs/40444709585) 均成功。
 - CSS 格式化覆盖 39 处压缩规则，词法 token 序列一致；视觉规则值和层叠顺序未变更。后续仍避免无把握地把不同页面里的媒体查询合并。
 - PR #13 仍 Open、未合并；WebUI 分支相对数据分支目前分叉（领先 23、落后 31），在确认跨分支接口和文件差异前不直接合并。
+
+
+## 2026-10-27 — PR #13 集成 Review 与合并完成
+
+- 重新核实集成前分支：数据目标分支 `feat/full-go-data-providers-api-switch` 为 `8ea8875693584816f0150412aa130902c32f4cba`，WebUI 分支为 `c0669d4c8a4e896623b9816ec58338912d242aaa`。共同基点之后，数据分支新增 34 个提交，WebUI 分支包含 24 个提交。
+- 对比数据分支相对共同基点的变更文件与 PR #13 的 16 个变更文件，没有发现同路径重叠；人工核对首页调用的指数、涨跌分布、板块、涨跌停、人气、龙虎榜与交易日历接口，后端路由及主要响应字段均有对应定义。本次没有修改 Go、Provider、数据库或 API 契约代码。
+- 修正 `.github/workflows/webui-browser-smoke.yml` 的触发范围：增加面向目标分支的 `pull_request`，并让目标分支上的 WebUI 修改也能触发 Chromium 冒烟检查。
+- PR #13 于 2026-10-27 合并成功，使用普通 merge commit 保留双方历史。合并提交：`704476fa02b1ebcf98f27b0ffb5c1a858727d82c`；第一父提交为当时最新数据分支 `8ea8875693584816f0150412aa130902c32f4cba`，第二父提交为 WebUI head `c0669d4c8a4e896623b9816ec58338912d242aaa`。
+- 合并前最终 WebUI head 的 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40445577049) 与 [Chromium browser smoke](https://github.com/Kasign/stock_data_provider/actions/runs/40445576952) 均成功；重复触发的浏览器烟测 [#40445571267](https://github.com/Kasign/stock_data_provider/actions/runs/40445571267) 也成功。合并后以目标分支最新提交对应的 Actions 为准。
+- 验收边界：浏览器烟测将 API 请求固定为 503，覆盖布局、导航及响应式行为，不代表真实行情接口端到端通过；真实 API Key、数据回包、主题、键盘细节与 NAS/1Panel 联调仍需在已部署环境验证。CI Runner 的中文字体缺失会影响截图汉字展示，不应误判为用户浏览器字体问题。
+- 当前 Git 冲突风险已通过集成合并处理，PR #13 不再处于 Open 状态。后续不需要再合并同一个 PR；只需在部署环境集中验证真实 API 与页面交互。
