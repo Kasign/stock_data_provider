@@ -193,6 +193,8 @@ func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
 			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","date":"2026-10-27","average_cost":1500.5,"cost_90_low":1300,"cost_90_high":1700,"cost_70_low":1400,"cost_70_high":1600,"profit_ratio":0.82,"concentration_90":0.15,"concentration_70":0.11,"source":"eastmoney","source_version":"test-v1","provider_date":"2026-10-27","fetched_at":%q,"quality_status":"valid","quality_reasons":[]}`, fetchedAt)))
 		case strings.HasSuffix(r.URL.Path, "/capital-flow"):
 			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","main_net_inflow_yuan":1200000,"inflow_5d_yuan":4200000,"inflow_10d_yuan":7600000,"observations":10,"source":"miaoxiang","source_version":"test-v1","fetched_at":%q,"quality_status":"degraded","quality_reasons":["exact_publication_time_unavailable"]}`, fetchedAt)))
+		case strings.HasSuffix(r.URL.Path, "/profile"):
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","name":"贵州茅台","ipo_date":"2001-08-27","security_type":1,"security_type_label":"stock","listing_status":1,"listing_status_label":"listed","pe_dynamic":23.5,"pb":8.4,"industry":"白酒","market_cap_cny":2100000000000,"float_market_cap_cny":2090000000000,"board_code":"SH","roe_percent":25.2,"net_profit_margin_percent":52.1,"net_profit_cny":80000000000,"gross_margin_percent":91.4,"source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"valid","quality_reasons":[],"normalization_version":"market-data-v1"}`, fetchedAt)))
 		default:
 			t.Errorf("unexpected route %s", r.URL.Path)
 			http.NotFound(w, r)
@@ -221,7 +223,10 @@ func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
 	if bundle.CapitalFlow["main_net_inflow_yuan"] != float64(1200000) {
 		t.Fatalf("capital-flow data not mapped: %+v", bundle.CapitalFlow)
 	}
-	for _, sourceKey := range []string{"fundamentals", "stock_boards", "chip_distribution", "capital_flow"} {
+	if bundle.Profile == nil || bundle.Profile.Industry != "白酒" || bundle.Profile.DynamicPE == nil || *bundle.Profile.DynamicPE != 23.5 {
+		t.Fatalf("stock profile not mapped: %+v", bundle.Profile)
+	}
+	for _, sourceKey := range []string{"fundamentals", "stock_boards", "chip_distribution", "capital_flow", "stock_profile"} {
 		if bundle.Sources[sourceKey] == "" {
 			t.Errorf("missing source provenance for %s: %+v", sourceKey, bundle.Sources)
 		}
@@ -234,6 +239,7 @@ func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
 		"/api/v1/stocks/600519/boards",
 		"/api/v1/stocks/600519/chip-distribution",
 		"/api/v1/stocks/600519/capital-flow",
+		"/api/v1/stocks/600519/profile",
 	} {
 		if seen[path] != 1 {
 			t.Errorf("route %s called %d times, want once", path, seen[path])
