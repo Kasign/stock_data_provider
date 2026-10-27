@@ -531,11 +531,19 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 原 Python TickFlowFetcher 可使用授权的 `quotes.get(symbols=[...])` 获取 6 个 A 股核心指数；Go 适配器此前仅实现个股 Quote 与日 K，未实现现有 `IndexQuoteProvider` 接口。
 - 新增独立 `FetchIndexQuotes` 能力，限定 6 个核心指数，不把未知代码混入结果；字段保留来源报价时间，缺少时间/成交额/OHLC 时显式降级，不伪造源时间或补零。
 - 默认关闭，新增 `MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED`。该能力需 TickFlow API Key，与免 Key 日 K 分开配置；配置缺 Key 时会在启动校验阶段失败。
-- 已补接口夹具与配置门禁测试源码；按协作约定未运行测试、构建、CI 或真实 Provider 请求。市场广度与 SW1 板块仍列为后续国内能力差异。
+- 已补接口夹具与配置门禁测试源码；按协作约定未运行测试、构建、CI 或真实 Provider 请求。市场广度已按官方 SDK 暴露的 A 股证券池和 universe 行情接口接入 Go 适配器，默认关闭且需授权 Key；SW1 板块排名仍缺少可确认的接口契约。
 
 ### 国内 Provider 静态契约复核（2026-10-27）
 
 - Tushare 日线的 `pct_chg` 不是 OHLC 主字段，但缺失时会影响涨跌幅完整性。当前适配器此前仅在字段存在但解析失败时降级，字段缺失或为 `null` 时可能保留 `valid`；本轮将两种情况统一标记 `degraded`，涨跌幅继续保留为空，不补零。
 - TickFlow 报价时间按毫秒 Unix 时间戳处理。个股行情和核心指数行情统一拒绝早于 2000-01-01 或晚于当前时间 5 分钟以上的时间戳，且将其标记为缺失/无效；不设置固定“陈旧”阈值，避免将休市/盘后最后有效快照误判。
-- 仍未完成的国内差异：TickFlow 市场广度与申万一级板块需先确认 REST 路径、字段结构和权限；Tushare / Pytdx / TickFlow 的字段单位、历史覆盖与回退语义仍需完成全量静态对照。历史财务修订、历史成分生效区间和复权因子时点重建依赖更完整的来源数据或存储设计，不能用最新值替代。
+- 仍未完成的国内差异：TickFlow 市场广度已按官方 SDK 的 `GET /v1/universes/CN_Equity_A` 与 `GET /v1/quotes?universes=CN_Equity_A` 契约接入，先校验证券池成员，再要求返回唯一行情覆盖完整；默认关闭，用户 Key 的实时行情/证券池权限与目标环境仍待验收。申万一级板块排名仍需确认源端端点与分类口径。Tushare / Pytdx / TickFlow 的字段单位、历史覆盖与回退语义仍需完成全量静态对照。历史财务修订、历史成分生效区间和复权因子时点重建依赖更完整的来源数据或存储设计，不能用最新值替代。
 - 本轮只增加代码与测试源码，按协作约定未运行测试、构建、CI 或真实 Provider 请求。
+
+### TickFlow 全市场 A 股涨跌统计接入（2026-10-27）
+
+- 根据 TickFlow 官方 SDK 的接口契约，使用 `GET /v1/universes/CN_Equity_A` 读取证券池清单及 `symbol_count`，再调用 `GET /v1/quotes?universes=CN_Equity_A` 读取实时行情；两个请求均通过 API Key 鉴权。
+- 统计前校验证券池数量、规范化后的唯一证券成员以及行情覆盖是否完整。缺证券、重复/未知代码、混合报告日期或没有有效来源日期时整体失败并让服务层回退，绝不把局部行情冒充全市场。
+- 涨跌/平盘按最新价与昨收价计算；成交额仅在所有证券均有有效金额时汇总，金额覆盖不完整时保留覆盖数并将总额置空。只有所有证券都提供有效涨跌停阈值时，才返回涨跌停计数。
+- 新能力由 `MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED` 独立控制，默认关闭；启用时启动配置要求 TickFlow API Key。官方 SDK 契约不代表具体账号已开通对应接口权限。
+- 新增隔离的 HTTP fixture 与配置门禁测试源码；按协作约定未运行测试、构建、CI 或真实 Provider 请求。

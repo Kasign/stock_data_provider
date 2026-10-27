@@ -300,6 +300,202 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 	return snapshot, nil
 }
 
+
+func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("TickFlow HTTP client is not configured")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("TickFlow market breadth requires TICKFLOW_API_KEY")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// 先读取上游证券池目录，不能使用硬编码股票数量推断全市场覆盖。
+	universeRaw, err := p.getJSON(ctx, p.apiURL, "/v1/universes/CN_Equity_A", nil, true)
+	if err != nil {
+		return nil, fmt.Errorf("TickFlow A-share universe request: %w", err)
+	}
+	universeData, err := tickflowResponseData(universeRaw)
+	if err != nil {
+		return nil, err
+	}
+	var universe struct {
+		ID          string   `json:"id"`
+		SymbolCount int      `json:"symbol_count"`
+		Symbols     []string `json:"symbols"`
+	}
+	if err := json.Unmarshal(universeData, &universe); err != nil {
+		return nil, fmt.Errorf("decode TickFlow A-share universe: %w", err)
+	}
+	if universe.ID != "CN_Equity_A" || universe.SymbolCount <= 0 || len(universe.Symbols) != universe.SymbolCount {
+		return nil, fmt.Errorf("TickFlow A-share universe metadata is incomplete: id=%q symbol_count=%d symbols=%d", universe.ID, universe.SymbolCount, len(universe.Symbols))
+	}
+	// 防止异常配置/响应造成超大快照聚合；正常 A 股全集远低于该上限。
+	const maxUniverseSecurities = 20000
+	if universe.SymbolCount > maxUniverseSecurities {
+		return nil, fmt.Errorf("TickFlow A-share universe symbol_count=%d exceeds safety limit %d", universe.SymbolCount, maxUniverseSecurities)
+	}
+	symbols := make([]string, 0, len(universe.Symbols))
+	expected := make(map[string]struct{}, len(universe.Symbols))
+	for _, rawSymbol := range universe.Symbols {
+		symbol, normalizeErr := tickflowDomesticSymbol(rawSymbol)
+		if normalizeErr != nil {
+			return nil, fmt.Errorf("TickFlow A-share universe contains an unsupported symbol %q: %w", rawSymbol, normalizeErr)
+		}
+		if _, duplicate := expected[symbol]; duplicate {
+			return nil, fmt.Errorf("TickFlow A-share universe contains duplicate symbol %s", symbol)
+		}
+		expected[symbol] = struct{}{}
+		symbols = append(symbols, symbol)
+	}
+	if len(expected) != universe.SymbolCount {
+		return nil, fmt.Errorf("TickFlow A-share universe normalized symbol count mismatch: expected=%d actual=%d", universe.SymbolCount, len(expected))
+	}
+
+	// 全市场实时行情需授权 Key；免费日 K endpoint 不提供此能力。
+	quotesRaw, err := p.getJSON(ctx, p.apiURL, "/v1/quotes", url.Values{"universes": []string{"CN_Equity_A"}}, true)
+	if err != nil {
+		return nil, fmt.Errorf("TickFlow A-share universe quotes request: %w", err)
+	}
+	quotesData, err := tickflowResponseData(quotesRaw)
+	if err != nil {
+		return nil, err
+	}
+	var quotes []tickflowQuotePayload
+	if err := json.Unmarshal(quotesData, &quotes); err != nil {
+		return nil, fmt.Errorf("decode TickFlow A-share universe quotes: %w", err)
+	}
+	if len(quotes) != universe.SymbolCount {
+		return nil, fmt.Errorf("TickFlow A-share quotes coverage mismatch: returned=%d universe=%d", len(quotes), universe.SymbolCount)
+	}
+	quotesBySymbol := make(map[string]tickflowQuotePayload, len(quotes))
+	for _, quote := range quotes {
+		symbol, normalizeErr := tickflowDomesticSymbol(quote.Symbol)
+		if normalizeErr != nil {
+			return nil, fmt.Errorf("TickFlow A-share quote has an unsupported symbol %q: %w", quote.Symbol, normalizeErr)
+		}
+		if _, ok := expected[symbol]; !ok {
+			return nil, fmt.Errorf("TickFlow returned quote for symbol %s outside CN_Equity_A", symbol)
+		}
+		if _, duplicate := quotesBySymbol[symbol]; duplicate {
+			return nil, fmt.Errorf("TickFlow returned duplicate A-share quote for %s", symbol)
+		}
+		quotesBySymbol[symbol] = quote
+	}
+	if len(quotesBySymbol) != universe.SymbolCount {
+		return nil, fmt.Errorf("TickFlow A-share unique quote coverage mismatch: returned=%d universe=%d", len(quotesBySymbol), universe.SymbolCount)
+	}
+	for _, symbol := range symbols {
+		if _, ok := quotesBySymbol[symbol]; !ok {
+			return nil, fmt.Errorf("TickFlow A-share quote is missing universe member %s", symbol)
+		}
+	}
+
+	fetchedAt := time.Now().UTC()
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		location = time.FixedZone("CST", 8*60*60)
+	}
+	snapshot := &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: universe.SymbolCount, CoveredSecurities: universe.SymbolCount,
+		Source: p.Name(), SourceVersion: tickflowVersion + "-market-breadth-v1",
+		FetchedAt: fetchedAt, QualityStatus: model.QualityValid,
+	}
+	degrade := func(reason string) {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, reason)
+	}
+	amountTotal := 0.0
+	amountCoverage := 0
+	reportDate := ""
+	limitUpCount, limitDownCount := 0, 0
+	limitCountsComplete := true
+
+	for _, symbol := range symbols {
+		quote := quotesBySymbol[symbol]
+		quoteTime := tickflowProviderQuoteTime(quote.Timestamp, fetchedAt)
+		if quoteTime == nil {
+			degrade("provider_quote_timestamp_missing_or_invalid")
+		} else {
+			date := quoteTime.In(location).Format("2006-01-02")
+			if reportDate == "" {
+				reportDate = date
+			} else if reportDate != date {
+				return nil, fmt.Errorf("TickFlow A-share quotes span multiple report dates: %s and %s", reportDate, date)
+			}
+		}
+
+		priceValid := quote.LastPrice != nil && quote.PrevClose != nil &&
+			tickflowPositiveFinite(*quote.LastPrice) && tickflowPositiveFinite(*quote.PrevClose)
+		if !priceValid {
+			snapshot.UnclassifiedCount++
+			degrade("provider_required_price_missing_or_invalid")
+			limitCountsComplete = false
+		} else {
+			switch {
+			case *quote.LastPrice > *quote.PrevClose:
+				snapshot.AdvancingCount++
+			case *quote.LastPrice < *quote.PrevClose:
+				snapshot.DecliningCount++
+			default:
+				snapshot.UnchangedCount++
+			}
+		}
+
+		if quote.Amount != nil && tickflowNonNegativeFinite(*quote.Amount) {
+			amountTotal += *quote.Amount
+			if math.IsNaN(amountTotal) || math.IsInf(amountTotal, 0) {
+				return nil, errors.New("TickFlow A-share total amount overflow")
+			}
+			amountCoverage++
+		} else {
+			degrade("provider_amount_missing_or_invalid")
+		}
+
+		// 涨跌停数仅在每一只证券都提供有效阈值且价格可用时发布，避免把缺阈值当作非涨停。
+		rawLimitUp, hasLimitUp := quote.Ext["limit_up"]
+		rawLimitDown, hasLimitDown := quote.Ext["limit_down"]
+		if !priceValid || !hasLimitUp || !hasLimitDown {
+			limitCountsComplete = false
+			continue
+		}
+		limitUp, parseUpErr := tickflowFloat(rawLimitUp)
+		limitDown, parseDownErr := tickflowFloat(rawLimitDown)
+		if parseUpErr != nil || parseDownErr != nil || !tickflowPositiveFinite(limitUp) ||
+			!tickflowPositiveFinite(limitDown) || limitDown > limitUp {
+			limitCountsComplete = false
+			continue
+		}
+		if *quote.LastPrice >= limitUp {
+			limitUpCount++
+		}
+		if *quote.LastPrice <= limitDown {
+			limitDownCount++
+		}
+	}
+	if reportDate == "" {
+		return nil, errors.New("TickFlow A-share quotes contain no valid provider timestamp for a report date")
+	}
+	snapshot.ProviderReportDate = reportDate
+	snapshot.AmountCoverageCount = amountCoverage
+	if amountCoverage == snapshot.CoveredSecurities {
+		snapshot.TotalAmountCNY = &amountTotal
+	} else {
+		// 金额有缺失时不把部分累加值暴露为全市场成交额。
+		snapshot.TotalAmountCNY = nil
+	}
+	if limitCountsComplete {
+		snapshot.LimitUpCount = &limitUpCount
+		snapshot.LimitDownCount = &limitDownCount
+	}
+	return snapshot, nil
+}
+
 func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("TickFlow HTTP client is not configured")

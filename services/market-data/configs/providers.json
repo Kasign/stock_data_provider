@@ -87,7 +87,8 @@
       "enabled": true,
       "quote": false,
       "daily_bars": true,
-      "index_quotes": false
+      "index_quotes": false,
+      "market_breadth": false
     },
     "pytdx": {
       "enabled": true,
