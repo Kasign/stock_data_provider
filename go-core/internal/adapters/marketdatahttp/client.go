@@ -444,7 +444,7 @@ func (c *Client) fetchStockAuxiliary(ctx context.Context, code string, out *doma
 
 func (c *Client) fetchFundamentals(ctx context.Context, code string) stockAuxResult {
 	result := stockAuxResult{kind: "fundamentals"}
-	year, quarter := latestCompletedReportPeriod(time.Now())
+	year, quarter := latestPublicReportPeriod(time.Now())
 	query := url.Values{}
 	query.Set("year", fmt.Sprintf("%d", year))
 	query.Set("quarter", fmt.Sprintf("%d", quarter))
@@ -592,17 +592,25 @@ func (c *Client) fetchCapitalFlow(ctx context.Context, code string) stockAuxResu
 	return result
 }
 
-func latestCompletedReportPeriod(now time.Time) (int, int) {
+// latestPublicReportPeriod selects the newest quarter whose standard A-share
+// disclosure deadline has passed. This avoids treating an in-progress Q3/Q4
+// filing window as if every listed company had already published that report.
+func latestPublicReportPeriod(now time.Time) (int, int) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		location = time.FixedZone("CST", 8*60*60)
 	}
 	now = now.In(location)
-	quarter := (int(now.Month())-1)/3 + 1
-	if quarter == 1 {
-		return now.Year() - 1, 4
+	switch {
+	case !now.Before(time.Date(now.Year(), time.November, 1, 0, 0, 0, 0, location)):
+		return now.Year(), 3
+	case !now.Before(time.Date(now.Year(), time.September, 1, 0, 0, 0, 0, location)):
+		return now.Year(), 2
+	case !now.Before(time.Date(now.Year(), time.May, 1, 0, 0, 0, 0, location)):
+		return now.Year(), 1
+	default:
+		return now.Year() - 1, 3
 	}
-	return now.Year(), quarter - 1
 }
 
 func sameStockCode(left, right string) bool {

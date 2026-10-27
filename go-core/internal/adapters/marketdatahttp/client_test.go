@@ -170,7 +170,7 @@ func TestFetchMarketOverviewAggregatesNativeDomesticEndpoints(t *testing.T) {
 
 func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
 	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	year, quarter := latestCompletedReportPeriod(time.Now())
+	year, quarter := latestPublicReportPeriod(time.Now())
 	periodEnd := time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 	publicationDate := time.Date(year, time.Month(quarter*3+1), 20, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 	var mu sync.Mutex
@@ -241,6 +241,34 @@ func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
 	} {
 		if seen[path] != 1 {
 			t.Errorf("route %s called %d times, want once", path, seen[path])
+		}
+	}
+}
+
+
+func TestLatestPublicReportPeriodRespectsDisclosureDeadlines(t *testing.T) {
+	location := time.FixedZone("CST", 8*60*60)
+	cases := []struct {
+		date string
+		year int
+		quarter int
+	}{
+		{"2026-01-15", 2025, 3},
+		{"2026-04-30", 2025, 3},
+		{"2026-05-01", 2026, 1},
+		{"2026-08-31", 2026, 1},
+		{"2026-09-01", 2026, 2},
+		{"2026-10-31", 2026, 2},
+		{"2026-11-01", 2026, 3},
+	}
+	for _, tc := range cases {
+		now, err := time.ParseInLocation("2006-01-02", tc.date, location)
+		if err != nil {
+			t.Fatal(err)
+		}
+		year, quarter := latestPublicReportPeriod(now)
+		if year != tc.year || quarter != tc.quarter {
+			t.Errorf("%s => %d Q%d, want %d Q%d", tc.date, year, quarter, tc.year, tc.quarter)
 		}
 	}
 }
