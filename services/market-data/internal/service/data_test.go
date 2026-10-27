@@ -910,3 +910,27 @@ func TestQuoteCacheRejectsLegacyUnverifiedTencentVolume(t *testing.T) {
 		}
 	}
 }
+
+
+func TestValidateMarketBreadthRequiresDegradedQualityForPartialAmountCoverage(t *testing.T) {
+	snapshot := &model.MarketBreadthSnapshot{
+		Market:              "cn_a_share",
+		TotalSecurities:     3,
+		CoveredSecurities:   3,
+		AdvancingCount:      1,
+		DecliningCount:      1,
+		UnchangedCount:      1,
+		AmountCoverageCount: 2,
+		Source:              "eastmoney",
+		FetchedAt:           time.Now().UTC(),
+		QualityStatus:       model.QualityValid,
+	}
+	if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "cannot have valid quality") {
+		t.Fatalf("partial amount coverage must not be labelled valid, got %v", err)
+	}
+
+	snapshot.QualityStatus = model.QualityDegraded
+	if err := validateMarketBreadth(snapshot); err != nil {
+		t.Fatalf("partial amount coverage with degraded quality should remain usable: %v", err)
+	}
+}

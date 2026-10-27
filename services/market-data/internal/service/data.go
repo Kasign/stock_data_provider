@@ -277,8 +277,14 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 		if snapshot.TotalAmountCNY == nil || math.IsNaN(*snapshot.TotalAmountCNY) || math.IsInf(*snapshot.TotalAmountCNY, 0) || *snapshot.TotalAmountCNY < 0 {
 			return errors.New("market-breadth amount invalid despite complete amount coverage")
 		}
-	} else if snapshot.TotalAmountCNY != nil {
-		return errors.New("partial market-breadth amount coverage must not expose a total amount")
+	} else {
+		if snapshot.TotalAmountCNY != nil {
+			return errors.New("partial market-breadth amount coverage must not expose a total amount")
+		}
+		// 金额覆盖不完整时，即使证券涨跌分类完整，也不能把整个市场广度快照声明为 valid。
+		if snapshot.QualityStatus == model.QualityValid {
+			return errors.New("partial market-breadth amount coverage cannot have valid quality")
+		}
 	}
 	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
 		return errors.New("market-breadth source or fetched_at is missing")

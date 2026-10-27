@@ -57,6 +57,8 @@
 
 缺失成交额必须保持 null。经过 Go bridge 进入历史 Python 消费者的 map 时，也必须继续表示为 null，而不是 0。
 
+市场广度的成交额是聚合字段：当 `amount_coverage_count` 小于 `covered_securities` 时，`total_amount_cny` 必须为 `null`，且快照质量必须是 `degraded`，不能因涨跌分类覆盖完整而标记为 `valid`。服务层必须同时校验该约束，避免错误质量状态进入缓存或 API。
+
 补充数据（如 MX 的筹码分布和个股资金流）还应保留 Provider 版本、快照日期、金额单位和质量原因。若无法证明精确发布时间/可用时间，即使表格字段完整，也不能标记为完全 valid。
 
 ## 当前实现边界

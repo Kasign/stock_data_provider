@@ -15,7 +15,7 @@
 - BaoStock 的财务和交易日历在当前默认配置中开启，迁移矩阵此前仍写“默认关闭”；已同步修正文案。BaoStock 仍只承担其已实现的日 K、财务和交易日历能力，不应据此推断其支持实时行情。
 - README 的数据域描述已从“尚未迁移这些数据域”调整为“部分国内数据域已接入，但字段覆盖、权限、质量与时点语义不等价”，避免把已有路由误写成完全未实现，也避免宣称已完成生产级迁移。
 
-本轮发现并修正的是注释/迁移状态与实际配置不一致，不改变 Provider 优先级、能力开关、数据字段或运行行为。下一轮继续重点核对 URL 拼接假设、缓存质量状态传播、时间/交易日边界和空值契约；只有证据明确的实现缺口才改业务代码。
+本轮除修正文档配置状态外，还补强了市场广度的服务层质量门禁：金额覆盖计数不足时必须同时满足总成交额为 null、质量状态为 degraded；即便 Provider 错误声明 valid，也会被拒绝，不会进入缓存或正常 API 响应。对应测试源码已补充，按约定未执行。下一轮继续审查日期规范化与其余缓存/时间边界。
 
 完整设计见 [Go 行情数据服务迁移方案](./GO_MARKET_DATA_MIGRATION_PLAN.md)，数据源扩展顺序与真实验收门槛见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)，真实 NAS 取数、故障回退与 Eastmoney 网络故障证据见 [数据源真实环境验收与故障排查记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)，Review 与警示见 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md)，数据域明细见 [Python Provider 到 Go 迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)。
 
