@@ -102,6 +102,9 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		if item.PublishedAt == nil && item.QualityStatus == model.QualityValid {
 			return errors.New("announcement without a source publishing time must not be marked valid quality")
 		}
+		if item.PublishedAt != nil && (item.PublishedAt.IsZero() || item.PublishedAt.After(time.Now().Add(5*time.Minute))) {
+			return errors.New("announcement publishing time is zero or in the future")
+		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("announcement item quality status %q is unsupported", item.QualityStatus)
 		}

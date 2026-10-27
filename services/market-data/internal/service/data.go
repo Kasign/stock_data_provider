@@ -197,8 +197,13 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 				return fmt.Errorf("index %s cannot be valid without a provider quote timestamp", item.Symbol)
 			}
 			hasDegradedItem = true
-		} else if item.QuoteTimeSemantics != "provider_snapshot_time" {
-			return fmt.Errorf("index %s has unsupported quote-time semantics %q", item.Symbol, item.QuoteTimeSemantics)
+		} else {
+			if item.QuoteTimeSemantics != "provider_snapshot_time" {
+				return fmt.Errorf("index %s has unsupported quote-time semantics %q", item.Symbol, item.QuoteTimeSemantics)
+			}
+			if item.QuoteTime.IsZero() || item.QuoteTime.After(item.FetchedAt.Add(5*time.Minute)) || item.QuoteTime.After(time.Now().Add(5*time.Minute)) {
+				return fmt.Errorf("index %s has a zero or future provider quote timestamp", item.Symbol)
+			}
 		}
 		if item.QualityStatus == model.QualityDegraded {
 			hasDegradedItem = true
@@ -326,6 +331,14 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 	}
 	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
 		return errors.New("market-breadth source or fetched_at is missing")
+	}
+	reportDate := strings.TrimSpace(snapshot.ProviderReportDate)
+	parsedReportDate, reportDateErr := time.Parse("2006-01-02", reportDate)
+	if reportDateErr != nil || parsedReportDate.Format("2006-01-02") != reportDate {
+		return errors.New("market-breadth provider_report_date is missing or invalid")
+	}
+	if reportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+		return fmt.Errorf("market-breadth provider_report_date %s is in the future", reportDate)
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("market-breadth quality status %q is unsupported", snapshot.QualityStatus)

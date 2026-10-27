@@ -922,6 +922,7 @@ func TestValidateMarketBreadthRequiresDegradedQualityForPartialAmountCoverage(t 
 		DecliningCount:      1,
 		UnchangedCount:      1,
 		AmountCoverageCount: 2,
+		ProviderReportDate:  "2026-10-23",
 		Source:              "eastmoney",
 		FetchedAt:           time.Now().UTC(),
 		QualityStatus:       model.QualityValid,
@@ -1095,6 +1096,38 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 		}
 		if err := validateHotRankingSnapshot("popular", snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
 			t.Fatalf("hot-ranking snapshot must inherit item degradation, got %v", err)
+		}
+	})
+}
+
+
+func TestSnapshotSourceTimesRejectMissingOrFutureValues(t *testing.T) {
+	now := time.Now().UTC()
+	t.Run("future index quote time", func(t *testing.T) {
+		price, changePercent := 3200.0, 1.0
+		future := now.Add(10 * time.Minute)
+		snapshot := &model.IndexQuoteSnapshot{
+			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Items: []model.MarketIndexQuote{{
+				Symbol: "000001.SH", Code: "000001", Name: "上证指数",
+				LatestPrice: &price, ChangePercent: &changePercent,
+				QuoteTime: &future, QuoteTimeSemantics: "provider_snapshot_time",
+				AmountUnit: "unknown", Source: "eastmoney", FetchedAt: now,
+				QualityStatus: model.QualityDegraded,
+			}},
+		}
+		if err := validateIndexQuoteSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "future provider quote timestamp") {
+			t.Fatalf("future index quote time must be rejected, got %v", err)
+		}
+	})
+	t.Run("hot ranking without provider time", func(t *testing.T) {
+		snapshot := &model.HotRankingSnapshot{
+			RankingType: "popular", Total: 1, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+			Items: []model.HotRankingItem{{Rank: 1, Symbol: "600519.SH", Code: "600519",
+				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid}},
+		}
+		if err := validateHotRankingSnapshot("popular", snapshot); err == nil || !strings.Contains(err.Error(), "without provider time") {
+			t.Fatalf("hot ranking without provider time must not be valid, got %v", err)
 		}
 	})
 }

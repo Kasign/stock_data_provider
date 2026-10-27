@@ -32,6 +32,13 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("unsupported hot-ranking quality %q", snapshot.QualityStatus)
 	}
+	if snapshot.ProviderTime == nil {
+		if snapshot.QualityStatus == model.QualityValid {
+			return errors.New("hot-ranking snapshot cannot be valid without provider time")
+		}
+	} else if snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute)) {
+		return errors.New("hot-ranking provider time is zero or in the future")
+	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
 	hasDegradedItem := false
 	for _, item := range snapshot.Items {
