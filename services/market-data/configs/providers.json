@@ -86,7 +86,8 @@
     "tickflow": {
       "enabled": true,
       "quote": false,
-      "daily_bars": true
+      "daily_bars": true,
+      "index_quotes": false
     },
     "pytdx": {
       "enabled": true,

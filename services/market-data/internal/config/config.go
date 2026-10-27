@@ -124,7 +124,7 @@ func defaultProviderFile() providerFile {
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
 			"netease":   {Enabled: true, Quote: true, DailyBars: true},
 			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false},
-			"tickflow":  {Enabled: true, Quote: false, DailyBars: true},
+			"tickflow":  {Enabled: true, Quote: false, DailyBars: true, IndexQuotes: false},
 			"pytdx":     {Enabled: true, Quote: true, DailyBars: true},
 			"xueqiu":    {Enabled: false, HotRankings: false},
 		},
@@ -315,8 +315,8 @@ func Load() (Config, error) {
 	if cfg.ProviderSettings["tushare"].Enabled && strings.TrimSpace(cfg.TushareToken) == "" {
 		return cfg, errors.New("MARKET_DATA_TUSHARE_ENABLED=true requires MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN")
 	}
-	if cfg.ProviderSettings["tickflow"].Quote && strings.TrimSpace(cfg.TickFlowAPIKey) == "" {
-		return cfg, errors.New("MARKET_DATA_TICKFLOW_QUOTE_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY")
+	if (cfg.ProviderSettings["tickflow"].Quote || cfg.ProviderSettings["tickflow"].IndexQuotes) && strings.TrimSpace(cfg.TickFlowAPIKey) == "" {
+		return cfg, errors.New("MARKET_DATA_TICKFLOW_QUOTE_ENABLED or MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY")
 	}
 	if cfg.ProviderSettings["tushare"].Quote {
 		return cfg, errors.New("Tushare currently supports daily bars only; disable MARKET_DATA_TUSHARE_QUOTE_ENABLED")
@@ -664,7 +664,7 @@ func validateEnvironment() error {
 		"MARKET_DATA_TUSHARE_LIMIT_POOLS_ENABLED", "MARKET_DATA_TUSHARE_DRAGON_TIGER_ENABLED",
 		"MARKET_DATA_TUSHARE_ANNOUNCEMENTS_ENABLED", "MARKET_DATA_TUSHARE_INDEX_CATALOG_ENABLED",
 		"MARKET_DATA_XUEQIU_ENABLED", "MARKET_DATA_XUEQIU_HOT_RANKINGS_ENABLED",
-		"MARKET_DATA_TICKFLOW_ENABLED", "MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED",
+		"MARKET_DATA_TICKFLOW_ENABLED", "MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED", "MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED",
 		"MARKET_DATA_HITHINK_ENABLED", "MARKET_DATA_HITHINK_QUOTE_ENABLED", "MARKET_DATA_HITHINK_DAILY_BARS_ENABLED", "MARKET_DATA_HITHINK_FUNDAMENTALS_ENABLED", "MARKET_DATA_HITHINK_INDEX_QUOTES_ENABLED", "MARKET_DATA_HITHINK_TRADING_CALENDAR_ENABLED", "MARKET_DATA_HITHINK_LIMIT_POOLS_ENABLED", "MARKET_DATA_HITHINK_DRAGON_TIGER_ENABLED", "MARKET_DATA_HITHINK_VALUATIONS_ENABLED", "MARKET_DATA_HITHINK_INDEX_CATALOG_ENABLED", "MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED",
 		"MARKET_DATA_PYTDX_ENABLED", "MARKET_DATA_PYTDX_QUOTE_ENABLED", "MARKET_DATA_PYTDX_DAILY_BARS_ENABLED",
 		"MARKET_DATA_SINA_QUOTE_ENABLED", "MARKET_DATA_SINA_DAILY_BARS_ENABLED", "MARKET_DATA_ALLOW_NO_STORAGE",

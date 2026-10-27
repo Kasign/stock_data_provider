@@ -67,6 +67,9 @@ func TestDefaultProviderCapabilitiesMatchDomesticPolicy(t *testing.T) {
 	if defaults.Providers["yahoo"].DailyBars {
 		t.Fatalf("Yahoo overseas daily bars must stay disabled by default: %+v", defaults.Providers["yahoo"])
 	}
+	if defaults.Providers["tickflow"].IndexQuotes {
+		t.Fatalf("TickFlow index quotes require an API key and must stay disabled by default: %+v", defaults.Providers["tickflow"])
+	}
 	if !defaults.Providers["netease"].Quote {
 		t.Fatalf("NetEase domestic quote capability must match configs/providers.json: %+v", defaults.Providers["netease"])
 	}
@@ -869,5 +872,27 @@ func TestLoadRejectsProviderEndpointWithEmptyQueryOrFragment(t *testing.T) {
 				t.Fatalf("endpoint %q must be rejected because it contains a query or fragment delimiter", tc.url)
 			}
 		})
+	}
+}
+
+func TestLoadTickFlowIndexQuotesRequiresAPIKey(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "providers.json")
+	data := `{"provider_priority":["tickflow"],"adjustment_basis":"forward_adjusted","providers":{"tickflow":{"enabled":true,"quote":false,"daily_bars":true,"index_quotes":true}}}`
+	if err := os.WriteFile(file, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MARKET_DATA_PROVIDERS_CONFIG", file)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_TICKFLOW_API_KEY", "")
+	t.Setenv("TICKFLOW_API_KEY", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_QUOTE_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED", "")
+
+	want := "MARKET_DATA_TICKFLOW_QUOTE_ENABLED or MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY"
+	if _, err := Load(); err == nil || err.Error() != want {
+		t.Fatalf("TickFlow index quotes without API key must fail configuration validation, got %v", err)
 	}
 }
