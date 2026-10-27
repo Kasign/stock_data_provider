@@ -492,6 +492,9 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	if reportDate == "" {
 		return nil, errors.New("TickFlow A-share quotes contain no valid provider timestamp for a report date")
 	}
+	if !limitCountsComplete {
+		degrade("provider_limit_counts_unavailable_or_incomplete")
+	}
 	snapshot.ProviderReportDate = reportDate
 	snapshot.AmountCoverageCount = amountCoverage
 	if amountCoverage == snapshot.CoveredSecurities {

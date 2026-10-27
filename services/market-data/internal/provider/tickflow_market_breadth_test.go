@@ -14,7 +14,7 @@ import (
 
 var tickflowBreadthFixtureSymbols = []string{"600000.SH", "000001.SZ", "300001.SZ"}
 
-func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFor string) *httptest.Server {
+func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFor, omitNameFor string) *httptest.Server {
 	t.Helper()
 	timestamp := time.Now().UTC().Add(-time.Minute).UnixMilli()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -56,8 +56,11 @@ func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFo
 					name = "创业板样本"
 				}
 				row := map[string]any{
-					"symbol": symbol, "name": name, "last_price": current, "prev_close": previous,
+					"symbol": symbol, "last_price": current, "prev_close": previous,
 					"open": current, "high": current, "low": current, "timestamp": timestamp,
+				}
+				if symbol != omitNameFor {
+					row["name"] = name
 				}
 				if symbol != omitAmountFor {
 					switch symbol {
@@ -79,7 +82,7 @@ func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFo
 }
 
 func TestTickFlowFetchMarketBreadthCalculatesCompleteSnapshot(t *testing.T) {
-	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "")
+	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "", "")
 	defer server.Close()
 
 	client := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
@@ -105,7 +108,7 @@ func TestTickFlowFetchMarketBreadthCalculatesCompleteSnapshot(t *testing.T) {
 }
 
 func TestTickFlowFetchMarketBreadthRejectsIncompleteQuoteCoverage(t *testing.T) {
-	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols[:2], "")
+	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols[:2], "", "")
 	defer server.Close()
 
 	client := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
@@ -115,7 +118,7 @@ func TestTickFlowFetchMarketBreadthRejectsIncompleteQuoteCoverage(t *testing.T) 
 }
 
 func TestTickFlowFetchMarketBreadthDegradesMissingAmount(t *testing.T) {
-	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "000001.SZ")
+	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "000001.SZ", "")
 	defer server.Close()
 
 	client := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
@@ -173,5 +176,23 @@ func TestTickFlowLimitPriceMatchesCentRoundingAndTolerance(t *testing.T) {
 	}
 	if _, _, ok := tickflowLimitPrice(0, 0.10, true); ok {
 		t.Fatal("non-positive previous close must be rejected")
+	}
+}
+
+
+func TestTickFlowFetchMarketBreadthDegradesUnavailableLimitCounts(t *testing.T) {
+	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "", "000001.SZ")
+	defer server.Close()
+
+	client := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	got, err := client.FetchMarketBreadth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.QualityStatus != model.QualityDegraded || got.LimitUpCount != nil || got.LimitDownCount != nil {
+		t.Fatalf("missing ST-classification metadata must leave limit counts unknown and degrade the snapshot: %+v", got)
+	}
+	if !containsTickFlowReason(got.QualityReasons, "provider_limit_counts_unavailable_or_incomplete") {
+		t.Fatalf("missing limit-count degradation reason: %+v", got.QualityReasons)
 	}
 }
