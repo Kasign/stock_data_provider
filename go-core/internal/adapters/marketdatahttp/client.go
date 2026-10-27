@@ -287,6 +287,41 @@ type wireCapitalFlow struct {
 	QualityReasons []string  `json:"quality_reasons"`
 }
 
+type wireStockAnnouncement struct {
+	ArticleID        string     `json:"article_id"`
+	Symbol           string     `json:"symbol"`
+	StockName        string     `json:"stock_name"`
+	Title            string     `json:"title"`
+	Category         string     `json:"category"`
+	AnnouncementDate string     `json:"announcement_date"`
+	PublishedAt      *time.Time `json:"published_at"`
+	SourceURL        string     `json:"source_url"`
+	Source           string     `json:"source"`
+	SourceVersion    string     `json:"source_version"`
+	FetchedAt        time.Time  `json:"fetched_at"`
+	QualityStatus    string     `json:"quality_status"`
+	QualityReasons   []string   `json:"quality_reasons"`
+}
+
+type wireStockAnnouncementSnapshot struct {
+	Symbol         string                  `json:"symbol"`
+	StartDate      string                  `json:"start_date"`
+	EndDate        string                  `json:"end_date"`
+	Page           int                     `json:"page"`
+	PageSize       int                     `json:"page_size"`
+	Total          int                     `json:"total"`
+	Pages          int                     `json:"pages"`
+	Returned       int                     `json:"returned"`
+	HasData        bool                    `json:"has_data"`
+	HasMore        bool                    `json:"has_more"`
+	Items          []wireStockAnnouncement `json:"items"`
+	Source         string                  `json:"source"`
+	SourceVersion  string                  `json:"source_version"`
+	FetchedAt      time.Time               `json:"fetched_at"`
+	QualityStatus  string                  `json:"quality_status"`
+	QualityReasons []string                `json:"quality_reasons"`
+}
+
 type stockAuxResult struct {
 	kind           string
 	source         string
@@ -701,6 +736,91 @@ func fundamentalsMap(snapshot wireFundamentalsSnapshot) map[string]any {
 		}
 	}
 	return result
+}
+
+// FetchStockAnnouncements validates date, identity, pagination and source quality.
+// FetchedAt remains ingestion time and is never substituted for a source publication timestamp.
+func (c *Client) FetchStockAnnouncements(ctx context.Context, code, startDate, endDate string, page, pageSize int) (domain.StockAnnouncementSnapshot, error) {
+	symbol := strings.TrimSpace(code)
+	if symbol == "" { return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement symbol is required") }
+	start, startErr := time.Parse("2006-01-02", strings.TrimSpace(startDate))
+	end, endErr := time.Parse("2006-01-02", strings.TrimSpace(endDate))
+	if startErr != nil || endErr != nil || start.Format("2006-01-02") != startDate || end.Format("2006-01-02") != endDate || start.After(end) {
+		return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement dates must be valid YYYY-MM-DD values with start_date <= end_date")
+	}
+	if page < 1 || page > 1000 || pageSize < 1 || pageSize > 100 {
+		return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement page/page_size is outside the supported range")
+	}
+	query := url.Values{}
+	query.Set("start_date", startDate)
+	query.Set("end_date", endDate)
+	query.Set("page", fmt.Sprintf("%d", page))
+	query.Set("page_size", fmt.Sprintf("%d", pageSize))
+	var wire wireStockAnnouncementSnapshot
+	path := "/api/v1/stocks/" + url.PathEscape(symbol) + "/announcements?" + query.Encode()
+	if err := c.get(ctx, path, &wire); err != nil { return domain.StockAnnouncementSnapshot{}, err }
+	if !sameStockCode(symbol, wire.Symbol) || wire.StartDate != startDate || wire.EndDate != endDate || wire.Page != page || wire.PageSize != pageSize {
+		return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement response identity does not match the request")
+	}
+	if strings.TrimSpace(wire.Source) == "" || wire.FetchedAt.IsZero() {
+		return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement response is missing source or fetched_at")
+	}
+	if wire.Total < 0 || wire.Pages < 0 || wire.Returned != len(wire.Items) || wire.Returned > pageSize {
+		return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement response counts are inconsistent")
+	}
+	if wire.Total == 0 {
+		if wire.Pages != 0 || wire.Returned != 0 || len(wire.Items) != 0 || wire.HasData || wire.HasMore || wire.QualityStatus != "unknown" {
+			return domain.StockAnnouncementSnapshot{}, errors.New("empty stock announcement response must remain unknown, not a confirmed absence")
+		}
+	} else {
+		if wire.Pages != (wire.Total+pageSize-1)/pageSize || page > wire.Pages || wire.Returned == 0 || wire.Total < wire.Returned || !wire.HasData || wire.HasMore != (page < wire.Pages) {
+			return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement pagination counters are inconsistent")
+		}
+		if wire.QualityStatus != "valid" && wire.QualityStatus != "degraded" {
+			return domain.StockAnnouncementSnapshot{}, fmt.Errorf("unsupported stock announcement quality status %q", wire.QualityStatus)
+		}
+	}
+	items := make([]domain.StockAnnouncement, 0, len(wire.Items))
+	seenIDs := make(map[string]struct{}, len(wire.Items))
+	for _, item := range wire.Items {
+		if strings.TrimSpace(item.ArticleID) == "" || strings.TrimSpace(item.Title) == "" || !sameStockCode(symbol, item.Symbol) ||
+			strings.TrimSpace(item.Source) != strings.TrimSpace(wire.Source) || item.FetchedAt.IsZero() {
+			return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement item has missing identity/title/source metadata")
+		}
+		if _, ok := seenIDs[item.ArticleID]; ok {
+			return domain.StockAnnouncementSnapshot{}, fmt.Errorf("stock announcement page has duplicate article ID %q", item.ArticleID)
+		}
+		seenIDs[item.ArticleID] = struct{}{}
+		date, err := time.Parse("2006-01-02", item.AnnouncementDate)
+		if err != nil || date.Format("2006-01-02") != item.AnnouncementDate || item.AnnouncementDate < startDate || item.AnnouncementDate > endDate {
+			return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement item date is invalid or outside the requested range")
+		}
+		parsedURL, err := url.Parse(strings.TrimSpace(item.SourceURL))
+		if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+			return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement item has an invalid source_url")
+		}
+		if item.QualityStatus != "valid" && item.QualityStatus != "degraded" {
+			return domain.StockAnnouncementSnapshot{}, fmt.Errorf("unsupported stock announcement item quality status %q", item.QualityStatus)
+		}
+		if item.PublishedAt == nil && item.QualityStatus == "valid" {
+			return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement without a source publication timestamp must not be marked valid")
+		}
+		if item.PublishedAt != nil && item.PublishedAt.IsZero() {
+			return domain.StockAnnouncementSnapshot{}, errors.New("stock announcement source publication timestamp is zero")
+		}
+		items = append(items, domain.StockAnnouncement{
+			ArticleID:item.ArticleID, Symbol:item.Symbol, StockName:item.StockName, Title:item.Title, Category:item.Category,
+			AnnouncementDate:item.AnnouncementDate, PublishedAt:item.PublishedAt, SourceURL:item.SourceURL, Source:item.Source,
+			SourceVersion:item.SourceVersion, FetchedAt:item.FetchedAt, QualityStatus:item.QualityStatus,
+			QualityReasons:append([]string(nil), item.QualityReasons...),
+		})
+	}
+	return domain.StockAnnouncementSnapshot{
+		Symbol:wire.Symbol, StartDate:wire.StartDate, EndDate:wire.EndDate, Page:wire.Page, PageSize:wire.PageSize,
+		Total:wire.Total, Pages:wire.Pages, Returned:wire.Returned, HasData:wire.HasData, HasMore:wire.HasMore,
+		Items:items, Source:wire.Source, SourceVersion:wire.SourceVersion, FetchedAt:wire.FetchedAt,
+		QualityStatus:wire.QualityStatus, QualityReasons:append([]string(nil), wire.QualityReasons...),
+	}, nil
 }
 
 func (c *Client) FetchMarketOverview(ctx context.Context, region, asOf string) (domain.MarketOverview, error) {

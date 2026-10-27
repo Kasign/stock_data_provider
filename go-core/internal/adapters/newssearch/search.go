@@ -48,6 +48,11 @@ var defaultNewsSpamTerms = []string{
 
 // Config controls the Go-native Chinese news-search chain.
 // Public SearXNG discovery is intentionally not enabled: configure trusted self-hosted endpoints explicitly.
+// StockAnnouncementSource supplies stock-specific disclosure records without inventing publication times.
+type StockAnnouncementSource interface {
+	FetchStockAnnouncements(context.Context, string, string, string, int, int) (domain.StockAnnouncementSnapshot, error)
+}
+
 type Config struct {
 	BochaAPIKeys    []string
 	BochaEndpoint   string
@@ -58,6 +63,7 @@ type Config struct {
 	StrategyProfile string
 	RequestTimeout  time.Duration
 	CacheTTL        time.Duration
+	StockAnnouncements StockAnnouncementSource
 }
 
 type Searcher struct {
@@ -69,6 +75,7 @@ type Searcher struct {
 	cacheTTL      time.Duration
 	trustedDomains []string
 	blockedTerms   []string
+	stockAnnouncements StockAnnouncementSource
 
 	mu    sync.Mutex
 	cache map[string]cacheEntry
@@ -85,11 +92,12 @@ type remoteProvider interface {
 }
 
 type searchCandidate struct {
-	Title        string
-	Snippet      string
-	URL          string
-	Source       string
+	Title string
+	Snippet string
+	URL string
+	Source string
 	PublishedRaw string
+	StockSpecificAnnouncement bool
 }
 
 type bochaProvider struct {
@@ -174,7 +182,7 @@ func New(cfg Config, fallback ports.NewsSearcher, logger *slog.Logger) *Searcher
 	client := &http.Client{Timeout: cfg.RequestTimeout}
 	searcher := &Searcher{
 		client: client, fallback: fallback, logger: logger,
-		windowDays: windowDays, cacheTTL: cfg.CacheTTL,
+		windowDays: windowDays, cacheTTL: cfg.CacheTTL, stockAnnouncements: cfg.StockAnnouncements,
 		trustedDomains: normalizeDomains(append(append([]string{}, defaultOfficialNewsDomains...), cfg.TrustedDomains...)),
 		blockedTerms: normalizeTerms(append(append([]string{}, defaultNewsSpamTerms...), cfg.BlockedTerms...)),
 		cache: make(map[string]cacheEntry),
@@ -193,17 +201,19 @@ func New(cfg Config, fallback ports.NewsSearcher, logger *slog.Logger) *Searcher
 }
 
 // NewFromEnv reuses Python-compatible environment names; credentials are never logged.
-func NewFromEnv(fallback ports.NewsSearcher, logger *slog.Logger) *Searcher {
-	return New(Config{
-		BochaAPIKeys:    splitCSV(os.Getenv("BOCHA_API_KEYS")),
-		BochaEndpoint:   envOr("GO_NEWS_BOCHA_ENDPOINT", defaultBochaEndpoint),
+func NewFromEnv(fallback ports.NewsSearcher, logger *slog.Logger, announcementSources ...StockAnnouncementSource) *Searcher {
+	cfg := Config{
+		BochaAPIKeys: splitCSV(os.Getenv("BOCHA_API_KEYS")),
+		BochaEndpoint: envOr("GO_NEWS_BOCHA_ENDPOINT", defaultBochaEndpoint),
 		SearXNGBaseURLs: splitCSV(os.Getenv("SEARXNG_BASE_URLS")),
-		TrustedDomains:  splitCSV(os.Getenv("GO_NEWS_TRUSTED_DOMAINS")),
-		BlockedTerms:    splitCSV(os.Getenv("GO_NEWS_BLOCKED_TERMS")),
-		MaxAgeDays:      positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
+		TrustedDomains: splitCSV(os.Getenv("GO_NEWS_TRUSTED_DOMAINS")),
+		BlockedTerms: splitCSV(os.Getenv("GO_NEWS_BLOCKED_TERMS")),
+		MaxAgeDays: positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
 		StrategyProfile: envOr("NEWS_STRATEGY_PROFILE", "short"),
-		RequestTimeout:  time.Duration(positiveIntEnv("NEWS_SEARCH_TIMEOUT_SECONDS", 10)) * time.Second,
-	}, fallback, logger)
+		RequestTimeout: time.Duration(positiveIntEnv("NEWS_SEARCH_TIMEOUT_SECONDS", 10))*time.Second,
+	}
+	if len(announcementSources)>0 { cfg.StockAnnouncements=announcementSources[0] }
+	return New(cfg,fallback,logger)
 }
 
 // ProviderNames lists configured native providers without exposing credentials.
@@ -212,10 +222,11 @@ func (s *Searcher) ProviderNames() []string {
 	for _, p := range s.providers {
 		names = append(names, p.Name())
 	}
+	if s.stockAnnouncements != nil { names = append(names, "GoStockAnnouncements") }
 	return names
 }
 
-func (s *Searcher) Available() bool { return len(s.providers) > 0 }
+func (s *Searcher) Available() bool { return len(s.providers) > 0 || s.stockAnnouncements != nil }
 
 func (s *Searcher) SearchStockNews(ctx context.Context, code, name string, limit int) ([]domain.NewsItem, error) {
 	code, name = strings.TrimSpace(code), strings.TrimSpace(name)
@@ -298,44 +309,104 @@ func (s *Searcher) searchWithFallback(ctx context.Context, cacheKey, query, code
 }
 
 func (s *Searcher) searchNative(ctx context.Context, query, code, name string, limit int) ([]domain.NewsItem, error) {
-	providerLimit := limit * 2
-	if providerLimit < 10 {
-		providerLimit = 10
+	providerLimit:=limit*2
+	if providerLimit<10 { providerLimit=10 }
+	if providerLimit>50 { providerLimit=50 }
+	var announcementCh chan []searchCandidate
+	if strings.TrimSpace(code)!="" && s.stockAnnouncements!=nil {
+		announcementCh=make(chan []searchCandidate,1)
+		go func(){ announcementCh <- s.fetchStockAnnouncementCandidates(ctx,code) }()
 	}
-	if providerLimit > 50 {
-		providerLimit = 50
+	announcementResolved:=announcementCh==nil
+	var announcementCandidates []searchCandidate
+	collectAnnouncements:=func() []searchCandidate {
+		if announcementResolved { return announcementCandidates }
+		announcementResolved=true
+		timer:=time.NewTimer(2200*time.Millisecond)
+		defer timer.Stop()
+		select {
+		case announcementCandidates=<-announcementCh:
+		case <-ctx.Done():
+		case <-timer.C: s.logger.Warn("stock announcement search exceeded latency budget")
+		}
+		return announcementCandidates
 	}
 	var failures []string
 	var best []rankedNews
-	for _, p := range s.providers {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		raw, err := p.Search(ctx, query, s.windowDays, providerLimit)
-		if err != nil {
-			s.logger.Warn("native news provider request failed; trying next provider", "provider", p.Name(), "error", err)
-			failures = append(failures, p.Name()+": "+err.Error())
+	var bestRaw []searchCandidate
+	for _,p:=range s.providers {
+		if err:=ctx.Err();err!=nil{return nil,err}
+		raw,err:=p.Search(ctx,query,s.windowDays,providerLimit)
+		if err!=nil {
+			s.logger.Warn("native news provider request failed; trying next provider","provider",p.Name(),"error",err)
+			failures=append(failures,p.Name()+": "+err.Error())
 			continue
 		}
-		items := s.filterAndRank(raw, code, name)
-		if len(items) == 0 {
-			s.logger.Info("native news provider returned no usable fresh articles; trying next provider", "provider", p.Name())
+		items:=s.filterAndRank(raw,code,name)
+		if len(items)==0 {
+			s.logger.Info("native news provider returned no usable fresh articles; trying next provider","provider",p.Name())
 			continue
 		}
-		if code == "" && name == "" || hasDirectArticle(items) {
-			return trimRanked(items, limit), nil
+		if code=="" && name=="" { return trimRanked(items,limit),nil }
+		if hasDirectArticle(items) {
+			combined:=append([]searchCandidate{},collectAnnouncements()...)
+			combined=append(combined,raw...)
+			return trimRanked(s.filterAndRank(combined,code,name),limit),nil
 		}
-		if len(best) == 0 || rankTotal(items) > rankTotal(best) {
-			best = items
-		}
+		if len(best)==0 || rankTotal(items)>rankTotal(best) { best,bestRaw=items,raw }
 	}
-	if len(best) > 0 {
-		return trimRanked(best, limit), nil
+	announcements:=collectAnnouncements()
+	if len(announcements)>0 {
+		combined:=append([]searchCandidate{},announcements...)
+		combined=append(combined,bestRaw...)
+		items:=s.filterAndRank(combined,code,name)
+		if len(items)>0{return trimRanked(items,limit),nil}
 	}
-	if len(failures) > 0 {
-		return nil, errors.New(strings.Join(failures, "; "))
+	if len(best)>0{return trimRanked(best,limit),nil}
+	if len(failures)>0{return nil,errors.New(strings.Join(failures,"; "))}
+	return []domain.NewsItem{},nil
+}
+
+func (s *Searcher) fetchStockAnnouncementCandidates(ctx context.Context,code string) []searchCandidate {
+	loc,err:=time.LoadLocation("Asia/Shanghai")
+	if err!=nil { loc=time.FixedZone("CST",8*60*60) }
+	now:=time.Now().In(loc)
+	endDate:=now.Format("2006-01-02")
+	startDate:=now.AddDate(0,0,-(s.windowDays-1)).Format("2006-01-02")
+	requestCtx,cancel:=context.WithTimeout(ctx,2*time.Second)
+	defer cancel()
+	snapshot,err:=s.stockAnnouncements.FetchStockAnnouncements(requestCtx,code,startDate,endDate,1,100)
+	if err!=nil {
+		if ctx.Err()==nil { s.logger.Warn("Go stock-announcement source unavailable","error",err) }
+		return nil
 	}
-	return []domain.NewsItem{}, nil
+	if !sameNewsStockCode(code,snapshot.Symbol)||snapshot.StartDate!=startDate||snapshot.EndDate!=endDate||
+		snapshot.Page!=1||snapshot.PageSize!=100||snapshot.Returned!=len(snapshot.Items) {
+		s.logger.Warn("Go stock-announcement source returned a mismatched snapshot")
+		return nil
+	}
+	if !snapshot.HasData{return nil}
+	candidates:=make([]searchCandidate,0,len(snapshot.Items))
+	for _,item:=range snapshot.Items {
+		status:=strings.ToLower(strings.TrimSpace(item.QualityStatus))
+		if status!="valid"&&status!="degraded"{continue}
+		if !sameNewsStockCode(code,item.Symbol)||item.Source!=snapshot.Source||strings.TrimSpace(item.Title)==""||strings.TrimSpace(item.SourceURL)==""{continue}
+		published:=strings.TrimSpace(item.AnnouncementDate)
+		if item.PublishedAt!=nil&&!item.PublishedAt.IsZero(){published=item.PublishedAt.Format(time.RFC3339Nano)}
+		snippet:=strings.TrimSpace(strings.Join([]string{item.StockName,item.Category}," "))
+		candidates=append(candidates,searchCandidate{Title:item.Title,Snippet:snippet,URL:item.SourceURL,Source:item.Source,PublishedRaw:published,StockSpecificAnnouncement:true})
+	}
+	return candidates
+}
+
+func sameNewsStockCode(left,right string) bool {
+	canonical:=func(value string) string {
+		value=strings.ToUpper(strings.TrimSpace(value))
+		if index:=strings.IndexByte(value,'.');index>=0{value=value[:index]}
+		for _,prefix:=range []string{"SH","SZ","BJ"}{if strings.HasPrefix(value,prefix)&&len(value)==8{value=value[2:];break}}
+		return value
+	}
+	return canonical(left)!=""&&canonical(left)==canonical(right)
 }
 
 type rankedNews struct {
@@ -391,6 +462,7 @@ func (s *Searcher) filterAndRank(raw []searchCandidate, code, name string) []ran
 			source = strings.TrimPrefix(strings.ToLower(parsedURL.Hostname()), "www.")
 		}
 		score, direct := scoreRelevance(title, snippet, code, name)
+		if candidate.StockSpecificAnnouncement { score += 45; direct = true }
 		score += newsSourceScore(parsedURL.Hostname(), s.trustedDomains)
 		items = append(items, rankedNews{
 			item: domain.NewsItem{

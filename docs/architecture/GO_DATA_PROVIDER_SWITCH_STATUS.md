@@ -14,7 +14,7 @@
 - 实时行情使用 `GET /api/v1/quotes/{symbol}`；日 K 使用 `GET /api/v1/bars/{symbol}/daily`。这两类数据不再静默回退到旧 Python API。
 - Go 服务在不同 Go module 之间通过 HTTP JSON 契约连接，未跨 module 导入对方的 `internal` 包。
 - `internal/adapters/pythonapi` 保留给旧 smoke test、对照和兼容测试，但不是根主 API 的行情 fallback。
-- `go-core` 仍通过 Python bridge 获取尚未迁移的市场概况、新闻、LLM 或其他辅助能力，不能直接删除 bridge。
+- `go-core` 的新闻检索已增加 Go 原生 Bocha/SearXNG 与个股公告候选源，但仍保留 Python bridge 兼容回退；LLM、部分非中国市场概况及其他辅助能力仍未全部迁移，不能直接删除 bridge。
 - `services/market-data` 已支持以 `MARKET_DATA_DB_HOST/PORT/USER/PASSWORD/NAME/CHARSET/TIMEZONE` 拆分配置并在 Go 代码中生成 MySQL DSN；根 `.env.example` 不再要求手工填写 `MARKET_DATA_MYSQL_DSN`。旧 DSN 仅在全部拆分字段都未配置时临时兼容；分析 API 继续独立使用 `DB_*` / `REDIS_*`。
 - `MARKET_DATA_ADJUSTMENT` 作为行情分析与行情服务共用的默认复权口径；仅当需要为行情服务单独覆盖时，才配置 `MARKET_DATA_DEFAULT_ADJUSTMENT`。
 
@@ -45,7 +45,7 @@ MX 相关接口：
 
 - 原 Python Provider 的完整替换仍未完成：Efinance、AkShare、Pytdx、Tushare、TickFlow、Longbridge、Futu、Finnhub、Alpha Vantage 等仍需逐一对照上游源码、权限、优先级、单位和失败语义；Yahoo Finance Chart API 提供可选日 K 与实时快照适配器（均默认关闭、缺成交额固定 degraded）；网易财经 Quote/CSV 已有独立 Go adapter，但实时行情与历史 CSV 必须分别验收。网易历史 CSV 曾返回 502，实时 Quote 在 GitHub Runner 上 DNS 解析失败；但当前 `.env.example` 与 `configs/providers.json` 将二者默认启用为后置回退。目标网络稳定性仍未验收，统一验收前可分别设置 `MARKET_DATA_NETEASE_QUOTE_ENABLED=false` 与 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false` 关闭。
 - 全市场指数/广度、行业/概念板块、涨停池、财务、完整资金流口径、龙虎榜、新闻公告等 Go 原生数据域未全部实现。
-- `go-core` 的 market overview/新闻/LLM/部分持久化及通知仍有 Python bridge 依赖。
+- `go-core` 的新闻链路现有原生候选源并保留 bridge 回退；非中国市场概况、LLM、部分持久化及通知仍有 Python bridge 依赖。
 - 同花顺接入尚未实现，已列入计划；参考仓库 [Kasign/Financial-API](https://github.com/Kasign/Financial-API)，必须先核验真实 API 权限、速率限制和字段口径。
 - 已实现 MariaDB `analysis_tasks`、有界 Go Worker、`POST /api/v1/analysis/tasks` 的 202 + task_id、任务状态查询和 `after_sequence` 阶段事件轮询；SSE、取消、自动重试与前端状态展示仍未完成。重启时遗留的 running 任务会显式标记为 `worker_interrupted`，不自动重跑。
 - 已完成一部分真实 Provider 请求及 MariaDB/Redis 链路验证，但目标环境的完整生产回归仍未完成；CI 绿色不能替代真实网络和端到端验收。
@@ -358,3 +358,12 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 
 - **报告期选择补充**：默认基本面查询改为以中国市场披露截止日判断最近可期待的报告期，避免三季报/年报披露窗口内普遍请求尚未披露的季度。对应回归测试源码已补，未执行测试、构建、CI 或真实上游请求。
+
+
+### Go-core 个股公告并入原生新闻检索（2026-10-27，本轮待统一验收）
+
+- `go-core/internal/adapters/marketdatahttp` 新增公告分页 DTO 与 `FetchStockAnnouncements`，校验请求日期/股票身份、分页计数、公告日期范围、源 URL、来源和质量状态；保持 `announcement_date`、`published_at`、`fetched_at` 的语义独立。
+- 个股分析使用 market-data 的按股票公告接口，并发获取当前公告窗口，与 Bocha/SearXNG 候选按 URL/标题去重；公告候选按股票关联加权。即使未配置网页搜索服务，只要公告接口可用也可返回个股公告。
+- 公告请求使用独立的短超时；单项不可用不会阻断核心分析和其他新闻来源。未提供源端精确发布时间的公告使用 `announcement_date` 作日期级过滤，不使用 `fetched_at` 伪造发布时间。
+- 已增加客户端契约、公告独立来源以及与网页搜索合并去重的回归测试源码。
+- 按约定，本轮未运行测试、格式化、构建、CI 或真实上游请求；待后续统一验收。

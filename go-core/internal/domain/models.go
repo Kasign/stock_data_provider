@@ -134,6 +134,45 @@ type MarketOverview struct {
 	Warnings       []string         `json:"warnings,omitempty"`
 }
 
+// StockAnnouncement preserves a stock-specific disclosure record.
+// AnnouncementDate is the source disclosure date; PublishedAt exists only when the source
+// provides an exact publication timestamp. FetchedAt is ingestion time and is never a substitute.
+type StockAnnouncement struct {
+	ArticleID        string     `json:"article_id"`
+	Symbol           string     `json:"symbol"`
+	StockName        string     `json:"stock_name,omitempty"`
+	Title            string     `json:"title"`
+	Category         string     `json:"category,omitempty"`
+	AnnouncementDate string     `json:"announcement_date"`
+	PublishedAt      *time.Time `json:"published_at,omitempty"`
+	SourceURL        string     `json:"source_url"`
+	Source           string     `json:"source"`
+	SourceVersion    string     `json:"source_version,omitempty"`
+	FetchedAt        time.Time  `json:"fetched_at"`
+	QualityStatus    string     `json:"quality_status"`
+	QualityReasons   []string   `json:"quality_reasons,omitempty"`
+}
+
+// StockAnnouncementSnapshot is one validated page from the stock-announcement endpoint.
+type StockAnnouncementSnapshot struct {
+	Symbol         string              `json:"symbol"`
+	StartDate      string              `json:"start_date"`
+	EndDate        string              `json:"end_date"`
+	Page           int                 `json:"page"`
+	PageSize       int                 `json:"page_size"`
+	Total          int                 `json:"total"`
+	Pages          int                 `json:"pages"`
+	Returned       int                 `json:"returned"`
+	HasData        bool                `json:"has_data"`
+	HasMore        bool                `json:"has_more"`
+	Items          []StockAnnouncement `json:"items"`
+	Source         string              `json:"source"`
+	SourceVersion  string              `json:"source_version,omitempty"`
+	FetchedAt      time.Time           `json:"fetched_at"`
+	QualityStatus  string              `json:"quality_status"`
+	QualityReasons []string            `json:"quality_reasons,omitempty"`
+}
+
 type NewsItem struct {
 	Title       string  `json:"title,omitempty"`
 	Summary     string  `json:"summary,omitempty"`

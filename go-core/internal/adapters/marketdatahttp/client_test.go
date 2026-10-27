@@ -272,3 +272,26 @@ func TestLatestPublicReportPeriodRespectsDisclosureDeadlines(t *testing.T) {
 		}
 	}
 }
+
+
+func TestFetchStockAnnouncementsPreservesPublicationSemantics(t *testing.T) {
+	location:=time.FixedZone("CST",8*60*60)
+	today:=time.Now().In(location).Format("2006-01-02")
+	announcementDate:=time.Now().In(location).AddDate(0,0,-1).Format("2006-01-02")
+	publishedAt:=announcementDate+"T15:30:00+08:00"
+	fetchedAt:=time.Now().UTC().Format(time.RFC3339Nano)
+	server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+		if r.URL.Path!="/api/v1/stocks/600519.SH/announcements"{t.Errorf("unexpected path: %s",r.URL.Path)}
+		if r.Header.Get("Authorization")!="Bearer market-secret"{t.Error("missing market-data authorization")}
+		if r.URL.Query().Get("start_date")!=announcementDate||r.URL.Query().Get("end_date")!=today||r.URL.Query().Get("page")!="1"||r.URL.Query().Get("page_size")!="100"{t.Errorf("unexpected query: %s",r.URL.RawQuery)}
+		w.Header().Set("Content-Type","application/json")
+		fmt.Fprintf(w,`{"symbol":"600519.SH","start_date":%q,"end_date":%q,"page":1,"page_size":100,"total":1,"pages":1,"returned":1,"has_data":true,"has_more":false,"items":[{"article_id":"AN-1","symbol":"600519.SH","stock_name":"贵州茅台","title":"贵州茅台年度报告","category":"定期报告","announcement_date":%q,"published_at":%q,"source_url":"https://data.eastmoney.com/notices/detail/600519/AN-1.html","source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"valid"}],"source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"valid"}`,announcementDate,today,announcementDate,publishedAt,fetchedAt,fetchedAt)
+	}))
+	defer server.Close()
+	client,err:=NewClient(server.URL,"market-secret",time.Second);if err!=nil{t.Fatal(err)}
+	snapshot,err:=client.FetchStockAnnouncements(context.Background(),"600519.SH",announcementDate,today,1,100);if err!=nil{t.Fatal(err)}
+	if len(snapshot.Items)!=1{t.Fatalf("unexpected announcements: %+v",snapshot)}
+	item:=snapshot.Items[0]
+	if item.AnnouncementDate!=announcementDate||item.PublishedAt==nil||item.PublishedAt.Format(time.RFC3339)!=publishedAt{t.Fatalf("publication-time semantics were not preserved: %+v",item)}
+	if item.SourceURL==""||item.Source!="eastmoney"||item.FetchedAt.IsZero(){t.Fatalf("source provenance was not preserved: %+v",item)}
+}

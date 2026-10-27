@@ -246,3 +246,53 @@ func TestNewsSearchRejectsFuturePublicationTimestamp(t *testing.T) {
 		t.Fatalf("future-dated article must be rejected, got %+v", items)
 	}
 }
+
+
+type announcementFetcherStub struct{ snapshot domain.StockAnnouncementSnapshot; err error; calls int }
+
+func (f *announcementFetcherStub) FetchStockAnnouncements(_ context.Context,code,startDate,endDate string,page,pageSize int)(domain.StockAnnouncementSnapshot,error){
+	f.calls++
+	snapshot:=f.snapshot
+	snapshot.Symbol,snapshot.StartDate,snapshot.EndDate=code,startDate,endDate
+	snapshot.Page,snapshot.PageSize,snapshot.Returned=page,pageSize,len(snapshot.Items)
+	return snapshot,f.err
+}
+
+func makeAnnouncementSnapshot(title,sourceURL,date string)domain.StockAnnouncementSnapshot{
+	now:=time.Now().UTC()
+	return domain.StockAnnouncementSnapshot{
+		HasData:true,Total:1,Pages:1,Returned:1,Source:"eastmoney",SourceVersion:"test-v1",FetchedAt:now,QualityStatus:"degraded",
+		Items:[]domain.StockAnnouncement{{ArticleID:"AN-TEST-1",Symbol:"600036.SH",StockName:"招商银行",Title:title,Category:"定期报告",
+			AnnouncementDate:date,SourceURL:sourceURL,Source:"eastmoney",SourceVersion:"test-v1",FetchedAt:now,QualityStatus:"degraded"}},
+	}
+}
+
+func TestStockAnnouncementsMergeWithWebSearchAndDeduplicateByTitle(t *testing.T){
+	date:=freshDateString(1)
+	announcementURL:="https://data.eastmoney.com/notices/detail/600036/AN-TEST-1.html"
+	title:="招商银行第三季度报告"
+	announcementSource:=&announcementFetcherStub{snapshot:makeAnnouncementSnapshot(title,announcementURL,date)}
+	webSearch:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+		if r.URL.Path!="/search"{t.Errorf("unexpected search path: %s",r.URL.Path)}
+		w.Header().Set("Content-Type","application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"results":[]map[string]any{{"title":title,"url":"https://finance.example.com/news/quarter-report","content":"招商银行最新定期报告","publishedDate":date}}})
+	}))
+	defer webSearch.Close()
+	fallback:=&fallbackSearcher{}
+	searcher:=New(Config{SearXNGBaseURLs:[]string{webSearch.URL},MaxAgeDays:3,StrategyProfile:"short",RequestTimeout:time.Second,StockAnnouncements:announcementSource},fallback,testLogger())
+	items,err:=searcher.SearchStockNews(context.Background(),"600036.SH","招商银行",5);if err!=nil{t.Fatal(err)}
+	if announcementSource.calls!=1{t.Fatalf("announcement calls=%d, want 1",announcementSource.calls)}
+	if len(items)!=1{t.Fatalf("same-title announcement and web result should be deduplicated: %+v",items)}
+	if items[0].URL!=announcementURL||items[0].PublishedAt!=date||items[0].Source!="eastmoney"{t.Fatalf("disclosure should take precedence without invented timestamp: %+v",items[0])}
+	if fallback.stockCalls!=0{t.Fatalf("native result should not invoke fallback, calls=%d",fallback.stockCalls)}
+}
+
+func TestStockAnnouncementsWorkWithoutWebSearchProviders(t *testing.T){
+	date:=freshDateString(1)
+	source:=&announcementFetcherStub{snapshot:makeAnnouncementSnapshot("招商银行第三季度报告","https://data.eastmoney.com/notices/detail/600036/AN-TEST-1.html",date)}
+	fallback:=&fallbackSearcher{}
+	searcher:=New(Config{StockAnnouncements:source,RequestTimeout:time.Second},fallback,testLogger())
+	items,err:=searcher.SearchStockNews(context.Background(),"600036.SH","招商银行",5);if err!=nil{t.Fatal(err)}
+	if len(items)!=1||items[0].PublishedAt!=date{t.Fatalf("announcements should be a standalone native source: %+v",items)}
+	if fallback.stockCalls!=0{t.Fatalf("announcement-only search should not fallback, calls=%d",fallback.stockCalls)}
+}
