@@ -85,11 +85,40 @@ type ChipDistribution struct {
 	Raw             map[string]any `json:"raw,omitempty"`
 }
 
+// StockProfile contains current low-frequency identity, valuation and profitability fields.
+type StockProfile struct {
+	Symbol                 string    `json:"symbol"`
+	Name                   string    `json:"name"`
+	IPODate                string    `json:"ipo_date,omitempty"`
+	OutDate                string    `json:"out_date,omitempty"`
+	SecurityType           int       `json:"security_type"`
+	SecurityTypeLabel      string    `json:"security_type_label"`
+	ListingStatus          int       `json:"listing_status"`
+	ListingStatusLabel     string    `json:"listing_status_label"`
+	DynamicPE              *float64  `json:"pe_dynamic,omitempty"`
+	PB                     *float64  `json:"pb,omitempty"`
+	Industry               string    `json:"industry,omitempty"`
+	MarketCapCNY           *float64  `json:"market_cap_cny,omitempty"`
+	FloatMarketCapCNY      *float64  `json:"float_market_cap_cny,omitempty"`
+	BoardCode              string    `json:"board_code,omitempty"`
+	ROEPercent             *float64  `json:"roe_percent,omitempty"`
+	NetProfitMarginPercent *float64  `json:"net_profit_margin_percent,omitempty"`
+	NetProfitCNY           *float64  `json:"net_profit_cny,omitempty"`
+	GrossMarginPercent     *float64  `json:"gross_margin_percent,omitempty"`
+	Source                 string    `json:"source"`
+	SourceVersion          string    `json:"source_version,omitempty"`
+	FetchedAt              time.Time `json:"fetched_at"`
+	QualityStatus          string    `json:"quality_status"`
+	QualityReasons         []string  `json:"quality_reasons,omitempty"`
+	NormalizationVersion   string    `json:"normalization_version,omitempty"`
+}
+
 type StockBundle struct {
 	Code                  string            `json:"code"`
 	Name                  string            `json:"name,omitempty"`
 	Quote                 *Quote            `json:"quote,omitempty"`
 	DailyBars             []DailyBar        `json:"daily_bars"`
+	Profile               *StockProfile     `json:"profile,omitempty"`
 	Chip                  *ChipDistribution `json:"chip,omitempty"`
 	CapitalFlow           map[string]any    `json:"capital_flow,omitempty"`
 	DragonTiger           map[string]any    `json:"dragon_tiger_context,omitempty"`
@@ -220,6 +249,7 @@ type AnalysisContext struct {
 	Chip                *ChipDistribution `json:"chip,omitempty"`
 	CapitalFlow         map[string]any    `json:"capital_flow_context,omitempty"`
 	DragonTiger         map[string]any    `json:"dragon_tiger_context,omitempty"`
+	StockProfile        *StockProfile     `json:"stock_profile,omitempty"`
 	Fundamentals        map[string]any    `json:"fundamental_context,omitempty"`
 	Boards              []map[string]any  `json:"boards,omitempty"`
 	News                []NewsItem        `json:"news,omitempty"`

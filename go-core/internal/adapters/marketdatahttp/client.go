@@ -339,6 +339,34 @@ type wireStockAnnouncement struct {
 	QualityReasons   []string   `json:"quality_reasons"`
 }
 
+
+type wireStockProfile struct {
+	Symbol                 string    `json:"symbol"`
+	Name                   string    `json:"name"`
+	IPODate                string    `json:"ipo_date"`
+	OutDate                string    `json:"out_date"`
+	SecurityType           int       `json:"security_type"`
+	SecurityTypeLabel      string    `json:"security_type_label"`
+	ListingStatus          int       `json:"listing_status"`
+	ListingStatusLabel     string    `json:"listing_status_label"`
+	DynamicPE              *float64  `json:"pe_dynamic"`
+	PB                     *float64  `json:"pb"`
+	Industry               string    `json:"industry"`
+	MarketCapCNY           *float64  `json:"market_cap_cny"`
+	FloatMarketCapCNY      *float64  `json:"float_market_cap_cny"`
+	BoardCode              string    `json:"board_code"`
+	ROEPercent             *float64  `json:"roe_percent"`
+	NetProfitMarginPercent *float64  `json:"net_profit_margin_percent"`
+	NetProfitCNY           *float64  `json:"net_profit_cny"`
+	GrossMarginPercent     *float64  `json:"gross_margin_percent"`
+	Source                 string    `json:"source"`
+	SourceVersion          string    `json:"source_version"`
+	FetchedAt              time.Time `json:"fetched_at"`
+	QualityStatus          string    `json:"quality_status"`
+	QualityReasons         []string  `json:"quality_reasons"`
+	NormalizationVersion   string    `json:"normalization_version"`
+}
+
 type wireStockAnnouncementSnapshot struct {
 	Symbol         string                  `json:"symbol"`
 	StartDate      string                  `json:"start_date"`
@@ -369,7 +397,8 @@ type stockAuxResult struct {
 	boards         []map[string]any
 	chip           *domain.ChipDistribution
 	capitalFlow    map[string]any
-	dragonTiger    map[string]any
+	dragonTiger   map[string]any
+	profile       *domain.StockProfile
 }
 
 func (c *Client) FetchStockBundle(ctx context.Context, code string, lookback int, asOf string) (domain.StockBundle, error) {
@@ -466,14 +495,15 @@ func (c *Client) fetchStockAuxiliary(ctx context.Context, code string, out *doma
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	results := make(chan stockAuxResult, 5)
+	results := make(chan stockAuxResult, 6)
 	go func() { results <- c.fetchFundamentals(ctx, code) }()
 	go func() { results <- c.fetchStockBoards(ctx, code) }()
 	go func() { results <- c.fetchChipDistribution(ctx, code) }()
 	go func() { results <- c.fetchCapitalFlow(ctx, code) }()
 	go func() { results <- c.fetchDragonTigerSummary(ctx, code, out.DailyBars) }()
+	go func() { results <- c.fetchStockProfile(ctx, code) }()
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		result := <-results
 		if err := ctx.Err(); err != nil {
 			return err
@@ -511,6 +541,8 @@ func (c *Client) fetchStockAuxiliary(ctx context.Context, code string, out *doma
 			out.CapitalFlow = result.capitalFlow
 		case "dragon_tiger":
 			out.DragonTiger = result.dragonTiger
+		case "stock_profile":
+			out.Profile = result.profile
 		}
 	}
 	return nil
@@ -1109,6 +1141,69 @@ func (c *Client) FetchStockAnnouncements(ctx context.Context, code, startDate, e
 		Items: items, Source: wire.Source, SourceVersion: wire.SourceVersion, FetchedAt: wire.FetchedAt,
 		QualityStatus: wire.QualityStatus, QualityReasons: append([]string(nil), wire.QualityReasons...),
 	}, nil
+}
+
+
+func (c *Client) FetchStockProfile(ctx context.Context, code string) (domain.StockProfile, error) {
+	symbol := strings.TrimSpace(code)
+	if symbol == "" {
+		return domain.StockProfile{}, errors.New("stock profile symbol is required")
+	}
+	var wire wireStockProfile
+	path := "/api/v1/stocks/" + url.PathEscape(symbol) + "/profile"
+	if err := c.get(ctx, path, &wire); err != nil {
+		return domain.StockProfile{}, err
+	}
+	if !sameStockCode(symbol, wire.Symbol) || strings.TrimSpace(wire.Name) == "" {
+		return domain.StockProfile{}, errors.New("stock profile identity or name does not match the request")
+	}
+	if wire.SecurityType < 1 || wire.SecurityType > 4 || (wire.ListingStatus != 0 && wire.ListingStatus != 1) {
+		return domain.StockProfile{}, errors.New("stock profile security type or listing status is invalid")
+	}
+	for field, value := range map[string]string{"ipo_date": wire.IPODate, "out_date": wire.OutDate} {
+		value = strings.TrimSpace(value)
+		if value == "" { continue }
+		parsed, err := time.Parse("2006-01-02", value)
+		if err != nil || parsed.Format("2006-01-02") != value {
+			return domain.StockProfile{}, fmt.Errorf("stock profile %s is not a valid YYYY-MM-DD date", field)
+		}
+	}
+	for field, value := range map[string]*float64{
+		"pe_dynamic": wire.DynamicPE, "pb": wire.PB, "market_cap_cny": wire.MarketCapCNY,
+		"float_market_cap_cny": wire.FloatMarketCapCNY, "roe_percent": wire.ROEPercent,
+		"net_profit_margin_percent": wire.NetProfitMarginPercent, "net_profit_cny": wire.NetProfitCNY,
+		"gross_margin_percent": wire.GrossMarginPercent,
+	} {
+		if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+			return domain.StockProfile{}, fmt.Errorf("stock profile %s is non-finite", field)
+		}
+	}
+	if wire.MarketCapCNY != nil && *wire.MarketCapCNY < 0 { return domain.StockProfile{}, errors.New("stock profile market_cap_cny must not be negative") }
+	if wire.FloatMarketCapCNY != nil && *wire.FloatMarketCapCNY < 0 { return domain.StockProfile{}, errors.New("stock profile float_market_cap_cny must not be negative") }
+	if strings.TrimSpace(wire.Source) == "" || wire.FetchedAt.IsZero() { return domain.StockProfile{}, errors.New("stock profile source or fetched_at is missing") }
+	if wire.QualityStatus != "valid" && wire.QualityStatus != "degraded" {
+		return domain.StockProfile{}, fmt.Errorf("stock profile quality status %q is unsupported", wire.QualityStatus)
+	}
+	return domain.StockProfile{
+		Symbol: wire.Symbol, Name: wire.Name, IPODate: wire.IPODate, OutDate: wire.OutDate,
+		SecurityType: wire.SecurityType, SecurityTypeLabel: wire.SecurityTypeLabel,
+		ListingStatus: wire.ListingStatus, ListingStatusLabel: wire.ListingStatusLabel,
+		DynamicPE: usableFiniteValue(wire.DynamicPE), PB: usableFiniteValue(wire.PB), Industry: wire.Industry,
+		MarketCapCNY: usableFiniteValue(wire.MarketCapCNY), FloatMarketCapCNY: usableFiniteValue(wire.FloatMarketCapCNY),
+		BoardCode: wire.BoardCode, ROEPercent: usableFiniteValue(wire.ROEPercent),
+		NetProfitMarginPercent: usableFiniteValue(wire.NetProfitMarginPercent),
+		NetProfitCNY: usableFiniteValue(wire.NetProfitCNY), GrossMarginPercent: usableFiniteValue(wire.GrossMarginPercent),
+		Source: wire.Source, SourceVersion: wire.SourceVersion, FetchedAt: wire.FetchedAt,
+		QualityStatus: wire.QualityStatus, QualityReasons: append([]string(nil), wire.QualityReasons...),
+		NormalizationVersion: wire.NormalizationVersion,
+	}, nil
+}
+
+func (c *Client) fetchStockProfile(ctx context.Context, code string) stockAuxResult {
+	profile, err := c.FetchStockProfile(ctx, code)
+	if err != nil { return stockAuxResult{kind: "stock_profile", err: err} }
+	return stockAuxResult{kind: "stock_profile", source: profile.Source, qualityStatus: profile.QualityStatus,
+		qualityReasons: append([]string(nil), profile.QualityReasons...), profile: &profile}
 }
 
 func (c *Client) FetchMarketOverview(ctx context.Context, region, asOf string) (domain.MarketOverview, error) {

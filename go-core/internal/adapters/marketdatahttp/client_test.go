@@ -358,3 +358,29 @@ func TestFetchStockBundleBuildsDragonTigerSummaryWithQualityBoundary(t *testing.
 		t.Fatalf("recent trade dates should be queried once each: %#v", seenDates)
 	}
 }
+
+
+func TestFetchStockProfileMapsValuationProfitabilityAndProvenance(t *testing.T) {
+	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/stocks/600519.SH/profile" { t.Errorf("unexpected path: %s", r.URL.Path) }
+		if r.Header.Get("Authorization") != "Bearer market-secret" { t.Error("missing market-data authorization") }
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"symbol":"600519.SH","name":"贵州茅台","ipo_date":"2001-08-27","security_type":1,"security_type_label":"stock","listing_status":1,"listing_status_label":"listed","pe_dynamic":23.5,"pb":8.4,"industry":"白酒","market_cap_cny":2100000000000,"float_market_cap_cny":2090000000000,"board_code":"SH","roe_percent":25.2,"net_profit_margin_percent":52.1,"net_profit_cny":80000000000,"gross_margin_percent":91.4,"source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"valid","quality_reasons":[],"normalization_version":"market-data-v1"}`, fetchedAt)
+	}))
+	defer server.Close()
+	client, err := NewClient(server.URL, "market-secret", time.Second)
+	if err != nil { t.Fatal(err) }
+	profile, err := client.FetchStockProfile(context.Background(), "600519.SH")
+	if err != nil { t.Fatal(err) }
+	if profile.Symbol != "600519.SH" || profile.Name != "贵州茅台" || profile.Industry != "白酒" {
+		t.Fatalf("stock identity fields not mapped: %+v", profile)
+	}
+	if profile.DynamicPE == nil || *profile.DynamicPE != 23.5 || profile.PB == nil || *profile.PB != 8.4 ||
+		profile.MarketCapCNY == nil || *profile.MarketCapCNY != 2100000000000 || profile.ROEPercent == nil || *profile.ROEPercent != 25.2 {
+		t.Fatalf("valuation/profitability fields not mapped: %+v", profile)
+	}
+	if profile.Source != "eastmoney" || profile.QualityStatus != "valid" || profile.FetchedAt.IsZero() {
+		t.Fatalf("profile quality/provenance not preserved: %+v", profile)
+	}
+}

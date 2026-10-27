@@ -213,3 +213,11 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 - Eastmoney struct tag 与之前列出的 gofmt 问题已修正。新闻多源测试显式配置 `MaxSearches=2`，确保两个远程 Provider 都被本地 fixture 验证；生产环境的查询上限逻辑不变。
 - 提交 `d551057` 的 Go 全量工作流 [#40449084361](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361) 通过，包含测试、race、vet、Compose 配置和两个 Go 镜像构建；[Live Provider Probe #40449084825](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825) 同样通过。
 - 后续 HEAD `24952dd` / `71993b1` 新增龙虎榜上下文摘要，相关 Go 客户端、domain、contextpack 与测试代码需要按最新 HEAD 重新验收。不能将上一提交的 CI 结果外推到这些新增代码。
+
+
+## 个股 profile 消费链路迁移（2026-10-27）
+
+- Go-core 新增结构化 StockProfile，消费现有 `/api/v1/stocks/{symbol}/profile`，保留证券身份、上市日期/状态、动态 PE/PB、行业、市值/流通市值、板块编号、ROE、净利率、净利润、毛利率与来源/质量字段。
+- profile 与基本面、板块、筹码、资金流、龙虎榜并发获取；某个辅助域失败只产生日志 warning，不覆盖或丢弃行情与日 K。
+- StockProfile 经 AnalysisContext 传给 legacy analyzer 的 `stock_profile_context`、`stock_profile`、`stock_info` 与 `enhanced_data`。由于来源接口只提供当前快照，显式历史 `as_of` 请求不会附加 profile。
+- 新增 profile 客户端本地 HTTP fixture 与 context bridge 测试源码；未运行测试、构建、CI 或真实上游请求。
