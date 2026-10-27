@@ -651,3 +651,8 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 财务指标 Provider 若返回合法但 `has_data=false` 的报告期快照、指数目录返回空 `unknown`，或指数成分股目录返回空 `unknown`，服务层会继续尝试其他已启用来源，不再让首源空结果掩盖后备数据。
 - 只有回退链耗尽时才返回 unknown，并分别增加 `fundamentals_fallback_exhausted_without_confirmed_data`、`index_catalog_fallback_exhausted_without_confirmed_data`、`index_constituents_fallback_exhausted_without_confirmed_data` 标记；未知空结果使用短缓存。多 Provider 场景会绕过旧版未记录回退耗尽标记的空缓存。
 - 本轮只更新源码、文档和测试源码，未执行测试、构建、CI 或真实 Provider 请求。
+
+
+### 指数目录缓存的类型边界静态修正（2026-10-27）
+
+指数目录缓存命中直接返回目录快照；仅指数成分股快照需要执行 `markIndexConstituentCoverage`，两类模型不可混用。已删除指数目录分支中的误调用。按约定未执行构建、测试或 CI。

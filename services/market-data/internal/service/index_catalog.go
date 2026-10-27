@@ -290,7 +290,6 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 				cacheEligible = fallbackExhausted || len(s.indexCatalogProviders) <= 1
 			}
 			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
-				markIndexConstituentCoverage(&cached)
 				return &cached, true, nil
 			}
 		}
