@@ -365,6 +365,53 @@ func TestFetchStockBundleBuildsDragonTigerSummaryWithQualityBoundary(t *testing.
 	}
 }
 
+
+func TestFetchDragonTigerDateChecksRawSourceCounts(t *testing.T) {
+	date := "2026-10-23"
+	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	cases := []struct {
+		name          string
+		total         int
+		sourceReturned int
+		excluded      int
+		wantComplete  bool
+	}{
+		{name: "incomplete source rows", total: 2, sourceReturned: 1, excluded: 0, wantComplete: false},
+		{name: "excluded non-A-share rows counted", total: 2, sourceReturned: 2, excluded: 1, wantComplete: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"trade_date":%q,"page":1,"page_size":500,"total":%d,"pages":1,"returned":1,"source_returned":%d,"excluded_non_a_share_count":%d,"has_data":true,"has_more":false,"items":[{"symbol":"600519.SH","code":"600519","trade_date":%q}],"source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"degraded","quality_reasons":[]}`,
+					date, tc.total, tc.sourceReturned, tc.excluded, date, fetchedAt)
+			}))
+			defer server.Close()
+			client, err := NewClient(server.URL, "market-secret", time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := client.fetchDragonTigerDate(context.Background(), date)
+			if result.err != nil {
+				t.Fatalf("unexpected request/contract error: %v", result.err)
+			}
+			if result.complete != tc.wantComplete {
+				t.Fatalf("complete=%v want %v; reasons=%v", result.complete, tc.wantComplete, result.qualityReasons)
+			}
+			hasCountMismatchReason := false
+			for _, reason := range result.qualityReasons {
+				if reason == "dragon_tiger_source_row_count_does_not_match_total" {
+					hasCountMismatchReason = true
+					break
+				}
+			}
+			if hasCountMismatchReason == tc.wantComplete {
+				t.Fatalf("unexpected source count mismatch reason: %v", result.qualityReasons)
+			}
+		})
+	}
+}
+
+
 func TestFetchStockProfileMapsValuationProfitabilityAndProvenance(t *testing.T) {
 	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

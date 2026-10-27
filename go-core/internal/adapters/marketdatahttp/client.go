@@ -300,8 +300,9 @@ type wireDragonTigerSnapshot struct {
 	Total          int                   `json:"total"`
 	Pages          int                   `json:"pages"`
 	Returned       int                   `json:"returned"`
-	SourceReturned int                   `json:"source_returned"`
-	HasData        bool                  `json:"has_data"`
+	SourceReturned         int                   `json:"source_returned"`
+	ExcludedNonAShareCount int                   `json:"excluded_non_a_share_count"`
+	HasData                bool                  `json:"has_data"`
 	HasMore        bool                  `json:"has_more"`
 	Items          []wireDragonTigerItem `json:"items"`
 	Source         string                `json:"source"`
@@ -861,6 +862,7 @@ func (c *Client) fetchDragonTigerDate(ctx context.Context, date string) dragonTi
 	const maxPages = 10
 	var total, pages int
 	var source, sourceVersion string
+	sourceRowsObserved := 0
 	allItems := make([]wireDragonTigerItem, 0)
 	for page := 1; page <= maxPages; page++ {
 		query := url.Values{}
@@ -877,8 +879,10 @@ func (c *Client) fetchDragonTigerDate(ctx context.Context, date string) dragonTi
 			result.err = errors.New("dragon-tiger response identity/source/fetched_at mismatch")
 			return result
 		}
-		if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize {
-			result.err = errors.New("dragon-tiger response pagination counts are invalid")
+		if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize ||
+			snapshot.SourceReturned < 0 || snapshot.SourceReturned > pageSize || snapshot.ExcludedNonAShareCount < 0 ||
+			snapshot.SourceReturned != snapshot.Returned+snapshot.ExcludedNonAShareCount {
+			result.err = errors.New("dragon-tiger response pagination/source row counts are invalid")
 			return result
 		}
 		if page == 1 {
@@ -888,6 +892,7 @@ func (c *Client) fetchDragonTigerDate(ctx context.Context, date string) dragonTi
 			result.err = errors.New("dragon-tiger pagination identity/source changed between pages")
 			return result
 		}
+		sourceRowsObserved += snapshot.SourceReturned
 		if snapshot.FetchedAt.After(result.fetchedAt) {
 			result.fetchedAt = snapshot.FetchedAt
 		}
@@ -928,7 +933,10 @@ func (c *Client) fetchDragonTigerDate(ctx context.Context, date string) dragonTi
 				result.err = errors.New("dragon-tiger final page still reports more data")
 				return result
 			}
-			result.complete = true
+			result.complete = sourceRowsObserved == total
+			if !result.complete {
+				result.qualityReasons = appendUniqueWarning(result.qualityReasons, "dragon_tiger_source_row_count_does_not_match_total")
+			}
 			result.qualityStatus = snapshot.QualityStatus
 			break
 		}

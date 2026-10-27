@@ -136,7 +136,7 @@ Live Provider Probe #107 请求 2026-10-23 的真实东方财富龙虎榜后，�
 
 - Go 原生公告 Provider 只覆盖东方财富单只股票公告列表，不代表通用新闻搜索已迁移。
 - Go 原生新闻链现已支持 Bocha/Tavily/Brave News/显式 SearXNG 与股票公告源；已配置的远程源并发聚合，统一应用日期门禁、URL/标题去重、可信域名排序、营销过滤与股票相关性权重。原 Python bridge 仍作为无可用原生结果时的兼容 fallback，不再是默认唯一搜索路径。
-- Python `get_dragon_tiger_context` 返回基本面上下文中的龙虎榜标记/近期上榜摘要，当前 Go 原生详细龙虎榜分页不自动等价于该字段；后续需用真实数据对照 `is_on_list/recent_count/latest_date`。
+- Go-core 已从最近 10 个完整交易日的原生龙虎榜分页结果派生 `is_on_list/recent_count/latest_date`，并将覆盖质量传入旧 analyzer context；语义边界与降级标记已实现，仍需在统一验收阶段用真实数据与旧 Python 输出对账。
 
 
 ## 公告发布时间毫秒格式的真实 Runner 修正（2026-10-26）
