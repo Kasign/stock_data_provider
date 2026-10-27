@@ -78,8 +78,8 @@ export function analysisLiveness(settings, signal) {
 export function analysisHealth(settings, signal) {
   return request(settings.analysisBase, "/readyz", { signal });
 }
-export function getDataSources(settings) {
-  return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey });
+export function getDataSources(settings, signal) {
+  return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey, signal });
 }
 export function getMarketValuations(settings, symbols, signal) {
   const normalizedSymbols = Array.isArray(symbols) ? symbols.map((item) => String(item ?? "").trim()).filter(Boolean) : [];
