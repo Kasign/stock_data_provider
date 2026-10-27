@@ -1459,10 +1459,17 @@ func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
 	if item.Inflow10D != nil && item.Observations < 10 {
 		return errors.New("capital-flow ten-day sum requires at least ten observations")
 	}
+	hasUsableMetric := false
 	for _, value := range []*float64{item.MainNetInflow, item.Inflow5D, item.Inflow10D} {
-		if value != nil && !isFiniteSupplement(*value) {
-			return errors.New("capital-flow amount is non-finite")
+		if value != nil {
+			if !isFiniteSupplement(*value) {
+				return errors.New("capital-flow amount is non-finite")
+			}
+			hasUsableMetric = true
 		}
+	}
+	if !hasUsableMetric {
+		return errors.New("capital-flow snapshot contains no usable amount metrics")
 	}
 	if item.QualityStatus == model.QualityValid {
 		return errors.New("capital-flow cannot be valid without verified publication availability time")

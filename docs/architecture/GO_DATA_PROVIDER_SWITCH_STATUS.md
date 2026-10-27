@@ -616,7 +616,7 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 ## 2026-10-27 个股资金流能力补齐
 
-- 已将东方财富公开 `/api/qt/stock/fflow/kline/get` 接入独立 `CapitalFlowProvider`，不再要求资金流 Provider 同时实现筹码分布。读取最近最多 10 个日观测，`f51` 作为 `provider_date`、`f52` 按人民币元解析；仅当 5/10 日窗口内每一条金额均有效时才返回对应合计。
+- 已将东方财富公开 `/api/qt/stock/fflow/kline/get` 接入独立 `CapitalFlowProvider`，不再要求资金流 Provider 同时实现筹码分布。读取最近最多 10 个日观测，`f51` 作为 `provider_date`、`f52` 按人民币元解析；仅当 5/10 日窗口内每一条金额均有效时才返回对应合计。若最新金额、5 日合计、10 日合计全部缺失，服务层拒绝该响应并继续尝试后备源。
 - 资金流端点、能力开关与 `providers.json`、根/服务环境样例及 OpenAPI 已同步。东方财富优先，旧的 MX `SupplementProvider` 继续作为后备兼容。
 - 本轮只补充源码与契约测试，不执行测试、构建、CI 或真实 Provider 请求。端点访问、字段实际返回、当日未收盘数据语义与全窗口覆盖仍待统一验收；没有把静态接线当作运行验收。
 
@@ -675,3 +675,6 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 指数历史日线 Provider 返回空 `items` 且 `quality_unknown` 时，不再立即成功返回并缓存 3 分钟；在默认自动来源模式下会继续尝试其他已注册的指数 Provider。
 - 回退耗尽后保留 unknown，并记录 `index_daily_bars_fallback_exhausted_without_confirmed_data`，再进行 3 分钟短缓存。旧的未标记回退耗尽状态的空缓存，在多个 Provider 可用时会被绕过。传入明确 `source` 时仍保持来源固定，不跨代码空间自动切源。
 - 已补回归测试源码，未运行测试、构建、CI 或真实 Provider 请求。
+
+
+资金流空指标回退补充（2026-10-27）：合法的资金流响应必须至少包含一项可用金额指标（最新主力净流入、5 日合计或 10 日合计）。如果源端只返回日期/观测条数而所有金额都缺失，不会当作成功结果缓存，会继续尝试后备 Provider。已补测试源码，未运行。
