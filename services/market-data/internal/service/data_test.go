@@ -55,6 +55,16 @@ func (p *transientProvider) FetchDailyBars(context.Context, string, string, stri
 	return nil, errors.New("not used by test")
 }
 
+func TestHistoricalMarketDateNormalizersRejectFutureDates(t *testing.T) {
+	futureDate := time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	if _, err := normalizeLimitPoolDate(futureDate); err == nil || !strings.Contains(err.Error(), "must not be in the future") {
+		t.Fatalf("future limit-pool date must be rejected, got %v", err)
+	}
+	if _, err := normalizeDragonTigerDate(futureDate); err == nil || !strings.Contains(err.Error(), "must not be in the future") {
+		t.Fatalf("future dragon-tiger date must be rejected, got %v", err)
+	}
+}
+
 func validFundamentalsSnapshotForTest() *model.FundamentalsSnapshot {
 	now := time.Now().UTC()
 	categories := []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"}

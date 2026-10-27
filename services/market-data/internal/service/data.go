@@ -336,18 +336,19 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 
 func normalizeLimitPoolDate(rawDate string) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
 	if rawDate == "" {
-		loc, err := time.LoadLocation("Asia/Shanghai")
-		if err != nil {
-			loc = time.FixedZone("CST", 8*60*60)
-		}
-		return time.Now().In(loc).Format("2006-01-02"), nil
+		return today, nil
 	}
 	parsed, err := time.Parse("2006-01-02", rawDate)
-	if err != nil {
+	if err != nil || parsed.Format("2006-01-02") != rawDate {
 		return "", fmt.Errorf("invalid limit-pool date %q: expected YYYY-MM-DD", rawDate)
 	}
-	return parsed.Format("2006-01-02"), nil
+	date := parsed.Format("2006-01-02")
+	if date > today {
+		return "", fmt.Errorf("limit-pool date %s must not be in the future (China market date %s)", date, today)
+	}
+	return date, nil
 }
 
 func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *model.LimitPoolSnapshot) error {
@@ -454,18 +455,19 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 
 func normalizeDragonTigerDate(rawDate string) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
 	if rawDate == "" {
-		loc, err := time.LoadLocation("Asia/Shanghai")
-		if err != nil {
-			loc = time.FixedZone("CST", 8*60*60)
-		}
-		return time.Now().In(loc).Format("2006-01-02"), nil
+		return today, nil
 	}
 	parsed, err := time.Parse("2006-01-02", rawDate)
 	if err != nil || parsed.Format("2006-01-02") != rawDate {
 		return "", fmt.Errorf("invalid dragon-tiger date %q: expected YYYY-MM-DD", rawDate)
 	}
-	return parsed.Format("2006-01-02"), nil
+	date := parsed.Format("2006-01-02")
+	if date > today {
+		return "", fmt.Errorf("dragon-tiger date %s must not be in the future (China market date %s)", date, today)
+	}
+	return date, nil
 }
 
 func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot *model.DragonTigerSnapshot) error {
