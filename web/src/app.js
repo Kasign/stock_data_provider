@@ -105,6 +105,7 @@ const state = {
   chartView: "close",
   movingAverages: [5, 20],
   technicalRows: [],
+  technicalSymbol: "",
   chartMeta: { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" },
   taskId: "",
   runId: "",
@@ -391,9 +392,7 @@ function renderResearchStockList() {
     td.textContent = "当前没有自选股或已查询标的。可以先搜索股票，或在行情页加入自选。";
     tr.append(td); root.append(tr); setText("#research-list-scope", "当前浏览器 · 无标的"); return;
   }
-  const technicalSymbol = state.quote?.symbol
-    ? (() => { try { return normalizeSymbol(state.quote.symbol); } catch { return ""; } })()
-    : "";
+  const technicalSymbol = state.technicalSymbol;
   const latest = technicalSymbol && technicalSymbol === currentSymbol
     ? [...state.technicalRows].reverse().find((row) => row && row.close !== null && row.close !== undefined) || null
     : null;
@@ -1451,6 +1450,12 @@ function setChartView(view) {
 
 function renderBars(response) {
   state.bars = Array.isArray(response.bars) ? response.bars : [];
+  state.technicalSymbol = "";
+  try {
+    state.technicalSymbol = normalizeSymbol(response.symbol || getQuerySymbol());
+  } catch {
+    // 响应标识无法规范化时不关联任何个股均线，避免将错误标识当作当前股票。
+  }
   state.chartMeta = {
     adjustmentBasis: String(response.adjustment_basis || "unknown"),
     volumeUnit: String(response.volume_unit || ""),
@@ -1679,6 +1684,7 @@ function configureDateInputs() {
 
 function clearBarsDisplay(symbol, message = "当前条件尚无日 K 结果。") {
   state.bars = [];
+  state.technicalSymbol = "";
   state.chartMeta = { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" };
   const tbody = $("#bars-body");
   tbody.replaceChildren();
