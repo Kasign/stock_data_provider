@@ -1,5 +1,13 @@
 # WebUI 技术说明
 
+## 2026-10-27 研究详情与设置分组导航
+
+- 个股研究分区按钮通过 `data-research-detail-target` 指向既有详情卡片 ID，不复制 API 请求或数据模型。
+- 研究与设置导航共用 `bindSectionNavigation`，统一点击跳转、`aria-current` 状态和 IntersectionObserver 滚动追踪；不支持 IntersectionObserver 的环境仍可使用点击导航。
+- 点击滚动尊重 `prefers-reduced-motion`；移动端专业资料导航改为横向滚动，避免挤压详情卡片。
+- 图表与历史日 K 继续使用个股行情页既有模块，不重复维护第二套渲染器；导航只定位已有内容，不改变请求和质量口径。
+- 本批未运行测试、构建、CI 或真实 API 请求；滚动高亮阈值和实机触屏体验仍待统一验收。
+
 ## 2026-10-27 自选股“今日分析”口径
 
 - 最近任务引用仅保存 task/run 标识、股票列表、状态、分析服务地址、服务端创建时间和本地更新时间，不保存报告正文、完整 RunResult 或密钥。
