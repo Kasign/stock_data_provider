@@ -206,3 +206,10 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 - `is_on_list` 仅在最新参考交易日有完整非空榜单时给出 true/false；榜单空/unknown 或分页不完整时保留 null 或标记 `recent_count_is_lower_bound=true`，不把未知解释成未上榜。
 - `recent_count`、`latest_date`、参考交易日、覆盖日数、来源、质量状态与原因经 StockBundle / AnalysisContext / legacy analyzer context 传递。
 - 新增客户端本地 HTTP fixture 与上下文桥接测试源码；没有运行测试、构建、CI 或真实上游请求。
+
+
+## 2026-10-27 — Go CI 阻塞已修复，龙虎榜上下文新增代码待验收
+
+- Eastmoney struct tag 与之前列出的 gofmt 问题已修正。新闻多源测试显式配置 `MaxSearches=2`，确保两个远程 Provider 都被本地 fixture 验证；生产环境的查询上限逻辑不变。
+- 提交 `d551057` 的 Go 全量工作流 [#40449084361](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361) 通过，包含测试、race、vet、Compose 配置和两个 Go 镜像构建；[Live Provider Probe #40449084825](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825) 同样通过。
+- 后续 HEAD `24952dd` / `71993b1` 新增龙虎榜上下文摘要，相关 Go 客户端、domain、contextpack 与测试代码需要按最新 HEAD 重新验收。不能将上一提交的 CI 结果外推到这些新增代码。

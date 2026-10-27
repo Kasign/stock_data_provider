@@ -383,3 +383,11 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - `StockBundle.DragonTiger` 与 `AnalysisContext.DragonTiger` 新增个股龙虎榜摘要；从最新 10 个完整交易日读取现有 Go API 并派生 `is_on_list`、`recent_count`、`latest_date`。
 - 摘要通过 `dragon_tiger_context` / `dragon_tiger` 传给兼容分析器。unknown/empty snapshots 不会强行转换成 `false`；覆盖不完整时保留 lower-bound 标记。
 - 每日最多分页 10 页、每页 500 条，最多 4 个日期请求并发。未运行测试、构建、CI 或真实上游请求。
+
+
+## 2026-10-27 — 构建阻塞修复与最新 HEAD 验证边界
+
+- Eastmoney JSON struct tag 的非法字符问题已由 `50fecf2` 修复；此前 go-core 与 market-data 的格式问题已整理。多维新闻检索的两个文件由 `d692a0d` 格式化；双 Provider 聚合测试改为显式设置 `MaxSearches=2`，修正直接配置默认只执行一个维度与测试期望不一致的问题。
+- `.github/workflows/go-test.yml` 现支持 `workflow_dispatch`，且格式检查输出脚本保留正确的单个 `\\n` 转义。
+- 提交 `d551057` 对应的 [Go test suite #40449084361](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361) 通过，根模块、go-core、market-data 的测试/race/vet、Compose 校验和两种 Go 镜像构建全部通过；同一 HEAD 的 [WebUI checks #40449084307](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 与 [Live Provider Probe #40449084825](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825) 也通过。
+- 随后分支继续前进至 `24952dd` / `71993b1`，新增个股龙虎榜上下文摘要并补充相关交接/进度说明。因此，上述绿色 CI 仅覆盖 `d551057`，不能自动视为新增 `DragonTiger` 上下文代码已验证；最新 HEAD 应再跑 Go 全量工作流确认。
