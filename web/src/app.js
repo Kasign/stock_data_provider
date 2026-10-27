@@ -1208,6 +1208,42 @@ function openResearchStock(symbol, name = "") {
   setView("research");
   if (!quoteMatches || !barsMatch) void runQuoteQuery();
 }
+function bindSectionNavigation(linkSelector, dataKey) {
+  const links = Array.from(document.querySelectorAll(linkSelector));
+  if (!links.length) return;
+
+  const setActive = (targetId) => {
+    links.forEach((link) => {
+      const active = link.dataset[dataKey] === targetId;
+      link.classList.toggle("is-active", active);
+      if (active) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    });
+  };
+
+  links.forEach((link) => {
+    link.addEventListener("click", () => {
+      const targetId = link.dataset[dataKey] || "";
+      const target = targetId ? document.getElementById(targetId) : null;
+      if (!target) return;
+      setActive(targetId);
+      const reduceMotion = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+      target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    });
+  });
+
+  if (typeof IntersectionObserver === "undefined") return;
+  const targets = links.map((link) => document.getElementById(link.dataset[dataKey] || "")).filter(Boolean);
+  if (!targets.length) return;
+  const observer = new IntersectionObserver((entries) => {
+    const referenceLine = Math.min(window.innerHeight * 0.28, 220);
+    const current = entries.filter((entry) => entry.isIntersecting)
+      .sort((a, b) => Math.abs(a.boundingClientRect.top - referenceLine) - Math.abs(b.boundingClientRect.top - referenceLine))[0];
+    if (current) setActive(current.target.id);
+  }, { rootMargin: "-15% 0px -65% 0px", threshold: 0 });
+  targets.forEach((target) => observer.observe(target));
+}
+
 function openResearchChartView() {
   let symbol;
   try { symbol = getQuerySymbol(); } catch (error) { setNotice(error.message, "danger"); return; }
@@ -2979,18 +3015,8 @@ $("#settings-check-connection").addEventListener("click", checkConnectionFromSet
 $("#settings-view-data-sources").addEventListener("click", () => {
   setView("data");
 });
-document.querySelectorAll("[data-settings-target]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const target = document.getElementById(button.dataset.settingsTarget);
-    if (!target) return;
-    document.querySelectorAll("[data-settings-target]").forEach((item) => {
-      item.classList.toggle("is-active", item === button);
-      if (item === button) item.setAttribute("aria-current", "location");
-      else item.removeAttribute("aria-current");
-    });
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-});
+bindSectionNavigation("[data-settings-target]", "settingsTarget");
+bindSectionNavigation("[data-research-detail-target]", "researchDetailTarget");
 document.querySelectorAll("[data-theme-value]").forEach((button) => {
   button.addEventListener("click", () => {
     const theme = persistTheme(button.dataset.themeValue);
