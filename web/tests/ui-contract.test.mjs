@@ -782,7 +782,9 @@ test("Run Flow 与结构化结果在浅色主题下使用可读的前景文字",
     ".boundary-grid strong",
     ".signal-result-card strong",
     ".analysis-result-block > h3",
-    ".analysis-result-card-heading strong"
+    ".analysis-result-card-heading strong",
+    ".source-summary strong",
+    ".supplemental-card-heading h3"
   ];
   for (const selector of mainTextSelectors) {
     assert.match(
@@ -819,7 +821,9 @@ test("Run Flow 与结构化结果在浅色主题下使用可读的前景文字",
     ".supplemental-context",
     ".supplemental-card-heading small",
     ".supplemental-fields dt",
-    ".supplemental-reasons"
+    ".supplemental-reasons",
+    ".section-heading h2 span",
+    ".recent-analysis-feedback"
   ];
   for (const selector of dimTextSelectors) {
     assert.match(
@@ -834,4 +838,9 @@ test("Run Flow 与结构化结果在浅色主题下使用可读的前景文字",
   assert.match(stylesheet, /:root\[data-theme="light"\] \.analysis-result-badge\.is-blocked \{ color: #b92f41; border-color: #f2c3c9; \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.task-result-warnings/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.inline-callout strong \{ color: #80540b; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.settings-feedback,?\s*[\s\S]*?:root\[data-theme="light"\] \.recent-analysis-feedback\.is-error \{ color: #b92f41; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.supplemental-feedback\.is-warning \{ color: #80540b; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.supplemental-feedback\.is-error \{ color: #b92f41; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.soft-badge \{ color: #245d95; background: #eaf3ff; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.text-button:hover \{ color: var\(--accent-strong\); \}/);
 });
