@@ -563,5 +563,11 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 ### 公共手单位成交量换算拒绝小数输入（2026-10-27）
 
 - `normalize.HandsToShares` 现在统一要求来源“手”数为非负整数后再换算成股数；拒绝小数手数、非有限值和溢出值。
-- 此门禁覆盖东方财富报价/日 K、腾讯按手口径分支、Pytdx、TickFlow 和 Tushare 等共用转换路径，避免个别 Provider 单独遗漏校验后把小数手数四舍五入成有效数据。
+- 此门禁覆盖按“手”返回成交量的东方财富报价/日 K、腾讯按手口径分支、Pytdx 和 Tushare 等共用转换路径。TickFlow 的 A 股实时行情与日 K 原始成交量单位是“股”，必须使用 `RawSharesToInt64` 直接校验，不能进入手数换算路径。
 - Tushare 保留 Provider 级错误上下文，具体原因由公共归一化错误返回；已扩展公共转换测试和 Tushare 数据夹具源码。未运行测试、构建、CI 或真实 Provider 请求。
+
+### TickFlow 成交量单位修正（2026-10-27）
+
+- 原项目同一 TickFlow 数据源的修复记录明确说明：A 股实时行情和日 K 的 `volume` 返回值已经是“股”，不是“手”；错误地乘以 100 会把成交量放大 100 倍。参考原项目修复记录：`https://github.com/ZhuLinsen/daily_stock_analysis/pull/2128`。
+- Go 适配器现将 TickFlow 报价与日 K 的成交量按股数直接校验为非负整数，不再调用 `HandsToShares`；`raw_volume_unit` 和归一化 `volume_unit` 均明确为 `shares`。东方财富、腾讯等其他来源仍按各自单位契约转换。
+- 将新增 Quote 与日 K HTTP 夹具，验证原始股数与标准化股数保持一致；未发起真实 TickFlow 请求，未运行测试、构建或 CI。

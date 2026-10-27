@@ -129,9 +129,9 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 	if q.Volume == nil || math.IsNaN(*q.Volume) || math.IsInf(*q.Volume, 0) || *q.Volume < 0 || math.Trunc(*q.Volume) != *q.Volume {
 		return nil, errors.New("TickFlow quote has invalid volume")
 	}
-	volume, err := normalize.HandsToShares(*q.Volume)
+	volume, err := normalize.RawSharesToInt64(*q.Volume)
 	if err != nil {
-		return nil, fmt.Errorf("normalize TickFlow quote volume: %w", err)
+		return nil, fmt.Errorf("normalize TickFlow quote volume in shares: %w", err)
 	}
 	change := *q.LastPrice - *q.PrevClose
 	changePercent := change / *q.PrevClose * 100
@@ -170,7 +170,7 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 		Volume: &volume, Amount: amount, TurnoverRate: turnover,
 		QuoteTime: quoteTime, QuoteTimeSemantics: "provider_snapshot_time",
 		FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: tickflowVersion,
-		RawVolume: &rawVolume, RawVolumeUnit: "hands",
+		RawVolume: &rawVolume, RawVolumeUnit: "shares",
 		RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField,
 		VolumeUnit: "shares", AmountUnit: amountUnit,
 		AdjustmentBasis: model.AdjustmentNone, QualityStatus: quality, QualityReasons: reasons,
@@ -630,9 +630,9 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		if err != nil || rawVolume < 0 || math.Trunc(rawVolume) != rawVolume {
 			return nil, fmt.Errorf("TickFlow has invalid volume on %s", tradeDate)
 		}
-		volume, err := normalize.HandsToShares(rawVolume)
+		volume, err := normalize.RawSharesToInt64(rawVolume)
 		if err != nil {
-			return nil, fmt.Errorf("normalize TickFlow volume on %s: %w", tradeDate, err)
+			return nil, fmt.Errorf("normalize TickFlow volume in shares on %s: %w", tradeDate, err)
 		}
 
 		var amount, rawAmount *float64
@@ -676,7 +676,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			AdjustmentMethod: "tickflow_api_" + adjust,
 			Source:           p.Name(), SourceVersion: tickflowVersion,
 			FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
-			RawVolume: &rawVolumeCopy, RawVolumeUnit: "hands",
+			RawVolume: &rawVolumeCopy, RawVolumeUnit: "shares",
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons,
 			NormalizationVer: normalize.Version,
