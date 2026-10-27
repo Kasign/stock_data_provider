@@ -229,7 +229,7 @@ func TestRawSharesToInt64RejectsInvalidAndOverflowValues(t *testing.T) {
 	if err != nil || got != 4421640 {
 		t.Fatalf("RawSharesToInt64=(%d,%v), want 4421640", got, err)
 	}
-	for _, value := range []float64{-1, math.NaN(), math.Inf(1), math.MaxFloat64, float64(math.MaxInt64)} {
+	for _, value := range []float64{-1, 1.5, math.NaN(), math.Inf(1), math.MaxFloat64, float64(math.MaxInt64)} {
 		if _, err := RawSharesToInt64(value); err == nil {
 			t.Errorf("RawSharesToInt64(%v) should fail", value)
 		}

@@ -92,10 +92,13 @@ func RawSharesToInt64(raw float64) (int64, error) {
 	if !finite(raw) || raw < 0 {
 		return 0, errors.New("raw volume in shares must be finite and non-negative")
 	}
+	if math.Trunc(raw) != raw {
+		return 0, errors.New("raw volume in shares must be an integer; fractional volume is not supported")
+	}
 	if raw >= float64(math.MaxInt64) {
 		return 0, errors.New("raw volume in shares overflows int64")
 	}
-	return int64(math.Round(raw)), nil
+	return int64(raw), nil
 }
 
 func ValidateQuote(q *model.Quote) error {
