@@ -524,3 +524,11 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 财务报告期查询拒绝尚未结束的未来季度，避免空分区绕过未来报告期检查。
 - 证券搜索 OpenAPI 契约已补齐；普通响应不再错误声明缓存命中。
 - 以上改动均未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### TickFlow 核心指数报价补齐（2026-10-27）
+
+- 原 Python TickFlowFetcher 可使用授权的 `quotes.get(symbols=[...])` 获取 6 个 A 股核心指数；Go 适配器此前仅实现个股 Quote 与日 K，未实现现有 `IndexQuoteProvider` 接口。
+- 新增独立 `FetchIndexQuotes` 能力，限定 6 个核心指数，不把未知代码混入结果；字段保留来源报价时间，缺少时间/成交额/OHLC 时显式降级，不伪造源时间或补零。
+- 默认关闭，新增 `MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED`。该能力需 TickFlow API Key，与免 Key 日 K 分开配置；配置缺 Key 时会在启动校验阶段失败。
+- 已补接口夹具与配置门禁测试源码；按协作约定未运行测试、构建、CI 或真实 Provider 请求。市场广度与 SW1 板块仍列为后续国内能力差异。

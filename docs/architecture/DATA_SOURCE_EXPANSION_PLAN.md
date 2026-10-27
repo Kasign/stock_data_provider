@@ -350,3 +350,8 @@ Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次
 ## 财务报告期查询与历史 as_of 支持边界
 
 当前财务 HTTP API 以 `year`/`quarter` 查询报告期，不支持指定历史时刻还原财务修订版本。请求中只要出现 `as_of` 参数（即使值为空）就返回 HTTP 400 `VALIDATION_ERROR`，避免调用方误以为过滤已生效。Provider 只返回请求时可获得的该报告期版本；严格 PIT 回测仍需公告/可用时间门禁，以及未来建设的历史修订记录存储。
+
+
+### TickFlow 国内指数报价能力
+
+原 Python 适配器已有基于授权报价 API 的 6 个核心指数查询；Go 侧现已补入独立 `IndexQuoteProvider` 能力，并且默认关闭，避免无凭据时启动失败。剩余 TickFlow 国内差异为全市场 universe 广度与 SW1 行业排行；这些能力依赖 universe/权限接口，需先核对其 Go REST 契约后再实现，避免凭猜测拼接接口。
