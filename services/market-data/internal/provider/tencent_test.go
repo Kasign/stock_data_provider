@@ -405,3 +405,24 @@ func TestTencentDailyBarsRejectsMissingRequestedAdjustedSeries(t *testing.T) {
 		})
 	}
 }
+
+func TestTencentChinaLocationFallsBackWhenZoneinfoIsUnavailable(t *testing.T) {
+	loc := tencentChinaLocation(func(string) (*time.Location, error) {
+		return nil, fmt.Errorf("zoneinfo unavailable in minimal container")
+	})
+	_, offset := time.Date(2026, 10, 27, 9, 30, 0, 0, loc).Zone()
+	if offset != 8*60*60 {
+		t.Fatalf("fallback location offset = %d seconds, want UTC+8", offset)
+	}
+}
+
+func TestParseTencentTimeTreatsProviderTimestampAsChinaLocalTime(t *testing.T) {
+	got := parseTencentTime("20261027093000")
+	if got == nil {
+		t.Fatal("valid Tencent quote timestamp should be parsed")
+	}
+	want := time.Date(2026, 10, 27, 1, 30, 0, 0, time.UTC)
+	if !got.Equal(want) {
+		t.Fatalf("parsed timestamp = %s, want %s", got.Format(time.RFC3339), want.Format(time.RFC3339))
+	}
+}
