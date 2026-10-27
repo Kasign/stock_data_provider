@@ -772,8 +772,8 @@ func (c *Client) fetchDragonTigerSummary(ctx context.Context, code string, bars 
 	summary := map[string]any{
 		"is_on_list": nil, "recent_count": len(matchedDates),
 		"recent_count_is_lower_bound": hasIncompleteCoverage,
-		"reference_trade_date": latestReferenceDate,
-		"lookback_trading_days": len(dates), "covered_trading_days": coveredDates,
+		"reference_trade_date":        latestReferenceDate,
+		"lookback_trading_days":       len(dates), "covered_trading_days": coveredDates,
 		"quality_status": qualityStatus, "quality_reasons": summaryReasons,
 		"source": source, "source_version": sourceVersion,
 	}
@@ -857,7 +857,9 @@ func (c *Client) fetchDragonTigerDate(ctx context.Context, date string) dragonTi
 			result.err = errors.New("dragon-tiger pagination identity/source changed between pages")
 			return result
 		}
-		if snapshot.FetchedAt.After(result.fetchedAt) { result.fetchedAt = snapshot.FetchedAt }
+		if snapshot.FetchedAt.After(result.fetchedAt) {
+			result.fetchedAt = snapshot.FetchedAt
+		}
 		for _, item := range snapshot.Items {
 			if item.TradeDate != date {
 				result.err = errors.New("dragon-tiger item trade date mismatch")
