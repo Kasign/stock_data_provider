@@ -450,6 +450,10 @@ function renderWatchlist(records = safeReadWatchlist()) {
     return;
   }
 
+  const recentTasks = safeReadRecentTasks();
+  const normalizeLocalSymbol = (value) => {
+    try { return normalizeSymbol(value); } catch { return String(value || "").trim().toUpperCase(); }
+  };
   items.forEach((record) => {
     const row = document.createElement("article");
     row.className = "watchlist-item";
@@ -488,17 +492,14 @@ function renderWatchlist(records = safeReadWatchlist()) {
 
     const tracking = document.createElement("div");
     tracking.className = "watchlist-tracking-summary";
-    const normalizeLocalSymbol = (value) => {
-      try { return normalizeSymbol(value); } catch { return String(value || "").trim().toUpperCase(); }
-    };
     const itemSymbol = normalizeLocalSymbol(record.symbol);
     const quoteMatches = Boolean(state.quote?.symbol) && normalizeLocalSymbol(state.quote.symbol) === itemSymbol;
     const quoteLine = document.createElement("small");
     quoteLine.className = "watchlist-tracking-line";
     quoteLine.textContent = quoteMatches
-      ? "当前行情：" + formatPrice(state.quote.current_price) + " · " + formatPercent(state.quote.change_percent) + " · " + qualityLabel(state.quote.quality_status)
+      ? "行情快照：" + formatPrice(state.quote.current_price) + " · " + formatPercent(state.quote.change_percent) + " · " + formatDateTime(state.quote.quote_time) + " · " + qualityLabel(state.quote.quality_status)
       : "当前行情：未加载（点击“查行情”读取）";
-    const recentTask = safeReadRecentTasks()
+    const recentTask = recentTasks
       .filter((task) => Array.isArray(task.symbols) && task.symbols.some((value) => normalizeLocalSymbol(value) === itemSymbol))
       .sort((a, b) => (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0))[0] || null;
     const activeTaskMatches = Boolean(state.taskId) && Array.isArray(state.taskSymbols)
@@ -519,7 +520,7 @@ function renderWatchlist(records = safeReadWatchlist()) {
       const corePass = state.lastRunResult.quality?.core_pass;
       const qualityState = corePass === true ? "核心质量门禁通过" : corePass === false ? "核心质量门禁未通过" : "核心质量门禁未报告";
       const warnings = Array.isArray(state.lastRunResult.warnings) ? " · 警告 " + state.lastRunResult.warnings.length + " 项" : "";
-      resultLine.textContent = "本页已载入结果：" + qualityState + warnings;
+      resultLine.textContent = "本页已载入结果：" + runStatusLabel(state.lastRunResult.status) + " · " + qualityState + warnings;
     } else {
       resultLine.textContent = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
     }
