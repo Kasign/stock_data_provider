@@ -668,3 +668,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 若估值 Provider 返回通过结构校验但 `quality_unknown` 的快照，服务层会继续尝试后续 Provider，避免一个来源的缺失数据遮住其他来源可用的估值。
 - 只有回退链耗尽时才返回 unknown 并增加 `valuations_fallback_exhausted_without_confirmed_data`；仅该状态的 unknown 会短缓存 10 秒。多 Provider 场景会忽略旧版未带回退耗尽标记的 unknown 缓存。
 - 已新增回归测试源码，未执行测试、构建、CI 或真实 Provider 请求。
+
+
+### 指数历史日线未知空结果回退（2026-10-27）
+
+- 指数历史日线 Provider 返回空 `items` 且 `quality_unknown` 时，不再立即成功返回并缓存 3 分钟；在默认自动来源模式下会继续尝试其他已注册的指数 Provider。
+- 回退耗尽后保留 unknown，并记录 `index_daily_bars_fallback_exhausted_without_confirmed_data`，再进行 3 分钟短缓存。旧的未标记回退耗尽状态的空缓存，在多个 Provider 可用时会被绕过。传入明确 `source` 时仍保持来源固定，不跨代码空间自动切源。
+- 已补回归测试源码，未运行测试、构建、CI 或真实 Provider 请求。

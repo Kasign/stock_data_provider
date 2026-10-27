@@ -414,3 +414,6 @@ Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次
 
 
 批量估值在 `quality_unknown` 时现在继续尝试后备 Provider；只有所有来源均未提供 valid/degraded 估值时才返回并短缓存带有 `valuations_fallback_exhausted_without_confirmed_data` 标记的 unknown。多 Provider 场景旧 unknown 缓存若缺少此标记会被绕过。
+
+
+指数历史日线补充：空序列必须保持 `quality_unknown`，但不应让第一个来源阻断后续可用的国内来源。自动选择来源时，服务层现会在未知空序列后继续回退，只有回退耗尽后才短缓存并附加 `index_daily_bars_fallback_exhausted_without_confirmed_data`；显式指定来源则仍不会跨来源混用。

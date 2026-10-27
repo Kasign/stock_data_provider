@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/cache"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
 )
@@ -70,5 +72,111 @@ func TestIndexDailyBarsRejectsFutureEndDateBeforeProviderSelection(t *testing.T)
 	svc := &DataService{}
 	if _, _, err := svc.IndexDailyBarsFromSource(context.Background(), "000300.SH", today, future, ""); err == nil || !strings.Contains(err.Error(), "must not be in the future") {
 		t.Fatalf("future index daily-bars end date must be rejected before selecting a Provider, got %v", err)
+	}
+}
+
+
+type indexDailyBarsFallbackTestProvider struct {
+	name string
+	snapshot *model.IndexDailyBarsSnapshot
+	err error
+	calls int
+}
+
+func (p *indexDailyBarsFallbackTestProvider) Name() string { return p.name }
+
+func (p *indexDailyBarsFallbackTestProvider) FetchIndexCatalog(context.Context, string) (*model.IndexCatalogSnapshot, error) {
+	return nil, nil
+}
+
+func (p *indexDailyBarsFallbackTestProvider) FetchIndexConstituents(context.Context, string) (*model.IndexConstituentSnapshot, error) {
+	return nil, nil
+}
+
+func (p *indexDailyBarsFallbackTestProvider) FetchIndexDailyBars(_ context.Context, indexSymbol, startDate, endDate string) (*model.IndexDailyBarsSnapshot, error) {
+	p.calls++
+	if p.err != nil {
+		return nil, p.err
+	}
+	if p.snapshot == nil {
+		return nil, nil
+	}
+	out := *p.snapshot
+	out.IndexSymbol = indexSymbol
+	out.StartDate = startDate
+	out.EndDate = endDate
+	out.Items = append([]model.IndexDailyBar(nil), p.snapshot.Items...)
+	return &out, nil
+}
+
+func unknownIndexDailyBarsForFallbackTest(source string) *model.IndexDailyBarsSnapshot {
+	return &model.IndexDailyBarsSnapshot{
+		IndexSymbol: "000300.SH", StartDate: "2026-10-20", EndDate: "2026-10-23",
+		Items: []model.IndexDailyBar{}, Total: 0, Source: source, SourceVersion: "test-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityUnknown,
+		QualityReasons: []string{"provider_index_daily_bars_empty"},
+	}
+}
+
+func populatedIndexDailyBarsForFallbackTest(source string) *model.IndexDailyBarsSnapshot {
+	now := time.Now().UTC()
+	volume := int64(1000000)
+	amount := 100000000.0
+	change := 1.2
+	return &model.IndexDailyBarsSnapshot{
+		IndexSymbol: "000300.SH", StartDate: "2026-10-20", EndDate: "2026-10-23",
+		Items: []model.IndexDailyBar{{
+			IndexSymbol: "000300.SH", TradeDate: "2026-10-23",
+			Open: 3900, High: 3950, Low: 3880, Close: 3940,
+			ChangePercent: &change, Volume: &volume, Amount: &amount,
+			VolumeUnit: "shares", AmountUnit: "CNY", Source: source, SourceVersion: "test-v1",
+			FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		}},
+		Total: 1, Source: source, SourceVersion: "test-v1", FetchedAt: now,
+		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+}
+
+func TestIndexDailyBarsFallsBackAfterUnknownEmptyProvider(t *testing.T) {
+	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: unknownIndexDailyBarsForFallbackTest("hithink")}
+	second := &indexDailyBarsFallbackTestProvider{name: "tushare", snapshot: populatedIndexDailyBarsForFallbackTest("tushare")}
+	svc := &DataService{
+		cache: cache.NewDisabled(),
+		indexCatalogProviders: []provider.IndexCatalogProvider{first, second},
+	}
+	got, hit, err := svc.IndexDailyBarsFromSource(context.Background(), "000300.SH", "2026-10-20", "2026-10-23", "")
+	if err != nil || hit {
+		t.Fatalf("IndexDailyBarsFromSource returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || len(got.Items) != 1 {
+		t.Fatalf("expected index daily-bars fallback data, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected both Providers to be called, first=%d second=%d", first.calls, second.calls)
+	}
+}
+
+func TestIndexDailyBarsCachesUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
+	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: unknownIndexDailyBarsForFallbackTest("hithink")}
+	second := &indexDailyBarsFallbackTestProvider{name: "tushare", err: errors.New("test endpoint unavailable")}
+	svc := &DataService{
+		cache: newMemoryCache(),
+		indexCatalogProviders: []provider.IndexCatalogProvider{first, second},
+	}
+	got, hit, err := svc.IndexDailyBarsFromSource(context.Background(), "000300.SH", "2026-10-20", "2026-10-23", "")
+	if err != nil || hit {
+		t.Fatalf("IndexDailyBarsFromSource returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || len(got.Items) != 0 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected unknown empty index daily-bars result, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "index_daily_bars_fallback_exhausted_without_confirmed_data" {
+			found = true
+		}
+	}
+	if !found || first.calls != 1 || second.calls != 1 {
+		t.Fatalf("missing fallback exhaustion marker or incomplete fallback: reasons=%v first=%d second=%d", got.QualityReasons, first.calls, second.calls)
 	}
 }

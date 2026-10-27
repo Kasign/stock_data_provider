@@ -483,10 +483,21 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 		var cached model.IndexDailyBarsSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			ttl := 15 * time.Minute
+			cacheEligible := len(cached.Items) > 0
 			if cached.QualityStatus != model.QualityValid {
 				ttl = 3 * time.Minute
 			}
-			if time.Since(cached.FetchedAt) < ttl {
+			if len(cached.Items) == 0 {
+				fallbackExhausted := false
+				for _, reason := range cached.QualityReasons {
+					if reason == "index_daily_bars_fallback_exhausted_without_confirmed_data" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				cacheEligible = fallbackExhausted || len(providers) <= 1
+			}
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
 		}
@@ -494,6 +505,7 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 		s.logger.Warn("index daily-bars cache read failed", "symbol", indexSymbol, "error", cacheErr)
 	}
 	var failures []string
+	var unknownEmpty *model.IndexDailyBarsSnapshot
 	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -505,6 +517,12 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 		}
 		if err := validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if len(snapshot.Items) == 0 {
+			// 空日线序列无法证明该指数在请求区间内确实没有行情，先尝试后续来源。
+			unknownEmpty = snapshot
+			failures = append(failures, p.Name()+": index daily bars are empty and cannot be confirmed")
 			continue
 		}
 		sort.Slice(snapshot.Items, func(i, j int) bool { return snapshot.Items[i].TradeDate < snapshot.Items[j].TradeDate })
@@ -520,6 +538,16 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 			s.logger.Warn("index daily-bars cache encode failed", "symbol", indexSymbol, "error", err)
 		}
 		return snapshot, false, nil
+	}
+	if unknownEmpty != nil {
+		unknownEmpty.QualityStatus = model.QualityUnknown
+		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "index_daily_bars_fallback_exhausted_without_confirmed_data")
+		if payload, err := json.Marshal(unknownEmpty); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, 3*time.Minute); cacheErr != nil {
+				s.logger.Warn("index daily-bars unknown cache write failed", "symbol", indexSymbol, "error", cacheErr)
+			}
+		}
+		return unknownEmpty, false, nil
 	}
 	return nil, false, fmt.Errorf("all index daily-bars providers failed: %s", strings.Join(failures, "; "))
 }
