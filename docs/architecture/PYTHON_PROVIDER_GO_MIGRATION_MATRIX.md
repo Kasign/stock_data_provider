@@ -33,25 +33,25 @@
 | 个股实时行情 `get_realtime_quote` | Eastmoney、Tencent、Sina；Yahoo 为显式关闭的可选源 | GitHub Runner #100 中新浪、腾讯、东方财富均返回报价；腾讯和 Yahoo 因字段/成交额契约限制为 degraded，Yahoo 默认关闭；仍需逐项对照原 Fetcher 的字段补齐与市场路由 |
 | 日线历史 `get_daily_data` | Eastmoney、Tencent、Sina、BaoStock；Yahoo 默认关闭，网易当前配置启用为后置回退但目标网络未验收 | GitHub Runner #100 对 Eastmoney、Tencent（none/qfq）、Sina（none）、BaoStock（qfq）和 Yahoo（qfq）各返回 8 根样本 K 线；新浪/腾讯/Yahoo 缺可核验成交额时保持 null/unknown/degraded；网易探测本次因 HTTP 502 被跳过；仍未迁移 Efinance / AkShare / Pytdx / Tushare / TickFlow / Longbridge 等来源、指数专用链和市场路由 |
 | 股票名称/代码搜索 | 独立 `StockSearchProvider` 链，腾讯 Smartbox 优先、东方财富 CLIST 兜底；分别由 `MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED` 与 `MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED` 控制，不必关闭各自的行情或日 K 能力 | 两个国内 Provider 均保留独立开关，搜索优先级继续为腾讯 → 东方财富；本轮补齐配置与注册校验，未运行测试或真实上游请求 |
-| 指数实时报价 | 新增独立 `IndexQuoteProvider`、东方财富 `ulist.np/get` 适配器与 `GET /api/v1/market/indices`，仅覆盖 7 个白名单核心指数 | GitHub Runner #100 返回 7 条；接口发生 302 后跳转至 delay 域名并返回 200，源端未提供可解析行情时间，输出 degraded；默认关闭，目标部署容器仍待验收 |
+| 指数实时报价 | 新增独立 `IndexQuoteProvider`、东方财富 `ulist.np/get` 适配器与 `GET /api/v1/market/indices`，仅覆盖 7 个白名单核心指数 | 当前 `configs/providers.json` 与服务模板默认启用；历史 Runner #100 返回 7 条，但接口经 302 跳转后未提供可解析行情时间，结果为 `degraded`。默认启用不等于已完成目标部署容器验收 |
 | 指数目录 / 成分 / 日线 | Hithink 专用指数目录、当前成分和历史日线；新增 Tushare index_basic、index_weight、index_daily，通过 tag=tushare 选择独立代码空间 | Hithink 使用 .TI/.SH/.SZ，Tushare 使用 .SH/.SZ/.CSI；当前成分按最近可用权重快照，日线成交量保留手、成交额从千元换算成人民币元；能力默认关闭并待统一验收 |
-| 市场涨跌统计 get_market_stats | Go MarketBreadthProvider 通过东方财富 getTopicZDFenBu 汇总涨跌分布、通过 getTopicZTPool/getTopicDTPool 按同一报告日补充涨跌停总数，并以 CLIST 的 f6 分页汇总全市场成交额；API 为 GET /api/v1/market/breadth | 成交额只在分页无缺失/重复、每条报价日期与分布报告日一致、成交额字段有效且证券数量与广度分布完全一致时输出；其余情况 total_amount_cny=null，amount_coverage_count=0。多页采集并非原子快照、证券全集尚未由独立主数据核验，因此质量仍为 degraded；实现已补，待统一测试与真实 Provider 验收 |
-| 行业板块涨跌榜 `get_sector_rankings` | 新增独立 `SectorRankingProvider`、东方财富 CLIST 适配器及 `GET /api/v1/market/sectors?type=industry` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
-| 概念 / 题材涨跌榜 `get_concept_rankings` | 复用板块 ranking 契约、使用独立概念过滤条件；API 为 `GET /api/v1/market/sectors?type=concept` | GitHub Runner 复验返回 10 条，Go 测试/镜像 CI 已通过；上游未提供可核验快照时间，结果固定 `degraded`；默认关闭，目标部署环境待验收 |
-| 涨停池 get_limit_up_pool、跌停池、炸板池 | 新增 LimitPoolProvider、东方财富 push2ex 三类池端点及 GET /api/v1/market/limit-pools?type=up|down|broken | GitHub Runner #100 三类端点均返回 200，报告总数分别为涨停 82、跌停 6、炸板 12（涨停池本次只返回 30 条样本项）；请求交易日为 2026-10-23，源端没有可核验快照时间，质量 degraded；默认关闭，NAS/Docker 与跨交易日语义验证未完成 |
-| 个股所属板块 `get_belong_boards` | 新增独立 `StockBoardsProvider`、东方财富 `slist/get` 适配器与 `GET /api/v1/stocks/{symbol}/boards` | GitHub Runner #100 对 600036.SH 返回 26 个板块项；302 → delay 域名 200；源端没有可核验快照时间且板块类型语义仍有限，结果 degraded；默认关闭，NAS/Docker 验收待完成 |
+| 市场涨跌统计 get_market_stats | Go MarketBreadthProvider 通过东方财富 getTopicZDFenBu 汇总涨跌分布、通过 getTopicZTPool/getTopicDTPool 按同一报告日补充涨跌停总数，并以 CLIST 的 f6 分页汇总全市场成交额；API 为 GET /api/v1/market/breadth | 当前配置默认启用，结果缓存 5 分钟；成交额只在分页无缺失/重复、每条报价日期与分布报告日一致、成交额字段有效且证券数量与涨跌分布覆盖数完全一致时输出。多页采集非原子快照、证券全集未由独立主数据核验，质量仍为 `degraded`；代码与契约已更新，待用户统一回归及生产源验收 |
+| 行业板块涨跌榜 `get_sector_rankings` | 新增独立 `SectorRankingProvider`、东方财富 CLIST 适配器及 `GET /api/v1/market/sectors?type=industry` | 当前配置默认启用；既往 Runner 返回 10 条，但上游缺少可核验快照时间，结果固定为 `degraded`。目标部署环境验收待完成 |
+| 概念 / 题材涨跌榜 `get_concept_rankings` | 复用板块 ranking 契约、使用独立概念过滤条件；API 为 `GET /api/v1/market/sectors?type=concept` | 当前配置默认启用；既往 Runner 返回 10 条，但上游缺少可核验快照时间，结果固定为 `degraded`。目标部署环境验收待完成 |
+| 涨停池 get_limit_up_pool、跌停池、炸板池 | 新增 LimitPoolProvider、东方财富 push2ex 三类池端点及 GET /api/v1/market/limit-pools?type=up|down|broken | 当前配置默认启用。既往 Runner #100 的报告总数为涨停 82、跌停 6、炸板 12，但涨停池本次只返回 30 条样本；源端没有可核验快照时间，结果为 `degraded`。NAS/Docker 与跨交易日语义验证未完成 |
+| 个股所属板块 `get_belong_boards` | 新增独立 `StockBoardsProvider`、东方财富 `slist/get` 适配器与 `GET /api/v1/stocks/{symbol}/boards` | 当前配置默认启用；既往 Runner #100 对 600036.SH 返回 26 个板块项，但源端没有可核验快照时间，且板块类型语义仍有限，结果为 `degraded`；NAS/Docker 验收待完成 |
 | 交易日历 | 新增独立 `TradingCalendarProvider`，通过 BaoStock TCP `query_trade_dates` 和可选 Tushare Pro `trade_cal`，统一使用 `GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD` | BaoStock 已有首轮真实样本；Tushare Go 实现已加入代码但默认关闭，需配置有效 Token 与接口权限；两者均须满足连续自然日覆盖契约，待统一验收 |
-| 筹码分布 `get_chip_distribution` | 可选 Go MX API 路由和缓存 | 精确 publication available_at 仍缺失；输出降级质量，历史 as_of 不得倒灌 |
+| 筹码分布 `get_chip_distribution` | 东方财富原生 CYQ 算法（基于最新未复权日 K 与换手率计算），可选 MX API 作为补充源；独立 API 与缓存 | 当前东方财富能力默认启用；无独立筹码快照时间，结果保持 `degraded`，仅代表最新可计算快照，不得用于伪造历史 `as_of`；精确 publication/available_at 仍缺失 |
 | 人气榜与飙升榜 | 东方财富原生 `HotRankingProvider`，API `GET /api/v1/market/hot-stocks?type=popular&limit=10`（`type=surge` 查询飙升榜）；端点分别由 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL`、`MARKET_DATA_EASTMONEY_HOT_SURGE_URL` 配置 | 两个变量默认沿用当前公开端点，启动时执行 HTTP(S) URL 形态校验；源端缺少可信快照时间，结果继续标记 `degraded`；配置可达地址不等于完成生产可用性验收 |
 | 基本面 `get_fundamental_context` | BaoStock 与可选 Tushare Pro `fina_indicator` 均提供 Go 原生 `FundamentalsProvider`，复用 `GET /api/v1/stocks/{symbol}/fundamentals?year=YYYY&quarter=N` | 按季度输出盈利、营运、成长、偿债、现金流、杜邦六组指标，保留报告期与公告日期；Tushare 需要对应积分权限，两个 Provider 都待统一验收；并非完整财务报表或原 Python 上下文的等价替代 |
 | 个股资金流 `get_capital_flow_context` | 可选 Go MX API 路由；字段按人民币元规范化，5/10 日累计要求完整观测 | 自然语言查询返回的指标需要验证字段标签/单位；缺值不补零，精确 available_at 未实现 |
-| 龙虎榜 `get_dragon_tiger_context` | 无 | 必须保留交易日、上榜原因、营业部/机构口径及金额单位 |
+| 龙虎榜 `get_dragon_tiger_context` | 东方财富原生 `DragonTigerProvider`、API `GET /api/v1/market/dragon-tiger?date=YYYY-MM-DD&page=1&page_size=100`；同花顺/Tushare 是可选能力 | 当前配置默认启用东方财富路由，但源端只有交易日、没有精确快照时间；空列表应为 `unknown` 而非确认零条，金额缺失保留 `null`。Runner 与 NAS/Docker 的交易日/分页覆盖仍待统一验收 |
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
 | 批量估值 | 可选 Tushare daily_basic Go Provider 与 GET /api/v1/market/valuations?symbols=... | 按最近已完成交易日返回 PE/PB/PS；不支持的 PCF 保持 null，并返回 provider_report_date；缺少精确更新时间时 quality 为 degraded；默认关闭，需 Token/积分权限，待统一验收 |
 | 股票名称 / 代码搜索 | 独立 `StockSearchProvider`，东方财富 CLIST 证券目录与 6 小时缓存，API `GET /api/v1/stocks/search?q=贵州茅台&limit=10` | 实测已证实目录源 HTTP 200 并报告 5,925 条证券，但首轮 `pz=5000`、次轮 `pz=1000` 都遇到服务端分页上限低于请求值，代码因此只扫描首页并漏掉“贵州茅台”。当前调整为每页 100 条、最多 100 页，并新增后续页匹配回归测试；待 Go CI 与真实 Runner 再验收 |
 | 新闻 / 公告 | 单股公告为 Go 原生东方财富 Provider/API；Go Core 已接入 Bocha 优先、自建 SearXNG 备选的国内新闻搜索链，并在未配置/无合格结果时回退 Python Bridge | Go CI #310 全部通过；Live Probe #115 的新闻搜索步骤因没有 `BOCHA_API_KEYS` 或 `SEARXNG_BASE_URLS` 而明确 `skipped`，不能视为真实源站验收。仍未覆盖 Python 的全部搜索源、复杂反垃圾准入和完整语言策略 |
 
-当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/stocks/{symbol}/boards`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`、`GET /api/v1/market/breadth`、`GET /api/v1/market/limit-pools?type=up|down|broken`、`GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。这些新增能力保持独立路由/开关；未通过 NAS/Docker 验收的能力默认关闭。
+当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/stocks/{symbol}/boards`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`、`GET /api/v1/market/breadth`、`GET /api/v1/market/limit-pools?type=up|down|broken`、`GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。这些新增能力保持独立路由/开关；当前代码已将部分东方财富国内能力（核心指数、市场广度、行业/概念榜、涨跌停池、所属板块、龙虎榜、公告、筹码分布和人气榜）配置为默认启用，但目标 NAS/Docker 端到端验收未完成，默认启用不代表生产可用；海外与需凭据的可选能力仍按独立开关管理。
 
 ## 3. Go Provider 设计要求
 
@@ -109,7 +109,7 @@ BaoStock 的详细 Go 接入、按能力分工和验收条件见 [数据源扩�
 所有未通过目标部署验收的新增能力继续保持独立开关默认关闭。此报告只构成一次 GitHub 托管 Runner 实测，不代表生产 SLA 或所有交易日、证券、分页的完整性证明。
 
 
-| 龙虎榜 `get_dragon_tiger_context` | Go 新增独立 `DragonTigerProvider`、东方财富数据中心 `RPT_DAILYBILLBOARD_DETAILSNEW`，`GET /api/v1/market/dragon-tiger?date=YYYY-MM-DD&page=1&page_size=100` | 2026-10-23 首次完成 Provider/API/契约测试接入；默认关闭，Runner 实测和 NAS/Docker 实测待新 CI。报告只有交易日，没有精确快照时间；空列表 unknown；金额为 CNY 元且缺字段保留 null。 |
+- **龙虎榜历史记录（2026-10-23）**：当时首次完成 `DragonTigerProvider`、东方财富数据中心 `RPT_DAILYBILLBOARD_DETAILSNEW` 与 API 接入，历史配置默认关闭。当前分支已在 `configs/providers.json` 和服务环境模板中默认启用对应能力，但 Runner / NAS / Docker 端到端验收仍未完成；源端报告仅含交易日、无精确快照时间，空列表为 `unknown`，金额缺失保留 `null`。
 
 ## 下一批数据域优先级更新（2026-10-23）
 
@@ -130,7 +130,7 @@ Live Provider Probe #107 请求 2026-10-23 的真实东方财富龙虎榜后，�
 现在 API 将 `total/pages` 解释为供应商原始报表计数，另行返回 `source_returned`（本页原始行数）、`returned`（过滤后符合 A 股股票契约的本页行数）、`excluded_non_a_share_count`（已识别并排除的非 A 股证券数）。三者必须满足 `source_returned = returned + excluded_non_a_share_count`。已识别可转债会加入 `provider_non_a_share_security_rows_excluded` 质量原因；若某页只有被排除的非 A 股证券，返回 unknown 空页及保留的 has_more 分页信息，不得把它说成当日全市场没有股票上榜。该修复等待当前 HEAD 的 Go CI 和新一轮真实 Runner 结果。
 
 
-| 单只 A 股公告列表 | Go 原生 `AnnouncementProvider`、东方财富 `/api/security/ann` 及 `GET /api/v1/stocks/{symbol}/announcements` | GitHub Go CI #304 与真实 Provider Probe #114 通过。`600036.SH` 在 2026-10-19 至 2026-10-25 返回 `total_hits=2`、1 页、2 条记录；源端 `display_time` 的冒号毫秒格式已正确解析为 `published_at`，本轮样本质量为 valid。独立开关仍默认关闭；NAS/Docker 目标部署验收未完成 |
+| 单只 A 股公告列表 | Go 原生 `AnnouncementProvider`、东方财富 `/api/security/ann` 及 `GET /api/v1/stocks/{symbol}/announcements` | GitHub Go CI #304 与真实 Provider Probe #114 通过。`600036.SH` 在 2026-10-19 至 2026-10-25 返回 `total_hits=2`、1 页、2 条记录；源端 `display_time` 的冒号毫秒格式已正确解析为 `published_at`，本轮样本质量为 valid。当前 `configs/providers.json` 与服务模板默认开启该能力；NAS/Docker 目标部署验收仍未完成 |
 
 ## 公告域和通用新闻搜索的迁移边界（2026-10-26）
 
