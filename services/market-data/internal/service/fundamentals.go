@@ -153,6 +153,10 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil {
+			// fetched_at 是本服务收到 Provider 回包的时间，不能沿用上游传入值。
+			snapshot.FetchedAt = time.Now().UTC()
+		}
 		if err := validateFundamentalsSnapshot(symbol, year, quarter, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue

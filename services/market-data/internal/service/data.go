@@ -1281,6 +1281,7 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 			return errors.New("chip-distribution ratio is outside [0,1]")
 		}
 	}
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
 	for _, date := range []string{item.Date, item.ProviderDate} {
 		if strings.TrimSpace(date) == "" {
 			continue
@@ -1288,6 +1289,9 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 		parsed, dateErr := time.Parse("2006-01-02", date)
 		if dateErr != nil || parsed.Format("2006-01-02") != date {
 			return errors.New("chip-distribution provider date is invalid")
+		}
+		if date > today {
+			return errors.New("chip-distribution provider date is in the future")
 		}
 	}
 	if strings.TrimSpace(item.Source) == "" || item.FetchedAt.IsZero() {
@@ -1393,9 +1397,8 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		if strings.TrimSpace(item.SourceVersion) == "" {
 			item.SourceVersion = "unknown"
 		}
-		if item.FetchedAt.IsZero() {
-			item.FetchedAt = time.Now().UTC()
-		}
+		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
+		item.FetchedAt = time.Now().UTC()
 		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
@@ -1468,9 +1471,8 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 		if strings.TrimSpace(item.SourceVersion) == "" {
 			item.SourceVersion = "unknown"
 		}
-		if item.FetchedAt.IsZero() {
-			item.FetchedAt = time.Now().UTC()
-		}
+		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
+		item.FetchedAt = time.Now().UTC()
 		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")

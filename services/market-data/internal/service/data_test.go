@@ -1541,3 +1541,80 @@ func TestValidateIndexDailyBarsRejectsQualityAndUnitMismatch(t *testing.T) {
 		}
 	})
 }
+
+
+func TestSupplementFetchedAtUsesServiceReceiveTime(t *testing.T) {
+	future := time.Now().UTC().Add(24 * time.Hour)
+	mainInflow, fiveDay := 120.0, 500.0
+	p := &supplementCountingFakeProvider{
+		chip: &model.ChipDistribution{
+			Symbol: "600519.SH", AverageCost: 12.5, SourceVersion: "test",
+			FetchedAt: future, QualityStatus: model.QualityDegraded,
+		},
+		flow: &model.CapitalFlow{
+			Symbol: "600519.SH", MainNetInflow: &mainInflow, Inflow5D: &fiveDay,
+			Observations: 5, SourceVersion: "test", FetchedAt: future,
+			QualityStatus: model.QualityDegraded,
+		},
+	}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetSupplementProviders([]provider.SupplementProvider{p})
+
+	start := time.Now().UTC()
+	chip, _, err := svc.ChipDistribution(context.Background(), "600519")
+	end := time.Now().UTC()
+	if err != nil {
+		t.Fatalf("ChipDistribution: %v", err)
+	}
+	if chip.FetchedAt.Before(start) || chip.FetchedAt.After(end) {
+		t.Fatalf("chip fetched_at must be stamped at service receive time: start=%s fetched_at=%s end=%s", start, chip.FetchedAt, end)
+	}
+
+	start = time.Now().UTC()
+	flow, _, err := svc.CapitalFlow(context.Background(), "600519")
+	end = time.Now().UTC()
+	if err != nil {
+		t.Fatalf("CapitalFlow: %v", err)
+	}
+	if flow.FetchedAt.Before(start) || flow.FetchedAt.After(end) {
+		t.Fatalf("capital-flow fetched_at must be stamped at service receive time: start=%s fetched_at=%s end=%s", start, flow.FetchedAt, end)
+	}
+}
+
+func TestChipDistributionRejectsFutureProviderDate(t *testing.T) {
+	futureDate := time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	p := &supplementCountingFakeProvider{
+		chip: &model.ChipDistribution{
+			Symbol: "600519.SH", Date: futureDate, AverageCost: 12.5,
+			SourceVersion: "test", FetchedAt: time.Now().UTC(),
+			QualityStatus: model.QualityDegraded,
+		},
+	}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetSupplementProviders([]provider.SupplementProvider{p})
+
+	if _, _, err := svc.ChipDistribution(context.Background(), "600519"); err == nil || !strings.Contains(err.Error(), "provider date is in the future") {
+		t.Fatalf("future chip-distribution date must be rejected, got %v", err)
+	}
+}
+
+func TestFundamentalsFetchedAtUsesServiceReceiveTime(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.FetchedAt = time.Now().UTC().Add(24 * time.Hour)
+	p := &fundamentalsCountingFakeProvider{snapshot: snapshot}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{p})
+
+	start := time.Now().UTC()
+	got, hit, err := svc.Fundamentals(context.Background(), "600519.SH", 2026, 2)
+	end := time.Now().UTC()
+	if err != nil || hit {
+		t.Fatalf("Fundamentals hit=%v err=%v", hit, err)
+	}
+	if got.FetchedAt.Before(start) || got.FetchedAt.After(end) {
+		t.Fatalf("fundamentals fetched_at must be stamped at service receive time: start=%s fetched_at=%s end=%s", start, got.FetchedAt, end)
+	}
+}
