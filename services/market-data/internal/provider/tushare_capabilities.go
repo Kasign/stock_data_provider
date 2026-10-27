@@ -506,16 +506,17 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		if readErr != nil {
 			return nil, readErr
 		}
-		announcementDate := ""
-		if strings.TrimSpace(announcementRaw) != "" {
-			announcementDate, dateErr = tushareISODate(announcementRaw)
-			if dateErr != nil {
-				return nil, fmt.Errorf("Tushare 财务公告日期无效: %w", dateErr)
-			}
-			// 只从报告期结束后、当前日期之前已公开的修订版本中选择最新记录。
-			if announcementDate < periodDate || announcementDate > today {
-				continue
-			}
+		if strings.TrimSpace(announcementRaw) == "" {
+			// 无公告日期就无法证明该版本在何时公开；排除该行，避免把时点未知的财务数值用于分析。
+			continue
+		}
+		announcementDate, dateErr := tushareISODate(announcementRaw)
+		if dateErr != nil {
+			return nil, fmt.Errorf("Tushare 财务公告日期无效: %w", dateErr)
+		}
+		// 只从报告期结束后、当前日期之前已公开的修订版本中选择最新记录。
+		if announcementDate < periodDate || announcementDate > today {
+			continue
 		}
 		if selected == nil || announcementDate > selectedAnnouncementDate {
 			selected = row

@@ -490,3 +490,44 @@ func TestTushareFundamentalsIgnoresFutureAnnouncementVersion(t *testing.T) {
 	}
 	t.Fatal("expected a selected EPS metric from the already-published version")
 }
+
+
+func TestTushareFundamentalsRejectsMissingAnnouncementDate(t *testing.T) {
+	fields := strings.Split("ts_code,ann_date,end_date,eps,dt_eps,roe,roe_waa,roe_dt,roa,netprofit_margin,grossprofit_margin,assets_turn,inv_turn,ar_turn,ca_turn,fa_turn,netprofit_yoy,or_yoy,assets_yoy,eqt_yoy,current_ratio,quick_ratio,cash_ratio,debt_to_assets,ocf_to_or,ocf_to_profit,ocf_to_debt,dupont_roe,dupont_asset_turn,dupont_pnitoni,dupont_tax_burden,dupont_intburden", ",")
+	periodEnd := "20251231"
+	values := make([]any, len(fields))
+	for index, field := range fields {
+		switch field {
+		case "ts_code":
+			values[index] = "600519.SH"
+		case "ann_date":
+			values[index] = ""
+		case "end_date":
+			values[index] = periodEnd
+		case "eps":
+			values[index] = 0.88
+		default:
+			values[index] = nil
+		}
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare fundamentals request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "fina_indicator" || request.Params["ts_code"] != "600519.SH" || request.Params["period"] != periodEnd {
+			t.Errorf("unexpected Tushare fundamentals request: %+v", request)
+		}
+		writeTushareTestTable(w, fields, [][]any{values})
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	_, err := provider.FetchFundamentals(context.Background(), "600519.SH", 2025, 4)
+	if err == nil || !strings.Contains(err.Error(), "未返回") {
+		t.Fatalf("financial data without an announcement date must be excluded, got %v", err)
+	}
+}
