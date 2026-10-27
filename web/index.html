@@ -356,6 +356,7 @@
             <div><p class="eyebrow">ANALYSIS FLOW / 02</p><h1>分析任务</h1><p class="page-subtitle">使用 Go 分析 API 创建任务，并轮询持久化状态及阶段事件。进度以服务端事件为准，不虚构百分比。</p></div>
             <div class="last-updated"><span class="status-dot"></span><span>队列模式</span><strong>异步持久化</strong></div>
           </div>
+          <div class="task-workspace-grid">
           <section class="panel recent-analysis-panel">
             <div class="panel-heading"><div><h2>最近分析</h2><p>仅保存在当前浏览器的任务引用，不保存完整报告或替代服务端历史。</p></div><span class="soft-badge" id="recent-analysis-count">0 / 10</span></div>
             <div class="recent-analysis-tools">
@@ -365,7 +366,7 @@
             <p class="recent-analysis-feedback" id="recent-analysis-feedback" role="status" aria-live="polite" hidden></p>
             <div class="recent-analysis-list" id="recent-analysis-list"><div class="empty-row">完成一次分析后，这里会显示最近任务。</div></div>
           </section>
-          <div class="content-grid task-grid">
+          
             <section class="panel task-create-panel">
               <div class="panel-heading"><div><h2>创建分析任务</h2><p>当前接入基础 Go 分析主流程</p></div><span class="soft-badge">POST · 202</span></div>
               <form id="task-form" class="task-form">
