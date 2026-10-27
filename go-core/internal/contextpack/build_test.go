@@ -237,7 +237,6 @@ func TestToLegacyAnalyzerContextPassesThroughDragonTigerSummary(t *testing.T) {
 	}
 }
 
-
 func TestToLegacyAnalyzerContextPassesThroughStockProfile(t *testing.T) {
 	pe := 23.5
 	profile := &domain.StockProfile{Symbol: "600519.SH", Name: "贵州茅台", Industry: "白酒", DynamicPE: &pe, Source: "eastmoney", QualityStatus: "valid"}
@@ -246,7 +245,9 @@ func TestToLegacyAnalyzerContextPassesThroughStockProfile(t *testing.T) {
 		t.Fatalf("stock profile was not preserved: %#v", legacy)
 	}
 	info, ok := legacy["stock_info"].(map[string]any)
-	if !ok || info["industry"] != "白酒" { t.Fatalf("stock_info projection is missing profile fields: %#v", legacy["stock_info"]) }
+	if !ok || info["industry"] != "白酒" {
+		t.Fatalf("stock_info projection is missing profile fields: %#v", legacy["stock_info"])
+	}
 	enhanced, ok := legacy["enhanced_data"].(map[string]any)
 	if !ok || enhanced["pe_dynamic"] != &pe || enhanced["quality_status"] != "valid" {
 		t.Fatalf("enhanced_data projection is missing valuation/quality fields: %#v", legacy["enhanced_data"])

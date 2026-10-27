@@ -339,7 +339,6 @@ type wireStockAnnouncement struct {
 	QualityReasons   []string   `json:"quality_reasons"`
 }
 
-
 type wireStockProfile struct {
 	Symbol                 string    `json:"symbol"`
 	Name                   string    `json:"name"`
@@ -397,8 +396,8 @@ type stockAuxResult struct {
 	boards         []map[string]any
 	chip           *domain.ChipDistribution
 	capitalFlow    map[string]any
-	dragonTiger   map[string]any
-	profile       *domain.StockProfile
+	dragonTiger    map[string]any
+	profile        *domain.StockProfile
 }
 
 func (c *Client) FetchStockBundle(ctx context.Context, code string, lookback int, asOf string) (domain.StockBundle, error) {
@@ -1143,7 +1142,6 @@ func (c *Client) FetchStockAnnouncements(ctx context.Context, code, startDate, e
 	}, nil
 }
 
-
 func (c *Client) FetchStockProfile(ctx context.Context, code string) (domain.StockProfile, error) {
 	symbol := strings.TrimSpace(code)
 	if symbol == "" {
@@ -1162,7 +1160,9 @@ func (c *Client) FetchStockProfile(ctx context.Context, code string) (domain.Sto
 	}
 	for field, value := range map[string]string{"ipo_date": wire.IPODate, "out_date": wire.OutDate} {
 		value = strings.TrimSpace(value)
-		if value == "" { continue }
+		if value == "" {
+			continue
+		}
 		parsed, err := time.Parse("2006-01-02", value)
 		if err != nil || parsed.Format("2006-01-02") != value {
 			return domain.StockProfile{}, fmt.Errorf("stock profile %s is not a valid YYYY-MM-DD date", field)
@@ -1178,9 +1178,15 @@ func (c *Client) FetchStockProfile(ctx context.Context, code string) (domain.Sto
 			return domain.StockProfile{}, fmt.Errorf("stock profile %s is non-finite", field)
 		}
 	}
-	if wire.MarketCapCNY != nil && *wire.MarketCapCNY < 0 { return domain.StockProfile{}, errors.New("stock profile market_cap_cny must not be negative") }
-	if wire.FloatMarketCapCNY != nil && *wire.FloatMarketCapCNY < 0 { return domain.StockProfile{}, errors.New("stock profile float_market_cap_cny must not be negative") }
-	if strings.TrimSpace(wire.Source) == "" || wire.FetchedAt.IsZero() { return domain.StockProfile{}, errors.New("stock profile source or fetched_at is missing") }
+	if wire.MarketCapCNY != nil && *wire.MarketCapCNY < 0 {
+		return domain.StockProfile{}, errors.New("stock profile market_cap_cny must not be negative")
+	}
+	if wire.FloatMarketCapCNY != nil && *wire.FloatMarketCapCNY < 0 {
+		return domain.StockProfile{}, errors.New("stock profile float_market_cap_cny must not be negative")
+	}
+	if strings.TrimSpace(wire.Source) == "" || wire.FetchedAt.IsZero() {
+		return domain.StockProfile{}, errors.New("stock profile source or fetched_at is missing")
+	}
 	if wire.QualityStatus != "valid" && wire.QualityStatus != "degraded" {
 		return domain.StockProfile{}, fmt.Errorf("stock profile quality status %q is unsupported", wire.QualityStatus)
 	}
@@ -1192,7 +1198,7 @@ func (c *Client) FetchStockProfile(ctx context.Context, code string) (domain.Sto
 		MarketCapCNY: usableFiniteValue(wire.MarketCapCNY), FloatMarketCapCNY: usableFiniteValue(wire.FloatMarketCapCNY),
 		BoardCode: wire.BoardCode, ROEPercent: usableFiniteValue(wire.ROEPercent),
 		NetProfitMarginPercent: usableFiniteValue(wire.NetProfitMarginPercent),
-		NetProfitCNY: usableFiniteValue(wire.NetProfitCNY), GrossMarginPercent: usableFiniteValue(wire.GrossMarginPercent),
+		NetProfitCNY:           usableFiniteValue(wire.NetProfitCNY), GrossMarginPercent: usableFiniteValue(wire.GrossMarginPercent),
 		Source: wire.Source, SourceVersion: wire.SourceVersion, FetchedAt: wire.FetchedAt,
 		QualityStatus: wire.QualityStatus, QualityReasons: append([]string(nil), wire.QualityReasons...),
 		NormalizationVersion: wire.NormalizationVersion,
@@ -1201,7 +1207,9 @@ func (c *Client) FetchStockProfile(ctx context.Context, code string) (domain.Sto
 
 func (c *Client) fetchStockProfile(ctx context.Context, code string) stockAuxResult {
 	profile, err := c.FetchStockProfile(ctx, code)
-	if err != nil { return stockAuxResult{kind: "stock_profile", err: err} }
+	if err != nil {
+		return stockAuxResult{kind: "stock_profile", err: err}
+	}
 	return stockAuxResult{kind: "stock_profile", source: profile.Source, qualityStatus: profile.QualityStatus,
 		qualityReasons: append([]string(nil), profile.QualityReasons...), profile: &profile}
 }
