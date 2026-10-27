@@ -2154,7 +2154,7 @@ td {
 @media (prefers-reduced-motion:reduce) { .dashboard-shortcut { transition:none; } }
 
 /* Tablet stock query form: controls wrap before widening the document. */
-@media (min-width: 601px) and (max-width: 900px) {
+@media (min-width: 601px) and (max-width: 1400px) {
   .search-panel { align-items: stretch; gap: 14px; }
   .search-intro { min-width: 100%; }
   .query-form { min-width: 0; flex-wrap: wrap; }
