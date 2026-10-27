@@ -198,3 +198,11 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 - 查询维度在多源之间轮转分配，减少调用成本；所有任务并行运行，结果保留 dimension 字段。公告候选使用 announcement 维度，并在同标题去重时优先保留公告源链接。
 - 新增五维查询与标签保留的本地 HTTP fixture 测试源码，未运行测试、构建、CI 或真实上游请求。
 - 这仍不等于 Python 的全部搜索策略完全等价；Python bridge fallback 暂时保留至统一验收和调用覆盖率核实完成。
+
+
+## 个股龙虎榜上下文摘要迁移（2026-10-27）
+
+- Go-core 从最近 10 个完整交易日的 Go 原生龙虎榜分页 API 派生个股摘要；每日期最多读取 10 页、每页 500 条，日期请求最多 4 路并发。
+- `is_on_list` 仅在最新参考交易日有完整非空榜单时给出 true/false；榜单空/unknown 或分页不完整时保留 null 或标记 `recent_count_is_lower_bound=true`，不把未知解释成未上榜。
+- `recent_count`、`latest_date`、参考交易日、覆盖日数、来源、质量状态与原因经 StockBundle / AnalysisContext / legacy analyzer context 传递。
+- 新增客户端本地 HTTP fixture 与上下文桥接测试源码；没有运行测试、构建、CI 或真实上游请求。

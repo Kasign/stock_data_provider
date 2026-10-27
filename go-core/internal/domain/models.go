@@ -92,6 +92,7 @@ type StockBundle struct {
 	DailyBars             []DailyBar        `json:"daily_bars"`
 	Chip                  *ChipDistribution `json:"chip,omitempty"`
 	CapitalFlow           map[string]any    `json:"capital_flow,omitempty"`
+	DragonTiger           map[string]any    `json:"dragon_tiger_context,omitempty"`
 	Fundamentals          map[string]any    `json:"fundamentals,omitempty"`
 	Boards                []map[string]any  `json:"boards,omitempty"`
 	Sources               map[string]string `json:"sources,omitempty"`
@@ -218,6 +219,7 @@ type AnalysisContext struct {
 	Technical           TechnicalSnapshot `json:"technical"`
 	Chip                *ChipDistribution `json:"chip,omitempty"`
 	CapitalFlow         map[string]any    `json:"capital_flow_context,omitempty"`
+	DragonTiger         map[string]any    `json:"dragon_tiger_context,omitempty"`
 	Fundamentals        map[string]any    `json:"fundamental_context,omitempty"`
 	Boards              []map[string]any  `json:"boards,omitempty"`
 	News                []NewsItem        `json:"news,omitempty"`

@@ -376,3 +376,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - Tavily 请求新闻 topic 并要求源端发布日期；Brave News 定向中国及简体中文检索。Brave 的 page_fetched 不视为发布时间；缺少可解析源端发布时间的结果会被质量过滤。
 - API 凭据只从环境变量读取，日志不输出 key。新增 Tavily/Brave 本地 HTTP fixture、跨源聚合和去重测试源码；未运行测试、构建、CI 或真实供应商请求。
 - 当前仍保留 Python bridge fallback 作为兼容边界；后续在统一验收与调用覆盖核实后，再评估是否可在部署配置中关闭新闻 fallback。
+
+
+### Go-core 龙虎榜上下文摘要（2026-10-27，本轮待统一验收）
+
+- `StockBundle.DragonTiger` 与 `AnalysisContext.DragonTiger` 新增个股龙虎榜摘要；从最新 10 个完整交易日读取现有 Go API 并派生 `is_on_list`、`recent_count`、`latest_date`。
+- 摘要通过 `dragon_tiger_context` / `dragon_tiger` 传给兼容分析器。unknown/empty snapshots 不会强行转换成 `false`；覆盖不完整时保留 lower-bound 标记。
+- 每日最多分页 10 页、每页 500 条，最多 4 个日期请求并发。未运行测试、构建、CI 或真实上游请求。

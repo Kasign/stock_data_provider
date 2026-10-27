@@ -307,3 +307,55 @@ func TestFetchStockAnnouncementsPreservesPublicationSemantics(t *testing.T) {
 		t.Fatalf("source provenance was not preserved: %+v", item)
 	}
 }
+
+
+func TestFetchStockBundleBuildsDragonTigerSummaryWithQualityBoundary(t *testing.T) {
+	loc := time.FixedZone("CST", 8*60*60)
+	recentDate := time.Now().In(loc).AddDate(0, 0, -1).Format("2006-01-02")
+	olderDate := time.Now().In(loc).AddDate(0, 0, -2).Format("2006-01-02")
+	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	var mu sync.Mutex
+	seenDates := map[string]int{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/v1/bundles/"):
+			fmt.Fprintf(w, `{"symbol":"600519.SH","name":"贵州茅台","daily_bars":[{"trade_date":%q,"open":1500,"high":1510,"low":1490,"close":1505,"volume":100,"amount":150500,"pct_chg":0.5,"source":"eastmoney","adjustment_basis":"forward_adjusted"},{"trade_date":%q,"open":1501,"high":1512,"low":1495,"close":1508,"volume":120,"amount":181000,"pct_chg":0.2,"source":"eastmoney","adjustment_basis":"forward_adjusted"}],"sources":{"daily_bars":"eastmoney"},"fetched_at":%q,"quality_status":"valid"}`, recentDate, olderDate, fetchedAt)
+		case r.URL.Path == "/api/v1/market/dragon-tiger":
+			date := r.URL.Query().Get("date")
+			mu.Lock()
+			seenDates[date]++
+			mu.Unlock()
+			fmt.Fprintf(w, `{"trade_date":%q,"page":1,"page_size":500,"total":1,"pages":1,"returned":1,"source_returned":1,"has_data":true,"has_more":false,"items":[{"symbol":"600519.SH","code":"600519","name":"贵州茅台","trade_date":%q}],"source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"degraded","quality_reasons":["provider_snapshot_timestamp_not_exposed"]}`, date, date, fetchedAt)
+		default:
+			http.Error(w, "optional auxiliary fixture unavailable", http.StatusServiceUnavailable)
+		}
+	}))
+	defer server.Close()
+	client, err := NewClient(server.URL, "market-secret", 3*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := client.FetchStockBundle(context.Background(), "600519.SH", 30, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := bundle.DragonTiger
+	if summary == nil {
+		t.Fatalf("dragon-tiger context summary missing; warnings=%v", bundle.Warnings)
+	}
+	if summary["is_on_list"] != true || summary["recent_count"] != 2 || summary["latest_date"] != recentDate {
+		t.Fatalf("unexpected dragon-tiger summary: %#v", summary)
+	}
+	if summary["quality_status"] != "degraded" || summary["recent_count_is_lower_bound"] != false {
+		t.Fatalf("quality and coverage boundary not preserved: %#v", summary)
+	}
+	if bundle.Sources["dragon_tiger"] != "eastmoney" {
+		t.Fatalf("dragon-tiger source provenance missing: %#v", bundle.Sources)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if seenDates[recentDate] != 1 || seenDates[olderDate] != 1 {
+		t.Fatalf("recent trade dates should be queried once each: %#v", seenDates)
+	}
+}

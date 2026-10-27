@@ -140,7 +140,7 @@ func BuildStockContext(bundle domain.StockBundle, technical domain.TechnicalSnap
 	return domain.AnalysisContext{
 		Code: bundle.Code, Name: bundle.Name, Market: inferMarket(bundle.Code), AsOf: asOfTime,
 		Quote: bundle.Quote, DailyBars: bundle.DailyBars, Technical: technical, Phase: phase,
-		Chip: bundle.Chip, CapitalFlow: bundle.CapitalFlow,
+		Chip: bundle.Chip, CapitalFlow: bundle.CapitalFlow, DragonTiger: bundle.DragonTiger,
 		Fundamentals: bundle.Fundamentals, Boards: bundle.Boards,
 		News: news, Warnings: warnings,
 		DataQuality: domain.DataQuality{Level: level, Score: qualityScore, Missing: missing, Warnings: warnings, Sources: bundle.Sources},
@@ -191,6 +191,8 @@ func ToLegacyAnalyzerContext(input domain.AnalysisContext) map[string]any {
 		"belong_boards":        input.Boards,
 		"capital_flow_context": input.CapitalFlow,
 		"capital_flow":         input.CapitalFlow,
+		"dragon_tiger_context": input.DragonTiger,
+		"dragon_tiger":         input.DragonTiger,
 	}
 	// The legacy GeminiAnalyzer expects a `today`/`yesterday` price-table shape,
 	// a separate realtime overlay, and the singular `chip` key. Completed daily

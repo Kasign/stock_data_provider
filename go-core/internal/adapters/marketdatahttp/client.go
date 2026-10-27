@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -286,6 +287,42 @@ type wireCapitalFlow struct {
 	QualityReasons []string  `json:"quality_reasons"`
 }
 
+type wireDragonTigerItem struct {
+	Symbol    string `json:"symbol"`
+	Code      string `json:"code"`
+	TradeDate string `json:"trade_date"`
+}
+
+type wireDragonTigerSnapshot struct {
+	TradeDate      string                `json:"trade_date"`
+	Page           int                   `json:"page"`
+	PageSize       int                   `json:"page_size"`
+	Total          int                   `json:"total"`
+	Pages          int                   `json:"pages"`
+	Returned       int                   `json:"returned"`
+	SourceReturned int                   `json:"source_returned"`
+	HasData        bool                  `json:"has_data"`
+	HasMore        bool                  `json:"has_more"`
+	Items          []wireDragonTigerItem `json:"items"`
+	Source         string                `json:"source"`
+	SourceVersion  string                `json:"source_version"`
+	FetchedAt      time.Time             `json:"fetched_at"`
+	QualityStatus  string                `json:"quality_status"`
+	QualityReasons []string              `json:"quality_reasons"`
+}
+
+type dragonTigerDateResult struct {
+	date           string
+	items          []wireDragonTigerItem
+	source         string
+	sourceVersion  string
+	fetchedAt      time.Time
+	qualityStatus  string
+	qualityReasons []string
+	complete       bool
+	err            error
+}
+
 type wireStockAnnouncement struct {
 	ArticleID        string     `json:"article_id"`
 	Symbol           string     `json:"symbol"`
@@ -331,7 +368,8 @@ type stockAuxResult struct {
 	fundamentals   map[string]any
 	boards         []map[string]any
 	chip           *domain.ChipDistribution
-	capitalFlow    map[string]any
+	capitalFlow   map[string]any
+	dragonTiger   map[string]any
 }
 
 func (c *Client) FetchStockBundle(ctx context.Context, code string, lookback int, asOf string) (domain.StockBundle, error) {
@@ -428,13 +466,14 @@ func (c *Client) fetchStockAuxiliary(ctx context.Context, code string, out *doma
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	results := make(chan stockAuxResult, 4)
+	results := make(chan stockAuxResult, 5)
 	go func() { results <- c.fetchFundamentals(ctx, code) }()
 	go func() { results <- c.fetchStockBoards(ctx, code) }()
 	go func() { results <- c.fetchChipDistribution(ctx, code) }()
 	go func() { results <- c.fetchCapitalFlow(ctx, code) }()
+	go func() { results <- c.fetchDragonTigerSummary(ctx, code, out.DailyBars) }()
 
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		result := <-results
 		if err := ctx.Err(); err != nil {
 			return err
@@ -470,6 +509,8 @@ func (c *Client) fetchStockAuxiliary(ctx context.Context, code string, out *doma
 			out.Chip = result.chip
 		case "capital_flow":
 			out.CapitalFlow = result.capitalFlow
+		case "dragon_tiger":
+			out.DragonTiger = result.dragonTiger
 		}
 	}
 	return nil
@@ -628,6 +669,220 @@ func (c *Client) fetchCapitalFlow(ctx context.Context, code string) stockAuxResu
 // latestPublicReportPeriod selects the newest quarter whose standard A-share
 // disclosure deadline has passed. This avoids treating an in-progress Q3/Q4
 // filing window as if every listed company had already published that report.
+
+func (c *Client) fetchDragonTigerSummary(ctx context.Context, code string, bars []domain.DailyBar) stockAuxResult {
+	result := stockAuxResult{kind: "dragon_tiger"}
+	dates := recentDragonTigerDates(bars, 10)
+	if len(dates) == 0 {
+		result.err = errors.New("no completed daily-bar dates available for dragon-tiger summary")
+		return result
+	}
+	results := make(chan dragonTigerDateResult, len(dates))
+	semaphore := make(chan struct{}, 4)
+	for _, date := range dates {
+		date := date
+		go func() {
+			select {
+			case semaphore <- struct{}{}:
+			case <-ctx.Done():
+				results <- dragonTigerDateResult{date: date, err: ctx.Err()}
+				return
+			}
+			dateResult := c.fetchDragonTigerDate(ctx, date)
+			<-semaphore
+			results <- dateResult
+		}()
+	}
+	summaryReasons := []string{}
+	source, sourceVersion := "", ""
+	var newestFetch time.Time
+	matchedDates := make(map[string]struct{})
+	coveredDates := 0
+	hasIncompleteCoverage := false
+	var latestIsOnList *bool
+	latestReferenceDate := dates[0]
+	for range dates {
+		dateResult := <-results
+		if dateResult.err != nil {
+			hasIncompleteCoverage = true
+			summaryReasons = appendUniqueWarning(summaryReasons, "dragon_tiger_date_fetch_failed:"+dateResult.date)
+			continue
+		}
+		if source == "" {
+			source, sourceVersion = dateResult.source, dateResult.sourceVersion
+		} else if dateResult.source != "" && dateResult.source != source {
+			hasIncompleteCoverage = true
+			summaryReasons = appendUniqueWarning(summaryReasons, "dragon_tiger_mixed_provider_sources")
+		}
+		if dateResult.fetchedAt.After(newestFetch) { newestFetch = dateResult.fetchedAt }
+		for _, reason := range dateResult.qualityReasons {
+			summaryReasons = appendUniqueWarning(summaryReasons, reason)
+		}
+		matched := false
+		for _, item := range dateResult.items {
+			symbol := item.Symbol
+			if strings.TrimSpace(symbol) == "" { symbol = item.Code }
+			if sameStockCode(code, symbol) { matched = true; break }
+		}
+		if matched { matchedDates[dateResult.date] = struct{}{} }
+		if dateResult.complete && len(dateResult.items) > 0 {
+			coveredDates++
+		} else {
+			hasIncompleteCoverage = true
+		}
+		if dateResult.date == latestReferenceDate {
+			if matched {
+				onList := true
+				latestIsOnList = &onList
+			} else if dateResult.complete && len(dateResult.items) > 0 {
+				onList := false
+				latestIsOnList = &onList
+			}
+		}
+	}
+	if len(matchedDates) == 0 {
+		summaryReasons = appendUniqueWarning(summaryReasons, "dragon_tiger_recent_coverage_has_no_confirmed_stock_match")
+	}
+	if coveredDates < len(dates) {
+		summaryReasons = appendUniqueWarning(summaryReasons, "dragon_tiger_lookback_coverage_incomplete")
+	}
+	latestMatchDate := ""
+	for date := range matchedDates { if date > latestMatchDate { latestMatchDate = date } }
+	qualityStatus := "unknown"
+	if coveredDates > 0 || len(matchedDates) > 0 {
+		qualityStatus = "degraded"
+		summaryReasons = appendUniqueWarning(summaryReasons, "provider_snapshot_timestamp_not_exposed")
+	}
+	if hasIncompleteCoverage && qualityStatus != "unknown" {
+		summaryReasons = appendUniqueWarning(summaryReasons, "dragon_tiger_summary_is_partial")
+	}
+	summary := map[string]any{
+		"is_on_list": nil, "recent_count": len(matchedDates),
+		"recent_count_is_lower_bound": hasIncompleteCoverage,
+		"reference_trade_date": latestReferenceDate,
+		"lookback_trading_days": len(dates), "covered_trading_days": coveredDates,
+		"quality_status": qualityStatus, "quality_reasons": summaryReasons,
+		"source": source, "source_version": sourceVersion,
+	}
+	if !newestFetch.IsZero() { summary["fetched_at"] = newestFetch }
+	if latestIsOnList != nil { summary["is_on_list"] = *latestIsOnList }
+	if latestMatchDate != "" { summary["latest_date"] = latestMatchDate }
+	result.dragonTiger = summary
+	result.source, result.qualityStatus, result.qualityReasons = source, qualityStatus, summaryReasons
+	if qualityStatus == "unknown" {
+		result.warning = "go_market_data_dragon_tiger_no_confirmed_coverage"
+	} else if hasIncompleteCoverage {
+		result.warning = "go_market_data_dragon_tiger_summary_partial_coverage"
+	}
+	return result
+}
+
+func recentDragonTigerDates(bars []domain.DailyBar, limit int) []string {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	today := time.Now().In(loc).Format("2006-01-02")
+	seen := make(map[string]struct{}, len(bars))
+	dates := make([]string, 0, len(bars))
+	for _, bar := range bars {
+		if bar.IsPartial || len(bar.Date) != 10 || bar.Date > today { continue }
+		if _, err := time.Parse("2006-01-02", bar.Date); err != nil { continue }
+		if _, exists := seen[bar.Date]; exists { continue }
+		seen[bar.Date] = struct{}{}
+		dates = append(dates, bar.Date)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
+	if limit > 0 && len(dates) > limit { dates = dates[:limit] }
+	return dates
+}
+
+func (c *Client) fetchDragonTigerDate(ctx context.Context, date string) dragonTigerDateResult {
+	result := dragonTigerDateResult{date: date}
+	const pageSize = 500
+	const maxPages = 10
+	var total, pages int
+	var source, sourceVersion string
+	allItems := make([]wireDragonTigerItem, 0)
+	for page := 1; page <= maxPages; page++ {
+		query := url.Values{}
+		query.Set("date", date)
+		query.Set("page", fmt.Sprintf("%d", page))
+		query.Set("page_size", fmt.Sprintf("%d", pageSize))
+		var snapshot wireDragonTigerSnapshot
+		if err := c.get(ctx, "/api/v1/market/dragon-tiger?"+query.Encode(), &snapshot); err != nil {
+			result.err = err
+			return result
+		}
+		if snapshot.TradeDate != date || snapshot.Page != page || snapshot.PageSize != pageSize ||
+			strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+			result.err = errors.New("dragon-tiger response identity/source/fetched_at mismatch")
+			return result
+		}
+		if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize {
+			result.err = errors.New("dragon-tiger response pagination counts are invalid")
+			return result
+		}
+		if page == 1 {
+			total, pages, source, sourceVersion = snapshot.Total, snapshot.Pages, snapshot.Source, snapshot.SourceVersion
+			result.source, result.sourceVersion = source, sourceVersion
+		} else if snapshot.Total != total || snapshot.Pages != pages || snapshot.Source != source {
+			result.err = errors.New("dragon-tiger pagination identity/source changed between pages")
+			return result
+		}
+		if snapshot.FetchedAt.After(result.fetchedAt) { result.fetchedAt = snapshot.FetchedAt }
+		for _, item := range snapshot.Items {
+			if item.TradeDate != date {
+				result.err = errors.New("dragon-tiger item trade date mismatch")
+				return result
+			}
+			allItems = append(allItems, item)
+		}
+		for _, reason := range snapshot.QualityReasons {
+			result.qualityReasons = appendUniqueWarning(result.qualityReasons, strings.TrimSpace(reason))
+		}
+		if snapshot.Total == 0 {
+			if snapshot.Pages != 0 || snapshot.Returned != 0 || snapshot.HasData || snapshot.HasMore || snapshot.QualityStatus != "unknown" {
+				result.err = errors.New("empty dragon-tiger snapshot must remain unknown")
+				return result
+			}
+			result.qualityStatus = "unknown"
+			result.qualityReasons = appendUniqueWarning(result.qualityReasons, "dragon_tiger_source_returned_unknown_empty_snapshot")
+			return result
+		}
+		if snapshot.Pages != (snapshot.Total+pageSize-1)/pageSize || page > snapshot.Pages ||
+			snapshot.HasMore != (page < snapshot.Pages) {
+			result.err = errors.New("dragon-tiger pagination counters are inconsistent")
+			return result
+		}
+		if snapshot.HasData && snapshot.QualityStatus != "valid" && snapshot.QualityStatus != "degraded" {
+			result.err = errors.New("dragon-tiger non-empty data has unusable quality status")
+			return result
+		}
+		if !snapshot.HasData && snapshot.Returned > 0 {
+			result.err = errors.New("dragon-tiger returned rows while has_data is false")
+			return result
+		}
+		if page == snapshot.Pages {
+			if snapshot.HasMore {
+				result.err = errors.New("dragon-tiger final page still reports more data")
+				return result
+			}
+			result.complete = true
+			result.qualityStatus = snapshot.QualityStatus
+			break
+		}
+	}
+	if pages > maxPages {
+		result.complete = false
+		result.qualityReasons = appendUniqueWarning(result.qualityReasons, "dragon_tiger_pagination_capped_at_ten_pages")
+	}
+	result.items = allItems
+	if len(allItems) == 0 {
+		result.complete = false
+		result.qualityStatus = "unknown"
+		result.qualityReasons = appendUniqueWarning(result.qualityReasons, "dragon_tiger_source_has_no_usable_a_share_rows")
+	}
+	return result
+}
 func latestPublicReportPeriod(now time.Time) (int, int) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {

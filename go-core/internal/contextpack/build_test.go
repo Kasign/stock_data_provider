@@ -223,3 +223,16 @@ func TestLegacyContextNullsMixedAdjustmentBasisPriceRows(t *testing.T) {
 		t.Fatalf("latest known basis row should remain available: %#v", rows[1])
 	}
 }
+
+
+func TestToLegacyAnalyzerContextPassesThroughDragonTigerSummary(t *testing.T) {
+	summary := map[string]any{
+		"is_on_list": true, "recent_count": 2, "latest_date": "2026-10-26",
+		"quality_status": "degraded", "recent_count_is_lower_bound": true,
+	}
+	ctx := domain.AnalysisContext{Code: "600519.SH", DragonTiger: summary}
+	legacy := ToLegacyAnalyzerContext(ctx)
+	if legacy["dragon_tiger_context"] != summary || legacy["dragon_tiger"] != summary {
+		t.Fatalf("dragon-tiger summary not propagated into legacy analyzer context: %#v", legacy)
+	}
+}
