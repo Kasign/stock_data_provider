@@ -15,7 +15,7 @@
 | YfinanceFetcher | 默认启用；默认 P4；海外股票与指数的专用路径 | 美股 / 海外行情与历史数据、部分基本面数据 | 无 | 未迁移 |
 | TencentFetcher | 默认启用；默认 P5 | A 股行情与日线兜底 | 原生 Go Tencent Provider | 已迁移部分行情能力，口径仍需逐项对照 |
 | TushareFetcher | 仅配置 `TUSHARE_TOKEN` / `MARKET_DATA_TUSHARE_TOKEN` 且显式开启后注册 | A 股原始日线、证券基础资料、交易日历、季度财务指标、批量估值、涨跌停池、龙虎榜与公告；权限依接口而异 | Go 原生 HTTP `Tushare` Provider：DailyBar、StockBasic、TradingCalendar、Fundamentals、Valuation、LimitPool、DragonTiger、Announcement、IndexCatalog（默认关闭） | 接口与独立能力路由已接入；日线只支持 `none`，成交量手数在换算前要求为整数；估值保留报告日期但无精确快照时间；`pe` 单独保留为 `pe_static`，不冒充 MRQ PE；PCF 未覆盖；财务返回报告期的最新修订版本并保留公告日期，但尚不支持历史 `as_of` 版本重建；事件金额按 provider_defined 保留；公告依赖单独开通权限；指数成分每次按月查询最新可用快照并保留大结果降级提示；未统一测试，不宣称生产可用 |
-| TickFlowFetcher | 免费 API 可免 Key 读取历史日 K；实时行情需 `TICKFLOW_API_KEY` 且显式开启 quote 能力 | 国内 SH/SZ/BJ 实时行情、日线 K 线 | Go 原生 REST `TickFlow` Provider（免费日 K 默认启用，实时行情/核心指数报价独立开关，均需 API Key；A 股 Quote/K 线的 volume 原始单位为股） | 行情、日 K 与 6 个核心指数报价已接入；TickFlow A 股实时行情与日 K 的 volume 按原始股数处理，不再乘以 100；Pytdx 请求必须保留 SH/SZ/BJ 前缀，响应按代码+交易所匹配，并拒绝指数代码进入个股日 K 链；指数报价采用来源时间，金额/时间缺失显式降级。Go TickFlow 已接入基于授权 `CN_Equity_A` 的市场广度统计及基于 `CN_Equity_SW1_*` 的 SW1 行业榜，均默认关闭并需 API Key；行业涨跌幅为成分股涨跌幅算术平均，概念榜仍由其他来源提供，权限和覆盖待统一验收 |
+| TickFlowFetcher | 免费 API 可免 Key 读取历史日 K；实时行情需 `TICKFLOW_API_KEY` 且显式开启 quote 能力 | 国内 SH/SZ/BJ 实时行情、日线 K 线 | Go 原生 REST `TickFlow` Provider（免费日 K 默认启用，实时行情/核心指数报价独立开关，需 API Key） | Quote/K 线成交量原始单位为股；日 K 只在供应商提供或可安全推导涨跌幅时输出，缺少 `prev_close` 时从排序后的前一收盘价推导且降级；市场广度基于 `CN_Equity_A`，SW1 榜基于可发现的 `CN_Equity_SW1_*` 证券池并取成分股收益率算术平均。官方 SDK 支持通用 universes list/get/batch 和按 universe 查询行情，但公开文档未保证 SW1 分类清单/账号授权，也未提供专用行业指数排名端点；SW1 不等同原生指数涨跌幅。权限、完整覆盖与目标环境均待验收，概念榜仍由其他来源提供 |
 | MiaoxiangFetcher（妙想 / MX_API） | 仅配置 `MX_APIKEY` 后注册；默认优先级 6 | 筹码分布及个股资金流等第三方补充数据 | Go `MiaoXiang`（独立 SupplementProvider，显式 opt-in） | 已迁移首批筹码/资金流字段；尚缺真实 MX Key 联调与精确 publication availability |
 | LongbridgeFetcher | 仅配置 Longbridge OAuth / 旧凭据后注册 | 美股 / 港股行情及日线兜底 | 无 | 可选源，未迁移 |
 | FutuFetcher | 检测到 Futu OpenD 端点配置后注册 | 港股等 Futu 支持市场 | 无 | 可选源，未迁移 |
@@ -221,3 +221,18 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 - profile 与基本面、板块、筹码、资金流、龙虎榜并发获取；某个辅助域失败只产生日志 warning，不覆盖或丢弃行情与日 K。
 - StockProfile 经 AnalysisContext 传给 legacy analyzer 的 `stock_profile_context`、`stock_profile`、`stock_info` 与 `enhanced_data`。由于来源接口只提供当前快照，显式历史 `as_of` 请求不会附加 profile。
 - 新增 profile 客户端本地 HTTP fixture 与 context bridge 测试源码；未运行测试、构建、CI 或真实上游请求。
+## Efinance / AkShare 国内能力逐项差距（2026-10-27）
+
+| 能力域 | Go 侧现状 | 状态与边界 |
+|---|---|---|
+| 证券名称/代码搜索 | `StockSearchProvider`：腾讯 Smartbox 优先，东方财富目录兜底 | 代码与独立 API 已接入；需统一验收分页、中文名称命中率、服务端截断和不同市场代码覆盖 |
+| 证券基础资料 | 东方财富 `StockBasicProvider` / profile，补充上市身份及动态 PE/PB、行业、市值、板块和部分盈利字段 | 仅部分字段等价；profile 当前快照缺少各字段独立时间戳，不可当作 point-in-time 财务数据 |
+| 行业/概念板块 | 东方财富行业/概念榜；TickFlow 可选 SW1 行业榜 | 东方财富能力已接入；TickFlow 只从 SW1 成分行情计算平均涨跌幅并固定降级，非供应商原生行业指数回报；概念榜不由 TickFlow 提供 |
+| 指数与成分 | 东方财富核心指数报价；同花顺/Tushare 指数目录、当前成分及指数历史 K；TickFlow 六个核心指数报价 | 已覆盖部分能力；当前成分历史生效序列、全量目录核对、跨源代码空间和数据完整性仍未闭环 |
+| 涨跌停池 | 东方财富三类池；同花顺/Tushare 独立可选能力 | 代码已接入；权限、池子分页/总数与金额单位须验收。返回条目不足以覆盖 `total` 时必须识别为截断/降级 |
+| 热度榜 | 东方财富人气/飙升榜、同花顺可选，雪球人气/关注后备 | 已有接口；源时间缺失则降级，雪球飙升榜只是涨幅排序代理，不是原生热度飙升口径 |
+| 筹码分布 | 东方财富 Go 原生 CYQ 计算，妙想 MX 可选补充 | 是最新可计算筹码快照，不具备严格历史时点可用时间；输出需保持降级 |
+| 个股资金流 | 妙想 MX API 独立补充 Provider | 需真实 MX Key/权限；字段单位、聚合窗口和可用时间仍待验收；不能假设东方财富行情可替代资金流字段 |
+| 增强数据 | 基础资料、财务、板块、筹码、资金流等独立能力可以组合 | 尚无完整 1:1 的单次聚合替代；不能仅因每个子 API 存在就宣称 `get_enhanced_data` 的字段和错误隔离语义已完成迁移 |
+
+本清单描述当前仓库代码状态，不代表运行验证。实际接入、账号可访问、字段含义一致、证券全量覆盖、生产可用性分别验收；海外来源暂缓。

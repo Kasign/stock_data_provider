@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,3 +96,86 @@ func TestTickFlowFetchDailyBarsKeepsVolumeInShares(t *testing.T) {
 		t.Fatalf("complete daily fixture should have valid quality: %+v", bars[0].QualityReasons)
 	}
 }
+
+func TestTickFlowDailyBarsDerivesChangeAfterChronologicalSort(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().In(location)
+	previousDay := time.Date(today.Year(), today.Month(), today.Day()-3, 12, 0, 0, 0, location)
+	latestDay := previousDay.AddDate(0, 0, 1)
+	previousDate := previousDay.Format("2006-01-02")
+	latestDate := latestDay.Format("2006-01-02")
+
+	// 故意按时间倒序返回，且整个 prev_close 数组缺失，确保回算使用排序后的前一交易日收盘价。
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
+			"timestamp": []int64{latestDay.UnixMilli(), previousDay.UnixMilli()},
+			"open": []float64{108, 99}, "high": []float64{112, 102}, "low": []float64{107, 98}, "close": []float64{110, 100},
+			"volume": []float64{1000, 2000}, "amount": []float64{110000, 100000},
+		}})
+	}))
+	defer server.Close()
+
+	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	bars, err := provider.FetchDailyBars(context.Background(), "600519.SH", previousDate, latestDate, 10, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 2 || bars[0].TradeDate != previousDate || bars[1].TradeDate != latestDate {
+		t.Fatalf("bars must be sorted chronologically: %+v", bars)
+	}
+	if bars[0].ChangePercent != nil {
+		t.Fatalf("first bar without provider prev_close must not invent a change: %+v", bars[0])
+	}
+	if bars[1].ChangePercent == nil || *bars[1].ChangePercent != 10 {
+		t.Fatalf("expected 10%% change based on the prior chronological close, got %+v", bars[1].ChangePercent)
+	}
+	if bars[0].QualityStatus != model.QualityDegraded || bars[1].QualityStatus != model.QualityDegraded {
+		t.Fatalf("change derived without provider prev_close must be degraded: first=%s latest=%s", bars[0].QualityStatus, bars[1].QualityStatus)
+	}
+	if !containsTickFlowReason(bars[1].QualityReasons, "provider_change_percent_derived_from_previous_chronological_close") {
+		t.Fatalf("derived change quality reason missing: %+v", bars[1].QualityReasons)
+	}
+}
+
+func TestTickFlowDailyBarsRejectsMismatchedOptionalArrays(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().In(location)
+	day1 := time.Date(today.Year(), today.Month(), today.Day()-3, 12, 0, 0, 0, location)
+	day2 := day1.AddDate(0, 0, 1)
+	cases := []struct {
+		name       string
+		field      string
+		wantReason string
+	}{
+		{name: "amount", field: "amount", wantReason: "amount length"},
+		{name: "prev_close", field: "prev_close", wantReason: "prev_close length"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				data := map[string]any{
+					"timestamp": []int64{day1.UnixMilli(), day2.UnixMilli()},
+					"open": []float64{100, 101}, "high": []float64{102, 103}, "low": []float64{99, 100}, "close": []float64{101, 102},
+					"volume": []float64{1000, 2000}, "amount": []float64{10000, 20000},
+					"prev_close": []float64{100, 101},
+				}
+				data[tc.field] = []float64{100}
+				_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": data})
+			}))
+			defer server.Close()
+
+			provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+			_, err := provider.FetchDailyBars(context.Background(), "600519.SH", day1.Format("2006-01-02"), day2.Format("2006-01-02"), 10, model.AdjustmentNone)
+			if err == nil || !strings.Contains(err.Error(), tc.wantReason) {
+				t.Fatalf("mismatched optional %s array must be rejected, got %v", tc.field, err)
+			}
+		})
+	}
+}
+

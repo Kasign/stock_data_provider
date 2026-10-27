@@ -957,6 +957,12 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			return nil, fmt.Errorf("TickFlow K-line %s length %d does not match timestamp length %d", name, length, n)
 		}
 	}
+	// 可选数组可以整体缺省，但一旦提供，必须与时间戳一一对应，避免静默错配。
+	for name, length := range map[string]int{"amount": len(data.Amount), "prev_close": len(data.PrevClose)} {
+		if length > 0 && length != n {
+			return nil, fmt.Errorf("TickFlow K-line %s length %d does not match timestamp length %d", name, length, n)
+		}
+	}
 	fetchedAt := time.Now().UTC()
 	out := make([]model.DailyBar, 0, n)
 	seen := make(map[string]struct{}, n)
@@ -1018,22 +1024,18 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			reasons = append(reasons, "amount_missing_from_provider", "amount_unit_unknown_because_amount_missing")
 		}
 		var pct *float64
-		if i < len(data.PrevClose) {
+		if len(data.PrevClose) > 0 {
 			prev, parseErr := tickflowFloat(data.PrevClose[i])
-			if parseErr == nil && prev > 0 {
+			if parseErr == nil && tickflowPositiveFinite(prev) {
 				value := (closePrice - prev) / prev * 100
-				pct = &value
+				if !math.IsNaN(value) && !math.IsInf(value, 0) {
+					pct = &value
+				}
 			}
-		} else if i > 0 {
-			prev, parseErr := tickflowFloat(data.Close[i-1])
-			if parseErr == nil && prev > 0 {
-				value := (closePrice - prev) / prev * 100
-				pct = &value
+			if pct == nil {
+				quality = model.QualityDegraded
+				reasons = append(reasons, "provider_change_percent_missing_or_invalid")
 			}
-		}
-		if pct == nil {
-			quality = model.QualityDegraded
-			reasons = append(reasons, "provider_change_percent_unavailable_for_first_bar")
 		}
 		rawVolumeCopy := rawVolume
 		out = append(out, model.DailyBar{
@@ -1050,6 +1052,34 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TradeDate < out[j].TradeDate })
+	if len(data.PrevClose) == 0 {
+		// 仅在排序后用前一个自然时间顺序的收盘价回算，避免上游倒序返回时算反涨跌幅。
+		// 这种回算无法替代供应商原始涨跌幅，所有受影响记录明确降级。
+		for i := range out {
+			if i == 0 {
+				out[i].QualityStatus = model.QualityDegraded
+				out[i].QualityReasons = appendTickflowUniqueReason(out[i].QualityReasons, "provider_change_percent_unavailable_for_first_bar")
+				continue
+			}
+			previousClose := out[i-1].Close
+			if !tickflowPositiveFinite(previousClose) || !tickflowPositiveFinite(out[i].Close) {
+				out[i].ChangePercent = nil
+				out[i].QualityStatus = model.QualityDegraded
+				out[i].QualityReasons = appendTickflowUniqueReason(out[i].QualityReasons, "provider_change_percent_derived_from_previous_chronological_close_unavailable")
+				continue
+			}
+			changePercent := (out[i].Close - previousClose) / previousClose * 100
+			if math.IsNaN(changePercent) || math.IsInf(changePercent, 0) {
+				out[i].ChangePercent = nil
+				out[i].QualityStatus = model.QualityDegraded
+				out[i].QualityReasons = appendTickflowUniqueReason(out[i].QualityReasons, "provider_change_percent_derived_from_previous_chronological_close_unavailable")
+				continue
+			}
+			out[i].ChangePercent = &changePercent
+			out[i].QualityStatus = model.QualityDegraded
+			out[i].QualityReasons = appendTickflowUniqueReason(out[i].QualityReasons, "provider_change_percent_derived_from_previous_chronological_close")
+		}
+	}
 	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
 }
 
