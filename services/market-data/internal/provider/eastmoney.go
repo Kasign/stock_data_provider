@@ -125,7 +125,7 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, stockListURL: defaultEastmoneySectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, stockListURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, ut: ut,
 	}
 }
 

@@ -1057,7 +1057,7 @@ paths:
   /api/v1/market/breadth:
     get:
       summary: Get Eastmoney A-share market-breadth distribution
-      description: Aggregates Eastmoney market-wide change-distribution buckets. total_securities is the sum of returned bucket counts, not an independently verified security-master count. Total amount remains null because the distribution endpoint does not provide market turnover. Quality is degraded because the source exposes a report date but no verifiable intraday snapshot timestamp.
+      description: Aggregates Eastmoney market-wide change-distribution buckets and date-aligned limit-pool totals. total_securities is the sum of distribution bucket counts, not an independently verified security-master count. total_amount_cny is populated only when CLIST turnover pages are complete, contain valid unique securities with quote dates matching provider_report_date, and their coverage count matches the distribution total; otherwise it remains null and amount_coverage_count is zero. The multi-page collection is not an atomic snapshot, and the source exposes no verifiable intraday timestamp, so quality remains degraded.
       responses:
         '200':
           description: Market breadth including universe coverage and data quality
