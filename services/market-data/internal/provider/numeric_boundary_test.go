@@ -5,6 +5,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
 func TestHithinkInt64VolumeRejectsFloat64OverflowBoundary(t *testing.T) {
@@ -51,5 +53,57 @@ func TestTencentQuoteVolumeRejectsOverflowBoundary(t *testing.T) {
 	boundary := float64(math.MaxInt64) / 100
 	if _, _, _, err := tencentQuoteVolume(nil, boundary, 10); err == nil {
 		t.Fatal("normalized-volume overflow boundary must be rejected before unit inference")
+	}
+}
+
+
+func TestNormalizePytdxDailyAmountOmitsInconsistentZeroAmount(t *testing.T) {
+	got, err := normalizePytdxDailyAmount(0, 120)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Amount != nil || got.AmountUnit != "unknown" || got.RawAmount == nil ||
+		*got.RawAmount != 0 || got.RawAmountUnit != "CNY" || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("zero amount with positive volume should be retained as raw but omitted from normalized data: %+v", got)
+	}
+	if len(got.QualityReasons) != 1 || got.QualityReasons[0] != "amount_volume_zero_mismatch_amount_omitted" {
+		t.Fatalf("missing amount/volume mismatch reason: %+v", got.QualityReasons)
+	}
+}
+
+func TestNormalizePytdxDailyAmountOmitsPositiveAmountWithZeroVolume(t *testing.T) {
+	got, err := normalizePytdxDailyAmount(1500, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Amount != nil || got.AmountUnit != "unknown" || got.RawAmount == nil ||
+		*got.RawAmount != 1500 || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("positive amount with zero volume should be marked unavailable: %+v", got)
+	}
+}
+
+func TestNormalizePytdxDailyAmountKeepsConsistentAmounts(t *testing.T) {
+	got, err := normalizePytdxDailyAmount(1500, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Amount == nil || *got.Amount != 1500 || got.AmountUnit != "CNY" ||
+		got.QualityStatus != model.QualityValid || got.RawAmount == nil || *got.RawAmount != 1500 {
+		t.Fatalf("consistent amount should remain valid: %+v", got)
+	}
+	zero, err := normalizePytdxDailyAmount(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if zero.Amount == nil || *zero.Amount != 0 || zero.QualityStatus != model.QualityValid {
+		t.Fatalf("zero amount and zero volume may represent a no-trade bar: %+v", zero)
+	}
+}
+
+func TestNormalizePytdxDailyAmountRejectsInvalidNumbers(t *testing.T) {
+	for _, value := range []float64{-1, math.NaN(), math.Inf(1)} {
+		if _, err := normalizePytdxDailyAmount(value, 10); err == nil {
+			t.Errorf("invalid raw amount %v must be rejected", value)
+		}
 	}
 }

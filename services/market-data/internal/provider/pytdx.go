@@ -384,16 +384,17 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			return nil, fmt.Errorf("normalize Pytdx volume on %s: %w", tradeDate, err)
 		}
 		amountValue := item.Amount.Float64()
-		if !pytdxNonNegativeFinite(amountValue) {
-			return nil, fmt.Errorf("Pytdx contains invalid amount on %s", tradeDate)
+		amountInfo, amountErr := normalizePytdxDailyAmount(amountValue, rawVolume)
+		if amountErr != nil {
+			return nil, fmt.Errorf("Pytdx contains invalid amount on %s: %w", tradeDate, amountErr)
 		}
 		var changePercent *float64
 		prevClose := item.Last.Float64()
 		if !pytdxPositiveFinite(prevClose) && i > 0 {
 			prevClose = adjusted[i-1].Close.Float64()
 		}
-		quality := model.QualityValid
-		var reasons []string
+		quality := amountInfo.QualityStatus
+		reasons := append([]string(nil), amountInfo.QualityReasons...)
 		if pytdxPositiveFinite(prevClose) {
 			value := (closePrice - prevClose) / prevClose * 100
 			changePercent = &value
@@ -402,7 +403,6 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			reasons = append(reasons, "provider_change_percent_unavailable_for_first_bar")
 		}
 		rawVolumeCopy := rawVolume
-		rawAmountCopy := amountValue
 		out = append(out, model.DailyBar{
 			Symbol:           symbol,
 			TradeDate:        tradeDate,
@@ -412,7 +412,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			Low:              low,
 			Close:            closePrice,
 			Volume:           &volume,
-			Amount:           &amountValue,
+			Amount:           amountInfo.Amount,
 			ChangePercent:    changePercent,
 			AdjustmentBasis:  adjustment,
 			AdjustmentMethod: adjustmentMethod,
@@ -422,11 +422,11 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			NormalizedAt:     time.Now().UTC(),
 			RawVolume:        &rawVolumeCopy,
 			RawVolumeUnit:    "hands",
-			RawAmount:        &rawAmountCopy,
-			RawAmountUnit:    "CNY",
-			RawAmountField:   "amount",
+			RawAmount:        amountInfo.RawAmount,
+			RawAmountUnit:   amountInfo.RawAmountUnit,
+			RawAmountField:  amountInfo.RawAmountField,
 			VolumeUnit:       "shares",
-			AmountUnit:       "CNY",
+			AmountUnit:       amountInfo.AmountUnit,
 			QualityStatus:    quality,
 			QualityReasons:   reasons,
 			NormalizationVer: normalize.Version,
@@ -436,6 +436,38 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 }
 
 func pytdxDomesticSymbol(raw string) (string, error) {
+// pytdxDailyAmountInfo preserves a daily bar when only the turnover amount is inconsistent.
+// The raw provider value remains auditable, while the normalized amount is left unknown.
+type pytdxDailyAmountInfo struct {
+	Amount         *float64
+	RawAmount      *float64
+	AmountUnit     string
+	RawAmountUnit  string
+	RawAmountField string
+	QualityStatus  model.QualityStatus
+	QualityReasons []string
+}
+
+func normalizePytdxDailyAmount(rawAmount, rawVolume float64) (pytdxDailyAmountInfo, error) {
+	if !pytdxNonNegativeFinite(rawAmount) {
+		return pytdxDailyAmountInfo{}, errors.New("raw amount must be finite and non-negative")
+	}
+	rawCopy := rawAmount
+	result := pytdxDailyAmountInfo{
+		RawAmount: &rawCopy, AmountUnit: "CNY", RawAmountUnit: "CNY",
+		RawAmountField: "amount", QualityStatus: model.QualityValid,
+	}
+	if (rawVolume == 0 && rawAmount > 0) || (rawVolume > 0 && rawAmount == 0) {
+		result.AmountUnit = "unknown"
+		result.QualityStatus = model.QualityDegraded
+		result.QualityReasons = []string{"amount_volume_zero_mismatch_amount_omitted"}
+		return result, nil
+	}
+	result.Amount = &rawCopy
+	return result, nil
+}
+
+
 	symbol, err := normalize.NormalizeSymbol(raw)
 	if err != nil {
 		return "", err
