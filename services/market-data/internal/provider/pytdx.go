@@ -435,9 +435,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
 }
 
-func pytdxDomesticSymbol(raw string) (string, error) {
-// pytdxDailyAmountInfo preserves a daily bar when only the turnover amount is inconsistent.
-// The raw provider value remains auditable, while the normalized amount is left unknown.
+// pytdxDailyAmountInfo 在成交额与成交量明显矛盾时保留原始记录，将归一化成交额置空。
 type pytdxDailyAmountInfo struct {
 	Amount         *float64
 	RawAmount      *float64
@@ -450,8 +448,12 @@ type pytdxDailyAmountInfo struct {
 
 func normalizePytdxDailyAmount(rawAmount, rawVolume float64) (pytdxDailyAmountInfo, error) {
 	if !pytdxNonNegativeFinite(rawAmount) {
-		return pytdxDailyAmountInfo{}, errors.New("raw amount must be finite and non-negative")
+		return pytdxDailyAmountInfo{}, errors.New("Pytdx raw amount must be finite and non-negative")
 	}
+	if !pytdxNonNegativeFinite(rawVolume) || math.Trunc(rawVolume) != rawVolume {
+		return pytdxDailyAmountInfo{}, errors.New("Pytdx raw volume must be a finite non-negative integer number of hands")
+	}
+
 	rawCopy := rawAmount
 	result := pytdxDailyAmountInfo{
 		RawAmount: &rawCopy, AmountUnit: "CNY", RawAmountUnit: "CNY",
@@ -467,7 +469,7 @@ func normalizePytdxDailyAmount(rawAmount, rawVolume float64) (pytdxDailyAmountIn
 	return result, nil
 }
 
-
+func pytdxDomesticSymbol(raw string) (string, error) {
 	symbol, err := normalize.NormalizeSymbol(raw)
 	if err != nil {
 		return "", err
