@@ -718,3 +718,9 @@
 - `web/tests/ui-contract.test.mjs` 增加组件级规则约束；未改变布局断点、业务状态、请求流或 API 契约。
 - GitHub Actions 在新 HEAD 的先前重试仍然没有分配 runner，Job 的 runner ID 为 0 且无 steps/logs；不能据此确认源码测试通过或失败。真实浏览器与 NAS/1Panel 验收仍待用户部署后进行。
 
+
+
+## 2026-10-27 — 占位文字级联规则复核
+
+- 发现自选股别名输入框仍有一条后置硬编码 placeholder 声明；同等 CSS 优先级下后声明胜出，会覆盖共享主题 token。已移除冗余规则。
+- UI 契约测试新增断言，防止该选择器再次添加硬编码颜色覆盖。该修复尚未通过可执行 Actions runner 验证。
