@@ -643,12 +643,12 @@ test("market overview and activity use readable secondary text and touch-sized c
 
 test("market workspace has functional in-page navigation for long research sections", () => {
   const targets = [...html.matchAll(/data-scroll-target="([^"]+)"/g)].map((match) => match[1]);
-  const htmlIds = new Set([...html.matchAll(/\\bid="([^"]+)"/g)].map((match) => match[1]));
+  const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
   assert.ok(targets.length >= 10, "quick navigation should cover the main market and stock-research sections");
   assert.equal(targets.length, new Set(targets).size, "quick navigation target IDs should be unique");
   const missingTargets = targets.filter((target) => !htmlIds.has(target));
   assert.deepEqual(missingTargets, [], "quick navigation targets must resolve to real sections: " + missingTargets.join(", "));
-  assert.match(app, /querySelectorAll\("\\.page-jump-button\\[data-scroll-target\\]"\)/);
+  assert.match(app, /querySelectorAll\("\.page-jump-button\[data-scroll-target\]"\)/);
   assert.match(app, /scrollIntoView\(\{ behavior: reduceMotion \? "auto" : "smooth"/);
   assert.match(app, /prefers-reduced-motion: reduce/);
   assert.match(stylesheet, /\.page-jump-nav\s*\{/);
