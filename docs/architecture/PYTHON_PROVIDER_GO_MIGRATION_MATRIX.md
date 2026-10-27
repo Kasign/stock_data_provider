@@ -49,7 +49,7 @@
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
 | 批量估值 | 可选 Tushare daily_basic Go Provider 与 GET /api/v1/market/valuations?symbols=... | 按最近已完成交易日返回 PE/PB/PS；不支持的 PCF 保持 null，并返回 provider_report_date；缺少精确更新时间时 quality 为 degraded；默认关闭，需 Token/积分权限，待统一验收 |
 | 股票名称 / 代码搜索 | 独立 `StockSearchProvider`，东方财富 CLIST 证券目录与 6 小时缓存，API `GET /api/v1/stocks/search?q=贵州茅台&limit=10` | 实测已证实目录源 HTTP 200 并报告 5,925 条证券，但首轮 `pz=5000`、次轮 `pz=1000` 都遇到服务端分页上限低于请求值，代码因此只扫描首页并漏掉“贵州茅台”。当前调整为每页 100 条、最多 100 页，并新增后续页匹配回归测试；待 Go CI 与真实 Runner 再验收 |
-| 新闻 / 公告 | 单股公告为 Go 原生东方财富 Provider/API；Go Core 已接入 Bocha 优先、自建 SearXNG 备选的国内新闻搜索链，并在未配置/无合格结果时回退 Python Bridge | Go CI #310 全部通过；Live Probe #115 的新闻搜索步骤因没有 `BOCHA_API_KEYS` 或 `SEARXNG_BASE_URLS` 而明确 `skipped`，不能视为真实源站验收。仍未覆盖 Python 的全部搜索源、复杂反垃圾准入和完整语言策略 |
+| 新闻 / 公告 | 东方财富公告 API + Go Core 原生 Bocha、Tavily、Brave News 和显式 SearXNG；多源并发、日期门禁、域名加权、反营销、URL/标题去重与个股相关性排序 | 已补源适配器及本地 fixture 测试源码；未运行测试/构建/CI/真实搜索请求。仍保留 Python bridge fallback；更完整的多维情报查询与生产覆盖率需统一验收 |
 
 当前原生 Go API 提供 `GET /api/v1/quotes/{symbol}`、`GET /api/v1/bars/{symbol}/daily`、`GET /api/v1/bundles/{symbol}`、`GET /api/v1/data-sources`、`GET /api/v1/stocks/{symbol}/profile`、`GET /api/v1/stocks/{symbol}/boards`、`GET /api/v1/market/sectors?type=industry|concept`、`GET /api/v1/market/indices`、`GET /api/v1/market/breadth`、`GET /api/v1/market/limit-pools?type=up|down|broken`、`GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD`，并新增可选的 `GET /api/v1/stocks/{symbol}/chip-distribution` 与 `GET /api/v1/stocks/{symbol}/capital-flow`。这些新增能力保持独立路由/开关；当前代码已将部分东方财富国内能力（核心指数、市场广度、行业/概念榜、涨跌停池、所属板块、龙虎榜、公告、筹码分布和人气榜）配置为默认启用，但目标 NAS/Docker 端到端验收未完成，默认启用不代表生产可用；海外与需凭据的可选能力仍按独立开关管理。
 
@@ -135,7 +135,7 @@ Live Provider Probe #107 请求 2026-10-23 的真实东方财富龙虎榜后，�
 ## 公告域和通用新闻搜索的迁移边界（2026-10-26）
 
 - Go 原生公告 Provider 只覆盖东方财富单只股票公告列表，不代表通用新闻搜索已迁移。
-- 原 Python `search_stock_news` 仍通过可配置 Bocha/Tavily/Brave/SearXNG 搜索源执行回退、时效过滤、语言/相关度排序及结果准入；Go `SearchAdapter` 目前仍调用 Python Bridge。后续 Go 原生新闻搜索需逐项对照这些行为和搜索源配置，不能用单一公告端点取代市场新闻/新闻检索。
+- Go 原生新闻链现已支持 Bocha/Tavily/Brave News/显式 SearXNG 与股票公告源；已配置的远程源并发聚合，统一应用日期门禁、URL/标题去重、可信域名排序、营销过滤与股票相关性权重。原 Python bridge 仍作为无可用原生结果时的兼容 fallback，不再是默认唯一搜索路径。
 - Python `get_dragon_tiger_context` 返回基本面上下文中的龙虎榜标记/近期上榜摘要，当前 Go 原生详细龙虎榜分页不自动等价于该字段；后续需用真实数据对照 `is_on_list/recent_count/latest_date`。
 
 
@@ -180,3 +180,12 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 ### 雪球关注榜 API 补齐（2026-10-26，待统一验收）
 
 现有 `GET /api/v1/market/hot-stocks` 新增 `type=followers`。雪球 `hot_stock/list.json?type=12` 对应关注榜；东方财富和同花顺不支持此类型时由既有 Provider 链继续回退，最终由启用的 Xueqiu Provider 响应。该榜单只表示关注排名，不与人气或涨幅信号混用。
+
+
+## Go 原生新闻搜索多源聚合第二阶段（2026-10-27）
+
+- Bocha、Tavily News、Brave News 和显式配置的 SearXNG 实现统一 remoteProvider 契约；API Key 只从环境变量读取，Tavily/Brave 未配置 key 时不注册。
+- 已配置搜索源与单股公告在个股搜索中并行请求，远程结果按注册顺序合并，公告源优先保留为去重后的规范链接。每个源失败会单独记录，不会直接丢弃其他源成功结果。
+- Brave 使用中国地区与简体中文偏好；只使用源端 published_date 或 page_age，不使用 page_fetched 推导文章发布时间。Tavily 请求新闻 topic 并要求返回源端发布日期。
+- 这批迁移 Provider 接口和聚合、质量门禁逻辑；不宣称与 Python 的多维 search_comprehensive_intel(max_searches=5) 完全等价。Python fallback 保留至后续核实调用覆盖率与真实部署表现。
+- 回归测试使用本地 HTTP fixture，尚未执行测试、构建、CI 或真实上游请求。

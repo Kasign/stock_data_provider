@@ -23,6 +23,8 @@ import (
 
 const (
 	defaultBochaEndpoint = "https://api.bocha.cn/v1/web-search"
+	defaultTavilyEndpoint = "https://api.tavily.com/search"
+	defaultBraveNewsEndpoint = "https://api.search.brave.com/res/v1/news/search"
 	defaultCacheTTL      = 10 * time.Minute
 	maxResponseBytes     = 4 << 20
 )
@@ -56,6 +58,10 @@ type StockAnnouncementSource interface {
 type Config struct {
 	BochaAPIKeys       []string
 	BochaEndpoint      string
+	TavilyAPIKeys      []string
+	TavilyEndpoint     string
+	BraveSearchAPIKeys []string
+	BraveNewsEndpoint  string
 	SearXNGBaseURLs    []string
 	TrustedDomains     []string
 	BlockedTerms       []string
@@ -108,11 +114,47 @@ type bochaProvider struct {
 	nextKey  int
 }
 
+type tavilyProvider struct {
+	client   *http.Client
+	endpoint string
+	keys     []string
+	mu       sync.Mutex
+	nextKey  int
+}
+
+type braveNewsProvider struct {
+	client   *http.Client
+	endpoint string
+	keys     []string
+	mu       sync.Mutex
+	nextKey  int
+}
+
 type searxngProvider struct {
 	client *http.Client
 	bases  []string
 	mu     sync.Mutex
 	next   int
+}
+
+type tavilyResponse struct {
+	Results []struct {
+		Title         string `json:"title"`
+		URL           string `json:"url"`
+		Content       string `json:"content"`
+		PublishedDate string `json:"published_date"`
+	} `json:"results"`
+}
+
+type braveNewsResponse struct {
+	Results []struct {
+		Title         string `json:"title"`
+		URL           string `json:"url"`
+		Description   string `json:"description"`
+		PublishedDate string `json:"published_date"`
+		PageAge       string `json:"page_age"`
+		// page_fetched must never be treated as the article publication time.
+	} `json:"results"`
 }
 
 type bochaResponse struct {
@@ -159,6 +201,12 @@ func New(cfg Config, fallback ports.NewsSearcher, logger *slog.Logger) *Searcher
 	if strings.TrimSpace(cfg.BochaEndpoint) == "" {
 		cfg.BochaEndpoint = defaultBochaEndpoint
 	}
+	if strings.TrimSpace(cfg.TavilyEndpoint) == "" {
+		cfg.TavilyEndpoint = defaultTavilyEndpoint
+	}
+	if strings.TrimSpace(cfg.BraveNewsEndpoint) == "" {
+		cfg.BraveNewsEndpoint = defaultBraveNewsEndpoint
+	}
 	if cfg.MaxAgeDays <= 0 {
 		cfg.MaxAgeDays = 3
 	}
@@ -193,6 +241,18 @@ func New(cfg Config, fallback ports.NewsSearcher, logger *slog.Logger) *Searcher
 			client: client, endpoint: strings.TrimSpace(cfg.BochaEndpoint), keys: keys,
 		})
 	}
+	tavilyKeys := compactStrings(cfg.TavilyAPIKeys)
+	if len(tavilyKeys) > 0 {
+		searcher.providers = append(searcher.providers, &tavilyProvider{
+			client: client, endpoint: strings.TrimSpace(cfg.TavilyEndpoint), keys: tavilyKeys,
+		})
+	}
+	braveKeys := compactStrings(cfg.BraveSearchAPIKeys)
+	if len(braveKeys) > 0 {
+		searcher.providers = append(searcher.providers, &braveNewsProvider{
+			client: client, endpoint: strings.TrimSpace(cfg.BraveNewsEndpoint), keys: braveKeys,
+		})
+	}
 	bases := normalizeSearchURLs(cfg.SearXNGBaseURLs)
 	if len(bases) > 0 {
 		searcher.providers = append(searcher.providers, &searxngProvider{client: client, bases: bases})
@@ -203,9 +263,13 @@ func New(cfg Config, fallback ports.NewsSearcher, logger *slog.Logger) *Searcher
 // NewFromEnv reuses Python-compatible environment names; credentials are never logged.
 func NewFromEnv(fallback ports.NewsSearcher, logger *slog.Logger, announcementSources ...StockAnnouncementSource) *Searcher {
 	cfg := Config{
-		BochaAPIKeys:    splitCSV(os.Getenv("BOCHA_API_KEYS")),
-		BochaEndpoint:   envOr("GO_NEWS_BOCHA_ENDPOINT", defaultBochaEndpoint),
-		SearXNGBaseURLs: splitCSV(os.Getenv("SEARXNG_BASE_URLS")),
+		BochaAPIKeys:       splitCSV(os.Getenv("BOCHA_API_KEYS")),
+		BochaEndpoint:      envOr("GO_NEWS_BOCHA_ENDPOINT", defaultBochaEndpoint),
+		TavilyAPIKeys:      splitCSV(envOr("TAVILY_API_KEYS", os.Getenv("TAVILY_API_KEY"))),
+		TavilyEndpoint:     envOr("GO_NEWS_TAVILY_ENDPOINT", defaultTavilyEndpoint),
+		BraveSearchAPIKeys: splitCSV(envOr("BRAVE_SEARCH_API_KEYS", envOr("BRAVE_SEARCH_API_KEY", os.Getenv("BRAVE_API_KEY")))),
+		BraveNewsEndpoint:  envOr("GO_NEWS_BRAVE_NEWS_ENDPOINT", defaultBraveNewsEndpoint),
+		SearXNGBaseURLs:    splitCSV(os.Getenv("SEARXNG_BASE_URLS")),
 		TrustedDomains:  splitCSV(os.Getenv("GO_NEWS_TRUSTED_DOMAINS")),
 		BlockedTerms:    splitCSV(os.Getenv("GO_NEWS_BLOCKED_TERMS")),
 		MaxAgeDays:      positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
@@ -320,10 +384,28 @@ func (s *Searcher) searchNative(ctx context.Context, query, code, name string, l
 	if providerLimit > 50 {
 		providerLimit = 50
 	}
+
+	type providerResult struct {
+		index      int
+		name       string
+		candidates []searchCandidate
+		err        error
+	}
+	results := make(chan providerResult, len(s.providers))
+	for index, provider := range s.providers {
+		index, provider := index, provider
+		go func() {
+			raw, err := provider.Search(ctx, query, s.windowDays, providerLimit)
+			results <- providerResult{index: index, name: provider.Name(), candidates: raw, err: err}
+		}()
+	}
+
 	var announcementCh chan []searchCandidate
 	if strings.TrimSpace(code) != "" && s.stockAnnouncements != nil {
 		announcementCh = make(chan []searchCandidate, 1)
-		go func() { announcementCh <- s.fetchStockAnnouncementCandidates(ctx, code) }()
+		go func() {
+			announcementCh <- s.fetchStockAnnouncementCandidates(ctx, code)
+		}()
 	}
 	announcementResolved := announcementCh == nil
 	var announcementCandidates []searchCandidate
@@ -342,47 +424,31 @@ func (s *Searcher) searchNative(ctx context.Context, query, code, name string, l
 		}
 		return announcementCandidates
 	}
-	var failures []string
-	var best []rankedNews
-	var bestRaw []searchCandidate
-	for _, p := range s.providers {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		raw, err := p.Search(ctx, query, s.windowDays, providerLimit)
-		if err != nil {
-			s.logger.Warn("native news provider request failed; trying next provider", "provider", p.Name(), "error", err)
-			failures = append(failures, p.Name()+": "+err.Error())
-			continue
-		}
-		items := s.filterAndRank(raw, code, name)
-		if len(items) == 0 {
-			s.logger.Info("native news provider returned no usable fresh articles; trying next provider", "provider", p.Name())
-			continue
-		}
-		if code == "" && name == "" {
-			return trimRanked(items, limit), nil
-		}
-		if hasDirectArticle(items) {
-			combined := append([]searchCandidate{}, collectAnnouncements()...)
-			combined = append(combined, raw...)
-			return trimRanked(s.filterAndRank(combined, code, name), limit), nil
-		}
-		if len(best) == 0 || rankTotal(items) > rankTotal(best) {
-			best, bestRaw = items, raw
+
+	byProvider := make([][]searchCandidate, len(s.providers))
+	failures := make([]string, 0, len(s.providers))
+	for received := 0; received < len(s.providers); received++ {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case result := <-results:
+			if result.err != nil {
+				s.logger.Warn("native news provider request failed", "provider", result.name, "error", result.err)
+				failures = append(failures, result.name+": "+result.err.Error())
+				continue
+			}
+			byProvider[result.index] = result.candidates
 		}
 	}
-	announcements := collectAnnouncements()
-	if len(announcements) > 0 {
-		combined := append([]searchCandidate{}, announcements...)
-		combined = append(combined, bestRaw...)
-		items := s.filterAndRank(combined, code, name)
-		if len(items) > 0 {
-			return trimRanked(items, limit), nil
-		}
+
+	raw := make([]searchCandidate, 0, providerLimit*len(s.providers))
+	raw = append(raw, collectAnnouncements()...)
+	for _, candidates := range byProvider {
+		raw = append(raw, candidates...)
 	}
-	if len(best) > 0 {
-		return trimRanked(best, limit), nil
+	items := s.filterAndRank(raw, code, name)
+	if len(items) > 0 {
+		return trimRanked(items, limit), nil
 	}
 	if len(failures) > 0 {
 		return nil, errors.New(strings.Join(failures, "; "))
@@ -398,6 +464,7 @@ func (s *Searcher) fetchStockAnnouncementCandidates(ctx context.Context, code st
 	now := time.Now().In(loc)
 	endDate := now.Format("2006-01-02")
 	startDate := now.AddDate(0, 0, -(s.windowDays - 1)).Format("2006-01-02")
+
 	requestCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	snapshot, err := s.stockAnnouncements.FetchStockAnnouncements(requestCtx, code, startDate, endDate, 1, 100)
@@ -421,7 +488,8 @@ func (s *Searcher) fetchStockAnnouncementCandidates(ctx context.Context, code st
 		if status != "valid" && status != "degraded" {
 			continue
 		}
-		if !sameNewsStockCode(code, item.Symbol) || item.Source != snapshot.Source || strings.TrimSpace(item.Title) == "" || strings.TrimSpace(item.SourceURL) == "" {
+		if !sameNewsStockCode(code, item.Symbol) || item.Source != snapshot.Source ||
+			strings.TrimSpace(item.Title) == "" || strings.TrimSpace(item.SourceURL) == "" {
 			continue
 		}
 		published := strings.TrimSpace(item.AnnouncementDate)
@@ -429,7 +497,10 @@ func (s *Searcher) fetchStockAnnouncementCandidates(ctx context.Context, code st
 			published = item.PublishedAt.Format(time.RFC3339Nano)
 		}
 		snippet := strings.TrimSpace(strings.Join([]string{item.StockName, item.Category}, " "))
-		candidates = append(candidates, searchCandidate{Title: item.Title, Snippet: snippet, URL: item.SourceURL, Source: item.Source, PublishedRaw: published, StockSpecificAnnouncement: true})
+		candidates = append(candidates, searchCandidate{
+			Title: item.Title, Snippet: snippet, URL: item.SourceURL, Source: item.Source,
+			PublishedRaw: published, StockSpecificAnnouncement: true,
+		})
 	}
 	return candidates
 }
@@ -689,6 +760,139 @@ func (p *bochaProvider) Search(ctx context.Context, query string, days, limit in
 		return result, nil
 	}
 	return nil, fmt.Errorf("all configured Bocha keys failed: %s", strings.Join(failures, "; "))
+}
+
+
+func (p *tavilyProvider) Name() string { return "Tavily" }
+
+func (p *tavilyProvider) Search(ctx context.Context, query string, days, limit int) ([]searchCandidate, error) {
+	p.mu.Lock()
+	start := p.nextKey
+	p.nextKey = (p.nextKey + 1) % len(p.keys)
+	p.mu.Unlock()
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	now := time.Now().In(loc)
+	startDate := now.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
+	endDate := now.Format("2006-01-02")
+	var failures []string
+	for i := 0; i < len(p.keys); i++ {
+		key := p.keys[(start+i)%len(p.keys)]
+		payload := map[string]any{
+			"query": query, "topic": "news", "search_depth": "basic", "max_results": limit,
+			"include_published_date": true, "filter_by_published_date": true,
+			"start_date": startDate, "end_date": endDate,
+			"include_answer": false, "include_raw_content": false, "include_images": false,
+		}
+		body, _ := json.Marshal(payload)
+		headers := http.Header{
+			"Authorization": []string{"Bearer " + key},
+			"Content-Type":  []string{"application/json"},
+			"Accept":        []string{"application/json"},
+		}
+		respBody, status, err := requestJSON(ctx, p.client, http.MethodPost, p.endpoint, headers, body)
+		if err != nil {
+			failures = append(failures, err.Error())
+			continue
+		}
+		if status != http.StatusOK {
+			failures = append(failures, fmt.Sprintf("HTTP %d", status))
+			continue
+		}
+		var response tavilyResponse
+		if err := json.Unmarshal(respBody, &response); err != nil {
+			failures = append(failures, "invalid JSON response")
+			continue
+		}
+		result := make([]searchCandidate, 0, len(response.Results))
+		for _, item := range response.Results {
+			result = append(result, searchCandidate{
+				Title: item.Title, Snippet: truncateRunes(item.Content, 500),
+				URL: item.URL, PublishedRaw: item.PublishedDate,
+			})
+		}
+		return result, nil
+	}
+	return nil, fmt.Errorf("all configured Tavily keys failed: %s", strings.Join(failures, "; "))
+}
+
+func (p *braveNewsProvider) Name() string { return "BraveNews" }
+
+func (p *braveNewsProvider) Search(ctx context.Context, query string, days, limit int) ([]searchCandidate, error) {
+	p.mu.Lock()
+	start := p.nextKey
+	p.nextKey = (p.nextKey + 1) % len(p.keys)
+	p.mu.Unlock()
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	now := time.Now().In(loc)
+	startDate := now.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
+	endDate := now.Format("2006-01-02")
+	freshness := fmt.Sprintf("%sto%s", startDate, endDate)
+	switch {
+	case days <= 1:
+		freshness = "pd"
+	case days <= 7:
+		freshness = "pw"
+	case days <= 31:
+		freshness = "pm"
+	case days <= 365:
+		freshness = "py"
+	}
+	var failures []string
+	for i := 0; i < len(p.keys); i++ {
+		key := p.keys[(start+i)%len(p.keys)]
+		endpoint, err := url.Parse(p.endpoint)
+		if err != nil || endpoint.Host == "" || (endpoint.Scheme != "https" && endpoint.Scheme != "http") {
+			return nil, errors.New("invalid Brave News endpoint URL")
+		}
+		params := endpoint.Query()
+		params.Set("q", query)
+		params.Set("count", strconv.Itoa(limit))
+		params.Set("freshness", freshness)
+		params.Set("country", "CN")
+		params.Set("search_lang", "zh-hans")
+		params.Set("ui_lang", "zh-CN")
+		params.Set("spellcheck", "false")
+		params.Set("safesearch", "strict")
+		endpoint.RawQuery = params.Encode()
+		headers := http.Header{
+			"X-Subscription-Token": []string{key},
+			"Accept":               []string{"application/json"},
+			"User-Agent":           []string{"stock-analysis-go/1.0"},
+		}
+		respBody, status, err := requestJSON(ctx, p.client, http.MethodGet, endpoint.String(), headers, nil)
+		if err != nil {
+			failures = append(failures, err.Error())
+			continue
+		}
+		if status != http.StatusOK {
+			failures = append(failures, fmt.Sprintf("HTTP %d", status))
+			continue
+		}
+		var response braveNewsResponse
+		if err := json.Unmarshal(respBody, &response); err != nil {
+			failures = append(failures, "invalid JSON response")
+			continue
+		}
+		result := make([]searchCandidate, 0, len(response.Results))
+		for _, item := range response.Results {
+			published := strings.TrimSpace(item.PublishedDate)
+			if published == "" {
+				published = strings.TrimSpace(item.PageAge)
+			}
+			result = append(result, searchCandidate{
+				Title: item.Title, Snippet: truncateRunes(item.Description, 500),
+				URL: item.URL, PublishedRaw: published,
+			})
+		}
+		return result, nil
+	}
+	return nil, fmt.Errorf("all configured Brave News keys failed: %s", strings.Join(failures, "; "))
 }
 
 func (p *searxngProvider) Name() string { return "SearXNG" }
