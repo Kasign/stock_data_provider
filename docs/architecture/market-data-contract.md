@@ -95,3 +95,5 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 个股所属板块：`has_data=false` 与 `quality_status=unknown` 表示源端尚未确认归属，不代表确认没有板块。此类空响应缓存 5 分钟；有板块数据的响应缓存 12 小时。
 
 财务快照缓存按完整性和质量分级：有效且有数据的快照最多缓存 12 小时；有数据但质量为 `degraded` 或 `unknown` 的快照最多缓存 1 小时；无数据的未知结果最多缓存 5 分钟。不能因为 `has_data=true` 就把质量未知的财务字段按有效数据长缓存。
+
+证券主数据的 Provider 若未提供质量状态或返回 `unknown`，服务层将其归为 `degraded` 并记录 `provider_quality_status_missing_or_unknown`，不会自动提升为 `valid`。这避免下游把未知来源质量当作经过验证的主数据。

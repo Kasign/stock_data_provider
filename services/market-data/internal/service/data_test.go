@@ -1224,3 +1224,51 @@ func TestFundamentalsUnknownSnapshotWithDataUsesShortCacheTTL(t *testing.T) {
 		t.Fatalf("refreshed fundamentals quality/calls mismatch: snapshot=%+v calls=%d", got, p.calls)
 	}
 }
+
+
+type stockBasicFakeProvider struct {
+	item  *model.StockBasic
+	calls int
+}
+
+func (p *stockBasicFakeProvider) Name() string { return "eastmoney" }
+
+func (p *stockBasicFakeProvider) FetchStockBasic(context.Context, string) (*model.StockBasic, error) {
+	p.calls++
+	return p.item, nil
+}
+
+func TestStockBasicDoesNotPromoteUnknownProviderQuality(t *testing.T) {
+	now := time.Now().UTC()
+	p := &stockBasicFakeProvider{
+		item: &model.StockBasic{
+			Symbol: "600519.SH", Name: "贵州茅台",
+			SecurityType: 1, SecurityTypeLabel: "stock",
+			ListingStatus: 1, ListingStatusLabel: "listed",
+			Source: "eastmoney", FetchedAt: now,
+			QualityStatus: model.QualityUnknown,
+			NormalizationVer: normalize.Version,
+		},
+	}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, newMemoryCache(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
+
+	got, hit, err := svc.StockBasic(context.Background(), "600519")
+	if err != nil || hit {
+		t.Fatalf("StockBasic hit=%v err=%v", hit, err)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("unknown Provider quality must be downgraded, got %q", got.QualityStatus)
+	}
+	foundReason := false
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_quality_status_missing_or_unknown" {
+			foundReason = true
+			break
+		}
+	}
+	if !foundReason {
+		t.Fatalf("downgraded stock-basic record is missing its quality reason: %+v", got.QualityReasons)
+	}
+}
