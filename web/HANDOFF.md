@@ -447,3 +447,9 @@
 - 首屏现在为完整大盘数据工作区；主 Tab 是大盘数据、个股分析、自选股。快速定位 DOM/滚动逻辑/CSS 已删除，市场榜单与龙虎榜、交易日历复用原有 API。
 - CI 截图中的中文方框来自 Runner 字体缺失。真实 API、深浅主题、键盘细节及 NAS/1Panel 联调仍需在部署环境确认。
 - PR #13 保持 Open/未合并。当前相对数据分支领先 21、落后 31；整合前必须再次比较分支差异并审查。
+
+
+## 2026-10-27 — 全局 CSS 维护性补充
+
+- `styles.css` 中超过 200 字符的压缩规则已拆成易读的多行格式，原 CSS token 顺序完全一致；没有变更选择器、声明值或响应式规则顺序。
+- 当前首页与三 Tab 导航的验收记录见 WebUI checks [#40444362551](https://github.com/Kasign/stock_data_provider/actions/runs/40444362551) 和 Chromium browser smoke [#40444358365](https://github.com/Kasign/stock_data_provider/actions/runs/40444358365)。仅格式化 CSS 的新提交仍将触发对应 CI。
