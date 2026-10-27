@@ -33,6 +33,7 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		return fmt.Errorf("unsupported hot-ranking quality %q", snapshot.QualityStatus)
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
+	hasDegradedItem := false
 	for _, item := range snapshot.Items {
 		symbol, err := normalize.NormalizeSymbol(item.Symbol)
 		if err != nil || symbol != item.Symbol || item.Code != strings.Split(symbol, ".")[0] || item.Rank < 1 {
@@ -48,6 +49,9 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("hot-ranking item has unsupported quality %q", item.QualityStatus)
 		}
+		if item.QualityStatus == model.QualityDegraded {
+			hasDegradedItem = true
+		}
 		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent} {
 			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
 				return errors.New("hot-ranking item contains a non-finite quote field")
@@ -59,6 +63,9 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 	}
 	if len(snapshot.Items) == 0 && snapshot.QualityStatus != model.QualityUnknown {
 		return errors.New("empty hot-ranking snapshot must be marked unknown")
+	}
+	if snapshot.QualityStatus == model.QualityValid && hasDegradedItem {
+		return errors.New("hot-ranking snapshot cannot be valid when one or more items are degraded")
 	}
 	return nil
 }

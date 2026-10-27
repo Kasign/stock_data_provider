@@ -330,6 +330,14 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("market-breadth quality status %q is unsupported", snapshot.QualityStatus)
 	}
+	if snapshot.QualityStatus == model.QualityValid {
+		for _, reason := range snapshot.QualityReasons {
+			switch reason {
+			case "market_amount_quotes_collected_non_atomically", "provider_snapshot_timestamp_not_exposed":
+				return fmt.Errorf("market-breadth snapshot cannot be valid while quality reason %q is present", reason)
+			}
+		}
+	}
 	return nil
 }
 
@@ -576,12 +584,16 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 			return fmt.Errorf("dragon-tiger quality status %q is unsupported", snapshot.QualityStatus)
 		}
 		seen := make(map[string]struct{}, len(snapshot.Items))
+		hasDegradedItem := false
 		for _, item := range snapshot.Items {
 			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.TradeDate != tradeDate {
 				return errors.New("dragon-tiger item is missing identity fields or has mismatched trade date")
 			}
 			if item.Source != snapshot.Source || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
 				return errors.New("dragon-tiger item source, fetched_at, or quality is invalid")
+			}
+			if item.QualityStatus == model.QualityDegraded {
+				hasDegradedItem = true
 			}
 			key := item.Symbol + "|" + item.Reason + "|" + item.Explanation
 			if _, ok := seen[key]; ok {
@@ -601,6 +613,9 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 			if item.ClosePrice != nil && *item.ClosePrice <= 0 {
 				return errors.New("dragon-tiger close price must be positive when present")
 			}
+		}
+		if snapshot.QualityStatus == model.QualityValid && hasDegradedItem {
+			return errors.New("dragon-tiger snapshot cannot be valid when one or more items are degraded")
 		}
 		return nil
 	}
@@ -1080,6 +1095,7 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 		return fmt.Errorf("stock-boards quality status %q is unsupported", snapshot.QualityStatus)
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
+	hasDegradedItem := false
 	for _, item := range snapshot.Items {
 		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
 			return errors.New("stock-board item is missing code or name")
@@ -1090,6 +1106,9 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("stock-board quality status %q is unsupported", item.QualityStatus)
 		}
+		if item.QualityStatus == model.QualityDegraded {
+			hasDegradedItem = true
+		}
 		if _, exists := seen[item.Code]; exists {
 			return fmt.Errorf("duplicate stock-board code %q", item.Code)
 		}
@@ -1097,6 +1116,9 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 		if item.ChangePercent != nil && (math.IsNaN(*item.ChangePercent) || math.IsInf(*item.ChangePercent, 0)) {
 			return fmt.Errorf("stock-board %s has invalid change percent", item.Code)
 		}
+	}
+	if snapshot.QualityStatus == model.QualityValid && hasDegradedItem {
+		return errors.New("stock-boards snapshot cannot be valid when one or more items are degraded")
 	}
 	return nil
 }

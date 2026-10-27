@@ -35,6 +35,11 @@ func TestDragonTigerValidatesDateAndPreservesSignedNetBuy(t *testing.T) {
 		Items: []model.DragonTigerItem{item}, Source: "eastmoney", SourceVersion: "test",
 		FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}
+	qualityMismatch := *snapshot
+	qualityMismatch.QualityStatus = model.QualityValid
+	if err := validateDragonTigerSnapshot("2026-10-22", 1, 100, &qualityMismatch); err == nil {
+		t.Fatal("dragon-tiger snapshot must not be valid when its item is degraded")
+	}
 	p := dragonTigerFakeProvider{snapshot: snapshot}
 	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
 		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)

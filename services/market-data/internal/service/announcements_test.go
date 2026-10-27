@@ -47,6 +47,12 @@ func TestStockAnnouncementsKeepsPublishTimeSeparateFromFetchedAt(t *testing.T) {
 	if got.Items[0].PublishedAt == nil || !got.Items[0].PublishedAt.Equal(published) || !got.FetchedAt.Equal(now) {
 		t.Fatalf("provider publish time was conflated with fetch time: %+v", got)
 	}
+	qualityMismatch := *snapshot
+	qualityMismatch.Items = append([]model.StockAnnouncement(nil), snapshot.Items...)
+	qualityMismatch.Items[0].QualityStatus = model.QualityDegraded
+	if err := validateStockAnnouncementSnapshot("600036.SH", "2026-10-20", "2026-10-26", 1, 20, &qualityMismatch); err == nil {
+		t.Fatal("announcement snapshot must not be valid when one or more items are degraded")
+	}
 }
 
 func TestStockAnnouncementsEmptySourceRemainsUnknownAndDateRangeIsValidated(t *testing.T) {

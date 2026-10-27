@@ -81,6 +81,7 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		return fmt.Errorf("announcement quality status %q is unsupported", snapshot.QualityStatus)
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
+	hasDegradedItem := false
 	for _, item := range snapshot.Items {
 		if strings.TrimSpace(item.ArticleID) == "" || strings.TrimSpace(item.Title) == "" ||
 			item.Symbol != symbol || item.Source != snapshot.Source || item.FetchedAt.IsZero() {
@@ -104,6 +105,12 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("announcement item quality status %q is unsupported", item.QualityStatus)
 		}
+		if item.QualityStatus == model.QualityDegraded {
+			hasDegradedItem = true
+		}
+	}
+	if snapshot.QualityStatus == model.QualityValid && hasDegradedItem {
+		return errors.New("announcement snapshot cannot be valid when one or more items are degraded")
 	}
 	return nil
 }

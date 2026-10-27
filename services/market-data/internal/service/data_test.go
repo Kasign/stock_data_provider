@@ -1057,3 +1057,44 @@ func TestValidateSectorRankingSnapshotRejectsInvalidTotalsAndQuality(t *testing.
 		}
 	})
 }
+
+
+func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T) {
+	now := time.Now().UTC()
+	t.Run("non-atomic market breadth", func(t *testing.T) {
+		amount := 100.0
+		snapshot := &model.MarketBreadthSnapshot{
+			Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+			AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
+			TotalAmountCNY: &amount, AmountCoverageCount: 3,
+			ProviderReportDate: "2026-10-23", Source: "eastmoney", FetchedAt: now,
+			QualityStatus: model.QualityValid,
+			QualityReasons: []string{"market_amount_quotes_collected_non_atomically"},
+		}
+		if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
+			t.Fatalf("non-atomic breadth must not be marked valid, got %v", err)
+		}
+	})
+	t.Run("stock board item degradation", func(t *testing.T) {
+		change := 1.2
+		snapshot := &model.StockBoardSnapshot{
+			Symbol: "600519.SH", Total: 1, HasData: true, Source: "eastmoney", FetchedAt: now,
+			QualityStatus: model.QualityValid,
+			Items: []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change,
+				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		}
+		if err := validateStockBoardsSnapshot("600519.SH", snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
+			t.Fatalf("stock-board snapshot must inherit item degradation, got %v", err)
+		}
+	})
+	t.Run("hot ranking item degradation", func(t *testing.T) {
+		snapshot := &model.HotRankingSnapshot{
+			RankingType: "popular", Total: 1, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+			Items: []model.HotRankingItem{{Rank: 1, Symbol: "600519.SH", Code: "600519",
+				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		}
+		if err := validateHotRankingSnapshot("popular", snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
+			t.Fatalf("hot-ranking snapshot must inherit item degradation, got %v", err)
+		}
+	})
+}
