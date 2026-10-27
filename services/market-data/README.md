@@ -180,7 +180,7 @@ curl -H "X-API-Key: $MARKET_DATA_API_KEY" "http://127.0.0.1:8091/api/v1/bars/600
 ### 人气榜与飙升榜（Go 原生，东方财富 + 可选同花顺回退）
 
 - API：`GET /api/v1/market/hot-stocks?type=popular&limit=10`；将 `type=surge` 切换为飙升榜。
-- 默认优先使用东方财富 `getAllCurrentList` / `getAllHisRcList` 并补充最新价与涨跌幅。显式启用同花顺后，回退源使用 `/api/a-share/special-data/hot-stock-list?period=day` 和 `/api/a-share/special-data/skyrocket-list?period=day`；保留同花顺原始 `heat`、`rank_change`、`rank_trend`，不伪造行情价格。
+- 默认优先使用东方财富 `getAllCurrentList` / `getAllHisRcList` 并补充最新价与涨跌幅；两个接口地址分别由 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL`（人气榜）和 `MARKET_DATA_EASTMONEY_HOT_SURGE_URL`（飙升榜）配置，默认值为当前公开接口地址。显式启用同花顺后，回退源使用 `/api/a-share/special-data/hot-stock-list?period=day` 和 `/api/a-share/special-data/skyrocket-list?period=day`；保留同花顺原始 `heat`、`rank_change`、`rank_trend`，不伪造行情价格。
 - 榜单数据可能延迟，响应保持 `degraded`；同花顺 `provider_time` 代表数据准备时间，不保证是精确行情时点。空列表标记 `unknown`，不解释为已核验的零条上榜。
 - 同花顺能力默认关闭；需同时设置 `MARKET_DATA_HITHINK_ENABLED=true`、有效 `MARKET_DATA_HITHINK_API_KEY` 和 `MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED=true`。东方财富能力可通过 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED=false` 关闭。未引入海外数据源。
 ### 个股 profile 扩展字段（Efinance get_base_info 迁移）

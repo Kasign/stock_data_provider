@@ -42,6 +42,7 @@
 | 个股所属板块 `get_belong_boards` | 新增独立 `StockBoardsProvider`、东方财富 `slist/get` 适配器与 `GET /api/v1/stocks/{symbol}/boards` | GitHub Runner #100 对 600036.SH 返回 26 个板块项；302 → delay 域名 200；源端没有可核验快照时间且板块类型语义仍有限，结果 degraded；默认关闭，NAS/Docker 验收待完成 |
 | 交易日历 | 新增独立 `TradingCalendarProvider`，通过 BaoStock TCP `query_trade_dates` 和可选 Tushare Pro `trade_cal`，统一使用 `GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD` | BaoStock 已有首轮真实样本；Tushare Go 实现已加入代码但默认关闭，需配置有效 Token 与接口权限；两者均须满足连续自然日覆盖契约，待统一验收 |
 | 筹码分布 `get_chip_distribution` | 可选 Go MX API 路由和缓存 | 精确 publication available_at 仍缺失；输出降级质量，历史 as_of 不得倒灌 |
+| 人气榜与飙升榜 | 东方财富原生 `HotRankingProvider`，API `GET /api/v1/market/hot-stocks?type=popular&limit=10`（`type=surge` 查询飙升榜）；端点分别由 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL`、`MARKET_DATA_EASTMONEY_HOT_SURGE_URL` 配置 | 两个变量默认沿用当前公开端点，启动时执行 HTTP(S) URL 形态校验；源端缺少可信快照时间，结果继续标记 `degraded`；配置可达地址不等于完成生产可用性验收 |
 | 基本面 `get_fundamental_context` | BaoStock 与可选 Tushare Pro `fina_indicator` 均提供 Go 原生 `FundamentalsProvider`，复用 `GET /api/v1/stocks/{symbol}/fundamentals?year=YYYY&quarter=N` | 按季度输出盈利、营运、成长、偿债、现金流、杜邦六组指标，保留报告期与公告日期；Tushare 需要对应积分权限，两个 Provider 都待统一验收；并非完整财务报表或原 Python 上下文的等价替代 |
 | 个股资金流 `get_capital_flow_context` | 可选 Go MX API 路由；字段按人民币元规范化，5/10 日累计要求完整观测 | 自然语言查询返回的指标需要验证字段标签/单位；缺值不补零，精确 available_at 未实现 |
 | 龙虎榜 `get_dragon_tiger_context` | 无 | 必须保留交易日、上榜原因、营业部/机构口径及金额单位 |

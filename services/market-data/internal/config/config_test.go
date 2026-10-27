@@ -95,6 +95,30 @@ func TestLoadStockSearchCapabilityEnvironmentOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadEastmoneyHotRankingEndpointConfiguration(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL", "https://rank.example.test/current")
+	t.Setenv("MARKET_DATA_EASTMONEY_HOT_SURGE_URL", "https://rank.example.test/surge")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("valid Eastmoney hot-ranking endpoints should load: %v", err)
+	}
+	if cfg.EastmoneyHotRankingsURL != "https://rank.example.test/current" {
+		t.Fatalf("popular ranking URL = %q", cfg.EastmoneyHotRankingsURL)
+	}
+	if cfg.EastmoneyHotSurgeURL != "https://rank.example.test/surge" {
+		t.Fatalf("surge ranking URL = %q", cfg.EastmoneyHotSurgeURL)
+	}
+
+	t.Setenv("MARKET_DATA_EASTMONEY_HOT_SURGE_URL", "file:///tmp/surge")
+	if _, err := Load(); err == nil {
+		t.Fatal("non-HTTP(S) Eastmoney hot-ranking endpoint must fail configuration loading")
+	}
+}
+
 func TestLoadRejectsInvalidStockSearchBoolean(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
