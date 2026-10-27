@@ -259,6 +259,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 静态比对运行时模型与 OpenAPI 时发现，数据源状态响应已包含 `index_catalog_capable`，但 `SourceStatus` schema 遗漏了该字段。现已补齐契约字段，保持 Provider 能力状态的 API 文档与实际 JSON 一致；未运行测试或构建。
 
+### 腾讯股票搜索端点可配置化（2026-10-27）
+
+腾讯 Smartbox 搜索能力已经独立开关，但旧构造函数将搜索地址固定为代码常量。现新增 `MARKET_DATA_TENCENT_STOCK_SEARCH_URL` 配置并纳入 URL 形态校验；旧 `NewTencentConfigured` 保持兼容，新构造函数接收搜索地址，默认仍使用 Smartbox 地址。配置测试与本地 fixture 测试源码已补充，未运行测试、构建、CI 或真实上游请求。
+
 ### 全市场成交额分页聚合补齐（2026-10-27，待统一验收）
 
 - `GET /api/v1/market/breadth` 新增东方财富 CLIST 全市场成交额汇总：按 A 股过滤条件分页读取 `f6`（人民币元），每页最多 100 条，最多 4 个并发请求，单次聚合预算为 60 秒。
