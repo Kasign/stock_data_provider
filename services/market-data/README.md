@@ -9,7 +9,7 @@
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表、证券名称/代码搜索，以及可选补充数据接口。
-- 证券搜索：`GET /api/v1/stocks/search?q=贵州茅台&limit=10`，以真实 A 股证券目录按中文名称或代码匹配，返回标准 `symbol`、代码、名称与交易所，不返回虚构/推算行情。目录在进程内缓存 6 小时，每次最多返回 50 条结果；目录刷新失败但有旧目录时会明确标记 `quality_status=stale` 与质量原因，没有可用目录时返回 Provider 错误。可选同花顺源也实现了 `StockSearchProvider`，只有显式启用并配置 API Key 后才参与检索回退。
+- 证券搜索：`GET /api/v1/stocks/search?q=贵州茅台&limit=10`，以真实 A 股证券目录按中文名称或代码匹配，返回标准 `symbol`、代码、名称与交易所，不返回虚构/推算行情。目录在进程内缓存 6 小时，每次最多返回 50 条结果；目录刷新失败但有旧目录时会明确标记 `quality_status=stale` 与质量原因，没有可用目录时返回 Provider 错误。当前腾讯 Smartbox 优先、东方财富 CLIST 兜底；分别由 `MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED` 与 `MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED` 控制，`GET /api/v1/data-sources` 会通过 `stock_search_capable` 暴露实际注册状态。可选同花顺源只有显式启用并配置 API Key 后才参与检索回退。
 - 标准单位：`volume` 为股，`amount` 为人民币元，价格为元/股；Tushare 原始日 K 的 `vol` 按手换算为股，`amount` 按千元换算为人民币元，原始字段/单位仍单独保留；`trade_date` 是交易日。`quote_time` 是供应商报告的行情快照/更新时间，不一定等于最近一笔成交时间；新增的 `quote_time_semantics=provider_snapshot_time` 明确该语义。`fetched_at` 是本服务采集时间，`normalized_at` 是标准化时间，三者不能互相替代。
 - 复权参数只能是 `none`、`forward_adjusted` 或 `backward_adjusted`。`unknown` 只用于说明数据未知，不是可请求的复权类型。
 - 标准化行情与 K 线保留底层 Provider 名称、版本、原始单位、抓取/标准化时间、复权口径、兜底诊断和质量原因。不能依据数值大小猜测单位，不能随意执行 100 倍价格修正。
@@ -102,7 +102,7 @@ Redis 地址应是 `Redis:6379` 这样的主机和端口，而不是 URL。若�
 | GET | `/api/v1/quotes/{symbol}` | 实时行情 |
 | GET | `/api/v1/bars/{symbol}/daily?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=120&adjustment=forward_adjusted` | 日线 K 线 |
 | GET | `/api/v1/bundles/{symbol}?lookback_days=120&adjustment=forward_adjusted&as_of=RFC3339` | 行情与 K 线组合 |
-| GET | `/api/v1/data-sources` | 已注册 Provider 与能力 |
+| GET | `/api/v1/data-sources` | 已注册 Provider 与能力（包括 `stock_search_capable` 等独立能力标志） |
 | GET | `/api/v1/stocks/{symbol}/chip-distribution` | 东方财富 Go 原生筹码分布；失败后可回退 MX |
 | GET | `/api/v1/market/hot-stocks?type=popular&limit=10` | 东方财富个股人气榜/飙升榜；类型支持 `popular`、`surge` |
 | GET | `/api/v1/stocks/{symbol}/capital-flow` | 可选个股资金流；MX 未启用时返回 Provider 不可用 |

@@ -86,6 +86,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	sort.Strings(names)
 	sources := make([]model.SourceStatus, 0, len(names))
 	stockBasicEnabled := map[string]bool{}
+	stockSearchEnabled := map[string]bool{}
 	sectorRankingEnabled := map[string]bool{}
 	indexQuoteEnabled := map[string]bool{}
 	marketBreadthEnabled := map[string]bool{}
@@ -102,6 +103,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	if svc != nil {
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
+		}
+		for _, p := range svc.StockSearchProviders() {
+			stockSearchEnabled[p.Name()] = true
 		}
 		for _, p := range svc.SectorRankingProviders() {
 			sectorRankingEnabled[p.Name()] = true
@@ -147,7 +151,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		sources = append(sources, model.SourceStatus{
 			Name: name, Enabled: true,
 			QuoteCapable: quoteEnabled[name], DailyBarCapable: barsEnabled[name],
-			StockBasicCapable: stockBasicEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
+			StockBasicCapable: stockBasicEnabled[name], StockSearchCapable: stockSearchEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
 			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], ChipCapable: chipEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],

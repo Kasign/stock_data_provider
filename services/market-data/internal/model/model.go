@@ -485,6 +485,7 @@ type SourceStatus struct {
 	QuoteCapable           bool   `json:"quote_capable"`
 	DailyBarCapable        bool   `json:"daily_bar_capable"`
 	StockBasicCapable      bool   `json:"stock_basic_capable,omitempty"`
+	StockSearchCapable     bool   `json:"stock_search_capable,omitempty"`
 	SectorRankingCapable   bool   `json:"sector_ranking_capable,omitempty"`
 	IndexQuoteCapable      bool   `json:"index_quote_capable,omitempty"`
 	MarketBreadthCapable   bool   `json:"market_breadth_capable,omitempty"`
