@@ -1249,13 +1249,14 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 		bar := model.IndexDailyBar{
 			IndexSymbol: indexSymbol, TradeDate: date,
 			Open: open, High: high, Low: low, Close: closeValue,
-			VolumeUnit: "shares", AmountUnit: "provider_defined",
+			VolumeUnit: "unknown", AmountUnit: "unknown",
 			Source: p.Name(), SourceVersion: sourceVersion, ProviderTime: snapshot.ProviderTime,
 			FetchedAt: now, QualityStatus: model.QualityValid,
 		}
 		if row.Volume != nil && hithinkNonNegativeFinite(*row.Volume) && math.Trunc(*row.Volume) == *row.Volume && *row.Volume <= float64(math.MaxInt64) {
 			volume := int64(*row.Volume)
 			bar.Volume = &volume
+			bar.VolumeUnit = "shares"
 		} else {
 			bar.QualityStatus = model.QualityDegraded
 			bar.QualityReasons = append(bar.QualityReasons, "provider_volume_missing_or_invalid")
@@ -1263,6 +1264,9 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 		if row.Turnover != nil && hithinkNonNegativeFinite(*row.Turnover) {
 			amount := *row.Turnover
 			bar.Amount = &amount
+			bar.AmountUnit = "provider_defined"
+			bar.QualityStatus = model.QualityDegraded
+			bar.QualityReasons = append(bar.QualityReasons, "provider_amount_unit_not_verified_as_cny")
 		} else {
 			bar.QualityStatus = model.QualityDegraded
 			bar.QualityReasons = append(bar.QualityReasons, "provider_turnover_missing_or_invalid")

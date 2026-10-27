@@ -75,6 +75,12 @@ func validateIndexCatalogSnapshot(tag string, snapshot *model.IndexCatalogSnapsh
 	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index catalog snapshot source, timestamp or quality invalid")
 	}
+	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
+		return errors.New("index catalog provider_time is zero or in the future")
+	}
+	if snapshot.QualityStatus == model.QualityValid && snapshot.ProviderTime == nil {
+		return errors.New("index catalog cannot be valid without a provider snapshot timestamp")
+	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
 	for _, item := range snapshot.Items {
 		symbol, err := canonicalIndexSymbol(item.Symbol)
@@ -104,6 +110,15 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 		if err != nil || date.Format("2006-01-02") != snapshot.ProviderReportDate {
 			return errors.New("index constituent provider_report_date is invalid")
 		}
+		if snapshot.ProviderReportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+			return errors.New("index constituent provider_report_date is in the future")
+		}
+	}
+	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
+		return errors.New("index constituent provider_time is zero or in the future")
+	}
+	if snapshot.QualityStatus == model.QualityValid && snapshot.ProviderTime == nil && snapshot.ProviderReportDate == "" {
+		return errors.New("index constituents cannot be valid without a provider time or report date")
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
 	for _, item := range snapshot.Items {
@@ -132,13 +147,18 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index daily-bars snapshot source, timestamp or quality invalid")
 	}
+	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
+		return errors.New("index daily-bars provider_time is zero or in the future")
+	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
 	previousDate := ""
+	hasDegradedItem := false
 	for _, item := range snapshot.Items {
 		if item.IndexSymbol != indexSymbol || item.TradeDate < startDate || item.TradeDate > endDate || item.Source != snapshot.Source || item.FetchedAt.IsZero() {
 			return errors.New("index daily bar identity, date or source invalid")
 		}
-		if _, err := time.Parse("2006-01-02", item.TradeDate); err != nil {
+		parsedDate, dateErr := time.Parse("2006-01-02", item.TradeDate)
+		if dateErr != nil || parsedDate.Format("2006-01-02") != item.TradeDate {
 			return errors.New("index daily bar has invalid trade date")
 		}
 		if _, duplicate := seen[item.TradeDate]; duplicate {
@@ -155,20 +175,66 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 			item.Low > item.High || item.Open < item.Low || item.Open > item.High || item.Close < item.Low || item.Close > item.High {
 			return fmt.Errorf("index daily bar %s has invalid OHLC values", item.TradeDate)
 		}
-		if item.Volume != nil && *item.Volume < 0 {
-			return fmt.Errorf("index daily bar %s has negative volume", item.TradeDate)
+		if item.ChangePercent != nil && (math.IsNaN(*item.ChangePercent) || math.IsInf(*item.ChangePercent, 0)) {
+			return fmt.Errorf("index daily bar %s has a non-finite change_percent", item.TradeDate)
 		}
-		if item.Amount != nil && (math.IsNaN(*item.Amount) || math.IsInf(*item.Amount, 0) || *item.Amount < 0) {
-			return fmt.Errorf("index daily bar %s has invalid amount", item.TradeDate)
+		if item.Volume == nil {
+			if item.VolumeUnit != "unknown" {
+				return fmt.Errorf("index daily bar %s has no volume but volume_unit is not unknown", item.TradeDate)
+			}
+		} else {
+			if *item.Volume < 0 {
+				return fmt.Errorf("index daily bar %s has negative volume", item.TradeDate)
+			}
+			if item.VolumeUnit != "shares" && item.VolumeUnit != "hands" {
+				return fmt.Errorf("index daily bar %s has unsupported volume_unit %q", item.TradeDate, item.VolumeUnit)
+			}
+		}
+		if item.Amount == nil {
+			if item.AmountUnit != "unknown" {
+				return fmt.Errorf("index daily bar %s has no amount but amount_unit is not unknown", item.TradeDate)
+			}
+		} else {
+			if math.IsNaN(*item.Amount) || math.IsInf(*item.Amount, 0) || *item.Amount < 0 {
+				return fmt.Errorf("index daily bar %s has invalid amount", item.TradeDate)
+			}
+			if item.AmountUnit != "CNY" && item.AmountUnit != "provider_defined" {
+				return fmt.Errorf("index daily bar %s has unsupported amount_unit %q", item.TradeDate, item.AmountUnit)
+			}
+			if item.AmountUnit == "provider_defined" && item.QualityStatus == model.QualityValid {
+				return fmt.Errorf("index daily bar %s cannot be valid with provider_defined amount unit", item.TradeDate)
+			}
+		}
+		if (item.Volume == nil || item.Amount == nil) && item.QualityStatus == model.QualityValid {
+			return fmt.Errorf("index daily bar %s cannot be valid with missing volume or amount", item.TradeDate)
+		}
+		if item.ProviderTime != nil && (item.ProviderTime.IsZero() || item.ProviderTime.After(time.Now().Add(5*time.Minute))) {
+			return fmt.Errorf("index daily bar %s has zero or future provider_time", item.TradeDate)
 		}
 		if !validSnapshotQuality(item.QualityStatus) || item.QualityStatus == model.QualityUnknown {
 			return fmt.Errorf("index daily bar %s has unsupported quality", item.TradeDate)
+		}
+		if item.QualityStatus == model.QualityDegraded {
+			hasDegradedItem = true
 		}
 	}
 	if len(snapshot.Items) == 0 && snapshot.QualityStatus != model.QualityUnknown {
 		return errors.New("empty index daily-bars snapshot must be marked unknown")
 	}
+	if snapshot.QualityStatus == model.QualityValid && hasDegradedItem {
+		return errors.New("index daily-bars snapshot cannot be valid when one or more items are degraded")
+	}
 	return nil
+}
+
+func indexCatalogCacheTTL(snapshot *model.IndexCatalogSnapshot) time.Duration {
+	if snapshot == nil || snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
+		return 5 * time.Minute
+	}
+	if snapshot.QualityStatus != model.QualityValid {
+		return time.Hour
+	}
+	return 12 * time.Hour
 }
 
 func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.IndexCatalogSnapshot, bool, error) {
@@ -186,10 +252,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexCatalogSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexCatalogSnapshot(tag, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
-			ttl := 12 * time.Hour
-			if cached.QualityStatus != model.QualityValid {
-				ttl = time.Hour
-			}
+			ttl := indexCatalogCacheTTL(&cached)
 			if time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
@@ -216,10 +279,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 			continue
 		}
 		if payload, err := json.Marshal(snapshot); err == nil {
-			ttl := 12 * time.Hour
-			if snapshot.QualityStatus != model.QualityValid {
-				ttl = time.Hour
-			}
+			ttl := indexCatalogCacheTTL(snapshot)
 			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
 				s.logger.Warn("index catalog cache write failed", "tag", tag, "error", cacheErr)
 			}

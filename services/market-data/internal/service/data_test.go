@@ -1469,3 +1469,75 @@ func TestValidateFundamentalsSnapshotRejectsPublicationBeforeReportPeriodEnd(t *
 		t.Fatalf("publication before period end must be rejected, got %v", err)
 	}
 }
+
+
+func TestIndexCatalogUnknownCacheUsesShortTTL(t *testing.T) {
+	if got := indexCatalogCacheTTL(&model.IndexCatalogSnapshot{QualityStatus: model.QualityUnknown}); got != 5*time.Minute {
+		t.Fatalf("empty unknown index catalog TTL=%s, want 5m", got)
+	}
+	if got := indexCatalogCacheTTL(&model.IndexCatalogSnapshot{Items: []model.IndexCatalogItem{{Symbol: "000300.SH", Name: "沪深300", Tag: "cn_concept"}}, QualityStatus: model.QualityDegraded}); got != time.Hour {
+		t.Fatalf("degraded index catalog TTL=%s, want 1h", got)
+	}
+}
+
+func TestValidateIndexConstituentsRejectsFutureReportDate(t *testing.T) {
+	futureDate := time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	snapshot := &model.IndexConstituentSnapshot{
+		IndexSymbol: "000300.SH", ProviderReportDate: futureDate,
+		Items: []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}},
+		Total: 1, Source: "tushare", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+	}
+	if err := validateIndexConstituentsSnapshot("000300.SH", snapshot); err == nil || !strings.Contains(err.Error(), "in the future") {
+		t.Fatalf("future constituent report date must be rejected, got %v", err)
+	}
+}
+
+func TestValidateIndexDailyBarsRejectsQualityAndUnitMismatch(t *testing.T) {
+	now := time.Now().UTC()
+	volume := int64(1000)
+	amount := 100000.0
+	makeSnapshot := func() *model.IndexDailyBarsSnapshot {
+		return &model.IndexDailyBarsSnapshot{
+			IndexSymbol: "000300.SH", StartDate: "2026-10-26", EndDate: "2026-10-26",
+			Items: []model.IndexDailyBar{{
+				IndexSymbol: "000300.SH", TradeDate: "2026-10-26",
+				Open: 10, High: 11, Low: 9, Close: 10.5,
+				Volume: &volume, Amount: &amount, VolumeUnit: "shares", AmountUnit: "CNY",
+				Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			}},
+			Total: 1, Source: "tushare", FetchedAt: now, QualityStatus: model.QualityValid,
+		}
+	}
+	t.Run("parent quality", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		if err := validateIndexDailyBarsSnapshot("000300.SH", "2026-10-26", "2026-10-26", snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
+			t.Fatalf("valid parent with degraded child must be rejected, got %v", err)
+		}
+	})
+	t.Run("unknown volume unit", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.Items[0].QualityStatus = model.QualityDegraded
+		snapshot.Items[0].VolumeUnit = "unknown"
+		if err := validateIndexDailyBarsSnapshot("000300.SH", "2026-10-26", "2026-10-26", snapshot); err == nil || !strings.Contains(err.Error(), "unsupported volume_unit") {
+			t.Fatalf("volume with unknown unit must be rejected, got %v", err)
+		}
+	})
+	t.Run("unverified amount unit", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.Items[0].QualityStatus = model.QualityValid
+		snapshot.Items[0].AmountUnit = "provider_defined"
+		if err := validateIndexDailyBarsSnapshot("000300.SH", "2026-10-26", "2026-10-26", snapshot); err == nil || !strings.Contains(err.Error(), "provider_defined amount unit") {
+			t.Fatalf("valid bar with unverified amount unit must be rejected, got %v", err)
+		}
+	})
+	t.Run("non-finite change percent", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		bad := math.NaN()
+		snapshot.Items[0].ChangePercent = &bad
+		if err := validateIndexDailyBarsSnapshot("000300.SH", "2026-10-26", "2026-10-26", snapshot); err == nil || !strings.Contains(err.Error(), "non-finite change_percent") {
+			t.Fatalf("non-finite change percent must be rejected, got %v", err)
+		}
+	})
+}
