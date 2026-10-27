@@ -277,3 +277,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 新增 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL`（人气榜）与 `MARKET_DATA_EASTMONEY_HOT_SURGE_URL`（飙升榜），采用原公开端点作为默认值，纳入统一的绝对 HTTP(S) URL 形态校验，并在启动装配时传入 Provider。
 - 旧的 `NewEastmoneyConfiguredWithAnnouncements` 等构造入口保留默认端点；新增的 `WithHotRankingURLs` 只覆盖非空配置值，因而不改变旧调用者行为。
 - 已补充配置覆盖、非法协议拒绝及旧构造函数兼容的测试源码，并同步根目录与服务级环境模板、服务 README 和迁移矩阵。未执行测试、构建、CI 或真实上游请求；榜单没有可信的源端快照时间，响应仍应保持 `degraded`。
+
+
+### 服务级环境模板请求超时同步（2026-10-27）
+
+- 复核发现根目录 `.env.example` 和 Go 配置默认值已采用 `MARKET_DATA_REQUEST_TIMEOUT=5m`，但 `services/market-data/.env.example` 仍保留旧的 `3m`。该值低于默认 Provider 链的保守重试/回退预算，独立使用服务级模板可能触发启动阶段的超时预算校验失败。
+- 已将服务级模板同步为 `5m`，并注释预算缘由。该修复只改环境示例与状态文档；未运行测试、构建、CI 或真实 Provider 请求。
