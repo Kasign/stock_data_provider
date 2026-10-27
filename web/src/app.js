@@ -377,15 +377,26 @@ function renderResearchStockList() {
   const quote = state.quote && typeof state.quote === "object" ? state.quote : null;
   let currentSymbol = "";
   try { currentSymbol = quote ? normalizeSymbol(quote.symbol || "") : ""; } catch { currentSymbol = ""; }
-  const items = records.map((record) => ({ symbol: record.symbol, name: record.name || record.symbol }));
-  if (currentSymbol && !items.some((item) => item.symbol === currentSymbol)) items.unshift({ symbol: currentSymbol, name: quote.name || currentSymbol });
+  const items = records.map((record) => {
+    let symbol = String(record.symbol || "");
+    try { symbol = normalizeSymbol(symbol); } catch { /* 不规范本地条目保留原始值并显示未加载。 */ }
+    return { symbol, name: record.name || symbol };
+  });
+  if (currentSymbol && !items.some((item) => item.symbol === currentSymbol)) {
+    items.unshift({ symbol: currentSymbol, name: quote.name || currentSymbol });
+  }
   if (!items.length) {
     const tr = document.createElement("tr"), td = document.createElement("td");
-    td.colSpan = 9; td.className = "table-empty";
+    td.colSpan = 10; td.className = "table-empty";
     td.textContent = "当前没有自选股或已查询标的。可以先搜索股票，或在行情页加入自选。";
     tr.append(td); root.append(tr); setText("#research-list-scope", "当前浏览器 · 无标的"); return;
   }
-  const latest = [...state.technicalRows].reverse().find((row) => row && row.close !== null && row.close !== undefined) || null;
+  const technicalSymbol = state.quote?.symbol
+    ? (() => { try { return normalizeSymbol(state.quote.symbol); } catch { return ""; } })()
+    : "";
+  const latest = technicalSymbol && technicalSymbol === currentSymbol
+    ? [...state.technicalRows].reverse().find((row) => row && row.close !== null && row.close !== undefined) || null
+    : null;
   items.forEach((item) => {
     const isCurrent = Boolean(currentSymbol) && item.symbol === currentSymbol && Boolean(quote);
     const tr = document.createElement("tr"), nameCell = document.createElement("td");
@@ -401,7 +412,9 @@ function renderResearchStockList() {
       makeCell(isCurrent ? missing(quote.turnover_rate == null ? null : formatPercent(quote.turnover_rate)) : "未加载"),
       makeCell(isCurrent ? missing(quote.volume_ratio == null ? null : Number(quote.volume_ratio).toFixed(2)) : "未加载"),
       makeCell(isCurrent && Number.isFinite(latest?.ma5) ? latest.ma5.toFixed(2) : "—"),
-      makeCell(isCurrent && Number.isFinite(latest?.ma20) ? latest.ma20.toFixed(2) : "—")
+      makeCell(isCurrent && Number.isFinite(latest?.ma20) ? latest.ma20.toFixed(2) : "—"),
+      makeCell(isCurrent ? qualityLabel(quote.quality_status) : "未加载",
+        isCurrent ? "mini-quality mini-quality-" + String(quote.quality_status || "unknown").toLowerCase() : "")
     );
     const actionCell = document.createElement("td"), action = document.createElement("button");
     action.type = "button"; action.className = "button button-secondary research-list-action";
@@ -428,6 +441,7 @@ function renderWatchlist(records = safeReadWatchlist()) {
     empty.className = "empty-row";
     empty.textContent = "暂无自选股。可先在上方输入代码，再点击“加入自选”。";
     root.append(empty);
+    renderResearchStockList();
     return;
   }
 
