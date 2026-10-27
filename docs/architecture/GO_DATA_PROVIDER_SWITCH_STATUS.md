@@ -320,3 +320,11 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 静态检查 `docker-compose.yml` 后确认 `stock-analysis-data` 的 `env_file` 是仓库根目录 `.env`；`services/market-data/.env.example` 只是服务级手工部署模板，根 Compose 不会自动加载它。
 - 根 `.env.example` 原先缺少多项虽已由 Go 配置读取、并通过启动 URL 形态校验的国内端点覆盖变量：东方财富行情、日 K、基础资料、板块、指数、市场广度、涨跌停池、所属板块、龙虎榜、公告；腾讯行情与日 K；新浪报价；以及雪球可选源配置。现已按 `config.go` 中的默认值补齐根模板，并补入东方财富公共 web token 的可选覆盖项。
 - 保留原有默认 endpoint 与能力开关，不更改任何 Provider 的默认启停策略；这次只让 Compose 部署者更容易显式覆盖地址，避免误以为服务级模板会由根 Compose 自动加载。未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 国内 Provider 静态 Review 补充（2026-10-27，本轮待统一验收）
+
+- **Tushare StockBasic 证券范围**：格式合法的六位代码不等于 A 股普通股票。现在先按普通 A 股代码范围校验，ETF/基金及不支持的证券在发起上游请求前拒绝；未知或缺失的 `market` 不再默认映射为“主板股票”。
+- **Tushare 日 K 响应字段表**：日 K 入口与其他 Tushare 能力采用一致的严格表头规则，拒绝空字段名和重复列名，避免重复列导致索引覆盖及字段错读。
+- **估值快照时点**：服务层拒绝无效或晚于中国市场当前日期的 `provider_report_date`，拒绝零值或超过当前时间 60 秒的 `provider_timestamp`；缺少报告日期/精确时间的估值不能标记为 valid。
+- 已新增对应回归测试源码。以上变更均只做了静态源码核对，**没有执行测试、构建、CI 或真实 Provider 请求**；仍需后续统一回归。
