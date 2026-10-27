@@ -3541,3 +3541,61 @@ td {
  .research-overview-actions { display:grid; grid-template-columns:minmax(0,1fr); }
  .research-overview-actions button { width:100%; }
 }
+
+
+/* 个股研究专业详情锚点导航：桌面保持可见，窄屏横向滚动。 */
+.research-detail-nav {
+  position: sticky;
+  top: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--text) 7%, transparent);
+}
+.research-detail-nav-label {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 650;
+}
+.research-detail-nav-link {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text-dim);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+.research-detail-nav-link:hover { color: var(--text); background: var(--panel-raised); }
+.research-detail-nav-link.is-active,
+.research-detail-nav-link[aria-current="location"] {
+  border-color: var(--border);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.stock-research-grid > article[id^="research-detail-"] { scroll-margin-top: 88px; }
+@media (max-width: 700px) {
+  .research-detail-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 7px;
+  }
+  .research-detail-nav-label { position: sticky; left: 0; background: var(--panel); }
+  .research-detail-nav-link { min-height: 36px; padding: 0 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .research-detail-nav-link { transition: none; } }
