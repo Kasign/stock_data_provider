@@ -1272,3 +1272,83 @@ func TestStockBasicDoesNotPromoteUnknownProviderQuality(t *testing.T) {
 		t.Fatalf("downgraded stock-basic record is missing its quality reason: %+v", got.QualityReasons)
 	}
 }
+
+
+type supplementCountingFakeProvider struct {
+	chip      *model.ChipDistribution
+	flow      *model.CapitalFlow
+	chipCalls int
+	flowCalls int
+}
+
+func (p *supplementCountingFakeProvider) Name() string { return "miaoxiang" }
+
+func (p *supplementCountingFakeProvider) FetchChipDistribution(context.Context, string) (*model.ChipDistribution, error) {
+	p.chipCalls++
+	return p.chip, nil
+}
+
+func (p *supplementCountingFakeProvider) FetchCapitalFlow(context.Context, string) (*model.CapitalFlow, error) {
+	p.flowCalls++
+	return p.flow, nil
+}
+
+func TestSupplementCachesReuseProviderContractValidation(t *testing.T) {
+	now := time.Now().UTC()
+	t.Run("invalid chip ratio cache is bypassed", func(t *testing.T) {
+		badRatio, goodRatio := 1.2, 0.8
+		cached := &model.ChipDistribution{
+			Symbol: "600519.SH", AverageCost: 12.5, ProfitRatio: &badRatio,
+			Source: "miaoxiang", SourceVersion: "test", FetchedAt: now.Add(-time.Minute),
+			QualityStatus: model.QualityDegraded,
+		}
+		encoded, err := json.Marshal(cached)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mem := newMemoryCache()
+		mem.values["md:v1:chip:600519.SH"] = encoded
+		p := &supplementCountingFakeProvider{chip: &model.ChipDistribution{
+			Symbol: "600519.SH", AverageCost: 12.5, ProfitRatio: &goodRatio,
+			SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}}
+		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
+			ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+		svc.SetSupplementProviders([]provider.SupplementProvider{p})
+		got, hit, err := svc.ChipDistribution(context.Background(), "600519")
+		if err != nil || hit || p.chipCalls != 1 {
+			t.Fatalf("invalid cached chip ratio should trigger provider refresh: hit=%v calls=%d err=%v", hit, p.chipCalls, err)
+		}
+		if got.ProfitRatio == nil || *got.ProfitRatio != goodRatio {
+			t.Fatalf("fresh chip ratio was not returned: %+v", got)
+		}
+	})
+	t.Run("incomplete flow sum cache is bypassed", func(t *testing.T) {
+		badFiveDay, goodFiveDay := 300.0, 500.0
+		cached := &model.CapitalFlow{
+			Symbol: "600519.SH", Observations: 2, Inflow5D: &badFiveDay,
+			Source: "miaoxiang", SourceVersion: "test", FetchedAt: now.Add(-time.Minute),
+			QualityStatus: model.QualityDegraded,
+		}
+		encoded, err := json.Marshal(cached)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mem := newMemoryCache()
+		mem.values["md:v1:capital-flow:600519.SH"] = encoded
+		p := &supplementCountingFakeProvider{flow: &model.CapitalFlow{
+			Symbol: "600519.SH", Observations: 5, Inflow5D: &goodFiveDay,
+			SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}}
+		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
+			ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+		svc.SetSupplementProviders([]provider.SupplementProvider{p})
+		got, hit, err := svc.CapitalFlow(context.Background(), "600519")
+		if err != nil || hit || p.flowCalls != 1 {
+			t.Fatalf("incomplete cached five-day sum should trigger provider refresh: hit=%v calls=%d err=%v", hit, p.flowCalls, err)
+		}
+		if got.Inflow5D == nil || *got.Inflow5D != goodFiveDay {
+			t.Fatalf("fresh capital-flow sum was not returned: %+v", got)
+		}
+	})
+}
