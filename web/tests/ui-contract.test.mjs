@@ -154,21 +154,20 @@ test("daily chart exposes close/candle modes, optional date filters and adjustme
 });
 
 
-test("supplemental chip and capital-flow research remains opt-in and independently reports each result", () => {
-  for (const id of ["load-supplemental-button", "supplemental-feedback", "chip-quality", "chip-error", "chip-profit-ratio", "flow-quality", "flow-error", "flow-main-inflow", "flow-inflow-5d", "flow-inflow-10d"]) {
-    assert.match(html, new RegExp('id="' + id + '"'), "supplemental field must exist: " + id);
+test("individual stock research uses one detail workspace without duplicate chip/flow fetches", () => {
+  for (const id of ["research-stock-list-body", "research-overview-panel", "research-overview-price", "research-overview-ma5", "research-overview-quality", "research-open-chart", "research-add-watchlist", "research-start-analysis", "stock-research-panel", "chip-quality", "load-chip-distribution", "capital-flow-quality", "load-capital-flow"]) {
+    assert.ok(html.includes('id="' + id + '"'), "research field must exist: " + id);
   }
-  assert.match(apiClient, /\/api\/v1\/stocks\/\$\{encodeURIComponent\(symbol\)\}\/chip-distribution/);
-  assert.match(apiClient, /\/api\/v1\/stocks\/\$\{encodeURIComponent\(symbol\)\}\/capital-flow/);
-  assert.match(app, /Promise\.allSettled\(\[[\s\S]*?getChipDistribution\(state\.settings, symbol\)[\s\S]*?getCapitalFlow\(state\.settings, symbol\)/);
-  assert.match(app, /function formatRatioPercent\(value\)/);
-  assert.match(app, /function renderSupplementError\(kind, error\)/);
-  assert.match(app, /resetSupplementPanel\(symbol\)/);
-  assert.match(stylesheet, /\.supplemental-grid/);
-  assert.match(stylesheet, /\.supplement-quality-degraded/);
+  assert.ok(!html.includes('id="stock-supplemental-panel"'), "old duplicate chip/flow panel must be gone");
+  assert.ok(app.includes("function renderResearchOverview()"));
+  assert.ok(app.includes('function openResearchStock(symbol, name = "")'));
+  assert.ok(app.includes("await stockResearch.refresh()"));
+  assert.ok(!app.includes("loadSupplementalData") && !app.includes("resetSupplementPanel"));
+  assert.ok(apiClient.includes("/chip-distribution") && apiClient.includes("/capital-flow"));
+  assert.ok(stockResearch.includes("getChipDistribution") && stockResearch.includes("getCapitalFlow"));
+  assert.ok(stockResearch.includes("async function refresh()"));
+  assert.ok(stylesheet.includes(".research-overview-grid") && stylesheet.includes(".supplement-quality-degraded"));
 });
-
-
 test("market overview refresh summary is protected from an older overlapping refresh", () => {
   assert.match(marketOverview, /refreshGeneration=0/);
   assert.match(marketOverview, /const currentGeneration=\+\+refreshGeneration/);
