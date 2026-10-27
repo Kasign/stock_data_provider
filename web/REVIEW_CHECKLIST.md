@@ -3,7 +3,7 @@
 更新时间：2026-10-27  
 仓库：`Kasign/stock_data_provider`  
 工作分支：`feat/webui-market-data-console`  
-本轮 Review 起始 HEAD：`67aaf3f9fd1ba0bea99845eae601ecaf57a483cb`  
+本轮 Review 起始 HEAD：`42c6d413714c479cbabedd21f1b91980adf71bad`（后续样式整理提交会触发新的 Actions）  
 范围：只修改 `web/`；不修改 Go、Provider、数据库、API 契约、根目录 Compose 或数据分支。
 
 ## 已完成的源码 Review 与改进
@@ -18,11 +18,11 @@
 | 过期/旧请求结果 | 主行情、个股研究和市场总览已有请求代次/取消保护；新个股查询会先清理旧行情及日 K | 保留既有保护逻辑，不改其状态契约 |
 | API 失败状态 | 已有逻辑可区分未接入（404）、Provider 不可用（503）、鉴权失败（401/403）及普通错误；市场总览有刷新结果汇总 | 不引入新的状态推断，不把空数据解释为零或“市场没有记录” |
 | Run Flow | 以服务端 StageEvent 作为真实时间线；当前无可信 DAG 拓扑快照 | 保留线性事件时间线，不绘制虚构节点、进度百分比或依赖边 |
-| CSS 维护性 | `styles.css` 已积累多个阶段追加的媒体查询与压缩规则，局部层叠规则需要后续分区整理 | 本轮只调整基础控件规则，避免大规模改写破坏既有页面；债务已记录，后续按组件区块集中整理 |
+| CSS 维护性 | `styles.css` 含有历史累积的分散断点；全文件当前约有 67 个媒体查询块 | 已将最新追加的首页快捷入口、Run Flow 与平板查询规则格式化为分区书写，保持选择器/声明/顺序；全局重复断点合并仍待后续分批处理 |
 
 ## 仍需浏览器 / NAS 验收
 
-本清单记录的是源码 Review，**不代表已经在真实浏览器或 NAS 上完成验收**。
+本清单记录源码 Review 与自动化验收边界。`42c6d41` 对应的 [Chromium 浏览器烟测](https://github.com/Kasign/stock_data_provider/actions/runs/40441039966) 已通过七种视口检查，但 API 被明确设为 503；**这不代表真实业务 API、深浅主题人工视觉或 NAS/Docker 已验收**。
 
 | 视口宽度 | 必查内容 |
 |---:|---|
@@ -42,7 +42,7 @@
 
 ## 下一轮建议
 
-先集中整理 `styles.css` 中的全局 token、组件基础规则和重复媒体查询，再依据上面视口矩阵做真实浏览器验收。该整理应按页面区块逐批进行，不要一次性重写整份样式表。
+最新追加的工作台/Run Flow/平板查询规则已完成第一阶段格式化整理。下一步分区梳理旧样式中的 token 和重复媒体查询，再按上方视口矩阵完成人工浏览器、主题/键盘与真实 API/NAS 验收；不一次性重写整份样式表。
 
 
 ## 2026-10-27 工作台重排专项验收
@@ -65,7 +65,7 @@
 ## GitHub Actions 浏览器验收
 
 - 工作流：.github/workflows/webui-browser-smoke.yml，推送到 feat/webui-market-data-console 且修改 WebUI 文件时自动执行，也支持手动触发。
-- 使用 Chromium 实际打开原生 HTML/CSS/ES Modules 页面；测试 320、375、600、768、900、1280、1600 px 七种宽度。
+- 使用 Chromium 实际打开原生 HTML/CSS/ES Modules 页面；在 `42c6d41` 基线上已测试 320、375、600、768、900、1280、1600 px 七种宽度。后续样式整理提交需查看其自己的 Actions 结果。
 - 检查主导航切页、页面水平溢出、Run Flow 对话框边界，以及宽屏双栏 / 窄屏单栏切换。
-- 浏览器测试只将 API 请求设为明确的 503 不可用状态，不伪造行情、任务或阶段事件；不替代 NAS/Docker/OpenResty 和真实后端验收。
+- 浏览器测试只将 API 请求设为明确的 503 不可用状态，不伪造行情、任务或阶段事件；已通过的运行是 [#40441039966](https://github.com/Kasign/stock_data_provider/actions/runs/40441039966)，不替代 NAS/Docker/OpenResty 和真实后端验收。
 - 每次运行上传首页与 Run Flow 截图为 GitHub Actions Artifact，保留 7 天，供人工查看实际渲染。

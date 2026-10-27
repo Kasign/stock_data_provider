@@ -3,15 +3,15 @@
 最后更新：2026-10-27
 用途：从新对话恢复 stock_data_provider WebUI 产品扩展与阶段 Review。
 
-## 当前 GitHub 真值（2026-10-27；全站易用性 Review 前核实）
+## 当前 GitHub 状态（2026-10-27；状态须以 PR/Actions 实时页面为准）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 工作分支：`feat/webui-market-data-console`；编辑前 HEAD：`dce4b5b03d8c722fb13f73d72fa767b76ee703ca`。
+- WebUI 工作分支：`feat/webui-market-data-console`；本次样式整理前已核实 HEAD：`42c6d413714c479cbabedd21f1b91980adf71bad`，提交后以 PR #13 最新 head SHA 为准。
 - WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，标题 `WebUI: improve market readability and refresh diagnostics`，状态 Open、未合并、mergeable；head 与 WebUI 分支一致，base 为 `feat/full-go-data-providers-api-switch`。
-- 本轮开工时，基线 SHA `67aaf3f9fd1ba0bea99845eae601ecaf57a483cb` 对应的 WebUI checks [Actions #40436326291](https://github.com/Kasign/stock_data_provider/actions/runs/40436326291) 已成功；本轮新提交的 CI 需以提交后 Actions 实际结果为准。
+- `42c6d41` 对应的 Chromium 视口烟测 [Actions #40441039966](https://github.com/Kasign/stock_data_provider/actions/runs/40441039966) 与 WebUI checks [Actions #40441045323](https://github.com/Kasign/stock_data_provider/actions/runs/40441045323) 均已成功；前者将 API 请求显式设为 503，不能替代真实 API/NAS 验收。后续样式整理提交的新 CI 需以新 HEAD 对应 Actions 为准。
 - PR #2 已关闭并合并，旧的 PR #2 HEAD 不再作为本轮基线。数据 PR #1 仍是独立变更流。
 - 本轮只提交到 WebUI 工作分支，改动限定在 `web/**`；不合并 PR、不更新数据分支、不修改 Go/Provider/数据库/API/Compose。
-- 本轮 Review 优先改善长行情页定位与全站信息可读性。真实浏览器与 NAS/Docker/OpenResty 实测仍由后续统一验收。
+- 本轮继续处理 CSS 可维护性与文档状态一致性；浏览器烟测已做自动化覆盖，深浅主题、键盘交互、真实后端与 NAS/Docker/OpenResty 仍由后续统一验收。
 
 ## 本轮已交付且尚未做运行时验收的事项
 
@@ -420,3 +420,12 @@
 - 新页面分工：行情总览（核心指数/涨跌分布）、市场数据（行业/概念、涨跌停、人气榜、龙虎榜、交易日历）、个股查询（搜索/行情/K 线/技术指标）、自选股（本地列表）、个股研究（公司资料/财务/估值/筹码/资金流/公告）、分析任务（Task/Run/StageEvent）。
 - 运行流借鉴 daily_stock_analysis 的顶部摘要、可筛选事件列表和详情分栏，改成近全屏；桌面并排展示，窄屏上下排列。当前数据层没有可信 DAG 拓扑，禁止创建假拓扑或进度百分比。
 - 变更仅限 `web/**`。新提交的 Actions 作为自动化结果；真实浏览器、NAS/1Panel 与触控验收仍需部署后执行。
+
+
+## 2026-10-27 — Run Flow / CSS 收尾续接
+
+- PR #13 仍保持 Open、未合并；工作范围限定于 `web/**`。不要因为 compare 接口显示 mergeable 就直接合并，须重新比较 WebUI 与数据分支并 Review 冲突/语义差异。
+- CSS 先完成了小范围低风险维护：把文件末尾新增的首页快捷入口、Run Flow 和平板查询表单规则改为多行分区格式；未更改选择器、声明值、规则顺序。历史样式仍约有 67 个媒体查询块，后续按页面逐区处理。
+- 已通过的自动化浏览器烟测只验证固定 API 503 下的导航、视口无横向溢出、Run Flow 弹窗边界与分栏切换；不是真实任务流数据验收。
+- 下一步优先查看本次提交后的 WebUI Actions，再分区清理旧 CSS；之后由用户在真实部署环境统一验收 API Key、中文股票搜索、任务状态/事件轮询、报告恢复、主题与键盘交互。
+- 通知、问股、选股、告警、服务端设置读写、服务端任务列表和可信 DAG 快照仍依赖后端 API；在契约和持久化可用前不得启用伪造操作。

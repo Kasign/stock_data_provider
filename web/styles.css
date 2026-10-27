@@ -2082,83 +2082,394 @@ td {
 
 
 /* 2026-10-27 工作台重排：首页精简，市场与个股相关内容分屏。 */
-.dashboard-shortcuts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:14px; }
-.dashboard-shortcut { display:flex; align-items:center; gap:10px; min-width:0; min-height:74px; padding:12px; border:1px solid var(--border); border-radius:11px; color:var(--text); background:var(--panel); text-align:left; cursor:pointer; transition:background-color .15s ease,border-color .15s ease,transform .15s ease; }
-.dashboard-shortcut:hover { border-color:color-mix(in srgb,var(--accent) 42%,var(--border)); background:var(--panel-raised); }
-.dashboard-shortcut:active { transform:translateY(1px); }
-.dashboard-shortcut-icon { display:grid; place-items:center; flex:0 0 34px; width:34px; height:34px; border:1px solid var(--border); border-radius:9px; color:var(--accent); background:var(--accent-soft); font-size:17px; }
-.dashboard-shortcut-copy { display:flex; flex:1; flex-direction:column; gap:4px; min-width:0; }
-.dashboard-shortcut-copy strong { font-size:12px; font-weight:700; }
-.dashboard-shortcut-copy small { color:var(--text-dim); font-size:10px; line-height:1.45; }
-.dashboard-shortcut-arrow { flex:0 0 auto; color:var(--accent); font-size:16px; }
-#market-data-view > .market-overview-panel { margin-bottom:14px; }
-#market-lists-panel .market-overview-detail-grid { margin-top:0; }
-#stocks-view > #stock-query-panel { margin-bottom:16px; }
-#watchlist-view .watchlist-panel { margin-top:0; }
+.dashboard-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.dashboard-shortcut {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text);
+  background: var(--panel);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.dashboard-shortcut:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: var(--panel-raised);
+}
+
+.dashboard-shortcut:active {
+  transform: translateY(1px);
+}
+
+.dashboard-shortcut-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 17px;
+}
+
+.dashboard-shortcut-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dashboard-shortcut-copy strong {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-shortcut-copy small {
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.dashboard-shortcut-arrow {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 16px;
+}
+
+#market-data-view > .market-overview-panel {
+  margin-bottom: 14px;
+}
+
+#market-lists-panel .market-overview-detail-grid {
+  margin-top: 0;
+}
+
+#stocks-view > #stock-query-panel {
+  margin-bottom: 16px;
+}
+
+#watchlist-view .watchlist-panel {
+  margin-top: 0;
+}
+
 #research-view > .supplemental-panel,
-#research-view > .stock-research-panel { margin-top:14px; scroll-margin-top:18px; }
-#market-overview-panel,#market-lists-panel,#market-activity-panel,#stock-query-panel,#stock-quote-section,#daily-chart-panel,#source-panel,#technical-indicators-panel,#historical-bars-panel,#watchlist-panel,#stock-supplemental-panel,#stock-research-panel { scroll-margin-top:18px; }
+#research-view > .stock-research-panel {
+  margin-top: 14px;
+  scroll-margin-top: 18px;
+}
+
+#market-overview-panel,
+#market-lists-panel,
+#market-activity-panel,
+#stock-query-panel,
+#stock-quote-section,
+#daily-chart-panel,
+#source-panel,
+#technical-indicators-panel,
+#historical-bars-panel,
+#watchlist-panel,
+#stock-supplemental-panel,
+#stock-research-panel {
+  scroll-margin-top: 18px;
+}
 
 /* Run Flow inspired by daily_stock_analysis: summary first, event timeline beside selected-event diagnostics. */
-.run-flow-dialog .run-flow-header { position:sticky; top:-20px; z-index:5; margin:-2px -2px 14px; padding:2px 2px 12px; border-bottom:1px solid var(--border-soft); background:var(--panel); }
-.run-flow-dialog .run-flow-title-group h2 { font-size:21px; }
-.run-flow-dialog .run-flow-header-actions { max-width:62%; }
-.run-flow-dialog #task-detail:not([hidden]) { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr); align-items:start; gap:12px 16px; margin-top:12px; }
-.run-flow-dialog .run-flow-summary { grid-column:1/-1; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:0; }
-.run-flow-dialog .run-flow-summary > div { min-height:68px; padding:10px 12px; }
-.run-flow-dialog .task-id-row,.run-flow-dialog .task-facts,.run-flow-dialog #task-error,.run-flow-dialog #task-result-section,.run-flow-dialog .task-actions { grid-column:1/-1; min-width:0; }
-.run-flow-dialog .task-id-row { margin-top:0; }
-.run-flow-dialog .task-facts { grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; margin-top:0; }
-.run-flow-dialog .task-facts > div { padding:9px 10px; }
-.run-flow-dialog .task-facts small { font-size:10px; line-height:1.4; }
-.run-flow-dialog .task-facts strong { font-size:12px; line-height:1.45; }
-.run-flow-dialog .run-flow-events-column { grid-column:1; min-width:0; }
-.run-flow-dialog .run-flow-events-column .event-heading { align-items:center; justify-content:space-between; gap:10px; margin:0 0 8px; }
-.run-flow-dialog .run-flow-events-column .event-heading h3 { font-size:14px !important; }
-.run-flow-dialog .run-flow-events-column .event-heading span { color:var(--text-dim); font-size:11px !important; }
-.run-flow-dialog .task-events-read-status { margin:0 0 8px; }
-.run-flow-dialog .task-event-filters { margin:0 0 5px; }
-.run-flow-dialog .task-event-filter { min-height:34px; }
-.run-flow-dialog .task-event-filter-summary { margin:5px 0 7px; }
-.run-flow-dialog #task-events { max-height:max(210px,calc(100dvh - 470px)); min-height:170px; overflow:auto; overscroll-behavior:contain; padding-right:4px; }
-.run-flow-dialog .event-row { padding:11px 9px 11px 4px; }
-.run-flow-dialog .event-row-message { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-.run-flow-dialog .task-event-detail { grid-column:2; align-self:stretch; min-width:0; max-height:min(64dvh,720px); overflow:auto; margin-top:0; padding:15px; }
-.run-flow-dialog .task-event-detail[hidden] { display:none !important; }
-.run-flow-dialog .event-detail-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-.run-flow-dialog .event-raw pre { max-height:32dvh; overflow:auto; }
-.run-flow-dialog #task-result-section { margin-top:5px; }
-.run-flow-dialog .task-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:0; }
-.run-flow-dialog #task-poll-label { color:var(--text-dim); font-size:12px; line-height:1.5; }
-:root[data-theme="light"] .run-flow-dialog { box-shadow:0 22px 80px rgba(24,46,60,.18); }
-:root[data-theme="light"] .run-flow-dialog .run-flow-header { background:var(--panel); }
-@media (max-width:1100px) {
-  .dashboard-shortcuts { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .run-flow-dialog .task-facts { grid-template-columns:repeat(3,minmax(0,1fr)); }
-  .run-flow-dialog #task-detail:not([hidden]) { grid-template-columns:minmax(0,1fr) minmax(280px,.85fr); }
+.run-flow-dialog .run-flow-header {
+  position: sticky;
+  top: -20px;
+  z-index: 5;
+  margin: -2px -2px 14px;
+  padding: 2px 2px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--panel);
 }
-@media (max-width:760px) {
-  .run-flow-dialog { inset:1vh 1vw; border-radius:12px; }
-  .run-flow-dialog .task-status-panel { padding:16px 14px 20px; }
-  .run-flow-dialog .run-flow-header { top:-16px; flex-direction:column; padding-top:2px; }
-  .run-flow-dialog .run-flow-header-actions { justify-content:flex-start; max-width:100%; }
-  .run-flow-dialog #task-detail:not([hidden]) { grid-template-columns:minmax(0,1fr); }
-  .run-flow-dialog .run-flow-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .run-flow-dialog .task-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .run-flow-dialog .run-flow-events-column,.run-flow-dialog .task-event-detail { grid-column:1; }
-  .run-flow-dialog #task-events { max-height:42dvh; min-height:150px; }
-  .run-flow-dialog .task-event-detail { max-height:none; }
-  .dashboard-shortcuts { grid-template-columns:minmax(0,1fr); gap:8px; }
-  .dashboard-shortcut { min-height:62px; padding:10px; }
+
+.run-flow-dialog .run-flow-title-group h2 {
+  font-size: 21px;
 }
-@media (prefers-reduced-motion:reduce) { .dashboard-shortcut { transition:none; } }
+
+.run-flow-dialog .run-flow-header-actions {
+  max-width: 62%;
+}
+
+.run-flow-dialog #task-detail:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
+  align-items: start;
+  gap: 12px 16px;
+  margin-top: 12px;
+}
+
+.run-flow-dialog .run-flow-summary {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.run-flow-dialog .run-flow-summary > div {
+  min-height: 68px;
+  padding: 10px 12px;
+}
+
+.run-flow-dialog .task-id-row,
+.run-flow-dialog .task-facts,
+.run-flow-dialog #task-error,
+.run-flow-dialog #task-result-section,
+.run-flow-dialog .task-actions {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.run-flow-dialog .task-id-row {
+  margin-top: 0;
+}
+
+.run-flow-dialog .task-facts {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 0;
+}
+
+.run-flow-dialog .task-facts > div {
+  padding: 9px 10px;
+}
+
+.run-flow-dialog .task-facts small {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.run-flow-dialog .task-facts strong {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.run-flow-dialog .run-flow-events-column {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.run-flow-dialog .run-flow-events-column .event-heading {
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+
+.run-flow-dialog .run-flow-events-column .event-heading h3 {
+  font-size: 14px !important;
+}
+
+.run-flow-dialog .run-flow-events-column .event-heading span {
+  color: var(--text-dim);
+  font-size: 11px !important;
+}
+
+.run-flow-dialog .task-events-read-status {
+  margin: 0 0 8px;
+}
+
+.run-flow-dialog .task-event-filters {
+  margin: 0 0 5px;
+}
+
+.run-flow-dialog .task-event-filter {
+  min-height: 34px;
+}
+
+.run-flow-dialog .task-event-filter-summary {
+  margin: 5px 0 7px;
+}
+
+.run-flow-dialog #task-events {
+  max-height: max(210px, calc(100dvh - 470px));
+  min-height: 170px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.run-flow-dialog .event-row {
+  padding: 11px 9px 11px 4px;
+}
+
+.run-flow-dialog .event-row-message {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.run-flow-dialog .task-event-detail {
+  grid-column: 2;
+  align-self: stretch;
+  min-width: 0;
+  max-height: min(64dvh, 720px);
+  overflow: auto;
+  margin-top: 0;
+  padding: 15px;
+}
+
+.run-flow-dialog .task-event-detail[hidden] {
+  display: none !important;
+}
+
+.run-flow-dialog .event-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.run-flow-dialog .event-raw pre {
+  max-height: 32dvh;
+  overflow: auto;
+}
+
+.run-flow-dialog #task-result-section {
+  margin-top: 5px;
+}
+
+.run-flow-dialog .task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 0;
+}
+
+.run-flow-dialog #task-poll-label {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+:root[data-theme="light"] .run-flow-dialog {
+  box-shadow: 0 22px 80px rgba(24, 46, 60, .18);
+}
+
+:root[data-theme="light"] .run-flow-dialog .run-flow-header {
+  background: var(--panel);
+}
+
+@media (max-width: 1100px) {
+  .dashboard-shortcuts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .run-flow-dialog .task-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .run-flow-dialog #task-detail:not([hidden]) {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, .85fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .run-flow-dialog {
+    inset: 1vh 1vw;
+    border-radius: 12px;
+  }
+
+  .run-flow-dialog .task-status-panel {
+    padding: 16px 14px 20px;
+  }
+
+  .run-flow-dialog .run-flow-header {
+    top: -16px;
+    flex-direction: column;
+    padding-top: 2px;
+  }
+
+  .run-flow-dialog .run-flow-header-actions {
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+
+  .run-flow-dialog #task-detail:not([hidden]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .run-flow-dialog .run-flow-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .run-flow-dialog .task-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .run-flow-dialog .run-flow-events-column,
+  .run-flow-dialog .task-event-detail {
+    grid-column: 1;
+  }
+
+  .run-flow-dialog #task-events {
+    max-height: 42dvh;
+    min-height: 150px;
+  }
+
+  .run-flow-dialog .task-event-detail {
+    max-height: none;
+  }
+
+  .dashboard-shortcuts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .dashboard-shortcut {
+    min-height: 62px;
+    padding: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shortcut {
+    transition: none;
+  }
+}
 
 /* Tablet stock query form: controls wrap before widening the document. */
 @media (min-width: 601px) and (max-width: 1400px) {
-  .search-panel { align-items: stretch; gap: 14px; }
-  .search-intro { min-width: 100%; }
-  .query-form { min-width: 0; flex-wrap: wrap; }
-  .query-form .field:not(.symbol-field) { flex: 1 1 120px; }
-  .query-button, .query-watchlist-button { flex: 1 1 auto; }
-  .query-hint { padding-left: 0; }
+  .search-panel {
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .search-intro {
+    min-width: 100%;
+  }
+
+  .query-form {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .query-form .field:not(.symbol-field) {
+    flex: 1 1 120px;
+  }
+
+  .query-button,
+  .query-watchlist-button {
+    flex: 1 1 auto;
+  }
+
+  .query-hint {
+    padding-left: 0;
+  }
 }
