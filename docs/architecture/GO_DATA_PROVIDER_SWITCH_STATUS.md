@@ -311,3 +311,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 对照 `internal/model.Quote` 与 OpenAPI `Quote` schema 时发现，Go 模型已输出可选的 `quote_time_semantics`，但普通个股报价 schema 遗漏该字段；指数报价 schema 已包含同名字段。
 - 已在 `services/market-data/openapi.yaml` 为个股 `Quote` 补入 `quote_time_semantics` 描述，明确这是供应商 `quote_time` 的语义，而不是采集时间。该字段保持可选，不改变已有 JSON 响应行为。
 - 本次仅更新契约文档和状态记录；未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 根 Compose 环境模板补齐国内上游 URL 覆盖项（2026-10-27）
+
+- 静态检查 `docker-compose.yml` 后确认 `stock-analysis-data` 的 `env_file` 是仓库根目录 `.env`；`services/market-data/.env.example` 只是服务级手工部署模板，根 Compose 不会自动加载它。
+- 根 `.env.example` 原先缺少多项虽已由 Go 配置读取、并通过启动 URL 形态校验的国内端点覆盖变量：东方财富行情、日 K、基础资料、板块、指数、市场广度、涨跌停池、所属板块、龙虎榜、公告；腾讯行情与日 K；新浪报价；以及雪球可选源配置。现已按 `config.go` 中的默认值补齐根模板，并补入东方财富公共 web token 的可选覆盖项。
+- 保留原有默认 endpoint 与能力开关，不更改任何 Provider 的默认启停策略；这次只让 Compose 部署者更容易显式覆盖地址，避免误以为服务级模板会由根 Compose 自动加载。未运行测试、构建、CI 或真实 Provider 请求。
