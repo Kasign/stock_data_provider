@@ -1,15 +1,15 @@
 # WebUI 任务交接上下文
 
-最后更新：2026-10-27
+最后更新：2026-10-27（第一批 UI 实现已提交）
 用途：恢复 WebUI 信息架构规划、数据能力缺口和后续实现任务。
 
-## 当前仓库状态（本轮文档规划前核对）
+## 当前仓库状态（开始本批 UI 实现前核对）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 工作分支：`feat/webui-market-data-console`；本轮规划基线为 `ec3aa3cd529973e57e294c47bf544387f5c56cd4`，后续提交请重新核实远程 HEAD。
+- WebUI 工作分支：`feat/webui-market-data-console`；本轮 UI 实现开始前的基线为 `9a35309a1efeb2fa2d23e6d33b704297d2a5e730`，本轮又新增多个实现提交；继续工作前务必重新核实远程 HEAD。
 - 数据分支：`feat/full-go-data-providers-api-switch`；本轮规划基线为 `df7a4e259734f0043bc0d71372e826bead032902`，后续提交请重新核实远程 HEAD。
 - PR #14：https://github.com/Kasign/stock_data_provider/pull/14，Open、未合并。本轮不合并。
-- 本轮规划文档已先提交于 WebUI 分支；只修改 `web/**` 文档，不涉及 Go/Provider/数据库/Compose 代码，不运行测试、构建、CI 或实时 Provider 请求。
+- 本轮 UI 源码与文档均只修改 `web/**`，没有改 Go/Provider/数据库/Compose，没有合并 PR。按用户要求未运行测试、构建、CI 或真实 Provider 请求；页面功能状态属于源码已提交，尚未运行时验收。
 
 ## 当前有效文档入口
 
@@ -34,6 +34,15 @@
 旧版单股分析闭环任务说明及下方历史记录用于追溯，不再覆盖上述当前有效计划。
 
 ## 本轮已交付且尚未做运行时验收的事项
+
+### 第一批 UI 排版实现（2026-10-27）
+
+- 首页已新增市场情绪即时指标、市场成交额/净流入分区、板块多维榜切换入口、全球市场占位；未接入的数据不使用 mock。
+- 个股研究已新增列表框架，可显示当前已查询股票的真实报价和有效日 K 计算出的 MA5/MA20；其它自选在查询前显示未加载，不触发逐股批量请求。列表与专业详情还需要进一步统一。
+- 数据中心已新增“立即检查”：WebUI 当前路径、行情 API live/ready、分析 API health/ready、分析服务提供的 MariaDB/Redis 依赖状态，以及 Provider capability 清单。Provider capability 显示注册/声明，不冒充实时健康。
+- 实际 Provider/capability 探测仍是数据层缺口；需为后端设计受保护、超时、限流且逐能力独立的诊断 API。市场情绪历史、市场/板块净流入、板块五日与完整排序、全球指数仍记录在 `DATA_CAPABILITY_GAPS.md`。
+- 按用户要求未运行测试、构建、CI 或实际数据源请求；后续请在实机统一验收。
+
 
 - 共享状态契约已添加到数据分支：https://github.com/Kasign/stock_data_provider/blob/5776313e7b50648ea0e7d741c7eb1c02b8d20758/docs/architecture/WEBUI_DATA_STATE_CONTRACT.md。数据层新功能开发前须先阅读它，再对照领域契约与 OpenAPI。
 - WebUI 主行情、日 K、股票搜索、市场总览、健康检查、Provider 清单已补充请求序号/generation 与旧响应保护。
