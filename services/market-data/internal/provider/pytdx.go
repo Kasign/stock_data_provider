@@ -145,14 +145,17 @@ func (p *Pytdx) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote,
 	}
 	defer client.Close()
 
-	response, err := client.GetQuote(strings.Split(symbol, ".")[0])
+	wireSymbol := pytdxWireSymbol(symbol)
+	response, err := client.GetQuote(wireSymbol)
 	if err != nil {
 		return nil, fmt.Errorf("Pytdx quote request: %w", err)
 	}
 	var found *protocol.Quote
-	code := strings.Split(symbol, ".")[0]
+	parts := strings.Split(symbol, ".")
+	code, exchange := parts[0], strings.ToLower(parts[1])
 	for _, item := range response {
-		if item != nil && strings.TrimSpace(item.Code) == code && item.Kline != nil {
+		if item != nil && strings.TrimSpace(item.Code) == code &&
+			strings.EqualFold(item.Exchange.String(), exchange) && item.Kline != nil {
 			found = item
 			break
 		}
@@ -231,6 +234,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 	if err != nil {
 		return nil, err
 	}
+	wireSymbol := pytdxWireSymbol(symbol)
 	switch adjustment {
 	case model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward:
 	default:
@@ -277,7 +281,6 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 	all := make(protocol.Klines, 0, 8000)
 	historyComplete := false
 	startDateReached := false
-	code := strings.Split(symbol, ".")[0]
 	for page := 0; page < pytdxMaxHistoryPage; page++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -286,7 +289,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			return nil, err
 		}
 		offset := uint16(page * pytdxPageSize)
-		response, requestErr := client.GetKlineDay(code, offset, pytdxPageSize)
+		response, requestErr := client.GetKlineDay(wireSymbol, offset, pytdxPageSize)
 		if requestErr != nil {
 			return nil, fmt.Errorf("Pytdx daily K-line page %d: %w", page+1, requestErr)
 		}
@@ -337,7 +340,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		if err := p.waitForRateLimit(ctx); err != nil {
 			return nil, err
 		}
-		gbbq, gbbqErr := client.GetGbbq(code)
+		gbbq, gbbqErr := client.GetGbbq(wireSymbol)
 		if gbbqErr != nil {
 			return nil, fmt.Errorf("Pytdx ex-rights/ex-dividend data required for %q adjustment: %w", adjustment, gbbqErr)
 		}
@@ -442,9 +445,23 @@ func pytdxDomesticSymbol(raw string) (string, error) {
 	}
 	parts := strings.Split(symbol, ".")
 	if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") {
-		return "", fmt.Errorf("Pytdx adapter only accepts domestic SH/SZ/BJ securities, got %q", raw)
+		return "", fmt.Errorf("Pytdx adapter only accepts domestic SH/SZ/BJ equities, got %q", raw)
+	}
+	wireSymbol := pytdxWireSymbol(symbol)
+	if wireSymbol == "" || !protocol.IsStock(wireSymbol) {
+		return "", fmt.Errorf("Pytdx adapter only accepts A-share equity codes, not index or unsupported security %q", raw)
 	}
 	return symbol, nil
+}
+
+// pytdxWireSymbol 将规范化证券代码转换为通达信要求的交易所前缀格式。
+// 必须保留显式交易所后缀，不能仅凭 6 位数字重新推断交易所。
+func pytdxWireSymbol(symbol string) string {
+	parts := strings.Split(symbol, ".")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return ""
+	}
+	return strings.ToLower(parts[1]) + parts[0]
 }
 
 func pytdxPositiveFinite(value float64) bool {
