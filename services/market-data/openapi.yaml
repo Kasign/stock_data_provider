@@ -704,6 +704,7 @@ components:
         stock_search_capable: {type: boolean}
         sector_ranking_capable: {type: boolean}
         index_quote_capable: {type: boolean}
+        index_catalog_capable: {type: boolean}
         market_breadth_capable: {type: boolean}
         limit_pool_capable: {type: boolean}
         stock_boards_capable: {type: boolean}
