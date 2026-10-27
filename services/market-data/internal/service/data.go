@@ -542,7 +542,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	key := fmt.Sprintf("md:v1:limit-pool:%s:%s:%d", poolType, date, limit)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.LimitPoolSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateLimitPoolSnapshot(poolType, date, limit, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+		if json.Unmarshal(data, &cached) == nil && cached.HasData && validateLimitPoolSnapshot(poolType, date, limit, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
 			// 兼容升级前缓存：若供应商总数大于实际条数，不能沿用缓存中的 valid。
 			markLimitPoolTruncated(&cached)
 			return &cached, true, nil
@@ -554,6 +554,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 		return nil, false, errors.New("no enabled limit-pool provider")
 	}
 	var failures []string
+	var unknownEmpty *model.LimitPoolSnapshot
 	for _, p := range s.limitPoolProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -567,6 +568,12 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if !snapshot.HasData {
+			// Unknown empty is not proof of zero events; continue to the next source.
+			unknownEmpty = snapshot
+			failures = append(failures, p.Name()+": empty pool is unknown, not confirmed zero")
+			continue
+		}
 		// total 是供应商报告总量；当前接口没有分页游标，未返回完整条数时显式降级。
 		markLimitPoolTruncated(snapshot)
 		if data, err := json.Marshal(snapshot); err == nil {
@@ -575,6 +582,21 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 			}
 		}
 		return snapshot, false, nil
+	}
+	if unknownEmpty != nil {
+		// 所有 Provider 都未能确认空池为真实零事件时，保留 unknown；不缓存，避免下一次请求跳过重新回退。
+		const reason = "limit_pool_fallback_exhausted_without_confirmed_data"
+		alreadyPresent := false
+		for _, existing := range unknownEmpty.QualityReasons {
+			if existing == reason {
+				alreadyPresent = true
+				break
+			}
+		}
+		if !alreadyPresent {
+			unknownEmpty.QualityReasons = append(unknownEmpty.QualityReasons, reason)
+		}
+		return unknownEmpty, false, nil
 	}
 	return nil, false, fmt.Errorf("all limit-pool providers failed: %s", strings.Join(failures, "; "))
 }

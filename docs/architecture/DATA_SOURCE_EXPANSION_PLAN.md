@@ -391,3 +391,8 @@ Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次
 ## 2026-10-27 国内个股资金流接入进度
 
 东方财富公开日资金流端点已新增独立 `CapitalFlowProvider`，与实时行情、日 K、筹码能力分离，默认启用且可通过 `MARKET_DATA_EASTMONEY_CAPITAL_FLOW_ENABLED` 关闭、通过 `MARKET_DATA_EASTMONEY_CAPITAL_FLOW_URL` 覆盖。当前只依赖日期 `f51` 与主力净流入金额 `f52`，回传最近观测日期，5/10 日汇总严格要求窗口内金额完整；时间可用性无法证明，故始终降级。妙想 MX_API 仍为需 Key 的可选后备。此项完成源码与文档接线，尚未进行真实请求、测试或构建，须纳入统一验收。
+
+
+### 涨跌停池空响应与 Provider 回退（2026-10-27）
+
+空池只有在来源能明确确认零事件时才可表示真实空结果；现有国内源对空列表的契约多为 `unknown`。服务层现对合法的未知空响应继续尝试后续 Provider；仅当回退链耗尽且无源确认有数据时才返回 `quality_unknown`，并增加 `limit_pool_fallback_exhausted_without_confirmed_data`。未知空结果不缓存，避免后续请求被短 TTL 的未知缓存挡住。测试源码已补齐，未运行。

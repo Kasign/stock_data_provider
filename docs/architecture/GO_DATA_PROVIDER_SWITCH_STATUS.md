@@ -619,3 +619,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 已将东方财富公开 `/api/qt/stock/fflow/kline/get` 接入独立 `CapitalFlowProvider`，不再要求资金流 Provider 同时实现筹码分布。读取最近最多 10 个日观测，`f51` 作为 `provider_date`、`f52` 按人民币元解析；仅当 5/10 日窗口内每一条金额均有效时才返回对应合计。
 - 资金流端点、能力开关与 `providers.json`、根/服务环境样例及 OpenAPI 已同步。东方财富优先，旧的 MX `SupplementProvider` 继续作为后备兼容。
 - 本轮只补充源码与契约测试，不执行测试、构建、CI 或真实 Provider 请求。端点访问、字段实际返回、当日未收盘数据语义与全窗口覆盖仍待统一验收；没有把静态接线当作运行验收。
+
+
+### 涨跌停池未知空响应继续回退（2026-10-27）
+
+- Provider 返回 `has_data=false`、`total=0` 且质量为 `unknown` 时，只表示无法确认当日是否确实没有事件；服务层现在继续尝试后续 Provider，不会将其当作成功结果提前终止回退。
+- 若所有 Provider 都没有提供可确认的池数据，但至少一个返回了契约合法的未知空响应，则返回 `quality_unknown` 并增加 `limit_pool_fallback_exhausted_without_confirmed_data`。此结果不缓存，避免下一次请求继续跳过回退链。没有未知空响应、且所有源都报错或违反契约时，仍返回明确错误。
+- 已补回归测试源码，覆盖先空后有数据、以及后备耗尽时保留 unknown 的情况；按协作约定未执行测试、构建、CI 或真实 Provider 请求。
