@@ -1253,8 +1253,7 @@ func (p *Hithink) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, start
 			Source: p.Name(), SourceVersion: sourceVersion, ProviderTime: snapshot.ProviderTime,
 			FetchedAt: now, QualityStatus: model.QualityValid,
 		}
-		if row.Volume != nil && hithinkNonNegativeFinite(*row.Volume) && math.Trunc(*row.Volume) == *row.Volume && *row.Volume <= float64(math.MaxInt64) {
-			volume := int64(*row.Volume)
+		if volume, ok := hithinkNonNegativeInt64(row.Volume); ok {
 			bar.Volume = &volume
 			bar.VolumeUnit = "shares"
 		} else {
@@ -1520,8 +1519,7 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	var amount, rawAmount *float64
 	quality := model.QualityDegraded
 	reasons := []string{"provider_quote_timestamp_not_available_for_symbol_query"}
-	if item.Volume != nil && hithinkNonNegativeFinite(*item.Volume) && math.Trunc(*item.Volume) == *item.Volume && *item.Volume <= float64(math.MaxInt64) {
-		v := int64(*item.Volume)
+	if v, ok := hithinkNonNegativeInt64(item.Volume); ok {
 		volume = &v
 		vRaw := *item.Volume
 		rawVolume = &vRaw
@@ -1915,11 +1913,11 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 			continue
 		}
 		endValue, ok := hithinkParseFundamentalValue(row["period_end_ms"])
-		if !ok || endValue <= 0 || endValue > float64(math.MaxInt64) {
+		if !ok {
 			continue
 		}
-		rowDate := time.UnixMilli(int64(endValue)).In(loc).Format("2006-01-02")
-		if rowDate == targetReportDate {
+		rowDate, validDate := hithinkDateFromMillis(endValue, loc)
+		if validDate && rowDate == targetReportDate {
 			selected = row
 			break
 		}
@@ -1933,8 +1931,8 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 		QualityStatus: model.QualityValid,
 	}
 	reportDateMS, ok := hithinkParseFundamentalValue(selected["report_date_ms"])
-	if ok && reportDateMS > 0 && reportDateMS <= float64(math.MaxInt64) {
-		section.PublicationDate = time.UnixMilli(int64(reportDateMS)).In(loc).Format("2006-01-02")
+	if publicationDate, validDate := hithinkDateFromMillis(reportDateMS, loc); ok && validDate {
+		section.PublicationDate = publicationDate
 	} else {
 		section.QualityStatus = model.QualityDegraded
 		section.QualityReasons = append(section.QualityReasons, "publication_date_missing_or_invalid")
@@ -2027,11 +2025,11 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			var rawVolume *float64
 			quality := model.QualityValid
 			var reasons []string
-			if item.Volume == nil || !hithinkNonNegativeFinite(*item.Volume) || math.Trunc(*item.Volume) != *item.Volume || *item.Volume > float64(math.MaxInt64) {
+			v, volumeOK := hithinkNonNegativeInt64(item.Volume)
+			if !volumeOK {
 				quality = model.QualityDegraded
 				reasons = append(reasons, "volume_missing_or_invalid")
 			} else {
-				v := int64(*item.Volume)
 				volume = &v
 				raw := *item.Volume
 				rawVolume = &raw
@@ -2161,6 +2159,20 @@ func hithinkDomesticSymbol(raw string) (string, error) {
 
 func hithinkPositiveFinite(value float64) bool {
 	return value > 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func hithinkNonNegativeInt64(value *float64) (int64, bool) {
+	if value == nil || !hithinkNonNegativeFinite(*value) || math.Trunc(*value) != *value || *value >= float64(math.MaxInt64) {
+		return 0, false
+	}
+	return int64(*value), true
+}
+
+func hithinkDateFromMillis(value float64, location *time.Location) (string, bool) {
+	if !hithinkPositiveFinite(value) || math.Trunc(value) != value || value >= float64(math.MaxInt64) {
+		return "", false
+	}
+	return time.UnixMilli(int64(value)).In(location).Format("2006-01-02"), true
 }
 
 func hithinkNonNegativeFinite(value float64) bool {

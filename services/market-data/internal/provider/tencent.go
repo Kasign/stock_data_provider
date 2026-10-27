@@ -318,7 +318,7 @@ func tencentQuoteVolume(fields []string, rawVolume, price float64) (int64, strin
 	if math.IsNaN(rawVolume) || math.IsInf(rawVolume, 0) || rawVolume < 0 {
 		return 0, "unknown", false, errors.New("raw Tencent quote volume must be finite and non-negative")
 	}
-	if rawVolume > float64(math.MaxInt64)/100 {
+	if rawVolume >= float64(math.MaxInt64)/100 {
 		return 0, "unknown", false, errors.New("raw Tencent quote volume overflows normalized shares")
 	}
 	// Tencent's public field 6 does not have a reliable unit declaration across

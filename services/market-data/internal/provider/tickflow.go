@@ -463,7 +463,8 @@ func tickflowFloat(raw json.RawMessage) (float64, error) {
 
 func tickflowInt64(raw json.RawMessage) (int64, error) {
 	value, err := tickflowFloat(raw)
-	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || math.Trunc(value) != value {
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || math.Trunc(value) != value ||
+		value < -float64(math.MaxInt64) || value >= float64(math.MaxInt64) {
 		return 0, errors.New("invalid TickFlow integer")
 	}
 	return int64(value), nil
