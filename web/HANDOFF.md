@@ -3,14 +3,15 @@
 最后更新：2026-10-27
 用途：从新对话恢复 stock_data_provider WebUI 产品扩展与阶段 Review。
 
-## 当前 GitHub 真值（2026-10-27；本轮编辑前核实）
+## 当前 GitHub 真值（2026-10-27；全站易用性 Review 前核实）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 工作分支：feat/webui-market-data-console；本轮开始前 HEAD 为 737153756f76de15157024ae63e528deb3b08757。
-- WebUI PR #2：https://github.com/Kasign/stock_data_provider/pull/2，已关闭并合并到 feat/full-go-data-providers-api-switch；PR #2 当时的 head 是 e0eb44f9505ae9e26b4391ed6e3d76cfb19987db。后续修复已同步到两个分支，当前不以 PR #2 的旧 head 作为编辑基线。
-- 数据分支：feat/full-go-data-providers-api-switch；本轮开始前 HEAD 与 WebUI 分支相同，均为 737153756f76de15157024ae63e528deb3b08757。
-- 数据 PR #1：https://github.com/Kasign/stock_data_provider/pull/1，仍开放，目标为 main。
-- 本轮只对 web/ 内文件做修改；提交目标为 WebUI 分支，不更新数据分支引用。后续编辑前仍须重新核实 HEAD 与 PR 状态。
+- WebUI 工作分支：`feat/webui-market-data-console`；编辑前 HEAD：`dce4b5b03d8c722fb13f73d72fa767b76ee703ca`。
+- WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，标题 `WebUI: improve market readability and refresh diagnostics`，状态 Open、未合并、mergeable；head 与 WebUI 分支一致，base 为 `feat/full-go-data-providers-api-switch`。
+- PR #13 最近一次已确认的 WebUI checks：[Actions #40434835833](https://github.com/Kasign/stock_data_provider/actions/runs/40434835833) 成功；该结果只对应当时的 HEAD，不代表本轮新提交已经通过。
+- PR #2 已关闭并合并，旧的 PR #2 HEAD 不再作为本轮基线。数据 PR #1 仍是独立变更流。
+- 本轮只提交到 WebUI 工作分支，改动限定在 `web/**`；不合并 PR、不更新数据分支、不修改 Go/Provider/数据库/API/Compose。
+- 本轮 Review 优先改善长行情页定位与全站信息可读性。真实浏览器与 NAS/Docker/OpenResty 实测仍由后续统一验收。
 
 ## 本轮已交付且尚未做运行时验收的事项
 

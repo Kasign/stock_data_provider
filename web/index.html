@@ -58,7 +58,24 @@
             <div class="last-updated"><span class="status-dot"></span><span>最近刷新</span><strong id="last-updated">—</strong></div>
           </div>
 
-          <section class="panel market-overview-panel" aria-labelledby="market-overview-title">
+          <nav class="page-jump-nav" aria-label="行情总览快速定位">
+            <span class="page-jump-nav-label">快速定位</span>
+            <div class="page-jump-nav-links">
+              <button class="page-jump-button" type="button" data-scroll-target="market-overview-panel">市场概况</button>
+              <button class="page-jump-button" type="button" data-scroll-target="market-activity-panel">龙虎榜 / 日历</button>
+              <button class="page-jump-button" type="button" data-scroll-target="stock-query-panel">个股查询</button>
+              <button class="page-jump-button" type="button" data-scroll-target="stock-quote-section">行情快照</button>
+              <button class="page-jump-button" type="button" data-scroll-target="daily-chart-panel">走势与 K 线</button>
+              <button class="page-jump-button" type="button" data-scroll-target="source-panel">数据源</button>
+              <button class="page-jump-button" type="button" data-scroll-target="technical-indicators-panel">技术指标</button>
+              <button class="page-jump-button" type="button" data-scroll-target="historical-bars-panel">历史日 K</button>
+              <button class="page-jump-button" type="button" data-scroll-target="stock-supplemental-panel">补充研究</button>
+              <button class="page-jump-button" type="button" data-scroll-target="stock-research-panel">公司资料</button>
+              <button class="page-jump-button page-jump-top" type="button" data-scroll-target="market-view">返回顶部</button>
+            </div>
+          </nav>
+
+          <section class="panel market-overview-panel" id="market-overview-panel" aria-labelledby="market-overview-title">
             <div class="panel-heading market-overview-heading"><div><h2 id="market-overview-title">A 股市场概况</h2><p>核心指数、市场涨跌分布、行业/概念排行与涨跌停池。各模块显示行情服务返回的数据、时间和质量。</p></div><div class="market-overview-actions"><span class="market-overview-updated" id="market-overview-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-overview" type="button">刷新市场数据 ↻</button></div></div>
             <section class="market-overview-index-section" aria-labelledby="market-indices-title"><div class="market-overview-subheading"><h3 id="market-indices-title">核心指数</h3><span id="market-indices-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-index-grid" id="market-index-grid"><p class="market-empty-state">配置行情 API Key 后加载核心指数。</p></div><p class="market-widget-meta" id="market-indices-meta"></p></section>
             <section class="market-breadth-strip" aria-labelledby="market-breadth-title"><div class="market-overview-subheading"><div><h3 id="market-breadth-title">市场涨跌分布</h3><p>样本来自后端分布桶，不代表已独立核验的全市场证券总数。</p></div><span id="market-breadth-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-breadth-values" id="market-breadth-values"><p class="market-empty-state">等待市场广度数据。</p></div><p class="market-widget-meta" id="market-breadth-meta"></p><details class="market-quality-reasons" id="market-breadth-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
@@ -69,7 +86,7 @@
             </div>
           </section>
 
-          <section class="panel market-activity-panel" aria-labelledby="market-activity-title">
+          <section class="panel market-activity-panel" id="market-activity-panel" aria-labelledby="market-activity-title">
             <div class="panel-heading"><div><h2 id="market-activity-title">市场活动与交易日历</h2><p>使用后端龙虎榜与显式交易日历。龙虎榜盘后数据可能延迟发布；交易日不通过星期规则推算。</p></div><span class="soft-badge">真实数据接口</span></div>
             <div class="market-activity-grid">
               <section class="market-activity-widget" aria-labelledby="dragon-tiger-title">
@@ -93,7 +110,7 @@
             </div>
           </section>
 
-          <section class="search-panel panel">
+          <section class="search-panel panel" id="stock-query-panel">
             <div class="search-intro"><div class="panel-kicker">标的查询</div><div class="panel-muted">输入 A 股代码，查看标准化后的上游数据</div></div>
             <form class="query-form" id="quote-form">
               <div class="field symbol-field">
@@ -136,7 +153,7 @@
 
           <div class="notice" id="market-notice" role="status" aria-live="polite" hidden></div>
 
-          <section class="quote-section">
+          <section class="quote-section" id="stock-quote-section">
             <div class="section-heading"><div><h2 id="quote-title">贵州茅台 <span>600519.SH</span></h2><p id="quote-subtitle">实时快照与行情质量</p></div><div class="quote-heading-actions"><div id="quote-quality" class="quality-pill quality-unknown">尚未查询</div><button class="button button-secondary" id="analyze-quote-button" type="button">分析当前股票 <span>→</span></button></div></div>
             <div class="metric-grid" id="metric-grid">
               <article class="metric-card metric-primary"><div class="metric-label">最新价</div><div class="metric-value" id="metric-price">—</div><div class="metric-foot" id="metric-change">等待行情</div></article>
@@ -148,7 +165,7 @@
           </section>
 
           <div class="content-grid">
-            <section class="panel chart-panel">
+            <section class="panel chart-panel" id="daily-chart-panel">
               <div class="panel-heading chart-panel-heading"><div><h2 id="chart-title">收盘价走势</h2><p id="chart-caption">日 K 数据 · 按交易日期升序展示</p></div>
                 <div class="chart-heading-actions">
                   <div class="chart-legend" id="chart-legend"><span></span><span id="chart-legend-label">收盘价</span></div>
@@ -171,14 +188,14 @@
               <div class="chart-foot"><span>价格单位：CNY / 股</span><span id="chart-quality-note">质量状态待确认</span></div>
             </section>
 
-            <section class="panel source-panel">
+            <section class="panel source-panel" id="source-panel">
               <div class="panel-heading"><div><h2>数据源能力</h2><p>后端注册的 Provider 与能力声明</p></div><button class="text-button" id="reload-sources" type="button">刷新 ↻</button></div>
               <div class="source-summary"><strong id="source-count">—</strong><span>个已注册来源</span><span class="source-version" id="normalization-version">归一化版本 —</span></div>
               <div class="source-list" id="data-source-list"><div class="empty-row">填写 API Key 后加载数据源列表。</div></div>
             </section>
           </div>
 
-          <section class="panel technical-panel" aria-labelledby="technical-indicators-title">
+          <section class="panel technical-panel" id="technical-indicators-panel" aria-labelledby="technical-indicators-title">
             <div class="panel-heading technical-panel-heading">
               <div><h2 id="technical-indicators-title">技术指标</h2><p>依据当前已加载的日 K 收盘价本地计算；样本不足时明确留空，不将指标解释为买卖建议。</p></div>
               <span id="technical-indicator-status" class="availability-pill is-readonly">等待日 K 数据</span>
@@ -208,7 +225,7 @@
             <p class="technical-sample-note" id="technical-sample-note">技术指标将在加载日 K 后计算。</p>
           </section>
 
-          <section class="panel bars-panel">
+          <section class="panel bars-panel" id="historical-bars-panel">
             <div class="panel-heading"><div><h2>历史日 K</h2><p id="bars-caption">标准化 OHLC · 复权口径与质量随行返回</p></div><div class="table-meta" id="bars-meta">0 根</div></div>
             <div class="table-scroll">
               <table>
@@ -218,7 +235,7 @@
             </div>
             <div class="table-footer"><span id="bars-warning">显示最近交易日，最新日期在前</span><span id="bars-adjustment">复权口径 —</span></div>
           </section>
-          <section class="panel supplemental-panel" aria-labelledby="supplemental-title">
+          <section class="panel supplemental-panel" id="stock-supplemental-panel" aria-labelledby="supplemental-title">
             <div class="panel-heading supplemental-heading">
               <div><h2 id="supplemental-title">个股补充研究数据</h2><p>按需读取后端现有的筹码分布与个股资金流接口；不参与行情主流程，也不推导买卖结论。</p></div>
               <button class="button button-secondary" id="load-supplemental-button" type="button">加载补充数据</button>
@@ -255,7 +272,7 @@
               </article>
             </div>
           </section>
-          <section class="panel stock-research-panel" aria-labelledby="stock-research-title">
+          <section class="panel stock-research-panel" id="stock-research-panel" aria-labelledby="stock-research-title">
             <div class="panel-heading supplemental-heading"><div><h2 id="stock-research-title">公司资料、财务与公告</h2><p>读取当前股票的真实档案、所属板块、季度财务指标和公告。各数据源独立标注质量与时间。</p></div><button class="button button-secondary" id="load-stock-research" type="button">加载公司资料</button></div>
             <div class="supplemental-context"><span id="stock-research-target">尚未选择标的</span><span>公告默认读取最近 7 个日历日；空结果不代表已确认没有公告。</span></div>
             <p class="supplemental-feedback" id="stock-research-feedback" role="status" aria-live="polite">选择股票后按需加载，公司资料与公告不会阻塞实时行情。</p>

@@ -2874,6 +2874,46 @@ window.addEventListener("resize", () => {
 window.addEventListener("hashchange", () => {
   setView(window.location.hash.slice(1), { updateHash: false });
 });
+
+const pageJumpButtons = Array.from(document.querySelectorAll(".page-jump-button[data-scroll-target]"));
+const pageJumpTargets = pageJumpButtons
+  .filter((button) => button.dataset.scrollTarget !== "market-view")
+  .map((button) => ({ button, target: document.getElementById(button.dataset.scrollTarget) }))
+  .filter(({ target }) => target && target.closest("#market-view"));
+
+function syncPageJumpLocation() {
+  if (state.view !== "market" || pageJumpTargets.length === 0) return;
+  let activeButton = null;
+  for (const entry of pageJumpTargets) {
+    if (entry.target.getBoundingClientRect().top <= 150) activeButton = entry.button;
+    else break;
+  }
+  if (!activeButton && window.scrollY < 250) activeButton = pageJumpButtons[0];
+  pageJumpButtons.forEach((button) => {
+    const active = button === activeButton;
+    button.classList.toggle("is-active", active);
+    if (active) button.setAttribute("aria-current", "location");
+    else button.removeAttribute("aria-current");
+  });
+}
+
+pageJumpButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const target = document.getElementById(button.dataset.scrollTarget);
+    if (!target || (target.id !== "market-view" && !target.closest("#market-view"))) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    const heading = target.matches("h1, h2, h3, .panel-kicker")
+      ? target
+      : target.querySelector("h1, h2, h3, .panel-kicker");
+    if (heading) {
+      heading.setAttribute("tabindex", "-1");
+      heading.focus({ preventScroll: true });
+    }
+    syncPageJumpLocation();
+  });
+});
+window.addEventListener("scroll", syncPageJumpLocation, { passive: true });
 $("#topbar-notifications").addEventListener("click", () => setView("notifications"));
 $("#chat-clear-context").addEventListener("click", () => {
   state.chatStockContext = null;

@@ -1833,3 +1833,218 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   .run-flow-dialog .task-event-filters { gap:5px; }
   .run-flow-dialog .task-event-filter { flex:1 1 calc(50% - 5px); padding:7px 6px; font-size:12px; }
 }
+
+
+/* 全站易用性优化：快速定位、清晰层级与更容易点击的常用控件。 */
+body {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.page-jump-nav {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0 0 18px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+  backdrop-filter: blur(12px);
+}
+
+.page-jump-nav-label {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.page-jump-nav-links {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.page-jump-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-soft);
+  background: var(--panel);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+
+.page-jump-button:hover,
+.page-jump-button:focus-visible {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.page-jump-button.is-active,
+.page-jump-button[aria-current="location"] {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.page-jump-top {
+  margin-left: 4px;
+  color: var(--accent);
+}
+
+#market-view [id="market-overview-panel"],
+#market-view [id="market-activity-panel"],
+#market-view [id="stock-query-panel"],
+#market-view [id="stock-quote-section"],
+#market-view [id="daily-chart-panel"],
+#market-view [id="source-panel"],
+#market-view [id="technical-indicators-panel"],
+#market-view [id="historical-bars-panel"],
+#market-view [id="stock-supplemental-panel"],
+#market-view [id="stock-research-panel"] {
+  scroll-margin-top: 88px;
+}
+
+/* Common controls: improve scanability without changing dense numeric emphasis. */
+.button {
+  min-height: 40px;
+  font-size: 12px;
+}
+
+.field,
+.field > span {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.field input,
+.field select,
+.field textarea {
+  min-height: 40px;
+}
+
+.panel-heading p,
+.section-heading p,
+.page-subtitle,
+.panel-muted,
+.query-hint,
+.field-hint,
+.supplemental-feedback,
+.market-widget-meta,
+.stock-research-footnote {
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.metric-label {
+  font-size: 12px;
+}
+
+.metric-foot {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.quality-pill,
+.availability-pill,
+.supplement-quality {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+th {
+  padding-block: 11px;
+  font-size: 11px;
+}
+
+td {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.text-button {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .page-jump-nav {
+    top: 6px;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 7px 8px;
+  }
+
+  .page-jump-button {
+    padding-inline: 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .page-jump-nav {
+    margin-inline: -2px;
+    padding: 6px;
+    border-radius: 10px;
+  }
+
+  .page-jump-nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .page-jump-nav-links {
+    gap: 5px;
+  }
+
+  .page-jump-button {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .page-jump-top {
+    margin-left: 0;
+  }
+
+  .button {
+    min-height: 40px;
+  }
+
+  .text-button {
+    min-height: 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-jump-button {
+    transition: none;
+  }
+}
