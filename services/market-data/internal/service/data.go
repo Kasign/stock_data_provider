@@ -1293,7 +1293,10 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 	if strings.TrimSpace(item.Source) == "" || item.FetchedAt.IsZero() {
 		return errors.New("chip-distribution source or fetched_at is missing")
 	}
-	if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded && item.QualityStatus != model.QualityUnknown {
+	if item.QualityStatus == model.QualityValid {
+		return errors.New("chip-distribution cannot be valid without verified publication availability time")
+	}
+	if item.QualityStatus != model.QualityDegraded && item.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("chip-distribution quality %q is unsupported", item.QualityStatus)
 	}
 	return nil
@@ -1327,7 +1330,10 @@ func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
 			return errors.New("capital-flow amount is non-finite")
 		}
 	}
-	if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded && item.QualityStatus != model.QualityUnknown {
+	if item.QualityStatus == model.QualityValid {
+		return errors.New("capital-flow cannot be valid without verified publication availability time")
+	}
+	if item.QualityStatus != model.QualityDegraded && item.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("capital-flow quality %q is unsupported", item.QualityStatus)
 	}
 	return nil
