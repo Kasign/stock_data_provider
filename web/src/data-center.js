@@ -121,8 +121,8 @@ function renderProviderCapabilities(payload) {
     const title = document.createElement("strong");
     title.textContent = source.name || "未命名 Provider";
     const state = document.createElement("span");
-    state.className = "source-state " + (source.enabled ? "source-state-on" : "source-state-off");
-    state.textContent = source.enabled ? "已注册 · 未实测" : "已禁用";
+    state.className = "data-center-capability-status";
+    state.textContent = source.enabled ? "已启用 · 未实测" : "已禁用";
 
     top.append(title, state);
     const capabilities = CAPABILITIES.filter(([key]) => source[key] === true);
