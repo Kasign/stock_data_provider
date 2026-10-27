@@ -201,6 +201,105 @@ type marketOverviewFetchResult struct {
 	err       error
 }
 
+type wireStockBoard struct {
+	Code           string    `json:"code"`
+	Name           string    `json:"name"`
+	ChangePercent  *float64  `json:"change_percent"`
+	Source         string    `json:"source"`
+	SourceVersion  string    `json:"source_version"`
+	FetchedAt      time.Time `json:"fetched_at"`
+	QualityStatus  string    `json:"quality_status"`
+	QualityReasons []string  `json:"quality_reasons"`
+}
+
+type wireStockBoardSnapshot struct {
+	Symbol         string           `json:"symbol"`
+	Total          int              `json:"total"`
+	HasData        bool             `json:"has_data"`
+	Items          []wireStockBoard `json:"items"`
+	Source         string           `json:"source"`
+	SourceVersion  string           `json:"source_version"`
+	FetchedAt      time.Time        `json:"fetched_at"`
+	QualityStatus  string           `json:"quality_status"`
+	QualityReasons []string         `json:"quality_reasons"`
+}
+
+type wireFundamentalMetric struct {
+	Key         string  `json:"key"`
+	Name        string  `json:"name"`
+	Value       float64 `json:"value"`
+	Unit        string  `json:"unit"`
+	SourceField string  `json:"source_field"`
+}
+
+type wireFundamentalSection struct {
+	Category        string                  `json:"category"`
+	ReportDate      string                  `json:"report_date"`
+	PublicationDate string                  `json:"publication_date"`
+	HasData         bool                    `json:"has_data"`
+	Metrics         []wireFundamentalMetric `json:"metrics"`
+	QualityStatus   string                  `json:"quality_status"`
+	QualityReasons  []string                `json:"quality_reasons"`
+}
+
+type wireFundamentalsSnapshot struct {
+	Symbol         string                  `json:"symbol"`
+	Year           int                     `json:"year"`
+	Quarter        int                     `json:"quarter"`
+	HasData        bool                    `json:"has_data"`
+	Sections       []wireFundamentalSection `json:"sections"`
+	Source         string                  `json:"source"`
+	SourceVersion  string                  `json:"source_version"`
+	FetchedAt      time.Time               `json:"fetched_at"`
+	QualityStatus  string                  `json:"quality_status"`
+	QualityReasons []string                `json:"quality_reasons"`
+}
+
+type wireChipDistribution struct {
+	Symbol          string    `json:"symbol"`
+	Date            string    `json:"date"`
+	AverageCost     float64   `json:"average_cost"`
+	Cost90Low       *float64  `json:"cost_90_low"`
+	Cost90High      *float64  `json:"cost_90_high"`
+	Cost70Low       *float64  `json:"cost_70_low"`
+	Cost70High      *float64  `json:"cost_70_high"`
+	SourceVersion   string    `json:"source_version"`
+	ProfitRatio     *float64  `json:"profit_ratio"`
+	Concentration90 *float64  `json:"concentration_90"`
+	Concentration70 *float64  `json:"concentration_70"`
+	Source          string    `json:"source"`
+	ProviderDate    string    `json:"provider_date"`
+	FetchedAt       time.Time `json:"fetched_at"`
+	QualityStatus   string    `json:"quality_status"`
+	QualityReasons  []string  `json:"quality_reasons"`
+}
+
+type wireCapitalFlow struct {
+	Symbol         string    `json:"symbol"`
+	SourceVersion  string    `json:"source_version"`
+	MainNetInflow  *float64  `json:"main_net_inflow_yuan"`
+	Inflow5D       *float64  `json:"inflow_5d_yuan"`
+	Inflow10D      *float64  `json:"inflow_10d_yuan"`
+	Observations   int       `json:"observations"`
+	Source         string    `json:"source"`
+	FetchedAt      time.Time `json:"fetched_at"`
+	QualityStatus  string    `json:"quality_status"`
+	QualityReasons []string  `json:"quality_reasons"`
+}
+
+type stockAuxResult struct {
+	kind           string
+	source         string
+	qualityStatus  string
+	qualityReasons []string
+	warning        string
+	err            error
+	fundamentals   map[string]any
+	boards         []map[string]any
+	chip           *domain.ChipDistribution
+	capitalFlow    map[string]any
+}
+
 func (c *Client) FetchStockBundle(ctx context.Context, code string, lookback int, asOf string) (domain.StockBundle, error) {
 	var wire wireBundle
 	path := "/api/v1/bundles/" + url.PathEscape(strings.TrimSpace(code))
@@ -276,9 +375,312 @@ func (c *Client) FetchStockBundle(ctx context.Context, code string, lookback int
 		}
 		out.DailyBars = append(out.DailyBars, bar)
 	}
+	if strings.TrimSpace(asOf) == "" {
+		if err := c.fetchStockAuxiliary(ctx, code, &out); err != nil {
+			return domain.StockBundle{}, err
+		}
+	} else {
+		// Auxiliary endpoints expose current snapshots, not as-of reads.
+		// Never attach a later snapshot to an explicitly timestamped analysis.
+		out.Warnings = appendUniqueWarning(out.Warnings, "native_auxiliary_snapshots_skipped_for_explicit_as_of")
+	}
 	return out, nil
 }
 
+
+func (c *Client) fetchStockAuxiliary(ctx context.Context, code string, out *domain.StockBundle) error {
+	if ctx == nil {
+		return errors.New("stock auxiliary context must not be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	results := make(chan stockAuxResult, 4)
+	go func() { results <- c.fetchFundamentals(ctx, code) }()
+	go func() { results <- c.fetchStockBoards(ctx, code) }()
+	go func() { results <- c.fetchChipDistribution(ctx, code) }()
+	go func() { results <- c.fetchCapitalFlow(ctx, code) }()
+
+	for i := 0; i < 4; i++ {
+		result := <-results
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if result.err != nil {
+			out.Warnings = appendUniqueWarning(out.Warnings, "go_market_data_"+result.kind+"_unavailable")
+			continue
+		}
+		if result.warning != "" {
+			out.Warnings = appendUniqueWarning(out.Warnings, result.warning)
+		}
+		if strings.TrimSpace(result.source) != "" {
+			if out.Sources == nil {
+				out.Sources = make(map[string]string)
+			}
+			out.Sources[result.kind] = result.source
+		}
+		if result.qualityStatus != "" && result.qualityStatus != "valid" {
+			out.Warnings = appendUniqueWarning(out.Warnings, "go_market_data_"+result.kind+"_quality_"+result.qualityStatus)
+		}
+		for _, reason := range result.qualityReasons {
+			reason = strings.TrimSpace(reason)
+			if reason != "" {
+				out.Warnings = appendUniqueWarning(out.Warnings, "go_market_data_"+result.kind+"_quality_reason:"+reason)
+			}
+		}
+		switch result.kind {
+		case "fundamentals":
+			out.Fundamentals = result.fundamentals
+		case "stock_boards":
+			out.Boards = result.boards
+		case "chip_distribution":
+			out.Chip = result.chip
+		case "capital_flow":
+			out.CapitalFlow = result.capitalFlow
+		}
+	}
+	return nil
+}
+
+func (c *Client) fetchFundamentals(ctx context.Context, code string) stockAuxResult {
+	result := stockAuxResult{kind: "fundamentals"}
+	year, quarter := latestCompletedReportPeriod(time.Now())
+	query := url.Values{}
+	query.Set("year", fmt.Sprintf("%d", year))
+	query.Set("quarter", fmt.Sprintf("%d", quarter))
+	var snapshot wireFundamentalsSnapshot
+	path := "/api/v1/stocks/" + url.PathEscape(strings.TrimSpace(code)) + "/fundamentals?" + query.Encode()
+	if err := c.get(ctx, path, &snapshot); err != nil {
+		result.err = err
+		return result
+	}
+	if !sameStockCode(snapshot.Symbol, code) || snapshot.Year != year || snapshot.Quarter != quarter {
+		result.err = errors.New("fundamentals response identity/period mismatch")
+		return result
+	}
+	result.source, result.qualityStatus, result.qualityReasons = snapshot.Source, snapshot.QualityStatus, snapshot.QualityReasons
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		result.err = errors.New("fundamentals response is missing source or fetched_at")
+		return result
+	}
+	if !snapshot.HasData {
+		result.warning = fmt.Sprintf("go_market_data_fundamentals_no_data_for_%d_q%d", year, quarter)
+		return result
+	}
+	if snapshot.QualityStatus != "valid" && snapshot.QualityStatus != "degraded" {
+		result.err = errors.New("fundamentals quality status is not usable")
+		return result
+	}
+	if len(snapshot.Sections) == 0 {
+		result.err = errors.New("fundamentals response has no sections")
+		return result
+	}
+	result.fundamentals = fundamentalsMap(snapshot)
+	return result
+}
+
+func (c *Client) fetchStockBoards(ctx context.Context, code string) stockAuxResult {
+	result := stockAuxResult{kind: "stock_boards"}
+	var snapshot wireStockBoardSnapshot
+	path := "/api/v1/stocks/" + url.PathEscape(strings.TrimSpace(code)) + "/boards"
+	if err := c.get(ctx, path, &snapshot); err != nil {
+		result.err = err
+		return result
+	}
+	if !sameStockCode(snapshot.Symbol, code) {
+		result.err = errors.New("stock boards response symbol mismatch")
+		return result
+	}
+	result.source, result.qualityStatus, result.qualityReasons = snapshot.Source, snapshot.QualityStatus, snapshot.QualityReasons
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		result.err = errors.New("stock boards response is missing source or fetched_at")
+		return result
+	}
+	if !snapshot.HasData {
+		result.warning = "go_market_data_stock_boards_empty_result_is_ambiguous"
+		return result
+	}
+	if snapshot.QualityStatus != "valid" && snapshot.QualityStatus != "degraded" {
+		result.err = errors.New("stock boards quality status is not usable")
+		return result
+	}
+	if snapshot.Total < len(snapshot.Items) {
+		result.err = errors.New("stock boards total is smaller than returned item count")
+		return result
+	}
+	result.boards = make([]map[string]any, 0, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
+			result.err = errors.New("stock board item is missing code or name")
+			result.boards = nil
+			return result
+		}
+		result.boards = append(result.boards, jsonObjectMap(item))
+	}
+	return result
+}
+
+func (c *Client) fetchChipDistribution(ctx context.Context, code string) stockAuxResult {
+	result := stockAuxResult{kind: "chip_distribution"}
+	var snapshot wireChipDistribution
+	path := "/api/v1/stocks/" + url.PathEscape(strings.TrimSpace(code)) + "/chip-distribution"
+	if err := c.get(ctx, path, &snapshot); err != nil {
+		result.err = err
+		return result
+	}
+	if !sameStockCode(snapshot.Symbol, code) {
+		result.err = errors.New("chip distribution response symbol mismatch")
+		return result
+	}
+	result.source, result.qualityStatus, result.qualityReasons = snapshot.Source, snapshot.QualityStatus, snapshot.QualityReasons
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
+		result.err = errors.New("chip distribution response is missing source or fetched_at")
+		return result
+	}
+	if snapshot.QualityStatus != "valid" && snapshot.QualityStatus != "degraded" {
+		result.err = errors.New("chip distribution quality status is not usable")
+		return result
+	}
+	if snapshot.AverageCost <= 0 || math.IsNaN(snapshot.AverageCost) || math.IsInf(snapshot.AverageCost, 0) {
+		result.warning = "go_market_data_chip_distribution_average_cost_unavailable"
+	} else {
+		average := snapshot.AverageCost
+		result.chip = &domain.ChipDistribution{CostAverage: &average}
+	}
+	if result.chip == nil {
+		result.chip = &domain.ChipDistribution{}
+	}
+	result.chip.ProfitRatio = usableFiniteValue(snapshot.ProfitRatio)
+	result.chip.Concentration90 = usableFiniteValue(snapshot.Concentration90)
+	result.chip.Concentration70 = usableFiniteValue(snapshot.Concentration70)
+	result.chip.Raw = jsonObjectMap(snapshot)
+	if result.chip.CostAverage == nil && result.chip.ProfitRatio == nil &&
+		result.chip.Concentration90 == nil && result.chip.Concentration70 == nil {
+		result.chip = nil
+		result.warning = "go_market_data_chip_distribution_has_no_usable_metrics"
+	}
+	return result
+}
+
+func (c *Client) fetchCapitalFlow(ctx context.Context, code string) stockAuxResult {
+	result := stockAuxResult{kind: "capital_flow"}
+	var snapshot wireCapitalFlow
+	path := "/api/v1/stocks/" + url.PathEscape(strings.TrimSpace(code)) + "/capital-flow"
+	if err := c.get(ctx, path, &snapshot); err != nil {
+		result.err = err
+		return result
+	}
+	if !sameStockCode(snapshot.Symbol, code) {
+		result.err = errors.New("capital flow response symbol mismatch")
+		return result
+	}
+	result.source, result.qualityStatus, result.qualityReasons = snapshot.Source, snapshot.QualityStatus, snapshot.QualityReasons
+	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() || snapshot.Observations < 0 {
+		result.err = errors.New("capital flow response metadata or observation count is invalid")
+		return result
+	}
+	if snapshot.QualityStatus != "valid" && snapshot.QualityStatus != "degraded" {
+		result.err = errors.New("capital flow quality status is not usable")
+		return result
+	}
+	if usableFiniteValue(snapshot.MainNetInflow) == nil && usableFiniteValue(snapshot.Inflow5D) == nil &&
+		usableFiniteValue(snapshot.Inflow10D) == nil {
+		result.warning = "go_market_data_capital_flow_has_no_usable_metrics"
+		return result
+	}
+	result.capitalFlow = jsonObjectMap(snapshot)
+	return result
+}
+
+func latestCompletedReportPeriod(now time.Time) (int, int) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		location = time.FixedZone("CST", 8*60*60)
+	}
+	now = now.In(location)
+	quarter := (int(now.Month())-1)/3 + 1
+	if quarter == 1 {
+		return now.Year() - 1, 4
+	}
+	return now.Year(), quarter - 1
+}
+
+func sameStockCode(left, right string) bool {
+	canonical := func(value string) string {
+		value = strings.ToUpper(strings.TrimSpace(value))
+		if index := strings.IndexByte(value, '.'); index >= 0 {
+			value = value[:index]
+		}
+		if len(value) == 8 && (strings.HasPrefix(value, "SH") || strings.HasPrefix(value, "SZ")) {
+			value = value[2:]
+		}
+		return value
+	}
+	return canonical(left) != "" && canonical(left) == canonical(right)
+}
+
+func usableFiniteValue(value *float64) *float64 {
+	if value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+func jsonObjectMap(input any) map[string]any {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return nil
+	}
+	var result map[string]any
+	if err := json.Unmarshal(encoded, &result); err != nil {
+		return nil
+	}
+	return result
+}
+
+func fundamentalsMap(snapshot wireFundamentalsSnapshot) map[string]any {
+	sections := make([]map[string]any, 0, len(snapshot.Sections))
+	metrics := make(map[string]any)
+	seen := make(map[string]bool)
+	duplicates := make(map[string]bool)
+	for _, section := range snapshot.Sections {
+		sectionMetrics := make([]wireFundamentalMetric, 0, len(section.Metrics))
+		for _, metric := range section.Metrics {
+			if strings.TrimSpace(metric.Key) == "" || math.IsNaN(metric.Value) || math.IsInf(metric.Value, 0) {
+				continue
+			}
+			sectionMetrics = append(sectionMetrics, metric)
+			metrics[section.Category+"."+metric.Key] = metric.Value
+			if seen[metric.Key] {
+				duplicates[metric.Key] = true
+				delete(metrics, metric.Key)
+			} else if !duplicates[metric.Key] {
+				seen[metric.Key] = true
+				metrics[metric.Key] = metric.Value
+			}
+		}
+		sections = append(sections, map[string]any{
+			"category": section.Category, "report_date": section.ReportDate,
+			"publication_date": section.PublicationDate, "has_data": section.HasData,
+			"metrics": sectionMetrics, "quality_status": section.QualityStatus,
+			"quality_reasons": section.QualityReasons,
+		})
+	}
+	result := map[string]any{
+		"symbol": snapshot.Symbol, "year": snapshot.Year, "quarter": snapshot.Quarter,
+		"has_data": snapshot.HasData, "sections": sections, "metrics": metrics,
+		"source": snapshot.Source, "source_version": snapshot.SourceVersion,
+		"fetched_at": snapshot.FetchedAt, "quality_status": snapshot.QualityStatus,
+		"quality_reasons": snapshot.QualityReasons,
+	}
+	for key, value := range metrics {
+		if !strings.Contains(key, ".") {
+			result[key] = value
+		}
+	}
+	return result
+}
 
 func (c *Client) FetchMarketOverview(ctx context.Context, region, asOf string) (domain.MarketOverview, error) {
 	region = strings.ToLower(strings.TrimSpace(region))

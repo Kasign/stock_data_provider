@@ -60,6 +60,14 @@ func BuildStockContext(bundle domain.StockBundle, technical domain.TechnicalSnap
 	if bundle.Chip == nil {
 		missing = append(missing, "chip_distribution")
 	}
+	if len(bundle.Boards) == 0 {
+		missing = append(missing, "stock_boards")
+		warnings = append(warnings, "未获得可信的个股所属板块快照")
+	}
+	if bundle.CapitalFlow == nil {
+		missing = append(missing, "capital_flow")
+		warnings = append(warnings, "未获得可用的个股资金流数据")
+	}
 	dailyMetricMissing := map[string]struct{}{}
 	basisSeen := map[string]struct{}{}
 	latestCompletedBasis := ""
@@ -132,7 +140,8 @@ func BuildStockContext(bundle domain.StockBundle, technical domain.TechnicalSnap
 	return domain.AnalysisContext{
 		Code: bundle.Code, Name: bundle.Name, Market: inferMarket(bundle.Code), AsOf: asOfTime,
 		Quote: bundle.Quote, DailyBars: bundle.DailyBars, Technical: technical, Phase: phase,
-		Chip: bundle.Chip, Fundamentals: bundle.Fundamentals, Boards: bundle.Boards,
+		Chip: bundle.Chip, CapitalFlow: bundle.CapitalFlow,
+		Fundamentals: bundle.Fundamentals, Boards: bundle.Boards,
 		News: news, Warnings: warnings,
 		DataQuality: domain.DataQuality{Level: level, Score: qualityScore, Missing: missing, Warnings: warnings, Sources: bundle.Sources},
 	}
@@ -180,6 +189,8 @@ func ToLegacyAnalyzerContext(input domain.AnalysisContext) map[string]any {
 		"technical_indicators": input.Technical,
 		"fundamental_context":  input.Fundamentals,
 		"belong_boards":        input.Boards,
+		"capital_flow_context":  input.CapitalFlow,
+		"capital_flow":          input.CapitalFlow,
 	}
 	// The legacy GeminiAnalyzer expects a `today`/`yesterday` price-table shape,
 	// a separate realtime overlay, and the singular `chip` key. Completed daily

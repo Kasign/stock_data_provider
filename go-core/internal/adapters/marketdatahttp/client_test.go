@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -16,7 +17,8 @@ func TestFetchStockBundlePreservesUnitsSourceAndQuality(t *testing.T) {
 			t.Errorf("missing auth header")
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/v1/bundles/") {
-			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.Error(w, "auxiliary provider disabled in this fixture", http.StatusServiceUnavailable)
+			return
 		}
 		if r.URL.Query().Get("adjustment") != "forward_adjusted" {
 			t.Errorf("unexpected adjustment=%s", r.URL.Query().Get("adjustment"))
@@ -162,5 +164,83 @@ func TestFetchMarketOverviewAggregatesNativeDomesticEndpoints(t *testing.T) {
 	staleAsOf := time.Now().Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano)
 	if _, err := client.FetchMarketOverview(context.Background(), "cn", staleAsOf); err == nil {
 		t.Fatal("historical as_of must not be mislabeled as live")
+	}
+}
+
+
+func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
+	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	year, quarter := latestCompletedReportPeriod(time.Now())
+	periodEnd := time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	publicationDate := time.Date(year, time.Month(quarter*3+1), 20, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	var mu sync.Mutex
+	seen := make(map[string]int)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer market-secret" {
+			t.Errorf("missing market-data auth header for %s", r.URL.Path)
+		}
+		mu.Lock()
+		seen[r.URL.Path]++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/v1/bundles/"):
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","name":"贵州茅台","daily_bars":[],"sources":{"daily_bars":"eastmoney"},"fetched_at":%q,"quality_status":"valid"}`, fetchedAt)))
+		case strings.HasSuffix(r.URL.Path, "/fundamentals"):
+			if r.URL.Query().Get("year") != fmt.Sprintf("%d", year) || r.URL.Query().Get("quarter") != fmt.Sprintf("%d", quarter) {
+				t.Errorf("unexpected requested fundamentals period: %s", r.URL.RawQuery)
+			}
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","year":%d,"quarter":%d,"has_data":true,"sections":[{"category":"profitability","report_date":%q,"publication_date":%q,"has_data":true,"metrics":[{"key":"roe_avg","name":"平均净资产收益率","value":0.074,"unit":"ratio","source_field":"roeAvg"}],"quality_status":"valid","quality_reasons":[]}],"source":"baostock","source_version":"test-v1","fetched_at":%q,"quality_status":"valid","quality_reasons":[]}`, year, quarter, periodEnd, publicationDate, fetchedAt)))
+		case strings.HasSuffix(r.URL.Path, "/boards"):
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","total":1,"has_data":true,"items":[{"code":"BK0477","name":"白酒","change_percent":1.2,"source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"valid","quality_reasons":[]}],"source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"valid","quality_reasons":[]}`, fetchedAt, fetchedAt)))
+		case strings.HasSuffix(r.URL.Path, "/chip-distribution"):
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","date":"2026-10-27","average_cost":1500.5,"cost_90_low":1300,"cost_90_high":1700,"cost_70_low":1400,"cost_70_high":1600,"profit_ratio":0.82,"concentration_90":0.15,"concentration_70":0.11,"source":"eastmoney","source_version":"test-v1","provider_date":"2026-10-27","fetched_at":%q,"quality_status":"valid","quality_reasons":[]}`, fetchedAt)))
+		case strings.HasSuffix(r.URL.Path, "/capital-flow"):
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","main_net_inflow_yuan":1200000,"inflow_5d_yuan":4200000,"inflow_10d_yuan":7600000,"observations":10,"source":"miaoxiang","source_version":"test-v1","fetched_at":%q,"quality_status":"degraded","quality_reasons":["exact_publication_time_unavailable"]}`, fetchedAt)))
+		default:
+			t.Errorf("unexpected route %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, "market-secret", 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := client.FetchStockBundle(context.Background(), "600519", 60, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bundle.Fundamentals["roe_avg"] != 0.074 {
+		t.Fatalf("flattened fundamental metric missing: %+v", bundle.Fundamentals)
+	}
+	if len(bundle.Boards) != 1 || bundle.Boards[0]["name"] != "白酒" {
+		t.Fatalf("stock boards not mapped: %+v", bundle.Boards)
+	}
+	if bundle.Chip == nil || bundle.Chip.CostAverage == nil || *bundle.Chip.CostAverage != 1500.5 ||
+		bundle.Chip.ProfitRatio == nil || *bundle.Chip.ProfitRatio != 0.82 {
+		t.Fatalf("chip distribution not mapped: %+v", bundle.Chip)
+	}
+	if bundle.CapitalFlow["main_net_inflow_yuan"] != float64(1200000) {
+		t.Fatalf("capital-flow data not mapped: %+v", bundle.CapitalFlow)
+	}
+	for _, sourceKey := range []string{"fundamentals", "stock_boards", "chip_distribution", "capital_flow"} {
+		if bundle.Sources[sourceKey] == "" {
+			t.Errorf("missing source provenance for %s: %+v", sourceKey, bundle.Sources)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, path := range []string{
+		"/api/v1/bundles/600519",
+		"/api/v1/stocks/600519/fundamentals",
+		"/api/v1/stocks/600519/boards",
+		"/api/v1/stocks/600519/chip-distribution",
+		"/api/v1/stocks/600519/capital-flow",
+	} {
+		if seen[path] != 1 {
+			t.Errorf("route %s called %d times, want once", path, seen[path])
+		}
 	}
 }
