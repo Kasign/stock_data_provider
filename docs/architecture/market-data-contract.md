@@ -55,6 +55,8 @@
 
 允许的质量状态包括 `valid`、`degraded`、`stale`、`invalid` 和 `unknown`。质量是否可用取决于下游目的：行情可以满足展示需求，但如果成交量单位未知，则不能用于依赖成交量的分析。
 
+指数行情必须有有限且大于零的最新价，非空的开高低/昨收价也必须为正数；非空数值不得为 NaN/Inf，成交额非空时必须是非负人民币元。缺少供应商报价时间的单项不能标记为 `valid`，只要有单项降级，快照整体也不能标记为 `valid`。这些约束由服务层在新 Provider 响应和缓存命中时统一执行。
+
 缺失成交额必须保持 null。经过 Go bridge 进入历史 Python 消费者的 map 时，也必须继续表示为 null，而不是 0。
 
 市场广度的成交额是聚合字段：当 `amount_coverage_count` 小于 `covered_securities` 时，`total_amount_cny` 必须为 `null`，且快照质量必须是 `degraded`，不能因涨跌分类覆盖完整而标记为 `valid`。服务层必须同时校验该约束，避免错误质量状态进入缓存或 API。

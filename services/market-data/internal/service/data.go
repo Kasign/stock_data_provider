@@ -158,6 +158,7 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 		return fmt.Errorf("index-quote snapshot quality %q is unsupported", snapshot.QualityStatus)
 	}
 	seen := make(map[string]bool, len(snapshot.Items))
+	hasDegradedItem := false
 	for _, item := range snapshot.Items {
 		if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
 			return errors.New("index-quote row has missing symbol/code/name")
@@ -168,10 +169,47 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("index-quote quality %q is unsupported", item.QualityStatus)
 		}
+		if *item.LatestPrice <= 0 || math.IsNaN(*item.LatestPrice) || math.IsInf(*item.LatestPrice, 0) {
+			return fmt.Errorf("index %s has a non-positive or non-finite latest price", item.Symbol)
+		}
+		for _, value := range []*float64{item.Change, item.ChangePercent, item.Open, item.High, item.Low, item.PrevClose, item.Amount} {
+			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+				return fmt.Errorf("index %s contains a non-finite numeric value", item.Symbol)
+			}
+		}
+		for _, value := range []*float64{item.Open, item.High, item.Low, item.PrevClose} {
+			if value != nil && *value <= 0 {
+				return fmt.Errorf("index %s contains a non-positive OHLC/previous-close value", item.Symbol)
+			}
+		}
+		if item.Low != nil && item.High != nil && *item.Low > *item.High {
+			return fmt.Errorf("index %s has low greater than high", item.Symbol)
+		}
+		if item.Amount == nil {
+			if item.AmountUnit != "unknown" {
+				return fmt.Errorf("index %s has no amount but amount_unit is not unknown", item.Symbol)
+			}
+		} else if *item.Amount < 0 || item.AmountUnit != "CNY" {
+			return fmt.Errorf("index %s has an invalid amount or amount unit", item.Symbol)
+		}
+		if item.QuoteTime == nil {
+			if item.QualityStatus == model.QualityValid {
+				return fmt.Errorf("index %s cannot be valid without a provider quote timestamp", item.Symbol)
+			}
+			hasDegradedItem = true
+		} else if item.QuoteTimeSemantics != "provider_snapshot_time" {
+			return fmt.Errorf("index %s has unsupported quote-time semantics %q", item.Symbol, item.QuoteTimeSemantics)
+		}
+		if item.QualityStatus == model.QualityDegraded {
+			hasDegradedItem = true
+		}
 		if seen[item.Symbol] {
 			return fmt.Errorf("duplicate index symbol %q", item.Symbol)
 		}
 		seen[item.Symbol] = true
+	}
+	if snapshot.QualityStatus == model.QualityValid && hasDegradedItem {
+		return errors.New("index-quote snapshot cannot be valid when one or more items are degraded")
 	}
 	return nil
 }

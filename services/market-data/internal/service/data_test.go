@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"context"
 	"encoding/json"
 	"errors"
@@ -932,5 +933,47 @@ func TestValidateMarketBreadthRequiresDegradedQualityForPartialAmountCoverage(t 
 	snapshot.QualityStatus = model.QualityDegraded
 	if err := validateMarketBreadth(snapshot); err != nil {
 		t.Fatalf("partial amount coverage with degraded quality should remain usable: %v", err)
+	}
+}
+
+
+func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *testing.T) {
+	now := time.Now().UTC()
+	changePercent := 1.0
+	for _, tc := range []struct {
+		name  string
+		price float64
+	}{
+		{name: "zero", price: 0},
+		{name: "negative", price: -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := &model.IndexQuoteSnapshot{
+				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+				Items: []model.MarketIndexQuote{{
+					Symbol: "000001.SH", Code: "000001", Name: "上证指数",
+					LatestPrice: &tc.price, ChangePercent: &changePercent,
+					AmountUnit: "unknown", Source: "eastmoney", FetchedAt: now,
+					QualityStatus: model.QualityValid,
+				}},
+			}
+			if err := validateIndexQuoteSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "latest price") {
+				t.Fatalf("non-positive index price must be rejected, got %v", err)
+			}
+		})
+	}
+
+	price := 3200.0
+	snapshot := &model.IndexQuoteSnapshot{
+		Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+		Items: []model.MarketIndexQuote{{
+			Symbol: "000001.SH", Code: "000001", Name: "上证指数",
+			LatestPrice: &price, ChangePercent: &changePercent,
+			AmountUnit: "unknown", Source: "eastmoney", FetchedAt: now,
+			QualityStatus: model.QualityDegraded,
+		}},
+	}
+	if err := validateIndexQuoteSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
+		t.Fatalf("snapshot must inherit item degradation, got %v", err)
 	}
 }
