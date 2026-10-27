@@ -655,3 +655,18 @@ test("market workspace has functional in-page navigation for long research secti
   assert.match(stylesheet, /\.page-jump-nav-links\s*\{[^}]*overflow-x:\s*auto/s);
   assert.match(stylesheet, /全站易用性优化/);
 });
+
+
+test("collapsed sidebar navigation remains accessible and unavailable modules disclose their status", () => {
+  const navButtons = [...html.matchAll(/<button class="nav-link[^"]*"[^>]*data-view="([^"]+)"[^>]*>/g)];
+  assert.equal(navButtons.length, 7, "each primary destination should remain in the sidebar");
+  for (const match of navButtons) {
+    const view = match[1];
+    assert.match(match[0], /aria-label="/, view + " should have an accessible name when its text is hidden");
+    assert.match(match[0], /title="/, view + " should expose a hover label in the collapsed sidebar");
+  }
+  assert.equal((html.match(/class="nav-link-state" title="后端接口待接入">待接入<\/span>/g) || []).length, 4,
+    "notifications, chat, screening, and alerts should disclose backend dependency before navigation");
+  assert.match(stylesheet, /\.nav-link-state\s*\{/);
+  assert.match(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.nav-link-state\s*\{\s*display: none;/);
+});

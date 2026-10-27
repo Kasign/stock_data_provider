@@ -394,3 +394,10 @@
 - 过滤只是视图操作；原始 StageEvent、服务端序号/游标、Task/Run 状态均保持不变。未知状态仍可在“全部”中检查，筛选无匹配会单独提示。
 - 新增 web/src/task-event-filter.js 与 web/tests/task-event-filter.test.mjs；把模块加入语法检查并更新产品/技术/进度文档。
 - 本批应继续只提交到 feat/webui-market-data-console。PR #13 保持 Open/未合并；数据分支和任何 Go/Provider/数据库/API/Compose 文件均不在此改动范围。
+
+
+## 2026-10-27 — 全站 Review 后续可发现性修正
+
+- 快速定位/字号批次 commit 85bd244d96296f6a7605bf661a490bff6c5b1e1c 之后，修正 UI 契约中的正则转义并取得 Actions #40436057454 成功。
+- 继续发现 900px 以下侧栏折叠为图标时缺少可访问名称提示，并且通知/问股/选股/告警导航没有提前声明当前接口不可用；本批补齐可访问名称，并在桌面导航显示“待接入”。
+- 仍限定于 web/**。后续验收最新提交对应的 Actions，以及真实浏览器中的键盘导航、窄屏侧栏与深浅主题。

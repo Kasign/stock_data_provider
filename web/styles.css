@@ -2048,3 +2048,31 @@ td {
     transition: none;
   }
 }
+
+
+/* 图标侧栏仍保留明确的导航名称；未接入的功能在桌面导航中提前标注。 */
+.nav-link-state {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 3px 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--text-dim);
+  background: var(--bg-elevated);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+:root[data-theme="light"] .nav-link-state {
+  border-color: var(--border);
+  color: var(--text-dim);
+  background: var(--panel-raised);
+}
+
+@media (max-width: 900px) {
+  .nav-link-state {
+    display: none;
+  }
+}
