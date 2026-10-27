@@ -466,9 +466,8 @@ func (s *Server) searchStocks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if snapshot.QualityStatus == model.QualityStale {
+		// 只有服务明确返回 stale 时才暴露缓存状态；正常响应不代表命中了服务层缓存。
 		w.Header().Set("X-Market-Data-Cache", "STALE")
-	} else {
-		w.Header().Set("X-Market-Data-Cache", "HIT")
 	}
 	writeJSON(w, http.StatusOK, snapshot)
 }

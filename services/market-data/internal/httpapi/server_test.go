@@ -242,6 +242,9 @@ func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
+	if got := w.Header().Get("X-Market-Data-Cache"); got != "" {
+		t.Fatalf("non-stale stock search must not claim a service cache status, got %q", got)
+	}
 	for _, want := range []string{"\"symbol\":\"600519.SH\"", "\"name\":\"测试证券\""} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("profile response missing %s: %s", want, w.Body.String())

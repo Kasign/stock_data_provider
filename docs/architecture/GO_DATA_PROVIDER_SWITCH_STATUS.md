@@ -488,3 +488,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 证券搜索路由和回归测试源码已存在，但 OpenAPI 曾遗漏 `GET /api/v1/stocks/search` 路径及响应模型；本轮补齐查询参数、错误状态、`StockSearchItem` / `StockSearchSnapshot` schema，并说明 `fetched_at` 不等于实时行情时间。
 - 基本面接口现在会在读取缓存或访问 Provider 前拒绝尚未结束的年度/季度报告期，避免空数据分区绕过未来报告期校验。新增服务层与 HTTP 层测试源码覆盖该门禁。
 - 本轮未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 证券搜索缓存状态头语义（2026-10-27）
+
+- 搜索服务没有独立缓存命中返回值，旧 HTTP handler 却把所有非 stale 响应都标为 `X-Market-Data-Cache: HIT`，可能将刚执行的上游查询误报为服务缓存命中。
+- 已改为仅在快照明确 stale 时返回 `X-Market-Data-Cache: STALE`；普通响应不声明缓存命中，并补充回归测试源码。未运行测试、构建、CI 或真实 Provider 请求。
