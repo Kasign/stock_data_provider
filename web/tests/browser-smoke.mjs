@@ -17,7 +17,18 @@ const viewports = [
   { width: 1280, height: 900 },
   { width: 1600, height: 1000 }
 ];
-const viewNames = ["market", "market-data", "stocks", "watchlist", "research", "tasks", "notifications", "chat", "screening", "alerts", "settings"];
+const viewNavigation = [
+  { name: "market", selector: '.workspace-tab[data-view="market"]' },
+  { name: "stocks", selector: '.workspace-tab[data-view="stocks"]' },
+  { name: "watchlist", selector: '.workspace-tab[data-view="watchlist"]' },
+  { name: "research", selector: '.nav-link[data-view="research"]' },
+  { name: "tasks", selector: '.nav-link[data-view="tasks"]' },
+  { name: "notifications", selector: '.nav-link[data-view="notifications"]' },
+  { name: "chat", selector: '.nav-link[data-view="chat"]' },
+  { name: "screening", selector: '.nav-link[data-view="screening"]' },
+  { name: "alerts", selector: '.nav-link[data-view="alerts"]' },
+  { name: "settings", selector: '.nav-link[data-view="settings"]' }
+];
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -77,7 +88,8 @@ try {
 
     await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
     await page.waitForFunction(
-      () => document.querySelectorAll(".nav-link[data-view]").length === 11,
+      () => document.querySelectorAll(".nav-link[data-view]").length === 7 &&
+        document.querySelectorAll(".workspace-tab[data-view]").length === 3,
       null,
       { timeout: 10000 }
     );
@@ -103,11 +115,12 @@ try {
     });
 
     const menu = page.locator("#mobile-menu-toggle");
-    for (const viewName of viewNames) {
+    for (const entry of viewNavigation) {
+      const viewName = entry.name;
       if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
         await menu.click();
       }
-      const navigationButton = page.locator('[data-view="' + viewName + '"]');
+      const navigationButton = page.locator(entry.selector);
       await navigationButton.click();
       await page.locator("#" + viewName + "-view").waitFor({ state: "visible" });
       assert.equal(

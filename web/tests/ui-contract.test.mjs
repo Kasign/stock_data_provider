@@ -641,34 +641,40 @@ test("market overview and activity use readable secondary text and touch-sized c
 });
 
 
-test("market workspace has functional in-page navigation for long research sections", () => {
-  const targets = [...html.matchAll(/data-scroll-target="([^"]+)"/g)].map((match) => match[1]);
-  const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
-  assert.ok(targets.length >= 10, "quick navigation should cover the main market and stock-research sections");
-  assert.equal(targets.length, new Set(targets).size, "quick navigation target IDs should be unique");
-  const missingTargets = targets.filter((target) => !htmlIds.has(target));
-  assert.deepEqual(missingTargets, [], "quick navigation targets must resolve to real sections: " + missingTargets.join(", "));
-  assert.match(app, /querySelectorAll\("\.page-jump-button\[data-scroll-target\]"\)/);
-  assert.match(app, /scrollIntoView\(\{ behavior: reduceMotion \? "auto" : "smooth"/);
-  assert.match(app, /prefers-reduced-motion: reduce/);
-  assert.match(stylesheet, /\.page-jump-nav\s*\{/);
-  assert.match(stylesheet, /\.page-jump-nav-links\s*\{[^}]*overflow-x:\s*auto/s);
-  assert.match(stylesheet, /全站易用性优化/);
+test("primary workspace tabs keep market modules on the homepage without quick-locate UI", () => {
+  const home = html.slice(html.indexOf('<section class="view" id="market-view">'), html.indexOf('<section class="view" id="stocks-view"'));
+  for (const id of ["market-overview-panel", "market-lists-panel", "market-activity-panel"]) {
+    assert.ok(home.includes('id="' + id + '"'), "homepage should include " + id);
+  }
+  assert.ok(home.indexOf('id="market-overview-panel"') < home.indexOf('id="market-lists-panel"'));
+  assert.ok(home.indexOf('id="market-lists-panel"') < home.indexOf('id="market-activity-panel"'));
+  for (const view of ["market", "stocks", "watchlist"]) {
+    assert.match(html, new RegExp('class="workspace-tab[^"]*"[^>]*data-view="' + view + '"'));
+  }
+  assert.match(html, /aria-label="核心工作区"/);
+  assert.doesNotMatch(html, /class="page-jump-nav"|data-scroll-target=/);
+  assert.doesNotMatch(app, /pageJumpButtons|syncPageJumpLocation|scroll-target/);
+  assert.doesNotMatch(stylesheet, /\.page-jump-nav|\.page-jump-button/);
+  assert.match(stylesheet, /\.workspace-tabs\s*\{/);
+  assert.match(stylesheet, /\.workspace-tab\.active/);
 });
-
 
 test("collapsed sidebar navigation remains accessible and unavailable modules disclose their status", () => {
   const navButtons = [...html.matchAll(/<button class="nav-link[^"]*"[^>]*data-view="([^"]+)"[^>]*>/g)];
   assert.deepEqual(navButtons.map((match) => match[1]), [
-    "market", "market-data", "stocks", "watchlist", "research",
-    "tasks", "notifications", "chat", "screening", "alerts", "settings"
-  ], "primary navigation should expose every dedicated workspace in its intended order");
+    "research", "tasks", "notifications", "chat", "screening", "alerts", "settings"
+  ], "sidebar should expose secondary tools while primary destinations live in workspace tabs");
+  const workspaceTabs = [...html.matchAll(/<button class="workspace-tab[^"]*"[^>]*data-view="([^"]+)"[^>]*>/g)];
+  assert.deepEqual(workspaceTabs.map((match) => match[1]), ["market", "stocks", "watchlist"]);
+  for (const view of ["market", "stocks", "watchlist"]) {
+    assert.match(html, new RegExp('id="' + view + '-view"'));
+  }
+  assert.doesNotMatch(html, /id="market-data-view"/);
   for (const match of navButtons) {
     const view = match[1];
     assert.match(match[0], /aria-label="/, view + " should have an accessible name when its text is hidden");
     assert.match(match[0], /title="/, view + " should expose a hover label in the collapsed sidebar");
   }
-  assert.match(html, /id="market-data-view"/);
   assert.match(html, /id="stocks-view"/);
   assert.match(html, /id="watchlist-view"/);
   assert.match(html, /id="research-view"/);
