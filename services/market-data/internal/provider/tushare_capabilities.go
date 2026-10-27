@@ -210,6 +210,11 @@ func (p *Tushare) FetchStockBasic(ctx context.Context, rawSymbol string) (*model
 	if err != nil {
 		return nil, err
 	}
+	// tushareExchangeCode 校验格式和后缀，不等同于普通 A 股证券范围校验。
+	// 防止 ETF、基金及其他非股票证券通过六位代码检查后被错误标为“主板股票”。
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tushare stock_basic 仅支持 A 股普通股票，证券 %s 不在支持范围内", symbol)
+	}
 	table, err := p.fetchCapabilityTable(ctx, "stock_basic", map[string]string{"ts_code": symbol}, "ts_code,name,industry,market,exchange,list_status,list_date,delist_date")
 	if err != nil {
 		return nil, err
@@ -284,7 +289,7 @@ func (p *Tushare) FetchStockBasic(ctx context.Context, rawSymbol string) (*model
 	default:
 		return nil, fmt.Errorf("Tushare stock_basic 返回未知上市状态 %q", status)
 	}
-	securityType, securityLabel := 1, "A股"
+	securityType, securityLabel := 0, ""
 	switch strings.TrimSpace(market) {
 	case "创业板":
 		securityType, securityLabel = 2, "创业板股票"
@@ -294,6 +299,8 @@ func (p *Tushare) FetchStockBasic(ctx context.Context, rawSymbol string) (*model
 		securityType, securityLabel = 4, "北交所股票"
 	case "主板":
 		securityType, securityLabel = 1, "主板股票"
+	default:
+		return nil, fmt.Errorf("Tushare stock_basic 返回未知或缺失的市场分类 %q，拒绝默认归类为主板", market)
 	}
 	now := time.Now().UTC()
 	return &model.StockBasic{

@@ -134,6 +134,59 @@ func TestTushareIndexConstituentsFallsBackToPreviousMonth(t *testing.T) {
 	}
 }
 
+func TestTushareStockBasicRejectsNonAShareBeforeRequest(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		http.Error(w, "unexpected request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	for _, symbol := range []string{"510300.SH", "159919.SZ", "900901.SH"} {
+		if _, err := provider.FetchStockBasic(context.Background(), symbol); err == nil {
+			t.Errorf("non-A-share instrument %s must be rejected", symbol)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("non-A-share requests must be rejected before upstream access; got %d request(s)", requests)
+	}
+}
+
+func TestTushareStockBasicRejectsUnknownMarketInsteadOfAssumingMainBoard(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeTushareTestTable(w,
+			[]string{"ts_code", "name", "industry", "market", "exchange", "list_status", "list_date", "delist_date"},
+			[][]any{{"600519.SH", "贵州茅台", "白酒", "", "SSE", "L", "20010827", ""}},
+		)
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	if _, err := provider.FetchStockBasic(context.Background(), "600519.SH"); err == nil {
+		t.Fatal("missing market classification must be rejected rather than silently mapped to main board")
+	}
+}
+
+func TestTushareStockBasicMapsKnownMarketClassification(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeTushareTestTable(w,
+			[]string{"ts_code", "name", "industry", "market", "exchange", "list_status", "list_date", "delist_date"},
+			[][]any{{"600519.SH", "贵州茅台", "白酒", "主板", "SSE", "L", "20010827", ""}},
+		)
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := provider.FetchStockBasic(context.Background(), "600519.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SecurityType != 1 || got.SecurityTypeLabel != "主板股票" {
+		t.Fatalf("known main-board classification mapped incorrectly: %+v", got)
+	}
+}
+
 func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
