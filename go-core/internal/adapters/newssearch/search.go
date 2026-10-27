@@ -27,12 +27,33 @@ const (
 	maxResponseBytes     = 4 << 20
 )
 
+// 官方监管、交易所和信息披露网站仅用于可信度加权；不把搜索结果限制为这些域名。
+var defaultOfficialNewsDomains = []string{
+	"gov.cn", "csrc.gov.cn", "pbc.gov.cn",
+	"sse.com.cn", "szse.cn", "bse.cn", "cninfo.com.cn",
+}
+
+// 可信财经媒体获得次级排序加分，不等于对单篇报道内容作真实性背书。
+var defaultFinancialNewsDomains = []string{
+	"xinhuanet.com", "people.com.cn", "chinanews.com.cn", "chinadaily.com.cn",
+	"stcn.com", "cs.com.cn", "cnstock.com", "cls.cn", "yicai.com",
+	"21jingji.com", "jrj.com.cn", "eastmoney.com",
+}
+
+// 仅过滤明显的荐股/导流营销词，避免用宽泛的情绪词误删正常财经报道。
+var defaultNewsSpamTerms = []string{
+	"免费荐股", "荐股群", "股票交流群", "稳赚不赔", "老师带单",
+	"开户返佣", "开户链接", "加微信", "扫码入群", "牛股群",
+}
+
 // Config controls the Go-native Chinese news-search chain.
 // Public SearXNG discovery is intentionally not enabled: configure trusted self-hosted endpoints explicitly.
 type Config struct {
 	BochaAPIKeys    []string
 	BochaEndpoint   string
 	SearXNGBaseURLs []string
+	TrustedDomains  []string
+	BlockedTerms    []string
 	MaxAgeDays      int
 	StrategyProfile string
 	RequestTimeout  time.Duration
@@ -44,8 +65,10 @@ type Searcher struct {
 	providers  []remoteProvider
 	fallback   ports.NewsSearcher
 	logger     *slog.Logger
-	windowDays int
-	cacheTTL   time.Duration
+	windowDays    int
+	cacheTTL      time.Duration
+	trustedDomains []string
+	blockedTerms   []string
 
 	mu    sync.Mutex
 	cache map[string]cacheEntry
@@ -152,6 +175,8 @@ func New(cfg Config, fallback ports.NewsSearcher, logger *slog.Logger) *Searcher
 	searcher := &Searcher{
 		client: client, fallback: fallback, logger: logger,
 		windowDays: windowDays, cacheTTL: cfg.CacheTTL,
+		trustedDomains: normalizeDomains(append(append([]string{}, defaultOfficialNewsDomains...), cfg.TrustedDomains...)),
+		blockedTerms: normalizeTerms(append(append([]string{}, defaultNewsSpamTerms...), cfg.BlockedTerms...)),
 		cache: make(map[string]cacheEntry),
 	}
 	keys := compactStrings(cfg.BochaAPIKeys)
@@ -173,6 +198,8 @@ func NewFromEnv(fallback ports.NewsSearcher, logger *slog.Logger) *Searcher {
 		BochaAPIKeys:    splitCSV(os.Getenv("BOCHA_API_KEYS")),
 		BochaEndpoint:   envOr("GO_NEWS_BOCHA_ENDPOINT", defaultBochaEndpoint),
 		SearXNGBaseURLs: splitCSV(os.Getenv("SEARXNG_BASE_URLS")),
+		TrustedDomains:  splitCSV(os.Getenv("GO_NEWS_TRUSTED_DOMAINS")),
+		BlockedTerms:    splitCSV(os.Getenv("GO_NEWS_BLOCKED_TERMS")),
 		MaxAgeDays:      positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
 		StrategyProfile: envOr("NEWS_STRATEGY_PROFILE", "short"),
 		RequestTimeout:  time.Duration(positiveIntEnv("NEWS_SEARCH_TIMEOUT_SECONDS", 10)) * time.Second,
@@ -325,7 +352,6 @@ func (s *Searcher) filterAndRank(raw []searchCandidate, code, name string) []ran
 	}
 	now := time.Now().In(loc)
 	earliest := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -(s.windowDays - 1))
-	latest := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, 1)
 
 	seenURLs := make(map[string]struct{}, len(raw))
 	seenTitles := make(map[string]struct{}, len(raw))
@@ -343,7 +369,11 @@ func (s *Searcher) filterAndRank(raw []searchCandidate, code, name string) []ran
 			continue
 		}
 		published = published.In(loc)
-		if published.Before(earliest) || published.After(latest) {
+		// 未来发布时间通常代表上游字段错位、时区误判或搜索索引脏数据。
+		if published.Before(earliest) || published.After(now) {
+			continue
+		}
+		if isSpamNews(title, snippet, s.blockedTerms) {
 			continue
 		}
 		canonical := canonicalArticleURL(parsedURL)
@@ -361,6 +391,7 @@ func (s *Searcher) filterAndRank(raw []searchCandidate, code, name string) []ran
 			source = strings.TrimPrefix(strings.ToLower(parsedURL.Hostname()), "www.")
 		}
 		score, direct := scoreRelevance(title, snippet, code, name)
+		score += newsSourceScore(parsedURL.Hostname(), s.trustedDomains)
 		items = append(items, rankedNews{
 			item: domain.NewsItem{
 				Title: title, Summary: snippet, URL: articleURL, Source: source,
@@ -433,6 +464,14 @@ func scoreRelevance(title, snippet, code, name string) (int, bool) {
 	for _, term := range []string{"公告", "业绩", "财报", "回购", "增持", "减持", "分红", "中标", "合同", "诉讼", "处罚", "预告", "重大"} {
 		if strings.Contains(titleLower, term) {
 			score += 4
+		}
+	}
+	// 市场复盘使用独立主题词打分；标题权重大于摘要，避免大量无关的近期网页挤占结果。
+	for _, term := range []string{"降准", "降息", "央行", "证监会", "财政部", "国务院", "国资委", "上证指数", "深证成指", "创业板", "A股", "交易所", "成交额", "IPO", "发行上市", "重大资产重组", "产业政策", "货币政策", "财政政策"} {
+		if strings.Contains(titleLower, term) {
+			score += 5
+		} else if strings.Contains(snippetLower, term) {
+			score += 2
 		}
 	}
 	return score, direct
@@ -709,6 +748,81 @@ func rawMessage(raw json.RawMessage) string {
 		return strings.TrimSpace(text)
 	}
 	return strings.TrimSpace(string(raw))
+}
+
+func isSpamNews(title, snippet string, blockedTerms []string) bool {
+	content := strings.ToLower(cleanText(title + " " + snippet))
+	for _, term := range blockedTerms {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if term != "" && strings.Contains(content, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func newsSourceScore(host string, trustedDomains []string) int {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if matchesNewsDomain(host, trustedDomains) {
+		return 30
+	}
+	if matchesNewsDomain(host, defaultFinancialNewsDomains) {
+		return 12
+	}
+	return 0
+}
+
+func matchesNewsDomain(host string, domains []string) bool {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	for _, domain := range domains {
+		domain = strings.ToLower(strings.Trim(strings.TrimSpace(domain), "."))
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeDomains(values []string) []string {
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, raw := range values {
+		value := strings.ToLower(strings.TrimSpace(raw))
+		if strings.Contains(value, "://") {
+			parsed, err := url.Parse(value)
+			if err != nil {
+				continue
+			}
+			value = parsed.Hostname()
+		}
+		value = strings.Trim(strings.TrimSpace(value), ".")
+		if value == "" || strings.ContainsAny(value, "/:@ \t\r\n") {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func normalizeTerms(values []string) []string {
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, raw := range values {
+		value := strings.ToLower(cleanText(raw))
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func canonicalArticleURL(parsed *url.URL) string {

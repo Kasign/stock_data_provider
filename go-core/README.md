@@ -7,6 +7,8 @@
 - 为单股分析和市场复盘提供带鉴权的内部 HTTP 接口。
 - 由 Go 管理主流程：获取数据、计算确定性技术指标、建立上下文和质量摘要、调用分析、持久化，并可选发送通知。
 - Python 能力适配器集中放在 `internal/adapters/pythonbridge`。
+- Go 原生新闻检索可使用 Bocha 与显式配置的 SearXNG；结果按发布时间、URL/标题去重、监管/交易所与可信财经媒体域名排序，并过滤明显的荐股导流内容。原生搜索没有可用新鲜结果时仍保留兼容 fallback。
+- 新闻可信域名仅用于排序加权，不是对文章真实性的自动背书；新闻检索仍未完全等价替代原 Python 新闻情报处理。
 - Go 不直接引入 ORM 或 pandas；现阶段 Python 仍拥有部分存储 schema 和 Provider SDK。
 - 工作流返回分阶段 trace，包含每一步的状态与耗时，供调用方查看完整执行过程。
 
@@ -28,6 +30,9 @@ go build ./cmd/analysisd
 - `PYTHON_BRIDGE_BASE_URL`：默认 `http://python-bridge:8090`。
 - `HTTP_ADDR`：默认 `127.0.0.1:8088`；Docker Compose 会显式覆盖为容器网络监听地址 `:8088`。
 - `GO_CORE_REQUEST_TIMEOUT` 和 `PYTHON_BRIDGE_TIMEOUT`：使用 Go duration 格式，如 `20m`。
+- `BOCHA_API_KEYS`、`SEARXNG_BASE_URLS`：可选的 Go 原生新闻检索来源；未配置时会继续使用 Python bridge。
+- `GO_NEWS_TRUSTED_DOMAINS`：可选，逗号分隔的可信域名排序加权项。
+- `GO_NEWS_BLOCKED_TERMS`：可选，追加的新闻营销/导流过滤词。
 
 ## 接口
 
