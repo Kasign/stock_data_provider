@@ -1,6 +1,7 @@
 package contextpack
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -231,7 +232,7 @@ func TestToLegacyAnalyzerContextPassesThroughDragonTigerSummary(t *testing.T) {
 	}
 	ctx := domain.AnalysisContext{Code: "600519.SH", DragonTiger: summary}
 	legacy := ToLegacyAnalyzerContext(ctx)
-	if legacy["dragon_tiger_context"] != summary || legacy["dragon_tiger"] != summary {
+	if !reflect.DeepEqual(legacy["dragon_tiger_context"], summary) || !reflect.DeepEqual(legacy["dragon_tiger"], summary) {
 		t.Fatalf("dragon-tiger summary not propagated into legacy analyzer context: %#v", legacy)
 	}
 }
