@@ -730,6 +730,19 @@ func TestProviderFailureSummaryRedactsURLQuery(t *testing.T) {
 	}
 }
 
+func TestProviderFailureSummaryClassifiesQuoteContractFailures(t *testing.T) {
+	for _, message := range []string{
+		"quote change is inconsistent with current_price minus prev_close",
+		"Tencent quote volume unit cannot be confirmed; refusing to assume 100-share lots",
+		"quote OHLC invariant failed",
+	} {
+		kind, _ := providerFailureSummary(errors.New(message))
+		if kind != "data_contract" {
+			t.Errorf("provider failure %q classified as %q, want data_contract", message, kind)
+		}
+	}
+}
+
 func TestProviderFailureSummaryClassifiesNetworkUnavailable(t *testing.T) {
 	kind, message := providerFailureSummary(errors.New("dial tcp 61.129.129.199:443: connect: Network unreachable"))
 	if kind != "network_connect" {

@@ -2050,7 +2050,10 @@ func providerFailureSummary(err error) (kind, message string) {
 			kind = "empty_or_unparseable_response"
 		case strings.Contains(lower, "validation"),
 			strings.Contains(lower, "symbol mismatch"),
-			strings.Contains(lower, "contract"):
+			strings.Contains(lower, "contract"),
+			strings.Contains(lower, "inconsistent"),
+			strings.Contains(lower, "ohlc invariant"),
+			strings.Contains(lower, "volume unit cannot be confirmed"):
 			kind = "data_contract"
 		default:
 			kind = "provider_error"
