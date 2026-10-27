@@ -411,3 +411,6 @@ Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次
 
 
 个股公告的空响应统一按 unknown 处理，不直接解释为零公告。现在对 unknown 空页继续尝试其他公告 Provider；仅在回退链耗尽后附加 `announcements_fallback_exhausted_without_confirmed_data` 并短缓存 30 秒。旧版无回退耗尽标记的空缓存，在多 Provider 场景会被忽略。
+
+
+批量估值在 `quality_unknown` 时现在继续尝试后备 Provider；只有所有来源均未提供 valid/degraded 估值时才返回并短缓存带有 `valuations_fallback_exhausted_without_confirmed_data` 标记的 unknown。多 Provider 场景旧 unknown 缓存若缺少此标记会被绕过。

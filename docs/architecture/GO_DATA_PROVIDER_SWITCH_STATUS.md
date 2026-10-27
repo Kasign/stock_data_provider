@@ -661,3 +661,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 ### 个股公告未知空结果回退（2026-10-27）
 
 公告接口的 `total=0` 响应仍按 `quality_unknown` 处理，不视为已确认“没有公告”。服务层会继续尝试其他公告 Provider；只有回退链耗尽后才返回 unknown 并记录 `announcements_fallback_exhausted_without_confirmed_data`，再短缓存 30 秒。多 Provider 场景会绕过旧版未带回退耗尽标记的 unknown 空缓存。已补回归测试源码，未执行测试。
+
+
+### 批量估值 unknown 回退（2026-10-27）
+
+- 若估值 Provider 返回通过结构校验但 `quality_unknown` 的快照，服务层会继续尝试后续 Provider，避免一个来源的缺失数据遮住其他来源可用的估值。
+- 只有回退链耗尽时才返回 unknown 并增加 `valuations_fallback_exhausted_without_confirmed_data`；仅该状态的 unknown 会短缓存 10 秒。多 Provider 场景会忽略旧版未带回退耗尽标记的 unknown 缓存。
+- 已新增回归测试源码，未执行测试、构建、CI 或真实 Provider 请求。

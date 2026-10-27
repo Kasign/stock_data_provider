@@ -163,7 +163,18 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			} else if cached.QualityStatus == model.QualityUnknown {
 				ttl = 10 * time.Second
 			}
-			if time.Since(cached.FetchedAt) < ttl {
+			cacheEligible := cached.QualityStatus != model.QualityUnknown
+			if !cacheEligible {
+				fallbackExhausted := false
+				for _, reason := range cached.QualityReasons {
+					if reason == "valuations_fallback_exhausted_without_confirmed_data" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				cacheEligible = fallbackExhausted || len(s.valuationProviders) <= 1
+			}
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
 		}
@@ -174,6 +185,7 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 		return nil, false, errors.New("no enabled valuation provider")
 	}
 	var failures []string
+	var unknownSnapshot *model.ValuationSnapshot
 	for _, p := range s.valuationProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -185,6 +197,11 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 		}
 		if err := validateValuationSnapshot(symbols, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if snapshot.QualityStatus == model.QualityUnknown {
+			unknownSnapshot = snapshot
+			failures = append(failures, p.Name()+": valuation snapshot quality is unknown")
 			continue
 		}
 		payload, marshalErr := json.Marshal(snapshot)
@@ -202,6 +219,15 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			}
 		}
 		return snapshot, false, nil
+	}
+	if unknownSnapshot != nil {
+		unknownSnapshot.QualityReasons = appendReason(unknownSnapshot.QualityReasons, "valuations_fallback_exhausted_without_confirmed_data")
+		if payload, err := json.Marshal(unknownSnapshot); err == nil {
+			if cacheErr := s.cache.Set(ctx, cacheKey, payload, 10*time.Second); cacheErr != nil {
+				s.logger.Warn("valuation unknown cache write failed", "symbols", strings.Join(symbols, ","), "error", cacheErr)
+			}
+		}
+		return unknownSnapshot, false, nil
 	}
 	return nil, false, fmt.Errorf("all valuation providers failed: %s", strings.Join(failures, "; "))
 }
