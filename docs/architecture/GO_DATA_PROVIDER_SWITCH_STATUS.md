@@ -4,6 +4,19 @@
 > 当前分支：`feat/full-go-data-providers-api-switch`  
 > 当前定位：分阶段迁移；不是全 Python 去依赖的最终版本。
 
+## 0. 国内 Provider 静态审查记录（2026-10-27）
+
+本轮只进行源码、配置和文档静态核对；按约定未运行测试、构建、CI，也未请求真实上游。
+
+- 腾讯股票搜索：`MARKET_DATA_TENCENT_STOCK_SEARCH_URL` 已从配置读取，经过 HTTPS/URL 形态校验，并由启动装配传入 Tencent Provider；旧 `NewTencentConfigured` 构造函数保留兼容，空配置仍回落到 Smartbox 默认地址。搜索源未报告匹配总数，因此结果质量继续为 `degraded`，由服务层在无匹配/解析失败时尝试东方财富后备源。
+- URL 配置静态对照：配置校验清单中的 27 个 HTTP(S) Provider URL 字段均在 `services/market-data/.env.example` 中有对应项，未发现该模板遗漏。Pytdx 的 TCP 主机列表与 BaoStock 的 TCP 主机/端口不是 URL，单独配置，不纳入该清单。
+- 国内 HTTP Provider 的端点默认值大多集中在 `config.Load()`，并通过构造函数传入；Provider 内仍存在默认 URL 作为直接构造时的兼容兜底。后续新增端点必须同时补齐 Config 字段、环境变量、URL 校验清单、服务级模板、根模板、装配和文档，避免只改一处。
+- 网易 Provider 注释此前称“默认禁用”，但当前 `providers.json` 与环境模板把网易行情/日 K 能力设为启用；已修正文案为由配置控制。该默认配置只代表加入回退链，不代表目标部署网络稳定，网易历史 CSV 与实时报价的 DNS/HTTP 可用性仍待用户统一验收。
+- BaoStock 的财务和交易日历在当前默认配置中开启，迁移矩阵此前仍写“默认关闭”；已同步修正文案。BaoStock 仍只承担其已实现的日 K、财务和交易日历能力，不应据此推断其支持实时行情。
+- README 的数据域描述已从“尚未迁移这些数据域”调整为“部分国内数据域已接入，但字段覆盖、权限、质量与时点语义不等价”，避免把已有路由误写成完全未实现，也避免宣称已完成生产级迁移。
+
+本轮发现并修正的是注释/迁移状态与实际配置不一致，不改变 Provider 优先级、能力开关、数据字段或运行行为。下一轮继续重点核对 URL 拼接假设、缓存质量状态传播、时间/交易日边界和空值契约；只有证据明确的实现缺口才改业务代码。
+
 完整设计见 [Go 行情数据服务迁移方案](./GO_MARKET_DATA_MIGRATION_PLAN.md)，数据源扩展顺序与真实验收门槛见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)，真实 NAS 取数、故障回退与 Eastmoney 网络故障证据见 [数据源真实环境验收与故障排查记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)，Review 与警示见 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md)，数据域明细见 [Python Provider 到 Go 迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)。
 
 ## 1. 当前已实现
