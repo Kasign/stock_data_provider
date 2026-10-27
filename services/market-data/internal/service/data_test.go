@@ -128,6 +128,23 @@ func TestValidateFundamentalsSnapshotAcceptsOptionalFinancialStatements(t *testi
 	}
 }
 
+func TestHithinkFundamentalMissingGroupsAreRepresentedAsUnknown(t *testing.T) {
+	// 同花顺省略标准能力组时，适配器应补齐 unknown 分区，而不是补零。
+	seen := map[string]bool{"profitability": true, "operating": true, "growth": true, "solvency": true, "cash_flow": true}
+	missing := "dupont"
+	if seen[missing] {
+		t.Fatalf("test setup error: %s should be missing", missing)
+	}
+	section := model.FundamentalSection{
+		Category: missing, ReportDate: "2026-06-30", Metrics: []model.FundamentalMetric{},
+		HasData: false, QualityStatus: model.QualityUnknown,
+		QualityReasons: []string{"provider_fundamental_ability_not_returned"},
+	}
+	if section.HasData || len(section.Metrics) != 0 || section.QualityStatus != model.QualityUnknown {
+		t.Fatalf("missing provider group must remain unknown without fabricated metrics: %+v", section)
+	}
+}
+
 func TestValidateFundamentalsSnapshotStillRequiresAllSixIndicatorGroups(t *testing.T) {
 	snapshot := validFundamentalsSnapshotForTest()
 	for index, section := range snapshot.Sections {

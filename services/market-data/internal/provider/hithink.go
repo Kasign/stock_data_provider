@@ -1731,8 +1731,13 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"publication_date_not_exposed_by_provider", "indicator_units_not_exposed_by_provider"},
 	}
+	seenCategories := make(map[string]struct{}, len(data.Abilities))
 	for _, ability := range data.Abilities {
 		category := hithinkFundamentalCategory(ability.Ability)
+		if _, duplicate := seenCategories[category]; duplicate {
+			return nil, fmt.Errorf("同花顺财务指标返回重复能力分区 %q", category)
+		}
+		seenCategories[category] = struct{}{}
 		section := model.FundamentalSection{
 			Category: category, ReportDate: reportDate,
 			Metrics:        make([]model.FundamentalMetric, 0, len(ability.Indicators)),
@@ -1766,6 +1771,21 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			snapshot.HasData = true
 		}
 		snapshot.Sections = append(snapshot.Sections, section)
+	}
+	// 同花顺可能省略暂时无数据的标准能力分区；显式补为 unknown，避免整份快照被拒绝，也不伪造零值。
+	standardCategories := []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"}
+	for _, category := range standardCategories {
+		if _, exists := seenCategories[category]; exists {
+			continue
+		}
+		seenCategories[category] = struct{}{}
+		snapshot.Sections = append(snapshot.Sections, model.FundamentalSection{
+			Category: category, ReportDate: reportDate,
+			Metrics: []model.FundamentalMetric{}, HasData: false,
+			QualityStatus: model.QualityUnknown,
+			QualityReasons: []string{"provider_fundamental_ability_not_returned"},
+		})
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_fundamental_ability_missing:"+category)
 	}
 	// 报表接口按年度/季度返回多期数据，按报告期末精确匹配，不把相邻期间误当作目标季度。
 	statementRequests := []struct {
