@@ -1175,3 +1175,52 @@ func TestStockBoardsCachesUnknownEmptyResultBriefly(t *testing.T) {
 		t.Fatalf("cached result must remain unknown and avoid another provider call: snapshot=%+v calls=%d", second, p.calls)
 	}
 }
+
+
+type fundamentalsCountingFakeProvider struct {
+	snapshot *model.FundamentalsSnapshot
+	calls    int
+}
+
+func (p *fundamentalsCountingFakeProvider) Name() string { return "baostock" }
+
+func (p *fundamentalsCountingFakeProvider) FetchFundamentals(context.Context, string, int, int) (*model.FundamentalsSnapshot, error) {
+	p.calls++
+	return p.snapshot, nil
+}
+
+func setFundamentalsUnknownQuality(snapshot *model.FundamentalsSnapshot) {
+	snapshot.QualityStatus = model.QualityUnknown
+	for index := range snapshot.Sections {
+		snapshot.Sections[index].QualityStatus = model.QualityUnknown
+	}
+}
+
+func TestFundamentalsUnknownSnapshotWithDataUsesShortCacheTTL(t *testing.T) {
+	now := time.Now().UTC()
+	stale := validFundamentalsSnapshotForTest()
+	setFundamentalsUnknownQuality(stale)
+	stale.FetchedAt = now.Add(-2 * time.Hour)
+	encoded, err := json.Marshal(stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem := newMemoryCache()
+	mem.values["md:v1:fundamentals:600519.SH:2026:2"] = encoded
+
+	fresh := validFundamentalsSnapshotForTest()
+	setFundamentalsUnknownQuality(fresh)
+	fresh.FetchedAt = now
+	p := &fundamentalsCountingFakeProvider{snapshot: fresh}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetFundamentalsProviders([]provider.FundamentalsProvider{p})
+
+	got, hit, err := svc.Fundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil || hit {
+		t.Fatalf("two-hour-old unknown fundamentals should refresh: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.QualityStatus != model.QualityUnknown || p.calls != 1 {
+		t.Fatalf("refreshed fundamentals quality/calls mismatch: snapshot=%+v calls=%d", got, p.calls)
+	}
+}
