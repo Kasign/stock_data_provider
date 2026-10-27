@@ -479,6 +479,12 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	}
 	var selected []json.RawMessage
 	selectedAnnouncementDate := ""
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		location = time.FixedZone("CST", 8*60*60)
+	}
+	today := time.Now().In(location).Format("2006-01-02")
+	periodDate := period.Format("2006-01-02")
 	for index, row := range table.rows {
 		code, readErr := table.stringValue(row, "ts_code")
 		if readErr != nil {
@@ -505,6 +511,10 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			announcementDate, dateErr = tushareISODate(announcementRaw)
 			if dateErr != nil {
 				return nil, fmt.Errorf("Tushare 财务公告日期无效: %w", dateErr)
+			}
+			// 只从报告期结束后、当前日期之前已公开的修订版本中选择最新记录。
+			if announcementDate < periodDate || announcementDate > today {
+				continue
 			}
 		}
 		if selected == nil || announcementDate > selectedAnnouncementDate {

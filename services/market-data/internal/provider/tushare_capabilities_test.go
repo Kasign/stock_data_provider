@@ -417,3 +417,76 @@ func TestTushareDailyRejectsFractionalVolumeInHands(t *testing.T) {
 		t.Fatalf("fractional volume in hands must not be rounded into shares, got %v", err)
 	}
 }
+
+
+func TestTushareFundamentalsIgnoresFutureAnnouncementVersion(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().In(location)
+	futureAnnouncement := today.AddDate(0, 0, 5).Format("20060102")
+	knownAnnouncement := today.AddDate(0, 0, -30).Format("20060102")
+	periodEnd := "20260630"
+	if knownAnnouncement < periodEnd {
+		t.Skip("test date is before the selected report period")
+	}
+
+	fields := strings.Split("ts_code,ann_date,end_date,eps,dt_eps,roe,roe_waa,roe_dt,roa,netprofit_margin,grossprofit_margin,assets_turn,inv_turn,ar_turn,ca_turn,fa_turn,netprofit_yoy,or_yoy,assets_yoy,eqt_yoy,current_ratio,quick_ratio,cash_ratio,debt_to_assets,ocf_to_or,ocf_to_profit,ocf_to_debt,dupont_roe,dupont_asset_turn,dupont_pnitoni,dupont_tax_burden,dupont_intburden", ",")
+	makeRow := func(announcementDate string, eps float64) []any {
+		values := make([]any, len(fields))
+		for i, field := range fields {
+			switch field {
+			case "ts_code":
+				values[i] = "600519.SH"
+			case "ann_date":
+				values[i] = announcementDate
+			case "end_date":
+				values[i] = periodEnd
+			case "eps":
+				values[i] = eps
+			default:
+				values[i] = nil
+			}
+		}
+		return values
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare fundamentals request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "fina_indicator" || request.Params["ts_code"] != "600519.SH" || request.Params["period"] != periodEnd {
+			t.Errorf("unexpected Tushare fundamentals request: %+v", request)
+		}
+		// 将未来公告放在第一行，确保适配器不会直接选择它。
+		writeTushareTestTable(w, fields, [][]any{
+			makeRow(futureAnnouncement, 9.99),
+			makeRow(knownAnnouncement, 1.23),
+		})
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	snapshot, err := provider.FetchFundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.QualityStatus == model.QualityValid {
+		t.Fatal("sparse indicator fixture should not be considered a complete valid snapshot")
+	}
+	for _, section := range snapshot.Sections {
+		for _, metric := range section.Metrics {
+			if metric.Key == "eps" {
+				if metric.Value != 1.23 || section.PublicationDate != time.Date(today.Year(), today.Month(), today.Day()-30, 0, 0, 0, 0, location).Format("2006-01-02") {
+					t.Fatalf("future-announced version was selected: metric=%+v section=%+v", metric, section)
+				}
+				return
+			}
+		}
+	}
+	t.Fatal("expected a selected EPS metric from the already-published version")
+}
