@@ -376,6 +376,9 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 	if start.After(end) {
 		return nil, false, errors.New("start must not be after end")
 	}
+	if endDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+		return nil, false, errors.New("index daily-bars end date must not be in the future")
+	}
 	if end.After(start.AddDate(10, 0, 0)) {
 		return nil, false, errors.New("index daily-bars date range must not exceed 10 years")
 	}

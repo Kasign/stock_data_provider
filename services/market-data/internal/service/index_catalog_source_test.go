@@ -60,3 +60,13 @@ func TestIndexCatalogProvidersForSourceRejectsUnavailableProvider(t *testing.T) 
 		t.Fatal("expected a disabled/unregistered source to be rejected")
 	}
 }
+
+
+func TestIndexDailyBarsRejectsFutureEndDateBeforeProviderSelection(t *testing.T) {
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	future := time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	svc := &DataService{}
+	if _, _, err := svc.IndexDailyBarsFromSource(context.Background(), "000300.SH", today, future, ""); err == nil || !strings.Contains(err.Error(), "must not be in the future") {
+		t.Fatalf("future index daily-bars end date must be rejected before selecting a Provider, got %v", err)
+	}
+}
