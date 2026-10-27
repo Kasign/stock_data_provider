@@ -482,7 +482,11 @@ func tencentCode(symbol string) (string, error) {
 }
 func parseTencentTime(s string) *time.Time {
 	s = strings.TrimSpace(s)
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		// 精简容器可能没有 zoneinfo 数据；腾讯返回的是中国本地行情时间，回退到固定 UTC+8。
+		loc = time.FixedZone("CST", 8*60*60)
+	}
 	for _, layout := range []string{"20060102150405", "200601021504", "2006-01-02 15:04:05"} {
 		if t, e := time.ParseInLocation(layout, s, loc); e == nil {
 			t = t.UTC()
