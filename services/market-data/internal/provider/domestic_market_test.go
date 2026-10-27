@@ -506,3 +506,36 @@ func TestEastmoneyFetchLimitPoolRejectsInvalidPoolType(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+
+func TestParseEastmoneyBoardIntegerRejectsInvalidCounts(t *testing.T) {
+	cases := []struct {
+		name  string
+		raw   string
+		want  int
+		valid bool
+	}{
+		{name: "integer number", raw: "3", want: 3, valid: true},
+		{name: "integer string", raw: `"7"`, want: 7, valid: true},
+		{name: "fractional number", raw: "1.5"},
+		{name: "fractional string", raw: `"2.5"`},
+		{name: "negative count", raw: "-1"},
+		{name: "unsafe integer precision", raw: "9007199254740992"},
+		{name: "missing count", raw: "null"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			row := map[string]json.RawMessage{"count": json.RawMessage(tc.raw)}
+			got := parseEastmoneyBoardInteger(row, "count")
+			if !tc.valid {
+				if got != nil {
+					t.Fatalf("invalid count %s must be missing, got %d", tc.raw, *got)
+				}
+				return
+			}
+			if got == nil || *got != tc.want {
+				t.Fatalf("count = %v, want %d", got, tc.want)
+			}
+		})
+	}
+}

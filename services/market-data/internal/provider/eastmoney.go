@@ -1896,7 +1896,14 @@ func parseEastmoneyBoardNumber(row map[string]json.RawMessage, key string) *floa
 
 func parseEastmoneyBoardInteger(row map[string]json.RawMessage, key string) *int {
 	value := parseEastmoneyBoardNumber(row, key)
-	if value == nil {
+	if value == nil || *value < 0 || math.Trunc(*value) != *value {
+		return nil
+	}
+	// 计数字段必须是非负整数；同时限制在浮点数可精确表示的整数范围内，
+	// 避免小数被截断或超大值转换为 int 时发生精度/溢出问题。
+	const maxExactInteger = 1 << 53
+	maxInt := int(^uint(0) >> 1)
+	if *value >= maxExactInteger || *value > float64(maxInt) {
 		return nil
 	}
 	integer := int(*value)

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -975,4 +976,44 @@ func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *tes
 	if err := validateIndexQuoteSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
 		t.Fatalf("snapshot must inherit item degradation, got %v", err)
 	}
+}
+
+
+func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testing.T) {
+	now := time.Now().UTC()
+	change := 2.5
+	makeSnapshot := func() *model.LimitPoolSnapshot {
+		return &model.LimitPoolSnapshot{
+			PoolType: "up", TradeDate: "2026-10-23", Total: 1, HasData: true,
+			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Items: []model.LimitPoolItem{{
+				Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", ChangePercent: &change,
+				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			}},
+		}
+	}
+
+	t.Run("non-finite amount", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		bad := math.NaN()
+		snapshot.Items[0].SealMoney = &bad
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "non-finite") {
+			t.Fatalf("non-finite amount must be rejected, got %v", err)
+		}
+	})
+	t.Run("negative count", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		bad := -1
+		snapshot.Items[0].ConsecutiveBoards = &bad
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "negative count") {
+			t.Fatalf("negative count must be rejected, got %v", err)
+		}
+	})
+	t.Run("aggregate quality", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.QualityStatus = model.QualityValid
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
+			t.Fatalf("snapshot quality must include item degradation, got %v", err)
+		}
+	})
 }

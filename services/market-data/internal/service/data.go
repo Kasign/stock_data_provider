@@ -416,6 +416,7 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			return fmt.Errorf("limit-pool quality status %q is unsupported", snapshot.QualityStatus)
 		}
 		seen := make(map[string]bool, len(snapshot.Items))
+		hasDegradedItem := false
 		for _, item := range snapshot.Items {
 			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.ChangePercent == nil {
 				return errors.New("limit-pool item missing required fields")
@@ -423,10 +424,40 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
 				return errors.New("limit-pool item source or fetched_at mismatch")
 			}
+			if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
+				return fmt.Errorf("limit-pool item %s has unsupported quality %q", item.Symbol, item.QualityStatus)
+			}
+			if item.QualityStatus == model.QualityDegraded {
+				hasDegradedItem = true
+			}
+			for _, value := range []*float64{
+				item.LastPrice, item.ChangePercent, item.TurnoverRatioPercent,
+				item.Turnover, item.SealMoney, item.MaxSealMoney,
+			} {
+				if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+					return fmt.Errorf("limit-pool item %s contains a non-finite numeric value", item.Symbol)
+				}
+			}
+			if item.LastPrice != nil && *item.LastPrice <= 0 {
+				return fmt.Errorf("limit-pool item %s has a non-positive last price", item.Symbol)
+			}
+			for _, value := range []*float64{item.TurnoverRatioPercent, item.Turnover, item.SealMoney, item.MaxSealMoney} {
+				if value != nil && *value < 0 {
+					return fmt.Errorf("limit-pool item %s has a negative turnover or seal metric", item.Symbol)
+				}
+			}
+			for _, value := range []*int{item.ConsecutiveBoards, item.BrokenCount, item.OpenTimes} {
+				if value != nil && *value < 0 {
+					return fmt.Errorf("limit-pool item %s has a negative count field", item.Symbol)
+				}
+			}
 			if seen[item.Symbol] {
 				return fmt.Errorf("limit-pool duplicate symbol %q", item.Symbol)
 			}
 			seen[item.Symbol] = true
+		}
+		if snapshot.QualityStatus == model.QualityValid && hasDegradedItem {
+			return errors.New("limit-pool snapshot cannot be valid when one or more items are degraded")
 		}
 		return nil
 	}
