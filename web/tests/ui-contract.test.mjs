@@ -764,5 +764,10 @@ test("辅助说明、任务元信息和输入占位文字统一使用主题感�
   );
   assert.match(stylesheet, /:root\[data-theme="light"\] \.side-label \{ color: var\(--text-dim\); \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.sidebar-footnote \{ color: var\(--text-dim\); \}/);
+  assert.doesNotMatch(
+    stylesheet,
+    /\.watchlist-name-input::placeholder\s*\{\s*color:\s*#[0-9a-fA-F]{3,8}\s*;/,
+    "a later hard-coded watchlist placeholder rule must not override the shared theme token"
+  );
 });
 
