@@ -701,3 +701,11 @@
 - CSS 维护性：主题 token 改为多行清晰排列；保留已有组件与媒体查询顺序，未冒险合并跨区块断点。
 - PR #13 已合并；本批后续代码已在 PR #14 独立 Review，保持 Open。当前尚未做 NAS/1Panel、真实数据源或人工主题/键盘验收。
 
+
+
+## 2026-10-27 — PR #14 同步及 CI 状态补充
+
+- 为解决目标分支同名文档并行更新，本分支已通过同步提交 `75b84a4d306308518b92e7d5a21f43479d49bed1` 将数据分支当时 HEAD `53a1519b138705484e00bbc8af23c1965d23145e` 作为第二父提交；保留原有提交历史，数据分支 ref 未修改。
+- PR #14 已从冲突状态恢复为可合并，目标分支与工作分支的比较只涉及 `web/` 下 7 个文件；PR 仍 Open，没有合并。
+- 同步提交的 [WebUI checks #40455555464](https://github.com/Kasign/stock_data_provider/actions/runs/40455555464) 和 [Chromium smoke #40455555462](https://github.com/Kasign/stock_data_provider/actions/runs/40455555462) 均在执行步骤开始前失败；对应 Job 未提供 steps/logs。此前 push smoke [#40455549420](https://github.com/Kasign/stock_data_provider/actions/runs/40455549420) 亦如此。当前不能判定该提交的源码测试通过或失败，需后续有可执行 runner 的 Actions 结果再确认。
+

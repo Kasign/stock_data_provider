@@ -6,11 +6,11 @@
 ## 当前 GitHub 状态（2026-10-27 复核；后续以 GitHub 实时状态为准）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 工作分支：`feat/webui-market-data-console`；本轮源码变更提交为 `da7b671294754913a55eb3bced36fe52e801b66e`。为防覆盖并行文档更新，后续同步提交将保留该提交并以目标分支最新 HEAD 为第二父提交。
+- WebUI 工作分支：`feat/webui-market-data-console`；本轮代码提交为 `da7b671294754913a55eb3bced36fe52e801b66e`，同步提交为 `75b84a4d306308518b92e7d5a21f43479d49bed1`。同步提交以代码提交为第一父、目标数据分支当时 HEAD `53a1519b138705484e00bbc8af23c1965d23145e` 为第二父，保留两边历史，未改动数据分支 ref。
 - 数据分支 `feat/full-go-data-providers-api-switch` 在同步前的最新 HEAD：`53a1519b138705484e00bbc8af23c1965d23145e`。同步目的仅为保留目标分支并行历史与同名文档更新，不会将 WebUI 改动写入该分支。
 - WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，已于 2026-10-27 11:42（新加坡时间）合并；合并提交 `704476fa02b1ebcf98f27b0ffb5c1a858727d82c`。PR #13 不再承接新提交。
 - WebUI 后续 PR #14：https://github.com/Kasign/stock_data_provider/pull/14，标题 `WebUI: 提升主题可读性并补全全站 Review`，保持 Open，不执行合并。
-- 本轮 push 触发的 [Chromium smoke #40455198547](https://github.com/Kasign/stock_data_provider/actions/runs/40455198547) 在 GitHub 未分配 runner 的情况下快速失败；重试仍未提供可读步骤/日志。PR #14 的新一轮 checks 需查看最新 Actions 状态，不得把此失败标为测试通过。
+- [WebUI checks #40455555464](https://github.com/Kasign/stock_data_provider/actions/runs/40455555464) 与 [Chromium smoke #40455555462](https://github.com/Kasign/stock_data_provider/actions/runs/40455555462) 在同步提交上均快速失败，Job 未提供执行步骤或日志；push smoke #40455549420 也有同样表现。因此本轮无法据此确认源码测试结果，不得将其标为通过。
 - 本轮只允许改动 `web/**`；不修改 Go/Provider/数据库/API 契约/根 Compose。CI 的固定 503 浏览器烟测也不能替代真实 API 与 NAS/1Panel 验收。
 
 ## 本轮已交付且尚未做运行时验收的事项
@@ -497,3 +497,10 @@
 - PR #14 的 Chromium smoke 曾在未分配 runner 时失败，重试结果仍未提供执行日志；待 PR checks 能正常分配 runner 后核对结果。不要将无步骤的快速失败误判为样式源码失败，也不要宣称通过。
 - 不合并 PR #14；若目标分支再推进，继续保留其文档更新并先比较两个分支 HEAD。
 
+
+
+## 2026-10-27 — 最新同步与 CI 交接说明
+
+- 已通过同步提交 `75b84a4d306308518b92e7d5a21f43479d49bed1` 把目标分支当时 HEAD `53a1519b138705484e00bbc8af23c1965d23145e` 纳入 WebUI 分支历史，解决 PR #14 对同名文档的合并冲突。此操作只推进 WebUI 工作分支，不将任何 WebUI 改动写入数据分支。
+- PR #14 仍处于 Open；比较目标分支与 WebUI 分支仅涉及 `web/` 下 7 个文件。
+- 同步提交的两项 Actions Job 均在未提供 steps/logs 的情况下失败。不要推断代码成功或代码失败；可用 runner 的下一次 CI 才能验证 Node 测试与 Chromium smoke。
