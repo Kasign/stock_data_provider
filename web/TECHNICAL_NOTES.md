@@ -336,3 +336,12 @@ X-API-Key: <由现有设置提供>
 - 数据侧 PR #1 Go suite [#40445663152](https://github.com/Kasign/stock_data_provider/actions/runs/40445663152) 是独立失败项：market-data 中 `eastmoney.go:2086-2090` 包含被错误转义为 `\x60` 的 Go struct tag，导致语法错误及 Docker 镜像构建失败。
 - go-core 的 gofmt 检查列出了 7 个文件需要格式化：marketdatahttp 的 client 与测试、newssearch 的实现与测试、pythonbridge 的测试、contextpack/build.go、domain/models.go。
 - PR #13 仅改 WebUI 与 WebUI workflow，不改任何 Go/Provider 文件，所以这个失败不归因于此次 WebUI 合并。本记录用于防止混淆：WebUI 集成通过不代表数据侧 Go suite 通过。
+
+
+## 2026-10-27 — Go CI 修复验证结论
+
+- Eastmoney 的 JSON struct tag 语法错误已修复。CI 中报告的 Go 格式差异通过 `gofmt` 输出精确整理，避免变更非必要业务逻辑。
+- 配置测试已与当前默认 Provider 能力保持一致：BaoStock fundamentals/trading calendar 默认启用；Yahoo daily bars 默认关闭；NetEase quote 默认启用。测试覆盖显式环境变量启用/关闭能力，不将测试期望错误地当作生产默认配置。
+- 新闻多源查询引入维度查询计划与并行聚合；对应聚合测试明确设置两个查询预算，验证两个已配置 Provider 均被调用一次并对重复标题去重。
+- 最新 head `24952dd` 的 [Go suite](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361)、[Live Provider probe](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825)、[WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 均成功。
+- Run Flow Review 后续单独开展：以服务端阶段事件、任务状态与时间戳为依据检查 UI 展示，不在本次 Go CI 修复中改运行流逻辑。

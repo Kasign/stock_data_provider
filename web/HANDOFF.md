@@ -478,3 +478,12 @@
 - market-data 镜像构建和 Go 语法检查指向 `services/market-data/internal/provider/eastmoney.go:2086-2090`：若干 Go struct tag 被写成字面量 `\x60json:...\x60`，而不是 Go tag 所需的反引号，造成 illegal character 和后续语法错误。
 - `go-core` 的 `gofmt` 检查也失败，涉及 `internal/adapters/marketdatahttp/client.go`、`client_test.go`、`internal/adapters/newssearch/search.go`、`search_test.go`、`internal/adapters/pythonbridge/adapters_test.go`、`internal/contextpack/build.go`、`internal/domain/models.go`。
 - 这些文件不属于 PR #13 的改动范围，因此本次没有把 Go/Provider 修复混入 WebUI 集成。数据层构建问题需要作为独立修复任务处理；不能把 PR #13 已成功合并理解为整个数据仓库 Go CI 已通过。
+
+
+## 2026-10-27 — Go CI 阻塞修复及最新完整验证
+
+- `50fecf2` 修复 Eastmoney struct tag 的反引号分隔符；`b694065`、`d692a0d` 完成 CI 报告的 Go 格式整理；`e5bb03f` 对齐配置测试默认能力策略；`d551057` 明确新闻多源聚合测试使用 `MaxSearches: 2`，使测试预算与“两家 Provider 各执行一个查询计划”的预期一致。
+- 并行新闻多维查询扩展提交 `49e0d64`、CI 手动触发与格式诊断工作流调整 `84b8b37`、`44f2267` 均保留在当前 PR 历史中，未重写或覆盖。
+- 最新验证 head `24952dd7af06f2e6824a1d8c52c54c7dabd9865b` 的 [Go test suite](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361)、[Live provider probe](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825) 与 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 均成功。Go suite 包含根模块、go-core、market-data 测试、race、vet、Compose 校验及 Go 镜像构建。
+- Provider 默认策略未被本轮改动：BaoStock fundamentals/trading calendar 默认启用、Yahoo 日线默认关闭、NetEase quote 默认启用；测试通过环境变量显式验证可覆盖能力开关。
+- 运行流（Run Flow）作为下一项共同 Review 任务单独推进；本轮只修复 Go CI，不改运行流行为。

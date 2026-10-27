@@ -368,9 +368,14 @@
 - [x] 全局清理无用首页导航规则与完全重复的顶层 CSS 规则。
 - [ ] 继续按组件区块处理历史 CSS 的断点/Token 维护性，并由部署后实测确认主题与窄屏视觉。
 
-### 2026-10-27 数据侧 CI 阻塞（单独于 WebUI PR #13）
+### 2026-10-27 数据侧 CI 阻塞 — 已修复
 
-- [ ] 修复 `services/market-data/internal/provider/eastmoney.go:2086-2090` 中字面量 `\x60` 导致的 Go struct tag 语法错误。
-- [ ] 对 Go suite 列出的 7 个 go-core 文件运行 gofmt，提交格式修正。
-- [ ] 重新运行数据侧 Go suite、`go vet`、race 检查及 market-data Docker 构建；通过前不得标记为完成。
-- 背景：PR #1 的 Go suite [#40445663152](https://github.com/Kasign/stock_data_provider/actions/runs/40445663152) 因上述问题失败。此项不属于 PR #13，避免把 Go/Provider 改动混入 WebUI 集成。
+- [x] 修复 Eastmoney JSON struct tag 语法错误。
+- [x] 完成 CI 报告的 Go 格式整理，包含并行新闻查询策略代码。
+- [x] 对齐 Provider 配置测试与当前国内数据源默认能力，保留 env override 验证。
+- [x] 补齐新闻多源聚合用例的 `MaxSearches: 2` 查询预算。
+- [x] 最新 head `24952dd` 的 Go suite、Live Provider probe、WebUI checks 均通过：
+  - [Go test suite](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361)
+  - [Live provider probe](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825)
+  - [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307)
+- [ ] 与用户共同 Review 运行流（Run Flow），不与本次 CI 修复混合。

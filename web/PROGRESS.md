@@ -681,3 +681,13 @@
 - 已定位的语法错误：`services/market-data/internal/provider/eastmoney.go:2086-2090` 中结构体 JSON tag 使用字面量 `\x60`，Go 编译器报 illegal character；这不是 WebUI 改动造成的。
 - 另有 7 个 go-core 文件未通过 gofmt（清单见 `web/HANDOFF.md`）。作为独立数据层工作记录，暂不在 PR #13 中跨范围修改。
 - 待办：修复 Eastmoney struct tag 的反引号/语法问题，统一上述 Go 文件格式，再重新执行 Go suite 与 market-data 镜像构建。当前不得将整个数据层标记为构建通过。
+
+
+## 2026-10-27 — Go CI 阻塞已修复，最新 HEAD 全绿
+
+- [x] 修复 Eastmoney provider JSON struct tag 语法错误。
+- [x] 修复 Go suite 报告的 `gofmt` 差异，包含并行新闻查询策略实现与测试。
+- [x] 对齐配置测试与当前 Provider 默认能力；特殊能力组合使用明确环境变量覆盖。
+- [x] 对新闻多源聚合测试显式设置 `MaxSearches: 2`，验证两家 Provider 各被调用一次并完成去重。
+- [x] 最新 head `24952dd` 的 [Go suite #40449084361](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361)、[Live Provider probe #40449084825](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825)、[WebUI checks #40449084307](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 成功。
+- [ ] 与用户共同 Review 运行流（Run Flow）；单独检查后端阶段事件、状态和时间线是否一致。
