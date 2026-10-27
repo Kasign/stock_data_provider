@@ -1,6 +1,6 @@
 # WebUI 当前 API 集成契约
 
-更新日期：2026-10-26
+更新日期：2026-10-27（新增数据中心检查范围）
 
 ## 结论
 
@@ -20,18 +20,33 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 
 | 服务 | 浏览器请求 | 请求参数/请求头 | 用途 |
 |---|---|---|---|
-| Go 行情 | `GET /market-api/health/ready` | 不附加 API Key | 行情服务就绪检查 |
+| Go 行情 | `GET /market-api/health/live` | 不附加 API Key | 行情服务存活检查（数据中心“立即检查”使用） |
+| Go 行情 | `GET /market-api/health/ready` | 不附加 API Key | 行情服务就绪检查（数据中心“立即检查”使用） |
 | Go 行情 | `GET /market-api/api/v1/data-sources` | `X-API-Key` | 读取 Provider 能力/状态 |
 | Go 行情 | `GET /market-api/api/v1/quotes/{symbol}` | `X-API-Key`；股票代码作为路径段 | 查询实时行情 |
 | Go 行情 | `GET /market-api/api/v1/bars/{symbol}/daily?limit=120&adjustment=forward_adjusted&start=2026-10-01&end=2026-10-23` | `X-API-Key`；`limit`、`adjustment` 可配置；`start`、`end` 可选 | 查询历史日 K；日期参数会原样传至现有行情 API |
 | Go 行情 | `GET /market-api/api/v1/stocks/{symbol}/chip-distribution` | `X-API-Key` | 按需读取个股筹码分布；字段可缺失，按接口返回的质量状态和原因展示 |
 | Go 行情 | `GET /market-api/api/v1/stocks/{symbol}/capital-flow` | `X-API-Key` | 按需读取个股资金流；5/10 日汇总可能为空，不能前端补造 |
-| Go 分析 | `GET /analysis-api/readyz` | 不附加行情 API Key | 分析服务就绪检查 |
+| Go 分析 | `GET /analysis-api/healthz` | 不附加行情 API Key | 分析服务存活检查（数据中心“立即检查”使用） |
+| Go 分析 | `GET /analysis-api/readyz` | 不附加行情 API Key | 分析服务就绪检查；当前可报告 MariaDB/Redis 依赖状态 |
 | Go 分析 | `POST /analysis-api/api/v1/analysis/tasks` | JSON；可选 `Idempotency-Key` | 创建异步分析任务 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}` | task ID 作为路径段 | 查询任务状态 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}/events?after_sequence=0&limit=100` | 增量事件游标与单页条数 | 获取持久化阶段事件 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | Run ID 作为路径段 | 读取单个 RunResult，并作为结构化分析结果展示的数据源；运行未结束时现有接口可能返回 409 `run_not_finished` |
 
+## 2026-10-27 数据中心“立即检查”的真实调用范围
+
+WebUI 已添加数据中心页面和手动“立即检查”操作。此页面当前实际调用：
+
+- `GET /health/live` 与 `GET /health/ready`：检查 Go 行情服务存活/就绪。
+- `GET /healthz` 与 `GET /readyz`：检查 Go 分析服务存活/就绪。
+- `GET /api/v1/data-sources`：读取 Provider 配置与 capability 声明，需行情 API Key。
+- WebUI/Nginx 页面路径：使用当前同源页面路径执行一次 GET；它只能确认此页面路径当时可响应，不代表容器内部每个进程都健康。
+- MariaDB/Redis：只读取分析服务 ` /readyz ` 响应中的依赖子状态。分析服务不可达或未返回子状态时 UI 显示 unknown。
+
+每项请求单独并发执行，最多等待约 6 秒；失败会显示状态、耗时和截断的安全错误摘要。此功能目前**没有**直接探测各 Provider 上游。Provider 清单中的 enabled/capability 只代表注册/配置声明，UI 会显示“已注册 · 未实测”。逐 Provider/capability 探测须等待 [数据能力缺口与服务巡检设计](./DATA_CAPABILITY_GAPS.md) 中描述的受保护诊断 API。
+
+上述是当前前端行为，不代表本轮已运行测试或在 NAS/1Panel 上完成真实验收。
 ## 行情 Bundle 与快照一致性
 
 - 未填写日 K 开始/结束日期时，WebUI 优先请求 `GET /market-api/api/v1/bundles/{symbol}?lookback_days=120&adjustment=forward_adjusted`，在一个响应中读取实时行情、日 K、质量警告、`snapshot_id` 与 `analysis_reference_time`。
