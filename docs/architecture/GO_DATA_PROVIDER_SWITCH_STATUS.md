@@ -435,3 +435,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 静态审查发现 `float64(math.MaxInt64)` 会舍入为 `2^63`。原来仅拒绝 `rawVolume > float64(math.MaxInt64)` 会让精确的 `2^63` 通过检查，再转 `int64` 时溢出。
 - 现改为在转换前拒绝 `rawVolume >= float64(math.MaxInt64)`；越界量保留为 `volume=null`、`volume_unit=unknown`，该条目标为 degraded 并记录稳定原因。
 - 新增 `TestTushareIndexDailyBarsRejectsInt64VolumeOverflow` 测试源码。未执行测试、构建、CI 或真实 Provider 请求。
+
+
+### 国内 Provider 浮点转整数边界复核（2026-10-27）
+
+- 同花顺指数日 K、个股行情/日 K 的成交量和财报时间戳统一在 `int64` 转换前拒绝 `>= float64(math.MaxInt64)` 的边界；对时间戳同时要求整数毫秒值。
+- TickFlow 整数解析增加正负 int64 范围检查，避免浮点输入越界后直接转换；腾讯报价成交量的预防性换算边界也改为包含等号的拒绝条件。
+- 新增 `numeric_boundary_test.go`，覆盖同花顺、TickFlow 与腾讯的 `2^63` 边界。仅增加测试源码，未执行测试/构建/CI/真实 Provider 请求。
