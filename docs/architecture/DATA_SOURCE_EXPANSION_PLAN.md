@@ -423,3 +423,6 @@ Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次
 
 
 人气/飙升/关注榜补充：未知空榜现在继续尝试后备 Provider；只有回退耗尽后才将空结果短缓存 10 秒并附加 `hot_ranking_fallback_exhausted_without_confirmed_data`，防止第一个来源的空榜把其他来源挡住。
+
+
+证券搜索补充：完整有效目录中的空匹配可以表示确实没有匹配，但 `quality_unknown` / `quality_stale` 的空匹配必须继续尝试后备来源；只有回退链耗尽后才返回 unknown 并带 `stock_search_fallback_exhausted_without_confirmed_match`。

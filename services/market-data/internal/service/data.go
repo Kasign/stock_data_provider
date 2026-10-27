@@ -1087,6 +1087,7 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 		return nil, errors.New("no enabled stock-search provider")
 	}
 	failures := make([]string, 0, len(s.stockSearchProviders))
+	var unknownEmpty *model.StockSearchSnapshot
 	for _, p := range s.stockSearchProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -1116,7 +1117,19 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if len(snapshot.Items) == 0 && (snapshot.QualityStatus == model.QualityUnknown || snapshot.QualityStatus == model.QualityStale) {
+			// 未知/过期目录中的空匹配不能证明证券不存在，继续尝试其他搜索源。
+			unknownEmpty = snapshot
+			failures = append(failures, p.Name()+": empty match from unconfirmed or stale stock directory")
+			continue
+		}
+		// 完整且非空的查询结果，或质量状态有效的确定空结果，均可直接返回。
 		return snapshot, nil
+	}
+	if unknownEmpty != nil {
+		unknownEmpty.QualityStatus = model.QualityUnknown
+		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "stock_search_fallback_exhausted_without_confirmed_match")
+		return unknownEmpty, nil
 	}
 	return nil, fmt.Errorf("all stock-search providers failed: %s", strings.Join(failures, "; "))
 }
