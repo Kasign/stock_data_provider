@@ -958,7 +958,8 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			item.ListingStatusLabel = map[int]string{0: "delisted", 1: "listed"}[item.ListingStatus]
 		}
 		if item.QualityStatus == "" || item.QualityStatus == model.QualityUnknown {
-			item.QualityStatus = model.QualityValid
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing_or_unknown")
 		}
 		if item.NormalizationVer == "" {
 			item.NormalizationVer = normalize.Version
