@@ -2011,6 +2011,132 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 const eastmoneyMarketUniverseFilter = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
 const eastmoneyMarketBreadthPageSize = 20000
 const eastmoneyMarketBreadthMaxSecurities = 12000
+const eastmoneyMarketTurnoverPageSize = 100
+const eastmoneyMarketTurnoverWorkers = 4
+const eastmoneyMarketTurnoverTimeout = 60 * time.Second
+
+type eastmoneyMarketTurnoverItem struct {
+	securityKey string
+	amountCNY   float64
+}
+
+// fetchMarketTurnover 从东方财富证券列表接口分页汇总全市场成交额。
+// 只有分页完整、证券唯一、金额字段有效且报价日期与广度报告日一致时才返回总额。
+func (p *Eastmoney) fetchMarketTurnover(ctx context.Context, reportDate string) (float64, int, string) {
+	fail := func(reason string) (float64, int, string) { return 0, 0, reason }
+	if ctx == nil { ctx = context.Background() }
+	if err := ctx.Err(); err != nil { return fail("market_amount_collection_cancelled") }
+	if _, err := time.Parse("2006-01-02", reportDate); err != nil { return fail("market_amount_report_date_invalid") }
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { location = time.FixedZone("CST", 8*60*60) }
+
+	fetchPage := func(requestCtx context.Context, page, expectedTotal int) (int, []eastmoneyMarketTurnoverItem, string) {
+		baseURL := strings.TrimSpace(p.stockListURL)
+		if baseURL == "" { baseURL = defaultEastmoneySectorRankingURL }
+		params := url.Values{
+			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(eastmoneyMarketTurnoverPageSize)},
+			"po": {"1"}, "np": {"1"}, "fid": {"f12"}, "fs": {eastmoneyMarketUniverseFilter},
+			"fields": {"f12,f13,f6,f86"}, "fltt": {"2"}, "invt": {"2"},
+			"ut": {p.ut}, "_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+		}
+		var payload struct {
+			RC *int `json:"rc"`
+			Data *struct {
+				Total int `json:"total"`
+				Diff json.RawMessage `json:"diff"`
+			} `json:"data"`
+		}
+		if err := p.getJSONWithRetry(requestCtx, baseURL, params, &payload, 6*time.Second); err != nil {
+			if requestCtx.Err() != nil { return 0, nil, "market_amount_collection_cancelled" }
+			return 0, nil, "market_amount_provider_request_failed"
+		}
+		if payload.RC != nil && *payload.RC != 0 { return 0, nil, "market_amount_provider_rejected_request" }
+		if payload.Data == nil || payload.Data.Total <= 0 { return 0, nil, "market_amount_provider_total_missing" }
+		total := payload.Data.Total
+		if total > eastmoneyMarketBreadthMaxSecurities { return 0, nil, "market_amount_universe_exceeds_safety_limit" }
+		if expectedTotal > 0 && total != expectedTotal { return 0, nil, "market_amount_provider_total_changed_during_pagination" }
+		rows, err := decodeEastmoneyBoardRows(payload.Data.Diff)
+		if err != nil { return 0, nil, "market_amount_provider_payload_invalid" }
+		expectedRows := eastmoneyMarketTurnoverPageSize
+		remaining := total - (page-1)*eastmoneyMarketTurnoverPageSize
+		if remaining < expectedRows { expectedRows = remaining }
+		if expectedRows <= 0 || len(rows) != expectedRows { return 0, nil, "market_amount_provider_pagination_incomplete" }
+
+		items := make([]eastmoneyMarketTurnoverItem, 0, len(rows))
+		for _, row := range rows {
+			code, market := parseEastmoneyBoardString(row, "f12"), parseEastmoneyBoardString(row, "f13")
+			if len(code) != 6 || (market != "0" && market != "1") { return 0, nil, "market_amount_provider_security_identity_invalid" }
+			for _, digit := range code {
+				if digit < '0' || digit > '9' { return 0, nil, "market_amount_provider_security_identity_invalid" }
+			}
+			amount := parseEastmoneyBoardNumber(row, "f6")
+			if amount == nil || *amount < 0 || !finiteNumber(*amount) { return 0, nil, "market_amount_provider_amount_invalid" }
+			quoteTime := parseEastmoneyTime(parseEastmoneyBoardString(row, "f86"))
+			if quoteTime == nil || quoteTime.In(location).Format("2006-01-02") != reportDate { return 0, nil, "market_amount_quote_date_mismatch" }
+			items = append(items, eastmoneyMarketTurnoverItem{securityKey: market + "." + code, amountCNY: *amount})
+		}
+		return total, items, ""
+	}
+
+	total, firstPage, reason := fetchPage(ctx, 1, 0)
+	if reason != "" { return fail(reason) }
+	pageCount := (total + eastmoneyMarketTurnoverPageSize - 1) / eastmoneyMarketTurnoverPageSize
+	if pageCount <= 0 || pageCount > eastmoneyStockSearchMaxPages { return fail("market_amount_provider_page_count_invalid") }
+	pages := make([][]eastmoneyMarketTurnoverItem, pageCount)
+	pages[0] = firstPage
+	if pageCount > 1 {
+		type pageResult struct { page int; items []eastmoneyMarketTurnoverItem; reason string }
+		workCtx, cancel := context.WithCancel(ctx)
+		jobs, results := make(chan int, pageCount-1), make(chan pageResult, pageCount-1)
+		for page := 2; page <= pageCount; page++ { jobs <- page }
+		close(jobs)
+		workerCount := eastmoneyMarketTurnoverWorkers
+		if workerCount > pageCount-1 { workerCount = pageCount-1 }
+		var workers sync.WaitGroup
+		var failureMu sync.Mutex
+		firstFailureReason := ""
+		workers.Add(workerCount)
+		for worker := 0; worker < workerCount; worker++ {
+			go func() {
+				defer workers.Done()
+				for page := range jobs {
+					if workCtx.Err() != nil { results <- pageResult{page: page, reason: "market_amount_collection_cancelled"}; continue }
+					_, items, pageReason := fetchPage(workCtx, page, total)
+					if pageReason != "" {
+						failureMu.Lock()
+						if firstFailureReason == "" { firstFailureReason = pageReason }
+						failureMu.Unlock()
+						cancel()
+					}
+					results <- pageResult{page: page, items: items, reason: pageReason}
+				}
+			}()
+		}
+		pageReasons := make([]string, pageCount)
+		for i := 0; i < pageCount-1; i++ {
+			result := <-results
+			pageReasons[result.page-1] = result.reason
+			if result.reason == "" { pages[result.page-1] = result.items }
+		}
+		workers.Wait()
+		cancel()
+		if firstFailureReason != "" { return fail(firstFailureReason) }
+		for _, pageReason := range pageReasons { if pageReason != "" { return fail(pageReason) } }
+	}
+
+	seen := make(map[string]struct{}, total)
+	var totalAmount float64
+	for _, page := range pages {
+		for _, item := range page {
+			if _, exists := seen[item.securityKey]; exists { return fail("market_amount_provider_duplicate_security") }
+			seen[item.securityKey] = struct{}{}
+			totalAmount += item.amountCNY
+			if !finiteNumber(totalAmount) { return fail("market_amount_provider_total_invalid") }
+		}
+	}
+	if len(seen) != total { return fail("market_amount_provider_pagination_incomplete") }
+	return totalAmount, len(seen), ""
+}
 
 func eastmoneyMarketStocksFallbackURL(rawURL string) string {
 	u, err := url.Parse(rawURL)
@@ -2082,7 +2208,6 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 		QualityStatus:      model.QualityDegraded,
 		QualityReasons: []string{
 			"provider_snapshot_timestamp_not_exposed",
-			"provider_market_amount_unavailable_from_distribution_endpoint",
 			"provider_distribution_population_not_verified_against_security_master",
 		},
 	}
@@ -2128,6 +2253,20 @@ func (p *Eastmoney) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadt
 	snapshot.UnclassifiedCount = 0
 	snapshot.AmountCoverageCount = 0
 	snapshot.TotalAmountCNY = nil
+
+	// 全市场金额需要分页遍历证券列表。限制额外耗时，失败时保留广度计数，不阻断主接口。
+	turnoverCtx, cancelTurnover := context.WithTimeout(ctx, eastmoneyMarketTurnoverTimeout)
+	totalAmount, amountCoverage, amountReason := p.fetchMarketTurnover(turnoverCtx, reportDate)
+	cancelTurnover()
+	if amountReason != "" {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, amountReason)
+	} else if amountCoverage != snapshot.TotalSecurities {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "market_amount_security_count_mismatch")
+	} else {
+		snapshot.TotalAmountCNY = &totalAmount
+		snapshot.AmountCoverageCount = amountCoverage
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "market_amount_quotes_collected_non_atomically")
+	}
 
 	// Limit-pool totals are separate upstream queries. Only attach them when the
 	// provider report date matches the breadth snapshot date; missing values stay nil.

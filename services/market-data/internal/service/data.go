@@ -296,7 +296,8 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
-	const ttl = 90 * time.Second
+	// 市场广度包含全市场成交额分页聚合，使用 5 分钟缓存控制上游请求量。
+	const ttl = 5 * time.Minute
 	const key = "md:v1:market-breadth:cn-a-share"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketBreadthSnapshot

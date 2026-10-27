@@ -481,9 +481,9 @@ components:
         unclassified_count: {type: integer, minimum: 0}
         limit_up_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-up pool endpoint, only when its report date matches the breadth report date; null means unknown}
         limit_down_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-down pool endpoint, only when its report date matches the breadth report date; null means unknown}
-        total_amount_cny: {type: number, nullable: true, description: Null unless amount fields cover the full universe}
-        amount_coverage_count: {type: integer, minimum: 0}
-        provider_report_date: {type: string, format: date, description: Source report date for market breadth and limit-pool alignment}
+        total_amount_cny: {type: number, nullable: true, description: Full A-share turnover sum in CNY; null unless all paginated securities have valid amounts, quote dates match provider_report_date, and security count matches the breadth distribution}
+        amount_coverage_count: {type: integer, minimum: 0, description: Count of securities included in the aggregate; zero when full coverage or cross-source count alignment cannot be established}
+        provider_report_date: {type: string, format: date, description: Source report date used to align breadth buckets, limit pools, and full-market quote rows}
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
