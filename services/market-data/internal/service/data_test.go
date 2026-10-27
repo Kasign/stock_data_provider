@@ -1131,3 +1131,47 @@ func TestSnapshotSourceTimesRejectMissingOrFutureValues(t *testing.T) {
 		}
 	})
 }
+
+
+type stockBoardsCountingFakeProvider struct {
+	snapshot *model.StockBoardSnapshot
+	calls    int
+}
+
+func (f *stockBoardsCountingFakeProvider) Name() string { return "eastmoney" }
+
+func (f *stockBoardsCountingFakeProvider) FetchStockBoards(context.Context, string) (*model.StockBoardSnapshot, error) {
+	f.calls++
+	return f.snapshot, nil
+}
+
+func TestStockBoardsCachesUnknownEmptyResultBriefly(t *testing.T) {
+	now := time.Now().UTC()
+	p := &stockBoardsCountingFakeProvider{
+		snapshot: &model.StockBoardSnapshot{
+			Symbol: "600519.SH", Total: 0, HasData: false, Items: []model.StockBoard{},
+			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityUnknown,
+			QualityReasons: []string{"provider_empty_membership_unconfirmed"},
+		},
+	}
+	mem := newMemoryCache()
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
+
+	first, hit, err := svc.StockBoards(context.Background(), "600519")
+	if err != nil || hit {
+		t.Fatalf("first StockBoards request hit=%v err=%v", hit, err)
+	}
+	if first.HasData || first.QualityStatus != model.QualityUnknown || p.calls != 1 {
+		t.Fatalf("first empty membership response was not preserved: snapshot=%+v calls=%d", first, p.calls)
+	}
+
+	second, hit, err := svc.StockBoards(context.Background(), "600519.SH")
+	if err != nil || !hit {
+		t.Fatalf("second StockBoards request should hit the short-lived unknown cache: hit=%v err=%v", hit, err)
+	}
+	if second.HasData || second.QualityStatus != model.QualityUnknown || p.calls != 1 {
+		t.Fatalf("cached result must remain unknown and avoid another provider call: snapshot=%+v calls=%d", second, p.calls)
+	}
+}

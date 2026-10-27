@@ -1215,15 +1215,19 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if item.HasData {
-			payload, marshalErr := json.Marshal(item)
-			if marshalErr == nil {
-				if cacheErr := s.cache.Set(ctx, key, payload, positiveTTL); cacheErr != nil {
-					s.logger.Warn("stock-boards cache write failed", "symbol", symbol, "error", cacheErr)
-				}
-			} else {
-				s.logger.Warn("stock-boards cache encode failed", "symbol", symbol, "error", marshalErr)
+		// 正向板块归属可以缓存较长时间；未确认归属的 unknown 结果只短缓存，
+		// 避免空结果导致每次页面请求都重新访问上游，同时不把空结果解释为“确认无板块”。
+		cacheTTL := positiveTTL
+		if !item.HasData {
+			cacheTTL = emptyTTL
+		}
+		payload, marshalErr := json.Marshal(item)
+		if marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, cacheTTL); cacheErr != nil {
+				s.logger.Warn("stock-boards cache write failed", "symbol", symbol, "error", cacheErr)
 			}
+		} else {
+			s.logger.Warn("stock-boards cache encode failed", "symbol", symbol, "error", marshalErr)
 		}
 		return item, false, nil
 	}
