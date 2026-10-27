@@ -476,3 +476,11 @@ X-API-Key: <由现有设置提供>
 - `persisted=false`：当前视图保留本次操作结果，但反馈应提示浏览器存储不可用；刷新后内容可能丢失，移除操作也可能在重新读取时恢复。
 - 警告状态使用 `watchlist-feedback-warning` 和主题 `--warning` token；浅色主题规则需要保持语义色优先级，不能被通用辅助文字颜色覆盖。
 - `web/tests/watchlist.test.mjs` 新增写入失败时的源码断言。此处没有运行测试或浏览器验证，结果仍待统一验收。
+## 19. 自选股读失败时禁止回写空列表
+
+自选股操作是“读-改-写”流程。若 `getItem` 抛错，或已存内容无法解析为数组，不能将其等同于“有效空列表”；否则后续 add/rename/remove 可能把空列表写回并覆盖用户数据。
+
+- `readWatchlistState` 返回 `items`、`storageReadable`、`storageValid` 与 `reason`。
+- 修改操作只有在 `storageReadable=true` 且 `storageValid=true` 时才会写回；读失败或 JSON 损坏时不执行 `setItem`。
+- 自选页、研究列表和任务表单区分“列表确实为空”与“无法读取/格式异常”。浏览器数据导出在自选存储无法读取或格式无效时直接失败，不生成看似有效但丢失自选股的备份文件。
+- 新增的单元测试源码检查读取失败与格式损坏时写入次数为零；未运行测试，结果待统一验收。

@@ -520,6 +520,11 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .watchlist-feedback { margin: 0 0 10px; color: var(--text-dim); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 .watchlist-feedback-error { color: var(--negative); }
 .watchlist-feedback-warning { color: var(--warning); }
+.watchlist-storage-unavailable {
+  border: 1px solid color-mix(in srgb, var(--warning) 42%, var(--border));
+  color: var(--warning);
+  background: var(--panel-raised);
+}
 @media (max-width: 800px) {
   .watchlist-list { grid-template-columns: minmax(0, 1fr); }
 }

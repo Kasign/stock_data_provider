@@ -4,6 +4,7 @@ import {
   addWatchlistSymbol,
   MAX_WATCHLIST_ITEMS,
   readWatchlist,
+  readWatchlistState,
   removeWatchlistSymbol,
   renameWatchlistSymbol,
   WATCHLIST_KEY
@@ -78,10 +79,26 @@ test("caps list size, skips malformed persisted entries and tolerates unavailabl
   storage.setItem(WATCHLIST_KEY, JSON.stringify([{ symbol: "bad-symbol" }, { symbol: "600519.SH", name: "valid" }]));
   assert.deepEqual(readWatchlist(storage), [{ symbol: "600519.SH", name: "valid", updated_at: "" }]);
 
-  const brokenStorage = { getItem() { throw new Error("storage disabled"); }, setItem() { throw new Error("storage disabled"); } };
+  let writes = 0;
+  const brokenStorage = {
+    getItem() { throw new Error("storage disabled"); },
+    setItem() { writes += 1; throw new Error("storage disabled"); }
+  };
   assert.deepEqual(readWatchlist(brokenStorage), []);
-  assert.doesNotThrow(() => addWatchlistSymbol("600519.SH", "贵州茅台", brokenStorage));
-  assert.doesNotThrow(() => removeWatchlistSymbol("600519.SH", brokenStorage));
+  assert.deepEqual(readWatchlistState(brokenStorage), {
+    items: [], storageReadable: false, storageValid: false, reason: "unavailable"
+  });
+  const blockedAdd = addWatchlistSymbol("600519.SH", "贵州茅台", brokenStorage);
+  assert.equal(blockedAdd.valid, true);
+  assert.equal(blockedAdd.persisted, false);
+  assert.equal(blockedAdd.storageReadable, false);
+  const blockedRename = renameWatchlistSymbol("600519.SH", "贵州茅台", brokenStorage);
+  assert.equal(blockedRename.persisted, false);
+  assert.equal(blockedRename.storageReadable, false);
+  const blockedRemove = removeWatchlistSymbol("600519.SH", brokenStorage);
+  assert.equal(blockedRemove.persisted, false);
+  assert.equal(blockedRemove.storageReadable, false);
+  assert.equal(writes, 0, "mutations must never write after an unsuccessful read");
 });
 
 test("reports persistence failures without claiming browser data was saved", () => {
@@ -106,4 +123,31 @@ test("reports persistence failures without claiming browser data was saved", () 
   assert.equal(removed.removed, true);
   assert.equal(removed.persisted, false);
   assert.deepEqual(removed.items.map((item) => item.symbol), []);
+});
+
+test("does not overwrite malformed stored data when reading or parsing fails", () => {
+  let writes = 0;
+  const storage = {
+    getItem() { return "{malformed"; },
+    setItem() { writes += 1; }
+  };
+
+  const state = readWatchlistState(storage);
+  assert.equal(state.storageReadable, true);
+  assert.equal(state.storageValid, false);
+  assert.equal(state.reason, "invalid");
+
+  const added = addWatchlistSymbol("600519.SH", "贵州茅台", storage);
+  assert.equal(added.valid, true);
+  assert.equal(added.persisted, false);
+  assert.equal(added.storageValid, false);
+
+  const renamed = renameWatchlistSymbol("600519.SH", "核心观察", storage);
+  assert.equal(renamed.persisted, false);
+  assert.equal(renamed.storageValid, false);
+
+  const removed = removeWatchlistSymbol("600519.SH", storage);
+  assert.equal(removed.persisted, false);
+  assert.equal(removed.storageValid, false);
+  assert.equal(writes, 0, "malformed data must not be replaced with an empty or partial list");
 });
