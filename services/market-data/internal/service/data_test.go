@@ -1028,6 +1028,45 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 }
 
 
+func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {
+	now := time.Now().UTC()
+	change := 1.5
+	snapshot := &model.LimitPoolSnapshot{
+		PoolType: "up", TradeDate: "2026-10-23", ProviderReportDate: "2026-10-23",
+		Total: 2, HasData: true, Source: "eastmoney", FetchedAt: now,
+		QualityStatus: model.QualityValid,
+		Items: []model.LimitPoolItem{{
+			Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", ChangePercent: &change,
+			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+		}},
+	}
+	markLimitPoolTruncated(snapshot)
+	if snapshot.QualityStatus != model.QualityDegraded {
+		t.Fatalf("incomplete limit pool must be degraded, got %q", snapshot.QualityStatus)
+	}
+	found := false
+	for _, reason := range snapshot.QualityReasons {
+		if reason == "provider_limit_pool_response_truncated" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("truncation reason missing: %+v", snapshot.QualityReasons)
+	}
+	markLimitPoolTruncated(snapshot)
+	count := 0
+	for _, reason := range snapshot.QualityReasons {
+		if reason == "provider_limit_pool_response_truncated" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("truncation reason must not be duplicated: %+v", snapshot.QualityReasons)
+	}
+}
+
+
 func TestValidateSectorRankingSnapshotRejectsInvalidTotalsAndQuality(t *testing.T) {
 	now := time.Now().UTC()
 	changePercent := 1.25

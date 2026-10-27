@@ -497,6 +497,22 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 	return nil
 }
 
+
+func markLimitPoolTruncated(snapshot *model.LimitPoolSnapshot) {
+	if snapshot == nil || !snapshot.HasData || snapshot.Total <= len(snapshot.Items) {
+		return
+	}
+
+	snapshot.QualityStatus = model.QualityDegraded
+	const reason = "provider_limit_pool_response_truncated"
+	for _, existing := range snapshot.QualityReasons {
+		if existing == reason {
+			return
+		}
+	}
+	snapshot.QualityReasons = append(snapshot.QualityReasons, reason)
+}
+
 func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, limit int) (*model.LimitPoolSnapshot, bool, error) {
 	poolType := strings.ToLower(strings.TrimSpace(rawType))
 	if poolType == "" {
@@ -526,6 +542,8 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.LimitPoolSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateLimitPoolSnapshot(poolType, date, limit, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+			// 兼容升级前缓存：若供应商总数大于实际条数，不能沿用缓存中的 valid。
+			markLimitPoolTruncated(&cached)
 			return &cached, true, nil
 		}
 	} else if cacheErr != nil {
@@ -548,6 +566,8 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		// total 是供应商报告总量；当前接口没有分页游标，未返回完整条数时显式降级。
+		markLimitPoolTruncated(snapshot)
 		if data, err := json.Marshal(snapshot); err == nil {
 			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
 				s.logger.Warn("limit pool cache write failed", "type", poolType, "date", date, "error", cacheErr)
