@@ -19,12 +19,8 @@
           <span class="brand-mark">K<span>.</span></span>
           <span class="brand-copy"><strong>Market Console</strong><small>GO DATA PLATFORM</small></span>
         </a>
-        <div class="side-label">工作台</div>
+        <div class="side-label">功能区</div>
         <nav class="side-nav" aria-label="主导航">
-          <button class="nav-link active" type="button" data-view="market" aria-label="行情总览" title="行情总览" aria-current="page"><span class="nav-icon" aria-hidden="true">◫</span><span>行情总览</span></button>
-          <button class="nav-link" type="button" data-view="market-data" aria-label="市场数据" title="市场数据"><span class="nav-icon" aria-hidden="true">▤</span><span>市场数据</span></button>
-          <button class="nav-link" type="button" data-view="stocks" aria-label="个股查询" title="个股查询"><span class="nav-icon" aria-hidden="true">⌕</span><span>个股查询</span></button>
-          <button class="nav-link" type="button" data-view="watchlist" aria-label="自选股" title="自选股"><span class="nav-icon" aria-hidden="true">☆</span><span>自选股</span></button>
           <button class="nav-link" type="button" data-view="research" aria-label="个股研究" title="个股研究"><span class="nav-icon" aria-hidden="true">⌑</span><span>个股研究</span></button>
           <button class="nav-link" type="button" data-view="tasks" aria-label="分析任务" title="分析任务"><span class="nav-icon" aria-hidden="true">↗</span><span>分析任务</span></button>
           <button class="nav-link" type="button" data-view="notifications" aria-label="通知中心" title="通知中心"><span class="nav-icon" aria-hidden="true">♧</span><span>通知中心</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
@@ -56,16 +52,22 @@
           </div>
         </header>
 
+        <nav class="workspace-tabs" aria-label="核心工作区">
+          <button class="workspace-tab active" type="button" data-view="market" aria-current="page">大盘数据</button>
+          <button class="workspace-tab" type="button" data-view="stocks">个股分析</button>
+          <button class="workspace-tab" type="button" data-view="watchlist">自选股</button>
+        </nav>
+
         <section class="view" id="market-view">
           <div class="page-heading">
-            <div><p class="eyebrow">MARKET DASHBOARD / 01</p><h1>行情总览</h1><p class="page-subtitle">首页聚焦核心指数与市场涨跌分布；个股查询、研究和市场榜单已拆分到独立页面。</p></div>
+            <div><p class="eyebrow">MARKET OVERVIEW / 01</p><h1>大盘数据</h1><p class="page-subtitle">统一查看核心指数、市场涨跌分布、行业与概念排行、涨跌停池、人气榜、龙虎榜和交易日历。每个模块分别显示接口状态、数据来源与质量说明。</p></div>
             
           </div>
 
           
 
           <section class="panel market-overview-panel" id="market-overview-panel" aria-labelledby="market-overview-title">
-            <div class="panel-heading market-overview-heading"><div><h2 id="market-overview-title">A 股市场概况</h2><p>核心指数与市场涨跌分布。数据及质量状态来自行情服务真实回包。</p></div><div class="market-overview-actions"><span class="market-overview-updated" id="market-overview-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-overview" type="button">刷新大盘摘要 ↻</button></div></div>
+            <div class="panel-heading market-overview-heading"><div><h2 id="market-overview-title">A 股市场概况</h2><p>核心指数与市场涨跌分布。数据及质量状态来自行情服务真实回包。</p></div><div class="market-overview-actions"><span class="market-overview-updated" id="market-overview-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-overview" type="button">刷新指数与广度 ↻</button></div></div>
             <section class="market-overview-index-section" aria-labelledby="market-indices-title"><div class="market-overview-subheading"><h3 id="market-indices-title">核心指数</h3><span id="market-indices-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-index-grid" id="market-index-grid"><p class="market-empty-state">配置行情 API Key 后加载核心指数。</p></div><p class="market-widget-meta" id="market-indices-meta"></p></section>
             <section class="market-breadth-strip" aria-labelledby="market-breadth-title"><div class="market-overview-subheading"><div><h3 id="market-breadth-title">市场涨跌分布</h3><p>样本来自后端分布桶，不代表已独立核验的全市场证券总数。</p></div><span id="market-breadth-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-breadth-values" id="market-breadth-values"><p class="market-empty-state">等待市场广度数据。</p></div><p class="market-widget-meta" id="market-breadth-meta"></p><details class="market-quality-reasons" id="market-breadth-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
             
@@ -74,20 +76,9 @@
           
 
           
-          <section class="dashboard-shortcuts" aria-label="常用工作入口">
-            <button class="dashboard-shortcut" type="button" data-open-view="market-data"><span class="dashboard-shortcut-icon" aria-hidden="true">▤</span><span class="dashboard-shortcut-copy"><strong>市场数据</strong><small>行业排行、人气榜、涨跌停、龙虎榜与交易日历</small></span><span class="dashboard-shortcut-arrow" aria-hidden="true">→</span></button>
-            <button class="dashboard-shortcut" type="button" data-open-view="stocks"><span class="dashboard-shortcut-icon" aria-hidden="true">⌕</span><span class="dashboard-shortcut-copy"><strong>个股查询</strong><small>中文名称搜索、实时行情、日 K 与技术指标</small></span><span class="dashboard-shortcut-arrow" aria-hidden="true">→</span></button>
-            <button class="dashboard-shortcut" type="button" data-open-view="watchlist"><span class="dashboard-shortcut-icon" aria-hidden="true">☆</span><span class="dashboard-shortcut-copy"><strong>自选股</strong><small>管理本地列表，快速查询或发起分析</small></span><span class="dashboard-shortcut-arrow" aria-hidden="true">→</span></button>
-            <button class="dashboard-shortcut" type="button" data-open-view="tasks"><span class="dashboard-shortcut-icon" aria-hidden="true">↗</span><span class="dashboard-shortcut-copy"><strong>分析任务</strong><small>查看任务状态、阶段事件与分析结果</small></span><span class="dashboard-shortcut-arrow" aria-hidden="true">→</span></button>
-          </section>
-        </section>
+          
 
 
-        <section class="view" id="market-data-view" hidden>
-          <div class="page-heading"><div><p class="eyebrow">MARKET DATA / 02</p><h1>市场数据</h1><p class="page-subtitle">集中查看行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜和交易日历。各模块独立显示来源、采集时间与质量，不将缺失数据解释成零。</p></div></div>
-          <nav class="page-jump-nav" aria-label="市场数据快速定位"><span class="page-jump-nav-label">快速定位</span><div class="page-jump-nav-links">
-            <button class="page-jump-button" type="button" data-scroll-target="market-lists-panel">市场榜单</button><button class="page-jump-button" type="button" data-scroll-target="market-activity-panel">龙虎榜与日历</button><button class="page-jump-button page-jump-top" type="button" data-scroll-target="market-data-view">返回顶部</button>
-          </div></nav>
           <section class="panel market-overview-panel" id="market-lists-panel" aria-labelledby="market-lists-title"><div class="panel-heading market-overview-heading">
             <div><h2 id="market-lists-title">行业、涨跌停与个股人气</h2><p>列表用于描述市场表现；排名与涨跌幅不是投资建议，也不代表全市场完整覆盖。</p></div>
             <div class="market-overview-actions"><span class="market-overview-updated" id="market-data-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-data" type="button">刷新市场榜单 ↻</button></div>
@@ -121,15 +112,14 @@
           </section>
         </section>
 
+
+
         <section class="view" id="stocks-view" hidden>
           <div class="page-heading">
-            <div><p class="eyebrow">STOCK WORKSPACE / 03</p><h1>个股查询</h1><p class="page-subtitle">搜索股票名称或代码，查看实时报价、K 线、技术指标和历史行情。公司资料、筹码与资金流已移至“个股研究”。</p></div>
+            <div><p class="eyebrow">STOCK ANALYSIS / 02</p><h1>个股分析</h1><p class="page-subtitle">搜索股票名称或代码，查看实时报价、K 线、技术指标和历史行情。公司资料、筹码与资金流已移至“个股研究”。</p></div>
             <div class="last-updated"><span class="status-dot"></span><span>最近刷新</span><strong id="last-updated">—</strong></div>
           </div>
-          <nav class="page-jump-nav" aria-label="个股查询快速定位"><span class="page-jump-nav-label">快速定位</span><div class="page-jump-nav-links">
-            <button class="page-jump-button" type="button" data-scroll-target="stock-query-panel">股票查询</button><button class="page-jump-button" type="button" data-scroll-target="stock-quote-section">实时行情</button><button class="page-jump-button" type="button" data-scroll-target="daily-chart-panel">走势与 K 线</button><button class="page-jump-button" type="button" data-scroll-target="source-panel">数据源能力</button><button class="page-jump-button" type="button" data-scroll-target="technical-indicators-panel">技术指标</button><button class="page-jump-button" type="button" data-scroll-target="historical-bars-panel">历史日 K</button><button class="page-jump-button page-jump-top" type="button" data-scroll-target="stocks-view">返回顶部</button>
-          </div></nav>
-<section class="search-panel panel" id="stock-query-panel">
+          <section class="search-panel panel" id="stock-query-panel">
             <div class="search-intro"><div class="panel-kicker">标的查询</div><div class="panel-muted">输入 A 股代码，查看标准化后的上游数据</div></div>
             <form class="query-form" id="quote-form">
               <div class="field symbol-field">
@@ -257,7 +247,7 @@
 
 
         <section class="view" id="watchlist-view" hidden>
-          <div class="page-heading"><div><p class="eyebrow">WATCHLIST / 04</p><h1>自选股</h1><p class="page-subtitle">这是当前浏览器本地保存的股票列表，不会同步到服务器。可在个股查询页添加股票，或从列表直接查询、发起分析。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索并添加自选 →</button></div>
+          <div class="page-heading"><div><p class="eyebrow">WATCHLIST / 03</p><h1>自选股</h1><p class="page-subtitle">这是当前浏览器本地保存的股票列表，不会同步到服务器。可在个股查询页添加股票，或从列表直接查询、发起分析。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索并添加自选 →</button></div>
           <section class="panel watchlist-panel" id="watchlist-panel" aria-labelledby="watchlist-title">
             <div class="panel-heading"><div><h2 id="watchlist-title">本地自选股</h2><p>仅保存在当前浏览器；不上传服务器，也不保存 API Key 或分析报告。</p></div><span class="soft-badge" id="watchlist-count">0 / 50</span></div>
             <div class="watchlist-feedback" id="watchlist-feedback" role="status" aria-live="polite" hidden></div>
@@ -268,9 +258,6 @@
 
         <section class="view" id="research-view" hidden>
           <div class="page-heading"><div><p class="eyebrow">STOCK RESEARCH / 05</p><h1>个股研究</h1><p class="page-subtitle">基于当前查询标的，按需加载上市档案、所属板块、财务指标、估值、筹码、资金流与公告。切换股票后请先在个股查询页选择新的标的。</p></div><button class="button button-secondary" type="button" data-open-view="stocks">返回个股查询 →</button></div>
-          <nav class="page-jump-nav" aria-label="个股研究快速定位"><span class="page-jump-nav-label">快速定位</span><div class="page-jump-nav-links">
-            <button class="page-jump-button" type="button" data-scroll-target="stock-supplemental-panel">筹码与资金流</button><button class="page-jump-button" type="button" data-scroll-target="stock-research-panel">公司资料与财务</button><button class="page-jump-button page-jump-top" type="button" data-scroll-target="research-view">返回顶部</button>
-          </div></nav>
           <section class="panel supplemental-panel" id="stock-supplemental-panel" aria-labelledby="supplemental-title">
             <div class="panel-heading supplemental-heading">
               <div><h2 id="supplemental-title">个股补充研究数据</h2><p>按需读取后端现有的筹码分布与个股资金流接口；不参与行情主流程，也不推导买卖结论。</p></div>

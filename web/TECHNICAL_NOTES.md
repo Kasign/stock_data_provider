@@ -288,17 +288,17 @@ X-API-Key: <由现有设置提供>
 - 禁用控件使用 `not-allowed` 光标；只有顶栏刷新处于忙碌状态时使用 `progress`。
 - 原生 `summary` 参与键盘折叠交互，应有可见的 `:focus-visible` 焦点环。
 - 已有全局 `prefers-reduced-motion: reduce` 规则继续生效。本轮不引入新的动画。
-- `styles.css` 仍包含多阶段叠加的响应式规则与部分压缩书写块。后续应先确定 token/组件区块边界，再合并重复断点；本轮避免大面积选择器迁移，降低回归风险。
+- `styles.css` 仍包含历史累积的分散媒体查询。本轮只把文件末尾新增的首页快捷入口、Run Flow 和平板查询表单规则改为易读的分区书写，保留原选择器、声明值与规则顺序；没有合并全局重复断点。后续仍应按页面/组件分批整理，避免一次性重写整份样式表。
 
-源码 Review 后的视口和人工验收清单见 [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md)。本说明不代表已执行真实浏览器或 NAS 部署验收。
+源码 Review 后的人工验收清单见 [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md)。`42c6d41` 上的 [Chromium 视口烟测](https://github.com/Kasign/stock_data_provider/actions/runs/40441039966) 与 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40441045323) 已通过；自动化烟测使用明确的 503 API 响应，不代表深浅主题的完整人工视觉检查或 NAS 部署验收。
 
 
 ## 7. 2026-10-27 页面职责与运行流布局
 
 ### 页面职责
 
-- `market-view`：首页只保留市场核心指数和市场涨跌分布，快捷入口进入市场榜单、个股查询、自选股及分析任务。
-- `market-data-view`：行业/概念排行、涨跌停池、人气/飙升榜以及龙虎榜和交易日历。
+- `market-view`：大盘首页同时展示核心指数、市场涨跌分布、行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜与交易日历，按“指数与广度 → 市场榜单 → 市场活动”排列。
+- `workspace-tabs`：页面上方三个主工作区 Tab 为大盘数据、个股分析、自选股；主导航其它功能仍通过侧栏进入。
 - `stocks-view`：股票名称/代码搜索、实时行情、日 K、指标、历史日 K 与 Provider 能力。
 - `watchlist-view`：只读写当前浏览器 localStorage 的本地自选股列表；它不是服务器持久列表。
 - `research-view`：公司档案、板块、财务、估值、筹码、资金流和公告。
@@ -306,10 +306,18 @@ X-API-Key: <由现有设置提供>
 
 ### 按当前视图刷新
 
-`bindMarketOverview.refresh(keys, statusSelector)` 支持按模块范围刷新：首页只查询 `indices/breadth`；市场数据页查询 `sectors/pool/hot`。原无参数 `refresh()` 仍可刷新全模块，用于显式批量刷新。各模块保留独立 AbortController/generation。
+`refreshMarketWorkspace()` 在进入首页、使用全局刷新或修改行情连接配置后统一刷新 `indices/breadth/sectors/pool/hot`，并独立刷新龙虎榜和交易日历。每个市场模块保留自己的 AbortController/generation 和质量状态；一个接口失败不会阻止其它模块显示。
 
 ### Run Flow 交互
 
 参考 [daily_stock_analysis 的 RunFlowPanel](https://github.com/Kasign/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowPanel.tsx)、[RunFlowSummaryBar](https://github.com/Kasign/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowSummaryBar.tsx) 和 [RunFlowEventList](https://github.com/Kasign/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowEventList.tsx) 的信息层级：顶部摘要、可筛选阶段列表、选中事件详情分别占据不同区域。当前项目的弹窗改为近全屏工作区，桌面端并排展示阶段时间线与详情，窄屏纵向排列。
 
-当前后端不提供可验证的 DAG 拓扑快照，所以只复用布局/交互，不复刻图节点与边。事件列表及选中详情只渲染真实阶段事件中的状态、阶段、时间、错误码和原始 JSON；事件缺失时明确展示空态。真实浏览器验收仍未完成。
+当前后端不提供可验证的 DAG 拓扑快照，所以只复用布局/交互，不复刻图节点与边。事件列表及选中详情只渲染真实阶段事件中的状态、阶段、时间、错误码和原始 JSON；事件缺失时明确展示空态。自动化 Chromium 烟测已验证弹窗边界、宽屏分栏/窄屏单列和导航；真实 API、主题/键盘细节和 NAS 部署验收仍未完成。
+
+
+## 8. 2026-10-27 大盘首页与工作区 Tab 重整
+
+- 首页使用 `market-overview-panel`、`market-lists-panel`、`market-activity-panel` 三个纵向区块。所有市场数据仍使用原有只读 API 和质量状态，不新增静态行情。
+- 旧 `#market-data` hash 会迁移到 `#market`；不再保留第二个市场数据视图。
+- 顶部 Tab 为大盘数据、个股分析、自选股；个股研究、分析任务和其它辅助功能继续通过侧栏进入。
+- 快速定位 UI 已从 DOM、滚动监听、CSS 和测试中移除。全局样式审查仅删除无用或完全重复规则；未重排剩余响应式规则，以降低全站级联风险。
