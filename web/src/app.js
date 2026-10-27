@@ -3119,6 +3119,9 @@ $("#refresh-button").addEventListener("click", async () => {
     else if (state.view === "research") {
       $("#load-supplemental-button").click();
       $("#load-stock-research").click();
+      renderResearchStockList();
+    } else if (state.view === "data") {
+      await dataCenter.refresh();
     } else if (state.view === "tasks" && state.taskId) {
       stopTaskPolling();
       const generation = state.pollGeneration;
