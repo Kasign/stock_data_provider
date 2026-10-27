@@ -1,16 +1,16 @@
 # WebUI 任务交接上下文
 
-最后更新：2026-10-27（PR #14 已合入；CSS 收尾新一轮启动）
+最后更新：2026-10-27（全站 Review；PR #17 开放中）
 用途：从新对话恢复 WebUI 开发进度、当前分支、剩余任务与验收边界。
 
 ## 当前仓库状态（已重新核实）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
 - 集成开发分支：`feat/full-go-data-providers-api-switch`
-- 最近集成提交：`dd53e55ed803c55d4c87de12af815dc15a171f7e`，由 PR #14 Squash Merge 产生。
+- 最近核实的集成分支 HEAD：`e81cfe88eaf67f17a4fd6d6fa2022574545270c7`；集成分支可能继续推进，提交/合并前以远程分支 ref 为准。
 - PR #14：https://github.com/Kasign/stock_data_provider/pull/14，已关闭且已合并，不能再引用旧的 Open 状态。
-- 新一轮 WebUI 后续分支：`feat/webui-css-polish`，从 `dd53e55e` 创建，继续只修改 `web/**`；PR #15 已打开，目标为 `feat/full-go-data-providers-api-switch`，尚未合入。
-- 旧分支 `feat/webui-market-data-console` 是 PR #14 的源分支。由于 PR 采用 Squash Merge，该分支历史与集成分支存在分叉；后续不要直接从旧分支继续提交，避免下一个 PR 重复包含已合入历史。
+- 当前 WebUI 工作分支：`feat/webui-market-data-console`；PR #17（https://github.com/Kasign/stock_data_provider/pull/17）替代已关闭的 PR #16，目标为 `feat/full-go-data-providers-api-switch`，当前未合并。
+- 本轮保持现有分支与提交历史，不创建临时分支、不重建父节点；即使集成分支继续推进，也先比较实际文件范围，不因数据层提交而重写 WebUI 历史。
 - PR #1 是 Go 数据层迁移到 `main` 的草稿 PR。当前没有合入 `main` 的计划，保持 Draft，不作为 WebUI 本轮的合并目标。
 - 本轮提交包括：`4443b9d7` 整理新增区块的样式排版；`63265425` 将新增区块 10–11px 辅助文字提升到 12px；`74ac4663` 增加字号契约测试；`e2a1ea47` 修复分区导航焦点、可见区块高亮和工作区导入时的任务引用隔离；`dc7daefb` 修复板块切换未接入维度时旧请求覆盖占位的问题；`0c91313e` 补充状态一致性契约测试源码。
 - CSS 整理覆盖最近追加的工作台/数据中心/个股研究/本地数据样式，并将日 K 技术图、Bundle 快照来源、估值与个股补充指标分区格式化；原有断点顺序保留，不跨区块合并媒体查询。新增区块及来源/估值标签的辅助文字统一按 12px 基线收尾。
@@ -580,3 +580,10 @@
 - 本批修复自选股读-改-写的数据安全边界：存储访问失败或保存内容不是有效数组时，不再以空列表继续写回；添加、改名、移除均会阻止覆盖。
 - 自选页/研究列表区分有效空列表与存储不可读、数据格式异常；任务表单载入会给出明确提示；浏览器数据导出在自选数据读取异常时取消，避免生成缺失自选数据的备份。
 - 本批只涉及 `web/**`，测试源码已补充但按协作约定未运行测试、构建、CI 或浏览器自动化。
+
+## 2026-10-27 — 当前状态复核（PR #17）
+
+- PR #17 开放中、未合并；PR #16 已关闭。当前继续使用原分支 `feat/webui-market-data-console`，不创建新的 WebUI 临时分支。
+- PR #17 原 HEAD `23a53c40f10351665673fb2373779e35bfb36cfb` 对应的 WebUI checks 与 Chromium browser smoke 均成功；后续提交必须以各自 HEAD 的 Actions 结果为准。
+- 全站 Review 新增检查最近任务的读取状态：存储不可读、JSON 损坏或部分记录损坏时，不将历史当作空列表覆盖；导出会拒绝输出不完整的本地任务备份。
+- 自动化浏览器烟测使用 503 后端，只能验证布局和导航，不等于真实 API、主题人工体验或 NAS/1Panel 部署验收。上述仍留待统一实机验收。
