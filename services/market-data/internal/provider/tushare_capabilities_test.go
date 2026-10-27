@@ -357,3 +357,40 @@ func TestTushareIndexDailyBarsRejectsInt64VolumeOverflow(t *testing.T) {
 		t.Fatalf("out-of-range volume must degrade the item and record its reason: %+v", bar)
 	}
 }
+
+func TestTushareDailyDegradesMissingChangePercent(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().In(location).Format("20060102")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeTushareTestTable(w,
+			[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
+			[][]any{{"600519.SH", today, 100.0, 102.0, 99.0, 101.0, nil, 1200.0, 456.0}},
+		)
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	bars, err := provider.FetchDailyBars(context.Background(), "600519.SH", time.Now().In(location).Format("2006-01-02"), time.Now().In(location).Format("2006-01-02"), 10, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("expected one daily bar, got %+v", bars)
+	}
+	if bars[0].ChangePercent != nil || bars[0].QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing pct_chg must remain nil and degrade quality: %+v", bars[0])
+	}
+	found := false
+	for _, reason := range bars[0].QualityReasons {
+		if reason == "provider_change_percent_unavailable" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing pct_chg degradation reason: %+v", bars[0].QualityReasons)
+	}
+}

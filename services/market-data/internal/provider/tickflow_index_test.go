@@ -89,3 +89,43 @@ func tickflowTestIndexSymbols() []string {
 	}
 	return symbols
 }
+
+func TestTickFlowFetchIndexQuotesDegradesImpossibleProviderTimestamp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rows := make([]map[string]any, 0, len(tickflowCoreIndexDefinitions))
+		for _, def := range tickflowCoreIndexDefinitions {
+			rows = append(rows, map[string]any{
+				"symbol": def.Symbol, "name": def.Name, "last_price": 101.0, "prev_close": 100.0,
+				"open": 99.0, "high": 102.0, "low": 98.0, "amount": 123456.0, "timestamp": int64(1),
+			})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": rows})
+	}))
+	defer server.Close()
+
+	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	got, err := provider.FetchIndexQuotes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("impossible provider timestamps must degrade the snapshot: %+v", got)
+	}
+	for _, item := range got.Items {
+		if item.QuoteTime != nil || item.QuoteTimeSemantics != "" {
+			t.Fatalf("impossible timestamp must not be exposed as provider time: %+v", item)
+		}
+		if !containsTickFlowReason(item.QualityReasons, "provider_quote_timestamp_missing_or_invalid") {
+			t.Fatalf("missing timestamp degradation reason: %+v", item.QualityReasons)
+		}
+	}
+}
+
+func containsTickFlowReason(reasons []string, wanted string) bool {
+	for _, reason := range reasons {
+		if reason == wanted {
+			return true
+		}
+	}
+	return false
+}

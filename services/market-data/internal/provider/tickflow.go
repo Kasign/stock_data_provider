@@ -139,12 +139,11 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 	var quoteTime *time.Time
 	quality := model.QualityValid
 	var reasons []string
-	if q.Timestamp > 0 {
-		value := time.UnixMilli(q.Timestamp).UTC()
-		quoteTime = &value
+	if value := tickflowProviderQuoteTime(q.Timestamp, now); value != nil {
+		quoteTime = value
 	} else {
 		quality = model.QualityDegraded
-		reasons = append(reasons, "provider_quote_timestamp_missing")
+		reasons = append(reasons, "provider_quote_timestamp_missing_or_invalid")
 	}
 	var amount, rawAmount *float64
 	amountUnit, rawAmountUnit, amountField := "unknown", "", ""
@@ -258,12 +257,9 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 		reasons := []string{}
 		var quoteTime *time.Time
 		quoteTimeSemantics := ""
-		if quote.Timestamp > 0 {
-			value := time.UnixMilli(quote.Timestamp).UTC()
-			if !value.After(fetchedAt.Add(5*time.Minute)) && !value.After(time.Now().UTC().Add(5*time.Minute)) {
-				quoteTime = &value
-				quoteTimeSemantics = "provider_snapshot_time"
-			}
+		if value := tickflowProviderQuoteTime(quote.Timestamp, fetchedAt); value != nil {
+			quoteTime = value
+			quoteTimeSemantics = "provider_snapshot_time"
 		}
 		if quoteTime == nil {
 			reasons = append(reasons, "provider_quote_timestamp_missing_or_invalid")
@@ -630,4 +626,15 @@ func tickflowPositiveFinite(value float64) bool {
 
 func bytesTrim(raw []byte) []byte {
 	return []byte(strings.TrimSpace(string(raw)))
+}
+
+// tickflowProviderQuoteTime 仅接受毫秒 Unix 时间戳；拒绝明显不合理的历史值和未来值。
+// 不在这里猜测“过期”阈值，避免把休市、节假日或盘后最后一次有效快照误判成错误。
+func tickflowProviderQuoteTime(timestamp int64, reference time.Time) *time.Time {
+	const earliestPlausibleTimestamp int64 = 946684800000 // 2000-01-01 00:00:00 UTC
+	if timestamp < earliestPlausibleTimestamp || timestamp > reference.Add(5*time.Minute).UnixMilli() {
+		return nil
+	}
+	value := time.UnixMilli(timestamp).UTC()
+	return &value
 }

@@ -285,7 +285,11 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			return nil, err
 		}
 		var pct *float64
-		if len(bytes.TrimSpace(pctRaw)) > 0 && !bytes.Equal(bytes.TrimSpace(pctRaw), []byte("null")) {
+		pctBytes := bytes.TrimSpace(pctRaw)
+		if len(pctBytes) == 0 || bytes.Equal(pctBytes, []byte("null")) || bytes.Equal(pctBytes, []byte("\"\"")) {
+			quality = model.QualityDegraded
+			reasons = append(reasons, "provider_change_percent_unavailable")
+		} else {
 			value, parseErr := tushareRawFloat(pctRaw)
 			if parseErr == nil {
 				pct = &value
