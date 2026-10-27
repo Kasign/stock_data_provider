@@ -99,3 +99,39 @@ func TestClientRejectsOversizedResponse(t *testing.T) {
 		t.Fatalf("expected response size-limit rejection, got %v", err)
 	}
 }
+
+
+func TestFetchMarketOverviewAggregatesNativeDomesticEndpoints(t *testing.T) {
+	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	responses := map[string]string{
+		"/api/v1/market/indices": fmt.Sprintf(`{"items":[{"symbol":"000001.SH","code":"000001","name":"上证指数","latest_price":3250.5,"change":10.5,"change_percent":0.32,"open":3240,"high":3260,"low":3235,"prev_close":3240,"amount":120000000000,"amount_unit":"CNY"}],"source":"eastmoney","fetched_at":%q,"quality_status":"valid"}`, fetchedAt),
+		"/api/v1/market/breadth": fmt.Sprintf(`{"total_securities":5200,"covered_securities":5100,"advancing_count":2800,"declining_count":2100,"unchanged_count":200,"unclassified_count":100,"limit_up_count":52,"limit_down_count":8,"total_amount_cny":1234567890000,"amount_coverage_count":5100,"provider_report_date":"2026-10-27","source":"eastmoney","fetched_at":%q,"quality_status":"degraded","quality_reasons":["timestamp_precision_limited"]}`, fetchedAt),
+		"/api/v1/market/sectors": "",
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer market-secret" { t.Errorf("missing market-data auth header") }
+		body, ok := responses[r.URL.Path]
+		if !ok { t.Errorf("unexpected path %s", r.URL.Path); http.NotFound(w, r); return }
+		if r.URL.Path == "/api/v1/market/sectors" {
+			category := r.URL.Query().Get("type")
+			if (category != "industry" && category != "concept") || r.URL.Query().Get("limit") != "20" { t.Errorf("unexpected sector query: %s", r.URL.RawQuery) }
+			name := map[string]string{"industry":"银行","concept":"人工智能"}[category]
+			body = fmt.Sprintf(`{"category":%q,"total":1,"items":[{"rank":1,"code":"BK0001","name":%q,"category":%q,"latest_price":1000,"change":25,"change_percent":2.5,"amount":1000000,"amount_unit":"CNY","advancing_count":30,"declining_count":5,"leading_stock":"示例股份","leader_change_percent":8.2,"source":"eastmoney","provider_report_date":"2026-10-27","quality_status":"valid"}],"source":"eastmoney","fetched_at":%q,"quality_status":"valid"}`, category, name, category, fetchedAt)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+	client, err := NewClient(server.URL, "market-secret", 2*time.Second)
+	if err != nil { t.Fatal(err) }
+	got, err := client.FetchMarketOverview(context.Background(), "CN", "")
+	if err != nil { t.Fatal(err) }
+	if got.Region != "cn" || got.Date != "2026-10-27" { t.Fatalf("unexpected market overview identity/date: %+v", got) }
+	if len(got.Indices) != 1 || got.Indices[0].Current != 3250.5 || got.Indices[0].ChangePct != 0.32 { t.Fatalf("index quote not mapped: %+v", got.Indices) }
+	if got.UpCount != 2800 || got.DownCount != 2100 || got.FlatCount != 200 || got.LimitUpCount != 52 || got.LimitDownCount != 8 { t.Fatalf("breadth counts not mapped: %+v", got) }
+	if got.TotalAmount != 1234567890000 || len(got.TopSectors) != 1 || len(got.TopConcepts) != 1 { t.Fatalf("turnover/sectors not mapped: %+v", got) }
+	if !strings.Contains(strings.Join(got.Warnings, " "), "bottom_sector_rankings_not_exposed") { t.Fatalf("missing bottom-sector limitation warning: %+v", got.Warnings) }
+	if _, err := client.FetchMarketOverview(context.Background(), "us", ""); err == nil { t.Fatal("native provider must reject non-CN region") }
+	staleAsOf := time.Now().Add(-2*time.Minute).UTC().Format(time.RFC3339Nano)
+	if _, err := client.FetchMarketOverview(context.Background(), "cn", staleAsOf); err == nil { t.Fatal("historical as_of must not be mislabeled as live") }
+}

@@ -49,4 +49,4 @@ go build ./cmd/analysisd
 
 本代码不会自动替换原有的 `main.py`、FastAPI 路由、Bot 或调度器。只有兼容性测试和 golden tests 通过后，现有入口才能经由 `python_bridge/go_core_client.py` 切换到 Go；否则可能导致新旧流程同时执行同一个任务。
 
-当前版本仍复用 Python 的 `GeminiAnalyzer`、部分原始数据源层、旧持久化 schema 和通知实现。分析上下文的完整行为一致性仍需在替换生产 `StockAnalysisPipeline` 前补齐。个股行情与日 K 已有原生 Go market-data HTTP 接口，但市场概览、新闻搜索、LLM、部分持久化与通知能力仍走 bridge。参见仓库根目录的迁移方案和 Provider 迁移矩阵。
+当前版本仍复用 Python 的 `GeminiAnalyzer`、部分原始数据源层、旧持久化 schema 和通知实现。分析上下文的完整行为一致性仍需在替换生产 `StockAnalysisPipeline` 前补齐。个股行情与日 K 已有原生 Go market-data HTTP 接口；中国 A 股市场概况现优先并发聚合原生指数、市场广度及行业/概念排名接口，原生组件整体不可用或没有有效结果时才回退到 bridge。非中国市场概况仍走 bridge。新闻检索已增加可信来源加权与营销内容过滤，但完整新闻情报能力、LLM、部分持久化与通知仍需继续迁移。参见仓库根目录的迁移方案和 Provider 迁移矩阵。

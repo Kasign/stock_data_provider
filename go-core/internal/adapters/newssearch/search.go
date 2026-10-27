@@ -467,7 +467,7 @@ func scoreRelevance(title, snippet, code, name string) (int, bool) {
 		}
 	}
 	// 市场复盘使用独立主题词打分；标题权重大于摘要，避免大量无关的近期网页挤占结果。
-	for _, term := range []string{"降准", "降息", "央行", "证监会", "财政部", "国务院", "国资委", "上证指数", "深证成指", "创业板", "A股", "交易所", "成交额", "IPO", "发行上市", "重大资产重组", "产业政策", "货币政策", "财政政策"} {
+	for _, term := range []string{"降准", "降息", "央行", "证监会", "财政部", "国务院", "国资委", "上证指数", "深证成指", "创业板", "a股", "交易所", "成交额", "ipo", "发行上市", "重大资产重组", "产业政策", "货币政策", "财政政策"} {
 		if strings.Contains(titleLower, term) {
 			score += 5
 		} else if strings.Contains(snippetLower, term) {

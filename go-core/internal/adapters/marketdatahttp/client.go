@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -124,6 +125,77 @@ type wireBundle struct {
 	QualityStatus         string            `json:"quality_status"`
 }
 
+
+type wireMarketOverviewIndex struct {
+	Symbol string `json:"symbol"`
+	Code string `json:"code"`
+	Name string `json:"name"`
+	LatestPrice *float64 `json:"latest_price"`
+	Change *float64 `json:"change"`
+	ChangePercent *float64 `json:"change_percent"`
+	Open *float64 `json:"open"`
+	High *float64 `json:"high"`
+	Low *float64 `json:"low"`
+	PrevClose *float64 `json:"prev_close"`
+	Amount *float64 `json:"amount"`
+	AmountUnit string `json:"amount_unit"`
+}
+type wireMarketOverviewIndexSnapshot struct {
+	Items []wireMarketOverviewIndex `json:"items"`
+	Source string `json:"source"`
+	FetchedAt time.Time `json:"fetched_at"`
+	QualityStatus string `json:"quality_status"`
+	QualityReasons []string `json:"quality_reasons"`
+}
+type wireMarketOverviewBreadthSnapshot struct {
+	TotalSecurities int `json:"total_securities"`
+	CoveredSecurities int `json:"covered_securities"`
+	AdvancingCount int `json:"advancing_count"`
+	DecliningCount int `json:"declining_count"`
+	UnchangedCount int `json:"unchanged_count"`
+	UnclassifiedCount int `json:"unclassified_count"`
+	LimitUpCount *int `json:"limit_up_count"`
+	LimitDownCount *int `json:"limit_down_count"`
+	TotalAmountCNY *float64 `json:"total_amount_cny"`
+	AmountCoverageCount int `json:"amount_coverage_count"`
+	ProviderReportDate string `json:"provider_report_date"`
+	Source string `json:"source"`
+	FetchedAt time.Time `json:"fetched_at"`
+	QualityStatus string `json:"quality_status"`
+	QualityReasons []string `json:"quality_reasons"`
+}
+type wireMarketOverviewSector struct {
+	Rank int `json:"rank"`
+	Code string `json:"code"`
+	Name string `json:"name"`
+	Category string `json:"category"`
+	LatestPrice *float64 `json:"latest_price"`
+	Change *float64 `json:"change"`
+	ChangePercent *float64 `json:"change_percent"`
+	Amount *float64 `json:"amount"`
+	AmountUnit string `json:"amount_unit"`
+	AdvancingCount *int `json:"advancing_count"`
+	DecliningCount *int `json:"declining_count"`
+	LeadingStock string `json:"leading_stock"`
+	LeaderChangePercent *float64 `json:"leader_change_percent"`
+	Source string `json:"source"`
+	ProviderReportDate string `json:"provider_report_date"`
+	QualityStatus string `json:"quality_status"`
+	QualityReasons []string `json:"quality_reasons"`
+}
+type wireMarketOverviewSectorSnapshot struct {
+	Category string `json:"category"`
+	Items []wireMarketOverviewSector `json:"items"`
+	Source string `json:"source"`
+	FetchedAt time.Time `json:"fetched_at"`
+	QualityStatus string `json:"quality_status"`
+	QualityReasons []string `json:"quality_reasons"`
+}
+type marketOverviewFetchResult struct {
+	component string
+	err error
+}
+
 func (c *Client) FetchStockBundle(ctx context.Context, code string, lookback int, asOf string) (domain.StockBundle, error) {
 	var wire wireBundle
 	path := "/api/v1/bundles/" + url.PathEscape(strings.TrimSpace(code))
@@ -200,6 +272,163 @@ func (c *Client) FetchStockBundle(ctx context.Context, code string, lookback int
 		out.DailyBars = append(out.DailyBars, bar)
 	}
 	return out, nil
+}
+
+
+func (c *Client) FetchMarketOverview(ctx context.Context, region, asOf string) (domain.MarketOverview, error) {
+	region = strings.ToLower(strings.TrimSpace(region))
+	if region == "" { region = "cn" }
+	if region != "cn" { return domain.MarketOverview{}, fmt.Errorf("native market overview does not support region %q", region) }
+	if ctx == nil { return domain.MarketOverview{}, errors.New("market overview context must not be nil") }
+	if err := ctx.Err(); err != nil { return domain.MarketOverview{}, err }
+	now := time.Now().UTC()
+	if raw := strings.TrimSpace(asOf); raw != "" {
+		referenceTime, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil { return domain.MarketOverview{}, errors.New("native market overview as_of must be an RFC3339 timestamp") }
+		age := now.Sub(referenceTime)
+		if age < 0 || age > 90*time.Second { return domain.MarketOverview{}, errors.New("native market overview only supports a live snapshot; as_of must be within 90 seconds before execution") }
+	}
+	industryQuery := url.Values{"type": {"industry"}, "limit": {"20"}}
+	conceptQuery := url.Values{"type": {"concept"}, "limit": {"20"}}
+	indices := &wireMarketOverviewIndexSnapshot{}
+	breadth := &wireMarketOverviewBreadthSnapshot{}
+	industry := &wireMarketOverviewSectorSnapshot{}
+	concept := &wireMarketOverviewSectorSnapshot{}
+	requests := []struct { component, path string; output any }{
+		{"indices", "/api/v1/market/indices", indices},
+		{"breadth", "/api/v1/market/breadth", breadth},
+		{"industry", "/api/v1/market/sectors?"+industryQuery.Encode(), industry},
+		{"concept", "/api/v1/market/sectors?"+conceptQuery.Encode(), concept},
+	}
+	results := make(chan marketOverviewFetchResult, len(requests))
+	for _, request := range requests {
+		request := request
+		go func() { results <- marketOverviewFetchResult{component: request.component, err: c.get(ctx, request.path, request.output)} }()
+	}
+	failed := make([]string, 0, len(requests))
+	for range requests {
+		result := <-results
+		if result.err != nil { failed = append(failed, result.component) }
+	}
+	if err := ctx.Err(); err != nil { return domain.MarketOverview{}, err }
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	marketNow := time.Now().In(loc)
+	out := domain.MarketOverview{Region: region, Date: marketNow.Format("2006-01-02"), Indices: make([]domain.MarketIndex, 0, len(indices.Items)), Warnings: []string{}}
+	sources := make([]string, 0, 4)
+	for _, part := range failed { appendOverviewWarning(&out.Warnings, "native_market_overview_component_unavailable_"+part) }
+	if !containsOverviewString(failed, "indices") {
+		appendOverviewSource(&sources, "indices", indices.Source)
+		appendOverviewQualityWarnings(&out.Warnings, "indices", indices.QualityStatus, indices.QualityReasons)
+		appendOverviewFreshnessWarning(&out.Warnings, "indices", indices.FetchedAt, marketNow)
+		for _, item := range indices.Items {
+			code := strings.TrimSpace(item.Code)
+			if code == "" { code = strings.TrimSpace(strings.Split(item.Symbol, ".")[0]) }
+			if code == "" || strings.TrimSpace(item.Name) == "" || !finiteOverviewNumber(item.LatestPrice) || *item.LatestPrice <= 0 ||
+				!finiteOverviewNumber(item.Change) || !finiteOverviewNumber(item.ChangePercent) {
+				appendOverviewWarning(&out.Warnings, "native_market_overview_invalid_index_item_skipped")
+				continue
+			}
+			itemOut := domain.MarketIndex{Code: code, Name: strings.TrimSpace(item.Name), Current: *item.LatestPrice, Change: *item.Change, ChangePct: *item.ChangePercent}
+			if finiteOverviewNumber(item.Open) { itemOut.Open = *item.Open }
+			if finiteOverviewNumber(item.High) { itemOut.High = *item.High }
+			if finiteOverviewNumber(item.Low) { itemOut.Low = *item.Low }
+			if finiteOverviewNumber(item.PrevClose) { itemOut.PrevClose = *item.PrevClose }
+			if finiteOverviewNumber(item.Amount) && *item.Amount >= 0 { itemOut.Amount = *item.Amount }
+			out.Indices = append(out.Indices, itemOut)
+		}
+	}
+	if !containsOverviewString(failed, "breadth") {
+		appendOverviewSource(&sources, "breadth", breadth.Source)
+		appendOverviewQualityWarnings(&out.Warnings, "breadth", breadth.QualityStatus, breadth.QualityReasons)
+		appendOverviewFreshnessWarning(&out.Warnings, "breadth", breadth.FetchedAt, marketNow)
+		if date, ok := strictOverviewDate(breadth.ProviderReportDate); ok { out.Date = date } else { appendOverviewWarning(&out.Warnings, "native_market_overview_provider_report_date_missing_using_collection_date") }
+		out.UpCount, out.DownCount, out.FlatCount = breadth.AdvancingCount, breadth.DecliningCount, breadth.UnchangedCount
+		if breadth.LimitUpCount != nil && *breadth.LimitUpCount >= 0 { out.LimitUpCount = *breadth.LimitUpCount } else { appendOverviewWarning(&out.Warnings, "native_market_overview_limit_up_count_unavailable") }
+		if breadth.LimitDownCount != nil && *breadth.LimitDownCount >= 0 { out.LimitDownCount = *breadth.LimitDownCount } else { appendOverviewWarning(&out.Warnings, "native_market_overview_limit_down_count_unavailable") }
+		if finiteOverviewNumber(breadth.TotalAmountCNY) && *breadth.TotalAmountCNY >= 0 { out.TotalAmount = *breadth.TotalAmountCNY } else { appendOverviewWarning(&out.Warnings, "native_market_overview_total_amount_unavailable") }
+		if breadth.UnclassifiedCount > 0 { appendOverviewWarning(&out.Warnings, "native_market_overview_unclassified_securities_present") }
+		if breadth.TotalSecurities > 0 && breadth.CoveredSecurities < breadth.TotalSecurities { appendOverviewWarning(&out.Warnings, "native_market_overview_market_breadth_partial_coverage") }
+		if breadth.AmountCoverageCount > 0 && breadth.CoveredSecurities > 0 && breadth.AmountCoverageCount < breadth.CoveredSecurities { appendOverviewWarning(&out.Warnings, "native_market_overview_total_amount_partial_coverage") }
+	}
+	if !containsOverviewString(failed, "industry") {
+		appendOverviewSource(&sources, "industry", industry.Source)
+		appendOverviewQualityWarnings(&out.Warnings, "industry", industry.QualityStatus, industry.QualityReasons)
+		appendOverviewFreshnessWarning(&out.Warnings, "industry", industry.FetchedAt, marketNow)
+		out.TopSectors = overviewSectorMaps(industry.Items, 5)
+		if len(out.TopSectors) == 0 { appendOverviewWarning(&out.Warnings, "native_market_overview_industry_rankings_empty") }
+	}
+	if !containsOverviewString(failed, "concept") {
+		appendOverviewSource(&sources, "concept", concept.Source)
+		appendOverviewQualityWarnings(&out.Warnings, "concept", concept.QualityStatus, concept.QualityReasons)
+		appendOverviewFreshnessWarning(&out.Warnings, "concept", concept.FetchedAt, marketNow)
+		out.TopConcepts = overviewSectorMaps(concept.Items, 5)
+		if len(out.TopConcepts) == 0 { appendOverviewWarning(&out.Warnings, "native_market_overview_concept_rankings_empty") }
+	}
+	if len(out.TopSectors) > 0 || len(out.TopConcepts) > 0 { appendOverviewWarning(&out.Warnings, "native_market_overview_bottom_sector_rankings_not_exposed_by_current_api") }
+	if len(sources) > 0 { appendOverviewWarning(&out.Warnings, "native_market_overview_sources="+strings.Join(sources, ",")) }
+	if len(out.Indices) == 0 && (containsOverviewString(failed, "breadth") || breadth.TotalSecurities <= 0) && len(out.TopSectors) == 0 && len(out.TopConcepts) == 0 {
+		if len(failed) > 0 { return domain.MarketOverview{}, fmt.Errorf("native market overview has no usable components; unavailable: %s", strings.Join(failed, ",")) }
+		return domain.MarketOverview{}, errors.New("native market overview returned no usable index, breadth or sector data")
+	}
+	return out, nil
+}
+
+func finiteOverviewNumber(value *float64) bool {
+	return value != nil && !math.IsNaN(*value) && !math.IsInf(*value, 0)
+}
+func strictOverviewDate(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	parsed, err := time.Parse("2006-01-02", raw)
+	if err != nil || parsed.Format("2006-01-02") != raw { return "", false }
+	return parsed.Format("2006-01-02"), true
+}
+func containsOverviewString(values []string, target string) bool {
+	for _, value := range values { if value == target { return true } }
+	return false
+}
+func appendOverviewWarning(warnings *[]string, value string) {
+	for _, current := range *warnings { if current == value { return } }
+	*warnings = append(*warnings, value)
+}
+func appendOverviewSource(sources *[]string, key, value string) {
+	value = strings.TrimSpace(value)
+	if value != "" { *sources = append(*sources, key+"="+value) }
+}
+func appendOverviewQualityWarnings(warnings *[]string, component, quality string, reasons []string) {
+	quality = strings.ToLower(strings.TrimSpace(quality))
+	if quality != "" && quality != "valid" { appendOverviewWarning(warnings, "native_market_overview_"+component+"_quality_"+quality) }
+	for _, reason := range reasons {
+		reason = strings.TrimSpace(reason)
+		if reason != "" { appendOverviewWarning(warnings, "native_market_overview_"+component+"_quality_reason:"+reason) }
+	}
+}
+func appendOverviewFreshnessWarning(warnings *[]string, component string, fetchedAt, now time.Time) {
+	if fetchedAt.IsZero() { appendOverviewWarning(warnings, "native_market_overview_"+component+"_fetched_at_missing"); return }
+	age := now.Sub(fetchedAt)
+	if age < -time.Minute { appendOverviewWarning(warnings, "native_market_overview_"+component+"_fetched_at_in_future") } else if age > 5*time.Minute { appendOverviewWarning(warnings, "native_market_overview_"+component+"_snapshot_stale") }
+}
+func overviewSectorMaps(items []wireMarketOverviewSector, limit int) []map[string]any {
+	capacity := len(items); if capacity > limit { capacity = limit }
+	result := make([]map[string]any, 0, capacity)
+	for _, item := range items {
+		if len(result) >= limit { break }
+		name := strings.TrimSpace(item.Name)
+		if name == "" || !finiteOverviewNumber(item.ChangePercent) { continue }
+		entry := map[string]any{"rank": item.Rank, "code": strings.TrimSpace(item.Code), "name": name, "change_percent": *item.ChangePercent, "source": strings.TrimSpace(item.Source), "quality_status": strings.TrimSpace(item.QualityStatus)}
+		if item.Category != "" { entry["category"] = item.Category }
+		if finiteOverviewNumber(item.LatestPrice) { entry["latest_price"] = *item.LatestPrice }
+		if finiteOverviewNumber(item.Change) { entry["change"] = *item.Change }
+		if finiteOverviewNumber(item.Amount) && *item.Amount >= 0 { entry["amount"] = *item.Amount }
+		if item.AmountUnit != "" { entry["amount_unit"] = item.AmountUnit }
+		if item.AdvancingCount != nil && *item.AdvancingCount >= 0 { entry["advancing_count"] = *item.AdvancingCount }
+		if item.DecliningCount != nil && *item.DecliningCount >= 0 { entry["declining_count"] = *item.DecliningCount }
+		if item.LeadingStock != "" { entry["leading_stock"] = item.LeadingStock }
+		if finiteOverviewNumber(item.LeaderChangePercent) { entry["leader_change_percent"] = *item.LeaderChangePercent }
+		if item.ProviderReportDate != "" { entry["provider_report_date"] = item.ProviderReportDate }
+		result = append(result, entry)
+	}
+	return result
 }
 
 func (c *Client) Health(ctx context.Context) error {

@@ -3,15 +3,16 @@ package pythonbridge
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/marketdatahttp"
 	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/domain"
 )
 
-// GoMarketDataAdapter 将原生 Go 行情服务作为实时行情与日 K 的唯一来源。
-// 这两类数据不会回退到 Python bridge，避免重新引入单位、复权口径和来源追溯的不确定性。
-// 市场概况和其他非行情能力在独立迁移前仍暂由 bridge 承担。
+// GoMarketDataAdapter 将原生 Go 行情服务作为实时行情与日 K 的唯一来源，
+// 并优先使用原生指数、市场广度和板块接口聚合中国市场概况。
+// 不支持的市场或原生市场概况无可用数据时保留兼容 bridge；个股行情和日 K 不回退。
 type GoMarketDataAdapter struct {
 	native *marketdatahttp.Client
 	bridge *Client
@@ -22,7 +23,7 @@ func NewGoMarketDataAdapter(native *marketdatahttp.Client, bridge *Client) (*GoM
 		return nil, errors.New("Go market-data client is required")
 	}
 	if bridge == nil {
-		return nil, errors.New("capability bridge client is required for the not-yet-migrated market overview")
+		return nil, errors.New("capability bridge client is required for non-CN overview fallback and auxiliary capabilities")
 	}
 	return &GoMarketDataAdapter{native: native, bridge: bridge}, nil
 }
@@ -54,16 +55,34 @@ func (a *GoMarketDataAdapter) FetchStockBundle(ctx context.Context, code string,
 }
 
 func (a *GoMarketDataAdapter) FetchMarketOverview(ctx context.Context, region, asOf string) (domain.MarketOverview, error) {
-	// 市场广度、板块、涨停/跌停等 Provider 尚未迁移到 Go。
-	// 必须明确标记能力缺失，不能从单只股票行情伪造全市场统计。
-	// 当前保留的 bridge 调用独立存在，不会获取个股行情或日 K。
-	var out domain.MarketOverview
-	request := map[string]any{"region": strings.ToLower(strings.TrimSpace(region))}
-	if strings.TrimSpace(asOf) != "" {
-		request["as_of"] = asOf
+	region = strings.ToLower(strings.TrimSpace(region))
+	if region == "" { region = "cn" }
+	if region == "cn" {
+		native, nativeErr := a.native.FetchMarketOverview(ctx, region, asOf)
+		if nativeErr == nil && usableNativeMarketOverview(native) { return native, nil }
+		if nativeErr == nil { nativeErr = errors.New("native market overview returned no usable data") }
+		if ctx != nil && ctx.Err() != nil { return domain.MarketOverview{}, ctx.Err() }
+		var legacy domain.MarketOverview
+		request := map[string]any{"region": region}
+		if strings.TrimSpace(asOf) != "" { request["as_of"] = asOf }
+		legacyErr := a.bridge.Post(ctx, "/internal/v1/market-data/market-overview", request, &legacy)
+		if legacyErr == nil {
+			legacy.Warnings = appendUniqueWarning(legacy.Warnings, "native_market_overview_unavailable_legacy_data_used")
+			return legacy, nil
+		}
+		return domain.MarketOverview{}, errors.Join(fmt.Errorf("native Go market overview: %w", nativeErr), fmt.Errorf("legacy bridge market overview: %w", legacyErr))
 	}
-	err := a.bridge.Post(ctx, "/internal/v1/market-data/market-overview", request, &out)
-	return out, err
+	var legacy domain.MarketOverview
+	request := map[string]any{"region": region}
+	if strings.TrimSpace(asOf) != "" { request["as_of"] = asOf }
+	if err := a.bridge.Post(ctx, "/internal/v1/market-data/market-overview", request, &legacy); err != nil { return domain.MarketOverview{}, err }
+	legacy.Warnings = appendUniqueWarning(legacy.Warnings, "market_overview_region_uses_legacy_bridge")
+	return legacy, nil
+}
+
+func usableNativeMarketOverview(snapshot domain.MarketOverview) bool {
+	if len(snapshot.Indices) > 0 || snapshot.UpCount > 0 || snapshot.DownCount > 0 || snapshot.FlatCount > 0 || snapshot.TotalAmount > 0 { return true }
+	return len(snapshot.TopSectors) > 0 || len(snapshot.BottomSectors) > 0 || len(snapshot.TopConcepts) > 0 || len(snapshot.BottomConcepts) > 0
 }
 
 func appendUniqueWarning(in []string, value string) []string {
