@@ -497,7 +497,7 @@ function renderWatchlist(records = safeReadWatchlist()) {
     const quoteLine = document.createElement("small");
     quoteLine.className = "watchlist-tracking-line";
     quoteLine.textContent = quoteMatches
-      ? "行情快照：" + formatPrice(state.quote.current_price) + " · " + formatPercent(state.quote.change_percent) + " · " + formatDateTime(state.quote.quote_time) + " · " + qualityLabel(state.quote.quality_status)
+      ? "行情快照：" + formatPrice(state.quote.current_price) + " · " + formatPercent(state.quote.change_percent) + " · " + (state.quote.quote_time ? formatDateTime(state.quote.quote_time) : "时间未报告") + " · " + qualityLabel(state.quote.quality_status)
       : "当前行情：未加载（点击“查行情”读取）";
     const recentTask = recentTasks
       .filter((task) => Array.isArray(task.symbols) && task.symbols.some((value) => normalizeLocalSymbol(value) === itemSymbol))
@@ -514,8 +514,13 @@ function renderWatchlist(records = safeReadWatchlist()) {
         : "最近任务：暂无本地任务记录（不代表从未分析）";
     const resultLine = document.createElement("small");
     resultLine.className = "watchlist-tracking-line";
-    const latestResultMatches = Boolean(recentTask && state.lastRunResult && state.taskId === recentTask.task_id
-      && Array.isArray(state.taskSymbols) && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol));
+    const latestResultMatches = Boolean(recentTask && state.lastRunResult
+      && state.taskId === recentTask.task_id
+      && recentTask.run_id
+      && state.lastRunResult.run_id === recentTask.run_id
+      && String(recentTask.analysis_base || state.settings.analysisBase) === String(state.taskAnalysisBase || state.settings.analysisBase)
+      && Array.isArray(state.taskSymbols)
+      && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol));
     if (latestResultMatches) {
       const corePass = state.lastRunResult.quality?.core_pass;
       const qualityState = corePass === true ? "核心质量门禁通过" : corePass === false ? "核心质量门禁未通过" : "核心质量门禁未报告";
