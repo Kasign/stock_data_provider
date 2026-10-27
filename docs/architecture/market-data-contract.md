@@ -108,7 +108,7 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 
 财务字段的日期顺序约束：`report_date` 必须对应请求季度的期末，不能晚于中国市场当前日期；若 `publication_date` 存在，则必须是有效日期且不早于 `report_date`，也不能在未来。两者语义不同，不能互相替代。
 
-财务快照必须包含六个标准指标分区（盈利、营运、成长、偿债、现金流、杜邦）；同花顺还可附带 `income_statement`、`balance_sheet`、`cash_flow_statement` 三类独立报表分区。服务层允许六个标准分区加最多三个报表分区。若同花顺未返回某个标准指标分区，适配器会补充 `unknown` 空分区并记录 `provider_fundamental_ability_missing:<category>`，不补零；重复分区、未知分类、错误报告期、非法日期与不一致的 `has_data/metrics` 仍拒绝。报表分区的降级状态不能被父快照提升为 `valid`。
+财务快照必须包含六个标准指标分区（盈利、营运、成长、偿债、现金流、杜邦）；同花顺还可附带 `income_statement`、`balance_sheet`、`cash_flow_statement` 三类独立报表分区。服务层允许六个标准分区加最多三个报表分区。若同花顺未返回某个标准指标分区，适配器会补充 `unknown` 空分区并记录 `provider_fundamental_ability_missing:<category>`，不补零；重复或未知指标能力会在适配器发起三张报表请求前被拒绝；错误报告期、非法日期与不一致的 `has_data/metrics` 也仍拒绝。报表分区的降级状态不能被父快照提升为 `valid`。
 
 财务 API 的 `year`/`quarter` 只定位报告期，不代表历史时点查询。当前 Provider 对该报告期返回请求时可获得的版本，尚不能重建指定历史时刻之前已发布的修订版本；`GET /api/v1/stocks/{symbol}/fundamentals` 若传入 `as_of` 参数（包括空值）会返回 HTTP 400 `VALIDATION_ERROR`，不会静默忽略。历史回测必须依据可审计的公告/可用时间做 point-in-time 门禁；在历史版本存储与回放能力完成前，不得将当前修订值当作历史时点财务数据。
 

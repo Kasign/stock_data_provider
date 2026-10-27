@@ -1731,9 +1731,17 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"publication_date_not_exposed_by_provider", "indicator_units_not_exposed_by_provider"},
 	}
+	standardCategories := []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"}
+	standardCategorySet := make(map[string]struct{}, len(standardCategories))
+	for _, category := range standardCategories {
+		standardCategorySet[category] = struct{}{}
+	}
 	seenCategories := make(map[string]struct{}, len(data.Abilities))
 	for _, ability := range data.Abilities {
 		category := hithinkFundamentalCategory(ability.Ability)
+		if _, allowed := standardCategorySet[category]; !allowed {
+			return nil, fmt.Errorf("同花顺财务指标返回未知能力分区 %q", ability.Ability)
+		}
 		if _, duplicate := seenCategories[category]; duplicate {
 			return nil, fmt.Errorf("同花顺财务指标返回重复能力分区 %q", category)
 		}
@@ -1773,7 +1781,6 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		snapshot.Sections = append(snapshot.Sections, section)
 	}
 	// 同花顺可能省略暂时无数据的标准能力分区；显式补为 unknown，避免整份快照被拒绝，也不伪造零值。
-	standardCategories := []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"}
 	for _, category := range standardCategories {
 		if _, exists := seenCategories[category]; exists {
 			continue
