@@ -1441,3 +1441,20 @@ func TestSupplementCacheRejectsOldValidQualityWithoutAvailabilityTime(t *testing
 		}
 	})
 }
+
+
+func TestValidateFundamentalsSnapshotRejectsFutureReportPeriod(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	futureYear := time.Now().In(marketLocation()).Year() + 1
+	snapshot.Year = futureYear
+	snapshot.Quarter = 1
+	futureReportDate := fundamentalPeriodEnd(futureYear, 1)
+	publicationDate := time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02")
+	for index := range snapshot.Sections {
+		snapshot.Sections[index].ReportDate = futureReportDate
+		snapshot.Sections[index].PublicationDate = publicationDate
+	}
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "report period is in the future") {
+		t.Fatalf("future financial report period must be rejected, got %v", err)
+	}
+}
