@@ -1807,12 +1807,12 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 @media (max-width: 700px) {
   .market-overview-actions { align-items: stretch; flex-direction: column; gap: 8px; }
   .market-overview-actions .button { width: 100%; min-height: 40px; }
-  .market-overview-updated { width: 100%; max-width: none; text-align: left; }
+  .market-overview-updated { width: 100%; max-width: none; text-align: left; font-size: 12px; line-height: 1.6; }
 }
 
 @media (max-width: 600px) {
-  .market-activity-controls label { min-width: 0; flex: 1 1 140px; }
-  .market-activity-controls .button { flex: 1 1 100%; }
+  .market-activity-controls label { min-width: 0; flex: 1 1 140px; font-size: 12px; }
+  .market-activity-controls .button { flex: 1 1 100%; min-height: 38px; font-size: 12px; }
   .calendar-range-controls label { min-width: calc(50% - 4px); }
   .trading-calendar-weekdays,
   .trading-calendar-grid { gap: 3px; }
