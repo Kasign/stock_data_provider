@@ -1,6 +1,6 @@
 # WebUI 技术说明
 
-更新日期：2026-10-26
+更新日期：2026-10-27
 
 本文记录 WebUI 的分层方式、请求生命周期、市场人气榜的数据契约与边界。目标是便于后续功能开发、代码审查和部署联调；它不替代 Go 服务的 OpenAPI 定义。
 
@@ -225,3 +225,99 @@ X-API-Key: <由现有设置提供>
 - 文案明确任务只分析输入框列出的代码；手动编辑输入框时会恢复通用说明，避免旧的“已载入”状态残留。
 - `position_review` 在 UI 中保持禁用，直到后端拥有真实持仓账本。当前 Go 组合提供器的版本是 `unconfigured-no-paper-ledger-v1`，现金和权益均为 0；不能把该结果包装成持仓复核。
 - 增补源码契约测试覆盖本地清单载入、任务类型切换及持仓复核能力门禁。本次按协作约定未运行测试或触发 CI。
+
+## 24. 市场总览与市场活动的可读性/窄屏交互
+
+- 市场概况面板的指数身份、涨跌幅、数据来源/采集时间、板块代码、涨跌停触及时间以及数据质量说明统一采用至少 12px 的正文/辅助文字基线。数值字段仍保留 tabular numerals，避免改变财务数字的对齐方式。
+- 龙虎榜与交易日历的字段标签提升到 12px；日期输入与查询按钮最小高度为 38px，股票跳转按钮与月份切换按钮使用更宽松的点击区域。
+- 交易日历状态文字在桌面用 11px、窄屏用 10px；小屏调整日期格间距和高度，使“交易日/休市”在 320px 视口下仍有可读空间。每一天仍来自真实 API 响应，不生成工作日或休市模拟数据。
+- 龙虎榜表格继续使用可横向滚动容器，在移动浏览器启用触屏惯性滚动并避免横向滚动事件向外层页面传播。
+- 以上仅是 CSS 呈现层与 UI 契约测试，不涉及数据计算、接口路径、API payload 或后端状态。视觉回归需要在真实浏览器中检查 320/375/600/768/900/1280px，并覆盖深色/浅色主题。
+
+
+## 25. 市场总览全局刷新反馈的真实含义
+
+- 五个模块（指数、涨跌分布、板块排行、涨跌停池、人气/飙升榜）独立发起请求；全局刷新等待这些请求结束后，汇总各自的请求结果。
+- 结果类型按 HTTP 状态区分：404 表示当前部署尚未提供接口，503 表示 Provider 不可用/未配置，401/403 表示鉴权失败；其他异常归为读取失败。
+- 缺少 API Key 时模块不会发出请求，并显示为“未请求”；过时的并发请求被取消时不会被错误计成失败。
+- “模块响应”不等于“数据验证通过”。回包中的 quality_status、quality_reasons、来源和采集/快照时间仍是数据可用性判断的依据；总览状态不把请求成功包装成数据质量成功。
+- summarizeMarketOverviewRefresh 是纯函数，可独立测试，无 DOM 依赖。
+
+
+## 26. Run Flow 阶段事件筛选
+
+- 筛选只操作内存中已收到的 StageEvent；服务端事件读取游标、sequence 去重、轮询间隔与任务状态不受影响。
+- 筛选类型按归一化状态键分组：issues = failed/error/blocked/rejected/degraded/partial；active = running/started/in-progress/in_progress/processing/queued/pending；completed = succeeded/success/completed/skipped。缺失或未知状态仍能在“全部”中查看，不会被错误归类为成功。
+- 每个筛选按钮的计数在每次渲染时按已读取事件重算；当前筛选结果为空时显示独立的过滤空态，不清空缓存事件、不修改服务端任务。
+- 切换筛选后，若当前选中事件不再可见，会在当前显示的事件中优先定位异常/降级/运行中事件，否则选中最后一条；选择事件仍可查看原始 JSON。
+- 核心匹配规则在 src/task-event-filter.js 中保持为纯函数，由 Node 测试覆盖，且新增模块包含在 npm run check 的语法检查。
+- 时间线继续是线性真实事件列表。未获得后端可信 Flow Snapshot 前不绘制 DAG，也不推断阶段依赖。
+
+
+## 27. 全站快速定位与可读性约定
+
+- `#market-view` 页面内容较长，快速定位通过 `data-scroll-target` 将按钮绑定到已存在的真实区块 ID。区块顺序不移动，避免破坏共享 DOM、行情请求状态和同一页面的元素依赖。
+- 快速定位不修改 `location.hash`，因此不会与顶层市场/任务/通知/问股/选股/告警/设置路由冲突。点击后滚动到目标区块，并把键盘焦点交给其标题，方便继续使用键盘阅读。
+- 当前定位高亮根据目标区块的实际 viewport 位置更新；导航在窄屏允许横向滚动，避免把多项研究入口压成拥挤的多行按钮。
+- 页面滚动遵循 `prefers-reduced-motion: reduce`；常用按钮、表单输入、状态徽标、表格与辅助说明使用统一的可读性基线，指标主值仍由各自组件定义。
+- 本次不添加新 API、无模拟数据，不改变行情/任务请求、轮询、缓存、路由或服务端状态。CSS/HTML 静态契约有自动化覆盖，但布局最终表现仍需真实浏览器截图验收。
+
+
+## 28. 主导航图标折叠态与未接入能力提示
+
+- 主导航的每个 data-view 按钮都设置稳定的 aria-label 和 title。在 max-width: 900px 时，侧栏隐藏文字，仅保留图标；此时名称仍通过可访问名称和原生悬停提示提供。
+- 通知、问股、选股、告警目前没有对应的完整后端能力，因此宽屏导航用中性“待接入”标签提前标注，不将视觉入口误表示为真实服务可用。折叠侧栏隐藏标签以避免挤压图标区。
+- 此变更只改导航文案和样式，不改变 data-view 值、setView 路由、页面状态或 API 行为。UI 契约测试检查七个导航入口的名称与四个能力标签。
+
+
+## 6. 2026-10-27 全站易用性 Review 补充
+
+### 顶栏刷新按钮的真实语义
+
+顶栏刷新入口必须描述当前视图真正执行的操作，不能仅因为所有页面共享一个按钮就都显示“刷新数据”：
+
+- 行情总览：重查服务健康状态、Provider、市场概况、市场活动及当前个股行情。
+- 任务与运行流：重查服务健康状态；存在当前任务时，再请求任务状态与阶段事件。
+- 通知、问股、选股、告警：这些页面的服务端资源尚未接入，顶栏操作只检查行情/分析服务健康状态，按钮的 `aria-label` 与 `title` 直接说明这一边界。
+- 设置中心：顶栏只检查已保存地址；测试未保存的表单草稿必须使用设置面板内的专用检查操作，该操作不保存草稿。
+
+点击后按钮增加 `aria-busy=true` 并禁用，避免连续刷新产生重复请求；结束后总是清除忙碌状态并恢复当前视图的说明。此锁只约束顶栏操作，不替代各 API 模块自己的 AbortController/generation 并发保护。
+
+### 禁用状态与焦点
+
+- 禁用控件使用 `not-allowed` 光标；只有顶栏刷新处于忙碌状态时使用 `progress`。
+- 原生 `summary` 参与键盘折叠交互，应有可见的 `:focus-visible` 焦点环。
+- 已有全局 `prefers-reduced-motion: reduce` 规则继续生效。本轮不引入新的动画。
+- `styles.css` 仍包含历史累积的分散媒体查询。本轮只把文件末尾新增的首页快捷入口、Run Flow 和平板查询表单规则改为易读的分区书写，保留原选择器、声明值与规则顺序；没有合并全局重复断点。后续仍应按页面/组件分批整理，避免一次性重写整份样式表。
+
+源码 Review 后的人工验收清单见 [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md)。`42c6d41` 上的 [Chromium 视口烟测](https://github.com/Kasign/stock_data_provider/actions/runs/40441039966) 与 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40441045323) 已通过；自动化烟测使用明确的 503 API 响应，不代表深浅主题的完整人工视觉检查或 NAS 部署验收。
+
+
+## 7. 2026-10-27 页面职责与运行流布局
+
+### 页面职责
+
+- `market-view`：大盘首页同时展示核心指数、市场涨跌分布、行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜与交易日历，按“指数与广度 → 市场榜单 → 市场活动”排列。
+- `workspace-tabs`：页面上方三个主工作区 Tab 为大盘数据、个股分析、自选股；主导航其它功能仍通过侧栏进入。
+- `stocks-view`：股票名称/代码搜索、实时行情、日 K、指标、历史日 K 与 Provider 能力。
+- `watchlist-view`：只读写当前浏览器 localStorage 的本地自选股列表；它不是服务器持久列表。
+- `research-view`：公司档案、板块、财务、估值、筹码、资金流和公告。
+- `tasks-view`：异步任务与运行流；其余未接入 API 的页面仍显示能力边界。
+
+### 按当前视图刷新
+
+`refreshMarketWorkspace()` 在进入首页、使用全局刷新或修改行情连接配置后统一刷新 `indices/breadth/sectors/pool/hot`，并独立刷新龙虎榜和交易日历。每个市场模块保留自己的 AbortController/generation 和质量状态；一个接口失败不会阻止其它模块显示。
+
+### Run Flow 交互
+
+参考 [daily_stock_analysis 的 RunFlowPanel](https://github.com/Kasign/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowPanel.tsx)、[RunFlowSummaryBar](https://github.com/Kasign/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowSummaryBar.tsx) 和 [RunFlowEventList](https://github.com/Kasign/daily_stock_analysis/blob/main/apps/dsa-web/src/components/run-flow/RunFlowEventList.tsx) 的信息层级：顶部摘要、可筛选阶段列表、选中事件详情分别占据不同区域。当前项目的弹窗改为近全屏工作区，桌面端并排展示阶段时间线与详情，窄屏纵向排列。
+
+当前后端不提供可验证的 DAG 拓扑快照，所以只复用布局/交互，不复刻图节点与边。事件列表及选中详情只渲染真实阶段事件中的状态、阶段、时间、错误码和原始 JSON；事件缺失时明确展示空态。自动化 Chromium 烟测已验证弹窗边界、宽屏分栏/窄屏单列和导航；真实 API、主题/键盘细节和 NAS 部署验收仍未完成。
+
+
+## 8. 2026-10-27 大盘首页与工作区 Tab 重整
+
+- 首页使用 `market-overview-panel`、`market-lists-panel`、`market-activity-panel` 三个纵向区块。所有市场数据仍使用原有只读 API 和质量状态，不新增静态行情。
+- 旧 `#market-data` hash 会迁移到 `#market`；不再保留第二个市场数据视图。
+- 顶部 Tab 为大盘数据、个股分析、自选股；个股研究、分析任务和其它辅助功能继续通过侧栏进入。
+- 快速定位 UI 已从 DOM、滚动监听、CSS 和测试中移除。全局样式审查仅删除无用或完全重复规则；未重排剩余响应式规则，以降低全站级联风险。

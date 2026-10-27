@@ -1,16 +1,17 @@
 # WebUI 任务交接上下文
 
-最后更新：2026-10-26
+最后更新：2026-10-27
 用途：从新对话恢复 stock_data_provider WebUI 产品扩展与阶段 Review。
 
-## 当前 GitHub 真值（本轮开始时重新核实）
+## 当前 GitHub 状态（2026-10-27；状态须以 PR/Actions 实时页面为准）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 分支：feat/webui-market-data-console；本轮 Compose 整理前已同步数据分支，基线 HEAD：55b06976b9ac8dc63c797e107590addc3b46c601。
-- PR #2：https://github.com/Kasign/stock_data_provider/pull/2，Open、未合并；head 与上述 WebUI HEAD 一致；base 为 feat/full-go-data-providers-api-switch。
-- 数据分支：feat/full-go-data-providers-api-switch；本轮开始时 HEAD：26f428a427a9f7d43299de267c1e3bd2b38d294e。
-- PR #1：https://github.com/Kasign/stock_data_provider/pull/1，Open、未合并；head 与上述数据分支 HEAD 一致；base 为 main。
-- 分支 HEAD 和 PR 状态必须在每次后续编辑前重新核对，不依赖此处记录当作实时真值。
+- WebUI 工作分支：`feat/webui-market-data-console`；本次样式整理前已核实 HEAD：`42c6d413714c479cbabedd21f1b91980adf71bad`，提交后以 PR #13 最新 head SHA 为准。
+- WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，标题 `WebUI: improve market readability and refresh diagnostics`，状态 Open、未合并、mergeable；head 与 WebUI 分支一致，base 为 `feat/full-go-data-providers-api-switch`。
+- `42c6d41` 对应的 Chromium 视口烟测 [Actions #40441039966](https://github.com/Kasign/stock_data_provider/actions/runs/40441039966) 与 WebUI checks [Actions #40441045323](https://github.com/Kasign/stock_data_provider/actions/runs/40441045323) 均已成功；前者将 API 请求显式设为 503，不能替代真实 API/NAS 验收。后续样式整理提交的新 CI 需以新 HEAD 对应 Actions 为准。
+- PR #2 已关闭并合并，旧的 PR #2 HEAD 不再作为本轮基线。数据 PR #1 仍是独立变更流。
+- 本轮只提交到 WebUI 工作分支，改动限定在 `web/**`；不合并 PR、不更新数据分支、不修改 Go/Provider/数据库/API/Compose。
+- 本轮继续处理 CSS 可维护性与文档状态一致性；浏览器烟测已做自动化覆盖，深浅主题、键盘交互、真实后端与 NAS/Docker/OpenResty 仍由后续统一验收。
 
 ## 本轮已交付且尚未做运行时验收的事项
 
@@ -38,6 +39,17 @@
 5. 按当前用户要求，不运行测试、CI 或镜像构建，并在总结中明确说明；只报告实际完成的源码 Review。
 6. 不合并 PR、不强推、不重写历史；后端能力缺口先记录为契约/依赖，不夹带 Go 源码修改。
 7. 在主要模块完成后做整体 Review，再由用户统一测试并在 NAS/Docker/OpenResty 上验收。
+
+
+## 2026-10-27 全站易用性 Review 结果
+
+- Review 开始时远程 HEAD：`67aaf3f9fd1ba0bea99845eae601ecaf57a483cb`；PR #13 状态 Open、未合并、mergeable=true，base 为 `feat/full-go-data-providers-api-switch`。
+- 顶栏刷新按钮的名称/提示现随当前视图更新；在无通知、Chat、选股、告警 API 的页面明确告知只刷新服务连接状态。顶栏刷新操作增加禁用锁和 `aria-busy`，防止快速连点。
+- 禁用控件光标不再显示“等待中”；原生 `summary` 的键盘焦点样式纳入基础规则。
+- 全站检查项与待验收视口矩阵见 [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md)。
+- **尚未做真实浏览器 / NAS / Docker 验收。** 不将源码 Review 或基线 CI 当作新提交的运行时通过证明。
+- 下一步：核对本轮提交的实际 SHA 和 GitHub Actions；之后按 Review 清单集中验收。只改 `web/`，不合并 PR、不修改数据侧分支。
+
 
 ## 下一步执行指令
 
@@ -370,3 +382,81 @@
 - `rank_change` 的正负含义不由 API 契约保证，因此仅展示源端数值；`total` 是本次有界响应记录数；`fetched_at` 是前端可以展示的采集时间，不是上游市场快照时间。
 - OpenAPI 说明源端缺少可核验行情快照时间，响应质量可能为 degraded；UI 保留该质量状态和质量原因。
 - 详细架构、错误处理和数据解释见 `web/TECHNICAL_NOTES.md`。本轮未运行测试或 CI。
+
+
+## 2026-10-27 — 市场总览与市场活动可读性批次
+
+- 本轮编辑前 WebUI 分支 HEAD 为 737153756f76de15157024ae63e528deb3b08757，数据分支当时同一 HEAD。本批只更改 web/styles.css、web/tests/ui-contract.test.mjs 和 web/ 内的进度/技术/交接文档。
+- 目标：提升市场概况辅助文字可读性，扩大龙虎榜/日历控制触控面积，改善 320–600px 日期日历布局。没有修改 API 路径、数据模型、Go 源码、Provider、数据库或根 Compose。
+- 对应 CI 状态应查看本批提交的 WebUI checks；静态样式契约不替代真实浏览器视觉验收。
+
+
+## 2026-10-27 — 市场总览全局刷新结果反馈
+
+- 全局刷新现在根据五个模块的实际请求结果汇总提示；404、503、401/403、其他读取错误、缺少 API Key 和取消请求各自计数。
+- “收到响应”不代表数据质量通过；每个模块的质量状态、原因、来源和时间仍独立显示。
+- 新增 web/tests/market-overview.test.mjs，覆盖完整响应、混合失败、缺 Key、取消和未知状态。
+- 这批修改仅限 web/**。开始时 WebUI HEAD 为 9fdb97693669510bef8416a86a7a0097e792559d；PR #13 仍 Open/未合并。数据分支在此期间新增的提交仅涉及数据层文件，本批不修改、不合并数据层代码。
+
+
+## 2026-10-27 — Run Flow 阶段事件筛选
+
+- WebUI 分支在前一批 00f301fc37e530bbb52af054e6c005dcb1239aa9 基础上增加阶段事件筛选：全部、异常/降级、运行中、成功/跳过，并显示当前已收到事件的分类计数。
+- 过滤只是视图操作；原始 StageEvent、服务端序号/游标、Task/Run 状态均保持不变。未知状态仍可在“全部”中检查，筛选无匹配会单独提示。
+- 新增 web/src/task-event-filter.js 与 web/tests/task-event-filter.test.mjs；把模块加入语法检查并更新产品/技术/进度文档。
+- 本批应继续只提交到 feat/webui-market-data-console。PR #13 保持 Open/未合并；数据分支和任何 Go/Provider/数据库/API/Compose 文件均不在此改动范围。
+
+
+## 2026-10-27 — 全站 Review 后续可发现性修正
+
+- 快速定位/字号批次 commit 85bd244d96296f6a7605bf661a490bff6c5b1e1c 之后，修正 UI 契约中的正则转义并取得 Actions #40436057454 成功。
+- 继续发现 900px 以下侧栏折叠为图标时缺少可访问名称提示，并且通知/问股/选股/告警导航没有提前声明当前接口不可用；本批补齐可访问名称，并在桌面导航显示“待接入”。
+- 仍限定于 web/**。后续验收最新提交对应的 Actions，以及真实浏览器中的键盘导航、窄屏侧栏与深浅主题。
+
+
+## 2026-10-27：首页重排与 Run Flow 样式任务
+
+- 变更前 WebUI HEAD：`5f57bd728fb671e7e180da80d8e3e6c2e94065b8`；PR #13 仍为独立 WebUI 工作流。
+- 新页面分工：行情总览（核心指数/涨跌分布）、市场数据（行业/概念、涨跌停、人气榜、龙虎榜、交易日历）、个股查询（搜索/行情/K 线/技术指标）、自选股（本地列表）、个股研究（公司资料/财务/估值/筹码/资金流/公告）、分析任务（Task/Run/StageEvent）。
+- 运行流借鉴 daily_stock_analysis 的顶部摘要、可筛选事件列表和详情分栏，改成近全屏；桌面并排展示，窄屏上下排列。当前数据层没有可信 DAG 拓扑，禁止创建假拓扑或进度百分比。
+- 变更仅限 `web/**`。新提交的 Actions 作为自动化结果；真实浏览器、NAS/1Panel 与触控验收仍需部署后执行。
+
+
+## 2026-10-27 — Run Flow / CSS 收尾续接
+
+- PR #13 仍保持 Open、未合并；工作范围限定于 `web/**`。不要因为 compare 接口显示 mergeable 就直接合并，须重新比较 WebUI 与数据分支并 Review 冲突/语义差异。
+- CSS 先完成了小范围低风险维护：把文件末尾新增的首页快捷入口、Run Flow 和平板查询表单规则改为多行分区格式；未更改选择器、声明值、规则顺序。历史样式仍约有 67 个媒体查询块，后续按页面逐区处理。
+- 已通过的自动化浏览器烟测只验证固定 API 503 下的导航、视口无横向溢出、Run Flow 弹窗边界与分栏切换；不是真实任务流数据验收。
+- 下一步优先查看本次提交后的 WebUI Actions，再分区清理旧 CSS；之后由用户在真实部署环境统一验收 API Key、中文股票搜索、任务状态/事件轮询、报告恢复、主题与键盘交互。
+- 通知、问股、选股、告警、服务端设置读写、服务端任务列表和可信 DAG 快照仍依赖后端 API；在契约和持久化可用前不得启用伪造操作。
+
+
+## 2026-10-27 — 大盘首页信息架构纠偏与全局 Review
+
+- 首页将核心指数/市场涨跌分布、行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜和交易日历集中展示，不再只剩指数卡片与导航快捷入口。
+- 主工作区改为三个顶部 Tab：大盘数据、个股分析、自选股；侧栏保留个股研究资料、分析任务、通知、问股、选股、告警与设置。
+- 通用快速定位条已从 HTML、JS、CSS、测试中移除；旧 `market-data` hash 会迁移到首页。
+- 全局 CSS 处理清除失效导航快捷卡片与完全重复的顶层 CSS 规则，添加 Tab 响应式/焦点/减少动画样式。未高风险合并旧媒体查询，剩余 CSS 维护工作继续分区推进。
+- 下一步查看本提交后的 WebUI checks 和 Chromium 截图。CI 固定 503 后端，只验证布局/交互，不替代真实 API、主题及 NAS/1Panel 联调。
+
+
+## 2026-10-27 — 首页重整的最新 CI 与截图
+
+- 最新代码提交：`df43632894f50f36bab2f00f5bf65e8e90eef8ac`。
+- [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40444362551) 与 [Chromium browser smoke](https://github.com/Kasign/stock_data_provider/actions/runs/40444358365) 均通过。浏览器运行产物为 Actions Artifact `webui-browser-screenshots`（artifact ID `12707731742`）。
+- 首屏现在为完整大盘数据工作区；主 Tab 是大盘数据、个股分析、自选股。快速定位 DOM/滚动逻辑/CSS 已删除，市场榜单与龙虎榜、交易日历复用原有 API。
+- CI 截图中的中文方框来自 Runner 字体缺失。真实 API、深浅主题、键盘细节及 NAS/1Panel 联调仍需在部署环境确认。
+- PR #13 保持 Open/未合并。当前相对数据分支领先 21、落后 31；整合前必须再次比较分支差异并审查。
+
+
+## 2026-10-27 — 全局 CSS 维护性补充
+
+- `styles.css` 中超过 200 字符的压缩规则已拆成易读的多行格式，原 CSS token 顺序完全一致；没有变更选择器、声明值或响应式规则顺序。
+- 当前首页与三 Tab 导航的验收记录见 WebUI checks [#40444362551](https://github.com/Kasign/stock_data_provider/actions/runs/40444362551) 和 Chromium browser smoke [#40444358365](https://github.com/Kasign/stock_data_provider/actions/runs/40444358365)。仅格式化 CSS 的新提交仍将触发对应 CI。
+
+
+## 2026-10-27 — 最新 CSS 整理提交已通过 CI
+
+- `a142c01ee05ca62a7d88f5290d4b860c040a4722` 的 WebUI checks [#40444716104](https://github.com/Kasign/stock_data_provider/actions/runs/40444716104) 与 Chromium browser smoke [#40444709585](https://github.com/Kasign/stock_data_provider/actions/runs/40444709585) 均成功。
+- CSS 格式化覆盖 39 处压缩规则，词法 token 序列一致；视觉规则值和层叠顺序未变更。后续仍避免无把握地把不同页面里的媒体查询合并。
+- PR #13 仍 Open、未合并；WebUI 分支相对数据分支目前分叉（领先 23、落后 31），在确认跨分支接口和文件差异前不直接合并。

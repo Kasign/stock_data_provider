@@ -615,3 +615,71 @@ test("Run Flow summary and event diagnostics remain grounded in persisted Task, 
   assert.doesNotMatch(app, /completed_stages\s*\/\s*\w+|progressPercent|100\s*\*\s*.*completed_stages/i,
     "Run Flow must not infer or fabricate progress percentages");
 });
+
+
+test("market overview and activity use readable secondary text and touch-sized controls", () => {
+  assert.match(finalCssRuleBody(".market-overview-updated"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-overview-subheading p"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-index-identity small"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-index-changes span"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-widget-meta"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-breadth-metric small"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-table-primary"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-table-secondary"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-touch-time"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-activity-heading p"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-activity-controls label"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-activity-controls input"), /min-height: 38px/);
+  assert.match(finalCssRuleBody(".market-activity-controls .button"), /min-height: 38px/);
+  assert.match(finalCssRuleBody(".calendar-month-navigation .icon-button"), /min-width: 38px; min-height: 38px/);
+  assert.match(finalCssRuleBody(".trading-calendar-weekdays span"), /font-size: 11px/);
+  assert.match(stylesheet, /\.trading-calendar-day span \{ font-size: 11px; line-height: 1\.25; text-align: center; overflow-wrap: anywhere; \}/);
+  assert.match(finalCssRuleBody(".trading-calendar-day span"), /font-size: 10px/);
+  assert.match(stylesheet, /@media \(max-width: 700px\) \{[\s\S]*?\.market-overview-actions \.button \{ width: 100%; min-height: 40px; \}/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.trading-calendar-day span \{ font-size: 10px; \}/);
+  assert.match(finalCssRuleBody(".market-activity-table"), /-webkit-overflow-scrolling: touch/);
+});
+
+
+test("primary workspace tabs keep market modules on the homepage without quick-locate UI", () => {
+  const home = html.slice(html.indexOf('<section class="view" id="market-view">'), html.indexOf('<section class="view" id="stocks-view"'));
+  for (const id of ["market-overview-panel", "market-lists-panel", "market-activity-panel"]) {
+    assert.ok(home.includes('id="' + id + '"'), "homepage should include " + id);
+  }
+  assert.ok(home.indexOf('id="market-overview-panel"') < home.indexOf('id="market-lists-panel"'));
+  assert.ok(home.indexOf('id="market-lists-panel"') < home.indexOf('id="market-activity-panel"'));
+  for (const view of ["market", "stocks", "watchlist"]) {
+    assert.match(html, new RegExp('class="workspace-tab[^"]*"[^>]*data-view="' + view + '"'));
+  }
+  assert.match(html, /aria-label="核心工作区"/);
+  assert.doesNotMatch(html, /class="page-jump-nav"|data-scroll-target=/);
+  assert.doesNotMatch(app, /pageJumpButtons|syncPageJumpLocation|scroll-target/);
+  assert.doesNotMatch(stylesheet, /\.page-jump-nav|\.page-jump-button/);
+  assert.match(stylesheet, /\.workspace-tabs\s*\{/);
+  assert.match(stylesheet, /\.workspace-tab\.active/);
+});
+
+test("collapsed sidebar navigation remains accessible and unavailable modules disclose their status", () => {
+  const navButtons = [...html.matchAll(/<button class="nav-link[^"]*"[^>]*data-view="([^"]+)"[^>]*>/g)];
+  assert.deepEqual(navButtons.map((match) => match[1]), [
+    "research", "tasks", "notifications", "chat", "screening", "alerts", "settings"
+  ], "sidebar should expose secondary tools while primary destinations live in workspace tabs");
+  const workspaceTabs = [...html.matchAll(/<button class="workspace-tab[^"]*"[^>]*data-view="([^"]+)"[^>]*>/g)];
+  assert.deepEqual(workspaceTabs.map((match) => match[1]), ["market", "stocks", "watchlist"]);
+  for (const view of ["market", "stocks", "watchlist"]) {
+    assert.match(html, new RegExp('id="' + view + '-view"'));
+  }
+  assert.doesNotMatch(html, /id="market-data-view"/);
+  for (const match of navButtons) {
+    const view = match[1];
+    assert.match(match[0], /aria-label="/, view + " should have an accessible name when its text is hidden");
+    assert.match(match[0], /title="/, view + " should expose a hover label in the collapsed sidebar");
+  }
+  assert.match(html, /id="stocks-view"/);
+  assert.match(html, /id="watchlist-view"/);
+  assert.match(html, /id="research-view"/);
+  assert.equal((html.match(/class="nav-link-state" title="后端接口待接入">待接入<\/span>/g) || []).length, 4,
+    "notifications, chat, screening, and alerts should disclose backend dependency before navigation");
+  assert.match(stylesheet, /\.nav-link-state\s*\{/);
+  assert.match(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.nav-link-state\s*\{\s*display: none;/);
+});

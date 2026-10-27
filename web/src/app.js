@@ -24,6 +24,7 @@ import {
 } from "./api.js";
 import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart, renderMACDChart, renderRSIChart } from "./chart.js";
 import { bindMarketOverview } from "./market-overview.js";
+import { taskEventMatchesFilter } from "./task-event-filter.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask } from "./recent-tasks.js";
@@ -120,6 +121,7 @@ const state = {
   taskEventsUnavailable: false,
   taskEventsError: "",
   selectedTaskEventSequence: null,
+  taskEventFilter: "all",
   pollTimer: null,
   pollGeneration: 0,
   isQuerying: false,
@@ -159,6 +161,7 @@ function setText(selector, value) {
 function selectStockFromMarket(item, source = "市场榜单") {
   const symbol = String(item?.symbol || "").trim();
   if (!symbol) return;
+  setView("stocks");
   $("#symbol-input").value = symbol;
   state.selectedStockSearchItem = { symbol, name: item.name || symbol };
   cancelStockSearchRequest();
@@ -489,7 +492,7 @@ function handleWatchlistAction(event) {
 
   if (action === "query") {
     $("#symbol-input").value = symbol;
-    setView("market");
+    setView("stocks");
     void runQuoteQuery();
     return;
   }
@@ -501,7 +504,7 @@ function fillTaskSymbolsFromWatchlist() {
   const help = $("#task-symbol-help");
   const records = safeReadWatchlist();
   if (!records.length) {
-    help.textContent = "当前没有可载入的本地自选股，请先在行情页添加股票。";
+    help.textContent = "当前没有可载入的本地自选股，请先在自选股页添加股票。";
     return;
   }
 
@@ -913,8 +916,11 @@ function getQuerySymbol() {
 }
 
 const VIEW_META = Object.freeze({
-  market: { title: "行情总览" },
-  tasks: { title: "任务与运行流" },
+  market: { title: "大盘数据" },
+  stocks: { title: "个股分析" },
+  watchlist: { title: "自选股" },
+  research: { title: "个股研究" },
+  tasks: { title: "分析任务" },
   notifications: { title: "通知中心" },
   chat: { title: "问股工作台" },
   screening: { title: "条件选股" },
@@ -922,19 +928,55 @@ const VIEW_META = Object.freeze({
   settings: { title: "设置中心" }
 });
 
-function setView(view, { updateHash = true } = {}) {
-  const nextView = Object.hasOwn(VIEW_META, view) ? view : "market";
+const REFRESH_BUTTON_CONTEXT = Object.freeze({
+  market: { label: "刷新大盘数据", title: "刷新核心指数、市场涨跌分布、行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜与交易日历。" },
+  stocks: { label: "重新查询个股行情", title: "使用当前输入的股票代码、日 K 数量、复权口径和日期范围重新查询。" },
+  watchlist: { label: "刷新自选股列表", title: "重新读取当前浏览器本地保存的自选股，不会向服务器同步列表。" },
+  research: { label: "刷新个股研究", title: "检查服务连接并重新加载当前标的的公司资料、财务、筹码与资金流。" },
+  tasks: { label: "刷新任务与连接状态", title: "重新检查服务连接；若已选择任务，则重新读取任务状态与阶段事件。" },
+  notifications: { label: "检查服务连接（通知接口待接入）", title: "通知中心 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  chat: { label: "检查服务连接（问股接口待接入）", title: "问股 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  screening: { label: "检查服务连接（选股接口待接入）", title: "选股任务与候选 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  alerts: { label: "检查服务连接（告警接口待接入）", title: "告警规则与触发记录 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  settings: { label: "检查服务连接", title: "重新检查已保存的行情/分析服务地址；未保存的地址请使用设置表单中的“检查连接”。" }
+});
+
+function syncRefreshButtonContext() {
+  const button = $("#refresh-button");
+  if (!button) return;
+  const context = REFRESH_BUTTON_CONTEXT[state.view] || REFRESH_BUTTON_CONTEXT.market;
+  button.setAttribute("aria-label", context.label);
+  button.title = context.title;
+}
+
+function refreshMarketWorkspace() {
+  return Promise.all([
+    marketOverview.refresh(["indices", "breadth", "sectors", "pool", "hot"], "#market-data-updated"),
+    marketActivity.refresh()
+  ]);
+}
+
+function setView(view, { updateHash = true, refreshData = true } = {}) {
+  const legacyMarketView = view === "market-data";
+  const requestedView = legacyMarketView ? "market" : view;
+  const nextView = Object.hasOwn(VIEW_META, requestedView) ? requestedView : "market";
   const previousView = state.view;
   state.view = nextView;
-  if (nextView === "market" && previousView !== "market") void marketOverview.refresh();
-  if (nextView === "market" && previousView !== "market") void marketActivity.refresh();
+  if (legacyMarketView && window.location.hash === "#market-data") window.history.replaceState(null, "", "#market");
+  syncRefreshButtonContext();
+  if (refreshData && previousView !== nextView) {
+    if (nextView === "market") void refreshMarketWorkspace();
+    else if (nextView === "stocks") void refreshSources();
+    else if (nextView === "watchlist") renderWatchlist();
+    else if (nextView === "research") stockResearch.syncSymbol();
+  }
   if (nextView === "chat") syncChatStockContextFromMarket();
   const runFlowDialog = $("#run-flow-dialog");
   if (nextView !== "tasks" && runFlowDialog?.open) runFlowDialog.close();
   document.querySelectorAll(".view").forEach((section) => {
     section.hidden = section.id !== nextView + "-view";
   });
-  document.querySelectorAll(".nav-link").forEach((button) => {
+  document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
     const active = button.dataset.view === nextView;
     button.classList.toggle("active", active);
     if (active) button.setAttribute("aria-current", "page");
@@ -1941,8 +1983,29 @@ function renderTaskEvents() {
   }
   const list = $("#task-events");
   list.replaceChildren();
-  const events = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
-  if (!events.length) {
+  const allEvents = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
+  const filterLabels = { all: "全部", issues: "异常 / 降级", active: "运行中", completed: "成功 / 跳过" };
+  if (!Object.prototype.hasOwnProperty.call(filterLabels, state.taskEventFilter)) state.taskEventFilter = "all";
+  const statusKeyFor = (item) => {
+    const event = item?.event && typeof item.event === "object" ? item.event : item;
+    return taskEventStatusKey(event?.status);
+  };
+  const filterCounts = { all: allEvents.length, issues: 0, active: 0, completed: 0 };
+  allEvents.forEach((item) => {
+    for (const key of ["issues", "active", "completed"]) {
+      if (taskEventMatchesFilter(statusKeyFor(item), key)) filterCounts[key]++;
+    }
+  });
+  document.querySelectorAll("[data-task-event-filter]").forEach((button) => {
+    const key = button.dataset.taskEventFilter || "all";
+    button.setAttribute("aria-pressed", String(key === state.taskEventFilter));
+    const count = button.querySelector("[data-filter-count]");
+    if (count) count.textContent = String(filterCounts[key] ?? 0);
+  });
+  const events = allEvents.filter((item) => taskEventMatchesFilter(statusKeyFor(item), state.taskEventFilter));
+  const summary = $("#task-event-filter-summary");
+  if (summary) summary.textContent = "筛选：" + filterLabels[state.taskEventFilter] + " · 显示 " + events.length + "/" + allEvents.length + " 条阶段事件";
+  if (!allEvents.length) {
     const empty = document.createElement("div");
     empty.className = "empty-row";
     empty.textContent = state.taskEventsError
@@ -1950,6 +2013,15 @@ function renderTaskEvents() {
       : state.taskEventsLoaded
         ? "服务端目前没有持久化阶段事件。排队期间事件数组可以为空。"
         : "等待服务端阶段事件读取。";
+    list.append(empty);
+    renderSelectedTaskEvent(null);
+    renderTaskFlowSummary();
+    return;
+  }
+  if (!events.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = "当前筛选条件下没有匹配事件（已读取 " + allEvents.length + " 条）。选择“全部”查看所有阶段。";
     list.append(empty);
     renderSelectedTaskEvent(null);
     renderTaskFlowSummary();
@@ -2790,10 +2862,11 @@ function applySettings(nextSettings) {
   initialConnectionDraft = null;
   $("#settings-dialog").close();
   void refreshServices();
-  void refreshSources();
-  void marketOverview.refresh();
-  void marketActivity.refresh();
-  if (state.view === "market" && state.settings.apiKey) void runQuoteQuery();
+  if (state.view === "market") void refreshMarketWorkspace();
+  else if (state.view === "stocks") {
+    void refreshSources();
+    if (state.settings.apiKey) void runQuoteQuery();
+  }
 }
 
 function saveSettingsFromForm() {
@@ -2842,6 +2915,7 @@ window.addEventListener("resize", () => {
 window.addEventListener("hashchange", () => {
   setView(window.location.hash.slice(1), { updateHash: false });
 });
+
 $("#topbar-notifications").addEventListener("click", () => setView("notifications"));
 $("#chat-clear-context").addEventListener("click", () => {
   state.chatStockContext = null;
@@ -2877,10 +2951,22 @@ document.querySelectorAll("[data-theme-value]").forEach((button) => {
     syncSettingsThemeButtons(theme);
   });
 });
-document.querySelectorAll(".nav-link").forEach((button) => {
+document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
   button.addEventListener("click", () => {
     setView(button.dataset.view);
     setMobileNavigationOpen(false);
+  });
+});
+document.querySelectorAll("[data-open-view]").forEach((button) => {
+  button.addEventListener("click", () => {
+    setView(button.dataset.openView);
+    setMobileNavigationOpen(false);
+  });
+});
+document.querySelectorAll("[data-task-event-filter]").forEach((button) => {
+  button.addEventListener("click", () => {
+    state.taskEventFilter = button.dataset.taskEventFilter || "all";
+    renderTaskEvents();
   });
 });
 $("#task-events").addEventListener("click", (event) => {
@@ -2960,17 +3046,32 @@ $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
 $("#reload-sources").addEventListener("click", refreshSources);
+syncRefreshButtonContext();
 $("#refresh-button").addEventListener("click", async () => {
-  await refreshServices();
-  if (state.view === "market") {
-    await refreshSources();
-    await marketOverview.refresh();
-    await marketActivity.refresh();
-    if (state.settings.apiKey) await runQuoteQuery();
-  } else if (state.view === "tasks" && state.taskId) {
-    stopTaskPolling();
-    const generation = state.pollGeneration;
-    await pollTask(generation);
+  const button = $("#refresh-button");
+  if (button.disabled) return;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  button.title = "正在刷新当前页面…";
+  try {
+    await refreshServices();
+    if (state.view === "market") await refreshMarketWorkspace();
+    else if (state.view === "stocks") {
+      await refreshSources();
+      if (state.settings.apiKey) await runQuoteQuery();
+    } else if (state.view === "watchlist") renderWatchlist();
+    else if (state.view === "research") {
+      $("#load-supplemental-button").click();
+      $("#load-stock-research").click();
+    } else if (state.view === "tasks" && state.taskId) {
+      stopTaskPolling();
+      const generation = state.pollGeneration;
+      await pollTask(generation);
+    }
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    syncRefreshButtonContext();
   }
 });
 $("#open-settings").addEventListener("click", openSettings);
@@ -3123,15 +3224,15 @@ renderRecentTasks();
 renderWatchlist();
 configureDateInputs();
 resetSupplementPanel("");
-setView(window.location.hash.slice(1), { updateHash: false });
+setView(window.location.hash.slice(1), { updateHash: false, refreshData: false });
 syncSettingsThemeButtons(readTheme());
 void refreshServices();
-void refreshSources();
-void marketOverview.refresh();
-void marketActivity.refresh();
 const restoredTask = restoreLastTask();
-if (!restoredTask && state.settings.apiKey) {
-  void runQuoteQuery();
-} else if (!restoredTask) {
-  setText("#query-hint", "尚未配置行情 API Key。点击右上角设置按钮后填写 MARKET_DATA_API_KEY。");
+if (!restoredTask) {
+  if (state.view === "market") void refreshMarketWorkspace();
+  else if (state.view === "stocks") {
+    void refreshSources();
+    if (state.settings.apiKey) void runQuoteQuery();
+    else setText("#query-hint", "尚未配置行情 API Key。点击右上角设置按钮后填写 MARKET_DATA_API_KEY。");
+  } else if (state.view === "research") stockResearch.syncSymbol();
 }
