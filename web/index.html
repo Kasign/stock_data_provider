@@ -23,6 +23,7 @@
         <nav class="side-nav" aria-label="主导航">
           <button class="nav-link" type="button" data-view="research" aria-label="个股研究" title="个股研究"><span class="nav-icon" aria-hidden="true">⌑</span><span>个股研究</span></button>
           <button class="nav-link" type="button" data-view="tasks" aria-label="分析任务" title="分析任务"><span class="nav-icon" aria-hidden="true">↗</span><span>分析任务</span></button>
+          <button class="nav-link" type="button" data-view="data" aria-label="数据中心" title="数据中心"><span class="nav-icon" aria-hidden="true">▤</span><span>数据中心</span></button>
           <button class="nav-link" type="button" data-view="notifications" aria-label="通知中心" title="通知中心"><span class="nav-icon" aria-hidden="true">♧</span><span>通知中心</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
           <button class="nav-link" type="button" data-view="chat" aria-label="问股" title="问股"><span class="nav-icon" aria-hidden="true">✦</span><span>问股</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
           <button class="nav-link" type="button" data-view="screening" aria-label="选股" title="选股"><span class="nav-icon" aria-hidden="true">⌕</span><span>选股</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
@@ -53,14 +54,14 @@
         </header>
 
         <nav class="workspace-tabs" aria-label="核心工作区">
-          <button class="workspace-tab active" type="button" data-view="market" aria-current="page">大盘数据</button>
-          <button class="workspace-tab" type="button" data-view="stocks">个股分析</button>
+          <button class="workspace-tab active" type="button" data-view="market" aria-current="page">首页</button>
+          <button class="workspace-tab" type="button" data-view="stocks">个股行情</button>
           <button class="workspace-tab" type="button" data-view="watchlist">自选股</button>
         </nav>
 
         <section class="view" id="market-view">
           <div class="page-heading">
-            <div><p class="eyebrow">MARKET OVERVIEW / 01</p><h1>大盘数据</h1><p class="page-subtitle">统一查看核心指数、市场涨跌分布、行业与概念排行、涨跌停池、人气榜、龙虎榜和交易日历。每个模块分别显示接口状态、数据来源与质量说明。</p></div>
+            <div><p class="eyebrow">MARKET OVERVIEW / 01</p><h1>首页</h1><p class="page-subtitle">从指数与市场广度开始，查看当日情绪、市场成交与资金、热点板块、涨跌停池、人气榜、龙虎榜和交易日历。每个模块独立呈现来源、时间与数据质量。</p></div>
             
           </div>
 
@@ -79,14 +80,44 @@
           
 
 
+          <div class="market-research-extension-grid">
+            <section class="panel market-extension-panel" id="market-sentiment-panel" aria-labelledby="market-sentiment-title">
+              <div class="panel-heading"><div><h2 id="market-sentiment-title">市场情绪</h2><p>先看可核验的涨跌分布与当日交易池数据；暂不生成缺乏依据的综合情绪分。</p></div><span class="availability-pill is-readonly">即时指标</span></div>
+              <div class="market-sentiment-metrics">
+                <article class="market-extension-metric"><small>上涨家数</small><strong id="market-sentiment-advancing">—</strong><span>来自市场广度接口</span></article>
+                <article class="market-extension-metric"><small>下跌家数</small><strong id="market-sentiment-declining">—</strong><span>来自市场广度接口</span></article>
+                <article class="market-extension-metric"><small>平盘家数</small><strong id="market-sentiment-unchanged">—</strong><span>来自市场广度接口</span></article>
+                <article class="market-extension-metric"><small>当前查看的交易池</small><strong id="market-sentiment-pool">尚未读取</strong><span>随涨跌停池选项更新，不等于情绪综合分</span></article>
+              </div>
+              <div class="market-planned-state" id="market-sentiment-history-state"><strong>情绪历史曲线 · 数据能力待接入</strong><p>需要持续采集并保存每日/盘中快照。尚未积累的历史数据不会用当前数值拼接。</p></div>
+              <p class="market-widget-meta" id="market-sentiment-meta">尚未取得当日市场广度数据。</p>
+            </section>
+            <section class="panel market-extension-panel" id="market-money-flow-panel" aria-labelledby="market-money-flow-title">
+              <div class="panel-heading"><div><h2 id="market-money-flow-title">市场成交与资金流向</h2><p>成交活跃度与资金净流入是不同指标，必须分开统计。</p></div><span class="availability-pill is-readonly">能力分层</span></div>
+              <div class="market-money-grid">
+                <article class="market-extension-metric"><small>市场广度返回的成交额</small><strong id="market-money-turnover">—</strong><span id="market-money-turnover-note">需先加载市场广度</span></article>
+                <article class="market-extension-metric market-extension-metric-planned"><small>全市场资金净流入</small><strong>接口待接入</strong><span>需要市场级资金流 Provider 与明确统计口径</span></article>
+              </div>
+              <div class="market-planned-state"><strong>历史资金趋势 · 数据能力待接入</strong><p>当前个股资金流不能直接相加冒充全市场流向；历史趋势需要后端快照存储和查询 API。</p></div>
+            </section>
+          </div>
           <section class="panel market-overview-panel" id="market-lists-panel" aria-labelledby="market-lists-title"><div class="panel-heading market-overview-heading">
             <div><h2 id="market-lists-title">行业、涨跌停与个股人气</h2><p>列表用于描述市场表现；排名与涨跌幅不是投资建议，也不代表全市场完整覆盖。</p></div>
             <div class="market-overview-actions"><span class="market-overview-updated" id="market-data-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-data" type="button">刷新市场榜单 ↻</button></div>
           </div><div class="market-overview-detail-grid">
-              <section class="market-overview-widget" aria-labelledby="market-sectors-title"><div class="market-overview-widget-heading"><div><h3 id="market-sectors-title">行业 / 概念排行</h3><p>按服务端排名展示，不生成前端投资结论。</p></div><span id="market-sector-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-overview-tabs" role="group" aria-label="板块排行类别"><button type="button" data-sector-type="industry" aria-pressed="true">行业</button><button type="button" data-sector-type="concept" aria-pressed="false">概念</button></div><div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>排名</th><th>板块</th><th>涨跌幅</th><th>领涨股</th><th>领涨幅</th></tr></thead><tbody id="market-sector-body"><tr><td colspan="5" class="table-empty">等待板块排行。</td></tr></tbody></table></div><p class="market-widget-meta" id="market-sector-meta"></p><details class="market-quality-reasons" id="market-sector-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
+              <section class="market-overview-widget" aria-labelledby="market-sectors-title"><div class="market-overview-widget-heading"><div><h3 id="market-sectors-title">行业 / 概念排行</h3><p>按服务端排名展示，不生成前端投资结论。</p></div><span id="market-sector-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-overview-tabs market-sector-metrics" role="group" aria-label="板块排行维度"><button type="button" data-sector-metric="change" aria-pressed="true">今日涨幅</button><button type="button" data-sector-metric="amount" aria-pressed="false">成交额</button><button type="button" data-sector-metric="five-day" aria-pressed="false">近 5 日</button><button type="button" data-sector-metric="flow" aria-pressed="false">资金净流入</button></div><div class="market-overview-tabs" role="group" aria-label="板块排行类别"><button type="button" data-sector-type="industry" aria-pressed="true">行业</button><button type="button" data-sector-type="concept" aria-pressed="false">概念</button></div><div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>排名</th><th>板块</th><th>涨跌幅</th><th>领涨股</th><th>领涨幅</th></tr></thead><tbody id="market-sector-body"><tr><td colspan="5" class="table-empty">等待板块排行。</td></tr></tbody></table></div><p class="market-widget-meta" id="market-sector-meta"></p><details class="market-quality-reasons" id="market-sector-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
               <section class="market-overview-widget" aria-labelledby="market-limit-pools-title"><div class="market-overview-widget-heading"><div><h3 id="market-limit-pools-title">涨跌停池</h3><p>未知池状态不会解释为 0 只股票。</p></div><span id="market-pool-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-overview-tabs" role="group" aria-label="涨跌停池类别"><button type="button" data-pool-type="up" aria-pressed="true">涨停</button><button type="button" data-pool-type="down" aria-pressed="false">跌停</button><button type="button" data-pool-type="broken" aria-pressed="false">炸板</button></div><div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>股票</th><th>涨跌幅</th><th>连板</th><th>首封 / 末封</th><th>行业</th></tr></thead><tbody id="market-pool-body"><tr><td colspan="5" class="table-empty">等待涨跌停池。</td></tr></tbody></table></div><p class="market-widget-meta" id="market-pool-meta"></p><details class="market-quality-reasons" id="market-pool-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
               <section class="market-overview-widget market-hot-stocks-widget" aria-labelledby="market-hot-stocks-title"><div class="market-overview-widget-heading"><div><h3 id="market-hot-stocks-title">个股人气与飙升榜</h3><p>按 Provider 排名展示；采集时间不等于上游行情快照时间，排名本身不构成投资建议。</p></div><span id="market-hot-stocks-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-overview-tabs" role="group" aria-label="个股人气排行类别"><button type="button" data-hot-type="popular" aria-pressed="true">人气榜</button><button type="button" data-hot-type="surge" aria-pressed="false">飙升榜</button></div><div class="table-scroll market-overview-table-scroll market-hot-stocks-table"><table><thead><tr><th>排名</th><th>股票</th><th>最新价 / 涨跌额</th><th>涨跌幅</th><th>源端排名变化</th></tr></thead><tbody id="market-hot-stocks-body"><tr><td colspan="5" class="table-empty">等待个股人气榜。</td></tr></tbody></table></div><p class="market-widget-meta" id="market-hot-stocks-meta"></p><details class="market-quality-reasons" id="market-hot-stocks-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
             </div></section>
+                    <section class="panel market-extension-panel market-global-panel" id="global-market-panel" aria-labelledby="global-market-title">
+            <div class="panel-heading"><div><h2 id="global-market-title">全球市场联动</h2><p>用于观察主要海外指数及宏观资产的关联表现；国内 A 股核心行情优先。</p></div><span class="availability-pill is-unavailable">数据源待确认</span></div>
+            <div class="market-global-grid">
+              <article class="market-global-placeholder"><strong>亚太市场</strong><span>恒生、日经等指数 · 接口待接入</span></article>
+              <article class="market-global-placeholder"><strong>美国市场</strong><span>标普 500、纳斯达克等指数 · 接口待接入</span></article>
+              <article class="market-global-placeholder"><strong>宏观资产</strong><span>美元、黄金、原油等 · 视数据源支持情况决定</span></article>
+            </div>
+            <p class="market-widget-meta">正式接入后需同时显示当地交易日期、时区、币种、源端报价时间、采集时间和质量状态；不将不同时段的行情直接作同一时点比较。</p>
+          </section>
           <section class="panel market-activity-panel" id="market-activity-panel" aria-labelledby="market-activity-title">
             <div class="panel-heading"><div><h2 id="market-activity-title">市场活动与交易日历</h2><p>使用后端龙虎榜与显式交易日历。龙虎榜盘后数据可能延迟发布；交易日不通过星期规则推算。</p></div><span class="soft-badge">真实数据接口</span></div>
             <div class="market-activity-grid">
@@ -116,7 +147,7 @@
 
         <section class="view" id="stocks-view" hidden>
           <div class="page-heading">
-            <div><p class="eyebrow">STOCK ANALYSIS / 02</p><h1>个股分析</h1><p class="page-subtitle">搜索股票名称或代码，查看实时报价、K 线、技术指标和历史行情。公司资料、筹码与资金流已移至“个股研究”。</p></div>
+            <div><p class="eyebrow">STOCK ANALYSIS / 02</p><h1>个股行情</h1><p class="page-subtitle">搜索股票名称或代码，查看价格、涨跌、成交额、成交量、换手率、量比、K 线与 MA5/MA20/MA60 等技术指标；公司资料、估值、筹码、资金流与公告在个股研究页继续查看。</p></div>
             <div class="last-updated"><span class="status-dot"></span><span>最近刷新</span><strong id="last-updated">—</strong></div>
           </div>
           <section class="search-panel panel" id="stock-query-panel">
@@ -257,7 +288,12 @@
 
 
         <section class="view" id="research-view" hidden>
-          <div class="page-heading"><div><p class="eyebrow">STOCK RESEARCH / 05</p><h1>个股研究</h1><p class="page-subtitle">基于当前查询标的，按需加载上市档案、所属板块、财务指标、估值、筹码、资金流与公告。切换股票后请先在个股查询页选择新的标的。</p></div><button class="button button-secondary" type="button" data-open-view="stocks">返回个股查询 →</button></div>
+          <div class="page-heading"><div><p class="eyebrow">STOCK RESEARCH / 04</p><h1>个股研究</h1><p class="page-subtitle">从自选股与当前研究标的进入专业详情，按需读取行情、技术、财务、估值、资金与筹码、公告和数据质量。当前没有全市场批量概览接口，未读取的股票不会显示虚构数据。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索股票并加载行情 →</button></div>
+          <section class="panel research-list-panel" aria-labelledby="research-list-title">
+            <div class="panel-heading"><div><h2 id="research-list-title">研究列表</h2><p>来源为浏览器本地自选股与当前已查询标的；只有当前已读取的标的才显示实际指标。</p></div><span class="availability-pill is-local" id="research-list-scope">当前浏览器 · 未批量拉取</span></div>
+            <div class="table-scroll research-list-table-scroll"><table><thead><tr><th>股票</th><th>最新价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th><th>量比</th><th>MA5</th><th>MA20</th><th>操作</th></tr></thead><tbody id="research-stock-list-body"><tr><td colspan="9" class="table-empty">当前没有自选股或已查询标的。</td></tr></tbody></table></div>
+            <p class="market-widget-meta">未加载标的显示“未加载”，不自动对所有自选逐只请求；如需全市场/大量股票排序，需先增加批量股票概览 API。</p>
+          </section>
           <section class="panel supplemental-panel" id="stock-supplemental-panel" aria-labelledby="supplemental-title">
             <div class="panel-heading supplemental-heading">
               <div><h2 id="supplemental-title">个股补充研究数据</h2><p>按需读取后端现有的筹码分布与个股资金流接口；不参与行情主流程，也不推导买卖结论。</p></div>
@@ -655,7 +691,19 @@
           </div>
         </section>
 
-        <section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
+                <section class="view feature-view data-center-view" id="data-view" hidden aria-labelledby="data-center-title">
+          <div class="page-heading"><div><p class="eyebrow">SERVICE HEALTH / 08</p><h1 id="data-center-title">数据中心</h1><p class="page-subtitle">查看 WebUI、行情服务、分析服务及可确认的数据库/缓存依赖状态。Provider 能力声明与实时健康检查分开显示。</p></div><div class="data-center-heading-actions"><span class="availability-pill is-readonly" id="data-center-last-check">尚未检查</span><button class="button button-primary" id="data-center-check" type="button">立即检查</button></div></div>
+          <section class="panel data-center-summary-panel" aria-labelledby="data-center-summary-title"><div class="panel-heading"><div><h2 id="data-center-summary-title">本次检查摘要</h2><p>每项检查独立完成；单项失败不会中断其他检查。</p></div><span class="availability-pill is-readonly" id="data-center-summary-status">等待检查</span></div><p class="data-center-summary-message" id="data-center-summary-message" role="status" aria-live="polite">点击“立即检查”读取当前服务状态。数据库或 Redis 缺少独立证据时会显示“未知”，不会猜测故障原因。</p><div class="data-center-summary-counts"><article><small>正常</small><strong id="data-center-count-healthy">—</strong></article><article><small>异常 / 降级</small><strong id="data-center-count-failed">—</strong></article><article><small>未知 / 未检查</small><strong id="data-center-count-unknown">—</strong></article></div></section>
+          <section class="data-center-service-grid" aria-label="服务与依赖状态">
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">UI</span><div><h2>WebUI / Nginx</h2><p>当前页面会话状态</p></div></div><span class="availability-pill is-local" id="data-service-webui-status">页面已加载</span><p class="data-center-service-detail">当前页面资源可访问；浏览器不能据此独立确认容器、Nginx 进程或所有反向代理上游均正常。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">API</span><div><h2>行情服务</h2><p>stock-analysis-data</p></div></div><div class="data-center-check-row"><span>存活检查</span><strong id="data-service-market-live">尚未检查</strong></div><div class="data-center-check-row"><span>就绪检查</span><strong id="data-service-market-ready">尚未检查</strong></div><p class="data-center-service-detail" id="data-service-market-detail">检查时间与错误摘要将在检查后显示。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">API</span><div><h2>分析服务</h2><p>stock-analysis-server</p></div></div><div class="data-center-check-row"><span>存活检查</span><strong id="data-service-analysis-live">尚未检查</strong></div><div class="data-center-check-row"><span>就绪检查</span><strong id="data-service-analysis-ready">尚未检查</strong></div><p class="data-center-service-detail" id="data-service-analysis-detail">检查时间与错误摘要将在检查后显示。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">DB</span><div><h2>MariaDB</h2><p>由分析服务就绪结果报告</p></div></div><span class="availability-pill is-readonly" id="data-service-mariadb-status">未知</span><p class="data-center-service-detail" id="data-service-mariadb-detail">没有独立状态证据时不推断数据库故障。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">KV</span><div><h2>Redis</h2><p>由分析服务就绪结果报告</p></div></div><span class="availability-pill is-readonly" id="data-service-redis-status">未知</span><p class="data-center-service-detail" id="data-service-redis-detail">没有独立状态证据时不推断缓存故障。</p></article>
+          </section>
+          <section class="panel data-center-providers-panel" aria-labelledby="data-center-providers-title"><div class="panel-heading"><div><h2 id="data-center-providers-title">Provider 与数据能力</h2><p>能力清单只表示配置/注册声明，不等于 Provider 当前实时可用。</p></div><span class="availability-pill is-readonly" id="data-center-provider-status">尚未读取</span></div><div class="data-center-provider-summary" id="data-center-provider-summary">配置行情 API Key 并执行检查后读取能力清单。</div><div class="data-center-provider-list" id="data-center-provider-list"><div class="empty-row">尚未检查数据源能力。</div></div><p class="data-center-diagnostic-note">当前没有逐 Provider / capability 的受控真实探测 API。此处不会把“已注册”显示为“健康”；待数据层巡检 API 接入后，再显示最近探测时间、耗时与诊断结果。</p></section>
+        </section>
+<section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
           <div class="page-heading">
             <div><p class="eyebrow">PREFERENCES / 07</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">按配置归属分组。每项都标明是本地偏好、浏览器连接配置，还是需要服务端 API 的系统配置。</p></div>
             <div class="feature-status"><span class="availability-pill is-unavailable">服务端配置 API 待接入</span></div>
@@ -711,7 +759,7 @@
                 <div class="settings-section-heading"><div><h2 id="settings-data-source-title">数据源</h2><p>当前可读取后端注册的 Provider 清单与能力声明；注册信息不等同于实时请求成功。</p></div><span class="availability-pill is-readonly">已有只读接口</span></div>
                 <div class="panel settings-connection-card">
                   <div><strong>数据源能力清单</strong><p>真实清单在行情总览显示。服务端没有通用的数据源启停、优先级编辑或密钥管理 API。</p></div>
-                  <button class="button button-secondary" id="settings-view-data-sources" type="button">查看数据源清单</button>
+                  <button class="button button-secondary" id="settings-view-data-sources" type="button">打开数据中心 →</button>
                 </div>
               </section>
 
