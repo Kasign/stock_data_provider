@@ -100,7 +100,7 @@ function renderProviderCapabilities(payload) {
   root.replaceChildren();
   const sources = Array.isArray(payload?.sources)
     ? payload.sources.filter((source) => source && typeof source === "object") : [];
-  setBadge("#data-center-provider-status", "healthy", "已读取能力声明");
+  setBadge("#data-center-provider-status", "unknown", "已读取能力声明");
   setText("#data-center-provider-summary", sources.length
     ? "已读取 " + sources.length + " 个 Provider 注册记录；此清单不执行上游实时探测。"
     : "服务响应成功，但未返回已注册 Provider。空清单不代表所有数据源都发生故障。");
@@ -267,21 +267,24 @@ export function bindDataCenter(getSettings) {
       const healthyDependencies = dependencyStates.filter((status) => status === "healthy").length;
       const failedDependencies = dependencyStates.filter((status) => status === "failed").length;
       const unknownDependencies = dependencyStates.filter((status) => status === "unknown").length;
-      const unknown = unknownDependencies + (sources.skipped ? 1 : 0);
+      const providerUnprobed = sources.ok && Array.isArray(sources.data?.sources)
+        ? sources.data.sources.filter((source) => source && typeof source === "object" && source.enabled === true).length
+        : 0;
+      const unknown = unknownDependencies + (sources.skipped ? 1 : 0) + providerUnprobed;
       const failed = failedServices + failedDependencies + degradedServices + (!sources.ok && !sources.skipped ? 1 : 0);
       setText("#data-center-count-healthy", healthyServices + healthyDependencies);
       setText("#data-center-count-failed", failed);
       setText("#data-center-count-unknown", unknown);
       const allNormal = failed === 0 && unknown === 0;
       setBadge("#data-center-summary-status", allNormal ? "healthy" : failed ? "unhealthy" : "unknown",
-        allNormal ? "检查完成" : failed ? "存在异常" : "部分状态未知");
+        allNormal ? "基础检查完成" : failed ? "存在异常" : "部分状态未知");
       setBadge("#data-center-last-check", "unknown", "检查于 " + timestamp);
       setText("#data-center-summary-message",
         failed
           ? "检查完成：发现服务端点或已明确报告的依赖异常/降级。请查看对应错误摘要与部署日志；其它检查已独立完成。"
           : unknown
             ? "检查已完成，但有服务、依赖或 Provider 状态无法确认。不能仅凭分析服务不可达就断定 MariaDB/Redis 故障。"
-            : "检查完成：当前健康检查端点可响应，且已报告的数据库/缓存依赖正常。Provider 能力清单仍只是配置声明，不代表逐 Provider 实测。");
+            : "基础检查完成：当前页面、服务端点和已报告的依赖状态已检查。Provider 能力清单仍只是配置声明，未实测项目已计入未知数量。");
     } catch (error) {
       setBadge("#data-center-summary-status", "failed", "检查过程异常");
       setText("#data-center-summary-message", safeError(error));
