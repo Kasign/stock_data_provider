@@ -453,3 +453,10 @@
 
 - `styles.css` 中超过 200 字符的压缩规则已拆成易读的多行格式，原 CSS token 顺序完全一致；没有变更选择器、声明值或响应式规则顺序。
 - 当前首页与三 Tab 导航的验收记录见 WebUI checks [#40444362551](https://github.com/Kasign/stock_data_provider/actions/runs/40444362551) 和 Chromium browser smoke [#40444358365](https://github.com/Kasign/stock_data_provider/actions/runs/40444358365)。仅格式化 CSS 的新提交仍将触发对应 CI。
+
+
+## 2026-10-27 — 最新 CSS 整理提交已通过 CI
+
+- `a142c01ee05ca62a7d88f5290d4b860c040a4722` 的 WebUI checks [#40444716104](https://github.com/Kasign/stock_data_provider/actions/runs/40444716104) 与 Chromium browser smoke [#40444709585](https://github.com/Kasign/stock_data_provider/actions/runs/40444709585) 均成功。
+- CSS 格式化覆盖 39 处压缩规则，词法 token 序列一致；视觉规则值和层叠顺序未变更。后续仍避免无把握地把不同页面里的媒体查询合并。
+- PR #13 仍 Open、未合并；WebUI 分支相对数据分支目前分叉（领先 23、落后 31），在确认跨分支接口和文件差异前不直接合并。
