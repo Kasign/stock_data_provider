@@ -99,3 +99,5 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 证券主数据的 Provider 若未提供质量状态或返回 `unknown`，服务层将其归为 `degraded` 并记录 `provider_quality_status_missing_or_unknown`，不会自动提升为 `valid`。这避免下游把未知来源质量当作经过验证的主数据。
 
 筹码分布和个股资金流在缓存命中时也必须执行与上游回包相同的字段校验。筹码成本区间需为有限正数、获利比例/集中度需在 `[0,1]`；资金流的 5 日/10 日合计分别要求至少 5/10 条观测。契约不通过的缓存应被忽略并触发上游刷新。
+
+由于筹码分布和资金流模型没有精确的来源可用时间字段，服务层不会接受 Provider 直接标记的 `valid`；这种返回会降级为 `degraded` 并附加 `publication_availability_timestamp_unverified`，直到契约能证明数据在何时对市场可见。

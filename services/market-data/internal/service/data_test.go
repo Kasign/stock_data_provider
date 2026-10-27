@@ -1352,3 +1352,39 @@ func TestSupplementCachesReuseProviderContractValidation(t *testing.T) {
 		}
 	})
 }
+
+
+func TestSupplementQualityCannotBeValidWithoutAvailabilityTime(t *testing.T) {
+	now := time.Now().UTC()
+	mainInflow, fiveDay := 120.0, 500.0
+	p := &supplementCountingFakeProvider{
+		chip: &model.ChipDistribution{
+			Symbol: "600519.SH", AverageCost: 12.5, SourceVersion: "test",
+			FetchedAt: now, QualityStatus: model.QualityValid,
+		},
+		flow: &model.CapitalFlow{
+			Symbol: "600519.SH", MainNetInflow: &mainInflow, Inflow5D: &fiveDay,
+			Observations: 5, SourceVersion: "test", FetchedAt: now,
+			QualityStatus: model.QualityValid,
+		},
+	}
+	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetSupplementProviders([]provider.SupplementProvider{p})
+
+	chip, _, err := svc.ChipDistribution(context.Background(), "600519")
+	if err != nil {
+		t.Fatalf("ChipDistribution: %v", err)
+	}
+	if chip.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(chip.QualityReasons, ","), "publication_availability_timestamp_unverified") {
+		t.Fatalf("chip result without availability timestamp must be degraded: %+v", chip)
+	}
+
+	flow, _, err := svc.CapitalFlow(context.Background(), "600519")
+	if err != nil {
+		t.Fatalf("CapitalFlow: %v", err)
+	}
+	if flow.QualityStatus != model.QualityDegraded || !strings.Contains(strings.Join(flow.QualityReasons, ","), "publication_availability_timestamp_unverified") {
+		t.Fatalf("capital-flow result without availability timestamp must be degraded: %+v", flow)
+	}
+}
