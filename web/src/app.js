@@ -413,8 +413,14 @@ function renderResearchStockList() {
       makeCell(isCurrent ? missing(quote.volume_ratio == null ? null : Number(quote.volume_ratio).toFixed(2)) : "未加载"),
       makeCell(isCurrent && Number.isFinite(latest?.ma5) ? latest.ma5.toFixed(2) : "—"),
       makeCell(isCurrent && Number.isFinite(latest?.ma20) ? latest.ma20.toFixed(2) : "—"),
-      makeCell(isCurrent ? qualityLabel(quote.quality_status) : "未加载",
-        isCurrent ? "mini-quality mini-quality-" + String(quote.quality_status || "unknown").toLowerCase() : "")
+      (() => {
+        const cell = document.createElement("td");
+        const pill = document.createElement("span");
+        pill.className = "mini-quality mini-quality-" + String(isCurrent ? quote.quality_status || "unknown" : "unknown").toLowerCase();
+        pill.textContent = isCurrent ? qualityLabel(quote.quality_status) : "未加载";
+        cell.append(pill);
+        return cell;
+      })()
     );
     const actionCell = document.createElement("td"), action = document.createElement("button");
     action.type = "button"; action.className = "button button-secondary research-list-action";
