@@ -698,3 +698,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - Tushare `daily` 适配器现在在请求上游前要求代码属于普通 A 股股票范围；ETF、指数、B 股及其他非普通股票代码不再发给股票日线端点。指数历史数据仍走独立 `index_daily` 能力，ETF 相关日线暂不声明已由该 Provider 支持。
 - 已补不触发真实 HTTP 请求的契约测试源码，未执行测试、构建、CI 或真实 Provider 请求。
+
+
+### 当前资料/板块/榜单的时间质量门禁（2026-10-27）
+
+- `StockBasic` 混合了当前估值/财务扩展字段，但 wire model 没有可核验的 Provider 快照时间；`StockBoards` 与 `SectorRanking` 同样没有独立快照时间字段。服务层现将供应商声明的 `valid` 下调为 `degraded` 并标记 `provider_snapshot_timestamp_not_exposed`；契约验证拒绝这些数据域在无 Provider 时间证据时保持 `valid`。旧的 valid 缓存会被验证拒绝并刷新。
+- 已补 StockBasic、StockBoards、SectorRanking 的测试源码；依约没有运行测试、构建、CI 或真实 Provider 请求。

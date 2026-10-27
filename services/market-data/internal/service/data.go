@@ -803,7 +803,10 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
 		return errors.New("sector-ranking source or fetched_at is missing")
 	}
-	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+	if snapshot.QualityStatus == model.QualityValid {
+		return errors.New("sector-ranking snapshot cannot be valid without a provider snapshot timestamp")
+	}
+	if snapshot.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("sector-ranking quality status %q is unsupported", snapshot.QualityStatus)
 	}
 	if len(snapshot.Items) == 0 || len(snapshot.Items) > limit {
@@ -825,7 +828,10 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 		if item.Source != snapshot.Source {
 			return errors.New("sector-ranking item source differs from its snapshot source")
 		}
-		if item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
+		if item.QualityStatus == model.QualityValid {
+			return errors.New("sector-ranking item cannot be valid without a provider snapshot timestamp")
+		}
+		if item.FetchedAt.IsZero() || item.QualityStatus != model.QualityDegraded {
 			return errors.New("sector-ranking item has invalid retrieval time or quality status")
 		}
 		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.Amount, item.LeaderChangePercent} {
@@ -907,6 +913,18 @@ func (s *DataService) SectorRankings(ctx context.Context, rawCategory string, li
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
+		if snapshot != nil && snapshot.QualityStatus == model.QualityValid {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_snapshot_timestamp_not_exposed")
+		}
+		if snapshot != nil {
+			for index := range snapshot.Items {
+				if snapshot.Items[index].QualityStatus == model.QualityValid {
+					snapshot.Items[index].QualityStatus = model.QualityDegraded
+					snapshot.Items[index].QualityReasons = appendReason(snapshot.Items[index].QualityReasons, "provider_snapshot_timestamp_not_exposed")
+				}
+			}
+		}
 		if err := validateSectorRankingSnapshot(category, limit, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
@@ -960,7 +978,10 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 {
 		return errors.New("stock-basic float_market_cap_cny must not be negative")
 	}
-	if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
+	if item.QualityStatus == model.QualityValid {
+		return errors.New("stock-basic cannot be valid without a provider snapshot timestamp")
+	}
+	if item.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("stock-basic quality status %q is unsupported", item.QualityStatus)
 	}
 	if strings.TrimSpace(item.Source) == "" {
@@ -1038,6 +1059,11 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		if item.QualityStatus == "" || item.QualityStatus == model.QualityUnknown {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing_or_unknown")
+		}
+		if item.QualityStatus == model.QualityValid {
+			// 基础资料合并当前估值/财务扩展字段，但 Provider 未暴露可核验快照时间。
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_snapshot_timestamp_not_exposed")
 		}
 		if item.NormalizationVer == "" {
 			item.NormalizationVer = normalize.Version
@@ -1207,7 +1233,10 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 	if snapshot.Total == 0 || len(snapshot.Items) == 0 || snapshot.Total != len(snapshot.Items) {
 		return errors.New("stock-boards coverage is incomplete")
 	}
-	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+	if snapshot.QualityStatus == model.QualityValid {
+		return errors.New("stock-boards cannot be valid without a provider snapshot timestamp")
+	}
+	if snapshot.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("stock-boards quality status %q is unsupported", snapshot.QualityStatus)
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
@@ -1219,7 +1248,10 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 		if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
 			return errors.New("stock-board item source or fetched_at mismatch")
 		}
-		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
+		if item.QualityStatus == model.QualityValid {
+			return errors.New("stock-board item cannot be valid without a provider snapshot timestamp")
+		}
+		if item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("stock-board quality status %q is unsupported", item.QualityStatus)
 		}
 		if item.QualityStatus == model.QualityDegraded {
@@ -1316,6 +1348,10 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 				item.Items[index].QualityStatus = model.QualityDegraded
 				item.Items[index].QualityReasons = appendReason(item.Items[index].QualityReasons, "provider_quality_not_reported")
 			}
+			if item.Items[index].QualityStatus == model.QualityValid {
+				item.Items[index].QualityStatus = model.QualityDegraded
+				item.Items[index].QualityReasons = appendReason(item.Items[index].QualityReasons, "provider_snapshot_timestamp_not_exposed")
+			}
 		}
 		if item.QualityStatus == "" {
 			if item.HasData {
@@ -1324,6 +1360,10 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 			} else {
 				item.QualityStatus = model.QualityUnknown
 			}
+		}
+		if item.QualityStatus == model.QualityValid {
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_snapshot_timestamp_not_exposed")
 		}
 		if err := validateStockBoardsSnapshot(symbol, item); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
