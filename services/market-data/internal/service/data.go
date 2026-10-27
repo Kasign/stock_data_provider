@@ -1588,6 +1588,8 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			errs = append(errs, p.Name()+": empty quote without error")
 			continue
 		}
+		// fetched_at 是服务接收到 Provider 回包的时间，不能信任上游同名字段。
+		receivedAt := time.Now().UTC()
 		if strings.TrimSpace(q.Symbol) != "" {
 			providerSymbol, symbolErr := normalize.NormalizeSymbol(q.Symbol)
 			if symbolErr != nil || providerSymbol != symbol {
@@ -1602,12 +1604,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 		q.Symbol = symbol
 		q.Source = p.Name()
 		q.RequestID = fetchID
-		if q.FetchedAt.IsZero() {
-			q.FetchedAt = time.Now().UTC()
-		}
-		if q.NormalizedAt.IsZero() {
-			q.NormalizedAt = time.Now().UTC()
-		}
+		q.FetchedAt = receivedAt
 		if q.NormalizationVer == "" {
 			q.NormalizationVer = normalize.Version
 		}
@@ -1627,6 +1624,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			continue
 		}
 		applyQuoteFreshness(q, time.Now())
+		q.NormalizedAt = time.Now().UTC()
 		if !quoteCacheEligible(q) {
 			s.breaker.Failure(breakerKey)
 			errs = append(errs, p.Name()+": quote not suitable as a fresh live snapshot: "+strings.Join(q.QualityReasons, ","))
@@ -1772,6 +1770,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, p.Name()+": "+safeError)
 			continue
 		}
+		receivedAt := time.Now().UTC()
 		if len(bars) == 0 {
 			s.breaker.Failure(breakerKey)
 			errs = append(errs, p.Name()+": empty daily-bar response without error")
@@ -1806,12 +1805,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				bars[j].QualityStatus = model.QualityDegraded
 				appendReasonOnce(&bars[j].QualityReasons, "current_daily_bar_may_be_incomplete")
 			}
-			if bars[j].FetchedAt.IsZero() {
-				bars[j].FetchedAt = time.Now().UTC()
-			}
-			if bars[j].NormalizedAt.IsZero() {
-				bars[j].NormalizedAt = time.Now().UTC()
-			}
+			bars[j].FetchedAt = receivedAt
 			if bars[j].NormalizationVer == "" {
 				bars[j].NormalizationVer = normalize.Version
 			}
@@ -1838,6 +1832,10 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			s.breaker.Failure(breakerKey)
 			errs = append(errs, p.Name()+" response failed bar validation")
 			continue
+		}
+		normalizedAt := time.Now().UTC()
+		for index := range bars {
+			bars[index].NormalizedAt = normalizedAt
 		}
 		// Surface material source/field limitations at the response level too;
 		// callers should not need to inspect every candle to discover fallback.

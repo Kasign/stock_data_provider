@@ -1618,3 +1618,61 @@ func TestFundamentalsFetchedAtUsesServiceReceiveTime(t *testing.T) {
 		t.Fatalf("fundamentals fetched_at must be stamped at service receive time: start=%s fetched_at=%s end=%s", start, got.FetchedAt, end)
 	}
 }
+
+
+func TestQuoteTimestampsAreStampedByService(t *testing.T) {
+	q := validQuote("eastmoney")
+	future := time.Now().UTC().Add(24 * time.Hour)
+	q.FetchedAt = future
+	q.NormalizedAt = future
+	p := fakeProvider{name: "eastmoney", quote: q}
+	svc := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	start := time.Now().UTC()
+	got, _, err := svc.Quote(context.Background(), "600519")
+	end := time.Now().UTC()
+	if err != nil {
+		t.Fatalf("Quote: %v", err)
+	}
+	if got.FetchedAt.Before(start) || got.FetchedAt.After(end) {
+		t.Fatalf("quote fetched_at must use service receive time: start=%s fetched_at=%s end=%s", start, got.FetchedAt, end)
+	}
+	if got.NormalizedAt.Before(start) || got.NormalizedAt.After(end) {
+		t.Fatalf("quote normalized_at must use service normalization time: start=%s normalized_at=%s end=%s", start, got.NormalizedAt, end)
+	}
+}
+
+func TestDailyBarTimestampsAreStampedByService(t *testing.T) {
+	volume := int64(1000)
+	amount := 10500.0
+	future := time.Now().UTC().Add(24 * time.Hour)
+	p := fakeProvider{
+		name: "eastmoney",
+		bars: []model.DailyBar{{
+			Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+			Open: 10, High: 11, Low: 9, Close: 10.5,
+			Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentNone,
+			Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY",
+			QualityStatus: model.QualityValid, FetchedAt: future, NormalizedAt: future,
+		}},
+	}
+	svc := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	start := time.Now().UTC()
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519", "2026-10-20", "2026-10-20", 1, model.AdjustmentNone)
+	end := time.Now().UTC()
+	if err != nil || hit {
+		t.Fatalf("DailyBars hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("expected one validated daily bar, got %d", len(bars))
+	}
+	if bars[0].FetchedAt.Before(start) || bars[0].FetchedAt.After(end) {
+		t.Fatalf("daily-bar fetched_at must use service receive time: start=%s fetched_at=%s end=%s", start, bars[0].FetchedAt, end)
+	}
+	if bars[0].NormalizedAt.Before(start) || bars[0].NormalizedAt.After(end) {
+		t.Fatalf("daily-bar normalized_at must use service normalization time: start=%s normalized_at=%s end=%s", start, bars[0].NormalizedAt, end)
+	}
+}
