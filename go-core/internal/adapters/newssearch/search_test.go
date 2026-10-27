@@ -283,7 +283,7 @@ func TestStockAnnouncementsMergeWithWebSearchAndDeduplicateByTitle(t *testing.T)
 	}))
 	defer webSearch.Close()
 	fallback := &fallbackSearcher{}
-	searcher := New(Config{SearXNGBaseURLs: []string{webSearch.URL}, MaxSearches: 2, MaxAgeDays: 3, StrategyProfile: "short", RequestTimeout: time.Second, StockAnnouncements: announcementSource}, fallback, testLogger())
+	searcher := New(Config{SearXNGBaseURLs: []string{webSearch.URL}, MaxAgeDays: 3, StrategyProfile: "short", RequestTimeout: time.Second, StockAnnouncements: announcementSource}, fallback, testLogger())
 	items, err := searcher.SearchStockNews(context.Background(), "600036.SH", "招商银行", 5)
 	if err != nil {
 		t.Fatal(err)
@@ -402,7 +402,7 @@ func TestNativeNewsSearchAggregatesConfiguredProvidersAndDeduplicates(t *testing
 	searcher := New(Config{
 		TavilyAPIKeys: []string{"tavily-test-key"}, TavilyEndpoint: tavilyServer.URL,
 		BraveSearchAPIKeys: []string{"brave-test-key"}, BraveNewsEndpoint: braveServer.URL,
-		MaxAgeDays: 3, StrategyProfile: "short", RequestTimeout: time.Second,
+		MaxSearches: 2, MaxAgeDays: 3, StrategyProfile: "short", RequestTimeout: time.Second,
 	}, nil, testLogger())
 	items, err := searcher.SearchStockNews(context.Background(), "600036.SH", "招商银行", 10)
 	if err != nil {
