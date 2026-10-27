@@ -25,8 +25,9 @@ const neteaseQuoteVersion = "netease-finance-quote-v1"
 const maxNeteaseQuoteBytes = 1 << 20
 const neteaseFields = "TCLOSE;HIGH;LOW;TOPEN;LCLOSE;CHG;PCHG;TURNOVER;VOTURNOVER;VATURNOVER"
 
-// Netease reads public historical CSV. The endpoint is unofficial and provides
-// raw, unadjusted OHLC only; the adapter remains disabled by default.
+// Netease reads public quote JSONP and historical CSV endpoints. The endpoints
+// are unofficial; historical bars provide raw, unadjusted OHLC only. Provider enablement
+// is controlled by providers.json and MARKET_DATA_NETEASE_*_ENABLED settings.
 
 type Netease struct {
 	client     *http.Client
