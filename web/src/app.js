@@ -1240,7 +1240,7 @@ function bindSectionNavigation(linkSelector, dataKey) {
     const current = entries.filter((entry) => entry.isIntersecting)
       .sort((a, b) => Math.abs(a.boundingClientRect.top - referenceLine) - Math.abs(b.boundingClientRect.top - referenceLine))[0];
     if (current) setActive(current.target.id);
-  }, { rootMargin: "-15% 0px -65% 0px", threshold: 0 });
+  }, { rootMargin: "-120px 0px -120px 0px", threshold: 0 });
   targets.forEach((target) => observer.observe(target));
 }
 
