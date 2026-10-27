@@ -68,6 +68,9 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	if start.After(end) {
 		return nil, errors.New("Tushare start date must not be after end date")
 	}
+	// 统一使用解析后的标准日期比较，避免接受首尾空白后又用原始字符串误判未来日期。
+	startDate = start.Format("2006-01-02")
+	endDate = end.Format("2006-01-02")
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		loc = time.FixedZone("CST", 8*60*60)

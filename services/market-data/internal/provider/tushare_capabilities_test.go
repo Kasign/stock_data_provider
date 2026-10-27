@@ -281,3 +281,43 @@ func containsTushareReason(reasons []string, target string) bool {
 	}
 	return false
 }
+
+
+func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().In(location).Format("2006-01-02")
+	tradeDate := strings.ReplaceAll(today, "-", "")
+	var requestedEnd string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare daily request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "daily" {
+			t.Errorf("api_name=%q, want daily", request.APIName)
+		}
+		requestedEnd = request.Params["end_date"]
+		writeTushareTestTable(w,
+			[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
+			[][]any{{"600519.SH", tradeDate, 100.0, 101.0, 99.0, 100.5, 0.5, 100.0, 50000.0}},
+		)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	bars, err := client.FetchDailyBars(context.Background(), "600519.SH", today, today+" ", 10, model.AdjustmentNone)
+	if err != nil {
+		t.Fatalf("today's end date with surrounding whitespace should be normalized, got %v", err)
+	}
+	if requestedEnd != tradeDate {
+		t.Fatalf("request end_date=%q, want canonical %q", requestedEnd, tradeDate)
+	}
+	if len(bars) != 1 || bars[0].TradeDate != today {
+		t.Fatalf("unexpected daily bars result: %+v", bars)
+	}
+}
