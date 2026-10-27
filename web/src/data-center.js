@@ -66,15 +66,18 @@ function probe(fn, settings, timeoutMs = 6000) {
 
   return Promise.resolve()
     .then(() => fn(settings, controller.signal))
-    .then((data) => ({ ok: true, data, durationMs: Math.round(performance.now() - started) }))
+    .then((data) => timedOut
+      ? { ok: false, error: new Error("检查超时"), timedOut: true, durationMs: Math.round(performance.now() - started) }
+      : { ok: true, data, durationMs: Math.round(performance.now() - started) })
     .catch((error) => ({ ok: false, error, timedOut, durationMs: Math.round(performance.now() - started) }))
     .finally(() => window.clearTimeout(timeout));
 }
 
 function probeState(result, ready = false) {
   if (!result?.ok) return result?.timedOut ? "timeout" : "failed";
-  const raw = String(result.data?.status || "").toLowerCase();
-  if (!raw || ["ok", "ready", "healthy", "alive", "running"].includes(raw)) return "healthy";
+  const raw = String(result.data?.status || "").trim().toLowerCase();
+  if (!raw) return "unknown";
+  if (["ok", "ready", "healthy", "alive", "running"].includes(raw)) return "healthy";
   if (ready && ["degraded", "partial"].includes(raw)) return "degraded";
   return "degraded";
 }
@@ -83,9 +86,11 @@ function showCheck(selector, result, options = {}) {
   const node = $(selector);
   if (!node) return "unknown";
   const current = probeState(result, Boolean(options.ready));
-  node.className = current === "healthy" ? "is-success" : current === "degraded" ? "is-warning" : "is-error";
+  node.className = current === "healthy" ? "is-success"
+    : current === "degraded" || current === "unknown" ? "is-warning" : "is-error";
   node.textContent = result?.ok
-    ? (current === "healthy" ? (options.ready ? "就绪" : "正常") : "返回状态需关注")
+    ? (current === "healthy" ? (options.ready ? "就绪" : "正常")
+      : current === "unknown" ? "状态未报告" : "返回状态需关注")
       + " · " + result.durationMs + " ms"
     : statusWord(current) + " · " + result.durationMs + " ms";
   return current;
@@ -263,6 +268,7 @@ export function bindDataCenter(getSettings) {
       const healthyServices = serviceStates.filter((status) => status === "healthy").length;
       const failedServices = serviceStates.filter((status) => status === "failed" || status === "timeout").length;
       const degradedServices = serviceStates.filter((status) => status === "degraded").length;
+      const unknownServices = serviceStates.filter((status) => status === "unknown").length;
       const dependencyStates = [mariadb, redis];
       const healthyDependencies = dependencyStates.filter((status) => status === "healthy").length;
       const failedDependencies = dependencyStates.filter((status) => status === "failed").length;
@@ -270,7 +276,7 @@ export function bindDataCenter(getSettings) {
       const providerUnprobed = sources.ok && Array.isArray(sources.data?.sources)
         ? sources.data.sources.filter((source) => source && typeof source === "object" && source.enabled === true).length
         : 0;
-      const unknown = unknownDependencies + (sources.skipped ? 1 : 0) + providerUnprobed;
+      const unknown = unknownServices + unknownDependencies + (sources.skipped ? 1 : 0) + providerUnprobed;
       const failed = failedServices + failedDependencies + degradedServices + (!sources.ok && !sources.skipped ? 1 : 0);
       setText("#data-center-count-healthy", healthyServices + healthyDependencies);
       setText("#data-center-count-failed", failed);

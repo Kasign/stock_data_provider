@@ -885,12 +885,27 @@ function handleQuoteFormSubmit(event) {
   }
 }
 
-function setServiceStatus(prefix, ok, text) {
+function setServiceStatus(prefix, status, text) {
   const dot = $(`#${prefix}-health-dot`);
   const label = $(`#${prefix}-health-text`);
-  dot.classList.toggle("is-online", Boolean(ok));
-  dot.classList.toggle("is-offline", !ok);
+  dot.classList.toggle("is-online", status === "healthy");
+  dot.classList.toggle("is-offline", status === "failed");
+  dot.classList.toggle("is-unknown", status === "unknown" || status === "degraded");
   label.textContent = text;
+}
+
+function serviceHealthState(result) {
+  if (result?.status !== "fulfilled") return "failed";
+  const status = String(result.value?.status || "").trim().toLowerCase();
+  if (["ok", "ready", "healthy", "alive", "running"].includes(status)) return "healthy";
+  if (!status) return "unknown";
+  return "degraded";
+}
+
+function serviceHealthLabel(status) {
+  return status === "healthy" ? "就绪"
+    : status === "failed" ? "不可用"
+      : status === "degraded" ? "状态需关注" : "状态未知";
 }
 
 function setQualityPill(target, status, customText = "") {
@@ -1231,6 +1246,8 @@ function bindSectionNavigation(linkSelector, dataKey) {
     });
   };
 
+  const targets = links.map((link) => document.getElementById(link.dataset[dataKey] || "")).filter(Boolean);
+
   links.forEach((link) => {
     link.addEventListener("click", () => {
       const targetId = link.dataset[dataKey] || "";
@@ -1239,16 +1256,26 @@ function bindSectionNavigation(linkSelector, dataKey) {
       setActive(targetId);
       const reduceMotion = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
       target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+
+      // 将键盘焦点移动到目标标题，使导航不只改变滚动位置。
+      const focusTarget = target.matches("h2, h3, h4")
+        ? target
+        : target.querySelector("h2, h3, h4") || target;
+      if (!focusTarget.hasAttribute("tabindex")) focusTarget.setAttribute("tabindex", "-1");
+      focusTarget.focus({ preventScroll: true });
     });
   });
 
-  if (typeof IntersectionObserver === "undefined") return;
-  const targets = links.map((link) => document.getElementById(link.dataset[dataKey] || "")).filter(Boolean);
-  if (!targets.length) return;
-  const observer = new IntersectionObserver((entries) => {
+  if (typeof IntersectionObserver === "undefined" || !targets.length) return;
+  const observer = new IntersectionObserver(() => {
+    // entries 只包含本次跨越观察阈值的元素；根据全部可见目标重算，避免高亮回跳。
     const referenceLine = Math.min(window.innerHeight * 0.28, 220);
-    const current = entries.filter((entry) => entry.isIntersecting)
-      .sort((a, b) => Math.abs(a.boundingClientRect.top - referenceLine) - Math.abs(b.boundingClientRect.top - referenceLine))[0];
+    const current = targets
+      .map((target) => ({ target, rect: target.getBoundingClientRect() }))
+      .filter(({ target, rect }) => target.getClientRects().length > 0
+        && rect.bottom >= 120
+        && rect.top <= window.innerHeight - 120)
+      .sort((a, b) => Math.abs(a.rect.top - referenceLine) - Math.abs(b.rect.top - referenceLine))[0];
     if (current) setActive(current.target.id);
   }, { rootMargin: "-120px 0px -120px 0px", threshold: 0 });
   targets.forEach((target) => observer.observe(target));
@@ -1592,16 +1619,23 @@ async function refreshServices() {
     marketHealth(settings),
     analysisHealth(settings)
   ]);
-  const marketOK = checks[0].status === "fulfilled";
-  const analysisOK = checks[1].status === "fulfilled";
-  if (generation !== serviceRefreshGeneration) return { marketOK, analysisOK, stale: true };
-  setServiceStatus("market", marketOK, marketOK ? "就绪" : "不可用");
-  setServiceStatus("analysis", analysisOK, analysisOK ? "就绪" : "不可用");
-  $("#connection-dot").classList.toggle("is-online", marketOK && analysisOK);
-  $("#connection-dot").classList.toggle("is-offline", !marketOK && !analysisOK);
-  setText("#connection-label", marketOK && analysisOK ? "服务已连接" : marketOK || analysisOK ? "部分连接" : "连接异常");
-  if (!marketOK && checks[0].reason) setText("#query-hint", errorMessage(checks[0].reason));
-  return { marketOK, analysisOK, stale: false };
+  const marketState = serviceHealthState(checks[0]);
+  const analysisState = serviceHealthState(checks[1]);
+  const marketOK = marketState === "healthy";
+  const analysisOK = analysisState === "healthy";
+  if (generation !== serviceRefreshGeneration) return { marketOK, analysisOK, marketState, analysisState, stale: true };
+  setServiceStatus("market", marketState, serviceHealthLabel(marketState));
+  setServiceStatus("analysis", analysisState, serviceHealthLabel(analysisState));
+  const connectionDot = $("#connection-dot");
+  connectionDot.classList.toggle("is-online", marketOK && analysisOK);
+  connectionDot.classList.toggle("is-offline", marketState === "failed" && analysisState === "failed");
+  connectionDot.classList.toggle("is-unknown", ["unknown", "degraded"].includes(marketState) || ["unknown", "degraded"].includes(analysisState));
+  const connectionLabel = marketOK && analysisOK ? "服务已连接"
+    : marketState === "failed" && analysisState === "failed" ? "连接异常"
+      : marketOK || analysisOK ? "部分连接"
+        : marketState === "failed" || analysisState === "failed" ? "连接异常或状态未知" : "服务状态未知";
+  setText("#connection-label", connectionLabel);
+  return { marketOK, analysisOK, marketState, analysisState, stale: false };
 }
 
 async function checkConnectionFromSettings() {
@@ -2922,10 +2956,10 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   );
 }
 
-function applySettings(nextSettings) {
+function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) {
   const previousSettings = state.settings;
   const analysisBaseChanged = previousSettings.analysisBase !== nextSettings.analysisBase;
-  if (analysisBaseChanged && state.taskId) {
+  if (analysisBaseChanged && state.taskId && persistPreviousActiveTask) {
     if (!state.taskAnalysisBase) state.taskAnalysisBase = previousSettings.analysisBase;
     persistTaskReference();
   }
@@ -3128,10 +3162,9 @@ async function importBrowserDataFile(file) {
     localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks));
     localStorage.removeItem(TASK_REFERENCE_KEY);
 
-    applySettings(nextSettings);
-    // applySettings 可能保存旧活动任务引用；导入文件中的历史记录应作为最终结果。
-    localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks));
-    persistTheme(imported.theme);
+    // 导入是替换操作，不应把导入前正在查看的旧任务重新写入任务历史。
+    // 所有本地存储写入均在应用内存状态之前完成，避免写入异常造成 UI 与磁盘状态分叉。
+    applySettings(nextSettings, { persistPreviousActiveTask: false });
     applyTheme(imported.theme);
     syncThemeControl(imported.theme);
     syncSettingsThemeButtons(imported.theme);
