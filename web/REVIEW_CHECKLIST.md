@@ -61,3 +61,11 @@
 - 事件接口失败、空事件、任务状态轮询和 RunResult 读取错误不能混淆。
 - 768 px 及更窄布局变为单列；键盘导航、Escape 关闭、焦点返回、深浅色与减少动画偏好需实机验收。
 - 不画未经后端确认的 DAG 依赖、节点或进度百分比。
+
+## GitHub Actions 浏览器验收
+
+- 工作流：.github/workflows/webui-browser-smoke.yml，推送到 feat/webui-market-data-console 且修改 WebUI 文件时自动执行，也支持手动触发。
+- 使用 Chromium 实际打开原生 HTML/CSS/ES Modules 页面；测试 320、375、600、768、900、1280、1600 px 七种宽度。
+- 检查主导航切页、页面水平溢出、Run Flow 对话框边界，以及宽屏双栏 / 窄屏单栏切换。
+- 浏览器测试只将 API 请求设为明确的 503 不可用状态，不伪造行情、任务或阶段事件；不替代 NAS/Docker/OpenResty 和真实后端验收。
+- 每次运行上传首页与 Run Flow 截图为 GitHub Actions Artifact，保留 7 天，供人工查看实际渲染。
