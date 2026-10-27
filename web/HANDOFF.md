@@ -6,8 +6,8 @@
 ## 当前 GitHub 状态（2026-10-27 最新复核）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 工作分支：`feat/webui-market-data-console`；本轮开始前 HEAD 为 `8f65d1ebe46e493170ca4a53fca6f2b30a4dc140`。
-- 数据分支 `feat/full-go-data-providers-api-switch` 在最近一次核对的 HEAD 为 `2cd8699e47136e672385af7ada5dbc717cc01602`。其自上次同步以来的提交修改 Go Provider/服务和数据契约文档，没有改动本批涉及的 WebUI 文件；本批不会把 WebUI 改动写入数据分支。
+- WebUI 工作分支：`feat/webui-market-data-console`；本轮开始前 HEAD 为 `3866ab68994102cc1993f9eccd9ef1e6f246f638`。
+- 数据分支 `feat/full-go-data-providers-api-switch` 在本轮开始时核对的 HEAD 为 `33bf8ae82f278e68ab202c4835b1e6ed6506ec72`。其自上次同步以来的提交修改 Go Provider/服务和数据契约文档，没有改动本批涉及的 WebUI 文件；本批不会把 WebUI 改动写入数据分支。
 - PR #13：https://github.com/Kasign/stock_data_provider/pull/13，已于 2026-10-27 11:42（新加坡时间）合并。
 - PR #14：https://github.com/Kasign/stock_data_provider/pull/14，标题 `WebUI: 提升主题可读性并补全全站 Review`，保持 Open，不合并。
 - 上一 HEAD 的 [WebUI checks #40455689326](https://github.com/Kasign/stock_data_provider/actions/runs/40455689326) 与 [Chromium smoke #40455689320](https://github.com/Kasign/stock_data_provider/actions/runs/40455689320) 重新运行后仍在 runner 启动前失败，Job 无 runner、无执行步骤/日志。当前无法据此判定源码测试结果，后续仍需正常执行的 CI。
