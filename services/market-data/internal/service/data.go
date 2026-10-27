@@ -1394,6 +1394,10 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
 		}
+		if item.QualityStatus == model.QualityValid {
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
+		}
 		if err := validateChipDistributionSnapshot(symbol, item); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
@@ -1464,6 +1468,10 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
 			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
+		}
+		if item.QualityStatus == model.QualityValid {
+			item.QualityStatus = model.QualityDegraded
+			item.QualityReasons = appendReason(item.QualityReasons, "publication_availability_timestamp_unverified")
 		}
 		if err := validateCapitalFlowSnapshot(symbol, item); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
