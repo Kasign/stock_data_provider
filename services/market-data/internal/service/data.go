@@ -703,10 +703,18 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if len(snapshot.Items) == 0 || len(snapshot.Items) > limit {
 		return fmt.Errorf("sector-ranking item count %d is outside 1..%d", len(snapshot.Items), limit)
 	}
-	seen := make(map[string]bool, len(snapshot.Items))
+	if snapshot.Total <= 0 || snapshot.Total < len(snapshot.Items) {
+		return errors.New("sector-ranking total is less than returned items or not positive")
+	}
+	seenCodes := make(map[string]bool, len(snapshot.Items))
+	seenRanks := make(map[int]bool, len(snapshot.Items))
+	hasDegradedItem := false
 	for _, item := range snapshot.Items {
-		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.Category != category {
-			return errors.New("sector-ranking item has missing code/name or mismatched category")
+		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.Category != category || item.ChangePercent == nil {
+			return errors.New("sector-ranking item has missing code/name/change-percent or mismatched category")
+		}
+		if item.Rank < 1 {
+			return errors.New("sector-ranking item rank must be positive")
 		}
 		if item.Source != snapshot.Source {
 			return errors.New("sector-ranking item source differs from its snapshot source")
@@ -714,10 +722,40 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 		if item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
 			return errors.New("sector-ranking item has invalid retrieval time or quality status")
 		}
-		if seen[item.Code] {
+		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.Amount, item.LeaderChangePercent} {
+			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+				return fmt.Errorf("sector-ranking item %s contains a non-finite numeric value", item.Code)
+			}
+		}
+		if item.LatestPrice != nil && *item.LatestPrice <= 0 {
+			return fmt.Errorf("sector-ranking item %s has a non-positive latest price", item.Code)
+		}
+		if item.Amount == nil {
+			if item.AmountUnit != "unknown" {
+				return fmt.Errorf("sector-ranking item %s has no amount but amount_unit is not unknown", item.Code)
+			}
+		} else if *item.Amount < 0 || item.AmountUnit != "CNY" {
+			return fmt.Errorf("sector-ranking item %s has an invalid amount or amount unit", item.Code)
+		}
+		for _, count := range []*int{item.AdvancingCount, item.DecliningCount} {
+			if count != nil && *count < 0 {
+				return fmt.Errorf("sector-ranking item %s has a negative advancing/declining count", item.Code)
+			}
+		}
+		if seenCodes[item.Code] {
 			return fmt.Errorf("sector-ranking duplicate board code %q", item.Code)
 		}
-		seen[item.Code] = true
+		seenCodes[item.Code] = true
+		if seenRanks[item.Rank] {
+			return fmt.Errorf("sector-ranking duplicate rank %d", item.Rank)
+		}
+		seenRanks[item.Rank] = true
+		if item.QualityStatus == model.QualityDegraded {
+			hasDegradedItem = true
+		}
+	}
+	if snapshot.QualityStatus == model.QualityValid && hasDegradedItem {
+		return errors.New("sector-ranking snapshot cannot be valid when one or more items are degraded")
 	}
 	return nil
 }

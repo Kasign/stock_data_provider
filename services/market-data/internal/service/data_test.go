@@ -1017,3 +1017,43 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 		}
 	})
 }
+
+
+func TestValidateSectorRankingSnapshotRejectsInvalidTotalsAndQuality(t *testing.T) {
+	now := time.Now().UTC()
+	changePercent := 1.25
+	makeSnapshot := func() *model.SectorRankingSnapshot {
+		return &model.SectorRankingSnapshot{
+			Category: "industry", Total: 1, Source: "eastmoney", FetchedAt: now,
+			QualityStatus: model.QualityDegraded,
+			Items: []model.SectorRanking{{
+				Rank: 1, Code: "BK0477", Name: "酿酒行业", Category: "industry",
+				ChangePercent: &changePercent, AmountUnit: "unknown", Source: "eastmoney",
+				FetchedAt: now, QualityStatus: model.QualityDegraded,
+			}},
+		}
+	}
+
+	t.Run("total below returned count", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Total = 0
+		if err := validateSectorRankingSnapshot("industry", 10, snapshot); err == nil || !strings.Contains(err.Error(), "total") {
+			t.Fatalf("invalid total must be rejected, got %v", err)
+		}
+	})
+	t.Run("non-finite change percent", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		bad := math.NaN()
+		snapshot.Items[0].ChangePercent = &bad
+		if err := validateSectorRankingSnapshot("industry", 10, snapshot); err == nil || !strings.Contains(err.Error(), "non-finite") {
+			t.Fatalf("non-finite change percent must be rejected, got %v", err)
+		}
+	})
+	t.Run("aggregate quality", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.QualityStatus = model.QualityValid
+		if err := validateSectorRankingSnapshot("industry", 10, snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
+			t.Fatalf("snapshot quality must include item degradation, got %v", err)
+		}
+	})
+}
