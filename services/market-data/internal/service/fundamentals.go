@@ -35,10 +35,16 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
 		return errors.New("fundamentals source or fetched_at is missing")
 	}
-	if len(snapshot.Sections) != 6 {
-		return fmt.Errorf("fundamentals snapshot has %d sections, expected 6", len(snapshot.Sections))
+	// 六个标准指标分区始终必需；同花顺可额外返回三张独立财务报表。
+	if len(snapshot.Sections) < 6 || len(snapshot.Sections) > 9 {
+		return fmt.Errorf("fundamentals snapshot has %d sections, expected six indicator groups and up to three statement groups", len(snapshot.Sections))
 	}
-	allowed := map[string]bool{"profitability": true, "operating": true, "growth": true, "solvency": true, "cash_flow": true, "dupont": true}
+	allowed := map[string]bool{
+		"profitability": true, "operating": true, "growth": true,
+		"solvency": true, "cash_flow": true, "dupont": true,
+		"income_statement": true, "balance_sheet": true, "cash_flow_statement": true,
+	}
+	standardCategories := []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"}
 	seen := make(map[string]bool, len(snapshot.Sections))
 	hasData, allValid := false, true
 	today := time.Now().In(marketLocation()).Format("2006-01-02")
@@ -87,6 +93,11 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 			if metric.Key == "" || metric.Name == "" || metric.Unit == "" || metric.SourceField == "" || math.IsNaN(metric.Value) || math.IsInf(metric.Value, 0) {
 				return fmt.Errorf("fundamentals section %s has invalid metric metadata/value", section.Category)
 			}
+		}
+	}
+	for _, category := range standardCategories {
+		if !seen[category] {
+			return fmt.Errorf("fundamentals snapshot is missing required indicator section %q", category)
 		}
 	}
 	if snapshot.HasData != hasData {

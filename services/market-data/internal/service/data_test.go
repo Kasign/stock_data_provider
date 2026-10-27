@@ -109,6 +109,38 @@ func TestValidateFundamentalsSnapshotAcceptsPointInTimeValidSnapshot(t *testing.
 	}
 }
 
+
+func TestValidateFundamentalsSnapshotAcceptsOptionalFinancialStatements(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.QualityStatus = model.QualityDegraded
+	for _, category := range []string{"income_statement", "balance_sheet", "cash_flow_statement"} {
+		snapshot.Sections = append(snapshot.Sections, model.FundamentalSection{
+			Category: category, ReportDate: fundamentalPeriodEnd(snapshot.Year, snapshot.Quarter),
+			PublicationDate: "2026-08-29", HasData: true,
+			Metrics: []model.FundamentalMetric{{
+				Key: "statement_metric", Name: "报表指标", Value: 1, Unit: "CNY", SourceField: "statement_metric",
+			}},
+			QualityStatus: model.QualityDegraded, QualityReasons: []string{"statement_units_or_coverage_not_fully_verified"},
+		})
+	}
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err != nil {
+		t.Fatalf("six standard groups plus three statement groups should be accepted as degraded: %v", err)
+	}
+}
+
+func TestValidateFundamentalsSnapshotStillRequiresAllSixIndicatorGroups(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	for index, section := range snapshot.Sections {
+		if section.Category == "dupont" {
+			snapshot.Sections = append(snapshot.Sections[:index], snapshot.Sections[index+1:]...)
+			break
+		}
+	}
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "expected six indicator groups") {
+		t.Fatalf("snapshot without all six standard groups must be rejected, got %v", err)
+	}
+}
+
 func valuationFloatPointerForValidationTest(value float64) *float64 { return &value }
 
 func validValuationSnapshotForValidationTest() *model.ValuationSnapshot {
