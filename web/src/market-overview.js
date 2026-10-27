@@ -2,6 +2,22 @@ import { getMarketBreadth, getMarketHotStocks, getMarketIndices, getMarketLimitP
 import { describeApiError, formatCompact, formatDateTime, formatPercent, formatPrice, qualityLabel } from "./format.js";
 const $ = (s) => document.querySelector(s);
 const KEYS = ["indices", "breadth", "sectors", "pool", "hot"];
+const REFRESH_OUTCOMES = new Set(["received", "unsupported", "provider_unavailable", "auth_failed", "failed", "needs_key", "cancelled"]);
+export function summarizeMarketOverviewRefresh(outcomes, configured = true) {
+ if (!configured) return "请先配置行情 API Key 后刷新市场概况";
+ const normalized = (Array.isArray(outcomes) ? outcomes : []).map(value => REFRESH_OUTCOMES.has(value) ? value : "failed");
+ if (!normalized.length) return "本次未执行市场模块请求";
+ const count = value => normalized.filter(item => item === value).length;
+ const parts = [`本次收到 ${count("received")}/${normalized.length} 个模块响应`];
+ if (count("unsupported")) parts.push(`接口尚未提供 ${count("unsupported")} 个`);
+ if (count("provider_unavailable")) parts.push(`Provider 不可用 ${count("provider_unavailable")} 个`);
+ if (count("auth_failed")) parts.push(`鉴权失败 ${count("auth_failed")} 个`);
+ if (count("failed")) parts.push(`读取失败 ${count("failed")} 个`);
+ if (count("needs_key")) parts.push(`缺少 API Key、未请求 ${count("needs_key")} 个`);
+ if (count("cancelled")) parts.push(`已取消 ${count("cancelled")} 个`);
+ if (count("received") === normalized.length) parts.push("请查看各模块来源时间与质量状态");
+ return parts.join("；");
+}
 function el(tag, cls = "", text = "") { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined&&text!==null)n.textContent=String(text); return n; }
 function count(v) { if(v===null||v===undefined||v==="")return "—"; const n=Number(v); return Number.isFinite(n)&&n>=0?Math.trunc(n).toLocaleString("zh-CN"):"—"; }
 function signed(v, fmt) { if(v===null||v===undefined||v===""||!Number.isFinite(Number(v)))return "—";return (Number(v)>0?"+":"")+fmt(v); }
@@ -82,13 +98,21 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",poolType="up",hotType="popular",refreshGeneration=0;
  function cancel(key){controllers[key]?.abort();delete controllers[key];generation[key]++;}
  async function load(key){cancel(key);const seq=generation[key],settings=typeof getSettings==="function"?getSettings():null;
-  if(!settings?.apiKey){pending(key,"请先在连接与密钥设置中配置行情 API Key。","warning");return;}
+  if(!settings?.apiKey){pending(key,"请先在连接与密钥设置中配置行情 API Key。","warning");return "needs_key";}
   const ctl=new AbortController();controllers[key]=ctl;pending(key,"正在读取…","pending");
-  try{let data;if(key==="indices")data=await getMarketIndices(settings,ctl.signal);else if(key==="breadth")data=await getMarketBreadth(settings,ctl.signal);else if(key==="sectors")data=await getMarketSectors(settings,{type:sectorType,limit:10,signal:ctl.signal});else if(key==="pool")data=await getMarketLimitPool(settings,{type:poolType,limit:30,signal:ctl.signal});else if(key==="hot")data=await getMarketHotStocks(settings,{type:hotType,limit:20,signal:ctl.signal});else return;
-   if(ctl.signal.aborted||generation[key]!==seq)return;if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data);else if(key==="pool")renderPool(data);else renderHotStocks(data);
-  }catch(err){if(ctl.signal.aborted||generation[key]!==seq)return;pending(key,errorMessage(err),"error");}finally{if(generation[key]===seq)delete controllers[key];}
+  try{let data;if(key==="indices")data=await getMarketIndices(settings,ctl.signal);else if(key==="breadth")data=await getMarketBreadth(settings,ctl.signal);else if(key==="sectors")data=await getMarketSectors(settings,{type:sectorType,limit:10,signal:ctl.signal});else if(key==="pool")data=await getMarketLimitPool(settings,{type:poolType,limit:30,signal:ctl.signal});else if(key==="hot")data=await getMarketHotStocks(settings,{type:hotType,limit:20,signal:ctl.signal});else return "failed";
+   if(ctl.signal.aborted||generation[key]!==seq)return "cancelled";if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data);else if(key==="pool")renderPool(data);else renderHotStocks(data);return "received";
+  }catch(err){
+   if(ctl.signal.aborted||generation[key]!==seq)return "cancelled";
+   pending(key,errorMessage(err),"error");
+   const status=Number(err?.status);
+   if(status===404)return "unsupported";
+   if(status===503)return "provider_unavailable";
+   if(status===401||status===403)return "auth_failed";
+   return "failed";
+  }finally{if(generation[key]===seq)delete controllers[key];}
  }
- async function refresh(){const currentGeneration=++refreshGeneration,status=$("#market-overview-updated"),settings=typeof getSettings==="function"?getSettings():null;if(status)status.textContent=settings?.apiKey?"正在刷新各模块…":"配置行情 API Key 后加载市场概况";await Promise.all(KEYS.map(load));if(currentGeneration!==refreshGeneration)return;if(status&&settings?.apiKey)status.textContent="已尝试刷新；请查看各模块的来源时间与质量状态";}
+ async function refresh(){const currentGeneration=++refreshGeneration,status=$("#market-overview-updated"),settings=typeof getSettings==="function"?getSettings():null;if(status)status.textContent=settings?.apiKey?"正在刷新各模块…":"配置行情 API Key 后加载市场概况";const outcomes=await Promise.all(KEYS.map(load));if(currentGeneration!==refreshGeneration)return;if(status)status.textContent=summarizeMarketOverviewRefresh(outcomes,Boolean(settings?.apiKey));}
  $("#refresh-market-overview")?.addEventListener("click",()=>{void refresh();});
  document.querySelectorAll("[data-sector-type]").forEach(button=>button.addEventListener("click",()=>{sectorType=button.dataset.sectorType==="concept"?"concept":"industry";document.querySelectorAll("[data-sector-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("sectors");}));
  document.querySelectorAll("[data-pool-type]").forEach(button=>button.addEventListener("click",()=>{poolType=["up","down","broken"].includes(button.dataset.poolType)?button.dataset.poolType:"up";document.querySelectorAll("[data-pool-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("pool");}));
