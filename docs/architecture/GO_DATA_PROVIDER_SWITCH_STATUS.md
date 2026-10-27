@@ -387,7 +387,7 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 ### Go-core 个股辅助数据并发迁移（2026-10-27，本轮待统一验收）
 
-- `go-core/internal/adapters/marketdatahttp.Client` 在行情/日 K bundle 获取成功后，并发请求原生基本面、所属板块、筹码分布和资金流接口；辅助接口失败只增加 warning，不把可用行情 bundle 整体判失败。
+- `go-core/internal/adapters/marketdatahttp.Client` 在行情/日 K bundle 获取成功后，并发请求原生基本面、所属板块、筹码分布、资金流、龙虎榜摘要与个股 profile，并汇总为 `StockBundle`/分析上下文；辅助接口失败只增加 warning，不把可用行情 bundle 整体判失败。旧 Python `get_enhanced_data` 的严格字段/空值相等性仍需要按矩阵逐项对账。
 - 基本面默认请求最近一个已结束季度，保留分区、公告日期、指标单位和来源质量信息；以不重复键兼容旧分析器，并使用分区前缀保留同名指标。
 - 所属板块仅在 Provider 明确返回 `has_data=true` 时作为有效列表；筹码区间、资金流单位和质量信息保持原义，不将区间误作中位成本或将 null 变为零。
 - 资金流新增到 Go `StockBundle`、`AnalysisContext` 及 Python 分析器桥接上下文。显式 `as_of` 请求不会附加仅支持当前快照的辅助数据；严格历史时点财报版本和辅助快照历史仍待实现。
