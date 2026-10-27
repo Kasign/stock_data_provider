@@ -3489,6 +3489,7 @@ td {
 .data-center-provider-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
 .data-center-provider-top strong { color:var(--text); font-size:12px; overflow-wrap:anywhere; }
 .data-center-provider-top .source-state { flex:0 0 auto; }
+.data-center-capability-status { flex:0 0 auto; display:inline-flex; align-items:center; padding:4px 7px; border:1px solid var(--border); border-radius:7px; color:var(--text-dim); background:var(--panel); font-size:10px; line-height:1.4; }
 .data-center-provider-row small { display:block; margin-top:7px; color:var(--text-dim); font-size:11px; line-height:1.6; }
 .data-center-capability-list { display:flex; flex-wrap:wrap; gap:5px; margin-top:10px; }
 .data-center-capability-tag { padding:4px 7px; border:1px solid var(--border); border-radius:6px; color:var(--text-dim); background:var(--panel); font-size:10px; }
