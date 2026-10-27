@@ -95,6 +95,16 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 	return nil
 }
 
+func fundamentalsCacheTTL(snapshot *model.FundamentalsSnapshot) time.Duration {
+	if snapshot == nil || !snapshot.HasData {
+		return 5 * time.Minute
+	}
+	if snapshot.QualityStatus != model.QualityValid {
+		return time.Hour
+	}
+	return 12 * time.Hour
+}
+
 func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, quarter int) (*model.FundamentalsSnapshot, bool, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
@@ -116,12 +126,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.FundamentalsSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateFundamentalsSnapshot(symbol, year, quarter, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
-			ttl := 12 * time.Hour
-			if cached.QualityStatus == model.QualityDegraded {
-				ttl = time.Hour
-			} else if !cached.HasData {
-				ttl = 5 * time.Minute
-			}
+			ttl := fundamentalsCacheTTL(&cached)
 			if time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
@@ -150,12 +155,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		if err != nil {
 			s.logger.Warn("fundamentals cache encode failed", "symbol", symbol, "year", year, "quarter", quarter, "error", err)
 		} else {
-			ttl := 12 * time.Hour
-			if snapshot.QualityStatus == model.QualityDegraded {
-				ttl = time.Hour
-			} else if !snapshot.HasData {
-				ttl = 5 * time.Minute
-			}
+			ttl := fundamentalsCacheTTL(snapshot)
 			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
 				s.logger.Warn("fundamentals cache write failed", "symbol", symbol, "year", year, "quarter", quarter, "error", cacheErr)
 			}
