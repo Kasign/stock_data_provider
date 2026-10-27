@@ -2023,75 +2023,143 @@ type eastmoneyMarketTurnoverItem struct {
 // fetchMarketTurnover 从东方财富证券列表接口分页汇总全市场成交额。
 // 只有分页完整、证券唯一、金额字段有效且报价日期与广度报告日一致时才返回总额。
 func (p *Eastmoney) fetchMarketTurnover(ctx context.Context, reportDate string) (float64, int, string) {
-	fail := func(reason string) (float64, int, string) { return 0, 0, reason }
-	if ctx == nil { ctx = context.Background() }
-	if err := ctx.Err(); err != nil { return fail("market_amount_collection_cancelled") }
-	if _, err := time.Parse("2006-01-02", reportDate); err != nil { return fail("market_amount_report_date_invalid") }
+	fail := func(reason string) (float64, int, string) {
+		return 0, 0, reason
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return fail("market_amount_collection_cancelled")
+	}
+	if _, err := time.Parse("2006-01-02", reportDate); err != nil {
+		return fail("market_amount_report_date_invalid")
+	}
+
 	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil { location = time.FixedZone("CST", 8*60*60) }
+	if err != nil {
+		location = time.FixedZone("CST", 8*60*60)
+	}
 
 	fetchPage := func(requestCtx context.Context, page, expectedTotal int) (int, []eastmoneyMarketTurnoverItem, string) {
 		baseURL := strings.TrimSpace(p.stockListURL)
-		if baseURL == "" { baseURL = defaultEastmoneySectorRankingURL }
+		if baseURL == "" {
+			baseURL = defaultEastmoneySectorRankingURL
+		}
+
 		params := url.Values{
-			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(eastmoneyMarketTurnoverPageSize)},
-			"po": {"1"}, "np": {"1"}, "fid": {"f12"}, "fs": {eastmoneyMarketUniverseFilter},
-			"fields": {"f12,f13,f6,f86"}, "fltt": {"2"}, "invt": {"2"},
-			"ut": {p.ut}, "_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+			"pn":     {strconv.Itoa(page)},
+			"pz":     {strconv.Itoa(eastmoneyMarketTurnoverPageSize)},
+			"po":     {"1"},
+			"np":     {"1"},
+			"fid":    {"f12"},
+			"fs":     {eastmoneyMarketUniverseFilter},
+			"fields": {"f12,f13,f6,f86"},
+			"fltt":   {"2"},
+			"invt":   {"2"},
+			"ut":     {p.ut},
+			"_":      {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		}
 		var payload struct {
-			RC *int `json:"rc"`
+			RC   *int \x60json:"rc"\x60
 			Data *struct {
-				Total int `json:"total"`
-				Diff json.RawMessage `json:"diff"`
-			} `json:"data"`
+				Total int             \x60json:"total"\x60
+				Diff  json.RawMessage \x60json:"diff"\x60
+			} \x60json:"data"\x60
 		}
 		if err := p.getJSONWithRetry(requestCtx, baseURL, params, &payload, 6*time.Second); err != nil {
-			if requestCtx.Err() != nil { return 0, nil, "market_amount_collection_cancelled" }
+			if requestCtx.Err() != nil {
+				return 0, nil, "market_amount_collection_cancelled"
+			}
 			return 0, nil, "market_amount_provider_request_failed"
 		}
-		if payload.RC != nil && *payload.RC != 0 { return 0, nil, "market_amount_provider_rejected_request" }
-		if payload.Data == nil || payload.Data.Total <= 0 { return 0, nil, "market_amount_provider_total_missing" }
+		if payload.RC != nil && *payload.RC != 0 {
+			return 0, nil, "market_amount_provider_rejected_request"
+		}
+		if payload.Data == nil || payload.Data.Total <= 0 {
+			return 0, nil, "market_amount_provider_total_missing"
+		}
+
 		total := payload.Data.Total
-		if total > eastmoneyMarketBreadthMaxSecurities { return 0, nil, "market_amount_universe_exceeds_safety_limit" }
-		if expectedTotal > 0 && total != expectedTotal { return 0, nil, "market_amount_provider_total_changed_during_pagination" }
+		if total > eastmoneyMarketBreadthMaxSecurities {
+			return 0, nil, "market_amount_universe_exceeds_safety_limit"
+		}
+		if expectedTotal > 0 && total != expectedTotal {
+			return 0, nil, "market_amount_provider_total_changed_during_pagination"
+		}
+
 		rows, err := decodeEastmoneyBoardRows(payload.Data.Diff)
-		if err != nil { return 0, nil, "market_amount_provider_payload_invalid" }
+		if err != nil {
+			return 0, nil, "market_amount_provider_payload_invalid"
+		}
 		expectedRows := eastmoneyMarketTurnoverPageSize
 		remaining := total - (page-1)*eastmoneyMarketTurnoverPageSize
-		if remaining < expectedRows { expectedRows = remaining }
-		if expectedRows <= 0 || len(rows) != expectedRows { return 0, nil, "market_amount_provider_pagination_incomplete" }
+		if remaining < expectedRows {
+			expectedRows = remaining
+		}
+		if expectedRows <= 0 || len(rows) != expectedRows {
+			return 0, nil, "market_amount_provider_pagination_incomplete"
+		}
 
 		items := make([]eastmoneyMarketTurnoverItem, 0, len(rows))
 		for _, row := range rows {
-			code, market := parseEastmoneyBoardString(row, "f12"), parseEastmoneyBoardString(row, "f13")
-			if len(code) != 6 || (market != "0" && market != "1") { return 0, nil, "market_amount_provider_security_identity_invalid" }
-			for _, digit := range code {
-				if digit < '0' || digit > '9' { return 0, nil, "market_amount_provider_security_identity_invalid" }
+			code := parseEastmoneyBoardString(row, "f12")
+			market := parseEastmoneyBoardString(row, "f13")
+			if len(code) != 6 || (market != "0" && market != "1") {
+				return 0, nil, "market_amount_provider_security_identity_invalid"
 			}
+			for _, digit := range code {
+				if digit < '0' || digit > '9' {
+					return 0, nil, "market_amount_provider_security_identity_invalid"
+				}
+			}
+
 			amount := parseEastmoneyBoardNumber(row, "f6")
-			if amount == nil || *amount < 0 || !finiteNumber(*amount) { return 0, nil, "market_amount_provider_amount_invalid" }
+			if amount == nil || *amount < 0 || !finiteNumber(*amount) {
+				return 0, nil, "market_amount_provider_amount_invalid"
+			}
 			quoteTime := parseEastmoneyTime(parseEastmoneyBoardString(row, "f86"))
-			if quoteTime == nil || quoteTime.In(location).Format("2006-01-02") != reportDate { return 0, nil, "market_amount_quote_date_mismatch" }
-			items = append(items, eastmoneyMarketTurnoverItem{securityKey: market + "." + code, amountCNY: *amount})
+			if quoteTime == nil || quoteTime.In(location).Format("2006-01-02") != reportDate {
+				return 0, nil, "market_amount_quote_date_mismatch"
+			}
+
+			items = append(items, eastmoneyMarketTurnoverItem{
+				securityKey: market + "." + code,
+				amountCNY:   *amount,
+			})
 		}
 		return total, items, ""
 	}
 
 	total, firstPage, reason := fetchPage(ctx, 1, 0)
-	if reason != "" { return fail(reason) }
+	if reason != "" {
+		return fail(reason)
+	}
 	pageCount := (total + eastmoneyMarketTurnoverPageSize - 1) / eastmoneyMarketTurnoverPageSize
-	if pageCount <= 0 || pageCount > eastmoneyStockSearchMaxPages { return fail("market_amount_provider_page_count_invalid") }
+	if pageCount <= 0 || pageCount > eastmoneyStockSearchMaxPages {
+		return fail("market_amount_provider_page_count_invalid")
+	}
+
 	pages := make([][]eastmoneyMarketTurnoverItem, pageCount)
 	pages[0] = firstPage
 	if pageCount > 1 {
-		type pageResult struct { page int; items []eastmoneyMarketTurnoverItem; reason string }
+		type pageResult struct {
+			page   int
+			items  []eastmoneyMarketTurnoverItem
+			reason string
+		}
 		workCtx, cancel := context.WithCancel(ctx)
-		jobs, results := make(chan int, pageCount-1), make(chan pageResult, pageCount-1)
-		for page := 2; page <= pageCount; page++ { jobs <- page }
+		jobs := make(chan int, pageCount-1)
+		results := make(chan pageResult, pageCount-1)
+		for page := 2; page <= pageCount; page++ {
+			jobs <- page
+		}
 		close(jobs)
+
 		workerCount := eastmoneyMarketTurnoverWorkers
-		if workerCount > pageCount-1 { workerCount = pageCount-1 }
+		if workerCount > pageCount-1 {
+			workerCount = pageCount - 1
+		}
 		var workers sync.WaitGroup
 		var failureMu sync.Mutex
 		firstFailureReason := ""
@@ -2100,11 +2168,16 @@ func (p *Eastmoney) fetchMarketTurnover(ctx context.Context, reportDate string) 
 			go func() {
 				defer workers.Done()
 				for page := range jobs {
-					if workCtx.Err() != nil { results <- pageResult{page: page, reason: "market_amount_collection_cancelled"}; continue }
+					if workCtx.Err() != nil {
+						results <- pageResult{page: page, reason: "market_amount_collection_cancelled"}
+						continue
+					}
 					_, items, pageReason := fetchPage(workCtx, page, total)
 					if pageReason != "" {
 						failureMu.Lock()
-						if firstFailureReason == "" { firstFailureReason = pageReason }
+						if firstFailureReason == "" {
+							firstFailureReason = pageReason
+						}
 						failureMu.Unlock()
 						cancel()
 					}
@@ -2112,29 +2185,44 @@ func (p *Eastmoney) fetchMarketTurnover(ctx context.Context, reportDate string) 
 				}
 			}()
 		}
+
 		pageReasons := make([]string, pageCount)
 		for i := 0; i < pageCount-1; i++ {
 			result := <-results
 			pageReasons[result.page-1] = result.reason
-			if result.reason == "" { pages[result.page-1] = result.items }
+			if result.reason == "" {
+				pages[result.page-1] = result.items
+			}
 		}
 		workers.Wait()
 		cancel()
-		if firstFailureReason != "" { return fail(firstFailureReason) }
-		for _, pageReason := range pageReasons { if pageReason != "" { return fail(pageReason) } }
+		if firstFailureReason != "" {
+			return fail(firstFailureReason)
+		}
+		for _, pageReason := range pageReasons {
+			if pageReason != "" {
+				return fail(pageReason)
+			}
+		}
 	}
 
 	seen := make(map[string]struct{}, total)
 	var totalAmount float64
 	for _, page := range pages {
 		for _, item := range page {
-			if _, exists := seen[item.securityKey]; exists { return fail("market_amount_provider_duplicate_security") }
+			if _, exists := seen[item.securityKey]; exists {
+				return fail("market_amount_provider_duplicate_security")
+			}
 			seen[item.securityKey] = struct{}{}
 			totalAmount += item.amountCNY
-			if !finiteNumber(totalAmount) { return fail("market_amount_provider_total_invalid") }
+			if !finiteNumber(totalAmount) {
+				return fail("market_amount_provider_total_invalid")
+			}
 		}
 	}
-	if len(seen) != total { return fail("market_amount_provider_pagination_incomplete") }
+	if len(seen) != total {
+		return fail("market_amount_provider_pagination_incomplete")
+	}
 	return totalAmount, len(seen), ""
 }
 
