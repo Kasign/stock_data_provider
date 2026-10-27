@@ -108,13 +108,15 @@ func TestValidateFundamentalsSnapshotAcceptsPointInTimeValidSnapshot(t *testing.
 	}
 }
 
+func valuationFloatPointerForValidationTest(value float64) *float64 { return &value }
+
 func validValuationSnapshotForValidationTest() *model.ValuationSnapshot {
 	now := time.Now().UTC()
 	symbol := "600519.SH"
 	item := model.ValuationItem{
 		Symbol: symbol, Code: "600519",
-		PETTM: ptrFloat(18.4), PEMRQ: ptrFloat(6.1), PEStatic: ptrFloat(22.5),
-		PBMRQ: ptrFloat(6.1), PSTTM: ptrFloat(7.2), PCFTTM: ptrFloat(9.0),
+		PETTM: valuationFloatPointerForValidationTest(18.4), PEMRQ: valuationFloatPointerForValidationTest(6.1), PEStatic: valuationFloatPointerForValidationTest(22.5),
+		PBMRQ: valuationFloatPointerForValidationTest(6.1), PSTTM: valuationFloatPointerForValidationTest(7.2), PCFTTM: valuationFloatPointerForValidationTest(9.0),
 		Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
 	}
 	return &model.ValuationSnapshot{
