@@ -50,9 +50,13 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	if p.token == "" {
 		return nil, errors.New("Tushare token is not configured")
 	}
-	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	symbol, err := tushareExchangeCode(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	// daily 是普通 A 股日线接口；ETF、指数与其他证券类型必须走各自的接口，不能误标为股票 K 线。
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tushare daily endpoint only supports common A-share equities, got %q", rawSymbol)
 	}
 	if adjustment != model.AdjustmentNone {
 		return nil, fmt.Errorf("Tushare daily endpoint only provides unadjusted OHLC; requested adjustment %q is unsupported", adjustment)

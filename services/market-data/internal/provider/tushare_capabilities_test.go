@@ -531,3 +531,23 @@ func TestTushareFundamentalsRejectsMissingAnnouncementDate(t *testing.T) {
 		t.Fatalf("financial data without an announcement date must be excluded, got %v", err)
 	}
 }
+
+
+func TestTushareDailyRejectsNonAShareBeforeRequest(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		http.Error(w, "unexpected request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	for _, symbol := range []string{"510300.SH", "159919.SZ", "000300.SH", "900901.SH"} {
+		if _, err := provider.FetchDailyBars(context.Background(), symbol, "2026-10-01", "2026-10-26", 10, model.AdjustmentNone); err == nil {
+			t.Errorf("non-common-A-share symbol %s must be rejected before querying Tushare daily", symbol)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("unsupported security types must be rejected before upstream access; got %d request(s)", requests)
+	}
+}

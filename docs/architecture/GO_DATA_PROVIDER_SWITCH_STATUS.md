@@ -693,3 +693,8 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 
 证券搜索过期匹配的回退补充（2026-10-27）：当首个 Provider 只能提供 `quality_stale` 的匹配项时，服务层暂存该快照并继续查询后续来源；如果后续没有更新的可用结果，才返回原过期结果，并增加 `stock_search_fallback_exhausted_using_stale_directory`，保留 stale 状态。
+
+### Tushare 个股日线证券类型边界（2026-10-27）
+
+- Tushare `daily` 适配器现在在请求上游前要求代码属于普通 A 股股票范围；ETF、指数、B 股及其他非普通股票代码不再发给股票日线端点。指数历史数据仍走独立 `index_daily` 能力，ETF 相关日线暂不声明已由该 Provider 支持。
+- 已补不触发真实 HTTP 请求的契约测试源码，未执行测试、构建、CI 或真实 Provider 请求。

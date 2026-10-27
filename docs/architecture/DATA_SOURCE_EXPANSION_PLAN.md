@@ -429,3 +429,6 @@ Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次
 
 
 证券搜索补充：过期目录即使含有匹配项，也先尝试后续来源；仅在没有新鲜可用结果时才以 `quality_stale` 返回暂存结果，并记录 `stock_search_fallback_exhausted_using_stale_directory`。
+
+
+Tushare 日线边界补充：`daily` 仅接受普通 A 股股票代码，ETF、指数、B 股与其他非普通股票在 Provider 层提前拒绝，以便服务层回退到真正支持该证券类型的来源；指数行情历史继续使用独立的 `index_daily` 接口。此项只完成静态实现与测试源码，尚未运行统一验收。
