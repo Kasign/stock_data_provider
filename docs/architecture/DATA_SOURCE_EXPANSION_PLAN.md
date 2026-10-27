@@ -396,3 +396,6 @@ Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次
 ### 涨跌停池空响应与 Provider 回退（2026-10-27）
 
 空池只有在来源能明确确认零事件时才可表示真实空结果；现有国内源对空列表的契约多为 `unknown`。服务层现对合法的未知空响应继续尝试后续 Provider；仅当回退链耗尽且无源确认有数据时才返回 `quality_unknown`，并增加 `limit_pool_fallback_exhausted_without_confirmed_data`。未知空结果不缓存，避免后续请求被短 TTL 的未知缓存挡住。测试源码已补齐，未运行。
+
+
+涨跌停池补充约束：若 Provider 暴露 `provider_report_date`，服务层强制要求其与请求 `trade_date` 完全一致；历史日期请求若意外返回最新快照，将触发 Provider 回退，而不会将最新事件误标为历史事件。
