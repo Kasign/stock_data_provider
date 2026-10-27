@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearRecentTasks, MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, removeRecentTask, upsertRecentTask } from "../src/recent-tasks.js";
+import { clearRecentTasks, MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask } from "../src/recent-tasks.js";
 
 function makeStorage(seed = {}) {
   const values = new Map(Object.entries(seed));
@@ -30,14 +30,24 @@ test("caps browser history and rejects malformed stored records", () => {
   assert.equal(readRecentTasks(storage)[0].task_id, "task-" + (MAX_RECENT_TASKS + 2));
   storage.setItem(RECENT_TASKS_KEY, "{invalid");
   assert.deepEqual(readRecentTasks(storage), []);
+  assert.deepEqual(readRecentTasksState(storage), {
+    items: [], storageReadable: true, storageValid: false, reason: "invalid"
+  });
 });
 
-test("storage failures do not throw or create bogus history entries", () => {
-  const storage = { getItem() { throw new Error("storage disabled"); }, setItem() { throw new Error("storage disabled"); } };
+test("storage failures do not throw or write task history after an unsuccessful read", () => {
+  let writes = 0;
+  const storage = {
+    getItem() { throw new Error("storage disabled"); },
+    setItem() { writes += 1; throw new Error("storage disabled"); }
+  };
   assert.deepEqual(readRecentTasks(storage), []);
-  assert.deepEqual(upsertRecentTask({ task_id: "task-a" }, storage), [{
-    task_id: "task-a", run_id: "", created_at: "", symbols: [], task_type: "post_market_scan", status: "", updated_at: "", analysis_base: ""
-  }]);
+  assert.deepEqual(readRecentTasksState(storage), {
+    items: [], storageReadable: false, storageValid: false, reason: "unavailable"
+  });
+  assert.deepEqual(upsertRecentTask({ task_id: "task-a" }, storage), []);
+  assert.deepEqual(removeRecentTask("task-a", storage), []);
+  assert.equal(writes, 0);
 });
 
 
@@ -97,4 +107,31 @@ test("remove and clear operations tolerate disabled browser storage", () => {
   };
   assert.deepEqual(removeRecentTask("task-a", storage), []);
   assert.deepEqual(clearRecentTasks(storage), []);
+});
+
+
+test("does not overwrite blank, malformed, non-array, or partially malformed history", () => {
+  const invalidValues = [
+    "",
+    "{invalid",
+    JSON.stringify({ items: [] }),
+    JSON.stringify([{ task_id: "valid-task" }, { status: "missing-task-id" }])
+  ];
+
+  for (const raw of invalidValues) {
+    let writes = 0;
+    const storage = {
+      getItem() { return raw; },
+      setItem() { writes += 1; }
+    };
+
+    const state = readRecentTasksState(storage);
+    assert.equal(state.storageReadable, true);
+    assert.equal(state.storageValid, false);
+    assert.equal(state.reason, "invalid");
+    assert.deepEqual(upsertRecentTask({ task_id: "new-task" }, storage), state.items);
+    assert.deepEqual(removeRecentTask("valid-task", storage), state.items);
+    assert.equal(writes, 0, "invalid history must not be replaced with a partial list");
+    assert.equal(storage.getItem(RECENT_TASKS_KEY), raw, "original stored bytes must remain unchanged");
+  }
 });

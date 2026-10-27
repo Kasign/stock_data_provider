@@ -151,3 +151,24 @@ test("does not overwrite malformed stored data when reading or parsing fails", (
   assert.equal(removed.storageValid, false);
   assert.equal(writes, 0, "malformed data must not be replaced with an empty or partial list");
 });
+
+
+test("rejects blank or non-array stored content instead of treating it as an empty list", () => {
+  for (const raw of ["", " ", JSON.stringify({ items: [] })]) {
+    let writes = 0;
+    const storage = {
+      getItem() { return raw; },
+      setItem() { writes += 1; }
+    };
+
+    const state = readWatchlistState(storage);
+    assert.equal(state.storageReadable, true);
+    assert.equal(state.storageValid, false);
+    assert.equal(state.reason, "invalid");
+
+    const added = addWatchlistSymbol("600519.SH", "贵州茅台", storage);
+    assert.equal(added.persisted, false);
+    assert.equal(added.storageValid, false);
+    assert.equal(writes, 0, "invalid stored content must never be replaced by a partial list");
+  }
+});

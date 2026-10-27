@@ -43,7 +43,7 @@ function readRecords(storage, limit = MAX_WATCHLIST_ITEMS) {
 
   let parsed;
   try {
-    parsed = JSON.parse(raw || "[]");
+    parsed = JSON.parse(raw === null || raw === undefined ? "[]" : raw);
   } catch {
     // 不覆盖无法解析的原始数据，避免一次操作把用户数据清空。
     return { items: [], storageReadable: true, storageValid: false, reason: "invalid" };

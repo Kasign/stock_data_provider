@@ -15,46 +15,88 @@ function normalizeRecord(record) {
   };
 }
 
-export function readRecentTasks(storage, limit = MAX_RECENT_TASKS) {
+function normalizeLimit(limit) {
+  return Math.max(0, Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : MAX_RECENT_TASKS);
+}
+
+export function readRecentTasksState(storage, limit = MAX_RECENT_TASKS) {
+  let raw;
   try {
-    const parsed = JSON.parse(storage.getItem(RECENT_TASKS_KEY) || "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(normalizeRecord).filter(Boolean).slice(0, Math.max(0, limit));
+    raw = storage.getItem(RECENT_TASKS_KEY);
   } catch {
-    return [];
+    return { items: [], storageReadable: false, storageValid: false, reason: "unavailable" };
   }
+
+  let parsed;
+  try {
+    parsed = raw === null || raw === undefined ? [] : JSON.parse(raw);
+  } catch {
+    return { items: [], storageReadable: true, storageValid: false, reason: "invalid" };
+  }
+  if (!Array.isArray(parsed)) {
+    return { items: [], storageReadable: true, storageValid: false, reason: "invalid" };
+  }
+
+  let malformedRecord = false;
+  const records = [];
+  for (const item of parsed) {
+    const normalized = normalizeRecord(item);
+    if (!normalized) {
+      malformedRecord = true;
+      continue;
+    }
+    records.push(normalized);
+  }
+
+  return {
+    items: records.slice(0, normalizeLimit(limit)),
+    storageReadable: true,
+    storageValid: !malformedRecord,
+    reason: malformedRecord ? "invalid" : ""
+  };
+}
+
+export function readRecentTasks(storage, limit = MAX_RECENT_TASKS) {
+  return readRecentTasksState(storage, limit).items;
 }
 
 export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
+  const currentState = readRecentTasksState(storage, limit);
+  if (!currentState.storageReadable || !currentState.storageValid) return currentState.items;
+
   const normalized = normalizeRecord(record);
-  if (!normalized) return readRecentTasks(storage, limit);
-  const records = [normalized, ...readRecentTasks(storage, limit).filter((item) =>
+  if (!normalized) return currentState.items;
+  const records = [normalized, ...currentState.items.filter((item) =>
     item.task_id !== normalized.task_id || (item.analysis_base && item.analysis_base !== normalized.analysis_base)
-  )]
-    .slice(0, Math.max(0, limit));
+  )].slice(0, normalizeLimit(limit));
+
   try {
     storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
   } catch {
-    // Recent task history is optional. Keep the current task functional without storage.
+    // 最近任务历史是可选能力；写入失败时当前任务仍可继续，但不声称已持久化。
   }
   return records;
 }
 
 export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, analysisBase = "") {
   if (typeof taskId !== "string" || !taskId.trim()) return readRecentTasks(storage, limit);
+  const currentState = readRecentTasksState(storage, limit);
+  if (!currentState.storageReadable || !currentState.storageValid) return currentState.items;
+
   const target = taskId.trim();
-  const records = readRecentTasks(storage, limit).filter((item) =>
+  const records = currentState.items.filter((item) =>
     item.task_id !== target || (analysisBase && item.analysis_base && item.analysis_base !== analysisBase)
   );
   try {
     storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
   } catch {
-    // Keep the current page usable when browser storage is unavailable.
+    // 保持当前页面可用；存储异常状态会由界面明确提示。
   }
   return records;
 }
 
 export function clearRecentTasks(storage) {
+  // 只有用户显式确认清空时才允许删除损坏的本地历史。
   try {
     storage.removeItem(RECENT_TASKS_KEY);
   } catch {

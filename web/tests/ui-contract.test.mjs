@@ -970,3 +970,12 @@ test("数据中心不会把缺少 status 的 2xx 回包标记为健康", () => {
   assert.match(dataCenter, /const unknownServices = serviceStates\.filter\(\(status\) => status === "unknown"\)\.length;/);
   assert.match(dataCenter, /const unknown = unknownServices \+ unknownDependencies/);
 });
+
+
+test("最近任务本地存储不可读或损坏时不覆盖原始历史，导出不会静默遗漏记录", () => {
+  assert.match(recentTaskModule, /export function readRecentTasksState\(storage, limit = MAX_RECENT_TASKS\)/);
+  assert.match(recentTaskModule, /if \(!currentState\.storageReadable \|\| !currentState\.storageValid\) return currentState\.items/);
+  assert.match(app, /function safeReadRecentTasksState\(\)/);
+  assert.match(app, /function renderRecentTasks\(records\)[\s\S]*?historyState\.storageReadable[\s\S]*?historyState\.storageValid[\s\S]*?历史修改已暂停/);
+  assert.match(app, /recent_tasks: \(\(\) => \{[\s\S]*?recentTasksState\.storageReadable[\s\S]*?recentTasksState\.storageValid[\s\S]*?导出已取消/);
+});

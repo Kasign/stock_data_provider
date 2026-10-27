@@ -27,7 +27,7 @@ import { taskEventMatchesFilter } from "./task-event-filter.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
 import { bindMarketActivity } from "./market-activity.js";
-import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
+import { clearRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
@@ -249,10 +249,24 @@ function persistTaskReference() {
   }
 }
 
-function renderRecentTasks(records = safeReadRecentTasks()) {
+function renderRecentTasks(records) {
   const root = $("#recent-analysis-list");
   root.replaceChildren();
-  const allItems = Array.isArray(records) ? records : [];
+  const historyState = safeReadRecentTasksState();
+  if (!historyState.storageReadable || !historyState.storageValid) {
+    setText("#recent-analysis-count", "不可用 / " + MAX_RECENT_TASKS);
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = !historyState.storageReadable
+      ? "无法读取浏览器最近任务存储。为避免误报为空，当前历史暂不可用；请检查浏览器存储权限后重新载入。"
+      : "本地最近任务数据格式异常。为避免覆盖原始记录，历史修改已暂停；请先检查或备份浏览器数据。";
+    root.append(empty);
+    setRecentTasksFeedback(empty.textContent, "error");
+    renderResearchStockList();
+    return;
+  }
+  setRecentTasksFeedback("");
+  const allItems = Array.isArray(records) ? records : historyState.items;
   const search = $("#recent-analysis-search").value.trim().toLocaleLowerCase();
   const items = search ? allItems.filter((record) => [
     record.task_id,
@@ -312,12 +326,16 @@ function renderRecentTasks(records = safeReadRecentTasks()) {
   });
 }
 
-function safeReadRecentTasks() {
+function safeReadRecentTasksState() {
   try {
-    return readRecentTasks(localStorage);
+    return readRecentTasksState(localStorage);
   } catch {
-    return [];
+    return { items: [], storageReadable: false, storageValid: false, reason: "unavailable" };
   }
+}
+
+function safeReadRecentTasks() {
+  return safeReadRecentTasksState().items;
 }
 
 function setRecentTasksFeedback(message, kind = "info") {
@@ -328,6 +346,17 @@ function setRecentTasksFeedback(message, kind = "info") {
 }
 
 function removeRecentTaskReference(taskId, analysisBase = "") {
+  const historyState = safeReadRecentTasksState();
+  if (!historyState.storageReadable || !historyState.storageValid) {
+    renderRecentTasks(historyState.items);
+    setRecentTasksFeedback(
+      !historyState.storageReadable
+        ? "无法读取浏览器最近任务存储，未移除任何记录。请检查浏览器存储权限后重试。"
+        : "本地最近任务数据格式异常，未修改历史记录。请先检查或备份浏览器数据。",
+      "error"
+    );
+    return;
+  }
   let remaining = [];
   try {
     remaining = removeRecentTask(taskId, localStorage, undefined, analysisBase);
@@ -3111,7 +3140,12 @@ function buildBrowserDataPayload() {
         if (!watchlistState.storageValid) throw new Error("本地自选数据格式异常，导出已取消以避免导出为空列表覆盖备份。");
         return watchlistState.items;
       })(),
-      recent_tasks: safeReadRecentTasks()
+      recent_tasks: (() => {
+        const recentTasksState = safeReadRecentTasksState();
+        if (!recentTasksState.storageReadable) throw new Error("无法读取浏览器最近任务存储，导出已取消。");
+        if (!recentTasksState.storageValid) throw new Error("本地最近任务数据格式异常，导出已取消以避免遗漏历史记录。");
+        return recentTasksState.items;
+      })()
     }
   };
 }
