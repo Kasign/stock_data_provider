@@ -408,3 +408,6 @@ Tushare `index_weight` 按月查询，避免将多个报告月份放在同一次
 
 
 财务指标、指数目录和指数成分股目录也统一未知空结果回退语义：没有可确认的数据时继续尝试后备 Provider；全部来源尝试完仍为空，才返回 `quality_unknown` 并加回退耗尽标记。多 Provider 场景忽略旧版不带该标记的 unknown 空缓存，避免首源历史空缓存阻止回退。
+
+
+个股公告的空响应统一按 unknown 处理，不直接解释为零公告。现在对 unknown 空页继续尝试其他公告 Provider；仅在回退链耗尽后附加 `announcements_fallback_exhausted_without_confirmed_data` 并短缓存 30 秒。旧版无回退耗尽标记的空缓存，在多 Provider 场景会被忽略。

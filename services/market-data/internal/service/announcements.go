@@ -149,10 +149,20 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 			validateStockAnnouncementSnapshot(symbol, startDate, endDate, page, pageSize, &cached) == nil &&
 			time.Since(cached.FetchedAt) >= 0 {
 			ttl := positiveTTL
+			cacheEligible := cached.HasData
 			if !cached.HasData {
 				ttl = emptyTTL
+				fallbackExhausted := false
+				for _, reason := range cached.QualityReasons {
+					if reason == "announcements_fallback_exhausted_without_confirmed_data" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				// 多 Provider 场景忽略旧版首源 unknown 空缓存，确保重新尝试后备源。
+				cacheEligible = fallbackExhausted || len(s.announcementProviders) <= 1
 			}
-			if time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
 		}
@@ -163,6 +173,7 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 		return nil, false, errors.New("no enabled stock-announcement provider")
 	}
 	var failures []string
+	var unknownEmpty *model.StockAnnouncementSnapshot
 	for _, p := range s.announcementProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -176,6 +187,11 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if !snapshot.HasData {
+			unknownEmpty = snapshot
+			failures = append(failures, p.Name()+": announcement absence is not confirmed")
+			continue
+		}
 		if encoded, marshalErr := json.Marshal(snapshot); marshalErr == nil {
 			ttl := positiveTTL
 			if !snapshot.HasData {
@@ -186,6 +202,16 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 			}
 		}
 		return snapshot, false, nil
+	}
+	if unknownEmpty != nil {
+		unknownEmpty.QualityStatus = model.QualityUnknown
+		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "announcements_fallback_exhausted_without_confirmed_data")
+		if encoded, marshalErr := json.Marshal(unknownEmpty); marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, encoded, emptyTTL); cacheErr != nil {
+				s.logger.Warn("stock-announcement unknown cache write failed", "symbol", symbol, "error", cacheErr)
+			}
+		}
+		return unknownEmpty, false, nil
 	}
 	return nil, false, fmt.Errorf("all stock-announcement providers failed: %s", strings.Join(failures, "; "))
 }

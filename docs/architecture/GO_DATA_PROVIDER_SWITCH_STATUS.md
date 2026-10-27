@@ -656,3 +656,8 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 ### 指数目录缓存的类型边界静态修正（2026-10-27）
 
 指数目录缓存命中直接返回目录快照；仅指数成分股快照需要执行 `markIndexConstituentCoverage`，两类模型不可混用。已删除指数目录分支中的误调用。按约定未执行构建、测试或 CI。
+
+
+### 个股公告未知空结果回退（2026-10-27）
+
+公告接口的 `total=0` 响应仍按 `quality_unknown` 处理，不视为已确认“没有公告”。服务层会继续尝试其他公告 Provider；只有回退链耗尽后才返回 unknown 并记录 `announcements_fallback_exhausted_without_confirmed_data`，再短缓存 30 秒。多 Provider 场景会绕过旧版未带回退耗尽标记的 unknown 空缓存。已补回归测试源码，未执行测试。
