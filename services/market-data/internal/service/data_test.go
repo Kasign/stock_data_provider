@@ -1388,3 +1388,56 @@ func TestSupplementQualityCannotBeValidWithoutAvailabilityTime(t *testing.T) {
 		t.Fatalf("capital-flow result without availability timestamp must be degraded: %+v", flow)
 	}
 }
+
+
+func TestSupplementCacheRejectsOldValidQualityWithoutAvailabilityTime(t *testing.T) {
+	now := time.Now().UTC()
+	t.Run("chip", func(t *testing.T) {
+		ratio := 0.8
+		cached := &model.ChipDistribution{
+			Symbol: "600519.SH", AverageCost: 12.5, ProfitRatio: &ratio,
+			Source: "miaoxiang", SourceVersion: "legacy", FetchedAt: now.Add(-time.Minute),
+			QualityStatus: model.QualityValid,
+		}
+		encoded, err := json.Marshal(cached)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mem := newMemoryCache()
+		mem.values["md:v1:chip:600519.SH"] = encoded
+		fresh := &model.ChipDistribution{Symbol: "600519.SH", AverageCost: 12.5, ProfitRatio: &ratio,
+			SourceVersion: "current", FetchedAt: now, QualityStatus: model.QualityDegraded}
+		p := &supplementCountingFakeProvider{chip: fresh}
+		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
+			ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+		svc.SetSupplementProviders([]provider.SupplementProvider{p})
+		got, hit, err := svc.ChipDistribution(context.Background(), "600519")
+		if err != nil || hit || p.chipCalls != 1 || got.QualityStatus != model.QualityDegraded {
+			t.Fatalf("legacy valid chip cache must be refreshed and downgraded: hit=%v calls=%d got=%+v err=%v", hit, p.chipCalls, got, err)
+		}
+	})
+	t.Run("capital flow", func(t *testing.T) {
+		fiveDay := 500.0
+		cached := &model.CapitalFlow{
+			Symbol: "600519.SH", Observations: 5, Inflow5D: &fiveDay,
+			Source: "miaoxiang", SourceVersion: "legacy", FetchedAt: now.Add(-time.Minute),
+			QualityStatus: model.QualityValid,
+		}
+		encoded, err := json.Marshal(cached)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mem := newMemoryCache()
+		mem.values["md:v1:capital-flow:600519.SH"] = encoded
+		fresh := &model.CapitalFlow{Symbol: "600519.SH", Observations: 5, Inflow5D: &fiveDay,
+			SourceVersion: "current", FetchedAt: now, QualityStatus: model.QualityDegraded}
+		p := &supplementCountingFakeProvider{flow: fresh}
+		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
+			ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+		svc.SetSupplementProviders([]provider.SupplementProvider{p})
+		got, hit, err := svc.CapitalFlow(context.Background(), "600519")
+		if err != nil || hit || p.flowCalls != 1 || got.QualityStatus != model.QualityDegraded {
+			t.Fatalf("legacy valid capital-flow cache must be refreshed and downgraded: hit=%v calls=%d got=%+v err=%v", hit, p.flowCalls, got, err)
+		}
+	})
+}
