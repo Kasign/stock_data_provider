@@ -151,11 +151,8 @@ func (p *Pytdx) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote,
 		return nil, fmt.Errorf("Pytdx quote request: %w", err)
 	}
 	var found *protocol.Quote
-	parts := strings.Split(symbol, ".")
-	code, exchange := parts[0], strings.ToLower(parts[1])
 	for _, item := range response {
-		if item != nil && strings.TrimSpace(item.Code) == code &&
-			strings.EqualFold(item.Exchange.String(), exchange) && item.Kline != nil {
+		if pytdxQuoteMatchesSymbol(item, symbol) {
 			found = item
 			break
 		}
@@ -462,6 +459,16 @@ func pytdxWireSymbol(symbol string) string {
 		return ""
 	}
 	return strings.ToLower(parts[1]) + parts[0]
+}
+
+func pytdxQuoteMatchesSymbol(item *protocol.Quote, symbol string) bool {
+	if item == nil || item.Kline == nil {
+		return false
+	}
+	parts := strings.Split(symbol, ".")
+	return len(parts) == 2 &&
+		strings.TrimSpace(item.Code) == parts[0] &&
+		strings.EqualFold(item.Exchange.String(), parts[1])
 }
 
 func pytdxPositiveFinite(value float64) bool {

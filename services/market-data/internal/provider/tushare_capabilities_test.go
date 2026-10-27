@@ -394,3 +394,26 @@ func TestTushareDailyDegradesMissingChangePercent(t *testing.T) {
 		t.Fatalf("missing pct_chg degradation reason: %+v", bars[0].QualityReasons)
 	}
 }
+
+func TestTushareDailyRejectsFractionalVolumeInHands(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().In(location)
+	date := today.Format("20060102")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeTushareTestTable(w,
+			[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
+			[][]any{{"600519.SH", date, 100.0, 102.0, 99.0, 101.0, 0.0, 1.5, 456.0}},
+		)
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	dateISO := today.Format("2006-01-02")
+	_, err = provider.FetchDailyBars(context.Background(), "600519.SH", dateISO, dateISO, 10, model.AdjustmentNone)
+	if err == nil || !strings.Contains(err.Error(), "fractional volume") {
+		t.Fatalf("fractional volume in hands must not be rounded into shares, got %v", err)
+	}
+}

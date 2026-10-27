@@ -248,6 +248,9 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		if err != nil {
 			return nil, err
 		}
+		if math.Trunc(rawVolume) != rawVolume {
+			return nil, fmt.Errorf("invalid Tushare volume in hands on %s: fractional volume is not supported", isoDate)
+		}
 		volume, err := normalize.HandsToShares(rawVolume)
 		if err != nil {
 			return nil, fmt.Errorf("normalize Tushare volume on %s: %w", isoDate, err)

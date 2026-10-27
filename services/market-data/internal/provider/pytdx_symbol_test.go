@@ -1,6 +1,10 @@
 package provider
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/injoyai/tdx/protocol"
+)
 
 func TestPytdxWireSymbolPreservesExplicitExchange(t *testing.T) {
 	cases := []struct {
@@ -29,5 +33,26 @@ func TestPytdxDomesticSymbolRejectsExchangeMismatchAndIndex(t *testing.T) {
 		if got, err := pytdxDomesticSymbol(symbol); err != nil || got != symbol {
 			t.Errorf("Pytdx should accept %q, got symbol=%q err=%v", symbol, got, err)
 		}
+	}
+}
+
+func TestPytdxQuoteMatchesSymbolRequiresMatchingExchange(t *testing.T) {
+	valid := &protocol.Quote{Code: "000001", Exchange: protocol.ExchangeSZ, Kline: &protocol.Kline{}}
+	if !pytdxQuoteMatchesSymbol(valid, "000001.SZ") {
+		t.Fatal("matching code and exchange should be accepted")
+	}
+	wrongExchange := &protocol.Quote{Code: "000001", Exchange: protocol.ExchangeSH, Kline: &protocol.Kline{}}
+	if pytdxQuoteMatchesSymbol(wrongExchange, "000001.SZ") {
+		t.Fatal("same code from a different exchange must be rejected")
+	}
+	wrongCode := &protocol.Quote{Code: "600519", Exchange: protocol.ExchangeSH, Kline: &protocol.Kline{}}
+	if pytdxQuoteMatchesSymbol(wrongCode, "000001.SZ") {
+		t.Fatal("different quote code must be rejected")
+	}
+	if pytdxQuoteMatchesSymbol(nil, "000001.SZ") {
+		t.Fatal("nil quote must be rejected")
+	}
+	if pytdxQuoteMatchesSymbol(&protocol.Quote{Code: "000001", Exchange: protocol.ExchangeSZ}, "000001.SZ") {
+		t.Fatal("quote without K-line data must be rejected")
 	}
 }
