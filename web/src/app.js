@@ -28,7 +28,7 @@ import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
-import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
+import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
   describeApiError,
@@ -376,7 +376,8 @@ function renderResearchStockList() {
   const root = $("#research-stock-list-body");
   if (!root) return;
   root.replaceChildren();
-  const records = safeReadWatchlist();
+  const watchlistState = safeReadWatchlistState();
+  const records = watchlistState.items;
   const quote = state.quote && typeof state.quote === "object" ? state.quote : null;
   let currentSymbol = "";
   try { currentSymbol = quote ? normalizeSymbol(quote.symbol || "") : ""; } catch { currentSymbol = ""; }
@@ -391,8 +392,17 @@ function renderResearchStockList() {
   if (!items.length) {
     const tr = document.createElement("tr"), td = document.createElement("td");
     td.colSpan = 10; td.className = "table-empty";
-    td.textContent = "当前没有自选股或已查询标的。可以先搜索股票，再回到本页查看研究详情。";
-    tr.append(td); root.append(tr); setText("#research-list-scope", "当前浏览器 · 无标的");
+    td.textContent = !watchlistState.storageReadable
+      ? "无法读取当前浏览器的自选股存储。为避免误报为空，请检查浏览器存储权限后重新载入。"
+      : !watchlistState.storageValid
+        ? "本地自选数据格式异常。为避免覆盖原始数据，当前未修改列表；请先检查或备份浏览器存储。"
+        : "当前没有自选股或已查询标的。可以先搜索股票，再回到本页查看研究详情。";
+    tr.append(td); root.append(tr);
+    setText("#research-list-scope", !watchlistState.storageReadable
+      ? "本地自选不可读取"
+      : !watchlistState.storageValid
+        ? "本地自选格式异常"
+        : "当前浏览器 · 无标的");
     renderResearchOverview();
     return;
   }
@@ -439,16 +449,21 @@ function renderResearchStockList() {
     action.textContent = "查看详情";
     actionCell.append(action); tr.append(actionCell); root.append(tr);
   });
-  setText("#research-list-scope", items.length + " 只 · 当前浏览器列表");
+  setText("#research-list-scope", !watchlistState.storageReadable
+    ? items.length + " 只当前标的 · 自选不可读取"
+    : !watchlistState.storageValid
+      ? items.length + " 只当前标的 · 自选格式异常"
+      : items.length + " 只 · 当前浏览器列表");
   renderResearchOverview();
 }
-function safeReadWatchlist() {
+function safeReadWatchlistState() {
   try {
-    return readWatchlist(localStorage);
+    return readWatchlistState(localStorage);
   } catch {
-    return [];
+    return { items: [], storageReadable: false, storageValid: false, reason: "unavailable" };
   }
 }
+
 
 function localCalendarDateKey(value) {
   const date = value instanceof Date ? value : new Date(String(value || ""));
@@ -456,11 +471,31 @@ function localCalendarDateKey(value) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-function renderWatchlist(records = safeReadWatchlist()) {
+function renderWatchlist(records, storageReadable, storageValid) {
   const root = $("#watchlist-list");
   root.replaceChildren();
+  if (records === undefined) {
+    const readState = safeReadWatchlistState();
+    records = readState.items;
+    storageReadable = readState.storageReadable;
+    storageValid = readState.storageValid;
+  }
   const items = Array.isArray(records) ? records : [];
-  setText("#watchlist-count", items.length + " / " + MAX_WATCHLIST_ITEMS);
+  const storageIsReadable = storageReadable !== false;
+  const storageIsValid = storageValid !== false;
+  setText("#watchlist-count", storageIsReadable && storageIsValid
+    ? items.length + " / " + MAX_WATCHLIST_ITEMS
+    : "不可用 / " + MAX_WATCHLIST_ITEMS);
+  if (!storageIsReadable || !storageIsValid) {
+    const empty = document.createElement("div");
+    empty.className = "empty-row watchlist-storage-unavailable";
+    empty.textContent = !storageIsReadable
+      ? "无法读取浏览器自选股存储。为防止误清空数据，添加、改名和移除已暂停；恢复浏览器存储权限后请重新载入。"
+      : "本地自选数据格式异常，已暂停修改以避免覆盖原始数据。请先检查或备份浏览器数据。";
+    root.append(empty);
+    renderResearchStockList();
+    return;
+  }
   if (!items.length) {
     const empty = document.createElement("div");
     empty.className = "empty-row";
@@ -497,10 +532,21 @@ function renderWatchlist(records = safeReadWatchlist()) {
     aliasInput.setAttribute("aria-label", record.symbol + " 的自定义名称");
     aliasInput.addEventListener("change", () => {
       try {
-        renderWatchlist(renameWatchlistSymbol(record.symbol, aliasInput.value, localStorage));
-        setWatchlistFeedback("已保存 " + record.symbol + " 的自定义名称。");
+        const result = renameWatchlistSymbol(record.symbol, aliasInput.value, localStorage);
+        renderWatchlist(result.items, result.storageReadable, result.storageValid);
+        if (!result.storageReadable || !result.storageValid) {
+          setWatchlistFeedback(!result.storageReadable
+            ? "无法读取浏览器自选股存储，未修改名称。为避免数据丢失，已暂停更改。"
+            : "本地自选数据格式异常，未修改名称；请先检查或备份浏览器数据。", "error");
+        } else if (!result.valid) {
+          setWatchlistFeedback("股票代码无效，未保存自定义名称。", "error");
+        } else if (result.persisted) {
+          setWatchlistFeedback("已保存 " + record.symbol + " 的自定义名称。");
+        } else {
+          setWatchlistFeedback(record.symbol + " 的名称已在当前页面临时更新，但浏览器存储不可用，刷新后可能丢失。", "warning");
+        }
       } catch {
-        setWatchlistFeedback("浏览器存储不可用，无法保存自选名称。", "error");
+        setWatchlistFeedback("自选名称更新失败，浏览器存储不可用。", "error");
       }
     });
 
@@ -615,7 +661,17 @@ function addCurrentSymbolToWatchlist() {
       setWatchlistFeedback("股票代码格式无效，未加入自选。", "error");
       return;
     }
-    renderWatchlist(result.items);
+    renderWatchlist(result.items, result.storageReadable, result.storageValid);
+    if (!result.storageReadable || !result.storageValid) {
+      setWatchlistFeedback(!result.storageReadable
+        ? "无法读取浏览器自选股存储，未添加或覆盖任何数据。请检查浏览器存储权限后重试。"
+        : "本地自选数据格式异常，未添加或覆盖任何数据；请先检查或备份浏览器数据。", "error");
+      return;
+    }
+    if (!result.persisted) {
+      setWatchlistFeedback(symbol + " 已在当前页面临时加入自选，但浏览器存储不可用，刷新后可能丢失。", "warning");
+      return;
+    }
     setWatchlistFeedback(result.added ? "已将 " + symbol + " 加入本地自选。" : symbol + " 已在自选列表中，已更新时间。");
   } catch {
     setWatchlistFeedback("浏览器本地存储不可用，无法保存自选股。", "error");
@@ -630,10 +686,23 @@ function handleWatchlistAction(event) {
 
   if (action === "remove") {
     try {
-      renderWatchlist(removeWatchlistSymbol(symbol, localStorage));
-      setWatchlistFeedback("已从本地自选中移除 " + symbol + "。");
+      const result = removeWatchlistSymbol(symbol, localStorage);
+      renderWatchlist(result.items, result.storageReadable, result.storageValid);
+      if (!result.storageReadable || !result.storageValid) {
+        setWatchlistFeedback(!result.storageReadable
+          ? "无法读取浏览器自选股存储，未移除或覆盖任何数据。请检查浏览器存储权限后重试。"
+          : "本地自选数据格式异常，未移除或覆盖任何数据；请先检查或备份浏览器数据。", "error");
+      } else if (!result.valid) {
+        setWatchlistFeedback("股票代码无效，未修改自选列表。", "error");
+      } else if (!result.removed) {
+        setWatchlistFeedback(symbol + " 已不在当前自选列表中。");
+      } else if (result.persisted) {
+        setWatchlistFeedback("已从本地自选中移除 " + symbol + "。");
+      } else {
+        setWatchlistFeedback(symbol + " 已在当前页面临时移除，但浏览器存储不可用，刷新后可能恢复。", "warning");
+      }
     } catch {
-      setWatchlistFeedback("浏览器本地存储不可用，无法移除自选股。", "error");
+      setWatchlistFeedback("自选股移除失败，浏览器存储不可用。", "error");
     }
     return;
   }
@@ -650,7 +719,14 @@ function handleWatchlistAction(event) {
 
 function fillTaskSymbolsFromWatchlist() {
   const help = $("#task-symbol-help");
-  const records = safeReadWatchlist();
+  const watchlistState = safeReadWatchlistState();
+  const records = watchlistState.items;
+  if (!watchlistState.storageReadable || !watchlistState.storageValid) {
+    help.textContent = !watchlistState.storageReadable
+      ? "无法读取浏览器自选股存储，未载入任何股票。请检查浏览器存储权限后重试。"
+      : "本地自选数据格式异常，未载入任何股票。请先检查或备份浏览器数据。";
+    return;
+  }
   if (!records.length) {
     help.textContent = "当前没有可载入的本地自选股，请先在自选股页添加股票。";
     return;
@@ -3029,7 +3105,12 @@ function buildBrowserDataPayload() {
     data: {
       theme: readTheme(),
       connection: { marketBase: state.settings.marketBase, analysisBase: state.settings.analysisBase },
-      watchlist: safeReadWatchlist(),
+      watchlist: (() => {
+        const watchlistState = safeReadWatchlistState();
+        if (!watchlistState.storageReadable) throw new Error("无法读取浏览器自选股存储，导出已取消。");
+        if (!watchlistState.storageValid) throw new Error("本地自选数据格式异常，导出已取消以避免导出为空列表覆盖备份。");
+        return watchlistState.items;
+      })(),
       recent_tasks: safeReadRecentTasks()
     }
   };
@@ -3168,7 +3249,7 @@ async function importBrowserDataFile(file) {
     applyTheme(imported.theme);
     syncThemeControl(imported.theme);
     syncSettingsThemeButtons(imported.theme);
-    renderWatchlist(safeReadWatchlist());
+    renderWatchlist();
     renderRecentTasks();
     setBrowserDataFeedback("导入完成：主题、同源 API 路径、自选股与本地任务引用已更新。原有 API Key 已保留。", "success");
   } catch (error) {
