@@ -26,6 +26,7 @@ import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolu
 import { bindMarketOverview } from "./market-overview.js";
 import { taskEventMatchesFilter } from "./task-event-filter.js";
 import { bindStockResearch } from "./stock-research.js";
+import { bindDataCenter } from "./data-center.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask } from "./recent-tasks.js";
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol } from "./watchlist.js";
@@ -148,6 +149,7 @@ const state = {
 
 const marketOverview = bindMarketOverview(() => state.settings, (item, source) => selectStockFromMarket(item, source));
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
+const dataCenter = bindDataCenter(() => state.settings);
 const marketActivity = bindMarketActivity(
   () => state.settings,
   (item) => selectStockFromMarket(item, "龙虎榜")
@@ -267,6 +269,7 @@ function renderRecentTasks(records = safeReadRecentTasks()) {
       ? "完成一次分析后，这里会显示最近任务。"
       : "没有匹配项，请调整关键词或清除搜索。";
     root.append(empty);
+    renderResearchStockList();
     return;
   }
 
@@ -366,6 +369,47 @@ function setWatchlistFeedback(message, kind = "info") {
   target.className = "watchlist-feedback" + (message ? " watchlist-feedback-" + kind : "");
 }
 
+function renderResearchStockList() {
+  const root = $("#research-stock-list-body");
+  if (!root) return;
+  root.replaceChildren();
+  const records = safeReadWatchlist();
+  const quote = state.quote && typeof state.quote === "object" ? state.quote : null;
+  let currentSymbol = "";
+  try { currentSymbol = quote ? normalizeSymbol(quote.symbol || "") : ""; } catch { currentSymbol = ""; }
+  const items = records.map((record) => ({ symbol: record.symbol, name: record.name || record.symbol }));
+  if (currentSymbol && !items.some((item) => item.symbol === currentSymbol)) items.unshift({ symbol: currentSymbol, name: quote.name || currentSymbol });
+  if (!items.length) {
+    const tr = document.createElement("tr"), td = document.createElement("td");
+    td.colSpan = 9; td.className = "table-empty";
+    td.textContent = "当前没有自选股或已查询标的。可以先搜索股票，或在行情页加入自选。";
+    tr.append(td); root.append(tr); setText("#research-list-scope", "当前浏览器 · 无标的"); return;
+  }
+  const latest = [...state.technicalRows].reverse().find((row) => row && row.close !== null && row.close !== undefined) || null;
+  items.forEach((item) => {
+    const isCurrent = Boolean(currentSymbol) && item.symbol === currentSymbol && Boolean(quote);
+    const tr = document.createElement("tr"), nameCell = document.createElement("td");
+    const name = document.createElement("strong"), symbol = document.createElement("small");
+    name.className = "research-list-stock-name"; name.textContent = item.name || item.symbol;
+    symbol.className = "research-list-symbol"; symbol.textContent = item.symbol; nameCell.append(name, symbol); tr.append(nameCell);
+    const missing = (value) => value === null || value === undefined || value === "" ? "—" : value;
+    const changeClass = isCurrent && Number(quote.change_percent) > 0 ? "positive" : isCurrent && Number(quote.change_percent) < 0 ? "negative" : "";
+    tr.append(
+      makeCell(isCurrent ? formatPrice(quote.current_price) : "未加载"),
+      makeCell(isCurrent ? formatPercent(quote.change_percent) : "未加载", changeClass),
+      makeCell(isCurrent ? formatCompact(quote.amount) : "未加载"),
+      makeCell(isCurrent ? missing(quote.turnover_rate == null ? null : formatPercent(quote.turnover_rate)) : "未加载"),
+      makeCell(isCurrent ? missing(quote.volume_ratio == null ? null : Number(quote.volume_ratio).toFixed(2)) : "未加载"),
+      makeCell(isCurrent && Number.isFinite(latest?.ma5) ? latest.ma5.toFixed(2) : "—"),
+      makeCell(isCurrent && Number.isFinite(latest?.ma20) ? latest.ma20.toFixed(2) : "—")
+    );
+    const actionCell = document.createElement("td"), action = document.createElement("button");
+    action.type = "button"; action.className = "button button-secondary research-list-action";
+    action.dataset.researchOpenSymbol = item.symbol; action.textContent = isCurrent ? "查看行情详情" : "加载行情";
+    actionCell.append(action); tr.append(actionCell); root.append(tr);
+  });
+  setText("#research-list-scope", items.length + " 只 · 当前浏览器列表");
+}
 function safeReadWatchlist() {
   try {
     return readWatchlist(localStorage);
@@ -438,6 +482,7 @@ function renderWatchlist(records = safeReadWatchlist()) {
     row.append(main, actions);
     root.append(row);
   });
+  renderResearchStockList();
 }
 
 function addCurrentSymbolToWatchlist() {
@@ -916,10 +961,11 @@ function getQuerySymbol() {
 }
 
 const VIEW_META = Object.freeze({
-  market: { title: "大盘数据" },
-  stocks: { title: "个股分析" },
+  market: { title: "首页" },
+  stocks: { title: "个股行情" },
   watchlist: { title: "自选股" },
   research: { title: "个股研究" },
+  data: { title: "数据中心" },
   tasks: { title: "分析任务" },
   notifications: { title: "通知中心" },
   chat: { title: "问股工作台" },
@@ -929,7 +975,7 @@ const VIEW_META = Object.freeze({
 });
 
 const REFRESH_BUTTON_CONTEXT = Object.freeze({
-  market: { label: "刷新大盘数据", title: "刷新核心指数、市场涨跌分布、行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜与交易日历。" },
+  market: { label: "刷新首页数据", title: "刷新核心指数、市场涨跌分布、行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜与交易日历。" },
   stocks: { label: "重新查询个股行情", title: "使用当前输入的股票代码、日 K 数量、复权口径和日期范围重新查询。" },
   watchlist: { label: "刷新自选股列表", title: "重新读取当前浏览器本地保存的自选股，不会向服务器同步列表。" },
   research: { label: "刷新个股研究", title: "检查服务连接并重新加载当前标的的公司资料、财务、筹码与资金流。" },
@@ -938,6 +984,7 @@ const REFRESH_BUTTON_CONTEXT = Object.freeze({
   chat: { label: "检查服务连接（问股接口待接入）", title: "问股 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   screening: { label: "检查服务连接（选股接口待接入）", title: "选股任务与候选 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   alerts: { label: "检查服务连接（告警接口待接入）", title: "告警规则与触发记录 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  data: { label: "立即检查服务与数据源能力", title: "检查行情/分析服务存活和就绪状态，并读取 Provider 能力声明；不代表逐 Provider 实时探测。" },
   settings: { label: "检查服务连接", title: "重新检查已保存的行情/分析服务地址；未保存的地址请使用设置表单中的“检查连接”。" }
 });
 
@@ -968,7 +1015,8 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
     if (nextView === "market") void refreshMarketWorkspace();
     else if (nextView === "stocks") void refreshSources();
     else if (nextView === "watchlist") renderWatchlist();
-    else if (nextView === "research") stockResearch.syncSymbol();
+    else if (nextView === "research") { stockResearch.syncSymbol(); renderResearchStockList(); }
+    else if (nextView === "data") void dataCenter.refresh();
   }
   if (nextView === "chat") syncChatStockContextFromMarket();
   const runFlowDialog = $("#run-flow-dialog");
@@ -1276,6 +1324,7 @@ function renderQuote(quote) {
   setText("#metric-volume-ratio", `量比 ${quote.volume_ratio == null ? "—" : Number(quote.volume_ratio).toFixed(2)}`);
   setText("#metric-source", quote.source || "未知");
   setText("#metric-quote-time", `行情时间 ${formatDateTime(quote.quote_time)}`);
+  renderResearchStockList();
 
   const reasons = Array.isArray(quote.quality_reasons) ? quote.quality_reasons : [];
   if (reasons.length) {
@@ -1426,6 +1475,7 @@ function renderBars(response) {
     });
   }
   renderTechnicalSummary(calculateTechnicalIndicators(state.bars));
+  renderResearchStockList();
   renderChartView();
 }
 
@@ -2917,6 +2967,13 @@ window.addEventListener("hashchange", () => {
 });
 
 $("#topbar-notifications").addEventListener("click", () => setView("notifications"));
+$("#research-stock-list-body").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-research-open-symbol]");
+  if (!button) return;
+  $("#symbol-input").value = button.dataset.researchOpenSymbol || "";
+  setView("stocks");
+  void runQuoteQuery();
+});
 $("#chat-clear-context").addEventListener("click", () => {
   state.chatStockContext = null;
   renderChatStockContext();
@@ -2928,8 +2985,7 @@ $("#run-flow-dialog").addEventListener("click", (event) => {
 $("#settings-open-connection").addEventListener("click", openSettings);
 $("#settings-check-connection").addEventListener("click", checkConnectionFromSettings);
 $("#settings-view-data-sources").addEventListener("click", () => {
-  setView("market");
-  window.requestAnimationFrame(() => $("#data-source-list").scrollIntoView({ behavior: "smooth", block: "center" }));
+  setView("data");
 });
 document.querySelectorAll("[data-settings-target]").forEach((button) => {
   button.addEventListener("click", () => {
