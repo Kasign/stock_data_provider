@@ -67,12 +67,12 @@ type Config struct {
 }
 
 type Searcher struct {
-	client     *http.Client
-	providers  []remoteProvider
-	fallback   ports.NewsSearcher
-	logger     *slog.Logger
-	windowDays    int
-	cacheTTL      time.Duration
+	client         *http.Client
+	providers      []remoteProvider
+	fallback       ports.NewsSearcher
+	logger         *slog.Logger
+	windowDays     int
+	cacheTTL       time.Duration
 	trustedDomains []string
 	blockedTerms   []string
 	stockAnnouncements StockAnnouncementSource
@@ -184,8 +184,8 @@ func New(cfg Config, fallback ports.NewsSearcher, logger *slog.Logger) *Searcher
 		client: client, fallback: fallback, logger: logger,
 		windowDays: windowDays, cacheTTL: cfg.CacheTTL, stockAnnouncements: cfg.StockAnnouncements,
 		trustedDomains: normalizeDomains(append(append([]string{}, defaultOfficialNewsDomains...), cfg.TrustedDomains...)),
-		blockedTerms: normalizeTerms(append(append([]string{}, defaultNewsSpamTerms...), cfg.BlockedTerms...)),
-		cache: make(map[string]cacheEntry),
+		blockedTerms:   normalizeTerms(append(append([]string{}, defaultNewsSpamTerms...), cfg.BlockedTerms...)),
+		cache:          make(map[string]cacheEntry),
 	}
 	keys := compactStrings(cfg.BochaAPIKeys)
 	if len(keys) > 0 {

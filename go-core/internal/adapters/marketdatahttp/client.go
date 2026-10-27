@@ -125,20 +125,19 @@ type wireBundle struct {
 	QualityStatus         string            `json:"quality_status"`
 }
 
-
 type wireMarketOverviewIndex struct {
-	Symbol         string   `json:"symbol"`
-	Code           string   `json:"code"`
-	Name           string   `json:"name"`
-	LatestPrice    *float64 `json:"latest_price"`
-	Change         *float64 `json:"change"`
-	ChangePercent  *float64 `json:"change_percent"`
-	Open           *float64 `json:"open"`
-	High           *float64 `json:"high"`
-	Low            *float64 `json:"low"`
-	PrevClose      *float64 `json:"prev_close"`
-	Amount         *float64 `json:"amount"`
-	AmountUnit     string   `json:"amount_unit"`
+	Symbol        string   `json:"symbol"`
+	Code          string   `json:"code"`
+	Name          string   `json:"name"`
+	LatestPrice   *float64 `json:"latest_price"`
+	Change        *float64 `json:"change"`
+	ChangePercent *float64 `json:"change_percent"`
+	Open          *float64 `json:"open"`
+	High          *float64 `json:"high"`
+	Low           *float64 `json:"low"`
+	PrevClose     *float64 `json:"prev_close"`
+	Amount        *float64 `json:"amount"`
+	AmountUnit    string   `json:"amount_unit"`
 }
 
 type wireMarketOverviewIndexSnapshot struct {
@@ -168,23 +167,23 @@ type wireMarketOverviewBreadthSnapshot struct {
 }
 
 type wireMarketOverviewSector struct {
-	Rank                int       `json:"rank"`
-	Code                string    `json:"code"`
-	Name                string    `json:"name"`
-	Category            string    `json:"category"`
-	LatestPrice         *float64  `json:"latest_price"`
-	Change              *float64  `json:"change"`
-	ChangePercent       *float64  `json:"change_percent"`
-	Amount              *float64  `json:"amount"`
-	AmountUnit          string    `json:"amount_unit"`
-	AdvancingCount      *int      `json:"advancing_count"`
-	DecliningCount      *int      `json:"declining_count"`
-	LeadingStock        string    `json:"leading_stock"`
-	LeaderChangePercent *float64  `json:"leader_change_percent"`
-	Source              string    `json:"source"`
-	ProviderReportDate  string    `json:"provider_report_date"`
-	QualityStatus       string    `json:"quality_status"`
-	QualityReasons      []string  `json:"quality_reasons"`
+	Rank                int      `json:"rank"`
+	Code                string   `json:"code"`
+	Name                string   `json:"name"`
+	Category            string   `json:"category"`
+	LatestPrice         *float64 `json:"latest_price"`
+	Change              *float64 `json:"change"`
+	ChangePercent       *float64 `json:"change_percent"`
+	Amount              *float64 `json:"amount"`
+	AmountUnit          string   `json:"amount_unit"`
+	AdvancingCount      *int     `json:"advancing_count"`
+	DecliningCount      *int     `json:"declining_count"`
+	LeadingStock        string   `json:"leading_stock"`
+	LeaderChangePercent *float64 `json:"leader_change_percent"`
+	Source              string   `json:"source"`
+	ProviderReportDate  string   `json:"provider_report_date"`
+	QualityStatus       string   `json:"quality_status"`
+	QualityReasons      []string `json:"quality_reasons"`
 }
 
 type wireMarketOverviewSectorSnapshot struct {
@@ -243,16 +242,16 @@ type wireFundamentalSection struct {
 }
 
 type wireFundamentalsSnapshot struct {
-	Symbol         string                  `json:"symbol"`
-	Year           int                     `json:"year"`
-	Quarter        int                     `json:"quarter"`
-	HasData        bool                    `json:"has_data"`
+	Symbol         string                   `json:"symbol"`
+	Year           int                      `json:"year"`
+	Quarter        int                      `json:"quarter"`
+	HasData        bool                     `json:"has_data"`
 	Sections       []wireFundamentalSection `json:"sections"`
-	Source         string                  `json:"source"`
-	SourceVersion  string                  `json:"source_version"`
-	FetchedAt      time.Time               `json:"fetched_at"`
-	QualityStatus  string                  `json:"quality_status"`
-	QualityReasons []string                `json:"quality_reasons"`
+	Source         string                   `json:"source"`
+	SourceVersion  string                   `json:"source_version"`
+	FetchedAt      time.Time                `json:"fetched_at"`
+	QualityStatus  string                   `json:"quality_status"`
+	QualityReasons []string                 `json:"quality_reasons"`
 }
 
 type wireChipDistribution struct {
@@ -421,7 +420,6 @@ func (c *Client) FetchStockBundle(ctx context.Context, code string, lookback int
 	}
 	return out, nil
 }
-
 
 func (c *Client) fetchStockAuxiliary(ctx context.Context, code string, out *domain.StockBundle) error {
 	if ctx == nil {

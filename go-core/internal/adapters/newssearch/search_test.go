@@ -176,7 +176,6 @@ func TestQueryWindowAndURLNormalization(t *testing.T) {
 	}
 }
 
-
 func TestNewsQualityFiltersPromotionalContentAndBoostsTrustedSources(t *testing.T) {
 	searcher := New(Config{
 		TrustedDomains: []string{"licensed.example.cn"},
@@ -185,28 +184,28 @@ func TestNewsQualityFiltersPromotionalContentAndBoostsTrustedSources(t *testing.
 	published := time.Now().UTC().Format(time.RFC3339)
 	raw := []searchCandidate{
 		{
-			Title: "证监会发布市场监管公告",
-			URL: "https://www.csrc.gov.cn/news/1",
-			Source: "来源标签不可用于可信度判定",
+			Title:        "证监会发布市场监管公告",
+			URL:          "https://www.csrc.gov.cn/news/1",
+			Source:       "来源标签不可用于可信度判定",
 			PublishedRaw: published,
 		},
 		{
-			Title: "A股市场综合观察",
-			URL: "https://finance.example.cn/news/2",
-			Source: "普通来源",
+			Title:        "A股市场综合观察",
+			URL:          "https://finance.example.cn/news/2",
+			Source:       "普通来源",
 			PublishedRaw: published,
 		},
 		{
-			Title: "免费荐股，加微信领取牛股",
-			URL: "https://licensed.example.cn/ad/1",
-			Source: "营销页面",
+			Title:        "免费荐股，加微信领取牛股",
+			URL:          "https://licensed.example.cn/ad/1",
+			Source:       "营销页面",
 			PublishedRaw: published,
 		},
 		{
-			Title: "股票市场学习资料",
-			Snippet: "课程推广，添加老师了解详情",
-			URL: "https://licensed.example.cn/ad/2",
-			Source: "营销页面",
+			Title:        "股票市场学习资料",
+			Snippet:      "课程推广，添加老师了解详情",
+			URL:          "https://licensed.example.cn/ad/2",
+			Source:       "营销页面",
 			PublishedRaw: published,
 		},
 	}
@@ -238,8 +237,8 @@ func TestNewsSearchRejectsFuturePublicationTimestamp(t *testing.T) {
 	searcher := New(Config{}, nil, testLogger())
 	future := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
 	items := searcher.filterAndRank([]searchCandidate{{
-		Title: "证监会发布新规",
-		URL: "https://www.csrc.gov.cn/news/future",
+		Title:        "证监会发布新规",
+		URL:          "https://www.csrc.gov.cn/news/future",
 		PublishedRaw: future,
 	}}, "", "")
 	if len(items) != 0 {

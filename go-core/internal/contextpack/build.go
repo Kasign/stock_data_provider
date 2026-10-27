@@ -189,8 +189,8 @@ func ToLegacyAnalyzerContext(input domain.AnalysisContext) map[string]any {
 		"technical_indicators": input.Technical,
 		"fundamental_context":  input.Fundamentals,
 		"belong_boards":        input.Boards,
-		"capital_flow_context":  input.CapitalFlow,
-		"capital_flow":          input.CapitalFlow,
+		"capital_flow_context": input.CapitalFlow,
+		"capital_flow":         input.CapitalFlow,
 	}
 	// The legacy GeminiAnalyzer expects a `today`/`yesterday` price-table shape,
 	// a separate realtime overlay, and the singular `chip` key. Completed daily

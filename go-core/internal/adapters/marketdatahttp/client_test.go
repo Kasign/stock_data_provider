@@ -102,9 +102,6 @@ func TestClientRejectsOversizedResponse(t *testing.T) {
 	}
 }
 
-
-
-
 func TestFetchMarketOverviewAggregatesNativeDomesticEndpoints(t *testing.T) {
 	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	responses := map[string]string{
@@ -166,7 +163,6 @@ func TestFetchMarketOverviewAggregatesNativeDomesticEndpoints(t *testing.T) {
 		t.Fatal("historical as_of must not be mislabeled as live")
 	}
 }
-
 
 func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
 	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
@@ -245,12 +241,11 @@ func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
 	}
 }
 
-
 func TestLatestPublicReportPeriodRespectsDisclosureDeadlines(t *testing.T) {
 	location := time.FixedZone("CST", 8*60*60)
 	cases := []struct {
-		date string
-		year int
+		date    string
+		year    int
 		quarter int
 	}{
 		{"2026-01-15", 2025, 3},

@@ -42,8 +42,6 @@ func TestMarketDataAdapterOmitsEmptyAsOfFromLegacyRequests(t *testing.T) {
 	}
 }
 
-
-
 func TestGoMarketDataAdapterFallsBackWhenNativeOverviewIsUnavailable(t *testing.T) {
 	nativeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "native component unavailable", http.StatusBadGateway)
