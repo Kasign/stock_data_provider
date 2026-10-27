@@ -1773,3 +1773,49 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 @media (max-width:1200px) { .technical-metric-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } .technical-macd-metric { grid-column:span 2; } }
 @media (max-width:760px) { .chart-heading-actions { justify-content:flex-start; gap:8px; } .technical-panel { padding:15px 12px; } .technical-metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .technical-macd-metric { grid-column:span 2; } .technical-chart-grid { grid-template-columns:minmax(0,1fr); } }
 @media (max-width:380px) { .technical-metric-grid { grid-template-columns:minmax(0,1fr); } .technical-macd-metric { grid-column:auto; } .chart-overlay-controls label { padding:3px 5px; } }
+
+
+/* 2026-10-27 readability pass: market overview, activity table, and calendar. */
+.market-overview-updated { max-width: 340px; font-size: 12px; line-height: 1.6; }
+.market-overview-subheading p,
+.market-overview-widget-heading p { font-size: 12px; line-height: 1.65; }
+.market-index-identity small,
+.market-index-card-footer small { font-size: 12px; line-height: 1.5; }
+.market-index-changes span { font-size: 12px; }
+.market-widget-meta { font-size: 12px; line-height: 1.7; }
+.market-breadth-metric small { font-size: 12px; line-height: 1.45; }
+.market-table-primary { font-size: 12px; line-height: 1.5; }
+.market-table-secondary { font-size: 12px; line-height: 1.45; }
+.market-touch-time { font-size: 12px; line-height: 1.5; }
+.market-quality-reasons { font-size: 12px; line-height: 1.7; }
+.market-overview-actions .button { min-height: 38px; font-size: 12px; }
+
+.market-activity-heading p { font-size: 12px; line-height: 1.65; }
+.market-activity-controls label { font-size: 12px; line-height: 1.4; }
+.market-activity-controls input { min-height: 38px; }
+.market-activity-controls .button { min-height: 38px; font-size: 12px; }
+.market-activity-table { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.activity-stock-link { min-height: 32px; padding: 5px 0; font-size: 12px; }
+.market-activity-footer span { font-size: 12px; }
+.market-activity-footer .button { min-height: 36px; font-size: 12px; }
+.calendar-month-navigation .icon-button { min-width: 38px; min-height: 38px; font-size: 13px; }
+.trading-calendar-weekdays span { padding: 5px 0; font-size: 11px; font-weight: 650; }
+.trading-calendar-day { min-height: 56px; padding: 6px 2px; gap: 5px; }
+.trading-calendar-day span { font-size: 11px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+.market-activity-widget .calendar-coverage-warning { font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 700px) {
+  .market-overview-actions { align-items: stretch; flex-direction: column; gap: 8px; }
+  .market-overview-actions .button { width: 100%; min-height: 40px; }
+  .market-overview-updated { width: 100%; max-width: none; text-align: left; }
+}
+
+@media (max-width: 600px) {
+  .market-activity-controls label { min-width: 0; flex: 1 1 140px; }
+  .market-activity-controls .button { flex: 1 1 100%; }
+  .calendar-range-controls label { min-width: calc(50% - 4px); }
+  .trading-calendar-weekdays,
+  .trading-calendar-grid { gap: 3px; }
+  .trading-calendar-day { min-height: 50px; padding: 5px 1px; }
+  .trading-calendar-day span { font-size: 10px; }
+}

@@ -1,16 +1,16 @@
 # WebUI 任务交接上下文
 
-最后更新：2026-10-26
+最后更新：2026-10-27
 用途：从新对话恢复 stock_data_provider WebUI 产品扩展与阶段 Review。
 
-## 当前 GitHub 真值（本轮开始时重新核实）
+## 当前 GitHub 真值（2026-10-27；本轮编辑前核实）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 分支：feat/webui-market-data-console；本轮 Compose 整理前已同步数据分支，基线 HEAD：55b06976b9ac8dc63c797e107590addc3b46c601。
-- PR #2：https://github.com/Kasign/stock_data_provider/pull/2，Open、未合并；head 与上述 WebUI HEAD 一致；base 为 feat/full-go-data-providers-api-switch。
-- 数据分支：feat/full-go-data-providers-api-switch；本轮开始时 HEAD：26f428a427a9f7d43299de267c1e3bd2b38d294e。
-- PR #1：https://github.com/Kasign/stock_data_provider/pull/1，Open、未合并；head 与上述数据分支 HEAD 一致；base 为 main。
-- 分支 HEAD 和 PR 状态必须在每次后续编辑前重新核对，不依赖此处记录当作实时真值。
+- WebUI 工作分支：feat/webui-market-data-console；本轮开始前 HEAD 为 737153756f76de15157024ae63e528deb3b08757。
+- WebUI PR #2：https://github.com/Kasign/stock_data_provider/pull/2，已关闭并合并到 feat/full-go-data-providers-api-switch；PR #2 当时的 head 是 e0eb44f9505ae9e26b4391ed6e3d76cfb19987db。后续修复已同步到两个分支，当前不以 PR #2 的旧 head 作为编辑基线。
+- 数据分支：feat/full-go-data-providers-api-switch；本轮开始前 HEAD 与 WebUI 分支相同，均为 737153756f76de15157024ae63e528deb3b08757。
+- 数据 PR #1：https://github.com/Kasign/stock_data_provider/pull/1，仍开放，目标为 main。
+- 本轮只对 web/ 内文件做修改；提交目标为 WebUI 分支，不更新数据分支引用。后续编辑前仍须重新核实 HEAD 与 PR 状态。
 
 ## 本轮已交付且尚未做运行时验收的事项
 
@@ -370,3 +370,10 @@
 - `rank_change` 的正负含义不由 API 契约保证，因此仅展示源端数值；`total` 是本次有界响应记录数；`fetched_at` 是前端可以展示的采集时间，不是上游市场快照时间。
 - OpenAPI 说明源端缺少可核验行情快照时间，响应质量可能为 degraded；UI 保留该质量状态和质量原因。
 - 详细架构、错误处理和数据解释见 `web/TECHNICAL_NOTES.md`。本轮未运行测试或 CI。
+
+
+## 2026-10-27 — 市场总览与市场活动可读性批次
+
+- 本轮编辑前 WebUI 分支 HEAD 为 737153756f76de15157024ae63e528deb3b08757，数据分支当时同一 HEAD。本批只更改 web/styles.css、web/tests/ui-contract.test.mjs 和 web/ 内的进度/技术/交接文档。
+- 目标：提升市场概况辅助文字可读性，扩大龙虎榜/日历控制触控面积，改善 320–600px 日期日历布局。没有修改 API 路径、数据模型、Go 源码、Provider、数据库或根 Compose。
+- 对应 CI 状态应查看本批提交的 WebUI checks；静态样式契约不替代真实浏览器视觉验收。

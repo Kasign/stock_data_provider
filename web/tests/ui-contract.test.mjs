@@ -615,3 +615,27 @@ test("Run Flow summary and event diagnostics remain grounded in persisted Task, 
   assert.doesNotMatch(app, /completed_stages\s*\/\s*\w+|progressPercent|100\s*\*\s*.*completed_stages/i,
     "Run Flow must not infer or fabricate progress percentages");
 });
+
+
+test("market overview and activity use readable secondary text and touch-sized controls", () => {
+  assert.match(finalCssRuleBody(".market-overview-updated"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-overview-subheading p"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-index-identity small"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-index-changes span"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-widget-meta"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-breadth-metric small"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-table-primary"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-table-secondary"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-touch-time"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-activity-heading p"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-activity-controls label"), /font-size: 12px/);
+  assert.match(finalCssRuleBody(".market-activity-controls input"), /min-height: 38px/);
+  assert.match(finalCssRuleBody(".market-activity-controls .button"), /min-height: 38px/);
+  assert.match(finalCssRuleBody(".calendar-month-navigation .icon-button"), /min-width: 38px; min-height: 38px/);
+  assert.match(finalCssRuleBody(".trading-calendar-weekdays span"), /font-size: 11px/);
+  assert.match(stylesheet, /\.trading-calendar-day span \{ font-size: 11px; line-height: 1\.25; text-align: center; overflow-wrap: anywhere; \}/);
+  assert.match(finalCssRuleBody(".trading-calendar-day span"), /font-size: 10px/);
+  assert.match(stylesheet, /@media \(max-width: 700px\) \{[\s\S]*?\.market-overview-actions \.button \{ width: 100%; min-height: 40px; \}/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.trading-calendar-day span \{ font-size: 10px; \}/);
+  assert.match(finalCssRuleBody(".market-activity-table"), /-webkit-overflow-scrolling: touch/);
+});
