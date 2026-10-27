@@ -380,7 +380,7 @@ func (s *Server) limitPool(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	limit := 30
+	limit := 100
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 1 || n > 100 {

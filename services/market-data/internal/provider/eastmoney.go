@@ -2437,7 +2437,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		return nil, fmt.Errorf("invalid limit-pool trade date %q: expected YYYY-MM-DD", tradeDate)
 	}
 	if limit <= 0 {
-		limit = 30
+		limit = 100
 	}
 	if limit > 100 {
 		return nil, errors.New("limit-pool limit must not exceed 100")

@@ -1017,6 +1017,14 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 			t.Fatalf("snapshot quality must include item degradation, got %v", err)
 		}
 	})
+
+	t.Run("future provider report date", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.ProviderReportDate = time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "report date is in the future") {
+			t.Fatalf("future provider report date must be rejected, got %v", err)
+		}
+	})
 }
 
 

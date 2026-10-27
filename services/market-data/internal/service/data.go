@@ -426,6 +426,15 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
 		return errors.New("limit-pool source or fetched_at is missing")
 	}
+	if snapshot.ProviderReportDate != "" {
+		parsed, dateErr := time.Parse("2006-01-02", snapshot.ProviderReportDate)
+		if dateErr != nil || parsed.Format("2006-01-02") != snapshot.ProviderReportDate {
+			return errors.New("limit-pool provider report date is invalid")
+		}
+		if snapshot.ProviderReportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+			return errors.New("limit-pool provider report date is in the future")
+		}
+	}
 	if snapshot.Total < 0 || len(snapshot.Items) > limit {
 		return errors.New("limit-pool total is negative or item count exceeds requested limit")
 	}
@@ -501,7 +510,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 		return nil, false, err
 	}
 	if limit == 0 {
-		limit = 30
+		limit = 100
 	}
 	if limit < 1 || limit > 100 {
 		return nil, false, errors.New("limit-pool limit must be between 1 and 100")

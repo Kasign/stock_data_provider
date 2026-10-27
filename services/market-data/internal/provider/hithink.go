@@ -570,7 +570,7 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 		return nil, fmt.Errorf("不支持的同花顺涨跌停池类型 %q；可选 up/down/broken", poolType)
 	}
 	if limit <= 0 {
-		limit = 30
+		limit = 100
 	}
 	if limit > 100 {
 		return nil, errors.New("同花顺涨跌停池单页条数不能超过 100")
@@ -638,11 +638,14 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 	}
 
 	now := time.Now().UTC()
-	reportDate := rawDate
+	// 仅从可信的供应商时间戳派生报告日期，不能用请求日期伪造来源报告日期。
+	reportDate := ""
+	providerTimestampValid := false
 	if data.Timestamp != nil && *data.Timestamp > 0 {
-		sourceDate := time.UnixMilli(*data.Timestamp).In(loc).Format("2006-01-02")
-		if sourceDate == rawDate {
-			reportDate = sourceDate
+		providerTime := time.UnixMilli(*data.Timestamp)
+		providerTimestampValid = providerTime.Year() >= 2000 && !providerTime.After(now.Add(5*time.Minute))
+		if providerTimestampValid {
+			reportDate = providerTime.In(loc).Format("2006-01-02")
 		}
 	}
 	sourceVersion := hithinkVersion + "-limit-" + poolType + "-pool-v2"
@@ -656,10 +659,10 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 	if poolType == "up" {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "limit_up_time_mapped_to_first_touch_time")
 	}
-	if data.Timestamp == nil || *data.Timestamp <= 0 || time.UnixMilli(*data.Timestamp).After(now.Add(5*time.Minute)) {
+	if !providerTimestampValid {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_timestamp_missing_or_invalid")
 	}
-	if data.Timestamp != nil && *data.Timestamp > 0 && time.UnixMilli(*data.Timestamp).In(loc).Format("2006-01-02") != rawDate {
+	if providerTimestampValid && reportDate != rawDate {
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_snapshot_date_differs_from_requested_trade_date")
 	}
 	if total == 0 && len(data.Item) == 0 {
