@@ -32,7 +32,7 @@ jobs:
 
       - name: Install Chromium
         working-directory: web
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Run responsive browser smoke tests
         working-directory: web
