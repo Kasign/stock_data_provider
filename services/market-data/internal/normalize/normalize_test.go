@@ -235,3 +235,25 @@ func TestRawSharesToInt64RejectsInvalidAndOverflowValues(t *testing.T) {
 		}
 	}
 }
+
+
+func TestValidateAndSortBarsRejectsNonCanonicalDates(t *testing.T) {
+	volume := int64(1000)
+	bars := []model.DailyBar{{
+		Symbol: "600519.SH", TradeDate: "2026-10-2", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, AdjustmentBasis: model.AdjustmentForward,
+		Source: "eastmoney", VolumeUnit: "shares", QualityStatus: model.QualityValid,
+	}}
+	got, warnings := ValidateAndSortBars("600519.SH", bars, "", "2026-10-31", 10)
+	if len(got) != 0 || !containsWarning(warnings, "invalid_trade_date_dropped") {
+		t.Fatalf("non-canonical trade date must be dropped: bars=%+v warnings=%v", got, warnings)
+	}
+
+	if got, warnings := ValidateAndSortBars("600519.SH", bars, "2026-1-01", "2026-10-31", 10); len(got) != 0 || !containsWarning(warnings, "invalid_start_date") {
+		t.Fatalf("non-canonical start date must be rejected: bars=%+v warnings=%v", got, warnings)
+	}
+	if got, warnings := ValidateAndSortBars("600519.SH", bars, "", "2026-10-2", 10); len(got) != 0 || !containsWarning(warnings, "invalid_end_date") {
+		t.Fatalf("non-canonical end date must be rejected: bars=%+v warnings=%v", got, warnings)
+	}
+}

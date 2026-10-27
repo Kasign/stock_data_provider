@@ -1735,3 +1735,12 @@ func TestDailyBarsCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
 		t.Fatalf("daily-bar cache with future service timestamps must be bypassed: hit=%v bars=%+v", hit, bars)
 	}
 }
+
+
+func TestDailyBarsRejectsNonCanonicalRequestDate(t *testing.T) {
+	svc := New([]provider.Provider{fakeProvider{name: "eastmoney"}}, cache.NewDisabled(), nil,
+		time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if _, _, _, err := svc.DailyBars(context.Background(), "600519", "2026-1-02", "2026-10-20", 10, model.AdjustmentNone); err == nil {
+		t.Fatal("non-canonical start date must be rejected before provider/cache lookup")
+	}
+}

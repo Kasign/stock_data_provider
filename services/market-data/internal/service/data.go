@@ -1678,12 +1678,14 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		limit = s.maxBars
 	}
 	if start != "" {
-		if _, err := time.Parse("2006-01-02", start); err != nil {
+		parsed, err := time.Parse("2006-01-02", start)
+		if err != nil || parsed.Format("2006-01-02") != start {
 			return nil, false, nil, fmt.Errorf("invalid start date %q", start)
 		}
 	}
 	if end != "" {
-		if _, err := time.Parse("2006-01-02", end); err != nil {
+		parsed, err := time.Parse("2006-01-02", end)
+		if err != nil || parsed.Format("2006-01-02") != end {
 			return nil, false, nil, fmt.Errorf("invalid end date %q", end)
 		}
 	} else {

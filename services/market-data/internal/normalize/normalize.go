@@ -183,12 +183,14 @@ func ValidateQuote(q *model.Quote) error {
 func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string, limit int) ([]model.DailyBar, []string) {
 	warnings := make([]string, 0)
 	if start != "" {
-		if _, err := time.Parse("2006-01-02", start); err != nil {
+		parsed, err := time.Parse("2006-01-02", start)
+		if err != nil || parsed.Format("2006-01-02") != start {
 			return nil, []string{"invalid_start_date"}
 		}
 	}
 	if end != "" {
-		if _, err := time.Parse("2006-01-02", end); err != nil {
+		parsed, err := time.Parse("2006-01-02", end)
+		if err != nil || parsed.Format("2006-01-02") != end {
 			return nil, []string{"invalid_end_date"}
 		}
 	}
@@ -196,7 +198,8 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 	valid := make([]model.DailyBar, 0, len(bars))
 	ohlcDiagnosticCount := 0
 	for _, b := range bars {
-		if _, err := time.Parse("2006-01-02", b.TradeDate); err != nil {
+		parsedTradeDate, err := time.Parse("2006-01-02", b.TradeDate)
+		if err != nil || parsedTradeDate.Format("2006-01-02") != b.TradeDate {
 			warnings = append(warnings, "invalid_trade_date_dropped")
 			continue
 		}
