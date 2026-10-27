@@ -35,8 +35,7 @@ func TestTencentSearchStocksDecodesGBKAndFiltersChineseName(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewTencent(2 * time.Second)
-	p.searchURL = server.URL
+	p := NewTencentConfiguredWithSearchURL(2*time.Second, "", "", "", server.URL)
 	got, err := p.SearchStocks(context.Background(), "贵州茅台", 10)
 	if err != nil {
 		t.Fatalf("SearchStocks returned error: %v", err)

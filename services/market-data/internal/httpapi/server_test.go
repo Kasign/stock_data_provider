@@ -231,6 +231,7 @@ func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil,
 	)
 	svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
+	svc.SetStockSearchProviders([]provider.StockSearchProvider{p})
 	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc,
 		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
 	).Handler()
@@ -251,8 +252,10 @@ func TestStockBasicProfileEndpointReturnsIndependentProviderData(t *testing.T) {
 	req.Header.Set("X-API-Key", "secret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "\"stock_basic_capable\":true") {
-		t.Fatalf("data-sources must advertise the independent stock-basic capability: status=%d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK ||
+		!strings.Contains(w.Body.String(), "\"stock_basic_capable\":true") ||
+		!strings.Contains(w.Body.String(), "\"stock_search_capable\":true") {
+		t.Fatalf("data-sources must advertise independent stock-basic and stock-search capabilities: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 

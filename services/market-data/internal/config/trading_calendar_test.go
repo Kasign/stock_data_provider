@@ -2,7 +2,7 @@ package config
 
 import "testing"
 
-func TestBaostockTradingCalendarIsOptIn(t *testing.T) {
+func TestBaostockTradingCalendarDefaultAndEnvironmentOverrides(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
@@ -12,8 +12,17 @@ func TestBaostockTradingCalendarIsOptIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !cfg.ProviderSettings["baostock"].TradingCalendar {
+		t.Fatal("BaoStock trading calendar should follow the domestic provider defaults")
+	}
+
+	t.Setenv("MARKET_DATA_BAOSTOCK_TRADING_CALENDAR_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cfg.ProviderSettings["baostock"].TradingCalendar {
-		t.Fatal("BaoStock trading calendar must be disabled by default")
+		t.Fatal("explicit false must disable trading calendar")
 	}
 
 	t.Setenv("MARKET_DATA_BAOSTOCK_TRADING_CALENDAR_ENABLED", "true")
@@ -22,6 +31,6 @@ func TestBaostockTradingCalendarIsOptIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !cfg.ProviderSettings["baostock"].TradingCalendar {
-		t.Fatal("explicit environment override should enable trading calendar")
+		t.Fatal("explicit true must enable trading calendar")
 	}
 }

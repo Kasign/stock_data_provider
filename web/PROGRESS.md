@@ -668,11 +668,36 @@
 - 浏览器截图中中文字体缺失的问题仅来自 GitHub Runner 环境；API 被固定为 503 的烟测不替代真实市场数据、主题及 NAS/1Panel 联调。
 
 
-## 2026-10-27 — 全站 Review 对比度与交接状态修正
+## 2026-10-27 — PR #13 集成与合并
 
-- 复核分支 HEAD：`c0669d4c8a4e896623b9816ec58338912d242aaa`；上一批对应的 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40445577049) 与 [Chromium browser smoke](https://github.com/Kasign/stock_data_provider/actions/runs/40445576952) 均成功。
+- 已完成集成 Review 并合并 PR #13：`704476fa02b1ebcf98f27b0ffb5c1a858727d82c`。目标分支已包含最新 WebUI 首页布局、市场模块、CSS 整理、诊断信息与浏览器烟测。
+- 目标分支新增 34 个提交与 WebUI 变更的路径集合无重叠；大盘首页依赖的 7 类市场接口均在当前 market-data HTTP 路由中存在，主要字段和 OpenAPI/Go 模型相符。
+- 修复浏览器烟测工作流，让后续针对 `feat/full-go-data-providers-api-switch` 的 PR 和 push 也能触发 Chromium 检查。
+- 合并前 head `c0669d4` 的 WebUI checks 与 Chromium browser smoke 均通过。该烟测使用模拟 503 响应，不替代真实 Provider/API 联调；部署环境验收仍待完成。
+
+## 2026-10-27 — 集成后发现的数据侧 CI 阻塞项
+
+- PR #13 本身的 WebUI checks 与 Chromium browser smoke 均成功，但数据侧 PR #1 的 Go suite [#40445663152](https://github.com/Kasign/stock_data_provider/actions/runs/40445663152) 失败于 Go 格式检查与 market-data 镜像构建。
+- 已定位的语法错误：`services/market-data/internal/provider/eastmoney.go:2086-2090` 中结构体 JSON tag 使用字面量 `\x60`，Go 编译器报 illegal character；这不是 WebUI 改动造成的。
+- 另有 7 个 go-core 文件未通过 gofmt（清单见 `web/HANDOFF.md`）。作为独立数据层工作记录，暂不在 PR #13 中跨范围修改。
+- 待办：修复 Eastmoney struct tag 的反引号/语法问题，统一上述 Go 文件格式，再重新执行 Go suite 与 market-data 镜像构建。当前不得将整个数据层标记为构建通过。
+
+
+## 2026-10-27 — Go CI 阻塞已修复，最新 HEAD 全绿
+
+- [x] 修复 Eastmoney provider JSON struct tag 语法错误。
+- [x] 修复 Go suite 报告的 `gofmt` 差异，包含并行新闻查询策略实现与测试。
+- [x] 对齐配置测试与当前 Provider 默认能力；特殊能力组合使用明确环境变量覆盖。
+- [x] 对新闻多源聚合测试显式设置 `MaxSearches: 2`，验证两家 Provider 各被调用一次并完成去重。
+- [x] 最新 head `24952dd` 的 [Go suite #40449084361](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361)、[Live Provider probe #40449084825](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825)、[WebUI checks #40449084307](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 成功。
+- [ ] 与用户共同 Review 运行流（Run Flow）；单独检查后端阶段事件、状态和时间线是否一致。
+
+
+## 2026-10-27 — 全站 Review 对比度与并行更新整合
+
+- 本批代码变更提交为 `da7b671294754913a55eb3bced36fe52e801b66e`；为了保留数据分支后续文档更新，WebUI 分支以最新目标分支 HEAD 为第二父提交同步，未重写既有提交历史。
 - 全局辅助文字 token 做了可读性校正：深色主题从 `#6e8194` 调整为 `#8296a8`，浅色主题从 `#65798a` 调整为 `#536777`；添加 WCAG AA 4.5:1 对比度回归检查覆盖四种常用背景 token。
 - 对请求生命周期做了源码核查：市场模块、公司资料/公告、龙虎榜与交易日历均有 generation/AbortController 保护；新查询先清理旧内容或呈现加载态，异常状态不会被解释为零数据。通知、问股、选股、告警仍未接入真实 API。
 - CSS 维护性：主题 token 改为多行清晰排列；保留已有组件与媒体查询顺序，未冒险合并跨区块断点。
-- PR #13 已合并；本批源代码完成后应从 `feat/webui-market-data-console` 创建新的独立 PR，保持 Open。当前尚未做 NAS/1Panel、真实数据源或人工主题/键盘验收。
+- PR #13 已合并；本批后续代码已在 PR #14 独立 Review，保持 Open。当前尚未做 NAS/1Panel、真实数据源或人工主题/键盘验收。
 

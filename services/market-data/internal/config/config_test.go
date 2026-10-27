@@ -12,7 +12,7 @@ import (
 func setDefaultProviderConfig(t *testing.T) {
 	t.Helper()
 	file := filepath.Join(t.TempDir(), "providers.json")
-	data := `{"provider_priority":["eastmoney","tencent"],"adjustment_basis":"forward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":true,"daily_bars":true},"tencent":{"enabled":true,"quote":true,"daily_bars":true}}}`
+	data := `{"provider_priority":["eastmoney","tencent"],"adjustment_basis":"forward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":true,"daily_bars":true,"stock_search":true},"tencent":{"enabled":true,"quote":true,"daily_bars":true,"stock_search":true}}}`
 	if err := os.WriteFile(file, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -31,6 +31,8 @@ func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	t.Setenv("MARKET_DATA_DEFAULT_ADJUSTMENT", "")
 	t.Setenv("MARKET_DATA_ADJUSTMENT", "")
 	t.Setenv("MARKET_DATA_EASTMONEY_ENABLED", "")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED", "")
+	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -44,6 +46,9 @@ func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	if !cfg.ProviderSettings["tencent"].Quote || cfg.ProviderSettings["tencent"].DailyBars {
 		t.Fatalf("Tencent capabilities not loaded: %+v", cfg.ProviderSettings["tencent"])
 	}
+	if !cfg.ProviderSettings["eastmoney"].StockSearch || !cfg.ProviderSettings["tencent"].StockSearch {
+		t.Fatal("legacy provider config should inherit default stock-search capabilities when stock_search is omitted")
+	}
 	t.Setenv("MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "true")
 	cfg, err = Load()
 	if err != nil {
@@ -51,6 +56,76 @@ func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	}
 	if !cfg.ProviderSettings["eastmoney"].Quote {
 		t.Fatal("environment override should take precedence over provider config")
+	}
+}
+
+func TestDefaultProviderCapabilitiesMatchDomesticPolicy(t *testing.T) {
+	defaults := defaultProviderFile()
+	if !defaults.Providers["baostock"].TradingCalendar || !defaults.Providers["baostock"].Fundamentals {
+		t.Fatalf("BaoStock domestic capabilities must match configs/providers.json: %+v", defaults.Providers["baostock"])
+	}
+	if defaults.Providers["yahoo"].DailyBars {
+		t.Fatalf("Yahoo overseas daily bars must stay disabled by default: %+v", defaults.Providers["yahoo"])
+	}
+	if !defaults.Providers["netease"].Quote {
+		t.Fatalf("NetEase domestic quote capability must match configs/providers.json: %+v", defaults.Providers["netease"])
+	}
+}
+
+func TestLoadStockSearchCapabilityEnvironmentOverrides(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED", "false")
+	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_URL", "https://smartbox.example.test/s3/")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["tencent"].StockSearch {
+		t.Fatal("Tencent stock search should be disabled by its independent environment flag")
+	}
+	if !cfg.ProviderSettings["eastmoney"].StockSearch {
+		t.Fatal("Eastmoney stock search should stay enabled independently")
+	}
+	if cfg.TencentStockSearchURL != "https://smartbox.example.test/s3/" {
+		t.Fatalf("Tencent stock-search URL = %q", cfg.TencentStockSearchURL)
+	}
+}
+
+func TestLoadEastmoneyHotRankingEndpointConfiguration(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL", "https://rank.example.test/current")
+	t.Setenv("MARKET_DATA_EASTMONEY_HOT_SURGE_URL", "https://rank.example.test/surge")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("valid Eastmoney hot-ranking endpoints should load: %v", err)
+	}
+	if cfg.EastmoneyHotRankingsURL != "https://rank.example.test/current" {
+		t.Fatalf("popular ranking URL = %q", cfg.EastmoneyHotRankingsURL)
+	}
+	if cfg.EastmoneyHotSurgeURL != "https://rank.example.test/surge" {
+		t.Fatalf("surge ranking URL = %q", cfg.EastmoneyHotSurgeURL)
+	}
+
+	t.Setenv("MARKET_DATA_EASTMONEY_HOT_SURGE_URL", "file:///tmp/surge")
+	if _, err := Load(); err == nil {
+		t.Fatal("non-HTTP(S) Eastmoney hot-ranking endpoint must fail configuration loading")
+	}
+}
+
+func TestLoadRejectsInvalidStockSearchBoolean(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED", "sometimes")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid stock-search capability boolean must fail configuration loading")
 	}
 }
 
@@ -478,7 +553,7 @@ func TestLoadYahooFinanceDailyBarsCanBeOptedIn(t *testing.T) {
 	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
 	t.Setenv("MARKET_DATA_YAHOO_ENABLED", "true")
 	t.Setenv("MARKET_DATA_YAHOO_QUOTE_ENABLED", "")
-	t.Setenv("MARKET_DATA_YAHOO_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_YAHOO_DAILY_BARS_ENABLED", "true")
 	t.Setenv("MARKET_DATA_YAHOO_CHART_URL", "")
 
 	cfg, err := Load()
@@ -551,8 +626,8 @@ func TestLoadNeteaseDailyBarsIsOptInAndEndpointConfigurable(t *testing.T) {
 	t.Setenv("MARKET_DATA_PROVIDER_TIMEOUT", "12s")
 	t.Setenv("MARKET_DATA_PROVIDER_RETRIES", "1")
 	t.Setenv("MARKET_DATA_NETEASE_ENABLED", "true")
-	t.Setenv("MARKET_DATA_NETEASE_QUOTE_ENABLED", "")
-	t.Setenv("MARKET_DATA_NETEASE_DAILY_BARS_ENABLED", "")
+	t.Setenv("MARKET_DATA_NETEASE_QUOTE_ENABLED", "false")
+	t.Setenv("MARKET_DATA_NETEASE_DAILY_BARS_ENABLED", "true")
 	t.Setenv("MARKET_DATA_NETEASE_HISTORY_URL", "https://example.test/history")
 
 	cfg, err := Load()
@@ -724,7 +799,7 @@ func TestEastmoneyAnnouncementsDefaultOffAndEndpointConfigurable(t *testing.T) {
 	}
 }
 
-func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) {
+func TestBaoStockFundamentalsDefaultAndEnvironmentOverrides(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
@@ -733,8 +808,16 @@ func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !cfg.ProviderSettings["baostock"].Fundamentals {
+		t.Fatal("BaoStock fundamentals should follow the domestic provider defaults")
+	}
+	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cfg.ProviderSettings["baostock"].Fundamentals {
-		t.Fatal("fundamentals must stay disabled until target deployment acceptance")
+		t.Fatal("explicit false must disable fundamentals")
 	}
 	t.Setenv("MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED", "true")
 	cfg, err = Load()
@@ -742,7 +825,7 @@ func TestBaoStockFundamentalsDefaultsOffAndCanBeEnabledExplicitly(t *testing.T) 
 		t.Fatal(err)
 	}
 	if !cfg.ProviderSettings["baostock"].Fundamentals {
-		t.Fatal("explicit opt-in must enable fundamentals")
+		t.Fatal("explicit true must enable fundamentals")
 	}
 }
 

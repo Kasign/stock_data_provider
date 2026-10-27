@@ -1,8 +1,21 @@
 # Go 数据服务迁移状态与验收边界
 
-> 更新时间：2026-10-23  
+> 更新时间：2026-10-27  
 > 当前分支：`feat/full-go-data-providers-api-switch`  
 > 当前定位：分阶段迁移；不是全 Python 去依赖的最终版本。
+
+## 0. 国内 Provider 静态审查记录（2026-10-27）
+
+本轮只进行源码、配置和文档静态核对；按约定未运行测试、构建、CI，也未请求真实上游。
+
+- 腾讯股票搜索：`MARKET_DATA_TENCENT_STOCK_SEARCH_URL` 已从配置读取，经过 HTTPS/URL 形态校验，并由启动装配传入 Tencent Provider；旧 `NewTencentConfigured` 构造函数保留兼容，空配置仍回落到 Smartbox 默认地址。搜索源未报告匹配总数，因此结果质量继续为 `degraded`，由服务层在无匹配/解析失败时尝试东方财富后备源。
+- URL 配置静态对照：配置校验清单中的 27 个 HTTP(S) Provider URL 字段均在 `services/market-data/.env.example` 中有对应项，未发现该模板遗漏。Pytdx 的 TCP 主机列表与 BaoStock 的 TCP 主机/端口不是 URL，单独配置，不纳入该清单。
+- 国内 HTTP Provider 的端点默认值大多集中在 `config.Load()`，并通过构造函数传入；Provider 内仍存在默认 URL 作为直接构造时的兼容兜底。后续新增端点必须同时补齐 Config 字段、环境变量、URL 校验清单、服务级模板、根模板、装配和文档，避免只改一处。
+- 网易 Provider 注释此前称“默认禁用”，但当前 `providers.json` 与环境模板把网易行情/日 K 能力设为启用；已修正文案为由配置控制。该默认配置只代表加入回退链，不代表目标部署网络稳定，网易历史 CSV 与实时报价的 DNS/HTTP 可用性仍待用户统一验收。
+- BaoStock 的财务和交易日历在当前默认配置中开启，迁移矩阵此前仍写“默认关闭”；已同步修正文案。BaoStock 仍只承担其已实现的日 K、财务和交易日历能力，不应据此推断其支持实时行情。
+- README 的数据域描述已从“尚未迁移这些数据域”调整为“部分国内数据域已接入，但字段覆盖、权限、质量与时点语义不等价”，避免把已有路由误写成完全未实现，也避免宣称已完成生产级迁移。
+
+本轮发现并修正的是注释/迁移状态与实际配置不一致，不改变 Provider 优先级、能力开关、数据字段或运行行为。下一轮继续重点核对 URL 拼接假设、缓存质量状态传播、时间/交易日边界和空值契约；只有证据明确的实现缺口才改业务代码。
 
 完整设计见 [Go 行情数据服务迁移方案](./GO_MARKET_DATA_MIGRATION_PLAN.md)，数据源扩展顺序与真实验收门槛见 [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)，真实 NAS 取数、故障回退与 Eastmoney 网络故障证据见 [数据源真实环境验收与故障排查记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)，Review 与警示见 [架构 Review 记录与工程规范](./ARCHITECTURE_REVIEW_AND_ENGINEERING_RULES.md)，数据域明细见 [Python Provider 到 Go 迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)。
 
@@ -14,7 +27,7 @@
 - 实时行情使用 `GET /api/v1/quotes/{symbol}`；日 K 使用 `GET /api/v1/bars/{symbol}/daily`。这两类数据不再静默回退到旧 Python API。
 - Go 服务在不同 Go module 之间通过 HTTP JSON 契约连接，未跨 module 导入对方的 `internal` 包。
 - `internal/adapters/pythonapi` 保留给旧 smoke test、对照和兼容测试，但不是根主 API 的行情 fallback。
-- `go-core` 仍通过 Python bridge 获取尚未迁移的市场概况、新闻、LLM 或其他辅助能力，不能直接删除 bridge。
+- `go-core` 的新闻检索已增加 Go 原生 Bocha/SearXNG 与个股公告候选源，但仍保留 Python bridge 兼容回退；LLM、部分非中国市场概况及其他辅助能力仍未全部迁移，不能直接删除 bridge。
 - `services/market-data` 已支持以 `MARKET_DATA_DB_HOST/PORT/USER/PASSWORD/NAME/CHARSET/TIMEZONE` 拆分配置并在 Go 代码中生成 MySQL DSN；根 `.env.example` 不再要求手工填写 `MARKET_DATA_MYSQL_DSN`。旧 DSN 仅在全部拆分字段都未配置时临时兼容；分析 API 继续独立使用 `DB_*` / `REDIS_*`。
 - `MARKET_DATA_ADJUSTMENT` 作为行情分析与行情服务共用的默认复权口径；仅当需要为行情服务单独覆盖时，才配置 `MARKET_DATA_DEFAULT_ADJUSTMENT`。
 
@@ -45,7 +58,7 @@ MX 相关接口：
 
 - 原 Python Provider 的完整替换仍未完成：Efinance、AkShare、Pytdx、Tushare、TickFlow、Longbridge、Futu、Finnhub、Alpha Vantage 等仍需逐一对照上游源码、权限、优先级、单位和失败语义；Yahoo Finance Chart API 提供可选日 K 与实时快照适配器（均默认关闭、缺成交额固定 degraded）；网易财经 Quote/CSV 已有独立 Go adapter，但实时行情与历史 CSV 必须分别验收。网易历史 CSV 曾返回 502，实时 Quote 在 GitHub Runner 上 DNS 解析失败；但当前 `.env.example` 与 `configs/providers.json` 将二者默认启用为后置回退。目标网络稳定性仍未验收，统一验收前可分别设置 `MARKET_DATA_NETEASE_QUOTE_ENABLED=false` 与 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false` 关闭。
 - 全市场指数/广度、行业/概念板块、涨停池、财务、完整资金流口径、龙虎榜、新闻公告等 Go 原生数据域未全部实现。
-- `go-core` 的 market overview/新闻/LLM/部分持久化及通知仍有 Python bridge 依赖。
+- `go-core` 的新闻链路现有原生候选源并保留 bridge 回退；非中国市场概况、LLM、部分持久化及通知仍有 Python bridge 依赖。
 - 同花顺接入尚未实现，已列入计划；参考仓库 [Kasign/Financial-API](https://github.com/Kasign/Financial-API)，必须先核验真实 API 权限、速率限制和字段口径。
 - 已实现 MariaDB `analysis_tasks`、有界 Go Worker、`POST /api/v1/analysis/tasks` 的 202 + task_id、任务状态查询和 `after_sequence` 阶段事件轮询；SSE、取消、自动重试与前端状态展示仍未完成。重启时遗留的 running 任务会显式标记为 `worker_interrupted`，不自动重跑。
 - 已完成一部分真实 Provider 请求及 MariaDB/Redis 链路验证，但目标环境的完整生产回归仍未完成；CI 绿色不能替代真实网络和端到端验收。
@@ -122,6 +135,8 @@ go vet ./...
 ### Tushare 国内数据域扩展（2026-10-26，待统一验收）
 
 本轮在现有日 K Provider 基础上，新增 Go 原生 StockBasicProvider、TradingCalendarProvider、FundamentalsProvider 和 ValuationProvider。能力复用现有 Provider 注册、数据服务缓存与契约校验，不引入 Python 运行时依赖。
+日 K 响应也会拒绝空字段名和重复列名，避免供应商返回表头变化后发生列索引覆盖和字段错读；对应回归源码已补充，仍待统一执行。
+StockBasic 只接受 A 股普通股票代码；未知或缺失的上游市场分类直接拒绝，不再默认归类为“主板股票”，避免将 ETF/基金等非目标证券误报为普通股票。该防护已补回归测试源码，尚待统一执行。
 
 - 证券基础资料使用 stock_basic，输出名称、行业、市场、上市/退市日期与上市状态；不会从该端点臆造 PE/PB、市值或完整公司资料。
 - 交易日历使用 trade_cal，要求上游覆盖请求区间内每个自然日；缺日/重复日会返回错误，交由既有回退链继续处理。
@@ -177,12 +192,12 @@ Review 范围：Tushare 新增数据域、指数契约与 Xueqiu 榜单接线；
 - 本轮只做静态审阅与契约比对；未编译、未运行单元测试、未触发 GitHub Actions，也未请求真实上游。
 
 
-### 市场涨跌统计字段补齐（2026-10-26，待统一验收）
+### 市场涨跌统计与全市场成交额（2026-10-27，待统一验收）
 
-- `GET /api/v1/market/breadth` 继续以东方财富分布桶提供上涨、下跌、平盘计数；另外查询涨停池、跌停池端点的供应商总数 `tc`，只有两个端点各自的 `qdate` 与分布接口 `qdate` 一致时才返回 `limit_up_count` / `limit_down_count`。
-- 若池接口失败、空池无法确认或报告日期不匹配，对应字段返回 null，并增加质量原因；不把未知计数伪造成 0，也不把分页返回条数误当作全量总数。
-- `total_amount_cny` 仍返回 null、`amount_coverage_count` 为 0。原 Python `get_market_stats` 会给出总成交额（单位为亿元），但目前分布端点没有成交额字段；在未接入且校验全市场成交额数据前，不将该字段标记为等价迁移完成。
-- 本轮只更新代码、接口契约、文档与测试用例；未执行编译、测试、真实请求或 CI。
+- `GET /api/v1/market/breadth` 以东方财富 `getTopicZDFenBu` 分布桶提供上涨、下跌、平盘计数；涨停池、跌停池的供应商总数 `tc` 只在各自 `qdate` 与分布报告日期一致时返回。
+- 全市场成交额另由东方财富 CLIST 接口分页读取 `f6`（人民币元），通过配置的 `MARKET_DATA_EASTMONEY_SECTOR_RANKING_URL` 指向同一 CLIST 地址。仅当分页总数稳定、每页行数完整、证券标识有效且无重复、每行报价日期与分布报告日一致，并且成交额覆盖数与分布计数一致时，才填写 `total_amount_cny`；否则金额保持 null、覆盖数为 0，并附带质量原因。
+- 成功聚合仍会标记 `market_amount_quotes_collected_non_atomically`：分批请求不是同一时刻的原子快照；此外，分布计数没有经独立证券主数据核验，供应商也未提供可验证的盘中快照时间，因此整体质量仍为 degraded。
+- 广度结果缓存使用 5 分钟 TTL，降低分页访问造成的请求放大。新增/调整了本地 CLIST fixture 与质量契约断言。本轮未运行编译、测试、构建、CI 或真实 Provider 请求，后续按统一验收计划执行。
 
 
 ### Tushare 指数成分按月查询（2026-10-26，待统一验收）
@@ -245,3 +260,147 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 已将 market-data 的默认请求超时和 `.env.example` 统一调整为 `5m`，可覆盖上述静态预算并留有少量额外余量；若增加默认 Provider 数量、提高单源超时或重试次数，仍需重新评估预算。实际环境若显式设置了更短的 `MARKET_DATA_REQUEST_TIMEOUT`，启动校验仍会拒绝不足的配置。
 - 已新增 `TestLoadDefaultTimeoutCoversFullDefaultProviderChain` 回归测试源码，覆盖完整启用链的默认预算。测试尚未执行。
 - 注意：该预算是 market-data 服务端的保守上限计算，不代表每次正常行情请求都会耗时五分钟。分析 API 的 `ANALYSIS_TIMEOUT` 是独立总任务上限；代码默认与 `.env.example` 已同步到 `5m`，`HTTP_WRITE_TIMEOUT` 示例为 `5m10s`。多标的或多轮数据采集可能超过五分钟，部署方应根据工作负载调整，不能把此默认值视为任何任务规模的时长保证。
+
+
+### 内置 Provider 默认值与 providers.json 一致性（2026-10-27）
+
+静态对比发现，配置文件存在时与配置文件缺失时的行为有三处差异：BaoStock 的交易日历/财务指标能力在内置默认值中关闭但在 `configs/providers.json` 中开启；Yahoo 日 K 在内置默认值中开启但配置文件明确关闭；网易行情在内置默认值中关闭但配置文件及部署模板开启。现已把默认表抽为 `defaultProviderFile()`，统一以上三项策略，并增加默认值回归测试源码。这样在缺失配置文件的本地运行与常规部署配置下，国内源能力不会因加载路径不同而漂移。未运行测试、构建或 CI。
+
+### 根目录环境变量模板覆盖范围补齐（2026-10-27）
+
+根目录 `.env.example` 用于 Compose 部署，因此已补齐当前国内默认 Provider 的主要能力覆盖项：东方财富市场广度、板块、指数、涨跌停池、所属板块、龙虎榜、公告、基础资料和日 K/行情开关；腾讯行情与日 K 开关；新浪行情开关；以及 BaoStock 交易日历与财务指标开关。服务级模板补入东方财富基础资料开关，并移除重复的新浪日 K 开关。模板值与当前国内默认策略一致，部署时可直接按需改为 `false`。本次未运行测试、构建、CI 或真实 Provider 请求。
+
+### SourceStatus OpenAPI 字段对齐（2026-10-27）
+
+静态比对运行时模型与 OpenAPI 时发现，数据源状态响应已包含 `index_catalog_capable`，但 `SourceStatus` schema 遗漏了该字段。现已补齐契约字段，保持 Provider 能力状态的 API 文档与实际 JSON 一致；未运行测试或构建。
+
+### 腾讯股票搜索端点可配置化（2026-10-27）
+
+腾讯 Smartbox 搜索能力已经独立开关，但旧构造函数将搜索地址固定为代码常量。现新增 `MARKET_DATA_TENCENT_STOCK_SEARCH_URL` 配置并纳入 URL 形态校验；旧 `NewTencentConfigured` 保持兼容，新构造函数接收搜索地址，默认仍使用 Smartbox 地址。配置测试与本地 fixture 测试源码已补充，未运行测试、构建、CI 或真实上游请求。
+
+### 全市场成交额分页聚合补齐（2026-10-27，待统一验收）
+
+- `GET /api/v1/market/breadth` 新增东方财富 CLIST 全市场成交额汇总：按 A 股过滤条件分页读取 `f6`（人民币元），每页最多 100 条，最多 4 个并发请求，单次聚合预算为 60 秒。
+- 每页要求返回完整条数且 `data.total` 在分页过程中保持一致；逐条校验证券代码/市场、非负成交额和 `f86` 报价日期；跨页证券重复、分页缺页、日期错位、全市场证券数与涨跌分布覆盖数不一致时均不输出总额。
+- 全量成功且两个数据域的证券数一致后才写入 `total_amount_cny` / `amount_coverage_count`；多页抓取非原子快照、源端分布总体未由独立证券主数据核验，质量继续标记 `degraded`。
+- 市场广度缓存从 90 秒调整为 5 分钟，避免每次缓存过期都重新扫描整个证券列表。新增分页聚合与报价日期门禁测试源码；按当前安排未执行测试、构建、CI 或真实上游请求，仍需后续统一回归。
+
+
+### 东方财富人气榜与飙升榜端点配置化（2026-10-27）
+
+- 静态审查发现，东方财富 Provider 的人气榜与飙升榜仍直接引用两个包级 URL 常量，配置层没有独立的端点覆盖入口；这与同一 Provider 的行情、日 K、板块、指数、龙虎榜和公告端点的配置方式不一致。
+- 新增 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL`（人气榜）与 `MARKET_DATA_EASTMONEY_HOT_SURGE_URL`（飙升榜），采用原公开端点作为默认值，纳入统一的绝对 HTTP(S) URL 形态校验，并在启动装配时传入 Provider。
+- 旧的 `NewEastmoneyConfiguredWithAnnouncements` 等构造入口保留默认端点；新增的 `WithHotRankingURLs` 只覆盖非空配置值，因而不改变旧调用者行为。
+- 已补充配置覆盖、非法协议拒绝及旧构造函数兼容的测试源码，并同步根目录与服务级环境模板、服务 README 和迁移矩阵。未执行测试、构建、CI 或真实上游请求；榜单没有可信的源端快照时间，响应仍应保持 `degraded`。
+
+
+### 服务级环境模板请求超时同步（2026-10-27）
+
+- 复核发现根目录 `.env.example` 和 Go 配置默认值已采用 `MARKET_DATA_REQUEST_TIMEOUT=5m`，但 `services/market-data/.env.example` 仍保留旧的 `3m`。该值低于默认 Provider 链的保守重试/回退预算，独立使用服务级模板可能触发启动阶段的超时预算校验失败。
+- 已将服务级模板同步为 `5m`，并注释预算缘由。该修复只改环境示例与状态文档；未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 东方财富国内补充能力默认状态与迁移矩阵对齐（2026-10-27）
+
+- 当前 `defaultProviderFile()`、`services/market-data/configs/providers.json` 与服务级环境模板中，东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、个股所属板块、龙虎榜、公告、筹码分布、人气榜/飙升榜均配置为默认启用，并可用各自独立能力开关关闭。
+- 迁移矩阵先前部分条目仍写“默认关闭”或“未实现”，与当前代码/配置不符；现已按当前分支更新实现、开关默认值和验收限制。此前 Probe #100 报告内关于“当时默认关闭”的句子保留为历史记录，不再作为当前默认值的说明。
+- 这些能力仍有真实部署网络、完整分页/交易日覆盖或源端快照时间方面的未验收项；默认启用仅描述配置行为，不得将 `degraded` 结果用于声称生产质量已达标。
+- 本次仅修正文档，不运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 新浪报价时间语义与网易成交量单位质量修复（2026-10-27）
+
+- 新浪报价解析了源端日期与时间并转换为 UTC，但标准模型此前遗漏 `quote_time_semantics`；现补为 `provider_snapshot_time`，并增加对应测试源码断言，避免下游将其与采集时间混淆。
+- 网易历史日 K 的成交量单位校验会用成交金额与 OHLC 均价交叉验证“股/手”解释。此前若两种解释都不成立，虽然质量状态降级且成交额置空，仍把未转换的原始成交量写入标准 `volume`、强制标注为 `shares`。现将单位校验返回类型改为可空指针：明确为股时使用原值，明确推断为手时换算为股，单位无法判定时返回空 `volume` 和 `volume_unit=unknown`，由统一日 K 契约校验器剔除该行，不再伪造标准化单位。
+- 已更新网易单位交叉校验测试源码并新增本地 HTTP fixture 测试，覆盖单位歧义时不得形成标准化股数；同步修正服务 README 中网易能力的默认状态描述，使其与 `providers.json` 及环境模板一致，并明确当前 DNS/502 稳定性仍未验收。未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 腾讯行情时间解析的时区数据库回退（2026-10-27）
+
+- 静态复核发现，腾讯行情时间解析器忽略 `time.LoadLocation("Asia/Shanghai")` 错误。极简容器缺少 zoneinfo 数据时，时间可能按 UTC 解释，造成快照时间偏移并影响新鲜度判定。
+- 现增加固定 UTC+8 回退，与新浪、网易解析器已有的时区降级策略保持一致；正常环境仍优先使用 IANA `Asia/Shanghai` 时区数据库。沿用既有本地夹具时间测试源码，不运行测试或真实请求。
+
+
+### 普通个股报价 OpenAPI 时间语义字段对齐（2026-10-27）
+
+- 对照 `internal/model.Quote` 与 OpenAPI `Quote` schema 时发现，Go 模型已输出可选的 `quote_time_semantics`，但普通个股报价 schema 遗漏该字段；指数报价 schema 已包含同名字段。
+- 已在 `services/market-data/openapi.yaml` 为个股 `Quote` 补入 `quote_time_semantics` 描述，明确这是供应商 `quote_time` 的语义，而不是采集时间。该字段保持可选，不改变已有 JSON 响应行为。
+- 本次仅更新契约文档和状态记录；未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 根 Compose 环境模板补齐国内上游 URL 覆盖项（2026-10-27）
+
+- 静态检查 `docker-compose.yml` 后确认 `stock-analysis-data` 的 `env_file` 是仓库根目录 `.env`；`services/market-data/.env.example` 只是服务级手工部署模板，根 Compose 不会自动加载它。
+- 根 `.env.example` 原先缺少多项虽已由 Go 配置读取、并通过启动 URL 形态校验的国内端点覆盖变量：东方财富行情、日 K、基础资料、板块、指数、市场广度、涨跌停池、所属板块、龙虎榜、公告；腾讯行情与日 K；新浪报价；以及雪球可选源配置。现已按 `config.go` 中的默认值补齐根模板，并补入东方财富公共 web token 的可选覆盖项。
+- 保留原有默认 endpoint 与能力开关，不更改任何 Provider 的默认启停策略；这次只让 Compose 部署者更容易显式覆盖地址，避免误以为服务级模板会由根 Compose 自动加载。未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 国内 Provider 静态 Review 补充（2026-10-27，本轮待统一验收）
+
+- **Tushare StockBasic 证券范围**：格式合法的六位代码不等于 A 股普通股票。现在先按普通 A 股代码范围校验，ETF/基金及不支持的证券在发起上游请求前拒绝；未知或缺失的 `market` 不再默认映射为“主板股票”。
+- **Tushare 日 K 响应字段表**：日 K 入口与其他 Tushare 能力采用一致的严格表头规则，拒绝空字段名和重复列名，避免重复列导致索引覆盖及字段错读。
+- **估值快照时点**：服务层拒绝无效或晚于中国市场当前日期的 `provider_report_date`，拒绝零值或超过当前时间 60 秒的 `provider_timestamp`；缺少报告日期/精确时间的估值不能标记为 valid。
+- 已新增对应回归测试源码。以上变更均只做了静态源码核对，**没有执行测试、构建、CI 或真实 Provider 请求**；仍需后续统一回归。
+
+
+### Go 原生新闻检索质量策略增强（2026-10-27，本轮待统一验收）
+
+- **可信来源排序**：按文章 URL 的实际 hostname 识别监管部门、交易所与信息披露网站，并为预置的可信财经媒体域名提供次级加分；不会仅相信搜索接口返回的 `siteName` 标签，也不会把可信域名当成文章真实的绝对保证。
+- **垃圾/营销过滤**：默认过滤明确的荐股群、导流和开户链接用语；`GO_NEWS_BLOCKED_TERMS` 可以追加自定义过滤词。过滤词有意保持窄范围，避免把一般性市场情绪词误判成垃圾内容。
+- **排序增强**：在股票代码/名称匹配基础上，增加监管、政策、指数、成交额与上市事件等市场主题词权重，标题命中高于摘要命中；原有新鲜度过滤、URL/标题去重和 Python 兼容 fallback 保持不变。
+- **时间质量门禁**：拒绝晚于当前时间的发布时间，避免未来时间戳污染新闻排序与“最新消息”上下文。
+- 配置示例已同步至根目录与 `go-core/.env.example`，技术说明同步至 `go-core/README.md`。本轮只新增/更新了回归测试源码，未执行测试、构建、CI 或真实新闻源请求；仍需统一验收。
+
+
+### 中国市场概况转为 Go 原生聚合（2026-10-27，本轮待统一验收）
+
+- `go-core/internal/adapters/marketdatahttp.Client` 新增原生市场概况聚合：并发请求指数快照、市场广度、行业排名和概念排名四个 Go API，减少 Python bridge 正常路径依赖与串行等待。
+- 指数快照映射到统一 `MarketOverview.Indices`；上涨/下跌/平盘、涨跌停数量与人民币成交额映射到统一模型；行业/概念排名保留来源及质量提示。
+- 对缺失成交额/涨跌停计数、部分市场覆盖、异常/过时的采集时间、非 valid 快照与接口失败保留明确 warnings。当前公开接口没有独立的板块跌幅榜，不伪造 `BottomSectors` / `BottomConcepts`，并输出对应限制提示。
+- 原生路径只服务中国市场 live snapshot，拒绝把历史 `as_of` 伪装成实时数据。香港、美股、日股、韩股概况继续走 bridge。中国市场的原生组件不可用或结果无效时回退到 bridge，并在 warnings 标记；个股行情和日 K 仍不回退到 Python。
+- 新增原生聚合和兼容回退回归测试源码。本轮未执行测试、构建、CI 或真实上游请求，仍待统一验收。
+
+
+### Go-core 个股辅助数据并发迁移（2026-10-27，本轮待统一验收）
+
+- `go-core/internal/adapters/marketdatahttp.Client` 在行情/日 K bundle 获取成功后，并发请求原生基本面、所属板块、筹码分布和资金流接口；辅助接口失败只增加 warning，不把可用行情 bundle 整体判失败。
+- 基本面默认请求最近一个已结束季度，保留分区、公告日期、指标单位和来源质量信息；以不重复键兼容旧分析器，并使用分区前缀保留同名指标。
+- 所属板块仅在 Provider 明确返回 `has_data=true` 时作为有效列表；筹码区间、资金流单位和质量信息保持原义，不将区间误作中位成本或将 null 变为零。
+- 资金流新增到 Go `StockBundle`、`AnalysisContext` 及 Python 分析器桥接上下文。显式 `as_of` 请求不会附加仅支持当前快照的辅助数据；严格历史时点财报版本和辅助快照历史仍待实现。
+- 已补对应客户端回归测试源码。本轮未执行测试、构建、CI 或真实上游请求，仍待统一验收。
+
+
+- **报告期选择补充**：默认基本面查询改为以中国市场披露截止日判断最近可期待的报告期，避免三季报/年报披露窗口内普遍请求尚未披露的季度。对应回归测试源码已补，未执行测试、构建、CI 或真实上游请求。
+
+
+### Go-core 个股公告并入原生新闻检索（2026-10-27，本轮待统一验收）
+
+- `go-core/internal/adapters/marketdatahttp` 新增公告分页 DTO 与 `FetchStockAnnouncements`，校验请求日期/股票身份、分页计数、公告日期范围、源 URL、来源和质量状态；保持 `announcement_date`、`published_at`、`fetched_at` 的语义独立。
+- 个股分析使用 market-data 的按股票公告接口，并发获取当前公告窗口，与 Bocha/SearXNG 候选按 URL/标题去重；公告候选按股票关联加权。即使未配置网页搜索服务，只要公告接口可用也可返回个股公告。
+- 公告请求使用独立的短超时；单项不可用不会阻断核心分析和其他新闻来源。未提供源端精确发布时间的公告使用 `announcement_date` 作日期级过滤，不使用 `fetched_at` 伪造发布时间。
+- 已增加客户端契约、公告独立来源以及与网页搜索合并去重的回归测试源码。
+- 按约定，本轮未运行测试、格式化、构建、CI 或真实上游请求；待后续统一验收。
+
+
+### Go 原生新闻多源聚合第二阶段（2026-10-27，本轮待统一验收）
+
+- 将 Tavily News 与 Brave News 加入既有 Go 原生 Provider 接口；只有配置 API Key 才注册，不自动请求或启用任何公开 SearXNG 实例。
+- Bocha、Tavily、Brave News、显式 SearXNG 均由统一调度器并发调用，失败来源单独记录，其他来源仍可提供结果；对所有候选统一执行发布时间门禁、可信域名加权、营销过滤、规范 URL/标题去重和个股相关性排序。
+- Tavily 请求新闻 topic 并要求源端发布日期；Brave News 定向中国及简体中文检索。Brave 的 page_fetched 不视为发布时间；缺少可解析源端发布时间的结果会被质量过滤。
+- API 凭据只从环境变量读取，日志不输出 key。新增 Tavily/Brave 本地 HTTP fixture、跨源聚合和去重测试源码；未运行测试、构建、CI 或真实供应商请求。
+- 当前仍保留 Python bridge fallback 作为兼容边界；后续在统一验收与调用覆盖核实后，再评估是否可在部署配置中关闭新闻 fallback。
+
+
+### Go-core 龙虎榜上下文摘要（2026-10-27，本轮待统一验收）
+
+- `StockBundle.DragonTiger` 与 `AnalysisContext.DragonTiger` 新增个股龙虎榜摘要；从最新 10 个完整交易日读取现有 Go API 并派生 `is_on_list`、`recent_count`、`latest_date`。
+- 摘要通过 `dragon_tiger_context` / `dragon_tiger` 传给兼容分析器。unknown/empty snapshots 不会强行转换成 `false`；覆盖不完整时保留 lower-bound 标记。
+- 每日最多分页 10 页、每页 500 条，最多 4 个日期请求并发。未运行测试、构建、CI 或真实上游请求。
+
+
+## 2026-10-27 — 构建阻塞修复与最新 HEAD 验证边界
+
+- Eastmoney JSON struct tag 的非法字符问题已由 `50fecf2` 修复；此前 go-core 与 market-data 的格式问题已整理。多维新闻检索的两个文件由 `d692a0d` 格式化；双 Provider 聚合测试改为显式设置 `MaxSearches=2`，修正直接配置默认只执行一个维度与测试期望不一致的问题。
+- `.github/workflows/go-test.yml` 现支持 `workflow_dispatch`，且格式检查输出脚本保留正确的单个 `\\n` 转义。
+- 提交 `d551057` 对应的 [Go test suite #40449084361](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361) 通过，根模块、go-core、market-data 的测试/race/vet、Compose 校验和两种 Go 镜像构建全部通过；同一 HEAD 的 [WebUI checks #40449084307](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 与 [Live Provider Probe #40449084825](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825) 也通过。
+- 随后分支继续前进至 `24952dd` / `71993b1`，新增个股龙虎榜上下文摘要并补充相关交接/进度说明。因此，上述绿色 CI 仅覆盖 `d551057`，不能自动视为新增 `DragonTiger` 上下文代码已验证；最新 HEAD 应再跑 Go 全量工作流确认。

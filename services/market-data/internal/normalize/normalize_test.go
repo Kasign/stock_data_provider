@@ -114,6 +114,43 @@ func TestQuoteRejectsInconsistentPriceScale(t *testing.T) {
 	}
 }
 
+func TestValidateQuoteRejectsInconsistentChangeFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*model.Quote)
+	}{
+		{
+			name: "change amount mismatch",
+			mutate: func(q *model.Quote) {
+				q.Change = ptrFloat(1.5)
+			},
+		},
+		{
+			name: "change percentage mismatch",
+			mutate: func(q *model.Quote) {
+				q.ChangePercent = ptrFloat(10)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			q := validQuoteForNormalizationTest()
+			tc.mutate(q)
+			if err := ValidateQuote(q); err == nil {
+				t.Fatal("inconsistent change fields must be rejected")
+			}
+		})
+	}
+}
+
+func TestValidateQuoteAllowsRoundedChangePercentage(t *testing.T) {
+	q := validQuoteForNormalizationTest()
+	q.ChangePercent = ptrFloat(11.1) // displayed percentage may be rounded to one decimal
+	if err := ValidateQuote(q); err != nil {
+		t.Fatalf("provider percentage rounding within tolerance should pass: %v", err)
+	}
+}
+
 func TestValidateQuoteAllowsMissingAmountAsDegradedWithoutClaimingCNY(t *testing.T) {
 	q := validQuoteForNormalizationTest()
 	q.Amount = nil
@@ -160,7 +197,7 @@ func TestValidateAndSortBarsRejectsNonFiniteChangePercentAndDegradesMissingAmoun
 
 func validQuoteForNormalizationTest() *model.Quote {
 	now := time.Now().UTC()
-	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 10.0, 9.0, 11.0, 8.0, 9.0, 100000.0
+	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 100.0/9.0, 9.0, 11.0, 8.0, 9.0, 100000.0
 	volume := int64(10000)
 	return &model.Quote{Symbol: "600519.SH", Source: "eastmoney", CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: &amount, QuoteTime: &now, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid}
 }

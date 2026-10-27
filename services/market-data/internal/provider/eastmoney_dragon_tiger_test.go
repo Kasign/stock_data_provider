@@ -12,6 +12,18 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
+func TestEastmoneyFetchDragonTigerRejectsFutureTradeDateWithoutCallingProvider(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	futureDate := time.Now().In(loc).AddDate(0, 0, 1).Format("2006-01-02")
+	p := NewEastmoney(2*time.Second, "", "")
+	if _, err := p.FetchDragonTiger(context.Background(), futureDate, 1, 100); err == nil || !strings.Contains(err.Error(), "must not be in the future") {
+		t.Fatalf("future dragon-tiger date must be rejected before making a request, got %v", err)
+	}
+}
+
 func TestEastmoneyFetchDragonTigerPreservesUnitsDateAndPagination(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

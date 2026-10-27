@@ -368,6 +368,18 @@
 - [x] 全局清理无用首页导航规则与完全重复的顶层 CSS 规则。
 - [ ] 继续按组件区块处理历史 CSS 的断点/Token 维护性，并由部署后实测确认主题与窄屏视觉。
 
+### 2026-10-27 数据侧 CI 阻塞 — 已修复
+
+- [x] 修复 Eastmoney JSON struct tag 语法错误。
+- [x] 完成 CI 报告的 Go 格式整理，包含并行新闻查询策略代码。
+- [x] 对齐 Provider 配置测试与当前国内数据源默认能力，保留 env override 验证。
+- [x] 补齐新闻多源聚合用例的 `MaxSearches: 2` 查询预算。
+- [x] 最新 head `24952dd` 的 Go suite、Live Provider probe、WebUI checks 均通过：
+  - [Go test suite](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361)
+  - [Live provider probe](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825)
+  - [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307)
+- [ ] 与用户共同 Review 运行流（Run Flow），不与本次 CI 修复混合。
+
 
 ## 2026-10-27 全站 Review 复核：对比度与请求状态
 
@@ -377,5 +389,5 @@
 - [x] 把 CSS 主题 tokens 整理成逐行声明；保留其他样式声明和 70 个媒体查询块的顺序，避免一次性高风险重写。
 - [ ] 下一阶段按组件分区减少历史 CSS 媒体查询重复；每次需保证规则顺序不变，或通过浏览器截图差异检查证实变化是有意的。
 - [ ] 真实浏览器和 NAS/1Panel 验收仍未完成；CI 固定 503 的响应式烟测不能作为真实数据链路验收。
-- [ ] PR #13 已于 2026-10-27 11:42（新加坡时间）合并；本批后续代码需另建 PR，保留 Review，不直接合并。
+- [ ] PR #13 已合并；当前变更由 PR #14 独立 Review，保持未合并。
 

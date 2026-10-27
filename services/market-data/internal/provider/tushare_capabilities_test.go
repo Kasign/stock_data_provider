@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
 type tushareIndexWeightRequest struct {
@@ -27,6 +30,31 @@ func tushareTestMonthWindow(now time.Time, offset int) (string, string) {
 	first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, -offset, 0)
 	last := first.AddDate(0, 1, -1)
 	return first.Format("20060102"), last.Format("20060102")
+}
+
+func TestTushareDailyRejectsEmptyOrDuplicateFieldNames(t *testing.T) {
+	cases := []struct {
+		name   string
+		fields []string
+		want   string
+	}{
+		{name: "empty field name", fields: []string{"ts_code", "", "trade_date"}, want: "empty field name"},
+		{name: "duplicate field name", fields: []string{"ts_code", "trade_date", "ts_code"}, want: "duplicate field"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeTushareTestTable(w, tc.fields, [][]any{})
+			}))
+			defer server.Close()
+
+			provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+			_, err := provider.FetchDailyBars(context.Background(), "600519.SH", "2026-10-26", "2026-10-26", 10, model.AdjustmentNone)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("invalid Tushare response field table should be rejected, got %v", err)
+			}
+		})
+	}
 }
 
 func TestTushareIndexConstituentsQueriesOnlyNewestAvailableMonth(t *testing.T) {
@@ -131,6 +159,59 @@ func TestTushareIndexConstituentsFallsBackToPreviousMonth(t *testing.T) {
 	}
 	if got.ProviderReportDate != previousMonthEnd.Format("2006-01-02") || got.Total != 1 {
 		t.Fatalf("unexpected previous-month constituent snapshot: %+v", got)
+	}
+}
+
+func TestTushareStockBasicRejectsNonAShareBeforeRequest(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		http.Error(w, "unexpected request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	for _, symbol := range []string{"510300.SH", "159919.SZ", "900901.SH"} {
+		if _, err := provider.FetchStockBasic(context.Background(), symbol); err == nil {
+			t.Errorf("non-A-share instrument %s must be rejected", symbol)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("non-A-share requests must be rejected before upstream access; got %d request(s)", requests)
+	}
+}
+
+func TestTushareStockBasicRejectsUnknownMarketInsteadOfAssumingMainBoard(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeTushareTestTable(w,
+			[]string{"ts_code", "name", "industry", "market", "exchange", "list_status", "list_date", "delist_date"},
+			[][]any{{"600519.SH", "贵州茅台", "白酒", "", "SSE", "L", "20010827", ""}},
+		)
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	if _, err := provider.FetchStockBasic(context.Background(), "600519.SH"); err == nil {
+		t.Fatal("missing market classification must be rejected rather than silently mapped to main board")
+	}
+}
+
+func TestTushareStockBasicMapsKnownMarketClassification(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeTushareTestTable(w,
+			[]string{"ts_code", "name", "industry", "market", "exchange", "list_status", "list_date", "delist_date"},
+			[][]any{{"600519.SH", "贵州茅台", "白酒", "主板", "SSE", "L", "20010827", ""}},
+		)
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := provider.FetchStockBasic(context.Background(), "600519.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SecurityType != 1 || got.SecurityTypeLabel != "主板股票" {
+		t.Fatalf("known main-board classification mapped incorrectly: %+v", got)
 	}
 }
 

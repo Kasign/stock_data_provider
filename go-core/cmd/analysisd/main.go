@@ -68,7 +68,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	legacySearch := pythonbridge.NewSearchAdapter(client)
-	search := newssearch.NewFromEnv(legacySearch, logger)
+	search := newssearch.NewFromEnv(legacySearch, logger, nativeMarketData)
 	analyzer := pythonbridge.NewAnalyzerAdapter(client)
 	persistence := pythonbridge.NewPersistenceAdapter(client)
 	notifier := pythonbridge.NewNotificationAdapter(client)

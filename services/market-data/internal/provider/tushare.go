@@ -147,6 +147,13 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	}
 	indices := make(map[string]int, len(envelope.Data.Fields))
 	for i, field := range envelope.Data.Fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			return nil, errors.New("Tushare daily response contains an empty field name")
+		}
+		if _, duplicate := indices[field]; duplicate {
+			return nil, fmt.Errorf("Tushare daily response contains duplicate field %q", field)
+		}
 		indices[field] = i
 	}
 	for _, required := range []string{"ts_code", "trade_date", "open", "high", "low", "close", "vol"} {

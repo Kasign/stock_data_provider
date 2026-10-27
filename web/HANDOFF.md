@@ -6,11 +6,12 @@
 ## 当前 GitHub 状态（2026-10-27 复核；后续以 GitHub 实时状态为准）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 工作分支：`feat/webui-market-data-console`；本批开始前核实 HEAD：`c0669d4c8a4e896623b9816ec58338912d242aaa`，对应树 SHA：`ef1d7a6c7cc3eb20a270f811fb7effff3eb7a94a`。
-- WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，标题 `WebUI: improve market readability and refresh diagnostics`，已于 2026-10-27 11:42（新加坡时间）合并；合并提交 `704476fa02b1ebcf98f27b0ffb5c1a858727d82c`。PR #13 不再承接新提交，后续 WebUI 改动须另建 PR 并保持 Open。
-- 基线提交的 [WebUI checks #40445577049](https://github.com/Kasign/stock_data_provider/actions/runs/40445577049) 与 [Chromium browser smoke #40445576952](https://github.com/Kasign/stock_data_provider/actions/runs/40445576952) 均成功。浏览器测试覆盖七种视口，但 API 固定返回 503，不能替代真实 API/NAS 验收。
-- 本轮只允许改动 `web/**`；不合并 PR、不更新数据分支、不修改 Go/Provider/数据库/API 契约/根 Compose。
-- 本轮源码已核查页面职责、未接入状态、请求代次与旧数据清理；辅助文字对比度修复及回归检查已纳入本批。人工深浅主题/键盘体验、真实后端与 NAS/Docker/OpenResty 仍待部署验收。
+- WebUI 工作分支：`feat/webui-market-data-console`；本轮源码变更提交为 `da7b671294754913a55eb3bced36fe52e801b66e`。为防覆盖并行文档更新，后续同步提交将保留该提交并以目标分支最新 HEAD 为第二父提交。
+- 数据分支 `feat/full-go-data-providers-api-switch` 在同步前的最新 HEAD：`53a1519b138705484e00bbc8af23c1965d23145e`。同步目的仅为保留目标分支并行历史与同名文档更新，不会将 WebUI 改动写入该分支。
+- WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，已于 2026-10-27 11:42（新加坡时间）合并；合并提交 `704476fa02b1ebcf98f27b0ffb5c1a858727d82c`。PR #13 不再承接新提交。
+- WebUI 后续 PR #14：https://github.com/Kasign/stock_data_provider/pull/14，标题 `WebUI: 提升主题可读性并补全全站 Review`，保持 Open，不执行合并。
+- 本轮 push 触发的 [Chromium smoke #40455198547](https://github.com/Kasign/stock_data_provider/actions/runs/40455198547) 在 GitHub 未分配 runner 的情况下快速失败；重试仍未提供可读步骤/日志。PR #14 的新一轮 checks 需查看最新 Actions 状态，不得把此失败标为测试通过。
+- 本轮只允许改动 `web/**`；不修改 Go/Provider/数据库/API 契约/根 Compose。CI 的固定 503 浏览器烟测也不能替代真实 API 与 NAS/1Panel 验收。
 
 ## 本轮已交付且尚未做运行时验收的事项
 
@@ -461,9 +462,38 @@
 - PR #13 仍 Open、未合并；WebUI 分支相对数据分支目前分叉（领先 23、落后 31），在确认跨分支接口和文件差异前不直接合并。
 
 
+## 2026-10-27 — PR #13 集成 Review 与合并完成
+
+- 重新核实集成前分支：数据目标分支 `feat/full-go-data-providers-api-switch` 为 `8ea8875693584816f0150412aa130902c32f4cba`，WebUI 分支为 `c0669d4c8a4e896623b9816ec58338912d242aaa`。共同基点之后，数据分支新增 34 个提交，WebUI 分支包含 24 个提交。
+- 对比数据分支相对共同基点的变更文件与 PR #13 的 16 个变更文件，没有发现同路径重叠；人工核对首页调用的指数、涨跌分布、板块、涨跌停、人气、龙虎榜与交易日历接口，后端路由及主要响应字段均有对应定义。本次没有修改 Go、Provider、数据库或 API 契约代码。
+- 修正 `.github/workflows/webui-browser-smoke.yml` 的触发范围：增加面向目标分支的 `pull_request`，并让目标分支上的 WebUI 修改也能触发 Chromium 冒烟检查。
+- PR #13 于 2026-10-27 合并成功，使用普通 merge commit 保留双方历史。合并提交：`704476fa02b1ebcf98f27b0ffb5c1a858727d82c`；第一父提交为当时最新数据分支 `8ea8875693584816f0150412aa130902c32f4cba`，第二父提交为 WebUI head `c0669d4c8a4e896623b9816ec58338912d242aaa`。
+- 合并前最终 WebUI head 的 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40445577049) 与 [Chromium browser smoke](https://github.com/Kasign/stock_data_provider/actions/runs/40445576952) 均成功；重复触发的浏览器烟测 [#40445571267](https://github.com/Kasign/stock_data_provider/actions/runs/40445571267) 也成功。合并后以目标分支最新提交对应的 Actions 为准。
+- 验收边界：浏览器烟测将 API 请求固定为 503，覆盖布局、导航及响应式行为，不代表真实行情接口端到端通过；真实 API Key、数据回包、主题、键盘细节与 NAS/1Panel 联调仍需在已部署环境验证。CI Runner 的中文字体缺失会影响截图汉字展示，不应误判为用户浏览器字体问题。
+- 当前 Git 冲突风险已通过集成合并处理，PR #13 不再处于 Open 状态。后续不需要再合并同一个 PR；只需在部署环境集中验证真实 API 与页面交互。
+
+## 2026-10-27 — 独立的数据层 CI 阻塞项（非 PR #13 引入）
+
+- PR #13 合并后的 WebUI checks 与 Chromium smoke 均通过；但并行的数据侧 PR #1 Go suite [#40445663152](https://github.com/Kasign/stock_data_provider/actions/runs/40445663152) 未通过，当前重跑/更新基线结果以 [#40445769785](https://github.com/Kasign/stock_data_provider/actions/runs/40445769785) 为准。
+- market-data 镜像构建和 Go 语法检查指向 `services/market-data/internal/provider/eastmoney.go:2086-2090`：若干 Go struct tag 被写成字面量 `\x60json:...\x60`，而不是 Go tag 所需的反引号，造成 illegal character 和后续语法错误。
+- `go-core` 的 `gofmt` 检查也失败，涉及 `internal/adapters/marketdatahttp/client.go`、`client_test.go`、`internal/adapters/newssearch/search.go`、`search_test.go`、`internal/adapters/pythonbridge/adapters_test.go`、`internal/contextpack/build.go`、`internal/domain/models.go`。
+- 这些文件不属于 PR #13 的改动范围，因此本次没有把 Go/Provider 修复混入 WebUI 集成。数据层构建问题需要作为独立修复任务处理；不能把 PR #13 已成功合并理解为整个数据仓库 Go CI 已通过。
+
+
+## 2026-10-27 — Go CI 阻塞修复及最新完整验证
+
+- `50fecf2` 修复 Eastmoney struct tag 的反引号分隔符；`b694065`、`d692a0d` 完成 CI 报告的 Go 格式整理；`e5bb03f` 对齐配置测试默认能力策略；`d551057` 明确新闻多源聚合测试使用 `MaxSearches: 2`，使测试预算与“两家 Provider 各执行一个查询计划”的预期一致。
+- 并行新闻多维查询扩展提交 `49e0d64`、CI 手动触发与格式诊断工作流调整 `84b8b37`、`44f2267` 均保留在当前 PR 历史中，未重写或覆盖。
+- 最新验证 head `24952dd7af06f2e6824a1d8c52c54c7dabd9865b` 的 [Go test suite](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361)、[Live provider probe](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825) 与 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 均成功。Go suite 包含根模块、go-core、market-data 测试、race、vet、Compose 校验及 Go 镜像构建。
+- Provider 默认策略未被本轮改动：BaoStock fundamentals/trading calendar 默认启用、Yahoo 日线默认关闭、NetEase quote 默认启用；测试通过环境变量显式验证可覆盖能力开关。
+- 运行流（Run Flow）作为下一项共同 Review 任务单独推进；本轮只修复 Go CI，不改运行流行为。
+
+
 ## 2026-10-27 — 全站 Review 复核交接
 
-- 最新复核基线为 `c0669d4c8a4e896623b9816ec58338912d242aaa`。PR #13 已合并；历史记录中关于其 Open 状态仅用于还原当时进度，不是当前真值。
-- 当前优先改进完成项：深浅主题辅助文字对比度与测试护栏；CSS 主题 token 可读性；检查市场总览、个股研究、龙虎榜/日历请求是否可能被旧响应覆盖；更新产品/进度/技术/Review 文档。
-- 当前仍未完成项：人工主题和键盘验收、真实 API 状态场景、NAS/1Panel/OpenResty 部署验收；历史 CSS 的 70 个媒体查询仍需分区维护，不做未经验证的全局合并。
-- 完成本批 commit 后，从 `feat/webui-market-data-console` 创建新 PR 指向 `feat/full-go-data-providers-api-switch`，保持 Open，不执行合并。提交前要再次读取分支 HEAD，并用 expected SHA 保护 ref。
+- 最新复核基线起于 `c0669d4c8a4e896623b9816ec58338912d242aaa`；PR #13 已合并，PR #14 独立跟踪当前改动并保持 Open。
+- 当前改进项：深浅主题辅助文字对比度与测试护栏；CSS 主题 token 可读性；检查市场总览、个股研究、龙虎榜/日历请求的旧响应保护；维护产品/进度/技术/Review 文档。
+- 当前仍未完成：人工主题和键盘验收、真实 API 404/503/401/403 场景、NAS/1Panel/OpenResty 部署验收；历史 CSS 的 70 个媒体查询仍需分区维护。
+- PR #14 的 Chromium smoke 曾在未分配 runner 时失败，重试结果仍未提供执行日志；待 PR checks 能正常分配 runner 后核对结果。不要将无步骤的快速失败误判为样式源码失败，也不要宣称通过。
+- 不合并 PR #14；若目标分支再推进，继续保留其文档更新并先比较两个分支 HEAD。
+

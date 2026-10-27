@@ -63,16 +63,31 @@ func TestNeteaseRejectsAdjustedRequestsAndUnsupportedExchange(t *testing.T) {
 
 func TestNeteaseUnitCrossCheckInfersHandsOnlyWhenUnambiguous(t *testing.T) {
 	shares, rawUnit, amount, amountUnit, quality, reasons := neteaseValidateTradingUnits(100000, 4200000, 41, 43)
-	if shares != 100000 || rawUnit != "shares" || amount == nil || amountUnit != "CNY" || quality != model.QualityValid {
-		t.Fatalf("unexpected shares interpretation: shares=%d rawUnit=%s amount=%v amountUnit=%s quality=%s reasons=%v", shares, rawUnit, amount, amountUnit, quality, reasons)
+	if shares == nil || *shares != 100000 || rawUnit != "shares" || amount == nil || amountUnit != "CNY" || quality != model.QualityValid {
+		t.Fatalf("unexpected shares interpretation: shares=%v rawUnit=%s amount=%v amountUnit=%s quality=%s reasons=%v", shares, rawUnit, amount, amountUnit, quality, reasons)
 	}
 	shares, rawUnit, amount, amountUnit, quality, reasons = neteaseValidateTradingUnits(1000, 4200000, 41, 43)
-	if shares != 100000 || rawUnit != "hands_inferred" || amount == nil || amountUnit != "CNY" || quality != model.QualityDegraded || len(reasons) == 0 {
-		t.Fatalf("unexpected inferred-hands interpretation: shares=%d rawUnit=%s amount=%v amountUnit=%s quality=%s reasons=%v", shares, rawUnit, amount, amountUnit, quality, reasons)
+	if shares == nil || *shares != 100000 || rawUnit != "hands_inferred" || amount == nil || amountUnit != "CNY" || quality != model.QualityDegraded || len(reasons) == 0 {
+		t.Fatalf("unexpected inferred-hands interpretation: shares=%v rawUnit=%s amount=%v amountUnit=%s quality=%s reasons=%v", shares, rawUnit, amount, amountUnit, quality, reasons)
 	}
 	shares, rawUnit, amount, amountUnit, quality, reasons = neteaseValidateTradingUnits(100000, 4200000000, 41, 43)
-	if amount != nil || amountUnit != "unknown" || rawUnit != "unknown" || quality != model.QualityDegraded || len(reasons) == 0 {
-		t.Fatalf("inconsistent amount must not be trusted: shares=%d rawUnit=%s amount=%v amountUnit=%s quality=%s reasons=%v", shares, rawUnit, amount, amountUnit, quality, reasons)
+	if shares != nil || amount != nil || amountUnit != "unknown" || rawUnit != "unknown" || quality != model.QualityDegraded || len(reasons) == 0 {
+		t.Fatalf("inconsistent amount must not expose normalized shares or trusted amount: shares=%v rawUnit=%s amount=%v amountUnit=%s quality=%s reasons=%v", shares, rawUnit, amount, amountUnit, quality, reasons)
+	}
+}
+
+func TestNeteaseAmbiguousVolumeUnitDoesNotProduceNormalizedShares(t *testing.T) {
+	payload := "日期,股票代码,名称,收盘价,最高价,最低价,开盘价,前收盘,涨跌额,涨跌幅,换手率,成交量,成交金额\n" +
+		"2026-10-21,'600036,招商银行,42.28,42.60,42.00,42.60,42.52,-0.24,-0.56,0.36,100000,4200000000\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	p := NewNetease(2*time.Second, server.URL)
+	if _, err := p.FetchDailyBars(context.Background(), "600036.SH", "2026-10-21", "2026-10-21", 1, model.AdjustmentNone); err == nil || !strings.Contains(err.Error(), "no valid daily bars") {
+		t.Fatalf("ambiguous volume units must not pass as normalized shares; err=%v", err)
 	}
 }
 

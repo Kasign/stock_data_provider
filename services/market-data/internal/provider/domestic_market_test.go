@@ -3,9 +3,11 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,10 +22,41 @@ func (roundTripper domesticMarketRoundTripper) RoundTrip(req *http.Request) (*ht
 	return roundTripper(req)
 }
 
+// writeEastmoneyMarketTurnoverFixture keeps market-breadth tests hermetic now that
+// breadth retrieval also requests CLIST quote pages for turnover aggregation.
+func writeEastmoneyMarketTurnoverFixture(w http.ResponseWriter, total int, reportDate string) {
+	reportDay, _ := time.Parse("2006-01-02", reportDate)
+	quoteTime := time.Date(reportDay.Year(), reportDay.Month(), reportDay.Day(), 15, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	rows := make([]map[string]any, 0, total)
+	for i := 0; i < total; i++ {
+		rows = append(rows, map[string]any{
+			"f12": fmt.Sprintf("%06d", 600000+i),
+			"f13": 1,
+			"f6":  float64(i + 1),
+			"f86": quoteTime.Unix(),
+		})
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"rc":   0,
+		"data": map[string]any{"total": total, "diff": rows},
+	})
+}
+
 func TestEastmoneyMarketBreadthDefaultsToDistributionEndpoint(t *testing.T) {
 	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", "", "", "")
 	if p.marketBreadthURL != "https://push2ex.eastmoney.com/getTopicZDFenBu" {
 		t.Fatalf("market breadth default endpoint = %q", p.marketBreadthURL)
+	}
+	if p.stockListURL != defaultEastmoneySectorRankingURL {
+		t.Fatalf("stock-list CLIST default endpoint = %q", p.stockListURL)
+	}
+}
+
+func TestEastmoneyConfiguredStockListUsesSectorCLISTEndpoint(t *testing.T) {
+	const customURL = "https://example.test/clist"
+	p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", customURL, "")
+	if p.stockListURL != customURL {
+		t.Fatalf("stock-list CLIST endpoint = %q, want %q", p.stockListURL, customURL)
 	}
 }
 
@@ -93,6 +126,10 @@ func TestEastmoneyFetchStockBoardsKeepsEmptyResultUnknown(t *testing.T) {
 
 func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/qt/clist/get" {
+			writeEastmoneyMarketTurnoverFixture(w, 44, "2026-10-23")
+			return
+		}
 		if r.URL.Path == "/getTopicZTPool" || r.URL.Path == "/getTopicDTPool" {
 			if r.URL.Query().Get("date") != "20261023" || r.URL.Query().Get("pagesize") != "1" {
 				t.Errorf("limit-pool query date/pagesize = %q/%q", r.URL.Query().Get("date"), r.URL.Query().Get("pagesize"))
@@ -132,6 +169,7 @@ func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) 
 	}))
 	defer server.Close()
 	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", server.URL, "")
+	p.stockListURL = server.URL + "/api/qt/clist/get"
 	got, err := p.FetchMarketBreadth(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -145,12 +183,12 @@ func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) 
 	if got.LimitUpCount == nil || *got.LimitUpCount != 82 || got.LimitDownCount == nil || *got.LimitDownCount != 6 {
 		t.Fatalf("expected date-aligned limit-up/down source totals, got %+v", got)
 	}
-	if got.TotalAmountCNY != nil || got.AmountCoverageCount != 0 {
-		t.Fatalf("distribution endpoint must not invent turnover: %+v", got)
+	if got.TotalAmountCNY == nil || *got.TotalAmountCNY != 990 || got.AmountCoverageCount != 44 {
+		t.Fatalf("expected complete date-aligned turnover aggregate, got %+v", got)
 	}
 	if got.QualityStatus != model.QualityDegraded ||
 		!strings.Contains(strings.Join(got.QualityReasons, ","), "provider_snapshot_timestamp_not_exposed") ||
-		!strings.Contains(strings.Join(got.QualityReasons, ","), "provider_market_amount_unavailable_from_distribution_endpoint") {
+		!strings.Contains(strings.Join(got.QualityReasons, ","), "market_amount_quotes_collected_non_atomically") {
 		t.Fatalf("missing conservative quality metadata: %+v", got)
 	}
 }
@@ -158,6 +196,8 @@ func TestEastmoneyFetchMarketBreadthAggregatesDistributionBuckets(t *testing.T) 
 func TestEastmoneyFetchMarketBreadthDoesNotMixLimitCountsAcrossDates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/api/qt/clist/get":
+			writeEastmoneyMarketTurnoverFixture(w, 6, "2026-10-23")
 		case "/getTopicZDFenBu":
 			_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{
 				"qdate": 20261023, "fenbu": []map[string]int{{"-1": 2}, {"0": 1}, {"1": 3}},
@@ -176,6 +216,7 @@ func TestEastmoneyFetchMarketBreadthDoesNotMixLimitCountsAcrossDates(t *testing.
 	}))
 	defer server.Close()
 	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", server.URL, "")
+	p.stockListURL = server.URL + "/api/qt/clist/get"
 	got, err := p.FetchMarketBreadth(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -214,6 +255,91 @@ func TestEastmoneyFetchMarketBreadthRejectsInvalidDistribution(t *testing.T) {
 	}
 }
 
+func TestEastmoneyFetchMarketTurnoverAggregatesCompleteDateAlignedPages(t *testing.T) {
+	reportDate := "2026-10-23"
+	quoteTime := time.Date(2026, 10, 23, 15, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	const total = 101
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/qt/clist/get" {
+			http.NotFound(w, r)
+			return
+		}
+		query := r.URL.Query()
+		if query.Get("pz") != "100" || query.Get("fs") != eastmoneyMarketUniverseFilter {
+			t.Errorf("unexpected pagination/universe query: %v", query)
+		}
+		if query.Get("fields") != "f12,f13,f6,f86" || query.Get("fid") != "f12" {
+			t.Errorf("unexpected amount fields/sort query: %v", query)
+		}
+		page, err := strconv.Atoi(query.Get("pn"))
+		if err != nil || page < 1 {
+			t.Errorf("invalid page: %q", query.Get("pn"))
+			http.Error(w, "invalid page", http.StatusBadRequest)
+			return
+		}
+
+		start := (page - 1) * eastmoneyMarketTurnoverPageSize
+		end := start + eastmoneyMarketTurnoverPageSize
+		if end > total {
+			end = total
+		}
+		rows := make([]map[string]any, 0, end-start)
+		for i := start; i < end; i++ {
+			rows = append(rows, map[string]any{
+				"f12": fmt.Sprintf("%06d", 600000+i),
+				"f13": 1,
+				"f6":  float64(i + 1),
+				"f86": quoteTime.Unix(),
+			})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"rc":   0,
+			"data": map[string]any{"total": total, "diff": rows},
+		})
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithStockBoards(3*time.Second, "", "", "", "", "", "", "", "", "")
+	p.stockListURL = server.URL + "/api/qt/clist/get"
+	amount, covered, reason := p.fetchMarketTurnover(context.Background(), reportDate)
+	if reason != "" {
+		t.Fatalf("fetchMarketTurnover reason=%q", reason)
+	}
+	if covered != total {
+		t.Fatalf("covered=%d, want %d", covered, total)
+	}
+	const wantAmount = 5151.0
+	if amount != wantAmount {
+		t.Fatalf("amount=%v, want %v", amount, wantAmount)
+	}
+}
+
+func TestEastmoneyFetchMarketTurnoverRejectsMismatchedQuoteDate(t *testing.T) {
+	quoteTime := time.Date(2026, 10, 24, 10, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"rc": 0,
+			"data": map[string]any{
+				"total": 1,
+				"diff": []map[string]any{{
+					"f12": "600519", "f13": 1, "f6": 123456.0, "f86": quoteTime.Unix(),
+				}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithStockBoards(3*time.Second, "", "", "", "", "", "", "", "", "")
+	p.stockListURL = server.URL
+	amount, covered, reason := p.fetchMarketTurnover(context.Background(), "2026-10-23")
+	if reason != "market_amount_quote_date_mismatch" {
+		t.Fatalf("reason=%q, want market_amount_quote_date_mismatch", reason)
+	}
+	if amount != 0 || covered != 0 {
+		t.Fatalf("mismatched date must not return an amount: amount=%v covered=%d", amount, covered)
+	}
+}
+
 func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
 	var breadthRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -223,6 +349,10 @@ func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
 				count, change = 1, -10.0
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"rc": 0, "data": map[string]any{"tc": count, "qdate": 20261023, "pool": []map[string]any{{"c": "600519", "m": 1, "n": "贵州茅台", "zdp": change}}}})
+			return
+		}
+		if r.URL.Path == "/api/qt/clist/get" {
+			writeEastmoneyMarketTurnoverFixture(w, 6, "2026-10-23")
 			return
 		}
 		if breadthRequests.Add(1) == 1 {
@@ -235,6 +365,7 @@ func TestEastmoneyFetchMarketBreadthRetriesTransientHTTP502(t *testing.T) {
 	}))
 	defer server.Close()
 	p := NewEastmoneyConfiguredWithDomesticMarketData(2*time.Second, "", "", "", "", "", server.URL+"/getTopicZDFenBu", server.URL, "")
+	p.stockListURL = server.URL + "/api/qt/clist/get"
 	got, err := p.FetchMarketBreadth(context.Background())
 	if err != nil {
 		t.Fatal(err)

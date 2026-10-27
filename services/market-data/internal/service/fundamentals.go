@@ -57,9 +57,18 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 			if section.ReportDate != fundamentalPeriodEnd(year, quarter) {
 				return fmt.Errorf("fundamentals section %s report date mismatches requested period", section.Category)
 			}
-			if section.PublicationDate != "" {
-				if _, err := time.Parse("2006-01-02", section.PublicationDate); err != nil {
+			if section.PublicationDate == "" {
+				if section.QualityStatus == model.QualityValid {
+					return fmt.Errorf("fundamentals section %s cannot be valid without a publication date", section.Category)
+				}
+			} else {
+				publicationDate, dateErr := time.Parse("2006-01-02", section.PublicationDate)
+				if dateErr != nil || publicationDate.Format("2006-01-02") != section.PublicationDate {
 					return fmt.Errorf("fundamentals section %s has invalid publication date", section.Category)
+				}
+				today := time.Now().In(marketLocation()).Format("2006-01-02")
+				if section.PublicationDate > today {
+					return fmt.Errorf("fundamentals section %s publication date is in the future", section.Category)
 				}
 			}
 			if section.QualityStatus != model.QualityValid {

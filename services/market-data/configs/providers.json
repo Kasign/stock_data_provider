@@ -18,6 +18,7 @@
       "quote": true,
       "daily_bars": true,
       "stock_basic": true,
+      "stock_search": true,
       "sector_rankings": true,
       "index_quotes": true,
       "market_breadth": true,
@@ -56,7 +57,8 @@
     "tencent": {
       "enabled": true,
       "quote": true,
-      "daily_bars": true
+      "daily_bars": true,
+      "stock_search": true
     },
     "sina": {
       "enabled": true,

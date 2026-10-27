@@ -32,6 +32,11 @@ func NewTencent(timeout time.Duration) *Tencent {
 }
 
 func NewTencentConfigured(timeout time.Duration, quoteURL, klineURL, noneKlineURL string) *Tencent {
+	return NewTencentConfiguredWithSearchURL(timeout, quoteURL, klineURL, noneKlineURL, "")
+}
+
+// NewTencentConfiguredWithSearchURL configures the Smartbox keyword-search endpoint independently.
+func NewTencentConfiguredWithSearchURL(timeout time.Duration, quoteURL, klineURL, noneKlineURL, stockSearchURL string) *Tencent {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -44,7 +49,10 @@ func NewTencentConfigured(timeout time.Duration, quoteURL, klineURL, noneKlineUR
 	if noneKlineURL == "" {
 		noneKlineURL = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
 	}
-	return &Tencent{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL, searchURL: defaultTencentStockSearchURL}
+	if stockSearchURL == "" {
+		stockSearchURL = defaultTencentStockSearchURL
+	}
+	return &Tencent{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL, searchURL: stockSearchURL}
 }
 func (p *Tencent) Name() string { return "tencent" }
 
@@ -146,7 +154,7 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	}
 	if !volumeVerified {
 		q.QualityStatus = model.QualityDegraded
-		q.QualityReasons = append(q.QualityReasons, "volume_unit_assumed_without_turnover_crosscheck")
+		q.QualityReasons = append(q.QualityReasons, "volume_unit_unverified")
 	} else if strings.HasSuffix(rawVolumeUnit, "_inferred") {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "volume_unit_inferred_from_turnover_metrics")
@@ -158,6 +166,9 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	q.QualityReasons = append(q.QualityReasons, "volume_ratio_unsupported_by_tencent_quote_contract")
 	if err := normalize.ValidateQuote(q); err != nil {
 		return nil, fmt.Errorf("Tencent quote data contract: %w", err)
+	}
+	if !volumeVerified {
+		return nil, errors.New("Tencent quote volume unit cannot be confirmed; refusing to assume 100-share lots")
 	}
 	return q, nil
 }
@@ -332,10 +343,11 @@ func tencentQuoteVolume(fields []string, rawVolume, price float64) (int64, strin
 			}
 		}
 	}
-	// Preserve compatibility with the legacy fallback, but mark it explicitly as
-	// assumed/degraded so downstream consumers can gate volume-sensitive analysis.
-	shares, err := normalize.HandsToShares(rawVolume)
-	return shares, "hands_assumed", false, err
+	// Unit inference must be supported by both turnover rate and circulating
+	// market value. If those fields are absent or contradictory, leave the
+	// normalized value unavailable so FetchQuote can reject this provider result
+	// and let the service try the next configured source.
+	return 0, "unknown", false, nil
 }
 
 func parsePositiveField(fields []string, index int) (float64, error) {
@@ -474,7 +486,11 @@ func tencentCode(symbol string) (string, error) {
 }
 func parseTencentTime(s string) *time.Time {
 	s = strings.TrimSpace(s)
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		// 精简容器可能没有 zoneinfo 数据；腾讯返回的是中国本地行情时间，回退到固定 UTC+8。
+		loc = time.FixedZone("CST", 8*60*60)
+	}
 	for _, layout := range []string{"20060102150405", "200601021504", "2006-01-02 15:04:05"} {
 		if t, e := time.ParseInLocation(layout, s, loc); e == nil {
 			t = t.UTC()

@@ -9,7 +9,7 @@
 
 - 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表、证券名称/代码搜索，以及可选补充数据接口。
-- 证券搜索：`GET /api/v1/stocks/search?q=贵州茅台&limit=10`，以真实 A 股证券目录按中文名称或代码匹配，返回标准 `symbol`、代码、名称与交易所，不返回虚构/推算行情。目录在进程内缓存 6 小时，每次最多返回 50 条结果；目录刷新失败但有旧目录时会明确标记 `quality_status=stale` 与质量原因，没有可用目录时返回 Provider 错误。可选同花顺源也实现了 `StockSearchProvider`，只有显式启用并配置 API Key 后才参与检索回退。
+- 证券搜索：`GET /api/v1/stocks/search?q=贵州茅台&limit=10`，以真实 A 股证券目录按中文名称或代码匹配，返回标准 `symbol`、代码、名称与交易所，不返回虚构/推算行情。目录在进程内缓存 6 小时，每次最多返回 50 条结果；目录刷新失败但有旧目录时会明确标记 `quality_status=stale` 与质量原因，没有可用目录时返回 Provider 错误。当前腾讯 Smartbox 优先、东方财富 CLIST 兜底；分别由 `MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED` 与 `MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED` 控制；腾讯搜索基地址可由 `MARKET_DATA_TENCENT_STOCK_SEARCH_URL` 覆盖。`GET /api/v1/data-sources` 会通过 `stock_search_capable` 暴露实际注册状态。可选同花顺源只有显式启用并配置 API Key 后才参与检索回退。
 - 标准单位：`volume` 为股，`amount` 为人民币元，价格为元/股；Tushare 原始日 K 的 `vol` 按手换算为股，`amount` 按千元换算为人民币元，原始字段/单位仍单独保留；`trade_date` 是交易日。`quote_time` 是供应商报告的行情快照/更新时间，不一定等于最近一笔成交时间；新增的 `quote_time_semantics=provider_snapshot_time` 明确该语义。`fetched_at` 是本服务采集时间，`normalized_at` 是标准化时间，三者不能互相替代。
 - 复权参数只能是 `none`、`forward_adjusted` 或 `backward_adjusted`。`unknown` 只用于说明数据未知，不是可请求的复权类型。
 - 标准化行情与 K 线保留底层 Provider 名称、版本、原始单位、抓取/标准化时间、复权口径、兜底诊断和质量原因。不能依据数值大小猜测单位，不能随意执行 100 倍价格修正。
@@ -17,7 +17,7 @@
 - 历史 `as_of` 查询会排除当日尚未完成的日 K，并明确提示复权历史可能包含之后发生的公司行动因子。本服务尚未建立严格的时点复权因子库，因此不能声称历史回测完全无前视偏差。
 - 本地 smoke 模式可不连接数据库；生产部署应复用现有 MariaDB/Redis，不要为了本服务额外启动一套数据库容器。
 
-东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告及筹码分布已纳入 Go 原生能力链路；筹码分布通过最近 120 根未复权日 K 与换手率计算，因上游不提供独立快照时间而标记 degraded。同花顺另提供可选指数/板块目录、当前成分股、指数历史日 K、指数快照、最近一年交易日历、财务指标、三张财务报表、涨停/跌停/炸板池、龙虎榜和批量估值快照（PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM）。指数时间戳缺失时降级；交易日历只返回开市日期、非交易日需推断；报表按目标报告期精确匹配；龙虎榜金额保留为 provider_defined 单位，未被误标成人民币元；相关能力均由独立开关控制且默认关闭。TickFlow、Tushare、Pytdx 也已接入可选国内行情/日 K 能力。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；个股 profile 已补齐动态 PE/PB、行业、总市值/流通市值、板块编号、ROE、净利率、净利润、毛利率等扩展字段；人气榜/飙升榜已由独立 API 接入，质量保持 degraded 因上游不提供快照时间。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
+东方财富的指数报价、市场广度、行业/概念排名、涨跌停池、龙虎榜、公告及筹码分布已纳入 Go 原生能力链路；当前 `configs/providers.json` 与服务级环境模板默认启用这些能力（人气榜/飙升榜也默认启用）。这只是配置默认值，不代表目标部署网络已验收；缺少可核验源端快照时间的榜单、指数、广度及相关数据仍按契约返回 `degraded`。市场广度会尝试通过东方财富 CLIST 证券列表分页汇总 A 股成交额（f6，人民币元），每页最多 100 条、最多 4 个并发请求，并将单次汇总限制在 60 秒内；仅当每页完整、证券无重复、逐行报价日期与报告日一致，且证券数量与涨跌分布覆盖数一致时才返回 total_amount_cny。否则保留 null 和具体质量原因，不使用部分总额；由于多页请求并非原子快照，结果仍标记为 degraded。市场广度结果缓存 5 分钟以控制全市场分页访问量。筹码分布通过最近 120 根未复权日 K 与换手率计算，因上游不提供独立快照时间而标记 degraded。同花顺另提供可选指数/板块目录、当前成分股、指数历史日 K、指数快照、最近一年交易日历、财务指标、三张财务报表、涨停/跌停/炸板池、龙虎榜和批量估值快照（PE TTM/MRQ、PB MRQ、PS TTM、PCF TTM）。指数时间戳缺失时降级；交易日历只返回开市日期、非交易日需推断；报表按目标报告期精确匹配；龙虎榜金额保留为 provider_defined 单位，未被误标成人民币元；相关能力均由独立开关控制且默认关闭。TickFlow、Tushare、Pytdx 也已接入可选国内行情/日 K 能力。Efinance 与 Akshare 是 Python 多端点封装，部分底层行情已由原生 Go Provider 覆盖，但尚未实现逐方法等价层；个股 profile 已补齐动态 PE/PB、行业、总市值/流通市值、板块编号、ROE、净利率、净利润、毛利率等扩展字段；人气榜/飙升榜已由独立 API 接入，质量保持 degraded 因上游不提供快照时间。另一个 `go-core` 服务仍通过 Python bridge 使用部分市场概况、新闻、LLM、持久化和通知能力。
 
 ## BaoStock 日 K 数据源（默认启用的备用源）
 
@@ -42,18 +42,18 @@ GitHub Actions 已连续完成真实登录/查询探测，且此前已有 NAS �
 - 该端点未提供经验证的成交额字段，`amount` 保持 `null`、`amount_unit=unknown`，质量标记为 `degraded`；响应也不回显股票代码，报告会保留身份校验限制。
 - 新浪接口单次历史回看最多 1023 条；若触及上限且无法覆盖请求起始日期，适配器返回明确错误，不静默接受不完整区间。真实请求结果以 GitHub Actions 探测和目标部署网络持续复验。
 
-## 网易财经实时行情（默认关闭）
+## 网易财经实时行情（配置默认启用，稳定性未验收）
 
-- 报价端点独立配置为 `MARKET_DATA_NETEASE_QUOTE_URL`（默认 `https://api.money.126.net/data/feed`），解包 JSONP 后再解析 JSON；不依赖 API Key 或 Python。GitHub Runner 实测该域名 DNS 解析失败，因此它目前只是候选实现，不属于已接通的可用来源。
+- 报价端点独立配置为 `MARKET_DATA_NETEASE_QUOTE_URL`（默认 `https://api.money.126.net/data/feed`），解包 JSONP 后再解析 JSON；不依赖 API Key 或 Python。既往 GitHub Runner 曾遇到该域名 DNS 解析失败，因此当前虽在 `configs/providers.json` 与环境模板中默认启用为后置回退，但尚不能视为已验收的稳定来源。
 - 实时端点独立返回 `price/open/high/low/yestclose/volume/turnover/time`；`percent` 是比例值，会乘以 100 转换为系统统一百分点。证券代码回显与报价更新时间必须通过契约校验。
-- 启用需显式设置 `MARKET_DATA_NETEASE_ENABLED=true` 与 `MARKET_DATA_NETEASE_QUOTE_ENABLED=true`。在 DNS/接口可达性重新验证前，保持关闭。
-- 历史 CSV endpoint 多次返回 502，因此即使实时报价可用，历史日 K 也应继续单独关闭。
+- 当前配置默认将该能力设为启用；如果部署网络仍无法解析或访问供应商，可通过 `MARKET_DATA_NETEASE_ENABLED=false` 或 `MARKET_DATA_NETEASE_QUOTE_ENABLED=false` 关闭。配置启用不代表网络验收通过。
+- 历史 CSV endpoint 曾返回 HTTP 502。日 K 开关目前在默认配置中也是启用的后置回退，但可用性未验收；必要时单独设置 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`，无需关闭其他 Provider。
 
-## 网易财经历史日 K（默认关闭）
+## 网易财经历史日 K（配置默认启用，稳定性未验收）
 
 - 通过 `MARKET_DATA_NETEASE_HISTORY_URL`（默认 `https://quotes.money.163.com/service/chddata.html`）下载公开 CSV；适配器按 GBK/UTF-8 解码并根据中文表头定位开高低收、成交量、成交金额，不依赖 Python 或 API Key。
-- 仅支持已验证的 `adjustment=none`；前复权/后复权请求会明确返回不支持。来源为非正式下载接口，默认关闭，只有完成目标网络验收后才通过 `MARKET_DATA_NETEASE_ENABLED=true` 启用。
-- 对成交额和成交量做内在一致性检查：以 `成交金额 / 成交量` 对照当日最低/最高价，只有单位解释唯一且均价处于 OHLC 附近时才保留可信金额；无法匹配或存在歧义时 `amount` 保持 `null`、金额单位 `unknown`，并标记 `degraded`。不会用收盘价乘成交量估算成交额。
+- 仅支持已验证的 `adjustment=none`；前复权/后复权请求会明确返回不支持。来源为非正式下载接口，配置默认作为后置回退启用但目标网络未验收；如不希望参与日 K 回退，请设置 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`。
+- 对成交额和成交量做内在一致性检查：以 `成交金额 / 成交量` 对照当日最低/最高价，只有单位解释唯一且均价处于 OHLC 附近时才保留可信金额和标准化股数；无法匹配或存在歧义时 `volume`、`amount` 均不输出，相关行由统一数据契约校验器剔除并使剩余数据降级。不会用收盘价乘成交量估算成交额，也不会把单位不明的原始数字伪装成“股”。
 - 真实探测结果与响应不稳定情况记录在 `docs/architecture/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md`；当前默认关闭，不加入生产默认回退链。
 
 ## Yahoo Finance 实时行情（默认关闭）
@@ -102,7 +102,7 @@ Redis 地址应是 `Redis:6379` 这样的主机和端口，而不是 URL。若�
 | GET | `/api/v1/quotes/{symbol}` | 实时行情 |
 | GET | `/api/v1/bars/{symbol}/daily?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=120&adjustment=forward_adjusted` | 日线 K 线 |
 | GET | `/api/v1/bundles/{symbol}?lookback_days=120&adjustment=forward_adjusted&as_of=RFC3339` | 行情与 K 线组合 |
-| GET | `/api/v1/data-sources` | 已注册 Provider 与能力 |
+| GET | `/api/v1/data-sources` | 已注册 Provider 与能力（包括 `stock_search_capable` 等独立能力标志） |
 | GET | `/api/v1/stocks/{symbol}/chip-distribution` | 东方财富 Go 原生筹码分布；失败后可回退 MX |
 | GET | `/api/v1/market/hot-stocks?type=popular&limit=10` | 东方财富个股人气榜/飙升榜；类型支持 `popular`、`surge` |
 | GET | `/api/v1/stocks/{symbol}/capital-flow` | 可选个股资金流；MX 未启用时返回 Provider 不可用 |
@@ -180,7 +180,7 @@ curl -H "X-API-Key: $MARKET_DATA_API_KEY" "http://127.0.0.1:8091/api/v1/bars/600
 ### 人气榜与飙升榜（Go 原生，东方财富 + 可选同花顺回退）
 
 - API：`GET /api/v1/market/hot-stocks?type=popular&limit=10`；将 `type=surge` 切换为飙升榜。
-- 默认优先使用东方财富 `getAllCurrentList` / `getAllHisRcList` 并补充最新价与涨跌幅。显式启用同花顺后，回退源使用 `/api/a-share/special-data/hot-stock-list?period=day` 和 `/api/a-share/special-data/skyrocket-list?period=day`；保留同花顺原始 `heat`、`rank_change`、`rank_trend`，不伪造行情价格。
+- 默认优先使用东方财富 `getAllCurrentList` / `getAllHisRcList` 并补充最新价与涨跌幅；两个接口地址分别由 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL`（人气榜）和 `MARKET_DATA_EASTMONEY_HOT_SURGE_URL`（飙升榜）配置，默认值为当前公开接口地址。显式启用同花顺后，回退源使用 `/api/a-share/special-data/hot-stock-list?period=day` 和 `/api/a-share/special-data/skyrocket-list?period=day`；保留同花顺原始 `heat`、`rank_change`、`rank_trend`，不伪造行情价格。
 - 榜单数据可能延迟，响应保持 `degraded`；同花顺 `provider_time` 代表数据准备时间，不保证是精确行情时点。空列表标记 `unknown`，不解释为已核验的零条上榜。
 - 同花顺能力默认关闭；需同时设置 `MARKET_DATA_HITHINK_ENABLED=true`、有效 `MARKET_DATA_HITHINK_API_KEY` 和 `MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED=true`。东方财富能力可通过 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_ENABLED=false` 关闭。未引入海外数据源。
 ### 个股 profile 扩展字段（Efinance get_base_info 迁移）

@@ -57,6 +57,7 @@ components:
         volume_ratio: {type: number, nullable: true, description: Provider volume ratio; null when unsupported}
         turnover_rate: {type: number, nullable: true, description: Percentage points; 1.25 means 1.25%}
         quote_time: {type: string, format: date-time, nullable: true, description: Provider quote timestamp; never use fetch time as a replacement}
+        quote_time_semantics: {type: string, description: Semantics of quote_time reported by the provider, e.g. provider_snapshot_time}
         fetched_at: {type: string, format: date-time}
         normalized_at: {type: string, format: date-time}
         source: {type: string}
@@ -481,9 +482,9 @@ components:
         unclassified_count: {type: integer, minimum: 0}
         limit_up_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-up pool endpoint, only when its report date matches the breadth report date; null means unknown}
         limit_down_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-down pool endpoint, only when its report date matches the breadth report date; null means unknown}
-        total_amount_cny: {type: number, nullable: true, description: Null unless amount fields cover the full universe}
-        amount_coverage_count: {type: integer, minimum: 0}
-        provider_report_date: {type: string, format: date, description: Source report date for market breadth and limit-pool alignment}
+        total_amount_cny: {type: number, nullable: true, description: Full A-share turnover sum in CNY; null unless all paginated securities have valid amounts, quote dates match provider_report_date, and security count matches the breadth distribution}
+        amount_coverage_count: {type: integer, minimum: 0, description: Count of securities included in the aggregate; zero when full coverage or cross-source count alignment cannot be established}
+        provider_report_date: {type: string, format: date, description: Source report date used to align breadth buckets, limit pools, and full-market quote rows}
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
@@ -701,8 +702,10 @@ components:
         quote_capable: {type: boolean}
         daily_bar_capable: {type: boolean}
         stock_basic_capable: {type: boolean}
+        stock_search_capable: {type: boolean}
         sector_ranking_capable: {type: boolean}
         index_quote_capable: {type: boolean}
+        index_catalog_capable: {type: boolean}
         market_breadth_capable: {type: boolean}
         limit_pool_capable: {type: boolean}
         stock_boards_capable: {type: boolean}
@@ -1057,7 +1060,7 @@ paths:
   /api/v1/market/breadth:
     get:
       summary: Get Eastmoney A-share market-breadth distribution
-      description: Aggregates Eastmoney market-wide change-distribution buckets. total_securities is the sum of returned bucket counts, not an independently verified security-master count. Total amount remains null because the distribution endpoint does not provide market turnover. Quality is degraded because the source exposes a report date but no verifiable intraday snapshot timestamp.
+      description: Aggregates Eastmoney market-wide change-distribution buckets and date-aligned limit-pool totals. total_securities is the sum of distribution bucket counts, not an independently verified security-master count. total_amount_cny is populated only when CLIST turnover pages are complete, contain valid unique securities with quote dates matching provider_report_date, and their coverage count matches the distribution total; otherwise it remains null and amount_coverage_count is zero. The multi-page collection is not an atomic snapshot, and the source exposes no verifiable intraday timestamp, so quality remains degraded.
       responses:
         '200':
           description: Market breadth including universe coverage and data quality

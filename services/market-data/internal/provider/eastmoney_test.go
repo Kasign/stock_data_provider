@@ -554,3 +554,19 @@ func TestEastmoneySearchStocksUsesAndCachesRealDirectoryShape(t *testing.T) {
 		t.Fatalf("directory should be fetched once and reused from cache, got %d requests", requests)
 	}
 }
+
+func TestEastmoneyHotRankingEndpointsAreConfigurable(t *testing.T) {
+	p := NewEastmoneyConfiguredWithAnnouncements(2*time.Second, "", "", "", "", "", "", "", "", "", "", "")
+	p.WithHotRankingURLs("  https://rank.example.test/current  ", "  https://rank.example.test/surge  ")
+	if p.hotRankingURL != "https://rank.example.test/current" {
+		t.Fatalf("popular ranking URL = %q", p.hotRankingURL)
+	}
+	if p.hotSurgeURL != "https://rank.example.test/surge" {
+		t.Fatalf("surge ranking URL = %q", p.hotSurgeURL)
+	}
+
+	legacy := NewEastmoneyConfiguredWithAnnouncements(2*time.Second, "", "", "", "", "", "", "", "", "", "", "")
+	if legacy.hotRankingURL != eastmoneyHotRankURL || legacy.hotSurgeURL != eastmoneyHotSurgeURL {
+		t.Fatal("existing constructors must preserve the default Eastmoney ranking endpoints")
+	}
+}

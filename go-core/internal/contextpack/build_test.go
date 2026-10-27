@@ -1,6 +1,7 @@
 package contextpack
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -221,5 +222,34 @@ func TestLegacyContextNullsMixedAdjustmentBasisPriceRows(t *testing.T) {
 	}
 	if rows[1]["close"] != float64(11) {
 		t.Fatalf("latest known basis row should remain available: %#v", rows[1])
+	}
+}
+
+func TestToLegacyAnalyzerContextPassesThroughDragonTigerSummary(t *testing.T) {
+	summary := map[string]any{
+		"is_on_list": true, "recent_count": 2, "latest_date": "2026-10-26",
+		"quality_status": "degraded", "recent_count_is_lower_bound": true,
+	}
+	ctx := domain.AnalysisContext{Code: "600519.SH", DragonTiger: summary}
+	legacy := ToLegacyAnalyzerContext(ctx)
+	if !reflect.DeepEqual(legacy["dragon_tiger_context"], summary) || !reflect.DeepEqual(legacy["dragon_tiger"], summary) {
+		t.Fatalf("dragon-tiger summary not propagated into legacy analyzer context: %#v", legacy)
+	}
+}
+
+func TestToLegacyAnalyzerContextPassesThroughStockProfile(t *testing.T) {
+	pe := 23.5
+	profile := &domain.StockProfile{Symbol: "600519.SH", Name: "贵州茅台", Industry: "白酒", DynamicPE: &pe, Source: "eastmoney", QualityStatus: "valid"}
+	legacy := ToLegacyAnalyzerContext(domain.AnalysisContext{Code: profile.Symbol, StockProfile: profile})
+	if legacy["stock_profile_context"] != profile || legacy["stock_profile"] != profile {
+		t.Fatalf("stock profile was not preserved: %#v", legacy)
+	}
+	info, ok := legacy["stock_info"].(map[string]any)
+	if !ok || info["industry"] != "白酒" {
+		t.Fatalf("stock_info projection is missing profile fields: %#v", legacy["stock_info"])
+	}
+	enhanced, ok := legacy["enhanced_data"].(map[string]any)
+	if !ok || enhanced["pe_dynamic"] != &pe || enhanced["quality_status"] != "valid" {
+		t.Fatalf("enhanced_data projection is missing valuation/quality fields: %#v", legacy["enhanced_data"])
 	}
 }

@@ -7,6 +7,9 @@
 - 为单股分析和市场复盘提供带鉴权的内部 HTTP 接口。
 - 由 Go 管理主流程：获取数据、计算确定性技术指标、建立上下文和质量摘要、调用分析、持久化，并可选发送通知。
 - Python 能力适配器集中放在 `internal/adapters/pythonbridge`。
+- Go 原生新闻检索支持 Bocha、Tavily、Brave News、显式配置的 SearXNG 和 market-data 个股公告接口。生产环境 NEWS_MAX_SEARCHES 默认值为 5，覆盖个股业绩/监管/业务/股东及市场政策/行情/上市/行业等维度；查询按注册顺序轮转分配给已配置的搜索源并并发执行。结果保留 dimension 标签，并统一执行时效门禁、URL/标题去重与相关度排序。公告日期与源端发布时间分开处理，抓取时间不冒充发布时间。仍保留可信域名加权、营销导流过滤和兼容 fallback。
+- 实时个股分析会并发读取 Go market-data 的 profile 基础资料、基本面、所属板块、筹码分布、资金流和龙虎榜摘要；任一辅助接口失败都不会丢弃行情与日 K，只添加 warning。profile 属于当前快照，显式 `as_of` 请求不会附加它，避免前视污染。
+- 新闻可信域名仅用于排序加权，不是对文章真实性的自动背书；新闻检索仍未完全等价替代原 Python 新闻情报处理。
 - Go 不直接引入 ORM 或 pandas；现阶段 Python 仍拥有部分存储 schema 和 Provider SDK。
 - 工作流返回分阶段 trace，包含每一步的状态与耗时，供调用方查看完整执行过程。
 
@@ -28,6 +31,9 @@ go build ./cmd/analysisd
 - `PYTHON_BRIDGE_BASE_URL`：默认 `http://python-bridge:8090`。
 - `HTTP_ADDR`：默认 `127.0.0.1:8088`；Docker Compose 会显式覆盖为容器网络监听地址 `:8088`。
 - `GO_CORE_REQUEST_TIMEOUT` 和 `PYTHON_BRIDGE_TIMEOUT`：使用 Go duration 格式，如 `20m`。
+- `BOCHA_API_KEYS`、`SEARXNG_BASE_URLS`：可选的 Go 原生新闻检索来源；未配置时会继续使用 Python bridge。
+- `GO_NEWS_TRUSTED_DOMAINS`：可选，逗号分隔的可信域名排序加权项。
+- `GO_NEWS_BLOCKED_TERMS`：可选，追加的新闻营销/导流过滤词。
 
 ## 接口
 
@@ -44,4 +50,4 @@ go build ./cmd/analysisd
 
 本代码不会自动替换原有的 `main.py`、FastAPI 路由、Bot 或调度器。只有兼容性测试和 golden tests 通过后，现有入口才能经由 `python_bridge/go_core_client.py` 切换到 Go；否则可能导致新旧流程同时执行同一个任务。
 
-当前版本仍复用 Python 的 `GeminiAnalyzer`、部分原始数据源层、旧持久化 schema 和通知实现。分析上下文的完整行为一致性仍需在替换生产 `StockAnalysisPipeline` 前补齐。个股行情与日 K 已有原生 Go market-data HTTP 接口，但市场概览、新闻搜索、LLM、部分持久化与通知能力仍走 bridge。参见仓库根目录的迁移方案和 Provider 迁移矩阵。
+当前版本仍复用 Python 的 `GeminiAnalyzer`、部分原始数据源层、旧持久化 schema 和通知实现。分析上下文的完整行为一致性仍需在替换生产 `StockAnalysisPipeline` 前补齐。个股行情与日 K 已有原生 Go market-data HTTP 接口；中国 A 股市场概况现优先并发聚合原生指数、市场广度及行业/概念排名接口，原生组件整体不可用或没有有效结果时才回退到 bridge。非中国市场概况仍走 bridge。新闻检索已增加可信来源加权与营销内容过滤，但完整新闻情报能力、LLM、部分持久化与通知仍需继续迁移。参见仓库根目录的迁移方案和 Provider 迁移矩阵。

@@ -296,7 +296,8 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
-	const ttl = 90 * time.Second
+	// 市场广度包含全市场成交额分页聚合，使用 5 分钟缓存控制上游请求量。
+	const ttl = 5 * time.Minute
 	const key = "md:v1:market-breadth:cn-a-share"
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketBreadthSnapshot
@@ -335,18 +336,19 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 
 func normalizeLimitPoolDate(rawDate string) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
 	if rawDate == "" {
-		loc, err := time.LoadLocation("Asia/Shanghai")
-		if err != nil {
-			loc = time.FixedZone("CST", 8*60*60)
-		}
-		return time.Now().In(loc).Format("2006-01-02"), nil
+		return today, nil
 	}
 	parsed, err := time.Parse("2006-01-02", rawDate)
-	if err != nil {
+	if err != nil || parsed.Format("2006-01-02") != rawDate {
 		return "", fmt.Errorf("invalid limit-pool date %q: expected YYYY-MM-DD", rawDate)
 	}
-	return parsed.Format("2006-01-02"), nil
+	date := parsed.Format("2006-01-02")
+	if date > today {
+		return "", fmt.Errorf("limit-pool date %s must not be in the future (China market date %s)", date, today)
+	}
+	return date, nil
 }
 
 func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *model.LimitPoolSnapshot) error {
@@ -453,18 +455,19 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 
 func normalizeDragonTigerDate(rawDate string) (string, error) {
 	rawDate = strings.TrimSpace(rawDate)
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
 	if rawDate == "" {
-		loc, err := time.LoadLocation("Asia/Shanghai")
-		if err != nil {
-			loc = time.FixedZone("CST", 8*60*60)
-		}
-		return time.Now().In(loc).Format("2006-01-02"), nil
+		return today, nil
 	}
 	parsed, err := time.Parse("2006-01-02", rawDate)
 	if err != nil || parsed.Format("2006-01-02") != rawDate {
 		return "", fmt.Errorf("invalid dragon-tiger date %q: expected YYYY-MM-DD", rawDate)
 	}
-	return parsed.Format("2006-01-02"), nil
+	date := parsed.Format("2006-01-02")
+	if date > today {
+		return "", fmt.Errorf("dragon-tiger date %s must not be in the future (China market date %s)", date, today)
+	}
+	return date, nil
 }
 
 func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot *model.DragonTigerSnapshot) error {
@@ -1976,7 +1979,7 @@ func quoteCacheEligible(q *model.Quote) bool {
 	}
 	for _, reason := range q.QualityReasons {
 		switch reason {
-		case "provider_timestamp_missing", "quote_older_than_180_seconds_during_trading_clock", "quote_older_than_24_hours_outside_trading_clock", "provider_timestamp_more_than_60_seconds_in_future":
+		case "provider_timestamp_missing", "quote_older_than_180_seconds_during_trading_clock", "quote_older_than_24_hours_outside_trading_clock", "provider_timestamp_more_than_60_seconds_in_future", "volume_unit_assumed_without_turnover_crosscheck", "volume_unit_unverified":
 			return false
 		}
 	}
@@ -2049,7 +2052,10 @@ func providerFailureSummary(err error) (kind, message string) {
 			kind = "empty_or_unparseable_response"
 		case strings.Contains(lower, "validation"),
 			strings.Contains(lower, "symbol mismatch"),
-			strings.Contains(lower, "contract"):
+			strings.Contains(lower, "contract"),
+			strings.Contains(lower, "inconsistent"),
+			strings.Contains(lower, "ohlc invariant"),
+			strings.Contains(lower, "volume unit cannot be confirmed"):
 			kind = "data_contract"
 		default:
 			kind = "provider_error"

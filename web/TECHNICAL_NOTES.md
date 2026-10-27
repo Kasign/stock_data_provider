@@ -323,6 +323,30 @@ X-API-Key: <由现有设置提供>
 - 快速定位 UI 已从 DOM、滚动监听、CSS 和测试中移除。全局样式审查仅删除无用或完全重复规则；未重排剩余响应式规则，以降低全站级联风险。
 
 
+## 2026-10-27 — WebUI CI 触发范围与集成检查
+
+- `.github/workflows/webui-browser-smoke.yml` 现在监听 `feat/full-go-data-providers-api-switch` 目标分支的 `pull_request` 与 `push`，同时保留 WebUI 工作分支的 `push` 和手动触发入口。
+- 原因：如果浏览器烟测只监听 WebUI 开发分支，那么合并后目标分支上的后续 UI 修改不会触发该工作流，无法持续保护集成分支。
+- PR #13 已以普通 merge commit `704476fa02b1ebcf98f27b0ffb5c1a858727d82c` 合入。此次人工核对确认，大盘首页引用的指数、市场广度、行业/概念板块、涨跌停池、人气榜、龙虎榜和交易日历路由均存在；UI 检查的主要响应字段可在 Go JSON 模型/OpenAPI 中找到对应定义。
+- Chromium 烟测固定模拟 API 503，目标是检查页面状态、导航与响应式布局；不能将它理解为真实行情数据可用性或部署端到端验收。
+
+## 2026-10-27 — Go CI 失败归因（WebUI 集成后）
+
+- PR #13 的 UI 相关检查通过：WebUI checks [#40445663189](https://github.com/Kasign/stock_data_provider/actions/runs/40445663189)、Chromium browser smoke [#40445658538](https://github.com/Kasign/stock_data_provider/actions/runs/40445658538)；文档更新后的 Chromium smoke [#40445764818](https://github.com/Kasign/stock_data_provider/actions/runs/40445764818) 也通过。
+- 数据侧 PR #1 Go suite [#40445663152](https://github.com/Kasign/stock_data_provider/actions/runs/40445663152) 是独立失败项：market-data 中 `eastmoney.go:2086-2090` 包含被错误转义为 `\x60` 的 Go struct tag，导致语法错误及 Docker 镜像构建失败。
+- go-core 的 gofmt 检查列出了 7 个文件需要格式化：marketdatahttp 的 client 与测试、newssearch 的实现与测试、pythonbridge 的测试、contextpack/build.go、domain/models.go。
+- PR #13 仅改 WebUI 与 WebUI workflow，不改任何 Go/Provider 文件，所以这个失败不归因于此次 WebUI 合并。本记录用于防止混淆：WebUI 集成通过不代表数据侧 Go suite 通过。
+
+
+## 2026-10-27 — Go CI 修复验证结论
+
+- Eastmoney 的 JSON struct tag 语法错误已修复。CI 中报告的 Go 格式差异通过 `gofmt` 输出精确整理，避免变更非必要业务逻辑。
+- 配置测试已与当前默认 Provider 能力保持一致：BaoStock fundamentals/trading calendar 默认启用；Yahoo daily bars 默认关闭；NetEase quote 默认启用。测试覆盖显式环境变量启用/关闭能力，不将测试期望错误地当作生产默认配置。
+- 新闻多源查询引入维度查询计划与并行聚合；对应聚合测试明确设置两个查询预算，验证两个已配置 Provider 均被调用一次并对重复标题去重。
+- 最新 head `24952dd` 的 [Go suite](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361)、[Live Provider probe](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825)、[WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 均成功。
+- Run Flow Review 后续单独开展：以服务端阶段事件、任务状态与时间戳为依据检查 UI 展示，不在本次 Go CI 修复中改运行流逻辑。
+
+
 ## 9. 2026-10-27 全站视觉与易用性 Review 补充
 
 ### 辅助文字对比度
@@ -345,5 +369,5 @@ X-API-Key: <由现有设置提供>
 
 ### CSS 维护范围
 
-`styles.css` 当前约 3,418 行、70 个媒体查询块。本轮将主题 tokens 逐行整理，并仅调整辅助文字 token；未改变组件声明和现存断点顺序。历史媒体查询仍应按组件/页面分区逐步整理，避免跨区域合并引发难以察觉的级联变化。
+`styles.css` 当前约 3,434 行、70 个媒体查询块。本轮将主题 tokens 逐行整理，并仅调整辅助文字 token；未改变组件声明和现存断点顺序。历史媒体查询仍应按组件/页面分区逐步整理，避免跨区域合并引发难以察觉的级联变化。
 

@@ -25,8 +25,9 @@ const neteaseQuoteVersion = "netease-finance-quote-v1"
 const maxNeteaseQuoteBytes = 1 << 20
 const neteaseFields = "TCLOSE;HIGH;LOW;TOPEN;LCLOSE;CHG;PCHG;TURNOVER;VOTURNOVER;VATURNOVER"
 
-// Netease reads public historical CSV. The endpoint is unofficial and provides
-// raw, unadjusted OHLC only; the adapter remains disabled by default.
+// Netease reads public quote JSONP and historical CSV endpoints. The endpoints
+// are unofficial; historical bars provide raw, unadjusted OHLC only. Provider enablement
+// is controlled by providers.json and MARKET_DATA_NETEASE_*_ENABLED settings.
 
 type Netease struct {
 	client     *http.Client
@@ -414,12 +415,12 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		bar := model.DailyBar{
 			Symbol: symbol, TradeDate: tradeDate, Period: "1d",
 			Open: openV, High: highV, Low: lowV, Close: closeV,
-			Volume: &shares, Amount: amount, AdjustmentBasis: model.AdjustmentNone,
+			Volume: shares, Amount: amount, AdjustmentBasis: model.AdjustmentNone,
 			AdjustmentMethod: "netease_raw_ohlc_no_adjustment",
 			Source:           p.Name(), SourceVersion: neteaseVersion,
 			FetchedAt: now, NormalizedAt: now, RawVolume: &rawVolumeCopy,
 			RawVolumeUnit: volumeUnit, RawAmount: &rawAmountCopy, RawAmountUnit: amountUnit,
-			RawAmountField: "VATURNOVER", VolumeUnit: "shares", AmountUnit: amountUnit,
+			RawAmountField: "VATURNOVER", VolumeUnit: optionalVolumeUnit(shares, "shares"), AmountUnit: amountUnit,
 			QualityStatus: quality, QualityReasons: reasons,
 			NormalizationVer: normalize.Version,
 		}
@@ -487,10 +488,11 @@ func parseNeteaseNumber(raw string) (float64, error) {
 
 // neteaseValidateTradingUnits uses the reported amount and daily OHLC range to
 // test whether volume is in shares or hands. Ambiguous values stay unknown.
-func neteaseValidateTradingUnits(rawVolume, rawAmount, low, high float64) (int64, string, *float64, string, model.QualityStatus, []string) {
+func neteaseValidateTradingUnits(rawVolume, rawAmount, low, high float64) (*int64, string, *float64, string, model.QualityStatus, []string) {
 	rawAmountCopy := rawAmount
 	if rawVolume <= 0 || rawAmount <= 0 || low <= 0 || high < low {
-		return int64(math.Round(math.Max(0, rawVolume))), "unknown", nil, "unknown", model.QualityDegraded,
+		// 单位尚不能判断时，不向标准 volume 字段填入未经转换的原始数字。
+		return nil, "unknown", nil, "unknown", model.QualityDegraded,
 			[]string{"netease_amount_volume_price_consistency_unavailable", "netease_volume_unit_unverified"}
 	}
 	sharesAverage := rawAmount / rawVolume
@@ -500,24 +502,25 @@ func neteaseValidateTradingUnits(rawVolume, rawAmount, low, high float64) (int64
 	if sharesMatch && !handsMatch {
 		shares, err := normalize.RawSharesToInt64(rawVolume)
 		if err == nil {
-			return shares, "shares", &rawAmountCopy, "CNY", model.QualityValid, nil
+			return &shares, "shares", &rawAmountCopy, "CNY", model.QualityValid, nil
 		}
 	}
 	if handsMatch && !sharesMatch {
 		if rawVolume >= float64(math.MaxInt64)/100 {
-			return 0, "unknown", nil, "unknown", model.QualityDegraded, []string{"netease_volume_overflow", "netease_volume_unit_unverified"}
+			return nil, "unknown", nil, "unknown", model.QualityDegraded, []string{"netease_volume_overflow", "netease_volume_unit_unverified"}
 		}
 		shares, err := normalize.RawSharesToInt64(rawVolume * 100)
 		if err == nil {
-			return shares, "hands_inferred", &rawAmountCopy, "CNY", model.QualityDegraded,
+			return &shares, "hands_inferred", &rawAmountCopy, "CNY", model.QualityDegraded,
 				[]string{"netease_volume_unit_inferred_from_amount_price"}
 		}
 	}
-	shares, err := normalize.RawSharesToInt64(rawVolume)
-	if err != nil {
-		return 0, "unknown", nil, "unknown", model.QualityDegraded, []string{"netease_volume_unit_unverified"}
+	if _, err := normalize.RawSharesToInt64(rawVolume); err != nil {
+		return nil, "unknown", nil, "unknown", model.QualityDegraded, []string{"netease_volume_unit_unverified"}
 	}
-	return shares, "unknown", nil, "unknown", model.QualityDegraded,
+	// 即使原始数字可转成整数，若股/手两种解释均不符合成交金额与价格区间，
+	// 也不能把它冒充为标准化股数；调用方应让统一校验器剔除此行。
+	return nil, "unknown", nil, "unknown", model.QualityDegraded,
 		[]string{"netease_amount_volume_price_consistency_failed", "netease_volume_unit_unverified"}
 }
 

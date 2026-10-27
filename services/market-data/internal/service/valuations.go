@@ -29,6 +29,24 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
 		return errors.New("valuation snapshot source or fetched_at is missing")
 	}
+	if snapshot.ProviderReportDate != "" {
+		reportDate, dateErr := time.Parse("2006-01-02", snapshot.ProviderReportDate)
+		if dateErr != nil || reportDate.Format("2006-01-02") != snapshot.ProviderReportDate {
+			return errors.New("valuation snapshot provider_report_date is invalid")
+		}
+		today := time.Now().In(marketLocation()).Format("2006-01-02")
+		if snapshot.ProviderReportDate > today {
+			return fmt.Errorf("valuation snapshot provider_report_date %s is in the future (China market date %s)", snapshot.ProviderReportDate, today)
+		}
+	}
+	if snapshot.ProviderTimestamp != nil {
+		if snapshot.ProviderTimestamp.IsZero() {
+			return errors.New("valuation snapshot provider_timestamp is zero")
+		}
+		if snapshot.ProviderTimestamp.After(time.Now().Add(60 * time.Second)) {
+			return errors.New("valuation snapshot provider_timestamp is in the future")
+		}
+	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("valuation snapshot quality %q is unsupported", snapshot.QualityStatus)
 	}
@@ -46,7 +64,7 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 		}
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
-	hasDegradation := len(snapshot.MissingSymbols) > 0 || snapshot.ProviderTimestamp == nil
+	hasDegradation := len(snapshot.MissingSymbols) > 0 || snapshot.ProviderTimestamp == nil || snapshot.ProviderReportDate == ""
 	for _, item := range snapshot.Items {
 		symbol, err := normalize.NormalizeSymbol(item.Symbol)
 		if err != nil || symbol != item.Symbol {

@@ -55,6 +55,104 @@ func (p *transientProvider) FetchDailyBars(context.Context, string, string, stri
 	return nil, errors.New("not used by test")
 }
 
+func TestHistoricalMarketDateNormalizersRejectFutureDates(t *testing.T) {
+	futureDate := time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	if _, err := normalizeLimitPoolDate(futureDate); err == nil || !strings.Contains(err.Error(), "must not be in the future") {
+		t.Fatalf("future limit-pool date must be rejected, got %v", err)
+	}
+	if _, err := normalizeDragonTigerDate(futureDate); err == nil || !strings.Contains(err.Error(), "must not be in the future") {
+		t.Fatalf("future dragon-tiger date must be rejected, got %v", err)
+	}
+}
+
+func validFundamentalsSnapshotForTest() *model.FundamentalsSnapshot {
+	now := time.Now().UTC()
+	categories := []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"}
+	sections := make([]model.FundamentalSection, 0, len(categories))
+	for _, category := range categories {
+		sections = append(sections, model.FundamentalSection{
+			Category:        category,
+			HasData:         true,
+			ReportDate:      "2026-06-30",
+			PublicationDate: "2026-08-29",
+			Metrics:         []model.FundamentalMetric{{Key: "test_metric", Name: "测试指标", Value: 1, Unit: "ratio", SourceField: "testField"}},
+			QualityStatus:   model.QualityValid,
+		})
+	}
+	return &model.FundamentalsSnapshot{
+		Symbol: "600519.SH", Year: 2026, Quarter: 2, HasData: true,
+		Sections: sections, Source: "baostock", FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+}
+
+func TestValidateFundamentalsSnapshotRejectsFuturePublicationDate(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.Sections[0].PublicationDate = time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "publication date is in the future") {
+		t.Fatalf("future publication date must be rejected, got %v", err)
+	}
+}
+
+func TestValidateFundamentalsSnapshotRejectsValidSectionWithoutPublicationDate(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.Sections[0].PublicationDate = ""
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid without a publication date") {
+		t.Fatalf("valid fundamentals without a publication date must be rejected, got %v", err)
+	}
+}
+
+func TestValidateFundamentalsSnapshotAcceptsPointInTimeValidSnapshot(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err != nil {
+		t.Fatalf("valid published fundamentals snapshot should pass: %v", err)
+	}
+}
+
+func valuationFloatPointerForValidationTest(value float64) *float64 { return &value }
+
+func validValuationSnapshotForValidationTest() *model.ValuationSnapshot {
+	now := time.Now().UTC()
+	symbol := "600519.SH"
+	item := model.ValuationItem{
+		Symbol: symbol, Code: "600519",
+		PETTM: valuationFloatPointerForValidationTest(18.4), PEMRQ: valuationFloatPointerForValidationTest(6.1), PEStatic: valuationFloatPointerForValidationTest(22.5),
+		PBMRQ: valuationFloatPointerForValidationTest(6.1), PSTTM: valuationFloatPointerForValidationTest(7.2), PCFTTM: valuationFloatPointerForValidationTest(9.0),
+		Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+	}
+	return &model.ValuationSnapshot{
+		RequestedSymbols: []string{symbol}, Total: 1, Items: []model.ValuationItem{item},
+		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+		Source:             "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+	}
+}
+
+func TestValidateValuationSnapshotRejectsFutureReportDateAndTimestamp(t *testing.T) {
+	t.Run("future report date", func(t *testing.T) {
+		snapshot := validValuationSnapshotForValidationTest()
+		snapshot.ProviderReportDate = time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+		if err := validateValuationSnapshot(snapshot.RequestedSymbols, snapshot); err == nil || !strings.Contains(err.Error(), "provider_report_date") {
+			t.Fatalf("future valuation report date must be rejected, got %v", err)
+		}
+	})
+	t.Run("future provider timestamp", func(t *testing.T) {
+		snapshot := validValuationSnapshotForValidationTest()
+		future := time.Now().UTC().Add(5 * time.Minute)
+		snapshot.ProviderTimestamp = &future
+		if err := validateValuationSnapshot(snapshot.RequestedSymbols, snapshot); err == nil || !strings.Contains(err.Error(), "provider_timestamp is in the future") {
+			t.Fatalf("future valuation timestamp must be rejected, got %v", err)
+		}
+	})
+	t.Run("missing report date cannot be valid", func(t *testing.T) {
+		snapshot := validValuationSnapshotForValidationTest()
+		snapshot.ProviderReportDate = ""
+		snapshot.QualityStatus = model.QualityValid
+		snapshot.ProviderTimestamp = nil
+		if err := validateValuationSnapshot(snapshot.RequestedSymbols, snapshot); err == nil || !strings.Contains(err.Error(), "claims valid quality") {
+			t.Fatalf("missing report date/time must not be marked valid, got %v", err)
+		}
+	})
+}
+
 func validQuote(source string) *model.Quote {
 	now := time.Now().UTC()
 	p := 1313.31
@@ -730,6 +828,19 @@ func TestProviderFailureSummaryRedactsURLQuery(t *testing.T) {
 	}
 }
 
+func TestProviderFailureSummaryClassifiesQuoteContractFailures(t *testing.T) {
+	for _, message := range []string{
+		"quote change is inconsistent with current_price minus prev_close",
+		"Tencent quote volume unit cannot be confirmed; refusing to assume 100-share lots",
+		"quote OHLC invariant failed",
+	} {
+		kind, _ := providerFailureSummary(errors.New(message))
+		if kind != "data_contract" {
+			t.Errorf("provider failure %q classified as %q, want data_contract", message, kind)
+		}
+	}
+}
+
 func TestProviderFailureSummaryClassifiesNetworkUnavailable(t *testing.T) {
 	kind, message := providerFailureSummary(errors.New("dial tcp 61.129.129.199:443: connect: Network unreachable"))
 	if kind != "network_connect" {
@@ -780,5 +891,22 @@ func TestStockBoardsRejectsProviderSymbolMismatch(t *testing.T) {
 	_, _, err := svc.StockBoards(context.Background(), "600519.SH")
 	if err == nil || !strings.Contains(err.Error(), "all stock-boards providers failed") {
 		t.Fatalf("expected stock-board identity mismatch, got %v", err)
+	}
+}
+
+func TestQuoteCacheRejectsLegacyUnverifiedTencentVolume(t *testing.T) {
+	now := time.Now().UTC()
+	for _, reason := range []string{
+		"volume_unit_assumed_without_turnover_crosscheck",
+		"volume_unit_unverified",
+	} {
+		q := &model.Quote{
+			QualityStatus:  model.QualityDegraded,
+			QuoteTime:      &now,
+			QualityReasons: []string{reason},
+		}
+		if quoteCacheEligible(q) {
+			t.Fatalf("quote cache must reject an unverified Tencent volume reason %q", reason)
+		}
 	}
 }
