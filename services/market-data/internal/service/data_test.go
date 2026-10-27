@@ -55,6 +55,49 @@ func (p *transientProvider) FetchDailyBars(context.Context, string, string, stri
 	return nil, errors.New("not used by test")
 }
 
+func validFundamentalsSnapshotForTest() *model.FundamentalsSnapshot {
+	now := time.Now().UTC()
+	categories := []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"}
+	sections := make([]model.FundamentalSection, 0, len(categories))
+	for _, category := range categories {
+		sections = append(sections, model.FundamentalSection{
+			Category: category,
+			HasData: true,
+			ReportDate: "2026-06-30",
+			PublicationDate: "2026-08-29",
+			Metrics: []model.FundamentalMetric{{Key: "test_metric", Name: "测试指标", Value: 1, Unit: "ratio", SourceField: "testField"}},
+			QualityStatus: model.QualityValid,
+		})
+	}
+	return &model.FundamentalsSnapshot{
+		Symbol: "600519.SH", Year: 2026, Quarter: 2, HasData: true,
+		Sections: sections, Source: "baostock", FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+}
+
+func TestValidateFundamentalsSnapshotRejectsFuturePublicationDate(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.Sections[0].PublicationDate = time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "publication date is in the future") {
+		t.Fatalf("future publication date must be rejected, got %v", err)
+	}
+}
+
+func TestValidateFundamentalsSnapshotRejectsValidSectionWithoutPublicationDate(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.Sections[0].PublicationDate = ""
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid without a publication date") {
+		t.Fatalf("valid fundamentals without a publication date must be rejected, got %v", err)
+	}
+}
+
+func TestValidateFundamentalsSnapshotAcceptsPointInTimeValidSnapshot(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err != nil {
+		t.Fatalf("valid published fundamentals snapshot should pass: %v", err)
+	}
+}
+
 func validQuote(source string) *model.Quote {
 	now := time.Now().UTC()
 	p := 1313.31
