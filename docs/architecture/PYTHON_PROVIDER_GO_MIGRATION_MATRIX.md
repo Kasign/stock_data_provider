@@ -44,7 +44,7 @@
 | 筹码分布 `get_chip_distribution` | 东方财富原生 CYQ 算法（基于最新未复权日 K 与换手率计算），可选 MX API 作为补充源；独立 API 与缓存 | 当前东方财富能力默认启用；无独立筹码快照时间，结果保持 `degraded`，仅代表最新可计算快照，不得用于伪造历史 `as_of`；精确 publication/available_at 仍缺失 |
 | 人气榜与飙升榜 | 东方财富原生 `HotRankingProvider`，API `GET /api/v1/market/hot-stocks?type=popular&limit=10`（`type=surge` 查询飙升榜）；端点分别由 `MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL`、`MARKET_DATA_EASTMONEY_HOT_SURGE_URL` 配置 | 两个变量默认沿用当前公开端点，启动时执行 HTTP(S) URL 形态校验；源端缺少可信快照时间，结果继续标记 `degraded`；配置可达地址不等于完成生产可用性验收 |
 | 基本面 `get_fundamental_context` | BaoStock 与可选 Tushare Pro `fina_indicator` 均提供 Go 原生 `FundamentalsProvider`，复用 `GET /api/v1/stocks/{symbol}/fundamentals?year=YYYY&quarter=N` | 按季度输出六组指标并保留报告期/公告日期；`as_of` 会被 HTTP 层明确拒绝（400），防止误以为支持历史时点查询；Provider 当前只返回指定报告期在请求时可获得的版本，尚不能重建当时已发布的历史修订；Tushare 权限与两源字段等价仍待统一验收 |
-| 个股资金流 `get_capital_flow_context` | 可选 Go MX API 路由；字段按人民币元规范化，5/10 日累计要求完整观测 | 自然语言查询返回的指标需要验证字段标签/单位；缺值不补零，精确 available_at 未实现 |
+| 个股资金流 `get_capital_flow_context` | 东方财富公开日资金流端点为默认源，MX API 为显式可选后备；字段按人民币元规范化，5/10 日累计要求完整观测 | `f51` 日期与 `f52` 主力净流入已接线；源端实际单位、盘中完整度与精确 available_at 仍待统一验收，缺值不补零 |
 | 龙虎榜 `get_dragon_tiger_context` | 东方财富原生 `DragonTigerProvider`、API `GET /api/v1/market/dragon-tiger?date=YYYY-MM-DD&page=1&page_size=100`；同花顺/Tushare 是可选能力 | 当前配置默认启用东方财富路由，但源端只有交易日、没有精确快照时间；空列表应为 `unknown` 而非确认零条，金额缺失保留 `null`。Runner 与 NAS/Docker 的交易日/分页覆盖仍待统一验收 |
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
 | 批量估值 | 可选 Tushare daily_basic Go Provider 与 GET /api/v1/market/valuations?symbols=... | 按最近已完成交易日返回 PE/PB/PS；不支持的 PCF 保持 null，并返回 provider_report_date；缺少精确更新时间时 quality 为 degraded；默认关闭，需 Token/积分权限，待统一验收 |
@@ -232,7 +232,7 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 | 涨跌停池 | 东方财富三类池；同花顺/Tushare 独立可选能力 | 代码已接入；权限、池子分页/总数与金额单位须验收。返回条目不足以覆盖 `total` 时必须识别为截断/降级 |
 | 热度榜 | 东方财富人气/飙升榜、同花顺可选，雪球人气/关注后备 | 已有接口；源时间缺失则降级，雪球飙升榜只是涨幅排序代理，不是原生热度飙升口径 |
 | 筹码分布 | 东方财富 Go 原生 CYQ 计算，妙想 MX 可选补充 | 是最新可计算筹码快照，不具备严格历史时点可用时间；输出需保持降级 |
-| 个股资金流 | 妙想 MX API 独立补充 Provider | 需真实 MX Key/权限；字段单位、聚合窗口和可用时间仍待验收；不能假设东方财富行情可替代资金流字段 |
+| 个股资金流 | 东方财富公开资金流为默认 Provider；妙想 MX API 作为独立可选后备 | 尚需统一验收返回字段、金额口径、当日数据语义与窗口完整度；无精确可用时间，始终 degraded |
 | 增强数据 | 基础资料、财务、板块、筹码、资金流等独立能力可以组合 | 尚无完整 1:1 的单次聚合替代；不能仅因每个子 API 存在就宣称 `get_enhanced_data` 的字段和错误隔离语义已完成迁移 |
 
 本清单描述当前仓库代码状态，不代表运行验证。实际接入、账号可访问、字段含义一致、证券全量覆盖、生产可用性分别验收；海外来源暂缓。

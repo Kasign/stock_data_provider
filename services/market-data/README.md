@@ -105,7 +105,7 @@ Redis 地址应是 `Redis:6379` 这样的主机和端口，而不是 URL。若�
 | GET | `/api/v1/data-sources` | 已注册 Provider 与能力（包括 `stock_search_capable` 等独立能力标志） |
 | GET | `/api/v1/stocks/{symbol}/chip-distribution` | 东方财富 Go 原生筹码分布；失败后可回退 MX |
 | GET | `/api/v1/market/hot-stocks?type=popular&limit=10` | 东方财富个股人气榜/飙升榜；类型支持 `popular`、`surge` |
-| GET | `/api/v1/stocks/{symbol}/capital-flow` | 可选个股资金流；MX 未启用时返回 Provider 不可用 |
+| GET | `/api/v1/stocks/{symbol}/capital-flow` | 个股主力资金流；东方财富默认优先，失败后仅在显式启用 MX 时使用后备 |
 
 证券代码支持 `600519`、`600519.SH`、`000001.SZ`、`430047.BJ` 等形式；无后缀代码会规范化为带交易所后缀的代码。当前腾讯 Provider 不提供北交所兜底。
 
@@ -118,7 +118,7 @@ MARKET_DATA_MX_API_URL=https://mkapi2.dfcfs.com/finskillshub/api/claw/query
 MARKET_DATA_MX_API_TIMEOUT=10s
 ```
 
-只有明确设置 `MARKET_DATA_MX_ENABLED=true` 才会注册该 Provider；开启后必须提供有效的 `MARKET_DATA_MX_API_KEY`，也兼容原项目的 `MX_APIKEY`。MX 是自然语言查询型补充接口，不支持实时行情或日线主链路。筹码与资金流结果缺少精确的发布时间/可用时间，质量状态会保持降级；不得把这些当前快照回灌到历史时点分析中。
+只有明确设置 `MARKET_DATA_MX_ENABLED=true` 才会注册该 Provider；开启后必须提供有效的 `MARKET_DATA_MX_API_KEY`，也兼容原项目的 `MX_APIKEY`。MX 是自然语言查询型补充接口，不支持实时行情或日线主链路。MX 返回的筹码与资金流结果缺少精确的发布时间/可用时间，质量状态会保持降级；不得把这些当前快照回灌到历史时点分析中。东方财富资金流也因缺少精确可用时间标记 degraded。
 
 ## 构建与测试
 
