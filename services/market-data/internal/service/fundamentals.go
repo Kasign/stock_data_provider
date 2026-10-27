@@ -41,6 +41,7 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 	allowed := map[string]bool{"profitability": true, "operating": true, "growth": true, "solvency": true, "cash_flow": true, "dupont": true}
 	seen := make(map[string]bool, len(snapshot.Sections))
 	hasData, allValid := false, true
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
 	for _, section := range snapshot.Sections {
 		if !allowed[section.Category] || seen[section.Category] {
 			return fmt.Errorf("unsupported or duplicate fundamentals section %q", section.Category)
@@ -57,6 +58,9 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 			if section.ReportDate != fundamentalPeriodEnd(year, quarter) {
 				return fmt.Errorf("fundamentals section %s report date mismatches requested period", section.Category)
 			}
+			if section.ReportDate > today {
+				return fmt.Errorf("fundamentals section %s report period is in the future", section.Category)
+			}
 			if section.PublicationDate == "" {
 				if section.QualityStatus == model.QualityValid {
 					return fmt.Errorf("fundamentals section %s cannot be valid without a publication date", section.Category)
@@ -66,7 +70,6 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 				if dateErr != nil || publicationDate.Format("2006-01-02") != section.PublicationDate {
 					return fmt.Errorf("fundamentals section %s has invalid publication date", section.Category)
 				}
-				today := time.Now().In(marketLocation()).Format("2006-01-02")
 				if section.PublicationDate > today {
 					return fmt.Errorf("fundamentals section %s publication date is in the future", section.Category)
 				}
