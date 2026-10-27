@@ -42,18 +42,18 @@ GitHub Actions 已连续完成真实登录/查询探测，且此前已有 NAS �
 - 该端点未提供经验证的成交额字段，`amount` 保持 `null`、`amount_unit=unknown`，质量标记为 `degraded`；响应也不回显股票代码，报告会保留身份校验限制。
 - 新浪接口单次历史回看最多 1023 条；若触及上限且无法覆盖请求起始日期，适配器返回明确错误，不静默接受不完整区间。真实请求结果以 GitHub Actions 探测和目标部署网络持续复验。
 
-## 网易财经实时行情（默认关闭）
+## 网易财经实时行情（配置默认启用，稳定性未验收）
 
-- 报价端点独立配置为 `MARKET_DATA_NETEASE_QUOTE_URL`（默认 `https://api.money.126.net/data/feed`），解包 JSONP 后再解析 JSON；不依赖 API Key 或 Python。GitHub Runner 实测该域名 DNS 解析失败，因此它目前只是候选实现，不属于已接通的可用来源。
+- 报价端点独立配置为 `MARKET_DATA_NETEASE_QUOTE_URL`（默认 `https://api.money.126.net/data/feed`），解包 JSONP 后再解析 JSON；不依赖 API Key 或 Python。既往 GitHub Runner 曾遇到该域名 DNS 解析失败，因此当前虽在 `configs/providers.json` 与环境模板中默认启用为后置回退，但尚不能视为已验收的稳定来源。
 - 实时端点独立返回 `price/open/high/low/yestclose/volume/turnover/time`；`percent` 是比例值，会乘以 100 转换为系统统一百分点。证券代码回显与报价更新时间必须通过契约校验。
-- 启用需显式设置 `MARKET_DATA_NETEASE_ENABLED=true` 与 `MARKET_DATA_NETEASE_QUOTE_ENABLED=true`。在 DNS/接口可达性重新验证前，保持关闭。
-- 历史 CSV endpoint 多次返回 502，因此即使实时报价可用，历史日 K 也应继续单独关闭。
+- 当前配置默认将该能力设为启用；如果部署网络仍无法解析或访问供应商，可通过 `MARKET_DATA_NETEASE_ENABLED=false` 或 `MARKET_DATA_NETEASE_QUOTE_ENABLED=false` 关闭。配置启用不代表网络验收通过。
+- 历史 CSV endpoint 曾返回 HTTP 502。日 K 开关目前在默认配置中也是启用的后置回退，但可用性未验收；必要时单独设置 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`，无需关闭其他 Provider。
 
-## 网易财经历史日 K（默认关闭）
+## 网易财经历史日 K（配置默认启用，稳定性未验收）
 
 - 通过 `MARKET_DATA_NETEASE_HISTORY_URL`（默认 `https://quotes.money.163.com/service/chddata.html`）下载公开 CSV；适配器按 GBK/UTF-8 解码并根据中文表头定位开高低收、成交量、成交金额，不依赖 Python 或 API Key。
-- 仅支持已验证的 `adjustment=none`；前复权/后复权请求会明确返回不支持。来源为非正式下载接口，默认关闭，只有完成目标网络验收后才通过 `MARKET_DATA_NETEASE_ENABLED=true` 启用。
-- 对成交额和成交量做内在一致性检查：以 `成交金额 / 成交量` 对照当日最低/最高价，只有单位解释唯一且均价处于 OHLC 附近时才保留可信金额；无法匹配或存在歧义时 `amount` 保持 `null`、金额单位 `unknown`，并标记 `degraded`。不会用收盘价乘成交量估算成交额。
+- 仅支持已验证的 `adjustment=none`；前复权/后复权请求会明确返回不支持。来源为非正式下载接口，配置默认作为后置回退启用但目标网络未验收；如不希望参与日 K 回退，请设置 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false`。
+- 对成交额和成交量做内在一致性检查：以 `成交金额 / 成交量` 对照当日最低/最高价，只有单位解释唯一且均价处于 OHLC 附近时才保留可信金额和标准化股数；无法匹配或存在歧义时 `volume`、`amount` 均不输出，相关行由统一数据契约校验器剔除并使剩余数据降级。不会用收盘价乘成交量估算成交额，也不会把单位不明的原始数字伪装成“股”。
 - 真实探测结果与响应不稳定情况记录在 `docs/architecture/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md`；当前默认关闭，不加入生产默认回退链。
 
 ## Yahoo Finance 实时行情（默认关闭）

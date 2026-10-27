@@ -62,6 +62,9 @@ func TestSinaFetchQuoteNormalizesSharesAndAmount(t *testing.T) {
 	if quote.QuoteTime == nil || quote.QuoteTime.Format("2006-01-02 15:04:05") != "2026-10-21 07:00:00" {
 		t.Fatalf("provider time should be interpreted as China Standard Time then stored in UTC: %v", quote.QuoteTime)
 	}
+	if quote.QuoteTimeSemantics != "provider_snapshot_time" {
+		t.Fatalf("Sina quote must label source time semantics, got %q", quote.QuoteTimeSemantics)
+	}
 }
 
 func TestSinaFetchQuoteDecodesGB18030Name(t *testing.T) {
