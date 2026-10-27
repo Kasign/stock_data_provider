@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -16,7 +16,8 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../src/market-activity.js", import.meta.url), "utf8"),
   readFile(new URL("../src/stock-research.js", import.meta.url), "utf8"),
   readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
-  readFile(new URL("../../internal/service/wiring.go", import.meta.url), "utf8")
+  readFile(new URL("../../internal/service/wiring.go", import.meta.url), "utf8"),
+  readFile(new URL("../src/data-center.js", import.meta.url), "utf8")
 ]);
 
 function finalCssRuleBody(selector) {
@@ -842,4 +843,125 @@ test("Run Flow 与结构化结果在浅色主题下使用可读的前景文字",
   assert.match(stylesheet, /:root\[data-theme="light"\] \.supplemental-feedback\.is-error \{ color: #b92f41; \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.soft-badge \{ color: #245d95; background: #eaf3ff; \}/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.text-button:hover \{ color: var\(--accent-strong\); \}/);
+});
+
+test("新增市场、数据中心与研究区块保持 12px 辅助文字基线", () => {
+  const readableRules = [
+    [/\.market-extension-metric small,\s*\.market-extension-metric span\s*\{[^}]*font-size:\s*12px;/, "market extension labels"],
+    [/\.market-planned-state p\s*\{[^}]*font-size:\s*12px;/, "market planned-state copy"],
+    [/\.market-global-placeholder span\s*\{[^}]*font-size:\s*12px;/, "global market placeholder copy"],
+    [/\.data-center-summary-counts small\s*\{[^}]*font-size:\s*12px;/, "data-center summary labels"],
+    [/\.data-center-service-heading p\s*\{[^}]*font-size:\s*12px;/, "data-center service descriptions"],
+    [/\.data-center-service-icon\s*\{[^}]*font-size:\s*12px;/, "data-center service icon labels"],
+    [/\.data-center-check-row\s*\{[^}]*font-size:\s*12px;/, "data-center check details"],
+    [/\.data-center-service-detail\s*\{[^}]*font-size:\s*12px;/, "data-center service details"],
+    [/\.data-center-capability-status\s*\{[^}]*font-size:\s*12px;/, "capability status labels"],
+    [/\.data-center-provider-row small\s*\{[^}]*font-size:\s*12px;/, "provider descriptions"],
+    [/\.data-center-capability-tag\s*\{[^}]*font-size:\s*12px;/, "capability tags"],
+    [/\.data-center-diagnostic-note\s*\{[^}]*font-size:\s*12px;/, "diagnostic notes"],
+    [/\.research-list-symbol\s*\{[^}]*font-size:\s*12px;/, "research list symbols"],
+    [/\.research-list-action\s*\{[^}]*font-size:\s*12px;/, "research list actions"],
+    [/\.watchlist-tracking-line\s*\{[^}]*font-size:\s*12px;/, "watchlist tracking details"],
+    [/\.research-overview-context span\s*\{[^}]*font-size:\s*12px;/, "research overview context"],
+    [/\.research-overview-metric span\s*\{[^}]*font-size:\s*12px;/, "research overview labels"],
+    [/\.research-overview-note\s*\{[^}]*font-size:\s*12px;/, "research overview notes"],
+    [/\.research-detail-nav-label\s*\{[^}]*font-size:\s*12px;/, "research detail navigation labels"]
+  ];
+  for (const [rule, description] of readableRules) {
+    assert.match(stylesheet, rule, description + " must respect the 12px support-text baseline");
+  }
+});
+
+test("研究与设置分区导航会移动键盘焦点并按全部可见区块同步高亮", () => {
+  assert.match(
+    app,
+    /function bindSectionNavigation\([\s\S]*?focusTarget\.focus\(\{ preventScroll: true \}\)[\s\S]*?const current = targets[\s\S]*?getBoundingClientRect\(\)/
+  );
+});
+
+test("分区导航的程序化焦点在研究和设置页中可见", () => {
+  assert.match(
+    stylesheet,
+    /#settings-view \.settings-section h2:focus,[\s\S]*?#research-view \.supplemental-card h3:focus\s*\{[^}]*outline:\s*2px solid var\(--accent\)/
+  );
+});
+
+test("导入浏览器工作区不会把导入前的活动任务重新写回任务引用", () => {
+  assert.match(
+    app,
+    /function applySettings\(nextSettings, \{ persistPreviousActiveTask = true \} = \{\}\)/
+  );
+  const importBody = app.match(/async function importBrowserDataFile\(file\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(
+    importBody,
+    /localStorage\.removeItem\(TASK_REFERENCE_KEY\);[\s\S]*?applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?applyTheme\(imported\.theme\)/
+  );
+  const applyIndex = importBody.indexOf("applySettings(nextSettings, { persistPreviousActiveTask: false })");
+  assert.ok(applyIndex >= 0, "workspace import must apply the validated settings");
+  assert.doesNotMatch(
+    importBody.slice(applyIndex),
+    /localStorage\.(?:setItem|removeItem)\(|persistTheme\(/,
+    "storage writes should finish before applying in-memory settings"
+  );
+});
+
+test("切换到尚未接入的板块维度时，旧请求不能覆盖能力占位", () => {
+  assert.match(
+    marketOverview,
+    /async function load\(key\)\{cancel\(key\);const seq=generation\[key\],[\s\S]*?if\(key==="sectors"&&sectorMetric!=="change"\)\{showSectorMetricUnavailable\(\);return "unsupported";\}/
+  );
+  assert.match(
+    marketOverview,
+    /sectorType=button\.dataset\.sectorType==="concept"\?"concept":"industry"[\s\S]*?void load\("sectors"\)/
+  );
+  assert.match(
+    marketOverview,
+    /sectorMetric=\["change","amount","five-day","flow"\][\s\S]*?void load\("sectors"\)/
+  );
+});
+
+test("快照来源、估值与补充指标使用可读的 12px 辅助文字", () => {
+  const readableRules = [
+    [/\.bundle-snapshot-metrics small\s*\{[^}]*font-size:\s*12px;/, "snapshot metadata labels"],
+    [/\.bundle-snapshot-source small\s*\{[^}]*font-size:\s*12px;/, "snapshot source labels"],
+    [/\.bundle-snapshot-source strong\s*\{[^}]*font-size:\s*12px;/, "snapshot source names"],
+    [/\.stock-valuation-metric > span\s*\{[^}]*font-size:\s*12px;/, "valuation metric labels"],
+    [/\.stock-supplement-metric > span\s*\{[^}]*font-size:\s*12px;/, "stock supplement metric labels"]
+  ];
+  for (const [rule, description] of readableRules) {
+    assert.match(stylesheet, rule, description + " must use at least 12px text");
+  }
+});
+
+test("数据中心超时后即使探针迟到返回，也不能覆盖为成功", () => {
+  assert.match(
+    dataCenter,
+    /\.then\(\(data\) => timedOut\s*\? \{ ok: false, error: new Error\("检查超时"\), timedOut: true/
+  );
+});
+
+test("服务健康刷新不会覆盖行情查询区域的独立提示", () => {
+  const refreshServices = app.match(/async function refreshServices\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(refreshServices, "refreshServices implementation must exist");
+  assert.doesNotMatch(
+    refreshServices,
+    /#query-hint/,
+    "service health feedback belongs to service indicators, not the current stock query hint"
+  );
+});
+
+test("侧栏与顶栏服务状态只有在明确健康回包时才显示正常", () => {
+  assert.match(app, /function serviceHealthState\(result\)[\s\S]*?const status = String\(result\.value\?\.status \|\| ""\)[\s\S]*?if \(!status\) return "unknown";/);
+  assert.match(app, /function setServiceStatus\(prefix, status, text\)[\s\S]*?status === "healthy"[\s\S]*?status === "unknown" \|\| status === "degraded"/);
+  assert.match(stylesheet, /\.status-dot\.is-unknown\s*\{[^}]*background:\s*var\(--text-dim\)/);
+});
+
+test("数据中心不会把缺少 status 的 2xx 回包标记为健康", () => {
+  assert.match(dataCenter, /if \(!raw\) return "unknown";/);
+  assert.match(
+    dataCenter,
+    /current === "degraded" \|\| current === "unknown" \? "is-warning" : "is-error"/
+  );
+  assert.match(dataCenter, /const unknownServices = serviceStates\.filter\(\(status\) => status === "unknown"\)\.length;/);
+  assert.match(dataCenter, /const unknown = unknownServices \+ unknownDependencies/);
 });
