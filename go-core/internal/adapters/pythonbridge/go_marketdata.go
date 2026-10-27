@@ -55,34 +55,60 @@ func (a *GoMarketDataAdapter) FetchStockBundle(ctx context.Context, code string,
 }
 
 func (a *GoMarketDataAdapter) FetchMarketOverview(ctx context.Context, region, asOf string) (domain.MarketOverview, error) {
+	if ctx == nil {
+		return domain.MarketOverview{}, errors.New("market overview context must not be nil")
+	}
 	region = strings.ToLower(strings.TrimSpace(region))
-	if region == "" { region = "cn" }
+	if region == "" {
+		region = "cn"
+	}
 	if region == "cn" {
 		native, nativeErr := a.native.FetchMarketOverview(ctx, region, asOf)
-		if nativeErr == nil && usableNativeMarketOverview(native) { return native, nil }
-		if nativeErr == nil { nativeErr = errors.New("native market overview returned no usable data") }
-		if ctx != nil && ctx.Err() != nil { return domain.MarketOverview{}, ctx.Err() }
+		if nativeErr == nil && usableNativeMarketOverview(native) {
+			return native, nil
+		}
+		if nativeErr == nil {
+			nativeErr = errors.New("native market overview returned no usable data")
+		}
+		if err := ctx.Err(); err != nil {
+			return domain.MarketOverview{}, err
+		}
+
 		var legacy domain.MarketOverview
 		request := map[string]any{"region": region}
-		if strings.TrimSpace(asOf) != "" { request["as_of"] = asOf }
+		if strings.TrimSpace(asOf) != "" {
+			request["as_of"] = asOf
+		}
 		legacyErr := a.bridge.Post(ctx, "/internal/v1/market-data/market-overview", request, &legacy)
 		if legacyErr == nil {
 			legacy.Warnings = appendUniqueWarning(legacy.Warnings, "native_market_overview_unavailable_legacy_data_used")
 			return legacy, nil
 		}
-		return domain.MarketOverview{}, errors.Join(fmt.Errorf("native Go market overview: %w", nativeErr), fmt.Errorf("legacy bridge market overview: %w", legacyErr))
+		return domain.MarketOverview{}, errors.Join(
+			fmt.Errorf("native Go market overview: %w", nativeErr),
+			fmt.Errorf("legacy bridge market overview: %w", legacyErr),
+		)
 	}
+
 	var legacy domain.MarketOverview
 	request := map[string]any{"region": region}
-	if strings.TrimSpace(asOf) != "" { request["as_of"] = asOf }
-	if err := a.bridge.Post(ctx, "/internal/v1/market-data/market-overview", request, &legacy); err != nil { return domain.MarketOverview{}, err }
+	if strings.TrimSpace(asOf) != "" {
+		request["as_of"] = asOf
+	}
+	if err := a.bridge.Post(ctx, "/internal/v1/market-data/market-overview", request, &legacy); err != nil {
+		return domain.MarketOverview{}, err
+	}
 	legacy.Warnings = appendUniqueWarning(legacy.Warnings, "market_overview_region_uses_legacy_bridge")
 	return legacy, nil
 }
 
 func usableNativeMarketOverview(snapshot domain.MarketOverview) bool {
-	if len(snapshot.Indices) > 0 || snapshot.UpCount > 0 || snapshot.DownCount > 0 || snapshot.FlatCount > 0 || snapshot.TotalAmount > 0 { return true }
-	return len(snapshot.TopSectors) > 0 || len(snapshot.BottomSectors) > 0 || len(snapshot.TopConcepts) > 0 || len(snapshot.BottomConcepts) > 0
+	if len(snapshot.Indices) > 0 || snapshot.UpCount > 0 || snapshot.DownCount > 0 ||
+		snapshot.FlatCount > 0 || snapshot.TotalAmount > 0 {
+		return true
+	}
+	return len(snapshot.TopSectors) > 0 || len(snapshot.BottomSectors) > 0 ||
+		len(snapshot.TopConcepts) > 0 || len(snapshot.BottomConcepts) > 0
 }
 
 func appendUniqueWarning(in []string, value string) []string {
