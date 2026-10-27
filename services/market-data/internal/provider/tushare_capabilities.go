@@ -1607,7 +1607,7 @@ func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawSt
 		if fieldErr != nil {
 			return nil, fieldErr
 		}
-		if rawVolume == nil || *rawVolume < 0 || math.Trunc(*rawVolume) != *rawVolume || *rawVolume > float64(math.MaxInt64) {
+		if rawVolume == nil || *rawVolume < 0 || math.Trunc(*rawVolume) != *rawVolume || *rawVolume >= float64(math.MaxInt64) {
 			rowReasons = appendTushareReason(rowReasons, "provider_index_volume_missing_or_invalid")
 		} else {
 			value := int64(*rawVolume)

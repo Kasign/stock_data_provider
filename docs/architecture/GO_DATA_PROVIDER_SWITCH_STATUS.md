@@ -22,7 +22,7 @@
 |---|---|
 | 市场广度 | 分类家数必须对账；成交额覆盖不完整时总额为 null、质量不得为 valid；非原子成交额聚合或未暴露源快照时间的质量原因不能被忽略；报告日期必须规范且不在未来。 |
 | 指数行情/指数目录 | 指数价格、金额单位及有限数值受校验；单项降级不能被父快照标成 valid；源时间不能为零或明显晚于当前时间。未知/空指数目录仅缓存 5 分钟。 |
-| 指数成分/指数日 K | 成分报告日期不得在未来，源时间必须合理；指数日 K 校验交易日期、OHLC、涨跌幅、成交量/成交额单位与空值一致性，并禁止父级 valid 掩盖降级条目。服务层统一拒绝未来 end_date，防止回退到不同 Provider 后语义不一致。 |
+| 指数成分/指数日 K | 成分报告日期不得在未来，源时间必须合理；指数日 K 校验交易日期、OHLC、涨跌幅、成交量/成交额单位与空值一致性，并禁止父级 valid 掩盖降级条目。服务层统一拒绝未来 end_date，防止回退到不同 Provider 后语义不一致；Tushare 成交量转换拒绝 `>= 2^63` 的 int64 浮点边界。 |
 | 行业/概念排行、涨跌停池 | 校验记录总数、排名/代码唯一性、必填值、非有限数值、计数/金额范围和单位，并传播子项质量状态。东方财富计数字段拒绝小数、负数及浮点安全整数范围外的值，不再静默截断。 |
 | 个股板块、龙虎榜、热度榜、公告 | 父级快照不能高于任一条目的质量等级；日期、分页与空结果语义必须一致。未确认的空列表保持 unknown，而不是伪装成“确认没有数据”。 |
 | 财务数据 | 报告期必须是请求季度的期末且不晚于中国市场当前日期；披露日期必须规范、不得在未来，且不得早于对应报告期末。 |
@@ -428,3 +428,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - `.github/workflows/go-test.yml` 现支持 `workflow_dispatch`，且格式检查输出脚本保留正确的单个 `\\n` 转义。
 - 提交 `d551057` 对应的 [Go test suite #40449084361](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361) 通过，根模块、go-core、market-data 的测试/race/vet、Compose 校验和两种 Go 镜像构建全部通过；同一 HEAD 的 [WebUI checks #40449084307](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 与 [Live Provider Probe #40449084825](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825) 也通过。
 - 随后分支继续前进至 `24952dd` / `71993b1`，新增个股龙虎榜上下文摘要并补充相关交接/进度说明。因此，上述绿色 CI 仅覆盖 `d551057`，不能自动视为新增 `DragonTiger` 上下文代码已验证；最新 HEAD 应再跑 Go 全量工作流确认。
+
+
+### Tushare 指数日 K 成交量溢出边界（2026-10-27）
+
+- 静态审查发现 `float64(math.MaxInt64)` 会舍入为 `2^63`。原来仅拒绝 `rawVolume > float64(math.MaxInt64)` 会让精确的 `2^63` 通过检查，再转 `int64` 时溢出。
+- 现改为在转换前拒绝 `rawVolume >= float64(math.MaxInt64)`；越界量保留为 `volume=null`、`volume_unit=unknown`，该条目标为 degraded 并记录稳定原因。
+- 新增 `TestTushareIndexDailyBarsRejectsInt64VolumeOverflow` 测试源码。未执行测试、构建、CI 或真实 Provider 请求。

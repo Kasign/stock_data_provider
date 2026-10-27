@@ -321,3 +321,39 @@ func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
 		t.Fatalf("unexpected daily bars result: %+v", bars)
 	}
 }
+
+
+func TestTushareIndexDailyBarsRejectsInt64VolumeOverflow(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare index daily request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "index_daily" {
+			t.Errorf("api_name=%q, want index_daily", request.APIName)
+		}
+		writeTushareTestTable(w,
+			[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
+			[][]any{{"000300.SH", "20261020", 4000.0, 4050.0, 3950.0, 4020.0, 0.5, "9223372036854775808", 120000000.0}},
+		)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchIndexDailyBars(context.Background(), "000300.SH", "2026-10-20", "2026-10-20")
+	if err != nil {
+		t.Fatalf("FetchIndexDailyBars: %v", err)
+	}
+	if len(got.Items) != 1 {
+		t.Fatalf("expected one index daily bar, got %+v", got.Items)
+	}
+	bar := got.Items[0]
+	if bar.Volume != nil || bar.VolumeUnit != "unknown" {
+		t.Fatalf("out-of-range volume must be withheld, got volume=%v unit=%q", bar.Volume, bar.VolumeUnit)
+	}
+	if bar.QualityStatus != model.QualityDegraded || !containsTushareReason(bar.QualityReasons, "provider_index_volume_missing_or_invalid") {
+		t.Fatalf("out-of-range volume must degrade the item and record its reason: %+v", bar)
+	}
+}
