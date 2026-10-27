@@ -6,6 +6,7 @@ function normalizeRecord(record) {
   return {
     task_id: record.task_id.trim(),
     run_id: typeof record.run_id === "string" ? record.run_id : "",
+    created_at: typeof record.created_at === "string" ? record.created_at : "",
     symbols: Array.isArray(record.symbols) ? record.symbols.filter((item) => typeof item === "string") : [],
     task_type: typeof record.task_type === "string" ? record.task_type : "post_market_scan",
     status: typeof record.status === "string" ? record.status : "",

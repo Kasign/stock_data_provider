@@ -3513,6 +3513,8 @@ td {
 /* Browser-local tracking status; unknown values remain explicit. */
 .watchlist-tracking-summary { display:grid; gap:6px; padding-top:9px; border-top:1px solid var(--border-soft); }
 .watchlist-tracking-line { color:var(--text-dim); font-size:10px; line-height:1.6; overflow-wrap:anywhere; }
+.watchlist-tracking-line.is-today { color:var(--text); }
+.watchlist-tracking-line.is-unknown { color:var(--text-dim); }
 
 
 /* 个股研究工作区：当前报价与技术摘要置于专业数据之前。 */

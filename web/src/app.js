@@ -108,6 +108,7 @@ const state = {
   taskId: "",
   runId: "",
   taskAnalysisBase: "",
+  taskCreatedAt: "",
   analysisConnectionGeneration: 0,
   taskSymbols: [],
   taskType: "post_market_scan",
@@ -198,6 +199,7 @@ function persistTaskReference() {
   const record = {
     task_id: state.taskId,
     run_id: state.runId || "",
+    created_at: state.taskCreatedAt || "",
     symbols: state.taskSymbols,
     task_type: state.taskType,
     status: state.taskStatus,
@@ -209,6 +211,7 @@ function persistTaskReference() {
     const previousComparable = previous ? JSON.stringify({
       task_id: previous.task_id,
       run_id: previous.run_id || "",
+      created_at: previous.created_at || "",
       symbols: Array.isArray(previous.symbols) ? previous.symbols : [],
       task_type: previous.task_type || "post_market_scan",
       status: previous.status || "",
@@ -223,6 +226,7 @@ function persistTaskReference() {
       const historyComparable = historyItem ? JSON.stringify({
         task_id: historyItem.task_id,
         run_id: historyItem.run_id || "",
+        created_at: historyItem.created_at || "",
         symbols: Array.isArray(historyItem.symbols) ? historyItem.symbols : [],
         task_type: historyItem.task_type || "post_market_scan",
         status: historyItem.status || "",
@@ -436,6 +440,12 @@ function safeReadWatchlist() {
   }
 }
 
+function localCalendarDateKey(value) {
+  const date = value instanceof Date ? value : new Date(String(value || ""));
+  if (!Number.isFinite(date.getTime())) return "";
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
 function renderWatchlist(records = safeReadWatchlist()) {
   const root = $("#watchlist-list");
   root.replaceChildren();
@@ -499,12 +509,30 @@ function renderWatchlist(records = safeReadWatchlist()) {
     quoteLine.textContent = quoteMatches
       ? "行情快照：" + formatPrice(state.quote.current_price) + " · " + formatPercent(state.quote.change_percent) + " · " + (state.quote.quote_time ? formatDateTime(state.quote.quote_time) : "时间未报告") + " · " + qualityLabel(state.quote.quality_status)
       : "当前行情：未加载（点击“查行情”读取）";
-    const recentTask = recentTasks
-      .filter((task) => Array.isArray(task.symbols) && task.symbols.some((value) => normalizeLocalSymbol(value) === itemSymbol))
+    const matchingTasks = recentTasks.filter((task) =>
+      Array.isArray(task.symbols) && task.symbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
+    );
+    const recentTask = [...matchingTasks]
       .sort((a, b) => (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0))[0] || null;
+    const todayKey = localCalendarDateKey(new Date());
+    const todayTask = [...matchingTasks]
+      .filter((task) => Boolean(todayKey) && localCalendarDateKey(task.created_at) === todayKey)
+      .sort((a, b) => (Date.parse(b.created_at || "") || 0) - (Date.parse(a.created_at || "") || 0))[0] || null;
     const activeTaskMatches = Boolean(state.taskId) && Array.isArray(state.taskSymbols)
       && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
       && ["running", "started", "pending", "queued", "processing", "in-progress", "in_progress"].includes(String(state.taskStatus || "").toLowerCase());
+    const todayLine = document.createElement("small");
+    todayLine.className = "watchlist-tracking-line" + (todayTask ? " is-today" : " is-unknown");
+    if (todayTask) {
+      todayLine.textContent = "今日分析：有本地记录 · " + taskStatusLabel(todayTask.status) + " · 创建于 " + formatDateTime(todayTask.created_at);
+    } else if (!matchingTasks.length) {
+      todayLine.textContent = "今日分析：未知（当前浏览器没有该股票的任务引用）";
+    } else if (matchingTasks.some((task) => !localCalendarDateKey(task.created_at))) {
+      todayLine.textContent = "今日分析：未知（部分旧任务缺少服务端创建时间）";
+    } else {
+      todayLine.textContent = "今日分析：本地最近任务未发现今日创建记录（不代表服务端无分析）";
+    }
+
     const taskLine = document.createElement("small");
     taskLine.className = "watchlist-tracking-line";
     taskLine.textContent = activeTaskMatches
@@ -529,7 +557,7 @@ function renderWatchlist(records = safeReadWatchlist()) {
     } else {
       resultLine.textContent = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
     }
-    tracking.append(quoteLine, taskLine, resultLine);
+    tracking.append(quoteLine, todayLine, taskLine, resultLine);
     main.append(tracking);
 
     const actions = document.createElement("div");
@@ -1947,6 +1975,7 @@ function renderSelectedTaskEvent(item) {
 }
 function renderTask(task) {
   state.taskStatus = task.status || state.taskStatus;
+  if (typeof task.created_at === "string" && task.created_at) state.taskCreatedAt = task.created_at;
   if (task.run_id) state.runId = task.run_id;
   if (task.task_type) state.taskType = task.task_type;
   if (Array.isArray(task.symbols)) state.taskSymbols = task.symbols;
@@ -2576,6 +2605,7 @@ async function createTask(event) {
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = "";
+  state.taskCreatedAt = "";
   state.runId = "";
   state.taskAnalysisBase = requestAnalysisBase;
   state.taskSymbols = symbols;
@@ -2601,6 +2631,7 @@ async function createTask(event) {
         const endpointRecord = {
           task_id: task.task_id,
           run_id: task.run_id || "",
+          created_at: typeof task.created_at === "string" ? task.created_at : "",
           symbols: Array.isArray(task.symbols) ? task.symbols : symbols,
           task_type: task.task_type || taskType,
           status: task.status || "",
@@ -2624,6 +2655,7 @@ async function createTask(event) {
     state.suppressedHistoryTaskId = "";
     state.suppressedHistoryTaskBase = "";
     state.taskId = task.task_id;
+    state.taskCreatedAt = typeof task.created_at === "string" ? task.created_at : "";
     state.runId = task.run_id || "";
     state.taskAnalysisBase = requestAnalysisBase;
     persistTaskReference();
@@ -2688,6 +2720,7 @@ function activateTaskReference(record) {
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = record.task_id;
+  state.taskCreatedAt = typeof record.created_at === "string" ? record.created_at : "";
   state.runId = typeof record.run_id === "string" ? record.run_id : "";
   state.taskAnalysisBase = requestedBase;
   state.taskSymbols = Array.isArray(record.symbols) ? record.symbols : [];
@@ -2810,6 +2843,7 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = "";
+  state.taskCreatedAt = "";
   state.runId = "";
   state.taskAnalysisBase = "";
   state.taskSymbols = [];
