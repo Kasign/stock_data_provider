@@ -66,14 +66,20 @@ async function request(base, path, { apiKey = "", method = "GET", body, signal, 
   return data ?? {};
 }
 
-export function marketHealth(settings) {
-  return request(settings.marketBase, "/health/ready");
+export function marketLiveness(settings, signal) {
+  return request(settings.marketBase, "/health/live", { signal });
 }
-export function analysisHealth(settings) {
-  return request(settings.analysisBase, "/readyz");
+export function marketHealth(settings, signal) {
+  return request(settings.marketBase, "/health/ready", { signal });
 }
-export function getDataSources(settings) {
-  return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey });
+export function analysisLiveness(settings, signal) {
+  return request(settings.analysisBase, "/healthz", { signal });
+}
+export function analysisHealth(settings, signal) {
+  return request(settings.analysisBase, "/readyz", { signal });
+}
+export function getDataSources(settings, signal) {
+  return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey, signal });
 }
 export function getMarketValuations(settings, symbols, signal) {
   const normalizedSymbols = Array.isArray(symbols) ? symbols.map((item) => String(item ?? "").trim()).filter(Boolean) : [];

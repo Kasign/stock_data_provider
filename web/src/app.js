@@ -1,4 +1,4 @@
-import { applyTheme, persistTheme, readTheme } from "./theme.js";
+import { applyTheme, persistTheme, readTheme, THEME_STORAGE_KEY } from "./theme.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
@@ -12,23 +12,23 @@ import {
   getAnalysisTask,
   getAnalysisTaskEvents,
   getDailyBars,
-  getChipDistribution,
-  getCapitalFlow,
   getDataSources,
   getMarketBundle,
   getQuote,
   searchStocks,
   loadSettings,
   marketHealth,
-  saveSettings
+  saveSettings,
+  SETTINGS_KEY
 } from "./api.js";
 import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart, renderMACDChart, renderRSIChart } from "./chart.js";
 import { bindMarketOverview } from "./market-overview.js";
 import { taskEventMatchesFilter } from "./task-event-filter.js";
 import { bindStockResearch } from "./stock-research.js";
+import { bindDataCenter } from "./data-center.js";
 import { bindMarketActivity } from "./market-activity.js";
-import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask } from "./recent-tasks.js";
-import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol } from "./watchlist.js";
+import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
+import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
   describeApiError,
@@ -49,6 +49,8 @@ import {
 
 const $ = (selector) => document.querySelector(selector);
 const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
+const BROWSER_DATA_FORMAT = "stock-provider-webui-browser-data";
+const BROWSER_DATA_VERSION = 1;
 const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
 const TASK_EVENT_STATUS_LABELS = Object.freeze({
   succeeded: "已完成",
@@ -104,10 +106,12 @@ const state = {
   chartView: "close",
   movingAverages: [5, 20],
   technicalRows: [],
+  technicalSymbol: "",
   chartMeta: { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" },
   taskId: "",
   runId: "",
   taskAnalysisBase: "",
+  taskCreatedAt: "",
   analysisConnectionGeneration: 0,
   taskSymbols: [],
   taskType: "post_market_scan",
@@ -138,9 +142,6 @@ const state = {
   stockSearchActiveIndex: -1,
   selectedStockSearchItem: null,
   sourceCount: 0,
-  supplementGeneration: 0,
-  supplementSymbol: "",
-  supplementLoading: false,
   suppressedHistoryTaskId: "",
   suppressedHistoryTaskBase: "",
   chatStockContext: null
@@ -148,6 +149,7 @@ const state = {
 
 const marketOverview = bindMarketOverview(() => state.settings, (item, source) => selectStockFromMarket(item, source));
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
+const dataCenter = bindDataCenter(() => state.settings);
 const marketActivity = bindMarketActivity(
   () => state.settings,
   (item) => selectStockFromMarket(item, "龙虎榜")
@@ -200,6 +202,7 @@ function persistTaskReference() {
   const record = {
     task_id: state.taskId,
     run_id: state.runId || "",
+    created_at: state.taskCreatedAt || "",
     symbols: state.taskSymbols,
     task_type: state.taskType,
     status: state.taskStatus,
@@ -211,6 +214,7 @@ function persistTaskReference() {
     const previousComparable = previous ? JSON.stringify({
       task_id: previous.task_id,
       run_id: previous.run_id || "",
+      created_at: previous.created_at || "",
       symbols: Array.isArray(previous.symbols) ? previous.symbols : [],
       task_type: previous.task_type || "post_market_scan",
       status: previous.status || "",
@@ -225,6 +229,7 @@ function persistTaskReference() {
       const historyComparable = historyItem ? JSON.stringify({
         task_id: historyItem.task_id,
         run_id: historyItem.run_id || "",
+        created_at: historyItem.created_at || "",
         symbols: Array.isArray(historyItem.symbols) ? historyItem.symbols : [],
         task_type: historyItem.task_type || "post_market_scan",
         status: historyItem.status || "",
@@ -267,6 +272,7 @@ function renderRecentTasks(records = safeReadRecentTasks()) {
       ? "完成一次分析后，这里会显示最近任务。"
       : "没有匹配项，请调整关键词或清除搜索。";
     root.append(empty);
+    renderResearchStockList();
     return;
   }
 
@@ -366,12 +372,88 @@ function setWatchlistFeedback(message, kind = "info") {
   target.className = "watchlist-feedback" + (message ? " watchlist-feedback-" + kind : "");
 }
 
+function renderResearchStockList() {
+  const root = $("#research-stock-list-body");
+  if (!root) return;
+  root.replaceChildren();
+  const records = safeReadWatchlist();
+  const quote = state.quote && typeof state.quote === "object" ? state.quote : null;
+  let currentSymbol = "";
+  try { currentSymbol = quote ? normalizeSymbol(quote.symbol || "") : ""; } catch { currentSymbol = ""; }
+  const items = records.map((record) => {
+    let symbol = String(record.symbol || "");
+    try { symbol = normalizeSymbol(symbol); } catch { /* 不规范本地条目保留原始值并显示未加载。 */ }
+    return { symbol, name: record.name || symbol };
+  });
+  if (currentSymbol && !items.some((item) => item.symbol === currentSymbol)) {
+    items.unshift({ symbol: currentSymbol, name: quote.name || currentSymbol });
+  }
+  if (!items.length) {
+    const tr = document.createElement("tr"), td = document.createElement("td");
+    td.colSpan = 10; td.className = "table-empty";
+    td.textContent = "当前没有自选股或已查询标的。可以先搜索股票，再回到本页查看研究详情。";
+    tr.append(td); root.append(tr); setText("#research-list-scope", "当前浏览器 · 无标的");
+    renderResearchOverview();
+    return;
+  }
+  const technicalSymbol = state.technicalSymbol;
+  const latest = technicalSymbol && technicalSymbol === currentSymbol
+    ? [...state.technicalRows].reverse().find((row) => row && row.close !== null && row.close !== undefined) || null
+    : null;
+  const formatResearchMA = (period, isCurrent) => {
+    if (!isCurrent) return "未加载";
+    if (!technicalSymbol || technicalSymbol !== currentSymbol) return state.isQuerying ? "读取中…" : "未加载";
+    if (!latest) return "数据不足";
+    const value = latest["ma" + period];
+    return Number.isFinite(value) ? value.toFixed(2) : "数据不足";
+  };
+  items.forEach((item) => {
+    const isCurrent = Boolean(currentSymbol) && item.symbol === currentSymbol && Boolean(quote);
+    const tr = document.createElement("tr"), nameCell = document.createElement("td");
+    const name = document.createElement("strong"), symbol = document.createElement("small");
+    name.className = "research-list-stock-name"; name.textContent = item.name || item.symbol;
+    symbol.className = "research-list-symbol"; symbol.textContent = item.symbol; nameCell.append(name, symbol); tr.append(nameCell);
+    const missing = (value) => value === null || value === undefined || value === "" ? "—" : value;
+    const changeClass = isCurrent && Number(quote.change_percent) > 0 ? "positive" : isCurrent && Number(quote.change_percent) < 0 ? "negative" : "";
+    tr.append(
+      makeCell(isCurrent ? formatPrice(quote.current_price) : "未加载"),
+      makeCell(isCurrent ? formatPercent(quote.change_percent) : "未加载", changeClass),
+      makeCell(isCurrent ? formatCompact(quote.amount) : "未加载"),
+      makeCell(isCurrent ? missing(quote.turnover_rate == null ? null : formatPercent(quote.turnover_rate)) : "未加载"),
+      makeCell(isCurrent ? missing(quote.volume_ratio == null ? null : Number(quote.volume_ratio).toFixed(2)) : "未加载"),
+      makeCell(formatResearchMA(5, isCurrent)),
+      makeCell(formatResearchMA(20, isCurrent)),
+      (() => {
+        const cell = document.createElement("td");
+        const pill = document.createElement("span");
+        pill.className = "mini-quality mini-quality-" + String(isCurrent ? quote.quality_status || "unknown" : "unknown").toLowerCase();
+        pill.textContent = isCurrent ? qualityLabel(quote.quality_status) : "未加载";
+        cell.append(pill);
+        return cell;
+      })()
+    );
+    const actionCell = document.createElement("td"), action = document.createElement("button");
+    action.type = "button"; action.className = "button button-secondary research-list-action";
+    action.dataset.researchOpenSymbol = item.symbol;
+    action.dataset.researchOpenName = item.name || item.symbol;
+    action.textContent = "查看详情";
+    actionCell.append(action); tr.append(actionCell); root.append(tr);
+  });
+  setText("#research-list-scope", items.length + " 只 · 当前浏览器列表");
+  renderResearchOverview();
+}
 function safeReadWatchlist() {
   try {
     return readWatchlist(localStorage);
   } catch {
     return [];
   }
+}
+
+function localCalendarDateKey(value) {
+  const date = value instanceof Date ? value : new Date(String(value || ""));
+  if (!Number.isFinite(date.getTime())) return "";
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
 function renderWatchlist(records = safeReadWatchlist()) {
@@ -384,9 +466,14 @@ function renderWatchlist(records = safeReadWatchlist()) {
     empty.className = "empty-row";
     empty.textContent = "暂无自选股。可先在上方输入代码，再点击“加入自选”。";
     root.append(empty);
+    renderResearchStockList();
     return;
   }
 
+  const recentTasks = safeReadRecentTasks();
+  const normalizeLocalSymbol = (value) => {
+    try { return normalizeSymbol(value); } catch { return String(value || "").trim().toUpperCase(); }
+  };
   items.forEach((record) => {
     const row = document.createElement("article");
     row.className = "watchlist-item";
@@ -423,6 +510,66 @@ function renderWatchlist(records = safeReadWatchlist()) {
     aliasLabel.append(aliasCaption, aliasInput);
     main.append(symbol, aliasLabel, meta);
 
+    const tracking = document.createElement("div");
+    tracking.className = "watchlist-tracking-summary";
+    const itemSymbol = normalizeLocalSymbol(record.symbol);
+    const quoteMatches = Boolean(state.quote?.symbol) && normalizeLocalSymbol(state.quote.symbol) === itemSymbol;
+    const quoteLine = document.createElement("small");
+    quoteLine.className = "watchlist-tracking-line";
+    quoteLine.textContent = quoteMatches
+      ? "行情快照：" + formatPrice(state.quote.current_price) + " · " + formatPercent(state.quote.change_percent) + " · " + (state.quote.quote_time ? formatDateTime(state.quote.quote_time) : "时间未报告") + " · " + qualityLabel(state.quote.quality_status)
+      : "当前行情：未加载（点击“查行情”读取）";
+    const matchingTasks = recentTasks.filter((task) =>
+      Array.isArray(task.symbols) && task.symbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
+    );
+    const recentTask = [...matchingTasks]
+      .sort((a, b) => (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0))[0] || null;
+    const todayKey = localCalendarDateKey(new Date());
+    const todayTask = [...matchingTasks]
+      .filter((task) => Boolean(todayKey) && localCalendarDateKey(task.created_at) === todayKey)
+      .sort((a, b) => (Date.parse(b.created_at || "") || 0) - (Date.parse(a.created_at || "") || 0))[0] || null;
+    const activeTaskMatches = Boolean(state.taskId) && Array.isArray(state.taskSymbols)
+      && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
+      && ["running", "started", "pending", "queued", "processing", "in-progress", "in_progress"].includes(String(state.taskStatus || "").toLowerCase());
+    const todayLine = document.createElement("small");
+    todayLine.className = "watchlist-tracking-line" + (todayTask ? " is-today" : " is-unknown");
+    if (todayTask) {
+      todayLine.textContent = "今日分析：有本地记录 · " + taskStatusLabel(todayTask.status) + " · 创建于 " + formatDateTime(todayTask.created_at);
+    } else if (!matchingTasks.length) {
+      todayLine.textContent = "今日分析：未知（当前浏览器没有该股票的任务引用）";
+    } else if (matchingTasks.some((task) => !localCalendarDateKey(task.created_at))) {
+      todayLine.textContent = "今日分析：未知（部分旧任务缺少服务端创建时间）";
+    } else {
+      todayLine.textContent = "今日分析：本地最近任务未发现今日创建记录（不代表服务端无分析）";
+    }
+
+    const taskLine = document.createElement("small");
+    taskLine.className = "watchlist-tracking-line";
+    taskLine.textContent = activeTaskMatches
+      ? "当前任务：" + taskStatusLabel(state.taskStatus) + " · " + state.taskId
+      : recentTask
+        ? "最近任务：" + taskStatusLabel(recentTask.status) + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
+        : "最近任务：暂无本地任务记录（不代表从未分析）";
+    const resultLine = document.createElement("small");
+    resultLine.className = "watchlist-tracking-line";
+    const latestResultMatches = Boolean(recentTask && state.lastRunResult
+      && state.taskId === recentTask.task_id
+      && recentTask.run_id
+      && state.lastRunResult.run_id === recentTask.run_id
+      && String(recentTask.analysis_base || state.settings.analysisBase) === String(state.taskAnalysisBase || state.settings.analysisBase)
+      && Array.isArray(state.taskSymbols)
+      && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol));
+    if (latestResultMatches) {
+      const corePass = state.lastRunResult.quality?.core_pass;
+      const qualityState = corePass === true ? "核心质量门禁通过" : corePass === false ? "核心质量门禁未通过" : "核心质量门禁未报告";
+      const warnings = Array.isArray(state.lastRunResult.warnings) ? " · 警告 " + state.lastRunResult.warnings.length + " 项" : "";
+      resultLine.textContent = "本页已载入结果：" + runStatusLabel(state.lastRunResult.status) + " · " + qualityState + warnings;
+    } else {
+      resultLine.textContent = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
+    }
+    tracking.append(quoteLine, todayLine, taskLine, resultLine);
+    main.append(tracking);
+
     const actions = document.createElement("div");
     actions.className = "watchlist-actions";
     for (const [action, label] of [["query", "查行情"], ["analyze", "分析"], ["remove", "移除"]]) {
@@ -438,6 +585,7 @@ function renderWatchlist(records = safeReadWatchlist()) {
     row.append(main, actions);
     root.append(row);
   });
+  renderResearchStockList();
 }
 
 function addCurrentSymbolToWatchlist() {
@@ -916,10 +1064,11 @@ function getQuerySymbol() {
 }
 
 const VIEW_META = Object.freeze({
-  market: { title: "大盘数据" },
-  stocks: { title: "个股分析" },
+  market: { title: "首页" },
+  stocks: { title: "个股行情" },
   watchlist: { title: "自选股" },
   research: { title: "个股研究" },
+  data: { title: "数据中心" },
   tasks: { title: "分析任务" },
   notifications: { title: "通知中心" },
   chat: { title: "问股工作台" },
@@ -929,7 +1078,7 @@ const VIEW_META = Object.freeze({
 });
 
 const REFRESH_BUTTON_CONTEXT = Object.freeze({
-  market: { label: "刷新大盘数据", title: "刷新核心指数、市场涨跌分布、行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜与交易日历。" },
+  market: { label: "刷新首页数据", title: "刷新核心指数、市场涨跌分布、行业/概念排行、涨跌停池、人气/飙升榜、龙虎榜与交易日历。" },
   stocks: { label: "重新查询个股行情", title: "使用当前输入的股票代码、日 K 数量、复权口径和日期范围重新查询。" },
   watchlist: { label: "刷新自选股列表", title: "重新读取当前浏览器本地保存的自选股，不会向服务器同步列表。" },
   research: { label: "刷新个股研究", title: "检查服务连接并重新加载当前标的的公司资料、财务、筹码与资金流。" },
@@ -938,6 +1087,7 @@ const REFRESH_BUTTON_CONTEXT = Object.freeze({
   chat: { label: "检查服务连接（问股接口待接入）", title: "问股 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   screening: { label: "检查服务连接（选股接口待接入）", title: "选股任务与候选 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   alerts: { label: "检查服务连接（告警接口待接入）", title: "告警规则与触发记录 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
+  data: { label: "立即检查服务与数据源能力", title: "检查行情/分析服务存活和就绪状态，并读取 Provider 能力声明；不代表逐 Provider 实时探测。" },
   settings: { label: "检查服务连接", title: "重新检查已保存的行情/分析服务地址；未保存的地址请使用设置表单中的“检查连接”。" }
 });
 
@@ -968,7 +1118,8 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
     if (nextView === "market") void refreshMarketWorkspace();
     else if (nextView === "stocks") void refreshSources();
     else if (nextView === "watchlist") renderWatchlist();
-    else if (nextView === "research") stockResearch.syncSymbol();
+    else if (nextView === "research") { stockResearch.syncSymbol(); renderResearchStockList(); }
+    else if (nextView === "data") void dataCenter.refresh();
   }
   if (nextView === "chat") syncChatStockContextFromMarket();
   const runFlowDialog = $("#run-flow-dialog");
@@ -1006,192 +1157,112 @@ function syncSettingsThemeButtons(theme = readTheme()) {
 }
 
 
-function supplementalElementId(kind, field) {
-  return kind === "chip" ? "supplement-chip-" + field : kind + "-" + field;
+function renderResearchOverview() {
+  if (!$("#research-overview-symbol")) return;
+  let symbol = "";
+  try { symbol = getQuerySymbol(); } catch {}
+  let quoteSymbol = "";
+  try { quoteSymbol = state.quote ? normalizeSymbol(state.quote.symbol || "") : ""; } catch {}
+  const quote = symbol && quoteSymbol === symbol ? state.quote : null;
+  const matched = Boolean(quote);
+  const quality = String(quote?.quality_status || "unknown").toLowerCase();
+  const qualityNode = $("#research-overview-quality");
+  qualityNode.className = "supplement-quality supplement-quality-" + (["valid","degraded","stale","invalid","unknown"].includes(quality) ? quality : "unknown");
+  qualityNode.textContent = matched ? qualityLabel(quality) : (symbol ? (state.isQuerying ? "查询中" : "未加载") : "未选择");
+  setText("#research-overview-symbol", symbol ? ((matched && quote.name ? quote.name + " · " : "") + symbol) : "尚未选择标的");
+  const meta = [];
+  if (matched) {
+    meta.push(quote.quote_time ? "行情时间 " + formatDateTime(quote.quote_time) : "行情时间未报告");
+    meta.push(quote.fetched_at ? "获取时间 " + formatDateTime(quote.fetched_at) : "获取时间未报告");
+    meta.push("质量 " + qualityLabel(quality));
+  } else meta.push(symbol ? (state.isQuerying ? "正在读取当前标的行情" : "尚无匹配报价") : "请先选择有效股票代码");
+  setText("#research-overview-meta", meta.join(" · "));
+  const display = (value, formatter) => !matched ? (symbol && state.isQuerying ? "读取中…" : "未加载") : (value == null || value === "" ? "未报告" : formatter(value));
+  setText("#research-overview-price", display(quote?.current_price, formatPrice));
+  const change = matched && quote.change != null ? formatPrice(quote.change) : "未报告";
+  const percent = matched && quote.change_percent != null ? formatPercent(quote.change_percent) : "未报告";
+  setText("#research-overview-change", matched ? change + " / " + percent : (symbol && state.isQuerying ? "读取中…" : "未加载"));
+  $("#research-overview-change").classList.toggle("positive", matched && Number(quote.change_percent) > 0);
+  $("#research-overview-change").classList.toggle("negative", matched && Number(quote.change_percent) < 0);
+  setText("#research-overview-amount", display(quote?.amount, formatCompact));
+  setText("#research-overview-turnover", display(quote?.turnover_rate, formatPercent));
+  setText("#research-overview-volume-ratio", display(quote?.volume_ratio, v => Number.isFinite(Number(v)) ? Number(v).toFixed(2) : "未报告"));
+  setText("#research-overview-source", matched ? (quote.source || "未报告") : (symbol && state.isQuerying ? "读取中…" : "未加载"));
+  let barsSymbol = "";
+  try { barsSymbol = normalizeSymbol(state.technicalSymbol || ""); } catch {}
+  const hasBars = Boolean(symbol && barsSymbol === symbol);
+  const latest = hasBars ? [...state.technicalRows].reverse().find(row => row && row.close != null) : null;
+  const technical = key => !hasBars ? (symbol && state.isQuerying ? "读取中…" : "未加载") : (Number.isFinite(latest?.[key]) ? latest[key].toFixed(2) : "数据不足");
+  setText("#research-overview-ma5", technical("ma5"));
+  setText("#research-overview-ma20", technical("ma20"));
+  const note = $("#research-overview-note");
+  const reasons = matched && Array.isArray(quote.quality_reasons) ? quote.quality_reasons.filter(Boolean) : [];
+  note.classList.toggle("is-warning", reasons.length > 0 || (matched && quality !== "valid"));
+  if (!symbol) note.textContent = "请先选择有效股票；未选择标的时不会展示上一只股票的快照。";
+  else if (!matched && state.isQuerying) note.textContent = "正在读取 " + symbol + " 的实时行情与日 K。";
+  else if (!matched) note.textContent = "当前标的尚无匹配行情。可从列表点击“查看详情”加载，或打开图表与日 K 页面查询。";
+  else if (reasons.length) note.textContent = "行情质量提示：" + reasons.join("；");
+  else if (quality !== "valid") note.textContent = "服务端未提供详细质量原因；当前质量为“" + qualityLabel(quality) + "”，请结合来源与时间判断。";
+  else note.textContent = "当前报价与所选股票匹配。MA5/MA20 仅基于当前股票有效日 K 计算；历史数据不足时不估算。";
+  ["research-open-chart","research-add-watchlist","research-start-analysis"].forEach(id => { const b = $("#"+id); if (b) b.disabled = !symbol; });
 }
-
-function clearSupplementReasons(kind, message = "尚未返回质量原因。") {
-  const root = $("#"+supplementalElementId(kind, "reasons"));
-  root.replaceChildren();
-  const line = document.createElement("p");
-  line.textContent = message;
-  root.append(line);
+function openResearchStock(symbol, name = "") {
+  let normalized;
+  try { normalized = normalizeSymbol(symbol); } catch (error) { setNotice(error.message, "danger"); return; }
+  let q = "", bars = "";
+  try { q = state.quote ? normalizeSymbol(state.quote.symbol || "") : ""; } catch {}
+  try { bars = state.technicalSymbol ? normalizeSymbol(state.technicalSymbol) : ""; } catch {}
+  const quoteMatches = q === normalized && Boolean(state.quote), barsMatch = bars === normalized;
+  $("#symbol-input").value = normalized;
+  state.selectedStockSearchItem = {symbol:normalized,name:name || normalized};
+  setView("research");
+  if (!quoteMatches || !barsMatch) void runQuoteQuery();
 }
+function bindSectionNavigation(linkSelector, dataKey) {
+  const links = Array.from(document.querySelectorAll(linkSelector));
+  if (!links.length) return;
 
-function setSupplementQuality(kind, status, label = "") {
-  const node = $("#"+supplementalElementId(kind, "quality"));
-  const normalized = String(status || "unknown").toLowerCase();
-  node.className = "supplement-quality supplement-quality-" + (["valid","degraded","stale","invalid","unknown"].includes(normalized) ? normalized : "unknown");
-  node.textContent = label || qualityLabel(normalized);
-}
+  const setActive = (targetId) => {
+    links.forEach((link) => {
+      const active = link.dataset[dataKey] === targetId;
+      link.classList.toggle("is-active", active);
+      if (active) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    });
+  };
 
-function clearSupplementCard(kind, symbolLabel = "尚未查询") {
-  const ids = kind === "chip"
-    ? ["chip-average-cost","chip-profit-ratio","chip-concentration-90","chip-concentration-70","chip-date","chip-source","chip-fetched-at"]
-    : ["flow-main-inflow","flow-inflow-5d","flow-inflow-10d","flow-observations","flow-source","flow-fetched-at"];
-  ids.forEach((id) => setText("#"+id, "—"));
-  setText("#"+supplementalElementId(kind, "symbol"), symbolLabel);
-  setSupplementQuality(kind, "unknown", "未加载");
-  clearSupplementReasons(kind, "加载后显示后端返回的质量原因。");
-  const errorNode = $("#"+supplementalElementId(kind, "error"));
-  errorNode.hidden = true;
-  errorNode.textContent = "";
-}
-
-function resetSupplementPanel(symbol) {
-  state.supplementGeneration += 1;
-  state.supplementSymbol = symbol || "";
-  state.supplementLoading = false;
-  setText("#supplemental-target", symbol ? "当前标的：" + symbol : "当前标的：尚未选择");
-  setText("#supplemental-feedback", "");
-  $("#supplemental-feedback").hidden = true;
-  $("#load-supplemental-button").disabled = !symbol;
-  $("#load-supplemental-button").textContent = "加载补充数据";
-  clearSupplementCard("chip", symbol || "尚未查询");
-  clearSupplementCard("flow", symbol || "尚未查询");
-}
-
-function formatRatioPercent(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < 0 || number > 1) return "超出接口约定";
-  return formatPercent(number * 100);
-}
-
-function formatSignedYuan(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "—";
-  const formatted = (number > 0 ? "+" : "") + formatCompact(number) + " 元";
-  return formatted;
-}
-
-function renderSupplementReasons(kind, reasons) {
-  const root = $("#"+supplementalElementId(kind, "reasons"));
-  root.replaceChildren();
-  if (!Array.isArray(reasons) || !reasons.length) {
-    const line = document.createElement("p");
-    line.textContent = "接口未返回质量原因；请结合质量状态与数据日期判断可用性。";
-    root.append(line);
-    return;
-  }
-  reasons.forEach((reason) => {
-    const line = document.createElement("p");
-    line.textContent = String(reason);
-    root.append(line);
+  links.forEach((link) => {
+    link.addEventListener("click", () => {
+      const targetId = link.dataset[dataKey] || "";
+      const target = targetId ? document.getElementById(targetId) : null;
+      if (!target) return;
+      setActive(targetId);
+      const reduceMotion = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+      target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    });
   });
+
+  if (typeof IntersectionObserver === "undefined") return;
+  const targets = links.map((link) => document.getElementById(link.dataset[dataKey] || "")).filter(Boolean);
+  if (!targets.length) return;
+  const observer = new IntersectionObserver((entries) => {
+    const referenceLine = Math.min(window.innerHeight * 0.28, 220);
+    const current = entries.filter((entry) => entry.isIntersecting)
+      .sort((a, b) => Math.abs(a.boundingClientRect.top - referenceLine) - Math.abs(b.boundingClientRect.top - referenceLine))[0];
+    if (current) setActive(current.target.id);
+  }, { rootMargin: "-120px 0px -120px 0px", threshold: 0 });
+  targets.forEach((target) => observer.observe(target));
 }
 
-function renderChipDistribution(data, symbol) {
-  setText("#supplement-chip-symbol", data.symbol || symbol);
-  setText("#chip-average-cost", Number(data.average_cost) > 0 ? formatPrice(data.average_cost) : "未报告");
-  setText("#chip-profit-ratio", formatRatioPercent(data.profit_ratio));
-  setText("#chip-concentration-90", formatRatioPercent(data.concentration_90));
-  setText("#chip-concentration-70", formatRatioPercent(data.concentration_70));
-  setText("#chip-date", data.date || data.provider_date ? formatDate(data.date || data.provider_date) : "未报告");
-  setText("#chip-source", [data.source, data.source_version].filter(Boolean).join(" · ") || "未报告");
-  setText("#chip-fetched-at", data.fetched_at ? formatDateTime(data.fetched_at) : "未报告");
-  setSupplementQuality("chip", data.quality_status);
-  renderSupplementReasons("chip", data.quality_reasons);
-  $("#supplement-chip-error").hidden = true;
-  $("#supplement-chip-error").textContent = "";
-}
-
-function renderCapitalFlow(data, symbol) {
-  setText("#flow-symbol", data.symbol || symbol);
-  setText("#flow-main-inflow", formatSignedYuan(data.main_net_inflow_yuan));
-  setText("#flow-inflow-5d", formatSignedYuan(data.inflow_5d_yuan));
-  setText("#flow-inflow-10d", formatSignedYuan(data.inflow_10d_yuan));
-  setText("#flow-observations", Number.isFinite(Number(data.observations)) ? String(data.observations) : "未报告");
-  setText("#flow-source", [data.source, data.source_version].filter(Boolean).join(" · ") || "未报告");
-  setText("#flow-fetched-at", data.fetched_at ? formatDateTime(data.fetched_at) : "未报告");
-  setSupplementQuality("flow", data.quality_status);
-  renderSupplementReasons("flow", data.quality_reasons);
-  $("#flow-error").hidden = true;
-  $("#flow-error").textContent = "";
-}
-
-function renderSupplementError(kind, error) {
-  const node = $("#"+supplementalElementId(kind, "error"));
-  node.hidden = false;
-  node.textContent = errorMessage(error);
-  setSupplementQuality(kind, "unknown", "接口不可用");
-  clearSupplementReasons(kind, "本次未获取到质量原因。");
-}
-
-async function loadSupplementalData() {
-  if (!state.settings.apiKey) {
-    const feedback = $("#supplemental-feedback");
-    feedback.hidden = false;
-    feedback.className = "supplemental-feedback is-warning";
-    feedback.textContent = "请先配置行情服务 API Key。";
-    $("#settings-dialog").showModal();
-    return;
-  }
-  if (state.isQuerying) {
-    const feedback = $("#supplemental-feedback");
-    feedback.hidden = false;
-    feedback.textContent = "主行情查询尚未完成，请稍后加载补充数据。";
-    feedback.className = "supplemental-feedback is-warning";
-    return;
-  }
-
+function openResearchChartView() {
   let symbol;
-  try {
-    symbol = getQuerySymbol();
-    state.settings.marketBase = normalizeBasePath(state.settings.marketBase, "/market-api");
-  } catch (error) {
-    const feedback = $("#supplemental-feedback");
-    feedback.hidden = false;
-    feedback.textContent = error.message;
-    feedback.className = "supplemental-feedback is-error";
-    return;
-  }
-
-  if (state.supplementLoading) return;
-  if (state.supplementSymbol !== symbol) resetSupplementPanel(symbol);
-  const generation = ++state.supplementGeneration;
-  state.supplementSymbol = symbol;
-  state.supplementLoading = true;
-  $("#load-supplemental-button").disabled = true;
-  $("#load-supplemental-button").textContent = "正在加载…";
-  setText("#supplemental-target", "当前标的：" + symbol);
-  const feedback = $("#supplemental-feedback");
-  feedback.hidden = false;
-  feedback.className = "supplemental-feedback";
-  feedback.textContent = "正在分别读取筹码分布和资金流；任一接口失败不会阻塞另一项结果。";
-  clearSupplementCard("chip", symbol);
-  clearSupplementCard("flow", symbol);
-  setSupplementQuality("chip", "unknown", "读取中…");
-  setSupplementQuality("flow", "unknown", "读取中…");
-
-  try {
-    const results = await Promise.allSettled([
-      getChipDistribution(state.settings, symbol),
-      getCapitalFlow(state.settings, symbol)
-    ]);
-    if (generation !== state.supplementGeneration || symbol !== state.supplementSymbol) return;
-
-    if (results[0].status === "fulfilled") renderChipDistribution(results[0].value, symbol);
-    else renderSupplementError("chip", results[0].reason);
-
-    if (results[1].status === "fulfilled") renderCapitalFlow(results[1].value, symbol);
-    else renderSupplementError("flow", results[1].reason);
-
-    const failed = results.filter((result) => result.status === "rejected").length;
-    feedback.className = "supplemental-feedback" + (failed ? " is-warning" : "");
-    feedback.textContent = failed === 0
-      ? "补充数据已返回。请分别检查各接口的数据日期、来源和质量状态；数值不代表交易建议。"
-      : failed === 1
-        ? "一项补充接口不可用，另一项结果已独立显示。请检查对应错误、请求 ID 和后端 Provider 配置。"
-        : "两项补充接口均未返回数据。请检查 API Key、服务版本和 Provider 是否启用；行情、日 K 与分析主流程不受此结果覆盖。";
-  } finally {
-    if (generation === state.supplementGeneration) {
-      state.supplementLoading = false;
-      $("#load-supplemental-button").disabled = !state.supplementSymbol;
-      $("#load-supplemental-button").textContent = "重新加载补充数据";
-    }
-  }
+  try { symbol = getQuerySymbol(); } catch (error) { setNotice(error.message, "danger"); return; }
+  let q = "", bars = "";
+  try { q = state.quote ? normalizeSymbol(state.quote.symbol || "") : ""; } catch {}
+  try { bars = state.technicalSymbol ? normalizeSymbol(state.technicalSymbol) : ""; } catch {}
+  const quoteMatches = q === symbol && Boolean(state.quote), barsMatch = bars === symbol;
+  setView("stocks");
+  if (!quoteMatches || !barsMatch) void runQuoteQuery();
 }
 
 function clearBundleSnapshotMetadata() {
@@ -1276,6 +1347,7 @@ function renderQuote(quote) {
   setText("#metric-volume-ratio", `量比 ${quote.volume_ratio == null ? "—" : Number(quote.volume_ratio).toFixed(2)}`);
   setText("#metric-source", quote.source || "未知");
   setText("#metric-quote-time", `行情时间 ${formatDateTime(quote.quote_time)}`);
+  renderResearchStockList();
 
   const reasons = Array.isArray(quote.quality_reasons) ? quote.quality_reasons : [];
   if (reasons.length) {
@@ -1302,6 +1374,7 @@ function clearQuoteDisplay(symbol, phase = "failed") {
   setText("#metric-volume-ratio", "量比 —");
   setText("#metric-source", "—");
   setText("#metric-quote-time", "行情时间未报告");
+  renderResearchStockList();
 }
 
 function makeCell(value, className = "") {
@@ -1382,6 +1455,12 @@ function setChartView(view) {
 
 function renderBars(response) {
   state.bars = Array.isArray(response.bars) ? response.bars : [];
+  state.technicalSymbol = "";
+  try {
+    state.technicalSymbol = normalizeSymbol(response.symbol || getQuerySymbol());
+  } catch {
+    // 响应标识无法规范化时不关联任何个股均线，避免将错误标识当作当前股票。
+  }
   state.chartMeta = {
     adjustmentBasis: String(response.adjustment_basis || "unknown"),
     volumeUnit: String(response.volume_unit || ""),
@@ -1426,6 +1505,7 @@ function renderBars(response) {
     });
   }
   renderTechnicalSummary(calculateTechnicalIndicators(state.bars));
+  renderResearchStockList();
   renderChartView();
 }
 
@@ -1609,6 +1689,7 @@ function configureDateInputs() {
 
 function clearBarsDisplay(symbol, message = "当前条件尚无日 K 结果。") {
   state.bars = [];
+  state.technicalSymbol = "";
   state.chartMeta = { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" };
   const tbody = $("#bars-body");
   tbody.replaceChildren();
@@ -1626,6 +1707,7 @@ function clearBarsDisplay(symbol, message = "当前条件尚无日 K 结果。")
   renderChartView();
   $("#chart-empty").textContent = message;
   $("#chart-empty").hidden = false;
+  renderResearchStockList();
 }
 
 function clearMarketQueryResults(symbol, message) {
@@ -1636,14 +1718,10 @@ function clearMarketQueryResults(symbol, message) {
   setText("#last-updated", "—");
   setText("#query-hint", message || "当前查询条件已变化，旧行情快照已清除。");
   setNotice("", "info");
-  let normalizedSymbol = "";
-  try { normalizedSymbol = normalizeSymbol(label); } catch {}
-  resetSupplementPanel(normalizedSymbol);
   stockResearch.invalidate(message || "当前查询条件已变化，请重新加载个股研究资料。");
 }
 
 function releaseQuoteQueryControls() {
-  $("#load-supplemental-button").disabled = !state.supplementSymbol || state.supplementLoading;
   $("#quote-form").classList.remove("is-loading");
   $("#quote-form button[type='submit']").disabled = false;
 }
@@ -1724,8 +1802,6 @@ async function runQuoteQuery(event) {
   state.quoteQueryInput = $("#symbol-input").value.trim();
   state.lastQueryInput = state.quoteQueryInput;
   state.isQuerying = true;
-  resetSupplementPanel(symbol);
-  $("#load-supplemental-button").disabled = true;
   $("#quote-form").classList.add("is-loading");
   $("#quote-form button[type='submit']").disabled = true;
   setNotice("", "info");
@@ -1842,6 +1918,7 @@ async function runQuoteQuery(event) {
       state.isQuerying = false;
       state.quoteQueryController = null;
       state.quoteQueryKey = "";
+      renderResearchOverview();
       releaseQuoteQueryControls();
     }
   }
@@ -1944,6 +2021,7 @@ function renderSelectedTaskEvent(item) {
 }
 function renderTask(task) {
   state.taskStatus = task.status || state.taskStatus;
+  if (typeof task.created_at === "string" && task.created_at) state.taskCreatedAt = task.created_at;
   if (task.run_id) state.runId = task.run_id;
   if (task.task_type) state.taskType = task.task_type;
   if (Array.isArray(task.symbols)) state.taskSymbols = task.symbols;
@@ -2573,6 +2651,7 @@ async function createTask(event) {
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = "";
+  state.taskCreatedAt = "";
   state.runId = "";
   state.taskAnalysisBase = requestAnalysisBase;
   state.taskSymbols = symbols;
@@ -2598,6 +2677,7 @@ async function createTask(event) {
         const endpointRecord = {
           task_id: task.task_id,
           run_id: task.run_id || "",
+          created_at: typeof task.created_at === "string" ? task.created_at : "",
           symbols: Array.isArray(task.symbols) ? task.symbols : symbols,
           task_type: task.task_type || taskType,
           status: task.status || "",
@@ -2621,6 +2701,7 @@ async function createTask(event) {
     state.suppressedHistoryTaskId = "";
     state.suppressedHistoryTaskBase = "";
     state.taskId = task.task_id;
+    state.taskCreatedAt = typeof task.created_at === "string" ? task.created_at : "";
     state.runId = task.run_id || "";
     state.taskAnalysisBase = requestAnalysisBase;
     persistTaskReference();
@@ -2685,6 +2766,7 @@ function activateTaskReference(record) {
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = record.task_id;
+  state.taskCreatedAt = typeof record.created_at === "string" ? record.created_at : "";
   state.runId = typeof record.run_id === "string" ? record.run_id : "";
   state.taskAnalysisBase = requestedBase;
   state.taskSymbols = Array.isArray(record.symbols) ? record.symbols : [];
@@ -2807,6 +2889,7 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = "";
+  state.taskCreatedAt = "";
   state.runId = "";
   state.taskAnalysisBase = "";
   state.taskSymbols = [];
@@ -2895,6 +2978,181 @@ function clearLocalSettings() {
   }
 }
 
+
+function setBrowserDataFeedback(message, kind = "info") {
+  const output = $("#browser-data-feedback");
+  if (!output) return;
+  output.textContent = message;
+  output.className = "settings-inline-status" + (kind === "error" ? " is-error" : kind === "success" ? " is-success" : "");
+}
+
+function buildBrowserDataPayload() {
+  // 仅导出明确允许的浏览器偏好与引用；绝不包含 API Key、行情缓存或完整报告。
+  return {
+    format: BROWSER_DATA_FORMAT,
+    version: BROWSER_DATA_VERSION,
+    exported_at: new Date().toISOString(),
+    data: {
+      theme: readTheme(),
+      connection: { marketBase: state.settings.marketBase, analysisBase: state.settings.analysisBase },
+      watchlist: safeReadWatchlist(),
+      recent_tasks: safeReadRecentTasks()
+    }
+  };
+}
+
+function downloadBrowserData() {
+  try {
+    const payload = buildBrowserDataPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "stock-provider-webui-local-data-" + new Date().toISOString().slice(0, 10) + ".json";
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setBrowserDataFeedback("本地工作区数据已导出。文件不包含 API Key、行情快照或完整分析报告；任务引用可能包含标的与任务 ID。", "success");
+  } catch (error) {
+    setBrowserDataFeedback("导出失败：" + (error?.message || "浏览器无法读取本地数据。"), "error");
+  }
+}
+
+function validateBrowserDataPayload(payload) {
+  if (!payload || payload.format !== BROWSER_DATA_FORMAT || payload.version !== BROWSER_DATA_VERSION) {
+    throw new Error("文件格式或版本不受支持。请使用本 WebUI 导出的 JSON 文件。");
+  }
+  const data = payload.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("缺少有效的 data 配置对象。");
+  if (!["dark", "light"].includes(data.theme)) throw new Error("主题字段无效。");
+  if (!data.connection || typeof data.connection !== "object") throw new Error("缺少连接路径配置。");
+  // 仅接受同源绝对路径，避免将导入文件变成任意外部请求目标。
+  const marketBase = normalizeBasePath(data.connection.marketBase, "/market-api");
+  const analysisBase = normalizeBasePath(data.connection.analysisBase, "/analysis-api");
+
+  if (!Array.isArray(data.watchlist) || data.watchlist.length > MAX_WATCHLIST_ITEMS) {
+    throw new Error("自选股必须是数组，且不能超过 " + MAX_WATCHLIST_ITEMS + " 条。");
+  }
+  const seenSymbols = new Set();
+  const symbolPattern = /^\d{6}(?:\.(?:SH|SZ|BJ))?$/;
+  const watchlist = data.watchlist.map((record) => {
+    if (!record || typeof record !== "object" || typeof record.symbol !== "string") throw new Error("自选股条目格式无效。");
+    const symbol = record.symbol.trim().toUpperCase();
+    if (!symbolPattern.test(symbol)) throw new Error("自选股代码格式无效：" + symbol);
+    if (seenSymbols.has(symbol)) throw new Error("自选股文件包含重复代码：" + symbol);
+    seenSymbols.add(symbol);
+    const name = String(record.name ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 32).trim() || symbol;
+    return { symbol, name, updated_at: typeof record.updated_at === "string" ? record.updated_at.slice(0, 80) : "" };
+  });
+
+  if (!Array.isArray(data.recent_tasks) || data.recent_tasks.length > MAX_RECENT_TASKS) {
+    throw new Error("最近任务引用必须是数组，且不能超过 " + MAX_RECENT_TASKS + " 条。");
+  }
+  const seenTasks = new Set();
+  const recentTasks = data.recent_tasks.map((record) => {
+    if (!record || typeof record !== "object" || typeof record.task_id !== "string" || !record.task_id.trim()) {
+      throw new Error("最近任务引用缺少有效 task_id。");
+    }
+    const taskId = record.task_id.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 200);
+    if (!taskId) throw new Error("最近任务引用中的 task_id 无效。");
+    if (record.symbols !== undefined && !Array.isArray(record.symbols)) throw new Error("任务标的必须是数组。");
+    const rawSymbols = Array.isArray(record.symbols) ? record.symbols : [];
+    if (rawSymbols.length > 100 || rawSymbols.some((item) => typeof item !== "string")) {
+      throw new Error("任务标的数量或格式无效。");
+    }
+    const analysisBase = typeof record.analysis_base === "string" && record.analysis_base.trim()
+      ? normalizeBasePath(record.analysis_base, "/analysis-api")
+      : "";
+    // 同一 task_id 可能由不同分析服务分别生成，身份由 task_id + analysis_base 共同决定。
+    const taskIdentity = JSON.stringify([taskId, analysisBase]);
+    if (seenTasks.has(taskIdentity)) throw new Error("最近任务引用包含重复的任务 ID 与服务地址：" + taskId);
+    seenTasks.add(taskIdentity);
+    const safeString = (value, max = 200) => typeof value === "string"
+      ? value.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, max)
+      : "";
+    return {
+      task_id: taskId,
+      run_id: safeString(record.run_id, 200),
+      created_at: safeString(record.created_at, 80),
+      symbols: rawSymbols.map((item) => item.trim().slice(0, 40)),
+      task_type: safeString(record.task_type, 100) || "post_market_scan",
+      status: safeString(record.status, 80),
+      analysis_base: analysisBase,
+      updated_at: safeString(record.updated_at, 80)
+    };
+  });
+  return { theme: data.theme, marketBase, analysisBase, watchlist, recentTasks };
+}
+
+async function importBrowserDataFile(file) {
+  if (!file) return;
+  if (file.size > 1024 * 1024) {
+    setBrowserDataFeedback("导入失败：文件超过 1 MiB 上限。", "error");
+    return;
+  }
+
+  let imported;
+  try {
+    imported = validateBrowserDataPayload(JSON.parse(await file.text()));
+  } catch (error) {
+    setBrowserDataFeedback("导入失败：" + (error?.message || "文件不是有效的工作区 JSON。"), "error");
+    return;
+  }
+  const confirmed = window.confirm(
+    "将替换当前浏览器的主题、API 路径、自选股与最近任务引用。\n" +
+    "当前 API Key 会保留；不会修改服务器 .env，也不会恢复行情缓存或完整分析报告。继续吗？"
+  );
+  if (!confirmed) {
+    setBrowserDataFeedback("已取消导入，现有本地数据未更改。");
+    return;
+  }
+
+  const storageKeys = [SETTINGS_KEY, THEME_STORAGE_KEY, WATCHLIST_KEY, RECENT_TASKS_KEY, TASK_REFERENCE_KEY];
+  const previous = new Map();
+  try {
+    storageKeys.forEach((key) => previous.set(key, localStorage.getItem(key)));
+  } catch (error) {
+    setBrowserDataFeedback("导入失败：无法读取当前浏览器配置，尚未执行写入。" + (error?.message || ""), "error");
+    return;
+  }
+  try {
+    const nextSettings = saveSettings({
+      marketBase: imported.marketBase,
+      analysisBase: imported.analysisBase,
+      apiKey: state.settings.apiKey
+    });
+    localStorage.setItem(THEME_STORAGE_KEY, imported.theme);
+    localStorage.setItem(WATCHLIST_KEY, JSON.stringify(imported.watchlist));
+    localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks));
+    localStorage.removeItem(TASK_REFERENCE_KEY);
+
+    applySettings(nextSettings);
+    // applySettings 可能保存旧活动任务引用；导入文件中的历史记录应作为最终结果。
+    localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks));
+    persistTheme(imported.theme);
+    applyTheme(imported.theme);
+    syncThemeControl(imported.theme);
+    syncSettingsThemeButtons(imported.theme);
+    renderWatchlist(safeReadWatchlist());
+    renderRecentTasks();
+    setBrowserDataFeedback("导入完成：主题、同源 API 路径、自选股与本地任务引用已更新。原有 API Key 已保留。", "success");
+  } catch (error) {
+    storageKeys.forEach((key) => {
+      try {
+        const value = previous.get(key);
+        if (value === null || value === undefined) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      } catch {
+        // 浏览器存储发生故障时尽力回滚；无法写入时需要用户重新载入确认实际状态。
+      }
+    });
+    setBrowserDataFeedback("导入失败，已尝试恢复导入前的浏览器存储：" + (error?.message || "本地存储不可用。"), "error");
+  }
+}
+
+
 syncThemeControl(readTheme());
 $("#theme-toggle").addEventListener("click", () => {
   const nextTheme = readTheme() === "dark" ? "light" : "dark";
@@ -2917,6 +3175,11 @@ window.addEventListener("hashchange", () => {
 });
 
 $("#topbar-notifications").addEventListener("click", () => setView("notifications"));
+$("#research-stock-list-body").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-research-open-symbol]");
+  if (!button) return;
+  openResearchStock(button.dataset.researchOpenSymbol || "", button.dataset.researchOpenName || "");
+});
 $("#chat-clear-context").addEventListener("click", () => {
   state.chatStockContext = null;
   renderChatStockContext();
@@ -2925,24 +3188,32 @@ $("#close-run-flow-dialog").addEventListener("click", () => $("#run-flow-dialog"
 $("#run-flow-dialog").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
+$("#research-open-chart").addEventListener("click", openResearchChartView);
+$("#research-add-watchlist").addEventListener("click", () => {
+  addCurrentSymbolToWatchlist();
+  const feedback = $("#watchlist-feedback");
+  if (feedback?.textContent) setText("#research-overview-note", feedback.textContent);
+});
+$("#research-start-analysis").addEventListener("click", () => startAnalysisForSymbol($("#symbol-input").value));
 $("#settings-open-connection").addEventListener("click", openSettings);
 $("#settings-check-connection").addEventListener("click", checkConnectionFromSettings);
 $("#settings-view-data-sources").addEventListener("click", () => {
-  setView("market");
-  window.requestAnimationFrame(() => $("#data-source-list").scrollIntoView({ behavior: "smooth", block: "center" }));
+  setView("data");
 });
-document.querySelectorAll("[data-settings-target]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const target = document.getElementById(button.dataset.settingsTarget);
-    if (!target) return;
-    document.querySelectorAll("[data-settings-target]").forEach((item) => {
-      item.classList.toggle("is-active", item === button);
-      if (item === button) item.setAttribute("aria-current", "location");
-      else item.removeAttribute("aria-current");
-    });
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
+$("#export-browser-data").addEventListener("click", downloadBrowserData);
+$("#import-browser-data").addEventListener("click", () => $("#browser-data-file").click());
+$("#browser-data-file").addEventListener("change", async (event) => {
+  const input = event.currentTarget;
+  try {
+    await importBrowserDataFile(input.files?.[0]);
+  } catch (error) {
+    setBrowserDataFeedback("导入失败：" + (error?.message || "无法读取文件。"), "error");
+  } finally {
+    input.value = "";
+  }
 });
+bindSectionNavigation("[data-settings-target]", "settingsTarget");
+bindSectionNavigation("[data-research-detail-target]", "researchDetailTarget");
 document.querySelectorAll("[data-theme-value]").forEach((button) => {
   button.addEventListener("click", () => {
     const theme = persistTheme(button.dataset.themeValue);
@@ -3010,7 +3281,6 @@ document.addEventListener("click", (event) => {
   cancelStockSearchRequest();
   hideStockSearch();
 });
-$("#load-supplemental-button").addEventListener("click", loadSupplementalData);
 $("#copy-bundle-snapshot").addEventListener("click", async () => {
   if (!state.bundleSnapshot) return;
   const feedback = $("#bundle-snapshot-feedback");
@@ -3061,8 +3331,10 @@ $("#refresh-button").addEventListener("click", async () => {
       if (state.settings.apiKey) await runQuoteQuery();
     } else if (state.view === "watchlist") renderWatchlist();
     else if (state.view === "research") {
-      $("#load-supplemental-button").click();
-      $("#load-stock-research").click();
+      await stockResearch.refresh();
+      renderResearchStockList();
+    } else if (state.view === "data") {
+      await dataCenter.refresh();
     } else if (state.view === "tasks" && state.taskId) {
       stopTaskPolling();
       const generation = state.pollGeneration;
@@ -3223,7 +3495,6 @@ renderAlertCollection({ supported: false }, "attempts", "[data-alert-delivery-st
 renderRecentTasks();
 renderWatchlist();
 configureDateInputs();
-resetSupplementPanel("");
 setView(window.location.hash.slice(1), { updateHash: false, refreshData: false });
 syncSettingsThemeButtons(readTheme());
 void refreshServices();

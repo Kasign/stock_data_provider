@@ -1,6 +1,6 @@
 # WebUI 当前 API 集成契约
 
-更新日期：2026-10-26
+更新日期：2026-10-27（新增数据中心检查范围）
 
 ## 结论
 
@@ -20,18 +20,33 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 
 | 服务 | 浏览器请求 | 请求参数/请求头 | 用途 |
 |---|---|---|---|
-| Go 行情 | `GET /market-api/health/ready` | 不附加 API Key | 行情服务就绪检查 |
+| Go 行情 | `GET /market-api/health/live` | 不附加 API Key | 行情服务存活检查（数据中心“立即检查”使用） |
+| Go 行情 | `GET /market-api/health/ready` | 不附加 API Key | 行情服务就绪检查（数据中心“立即检查”使用） |
 | Go 行情 | `GET /market-api/api/v1/data-sources` | `X-API-Key` | 读取 Provider 能力/状态 |
 | Go 行情 | `GET /market-api/api/v1/quotes/{symbol}` | `X-API-Key`；股票代码作为路径段 | 查询实时行情 |
 | Go 行情 | `GET /market-api/api/v1/bars/{symbol}/daily?limit=120&adjustment=forward_adjusted&start=2026-10-01&end=2026-10-23` | `X-API-Key`；`limit`、`adjustment` 可配置；`start`、`end` 可选 | 查询历史日 K；日期参数会原样传至现有行情 API |
 | Go 行情 | `GET /market-api/api/v1/stocks/{symbol}/chip-distribution` | `X-API-Key` | 按需读取个股筹码分布；字段可缺失，按接口返回的质量状态和原因展示 |
 | Go 行情 | `GET /market-api/api/v1/stocks/{symbol}/capital-flow` | `X-API-Key` | 按需读取个股资金流；5/10 日汇总可能为空，不能前端补造 |
-| Go 分析 | `GET /analysis-api/readyz` | 不附加行情 API Key | 分析服务就绪检查 |
+| Go 分析 | `GET /analysis-api/healthz` | 不附加行情 API Key | 分析服务存活检查（数据中心“立即检查”使用） |
+| Go 分析 | `GET /analysis-api/readyz` | 不附加行情 API Key | 分析服务就绪检查；当前可报告 MariaDB/Redis 依赖状态 |
 | Go 分析 | `POST /analysis-api/api/v1/analysis/tasks` | JSON；可选 `Idempotency-Key` | 创建异步分析任务 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}` | task ID 作为路径段 | 查询任务状态 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}/events?after_sequence=0&limit=100` | 增量事件游标与单页条数 | 获取持久化阶段事件 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | Run ID 作为路径段 | 读取单个 RunResult，并作为结构化分析结果展示的数据源；运行未结束时现有接口可能返回 409 `run_not_finished` |
 
+## 2026-10-27 数据中心“立即检查”的真实调用范围
+
+WebUI 已添加数据中心页面和手动“立即检查”操作。此页面当前实际调用：
+
+- `GET /health/live` 与 `GET /health/ready`：检查 Go 行情服务存活/就绪。
+- `GET /healthz` 与 `GET /readyz`：检查 Go 分析服务存活/就绪。
+- `GET /api/v1/data-sources`：读取 Provider 配置与 capability 声明，需行情 API Key。
+- WebUI/Nginx 页面路径：使用当前同源页面路径执行一次 GET；它只能确认此页面路径当时可响应，不代表容器内部每个进程都健康。
+- MariaDB/Redis：只读取分析服务 ` /readyz ` 响应中的依赖子状态。分析服务不可达或未返回子状态时 UI 显示 unknown。
+
+每项请求单独并发执行，最多等待约 6 秒；失败会显示状态、耗时和截断的安全错误摘要。此功能目前**没有**直接探测各 Provider 上游。Provider 清单中的 enabled/capability 只代表注册/配置声明，UI 会显示“已注册 · 未实测”。逐 Provider/capability 探测须等待 [数据能力缺口与服务巡检设计](./DATA_CAPABILITY_GAPS.md) 中描述的受保护诊断 API。
+
+上述是当前前端行为，不代表本轮已运行测试或在 NAS/1Panel 上完成真实验收。
 ## 行情 Bundle 与快照一致性
 
 - 未填写日 K 开始/结束日期时，WebUI 优先请求 `GET /market-api/api/v1/bundles/{symbol}?lookback_days=120&adjustment=forward_adjusted`，在一个响应中读取实时行情、日 K、质量警告、`snapshot_id` 与 `analysis_reference_time`。
@@ -354,3 +369,49 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 5. 只有真实部署确认路由已注册后，才把对应视图从 supported=false 切换到实际 API 能力；不能只因 mock/fixture 或静态断言存在就启用按钮。
 
 以上均为后续契约需求，不扩大当前 WebUI PR 的后端变更范围。
+
+
+## 2026-10-27 产品排版与新增数据需求登记
+
+本轮新的页面结构见 [UI_LAYOUT_PLAN.md](./UI_LAYOUT_PLAN.md)；当前未实现数据能力与后端诊断需求以 [DATA_CAPABILITY_GAPS.md](./DATA_CAPABILITY_GAPS.md) 为集中登记入口。
+
+下面是需求登记，**不代表路由已实现**：
+- 市场情绪历史快照与按交易日/时间范围查询；
+- 市场级资金净流入，以及板块级资金净流入；
+- 板块成交额排行的完整候选/排序/分页、板块近 5 日表现；
+- 通用全球指数目录/实时快照、币种、时区和交易日语义；
+- 面向研究列表的批量股票概览与统一 MA/成交活跃度字段；
+- 逐服务依赖、Provider 和 capability 的真实探测与最近结果。
+
+### 服务状态与 Provider 巡检（设计草案）
+
+现有实际接口：
+- 行情服务：`GET /health/live`、`GET /health/ready`、`GET /api/v1/data-sources`。
+- 分析服务：`GET /healthz`、`GET /readyz`；ready 响应可返回 MariaDB 和 Redis 的依赖状态。
+- `/api/v1/data-sources` 是 Provider 配置/能力清单，不是实时上游健康检测。
+
+为数据中心的“立即检查”后续设计一组受保护的诊断操作和最近结果读取能力。每条探测需要返回 service/dependency/provider/capability、状态、checked_at、耗时、安全错误摘要、最近成功时间（存在可信记录时）、source/version 和数据质量。Provider 的不同 capability 必须分别探测，不能因为行情接口成功就推断该 Provider 的公告、财务或资金流也正常。
+
+诊断操作必须限制并发、单项/总超时和频率；不能允许浏览器传入任意 URL、直连 MariaDB/Redis 或暴露密钥/Cookie/内部敏感地址。若分析服务不可达且无其他独立证据，数据库/Redis 状态显示 unknown，而不是推断为故障。以上均为需求草案，需先实现 Handler、模型/OpenAPI 与安全边界，再由 WebUI 接入。
+
+### 市场总览新增指标（设计草案）
+
+- 市场广度 `total_amount_cny` 与板块 `amount` 代表成交额，不等于资金净流入。
+- 市场情绪原始指标必须定义分子/分母、覆盖范围、交易日/采集时间及缺失语义。历史图表需要定时持久化快照，当前快照不得重复用作历史。
+- 板块多维排名需要明确维度、排序方向、完整候选集/总数、分页、报告日期、来源及质量；近 5 日表现依赖稳定的板块标识和历史数据。
+- 全球行情需要资产标识、交易所/市场、币种、时区、交易时段、当地交易日期、行情时间、延迟说明与质量。
+- 个股概览批量 API 需要明确证券集合/分页、批量字段、MA 算法版本、日 K 复权口径、最后有效交易日和逐标的质量状态。
+
+
+## 浏览器本地工作区导入/导出（无新增 API）
+
+设置中心的“浏览器本地数据”分组只提供前端本地 JSON 文件功能，不调用服务端配置 API，也不代表服务器备份。导出 schema 带有 format 与 version，数据字段使用 allowlist：
+
+- theme：当前 dark/light 主题；
+- connection.marketBase、connection.analysisBase：同源绝对 API 路径，不允许协议、外部主机、查询、片段或空白字符；
+- watchlist：当前浏览器最多 50 条自选股；
+- recent_tasks：当前浏览器最多 10 条任务引用，保留任务 ID、Run ID、标的、类型、状态、分析服务路径与更新时间。
+
+**不导出、不导入 API Key**。导入时保留浏览器已有 API Key；若当前浏览器尚未设置 Key，导入后仍为空。行情报价、日 K/图表缓存、完整分析报告、服务器 .env、服务端设置/密码都不在文件中。
+
+导入要求版本、字段、条数、证券代码和重复项校验通过，并要求用户明确确认覆盖。任务引用包含标的/任务标识，应像其他本地研究资料一样妥善保管；不要将其误认为服务端完整历史，或不经审查直接公开分享。文件损坏、格式版本不支持或本地存储写入失败时，UI 显示错误；浏览器存储回滚属于尽力处理，不构成服务器级事务保证。

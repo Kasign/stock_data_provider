@@ -1,19 +1,57 @@
 # WebUI 任务交接上下文
 
-最后更新：2026-10-27
-用途：从新对话恢复 stock_data_provider WebUI 产品扩展与阶段 Review。
+最后更新：2026-10-27（个股研究状态细化与浏览器本地工作区导入/导出）
+用途：恢复 WebUI 信息架构规划、数据能力缺口和后续实现任务。
 
-## 当前 GitHub 状态（2026-10-27；状态须以 PR/Actions 实时页面为准）
+## 当前执行轮次（2026-10-27，最新核实）
+
+- 开始修改前确认 PR #14 为 Open、未合并；WebUI 分支当时 HEAD 为 b411ead220c101c0f17ccf7f16b60ea0b5c9a027，相对上一轮已知 a272ce58d57edd8b39f891c72dae4801884a331a 前进 12 个提交。本轮后续已增加代码提交，完成后应再次核实最新 HEAD。
+- 本轮只涉及 web/**：细化个股研究 MA 状态，并添加浏览器本地工作区导入/导出；服务器端配置、密码与 .env 管理继续保持禁用。
+- 导出内容仅包含主题、同源 API 路径、自选股和最近任务引用；不包含 API Key、行情缓存或完整报告。导入前进行版本、路径、代码、重复项与数量校验，确认后覆盖本地工作区并保留当前 API Key。
+- 按用户要求，本轮没有运行测试、构建、CI、浏览器自动化或真实 Provider 请求。源码变更仍需统一运行时验收，PR #14 保持 Open、不合并。
+
+
+## 当前仓库状态（开始本批 UI 实现前核对）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 工作分支：`feat/webui-market-data-console`；本次样式整理前已核实 HEAD：`42c6d413714c479cbabedd21f1b91980adf71bad`，提交后以 PR #13 最新 head SHA 为准。
-- WebUI PR #13：https://github.com/Kasign/stock_data_provider/pull/13，标题 `WebUI: improve market readability and refresh diagnostics`，状态 Open、未合并、mergeable；head 与 WebUI 分支一致，base 为 `feat/full-go-data-providers-api-switch`。
-- `42c6d41` 对应的 Chromium 视口烟测 [Actions #40441039966](https://github.com/Kasign/stock_data_provider/actions/runs/40441039966) 与 WebUI checks [Actions #40441045323](https://github.com/Kasign/stock_data_provider/actions/runs/40441045323) 均已成功；前者将 API 请求显式设为 503，不能替代真实 API/NAS 验收。后续样式整理提交的新 CI 需以新 HEAD 对应 Actions 为准。
-- PR #2 已关闭并合并，旧的 PR #2 HEAD 不再作为本轮基线。数据 PR #1 仍是独立变更流。
-- 本轮只提交到 WebUI 工作分支，改动限定在 `web/**`；不合并 PR、不更新数据分支、不修改 Go/Provider/数据库/API/Compose。
-- 本轮继续处理 CSS 可维护性与文档状态一致性；浏览器烟测已做自动化覆盖，深浅主题、键盘交互、真实后端与 NAS/Docker/OpenResty 仍由后续统一验收。
+- WebUI 工作分支：`feat/webui-market-data-console`；本轮 UI 实现开始前的基线为 `9a35309a1efeb2fa2d23e6d33b704297d2a5e730`，本轮又新增多个实现提交；继续工作前务必重新核实远程 HEAD。
+- 数据分支：`feat/full-go-data-providers-api-switch`；本轮规划基线为 `df7a4e259734f0043bc0d71372e826bead032902`，后续提交请重新核实远程 HEAD。
+- PR #14：https://github.com/Kasign/stock_data_provider/pull/14，Open、未合并。本轮不合并。
+- 本轮 UI 源码与文档均只修改 `web/**`，没有改 Go/Provider/数据库/Compose，没有合并 PR。按用户要求未运行测试、构建、CI 或真实 Provider 请求；页面功能状态属于源码已提交，尚未运行时验收。
+
+## 当前有效文档入口
+
+- 页面信息架构与排版：[UI_LAYOUT_PLAN.md](./UI_LAYOUT_PLAN.md)
+- 数据能力缺口与服务巡检：[DATA_CAPABILITY_GAPS.md](./DATA_CAPABILITY_GAPS.md)
+- 当前执行任务：[PRODUCT_BACKLOG.md](./PRODUCT_BACKLOG.md)
+- 当前 API 契约：[API_CONTRACT.md](./API_CONTRACT.md)
+- 技术约束：[TECHNICAL_NOTES.md](./TECHNICAL_NOTES.md)
+- 实施进度：[PROGRESS.md](./PROGRESS.md)
+- 验收清单：[REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md)
+
+## 当前执行顺序
+
+1. 优先进行 UI 排版重整：首页市场总览、个股研究列表/专业详情、自选股、分析任务与详情内运行流、数据中心及设置。
+2. 缺数据的模块可以先做布局，但只显示规划/接口待接入，不使用静态或 fixture 行情冒充真实数据。
+3. 数据中心先基于现有 live/readiness 与 Provider 清单展示可证实的状态；“立即检查”里的逐 Provider/能力实际测试等待受保护诊断 API。
+4. 国内数据能力需求集中记录于 `DATA_CAPABILITY_GAPS.md`：市场情绪历史、市场/板块资金流、板块成交额与五日多维排行、股票批量概览、Provider 实时探测。
+5. 全球市场联动最后推进，需先明确数据源、时区、交易时段、币种、时间与质量口径。
+6. 运行流始终处于任务详情内部，当前仅展示真实 StageEvent 时间线；无可信拓扑 API 前不得画 DAG。
+7. 不混入数据分支，不合并 PR #14；在文档里标注清楚规划、源码实现、CI 和实际 NAS/1Panel 验收的不同状态。
+
+旧版单股分析闭环任务说明及下方历史记录用于追溯，不再覆盖上述当前有效计划。
 
 ## 本轮已交付且尚未做运行时验收的事项
+
+### 第一批 UI 排版实现（2026-10-27）
+
+- 首页已新增市场情绪即时指标、市场成交额/净流入分区、板块多维榜切换入口、全球市场占位；未接入的数据不使用 mock。
+- 个股研究列表与专业资料现位于同一连续工作区；顶部显示当前匹配 Quote 与 MA 摘要，“查看详情”在研究页切换标的。重复筹码/资金流面板已移除，由专业详情统一按需加载；完整图表和日 K 仍在独立行情视图。
+- 数据中心已新增“立即检查”：WebUI 当前路径、行情 API live/ready、分析 API health/ready、分析服务提供的 MariaDB/Redis 依赖状态，以及 Provider capability 清单。Provider capability 显示注册/声明，不冒充实时健康。
+- 自选股已增加本地跟踪摘要：当前行情、最近任务状态、本页 Run 结果与“今日分析”。今日口径使用服务端 created_at 和浏览器本地日期，旧记录缺少时间时显示未知；最近 10 条引用不是服务端完整历史。Run 质量仍要求标的、Task ID、Run ID 和分析服务地址全部匹配。
+- 实际 Provider/capability 探测仍是数据层缺口；需为后端设计受保护、超时、限流且逐能力独立的诊断 API。市场情绪历史、市场/板块净流入、板块五日与完整排序、全球指数仍记录在 `DATA_CAPABILITY_GAPS.md`。
+- 按用户要求未运行测试、构建、CI 或实际数据源请求；后续请在实机统一验收。
+
 
 - 共享状态契约已添加到数据分支：https://github.com/Kasign/stock_data_provider/blob/5776313e7b50648ea0e7d741c7eb1c02b8d20758/docs/architecture/WEBUI_DATA_STATE_CONTRACT.md。数据层新功能开发前须先阅读它，再对照领域契约与 OpenAPI。
 - WebUI 主行情、日 K、股票搜索、市场总览、健康检查、Provider 清单已补充请求序号/generation 与旧响应保护。
@@ -487,3 +525,37 @@
 - 最新验证 head `24952dd7af06f2e6824a1d8c52c54c7dabd9865b` 的 [Go test suite](https://github.com/Kasign/stock_data_provider/actions/runs/40449084361)、[Live provider probe](https://github.com/Kasign/stock_data_provider/actions/runs/40449084825) 与 [WebUI checks](https://github.com/Kasign/stock_data_provider/actions/runs/40449084307) 均成功。Go suite 包含根模块、go-core、market-data 测试、race、vet、Compose 校验及 Go 镜像构建。
 - Provider 默认策略未被本轮改动：BaoStock fundamentals/trading calendar 默认启用、Yahoo 日线默认关闭、NetEase quote 默认启用；测试通过环境变量显式验证可覆盖能力开关。
 - 运行流（Run Flow）作为下一项共同 Review 任务单独推进；本轮只修复 Go CI，不改运行流行为。
+
+
+## 2026-10-27 — 全站 Review 复核交接
+
+- 最新复核基线起于 `c0669d4c8a4e896623b9816ec58338912d242aaa`；PR #13 已合并，PR #14 独立跟踪当前改动并保持 Open。
+- 当前改进项：深浅主题辅助文字对比度与测试护栏；CSS 主题 token 可读性；检查市场总览、个股研究、龙虎榜/日历请求的旧响应保护；维护产品/进度/技术/Review 文档。
+- 当前仍未完成：人工主题和键盘验收、真实 API 404/503/401/403 场景、NAS/1Panel/OpenResty 部署验收；历史 CSS 的 70 个媒体查询仍需分区维护。
+- PR #14 的 Chromium smoke 曾在未分配 runner 时失败，重试结果仍未提供执行日志；待 PR checks 能正常分配 runner 后核对结果。不要将无步骤的快速失败误判为样式源码失败，也不要宣称通过。
+- 不合并 PR #14；若目标分支再推进，继续保留其文档更新并先比较两个分支 HEAD。
+
+
+
+## 2026-10-27 — 最新同步与 CI 交接说明
+
+- 已通过同步提交 `75b84a4d306308518b92e7d5a21f43479d49bed1` 把目标分支当时 HEAD `53a1519b138705484e00bbc8af23c1965d23145e` 纳入 WebUI 分支历史，解决 PR #14 对同名文档的合并冲突。此操作只推进 WebUI 工作分支，不将任何 WebUI 改动写入数据分支。
+- PR #14 仍处于 Open；比较目标分支与 WebUI 分支仅涉及 `web/` 下 7 个文件。
+- 同步提交的两项 Actions Job 均在未提供 steps/logs 的情况下失败。不要推断代码成功或代码失败；可用 runner 的下一次 CI 才能验证 Node 测试与 Chromium smoke。
+
+
+## 2026-10-27 — 辅助文字组件级对比度补充
+
+- 本轮在通用 token 修复之后，继续把侧栏分组标签/脚注、Run Flow 任务属性/事件元信息、任务操作辅助文字及输入占位文字统一到 `--text-dim`。
+- UI 契约测试增加组件级样式约束；本轮尚未取得可执行 runner 的 CI 验证，也未进行真实浏览器或 NAS/1Panel 部署验收。
+- 后续待办：检查最新 HEAD 的 WebUI checks 和 Chromium smoke 是否有 runner；实机核验 320–1600px 响应式、深浅主题、键盘及减少动画、真实 API 404/503/401/403。不得合并 PR #14。
+
+
+
+## 2026-10-27 — 浅色主题结果与反馈状态二轮补充
+
+- 在通用辅助文字 token 与占位文字级联修复之后，继续修复任务详情、Task ID、任务属性、阶段事件、结构化分析结果和信号卡片中与深色主题耦合的浅色正文颜色。
+- 辅助说明、图表轴标签、数据源版本/说明、空状态与补充资料字段标签现统一使用 `--text-dim`；主要值与卡片标题使用 `--text`。
+- 修复浅色主题的设置错误、最近分析错误、补充数据警告/错误、数据接口徽标和文本按钮 hover 状态，避免语义色在白底下失去对比度。
+- 已同步 UI 契约测试、技术说明、进度和 Review 清单。未运行测试、构建或主动重跑 CI；最新 Actions Job 没有执行步骤或日志，新增断言尚无可用 runner 验证。
+- 数据分支从原同步基点 `53a1519` 继续前进；比较到的变化均在 Provider/服务/数据契约文件，没有 `web/**` 重叠，因此本轮不合入数据层历史。PR #14 保持 Open、不合并。

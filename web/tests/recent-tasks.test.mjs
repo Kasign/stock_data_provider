@@ -20,6 +20,7 @@ test("upserts task references without duplicate IDs and keeps newest first", () 
   assert.deepEqual(items.map((item) => item.task_id), ["task-a", "task-b"]);
   assert.equal(items[0].run_id, "run-a");
   assert.equal(items[0].status, "succeeded");
+  assert.equal(items[0].created_at, "");
 });
 
 test("caps browser history and rejects malformed stored records", () => {
@@ -35,7 +36,7 @@ test("storage failures do not throw or create bogus history entries", () => {
   const storage = { getItem() { throw new Error("storage disabled"); }, setItem() { throw new Error("storage disabled"); } };
   assert.deepEqual(readRecentTasks(storage), []);
   assert.deepEqual(upsertRecentTask({ task_id: "task-a" }, storage), [{
-    task_id: "task-a", run_id: "", symbols: [], task_type: "post_market_scan", status: "", updated_at: "", analysis_base: ""
+    task_id: "task-a", run_id: "", created_at: "", symbols: [], task_type: "post_market_scan", status: "", updated_at: "", analysis_base: ""
   }]);
 });
 
@@ -45,6 +46,7 @@ test("stores only task references and excludes report payloads and secrets", () 
   const input = {
     task_id: "task-safe",
     run_id: "run-safe",
+    created_at: "2026-10-27T01:20:00Z",
     symbols: ["600519"],
     status: "succeeded",
     report: "private report body",
@@ -56,9 +58,10 @@ test("stores only task references and excludes report payloads and secrets", () 
   const stored = JSON.parse(storage.getItem(RECENT_TASKS_KEY));
 
   assert.deepEqual(Object.keys(stored[0]).sort(), [
-    "analysis_base", "run_id", "status", "symbols", "task_id", "task_type", "updated_at"
+    "analysis_base", "created_at", "run_id", "status", "symbols", "task_id", "task_type", "updated_at"
   ].sort());
   assert.equal(records[0].task_id, "task-safe");
+  assert.equal(records[0].created_at, "2026-10-27T01:20:00Z");
   assert.doesNotMatch(storage.getItem(RECENT_TASKS_KEY), /private report body|private-api-key|quality/);
 });
 

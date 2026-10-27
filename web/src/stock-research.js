@@ -24,7 +24,7 @@ function responseError(err){if(Number(err?.status)===404)return "当前部署的
 function safeAnnouncementUrl(raw){try{const url=new URL(String(raw||""));return url.protocol==="https:"&&(url.hostname==="eastmoney.com"||url.hostname.endsWith(".eastmoney.com"))?url.href:"";}catch{return "";}}
 function currentYearAndQuarter(){const now=new Date();let year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3);if(quarter===0){year-=1;quarter=4;}return {year,quarter};}
 export function bindStockResearch(getSettings,getSymbol){
- const state={symbol:"",generation:{profile:0,boards:0,fundamentals:0,announcements:0,valuations:0,chip:0,capitalFlow:0},controllers:{},announcementPage:0,announcementHasMore:false,announcementLoading:false};
+ const state={symbol:"",generation:{profile:0,boards:0,fundamentals:0,announcements:0,valuations:0,chip:0,capitalFlow:0},controllers:{},requested:new Set(),announcementPage:0,announcementHasMore:false,announcementLoading:false};
  function resolvedSymbol(){try{return String(getSymbol?.()||"").trim();}catch{return "";}}
  function abort(key){state.controllers[key]?.abort();delete state.controllers[key];state.generation[key]++;}
  function clearPanel(key,placeholder,symbol=state.symbol){
@@ -46,7 +46,7 @@ export function bindStockResearch(getSettings,getSymbol){
   $("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="加载更多公告";
  }
  function reset(symbol){
-  Object.keys(state.generation).forEach(abort);state.symbol=symbol;state.announcementPage=0;state.announcementHasMore=false;state.announcementLoading=false;
+  Object.keys(state.generation).forEach(abort);state.symbol=symbol;state.requested.clear();state.announcementPage=0;state.announcementHasMore=false;state.announcementLoading=false;
   setText("stock-research-target",symbol?"当前标的："+symbol:"请先输入代码，或从中文名称搜索结果中选择股票");
   Object.keys(PANEL_CONFIG).forEach(key=>{
    const panel=PANEL_CONFIG[key];clearPanel(key,panel.empty,symbol);setQuality(panel.quality,"unknown","未加载");
@@ -71,6 +71,7 @@ export function bindStockResearch(getSettings,getSymbol){
   const settings=typeof getSettings==="function"?getSettings():null;
   const panel=PANEL_CONFIG[key];if(!panel)return false;
   if(!settings?.apiKey){markApiKeyRequired();return false;}
+  state.requested.add(key);
   clearPanel(key,"正在读取本次请求，尚无新结果。",symbol);
   setQuality(panel.quality,"unknown","读取中…");
   const ctl=new AbortController();state.controllers[key]=ctl;
@@ -96,6 +97,7 @@ export function bindStockResearch(getSettings,getSymbol){
   const symbol=syncSymbol();if(!symbol)return false;
   const settings=typeof getSettings==="function"?getSettings():null;
   if(!settings?.apiKey){markApiKeyRequired();return false;}
+  if(!append)state.requested.add("announcements");
   if(state.announcementLoading)return false;
   if(append&&!state.announcementHasMore)return false;
   if(!append){
@@ -291,6 +293,21 @@ export function bindStockResearch(getSettings,getSymbol){
   setText("fundamentals-meta","报告期 "+data.year+" Q"+data.quarter+" · 来源 "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
   reasons("fundamentals-reasons",data.quality_reasons);
  }
+ async function refresh(){
+  const symbol=syncSymbol();
+  if(!symbol){setText("stock-research-feedback","请先选择有效股票，再刷新研究数据。");return false;}
+  const requested=new Set(state.requested);
+  if(!requested.size)return loadResearch();
+  const jobs=[];
+  if(requested.has("profile"))jobs.push(fetchOne("profile",getStockProfile,renderProfile));
+  if(requested.has("boards"))jobs.push(fetchOne("boards",getStockBoards,renderBoards));
+  if(requested.has("announcements"))jobs.push(loadAnnouncements(false));
+  if(requested.has("fundamentals"))jobs.push(loadFundamentals());
+  if(requested.has("valuations"))jobs.push(loadValuations());
+  if(requested.has("chip"))jobs.push(loadChipDistribution());
+  if(requested.has("capitalFlow"))jobs.push(loadCapitalFlow());
+  return Promise.allSettled(jobs);
+ }
  function initPeriodSelectors(){
   const yearSelect=$("#fundamentals-year"),quarterSelect=$("#fundamentals-quarter");
   const currentYear=new Date().getFullYear();
@@ -307,5 +324,5 @@ export function bindStockResearch(getSettings,getSymbol){
  $("#symbol-input")?.addEventListener("input",()=>{syncSymbol();});
  $("#quote-form")?.addEventListener("submit",()=>{syncSymbol();});
  initPeriodSelectors();syncSymbol();
- return {refresh:loadResearch,syncSymbol,invalidate};
+ return {refresh,syncSymbol,invalidate};
 }

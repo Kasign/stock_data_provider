@@ -154,21 +154,20 @@ test("daily chart exposes close/candle modes, optional date filters and adjustme
 });
 
 
-test("supplemental chip and capital-flow research remains opt-in and independently reports each result", () => {
-  for (const id of ["load-supplemental-button", "supplemental-feedback", "chip-quality", "chip-error", "chip-profit-ratio", "flow-quality", "flow-error", "flow-main-inflow", "flow-inflow-5d", "flow-inflow-10d"]) {
-    assert.match(html, new RegExp('id="' + id + '"'), "supplemental field must exist: " + id);
+test("individual stock research uses one detail workspace without duplicate chip/flow fetches", () => {
+  for (const id of ["research-stock-list-body", "research-overview-panel", "research-overview-price", "research-overview-ma5", "research-overview-quality", "research-open-chart", "research-add-watchlist", "research-start-analysis", "stock-research-panel", "chip-quality", "load-chip-distribution", "capital-flow-quality", "load-capital-flow"]) {
+    assert.ok(html.includes('id="' + id + '"'), "research field must exist: " + id);
   }
-  assert.match(apiClient, /\/api\/v1\/stocks\/\$\{encodeURIComponent\(symbol\)\}\/chip-distribution/);
-  assert.match(apiClient, /\/api\/v1\/stocks\/\$\{encodeURIComponent\(symbol\)\}\/capital-flow/);
-  assert.match(app, /Promise\.allSettled\(\[[\s\S]*?getChipDistribution\(state\.settings, symbol\)[\s\S]*?getCapitalFlow\(state\.settings, symbol\)/);
-  assert.match(app, /function formatRatioPercent\(value\)/);
-  assert.match(app, /function renderSupplementError\(kind, error\)/);
-  assert.match(app, /resetSupplementPanel\(symbol\)/);
-  assert.match(stylesheet, /\.supplemental-grid/);
-  assert.match(stylesheet, /\.supplement-quality-degraded/);
+  assert.ok(!html.includes('id="stock-supplemental-panel"'), "old duplicate chip/flow panel must be gone");
+  assert.ok(app.includes("function renderResearchOverview()"));
+  assert.ok(app.includes('function openResearchStock(symbol, name = "")'));
+  assert.ok(app.includes("await stockResearch.refresh()"));
+  assert.ok(!app.includes("loadSupplementalData") && !app.includes("resetSupplementPanel"));
+  assert.ok(apiClient.includes("/chip-distribution") && apiClient.includes("/capital-flow"));
+  assert.ok(stockResearch.includes("getChipDistribution") && stockResearch.includes("getCapitalFlow"));
+  assert.ok(stockResearch.includes("async function refresh()"));
+  assert.ok(stylesheet.includes(".research-overview-grid") && stylesheet.includes(".supplement-quality-degraded"));
 });
-
-
 test("market overview refresh summary is protected from an older overlapping refresh", () => {
   assert.match(marketOverview, /refreshGeneration=0/);
   assert.match(marketOverview, /const currentGeneration=\+\+refreshGeneration/);
@@ -682,4 +681,165 @@ test("collapsed sidebar navigation remains accessible and unavailable modules di
     "notifications, chat, screening, and alerts should disclose backend dependency before navigation");
   assert.match(stylesheet, /\.nav-link-state\s*\{/);
   assert.match(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.nav-link-state\s*\{\s*display: none;/);
+});
+
+function parseThemeTokens(selector) {
+  const start = stylesheet.indexOf(selector);
+  assert.notEqual(start, -1, "CSS should declare theme token block: " + selector);
+  const open = stylesheet.indexOf("{", start);
+  const close = stylesheet.indexOf("}", open + 1);
+  assert.ok(open > start && close > open, "theme token block should be closed: " + selector);
+  return Object.fromEntries(
+    [...stylesheet.slice(open + 1, close).matchAll(/--([A-Za-z0-9_-]+)[ \t]*:[ \t]*(#[0-9a-fA-F]{6})[ \t]*;/g)]
+      .map((match) => [match[1], match[2]])
+  );
+}
+
+function relativeLuminance(hexColor) {
+  const channels = hexColor.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16) / 255);
+  const linear = channels.map((value) => value <= 0.04045
+    ? value / 12.92
+    : ((value + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastRatio(foreground, background) {
+  const a = relativeLuminance(foreground);
+  const b = relativeLuminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+test("深浅主题的辅助文字在常用背景上达到 WCAG AA 对比度", () => {
+  const themes = [
+    { name: "深色", selector: ":root {", surfaces: ["bg", "bg-elevated", "panel", "panel-raised"] },
+    { name: "浅色", selector: ':root[data-theme="light"] {', surfaces: ["bg", "bg-elevated", "panel", "panel-raised"] }
+  ];
+
+  for (const theme of themes) {
+    const tokens = parseThemeTokens(theme.selector);
+    for (const surface of theme.surfaces) {
+      assert.ok(tokens["text-dim"], theme.name + "主题必须声明辅助文字颜色");
+      assert.ok(tokens[surface], theme.name + "主题必须声明背景 token: " + surface);
+      const ratio = contrastRatio(tokens["text-dim"], tokens[surface]);
+      assert.ok(
+        ratio >= 4.5,
+        theme.name + "主题的 --text-dim 在 --" + surface + " 上对比度为 " + ratio.toFixed(2) + ":1，低于 4.5:1"
+      );
+    }
+  }
+});
+
+function baseCssDeclarationBlock(selector) {
+  const escaped = selector.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
+  const match = stylesheet.match(new RegExp("(?:^|\\n)\\s*" + escaped + "\\s*\\{([^}]*)\\}"));
+  assert.ok(match, "stylesheet should declare " + selector);
+  return match[1];
+}
+
+test("辅助说明、任务元信息和输入占位文字统一使用主题感知的辅助文字 token", () => {
+  for (const selector of [
+    ".side-label",
+    ".sidebar-footnote",
+    ".task-facts small",
+    ".event-row > small",
+    ".task-actions > span"
+  ]) {
+    assert.match(
+      baseCssDeclarationBlock(selector),
+      /color:\s*var\(--text-dim\)\s*;/,
+      selector + " should inherit contrast-safe text color from the current theme"
+    );
+  }
+
+  assert.match(
+    stylesheet,
+    /\.field input::placeholder,\s*\.field textarea::placeholder,\s*\.recent-analysis-search input::placeholder,\s*\.watchlist-name-input::placeholder\s*\{[^}]*color:\s*var\(--text-dim\)/,
+    "form and local-search placeholders should use the shared contrast-safe token"
+  );
+  assert.match(
+    stylesheet,
+    /:root\[data-theme="light"\] \.field input::placeholder,[\s\S]*?\.watchlist-name-input::placeholder\s*\{\s*color:\s*var\(--text-dim\);/,
+    "light-theme placeholder overrides must not restore a low-contrast hard-coded color"
+  );
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.side-label \{ color: var\(--text-dim\); \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.sidebar-footnote \{ color: var\(--text-dim\); \}/);
+  assert.doesNotMatch(
+    stylesheet,
+    /\.watchlist-name-input::placeholder\s*\{\s*color:\s*#[0-9a-fA-F]{3,8}\s*;/,
+    "a later hard-coded watchlist placeholder rule must not override the shared theme token"
+  );
+});
+
+
+
+test("Run Flow 与结构化结果在浅色主题下使用可读的前景文字", () => {
+  const mainTextSelectors = [
+    ".task-empty strong",
+    ".task-id-row code",
+    ".task-facts strong",
+    ".event-body strong",
+    ".boundary-grid strong",
+    ".signal-result-card strong",
+    ".analysis-result-block > h3",
+    ".analysis-result-card-heading strong",
+    ".source-summary strong",
+    ".supplemental-card-heading h3"
+  ];
+  for (const selector of mainTextSelectors) {
+    assert.match(
+      baseCssDeclarationBlock(selector),
+      /color:\s*var\(--text\)\s*;/,
+      selector + " must use the theme-aware primary text token"
+    );
+  }
+
+  const dimTextSelectors = [
+    ".task-empty",
+    ".task-id-row > span",
+    ".event-body p",
+    ".boundary-grid p",
+    ".task-result-note",
+    ".task-result-metric small",
+    ".signal-result-card p",
+    ".analysis-result-block > p",
+    ".analysis-result-fields dt",
+    ".analysis-result-empty",
+    ".raw-result",
+    ".empty-row",
+    ".table-empty",
+    ".query-hint",
+    ".metric-foot",
+    ".chart-empty",
+    ".chart-foot",
+    ".source-version",
+    ".source-main small",
+    ".table-footer",
+    ".page-footer",
+    ".recent-analysis-item-main small",
+    ".watchlist-item-meta",
+    ".supplemental-context",
+    ".supplemental-card-heading small",
+    ".supplemental-fields dt",
+    ".supplemental-reasons",
+    ".section-heading h2 span",
+    ".recent-analysis-feedback"
+  ];
+  for (const selector of dimTextSelectors) {
+    assert.match(
+      baseCssDeclarationBlock(selector),
+      /color:\s*var\(--text-dim\)\s*;/,
+      selector + " must use the theme-aware secondary text token"
+    );
+  }
+
+  assert.match(baseCssDeclarationBlock(".chart-axis-label"), /fill:\s*var\(--text-dim\)\s*;/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.analysis-result-badge\.is-allowed \{ color: #08765e; border-color: #b9e6d6; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.analysis-result-badge\.is-blocked \{ color: #b92f41; border-color: #f2c3c9; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.task-result-warnings/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.inline-callout strong \{ color: #80540b; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.settings-feedback,?\s*[\s\S]*?:root\[data-theme="light"\] \.recent-analysis-feedback\.is-error \{ color: #b92f41; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.supplemental-feedback\.is-warning \{ color: #80540b; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.supplemental-feedback\.is-error \{ color: #b92f41; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.soft-badge \{ color: #245d95; background: #eaf3ff; \}/);
+  assert.match(stylesheet, /:root\[data-theme="light"\] \.text-button:hover \{ color: var\(--accent-strong\); \}/);
 });
