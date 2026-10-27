@@ -21,6 +21,7 @@ type ProviderSettings struct {
 	Quote            bool `json:"quote"`
 	DailyBars        bool `json:"daily_bars"`
 	StockBasic       bool `json:"stock_basic"`
+	StockSearch      bool `json:"stock_search"`
 	SectorRankings   bool `json:"sector_rankings"`
 	IndexQuotes      bool `json:"index_quotes"`
 	MarketBreadth    bool `json:"market_breadth"`
@@ -115,9 +116,9 @@ func Load() (Config, error) {
 		ProviderPriority: []string{"eastmoney", "baostock", "hithink", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx", "xueqiu"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, HotRankings: true},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, StockSearch: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, HotRankings: true},
 			"hithink":   {Enabled: false, Quote: false, DailyBars: false, IndexQuotes: false, TradingCalendar: false, LimitPools: false, DragonTiger: false, Fundamentals: false, Valuations: false, IndexCatalog: false, HotRankings: false},
-			"tencent":   {Enabled: true, Quote: true, DailyBars: true},
+			"tencent":   {Enabled: true, Quote: true, DailyBars: true, StockSearch: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: false, Fundamentals: false},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: true},
@@ -141,6 +142,14 @@ func Load() (Config, error) {
 		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 			return Config{}, fmt.Errorf("parse providers config %s: expected exactly one JSON object", configPath)
 		}
+		// 老版本 providers.json 尚无 stock_search 字段时继承默认能力；
+		// 显式写入 false 仍可关闭，避免升级后意外丢失原有中文名称搜索。
+		var suppliedPresence struct {
+			Providers map[string]map[string]json.RawMessage `json:"providers"`
+		}
+		if err := json.Unmarshal(raw, &suppliedPresence); err != nil {
+			return Config{}, fmt.Errorf("parse providers config %s: %w", configPath, err)
+		}
 		for name := range supplied.Providers {
 			if !isSupportedProviderName(name) {
 				return Config{}, fmt.Errorf("unknown provider %q in providers config", name)
@@ -153,6 +162,9 @@ func Load() (Config, error) {
 			file.AdjustmentBasis = supplied.AdjustmentBasis
 		}
 		for name, settings := range supplied.Providers {
+			if _, specified := suppliedPresence.Providers[name]["stock_search"]; !specified {
+				settings.StockSearch = defaults.Providers[name].StockSearch
+			}
 			file.Providers[name] = settings
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -408,6 +420,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.Quote = boolEnv("MARKET_DATA_"+prefix+"_QUOTE_ENABLED", p.Quote)
 	p.DailyBars = boolEnv("MARKET_DATA_"+prefix+"_DAILY_BARS_ENABLED", p.DailyBars)
 	p.StockBasic = boolEnv("MARKET_DATA_"+prefix+"_STOCK_BASIC_ENABLED", p.StockBasic)
+	p.StockSearch = boolEnv("MARKET_DATA_"+prefix+"_STOCK_SEARCH_ENABLED", p.StockSearch)
 	p.SectorRankings = boolEnv("MARKET_DATA_"+prefix+"_SECTOR_RANKINGS_ENABLED", p.SectorRankings)
 	p.IndexQuotes = boolEnv("MARKET_DATA_"+prefix+"_INDEX_QUOTES_ENABLED", p.IndexQuotes)
 	p.MarketBreadth = boolEnv("MARKET_DATA_"+prefix+"_MARKET_BREADTH_ENABLED", p.MarketBreadth)
@@ -601,7 +614,7 @@ func validateEnvironment() error {
 	// 造成非法布尔值被 boolEnv 静默忽略并回退到默认值。
 	providerNames := []string{"EASTMONEY", "BAOSTOCK", "TENCENT", "SINA", "YAHOO", "NETEASE", "TUSHARE", "TICKFLOW", "PYTDX", "HITHINK", "XUEQIU"}
 	providerBooleanSuffixes := []string{
-		"ENABLED", "QUOTE_ENABLED", "DAILY_BARS_ENABLED", "STOCK_BASIC_ENABLED",
+		"ENABLED", "QUOTE_ENABLED", "DAILY_BARS_ENABLED", "STOCK_BASIC_ENABLED", "STOCK_SEARCH_ENABLED",
 		"SECTOR_RANKINGS_ENABLED", "INDEX_QUOTES_ENABLED", "MARKET_BREADTH_ENABLED",
 		"LIMIT_POOLS_ENABLED", "STOCK_BOARDS_ENABLED", "DRAGON_TIGER_ENABLED",
 		"ANNOUNCEMENTS_ENABLED", "TRADING_CALENDAR_ENABLED", "FUNDAMENTALS_ENABLED",

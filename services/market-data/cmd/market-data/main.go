@@ -242,9 +242,12 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		if !enabled {
 			continue
 		}
+		if !cfg.ProviderSettings[name].StockSearch {
+			continue
+		}
 		searchProvider, ok := p.(provider.StockSearchProvider)
 		if !ok {
-			continue
+			return fmt.Errorf("provider %q is configured for stock search but does not implement StockSearchProvider", name)
 		}
 		stockSearchProviders = append(stockSearchProviders, searchProvider)
 	}

@@ -12,7 +12,7 @@ import (
 func setDefaultProviderConfig(t *testing.T) {
 	t.Helper()
 	file := filepath.Join(t.TempDir(), "providers.json")
-	data := `{"provider_priority":["eastmoney","tencent"],"adjustment_basis":"forward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":true,"daily_bars":true},"tencent":{"enabled":true,"quote":true,"daily_bars":true}}}`
+	data := `{"provider_priority":["eastmoney","tencent"],"adjustment_basis":"forward_adjusted","providers":{"eastmoney":{"enabled":true,"quote":true,"daily_bars":true,"stock_search":true},"tencent":{"enabled":true,"quote":true,"daily_bars":true,"stock_search":true}}}`
 	if err := os.WriteFile(file, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -31,6 +31,8 @@ func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	t.Setenv("MARKET_DATA_DEFAULT_ADJUSTMENT", "")
 	t.Setenv("MARKET_DATA_ADJUSTMENT", "")
 	t.Setenv("MARKET_DATA_EASTMONEY_ENABLED", "")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED", "")
+	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -44,6 +46,9 @@ func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	if !cfg.ProviderSettings["tencent"].Quote || cfg.ProviderSettings["tencent"].DailyBars {
 		t.Fatalf("Tencent capabilities not loaded: %+v", cfg.ProviderSettings["tencent"])
 	}
+	if !cfg.ProviderSettings["eastmoney"].StockSearch || !cfg.ProviderSettings["tencent"].StockSearch {
+		t.Fatal("legacy provider config should inherit default stock-search capabilities when stock_search is omitted")
+	}
 	t.Setenv("MARKET_DATA_EASTMONEY_QUOTE_ENABLED", "true")
 	cfg, err = Load()
 	if err != nil {
@@ -51,6 +56,35 @@ func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	}
 	if !cfg.ProviderSettings["eastmoney"].Quote {
 		t.Fatal("environment override should take precedence over provider config")
+	}
+}
+
+func TestLoadStockSearchCapabilityEnvironmentOverrides(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED", "false")
+	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProviderSettings["tencent"].StockSearch {
+		t.Fatal("Tencent stock search should be disabled by its independent environment flag")
+	}
+	if !cfg.ProviderSettings["eastmoney"].StockSearch {
+		t.Fatal("Eastmoney stock search should stay enabled independently")
+	}
+}
+
+func TestLoadRejectsInvalidStockSearchBoolean(t *testing.T) {
+	setDefaultProviderConfig(t)
+	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED", "sometimes")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid stock-search capability boolean must fail configuration loading")
 	}
 }
 
