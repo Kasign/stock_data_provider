@@ -242,3 +242,13 @@ X-API-Key: <由现有设置提供>
 - 缺少 API Key 时模块不会发出请求，并显示为“未请求”；过时的并发请求被取消时不会被错误计成失败。
 - “模块响应”不等于“数据验证通过”。回包中的 quality_status、quality_reasons、来源和采集/快照时间仍是数据可用性判断的依据；总览状态不把请求成功包装成数据质量成功。
 - summarizeMarketOverviewRefresh 是纯函数，可独立测试，无 DOM 依赖。
+
+
+## 26. Run Flow 阶段事件筛选
+
+- 筛选只操作内存中已收到的 StageEvent；服务端事件读取游标、sequence 去重、轮询间隔与任务状态不受影响。
+- 筛选类型按归一化状态键分组：issues = failed/error/blocked/rejected/degraded/partial；active = running/started/in-progress/in_progress/processing/queued/pending；completed = succeeded/success/completed/skipped。缺失或未知状态仍能在“全部”中查看，不会被错误归类为成功。
+- 每个筛选按钮的计数在每次渲染时按已读取事件重算；当前筛选结果为空时显示独立的过滤空态，不清空缓存事件、不修改服务端任务。
+- 切换筛选后，若当前选中事件不再可见，会在当前显示的事件中优先定位异常/降级/运行中事件，否则选中最后一条；选择事件仍可查看原始 JSON。
+- 核心匹配规则在 src/task-event-filter.js 中保持为纯函数，由 Node 测试覆盖，且新增模块包含在 npm run check 的语法检查。
+- 时间线继续是线性真实事件列表。未获得后端可信 Flow Snapshot 前不绘制 DAG，也不推断阶段依赖。

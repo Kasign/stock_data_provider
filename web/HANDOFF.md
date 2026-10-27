@@ -385,3 +385,11 @@
 - “收到响应”不代表数据质量通过；每个模块的质量状态、原因、来源和时间仍独立显示。
 - 新增 web/tests/market-overview.test.mjs，覆盖完整响应、混合失败、缺 Key、取消和未知状态。
 - 这批修改仅限 web/**。开始时 WebUI HEAD 为 9fdb97693669510bef8416a86a7a0097e792559d；PR #13 仍 Open/未合并。数据分支在此期间新增的提交仅涉及数据层文件，本批不修改、不合并数据层代码。
+
+
+## 2026-10-27 — Run Flow 阶段事件筛选
+
+- WebUI 分支在前一批 00f301fc37e530bbb52af054e6c005dcb1239aa9 基础上增加阶段事件筛选：全部、异常/降级、运行中、成功/跳过，并显示当前已收到事件的分类计数。
+- 过滤只是视图操作；原始 StageEvent、服务端序号/游标、Task/Run 状态均保持不变。未知状态仍可在“全部”中检查，筛选无匹配会单独提示。
+- 新增 web/src/task-event-filter.js 与 web/tests/task-event-filter.test.mjs；把模块加入语法检查并更新产品/技术/进度文档。
+- 本批应继续只提交到 feat/webui-market-data-console。PR #13 保持 Open/未合并；数据分支和任何 Go/Provider/数据库/API/Compose 文件均不在此改动范围。

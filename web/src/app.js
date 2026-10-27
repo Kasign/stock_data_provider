@@ -24,6 +24,7 @@ import {
 } from "./api.js";
 import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart, renderMACDChart, renderRSIChart } from "./chart.js";
 import { bindMarketOverview } from "./market-overview.js";
+import { taskEventMatchesFilter } from "./task-event-filter.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask } from "./recent-tasks.js";
@@ -120,6 +121,7 @@ const state = {
   taskEventsUnavailable: false,
   taskEventsError: "",
   selectedTaskEventSequence: null,
+  taskEventFilter: "all",
   pollTimer: null,
   pollGeneration: 0,
   isQuerying: false,
@@ -1941,8 +1943,29 @@ function renderTaskEvents() {
   }
   const list = $("#task-events");
   list.replaceChildren();
-  const events = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
-  if (!events.length) {
+  const allEvents = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
+  const filterLabels = { all: "全部", issues: "异常 / 降级", active: "运行中", completed: "成功 / 跳过" };
+  if (!Object.prototype.hasOwnProperty.call(filterLabels, state.taskEventFilter)) state.taskEventFilter = "all";
+  const statusKeyFor = (item) => {
+    const event = item?.event && typeof item.event === "object" ? item.event : item;
+    return taskEventStatusKey(event?.status);
+  };
+  const filterCounts = { all: allEvents.length, issues: 0, active: 0, completed: 0 };
+  allEvents.forEach((item) => {
+    for (const key of ["issues", "active", "completed"]) {
+      if (taskEventMatchesFilter(statusKeyFor(item), key)) filterCounts[key]++;
+    }
+  });
+  document.querySelectorAll("[data-task-event-filter]").forEach((button) => {
+    const key = button.dataset.taskEventFilter || "all";
+    button.setAttribute("aria-pressed", String(key === state.taskEventFilter));
+    const count = button.querySelector("[data-filter-count]");
+    if (count) count.textContent = String(filterCounts[key] ?? 0);
+  });
+  const events = allEvents.filter((item) => taskEventMatchesFilter(statusKeyFor(item), state.taskEventFilter));
+  const summary = $("#task-event-filter-summary");
+  if (summary) summary.textContent = "筛选：" + filterLabels[state.taskEventFilter] + " · 显示 " + events.length + "/" + allEvents.length + " 条阶段事件";
+  if (!allEvents.length) {
     const empty = document.createElement("div");
     empty.className = "empty-row";
     empty.textContent = state.taskEventsError
@@ -1950,6 +1973,15 @@ function renderTaskEvents() {
       : state.taskEventsLoaded
         ? "服务端目前没有持久化阶段事件。排队期间事件数组可以为空。"
         : "等待服务端阶段事件读取。";
+    list.append(empty);
+    renderSelectedTaskEvent(null);
+    renderTaskFlowSummary();
+    return;
+  }
+  if (!events.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = "当前筛选条件下没有匹配事件（已读取 " + allEvents.length + " 条）。选择“全部”查看所有阶段。";
     list.append(empty);
     renderSelectedTaskEvent(null);
     renderTaskFlowSummary();
@@ -2881,6 +2913,12 @@ document.querySelectorAll(".nav-link").forEach((button) => {
   button.addEventListener("click", () => {
     setView(button.dataset.view);
     setMobileNavigationOpen(false);
+  });
+});
+document.querySelectorAll("[data-task-event-filter]").forEach((button) => {
+  button.addEventListener("click", () => {
+    state.taskEventFilter = button.dataset.taskEventFilter || "all";
+    renderTaskEvents();
   });
 });
 $("#task-events").addEventListener("click", (event) => {

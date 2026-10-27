@@ -332,6 +332,13 @@
                 <div id="task-error" class="task-error" hidden></div>
                 <div class="event-heading"><h3>阶段事件</h3><span>点击事件查看服务端详情与诊断</span></div>
                 <p id="task-events-read-status" class="task-events-read-status" role="status" aria-live="polite" hidden></p>
+                <div class="task-event-filters" role="group" aria-label="阶段事件筛选">
+                  <button class="task-event-filter" type="button" data-task-event-filter="all" aria-pressed="true">全部 <span class="task-event-filter-count" data-filter-count="all">0</span></button>
+                  <button class="task-event-filter" type="button" data-task-event-filter="issues" aria-pressed="false">异常 / 降级 <span class="task-event-filter-count" data-filter-count="issues">0</span></button>
+                  <button class="task-event-filter" type="button" data-task-event-filter="active" aria-pressed="false">运行中 <span class="task-event-filter-count" data-filter-count="active">0</span></button>
+                  <button class="task-event-filter" type="button" data-task-event-filter="completed" aria-pressed="false">成功 / 跳过 <span class="task-event-filter-count" data-filter-count="completed">0</span></button>
+                </div>
+                <p id="task-event-filter-summary" class="task-event-filter-summary" role="status" aria-live="polite">等待服务端阶段事件。</p>
                 <div id="task-events" class="event-list"><div class="empty-row">等待服务端阶段事件。</div></div>
                 <section class="task-event-detail" id="task-event-detail" hidden aria-live="polite">
                   <div class="event-detail-header">

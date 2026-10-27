@@ -1819,3 +1819,17 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   .trading-calendar-day { min-height: 50px; padding: 5px 1px; }
   .trading-calendar-day span { font-size: 10px; }
 }
+
+
+/* Run Flow event filters use shared theme tokens for both light and dark modes. */
+.run-flow-dialog .task-event-filters { display:flex; flex-wrap:wrap; gap:7px; margin:10px 0 4px; }
+.run-flow-dialog .task-event-filter { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:35px; padding:6px 10px; border:1px solid var(--border); border-radius:8px; color:var(--text-soft); background:var(--panel-raised); cursor:pointer; line-height:1.4; }
+.run-flow-dialog .task-event-filter:hover { border-color:var(--accent); color:var(--text); }
+.run-flow-dialog .task-event-filter[aria-pressed="true"] { border-color:var(--accent); color:var(--text); background:var(--accent-soft); }
+.run-flow-dialog .task-event-filter:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.run-flow-dialog .task-event-filter-count { display:inline-grid; place-items:center; min-width:1.6em; min-height:1.6em; padding:1px 4px; border-radius:5px; color:var(--text); background:var(--bg-elevated); font-size:11px; font-variant-numeric:tabular-nums; }
+.run-flow-dialog .task-event-filter-summary { margin:5px 0 8px; color:var(--text-soft); font-size:12px; line-height:1.5; }
+@media (max-width:420px) {
+  .run-flow-dialog .task-event-filters { gap:5px; }
+  .run-flow-dialog .task-event-filter { flex:1 1 calc(50% - 5px); padding:7px 6px; font-size:12px; }
+}
