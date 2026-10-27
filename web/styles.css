@@ -946,7 +946,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .run-flow-dialog .event-row > small { max-width: 150px; line-height: 1.6; text-align: right; overflow-wrap: anywhere; }
 :root[data-theme="light"] .run-flow-dialog .task-status-panel { box-shadow: -18px 0 46px rgba(26, 47, 61, .1); }
 @media (max-width: 600px) {
-  .run-flow-dialog { width: 100vw; }
+  .run-flow-dialog { width: auto; max-width: none; }
   .run-flow-dialog .task-status-panel { padding: 16px 13px; }
   .run-flow-header { flex-direction: column; }
   .run-flow-header-actions { justify-content: flex-start; max-width: 100%; }
