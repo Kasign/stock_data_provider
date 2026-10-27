@@ -1,17 +1,37 @@
 # WebUI 任务交接上下文
 
 最后更新：2026-10-27
-用途：从新对话恢复 stock_data_provider WebUI 产品扩展与阶段 Review。
+用途：恢复 WebUI 信息架构规划、数据能力缺口和后续实现任务。
 
-## 当前 GitHub 状态（2026-10-27 最新复核）
+## 当前仓库状态（本轮文档规划前核对）
 
 - 仓库：https://github.com/Kasign/stock_data_provider
-- WebUI 工作分支：`feat/webui-market-data-console`；本轮开始前 HEAD 为 `3866ab68994102cc1993f9eccd9ef1e6f246f638`。
-- 数据分支 `feat/full-go-data-providers-api-switch` 在本轮开始时核对的 HEAD 为 `33bf8ae82f278e68ab202c4835b1e6ed6506ec72`。其自上次同步以来的提交修改 Go Provider/服务和数据契约文档，没有改动本批涉及的 WebUI 文件；本批不会把 WebUI 改动写入数据分支。
-- PR #13：https://github.com/Kasign/stock_data_provider/pull/13，已于 2026-10-27 11:42（新加坡时间）合并。
-- PR #14：https://github.com/Kasign/stock_data_provider/pull/14，标题 `WebUI: 提升主题可读性并补全全站 Review`，保持 Open，不合并。
-- 上一 HEAD 的 [WebUI checks #40455689326](https://github.com/Kasign/stock_data_provider/actions/runs/40455689326) 与 [Chromium smoke #40455689320](https://github.com/Kasign/stock_data_provider/actions/runs/40455689320) 重新运行后仍在 runner 启动前失败，Job 无 runner、无执行步骤/日志。当前无法据此判定源码测试结果，后续仍需正常执行的 CI。
-- 本轮仅修改 `web/**`；不修改 Go/Provider/数据库/API 契约/根 Compose，不合并 PR。CI 固定 503 的布局烟测也不替代真实 API 和 NAS/1Panel 验收。
+- WebUI 工作分支：`feat/webui-market-data-console`；本轮规划基线为 `ec3aa3cd529973e57e294c47bf544387f5c56cd4`，后续提交请重新核实远程 HEAD。
+- 数据分支：`feat/full-go-data-providers-api-switch`；本轮规划基线为 `df7a4e259734f0043bc0d71372e826bead032902`，后续提交请重新核实远程 HEAD。
+- PR #14：https://github.com/Kasign/stock_data_provider/pull/14，Open、未合并。本轮不合并。
+- 本轮规划文档已先提交于 WebUI 分支；只修改 `web/**` 文档，不涉及 Go/Provider/数据库/Compose 代码，不运行测试、构建、CI 或实时 Provider 请求。
+
+## 当前有效文档入口
+
+- 页面信息架构与排版：[UI_LAYOUT_PLAN.md](./UI_LAYOUT_PLAN.md)
+- 数据能力缺口与服务巡检：[DATA_CAPABILITY_GAPS.md](./DATA_CAPABILITY_GAPS.md)
+- 当前执行任务：[PRODUCT_BACKLOG.md](./PRODUCT_BACKLOG.md)
+- 当前 API 契约：[API_CONTRACT.md](./API_CONTRACT.md)
+- 技术约束：[TECHNICAL_NOTES.md](./TECHNICAL_NOTES.md)
+- 实施进度：[PROGRESS.md](./PROGRESS.md)
+- 验收清单：[REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md)
+
+## 当前执行顺序
+
+1. 优先进行 UI 排版重整：首页市场总览、个股研究列表/专业详情、自选股、分析任务与详情内运行流、数据中心及设置。
+2. 缺数据的模块可以先做布局，但只显示规划/接口待接入，不使用静态或 fixture 行情冒充真实数据。
+3. 数据中心先基于现有 live/readiness 与 Provider 清单展示可证实的状态；“立即检查”里的逐 Provider/能力实际测试等待受保护诊断 API。
+4. 国内数据能力需求集中记录于 `DATA_CAPABILITY_GAPS.md`：市场情绪历史、市场/板块资金流、板块成交额与五日多维排行、股票批量概览、Provider 实时探测。
+5. 全球市场联动最后推进，需先明确数据源、时区、交易时段、币种、时间与质量口径。
+6. 运行流始终处于任务详情内部，当前仅展示真实 StageEvent 时间线；无可信拓扑 API 前不得画 DAG。
+7. 不混入数据分支，不合并 PR #14；在文档里标注清楚规划、源码实现、CI 和实际 NAS/1Panel 验收的不同状态。
+
+旧版单股分析闭环任务说明及下方历史记录用于追溯，不再覆盖上述当前有效计划。
 
 ## 本轮已交付且尚未做运行时验收的事项
 
