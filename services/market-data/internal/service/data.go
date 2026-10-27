@@ -1977,7 +1977,7 @@ func quoteCacheEligible(q *model.Quote) bool {
 	}
 	for _, reason := range q.QualityReasons {
 		switch reason {
-		case "provider_timestamp_missing", "quote_older_than_180_seconds_during_trading_clock", "quote_older_than_24_hours_outside_trading_clock", "provider_timestamp_more_than_60_seconds_in_future":
+		case "provider_timestamp_missing", "quote_older_than_180_seconds_during_trading_clock", "quote_older_than_24_hours_outside_trading_clock", "provider_timestamp_more_than_60_seconds_in_future", "volume_unit_assumed_without_turnover_crosscheck", "volume_unit_unverified":
 			return false
 		}
 	}

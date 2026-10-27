@@ -154,7 +154,7 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	}
 	if !volumeVerified {
 		q.QualityStatus = model.QualityDegraded
-		q.QualityReasons = append(q.QualityReasons, "volume_unit_assumed_without_turnover_crosscheck")
+		q.QualityReasons = append(q.QualityReasons, "volume_unit_unverified")
 	} else if strings.HasSuffix(rawVolumeUnit, "_inferred") {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "volume_unit_inferred_from_turnover_metrics")
@@ -166,6 +166,9 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	q.QualityReasons = append(q.QualityReasons, "volume_ratio_unsupported_by_tencent_quote_contract")
 	if err := normalize.ValidateQuote(q); err != nil {
 		return nil, fmt.Errorf("Tencent quote data contract: %w", err)
+	}
+	if !volumeVerified {
+		return nil, errors.New("Tencent quote volume unit cannot be confirmed; refusing to assume 100-share lots")
 	}
 	return q, nil
 }
@@ -340,10 +343,11 @@ func tencentQuoteVolume(fields []string, rawVolume, price float64) (int64, strin
 			}
 		}
 	}
-	// Preserve compatibility with the legacy fallback, but mark it explicitly as
-	// assumed/degraded so downstream consumers can gate volume-sensitive analysis.
-	shares, err := normalize.HandsToShares(rawVolume)
-	return shares, "hands_assumed", false, err
+	// Unit inference must be supported by both turnover rate and circulating
+	// market value. If those fields are absent or contradictory, leave the
+	// normalized value unavailable so FetchQuote can reject this provider result
+	// and let the service try the next configured source.
+	return 0, "unknown", false, nil
 }
 
 func parsePositiveField(fields []string, index int) (float64, error) {

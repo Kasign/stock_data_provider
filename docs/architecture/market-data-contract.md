@@ -29,6 +29,7 @@
 - 成交额按供应商字段契约转换成 CNY。已经是人民币元的值不再换算。若成交额缺失，`amount` 必须保持 `null` 且该条记录的 `amount_unit` 必须为 `unknown`；接口整体的标准金额单位为 CNY 不代表缺失值具有该单位。
 - 若数据源提供原始值，应在 `raw_volume`、`raw_volume_unit`、`raw_amount`、`raw_amount_unit` 等字段保留，供审计与差异定位。
 - 不得仅凭数值大小猜测未知单位。无法证明单位时，应标记 unknown/degraded，并阻止依赖该字段的高风险分析。
+- 腾讯实时行情字段 6 的成交量单位不稳定；只有在换手率与流通市值交叉校验能明确支持“股”或“手”时才允许标准化。交叉校验缺失或不一致时，该 Provider 必须返回错误并触发下一数据源兜底，不得继续把原始值默认乘以 100。旧 Redis 报价若带有历史原因 `volume_unit_assumed_without_turnover_crosscheck`，也必须拒绝命中并重新获取。
 - 可以使用 `amount / volume` 对成交均价做合理性检查。若与 OHLC 明显矛盾，应拒绝该 Provider 结果并转向已配置的下一个 Provider；禁止自动执行未经来源证明的 x100 或 x0.01 修正。
 
 ## 复权规则

@@ -782,3 +782,20 @@ func TestStockBoardsRejectsProviderSymbolMismatch(t *testing.T) {
 		t.Fatalf("expected stock-board identity mismatch, got %v", err)
 	}
 }
+
+func TestQuoteCacheRejectsLegacyUnverifiedTencentVolume(t *testing.T) {
+	now := time.Now().UTC()
+	for _, reason := range []string{
+		"volume_unit_assumed_without_turnover_crosscheck",
+		"volume_unit_unverified",
+	} {
+		q := &model.Quote{
+			QualityStatus: model.QualityDegraded,
+			QuoteTime:     &now,
+			QualityReasons: []string{reason},
+		}
+		if quoteCacheEligible(q) {
+			t.Fatalf("quote cache must reject an unverified Tencent volume reason %q", reason)
+		}
+	}
+}

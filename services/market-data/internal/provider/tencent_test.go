@@ -117,7 +117,7 @@ func TestTencentQuoteVolumeUsesTurnoverAndMarketValueToInferUnit(t *testing.T) {
 	}
 }
 
-func TestTencentQuoteVolumeMarksFallbackAssumption(t *testing.T) {
+func TestTencentQuoteVolumeLeavesUnitUnknownWithoutCrosscheck(t *testing.T) {
 	fields := make([]string, 60)
 	for i := range fields {
 		fields[i] = "0"
@@ -126,8 +126,28 @@ func TestTencentQuoteVolumeMarksFallbackAssumption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if shares != 10000 || unit != "hands_assumed" || verified {
-		t.Fatalf("unexpected fallback volume: shares=%d unit=%q verified=%v", shares, unit, verified)
+	if shares != 0 || unit != "unknown" || verified {
+		t.Fatalf("unverified volume must not be normalized: shares=%d unit=%q verified=%v", shares, unit, verified)
+	}
+}
+
+func TestTencentQuoteRejectsUnverifiedVolumeUnits(t *testing.T) {
+	fields := make([]string, 60)
+	for i := range fields {
+		fields[i] = "0"
+	}
+	fields[1], fields[2] = "贵州茅台", "600519"
+	fields[3], fields[4], fields[5], fields[6] = "100", "99", "99", "1234"
+	fields[30], fields[31], fields[32], fields[33], fields[34] = "20261021112802", "1", "1.01", "101", "98"
+	fields[35], fields[37] = "100/1234/123400", "-"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "v_sh600519=%q;", strings.Join(fields, "~"))
+	}))
+	defer server.Close()
+	p := NewTencent(2 * time.Second)
+	p.quoteURL = server.URL + "/quote"
+	if _, err := p.FetchQuote(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), "volume unit cannot be confirmed") {
+		t.Fatalf("unverified volume unit must reject this provider result, got %v", err)
 	}
 }
 
