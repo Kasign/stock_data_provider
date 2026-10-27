@@ -8,7 +8,7 @@
 
 | 原 Python 数据源 | 原注册条件 / 默认位置 | 主要市场或用途 | 当前 Go 对应 | 状态 |
 |---|---|---|---|---|
-| EfinanceFetcher | Python wrapper；日线/行情/基本资料/所属板块多经由东方财富 | A 股行情、日线、实时指数、涨跌统计、行业/概念排行、个股基本信息、所属板块、增强数据 | Go 原生 profile 已映射动态 PE/PB、行业、市值、板块编号、ROE、净利率、净利润和毛利率；enhanced_data 可由独立 API 组合 | profile 扩展值没有独立上游时间戳，质量始终 degraded；任意地区指数列表与 Python 字段组合不保证 1:1 等价；未统一测试 |
+| EfinanceFetcher | Python wrapper；日线/行情/基本资料/所属板块多经由东方财富 | A 股行情、日线、实时指数、涨跌统计、行业/概念排行、个股基本信息、所属板块、增强数据 | Go 原生 profile 已映射动态 PE/PB、行业、市值、板块编号、ROE、净利率、净利润和毛利率；个股资金流已接入东方财富公开日资金流接口；enhanced_data 可由独立 API 组合 | profile 扩展值没有独立上游时间戳，质量始终 degraded；任意地区指数列表与 Python 字段组合不保证 1:1 等价；未统一测试 |
 | AkshareFetcher | Python 多端点聚合库；A 股日线回退东方财富 → 新浪 → 腾讯；筹码分布调用 stock_cyq_em 本地计算；人气榜/飙升榜使用东方财富 rank API | A 股行情、日线、指数历史、筹码分布、市场统计、行业/概念、涨停池、人气榜/飙升榜 | Go 原生 Eastmoney/Sina/Tencent 覆盖行情与日线，THS/Tushare 覆盖不同代码空间下的指数目录/成分/历史日 K；Eastmoney Go 原生 CYQ 算法、市场统计/板块/涨停池和人气榜/飙升榜均已接入，Xueqiu 为可选的人气榜/关注榜备用源 | 人气榜/飙升榜已接入独立路由，因来源时间缺失保持 degraded；个股基本资料扩展字段仍未完整迁移；筹码输出降级且仅为最新快照；未统一测试 |
 | PytdxFetcher | 国内行情/日 K 末位回退源，默认开启 | A 股实时行情、日线 K 线；支持通达信除权事件辅助前/后复权 | Go 原生 `github.com/injoyai/tdx` v0.0.86 Provider（QuoteProvider + DailyBarProvider） | 已接入代码与路由，未统一测试；连接/行情服务器可用性、复权契约待集中验收 |
 | BaostockFetcher | 原 Python 默认 P3；Go 按历史 K 线优先候选 | A 股历史日线优先；财务、复权因子、除权除息、基础资料/行业/指数成分按 API 能力逐项扩展 | Go 原生 TCP 客户端与 DailyBarProvider 已实现；NAS Docker 容器已真实登录/查询，并覆盖多个证券及前复权、后复权、不复权样本；GitHub Runner #100 又返回 8 根样本日 K | 日 K 已有目标容器首轮实测，可作为受限回退源；仍需持续观察稳定性和更多证券/日期范围，不能外推为全覆盖或 SLA；当前 `providers.json` 与服务 `.env.example` 默认开启财务指标和交易日历；部署时仍可分别通过 `MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED`、`MARKET_DATA_BAOSTOCK_TRADING_CALENDAR_ENABLED` 关闭 |
@@ -16,7 +16,7 @@
 | TencentFetcher | 默认启用；默认 P5 | A 股行情与日线兜底 | 原生 Go Tencent Provider | 已迁移部分行情能力，口径仍需逐项对照 |
 | TushareFetcher | 仅配置 `TUSHARE_TOKEN` / `MARKET_DATA_TUSHARE_TOKEN` 且显式开启后注册 | A 股原始日线、证券基础资料、交易日历、季度财务指标、批量估值、涨跌停池、龙虎榜与公告；权限依接口而异 | Go 原生 HTTP `Tushare` Provider：DailyBar、StockBasic、TradingCalendar、Fundamentals、Valuation、LimitPool、DragonTiger、Announcement、IndexCatalog（默认关闭） | 接口与独立能力路由已接入；日线只支持 `none`，成交量手数在换算前要求为整数；估值保留报告日期但无精确快照时间；`pe` 单独保留为 `pe_static`，不冒充 MRQ PE；PCF 未覆盖；财务返回报告期的最新修订版本并保留公告日期，但尚不支持历史 `as_of` 版本重建；事件金额按 provider_defined 保留；公告依赖单独开通权限；指数成分每次按月查询最新可用快照并保留大结果降级提示；未统一测试，不宣称生产可用 |
 | TickFlowFetcher | 免费 API 可免 Key 读取历史日 K；实时行情需 `TICKFLOW_API_KEY` 且显式开启 quote 能力 | 国内 SH/SZ/BJ 实时行情、日线 K 线 | Go 原生 REST `TickFlow` Provider（免费日 K 默认启用，实时行情/核心指数报价独立开关，需 API Key） | Quote/K 线成交量原始单位为股；日 K 只在供应商提供或可安全推导涨跌幅时输出，缺少 `prev_close` 时从排序后的前一收盘价推导且降级；市场广度基于 `CN_Equity_A`，SW1 榜基于可发现的 `CN_Equity_SW1_*` 证券池并取成分股收益率算术平均。官方 SDK 支持通用 universes list/get/batch 和按 universe 查询行情，但公开文档未保证 SW1 分类清单/账号授权，也未提供专用行业指数排名端点；SW1 不等同原生指数涨跌幅。权限、完整覆盖与目标环境均待验收，概念榜仍由其他来源提供 |
-| MiaoxiangFetcher（妙想 / MX_API） | 仅配置 `MX_APIKEY` 后注册；默认优先级 6 | 筹码分布及个股资金流等第三方补充数据 | Go `MiaoXiang`（独立 SupplementProvider，显式 opt-in） | 已迁移首批筹码/资金流字段；尚缺真实 MX Key 联调与精确 publication availability |
+| MiaoxiangFetcher（妙想 / MX_API） | 仅配置 `MX_APIKEY` 后注册；默认优先级 6 | 筹码分布及个股资金流等第三方补充数据 | Go `MiaoXiang`（独立 SupplementProvider，显式 opt-in） | 筹码与资金流保留为可选补充/后备；个股资金流已有东方财富公开端点作为默认能力，MX Key 联调与精确 publication availability 仍待验收 |
 | LongbridgeFetcher | 仅配置 Longbridge OAuth / 旧凭据后注册 | 美股 / 港股行情及日线兜底 | 无 | 可选源，未迁移 |
 | FutuFetcher | 检测到 Futu OpenD 端点配置后注册 | 港股等 Futu 支持市场 | 无 | 可选源，未迁移 |
 | FinnhubFetcher | 仅配置 `FINNHUB_API_KEY` 后注册 | 以美股/海外股票为主的补充行情和历史数据 | 无 | 可选源，未迁移 |
@@ -236,3 +236,8 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 | 增强数据 | 基础资料、财务、板块、筹码、资金流等独立能力可以组合 | 尚无完整 1:1 的单次聚合替代；不能仅因每个子 API 存在就宣称 `get_enhanced_data` 的字段和错误隔离语义已完成迁移 |
 
 本清单描述当前仓库代码状态，不代表运行验证。实际接入、账号可访问、字段含义一致、证券全量覆盖、生产可用性分别验收；海外来源暂缓。
+
+
+## 2026-10-27 个股主力资金流补充
+
+个股主力资金流新增东方财富公开日资金流端点 `https://push2.eastmoney.com/api/qt/stock/fflow/kline/get`，默认随东方财富能力启用，不要求额外 API Key。当前只使用 `f51` 日期和 `f52` 主力净流入金额，回传 `provider_date`；5 日/10 日合计要求对应窗口金额完整。妙想 `MX_API` 仍可显式启用作为后备，但不是资金流能力的唯一来源。字段映射参考公开端点资料（[接口字段参考](https://github.com/wlor0623/llm-dev-knowledge/blob/main/knowledge-base/eastmoney-quotes-api/endpoints/capital-flow.md)）；实际连通性、当日盘中数据语义及金额口径仍未执行统一验收，输出质量保持 degraded。

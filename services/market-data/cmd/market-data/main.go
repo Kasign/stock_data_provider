@@ -74,7 +74,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 	}()
 	available := map[string]provider.NamedProvider{
-		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL),
+		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL),
 		"hithink":   provider.NewHithinkConfigured(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey),
 		"baostock":  provider.NewBaostock(baostockClient),
 		"tencent":   provider.NewTencentConfiguredWithSearchURL(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL),
@@ -104,6 +104,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	valuationProviders := make([]provider.ValuationProvider, 0, len(available))
 	indexCatalogProviders := make([]provider.IndexCatalogProvider, 0, len(available))
 	chipDistributionProviders := make([]provider.ChipDistributionProvider, 0, len(available))
+	capitalFlowProviders := make([]provider.CapitalFlowProvider, 0, len(available))
 	hotRankingProviders := make([]provider.HotRankingProvider, 0, len(available))
 	for _, name := range cfg.ProviderPriority {
 		p, ok := available[name]
@@ -221,6 +222,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			}
 			chipDistributionProviders = append(chipDistributionProviders, capability)
 		}
+		if settings.CapitalFlow {
+			capability, ok := p.(provider.CapitalFlowProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for capital flow but does not implement CapitalFlowProvider", name)
+			}
+			capitalFlowProviders = append(capitalFlowProviders, capability)
+		}
 		if settings.HotRankings {
 			capability, ok := p.(provider.HotRankingProvider)
 			if !ok {
@@ -278,6 +286,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	ds.SetValuationProviders(valuationProviders)
 	ds.SetIndexCatalogProviders(indexCatalogProviders)
 	ds.SetChipDistributionProviders(chipDistributionProviders)
+	ds.SetCapitalFlowProviders(capitalFlowProviders)
 	ds.SetHotRankingProviders(hotRankingProviders)
 	handler := httpapi.NewWithCapabilityInterfaces(cfg.APIKey, cfg.Adjustment, ds, allProviders, quoteProviders, barProviders, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}

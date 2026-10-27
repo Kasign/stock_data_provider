@@ -7,7 +7,7 @@
 - 国内实时行情 Provider：东方财富、同花顺（可选官方 API）、腾讯、新浪、Pytdx、网易财经；同花顺需 API Key 且默认关闭，Pytdx 使用通达信协议的 Go 原生客户端作为末位回退源，可通过 `MARKET_DATA_PYTDX_HOSTS` 配置逗号分隔的国内 TDX 服务器（`host` 或 `host:port`），连接按有限数量候选轮换并使用单地址超时。公共行情服务器仍不保证长期可连。Yahoo Finance 保留兼容代码但从默认优先级移除、所有能力默认关闭。
 - 国内日线 K 线 Provider：东方财富、同花顺（可选官方 API）、BaoStock、TickFlow（免费历史日 K，有频率限制）、Pytdx、腾讯、新浪（仅 `none` 复权口径）、网易财经（仅 `none` 复权口径）；Tushare Pro 是另一个可选 Go HTTP Provider，需用户 Token，默认关闭且当前只支持原始不复权日 K。同花顺需要 API Key，支持 `none`、`forward`、`backward` 三种日 K 口径，具体额度及账号权限以授权为准。Pytdx 可通过通达信除权事件计算前/后复权，但与其他供应商复权因子的等价性需后续集中对账。TickFlow 实时行情仅在提供 API Key 并显式开启 quote 能力时可用。
 
-- 可选补充 Provider：妙想 MX_API，提供筹码分布和个股主力资金流，默认关闭；不参与行情与 K 线兜底。
+- 个股主力资金流默认接入东方财富公开日资金流端点（无需独立 API Key），由 `MARKET_DATA_EASTMONEY_CAPITAL_FLOW_ENABLED` 控制，地址可用 `MARKET_DATA_EASTMONEY_CAPITAL_FLOW_URL` 覆盖；妙想 MX_API 保留为显式启用的可选后备源，需配置 Key。筹码分布继续由东方财富本地 CYQ 估算，MX 可作为兼容补充源；两类数据均因源端精确可用时间不可验证保持 degraded，不参与行情与 K 线兜底。
 - HTTP 接口：存活/就绪检查、实时行情、日线、行情与 K 线组合、数据源能力列表、证券名称/代码搜索，以及可选补充数据接口。
 - 证券搜索：`GET /api/v1/stocks/search?q=贵州茅台&limit=10`，以真实 A 股证券目录按中文名称或代码匹配，返回标准 `symbol`、代码、名称与交易所，不返回虚构/推算行情。目录在进程内缓存 6 小时，每次最多返回 50 条结果；目录刷新失败但有旧目录时会明确标记 `quality_status=stale` 与质量原因，没有可用目录时返回 Provider 错误。当前腾讯 Smartbox 优先、东方财富 CLIST 兜底；分别由 `MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED` 与 `MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED` 控制；腾讯搜索基地址可由 `MARKET_DATA_TENCENT_STOCK_SEARCH_URL` 覆盖。`GET /api/v1/data-sources` 会通过 `stock_search_capable` 暴露实际注册状态。可选同花顺源只有显式启用并配置 API Key 后才参与检索回退。
 - 标准单位：`volume` 为股，`amount` 为人民币元，价格为元/股；Tushare 原始日 K 的 `vol` 按手换算为股，`amount` 按千元换算为人民币元，原始字段/单位仍单独保留；`trade_date` 是交易日。`quote_time` 是供应商报告的行情快照/更新时间，不一定等于最近一笔成交时间；新增的 `quote_time_semantics=provider_snapshot_time` 明确该语义。`fetched_at` 是本服务采集时间，`normalized_at` 是标准化时间，三者不能互相替代。

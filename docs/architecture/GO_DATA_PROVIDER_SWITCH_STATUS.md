@@ -62,14 +62,14 @@
 | 实时行情 | 东方财富、腾讯、新浪、Yahoo Finance（可选）、网易财经（候选） | Yahoo 新增 Chart 1m 实时快照，缺成交额固定 degraded、默认关闭；网易报价在 GitHub Runner 上出现 DNS 解析失败；当前配置仍将网易作为启用的后置回退，生产稳定性未验收 |
 | 日线 K 线 | 东方财富、BaoStock、腾讯、新浪（仅 none）、Yahoo Finance（可选）、网易财经 CSV（可选） | BaoStock 已进入默认日 K 回退链；新浪只支持不复权且缺成交额；Yahoo 已有真实返回、缺成交额固定 degraded；网易财经 CSV 只支持不复权、仅在成交额/成交量与价格区间一致时保留金额；当前配置启用为后置回退，上游稳定性仍未验收 |
 | 筹码分布 | 妙想 MX_API | 已新增可选 SupplementProvider、HTTP 路由和缓存；默认关闭 |
-| 个股主力资金流 | 妙想 MX_API | 已新增可选 SupplementProvider、HTTP 路由和缓存；5/10 日合计必须有完整观测 |
+| 个股主力资金流 | 东方财富公开日资金流端点；妙想 MX_API 可选后备 | 已接入独立 CapitalFlowProvider；按 f51 日期与 f52 主力净流入（人民币元）计算 5/10 日完整窗口；接口地址可配置 |
 
-MX 相关接口：
+补充数据接口：
 
-- `GET /api/v1/stocks/{symbol}/chip-distribution`
-- `GET /api/v1/stocks/{symbol}/capital-flow`
+- `GET /api/v1/stocks/{symbol}/chip-distribution`：东方财富 CYQ 估算优先，MX 可作为兼容后备。
+- `GET /api/v1/stocks/{symbol}/capital-flow`：东方财富公开资金流优先，MX 作为显式启用的可选后备。
 
-启用条件是显式设置 `MARKET_DATA_MX_ENABLED=true` 并配置 `MARKET_DATA_MX_API_KEY`（兼容原变量 `MX_APIKEY`）。筹码和资金流尚不能证明精确 publication/available_at，返回值必须保留 degraded 质量状态；不得用于严格的历史时点分析。
+东方财富个股资金流默认独立启用，可通过 `MARKET_DATA_EASTMONEY_CAPITAL_FLOW_ENABLED=false` 关闭，并可使用 `MARKET_DATA_EASTMONEY_CAPITAL_FLOW_URL` 覆盖端点；妙想仍需显式设置 `MARKET_DATA_MX_ENABLED=true` 和 `MARKET_DATA_MX_API_KEY`（兼容原变量 `MX_APIKEY`），作为后备补充源。两类数据都不能证明精确 publication/available_at，必须保留 degraded 质量状态；不得用于严格的历史时点分析。
 
 ### 日志与任务事件
 
@@ -612,3 +612,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - **Tushare 日 K：** `vol` 是手数，必须为非负整数后换算成股；`amount` 按千元人民币换算成人民币元；日线端点仅支持不复权。缺失/非法涨跌幅保留 `null` 并降级；代码、日期、重复交易日、OHLC 或必需字段违反契约时拒绝该源结果，交由能力路由尝试后续来源。单次请求无供应商总记录数/游标可对账，不能仅凭响应成功宣称请求区间每个交易日均覆盖。
 - **Pytdx 日 K：** 每页最多 800 条，扫描上限 40 页；请求起始日期未到达或后复权所需历史未完整获取时返回错误，不把截断历史伪装成完整结果。复权需要除权除息事件查询成功；个股报价没有可用供应商时间戳，所以保持降级。成交量按手转换为股，成交额异常与成交量明显矛盾时保留原始值、将标准化成交额置空并降级。
 - 本批只更新实现、测试源码与状态说明，未运行测试、构建、CI 或真实 Provider 请求。以上仍属于静态契约检查，不代表真实接口权限、返回数据完整性或部署稳定性已验收。
+
+
+## 2026-10-27 个股资金流能力补齐
+
+- 已将东方财富公开 `/api/qt/stock/fflow/kline/get` 接入独立 `CapitalFlowProvider`，不再要求资金流 Provider 同时实现筹码分布。读取最近最多 10 个日观测，`f51` 作为 `provider_date`、`f52` 按人民币元解析；仅当 5/10 日窗口内每一条金额均有效时才返回对应合计。
+- 资金流端点、能力开关与 `providers.json`、根/服务环境样例及 OpenAPI 已同步。东方财富优先，旧的 MX `SupplementProvider` 继续作为后备兼容。
+- 本轮只补充源码与契约测试，不执行测试、构建、CI 或真实 Provider 请求。端点访问、字段实际返回、当日未收盘数据语义与全窗口覆盖仍待统一验收；没有把静态接线当作运行验收。

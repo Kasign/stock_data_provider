@@ -34,6 +34,7 @@ const defaultEastmoneyStockBasicURL = "https://datacenter.eastmoney.com/securiti
 const defaultEastmoneySectorRankingURL = "https://push2.eastmoney.com/api/qt/clist/get"
 const defaultEastmoneyIndexURL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
 const defaultEastmoneyStockBoardsURL = "https://push2.eastmoney.com/api/qt/slist/get"
+const defaultEastmoneyCapitalFlowURL = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get"
 
 type Eastmoney struct {
 	client           *http.Client
@@ -46,6 +47,7 @@ type Eastmoney struct {
 	marketBreadthURL string
 	limitPoolBaseURL string
 	stockBoardsURL   string
+	capitalFlowURL   string
 	dragonTigerURL   string
 	announcementURL  string
 	hotRankingURL    string
@@ -127,7 +129,7 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, stockListURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, hotRankingURL: eastmoneyHotRankURL, hotSurgeURL: eastmoneyHotSurgeURL, ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, stockListURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, capitalFlowURL: defaultEastmoneyCapitalFlowURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, hotRankingURL: eastmoneyHotRankURL, hotSurgeURL: eastmoneyHotSurgeURL, ut: ut,
 	}
 }
 
@@ -155,6 +157,20 @@ func (p *Eastmoney) WithHotRankingURLs(popularURL, surgeURL string) *Eastmoney {
 }
 
 func (p *Eastmoney) Name() string { return "eastmoney" }
+
+// WithCapitalFlowURL 覆盖东方财富个股资金流端点；空值保留默认公开地址。
+func (p *Eastmoney) WithCapitalFlowURL(endpoint string) *Eastmoney {
+	if p == nil {
+		return nil
+	}
+	if value := strings.TrimSpace(endpoint); value != "" {
+		p.capitalFlowURL = value
+	}
+	if strings.TrimSpace(p.capitalFlowURL) == "" {
+		p.capitalFlowURL = defaultEastmoneyCapitalFlowURL
+	}
+	return p
+}
 
 // FetchStockBoards returns the board memberships associated with one security via Eastmoney's slist endpoint.
 func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*model.StockBoardSnapshot, error) {

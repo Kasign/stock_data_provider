@@ -42,6 +42,7 @@ type DataService struct {
 	valuationProviders        []provider.ValuationProvider
 	indexCatalogProviders     []provider.IndexCatalogProvider
 	chipDistributionProviders []provider.ChipDistributionProvider
+	capitalFlowProviders      []provider.CapitalFlowProvider
 	hotRankingProviders       []provider.HotRankingProvider
 	supplementProviders       []provider.SupplementProvider
 	maxBars                   int
@@ -1283,6 +1284,28 @@ func (s *DataService) SupplementProviders() []provider.SupplementProvider {
 	return append([]provider.SupplementProvider(nil), s.supplementProviders...)
 }
 
+// SetCapitalFlowProviders 注册独立的资金流数据源，避免资金流能力依赖筹码分布接口。
+func (s *DataService) SetCapitalFlowProviders(providers []provider.CapitalFlowProvider) {
+	s.capitalFlowProviders = append([]provider.CapitalFlowProvider(nil), providers...)
+}
+
+// CapitalFlowProviders 合并独立资金流 Provider 与旧版 SupplementProvider，按名称去重。
+func (s *DataService) CapitalFlowProviders() []provider.CapitalFlowProvider {
+	out := append([]provider.CapitalFlowProvider(nil), s.capitalFlowProviders...)
+	seen := make(map[string]struct{}, len(out)+len(s.supplementProviders))
+	for _, p := range out {
+		seen[p.Name()] = struct{}{}
+	}
+	for _, p := range s.supplementProviders {
+		if _, exists := seen[p.Name()]; exists {
+			continue
+		}
+		out = append(out, p)
+		seen[p.Name()] = struct{}{}
+	}
+	return out
+}
+
 func validateChipDistributionSnapshot(symbol string, item *model.ChipDistribution) error {
 	if item == nil {
 		return errors.New("chip-distribution response is empty")
@@ -1342,6 +1365,13 @@ func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
 	canonical, err := normalize.NormalizeSymbol(item.Symbol)
 	if err != nil || canonical != symbol || item.Symbol != symbol {
 		return errors.New("capital-flow symbol mismatch")
+	}
+	if strings.TrimSpace(item.ProviderDate) != "" {
+		parsed, dateErr := time.Parse("2006-01-02", item.ProviderDate)
+		today := time.Now().In(marketLocation()).Format("2006-01-02")
+		if dateErr != nil || parsed.Format("2006-01-02") != item.ProviderDate || item.ProviderDate > today {
+			return errors.New("capital-flow provider date is invalid or in the future")
+		}
 	}
 	if strings.TrimSpace(item.Source) == "" || item.FetchedAt.IsZero() {
 		return errors.New("capital-flow source or fetched_at is missing")
@@ -1473,11 +1503,12 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 	} else if cacheErr != nil {
 		s.logger.Warn("capital-flow cache read failed", "error", cacheErr)
 	}
-	if len(s.supplementProviders) == 0 {
+	providers := s.CapitalFlowProviders()
+	if len(providers) == 0 {
 		return nil, false, errors.New("no enabled capital-flow provider")
 	}
 	var failures []string
-	for _, p := range s.supplementProviders {
+	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}

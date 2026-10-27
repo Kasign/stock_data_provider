@@ -660,6 +660,7 @@ components:
       required: [symbol, observations, source, fetched_at, quality_status]
       properties:
         symbol: {type: string, example: 600519.SH}
+        provider_date: {type: string, format: date, description: Date of the latest provider observation; not an exact available timestamp}
         source_version: {type: string}
         main_net_inflow_yuan: {type: number, nullable: true, description: Provider-reported main net inflow in CNY yuan}
         inflow_5d_yuan: {type: number, nullable: true, description: Five-day net-inflow aggregate in CNY yuan when all required observations exist}
@@ -929,7 +930,7 @@ paths:
       description: >-
         Amounts are CNY yuan. Main net inflow is the provider's reported observation, not a complete order-book audit.
         Five-day and ten-day aggregates are populated only when their required observations are available; missing
-        values remain absent. The snapshot includes observation count, source, fetch time and quality reasons.
+        values remain absent. provider_date is the newest observation date, not an exact availability timestamp. The snapshot includes observation count, source, fetch time and quality reasons.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 600519.SH}}
       responses:

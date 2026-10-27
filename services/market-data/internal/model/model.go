@@ -526,9 +526,11 @@ type ChipDistribution struct {
 	QualityReasons  []string      `json:"quality_reasons,omitempty"`
 }
 
-// CapitalFlow 表示以人民币元计量的妙想个股资金流摘要。只有所需观测值全部可用时，才会填充 5/10 日合计字段。
+// CapitalFlow 表示以人民币元计量的个股主力资金流摘要。ProviderDate 是最近一条观测的源端日期，不代表精确可用时间。
+// 只有所需观测值全部可用时，才会填充 5/10 日合计字段。
 type CapitalFlow struct {
 	Symbol         string        `json:"symbol"`
+	ProviderDate   string        `json:"provider_date,omitempty"`
 	SourceVersion  string        `json:"source_version,omitempty"`
 	MainNetInflow  *float64      `json:"main_net_inflow_yuan,omitempty"`
 	Inflow5D       *float64      `json:"inflow_5d_yuan,omitempty"`

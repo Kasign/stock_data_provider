@@ -117,7 +117,13 @@ type ChipDistributionProvider interface {
 	FetchChipDistribution(ctx context.Context, symbol string) (*model.ChipDistribution, error)
 }
 
-// SupplementProvider 用于承载可选补充数据，这类能力不会进入实时行情或日 K 的兜底链。
+// CapitalFlowProvider 提供独立个股主力资金流能力，不要求 Provider 同时实现筹码分布。
+type CapitalFlowProvider interface {
+	NamedProvider
+	FetchCapitalFlow(ctx context.Context, symbol string) (*model.CapitalFlow, error)
+}
+
+// SupplementProvider 用于承载兼容既有补充源的多能力接口，这类能力不会进入实时行情或日 K 的兜底链。
 type SupplementProvider interface {
 	NamedProvider
 	FetchChipDistribution(ctx context.Context, symbol string) (*model.ChipDistribution, error)

@@ -32,6 +32,7 @@ type ProviderSettings struct {
 	Valuations       bool `json:"valuations"`
 	IndexCatalog     bool `json:"index_catalog"`
 	ChipDistribution bool `json:"chip_distribution"`
+	CapitalFlow      bool `json:"capital_flow"`
 	HotRankings      bool `json:"hot_rankings"`
 	DragonTiger      bool `json:"dragon_tiger"`
 	Announcements    bool `json:"announcements"`
@@ -65,6 +66,7 @@ type Config struct {
 	EastmoneyAnnouncementsURL string
 	EastmoneyHotRankingsURL   string
 	EastmoneyHotSurgeURL      string
+	EastmoneyCapitalFlowURL   string
 	EastmoneyUT               string
 	TencentQuoteURL           string
 	TencentKlineURL           string
@@ -116,7 +118,7 @@ func defaultProviderFile() providerFile {
 		ProviderPriority: []string{"eastmoney", "baostock", "hithink", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx", "xueqiu"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
-			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, StockSearch: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, HotRankings: true},
+			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, StockSearch: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, CapitalFlow: true, HotRankings: true},
 			"hithink":   {Enabled: false, Quote: false, DailyBars: false, IndexQuotes: false, TradingCalendar: false, LimitPools: false, DragonTiger: false, Fundamentals: false, Valuations: false, IndexCatalog: false, HotRankings: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true, StockSearch: true},
 			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: true, Fundamentals: true},
@@ -171,6 +173,10 @@ func Load() (Config, error) {
 		for name, settings := range supplied.Providers {
 			if _, specified := suppliedPresence.Providers[name]["stock_search"]; !specified {
 				settings.StockSearch = defaults.Providers[name].StockSearch
+			}
+			if _, specified := suppliedPresence.Providers[name]["capital_flow"]; !specified {
+				// 旧配置未定义个股资金流能力时继承默认值；显式 false 仍可关闭。
+				settings.CapitalFlow = defaults.Providers[name].CapitalFlow
 			}
 			file.Providers[name] = settings
 		}
@@ -230,6 +236,7 @@ func Load() (Config, error) {
 		EastmoneyAnnouncementsURL: get("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_URL", "https://np-anotice-stock.eastmoney.com/api/security/ann"),
 		EastmoneyHotRankingsURL:   get("MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL", "https://emappdata.eastmoney.com/stockrank/getAllCurrentList"),
 		EastmoneyHotSurgeURL:      get("MARKET_DATA_EASTMONEY_HOT_SURGE_URL", "https://emappdata.eastmoney.com/stockrank/getAllHisRcList"),
+		EastmoneyCapitalFlowURL:   get("MARKET_DATA_EASTMONEY_CAPITAL_FLOW_URL", "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get"),
 		EastmoneyUT:               get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:           get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:           get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
@@ -289,6 +296,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_URL":   cfg.EastmoneyAnnouncementsURL,
 		"MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL":    cfg.EastmoneyHotRankingsURL,
 		"MARKET_DATA_EASTMONEY_HOT_SURGE_URL":       cfg.EastmoneyHotSurgeURL,
+		"MARKET_DATA_EASTMONEY_CAPITAL_FLOW_URL":    cfg.EastmoneyCapitalFlowURL,
 		"MARKET_DATA_TENCENT_QUOTE_URL":             cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":             cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL":        cfg.TencentNoneKlineURL,
@@ -448,6 +456,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.Valuations = boolEnv("MARKET_DATA_"+prefix+"_VALUATIONS_ENABLED", p.Valuations)
 	p.IndexCatalog = boolEnv("MARKET_DATA_"+prefix+"_INDEX_CATALOG_ENABLED", p.IndexCatalog)
 	p.ChipDistribution = boolEnv("MARKET_DATA_"+prefix+"_CHIP_DISTRIBUTION_ENABLED", p.ChipDistribution)
+	p.CapitalFlow = boolEnv("MARKET_DATA_"+prefix+"_CAPITAL_FLOW_ENABLED", p.CapitalFlow)
 	p.HotRankings = boolEnv("MARKET_DATA_"+prefix+"_HOT_RANKINGS_ENABLED", p.HotRankings)
 	return p
 }
