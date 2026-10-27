@@ -32,6 +32,7 @@
 - 腾讯实时行情字段 6 的成交量单位不稳定；只有在换手率与流通市值交叉校验能明确支持“股”或“手”时才允许标准化。交叉校验缺失或不一致时，该 Provider 必须返回错误并触发下一数据源兜底，不得继续把原始值默认乘以 100。旧 Redis 报价若带有历史原因 `volume_unit_assumed_without_turnover_crosscheck`，也必须拒绝命中并重新获取。
 - 可以使用 `amount / volume` 对成交均价做合理性检查。若与 OHLC 明显矛盾，应拒绝该 Provider 结果并转向已配置的下一个 Provider；禁止自动执行未经来源证明的 x100 或 x0.01 修正。
 - 实时行情的 `change` 必须与 `current_price - prev_close` 相差不超过 0.02 CNY；`change_percent` 必须与该差值换算的百分比相差不超过 0.15 个百分点，以容纳供应商展示精度的四舍五入。超出容差时拒绝该报价并走 Provider 兜底，不能只信任供应商单个字段。
+- 估值快照的 `provider_report_date` 必须是有效日期且不能晚于中国市场当前日期；`provider_timestamp` 如存在，不允许为零值或明显晚于当前时间（超过 60 秒）。缺少报告日期或精确时间的估值不能标记为 valid。
 
 ## 复权规则
 

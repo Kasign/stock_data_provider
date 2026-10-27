@@ -108,6 +108,49 @@ func TestValidateFundamentalsSnapshotAcceptsPointInTimeValidSnapshot(t *testing.
 	}
 }
 
+func validValuationSnapshotForValidationTest() *model.ValuationSnapshot {
+	now := time.Now().UTC()
+	symbol := "600519.SH"
+	item := model.ValuationItem{
+		Symbol: symbol, Code: "600519",
+		PETTM: ptrFloat(18.4), PEMRQ: ptrFloat(6.1), PEStatic: ptrFloat(22.5),
+		PBMRQ: ptrFloat(6.1), PSTTM: ptrFloat(7.2), PCFTTM: ptrFloat(9.0),
+		Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+	}
+	return &model.ValuationSnapshot{
+		RequestedSymbols: []string{symbol}, Total: 1, Items: []model.ValuationItem{item},
+		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+		Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+	}
+}
+
+func TestValidateValuationSnapshotRejectsFutureReportDateAndTimestamp(t *testing.T) {
+	t.Run("future report date", func(t *testing.T) {
+		snapshot := validValuationSnapshotForValidationTest()
+		snapshot.ProviderReportDate = time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+		if err := validateValuationSnapshot(snapshot.RequestedSymbols, snapshot); err == nil || !strings.Contains(err.Error(), "provider_report_date") {
+			t.Fatalf("future valuation report date must be rejected, got %v", err)
+		}
+	})
+	t.Run("future provider timestamp", func(t *testing.T) {
+		snapshot := validValuationSnapshotForValidationTest()
+		future := time.Now().UTC().Add(5 * time.Minute)
+		snapshot.ProviderTimestamp = &future
+		if err := validateValuationSnapshot(snapshot.RequestedSymbols, snapshot); err == nil || !strings.Contains(err.Error(), "provider_timestamp is in the future") {
+			t.Fatalf("future valuation timestamp must be rejected, got %v", err)
+		}
+	})
+	t.Run("missing report date cannot be valid", func(t *testing.T) {
+		snapshot := validValuationSnapshotForValidationTest()
+		snapshot.ProviderReportDate = ""
+		snapshot.QualityStatus = model.QualityValid
+		snapshot.ProviderTimestamp = nil
+		if err := validateValuationSnapshot(snapshot.RequestedSymbols, snapshot); err == nil || !strings.Contains(err.Error(), "claims valid quality") {
+			t.Fatalf("missing report date/time must not be marked valid, got %v", err)
+		}
+	})
+}
+
 func validQuote(source string) *model.Quote {
 	now := time.Now().UTC()
 	p := 1313.31
