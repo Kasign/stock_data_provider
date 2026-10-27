@@ -1458,3 +1458,14 @@ func TestValidateFundamentalsSnapshotRejectsFutureReportPeriod(t *testing.T) {
 		t.Fatalf("future financial report period must be rejected, got %v", err)
 	}
 }
+
+
+func TestValidateFundamentalsSnapshotRejectsPublicationBeforeReportPeriodEnd(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	for index := range snapshot.Sections {
+		snapshot.Sections[index].PublicationDate = "2026-06-29"
+	}
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "publication date precedes") {
+		t.Fatalf("publication before period end must be rejected, got %v", err)
+	}
+}
