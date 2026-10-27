@@ -217,7 +217,7 @@ func TestHandsToSharesRejectsInvalidAndOverflowValues(t *testing.T) {
 	if err != nil || got != 3413600 {
 		t.Fatalf("HandsToShares(34136)=(%d,%v), want 3413600", got, err)
 	}
-	for _, value := range []float64{-1, math.NaN(), math.Inf(1), math.MaxFloat64} {
+	for _, value := range []float64{-1, 1.5, math.NaN(), math.Inf(1), math.MaxFloat64} {
 		if _, err := HandsToShares(value); err == nil {
 			t.Errorf("HandsToShares(%v) should fail", value)
 		}

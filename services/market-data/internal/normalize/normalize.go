@@ -75,6 +75,9 @@ func HandsToShares(raw float64) (int64, error) {
 	if !finite(raw) || raw < 0 {
 		return 0, errors.New("raw volume in hands must be finite and non-negative")
 	}
+	if math.Trunc(raw) != raw {
+		return 0, errors.New("raw volume in hands must be an integer; fractional volume is not supported")
+	}
 	if raw >= float64(math.MaxInt64)/100 {
 		return 0, errors.New("raw volume in hands overflows normalized shares")
 	}
