@@ -486,6 +486,46 @@ function renderWatchlist(records = safeReadWatchlist()) {
     aliasLabel.append(aliasCaption, aliasInput);
     main.append(symbol, aliasLabel, meta);
 
+    const tracking = document.createElement("div");
+    tracking.className = "watchlist-tracking-summary";
+    const normalizeLocalSymbol = (value) => {
+      try { return normalizeSymbol(value); } catch { return String(value || "").trim().toUpperCase(); }
+    };
+    const itemSymbol = normalizeLocalSymbol(record.symbol);
+    const quoteMatches = Boolean(state.quote?.symbol) && normalizeLocalSymbol(state.quote.symbol) === itemSymbol;
+    const quoteLine = document.createElement("small");
+    quoteLine.className = "watchlist-tracking-line";
+    quoteLine.textContent = quoteMatches
+      ? "当前行情：" + formatPrice(state.quote.current_price) + " · " + formatPercent(state.quote.change_percent) + " · " + qualityLabel(state.quote.quality_status)
+      : "当前行情：未加载（点击“查行情”读取）";
+    const recentTask = safeReadRecentTasks()
+      .filter((task) => Array.isArray(task.symbols) && task.symbols.some((value) => normalizeLocalSymbol(value) === itemSymbol))
+      .sort((a, b) => (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0))[0] || null;
+    const activeTaskMatches = Boolean(state.taskId) && Array.isArray(state.taskSymbols)
+      && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
+      && ["running", "started", "pending", "queued", "processing", "in-progress", "in_progress"].includes(String(state.taskStatus || "").toLowerCase());
+    const taskLine = document.createElement("small");
+    taskLine.className = "watchlist-tracking-line";
+    taskLine.textContent = activeTaskMatches
+      ? "当前任务：" + taskStatusLabel(state.taskStatus) + " · " + state.taskId
+      : recentTask
+        ? "最近任务：" + taskStatusLabel(recentTask.status) + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
+        : "最近任务：暂无本地任务记录（不代表从未分析）";
+    const resultLine = document.createElement("small");
+    resultLine.className = "watchlist-tracking-line";
+    const latestResultMatches = Boolean(recentTask && state.lastRunResult && state.taskId === recentTask.task_id
+      && Array.isArray(state.taskSymbols) && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol));
+    if (latestResultMatches) {
+      const corePass = state.lastRunResult.quality?.core_pass;
+      const qualityState = corePass === true ? "核心质量门禁通过" : corePass === false ? "核心质量门禁未通过" : "核心质量门禁未报告";
+      const warnings = Array.isArray(state.lastRunResult.warnings) ? " · 警告 " + state.lastRunResult.warnings.length + " 项" : "";
+      resultLine.textContent = "本页已载入结果：" + qualityState + warnings;
+    } else {
+      resultLine.textContent = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
+    }
+    tracking.append(quoteLine, taskLine, resultLine);
+    main.append(tracking);
+
     const actions = document.createElement("div");
     actions.className = "watchlist-actions";
     for (const [action, label] of [["query", "查行情"], ["analyze", "分析"], ["remove", "移除"]]) {
