@@ -20,6 +20,22 @@ import (
 
 const tickflowVersion = "tickflow-rest-v1"
 
+type tickflowIndexDefinition struct {
+	Symbol string
+	Code   string
+	Name   string
+}
+
+var tickflowCoreIndexDefinitions = []tickflowIndexDefinition{
+	{Symbol: "000001.SH", Code: "000001", Name: "上证指数"},
+	{Symbol: "399001.SZ", Code: "399001", Name: "深证成指"},
+	{Symbol: "399006.SZ", Code: "399006", Name: "创业板指"},
+	{Symbol: "000688.SH", Code: "000688", Name: "科创50"},
+	{Symbol: "000016.SH", Code: "000016", Name: "上证50"},
+	{Symbol: "000300.SH", Code: "000300", Name: "沪深300"},
+}
+
+
 type TickFlow struct {
 	client       *http.Client
 	apiURL       string
@@ -161,6 +177,131 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 		AdjustmentBasis: model.AdjustmentNone, QualityStatus: quality, QualityReasons: reasons,
 		NormalizationVer: normalize.Version,
 	}, nil
+}
+
+func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("TickFlow HTTP client is not configured")
+	}
+	if p.apiKey == "" {
+		return nil, errors.New("TickFlow index quotes require TICKFLOW_API_KEY")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	symbols := make([]string, 0, len(tickflowCoreIndexDefinitions))
+	definitions := make(map[string]tickflowIndexDefinition, len(tickflowCoreIndexDefinitions))
+	for _, definition := range tickflowCoreIndexDefinitions {
+		symbols = append(symbols, definition.Symbol)
+		definitions[definition.Symbol] = definition
+	}
+	raw, err := p.getJSON(ctx, p.apiURL, "/v1/quotes", url.Values{"symbols": []string{strings.Join(symbols, ",")}}, true)
+	if err != nil {
+		return nil, fmt.Errorf("TickFlow index quote request: %w", err)
+	}
+	data, err := tickflowResponseData(raw)
+	if err != nil {
+		return nil, err
+	}
+	var quotes []tickflowQuotePayload
+	if err := json.Unmarshal(data, &quotes); err != nil {
+		return nil, fmt.Errorf("decode TickFlow index quote data: %w", err)
+	}
+
+	fetchedAt := time.Now().UTC()
+	snapshot := &model.IndexQuoteSnapshot{Source: p.Name(), SourceVersion: tickflowVersion + "-index-quotes-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityValid, Items: make([]model.MarketIndexQuote, 0, len(tickflowCoreIndexDefinitions))}
+	markSnapshotDegraded := func(reason string) {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, reason)
+	}
+	quotesBySymbol := make(map[string]tickflowQuotePayload, len(quotes))
+	for _, quote := range quotes {
+		symbol := strings.ToUpper(strings.TrimSpace(quote.Symbol))
+		if _, expected := definitions[symbol]; !expected {
+			markSnapshotDegraded("provider_returned_unrequested_index_ignored")
+			continue
+		}
+		if _, duplicate := quotesBySymbol[symbol]; duplicate {
+			markSnapshotDegraded("duplicate_index_row_dropped")
+			continue
+		}
+		quotesBySymbol[symbol] = quote
+	}
+
+	for _, definition := range tickflowCoreIndexDefinitions {
+		quote, exists := quotesBySymbol[definition.Symbol]
+		if !exists {
+			markSnapshotDegraded("provider_core_index_rows_missing")
+			continue
+		}
+		if quote.LastPrice == nil || !tickflowPositiveFinite(*quote.LastPrice) || quote.PrevClose == nil || !tickflowPositiveFinite(*quote.PrevClose) {
+			markSnapshotDegraded("provider_index_required_price_field_missing_or_invalid")
+			continue
+		}
+		change := *quote.LastPrice - *quote.PrevClose
+		if rawChange, ok := quote.Ext["change_amount"]; ok {
+			if value, parseErr := tickflowFloat(rawChange); parseErr == nil && !math.IsNaN(value) && !math.IsInf(value, 0) {
+				change = value
+			}
+		}
+		changePercent := change / *quote.PrevClose * 100
+		if rawChangePercent, ok := quote.Ext["change_pct"]; ok {
+			if value, parseErr := tickflowFloat(rawChangePercent); parseErr == nil && !math.IsNaN(value) && !math.IsInf(value, 0) {
+				changePercent = value * 100
+			}
+		}
+
+		reasons := []string{}
+		var quoteTime *time.Time
+		quoteTimeSemantics := ""
+		if quote.Timestamp > 0 {
+			value := time.UnixMilli(quote.Timestamp).UTC()
+			if !value.After(fetchedAt.Add(5*time.Minute)) && !value.After(time.Now().UTC().Add(5*time.Minute)) {
+				quoteTime = &value
+				quoteTimeSemantics = "provider_snapshot_time"
+			}
+		}
+		if quoteTime == nil {
+			reasons = append(reasons, "provider_quote_timestamp_missing_or_invalid")
+		}
+		var amount *float64
+		amountUnit := "unknown"
+		if quote.Amount != nil && tickflowNonNegativeFinite(*quote.Amount) {
+			amount, amountUnit = quote.Amount, "CNY"
+		} else {
+			reasons = append(reasons, "provider_amount_missing_or_invalid")
+		}
+		if quote.Open == nil || quote.High == nil || quote.Low == nil {
+			reasons = append(reasons, "provider_index_ohlc_missing")
+		} else if !tickflowPositiveFinite(*quote.Open) || !tickflowPositiveFinite(*quote.High) ||
+			!tickflowPositiveFinite(*quote.Low) || *quote.Low > *quote.High ||
+			*quote.Open < *quote.Low || *quote.Open > *quote.High ||
+			*quote.LastPrice < *quote.Low || *quote.LastPrice > *quote.High {
+			return nil, fmt.Errorf("TickFlow index %s has invalid OHLC values", definition.Symbol)
+		}
+
+		item := model.MarketIndexQuote{
+			Symbol: definition.Symbol, Code: definition.Code, Name: definition.Name,
+			LatestPrice: quote.LastPrice, Change: &change, ChangePercent: &changePercent,
+			Open: quote.Open, High: quote.High, Low: quote.Low, PrevClose: quote.PrevClose,
+			Amount: amount, AmountUnit: amountUnit, QuoteTime: quoteTime, QuoteTimeSemantics: quoteTimeSemantics,
+			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt,
+			QualityStatus: model.QualityValid, QualityReasons: reasons,
+		}
+		if len(reasons) > 0 {
+			item.QualityStatus = model.QualityDegraded
+			markSnapshotDegraded("one_or_more_index_rows_degraded")
+		}
+		snapshot.Items = append(snapshot.Items, item)
+	}
+	if len(snapshot.Items) == 0 {
+		return nil, errors.New("TickFlow index quote rows failed index-code and price validation")
+	}
+	return snapshot, nil
 }
 
 func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
@@ -468,6 +609,19 @@ func tickflowInt64(raw json.RawMessage) (int64, error) {
 		return 0, errors.New("invalid TickFlow integer")
 	}
 	return int64(value), nil
+}
+
+func appendTickflowUniqueReason(reasons []string, reason string) []string {
+	for _, existing := range reasons {
+		if existing == reason {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
+}
+
+func tickflowNonNegativeFinite(value float64) bool {
+	return value >= 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func tickflowPositiveFinite(value float64) bool {
