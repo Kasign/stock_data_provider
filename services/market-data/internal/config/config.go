@@ -108,27 +108,31 @@ type providerFile struct {
 	Providers        map[string]ProviderSettings `json:"providers"`
 }
 
-func Load() (Config, error) {
-	if err := validateEnvironment(); err != nil {
-		return Config{}, err
-	}
-	defaults := providerFile{
+func defaultProviderFile() providerFile {
+	return providerFile{
 		ProviderPriority: []string{"eastmoney", "baostock", "hithink", "tushare", "tickflow", "tencent", "sina", "netease", "pytdx", "xueqiu"},
 		AdjustmentBasis:  "forward_adjusted",
 		Providers: map[string]ProviderSettings{
 			"eastmoney": {Enabled: true, Quote: true, DailyBars: true, StockBasic: true, StockSearch: true, SectorRankings: true, IndexQuotes: true, MarketBreadth: true, LimitPools: true, StockBoards: true, DragonTiger: true, Announcements: true, ChipDistribution: true, HotRankings: true},
 			"hithink":   {Enabled: false, Quote: false, DailyBars: false, IndexQuotes: false, TradingCalendar: false, LimitPools: false, DragonTiger: false, Fundamentals: false, Valuations: false, IndexCatalog: false, HotRankings: false},
 			"tencent":   {Enabled: true, Quote: true, DailyBars: true, StockSearch: true},
-			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: false, Fundamentals: false},
+			"baostock":  {Enabled: true, Quote: false, DailyBars: true, TradingCalendar: true, Fundamentals: true},
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
-			"yahoo":     {Enabled: false, Quote: false, DailyBars: true},
-			"netease":   {Enabled: true, Quote: false, DailyBars: true},
+			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
+			"netease":   {Enabled: true, Quote: true, DailyBars: true},
 			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false},
 			"tickflow":  {Enabled: true, Quote: false, DailyBars: true},
 			"pytdx":     {Enabled: true, Quote: true, DailyBars: true},
 			"xueqiu":    {Enabled: false, HotRankings: false},
 		},
 	}
+}
+
+func Load() (Config, error) {
+	if err := validateEnvironment(); err != nil {
+		return Config{}, err
+	}
+	defaults := defaultProviderFile()
 	file := defaults
 	explicitConfigPath := strings.TrimSpace(os.Getenv("MARKET_DATA_PROVIDERS_CONFIG")) != ""
 	configPath := get("MARKET_DATA_PROVIDERS_CONFIG", "configs/providers.json")

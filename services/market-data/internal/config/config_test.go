@@ -59,6 +59,19 @@ func TestLoadProviderConfigAndEnvironmentOverrides(t *testing.T) {
 	}
 }
 
+func TestDefaultProviderCapabilitiesMatchDomesticPolicy(t *testing.T) {
+	defaults := defaultProviderFile()
+	if !defaults.Providers["baostock"].TradingCalendar || !defaults.Providers["baostock"].Fundamentals {
+		t.Fatalf("BaoStock domestic capabilities must match configs/providers.json: %+v", defaults.Providers["baostock"])
+	}
+	if defaults.Providers["yahoo"].DailyBars {
+		t.Fatalf("Yahoo overseas daily bars must stay disabled by default: %+v", defaults.Providers["yahoo"])
+	}
+	if !defaults.Providers["netease"].Quote {
+		t.Fatalf("NetEase domestic quote capability must match configs/providers.json: %+v", defaults.Providers["netease"])
+	}
+}
+
 func TestLoadStockSearchCapabilityEnvironmentOverrides(t *testing.T) {
 	setDefaultProviderConfig(t)
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
