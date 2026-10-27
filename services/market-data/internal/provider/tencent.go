@@ -32,6 +32,11 @@ func NewTencent(timeout time.Duration) *Tencent {
 }
 
 func NewTencentConfigured(timeout time.Duration, quoteURL, klineURL, noneKlineURL string) *Tencent {
+	return NewTencentConfiguredWithSearchURL(timeout, quoteURL, klineURL, noneKlineURL, "")
+}
+
+// NewTencentConfiguredWithSearchURL configures the Smartbox keyword-search endpoint independently.
+func NewTencentConfiguredWithSearchURL(timeout time.Duration, quoteURL, klineURL, noneKlineURL, stockSearchURL string) *Tencent {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -44,7 +49,10 @@ func NewTencentConfigured(timeout time.Duration, quoteURL, klineURL, noneKlineUR
 	if noneKlineURL == "" {
 		noneKlineURL = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
 	}
-	return &Tencent{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL, searchURL: defaultTencentStockSearchURL}
+	if stockSearchURL == "" {
+		stockSearchURL = defaultTencentStockSearchURL
+	}
+	return &Tencent{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL, searchURL: stockSearchURL}
 }
 func (p *Tencent) Name() string { return "tencent" }
 

@@ -77,6 +77,7 @@ func TestLoadStockSearchCapabilityEnvironmentOverrides(t *testing.T) {
 	t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
 	t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
 	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED", "false")
+	t.Setenv("MARKET_DATA_TENCENT_STOCK_SEARCH_URL", "https://smartbox.example.test/s3/")
 	t.Setenv("MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED", "true")
 
 	cfg, err := Load()
@@ -88,6 +89,9 @@ func TestLoadStockSearchCapabilityEnvironmentOverrides(t *testing.T) {
 	}
 	if !cfg.ProviderSettings["eastmoney"].StockSearch {
 		t.Fatal("Eastmoney stock search should stay enabled independently")
+	}
+	if cfg.TencentStockSearchURL != "https://smartbox.example.test/s3/" {
+		t.Fatalf("Tencent stock-search URL = %q", cfg.TencentStockSearchURL)
 	}
 }
 

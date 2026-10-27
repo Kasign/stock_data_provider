@@ -67,6 +67,7 @@ type Config struct {
 	TencentQuoteURL           string
 	TencentKlineURL           string
 	TencentNoneKlineURL       string
+	TencentStockSearchURL     string
 	SinaQuoteURL              string
 	SinaKlineURL              string
 	YahooChartURL             string
@@ -229,6 +230,7 @@ func Load() (Config, error) {
 		TencentQuoteURL:           get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:           get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
 		TencentNoneKlineURL:       get("MARKET_DATA_TENCENT_NONE_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"),
+		TencentStockSearchURL:     get("MARKET_DATA_TENCENT_STOCK_SEARCH_URL", "https://smartbox.gtimg.cn/s3/"),
 		SinaQuoteURL:              get("MARKET_DATA_SINA_QUOTE_URL", "https://hq.sinajs.cn/list="),
 		SinaKlineURL:              get("MARKET_DATA_SINA_KLINE_URL", "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"),
 		YahooChartURL:             get("MARKET_DATA_YAHOO_CHART_URL", "https://query1.finance.yahoo.com/v8/finance/chart"),
@@ -284,6 +286,7 @@ func Load() (Config, error) {
 		"MARKET_DATA_TENCENT_QUOTE_URL":             cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":             cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL":        cfg.TencentNoneKlineURL,
+		"MARKET_DATA_TENCENT_STOCK_SEARCH_URL":      cfg.TencentStockSearchURL,
 		"MARKET_DATA_SINA_QUOTE_URL":                cfg.SinaQuoteURL,
 		"MARKET_DATA_SINA_KLINE_URL":                cfg.SinaKlineURL,
 		"MARKET_DATA_YAHOO_CHART_URL":               cfg.YahooChartURL,
