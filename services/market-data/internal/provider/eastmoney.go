@@ -48,6 +48,8 @@ type Eastmoney struct {
 	stockBoardsURL   string
 	dragonTigerURL   string
 	announcementURL  string
+	hotRankingURL    string
+	hotSurgeURL      string
 	ut               string
 
 	stockSearchMu         sync.Mutex
@@ -125,7 +127,7 @@ func NewEastmoneyConfiguredWithStockBoards(timeout time.Duration, quoteURL, klin
 	}
 	return &Eastmoney{
 		client:   &http.Client{Timeout: timeout, CheckRedirect: eastmoneyRedirectPolicy},
-		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, stockListURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, ut: ut,
+		quoteURL: quoteURL, klineURL: klineURL, stockBasicURL: stockBasicURL, sectorRankingURL: sectorRankingURL, stockListURL: sectorRankingURL, indexURL: indexURL, marketBreadthURL: marketBreadthURL, limitPoolBaseURL: strings.TrimRight(limitPoolBaseURL, "/"), stockBoardsURL: stockBoardsURL, dragonTigerURL: defaultEastmoneyDragonTigerURL, announcementURL: defaultEastmoneyAnnouncementURL, hotRankingURL: eastmoneyHotRankURL, hotSurgeURL: eastmoneyHotSurgeURL, ut: ut,
 	}
 }
 
@@ -134,6 +136,20 @@ func NewEastmoneyConfiguredWithAnnouncements(timeout time.Duration, quoteURL, kl
 	p := NewEastmoneyConfiguredWithDragonTiger(timeout, quoteURL, klineURL, stockBasicURL, sectorRankingURL, indexURL, marketBreadthURL, limitPoolBaseURL, stockBoardsURL, dragonTigerURL, ut)
 	if strings.TrimSpace(announcementURL) != "" {
 		p.announcementURL = strings.TrimSpace(announcementURL)
+	}
+	return p
+}
+
+// WithHotRankingURLs 覆盖人气榜与飙升榜端点；传入空白值时保留原有官方默认地址。
+func (p *Eastmoney) WithHotRankingURLs(popularURL, surgeURL string) *Eastmoney {
+	if p == nil {
+		return nil
+	}
+	if value := strings.TrimSpace(popularURL); value != "" {
+		p.hotRankingURL = value
+	}
+	if value := strings.TrimSpace(surgeURL); value != "" {
+		p.hotSurgeURL = value
 	}
 	return p
 }
@@ -655,9 +671,15 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 	endpoint := ""
 	switch rankingType {
 	case "popular":
-		endpoint = eastmoneyHotRankURL
+		endpoint = strings.TrimSpace(p.hotRankingURL)
+		if endpoint == "" {
+			endpoint = eastmoneyHotRankURL
+		}
 	case "surge":
-		endpoint = eastmoneyHotSurgeURL
+		endpoint = strings.TrimSpace(p.hotSurgeURL)
+		if endpoint == "" {
+			endpoint = eastmoneyHotSurgeURL
+		}
 	default:
 		return nil, fmt.Errorf("unsupported hot-ranking type %q; want popular or surge", rankingType)
 	}

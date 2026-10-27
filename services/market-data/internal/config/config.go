@@ -63,6 +63,8 @@ type Config struct {
 	EastmoneyStockBoardsURL   string
 	EastmoneyDragonTigerURL   string
 	EastmoneyAnnouncementsURL string
+	EastmoneyHotRankingsURL   string
+	EastmoneyHotSurgeURL      string
 	EastmoneyUT               string
 	TencentQuoteURL           string
 	TencentKlineURL           string
@@ -226,6 +228,8 @@ func Load() (Config, error) {
 		EastmoneyStockBoardsURL:   get("MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL", "https://push2.eastmoney.com/api/qt/slist/get"),
 		EastmoneyDragonTigerURL:   get("MARKET_DATA_EASTMONEY_DRAGON_TIGER_URL", "https://datacenter-web.eastmoney.com/api/data/v1/get"),
 		EastmoneyAnnouncementsURL: get("MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_URL", "https://np-anotice-stock.eastmoney.com/api/security/ann"),
+		EastmoneyHotRankingsURL:   get("MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL", "https://emappdata.eastmoney.com/stockrank/getAllCurrentList"),
+		EastmoneyHotSurgeURL:      get("MARKET_DATA_EASTMONEY_HOT_SURGE_URL", "https://emappdata.eastmoney.com/stockrank/getAllHisRcList"),
 		EastmoneyUT:               get("MARKET_DATA_EASTMONEY_UT", ""),
 		TencentQuoteURL:           get("MARKET_DATA_TENCENT_QUOTE_URL", "https://web.sqt.gtimg.cn/utf8/q"),
 		TencentKlineURL:           get("MARKET_DATA_TENCENT_KLINE_URL", "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"),
@@ -283,6 +287,8 @@ func Load() (Config, error) {
 		"MARKET_DATA_EASTMONEY_STOCK_BOARDS_URL":    cfg.EastmoneyStockBoardsURL,
 		"MARKET_DATA_EASTMONEY_DRAGON_TIGER_URL":    cfg.EastmoneyDragonTigerURL,
 		"MARKET_DATA_EASTMONEY_ANNOUNCEMENTS_URL":   cfg.EastmoneyAnnouncementsURL,
+		"MARKET_DATA_EASTMONEY_HOT_RANKINGS_URL":   cfg.EastmoneyHotRankingsURL,
+		"MARKET_DATA_EASTMONEY_HOT_SURGE_URL":      cfg.EastmoneyHotSurgeURL,
 		"MARKET_DATA_TENCENT_QUOTE_URL":             cfg.TencentQuoteURL,
 		"MARKET_DATA_TENCENT_KLINE_URL":             cfg.TencentKlineURL,
 		"MARKET_DATA_TENCENT_NONE_KLINE_URL":        cfg.TencentNoneKlineURL,
