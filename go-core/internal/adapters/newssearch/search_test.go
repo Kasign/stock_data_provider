@@ -418,7 +418,6 @@ func TestNativeNewsSearchAggregatesConfiguredProvidersAndDeduplicates(t *testing
 	}
 }
 
-
 func TestStockSearchUsesFiveNewsDimensionsAndPreservesLabels(t *testing.T) {
 	date := freshDateString(1)
 	var mu sync.Mutex

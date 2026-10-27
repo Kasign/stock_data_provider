@@ -286,8 +286,8 @@ func NewFromEnv(fallback ports.NewsSearcher, logger *slog.Logger, announcementSo
 		SearXNGBaseURLs:    splitCSV(os.Getenv("SEARXNG_BASE_URLS")),
 		TrustedDomains:     splitCSV(os.Getenv("GO_NEWS_TRUSTED_DOMAINS")),
 		BlockedTerms:       splitCSV(os.Getenv("GO_NEWS_BLOCKED_TERMS")),
-		MaxAgeDays:      positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
-		MaxSearches:     positiveIntEnv("NEWS_MAX_SEARCHES", 5),
+		MaxAgeDays:         positiveIntEnv("NEWS_MAX_AGE_DAYS", 3),
+		MaxSearches:        positiveIntEnv("NEWS_MAX_SEARCHES", 5),
 		StrategyProfile:    envOr("NEWS_STRATEGY_PROFILE", "short"),
 		RequestTimeout:     time.Duration(positiveIntEnv("NEWS_SEARCH_TIMEOUT_SECONDS", 10)) * time.Second,
 	}
