@@ -850,3 +850,24 @@ func TestLoadAcceptsXueqiuInProviderPriority(t *testing.T) {
 		t.Fatalf("provider priority=%v, want [eastmoney tencent xueqiu]", cfg.ProviderPriority)
 	}
 }
+
+
+func TestLoadRejectsProviderEndpointWithEmptyQueryOrFragment(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		url  string
+	}{
+		{name: "empty query", url: "https://example.test/kline?"},
+		{name: "empty fragment", url: "https://example.test/kline#"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setDefaultProviderConfig(t)
+			t.Setenv("MARKET_DATA_API_KEY", "test-api-key-that-is-at-least-32-characters")
+			t.Setenv("MARKET_DATA_ALLOW_NO_STORAGE", "true")
+			t.Setenv("MARKET_DATA_TENCENT_KLINE_URL", tc.url)
+			if _, err := Load(); err == nil {
+				t.Fatalf("endpoint %q must be rejected because it contains a query or fragment delimiter", tc.url)
+			}
+		})
+	}
+}

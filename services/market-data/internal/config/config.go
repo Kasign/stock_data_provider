@@ -421,8 +421,10 @@ func minimumProviderRequestBudget(providerTimeout time.Duration, retries, provid
 }
 
 func validateEndpointURL(name, raw string) error {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u == nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	raw = strings.TrimSpace(raw)
+	u, err := url.Parse(raw)
+	if err != nil || u == nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") ||
+		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(raw, "#") {
 		return fmt.Errorf("%s must be an absolute http(s) endpoint URL without credentials, query, or fragment", name)
 	}
 	return nil
