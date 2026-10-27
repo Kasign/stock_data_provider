@@ -2152,3 +2152,13 @@ td {
   .dashboard-shortcut { min-height:62px; padding:10px; }
 }
 @media (prefers-reduced-motion:reduce) { .dashboard-shortcut { transition:none; } }
+
+/* Tablet stock query form: controls wrap before widening the document. */
+@media (min-width: 601px) and (max-width: 900px) {
+  .search-panel { align-items: stretch; gap: 14px; }
+  .search-intro { min-width: 100%; }
+  .query-form { min-width: 0; flex-wrap: wrap; }
+  .query-form .field:not(.symbol-field) { flex: 1 1 120px; }
+  .query-button, .query-watchlist-button { flex: 1 1 auto; }
+  .query-hint { padding-left: 0; }
+}
