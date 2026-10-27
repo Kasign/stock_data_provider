@@ -1,5 +1,17 @@
 # WebUI 实施进度
 
+更新时间：2026-10-27（当前计划已更新，历史内容仍用于追溯）
+
+## 2026-10-27 产品排版与数据能力规划登记（本轮仅更新文档）
+
+- 本轮规划开始前核对 WebUI 基线 `ec3aa3cd529973e57e294c47bf544387f5c56cd4` 与数据分支基线 `df7a4e259734f0043bc0d71372e826bead032902`。规划文档随后提交到了 WebUI 分支；开始下一轮任务前应重新查询远程 HEAD。
+- PR #14 仍保持 Open、未合并。本轮仅修改 `web/**` 文档，不修改 Go/Provider/数据库/Compose，不运行测试、构建、CI 或实时 Provider 请求。
+- 新增 `UI_LAYOUT_PLAN.md`：定义首页（市场情绪、市场资金、多维热点和全球市场占位）、个股研究列表/专业详情、自选股、分析任务与详情内运行流、条件选股占位、数据中心和设置的目标结构。
+- 新增 `DATA_CAPABILITY_GAPS.md`：逐项记录当前 API 能力与缺口，包括情绪历史快照、市场/板块资金净流入、板块完整多维排名、全球指数、股票批量概览和逐 Provider 实际诊断。
+- 更新 `PRODUCT_BACKLOG.md`、`ROADMAP.md`、`HANDOFF.md`、`API_CONTRACT.md` 与 `TECHNICAL_NOTES.md`，让现行优先级和接口草案统一指向以上两个主文档。
+- 后续实现必须区分规划占位、源码完成、CI 验证和 NAS/1Panel 实际验收；本轮只完成需求与约束登记，不表示任何新 UI/API 已上线。
+
+
 更新时间：2026-10-27  
 目标分支：`feat/webui-market-data-console`  
 范围：WebUI、部署 Compose/脚本、相关 CI 工作流与文档；不改 Go API、数据源、数据库或任务契约。
