@@ -276,6 +276,7 @@ type wireChipDistribution struct {
 
 type wireCapitalFlow struct {
 	Symbol         string    `json:"symbol"`
+	ProviderDate   string    `json:"provider_date"`
 	SourceVersion  string    `json:"source_version"`
 	MainNetInflow  *float64  `json:"main_net_inflow_yuan"`
 	Inflow5D       *float64  `json:"inflow_5d_yuan"`
