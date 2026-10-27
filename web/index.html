@@ -705,12 +705,13 @@
 <section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
           <div class="page-heading">
             <div><p class="eyebrow">PREFERENCES / 07</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">按配置归属分组。每项都标明是本地偏好、浏览器连接配置，还是需要服务端 API 的系统配置。</p></div>
-            <div class="feature-status"><span class="availability-pill is-unavailable">服务端配置 API 待接入</span></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable">服务器配置 API 待接入</span></div>
           </div>
           <div class="settings-layout">
             <nav class="settings-nav" aria-label="设置分组">
               <button class="settings-nav-link is-active" type="button" data-settings-target="settings-display-section" aria-current="location">显示偏好</button>
               <button class="settings-nav-link" type="button" data-settings-target="settings-connection-section">连接与服务</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-local-data-section">浏览器本地数据</button>
               <button class="settings-nav-link" type="button" data-settings-target="settings-basic-section">基础设置</button>
               <button class="settings-nav-link" type="button" data-settings-target="settings-data-source-section">数据源</button>
               <button class="settings-nav-link" type="button" data-settings-target="settings-ai-section">AI 与问股</button>
@@ -738,6 +739,16 @@
                     <p id="settings-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未执行连接检查。</p>
                   </div>
                   <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查连接</button><button class="button button-primary" id="settings-open-connection" type="button">编辑连接配置</button></div>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-local-data-section" aria-labelledby="settings-local-data-title">
+                <div class="settings-section-heading"><div><h2 id="settings-local-data-title">浏览器本地数据</h2><p>只管理当前浏览器的主题、同源 API 路径、自选股与最近任务引用，不会写入服务器。</p></div><span class="availability-pill is-local">浏览器本地</span></div>
+                <div class="panel settings-browser-data-panel">
+                  <div class="settings-browser-data-copy"><strong>个人工作区导入与导出</strong><p>用于更换浏览器或迁移个人列表。导出文件不包含 API Key、行情快照或完整分析报告；最近任务引用可能包含股票代码、任务 ID 与分析服务路径，请妥善保管。</p></div>
+                  <div class="settings-browser-data-actions"><button class="button button-secondary" id="export-browser-data" type="button">导出本地数据</button><button class="button button-primary" id="import-browser-data" type="button">导入本地数据</button><input id="browser-data-file" type="file" accept="application/json,.json" hidden /></div>
+                  <p class="settings-inline-status" id="browser-data-feedback" role="status" aria-live="polite">尚未导入或导出。</p>
+                  <p class="field-hint">导入将替换主题、API 路径、自选股和最近任务引用，并保留当前 API Key。文件仅恢复浏览器本地数据，不是服务器备份。</p>
                 </div>
               </section>
 
@@ -795,7 +806,7 @@
               </section>
 
               <section class="settings-section" id="settings-security-section" aria-labelledby="settings-security-title">
-                <div class="settings-section-heading"><div><h2 id="settings-security-title">系统安全与配置备份</h2><p>服务端密码、权限、.env、备份和恢复涉及认证、授权、审计、版本冲突与原子写入。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
+                <div class="settings-section-heading"><div><h2 id="settings-security-title">服务器安全与配置备份</h2><p>服务端密码、权限、.env、备份和恢复涉及认证、授权、审计、版本冲突与原子写入。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
                 <div class="panel settings-unavailable-panel">
                   <h3>未开放服务器配置写入</h3><p>浏览器没有访问 NAS 文件系统的权限。这里不会假装设置/删除管理员密码，也不会用本地文件导入导出来冒充服务器备份。</p>
                   <div class="settings-unavailable-actions"><button class="button button-secondary" type="button" disabled aria-disabled="true">更改管理员密码（待接入）</button><button class="button button-secondary" type="button" disabled aria-disabled="true">导出服务器配置（待接入）</button><button class="button button-secondary" type="button" disabled aria-disabled="true">导入服务器配置（待接入）</button></div>

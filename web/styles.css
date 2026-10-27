@@ -3599,3 +3599,30 @@ td {
   .research-detail-nav-link { min-height: 36px; padding: 0 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .research-detail-nav-link { transition: none; } }
+
+
+/* 浏览器本地工作区备份：与服务器设置/备份明确区分。 */
+.settings-browser-data-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px 20px;
+  padding: 20px;
+}
+.settings-browser-data-copy { min-width: 0; }
+.settings-browser-data-copy > strong { display: block; color: var(--text); font-size: 14px; }
+.settings-browser-data-copy p { margin: 7px 0 0; color: var(--text-dim); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.settings-browser-data-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; min-width: 0; }
+.settings-browser-data-panel > .settings-inline-status,
+.settings-browser-data-panel > .field-hint { grid-column: 1 / -1; margin: 0; overflow-wrap: anywhere; }
+.settings-browser-data-panel .settings-inline-status.is-error { color: var(--danger); }
+.settings-browser-data-panel .settings-inline-status.is-success { color: var(--accent); }
+@media (max-width: 800px) {
+  .settings-browser-data-panel { grid-template-columns: minmax(0, 1fr); }
+  .settings-browser-data-actions { justify-content: flex-start; }
+}
+@media (max-width: 600px) {
+  .settings-browser-data-panel { padding: 15px; }
+  .settings-browser-data-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .settings-browser-data-actions .button { width: 100%; }
+}

@@ -1,4 +1,4 @@
-import { applyTheme, persistTheme, readTheme } from "./theme.js";
+import { applyTheme, persistTheme, readTheme, THEME_STORAGE_KEY } from "./theme.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
@@ -18,7 +18,8 @@ import {
   searchStocks,
   loadSettings,
   marketHealth,
-  saveSettings
+  saveSettings,
+  SETTINGS_KEY
 } from "./api.js";
 import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart, renderMACDChart, renderRSIChart } from "./chart.js";
 import { bindMarketOverview } from "./market-overview.js";
@@ -26,8 +27,8 @@ import { taskEventMatchesFilter } from "./task-event-filter.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
 import { bindMarketActivity } from "./market-activity.js";
-import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask } from "./recent-tasks.js";
-import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol } from "./watchlist.js";
+import { clearRecentTasks, readRecentTasks, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
+import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlist, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
   describeApiError,
@@ -48,6 +49,8 @@ import {
 
 const $ = (selector) => document.querySelector(selector);
 const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
+const BROWSER_DATA_FORMAT = "stock-provider-webui-browser-data";
+const BROWSER_DATA_VERSION = 1;
 const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
 const TASK_EVENT_STATUS_LABELS = Object.freeze({
   succeeded: "已完成",
@@ -397,6 +400,13 @@ function renderResearchStockList() {
   const latest = technicalSymbol && technicalSymbol === currentSymbol
     ? [...state.technicalRows].reverse().find((row) => row && row.close !== null && row.close !== undefined) || null
     : null;
+  const formatResearchMA = (period, isCurrent) => {
+    if (!isCurrent) return "未加载";
+    if (!technicalSymbol || technicalSymbol !== currentSymbol) return state.isQuerying ? "读取中…" : "未加载";
+    if (!latest) return "数据不足";
+    const value = latest["ma" + period];
+    return Number.isFinite(value) ? value.toFixed(2) : "数据不足";
+  };
   items.forEach((item) => {
     const isCurrent = Boolean(currentSymbol) && item.symbol === currentSymbol && Boolean(quote);
     const tr = document.createElement("tr"), nameCell = document.createElement("td");
@@ -411,8 +421,8 @@ function renderResearchStockList() {
       makeCell(isCurrent ? formatCompact(quote.amount) : "未加载"),
       makeCell(isCurrent ? missing(quote.turnover_rate == null ? null : formatPercent(quote.turnover_rate)) : "未加载"),
       makeCell(isCurrent ? missing(quote.volume_ratio == null ? null : Number(quote.volume_ratio).toFixed(2)) : "未加载"),
-      makeCell(isCurrent && Number.isFinite(latest?.ma5) ? latest.ma5.toFixed(2) : "—"),
-      makeCell(isCurrent && Number.isFinite(latest?.ma20) ? latest.ma20.toFixed(2) : "—"),
+      makeCell(formatResearchMA(5, isCurrent)),
+      makeCell(formatResearchMA(20, isCurrent)),
       (() => {
         const cell = document.createElement("td");
         const pill = document.createElement("span");
@@ -2968,6 +2978,173 @@ function clearLocalSettings() {
   }
 }
 
+
+function setBrowserDataFeedback(message, kind = "info") {
+  const output = $("#browser-data-feedback");
+  if (!output) return;
+  output.textContent = message;
+  output.className = "settings-inline-status" + (kind === "error" ? " is-error" : kind === "success" ? " is-success" : "");
+}
+
+function buildBrowserDataPayload() {
+  // 仅导出明确允许的浏览器偏好与引用；绝不包含 API Key、行情缓存或完整报告。
+  return {
+    format: BROWSER_DATA_FORMAT,
+    version: BROWSER_DATA_VERSION,
+    exported_at: new Date().toISOString(),
+    data: {
+      theme: readTheme(),
+      connection: { marketBase: state.settings.marketBase, analysisBase: state.settings.analysisBase },
+      watchlist: safeReadWatchlist(),
+      recent_tasks: safeReadRecentTasks()
+    }
+  };
+}
+
+function downloadBrowserData() {
+  try {
+    const payload = buildBrowserDataPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "stock-provider-webui-local-data-" + new Date().toISOString().slice(0, 10) + ".json";
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setBrowserDataFeedback("本地工作区数据已导出。文件不包含 API Key、行情快照或完整分析报告；任务引用可能包含标的与任务 ID。", "success");
+  } catch (error) {
+    setBrowserDataFeedback("导出失败：" + (error?.message || "浏览器无法读取本地数据。"), "error");
+  }
+}
+
+function validateBrowserDataPayload(payload) {
+  if (!payload || payload.format !== BROWSER_DATA_FORMAT || payload.version !== BROWSER_DATA_VERSION) {
+    throw new Error("文件格式或版本不受支持。请使用本 WebUI 导出的 JSON 文件。");
+  }
+  const data = payload.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("缺少有效的 data 配置对象。");
+  if (!["dark", "light"].includes(data.theme)) throw new Error("主题字段无效。");
+  if (!data.connection || typeof data.connection !== "object") throw new Error("缺少连接路径配置。");
+  // 仅接受同源绝对路径，避免将导入文件变成任意外部请求目标。
+  const marketBase = normalizeBasePath(data.connection.marketBase, "/market-api");
+  const analysisBase = normalizeBasePath(data.connection.analysisBase, "/analysis-api");
+
+  if (!Array.isArray(data.watchlist) || data.watchlist.length > MAX_WATCHLIST_ITEMS) {
+    throw new Error("自选股必须是数组，且不能超过 " + MAX_WATCHLIST_ITEMS + " 条。");
+  }
+  const seenSymbols = new Set();
+  const symbolPattern = /^\d{6}(?:\.(?:SH|SZ|BJ))?$/;
+  const watchlist = data.watchlist.map((record) => {
+    if (!record || typeof record !== "object" || typeof record.symbol !== "string") throw new Error("自选股条目格式无效。");
+    const symbol = record.symbol.trim().toUpperCase();
+    if (!symbolPattern.test(symbol)) throw new Error("自选股代码格式无效：" + symbol);
+    if (seenSymbols.has(symbol)) throw new Error("自选股文件包含重复代码：" + symbol);
+    seenSymbols.add(symbol);
+    const name = String(record.name ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 32).trim() || symbol;
+    return { symbol, name, updated_at: typeof record.updated_at === "string" ? record.updated_at.slice(0, 80) : "" };
+  });
+
+  if (!Array.isArray(data.recent_tasks) || data.recent_tasks.length > MAX_RECENT_TASKS) {
+    throw new Error("最近任务引用必须是数组，且不能超过 " + MAX_RECENT_TASKS + " 条。");
+  }
+  const seenTasks = new Set();
+  const recentTasks = data.recent_tasks.map((record) => {
+    if (!record || typeof record !== "object" || typeof record.task_id !== "string" || !record.task_id.trim()) {
+      throw new Error("最近任务引用缺少有效 task_id。");
+    }
+    const taskId = record.task_id.trim().slice(0, 200);
+    if (seenTasks.has(taskId)) throw new Error("最近任务引用包含重复 task_id：" + taskId);
+    seenTasks.add(taskId);
+    if (record.symbols !== undefined && !Array.isArray(record.symbols)) throw new Error("任务标的必须是数组。");
+    const rawSymbols = Array.isArray(record.symbols) ? record.symbols : [];
+    if (rawSymbols.length > 100 || rawSymbols.some((item) => typeof item !== "string")) {
+      throw new Error("任务标的数量或格式无效。");
+    }
+    const analysisBase = typeof record.analysis_base === "string" && record.analysis_base.trim()
+      ? normalizeBasePath(record.analysis_base, "/analysis-api")
+      : "";
+    const safeString = (value, max = 200) => typeof value === "string"
+      ? value.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, max)
+      : "";
+    return {
+      task_id: taskId,
+      run_id: safeString(record.run_id, 200),
+      created_at: safeString(record.created_at, 80),
+      symbols: rawSymbols.map((item) => item.trim().slice(0, 40)),
+      task_type: safeString(record.task_type, 100) || "post_market_scan",
+      status: safeString(record.status, 80),
+      analysis_base: analysisBase,
+      updated_at: safeString(record.updated_at, 80)
+    };
+  });
+  return { theme: data.theme, marketBase, analysisBase, watchlist, recentTasks };
+}
+
+async function importBrowserDataFile(file) {
+  if (!file) return;
+  if (file.size > 1024 * 1024) {
+    setBrowserDataFeedback("导入失败：文件超过 1 MiB 上限。", "error");
+    return;
+  }
+
+  let imported;
+  try {
+    imported = validateBrowserDataPayload(JSON.parse(await file.text()));
+  } catch (error) {
+    setBrowserDataFeedback("导入失败：" + (error?.message || "文件不是有效的工作区 JSON。"), "error");
+    return;
+  }
+  const confirmed = window.confirm(
+    "将替换当前浏览器的主题、API 路径、自选股与最近任务引用。\n" +
+    "当前 API Key 会保留；不会修改服务器 .env，也不会恢复行情缓存或完整分析报告。继续吗？"
+  );
+  if (!confirmed) {
+    setBrowserDataFeedback("已取消导入，现有本地数据未更改。");
+    return;
+  }
+
+  const storageKeys = [SETTINGS_KEY, THEME_STORAGE_KEY, WATCHLIST_KEY, RECENT_TASKS_KEY, TASK_REFERENCE_KEY];
+  const previous = new Map();
+  try {
+    storageKeys.forEach((key) => previous.set(key, localStorage.getItem(key)));
+    const nextSettings = saveSettings({
+      marketBase: imported.marketBase,
+      analysisBase: imported.analysisBase,
+      apiKey: state.settings.apiKey
+    });
+    localStorage.setItem(THEME_STORAGE_KEY, imported.theme);
+    localStorage.setItem(WATCHLIST_KEY, JSON.stringify(imported.watchlist));
+    localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks));
+    localStorage.removeItem(TASK_REFERENCE_KEY);
+
+    applySettings(nextSettings);
+    // applySettings 可能保存旧活动任务引用；导入文件中的历史记录应作为最终结果。
+    localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks));
+    persistTheme(imported.theme);
+    applyTheme(imported.theme);
+    syncThemeControl(imported.theme);
+    syncSettingsThemeButtons(imported.theme);
+    renderWatchlist(safeReadWatchlist());
+    renderRecentTasks();
+    setBrowserDataFeedback("导入完成：主题、同源 API 路径、自选股与本地任务引用已更新。原有 API Key 已保留。", "success");
+  } catch (error) {
+    storageKeys.forEach((key) => {
+      try {
+        const value = previous.get(key);
+        if (value === null || value === undefined) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      } catch {
+        // 浏览器存储发生故障时尽力回滚；无法写入时需要用户重新载入确认实际状态。
+      }
+    });
+    setBrowserDataFeedback("导入失败，已尝试恢复导入前的浏览器存储：" + (error?.message || "本地存储不可用。"), "error");
+  }
+}
+
+
 syncThemeControl(readTheme());
 $("#theme-toggle").addEventListener("click", () => {
   const nextTheme = readTheme() === "dark" ? "light" : "dark";
@@ -3014,6 +3191,18 @@ $("#settings-open-connection").addEventListener("click", openSettings);
 $("#settings-check-connection").addEventListener("click", checkConnectionFromSettings);
 $("#settings-view-data-sources").addEventListener("click", () => {
   setView("data");
+});
+$("#export-browser-data").addEventListener("click", downloadBrowserData);
+$("#import-browser-data").addEventListener("click", () => $("#browser-data-file").click());
+$("#browser-data-file").addEventListener("change", async (event) => {
+  const input = event.currentTarget;
+  try {
+    await importBrowserDataFile(input.files?.[0]);
+  } catch (error) {
+    setBrowserDataFeedback("导入失败：" + (error?.message || "无法读取文件。"), "error");
+  } finally {
+    input.value = "";
+  }
 });
 bindSectionNavigation("[data-settings-target]", "settingsTarget");
 bindSectionNavigation("[data-research-detail-target]", "researchDetailTarget");
