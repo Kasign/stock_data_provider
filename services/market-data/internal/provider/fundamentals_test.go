@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/baostock"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
@@ -63,6 +64,24 @@ func TestBaostockFundamentalsPreservesRatioAndDisclosureDate(t *testing.T) {
 	}
 	if netProfit == nil || netProfit.Value != 28522000000 || netProfit.Unit != "CNY" {
 		t.Fatalf("net profit should preserve yuan unit: %+v", netProfit)
+	}
+}
+
+func TestBaostockFundamentalsRejectsFutureReportingPeriod(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	now := time.Now().In(loc)
+	today := now.Format("2006-01-02")
+	quarter := int((int(now.Month())-1)/3) + 1
+	if fundamentalQuarterEnd(now.Year(), quarter) <= today {
+		quarter++
+	}
+	if quarter > 4 {
+		t.Skip("no future quarter end remains in the current year")
+	}
+	_, err = NewBaostock(fakeBaoStockFinancialClient{}).FetchFundamentals(context.Background(), "600519.SH", now.Year(), quarter)
+	if err == nil || !strings.Contains(err.Error(), "report period") || !strings.Contains(err.Error(), "is in the future") {
+		t.Fatalf("future reporting period must be rejected before provider queries, got %v", err)
 	}
 }
 

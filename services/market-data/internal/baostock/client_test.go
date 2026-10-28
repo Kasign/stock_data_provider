@@ -748,6 +748,22 @@ func TestQueryQuarterlyFinancialDataHandlesLoginQueryAndLogout(t *testing.T) {
 	}
 }
 
+func TestQueryQuarterlyFinancialDataRejectsFutureReportingPeriodBeforeNetworkIO(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	now := time.Now().In(loc)
+	today := now.Format("2006-01-02")
+	quarter := int((int(now.Month())-1)/3) + 1
+	periodEnd := time.Date(now.Year(), time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	if periodEnd <= today { quarter++ }
+	if quarter > 4 { t.Skip("no future quarter end remains in the current year") }
+
+	c := NewClient(Config{})
+	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "profitability", now.Year(), quarter); err == nil {
+		t.Fatal("future quarterly reporting period should fail before network IO")
+	}
+}
+
 func TestQueryQuarterlyFinancialDataRejectsInvalidInputsBeforeNetworkIO(t *testing.T) {
 	c := NewClient(Config{})
 	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "missing", 2026, 2); err == nil {
