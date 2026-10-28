@@ -68,6 +68,34 @@ func TestIndexCatalogProvidersForSourceRejectsUnavailableProvider(t *testing.T) 
 
 
 
+func TestIndexSnapshotContractsRequireSourceVersion(t *testing.T) {
+	catalog := indexCatalogDegradedDataForTest("hithink", "tushare")
+	catalog.SourceVersion = ""
+	if err := validateIndexCatalogSnapshot("tushare", catalog); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("index catalog without source version must be rejected, got %v", err)
+	}
+
+	constituents := indexConstituentsDegradedDataForTest("hithink")
+	constituents.SourceVersion = ""
+	if err := validateIndexConstituentsSnapshot("000300.SH", constituents); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("index constituents without source version must be rejected, got %v", err)
+	}
+
+	daily := populatedIndexDailyBarsForFallbackTest("tushare")
+	daily.SourceVersion = ""
+	if err := validateIndexDailyBarsSnapshot("000300.SH", "2026-10-20", "2026-10-23", daily); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("index daily bars without source version must be rejected, got %v", err)
+	}
+}
+
+func TestIndexDailyBarsRejectsMismatchedItemSourceVersion(t *testing.T) {
+	snapshot := populatedIndexDailyBarsForFallbackTest("tushare")
+	snapshot.Items[0].SourceVersion = "older-version"
+	if err := validateIndexDailyBarsSnapshot("000300.SH", "2026-10-20", "2026-10-23", snapshot); err == nil || !strings.Contains(err.Error(), "source/version") {
+		t.Fatalf("index daily bar version mismatch must be rejected, got %v", err)
+	}
+}
+
 func TestValidateIndexDailyBarsRejectsValidSnapshotWithoutProviderTime(t *testing.T) {
 	snapshot := populatedIndexDailyBarsForFallbackTest("tushare")
 	snapshot.QualityStatus = model.QualityValid

@@ -72,8 +72,8 @@ func validateIndexCatalogSnapshot(tag string, snapshot *model.IndexCatalogSnapsh
 	if snapshot == nil || snapshot.Tag != tag || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index catalog snapshot identity/count mismatch")
 	}
-	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
-		return errors.New("index catalog snapshot source, timestamp or quality invalid")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
+		return errors.New("index catalog snapshot source, source_version, timestamp or quality invalid")
 	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
 		return errors.New("index catalog provider_time is zero or in the future")
@@ -102,8 +102,8 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index constituent snapshot identity/count mismatch")
 	}
-	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
-		return errors.New("index constituent snapshot source, timestamp or quality invalid")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
+		return errors.New("index constituent snapshot source, source_version, timestamp or quality invalid")
 	}
 	if snapshot.ProviderReturned < 0 || snapshot.ExcludedCount < 0 ||
 		(snapshot.ProviderReturned > 0 && snapshot.ProviderReturned != snapshot.Total+snapshot.ExcludedCount) ||
@@ -169,8 +169,8 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.StartDate != startDate || snapshot.EndDate != endDate || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index daily-bars snapshot identity/range/count mismatch")
 	}
-	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
-		return errors.New("index daily-bars snapshot source, timestamp or quality invalid")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
+		return errors.New("index daily-bars snapshot source, source_version, timestamp or quality invalid")
 	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
 		return errors.New("index daily-bars provider_time is zero or in the future")
@@ -182,8 +182,8 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 	previousDate := ""
 	hasDegradedItem := false
 	for _, item := range snapshot.Items {
-		if item.IndexSymbol != indexSymbol || item.TradeDate < startDate || item.TradeDate > endDate || item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-			return errors.New("index daily bar identity, date or source invalid")
+		if item.IndexSymbol != indexSymbol || item.TradeDate < startDate || item.TradeDate > endDate || item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+			return errors.New("index daily bar identity, date or source/version invalid")
 		}
 		parsedDate, dateErr := time.Parse("2006-01-02", item.TradeDate)
 		if dateErr != nil || parsedDate.Format("2006-01-02") != item.TradeDate {
