@@ -74,6 +74,38 @@ func TestFundamentalsFallsBackFromUnknownQualityMetricsToUsableProvider(t *testi
 	}
 }
 
+func TestFundamentalsKeepsUnknownCandidateWithMoreMetricCoverage(t *testing.T) {
+	more := unknownFundamentalsFallbackSnapshot("baostock")
+	less := unknownFundamentalsFallbackSnapshot("tushare")
+	for index := range less.Sections {
+		if index >= 2 {
+			less.Sections[index].HasData = false
+			less.Sections[index].Metrics = []model.FundamentalMetric{}
+			less.Sections[index].QualityReasons = []string{"test_section_metrics_unavailable"}
+		}
+	}
+	less.HasData = true
+	failed := &fundamentalsFallbackTestProvider{name: "third-source", err: errors.New("test source unavailable")}
+	first := &fundamentalsFallbackTestProvider{name: "baostock", snapshot: more}
+	second := &fundamentalsFallbackTestProvider{name: "tushare", snapshot: less}
+	svc := fundamentalsFallbackService(first, second, failed)
+
+	got, hit, err := svc.Fundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil || hit {
+		t.Fatalf("Fundamentals returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "baostock" || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected the fuller unknown fundamentals snapshot, got %+v", got)
+	}
+	metricCount := 0
+	for _, section := range got.Sections {
+		metricCount += len(section.Metrics)
+	}
+	if metricCount != 6 || first.calls != 1 || second.calls != 1 || failed.calls != 1 {
+		t.Fatalf("expected six metrics from the best candidate and all Providers tried, metrics=%d calls=%d/%d/%d", metricCount, first.calls, second.calls, failed.calls)
+	}
+}
+
 func TestFundamentalsUnknownQualityMetricsAreReturnedOnlyAfterFallbackExhaustion(t *testing.T) {
 	unknown := &fundamentalsFallbackTestProvider{
 		name: "baostock", snapshot: unknownFundamentalsFallbackSnapshot("baostock"),

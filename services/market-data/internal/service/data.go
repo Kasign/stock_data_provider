@@ -1694,7 +1694,7 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		}
 		if item.QualityStatus == model.QualityUnknown {
 			// Metrics may be present while their source quality remains unknown; try another source first.
-			if unknownCandidate == nil {
+			if betterUnknownChipDistribution(item, unknownCandidate) {
 				unknownCandidate = item
 			}
 			failures = append(failures, p.Name()+": chip-distribution quality is unknown")
@@ -1721,6 +1721,68 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all chip-distribution providers failed: %s", strings.Join(failures, " | "))
+}
+
+// betterUnknownCapitalFlowSnapshot 在回退耗尽后优先保留金额指标更多的候选；同指标数时优先较新的源端日期。
+func betterUnknownCapitalFlowSnapshot(candidate, current *model.CapitalFlow) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	metricCount := func(item *model.CapitalFlow) int {
+		count := 0
+		for _, value := range []*float64{item.MainNetInflow, item.Inflow5D, item.Inflow10D} {
+			if value != nil {
+				count++
+			}
+		}
+		return count
+	}
+	left, right := metricCount(candidate), metricCount(current)
+	if left != right {
+		return left > right
+	}
+	if candidate.ProviderDate != current.ProviderDate {
+		return candidate.ProviderDate > current.ProviderDate
+	}
+	return candidate.Observations > current.Observations
+}
+
+// betterUnknownChipDistribution 在回退耗尽后优先保留成本区间、获利比例和集中度字段更多的候选。
+func betterUnknownChipDistribution(candidate, current *model.ChipDistribution) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	metricCount := func(item *model.ChipDistribution) int {
+		count := 0
+		for _, value := range []*float64{
+			item.Cost90Low, item.Cost90High, item.Cost70Low, item.Cost70High,
+			item.ProfitRatio, item.Concentration90, item.Concentration70,
+		} {
+			if value != nil {
+				count++
+			}
+		}
+		return count
+	}
+	left, right := metricCount(candidate), metricCount(current)
+	if left != right {
+		return left > right
+	}
+	candidateDate := candidate.ProviderDate
+	if candidateDate == "" {
+		candidateDate = candidate.Date
+	}
+	currentDate := current.ProviderDate
+	if currentDate == "" {
+		currentDate = current.Date
+	}
+	return candidateDate > currentDate
 }
 
 func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model.CapitalFlow, bool, error) {
@@ -1802,7 +1864,7 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 		}
 		if item.QualityStatus == model.QualityUnknown {
 			// unknown 即使包含数值也不能抢先返回；优先给后续来源机会。
-			if unknownCandidate == nil {
+			if betterUnknownCapitalFlowSnapshot(item, unknownCandidate) {
 				unknownCandidate = item
 			}
 			failures = append(failures, p.Name()+": capital-flow quality is unknown")

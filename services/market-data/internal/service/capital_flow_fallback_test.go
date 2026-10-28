@@ -102,6 +102,30 @@ func TestCapitalFlowFallsBackFromUnknownQualitySnapshot(t *testing.T) {
 	}
 }
 
+func TestCapitalFlowKeepsUnknownCandidateWithMoreMetrics(t *testing.T) {
+	partial := capitalFlowFallbackItemForTest("eastmoney", model.QualityUnknown)
+	partial.Inflow5D = nil
+	partial.Inflow10D = nil
+	partial.Observations = 1
+	full := capitalFlowFallbackItemForTest("miaoxiang", model.QualityUnknown)
+	first := &capitalFlowFallbackTestProvider{name: "eastmoney", item: partial}
+	second := &capitalFlowFallbackTestProvider{name: "miaoxiang", item: full}
+	failed := &capitalFlowFallbackTestProvider{name: "third-source", err: errors.New("test source unavailable")}
+	svc := capitalFlowServiceForFallbackTest(first, second, failed)
+
+	got, hit, err := svc.CapitalFlow(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("CapitalFlow returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "miaoxiang" || got.Inflow5D == nil || got.Inflow10D == nil ||
+		got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected the unknown candidate with more metrics, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 || failed.calls != 1 {
+		t.Fatalf("expected all Providers to be tried, calls=%d/%d/%d", first.calls, second.calls, failed.calls)
+	}
+}
+
 func TestCapitalFlowReturnsUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 	unknown := &capitalFlowFallbackTestProvider{
 		name: "eastmoney", item: capitalFlowFallbackItemForTest("eastmoney", model.QualityUnknown),

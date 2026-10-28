@@ -65,6 +65,32 @@ func TestChipDistributionFallsBackFromUnknownQualitySnapshot(t *testing.T) {
 	}
 }
 
+func TestChipDistributionKeepsUnknownCandidateWithMoreMetrics(t *testing.T) {
+	partial := chipFallbackItem("eastmoney", model.QualityUnknown)
+	full := chipFallbackItem("miaoxiang", model.QualityUnknown)
+	cost90Low, cost90High, cost70Low, cost70High := 1300.0, 1700.0, 1400.0, 1600.0
+	profit, concentration90, concentration70 := 0.82, 0.15, 0.11
+	full.Cost90Low, full.Cost90High = &cost90Low, &cost90High
+	full.Cost70Low, full.Cost70High = &cost70Low, &cost70High
+	full.ProfitRatio, full.Concentration90, full.Concentration70 = &profit, &concentration90, &concentration70
+	first := &chipFallbackTestProvider{name: "eastmoney", item: partial}
+	second := &chipFallbackTestProvider{name: "miaoxiang", item: full}
+	failed := &chipFallbackTestProvider{name: "third-source", err: errors.New("test source unavailable")}
+	svc := chipFallbackService(first, second, failed)
+
+	got, hit, err := svc.ChipDistribution(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("ChipDistribution returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "miaoxiang" || got.Cost90Low == nil || got.ProfitRatio == nil ||
+		got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected unknown candidate with more chip metrics, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 || failed.calls != 1 {
+		t.Fatalf("expected all Providers to be tried, calls=%d/%d/%d", first.calls, second.calls, failed.calls)
+	}
+}
+
 func TestChipDistributionUnknownQualityIsReturnedOnlyAfterFallbackExhaustion(t *testing.T) {
 	unknown := &chipFallbackTestProvider{name: "eastmoney", item: chipFallbackItem("eastmoney", model.QualityUnknown)}
 	failed := &chipFallbackTestProvider{name: "miaoxiang", err: errors.New("test source unavailable")}

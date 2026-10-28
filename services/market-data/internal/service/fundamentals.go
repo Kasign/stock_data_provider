@@ -122,6 +122,48 @@ func fundamentalsCacheTTL(snapshot *model.FundamentalsSnapshot) time.Duration {
 	return 12 * time.Hour
 }
 
+// betterUnknownFundamentalsSnapshot 在回退耗尽后优先保留已填充分区与指标更多的财务候选；同覆盖时保留先注册的来源。
+func betterUnknownFundamentalsSnapshot(candidate, current *model.FundamentalsSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if candidate.HasData != current.HasData {
+		return candidate.HasData
+	}
+	type coverage struct {
+		dataSections       int
+		metricCount        int
+		publicationDates   int
+	}
+	score := func(snapshot *model.FundamentalsSnapshot) coverage {
+		result := coverage{}
+		for _, section := range snapshot.Sections {
+			if section.HasData {
+				result.dataSections++
+			}
+			result.metricCount += len(section.Metrics)
+			if strings.TrimSpace(section.PublicationDate) != "" {
+				result.publicationDates++
+			}
+		}
+		return result
+	}
+	left, right := score(candidate), score(current)
+	if left.dataSections != right.dataSections {
+		return left.dataSections > right.dataSections
+	}
+	if left.metricCount != right.metricCount {
+		return left.metricCount > right.metricCount
+	}
+	if left.publicationDates != right.publicationDates {
+		return left.publicationDates > right.publicationDates
+	}
+	return false
+}
+
 func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, quarter int) (*model.FundamentalsSnapshot, bool, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
@@ -193,7 +235,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		if !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
 			// Unknown-quality metrics may lack a provable publication date; keep them as a final candidate,
 			// but allow later providers to return a point-in-time safer snapshot first.
-			if unknownCandidate == nil || (snapshot.HasData && !unknownCandidate.HasData) {
+			if betterUnknownFundamentalsSnapshot(snapshot, unknownCandidate) {
 				unknownCandidate = snapshot
 			}
 			if !snapshot.HasData {
