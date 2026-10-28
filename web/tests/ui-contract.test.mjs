@@ -1505,6 +1505,16 @@ test("数据中心超时后即使探针迟到返回，也不能覆盖为成功",
   );
 });
 
+test("服务健康刷新把请求与 DOM 异常收敛为结果", () => {
+  const refresh = app.match(/async function refreshServices\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(refresh, "refreshServices implementation must exist");
+  assert.match(refresh, /try \{[\s\S]*?await Promise\.all\(\[[\s\S]*?runHealthCheck\(marketHealth, settings\)/);
+  assert.match(refresh, /catch \(renderError\)[\s\S]*?状态显示更新失败[\s\S]*?return \{ marketOK, analysisOK, marketState, analysisState, stale: false, renderError: message \}/);
+  assert.match(refresh, /catch \(error\)[\s\S]*?服务健康检查流程异常[\s\S]*?return \{ \.\.\.staleResult, stale: false, error: message \}/);
+  assert.match(refresh, /generation !== serviceRefreshGeneration/);
+  assert.match(refresh, /label\.title = message/);
+});
+
 test("服务健康刷新不会覆盖行情查询区域的独立提示", () => {
   const refreshServices = app.match(/async function refreshServices\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refreshServices, "refreshServices implementation must exist");

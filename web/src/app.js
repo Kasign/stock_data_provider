@@ -1831,28 +1831,77 @@ function renderSources(payload) {
 async function refreshServices() {
   const generation = ++serviceRefreshGeneration;
   const settings = state.settings;
-  const checks = await Promise.all([
-    runHealthCheck(marketHealth, settings),
-    runHealthCheck(analysisHealth, settings)
-  ]);
-  const marketState = serviceHealthState(checks[0]);
-  const analysisState = serviceHealthState(checks[1]);
-  const marketOK = marketState === "healthy";
-  const analysisOK = analysisState === "healthy";
-  if (generation !== serviceRefreshGeneration) return { marketOK, analysisOK, marketState, analysisState, stale: true };
-  setServiceStatus("market", marketState, serviceHealthLabel(marketState));
-  setServiceStatus("analysis", analysisState, serviceHealthLabel(analysisState));
-  const connectionDot = $("#connection-dot");
-  connectionDot.classList.toggle("is-online", marketOK && analysisOK);
-  connectionDot.classList.toggle("is-offline", marketState === "failed" && analysisState === "failed");
-  connectionDot.classList.toggle("is-unknown", ["unknown", "degraded"].includes(marketState) || ["unknown", "degraded"].includes(analysisState));
-  const connectionLabel = marketOK && analysisOK ? "服务已连接"
-    : marketState === "failed" && analysisState === "failed" ? "连接异常"
-      : marketOK || analysisOK ? "部分连接"
-        : marketState === "failed" || analysisState === "failed" ? "连接异常或状态未知" : "服务状态未知";
-  setText("#connection-label", connectionLabel);
-  return { marketOK, analysisOK, marketState, analysisState, stale: false };
+  const staleResult = {
+    marketOK: false,
+    analysisOK: false,
+    marketState: "unknown",
+    analysisState: "unknown",
+    stale: true
+  };
+
+  try {
+    const checks = await Promise.all([
+      runHealthCheck(marketHealth, settings),
+      runHealthCheck(analysisHealth, settings)
+    ]);
+    const marketState = serviceHealthState(checks[0]);
+    const analysisState = serviceHealthState(checks[1]);
+    const marketOK = marketState === "healthy";
+    const analysisOK = analysisState === "healthy";
+    if (generation !== serviceRefreshGeneration) {
+      return { marketOK, analysisOK, marketState, analysisState, stale: true };
+    }
+
+    try {
+      setServiceStatus("market", marketState, serviceHealthLabel(marketState));
+      setServiceStatus("analysis", analysisState, serviceHealthLabel(analysisState));
+      const connectionDot = $("#connection-dot");
+      connectionDot.classList.toggle("is-online", marketOK && analysisOK);
+      connectionDot.classList.toggle("is-offline", marketState === "failed" && analysisState === "failed");
+      connectionDot.classList.toggle("is-unknown",
+        ["unknown", "degraded"].includes(marketState) || ["unknown", "degraded"].includes(analysisState));
+      const connectionLabel = marketOK && analysisOK ? "服务已连接"
+        : marketState === "failed" && analysisState === "failed" ? "连接异常"
+          : marketOK || analysisOK ? "部分连接"
+            : marketState === "failed" || analysisState === "failed" ? "连接异常或状态未知" : "服务状态未知";
+      setText("#connection-label", connectionLabel);
+    } catch (renderError) {
+      if (generation !== serviceRefreshGeneration) return staleResult;
+      const message = "服务健康结果已获取，但状态显示更新失败：" + settingsCheckErrorMessage(renderError);
+      try {
+        const label = $("#connection-label");
+        if (label) {
+          label.textContent = "服务状态显示异常";
+          label.title = message;
+        }
+      } catch {}
+      return { marketOK, analysisOK, marketState, analysisState, stale: false, renderError: message };
+    }
+    return { marketOK, analysisOK, marketState, analysisState, stale: false };
+  } catch (error) {
+    if (generation !== serviceRefreshGeneration) return staleResult;
+    const message = "服务健康检查流程异常：" + settingsCheckErrorMessage(error);
+    // 即使健康请求或状态渲染意外失败，也将错误转换为结果，避免 void 调用产生未处理 rejection。
+    try {
+      setServiceStatus("market", "unknown", "状态未知");
+      setServiceStatus("analysis", "unknown", "状态未知");
+    } catch {}
+    try {
+      const connectionDot = $("#connection-dot");
+      connectionDot.classList.remove("is-online", "is-offline");
+      connectionDot.classList.add("is-unknown");
+    } catch {}
+    try {
+      const label = $("#connection-label");
+      if (label) {
+        label.textContent = "服务状态未知";
+        label.title = message;
+      }
+    } catch {}
+    return { ...staleResult, stale: false, error: message };
+  }
 }
+
 
 function describeConnectionHealthResults(marketResult, analysisResult) {
   const marketState = serviceHealthState(marketResult);
