@@ -1172,10 +1172,23 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if len(snapshot.Items) == 0 && (snapshot.QualityStatus == model.QualityUnknown || snapshot.QualityStatus == model.QualityStale) {
-			// 未知/过期目录中的空匹配不能证明证券不存在，继续尝试其他搜索源。
-			unknownEmpty = snapshot
-			failures = append(failures, p.Name()+": empty match from unconfirmed or stale stock directory")
+		if snapshot.QualityStatus == model.QualityUnknown {
+			if len(snapshot.Items) == 0 {
+				// 未知目录中的空匹配不能证明证券不存在，继续尝试其他搜索源。
+				unknownEmpty = snapshot
+				failures = append(failures, p.Name()+": empty match from unconfirmed stock directory")
+			} else {
+				// 有匹配条目但目录质量未知时，保留覆盖较完整的候选并继续尝试后备源。
+				if unknownMatches == nil || len(snapshot.Items) > len(unknownMatches.Items) {
+					unknownMatches = snapshot
+				}
+				failures = append(failures, p.Name()+": matches retained as unconfirmed directory fallback")
+			}
+			continue
+		}
+		if len(snapshot.Items) == 0 && snapshot.QualityStatus == model.QualityStale {
+			// 过期目录中的空匹配不能证明证券不存在，继续尝试其他搜索源。
+			failures = append(failures, p.Name()+": empty match from stale stock directory")
 			continue
 		}
 		if snapshot.QualityStatus == model.QualityStale {
@@ -1190,6 +1203,11 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 	if staleMatches != nil {
 		staleMatches.QualityReasons = appendReason(staleMatches.QualityReasons, "stock_search_fallback_exhausted_using_stale_directory")
 		return staleMatches, nil
+	}
+	if unknownMatches != nil {
+		unknownMatches.QualityStatus = model.QualityUnknown
+		unknownMatches.QualityReasons = appendReason(unknownMatches.QualityReasons, "stock_search_fallback_exhausted_with_unconfirmed_quality")
+		return unknownMatches, nil
 	}
 	if unknownEmpty != nil {
 		unknownEmpty.QualityStatus = model.QualityUnknown

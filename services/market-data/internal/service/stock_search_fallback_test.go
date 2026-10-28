@@ -68,6 +68,54 @@ func TestStockSearchFallsBackAfterUnknownEmptyMatch(t *testing.T) {
 	}
 }
 
+func unknownStockSearchWithMatchesForFallbackTest(source string) *model.StockSearchSnapshot {
+	snapshot := populatedStockSearchForFallbackTest(source)
+	snapshot.QualityStatus = model.QualityUnknown
+	snapshot.QualityReasons = []string{"provider_directory_quality_unknown"}
+	return snapshot
+}
+
+func TestStockSearchFallsBackFromUnknownQualityMatches(t *testing.T) {
+	first := &stockSearchFallbackTestProvider{name: "eastmoney", snapshot: unknownStockSearchWithMatchesForFallbackTest("eastmoney")}
+	second := &stockSearchFallbackTestProvider{name: "tencent", snapshot: populatedStockSearchForFallbackTest("tencent")}
+	svc := &DataService{stockSearchProviders: []provider.StockSearchProvider{first, second}}
+
+	got, err := svc.SearchStocks(context.Background(), "贵州茅台", 10)
+	if err != nil {
+		t.Fatalf("SearchStocks returned error: %v", err)
+	}
+	if got == nil || got.Source != "tencent" || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected confirmed-quality fallback match, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected both sources to be tried once, first=%d second=%d", first.calls, second.calls)
+	}
+}
+
+func TestStockSearchReturnsUnknownMatchesOnlyAfterFallbackExhaustion(t *testing.T) {
+	first := &stockSearchFallbackTestProvider{name: "eastmoney", snapshot: unknownStockSearchWithMatchesForFallbackTest("eastmoney")}
+	second := &stockSearchFallbackTestProvider{name: "tencent", err: errors.New("test provider unavailable")}
+	svc := &DataService{stockSearchProviders: []provider.StockSearchProvider{first, second}}
+
+	got, err := svc.SearchStocks(context.Background(), "贵州茅台", 10)
+	if err != nil {
+		t.Fatalf("SearchStocks returned error: %v", err)
+	}
+	if got == nil || len(got.Items) != 1 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected the unknown match to remain as last-resort data, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "stock_search_fallback_exhausted_with_unconfirmed_quality" {
+			found = true
+			break
+		}
+	}
+	if !found || first.calls != 1 || second.calls != 1 {
+		t.Fatalf("missing fallback-exhaustion reason or incomplete fallback: reasons=%v calls=%d/%d", got.QualityReasons, first.calls, second.calls)
+	}
+}
+
 func TestStockSearchReturnsUnknownOnlyAfterAllProvidersExhausted(t *testing.T) {
 	first := &stockSearchFallbackTestProvider{name: "eastmoney", snapshot: unknownStockSearchForFallbackTest("eastmoney")}
 	second := &stockSearchFallbackTestProvider{name: "tencent", err: errors.New("test search endpoint unavailable")}
