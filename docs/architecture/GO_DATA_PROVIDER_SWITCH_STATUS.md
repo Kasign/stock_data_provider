@@ -916,3 +916,7 @@ Tushare `stock_basic` 按 `ts_code` 查询单只证券时，原适配器只接�
 ## 2026-10-28 Tushare 涨跌停池重复证券门禁
 
 Tushare `limit_list_d` 现在检查同一响应中的普通 A 股证券代码唯一性；重复证券直接拒绝当前 Provider。已新增 HTTP fixture 回归测试源码，尚未执行 Go 测试、构建或真实上游请求。
+
+## 2026-10-28 个股公告证券类型门禁
+
+东方财富公告与 Tushare `anns_d` Provider 现会在请求上游之前校验证券是否属于受支持的普通 A 股代码段，拒绝 ETF、指数、可转债、B 股等非股票证券。已增加两个 Provider 的 HTTP fixture 测试源码，尚未执行。
