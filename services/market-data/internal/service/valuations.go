@@ -96,6 +96,22 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 				hasDegradation = true
 			}
 		}
+
+		// 比例类估值字段按经济含义只能是非负数；PE/PB 等估值倍数不在此列。
+		for _, metric := range []struct {
+			name  string
+			value *float64
+		}{
+			{name: "turnover_rate", value: item.TurnoverRatePercent},
+			{name: "turnover_rate_f", value: item.FloatTurnoverRatePercent},
+			{name: "volume_ratio", value: item.VolumeRatio},
+			{name: "dv_ratio", value: item.DividendYieldPercent},
+			{name: "dv_ttm", value: item.DividendYieldTTMPercent},
+		} {
+			if metric.value != nil && *metric.value < 0 {
+				return fmt.Errorf("valuation item %s has negative %s", symbol, metric.name)
+			}
+		}
 		if item.QualityStatus != model.QualityValid {
 			hasDegradation = true
 		}

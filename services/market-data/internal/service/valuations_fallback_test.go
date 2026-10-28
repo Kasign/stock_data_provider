@@ -166,6 +166,28 @@ func TestValuationsPrefersUnknownSnapshotWithMoreExtendedMetrics(t *testing.T) {
 	}
 }
 
+func TestValidateValuationSnapshotRejectsNegativeRatioMetrics(t *testing.T) {
+	cases := []struct {
+		name string
+		set  func(*model.ValuationItem)
+	}{
+		{name: "turnover_rate", set: func(item *model.ValuationItem) { value := -1.0; item.TurnoverRatePercent = &value }},
+		{name: "turnover_rate_f", set: func(item *model.ValuationItem) { value := -1.0; item.FloatTurnoverRatePercent = &value }},
+		{name: "volume_ratio", set: func(item *model.ValuationItem) { value := -1.0; item.VolumeRatio = &value }},
+		{name: "dv_ratio", set: func(item *model.ValuationItem) { value := -1.0; item.DividendYieldPercent = &value }},
+		{name: "dv_ttm", set: func(item *model.ValuationItem) { value := -1.0; item.DividendYieldTTMPercent = &value }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := validValuationsForFallbackTest("eastmoney")
+			tc.set(&snapshot.Items[0])
+			if err := validateValuationSnapshot([]string{"600519.SH"}, snapshot); err == nil {
+				t.Fatalf("expected negative %s to be rejected", tc.name)
+			}
+		})
+	}
+}
+
 func TestValidateValuationSnapshotRequiresSourceVersion(t *testing.T) {
 	snapshot := validValuationsForFallbackTest("eastmoney")
 	snapshot.SourceVersion = ""
