@@ -3235,24 +3235,83 @@ async function pollTask(generation = state.pollGeneration) {
 
 function pollTaskSafely(generation = state.pollGeneration) {
   return pollTask(generation).catch((error) => {
-    // 旧任务的迟到异常不能覆盖当前任务状态或暂停新任务的轮询。
-    if (generation !== state.pollGeneration || !state.taskId) return;
+    // 将异常恢复也视为不可信路径：其中任一 UI 更新失败都不能再次拒绝 Promise。
+    try {
+      // 旧任务的迟到异常不能覆盖当前任务状态或暂停新任务的轮询。
+      if (generation !== state.pollGeneration || !state.taskId) return;
 
-    const message = errorMessage(error);
-    state.taskStatusLoading = false;
-    state.taskStatusError = message;
-    state.taskStatusErrorRetrying = false;
-    setQualityPill($("#task-status-pill"), "unknown", "状态处理失败");
-    stopTaskPolling();
-    $("#task-poll-label").textContent =
-      "自动刷新已暂停：处理任务状态时发生意外错误：" + message +
-      "。请检查页面状态；问题排除后可点击“立即刷新状态”重试。";
-    if (state.view === "watchlist") {
+      let message = "未知异常";
       try {
-        renderWatchlist();
-      } catch (renderError) {
-        state.taskStatusError += "；自选股卡片刷新失败：" + errorMessage(renderError);
+        message = errorMessage(error);
+      } catch {
+        // 错误对象本身不可格式化时仍继续完成轮询收尾。
       }
+
+      const appendRecoveryError = (label, recoveryError) => {
+        try {
+          state.taskStatusError = [state.taskStatusError, label + errorMessage(recoveryError)]
+            .filter(Boolean)
+            .join("；");
+        } catch {
+          // 诊断记录失败不能让异常处理路径再次抛错。
+        }
+      };
+
+      try {
+        state.taskStatusLoading = false;
+      } catch (cleanupError) {
+        appendRecoveryError("清除状态加载标记失败：", cleanupError);
+      }
+      try {
+        state.taskStatusError = message;
+      } catch (cleanupError) {
+        appendRecoveryError("记录任务状态错误失败：", cleanupError);
+      }
+      try {
+        state.taskStatusErrorRetrying = false;
+      } catch (cleanupError) {
+        appendRecoveryError("更新状态重试标记失败：", cleanupError);
+      }
+
+      // 先停轮询，再尽力更新诊断；即使某个 DOM 节点或视图渲染异常也不再冒泡。
+      try {
+        stopTaskPolling();
+      } catch (cleanupError) {
+        appendRecoveryError("停止自动轮询失败：", cleanupError);
+      }
+      try {
+        setQualityPill($("#task-status-pill"), "unknown", "状态处理失败");
+      } catch (renderError) {
+        appendRecoveryError("状态徽标更新失败：", renderError);
+      }
+      try {
+        const pollLabel = $("#task-poll-label");
+        if (pollLabel) {
+          pollLabel.textContent =
+            "自动刷新已暂停：处理任务状态时发生意外错误：" + message +
+            "。请检查页面状态；问题排除后可点击“立即刷新状态”重试。";
+        }
+      } catch (renderError) {
+        appendRecoveryError("轮询诊断更新失败：", renderError);
+      }
+      if (state.view === "watchlist") {
+        try {
+          renderWatchlist();
+        } catch (renderError) {
+          appendRecoveryError("自选股卡片刷新失败：", renderError);
+        }
+      }
+    } catch {
+      // 最终兜底：异常收敛中的异常也不得形成新的未处理 Promise rejection。
+      try {
+        state.taskStatusLoading = false;
+      } catch {}
+      try {
+        state.taskStatusErrorRetrying = false;
+      } catch {}
+      try {
+        stopTaskPolling();
+      } catch {}
     }
   });
 }
