@@ -846,6 +846,10 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	if err != nil || parsedResponseDate.Format("2006-01-02") != responseDate {
 		return nil, fmt.Errorf("同花顺龙虎榜返回了无效交易日 %q", responseDate)
 	}
+	today := time.Now().In(loc).Format("2006-01-02")
+	if responseDate > today {
+		return nil, fmt.Errorf("同花顺龙虎榜源端交易日 %s 晚于中国市场当前日期 %s", responseDate, today)
+	}
 	if rawDate != "" && rawDate != responseDate {
 		return nil, fmt.Errorf("同花顺龙虎榜交易日不匹配: requested=%s returned=%s", rawDate, responseDate)
 	}
