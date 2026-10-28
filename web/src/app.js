@@ -166,7 +166,9 @@ const state = {
   sourceCount: 0,
   suppressedHistoryTaskId: "",
   suppressedHistoryTaskBase: "",
-  chatStockContext: null
+  chatStockContext: null,
+  // 用户主动清除后，禁止旧行情与页面切换重新注入股票上下文，直到开始新的行情查询。
+  chatStockContextCleared: false
 };
 
 const marketOverview = bindMarketOverview(() => state.settings, (item, source) => selectStockFromMarket(item, source));
@@ -1145,6 +1147,11 @@ function renderChatStockContext() {
 }
 
 function syncChatStockContextFromMarket() {
+  if (state.chatStockContextCleared) {
+    state.chatStockContext = null;
+    renderChatStockContext();
+    return;
+  }
   state.chatStockContext = state.quote && typeof state.quote.symbol === "string" && state.quote.symbol.trim()
     ? { symbol: state.quote.symbol.trim(), name: String(state.quote.name || state.quote.symbol).trim() }
     : null;
@@ -1329,7 +1336,7 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
     else if (nextView === "research") { stockResearch.syncSymbol(); renderResearchStockList(); }
     else if (nextView === "data") void dataCenter.refresh();
   }
-  if (nextView === "chat") syncChatStockContextFromMarket();
+  if (nextView === "chat" && previousView !== "chat") syncChatStockContextFromMarket();
   const runFlowDialog = $("#run-flow-dialog");
   if (nextView !== "tasks" && runFlowDialog?.open) runFlowDialog.close();
   document.querySelectorAll(".view").forEach((section) => {
@@ -2108,6 +2115,8 @@ async function runQuoteQuery(event) {
     return;
   }
 
+  // 新的用户行情查询允许后续成功回包建立新的临时问股上下文。
+  state.chatStockContextCleared = false;
   const generation = ++state.quoteQueryGeneration;
   const controller = new AbortController();
   state.quoteQueryController = controller;
@@ -3743,6 +3752,7 @@ $("#research-stock-list-body").addEventListener("click", (event) => {
   openResearchStock(button.dataset.researchOpenSymbol || "", button.dataset.researchOpenName || "");
 });
 $("#chat-clear-context").addEventListener("click", () => {
+  state.chatStockContextCleared = true;
   state.chatStockContext = null;
   renderChatStockContext();
 });
