@@ -528,8 +528,13 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 	for _, metric := range definition.metrics {
 		fields = append(fields, metric.field)
 	}
+	// 利润表和现金流量表使用单季合并报表；资产负债表是期末时点数据，使用最新合并报表。
+	reportType := "1"
+	if definition.apiName == "income" || definition.apiName == "cashflow" {
+		reportType = "2"
+	}
 	table, err := p.fetchCapabilityTable(ctx, definition.apiName, map[string]string{
-		"ts_code": symbol, "period": periodCompact, "report_type": "1",
+		"ts_code": symbol, "period": periodCompact, "report_type": reportType,
 	}, strings.Join(fields, ","))
 	if err != nil {
 		return model.FundamentalSection{}, err
@@ -562,11 +567,11 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 		if endDate != periodDate {
 			continue
 		}
-		reportType, readErr := table.stringValue(row, "report_type")
+		rowReportType, readErr := table.stringValue(row, "report_type")
 		if readErr != nil {
 			return model.FundamentalSection{}, readErr
 		}
-		if strings.TrimSpace(reportType) != "1" {
+		if strings.TrimSpace(rowReportType) != reportType {
 			continue
 		}
 
