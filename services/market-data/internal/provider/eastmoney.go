@@ -2686,13 +2686,24 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 			return nil, fmt.Errorf("Eastmoney limit-pool contains duplicate symbol %s", symbol)
 		}
 		seen[symbol] = struct{}{}
+		firstTouchRaw, lastTouchRaw := parseEastmoneyBoardString(raw, "fbt"), parseEastmoneyBoardString(raw, "lbt")
+		firstTouch, lastTouch := parseEastmoneyLimitTime(firstTouchRaw), parseEastmoneyLimitTime(lastTouchRaw)
+		itemQualityReasons := []string{"provider_snapshot_timestamp_not_exposed"}
+		for _, touchTime := range []struct{ raw, parsed string }{
+			{raw: firstTouchRaw, parsed: firstTouch},
+			{raw: lastTouchRaw, parsed: lastTouch},
+		} {
+			if strings.TrimSpace(touchTime.raw) != "" && touchTime.parsed == "" {
+				itemQualityReasons = appendUniqueEastmoneyReason(itemQualityReasons, "provider_limit_pool_touch_time_invalid")
+				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_limit_pool_touch_time_invalid")
+			}
+		}
 		snapshot.Items = append(snapshot.Items, model.LimitPoolItem{
 			Symbol: symbol, Code: code, Name: name, ChangePercent: change,
-			FirstTouchTime:    parseEastmoneyLimitTime(parseEastmoneyBoardString(raw, "fbt")),
-			LastTouchTime:     parseEastmoneyLimitTime(parseEastmoneyBoardString(raw, "lbt")),
+			FirstTouchTime: firstTouch, LastTouchTime: lastTouch,
 			ConsecutiveBoards: parseEastmoneyBoardInteger(raw, "lbc"), BrokenCount: parseEastmoneyBoardInteger(raw, "zbc"),
 			Industry: parseEastmoneyBoardString(raw, "hybk"), Source: p.Name(), SourceVersion: snapshot.SourceVersion,
-			FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+			FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded, QualityReasons: itemQualityReasons,
 		})
 	}
 	return snapshot, nil
@@ -2709,6 +2720,12 @@ func parseEastmoneyLimitTime(value string) string {
 		}
 	}
 	value = strings.Repeat("0", 6-len(value)) + value
+	hour, hourErr := strconv.Atoi(value[:2])
+	minute, minuteErr := strconv.Atoi(value[2:4])
+	second, secondErr := strconv.Atoi(value[4:])
+	if hourErr != nil || minuteErr != nil || secondErr != nil || hour > 23 || minute > 59 || second > 59 {
+		return ""
+	}
 	return value[:2] + ":" + value[2:4] + ":" + value[4:]
 }
 

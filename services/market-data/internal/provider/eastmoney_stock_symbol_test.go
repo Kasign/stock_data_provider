@@ -131,3 +131,46 @@ func TestEastmoneyStockSearchDropsNonAshareAndMarketMismatchRows(t *testing.T) {
 		t.Fatalf("quality reasons should disclose filtered non-A-share rows, got %v", reasons)
 	}
 }
+
+
+func TestParseEastmoneyLimitTimeValidatesClockRange(t *testing.T) {
+	for _, tt := range []struct {
+		raw  string
+		want string
+	}{
+		{raw: "93000", want: "09:30:00"},
+		{raw: "093001", want: "09:30:01"},
+		{raw: "240000", want: ""},
+		{raw: "126000", want: ""},
+		{raw: "125960", want: ""},
+		{raw: "999999", want: ""},
+		{raw: "abc123", want: ""},
+	} {
+		if got := parseEastmoneyLimitTime(tt.raw); got != tt.want {
+			t.Errorf("parseEastmoneyLimitTime(%q) = %q, want %q", tt.raw, got, tt.want)
+		}
+	}
+}
+
+func TestEastmoneyLimitPoolMarksInvalidTouchTimesAsDegraded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"tc":1,"qdate":"20261026","pool":[{"c":"600519","n":"贵州茅台","m":"1","zdp":10,"fbt":"246000","lbt":"093000"}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(2*time.Second, server.URL, server.URL)
+	p.limitPoolBaseURL = server.URL
+	got, err := p.FetchLimitPool(context.Background(), "up", "2026-10-26", 10)
+	if err != nil {
+		t.Fatalf("FetchLimitPool returned error: %v", err)
+	}
+	if len(got.Items) != 1 || got.Items[0].FirstTouchTime != "" || got.Items[0].LastTouchTime != "09:30:00" {
+		t.Fatalf("invalid touch time should be omitted without damaging the valid one: %+v", got.Items)
+	}
+	if !strings.Contains(strings.Join(got.Items[0].QualityReasons, ","), "provider_limit_pool_touch_time_invalid") {
+		t.Fatalf("item quality should disclose invalid touch time: %+v", got.Items[0].QualityReasons)
+	}
+	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_limit_pool_touch_time_invalid") {
+		t.Fatalf("snapshot quality should disclose invalid touch time: %+v", got.QualityReasons)
+	}
+}
