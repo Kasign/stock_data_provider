@@ -1515,6 +1515,23 @@ test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 R
   assert.equal((app.match(/state\.taskSequence = 0;\s*state\.taskEventCursor = 0;/g) || []).length, 3, "新建、恢复和清空任务时都重置独立事件游标");
 });
 
+test("任务切换和分析连接切换会重置事件游标并隔离迟到轮询", () => {
+  const contexts = [
+    ["new task creation", "async function createTask(event) {", "function startAnalysisForSymbol("],
+    ["recent task restoration", "function activateTaskReference(record) {", "function restoreLastTask("],
+    ["analysis API change", "function invalidateActiveTaskForAnalysisBaseChange(", "function applySettings("]
+  ];
+  for (const [label, startMarker, endMarker] of contexts) {
+    const start = app.indexOf(startMarker);
+    const end = app.indexOf(endMarker, start + startMarker.length);
+    assert.ok(start >= 0 && end > start, label + " state-reset function must exist");
+    const body = app.slice(start, end);
+    assert.match(body, /state\.taskSequence = 0;\s*state\.taskEventCursor = 0;\s*state\.taskEvents\.clear\(\)/, label + " resets both event cursors and stored events");
+  }
+  assert.match(app, /function stopTaskPolling\(\) \{[\s\S]*?state\.pollGeneration \+= 1/);
+  assert.match(app, /if \(generation !== state\.pollGeneration \|\| taskId !== state\.taskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
+});
+
  
 test("任务状态回包不能替换任务标的集合，Run 与任务复用同一规范化比较", () => {
   assert.match(app, /function sameTaskSymbolSet\(expectedRaw, actualRaw\)/);
