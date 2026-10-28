@@ -820,3 +820,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - 增加行业/概念排行的原始返回条数与 total/limit 关系检查，源端返回不足或超额时走 Provider 回退；服务层要求返回条数与请求上限及总数相符，防止截断候选只因源端时间缺失而以通用 degraded 原因进入缓存。
 - 若源端未给出可用 total，适配器会记录使用已返回条数作为下界的明确质量原因。相关 HTTP fixture 与服务层测试源码已补齐；未运行测试、构建、CI 或真实 Provider 请求，仍需统一验收。
+
+
+### 指数成分旧缓存覆盖计数复核（2026-10-28）
+
+- 修复指数成分缓存命中遗漏覆盖质量降级的问题：非空旧缓存缺少 `provider_returned` 时，同样追加 `provider_constituent_source_coverage_unreported`；原本 `valid/degraded` 的结果降级，原本 `unknown` 的结果仍保持 unknown。
+- 新增旧缓存 valid 和 unknown 两种状态的回归测试源码。尚未运行测试、构建、CI 或真实 Provider 请求；统一验收仍需确认。

@@ -175,7 +175,7 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 ## 指数成分来源覆盖计数
 
 - `total` 与 `items` 表示规范化后实际返回的成分数量；`provider_returned` 表示来源在去重/名称补全前返回的候选成分条数；`excluded_count` 记录因重复或缺少可核验名称而被排除的候选条数。若 `provider_returned > 0`，必须满足 `provider_returned = total + excluded_count`。
-- 只要 `excluded_count > 0`，快照质量不得为 `valid`。旧缓存或旧 Provider 没有来源覆盖计数时，非空快照降级并附加 `provider_constituent_source_coverage_unreported`。这些字段描述当前来源快照的覆盖情况，并不代表历史成分生效日期已知。
+- 只要 `excluded_count > 0`，快照质量不得为 `valid`。旧缓存或旧 Provider 没有来源覆盖计数时，非空且原本为 `valid/degraded` 的快照必须降级并附加 `provider_constituent_source_coverage_unreported`；原本为 `unknown` 的快照保持 `unknown`，只补充覆盖原因，不能通过补元数据变成已确认数据。缓存命中与新 Provider 回包必须调用同一处理逻辑。这些字段描述当前来源快照的覆盖情况，并不代表历史成分生效日期已知。
 
 
 ## A 股证券名称/代码搜索
