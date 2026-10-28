@@ -250,6 +250,14 @@ func TestSinaFetchDailyBarsNormalizesUnadjustedRows(t *testing.T) {
 	}
 }
 
+func TestSinaDailyDateRangeRejectsFutureEndDate(t *testing.T) {
+	now := time.Now()
+	future := now.In(sinaChinaLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	if _, _, err := sinaDailyDateRange("2026-10-20", future, 10, now); err == nil || !strings.Contains(err.Error(), "end date must not be after today") {
+		t.Fatalf("future Sina end date must be rejected, got %v", err)
+	}
+}
+
 func TestSinaFetchDailyBarsRejectsUnverifiedAdjustmentAndDateRange(t *testing.T) {
 	p := NewSinaConfigured(0, "http://127.0.0.1:1/unused", "http://127.0.0.1:1/kline")
 	if _, err := p.FetchDailyBars(context.Background(), "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "only supports verified adjustment basis") {

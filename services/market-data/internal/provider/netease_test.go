@@ -91,6 +91,16 @@ func TestNeteaseAmbiguousVolumeUnitDoesNotProduceNormalizedShares(t *testing.T) 
 	}
 }
 
+func TestNeteaseDateRangeRejectsFutureEndDate(t *testing.T) {
+	now := time.Now()
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	future := now.In(loc).AddDate(0, 0, 1).Format("2006-01-02")
+	if _, _, err := neteaseDateRange("2026-10-20", future, 10, now); err == nil || !strings.Contains(err.Error(), "end date must not be after today") {
+		t.Fatalf("future Netease end date must be rejected, got %v", err)
+	}
+}
+
 func TestNeteaseDateRangeRejectsInvalidAndReversedDates(t *testing.T) {
 	loc, _ := time.LoadLocation("Asia/Shanghai")
 	now := time.Date(2026, 10, 23, 15, 0, 0, 0, loc)

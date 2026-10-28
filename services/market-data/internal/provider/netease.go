@@ -570,6 +570,9 @@ func neteaseDateRange(startDate, endDate string, limit int, now time.Time) (time
 		}
 		end = parsed
 	}
+	if end.Format("2006-01-02") > localNow.Format("2006-01-02") {
+		return time.Time{}, time.Time{}, errors.New("Netease end date must not be after today in Asia/Shanghai")
+	}
 	if limit <= 0 {
 		limit = 400
 	}
