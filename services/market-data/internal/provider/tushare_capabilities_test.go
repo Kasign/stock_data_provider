@@ -413,6 +413,77 @@ func TestTushareLimitPoolEmptyResultDoesNotInventProviderReportDate(t *testing.T
 	}
 }
 
+
+
+func TestTushareLimitPoolMarksExcludedNonAShareRows(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
+	makeRow := func(symbol, name string) []any {
+		values := make([]any, len(fields))
+		for index, field := range fields {
+			switch field {
+			case "trade_date":
+				values[index] = "20261027"
+			case "ts_code":
+				values[index] = symbol
+			case "industry":
+				values[index] = "消费"
+			case "name":
+				values[index] = name
+			case "close":
+				values[index] = 1500.0
+			case "pct_chg":
+				values[index] = 1.2
+			case "amount":
+				values[index] = 100.0
+			case "limit":
+				values[index] = "U"
+			default:
+				values[index] = nil
+			}
+		}
+		return values
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare limit-pool request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "limit_list_d" || request.Params["trade_date"] != "20261027" || request.Params["limit_type"] != "U" {
+			t.Errorf("unexpected Tushare limit-pool request: %+v", request)
+		}
+		writeTushareTestTable(w, fields, [][]any{
+			makeRow("510300.SH", "沪深300ETF"),
+			makeRow("600519.SH", "贵州茅台"),
+		})
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchLimitPool(context.Background(), "up", "2026-10-27", 30)
+	if err != nil {
+		t.Fatalf("FetchLimitPool: %v", err)
+	}
+	if got.Total != 1 || len(got.Items) != 1 || got.Items[0].Symbol != "600519.SH" {
+		t.Fatalf("non-A-share rows must not enter the pool, got %+v", got)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("filtered provider rows must remain visible as degraded quality, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_non_a_share_security_rows_excluded" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing non-A-share exclusion reason: %v", got.QualityReasons)
+	}
+}
+
 func TestTushareDragonTigerEmptyResultDoesNotInventProviderReportDate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request tushareIndexWeightRequest

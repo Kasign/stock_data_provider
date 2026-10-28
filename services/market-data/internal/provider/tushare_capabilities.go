@@ -1262,6 +1262,7 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行证券代码无效: %q", index, rawSymbol)
 		}
 		if !isTushareAShareSymbol(symbol) {
+			reasons = appendTushareReason(reasons, "provider_non_a_share_security_rows_excluded")
 			continue
 		}
 		name, readErr := table.stringValue(row, "name")
