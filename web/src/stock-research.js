@@ -108,15 +108,18 @@ export function bindStockResearch(getSettings,getSymbol){
   const settings=typeof getSettings==="function"?getSettings():null;
   if(!settings?.apiKey){markApiKeyRequired();return false;}
   if(!append)state.requested.add("announcements");
-  if(state.announcementLoading)return false;
+  const replacingInFlight=state.announcementLoading;
+  if(replacingInFlight&&append)return false;
   if(append&&!state.announcementHasMore)return false;
+  if(replacingInFlight){abort("announcements");state.announcementLoading=false;}
   if(!append){
    state.announcementPage=0;state.announcementHasMore=false;
    clearPanel("announcements","正在读取本次公告，尚无新结果。",symbol);
    setQuality("announcements-quality","unknown","读取中…");
   }
   setError("announcements-error","");
-  abort("announcements");const seq=state.generation.announcements,requestPage=append?state.announcementPage+1:1;
+  if(!replacingInFlight)abort("announcements");
+  const seq=state.generation.announcements,requestPage=append?state.announcementPage+1:1;
   state.announcementLoading=true;$("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="正在加载…";
   const ctl=new AbortController();state.controllers.announcements=ctl;
   try{

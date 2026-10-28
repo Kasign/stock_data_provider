@@ -201,6 +201,8 @@ test("stock research clears stale snapshots on reload, request errors, and missi
   assert.match(stockResearch, /valuations-reasons/);
   assert.match(app, /stockResearch\.invalidate\(/);
   assert.match(stockResearch, /if\(!append\)setQuality\("announcements-quality","invalid","读取失败"\)/);
+  assert.match(stockResearch, /const replacingInFlight=state\.announcementLoading;[\s\S]*?if\(replacingInFlight&&append\)return false;[\s\S]*?if\(replacingInFlight\)\{abort\("announcements"\);state\.announcementLoading=false;\}/);
+  assert.match(stockResearch, /if\(!replacingInFlight\)abort\("announcements"\);\s*const seq=state\.generation\.announcements/);
 });
 
 test("changing market API credentials invalidates old stock-search suggestions", () => {
