@@ -98,3 +98,17 @@ func TestEastmoneyAnnouncementDisplayTimeParserDoesNotUseNoticeDateAsTimestamp(t
 		t.Fatal("article URL pattern should be available")
 	}
 }
+
+
+func TestEastmoneyFetchStockAnnouncementsRejectsUnderfilledPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"success":1,"data":{"page_index":1,"page_size":20,"total_hits":21,"list":[{"art_code":"AN202610231234567890","codes":[{"stock_code":"600036"}],"notice_date":"2026-10-23","title":"测试公告","display_time":"2026-10-23 18:30:00"}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithAnnouncements(2*time.Second, "", "", "", "", "", "", "", "", "", server.URL, "")
+	_, err := p.FetchStockAnnouncements(context.Background(), "600036.SH", "2026-10-20", "2026-10-26", 1, 20)
+	if err == nil || !strings.Contains(err.Error(), "expected 20 from total_hits=21") {
+		t.Fatalf("underfilled announcement page must be rejected, got %v", err)
+	}
+}

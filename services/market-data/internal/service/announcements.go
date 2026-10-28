@@ -52,6 +52,9 @@ func normalizeAnnouncementRange(rawStart, rawEnd string) (string, string, error)
 }
 
 func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, pageSize int, snapshot *model.StockAnnouncementSnapshot) error {
+	if page < 1 || pageSize < 1 {
+		return errors.New("announcement page and page size must be positive")
+	}
 	if snapshot == nil {
 		return errors.New("announcement provider returned an empty snapshot")
 	}
@@ -72,10 +75,16 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		}
 		return nil
 	}
-	if snapshot.Pages != (snapshot.Total+pageSize-1)/pageSize || page > snapshot.Pages ||
+	expectedPages := 1 + (snapshot.Total-1)/pageSize
+	expectedReturned := snapshot.Total - (page-1)*pageSize
+	if expectedReturned > pageSize {
+		expectedReturned = pageSize
+	}
+	if snapshot.Pages != expectedPages || page > snapshot.Pages ||
+		expectedReturned <= 0 || snapshot.Returned != expectedReturned ||
 		snapshot.Returned == 0 || snapshot.Total < snapshot.Returned || !snapshot.HasData ||
 		snapshot.HasMore != (page < snapshot.Pages) {
-		return errors.New("announcement page counters are inconsistent with source total")
+		return errors.New("announcement page counters or returned rows are inconsistent with source total")
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("announcement quality status %q is unsupported", snapshot.QualityStatus)

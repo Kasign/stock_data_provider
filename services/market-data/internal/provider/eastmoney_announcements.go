@@ -166,7 +166,8 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 	fetchedAt := time.Now().UTC()
 	pages := 0
 	if total > 0 {
-		pages = (total + pageSize - 1) / pageSize
+		// 使用减一后整除，避免 total 接近 int 上界时加法溢出。
+		pages = 1 + (total-1)/pageSize
 	}
 	if total == 0 {
 		if len(payload.Data.List) != 0 {
@@ -177,11 +178,15 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 	if page > pages {
 		return nil, fmt.Errorf("requested announcement page %d exceeds source page count %d", page, pages)
 	}
-	if len(payload.Data.List) == 0 {
-		return nil, fmt.Errorf("Eastmoney announcement total_hits=%d but page %d returned no rows", total, page)
+	expectedRows := total - (page-1)*pageSize
+	if expectedRows > pageSize {
+		expectedRows = pageSize
 	}
-	if len(payload.Data.List) > pageSize {
-		return nil, fmt.Errorf("Eastmoney announcement returned %d rows above requested page_size=%d", len(payload.Data.List), pageSize)
+	if expectedRows <= 0 || len(payload.Data.List) != expectedRows {
+		return nil, fmt.Errorf(
+			"Eastmoney announcement page %d returned %d rows, expected %d from total_hits=%d and page_size=%d",
+			page, len(payload.Data.List), expectedRows, total, pageSize,
+		)
 	}
 
 	snapshot := &model.StockAnnouncementSnapshot{

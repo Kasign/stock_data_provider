@@ -117,3 +117,16 @@ func TestStockAnnouncementsReturnsUnknownOnlyAfterFallbackExhaustion(t *testing.
 	for _, reason := range got.QualityReasons { if reason == "announcements_fallback_exhausted_without_confirmed_data" { found = true } }
 	if !found || first.calls != 1 || second.calls != 1 { t.Fatalf("missing fallback exhaustion marker or incomplete fallback: reasons=%v calls=%d/%d", got.QualityReasons, first.calls, second.calls) }
 }
+
+
+func TestValidateStockAnnouncementSnapshotRejectsUnderfilledPage(t *testing.T) {
+	snapshot := validAnnouncementsForFallbackTest("eastmoney")
+	snapshot.Total = 21
+	snapshot.Pages = 2
+	snapshot.HasMore = true
+
+	err := validateStockAnnouncementSnapshot("600519.SH", "2026-10-20", "2026-10-26", 1, 20, snapshot)
+	if err == nil || !strings.Contains(err.Error(), "returned rows are inconsistent") {
+		t.Fatalf("announcement page with fewer rows than source total requires must be rejected, got %v", err)
+	}
+}
