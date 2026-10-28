@@ -3080,7 +3080,7 @@ async function createTask(event) {
   state.taskStatusLoading = false;
   state.taskStatusError = "";
   state.taskStatusErrorRetrying = false;
-  setQualityPill($("#task-status-pill"), "unknown", "正在恢复");
+  setQualityPill($("#task-status-pill"), "unknown", "正在创建");
   state.lastRunResult = null;
   state.runResultReadStatus = "";
   state.runResultReadError = "";
@@ -3192,7 +3192,7 @@ async function createTask(event) {
     };
     renderTask(normalizedTask);
     if (state.taskStatusLoading) {
-      setQualityPill($("#task-status-pill"), "unknown", "正在恢复");
+      setQualityPill($("#task-status-pill"), "unknown", "正在确认");
     }
     if (creationResponseWarnings.length) {
       $("#task-poll-label").textContent = "创建任务已确认；回包" + creationResponseWarnings.join("、") +

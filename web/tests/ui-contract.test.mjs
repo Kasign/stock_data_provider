@@ -131,6 +131,18 @@ test("watchlist marks a retained Run result when re-reading fails and refreshes 
   assert.match(loader, /if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
 });
 
+test("creation, contract confirmation, and history restoration use distinct task status labels", () => {
+  const createStart = app.indexOf("async function createTask(event) {");
+  const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
+  const creator = app.slice(createStart, createEnd);
+  assert.ok(creator.includes('setQualityPill($("#task-status-pill"), "unknown", "正在创建");'));
+  assert.ok(creator.includes('setQualityPill($("#task-status-pill"), "unknown", "正在确认");'));
+  assert.ok(!creator.includes('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");'));
+  const restoreStart = app.indexOf("function activateTaskReference(record) {");
+  const restoreEnd = app.indexOf("\nfunction restoreLastTask(", restoreStart);
+  assert.ok(app.slice(restoreStart, restoreEnd).includes('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");'));
+});
+
 test("task restoration and manual refresh mark cached status as unconfirmed", () => {
   assert.ok(app.includes("taskStatusLoading: false"));
   const pollStart = app.indexOf("async function pollTask(");
