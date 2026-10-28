@@ -189,7 +189,8 @@ test("new task creation responses cannot poison requested symbols or run/status 
   assert.match(creator, /const responseRunId = responseSymbolsMatch && responseRunIdValid \? task\.run_id : ""/);
   assert.match(creator, /const responseStatus = responseSymbolsMatch && responseStatusValid \? task\.status : ""/);
   assert.match(creator, /const normalizedTask = \{[\s\S]*?task_id: task\.task_id,[\s\S]*?run_id: responseRunId,[\s\S]*?status: responseStatus,[\s\S]*?task_type: taskType,[\s\S]*?symbols,/);
-  assert.match(creator, /if \(creationResponseWarnings\.length \|\| !TERMINAL_TASK_STATUSES\.has\(responseStatus\)\) \{[\s\S]*?pollTask\(generation\)/);
+  assert.match(creator, /state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 500\);/);
+  assert.doesNotMatch(creator, /void loadTaskRunResult\(responseRunId, task\.task_id\)/, "终态创建/幂等回包也必须先确认阶段事件");
   assert.match(creator, /current_stage: responseSymbolsMatch \? task\.current_stage : "等待服务端确认"/);
 });
 
@@ -1491,6 +1492,20 @@ test("增量阶段事件不会覆盖已读取的相同或更旧序号", () => {
   assert.match(app, /sequence <= previousSequence \|\| state\.taskEvents\.has\(sequence\)/);
   assert.match(app, /state\.taskEvents\.set\(sequence, normalized\)/);
   assert.match(app, /无效、重复或旧序号的阶段事件，已忽略/);
+});
+
+test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 Run 报告", () => {
+  assert.match(app, /taskEventCursor: 0/);
+  const pollStart = app.indexOf("async function pollTask(");
+  const pollEnd = app.indexOf("\\nasync function createTask(", pollStart);
+  const poller = pollStart >= 0 && pollEnd > pollStart ? app.slice(pollStart, pollEnd) : "";
+  assert.match(poller, /const requestedEventCursor = state\.taskEventCursor/);
+  assert.match(poller, /getAnalysisTaskEvents\(requestSettings, taskId, requestedEventCursor\)/);
+  assert.match(poller, /!Number\.isSafeInteger\(nextAfterSequence\)/);
+  assert.match(poller, /state\.taskEventCursor = nextAfterSequence/);
+  assert.match(poller, /eventPageHasMore = eventPayload\.events\.length >= TASK_EVENT_PAGE_SIZE &&[\s\S]*?nextAfterSequence > requestedEventCursor/);
+  assert.match(poller, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?if \(eventPageHasMore && !eventError && !eventsSkipped\) \{[\s\S]*?正在继续读取剩余阶段事件[\s\S]*?setTimeout\(\(\) => pollTask\(generation\), 0\)[\s\S]*?return;[\s\S]*?stopTaskPolling\(\)[\s\S]*?loadTaskRunResult/);
+  assert.equal((app.match(/state\.taskSequence = 0;\s*state\.taskEventCursor = 0;/g) || []).length, 3, "新建、恢复和清空任务时都重置独立事件游标");
 });
 
  

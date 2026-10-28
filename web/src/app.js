@@ -109,6 +109,7 @@ function taskEventStatusTone(statusKey) {
 }
 
 const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
+const TASK_EVENT_PAGE_SIZE = 100;
 let initialConnectionDraft = null;
 let serviceRefreshGeneration = 0;
 let sourceRefreshGeneration = 0;
@@ -146,6 +147,7 @@ const state = {
   runResultReadError: "",
   runResultGeneration: 0,
   taskSequence: 0,
+  taskEventCursor: 0,
   taskEvents: new Map(),
   taskEventsLoaded: false,
   taskEventsUnavailable: false,
@@ -2959,9 +2961,10 @@ async function pollTask(generation = state.pollGeneration) {
   if (analysisBase !== state.settings.analysisBase) return;
   const requestSettings = { ...state.settings, analysisBase };
   const endpointGeneration = state.analysisConnectionGeneration;
+  const requestedEventCursor = state.taskEventCursor;
   const eventRequest = state.taskEventsUnavailable
     ? Promise.resolve({ skipped: true })
-    : getAnalysisTaskEvents(requestSettings, taskId, state.taskSequence);
+    : getAnalysisTaskEvents(requestSettings, taskId, requestedEventCursor);
   const [taskResult, eventResult] = await Promise.allSettled([
     getAnalysisTask(requestSettings, taskId),
     eventRequest
@@ -2972,6 +2975,7 @@ async function pollTask(generation = state.pollGeneration) {
   let taskError = null;
   let eventError = null;
   let eventsSkipped = false;
+  let eventPageHasMore = false;
 
   if (taskResult.status === "fulfilled") {
     const payload = taskResult.value;
@@ -3017,46 +3021,62 @@ async function pollTask(generation = state.pollGeneration) {
         ? "阶段事件接口返回了其他任务的事件，已忽略。"
         : "阶段事件接口未返回 task_id，已忽略该响应。");
     } else {
-      state.taskEventsLoaded = true;
-      state.taskEventsError = "";
-      let invalidStructureCount = 0;
-      let mismatchedRunCount = 0;
-      let ignoredSequenceCount = 0;
-      const previousSequence = state.taskSequence;
-      const expectedEventRunId = state.runId || task?.run_id || "";
-      for (const item of eventPayload.events) {
+      const nextAfterSequence = eventPayload.next_after_sequence;
+      const highestReportedSequence = eventPayload.events.reduce((maximum, item) => {
         const sequence = typeof item?.sequence === "number" ? item.sequence : NaN;
-        if (!item || typeof item !== "object" || Array.isArray(item) ||
-            !Number.isSafeInteger(sequence) || sequence < 1 ||
-            !item.event || typeof item.event !== "object" || Array.isArray(item.event)) {
-          invalidStructureCount += 1;
-          continue;
+        return Number.isSafeInteger(sequence) && sequence >= 1 ? Math.max(maximum, sequence) : maximum;
+      }, requestedEventCursor);
+      if (!Number.isSafeInteger(nextAfterSequence) ||
+          nextAfterSequence < requestedEventCursor ||
+          (eventPayload.events.length > 0 && nextAfterSequence <= requestedEventCursor) ||
+          nextAfterSequence < highestReportedSequence) {
+        eventError = responseContractError("阶段事件接口返回的 next_after_sequence 无效或未前进。");
+      } else {
+        // 请求游标独立于可显示的事件序号推进；单条坏事件不能卡住后续分页。
+        state.taskEventCursor = nextAfterSequence;
+        eventPageHasMore = eventPayload.events.length >= TASK_EVENT_PAGE_SIZE &&
+          nextAfterSequence > requestedEventCursor;
+        state.taskEventsLoaded = true;
+        state.taskEventsError = "";
+        let invalidStructureCount = 0;
+        let mismatchedRunCount = 0;
+        let ignoredSequenceCount = 0;
+        const previousSequence = state.taskSequence;
+        const expectedEventRunId = state.runId || task?.run_id || "";
+        for (const item of eventPayload.events) {
+          const sequence = typeof item?.sequence === "number" ? item.sequence : NaN;
+          if (!item || typeof item !== "object" || Array.isArray(item) ||
+              !Number.isSafeInteger(sequence) || sequence < 1 ||
+              !item.event || typeof item.event !== "object" || Array.isArray(item.event)) {
+            invalidStructureCount += 1;
+            continue;
+          }
+          const eventRunId = typeof item.event.run_id === "string" ? item.event.run_id.trim() : "";
+          if (!expectedEventRunId || !eventRunId || eventRunId !== expectedEventRunId) {
+            mismatchedRunCount += 1;
+            continue;
+          }
+          if (sequence <= previousSequence || state.taskEvents.has(sequence)) {
+            ignoredSequenceCount += 1;
+            continue;
+          }
+          const normalized = { ...item, sequence };
+          state.taskEvents.set(sequence, normalized);
+          state.taskSequence = Math.max(state.taskSequence, sequence);
         }
-        const eventRunId = typeof item.event.run_id === "string" ? item.event.run_id.trim() : "";
-        if (!expectedEventRunId || !eventRunId || eventRunId !== expectedEventRunId) {
-          mismatchedRunCount += 1;
-          continue;
+        const ignoredReasons = [];
+        if (invalidStructureCount) {
+          ignoredReasons.push("字段无效的阶段事件（序号或 event 结构不符合契约），已忽略 " + invalidStructureCount + " 条");
         }
-        if (sequence <= previousSequence || state.taskEvents.has(sequence)) {
-          ignoredSequenceCount += 1;
-          continue;
+        if (mismatchedRunCount) {
+          ignoredReasons.push("Run ID 缺失或与当前任务关联的 Run 不一致，已忽略 " + mismatchedRunCount + " 条");
         }
-        const normalized = { ...item, sequence };
-        state.taskEvents.set(sequence, normalized);
-        state.taskSequence = Math.max(state.taskSequence, sequence);
+        if (ignoredSequenceCount) {
+          ignoredReasons.push("重复或旧序号的阶段事件，已忽略 " + ignoredSequenceCount + " 条");
+        }
+        if (ignoredReasons.length) state.taskEventsError = ignoredReasons.join("；") + "。";
+        renderTaskEvents();
       }
-      const ignoredReasons = [];
-      if (invalidStructureCount) {
-        ignoredReasons.push("字段无效的阶段事件（序号或 event 结构不符合契约），已忽略 " + invalidStructureCount + " 条");
-      }
-      if (mismatchedRunCount) {
-        ignoredReasons.push("Run ID 缺失或与当前任务关联的 Run 不一致，已忽略 " + mismatchedRunCount + " 条");
-      }
-      if (ignoredSequenceCount) {
-        ignoredReasons.push("重复或旧序号的阶段事件，已忽略 " + ignoredSequenceCount + " 条");
-      }
-      if (ignoredReasons.length) state.taskEventsError = ignoredReasons.join("；") + "。";
-      renderTaskEvents();
     }
   } else {
     eventError = eventResult.reason;
@@ -3087,6 +3107,11 @@ async function pollTask(generation = state.pollGeneration) {
   }
 
   if (task && TERMINAL_TASK_STATUSES.has(task.status)) {
+    if (eventPageHasMore && !eventError && !eventsSkipped) {
+      $("#task-poll-label").textContent = "任务已结束，正在继续读取剩余阶段事件…";
+      state.pollTimer = window.setTimeout(() => pollTask(generation), 0);
+      return;
+    }
     stopTaskPolling();
     if (eventError) {
       $("#task-poll-label").textContent =
@@ -3123,6 +3148,11 @@ async function pollTask(generation = state.pollGeneration) {
     return;
   }
 
+  if (eventPageHasMore) {
+    $("#task-poll-label").textContent = "阶段事件较多，正在继续读取后续事件…";
+    state.pollTimer = window.setTimeout(() => pollTask(generation), 0);
+    return;
+  }
   if (eventsSkipped) {
     state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
     return;
@@ -3180,6 +3210,7 @@ async function createTask(event) {
   state.runResultReadStatus = "";
   state.runResultReadError = "";
   state.taskSequence = 0;
+  state.taskEventCursor = 0;
   state.taskEvents.clear();
   state.taskEventFilter = "all";
   state.taskEventsLoaded = false;
@@ -3316,11 +3347,8 @@ async function createTask(event) {
     renderTaskEvents();
     openRunFlowDrawer();
     const generation = state.pollGeneration;
-    if (creationResponseWarnings.length || !TERMINAL_TASK_STATUSES.has(responseStatus)) {
-      state.pollTimer = window.setTimeout(() => pollTask(generation), 500);
-    } else if (responseRunId) {
-      void loadTaskRunResult(responseRunId, task.task_id);
-    }
+    // 即使幂等命中已结束任务，也先读取并排空阶段事件，再加载最终 Run 报告。
+    state.pollTimer = window.setTimeout(() => pollTask(generation), 500);
   } catch (error) {
     if (creationContextGeneration !== state.taskContextGeneration) {
       feedback.hidden = false;
@@ -3393,6 +3421,7 @@ function activateTaskReference(record) {
   state.runResultReadStatus = "";
   state.runResultReadError = "";
   state.taskSequence = 0;
+  state.taskEventCursor = 0;
   state.taskEvents.clear();
   state.taskEventFilter = "all";
   state.taskEventsLoaded = false;
@@ -3530,6 +3559,7 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.runResultReadStatus = "";
   state.runResultReadError = "";
   state.taskSequence = 0;
+  state.taskEventCursor = 0;
   state.taskEvents.clear();
   state.taskEventFilter = "all";
   state.taskEventsLoaded = false;
