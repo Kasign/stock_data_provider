@@ -324,6 +324,9 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		if payload.Result == nil || len(payload.Result.Data) == 0 {
 			return nil, fmt.Errorf("eastmoney stock-basic report %s returned no row for %s", reportName, symbol)
 		}
+		if len(payload.Result.Data) != 1 {
+			return nil, fmt.Errorf("eastmoney stock-basic report %s expected exactly one row for %s, got %d", reportName, symbol, len(payload.Result.Data))
+		}
 		row := payload.Result.Data[0]
 		field := func(name string) string {
 			raw, ok := row[name]

@@ -353,6 +353,7 @@ func TestEastmoneyFetchStockBasicRejectsMismatchedOrEmptyRows(t *testing.T) {
 	}{
 		{"mismatch", `{"result":{"data":[{"SECUCODE":"000001.SZ","SECURITY_NAME_ABBR":"wrong"}]}}`, "symbol mismatch"},
 		{"empty", `{"result":{"data":[]}}`, "no row"},
+		{"duplicate rows", `{"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台"},{"SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"另一个名称"}]}}`, "expected exactly one row"},
 		{"missing name", `{"result":{"data":[{"SECUCODE":"600519.SH","LISTING_DATE":"2001-08-27"}]}}`, "name is empty"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
