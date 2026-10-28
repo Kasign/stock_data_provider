@@ -230,6 +230,8 @@ test("task polling and saved task references are scoped to the analysis API base
   assert.match(app, /endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /const taskAnalysisBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase;[\s\S]*?analysis_base: taskAnalysisBase/);
   assert.match(app, /旧任务不再自动轮询/);
+  const baseInvalidation = app.match(/function invalidateActiveTaskForAnalysisBaseChange\([\s\S]*?\n\}/)?.[0] || "";
+  assert.match(baseInvalidation, /if \(state\.view === "watchlist"\) renderWatchlist\(\);/, "切换分析地址后应立即清除可见自选卡片中的旧活动任务与 Run 状态");
   assert.match(app, /if \(requestedBase !== state\.settings\.analysisBase\)/);
   assert.match(recentTaskModule, /analysis_base: typeof record\.analysis_base === "string"/);
 });

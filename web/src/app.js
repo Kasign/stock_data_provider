@@ -3283,6 +3283,9 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   );
 }
 
+  // 地址切换已清空活动任务/Run；若自选股页当前可见，立即同步卡片展示。
+  if (state.view === "watchlist") renderWatchlist();
+
 function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) {
   const previousSettings = state.settings;
   const analysisBaseChanged = previousSettings.analysisBase !== nextSettings.analysisBase;
