@@ -2917,6 +2917,23 @@ function setRunResultReloadBusy(busy) {
   }
 }
 
+function releaseRunResultReloadBusy() {
+  try {
+    setRunResultReloadBusy(false);
+  } catch (error) {
+    // 结果按钮的 DOM 更新失败不能中断任务/连接上下文的状态清理。
+    try {
+      const message = typeof error?.message === "string" ? error.message : "未知异常";
+      state.runResultReadError = [
+        state.runResultReadError,
+        "恢复结果读取按钮失败：" + message
+      ].filter(Boolean).join("；");
+    } catch {
+      // 状态记录也失败时仍必须继续完成上下文切换。
+    }
+  }
+}
+
 async function loadTaskRunResult(runId, expectedTaskId) {
   const analysisBase = state.taskAnalysisBase || state.settings.analysisBase;
   if (analysisBase !== state.settings.analysisBase || state.taskId !== expectedTaskId) return;
@@ -3049,10 +3066,30 @@ async function loadTaskRunResult(runId, expectedTaskId) {
   }
 }
 function stopTaskPolling() {
-  if (state.pollTimer) window.clearTimeout(state.pollTimer);
+  const timer = state.pollTimer;
   state.pollTimer = null;
+  // 先失效当前代际，再进行定时器与按钮清理；UI 故障不能让旧回包继续生效。
   state.pollGeneration += 1;
-  setTaskRefreshBusy(false);
+  try {
+    if (timer) window.clearTimeout(timer);
+  } catch (error) {
+    try {
+      const message = typeof error?.message === "string" ? error.message : "未知异常";
+      state.taskStatusError = [state.taskStatusError, "清除任务轮询定时器失败：" + message]
+        .filter(Boolean).join("；");
+    } catch {}
+  }
+  try {
+    setTaskRefreshBusy(false);
+  } catch (error) {
+    try {
+      const message = typeof error?.message === "string" ? error.message : "未知异常";
+      state.taskStatusError = [state.taskStatusError, "恢复任务刷新按钮失败：" + message]
+        .filter(Boolean).join("；");
+    } catch {
+      // 按钮 DOM 不可用时仍保持代际已失效，不能中断调用方的上下文清理。
+    }
+  }
 }
 
 async function pollTask(generation = state.pollGeneration) {
@@ -3386,7 +3423,7 @@ async function createTask(event) {
   const creationContextGeneration = state.taskContextGeneration;
   const creationHistoryGeneration = state.taskHistoryGeneration;
   state.runResultGeneration += 1;
-  setRunResultReloadBusy(false);
+  releaseRunResultReloadBusy();
   stopTaskPolling();
   state.taskId = "";
   state.taskCreatedAt = "";
@@ -3599,7 +3636,7 @@ function activateTaskReference(record) {
   state.suppressedHistoryTaskBase = "";
   state.taskContextGeneration += 1;
   state.runResultGeneration += 1;
-  setRunResultReloadBusy(false);
+  releaseRunResultReloadBusy();
   stopTaskPolling();
   state.taskId = record.task_id;
   state.taskCreatedAt = typeof record.created_at === "string" ? record.created_at : "";
@@ -3738,7 +3775,7 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.taskContextGeneration += 1;
   state.analysisConnectionGeneration += 1;
   state.runResultGeneration += 1;
-  setRunResultReloadBusy(false);
+  releaseRunResultReloadBusy();
   stopTaskPolling();
   state.taskId = "";
   state.taskCreatedAt = "";

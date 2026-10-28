@@ -186,6 +186,29 @@ test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
 });
 
 
+test("任务切换与分析 API 切换不会被按钮解锁异常中断", () => {
+  assert.match(app, /function releaseRunResultReloadBusy\(\) \{[\s\S]*?try \{\s*setRunResultReloadBusy\(false\);\s*\} catch[\s\S]*?继续完成上下文切换/);
+
+  const stop = app.match(/function stopTaskPolling\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(stop, "停止轮询共用函数必须存在");
+  assert.match(stop, /state\.pollGeneration \+= 1;[\s\S]*?try \{[\s\S]*?setTaskRefreshBusy\(false\);[\s\S]*?catch/);
+  assert.match(stop, /const timer = state\.pollTimer;\s*state\.pollTimer = null/);
+
+  const contexts = [
+    ["创建任务", "async function createTask(event) {", "function startAnalysisForSymbol("],
+    ["恢复最近任务", "function activateTaskReference(record) {", "function restoreLastTask("],
+    ["分析 API 地址切换", "function invalidateActiveTaskForAnalysisBaseChange(", "function applySettings("]
+  ];
+  for (const [label, startMarker, endMarker] of contexts) {
+    const start = app.indexOf(startMarker);
+    const end = app.indexOf(endMarker, start + startMarker.length);
+    const body = start >= 0 && end > start ? app.slice(start, end) : "";
+    assert.ok(body.includes("releaseRunResultReloadBusy();"), label + " 应使用不会冒泡的 Run 按钮解锁");
+    assert.ok(body.includes("stopTaskPolling();"), label + " 应停止旧轮询");
+    assert.doesNotMatch(body, /setRunResultReloadBusy\(false\);/, label + " 不应直接调用可能中断清理的按钮解锁");
+  }
+});
+
 test("任务轮询意外异常会暂停自动刷新并保留手动重试入口", () => {
   const safeStart = app.indexOf("function pollTaskSafely(");
   const safeEnd = app.indexOf("\nasync function createTask(", safeStart);
