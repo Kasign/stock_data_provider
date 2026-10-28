@@ -1324,10 +1324,43 @@ function syncRefreshButtonContext() {
 }
 
 function refreshMarketWorkspace() {
-  return Promise.all([
-    marketOverview.refresh(["indices", "breadth", "sectors", "pool", "hot"], "#market-data-updated"),
-    marketActivity.refresh()
-  ]);
+  const startModule = (label, operation) => {
+    try {
+      return Promise.resolve(operation()).then(
+        (value) => ({ label, ok: true, value }),
+        (error) => ({ label, ok: false, error })
+      );
+    } catch (error) {
+      // 捕获模块启动阶段同步异常，和 Promise rejection 使用同一结果结构。
+      return Promise.resolve({ label, ok: false, error });
+    }
+  };
+  const requests = [
+    startModule("市场总览", () =>
+      marketOverview.refresh(["indices", "breadth", "sectors", "pool", "hot"], "#market-data-updated")),
+    startModule("资金与活跃度", () => marketActivity.refresh())
+  ];
+
+  // allSettled 语义：单个模块失败不取消等待其他模块，也不让 void 调用产生未处理 rejection。
+  return Promise.all(requests).then((results) => {
+    const failures = results.filter((result) => !result.ok);
+    if (failures.length) {
+      const details = failures.map((result) =>
+        result.label + "：" + settingsCheckErrorMessage(result.error));
+      try {
+        setText("#market-data-updated", "市场工作台部分模块刷新失败：" + details.join("；"));
+      } catch {
+        // 元信息节点不可用时，保留逐模块捕获结果并避免再次抛错。
+      }
+    }
+    return results;
+  }).catch((error) => {
+    // 最终汇总防线：异常只返回诊断，不向页面初始化或切换流程传播 rejection。
+    try {
+      setText("#market-data-updated", "市场工作台刷新汇总异常：" + settingsCheckErrorMessage(error));
+    } catch {}
+    return [];
+  });
 }
 
 function setView(view, { updateHash = true, refreshData = true } = {}) {

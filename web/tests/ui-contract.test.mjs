@@ -1505,6 +1505,17 @@ test("数据中心超时后即使探针迟到返回，也不能覆盖为成功",
   );
 });
 
+test("市场工作台各模块刷新失败会独立收敛并显示诊断", () => {
+  const refresh = app.match(/function refreshMarketWorkspace\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(refresh, "refreshMarketWorkspace implementation must exist");
+  assert.match(refresh, /const startModule = \(label, operation\) => \{[\s\S]*?Promise\.resolve\(operation\)\.then/);
+  assert.match(refresh, /\(error\) => \(\{ label, ok: false, error \}\)/);
+  assert.match(refresh, /catch \(error\) \{[\s\S]*?return Promise\.resolve\(\{ label, ok: false, error \}\)/);
+  assert.match(refresh, /startModule\("市场总览"[\s\S]*?startModule\("资金与活跃度"/);
+  assert.match(refresh, /Promise\.all\(requests\)\.then\(\(results\) => \{[\s\S]*?result\.ok[\s\S]*?市场工作台部分模块刷新失败/);
+  assert.match(refresh, /市场工作台刷新汇总异常：[\s\S]*?return \[\]/);
+});
+
 test("服务健康刷新把请求与 DOM 异常收敛为结果", () => {
   const refresh = app.match(/async function refreshServices\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refresh, "refreshServices implementation must exist");
