@@ -1718,7 +1718,7 @@ func TestValidateIndexConstituentsRejectsFutureReportDate(t *testing.T) {
 	snapshot := &model.IndexConstituentSnapshot{
 		IndexSymbol: "000300.SH", ProviderReportDate: futureDate,
 		Items: []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}},
-		Total: 1, Source: "tushare", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+		Total: 1, Source: "tushare", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
 	}
 	if err := validateIndexConstituentsSnapshot("000300.SH", snapshot); err == nil || !strings.Contains(err.Error(), "in the future") {
 		t.Fatalf("future constituent report date must be rejected, got %v", err)
@@ -1736,7 +1736,7 @@ func TestIndexConstituentCoverageCountersAndLegacyDowngrade(t *testing.T) {
 				{Symbol: "000001.SZ", Code: "000001", Name: "平安银行"},
 			},
 			Total: 2, ProviderReturned: 3, ExcludedCount: 1,
-			Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			QualityReasons: []string{"one_or_more_constituent_names_missing_from_current_stock_directory"},
 		}
 	}
@@ -1793,9 +1793,9 @@ func TestValidateIndexDailyBarsRejectsQualityAndUnitMismatch(t *testing.T) {
 				IndexSymbol: "000300.SH", TradeDate: "2026-10-26",
 				Open: 10, High: 11, Low: 9, Close: 10.5,
 				Volume: &volume, Amount: &amount, VolumeUnit: "shares", AmountUnit: "CNY",
-				Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+				Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			}},
-			Total: 1, Source: "tushare", FetchedAt: now, QualityStatus: model.QualityValid,
+			Total: 1, Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 		}
 	}
 	t.Run("parent quality", func(t *testing.T) {
