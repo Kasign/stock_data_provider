@@ -242,3 +242,8 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 ## 2026-10-27 个股主力资金流补充
 
 个股主力资金流新增东方财富公开日资金流端点 `https://push2.eastmoney.com/api/qt/stock/fflow/kline/get`，默认随东方财富能力启用，不要求额外 API Key。当前只使用 `f51` 日期和 `f52` 主力净流入金额，回传 `provider_date`；5 日/10 日合计要求对应窗口金额完整。妙想 `MX_API` 仍可显式启用作为后备，但不是资金流能力的唯一来源。字段映射参考公开端点资料（[接口字段参考](https://github.com/wlor0623/llm-dev-knowledge/blob/main/knowledge-base/eastmoney-quotes-api/endpoints/capital-flow.md)）；实际连通性、当日盘中数据语义及金额口径仍未执行统一验收，输出质量保持 degraded。
+## 2026-10-28 国内 Provider 质量契约复核状态
+
+最近一轮静态审查已为主要国内 A 股数据域补上来源版本/归一化版本边界：父快照与条目版本需一致；旧归一化版本缓存回源、Provider 结果进入回退而不直接输出；资金流/筹码缺少真实版本时不以字面值 `unknown` 冒充版本。个股基础资料增加股本、市值的有限值与大小关系校验，并验证上市/退市日期先后关系。Tushare 日 K 和指数日 K 的成交额单位换算已补本地 HTTP fixture 测试源码。数据库日 K 回退按来源、source_version、复权参考日期与归一化版本分组，并以固定规则选择候选。
+
+这些变化只表示实现和测试源码已更新，不等于测试执行或真实数据源验收完成。测试、构建、CI、Provider 权限/覆盖与字段级 Python 等价性仍留给统一验收；海外数据源继续暂缓。
