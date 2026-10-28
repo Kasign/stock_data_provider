@@ -91,6 +91,23 @@ test("task restoration validates local references and guards stale asynchronous 
 });
 
 
+test("task polling errors mark last-known status stale and successful refresh clears it", () => {
+  assert.ok(app.includes('taskStatusError: ""'));
+  assert.ok(app.includes('taskStatusErrorRetrying: false'));
+  const pollStart = app.indexOf("async function pollTask(");
+  const pollEnd = app.indexOf("\nasync function createTask(", pollStart);
+  const poller = pollStart >= 0 && pollEnd > pollStart ? app.slice(pollStart, pollEnd) : "";
+  assert.ok(poller.includes("state.taskStatusError = errorMessage(taskError);"), "任务状态读取失败时保存提示");
+  assert.ok(poller.includes("state.taskStatusErrorRetrying = isRetryableApiError(taskError) && !taskError.responseContractError;"), "区分自动重试与永久暂停");
+  assert.ok(poller.includes('state.taskStatusError = "";'), "下一次有效 Task 回包清除旧错误");
+  assert.ok(poller.includes('setQualityPill($("#task-status-pill"), "unknown", state.taskStatusErrorRetrying ? "状态刷新失败" : "状态读取失败")'), "任务状态徽标不得继续冒充为已确认的 running/succeeded");
+  const watchlistRenderer = app.slice(app.indexOf("function renderWatchlist("), app.indexOf("\nfunction addCurrentSymbolToWatchlist("));
+  assert.ok(watchlistRenderer.includes("状态读取异常（上次状态："), "自选卡片应将上次状态标为未验证");
+  assert.ok(watchlistRenderer.includes("自动重试中") && watchlistRenderer.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
+  const manualRefresh = app.slice(app.indexOf('$("#refresh-task").addEventListener("click"'), app.indexOf('$("#recent-analysis-search")'));
+  assert.ok(manualRefresh.includes("state.taskEventsUnavailable = false") && manualRefresh.includes("pollTask(generation)"), "手动刷新重新尝试任务与事件读取");
+});
+
 test("polling pauses on permanent API errors and Run reads use bounded, stale-safe retries", () => {
   assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
   assert.match(app, /const RUN_RESULT_RETRY_DELAYS_MS = \[1000, 2500, 5000\]/);

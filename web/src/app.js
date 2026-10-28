@@ -131,6 +131,8 @@ const state = {
   taskSymbols: [],
   taskType: "post_market_scan",
   taskStatus: "",
+  taskStatusError: "",
+  taskStatusErrorRetrying: false,
   isCreatingTask: false,
   lastRunResult: null,
   runResultGeneration: 0,
@@ -674,7 +676,9 @@ function renderWatchlist(records, storageReadable, storageValid) {
     const taskLine = document.createElement("small");
     taskLine.className = "watchlist-tracking-line";
     taskLine.textContent = activeTaskMatches
-      ? "当前任务：" + taskStatusLabel(state.taskStatus) + " · " + state.taskId
+      ? state.taskStatusError
+        ? "当前任务：状态读取异常（上次状态：" + taskStatusLabel(state.taskStatus) + (state.taskStatusErrorRetrying ? "，自动重试中" : "，自动刷新已暂停") + "） · " + state.taskId
+        : "当前任务：" + taskStatusLabel(state.taskStatus) + " · " + state.taskId
       : recentTask
         ? "最近任务：" + taskStatusLabel(recentTask.status) + (recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "") + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
         : "最近任务：暂无本地任务记录（不代表从未分析）";
@@ -2876,6 +2880,8 @@ async function pollTask(generation = state.pollGeneration) {
         : "任务状态接口未返回有效状态，已暂停自动刷新。");
     } else {
       task = candidate;
+      state.taskStatusError = "";
+      state.taskStatusErrorRetrying = false;
       renderTask(task);
     }
   } else {
@@ -2926,6 +2932,13 @@ async function pollTask(generation = state.pollGeneration) {
     state.taskEventsError = errorMessage(eventError);
     if (!isRetryableApiError(eventError) || eventError.responseContractError) state.taskEventsUnavailable = true;
     renderTaskEvents();
+  }
+
+  if (taskError) {
+    state.taskStatusError = errorMessage(taskError);
+    state.taskStatusErrorRetrying = isRetryableApiError(taskError) && !taskError.responseContractError;
+    setQualityPill($("#task-status-pill"), "unknown", state.taskStatusErrorRetrying ? "状态刷新失败" : "状态读取失败");
+    if (state.view === "watchlist") renderWatchlist();
   }
 
   // A permanent task lookup failure means the current task reference cannot be polled safely.
@@ -3021,6 +3034,8 @@ async function createTask(event) {
   state.taskSymbols = symbols;
   state.taskType = taskType;
   state.taskStatus = "";
+  state.taskStatusError = "";
+  state.taskStatusErrorRetrying = false;
   state.lastRunResult = null;
   state.taskSequence = 0;
   state.taskEvents.clear();
@@ -3140,6 +3155,8 @@ function activateTaskReference(record) {
   state.taskSymbols = Array.isArray(record.symbols) ? record.symbols : [];
   state.taskType = record.task_type || "post_market_scan";
   state.taskStatus = record.status || "";
+  state.taskStatusError = "";
+  state.taskStatusErrorRetrying = false;
   state.lastRunResult = null;
   state.taskSequence = 0;
   state.taskEvents.clear();
@@ -3264,6 +3281,8 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.taskSymbols = [];
   state.taskType = "post_market_scan";
   state.taskStatus = "";
+  state.taskStatusError = "";
+  state.taskStatusErrorRetrying = false;
   state.lastRunResult = null;
   state.taskSequence = 0;
   state.taskEvents.clear();
