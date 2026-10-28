@@ -992,3 +992,10 @@
 - 旧刷新汇总的 generation 同步失效，避免前一配置的完成回调覆盖“连接配置已变更”的新状态；与上一提交中的龙虎榜/交易日历失效逻辑分开维护。
 - 代码和回归契约提交：https://github.com/Kasign/stock_data_provider/commit/a6d546cc43fd7a2943e5440e23b33b721d7bbb98
 - 本轮未运行本地测试、构建或浏览器自动化；新加的静态契约等待后续统一执行。
+
+## 2026-10-28 阶段事件 Run 身份校验
+
+- 阶段事件响应先校验外层 task_id，再逐项核对 event.run_id 与当前已确认的 Run ID；缺失或不一致的事件不会进入当前 Task 的时间线。
+- 结构错误、Run 身份不匹配、重复或旧序号分别计数并展示诊断，避免混合数据只显示成笼统的事件错误。
+- 代码与 UI 回归契约提交：https://github.com/Kasign/stock_data_provider/commit/1b781d6117f3dbc358fd78146b2b656eb49ca5bd
+- 本轮未执行本地 Node 测试；对应静态契约等待后续统一执行。
