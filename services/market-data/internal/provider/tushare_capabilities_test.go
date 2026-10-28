@@ -241,8 +241,11 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 			if request.Params["trade_date"] != tradeDate {
 				t.Errorf("daily_basic trade_date = %q, want %q", request.Params["trade_date"], tradeDate)
 			}
-			writeTushareTestTable(w, []string{"ts_code", "trade_date", "pe", "pe_ttm", "pb", "ps_ttm"}, [][]any{
-				{"600519.SH", tradeDate, 22.5, 18.4, 6.1, 7.2},
+			writeTushareTestTable(w, []string{
+				"ts_code", "trade_date", "pe", "pe_ttm", "pb", "ps_ttm",
+				"turnover_rate", "turnover_rate_f", "volume_ratio", "dv_ratio", "dv_ttm",
+			}, [][]any{
+				{"600519.SH", tradeDate, 22.5, 18.4, 6.1, 7.2, 1.25, 1.7, 0.95, 2.3, 2.6},
 			})
 		default:
 			t.Errorf("unexpected Tushare api_name %q", request.APIName)
@@ -268,6 +271,15 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 	}
 	if item.PETTM == nil || *item.PETTM != 18.4 {
 		t.Fatalf("expected TTM PE to remain mapped, got %+v", item.PETTM)
+	}
+	if item.TurnoverRatePercent == nil || *item.TurnoverRatePercent != 1.25 ||
+		item.FloatTurnoverRatePercent == nil || *item.FloatTurnoverRatePercent != 1.7 ||
+		item.VolumeRatio == nil || *item.VolumeRatio != 0.95 {
+		t.Fatalf("turnover and volume-ratio fields were not mapped: %+v", item)
+	}
+	if item.DividendYieldPercent == nil || *item.DividendYieldPercent != 2.3 ||
+		item.DividendYieldTTMPercent == nil || *item.DividendYieldTTMPercent != 2.6 {
+		t.Fatalf("dividend-yield fields were not mapped: %+v", item)
 	}
 	if !containsTushareReason(item.QualityReasons, "provider_pe_mrq_not_supported_by_tushare_daily_basic") {
 		t.Fatalf("expected missing-MRQ quality reason, got %+v", item.QualityReasons)

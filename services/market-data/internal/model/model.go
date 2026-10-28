@@ -347,8 +347,13 @@ type ValuationItem struct {
 	PEStatic       *float64      `json:"pe_static"`
 	PBMRQ          *float64      `json:"pb_mrq"`
 	PSTTM          *float64      `json:"ps_ttm"`
-	PCFTTM         *float64      `json:"pcf_ttm"`
-	Source         string        `json:"source"`
+	PCFTTM                   *float64      `json:"pcf_ttm"`
+	TurnoverRatePercent      *float64      `json:"turnover_rate_percent,omitempty"`
+	FloatTurnoverRatePercent *float64      `json:"float_turnover_rate_percent,omitempty"`
+	VolumeRatio              *float64      `json:"volume_ratio,omitempty"`
+	DividendYieldPercent     *float64      `json:"dividend_yield_percent,omitempty"`
+	DividendYieldTTMPercent  *float64      `json:"dividend_yield_ttm_percent,omitempty"`
+	Source                   string        `json:"source"`
 	SourceVersion  string        `json:"source_version,omitempty"`
 	FetchedAt      time.Time     `json:"fetched_at"`
 	QualityStatus  QualityStatus `json:"quality_status"`

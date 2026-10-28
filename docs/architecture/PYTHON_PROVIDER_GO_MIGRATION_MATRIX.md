@@ -47,7 +47,7 @@
 | 个股资金流 `get_capital_flow_context` | 东方财富公开日资金流端点为默认源，MX API 为显式可选后备；字段按人民币元规范化，5/10 日累计要求完整观测 | `f51` 日期与 `f52` 主力净流入已接线；源端实际单位、盘中完整度与精确 available_at 仍待统一验收，缺值不补零 |
 | 龙虎榜 `get_dragon_tiger_context` | 东方财富原生 `DragonTigerProvider`、API `GET /api/v1/market/dragon-tiger?date=YYYY-MM-DD&page=1&page_size=100`；同花顺/Tushare 是可选能力 | 当前配置默认启用东方财富路由，但源端只有交易日、没有精确快照时间；空列表应为 `unknown` 而非确认零条，金额缺失保留 `null`。Runner 与 NAS/Docker 的交易日/分页覆盖仍待统一验收 |
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
-| 批量估值 | 可选 Tushare daily_basic Go Provider 与 GET /api/v1/market/valuations?symbols=... | 按最近已完成交易日返回 PE/PB/PS；不支持的 PCF 保持 null，并返回 provider_report_date；缺少精确更新时间时 quality 为 degraded；默认关闭，需 Token/积分权限，待统一验收 |
+| 批量估值 | 可选 Tushare daily_basic Go Provider 与 GET /api/v1/market/valuations?symbols=... | 按最近已完成交易日返回 PE/PB/PS、换手率、流通换手率、量比和两类股息率；不支持的 PCF 与 MRQ PE 保持 null，并返回 provider_report_date；缺少精确更新时间时 quality 为 degraded；默认关闭，需 Token/积分权限，待统一验收 |
 | 股票名称 / 代码搜索 | 独立 `StockSearchProvider`，东方财富 CLIST 证券目录与 6 小时缓存，API `GET /api/v1/stocks/search?q=贵州茅台&limit=10` | 实测已证实目录源 HTTP 200 并报告 5,925 条证券，但首轮 `pz=5000`、次轮 `pz=1000` 都遇到服务端分页上限低于请求值，代码因此只扫描首页并漏掉“贵州茅台”。当前调整为每页 100 条、最多 100 页，并新增后续页匹配回归测试；待 Go CI 与真实 Runner 再验收 |
 | 新闻 / 公告 | 东方财富公告 API + Go Core 原生 Bocha、Tavily、Brave News 和显式 SearXNG；多源并发、日期门禁、域名加权、反营销、URL/标题去重与个股相关性排序 | 已补源适配器及本地 fixture 测试源码；未运行测试/构建/CI/真实搜索请求。仍保留 Python bridge fallback；更完整的多维情报查询与生产覆盖率需统一验收 |
 

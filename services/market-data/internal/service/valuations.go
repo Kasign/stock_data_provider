@@ -83,7 +83,11 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("valuation item %s has unsupported quality %q", symbol, item.QualityStatus)
 		}
-		for _, value := range []*float64{item.PETTM, item.PEMRQ, item.PEStatic, item.PBMRQ, item.PSTTM, item.PCFTTM} {
+		for _, value := range []*float64{
+			item.PETTM, item.PEMRQ, item.PEStatic, item.PBMRQ, item.PSTTM, item.PCFTTM,
+			item.TurnoverRatePercent, item.FloatTurnoverRatePercent, item.VolumeRatio,
+			item.DividendYieldPercent, item.DividendYieldTTMPercent,
+		} {
 			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
 				return fmt.Errorf("valuation item %s has non-finite metric", symbol)
 			}

@@ -1038,7 +1038,7 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	}
 	table, err := p.fetchCapabilityTable(ctx, "daily_basic", map[string]string{
 		"ts_code": strings.Join(symbols, ","), "trade_date": compactDate,
-	}, "ts_code,trade_date,pe,pe_ttm,pb,ps_ttm")
+	}, "ts_code,trade_date,pe,pe_ttm,pb,ps_ttm,turnover_rate,turnover_rate_f,volume_ratio,dv_ratio,dv_ttm")
 	if err != nil {
 		return nil, err
 	}
@@ -1090,13 +1090,37 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		if readErr != nil {
 			return nil, readErr
 		}
+		turnoverRate, readErr := table.optionalFloat(row, "turnover_rate")
+		if readErr != nil {
+			return nil, readErr
+		}
+		floatTurnoverRate, readErr := table.optionalFloat(row, "turnover_rate_f")
+		if readErr != nil {
+			return nil, readErr
+		}
+		volumeRatio, readErr := table.optionalFloat(row, "volume_ratio")
+		if readErr != nil {
+			return nil, readErr
+		}
+		dividendYield, readErr := table.optionalFloat(row, "dv_ratio")
+		if readErr != nil {
+			return nil, readErr
+		}
+		dividendYieldTTM, readErr := table.optionalFloat(row, "dv_ttm")
+		if readErr != nil {
+			return nil, readErr
+		}
 		itemReasons := []string{"provider_exact_snapshot_time_not_exposed", "provider_pcf_ttm_not_supported_by_tushare_daily_basic", "provider_pe_mrq_not_supported_by_tushare_daily_basic"}
-		if peStatic == nil || peTTM == nil || pb == nil || psTTM == nil {
-			itemReasons = appendTushareReason(itemReasons, "one_or_more_valuation_metrics_missing")
+		if peStatic == nil || peTTM == nil || pb == nil || psTTM == nil ||
+			turnoverRate == nil || floatTurnoverRate == nil || volumeRatio == nil ||
+			dividendYield == nil || dividendYieldTTM == nil {
+			itemReasons = appendTushareReason(itemReasons, "one_or_more_daily_basic_metrics_missing")
 		}
 		bySymbol[symbol] = values{item: model.ValuationItem{
 			Symbol: symbol, Code: strings.Split(symbol, ".")[0],
 			PETTM: peTTM, PEMRQ: nil, PEStatic: peStatic, PBMRQ: pb, PSTTM: psTTM, PCFTTM: nil,
+			TurnoverRatePercent: turnoverRate, FloatTurnoverRatePercent: floatTurnoverRate,
+			VolumeRatio: volumeRatio, DividendYieldPercent: dividendYield, DividendYieldTTMPercent: dividendYieldTTM,
 			Source: p.Name(), SourceVersion: tushareValuationVersion, FetchedAt: now,
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		}}

@@ -686,6 +686,11 @@ components:
         pb_mrq: {type: number, nullable: true, description: Price-to-book ratio on most recent quarter basis; may be null}
         ps_ttm: {type: number, nullable: true, description: Price-to-sales ratio on trailing twelve-month basis; may be negative or null}
         pcf_ttm: {type: number, nullable: true, description: Price-to-cash-flow ratio on trailing twelve-month basis; may be negative or null}
+        turnover_rate_percent: {type: number, nullable: true, description: Daily turnover rate in percentage points}
+        float_turnover_rate_percent: {type: number, nullable: true, description: Daily free-float turnover rate in percentage points}
+        volume_ratio: {type: number, nullable: true, description: Daily volume ratio; provider-native ratio, not a percentage}
+        dividend_yield_percent: {type: number, nullable: true, description: Provider-reported dividend yield in percentage points}
+        dividend_yield_ttm_percent: {type: number, nullable: true, description: Provider-reported trailing twelve-month dividend yield in percentage points}
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
