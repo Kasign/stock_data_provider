@@ -1576,6 +1576,13 @@ func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawSt
 	if start.After(end) || end.After(start.AddDate(10, 0, 0)) {
 		return nil, errors.New("Tushare 指数日 K 日期范围无效或超过 10 年")
 	}
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	if end.Format("2006-01-02") > time.Now().In(loc).Format("2006-01-02") {
+		return nil, errors.New("Tushare 指数日 K end_date 不能晚于中国市场当前日期")
+	}
 	table, err := p.fetchCapabilityTable(ctx, "index_daily", map[string]string{
 		"ts_code": indexSymbol, "start_date": startCompact, "end_date": endCompact,
 	}, "ts_code,trade_date,open,high,low,close,pct_chg,vol,amount")

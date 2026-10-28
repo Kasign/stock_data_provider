@@ -407,6 +407,26 @@ func TestTushareEventEndpointsRejectFutureTradeDatesBeforeRequest(t *testing.T) 
 	}
 }
 
+func TestTushareIndexDailyBarsRejectsFutureEndDateBeforeRequest(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().In(loc).AddDate(0, 0, 1).Format("2006-01-02")
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		http.Error(w, "should not be called for future index date", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	_, err = client.FetchIndexDailyBars(context.Background(), "000300.SH", future, future)
+	if err == nil || called {
+		t.Fatalf("future index daily-bars range must be rejected before provider request: err=%v called=%v", err, called)
+	}
+}
+
 func TestTushareIndexDailyBarsDegradesMissingProviderTimestamp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request tushareIndexWeightRequest
