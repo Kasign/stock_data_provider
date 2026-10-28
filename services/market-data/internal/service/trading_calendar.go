@@ -59,8 +59,8 @@ func validateTradingCalendarSnapshot(snapshot *model.TradingCalendarSnapshot, st
 	if snapshot.TradingDays != count {
 		return fmt.Errorf("trading-calendar trading_days mismatch: declared=%d observed=%d", snapshot.TradingDays, count)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("trading-calendar source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("trading-calendar source, source_version or fetched_at is missing")
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("trading-calendar quality status %q is unsupported", snapshot.QualityStatus)

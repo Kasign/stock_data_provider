@@ -82,7 +82,15 @@ func validFundamentalsSnapshotForTest() *model.FundamentalsSnapshot {
 	}
 	return &model.FundamentalsSnapshot{
 		Symbol: "600519.SH", Year: 2026, Quarter: 2, HasData: true,
-		Sections: sections, Source: "baostock", FetchedAt: now, QualityStatus: model.QualityValid,
+		Sections: sections, Source: "baostock", SourceVersion: "fixture-fundamentals-v1", FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+}
+
+func TestValidateFundamentalsSnapshotRequiresSourceVersion(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.SourceVersion = ""
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("fundamentals snapshot without source version must be rejected, got %v", err)
 	}
 }
 
