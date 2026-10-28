@@ -1,5 +1,5 @@
 import { getMarketBreadth, getMarketHotStocks, getMarketIndices, getMarketLimitPool, getMarketSectors } from "./api.js";
-import { describeApiError, formatCompact, formatDateTime, formatPercent, formatPrice, qualityLabel } from "./format.js";
+import { describeApiError, finiteNumberOrNull, formatCompact, formatDateTime, formatPercent, formatPrice, qualityLabel } from "./format.js";
 const $ = (s) => document.querySelector(s);
 const KEYS = ["indices", "breadth", "sectors", "pool", "hot"];
 const REFRESH_OUTCOMES = new Set(["received", "unsupported", "provider_unavailable", "auth_failed", "failed", "needs_key", "cancelled"]);
@@ -19,9 +19,9 @@ export function summarizeMarketOverviewRefresh(outcomes, configured = true) {
  return parts.join("；");
 }
 function el(tag, cls = "", text = "") { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined&&text!==null)n.textContent=String(text); return n; }
-function count(v) { if(v===null||v===undefined||v==="")return "—"; const n=Number(v); return Number.isFinite(n)&&n>=0?Math.trunc(n).toLocaleString("zh-CN"):"—"; }
-function signed(v, fmt) { if(v===null||v===undefined||v===""||!Number.isFinite(Number(v)))return "—";return (Number(v)>0?"+":"")+fmt(v); }
-function dir(v) { const n=Number(v); if(v===null||v===undefined||v===""||!Number.isFinite(n))return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat"; }
+function count(v) { const n=finiteNumberOrNull(v); return n!==null&&n>=0?Math.trunc(n).toLocaleString("zh-CN"):"—"; }
+function signed(v, fmt) { const n=finiteNumberOrNull(v); if(n===null)return "—";return (n>0?"+":"")+fmt(n); }
+function dir(v) { const n=finiteNumberOrNull(v); if(n===null)return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat"; }
 function badge(id,label,tone="pending",quality="") { const n=$("#"+id);if(!n)return;n.textContent=label;if(tone==="quality"){const q=["valid","degraded","stale","invalid","unknown"].includes(String(quality).toLowerCase())?String(quality).toLowerCase():"unknown";n.className="quality-pill quality-"+q;}else n.className="availability-pill "+(tone==="error"||tone==="warning"?"is-unavailable":tone==="success"?"is-local":"is-readonly"); }
 function meta(id,parts) { const n=$("#"+id);if(n)n.textContent=parts.filter(v=>v!==null&&v!==undefined&&String(v).trim()).join(" · "); }
 function qualityReasons(id,values) { const d=$("#"+id),ul=d?.querySelector("ul");if(!d||!ul)return;ul.replaceChildren();const rows=Array.isArray(values)?values.filter(v=>String(v??"").trim()):[];d.hidden=!rows.length;rows.forEach(v=>ul.append(el("li","",v)));const s=d.querySelector("summary");if(s&&rows.length)s.textContent="数据质量说明（"+rows.length+"）"; }

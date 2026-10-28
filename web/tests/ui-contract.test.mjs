@@ -1175,3 +1175,18 @@ test("移动侧栏打开连接设置时先关闭抽屉，模态对话框接管�
   assert.match(app, /if \(document\.querySelector\("dialog\[open\]"\)\) return;[\s\S]*?const sidebar = \$\("\.sidebar"\)/);
   assert.match(app, /\$\("#open-settings-side"\)\.addEventListener\("click", \(\) => \{\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);\s*openSettings\(\);/);
 });
+
+ 
+test("numeric UI presentation rejects boolean or structured market fields", () => {
+  assert.match(format, /export function finiteNumberOrNull\(value\)/);
+  assert.match(format, /typeof value !== "number" && typeof value !== "string"/);
+  assert.match(marketOverview, /function count\(v\) \{ const n=finiteNumberOrNull\(v\)/);
+  assert.match(marketOverview, /function dir\(v\) \{ const n=finiteNumberOrNull\(v\)/);
+  assert.match(marketActivity, /function amount\(v\)\{const n=finiteNumberOrNull\(v\)/);
+  assert.match(stockResearch, /function formatNumber\(value\)\{const number=finiteNumberOrNull\(value\)/);
+  assert.match(app, /const changeValue = finiteNumberOrNull\(quote\.change\)/);
+  assert.match(app, /const changePercentValue = matched \? finiteNumberOrNull\(quote\.change_percent\) : null/);
+  assert.match(app, /const ratio = finiteNumberOrNull\(v\)/);
+  assert.doesNotMatch(app, /Number\(quote\.(?:change|change_percent|volume_ratio)\)|Number\(bar\.change_percent\)/, "market values must not use coercive Number() for display or direction styling");
+  assert.match(app, /const changePercent = finiteNumberOrNull\(bar\.change_percent\)/);
+});

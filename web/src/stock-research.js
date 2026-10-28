@@ -1,5 +1,5 @@
 import { getCapitalFlow, getChipDistribution, getMarketValuations, getStockAnnouncements, getStockBoards, getStockFundamentals, getStockProfile } from "./api.js";
-import { describeApiError, formatDateTime, formatPercent, normalizeSymbol, qualityLabel } from "./format.js";
+import { describeApiError, finiteNumberOrNull, formatDateTime, formatPercent, normalizeSymbol, qualityLabel } from "./format.js";
 const $=(s)=>document.querySelector(s);
 const QUALITY=["valid","degraded","stale","invalid","unknown"];
 const CATEGORY={profitability:"盈利能力",operating:"营运能力",growth:"成长能力",solvency:"偿债能力",cash_flow:"现金流",dupont:"杜邦分析"};
@@ -19,7 +19,7 @@ function setError(id,message){const n=$("#"+id);if(!n)return;n.hidden=!message;n
 function makeDl(items){const dl=el("dl","supplemental-fields");items.forEach(([label,value])=>{dl.append(el("dt","",label),el("dd","",value===null||value===undefined||value===""?"—":value));});return dl;}
 function reasons(id,rows){const root=$("#"+id);if(!root)return;root.replaceChildren();if(!Array.isArray(rows)||!rows.length){root.append(el("p","","接口未返回质量原因；请结合状态与时间判断。"));return;}rows.forEach(v=>root.append(el("p","",v)));}
 function clearReasons(id){const root=$("#"+id);if(root)root.replaceChildren();}
-function formatNumber(value){if(value===null||value===undefined||value===""||!Number.isFinite(Number(value)))return "—";return new Intl.NumberFormat("zh-CN",{maximumFractionDigits:4}).format(Number(value));}
+function formatNumber(value){const number=finiteNumberOrNull(value);return number===null?"—":new Intl.NumberFormat("zh-CN",{maximumFractionDigits:4}).format(number);}
 function responseError(err){if(Number(err?.status)===404)return "当前部署的 market-data 尚未提供该接口，请更新数据服务版本。";if(Number(err?.status)===503)return "对应数据源未启用或未配置，请检查 market-data 的 Provider 配置。";return describeApiError(err,"请求失败。");}
 function safeAnnouncementUrl(raw){try{const url=new URL(String(raw||""));return url.protocol==="https:"&&(url.hostname==="eastmoney.com"||url.hostname.endsWith(".eastmoney.com"))?url.href:"";}catch{return "";}}
 function currentYearAndQuarter(){const now=new Date();let year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3);if(quarter===0){year-=1;quarter=4;}return {year,quarter};}
@@ -276,8 +276,8 @@ export function bindStockResearch(getSettings,getSymbol){
   if(!item)reasons("valuations-reasons",data.quality_reasons);
  }
  function fractionPercent(value){
-  if(value===null||value===undefined||value===""||!Number.isFinite(Number(value)))return "未提供";
-  return formatNumber(Number(value)*100)+"%";
+  const number=finiteNumberOrNull(value);
+  return number===null?"未提供":formatNumber(number*100)+"%";
  }
  function costBand(low,high){
   const lower=low===null||low===undefined||low===""?"未提供":formatNumber(low);
@@ -286,9 +286,8 @@ export function bindStockResearch(getSettings,getSymbol){
   return lower+" – "+upper+" 元";
  }
  function formatYuan(value){
-  if(value===null||value===undefined||value===""||!Number.isFinite(Number(value)))return "未提供";
-  const amount=Number(value);
-  return (amount>0?"+":"")+new Intl.NumberFormat("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount)+" 元";
+  const amount=finiteNumberOrNull(value);
+  return amount===null?"未提供":(amount>0?"+":"")+new Intl.NumberFormat("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount)+" 元";
  }
  async function loadChipDistribution(){
   return runSupplementRequest("#load-chip-distribution","读取筹码分布","chip",
@@ -320,7 +319,7 @@ export function bindStockResearch(getSettings,getSymbol){
  function renderCapitalFlow(data,symbol){
   setText("capital-flow-symbol",data.symbol||symbol);setQuality("capital-flow-quality",data.quality_status);
   const root=$("#capital-flow-content");root.replaceChildren();
-  const observations=Number(data.observations);
+  const observations=finiteNumberOrNull(data.observations);
   const metrics=[
    ["主力净流入",formatYuan(data.main_net_inflow_yuan)],
    ["5 日净流入合计",formatYuan(data.inflow_5d_yuan)],

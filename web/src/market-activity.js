@@ -1,5 +1,5 @@
 import { getMarketDragonTiger, getTradingCalendar } from "./api.js";
-import { describeApiError, formatCompact, formatDateTime, formatPercent, qualityLabel } from "./format.js";
+import { describeApiError, finiteNumberOrNull, formatCompact, formatDateTime, formatPercent, qualityLabel } from "./format.js";
 const $=(s)=>document.querySelector(s);
 const QUALITY=["valid","degraded","stale","invalid","unknown"];
 function el(tag,cls="",text=""){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined&&text!==null)n.textContent=String(text);return n;}
@@ -12,8 +12,8 @@ function errorBox(id,message){const n=$("#"+id);if(n){n.hidden=!message;n.textCo
 function clearReasons(id){const n=$("#"+id);if(n){n.replaceChildren();n.hidden=true;}}
 function messageRow(root,message,span){root.replaceChildren();const tr=document.createElement("tr"),td=el("td","table-empty",message);td.colSpan=span;tr.append(td);root.append(tr);}
 function cell(row,value,cls=""){row.append(el("td",cls,value===null||value===undefined||value===""?"—":value));}
-function amount(v){if(v===null||v===undefined||v===""||!Number.isFinite(Number(v)))return "—";const n=Number(v);return (n>0?"+":n<0?"−":"")+formatCompact(Math.abs(n))+" 元";}
-function direction(v){const n=Number(v);if(v===null||v===undefined||v===""||!Number.isFinite(n))return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat";}
+function amount(v){const n=finiteNumberOrNull(v);if(n===null)return "—";return (n>0?"+":n<0?"−":"")+formatCompact(Math.abs(n))+" 元";}
+function direction(v){const n=finiteNumberOrNull(v);if(n===null)return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat";}
 function errorMessage(e){if(Number(e?.status)===404)return "当前 market-data 版本尚未提供此接口，请更新数据服务后再刷新。";if(Number(e?.status)===503)return "对应 Provider 未启用或未配置，请检查 market-data 数据源设置。";if([401,403].includes(Number(e?.status)))return "API Key 验证失败，请检查连接与密钥设置。";return describeApiError(e,"读取数据失败。");}
 export function bindMarketActivity(getSettings,onSelectStock){
  const controllers={},generation={dragon:0,calendar:0};let dragonPage=1,dragonHasMore=false,dragonDate="",monthOffset=0;

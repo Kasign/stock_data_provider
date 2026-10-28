@@ -37,21 +37,29 @@ export function parseAnalysisSymbols(input) {
   return symbols;
 }
 
-export function formatPrice(value, digits = 2) {
+export function finiteNumberOrNull(value) {
+  if (value === null || value === undefined ||
+      (typeof value !== "number" && typeof value !== "string") ||
+      (typeof value === "string" && !value.trim())) return null;
   const number = Number(value);
-  if (value === null || value === undefined || value === "" || !Number.isFinite(number)) return "—";
+  return Number.isFinite(number) ? number : null;
+}
+
+export function formatPrice(value, digits = 2) {
+  const number = finiteNumberOrNull(value);
+  if (number === null) return "—";
   return number.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 export function formatCompact(value) {
-  const number = Number(value);
-  if (value === null || value === undefined || value === "" || !Number.isFinite(number)) return "—";
+  const number = finiteNumberOrNull(value);
+  if (number === null) return "—";
   return new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 2 }).format(number);
 }
 
 export function formatPercent(value, digits = 2) {
-  const number = Number(value);
-  if (value === null || value === undefined || value === "" || !Number.isFinite(number)) return "—";
+  const number = finiteNumberOrNull(value);
+  if (number === null) return "—";
   return `${number > 0 ? "+" : ""}${number.toFixed(digits)}%`;
 }
 

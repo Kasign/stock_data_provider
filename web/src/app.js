@@ -36,6 +36,7 @@ import {
   formatCompact,
   formatDate,
   formatDateTime,
+  finiteNumberOrNull,
   formatPercent,
   formatPrice,
   isRetryableApiError,
@@ -493,13 +494,15 @@ function renderResearchStockList() {
     name.className = "research-list-stock-name"; name.textContent = item.name || item.symbol;
     symbol.className = "research-list-symbol"; symbol.textContent = item.symbol; nameCell.append(name, symbol); tr.append(nameCell);
     const missing = (value) => value === null || value === undefined || value === "" ? "—" : value;
-    const changeClass = isCurrent && Number(quote.change_percent) > 0 ? "positive" : isCurrent && Number(quote.change_percent) < 0 ? "negative" : "";
+    const changePercent = isCurrent ? finiteNumberOrNull(quote.change_percent) : null;
+    const volumeRatio = isCurrent ? finiteNumberOrNull(quote.volume_ratio) : null;
+    const changeClass = changePercent !== null && changePercent > 0 ? "positive" : changePercent !== null && changePercent < 0 ? "negative" : "";
     tr.append(
       makeCell(isCurrent ? formatPrice(quote.current_price) : "未加载"),
       makeCell(isCurrent ? formatPercent(quote.change_percent) : "未加载", changeClass),
       makeCell(isCurrent ? formatCompact(quote.amount) : "未加载"),
       makeCell(isCurrent ? missing(quote.turnover_rate == null ? null : formatPercent(quote.turnover_rate)) : "未加载"),
-      makeCell(isCurrent ? missing(quote.volume_ratio == null ? null : Number(quote.volume_ratio).toFixed(2)) : "未加载"),
+      makeCell(isCurrent ? (volumeRatio === null ? "—" : volumeRatio.toFixed(2)) : "未加载"),
       makeCell(formatResearchMA(5, isCurrent)),
       makeCell(formatResearchMA(20, isCurrent)),
       (() => {
@@ -1340,14 +1343,19 @@ function renderResearchOverview() {
   setText("#research-overview-meta", meta.join(" · "));
   const display = (value, formatter) => !matched ? (symbol && state.isQuerying ? "读取中…" : "未加载") : (value == null || value === "" ? "未报告" : formatter(value));
   setText("#research-overview-price", display(quote?.current_price, formatPrice));
-  const change = matched && quote.change != null ? formatPrice(quote.change) : "未报告";
-  const percent = matched && quote.change_percent != null ? formatPercent(quote.change_percent) : "未报告";
+  const changeValue = matched ? finiteNumberOrNull(quote.change) : null;
+  const changePercentValue = matched ? finiteNumberOrNull(quote.change_percent) : null;
+  const change = changeValue === null ? "未报告" : formatPrice(changeValue);
+  const percent = changePercentValue === null ? "未报告" : formatPercent(changePercentValue);
   setText("#research-overview-change", matched ? change + " / " + percent : (symbol && state.isQuerying ? "读取中…" : "未加载"));
-  $("#research-overview-change").classList.toggle("positive", matched && Number(quote.change_percent) > 0);
-  $("#research-overview-change").classList.toggle("negative", matched && Number(quote.change_percent) < 0);
+  $("#research-overview-change").classList.toggle("positive", changePercentValue !== null && changePercentValue > 0);
+  $("#research-overview-change").classList.toggle("negative", changePercentValue !== null && changePercentValue < 0);
   setText("#research-overview-amount", display(quote?.amount, formatCompact));
   setText("#research-overview-turnover", display(quote?.turnover_rate, formatPercent));
-  setText("#research-overview-volume-ratio", display(quote?.volume_ratio, v => Number.isFinite(Number(v)) ? Number(v).toFixed(2) : "未报告"));
+  setText("#research-overview-volume-ratio", display(quote?.volume_ratio, v => {
+    const ratio = finiteNumberOrNull(v);
+    return ratio === null ? "未报告" : ratio.toFixed(2);
+  }));
   setText("#research-overview-source", matched ? (quote.source || "未报告") : (symbol && state.isQuerying ? "读取中…" : "未加载"));
   let barsSymbol = "";
   try { barsSymbol = normalizeSymbol(state.technicalSymbol || ""); } catch {}
@@ -1511,13 +1519,16 @@ function renderQuote(quote) {
   setText("#metric-price", formatPrice(quote.current_price));
   const change = formatPrice(quote.change);
   const changePct = formatPercent(quote.change_percent);
-  setText("#metric-change", quote.change == null && quote.change_percent == null ? "暂无涨跌数据" : `${change}（${changePct}）`);
-  $("#metric-change").classList.toggle("positive", Number(quote.change) > 0);
-  $("#metric-change").classList.toggle("negative", Number(quote.change) < 0);
+  const changeValue = finiteNumberOrNull(quote.change);
+  const changePercentValue = finiteNumberOrNull(quote.change_percent);
+  setText("#metric-change", changeValue === null && changePercentValue === null ? "暂无涨跌数据" : `${change}（${changePct}）`);
+  $("#metric-change").classList.toggle("positive", changeValue !== null && changeValue > 0);
+  $("#metric-change").classList.toggle("negative", changeValue !== null && changeValue < 0);
   setText("#metric-amount", formatCompact(quote.amount));
   setText("#metric-volume", formatCompact(quote.volume));
   setText("#metric-turnover", quote.turnover_rate == null ? "—" : formatPercent(quote.turnover_rate));
-  setText("#metric-volume-ratio", `量比 ${quote.volume_ratio == null ? "—" : Number(quote.volume_ratio).toFixed(2)}`);
+  const volumeRatio = finiteNumberOrNull(quote.volume_ratio);
+  setText("#metric-volume-ratio", `量比 ${volumeRatio === null ? "—" : volumeRatio.toFixed(2)}`);
   setText("#metric-source", quote.source || "未知");
   setText("#metric-quote-time", `行情时间 ${formatDateTime(quote.quote_time)}`);
   renderResearchStockList();
@@ -1658,13 +1669,14 @@ function renderBars(response) {
   } else {
     [...bars].reverse().slice(0, 40).forEach((bar) => {
       const row = document.createElement("tr");
+      const changePercent = finiteNumberOrNull(bar.change_percent);
       row.append(
         makeCell(formatDate(bar.trade_date), "date-cell"),
         makeCell(formatPrice(bar.open)),
         makeCell(formatPrice(bar.high)),
         makeCell(formatPrice(bar.low)),
         makeCell(formatPrice(bar.close), "close-cell"),
-        makeCell(formatPercent(bar.change_percent), Number(bar.change_percent) > 0 ? "positive" : Number(bar.change_percent) < 0 ? "negative" : ""),
+        makeCell(formatPercent(bar.change_percent), changePercent !== null && changePercent > 0 ? "positive" : changePercent !== null && changePercent < 0 ? "negative" : ""),
         makeCell(formatCompact(bar.volume)),
         makeCell(bar.source || "—"),
       );

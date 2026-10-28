@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   describeApiError,
+  finiteNumberOrNull,
+  formatCompact,
   formatPercent,
   formatPrice,
   isRetryableApiError,
@@ -105,4 +107,16 @@ test("classifies transient request failures separately from permanent client err
   for (const status of [400, 401, 403, 404, 405, 413, 415]) {
     assert.equal(isRetryableApiError({ status }), false, "should stop retrying HTTP " + status);
   }
+});
+
+ 
+test("numeric formatters reject booleans and non-scalar API values", () => {
+  for (const value of [true, false, {}, [], " "]) {
+    assert.equal(finiteNumberOrNull(value), null);
+    assert.equal(formatPrice(value), "—");
+    assert.equal(formatCompact(value), "—");
+    assert.equal(formatPercent(value), "—");
+  }
+  assert.equal(finiteNumberOrNull("12.5"), 12.5);
+  assert.equal(formatPrice("12.5"), "12.50");
 });
