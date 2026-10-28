@@ -1457,7 +1457,7 @@ test("switching task context or analysis API endpoint resets the stage-event fil
 
 test("工作区导入与自选股存储使用同一规则识别带后缀的重复证券", () => {
   assert.match(app, /function comparableMarketSymbol\(input\)/);
-  const importBody = app.match(/function validateBrowserDataPayload\(payload\) \{[\\s\\S]*?\\n\}/)?.[0] || "";
+  const importBody = app.match(/function validateBrowserDataPayload\(payload\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(importBody, "工作区数据导入必须先完成结构校验");
   assert.match(importBody, /const symbolIdentity = comparableMarketSymbol\(symbol\)/);
   assert.match(importBody, /seenSymbols\.has\(symbolIdentity\)/);
