@@ -230,7 +230,7 @@ test("task polling and saved task references are scoped to the analysis API base
 
 test("topbar service health checks have bounded timeouts and pass abort signals", () => {
   assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000)"));
-  assert.match(app, /controller\.abort\(\)[\s\S]*?Promise\.race\(\[request, timeout\]\)/);
+  assert.match(healthCheck, /controller\\.abort\\(\\)[\\s\\S]*?Promise\\.race\\(\\[request, timeout\\]\\)/);
   assert.match(app, /async function refreshServices\(\)[\s\S]*?Promise\.all\(\[[\s\S]*?runHealthCheck\(marketHealth, settings\)[\s\S]*?runHealthCheck\(analysisHealth, settings\)/);
 });
 
@@ -481,7 +481,7 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /runHealthCheck\(marketHealth, settingsToCheck\)/);
   assert.match(app, /runHealthCheck\(analysisHealth, settingsToCheck\)/);
   assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000)"));
-  assert.match(app, /Promise\.race\(\[request, timeout\]\)/);
+  assert.match(healthCheck, /Promise\\.race\\(\\[request, timeout\\]\\)/);
   assert.match(app, /const marketState = serviceHealthState\(marketResult\);/);
   assert.match(app, /const analysisState = serviceHealthState\(analysisResult\);/);
   assert.match(app, /API 状态未知（回包未提供可识别的健康状态）/);
@@ -970,7 +970,7 @@ test("快照来源、估值与补充指标使用可读的 12px 辅助文字", ()
 
 test("数据中心超时后即使探针迟到返回，也不能覆盖为成功", () => {
   assert.match(
-    dataCenter,
+    healthCheck,
     /\.then\(\(data\) => timedOut\s*\? \{ ok: false, error: new Error\("检查超时"\), timedOut: true/
   );
 });
@@ -986,7 +986,7 @@ test("服务健康刷新不会覆盖行情查询区域的独立提示", () => {
 });
 
 test("侧栏与顶栏服务状态只有在明确健康回包时才显示正常", () => {
-  assert.match(app, /function serviceHealthState\(result\)[\s\S]*?const status = String\(result\.value\?\.status \|\| ""\)[\s\S]*?if \(!status\) return "unknown";/);
+  assert.match(app, /function serviceHealthState\\(result\\)[\\s\\S]*?if \\(!result\\?\\.ok\\) return "failed";[\\s\\S]*?const status = String\\(result\\.data\\?\\.status \\|\\| ""\\)[\\s\\S]*?if \\(!status\\) return "unknown";/);
   assert.match(app, /function setServiceStatus\(prefix, status, text\)[\s\S]*?status === "healthy"[\s\S]*?status === "unknown" \|\| status === "degraded"/);
   assert.match(stylesheet, /\.status-dot\.is-unknown\s*\{[^}]*background:\s*var\(--text-dim\)/);
 });
