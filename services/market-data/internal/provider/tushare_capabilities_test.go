@@ -608,6 +608,31 @@ func TestTushareLimitPoolMarksExcludedNonAShareRows(t *testing.T) {
 	}
 }
 
+
+
+func TestTushareDragonTigerRejectsDuplicateSymbols(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ",")
+	row := []any{"20261027", "600519.SH", "贵州茅台", 1500.0, 1.2, 0.5, 100000.0, 1000.0, 900.0, 1900.0, 100.0, 5.0, 1.2, "测试原因"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare dragon-tiger request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "top_list" || request.Params["trade_date"] != "20261027" {
+			t.Errorf("unexpected Tushare dragon-tiger request: %+v", request)
+		}
+		writeTushareTestTable(w, fields, [][]any{row, row})
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	if _, err := client.FetchDragonTiger(context.Background(), "2026-10-27", 1, 100); err == nil || !strings.Contains(err.Error(), "重复证券") {
+		t.Fatalf("duplicate source symbols must reject the Tushare page, got %v", err)
+	}
+}
+
 func TestTushareDragonTigerEmptyResultDoesNotInventProviderReportDate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request tushareIndexWeightRequest

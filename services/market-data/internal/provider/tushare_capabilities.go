@@ -1422,6 +1422,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	base.SourceReturned = len(rows)
 	base.HasMore = page < pages
 	base.Items = make([]model.DragonTigerItem, 0, len(rows))
+	seenSymbols := make(map[string]struct{}, len(rows))
 	for index, row := range rows {
 		rowDateRaw, readErr := table.stringValue(row, "trade_date")
 		if readErr != nil {
@@ -1443,6 +1444,10 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 			base.ExcludedNonAShareCount++
 			continue
 		}
+		if _, duplicate := seenSymbols[symbol]; duplicate {
+			return nil, fmt.Errorf("Tushare 龙虎榜第 %d 行重复证券 %s", start+index, symbol)
+		}
+		seenSymbols[symbol] = struct{}{}
 		name, readErr := table.stringValue(row, "name")
 		if readErr != nil || strings.TrimSpace(name) == "" {
 			return nil, fmt.Errorf("Tushare 龙虎榜第 %d 行缺少证券名称", start+index)
