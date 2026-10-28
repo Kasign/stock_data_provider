@@ -3825,6 +3825,33 @@ function closeSettingsWithGuard() {
   $("#settings-dialog").close();
 }
 
+function safelyUpdateTaskContextUi(label, update) {
+  try {
+    update();
+  } catch (error) {
+    let message = "未知异常";
+    try {
+      message = errorMessage(error);
+    } catch {
+      // 诊断格式化失败时仍需允许设置保存流程继续。
+    }
+    try {
+      state.taskStatusError = [state.taskStatusError, label + message].filter(Boolean).join("；");
+    } catch {}
+    try {
+      const feedback = $("#task-create-feedback");
+      if (feedback) {
+        feedback.hidden = false;
+        feedback.textContent =
+          "分析 API 地址已变化，旧任务状态已作废；部分界面清理失败：" + label + message +
+          "。请重新载入页面核对显示。";
+      }
+    } catch {
+      // 视图与反馈节点均不可用时，不能阻断配置应用流程。
+    }
+  }
+}
+
 function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.taskContextGeneration += 1;
   state.analysisConnectionGeneration += 1;
@@ -3852,28 +3879,33 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.taskEventsUnavailable = false;
   state.taskEventsError = "";
   state.selectedTaskEventSequence = null;
-  $("#task-empty").hidden = false;
-  $("#task-detail").hidden = true;
-  $("#task-result-section").hidden = true;
-  $("#task-result-metrics").replaceChildren();
-  $("#task-result-structured").replaceChildren();
-  $("#task-result-warnings").replaceChildren();
-  $("#task-poll-label").textContent = "分析 API 地址已变化，旧任务不再自动轮询。";
-  $("#task-create-feedback").hidden = false;
-  $("#task-create-feedback").textContent = "分析 API 地址已从 " + previousBase + " 改为 " + nextBase +
-    "。旧任务引用仍保留在最近分析列表；切回原地址后才能恢复，当前不会向新地址发送旧 task_id。";
-  renderTaskEvents();
-  renderTaskFlowSummary();
-  renderRecentTasks();
-  setRecentTasksFeedback(
+  safelyUpdateTaskContextUi("清理任务详情失败：", () => {
+    $("#task-empty").hidden = false;
+    $("#task-detail").hidden = true;
+    $("#task-result-section").hidden = true;
+    $("#task-result-metrics").replaceChildren();
+    $("#task-result-structured").replaceChildren();
+    $("#task-result-warnings").replaceChildren();
+  });
+  safelyUpdateTaskContextUi("更新 API 地址切换提示失败：", () => {
+    $("#task-poll-label").textContent = "分析 API 地址已变化，旧任务不再自动轮询。";
+    $("#task-create-feedback").hidden = false;
+    $("#task-create-feedback").textContent = "分析 API 地址已从 " + previousBase + " 改为 " + nextBase +
+      "。旧任务引用仍保留在最近分析列表；切回原地址后才能恢复，当前不会向新地址发送旧 task_id。";
+  });
+  safelyUpdateTaskContextUi("重绘阶段事件失败：", () => renderTaskEvents());
+  safelyUpdateTaskContextUi("重绘任务流程摘要失败：", () => renderTaskFlowSummary());
+  safelyUpdateTaskContextUi("重绘最近任务失败：", () => renderRecentTasks());
+  safelyUpdateTaskContextUi("更新最近任务反馈失败：", () => setRecentTasksFeedback(
     "分析 API 地址已从 " + previousBase + " 改为 " + nextBase +
     "。旧任务引用仍保留并标注来源地址；切回原地址后可恢复。",
     "warning"
-  );
-  // 地址切换已清空活动任务/Run；若自选股页当前可见，立即同步卡片展示。
-  if (state.view === "watchlist") renderWatchlist();
+  ));
+  // 地址切换已清空活动任务/Run；自选股卡片失败不阻断其他连接配置的失效处理。
+  if (state.view === "watchlist") {
+    safelyUpdateTaskContextUi("重绘自选股卡片失败：", () => renderWatchlist());
+  }
 }
-
 function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) {
   const previousSettings = state.settings;
   const analysisBaseChanged = previousSettings.analysisBase !== nextSettings.analysisBase;

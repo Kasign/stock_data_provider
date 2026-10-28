@@ -1667,6 +1667,24 @@ test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 R
   assert.equal((app.match(/state\.taskSequence = 0;\s*state\.taskEventCursor = 0;/g) || []).length, 3, "新建、恢复和清空任务时都重置独立事件游标");
 });
 
+test("分析 API 切换期间的 UI 清理异常不会中断配置应用", () => {
+  const helper = app.match(/function safelyUpdateTaskContextUi\(label, update\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(helper, /try \{\s*update\(\);\s*\} catch \(error\)/);
+  assert.match(helper, /部分界面清理失败[\s\S]*?catch/);
+
+  const invalidateStart = app.indexOf("function invalidateActiveTaskForAnalysisBaseChange(");
+  const invalidateEnd = app.indexOf("\nfunction applySettings(", invalidateStart);
+  const invalidate = invalidateStart >= 0 && invalidateEnd > invalidateStart
+    ? app.slice(invalidateStart, invalidateEnd) : "";
+  assert.match(invalidate, /state\.taskId = "";[\s\S]*?safelyUpdateTaskContextUi\("清理任务详情失败：[\s\S]*?safelyUpdateTaskContextUi\("重绘阶段事件失败：[\s\S]*?safelyUpdateTaskContextUi\("重绘自选股卡片失败：/);
+  assert.doesNotMatch(invalidate, /(^|\n)\s*renderTaskEvents\(\);|(^|\n)\s*renderTaskFlowSummary\(\);|(^|\n)\s*renderRecentTasks\(\);/);
+
+  const applyStart = app.indexOf("function applySettings(");
+  const applyEnd = app.indexOf("\nfunction saveSettingsFromForm(", applyStart);
+  const apply = applyStart >= 0 && applyEnd > applyStart ? app.slice(applyStart, applyEnd) : "";
+  assert.match(apply, /if \(analysisBaseChanged\) invalidateActiveTaskForAnalysisBaseChange[\s\S]*?const marketConnectionChanged[\s\S]*?dataCenter\.invalidate[\s\S]*?\$\("#settings-dialog"\)\.close\(\)/);
+});
+
 test("任务切换和分析连接切换会重置事件游标并隔离迟到轮询", () => {
   const contexts = [
     ["new task creation", "async function createTask(event) {", "function startAnalysisForSymbol("],
