@@ -204,6 +204,7 @@ type SectorRanking struct {
 
 type SectorRankingSnapshot struct {
 	Category       string          `json:"category"`
+	Direction      string          `json:"direction"`
 	Total          int             `json:"total"`
 	Items          []SectorRanking `json:"items"`
 	Source         string          `json:"source"`

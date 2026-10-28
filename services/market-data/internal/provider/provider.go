@@ -45,6 +45,12 @@ type SectorRankingProvider interface {
 	FetchSectorRankings(ctx context.Context, category string, limit int) (*model.SectorRankingSnapshot, error)
 }
 
+// DirectionalSectorRankingProvider 可选地支持领涨/领跌两种排名；旧 Provider 仍可只提供默认领涨榜。
+type DirectionalSectorRankingProvider interface {
+	NamedProvider
+	FetchSectorRankingsDirection(ctx context.Context, category, direction string, limit int) (*model.SectorRankingSnapshot, error)
+}
+
 // IndexQuoteProvider provides quotes for a separately allow-listed core index set.
 type IndexQuoteProvider interface {
 	NamedProvider

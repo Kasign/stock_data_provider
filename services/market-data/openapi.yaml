@@ -351,9 +351,10 @@ components:
           items: {type: string}
     SectorRankingSnapshot:
       type: object
-      required: [category, total, items, source, fetched_at, quality_status]
+      required: [category, direction, total, items, source, fetched_at, quality_status]
       properties:
         category: {type: string, enum: [industry, concept]}
+        direction: {type: string, enum: [up, down]}
         total: {type: integer}
         items:
           type: array
@@ -996,13 +997,17 @@ paths:
         - name: limit
           in: query
           schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+        - name: direction
+          in: query
+          description: Return largest percentage movers first (up) or smallest first (down).
+          schema: {type: string, enum: [up, down], default: up}
       responses:
         '200':
           description: Current provider ranking snapshot with source and quality metadata
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SectorRankingSnapshot'}
-        '400': {description: Invalid sector type or limit}
+        '400': {description: Invalid sector type, direction or limit}
         '401': {description: API key required}
         '502': {description: All sector-ranking providers failed}
         '503': {description: No sector-ranking provider enabled}

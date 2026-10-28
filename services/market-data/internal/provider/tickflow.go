@@ -863,6 +863,42 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	return snapshot, nil
 }
 
+// FetchSectorRankingsDirection adds a bottom SW1 ranking. It requires the complete industry set,
+// because reversing a top-N slice would not produce the actual bottom-N sectors.
+func (p *TickFlow) FetchSectorRankingsDirection(ctx context.Context, rawCategory, rawDirection string, limit int) (*model.SectorRankingSnapshot, error) {
+	direction := strings.ToLower(strings.TrimSpace(rawDirection))
+	if direction == "" {
+		direction = "up"
+	}
+	if direction != "up" && direction != "down" {
+		return nil, fmt.Errorf("TickFlow sector ranking direction must be up or down, got %q", rawDirection)
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		return nil, errors.New("TickFlow SW1 sector ranking limit must not exceed 100")
+	}
+	fetchLimit := limit
+	if direction == "down" {
+		fetchLimit = 100
+	}
+	snapshot, err := p.FetchSectorRankings(ctx, rawCategory, fetchLimit)
+	if err != nil {
+		return nil, err
+	}
+	if direction == "down" && snapshot.Total != len(snapshot.Items) {
+		return nil, fmt.Errorf("TickFlow cannot provide a complete SW1 bottom ranking: total=%d returned=%d", snapshot.Total, len(snapshot.Items))
+	}
+	if err := sortSectorRankingSnapshot(snapshot, direction); err != nil {
+		return nil, err
+	}
+	if len(snapshot.Items) > limit {
+		snapshot.Items = snapshot.Items[:limit]
+	}
+	return snapshot, nil
+}
+
 func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("TickFlow HTTP client is not configured")

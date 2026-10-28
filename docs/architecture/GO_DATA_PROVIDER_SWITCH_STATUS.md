@@ -714,3 +714,10 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 ### 指数目录/成分存在条目但质量未知时继续回退（2026-10-28）
 
 指数目录与当前成分快照即使返回条目，若质量仍为 `unknown`（例如无法确认源端时点），现在也会继续尝试其他启用 Provider；只有所有来源都未返回 `valid` 或 `degraded` 的可用结果时，才返回并短缓存 unknown。旧 unknown 缓存需带回退耗尽标记，才能在多 Provider 场景命中。显式指定指数目录来源时仍保持来源绑定，不跨代码空间回退。本轮新增测试源码，未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 行业/概念领涨与领跌排名（2026-10-28）
+
+- `GET /api/v1/market/sectors` 新增 `direction=up|down`，默认 `up` 保持旧调用兼容。东方财富按 `f3` 涨跌幅请求 `po=1/0` 并在服务端稳定排序；返回快照显式带 `direction`，缓存键按方向区分。
+- 新增可选 `DirectionalSectorRankingProvider`，不要求现有 Provider 全部同步实现。TickFlow SW1 仅在能获得完整行业候选集合时提供领跌榜；若返回候选被截断，会报错并触发后备源，而不会将领涨前 N 项反向冒充领跌榜。TickFlow 结果仍是成分股平均涨跌幅估算并保持 degraded。
+- 已补方向排序与服务契约测试源码；本轮未运行测试、构建、CI 或真实 Provider 请求。

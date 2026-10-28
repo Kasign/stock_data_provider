@@ -800,6 +800,9 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if snapshot.Category != category {
 		return fmt.Errorf("sector-ranking category mismatch: requested %s, got %q", category, snapshot.Category)
 	}
+	if snapshot.Direction != "" && snapshot.Direction != "up" && snapshot.Direction != "down" {
+		return fmt.Errorf("sector-ranking direction %q is unsupported", snapshot.Direction)
+	}
 	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
 		return errors.New("sector-ranking source or fetched_at is missing")
 	}
@@ -873,9 +876,20 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 }
 
 func (s *DataService) SectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, bool, error) {
+	return s.SectorRankingsByDirection(ctx, rawCategory, "up", limit)
+}
+
+func (s *DataService) SectorRankingsByDirection(ctx context.Context, rawCategory, rawDirection string, limit int) (*model.SectorRankingSnapshot, bool, error) {
 	category := strings.ToLower(strings.TrimSpace(rawCategory))
 	if category != "industry" && category != "concept" {
 		return nil, false, fmt.Errorf("unsupported sector category %q; want industry or concept", rawCategory)
+	}
+	direction := strings.ToLower(strings.TrimSpace(rawDirection))
+	if direction == "" {
+		direction = "up"
+	}
+	if direction != "up" && direction != "down" {
+		return nil, false, fmt.Errorf("unsupported sector ranking direction %q; want up or down", rawDirection)
 	}
 	if limit == 0 {
 		limit = 10
@@ -890,7 +904,7 @@ func (s *DataService) SectorRankings(ctx context.Context, rawCategory string, li
 		return nil, false, err
 	}
 	const ttl = time.Minute
-	key := fmt.Sprintf("md:v1:sector-ranking:%s:%d", category, limit)
+	key := fmt.Sprintf("md:v2:sector-ranking:%s:%s:%d", category, direction, limit)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.SectorRankingSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateSectorRankingSnapshot(category, limit, &cached) == nil &&
@@ -908,10 +922,25 @@ func (s *DataService) SectorRankings(ctx context.Context, rawCategory string, li
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
-		snapshot, fetchErr := p.FetchSectorRankings(ctx, category, limit)
+		var snapshot *model.SectorRankingSnapshot
+		var fetchErr error
+		if directional, ok := p.(provider.DirectionalSectorRankingProvider); ok {
+			snapshot, fetchErr = directional.FetchSectorRankingsDirection(ctx, category, direction, limit)
+		} else if direction == "up" {
+			snapshot, fetchErr = p.FetchSectorRankings(ctx, category, limit)
+		} else {
+			fetchErr = fmt.Errorf("provider does not support %s sector ranking", direction)
+		}
 		if fetchErr != nil {
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
+		}
+		if snapshot != nil {
+			if snapshot.Direction != "" && snapshot.Direction != direction {
+				failures = append(failures, p.Name()+": provider returned a different sector ranking direction")
+				continue
+			}
+			snapshot.Direction = direction
 		}
 		if snapshot != nil && snapshot.QualityStatus == model.QualityValid {
 			snapshot.QualityStatus = model.QualityDegraded
@@ -941,7 +970,6 @@ func (s *DataService) SectorRankings(ctx context.Context, rawCategory string, li
 	}
 	return nil, false, fmt.Errorf("all sector-ranking providers failed: %s", strings.Join(failures, "; "))
 }
-
 func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if item == nil {
 		return errors.New("stock-basic provider returned an empty response")

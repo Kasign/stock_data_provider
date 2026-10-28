@@ -360,6 +360,33 @@ func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
 	}
 }
 
+func TestEastmoneyFetchSectorRankingsSupportsBottomDirection(t *testing.T) {
+	var got url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query()
+		fmt.Fprint(w, `{"rc":0,"data":{"total":3,"diff":[{"f2":12.5,"f3":2.3,"f4":0.15,"f6":100000,"f12":"BK0475","f14":"电池"},{"f2":8.5,"f3":-1.2,"f4":-0.1,"f6":80000,"f12":"BK0476","f14":"传媒"},{"f2":10.0,"f3":0.5,"f4":0.05,"f6":90000,"f12":"BK0477","f14":"食品"}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+	snapshot, err := p.FetchSectorRankingsDirection(context.Background(), "industry", "down", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Get("po") != "0" || got.Get("fid") != "f3" || got.Get("pz") != "3" {
+		t.Fatalf("unexpected bottom-ranking query: %v", got)
+	}
+	if snapshot.Direction != "down" || len(snapshot.Items) != 3 {
+		t.Fatalf("unexpected bottom-ranking metadata: %+v", snapshot)
+	}
+	wantCodes := []string{"BK0476", "BK0477", "BK0475"}
+	for i, want := range wantCodes {
+		if snapshot.Items[i].Code != want || snapshot.Items[i].Rank != i+1 {
+			t.Fatalf("bottom ranking order/rank mismatch at %d: got=%+v want_code=%s", i, snapshot.Items[i], want)
+		}
+	}
+}
+
 func TestEastmoneyFetchSectorRankingsRetriesTemporary502(t *testing.T) {
 	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

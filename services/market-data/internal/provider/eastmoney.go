@@ -1738,6 +1738,10 @@ func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSea
 }
 
 func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, error) {
+	return p.FetchSectorRankingsDirection(ctx, rawCategory, "up", limit)
+}
+
+func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategory, rawDirection string, limit int) (*model.SectorRankingSnapshot, error) {
 	category := strings.ToLower(strings.TrimSpace(rawCategory))
 	filters := map[string]string{
 		"industry": "m:90+t:2+f:!50",
@@ -1747,6 +1751,17 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 	if !ok {
 		return nil, fmt.Errorf("unsupported sector category %q; want industry or concept", rawCategory)
 	}
+	direction := strings.ToLower(strings.TrimSpace(rawDirection))
+	if direction == "" {
+		direction = "up"
+	}
+	if direction != "up" && direction != "down" {
+		return nil, fmt.Errorf("unsupported sector ranking direction %q; want up or down", rawDirection)
+	}
+	sortOrder := "1"
+	if direction == "down" {
+		sortOrder = "0"
+	}
 	if limit <= 0 {
 		limit = 10
 	}
@@ -1754,7 +1769,7 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 		return nil, errors.New("sector ranking limit must not exceed 100")
 	}
 	params := url.Values{
-		"pn": {"1"}, "pz": {strconv.Itoa(limit)}, "po": {"1"}, "np": {"1"},
+		"pn": {"1"}, "pz": {strconv.Itoa(limit)}, "po": {sortOrder}, "np": {"1"},
 		"ut": {p.ut}, "fltt": {"2"}, "invt": {"2"}, "fid": {"f3"},
 		"fs": {filter}, "fields": {"f2,f3,f4,f6,f12,f14,f104,f105,f128,f136"},
 		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
@@ -1777,7 +1792,7 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.SectorRankingSnapshot{
-		Category: category, Total: payload.Data.Total, Source: p.Name(),
+		Category: category, Direction: direction, Total: payload.Data.Total, Source: p.Name(),
 		SourceVersion:  "eastmoney-sector-clist-v1",
 		FetchedAt:      fetchedAt,
 		QualityStatus:  model.QualityDegraded,
@@ -1819,9 +1834,11 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 	if len(snapshot.Items) < len(payload.Data.Diff) {
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_rows_dropped_after_validation")
 	}
+	if err := sortSectorRankingSnapshot(snapshot, direction); err != nil {
+		return nil, err
+	}
 	return snapshot, nil
 }
-
 // decodeEastmoneyBoardRows accepts array payloads and Eastmoney's indexed-object shape
 // ({"0": {...}, "1": {...}}). Numeric index ordering is preserved explicitly because
 // Go map iteration order is intentionally unspecified.
