@@ -1276,9 +1276,9 @@ test("估值请求补齐交易所后缀，并只展示与当前标的匹配的�
   const renderer = stockResearch.match(/function renderValuations\(data,symbol\)\{[\s\S]*?\n \}\n function fractionPercent/)?.[0] || "";
   assert.ok(renderer, "估值渲染器应存在");
   assert.match(stockResearch, /function normalizeValuationSymbol\(input\)/);
-  assert.ok(stockResearch.includes('if(value.startsWith("6"))return value+".SH";'));
-  assert.ok(stockResearch.includes('if(/^[03]/.test(value))return value+".SZ";'));
-  assert.ok(stockResearch.includes('return value+".BJ";'));
+  assert.match(stockResearch, /import \{ comparableMarketSymbol, .* from "\.\/format\.js"/);
+  assert.match(stockResearch, /const normalized=comparableMarketSymbol\(value\)/);
+  assert.match(stockResearch, /if\(!value\.includes\("\."\)&&normalized===value\)[\s\S]*?无法从该六位代码判断交易所/);
   assert.ok(stockResearch.includes("getMarketValuations(settings,[normalizeValuationSymbol(sym)],signal)"));
   assert.match(renderer, /const requestedSymbol=String\(symbol\|\|data\.requested_symbols\?\.\[0\]\|\|"\)\.trim\(\)/);
   assert.match(renderer, /const targetSymbol=normalizeValuationSymbol\(requestedSymbol\)/);
