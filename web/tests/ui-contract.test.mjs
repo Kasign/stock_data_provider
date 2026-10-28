@@ -227,6 +227,12 @@ test("task polling and saved task references are scoped to the analysis API base
   assert.match(recentTaskModule, /analysis_base: typeof record\.analysis_base === "string"/);
 });
 
+test("topbar service health checks have bounded timeouts and pass abort signals", () => {
+  assert.ok(app.includes("async function runHealthCheck(check, settings, timeoutMs = 6000)"));
+  assert.match(app, /controller\.abort\(\)[\s\S]*?Promise\.race\(\[request, timeout\]\)/);
+  assert.match(app, /async function refreshServices\(\)[\s\S]*?Promise\.all\(\[[\s\S]*?runHealthCheck\(marketHealth, settings\)[\s\S]*?runHealthCheck\(analysisHealth, settings\)/);
+});
+
 test("service health and provider-list refreshes ignore superseded responses", () => {
   assert.match(app, /let serviceRefreshGeneration = 0;/);
   assert.match(app, /let sourceRefreshGeneration = 0;/);
@@ -473,7 +479,7 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /const settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);/);
   assert.match(app, /runHealthCheck\(marketHealth, settingsToCheck\)/);
   assert.match(app, /runHealthCheck\(analysisHealth, settingsToCheck\)/);
-  assert.match(app, /const runHealthCheck = async \(check, settings, timeoutMs = 6000\)/);
+  assert.ok(app.includes("async function runHealthCheck(check, settings, timeoutMs = 6000)"));
   assert.match(app, /Promise\.race\(\[request, timeout\]\)/);
   assert.match(app, /const marketState = serviceHealthState\(marketResult\);/);
   assert.match(app, /const analysisState = serviceHealthState\(analysisResult\);/);

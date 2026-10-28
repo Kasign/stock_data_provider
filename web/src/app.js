@@ -1045,6 +1045,28 @@ function serviceHealthLabel(status) {
       : status === "degraded" ? "状态需关注" : "状态未知";
 }
 
+async function runHealthCheck(check, settings, timeoutMs = 6000) {
+  const controller = new AbortController();
+  let timeoutId = null;
+  const timeout = new Promise((resolve) => {
+    timeoutId = window.setTimeout(() => {
+      controller.abort();
+      resolve({ status: "rejected", reason: new Error("检查超时") });
+    }, timeoutMs);
+  });
+  const request = Promise.resolve()
+    .then(() => check(settings, controller.signal))
+    .then(
+      (value) => ({ status: "fulfilled", value }),
+      (reason) => ({ status: "rejected", reason })
+    );
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+  }
+}
+
 function setQualityPill(target, status, customText = "") {
   target.className = `quality-pill quality-${String(status || "unknown").toLowerCase()}`;
   target.textContent = customText || qualityLabel(status);
@@ -1752,9 +1774,9 @@ function renderSources(payload) {
 async function refreshServices() {
   const generation = ++serviceRefreshGeneration;
   const settings = state.settings;
-  const checks = await Promise.allSettled([
-    marketHealth(settings),
-    analysisHealth(settings)
+  const checks = await Promise.all([
+    runHealthCheck(marketHealth, settings),
+    runHealthCheck(analysisHealth, settings)
   ]);
   const marketState = serviceHealthState(checks[0]);
   const analysisState = serviceHealthState(checks[1]);
@@ -1783,27 +1805,6 @@ async function checkConnectionFromSettings() {
   button.textContent = "检查中…";
   output.textContent = "正在测试表单中的行情与分析 API 地址；本次检查不会保存配置…";
   output.className = "settings-inline-status";
-  const runHealthCheck = async (check, settings, timeoutMs = 6000) => {
-    const controller = new AbortController();
-    let timeoutId = null;
-    const timeout = new Promise((resolve) => {
-      timeoutId = window.setTimeout(() => {
-        controller.abort();
-        resolve({ status: "rejected", reason: new Error("检查超时") });
-      }, timeoutMs);
-    });
-    const request = Promise.resolve()
-      .then(() => check(settings, controller.signal))
-      .then(
-        (value) => ({ status: "fulfilled", value }),
-        (reason) => ({ status: "rejected", reason })
-      );
-    try {
-      return await Promise.race([request, timeout]);
-    } finally {
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
-    }
-  };
   try {
     // 使用表单草稿而不是已保存设置；健康检查不保存草稿。
     const settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
