@@ -1300,6 +1300,32 @@ func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *tes
 }
 
 
+func TestIndexQuoteRejectsInvalidSymbolOrCode(t *testing.T) {
+	now := time.Now().UTC()
+	price, changePercent := 3200.0, 1.0
+	cases := []struct {
+		name, symbol, code string
+	}{
+		{name: "missing exchange suffix", symbol: "000001", code: "000001"},
+		{name: "symbol code mismatch", symbol: "000001.SH", code: "999999"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := &model.IndexQuoteSnapshot{
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+				Items: []model.MarketIndexQuote{{
+					Symbol: tc.symbol, Code: tc.code, Name: "测试指数",
+					LatestPrice: &price, ChangePercent: &changePercent, AmountUnit: "unknown",
+					Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+				}},
+			}
+			if err := validateIndexQuoteSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "invalid symbol/code") {
+				t.Fatalf("invalid index symbol/code must be rejected, got %v", err)
+			}
+		})
+	}
+}
+
 func TestIndexQuoteRejectsMismatchedItemSourceVersion(t *testing.T) {
 	now := time.Now().UTC()
 	price, changePercent := 3200.0, 1.0

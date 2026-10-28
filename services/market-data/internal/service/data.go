@@ -164,6 +164,10 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 		if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
 			return errors.New("index-quote row has missing symbol/code/name")
 		}
+		canonicalSymbol, symbolErr := canonicalIndexSymbol(item.Symbol)
+		if symbolErr != nil || canonicalSymbol != item.Symbol || item.Code != strings.Split(canonicalSymbol, ".")[0] {
+			return errors.New("index-quote row has invalid symbol/code")
+		}
 		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() || item.LatestPrice == nil || item.ChangePercent == nil {
 			return errors.New("index-quote row failed source/version, fetched_at or required-value validation")
 		}
