@@ -75,6 +75,21 @@ func TestEastmoneyQuoteAcceptsNumericUnixSecondsTimestamp(t *testing.T) {
 	}
 }
 
+func TestEastmoneyQuoteDegradesFutureProviderTimestamp(t *testing.T) {
+	timestamp := time.Date(2099, 12, 31, 12, 0, 0, 0, time.UTC).Unix()
+	body := fmt.Sprintf(`{"rc":0,"data":{"f43":41.76,"f44":42.09,"f45":41.66,"f46":41.70,"f47":125595,"f48":525556667,"f57":"600036","f58":"招商银行","f60":41.82,"f86":%d,"f169":-0.06,"f170":-0.14,"f50":2.85,"f168":0.06}}`, timestamp)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, body) }))
+	defer server.Close()
+
+	q, err := NewEastmoney(2*time.Second, server.URL, server.URL).FetchQuote(context.Background(), "600036.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.QuoteTime != nil || q.QualityStatus != model.QualityDegraded {
+		t.Fatalf("future provider timestamp must be omitted and quality degraded: %+v", q)
+	}
+}
+
 func TestParseEastmoneyTimeSupportsUnixSecondsAndMilliseconds(t *testing.T) {
 	want := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 	for _, raw := range []string{
