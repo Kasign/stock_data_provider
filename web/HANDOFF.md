@@ -1066,3 +1066,13 @@
 - 修复点是：忙碌锁设置后立即进入外层 `try`，初始状态写入、自选股重绘、结果区域更新与读取循环都在其保护范围内。
 - 外层 catch 在当前任务/Run 代际仍有效时记录读取错误并尝试显示提示；finally 仍只允许当前 `runResultGeneration` 释放按钮。
 - 本轮未运行本地 Node 测试、构建或真实浏览器验收；待核对对应 GitHub Actions Browser Smoke。
+
+
+## 2026-10-28 轮询异常恢复与手动刷新收尾补强
+
+- 当前分支已包含 `pollTaskSafely`。本轮进一步将异常恢复本身的状态写入、质量徽标、诊断文案和自选股卡片重绘分别隔离；恢复路径再发生 UI 错误时，不应向调用方返回新的 rejected Promise。
+- 手动刷新按钮忙碌后，前置 UI 更新现在有独立异常收敛；即使徽标、状态文案或自选股卡片重绘失败，也会继续发起安全轮询。当前代际仍有效时由 Promise `finally` 收尾按钮，过时代际不覆盖新操作。
+- 代码提交：https://github.com/Kasign/stock_data_provider/commit/5d3375652bfe13fd33f12e339292272639a56b73
+- 回归契约更正：https://github.com/Kasign/stock_data_provider/commit/3cab3911f1848b031e73437f9629e2b9090d4416
+- 手动刷新前置异常修复与契约：https://github.com/Kasign/stock_data_provider/commit/2740bf1393edc43ae40bd2a21e67784ad651401b
+- 当前尚未执行 Node 测试、构建或真实浏览器验收。检查 GitHub Actions 时应以目标分支最新 HEAD 对应的 Browser Smoke 为准，不能把旧 HEAD 的结果当作当前验收结论。
