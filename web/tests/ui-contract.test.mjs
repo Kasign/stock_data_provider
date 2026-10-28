@@ -246,6 +246,15 @@ test("data-center checks are invalidated when a saved API connection changes", (
   assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(analysisBaseChanged \|\| marketConnectionChanged\) \{\s*dataCenter\.invalidate\(/);
 });
 
+test("connection-check failures ignore errors from a superseded configuration", () => {
+  const checkConnection = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(checkConnection, "settings connection check must exist");
+  assert.match(checkConnection, /let settingsToCheck = null/);
+  assert.match(checkConnection, /catch \(error\) \{[\s\S]*?const currentDraft = readConnectionDraft\(\);[\s\S]*?connectionDraftChanged\(testedDraft, currentDraft\)/);
+  assert.match(checkConnection, /if \(configurationChanged\) \{[\s\S]*?旧错误已忽略，请使用当前配置重新检查/);
+  assert.match(checkConnection, /连接检查失败：[\s\S]*?finally \{/);
+});
+
 test("market connection changes invalidate all in-flight stock-research panels", () => {
   assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(marketConnectionChanged\) \{[\s\S]*?cancelStockSearchRequest\(\);[\s\S]*?stockResearch\.invalidate\("行情连接配置已变更，旧研究请求已作废，请重新加载对应资料。"\);\s*\}/);
   assert.match(stockResearch, /function invalidate\(message="行情连接配置已变更，请重新加载个股研究资料。"\)\{\s*reset\(resolvedSymbol\(\)\);[\s\S]*?Object\.keys\(state\.generation\)\.forEach\(abort\)/);

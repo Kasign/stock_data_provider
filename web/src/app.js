@@ -1781,13 +1781,14 @@ async function checkConnectionFromSettings() {
   const button = $("#settings-check-connection");
   const output = $("#settings-connection-check");
   const testedDraft = readConnectionDraft();
+  let settingsToCheck = null;
   button.disabled = true;
   button.textContent = "检查中…";
   output.textContent = "正在测试表单中的行情与分析 API 地址；本次检查不会保存配置…";
   output.className = "settings-inline-status";
   try {
     // 使用表单草稿而不是已保存设置；健康检查不保存草稿。
-    const settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
+    settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
     const [marketResult, analysisResult] = await Promise.all([
       runHealthCheck(marketHealth, settingsToCheck),
       runHealthCheck(analysisHealth, settingsToCheck)
@@ -1820,6 +1821,23 @@ async function checkConnectionFromSettings() {
       ? "settings-inline-status is-success"
       : "settings-inline-status is-warning";
   } catch (error) {
+    const currentDraft = readConnectionDraft();
+    let configurationChanged = connectionDraftChanged(testedDraft, currentDraft);
+    if (!configurationChanged && settingsToCheck) {
+      try {
+        const currentSettingsToCheck = mergeConnectionDraft(currentDraft, state.settings);
+        configurationChanged = currentSettingsToCheck.marketBase !== settingsToCheck.marketBase ||
+          currentSettingsToCheck.analysisBase !== settingsToCheck.analysisBase ||
+          currentSettingsToCheck.apiKey !== settingsToCheck.apiKey;
+      } catch {
+        configurationChanged = true;
+      }
+    }
+    if (configurationChanged) {
+      output.textContent = "检查期间连接地址、API Key 或已保存配置发生变化，旧错误已忽略，请使用当前配置重新检查。";
+      output.className = "settings-inline-status is-warning";
+      return;
+    }
     output.textContent = "连接检查失败：" + errorMessage(error);
     output.className = "settings-inline-status is-warning";
   } finally {
