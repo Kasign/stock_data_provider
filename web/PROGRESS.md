@@ -1388,3 +1388,11 @@
 - 修复手动刷新在启动安全轮询前同步更新 UI 的边界：前置徽标、状态文案或自选股重绘失败时，记录诊断但继续请求服务端状态；按钮解锁路径也捕获自身的 UI 异常。
 - 代码与静态契约提交：5d3375652bfe13fd33f12e339292272639a56b73、3cab3911f1848b031e73437f9629e2b9090d4416、2740bf1393edc43ae40bd2a21e67784ad651401b。
 - 本轮只做远程源码结构与静态契约内容核对；未运行本地 Node 测试、构建或手动浏览器验收。GitHub Actions Browser Smoke 已由推送触发，需后续检查最终结果。
+
+
+## 2026-10-28 — Run 结果读取的异常收尾完整性
+
+- Review 发现 Run 结果读取的 `setRunResultReloadBusy(true)` 仍位于外层 `try` 之前；若忙碌状态更新异常，读取流程会提前 rejected，无法进入 finally 收尾。
+- 将锁初始化纳入统一 `try/catch/finally`；异常诊断格式化、安全提示更新、自选股重绘及最终按钮解锁均增加局部保护，当前代际和分析 API 地址隔离保持不变。
+- 代码与回归契约提交：https://github.com/Kasign/stock_data_provider/commit/af6a75eccaa559ddee3bb6d1dad14914edc59669
+- 本轮未运行本地 Node 测试、构建或人工浏览器验收；该提交的 Browser Smoke 已触发，结果待后续核对。

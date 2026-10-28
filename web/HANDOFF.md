@@ -1076,3 +1076,11 @@
 - 回归契约更正：https://github.com/Kasign/stock_data_provider/commit/3cab3911f1848b031e73437f9629e2b9090d4416
 - 手动刷新前置异常修复与契约：https://github.com/Kasign/stock_data_provider/commit/2740bf1393edc43ae40bd2a21e67784ad651401b
 - 当前尚未执行 Node 测试、构建或真实浏览器验收。检查 GitHub Actions 时应以目标分支最新 HEAD 对应的 Browser Smoke 为准，不能把旧 HEAD 的结果当作当前验收结论。
+
+
+## 2026-10-28 Run 结果异常收尾补强
+
+- `loadTaskRunResult` 的忙碌锁设置现位于最外层 `try` 内，准备阶段异常也会进入收尾流程。
+- 外层异常路径使用安全错误格式化，并分别保护结果提示、自选股卡片重绘和失败诊断写入；finally 仅在 `runResultGeneration` 仍匹配时解锁，解锁自身异常也会被收敛。
+- 代码与静态回归契约：https://github.com/Kasign/stock_data_provider/commit/af6a75eccaa559ddee3bb6d1dad14914edc59669
+- 未运行本地 Node 测试、构建或手动浏览器验收。后续需核对该 HEAD 的 Browser Smoke，并在统一回归中执行完整 UI 契约测试。
