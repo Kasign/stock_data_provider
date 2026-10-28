@@ -285,3 +285,8 @@ Go 行业/概念排行要求当前返回条数满足 min(limit,total)。源端�
 ## 2026-10-28 龙虎榜源端错误状态复核
 
 东方财富龙虎榜 Provider 在解析数据体前检查显式 `success=false`，即使响应同时包含有效形状的 result/count/data 也拒绝该候选并进入回退；缺失 success 字段则继续通过既有响应契约判断。测试源码已增加，尚未实际执行。
+
+
+## 2026-10-28 Tushare 公告重复行质量处理
+
+Tushare 公告适配器对稳定 article ID 的重复记录仍只保留一条，但在父快照质量原因中显式记录 `provider_duplicate_announcement_rows_deduplicated`，防止源端重复记录被静默隐藏。测试源码已补齐，尚未执行统一验收。

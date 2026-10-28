@@ -223,3 +223,8 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 ### 龙虎榜源端显式失败状态
 
 东方财富龙虎榜响应若明确提供 `success=false`，即使 `result` 中仍带有 `count/data`，也必须拒绝该响应并继续 Provider 回退；不能只因条目可解析就忽略源端失败标志。若源端未提供 `success` 字段，继续按现有 `result/count`、交易日、页数及行数契约验证，不把缺失字段当成失败或成功证据。
+
+
+### Tushare 公告重复行质量原因
+
+Tushare 公告端点返回完全重复的记录时，适配器按规范化的证券、公告日期、标题和来源 URL 生成稳定 ID 并去重，但必须增加 `provider_duplicate_announcement_rows_deduplicated` 质量原因，使聚合快照保持 degraded；去重后的 `total/returned` 表示唯一公告记录数，不伪装成源端未去重行数。

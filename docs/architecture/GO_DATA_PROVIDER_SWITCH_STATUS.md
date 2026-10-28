@@ -844,3 +844,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - 东方财富龙虎榜适配器新增 `success=false` 显式失败门禁，防止错误响应携带的残留 `result/data` 被当作有效候选。未提供 `success` 时不额外拒绝，仍执行既有计数和行级契约。
 - 新增失败标志存在但数据体非空的 HTTP fixture 测试源码；未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### Tushare 公告重复记录静态复核（2026-10-28）
+
+- 重复公告记录仍按稳定 article ID 去重，但不再静默丢弃：父快照增加 `provider_duplicate_announcement_rows_deduplicated`，质量降级并在迁移文档说明 `total/returned` 是去重后唯一记录数。
+- 新增 Tushare HTTP fixture 测试源码，覆盖重复记录去重和质量原因；未执行测试、构建、CI 或真实 Provider 请求。
