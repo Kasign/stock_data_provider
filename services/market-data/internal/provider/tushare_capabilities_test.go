@@ -674,8 +674,12 @@ func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 			key      string
 		}{
 			{category: "income_statement", key: "ebitda"},
+			{category: "income_statement", key: "commission_income"},
 			{category: "balance_sheet", key: "total_liabilities_and_equity"},
+			{category: "balance_sheet", key: "right_of_use_assets"},
 			{category: "cash_flow_statement", key: "free_cash_flow"},
+			{category: "cash_flow_statement", key: "cash_received_tax_refunds"},
+			{category: "cash_flow_statement", key: "other_financing_cash_paid"},
 		} {
 			found := false
 			for _, section := range snapshot.Sections {
