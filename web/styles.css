@@ -1937,22 +1937,24 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   flex-direction:column;
   gap:5px;
   color:var(--text-soft);
-  font-size:10px
+  font-size:12px;
+  line-height:1.4
 }
 .stock-research-toolbar select {
   min-width:80px;
   max-width:110px;
-  min-height:32px;
-  padding:5px 7px;
+  min-height:38px;
+  padding:6px 8px;
   border:1px solid var(--border);
   border-radius:6px;
   background:var(--panel-raised);
-  color:var(--text)
+  color:var(--text);
+  font-size:12px
 }
 .stock-research-toolbar .button {
-  min-height:32px;
+  min-height:38px;
   padding:6px 10px;
-  font-size:10px
+  font-size:12px
 }
 .stock-board-list {
   display:grid;

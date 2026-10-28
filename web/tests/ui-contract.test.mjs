@@ -659,6 +659,14 @@ test("Run Flow summary and event diagnostics remain grounded in persisted Task, 
 });
 
 
+test("stock research toolbar controls use readable labels and touch-sized targets", () => {
+  assert.match(finalCssRuleBody(".stock-research-toolbar label"), /font-size:12px/);
+  assert.match(finalCssRuleBody(".stock-research-toolbar select"), /min-height:38px/);
+  assert.match(finalCssRuleBody(".stock-research-toolbar select"), /font-size:12px/);
+  assert.match(finalCssRuleBody(".stock-research-toolbar .button"), /min-height:38px/);
+  assert.match(finalCssRuleBody(".stock-research-toolbar .button"), /font-size:12px/);
+});
+
 test("market overview and activity use readable secondary text and touch-sized controls", () => {
   assert.match(finalCssRuleBody(".market-overview-updated"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-overview-subheading p"), /font-size: 12px/);
