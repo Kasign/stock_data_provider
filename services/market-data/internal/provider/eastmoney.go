@@ -2057,6 +2057,9 @@ type eastmoneyIndexDefinition struct {
 	Name   string
 }
 
+const eastmoneyIndexChangeTolerance = 0.05
+const eastmoneyIndexChangePercentTolerancePP = 0.15
+
 var eastmoneyCoreIndexDefinitions = []eastmoneyIndexDefinition{
 	{Symbol: "000001.SH", Code: "000001", SecID: "1.000001", Market: "1", Name: "上证指数"},
 	{Symbol: "399001.SZ", Code: "399001", SecID: "0.399001", Market: "0", Name: "深证成指"},
@@ -2135,6 +2138,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_name_missing_used_allowlisted_name")
 		}
 		price, changePercent := parseEastmoneyBoardNumber(raw, "f2"), parseEastmoneyBoardNumber(raw, "f3")
+		change := parseEastmoneyBoardNumber(raw, "f4")
 		if price == nil || *price <= 0 || changePercent == nil {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_required_price_field_missing_or_invalid")
@@ -2155,6 +2159,15 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_ohlc_invariant_failed")
 			continue
+		}
+		if prevClose != nil {
+			priceChange := *price - *prevClose
+			if (change != nil && math.Abs(*change-priceChange) > eastmoneyIndexChangeTolerance) ||
+				math.Abs(*changePercent-priceChange / *prevClose * 100) > eastmoneyIndexChangePercentTolerancePP {
+				snapshot.QualityStatus = model.QualityDegraded
+				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+				continue
+			}
 		}
 		reasons := []string{}
 		amount := parseEastmoneyBoardNumber(raw, "f6")
@@ -2182,7 +2195,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		}
 		item := model.MarketIndexQuote{
 			Symbol: definition.Symbol, Code: definition.Code, Name: name,
-			LatestPrice: price, Change: parseEastmoneyBoardNumber(raw, "f4"), ChangePercent: changePercent,
+			LatestPrice: price, Change: change, ChangePercent: changePercent,
 			Open: openPrice, High: high, Low: low, PrevClose: prevClose,
 			Amount: amount, AmountUnit: amountUnit, QuoteTime: quoteTime, QuoteTimeSemantics: quoteTimeSemantics,
 			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt, QualityStatus: model.QualityValid, QualityReasons: reasons,

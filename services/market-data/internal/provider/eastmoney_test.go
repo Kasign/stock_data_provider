@@ -488,7 +488,10 @@ func TestEastmoneyFetchIndexQuotesParsesAllowListedCoreIndexes(t *testing.T) {
 		got = r.URL.Query()
 		rows := make([]map[string]any, 0, len(eastmoneyCoreIndexDefinitions))
 		for i, idx := range eastmoneyCoreIndexDefinitions {
-			rows = append(rows, map[string]any{"f2": 3200.5 + float64(i), "f3": 0.8, "f4": 24.5, "f6": 123456789.0, "f12": idx.Code, "f13": idx.Market, "f14": idx.Name, "f15": 3210.0, "f16": 3180.0, "f17": 3190.0, "f18": 3176.0, "f86": "202610231500"})
+			price := 3200.5 + float64(i)
+			change := price - 3176.0
+			changePercent := change / 3176.0 * 100
+			rows = append(rows, map[string]any{"f2": price, "f3": changePercent, "f4": change, "f6": 123456789.0, "f12": idx.Code, "f13": idx.Market, "f14": idx.Name, "f15": 3210.0, "f16": 3180.0, "f17": 3190.0, "f18": 3176.0, "f86": "202610231500"})
 		}
 		body, err := json.Marshal(map[string]any{"rc": 0, "data": map[string]any{"total": len(rows), "diff": rows}})
 		if err != nil {
@@ -918,5 +921,28 @@ func TestEastmoneyFetchIndexQuotesNegativeAmountDegradesInsteadOfReturningNegati
 	}
 	if !strings.Contains(strings.Join(item.QualityReasons, ","), "provider_amount_negative_or_invalid") {
 		t.Fatalf("item should disclose invalid negative amount: %v", item.QualityReasons)
+	}
+}
+
+
+func TestEastmoneyFetchIndexQuotesRejectsInconsistentChangeFields(t *testing.T) {
+	for _, row := range []struct {
+		name string
+		json string
+	}{
+		{name: "change amount mismatch", json: `{"f2":3200.5,"f3":0.8,"f4":10,"f12":"000001","f13":1,"f18":3176}`},
+		{name: "change percent mismatch", json: `{"f2":3200.5,"f3":10,"f4":24.5,"f12":"000001","f13":1,"f18":3176}`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"rc":0,"data":{"total":1,"diff":[%s]}}`, row.json)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+			_, err := p.FetchIndexQuotes(context.Background())
+			if err == nil || !strings.Contains(err.Error(), "rows failed index-code and price validation") {
+				t.Fatalf("inconsistent change fields must not be accepted, got %v", err)
+			}
+		})
 	}
 }
