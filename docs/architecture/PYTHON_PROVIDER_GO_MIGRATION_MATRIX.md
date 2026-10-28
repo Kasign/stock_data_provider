@@ -233,7 +233,7 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 | 热度榜 | 东方财富人气/飙升榜、同花顺可选，雪球人气/关注后备 | 已有接口；源时间缺失则降级，雪球飙升榜只是涨幅排序代理，不是原生热度飙升口径 |
 | 筹码分布 | 东方财富 Go 原生 CYQ 计算，妙想 MX 可选补充 | 是最新可计算筹码快照，不具备严格历史时点可用时间；输出需保持降级 |
 | 个股资金流 | 东方财富公开资金流为默认 Provider；妙想 MX API 作为独立可选后备 | 尚需统一验收返回字段、金额口径、当日数据语义与窗口完整度；无精确可用时间，始终 degraded |
-| 增强数据 | `GET /api/v1/bundles/{symbol}` 提供 quote + daily bars；`go-core` 的 `StockBundle` 再并发汇总 profile、所属板块、财务、筹码、资金流和龙虎榜 | 已有一体化分析上下文/聚合模型，但不是旧 Python 函数的严格 1:1 字段替代：旧函数的 `None` 键、异常隔离和 DataFrame 序列化语义不同；显式 `as_of` 会跳过当前辅助快照。需按字段与错误语义对账，不应重复新建相同 Provider |
+| 增强数据 | `GET /api/v1/bundles/{symbol}` 提供 quote + daily bars；`go-core` 的 `StockBundle` 再并发汇总 profile、所属板块、财务、筹码、资金流和龙虎榜 | 已有一体化分析上下文/聚合模型，但不是旧 Python 函数的严格 1:1 字段替代：旧函数的 `None` 键、异常隔离和 DataFrame 序列化语义不同；Go 路径及 Python 兼容桥在历史 `as_of` 无法重建时都必须跳过当前辅助快照。需按字段与错误语义对账，不应重复新建相同 Provider |
 
 本清单描述当前仓库代码状态，不代表运行验证。实际接入、账号可访问、字段含义一致、证券全量覆盖、生产可用性分别验收；海外来源暂缓。
 
