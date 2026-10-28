@@ -1,5 +1,5 @@
 import { getCapitalFlow, getChipDistribution, getMarketValuations, getStockAnnouncements, getStockBoards, getStockFundamentals, getStockProfile } from "./api.js";
-import { describeApiError, finiteNumberOrNull, formatDateTime, formatPercent, normalizeSymbol, qualityLabel } from "./format.js";
+import { comparableMarketSymbol, describeApiError, finiteNumberOrNull, formatDateTime, formatPercent, normalizeSymbol, qualityLabel } from "./format.js";
 const $=(s)=>document.querySelector(s);
 const QUALITY=["valid","degraded","stale","invalid","unknown"];
 const CATEGORY={profitability:"盈利能力",operating:"营运能力",growth:"成长能力",solvency:"偿债能力",cash_flow:"现金流",dupont:"杜邦分析"};
@@ -24,12 +24,12 @@ function responseError(err){if(Number(err?.status)===404)return "当前部署的
 function safeAnnouncementUrl(raw){try{const url=new URL(String(raw||""));return url.protocol==="https:"&&(url.hostname==="eastmoney.com"||url.hostname.endsWith(".eastmoney.com"))?url.href:"";}catch{return "";}}
 function currentYearAndQuarter(){const now=new Date();let year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3);if(quarter===0){year-=1;quarter=4;}return {year,quarter};}
 function normalizeValuationSymbol(input) {
- const value=normalizeSymbol(input);
- if(value.includes("."))return value;
- if(value.startsWith("6"))return value+".SH";
- if(/^[03]/.test(value))return value+".SZ";
- if(/^(?:[48]\d{5}|92\d{4})$/.test(value))return value+".BJ";
- throw new Error("无法从该六位代码判断交易所，请输入带 .SH、.SZ 或 .BJ 后缀的 A 股代码。");
+  const value=normalizeSymbol(input);
+  const normalized=comparableMarketSymbol(value);
+  if(!value.includes(".")&&normalized===value){
+    throw new Error("无法从该六位代码判断交易所，请输入带 .SH、.SZ 或 .BJ 后缀的 A 股代码。");
+  }
+  return normalized;
 }
 function sameValuationSymbol(left,right) {
  try{return normalizeValuationSymbol(left)===normalizeValuationSymbol(right);}
