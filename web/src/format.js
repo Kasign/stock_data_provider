@@ -16,6 +16,16 @@ export function normalizeSymbol(input) {
   throw new Error("股票代码格式不正确，请输入 6 位代码或带交易所后缀的代码，例如 600519.SH。");
 }
 
+// 为行情、研究、自选股与工作区导入提供唯一的 A 股身份比较规则。
+export function comparableMarketSymbol(input) {
+  const value = normalizeSymbol(input);
+  if (value.includes(".")) return value;
+  if (value.startsWith("6")) return value + ".SH";
+  if (/^[03]\d{5}$/.test(value)) return value + ".SZ";
+  if (/^(?:[48]\d{5}|92\d{4})$/.test(value)) return value + ".BJ";
+  return value;
+}
+
 export function parseSymbols(input) {
   const parts = String(input ?? "").split(/[，,\s;；]+/).map((item) => item.trim()).filter(Boolean);
   const normalized = [...new Set(parts.map(normalizeSymbol))];
