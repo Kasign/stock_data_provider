@@ -942,6 +942,11 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if snapshot.Total <= 0 || snapshot.Total < len(snapshot.Items) {
 		return errors.New("sector-ranking total is less than returned items or not positive")
 	}
+	for _, reason := range snapshot.QualityReasons {
+		if reason == "provider_rows_dropped_after_validation" {
+			return errors.New("sector-ranking candidate dropped source rows during required-field validation")
+		}
+	}
 	expectedItems := limit
 	if snapshot.Total < expectedItems {
 		expectedItems = snapshot.Total
