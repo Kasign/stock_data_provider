@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,12 @@ func TestDragonTigerValidatesDateAndPreservesSignedNetBuy(t *testing.T) {
 		Total: 1, Pages: 1, Returned: 1, SourceReturned: 1, ExcludedNonAShareCount: 0, HasData: true, HasMore: false,
 		Items: []model.DragonTigerItem{item}, Source: "eastmoney", SourceVersion: "test",
 		FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+	versionMismatch := *snapshot
+	versionMismatch.Items = append([]model.DragonTigerItem(nil), snapshot.Items...)
+	versionMismatch.Items[0].SourceVersion = "older-version"
+	if err := validateDragonTigerSnapshot("2026-10-22", 1, 100, &versionMismatch); err == nil {
+		t.Fatal("dragon-tiger item source version must match parent snapshot")
 	}
 	qualityMismatch := *snapshot
 	qualityMismatch.QualityStatus = model.QualityValid
@@ -79,5 +86,25 @@ func TestValidateDragonTigerSnapshotRejectsMissingRowsForNonzeroTotal(t *testing
 	}
 	if err := validateDragonTigerSnapshot("2026-10-22", 1, 100, snapshot); err == nil {
 		t.Fatal("nonzero total and empty page must be rejected")
+	}
+}
+
+
+func TestValidateDragonTigerSnapshotRejectsUnderfilledSourcePage(t *testing.T) {
+	now := time.Now().UTC()
+	change, closePrice := 1.5, 10.0
+	item := model.DragonTigerItem{
+		Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", TradeDate: "2026-10-22",
+		ChangePercent: &change, ClosePrice: &closePrice,
+		Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+	}
+	snapshot := &model.DragonTigerSnapshot{
+		TradeDate: "2026-10-22", ProviderReportDate: "2026-10-22", Page: 1, PageSize: 2,
+		Total: 3, Pages: 2, Returned: 1, SourceReturned: 1, ExcludedNonAShareCount: 0,
+		HasData: true, HasMore: true, Items: []model.DragonTigerItem{item},
+		Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+	}
+	if err := validateDragonTigerSnapshot("2026-10-22", 1, 2, snapshot); err == nil || !strings.Contains(err.Error(), "source row count") {
+		t.Fatalf("dragon-tiger source page below the count-implied size must be rejected, got %v", err)
 	}
 }

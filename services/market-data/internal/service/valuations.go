@@ -26,8 +26,8 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 	if snapshot == nil {
 		return errors.New("valuation provider returned an empty snapshot")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("valuation snapshot source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
+		return errors.New("valuation snapshot source, source_version or fetched_at is missing")
 	}
 	if snapshot.ProviderReportDate != "" {
 		reportDate, dateErr := time.Parse("2006-01-02", snapshot.ProviderReportDate)
@@ -77,18 +77,39 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 			return fmt.Errorf("valuation provider returned duplicate symbol %q", symbol)
 		}
 		seen[symbol] = struct{}{}
-		if item.Code != strings.Split(symbol, ".")[0] || strings.TrimSpace(item.Source) == "" || item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-			return fmt.Errorf("valuation item %s has inconsistent identity/source metadata", symbol)
+		if item.Code != strings.Split(symbol, ".")[0] || strings.TrimSpace(item.Source) == "" ||
+			item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+			return fmt.Errorf("valuation item %s has inconsistent identity/source/version metadata", symbol)
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("valuation item %s has unsupported quality %q", symbol, item.QualityStatus)
 		}
-		for _, value := range []*float64{item.PETTM, item.PEMRQ, item.PEStatic, item.PBMRQ, item.PSTTM, item.PCFTTM} {
+		for _, value := range []*float64{
+			item.PETTM, item.PEMRQ, item.PEStatic, item.PBMRQ, item.PSTTM, item.PCFTTM,
+			item.TurnoverRatePercent, item.FloatTurnoverRatePercent, item.VolumeRatio,
+			item.DividendYieldPercent, item.DividendYieldTTMPercent,
+		} {
 			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
 				return fmt.Errorf("valuation item %s has non-finite metric", symbol)
 			}
 			if value == nil {
 				hasDegradation = true
+			}
+		}
+
+		// 比例类估值字段按经济含义只能是非负数；PE/PB 等估值倍数不在此列。
+		for _, metric := range []struct {
+			name  string
+			value *float64
+		}{
+			{name: "turnover_rate", value: item.TurnoverRatePercent},
+			{name: "turnover_rate_f", value: item.FloatTurnoverRatePercent},
+			{name: "volume_ratio", value: item.VolumeRatio},
+			{name: "dv_ratio", value: item.DividendYieldPercent},
+			{name: "dv_ttm", value: item.DividendYieldTTMPercent},
+		} {
+			if metric.value != nil && *metric.value < 0 {
+				return fmt.Errorf("valuation item %s has negative %s", symbol, metric.name)
 			}
 		}
 		if item.QualityStatus != model.QualityValid {
@@ -115,6 +136,34 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 		return errors.New("valuation snapshot claims valid quality despite missing/stale fields")
 	}
 	return nil
+}
+
+// betterUnknownValuationSnapshot 判断哪个未知质量快照保留的信息更多；同覆盖时优先较早的 Provider。
+func betterUnknownValuationSnapshot(candidate, current *model.ValuationSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	metricCount := func(snapshot *model.ValuationSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			for _, value := range []*float64{
+				item.PETTM, item.PEMRQ, item.PEStatic, item.PBMRQ, item.PSTTM, item.PCFTTM,
+				item.TurnoverRatePercent, item.FloatTurnoverRatePercent, item.VolumeRatio,
+				item.DividendYieldPercent, item.DividendYieldTTMPercent,
+			} {
+				if value != nil {
+					count++
+				}
+		}
+		return count
+	}
+	return metricCount(candidate) > metricCount(current)
 }
 
 func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*model.ValuationSnapshot, bool, error) {
@@ -167,7 +216,8 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			if !cacheEligible {
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "valuations_fallback_exhausted_without_confirmed_data" {
+					if reason == "valuations_fallback_exhausted_without_confirmed_data" ||
+						reason == "valuations_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
@@ -200,7 +250,9 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			continue
 		}
 		if snapshot.QualityStatus == model.QualityUnknown {
-			unknownSnapshot = snapshot
+			if betterUnknownValuationSnapshot(snapshot, unknownSnapshot) {
+				unknownSnapshot = snapshot
+			}
 			failures = append(failures, p.Name()+": valuation snapshot quality is unknown")
 			continue
 		}
@@ -221,7 +273,11 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 		return snapshot, false, nil
 	}
 	if unknownSnapshot != nil {
-		unknownSnapshot.QualityReasons = appendReason(unknownSnapshot.QualityReasons, "valuations_fallback_exhausted_without_confirmed_data")
+		reason := "valuations_fallback_exhausted_without_usable_quality"
+		if len(unknownSnapshot.Items) == 0 {
+			reason = "valuations_fallback_exhausted_without_confirmed_data"
+		}
+		unknownSnapshot.QualityReasons = appendReason(unknownSnapshot.QualityReasons, reason)
 		if payload, err := json.Marshal(unknownSnapshot); err == nil {
 			if cacheErr := s.cache.Set(ctx, cacheKey, payload, 10*time.Second); cacheErr != nil {
 				s.logger.Warn("valuation unknown cache write failed", "symbols", strings.Join(symbols, ","), "error", cacheErr)

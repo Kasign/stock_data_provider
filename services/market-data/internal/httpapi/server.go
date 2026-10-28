@@ -98,6 +98,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	fundamentalsEnabled := map[string]bool{}
 	valuationEnabled := map[string]bool{}
 	indexCatalogEnabled := map[string]bool{}
+	historicalIndexConstituentsEnabled := map[string]bool{}
 	chipEnabled := map[string]bool{}
 	capitalFlowEnabled := map[string]bool{}
 	hotRankingEnabled := map[string]bool{}
@@ -140,6 +141,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		}
 		for _, p := range svc.IndexCatalogProviders() {
 			indexCatalogEnabled[p.Name()] = true
+			if _, ok := p.(provider.HistoricalIndexConstituentProvider); ok {
+				historicalIndexConstituentsEnabled[p.Name()] = true
+			}
 		}
 		for _, p := range svc.ChipDistributionProviders() {
 			chipEnabled[p.Name()] = true
@@ -158,7 +162,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			StockBasicCapable: stockBasicEnabled[name], StockSearchCapable: stockSearchEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
-			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
+			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -336,6 +340,14 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "type must be industry or concept", requestID(r))
 		return
 	}
+	direction := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("direction")))
+	if direction == "" {
+		direction = "up"
+	}
+	if direction != "up" && direction != "down" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "direction must be up or down", requestID(r))
+		return
+	}
 	limit := 10
 	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
 		parsed, err := strconv.Atoi(rawLimit)
@@ -345,7 +357,7 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	snapshot, cacheHit, err := s.svc.SectorRankings(r.Context(), category, limit)
+	snapshot, cacheHit, err := s.svc.SectorRankingsByDirection(r.Context(), category, direction, limit)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return

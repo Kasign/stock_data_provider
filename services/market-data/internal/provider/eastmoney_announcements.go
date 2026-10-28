@@ -116,6 +116,9 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney stock announcements only support common A-share equities, got %q", rawSymbol)
+	}
 	start, startErr := time.Parse("2006-01-02", strings.TrimSpace(startDate))
 	end, endErr := time.Parse("2006-01-02", strings.TrimSpace(endDate))
 	if startErr != nil || endErr != nil || start.Format("2006-01-02") != strings.TrimSpace(startDate) ||
@@ -159,6 +162,13 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 		}
 		return nil, fmt.Errorf("Eastmoney stock-announcement response rejected: success=%d code=%q message=%q", payload.Success, code, message)
 	}
+	// 源端若回传分页元数据，必须与本次请求一致；不使用响应缺失字段伪造源端确认。
+	if payload.Data.PageIndex > 0 && payload.Data.PageIndex != page {
+		return nil, fmt.Errorf("Eastmoney announcement page_index=%d does not match requested page=%d", payload.Data.PageIndex, page)
+	}
+	if payload.Data.PageSize > 0 && payload.Data.PageSize != pageSize {
+		return nil, fmt.Errorf("Eastmoney announcement page_size=%d does not match requested page_size=%d", payload.Data.PageSize, pageSize)
+	}
 	total := payload.Data.TotalHits
 	if total < 0 {
 		return nil, fmt.Errorf("Eastmoney announcement total_hits is negative: %d", total)
@@ -166,7 +176,8 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 	fetchedAt := time.Now().UTC()
 	pages := 0
 	if total > 0 {
-		pages = (total + pageSize - 1) / pageSize
+		// 使用减一后整除，避免 total 接近 int 上界时加法溢出。
+		pages = 1 + (total-1)/pageSize
 	}
 	if total == 0 {
 		if len(payload.Data.List) != 0 {
@@ -177,11 +188,15 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 	if page > pages {
 		return nil, fmt.Errorf("requested announcement page %d exceeds source page count %d", page, pages)
 	}
-	if len(payload.Data.List) == 0 {
-		return nil, fmt.Errorf("Eastmoney announcement total_hits=%d but page %d returned no rows", total, page)
+	expectedRows := total - (page-1)*pageSize
+	if expectedRows > pageSize {
+		expectedRows = pageSize
 	}
-	if len(payload.Data.List) > pageSize {
-		return nil, fmt.Errorf("Eastmoney announcement returned %d rows above requested page_size=%d", len(payload.Data.List), pageSize)
+	if expectedRows <= 0 || len(payload.Data.List) != expectedRows {
+		return nil, fmt.Errorf(
+			"Eastmoney announcement page %d returned %d rows, expected %d from total_hits=%d and page_size=%d",
+			page, len(payload.Data.List), expectedRows, total, pageSize,
+		)
 	}
 
 	snapshot := &model.StockAnnouncementSnapshot{

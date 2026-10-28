@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,6 +70,148 @@ func TestValuationsFallsBackAfterUnknownProviderSnapshot(t *testing.T) {
 	if err != nil || hit { t.Fatalf("Valuations returned hit=%v err=%v", hit, err) }
 	if got == nil || got.QualityStatus != model.QualityDegraded || got.Source != "tushare" || first.calls != 1 || second.calls != 1 {
 		t.Fatalf("expected fallback valuation data, snapshot=%+v calls=%d/%d", got, first.calls, second.calls)
+	}
+}
+
+func unknownValuationsWithCoverageForTest(source string, returned, missing []string) *model.ValuationSnapshot {
+	now := time.Now().UTC()
+	value := 25.0
+	items := make([]model.ValuationItem, 0, len(returned))
+	for _, symbol := range returned {
+		parts := strings.Split(symbol, ".")
+		items = append(items, model.ValuationItem{
+			Symbol: symbol, Code: parts[0], Name: symbol,
+			PETTM: &value, PEMRQ: &value, PEStatic: &value, PBMRQ: &value, PSTTM: &value, PCFTTM: &value,
+			Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		})
+	}
+	return &model.ValuationSnapshot{
+		RequestedSymbols: []string{"600519.SH", "000858.SZ"},
+		Total: len(items), Items: items, MissingSymbols: append([]string(nil), missing...),
+		Source: source, SourceVersion: "test-v1", FetchedAt: now,
+		QualityStatus: model.QualityUnknown, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+}
+
+func TestValuationsKeepsBestCoverageUnknownSnapshotAfterFallbackExhaustion(t *testing.T) {
+	full := &valuationFallbackTestProvider{
+		name: "eastmoney",
+		snapshot: unknownValuationsWithCoverageForTest("eastmoney", []string{"600519.SH", "000858.SZ"}, []string{}),
+	}
+	partial := &valuationFallbackTestProvider{
+		name: "tushare",
+		snapshot: unknownValuationsWithCoverageForTest("tushare", []string{"600519.SH"}, []string{"000858.SZ"}),
+	}
+	svc := valuationFallbackService(full, partial)
+
+	got, hit, err := svc.Valuations(context.Background(), []string{"600519.SH", "000858.SZ"})
+	if err != nil || hit {
+		t.Fatalf("Valuations returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "eastmoney" || len(got.Items) != 2 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected the more complete unknown snapshot to be retained, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "valuations_fallback_exhausted_without_usable_quality" {
+			found = true
+			break
+		}
+	}
+	if !found || full.calls != 1 || partial.calls != 1 {
+		t.Fatalf("missing usable-quality exhaustion marker or incomplete fallback: reasons=%v calls=%d/%d", got.QualityReasons, full.calls, partial.calls)
+	}
+}
+
+func TestValuationsPrefersUnknownSnapshotWithMoreExtendedMetrics(t *testing.T) {
+	requested := []string{"600519.SH", "000858.SZ"}
+	baseline := unknownValuationsWithCoverageForTest("eastmoney", requested, []string{})
+	extended := unknownValuationsWithCoverageForTest("tushare", requested, []string{})
+	for i := range extended.Items {
+		turnoverRate := 1.1
+		floatTurnoverRate := 1.2
+		volumeRatio := 1.3
+		dividendYield := 1.4
+		dividendYieldTTM := 1.5
+		item := &extended.Items[i]
+		item.TurnoverRatePercent = &turnoverRate
+		item.FloatTurnoverRatePercent = &floatTurnoverRate
+		item.VolumeRatio = &volumeRatio
+		item.DividendYieldPercent = &dividendYield
+		item.DividendYieldTTMPercent = &dividendYieldTTM
+	}
+
+	first := &valuationFallbackTestProvider{name: "eastmoney", snapshot: baseline}
+	second := &valuationFallbackTestProvider{name: "tushare", snapshot: extended}
+	got, hit, err := valuationFallbackService(first, second).Valuations(context.Background(), requested)
+	if err != nil || hit {
+		t.Fatalf("Valuations returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.QualityStatus != model.QualityUnknown || len(got.Items) != len(requested) {
+		t.Fatalf("expected unknown snapshot with more mapped fields, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected both unknown providers to be attempted, calls=%d/%d", first.calls, second.calls)
+	}
+	foundExhausted := false
+	for _, reason := range got.QualityReasons {
+		if reason == "valuations_fallback_exhausted_without_usable_quality" {
+			foundExhausted = true
+			break
+		}
+	}
+	if !foundExhausted {
+		t.Fatalf("expected fallback-exhaustion reason, got %v", got.QualityReasons)
+	}
+}
+
+func TestValidateValuationSnapshotRejectsNegativeRatioMetrics(t *testing.T) {
+	cases := []struct {
+		name string
+		set  func(*model.ValuationItem)
+	}{
+		{name: "turnover_rate", set: func(item *model.ValuationItem) { value := -1.0; item.TurnoverRatePercent = &value }},
+		{name: "turnover_rate_f", set: func(item *model.ValuationItem) { value := -1.0; item.FloatTurnoverRatePercent = &value }},
+		{name: "volume_ratio", set: func(item *model.ValuationItem) { value := -1.0; item.VolumeRatio = &value }},
+		{name: "dv_ratio", set: func(item *model.ValuationItem) { value := -1.0; item.DividendYieldPercent = &value }},
+		{name: "dv_ttm", set: func(item *model.ValuationItem) { value := -1.0; item.DividendYieldTTMPercent = &value }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := validValuationsForFallbackTest("eastmoney")
+			tc.set(&snapshot.Items[0])
+			if err := validateValuationSnapshot([]string{"600519.SH"}, snapshot); err == nil {
+				t.Fatalf("expected negative %s to be rejected", tc.name)
+			}
+		})
+	}
+}
+
+func TestValidateValuationSnapshotRequiresSourceVersion(t *testing.T) {
+	snapshot := validValuationsForFallbackTest("eastmoney")
+	snapshot.SourceVersion = ""
+	snapshot.Items[0].SourceVersion = ""
+	if err := validateValuationSnapshot([]string{"600519.SH"}, snapshot); err == nil {
+		t.Fatal("expected valuation snapshot without a source version to be rejected")
+	}
+}
+
+func TestValuationsRejectsItemSourceVersionMismatchAndFallsBack(t *testing.T) {
+	mismatched := validValuationsForFallbackTest("eastmoney")
+	mismatched.Items[0].SourceVersion = "old-version"
+	first := &valuationFallbackTestProvider{name: "eastmoney", snapshot: mismatched}
+	second := &valuationFallbackTestProvider{name: "tushare", snapshot: validValuationsForFallbackTest("tushare")}
+
+	got, hit, err := valuationFallbackService(first, second).Valuations(context.Background(), []string{"600519.SH"})
+	if err != nil || hit {
+		t.Fatalf("Valuations returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.Items[0].SourceVersion != got.SourceVersion {
+		t.Fatalf("expected fallback to a source-version-consistent snapshot, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected version mismatch to trigger fallback, calls=%d/%d", first.calls, second.calls)
 	}
 }
 

@@ -82,7 +82,56 @@ func validFundamentalsSnapshotForTest() *model.FundamentalsSnapshot {
 	}
 	return &model.FundamentalsSnapshot{
 		Symbol: "600519.SH", Year: 2026, Quarter: 2, HasData: true,
-		Sections: sections, Source: "baostock", FetchedAt: now, QualityStatus: model.QualityValid,
+		Sections: sections, Source: "baostock", SourceVersion: "fixture-fundamentals-v1", FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+}
+
+func TestValidateFundamentalsSnapshotRejectsDuplicateMetricKeys(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.Sections[0].Metrics = append(snapshot.Sections[0].Metrics, snapshot.Sections[0].Metrics[0])
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "duplicate metric key") {
+		t.Fatalf("duplicate metric keys within a section must be rejected, got %v", err)
+	}
+}
+
+func TestValidateFundamentalsSnapshotRejectsBlankMetricMetadata(t *testing.T) {
+	cases := []struct {
+		name string
+		mutate func(*model.FundamentalMetric)
+	}{
+		{name: "blank key", mutate: func(metric *model.FundamentalMetric) { metric.Key = "  " }},
+		{name: "blank name", mutate: func(metric *model.FundamentalMetric) { metric.Name = "  " }},
+		{name: "blank unit", mutate: func(metric *model.FundamentalMetric) { metric.Unit = "  " }},
+		{name: "blank source field", mutate: func(metric *model.FundamentalMetric) { metric.SourceField = "  " }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := validFundamentalsSnapshotForTest()
+			tc.mutate(&snapshot.Sections[0].Metrics[0])
+			if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "invalid metric metadata/value") {
+				t.Fatalf("blank metric metadata must be rejected, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateFundamentalsSnapshotRejectsPlaceholderSourceVersion(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.SourceVersion = "unknown"
+	for i := range snapshot.Sections {
+		snapshot.Sections[i].QualityStatus = model.QualityDegraded
+	}
+	snapshot.QualityStatus = model.QualityDegraded
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("placeholder fundamentals source version must be rejected, got %v", err)
+	}
+}
+
+func TestValidateFundamentalsSnapshotRequiresSourceVersion(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.SourceVersion = ""
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("fundamentals snapshot without source version must be rejected, got %v", err)
 	}
 }
 
@@ -172,12 +221,12 @@ func validValuationSnapshotForValidationTest() *model.ValuationSnapshot {
 		Symbol: symbol, Code: "600519",
 		PETTM: valuationFloatPointerForValidationTest(18.4), PEMRQ: valuationFloatPointerForValidationTest(6.1), PEStatic: valuationFloatPointerForValidationTest(22.5),
 		PBMRQ: valuationFloatPointerForValidationTest(6.1), PSTTM: valuationFloatPointerForValidationTest(7.2), PCFTTM: valuationFloatPointerForValidationTest(9.0),
-		Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Source: "tushare", SourceVersion: "tushare-daily-basic-v2", FetchedAt: now, QualityStatus: model.QualityDegraded,
 	}
 	return &model.ValuationSnapshot{
 		RequestedSymbols: []string{symbol}, Total: 1, Items: []model.ValuationItem{item},
 		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
-		Source:             "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Source:             "tushare", SourceVersion: "tushare-daily-basic-v2", FetchedAt: now, QualityStatus: model.QualityDegraded,
 	}
 }
 
@@ -220,8 +269,96 @@ func validQuote(source string) *model.Quote {
 	vol := int64(3413600)
 	amount := 4525398959.0
 	qt := now
-	return &model.Quote{Symbol: "600519.SH", Name: "贵州茅台", CurrentPrice: &p, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &vol, Amount: &amount, QuoteTime: &qt, FetchedAt: now, NormalizedAt: now, Source: source, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+	return &model.Quote{Symbol: "600519.SH", Name: "贵州茅台", CurrentPrice: &p, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &vol, Amount: &amount, QuoteTime: &qt, FetchedAt: now, NormalizedAt: now, Source: source, SourceVersion: source + "-quote-v1", VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 }
+func TestQuoteFallsBackFromOldNormalizationVersion(t *testing.T) {
+	old := validQuote("eastmoney")
+	old.NormalizationVer = "old-normalization-v1"
+	current := validQuote("tencent")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", quote: old},
+		fakeProvider{name: "tencent", quote: current},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" || got.NormalizationVer != normalize.Version {
+		t.Fatalf("old-normalization quote must fall back to current version: %+v", got)
+	}
+}
+
+func TestHasIdentifiableSourceVersion(t *testing.T) {
+	for _, value := range []string{"", "  ", "unknown", " UNKNOWN ", "UnKnOwN"} {
+		if hasIdentifiableSourceVersion(value) {
+			t.Errorf("placeholder source version %q must be rejected", value)
+		}
+	}
+	for _, value := range []string{"eastmoney-stock-basic-v2", "test-v1", "v3"} {
+		if !hasIdentifiableSourceVersion(value) {
+			t.Errorf("identifiable source version %q must be accepted", value)
+		}
+	}
+}
+
+func TestQuoteFallsBackFromPlaceholderSourceVersion(t *testing.T) {
+	placeholder := validQuote("eastmoney")
+	placeholder.SourceVersion = " UNKNOWN "
+	fallback := validQuote("tencent")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", quote: placeholder},
+		fakeProvider{name: "tencent", quote: fallback},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" {
+		t.Fatalf("placeholder source version must trigger fallback, got %+v", got)
+	}
+}
+
+func TestDailyBarsFallsBackFromPlaceholderSourceVersion(t *testing.T) {
+	invalid := dailyBarForVersionContractTest("unknown", "2026-10-20")
+	fallbackBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", bars: []model.DailyBar{invalid}},
+		fakeProvider{name: "tencent", bars: []model.DailyBar{fallbackBar}},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" {
+		t.Fatalf("placeholder source version must trigger daily-bar fallback, got %+v", bars)
+	}
+}
+
+func TestQuoteFallsBackWhenProviderSourceVersionIsMissing(t *testing.T) {
+	missingVersion := validQuote("eastmoney")
+	missingVersion.SourceVersion = ""
+	fallback := validQuote("tencent")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", quote: missingVersion},
+		fakeProvider{name: "tencent", quote: fallback},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" || got.SourceVersion != fallback.SourceVersion || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("quote without source version must fall back to a versioned provider: %+v", got)
+	}
+}
+
 func TestQuotePreservesPriceWhenAmountMissingAndMarksUnitUnknown(t *testing.T) {
 	q := validQuote("eastmoney")
 	q.Amount = nil
@@ -288,7 +425,7 @@ func TestHistoricalBundleDoesNotFetchRealtimeQuote(t *testing.T) {
 	p := fakeProvider{name: "eastmoney", quoteErr: errors.New("quote should not be called")}
 	v := int64(1000)
 	amount := float64(10500)
-	p.bars = []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &v, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
+	p.bars = []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &v, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
 	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 60, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	asOf, _ := time.Parse(time.RFC3339, "2026-10-20T08:00:00Z")
 	b, err := s.Bundle(context.Background(), "600519", 60, asOf, true, model.AdjustmentForward)
@@ -312,8 +449,8 @@ func TestHistoricalBundleCutsOffCurrentIncompleteDayAndWarnsAboutAdjustmentLooka
 	vol := int64(1000)
 	amount := float64(10500)
 	p := fakeProvider{name: "eastmoney", seenEnd: &seenEnd, bars: []model.DailyBar{
-		{Symbol: "600519.SH", TradeDate: "2026-10-16", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
-		{Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-16", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
 	}}
 	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 60, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	b, err := s.Bundle(context.Background(), "600519", 60, asOf, true, model.AdjustmentForward)
@@ -480,12 +617,12 @@ func TestDailyBarsRejectsCacheWithWrongAdjustmentBasis(t *testing.T) {
 	mem := newMemoryCache()
 	vol := int64(10000)
 	amt := float64(100000)
-	cached := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amt, AdjustmentBasis: model.AdjustmentBackward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
+	cached := []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amt, AdjustmentBasis: model.AdjustmentBackward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
 	payload, _ := json.Marshal(map[string]any{"bars": cached, "warnings": []string{}})
 	mem.values["md:v4:bars:600519.SH:::forward_adjusted:120"] = payload
 	providerVol := int64(20000)
 	providerAmt := float64(200000)
-	p := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &providerVol, Amount: &providerAmt, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
+	p := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &providerVol, Amount: &providerAmt, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
 	s := New([]provider.Provider{p}, mem, nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bars, hit, _, err := s.DailyBars(context.Background(), "600519.SH", "", "", 120, model.AdjustmentForward)
 	if err != nil {
@@ -499,11 +636,159 @@ func TestDailyBarsRejectsCacheWithWrongAdjustmentBasis(t *testing.T) {
 	}
 }
 
+func dailyBarForVersionContractTest(sourceVersion, tradeDate string) model.DailyBar {
+	volume := int64(10000)
+	amount := 100000.0
+	return model.DailyBar{
+		Symbol: "600519.SH", TradeDate: tradeDate, Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
+		AdjustmentBasis: model.AdjustmentForward, Source: "fixture-provider", SourceVersion: sourceVersion,
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityDegraded,
+	}
+}
+
+func TestDailyBarsFallsBackFromOldNormalizationVersion(t *testing.T) {
+	old := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20")
+	old.NormalizationVer = "old-normalization-v1"
+	current := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", bars: []model.DailyBar{old}},
+		fakeProvider{name: "tencent", bars: []model.DailyBar{current}},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "", "", 120, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].NormalizationVer != normalize.Version {
+		t.Fatalf("old-normalization daily bars must fall back to current version: %+v", bars)
+	}
+}
+
+func TestDailyBarsFallsBackWhenProviderSourceVersionIsMissing(t *testing.T) {
+	primaryBar := dailyBarForVersionContractTest("placeholder", "2026-10-20")
+	primaryBar.SourceVersion = ""
+	fallbackBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	primary := fakeProvider{name: "eastmoney", bars: []model.DailyBar{primaryBar}}
+	fallback := fakeProvider{name: "tencent", bars: []model.DailyBar{fallbackBar}}
+	svc := New([]provider.Provider{primary, fallback}, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].SourceVersion != "tencent-daily-bars-v1" {
+		t.Fatalf("daily bars without source version must trigger fallback: %+v", bars)
+	}
+}
+
+func TestDailyBarsRejectsMixedProviderSourceVersionsAsAWhole(t *testing.T) {
+	primary := fakeProvider{name: "eastmoney", bars: []model.DailyBar{
+		dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20"),
+		dailyBarForVersionContractTest("eastmoney-daily-bars-v2", "2026-10-21"),
+	}}
+	fallbackVersion := "tencent-daily-bars-v1"
+	fallback := fakeProvider{name: "tencent", bars: []model.DailyBar{
+		dailyBarForVersionContractTest(fallbackVersion, "2026-10-20"),
+		dailyBarForVersionContractTest(fallbackVersion, "2026-10-21"),
+	}}
+	svc := New([]provider.Provider{primary, fallback}, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-21", 2, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 2 || bars[0].Source != "tencent" || bars[1].Source != "tencent" ||
+		bars[0].SourceVersion != fallbackVersion || bars[1].SourceVersion != fallbackVersion {
+		t.Fatalf("mixed-version response must be discarded as a whole: %+v", bars)
+	}
+}
+
+func TestDailyBarsCacheWithoutSourceVersionIsBypassed(t *testing.T) {
+	mem := newMemoryCache()
+	legacy := dailyBarForVersionContractTest("", "2026-10-20")
+	legacy.FetchedAt = time.Now().UTC()
+	legacy.NormalizedAt = time.Now().UTC()
+	legacy.NormalizationVer = normalize.Version
+	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{legacy}, "warnings": []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v4:bars:600519.SH:2026-10-20:2026-10-20:forward_adjusted:1"] = payload
+	fresh := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	svc := New([]provider.Provider{fakeProvider{name: "tencent", bars: []model.DailyBar{fresh}}}, mem, nil,
+		time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("daily-bar cache without source version must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].SourceVersion != fresh.SourceVersion {
+		t.Fatalf("expected versioned Provider response after cache bypass: %+v", bars)
+	}
+}
+
+func TestCoherentStoredSeriesUsesStableTieBreakers(t *testing.T) {
+	oldFetch := time.Date(2026, 10, 27, 8, 0, 0, 0, time.UTC)
+	newFetch := time.Date(2026, 10, 28, 8, 0, 0, 0, time.UTC)
+	makeSeries := func(source, version string, fetched time.Time) []model.DailyBar {
+		return []model.DailyBar{
+			{Source: source, SourceVersion: version, TradeDate: "2026-10-20", FetchedAt: fetched, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+			{Source: source, SourceVersion: version, TradeDate: "2026-10-21", FetchedAt: fetched, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+		}
+	}
+	older := makeSeries("eastmoney", "eastmoney-bars-v1", oldFetch)
+	newer := makeSeries("tencent", "tencent-bars-v1", newFetch)
+
+	for _, bars := range [][]model.DailyBar{
+		append(append([]model.DailyBar(nil), older...), newer...),
+		append(append([]model.DailyBar(nil), newer...), older...),
+	} {
+		got, reason := coherentStoredSeries(bars, model.AdjustmentNone)
+		source := ""
+		if len(got) > 0 {
+			source = got[0].Source
+		}
+		if reason != "" || len(got) != 2 || source != "tencent" {
+			t.Fatalf("equal-coverage groups must prefer latest fetched series regardless of input order: source=%q bars=%+v reason=%s", source, got, reason)
+		}
+	}
+
+	// 同一采集时刻和覆盖度仍打平时，按分组 key 字典序稳定决胜。
+	equalFetchTencent := makeSeries("tencent", "tencent-bars-v1", newFetch)
+	equalFetchEastmoney := makeSeries("eastmoney", "eastmoney-bars-v1", newFetch)
+	got, reason := coherentStoredSeries(append(equalFetchTencent, equalFetchEastmoney...), model.AdjustmentNone)
+	source := ""
+	if len(got) > 0 {
+		source = got[0].Source
+	}
+	if reason != "" || len(got) != 2 || source != "eastmoney" {
+		t.Fatalf("fully tied groups must use deterministic lexical key ordering: source=%q bars=%+v reason=%s", source, got, reason)
+	}
+}
+
+func TestCoherentStoredSeriesDoesNotMixSourceVersions(t *testing.T) {
+	first := model.DailyBar{
+		Source: "eastmoney", SourceVersion: "eastmoney-bars-v1", TradeDate: "2026-10-20",
+		AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version,
+	}
+	second := first
+	second.TradeDate = "2026-10-21"
+	second.SourceVersion = "eastmoney-bars-v2"
+	series, reason := coherentStoredSeries([]model.DailyBar{first, second}, model.AdjustmentNone)
+	if reason != "" || len(series) != 1 {
+		t.Fatalf("stored daily bars must be partitioned by source version: bars=%+v reason=%s", series, reason)
+	}
+}
+
 func TestDailyBarsRejectsProviderAdjustmentMismatchAndUsesFallback(t *testing.T) {
 	wrongVol, rightVol := int64(10000), int64(20000)
 	amount := float64(100000)
-	wrong := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &wrongVol, Amount: &amount, AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
-	right := fakeProvider{name: "tencent", bars: []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &rightVol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "tencent", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
+	wrong := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &wrongVol, Amount: &amount, AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
+	right := fakeProvider{name: "tencent", bars: []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &rightVol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "tencent", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
 	s := New([]provider.Provider{wrong, right}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bars, hit, _, err := s.DailyBars(context.Background(), "600519.SH", "", "", 120, model.AdjustmentForward)
 	if err != nil {
@@ -519,6 +804,28 @@ func TestDailyBarsRejectsStartAfterEnd(t *testing.T) {
 	_, _, _, err := s.DailyBars(context.Background(), "600519", "2026-10-21", "2026-10-20", 20, model.AdjustmentForward)
 	if err == nil {
 		t.Fatal("start date after end date must be rejected")
+	}
+}
+
+func TestQuoteCacheWithoutSourceVersionIsBypassed(t *testing.T) {
+	mem := newMemoryCache()
+	legacy := validQuote("eastmoney")
+	legacy.SourceVersion = ""
+	payload, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v4:quote:600519.SH"] = payload
+	fresh := validQuote("tencent")
+	svc := New([]provider.Provider{fakeProvider{name: "tencent", quote: fresh}}, mem, nil, time.Second, time.Second, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("quote cache without source version must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" {
+		t.Fatalf("expected fresh versioned quote after cache bypass, got %+v", got)
 	}
 }
 
@@ -544,7 +851,7 @@ func TestQuoteCacheReturnsCanonicalSymbol(t *testing.T) {
 func TestDailyBarsRejectsMixedAdjustmentResponseAsAWhole(t *testing.T) {
 	vol := int64(10000)
 	amount := float64(100000)
-	valid := model.DailyBar{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}
+	valid := model.DailyBar{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}
 	wrong := valid
 	wrong.TradeDate = "2026-10-19"
 	wrong.AdjustmentBasis = model.AdjustmentNone
@@ -570,7 +877,7 @@ func TestNearLiveAsOfDoesNotIncludeQuoteTimestampAfterCutoff(t *testing.T) {
 	vol := int64(1000)
 	amount := float64(10500)
 	p := fakeProvider{name: "eastmoney", quote: q, bars: []model.DailyBar{{
-		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
+			SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
 	}}}
@@ -617,7 +924,7 @@ func TestDailyBarsCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
 	mem := newMemoryCache()
 	volume := int64(1000)
 	amount := float64(10500)
-	old := model.DailyBar{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: "1"}
+	old := model.DailyBar{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: "1"}
 	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{old}, "warnings": []string{}})
 	if err != nil {
 		t.Fatal(err)
@@ -686,8 +993,8 @@ func TestDailyBarsBoundsImplicitEndDateToTodayAndDropsFutureRows(t *testing.T) {
 	volume := int64(1000)
 	amount := 10500.0
 	p := fakeProvider{name: "eastmoney", seenEnd: &seenEnd, bars: []model.DailyBar{
-		{Symbol: "600519.SH", TradeDate: currentDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
-		{Symbol: "600519.SH", TradeDate: futureDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: currentDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: futureDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
 	}}
 	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bars, _, warnings, err := s.DailyBars(context.Background(), "600519", "", "", 120, model.AdjustmentForward)
@@ -716,17 +1023,17 @@ func containsTestWarning(warnings []string, target string) bool {
 
 func TestPreferPartialBarsChoosesNewestSeriesWhenCountsTie(t *testing.T) {
 	current := []model.DailyBar{
-		{TradeDate: "2026-10-20"},
-		{TradeDate: "2026-10-21"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-20"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-21"},
 	}
 	newer := []model.DailyBar{
-		{TradeDate: "2026-10-21"},
-		{TradeDate: "2026-10-22"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-21"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-22"},
 	}
 	longerButOlder := []model.DailyBar{
-		{TradeDate: "2026-10-18"},
-		{TradeDate: "2026-10-19"},
-		{TradeDate: "2026-10-20"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-18"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-19"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-20"},
 	}
 
 	if !preferPartialBars(newer, current) {
@@ -769,7 +1076,7 @@ func TestCoverageSufficientRejectsSparseLookback(t *testing.T) {
 
 func TestDailyBarsCachePartialCandleRefreshesAfterClose(t *testing.T) {
 	loc := marketLocation()
-	bar := model.DailyBar{TradeDate: "2026-10-21", IsPartial: true}
+	bar := model.DailyBar{SourceVersion: "test-v1", TradeDate: "2026-10-21", IsPartial: true}
 	before := time.Date(2026, 10, 21, 15, 3, 0, 0, loc)
 	after := time.Date(2026, 10, 21, 15, 6, 0, 0, loc)
 	if dailyBarsCacheNeedsPostCloseRefresh([]model.DailyBar{bar}, before) {
@@ -781,7 +1088,7 @@ func TestDailyBarsCachePartialCandleRefreshesAfterClose(t *testing.T) {
 }
 
 func TestCoherentStoredSeriesNeverMixesProvidersAndRejectsUnknownAdjustedReference(t *testing.T) {
-	a := model.DailyBar{Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version}
+	a := model.DailyBar{SourceVersion: "test-v1", Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version}
 	b := a
 	b.Source = "tencent"
 	b.TradeDate = "2026-10-21"
@@ -789,7 +1096,7 @@ func TestCoherentStoredSeriesNeverMixesProvidersAndRejectsUnknownAdjustedReferen
 	if reason != "" || len(series) != 1 || series[0].Source == "" {
 		t.Fatalf("should return a single source series, got %+v reason=%s", series, reason)
 	}
-	_, reason = coherentStoredSeries([]model.DailyBar{{Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward, NormalizationVer: normalize.Version}}, model.AdjustmentForward)
+	_, reason = coherentStoredSeries([]model.DailyBar{{SourceVersion: "test-v1", Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward, NormalizationVer: normalize.Version}}, model.AdjustmentForward)
 	if reason == "" {
 		t.Fatal("adjusted series with unknown reference date must be rejected")
 	}
@@ -831,6 +1138,7 @@ func TestDailyBarsFallbackWarningsExposeMissingAmount(t *testing.T) {
 	fallback := fakeProvider{
 		name: "tencent",
 		bars: []model.DailyBar{{
+			SourceVersion: "test-v1",
 			Symbol: "600519.SH", TradeDate: "2026-10-21", Period: "1d",
 			Open: 1331.88, High: 1331.98, Low: 1302.36, Close: 1309.69,
 			Volume: &volume, Amount: nil, AdjustmentBasis: model.AdjustmentForward,
@@ -916,12 +1224,55 @@ func (f stockBoardsFakeProvider) FetchStockBoards(context.Context, string) (*mod
 	return f.snapshot, f.err
 }
 
+func TestStockBoardsNormalizesProviderAndCachedSymbols(t *testing.T) {
+	change := 1.25
+	makeSnapshot := func(symbol string) *model.StockBoardSnapshot {
+		now := time.Now().UTC()
+		return &model.StockBoardSnapshot{
+			Symbol: symbol, Total: 1, HasData: true,
+			Items: []model.StockBoard{{
+				Code: "BK0477", Name: "酿酒行业", ChangePercent: &change,
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			}},
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}
+	}
+	t.Run("provider response", func(t *testing.T) {
+		p := stockBoardsFakeProvider{snapshot: makeSnapshot("600519")}
+		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+			ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+		svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
+		got, hit, err := svc.StockBoards(context.Background(), "600519.SH")
+		if err != nil || hit {
+			t.Fatalf("StockBoards returned hit=%v err=%v", hit, err)
+		}
+		if got == nil || got.Symbol != "600519.SH" {
+			t.Fatalf("provider board symbol must be returned canonically, got %+v", got)
+		}
+	})
+	t.Run("cache payload", func(t *testing.T) {
+		legacy := makeSnapshot("600519")
+		encoded, err := json.Marshal(legacy)
+		if err != nil { t.Fatal(err) }
+		mem := newMemoryCache()
+		mem.values["md:v1:stock-boards:600519.SH"] = encoded
+		svc := NewWithCapabilities(nil, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+		got, hit, err := svc.StockBoards(context.Background(), "600519.SH")
+		if err != nil || !hit {
+			t.Fatalf("StockBoards cache returned hit=%v err=%v", hit, err)
+		}
+		if got == nil || got.Symbol != "600519.SH" {
+			t.Fatalf("cached board symbol must be returned canonically, got %+v", got)
+		}
+	})
+}
+
 func TestStockBoardsValidatesIdentityAndReturnsSnapshot(t *testing.T) {
 	now := time.Now().UTC()
 	change := 1.25
 	snapshot := &model.StockBoardSnapshot{
 		Symbol: "600519.SH", Total: 1, HasData: true,
-		Items:  []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Items:  []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", SourceVersion: "test-stock-boards-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		Source: "eastmoney", SourceVersion: "test-stock-boards-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}
@@ -935,11 +1286,17 @@ func TestStockBoardsValidatesIdentityAndReturnsSnapshot(t *testing.T) {
 	if got.Symbol != "600519.SH" || !got.HasData || got.Total != 1 || got.Items[0].Code != "BK0477" {
 		t.Fatalf("unexpected stock boards result: %+v", got)
 	}
+	versionMismatch := *snapshot
+	versionMismatch.Items = append([]model.StockBoard(nil), snapshot.Items...)
+	versionMismatch.Items[0].SourceVersion = "older-version"
+	if err := validateStockBoardsSnapshot("600519.SH", &versionMismatch); err == nil || !strings.Contains(err.Error(), "source/version") {
+		t.Fatalf("mismatched stock-board item version must be rejected, got %v", err)
+	}
 }
 
 func TestStockBoardsRejectsProviderSymbolMismatch(t *testing.T) {
 	now := time.Now().UTC()
-	snapshot := &model.StockBoardSnapshot{Symbol: "000001.SZ", Total: 1, HasData: true, Items: []model.StockBoard{{Code: "BK1", Name: "测试", Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}}, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}
+	snapshot := &model.StockBoardSnapshot{Symbol: "000001.SZ", Total: 1, HasData: true, Items: []model.StockBoard{{Code: "BK1", Name: "测试", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}}, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}
 	p := stockBoardsFakeProvider{snapshot: snapshot}
 	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
@@ -967,6 +1324,45 @@ func TestQuoteCacheRejectsLegacyUnverifiedTencentVolume(t *testing.T) {
 }
 
 
+func TestValidateMarketBreadthRequiresSourceVersion(t *testing.T) {
+	amount := 100.0
+	snapshot := &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+		AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1, AmountCoverageCount: 3,
+		TotalAmountCNY: &amount, ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+		Source: "eastmoney", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+	}
+	if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("market-breadth snapshot without source version must be rejected, got %v", err)
+	}
+}
+
+func TestValidateMarketBreadthRejectsLimitCountsAboveCoverage(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		up, down int
+	}{
+		{name: "limit up", up: 4, down: 1},
+		{name: "limit down", up: 1, down: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			up, down, amount := tc.up, tc.down, 100.0
+			snapshot := &model.MarketBreadthSnapshot{
+				Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+				AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
+				LimitUpCount: &up, LimitDownCount: &down,
+				TotalAmountCNY: &amount, AmountCoverageCount: 3,
+				ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+				QualityStatus: model.QualityDegraded,
+			}
+			if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "outside covered-securities bounds") {
+				t.Fatalf("limit counts must not exceed covered securities, got %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateMarketBreadthRequiresDegradedQualityForPartialAmountCoverage(t *testing.T) {
 	snapshot := &model.MarketBreadthSnapshot{
 		Market:              "cn_a_share",
@@ -978,6 +1374,7 @@ func TestValidateMarketBreadthRequiresDegradedQualityForPartialAmountCoverage(t 
 		AmountCoverageCount: 2,
 		ProviderReportDate:  "2026-10-23",
 		Source:              "eastmoney",
+		SourceVersion:       "test-v1",
 		FetchedAt:           time.Now().UTC(),
 		QualityStatus:       model.QualityValid,
 	}
@@ -1004,11 +1401,11 @@ func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *tes
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot := &model.IndexQuoteSnapshot{
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 				Items: []model.MarketIndexQuote{{
 					Symbol: "000001.SH", Code: "000001", Name: "上证指数",
 					LatestPrice: &tc.price, ChangePercent: &changePercent,
-					AmountUnit: "unknown", Source: "eastmoney", FetchedAt: now,
+					AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 					QualityStatus: model.QualityValid,
 				}},
 			}
@@ -1020,11 +1417,11 @@ func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *tes
 
 	price := 3200.0
 	snapshot := &model.IndexQuoteSnapshot{
-		Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+		Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 		Items: []model.MarketIndexQuote{{
 			Symbol: "000001.SH", Code: "000001", Name: "上证指数",
 			LatestPrice: &price, ChangePercent: &changePercent,
-			AmountUnit: "unknown", Source: "eastmoney", FetchedAt: now,
+			AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityDegraded,
 		}},
 	}
@@ -1034,20 +1431,83 @@ func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *tes
 }
 
 
+func TestIndexQuoteRejectsInvalidSymbolOrCode(t *testing.T) {
+	now := time.Now().UTC()
+	price, changePercent := 3200.0, 1.0
+	cases := []struct {
+		name, symbol, code string
+	}{
+		{name: "missing exchange suffix", symbol: "000001", code: "000001"},
+		{name: "symbol code mismatch", symbol: "000001.SH", code: "999999"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := &model.IndexQuoteSnapshot{
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+				Items: []model.MarketIndexQuote{{
+					Symbol: tc.symbol, Code: tc.code, Name: "测试指数",
+					LatestPrice: &price, ChangePercent: &changePercent, AmountUnit: "unknown",
+					Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+				}},
+			}
+			if err := validateIndexQuoteSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "invalid symbol/code") {
+				t.Fatalf("invalid index symbol/code must be rejected, got %v", err)
+			}
+		})
+	}
+}
+
+func TestIndexQuoteRejectsMismatchedItemSourceVersion(t *testing.T) {
+	now := time.Now().UTC()
+	price, changePercent := 3200.0, 1.0
+	snapshot := &model.IndexQuoteSnapshot{
+		Source: "eastmoney", SourceVersion: "current-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Items: []model.MarketIndexQuote{{
+			Symbol: "000001.SH", Code: "000001", Name: "上证指数",
+			LatestPrice: &price, ChangePercent: &changePercent, AmountUnit: "unknown",
+			Source: "eastmoney", SourceVersion: "old-v0", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}},
+	}
+	if err := validateIndexQuoteSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "source/version") {
+		t.Fatalf("mismatched index quote version must be rejected, got %v", err)
+	}
+}
+
 func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testing.T) {
 	now := time.Now().UTC()
 	change := 2.5
 	makeSnapshot := func() *model.LimitPoolSnapshot {
 		return &model.LimitPoolSnapshot{
 			PoolType: "up", TradeDate: "2026-10-23", Total: 1, HasData: true,
-			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			Items: []model.LimitPoolItem{{
 				Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", ChangePercent: &change,
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			}},
 		}
 	}
 
+	t.Run("source version mismatch", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Items[0].SourceVersion = "older-version"
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "source/version") {
+			t.Fatalf("mismatched limit-pool item version must be rejected, got %v", err)
+		}
+	})
+	t.Run("total below returned count", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Total = 0
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "total") {
+			t.Fatalf("limit-pool total below returned item count must be rejected, got %v", err)
+		}
+	})
+	t.Run("symbol code mismatch", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Items[0].Code = "000001"
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "symbol/code mismatch") {
+			t.Fatalf("limit-pool symbol/code mismatch must be rejected, got %v", err)
+		}
+	})
 	t.Run("non-finite amount", func(t *testing.T) {
 		snapshot := makeSnapshot()
 		bad := math.NaN()
@@ -1094,11 +1554,11 @@ func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {
 	change := 1.5
 	snapshot := &model.LimitPoolSnapshot{
 		PoolType: "up", TradeDate: "2026-10-23", ProviderReportDate: "2026-10-23",
-		Total: 2, HasData: true, Source: "eastmoney", FetchedAt: now,
+		Total: 2, HasData: true, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 		QualityStatus: model.QualityValid,
 		Items: []model.LimitPoolItem{{
 			Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", ChangePercent: &change,
-			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 		}},
 	}
 	markLimitPoolTruncated(snapshot)
@@ -1128,21 +1588,67 @@ func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {
 }
 
 
+func TestValidateSectorRankingSnapshotEnforcesRankAndDirectionOrder(t *testing.T) {
+	makeSnapshot := func(direction string, firstRank, secondRank int, firstChange, secondChange float64) *model.SectorRankingSnapshot {
+		now := time.Now().UTC()
+		return &model.SectorRankingSnapshot{
+			Category: "industry", Direction: direction, Total: 2,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Items: []model.SectorRanking{
+				{Rank: firstRank, Code: "BK0001", Name: "行业一", Category: "industry", ChangePercent: &firstChange,
+					AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+				{Rank: secondRank, Code: "BK0002", Name: "行业二", Category: "industry", ChangePercent: &secondChange,
+					AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+			},
+		}
+	}
+	cases := []struct {
+		name string
+		snapshot *model.SectorRankingSnapshot
+		wantError string
+	}{
+		{name: "rank order", snapshot: makeSnapshot("up", 2, 1, 2, 1), wantError: "increasing rank"},
+		{name: "up direction", snapshot: makeSnapshot("up", 1, 2, 1, 2), wantError: "descending change percent"},
+		{name: "down direction", snapshot: makeSnapshot("down", 1, 2, 2, 1), wantError: "ascending change percent"},
+		{name: "valid up order", snapshot: makeSnapshot("up", 1, 2, 2, 1)},
+		{name: "valid down order", snapshot: makeSnapshot("down", 1, 2, 1, 2)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateSectorRankingSnapshot("industry", 10, tc.snapshot)
+			if tc.wantError == "" {
+				if err != nil { t.Fatalf("expected valid direction ordering, got %v", err) }
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantError, err)
+			}
+		})
+	}
+}
+
 func TestValidateSectorRankingSnapshotRejectsInvalidTotalsAndQuality(t *testing.T) {
 	now := time.Now().UTC()
 	changePercent := 1.25
 	makeSnapshot := func() *model.SectorRankingSnapshot {
 		return &model.SectorRankingSnapshot{
-			Category: "industry", Total: 1, Source: "eastmoney", FetchedAt: now,
+			Category: "industry", Total: 1, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityDegraded,
 			Items: []model.SectorRanking{{
 				Rank: 1, Code: "BK0477", Name: "酿酒行业", Category: "industry",
-				ChangePercent: &changePercent, AmountUnit: "unknown", Source: "eastmoney",
+				ChangePercent: &changePercent, AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1",
 				FetchedAt: now, QualityStatus: model.QualityDegraded,
 			}},
 		}
 	}
 
+	t.Run("source version mismatch", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Items[0].SourceVersion = "older-version"
+		if err := validateSectorRankingSnapshot("industry", 10, snapshot); err == nil || !strings.Contains(err.Error(), "source/version") {
+			t.Fatalf("mismatched sector-ranking item version must be rejected, got %v", err)
+		}
+	})
 	t.Run("total below returned count", func(t *testing.T) {
 		snapshot := makeSnapshot()
 		snapshot.Total = 0
@@ -1176,7 +1682,7 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 			Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
 			AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
 			TotalAmountCNY: &amount, AmountCoverageCount: 3,
-			ProviderReportDate: "2026-10-23", Source: "eastmoney", FetchedAt: now,
+			ProviderReportDate: "2026-10-23", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityValid,
 			QualityReasons: []string{"market_amount_quotes_collected_non_atomically"},
 		}
@@ -1187,10 +1693,10 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 	t.Run("stock board item degradation", func(t *testing.T) {
 		change := 1.2
 		snapshot := &model.StockBoardSnapshot{
-			Symbol: "600519.SH", Total: 1, HasData: true, Source: "eastmoney", FetchedAt: now,
+			Symbol: "600519.SH", Total: 1, HasData: true, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityValid,
 			Items: []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change,
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		}
 		if err := validateStockBoardsSnapshot("600519.SH", snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
 			t.Fatalf("stock-board snapshot must inherit item degradation, got %v", err)
@@ -1198,9 +1704,9 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 	})
 	t.Run("hot ranking item degradation", func(t *testing.T) {
 		snapshot := &model.HotRankingSnapshot{
-			RankingType: "popular", Total: 1, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+			RankingType: "popular", Total: 1, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 			Items: []model.HotRankingItem{{Rank: 1, Symbol: "600519.SH", Code: "600519",
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		}
 		if err := validateHotRankingSnapshot("popular", snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
 			t.Fatalf("hot-ranking snapshot must inherit item degradation, got %v", err)
@@ -1215,12 +1721,12 @@ func TestSnapshotSourceTimesRejectMissingOrFutureValues(t *testing.T) {
 		price, changePercent := 3200.0, 1.0
 		future := now.Add(10 * time.Minute)
 		snapshot := &model.IndexQuoteSnapshot{
-			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			Items: []model.MarketIndexQuote{{
 				Symbol: "000001.SH", Code: "000001", Name: "上证指数",
 				LatestPrice: &price, ChangePercent: &changePercent,
 				QuoteTime: &future, QuoteTimeSemantics: "provider_snapshot_time",
-				AmountUnit: "unknown", Source: "eastmoney", FetchedAt: now,
+				AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 				QualityStatus: model.QualityDegraded,
 			}},
 		}
@@ -1230,10 +1736,10 @@ func TestSnapshotSourceTimesRejectMissingOrFutureValues(t *testing.T) {
 	})
 	t.Run("hot ranking without provider time", func(t *testing.T) {
 		snapshot := &model.HotRankingSnapshot{
-			RankingType: "popular", Total: 1, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+			RankingType: "popular", Total: 1, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 			Items: []model.HotRankingItem{{Rank: 1, Symbol: "600519.SH", Code: "600519",
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid}},
-		}
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid}},
+	}
 		if err := validateHotRankingSnapshot("popular", snapshot); err == nil || !strings.Contains(err.Error(), "without provider time") {
 			t.Fatalf("hot ranking without provider time must not be valid, got %v", err)
 		}
@@ -1258,7 +1764,7 @@ func TestStockBoardsCachesUnknownEmptyResultBriefly(t *testing.T) {
 	p := &stockBoardsCountingFakeProvider{
 		snapshot: &model.StockBoardSnapshot{
 			Symbol: "600519.SH", Total: 0, HasData: false, Items: []model.StockBoard{},
-			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityUnknown,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityUnknown,
 			QualityReasons: []string{"provider_empty_membership_unconfirmed"},
 		},
 	}
@@ -1308,7 +1814,7 @@ func TestFundamentalsUnknownSnapshotWithDataUsesShortCacheTTL(t *testing.T) {
 	now := time.Now().UTC()
 	stale := validFundamentalsSnapshotForTest()
 	setFundamentalsUnknownQuality(stale)
-	stale.FetchedAt = now.Add(-2 * time.Hour)
+	stale.FetchedAt = now.Add(-10 * time.Minute)
 	encoded, err := json.Marshal(stale)
 	if err != nil {
 		t.Fatal(err)
@@ -1335,25 +1841,244 @@ func TestFundamentalsUnknownSnapshotWithDataUsesShortCacheTTL(t *testing.T) {
 
 
 type stockBasicFakeProvider struct {
+	name  string
 	item  *model.StockBasic
 	calls int
 }
 
-func (p *stockBasicFakeProvider) Name() string { return "eastmoney" }
+func (p *stockBasicFakeProvider) Name() string {
+	if strings.TrimSpace(p.name) == "" {
+		return "eastmoney"
+	}
+	return p.name
+}
 
 func (p *stockBasicFakeProvider) FetchStockBasic(context.Context, string) (*model.StockBasic, error) {
 	p.calls++
 	return p.item, nil
 }
 
-func TestStockBasicDoesNotPromoteUnknownProviderQuality(t *testing.T) {
+func stockBasicIdentityFixtureForTest(symbol string) *model.StockBasic {
+	return &model.StockBasic{
+		Symbol: symbol, Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney",
+		SourceVersion: "eastmoney-stock-basic-v2", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}
+}
+
+func TestStockBasicNormalizesProviderAndCachedSymbols(t *testing.T) {
+	t.Run("provider response", func(t *testing.T) {
+		p := &stockBasicFakeProvider{name: "eastmoney", item: stockBasicIdentityFixtureForTest("600519")}
+		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+			ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+		svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
+		got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+		if err != nil || hit {
+			t.Fatalf("StockBasic returned hit=%v err=%v", hit, err)
+		}
+		if got == nil || got.Symbol != "600519.SH" {
+			t.Fatalf("provider stock symbol must be returned canonically, got %+v", got)
+		}
+	})
+	t.Run("cache payload", func(t *testing.T) {
+		legacy := stockBasicIdentityFixtureForTest("600519")
+		encoded, err := json.Marshal(legacy)
+		if err != nil { t.Fatal(err) }
+		mem := newMemoryCache()
+		mem.values["md:v1:stock-basic:600519.SH"] = encoded
+		svc := NewWithCapabilities(nil, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+		got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+		if err != nil || !hit {
+			t.Fatalf("StockBasic cache returned hit=%v err=%v", hit, err)
+		}
+		if got == nil || got.Symbol != "600519.SH" {
+			t.Fatalf("cached stock symbol must be returned canonically, got %+v", got)
+		}
+	})
+}
+
+func TestStockBasicFallsBackFromOldNormalizationVersion(t *testing.T) {
+	now := time.Now().UTC()
+	old := &stockBasicFakeProvider{name: "eastmoney", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+		FetchedAt: now, QualityStatus: model.QualityDegraded, NormalizationVer: "old-normalization-v1",
+	}}
+	current := &stockBasicFakeProvider{name: "tushare", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", SourceVersion: "tushare-stock-basic-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}}
+	svc := NewWithCapabilities([]provider.NamedProvider{old, current}, nil, nil, newMemoryCache(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{old, current})
+
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("StockBasic returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.NormalizationVer != normalize.Version {
+		t.Fatalf("old normalization contract must fall back to current version: %+v", got)
+	}
+	if old.calls != 1 || current.calls != 1 {
+		t.Fatalf("normalization-version mismatch must trigger fallback, calls=%d/%d", old.calls, current.calls)
+	}
+}
+
+func TestStockBasicCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
+	now := time.Now().UTC()
+	legacy := &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+		FetchedAt: now.Add(-time.Minute), QualityStatus: model.QualityDegraded, NormalizationVer: "old-normalization-v1",
+	}
+	encoded, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem := newMemoryCache()
+	mem.values["md:v1:stock-basic:600519.SH"] = encoded
+	current := &stockBasicFakeProvider{name: "tushare", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", SourceVersion: "tushare-stock-basic-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}}
+	svc := NewWithCapabilities([]provider.NamedProvider{current}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{current})
+
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("old-normalization cache should be bypassed: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || current.calls != 1 {
+		t.Fatalf("expected a fresh current-normalization record, got %+v calls=%d", got, current.calls)
+	}
+}
+
+func TestValidateStockBasicRejectsOutDateBeforeIPODate(t *testing.T) {
+	item := &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", IPODate: "2020-01-02", OutDate: "2019-12-31",
+		SecurityType: 1, SecurityTypeLabel: "stock", ListingStatus: 0, ListingStatusLabel: "delisted",
+		Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}
+	if err := validateStockBasic("600519.SH", item); err == nil || !strings.Contains(err.Error(), "out_date must not precede ipo_date") {
+		t.Fatalf("out date before IPO date must be rejected, got %v", err)
+	}
+}
+
+func TestValidateStockBasicRequiresSourceVersion(t *testing.T) {
+	item := &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}
+	if err := validateStockBasic("600519.SH", item); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("stock-basic item without source version must be rejected, got %v", err)
+	}
+}
+
+func TestValidateStockBasicRejectsInvalidShareCounts(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(*model.StockBasic)
+		want  string
+	}{
+		{name: "total shares NaN", setup: func(item *model.StockBasic) { value := math.NaN(); item.TotalShares = &value }, want: "total_shares is non-finite"},
+		{name: "float shares infinity", setup: func(item *model.StockBasic) { value := math.Inf(1); item.FloatShares = &value }, want: "float_shares is non-finite"},
+		{name: "total shares zero", setup: func(item *model.StockBasic) { value := 0.0; item.TotalShares = &value }, want: "total_shares must be positive"},
+		{name: "float shares negative", setup: func(item *model.StockBasic) { value := -1.0; item.FloatShares = &value }, want: "float_shares must not be negative"},
+		{name: "float shares exceed total", setup: func(item *model.StockBasic) { value := 1_000_001.0; item.FloatShares = &value }, want: "float_shares must not exceed total_shares"},
+		{name: "float market cap exceeds total", setup: func(item *model.StockBasic) { total, floating := 1_000_000.0, 1_000_001.0; item.MarketCapCNY = &total; item.FloatMarketCapCNY = &floating }, want: "float_market_cap_cny must not exceed market_cap_cny"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			total, floating := 1_000_000.0, 800_000.0
+			item := &model.StockBasic{
+				Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+				ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+				TotalShares: &total, FloatShares: &floating, FetchedAt: time.Now().UTC(),
+				QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+			}
+			tc.setup(item)
+			if err := validateStockBasic("600519.SH", item); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected stock-basic share validation error %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestStockBasicFallsBackWhenProviderHasInconsistentShareCounts(t *testing.T) {
+	now := time.Now().UTC()
+	total, invalidFloat := 1_000_000.0, 1_100_000.0
+	first := &stockBasicFakeProvider{name: "eastmoney", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+		TotalShares: &total, FloatShares: &invalidFloat, FetchedAt: now, QualityStatus: model.QualityDegraded,
+		NormalizationVer: normalize.Version,
+	}}
+	goodTotal, goodFloat := 1_000_000.0, 800_000.0
+	second := &stockBasicFakeProvider{name: "tushare", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", SourceVersion: "tushare-stock-basic-v1",
+		TotalShares: &goodTotal, FloatShares: &goodFloat, FetchedAt: now, QualityStatus: model.QualityDegraded,
+		NormalizationVer: normalize.Version,
+	}}
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil, newMemoryCache(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{first, second})
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("StockBasic hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.FloatShares == nil || *got.FloatShares != goodFloat {
+		t.Fatalf("expected fallback after invalid share counts, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("invalid share counts must trigger provider fallback, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
+func TestStockBasicFallsBackFromUnknownQualityProvider(t *testing.T) {
+	now := time.Now().UTC()
+	first := &stockBasicFakeProvider{name: "eastmoney", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
+		QualityStatus: model.QualityUnknown, NormalizationVer: normalize.Version,
+	}}
+	marketCap := 2000000000000.0
+	second := &stockBasicFakeProvider{name: "tushare", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", SourceVersion: "test-v1", FetchedAt: now,
+		MarketCapCNY: &marketCap, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"}, NormalizationVer: normalize.Version,
+	}}
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil, newMemoryCache(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{first, second})
+
+	got, hit, err := svc.StockBasic(context.Background(), "600519")
+	if err != nil || hit {
+		t.Fatalf("StockBasic hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded fallback after unknown first source, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected both stock-basic sources to be tried, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
+func TestStockBasicRetainsUnknownAfterFallbackExhaustion(t *testing.T) {
 	now := time.Now().UTC()
 	p := &stockBasicFakeProvider{
 		item: &model.StockBasic{
 			Symbol: "600519.SH", Name: "贵州茅台",
 			SecurityType: 1, SecurityTypeLabel: "stock",
 			ListingStatus: 1, ListingStatusLabel: "listed",
-			Source: "eastmoney", FetchedAt: now,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityUnknown,
 			NormalizationVer: normalize.Version,
 		},
@@ -1366,18 +2091,18 @@ func TestStockBasicDoesNotPromoteUnknownProviderQuality(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("StockBasic hit=%v err=%v", hit, err)
 	}
-	if got.QualityStatus != model.QualityDegraded {
-		t.Fatalf("unknown Provider quality must be downgraded, got %q", got.QualityStatus)
+	if got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("unknown Provider quality must remain unknown after fallback exhaustion, got %q", got.QualityStatus)
 	}
 	foundReason := false
 	for _, reason := range got.QualityReasons {
-		if reason == "provider_quality_status_missing_or_unknown" {
+		if reason == "stock_basic_fallback_exhausted_without_usable_quality" {
 			foundReason = true
 			break
 		}
 	}
 	if !foundReason {
-		t.Fatalf("downgraded stock-basic record is missing its quality reason: %+v", got.QualityReasons)
+		t.Fatalf("unknown stock-basic record is missing its fallback-exhaustion reason: %+v", got.QualityReasons)
 	}
 }
 
@@ -1399,6 +2124,34 @@ func (p *supplementCountingFakeProvider) FetchChipDistribution(context.Context, 
 func (p *supplementCountingFakeProvider) FetchCapitalFlow(context.Context, string) (*model.CapitalFlow, error) {
 	p.flowCalls++
 	return p.flow, nil
+}
+
+func TestSupplementContractsRequireSourceVersion(t *testing.T) {
+	now := time.Now().UTC()
+	chip := &model.ChipDistribution{
+		Symbol: "600519.SH", AverageCost: 12.5, Source: "eastmoney", FetchedAt: now,
+		QualityStatus: model.QualityDegraded,
+	}
+	if err := validateChipDistributionSnapshot("600519.SH", chip); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("chip-distribution without source version must be rejected, got %v", err)
+	}
+	chip.SourceVersion = " UnKnOwN "
+	if err := validateChipDistributionSnapshot("600519.SH", chip); err == nil || !strings.Contains(err.Error(), "unidentifiable") {
+		t.Fatalf("chip-distribution placeholder source version must be rejected, got %v", err)
+	}
+
+	mainNetInflow := 120.0
+	flow := &model.CapitalFlow{
+		Symbol: "600519.SH", MainNetInflow: &mainNetInflow, Observations: 1,
+		Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+	}
+	if err := validateCapitalFlowSnapshot("600519.SH", flow); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("capital-flow without source version must be rejected, got %v", err)
+	}
+	flow.SourceVersion = "unknown"
+	if err := validateCapitalFlowSnapshot("600519.SH", flow); err == nil || !strings.Contains(err.Error(), "unidentifiable") {
+		t.Fatalf("capital-flow placeholder source version must be rejected, got %v", err)
+	}
 }
 
 func TestSupplementCachesReuseProviderContractValidation(t *testing.T) {
@@ -1593,7 +2346,7 @@ func TestValidateIndexConstituentsRejectsFutureReportDate(t *testing.T) {
 	snapshot := &model.IndexConstituentSnapshot{
 		IndexSymbol: "000300.SH", ProviderReportDate: futureDate,
 		Items: []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}},
-		Total: 1, Source: "tushare", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+		Total: 1, Source: "tushare", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
 	}
 	if err := validateIndexConstituentsSnapshot("000300.SH", snapshot); err == nil || !strings.Contains(err.Error(), "in the future") {
 		t.Fatalf("future constituent report date must be rejected, got %v", err)
@@ -1611,7 +2364,7 @@ func TestIndexConstituentCoverageCountersAndLegacyDowngrade(t *testing.T) {
 				{Symbol: "000001.SZ", Code: "000001", Name: "平安银行"},
 			},
 			Total: 2, ProviderReturned: 3, ExcludedCount: 1,
-			Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			QualityReasons: []string{"one_or_more_constituent_names_missing_from_current_stock_directory"},
 		}
 	}
@@ -1668,9 +2421,9 @@ func TestValidateIndexDailyBarsRejectsQualityAndUnitMismatch(t *testing.T) {
 				IndexSymbol: "000300.SH", TradeDate: "2026-10-26",
 				Open: 10, High: 11, Low: 9, Close: 10.5,
 				Volume: &volume, Amount: &amount, VolumeUnit: "shares", AmountUnit: "CNY",
-				Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+				Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			}},
-			Total: 1, Source: "tushare", FetchedAt: now, QualityStatus: model.QualityValid,
+			Total: 1, Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 		}
 	}
 	t.Run("parent quality", func(t *testing.T) {
@@ -1815,6 +2568,7 @@ func TestDailyBarTimestampsAreStampedByService(t *testing.T) {
 	p := fakeProvider{
 		name: "eastmoney",
 		bars: []model.DailyBar{{
+			SourceVersion: "test-v1",
 			Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 			Open: 10, High: 11, Low: 9, Close: 10.5,
 			Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentNone,
@@ -1873,6 +2627,7 @@ func TestDailyBarsCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
 	amount := 10500.0
 	future := time.Now().UTC().Add(24 * time.Hour)
 	cached := model.DailyBar{
+		SourceVersion: "test-v1",
 		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 		Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward,
@@ -1907,5 +2662,94 @@ func TestDailyBarsRejectsNonCanonicalRequestDate(t *testing.T) {
 		time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if _, _, _, err := svc.DailyBars(context.Background(), "600519", "2026-1-02", "2026-10-20", 10, model.AdjustmentNone); err == nil {
 		t.Fatal("non-canonical start date must be rejected before provider/cache lookup")
+	}
+}
+
+
+func TestValidateSectorRankingSnapshotRejectsUnderfilledPage(t *testing.T) {
+	now := time.Now().UTC()
+	change := 2.3
+	snapshot := &model.SectorRankingSnapshot{
+		Category: "industry", Direction: "up", Total: 120,
+		Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		Items: []model.SectorRanking{{
+			Rank: 1, Code: "BK0475", Name: "电池", Category: "industry", ChangePercent: &change,
+			AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
+			QualityStatus: model.QualityDegraded,
+		}},
+	}
+	if err := validateSectorRankingSnapshot("industry", 5, snapshot); err == nil || !strings.Contains(err.Error(), "row count does not match") {
+		t.Fatalf("underfilled sector-ranking page must be rejected so fallback can continue, got %v", err)
+	}
+}
+
+
+func TestValidateLimitPoolRejectsValidSnapshotWithoutProviderReportDate(t *testing.T) {
+	now := time.Now().UTC()
+	change := 10.0
+	makeSnapshot := func() *model.LimitPoolSnapshot {
+		return &model.LimitPoolSnapshot{
+			PoolType: "up", TradeDate: "2026-10-23", Total: 1, HasData: true,
+			Items: []model.LimitPoolItem{{
+				Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", ChangePercent: &change,
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
+			}},
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
+		}
+	}
+
+	snapshot := makeSnapshot()
+	if err := validateLimitPoolSnapshot("up", "2026-10-23", 10, snapshot); err == nil || !strings.Contains(err.Error(), "provider report date") {
+		t.Fatalf("valid limit-pool data must include a verified source report date, got %v", err)
+	}
+	snapshot.ProviderReportDate = "2026-10-23"
+	if err := validateLimitPoolSnapshot("up", "2026-10-23", 10, snapshot); err != nil {
+		t.Fatalf("valid limit-pool data with matching source report date should pass, got %v", err)
+	}
+}
+
+
+func TestValidateMarketBreadthRequiresConsistentQuoteTimestampCoverage(t *testing.T) {
+	location := marketLocation()
+	oldest := time.Now().In(location).Add(-time.Minute).UTC()
+	newest := oldest
+	amount := 100.0
+	snapshot := &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+		AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
+		AmountCoverageCount: 3, QuoteTimestampCoverageCount: 3,
+		OldestQuoteTime: &oldest, NewestQuoteTime: &newest, TotalAmountCNY: &amount,
+		ProviderReportDate: oldest.In(location).Format("2006-01-02"),
+		Source: "tickflow", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityValid,
+	}
+	if err := validateMarketBreadth(snapshot); err != nil {
+		t.Fatalf("complete time-aligned breadth should validate: %v", err)
+	}
+
+	snapshot.QuoteTimestampCoverageCount = 2
+	if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "complete quote timestamp coverage") {
+		t.Fatalf("valid breadth must require all quote timestamps, got %v", err)
+	}
+	snapshot.QualityStatus = model.QualityDegraded
+	if err := validateMarketBreadth(snapshot); err != nil {
+		t.Fatalf("degraded snapshot with disclosed partial time coverage should remain usable: %v", err)
+	}
+}
+
+
+func TestValidateMarketBreadthRejectsOverflowingCategoryCounts(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	snapshot := &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+		AdvancingCount: maxInt, DecliningCount: maxInt, UnchangedCount: 5,
+		AmountCoverageCount: 0, QuoteTimestampCoverageCount: 0,
+		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+		Source: "untrusted-fixture", SourceVersion: "test-overflow-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+	}
+	if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "category counts do not reconcile") {
+		t.Fatalf("integer overflow must not allow incoherent breadth counts, got %v", err)
 	}
 }

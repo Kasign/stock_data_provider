@@ -382,7 +382,7 @@ def test_fetch_stock_bundle_skips_current_quote_for_historical_as_of(monkeypatch
             assert orient == "records"
             return [{"date": "2020-10-19", "open": 10, "high": 12, "low": 9, "close": 11, "volume": 100}]
 
-    calls = {"realtime": 0, "closed": False}
+    calls = {"realtime": 0, "chip": 0, "fundamentals": 0, "boards": 0, "closed": False}
 
     class FakeManager:
         def get_stock_name(self, code, allow_realtime=False):
@@ -397,13 +397,16 @@ def test_fetch_stock_bundle_skips_current_quote_for_historical_as_of(monkeypatch
             return {"code": code, "price": 999}
 
         def get_chip_distribution(self, code):
-            return None
+            calls["chip"] += 1
+            return {"avg_cost": 10}
 
         def get_fundamental_context(self, code):
-            return None
+            calls["fundamentals"] += 1
+            return {"status": "latest"}
 
         def get_belong_boards(self, code):
-            return []
+            calls["boards"] += 1
+            return [{"code": "BK0001"}]
 
         def close(self):
             calls["closed"] = True
@@ -419,6 +422,13 @@ def test_fetch_stock_bundle_skips_current_quote_for_historical_as_of(monkeypatch
     assert payload["quote"] is None
     assert any("realtime_quote_skipped_as_of_not_live" in warning for warning in payload["warnings"])
     assert calls["realtime"] == 0
+    assert payload["chip"] is None
+    assert payload["fundamentals"] is None
+    assert payload["boards"] == []
+    assert calls["chip"] == 0
+    assert calls["fundamentals"] == 0
+    assert calls["boards"] == 0
+    assert any("auxiliary_data_skipped_for_historical_as_of_point_in_time_unavailable" in warning for warning in payload["warnings"])
     assert calls["closed"] is True
 
 

@@ -14,8 +14,12 @@ import (
 
 var tickflowSectorTestSymbols = []string{"600000.SH", "000001.SZ", "300001.SZ"}
 
-func newTickFlowSectorFixture(t *testing.T, quoteSymbols []string) *httptest.Server {
+func newTickFlowSectorFixture(t *testing.T, quoteSymbols []string, invalidQuoteSymbols ...string) *httptest.Server {
 	t.Helper()
+	invalidQuotes := make(map[string]struct{}, len(invalidQuoteSymbols))
+	for _, symbol := range invalidQuoteSymbols {
+		invalidQuotes[symbol] = struct{}{}
+	}
 	timestamp := time.Now().UTC().Add(-time.Minute).UnixMilli()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-api-key") != "test-api-key" {
@@ -74,11 +78,15 @@ func newTickFlowSectorFixture(t *testing.T, quoteSymbols []string) *httptest.Ser
 				case "300001.SZ":
 					last, prev, pct = 20.6, 20.0, 0.03
 				}
-				quotes = append(quotes, map[string]any{
+				quote := map[string]any{
 					"symbol": symbol, "last_price": last, "prev_close": prev,
 					"open": prev, "high": last, "low": prev, "timestamp": timestamp,
 					"ext": map[string]any{"change_pct": pct},
-				})
+				}
+				if _, invalid := invalidQuotes[symbol]; invalid {
+					quote["last_price"], quote["prev_close"] = nil, nil
+				}
+				quotes = append(quotes, quote)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": quotes})
 		default:
@@ -138,5 +146,23 @@ func TestTickFlowFetchSectorRankingsDoesNotMislabelConceptsAsSW1(t *testing.T) {
 	if _, err := provider.FetchSectorRankings(context.Background(), "concept", 10); err == nil ||
 		!strings.Contains(err.Error(), "only SW1 industry rankings") {
 		t.Fatalf("TickFlow SW1 ranking must not claim concept coverage, got %v", err)
+	}
+}
+
+
+func TestTickFlowFetchSectorRankingsReportsOmittedIndustryWithoutValidChanges(t *testing.T) {
+	server := newTickFlowSectorFixture(t, tickflowSectorTestSymbols, "300001.SZ")
+	defer server.Close()
+
+	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	got, err := provider.FetchSectorRankings(context.Background(), "industry", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 2 || len(got.Items) != 1 {
+		t.Fatalf("expected total universe and only one usable industry row, got total=%d items=%d", got.Total, len(got.Items))
+	}
+	if !containsTickFlowReason(got.QualityReasons, "one_or_more_industries_omitted_without_valid_constituent_quote_changes") {
+		t.Fatalf("missing quality reason for an industry omitted due to invalid constituent quotes: %+v", got.QualityReasons)
 	}
 }

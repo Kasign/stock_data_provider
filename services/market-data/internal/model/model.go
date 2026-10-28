@@ -145,6 +145,8 @@ type StockBasic struct {
 	Industry               string        `json:"industry,omitempty"`
 	MarketCapCNY           *float64      `json:"market_cap_cny,omitempty"`
 	FloatMarketCapCNY      *float64      `json:"float_market_cap_cny,omitempty"`
+	TotalShares            *float64      `json:"total_shares,omitempty"`
+	FloatShares            *float64      `json:"float_shares,omitempty"`
 	BoardCode              string        `json:"board_code,omitempty"`
 	ROEPercent             *float64      `json:"roe_percent,omitempty"`
 	NetProfitMarginPercent *float64      `json:"net_profit_margin_percent,omitempty"`
@@ -204,6 +206,7 @@ type SectorRanking struct {
 
 type SectorRankingSnapshot struct {
 	Category       string          `json:"category"`
+	Direction      string          `json:"direction"`
 	Total          int             `json:"total"`
 	Items          []SectorRanking `json:"items"`
 	Source         string          `json:"source"`
@@ -256,8 +259,11 @@ type MarketBreadthSnapshot struct {
 	LimitUpCount        *int          `json:"limit_up_count"`
 	LimitDownCount      *int          `json:"limit_down_count"`
 	TotalAmountCNY      *float64      `json:"total_amount_cny"`
-	AmountCoverageCount int           `json:"amount_coverage_count"`
-	Source              string        `json:"source"`
+	AmountCoverageCount        int           `json:"amount_coverage_count"`
+	QuoteTimestampCoverageCount int           `json:"quote_timestamp_coverage_count"`
+	OldestQuoteTime             *time.Time    `json:"oldest_quote_time,omitempty"`
+	NewestQuoteTime             *time.Time    `json:"newest_quote_time,omitempty"`
+	Source                      string        `json:"source"`
 	SourceVersion       string        `json:"source_version,omitempty"`
 	ProviderReportDate  string        `json:"provider_report_date,omitempty"`
 	FetchedAt           time.Time     `json:"fetched_at"`
@@ -344,8 +350,13 @@ type ValuationItem struct {
 	PEStatic       *float64      `json:"pe_static"`
 	PBMRQ          *float64      `json:"pb_mrq"`
 	PSTTM          *float64      `json:"ps_ttm"`
-	PCFTTM         *float64      `json:"pcf_ttm"`
-	Source         string        `json:"source"`
+	PCFTTM                   *float64      `json:"pcf_ttm"`
+	TurnoverRatePercent      *float64      `json:"turnover_rate_percent,omitempty"`
+	FloatTurnoverRatePercent *float64      `json:"float_turnover_rate_percent,omitempty"`
+	VolumeRatio              *float64      `json:"volume_ratio,omitempty"`
+	DividendYieldPercent     *float64      `json:"dividend_yield_percent,omitempty"`
+	DividendYieldTTMPercent  *float64      `json:"dividend_yield_ttm_percent,omitempty"`
+	Source                   string        `json:"source"`
 	SourceVersion  string        `json:"source_version,omitempty"`
 	FetchedAt      time.Time     `json:"fetched_at"`
 	QualityStatus  QualityStatus `json:"quality_status"`
@@ -400,12 +411,14 @@ type IndexConstituent struct {
 // IndexConstituentSnapshot 为指定指数或板块的当前成分股快照。
 type IndexConstituentSnapshot struct {
 	IndexSymbol        string             `json:"index_symbol"`
+	// AsOfDate 是请求的历史查询日期；ProviderReportDate 是实际采用的源端权重报告日，两者不能混为一谈。
+	AsOfDate           string             `json:"as_of_date,omitempty"`
 	ProviderReportDate string             `json:"provider_report_date,omitempty"`
 	Items              []IndexConstituent `json:"items"`
 	Total              int                `json:"total"`
 	// ProviderReturned 表示所选来源在成分规范化/名称补全前返回的候选行数。
 	ProviderReturned int `json:"provider_returned"`
-	// ExcludedCount 记录来源已返回、但因重复或缺少可核验名称而未进入 Items 的行数。
+	// ExcludedCount 记录最新源端报告日中因证券类型不受支持或缺少可核验名称而未进入 Items 的行数。
 	ExcludedCount int `json:"excluded_count,omitempty"`
 	ProviderTime       *time.Time         `json:"provider_time,omitempty"`
 	Source             string             `json:"source"`
@@ -501,6 +514,7 @@ type SourceStatus struct {
 	FundamentalsCapable    bool   `json:"fundamentals_capable,omitempty"`
 	ValuationCapable       bool   `json:"valuation_capable,omitempty"`
 	IndexCatalogCapable    bool   `json:"index_catalog_capable,omitempty"`
+	HistoricalIndexConstituentsCapable bool `json:"historical_index_constituents_capable"`
 	ChipCapable            bool   `json:"chip_capable,omitempty"`
 	HotRankingCapable      bool   `json:"hot_ranking_capable,omitempty"`
 	CapitalFlowCapable     bool   `json:"capital_flow_capable,omitempty"`

@@ -52,6 +52,9 @@ func normalizeAnnouncementRange(rawStart, rawEnd string) (string, string, error)
 }
 
 func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, pageSize int, snapshot *model.StockAnnouncementSnapshot) error {
+	if page < 1 || pageSize < 1 {
+		return errors.New("announcement page and page size must be positive")
+	}
 	if snapshot == nil {
 		return errors.New("announcement provider returned an empty snapshot")
 	}
@@ -59,8 +62,8 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		snapshot.Page != page || snapshot.PageSize != pageSize {
 		return errors.New("announcement request identity mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("announcement source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
+		return errors.New("announcement source, source_version or fetched_at is missing")
 	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize {
 		return errors.New("announcement total/pages/returned count is invalid")
@@ -72,20 +75,26 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		}
 		return nil
 	}
-	if snapshot.Pages != (snapshot.Total+pageSize-1)/pageSize || page > snapshot.Pages ||
+	expectedPages := 1 + (snapshot.Total-1)/pageSize
+	expectedReturned := snapshot.Total - (page-1)*pageSize
+	if expectedReturned > pageSize {
+		expectedReturned = pageSize
+	}
+	if snapshot.Pages != expectedPages || page > snapshot.Pages ||
+		expectedReturned <= 0 || snapshot.Returned != expectedReturned ||
 		snapshot.Returned == 0 || snapshot.Total < snapshot.Returned || !snapshot.HasData ||
 		snapshot.HasMore != (page < snapshot.Pages) {
-		return errors.New("announcement page counters are inconsistent with source total")
+		return errors.New("announcement page counters or returned rows are inconsistent with source total")
 	}
-	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("announcement quality status %q is unsupported", snapshot.QualityStatus)
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
 	hasDegradedItem := false
 	for _, item := range snapshot.Items {
 		if strings.TrimSpace(item.ArticleID) == "" || strings.TrimSpace(item.Title) == "" ||
-			item.Symbol != symbol || item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-			return errors.New("announcement item is missing ID/title or has mismatched symbol/source")
+			item.Symbol != symbol || item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+			return errors.New("announcement item is missing ID/title or has mismatched symbol/source/version")
 		}
 		if _, ok := seen[item.ArticleID]; ok {
 			return fmt.Errorf("announcement item has duplicate article ID %q", item.ArticleID)
@@ -119,6 +128,26 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 }
 
 // StockAnnouncements returns paginated announcements for one A-share and an explicit date range.
+// betterUnknownAnnouncementSnapshot 优先保留公告条数更多、源端发布时间覆盖更完整的 unknown 候选。
+func betterUnknownAnnouncementSnapshot(candidate, current *model.StockAnnouncementSnapshot) bool {
+	if candidate == nil { return false }
+	if current == nil { return true }
+	if len(candidate.Items) != len(current.Items) { return len(candidate.Items) > len(current.Items) }
+	coverage := func(snapshot *model.StockAnnouncementSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			if item.PublishedAt != nil { count++ }
+			if strings.TrimSpace(item.SourceURL) != "" { count++ }
+			if strings.TrimSpace(item.Category) != "" { count++ }
+			if strings.TrimSpace(item.TitleChinese) != "" { count++ }
+		}
+		return count
+	}
+	left, right := coverage(candidate), coverage(current)
+	if left != right { return left > right }
+	return candidate.FetchedAt.After(current.FetchedAt)
+}
+
 func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStartDate, rawEndDate string, page, pageSize int) (*model.StockAnnouncementSnapshot, bool, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
@@ -149,17 +178,17 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 			validateStockAnnouncementSnapshot(symbol, startDate, endDate, page, pageSize, &cached) == nil &&
 			time.Since(cached.FetchedAt) >= 0 {
 			ttl := positiveTTL
-			cacheEligible := cached.HasData
-			if !cached.HasData {
+			cacheEligible := cached.HasData && cached.QualityStatus != model.QualityUnknown
+			if !cached.HasData || cached.QualityStatus == model.QualityUnknown {
 				ttl = emptyTTL
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "announcements_fallback_exhausted_without_confirmed_data" {
+					if reason == "announcements_fallback_exhausted_without_confirmed_data" ||
+						reason == "announcements_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
 				}
-				// 多 Provider 场景忽略旧版首源 unknown 空缓存，确保重新尝试后备源。
 				cacheEligible = fallbackExhausted || len(s.announcementProviders) <= 1
 			}
 			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
@@ -173,7 +202,7 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 		return nil, false, errors.New("no enabled stock-announcement provider")
 	}
 	var failures []string
-	var unknownEmpty *model.StockAnnouncementSnapshot
+	var unknownCandidate *model.StockAnnouncementSnapshot
 	for _, p := range s.announcementProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -187,9 +216,13 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if !snapshot.HasData {
-			unknownEmpty = snapshot
-			failures = append(failures, p.Name()+": announcement absence is not confirmed")
+		if !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
+			if betterUnknownAnnouncementSnapshot(snapshot, unknownCandidate) { unknownCandidate = snapshot }
+			if !snapshot.HasData {
+				failures = append(failures, p.Name()+": announcement absence is not confirmed")
+			} else {
+				failures = append(failures, p.Name()+": announcement rows are present but snapshot quality is unknown")
+			}
 			continue
 		}
 		if encoded, marshalErr := json.Marshal(snapshot); marshalErr == nil {
@@ -203,15 +236,17 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 		}
 		return snapshot, false, nil
 	}
-	if unknownEmpty != nil {
-		unknownEmpty.QualityStatus = model.QualityUnknown
-		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "announcements_fallback_exhausted_without_confirmed_data")
-		if encoded, marshalErr := json.Marshal(unknownEmpty); marshalErr == nil {
+	if unknownCandidate != nil {
+		reason := "announcements_fallback_exhausted_without_usable_quality"
+		if !unknownCandidate.HasData { reason = "announcements_fallback_exhausted_without_confirmed_data" }
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if encoded, marshalErr := json.Marshal(unknownCandidate); marshalErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, encoded, emptyTTL); cacheErr != nil {
 				s.logger.Warn("stock-announcement unknown cache write failed", "symbol", symbol, "error", cacheErr)
 			}
 		}
-		return unknownEmpty, false, nil
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all stock-announcement providers failed: %s", strings.Join(failures, "; "))
 }

@@ -2,13 +2,18 @@ package provider
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/baostock"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
-type fakeBaoStockFinancialClient struct{ noDataCategory string }
+type fakeBaoStockFinancialClient struct {
+	noDataCategory string
+	publicationDate string
+}
 
 func (fakeBaoStockFinancialClient) QueryDailyKLines(context.Context, string, string, string, string) ([]baostock.DailyKLine, error) {
 	return nil, nil
@@ -17,7 +22,11 @@ func (f fakeBaoStockFinancialClient) QueryQuarterlyFinancialData(_ context.Conte
 	if category == f.noDataCategory {
 		return nil, nil
 	}
-	values := map[string]string{"code": code, "pubDate": "2026-08-29", "statDate": "2026-06-30"}
+	publicationDate := f.publicationDate
+	if publicationDate == "" {
+		publicationDate = "2026-08-29"
+	}
+	values := map[string]string{"code": code, "pubDate": publicationDate, "statDate": "2026-06-30"}
 	for _, section := range quarterlyFundamentalMappings {
 		if section.Category == category {
 			for _, metric := range section.Fields {
@@ -55,6 +64,33 @@ func TestBaostockFundamentalsPreservesRatioAndDisclosureDate(t *testing.T) {
 	}
 	if netProfit == nil || netProfit.Value != 28522000000 || netProfit.Unit != "CNY" {
 		t.Fatalf("net profit should preserve yuan unit: %+v", netProfit)
+	}
+}
+
+func TestBaostockFundamentalsRejectsFutureReportingPeriod(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	now := time.Now().In(loc)
+	today := now.Format("2006-01-02")
+	quarter := int((int(now.Month())-1)/3) + 1
+	if fundamentalQuarterEnd(now.Year(), quarter) <= today {
+		quarter++
+	}
+	if quarter > 4 {
+		t.Skip("no future quarter end remains in the current year")
+	}
+	_, err = NewBaostock(fakeBaoStockFinancialClient{}).FetchFundamentals(context.Background(), "600519.SH", now.Year(), quarter)
+	if err == nil || !strings.Contains(err.Error(), "report period") || !strings.Contains(err.Error(), "is in the future") {
+		t.Fatalf("future reporting period must be rejected before provider queries, got %v", err)
+	}
+}
+
+func TestBaostockFundamentalsRejectsFuturePublicationDate(t *testing.T) {
+	_, err := NewBaostock(fakeBaoStockFinancialClient{publicationDate: "2099-12-31"}).FetchFundamentals(
+		context.Background(), "600519.SH", 2026, 2,
+	)
+	if err == nil || !strings.Contains(err.Error(), "is after China market date") {
+		t.Fatalf("future publication date must be rejected, got %v", err)
 	}
 }
 

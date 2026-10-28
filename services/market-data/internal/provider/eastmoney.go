@@ -27,6 +27,9 @@ const eastmoneyVersion = "eastmoney-stock-api-v1"
 const eastmoneyLookbackDaysPerBar = 4
 const eastmoneyLookbackBufferDays = 30
 
+// Eastmoney limit-pool responses can be shorter than the source total; fetch small pages until the requested coverage is reached.
+const eastmoneyLimitPoolPageSize = 30
+
 // defaultEastmoneyUT is the public web token commonly used by Eastmoney front-end clients.
 // It is not a user credential or private API key; deployments can override it if Eastmoney rotates it.
 const defaultEastmoneyUT = "7eea3edcaed734bea9cbfc24409ed989"
@@ -178,6 +181,9 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney stock boards only support common A-share equities, got %q", rawSymbol)
+	}
 	secID, err := eastmoneySecID(symbol)
 	if err != nil {
 		return nil, err
@@ -266,6 +272,9 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney stock-basic only supports common A-share equities, got %q", rawSymbol)
+	}
 
 	fetchRow := func(reportName string) (map[string]json.RawMessage, error) {
 		params := url.Values{
@@ -317,6 +326,9 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		}
 		if payload.Result == nil || len(payload.Result.Data) == 0 {
 			return nil, fmt.Errorf("eastmoney stock-basic report %s returned no row for %s", reportName, symbol)
+		}
+		if len(payload.Result.Data) != 1 {
+			return nil, fmt.Errorf("eastmoney stock-basic report %s expected exactly one row for %s, got %d", reportName, symbol, len(payload.Result.Data))
 		}
 		row := payload.Result.Data[0]
 		field := func(name string) string {
@@ -397,7 +409,7 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		Symbol: symbol, Name: name, IPODate: ipoDate, OutDate: outDate,
 		SecurityType: 1, SecurityTypeLabel: "stock",
 		ListingStatus: status, ListingStatusLabel: statusLabel,
-		Source: p.Name(), SourceVersion: "eastmoney-f10-market-profile-v2",
+		Source: p.Name(), SourceVersion: "eastmoney-f10-market-profile-v3",
 		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
 		QualityReasons:   []string{"market_profile_timestamp_not_exposed"},
 		NormalizationVer: normalize.Version,
@@ -412,7 +424,7 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	}
 	quoteParams := url.Values{
 		"secid":  []string{secid},
-		"fields": []string{"f57,f58,f162,f167,f127,f116,f117,f198,f173,f187,f105,f186"},
+		"fields": []string{"f57,f58,f162,f167,f127,f116,f117,f84,f85,f198,f173,f187,f105,f186"},
 		"fltt":   []string{"2"},
 		"invt":   []string{"2"},
 		"ut":     []string{p.ut},
@@ -447,6 +459,8 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	item.Industry = readEastmoneyField(quotePayload.Data, "f127")
 	item.MarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f116"])
 	item.FloatMarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f117"])
+	item.TotalShares = parseEastmoneyProfileNumber(quotePayload.Data["f84"])
+	item.FloatShares = parseEastmoneyProfileNumber(quotePayload.Data["f85"])
 	item.BoardCode = readEastmoneyField(quotePayload.Data, "f198")
 	item.ROEPercent = parseEastmoneyProfileNumber(quotePayload.Data["f173"])
 	item.NetProfitMarginPercent = parseEastmoneyProfileNumber(quotePayload.Data["f187"])
@@ -455,7 +469,9 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 
 	for key, value := range map[string]*float64{
 		"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY,
-		"float_market_cap_cny": item.FloatMarketCapCNY, "roe_percent": item.ROEPercent,
+		"float_market_cap_cny": item.FloatMarketCapCNY,
+		"total_shares": item.TotalShares, "float_shares": item.FloatShares,
+		"roe_percent": item.ROEPercent,
 		"net_profit_margin_percent": item.NetProfitMarginPercent, "net_profit_cny": item.NetProfitCNY,
 		"gross_margin_percent": item.GrossMarginPercent,
 	} {
@@ -470,6 +486,18 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 {
 		item.FloatMarketCapCNY = nil
 		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_float_market_cap_cny_negative")
+	}
+	if item.TotalShares != nil && *item.TotalShares <= 0 {
+		item.TotalShares = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_total_shares_non_positive")
+	}
+	if item.FloatShares != nil && *item.FloatShares < 0 {
+		item.FloatShares = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_float_shares_negative")
+	}
+	if item.TotalShares != nil && item.FloatShares != nil && *item.FloatShares > *item.TotalShares {
+		item.FloatShares = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_float_shares_exceed_total_shares")
 	}
 	if item.Industry == "" {
 		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_industry_missing")
@@ -528,6 +556,9 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney stock quote only supports common A-share equities, got %q", rawSymbol)
 	}
 	secid, err := eastmoneySecID(symbol)
 	if err != nil {
@@ -639,8 +670,9 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		return nil, err
 	}
 	name := getString("f58")
-	providerTime := parseEastmoneyTime(getString("f86"))
-	quote := &model.Quote{Symbol: symbol, Name: name, CurrentPrice: price, Change: change, ChangePercent: pct, Open: open, High: high, Low: low, PrevClose: prev, Volume: volume, Amount: amount, VolumeRatio: volumeRatio, TurnoverRate: turnoverRate, QuoteTime: providerTime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), Source: p.Name(), SourceVersion: eastmoneyVersion, RawVolume: volumePtr, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "f48"), VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+	fetchedAt := time.Now().UTC()
+	providerTime := validProviderSnapshotTime(parseEastmoneyTime(getString("f86")), fetchedAt)
+	quote := &model.Quote{Symbol: symbol, Name: name, CurrentPrice: price, Change: change, ChangePercent: pct, Open: open, High: high, Low: low, PrevClose: prev, Volume: volume, Amount: amount, VolumeRatio: volumeRatio, TurnoverRate: turnoverRate, QuoteTime: providerTime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: fetchedAt, NormalizedAt: fetchedAt, Source: p.Name(), SourceVersion: eastmoneyVersion, RawVolume: volumePtr, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "f48"), VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 	if reportedSymbol == "" {
 		quote.QualityStatus = model.QualityDegraded
 		quote.QualityReasons = append(quote.QualityReasons, "provider_symbol_missing_assumed_from_request")
@@ -656,6 +688,11 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 	if err := normalize.ValidateQuote(quote); err != nil {
 		return nil, fmt.Errorf("Eastmoney quote data contract: %w", err)
 	}
+	// 源端涨跌字段已通过容差校验；输出值统一以最新价和昨收价计算。
+	canonicalChange := *quote.CurrentPrice - *quote.PrevClose
+	canonicalChangePercent := canonicalChange / *quote.PrevClose * 100
+	quote.Change = &canonicalChange
+	quote.ChangePercent = &canonicalChangePercent
 	return quote, nil
 }
 
@@ -738,7 +775,7 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 			return nil, fmt.Errorf("Eastmoney hot-ranking row %d has invalid security code: %w", index, symbolErr)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
-			continue
+			return nil, fmt.Errorf("Eastmoney hot-ranking response contains duplicate symbol %s", symbol)
 		}
 		seen[symbol] = struct{}{}
 		rank, ok := eastmoneyHotRowInt(row, "rk")
@@ -786,9 +823,13 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 	quotes := make(map[string]map[string]json.RawMessage, len(quotePayload.Data.Diff))
 	for _, row := range quotePayload.Data.Diff {
 		code := eastmoneyHotRowString(row, "f12")
-		if code != "" {
-			quotes[code] = row
+		if code == "" {
+			continue
 		}
+		if _, duplicate := quotes[code]; duplicate {
+			return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment contains duplicate code %s", code)
+		}
+		quotes[code] = row
 	}
 	now := time.Now().UTC()
 	sourceVersion := eastmoneyVersion + "-hot-ranking-v1"
@@ -915,6 +956,21 @@ func eastmoneyHotRankingSymbol(raw string) (symbol, code, secid string, err erro
 			return "", "", "", fmt.Errorf("non-numeric stock code %q", raw)
 		}
 	}
+	// 热度榜契约是普通 A 股股票；仅识别交易所前缀会把 ETF、指数和可转债误作个股。
+	stockCode := false
+	prefixes := []string{"600", "601", "603", "605", "688", "689"}
+	if exchange == "SZ" {
+		prefixes = []string{"000", "001", "002", "003", "300", "301"}
+	}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(bare, prefix) {
+			stockCode = true
+			break
+		}
+	}
+	if !stockCode {
+		return "", "", "", fmt.Errorf("unsupported non-equity or unrecognized stock code %q", raw)
+	}
 	market := "1"
 	if exchange == "SZ" {
 		market = "0"
@@ -964,6 +1020,9 @@ func (p *Eastmoney) FetchChipDistribution(ctx context.Context, rawSymbol string)
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney chip distribution only supports common A-share equities, got %q", rawSymbol)
 	}
 	secid, err := eastmoneySecID(symbol)
 	if err != nil {
@@ -1180,6 +1239,9 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney daily bars only support common A-share equities, got %q", rawSymbol)
+	}
 	secid, err := eastmoneySecID(symbol)
 	if err != nil {
 		return nil, err
@@ -1234,7 +1296,9 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	if payload.Data == nil {
 		return nil, errors.New("eastmoney returned empty daily bars")
 	}
-	if reported := strings.TrimSpace(payload.Data.Code); reported != "" {
+	reported := strings.TrimSpace(payload.Data.Code)
+	reportedSymbolMissing := reported == ""
+	if !reportedSymbolMissing {
 		reportedSymbol, normalizeErr := normalize.NormalizeSymbol(reported)
 		if normalizeErr != nil || reportedSymbol != symbol {
 			return nil, fmt.Errorf("Eastmoney daily-bars symbol mismatch: requested %s got %q", symbol, reported)
@@ -1278,7 +1342,19 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	// 使用实际发给上游的查询区间（包括自动计算的回溯起始日）过滤结果。
 	startISO := beg[:4] + "-" + beg[4:6] + "-" + beg[6:]
 	endISO := end[:4] + "-" + end[4:6] + "-" + end[6:]
-	return normalizeProviderDailyBars(symbol, startISO, endISO, limit, out, rejectedRows)
+	bars, normalizeErr := normalizeProviderDailyBars(symbol, startISO, endISO, limit, out, rejectedRows)
+	if normalizeErr != nil {
+		return nil, normalizeErr
+	}
+	if reportedSymbolMissing {
+		for index := range bars {
+			if bars[index].QualityStatus == model.QualityValid || bars[index].QualityStatus == model.QualityUnknown || bars[index].QualityStatus == "" {
+				bars[index].QualityStatus = model.QualityDegraded
+			}
+			bars[index].QualityReasons = appendProviderQualityReason(bars[index].QualityReasons, "provider_symbol_missing_assumed_from_request")
+		}
+	}
+	return bars, nil
 }
 
 // eastmoneyDateRange preserves explicit caller ranges. When no start date is
@@ -1677,10 +1753,31 @@ func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSea
 			if total > eastmoneyStockSearchPageSize*eastmoneyStockSearchMaxPages {
 				return nil, model.QualityUnknown, nil, fmt.Errorf("Eastmoney stock-search directory total %d exceeds safety limit", total)
 			}
+		} else if payload.Data.Total != total {
+			// 全量目录没有源端快照令牌；分页总数漂移表示无法证明各页属于同一完整目录。
+			return nil, model.QualityUnknown, nil, fmt.Errorf(
+				"Eastmoney stock-search directory total changed across pages: first=%d page=%d got=%d",
+				total, page, payload.Data.Total,
+			)
+		}
+		expectedRows := total - (page-1)*eastmoneyStockSearchPageSize
+		if expectedRows > eastmoneyStockSearchPageSize {
+			expectedRows = eastmoneyStockSearchPageSize
+		}
+		if expectedRows <= 0 {
+			return nil, model.QualityUnknown, nil, fmt.Errorf(
+				"Eastmoney stock-search page %d exceeds the declared directory total %d", page, total,
+			)
 		}
 		rows, err := decodeEastmoneyBoardRows(payload.Data.Diff)
 		if err != nil {
 			return nil, model.QualityUnknown, nil, fmt.Errorf("decode Eastmoney stock-search rows: %w", err)
+		}
+		if len(rows) > expectedRows {
+			return nil, model.QualityUnknown, nil, fmt.Errorf(
+				"Eastmoney stock-search page %d returned %d rows, exceeding %d rows implied by total %d",
+				page, len(rows), expectedRows, total,
+			)
 		}
 		if len(rows) == 0 {
 			if page == 1 {
@@ -1693,12 +1790,20 @@ func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSea
 		for _, row := range rows {
 			code := parseEastmoneyBoardString(row, "f12")
 			name := parseEastmoneyBoardString(row, "f14")
-			if code == "" || name == "" {
+			market := parseEastmoneyBoardString(row, "f13")
+			if code == "" || name == "" || (market != "0" && market != "1") {
 				quality = model.QualityDegraded
 				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
 				continue
 			}
-			symbol, normalizeErr := normalize.NormalizeSymbol(code)
+			suffix := ".SZ"
+			if market == "1" {
+				suffix = ".SH"
+			}
+			if strings.HasPrefix(code, "8") || strings.HasPrefix(code, "4") || strings.HasPrefix(code, "920") {
+				suffix = ".BJ"
+			}
+			symbol, normalizeErr := normalize.NormalizeSymbol(code + suffix)
 			if normalizeErr != nil {
 				quality = model.QualityDegraded
 				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
@@ -1708,6 +1813,11 @@ func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSea
 			if len(parts) != 2 {
 				quality = model.QualityDegraded
 				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
+				continue
+			}
+			if !isTushareAShareSymbol(symbol) {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_non_a_share_security_rows_dropped")
 				continue
 			}
 			if _, exists := seen[symbol]; exists {
@@ -1738,6 +1848,10 @@ func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSea
 }
 
 func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, error) {
+	return p.FetchSectorRankingsDirection(ctx, rawCategory, "up", limit)
+}
+
+func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategory, rawDirection string, limit int) (*model.SectorRankingSnapshot, error) {
 	category := strings.ToLower(strings.TrimSpace(rawCategory))
 	filters := map[string]string{
 		"industry": "m:90+t:2+f:!50",
@@ -1747,6 +1861,17 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 	if !ok {
 		return nil, fmt.Errorf("unsupported sector category %q; want industry or concept", rawCategory)
 	}
+	direction := strings.ToLower(strings.TrimSpace(rawDirection))
+	if direction == "" {
+		direction = "up"
+	}
+	if direction != "up" && direction != "down" {
+		return nil, fmt.Errorf("unsupported sector ranking direction %q; want up or down", rawDirection)
+	}
+	sortOrder := "1"
+	if direction == "down" {
+		sortOrder = "0"
+	}
 	if limit <= 0 {
 		limit = 10
 	}
@@ -1754,7 +1879,7 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 		return nil, errors.New("sector ranking limit must not exceed 100")
 	}
 	params := url.Values{
-		"pn": {"1"}, "pz": {strconv.Itoa(limit)}, "po": {"1"}, "np": {"1"},
+		"pn": {"1"}, "pz": {strconv.Itoa(limit)}, "po": {sortOrder}, "np": {"1"},
 		"ut": {p.ut}, "fltt": {"2"}, "invt": {"2"}, "fid": {"f3"},
 		"fs": {filter}, "fields": {"f2,f3,f4,f6,f12,f14,f104,f105,f128,f136"},
 		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
@@ -1762,7 +1887,7 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 	var payload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
-			Total int                          `json:"total"`
+			Total *int `json:"total"`
 			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
@@ -1775,9 +1900,29 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 	if payload.Data == nil || len(payload.Data.Diff) == 0 {
 		return nil, errors.New("Eastmoney sector ranking returned no rows")
 	}
+	reportedTotal := 0
+	if payload.Data.Total != nil {
+		reportedTotal = *payload.Data.Total
+		if reportedTotal < 0 {
+			return nil, fmt.Errorf("Eastmoney sector ranking total is negative: %d", reportedTotal)
+		}
+		if reportedTotal == 0 {
+			return nil, errors.New("Eastmoney sector ranking reports total=0 with non-empty rows")
+		}
+		expectedRows := limit
+		if reportedTotal < expectedRows {
+			expectedRows = reportedTotal
+		}
+		if len(payload.Data.Diff) != expectedRows {
+			return nil, fmt.Errorf(
+				"Eastmoney sector ranking returned %d rows, expected %d rows from total=%d and limit=%d",
+				len(payload.Data.Diff), expectedRows, reportedTotal, limit,
+			)
+		}
+	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.SectorRankingSnapshot{
-		Category: category, Total: payload.Data.Total, Source: p.Name(),
+		Category: category, Direction: direction, Total: reportedTotal, Source: p.Name(),
 		SourceVersion:  "eastmoney-sector-clist-v1",
 		FetchedAt:      fetchedAt,
 		QualityStatus:  model.QualityDegraded,
@@ -1813,15 +1958,19 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 	if len(snapshot.Items) == 0 {
 		return nil, errors.New("Eastmoney sector ranking rows failed code/name/change-percent validation")
 	}
-	if snapshot.Total <= 0 {
+	if snapshot.Total == 0 {
+		// 某些响应可能缺少总数；用已解析条数作为下界，但明确标记总量未知。
 		snapshot.Total = len(snapshot.Items)
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_total_missing_using_returned_count")
 	}
 	if len(snapshot.Items) < len(payload.Data.Diff) {
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_rows_dropped_after_validation")
 	}
+	if err := sortSectorRankingSnapshot(snapshot, direction); err != nil {
+		return nil, err
+	}
 	return snapshot, nil
 }
-
 // decodeEastmoneyBoardRows accepts array payloads and Eastmoney's indexed-object shape
 // ({"0": {...}, "1": {...}}). Numeric index ordering is preserved explicitly because
 // Go map iteration order is intentionally unspecified.
@@ -1934,6 +2083,9 @@ type eastmoneyIndexDefinition struct {
 	Name   string
 }
 
+const eastmoneyIndexChangeTolerance = 0.05
+const eastmoneyIndexChangePercentTolerancePP = 0.15
+
 var eastmoneyCoreIndexDefinitions = []eastmoneyIndexDefinition{
 	{Symbol: "000001.SH", Code: "000001", SecID: "1.000001", Market: "1", Name: "上证指数"},
 	{Symbol: "399001.SZ", Code: "399001", SecID: "0.399001", Market: "0", Name: "深证成指"},
@@ -1960,7 +2112,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	var payload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
-			Total int                          `json:"total"`
+			Total *int                         `json:"total"`
 			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
@@ -1970,11 +2122,29 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	if payload.RC != nil && *payload.RC != 0 {
 		return nil, fmt.Errorf("Eastmoney index quote provider error rc=%d", *payload.RC)
 	}
-	if payload.Data == nil || len(payload.Data.Diff) == 0 {
+	if payload.Data == nil {
+		return nil, errors.New("Eastmoney index quote response has no data object")
+	}
+	if payload.Data.Total != nil {
+		if *payload.Data.Total < 0 {
+			return nil, fmt.Errorf("Eastmoney index quote total is negative: %d", *payload.Data.Total)
+		}
+		if *payload.Data.Total == 0 && len(payload.Data.Diff) > 0 {
+			return nil, errors.New("Eastmoney index quote reports total=0 with non-empty rows")
+		}
+		if *payload.Data.Total < len(payload.Data.Diff) {
+			return nil, fmt.Errorf("Eastmoney index quote reports total=%d with %d returned rows", *payload.Data.Total, len(payload.Data.Diff))
+		}
+	}
+	if len(payload.Data.Diff) == 0 {
 		return nil, errors.New("Eastmoney index quote returned no rows")
 	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.IndexQuoteSnapshot{Source: p.Name(), SourceVersion: "eastmoney-ulist-index-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityValid, Items: make([]model.MarketIndexQuote, 0, len(eastmoneyCoreIndexDefinitions))}
+	if payload.Data.Total != nil && *payload.Data.Total > len(payload.Data.Diff) {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_total_exceeds_returned_rows")
+	}
 	seen := make(map[string]bool, len(eastmoneyCoreIndexDefinitions))
 	for _, raw := range payload.Data.Diff {
 		market, code := parseEastmoneyBoardString(raw, "f13"), parseEastmoneyBoardString(raw, "f12")
@@ -1994,19 +2164,49 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_name_missing_used_allowlisted_name")
 		}
 		price, changePercent := parseEastmoneyBoardNumber(raw, "f2"), parseEastmoneyBoardNumber(raw, "f3")
-		if price == nil || changePercent == nil {
+		change := parseEastmoneyBoardNumber(raw, "f4")
+		if price == nil || *price <= 0 || changePercent == nil {
 			snapshot.QualityStatus = model.QualityDegraded
-			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_required_price_field_missing")
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_required_price_field_missing_or_invalid")
 			continue
+		}
+		openPrice := parseEastmoneyBoardNumber(raw, "f17")
+		high := parseEastmoneyBoardNumber(raw, "f15")
+		low := parseEastmoneyBoardNumber(raw, "f16")
+		prevClose := parseEastmoneyBoardNumber(raw, "f18")
+		invalidOptionalPrice := false
+		for _, value := range []*float64{openPrice, high, low, prevClose} {
+			if value != nil && *value <= 0 {
+				invalidOptionalPrice = true
+				break
+			}
+		}
+		if invalidOptionalPrice || (high != nil && low != nil && (*low > *high || *price < *low || *price > *high || (openPrice != nil && (*openPrice < *low || *openPrice > *high)))) {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_ohlc_invariant_failed")
+			continue
+		}
+		if prevClose != nil {
+			priceChange := *price - *prevClose
+			if (change != nil && math.Abs(*change-priceChange) > eastmoneyIndexChangeTolerance) ||
+				math.Abs(*changePercent-priceChange / *prevClose * 100) > eastmoneyIndexChangePercentTolerancePP {
+				snapshot.QualityStatus = model.QualityDegraded
+				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+				continue
+			}
 		}
 		reasons := []string{}
 		amount := parseEastmoneyBoardNumber(raw, "f6")
 		amountUnit := "CNY"
+		if amount != nil && *amount < 0 {
+			amount = nil
+			reasons = append(reasons, "provider_amount_negative_or_invalid")
+		}
 		if amount == nil {
 			amountUnit = "unknown"
 			reasons = append(reasons, "provider_amount_missing")
 		}
-		quoteTime := parseEastmoneyTime(parseEastmoneyBoardString(raw, "f86"))
+		quoteTime := validProviderSnapshotTime(parseEastmoneyTime(parseEastmoneyBoardString(raw, "f86")), time.Now().UTC())
 		quoteTimeSemantics := ""
 		if quoteTime == nil {
 			reasons = append(reasons, "provider_snapshot_timestamp_not_exposed")
@@ -2021,8 +2221,8 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		}
 		item := model.MarketIndexQuote{
 			Symbol: definition.Symbol, Code: definition.Code, Name: name,
-			LatestPrice: price, Change: parseEastmoneyBoardNumber(raw, "f4"), ChangePercent: changePercent,
-			Open: parseEastmoneyBoardNumber(raw, "f17"), High: parseEastmoneyBoardNumber(raw, "f15"), Low: parseEastmoneyBoardNumber(raw, "f16"), PrevClose: parseEastmoneyBoardNumber(raw, "f18"),
+			LatestPrice: price, Change: change, ChangePercent: changePercent,
+			Open: openPrice, High: high, Low: low, PrevClose: prevClose,
 			Amount: amount, AmountUnit: amountUnit, QuoteTime: quoteTime, QuoteTimeSemantics: quoteTimeSemantics,
 			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt, QualityStatus: model.QualityValid, QualityReasons: reasons,
 		}
@@ -2448,9 +2648,18 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	if !ok {
 		return nil, fmt.Errorf("unsupported limit-pool type %q; want up, down or broken", poolType)
 	}
-	date, err := time.Parse("2006-01-02", tradeDate)
-	if err != nil {
+	rawDate := strings.TrimSpace(tradeDate)
+	date, err := time.Parse("2006-01-02", rawDate)
+	if err != nil || date.Format("2006-01-02") != rawDate {
 		return nil, fmt.Errorf("invalid limit-pool trade date %q: expected YYYY-MM-DD", tradeDate)
+	}
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	today := time.Now().In(loc).Format("2006-01-02")
+	if rawDate > today {
+		return nil, fmt.Errorf("limit-pool trade date %s must not be in the future (China market date %s)", rawDate, today)
 	}
 	if limit <= 0 {
 		limit = 100
@@ -2463,74 +2672,133 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		// The DTPool endpoint has returned tc>0/pool=[] with fbt:asc; fund:asc returns its rows.
 		sortField = "fund:asc"
 	}
-	params := url.Values{
-		"ut": {p.ut}, "dpt": {"wz.ztzt"}, "Pageindex": {"0"}, "pagesize": {strconv.Itoa(limit)},
-		"sort": {sortField}, "date": {date.Format("20060102")},
-		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	pageSize := limit
+	if pageSize > eastmoneyLimitPoolPageSize {
+		pageSize = eastmoneyLimitPoolPageSize
 	}
-	var payload struct {
-		RC   *int `json:"rc"`
-		Data *struct {
-			Total int                          `json:"tc"`
-			QDate json.RawMessage              `json:"qdate"`
-			Pool  []map[string]json.RawMessage `json:"pool"`
-		} `json:"data"`
-	}
-	if err := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); err != nil {
-		return nil, fmt.Errorf("Eastmoney %s limit-pool request: %w", poolType, err)
-	}
-	if payload.RC != nil && *payload.RC != 0 {
-		return nil, fmt.Errorf("Eastmoney %s limit-pool provider error rc=%d", poolType, *payload.RC)
-	}
-	if payload.Data == nil {
-		return nil, errors.New("Eastmoney limit-pool response has no data object")
-	}
-	// push2ex can briefly report a non-empty total while omitting all pool rows (full=0).
-	// Retry this semantic partial response once; never reinterpret tc>0 with no rows as an empty pool.
-	if payload.Data.Total > 0 && len(payload.Data.Pool) == 0 {
-		firstTotal := payload.Data.Total
-		timer := time.NewTimer(350 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
+	requestPage := func(pageIndex int) (int, json.RawMessage, []map[string]json.RawMessage, error) {
+		params := url.Values{
+			"ut": {p.ut}, "dpt": {"wz.ztzt"}, "Pageindex": {strconv.Itoa(pageIndex)}, "pagesize": {strconv.Itoa(pageSize)},
+			"sort": {sortField}, "date": {date.Format("20060102")},
+			"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		}
-		payload.RC, payload.Data = nil, nil
-		if retryErr := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); retryErr != nil {
-			return nil, fmt.Errorf("Eastmoney %s limit-pool partial response (tc=%d, pool empty); retry failed: %w", poolType, firstTotal, retryErr)
+		var payload struct {
+			RC   *int `json:"rc"`
+			Data *struct {
+				Total int                          `json:"tc"`
+				QDate json.RawMessage              `json:"qdate"`
+				Pool  []map[string]json.RawMessage `json:"pool"`
+			} `json:"data"`
+		}
+		if err := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); err != nil {
+			return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d request: %w", poolType, pageIndex, err)
 		}
 		if payload.RC != nil && *payload.RC != 0 {
-			return nil, fmt.Errorf("Eastmoney %s limit-pool provider error after partial-response retry rc=%d", poolType, *payload.RC)
+			return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool provider error rc=%d on page %d", poolType, *payload.RC, pageIndex)
 		}
 		if payload.Data == nil {
-			return nil, errors.New("Eastmoney limit-pool retry returned no data object")
+			return 0, nil, nil, fmt.Errorf("Eastmoney limit-pool page %d has no data object", pageIndex)
 		}
 		if payload.Data.Total > 0 && len(payload.Data.Pool) == 0 {
-			return nil, fmt.Errorf("Eastmoney %s limit-pool total/pool mismatch after retry (tc=%d, first tc=%d, pool empty)", poolType, payload.Data.Total, firstTotal)
+			// push2ex can briefly report a non-empty total while omitting all pool rows (full=0).
+			// Retry this semantic partial response once; never reinterpret tc>0 with no rows as an empty pool.
+			firstTotal := payload.Data.Total
+			timer := time.NewTimer(350 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return 0, nil, nil, ctx.Err()
+			case <-timer.C:
+			}
+			payload.RC, payload.Data = nil, nil
+			if retryErr := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); retryErr != nil {
+				return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d partial response (tc=%d, pool empty); retry failed: %w", poolType, pageIndex, firstTotal, retryErr)
+			}
+			if payload.RC != nil && *payload.RC != 0 {
+				return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool provider error after partial-response retry rc=%d", poolType, *payload.RC)
+			}
+			if payload.Data == nil {
+				return 0, nil, nil, fmt.Errorf("Eastmoney limit-pool page %d retry returned no data object", pageIndex)
+			}
+			if payload.Data.Total > 0 && len(payload.Data.Pool) == 0 {
+				return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d total/pool mismatch after retry (tc=%d, first tc=%d, pool empty)", poolType, pageIndex, payload.Data.Total, firstTotal)
+			}
+		}
+		if len(payload.Data.Pool) > pageSize {
+			return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d returned %d rows above requested page size %d", poolType, pageIndex, len(payload.Data.Pool), pageSize)
+		}
+		return payload.Data.Total, payload.Data.QDate, payload.Data.Pool, nil
+	}
+
+	var sourceTotal int
+	var sourceQDate json.RawMessage
+	poolRows := make([]map[string]json.RawMessage, 0, limit)
+	for pageIndex := 0; pageIndex < 100; pageIndex++ {
+		total, qdate, rows, requestErr := requestPage(pageIndex)
+		if requestErr != nil {
+			return nil, requestErr
+		}
+		if pageIndex == 0 {
+			sourceTotal, sourceQDate = total, qdate
+			if total == 0 && len(rows) == 0 {
+				break
+			}
+		} else {
+			if total != sourceTotal {
+				return nil, fmt.Errorf("Eastmoney %s limit-pool total changed across pages: first=%d page_%d=%d", poolType, sourceTotal, pageIndex, total)
+			}
+			if !bytes.Equal(bytes.TrimSpace(qdate), bytes.TrimSpace(sourceQDate)) {
+				return nil, fmt.Errorf("Eastmoney %s limit-pool report date changed across pages", poolType)
+			}
+		}
+		if total < 0 {
+			return nil, fmt.Errorf("Eastmoney %s limit-pool returned negative total %d", poolType, total)
+		}
+		remaining := limit - len(poolRows)
+		if remaining > len(rows) {
+			remaining = len(rows)
+		}
+		if remaining > 0 {
+			poolRows = append(poolRows, rows[:remaining]...)
+		}
+		targetRows := sourceTotal
+		if targetRows > limit {
+			targetRows = limit
+		}
+		if sourceTotal == 0 || len(poolRows) >= targetRows {
+			break
+		}
+		if len(rows) == 0 {
+			return nil, fmt.Errorf("Eastmoney %s limit-pool coverage ended at %d rows before target %d (source total %d)", poolType, len(poolRows), targetRows, sourceTotal)
+		}
+		if pageIndex == 99 {
+			return nil, fmt.Errorf("Eastmoney %s limit-pool exceeded pagination safety limit", poolType)
 		}
 	}
 	fetchedAt, requestedDate := time.Now().UTC(), date.Format("2006-01-02")
 	snapshot := &model.LimitPoolSnapshot{
-		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(strings.Trim(strings.TrimSpace(string(payload.Data.QDate)), `"`)),
-		Total: payload.Data.Total, HasData: payload.Data.Total > 0 && len(payload.Data.Pool) > 0,
-		Items: make([]model.LimitPoolItem, 0, len(payload.Data.Pool)), Source: p.Name(),
+		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(strings.Trim(strings.TrimSpace(string(sourceQDate)), `"`)),
+		Total: sourceTotal, HasData: sourceTotal > 0 && len(poolRows) > 0,
+		Items: make([]model.LimitPoolItem, 0, len(poolRows)), Source: p.Name(),
 		SourceVersion: "eastmoney-push2ex-limit-pool-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed", "requested_trade_date_is_authoritative"},
 	}
-	if payload.Data.Total == 0 && len(payload.Data.Pool) == 0 {
+	if sourceTotal > len(poolRows) {
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_total_exceeds_returned_rows")
+	}
+	if sourceTotal == 0 && len(poolRows) == 0 {
 		snapshot.QualityStatus = model.QualityUnknown
 		snapshot.QualityReasons = []string{"provider_returned_empty_pool_cannot_distinguish_zero_events_from_unavailable_date"}
 		return snapshot, nil
 	}
-	if payload.Data.Total <= 0 || len(payload.Data.Pool) == 0 {
+	if sourceTotal <= 0 || len(poolRows) == 0 {
 		return nil, errors.New("Eastmoney limit-pool total/pool mismatch")
 	}
-	if len(payload.Data.Pool) > limit {
-		return nil, fmt.Errorf("Eastmoney limit-pool returned %d rows above requested limit %d", len(payload.Data.Pool), limit)
+	if len(poolRows) > limit {
+		return nil, fmt.Errorf("Eastmoney limit-pool returned %d rows above requested limit %d", len(poolRows), limit)
 	}
-	seen := make(map[string]struct{}, len(payload.Data.Pool))
-	for index, raw := range payload.Data.Pool {
+	seen := make(map[string]struct{}, len(poolRows))
+	for index, raw := range poolRows {
 		code, name, market := parseEastmoneyBoardString(raw, "c"), parseEastmoneyBoardString(raw, "n"), parseEastmoneyBoardString(raw, "m")
 		change := parseEastmoneyBoardNumber(raw, "zdp")
 		if code == "" || name == "" || (market != "0" && market != "1") || change == nil {
@@ -2544,17 +2812,31 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 			suffix = ".BJ"
 		}
 		symbol := code + suffix
+		if !isTushareAShareSymbol(symbol) {
+			return nil, fmt.Errorf("Eastmoney limit-pool row %d is not a supported ordinary A-share security: %s", index, symbol)
+		}
 		if _, exists := seen[symbol]; exists {
 			return nil, fmt.Errorf("Eastmoney limit-pool contains duplicate symbol %s", symbol)
 		}
 		seen[symbol] = struct{}{}
+		firstTouchRaw, lastTouchRaw := parseEastmoneyBoardString(raw, "fbt"), parseEastmoneyBoardString(raw, "lbt")
+		firstTouch, lastTouch := parseEastmoneyLimitTime(firstTouchRaw), parseEastmoneyLimitTime(lastTouchRaw)
+		itemQualityReasons := []string{"provider_snapshot_timestamp_not_exposed"}
+		for _, touchTime := range []struct{ raw, parsed string }{
+			{raw: firstTouchRaw, parsed: firstTouch},
+			{raw: lastTouchRaw, parsed: lastTouch},
+		} {
+			if strings.TrimSpace(touchTime.raw) != "" && touchTime.parsed == "" {
+				itemQualityReasons = appendUniqueEastmoneyReason(itemQualityReasons, "provider_limit_pool_touch_time_invalid")
+				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_limit_pool_touch_time_invalid")
+			}
+		}
 		snapshot.Items = append(snapshot.Items, model.LimitPoolItem{
 			Symbol: symbol, Code: code, Name: name, ChangePercent: change,
-			FirstTouchTime:    parseEastmoneyLimitTime(parseEastmoneyBoardString(raw, "fbt")),
-			LastTouchTime:     parseEastmoneyLimitTime(parseEastmoneyBoardString(raw, "lbt")),
+			FirstTouchTime: firstTouch, LastTouchTime: lastTouch,
 			ConsecutiveBoards: parseEastmoneyBoardInteger(raw, "lbc"), BrokenCount: parseEastmoneyBoardInteger(raw, "zbc"),
 			Industry: parseEastmoneyBoardString(raw, "hybk"), Source: p.Name(), SourceVersion: snapshot.SourceVersion,
-			FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+			FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded, QualityReasons: itemQualityReasons,
 		})
 	}
 	return snapshot, nil
@@ -2571,6 +2853,12 @@ func parseEastmoneyLimitTime(value string) string {
 		}
 	}
 	value = strings.Repeat("0", 6-len(value)) + value
+	hour, hourErr := strconv.Atoi(value[:2])
+	minute, minuteErr := strconv.Atoi(value[2:4])
+	second, secondErr := strconv.Atoi(value[4:])
+	if hourErr != nil || minuteErr != nil || secondErr != nil || hour > 23 || minute > 59 || second > 59 {
+		return ""
+	}
 	return value[:2] + ":" + value[2:4] + ":" + value[4:]
 }
 

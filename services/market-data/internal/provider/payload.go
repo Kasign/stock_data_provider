@@ -104,3 +104,12 @@ func optionalVolumeUnit(value *int64, unit string) string {
 	}
 	return unit
 }
+
+// validProviderSnapshotTime rejects empty/zero timestamps and timestamps more than five minutes in the future.
+// Older timestamps remain valid here; freshness policy is handled by the quote cache/service layer.
+func validProviderSnapshotTime(value *time.Time, reference time.Time) *time.Time {
+	if value == nil || value.IsZero() || value.After(reference.Add(5*time.Minute)) {
+		return nil
+	}
+	return value
+}

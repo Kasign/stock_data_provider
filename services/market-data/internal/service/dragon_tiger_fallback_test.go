@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +73,47 @@ func dragonTigerFallbackService(providers ...provider.DragonTigerProvider) *Data
 	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
 	svc.SetDragonTigerProviders(providers)
 	return svc
+}
+
+func TestDragonTigerRejectsMismatchedSymbolAndCode(t *testing.T) {
+	snapshot := dataDragonTigerForFallbackTest("eastmoney")
+	snapshot.Items[0].Code = "000001"
+	if err := validateDragonTigerSnapshot(snapshot.TradeDate, snapshot.Page, snapshot.PageSize, snapshot); err == nil || !strings.Contains(err.Error(), "symbol/code mismatch") {
+		t.Fatalf("dragon-tiger symbol/code mismatch must be rejected, got %v", err)
+	}
+}
+
+func TestDragonTigerFallsBackFromUnknownQualityRows(t *testing.T) {
+	date := "2026-10-26"
+	unknown := dataDragonTigerForFallbackTest("eastmoney")
+	unknown.QualityStatus = model.QualityUnknown
+	unknown.QualityReasons = []string{"provider_dragon_tiger_quality_unknown"}
+	first := &dragonTigerFallbackTestProvider{name: "eastmoney", snapshot: unknown}
+	fallback := &dragonTigerFallbackTestProvider{name: "hithink", snapshot: dataDragonTigerForFallbackTest("hithink")}
+	svc := dragonTigerFallbackService(first, fallback)
+	got, hit, err := svc.DragonTiger(context.Background(), date, 1, 100)
+	if err != nil || hit { t.Fatalf("DragonTiger returned hit=%v err=%v", hit, err) }
+	if got == nil || got.Source != "hithink" || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded fallback rather than unknown rows, got %+v", got)
+	}
+	if first.calls != 1 || fallback.calls != 1 { t.Fatalf("expected both providers to be attempted, calls=%d/%d", first.calls, fallback.calls) }
+}
+
+func TestDragonTigerReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
+	date := "2026-10-26"
+	candidate := dataDragonTigerForFallbackTest("eastmoney")
+	candidate.QualityStatus = model.QualityUnknown
+	candidate.QualityReasons = []string{"provider_dragon_tiger_quality_unknown"}
+	first := &dragonTigerFallbackTestProvider{name: "eastmoney", snapshot: candidate}
+	failed := &dragonTigerFallbackTestProvider{name: "hithink", err: errors.New("test provider unavailable")}
+	svc := dragonTigerFallbackService(first, failed)
+	got, hit, err := svc.DragonTiger(context.Background(), date, 1, 100)
+	if err != nil || hit { t.Fatalf("DragonTiger returned hit=%v err=%v", hit, err) }
+	if got == nil || !got.HasData || got.QualityStatus != model.QualityUnknown ||
+		!strings.Contains(strings.Join(got.QualityReasons, ","), "dragon_tiger_fallback_exhausted_without_usable_quality") {
+		t.Fatalf("expected retained unknown rows after fallback exhaustion, got %+v", got)
+	}
+	if first.calls != 1 || failed.calls != 1 { t.Fatalf("expected all providers to be attempted, calls=%d/%d", first.calls, failed.calls) }
 }
 
 func TestDragonTigerFallsBackAfterUnknownEmptyReport(t *testing.T) {

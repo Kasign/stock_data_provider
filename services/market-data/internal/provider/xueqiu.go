@@ -240,8 +240,16 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		return nil, fmt.Errorf("解析雪球榜单响应失败: %w", err)
 	}
 	if rawCode := bytes.TrimSpace(envelope["error_code"]); len(rawCode) > 0 {
-		code, parseErr := strconv.Atoi(strings.TrimSpace(strings.Trim(string(rawCode), "\"")))
-		if parseErr == nil && code != 0 {
+		codeText := string(rawCode)
+		var stringCode string
+		if json.Unmarshal(rawCode, &stringCode) == nil {
+			codeText = stringCode
+		}
+		code, parseErr := strconv.Atoi(strings.TrimSpace(codeText))
+		if parseErr != nil {
+			return nil, errors.New("雪球榜单响应 error_code 无效")
+		}
+		if code != 0 {
 			message := xueqiuString(envelope, "error_description")
 			if message == "" {
 				message = xueqiuString(envelope, "message")
@@ -277,6 +285,9 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 	}
 	if rankingType == "surge" {
 		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "xueqiu_surge_uses_percentage_mover_proxy_not_eastmoney_hot_up_equivalent")
+	}
+	if requestLimit < limit {
+		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "provider_request_limit_capped_at_50")
 	}
 	if len(rows) > requestLimit {
 		snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, "provider_returned_more_rows_than_requested")
@@ -318,13 +329,21 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 			return nil, err
 		}
 		var rankChange *int
+		invalidRankChange := false
 		if rawRankChange := strings.TrimSpace(xueqiuString(row, "rank_change")); rawRankChange != "" {
 			value, parseErr := strconv.Atoi(rawRankChange)
 			if parseErr == nil && value >= -1000000 && value <= 1000000 {
 				rankChange = &value
+			} else {
+				invalidRankChange = true
 			}
 		}
 		itemReasons := []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal"}
+		if invalidRankChange {
+			const reason = "provider_rank_change_invalid_or_out_of_range"
+			snapshot.QualityReasons = appendTushareReason(snapshot.QualityReasons, reason)
+			itemReasons = appendTushareReason(itemReasons, reason)
+		}
 		if providerTime == nil {
 			itemReasons = appendTushareReason(itemReasons, "provider_snapshot_timestamp_missing_or_invalid")
 		}

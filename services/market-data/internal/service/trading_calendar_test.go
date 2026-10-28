@@ -56,6 +56,14 @@ func validTestTradingCalendar() *model.TradingCalendarSnapshot {
 	}
 }
 
+func TestTradingCalendarRejectsMissingSourceVersion(t *testing.T) {
+	snapshot := validTestTradingCalendar()
+	snapshot.SourceVersion = ""
+	if err := validateTradingCalendarSnapshot(snapshot, snapshot.StartDate, snapshot.EndDate); err == nil {
+		t.Fatal("trading-calendar snapshot without source version must be rejected")
+	}
+}
+
 func TestTradingCalendarRequiresCompleteExplicitDateCoverage(t *testing.T) {
 	p := &testTradingCalendarProvider{snapshot: validTestTradingCalendar()}
 	testCache := &tradingCalendarTestCache{items: map[string][]byte{}}

@@ -9,20 +9,20 @@
 | 原 Python 数据源 | 原注册条件 / 默认位置 | 主要市场或用途 | 当前 Go 对应 | 状态 |
 |---|---|---|---|---|
 | EfinanceFetcher | Python wrapper；日线/行情/基本资料/所属板块多经由东方财富 | A 股行情、日线、实时指数、涨跌统计、行业/概念排行、个股基本信息、所属板块、增强数据 | Go 原生 profile 已映射动态 PE/PB、行业、市值、板块编号、ROE、净利率、净利润和毛利率；个股资金流已接入东方财富公开日资金流接口；enhanced_data 可由独立 API 组合 | profile 扩展值没有独立上游时间戳，质量始终 degraded；任意地区指数列表与 Python 字段组合不保证 1:1 等价；未统一测试 |
-| AkshareFetcher | Python 多端点聚合库；A 股日线回退东方财富 → 新浪 → 腾讯；筹码分布调用 stock_cyq_em 本地计算；人气榜/飙升榜使用东方财富 rank API | A 股行情、日线、指数历史、筹码分布、市场统计、行业/概念、涨停池、人气榜/飙升榜 | Go 原生 Eastmoney/Sina/Tencent 覆盖行情与日线，THS/Tushare 覆盖不同代码空间下的指数目录/成分/历史日 K；Eastmoney Go 原生 CYQ 算法、市场统计/板块/涨停池和人气榜/飙升榜均已接入，Xueqiu 为可选的人气榜/关注榜备用源 | 人气榜/飙升榜已接入独立路由，因来源时间缺失保持 degraded；个股基本资料扩展字段仍未完整迁移；筹码输出降级且仅为最新快照；未统一测试 |
+| AkshareFetcher | Python 多端点聚合库；A 股日线回退东方财富 → 新浪 → 腾讯；筹码分布调用 stock_cyq_em 本地计算；人气榜/飙升榜使用东方财富 rank API | A 股行情、日线、指数历史、筹码分布、市场统计、行业/概念、涨停池、人气榜/飙升榜 | Go 原生 Eastmoney/Sina/Tencent 覆盖行情与日线，THS/Tushare 覆盖不同代码空间下的指数目录/成分/历史日 K；Eastmoney Go 原生 CYQ 算法、市场统计/板块/涨停池和人气榜/飙升榜均已接入，Xueqiu 为可选的人气榜/关注榜备用源 | 人气榜/飙升榜已接入独立路由，因来源时间缺失保持 degraded；个股基本资料新增总股本/流通股本映射，但其他个股信息字段及历史时点仍未完整迁移；筹码输出降级且仅为最新快照；未统一测试 |
 | PytdxFetcher | 国内行情/日 K 末位回退源，默认开启 | A 股实时行情、日线 K 线；支持通达信除权事件辅助前/后复权 | Go 原生 `github.com/injoyai/tdx` v0.0.86 Provider（QuoteProvider + DailyBarProvider） | 已接入代码与路由，未统一测试；连接/行情服务器可用性、复权契约待集中验收 |
 | BaostockFetcher | 原 Python 默认 P3；Go 按历史 K 线优先候选 | A 股历史日线优先；财务、复权因子、除权除息、基础资料/行业/指数成分按 API 能力逐项扩展 | Go 原生 TCP 客户端与 DailyBarProvider 已实现；NAS Docker 容器已真实登录/查询，并覆盖多个证券及前复权、后复权、不复权样本；GitHub Runner #100 又返回 8 根样本日 K | 日 K 已有目标容器首轮实测，可作为受限回退源；仍需持续观察稳定性和更多证券/日期范围，不能外推为全覆盖或 SLA；当前 `providers.json` 与服务 `.env.example` 默认开启财务指标和交易日历；部署时仍可分别通过 `MARKET_DATA_BAOSTOCK_FUNDAMENTALS_ENABLED`、`MARKET_DATA_BAOSTOCK_TRADING_CALENDAR_ENABLED` 关闭 |
 | YfinanceFetcher | 默认启用；默认 P4；海外股票与指数的专用路径 | 美股 / 海外行情与历史数据、部分基本面数据 | 无 | 未迁移 |
 | TencentFetcher | 默认启用；默认 P5 | A 股行情与日线兜底 | 原生 Go Tencent Provider | 已迁移部分行情能力，口径仍需逐项对照 |
-| TushareFetcher | 仅配置 `TUSHARE_TOKEN` / `MARKET_DATA_TUSHARE_TOKEN` 且显式开启后注册 | A 股原始日线、证券基础资料、交易日历、季度财务指标、批量估值、涨跌停池、龙虎榜与公告；权限依接口而异 | Go 原生 HTTP `Tushare` Provider：DailyBar、StockBasic、TradingCalendar、Fundamentals、Valuation、LimitPool、DragonTiger、Announcement、IndexCatalog（默认关闭） | 接口与独立能力路由已接入；日线只支持 `none`，成交量手数在换算前要求为整数；估值保留报告日期但无精确快照时间；`pe` 单独保留为 `pe_static`，不冒充 MRQ PE；PCF 未覆盖；财务仅选择具有有效公告日期、且已公告的报告期修订版本；缺公告日期的记录不参与选择，但尚不支持历史 `as_of` 版本重建；事件金额按 provider_defined 保留；公告依赖单独开通权限；指数成分每次按月查询最新可用快照并保留大结果降级提示；未统一测试，不宣称生产可用 |
-| TickFlowFetcher | 免费 API 可免 Key 读取历史日 K；实时行情需 `TICKFLOW_API_KEY` 且显式开启 quote 能力 | 国内 SH/SZ/BJ 实时行情、日线 K 线 | Go 原生 REST `TickFlow` Provider（免费日 K 默认启用，实时行情/核心指数报价独立开关，需 API Key） | Quote/K 线成交量原始单位为股；日 K 只在供应商提供或可安全推导涨跌幅时输出，缺少 `prev_close` 时从排序后的前一收盘价推导且降级；市场广度基于 `CN_Equity_A`，SW1 榜基于可发现的 `CN_Equity_SW1_*` 证券池并取成分股收益率算术平均。官方 SDK 支持通用 universes list/get/batch 和按 universe 查询行情，但公开文档未保证 SW1 分类清单/账号授权，也未提供专用行业指数排名端点；SW1 不等同原生指数涨跌幅。权限、完整覆盖与目标环境均待验收，概念榜仍由其他来源提供 |
+| TushareFetcher | 仅配置 `TUSHARE_TOKEN` / `MARKET_DATA_TUSHARE_TOKEN` 且显式开启后注册 | 普通 A 股股票原始日线、证券基础资料、交易日历、季度财务指标、利润表/资产负债表/现金流量表、批量估值、涨跌停池、龙虎榜与公告；指数日线走独立 `index_daily` 能力；权限依接口而异 | Go 原生 HTTP `Tushare` Provider：DailyBar、StockBasic、TradingCalendar、Fundamentals（六组指标+三张报表；利润/现金流单季、资产负债表期末）、Valuation、LimitPool、DragonTiger、Announcement、IndexCatalog（默认关闭） | `daily` 在请求前拒绝 ETF、指数、B 股等非普通 A 股证券，成交量手数在换算前要求为整数；日线只支持 `none`；估值保留报告日期但无精确快照时间；`pe` 单独保留为 `pe_static`，不冒充 MRQ PE；PCF 未覆盖；财务仅选择具有有效公告日期、且已公告的报告期修订版本；缺公告日期的记录不参与选择，但尚不支持历史 `as_of` 版本重建；事件金额按 provider_defined 保留；公告依赖单独开通权限；指数成分每次按月查询最新可用快照并保留大结果降级提示；指数日 K Provider 直接拒绝未来 end_date；龙虎榜/涨跌停池 Provider 直接拒绝未来交易日期；空 unknown 不伪造源端报表日期。未统一测试，不宣称生产可用 |
+| TickFlowFetcher | 免费 API 可免 Key 读取历史日 K；实时行情需 `TICKFLOW_API_KEY` 且显式开启 quote 能力 | 国内 SH/SZ/BJ 实时行情、日线 K 线 | Go 原生 REST `TickFlow` Provider（免费日 K 默认启用，实时行情/核心指数报价独立开关，需 API Key） | Quote/K 线成交量原始单位为股；日 K 只在供应商提供或可安全推导涨跌幅时输出，缺少 `prev_close` 时从排序后的前一收盘价推导且降级；市场广度基于 `CN_Equity_A`，同时输出报价时间戳覆盖数与最早/最新报价时间；报价时间覆盖不全或时间跨度超过 10 分钟时降级。SW1 榜基于可发现的 `CN_Equity_SW1_*` 证券池并取成分股收益率算术平均。官方 SDK 支持通用 universes list/get/batch 和按 universe 查询行情，但公开文档未保证 SW1 分类清单/账号授权，也未提供专用行业指数排名端点；SW1 不等同原生指数涨跌幅。权限、完整覆盖与目标环境均待验收，概念榜仍由其他来源提供 |
 | MiaoxiangFetcher（妙想 / MX_API） | 仅配置 `MX_APIKEY` 后注册；默认优先级 6 | 筹码分布及个股资金流等第三方补充数据 | Go `MiaoXiang`（独立 SupplementProvider，显式 opt-in） | 筹码与资金流保留为可选补充/后备；个股资金流已有东方财富公开端点作为默认能力，MX Key 联调与精确 publication availability 仍待验收 |
 | LongbridgeFetcher | 仅配置 Longbridge OAuth / 旧凭据后注册 | 美股 / 港股行情及日线兜底 | 无 | 可选源，未迁移 |
 | FutuFetcher | 检测到 Futu OpenD 端点配置后注册 | 港股等 Futu 支持市场 | 无 | 可选源，未迁移 |
 | FinnhubFetcher | 仅配置 `FINNHUB_API_KEY` 后注册 | 以美股/海外股票为主的补充行情和历史数据 | 无 | 可选源，未迁移 |
 | AlphaVantageFetcher | 仅配置 `ALPHAVANTAGE_API_KEY` 后注册 | 以美股/海外股票为主的补充行情和历史数据 | 无 | 可选源，未迁移 |
-| 同花顺 / THS Financial-API | 通过 `MARKET_DATA_HITHINK_API_KEY` 或 `HITHINK_FINANCE_API_KEY` 配置；默认关闭，按能力显式开启 | A 股名称/代码搜索、行情快照、历史日 K、指数/板块目录、当前成分股、指数历史日 K、指数快照、最近一年交易日历、财务指标与三张财务报表、三类涨跌停池、龙虎榜、批量估值、人气榜/飙升榜 | Go 原生 REST `Hithink` Provider（StockSearchProvider + QuoteProvider + DailyBarProvider + IndexQuoteProvider + TradingCalendarProvider + FundamentalsProvider + ValuationProvider + IndexCatalogProvider + LimitPoolProvider + DragonTigerProvider + HotRankingProvider） | 按能力独立开关；指数目录默认关闭；三类涨跌停池复用统一端点，金额单位未知时保持 `provider_defined`；人气榜/飙升榜通过可选 `MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED` 接入现有源优先级链，数据延迟时保持 degraded；历史成分与完整板块历史行情仍不支持；财务指标分区与三张报表分区分别校验；服务层允许六个标准指标分区加最多三张报表，未知/重复分区仍拒绝；未统一测试 |
-| Akshare / YFinance fundamental adapters | 由基本面上下文聚合逻辑调用，不完全等同于行情 Fetcher 列表 | 财务与基本面指标 | 无 | 未迁移 |
+| 同花顺 / THS Financial-API | 通过 `MARKET_DATA_HITHINK_API_KEY` 或 `HITHINK_FINANCE_API_KEY` 配置；默认关闭，按能力显式开启 | A 股名称/代码搜索、行情快照、历史日 K、指数/板块目录、当前成分股、指数历史日 K、指数快照、最近一年交易日历、财务指标与三张财务报表、三类涨跌停池、龙虎榜、批量估值、人气榜/飙升榜 | Go 原生 REST `Hithink` Provider（StockSearchProvider + QuoteProvider + DailyBarProvider + IndexQuoteProvider + TradingCalendarProvider + FundamentalsProvider + ValuationProvider + IndexCatalogProvider + LimitPoolProvider + DragonTigerProvider + HotRankingProvider） | 按能力独立开关；指数目录默认关闭；三类涨跌停池复用统一端点，金额单位未知时保持 `provider_defined`；人气榜/飙升榜通过可选 `MARKET_DATA_HITHINK_HOT_RANKINGS_ENABLED` 接入现有源优先级链，数据延迟时保持 degraded；历史成分与完整板块历史行情仍不支持；财务指标分区与三张报表分区分别校验；服务层允许六个标准指标分区加最多三张报表，未知/重复分区仍拒绝；龙虎榜请求会校验响应源端交易日，拒绝未来日期。未统一测试 |
+| Akshare / YFinance fundamental adapters | 由基本面上下文聚合逻辑调用，不完全等同于行情 Fetcher 列表 | 财务与基本面指标 | Go 原生财务快照现已支持六组标准指标加三张独立报表分区；Tushare 接入 income/balancesheet/cashflow，BaoStock/THS 能力按各自契约保留 | 旧 Python 汇总与字段级完全等价、历史 as_of 修订重建仍未完成；不能把当前版本当作历史 PIT 财报 |
 
 原 Python 管理器会按注册的 Fetcher 优先级排序，并针对市场类型、数据能力、可用性和失败状态采用不同的路由 / fallback 规则。因此，简单地把这张表映射成一个全局 Provider 顺序并不足以复现原行为。
 
@@ -31,14 +31,14 @@
 | 数据能力 / 原管理器入口 | 当前 Go 实现 | 当前缺口 |
 |---|---|---|
 | 个股实时行情 `get_realtime_quote` | Eastmoney、Tencent、Sina；Yahoo 为显式关闭的可选源 | GitHub Runner #100 中新浪、腾讯、东方财富均返回报价；腾讯和 Yahoo 因字段/成交额契约限制为 degraded，Yahoo 默认关闭；仍需逐项对照原 Fetcher 的字段补齐与市场路由 |
-| 日线历史 `get_daily_data` | Eastmoney、Tencent、Sina、BaoStock；Yahoo 默认关闭，网易当前配置启用为后置回退但目标网络未验收 | GitHub Runner #100 对 Eastmoney、Tencent（none/qfq）、Sina（none）、BaoStock（qfq）和 Yahoo（qfq）各返回 8 根样本 K 线；新浪/腾讯/Yahoo 缺可核验成交额时保持 null/unknown/degraded；网易探测本次因 HTTP 502 被跳过；Efinance/AkShare 的独立 Python 包装层不再作为单独 Go Provider 迁移，主要公开端点能力由现有 Go Provider 组合覆盖；Pytdx/Tushare/TickFlow 已有部分 Go 日线/能力适配，但字段级等价、权限、日期覆盖及失败语义尚未完成统一审查；Longbridge 海外/账户源按既定范围暂缓，指数专用链与全市场路由仍需逐项完成 |
+| 日线历史 `get_daily_data` | Eastmoney、Tencent、Sina、BaoStock；Yahoo 默认关闭，网易当前配置启用为后置回退但目标网络未验收 | GitHub Runner #100 对 Eastmoney、Tencent（none/qfq）、Sina（none）、BaoStock（qfq）和 Yahoo（qfq）各返回 8 根样本 K 线；新浪/腾讯/Yahoo 缺可核验成交额时保持 null/unknown/degraded；网易探测本次因 HTTP 502 被跳过；Tushare 日 K 已通过 `adj_factor` 实现前/后复权换算，缺失或异常因子时拒绝候选，账户权限及与其他来源的算法差异仍待统一验收；Efinance/AkShare 的独立 Python 包装层不再作为单独 Go Provider 迁移，主要公开端点能力由现有 Go Provider 组合覆盖；Pytdx/Tushare/TickFlow 已有部分 Go 日线/能力适配，但字段级等价、权限、日期覆盖及失败语义尚未完成统一审查；Longbridge 海外/账户源按既定范围暂缓，指数专用链与全市场路由仍需逐项完成 |
 | 股票名称/代码搜索 | 独立 `StockSearchProvider` 链，腾讯 Smartbox 优先、东方财富 CLIST 兜底；分别由 `MARKET_DATA_TENCENT_STOCK_SEARCH_ENABLED` 与 `MARKET_DATA_EASTMONEY_STOCK_SEARCH_ENABLED` 控制，不必关闭各自的行情或日 K 能力 | 两个国内 Provider 均保留独立开关，搜索优先级继续为腾讯 → 东方财富；`/api/v1/stocks/search` 已实现，现补齐 OpenAPI 响应模型与参数/错误契约。测试源码已覆盖认证、参数校验和规范化结果；本轮未执行测试或真实上游请求 |
 | 指数实时报价 | 新增独立 `IndexQuoteProvider`、东方财富 `ulist.np/get` 适配器与 `GET /api/v1/market/indices`，仅覆盖 7 个白名单核心指数 | 当前 `configs/providers.json` 与服务模板默认启用；历史 Runner #100 返回 7 条，但接口经 302 跳转后未提供可解析行情时间，结果为 `degraded`。默认启用不等于已完成目标部署容器验收 |
-| 指数目录 / 成分 / 日线 | Hithink 专用指数目录、当前成分和历史日线；Tushare index_basic、index_weight、index_daily 通过 tag=tushare 使用独立代码空间 | Hithink 使用 .TI/.SH/.SZ，Tushare 使用 .SH/.SZ/.CSI；当前成分按最近可用权重快照，日线成交量保留手、成交额从千元换算成人民币元；能力默认关闭并待统一验收 | 成分快照新增 provider_returned/excluded_count；缺名称被排除时显式计数并降级；两源均不提供可重建的历史成分生效序列 |
+| 指数目录 / 成分 / 日线 | Hithink 专用指数目录、当前成分和历史日线；Tushare index_basic、index_weight、index_daily 通过 tag=tushare 使用独立代码空间 | Hithink 使用 .TI/.SH/.SZ，Tushare 使用 .SH/.SZ/.CSI；当前成分按最近可用权重快照，日线成交量保留手、成交额从千元换算成人民币元；能力默认关闭并待统一验收 | 成分快照新增 provider_returned/excluded_count；Tushare 新增 /constituents?as_of=YYYY-MM-DD，按月向前查找不晚于请求日期的报告，并公开 historical_index_constituents_capable；仍不是成分纳入/剔除的生效区间，不支持完整严格 PIT 重放；测试和真实来源均待统一验收 |
 | 市场涨跌统计 get_market_stats | Go MarketBreadthProvider 通过东方财富 getTopicZDFenBu 汇总涨跌分布、通过 getTopicZTPool/getTopicDTPool 按同一报告日补充涨跌停总数，并以 CLIST 的 f6 分页汇总全市场成交额；API 为 GET /api/v1/market/breadth | 当前配置默认启用，结果缓存 5 分钟；成交额只在分页无缺失/重复、每条报价日期与分布报告日一致、成交额字段有效且证券数量与涨跌分布覆盖数完全一致时输出。多页采集非原子快照、证券全集未由独立主数据核验，质量仍为 `degraded`；代码与契约已更新，待用户统一回归及生产源验收 |
-| 行业板块涨跌榜 `get_sector_rankings` | 新增独立 `SectorRankingProvider`、东方财富 CLIST 适配器及 `GET /api/v1/market/sectors?type=industry` | 当前配置默认启用；既往 Runner 返回 10 条，但上游缺少可核验快照时间，结果固定为 `degraded`。目标部署环境验收待完成 |
-| 概念 / 题材涨跌榜 `get_concept_rankings` | 复用板块 ranking 契约、使用独立概念过滤条件；API 为 `GET /api/v1/market/sectors?type=concept` | 当前配置默认启用；既往 Runner 返回 10 条，但上游缺少可核验快照时间，结果固定为 `degraded`。目标部署环境验收待完成 |
-| 涨停池 get_limit_up_pool、跌停池、炸板池 | 新增 LimitPoolProvider、东方财富 push2ex 三类池端点及 GET /api/v1/market/limit-pools?type=up|down|broken | 当前配置默认启用。既往 Runner #100 的报告总数为涨停 82、跌停 6、炸板 12，但涨停池本次只返回 30 条样本；源端没有可核验快照时间，结果为 `degraded`。NAS/Docker 与跨交易日语义验证未完成 |
+| 行业板块涨跌榜 `get_sector_rankings` | 东方财富 CLIST 双向排名及 TickFlow SW1 行业估算，统一使用 `GET /api/v1/market/sectors?type=industry&direction=up|down` | 已支持领涨/领跌；TickFlow 领跌仅在 SW1 行业全集均可返回时提供；来源无可信快照时间或为成分股均值时保持 `degraded`，目标部署环境验收待完成 |
+| 概念 / 题材涨跌榜 `get_concept_rankings` | 东方财富概念 CLIST 双向排名；API 为 `GET /api/v1/market/sectors?type=concept&direction=up|down` | 已支持领涨/领跌；上游缺少可核验快照时间，结果固定为 `degraded`。目标部署环境验收待完成 |
+| 涨停池 get_limit_up_pool、跌停池、炸板池 | 新增 LimitPoolProvider、东方财富 push2ex 三类池端点及 GET /api/v1/market/limit-pools?type=up|down|broken | 当前配置默认启用。东方财富 Provider 已改为每页最多 30 条分页采集，按源端 `tc` 和调用方 `limit` 继续读取，分页总数/报告日期不一致或提前空页时拒绝候选；HTTP fixture 覆盖 65 条跨三页完整返回，代码侧不再把第一页误当作全部。因源端缺少可核验快照时间，结果仍为 `degraded`；目标 NAS/Docker 及真实来源分页语义仍待统一验收 |
 | 个股所属板块 `get_belong_boards` | 新增独立 `StockBoardsProvider`、东方财富 `slist/get` 适配器与 `GET /api/v1/stocks/{symbol}/boards` | 当前配置默认启用；既往 Runner #100 对 600036.SH 返回 26 个板块项，但源端没有可核验快照时间，且板块类型语义仍有限，结果为 `degraded`；NAS/Docker 验收待完成 |
 | 交易日历 | 新增独立 `TradingCalendarProvider`，通过 BaoStock TCP `query_trade_dates` 和可选 Tushare Pro `trade_cal`，统一使用 `GET /api/v1/market/trading-calendar?start=YYYY-MM-DD&end=YYYY-MM-DD` | BaoStock 已有首轮真实样本；Tushare Go 实现已加入代码但默认关闭，需配置有效 Token 与接口权限；两者均须满足连续自然日覆盖契约，待统一验收 |
 | 筹码分布 `get_chip_distribution` | 东方财富原生 CYQ 算法（基于最新未复权日 K 与换手率计算），可选 MX API 作为补充源；独立 API 与缓存 | 当前东方财富能力默认启用；无独立筹码快照时间，结果保持 `degraded`，仅代表最新可计算快照，不得用于伪造历史 `as_of`；精确 publication/available_at 仍缺失 |
@@ -47,7 +47,7 @@
 | 个股资金流 `get_capital_flow_context` | 东方财富公开日资金流端点为默认源，MX API 为显式可选后备；字段按人民币元规范化，5/10 日累计要求完整观测 | `f51` 日期与 `f52` 主力净流入已接线；源端实际单位、盘中完整度与精确 available_at 仍待统一验收，缺值不补零 |
 | 龙虎榜 `get_dragon_tiger_context` | 东方财富原生 `DragonTigerProvider`、API `GET /api/v1/market/dragon-tiger?date=YYYY-MM-DD&page=1&page_size=100`；同花顺/Tushare 是可选能力 | 当前配置默认启用东方财富路由，但源端只有交易日、没有精确快照时间；空列表应为 `unknown` 而非确认零条，金额缺失保留 `null`。Runner 与 NAS/Docker 的交易日/分页覆盖仍待统一验收 |
 | 股票名称 / 基础资料 `get_stock_name` / profile | 新增独立 `StockBasicProvider` 和 `GET /api/v1/stocks/{symbol}/profile`，接入东方财富 F10 发行信息（简称、上市日期、上市状态） | 单证券基础身份信息已在 GitHub Runner HTTP 200 实测通过；不等于批量名称或完整公司基本面，目标部署容器仍待验收 |
-| 批量估值 | 可选 Tushare daily_basic Go Provider 与 GET /api/v1/market/valuations?symbols=... | 按最近已完成交易日返回 PE/PB/PS；不支持的 PCF 保持 null，并返回 provider_report_date；缺少精确更新时间时 quality 为 degraded；默认关闭，需 Token/积分权限，待统一验收 |
+| 批量估值 | 可选 Tushare daily_basic Go Provider 与 GET /api/v1/market/valuations?symbols=... | 按最近已完成交易日返回 PE/PB/PS、换手率、流通换手率、量比和两类股息率；不支持的 PCF 与 MRQ PE 保持 null，并返回 provider_report_date；缺少精确更新时间时 quality 为 degraded；默认关闭，需 Token/积分权限，待统一验收 |
 | 股票名称 / 代码搜索 | 独立 `StockSearchProvider`，东方财富 CLIST 证券目录与 6 小时缓存，API `GET /api/v1/stocks/search?q=贵州茅台&limit=10` | 实测已证实目录源 HTTP 200 并报告 5,925 条证券，但首轮 `pz=5000`、次轮 `pz=1000` 都遇到服务端分页上限低于请求值，代码因此只扫描首页并漏掉“贵州茅台”。当前调整为每页 100 条、最多 100 页，并新增后续页匹配回归测试；待 Go CI 与真实 Runner 再验收 |
 | 新闻 / 公告 | 东方财富公告 API + Go Core 原生 Bocha、Tavily、Brave News 和显式 SearXNG；多源并发、日期门禁、域名加权、反营销、URL/标题去重与个股相关性排序 | 已补源适配器及本地 fixture 测试源码；未运行测试/构建/CI/真实搜索请求。仍保留 Python bridge fallback；更完整的多维情报查询与生产覆盖率需统一验收 |
 
@@ -226,6 +226,7 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 | 能力域 | Go 侧现状 | 状态与边界 |
 |---|---|---|
 | 证券名称/代码搜索 | `StockSearchProvider`：腾讯 Smartbox 优先，东方财富目录兜底 | 代码与独立 API 已接入；需统一验收分页、中文名称命中率、服务端截断和不同市场代码覆盖 |
+| 财务指标与三张报表 | Go `FundamentalsProvider` 提供六组标准季度指标，并可在同一快照中包含利润表、资产负债表、现金流量表的选定字段；Tushare 使用独立报表端点，BaoStock/同花顺按已配置能力接入 | 已有可用代码契约，但指标端点和报表端点独立回退，某一能力失败不会丢弃另一能力的有效字段；扩展常用利润表/资产负债表/现金流科目（含 EBIT/EBITDA、银行保险科目、租赁科目、应收应付组合项、总资产与权益、经营现金流及自由现金流），但仍非完整原始报表；只映射选定字段，并按公告日期、报告期和合并/单季口径筛选（一季度利润/现金流使用 report_type=1，Q2-Q4 使用单季 report_type=2）；账号权限、字段覆盖和单位仍待统一验收。当前仅返回最新可用修订，不支持历史 `as_of` 重建，不能宣称与所有 AkShare/Efinance 财务函数完全等价 |
 | 证券基础资料 | 东方财富 `StockBasicProvider` / profile，补充上市身份及动态 PE/PB、行业、市值、板块和部分盈利字段 | 仅部分字段等价；profile 当前快照缺少各字段独立时间戳，不可当作 point-in-time 财务数据 |
 | 行业/概念板块 | 东方财富行业/概念榜；TickFlow 可选 SW1 行业榜 | 东方财富能力已接入；TickFlow 只从 SW1 成分行情计算平均涨跌幅并固定降级，非供应商原生行业指数回报；概念榜不由 TickFlow 提供 |
 | 指数与成分 | 东方财富核心指数报价；同花顺/Tushare 指数目录、当前成分及指数历史 K；TickFlow 六个核心指数报价 | 已覆盖部分能力；当前成分历史生效序列、全量目录核对、跨源代码空间和数据完整性仍未闭环 |
@@ -233,7 +234,7 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 | 热度榜 | 东方财富人气/飙升榜、同花顺可选，雪球人气/关注后备 | 已有接口；源时间缺失则降级，雪球飙升榜只是涨幅排序代理，不是原生热度飙升口径 |
 | 筹码分布 | 东方财富 Go 原生 CYQ 计算，妙想 MX 可选补充 | 是最新可计算筹码快照，不具备严格历史时点可用时间；输出需保持降级 |
 | 个股资金流 | 东方财富公开资金流为默认 Provider；妙想 MX API 作为独立可选后备 | 尚需统一验收返回字段、金额口径、当日数据语义与窗口完整度；无精确可用时间，始终 degraded |
-| 增强数据 | 基础资料、财务、板块、筹码、资金流等独立能力可以组合 | 尚无完整 1:1 的单次聚合替代；不能仅因每个子 API 存在就宣称 `get_enhanced_data` 的字段和错误隔离语义已完成迁移 |
+| 增强数据 | `GET /api/v1/bundles/{symbol}` 提供 quote + daily bars；`go-core` 的 `StockBundle` 再并发汇总 profile、所属板块、财务、筹码、资金流和龙虎榜 | 已有一体化分析上下文/聚合模型，但不是旧 Python 函数的严格 1:1 字段替代：旧函数的 `None` 键、异常隔离和 DataFrame 序列化语义不同；Go 路径及 Python 兼容桥在历史 `as_of` 无法重建时都必须跳过当前辅助快照。需按字段与错误语义对账，不应重复新建相同 Provider |
 
 本清单描述当前仓库代码状态，不代表运行验证。实际接入、账号可访问、字段含义一致、证券全量覆盖、生产可用性分别验收；海外来源暂缓。
 
@@ -241,3 +242,152 @@ Live Provider Probe #112（[run 40258376973](https://github.com/Kasign/stock_dat
 ## 2026-10-27 个股主力资金流补充
 
 个股主力资金流新增东方财富公开日资金流端点 `https://push2.eastmoney.com/api/qt/stock/fflow/kline/get`，默认随东方财富能力启用，不要求额外 API Key。当前只使用 `f51` 日期和 `f52` 主力净流入金额，回传 `provider_date`；5 日/10 日合计要求对应窗口金额完整。妙想 `MX_API` 仍可显式启用作为后备，但不是资金流能力的唯一来源。字段映射参考公开端点资料（[接口字段参考](https://github.com/wlor0623/llm-dev-knowledge/blob/main/knowledge-base/eastmoney-quotes-api/endpoints/capital-flow.md)）；实际连通性、当日盘中数据语义及金额口径仍未执行统一验收，输出质量保持 degraded。
+## 2026-10-28 国内 Provider 质量契约复核状态
+
+最近一轮静态审查已为主要国内 A 股数据域补上来源版本/归一化版本边界：父快照与条目版本需一致；旧归一化版本缓存回源、Provider 结果进入回退而不直接输出；资金流/筹码缺少真实版本时不以字面值 `unknown` 冒充版本。个股基础资料增加股本、市值的有限值与大小关系校验，并验证上市/退市日期先后关系。Tushare 日 K 和指数日 K 的成交额单位换算已补本地 HTTP fixture 测试源码。数据库日 K 回退按来源、source_version、复权参考日期与归一化版本分组，并以固定规则选择候选。
+
+这些变化只表示实现和测试源码已更新，不等于测试执行或真实数据源验收完成。测试、构建、CI、Provider 权限/覆盖与字段级 Python 等价性仍留给统一验收；海外数据源继续暂缓。
+## 2026-10-28 数据层契约续审
+
+补齐来源版本占位值门禁、证券代码/交易所标识一致性、市场广度涨跌停计数上界与涨跌停池 total/returned 一致性、财务指标键唯一性、行业榜方向排序与热度榜名次顺序校验。日 K 数据库回退的同覆盖候选已增加确定性决胜规则；Tushare 股票/指数日 K 成交额单位换算有本地 HTTP fixture 测试源码。涉及修改均未运行测试或真实 Provider 请求，仍需统一验收；生产可达性、账号权限、全量覆盖和 Python 字段级等价性仍未因此自动完成。
+
+
+## 2026-10-28 证券搜索分页契约续审
+
+东方财富证券目录全量抓取需要以第一页总数确定分页边界；每个后续页必须返回同一 `total`，且原始行数不得超过按总数推导的该页剩余容量。分页计数漂移或超额返回会拒绝该 Provider 候选，使搜索服务继续回退；短页、重复证券及无效行仍通过质量降级暴露覆盖损失。对应 HTTP fixture 测试源码已补齐，但未实际执行，统一验收仍需验证真实源端的分页返回行为。
+
+
+## 2026-10-28 公告与龙虎榜分页完整性复核
+
+Go Provider 对非空公告页和龙虎榜页增加总数、总页数与当前页原始返回量的交叉校验；服务层也校验公告页与龙虎榜源端行数，避免部分页携带 valid/degraded 状态进入缓存/API。龙虎榜过滤可转债等非 A 股行时保留源端返回计数，并单独记录排除数。新增针对不足页与错误总页数的测试源码，未执行测试或真实源端请求，行为仍待统一验收。
+
+
+## 2026-10-28 行业/概念排行覆盖度复核
+
+Go 行业/概念排行要求当前返回条数满足 min(limit,total)。源端总数与本页条数矛盾、返回超出请求上限或必填字段丢弃导致页面不足时，拒绝该 Provider 候选并尝试回退；来源未报告 total 时显式记录该计数只是返回条数下界，并保持 degraded。对应契约与测试源码已更新，尚未实际执行统一验收。
+
+
+## 2026-10-28 指数成分缓存覆盖度复核
+
+指数成分旧缓存与新 Provider 回包统一执行来源覆盖计数处理。缺少源端覆盖计数的非空缓存不能保持 valid；若原质量为 unknown，只补充缺少覆盖计数原因并保持 unknown，避免缓存兼容逻辑改变数据可信度。已补两个缓存状态的测试源码，未实际执行，等待统一验收。
+
+
+## 2026-10-28 涨跌停池源端报告日期门禁
+
+非空涨跌停池只有在提供与请求交易日一致的源端报告日期时才可标记为 valid；缺失日期会使服务拒绝该候选并尝试后备 Provider，缓存也执行同一校验。新增测试源码覆盖缺失和匹配日期情形，未执行测试或 CI，仍待统一验收。
+
+
+## 2026-10-28 公告源端分页身份复核
+
+东方财富公告 Provider 在处理总数与条目之前，先校验响应中非零的 page_index/page_size 是否与请求一致，避免错误页被标记为目标页。新增错页/错页大小测试源码，尚未执行。
+
+
+## 2026-10-28 龙虎榜源端错误状态复核
+
+东方财富龙虎榜 Provider 在解析数据体前检查显式 `success=false`，即使响应同时包含有效形状的 result/count/data 也拒绝该候选并进入回退；缺失 success 字段则继续通过既有响应契约判断。测试源码已增加，尚未实际执行。
+
+
+## 2026-10-28 Tushare 公告重复行质量处理
+
+Tushare 公告适配器对稳定 article ID 的重复记录仍只保留一条，但在父快照质量原因中显式记录 `provider_duplicate_announcement_rows_deduplicated`，防止源端重复记录被静默隐藏。测试源码已补齐，尚未执行统一验收。
+
+
+## 2026-10-28 热度榜重复记录契约
+
+热度榜源记录的证券身份必须唯一；批量行情补充结果的证券代码也必须唯一。任何重复项会使 Provider 候选失败并继续回退，避免原先 `continue` 或 map 赋值将重复记录静默丢弃/覆盖。新测试源码已补齐但未执行，等待统一验收。
+
+
+## 2026-10-28 热度榜数值边界复核
+
+热度榜校验覆盖所有非空数值字段，包括可选 heat 分值。非有限热度值会拒绝该 Provider 候选并继续回退，避免 NaN/Inf 进入缓存或 API。测试源码已补充但未执行。
+
+
+## 2026-10-28 热度榜证券类型边界
+
+东方财富热度榜代码必须符合普通沪深 A 股股票代码段。交易所前缀只确认市场，不能确认证券类别；对 ETF、指数、可转债、B 股与未支持代码拒绝 Provider 候选并回退。北交所不在此适配器当前代码空间内。相关测试源码已添加但未执行。
+
+
+## 2026-10-28 行业/概念排行总数字段语义
+
+东方财富排行适配器现在区分 `total` 缺失和明确返回 `total=0`。非空记录配合显式零值属于计数矛盾，拒绝并回退；仅缺少总数字段时，才把当前条数作为不完整下界并记录质量原因。相应测试源码已添加但未执行。
+
+
+## 2026-10-28 热度榜排名连续性复核
+
+热度榜名次不仅需递增且唯一，还必须从 1 开始连续递增；缺号结果会触发 Provider 回退，避免不完整排行被视为完整返回。对应测试源码已新增但未执行。
+
+## 2026-10-28 雪球热度榜字段覆盖契约
+
+雪球榜单适配器的单次上游请求上限为 50 条；当接口调用请求更多数据时，结果必须明确标记 `provider_request_limit_capped_at_50`。可选 `rank_change` 的非法非空值不能静默忽略，必须省略值并在父快照和对应条目写入质量原因。已增加 fixture 测试源码，待统一执行验收。
+
+## 2026-10-28 涨跌停池证券过滤可见性
+
+Tushare 涨跌停池过滤非 A 股证券时，必须在父快照质量原因中标记 `provider_non_a_share_security_rows_excluded`。该约束只说明已观察到的源记录被过滤，不代表供应商原始全集覆盖完整；对应本地 HTTP fixture 测试源码待统一执行。
+
+## 2026-10-28 指数成分最新报告日语义
+
+指数成分快照必须先确定源端最新报告日，再统计支持及排除的源行。不能因最新日期的行被证券类型过滤而误用旧日期；`provider_returned` 与 `excluded_count` 必须与 `total` 对账。最新报告日无可用 A 股成员时应输出 `unknown` 候选并继续跨 Provider 回退。相关 HTTP fixture 测试源码已添加，待统一执行。
+
+## 2026-10-28 雪球响应错误码契约
+
+雪球回包存在 `error_code` 时，该字段必须是可解析的整数；格式无效的状态码不能与正常 `data` 一起被接受。对应 fixture 测试源码已添加，尚待统一验收。
+
+## 2026-10-28 龙虎榜重复证券契约
+
+龙虎榜单页的普通 A 股证券代码应唯一。重复证券视为源端分页契约错误并触发 Provider 回退，不静默重复计数或吞掉重复项。对应 Tushare fixture 测试源码已添加，待统一验收。
+
+## 2026-10-28 股票基础资料唯一身份
+
+Tushare 单证券基础资料请求只允许一条匹配 `ts_code` 的返回记录。重复行视为源端身份契约错误，不再静默采用第一条；对应 fixture 测试源码已补充，待统一验收。
+
+## 2026-10-28 东财涨跌停池覆盖语义
+
+当东财涨跌停池源端总数超过实际返回条数时，保留源端 `total` 并增加 `provider_total_exceeds_returned_rows`，明确提示截断或覆盖不足。回归测试源码已补充，待统一验收。
+
+## 2026-10-28 涨跌停池证券唯一性
+
+Tushare 涨跌停池同一回包的普通 A 股证券代码必须唯一；重复记录属于源端契约错误，应触发回退而不是输出重复股票。对应 fixture 测试源码已补充，待统一验收。
+
+## 2026-10-28 个股公告的证券范围一致性
+
+东方财富与 Tushare 个股公告查询统一限制为普通 A 股股票；只通过代码格式标准化、但证券类型不受支持的输入须在上游请求前拒绝。相关 fixture 测试源码已补齐，待统一执行验收。
+
+## 2026-10-28 龙虎榜排除记录质量可见性
+
+Tushare 龙虎榜过滤非 A 股记录时，父快照必须同时公开排除原因与源端/接受/排除计数。测试源码已补充，仍需统一运行验收。
+
+## 2026-10-28 东方财富股票接口证券身份一致性
+
+东方财富股票专用数据域不能仅依赖证券代码的格式校验；报价、日 K、基础资料、所属板块、筹码和资金流都必须限制到受支持的普通 A 股代码段，并在请求上游前拒绝 ETF、指数、可转债和 B 股。测试源码已补充，待统一验收。
+
+## 东方财富涨跌停池证券身份一致性
+
+涨停、跌停和炸板池不能仅按返回的市场字段推导交易所后就接受证券代码。将生成的证券标识通过普通 A 股代码段校验，拒绝 ETF、指数、B 股和交易所字段不一致的行；保留沪市、深市和北交所普通 A 股的支持边界。测试源码已补充，待统一验收。
+
+## 东方财富证券搜索目录证券范围校验
+
+证券搜索目录须按源端市场字段还原交易所，并只返回受支持的普通 A 股。对 ETF、指数、B 股以及源端市场字段与代码段不一致的记录进行过滤，同时将结果标为降级并留下明确质量原因。相关测试源码已补充，待统一验收。
+
+## 东方财富涨跌停池触板时间有效性
+
+涨跌停池的首次/最后触板时间必须通过 24 小时制时分秒校验。非空无效值不能作为时间返回，应清空该值，并在行级及快照级质量原因中明确记录 `provider_limit_pool_touch_time_invalid`。测试源码已补充，待统一验收。
+
+## 东方财富指数行情数值边界与计数对账
+
+指数行情接口必须拒绝负数或与返回行数自相矛盾的源端 `total`；若源端声明的行数多于回包实际行数，快照应明确降级。最新价及已提供的 OHLC/昨收价格字段需为正数，OHLC 上下界和最新/开盘价格需保持合理关系。负成交额不能作为有效人民币金额输出。测试源码已补充，待统一验收。
+
+## 东方财富指数行情字段交叉校验
+
+指数行情在昨收价可用时，应校验涨跌额等于最新价减昨收价、涨跌幅等于对应百分比，且允许有限的源端显示舍入误差。超出容差的记录应排除并记录明确质量原因，不能将互相矛盾的行情数值作为有效快照返回。测试源码已补充，待统一验收。
+
+## 东方财富日 K 源端证券身份缺失
+
+日 K 回包中的源端证券代码缺失时，结果必须显式降级并记录 `provider_symbol_missing_assumed_from_request`；若源端代码存在但指向其他证券，则必须拒绝。该规则用于避免把“按请求代码推定”的历史行情误认为源端身份已经核实。测试源码已补充，待统一验收。
+
+## TickFlow 指数行情扩展字段一致性
+
+指数涨跌额和涨跌幅应以最新价、昨收价计算；源端扩展字段用于校验，而不是覆盖规范计算结果。源端扩展字段与计算结果冲突、无法解析或包含非有限数值时，应排除对应行并明确降级快照质量。测试源码已补充，待统一验收。
+
+## Tencent 股票报价与日 K 证券范围
+
+Tencent 个股报价及历史日 K 只服务普通 A 股。必须在请求上游前排除 ETF、指数、可转债、B 股和其他非普通股票证券，避免其误入个股数据链路。对应测试源码已补充，待统一验收。

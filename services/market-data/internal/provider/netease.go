@@ -151,6 +151,23 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if !finiteNumber(changePercent) || math.Abs(changePercent) > 1000 {
 		return nil, errors.New("Netease quote percent is outside a plausible numeric range")
 	}
+	if !finiteNumber(change) {
+		return nil, errors.New("Netease quote change is not a finite number")
+	}
+	canonicalChange := price - prevClose
+	canonicalChangePercent := canonicalChange / prevClose * 100
+	if !finiteNumber(canonicalChange) || !finiteNumber(canonicalChangePercent) {
+		return nil, errors.New("Netease quote canonical change is not a finite number")
+	}
+	if math.Abs(change-canonicalChange) > 0.05 {
+		return nil, errors.New("Netease quote change is inconsistent with latest and previous close")
+	}
+	if math.Abs(changePercent-canonicalChangePercent) > 0.15 {
+		return nil, errors.New("Netease quote percent is inconsistent with latest and previous close")
+	}
+	// 使用最新价和昨收价计算规范值，源端涨跌字段仅用于交叉校验。
+	change = canonicalChange
+	changePercent = canonicalChangePercent
 	rawVolume, volumeErr := parseNeteaseNumber(string(row.Volume))
 	var volume *int64
 	if volumeErr == nil {
@@ -164,8 +181,8 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if amountErr == nil && rawAmount >= 0 && finiteNumber(rawAmount) {
 		amount = &rawAmount
 	}
-	quoteTime := parseNeteaseQuoteTime(firstNonEmptyString(row.Time, row.Update))
 	now := time.Now().UTC()
+	quoteTime := validProviderSnapshotTime(parseNeteaseQuoteTime(firstNonEmptyString(row.Time, row.Update)), now)
 	q := &model.Quote{
 		Symbol: symbol, Name: strings.TrimSpace(row.Name),
 		CurrentPrice: &price, Change: &change, ChangePercent: &changePercent,
@@ -552,6 +569,9 @@ func neteaseDateRange(startDate, endDate string, limit int, now time.Time) (time
 			return time.Time{}, time.Time{}, fmt.Errorf("invalid Netease end date: %w", parseErr)
 		}
 		end = parsed
+	}
+	if end.Format("2006-01-02") > localNow.Format("2006-01-02") {
+		return time.Time{}, time.Time{}, errors.New("Netease end date must not be after today in Asia/Shanghai")
 	}
 	if limit <= 0 {
 		limit = 400

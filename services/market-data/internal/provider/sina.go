@@ -246,6 +246,9 @@ func sinaDailyDateRange(startDate, endDate string, limit int, now time.Time) (ti
 		}
 		end = parsed
 	}
+	if end.Format("2006-01-02") > localNow.Format("2006-01-02") {
+		return time.Time{}, time.Time{}, errors.New("Sina K-line end date must not be after today in Asia/Shanghai")
+	}
 	if limit <= 0 {
 		limit = 400
 	}
@@ -324,6 +327,11 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 	if start < 0 || end <= start+2 {
 		return nil, errors.New("Sina response does not contain a quoted quote payload")
 	}
+	// 新浪回包中的变量名包含证券代码；必须与请求代码一致，不能只按 URL 将回包归属于请求证券。
+	assignment := strings.Fields(strings.TrimSpace(text[:start]))
+	if len(assignment) != 2 || assignment[0] != "var" || assignment[1] != "hq_str_"+code {
+		return nil, fmt.Errorf("Sina quote symbol mismatch: requested %s, response assignment %q", code, strings.TrimSpace(text[:start]))
+	}
 	fields := strings.Split(text[start+2:end], ",")
 	if len(fields) < 32 {
 		return nil, fmt.Errorf("Sina quote response has only %d fields; expected at least 32", len(fields))
@@ -399,6 +407,7 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 			quoteTime = &utc
 		}
 	}
+	quoteTime = validProviderSnapshotTime(quoteTime, fetchedAt)
 	quality := model.QualityValid
 	reasons := make([]string, 0, 3)
 	if name == "" {

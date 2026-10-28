@@ -26,8 +26,8 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 	if snapshot == nil || snapshot.RankingType != rankingType || snapshot.Total != len(snapshot.Items) {
 		return errors.New("hot-ranking snapshot identity/count mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("hot-ranking source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
+		return errors.New("hot-ranking source, source_version or fetched_at is missing")
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("unsupported hot-ranking quality %q", snapshot.QualityStatus)
@@ -40,8 +40,10 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		return errors.New("hot-ranking provider time is zero or in the future")
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
+	seenRanks := make(map[int]struct{}, len(snapshot.Items))
+	previousRank := 0
 	hasDegradedItem := false
-	for _, item := range snapshot.Items {
+	for index, item := range snapshot.Items {
 		symbol, err := normalize.NormalizeSymbol(item.Symbol)
 		if err != nil || symbol != item.Symbol || item.Code != strings.Split(symbol, ".")[0] || item.Rank < 1 {
 			return errors.New("hot-ranking item has invalid symbol/code/rank")
@@ -50,8 +52,19 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 			return fmt.Errorf("hot-ranking snapshot contains duplicate symbol %s", symbol)
 		}
 		seen[symbol] = struct{}{}
-		if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-			return errors.New("hot-ranking item source/fetched_at mismatch")
+		if _, duplicate := seenRanks[item.Rank]; duplicate {
+			return fmt.Errorf("hot-ranking snapshot contains duplicate rank %d", item.Rank)
+		}
+		seenRanks[item.Rank] = struct{}{}
+		if item.Rank <= previousRank {
+			return errors.New("hot-ranking items are not ordered by increasing rank")
+		}
+		if item.Rank != index+1 {
+			return errors.New("hot-ranking ranks are not contiguous from 1")
+		}
+		previousRank = item.Rank
+		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+			return errors.New("hot-ranking item source/version/fetched_at mismatch")
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("hot-ranking item has unsupported quality %q", item.QualityStatus)
@@ -59,9 +72,9 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		if item.QualityStatus == model.QualityDegraded {
 			hasDegradedItem = true
 		}
-		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent} {
+		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.Heat} {
 			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
-				return errors.New("hot-ranking item contains a non-finite quote field")
+				return errors.New("hot-ranking item contains a non-finite numeric field")
 			}
 		}
 		if item.LatestPrice != nil && *item.LatestPrice <= 0 {
@@ -75,6 +88,53 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		return errors.New("hot-ranking snapshot cannot be valid when one or more items are degraded")
 	}
 	return nil
+}
+
+// betterUnknownHotRankingSnapshot 在回退耗尽后优先保留条目更多、行情/热度字段更完整的榜单候选。
+func betterUnknownHotRankingSnapshot(candidate, current *model.HotRankingSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	metricCount := func(snapshot *model.HotRankingSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.Heat} {
+				if value != nil {
+					count++
+				}
+			}
+			if item.RankChange != nil {
+				count++
+			}
+			if strings.TrimSpace(item.Name) != "" {
+				count++
+			}
+			if strings.TrimSpace(item.RankTrend) != "" {
+				count++
+			}
+		}
+		return count
+	}
+	left, right := metricCount(candidate), metricCount(current)
+	if left != right {
+		return left > right
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime == nil {
+		return true
+	}
+	if candidate.ProviderTime == nil && current.ProviderTime != nil {
+		return false
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime != nil && !candidate.ProviderTime.Equal(*current.ProviderTime) {
+		return candidate.ProviderTime.After(*current.ProviderTime)
+	}
+	return false
 }
 
 func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) (*model.HotRankingSnapshot, bool, error) {
@@ -107,7 +167,20 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			} else if cached.QualityStatus == model.QualityUnknown {
 				ttl = 10 * time.Second
 			}
-			if time.Since(cached.FetchedAt) < ttl {
+			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
+			if cached.QualityStatus == model.QualityUnknown {
+				fallbackExhausted := false
+				for _, reason := range cached.QualityReasons {
+					if reason == "hot_ranking_fallback_exhausted_without_confirmed_data" ||
+						reason == "hot_ranking_fallback_exhausted_without_usable_quality" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				// 多 Provider 场景中，unknown 即使带有条目，也必须先让后备源刷新。
+				cacheEligible = fallbackExhausted || len(s.hotRankingProviders) <= 1
+			}
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
 		}
@@ -118,6 +191,7 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 		return nil, false, errors.New("no enabled hot-ranking provider")
 	}
 	var failures []string
+	var unknownCandidate *model.HotRankingSnapshot
 	for _, p := range s.hotRankingProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -131,13 +205,23 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
+			// 空榜或虽有条目但质量未知，都不能阻断后续来源。
+			if betterUnknownHotRankingSnapshot(snapshot, unknownCandidate) {
+				unknownCandidate = snapshot
+			}
+			if len(snapshot.Items) == 0 {
+				failures = append(failures, p.Name()+": hot-ranking result is empty and cannot be confirmed")
+			} else {
+				failures = append(failures, p.Name()+": hot-ranking rows are present but snapshot quality is unknown")
+			}
+			continue
+		}
 		encoded, encodeErr := json.Marshal(snapshot)
 		if encodeErr == nil {
 			ttl := 90 * time.Second
 			if snapshot.QualityStatus == model.QualityDegraded {
 				ttl = 30 * time.Second
-			} else if snapshot.QualityStatus == model.QualityUnknown {
-				ttl = 10 * time.Second
 			}
 			if cacheErr := s.cache.Set(ctx, key, encoded, ttl); cacheErr != nil {
 				s.logger.Warn("hot-ranking cache write failed", "type", rankingType, "error", cacheErr)
@@ -146,6 +230,20 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			s.logger.Warn("hot-ranking cache encode failed", "type", rankingType, "error", encodeErr)
 		}
 		return snapshot, false, nil
+	}
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		reason := "hot_ranking_fallback_exhausted_without_usable_quality"
+		if len(unknownCandidate.Items) == 0 {
+			reason = "hot_ranking_fallback_exhausted_without_confirmed_data"
+		}
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if encoded, encodeErr := json.Marshal(unknownCandidate); encodeErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, encoded, 10*time.Second); cacheErr != nil {
+				s.logger.Warn("hot-ranking unknown cache write failed", "type", rankingType, "error", cacheErr)
+			}
+		}
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all hot-ranking providers failed: %s", strings.Join(failures, "; "))
 }

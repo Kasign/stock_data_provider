@@ -56,3 +56,24 @@ func TestPytdxQuoteMatchesSymbolRequiresMatchingExchange(t *testing.T) {
 		t.Fatal("quote without K-line data must be rejected")
 	}
 }
+
+func TestPytdxFindUniqueQuoteRejectsDuplicateIdentity(t *testing.T) {
+	valid := &protocol.Quote{Code: "000001", Exchange: protocol.ExchangeSZ, Kline: &protocol.Kline{}}
+	got, err := pytdxFindUniqueQuote([]*protocol.Quote{valid}, "000001.SZ")
+	if err != nil || got != valid {
+		t.Fatalf("single matching quote should be accepted, got=%p err=%v", got, err)
+	}
+
+	// 即使重复行没有 K 线数据，证券身份仍然重复，不能忽略歧义并采用另一行。
+	duplicateWithoutKline := &protocol.Quote{Code: "000001", Exchange: protocol.ExchangeSZ}
+	got, err = pytdxFindUniqueQuote([]*protocol.Quote{valid, duplicateWithoutKline}, "000001.SZ")
+	if err == nil || got != nil {
+		t.Fatalf("duplicate quote identity must be rejected, got=%p err=%v", got, err)
+	}
+
+	otherExchange := &protocol.Quote{Code: "000001", Exchange: protocol.ExchangeSH, Kline: &protocol.Kline{}}
+	got, err = pytdxFindUniqueQuote([]*protocol.Quote{valid, otherExchange}, "000001.SZ")
+	if err != nil || got != valid {
+		t.Fatalf("different exchange must not count as a duplicate, got=%p err=%v", got, err)
+	}
+}

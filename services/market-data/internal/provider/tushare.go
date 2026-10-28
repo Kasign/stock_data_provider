@@ -19,10 +19,10 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
 )
 
-const tushareVersion = "tushare-pro-daily-v1"
+const tushareVersion = "tushare-pro-daily-v2-adjustment-factor"
 
 // Tushare 通过 HTTP JSON 接口读取 A 股日 K。需要用户自己的 Token，默认关闭。
-// daily 接口返回原始 OHLC；不能满足请求复权口径时明确失败，不伪装复权数据。
+// daily 接口返回原始 OHLC；前/后复权通过 adj_factor 明确换算，因子不完整时拒绝结果。
 type Tushare struct {
 	client   *http.Client
 	endpoint string
@@ -50,12 +50,18 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	if p.token == "" {
 		return nil, errors.New("Tushare token is not configured")
 	}
-	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	symbol, err := tushareExchangeCode(rawSymbol)
 	if err != nil {
 		return nil, err
 	}
-	if adjustment != model.AdjustmentNone {
-		return nil, fmt.Errorf("Tushare daily endpoint only provides unadjusted OHLC; requested adjustment %q is unsupported", adjustment)
+	// daily 是普通 A 股日线接口；ETF、指数与其他证券类型必须走各自的接口，不能误标为股票 K 线。
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tushare daily endpoint only supports common A-share equities, got %q", rawSymbol)
+	}
+	switch adjustment {
+	case model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward:
+	default:
+		return nil, fmt.Errorf("Tushare daily endpoint does not support adjustment basis %q", adjustment)
 	}
 	start, err := time.Parse("2006-01-02", strings.TrimSpace(startDate))
 	if err != nil {
@@ -309,7 +315,116 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TradeDate < out[j].TradeDate })
+	if adjustment != model.AdjustmentNone {
+		factors, factorErr := p.fetchAdjustmentFactors(ctx, symbol, startDate, endDate)
+		if factorErr != nil {
+			return nil, factorErr
+		}
+		if _, factorErr = applyTushareAdjustment(out, factors, adjustment); factorErr != nil {
+			return nil, factorErr
+		}
+	}
 	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
+}
+
+func (p *Tushare) fetchAdjustmentFactors(ctx context.Context, symbol, startDate, endDate string) (map[string]float64, error) {
+	startCompact, err := tushareCompactDate(startDate)
+	if err != nil {
+		return nil, fmt.Errorf("Tushare adjustment-factor start date: %w", err)
+	}
+	endCompact, err := tushareCompactDate(endDate)
+	if err != nil {
+		return nil, fmt.Errorf("Tushare adjustment-factor end date: %w", err)
+	}
+	table, err := p.fetchCapabilityTable(ctx, "adj_factor", map[string]string{
+		"ts_code": symbol, "start_date": startCompact, "end_date": endCompact,
+	}, "ts_code,trade_date,adj_factor")
+	if err != nil {
+		return nil, fmt.Errorf("fetch Tushare adjustment factors: %w", err)
+	}
+	if len(table.rows) == 0 {
+		return nil, errors.New("Tushare returned no adjustment-factor rows")
+	}
+	factors := make(map[string]float64, len(table.rows))
+	for rowIndex, row := range table.rows {
+		code, rowErr := table.stringValue(row, "ts_code")
+		if rowErr != nil || strings.ToUpper(strings.TrimSpace(code)) != symbol {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d symbol mismatch: requested %s, returned %q", rowIndex, symbol, code)
+		}
+		dateText, rowErr := table.stringValue(row, "trade_date")
+		if rowErr != nil {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d has an invalid trade date: %w", rowIndex, rowErr)
+		}
+		isoDate, rowErr := tushareISODate(dateText)
+		if rowErr != nil {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d date: %w", rowIndex, rowErr)
+		}
+		if isoDate < startDate || isoDate > endDate {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d date %s is outside requested range", rowIndex, isoDate)
+		}
+		if _, duplicate := factors[isoDate]; duplicate {
+			return nil, fmt.Errorf("Tushare returned duplicate adjustment factor for %s", isoDate)
+		}
+		factor, rowErr := table.optionalFloat(row, "adj_factor")
+		if rowErr != nil || factor == nil || *factor <= 0 {
+			return nil, fmt.Errorf("Tushare adjustment factor on %s must be a finite positive number", isoDate)
+		}
+		factors[isoDate] = *factor
+	}
+	return factors, nil
+}
+
+// applyTushareAdjustment 使用 Tushare 累计复权因子换算 OHLC；成交量与成交额保持原始日行情口径。
+func applyTushareAdjustment(bars []model.DailyBar, factors map[string]float64, adjustment model.AdjustmentBasis) (string, error) {
+	if adjustment != model.AdjustmentForward && adjustment != model.AdjustmentBackward {
+		return "", fmt.Errorf("Tushare adjustment-factor conversion does not support basis %q", adjustment)
+	}
+	if len(bars) == 0 || len(factors) == 0 {
+		return "", errors.New("Tushare adjustment requires daily bars and adjustment factors")
+	}
+	referenceDate := ""
+	referenceFactor := 0.0
+	for date, factor := range factors {
+		if date > referenceDate {
+			referenceDate = date
+			referenceFactor = factor
+		}
+	}
+	if adjustment == model.AdjustmentForward && referenceFactor <= 0 {
+		return "", errors.New("Tushare forward adjustment has no valid reference factor")
+	}
+	method := "tushare_adj_factor_qfq_v1"
+	if adjustment == model.AdjustmentBackward {
+		method = "tushare_adj_factor_hfq_v1"
+	}
+	for i := range bars {
+		factor, ok := factors[bars[i].TradeDate]
+		if !ok {
+			return "", fmt.Errorf("Tushare adjustment factor is missing for daily bar date %s", bars[i].TradeDate)
+		}
+		multiplier := factor
+		if adjustment == model.AdjustmentForward {
+			multiplier = factor / referenceFactor
+		}
+		if multiplier <= 0 || math.IsNaN(multiplier) || math.IsInf(multiplier, 0) {
+			return "", fmt.Errorf("Tushare adjustment multiplier is invalid on %s", bars[i].TradeDate)
+		}
+		for _, price := range []*float64{&bars[i].Open, &bars[i].High, &bars[i].Low, &bars[i].Close} {
+			*price *= multiplier
+			if *price <= 0 || math.IsNaN(*price) || math.IsInf(*price, 0) {
+				return "", fmt.Errorf("Tushare adjusted OHLC is invalid on %s", bars[i].TradeDate)
+			}
+		}
+		bars[i].AdjustmentBasis = adjustment
+		bars[i].AdjustmentMethod = method
+		if adjustment == model.AdjustmentForward {
+			bars[i].AdjustmentRefDate = referenceDate
+		}
+	}
+	if adjustment == model.AdjustmentForward {
+		return referenceDate, nil
+	}
+	return "", nil
 }
 
 func (p *Tushare) waitForRateLimit(ctx context.Context) error {

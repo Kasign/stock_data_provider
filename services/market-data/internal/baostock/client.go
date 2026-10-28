@@ -121,6 +121,15 @@ func (c *Client) QueryQuarterlyFinancialData(ctx context.Context, code, category
 	if quarter < 1 || quarter > 4 {
 		return nil, fmt.Errorf("BaoStock financial quarter %d is outside 1..4", quarter)
 	}
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	periodEnd := time.Date(year, time.Month(quarter*3+1), 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	chinaToday := time.Now().In(loc).Format("2006-01-02")
+	if periodEnd > chinaToday {
+		return nil, fmt.Errorf("BaoStock financial reporting period %s is in the future as of China market date %s", periodEnd, chinaToday)
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}

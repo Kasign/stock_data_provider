@@ -29,6 +29,11 @@ func TestEastmoneyQuoteNormalizesUnitsAndProviderTime(t *testing.T) {
 	if *q.CurrentPrice != 1313.31 {
 		t.Fatalf("price=%v", *q.CurrentPrice)
 	}
+	wantChange := *q.CurrentPrice - *q.PrevClose
+	wantChangePercent := wantChange / *q.PrevClose * 100
+	if q.Change == nil || *q.Change != wantChange || q.ChangePercent == nil || *q.ChangePercent != wantChangePercent {
+		t.Fatalf("change fields must be canonical: %+v", q)
+	}
 	if *q.Volume != 3413600 {
 		t.Fatalf("volume shares=%d", *q.Volume)
 	}
@@ -67,6 +72,21 @@ func TestEastmoneyQuoteAcceptsNumericUnixSecondsTimestamp(t *testing.T) {
 	}
 	if q.QualityStatus != model.QualityValid {
 		t.Fatalf("a complete quote with a valid numeric timestamp should not be degraded: %+v", q)
+	}
+}
+
+func TestEastmoneyQuoteDegradesFutureProviderTimestamp(t *testing.T) {
+	timestamp := time.Date(2099, 12, 31, 12, 0, 0, 0, time.UTC).Unix()
+	body := fmt.Sprintf(`{"rc":0,"data":{"f43":41.76,"f44":42.09,"f45":41.66,"f46":41.70,"f47":125595,"f48":525556667,"f57":"600036","f58":"招商银行","f60":41.82,"f86":%d,"f169":-0.06,"f170":-0.14,"f50":2.85,"f168":0.06}}`, timestamp)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, body) }))
+	defer server.Close()
+
+	q, err := NewEastmoney(2*time.Second, server.URL, server.URL).FetchQuote(context.Background(), "600036.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.QuoteTime != nil || q.QualityStatus != model.QualityDegraded {
+		t.Fatalf("future provider timestamp must be omitted and quality degraded: %+v", q)
 	}
 }
 
@@ -253,6 +273,7 @@ func TestEastmoneyRejectsKlineSymbolMismatch(t *testing.T) {
 
 func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	var gotQueries []url.Values
+	var quoteFields string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		if query.Get("reportName") != "" && r.Header.Get("Referer") != "https://emweb.securities.eastmoney.com/" {
@@ -266,7 +287,8 @@ func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 			gotQueries = append(gotQueries, query)
 			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","STR_NAMEA":"贵州茅台","ORG_NAME":"贵州茅台酒股份有限公司"}]}}`)
 		default:
-			fmt.Fprint(w, `{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f162":25.1,"f167":8.2,"f127":"白酒","f116":1000000000000,"f117":900000000000,"f198":"BK0450","f173":25,"f187":50,"f105":80000000000,"f186":90}}`)
+			quoteFields = query.Get("fields")
+			fmt.Fprint(w, `{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f162":25.1,"f167":8.2,"f127":"白酒","f116":1000000000000,"f117":900000000000,"f84":1200000000,"f85":950000000,"f198":"BK0450","f173":25,"f187":50,"f105":80000000000,"f186":90}}`)
 		}
 	}))
 	defer server.Close()
@@ -289,6 +311,14 @@ func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	if item.DynamicPE == nil || *item.DynamicPE != 25.1 || item.Industry != "白酒" {
 		t.Fatalf("market-profile fields were not normalized: %+v", item)
 	}
+	if item.TotalShares == nil || *item.TotalShares != 1200000000 || item.FloatShares == nil || *item.FloatShares != 950000000 {
+		t.Fatalf("share-count fields were not mapped: total=%v float=%v", item.TotalShares, item.FloatShares)
+	}
+	fields := make(map[string]bool)
+	for _, field := range strings.Split(quoteFields, ",") { fields[field] = true }
+	if !fields["f84"] || !fields["f85"] {
+		t.Fatalf("quote fields must request total and floating shares: %q", quoteFields)
+	}
 	if len(gotQueries) != 2 || gotQueries[0].Get("reportName") != "RPT_PCF10_ORG_ISSUEINFO" || gotQueries[1].Get("reportName") != "RPT_F10_BASIC_ORGINFO" {
 		t.Fatalf("unexpected F10 requests: %+v", gotQueries)
 	}
@@ -299,12 +329,51 @@ func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	}
 }
 
+func TestEastmoneyFetchStockBasicRejectsInvalidShareCounts(t *testing.T) {
+	for _, tc := range []struct {
+		name, totalShares, floatShares, wantReason string
+		wantTotal, wantFloat bool
+	}{
+		{name: "non-positive total shares", totalShares: "0", floatShares: "100", wantReason: "market_profile_total_shares_non_positive", wantFloat: true},
+		{name: "negative floating shares", totalShares: "1000", floatShares: "-1", wantReason: "market_profile_float_shares_negative", wantTotal: true},
+		{name: "floating shares exceed total", totalShares: "1000", floatShares: "1001", wantReason: "market_profile_float_shares_exceed_total_shares", wantTotal: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				query := r.URL.Query()
+				if query.Get("reportName") != "" {
+					fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","SECURITY_NAME_ABBR":"贵州茅台","LISTING_DATE":"2001-08-27"}]}}`)
+					return
+				}
+				fmt.Fprintf(w, `{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f84":%s,"f85":%s}}`, tc.totalShares, tc.floatShares)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, server.URL, "", server.URL, "")
+			got, err := p.FetchStockBasic(context.Background(), "600519.SH")
+			if err != nil {
+				t.Fatalf("FetchStockBasic returned error: %v", err)
+			}
+			if (got.TotalShares != nil) != tc.wantTotal || (got.FloatShares != nil) != tc.wantFloat {
+				t.Fatalf("unexpected share fields: total=%v float=%v", got.TotalShares, got.FloatShares)
+			}
+			found := false
+			for _, reason := range got.QualityReasons {
+				if reason == tc.wantReason { found = true; break }
+			}
+			if !found {
+				t.Fatalf("missing quality reason %q: %+v", tc.wantReason, got.QualityReasons)
+			}
+		})
+	}
+}
+
 func TestEastmoneyFetchStockBasicRejectsMismatchedOrEmptyRows(t *testing.T) {
 	for _, tc := range []struct {
 		name, body, want string
 	}{
 		{"mismatch", `{"result":{"data":[{"SECUCODE":"000001.SZ","SECURITY_NAME_ABBR":"wrong"}]}}`, "symbol mismatch"},
 		{"empty", `{"result":{"data":[]}}`, "no row"},
+		{"duplicate rows", `{"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台"},{"SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"另一个名称"}]}}`, "expected exactly one row"},
 		{"missing name", `{"result":{"data":[{"SECUCODE":"600519.SH","LISTING_DATE":"2001-08-27"}]}}`, "name is empty"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -329,7 +398,13 @@ func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
 			var got url.Values
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				got = r.URL.Query()
-				fmt.Fprint(w, `{"rc":0,"data":{"total":120,"diff":[{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12}]}}`)
+				fmt.Fprint(w, `{"rc":0,"data":{"total":120,"diff":[
+					{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12},
+					{"f2":120.5,"f3":1.5,"f4":1.8,"f6":223456789,"f12":"BK0476","f14":"通信","f104":10,"f105":8,"f128":"中际旭创","f136":3.12},
+					{"f2":88.5,"f3":0.7,"f4":0.6,"f6":323456789,"f12":"BK0477","f14":"电子","f104":9,"f105":6,"f128":"立讯精密","f136":2.12},
+					{"f2":66.5,"f3":0.2,"f4":0.1,"f6":423456789,"f12":"BK0478","f14":"汽车","f104":8,"f105":5,"f128":"比亚迪","f136":1.12},
+					{"f2":55.5,"f3":-0.5,"f4":-0.3,"f6":523456789,"f12":"BK0479","f14":"计算机","f104":6,"f105":7,"f128":"中科曙光","f136":0.12}
+				]}}`)
 			}))
 			defer server.Close()
 			p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
@@ -340,7 +415,7 @@ func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
 			if got.Get("fs") != tc.filter || got.Get("pz") != "5" || got.Get("fid") != "f3" {
 				t.Fatalf("unexpected CLIST request: %v", got)
 			}
-			if len(snapshot.Items) != 1 || snapshot.Category != tc.category || snapshot.Total != 120 {
+			if len(snapshot.Items) != 5 || snapshot.Category != tc.category || snapshot.Total != 120 {
 				t.Fatalf("unexpected snapshot metadata: %+v", snapshot)
 			}
 			item := snapshot.Items[0]
@@ -357,6 +432,33 @@ func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
 				t.Fatalf("provider timestamp is not exposed; snapshot must be degraded: %+v", snapshot)
 			}
 		})
+	}
+}
+
+func TestEastmoneyFetchSectorRankingsSupportsBottomDirection(t *testing.T) {
+	var got url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query()
+		fmt.Fprint(w, `{"rc":0,"data":{"total":3,"diff":[{"f2":12.5,"f3":2.3,"f4":0.15,"f6":100000,"f12":"BK0475","f14":"电池"},{"f2":8.5,"f3":-1.2,"f4":-0.1,"f6":80000,"f12":"BK0476","f14":"传媒"},{"f2":10.0,"f3":0.5,"f4":0.05,"f6":90000,"f12":"BK0477","f14":"食品"}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+	snapshot, err := p.FetchSectorRankingsDirection(context.Background(), "industry", "down", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Get("po") != "0" || got.Get("fid") != "f3" || got.Get("pz") != "3" {
+		t.Fatalf("unexpected bottom-ranking query: %v", got)
+	}
+	if snapshot.Direction != "down" || len(snapshot.Items) != 3 {
+		t.Fatalf("unexpected bottom-ranking metadata: %+v", snapshot)
+	}
+	wantCodes := []string{"BK0476", "BK0477", "BK0475"}
+	for i, want := range wantCodes {
+		if snapshot.Items[i].Code != want || snapshot.Items[i].Rank != i+1 {
+			t.Fatalf("bottom ranking order/rank mismatch at %d: got=%+v want_code=%s", i, snapshot.Items[i], want)
+		}
 	}
 }
 
@@ -407,7 +509,10 @@ func TestEastmoneyFetchIndexQuotesParsesAllowListedCoreIndexes(t *testing.T) {
 		got = r.URL.Query()
 		rows := make([]map[string]any, 0, len(eastmoneyCoreIndexDefinitions))
 		for i, idx := range eastmoneyCoreIndexDefinitions {
-			rows = append(rows, map[string]any{"f2": 3200.5 + float64(i), "f3": 0.8, "f4": 24.5, "f6": 123456789.0, "f12": idx.Code, "f13": idx.Market, "f14": idx.Name, "f15": 3210.0, "f16": 3180.0, "f17": 3190.0, "f18": 3176.0, "f86": "202610231500"})
+			price := 3200.5 + float64(i)
+			change := price - 3176.0
+			changePercent := change / 3176.0 * 100
+			rows = append(rows, map[string]any{"f2": price, "f3": changePercent, "f4": change, "f6": 123456789.0, "f12": idx.Code, "f13": idx.Market, "f14": idx.Name, "f15": 3210.0, "f16": 3180.0, "f17": 3190.0, "f18": 3176.0, "f86": "202610231500"})
 		}
 		body, err := json.Marshal(map[string]any{"rc": 0, "data": map[string]any{"total": len(rows), "diff": rows}})
 		if err != nil {
@@ -485,10 +590,8 @@ func TestEastmoneySearchStocksContinuesAfterProviderPageCap(t *testing.T) {
 		for index := start; index < end; index++ {
 			code := fmt.Sprintf("%06d", 300000+index)
 			name := fmt.Sprintf("测试股票%d", index)
+			// 300xxx 属于深市代码段，目录 fixture 的市场字段保持一致。
 			market := 0
-			if index%2 == 0 {
-				market = 1
-			}
 			if index == 100 {
 				code, name, market = "600519", "贵州茅台", 1
 			}
@@ -568,5 +671,322 @@ func TestEastmoneyHotRankingEndpointsAreConfigurable(t *testing.T) {
 	legacy := NewEastmoneyConfiguredWithAnnouncements(2*time.Second, "", "", "", "", "", "", "", "", "", "", "")
 	if legacy.hotRankingURL != eastmoneyHotRankURL || legacy.hotSurgeURL != eastmoneyHotSurgeURL {
 		t.Fatal("existing constructors must preserve the default Eastmoney ranking endpoints")
+	}
+}
+
+
+// eastmoneyStockSearchRowsForContractTest 生成用于分页契约测试的有效证券目录行。
+func eastmoneyStockSearchRowsForContractTest(start, count int) []map[string]any {
+	rows := make([]map[string]any, 0, count)
+	for index := start; index < start+count; index++ {
+		rows = append(rows, map[string]any{
+			"f12": fmt.Sprintf("%06d", 300000+index),
+			"f13": 0,
+			"f14": fmt.Sprintf("测试股票%d", index),
+		})
+	}
+	return rows
+}
+
+func TestEastmoneyStockSearchRejectsChangingTotalBetweenPages(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		page, err := strconv.Atoi(r.URL.Query().Get("pn"))
+		if err != nil {
+			t.Errorf("invalid page number: %v", err)
+		}
+		total := 101
+		count := 100
+		if page > 1 {
+			total = 102
+			count = 2
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"rc": 0,
+			"data": map[string]any{
+				"total": total,
+				"diff":  eastmoneyStockSearchRowsForContractTest((page-1)*100, count),
+			},
+		}); err != nil {
+			t.Errorf("encode page: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	p := &Eastmoney{client: server.Client(), stockListURL: server.URL, ut: "test-token"}
+	_, err := p.SearchStocks(context.Background(), "测试股票", 10)
+	if err == nil || !strings.Contains(err.Error(), "total changed across pages") {
+		t.Fatalf("directory with changing page totals must be rejected, got %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("pagination should stop when page total changes, got %d requests", requests)
+	}
+}
+
+func TestEastmoneyStockSearchRejectsPageRowsBeyondDeclaredTotal(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		page, err := strconv.Atoi(r.URL.Query().Get("pn"))
+		if err != nil {
+			t.Errorf("invalid page number: %v", err)
+		}
+		count := 100
+		if page > 1 {
+			count = 2 // total=101 时，末页最多只能返回 1 条。
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"rc": 0,
+			"data": map[string]any{
+				"total": 101,
+				"diff":  eastmoneyStockSearchRowsForContractTest((page-1)*100, count),
+			},
+		}); err != nil {
+			t.Errorf("encode page: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	p := &Eastmoney{client: server.Client(), stockListURL: server.URL, ut: "test-token"}
+	_, err := p.SearchStocks(context.Background(), "测试股票", 10)
+	if err == nil || !strings.Contains(err.Error(), "exceeding 1 rows implied by total 101") {
+		t.Fatalf("page rows beyond declared total must be rejected, got %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("pagination should stop on an overfull page, got %d requests", requests)
+	}
+}
+
+
+func TestEastmoneyFetchSectorRankingsRejectsUnderfilledPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"total":120,"diff":[{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+	_, err := p.FetchSectorRankings(context.Background(), "industry", 5)
+	if err == nil || !strings.Contains(err.Error(), "expected 5 rows from total=120 and limit=5") {
+		t.Fatalf("underfilled sector-ranking response must be rejected, got %v", err)
+	}
+}
+
+
+func TestEastmoneyFetchHotStocksRejectsDuplicateRankingSymbols(t *testing.T) {
+	quoteCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rank":
+			fmt.Fprint(w, `{"code":0,"data":[{"sc":"SH600519","rk":1},{"sc":"SH600519","rk":2}]}`)
+		case "/quote":
+			quoteCalled = true
+			fmt.Fprint(w, `{"rc":0,"data":{"diff":[]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(2*time.Second, "", "")
+	p.hotRankingURL = server.URL + "/rank"
+	p.indexURL = server.URL + "/quote"
+	_, err := p.FetchHotStocks(context.Background(), "popular", 10)
+	if err == nil || !strings.Contains(err.Error(), "duplicate symbol 600519.SH") {
+		t.Fatalf("duplicate ranking symbols must reject the provider response, got %v", err)
+	}
+	if quoteCalled {
+		t.Fatal("duplicate ranking rows should be rejected before quote enrichment")
+	}
+}
+
+func TestEastmoneyFetchHotStocksRejectsDuplicateQuoteEnrichmentCodes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rank":
+			fmt.Fprint(w, `{"code":0,"data":[{"sc":"SH600519","rk":1}]}`)
+		case "/quote":
+			fmt.Fprint(w, `{"rc":0,"data":{"diff":[
+				{"f12":"600519","f14":"贵州茅台","f2":1313.3,"f3":1.2},
+				{"f12":"600519","f14":"错误重复行","f2":1,"f3":99}
+			]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(2*time.Second, "", "")
+	p.hotRankingURL = server.URL + "/rank"
+	p.indexURL = server.URL + "/quote"
+	_, err := p.FetchHotStocks(context.Background(), "popular", 10)
+	if err == nil || !strings.Contains(err.Error(), "duplicate code 600519") {
+		t.Fatalf("duplicate quote enrichment code must not overwrite prior fields, got %v", err)
+	}
+}
+
+
+func TestEastmoneyHotRankingSymbolRejectsNonEquityCodes(t *testing.T) {
+	for _, raw := range []string{"SH510300", "SZ159919", "SH000001", "SZ399001", "SH113001", "SH900901"} {
+		if _, _, _, err := eastmoneyHotRankingSymbol(raw); err == nil {
+			t.Errorf("non-equity or unsupported code %s must not be returned as a hot stock", raw)
+		}
+	}
+	for _, raw := range []string{"SH600519", "SH688981", "SZ000001", "SZ300750"} {
+		if _, _, _, err := eastmoneyHotRankingSymbol(raw); err != nil {
+			t.Errorf("ordinary A-share code %s should remain supported: %v", raw, err)
+		}
+	}
+}
+
+
+func TestEastmoneySectorRankingDistinguishesMissingTotalFromZeroWithRows(t *testing.T) {
+	row := `{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12}`
+
+	t.Run("explicit zero with rows is rejected", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rc":0,"data":{"total":0,"diff":[%s]}}`, row)
+		}))
+		defer server.Close()
+		p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+		_, err := p.FetchSectorRankings(context.Background(), "industry", 5)
+		if err == nil || !strings.Contains(err.Error(), "reports total=0 with non-empty rows") {
+			t.Fatalf("explicit zero total contradicting non-empty rows must be rejected, got %v", err)
+		}
+	})
+
+	t.Run("missing total is explicit lower-bound degradation", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rc":0,"data":{"diff":[%s]}}`, row)
+		}))
+		defer server.Close()
+		p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+		got, err := p.FetchSectorRankings(context.Background(), "industry", 5)
+		if err != nil {
+			t.Fatalf("missing total should remain a degraded lower-bound candidate, got %v", err)
+		}
+		if got.Total != 1 || !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_total_missing_using_returned_count") {
+			t.Fatalf("missing source total was not disclosed as a lower bound: %+v", got)
+		}
+	})
+}
+
+
+func TestEastmoneyFetchIndexQuotesRejectsContradictoryReportedTotal(t *testing.T) {
+	for _, body := range []struct {
+		name string
+		json string
+		want string
+	}{
+		{name: "zero with rows", json: `{"rc":0,"data":{"total":0,"diff":[{"f2":3200.5,"f3":0.8,"f12":"000001","f13":1}]}}`, want: "total=0 with non-empty rows"},
+		{name: "negative total", json: `{"rc":0,"data":{"total":-1,"diff":[{"f2":3200.5,"f3":0.8,"f12":"000001","f13":1}]}}`, want: "total is negative"},
+		{name: "total less than rows", json: `{"rc":0,"data":{"total":1,"diff":[{"f2":3200.5,"f3":0.8,"f12":"000001","f13":1},{"f2":3201.5,"f3":0.9,"f12":"399001","f13":0}]}}`, want: "reports total=1 with 2 returned rows"},
+	} {
+		t.Run(body.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, body.json)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+			_, err := p.FetchIndexQuotes(context.Background())
+			if err == nil || !strings.Contains(err.Error(), body.want) {
+				t.Fatalf("contradictory source total should be rejected, got %v", err)
+			}
+		})
+	}
+}
+
+func TestEastmoneyFetchIndexQuotesRejectsInvalidPricesAndOHLC(t *testing.T) {
+	for _, row := range []struct {
+		name string
+		json string
+	}{
+		{name: "zero price", json: `{"f2":0,"f3":0,"f12":"000001","f13":1}`},
+		{name: "negative price", json: `{"f2":-1,"f3":0,"f12":"000001","f13":1}`},
+		{name: "high below low", json: `{"f2":3200,"f3":0,"f15":3100,"f16":3150,"f17":3160,"f18":3180,"f12":"000001","f13":1}`},
+		{name: "price outside range", json: `{"f2":3300,"f3":0,"f15":3210,"f16":3180,"f17":3190,"f18":3176,"f12":"000001","f13":1}`},
+		{name: "nonpositive previous close", json: `{"f2":3200,"f3":0,"f18":0,"f12":"000001","f13":1}`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"rc":0,"data":{"total":1,"diff":[%s]}}`, row.json)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+			_, err := p.FetchIndexQuotes(context.Background())
+			if err == nil || !strings.Contains(err.Error(), "rows failed index-code and price validation") {
+				t.Fatalf("invalid index price/OHLC row should not be accepted, got %v", err)
+			}
+		})
+	}
+}
+
+func TestEastmoneyFetchIndexQuotesNegativeAmountDegradesInsteadOfReturningNegativeAmount(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"total":1,"diff":[{"f2":3200.5,"f3":0.8,"f4":24.5,"f6":-10,"f12":"000001","f13":1,"f14":"上证指数","f15":3210,"f16":3180,"f17":3190,"f18":3176,"f86":"202610231500"}]}}`)
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+	snapshot, err := p.FetchIndexQuotes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Items) != 1 {
+		t.Fatalf("expected the valid price row to be preserved: %+v", snapshot)
+	}
+	item := snapshot.Items[0]
+	if item.Amount != nil || item.AmountUnit != "unknown" || item.QualityStatus != model.QualityDegraded {
+		t.Fatalf("negative amount must be omitted and quality downgraded: %+v", item)
+	}
+	if !strings.Contains(strings.Join(item.QualityReasons, ","), "provider_amount_negative_or_invalid") {
+		t.Fatalf("item should disclose invalid negative amount: %v", item.QualityReasons)
+	}
+}
+
+
+func TestEastmoneyFetchIndexQuotesRejectsInconsistentChangeFields(t *testing.T) {
+	for _, row := range []struct {
+		name string
+		json string
+	}{
+		{name: "change amount mismatch", json: `{"f2":3200.5,"f3":0.8,"f4":10,"f12":"000001","f13":1,"f18":3176}`},
+		{name: "change percent mismatch", json: `{"f2":3200.5,"f3":10,"f4":24.5,"f12":"000001","f13":1,"f18":3176}`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"rc":0,"data":{"total":1,"diff":[%s]}}`, row.json)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+			_, err := p.FetchIndexQuotes(context.Background())
+			if err == nil || !strings.Contains(err.Error(), "rows failed index-code and price validation") {
+				t.Fatalf("inconsistent change fields must not be accepted, got %v", err)
+			}
+		})
+	}
+}
+
+
+func TestEastmoneyDailyBarsMarksMissingProviderSymbolAsDegraded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"name":"贵州茅台","klines":["2026-10-20,10.0,10.2,10.3,9.9,100,1020000,1.42,0.81,10.87,0.23"]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(2*time.Second, server.URL, server.URL)
+	bars, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-01", "2026-10-21", 10, model.AdjustmentForward)
+	if err != nil {
+		t.Fatalf("valid bars with missing source identity should be preserved as degraded, got %v", err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("bars=%d, want 1", len(bars))
+	}
+	if bars[0].QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing provider identity must downgrade bar quality, got %+v", bars[0])
+	}
+	if !strings.Contains(strings.Join(bars[0].QualityReasons, ","), "provider_symbol_missing_assumed_from_request") {
+		t.Fatalf("missing identity reason not exposed: %+v", bars[0].QualityReasons)
 	}
 }

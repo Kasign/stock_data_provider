@@ -186,7 +186,7 @@ func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
 			if r.URL.Query().Get("year") != fmt.Sprintf("%d", year) || r.URL.Query().Get("quarter") != fmt.Sprintf("%d", quarter) {
 				t.Errorf("unexpected requested fundamentals period: %s", r.URL.RawQuery)
 			}
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","year":%d,"quarter":%d,"has_data":true,"sections":[{"category":"profitability","report_date":%q,"publication_date":%q,"has_data":true,"metrics":[{"key":"roe_avg","name":"平均净资产收益率","value":0.074,"unit":"ratio","source_field":"roeAvg"}],"quality_status":"valid","quality_reasons":[]}],"source":"baostock","source_version":"test-v1","fetched_at":%q,"quality_status":"valid","quality_reasons":[]}`, year, quarter, periodEnd, publicationDate, fetchedAt)))
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","year":%d,"quarter":%d,"has_data":true,"sections":[{"category":"profitability","report_date":%q,"publication_date":%q,"has_data":true,"metrics":[{"key":"roe_avg","name":"平均净资产收益率","value":0.074,"unit":"ratio","source_field":"roeAvg"}],"quality_status":"valid","quality_reasons":[]},{"category":"income_statement","report_date":%q,"publication_date":%q,"has_data":true,"metrics":[{"key":"total_revenue","name":"营业总收入","value":2500000000,"unit":"CNY","source_field":"total_revenue"}],"quality_status":"valid","quality_reasons":[]}],"source":"baostock","source_version":"test-v1","fetched_at":%q,"quality_status":"valid","quality_reasons":[]}`, year, quarter, periodEnd, publicationDate, periodEnd, publicationDate, fetchedAt)))
 		case strings.HasSuffix(r.URL.Path, "/boards"):
 			_, _ = w.Write([]byte(fmt.Sprintf(`{"symbol":"600519.SH","total":1,"has_data":true,"items":[{"code":"BK0477","name":"白酒","change_percent":1.2,"source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"valid","quality_reasons":[]}],"source":"eastmoney","source_version":"test-v1","fetched_at":%q,"quality_status":"valid","quality_reasons":[]}`, fetchedAt, fetchedAt)))
 		case strings.HasSuffix(r.URL.Path, "/chip-distribution"):
@@ -212,6 +212,12 @@ func TestFetchStockBundleFetchesNativeAuxiliaryData(t *testing.T) {
 	}
 	if bundle.Fundamentals["roe_avg"] != 0.074 {
 		t.Fatalf("flattened fundamental metric missing: %+v", bundle.Fundamentals)
+	}
+	if bundle.Fundamentals["income_statement.total_revenue"] != float64(2500000000) {
+		t.Fatalf("statement metric must be preserved with its section prefix: %+v", bundle.Fundamentals)
+	}
+	if bundle.Fundamentals["total_revenue"] != float64(2500000000) {
+		t.Fatalf("unique statement metric should remain available through the compatibility alias: %+v", bundle.Fundamentals)
 	}
 	if len(bundle.Boards) != 1 || bundle.Boards[0]["name"] != "白酒" {
 		t.Fatalf("stock boards not mapped: %+v", bundle.Boards)

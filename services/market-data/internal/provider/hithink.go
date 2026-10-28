@@ -146,6 +146,11 @@ type hithinkIndexDefinition struct {
 	Name   string
 }
 
+const (
+	hithinkChangeTolerance             = 0.05
+	hithinkChangePercentTolerancePP    = 0.15
+)
+
 var hithinkCoreIndexDefinitions = []hithinkIndexDefinition{
 	{Symbol: "000001.SH", Code: "000001", Name: "上证指数"},
 	{Symbol: "399001.SZ", Code: "399001", Name: "深证成指"},
@@ -245,13 +250,20 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_index_rows_have_invalid_required_prices")
 			continue
 		}
+		// 涨跌额与涨跌幅以最新价、昨收价计算为规范值；源端扩展字段仅用于交叉校验。
 		change := *item.LastPrice - *item.PreviousPrice
-		if item.PriceChange != nil && hithinkFinite(*item.PriceChange) {
-			change = *item.PriceChange
-		}
 		changePercent := change / *item.PreviousPrice * 100
-		if item.ChangeRatio != nil && hithinkFinite(*item.ChangeRatio) {
-			changePercent = *item.ChangeRatio
+		if item.PriceChange != nil &&
+			(!hithinkFinite(*item.PriceChange) || math.Abs(*item.PriceChange-change) > hithinkChangeTolerance) {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+			continue
+		}
+		if item.ChangeRatio != nil &&
+			(!hithinkFinite(*item.ChangeRatio) || math.Abs(*item.ChangeRatio-changePercent) > hithinkChangePercentTolerancePP) {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+			continue
 		}
 		name := strings.TrimSpace(item.Name)
 		if name == "" {
@@ -845,6 +857,10 @@ func (p *Hithink) FetchDragonTiger(ctx context.Context, tradeDate string, page, 
 	parsedResponseDate, err := time.Parse("2006-01-02", responseDate)
 	if err != nil || parsedResponseDate.Format("2006-01-02") != responseDate {
 		return nil, fmt.Errorf("同花顺龙虎榜返回了无效交易日 %q", responseDate)
+	}
+	today := time.Now().In(loc).Format("2006-01-02")
+	if responseDate > today {
+		return nil, fmt.Errorf("同花顺龙虎榜源端交易日 %s 晚于中国市场当前日期 %s", responseDate, today)
 	}
 	if rawDate != "" && rawDate != responseDate {
 		return nil, fmt.Errorf("同花顺龙虎榜交易日不匹配: requested=%s returned=%s", rawDate, responseDate)
@@ -1466,6 +1482,7 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		Timestamp *int64 `json:"timestamp"`
 		Item      []struct {
 			THSCode       string   `json:"thscode"`
+			Name          string   `json:"name"`
 			LastPrice     *float64 `json:"last_price"`
 			PriceChange   *float64 `json:"price_change"`
 			ChangeRatio   *float64 `json:"price_change_ratio_pct"`
@@ -1482,6 +1499,7 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	}
 	var item *struct {
 		THSCode       string   `json:"thscode"`
+		Name          string   `json:"name"`
 		LastPrice     *float64 `json:"last_price"`
 		PriceChange   *float64 `json:"price_change"`
 		ChangeRatio   *float64 `json:"price_change_ratio_pct"`
@@ -1493,10 +1511,14 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		Turnover      *float64 `json:"turnover"`
 	}
 	for i := range data.Item {
-		if strings.EqualFold(strings.TrimSpace(data.Item[i].THSCode), symbol) {
-			item = &data.Item[i]
-			break
+		if !strings.EqualFold(strings.TrimSpace(data.Item[i].THSCode), symbol) {
+			continue
 		}
+		if item != nil {
+			// 单证券报价响应也必须保持证券身份唯一；重复行不能静默采用第一条。
+			return nil, fmt.Errorf("同花顺行情响应包含重复请求证券 %s", symbol)
+		}
+		item = &data.Item[i]
 	}
 	if item == nil {
 		return nil, fmt.Errorf("同花顺行情响应未包含请求证券 %s", symbol)
@@ -1510,32 +1532,56 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		return nil, errors.New("同花顺行情 OHLC/价格字段不满足数据契约")
 	}
 
+	// 涨跌额与涨跌幅始终以最新价、昨收价计算；源端扩展值只用于交叉校验。
 	change := *item.LastPrice - *item.PreviousPrice
-	if item.PriceChange != nil && hithinkFinite(*item.PriceChange) {
-		change = *item.PriceChange
-	}
 	changePercent := change / *item.PreviousPrice * 100
-	if item.ChangeRatio != nil && hithinkFinite(*item.ChangeRatio) {
-		changePercent = *item.ChangeRatio
+	if item.PriceChange != nil &&
+		(!hithinkFinite(*item.PriceChange) || math.Abs(*item.PriceChange-change) > hithinkChangeTolerance) {
+		return nil, errors.New("同花顺行情涨跌额与最新价/昨收价不一致")
 	}
+	if item.ChangeRatio != nil &&
+		(!hithinkFinite(*item.ChangeRatio) || math.Abs(*item.ChangeRatio-changePercent) > hithinkChangePercentTolerancePP) {
+		return nil, errors.New("同花顺行情涨跌幅与最新价/昨收价不一致")
+	}
+
 	now := time.Now().UTC()
+	var quoteTime *time.Time
+	quoteTimeSemantics := ""
+	if data.Timestamp != nil && *data.Timestamp > 0 {
+		value := time.UnixMilli(*data.Timestamp).UTC()
+		if !value.After(now.Add(5 * time.Minute)) {
+			quoteTime = &value
+			quoteTimeSemantics = "provider_snapshot_time"
+		}
+	}
 	var volume *int64
 	var rawVolume *float64
 	var amount, rawAmount *float64
-	quality := model.QualityDegraded
-	reasons := []string{"provider_quote_timestamp_not_available_for_symbol_query"}
+	quality := model.QualityValid
+	reasons := []string{}
+	if quoteTime == nil {
+		quality = model.QualityDegraded
+		reasons = append(reasons, "provider_snapshot_timestamp_missing_or_invalid")
+	}
 	if v, ok := hithinkNonNegativeInt64(item.Volume); ok {
 		volume = &v
 		vRaw := *item.Volume
 		rawVolume = &vRaw
 	} else {
+		quality = model.QualityDegraded
 		reasons = append(reasons, "volume_missing_or_invalid")
 	}
 	if item.Turnover != nil && hithinkNonNegativeFinite(*item.Turnover) {
 		v := *item.Turnover
 		amount, rawAmount = &v, &v
 	} else {
+		quality = model.QualityDegraded
 		reasons = append(reasons, "amount_missing_or_invalid")
+	}
+	name := strings.TrimSpace(item.Name)
+	if name == "" {
+		quality = model.QualityDegraded
+		reasons = append(reasons, "provider_quote_name_missing")
 	}
 	qualityReason := []string(nil)
 	if len(reasons) > 0 {
@@ -1547,31 +1593,34 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		amountUnit, rawAmountUnit, rawAmountField = "unknown", "", ""
 	}
 	return &model.Quote{
-		Symbol:           symbol,
-		CurrentPrice:     item.LastPrice,
-		Change:           &change,
-		ChangePercent:    &changePercent,
-		Open:             item.OpenPrice,
-		High:             item.HighPrice,
-		Low:              item.LowPrice,
-		PrevClose:        item.PreviousPrice,
-		Volume:           volume,
-		Amount:           amount,
-		FetchedAt:        now,
-		NormalizedAt:     now,
-		Source:           p.Name(),
-		SourceVersion:    hithinkVersion,
-		RawVolume:        rawVolume,
-		RawVolumeUnit:    volumeUnit,
-		RawAmount:        rawAmount,
-		RawAmountUnit:    rawAmountUnit,
-		RawAmountField:   rawAmountField,
-		VolumeUnit:       volumeUnit,
-		AmountUnit:       amountUnit,
-		AdjustmentBasis:  model.AdjustmentNone,
-		QualityStatus:    quality,
-		QualityReasons:   qualityReason,
-		NormalizationVer: normalize.Version,
+		Symbol:             symbol,
+		Name:               name,
+		CurrentPrice:       item.LastPrice,
+		Change:             &change,
+		ChangePercent:      &changePercent,
+		Open:               item.OpenPrice,
+		High:               item.HighPrice,
+		Low:                item.LowPrice,
+		PrevClose:          item.PreviousPrice,
+		QuoteTime:          quoteTime,
+		QuoteTimeSemantics: quoteTimeSemantics,
+		Volume:             volume,
+		Amount:             amount,
+		FetchedAt:          now,
+		NormalizedAt:       now,
+		Source:             p.Name(),
+		SourceVersion:      hithinkVersion,
+		RawVolume:          rawVolume,
+		RawVolumeUnit:      volumeUnit,
+		RawAmount:          rawAmount,
+		RawAmountUnit:      rawAmountUnit,
+		RawAmountField:     rawAmountField,
+		VolumeUnit:         volumeUnit,
+		AmountUnit:         amountUnit,
+		AdjustmentBasis:    model.AdjustmentNone,
+		QualityStatus:      quality,
+		QualityReasons:     qualityReason,
+		NormalizationVer:   normalize.Version,
 	}, nil
 }
 
@@ -1753,12 +1802,18 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			QualityReasons: []string{"publication_date_not_exposed_by_provider", "metric_unit_not_exposed_by_provider"},
 		}
 		invalidValueCount := 0
+		seenIndexIDs := make(map[string]struct{}, len(ability.Indicators))
 		for _, item := range ability.Indicators {
 			indexID := strings.TrimSpace(item.IndexID)
 			if indexID == "" {
 				invalidValueCount++
 				continue
 			}
+			normalizedIndexID := strings.ToLower(indexID)
+			if _, duplicate := seenIndexIDs[normalizedIndexID]; duplicate {
+				return nil, fmt.Errorf("同花顺财务指标返回重复指标 ID %q（分区 %s）", indexID, category)
+			}
+			seenIndexIDs[normalizedIndexID] = struct{}{}
 			value, ok := hithinkParseFundamentalValue(item.Value)
 			if !ok {
 				invalidValueCount++
@@ -1950,8 +2005,10 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 		}
 		rowDate, validDate := hithinkDateFromMillis(endValue, loc)
 		if validDate && rowDate == targetReportDate {
+			if selected != nil {
+				return model.FundamentalSection{}, fmt.Errorf("同花顺 %s 返回重复报告期 %s 记录", category, targetReportDate)
+			}
 			selected = row
-			break
 		}
 	}
 	if selected == nil {

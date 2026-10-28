@@ -69,6 +69,37 @@ func validStockBoardsForFallbackTest(source string) *model.StockBoardSnapshot {
 	}
 }
 
+func TestStockBoardsFallsBackFromUnknownQualityRows(t *testing.T) {
+	firstSnapshot := validStockBoardsForFallbackTest("eastmoney")
+	firstSnapshot.QualityStatus = model.QualityUnknown
+	firstSnapshot.QualityReasons = []string{"provider_board_quality_unknown"}
+	first := &stockBoardsFallbackTestProvider{name: "eastmoney", snapshot: firstSnapshot}
+	fallback := &stockBoardsFallbackTestProvider{name: "hithink", snapshot: validStockBoardsForFallbackTest("hithink")}
+	svc := stockBoardsFallbackService(first, fallback)
+	got, hit, err := svc.StockBoards(context.Background(), "600519.SH")
+	if err != nil || hit { t.Fatalf("StockBoards returned hit=%v err=%v", hit, err) }
+	if got == nil || got.Source != "hithink" || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded fallback rather than unknown board rows, got %+v", got)
+	}
+	if first.calls != 1 || fallback.calls != 1 { t.Fatalf("expected both providers to be attempted, calls=%d/%d", first.calls, fallback.calls) }
+}
+
+func TestStockBoardsReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
+	candidate := validStockBoardsForFallbackTest("eastmoney")
+	candidate.QualityStatus = model.QualityUnknown
+	candidate.QualityReasons = []string{"provider_board_quality_unknown"}
+	first := &stockBoardsFallbackTestProvider{name: "eastmoney", snapshot: candidate}
+	failed := &stockBoardsFallbackTestProvider{name: "hithink", err: errors.New("test provider unavailable")}
+	svc := stockBoardsFallbackService(first, failed)
+	got, hit, err := svc.StockBoards(context.Background(), "600519.SH")
+	if err != nil || hit { t.Fatalf("StockBoards returned hit=%v err=%v", hit, err) }
+	if got == nil || !got.HasData || got.QualityStatus != model.QualityUnknown ||
+		!strings.Contains(strings.Join(got.QualityReasons, ","), "stock_boards_fallback_exhausted_with_unconfirmed_quality") {
+		t.Fatalf("expected retained unknown rows after fallback exhaustion, got %+v", got)
+	}
+	if first.calls != 1 || failed.calls != 1 { t.Fatalf("expected all providers to be attempted, calls=%d/%d", first.calls, failed.calls) }
+}
+
 func TestStockBoardsFallsBackAfterUnknownEmptyProvider(t *testing.T) {
 	empty := &stockBoardsFallbackTestProvider{name: "eastmoney", snapshot: unknownStockBoardsForFallbackTest("eastmoney")}
 	fallback := &stockBoardsFallbackTestProvider{name: "hithink", snapshot: validStockBoardsForFallbackTest("hithink")}

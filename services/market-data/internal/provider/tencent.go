@@ -61,6 +61,9 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tencent stock quote only supports common A-share equities, got %q", rawSymbol)
+	}
 	apiCode, err := tencentCode(symbol)
 	if err != nil {
 		return nil, err
@@ -128,10 +131,12 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		return nil, fmt.Errorf("normalize Tencent quote volume: %w", conversionErr)
 	}
 	rawAmount, amount, amountField, rawAmountUnit := tencentQuoteAmount(fields, low, high, volume)
+	fetchedAt := time.Now().UTC()
 	var qtime *time.Time
 	if len(fields) > 30 {
 		qtime = parseTencentTime(fields[30])
 	}
+	qtime = validProviderSnapshotTime(qtime, fetchedAt)
 	var turnoverRate *float64
 	if parsed, parseErr := parsePositiveField(fields, 38); parseErr == nil {
 		// Tencent field 38 is interpreted as turnover rate by the existing
@@ -139,7 +144,7 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		turnoverRate = &parsed
 	}
 	rv := rawVol
-	q := &model.Quote{Symbol: symbol, Name: fields[1], CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: amount, TurnoverRate: turnoverRate, QuoteTime: qtime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), Source: p.Name(), SourceVersion: tencentVersion, RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+	q := &model.Quote{Symbol: symbol, Name: fields[1], CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: amount, TurnoverRate: turnoverRate, QuoteTime: qtime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: fetchedAt, NormalizedAt: fetchedAt, Source: p.Name(), SourceVersion: tencentVersion, RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 	if reportedSymbol == "" {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_symbol_missing_assumed_from_request")
@@ -170,6 +175,11 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if !volumeVerified {
 		return nil, errors.New("Tencent quote volume unit cannot be confirmed; refusing to assume 100-share lots")
 	}
+	// ValidateQuote 先校验源端涨跌字段；规范输出随后统一按最新价和昨收价计算。
+	canonicalChange := *q.CurrentPrice - *q.PrevClose
+	canonicalChangePercent := canonicalChange / *q.PrevClose * 100
+	q.Change = &canonicalChange
+	q.ChangePercent = &canonicalChangePercent
 	return q, nil
 }
 
@@ -177,6 +187,9 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tencent daily bars only support common A-share equities, got %q", rawSymbol)
 	}
 	apiCode, err := tencentCode(symbol)
 	if err != nil {
@@ -198,6 +211,21 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		if _, e := time.Parse("2006-01-02", end); e != nil {
 			return nil, fmt.Errorf("invalid end date: %w", e)
 		}
+	}
+	// 日期边界和区间错误必须在发起上游请求前拒绝，避免浪费调用额度并防止未来日期进入日 K 链路。
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	today := time.Now().In(loc).Format("2006-01-02")
+	if start != "" && start > today {
+		return nil, errors.New("Tencent start date must not be after today in Asia/Shanghai")
+	}
+	if end != "" && end > today {
+		return nil, errors.New("Tencent end date must not be after today in Asia/Shanghai")
+	}
+	if start != "" && end != "" && start > end {
+		return nil, errors.New("start date must not be after end date")
 	}
 	adjustCode, key := "", "day"
 	endpoint := p.noneKlineURL

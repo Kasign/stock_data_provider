@@ -67,6 +67,11 @@ func TestTencentQuoteNormalizesVolumeAndAmount(t *testing.T) {
 	if q.Name != "贵州茅台" {
 		t.Fatalf("name=%s", q.Name)
 	}
+	wantChange := *q.CurrentPrice - *q.PrevClose
+	wantChangePercent := wantChange / *q.PrevClose * 100
+	if q.Change == nil || *q.Change != wantChange || q.ChangePercent == nil || *q.ChangePercent != wantChangePercent {
+		t.Fatalf("change fields must be canonical: %+v", q)
+	}
 	if q.TurnoverRate == nil || *q.TurnoverRate != 5.0 {
 		t.Fatalf("Tencent turnover rate must be returned in percentage points, got %v", q.TurnoverRate)
 	}
@@ -74,6 +79,25 @@ func TestTencentQuoteNormalizesVolumeAndAmount(t *testing.T) {
 		t.Fatalf("Tencent volume ratio must remain unknown unless the provider contract supplies it, got %v", q.VolumeRatio)
 	}
 }
+func TestTencentQuoteDegradesFutureProviderTimestamp(t *testing.T) {
+	f := make([]string, 60)
+	for i := range f { f[i] = "0" }
+	f[1], f[2], f[3], f[4], f[5], f[6] = "贵州茅台", "600519", "1313.31", "1331.88", "1331.88", "34136"
+	f[30], f[31], f[32], f[33], f[34] = "20991231112802", "-18.57", "-1.394", "1331.98", "1312"
+	f[35], f[37], f[38], f[44] = "1313.31/34136/4525398959", "452540", "5.0", "896.8"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "v_sh600519=\"%s\";", strings.Join(f, "~"))
+	}))
+	defer server.Close()
+	p := NewTencent(2*time.Second)
+	p.quoteURL = server.URL + "/utf8/q"
+	q, err := p.FetchQuote(context.Background(), "600519.SH")
+	if err != nil { t.Fatal(err) }
+	if q.QuoteTime != nil || q.QualityStatus != model.QualityDegraded {
+		t.Fatalf("future provider timestamp must be omitted and quality degraded: %+v", q)
+	}
+}
+
 func TestTencentQuoteAmountFallsBackWhenTupleAmountIsImplausible(t *testing.T) {
 	fields := make([]string, 60)
 	for i := range fields {
@@ -266,6 +290,55 @@ func TestTencentStarMarketDailyVolumeAlreadyInShares(t *testing.T) {
 	}
 	if bars[0].Amount != nil || bars[0].AmountUnit != "unknown" {
 		t.Fatalf("undocumented trailing numeric field must not be interpreted as amount, got %+v", bars[0])
+	}
+}
+
+func TestTencentDailyBarsRejectsReversedDateRangeBeforeRequest(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		fmt.Fprint(w, `{"data":{}}`)
+	}))
+	defer server.Close()
+
+	p := NewTencent(2 * time.Second)
+	p.noneKlineURL = server.URL
+	_, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-21", "2026-10-20", 10, model.AdjustmentNone)
+	if err == nil {
+		t.Fatal("reversed date range should be rejected")
+	}
+	if requests != 0 {
+		t.Fatalf("invalid date range must be rejected before upstream request, got %d request(s)", requests)
+	}
+}
+
+func TestTencentDailyBarsRejectsFutureDateBeforeRequest(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	nextDay := time.Now().In(loc).AddDate(0, 0, 1).Format("2006-01-02")
+	cases := []struct {
+		name, start, end string
+	}{
+		{name: "future start only", start: nextDay},
+		{name: "future end", start: "2026-10-20", end: nextDay},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests++
+				fmt.Fprint(w, `{"data":{}}`)
+			}))
+			defer server.Close()
+			p := NewTencent(2 * time.Second)
+			p.noneKlineURL = server.URL
+			if _, err := p.FetchDailyBars(context.Background(), "600519.SH", tc.start, tc.end, 10, model.AdjustmentNone); err == nil {
+				t.Fatal("future date bound should be rejected")
+			}
+			if requests != 0 {
+				t.Fatalf("future date bound must be rejected before upstream request, got %d request(s)", requests)
+			}
+		})
 	}
 }
 

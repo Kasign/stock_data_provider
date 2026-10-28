@@ -72,8 +72,8 @@ func validateIndexCatalogSnapshot(tag string, snapshot *model.IndexCatalogSnapsh
 	if snapshot == nil || snapshot.Tag != tag || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index catalog snapshot identity/count mismatch")
 	}
-	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
-		return errors.New("index catalog snapshot source, timestamp or quality invalid")
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
+		return errors.New("index catalog snapshot source, source_version, timestamp or quality invalid")
 	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
 		return errors.New("index catalog provider_time is zero or in the future")
@@ -102,8 +102,8 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index constituent snapshot identity/count mismatch")
 	}
-	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
-		return errors.New("index constituent snapshot source, timestamp or quality invalid")
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
+		return errors.New("index constituent snapshot source, source_version, timestamp or quality invalid")
 	}
 	if snapshot.ProviderReturned < 0 || snapshot.ExcludedCount < 0 ||
 		(snapshot.ProviderReturned > 0 && snapshot.ProviderReturned != snapshot.Total+snapshot.ExcludedCount) ||
@@ -120,6 +120,18 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 		}
 		if snapshot.ProviderReportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
 			return errors.New("index constituent provider_report_date is in the future")
+		}
+	}
+	if snapshot.AsOfDate != "" {
+		asOf, err := time.Parse("2006-01-02", snapshot.AsOfDate)
+		if err != nil || asOf.Format("2006-01-02") != snapshot.AsOfDate {
+			return errors.New("index constituent as_of_date is invalid")
+		}
+		if snapshot.AsOfDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+			return errors.New("index constituent as_of_date is in the future")
+		}
+		if snapshot.ProviderReportDate != "" && snapshot.ProviderReportDate > snapshot.AsOfDate {
+			return errors.New("index constituent provider_report_date is later than as_of_date")
 		}
 	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
@@ -154,8 +166,10 @@ func markIndexConstituentCoverage(snapshot *model.IndexConstituentSnapshot) {
 		return
 	}
 
-	// 兼容没有覆盖计数的旧缓存/旧 Provider，但不再把它们当作完整有效快照。
-	snapshot.QualityStatus = model.QualityDegraded
+	// 未确认质量保持 unknown；其余非空快照因缺少源端覆盖计数必须降级。
+	if snapshot.QualityStatus != model.QualityUnknown {
+		snapshot.QualityStatus = model.QualityDegraded
+	}
 	const reason = "provider_constituent_source_coverage_unreported"
 	for _, existing := range snapshot.QualityReasons {
 		if existing == reason {
@@ -169,18 +183,21 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.StartDate != startDate || snapshot.EndDate != endDate || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index daily-bars snapshot identity/range/count mismatch")
 	}
-	if snapshot.Source == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
-		return errors.New("index daily-bars snapshot source, timestamp or quality invalid")
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
+		return errors.New("index daily-bars snapshot source, source_version, timestamp or quality invalid")
 	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
 		return errors.New("index daily-bars provider_time is zero or in the future")
+	}
+	if snapshot.QualityStatus == model.QualityValid && snapshot.ProviderTime == nil {
+		return errors.New("index daily-bars snapshot cannot be valid without a provider snapshot timestamp")
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
 	previousDate := ""
 	hasDegradedItem := false
 	for _, item := range snapshot.Items {
-		if item.IndexSymbol != indexSymbol || item.TradeDate < startDate || item.TradeDate > endDate || item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-			return errors.New("index daily bar identity, date or source invalid")
+		if item.IndexSymbol != indexSymbol || item.TradeDate < startDate || item.TradeDate > endDate || item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+			return errors.New("index daily bar identity, date or source/version invalid")
 		}
 		parsedDate, dateErr := time.Parse("2006-01-02", item.TradeDate)
 		if dateErr != nil || parsedDate.Format("2006-01-02") != item.TradeDate {
@@ -262,6 +279,29 @@ func indexCatalogCacheTTL(snapshot *model.IndexCatalogSnapshot) time.Duration {
 	return 12 * time.Hour
 }
 
+// betterUnknownIndexCatalogSnapshot 在目录质量无法确认时优先保留条目更多、且带有源端快照时间的候选。
+func betterUnknownIndexCatalogSnapshot(candidate, current *model.IndexCatalogSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime == nil {
+		return true
+	}
+	if candidate.ProviderTime == nil && current.ProviderTime != nil {
+		return false
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime != nil && !candidate.ProviderTime.Equal(*current.ProviderTime) {
+		return candidate.ProviderTime.After(*current.ProviderTime)
+	}
+	return false
+}
+
 func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.IndexCatalogSnapshot, bool, error) {
 	tag, err := validIndexCatalogTag(rawTag)
 	if err != nil {
@@ -278,11 +318,12 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 		var cached model.IndexCatalogSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexCatalogSnapshot(tag, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			ttl := indexCatalogCacheTTL(&cached)
-			cacheEligible := len(cached.Items) > 0
-			if len(cached.Items) == 0 {
+			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
+			if cached.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "index_catalog_fallback_exhausted_without_confirmed_data" {
+					if reason == "index_catalog_fallback_exhausted_without_confirmed_data" ||
+						reason == "index_catalog_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
@@ -301,7 +342,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 		return nil, false, errors.New("no enabled index-catalog provider")
 	}
 	var failures []string
-	var unknownEmpty *model.IndexCatalogSnapshot
+	var unknownCandidate *model.IndexCatalogSnapshot
 	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -315,8 +356,18 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if snapshot.QualityStatus == model.QualityUnknown {
+			if betterUnknownIndexCatalogSnapshot(snapshot, unknownCandidate) {
+				unknownCandidate = snapshot
+			}
+			if len(snapshot.Items) == 0 {
+				failures = append(failures, p.Name()+": index catalog is empty and cannot be confirmed")
+			} else {
+				failures = append(failures, p.Name()+": index catalog contains entries but source quality is unknown")
+			}
+			continue
+		}
 		if len(snapshot.Items) == 0 {
-			unknownEmpty = snapshot
 			failures = append(failures, p.Name()+": index catalog is empty and cannot be confirmed")
 			continue
 		}
@@ -330,21 +381,67 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 		}
 		return snapshot, false, nil
 	}
-	if unknownEmpty != nil {
-		unknownEmpty.QualityStatus = model.QualityUnknown
-		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "index_catalog_fallback_exhausted_without_confirmed_data")
-		if payload, err := json.Marshal(unknownEmpty); err == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, indexCatalogCacheTTL(unknownEmpty)); cacheErr != nil {
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		reason := "index_catalog_fallback_exhausted_without_usable_quality"
+		if len(unknownCandidate.Items) == 0 {
+			reason = "index_catalog_fallback_exhausted_without_confirmed_data"
+		}
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if payload, err := json.Marshal(unknownCandidate); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, indexCatalogCacheTTL(unknownCandidate)); cacheErr != nil {
 				s.logger.Warn("index-catalog unknown cache write failed", "tag", tag, "error", cacheErr)
 			}
 		}
-		return unknownEmpty, false, nil
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all index-catalog providers failed: %s", strings.Join(failures, "; "))
 }
 
 func (s *DataService) IndexConstituents(ctx context.Context, rawIndexSymbol string) (*model.IndexConstituentSnapshot, bool, error) {
 	return s.IndexConstituentsFromSource(ctx, rawIndexSymbol, "")
+}
+
+// betterUnknownIndexConstituentSnapshot 在回退耗尽后优先保留成分数更多、权重和源端时间信息更完整的候选。
+func betterUnknownIndexConstituentSnapshot(candidate, current *model.IndexConstituentSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	coverage := func(snapshot *model.IndexConstituentSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			if item.WeightPercent != nil {
+				count++
+			}
+		}
+		if snapshot.ProviderTime != nil {
+			count++
+		}
+		if strings.TrimSpace(snapshot.ProviderReportDate) != "" {
+			count++
+		}
+		return count
+	}
+	left, right := coverage(candidate), coverage(current)
+	if left != right {
+		return left > right
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime == nil {
+		return true
+	}
+	if candidate.ProviderTime == nil && current.ProviderTime != nil {
+		return false
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime != nil && !candidate.ProviderTime.Equal(*current.ProviderTime) {
+		return candidate.ProviderTime.After(*current.ProviderTime)
+	}
+	return candidate.ProviderReportDate > current.ProviderReportDate
 }
 
 func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexSymbol, rawSource string) (*model.IndexConstituentSnapshot, bool, error) {
@@ -369,15 +466,18 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexConstituentSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+			// 缓存与新 Provider 回包使用同一覆盖计数处理；unknown 只补原因，不改变其未知语义。
+			markIndexConstituentCoverage(&cached)
 			ttl := 30 * time.Minute
 			if cached.QualityStatus != model.QualityValid {
 				ttl = 5 * time.Minute
 			}
-			cacheEligible := len(cached.Items) > 0
-			if len(cached.Items) == 0 {
+			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
+			if cached.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "index_constituents_fallback_exhausted_without_confirmed_data" {
+					if reason == "index_constituents_fallback_exhausted_without_confirmed_data" ||
+						reason == "index_constituents_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
@@ -392,7 +492,7 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 		s.logger.Warn("index constituents cache read failed", "symbol", indexSymbol, "error", cacheErr)
 	}
 	var failures []string
-	var unknownEmpty *model.IndexConstituentSnapshot
+	var unknownCandidate *model.IndexConstituentSnapshot
 	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -406,12 +506,18 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if len(snapshot.Items) == 0 {
-			unknownEmpty = snapshot
-			failures = append(failures, p.Name()+": index constituent membership is empty and cannot be confirmed")
+		markIndexConstituentCoverage(snapshot)
+		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
+			if betterUnknownIndexConstituentSnapshot(snapshot, unknownCandidate) {
+				unknownCandidate = snapshot
+			}
+			if len(snapshot.Items) == 0 {
+				failures = append(failures, p.Name()+": index constituent membership is empty and cannot be confirmed")
+			} else {
+				failures = append(failures, p.Name()+": index constituent membership is present but source quality is unknown")
+			}
 			continue
 		}
-		markIndexConstituentCoverage(snapshot)
 		if payload, err := json.Marshal(snapshot); err == nil {
 			ttl := 30 * time.Minute
 			if snapshot.QualityStatus != model.QualityValid {
@@ -425,21 +531,199 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 		}
 		return snapshot, false, nil
 	}
-	if unknownEmpty != nil {
-		unknownEmpty.QualityStatus = model.QualityUnknown
-		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "index_constituents_fallback_exhausted_without_confirmed_data")
-		if payload, err := json.Marshal(unknownEmpty); err == nil {
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		reason := "index_constituents_fallback_exhausted_without_usable_quality"
+		if len(unknownCandidate.Items) == 0 {
+			reason = "index_constituents_fallback_exhausted_without_confirmed_data"
+		}
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if payload, err := json.Marshal(unknownCandidate); err == nil {
 			if cacheErr := s.cache.Set(ctx, key, payload, 5*time.Minute); cacheErr != nil {
 				s.logger.Warn("index constituents unknown cache write failed", "symbol", indexSymbol, "error", cacheErr)
 			}
 		}
-		return unknownEmpty, false, nil
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all index-constituent providers failed: %s", strings.Join(failures, "; "))
 }
 
+
+func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIndexSymbol, rawAsOfDate, rawSource string) (*model.IndexConstituentSnapshot, bool, error) {
+	indexSymbol, err := canonicalIndexSymbol(rawIndexSymbol)
+	if err != nil {
+		return nil, false, err
+	}
+	asOfDate := strings.TrimSpace(rawAsOfDate)
+	asOf, parseErr := time.Parse("2006-01-02", asOfDate)
+	if parseErr != nil || asOf.Format("2006-01-02") != asOfDate {
+		return nil, false, errors.New("as_of must use YYYY-MM-DD")
+	}
+	if asOfDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+		return nil, false, errors.New("as_of must not be in the future")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	selected, sourceKey, sourceErr := s.indexCatalogProvidersForSource(rawSource)
+	if sourceErr != nil {
+		return nil, false, sourceErr
+	}
+	providers := make([]provider.HistoricalIndexConstituentProvider, 0, len(selected))
+	for _, candidate := range selected {
+		if historical, ok := candidate.(provider.HistoricalIndexConstituentProvider); ok {
+			providers = append(providers, historical)
+		}
+	}
+	if len(providers) == 0 {
+		return nil, false, fmt.Errorf("no enabled index-constituent provider supports historical as_of queries for source %q", sourceKey)
+	}
+
+	key := fmt.Sprintf("md:v1:index-constituents-asof:%s:%s:%s", sourceKey, indexSymbol, asOfDate)
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.IndexConstituentSnapshot
+		if json.Unmarshal(data, &cached) == nil &&
+			cached.AsOfDate == asOfDate &&
+			validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil &&
+			time.Since(cached.FetchedAt) >= 0 {
+			markIndexConstituentCoverage(&cached)
+			ttl := 24 * time.Hour
+			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
+			if cached.QualityStatus == model.QualityUnknown {
+				ttl = 5 * time.Minute
+				for _, reason := range cached.QualityReasons {
+					if reason == "index_constituents_as_of_fallback_exhausted_without_confirmed_data" ||
+						reason == "index_constituents_as_of_fallback_exhausted_without_usable_quality" {
+						cacheEligible = true
+						break
+					}
+				}
+			} else if cached.QualityStatus != model.QualityValid {
+				ttl = 6 * time.Hour
+			}
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+				return &cached, true, nil
+			}
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("historical index constituents cache read failed", "symbol", indexSymbol, "as_of", asOfDate, "error", cacheErr)
+	}
+
+	var failures []string
+	var unknownCandidate *model.IndexConstituentSnapshot
+	for _, p := range providers {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchIndexConstituentsAsOf(ctx, indexSymbol, asOfDate)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot == nil || snapshot.AsOfDate != asOfDate {
+			failures = append(failures, p.Name()+": historical constituent response does not preserve requested as_of date")
+			continue
+		}
+		if len(snapshot.Items) > 0 && snapshot.ProviderReportDate == "" {
+			failures = append(failures, p.Name()+": historical constituent response has no source report date")
+			continue
+		}
+		if err := validateIndexConstituentsSnapshot(indexSymbol, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		markIndexConstituentCoverage(snapshot)
+		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
+			if betterUnknownIndexConstituentSnapshot(snapshot, unknownCandidate) {
+				unknownCandidate = snapshot
+			}
+			continue
+		}
+		if payload, err := json.Marshal(snapshot); err == nil {
+			ttl := 24 * time.Hour
+			if snapshot.QualityStatus != model.QualityValid {
+				ttl = 6 * time.Hour
+			}
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+				s.logger.Warn("historical index constituents cache write failed", "symbol", indexSymbol, "as_of", asOfDate, "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("historical index constituents cache encode failed", "symbol", indexSymbol, "as_of", asOfDate, "error", err)
+		}
+		return snapshot, false, nil
+	}
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		reason := "index_constituents_as_of_fallback_exhausted_without_usable_quality"
+		if len(unknownCandidate.Items) == 0 {
+			reason = "index_constituents_as_of_fallback_exhausted_without_confirmed_data"
+		}
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if payload, err := json.Marshal(unknownCandidate); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, 5*time.Minute); cacheErr != nil {
+				s.logger.Warn("historical index constituents unknown cache write failed", "symbol", indexSymbol, "as_of", asOfDate, "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("historical index constituents unknown cache encode failed", "symbol", indexSymbol, "as_of", asOfDate, "error", err)
+		}
+		return unknownCandidate, false, nil
+	}
+	return nil, false, fmt.Errorf("all historical index-constituent providers failed: %s", strings.Join(failures, "; "))
+}
+
 func (s *DataService) IndexDailyBars(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate string) (*model.IndexDailyBarsSnapshot, bool, error) {
 	return s.IndexDailyBarsFromSource(ctx, rawIndexSymbol, rawStartDate, rawEndDate, "")
+}
+
+// betterUnknownIndexDailyBarsSnapshot 在回退耗尽后优先保留日 K 条目数相同但成交量、成交额、涨跌幅更完整的快照。
+func betterUnknownIndexDailyBarsSnapshot(candidate, current *model.IndexDailyBarsSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	coverage := func(snapshot *model.IndexDailyBarsSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			if item.ChangePercent != nil {
+				count++
+			}
+			if item.Volume != nil {
+				count++
+			}
+			if item.Amount != nil {
+				count++
+			}
+			if item.ProviderTime != nil {
+				count++
+			}
+		}
+		if snapshot.ProviderTime != nil {
+			count++
+		}
+		return count
+	}
+	left, right := coverage(candidate), coverage(current)
+	if left != right {
+		return left > right
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime == nil {
+		return true
+	}
+	if candidate.ProviderTime == nil && current.ProviderTime != nil {
+		return false
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime != nil && !candidate.ProviderTime.Equal(*current.ProviderTime) {
+		return candidate.ProviderTime.After(*current.ProviderTime)
+	}
+	return false
 }
 
 func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate, rawSource string) (*model.IndexDailyBarsSnapshot, bool, error) {
@@ -483,10 +767,23 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 		var cached model.IndexDailyBarsSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			ttl := 15 * time.Minute
+			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
 			if cached.QualityStatus != model.QualityValid {
 				ttl = 3 * time.Minute
 			}
-			if time.Since(cached.FetchedAt) < ttl {
+			if cached.QualityStatus == model.QualityUnknown {
+				fallbackExhausted := false
+				for _, reason := range cached.QualityReasons {
+					if reason == "index_daily_bars_fallback_exhausted_without_confirmed_data" ||
+						reason == "index_daily_bars_fallback_exhausted_without_usable_quality" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				// 多 Provider 场景忽略未记录回退耗尽的 unknown 缓存，包括“有 K 线条目但质量未知”的旧缓存。
+				cacheEligible = fallbackExhausted || len(providers) <= 1
+			}
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
 		}
@@ -494,6 +791,7 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 		s.logger.Warn("index daily-bars cache read failed", "symbol", indexSymbol, "error", cacheErr)
 	}
 	var failures []string
+	var unknownCandidate *model.IndexDailyBarsSnapshot
 	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -505,6 +803,18 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 		}
 		if err := validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate, snapshot); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
+			// 无数据，或虽有 K 线但无法确认快照质量时，都先让后续来源尝试。
+			if betterUnknownIndexDailyBarsSnapshot(snapshot, unknownCandidate) {
+				unknownCandidate = snapshot
+			}
+			if len(snapshot.Items) == 0 {
+				failures = append(failures, p.Name()+": index daily bars are empty and cannot be confirmed")
+			} else {
+				failures = append(failures, p.Name()+": index daily bars contain rows but snapshot quality is unknown")
+			}
 			continue
 		}
 		sort.Slice(snapshot.Items, func(i, j int) bool { return snapshot.Items[i].TradeDate < snapshot.Items[j].TradeDate })
@@ -520,6 +830,20 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 			s.logger.Warn("index daily-bars cache encode failed", "symbol", indexSymbol, "error", err)
 		}
 		return snapshot, false, nil
+	}
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		reason := "index_daily_bars_fallback_exhausted_without_usable_quality"
+		if len(unknownCandidate.Items) == 0 {
+			reason = "index_daily_bars_fallback_exhausted_without_confirmed_data"
+		}
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if payload, err := json.Marshal(unknownCandidate); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, 3*time.Minute); cacheErr != nil {
+				s.logger.Warn("index daily-bars unknown cache write failed", "symbol", indexSymbol, "error", cacheErr)
+			}
+		}
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all index daily-bars providers failed: %s", strings.Join(failures, "; "))
 }

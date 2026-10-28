@@ -24,7 +24,7 @@ const (
 	tushareStockBasicVersion   = "tushare-stock-basic-v1"
 	tushareCalendarVersion     = "tushare-trade-calendar-v1"
 	tushareFundamentalsVersion = "tushare-fina-indicator-v1"
-	tushareValuationVersion    = "tushare-daily-basic-v1"
+	tushareValuationVersion    = "tushare-daily-basic-v2"
 )
 
 // tushareTable 为 Tushare Pro 的通用字段/行响应提供按列名读取能力。
@@ -223,7 +223,7 @@ func (p *Tushare) FetchStockBasic(ctx context.Context, rawSymbol string) (*model
 		return nil, fmt.Errorf("Tushare stock_basic 未返回 %s", symbol)
 	}
 	var selected []json.RawMessage
-	for _, row := range table.rows {
+	for index, row := range table.rows {
 		code, readErr := table.stringValue(row, "ts_code")
 		if readErr != nil {
 			return nil, readErr
@@ -232,8 +232,10 @@ func (p *Tushare) FetchStockBasic(ctx context.Context, rawSymbol string) (*model
 		if normErr != nil || canonical != symbol {
 			return nil, fmt.Errorf("Tushare stock_basic 返回证券代码不匹配: requested=%s returned=%q", symbol, code)
 		}
+		if selected != nil {
+			return nil, fmt.Errorf("Tushare stock_basic 第 %d 行重复返回证券 %s", index, symbol)
+		}
 		selected = row
-		break
 	}
 	if selected == nil {
 		return nil, fmt.Errorf("Tushare stock_basic 未找到请求证券 %s", symbol)
@@ -460,7 +462,309 @@ func tushareFundamentalDefinitions() []struct {
 }
 
 // FetchFundamentals reads one explicit report period and preserves the publication date separately.
+type tushareStatementMetricDefinition struct {
+	field    string
+	key      string
+	name     string
+	unit     string
+	required bool
+}
+
+type tushareStatementDefinition struct {
+	apiName  string
+	category string
+	metrics  []tushareStatementMetricDefinition
+}
+
+// tushareStatementDefinitions 按 Tushare 官方字段契约映射三张 A 股合并财务报表；不把未知字段或缺失值补零。
+func tushareStatementDefinitions() []tushareStatementDefinition {
+	return []tushareStatementDefinition{
+		{
+			apiName: "income", category: "income_statement",
+			metrics: []tushareStatementMetricDefinition{
+				{field: "basic_eps", key: "basic_eps", name: "基本每股收益", unit: "CNY/share"},
+				{field: "diluted_eps", key: "diluted_eps", name: "稀释每股收益", unit: "CNY/share"},
+				{field: "prem_earned", key: "earned_premiums", name: "已赚保费", unit: "CNY"},
+				{field: "comm_income", key: "commission_income", name: "手续费及佣金收入", unit: "CNY"},
+				{field: "n_oth_income", key: "net_other_income", name: "其他收益", unit: "CNY"},
+				{field: "n_oth_b_income", key: "net_other_business_income", name: "其他业务净收益", unit: "CNY"},
+				{field: "oth_b_income", key: "other_business_income", name: "其他业务收入", unit: "CNY"},
+				{field: "fv_value_chg_gain", key: "fair_value_change_gain", name: "公允价值变动收益", unit: "CNY"},
+				{field: "ass_invest_income", key: "associate_investment_income", name: "对联营企业和合营企业的投资收益", unit: "CNY"},
+				{field: "forex_gain", key: "foreign_exchange_gain", name: "汇兑收益", unit: "CNY"},
+				{field: "int_exp", key: "interest_expenses", name: "利息支出", unit: "CNY"},
+				{field: "comm_exp", key: "commission_expenses", name: "手续费及佣金支出", unit: "CNY"},
+				{field: "biz_tax_surchg", key: "business_tax_surcharges", name: "营业税金及附加", unit: "CNY"},
+				{field: "total_revenue", key: "total_revenue", required: true, name: "营业总收入", unit: "CNY"},
+				{field: "revenue", key: "revenue", name: "营业收入", unit: "CNY"},
+				{field: "int_income", key: "interest_income", name: "利息收入", unit: "CNY"},
+				{field: "n_commis_income", key: "net_commission_income", name: "手续费及佣金净收入", unit: "CNY"},
+				{field: "invest_income", key: "investment_income", name: "投资净收益", unit: "CNY"},
+				{field: "total_cogs", key: "total_cogs", name: "营业总成本", unit: "CNY"},
+				{field: "oper_cost", key: "operating_cost", name: "营业成本", unit: "CNY"},
+				{field: "sell_exp", key: "selling_expenses", name: "销售费用", unit: "CNY"},
+				{field: "admin_exp", key: "administrative_expenses", name: "管理费用", unit: "CNY"},
+				{field: "fin_exp", key: "financial_expenses", name: "财务费用", unit: "CNY"},
+				{field: "assets_impair_loss", key: "asset_impairment_loss", name: "资产减值损失", unit: "CNY"},
+				{field: "operate_profit", key: "operating_profit", name: "营业利润", unit: "CNY"},
+				{field: "non_oper_income", key: "non_operating_income", name: "营业外收入", unit: "CNY"},
+				{field: "non_oper_exp", key: "non_operating_expenses", name: "营业外支出", unit: "CNY"},
+				{field: "total_profit", key: "total_profit", required: true, name: "利润总额", unit: "CNY"},
+				{field: "income_tax", key: "income_tax", name: "所得税费用", unit: "CNY"},
+				{field: "n_income", key: "net_income", required: true, name: "净利润（含少数股东损益）", unit: "CNY"},
+				{field: "n_income_attr_p", key: "parent_net_income", required: true, name: "归属于母公司股东的净利润", unit: "CNY"},
+				{field: "minority_gain", key: "minority_profit", name: "少数股东损益", unit: "CNY"},
+				{field: "oth_compr_income", key: "other_comprehensive_income", name: "其他综合收益", unit: "CNY"},
+				{field: "t_compr_income", key: "total_comprehensive_income", name: "综合收益总额", unit: "CNY"},
+				{field: "compr_inc_attr_p", key: "parent_comprehensive_income", name: "归属于母公司股东的综合收益总额", unit: "CNY"},
+				{field: "ebit", key: "ebit", name: "息税前利润", unit: "CNY"},
+				{field: "ebitda", key: "ebitda", name: "息税折旧摊销前利润", unit: "CNY"},
+				{field: "rd_exp", key: "rd_expenses", name: "研发费用", unit: "CNY"},
+				{field: "fin_exp_int_exp", key: "financial_interest_expenses", name: "财务费用中的利息费用", unit: "CNY"},
+				{field: "fin_exp_int_inc", key: "financial_interest_income", name: "财务费用中的利息收入", unit: "CNY"},
+			},
+		},
+		{
+			apiName: "balancesheet", category: "balance_sheet",
+			metrics: []tushareStatementMetricDefinition{
+				{field: "total_share", key: "total_shares", name: "期末总股本", unit: "shares"},
+				{field: "special_rese", key: "special_reserve", name: "专项储备", unit: "CNY"},
+				{field: "receiv_financing", key: "receivables_financing", name: "应收款项融资", unit: "CNY"},
+				{field: "accounts_receiv_bill", key: "notes_and_accounts_receivable", name: "应收票据及应收账款", unit: "CNY"},
+				{field: "accounts_pay", key: "notes_and_accounts_payable", name: "应付票据及应付账款", unit: "CNY"},
+				{field: "oth_rcv_total", key: "total_other_receivables", name: "其他应收款合计", unit: "CNY"},
+				{field: "fix_assets_total", key: "total_fixed_assets", name: "固定资产合计", unit: "CNY"},
+				{field: "use_right_assets", key: "right_of_use_assets", name: "使用权资产", unit: "CNY"},
+				{field: "lease_liab", key: "lease_liabilities", name: "租赁负债", unit: "CNY"},
+				{field: "defer_tax_liab", key: "deferred_tax_liabilities", name: "递延所得税负债", unit: "CNY"},
+				{field: "oth_cur_liab", key: "other_current_liabilities", name: "其他流动负债", unit: "CNY"},
+				{field: "debt_invest", key: "debt_investments", name: "债权投资", unit: "CNY"},
+				{field: "oth_debt_invest", key: "other_debt_investments", name: "其他债权投资", unit: "CNY"},
+				{field: "cap_rese", key: "capital_reserve", name: "资本公积金", unit: "CNY"},
+				{field: "surplus_rese", key: "surplus_reserve", name: "盈余公积金", unit: "CNY"},
+				{field: "undistr_porfit", key: "undistributed_profit", name: "未分配利润", unit: "CNY"},
+				{field: "money_cap", key: "cash_and_bank", name: "货币资金", unit: "CNY"},
+				{field: "trad_asset", key: "trading_financial_assets", name: "交易性金融资产", unit: "CNY"},
+				{field: "notes_receiv", key: "notes_receivable", name: "应收票据", unit: "CNY"},
+				{field: "accounts_receiv", key: "accounts_receivable", name: "应收账款", unit: "CNY"},
+				{field: "oth_receiv", key: "other_receivables", name: "其他应收款", unit: "CNY"},
+				{field: "prepayment", key: "prepayments", name: "预付款项", unit: "CNY"},
+				{field: "div_receiv", key: "dividends_receivable", name: "应收股利", unit: "CNY"},
+				{field: "int_receiv", key: "interest_receivable", name: "应收利息", unit: "CNY"},
+				{field: "inventories", key: "inventories", name: "存货", unit: "CNY"},
+				{field: "oth_cur_assets", key: "other_current_assets", name: "其他流动资产", unit: "CNY"},
+				{field: "total_cur_assets", key: "total_current_assets", name: "流动资产合计", unit: "CNY"},
+				{field: "lt_eqt_invest", key: "long_term_equity_investments", name: "长期股权投资", unit: "CNY"},
+				{field: "fix_assets", key: "fixed_assets", name: "固定资产", unit: "CNY"},
+				{field: "cip", key: "construction_in_progress", name: "在建工程", unit: "CNY"},
+				{field: "const_materials", key: "construction_materials", name: "工程物资", unit: "CNY"},
+				{field: "intan_assets", key: "intangible_assets", name: "无形资产", unit: "CNY"},
+				{field: "r_and_d", key: "research_and_development_assets", name: "研发支出", unit: "CNY"},
+				{field: "goodwill", key: "goodwill", name: "商誉", unit: "CNY"},
+				{field: "defer_tax_assets", key: "deferred_tax_assets", name: "递延所得税资产", unit: "CNY"},
+				{field: "total_nca", key: "total_non_current_assets", name: "非流动资产合计", unit: "CNY"},
+				{field: "total_assets", key: "total_assets", required: true, name: "资产总计", unit: "CNY"},
+				{field: "st_borr", key: "short_term_borrowings", name: "短期借款", unit: "CNY"},
+				{field: "notes_payable", key: "notes_payable", name: "应付票据", unit: "CNY"},
+				{field: "acct_payable", key: "accounts_payable", name: "应付账款", unit: "CNY"},
+				{field: "payroll_payable", key: "payroll_payable", name: "应付职工薪酬", unit: "CNY"},
+				{field: "taxes_payable", key: "taxes_payable", name: "应交税费", unit: "CNY"},
+				{field: "div_payable", key: "dividends_payable", name: "应付股利", unit: "CNY"},
+				{field: "oth_payable", key: "other_payables", name: "其他应付款", unit: "CNY"},
+				{field: "non_cur_liab_due_1y", key: "non_current_liabilities_due_within_one_year", name: "一年内到期的非流动负债", unit: "CNY"},
+				{field: "total_cur_liab", key: "total_current_liabilities", name: "流动负债合计", unit: "CNY"},
+				{field: "lt_borr", key: "long_term_borrowings", name: "长期借款", unit: "CNY"},
+				{field: "bond_payable", key: "bonds_payable", name: "应付债券", unit: "CNY"},
+				{field: "total_ncl", key: "total_non_current_liabilities", name: "非流动负债合计", unit: "CNY"},
+				{field: "total_liab", key: "total_liabilities", required: true, name: "负债合计", unit: "CNY"},
+				{field: "treasury_share", key: "treasury_shares", name: "库存股", unit: "CNY"},
+				{field: "minority_int", key: "minority_interest", name: "少数股东权益", unit: "CNY"},
+				{field: "total_hldr_eqy_exc_min_int", key: "equity_excluding_minority", name: "股东权益合计（不含少数股东权益）", unit: "CNY"},
+				{field: "total_hldr_eqy_inc_min_int", key: "equity_including_minority", required: true, name: "股东权益合计（含少数股东权益）", unit: "CNY"},
+				{field: "total_liab_hldr_eqy", key: "total_liabilities_and_equity", name: "负债和股东权益总计", unit: "CNY"},
+				{field: "contract_assets", key: "contract_assets", name: "合同资产", unit: "CNY"},
+				{field: "contract_liab", key: "contract_liabilities", name: "合同负债", unit: "CNY"},
+			},
+		},
+		{
+			apiName: "cashflow", category: "cash_flow_statement",
+			metrics: []tushareStatementMetricDefinition{
+				{field: "net_profit", key: "net_profit", name: "净利润", unit: "CNY"},
+				{field: "recp_tax_rends", key: "cash_received_tax_refunds", name: "收到的税费返还", unit: "CNY"},
+				{field: "n_recp_disp_fiolta", key: "net_cash_received_from_long_lived_asset_disposals", name: "处置固定资产等长期资产收回的现金净额", unit: "CNY"},
+				{field: "n_recp_disp_sobu", key: "net_cash_received_from_subsidiary_disposals", name: "处置子公司及其他营业单位收到的现金净额", unit: "CNY"},
+				{field: "oth_cash_recp_ral_fnc_act", key: "other_financing_cash_received", name: "收到其他与筹资活动有关的现金", unit: "CNY"},
+				{field: "oth_cashpay_ral_fnc_act", key: "other_financing_cash_paid", name: "支付其他与筹资活动有关的现金", unit: "CNY"},
+				{field: "incl_dvd_profit_paid_sc_ms", key: "dividends_paid_to_minority_shareholders", name: "支付给少数股东的股利利润", unit: "CNY"},
+				{field: "prov_depr_assets", key: "asset_impairment_provision", name: "资产减值准备", unit: "CNY"},
+				{field: "depr_fa_coga_dpba", key: "fixed_asset_depreciation", name: "固定资产等折旧", unit: "CNY"},
+				{field: "amort_intang_assets", key: "intangible_asset_amortization", name: "无形资产摊销", unit: "CNY"},
+				{field: "use_right_asset_dep", key: "right_of_use_asset_depreciation", name: "使用权资产折旧", unit: "CNY"},
+				{field: "im_n_incr_cash_equ", key: "indirect_net_increase_cash_equivalents", name: "现金及现金等价物净增加额（间接法）", unit: "CNY"},
+				{field: "credit_impa_loss", key: "credit_impairment_loss", name: "信用减值损失", unit: "CNY"},
+				{field: "finan_exp", key: "financial_expenses", name: "财务费用", unit: "CNY"},
+				{field: "c_fr_sale_sg", key: "cash_received_from_sales", name: "销售商品、提供劳务收到的现金", unit: "CNY"},
+				{field: "c_fr_oth_operate_a", key: "cash_received_from_other_operating_activities", name: "收到其他与经营活动有关的现金", unit: "CNY"},
+				{field: "c_inf_fr_operate_a", key: "total_cash_inflows_operating", name: "经营活动现金流入小计", unit: "CNY"},
+				{field: "c_paid_goods_s", key: "cash_paid_for_goods_and_services", name: "购买商品、接受劳务支付的现金", unit: "CNY"},
+				{field: "c_paid_to_for_empl", key: "cash_paid_to_employees", name: "支付给职工以及为职工支付的现金", unit: "CNY"},
+				{field: "c_paid_for_taxes", key: "cash_paid_for_taxes", name: "支付的各项税费", unit: "CNY"},
+				{field: "oth_cash_pay_oper_act", key: "cash_paid_for_other_operating_activities", name: "支付其他与经营活动有关的现金", unit: "CNY"},
+				{field: "st_cash_out_act", key: "total_cash_outflows_operating", name: "经营活动现金流出小计", unit: "CNY"},
+				{field: "n_cashflow_act", key: "net_operating_cash_flow", required: true, name: "经营活动产生的现金流量净额", unit: "CNY"},
+				{field: "oth_recp_ral_inv_act", key: "cash_received_from_other_investing_activities", name: "收到其他与投资活动有关的现金", unit: "CNY"},
+				{field: "c_disp_withdrwl_invest", key: "cash_received_from_investment_recovery", name: "收回投资收到的现金", unit: "CNY"},
+				{field: "c_recp_return_invest", key: "cash_received_from_investment_returns", name: "取得投资收益收到的现金", unit: "CNY"},
+				{field: "stot_inflows_inv_act", key: "total_cash_inflows_investing", name: "投资活动现金流入小计", unit: "CNY"},
+				{field: "c_pay_acq_const_fiolta", key: "cash_paid_for_long_term_assets", name: "购建固定资产等支付的现金", unit: "CNY"},
+				{field: "c_paid_invest", key: "cash_paid_for_investments", name: "投资支付的现金", unit: "CNY"},
+				{field: "oth_pay_ral_inv_act", key: "cash_paid_for_other_investing_activities", name: "支付其他与投资活动有关的现金", unit: "CNY"},
+				{field: "stot_out_inv_act", key: "total_cash_outflows_investing", name: "投资活动现金流出小计", unit: "CNY"},
+				{field: "n_cashflow_inv_act", key: "net_investing_cash_flow", required: true, name: "投资活动产生的现金流量净额", unit: "CNY"},
+				{field: "c_recp_borrow", key: "cash_received_from_borrowings", name: "取得借款收到的现金", unit: "CNY"},
+				{field: "stot_cash_in_fnc_act", key: "total_cash_inflows_financing", name: "筹资活动现金流入小计", unit: "CNY"},
+				{field: "c_prepay_amt_borr", key: "cash_paid_for_debt_repayment", name: "偿还债务支付的现金", unit: "CNY"},
+				{field: "c_pay_dist_dpcp_int_exp", key: "cash_paid_for_dividends_profit_interest", name: "分配股利、利润或偿付利息支付的现金", unit: "CNY"},
+				{field: "stot_cashout_fnc_act", key: "total_cash_outflows_financing", name: "筹资活动现金流出小计", unit: "CNY"},
+				{field: "n_cash_flows_fnc_act", key: "net_financing_cash_flow", required: true, name: "筹资活动产生的现金流量净额", unit: "CNY"},
+				{field: "eff_fx_flu_cash", key: "effect_of_fx_changes_on_cash", name: "汇率变动对现金的影响", unit: "CNY"},
+				{field: "n_incr_cash_cash_equ", key: "net_increase_cash_equivalents", name: "现金及现金等价物净增加额", unit: "CNY"},
+				{field: "c_cash_equ_beg_period", key: "beginning_cash_and_equivalents", name: "期初现金及现金等价物余额", unit: "CNY"},
+				{field: "c_cash_equ_end_period", key: "ending_cash_and_equivalents", name: "期末现金及现金等价物余额", unit: "CNY"},
+				{field: "free_cashflow", key: "free_cash_flow", name: "企业自由现金流量", unit: "CNY"},
+				{field: "im_net_cashflow_oper_act", key: "indirect_net_operating_cash_flow", name: "经营活动现金流量净额（间接法）", unit: "CNY"},
+			},
+		},
+	}
+}
+// tushareStatementReportType 返回合并报表的查询类型：一季报本身是单季度值，后续季度才取单季合并类型。
+func tushareStatementReportType(apiName, periodDate string) string {
+	if apiName != "income" && apiName != "cashflow" {
+		return "1"
+	}
+	if strings.HasSuffix(periodDate, "-03-31") {
+		return "1"
+	}
+	return "2"
+}
+
+func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompact, periodDate string, definition tushareStatementDefinition) (model.FundamentalSection, error) {
+	fields := []string{"ts_code", "ann_date", "f_ann_date", "end_date", "report_type"}
+	for _, metric := range definition.metrics {
+		fields = append(fields, metric.field)
+	}
+	// 利润表/现金流量表：Q1 使用 report_type=1，Q2-Q4 使用 report_type=2 的单季合并报表；资产负债表各季度使用 report_type=1 的期末合并报表。
+	reportType := tushareStatementReportType(definition.apiName, periodDate)
+	table, err := p.fetchCapabilityTable(ctx, definition.apiName, map[string]string{
+		"ts_code": symbol, "period": periodCompact, "report_type": reportType,
+	}, strings.Join(fields, ","))
+	if err != nil {
+		return model.FundamentalSection{}, err
+	}
+
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	today := time.Now().In(loc).Format("2006-01-02")
+	var selected []json.RawMessage
+	selectedPublicationDate := ""
+	for rowIndex, row := range table.rows {
+		rawCode, readErr := table.stringValue(row, "ts_code")
+		if readErr != nil {
+			return model.FundamentalSection{}, readErr
+		}
+		rowSymbol, symbolErr := normalize.NormalizeSymbol(rawCode)
+		if symbolErr != nil || rowSymbol != symbol {
+			return model.FundamentalSection{}, fmt.Errorf("Tushare %s 第 %d 行证券代码不匹配: %q", definition.apiName, rowIndex, rawCode)
+		}
+		rawEndDate, readErr := table.stringValue(row, "end_date")
+		if readErr != nil {
+			return model.FundamentalSection{}, readErr
+		}
+		endDate, dateErr := tushareISODate(rawEndDate)
+		if dateErr != nil {
+			return model.FundamentalSection{}, fmt.Errorf("Tushare %s 第 %d 行报告期无效: %q", definition.apiName, rowIndex, rawEndDate)
+		}
+		if endDate != periodDate {
+			continue
+		}
+		rowReportType, readErr := table.stringValue(row, "report_type")
+		if readErr != nil {
+			return model.FundamentalSection{}, readErr
+		}
+		if strings.TrimSpace(rowReportType) != reportType {
+			continue
+		}
+
+		publicationRaw, readErr := table.stringValue(row, "f_ann_date")
+		if readErr != nil {
+			return model.FundamentalSection{}, readErr
+		}
+		if strings.TrimSpace(publicationRaw) == "" {
+			publicationRaw, readErr = table.stringValue(row, "ann_date")
+			if readErr != nil {
+				return model.FundamentalSection{}, readErr
+			}
+		}
+		if strings.TrimSpace(publicationRaw) == "" {
+			continue
+		}
+		publicationDate, dateErr := tushareISODate(publicationRaw)
+		if dateErr != nil || publicationDate < periodDate || publicationDate > today {
+			continue
+		}
+		if selected == nil || publicationDate > selectedPublicationDate {
+			selected = row
+			selectedPublicationDate = publicationDate
+		}
+	}
+	if selected == nil {
+		return model.FundamentalSection{
+			Category: definition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},
+			QualityStatus: model.QualityUnknown,
+			QualityReasons: []string{"no_statement_row_with_confirmed_publication_date_for_requested_period"},
+		}, nil
+	}
+
+	section := model.FundamentalSection{
+		Category: definition.category, ReportDate: periodDate, PublicationDate: selectedPublicationDate,
+		Metrics: make([]model.FundamentalMetric, 0, len(definition.metrics)),
+		QualityStatus: model.QualityValid,
+	}
+	requiredMissingCount := 0
+	for _, metric := range definition.metrics {
+		value, valueErr := table.optionalFloat(selected, metric.field)
+		if valueErr != nil || value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) {
+			// 非关键明细科目允许按行业/报表结构缺失；只记录关键汇总科目的缺失为质量问题。
+			if metric.required {
+				requiredMissingCount++
+				reason := "required_statement_metric_missing_or_invalid:" + metric.field
+				section.QualityReasons = appendTushareReason(section.QualityReasons, reason)
+			}
+			continue
+		}
+		section.Metrics = append(section.Metrics, model.FundamentalMetric{
+			Key: metric.key, Name: metric.name, Value: *value, Unit: metric.unit, SourceField: metric.field,
+		})
+	}
+	section.HasData = len(section.Metrics) > 0
+	if requiredMissingCount > 0 {
+		section.QualityStatus = model.QualityDegraded
+		section.QualityReasons = appendTushareReason(section.QualityReasons, "one_or_more_required_statement_fields_missing_or_invalid")
+	}
+	if !section.HasData {
+		section.QualityStatus = model.QualityDegraded
+		section.QualityReasons = appendTushareReason(section.QualityReasons, "no_numeric_statement_fields_available")
+	}
+	return section, nil
+}
+
+
 func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year, quarter int) (*model.FundamentalsSnapshot, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	symbol, err := tushareExchangeCode(rawSymbol)
 	if err != nil {
 		return nil, err
@@ -471,11 +775,12 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	}
 	periodCompact := period.Format("20060102")
 	fields := "ts_code,ann_date,end_date,eps,dt_eps,roe,roe_waa,roe_dt,roa,netprofit_margin,grossprofit_margin,assets_turn,inv_turn,ar_turn,ca_turn,fa_turn,netprofit_yoy,or_yoy,assets_yoy,eqt_yoy,current_ratio,quick_ratio,cash_ratio,debt_to_assets,ocf_to_or,ocf_to_profit,ocf_to_debt,dupont_roe,dupont_asset_turn,dupont_pnitoni,dupont_tax_burden,dupont_intburden"
-	table, err := p.fetchCapabilityTable(ctx, "fina_indicator", map[string]string{
+	table, indicatorErr := p.fetchCapabilityTable(ctx, "fina_indicator", map[string]string{
 		"ts_code": symbol, "period": periodCompact,
 	}, fields)
-	if err != nil {
-		return nil, err
+	if indicatorErr != nil {
+		// 指标端点权限或响应失败不应阻断独立的利润表、资产负债表和现金流量表端点。
+		table = &tushareTable{positions: map[string]int{}, rows: [][]json.RawMessage{}}
 	}
 	var selected []json.RawMessage
 	selectedAnnouncementDate := ""
@@ -523,9 +828,6 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			selectedAnnouncementDate = announcementDate
 		}
 	}
-	if selected == nil {
-		return nil, fmt.Errorf("Tushare fina_indicator 未返回 %s 报告期 %s 的记录", symbol, period.Format("2006-01-02"))
-	}
 	now := time.Now().UTC()
 	sections := make([]model.FundamentalSection, 0, 6)
 	snapshotReasons := []string{}
@@ -535,6 +837,23 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	}
 	hasData := false
 	for _, definition := range tushareFundamentalDefinitions() {
+		if selected == nil {
+			allSectionsComplete = false
+			sectionQuality := model.QualityUnknown
+			sectionReasons := []string{"no_published_indicator_row_for_requested_period"}
+			if indicatorErr != nil {
+				sectionQuality = model.QualityDegraded
+				sectionReasons = []string{"provider_fina_indicator_endpoint_unavailable"}
+				snapshotReasons = appendTushareReason(snapshotReasons, "provider_fina_indicator_endpoint_unavailable")
+			} else {
+				snapshotReasons = appendTushareReason(snapshotReasons, "no_published_indicator_row_for_requested_period")
+			}
+			sections = append(sections, model.FundamentalSection{
+				Category: definition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},
+				HasData: false, QualityStatus: sectionQuality, QualityReasons: sectionReasons,
+			})
+			continue
+		}
 		metrics := make([]model.FundamentalMetric, 0, len(definition.metrics))
 		sectionReasons := []string{}
 		for _, metricDefinition := range definition.metrics {
@@ -576,9 +895,39 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			QualityStatus: sectionStatus, QualityReasons: sectionReasons,
 		})
 	}
-	if !hasData {
-		return nil, fmt.Errorf("Tushare fina_indicator 在 %s 报告期没有可用指标", period.Format("2006-01-02"))
+	// 将 Tushare 的三张财务报表作为独立分区追加。某个报表权限不足或缺失时，
+	// 仅降级该分区，不能丢弃已经取得的六组财务指标。
+	for _, statementDefinition := range tushareStatementDefinitions() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		section, statementErr := p.fetchStatementSection(
+			ctx, symbol, periodCompact, periodDate, statementDefinition,
+		)
+		if statementErr != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			section = model.FundamentalSection{
+				Category: statementDefinition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},
+				QualityStatus: model.QualityDegraded,
+				QualityReasons: []string{"provider_statement_endpoint_unavailable"},
+			}
+			snapshotReasons = appendTushareReason(snapshotReasons, statementDefinition.category+"_provider_unavailable")
+		}
+		if section.HasData {
+			hasData = true
+		}
+		if !section.HasData || section.QualityStatus != model.QualityValid {
+			allSectionsComplete = false
+			snapshotReasons = appendTushareReason(snapshotReasons, statementDefinition.category+"_incomplete_or_unavailable")
+		}
+		sections = append(sections, section)
 	}
+	if !hasData {
+		return nil, fmt.Errorf("Tushare 在 %s 报告期没有可用财务指标或报表字段", period.Format("2006-01-02"))
+	}
+
 	status := model.QualityDegraded
 	if allSectionsComplete {
 		status = model.QualityValid
@@ -691,7 +1040,7 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 	}
 	table, err := p.fetchCapabilityTable(ctx, "daily_basic", map[string]string{
 		"ts_code": strings.Join(symbols, ","), "trade_date": compactDate,
-	}, "ts_code,trade_date,pe,pe_ttm,pb,ps_ttm")
+	}, "ts_code,trade_date,pe,pe_ttm,pb,ps_ttm,turnover_rate,turnover_rate_f,volume_ratio,dv_ratio,dv_ttm")
 	if err != nil {
 		return nil, err
 	}
@@ -743,13 +1092,37 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		if readErr != nil {
 			return nil, readErr
 		}
+		turnoverRate, readErr := table.optionalFloat(row, "turnover_rate")
+		if readErr != nil {
+			return nil, readErr
+		}
+		floatTurnoverRate, readErr := table.optionalFloat(row, "turnover_rate_f")
+		if readErr != nil {
+			return nil, readErr
+		}
+		volumeRatio, readErr := table.optionalFloat(row, "volume_ratio")
+		if readErr != nil {
+			return nil, readErr
+		}
+		dividendYield, readErr := table.optionalFloat(row, "dv_ratio")
+		if readErr != nil {
+			return nil, readErr
+		}
+		dividendYieldTTM, readErr := table.optionalFloat(row, "dv_ttm")
+		if readErr != nil {
+			return nil, readErr
+		}
 		itemReasons := []string{"provider_exact_snapshot_time_not_exposed", "provider_pcf_ttm_not_supported_by_tushare_daily_basic", "provider_pe_mrq_not_supported_by_tushare_daily_basic"}
-		if peStatic == nil || peTTM == nil || pb == nil || psTTM == nil {
-			itemReasons = appendTushareReason(itemReasons, "one_or_more_valuation_metrics_missing")
+		if peStatic == nil || peTTM == nil || pb == nil || psTTM == nil ||
+			turnoverRate == nil || floatTurnoverRate == nil || volumeRatio == nil ||
+			dividendYield == nil || dividendYieldTTM == nil {
+			itemReasons = appendTushareReason(itemReasons, "one_or_more_daily_basic_metrics_missing")
 		}
 		bySymbol[symbol] = values{item: model.ValuationItem{
 			Symbol: symbol, Code: strings.Split(symbol, ".")[0],
 			PETTM: peTTM, PEMRQ: nil, PEStatic: peStatic, PBMRQ: pb, PSTTM: psTTM, PCFTTM: nil,
+			TurnoverRatePercent: turnoverRate, FloatTurnoverRatePercent: floatTurnoverRate,
+			VolumeRatio: volumeRatio, DividendYieldPercent: dividendYield, DividendYieldTTMPercent: dividendYieldTTM,
 			Source: p.Name(), SourceVersion: tushareValuationVersion, FetchedAt: now,
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		}}
@@ -850,6 +1223,13 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	}
 	parsedDate, _ := time.Parse("20060102", compactDate)
 	tradeDate = parsedDate.Format("2006-01-02")
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	if tradeDate > time.Now().In(loc).Format("2006-01-02") {
+		return nil, errors.New("Tushare 涨跌停池交易日期不能晚于中国市场当前日期")
+	}
 	table, err := p.fetchCapabilityTable(ctx, "limit_list_d", map[string]string{
 		"trade_date": compactDate, "limit_type": limitType,
 	}, "trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit")
@@ -862,6 +1242,7 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	if len(table.rows) >= 2500 {
 		reasons = appendTushareReason(reasons, "provider_response_may_be_capped_at_2500_rows")
 	}
+	seenSymbols := make(map[string]struct{}, len(table.rows))
 	for index, row := range table.rows {
 		rowDateRaw, readErr := table.stringValue(row, "trade_date")
 		if readErr != nil {
@@ -884,8 +1265,13 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行证券代码无效: %q", index, rawSymbol)
 		}
 		if !isTushareAShareSymbol(symbol) {
+			reasons = appendTushareReason(reasons, "provider_non_a_share_security_rows_excluded")
 			continue
 		}
+		if _, duplicate := seenSymbols[symbol]; duplicate {
+			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行重复证券 %s", index, symbol)
+		}
+		seenSymbols[symbol] = struct{}{}
 		name, readErr := table.stringValue(row, "name")
 		if readErr != nil || strings.TrimSpace(name) == "" {
 			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行缺少证券名称", index)
@@ -953,9 +1339,14 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		})
 	}
+	providerReportDate := ""
+	if len(table.rows) > 0 {
+		// 原始结果行已逐条核对 trade_date；只有确实收到该日期的源记录时才填报表日期。
+		providerReportDate = tradeDate
+	}
 	if len(allItems) == 0 {
 		return &model.LimitPoolSnapshot{
-			PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: tradeDate,
+			PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: providerReportDate,
 			Total: 0, HasData: false, Items: []model.LimitPoolItem{},
 			Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
 			QualityStatus:  model.QualityUnknown,
@@ -967,7 +1358,7 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 		allItems = allItems[:limit]
 	}
 	return &model.LimitPoolSnapshot{
-		PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: tradeDate,
+		PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: providerReportDate,
 		Total: total, HasData: true, Items: allItems,
 		Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
@@ -990,6 +1381,13 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	}
 	parsedDate, _ := time.Parse("20060102", compactDate)
 	tradeDate = parsedDate.Format("2006-01-02")
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	if tradeDate > time.Now().In(loc).Format("2006-01-02") {
+		return nil, errors.New("Tushare 龙虎榜交易日期不能晚于中国市场当前日期")
+	}
 	if page < 1 || page > 1000 {
 		return nil, errors.New("Tushare 龙虎榜 page 必须在 1..1000")
 	}
@@ -1008,7 +1406,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		pages = (total + pageSize - 1) / pageSize
 	}
 	base := &model.DragonTigerSnapshot{
-		TradeDate: tradeDate, ProviderReportDate: tradeDate, Page: page, PageSize: pageSize,
+		TradeDate: tradeDate, ProviderReportDate: "", Page: page, PageSize: pageSize,
 		Total: total, Pages: pages, SourceReturned: 0, ExcludedNonAShareCount: 0,
 		HasData: false, HasMore: false, Items: []model.DragonTigerItem{},
 		Source: p.Name(), SourceVersion: "tushare-top-list-v1", FetchedAt: now,
@@ -1031,6 +1429,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	base.SourceReturned = len(rows)
 	base.HasMore = page < pages
 	base.Items = make([]model.DragonTigerItem, 0, len(rows))
+	seenSymbols := make(map[string]struct{}, len(rows))
 	for index, row := range rows {
 		rowDateRaw, readErr := table.stringValue(row, "trade_date")
 		if readErr != nil {
@@ -1050,8 +1449,13 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		}
 		if !isTushareAShareSymbol(symbol) {
 			base.ExcludedNonAShareCount++
+			base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_non_a_share_security_rows_excluded")
 			continue
 		}
+		if _, duplicate := seenSymbols[symbol]; duplicate {
+			return nil, fmt.Errorf("Tushare 龙虎榜第 %d 行重复证券 %s", start+index, symbol)
+		}
+		seenSymbols[symbol] = struct{}{}
 		name, readErr := table.stringValue(row, "name")
 		if readErr != nil || strings.TrimSpace(name) == "" {
 			return nil, fmt.Errorf("Tushare 龙虎榜第 %d 行缺少证券名称", start+index)
@@ -1106,6 +1510,8 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		})
 	}
+	// 只有实际收到且逐条核对过交易日的源记录，才能证明 ProviderReportDate。
+	base.ProviderReportDate = tradeDate
 	base.Returned = len(base.Items)
 	if total >= 10000 {
 		base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_response_may_be_capped_at_10000_rows")
@@ -1148,6 +1554,9 @@ func (p *Tushare) FetchStockAnnouncements(ctx context.Context, rawSymbol, rawSta
 	symbol, err := tushareExchangeCode(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tushare anns_d 仅支持普通 A 股股票，证券 %s 不在支持范围内", symbol)
 	}
 	startDate, endDate := strings.TrimSpace(rawStartDate), strings.TrimSpace(rawEndDate)
 	startCompact, err := tushareCompactDate(startDate)
@@ -1228,6 +1637,7 @@ func (p *Tushare) FetchStockAnnouncements(ctx context.Context, rawSymbol, rawSta
 		hash := sha256.Sum256([]byte(hashInput))
 		articleID := "tushare-" + hex.EncodeToString(hash[:12])
 		if _, duplicate := seen[articleID]; duplicate {
+			snapshotReasons = appendTushareReason(snapshotReasons, "provider_duplicate_announcement_rows_deduplicated")
 			continue
 		}
 		seen[articleID] = struct{}{}
@@ -1373,12 +1783,23 @@ func (p *Tushare) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 }
 
 type tushareWeightedConstituent struct {
-	symbol string
-	weight *float64
+	symbol   string
+	weight   *float64
+	excluded bool
 }
 
 // FetchIndexConstituents returns the most recent monthly weight snapshot available in four months.
 func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol string) (*model.IndexConstituentSnapshot, error) {
+	return p.fetchIndexConstituents(ctx, rawIndexSymbol, "")
+}
+
+// FetchIndexConstituentsAsOf returns the latest Tushare index-weight report on or before asOfDate.
+// It does not claim an effective-date interval for membership changes.
+func (p *Tushare) FetchIndexConstituentsAsOf(ctx context.Context, rawIndexSymbol, asOfDate string) (*model.IndexConstituentSnapshot, error) {
+	return p.fetchIndexConstituents(ctx, rawIndexSymbol, asOfDate)
+}
+
+func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, rawAsOfDate string) (*model.IndexConstituentSnapshot, error) {
 	indexSymbol, err := canonicalTushareIndexSymbol(rawIndexSymbol)
 	if err != nil {
 		return nil, err
@@ -1396,21 +1817,42 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	}
 	nowLocal := time.Now().In(loc)
 	today := nowLocal.Format("2006-01-02")
-	monthStart := time.Date(nowLocal.Year(), nowLocal.Month(), 1, 0, 0, 0, 0, loc)
+	requestedAsOfDate := strings.TrimSpace(rawAsOfDate)
+	anchorDate := nowLocal
+	lookbackMonths := 4
+	reasons := []string{"provider_constituent_date_is_latest_available_weight_snapshot_not_intraday"}
+	var asOfTime time.Time
+	if requestedAsOfDate != "" {
+		var parseErr error
+		asOfTime, parseErr = time.ParseInLocation("2006-01-02", requestedAsOfDate, loc)
+		if parseErr != nil || asOfTime.Format("2006-01-02") != requestedAsOfDate {
+			return nil, fmt.Errorf("Tushare 指数成分 as_of 日期必须使用 YYYY-MM-DD")
+		}
+		if requestedAsOfDate > today {
+			return nil, fmt.Errorf("Tushare 指数成分 as_of 日期不能晚于当前日期")
+		}
+		anchorDate = asOfTime
+		lookbackMonths = 120
+		reasons = []string{"provider_as_of_uses_latest_index_weight_report_not_effective_membership_interval"}
+	}
+	monthStart := time.Date(anchorDate.Year(), anchorDate.Month(), 1, 0, 0, 0, 0, loc)
 
 	// index_weight is monthly data. Query one month at a time from newest to
 	// oldest; a single multi-month request can hit upstream result limits and
-	// silently omit members from the newest snapshot.
+	// silently omit members from the newest snapshot. Historical lookups keep
+	// each month isolated and never accept a report after the requested date.
 	latestDate := ""
 	latest := make([]tushareWeightedConstituent, 0)
-	reasons := []string{"provider_constituent_date_is_latest_available_weight_snapshot_not_intraday"}
 	foundMonth := false
-	for monthOffset := 0; monthOffset < 4; monthOffset++ {
+	for monthOffset := 0; monthOffset < lookbackMonths; monthOffset++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		windowStart := monthStart.AddDate(0, -monthOffset, 0)
 		windowEnd := windowStart.AddDate(0, 1, -1)
+		if requestedAsOfDate != "" && monthOffset == 0 && asOfTime.Before(windowEnd) {
+			windowEnd = asOfTime
+		}
 		startCompact := windowStart.Format("20060102")
 		endCompact := windowEnd.Format("20060102")
 		table, fetchErr := p.fetchCapabilityTable(ctx, "index_weight", map[string]string{
@@ -1448,6 +1890,14 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 			}
 			constituent, symbolErr := normalize.NormalizeSymbol(constituentRaw)
 			if symbolErr != nil || !isTushareAShareSymbol(constituent) {
+				// 先按源端日期选择最新报告日，再记录不支持的证券；不能让过滤操作把报告日倒退。
+				if date > monthLatestDate {
+					monthLatestDate = date
+					monthLatest = monthLatest[:0]
+				}
+				if date == monthLatestDate {
+					monthLatest = append(monthLatest, tushareWeightedConstituent{excluded: true})
+				}
 				continue
 			}
 			weight, readErr := table.optionalFloat(row, "weight")
@@ -1475,14 +1925,40 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 
 	now := time.Now().UTC()
 	if !foundMonth || latestDate == "" || len(latest) == 0 {
+		noSnapshotReason := "provider_has_no_constituent_snapshot_in_recent_four_months"
+		if requestedAsOfDate != "" {
+			noSnapshotReason = "provider_has_no_index_weight_snapshot_on_or_before_requested_as_of_within_120_months"
+		}
 		return &model.IndexConstituentSnapshot{
-			IndexSymbol: indexSymbol, Items: []model.IndexConstituent{}, Total: 0, Source: p.Name(),
+			IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, Items: []model.IndexConstituent{}, Total: 0, Source: p.Name(),
 			SourceVersion: tushareIndexConstituentVersion, FetchedAt: now, QualityStatus: model.QualityUnknown,
-			QualityReasons: appendTushareReason(reasons, "provider_has_no_constituent_snapshot_in_recent_four_months"),
+			QualityReasons: appendTushareReason(reasons, noSnapshotReason),
+		}, nil
+	}
+	supportedCount := 0
+	for _, entry := range latest {
+		if !entry.excluded {
+			supportedCount++
+		}
+	}
+	if supportedCount == 0 {
+		// 最新源报告日有记录，但没有受支持的 A 股成分；保留日期与覆盖计数，交由服务层继续回退。
+		reasons = appendTushareReason(reasons, "provider_unsupported_constituent_rows_excluded")
+		reasons = appendTushareReason(reasons, "provider_latest_constituent_snapshot_has_no_supported_a_share_members")
+		return &model.IndexConstituentSnapshot{
+			IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, ProviderReportDate: latestDate, Items: []model.IndexConstituent{}, Total: 0,
+			ProviderReturned: len(latest), ExcludedCount: len(latest), Source: p.Name(),
+			SourceVersion: tushareIndexConstituentVersion, FetchedAt: now, QualityStatus: model.QualityUnknown,
+			QualityReasons: reasons,
 		}, nil
 	}
 	// index_weight gives constituent codes but not names; enrich in one stock_basic call.
-	basic, err := p.fetchCapabilityTable(ctx, "stock_basic", map[string]string{"list_status": "L"}, "ts_code,name")
+	basicParams := map[string]string{"list_status": "L"}
+	if requestedAsOfDate != "" {
+		// 历史成分可能包含已退市证券；省略 list_status 以查询完整证券目录。
+		basicParams = map[string]string{}
+	}
+	basic, err := p.fetchCapabilityTable(ctx, "stock_basic", basicParams, "ts_code,name")
 	if err != nil {
 		return nil, fmt.Errorf("Tushare 指数成分名称补充失败: %w", err)
 	}
@@ -1511,6 +1987,11 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	seen := make(map[string]struct{}, len(latest))
 	excludedCount := 0
 	for _, entry := range latest {
+		if entry.excluded {
+			excludedCount++
+			reasons = appendTushareReason(reasons, "provider_unsupported_constituent_rows_excluded")
+			continue
+		}
 		if _, duplicate := seen[entry.symbol]; duplicate {
 			return nil, fmt.Errorf("Tushare 指数成分 %s 在最新快照中重复", entry.symbol)
 		}
@@ -1528,15 +2009,14 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 		return nil, errors.New("Tushare 指数成分有代码但无法从股票目录解析任何名称")
 	}
 	return &model.IndexConstituentSnapshot{
-		IndexSymbol: indexSymbol, ProviderReportDate: latestDate, Items: items, Total: len(items),
+		IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, ProviderReportDate: latestDate, Items: items, Total: len(items),
 		ProviderReturned: len(latest), ExcludedCount: excludedCount, Source: p.Name(),
 		SourceVersion: tushareIndexConstituentVersion, FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 	}, nil
 }
 
-// FetchIndexDailyBars reads unadjusted index OHLC. Volume remains in hands and amount
-// is normalized from the documented thousand-CNY unit.
+// FetchIndexDailyBars 读取未复权指数 OHLC；成交量保留手口径，成交额按千元转成人民币元。
 func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate string) (*model.IndexDailyBarsSnapshot, error) {
 	indexSymbol, err := canonicalTushareIndexSymbol(rawIndexSymbol)
 	if err != nil {
@@ -1554,6 +2034,13 @@ func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawSt
 	end, _ := time.Parse("20060102", endCompact)
 	if start.After(end) || end.After(start.AddDate(10, 0, 0)) {
 		return nil, errors.New("Tushare 指数日 K 日期范围无效或超过 10 年")
+	}
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	if end.Format("2006-01-02") > time.Now().In(loc).Format("2006-01-02") {
+		return nil, errors.New("Tushare 指数日 K end_date 不能晚于中国市场当前日期")
 	}
 	table, err := p.fetchCapabilityTable(ctx, "index_daily", map[string]string{
 		"ts_code": indexSymbol, "start_date": startCompact, "end_date": endCompact,
@@ -1615,7 +2102,7 @@ func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawSt
 		if lowPrice > highPrice || openPrice < lowPrice || openPrice > highPrice || closePrice < lowPrice || closePrice > highPrice {
 			return nil, fmt.Errorf("Tushare 指数日 K %s 的 OHLC 不满足数据契约", date)
 		}
-		rowReasons := []string{}
+		rowReasons := []string{"provider_snapshot_timestamp_not_exposed"}
 		var volume *int64
 		rawVolume, fieldErr := table.optionalFloat(row, "vol")
 		if fieldErr != nil {

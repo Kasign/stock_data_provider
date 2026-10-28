@@ -45,6 +45,12 @@ type SectorRankingProvider interface {
 	FetchSectorRankings(ctx context.Context, category string, limit int) (*model.SectorRankingSnapshot, error)
 }
 
+// DirectionalSectorRankingProvider 可选地支持领涨/领跌两种排名；旧 Provider 仍可只提供默认领涨榜。
+type DirectionalSectorRankingProvider interface {
+	NamedProvider
+	FetchSectorRankingsDirection(ctx context.Context, category, direction string, limit int) (*model.SectorRankingSnapshot, error)
+}
+
 // IndexQuoteProvider provides quotes for a separately allow-listed core index set.
 type IndexQuoteProvider interface {
 	NamedProvider
@@ -97,6 +103,13 @@ type IndexCatalogProvider interface {
 	FetchIndexCatalog(ctx context.Context, tag string) (*model.IndexCatalogSnapshot, error)
 	FetchIndexConstituents(ctx context.Context, indexSymbol string) (*model.IndexConstituentSnapshot, error)
 	FetchIndexDailyBars(ctx context.Context, indexSymbol, startDate, endDate string) (*model.IndexDailyBarsSnapshot, error)
+}
+
+// HistoricalIndexConstituentProvider 提供不晚于指定日期的指数成分权重快照。
+// 该接口与当前成分能力分离，避免把当前成分错误当作历史成分。
+type HistoricalIndexConstituentProvider interface {
+	NamedProvider
+	FetchIndexConstituentsAsOf(ctx context.Context, indexSymbol, asOfDate string) (*model.IndexConstituentSnapshot, error)
 }
 
 // ValuationProvider returns the latest PE/PB/PS/PCF snapshot for a bounded list of A-share symbols.

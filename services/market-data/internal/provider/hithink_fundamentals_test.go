@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"context"
 	"fmt"
 	"net/http"
@@ -102,6 +103,11 @@ func TestHithinkFundamentalsRejectsUnknownOrDuplicateAbilityBeforeStatementCalls
 			]`,
 			wantError: "重复能力分区",
 		},
+		{
+			name:      "duplicate metric identifier",
+			abilities: `[{"ability":"profitability","indicators":[{"index_id":"roe","value":"0.1"},{"index_id":"ROE","value":"0.2"}]}]`,
+			wantError: "重复指标 ID",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -125,4 +131,59 @@ func containsHithinkReason(reasons []string, expected string) bool {
 		}
 	}
 	return false
+}
+
+
+func TestHithinkFundamentalsRejectsDuplicateStatementRowsForTargetReport(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	periodEnd := time.Date(2026, time.June, 30, 0, 0, 0, 0, location).UnixMilli()
+	publicationDate := time.Date(2026, time.August, 25, 0, 0, 0, 0, location).UnixMilli()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/a-share/financials/indicators":
+			_, _ = fmt.Fprint(w, `{"code":0,"data":{"thscode":"600519.SH","report":"2026-2","abilities":[]}}`)
+		case "/api/a-share/financials/income-statements":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 0,
+				"data": map[string]any{"item": []map[string]any{
+					{"thscode":"600519.SH","period_end_ms":periodEnd,"report_date_ms":publicationDate,"operating_income":1000.0},
+					{"thscode":"600519.SH","period_end_ms":periodEnd,"report_date_ms":publicationDate,"operating_income":2000.0},
+				}},
+			})
+		case "/api/a-share/financials/balance-sheets", "/api/a-share/financials/cash-flow-statements":
+			_, _ = fmt.Fprint(w, `{"code":0,"data":{"item":[]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	provider := NewHithinkConfigured(3*time.Second, server.URL, "unit-test-key")
+	got, err := provider.FetchFundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("partial fundamentals should remain usable when one statement endpoint is ambiguous: %v", err)
+	}
+	var income *model.FundamentalSection
+	for i := range got.Sections {
+		if got.Sections[i].Category == "income_statement" {
+			income = &got.Sections[i]
+			break
+		}
+	}
+	if income == nil {
+		t.Fatalf("income-statement section is missing: %+v", got.Sections)
+	}
+	if income.HasData || len(income.Metrics) != 0 {
+		t.Fatalf("ambiguous duplicate rows must not be used as a statement: %+v", *income)
+	}
+	if !containsHithinkReason(income.QualityReasons, "provider_statement_unavailable_or_target_period_missing") {
+		t.Fatalf("duplicate report rows should be represented as unavailable, got %+v", *income)
+	}
+	if !containsHithinkReason(got.QualityReasons, "income_statement_provider_unavailable") {
+		t.Fatalf("snapshot should preserve statement-unavailable reason, got %+v", got.QualityReasons)
+	}
 }

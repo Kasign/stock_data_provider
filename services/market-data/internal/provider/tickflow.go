@@ -243,15 +243,24 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 			continue
 		}
 		change := *quote.LastPrice - *quote.PrevClose
+		changePercent := change / *quote.PrevClose * 100
+		if math.IsNaN(change) || math.IsInf(change, 0) || math.IsNaN(changePercent) || math.IsInf(changePercent, 0) {
+			markSnapshotDegraded("provider_index_change_fields_inconsistent")
+			continue
+		}
+		// 扩展字段只用于交叉校验，不能覆盖由最新价和昨收价计算的规范值。
 		if rawChange, ok := quote.Ext["change_amount"]; ok {
-			if value, parseErr := tickflowFloat(rawChange); parseErr == nil && !math.IsNaN(value) && !math.IsInf(value, 0) {
-				change = value
+			value, parseErr := tickflowFloat(rawChange)
+			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) || math.Abs(value-change) > 0.05 {
+				markSnapshotDegraded("provider_index_change_fields_inconsistent")
+				continue
 			}
 		}
-		changePercent := change / *quote.PrevClose * 100
 		if rawChangePercent, ok := quote.Ext["change_pct"]; ok {
-			if value, parseErr := tickflowFloat(rawChangePercent); parseErr == nil && !math.IsNaN(value) && !math.IsInf(value, 0) {
-				changePercent = value * 100
+			value, parseErr := tickflowFloat(rawChangePercent)
+			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) || math.Abs(value*100-changePercent) > 0.15 {
+				markSnapshotDegraded("provider_index_change_fields_inconsistent")
+				continue
 			}
 		}
 
@@ -301,6 +310,8 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 	return snapshot, nil
 }
 
+
+const tickflowBreadthMaxQuoteTimestampSpread = 10 * time.Minute
 
 func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error) {
 	if p == nil || p.client == nil {
@@ -413,6 +424,8 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 	amountTotal := 0.0
 	amountCoverage := 0
+	timestampCoverage := 0
+	var oldestQuoteTime, newestQuoteTime *time.Time
 	reportDate := ""
 	limitUpCount, limitDownCount := 0, 0
 	limitCountsComplete := true
@@ -423,11 +436,20 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 		if quoteTime == nil {
 			degrade("provider_quote_timestamp_missing_or_invalid")
 		} else {
+			timestampCoverage++
 			date := quoteTime.In(location).Format("2006-01-02")
 			if reportDate == "" {
 				reportDate = date
 			} else if reportDate != date {
 				return nil, fmt.Errorf("TickFlow A-share quotes span multiple report dates: %s and %s", reportDate, date)
+			}
+			if oldestQuoteTime == nil || quoteTime.Before(*oldestQuoteTime) {
+				oldest := quoteTime.UTC()
+				oldestQuoteTime = &oldest
+			}
+			if newestQuoteTime == nil || quoteTime.After(*newestQuoteTime) {
+				newest := quoteTime.UTC()
+				newestQuoteTime = &newest
 			}
 		}
 
@@ -491,6 +513,15 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 	if reportDate == "" {
 		return nil, errors.New("TickFlow A-share quotes contain no valid provider timestamp for a report date")
+	}
+	snapshot.QuoteTimestampCoverageCount = timestampCoverage
+	snapshot.OldestQuoteTime = oldestQuoteTime
+	snapshot.NewestQuoteTime = newestQuoteTime
+	if timestampCoverage != snapshot.CoveredSecurities {
+		degrade("provider_quote_timestamp_coverage_incomplete")
+	}
+	if oldestQuoteTime != nil && newestQuoteTime != nil && newestQuoteTime.Sub(*oldestQuoteTime) > tickflowBreadthMaxQuoteTimestampSpread {
+		degrade("provider_quote_timestamp_spread_exceeds_10_minutes")
 	}
 	if !limitCountsComplete {
 		degrade("provider_limit_counts_unavailable_or_incomplete")
@@ -771,6 +802,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 		partialCoverage bool
 	}
 	industries := make([]industryValue, 0, len(industrySymbols))
+	industriesWithoutUsableChanges := 0
 	for name, symbols := range industrySymbols {
 		value := industryValue{id: industryIDs[name], name: name}
 		for symbol := range symbols {
@@ -806,6 +838,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 			}
 		}
 		if value.changeCount == 0 {
+			industriesWithoutUsableChanges++
 			continue
 		}
 		industries = append(industries, value)
@@ -835,6 +868,11 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	if timestampIncomplete {
 		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, "one_or_more_quote_timestamps_missing_or_invalid")
 	}
+	if industriesWithoutUsableChanges > 0 {
+		snapshot.QualityReasons = appendTickflowUniqueReason(
+			snapshot.QualityReasons, "one_or_more_industries_omitted_without_valid_constituent_quote_changes",
+		)
+	}
 	for i, item := range industries {
 		if i >= limit {
 			break
@@ -859,6 +897,42 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt,
 			ProviderReportDate: reportDate, QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 		})
+	}
+	return snapshot, nil
+}
+
+// FetchSectorRankingsDirection adds a bottom SW1 ranking. It requires the complete industry set,
+// because reversing a top-N slice would not produce the actual bottom-N sectors.
+func (p *TickFlow) FetchSectorRankingsDirection(ctx context.Context, rawCategory, rawDirection string, limit int) (*model.SectorRankingSnapshot, error) {
+	direction := strings.ToLower(strings.TrimSpace(rawDirection))
+	if direction == "" {
+		direction = "up"
+	}
+	if direction != "up" && direction != "down" {
+		return nil, fmt.Errorf("TickFlow sector ranking direction must be up or down, got %q", rawDirection)
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		return nil, errors.New("TickFlow SW1 sector ranking limit must not exceed 100")
+	}
+	fetchLimit := limit
+	if direction == "down" {
+		fetchLimit = 100
+	}
+	snapshot, err := p.FetchSectorRankings(ctx, rawCategory, fetchLimit)
+	if err != nil {
+		return nil, err
+	}
+	if direction == "down" && snapshot.Total != len(snapshot.Items) {
+		return nil, fmt.Errorf("TickFlow cannot provide a complete SW1 bottom ranking: total=%d returned=%d", snapshot.Total, len(snapshot.Items))
+	}
+	if err := sortSectorRankingSnapshot(snapshot, direction); err != nil {
+		return nil, err
+	}
+	if len(snapshot.Items) > limit {
+		snapshot.Items = snapshot.Items[:limit]
 	}
 	return snapshot, nil
 }

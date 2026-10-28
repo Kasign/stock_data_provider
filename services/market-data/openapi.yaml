@@ -152,7 +152,7 @@ components:
       type: object
       required: [category, has_data, metrics, quality_status]
       properties:
-        category: {type: string, enum: [profitability, operating, growth, solvency, cash_flow, dupont]}
+        category: {type: string, enum: [profitability, operating, growth, solvency, cash_flow, dupont, income_statement, balance_sheet, cash_flow_statement]}
         report_date: {type: string, format: date}
         publication_date: {type: string, format: date, description: Disclosure date for the selected provider revision; not an as_of historical revision selector}
         has_data: {type: boolean}
@@ -314,6 +314,8 @@ components:
         industry: {type: string, nullable: true}
         market_cap_cny: {type: number, nullable: true, description: Total market capitalization in CNY}
         float_market_cap_cny: {type: number, nullable: true, description: Floating market capitalization in CNY}
+        total_shares: {type: number, nullable: true, description: Total share capital in shares, from Eastmoney f84; may be missing}
+        float_shares: {type: number, nullable: true, description: Floating share capital in shares, from Eastmoney f85; may be missing or excluded if greater than total shares}
         board_code: {type: string, nullable: true, description: Eastmoney board code}
         roe_percent: {type: number, nullable: true, description: Return on equity in percentage points}
         net_profit_margin_percent: {type: number, nullable: true, description: Net profit margin in percentage points}
@@ -351,9 +353,10 @@ components:
           items: {type: string}
     SectorRankingSnapshot:
       type: object
-      required: [category, total, items, source, fetched_at, quality_status]
+      required: [category, direction, total, items, source, fetched_at, quality_status]
       properties:
         category: {type: string, enum: [industry, concept]}
+        direction: {type: string, enum: [up, down]}
         total: {type: integer}
         items:
           type: array
@@ -425,7 +428,8 @@ components:
       required: [index_symbol, items, total, source, fetched_at, quality_status]
       properties:
         index_symbol: {type: string}
-        provider_report_date: {type: string, format: date, description: Latest constituent/weight report date when exposed}
+        as_of_date: {type: string, format: date, description: Requested historical query date; distinct from the source report date}
+        provider_report_date: {type: string, format: date, description: Latest constituent/weight report date at or before as_of when historical query is requested}
         items:
           type: array
           items: {$ref: '#/components/schemas/IndexConstituent'}
@@ -491,7 +495,7 @@ components:
 
     MarketBreadthSnapshot:
       type: object
-      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, amount_coverage_count, source, fetched_at, quality_status]
+      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, amount_coverage_count, quote_timestamp_coverage_count, source, fetched_at, quality_status]
       properties:
         market: {type: string, enum: [cn_a_share]}
         total_securities: {type: integer, minimum: 1, description: Sum of source change-distribution bucket counts; not independently verified against a security master}
@@ -504,6 +508,9 @@ components:
         limit_down_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-down pool endpoint, only when its report date matches the breadth report date; null means unknown}
         total_amount_cny: {type: number, nullable: true, description: Full A-share turnover sum in CNY; null unless all paginated securities have valid amounts, quote dates match provider_report_date, and security count matches the breadth distribution}
         amount_coverage_count: {type: integer, minimum: 0, description: Count of securities included in the aggregate; zero when full coverage or cross-source count alignment cannot be established}
+        quote_timestamp_coverage_count: {type: integer, minimum: 0, description: Number of universe quotes with a valid source timestamp}
+        oldest_quote_time: {type: string, format: date-time, nullable: true, description: Earliest valid source quote timestamp included in the universe snapshot; this is a conservative bound, not the exact snapshot time}
+        newest_quote_time: {type: string, format: date-time, nullable: true, description: Latest valid source quote timestamp included in the universe snapshot}
         provider_report_date: {type: string, format: date, description: Source report date used to align breadth buckets, limit pools, and full-market quote rows}
         source: {type: string}
         source_version: {type: string}
@@ -683,6 +690,11 @@ components:
         pb_mrq: {type: number, nullable: true, description: Price-to-book ratio on most recent quarter basis; may be null}
         ps_ttm: {type: number, nullable: true, description: Price-to-sales ratio on trailing twelve-month basis; may be negative or null}
         pcf_ttm: {type: number, nullable: true, description: Price-to-cash-flow ratio on trailing twelve-month basis; may be negative or null}
+        turnover_rate_percent: {type: number, nullable: true, description: Daily turnover rate in percentage points}
+        float_turnover_rate_percent: {type: number, nullable: true, description: Daily free-float turnover rate in percentage points}
+        volume_ratio: {type: number, nullable: true, description: Daily volume ratio; provider-native ratio, not a percentage}
+        dividend_yield_percent: {type: number, nullable: true, description: Provider-reported dividend yield in percentage points}
+        dividend_yield_ttm_percent: {type: number, nullable: true, description: Provider-reported trailing twelve-month dividend yield in percentage points}
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
@@ -727,6 +739,7 @@ components:
         sector_ranking_capable: {type: boolean}
         index_quote_capable: {type: boolean}
         index_catalog_capable: {type: boolean}
+        historical_index_constituents_capable: {type: boolean, description: Provider explicitly supports historical constituent report-date queries}
         market_breadth_capable: {type: boolean}
         limit_pool_capable: {type: boolean}
         stock_boards_capable: {type: boolean}
@@ -883,21 +896,24 @@ paths:
         '503': {description: No stock-basic provider enabled}
   /api/v1/stocks/{symbol}/fundamentals:
     get:
-      summary: Get quarterly financial indicators
+      summary: Get quarterly indicators and financial statement sections
       description: >-
-        Returns six groups of quarterly indicators for an explicit report period. report_date is the financial
-        period end; publication_date is the disclosure date of the selected provider revision. The endpoint returns the
-        latest revision available from the provider for that report period and has no as_of parameter or historical
-        restatement reconstruction. For point-in-time analysis, ignore values whose publication_date is after the
-        strategy reference date; this can omit the value rather than recover an earlier revision. Values preserve
-        provider-native numeric scale. This is an indicators API, not a complete financial-statement line-item API.
+        Returns six groups of quarterly financial indicators and may also include selected income-statement,
+        balance-sheet and cash-flow-statement line items when a configured provider supports them. Statement sections
+        are not full upstream statements; missing fields remain absent and each section carries its own quality state.
+        report_date is the financial period end; publication_date is the disclosure date of the selected provider
+        revision. Income and cash-flow statement values use a single-quarter consolidated report where supported;
+        balance-sheet values use the consolidated period-end report. The endpoint returns the latest revision available
+        from the provider for that report period and has no as_of parameter or historical restatement reconstruction.
+        For point-in-time analysis, a publication date after the strategy reference date must be excluded; an earlier
+        revision is not reconstructed. Values preserve provider-native numeric scale and explicit units.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: year, in: query, required: true, schema: {type: integer, minimum: 2007}}
         - {name: quarter, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 4}}
       responses:
         '200':
-          description: Quarterly financial indicators
+          description: Quarterly indicators and supported financial-statement sections
           content:
             application/json:
               schema: {$ref: '#/components/schemas/FundamentalsSnapshot'}
@@ -996,13 +1012,17 @@ paths:
         - name: limit
           in: query
           schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+        - name: direction
+          in: query
+          description: Return largest percentage movers first (up) or smallest first (down).
+          schema: {type: string, enum: [up, down], default: up}
       responses:
         '200':
           description: Current provider ranking snapshot with source and quality metadata
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SectorRankingSnapshot'}
-        '400': {description: Invalid sector type or limit}
+        '400': {description: Invalid sector type, direction or limit}
         '401': {description: API key required}
         '502': {description: All sector-ranking providers failed}
         '503': {description: No sector-ranking provider enabled}
@@ -1028,19 +1048,21 @@ paths:
 
   /api/v1/market/indices/{symbol}/constituents:
     get:
-      summary: 获取指定指数最近可用的成分股快照
-      description: Tushare 返回最近可用权重日，可能滞后于当前交易日；同花顺返回当前成分快照。
+      summary: 获取指定指数的最近或指定日期之前的成分权重报告快照
+      description: 未提供 as_of 时保持原有当前/最近快照行为。提供 as_of 时只使用显式支持历史查询的 Provider；Tushare 返回不晚于请求日期的最新 index_weight 报告日。as_of_date 是请求日期，provider_report_date 是实际报告日。该接口不表示成分在报告日至下次报告日之间持续有效，也不是严格历史成员生效区间回放。
       security:
         - ApiKeyAuth: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
-        - {name: source, in: query, required: false, description: Pin the provider to the source returned by the index catalog; omitted means configured priority fallback, schema: {type: string, enum: [hithink, tushare]}}
+        - {name: source, in: query, required: false, description: 指定来源；未提供时仅在具备相应能力的来源间选择，schema: {type: string, enum: [hithink, tushare]}}
+        - {name: as_of, in: query, required: false, description: 返回不晚于该日期的最新历史权重报告；只支持 YYYY-MM-DD，不能替代成分生效区间，schema: {type: string, format: date}}
       responses:
         '200':
-          description: 指数成分股票目录及来源质量
+          description: 指数成分股票目录及来源质量；历史查询同时返回 as_of_date 与 provider_report_date
           content:
             application/json:
               schema: {$ref: '#/components/schemas/IndexConstituentSnapshot'}
+        '400': {description: Invalid date or source does not support historical query}
         '401': {description: API key required}
         '502': {description: All index constituent providers failed}
         '503': {description: No index catalog provider enabled}

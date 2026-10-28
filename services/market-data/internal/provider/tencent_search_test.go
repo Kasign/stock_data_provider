@@ -126,3 +126,29 @@ func TestTencentSmartboxUnescapesUnicodeName(t *testing.T) {
 		t.Fatalf("unexpected decoded Smartbox item: %+v", items)
 	}
 }
+
+
+func TestTencentSearchStocksFiltersNonEquitySecurities(t *testing.T) {
+	body := []byte(`v_hint="sh~510300~沪深300ETF^sz~159919~沪深300ETF^sh~000001~上证指数^sz~399001~深证成指^sh~113001~可转债^sh~600519~贵州茅台^sz~300750~宁德时代^bj~430047~诺思兰德^";`)
+	got, err := parseTencentSmartboxStocks(body)
+	if err != nil {
+		t.Fatalf("parseTencentSmartboxStocks returned error: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected only the three A-share stock records, got %+v", got)
+	}
+	seen := map[string]bool{}
+	for _, item := range got {
+		seen[item.Symbol] = true
+	}
+	for _, symbol := range []string{"600519.SH", "300750.SZ", "430047.BJ"} {
+		if !seen[symbol] {
+			t.Errorf("supported A-share stock %s was filtered out: %+v", symbol, got)
+		}
+	}
+	for _, symbol := range []string{"510300.SH", "159919.SZ", "000001.SH", "399001.SZ", "113001.SH"} {
+		if seen[symbol] {
+			t.Errorf("non-equity security %s was returned as a stock: %+v", symbol, got)
+		}
+	}
+}

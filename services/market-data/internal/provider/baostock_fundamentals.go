@@ -108,6 +108,11 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 	if quarter < 1 || quarter > 4 {
 		return nil, errors.New("fundamental quarter must be between 1 and 4")
 	}
+	chinaToday := baostockChinaMarketDate(time.Now())
+	requestedPeriodEnd := fundamentalQuarterEnd(year, quarter)
+	if requestedPeriodEnd > chinaToday {
+		return nil, fmt.Errorf("requested BaoStock report period %s is in the future as of China market date %s", requestedPeriodEnd, chinaToday)
+	}
 	snapshot := &model.FundamentalsSnapshot{
 		Symbol: symbol, Year: year, Quarter: quarter,
 		Sections: make([]model.FundamentalSection, 0, len(quarterlyFundamentalMappings)),
@@ -143,9 +148,12 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 		}
 		section.ReportDate, section.PublicationDate = record.ReportDate, record.PublicationDate
 		degraded := false
-		if _, dateErr := time.Parse("2006-01-02", record.PublicationDate); dateErr != nil {
+		publicationDate := strings.TrimSpace(record.PublicationDate)
+		if _, dateErr := time.Parse("2006-01-02", publicationDate); dateErr != nil {
 			degraded = true
 			section.QualityReasons = append(section.QualityReasons, "publication_date_missing_or_invalid")
+		} else if publicationDate > chinaToday {
+			return nil, fmt.Errorf("BaoStock %s publication date %s is after China market date %s", mapping.Category, publicationDate, chinaToday)
 		}
 		for _, metric := range mapping.Fields {
 			raw := strings.TrimSpace(record.Fields[metric.SourceField])
@@ -201,6 +209,15 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 		snapshot.QualityReasons = []string{"no_financial_records_for_requested_period"}
 	}
 	return snapshot, nil
+}
+
+// baostockChinaMarketDate returns the current date in the mainland China market timezone.
+func baostockChinaMarketDate(now time.Time) string {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	return now.In(loc).Format("2006-01-02")
 }
 
 // appendFundamentalReason appends a quality reason only once.

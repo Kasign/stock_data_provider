@@ -67,6 +67,41 @@ func TestSinaFetchQuoteNormalizesSharesAndAmount(t *testing.T) {
 	}
 }
 
+func TestSinaFetchQuoteRejectsResponseVariableSymbolMismatch(t *testing.T) {
+	fields := make([]string, 32)
+	fields[0] = "WrongSymbol"
+	fields[1], fields[2], fields[3] = "10.00", "9.80", "10.20"
+	fields[4], fields[5], fields[8], fields[9] = "10.50", "9.50", "10000", "102000"
+	fields[30], fields[31] = "2026-10-21", "15:00:00"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// 请求的是 sh600519，但上游变量名报告的是 sh600000。
+		_, _ = fmt.Fprintf(w, "var hq_str_sh600000=\"%s\";\n", strings.Join(fields, ","))
+	}))
+	defer server.Close()
+
+	p := NewSina(0, server.URL+"/list=")
+	if _, err := p.FetchQuote(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), "symbol mismatch") {
+		t.Fatalf("expected response variable symbol mismatch to be rejected, got %v", err)
+	}
+}
+
+func TestSinaFetchQuoteDegradesFutureProviderTimestamp(t *testing.T) {
+	fields := make([]string, 32)
+	fields[0] = "SinaTest"
+	fields[1], fields[2], fields[3] = "10.00", "9.80", "10.20"
+	fields[4], fields[5], fields[8], fields[9] = "10.50", "9.50", "10000", "102000"
+	fields[30], fields[31] = "2099-12-31", "15:00:00"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, "var hq_str_sh600519=\"%s\";\n", strings.Join(fields, ","))
+	}))
+	defer server.Close()
+	q, err := NewSina(2*time.Second, server.URL+"/list=").FetchQuote(context.Background(), "600519.SH")
+	if err != nil { t.Fatal(err) }
+	if q.QuoteTime != nil || q.QualityStatus != model.QualityDegraded {
+		t.Fatalf("future provider timestamp must be omitted and quality degraded: %+v", q)
+	}
+}
+
 func TestSinaFetchQuoteDecodesGB18030Name(t *testing.T) {
 	fields := make([]string, 32)
 	fields[0] = "贵州茅台"
@@ -212,6 +247,14 @@ func TestSinaFetchDailyBarsNormalizesUnadjustedRows(t *testing.T) {
 	}
 	if bars[0].AdjustmentBasis != model.AdjustmentNone || bars[0].AdjustmentMethod != "sina_raw_ohlc_no_adjustment" {
 		t.Fatalf("Sina must explicitly label the unadjusted basis: %+v", bars[0])
+	}
+}
+
+func TestSinaDailyDateRangeRejectsFutureEndDate(t *testing.T) {
+	now := time.Now()
+	future := now.In(sinaChinaLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	if _, _, err := sinaDailyDateRange("2026-10-20", future, 10, now); err == nil || !strings.Contains(err.Error(), "end date must not be after today") {
+		t.Fatalf("future Sina end date must be rejected, got %v", err)
 	}
 }
 
