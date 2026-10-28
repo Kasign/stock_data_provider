@@ -1802,12 +1802,18 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			QualityReasons: []string{"publication_date_not_exposed_by_provider", "metric_unit_not_exposed_by_provider"},
 		}
 		invalidValueCount := 0
+		seenIndexIDs := make(map[string]struct{}, len(ability.Indicators))
 		for _, item := range ability.Indicators {
 			indexID := strings.TrimSpace(item.IndexID)
 			if indexID == "" {
 				invalidValueCount++
 				continue
 			}
+			normalizedIndexID := strings.ToLower(indexID)
+			if _, duplicate := seenIndexIDs[normalizedIndexID]; duplicate {
+				return nil, fmt.Errorf("同花顺财务指标返回重复指标 ID %q（分区 %s）", indexID, category)
+			}
+			seenIndexIDs[normalizedIndexID] = struct{}{}
 			value, ok := hithinkParseFundamentalValue(item.Value)
 			if !ok {
 				invalidValueCount++

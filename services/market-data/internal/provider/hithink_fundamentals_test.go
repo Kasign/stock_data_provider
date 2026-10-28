@@ -103,6 +103,11 @@ func TestHithinkFundamentalsRejectsUnknownOrDuplicateAbilityBeforeStatementCalls
 			]`,
 			wantError: "重复能力分区",
 		},
+		{
+			name:      "duplicate metric identifier",
+			abilities: `[{"ability":"profitability","indicators":[{"index_id":"roe","value":"0.1"},{"index_id":"ROE","value":"0.2"}]}]`,
+			wantError: "重复指标 ID",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
