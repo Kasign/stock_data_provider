@@ -956,3 +956,7 @@ Tushare `top_list` 将非普通 A 股记录计入 `ExcludedNonAShareCount` 时�
 ## 2026-10-28 TickFlow 指数涨跌字段交叉校验
 
 TickFlow 指数行情现在始终使用最新价和昨收价计算涨跌额及涨跌幅，源端 `ext.change_amount` / `ext.change_pct` 只作为一致性检查；出现非数值或超出舍入容差时排除该行并降级父快照。新增多指数 HTTP fixture 测试源码，覆盖相互矛盾扩展字段；尚未执行测试或真实 Provider 请求。
+
+## 2026-10-28 Tencent 个股接口证券范围校验
+
+Tencent 个股报价和日 K 入口新增普通 A 股范围门禁，在上游请求前拒绝 ETF、指数、可转债和 B 股等非普通股票证券。新增覆盖两类接口、五种非普通证券的 HTTP fixture 测试源码，尚未执行测试或真实 Provider 请求。
