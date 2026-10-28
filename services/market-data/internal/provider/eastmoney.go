@@ -754,7 +754,7 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 			return nil, fmt.Errorf("Eastmoney hot-ranking row %d has invalid security code: %w", index, symbolErr)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
-			continue
+			return nil, fmt.Errorf("Eastmoney hot-ranking response contains duplicate symbol %s", symbol)
 		}
 		seen[symbol] = struct{}{}
 		rank, ok := eastmoneyHotRowInt(row, "rk")
@@ -802,9 +802,13 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 	quotes := make(map[string]map[string]json.RawMessage, len(quotePayload.Data.Diff))
 	for _, row := range quotePayload.Data.Diff {
 		code := eastmoneyHotRowString(row, "f12")
-		if code != "" {
-			quotes[code] = row
+		if code == "" {
+			continue
 		}
+		if _, duplicate := quotes[code]; duplicate {
+			return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment contains duplicate code %s", code)
+		}
+		quotes[code] = row
 	}
 	now := time.Now().UTC()
 	sourceVersion := eastmoneyVersion + "-hot-ranking-v1"
