@@ -152,7 +152,7 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 	if snapshot == nil || len(snapshot.Items) == 0 {
 		return errors.New("index-quote provider returned an empty snapshot")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("index-quote source, source_version or fetched_at is missing")
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
@@ -335,7 +335,7 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 			return errors.New("partial market-breadth amount coverage cannot have valid quality")
 		}
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("market-breadth source, source_version or fetched_at is missing")
 	}
 	reportDate := strings.TrimSpace(snapshot.ProviderReportDate)
@@ -429,7 +429,7 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 	if snapshot.PoolType != poolType || snapshot.TradeDate != tradeDate {
 		return fmt.Errorf("limit-pool identity mismatch: requested %s/%s got %s/%s", poolType, tradeDate, snapshot.PoolType, snapshot.TradeDate)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("limit-pool source, source_version or fetched_at is missing")
 	}
 	if snapshot.ProviderReportDate != "" {
@@ -662,7 +662,7 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 	if snapshot.TradeDate != tradeDate || snapshot.Page != page || snapshot.PageSize != pageSize {
 		return fmt.Errorf("dragon-tiger request identity mismatch: wanted %s/%d/%d, got %s/%d/%d", tradeDate, page, pageSize, snapshot.TradeDate, snapshot.Page, snapshot.PageSize)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("dragon-tiger source, source_version or fetched_at is missing")
 	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.SourceReturned < 0 ||
@@ -870,7 +870,7 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if snapshot.Direction != "" && snapshot.Direction != "up" && snapshot.Direction != "down" {
 		return fmt.Errorf("sector-ranking direction %q is unsupported", snapshot.Direction)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("sector-ranking source, source_version or fetched_at is missing")
 	}
 	if snapshot.QualityStatus == model.QualityValid {
@@ -1110,7 +1110,7 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if strings.TrimSpace(item.Source) == "" {
 		return errors.New("stock-basic source is missing")
 	}
-	if strings.TrimSpace(item.SourceVersion) == "" {
+	if !hasIdentifiableSourceVersion(item.SourceVersion) {
 		return errors.New("stock-basic source_version is missing")
 	}
 	if item.NormalizationVer != normalize.Version {
@@ -1391,7 +1391,7 @@ func validateStockSearchSnapshot(query string, limit int, snapshot *model.StockS
 	if strings.TrimSpace(snapshot.Query) != query {
 		return errors.New("stock-search query mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("stock-search source, source_version or fetched_at is missing")
 	}
 	if snapshot.Total < 0 || snapshot.Total < len(snapshot.Items) || len(snapshot.Items) > limit {
@@ -1431,7 +1431,7 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 	if err != nil || returnedSymbol != symbol {
 		return fmt.Errorf("stock-boards symbol mismatch: requested %s, returned %q", symbol, snapshot.Symbol)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("stock-boards source, source_version or fetched_at is missing")
 	}
 	if snapshot.Total < 0 || snapshot.Total > 1000 || len(snapshot.Items) > snapshot.Total {
@@ -2137,7 +2137,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 				q.Symbol = cachedSymbol
 			}
 			cacheNow := time.Now()
-			if symbolErr == nil && cachedSymbol == symbol && strings.TrimSpace(q.SourceVersion) != "" && q.NormalizationVer == normalize.Version &&
+			if symbolErr == nil && cachedSymbol == symbol && hasIdentifiableSourceVersion(q.SourceVersion) && q.NormalizationVer == normalize.Version &&
 				serviceTimestampIsSane(q.FetchedAt, cacheNow) && serviceTimestampIsSane(q.NormalizedAt, cacheNow) &&
 				normalize.ValidateQuote(&q) == nil {
 				applyQuoteFreshness(&q, time.Now())
@@ -2189,7 +2189,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			errs = append(errs, p.Name()+": empty quote without error")
 			continue
 		}
-		if strings.TrimSpace(q.SourceVersion) == "" {
+		if !hasIdentifiableSourceVersion(q.SourceVersion) {
 			s.breaker.Failure(breakerKey)
 			errs = append(errs, p.Name()+": quote source_version is missing")
 			continue
@@ -2329,7 +2329,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				cachedSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
 				source := strings.TrimSpace(bar.Source)
 				sourceVersion := strings.TrimSpace(bar.SourceVersion)
-				if symbolErr != nil || cachedSymbol != symbol || source == "" || sourceVersion == "" ||
+				if symbolErr != nil || cachedSymbol != symbol || source == "" || !hasIdentifiableSourceVersion(sourceVersion) ||
 					bar.AdjustmentBasis != basis || bar.NormalizationVer != normalize.Version ||
 					!serviceTimestampIsSane(bar.FetchedAt, cacheNow) || !serviceTimestampIsSane(bar.NormalizedAt, cacheNow) {
 					contractMismatch = true
@@ -2422,7 +2422,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				contractError = "provider returned daily bars with unsupported normalization_version"
 				break
 			}
-			if sourceVersion == "" {
+			if !hasIdentifiableSourceVersion(sourceVersion) {
 				contractError = "provider returned daily bars without source_version"
 				break
 			}
@@ -2827,7 +2827,7 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 	for _, bar := range bars {
 		source := strings.TrimSpace(bar.Source)
 		sourceVersion := strings.TrimSpace(bar.SourceVersion)
-		if source == "" || sourceVersion == "" {
+		if source == "" || !hasIdentifiableSourceVersion(sourceVersion) {
 			continue
 		}
 		refDate := strings.TrimSpace(bar.AdjustmentRefDate)

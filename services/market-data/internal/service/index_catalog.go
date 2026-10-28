@@ -72,7 +72,7 @@ func validateIndexCatalogSnapshot(tag string, snapshot *model.IndexCatalogSnapsh
 	if snapshot == nil || snapshot.Tag != tag || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index catalog snapshot identity/count mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index catalog snapshot source, source_version, timestamp or quality invalid")
 	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
@@ -102,7 +102,7 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index constituent snapshot identity/count mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index constituent snapshot source, source_version, timestamp or quality invalid")
 	}
 	if snapshot.ProviderReturned < 0 || snapshot.ExcludedCount < 0 ||
@@ -169,7 +169,7 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 	if snapshot == nil || snapshot.IndexSymbol != indexSymbol || snapshot.StartDate != startDate || snapshot.EndDate != endDate || snapshot.Total != len(snapshot.Items) {
 		return errors.New("index daily-bars snapshot identity/range/count mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index daily-bars snapshot source, source_version, timestamp or quality invalid")
 	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {

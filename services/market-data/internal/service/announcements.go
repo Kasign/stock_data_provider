@@ -59,7 +59,7 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		snapshot.Page != page || snapshot.PageSize != pageSize {
 		return errors.New("announcement request identity mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("announcement source, source_version or fetched_at is missing")
 	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize {

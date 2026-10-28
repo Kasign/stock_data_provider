@@ -115,6 +115,18 @@ func TestValidateFundamentalsSnapshotRejectsBlankMetricMetadata(t *testing.T) {
 	}
 }
 
+func TestValidateFundamentalsSnapshotRejectsPlaceholderSourceVersion(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.SourceVersion = "unknown"
+	for i := range snapshot.Sections {
+		snapshot.Sections[i].QualityStatus = model.QualityDegraded
+	}
+	snapshot.QualityStatus = model.QualityDegraded
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("placeholder fundamentals source version must be rejected, got %v", err)
+	}
+}
+
 func TestValidateFundamentalsSnapshotRequiresSourceVersion(t *testing.T) {
 	snapshot := validFundamentalsSnapshotForTest()
 	snapshot.SourceVersion = ""
@@ -275,6 +287,56 @@ func TestQuoteFallsBackFromOldNormalizationVersion(t *testing.T) {
 	}
 	if got == nil || got.Source != "tencent" || got.NormalizationVer != normalize.Version {
 		t.Fatalf("old-normalization quote must fall back to current version: %+v", got)
+	}
+}
+
+func TestHasIdentifiableSourceVersion(t *testing.T) {
+	for _, value := range []string{"", "  ", "unknown", " UNKNOWN ", "UnKnOwN"} {
+		if hasIdentifiableSourceVersion(value) {
+			t.Errorf("placeholder source version %q must be rejected", value)
+		}
+	}
+	for _, value := range []string{"eastmoney-stock-basic-v2", "test-v1", "v3"} {
+		if !hasIdentifiableSourceVersion(value) {
+			t.Errorf("identifiable source version %q must be accepted", value)
+		}
+	}
+}
+
+func TestQuoteFallsBackFromPlaceholderSourceVersion(t *testing.T) {
+	placeholder := validQuote("eastmoney")
+	placeholder.SourceVersion = " UNKNOWN "
+	fallback := validQuote("tencent")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", quote: placeholder},
+		fakeProvider{name: "tencent", quote: fallback},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" {
+		t.Fatalf("placeholder source version must trigger fallback, got %+v", got)
+	}
+}
+
+func TestDailyBarsFallsBackFromPlaceholderSourceVersion(t *testing.T) {
+	invalid := dailyBarForVersionContractTest("unknown", "2026-10-20")
+	fallbackBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", bars: []model.DailyBar{invalid}},
+		fakeProvider{name: "tencent", bars: []model.DailyBar{fallbackBar}},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" {
+		t.Fatalf("placeholder source version must trigger daily-bar fallback, got %+v", bars)
 	}
 }
 

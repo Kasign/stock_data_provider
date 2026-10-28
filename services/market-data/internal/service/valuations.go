@@ -26,7 +26,7 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 	if snapshot == nil {
 		return errors.New("valuation provider returned an empty snapshot")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("valuation snapshot source, source_version or fetched_at is missing")
 	}
 	if snapshot.ProviderReportDate != "" {

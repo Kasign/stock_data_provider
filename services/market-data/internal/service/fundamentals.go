@@ -32,7 +32,7 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 	if err != nil || got != symbol || snapshot.Year != year || snapshot.Quarter != quarter {
 		return errors.New("fundamentals snapshot identity/period mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("fundamentals source, source_version or fetched_at is missing")
 	}
 	// 六个标准指标分区始终必需；同花顺可额外返回三张独立财务报表。

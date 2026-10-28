@@ -26,7 +26,7 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 	if snapshot == nil || snapshot.RankingType != rankingType || snapshot.Total != len(snapshot.Items) {
 		return errors.New("hot-ranking snapshot identity/count mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("hot-ranking source, source_version or fetched_at is missing")
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
