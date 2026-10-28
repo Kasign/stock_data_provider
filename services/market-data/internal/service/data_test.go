@@ -2664,3 +2664,22 @@ func TestDailyBarsRejectsNonCanonicalRequestDate(t *testing.T) {
 		t.Fatal("non-canonical start date must be rejected before provider/cache lookup")
 	}
 }
+
+
+func TestValidateSectorRankingSnapshotRejectsUnderfilledPage(t *testing.T) {
+	now := time.Now().UTC()
+	change := 2.3
+	snapshot := &model.SectorRankingSnapshot{
+		Category: "industry", Direction: "up", Total: 120,
+		Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		Items: []model.SectorRanking{{
+			Rank: 1, Code: "BK0475", Name: "电池", Category: "industry", ChangePercent: &change,
+			AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
+			QualityStatus: model.QualityDegraded,
+		}},
+	}
+	if err := validateSectorRankingSnapshot("industry", 5, snapshot); err == nil || !strings.Contains(err.Error(), "row count does not match") {
+		t.Fatalf("underfilled sector-ranking page must be rejected so fallback can continue, got %v", err)
+	}
+}

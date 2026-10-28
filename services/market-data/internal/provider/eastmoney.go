@@ -1827,6 +1827,21 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	if payload.Data == nil || len(payload.Data.Diff) == 0 {
 		return nil, errors.New("Eastmoney sector ranking returned no rows")
 	}
+	if payload.Data.Total < 0 {
+		return nil, fmt.Errorf("Eastmoney sector ranking total is negative: %d", payload.Data.Total)
+	}
+	if payload.Data.Total > 0 {
+		expectedRows := limit
+		if payload.Data.Total < expectedRows {
+			expectedRows = payload.Data.Total
+		}
+		if len(payload.Data.Diff) != expectedRows {
+			return nil, fmt.Errorf(
+				"Eastmoney sector ranking returned %d rows, expected %d rows from total=%d and limit=%d",
+				len(payload.Data.Diff), expectedRows, payload.Data.Total, limit,
+			)
+		}
+	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.SectorRankingSnapshot{
 		Category: category, Direction: direction, Total: payload.Data.Total, Source: p.Name(),
@@ -1865,8 +1880,10 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	if len(snapshot.Items) == 0 {
 		return nil, errors.New("Eastmoney sector ranking rows failed code/name/change-percent validation")
 	}
-	if snapshot.Total <= 0 {
+	if snapshot.Total == 0 {
+		// 某些响应可能缺少总数；用已解析条数作为下界，但明确标记总量未知。
 		snapshot.Total = len(snapshot.Items)
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_total_missing_using_returned_count")
 	}
 	if len(snapshot.Items) < len(payload.Data.Diff) {
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_rows_dropped_after_validation")

@@ -899,6 +899,13 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if snapshot.Total <= 0 || snapshot.Total < len(snapshot.Items) {
 		return errors.New("sector-ranking total is less than returned items or not positive")
 	}
+	expectedItems := limit
+	if snapshot.Total < expectedItems {
+		expectedItems = snapshot.Total
+	}
+	if len(snapshot.Items) != expectedItems {
+		return errors.New("sector-ranking returned row count does not match source total and requested limit")
+	}
 	seenCodes := make(map[string]bool, len(snapshot.Items))
 	seenRanks := make(map[int]bool, len(snapshot.Items))
 	direction := snapshot.Direction

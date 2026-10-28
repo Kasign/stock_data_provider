@@ -377,7 +377,13 @@ func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
 			var got url.Values
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				got = r.URL.Query()
-				fmt.Fprint(w, `{"rc":0,"data":{"total":120,"diff":[{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12}]}}`)
+				fmt.Fprint(w, `{"rc":0,"data":{"total":120,"diff":[
+					{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12},
+					{"f2":120.5,"f3":1.5,"f4":1.8,"f6":223456789,"f12":"BK0476","f14":"通信","f104":10,"f105":8,"f128":"中际旭创","f136":3.12},
+					{"f2":88.5,"f3":0.7,"f4":0.6,"f6":323456789,"f12":"BK0477","f14":"电子","f104":9,"f105":6,"f128":"立讯精密","f136":2.12},
+					{"f2":66.5,"f3":0.2,"f4":0.1,"f6":423456789,"f12":"BK0478","f14":"汽车","f104":8,"f105":5,"f128":"比亚迪","f136":1.12},
+					{"f2":55.5,"f3":-0.5,"f4":-0.3,"f6":523456789,"f12":"BK0479","f14":"计算机","f104":6,"f105":7,"f128":"中科曙光","f136":0.12}
+				]}}`)
 			}))
 			defer server.Close()
 			p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
@@ -388,7 +394,7 @@ func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
 			if got.Get("fs") != tc.filter || got.Get("pz") != "5" || got.Get("fid") != "f3" {
 				t.Fatalf("unexpected CLIST request: %v", got)
 			}
-			if len(snapshot.Items) != 1 || snapshot.Category != tc.category || snapshot.Total != 120 {
+			if len(snapshot.Items) != 5 || snapshot.Category != tc.category || snapshot.Total != 120 {
 				t.Fatalf("unexpected snapshot metadata: %+v", snapshot)
 			}
 			item := snapshot.Items[0]
@@ -729,5 +735,19 @@ func TestEastmoneyStockSearchRejectsPageRowsBeyondDeclaredTotal(t *testing.T) {
 	}
 	if requests != 2 {
 		t.Fatalf("pagination should stop on an overfull page, got %d requests", requests)
+	}
+}
+
+
+func TestEastmoneyFetchSectorRankingsRejectsUnderfilledPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"total":120,"diff":[{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+	_, err := p.FetchSectorRankings(context.Background(), "industry", 5)
+	if err == nil || !strings.Contains(err.Error(), "expected 5 rows from total=120 and limit=5") {
+		t.Fatalf("underfilled sector-ranking response must be rejected, got %v", err)
 	}
 }
