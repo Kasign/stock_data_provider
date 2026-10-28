@@ -259,8 +259,11 @@ type MarketBreadthSnapshot struct {
 	LimitUpCount        *int          `json:"limit_up_count"`
 	LimitDownCount      *int          `json:"limit_down_count"`
 	TotalAmountCNY      *float64      `json:"total_amount_cny"`
-	AmountCoverageCount int           `json:"amount_coverage_count"`
-	Source              string        `json:"source"`
+	AmountCoverageCount        int           `json:"amount_coverage_count"`
+	QuoteTimestampCoverageCount int           `json:"quote_timestamp_coverage_count"`
+	OldestQuoteTime             *time.Time    `json:"oldest_quote_time,omitempty"`
+	NewestQuoteTime             *time.Time    `json:"newest_quote_time,omitempty"`
+	Source                      string        `json:"source"`
 	SourceVersion       string        `json:"source_version,omitempty"`
 	ProviderReportDate  string        `json:"provider_report_date,omitempty"`
 	FetchedAt           time.Time     `json:"fetched_at"`

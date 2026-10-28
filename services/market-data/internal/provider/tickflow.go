@@ -311,6 +311,8 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 }
 
 
+const tickflowBreadthMaxQuoteTimestampSpread = 10 * time.Minute
+
 func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("TickFlow HTTP client is not configured")
@@ -422,6 +424,8 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 	amountTotal := 0.0
 	amountCoverage := 0
+	timestampCoverage := 0
+	var oldestQuoteTime, newestQuoteTime *time.Time
 	reportDate := ""
 	limitUpCount, limitDownCount := 0, 0
 	limitCountsComplete := true
@@ -432,11 +436,20 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 		if quoteTime == nil {
 			degrade("provider_quote_timestamp_missing_or_invalid")
 		} else {
+			timestampCoverage++
 			date := quoteTime.In(location).Format("2006-01-02")
 			if reportDate == "" {
 				reportDate = date
 			} else if reportDate != date {
 				return nil, fmt.Errorf("TickFlow A-share quotes span multiple report dates: %s and %s", reportDate, date)
+			}
+			if oldestQuoteTime == nil || quoteTime.Before(*oldestQuoteTime) {
+				oldest := quoteTime.UTC()
+				oldestQuoteTime = &oldest
+			}
+			if newestQuoteTime == nil || quoteTime.After(*newestQuoteTime) {
+				newest := quoteTime.UTC()
+				newestQuoteTime = &newest
 			}
 		}
 
@@ -500,6 +513,15 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 	if reportDate == "" {
 		return nil, errors.New("TickFlow A-share quotes contain no valid provider timestamp for a report date")
+	}
+	snapshot.QuoteTimestampCoverageCount = timestampCoverage
+	snapshot.OldestQuoteTime = oldestQuoteTime
+	snapshot.NewestQuoteTime = newestQuoteTime
+	if timestampCoverage != snapshot.CoveredSecurities {
+		degrade("provider_quote_timestamp_coverage_incomplete")
+	}
+	if oldestQuoteTime != nil && newestQuoteTime != nil && newestQuoteTime.Sub(*oldestQuoteTime) > tickflowBreadthMaxQuoteTimestampSpread {
+		degrade("provider_quote_timestamp_spread_exceeds_10_minutes")
 	}
 	if !limitCountsComplete {
 		degrade("provider_limit_counts_unavailable_or_incomplete")

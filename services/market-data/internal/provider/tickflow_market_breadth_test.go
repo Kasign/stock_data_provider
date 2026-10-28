@@ -14,9 +14,13 @@ import (
 
 var tickflowBreadthFixtureSymbols = []string{"600000.SH", "000001.SZ", "300001.SZ"}
 
-func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFor, omitNameFor string) *httptest.Server {
+func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFor, omitNameFor string, timestampSkew ...time.Duration) *httptest.Server {
 	t.Helper()
 	timestamp := time.Now().UTC().Add(-time.Minute).UnixMilli()
+	var skewMillis int64
+	if len(timestampSkew) > 0 {
+		skewMillis = timestampSkew[0].Milliseconds()
+	}
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-api-key") != "test-api-key" {
 			t.Errorf("x-api-key header was not forwarded")
@@ -55,9 +59,13 @@ func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFo
 				case "300001.SZ":
 					name = "创业板样本"
 				}
+				rowTimestamp := timestamp
+				if symbol == "000001.SZ" && skewMillis > 0 {
+					rowTimestamp -= skewMillis
+				}
 				row := map[string]any{
 					"symbol": symbol, "last_price": current, "prev_close": previous,
-					"open": current, "high": current, "low": current, "timestamp": timestamp,
+					"open": current, "high": current, "low": current, "timestamp": rowTimestamp,
 				}
 				if symbol != omitNameFor {
 					row["name"] = name
@@ -104,6 +112,30 @@ func TestTickFlowFetchMarketBreadthCalculatesCompleteSnapshot(t *testing.T) {
 	}
 	if got.ProviderReportDate == "" || got.QualityStatus != model.QualityValid {
 		t.Fatalf("expected a valid report date and quality status: %+v", got)
+	}
+	if got.QuoteTimestampCoverageCount != 3 || got.OldestQuoteTime == nil || got.NewestQuoteTime == nil ||
+		got.NewestQuoteTime.Sub(*got.OldestQuoteTime) != 0 {
+		t.Fatalf("complete fixture must expose a complete, aligned timestamp range: %+v", got)
+	}
+}
+
+
+func TestTickFlowFetchMarketBreadthDegradesWideQuoteTimestampSpread(t *testing.T) {
+	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "", "", 11*time.Minute)
+	defer server.Close()
+
+	client := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	got, err := client.FetchMarketBreadth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.QualityStatus != model.QualityDegraded ||
+		got.OldestQuoteTime == nil || got.NewestQuoteTime == nil ||
+		got.NewestQuoteTime.Sub(*got.OldestQuoteTime) != 11*time.Minute {
+		t.Fatalf("wide timestamp spread must be exposed and degrade quality: %+v", got)
+	}
+	if !containsTickflowReason(got.QualityReasons, "provider_quote_timestamp_spread_exceeds_10_minutes") {
+		t.Fatalf("missing timestamp spread quality reason: %v", got.QualityReasons)
 	}
 }
 

@@ -322,6 +322,33 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 	if snapshot.AmountCoverageCount < 0 || snapshot.AmountCoverageCount > snapshot.CoveredSecurities {
 		return errors.New("market-breadth amount coverage is invalid")
 	}
+	if snapshot.QuoteTimestampCoverageCount < 0 || snapshot.QuoteTimestampCoverageCount > snapshot.CoveredSecurities {
+		return errors.New("market-breadth quote timestamp coverage is invalid")
+	}
+	if snapshot.QuoteTimestampCoverageCount == 0 {
+		if snapshot.OldestQuoteTime != nil || snapshot.NewestQuoteTime != nil {
+			return errors.New("market-breadth quote timestamp bounds exist without timestamp coverage")
+		}
+	} else {
+		if snapshot.OldestQuoteTime == nil || snapshot.NewestQuoteTime == nil {
+			return errors.New("market-breadth quote timestamp bounds are missing despite reported coverage")
+		}
+		if snapshot.OldestQuoteTime.IsZero() || snapshot.NewestQuoteTime.IsZero() || snapshot.NewestQuoteTime.Before(*snapshot.OldestQuoteTime) {
+			return errors.New("market-breadth quote timestamp bounds are invalid")
+		}
+		if snapshot.OldestQuoteTime.After(time.Now().Add(5*time.Minute)) || snapshot.NewestQuoteTime.After(time.Now().Add(5*time.Minute)) {
+			return errors.New("market-breadth quote timestamp is in the future")
+		}
+		if snapshot.OldestQuoteTime.In(marketLocation()).Format("2006-01-02") != snapshot.ProviderReportDate ||
+			snapshot.NewestQuoteTime.In(marketLocation()).Format("2006-01-02") != snapshot.ProviderReportDate {
+			return errors.New("market-breadth quote timestamps do not match provider report date")
+		}
+		if snapshot.QuoteTimestampCoverageCount == snapshot.CoveredSecurities &&
+			snapshot.NewestQuoteTime.Sub(*snapshot.OldestQuoteTime) > 10*time.Minute &&
+			 snapshot.QualityStatus == model.QualityValid {
+			return errors.New("market-breadth cannot be valid when quote timestamp spread exceeds 10 minutes")
+		}
+	}
 	if snapshot.AmountCoverageCount == snapshot.CoveredSecurities {
 		if snapshot.TotalAmountCNY == nil || math.IsNaN(*snapshot.TotalAmountCNY) || math.IsInf(*snapshot.TotalAmountCNY, 0) || *snapshot.TotalAmountCNY < 0 {
 			return errors.New("market-breadth amount invalid despite complete amount coverage")
@@ -350,9 +377,13 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 		return fmt.Errorf("market-breadth quality status %q is unsupported", snapshot.QualityStatus)
 	}
 	if snapshot.QualityStatus == model.QualityValid {
+		if snapshot.QuoteTimestampCoverageCount != snapshot.CoveredSecurities ||
+			snapshot.OldestQuoteTime == nil || snapshot.NewestQuoteTime == nil {
+			return errors.New("market-breadth cannot be valid without complete quote timestamp coverage")
+		}
 		for _, reason := range snapshot.QualityReasons {
 			switch reason {
-			case "market_amount_quotes_collected_non_atomically", "provider_snapshot_timestamp_not_exposed":
+			case "market_amount_quotes_collected_non_atomically", "provider_snapshot_timestamp_not_exposed", "provider_quote_timestamp_missing_or_invalid", "provider_quote_timestamp_coverage_incomplete", "provider_quote_timestamp_spread_exceeds_10_minutes":
 				return fmt.Errorf("market-breadth snapshot cannot be valid while quality reason %q is present", reason)
 			}
 		}

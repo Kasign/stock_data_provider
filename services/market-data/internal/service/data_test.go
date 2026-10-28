@@ -2708,3 +2708,32 @@ func TestValidateLimitPoolRejectsValidSnapshotWithoutProviderReportDate(t *testi
 		t.Fatalf("valid limit-pool data with matching source report date should pass, got %v", err)
 	}
 }
+
+
+func TestValidateMarketBreadthRequiresConsistentQuoteTimestampCoverage(t *testing.T) {
+	location := marketLocation()
+	oldest := time.Now().In(location).Add(-time.Minute).UTC()
+	newest := oldest
+	amount := 100.0
+	snapshot := &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+		AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
+		AmountCoverageCount: 3, QuoteTimestampCoverageCount: 3,
+		OldestQuoteTime: &oldest, NewestQuoteTime: &newest, TotalAmountCNY: &amount,
+		ProviderReportDate: oldest.In(location).Format("2006-01-02"),
+		Source: "tickflow", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityValid,
+	}
+	if err := validateMarketBreadth(snapshot); err != nil {
+		t.Fatalf("complete time-aligned breadth should validate: %v", err)
+	}
+
+	snapshot.QuoteTimestampCoverageCount = 2
+	if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "complete quote timestamp coverage") {
+		t.Fatalf("valid breadth must require all quote timestamps, got %v", err)
+	}
+	snapshot.QualityStatus = model.QualityDegraded
+	if err := validateMarketBreadth(snapshot); err != nil {
+		t.Fatalf("degraded snapshot with disclosed partial time coverage should remain usable: %v", err)
+	}
+}
