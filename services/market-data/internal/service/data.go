@@ -1066,6 +1066,9 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 {
 		return errors.New("stock-basic float_market_cap_cny must not be negative")
 	}
+	if item.MarketCapCNY != nil && item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY > *item.MarketCapCNY {
+		return errors.New("stock-basic float_market_cap_cny must not exceed market_cap_cny")
+	}
 	if item.TotalShares != nil && *item.TotalShares <= 0 {
 		return errors.New("stock-basic total_shares must be positive")
 	}

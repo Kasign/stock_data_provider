@@ -1564,6 +1564,7 @@ func TestValidateStockBasicRejectsInvalidShareCounts(t *testing.T) {
 		{name: "total shares zero", setup: func(item *model.StockBasic) { value := 0.0; item.TotalShares = &value }, want: "total_shares must be positive"},
 		{name: "float shares negative", setup: func(item *model.StockBasic) { value := -1.0; item.FloatShares = &value }, want: "float_shares must not be negative"},
 		{name: "float shares exceed total", setup: func(item *model.StockBasic) { value := 1_000_001.0; item.FloatShares = &value }, want: "float_shares must not exceed total_shares"},
+		{name: "float market cap exceeds total", setup: func(item *model.StockBasic) { total, floating := 1_000_000.0, 1_000_001.0; item.MarketCapCNY = &total; item.FloatMarketCapCNY = &floating }, want: "float_market_cap_cny must not exceed market_cap_cny"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
