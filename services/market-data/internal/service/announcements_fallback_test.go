@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"context"
 	"errors"
 	"testing"
@@ -55,6 +56,40 @@ func validAnnouncementsForFallbackTest(source string) *model.StockAnnouncementSn
 		Source: source, SourceVersion: "test-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_publish_time_not_exposed"},
 	}
+}
+
+func TestStockAnnouncementsFallsBackFromUnknownQualityRows(t *testing.T) {
+	firstSnapshot := validAnnouncementsForFallbackTest("eastmoney")
+	firstSnapshot.QualityStatus = model.QualityUnknown
+	firstSnapshot.QualityReasons = []string{"provider_announcement_quality_unknown"}
+	first := &announcementFallbackTestProvider{name: "eastmoney", snapshot: firstSnapshot}
+	fallback := &announcementFallbackTestProvider{name: "hithink", snapshot: validAnnouncementsForFallbackTest("hithink")}
+	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetAnnouncementProviders([]provider.AnnouncementProvider{first, fallback})
+	got, hit, err := svc.StockAnnouncements(context.Background(), "600519.SH", "2026-10-20", "2026-10-26", 1, 20)
+	if err != nil || hit { t.Fatalf("StockAnnouncements returned hit=%v err=%v", hit, err) }
+	if got == nil || got.Source != "hithink" || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded fallback rather than unknown announcement rows, got %+v", got)
+	}
+	if first.calls != 1 || fallback.calls != 1 { t.Fatalf("expected both providers to be attempted, calls=%d/%d", first.calls, fallback.calls) }
+}
+
+func TestStockAnnouncementsReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
+	candidate := validAnnouncementsForFallbackTest("eastmoney")
+	candidate.QualityStatus = model.QualityUnknown
+	candidate.QualityReasons = []string{"provider_announcement_quality_unknown"}
+	first := &announcementFallbackTestProvider{name: "eastmoney", snapshot: candidate}
+	failed := &announcementFallbackTestProvider{name: "hithink", err: errors.New("test provider unavailable")}
+	mem := newMemoryCache()
+	svc := NewWithCapabilities(nil, nil, nil, mem, nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetAnnouncementProviders([]provider.AnnouncementProvider{first, failed})
+	got, hit, err := svc.StockAnnouncements(context.Background(), "600519.SH", "2026-10-20", "2026-10-26", 1, 20)
+	if err != nil || hit { t.Fatalf("StockAnnouncements returned hit=%v err=%v", hit, err) }
+	if got == nil || !got.HasData || got.QualityStatus != model.QualityUnknown ||
+		!strings.Contains(strings.Join(got.QualityReasons, ","), "announcements_fallback_exhausted_without_usable_quality") {
+		t.Fatalf("expected retained unknown rows after fallback exhaustion, got %+v", got)
+	}
+	if first.calls != 1 || failed.calls != 1 { t.Fatalf("expected all providers to be attempted, calls=%d/%d", first.calls, failed.calls) }
 }
 
 func TestStockAnnouncementsFallsBackAfterUnknownEmptyProvider(t *testing.T) {
