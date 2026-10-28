@@ -86,6 +86,35 @@ func validFundamentalsSnapshotForTest() *model.FundamentalsSnapshot {
 	}
 }
 
+func TestValidateFundamentalsSnapshotRejectsDuplicateMetricKeys(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.Sections[0].Metrics = append(snapshot.Sections[0].Metrics, snapshot.Sections[0].Metrics[0])
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "duplicate metric key") {
+		t.Fatalf("duplicate metric keys within a section must be rejected, got %v", err)
+	}
+}
+
+func TestValidateFundamentalsSnapshotRejectsBlankMetricMetadata(t *testing.T) {
+	cases := []struct {
+		name string
+		mutate func(*model.FundamentalMetric)
+	}{
+		{name: "blank key", mutate: func(metric *model.FundamentalMetric) { metric.Key = "  " }},
+		{name: "blank name", mutate: func(metric *model.FundamentalMetric) { metric.Name = "  " }},
+		{name: "blank unit", mutate: func(metric *model.FundamentalMetric) { metric.Unit = "  " }},
+		{name: "blank source field", mutate: func(metric *model.FundamentalMetric) { metric.SourceField = "  " }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := validFundamentalsSnapshotForTest()
+			tc.mutate(&snapshot.Sections[0].Metrics[0])
+			if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "invalid metric metadata/value") {
+				t.Fatalf("blank metric metadata must be rejected, got %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateFundamentalsSnapshotRequiresSourceVersion(t *testing.T) {
 	snapshot := validFundamentalsSnapshotForTest()
 	snapshot.SourceVersion = ""

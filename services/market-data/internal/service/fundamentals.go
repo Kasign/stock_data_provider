@@ -89,10 +89,17 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 		} else {
 			allValid = false
 		}
+		seenMetricKeys := make(map[string]struct{}, len(section.Metrics))
 		for _, metric := range section.Metrics {
-			if metric.Key == "" || metric.Name == "" || metric.Unit == "" || metric.SourceField == "" || math.IsNaN(metric.Value) || math.IsInf(metric.Value, 0) {
+			key := strings.TrimSpace(metric.Key)
+			if key == "" || strings.TrimSpace(metric.Name) == "" || strings.TrimSpace(metric.Unit) == "" ||
+				strings.TrimSpace(metric.SourceField) == "" || math.IsNaN(metric.Value) || math.IsInf(metric.Value, 0) {
 				return fmt.Errorf("fundamentals section %s has invalid metric metadata/value", section.Category)
 			}
+			if _, exists := seenMetricKeys[key]; exists {
+				return fmt.Errorf("fundamentals section %s has duplicate metric key %q", section.Category, key)
+			}
+			seenMetricKeys[key] = struct{}{}
 		}
 	}
 	for _, category := range standardCategories {
