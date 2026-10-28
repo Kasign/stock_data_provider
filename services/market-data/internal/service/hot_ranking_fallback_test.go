@@ -63,6 +63,30 @@ func hotRankingFallbackService(cacheStore cache.Cache, providers ...provider.Hot
 	return svc
 }
 
+func TestHotRankingFallsBackFromDuplicateRank(t *testing.T) {
+	invalid := populatedHotRankingForFallbackTest("eastmoney")
+	duplicate := invalid.Items[0]
+	duplicate.Symbol = "000001.SZ"
+	duplicate.Code = "000001"
+	duplicate.Name = "平安银行"
+	invalid.Items = append(invalid.Items, duplicate)
+	invalid.Total = len(invalid.Items)
+	first := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: invalid}
+	second := &hotRankingFallbackTestProvider{name: "hithink", snapshot: populatedHotRankingForFallbackTest("hithink")}
+	svc := hotRankingFallbackService(cache.NewDisabled(), first, second)
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit {
+		t.Fatalf("HotStocks returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "hithink" || len(got.Items) != 1 {
+		t.Fatalf("duplicate rank must reject the first provider and fall back, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("duplicate rank must trigger fallback, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
 func TestHotRankingFallsBackAfterUnknownEmptyResult(t *testing.T) {
 	first := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: emptyHotRankingForFallbackTest("eastmoney")}
 	second := &hotRankingFallbackTestProvider{name: "hithink", snapshot: populatedHotRankingForFallbackTest("hithink")}

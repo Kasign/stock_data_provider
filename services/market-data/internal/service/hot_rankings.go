@@ -40,6 +40,7 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		return errors.New("hot-ranking provider time is zero or in the future")
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
+	seenRanks := make(map[int]struct{}, len(snapshot.Items))
 	hasDegradedItem := false
 	for _, item := range snapshot.Items {
 		symbol, err := normalize.NormalizeSymbol(item.Symbol)
@@ -50,6 +51,10 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 			return fmt.Errorf("hot-ranking snapshot contains duplicate symbol %s", symbol)
 		}
 		seen[symbol] = struct{}{}
+		if _, duplicate := seenRanks[item.Rank]; duplicate {
+			return fmt.Errorf("hot-ranking snapshot contains duplicate rank %d", item.Rank)
+		}
+		seenRanks[item.Rank] = struct{}{}
 		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return errors.New("hot-ranking item source/version/fetched_at mismatch")
 		}
