@@ -207,13 +207,15 @@ test("任务轮询意外异常会暂停自动刷新并保留手动重试入口",
 
 test("轮询异常收敛中的诊断渲染失败不会再次拒绝 Promise", () => {
   const safeStart = app.indexOf("function pollTaskSafely(");
-  const safeEnd = app.indexOf("\\nasync function createTask(", safeStart);
+  const safeEnd = app.indexOf("\nasync function createTask(", safeStart);
   const safePoll = safeStart >= 0 && safeEnd > safeStart ? app.slice(safeStart, safeEnd) : "";
-  assert.match(safePoll, /return pollTask\\(generation\\)\\.catch\\(\\(error\\) => \\{[\\s\\S]*?try \\{/);
-  assert.match(safePoll, /setQualityPill\\(\\$\\("#task-status-pill"\\), "unknown", "状态处理失败"\\);[\\s\\S]*?catch \\(renderError\\)/);
-  assert.match(safePoll, /const pollLabel = \\$("#task-poll-label"\\);[\\s\\S]*?catch \\(renderError\\)/);
-  assert.match(safePoll, /if \\(state.view === "watchlist"\\) \\{[\\s\\S]*?try \\{[\\s\\S]*?renderWatchlist\\(\\);[\\s\\S]*?catch \\(renderError\\)/);
-  assert.match(safePoll, /异常收敛中的异常也不得形成新的未处理 Promise rejection[\\s\\S]*?try \\{[\\s\\S]*?stopTaskPolling\\(\\);[\\s\\S]*?catch \\{\\s*\\}/);
+  assert.ok(safePoll.includes("return pollTask(generation).catch((error) => {"));
+  assert.ok(safePoll.includes("generation !== state.pollGeneration || !state.taskId"));
+  assert.ok(safePoll.includes('appendRecoveryError("状态徽标更新失败：", renderError);'));
+  assert.ok(safePoll.includes('appendRecoveryError("轮询诊断更新失败：", renderError);'));
+  assert.ok(safePoll.includes('appendRecoveryError("自选股卡片刷新失败：", renderError);'));
+  assert.ok(safePoll.includes("异常收敛中的异常也不得形成新的未处理 Promise rejection"));
+  assert.ok(safePoll.includes("try {\n        stopTaskPolling();\n      } catch {}"));
 });
 
 test("Run 结果读取准备阶段异常也会复位忙碌锁", () => {
