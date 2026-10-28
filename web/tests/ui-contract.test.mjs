@@ -174,10 +174,9 @@ test("individual stock research uses one detail workspace without duplicate chip
   assert.ok(stylesheet.includes(".research-overview-grid") && stylesheet.includes(".supplement-quality-degraded"));
 });
 test("watchlist labels task history from a different analysis API address", () => {
-  const watchlistRenderer = app.match(/function renderWatchlist\\(records, storageReadable, storageValid\\) \\{[\\s\\S]*?\\n\\}/)?.[0] || "";
-  assert.match(watchlistRenderer, /const isOtherAnalysisBase = \\(task\\) => Boolean\\(task && String\\(task\\.analysis_base \\|\\| state\\.settings\\.analysisBase\\) !== String\\(state\\.settings\\.analysisBase\\)\\);/);
-  assert.match(watchlistRenderer, /todayTaskUsesOtherEndpoint \\? "（旧分析 API 地址）" : ""/);
-  assert.match(watchlistRenderer, /recentTaskUsesOtherEndpoint \\? " · 旧分析 API 地址" : ""/);
+  assert.ok(app.includes('const isOtherAnalysisBase = (task) => Boolean(task && String(task.analysis_base || state.settings.analysisBase) !== String(state.settings.analysisBase));'));
+  assert.ok(app.includes('todayLine.textContent = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "")'));
+  assert.ok(app.includes('(recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "")'));
 });
 
 test("watchlist task and Run summaries refresh when background state changes", () => {
