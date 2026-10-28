@@ -97,9 +97,9 @@ function renderHotStocks(data) {
   items.forEach(item=>{
    const tr=document.createElement("tr");
    cell(tr,item.rank===null||item.rank===undefined?"—":count(item.rank),"market-rank-cell");
-   const stock=el("td"),button=el("button","market-hot-stock-link");
-   button.type="button";button.dataset.hotSymbol=String(item.symbol||"");button.dataset.hotName=String(item.name||item.symbol||item.code||"");button.disabled=!String(item.symbol||"").trim();
-   button.append(el("strong","market-table-primary",item.name||"名称未报告"),el("small","market-table-secondary",item.code||item.symbol||"代码未报告"));
+   const stock=el("td"),button=el("button","market-hot-stock-link"),symbol=String(item.symbol||item.code||"").trim();
+   button.type="button";button.dataset.hotSymbol=symbol;button.dataset.hotName=String(item.name||symbol||"");button.disabled=!symbol;
+   button.append(el("strong","market-table-primary",item.name||"名称未报告"),el("small","market-table-secondary",symbol||"代码未报告"));
    stock.append(button);tr.append(stock);
    const price=el("td");price.append(el("strong","market-table-primary",formatPrice(item.latest_price)),el("small","market-table-secondary","涨跌额 "+formatPrice(item.change)));tr.append(price);
    cell(tr,formatPercent(item.change_percent),dir(item.change_percent));

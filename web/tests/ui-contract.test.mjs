@@ -442,6 +442,11 @@ test("run-flow keeps cached events explicit during read errors and exports diagn
 });
 
 
+test("market hot-rank actions accept the symbol or code field as the stock identifier", () => {
+  assert.match(marketOverview, /const stock=el\("td"\),button=el\("button","market-hot-stock-link"\),symbol=String\(item\.symbol\|\|item\.code\|\|""\)\.trim\(\);/);
+  assert.match(marketOverview, /button\.dataset\.hotSymbol=symbol;button\.dataset\.hotName=String\(item\.name\|\|symbol\|\|""\);button\.disabled=!symbol/);
+});
+
 test("dragon-tiger rows only render stock navigation when a usable code exists", () => {
   assert.match(marketActivity, /const symbol=String\(item\.symbol\|\|item\.code\|\|""\)\.trim\(\);/);
   assert.match(marketActivity, /if\(symbol\)\{\s*const button=el\("button","activity-stock-link","查看行情"\);button\.type="button";button\.dataset\.dragonSymbol=symbol/);
