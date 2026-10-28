@@ -323,6 +323,90 @@ func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
 }
 
 
+func TestTushareLimitPoolEmptyResultDoesNotInventProviderReportDate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare limit-pool request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "limit_list_d" {
+			t.Errorf("api_name=%q, want limit_list_d", request.APIName)
+		}
+		writeTushareTestTable(w,
+			strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ","),
+			[][]any{},
+		)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchLimitPool(context.Background(), "up", "2026-10-27", 30)
+	if err != nil {
+		t.Fatalf("FetchLimitPool: %v", err)
+	}
+	if got.QualityStatus != model.QualityUnknown || got.ProviderReportDate != "" {
+		t.Fatalf("empty unknown pool must not claim a confirmed provider report date: %+v", got)
+	}
+}
+
+func TestTushareDragonTigerEmptyResultDoesNotInventProviderReportDate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare dragon-tiger request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "top_list" {
+			t.Errorf("api_name=%q, want top_list", request.APIName)
+		}
+		writeTushareTestTable(w,
+			strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ","),
+			[][]any{},
+		)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchDragonTiger(context.Background(), "2026-10-27", 1, 100)
+	if err != nil {
+		t.Fatalf("FetchDragonTiger: %v", err)
+	}
+	if got.QualityStatus != model.QualityUnknown || got.ProviderReportDate != "" {
+		t.Fatalf("empty unknown report must not claim a confirmed provider report date: %+v", got)
+	}
+}
+
+func TestTushareEventEndpointsRejectFutureTradeDatesBeforeRequest(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().In(loc).AddDate(0, 0, 1).Format("2006-01-02")
+	for _, name := range []string{"limit-pool", "dragon-tiger"} {
+		t.Run(name, func(t *testing.T) {
+			called := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				http.Error(w, "should not be called for a future trade date", http.StatusBadRequest)
+			}))
+			defer server.Close()
+			client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+			var callErr error
+			if name == "limit-pool" {
+				_, callErr = client.FetchLimitPool(context.Background(), "up", future, 30)
+			} else {
+				_, callErr = client.FetchDragonTiger(context.Background(), future, 1, 100)
+			}
+			if callErr == nil || called {
+				t.Fatalf("future trade date should be rejected before the provider request: err=%v called=%v", callErr, called)
+			}
+		})
+	}
+}
+
 func TestTushareIndexDailyBarsDegradesMissingProviderTimestamp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request tushareIndexWeightRequest

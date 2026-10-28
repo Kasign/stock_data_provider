@@ -851,6 +851,13 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	}
 	parsedDate, _ := time.Parse("20060102", compactDate)
 	tradeDate = parsedDate.Format("2006-01-02")
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	if tradeDate > time.Now().In(loc).Format("2006-01-02") {
+		return nil, errors.New("Tushare 涨跌停池交易日期不能晚于中国市场当前日期")
+	}
 	table, err := p.fetchCapabilityTable(ctx, "limit_list_d", map[string]string{
 		"trade_date": compactDate, "limit_type": limitType,
 	}, "trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit")
@@ -954,9 +961,14 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		})
 	}
+	providerReportDate := ""
+	if len(table.rows) > 0 {
+		// 原始结果行已逐条核对 trade_date；只有确实收到该日期的源记录时才填报表日期。
+		providerReportDate = tradeDate
+	}
 	if len(allItems) == 0 {
 		return &model.LimitPoolSnapshot{
-			PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: tradeDate,
+			PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: providerReportDate,
 			Total: 0, HasData: false, Items: []model.LimitPoolItem{},
 			Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
 			QualityStatus:  model.QualityUnknown,
@@ -968,7 +980,7 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 		allItems = allItems[:limit]
 	}
 	return &model.LimitPoolSnapshot{
-		PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: tradeDate,
+		PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: providerReportDate,
 		Total: total, HasData: true, Items: allItems,
 		Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
@@ -991,6 +1003,13 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	}
 	parsedDate, _ := time.Parse("20060102", compactDate)
 	tradeDate = parsedDate.Format("2006-01-02")
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	if tradeDate > time.Now().In(loc).Format("2006-01-02") {
+		return nil, errors.New("Tushare 龙虎榜交易日期不能晚于中国市场当前日期")
+	}
 	if page < 1 || page > 1000 {
 		return nil, errors.New("Tushare 龙虎榜 page 必须在 1..1000")
 	}
@@ -1009,7 +1028,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		pages = (total + pageSize - 1) / pageSize
 	}
 	base := &model.DragonTigerSnapshot{
-		TradeDate: tradeDate, ProviderReportDate: tradeDate, Page: page, PageSize: pageSize,
+		TradeDate: tradeDate, ProviderReportDate: "", Page: page, PageSize: pageSize,
 		Total: total, Pages: pages, SourceReturned: 0, ExcludedNonAShareCount: 0,
 		HasData: false, HasMore: false, Items: []model.DragonTigerItem{},
 		Source: p.Name(), SourceVersion: "tushare-top-list-v1", FetchedAt: now,
@@ -1107,6 +1126,8 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 			QualityStatus: model.QualityDegraded, QualityReasons: itemReasons,
 		})
 	}
+	// 只有实际收到且逐条核对过交易日的源记录，才能证明 ProviderReportDate。
+	base.ProviderReportDate = tradeDate
 	base.Returned = len(base.Items)
 	if total >= 10000 {
 		base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_response_may_be_capped_at_10000_rows")
