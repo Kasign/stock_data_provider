@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"context"
 	"errors"
 	"strings"
@@ -153,6 +154,57 @@ func TestIndexDailyBarsFallsBackAfterUnknownEmptyProvider(t *testing.T) {
 	}
 	if first.calls != 1 || second.calls != 1 {
 		t.Fatalf("expected both Providers to be called, first=%d second=%d", first.calls, second.calls)
+	}
+}
+
+func unknownQualityIndexDailyBarsForFallbackTest(source string) *model.IndexDailyBarsSnapshot {
+	snapshot := populatedIndexDailyBarsForFallbackTest(source)
+	snapshot.QualityStatus = model.QualityUnknown
+	snapshot.QualityReasons = []string{"provider_index_daily_bars_quality_unknown"}
+	return snapshot
+}
+
+func TestIndexDailyBarsFallsBackFromUnknownQualityRows(t *testing.T) {
+	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: unknownQualityIndexDailyBarsForFallbackTest("hithink")}
+	second := &indexDailyBarsFallbackTestProvider{name: "tushare", snapshot: populatedIndexDailyBarsForFallbackTest("tushare")}
+	svc := &DataService{
+		cache: cache.NewDisabled(),
+		indexCatalogProviders: []provider.IndexCatalogProvider{first, second},
+	}
+
+	got, hit, err := svc.IndexDailyBarsFromSource(context.Background(), "000300.SH", "2026-10-20", "2026-10-23", "")
+	if err != nil || hit {
+		t.Fatalf("IndexDailyBarsFromSource returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.QualityStatus != model.QualityDegraded || len(got.Items) != 1 {
+		t.Fatalf("expected degraded bars from the later provider, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected fallback after unknown-quality rows, first=%d second=%d", first.calls, second.calls)
+	}
+}
+
+func TestIndexDailyBarsLegacyUnknownQualityCacheDoesNotBlockFallback(t *testing.T) {
+	legacy := unknownQualityIndexDailyBarsForFallbackTest("hithink")
+	encoded, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem := newMemoryCache()
+	mem.values["md:v2:index-daily-bars:auto:000300.SH:2026-10-20:2026-10-23"] = encoded
+	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: legacy}
+	second := &indexDailyBarsFallbackTestProvider{name: "tushare", snapshot: populatedIndexDailyBarsForFallbackTest("tushare")}
+	svc := &DataService{
+		cache: mem,
+		indexCatalogProviders: []provider.IndexCatalogProvider{first, second},
+	}
+
+	got, hit, err := svc.IndexDailyBarsFromSource(context.Background(), "000300.SH", "2026-10-20", "2026-10-23", "")
+	if err != nil || hit {
+		t.Fatalf("legacy unknown-quality cache must not short-circuit fallback: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || second.calls != 1 {
+		t.Fatalf("expected fallback provider after bypassing legacy cache, got %+v secondCalls=%d", got, second.calls)
 	}
 }
 
