@@ -92,7 +92,7 @@ test("task restoration validates local references and guards stale asynchronous 
 
 
 test("polling pauses on permanent API errors and Run reads use bounded, stale-safe retries", () => {
-  assert.match(app, /if \(taskError && !isRetryableApiError\(taskError\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
+  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseIdentityMismatch\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
   assert.match(app, /const RUN_RESULT_RETRY_DELAYS_MS = \[1000, 2500, 5000\]/);
   assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /state\.runResultGeneration \+= 1/);
@@ -1139,4 +1139,15 @@ test("主行情、日 K 与统一快照拒绝证券代码不匹配的响应", ()
   assert.match(app, /responseSymbolMismatch\(barsResult\.value, symbol, "日 K"\)/);
   assert.match(app, /quote: null,[\s\S]*?warnings: \[\.\.\.\(Array\.isArray\(bundleResponse\.warnings\)/);
   assert.ok(app.includes('return label + "返回的证券代码 " + responseSymbol + " 与请求标的 " + requestedSymbol + " 不匹配，已忽略结果。"'));
+});
+
+ 
+test("分析任务、阶段事件与 Run 响应必须匹配当前请求标识", () => {
+  assert.match(app, /function responseIdentityError\(message\)[\s\S]*?error\.responseIdentityMismatch = true/);
+  assert.match(app, /candidate\.task_id !== taskId[\s\S]*?任务状态接口未返回 task_id/);
+  assert.match(app, /eventPayload\.task_id !== taskId[\s\S]*?阶段事件接口未返回 task_id/);
+  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseIdentityMismatch\)\)/);
+  assert.match(app, /if \(isRetryableApiError\(eventError\) && !eventError\.responseIdentityMismatch\)/);
+  assert.match(app, /if \(result\?\.run_id !== runId\) \{[\s\S]*?Run 结果接口未返回 run_id/);
+  assert.match(app, /!error\.responseIdentityMismatch && isRetryableApiError\(error\)/);
 });

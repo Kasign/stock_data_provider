@@ -34,6 +34,10 @@ WebUI 使用的 HTTP API **不是现在从零新定的**。行情服务与 Go �
 | Go 分析 | `GET /analysis-api/api/v1/analysis/tasks/{task_id}/events?after_sequence=0&limit=100` | 增量事件游标与单页条数 | 获取持久化阶段事件 |
 | Go 分析 | `GET /analysis-api/api/v1/analysis/runs/{run_id}` | Run ID 作为路径段 | 读取单个 RunResult，并作为结构化分析结果展示的数据源；运行未结束时现有接口可能返回 409 `run_not_finished` |
 
+## 分析任务与 Run 响应标识校验
+
+任务状态响应必须包含与当前路径一致的 `task_id`；阶段事件响应必须包含相同的 `task_id`；Run 结果必须包含与请求路径一致的 `run_id`。缺失或不匹配的标识属于响应契约错误：前端不渲染错误内容，不把它当作瞬时网络故障反复重试。阶段事件身份错误只暂停事件续读，不阻塞任务状态的独立轮询。
+
 ## 2026-10-27 数据中心“立即检查”的真实调用范围
 
 WebUI 已添加数据中心页面和手动“立即检查”操作。此页面当前实际调用：

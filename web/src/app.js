@@ -75,6 +75,12 @@ const TASK_EVENT_STATUS_LABELS = Object.freeze({
   other: "其他状态"
 });
 
+function responseIdentityError(message) {
+  const error = new Error(message);
+  error.responseIdentityMismatch = true;
+  return error;
+}
+
 function taskEventStatusKey(status) {
   const normalized = String(status || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
   return Object.prototype.hasOwnProperty.call(TASK_EVENT_STATUS_LABELS, normalized)
@@ -2735,14 +2741,19 @@ async function loadTaskRunResult(runId, expectedTaskId) {
     try {
       const result = await getAnalysisRun(requestSettings, runId);
       if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
-      state.runId = result.run_id || runId;
+      if (result?.run_id !== runId) {
+        throw responseIdentityError(result?.run_id
+          ? "Run 结果接口返回了其他 Run 的结果，已忽略。"
+          : "Run 结果接口未返回 run_id，已忽略该响应。");
+      }
+      state.runId = result.run_id;
       persistTaskReference();
       renderTaskResult(result);
       return;
     } catch (error) {
       if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
       const delay = RUN_RESULT_RETRY_DELAYS_MS[retries];
-      if (delay !== undefined && isRetryableApiError(error)) {
+      if (delay !== undefined && !error.responseIdentityMismatch && isRetryableApiError(error)) {
         retries += 1;
         $("#task-result-note").textContent =
           `Run 结果暂时不可读（${errorMessage(error)}），将在 ${delay / 1000} 秒后重试（${retries}/${RUN_RESULT_RETRY_DELAYS_MS.length}）…`;
@@ -2788,8 +2799,10 @@ async function pollTask(generation = state.pollGeneration) {
     const candidate = payload?.task || payload;
     if (!candidate || typeof candidate !== "object" || !candidate.status) {
       taskError = new Error("任务状态接口返回了无法识别的响应。");
-    } else if (candidate.task_id && candidate.task_id !== taskId) {
-      taskError = new Error("任务状态接口返回了其他任务的结果，已忽略。");
+    } else if (candidate.task_id !== taskId) {
+      taskError = responseIdentityError(candidate.task_id
+        ? "任务状态接口返回了其他任务的结果，已忽略。"
+        : "任务状态接口未返回 task_id，已忽略该响应。");
     } else {
       task = candidate;
       renderTask(task);
@@ -2804,8 +2817,10 @@ async function pollTask(generation = state.pollGeneration) {
     const eventPayload = eventResult.value;
     if (!eventPayload || typeof eventPayload !== "object" || !Array.isArray(eventPayload.events)) {
       eventError = new Error("阶段事件接口返回的数据结构无效。");
-    } else if (eventPayload.task_id && eventPayload.task_id !== taskId) {
-      eventError = new Error("阶段事件接口返回了其他任务的事件，已忽略。");
+    } else if (eventPayload.task_id !== taskId) {
+      eventError = responseIdentityError(eventPayload.task_id
+        ? "阶段事件接口返回了其他任务的事件，已忽略。"
+        : "阶段事件接口未返回 task_id，已忽略该响应。");
     } else {
       state.taskEventsLoaded = true;
       state.taskEventsError = "";
@@ -2831,12 +2846,12 @@ async function pollTask(generation = state.pollGeneration) {
 
   if (eventError) {
     state.taskEventsError = errorMessage(eventError);
-    if (!isRetryableApiError(eventError)) state.taskEventsUnavailable = true;
+    if (!isRetryableApiError(eventError) || eventError.responseIdentityMismatch) state.taskEventsUnavailable = true;
     renderTaskEvents();
   }
 
   // A permanent task lookup failure means the current task reference cannot be polled safely.
-  if (taskError && !isRetryableApiError(taskError)) {
+  if (taskError && (!isRetryableApiError(taskError) || taskError.responseIdentityMismatch)) {
     stopTaskPolling();
     $("#task-poll-label").textContent =
       "自动刷新已暂停：任务状态读取失败：" + errorMessage(taskError) +
@@ -2869,7 +2884,7 @@ async function pollTask(generation = state.pollGeneration) {
   }
 
   if (eventError) {
-    if (isRetryableApiError(eventError)) {
+    if (isRetryableApiError(eventError) && !eventError.responseIdentityMismatch) {
       $("#task-poll-label").textContent =
         "任务状态已更新，但阶段事件读取失败：" + errorMessage(eventError) + "，5 秒后重试…";
       state.pollTimer = window.setTimeout(() => pollTask(generation), 5000);
