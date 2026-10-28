@@ -2612,13 +2612,16 @@ function renderTaskFlowSummary() {
 
 function renderSelectedTaskEvent(item) {
   const panel = $("#task-event-detail");
+  const detailLayout = $("#task-detail");
   if (!panel) return;
   if (!item) {
     panel.hidden = true;
+    detailLayout?.classList.remove("has-selected-event");
     return;
   }
   const event = item.event && typeof item.event === "object" ? item.event : item;
   panel.hidden = false;
+  detailLayout?.classList.add("has-selected-event");
   const sequence = Number(item.sequence);
   const label = event.stage || event.name || "阶段事件";
   $("#task-event-detail-title").textContent = label + " · #" + (Number.isFinite(sequence) ? sequence : "未报告");

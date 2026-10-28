@@ -3506,6 +3506,11 @@ td {
   margin-top: 12px;
 }
 
+/* No selected event means no diagnostics pane: let the timeline use the full width. */
+.run-flow-dialog #task-detail:not([hidden]):not(.has-selected-event) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .run-flow-dialog .run-flow-summary {
   grid-column: 1 / -1;
   grid-template-columns: repeat(4, minmax(0, 1fr));
