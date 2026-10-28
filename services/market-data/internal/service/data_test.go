@@ -2737,3 +2737,19 @@ func TestValidateMarketBreadthRequiresConsistentQuoteTimestampCoverage(t *testin
 		t.Fatalf("degraded snapshot with disclosed partial time coverage should remain usable: %v", err)
 	}
 }
+
+
+func TestValidateMarketBreadthRejectsOverflowingCategoryCounts(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	snapshot := &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+		AdvancingCount: maxInt, DecliningCount: maxInt, UnchangedCount: 5,
+		AmountCoverageCount: 0, QuoteTimestampCoverageCount: 0,
+		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+		Source: "untrusted-fixture", SourceVersion: "test-overflow-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+	}
+	if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "category counts do not reconcile") {
+		t.Fatalf("integer overflow must not allow incoherent breadth counts, got %v", err)
+	}
+}

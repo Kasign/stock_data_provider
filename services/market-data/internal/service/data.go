@@ -315,8 +315,17 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 		(snapshot.LimitDownCount != nil && (*snapshot.LimitDownCount < 0 || *snapshot.LimitDownCount > snapshot.CoveredSecurities)) {
 		return errors.New("market-breadth limit counts are outside covered-securities bounds")
 	}
-	counts := snapshot.AdvancingCount + snapshot.DecliningCount + snapshot.UnchangedCount + snapshot.UnclassifiedCount
-	if snapshot.AdvancingCount < 0 || snapshot.DecliningCount < 0 || snapshot.UnchangedCount < 0 || snapshot.UnclassifiedCount < 0 || counts != snapshot.CoveredSecurities {
+	categoryCounts := []int{snapshot.AdvancingCount, snapshot.DecliningCount, snapshot.UnchangedCount, snapshot.UnclassifiedCount}
+	reconciledCount := 0
+	for _, count := range categoryCounts {
+		// 先与剩余覆盖量比较，再相加，避免异常来源数据通过 int 溢出伪造一致总数。
+		remaining := snapshot.CoveredSecurities - reconciledCount
+		if count < 0 || count > remaining {
+			return errors.New("market-breadth category counts do not reconcile to covered securities")
+		}
+		reconciledCount += count
+	}
+	if reconciledCount != snapshot.CoveredSecurities {
 		return errors.New("market-breadth category counts do not reconcile to covered securities")
 	}
 	if snapshot.AmountCoverageCount < 0 || snapshot.AmountCoverageCount > snapshot.CoveredSecurities {
