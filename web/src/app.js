@@ -124,8 +124,9 @@ const state = {
   technicalRows: [],
   technicalSymbol: "",
   chartMeta: { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" },
-  // 当前任务选择代际用于隔离创建请求的晚到响应。
+  // 当前任务选择代际与最近任务历史代际分别隔离不同来源的晚到响应。
   taskContextGeneration: 0,
+  taskHistoryGeneration: 0,
   taskId: "",
   runId: "",
   taskAnalysisBase: "",
@@ -445,6 +446,9 @@ function clearRecentTaskHistory() {
       (error?.message ? "（" + error.message + "）" : ""), "error");
     return;
   }
+  // 使清空之前发出的创建请求失效，防止晚到响应把历史重新写入。
+  state.taskHistoryGeneration += 1;
+  state.taskContextGeneration += 1;
   state.suppressedHistoryTaskId = currentTaskId;
   state.suppressedHistoryTaskBase = currentTaskId ? (state.taskAnalysisBase || state.settings.analysisBase) : "";
   renderRecentTasks(remaining);
@@ -3080,6 +3084,7 @@ async function createTask(event) {
   const requestSettings = { ...state.settings, analysisBase: requestAnalysisBase };
   state.taskContextGeneration += 1;
   const creationContextGeneration = state.taskContextGeneration;
+  const creationHistoryGeneration = state.taskHistoryGeneration;
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = "";
@@ -3123,6 +3128,7 @@ async function createTask(event) {
     if (!responseStatusValid) creationResponseWarnings.push("状态缺失或不受支持");
     if (!responseRunIdValid) creationResponseWarnings.push("Run ID 缺失或格式无效");
     if (!responseSymbolsMatch) creationResponseWarnings.push("回包标的列表无效或与本次请求不一致");
+    const taskHistoryWasReplaced = creationHistoryGeneration !== state.taskHistoryGeneration;
     if (requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase) {
       if (typeof task?.task_id === "string" && task.task_id.trim()) {
         const endpointRecord = {
@@ -3135,13 +3141,22 @@ async function createTask(event) {
           updated_at: new Date().toISOString(),
           analysis_base: requestAnalysisBase
         };
-        try { renderRecentTasks(upsertRecentTask(endpointRecord, localStorage)); } catch { renderRecentTasks(); }
-        setRecentTasksFeedback(
-          "任务已在旧分析 API 地址 " + requestAnalysisBase + " 创建，并已保存到最近分析列表。当前地址已改变；切回原地址后才能继续读取。",
-          "warning"
-        );
-        feedback.hidden = false;
-        feedback.textContent = "任务已在旧连接创建并记录；当前界面不会把它绑定到新分析 API。切回原地址后可从最近分析恢复。";
+        if (taskHistoryWasReplaced) {
+          setRecentTasksFeedback(
+            "任务已在旧分析 API 地址创建，但本地最近任务历史在提交期间已被清空或替换；按当前操作未重新写入该引用。任务 ID：" + task.task_id + "。切回原地址后可手动核实。",
+            "warning"
+          );
+          feedback.hidden = false;
+          feedback.textContent = "旧连接已返回任务 ID，但本地历史已被替换；本次未重新写入任务引用。任务 ID：" + task.task_id + "。";
+        } else {
+          try { renderRecentTasks(upsertRecentTask(endpointRecord, localStorage)); } catch { renderRecentTasks(); }
+          setRecentTasksFeedback(
+            "任务已在旧分析 API 地址 " + requestAnalysisBase + " 创建，并已保存到最近分析列表。当前地址已改变；切回原地址后才能继续读取。",
+            "warning"
+          );
+          feedback.hidden = false;
+          feedback.textContent = "任务已在旧连接创建并记录；当前界面不会把它绑定到新分析 API。切回原地址后可从最近分析恢复。";
+        }
       } else {
         feedback.hidden = false;
         feedback.textContent = "提交期间分析 API 地址已变化，返回中没有可用 task_id。无法在当前连接确认任务状态；请核实旧服务，避免盲目重复提交。";
@@ -3161,13 +3176,22 @@ async function createTask(event) {
           updated_at: new Date().toISOString(),
           analysis_base: requestAnalysisBase
         };
-        try { renderRecentTasks(upsertRecentTask(endpointRecord, localStorage)); } catch { renderRecentTasks(); }
-        setRecentTasksFeedback(
-          "新建任务已创建，但提交期间当前任务已切换。新任务已保存到最近分析列表；当前选中的任务不会被覆盖。",
-          "warning"
-        );
-        feedback.hidden = false;
-        feedback.textContent = "新建任务 " + task.task_id + " 已创建并保存到最近分析列表；页面继续跟踪当前选中的任务。";
+        if (taskHistoryWasReplaced) {
+          setRecentTasksFeedback(
+            "新建任务已创建，但本地最近任务历史在提交期间已被清空或替换；按当前操作未重新写入该引用。任务 ID：" + task.task_id + "。",
+            "warning"
+          );
+          feedback.hidden = false;
+          feedback.textContent = "提交前的任务请求已返回任务 ID，但本地历史已被替换；本次未重新写入任务引用。任务 ID：" + task.task_id + "。";
+        } else {
+          try { renderRecentTasks(upsertRecentTask(endpointRecord, localStorage)); } catch { renderRecentTasks(); }
+          setRecentTasksFeedback(
+            "新建任务已创建，但提交期间当前任务已切换。新任务已保存到最近分析列表；当前选中的任务不会被覆盖。",
+            "warning"
+          );
+          feedback.hidden = false;
+          feedback.textContent = "新建任务 " + task.task_id + " 已创建并保存到最近分析列表；页面继续跟踪当前选中的任务。";
+        }
       } else {
         feedback.hidden = false;
         feedback.textContent = "提交期间当前任务已切换，但新建任务响应没有有效 task_id，无法安全绑定或记录。请核实服务端任务记录，避免盲目重复提交。";
@@ -3679,6 +3703,9 @@ async function importBrowserDataFile(file) {
     // 导入是替换操作，不应把导入前正在查看的旧任务重新写入任务历史。
     // 所有本地存储写入均在应用内存状态之前完成，避免写入异常造成 UI 与磁盘状态分叉。
     applySettings(nextSettings, { persistPreviousActiveTask: false });
+    // 将导入视为历史替换：在途的创建请求不能接管当前任务，也不能把新记录写回导入的列表。
+    state.taskHistoryGeneration += 1;
+    state.taskContextGeneration += 1;
     state.suppressedHistoryTaskId = importedActiveTaskId;
     state.suppressedHistoryTaskBase = importedActiveTaskId ? importedActiveTaskBase : "";
     applyTheme(imported.theme);
