@@ -1009,3 +1009,11 @@
 - 主要功能提交：https://github.com/Kasign/stock_data_provider/commit/42e548510ab7253abda37433113d91ea1b03ac67
 - 回归测试边界修正：https://github.com/Kasign/stock_data_provider/commit/2081df7876e4788e9edbebac35cc9a65146925af
 - 未执行本地 Node 测试、构建或浏览器验收；后续以最新提交对应的 GitHub Actions Smoke 状态为准。
+
+
+## 2026-10-28 终态阶段事件临时故障重试
+
+- 终态 Task 的事件页续读遇到可重试的网络/服务端错误时，不再立即停止轮询并加载 Run 报告；保留 `taskEventCursor`，5 秒后重试同一游标。
+- 只有续读成功完成后才加载 Run；若遇到永久/契约错误，保留诊断并暂停事件自动续读，Run 结果仍可独立读取。
+- 代码与回归契约提交：https://github.com/Kasign/stock_data_provider/commit/bef394f96afbfe9337f9c000e8a61ad8a2de5762
+- 本轮未执行本地 Node 测试、构建或浏览器验收。
