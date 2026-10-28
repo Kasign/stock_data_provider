@@ -91,6 +91,14 @@ test("task restoration validates local references and guards stale asynchronous 
 });
 
 
+test("restoring a recent task clears the previous task status badge while waiting", () => {
+  const start = app.indexOf("function activateTaskReference(record) {");
+  const end = app.indexOf("\nfunction ", start + 1);
+  const restore = start >= 0 && end > start ? app.slice(start, end) : "";
+  assert.ok(restore.includes('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");'), "恢复期间不沿用上一条任务的状态徽标");
+  assert.ok(restore.indexOf('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");') < restore.indexOf("void pollTask(state.pollGeneration);"), "先显示恢复中，再请求服务端");
+});
+
 test("task polling errors mark last-known status stale and successful refresh clears it", () => {
   assert.ok(app.includes('taskStatusError: ""'));
   assert.ok(app.includes('taskStatusErrorRetrying: false'));

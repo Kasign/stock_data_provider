@@ -3036,6 +3036,7 @@ async function createTask(event) {
   state.taskStatus = "";
   state.taskStatusError = "";
   state.taskStatusErrorRetrying = false;
+  setQualityPill($("#task-status-pill"), "unknown", "正在恢复");
   state.lastRunResult = null;
   state.taskSequence = 0;
   state.taskEvents.clear();
