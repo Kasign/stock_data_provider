@@ -579,7 +579,7 @@ func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIn
 		}
 	}
 	if len(providers) == 0 {
-		return nil, false, fmt.Errorf("no enabled index-constituent provider does not support historical as_of queries for source %q", sourceKey)
+		return nil, false, fmt.Errorf("no enabled index-constituent provider supports historical as_of queries for source %q", sourceKey)
 	}
 
 	key := fmt.Sprintf("md:v1:index-constituents-asof:%s:%s:%s", sourceKey, indexSymbol, asOfDate)

@@ -511,6 +511,7 @@ type SourceStatus struct {
 	FundamentalsCapable    bool   `json:"fundamentals_capable,omitempty"`
 	ValuationCapable       bool   `json:"valuation_capable,omitempty"`
 	IndexCatalogCapable    bool   `json:"index_catalog_capable,omitempty"`
+	HistoricalIndexConstituentsCapable bool `json:"historical_index_constituents_capable"`
 	ChipCapable            bool   `json:"chip_capable,omitempty"`
 	HotRankingCapable      bool   `json:"hot_ranking_capable,omitempty"`
 	CapitalFlowCapable     bool   `json:"capital_flow_capable,omitempty"`

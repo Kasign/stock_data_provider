@@ -98,6 +98,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	fundamentalsEnabled := map[string]bool{}
 	valuationEnabled := map[string]bool{}
 	indexCatalogEnabled := map[string]bool{}
+	historicalIndexConstituentsEnabled := map[string]bool{}
 	chipEnabled := map[string]bool{}
 	capitalFlowEnabled := map[string]bool{}
 	hotRankingEnabled := map[string]bool{}
@@ -140,6 +141,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		}
 		for _, p := range svc.IndexCatalogProviders() {
 			indexCatalogEnabled[p.Name()] = true
+			if _, ok := p.(provider.HistoricalIndexConstituentProvider); ok {
+				historicalIndexConstituentsEnabled[p.Name()] = true
+			}
 		}
 		for _, p := range svc.ChipDistributionProviders() {
 			chipEnabled[p.Name()] = true
@@ -158,7 +162,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			StockBasicCapable: stockBasicEnabled[name], StockSearchCapable: stockSearchEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
-			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
+			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {

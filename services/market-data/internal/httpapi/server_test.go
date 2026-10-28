@@ -610,6 +610,13 @@ func TestIndexConstituentsAsOfEndpointReturnsRequestedDateAndReportDate(t *testi
 			t.Fatalf("historical constituent response missing %s: %s", want, w.Body.String())
 		}
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"historical_index_constituents_capable":true`) {
+		t.Fatalf("data sources must advertise historical index constituent support: status=%d body=%s", w.Code, w.Body.String())
+	}
 }
 
 func TestIndexConstituentsRejectsInvalidAsOfQueryAndCurrentOnlySource(t *testing.T) {
@@ -618,9 +625,10 @@ func TestIndexConstituentsRejectsInvalidAsOfQueryAndCurrentOnlySource(t *testing
 		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetIndexCatalogProviders([]provider.IndexCatalogProvider{p})
 	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	validPastDate := time.Now().In(marketLocationForHTTPTest()).AddDate(0, 0, -2).Format("2006-01-02")
 	for _, path := range []string{
 		"/api/v1/market/indices/000300.SH/constituents?as_of=2026-1-5",
-		"/api/v1/market/indices/000300.SH/constituents?as_of=2026-10-20&source=hithink",
+		"/api/v1/market/indices/000300.SH/constituents?as_of=" + validPastDate + "&source=hithink",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		req.Header.Set("X-API-Key", "secret")

@@ -361,7 +361,7 @@ func TestIndexConstituentsAsOfDoesNotFallBackToCurrentOnlyProvider(t *testing.T)
 	p := indexCatalogSourceTestProvider{name: "hithink"}
 	svc := &DataService{cache: cache.NewDisabled(), indexCatalogProviders: []provider.IndexCatalogProvider{p}}
 	_, _, err := svc.IndexConstituentsAsOfFromSource(context.Background(), "000300.SH", time.Now().In(marketLocation()).AddDate(0, 0, -2).Format("2006-01-02"), "")
-	if err == nil || !strings.Contains(err.Error(), "does not support historical as_of") {
+	if err == nil || !strings.Contains(err.Error(), "supports historical as_of queries") {
 		t.Fatalf("current-only Provider must not be used for historical constituents, got %v", err)
 	}
 }
