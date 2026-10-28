@@ -882,6 +882,11 @@ func TestTushareFundamentalsRejectsMissingAnnouncementDate(t *testing.T) {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
+		if request.APIName == "income" || request.APIName == "balancesheet" || request.APIName == "cashflow" {
+			// 此用例只验证指标修订缺少公告日期；独立报表端点返回空表，不额外制造测试错误。
+			writeTushareTestTable(w, strings.Split(request.Fields, ","), [][]any{})
+			return
+		}
 		if request.APIName != "fina_indicator" || request.Params["ts_code"] != "600519.SH" || request.Params["period"] != periodEnd {
 			t.Errorf("unexpected Tushare fundamentals request: %+v", request)
 		}
