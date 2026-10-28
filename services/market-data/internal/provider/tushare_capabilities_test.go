@@ -428,6 +428,81 @@ func TestTushareIndexDailyBarsRejectsFutureEndDateBeforeRequest(t *testing.T) {
 	}
 }
 
+func TestTushareFundamentalsUsesStatementsWhenIndicatorEndpointFails(t *testing.T) {
+	const period = "20260630"
+	const announcementDate = "20260830"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare financial request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName == "fina_indicator" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":2002,"msg":"fina_indicator permission not available","data":null}`))
+			return
+		}
+		fields := strings.Split(request.Fields, ",")
+		values := make([]any, len(fields))
+		for index, field := range fields {
+			switch field {
+			case "ts_code":
+				values[index] = "600519.SH"
+			case "ann_date", "f_ann_date":
+				values[index] = announcementDate
+			case "end_date":
+				values[index] = period
+			case "report_type":
+				values[index] = request.Params["report_type"]
+			default:
+				values[index] = 1.0
+			}
+		}
+		switch request.APIName {
+		case "income", "balancesheet", "cashflow":
+			writeTushareTestTable(w, fields, [][]any{values})
+		default:
+			t.Errorf("unexpected Tushare financial endpoint %q", request.APIName)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	snapshot, err := client.FetchFundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("statement sections should remain available when fina_indicator fails: %v", err)
+	}
+	if !snapshot.HasData || snapshot.QualityStatus != model.QualityDegraded || len(snapshot.Sections) != 9 {
+		t.Fatalf("expected a degraded snapshot assembled from available statements, got %+v", snapshot)
+	}
+	for _, category := range []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"} {
+		found := false
+		for _, section := range snapshot.Sections {
+			if section.Category == category {
+				found = !section.HasData && section.QualityStatus == model.QualityDegraded
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("indicator section %s must explicitly degrade when fina_indicator is unavailable", category)
+		}
+	}
+	for _, category := range []string{"income_statement", "balance_sheet", "cash_flow_statement"} {
+		found := false
+		for _, section := range snapshot.Sections {
+			if section.Category == category {
+				found = section.HasData && section.QualityStatus == model.QualityValid
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("statement section %s should remain usable despite indicator endpoint failure", category)
+		}
+	}
+}
+
 func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 	const period = "20260630"
 	const announcementDate = "20260830"

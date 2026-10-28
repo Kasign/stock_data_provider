@@ -650,11 +650,12 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	}
 	periodCompact := period.Format("20060102")
 	fields := "ts_code,ann_date,end_date,eps,dt_eps,roe,roe_waa,roe_dt,roa,netprofit_margin,grossprofit_margin,assets_turn,inv_turn,ar_turn,ca_turn,fa_turn,netprofit_yoy,or_yoy,assets_yoy,eqt_yoy,current_ratio,quick_ratio,cash_ratio,debt_to_assets,ocf_to_or,ocf_to_profit,ocf_to_debt,dupont_roe,dupont_asset_turn,dupont_pnitoni,dupont_tax_burden,dupont_intburden"
-	table, err := p.fetchCapabilityTable(ctx, "fina_indicator", map[string]string{
+	table, indicatorErr := p.fetchCapabilityTable(ctx, "fina_indicator", map[string]string{
 		"ts_code": symbol, "period": periodCompact,
 	}, fields)
-	if err != nil {
-		return nil, err
+	if indicatorErr != nil {
+		// 指标端点权限或响应失败不应阻断独立的利润表、资产负债表和现金流量表端点。
+		table = &tushareTable{positions: map[string]int{}, rows: [][]json.RawMessage{}}
 	}
 	var selected []json.RawMessage
 	selectedAnnouncementDate := ""
@@ -702,9 +703,6 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			selectedAnnouncementDate = announcementDate
 		}
 	}
-	if selected == nil {
-		return nil, fmt.Errorf("Tushare fina_indicator 未返回 %s 报告期 %s 的记录", symbol, period.Format("2006-01-02"))
-	}
 	now := time.Now().UTC()
 	sections := make([]model.FundamentalSection, 0, 6)
 	snapshotReasons := []string{}
@@ -714,6 +712,21 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	}
 	hasData := false
 	for _, definition := range tushareFundamentalDefinitions() {
+		if selected == nil {
+			allSectionsComplete = false
+			sectionQuality := model.QualityUnknown
+			sectionReasons := []string{"no_published_indicator_row_for_requested_period"}
+			if indicatorErr != nil {
+				sectionQuality = model.QualityDegraded
+				sectionReasons = []string{"provider_fina_indicator_endpoint_unavailable"}
+				snapshotReasons = appendTushareReason(snapshotReasons, "provider_fina_indicator_endpoint_unavailable")
+			}
+			sections = append(sections, model.FundamentalSection{
+				Category: definition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},
+				HasData: false, QualityStatus: sectionQuality, QualityReasons: sectionReasons,
+			})
+			continue
+		}
 		metrics := make([]model.FundamentalMetric, 0, len(definition.metrics))
 		sectionReasons := []string{}
 		for _, metricDefinition := range definition.metrics {
@@ -755,9 +768,6 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			QualityStatus: sectionStatus, QualityReasons: sectionReasons,
 		})
 	}
-	if !hasData {
-		return nil, fmt.Errorf("Tushare fina_indicator 在 %s 报告期没有可用指标", period.Format("2006-01-02"))
-	}
 	// 将 Tushare 的三张财务报表作为独立分区追加。某个报表权限不足或缺失时，
 	// 仅降级该分区，不能丢弃已经取得的六组财务指标。
 	for _, statementDefinition := range tushareStatementDefinitions() {
@@ -778,11 +788,17 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			}
 			snapshotReasons = appendTushareReason(snapshotReasons, statementDefinition.category+"_provider_unavailable")
 		}
+		if section.HasData {
+			hasData = true
+		}
 		if !section.HasData || section.QualityStatus != model.QualityValid {
 			allSectionsComplete = false
 			snapshotReasons = appendTushareReason(snapshotReasons, statementDefinition.category+"_incomplete_or_unavailable")
 		}
 		sections = append(sections, section)
+	}
+	if !hasData {
+		return nil, fmt.Errorf("Tushare 在 %s 报告期没有可用财务指标或报表字段", period.Format("2006-01-02"))
 	}
 
 	status := model.QualityDegraded
