@@ -2,8 +2,11 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -70,3 +73,71 @@ func TestEastmoneyFetchLimitPoolMarksPartialCoverage(t *testing.T) {
 	}
 }
 
+func TestEastmoneyFetchLimitPoolPaginatesTruncatedPages(t *testing.T) {
+	const total = 65
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	tradeDate := time.Now().In(loc).AddDate(0, 0, -1)
+	tradeDateISO, tradeDateCompact := tradeDate.Format("2006-01-02"), tradeDate.Format("20060102")
+	pageCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pageCalls++
+		query := r.URL.Query()
+		page, err := strconv.Atoi(query.Get("Pageindex"))
+		if err != nil {
+			t.Errorf("invalid Pageindex: %v", err)
+			http.Error(w, "bad page index", http.StatusBadRequest)
+			return
+		}
+		if got := query.Get("pagesize"); got != "30" {
+			t.Errorf("pagesize=%q, want 30 for paginated requests", got)
+		}
+		if got := query.Get("date"); got != tradeDateCompact {
+			t.Errorf("date=%q, want %s", got, tradeDateCompact)
+		}
+		start := page * 30
+		end := start + 30
+		if end > total {
+			end = total
+		}
+		if start >= total {
+			end = start
+		}
+		rows := make([]map[string]any, 0, end-start)
+		for i := start; i < end; i++ {
+			rows = append(rows, map[string]any{
+				"c": fmt.Sprintf("%06d", 600001+i), "n": fmt.Sprintf("测试股票%d", i+1),
+				"m": "1", "zdp": 10.0,
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"rc": 0, "data": map[string]any{"tc": total, "qdate": tradeDateCompact, "pool": rows},
+		})
+	}))
+	defer server.Close()
+
+	provider := NewEastmoneyConfiguredWithDomesticMarketData(
+		2*time.Second, "", "", "", "", "", "", server.URL, "",
+	)
+	got, err := provider.FetchLimitPool(context.Background(), "up", tradeDateISO, 100)
+	if err != nil {
+		t.Fatalf("FetchLimitPool: %v", err)
+	}
+	if pageCalls != 3 {
+		t.Fatalf("page calls=%d, want 3", pageCalls)
+	}
+	if got.Total != total || len(got.Items) != total {
+		t.Fatalf("limit pool should return all %d rows after pagination, total=%d items=%d", total, got.Total, len(got.Items))
+	}
+	if got.Items[0].Code != "600001" || got.Items[len(got.Items)-1].Code != "600065" {
+		t.Fatalf("pagination order/range mismatch: first=%+v last=%+v", got.Items[0], got.Items[len(got.Items)-1])
+	}
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_total_exceeds_returned_rows" {
+			t.Fatalf("complete pagination must not report partial coverage: %v", got.QualityReasons)
+		}
+	}
+}

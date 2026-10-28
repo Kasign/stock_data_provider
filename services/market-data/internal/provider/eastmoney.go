@@ -27,6 +27,9 @@ const eastmoneyVersion = "eastmoney-stock-api-v1"
 const eastmoneyLookbackDaysPerBar = 4
 const eastmoneyLookbackBufferDays = 30
 
+// Eastmoney limit-pool responses can be shorter than the source total; fetch small pages until the requested coverage is reached.
+const eastmoneyLimitPoolPageSize = 30
+
 // defaultEastmoneyUT is the public web token commonly used by Eastmoney front-end clients.
 // It is not a user credential or private API key; deployments can override it if Eastmoney rotates it.
 const defaultEastmoneyUT = "7eea3edcaed734bea9cbfc24409ed989"
@@ -2669,77 +2672,133 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		// The DTPool endpoint has returned tc>0/pool=[] with fbt:asc; fund:asc returns its rows.
 		sortField = "fund:asc"
 	}
-	params := url.Values{
-		"ut": {p.ut}, "dpt": {"wz.ztzt"}, "Pageindex": {"0"}, "pagesize": {strconv.Itoa(limit)},
-		"sort": {sortField}, "date": {date.Format("20060102")},
-		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	pageSize := limit
+	if pageSize > eastmoneyLimitPoolPageSize {
+		pageSize = eastmoneyLimitPoolPageSize
 	}
-	var payload struct {
-		RC   *int `json:"rc"`
-		Data *struct {
-			Total int                          `json:"tc"`
-			QDate json.RawMessage              `json:"qdate"`
-			Pool  []map[string]json.RawMessage `json:"pool"`
-		} `json:"data"`
-	}
-	if err := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); err != nil {
-		return nil, fmt.Errorf("Eastmoney %s limit-pool request: %w", poolType, err)
-	}
-	if payload.RC != nil && *payload.RC != 0 {
-		return nil, fmt.Errorf("Eastmoney %s limit-pool provider error rc=%d", poolType, *payload.RC)
-	}
-	if payload.Data == nil {
-		return nil, errors.New("Eastmoney limit-pool response has no data object")
-	}
-	// push2ex can briefly report a non-empty total while omitting all pool rows (full=0).
-	// Retry this semantic partial response once; never reinterpret tc>0 with no rows as an empty pool.
-	if payload.Data.Total > 0 && len(payload.Data.Pool) == 0 {
-		firstTotal := payload.Data.Total
-		timer := time.NewTimer(350 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
+	requestPage := func(pageIndex int) (int, json.RawMessage, []map[string]json.RawMessage, error) {
+		params := url.Values{
+			"ut": {p.ut}, "dpt": {"wz.ztzt"}, "Pageindex": {strconv.Itoa(pageIndex)}, "pagesize": {strconv.Itoa(pageSize)},
+			"sort": {sortField}, "date": {date.Format("20060102")},
+			"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		}
-		payload.RC, payload.Data = nil, nil
-		if retryErr := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); retryErr != nil {
-			return nil, fmt.Errorf("Eastmoney %s limit-pool partial response (tc=%d, pool empty); retry failed: %w", poolType, firstTotal, retryErr)
+		var payload struct {
+			RC   *int `json:"rc"`
+			Data *struct {
+				Total int                          `json:"tc"`
+				QDate json.RawMessage              `json:"qdate"`
+				Pool  []map[string]json.RawMessage `json:"pool"`
+			} `json:"data"`
+		}
+		if err := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); err != nil {
+			return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d request: %w", poolType, pageIndex, err)
 		}
 		if payload.RC != nil && *payload.RC != 0 {
-			return nil, fmt.Errorf("Eastmoney %s limit-pool provider error after partial-response retry rc=%d", poolType, *payload.RC)
+			return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool provider error rc=%d on page %d", poolType, *payload.RC, pageIndex)
 		}
 		if payload.Data == nil {
-			return nil, errors.New("Eastmoney limit-pool retry returned no data object")
+			return 0, nil, nil, fmt.Errorf("Eastmoney limit-pool page %d has no data object", pageIndex)
 		}
 		if payload.Data.Total > 0 && len(payload.Data.Pool) == 0 {
-			return nil, fmt.Errorf("Eastmoney %s limit-pool total/pool mismatch after retry (tc=%d, first tc=%d, pool empty)", poolType, payload.Data.Total, firstTotal)
+			// push2ex can briefly report a non-empty total while omitting all pool rows (full=0).
+			// Retry this semantic partial response once; never reinterpret tc>0 with no rows as an empty pool.
+			firstTotal := payload.Data.Total
+			timer := time.NewTimer(350 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return 0, nil, nil, ctx.Err()
+			case <-timer.C:
+			}
+			payload.RC, payload.Data = nil, nil
+			if retryErr := p.getJSONWithRetry(ctx, p.limitPoolBaseURL+"/"+endpointPath, params, &payload, 6*time.Second); retryErr != nil {
+				return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d partial response (tc=%d, pool empty); retry failed: %w", poolType, pageIndex, firstTotal, retryErr)
+			}
+			if payload.RC != nil && *payload.RC != 0 {
+				return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool provider error after partial-response retry rc=%d", poolType, *payload.RC)
+			}
+			if payload.Data == nil {
+				return 0, nil, nil, fmt.Errorf("Eastmoney limit-pool page %d retry returned no data object", pageIndex)
+			}
+			if payload.Data.Total > 0 && len(payload.Data.Pool) == 0 {
+				return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d total/pool mismatch after retry (tc=%d, first tc=%d, pool empty)", poolType, pageIndex, payload.Data.Total, firstTotal)
+			}
+		}
+		if len(payload.Data.Pool) > pageSize {
+			return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d returned %d rows above requested page size %d", poolType, pageIndex, len(payload.Data.Pool), pageSize)
+		}
+		return payload.Data.Total, payload.Data.QDate, payload.Data.Pool, nil
+	}
+
+	var sourceTotal int
+	var sourceQDate json.RawMessage
+	poolRows := make([]map[string]json.RawMessage, 0, limit)
+	for pageIndex := 0; pageIndex < 100; pageIndex++ {
+		total, qdate, rows, requestErr := requestPage(pageIndex)
+		if requestErr != nil {
+			return nil, requestErr
+		}
+		if pageIndex == 0 {
+			sourceTotal, sourceQDate = total, qdate
+			if total == 0 && len(rows) == 0 {
+				break
+			}
+		} else {
+			if total != sourceTotal {
+				return nil, fmt.Errorf("Eastmoney %s limit-pool total changed across pages: first=%d page_%d=%d", poolType, sourceTotal, pageIndex, total)
+			}
+			if !bytes.Equal(bytes.TrimSpace(qdate), bytes.TrimSpace(sourceQDate)) {
+				return nil, fmt.Errorf("Eastmoney %s limit-pool report date changed across pages", poolType)
+			}
+		}
+		if total < 0 {
+			return nil, fmt.Errorf("Eastmoney %s limit-pool returned negative total %d", poolType, total)
+		}
+		remaining := limit - len(poolRows)
+		if remaining > len(rows) {
+			remaining = len(rows)
+		}
+		if remaining > 0 {
+			poolRows = append(poolRows, rows[:remaining]...)
+		}
+		targetRows := sourceTotal
+		if targetRows > limit {
+			targetRows = limit
+		}
+		if sourceTotal == 0 || len(poolRows) >= targetRows {
+			break
+		}
+		if len(rows) == 0 {
+			return nil, fmt.Errorf("Eastmoney %s limit-pool coverage ended at %d rows before target %d (source total %d)", poolType, len(poolRows), targetRows, sourceTotal)
+		}
+		if pageIndex == 99 {
+			return nil, fmt.Errorf("Eastmoney %s limit-pool exceeded pagination safety limit", poolType)
 		}
 	}
 	fetchedAt, requestedDate := time.Now().UTC(), date.Format("2006-01-02")
 	snapshot := &model.LimitPoolSnapshot{
-		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(strings.Trim(strings.TrimSpace(string(payload.Data.QDate)), `"`)),
-		Total: payload.Data.Total, HasData: payload.Data.Total > 0 && len(payload.Data.Pool) > 0,
-		Items: make([]model.LimitPoolItem, 0, len(payload.Data.Pool)), Source: p.Name(),
+		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(strings.Trim(strings.TrimSpace(string(sourceQDate)), `"`)),
+		Total: sourceTotal, HasData: sourceTotal > 0 && len(poolRows) > 0,
+		Items: make([]model.LimitPoolItem, 0, len(poolRows)), Source: p.Name(),
 		SourceVersion: "eastmoney-push2ex-limit-pool-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed", "requested_trade_date_is_authoritative"},
 	}
-	if payload.Data.Total > len(payload.Data.Pool) {
+	if sourceTotal > len(poolRows) {
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_total_exceeds_returned_rows")
 	}
-	if payload.Data.Total == 0 && len(payload.Data.Pool) == 0 {
+	if sourceTotal == 0 && len(poolRows) == 0 {
 		snapshot.QualityStatus = model.QualityUnknown
 		snapshot.QualityReasons = []string{"provider_returned_empty_pool_cannot_distinguish_zero_events_from_unavailable_date"}
 		return snapshot, nil
 	}
-	if payload.Data.Total <= 0 || len(payload.Data.Pool) == 0 {
+	if sourceTotal <= 0 || len(poolRows) == 0 {
 		return nil, errors.New("Eastmoney limit-pool total/pool mismatch")
 	}
-	if len(payload.Data.Pool) > limit {
-		return nil, fmt.Errorf("Eastmoney limit-pool returned %d rows above requested limit %d", len(payload.Data.Pool), limit)
+	if len(poolRows) > limit {
+		return nil, fmt.Errorf("Eastmoney limit-pool returned %d rows above requested limit %d", len(poolRows), limit)
 	}
-	seen := make(map[string]struct{}, len(payload.Data.Pool))
-	for index, raw := range payload.Data.Pool {
+	seen := make(map[string]struct{}, len(poolRows))
+	for index, raw := range poolRows {
 		code, name, market := parseEastmoneyBoardString(raw, "c"), parseEastmoneyBoardString(raw, "n"), parseEastmoneyBoardString(raw, "m")
 		change := parseEastmoneyBoardNumber(raw, "zdp")
 		if code == "" || name == "" || (market != "0" && market != "1") || change == nil {
