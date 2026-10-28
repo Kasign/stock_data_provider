@@ -1620,6 +1620,7 @@ func (p *Tushare) FetchStockAnnouncements(ctx context.Context, rawSymbol, rawSta
 		hash := sha256.Sum256([]byte(hashInput))
 		articleID := "tushare-" + hex.EncodeToString(hash[:12])
 		if _, duplicate := seen[articleID]; duplicate {
+			snapshotReasons = appendTushareReason(snapshotReasons, "provider_duplicate_announcement_rows_deduplicated")
 			continue
 		}
 		seen[articleID] = struct{}{}

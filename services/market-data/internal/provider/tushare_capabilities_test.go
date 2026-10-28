@@ -1051,3 +1051,44 @@ func TestTushareDailyRejectsNonAShareBeforeRequest(t *testing.T) {
 		t.Fatalf("unsupported security types must be rejected before upstream access; got %d request(s)", requests)
 	}
 }
+
+
+func TestTushareStockAnnouncementsMarksDuplicateRows(t *testing.T) {
+	fields := []string{"ann_date", "ts_code", "name", "title", "url", "rec_time"}
+	row := []any{"20261023", "600519.SH", "贵州茅台", "测试公告", "https://example.test/notice/1", "2026-10-23 18:30:00"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare announcement request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "anns_d" {
+			t.Errorf("api_name=%q, want anns_d", request.APIName)
+		}
+		writeTushareTestTable(w, fields, [][]any{row, row})
+	}))
+	defer server.Close()
+
+	p := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := p.FetchStockAnnouncements(context.Background(), "600519.SH", "2026-10-20", "2026-10-26", 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 1 || got.Returned != 1 || len(got.Items) != 1 {
+		t.Fatalf("duplicate source rows should produce one unique announcement, got %+v", got)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("deduplicated source rows must be disclosed as degraded quality, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_duplicate_announcement_rows_deduplicated" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing duplicate-row quality reason: %v", got.QualityReasons)
+	}
+}
