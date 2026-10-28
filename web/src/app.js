@@ -1875,6 +1875,7 @@ async function checkConnectionFromSettings() {
   const settingsToCheck = { ...state.settings };
   const generation = ++savedConnectionCheckGeneration;
   button.disabled = true;
+  button.setAttribute("aria-busy", "true");
   button.textContent = "检查中…";
   output.textContent = "正在检查当前已保存的行情与分析 API 地址…";
   output.className = "settings-inline-status";
@@ -1911,6 +1912,7 @@ async function checkConnectionFromSettings() {
   } finally {
     if (generation === savedConnectionCheckGeneration) {
       button.disabled = false;
+      button.removeAttribute("aria-busy");
       button.textContent = "检查连接";
     }
   }
@@ -1923,6 +1925,7 @@ async function checkDraftConnectionFromSettings() {
   const testedDraft = readConnectionDraft();
   let settingsToCheck = null;
   button.disabled = true;
+  button.setAttribute("aria-busy", "true");
   button.textContent = "检查中…";
   output.textContent = "正在测试表单中的行情与分析 API 地址；本次检查不会保存配置…";
   output.className = "settings-inline-status";
@@ -1971,6 +1974,7 @@ async function checkDraftConnectionFromSettings() {
   } finally {
     if (generation === draftConnectionCheckGeneration && $("#settings-dialog").open) {
       button.disabled = false;
+      button.removeAttribute("aria-busy");
       button.textContent = "检查未保存配置";
     }
   }
@@ -3479,6 +3483,7 @@ function openSettings() {
   initialConnectionDraft = readConnectionDraft();
   syncConnectionDraftState();
   $("#settings-check-draft-connection").disabled = false;
+  $("#settings-check-draft-connection").removeAttribute("aria-busy");
   $("#settings-check-draft-connection").textContent = "检查未保存配置";
   $("#settings-draft-connection-check").textContent = "尚未检查未保存配置。";
   $("#settings-draft-connection-check").className = "settings-inline-status";
@@ -4030,6 +4035,7 @@ $("#settings-dialog").addEventListener("close", () => {
   // 关闭弹窗后作废草稿检查结果；迟到的健康回包不能覆盖下一次打开的状态。
   draftConnectionCheckGeneration += 1;
   $("#settings-check-draft-connection").disabled = false;
+  $("#settings-check-draft-connection").removeAttribute("aria-busy");
   $("#settings-check-draft-connection").textContent = "检查未保存配置";
   setMarketKeyVisibility(false);
   initialConnectionDraft = null;
