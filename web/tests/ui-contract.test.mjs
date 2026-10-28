@@ -454,7 +454,15 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /closeSettingsWithGuard/);
   assert.match(app, /event\.preventDefault\(\);[\s\S]*?closeSettingsWithGuard\(\)/);
   assert.match(app, /mergeConnectionDraft\(readConnectionDraft\(\), state\.settings\)/);
-  assert.match(app, /async function checkConnectionFromSettings\(\)[\s\S]*?const settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);[\s\S]*?Promise\.allSettled\(\[[\s\S]*?marketHealth\(settingsToCheck\)[\s\S]*?analysisHealth\(settingsToCheck\)/);
+  assert.match(app, /async function checkConnectionFromSettings\(\)/);
+  assert.match(app, /const settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);/);
+  assert.match(app, /runHealthCheck\(marketHealth, settingsToCheck\)/);
+  assert.match(app, /runHealthCheck\(analysisHealth, settingsToCheck\)/);
+  assert.match(app, /const runHealthCheck = async \(check, settings, timeoutMs = 6000\)/);
+  assert.match(app, /Promise\.race\(\[request, timeout\]\)/);
+  assert.match(app, /const marketState = serviceHealthState\(marketResult\);/);
+  assert.match(app, /const analysisState = serviceHealthState\(analysisResult\);/);
+  assert.match(app, /API 状态未知（回包未提供可识别的健康状态）/);
   assert.match(app, /currentDraft\.marketBase !== testedDraft\.marketBase \|\| currentDraft\.analysisBase !== testedDraft\.analysisBase/);
   assert.match(app, /不会更改全局连接状态/);
   assert.match(html, /服务器配置 API 待接入/);

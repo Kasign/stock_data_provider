@@ -1751,12 +1751,33 @@ async function checkConnectionFromSettings() {
   button.textContent = "检查中…";
   output.textContent = "正在测试表单中的行情与分析 API 地址；本次检查不会保存配置…";
   output.className = "settings-inline-status";
+  const runHealthCheck = async (check, settings, timeoutMs = 6000) => {
+    const controller = new AbortController();
+    let timeoutId = null;
+    const timeout = new Promise((resolve) => {
+      timeoutId = window.setTimeout(() => {
+        controller.abort();
+        resolve({ status: "rejected", reason: new Error("检查超时") });
+      }, timeoutMs);
+    });
+    const request = Promise.resolve()
+      .then(() => check(settings, controller.signal))
+      .then(
+        (value) => ({ status: "fulfilled", value }),
+        (reason) => ({ status: "rejected", reason })
+      );
+    try {
+      return await Promise.race([request, timeout]);
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    }
+  };
   try {
-    // Use the draft values, not the previously saved settings; health checks never persist the draft.
+    // 使用表单草稿而不是已保存设置；健康检查不保存草稿。
     const settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
-    const [marketResult, analysisResult] = await Promise.allSettled([
-      marketHealth(settingsToCheck),
-      analysisHealth(settingsToCheck)
+    const [marketResult, analysisResult] = await Promise.all([
+      runHealthCheck(marketHealth, settingsToCheck),
+      runHealthCheck(analysisHealth, settingsToCheck)
     ]);
     const currentDraft = readConnectionDraft();
     if (currentDraft.marketBase !== testedDraft.marketBase || currentDraft.analysisBase !== testedDraft.analysisBase) {
@@ -1764,13 +1785,21 @@ async function checkConnectionFromSettings() {
       output.className = "settings-inline-status is-warning";
       return;
     }
-    const marketOK = marketResult.status === "fulfilled";
-    const analysisOK = analysisResult.status === "fulfilled";
-    const marketMessage = marketOK ? "行情 API 就绪" : "行情 API 不可用（" + errorMessage(marketResult.reason) + "）";
-    const analysisMessage = analysisOK ? "分析 API 就绪" : "分析 API 不可用（" + errorMessage(analysisResult.reason) + "）";
+    const marketState = serviceHealthState(marketResult);
+    const analysisState = serviceHealthState(analysisResult);
+    const describe = (name, result, status) => {
+      if (status === "healthy") return name + " API 就绪";
+      if (status === "failed") return name + " API 不可用（" + errorMessage(result.reason) + "）";
+      if (status === "unknown") return name + " API 状态未知（回包未提供可识别的健康状态）";
+      return name + " API 返回需关注的状态（" + String(result.value?.status || "未知") + "）";
+    };
+    const marketMessage = describe("行情", marketResult, marketState);
+    const analysisMessage = describe("分析", analysisResult, analysisState);
     output.textContent = "表单地址检查结果（尚未保存）：" + marketMessage + "；" + analysisMessage +
       "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。";
-    output.className = "settings-inline-status " + (marketOK && analysisOK ? "is-success" : "is-warning");
+    output.className = marketState === "healthy" && analysisState === "healthy"
+      ? "settings-inline-status is-success"
+      : "settings-inline-status is-warning";
   } catch (error) {
     output.textContent = "连接检查失败：" + errorMessage(error);
     output.className = "settings-inline-status is-warning";
