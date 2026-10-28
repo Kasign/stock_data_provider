@@ -3565,6 +3565,15 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
     stockResearch.invalidate("行情连接配置已变更，旧研究请求已作废，请重新加载对应资料。");
   }
   if (analysisBaseChanged || marketConnectionChanged) {
+    // 配置变更会让已保存连接检查的结论失效；同时作废在途结果并恢复按钮状态。
+    savedConnectionCheckGeneration += 1;
+    const connectionCheckButton = $("#settings-check-connection");
+    connectionCheckButton.disabled = false;
+    connectionCheckButton.removeAttribute("aria-busy");
+    connectionCheckButton.textContent = "检查连接";
+    const connectionCheckOutput = $("#settings-connection-check");
+    connectionCheckOutput.textContent = "连接配置已变化，请重新检查当前已保存的配置。";
+    connectionCheckOutput.className = "settings-inline-status is-warning";
     dataCenter.invalidate("连接配置已变更，旧的数据中心检查结果已作废。请使用新配置重新检查服务与 Provider 能力。");
   }
   initialConnectionDraft = null;
