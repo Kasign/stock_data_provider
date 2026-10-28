@@ -603,11 +603,15 @@ func TestTushareStatementReportTypeForQuarterBoundaries(t *testing.T) {
 		{name: "income first quarter", apiName: "income", periodDate: "2026-03-31", want: "1"},
 		{name: "income second quarter", apiName: "income", periodDate: "2026-06-30", want: "2"},
 		{name: "income third quarter", apiName: "income", periodDate: "2026-09-30", want: "2"},
-		{name: "income annual quarter", apiName: "income", periodDate: "2026-12-31", want: "2"},
+		{name: "income annual report", apiName: "income", periodDate: "2026-12-31", want: "2"},
 		{name: "cashflow first quarter", apiName: "cashflow", periodDate: "2026-03-31", want: "1"},
 		{name: "cashflow second quarter", apiName: "cashflow", periodDate: "2026-06-30", want: "2"},
+		{name: "cashflow third quarter", apiName: "cashflow", periodDate: "2026-09-30", want: "2"},
+		{name: "cashflow annual report", apiName: "cashflow", periodDate: "2026-12-31", want: "2"},
 		{name: "balance sheet first quarter", apiName: "balancesheet", periodDate: "2026-03-31", want: "1"},
-		{name: "balance sheet annual", apiName: "balancesheet", periodDate: "2026-12-31", want: "1"},
+		{name: "balance sheet second quarter", apiName: "balancesheet", periodDate: "2026-06-30", want: "1"},
+		{name: "balance sheet third quarter", apiName: "balancesheet", periodDate: "2026-09-30", want: "1"},
+		{name: "balance sheet annual report", apiName: "balancesheet", periodDate: "2026-12-31", want: "1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -617,6 +621,7 @@ func TestTushareStatementReportTypeForQuarterBoundaries(t *testing.T) {
 		})
 	}
 }
+
 
 func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 	const period = "20260630"

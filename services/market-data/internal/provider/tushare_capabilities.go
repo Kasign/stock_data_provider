@@ -651,7 +651,7 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 	for _, metric := range definition.metrics {
 		fields = append(fields, metric.field)
 	}
-	// 利润表和现金流量表使用单季合并报表；资产负债表是期末时点数据，使用最新合并报表。
+	// 利润表/现金流量表：Q1 使用 report_type=1，Q2-Q4 使用 report_type=2 的单季合并报表；资产负债表各季度使用 report_type=1 的期末合并报表。
 	reportType := tushareStatementReportType(definition.apiName, periodDate)
 	table, err := p.fetchCapabilityTable(ctx, definition.apiName, map[string]string{
 		"ts_code": symbol, "period": periodCompact, "report_type": reportType,
