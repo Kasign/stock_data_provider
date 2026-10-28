@@ -720,6 +720,8 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 				sectionQuality = model.QualityDegraded
 				sectionReasons = []string{"provider_fina_indicator_endpoint_unavailable"}
 				snapshotReasons = appendTushareReason(snapshotReasons, "provider_fina_indicator_endpoint_unavailable")
+			} else {
+				snapshotReasons = appendTushareReason(snapshotReasons, "no_published_indicator_row_for_requested_period")
 			}
 			sections = append(sections, model.FundamentalSection{
 				Category: definition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},

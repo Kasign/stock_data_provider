@@ -1142,6 +1142,7 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 	}
 	failures := make([]string, 0, len(s.stockSearchProviders))
 	var unknownEmpty *model.StockSearchSnapshot
+	var unknownMatches *model.StockSearchSnapshot
 	var staleMatches *model.StockSearchSnapshot
 	for _, p := range s.stockSearchProviders {
 		if err := ctx.Err(); err != nil {

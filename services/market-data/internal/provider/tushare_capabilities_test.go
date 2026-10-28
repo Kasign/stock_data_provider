@@ -428,6 +428,66 @@ func TestTushareIndexDailyBarsRejectsFutureEndDateBeforeRequest(t *testing.T) {
 	}
 }
 
+func TestTushareFundamentalsMarksMissingIndicatorRevisionAtSnapshotLevel(t *testing.T) {
+	const period = "20260630"
+	const announcementDate = "20260830"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare financial request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		fields := strings.Split(request.Fields, ",")
+		if request.APIName == "fina_indicator" {
+			writeTushareTestTable(w, fields, [][]any{})
+			return
+		}
+		values := make([]any, len(fields))
+		for index, field := range fields {
+			switch field {
+			case "ts_code":
+				values[index] = "600519.SH"
+			case "ann_date", "f_ann_date":
+				values[index] = announcementDate
+			case "end_date":
+				values[index] = period
+			case "report_type":
+				values[index] = request.Params["report_type"]
+			default:
+				values[index] = 1.0
+			}
+		}
+		switch request.APIName {
+		case "income", "balancesheet", "cashflow":
+			writeTushareTestTable(w, fields, [][]any{values})
+		default:
+			t.Errorf("unexpected Tushare financial endpoint %q", request.APIName)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	snapshot, err := client.FetchFundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("statement sections should remain available without a published indicator revision: %v", err)
+	}
+	if !snapshot.HasData || snapshot.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded statement snapshot, got %+v", snapshot)
+	}
+	found := false
+	for _, reason := range snapshot.QualityReasons {
+		if reason == "no_published_indicator_row_for_requested_period" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("parent snapshot must expose the missing indicator revision: %v", snapshot.QualityReasons)
+	}
+}
+
 func TestTushareFundamentalsUsesStatementsWhenIndicatorEndpointFails(t *testing.T) {
 	const period = "20260630"
 	const announcementDate = "20260830"
@@ -476,6 +536,16 @@ func TestTushareFundamentalsUsesStatementsWhenIndicatorEndpointFails(t *testing.
 	}
 	if !snapshot.HasData || snapshot.QualityStatus != model.QualityDegraded || len(snapshot.Sections) != 9 {
 		t.Fatalf("expected a degraded snapshot assembled from available statements, got %+v", snapshot)
+	}
+	foundIndicatorError := false
+	for _, reason := range snapshot.QualityReasons {
+		if reason == "provider_fina_indicator_endpoint_unavailable" {
+			foundIndicatorError = true
+			break
+		}
+	}
+	if !foundIndicatorError {
+		t.Fatalf("parent snapshot must preserve the indicator endpoint failure reason: %v", snapshot.QualityReasons)
 	}
 	for _, category := range []string{"profitability", "operating", "growth", "solvency", "cash_flow", "dupont"} {
 		found := false
