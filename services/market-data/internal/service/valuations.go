@@ -117,6 +117,31 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 	return nil
 }
 
+// betterUnknownValuationSnapshot 判断哪个未知质量快照保留的信息更多；同覆盖时优先较早的 Provider。
+func betterUnknownValuationSnapshot(candidate, current *model.ValuationSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	metricCount := func(snapshot *model.ValuationSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			for _, value := range []*float64{item.PETTM, item.PEMRQ, item.PEStatic, item.PBMRQ, item.PSTTM, item.PCFTTM} {
+				if value != nil {
+					count++
+				}
+			}
+		}
+		return count
+	}
+	return metricCount(candidate) > metricCount(current)
+}
+
 func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*model.ValuationSnapshot, bool, error) {
 	if len(rawSymbols) == 0 || len(rawSymbols) > 100 {
 		return nil, false, errors.New("valuation request must contain 1..100 raw symbol tokens")
@@ -167,7 +192,8 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			if !cacheEligible {
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "valuations_fallback_exhausted_without_confirmed_data" {
+					if reason == "valuations_fallback_exhausted_without_confirmed_data" ||
+						reason == "valuations_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
@@ -200,7 +226,9 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 			continue
 		}
 		if snapshot.QualityStatus == model.QualityUnknown {
-			unknownSnapshot = snapshot
+			if betterUnknownValuationSnapshot(snapshot, unknownSnapshot) {
+				unknownSnapshot = snapshot
+			}
 			failures = append(failures, p.Name()+": valuation snapshot quality is unknown")
 			continue
 		}
@@ -221,7 +249,11 @@ func (s *DataService) Valuations(ctx context.Context, rawSymbols []string) (*mod
 		return snapshot, false, nil
 	}
 	if unknownSnapshot != nil {
-		unknownSnapshot.QualityReasons = appendReason(unknownSnapshot.QualityReasons, "valuations_fallback_exhausted_without_confirmed_data")
+		reason := "valuations_fallback_exhausted_without_usable_quality"
+		if len(unknownSnapshot.Items) == 0 {
+			reason = "valuations_fallback_exhausted_without_confirmed_data"
+		}
+		unknownSnapshot.QualityReasons = appendReason(unknownSnapshot.QualityReasons, reason)
 		if payload, err := json.Marshal(unknownSnapshot); err == nil {
 			if cacheErr := s.cache.Set(ctx, cacheKey, payload, 10*time.Second); cacheErr != nil {
 				s.logger.Warn("valuation unknown cache write failed", "symbols", strings.Join(symbols, ","), "error", cacheErr)

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"context"
 	"errors"
 	"testing"
@@ -69,6 +70,57 @@ func TestValuationsFallsBackAfterUnknownProviderSnapshot(t *testing.T) {
 	if err != nil || hit { t.Fatalf("Valuations returned hit=%v err=%v", hit, err) }
 	if got == nil || got.QualityStatus != model.QualityDegraded || got.Source != "tushare" || first.calls != 1 || second.calls != 1 {
 		t.Fatalf("expected fallback valuation data, snapshot=%+v calls=%d/%d", got, first.calls, second.calls)
+	}
+}
+
+func unknownValuationsWithCoverageForTest(source string, returned, missing []string) *model.ValuationSnapshot {
+	now := time.Now().UTC()
+	value := 25.0
+	items := make([]model.ValuationItem, 0, len(returned))
+	for _, symbol := range returned {
+		parts := strings.Split(symbol, ".")
+		items = append(items, model.ValuationItem{
+			Symbol: symbol, Code: parts[0], Name: symbol,
+			PETTM: &value, PEMRQ: &value, PEStatic: &value, PBMRQ: &value, PSTTM: &value, PCFTTM: &value,
+			Source: source, SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		})
+	}
+	return &model.ValuationSnapshot{
+		RequestedSymbols: []string{"600519.SH", "000858.SZ"},
+		Total: len(items), Items: items, MissingSymbols: append([]string(nil), missing...),
+		Source: source, SourceVersion: "test-v1", FetchedAt: now,
+		QualityStatus: model.QualityUnknown, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+}
+
+func TestValuationsKeepsBestCoverageUnknownSnapshotAfterFallbackExhaustion(t *testing.T) {
+	full := &valuationFallbackTestProvider{
+		name: "eastmoney",
+		snapshot: unknownValuationsWithCoverageForTest("eastmoney", []string{"600519.SH", "000858.SZ"}, []string{}),
+	}
+	partial := &valuationFallbackTestProvider{
+		name: "tushare",
+		snapshot: unknownValuationsWithCoverageForTest("tushare", []string{"600519.SH"}, []string{"000858.SZ"}),
+	}
+	svc := valuationFallbackService(full, partial)
+
+	got, hit, err := svc.Valuations(context.Background(), []string{"600519.SH", "000858.SZ"})
+	if err != nil || hit {
+		t.Fatalf("Valuations returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "eastmoney" || len(got.Items) != 2 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected the more complete unknown snapshot to be retained, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "valuations_fallback_exhausted_without_usable_quality" {
+			found = true
+			break
+		}
+	}
+	if !found || full.calls != 1 || partial.calls != 1 {
+		t.Fatalf("missing usable-quality exhaustion marker or incomplete fallback: reasons=%v calls=%d/%d", got.QualityReasons, full.calls, partial.calls)
 	}
 }
 

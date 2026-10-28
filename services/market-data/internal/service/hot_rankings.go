@@ -107,15 +107,17 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			} else if cached.QualityStatus == model.QualityUnknown {
 				ttl = 10 * time.Second
 			}
-			cacheEligible := len(cached.Items) > 0
-			if len(cached.Items) == 0 {
+			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
+			if cached.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "hot_ranking_fallback_exhausted_without_confirmed_data" {
+					if reason == "hot_ranking_fallback_exhausted_without_confirmed_data" ||
+						reason == "hot_ranking_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
 				}
+				// 多 Provider 场景中，unknown 即使带有条目，也必须先让后备源刷新。
 				cacheEligible = fallbackExhausted || len(s.hotRankingProviders) <= 1
 			}
 			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
@@ -129,7 +131,7 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 		return nil, false, errors.New("no enabled hot-ranking provider")
 	}
 	var failures []string
-	var unknownEmpty *model.HotRankingSnapshot
+	var unknownCandidate *model.HotRankingSnapshot
 	for _, p := range s.hotRankingProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -143,10 +145,16 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if len(snapshot.Items) == 0 {
-			// 空榜只代表当前源无法确认排行结果，不应阻断后续来源。
-			unknownEmpty = snapshot
-			failures = append(failures, p.Name()+": hot-ranking result is empty and cannot be confirmed")
+		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
+			// 空榜或虽有条目但质量未知，都不能阻断后续来源。
+			if unknownCandidate == nil || len(snapshot.Items) > len(unknownCandidate.Items) {
+				unknownCandidate = snapshot
+			}
+			if len(snapshot.Items) == 0 {
+				failures = append(failures, p.Name()+": hot-ranking result is empty and cannot be confirmed")
+			} else {
+				failures = append(failures, p.Name()+": hot-ranking rows are present but snapshot quality is unknown")
+			}
 			continue
 		}
 		encoded, encodeErr := json.Marshal(snapshot)
@@ -163,15 +171,19 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 		}
 		return snapshot, false, nil
 	}
-	if unknownEmpty != nil {
-		unknownEmpty.QualityStatus = model.QualityUnknown
-		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "hot_ranking_fallback_exhausted_without_confirmed_data")
-		if encoded, encodeErr := json.Marshal(unknownEmpty); encodeErr == nil {
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		reason := "hot_ranking_fallback_exhausted_without_usable_quality"
+		if len(unknownCandidate.Items) == 0 {
+			reason = "hot_ranking_fallback_exhausted_without_confirmed_data"
+		}
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if encoded, encodeErr := json.Marshal(unknownCandidate); encodeErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, encoded, 10*time.Second); cacheErr != nil {
 				s.logger.Warn("hot-ranking unknown cache write failed", "type", rankingType, "error", cacheErr)
 			}
 		}
-		return unknownEmpty, false, nil
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all hot-ranking providers failed: %s", strings.Join(failures, "; "))
 }

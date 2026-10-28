@@ -37,6 +37,12 @@
 | 筹码分布、资金流 | 缓存命中与新 Provider 回包使用同一套字段校验；拒绝越界比例、非有限/反向成本区间，以及观测数量不足的 5/10 日合计。由于当前模型没有精确来源可用时间字段，即使 Provider 或旧 Redis 缓存标 valid，也会降级/拒绝，并记录 `publication_availability_timestamp_unverified`。 |
 | Tushare 日 K | 结束日期先规范化为 `YYYY-MM-DD` 再做未来日期比较，避免输入带首尾空格时校验口径不一致。 |
 
+### 人气榜与估值 unknown 回退补强（2026-10-28）
+
+- 人气榜/飙升榜现在将“有条目但父快照质量为 unknown”视为可回退状态，不再直接返回并以正常榜单 TTL 缓存；旧 unknown 行缓存没有回退耗尽原因时，多 Provider 场景下会被绕过。
+- 估值回退链耗尽时优先保留返回股票数量较多的 unknown 快照；同覆盖时比较非空估值指标数。未知质量但带条目的候选使用独立的 `valuations_fallback_exhausted_without_usable_quality` 标记并短缓存。
+- 上述改动仅补源码和测试源码，本轮未运行测试、构建、CI 或真实 Provider 请求。
+
 ### 缓存策略修复
 
 - **个股板块**：此前虽定义 unknown 空响应 5 分钟 TTL，但只写入 `HasData=true`；现在所有通过校验的响应均缓存，确认有数据缓存 12 小时，unknown 空响应缓存 5 分钟。

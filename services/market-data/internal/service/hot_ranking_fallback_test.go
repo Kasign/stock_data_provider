@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"context"
 	"errors"
 	"testing"
@@ -76,6 +77,79 @@ func TestHotRankingFallsBackAfterUnknownEmptyResult(t *testing.T) {
 	}
 	if first.calls != 1 || second.calls != 1 {
 		t.Fatalf("expected both providers to be called once, eastmoney=%d hithink=%d", first.calls, second.calls)
+	}
+}
+
+func unknownQualityHotRankingForFallbackTest(source string) *model.HotRankingSnapshot {
+	snapshot := populatedHotRankingForFallbackTest(source)
+	snapshot.QualityStatus = model.QualityUnknown
+	snapshot.QualityReasons = []string{"provider_ranking_quality_unknown"}
+	return snapshot
+}
+
+func TestHotRankingFallsBackFromUnknownQualityRows(t *testing.T) {
+	first := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: unknownQualityHotRankingForFallbackTest("eastmoney")}
+	second := &hotRankingFallbackTestProvider{name: "hithink", snapshot: populatedHotRankingForFallbackTest("hithink")}
+	svc := hotRankingFallbackService(cache.NewDisabled(), first, second)
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit {
+		t.Fatalf("HotStocks returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "hithink" || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected later degraded provider to outrank unknown rows, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected fallback after unknown-quality rows, first=%d second=%d", first.calls, second.calls)
+	}
+}
+
+func TestHotRankingLegacyUnknownRowsCacheDoesNotBlockFallback(t *testing.T) {
+	legacy := unknownQualityHotRankingForFallbackTest("eastmoney")
+	encoded, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem := newMemoryCache()
+	mem.values["md:v1:hot-ranking:popular:10"] = encoded
+	first := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: legacy}
+	second := &hotRankingFallbackTestProvider{name: "hithink", snapshot: populatedHotRankingForFallbackTest("hithink")}
+	svc := hotRankingFallbackService(mem, first, second)
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit {
+		t.Fatalf("legacy unknown rows cache must not short-circuit fallback: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "hithink" || second.calls != 1 {
+		t.Fatalf("expected fallback source after bypassing old unknown rows cache, got %+v calls=%d", got, second.calls)
+	}
+}
+
+func TestHotRankingReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
+	first := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: unknownQualityHotRankingForFallbackTest("eastmoney")}
+	second := &hotRankingFallbackTestProvider{name: "hithink", err: errors.New("test provider unavailable")}
+	svc := hotRankingFallbackService(newMemoryCache(), first, second)
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit {
+		t.Fatalf("HotStocks returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.QualityStatus != model.QualityUnknown || len(got.Items) != 1 {
+		t.Fatalf("expected unknown rows after fallback exhaustion, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "hot_ranking_fallback_exhausted_without_usable_quality" {
+			found = true
+			break
+		}
+	}
+	if !found || first.calls != 1 || second.calls != 1 {
+		t.Fatalf("missing unknown-quality exhaustion marker or incomplete fallback: reasons=%v calls=%d/%d", got.QualityReasons, first.calls, second.calls)
+	}
+	cached, cacheHit, cacheErr := svc.HotStocks(context.Background(), "popular", 10)
+	if cacheErr != nil || !cacheHit || cached == nil || cached.QualityStatus != model.QualityUnknown {
+		t.Fatalf("marked unknown rows should use their short cache: hit=%v err=%v cached=%+v", cacheHit, cacheErr, cached)
 	}
 }
 
