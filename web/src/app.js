@@ -3693,30 +3693,50 @@ function activateTaskReference(record) {
   state.taskEventsUnavailable = false;
   state.taskEventsError = "";
   state.selectedTaskEventSequence = null;
-  $("#task-symbols").value = state.taskSymbols.join(", ") || "600519";
-  if (["post_market_scan", "watchlist_scan", "position_review"].includes(state.taskType)) {
-    $("#task-type").value = state.taskType;
+  try {
+    $("#task-symbols").value = state.taskSymbols.join(", ") || "600519";
+    if (["post_market_scan", "watchlist_scan", "position_review"].includes(state.taskType)) {
+      $("#task-type").value = state.taskType;
+    }
+    $("#task-empty").hidden = true;
+    $("#task-detail").hidden = false;
+    $("#task-result-section").hidden = true;
+    $("#task-result-metrics").replaceChildren();
+    $("#task-result-structured").replaceChildren();
+    $("#task-result-warnings").replaceChildren();
+    setText("#task-id-value", state.taskId);
+    setText("#task-run-id", state.runId);
+    setText("#task-current-stage", "正在恢复任务");
+    setQualityPill($("#task-status-pill"), "unknown", "正在恢复");
+    $("#task-poll-label").textContent = "正在从服务端恢复状态与阶段事件…";
+    setView("tasks");
+    renderRunStatus("");
+    openRunFlowDrawer();
+    renderTaskEvents();
+    persistTaskReference();
+  } catch (error) {
+    let message = "未知异常";
+    try {
+      message = errorMessage(error);
+    } catch {
+      // 恢复视图自身发生异常时，仍必须启动当前任务的权威状态读取。
+    }
+    try {
+      state.taskStatusError = "恢复任务界面时发生错误：" + message;
+    } catch {}
+    try {
+      const pollLabel = $("#task-poll-label");
+      if (pollLabel) {
+        pollLabel.textContent =
+          "任务引用已切换，但部分界面更新失败；正在继续读取服务端状态。详情：" + message;
+      }
+    } catch {
+      // 诊断节点不可用时仍继续发起安全轮询。
+    }
   }
-  $("#task-empty").hidden = true;
-  $("#task-detail").hidden = false;
-  $("#task-result-section").hidden = true;
-  $("#task-result-metrics").replaceChildren();
-  $("#task-result-structured").replaceChildren();
-  $("#task-result-warnings").replaceChildren();
-  setText("#task-id-value", state.taskId);
-  setText("#task-run-id", state.runId);
-  setText("#task-current-stage", "正在恢复任务");
-  setQualityPill($("#task-status-pill"), "unknown", "正在恢复");
-  $("#task-poll-label").textContent = "正在从服务端恢复状态与阶段事件…";
-  setView("tasks");
-  renderRunStatus("");
-  openRunFlowDrawer();
-  renderTaskEvents();
-  persistTaskReference();
   void pollTaskSafely(state.pollGeneration);
   return true;
 }
-
 function restoreLastTask() {
   let record;
   try {

@@ -209,6 +209,20 @@ test("任务切换与分析 API 切换不会被按钮解锁异常中断", () => 
   }
 });
 
+test("恢复最近任务时界面渲染失败仍会启动安全轮询", () => {
+  const start = app.indexOf("function activateTaskReference(record) {");
+  const end = app.indexOf("\nfunction restoreLastTask(", start);
+  const activate = start >= 0 && end > start ? app.slice(start, end) : "";
+  const taskBinding = activate.indexOf("state.taskId = record.task_id;");
+  const uiTry = activate.indexOf("try {", taskBinding);
+  const uiCatch = activate.indexOf("catch (error)", uiTry);
+  const safePoll = activate.indexOf("void pollTaskSafely(state.pollGeneration);", uiCatch);
+  assert.ok(taskBinding >= 0 && uiTry > taskBinding && uiCatch > uiTry, "先绑定任务上下文，再保护初始视图渲染");
+  assert.ok(safePoll > uiCatch, "即使初始视图渲染失败，仍应发起安全轮询");
+  assert.match(activate.slice(uiCatch), /恢复任务界面时发生错误：[\s\S]*?正在继续读取服务端状态[\s\S]*?void pollTaskSafely\(state\.pollGeneration\)/);
+  assert.match(activate, /state\.taskId = record\.task_id;[\s\S]*?state\.taskEvents\.clear\(\);[\s\S]*?try \{/);
+});
+
 test("任务轮询意外异常会暂停自动刷新并保留手动重试入口", () => {
   const safeStart = app.indexOf("function pollTaskSafely(");
   const safeEnd = app.indexOf("\nasync function createTask(", safeStart);
