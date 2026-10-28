@@ -67,6 +67,19 @@ func TestIndexCatalogProvidersForSourceRejectsUnavailableProvider(t *testing.T) 
 }
 
 
+
+func TestValidateIndexDailyBarsRejectsValidSnapshotWithoutProviderTime(t *testing.T) {
+	snapshot := populatedIndexDailyBarsForFallbackTest("tushare")
+	snapshot.QualityStatus = model.QualityValid
+	snapshot.Items[0].QualityStatus = model.QualityValid
+	snapshot.Items[0].QualityReasons = nil
+
+	err := validateIndexDailyBarsSnapshot("000300.SH", "2026-10-20", "2026-10-23", snapshot)
+	if err == nil || !strings.Contains(err.Error(), "without a provider snapshot timestamp") {
+		t.Fatalf("index daily-bars snapshot without provider time must not be valid, got %v", err)
+	}
+}
+
 func TestIndexDailyBarsRejectsFutureEndDateBeforeProviderSelection(t *testing.T) {
 	today := time.Now().In(marketLocation()).Format("2006-01-02")
 	future := time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")

@@ -528,7 +528,8 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	}
 	now := time.Now().UTC()
 	sections := make([]model.FundamentalSection, 0, 6)
-	snapshotReasons := []string{}
+	// index_daily 不提供可核验的源端快照时间，数据可以用于展示但不能标记为完全 valid。
+	snapshotReasons := []string{"provider_snapshot_timestamp_not_exposed"}
 	allSectionsComplete := selectedAnnouncementDate != ""
 	if selectedAnnouncementDate == "" {
 		snapshotReasons = appendTushareReason(snapshotReasons, "provider_publication_date_missing")
@@ -1615,7 +1616,7 @@ func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawSt
 		if lowPrice > highPrice || openPrice < lowPrice || openPrice > highPrice || closePrice < lowPrice || closePrice > highPrice {
 			return nil, fmt.Errorf("Tushare 指数日 K %s 的 OHLC 不满足数据契约", date)
 		}
-		rowReasons := []string{}
+		rowReasons := []string{"provider_snapshot_timestamp_not_exposed"}
 		var volume *int64
 		rawVolume, fieldErr := table.optionalFloat(row, "vol")
 		if fieldErr != nil {

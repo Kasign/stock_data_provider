@@ -323,6 +323,38 @@ func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
 }
 
 
+func TestTushareIndexDailyBarsDegradesMissingProviderTimestamp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare index daily request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "index_daily" {
+			t.Errorf("api_name=%q, want index_daily", request.APIName)
+		}
+		writeTushareTestTable(w,
+			[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
+			[][]any{{"000300.SH", "20261020", 4000.0, 4050.0, 3950.0, 4020.0, 0.5, 100000.0, 120000000.0}},
+		)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchIndexDailyBars(context.Background(), "000300.SH", "2026-10-20", "2026-10-20")
+	if err != nil {
+		t.Fatalf("FetchIndexDailyBars: %v", err)
+	}
+	if got.QualityStatus != model.QualityDegraded || !containsTushareReason(got.QualityReasons, "provider_snapshot_timestamp_not_exposed") {
+		t.Fatalf("index daily-bars snapshot without provider timestamp must be degraded: %+v", got)
+	}
+	if len(got.Items) != 1 || got.Items[0].QualityStatus != model.QualityDegraded ||
+		!containsTushareReason(got.Items[0].QualityReasons, "provider_snapshot_timestamp_not_exposed") {
+		t.Fatalf("index daily bar without provider timestamp must preserve the quality reason: %+v", got.Items)
+	}
+}
+
 func TestTushareIndexDailyBarsRejectsInt64VolumeOverflow(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request tushareIndexWeightRequest

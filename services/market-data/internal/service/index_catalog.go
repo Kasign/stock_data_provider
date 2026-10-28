@@ -175,6 +175,9 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
 		return errors.New("index daily-bars provider_time is zero or in the future")
 	}
+	if snapshot.QualityStatus == model.QualityValid && snapshot.ProviderTime == nil {
+		return errors.New("index daily-bars snapshot cannot be valid without a provider snapshot timestamp")
+	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
 	previousDate := ""
 	hasDegradedItem := false
