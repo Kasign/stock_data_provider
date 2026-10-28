@@ -2793,8 +2793,12 @@ async function loadTaskRunResult(runId, expectedTaskId) {
   const endpointGeneration = state.analysisConnectionGeneration;
   const generation = ++state.runResultGeneration;
   let retries = 0;
+  const retainedPreviousResult = Boolean(state.lastRunResult && state.lastRunResult.run_id === runId);
+  const retainedResultNotice = retainedPreviousResult
+    ? "页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"
+    : "";
   $("#task-result-section").hidden = false;
-  $("#task-result-note").textContent = "正在读取已保存的 Run 结果…";
+  $("#task-result-note").textContent = "正在读取已保存的 Run 结果…" + (retainedResultNotice ? " " + retainedResultNotice : "");
 
   while (true) {
     if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
@@ -2818,12 +2822,13 @@ async function loadTaskRunResult(runId, expectedTaskId) {
       if (delay !== undefined && !error.responseContractError && isRetryableApiError(error)) {
         retries += 1;
         $("#task-result-note").textContent =
-          `Run 结果暂时不可读（${errorMessage(error)}），将在 ${delay / 1000} 秒后重试（${retries}/${RUN_RESULT_RETRY_DELAYS_MS.length}）…`;
+          `Run 结果暂时不可读（${errorMessage(error)}），将在 ${delay / 1000} 秒后重试（${retries}/${RUN_RESULT_RETRY_DELAYS_MS.length}）…` + (retainedResultNotice ? " " + retainedResultNotice : "");
         await new Promise((resolve) => window.setTimeout(resolve, delay));
         continue;
       }
       $("#task-result-note").textContent =
-        "读取结果失败：" + errorMessage(error) + "。可点击“重新读取结果”或“立即刷新状态”重试。";
+        "读取结果失败：" + errorMessage(error) + "。可点击“重新读取结果”或“立即刷新状态”重试。" +
+        (retainedPreviousResult ? " 页面保留的是此前已成功读取的同一 Run 结果，本次读取未成功，不代表结果已更新。" : "");
       return;
     }
   }

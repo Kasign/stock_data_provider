@@ -99,6 +99,16 @@ test("restoring a recent task clears the previous task status badge while waitin
   assert.ok(restore.indexOf('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");') < restore.indexOf("void pollTask(state.pollGeneration);"), "先显示恢复中，再请求服务端");
 });
 
+test("failed Run refresh distinguishes the last verified same-Run result from a new read", () => {
+  const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
+  const end = app.indexOf("\nfunction stopTaskPolling()", start);
+  const loader = start >= 0 && end > start ? app.slice(start, end) : "";
+  assert.ok(loader.includes("const retainedPreviousResult = Boolean(state.lastRunResult && state.lastRunResult.run_id === runId);"));
+  assert.ok(loader.includes("页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"));
+  assert.ok(loader.includes("本次读取未成功，不代表结果已更新。"));
+  assert.ok(loader.includes("renderTaskResult(result);"), "只有本次 Run 身份和标的校验通过才替换报告内容");
+});
+
 test("task polling errors mark last-known status stale and successful refresh clears it", () => {
   assert.ok(app.includes('taskStatusError: ""'));
   assert.ok(app.includes('taskStatusErrorRetrying: false'));
