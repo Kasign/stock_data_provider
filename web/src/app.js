@@ -2378,24 +2378,25 @@ async function runQuoteQuery(event) {
   }
 
   // 新的用户行情查询允许后续成功回包建立新的临时问股上下文。
-  state.chatStockContextCleared = false;
   const generation = ++state.quoteQueryGeneration;
   const controller = new AbortController();
-  state.quoteQueryController = controller;
-  state.quoteQueryKey = requestKey;
-  state.quoteQueryInput = $("#symbol-input").value.trim();
-  state.lastQueryInput = state.quoteQueryInput;
-  state.isQuerying = true;
-  $("#quote-form").classList.add("is-loading");
-  $("#quote-form button[type='submit']").disabled = true;
-  setNotice("", "info");
-  setText("#query-hint", `正在查询 ${symbol} 的实时行情与日 K…`);
   let bundleResponse = null;
   let quoteResult;
   let barsResult;
   let usedLegacyBundleFallback = false;
 
   try {
+    state.chatStockContextCleared = false;
+    state.quoteQueryController = controller;
+    state.quoteQueryKey = requestKey;
+    state.quoteQueryInput = $("#symbol-input").value.trim();
+    state.lastQueryInput = state.quoteQueryInput;
+    state.isQuerying = true;
+    $("#quote-form").classList.add("is-loading");
+    $("#quote-form button[type='submit']").disabled = true;
+    setNotice("", "info");
+    setText("#query-hint", `正在查询 ${symbol} 的实时行情与日 K…`);
+
     clearQuoteDisplay(symbol, "loading");
     clearBarsDisplay(symbol, "正在读取本次日 K，尚无新结果。");
     clearBundleSnapshotMetadata();
@@ -2521,16 +2522,43 @@ async function runQuoteQuery(event) {
   setText("#query-hint", `请求标的：${symbol} · 日 K 上限：${limit} · 复权口径：${adjustment} · 日期：${startDate || "起始不限"} 至 ${endDate || "截至今天"}${compatibilityHint}`);
   } catch (error) {
     if (!controller.signal.aborted && generation === state.quoteQueryGeneration) {
-      clearMarketQueryResults(symbol, "本次行情结果无法展示，旧快照已清除。");
-      setNotice("行情查询结果处理失败：" + errorMessage(error), "danger");
+      let message = "未知异常";
+      try { message = errorMessage(error); } catch {}
+      try {
+        clearMarketQueryResults(symbol, "本次行情结果无法展示，旧快照已清除。");
+      } catch (renderError) {
+        try {
+          message += "；清理旧行情显示失败：" + errorMessage(renderError);
+        } catch {}
+      }
+      try {
+        setNotice("行情查询结果处理失败：" + message, "danger");
+      } catch {
+        try { setText("#query-hint", "行情查询失败，且错误提示更新失败：" + message); } catch {}
+      }
     }
   } finally {
     if (generation === state.quoteQueryGeneration) {
+      // 先释放逻辑锁，再分别尽力更新摘要和表单控件，避免任一渲染失败跳过按钮解锁。
       state.isQuerying = false;
       state.quoteQueryController = null;
       state.quoteQueryKey = "";
-      renderResearchOverview();
-      releaseQuoteQueryControls();
+      try {
+        renderResearchOverview();
+      } catch (renderError) {
+        try {
+          setText("#query-hint", "行情请求已结束，但个股研究摘要刷新失败：" + errorMessage(renderError));
+        } catch {}
+      }
+      try {
+        releaseQuoteQueryControls();
+      } catch (unlockError) {
+        try {
+          setNotice("行情请求已结束，但查询按钮状态恢复失败：" + errorMessage(unlockError), "warning");
+        } catch {
+          try { setText("#query-hint", "行情请求已结束，请重新载入页面恢复查询控件。"); } catch {}
+        }
+      }
     }
   }
 }

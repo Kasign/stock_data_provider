@@ -1505,6 +1505,22 @@ test("数据中心超时后即使探针迟到返回，也不能覆盖为成功",
   );
 });
 
+test("行情查询初始化与 finally 渲染异常不会遗留查询按钮锁", () => {
+  const start = app.indexOf("async function runQuoteQuery(event) {");
+  const end = app.indexOf("\nfunction ", start + 20);
+  const query = start >= 0 && end > start ? app.slice(start, end) : "";
+  const tryStart = query.indexOf("try {", query.indexOf("const generation = ++state.quoteQueryGeneration;"));
+  assert.ok(tryStart >= 0, "请求生命周期必须有主 try");
+  assert.ok(query.indexOf('state.quoteQueryController = controller;', tryStart) > tryStart);
+  assert.ok(query.indexOf('$("#quote-form").classList.add("is-loading");', tryStart) > tryStart);
+  assert.match(query, /catch \(error\) \{[\s\S]*?清理旧行情显示失败：[\s\S]*?finally \{/);
+  const finallyStart = query.lastIndexOf("} finally {");
+  const finalizer = query.slice(finallyStart);
+  assert.match(finalizer, /state\.isQuerying = false;[\s\S]*?try \{\s*renderResearchOverview\(\);\s*\} catch/);
+  assert.match(finalizer, /catch \(renderError\)[\s\S]*?try \{\s*releaseQuoteQueryControls\(\);\s*\} catch \(unlockError\)/);
+  assert.match(finalizer, /行情请求已结束，但查询按钮状态恢复失败/);
+});
+
 test("市场工作台各模块刷新失败会独立收敛并显示诊断", () => {
   const refresh = app.match(/function refreshMarketWorkspace\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refresh, "refreshMarketWorkspace implementation must exist");
