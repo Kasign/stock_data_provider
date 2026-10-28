@@ -1084,3 +1084,15 @@
 - 外层异常路径使用安全错误格式化，并分别保护结果提示、自选股卡片重绘和失败诊断写入；finally 仅在 `runResultGeneration` 仍匹配时解锁，解锁自身异常也会被收敛。
 - 代码与静态回归契约：https://github.com/Kasign/stock_data_provider/commit/af6a75eccaa559ddee3bb6d1dad14914edc59669
 - 未运行本地 Node 测试、构建或手动浏览器验收。后续需核对该 HEAD 的 Browser Smoke，并在统一回归中执行完整 UI 契约测试。
+
+
+## 2026-10-28 多路径异步异常收尾
+
+本轮新增四个代码/回归契约提交：
+
+- [7e02067 — 修复任务切换时按钮解锁异常中断清理](https://github.com/Kasign/stock_data_provider/commit/7e020671c76280ce05eadd845ac460debda661d2)：任务创建、恢复和分析 API 切换使用安全 Run 按钮解锁；停止轮询时先失效 generation，并保护定时器/手动刷新按钮复位。
+- [8ef277e — 修复任务创建准备阶段忙碌状态收尾](https://github.com/Kasign/stock_data_provider/commit/8ef277e8971d482e1570ce193ac2a1903d42fbce)：创建任务前置初始化、网络请求、错误反馈与 finally 共用保护范围，先释放逻辑提交锁，再尽力恢复按钮。
+- [75795cc — 修复恢复任务时界面异常阻断轮询](https://github.com/Kasign/stock_data_provider/commit/75795cc3ade488cd5a9a32a8c557b1c91ac1a786)：绑定当前任务后，即使首次渲染部分失败也会继续调用 `pollTaskSafely`。
+- [e3a86ae — 修复分析 API 切换时界面异常中断配置收尾](https://github.com/Kasign/stock_data_provider/commit/e3a86aebb3ba83b815da01a6381643e3f1a99f58)：API 地址改变时对任务详情、提示、事件、流程摘要、最近任务和自选股进行独立安全更新，阻止单个 UI 错误中断后续设置应用。
+
+每项代码修改都与对应静态契约在同一提交中；本轮另外更新检查文档。尚未运行本地 Node 测试、构建或真实浏览器人工验收。请后续核对最新 HEAD 的 GitHub Actions，并在统一回归时运行完整 UI 契约集。
