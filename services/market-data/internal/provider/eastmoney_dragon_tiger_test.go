@@ -156,3 +156,35 @@ func TestEastmoneyFetchDragonTigerTreatsCode9201AsUnknownEmptyReport(t *testing.
 		t.Fatalf("response code should be retained in quality reasons: %+v", got.QualityReasons)
 	}
 }
+
+
+func TestEastmoneyFetchDragonTigerRejectsUnderfilledPage(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		fmt.Fprint(w, `{"result":{"pages":2,"count":101,"data":[{}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	_, err := p.FetchDragonTiger(context.Background(), "2026-10-22", 1, 100)
+	if err == nil || !strings.Contains(err.Error(), "returned 1 raw rows, expected 100") {
+		t.Fatalf("underfilled dragon-tiger page must be rejected, got %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("underfilled source page should fail immediately, got %d requests", requests)
+	}
+}
+
+func TestEastmoneyFetchDragonTigerRejectsInconsistentPageCount(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":101,"data":[{}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	_, err := p.FetchDragonTiger(context.Background(), "2026-10-22", 1, 100)
+	if err == nil || !strings.Contains(err.Error(), "disagree with count=101") {
+		t.Fatalf("inconsistent source pages must be rejected, got %v", err)
+	}
+}

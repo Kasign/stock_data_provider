@@ -656,6 +656,9 @@ func normalizeDragonTigerDate(rawDate string) (string, error) {
 }
 
 func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot *model.DragonTigerSnapshot) error {
+	if page < 1 || pageSize < 1 {
+		return errors.New("dragon-tiger page and page size must be positive")
+	}
 	if snapshot == nil {
 		return errors.New("dragon-tiger provider returned an empty snapshot")
 	}
@@ -670,6 +673,17 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 		snapshot.Returned > snapshot.SourceReturned ||
 		snapshot.SourceReturned != snapshot.Returned+snapshot.ExcludedNonAShareCount {
 		return errors.New("dragon-tiger totals or source/accepted/excluded row counts are invalid")
+	}
+	if snapshot.Total > 0 {
+		expectedPages := 1 + (snapshot.Total-1)/pageSize
+		expectedSourceReturned := snapshot.Total - (page-1)*pageSize
+		if expectedSourceReturned > pageSize {
+			expectedSourceReturned = pageSize
+		}
+		if page > expectedPages || snapshot.Pages != expectedPages ||
+			snapshot.SourceReturned != expectedSourceReturned {
+			return errors.New("dragon-tiger page counters or source row count are inconsistent with provider total")
+		}
 	}
 	if snapshot.HasData {
 		if snapshot.Total <= 0 || snapshot.Pages <= 0 || snapshot.Returned == 0 ||

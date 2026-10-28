@@ -112,15 +112,22 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 	if len(payload.Result.Data) == 0 {
 		return nil, fmt.Errorf("Eastmoney dragon-tiger count is %d but page %d returned no rows", total, page)
 	}
+	expectedPages := 1 + (total-1)/pageSize
 	if pages <= 0 {
-		pages = (total + pageSize - 1) / pageSize
+		pages = expectedPages
 		reasons = append(reasons, "provider_pages_field_missing_or_invalid")
+	} else if pages != expectedPages {
+		return nil, fmt.Errorf("Eastmoney dragon-tiger provider pages=%d disagree with count=%d and page_size=%d (expected %d pages)", pages, total, pageSize, expectedPages)
 	}
 	if page > pages {
 		return nil, fmt.Errorf("requested dragon-tiger page %d exceeds provider page count %d", page, pages)
 	}
-	if len(payload.Result.Data) > pageSize {
-		return nil, fmt.Errorf("Eastmoney dragon-tiger returned %d rows above page size %d", len(payload.Result.Data), pageSize)
+	expectedRows := total - (page-1)*pageSize
+	if expectedRows > pageSize {
+		expectedRows = pageSize
+	}
+	if expectedRows <= 0 || len(payload.Result.Data) != expectedRows {
+		return nil, fmt.Errorf("Eastmoney dragon-tiger page %d returned %d raw rows, expected %d from count=%d and page_size=%d", page, len(payload.Result.Data), expectedRows, total, pageSize)
 	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.DragonTigerSnapshot{
