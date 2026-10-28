@@ -3593,8 +3593,9 @@ function validateBrowserDataPayload(payload) {
     if (!record || typeof record !== "object" || typeof record.symbol !== "string") throw new Error("自选股条目格式无效。");
     const symbol = record.symbol.trim().toUpperCase();
     if (!symbolPattern.test(symbol)) throw new Error("自选股代码格式无效：" + symbol);
-    if (seenSymbols.has(symbol)) throw new Error("自选股文件包含重复代码：" + symbol);
-    seenSymbols.add(symbol);
+    const symbolIdentity = comparableMarketSymbol(symbol);
+    if (seenSymbols.has(symbolIdentity)) throw new Error("自选股文件包含重复证券：" + symbol + "（纯代码与交易所后缀代码按同一标的处理）");
+    seenSymbols.add(symbolIdentity);
     const name = String(record.name ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 32).trim() || symbol;
     return { symbol, name, updated_at: typeof record.updated_at === "string" ? record.updated_at.slice(0, 80) : "" };
   });
