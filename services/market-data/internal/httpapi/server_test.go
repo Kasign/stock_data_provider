@@ -46,6 +46,14 @@ func (httpFakeProvider) FetchSectorRankings(_ context.Context, category string, 
 		}},
 	}, nil
 }
+
+func (p httpFakeProvider) FetchSectorRankingsDirection(ctx context.Context, category, direction string, limit int) (*model.SectorRankingSnapshot, error) {
+	snapshot, err := p.FetchSectorRankings(ctx, category, limit)
+	if snapshot != nil {
+		snapshot.Direction = direction
+	}
+	return snapshot, err
+}
 func (httpFakeProvider) FetchStockBasic(_ context.Context, symbol string) (*model.StockBasic, error) {
 	return &model.StockBasic{Symbol: symbol, Name: "测试证券", IPODate: "2000-01-01", SecurityType: 1, SecurityTypeLabel: "stock", ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid}, nil
 }
@@ -441,16 +449,18 @@ func TestSectorRankingEndpointSeparatesIndustryAndConcept(t *testing.T) {
 		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, []provider.DailyBarProvider{p}, 2000, time.Second, nil,
 	).Handler()
 	for _, category := range []string{"industry", "concept"} {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type="+category+"&limit=5", nil)
-		req.Header.Set("X-API-Key", "secret")
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, req)
-		if w.Code != http.StatusOK {
-			t.Fatalf("category=%s status=%d body=%s", category, w.Code, w.Body.String())
-		}
-		for _, want := range []string{`"category":"` + category + `"`, `"code":"BK0475"`, `"amount_unit":"CNY"`, `"quality_status":"degraded"`} {
-			if !strings.Contains(w.Body.String(), want) {
-				t.Fatalf("category=%s response missing %s: %s", category, want, w.Body.String())
+		for _, direction := range []string{"up", "down"} {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type="+category+"&direction="+direction+"&limit=5", nil)
+			req.Header.Set("X-API-Key", "secret")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("category=%s direction=%s status=%d body=%s", category, direction, w.Code, w.Body.String())
+			}
+			for _, want := range []string{`"category":"` + category + `"`, `"direction":"` + direction + `"`, `"code":"BK0475"`, `"amount_unit":"CNY"`, `"quality_status":"degraded"`} {
+				if !strings.Contains(w.Body.String(), want) {
+					t.Fatalf("category=%s direction=%s response missing %s: %s", category, direction, want, w.Body.String())
+				}
 			}
 		}
 	}
@@ -460,6 +470,13 @@ func TestSectorRankingEndpointSeparatesIndustryAndConcept(t *testing.T) {
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
 		t.Fatalf("invalid sector category should be rejected, got status=%d body=%s", w.Code, w.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type=industry&direction=sideways", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+		t.Fatalf("invalid sector direction should be rejected, got status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 
