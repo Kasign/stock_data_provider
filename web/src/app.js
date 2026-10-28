@@ -357,23 +357,46 @@ function removeRecentTaskReference(taskId, analysisBase = "") {
     );
     return;
   }
-  let remaining = [];
-  try {
-    remaining = removeRecentTask(taskId, localStorage, undefined, analysisBase);
-  } catch {
-    remaining = safeReadRecentTasks();
-  }
+
+  // 先清理兼容旧版本的单任务引用，确认成功后再删除历史列表，避免刷新后旧任务重新出现。
   try {
     const last = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
-    if (last?.task_id === taskId && (!analysisBase || !last.analysis_base || last.analysis_base === analysisBase)) localStorage.removeItem(TASK_REFERENCE_KEY);
-  } catch {
-    // Local history is optional and must not interrupt task controls.
+    if (last?.task_id === taskId && (!analysisBase || !last.analysis_base || last.analysis_base === analysisBase)) {
+      localStorage.removeItem(TASK_REFERENCE_KEY);
+      if (localStorage.getItem(TASK_REFERENCE_KEY) !== null) throw new Error("旧任务引用仍存在");
+    }
+  } catch (error) {
+    renderRecentTasks();
+    setRecentTasksFeedback("无法确认旧任务引用已移除，最近任务历史未修改。请检查浏览器存储权限后重试。" +
+      (error?.message ? "（" + error.message + "）" : ""), "error");
+    return;
   }
+
+  try {
+    removeRecentTask(taskId, localStorage, undefined, analysisBase);
+  } catch (error) {
+    renderRecentTasks();
+    setRecentTasksFeedback("移除最近任务失败，已保留当前存储内容。" +
+      (error?.message ? "（" + error.message + "）" : ""), "error");
+    return;
+  }
+
+  // removeRecentTask 会尽量处理存储异常；必须回读确认目标记录确实不再存在，才能反馈成功。
+  const persistedState = safeReadRecentTasksState();
+  const targetStillExists = persistedState.items.some((item) =>
+    item.task_id === taskId && (!analysisBase || !item.analysis_base || item.analysis_base === analysisBase)
+  );
+  if (!persistedState.storageReadable || !persistedState.storageValid || targetStillExists) {
+    renderRecentTasks();
+    setRecentTasksFeedback("无法确认最近任务引用已移除。浏览器存储可能不可写，已保留可读取的记录，请检查后重试。", "error");
+    return;
+  }
+
   if (state.taskId === taskId && (!analysisBase || state.taskAnalysisBase === analysisBase)) {
     state.suppressedHistoryTaskId = taskId;
     state.suppressedHistoryTaskBase = state.taskAnalysisBase || state.settings.analysisBase;
   }
-  renderRecentTasks(remaining);
+  renderRecentTasks(persistedState.items);
   setRecentTasksFeedback("已从当前浏览器移除该任务引用；服务端任务和报告不会被删除。");
 }
 
@@ -382,10 +405,19 @@ function clearRecentTaskHistory() {
   const currentTaskId = state.taskId;
   let remaining = [];
   try {
-    remaining = clearRecentTasks(localStorage);
     localStorage.removeItem(TASK_REFERENCE_KEY);
-  } catch {
-    remaining = [];
+    if (localStorage.getItem(TASK_REFERENCE_KEY) !== null) throw new Error("旧任务引用仍存在");
+    clearRecentTasks(localStorage);
+    const clearedState = safeReadRecentTasksState();
+    if (!clearedState.storageReadable || !clearedState.storageValid || clearedState.items.length !== 0) {
+      throw new Error("最近任务历史回读后仍有记录，无法确认清空完成");
+    }
+    remaining = clearedState.items;
+  } catch (error) {
+    renderRecentTasks();
+    setRecentTasksFeedback("未能确认最近任务历史已清空。浏览器存储可能不可写，请检查后重试。" +
+      (error?.message ? "（" + error.message + "）" : ""), "error");
+    return;
   }
   state.suppressedHistoryTaskId = currentTaskId;
   state.suppressedHistoryTaskBase = currentTaskId ? (state.taskAnalysisBase || state.settings.analysisBase) : "";
