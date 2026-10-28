@@ -24,6 +24,8 @@
 - 代码与 HTTP fixture 测试源码已提交，本轮未运行测试、构建、CI 或真实 Provider 请求。Tushare 账号权限和字段级数据仍须统一验收。
 
 ### 非空 unknown 快照的事件域回退补齐
+- 总股本、流通股本字段已补异常值回归测试源码，覆盖总股本非正、流通股本为负及流通股本超过总股本；本轮仍未运行测试。
+
 - 涨跌停池候选即使父级质量仍为 unknown，只要源端 `total` 大于返回 `items`，也保留 `provider_limit_pool_response_truncated`，但不会因此把 unknown 提升或降级成其他状态。
 （2026-10-28）
 

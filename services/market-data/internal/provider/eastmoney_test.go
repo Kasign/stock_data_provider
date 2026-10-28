@@ -309,6 +309,44 @@ func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	}
 }
 
+func TestEastmoneyFetchStockBasicRejectsInvalidShareCounts(t *testing.T) {
+	for _, tc := range []struct {
+		name, totalShares, floatShares, wantReason string
+		wantTotal, wantFloat bool
+	}{
+		{name: "non-positive total shares", totalShares: "0", floatShares: "100", wantReason: "market_profile_total_shares_non_positive", wantFloat: true},
+		{name: "negative floating shares", totalShares: "1000", floatShares: "-1", wantReason: "market_profile_float_shares_negative", wantTotal: true},
+		{name: "floating shares exceed total", totalShares: "1000", floatShares: "1001", wantReason: "market_profile_float_shares_exceed_total_shares", wantTotal: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				query := r.URL.Query()
+				if query.Get("reportName") != "" {
+					fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","SECURITY_NAME_ABBR":"贵州茅台","LISTING_DATE":"2001-08-27"}]}}`)
+					return
+				}
+				fmt.Fprintf(w, `{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f84":%s,"f85":%s}}`, tc.totalShares, tc.floatShares)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithStockBasic(2*time.Second, server.URL, "", server.URL, "")
+			got, err := p.FetchStockBasic(context.Background(), "600519.SH")
+			if err != nil {
+				t.Fatalf("FetchStockBasic returned error: %v", err)
+			}
+			if (got.TotalShares != nil) != tc.wantTotal || (got.FloatShares != nil) != tc.wantFloat {
+				t.Fatalf("unexpected share fields: total=%v float=%v", got.TotalShares, got.FloatShares)
+			}
+			found := false
+			for _, reason := range got.QualityReasons {
+				if reason == tc.wantReason { found = true; break }
+			}
+			if !found {
+				t.Fatalf("missing quality reason %q: %+v", tc.wantReason, got.QualityReasons)
+			}
+		})
+	}
+}
+
 func TestEastmoneyFetchStockBasicRejectsMismatchedOrEmptyRows(t *testing.T) {
 	for _, tc := range []struct {
 		name, body, want string
