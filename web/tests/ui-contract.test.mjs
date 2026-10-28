@@ -170,10 +170,11 @@ test("individual stock research uses one detail workspace without duplicate chip
   assert.ok(stockResearch.includes("async function refresh()"));
   assert.ok(stylesheet.includes(".research-overview-grid") && stylesheet.includes(".supplement-quality-degraded"));
 });
-test("market overview refresh summary is protected from an older overlapping refresh", () => {
-  assert.match(marketOverview, /refreshGeneration=0/);
-  assert.match(marketOverview, /const currentGeneration=\+\+refreshGeneration/);
-  assert.match(marketOverview, /if\(currentGeneration!==refreshGeneration\)return/);
+test("market overview refresh summaries are isolated by status region and guarded against stale runs", () => {
+  assert.match(marketOverview, /refreshGenerations=Object\.create\(null\)/);
+  assert.match(marketOverview, /const currentGeneration=\(refreshGenerations\[statusSelector\]\|\|0\)\+1/);
+  assert.match(marketOverview, /refreshGenerations\[statusSelector\]=currentGeneration/);
+  assert.match(marketOverview, /if\(currentGeneration!==refreshGenerations\[statusSelector\]\)return/);
 });
 
 test("an older stock-research load cannot unlock the current stock's loading button", () => {

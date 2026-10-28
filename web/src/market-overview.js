@@ -112,7 +112,7 @@ function renderHotStocks(data) {
  qualityReasons("market-hot-stocks-reasons",data?.quality_reasons);
 }
 export function bindMarketOverview(getSettings,onSelectStock) {
- const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",poolType="up",hotType="popular",refreshGeneration=0;
+ const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",poolType="up",hotType="popular",refreshGenerations=Object.create(null);
  function showSectorMetricUnavailable(metric=sectorMetric){
   const labels={amount:"成交额排行","five-day":"近 5 日涨幅",flow:"资金净流入"};
   const root=$("#market-sector-body");
@@ -138,7 +138,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    return "failed";
   }finally{if(generation[key]===seq)delete controllers[key];}
  }
- async function refresh(keys=KEYS,statusSelector="#market-overview-updated"){const requested=Array.isArray(keys)?keys.filter(key=>KEYS.includes(key)):KEYS;const currentGeneration=++refreshGeneration,status=$(statusSelector),settings=typeof getSettings==="function"?getSettings():null;if(status)status.textContent=settings?.apiKey?"正在刷新市场模块…":"配置行情 API Key 后加载市场数据";const outcomes=await Promise.all(requested.map(load));if(currentGeneration!==refreshGeneration)return;if(status)status.textContent=summarizeMarketOverviewRefresh(outcomes,Boolean(settings?.apiKey));}
+ async function refresh(keys=KEYS,statusSelector="#market-overview-updated"){const requested=Array.isArray(keys)?keys.filter(key=>KEYS.includes(key)):KEYS;const currentGeneration=(refreshGenerations[statusSelector]||0)+1;refreshGenerations[statusSelector]=currentGeneration;const status=$(statusSelector),settings=typeof getSettings==="function"?getSettings():null;if(status)status.textContent=settings?.apiKey?"正在刷新市场模块…":"配置行情 API Key 后加载市场数据";const outcomes=await Promise.all(requested.map(load));if(currentGeneration!==refreshGenerations[statusSelector])return;if(status)status.textContent=summarizeMarketOverviewRefresh(outcomes,Boolean(settings?.apiKey));}
  $("#refresh-market-overview")?.addEventListener("click",()=>{void refresh(["indices","breadth"],"#market-overview-updated");});
  $("#refresh-market-data")?.addEventListener("click",()=>{void refresh(["sectors","pool","hot"],"#market-data-updated");});
  document.querySelectorAll("[data-sector-type]").forEach(button=>button.addEventListener("click",()=>{sectorType=button.dataset.sectorType==="concept"?"concept":"industry";document.querySelectorAll("[data-sector-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("sectors");}));
