@@ -152,8 +152,8 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 	if snapshot == nil || len(snapshot.Items) == 0 {
 		return errors.New("index-quote provider returned an empty snapshot")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("index-quote source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("index-quote source, source_version or fetched_at is missing")
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("index-quote snapshot quality %q is unsupported", snapshot.QualityStatus)
@@ -164,8 +164,8 @@ func validateIndexQuoteSnapshot(snapshot *model.IndexQuoteSnapshot) error {
 		if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
 			return errors.New("index-quote row has missing symbol/code/name")
 		}
-		if item.Source != snapshot.Source || item.FetchedAt.IsZero() || item.LatestPrice == nil || item.ChangePercent == nil {
-			return errors.New("index-quote row failed source, fetched_at or required-value validation")
+		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() || item.LatestPrice == nil || item.ChangePercent == nil {
+			return errors.New("index-quote row failed source/version, fetched_at or required-value validation")
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("index-quote quality %q is unsupported", item.QualityStatus)

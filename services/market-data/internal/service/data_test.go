@@ -1004,11 +1004,11 @@ func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *tes
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot := &model.IndexQuoteSnapshot{
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 				Items: []model.MarketIndexQuote{{
 					Symbol: "000001.SH", Code: "000001", Name: "上证指数",
 					LatestPrice: &tc.price, ChangePercent: &changePercent,
-					AmountUnit: "unknown", Source: "eastmoney", FetchedAt: now,
+					AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 					QualityStatus: model.QualityValid,
 				}},
 			}
@@ -1020,11 +1020,11 @@ func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *tes
 
 	price := 3200.0
 	snapshot := &model.IndexQuoteSnapshot{
-		Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+		Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 		Items: []model.MarketIndexQuote{{
 			Symbol: "000001.SH", Code: "000001", Name: "上证指数",
 			LatestPrice: &price, ChangePercent: &changePercent,
-			AmountUnit: "unknown", Source: "eastmoney", FetchedAt: now,
+			AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityDegraded,
 		}},
 	}
@@ -1033,6 +1033,22 @@ func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *tes
 	}
 }
 
+
+func TestIndexQuoteRejectsMismatchedItemSourceVersion(t *testing.T) {
+	now := time.Now().UTC()
+	price, changePercent := 3200.0, 1.0
+	snapshot := &model.IndexQuoteSnapshot{
+		Source: "eastmoney", SourceVersion: "current-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Items: []model.MarketIndexQuote{{
+			Symbol: "000001.SH", Code: "000001", Name: "上证指数",
+			LatestPrice: &price, ChangePercent: &changePercent, AmountUnit: "unknown",
+			Source: "eastmoney", SourceVersion: "old-v0", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}},
+	}
+	if err := validateIndexQuoteSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "source/version") {
+		t.Fatalf("mismatched index quote version must be rejected, got %v", err)
+	}
+}
 
 func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testing.T) {
 	now := time.Now().UTC()
@@ -1190,7 +1206,7 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 			Symbol: "600519.SH", Total: 1, HasData: true, Source: "eastmoney", FetchedAt: now,
 			QualityStatus: model.QualityValid,
 			Items: []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change,
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		}
 		if err := validateStockBoardsSnapshot("600519.SH", snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
 			t.Fatalf("stock-board snapshot must inherit item degradation, got %v", err)
@@ -1198,7 +1214,7 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 	})
 	t.Run("hot ranking item degradation", func(t *testing.T) {
 		snapshot := &model.HotRankingSnapshot{
-			RankingType: "popular", Total: 1, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+			RankingType: "popular", Total: 1, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 			Items: []model.HotRankingItem{{Rank: 1, Symbol: "600519.SH", Code: "600519",
 				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		}
@@ -1215,12 +1231,12 @@ func TestSnapshotSourceTimesRejectMissingOrFutureValues(t *testing.T) {
 		price, changePercent := 3200.0, 1.0
 		future := now.Add(10 * time.Minute)
 		snapshot := &model.IndexQuoteSnapshot{
-			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			Items: []model.MarketIndexQuote{{
 				Symbol: "000001.SH", Code: "000001", Name: "上证指数",
 				LatestPrice: &price, ChangePercent: &changePercent,
 				QuoteTime: &future, QuoteTimeSemantics: "provider_snapshot_time",
-				AmountUnit: "unknown", Source: "eastmoney", FetchedAt: now,
+				AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 				QualityStatus: model.QualityDegraded,
 			}},
 		}
@@ -1230,10 +1246,10 @@ func TestSnapshotSourceTimesRejectMissingOrFutureValues(t *testing.T) {
 	})
 	t.Run("hot ranking without provider time", func(t *testing.T) {
 		snapshot := &model.HotRankingSnapshot{
-			RankingType: "popular", Total: 1, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+			RankingType: "popular", Total: 1, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 			Items: []model.HotRankingItem{{Rank: 1, Symbol: "600519.SH", Code: "600519",
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid}},
-		}
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid}},
+	}
 		if err := validateHotRankingSnapshot("popular", snapshot); err == nil || !strings.Contains(err.Error(), "without provider time") {
 			t.Fatalf("hot ranking without provider time must not be valid, got %v", err)
 		}

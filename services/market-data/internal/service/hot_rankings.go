@@ -26,8 +26,8 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 	if snapshot == nil || snapshot.RankingType != rankingType || snapshot.Total != len(snapshot.Items) {
 		return errors.New("hot-ranking snapshot identity/count mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("hot-ranking source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("hot-ranking source, source_version or fetched_at is missing")
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("unsupported hot-ranking quality %q", snapshot.QualityStatus)
@@ -50,8 +50,8 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 			return fmt.Errorf("hot-ranking snapshot contains duplicate symbol %s", symbol)
 		}
 		seen[symbol] = struct{}{}
-		if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-			return errors.New("hot-ranking item source/fetched_at mismatch")
+		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+			return errors.New("hot-ranking item source/version/fetched_at mismatch")
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("hot-ranking item has unsupported quality %q", item.QualityStatus)

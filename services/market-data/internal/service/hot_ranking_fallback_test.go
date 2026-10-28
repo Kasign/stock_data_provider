@@ -87,6 +87,25 @@ func unknownQualityHotRankingForFallbackTest(source string) *model.HotRankingSna
 	return snapshot
 }
 
+func TestHotRankingFallsBackFromItemSourceVersionMismatch(t *testing.T) {
+	mismatched := populatedHotRankingForFallbackTest("eastmoney")
+	mismatched.Items[0].SourceVersion = "older-version"
+	first := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: mismatched}
+	second := &hotRankingFallbackTestProvider{name: "hithink", snapshot: populatedHotRankingForFallbackTest("hithink")}
+	svc := hotRankingFallbackService(cache.NewDisabled(), first, second)
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit {
+		t.Fatalf("HotStocks returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "hithink" || got.Items[0].SourceVersion != got.SourceVersion {
+		t.Fatalf("expected fallback after source-version mismatch, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("version mismatch must trigger fallback, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
 func TestHotRankingFallsBackFromUnknownQualityRows(t *testing.T) {
 	first := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: unknownQualityHotRankingForFallbackTest("eastmoney")}
 	second := &hotRankingFallbackTestProvider{name: "hithink", snapshot: populatedHotRankingForFallbackTest("hithink")}
