@@ -178,6 +178,9 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney stock boards only support common A-share equities, got %q", rawSymbol)
+	}
 	secID, err := eastmoneySecID(symbol)
 	if err != nil {
 		return nil, err
@@ -265,6 +268,9 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney stock-basic only supports common A-share equities, got %q", rawSymbol)
 	}
 
 	fetchRow := func(reportName string) (map[string]json.RawMessage, error) {
@@ -544,6 +550,9 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney stock quote only supports common A-share equities, got %q", rawSymbol)
 	}
 	secid, err := eastmoneySecID(symbol)
 	if err != nil {
@@ -1000,6 +1009,9 @@ func (p *Eastmoney) FetchChipDistribution(ctx context.Context, rawSymbol string)
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney chip distribution only supports common A-share equities, got %q", rawSymbol)
+	}
 	secid, err := eastmoneySecID(symbol)
 	if err != nil {
 		return nil, err
@@ -1214,6 +1226,9 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney daily bars only support common A-share equities, got %q", rawSymbol)
 	}
 	secid, err := eastmoneySecID(symbol)
 	if err != nil {

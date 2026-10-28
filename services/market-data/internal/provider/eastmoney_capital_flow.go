@@ -34,6 +34,9 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney capital flow only supports common A-share equities, got %q", rawSymbol)
+	}
 	secid, err := eastmoneySecID(symbol)
 	if err != nil {
 		return nil, err
