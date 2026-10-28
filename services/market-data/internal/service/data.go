@@ -2177,6 +2177,11 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 		if q.NormalizationVer == "" {
 			q.NormalizationVer = normalize.Version
 		}
+		if q.NormalizationVer != normalize.Version {
+			s.breaker.Failure(breakerKey)
+			errs = append(errs, p.Name()+": quote normalization_version is unsupported")
+			continue
+		}
 		if i > 0 {
 			q.QualityStatus = model.QualityDegraded
 			appendReasonOnce(&q.QualityReasons, "provider_fallback_used")
@@ -2375,6 +2380,10 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				break
 			}
 			sourceVersion := strings.TrimSpace(bar.SourceVersion)
+			if bar.NormalizationVer != "" && bar.NormalizationVer != normalize.Version {
+				contractError = "provider returned daily bars with unsupported normalization_version"
+				break
+			}
 			if sourceVersion == "" {
 				contractError = "provider returned daily bars without source_version"
 				break

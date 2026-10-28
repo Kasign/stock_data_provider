@@ -230,6 +230,25 @@ func validQuote(source string) *model.Quote {
 	qt := now
 	return &model.Quote{Symbol: "600519.SH", Name: "贵州茅台", CurrentPrice: &p, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &vol, Amount: &amount, QuoteTime: &qt, FetchedAt: now, NormalizedAt: now, Source: source, SourceVersion: source + "-quote-v1", VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 }
+func TestQuoteFallsBackFromOldNormalizationVersion(t *testing.T) {
+	old := validQuote("eastmoney")
+	old.NormalizationVer = "old-normalization-v1"
+	current := validQuote("tencent")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", quote: old},
+		fakeProvider{name: "tencent", quote: current},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" || got.NormalizationVer != normalize.Version {
+		t.Fatalf("old-normalization quote must fall back to current version: %+v", got)
+	}
+}
+
 func TestQuoteFallsBackWhenProviderSourceVersionIsMissing(t *testing.T) {
 	missingVersion := validQuote("eastmoney")
 	missingVersion.SourceVersion = ""
@@ -534,6 +553,25 @@ func dailyBarForVersionContractTest(sourceVersion, tradeDate string) model.Daily
 		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
 		AdjustmentBasis: model.AdjustmentForward, Source: "fixture-provider", SourceVersion: sourceVersion,
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityDegraded,
+	}
+}
+
+func TestDailyBarsFallsBackFromOldNormalizationVersion(t *testing.T) {
+	old := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20")
+	old.NormalizationVer = "old-normalization-v1"
+	current := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", bars: []model.DailyBar{old}},
+		fakeProvider{name: "tencent", bars: []model.DailyBar{current}},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "", "", 120, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].NormalizationVer != normalize.Version {
+		t.Fatalf("old-normalization daily bars must fall back to current version: %+v", bars)
 	}
 }
 
