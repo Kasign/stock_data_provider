@@ -1153,3 +1153,10 @@
 - 自选股卡片会跨本地最近任务引用选取匹配股票的最新记录；旧分析 API 地址的记录之前没有来源标签，容易被理解成当前服务的状态。
 - 对 `analysis_base` 与当前设置不一致的最近任务/今日任务添加“旧分析 API 地址”标识。结果详情仍须匹配当前 Task ID、Run ID、标的集合与分析地址，不放宽报告关联规则。
 - 已补静态 UI 契约并同步 API_CONTRACT、HANDOFF、PROGRESS 和 REVIEW_CHECKLIST；未手动运行测试、构建、CI、浏览器自动化或真实 Provider 请求。
+
+
+## 2026-10-28 — 恢复任务时重置阶段事件选择
+
+- `activateTaskReference` 切换任务时清空阶段事件 Map，但原先没有重置 `selectedTaskEventSequence`；新任务若有相同 sequence，会误继承旧任务的选中状态。
+- 现在在渲染新任务事件前显式重置选择序号，事件列表仍按新任务真实回包决定默认选中项。
+- 已补静态 UI 契约和更新 HANDOFF、PROGRESS、REVIEW_CHECKLIST；这是纯前端选择状态，不改变服务端接口契约。本轮未手动运行测试、构建、CI、浏览器自动化或真实 Provider 请求。

@@ -3146,6 +3146,7 @@ function activateTaskReference(record) {
   state.taskEventsLoaded = false;
   state.taskEventsUnavailable = false;
   state.taskEventsError = "";
+  state.selectedTaskEventSequence = null;
   $("#task-symbols").value = state.taskSymbols.join(", ") || "600519";
   if (["post_market_scan", "watchlist_scan", "position_review"].includes(state.taskType)) {
     $("#task-type").value = state.taskType;

@@ -173,6 +173,15 @@ test("individual stock research uses one detail workspace without duplicate chip
   assert.ok(stockResearch.includes("async function refresh()"));
   assert.ok(stylesheet.includes(".research-overview-grid") && stylesheet.includes(".supplement-quality-degraded"));
 });
+test("restoring a task resets the previous stage-event selection", () => {
+  const restoreStart = app.indexOf("function activateTaskReference(record) {");
+  const restoreEnd = app.indexOf("\nfunction ", restoreStart + 1);
+  const restoreTask = restoreStart >= 0 && restoreEnd > restoreStart ? app.slice(restoreStart, restoreEnd) : "";
+  assert.ok(restoreTask.includes("state.taskEvents.clear();"), "恢复任务前清空上一任务事件");
+  assert.ok(restoreTask.includes("state.selectedTaskEventSequence = null;"), "恢复任务时清空旧事件选中序号");
+  assert.ok(restoreTask.indexOf("state.selectedTaskEventSequence = null;") < restoreTask.indexOf("renderTaskEvents();"), "先重置事件选择，再渲染新任务事件");
+});
+
 test("watchlist labels task history from a different analysis API address", () => {
   assert.ok(app.includes('const isOtherAnalysisBase = (task) => Boolean(task && String(task.analysis_base || state.settings.analysisBase) !== String(state.settings.analysisBase));'));
   assert.ok(app.includes('todayLine.textContent = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "")'));
