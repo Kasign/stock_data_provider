@@ -924,3 +924,7 @@ Tushare `limit_list_d` 现在检查同一响应中的普通 A 股证券代码唯
 ## 2026-10-28 Tushare 龙虎榜非 A 股过滤原因
 
 Tushare `top_list` 将非普通 A 股记录计入 `ExcludedNonAShareCount` 时，现在同步在父快照加入 `provider_non_a_share_security_rows_excluded`。新增混合普通股票/可转债回包的 HTTP fixture 测试源码，尚未执行。
+
+## 2026-10-28 东方财富股票接口证券范围门禁
+
+东方财富普通股票报价、日 K、基础资料、所属板块、筹码分布和个股资金流新增统一证券类型门禁，在请求上游前拒绝 ETF、指数、可转债、B 股等非普通 A 股证券。新增单项覆盖六个接口的 HTTP fixture 测试源码；尚未执行测试或真实 Provider 请求。
