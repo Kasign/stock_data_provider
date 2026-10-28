@@ -175,6 +175,12 @@ test("market overview refresh summary is protected from an older overlapping ref
   assert.match(marketOverview, /if\(currentGeneration!==refreshGeneration\)return/);
 });
 
+test("an older stock-research load cannot unlock the current stock's loading button", () => {
+  assert.match(stockResearch, /loadResearchGeneration:0/);
+  assert.match(stockResearch, /function reset\(symbol\)\{[\s\S]*?state\.loadResearchGeneration\+=1;[\s\S]*?\$\("#load-stock-research"\)/);
+  assert.match(stockResearch, /async function loadResearch\(\)\{[\s\S]*?const requestGeneration=\+\+state\.loadResearchGeneration;[\s\S]*?await Promise\.allSettled\([\s\S]*?requestGeneration!==state\.loadResearchGeneration\|\|symbol!==state\.symbol[\s\S]*?finally\{[\s\S]*?requestGeneration===state\.loadResearchGeneration&&symbol===state\.symbol/);
+});
+
 test("stock research clears stale snapshots on reload, request errors, and missing API key", () => {
   assert.match(stockResearch, /function clearPanel\(/);
   assert.match(stockResearch, /function markApiKeyRequired\(/);

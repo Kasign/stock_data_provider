@@ -24,7 +24,7 @@ function responseError(err){if(Number(err?.status)===404)return "当前部署的
 function safeAnnouncementUrl(raw){try{const url=new URL(String(raw||""));return url.protocol==="https:"&&(url.hostname==="eastmoney.com"||url.hostname.endsWith(".eastmoney.com"))?url.href:"";}catch{return "";}}
 function currentYearAndQuarter(){const now=new Date();let year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3);if(quarter===0){year-=1;quarter=4;}return {year,quarter};}
 export function bindStockResearch(getSettings,getSymbol){
- const state={symbol:"",generation:{profile:0,boards:0,fundamentals:0,announcements:0,valuations:0,chip:0,capitalFlow:0},controllers:{},requested:new Set(),announcementPage:0,announcementHasMore:false,announcementLoading:false};
+ const state={symbol:"",generation:{profile:0,boards:0,fundamentals:0,announcements:0,valuations:0,chip:0,capitalFlow:0},controllers:{},requested:new Set(),announcementPage:0,announcementHasMore:false,announcementLoading:false,loadResearchGeneration:0};
  function resolvedSymbol(){try{return String(getSymbol?.()||"").trim();}catch{return "";}}
  function abort(key){state.controllers[key]?.abort();delete state.controllers[key];state.generation[key]++;}
  function clearPanel(key,placeholder,symbol=state.symbol){
@@ -46,12 +46,15 @@ export function bindStockResearch(getSettings,getSymbol){
   $("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="加载更多公告";
  }
  function reset(symbol){
+  state.loadResearchGeneration+=1;
   Object.keys(state.generation).forEach(abort);state.symbol=symbol;state.requested.clear();state.announcementPage=0;state.announcementHasMore=false;state.announcementLoading=false;
   setText("stock-research-target",symbol?"当前标的："+symbol:"请先输入代码，或从中文名称搜索结果中选择股票");
   Object.keys(PANEL_CONFIG).forEach(key=>{
    const panel=PANEL_CONFIG[key];clearPanel(key,panel.empty,symbol);setQuality(panel.quality,"unknown","未加载");
   });
   setText("stock-research-feedback",symbol?"标的已切换；请重新加载对应资料，避免沿用上一只股票的结果。":"请先输入代码，或从中文名称搜索结果中选择股票。");
+  const loadButton=$("#load-stock-research");
+  if(loadButton){loadButton.disabled=false;loadButton.textContent=symbol?"重新加载公司资料":"加载公司资料";}
   $("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="加载更多公告";
  }
  function syncSymbol(){
@@ -147,15 +150,24 @@ export function bindStockResearch(getSettings,getSymbol){
   const symbol=syncSymbol(),settings=typeof getSettings==="function"?getSettings():null;
   if(!symbol){setText("stock-research-feedback","请先输入有效股票代码，或从中文名称搜索建议中选择股票。");return;}
   if(!settings?.apiKey){markApiKeyRequired();return;}
+  const requestGeneration=++state.loadResearchGeneration;
   setText("stock-research-feedback","正在分别读取公司档案、所属板块和近期公告，各接口状态独立。");
   $("#load-stock-research").disabled=true;$("#load-stock-research").textContent="正在加载…";
-  const results=await Promise.allSettled([
-   fetchOne("profile",getStockProfile,renderProfile),
-   fetchOne("boards",getStockBoards,renderBoards),
-   loadAnnouncements(false)
-  ]);
-  if(symbol===state.symbol){const failures=results.filter(r=>r.status==="rejected"||r.value===false).length;setText("stock-research-feedback",failures===0?"公司资料、所属板块和公告请求已完成，请查看各自质量与来源时间。":failures+" 项读取未成功；其它模块仍独立展示，请分别查看对应错误。");}
-  $("#load-stock-research").disabled=false;$("#load-stock-research").textContent="重新加载公司资料";
+  try{
+   const results=await Promise.allSettled([
+    fetchOne("profile",getStockProfile,renderProfile),
+    fetchOne("boards",getStockBoards,renderBoards),
+    loadAnnouncements(false)
+   ]);
+   if(requestGeneration!==state.loadResearchGeneration||symbol!==state.symbol)return;
+   const failures=results.filter(r=>r.status==="rejected"||r.value===false).length;
+   setText("stock-research-feedback",failures===0?"公司资料、所属板块和公告请求已完成，请查看各自质量与来源时间。":failures+" 项读取未成功；其它模块仍独立展示，请分别查看对应错误。");
+  }finally{
+   if(requestGeneration===state.loadResearchGeneration&&symbol===state.symbol){
+    $("#load-stock-research").disabled=false;
+    $("#load-stock-research").textContent="重新加载公司资料";
+   }
+  }
  }
  async function loadFundamentals(){
   const symbol=syncSymbol();if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return;}
