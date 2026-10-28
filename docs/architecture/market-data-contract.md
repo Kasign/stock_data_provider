@@ -197,3 +197,8 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 
 - 公告 total / pages 表示本次查询范围的源端匹配总数与总页数。对于非空查询，当前页 returned 必须等于 min(page_size, total - (page-1)*page_size)；不足页或超额页视为源端计数/分页契约异常，拒绝该 Provider 并继续回退，不把部分记录当作完整有效页。total=0 仍表示尚未确认的空结果，不能据此证明没有公告。
 - 龙虎榜的 total/pages 保留源端报表总行数；source_returned 是当前页未过滤的源端行数，returned 是过滤非 A 股品种后的规范行数，excluded_non_a_share_count 只统计当前页被排除的行。因此 source_returned = returned + excluded_non_a_share_count，且 pages = ceil(total/page_size)、当前页源端原始行数必须等于总数推导的预期条数。仅条目质量为 degraded 并不能替代分页完整性校验；新 Provider 响应与缓存都必须经过相同的服务层门禁。
+
+
+## 腾讯 Smartbox 证券类型过滤
+
+- 腾讯 Smartbox 搜索使用 t=all，市场标记仅说明交易所，不能独立证明记录是普通 A 股股票。适配器需同时校验交易所与普通股票代码段，过滤 ETF、指数、可转债及其他不支持品种；若过滤后无匹配股票，应返回 Provider 错误，让服务层尝试东方财富全量股票目录。腾讯搜索未报告完整匹配总数，因此非空结果继续标记为 degraded，不得提升为 valid。

@@ -808,3 +808,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 公告列表校验当前页 returned 必须与 total/page/page_size 推导的预期条数一致；东方财富 Provider 与服务缓存/新响应验证均执行该规则。
 - 龙虎榜校验 pages 必须与源端总数及页大小相符，当前页源端原始行数必须完整；服务层进一步验证每页 source_returned/returned/excluded_non_a_share_count 的关系，避免部分页被当成有效快照返回。
 - 对应 Provider HTTP fixture 与服务层契约测试源码已添加。此次仅静态审查和源码更新，没有运行 Go 测试、构建、CI 或真实 Provider 请求；仍需统一验收。PR #1 继续保持 Open / Draft。
+
+
+### 腾讯证券搜索身份分类复核（2026-10-28）
+
+- 腾讯 Smartbox 搜索返回的市场标签不能单独区分股票与 ETF、指数、可转债等证券。增加沪深北普通 A 股代码段筛选，避免非股票品种进入个股搜索结果；若候选被过滤为空，仍触发后备 Provider。
+- 增加覆盖沪深股票、北交所股票以及 ETF/指数/可转债过滤的测试源码。此项仅完成静态审查与源码修改，未运行测试、构建、CI 或真实 Provider 请求；待统一验收。

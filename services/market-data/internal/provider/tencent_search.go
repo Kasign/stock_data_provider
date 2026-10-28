@@ -128,6 +128,31 @@ func tencentStockSearchTerm(query string) string {
 	return strings.TrimSpace(query)
 }
 
+// isTencentAshareStockCode 过滤 Smartbox 的 ETF、指数、可转债等非普通 A 股证券代码。
+ // Smartbox 的 t=all 结果仅给出交易所标记与代码，交易所标记本身不能证明证券类型。
+func isTencentAshareStockCode(code, exchange string) bool {
+	if len(code) != 6 {
+		return false
+	}
+	var prefixes []string
+	switch exchange {
+	case "SH":
+		prefixes = []string{"600", "601", "603", "605", "688", "689"}
+	case "SZ":
+		prefixes = []string{"000", "001", "002", "003", "300", "301"}
+	case "BJ":
+		return strings.HasPrefix(code, "4") || strings.HasPrefix(code, "8") || strings.HasPrefix(code, "92")
+	default:
+		return false
+	}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(code, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseTencentSmartboxStocks(body []byte) ([]model.StockSearchItem, error) {
 	text := string(body)
 	if !utf8.Valid(body) {
@@ -179,6 +204,9 @@ func parseTencentSmartboxStocks(body []byte) ([]model.StockSearchItem, error) {
 			exchange = "BJ"
 		default:
 			// Smartbox may include funds, indices, overseas markets and other securities.
+			continue
+		}
+		if !isTencentAshareStockCode(code, exchange) {
 			continue
 		}
 		symbol, err := normalize.NormalizeSymbol(code + "." + exchange)
