@@ -1831,32 +1831,50 @@ async function checkConnectionFromSettings() {
 async function refreshSources() {
   const generation = ++sourceRefreshGeneration;
   const settings = state.settings;
-  if (!settings.apiKey) {
-    if (generation !== sourceRefreshGeneration) return;
-    const list = $("#data-source-list");
+  const button = $("#reload-sources");
+  const list = $("#data-source-list");
+  const showMessage = (message, className = "empty-row") => {
     list.replaceChildren();
     const hint = document.createElement("div");
-    hint.className = "empty-row";
-    hint.textContent = "尚未配置行情 API Key。密钥保存在当前浏览器本地。";
+    hint.className = className;
+    hint.textContent = message;
     list.append(hint);
-    setText("#source-count", "—");
-    setText("#normalization-version", "归一化版本 —");
-    return;
+  };
+
+  // 开始新请求时立即清除旧连接的 Provider 声明，避免旧配置结果被当作当前结果。
+  list.replaceChildren();
+  setText("#source-count", "—");
+  setText("#normalization-version", "归一化版本 —");
+  state.sourceCount = 0;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "读取中…";
+    button.setAttribute("aria-busy", "true");
   }
+
   try {
+    if (!settings.apiKey) {
+      if (generation !== sourceRefreshGeneration) return;
+      showMessage("尚未配置行情 API Key。密钥保存在当前浏览器本地。");
+      return;
+    }
+
+    showMessage("正在读取当前连接配置对应的数据源能力…");
     const payload = await getDataSources(settings);
     if (generation !== sourceRefreshGeneration) return;
     renderSources(payload);
   } catch (error) {
     if (generation !== sourceRefreshGeneration) return;
-    const list = $("#data-source-list");
-    list.replaceChildren();
-    const hint = document.createElement("div");
-    hint.className = "empty-row error-text";
-    hint.textContent = errorMessage(error);
-    list.append(hint);
+    showMessage(errorMessage(error), "empty-row error-text");
     setText("#source-count", "—");
     setText("#normalization-version", "归一化版本 —");
+    state.sourceCount = 0;
+  } finally {
+    if (generation === sourceRefreshGeneration && button) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.textContent = "刷新 ↻";
+    }
   }
 }
 

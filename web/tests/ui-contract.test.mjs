@@ -254,6 +254,16 @@ test("service health and provider-list refreshes ignore superseded responses", (
   assert.match(app, /if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};[\s\S]*?setServiceStatus\("market"/);
 });
 
+test("provider capability refresh clears old connection data and owns its loading state", () => {
+  const refreshSources = app.match(/async function refreshSources\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(refreshSources, "refreshSources implementation must exist");
+  assert.match(refreshSources, /list\.replaceChildren\(\);[\s\S]*?setText\("#source-count", "—"\);[\s\S]*?state\.sourceCount = 0/);
+  assert.match(refreshSources, /button\.disabled = true;[\s\S]*?button\.setAttribute\("aria-busy", "true"\)/);
+  assert.match(refreshSources, /正在读取当前连接配置对应的数据源能力/);
+  assert.match(refreshSources, /showMessage\(errorMessage\(error\), "empty-row error-text"\)/);
+  assert.match(refreshSources, /finally \{[\s\S]*?if \(generation === sourceRefreshGeneration && button\)[\s\S]*?button\.disabled = false;[\s\S]*?button\.removeAttribute\("aria-busy"\)/);
+});
+
 test("filter changes clear stale errors even when a prior query returned no data", () => {
   assert.match(app, /function handleQuoteCriteriaChange\([^)]*\) \{\s*cancelQuoteQuery\(\{ clearResults: true,[\s\S]*?\}\);\s*\}/);
 });
