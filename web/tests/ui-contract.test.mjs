@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter] = await Promise.all([
+const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -18,6 +18,7 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/service/wiring.go", import.meta.url), "utf8"),
   readFile(new URL("../src/data-center.js", import.meta.url), "utf8")
+  readFile(new URL("../src/health-check.js", import.meta.url), "utf8")
 ]);
 
 function finalCssRuleBody(selector) {
@@ -228,7 +229,7 @@ test("task polling and saved task references are scoped to the analysis API base
 });
 
 test("topbar service health checks have bounded timeouts and pass abort signals", () => {
-  assert.ok(app.includes("async function runHealthCheck(check, settings, timeoutMs = 6000)"));
+  assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000)"));
   assert.match(app, /controller\.abort\(\)[\s\S]*?Promise\.race\(\[request, timeout\]\)/);
   assert.match(app, /async function refreshServices\(\)[\s\S]*?Promise\.all\(\[[\s\S]*?runHealthCheck\(marketHealth, settings\)[\s\S]*?runHealthCheck\(analysisHealth, settings\)/);
 });
@@ -479,7 +480,7 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /const settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);/);
   assert.match(app, /runHealthCheck\(marketHealth, settingsToCheck\)/);
   assert.match(app, /runHealthCheck\(analysisHealth, settingsToCheck\)/);
-  assert.ok(app.includes("async function runHealthCheck(check, settings, timeoutMs = 6000)"));
+  assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000)"));
   assert.match(app, /Promise\.race\(\[request, timeout\]\)/);
   assert.match(app, /const marketState = serviceHealthState\(marketResult\);/);
   assert.match(app, /const analysisState = serviceHealthState\(analysisResult\);/);

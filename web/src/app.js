@@ -26,6 +26,7 @@ import { bindMarketOverview } from "./market-overview.js";
 import { taskEventMatchesFilter } from "./task-event-filter.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
+import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { clearRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
@@ -1032,8 +1033,8 @@ function setServiceStatus(prefix, status, text) {
 }
 
 function serviceHealthState(result) {
-  if (result?.status !== "fulfilled") return "failed";
-  const status = String(result.value?.status || "").trim().toLowerCase();
+  if (!result?.ok) return "failed";
+  const status = String(result.data?.status || "").trim().toLowerCase();
   if (["ok", "ready", "healthy", "alive", "running"].includes(status)) return "healthy";
   if (!status) return "unknown";
   return "degraded";
@@ -1045,27 +1046,6 @@ function serviceHealthLabel(status) {
       : status === "degraded" ? "状态需关注" : "状态未知";
 }
 
-async function runHealthCheck(check, settings, timeoutMs = 6000) {
-  const controller = new AbortController();
-  let timeoutId = null;
-  const timeout = new Promise((resolve) => {
-    timeoutId = window.setTimeout(() => {
-      controller.abort();
-      resolve({ status: "rejected", reason: new Error("检查超时") });
-    }, timeoutMs);
-  });
-  const request = Promise.resolve()
-    .then(() => check(settings, controller.signal))
-    .then(
-      (value) => ({ status: "fulfilled", value }),
-      (reason) => ({ status: "rejected", reason })
-    );
-  try {
-    return await Promise.race([request, timeout]);
-  } finally {
-    if (timeoutId !== null) window.clearTimeout(timeoutId);
-  }
-}
 
 function setQualityPill(target, status, customText = "") {
   target.className = `quality-pill quality-${String(status || "unknown").toLowerCase()}`;
@@ -1822,9 +1802,9 @@ async function checkConnectionFromSettings() {
     const analysisState = serviceHealthState(analysisResult);
     const describe = (name, result, status) => {
       if (status === "healthy") return name + " API 就绪";
-      if (status === "failed") return name + " API 不可用（" + errorMessage(result.reason) + "）";
+      if (status === "failed") return name + " API 不可用（" + errorMessage(result.error) + "）";
       if (status === "unknown") return name + " API 状态未知（回包未提供可识别的健康状态）";
-      return name + " API 返回需关注的状态（" + String(result.value?.status || "未知") + "）";
+      return name + " API 返回需关注的状态（" + String(result.data?.status || "未知") + "）";
     };
     const marketMessage = describe("行情", marketResult, marketState);
     const analysisMessage = describe("分析", analysisResult, analysisState);

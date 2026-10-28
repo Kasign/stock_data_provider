@@ -1,4 +1,5 @@
 import { analysisHealth, analysisLiveness, getDataSources, marketHealth, marketLiveness } from "./api.js";
+import { runHealthCheck } from "./health-check.js";
 import { describeApiError, formatDateTime } from "./format.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -55,23 +56,6 @@ async function checkWebUI(_settings, signal) {
   return { status: "ok" };
 }
 
-function probe(fn, settings, timeoutMs = 6000) {
-  const controller = new AbortController();
-  const started = performance.now();
-  let timedOut = false;
-  const timeout = window.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-
-  return Promise.resolve()
-    .then(() => fn(settings, controller.signal))
-    .then((data) => timedOut
-      ? { ok: false, error: new Error("检查超时"), timedOut: true, durationMs: Math.round(performance.now() - started) }
-      : { ok: true, data, durationMs: Math.round(performance.now() - started) })
-    .catch((error) => ({ ok: false, error, timedOut, durationMs: Math.round(performance.now() - started) }))
-    .finally(() => window.clearTimeout(timeout));
-}
 
 function probeState(result, ready = false) {
   if (!result?.ok) return result?.timedOut ? "timeout" : "failed";
@@ -203,13 +187,13 @@ export function bindDataCenter(getSettings) {
 
     try {
       const checks = await Promise.all([
-        probe(checkWebUI, settings),
-        probe(marketLiveness, settings),
-        probe(marketHealth, settings),
-        probe(analysisLiveness, settings),
-        probe(analysisHealth, settings),
+        runHealthCheck(checkWebUI, settings),
+        runHealthCheck(marketLiveness, settings),
+        runHealthCheck(marketHealth, settings),
+        runHealthCheck(analysisLiveness, settings),
+        runHealthCheck(analysisHealth, settings),
         settings?.apiKey
-          ? probe(getDataSources, settings)
+          ? runHealthCheck(getDataSources, settings)
           : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 })
       ]);
       if (current !== generation) return;
