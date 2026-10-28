@@ -92,7 +92,7 @@ test("task restoration validates local references and guards stale asynchronous 
 
 
 test("polling pauses on permanent API errors and Run reads use bounded, stale-safe retries", () => {
-  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseIdentityMismatch\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
+  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
   assert.match(app, /const RUN_RESULT_RETRY_DELAYS_MS = \[1000, 2500, 5000\]/);
   assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /state\.runResultGeneration \+= 1/);
@@ -1153,10 +1153,10 @@ test("分析任务、阶段事件与 Run 响应必须匹配当前请求标识", 
   assert.match(app, /function responseIdentityError\(message\)[\s\S]*?error\.responseIdentityMismatch = true/);
   assert.match(app, /candidate\.task_id !== taskId[\s\S]*?任务状态接口未返回 task_id/);
   assert.match(app, /eventPayload\.task_id !== taskId[\s\S]*?阶段事件接口未返回 task_id/);
-  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseIdentityMismatch\)\)/);
-  assert.match(app, /if \(isRetryableApiError\(eventError\) && !eventError\.responseIdentityMismatch\)/);
+  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\)/);
+  assert.match(app, /if \(isRetryableApiError\(eventError\) && !eventError\.responseContractError\)/);
   assert.match(app, /if \(result\?\.run_id !== runId\) \{[\s\S]*?Run 结果接口未返回 run_id/);
-  assert.match(app, /!error\.responseIdentityMismatch && isRetryableApiError\(error\)/);
+  assert.match(app, /!error\.responseContractError && isRetryableApiError\(error\)/);
 });
 
  
@@ -1197,4 +1197,16 @@ test("任务创建成功响应缺少 task_id 时提示结果未确认，避免�
   assert.match(app, /typeof task\?\.task_id === "string" && task\.task_id\.trim\(\)/);
   assert.ok(app.includes("error?.creationOutcomeUnknown ? error.message"));
   assert.match(app, /无法确认任务是否已创建[\s\S]*?避免盲目重复提交/);
+});
+
+ 
+test("任务状态和阶段事件响应结构无效时暂停重试，未知状态不进入轮询循环", () => {
+  assert.match(app, /const TASK_STATUSES = new Set\(\["queued", "running", "succeeded", "partial", "failed"\]\)/);
+  assert.match(app, /function responseContractError\(message\)[\s\S]*?error\.responseContractError = true/);
+  assert.match(app, /typeof candidate\.status !== "string" \|\| !TASK_STATUSES\.has\(candidate\.status\)/);
+  assert.match(app, /任务状态接口返回了未支持的状态/);
+  assert.match(app, /taskError = responseContractError\("任务状态接口返回了无法识别的响应结构。"\)/);
+  assert.match(app, /eventError = responseContractError\("阶段事件接口返回的数据结构无效。"\)/);
+  assert.match(app, /if \(!isRetryableApiError\(eventError\) \|\| eventError\.responseContractError\) state\.taskEventsUnavailable = true/);
+  assert.match(app, /if \(delay !== undefined && !error\.responseContractError && isRetryableApiError\(error\)\)/);
 });
