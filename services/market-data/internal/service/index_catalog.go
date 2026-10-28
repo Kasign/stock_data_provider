@@ -265,6 +265,29 @@ func indexCatalogCacheTTL(snapshot *model.IndexCatalogSnapshot) time.Duration {
 	return 12 * time.Hour
 }
 
+// betterUnknownIndexCatalogSnapshot 在目录质量无法确认时优先保留条目更多、且带有源端快照时间的候选。
+func betterUnknownIndexCatalogSnapshot(candidate, current *model.IndexCatalogSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime == nil {
+		return true
+	}
+	if candidate.ProviderTime == nil && current.ProviderTime != nil {
+		return false
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime != nil && !candidate.ProviderTime.Equal(*current.ProviderTime) {
+		return candidate.ProviderTime.After(*current.ProviderTime)
+	}
+	return false
+}
+
 func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.IndexCatalogSnapshot, bool, error) {
 	tag, err := validIndexCatalogTag(rawTag)
 	if err != nil {
@@ -320,7 +343,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 			continue
 		}
 		if snapshot.QualityStatus == model.QualityUnknown {
-			if betterUnknownIndexDailyBarsSnapshot(snapshot, unknownCandidate) {
+			if betterUnknownIndexCatalogSnapshot(snapshot, unknownCandidate) {
 				unknownCandidate = snapshot
 			}
 			if len(snapshot.Items) == 0 {

@@ -93,6 +93,28 @@ func indexCatalogQualityFallbackService(providers ...provider.IndexCatalogProvid
 	return &DataService{cache: cache.NewDisabled(), indexCatalogProviders: providers}
 }
 
+func TestIndexCatalogKeepsUnknownCandidateWithProviderTime(t *testing.T) {
+	sparse := indexCatalogUnknownDataForTest("hithink", "tushare")
+	rich := indexCatalogUnknownDataForTest("eastmoney", "tushare")
+	providerTime := time.Now().UTC().Add(-time.Minute)
+	rich.ProviderTime = &providerTime
+	first := &indexCatalogQualityFallbackProvider{name: "hithink", catalog: sparse}
+	second := &indexCatalogQualityFallbackProvider{name: "eastmoney", catalog: rich}
+	failed := &indexCatalogQualityFallbackProvider{name: "third-source", catalogErr: errors.New("test catalog endpoint unavailable")}
+	svc := indexCatalogQualityFallbackService(first, second, failed)
+
+	got, hit, err := svc.IndexCatalog(context.Background(), "tushare")
+	if err != nil || hit {
+		t.Fatalf("IndexCatalog returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "eastmoney" || got.QualityStatus != model.QualityUnknown || got.ProviderTime == nil {
+		t.Fatalf("expected unknown catalog candidate with source timestamp, got %+v", got)
+	}
+	if first.catalogCalls != 1 || second.catalogCalls != 1 || failed.catalogCalls != 1 {
+		t.Fatalf("expected all providers to be attempted, calls=%d/%d/%d", first.catalogCalls, second.catalogCalls, failed.catalogCalls)
+	}
+}
+
 func TestIndexCatalogFallsBackFromUnknownQualityEntries(t *testing.T) {
 	first := &indexCatalogQualityFallbackProvider{name: "hithink", catalog: indexCatalogUnknownDataForTest("hithink", "cn_concept")}
 	second := &indexCatalogQualityFallbackProvider{name: "tushare", catalog: indexCatalogDegradedDataForTest("tushare", "cn_concept")}
