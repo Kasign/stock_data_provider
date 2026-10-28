@@ -1025,3 +1025,11 @@
 - 新增手动刷新契约：恢复 `taskEventsUnavailable` 后需重新发起轮询，同时保留 `taskEventCursor`，防止重复请求第一页或覆盖已读取的事件集合。
 - 测试契约提交：https://github.com/Kasign/stock_data_provider/commit/0990c86be02f862458e1e107ea242c80af152011
 - 未执行本地 Node 测试、构建或浏览器验收。
+
+
+## 2026-10-28 事件游标上下文隔离回归契约
+
+- 新增静态契约，分别检查新建任务、恢复最近任务和分析 API 地址变化时，已展示事件序号、服务端分页游标与事件 Map 同步重置。
+- 同时断言轮询回包必须匹配当前 poll generation、task_id 与分析 API 地址代际，避免旧请求覆盖新任务事件。
+- 回归契约提交：https://github.com/Kasign/stock_data_provider/commit/a07ff35d9487f3c30d0c98f59d81e60f69b815d7
+- 未运行本地 Node 测试或浏览器验收。
