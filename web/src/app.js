@@ -3906,51 +3906,122 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
     safelyUpdateTaskContextUi("重绘自选股卡片失败：", () => renderWatchlist());
   }
 }
+function reportSettingsApplyFailures(failures) {
+  if (!failures.length) return;
+  const message = "配置已保存，但部分界面/缓存刷新步骤失败：" + failures.join("；") +
+    "。请重新打开设置检查，并重新载入页面复核。";
+  try {
+    const output = $("#settings-connection-check");
+    if (output) {
+      output.textContent = message;
+      output.className = "settings-inline-status is-warning";
+    }
+  } catch {}
+  try {
+    const feedback = $("#settings-feedback");
+    if (feedback) feedback.textContent = message;
+  } catch {}
+  try {
+    const label = $("#connection-label");
+    if (label) label.title = message;
+  } catch {}
+}
+
+function runSettingsApplyStep(label, operation, failures) {
+  try {
+    const result = operation();
+    if (result && typeof result.then === "function") {
+      return result.catch((error) => {
+        let message = "未知异常";
+        try {
+          message = errorMessage(error);
+        } catch {}
+        failures.push(label + message);
+        reportSettingsApplyFailures(failures);
+      });
+    }
+    return result;
+  } catch (error) {
+    let message = "未知异常";
+    try {
+      message = errorMessage(error);
+    } catch {}
+    failures.push(label + message);
+    reportSettingsApplyFailures(failures);
+    return undefined;
+  }
+}
+
 function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) {
   const previousSettings = state.settings;
   const analysisBaseChanged = previousSettings.analysisBase !== nextSettings.analysisBase;
+  const marketConnectionChanged = previousSettings.apiKey !== nextSettings.apiKey ||
+    previousSettings.marketBase !== nextSettings.marketBase;
+  const failures = [];
+
+  // 保存上一任务的引用属于辅助操作；存储异常不能阻止已持久化的新连接配置生效。
   if (analysisBaseChanged && state.taskId && persistPreviousActiveTask) {
     if (!state.taskAnalysisBase) state.taskAnalysisBase = previousSettings.analysisBase;
-    persistTaskReference();
+    runSettingsApplyStep("保存旧任务引用失败：", () => persistTaskReference(), failures);
   }
+
   state.settings = nextSettings;
-  if (analysisBaseChanged) invalidateActiveTaskForAnalysisBaseChange(previousSettings.analysisBase, nextSettings.analysisBase);
-  const marketConnectionChanged = previousSettings.apiKey !== nextSettings.apiKey || previousSettings.marketBase !== nextSettings.marketBase;
+
+  if (analysisBaseChanged) {
+    runSettingsApplyStep("清理旧分析任务失败：", () =>
+      invalidateActiveTaskForAnalysisBaseChange(previousSettings.analysisBase, nextSettings.analysisBase), failures);
+  }
+
   if (marketConnectionChanged) {
-    marketOverview.invalidateConnection();
-    marketActivity.invalidateConnection();
-    cancelQuoteQuery({
+    runSettingsApplyStep("失效市场总览请求失败：", () => marketOverview.invalidateConnection(), failures);
+    runSettingsApplyStep("失效市场活动请求失败：", () => marketActivity.invalidateConnection(), failures);
+    runSettingsApplyStep("清理旧行情结果失败：", () => cancelQuoteQuery({
       clearResults: true,
       symbol: $("#symbol-input").value.trim(),
       message: "行情连接配置已变更，旧快照已清除，请重新加载。"
-    });
-    cancelStockSearchRequest();
+    }), failures);
+    runSettingsApplyStep("取消股票搜索请求失败：", () => cancelStockSearchRequest(), failures);
     state.stockSearchResults = [];
-    $("#stock-search-results").replaceChildren();
-    hideStockSearch();
-    stockResearch.invalidate("行情连接配置已变更，旧研究请求已作废，请重新加载对应资料。");
+    runSettingsApplyStep("清理股票搜索结果失败：", () => $("#stock-search-results").replaceChildren(), failures);
+    runSettingsApplyStep("关闭股票搜索面板失败：", () => hideStockSearch(), failures);
+    runSettingsApplyStep("失效个股研究请求失败：", () =>
+      stockResearch.invalidate("行情连接配置已变更，旧研究请求已作废，请重新加载对应资料。"), failures);
   }
+
   if (analysisBaseChanged || marketConnectionChanged) {
-    // 配置变更会让已保存连接检查的结论失效；同时作废在途结果并恢复按钮状态。
+    // 先让在途连接检查失效，再分别恢复按钮、结果提示和数据中心状态。
     savedConnectionCheckGeneration += 1;
-    const connectionCheckButton = $("#settings-check-connection");
-    connectionCheckButton.disabled = false;
-    connectionCheckButton.removeAttribute("aria-busy");
-    connectionCheckButton.textContent = "检查连接";
-    const connectionCheckOutput = $("#settings-connection-check");
-    connectionCheckOutput.textContent = "连接配置已变化，请重新检查当前已保存的配置。";
-    connectionCheckOutput.className = "settings-inline-status is-warning";
-    dataCenter.invalidate("连接配置已变更，旧的数据中心检查结果已作废。请使用新配置重新检查服务与 Provider 能力。");
+    runSettingsApplyStep("恢复连接检查按钮失败：", () => {
+      const button = $("#settings-check-connection");
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.textContent = "检查连接";
+    }, failures);
+    runSettingsApplyStep("更新连接检查提示失败：", () => {
+      const output = $("#settings-connection-check");
+      output.textContent = "连接配置已变化，请重新检查当前已保存的配置。";
+      output.className = "settings-inline-status is-warning";
+    }, failures);
+    runSettingsApplyStep("失效数据中心检查结果失败：", () =>
+      dataCenter.invalidate("连接配置已变更，旧的数据中心检查结果已作废。请使用新配置重新检查服务与 Provider 能力。"), failures);
   }
+
   initialConnectionDraft = null;
-  $("#settings-dialog").close();
-  void refreshServices();
-  if (state.view === "market") void refreshMarketWorkspace();
-  else if (state.view === "stocks") {
-    void refreshSources();
-    if (state.settings.apiKey) void runQuoteQuery();
+  runSettingsApplyStep("关闭连接设置窗口失败：", () => $("#settings-dialog").close(), failures);
+
+  // 网络刷新与当前设置应用解耦，并显式收敛 Promise rejection。
+  runSettingsApplyStep("刷新服务健康状态失败：", () => refreshServices(), failures);
+  if (state.view === "market") {
+    runSettingsApplyStep("刷新市场工作台失败：", () => refreshMarketWorkspace(), failures);
+  } else if (state.view === "stocks") {
+    runSettingsApplyStep("刷新数据源能力失败：", () => refreshSources(), failures);
+    if (state.settings.apiKey) {
+      runSettingsApplyStep("重新查询行情失败：", () => runQuoteQuery(), failures);
+    }
   }
+  reportSettingsApplyFailures(failures);
 }
+
 
 function saveSettingsFromForm() {
   const form = $("#settings-form");

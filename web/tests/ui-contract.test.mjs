@@ -186,6 +186,22 @@ test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
 });
 
 
+test("applySettings 的单项清理失败不会阻断其余配置应用步骤", () => {
+  assert.match(app, /function runSettingsApplyStep\(label, operation, failures\) \{[\s\S]*?operation\(\)[\s\S]*?result\.catch\(\(error\) => \{[\s\S]*?failures\.push\(label \+ message\)/);
+  assert.match(app, /function reportSettingsApplyFailures\(failures\) \{[\s\S]*?settings-connection-check[\s\S]*?is-warning/);
+
+  const start = app.indexOf("function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) {");
+  const end = app.indexOf("\nfunction saveSettingsFromForm()", start);
+  const apply = start >= 0 && end > start ? app.slice(start, end) : "";
+  assert.match(apply, /runSettingsApplyStep\("保存旧任务引用失败：[\s\S]*?state\.settings = nextSettings;/);
+  assert.match(apply, /state\.settings = nextSettings;[\s\S]*?runSettingsApplyStep\("清理旧分析任务失败：/);
+  assert.match(apply, /runSettingsApplyStep\("清理旧行情结果失败：[\s\S]*?runSettingsApplyStep\("取消股票搜索请求失败：[\s\S]*?runSettingsApplyStep\("失效个股研究请求失败：/);
+  assert.match(apply, /savedConnectionCheckGeneration \+= 1;[\s\S]*?runSettingsApplyStep\("恢复连接检查按钮失败：[\s\S]*?runSettingsApplyStep\("失效数据中心检查结果失败：/);
+  assert.match(apply, /runSettingsApplyStep\("关闭连接设置窗口失败：[\s\S]*?runSettingsApplyStep\("刷新服务健康状态失败：[\s\S]*?reportSettingsApplyFailures\(failures\)/);
+  assert.match(apply, /runSettingsApplyStep\("刷新市场工作台失败：/);
+  assert.match(apply, /runSettingsApplyStep\("刷新数据源能力失败：[\s\S]*?runSettingsApplyStep\("重新查询行情失败：/);
+});
+
 test("任务切换与分析 API 切换不会被按钮解锁异常中断", () => {
   assert.match(app, /function releaseRunResultReloadBusy\(\) \{[\s\S]*?try \{\s*setRunResultReloadBusy\(false\);\s*\} catch[\s\S]*?继续完成上下文切换/);
 
