@@ -23,7 +23,9 @@
 - 三张报表端点权限/响应失败时只把对应分区标记为降级，不丢弃已有六组标准指标；缺字段保留缺失并记录质量原因，不补零。 反向情况同样处理：若 `fina_indicator` 失败而任一报表端点仍可用，六组指标保留为显式降级/unknown 分区，已获得的报表数据仍能组成 degraded 快照，不会因首个端点失败整体退出。 若 `fina_indicator` 成功但没有已披露候选，父快照的 `quality_reasons` 也保留 `no_published_indicator_row_for_requested_period`，不会只在六个子分区记录原因。
 - 代码与 HTTP fixture 测试源码已提交，本轮未运行测试、构建、CI 或真实 Provider 请求。Tushare 账号权限和字段级数据仍须统一验收。
 
-### 非空 unknown 快照的事件域回退补齐（2026-10-28）
+### 非空 unknown 快照的事件域回退补齐
+- 涨跌停池候选即使父级质量仍为 unknown，只要源端 `total` 大于返回 `items`，也保留 `provider_limit_pool_response_truncated`，但不会因此把 unknown 提升或降级成其他状态。
+（2026-10-28）
 
 - 涨跌停池与龙虎榜现在允许父级质量为 `unknown`、但条目本身结构完整且仍保留独立质量状态的快照进入回退链；unknown 不再被直接当作无效 Provider 错误。
 - 所有 Provider 都没有返回非 unknown 结果时，服务层按条目数和可用字段覆盖选择候选，标记 `*_fallback_exhausted_without_usable_quality` 或既有空结果原因，再使用短 TTL；旧 unknown 缓存如果没有回退耗尽标记，会在多 Provider 场景跳过。

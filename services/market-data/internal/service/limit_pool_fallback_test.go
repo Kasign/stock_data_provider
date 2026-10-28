@@ -89,6 +89,7 @@ func TestLimitPoolFallsBackFromUnknownQualityRows(t *testing.T) {
 func TestLimitPoolReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
 	tradeDate := time.Now().In(marketLocation()).Format("2006-01-02")
 	candidate := dataLimitPoolForTest("eastmoney", tradeDate)
+	candidate.Total = 2 // 服务端只返回一条时必须保留截断原因。
 	candidate.QualityStatus = model.QualityUnknown
 	candidate.QualityReasons = []string{"provider_limit_pool_quality_unknown"}
 	first := &limitPoolFallbackTestProvider{name: "eastmoney", snapshot: candidate}
@@ -99,6 +100,9 @@ func TestLimitPoolReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
 	if got == nil || !got.HasData || got.QualityStatus != model.QualityUnknown ||
 		!strings.Contains(strings.Join(got.QualityReasons, ","), "limit_pool_fallback_exhausted_without_usable_quality") {
 		t.Fatalf("expected retained unknown rows and exhaustion reason, got %+v", got)
+	}
+	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_limit_pool_response_truncated") {
+		t.Fatalf("unknown snapshot must preserve the source coverage/truncation reason: %v", got.QualityReasons)
 	}
 	if first.calls != 1 || failed.calls != 1 { t.Fatalf("expected all providers to be attempted, calls=%d/%d", first.calls, failed.calls) }
 }

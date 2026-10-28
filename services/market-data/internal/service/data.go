@@ -595,6 +595,10 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if snapshot.HasData && snapshot.Total > len(snapshot.Items) {
+			// unknown 质量不能代替具体的覆盖率原因；只附加截断标记，不提升质量状态。
+			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_limit_pool_response_truncated")
+		}
 		if !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
 			// 空池或有条目但父快照质量未知，都不能阻断后续 Provider。
 			if betterUnknownLimitPoolSnapshot(snapshot, unknownCandidate) { unknownCandidate = snapshot }
