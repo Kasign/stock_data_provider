@@ -127,8 +127,21 @@ function renderCalendar(data){
   const rangeMismatch=expectedDays!==null&&expectedDays!==items.length;
   if(missingDates>0||reportedMismatch||rangeMismatch||(!validRange&&items.length))root.prepend(el("p","calendar-coverage-warning","返回日期数与请求范围或源端报告天数不一致；缺失日期会标示为“未返回”，请勿将不完整日历用于交易日判断。"));
  }
+ function syncCalendarMonthNavigation(){
+  const start=String($("#calendar-start-date").value||""),end=String($("#calendar-end-date").value||"");
+  const startTime=calendarTimestamp(start),endTime=calendarTimestamp(end);
+  if(Number.isFinite(startTime)){
+   const date=new Date(startTime),current=chinaParts();
+   const selectedYear=date.getUTCFullYear(),selectedMonth=date.getUTCMonth();
+   monthOffset=selectedYear*12+selectedMonth-(Number(current.year)*12+Number(current.month)-1);
+  }
+  const label=Number.isFinite(startTime)&&Number.isFinite(endTime)&&start<=end
+   ?start.slice(0,7)+(start.slice(0,7)===end.slice(0,7)?"":" — "+end.slice(0,7))
+   :"日期范围待修正";
+  meta("calendar-month-label",label);
+ }
  function invalidateCalendarFilter(){
-  abort("calendar");
+  abort("calendar");syncCalendarMonthNavigation();
   errorBox("trading-calendar-error","");badge("trading-calendar-quality","条件已变更","unknown");
   meta("trading-calendar-meta","日期筛选已变更，请重新加载交易日历。");
   clearReasons("trading-calendar-reasons");

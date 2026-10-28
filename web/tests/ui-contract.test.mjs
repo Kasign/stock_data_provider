@@ -490,6 +490,13 @@ test("changing fundamentals report period cancels old results until reloaded", (
   assert.match(stockResearch, /\$\("#fundamentals-quarter"\)\?\.addEventListener\("change",invalidateFundamentalsPeriod\)/);
 });
 
+test("manual trading-calendar date ranges keep month navigation in sync", () => {
+  assert.ok(marketActivity.includes("function syncCalendarMonthNavigation()"));
+  assert.ok(marketActivity.includes("monthOffset=selectedYear*12+selectedMonth-(Number(current.year)*12+Number(current.month)-1)"));
+  assert.match(marketActivity, /function invalidateCalendarFilter\(\)[\s\S]*?syncCalendarMonthNavigation\(\)/);
+  assert.match(marketActivity, /meta\("calendar-month-label",label\)/);
+});
+
 test("provider capability definitions expose each backend capability once", () => {
   const definitionBlock = app.match(/const capabilityDefinitions = \[([\s\S]*?)\n  \];/);
   assert.ok(definitionBlock, "provider capability definitions must remain explicit");
