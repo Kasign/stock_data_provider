@@ -243,15 +243,24 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 			continue
 		}
 		change := *quote.LastPrice - *quote.PrevClose
+		changePercent := change / *quote.PrevClose * 100
+		if math.IsNaN(change) || math.IsInf(change, 0) || math.IsNaN(changePercent) || math.IsInf(changePercent, 0) {
+			markSnapshotDegraded("provider_index_change_fields_inconsistent")
+			continue
+		}
+		// 扩展字段只用于交叉校验，不能覆盖由最新价和昨收价计算的规范值。
 		if rawChange, ok := quote.Ext["change_amount"]; ok {
-			if value, parseErr := tickflowFloat(rawChange); parseErr == nil && !math.IsNaN(value) && !math.IsInf(value, 0) {
-				change = value
+			value, parseErr := tickflowFloat(rawChange)
+			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) || math.Abs(value-change) > 0.05 {
+				markSnapshotDegraded("provider_index_change_fields_inconsistent")
+				continue
 			}
 		}
-		changePercent := change / *quote.PrevClose * 100
 		if rawChangePercent, ok := quote.Ext["change_pct"]; ok {
-			if value, parseErr := tickflowFloat(rawChangePercent); parseErr == nil && !math.IsNaN(value) && !math.IsInf(value, 0) {
-				changePercent = value * 100
+			value, parseErr := tickflowFloat(rawChangePercent)
+			if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) || math.Abs(value*100-changePercent) > 0.15 {
+				markSnapshotDegraded("provider_index_change_fields_inconsistent")
+				continue
 			}
 		}
 
