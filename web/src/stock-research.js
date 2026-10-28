@@ -216,16 +216,19 @@ export function bindStockResearch(getSettings,getSymbol){
    "估值快照已返回；请同时参考每只股票质量、供应商时间及缺失指标。");
  }
  function renderValuations(data,symbol){
-  const requestedSymbol=String(data.requested_symbols?.[0]||symbol);
+  const requestedSymbol=String(symbol||data.requested_symbols?.[0]||"").trim();
   setText("valuations-symbol",requestedSymbol);
   setQuality("valuations-quality",data.quality_status);
   const root=$("#valuation-content");root.replaceChildren();
   const items=Array.isArray(data.items)?data.items.filter(item=>item&&typeof item==="object"):[];
-  const item=items.find(value=>String(value.symbol||"")===requestedSymbol)||items[0];
+  const targetSymbol=requestedSymbol.toUpperCase();
+  const item=items.find(value=>String(value.symbol||"").trim().toUpperCase()===targetSymbol);
   if(!item){
-   const message=Array.isArray(data.missing_symbols)&&data.missing_symbols.includes(requestedSymbol)
-    ?"服务端未返回该标的估值记录；不会将缺失记录解释为 0。"
-    :"估值接口返回成功，但没有可展示的估值项目。";
+   const message=items.length
+    ?"估值接口返回的证券代码与当前标的不匹配，已忽略这些记录。"
+    :Array.isArray(data.missing_symbols)&&data.missing_symbols.includes(requestedSymbol)
+     ?"服务端未返回该标的估值记录；不会将缺失记录解释为 0。"
+     :"估值接口返回成功，但没有可展示的估值项目。";
    root.append(el("p","stock-research-empty",message));
   }else{
    const grid=el("div","stock-valuation-grid");

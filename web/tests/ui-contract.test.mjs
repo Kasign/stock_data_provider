@@ -1103,3 +1103,13 @@ test("最近任务本地存储不可读或损坏时不覆盖原始历史，导�
   assert.match(app, /function renderRecentTasks\(records\)[\s\S]*?historyState\.storageReadable[\s\S]*?historyState\.storageValid[\s\S]*?历史修改已暂停/);
   assert.match(app, /recent_tasks: \(\(\) => \{[\s\S]*?recentTasksState\.storageReadable[\s\S]*?recentTasksState\.storageValid[\s\S]*?导出已取消/);
 });
+
+
+test("估值响应只展示与当前请求标的匹配的记录", () => {
+  const renderer = stockResearch.match(/function renderValuations\(data,symbol\)\{[\s\S]*?\n \}\n function fractionPercent/)?.[0] || "";
+  assert.ok(renderer, "估值渲染器应存在");
+  assert.match(renderer, /const requestedSymbol=String\(symbol\|\|data\.requested_symbols\?\.\[0\]\|\|"\)\.trim\(\)/);
+  assert.match(renderer, /items\.find\(value=>String\(value\.symbol\|\|""\)\.trim\(\)\.toUpperCase\(\)===targetSymbol\)/);
+  assert.doesNotMatch(renderer, /items\[0\]/, "目标股票未匹配时不得退回展示列表第一条记录");
+  assert.match(renderer, /估值接口返回的证券代码与当前标的不匹配，已忽略这些记录/);
+});
