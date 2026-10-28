@@ -58,6 +58,48 @@ func TestTushareDailyRejectsEmptyOrDuplicateFieldNames(t *testing.T) {
 	}
 }
 
+
+func TestTushareDailyNormalizesAmountFromThousandCNYToCNY(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			APIName string `json:"api_name"`
+			Fields  string `json:"fields"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "daily" {
+			t.Errorf("api_name=%q, want daily", request.APIName)
+		}
+		writeTushareTestTable(w,
+			[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
+			[][]any{{"600519.SH", "20261026", 10.0, 11.0, 9.0, 10.5, 5.0, 100.0, 105.0}},
+		)
+	}))
+	defer server.Close()
+
+	p := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	bars, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-26", "2026-10-26", 10, model.AdjustmentNone)
+	if err != nil {
+		t.Fatalf("FetchDailyBars: %v", err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("got %d bars, want 1", len(bars))
+	}
+	bar := bars[0]
+	if bar.Amount == nil || *bar.Amount != 105000 || bar.AmountUnit != "CNY" {
+		t.Fatalf("normalized amount must be 105000 CNY, got amount=%v unit=%q", bar.Amount, bar.AmountUnit)
+	}
+	if bar.RawAmount == nil || *bar.RawAmount != 105 || bar.RawAmountUnit != "thousand_CNY" || bar.RawAmountField != "amount" {
+		t.Fatalf("raw amount provenance was not preserved: raw_amount=%v unit=%q field=%q", bar.RawAmount, bar.RawAmountUnit, bar.RawAmountField)
+	}
+	if bar.Volume == nil || *bar.Volume != 10000 || bar.RawVolume == nil || *bar.RawVolume != 100 || bar.RawVolumeUnit != "hands" {
+		t.Fatalf("Tushare volume normalization/provenance mismatch: volume=%v raw=%v raw_unit=%q", bar.Volume, bar.RawVolume, bar.RawVolumeUnit)
+	}
+}
+
 func TestTushareIndexConstituentsQueriesOnlyNewestAvailableMonth(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
