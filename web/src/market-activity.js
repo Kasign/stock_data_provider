@@ -40,6 +40,13 @@ export function bindMarketActivity(getSettings,onSelectStock){
   const rr=$("#dragon-tiger-reasons");rr.replaceChildren();const rs=Array.isArray(data?.quality_reasons)?data.quality_reasons:[];rr.hidden=!rs.length;rs.forEach(x=>rr.append(el("li","",x)));
   dragonPage=Number(data?.page)||1;dragonHasMore=Boolean(data?.has_more);$("#dragon-tiger-next").hidden=!dragonHasMore;$("#dragon-tiger-next").disabled=!dragonHasMore;$("#dragon-tiger-next").textContent=dragonHasMore?"加载下一页":"没有更多页";
  }
+ function invalidateDragonFilter(){
+  abort("dragon");dragonPage=1;dragonHasMore=false;
+  errorBox("dragon-tiger-error","");badge("dragon-tiger-quality","条件已变更","unknown");
+  meta("dragon-tiger-meta","日期筛选已变更，请重新加载龙虎榜。");clearReasons("dragon-tiger-reasons");
+  messageRow($("#dragon-tiger-body"),"交易日期已变化，请点击“读取龙虎榜”加载新条件。",6);
+  const next=$("#dragon-tiger-next");next.hidden=true;next.disabled=true;next.textContent="加载下一页";
+ }
  async function loadDragon({append=false}={}){
   abort("dragon");const seq=generation.dragon,cfg=settings();
   if(!cfg?.apiKey){
@@ -84,6 +91,13 @@ export function bindMarketActivity(getSettings,onSelectStock){
   const rr=$("#trading-calendar-reasons");rr.replaceChildren();const rs=Array.isArray(data?.quality_reasons)?data.quality_reasons:[];rr.hidden=!rs.length;rs.forEach(x=>rr.append(el("li","",x)));
   if(Number.isFinite(Number(data?.total_days))&&Number(data.total_days)!==items.length)root.prepend(el("p","calendar-coverage-warning","返回日期数与源端报告天数不一致，请勿将不完整日历用于交易日判断。"));
  }
+ function invalidateCalendarFilter(){
+  abort("calendar");
+  errorBox("trading-calendar-error","");badge("trading-calendar-quality","条件已变更","unknown");
+  meta("trading-calendar-meta","日期筛选已变更，请重新加载交易日历。");
+  clearReasons("trading-calendar-reasons");
+  $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","日期范围已变化，请点击“读取交易日历”加载新条件。"));
+ }
  async function loadCalendar(){
   abort("calendar");const seq=generation.calendar,cfg=settings(),start=$("#calendar-start-date").value,end=$("#calendar-end-date").value;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||start>end){
@@ -123,8 +137,11 @@ export function bindMarketActivity(getSettings,onSelectStock){
  }
  const today=chinaParts();$("#dragon-tiger-date").value=dateKey(today.year,today.month,today.day);setMonth(0);
  $("#load-dragon-tiger").addEventListener("click",()=>void loadDragon());$("#dragon-tiger-next").addEventListener("click",()=>{if(dragonHasMore)void loadDragon({append:true});});
+ $("#dragon-tiger-date").addEventListener("change",invalidateDragonFilter);
  $("#dragon-tiger-date").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();void loadDragon();}});
  $("#load-trading-calendar").addEventListener("click",()=>void loadCalendar());
+ $("#calendar-start-date").addEventListener("change",invalidateCalendarFilter);
+ $("#calendar-end-date").addEventListener("change",invalidateCalendarFilter);
  $("#calendar-previous-month").addEventListener("click",()=>{setMonth(monthOffset-1);void loadCalendar();});
  $("#calendar-current-month").addEventListener("click",()=>{setMonth(0);void loadCalendar();});
  $("#calendar-next-month").addEventListener("click",()=>{setMonth(monthOffset+1);void loadCalendar();});

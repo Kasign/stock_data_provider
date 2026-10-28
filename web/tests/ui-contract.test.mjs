@@ -466,6 +466,14 @@ test("market activity clears stale calendar state for invalid input, missing key
 });
 
 
+test("market activity date filter changes cancel old requests and clear mismatched results", () => {
+  assert.match(marketActivity, /function invalidateDragonFilter\(\)[\s\S]*?abort\("dragon"\);[\s\S]*?dragonHasMore=false[\s\S]*?交易日期已变化/);
+  assert.match(marketActivity, /function invalidateCalendarFilter\(\)[\s\S]*?abort\("calendar"\);[\s\S]*?日期筛选已变更[\s\S]*?日期范围已变化/);
+  assert.match(marketActivity, /\$\("#dragon-tiger-date"\)\.addEventListener\("change",invalidateDragonFilter\)/);
+  assert.match(marketActivity, /\$\("#calendar-start-date"\)\.addEventListener\("change",invalidateCalendarFilter\)/);
+  assert.match(marketActivity, /\$\("#calendar-end-date"\)\.addEventListener\("change",invalidateCalendarFilter\)/);
+});
+
 test("provider capability definitions expose each backend capability once", () => {
   const definitionBlock = app.match(/const capabilityDefinitions = \[([\s\S]*?)\n  \];/);
   assert.ok(definitionBlock, "provider capability definitions must remain explicit");
