@@ -176,16 +176,25 @@ export function bindDataCenter(getSettings) {
     if (checking) return;
     checking = true;
     const current = ++generation;
-    const settings = typeof getSettings === "function" ? getSettings() : null;
-    if (button) {
-      button.disabled = true;
-      button.textContent = "检查中…";
-      button.setAttribute("aria-busy", "true");
-    }
-    setBadge("#data-center-summary-status", "unknown", "检查中");
-    setText("#data-center-summary-message", "正在检查服务存活/就绪状态与 Provider 能力清单；单项失败不会中断其他检查。");
-
+    let settings = null;
     try {
+      settings = typeof getSettings === "function" ? getSettings() : null;
+      try {
+        if (button) {
+          button.disabled = true;
+          button.textContent = "检查中…";
+          button.setAttribute("aria-busy", "true");
+        }
+      } catch {
+        // 按钮 DOM 更新失败不能阻止服务探测。
+      }
+      try {
+        setBadge("#data-center-summary-status", "unknown", "检查中");
+        setText("#data-center-summary-message", "正在检查服务存活/就绪状态与 Provider 能力清单；单项失败不会中断其他检查。");
+      } catch {
+        // 初始提示失败不能阻止检查请求，也不能跳过最终解锁。
+      }
+
       const checks = await Promise.all([
         runHealthCheck(checkWebUI, settings),
         runHealthCheck(marketLiveness, settings),
@@ -277,15 +286,25 @@ export function bindDataCenter(getSettings) {
             : "基础检查完成：当前页面、服务端点和已报告的依赖状态已检查。Provider 能力清单仍只是配置声明，未实测项目已计入未知数量。");
     } catch (error) {
       if (current !== generation) return;
-      setBadge("#data-center-summary-status", "failed", "检查过程异常");
-      setText("#data-center-summary-message", safeError(error));
+      try {
+        setBadge("#data-center-summary-status", "failed", "检查过程异常");
+      } catch {}
+      try {
+        setText("#data-center-summary-message", safeError(error));
+      } catch {
+        // 故障提示不可写时，错误仍被捕获且 finally 会继续复位。
+      }
     } finally {
       if (current === generation) {
         checking = false;
-        if (button) {
-          button.disabled = false;
-          button.textContent = "重新检查";
-          button.removeAttribute("aria-busy");
+        try {
+          if (button) {
+            button.disabled = false;
+            button.textContent = "重新检查";
+            button.removeAttribute("aria-busy");
+          }
+        } catch {
+          // 数据中心按钮不可写时也不能让 finally 产生新的 rejection。
         }
       }
     }
@@ -294,32 +313,40 @@ export function bindDataCenter(getSettings) {
   function invalidate(message = "连接配置已变更，之前的检查结果已作废。请重新检查。") {
     generation += 1;
     checking = false;
-    if (button) {
-      button.disabled = false;
-      button.textContent = "立即检查";
-      button.removeAttribute("aria-busy");
+    try {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "立即检查";
+        button.removeAttribute("aria-busy");
+      }
+    } catch {
+      // 先递增 generation，旧请求不会覆盖新连接状态。
     }
 
-    setBadge("#data-center-summary-status", "unknown", "需重新检查");
-    setText("#data-center-summary-message", message);
-    setBadge("#data-center-last-check", "unknown", "尚未检查");
+    const safeInvalidateStep = (operation) => {
+      try { operation(); } catch {}
+    };
+    safeInvalidateStep(() => setBadge("#data-center-summary-status", "unknown", "需重新检查"));
+    safeInvalidateStep(() => setText("#data-center-summary-message", message));
+    safeInvalidateStep(() => setBadge("#data-center-last-check", "unknown", "尚未检查"));
 
     [
       "#data-service-webui-status", "#data-service-market-live", "#data-service-market-ready",
       "#data-service-analysis-live", "#data-service-analysis-ready", "#data-service-mariadb-status",
       "#data-service-redis-status", "#data-center-provider-status"
-    ].forEach((selector) => setBadge(selector, "unknown", "需重新检查"));
+    ].forEach((selector) => safeInvalidateStep(() => setBadge(selector, "unknown", "需重新检查")));
     [
       "#data-service-webui-detail", "#data-service-market-detail", "#data-service-analysis-detail",
       "#data-service-mariadb-detail", "#data-service-redis-detail"
-    ].forEach((selector) => setText(selector, "连接配置已变更，尚未重新检查。"));
-    setText("#data-center-provider-summary", "连接配置已变更，尚未重新读取 Provider 能力清单。");
-    const providerList = $("#data-center-provider-list");
-    if (providerList) providerList.replaceChildren();
+    ].forEach((selector) => safeInvalidateStep(() => setText(selector, "连接配置已变更，尚未重新检查。")));
+    safeInvalidateStep(() => setText("#data-center-provider-summary", "连接配置已变更，尚未重新读取 Provider 能力清单。"));
+    safeInvalidateStep(() => {
+      const providerList = $("#data-center-provider-list");
+      if (providerList) providerList.replaceChildren();
+    });
     ["#data-center-count-healthy", "#data-center-count-failed", "#data-center-count-unknown"]
-      .forEach((selector) => setText(selector, "—"));
+      .forEach((selector) => safeInvalidateStep(() => setText(selector, "—")));
   }
-
   button?.addEventListener("click", () => { void refresh(); });
   return { refresh, invalidate };
 }

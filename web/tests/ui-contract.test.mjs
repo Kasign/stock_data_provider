@@ -1498,6 +1498,19 @@ test("快照来源、估值与补充指标使用可读的 12px 辅助文字", ()
   }
 });
 
+test("数据中心检查初始化与 finally 解锁异常不会破坏 generation 收尾", () => {
+  const refresh = dataCenter.match(/async function refresh\(\) \{[\s\S]*?\n  \}/)?.[0] || "";
+  assert.ok(refresh);
+  assert.match(refresh, /checking = true;[\s\S]*?try \{\s*settings = typeof getSettings/);
+  assert.match(refresh, /按钮 DOM 更新失败不能阻止服务探测[\s\S]*?await Promise\.all/);
+  assert.match(refresh, /catch \(error\) \{\s*if \(current !== generation\) return;[\s\S]*?safeError\(error\)/);
+  assert.match(refresh, /finally \{[\s\S]*?checking = false;[\s\S]*?button\.disabled = false;[\s\S]*?finally 产生新的 rejection/);
+  const invalidate = dataCenter.match(/function invalidate\(message = [\s\S]*?\n  \}/)?.[0] || "";
+  assert.match(invalidate, /generation \+= 1;[\s\S]*?safeInvalidateStep/);
+  assert.match(invalidate, /safeInvalidateStep\(\(\) => setBadge\("#data-center-summary-status"/);
+  assert.match(invalidate, /forEach\(\(selector\) => safeInvalidateStep/);
+});
+
 test("数据中心超时后即使探针迟到返回，也不能覆盖为成功", () => {
   assert.match(
     healthCheck,
