@@ -3106,6 +3106,7 @@ async function createTask(event) {
   state.runResultReadError = "";
   state.taskSequence = 0;
   state.taskEvents.clear();
+  state.taskEventFilter = "all";
   state.taskEventsLoaded = false;
   state.taskEventsUnavailable = false;
   state.taskEventsError = "";
@@ -3299,6 +3300,7 @@ function activateTaskReference(record) {
   state.runResultReadError = "";
   state.taskSequence = 0;
   state.taskEvents.clear();
+  state.taskEventFilter = "all";
   state.taskEventsLoaded = false;
   state.taskEventsUnavailable = false;
   state.taskEventsError = "";
@@ -3430,6 +3432,7 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.runResultReadError = "";
   state.taskSequence = 0;
   state.taskEvents.clear();
+  state.taskEventFilter = "all";
   state.taskEventsLoaded = false;
   state.taskEventsUnavailable = false;
   state.taskEventsError = "";
