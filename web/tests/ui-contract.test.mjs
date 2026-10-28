@@ -17,7 +17,7 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../src/stock-research.js", import.meta.url), "utf8"),
   readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/service/wiring.go", import.meta.url), "utf8"),
-  readFile(new URL("../src/data-center.js", import.meta.url), "utf8")
+  readFile(new URL("../src/data-center.js", import.meta.url), "utf8"),
   readFile(new URL("../src/health-check.js", import.meta.url), "utf8")
 ]);
 
