@@ -850,3 +850,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - 重复公告记录仍按稳定 article ID 去重，但不再静默丢弃：父快照增加 `provider_duplicate_announcement_rows_deduplicated`，质量降级并在迁移文档说明 `total/returned` 是去重后唯一记录数。
 - 新增 Tushare HTTP fixture 测试源码，覆盖重复记录去重和质量原因；未执行测试、构建、CI 或真实 Provider 请求。
+
+
+### 热度榜重复证券与报价覆盖静态复核（2026-10-28）
+
+- 东方财富热度榜 Provider 不再静默跳过重复证券；行情补充响应也拒绝重复 `f12`，防止 map 写入时后续行覆盖先前值。
+- 新增两项本地 HTTP fixture 测试源码，分别覆盖榜单重复证券和补充行情重复代码。尚未执行测试、构建、CI 或真实 Provider 请求。
