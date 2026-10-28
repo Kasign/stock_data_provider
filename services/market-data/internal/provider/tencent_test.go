@@ -312,6 +312,36 @@ func TestTencentDailyBarsRejectsReversedDateRangeBeforeRequest(t *testing.T) {
 	}
 }
 
+func TestTencentDailyBarsRejectsFutureDateBeforeRequest(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	nextDay := time.Now().In(loc).AddDate(0, 0, 1).Format("2006-01-02")
+	cases := []struct {
+		name, start, end string
+	}{
+		{name: "future start only", start: nextDay},
+		{name: "future end", start: "2026-10-20", end: nextDay},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests++
+				fmt.Fprint(w, `{"data":{}}`)
+			}))
+			defer server.Close()
+			p := NewTencent(2 * time.Second)
+			p.noneKlineURL = server.URL
+			if _, err := p.FetchDailyBars(context.Background(), "600519.SH", tc.start, tc.end, 10, model.AdjustmentNone); err == nil {
+				t.Fatal("future date bound should be rejected")
+			}
+			if requests != 0 {
+				t.Fatalf("future date bound must be rejected before upstream request, got %d request(s)", requests)
+			}
+		})
+	}
+}
+
 func TestTencentDailyBarsUsesRequestedAdjustmentEndpointAndPayloadKey(t *testing.T) {
 	type requestRecord struct {
 		path  string

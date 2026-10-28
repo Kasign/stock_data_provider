@@ -212,7 +212,18 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			return nil, fmt.Errorf("invalid end date: %w", e)
 		}
 	}
-	// 日期区间错误必须在发起上游请求前拒绝，避免浪费调用额度或把上游错误当作参数错误。
+	// 日期边界和区间错误必须在发起上游请求前拒绝，避免浪费调用额度并防止未来日期进入日 K 链路。
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	today := time.Now().In(loc).Format("2006-01-02")
+	if start != "" && start > today {
+		return nil, errors.New("Tencent start date must not be after today in Asia/Shanghai")
+	}
+	if end != "" && end > today {
+		return nil, errors.New("Tencent end date must not be after today in Asia/Shanghai")
+	}
 	if start != "" && end != "" && start > end {
 		return nil, errors.New("start date must not be after end date")
 	}
