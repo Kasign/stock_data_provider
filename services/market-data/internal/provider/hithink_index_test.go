@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -170,13 +169,3 @@ func TestHithinkFetchIndexQuotesMissingOptionalChangesUsesCalculatedValues(t *te
 	}
 }
 
-func containsHithinkReason(reasons []string, expected string) bool {
-	for _, reason := range reasons {
-		if reason == expected {
-			return true
-		}
-	}
-	return false
-}
-
-var _ = fmt.Sprintf
