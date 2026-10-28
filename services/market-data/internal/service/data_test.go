@@ -1678,6 +1678,18 @@ func TestStockBasicCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
 	}
 }
 
+func TestValidateStockBasicRejectsOutDateBeforeIPODate(t *testing.T) {
+	item := &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", IPODate: "2020-01-02", OutDate: "2019-12-31",
+		SecurityType: 1, SecurityTypeLabel: "stock", ListingStatus: 0, ListingStatusLabel: "delisted",
+		Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}
+	if err := validateStockBasic("600519.SH", item); err == nil || !strings.Contains(err.Error(), "out_date must not precede ipo_date") {
+		t.Fatalf("out date before IPO date must be rejected, got %v", err)
+	}
+}
+
 func TestValidateStockBasicRequiresSourceVersion(t *testing.T) {
 	item := &model.StockBasic{
 		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",

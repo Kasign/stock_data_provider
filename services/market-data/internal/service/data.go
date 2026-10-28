@@ -1041,13 +1041,23 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if item.ListingStatus != 0 && item.ListingStatus != 1 {
 		return fmt.Errorf("stock-basic listing status %d is unsupported", item.ListingStatus)
 	}
-	for field, value := range map[string]string{"ipo_date": item.IPODate, "out_date": item.OutDate} {
-		if strings.TrimSpace(value) == "" {
-			continue
+	var ipoDate, outDate time.Time
+	if value := strings.TrimSpace(item.IPODate); value != "" {
+		parsed, err := time.Parse("2006-01-02", value)
+		if err != nil || parsed.Format("2006-01-02") != value {
+			return fmt.Errorf("stock-basic ipo_date %q is invalid", value)
 		}
-		if _, err := time.Parse("2006-01-02", value); err != nil {
-			return fmt.Errorf("stock-basic %s %q is invalid", field, value)
+		ipoDate = parsed
+	}
+	if value := strings.TrimSpace(item.OutDate); value != "" {
+		parsed, err := time.Parse("2006-01-02", value)
+		if err != nil || parsed.Format("2006-01-02") != value {
+			return fmt.Errorf("stock-basic out_date %q is invalid", value)
 		}
+		outDate = parsed
+	}
+	if !ipoDate.IsZero() && !outDate.IsZero() && outDate.Before(ipoDate) {
+		return errors.New("stock-basic out_date must not precede ipo_date")
 	}
 	for field, value := range map[string]*float64{
 		"pe_dynamic": item.DynamicPE, "pb": item.PB,
