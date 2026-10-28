@@ -125,6 +125,36 @@ func TestHotRankingLegacyUnknownRowsCacheDoesNotBlockFallback(t *testing.T) {
 	}
 }
 
+func TestHotRankingKeepsUnknownCandidateWithMoreMetricCoverage(t *testing.T) {
+	sparse := unknownQualityHotRankingForFallbackTest("eastmoney")
+	rich := unknownQualityHotRankingForFallbackTest("hithink")
+	latestPrice, change, changePercent, heat := 1500.0, 10.0, 0.67, 88.0
+	rankChange := 2
+	rich.Items[0].LatestPrice = &latestPrice
+	rich.Items[0].Change = &change
+	rich.Items[0].ChangePercent = &changePercent
+	rich.Items[0].Heat = &heat
+	rich.Items[0].RankChange = &rankChange
+	rich.Items[0].RankTrend = "rising"
+
+	first := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: sparse}
+	second := &hotRankingFallbackTestProvider{name: "hithink", snapshot: rich}
+	failed := &hotRankingFallbackTestProvider{name: "third-source", err: errors.New("test ranking endpoint unavailable")}
+	svc := hotRankingFallbackService(newMemoryCache(), first, second, failed)
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit {
+		t.Fatalf("HotStocks returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "hithink" || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected the unknown ranking with richer item fields, got %+v", got)
+	}
+	if got.Items[0].LatestPrice == nil || got.Items[0].Heat == nil ||
+		first.calls != 1 || second.calls != 1 || failed.calls != 1 {
+		t.Fatalf("expected richer item fields and all Providers attempted: snapshot=%+v calls=%d/%d/%d", got, first.calls, second.calls, failed.calls)
+	}
+}
+
 func TestHotRankingReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
 	first := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: unknownQualityHotRankingForFallbackTest("eastmoney")}
 	second := &hotRankingFallbackTestProvider{name: "hithink", err: errors.New("test provider unavailable")}

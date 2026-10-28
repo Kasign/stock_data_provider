@@ -77,6 +77,53 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 	return nil
 }
 
+// betterUnknownHotRankingSnapshot 在回退耗尽后优先保留条目更多、行情/热度字段更完整的榜单候选。
+func betterUnknownHotRankingSnapshot(candidate, current *model.HotRankingSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	metricCount := func(snapshot *model.HotRankingSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.Heat} {
+				if value != nil {
+					count++
+				}
+			}
+			if item.RankChange != nil {
+				count++
+			}
+			if strings.TrimSpace(item.Name) != "" {
+				count++
+			}
+			if strings.TrimSpace(item.RankTrend) != "" {
+				count++
+			}
+		}
+		return count
+	}
+	left, right := metricCount(candidate), metricCount(current)
+	if left != right {
+		return left > right
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime == nil {
+		return true
+	}
+	if candidate.ProviderTime == nil && current.ProviderTime != nil {
+		return false
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime != nil && !candidate.ProviderTime.Equal(*current.ProviderTime) {
+		return candidate.ProviderTime.After(*current.ProviderTime)
+	}
+	return false
+}
+
 func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) (*model.HotRankingSnapshot, bool, error) {
 	rankingType := strings.ToLower(strings.TrimSpace(rawType))
 	if rankingType == "" {
@@ -147,7 +194,7 @@ func (s *DataService) HotStocks(ctx context.Context, rawType string, limit int) 
 		}
 		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
 			// 空榜或虽有条目但质量未知，都不能阻断后续来源。
-			if unknownCandidate == nil || len(snapshot.Items) > len(unknownCandidate.Items) {
+			if betterUnknownHotRankingSnapshot(snapshot, unknownCandidate) {
 				unknownCandidate = snapshot
 			}
 			if len(snapshot.Items) == 0 {
