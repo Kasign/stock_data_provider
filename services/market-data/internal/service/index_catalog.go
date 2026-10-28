@@ -154,8 +154,10 @@ func markIndexConstituentCoverage(snapshot *model.IndexConstituentSnapshot) {
 		return
 	}
 
-	// 兼容没有覆盖计数的旧缓存/旧 Provider，但不再把它们当作完整有效快照。
-	snapshot.QualityStatus = model.QualityDegraded
+	// 未确认质量保持 unknown；其余非空快照因缺少源端覆盖计数必须降级。
+	if snapshot.QualityStatus != model.QualityUnknown {
+		snapshot.QualityStatus = model.QualityDegraded
+	}
 	const reason = "provider_constituent_source_coverage_unreported"
 	for _, existing := range snapshot.QualityReasons {
 		if existing == reason {
@@ -452,10 +454,8 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexConstituentSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
-			// 兼容历史缓存：未记录源端覆盖计数的非 unknown 成分快照必须降级，不能因缓存命中绕过覆盖检查。
-			if cached.QualityStatus != model.QualityUnknown {
-				markIndexConstituentCoverage(&cached)
-			}
+			// 缓存与新 Provider 回包使用同一覆盖计数处理；unknown 只补原因，不改变其未知语义。
+			markIndexConstituentCoverage(&cached)
 			ttl := 30 * time.Minute
 			if cached.QualityStatus != model.QualityValid {
 				ttl = 5 * time.Minute
@@ -494,6 +494,7 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		markIndexConstituentCoverage(snapshot)
 		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
 			if betterUnknownIndexConstituentSnapshot(snapshot, unknownCandidate) {
 				unknownCandidate = snapshot
@@ -505,7 +506,6 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 			}
 			continue
 		}
-		markIndexConstituentCoverage(snapshot)
 		if payload, err := json.Marshal(snapshot); err == nil {
 			ttl := 30 * time.Minute
 			if snapshot.QualityStatus != model.QualityValid {

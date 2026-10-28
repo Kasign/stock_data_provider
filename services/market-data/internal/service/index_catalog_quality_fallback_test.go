@@ -218,3 +218,44 @@ func TestIndexConstituentsLegacyCacheWithoutCoverageCountIsDegraded(t *testing.T
 		t.Fatalf("valid cache hit should not fetch provider, calls=%d", fallback.constituentCalls)
 	}
 }
+
+
+func TestIndexConstituentsUnknownCacheWithoutCoverageCountRemainsUnknown(t *testing.T) {
+	mem := newMemoryCache()
+	cached := indexConstituentsUnknownDataForTest("tushare")
+	cached.ProviderReturned = 0
+	payload, err := json.Marshal(cached)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v2:index-constituents:auto:000300.SH"] = payload
+
+	fallback := &indexCatalogQualityFallbackProvider{
+		name: "tushare", constituents: indexConstituentsDegradedDataForTest("tushare"),
+	}
+	svc := &DataService{
+		cache: mem,
+		indexCatalogProviders: []provider.IndexCatalogProvider{fallback},
+	}
+
+	got, hit, err := svc.IndexConstituentsFromSource(context.Background(), "000300.SH", "")
+	if err != nil || !hit {
+		t.Fatalf("single-provider unknown cache should remain cacheable with unknown quality: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("missing coverage metadata must not turn unknown into another quality state, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_constituent_source_coverage_unreported" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("unknown legacy cache must preserve missing-coverage reason: %v", got.QualityReasons)
+	}
+	if fallback.constituentCalls != 0 {
+		t.Fatalf("eligible single-provider cache should not fetch source, calls=%d", fallback.constituentCalls)
+	}
+}
