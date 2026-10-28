@@ -114,6 +114,21 @@ func TestChipDistributionUnknownQualityIsReturnedOnlyAfterFallbackExhaustion(t *
 	}
 }
 
+func TestChipDistributionDeduplicatesProviderNamesIgnoringCaseAndWhitespace(t *testing.T) {
+	first := &chipFallbackTestProvider{name: "eastmoney", item: chipFallbackItem("eastmoney", model.QualityUnknown)}
+	duplicate := &chipFallbackTestProvider{name: " EASTMONEY ", err: errors.New("duplicate provider should not be called")}
+	fallback := &chipFallbackTestProvider{name: "miaoxiang", item: chipFallbackItem("miaoxiang", model.QualityDegraded)}
+	svc := chipFallbackService(first, duplicate, fallback)
+
+	got, hit, err := svc.ChipDistribution(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("ChipDistribution returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "miaoxiang" || first.calls != 1 || duplicate.calls != 0 || fallback.calls != 1 {
+		t.Fatalf("expected case-insensitive duplicate provider to be skipped: got=%+v calls=%d/%d/%d", got, first.calls, duplicate.calls, fallback.calls)
+	}
+}
+
 func TestChipDistributionLegacyUnknownCacheDoesNotBlockFallback(t *testing.T) {
 	legacy := chipFallbackItem("eastmoney", model.QualityUnknown)
 	encoded, err := json.Marshal(legacy)
