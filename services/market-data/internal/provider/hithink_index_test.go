@@ -262,3 +262,33 @@ func TestHithinkFetchQuoteRejectsInconsistentReportedChanges(t *testing.T) {
 		})
 	}
 }
+
+
+func TestHithinkFetchQuoteRejectsDuplicateRequestedSecurityRows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/a-share/prices/snapshot" {
+			http.NotFound(w, r)
+			return
+		}
+		row := map[string]any{
+			"thscode": "600519.SH", "name": "贵州茅台",
+			"last_price": 101.0, "prev_price": 100.0,
+			"price_change": 1.0, "price_change_ratio_pct": 1.0,
+			"open_price": 99.0, "high_price": 102.0, "low_price": 98.0,
+			"volume": 1000.0, "turnover": 100000.0,
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"data": map[string]any{
+				"timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli(),
+				"item": []map[string]any{row, row},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	if _, err := provider.FetchQuote(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), "重复请求证券") {
+		t.Fatalf("duplicate quote identity must be rejected rather than selecting the first row, got %v", err)
+	}
+}

@@ -1511,10 +1511,14 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		Turnover      *float64 `json:"turnover"`
 	}
 	for i := range data.Item {
-		if strings.EqualFold(strings.TrimSpace(data.Item[i].THSCode), symbol) {
-			item = &data.Item[i]
-			break
+		if !strings.EqualFold(strings.TrimSpace(data.Item[i].THSCode), symbol) {
+			continue
 		}
+		if item != nil {
+			// 单证券报价响应也必须保持证券身份唯一；重复行不能静默采用第一条。
+			return nil, fmt.Errorf("同花顺行情响应包含重复请求证券 %s", symbol)
+		}
+		item = &data.Item[i]
 	}
 	if item == nil {
 		return nil, fmt.Errorf("同花顺行情响应未包含请求证券 %s", symbol)
