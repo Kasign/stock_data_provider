@@ -278,11 +278,12 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 		var cached model.IndexCatalogSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexCatalogSnapshot(tag, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			ttl := indexCatalogCacheTTL(&cached)
-			cacheEligible := len(cached.Items) > 0
-			if len(cached.Items) == 0 {
+			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
+			if cached.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "index_catalog_fallback_exhausted_without_confirmed_data" {
+					if reason == "index_catalog_fallback_exhausted_without_confirmed_data" ||
+						reason == "index_catalog_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
@@ -301,7 +302,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 		return nil, false, errors.New("no enabled index-catalog provider")
 	}
 	var failures []string
-	var unknownEmpty *model.IndexCatalogSnapshot
+	var unknownCandidate *model.IndexCatalogSnapshot
 	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -315,8 +316,18 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if snapshot.QualityStatus == model.QualityUnknown {
+			if unknownCandidate == nil || len(snapshot.Items) > len(unknownCandidate.Items) {
+				unknownCandidate = snapshot
+			}
+			if len(snapshot.Items) == 0 {
+				failures = append(failures, p.Name()+": index catalog is empty and cannot be confirmed")
+			} else {
+				failures = append(failures, p.Name()+": index catalog contains entries but source quality is unknown")
+			}
+			continue
+		}
 		if len(snapshot.Items) == 0 {
-			unknownEmpty = snapshot
 			failures = append(failures, p.Name()+": index catalog is empty and cannot be confirmed")
 			continue
 		}
@@ -330,15 +341,19 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 		}
 		return snapshot, false, nil
 	}
-	if unknownEmpty != nil {
-		unknownEmpty.QualityStatus = model.QualityUnknown
-		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "index_catalog_fallback_exhausted_without_confirmed_data")
-		if payload, err := json.Marshal(unknownEmpty); err == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, indexCatalogCacheTTL(unknownEmpty)); cacheErr != nil {
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		reason := "index_catalog_fallback_exhausted_without_usable_quality"
+		if len(unknownCandidate.Items) == 0 {
+			reason = "index_catalog_fallback_exhausted_without_confirmed_data"
+		}
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if payload, err := json.Marshal(unknownCandidate); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, indexCatalogCacheTTL(unknownCandidate)); cacheErr != nil {
 				s.logger.Warn("index-catalog unknown cache write failed", "tag", tag, "error", cacheErr)
 			}
 		}
-		return unknownEmpty, false, nil
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all index-catalog providers failed: %s", strings.Join(failures, "; "))
 }
@@ -373,11 +388,12 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 			if cached.QualityStatus != model.QualityValid {
 				ttl = 5 * time.Minute
 			}
-			cacheEligible := len(cached.Items) > 0
-			if len(cached.Items) == 0 {
+			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
+			if cached.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "index_constituents_fallback_exhausted_without_confirmed_data" {
+					if reason == "index_constituents_fallback_exhausted_without_confirmed_data" ||
+						reason == "index_constituents_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
@@ -392,7 +408,7 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 		s.logger.Warn("index constituents cache read failed", "symbol", indexSymbol, "error", cacheErr)
 	}
 	var failures []string
-	var unknownEmpty *model.IndexConstituentSnapshot
+	var unknownCandidate *model.IndexConstituentSnapshot
 	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -406,9 +422,15 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if len(snapshot.Items) == 0 {
-			unknownEmpty = snapshot
-			failures = append(failures, p.Name()+": index constituent membership is empty and cannot be confirmed")
+		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
+			if unknownCandidate == nil || len(snapshot.Items) > len(unknownCandidate.Items) {
+				unknownCandidate = snapshot
+			}
+			if len(snapshot.Items) == 0 {
+				failures = append(failures, p.Name()+": index constituent membership is empty and cannot be confirmed")
+			} else {
+				failures = append(failures, p.Name()+": index constituent membership is present but source quality is unknown")
+			}
 			continue
 		}
 		markIndexConstituentCoverage(snapshot)
@@ -425,15 +447,19 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 		}
 		return snapshot, false, nil
 	}
-	if unknownEmpty != nil {
-		unknownEmpty.QualityStatus = model.QualityUnknown
-		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "index_constituents_fallback_exhausted_without_confirmed_data")
-		if payload, err := json.Marshal(unknownEmpty); err == nil {
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		reason := "index_constituents_fallback_exhausted_without_usable_quality"
+		if len(unknownCandidate.Items) == 0 {
+			reason = "index_constituents_fallback_exhausted_without_confirmed_data"
+		}
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if payload, err := json.Marshal(unknownCandidate); err == nil {
 			if cacheErr := s.cache.Set(ctx, key, payload, 5*time.Minute); cacheErr != nil {
 				s.logger.Warn("index constituents unknown cache write failed", "symbol", indexSymbol, "error", cacheErr)
 			}
 		}
-		return unknownEmpty, false, nil
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all index-constituent providers failed: %s", strings.Join(failures, "; "))
 }

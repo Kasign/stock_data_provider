@@ -709,3 +709,8 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 ### 筹码快照未知质量的后备策略（2026-10-28）
 
 筹码快照若虽包含有效平均成本但 Provider 明确标记 `quality_unknown`，服务层现在会继续尝试其他启用来源；只有来源链耗尽后才返回 unknown，并加 `chip_distribution_fallback_exhausted_without_usable_quality`，短缓存 5 分钟。多 Provider 场景会绕过未带耗尽标记的旧 unknown 缓存；同时按 Provider 名称去重，避免同一源因兼容接口重复注册而重复请求。本轮仅新增代码与测试源码，未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 指数目录/成分存在条目但质量未知时继续回退（2026-10-28）
+
+指数目录与当前成分快照即使返回条目，若质量仍为 `unknown`（例如无法确认源端时点），现在也会继续尝试其他启用 Provider；只有所有来源都未返回 `valid` 或 `degraded` 的可用结果时，才返回并短缓存 unknown。旧 unknown 缓存需带回退耗尽标记，才能在多 Provider 场景命中。显式指定指数目录来源时仍保持来源绑定，不跨代码空间回退。本轮新增测试源码，未运行测试、构建、CI 或真实 Provider 请求。
