@@ -1063,7 +1063,7 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if item.QualityStatus == model.QualityValid {
 		return errors.New("stock-basic cannot be valid without a provider snapshot timestamp")
 	}
-	if item.QualityStatus != model.QualityDegraded {
+	if item.QualityStatus != model.QualityDegraded && item.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("stock-basic quality status %q is unsupported", item.QualityStatus)
 	}
 	if strings.TrimSpace(item.Source) == "" {
@@ -1076,6 +1076,28 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 }
 
 // StockBasic loads security identity and listing data from independent stock-basic providers.
+// betterUnknownStockBasic 优先保留可选基础资料字段覆盖更多的 unknown 记录。
+func betterUnknownStockBasic(candidate, current *model.StockBasic) bool {
+	if candidate == nil { return false }
+	if current == nil { return true }
+	coverage := func(item *model.StockBasic) int {
+		count := 0
+		for _, value := range []*float64{
+			item.DynamicPE, item.PB, item.MarketCapCNY, item.FloatMarketCapCNY,
+			item.ROEPercent, item.NetProfitMarginPercent, item.NetProfitCNY, item.GrossMarginPercent,
+		} {
+			if value != nil { count++ }
+		}
+		for _, value := range []string{item.IPODate, item.OutDate, item.Industry, item.BoardCode, item.SourceVersion} {
+			if strings.TrimSpace(value) != "" { count++ }
+		}
+		return count
+	}
+	left, right := coverage(candidate), coverage(current)
+	if left != right { return left > right }
+	return candidate.FetchedAt.After(current.FetchedAt)
+}
+
 func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.StockBasic, bool, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
@@ -1096,8 +1118,21 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			maxAge := ttl
 			if item.QualityStatus == model.QualityDegraded {
 				maxAge = degradedTTL
+			} else if item.QualityStatus == model.QualityUnknown {
+				maxAge = 10 * time.Second
 			}
-			if time.Since(item.FetchedAt) < maxAge {
+			cacheEligible := item.QualityStatus != model.QualityUnknown
+			if item.QualityStatus == model.QualityUnknown {
+				fallbackExhausted := false
+				for _, reason := range item.QualityReasons {
+					if reason == "stock_basic_fallback_exhausted_without_usable_quality" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				cacheEligible = fallbackExhausted || len(s.stockBasicProviders) <= 1
+			}
+			if cacheEligible && time.Since(item.FetchedAt) < maxAge {
 				return &item, true, nil
 			}
 		}
@@ -1108,6 +1143,7 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		return nil, false, errors.New("no enabled stock-basic provider")
 	}
 	var failures []string
+	var unknownCandidate *model.StockBasic
 	for _, p := range s.stockBasicProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -1138,9 +1174,12 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		if item.ListingStatusLabel == "" {
 			item.ListingStatusLabel = map[int]string{0: "delisted", 1: "listed"}[item.ListingStatus]
 		}
-		if item.QualityStatus == "" || item.QualityStatus == model.QualityUnknown {
+		if item.QualityStatus == "" {
 			item.QualityStatus = model.QualityDegraded
-			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing_or_unknown")
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_missing")
+		} else if item.QualityStatus == model.QualityUnknown {
+			// 结构完整不等于质量可用；先尝试后备 Provider，不能把 unknown 直接改为 degraded 返回。
+			item.QualityReasons = appendReason(item.QualityReasons, "provider_quality_status_unknown")
 		}
 		if item.QualityStatus == model.QualityValid {
 			// 基础资料合并当前估值/财务扩展字段，但 Provider 未暴露可核验快照时间。
@@ -1152,6 +1191,15 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 		}
 		if err := validateStockBasic(symbol, item); err != nil {
 			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		if item.QualityStatus == model.QualityUnknown {
+			if betterUnknownStockBasic(item, unknownCandidate) {
+				copy := *item
+				copy.QualityReasons = append([]string(nil), item.QualityReasons...)
+				unknownCandidate = &copy
+			}
+			failures = append(failures, p.Name()+": stock-basic quality is unknown")
 			continue
 		}
 		cacheTTL := ttl
@@ -1167,6 +1215,17 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			s.logger.Warn("stock-basic cache encode failed", "symbol", symbol, "error", marshalErr)
 		}
 		return item, false, nil
+	}
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, "stock_basic_fallback_exhausted_without_usable_quality")
+		payload, marshalErr := json.Marshal(unknownCandidate)
+		if marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, 10*time.Second); cacheErr != nil {
+				s.logger.Warn("stock-basic unknown cache write failed", "symbol", symbol, "error", cacheErr)
+			}
+		}
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all stock-basic providers failed: %s", strings.Join(failures, "; "))
 }

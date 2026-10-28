@@ -1335,18 +1335,54 @@ func TestFundamentalsUnknownSnapshotWithDataUsesShortCacheTTL(t *testing.T) {
 
 
 type stockBasicFakeProvider struct {
+	name  string
 	item  *model.StockBasic
 	calls int
 }
 
-func (p *stockBasicFakeProvider) Name() string { return "eastmoney" }
+func (p *stockBasicFakeProvider) Name() string {
+	if strings.TrimSpace(p.name) == "" {
+		return "eastmoney"
+	}
+	return p.name
+}
 
 func (p *stockBasicFakeProvider) FetchStockBasic(context.Context, string) (*model.StockBasic, error) {
 	p.calls++
 	return p.item, nil
 }
 
-func TestStockBasicDoesNotPromoteUnknownProviderQuality(t *testing.T) {
+func TestStockBasicFallsBackFromUnknownQualityProvider(t *testing.T) {
+	now := time.Now().UTC()
+	first := &stockBasicFakeProvider{name: "eastmoney", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", FetchedAt: now,
+		QualityStatus: model.QualityUnknown, NormalizationVer: normalize.Version,
+	}}
+	marketCap := 2000000000000.0
+	second := &stockBasicFakeProvider{name: "tushare", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", FetchedAt: now,
+		MarketCapCNY: &marketCap, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"}, NormalizationVer: normalize.Version,
+	}}
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil, newMemoryCache(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{first, second})
+
+	got, hit, err := svc.StockBasic(context.Background(), "600519")
+	if err != nil || hit {
+		t.Fatalf("StockBasic hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded fallback after unknown first source, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected both stock-basic sources to be tried, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
+func TestStockBasicRetainsUnknownAfterFallbackExhaustion(t *testing.T) {
 	now := time.Now().UTC()
 	p := &stockBasicFakeProvider{
 		item: &model.StockBasic{
@@ -1366,18 +1402,18 @@ func TestStockBasicDoesNotPromoteUnknownProviderQuality(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("StockBasic hit=%v err=%v", hit, err)
 	}
-	if got.QualityStatus != model.QualityDegraded {
-		t.Fatalf("unknown Provider quality must be downgraded, got %q", got.QualityStatus)
+	if got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("unknown Provider quality must remain unknown after fallback exhaustion, got %q", got.QualityStatus)
 	}
 	foundReason := false
 	for _, reason := range got.QualityReasons {
-		if reason == "provider_quality_status_missing_or_unknown" {
+		if reason == "stock_basic_fallback_exhausted_without_usable_quality" {
 			foundReason = true
 			break
 		}
 	}
 	if !foundReason {
-		t.Fatalf("downgraded stock-basic record is missing its quality reason: %+v", got.QualityReasons)
+		t.Fatalf("unknown stock-basic record is missing its fallback-exhaustion reason: %+v", got.QualityReasons)
 	}
 }
 
