@@ -173,6 +173,13 @@ test("individual stock research uses one detail workspace without duplicate chip
   assert.ok(stockResearch.includes("async function refresh()"));
   assert.ok(stylesheet.includes(".research-overview-grid") && stylesheet.includes(".supplement-quality-degraded"));
 });
+test("watchlist labels task history from a different analysis API address", () => {
+  const watchlistRenderer = app.match(/function renderWatchlist\\(records, storageReadable, storageValid\\) \\{[\\s\\S]*?\\n\\}/)?.[0] || "";
+  assert.match(watchlistRenderer, /const isOtherAnalysisBase = \\(task\\) => Boolean\\(task && String\\(task\\.analysis_base \\|\\| state\\.settings\\.analysisBase\\) !== String\\(state\\.settings\\.analysisBase\\)\\);/);
+  assert.match(watchlistRenderer, /todayTaskUsesOtherEndpoint \\? "（旧分析 API 地址）" : ""/);
+  assert.match(watchlistRenderer, /recentTaskUsesOtherEndpoint \\? " · 旧分析 API 地址" : ""/);
+});
+
 test("watchlist task and Run summaries refresh when background state changes", () => {
   const taskRenderer = app.match(/function renderTask\(task\) \{[\s\S]*?\n\}/)?.[0] || "";
   const runRenderer = app.match(/function renderTaskResult\(result\) \{[\s\S]*?\n\}/)?.[0] || "";

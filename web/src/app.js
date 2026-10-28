@@ -650,6 +650,9 @@ function renderWatchlist(records, storageReadable, storageValid) {
     const recentTask = [...matchingTasks]
       .sort((a, b) => (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0))[0] || null;
     const todayKey = localCalendarDateKey(new Date());
+    const isOtherAnalysisBase = (task) => Boolean(task && String(task.analysis_base || state.settings.analysisBase) !== String(state.settings.analysisBase));
+    const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask);
+    const recentTaskUsesOtherEndpoint = isOtherAnalysisBase(recentTask);
     const todayTask = [...matchingTasks]
       .filter((task) => Boolean(todayKey) && localCalendarDateKey(task.created_at) === todayKey)
       .sort((a, b) => (Date.parse(b.created_at || "") || 0) - (Date.parse(a.created_at || "") || 0))[0] || null;
@@ -659,7 +662,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
     const todayLine = document.createElement("small");
     todayLine.className = "watchlist-tracking-line" + (todayTask ? " is-today" : " is-unknown");
     if (todayTask) {
-      todayLine.textContent = "今日分析：有本地记录 · " + taskStatusLabel(todayTask.status) + " · 创建于 " + formatDateTime(todayTask.created_at);
+      todayLine.textContent = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "") + " · " + taskStatusLabel(todayTask.status) + " · 创建于 " + formatDateTime(todayTask.created_at);
     } else if (!matchingTasks.length) {
       todayLine.textContent = "今日分析：未知（当前浏览器没有该股票的任务引用）";
     } else if (matchingTasks.some((task) => !localCalendarDateKey(task.created_at))) {
@@ -673,7 +676,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
     taskLine.textContent = activeTaskMatches
       ? "当前任务：" + taskStatusLabel(state.taskStatus) + " · " + state.taskId
       : recentTask
-        ? "最近任务：" + taskStatusLabel(recentTask.status) + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
+        ? "最近任务：" + taskStatusLabel(recentTask.status) + (recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "") + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
         : "最近任务：暂无本地任务记录（不代表从未分析）";
     const resultLine = document.createElement("small");
     resultLine.className = "watchlist-tracking-line";

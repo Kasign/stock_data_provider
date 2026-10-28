@@ -856,3 +856,10 @@
 - 修复自选股页面保持可见时，后台任务状态轮询或 Run 结果读取更新状态后卡片不刷新的问题。
 - `renderTask` 与 `renderTaskResult` 仅在当前视图为自选股时重渲染；现有 task_id、run_id、标的集合与 analysis_base 关联校验保持不变。
 - 已增加静态 UI 契约并同步 API_CONTRACT、HANDOFF、PROGRESS 和 REVIEW_CHECKLIST；未手动运行测试、构建、CI、浏览器自动化或真实 Provider 请求。
+
+
+## 2026-10-28 — 标明自选股历史任务的来源地址
+
+- 自选股卡片会跨本地最近任务引用选取匹配股票的最新记录；旧分析 API 地址的记录之前没有来源标签，容易被理解成当前服务的状态。
+- 对 `analysis_base` 与当前设置不一致的最近任务/今日任务添加“旧分析 API 地址”标识。结果详情仍须匹配当前 Task ID、Run ID、标的集合与分析地址，不放宽报告关联规则。
+- 已补静态 UI 契约并同步 API_CONTRACT、HANDOFF、PROGRESS 和 REVIEW_CHECKLIST；未手动运行测试、构建、CI、浏览器自动化或真实 Provider 请求。
