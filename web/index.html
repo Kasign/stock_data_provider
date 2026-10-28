@@ -842,7 +842,8 @@
         <label class="field"><span>分析 API 路径</span><input id="analysis-base-input" value="/analysis-api" required /></label>
         <div class="security-note">安全提示：不要将带有 API Key 的浏览器会话分享给他人。对公网部署前，应在 OpenResty 或身份认证层增加访问控制；行情服务密钥本身不等于用户认证。</div>
         <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>存在未保存的连接配置更改。</p>
-        <div class="dialog-actions"><button class="button button-secondary" id="clear-settings" type="button">清除本地设置</button><span class="grow"></span><button class="button button-secondary" id="cancel-settings-dialog" type="button">取消</button><button class="button button-primary" id="save-settings" type="button">保存本地连接配置</button></div>
+        <p class="settings-inline-status" id="settings-draft-connection-check" role="status" aria-live="polite">尚未检查未保存配置。</p>
+        <div class="dialog-actions"><button class="button button-secondary" id="clear-settings" type="button">清除本地设置</button><button class="button button-secondary" id="settings-check-draft-connection" type="button">检查未保存配置</button><span class="grow"></span><button class="button button-secondary" id="cancel-settings-dialog" type="button">取消</button><button class="button button-primary" id="save-settings" type="button">保存本地连接配置</button></div>
         <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite"></p>
       </form>
     </dialog>
