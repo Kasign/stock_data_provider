@@ -1999,8 +1999,10 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 		}
 		rowDate, validDate := hithinkDateFromMillis(endValue, loc)
 		if validDate && rowDate == targetReportDate {
+			if selected != nil {
+				return model.FundamentalSection{}, fmt.Errorf("同花顺 %s 返回重复报告期 %s 记录", category, targetReportDate)
+			}
 			selected = row
-			break
 		}
 	}
 	if selected == nil {
