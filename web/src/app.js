@@ -3289,10 +3289,9 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
     "。旧任务引用仍保留并标注来源地址；切回原地址后可恢复。",
     "warning"
   );
-}
-
   // 地址切换已清空活动任务/Run；若自选股页当前可见，立即同步卡片展示。
   if (state.view === "watchlist") renderWatchlist();
+}
 
 function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) {
   const previousSettings = state.settings;
