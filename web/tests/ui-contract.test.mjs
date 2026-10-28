@@ -323,6 +323,22 @@ test("market overview refresh summaries are isolated by status region and guarde
   assert.match(marketOverview, /if\(currentGeneration!==refreshGenerations\[statusSelector\]\)return/);
 });
 
+test("market connection changes invalidate all market overview requests and old summaries", () => {
+  const start = marketOverview.indexOf("function invalidateConnection(){");
+  const end = marketOverview.indexOf("\n }", start);
+  const body = start >= 0 && end > start ? marketOverview.slice(start, end) : "";
+  assert.ok(body.includes("KEYS.forEach(key=>{"));
+  assert.ok(body.includes("cancel(key);"), "连接变更应中止各市场模块请求并推进 generation");
+  assert.ok(body.includes('pending(key,"行情连接配置已变更，旧结果已清除，请重新刷新。","warning")'));
+  assert.ok(body.includes("refreshGenerations[selector]+=1;"), "作废旧刷新摘要回写");
+  assert.ok(body.includes('"#market-overview-updated","#market-data-updated"'));
+  assert.ok(marketOverview.includes("return {refresh,invalidateConnection};"));
+  const settingsStart = app.indexOf("function applySettings(nextSettings,");
+  const settingsEnd = app.indexOf("\nfunction saveSettingsFromForm", settingsStart);
+  const settingsApplication = settingsStart >= 0 && settingsEnd > settingsStart ? app.slice(settingsStart, settingsEnd) : "";
+  assert.ok(settingsApplication.includes("marketOverview.invalidateConnection();"));
+});
+
 test("market connection changes invalidate in-flight dragon-tiger and calendar requests", () => {
   const invalidateStart = marketActivity.indexOf("function invalidateConnection() {");
   const invalidateEnd = marketActivity.indexOf("\n }", invalidateStart);

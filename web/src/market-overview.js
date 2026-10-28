@@ -139,6 +139,17 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   }finally{if(generation[key]===seq)delete controllers[key];}
  }
  async function refresh(keys=KEYS,statusSelector="#market-overview-updated"){const requested=Array.isArray(keys)?keys.filter(key=>KEYS.includes(key)):KEYS;const currentGeneration=(refreshGenerations[statusSelector]||0)+1;refreshGenerations[statusSelector]=currentGeneration;const status=$(statusSelector),settings=typeof getSettings==="function"?getSettings():null;if(status)status.textContent=settings?.apiKey?"正在刷新市场模块…":"配置行情 API Key 后加载市场数据";const outcomes=await Promise.all(requested.map(load));if(currentGeneration!==refreshGenerations[statusSelector])return;if(status)status.textContent=summarizeMarketOverviewRefresh(outcomes,Boolean(settings?.apiKey));}
+ function invalidateConnection(){
+  KEYS.forEach(key=>{
+   cancel(key);
+   pending(key,"行情连接配置已变更，旧结果已清除，请重新刷新。","warning");
+  });
+  Object.keys(refreshGenerations).forEach(selector=>{refreshGenerations[selector]+=1;});
+  ["#market-overview-updated","#market-data-updated"].forEach(selector=>{
+   const node=$(selector);
+   if(node)node.textContent="行情连接配置已变更，旧结果已清除，请重新刷新市场模块。";
+  });
+ }
  $("#refresh-market-overview")?.addEventListener("click",()=>{void refresh(["indices","breadth"],"#market-overview-updated");});
  $("#refresh-market-data")?.addEventListener("click",()=>{void refresh(["sectors","pool","hot"],"#market-data-updated");});
  document.querySelectorAll("[data-sector-type]").forEach(button=>button.addEventListener("click",()=>{sectorType=button.dataset.sectorType==="concept"?"concept":"industry";document.querySelectorAll("[data-sector-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("sectors");}));
@@ -146,5 +157,5 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  document.querySelectorAll("[data-pool-type]").forEach(button=>button.addEventListener("click",()=>{poolType=["up","down","broken"].includes(button.dataset.poolType)?button.dataset.poolType:"up";document.querySelectorAll("[data-pool-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("pool");}));
  document.querySelectorAll("[data-hot-type]").forEach(button=>button.addEventListener("click",()=>{hotType=["popular","surge"].includes(button.dataset.hotType)?button.dataset.hotType:"popular";document.querySelectorAll("[data-hot-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("hot");}));
  $("#market-hot-stocks-body")?.addEventListener("click",event=>{const button=event.target.closest("button[data-hot-symbol]");if(!button||!button.dataset.hotSymbol||typeof onSelectStock!=="function")return;onSelectStock({symbol:button.dataset.hotSymbol,name:button.dataset.hotName||button.dataset.hotSymbol},"人气/飙升榜");});
- return {refresh};
+ return {refresh,invalidateConnection};
 }
