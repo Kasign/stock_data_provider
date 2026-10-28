@@ -1406,3 +1406,20 @@
 - 分析 API 地址切换：任务/Run 状态先失效，随后以独立安全步骤清理详情、提示、事件、摘要、最近任务和自选股视图；单项视图错误不再阻断 `applySettings` 后续连接检查失效与设置弹窗收尾。
 - 代码与静态契约提交：7e020671c76280ce05eadd845ac460debda661d2、8ef277e8971d482e1570ce193ac2a1903d42fbce、75795cc3ade488cd5a9a32a8c557b1c91ac1a786、e3a86aebb3ba83b815da01a6381643e3f1a99f58。
 - 静态源码结构与契约文本核对已执行；本轮未运行本地 Node 测试、构建或人工浏览器验收。最新 HEAD 的 Browser Smoke 已触发，结果待后续检查。
+
+
+## 2026-10-28 — 设置应用与页面刷新异步收尾补强
+
+- `applySettings` 新增逐步骤安全执行：保存旧任务引用、失效市场/研究请求、重置连接检查与数据中心结果、关闭设置弹窗及启动服务刷新相互隔离；同步异常和异步 Promise rejection 均会记录诊断，不阻断后续配置应用。
+- 已保存连接检查与未保存草稿检查将控件初始化纳入 `try/finally`，错误展示和按钮复位使用安全更新入口；原有独立 generation、草稿对比和已保存配置对比继续保留。
+- 数据源能力刷新将初始化、网络请求、渲染与按钮解锁纳入安全生命周期；刷新当前页面会分别收敛视图刷新异常和按钮收尾异常。
+- 服务健康刷新将探测与状态渲染错误转换为带诊断的结果，不让页面初始化的 `void refreshServices()` 产生未处理 rejection。
+- 市场工作台的市场总览、资金与活跃度模块分别捕获同步启动错误和异步 rejection；部分模块失败时汇总显示诊断，不伪造整体成功。
+- 代码/回归契约提交：
+  - https://github.com/Kasign/stock_data_provider/commit/151c4c492881f7c31cfce7f881d0e0a31940896b
+  - https://github.com/Kasign/stock_data_provider/commit/8e519e834d7deb6cb319286bcd5c385cb0061ef5
+  - https://github.com/Kasign/stock_data_provider/commit/6bf6ec02e4010ce3c0e44645760cf3d38bfb89ae
+  - https://github.com/Kasign/stock_data_provider/commit/b7d1705465e2555249016c96c2f92735d0f1d8aa
+  - https://github.com/Kasign/stock_data_provider/commit/8ce02f5b3f3a84979e021ab81bd95178a4197516
+  - https://github.com/Kasign/stock_data_provider/commit/d3aeb997b994afc2eb7c934b0e9b9de2a08da37e
+- 已核对静态源码结构和新增契约文本；本轮未运行本地 Node 测试、构建或人工浏览器验收。最新代码 HEAD 的 Browser Smoke 已触发，等待后续核对。

@@ -1096,3 +1096,17 @@
 - [e3a86ae — 修复分析 API 切换时界面异常中断配置收尾](https://github.com/Kasign/stock_data_provider/commit/e3a86aebb3ba83b815da01a6381643e3f1a99f58)：API 地址改变时对任务详情、提示、事件、流程摘要、最近任务和自选股进行独立安全更新，阻止单个 UI 错误中断后续设置应用。
 
 每项代码修改都与对应静态契约在同一提交中；本轮另外更新检查文档。尚未运行本地 Node 测试、构建或真实浏览器人工验收。请后续核对最新 HEAD 的 GitHub Actions，并在统一回归时运行完整 UI 契约集。
+
+
+## 2026-10-28 设置应用与共享刷新链路复核
+
+新增的代码与契约提交如下：
+
+- [151c4c4 — 修复设置应用中单项刷新异常中断后续步骤](https://github.com/Kasign/stock_data_provider/commit/151c4c492881f7c31cfce7f881d0e0a31940896b)：逐步保护配置应用中的同步/异步副作用，失败时记录诊断并继续执行其他步骤。
+- [8e519e8 — 修复设置连接检查按钮异常收尾](https://github.com/Kasign/stock_data_provider/commit/8e519e834d7deb6cb319286bcd5c385cb0061ef5)：已保存连接和草稿检查的初始化、输出与 finally 解锁均增加保护，保留各自的 generation 和上下文比对。
+- [6bf6ec0 — 修复数据源能力刷新异常收尾](https://github.com/Kasign/stock_data_provider/commit/6bf6ec02e4010ce3c0e44645760cf3d38bfb89ae)：数据源能力读取的 UI 初始化、网络错误、渲染错误和按钮解锁分离收敛。
+- [b7d1705 — 修复工具栏刷新按钮异常收尾](https://github.com/Kasign/stock_data_provider/commit/b7d1705465e2555249016c96c2f92735d0f1d8aa)：当前视图刷新异常不再跳过 finally；重复触发不释放其他操作拥有的按钮锁，失败保留在按钮提示中。
+- [8ce02f5 — 修复服务健康刷新异常导致的未处理拒绝](https://github.com/Kasign/stock_data_provider/commit/8ce02f5b3f3a84979e021ab81bd95178a4197516)：服务健康探测与状态渲染异常会转换为结果并保留诊断，避免启动时的 fire-and-forget 调用产生未处理 rejection。
+- [d3aeb99 — 修复市场工作台模块刷新未处理拒绝](https://github.com/Kasign/stock_data_provider/commit/d3aeb997b994afc2eb7c934b0e9b9de2a08da37e)：市场总览和资金/活跃度模块独立收敛同步启动错误与异步拒绝，完成后汇总部分失败原因。
+
+所有代码修改与对应静态契约在同一次提交中；本轮另行更新本交接文档和检查清单。尚未运行本地 Node 测试、构建或人工浏览器验收。下一轮应核对最新 HEAD 的 Browser Smoke，并继续检查 `runQuoteQuery`、个股研究模块和数据中心刷新入口的 fire-and-forget Promise 是否都有内部 catch/finally 保护。
