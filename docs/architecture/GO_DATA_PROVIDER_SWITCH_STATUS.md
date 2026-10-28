@@ -908,3 +908,7 @@ Tushare `top_list` 分页现在维护证券代码集合；同页中普通 A 股�
 ## 2026-10-28 Tushare 股票基础资料重复行门禁
 
 Tushare `stock_basic` 按 `ts_code` 查询单只证券时，原适配器只接收首条匹配行，忽略后续重复行。现在一旦发现重复身份便拒绝当前 Provider 候选，并新增 HTTP fixture 回归测试源码；尚未执行测试或真实请求。
+
+## 2026-10-28 东财涨跌停池覆盖不足提示
+
+东财涨跌停池保留源端 `tc` 作为 `total`，当它大于响应 `pool` 条数时新增 `provider_total_exceeds_returned_rows` 质量原因，显式提示本次列表只覆盖部分源端记录。已新增 HTTP fixture 测试源码，尚未执行。
