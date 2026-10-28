@@ -1669,6 +1669,12 @@ func (s *DataService) SetCapitalFlowProviders(providers []provider.CapitalFlowPr
 	s.capitalFlowProviders = append([]provider.CapitalFlowProvider(nil), providers...)
 }
 
+// hasIdentifiableSourceVersion 拒绝空版本和占位值，避免把未知字段映射伪装成可追溯契约。
+func hasIdentifiableSourceVersion(value string) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && !strings.EqualFold(value, "unknown")
+}
+
 // CapitalFlowProviders 合并独立资金流 Provider 与旧版 SupplementProvider，按名称去重。
 func (s *DataService) CapitalFlowProviders() []provider.CapitalFlowProvider {
 	out := make([]provider.CapitalFlowProvider, 0, len(s.capitalFlowProviders)+len(s.supplementProviders))
@@ -1732,8 +1738,8 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 			return errors.New("chip-distribution provider date is in the future")
 		}
 	}
-	if strings.TrimSpace(item.Source) == "" || strings.TrimSpace(item.SourceVersion) == "" || item.FetchedAt.IsZero() {
-		return errors.New("chip-distribution source, source_version or fetched_at is missing")
+	if strings.TrimSpace(item.Source) == "" || !hasIdentifiableSourceVersion(item.SourceVersion) || item.FetchedAt.IsZero() {
+		return errors.New("chip-distribution source/source_version is missing or unidentifiable, or fetched_at is missing")
 	}
 	if item.QualityStatus == model.QualityValid {
 		return errors.New("chip-distribution cannot be valid without verified publication availability time")
@@ -1759,8 +1765,8 @@ func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
 			return errors.New("capital-flow provider date is invalid or in the future")
 		}
 	}
-	if strings.TrimSpace(item.Source) == "" || strings.TrimSpace(item.SourceVersion) == "" || item.FetchedAt.IsZero() {
-		return errors.New("capital-flow source, source_version or fetched_at is missing")
+	if strings.TrimSpace(item.Source) == "" || !hasIdentifiableSourceVersion(item.SourceVersion) || item.FetchedAt.IsZero() {
+		return errors.New("capital-flow source/source_version is missing or unidentifiable, or fetched_at is missing")
 	}
 	if item.Observations < 0 {
 		return errors.New("capital-flow observation count cannot be negative")

@@ -2027,6 +2027,10 @@ func TestSupplementContractsRequireSourceVersion(t *testing.T) {
 	if err := validateChipDistributionSnapshot("600519.SH", chip); err == nil || !strings.Contains(err.Error(), "source_version") {
 		t.Fatalf("chip-distribution without source version must be rejected, got %v", err)
 	}
+	chip.SourceVersion = " UnKnOwN "
+	if err := validateChipDistributionSnapshot("600519.SH", chip); err == nil || !strings.Contains(err.Error(), "unidentifiable") {
+		t.Fatalf("chip-distribution placeholder source version must be rejected, got %v", err)
+	}
 
 	mainNetInflow := 120.0
 	flow := &model.CapitalFlow{
@@ -2035,6 +2039,10 @@ func TestSupplementContractsRequireSourceVersion(t *testing.T) {
 	}
 	if err := validateCapitalFlowSnapshot("600519.SH", flow); err == nil || !strings.Contains(err.Error(), "source_version") {
 		t.Fatalf("capital-flow without source version must be rejected, got %v", err)
+	}
+	flow.SourceVersion = "unknown"
+	if err := validateCapitalFlowSnapshot("600519.SH", flow); err == nil || !strings.Contains(err.Error(), "unidentifiable") {
+		t.Fatalf("capital-flow placeholder source version must be rejected, got %v", err)
 	}
 }
 
