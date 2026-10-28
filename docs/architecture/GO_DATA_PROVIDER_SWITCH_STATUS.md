@@ -936,3 +936,7 @@ Tushare `top_list` 将非普通 A 股记录计入 `ExcludedNonAShareCount` 时�
 ## 2026-10-28 东方财富证券搜索目录证券类型校验
 
 证券搜索目录现在根据源端市场字段构建证券标识，并复用普通 A 股代码段校验；ETF、指数、B 股及市场字段错配记录会被过滤并通过 `provider_non_a_share_security_rows_dropped` 暴露，目录质量降级。已新增覆盖沪深/北交所正例和多类负例的 HTTP fixture 测试源码，尚未执行测试或真实 Provider 请求。
+
+## 2026-10-28 东方财富涨跌停池触板时间校验
+
+首次/最后触板时间现在除数字格式外，还校验时、分、秒范围；非空无效值将被清空，并在记录和父快照的质量原因中写入 `provider_limit_pool_touch_time_invalid`。新增边界和 HTTP fixture 测试源码，尚未执行测试或真实 Provider 请求。
