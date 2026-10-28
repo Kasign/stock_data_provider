@@ -699,6 +699,12 @@ function renderWatchlist(records, storageReadable, storageValid) {
       && String(recentTask.analysis_base || state.settings.analysisBase) === String(state.taskAnalysisBase || state.settings.analysisBase)
       && Array.isArray(state.taskSymbols)
       && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol));
+    const activeRunReadMatches = Boolean(recentTask
+      && state.taskId === recentTask.task_id
+      && String(recentTask.analysis_base || state.settings.analysisBase) === String(state.taskAnalysisBase || state.settings.analysisBase)
+      && Array.isArray(state.taskSymbols)
+      && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
+      && ["loading", "retrying", "error"].includes(state.runResultReadStatus));
     if (latestResultMatches) {
       const corePass = state.lastRunResult.quality?.core_pass;
       const qualityState = corePass === true ? "核心质量门禁通过" : corePass === false ? "核心质量门禁未通过" : "核心质量门禁未报告";
@@ -715,6 +721,15 @@ function renderWatchlist(records, storageReadable, storageValid) {
         ? " · 重读提示：" + state.runResultReadError
         : "";
       resultLine.textContent = readLabel + runStatusLabel(state.lastRunResult.status) + " · " + qualityState + warnings + readError;
+    } else if (activeRunReadMatches) {
+      const readState = state.runResultReadStatus;
+      const readLabel = readState === "loading"
+        ? "当前 Run 结果：正在读取服务端结果"
+        : readState === "retrying"
+          ? "当前 Run 结果：暂时不可读，正在自动重试"
+          : "当前 Run 结果：读取失败";
+      const readError = state.runResultReadError ? " · " + state.runResultReadError : "";
+      resultLine.textContent = readLabel + readError;
     } else {
       resultLine.textContent = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
     }
@@ -2818,9 +2833,9 @@ async function loadTaskRunResult(runId, expectedTaskId) {
   const retainedResultNotice = retainedPreviousResult
     ? "页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"
     : "";
-  state.runResultReadStatus = retainedPreviousResult ? "loading" : "";
+  state.runResultReadStatus = "loading";
   state.runResultReadError = "";
-  if (state.view === "watchlist" && retainedPreviousResult) renderWatchlist();
+  if (state.view === "watchlist") renderWatchlist();
   $("#task-result-section").hidden = false;
   $("#task-result-note").textContent = "正在读取已保存的 Run 结果…" + (retainedResultNotice ? " " + retainedResultNotice : "");
 
@@ -2845,11 +2860,9 @@ async function loadTaskRunResult(runId, expectedTaskId) {
       const delay = RUN_RESULT_RETRY_DELAYS_MS[retries];
       if (delay !== undefined && !error.responseContractError && isRetryableApiError(error)) {
         retries += 1;
-        if (retainedPreviousResult) {
-          state.runResultReadStatus = "retrying";
-          state.runResultReadError = errorMessage(error);
-          if (state.view === "watchlist") renderWatchlist();
-        }
+        state.runResultReadStatus = "retrying";
+        state.runResultReadError = errorMessage(error);
+        if (state.view === "watchlist") renderWatchlist();
         $("#task-result-note").textContent =
           `Run 结果暂时不可读（${errorMessage(error)}），将在 ${delay / 1000} 秒后重试（${retries}/${RUN_RESULT_RETRY_DELAYS_MS.length}）…` + (retainedResultNotice ? " " + retainedResultNotice : "");
         await new Promise((resolve) => window.setTimeout(resolve, delay));
@@ -2858,11 +2871,9 @@ async function loadTaskRunResult(runId, expectedTaskId) {
       $("#task-result-note").textContent =
         "读取结果失败：" + errorMessage(error) + "。可点击“重新读取结果”或“立即刷新状态”重试。" +
         (retainedPreviousResult ? " 页面保留的是此前已成功读取的同一 Run 结果，本次读取未成功，不代表结果已更新。" : "");
-      if (retainedPreviousResult) {
-        state.runResultReadStatus = "error";
-        state.runResultReadError = errorMessage(error);
-        if (state.view === "watchlist") renderWatchlist();
-      }
+      state.runResultReadStatus = "error";
+      state.runResultReadError = errorMessage(error);
+      if (state.view === "watchlist") renderWatchlist();
       return;
     }
   }

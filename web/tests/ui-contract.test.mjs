@@ -125,10 +125,12 @@ test("watchlist marks a retained Run result when re-reading fails and refreshes 
   const loaderStart = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
   const loaderEnd = app.indexOf("\nfunction stopTaskPolling()", loaderStart);
   const loader = app.slice(loaderStart, loaderEnd);
-  assert.match(loader, /state\.runResultReadStatus = retainedPreviousResult \? "loading" : ""/);
-  assert.match(loader, /state\.runResultReadStatus = "retrying"/);
-  assert.match(loader, /state\.runResultReadStatus = "error"/);
-  assert.match(loader, /if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
+  assert.match(watchlist, /activeRunReadMatches[\s\S]*?当前 Run 结果：正在读取服务端结果/);
+  assert.match(watchlist, /当前 Run 结果：暂时不可读，正在自动重试/);
+  assert.match(watchlist, /当前 Run 结果：读取失败/);
+  assert.match(loader, /state\.runResultReadStatus = "loading"/);
+  assert.match(loader, /state\.runResultReadStatus = "retrying"[\s\S]*?if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
+  assert.match(loader, /state\.runResultReadStatus = "error"[\s\S]*?if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
 });
 
 test("creation, contract confirmation, and history restoration use distinct task status labels", () => {
