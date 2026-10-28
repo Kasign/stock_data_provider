@@ -1430,3 +1430,16 @@
 - Review 发现 Run 结果并发锁的旧静态契约仍统计上下文切换中的直接 `setRunResultReloadBusy(false)` 调用，但实现已统一切换到 `releaseRunResultReloadBusy` 安全入口。
 - 已将契约改为检查新建任务、恢复最近任务和分析 API 地址切换三条路径都调用安全解锁助手，避免后续回归因断言滞后而误报。
 - 契约校准提交：https://github.com/Kasign/stock_data_provider/commit/446d57765c2f18367d2f63fd931bffc14b59ac9e
+
+
+## 2026-10-28 — 行情查询、个股研究与数据中心收尾补强
+
+- `runQuoteQuery`：将活动查询上下文和加载态 DOM 更新纳入主 `try/catch/finally`；处理异常时保护旧快照清理和错误提示，finally 先释放逻辑锁，再独立更新研究摘要与查询控件。
+- 个股研究：新增安全按钮/反馈 helper；`fetchOne` 的准备、请求、错误显示和控制器清理放在同一生命周期；公告分页、公司资料读取、补充指标按钮收尾和季度财务报告期校验均避免错误处理/最终复位再次抛错。
+- 数据中心：健康探测设置和初始 DOM 更新现在由主 try 保护；错误状态显示与 finally 解锁分别隔离；配置失效时先推进 generation，再独立清理各个状态节点，避免单节点错误中断其余重置。
+- 代码与对应回归契约：
+  - https://github.com/Kasign/stock_data_provider/commit/e0ba04ceb995afc0221a14a24387cc63196264b0
+  - https://github.com/Kasign/stock_data_provider/commit/9f537d2d9f78261f1ee38df59b95c92ec92e22a8
+  - https://github.com/Kasign/stock_data_provider/commit/ef1118689b14ecb2901efeeff1e7dd5ac0ccf693
+  - https://github.com/Kasign/stock_data_provider/commit/84c3e4f053f362163f285f0025b7d024eeede779
+- 结构级静态源码检查和新增契约文本检查已完成；未运行本地 Node 测试、构建或人工浏览器验收。前三个代码提交的 Browser Smoke 已通过；84c3e4f 的 Browser Smoke 仍在运行。

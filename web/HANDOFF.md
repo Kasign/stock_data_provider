@@ -1117,3 +1117,15 @@
 - 已修正既有静态契约：新建任务、恢复任务和分析 API 地址切换的旧解锁调用已迁移到 `releaseRunResultReloadBusy`，断言现在检查三条路径使用安全封装，不再期待直接调用底层 DOM 解锁函数。
 - 契约提交：https://github.com/Kasign/stock_data_provider/commit/446d57765c2f18367d2f63fd931bffc14b59ac9e
 - 本次为契约同步修正，没有修改运行时代码；仍未运行本地 Node 测试。
+
+
+## 2026-10-28 行情查询/研究/数据中心异常收尾
+
+本轮新增四个代码与静态回归契约提交：
+
+- [e0ba04c — 修复行情查询异常时按钮锁未释放](https://github.com/Kasign/stock_data_provider/commit/e0ba04ceb995afc0221a14a24387cc63196264b0)：查询初始化纳入主 try；finally 先释放逻辑锁，再分别保护研究摘要刷新与查询控件恢复。
+- [9f537d2 — 修复个股研究请求的按钮异常收尾](https://github.com/Kasign/stock_data_provider/commit/9f537d2d9f78261f1ee38df59b95c92ec92e22a8)：保护 `fetchOne`、公告分页、公司资料加载及补充指标按钮流程；保留响应证券代码、generation 和当前标的隔离。
+- [ef11186 — 修复数据中心检查异常收尾](https://github.com/Kasign/stock_data_provider/commit/ef1118689b14ecb2901efeeff1e7dd5ac0ccf693)：初始 UI 更新、探测错误展示、最终按钮解锁和配置变更后的逐项失效分别保护。
+- [84c3e4f — 修复季度财务指标读取异常收尾](https://github.com/Kasign/stock_data_provider/commit/84c3e4f053f362163f285f0025b7d024eeede779)：报告期读取/校验和成功/失败提示使用统一 catch，避免 `void loadFundamentals()` 将意外异常传播为未处理 rejection。
+
+所有代码修改与对应回归契约在同一提交中。本轮没有运行本地 Node 测试、构建或人工浏览器验收；前三个代码提交的 Browser Smoke 已通过，84c3e4f 的 Actions 结果需后续确认。
