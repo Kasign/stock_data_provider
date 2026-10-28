@@ -1308,7 +1308,7 @@ func TestFundamentalsUnknownSnapshotWithDataUsesShortCacheTTL(t *testing.T) {
 	now := time.Now().UTC()
 	stale := validFundamentalsSnapshotForTest()
 	setFundamentalsUnknownQuality(stale)
-	stale.FetchedAt = now.Add(-2 * time.Hour)
+	stale.FetchedAt = now.Add(-10 * time.Minute)
 	encoded, err := json.Marshal(stale)
 	if err != nil {
 		t.Fatal(err)
