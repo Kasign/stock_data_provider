@@ -53,6 +53,12 @@ func TestStockAnnouncementsKeepsPublishTimeSeparateFromFetchedAt(t *testing.T) {
 	if err := validateStockAnnouncementSnapshot("600036.SH", "2026-10-20", "2026-10-26", 1, 20, &qualityMismatch); err == nil {
 		t.Fatal("announcement snapshot must not be valid when one or more items are degraded")
 	}
+	versionMismatch := *snapshot
+	versionMismatch.Items = append([]model.StockAnnouncement(nil), snapshot.Items...)
+	versionMismatch.Items[0].SourceVersion = "older-version"
+	if err := validateStockAnnouncementSnapshot("600036.SH", "2026-10-20", "2026-10-26", 1, 20, &versionMismatch); err == nil {
+		t.Fatal("announcement item source version must match parent snapshot")
+	}
 	futureSnapshot := *snapshot
 	futureSnapshot.Items = append([]model.StockAnnouncement(nil), snapshot.Items...)
 	futureTime := time.Now().UTC().Add(time.Hour)

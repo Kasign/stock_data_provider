@@ -59,8 +59,8 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		snapshot.Page != page || snapshot.PageSize != pageSize {
 		return errors.New("announcement request identity mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("announcement source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("announcement source, source_version or fetched_at is missing")
 	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize {
 		return errors.New("announcement total/pages/returned count is invalid")
@@ -84,8 +84,8 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 	hasDegradedItem := false
 	for _, item := range snapshot.Items {
 		if strings.TrimSpace(item.ArticleID) == "" || strings.TrimSpace(item.Title) == "" ||
-			item.Symbol != symbol || item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-			return errors.New("announcement item is missing ID/title or has mismatched symbol/source")
+			item.Symbol != symbol || item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+			return errors.New("announcement item is missing ID/title or has mismatched symbol/source/version")
 		}
 		if _, ok := seen[item.ArticleID]; ok {
 			return fmt.Errorf("announcement item has duplicate article ID %q", item.ArticleID)
