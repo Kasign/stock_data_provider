@@ -83,7 +83,7 @@ test("Go rejected Run status maps to a failed task instead of false success", ()
 
 test("task restoration validates local references and guards stale asynchronous responses", () => {
   assert.match(app, /function restoreLastTask\(\)[\s\S]*?JSON\.parse\(localStorage\.getItem\(TASK_REFERENCE_KEY\) \|\| "null"\)[\s\S]*?catch \{[\s\S]*?return false;[\s\S]*?return activateTaskReference\(record\);/);
-  assert.match(app, /function activateTaskReference\(record\)[\s\S]*?if \(!record \|\| typeof record\.task_id !== "string" \|\| !record\.task_id\.trim\(\)\) return false;[\s\S]*?stopTaskPolling\(\);[\s\S]*?state\.taskEvents\.clear\(\);[\s\S]*?void pollTask\(state\.pollGeneration\);/);
+  assert.match(app, /function activateTaskReference\(record\)[\s\S]*?if \(!record \|\| typeof record\.task_id !== "string" \|\| !record\.task_id\.trim\(\)\) return false;[\s\S]*?stopTaskPolling\(\);[\s\S]*?state\.taskEvents\.clear\(\);[\s\S]*?void pollTaskSafely\(state\.pollGeneration\);/);
   assert.match(app, /if \(generation !== state\.pollGeneration \|\| taskId !== state\.taskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
   assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
   assert.match(app, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?stopTaskPolling\(\);[\s\S]*?const runId = task\.run_id \|\| state\.runId;[\s\S]*?if \(runId\) void loadTaskRunResult\(runId, taskId\);/);
@@ -97,7 +97,7 @@ test("restoring a recent task clears the previous task status badge while waitin
   const restore = start >= 0 && end > start ? app.slice(start, end) : "";
   assert.ok(restore.includes('state.taskStatusLoading = true;'), "恢复任务期间标记状态待确认");
   assert.ok(restore.includes('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");'), "恢复期间不沿用上一条任务的状态徽标");
-  assert.ok(restore.indexOf('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");') < restore.indexOf("void pollTask(state.pollGeneration);"), "先显示恢复中，再请求服务端");
+  assert.ok(restore.indexOf('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");') < restore.indexOf("void pollTaskSafely(state.pollGeneration);"), "先显示恢复中，再请求服务端");
 });
 
 test("failed Run refresh distinguishes the last verified same-Run result from a new read", () => {
@@ -181,8 +181,27 @@ test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
   const manual = manualStart >= 0 && manualEnd > manualStart ? app.slice(manualStart, manualEnd) : "";
   assert.match(manual, /if \(!state\.taskId \|\| \$\("#refresh-task"\)\.disabled\) return/);
   assert.match(manual, /stopTaskPolling\(\);[\s\S]*?setTaskRefreshBusy\(true\)/);
-  assert.match(manual, /pollTask\(generation\)\.finally\(\(\) => \{[\s\S]*?generation === state\.pollGeneration\) setTaskRefreshBusy\(false\)/);
+  assert.match(manual, /pollTaskSafely\(generation\)\.finally\(\(\) => \{[\s\S]*?generation === state\.pollGeneration\) setTaskRefreshBusy\(false\)/);
   assert.match(app, /function stopTaskPolling\(\) \{[\s\S]*?state\.pollGeneration \+= 1;\s*setTaskRefreshBusy\(false\)/);
+});
+
+
+test("任务轮询意外异常会暂停自动刷新并保留手动重试入口", () => {
+  const safeStart = app.indexOf("function pollTaskSafely(");
+  const safeEnd = app.indexOf("\nasync function createTask(", safeStart);
+  const safePoll = safeStart >= 0 && safeEnd > safeStart ? app.slice(safeStart, safeEnd) : "";
+  assert.match(safePoll, /return pollTask\(generation\)\.catch\(\(error\) => \{/);
+  assert.match(safePoll, /generation !== state\.pollGeneration \|\| !state\.taskId\) return/);
+  assert.match(safePoll, /state\.taskStatusLoading = false;[\s\S]*?state\.taskStatusError = message;[\s\S]*?state\.taskStatusErrorRetrying = false/);
+  assert.match(safePoll, /stopTaskPolling\(\);[\s\S]*?自动刷新已暂停：处理任务状态时发生意外错误[\s\S]*?点击“立即刷新状态”重试/);
+
+  const pollStart = app.indexOf("async function pollTask(");
+  const poller = pollStart >= 0 && safeStart > pollStart ? app.slice(pollStart, safeStart) : "";
+  assert.doesNotMatch(poller, /setTimeout\(\(\) => pollTask\(generation\)/);
+  assert.match(poller, /setTimeout\(\(\) => pollTaskSafely\(generation\)/);
+  assert.ok(app.includes("void pollTaskSafely(state.pollGeneration);"), "恢复任务使用异常收敛入口");
+  assert.ok(app.includes("await pollTaskSafely(generation);"), "工具栏刷新使用异常收敛入口");
+  assert.ok(app.includes("void pollTaskSafely(generation).finally("), "手动刷新使用异常收敛入口并仍收尾忙碌状态");
 });
 
 test("task polling errors mark last-known status stale and successful refresh clears it", () => {
@@ -199,7 +218,7 @@ test("task polling errors mark last-known status stale and successful refresh cl
   assert.ok(watchlistRenderer.includes("状态读取异常（上次状态："), "自选卡片应将上次状态标为未验证");
   assert.ok(watchlistRenderer.includes("自动重试中") && watchlistRenderer.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
   const manualRefresh = app.slice(app.indexOf('$("#refresh-task").addEventListener("click"'), app.indexOf('$("#recent-analysis-search")'));
-  assert.ok(manualRefresh.includes("state.taskEventsUnavailable = false") && manualRefresh.includes("pollTask(generation)"), "手动刷新重新尝试任务与事件读取");
+  assert.ok(manualRefresh.includes("state.taskEventsUnavailable = false") && manualRefresh.includes("pollTaskSafely(generation)"), "手动刷新重新尝试任务与事件读取");
   assert.ok(manualRefresh.includes("正在手动刷新任务状态与阶段事件"), "手动刷新开始后应立即反馈，避免旧错误提示看起来未响应");
 });
 
@@ -211,7 +230,7 @@ test("new task creation responses cannot poison requested symbols or run/status 
   assert.match(creator, /const responseRunId = responseSymbolsMatch && responseRunIdValid \? task\.run_id : ""/);
   assert.match(creator, /const responseStatus = responseSymbolsMatch && responseStatusValid \? task\.status : ""/);
   assert.match(creator, /const normalizedTask = \{[\s\S]*?task_id: task\.task_id,[\s\S]*?run_id: responseRunId,[\s\S]*?status: responseStatus,[\s\S]*?task_type: taskType,[\s\S]*?symbols,/);
-  assert.match(creator, /state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 500\);/);
+  assert.match(creator, /state\.pollTimer = window\.setTimeout\(\(\) => pollTaskSafely\(generation\), 500\);/);
   assert.doesNotMatch(creator, /void loadTaskRunResult\(responseRunId, task\.task_id\)/, "终态创建/幂等回包也必须先确认阶段事件");
   assert.match(creator, /current_stage: responseSymbolsMatch \? task\.current_stage : "等待服务端确认"/);
 });
@@ -233,7 +252,7 @@ test("late task creation responses cannot replace the task selected while submis
 });
 
 test("polling pauses on permanent API errors and Run reads use bounded, stale-safe retries", () => {
-  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
+  assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\);/);
   assert.match(app, /const RUN_RESULT_RETRY_DELAYS_MS = \[1000, 2500, 5000\]/);
   assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /state\.runResultGeneration \+= 1/);
@@ -659,7 +678,7 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
   }
   assert.match(html, /<dialog class="run-flow-dialog" id="run-flow-dialog"/);
   assert.match(app, /function openRunFlowDrawer\(\)[\s\S]*?dialog\.showModal\(\)/);
-  assert.match(app, /function activateTaskReference\(record\)[\s\S]*?openRunFlowDrawer\(\)[\s\S]*?pollTask\(state\.pollGeneration\)/);
+  assert.match(app, /function activateTaskReference\(record\)[\s\S]*?openRunFlowDrawer\(\)[\s\S]*?pollTaskSafely\(state\.pollGeneration\)/);
   assert.match(app, /function renderTask\(task\)[\s\S]*?task\.started_at[\s\S]*?task\.finished_at/);
   assert.match(app, /function renderRunStatus\(status = ""\)[\s\S]*?runStatusLabel\(normalized\)/);
   assert.match(app, /function renderTaskResult\(result\)[\s\S]*?renderRunStatus\(result\.status \|\| ""\)/);
@@ -1526,13 +1545,13 @@ test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 R
   assert.match(poller, /!Number\.isSafeInteger\(nextAfterSequence\)/);
   assert.match(poller, /state\.taskEventCursor = nextAfterSequence/);
   assert.match(poller, /eventPageHasMore = eventPayload\.events\.length >= TASK_EVENT_PAGE_SIZE &&[\s\S]*?nextAfterSequence > requestedEventCursor/);
-  assert.match(poller, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?if \(eventPageHasMore && !eventError && !eventsSkipped\) \{[\s\S]*?正在继续读取剩余阶段事件[\s\S]*?setTimeout\(\(\) => pollTask\(generation\), 0\)[\s\S]*?return;[\s\S]*?stopTaskPolling\(\)[\s\S]*?loadTaskRunResult/);
-  assert.match(poller, /if \(eventError && isRetryableApiError\(eventError\) && !eventError\.responseContractError\) \{[\s\S]*?5 秒后自动重试[\s\S]*?setTimeout\(\(\) => pollTask\(generation\), 5000\)/);
+  assert.match(poller, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?if \(eventPageHasMore && !eventError && !eventsSkipped\) \{[\s\S]*?正在继续读取剩余阶段事件[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 0\)[\s\S]*?return;[\s\S]*?stopTaskPolling\(\)[\s\S]*?loadTaskRunResult/);
+  assert.match(poller, /if \(eventError && isRetryableApiError\(eventError\) && !eventError\.responseContractError\) \{[\s\S]*?5 秒后自动重试[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\)/);
   const refreshStart = app.indexOf('$("#refresh-task").addEventListener("click"');
   const refreshEnd = app.indexOf('$("#recent-analysis-search")', refreshStart);
   const refreshHandler = refreshStart >= 0 && refreshEnd > refreshStart ? app.slice(refreshStart, refreshEnd) : "";
   assert.ok(refreshHandler.includes("state.taskEventsUnavailable = false"), "手动刷新必须恢复事件读取");
-  assert.ok(refreshHandler.includes("pollTask(generation)"), "手动刷新必须立即重新发起 Task/事件读取");
+  assert.ok(refreshHandler.includes("pollTaskSafely(generation)"), "手动刷新必须立即重新发起 Task/事件读取");
   assert.doesNotMatch(refreshHandler, /state\.taskEventCursor\s*=\s*0/, "手动重试应保留已推进的服务端游标，避免重新读取第一页");
   assert.equal((app.match(/state\.taskSequence = 0;\s*state\.taskEventCursor = 0;/g) || []).length, 3, "新建、恢复和清空任务时都重置独立事件游标");
 });

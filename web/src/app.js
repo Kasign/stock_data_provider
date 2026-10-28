@@ -3145,12 +3145,12 @@ async function pollTask(generation = state.pollGeneration) {
       $("#task-poll-label").textContent =
         "任务已结束；阶段事件暂时读取失败：" + errorMessage(eventError) +
         "，5 秒后自动重试；续读完成前不会加载 Run 报告。";
-      state.pollTimer = window.setTimeout(() => pollTask(generation), 5000);
+      state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 5000);
       return;
     }
     if (eventPageHasMore && !eventError && !eventsSkipped) {
       $("#task-poll-label").textContent = "任务已结束，正在继续读取剩余阶段事件…";
-      state.pollTimer = window.setTimeout(() => pollTask(generation), 0);
+      state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 0);
       return;
     }
     stopTaskPolling();
@@ -3171,7 +3171,7 @@ async function pollTask(generation = state.pollGeneration) {
       "任务状态刷新失败：" + errorMessage(taskError) +
       (eventError ? "；阶段事件刷新失败：" + errorMessage(eventError) : "") +
       "，5 秒后自动重试…";
-    state.pollTimer = window.setTimeout(() => pollTask(generation), 5000);
+    state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 5000);
     return;
   }
 
@@ -3179,26 +3179,51 @@ async function pollTask(generation = state.pollGeneration) {
     if (isRetryableApiError(eventError) && !eventError.responseContractError) {
       $("#task-poll-label").textContent =
         "任务状态已更新，但阶段事件读取失败：" + errorMessage(eventError) + "，5 秒后重试…";
-      state.pollTimer = window.setTimeout(() => pollTask(generation), 5000);
+      state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 5000);
     } else {
       $("#task-poll-label").textContent =
         "任务状态正常刷新；阶段事件接口暂不可用：" + errorMessage(eventError) +
         "。已暂停事件请求以避免重复失败；点击“立即刷新状态”可重试。";
-      state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
+      state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 2500);
     }
     return;
   }
 
   if (eventPageHasMore) {
     $("#task-poll-label").textContent = "阶段事件较多，正在继续读取后续事件…";
-    state.pollTimer = window.setTimeout(() => pollTask(generation), 0);
+    state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 0);
     return;
   }
   if (eventsSkipped) {
-    state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
+    state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 2500);
     return;
   }
-  state.pollTimer = window.setTimeout(() => pollTask(generation), 2500);
+  state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 2500);
+}
+
+
+function pollTaskSafely(generation = state.pollGeneration) {
+  return pollTask(generation).catch((error) => {
+    // 旧任务的迟到异常不能覆盖当前任务状态或暂停新任务的轮询。
+    if (generation !== state.pollGeneration || !state.taskId) return;
+
+    const message = errorMessage(error);
+    state.taskStatusLoading = false;
+    state.taskStatusError = message;
+    state.taskStatusErrorRetrying = false;
+    setQualityPill($("#task-status-pill"), "unknown", "状态处理失败");
+    stopTaskPolling();
+    $("#task-poll-label").textContent =
+      "自动刷新已暂停：处理任务状态时发生意外错误：" + message +
+      "。请检查页面状态；问题排除后可点击“立即刷新状态”重试。";
+    if (state.view === "watchlist") {
+      try {
+        renderWatchlist();
+      } catch (renderError) {
+        state.taskStatusError += "；自选股卡片刷新失败：" + errorMessage(renderError);
+      }
+    }
+  });
 }
 
 async function createTask(event) {
@@ -3390,7 +3415,7 @@ async function createTask(event) {
     openRunFlowDrawer();
     const generation = state.pollGeneration;
     // 即使幂等命中已结束任务，也先读取并排空阶段事件，再加载最终 Run 报告。
-    state.pollTimer = window.setTimeout(() => pollTask(generation), 500);
+    state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 500);
   } catch (error) {
     if (creationContextGeneration !== state.taskContextGeneration) {
       feedback.hidden = false;
@@ -3491,7 +3516,7 @@ function activateTaskReference(record) {
   openRunFlowDrawer();
   renderTaskEvents();
   persistTaskReference();
-  void pollTask(state.pollGeneration);
+  void pollTaskSafely(state.pollGeneration);
   return true;
 }
 
@@ -4107,7 +4132,7 @@ $("#refresh-button").addEventListener("click", async () => {
     } else if (state.view === "tasks" && state.taskId) {
       stopTaskPolling();
       const generation = state.pollGeneration;
-      await pollTask(generation);
+      await pollTaskSafely(generation);
     }
   } finally {
     button.disabled = false;
@@ -4158,7 +4183,7 @@ $("#refresh-task").addEventListener("click", () => {
   setTaskRefreshBusy(true);
   $("#task-poll-label").textContent = "正在手动刷新任务状态与阶段事件…";
   if (state.view === "watchlist") renderWatchlist();
-  void pollTask(generation).finally(() => {
+  void pollTaskSafely(generation).finally(() => {
     if (generation === state.pollGeneration) setTaskRefreshBusy(false);
   });
 });
