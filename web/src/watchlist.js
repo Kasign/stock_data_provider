@@ -1,17 +1,9 @@
+import { comparableMarketSymbol } from "./format.js";
+
 export const WATCHLIST_KEY = "stock-provider-webui.watchlist.v1";
 export const MAX_WATCHLIST_ITEMS = 50;
 
 const SYMBOL_PATTERN = /^\d{6}(?:\.(?:SH|SZ|BJ))?$/;
-
-// 将可识别的 A 股纯六位代码映射到默认交易所，确保和行情/研究模块的标的比较一致。
-function comparableSymbol(input) {
-  const symbol = String(input ?? "").trim().toUpperCase();
-  if (symbol.includes(".")) return symbol;
-  if (symbol.startsWith("6")) return symbol + ".SH";
-  if (/^[03]\d{5}$/.test(symbol)) return symbol + ".SZ";
-  if (/^(?:[48]\d{5}|92\d{4})$/.test(symbol)) return symbol + ".BJ";
-  return symbol;
-}
 
 function normalizeName(value, symbol) {
   const name = String(value ?? "")
@@ -74,7 +66,7 @@ function readRecords(storage, limit = MAX_WATCHLIST_ITEMS) {
       malformedRecord = true;
       continue;
     }
-    const identity = comparableSymbol(normalized.symbol);
+    const identity = comparableMarketSymbol(normalized.symbol);
     if (seen.has(identity)) {
       malformedRecord = true;
       continue;
@@ -116,15 +108,15 @@ export function addWatchlistSymbol(symbol, name, storage, updatedAt = new Date()
     };
   }
 
-  const identity = comparableSymbol(normalized.symbol);
-  const existing = current.find((item) => comparableSymbol(item.symbol) === identity);
+  const identity = comparableMarketSymbol(normalized.symbol);
+  const existing = current.find((item) => comparableMarketSymbol(item.symbol) === identity);
   const storedSymbol = existing?.symbol || normalized.symbol;
   const next = {
     symbol: storedSymbol,
     name: existing?.name && existing.name !== existing.symbol ? existing.name : normalized.name,
     updated_at: String(updatedAt || new Date().toISOString())
   };
-  const items = [next, ...current.filter((item) => comparableSymbol(item.symbol) !== identity)]
+  const items = [next, ...current.filter((item) => comparableMarketSymbol(item.symbol) !== identity)]
     .slice(0, MAX_WATCHLIST_ITEMS);
   const persisted = writeRecords(storage, items);
   return { items, added: !existing, valid: true, persisted, storageReadable: true, storageValid: true };
@@ -146,12 +138,12 @@ export function renameWatchlistSymbol(symbol, name, storage, updatedAt = new Dat
       storageReadable: currentState.storageReadable, storageValid: currentState.storageValid
     };
   }
-  const identity = comparableSymbol(normalizedSymbol);
-  const changed = current.some((item) => comparableSymbol(item.symbol) === identity);
+  const identity = comparableMarketSymbol(normalizedSymbol);
+  const changed = current.some((item) => comparableMarketSymbol(item.symbol) === identity);
   if (!changed) {
     return { items: current, changed: false, valid: true, persisted: true, storageReadable: true, storageValid: true };
   }
-  const items = current.map((item) => comparableSymbol(item.symbol) === identity
+  const items = current.map((item) => comparableMarketSymbol(item.symbol) === identity
     ? { ...item, name: normalizeName(name, item.symbol), updated_at: String(updatedAt || new Date().toISOString()) }
     : item);
   const persisted = writeRecords(storage, items);
@@ -174,8 +166,8 @@ export function removeWatchlistSymbol(symbol, storage) {
       storageReadable: currentState.storageReadable, storageValid: currentState.storageValid
     };
   }
-  const identity = comparableSymbol(normalizedSymbol);
-  const items = current.filter((item) => comparableSymbol(item.symbol) !== identity);
+  const identity = comparableMarketSymbol(normalizedSymbol);
+  const items = current.filter((item) => comparableMarketSymbol(item.symbol) !== identity);
   const removed = items.length !== current.length;
   if (!removed) {
     return { items: current, removed: false, valid: true, persisted: true, storageReadable: true, storageValid: true };
