@@ -328,139 +328,48 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 }
 
 func (p *Tushare) fetchAdjustmentFactors(ctx context.Context, symbol, startDate, endDate string) (map[string]float64, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if err := p.waitForRateLimit(ctx); err != nil {
-		return nil, err
-	}
-	payload := map[string]any{
-		"api_name": "adj_factor",
-		"token":    p.token,
-		"params": map[string]string{
-			"ts_code": symbol, "start_date": strings.ReplaceAll(startDate, "-", ""),
-			"end_date": strings.ReplaceAll(endDate, "-", ""),
-		},
-		"fields": "ts_code,trade_date,adj_factor",
-	}
-	body, err := json.Marshal(payload)
+	startCompact, err := tushareCompactDate(startDate)
 	if err != nil {
-		return nil, fmt.Errorf("encode Tushare adjustment-factor request: %w", err)
+		return nil, fmt.Errorf("Tushare adjustment-factor start date: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, bytes.NewReader(body))
+	endCompact, err := tushareCompactDate(endDate)
 	if err != nil {
-		return nil, fmt.Errorf("create Tushare adjustment-factor request: %w", err)
+		return nil, fmt.Errorf("Tushare adjustment-factor end date: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "MarketDataService/1.0")
-	resp, err := p.client.Do(req)
+	table, err := p.fetchCapabilityTable(ctx, "adj_factor", map[string]string{
+		"ts_code": symbol, "start_date": startCompact, "end_date": endCompact,
+	}, "ts_code,trade_date,adj_factor")
 	if err != nil {
-		return nil, fmt.Errorf("Tushare adjustment-factor request: %w", err)
+		return nil, fmt.Errorf("fetch Tushare adjustment factors: %w", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("Tushare adjustment-factor HTTP status %d", resp.StatusCode)
-	}
-	raw, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
-	if err != nil {
-		return nil, fmt.Errorf("read Tushare adjustment-factor response: %w", err)
-	}
-	var envelope struct {
-		Code *int   `json:"code"`
-		Msg  string `json:"msg"`
-		Data *struct {
-			Fields []string            `json:"fields"`
-			Items  [][]json.RawMessage `json:"items"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return nil, fmt.Errorf("decode Tushare adjustment-factor response: %w", err)
-	}
-	if envelope.Code == nil {
-		return nil, errors.New("Tushare adjustment-factor response is missing code")
-	}
-	if *envelope.Code != 0 {
-		msg := strings.TrimSpace(envelope.Msg)
-		if msg == "" {
-			msg = "unspecified provider error"
-		}
-		return nil, fmt.Errorf("Tushare adjustment-factor provider error code=%d: %s", *envelope.Code, msg)
-	}
-	if envelope.Data == nil {
-		return nil, errors.New("Tushare adjustment-factor response is missing data")
-	}
-	indices := make(map[string]int, len(envelope.Data.Fields))
-	for i, field := range envelope.Data.Fields {
-		field = strings.TrimSpace(field)
-		if field == "" {
-			return nil, errors.New("Tushare adjustment-factor response contains an empty field name")
-		}
-		if _, duplicate := indices[field]; duplicate {
-			return nil, fmt.Errorf("Tushare adjustment-factor response contains duplicate field %q", field)
-		}
-		indices[field] = i
-	}
-	for _, required := range []string{"ts_code", "trade_date", "adj_factor"} {
-		if _, ok := indices[required]; !ok {
-			return nil, fmt.Errorf("Tushare adjustment-factor response is missing field %q", required)
-		}
-	}
-	if len(envelope.Data.Items) == 0 {
+	if len(table.rows) == 0 {
 		return nil, errors.New("Tushare returned no adjustment-factor rows")
 	}
-	cell := func(row []json.RawMessage, field string, rowIndex int) (json.RawMessage, error) {
-		index := indices[field]
-		if index >= len(row) {
-			return nil, fmt.Errorf("Tushare adjustment-factor row %d is missing value for field %q", rowIndex, field)
-		}
-		return row[index], nil
-	}
-	factors := make(map[string]float64, len(envelope.Data.Items))
-	for rowIndex, row := range envelope.Data.Items {
-		codeRaw, cellErr := cell(row, "ts_code", rowIndex)
-		if cellErr != nil {
-			return nil, cellErr
-		}
-		code, cellErr := tushareString(codeRaw)
-		if cellErr != nil || strings.ToUpper(strings.TrimSpace(code)) != symbol {
+	factors := make(map[string]float64, len(table.rows))
+	for rowIndex, row := range table.rows {
+		code, rowErr := table.stringValue(row, "ts_code")
+		if rowErr != nil || strings.ToUpper(strings.TrimSpace(code)) != symbol {
 			return nil, fmt.Errorf("Tushare adjustment-factor row %d symbol mismatch: requested %s, returned %q", rowIndex, symbol, code)
 		}
-		dateRaw, cellErr := cell(row, "trade_date", rowIndex)
-		if cellErr != nil {
-			return nil, cellErr
+		dateText, rowErr := table.stringValue(row, "trade_date")
+		if rowErr != nil {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d has an invalid trade date: %w", rowIndex, rowErr)
 		}
-		dateText, cellErr := tushareString(dateRaw)
-		if cellErr != nil {
-			return nil, fmt.Errorf("Tushare adjustment-factor row %d has an invalid trade date", rowIndex)
+		isoDate, rowErr := tushareISODate(dateText)
+		if rowErr != nil {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d date: %w", rowIndex, rowErr)
 		}
-		tradeDate, parseErr := time.Parse("20060102", dateText)
-		if parseErr != nil {
-			tradeDate, parseErr = time.Parse("2006-01-02", dateText)
-		}
-		if parseErr != nil {
-			return nil, fmt.Errorf("Tushare adjustment-factor row %d has invalid trade date %q", rowIndex, dateText)
-		}
-		isoDate := tradeDate.Format("2006-01-02")
 		if isoDate < startDate || isoDate > endDate {
 			return nil, fmt.Errorf("Tushare adjustment-factor row %d date %s is outside requested range", rowIndex, isoDate)
 		}
 		if _, duplicate := factors[isoDate]; duplicate {
 			return nil, fmt.Errorf("Tushare returned duplicate adjustment factor for %s", isoDate)
 		}
-		factorRaw, cellErr := cell(row, "adj_factor", rowIndex)
-		if cellErr != nil {
-			return nil, cellErr
-		}
-		factor, parseErr := tushareRawFloat(factorRaw)
-		if parseErr != nil || factor <= 0 {
+		factor, rowErr := table.optionalFloat(row, "adj_factor")
+		if rowErr != nil || factor == nil || *factor <= 0 {
 			return nil, fmt.Errorf("Tushare adjustment factor on %s must be a finite positive number", isoDate)
 		}
-		factors[isoDate] = factor
+		factors[isoDate] = *factor
 	}
 	return factors, nil
 }
