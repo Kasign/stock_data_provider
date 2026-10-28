@@ -534,6 +534,51 @@ func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
 }
 
 
+
+
+func TestTushareLimitPoolRejectsDuplicateSymbols(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
+	row := make([]any, len(fields))
+	for index, field := range fields {
+		switch field {
+		case "trade_date":
+			row[index] = "20261027"
+		case "ts_code":
+			row[index] = "600519.SH"
+		case "industry":
+			row[index] = "白酒"
+		case "name":
+			row[index] = "贵州茅台"
+		case "close":
+			row[index] = 1500.0
+		case "pct_chg":
+			row[index] = 1.2
+		case "limit":
+			row[index] = "U"
+		default:
+			row[index] = nil
+		}
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare limit-pool request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "limit_list_d" {
+			t.Errorf("api_name=%q, want limit_list_d", request.APIName)
+		}
+		writeTushareTestTable(w, fields, [][]any{row, row})
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	if _, err := client.FetchLimitPool(context.Background(), "up", "2026-10-27", 30); err == nil || !strings.Contains(err.Error(), "重复证券") {
+		t.Fatalf("duplicate limit-pool symbols must be rejected, got %v", err)
+	}
+}
+
 func TestTushareLimitPoolEmptyResultDoesNotInventProviderReportDate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request tushareIndexWeightRequest

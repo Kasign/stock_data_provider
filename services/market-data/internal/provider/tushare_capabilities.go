@@ -1242,6 +1242,7 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	if len(table.rows) >= 2500 {
 		reasons = appendTushareReason(reasons, "provider_response_may_be_capped_at_2500_rows")
 	}
+	seenSymbols := make(map[string]struct{}, len(table.rows))
 	for index, row := range table.rows {
 		rowDateRaw, readErr := table.stringValue(row, "trade_date")
 		if readErr != nil {
@@ -1267,6 +1268,10 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 			reasons = appendTushareReason(reasons, "provider_non_a_share_security_rows_excluded")
 			continue
 		}
+		if _, duplicate := seenSymbols[symbol]; duplicate {
+			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行重复证券 %s", index, symbol)
+		}
+		seenSymbols[symbol] = struct{}{}
 		name, readErr := table.stringValue(row, "name")
 		if readErr != nil || strings.TrimSpace(name) == "" {
 			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行缺少证券名称", index)
