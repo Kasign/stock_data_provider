@@ -110,6 +110,17 @@ test("failed Run refresh distinguishes the last verified same-Run result from a 
   assert.ok(loader.includes("renderTaskResult(result);"), "只有本次 Run 身份和标的校验通过才替换报告内容");
 });
 
+test("Run 结果重读采用单次请求锁并只由当前代际解锁按钮", () => {
+  assert.match(app, /function setRunResultReloadBusy\(busy\) \{[\s\S]*?button\.disabled = Boolean\(busy\)[\s\S]*?button\.setAttribute\("aria-busy", "true"\)[\s\S]*?button\.textContent = "重新读取结果"/);
+  const loaderStart = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
+  const loaderEnd = app.indexOf("\nfunction stopTaskPolling()", loaderStart);
+  const loader = loaderStart >= 0 && loaderEnd > loaderStart ? app.slice(loaderStart, loaderEnd) : "";
+  assert.match(loader, /reload-run-result.*disabled[\s\S]*?\["loading", "retrying"\][\s\S]*?return;/);
+  assert.match(loader, /setRunResultReloadBusy\(true\)/);
+  assert.match(loader, /finally \{[\s\S]*?generation === state\.runResultGeneration\) setRunResultReloadBusy\(false\)/);
+  assert.equal((app.match(/state\.runResultGeneration \+= 1;\s*setRunResultReloadBusy\(false\);/g) || []).length, 3, "新建任务、恢复任务和分析地址切换都必须解除旧请求锁");
+});
+
 test("watchlist marks a retained Run result when re-reading fails and refreshes on recovery", () => {
   assert.ok(app.includes('runResultReadStatus: ""'));
   assert.ok(app.includes('runResultReadError: ""'));

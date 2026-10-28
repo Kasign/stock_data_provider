@@ -2891,9 +2891,23 @@ function runResultSymbolMismatch(result) {
     : "Run 结果中的标的列表与当前任务不一致，已忽略。";
 }
 
+function setRunResultReloadBusy(busy) {
+  const button = $("#reload-run-result");
+  if (!button) return;
+  button.disabled = Boolean(busy);
+  if (busy) {
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "读取中…";
+  } else {
+    button.removeAttribute("aria-busy");
+    button.textContent = "重新读取结果";
+  }
+}
+
 async function loadTaskRunResult(runId, expectedTaskId) {
   const analysisBase = state.taskAnalysisBase || state.settings.analysisBase;
   if (analysisBase !== state.settings.analysisBase || state.taskId !== expectedTaskId) return;
+  if ($("#reload-run-result")?.disabled && ["loading", "retrying"].includes(state.runResultReadStatus)) return;
   const requestSettings = { ...state.settings, analysisBase };
   const endpointGeneration = state.analysisConnectionGeneration;
   const generation = ++state.runResultGeneration;
@@ -2902,14 +2916,16 @@ async function loadTaskRunResult(runId, expectedTaskId) {
   const retainedResultNotice = retainedPreviousResult
     ? "页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"
     : "";
+  setRunResultReloadBusy(true);
   state.runResultReadStatus = "loading";
   state.runResultReadError = "";
   if (state.view === "watchlist") renderWatchlist();
   $("#task-result-section").hidden = false;
   $("#task-result-note").textContent = "正在读取已保存的 Run 结果…" + (retainedResultNotice ? " " + retainedResultNotice : "");
 
-  while (true) {
-    if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
+  try {
+    while (true) {
+      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
     try {
       const result = await getAnalysisRun(requestSettings, runId);
       if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
@@ -2945,6 +2961,10 @@ async function loadTaskRunResult(runId, expectedTaskId) {
       if (state.view === "watchlist") renderWatchlist();
       return;
     }
+    }
+  } finally {
+    // 旧任务的迟到 finally 不能解锁新任务的读取按钮。
+    if (generation === state.runResultGeneration) setRunResultReloadBusy(false);
   }
 }
 
@@ -3201,6 +3221,7 @@ async function createTask(event) {
   const creationContextGeneration = state.taskContextGeneration;
   const creationHistoryGeneration = state.taskHistoryGeneration;
   state.runResultGeneration += 1;
+  setRunResultReloadBusy(false);
   stopTaskPolling();
   state.taskId = "";
   state.taskCreatedAt = "";
@@ -3413,6 +3434,7 @@ function activateTaskReference(record) {
   state.suppressedHistoryTaskBase = "";
   state.taskContextGeneration += 1;
   state.runResultGeneration += 1;
+  setRunResultReloadBusy(false);
   stopTaskPolling();
   state.taskId = record.task_id;
   state.taskCreatedAt = typeof record.created_at === "string" ? record.created_at : "";
@@ -3551,6 +3573,7 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.taskContextGeneration += 1;
   state.analysisConnectionGeneration += 1;
   state.runResultGeneration += 1;
+  setRunResultReloadBusy(false);
   stopTaskPolling();
   state.taskId = "";
   state.taskCreatedAt = "";
