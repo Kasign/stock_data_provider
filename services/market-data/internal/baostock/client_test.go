@@ -759,8 +759,8 @@ func TestQueryQuarterlyFinancialDataRejectsFutureReportingPeriodBeforeNetworkIO(
 	if quarter > 4 { t.Skip("no future quarter end remains in the current year") }
 
 	c := NewClient(Config{})
-	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "profitability", now.Year(), quarter); err == nil {
-		t.Fatal("future quarterly reporting period should fail before network IO")
+	if _, err := c.QueryQuarterlyFinancialData(context.Background(), "sh.600519", "profitability", now.Year(), quarter); err == nil || !strings.Contains(err.Error(), "is in the future") {
+		t.Fatalf("future quarterly reporting period should be rejected before network IO, got %v", err)
 	}
 }
 
