@@ -2972,7 +2972,7 @@ async function createTask(event) {
     const response = await createAnalysisTask(requestSettings, payload, idempotencyKey);
     const task = response.task || response;
     if (requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase) {
-      if (task?.task_id) {
+      if (typeof task?.task_id === "string" && task.task_id.trim()) {
         const endpointRecord = {
           task_id: task.task_id,
           run_id: task.run_id || "",
@@ -2996,7 +2996,11 @@ async function createTask(event) {
       }
       return;
     }
-    if (!task.task_id) throw new Error("接口返回成功，但响应中缺少 task.task_id。");
+    if (!task || typeof task.task_id !== "string" || !task.task_id.trim()) {
+      const error = new Error("分析服务返回成功响应，但缺少有效 task_id，无法确认任务是否已创建。请检查服务端任务记录后再决定是否重试，避免盲目重复提交。");
+      error.creationOutcomeUnknown = true;
+      throw error;
+    }
     state.suppressedHistoryTaskId = "";
     state.suppressedHistoryTaskBase = "";
     state.taskId = task.task_id;
@@ -3020,7 +3024,7 @@ async function createTask(event) {
     feedback.hidden = false;
     feedback.textContent = requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase
       ? "分析 API 地址在提交期间已变化，无法确认旧连接是否创建了任务：" + errorMessage(error) + "。请核实旧服务后再决定是否重试。"
-      : "创建任务失败：" + errorMessage(error);
+      : error?.creationOutcomeUnknown ? error.message : "创建任务失败：" + errorMessage(error);
   } finally {
     state.isCreatingTask = false;
     button.disabled = false;

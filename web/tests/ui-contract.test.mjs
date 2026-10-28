@@ -1190,3 +1190,11 @@ test("numeric UI presentation rejects boolean or structured market fields", () =
   assert.doesNotMatch(app, /Number\(quote\.(?:change|change_percent|volume_ratio)\)|Number\(bar\.change_percent\)/, "market values must not use coercive Number() for display or direction styling");
   assert.match(app, /const changePercent = finiteNumberOrNull\(bar\.change_percent\)/);
 });
+
+ 
+test("任务创建成功响应缺少 task_id 时提示结果未确认，避免误报失败", () => {
+  assert.match(app, /if \(!task \|\| typeof task\.task_id !== "string" \|\| !task\.task_id\.trim\(\)\) \{[\s\S]*?error\.creationOutcomeUnknown = true/);
+  assert.match(app, /typeof task\?\.task_id === "string" && task\.task_id\.trim\(\)/);
+  assert.ok(app.includes("error?.creationOutcomeUnknown ? error.message"));
+  assert.match(app, /无法确认任务是否已创建[\s\S]*?避免盲目重复提交/);
+});
