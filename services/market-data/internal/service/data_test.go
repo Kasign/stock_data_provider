@@ -602,6 +602,45 @@ func TestDailyBarsCacheWithoutSourceVersionIsBypassed(t *testing.T) {
 	}
 }
 
+func TestCoherentStoredSeriesUsesStableTieBreakers(t *testing.T) {
+	oldFetch := time.Date(2026, 10, 27, 8, 0, 0, 0, time.UTC)
+	newFetch := time.Date(2026, 10, 28, 8, 0, 0, 0, time.UTC)
+	makeSeries := func(source, version string, fetched time.Time) []model.DailyBar {
+		return []model.DailyBar{
+			{Source: source, SourceVersion: version, TradeDate: "2026-10-20", FetchedAt: fetched, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+			{Source: source, SourceVersion: version, TradeDate: "2026-10-21", FetchedAt: fetched, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
+		}
+	}
+	older := makeSeries("eastmoney", "eastmoney-bars-v1", oldFetch)
+	newer := makeSeries("tencent", "tencent-bars-v1", newFetch)
+
+	for _, bars := range [][]model.DailyBar{
+		append(append([]model.DailyBar(nil), older...), newer...),
+		append(append([]model.DailyBar(nil), newer...), older...),
+	} {
+		got, reason := coherentStoredSeries(bars, model.AdjustmentNone)
+		source := ""
+		if len(got) > 0 {
+			source = got[0].Source
+		}
+		if reason != "" || len(got) != 2 || source != "tencent" {
+			t.Fatalf("equal-coverage groups must prefer latest fetched series regardless of input order: source=%q bars=%+v reason=%s", source, got, reason)
+		}
+	}
+
+	// 同一采集时刻和覆盖度仍打平时，按分组 key 字典序稳定决胜。
+	equalFetchTencent := makeSeries("tencent", "tencent-bars-v1", newFetch)
+	equalFetchEastmoney := makeSeries("eastmoney", "eastmoney-bars-v1", newFetch)
+	got, reason := coherentStoredSeries(append(equalFetchTencent, equalFetchEastmoney...), model.AdjustmentNone)
+	source := ""
+	if len(got) > 0 {
+		source = got[0].Source
+	}
+	if reason != "" || len(got) != 2 || source != "eastmoney" {
+		t.Fatalf("fully tied groups must use deterministic lexical key ordering: source=%q bars=%+v reason=%s", source, got, reason)
+	}
+}
+
 func TestCoherentStoredSeriesDoesNotMixSourceVersions(t *testing.T) {
 	first := model.DailyBar{
 		Source: "eastmoney", SourceVersion: "eastmoney-bars-v1", TradeDate: "2026-10-20",

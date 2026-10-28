@@ -2768,8 +2768,10 @@ func preferStoredSeries(stored, providerPartial []model.DailyBar) bool {
 
 func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([]model.DailyBar, string) {
 	type group struct {
-		bars   []model.DailyBar
-		newest string
+		key             string
+		bars            []model.DailyBar
+		newest          string
+		latestFetchedAt time.Time
 	}
 	groups := map[string]*group{}
 	for _, bar := range bars {
@@ -2785,17 +2787,24 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 		key := source + "|" + sourceVersion + "|" + refDate + "|" + bar.NormalizationVer
 		g := groups[key]
 		if g == nil {
-			g = &group{}
+			g = &group{key: key}
 			groups[key] = g
 		}
 		g.bars = append(g.bars, bar)
 		if bar.TradeDate > g.newest {
 			g.newest = bar.TradeDate
 		}
+		if bar.FetchedAt.After(g.latestFetchedAt) {
+			g.latestFetchedAt = bar.FetchedAt
+		}
 	}
 	var best *group
 	for _, g := range groups {
-		if best == nil || len(g.bars) > len(best.bars) || (len(g.bars) == len(best.bars) && g.newest > best.newest) {
+		if best == nil ||
+			len(g.bars) > len(best.bars) ||
+			(len(g.bars) == len(best.bars) && g.newest > best.newest) ||
+			(len(g.bars) == len(best.bars) && g.newest == best.newest && g.latestFetchedAt.After(best.latestFetchedAt)) ||
+			(len(g.bars) == len(best.bars) && g.newest == best.newest && g.latestFetchedAt.Equal(best.latestFetchedAt) && g.key < best.key) {
 			best = g
 		}
 	}
