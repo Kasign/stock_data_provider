@@ -1204,6 +1204,8 @@ test("任务状态和阶段事件响应结构无效时暂停重试，未知状�
   assert.match(app, /const TASK_STATUSES = new Set\(\["queued", "running", "succeeded", "partial", "failed"\]\)/);
   assert.match(app, /function responseContractError\(message\)[\s\S]*?error\.responseContractError = true/);
   assert.match(app, /typeof candidate\.status !== "string" \|\| !TASK_STATUSES\.has\(candidate\.status\)/);
+  assert.match(app, /typeof candidate\.run_id !== "string" \|\| !candidate\.run_id\.trim\(\)/);
+  assert.match(app, /state\.runId && candidate\.run_id !== state\.runId[\s\S]*?当前任务已关联的 Run 不一致/);
   assert.match(app, /任务状态接口返回了未支持的状态/);
   assert.match(app, /taskError = responseContractError\("任务状态接口返回了无法识别的响应结构。"\)/);
   assert.match(app, /eventError = responseContractError\("阶段事件接口返回的数据结构无效。"\)/);
@@ -1219,4 +1221,15 @@ test("Run 结果必须与当前任务标的集合一致后才允许渲染", () =
   assert.match(app, /normalizeSet\(expectedRaw\)[\s\S]*?normalizeSet\(actualRaw\)[\s\S]*?JSON\.stringify\(expected\) === JSON\.stringify\(actual\)/);
   assert.match(app, /const symbolMismatch = runResultSymbolMismatch\(result\);[\s\S]*?if \(symbolMismatch\) throw responseIdentityError\(symbolMismatch\);[\s\S]*?renderTaskResult\(result\)/);
   assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase/);
+});
+
+ 
+test("任务状态轮询不允许更换已建立的 task_id/run_id 关联", () => {
+  const poller = app.match(/async function pollTask\([\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(poller, "task poller must exist");
+  assert.match(poller, /candidate\.task_id !== taskId/);
+  assert.match(poller, /typeof candidate\.run_id !== "string" \|\| !candidate\.run_id\.trim\(\)/);
+  assert.match(poller, /state\.runId && candidate\.run_id !== state\.runId/);
+  assert.match(poller, /任务状态接口返回的 run_id 与当前任务已关联的 Run 不一致/);
+  assert.match(poller, /taskError = responseIdentityError\([\s\S]*?run_id 与当前任务已关联的 Run 不一致/);
 });

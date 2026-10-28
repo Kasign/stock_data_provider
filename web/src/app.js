@@ -2843,6 +2843,10 @@ async function pollTask(generation = state.pollGeneration) {
       taskError = responseIdentityError(candidate.task_id
         ? "任务状态接口返回了其他任务的结果，已忽略。"
         : "任务状态接口未返回 task_id，已忽略该响应。");
+    } else if (typeof candidate.run_id !== "string" || !candidate.run_id.trim()) {
+      taskError = responseContractError("任务状态接口未返回有效 run_id，已暂停自动刷新。");
+    } else if (state.runId && candidate.run_id !== state.runId) {
+      taskError = responseIdentityError("任务状态接口返回的 run_id 与当前任务已关联的 Run 不一致，已忽略。");
     } else if (typeof candidate.status !== "string" || !TASK_STATUSES.has(candidate.status)) {
       taskError = responseContractError(candidate.status
         ? "任务状态接口返回了未支持的状态“" + String(candidate.status) + "”，已暂停自动刷新。"
