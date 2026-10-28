@@ -532,6 +532,19 @@ test("watchlist task and Run summaries refresh when background state changes", (
   assert.match(runRenderer, /if \(state\.view === "watchlist"\) renderWatchlist\(\);/, "Run 结果更新时刷新可见自选卡片");
 });
 
+test("市场总览与活跃度请求的准备阶段和 finally 异常会收敛", () => {
+  assert.match(marketOverview, /function safeOverviewUi\(operation\)/);
+  assert.match(marketOverview, /function cancel\(key\)\{const controller=controllers\[key\];delete controllers\[key\];generation\[key\]\+\+;try\{controller\?\.abort\(\);\}catch\{\}\}/);
+  assert.match(marketOverview, /async function load\(key\)\{[\s\S]*?try\{\s*cancel\(key\);seq=generation\[key\];settings=typeof getSettings/);
+  assert.match(marketOverview, /async function refresh\(keys=KEYS,statusSelector="#market-overview-updated"\)\{[\s\S]*?try\{[\s\S]*?await Promise\.all\(requested\.map\(load\)\)[\s\S]*?catch\(error\)/);
+  assert.match(marketOverview, /Object\.keys\(refreshGenerations\)\.forEach\(selector=>\{refreshGenerations\[selector\]\+=1;\}\);[\s\S]*?KEYS\.forEach/);
+  assert.match(marketActivity, /function safeActivityUi\(operation\)/);
+  assert.match(marketActivity, /async function loadDragon\(\{append=false\}=\{\}\)\{[\s\S]*?try\{\s*abort\("dragon"\);seq=generation\.dragon;cfg=settings\(\)/);
+  assert.match(marketActivity, /finally\{[\s\S]*?if\(seq!==null&&generation\.dragon===seq\)[\s\S]*?safeActivityUi\(\(\)=>\{const next=\$\("#dragon-tiger-next"\)/);
+  assert.match(marketActivity, /async function loadCalendar\(\)\{[\s\S]*?try\{\s*abort\("calendar"\);seq=generation\.calendar;cfg=settings\(\)/);
+  assert.match(marketActivity, /finally\{[\s\S]*?if\(seq!==null&&generation\.calendar===seq\)safeActivityUi/);
+});
+
 test("market overview refresh summaries are isolated by status region and guarded against stale runs", () => {
   assert.match(marketOverview, /refreshGenerations=Object\.create\(null\)/);
   assert.match(marketOverview, /const currentGeneration=\(refreshGenerations\[statusSelector\]\|\|0\)\+1/);

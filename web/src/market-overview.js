@@ -121,35 +121,68 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   meta("market-sector-meta",["维度 "+(labels[metric]||"未选择"),"当前为能力占位，不代表没有符合条件的板块"]);
   qualityReasons("market-sector-reasons",[]);
  }
- function cancel(key){controllers[key]?.abort();delete controllers[key];generation[key]++;}
- async function load(key){cancel(key);const seq=generation[key],settings=typeof getSettings==="function"?getSettings():null;
-  if(key==="sectors"&&sectorMetric!=="change"){showSectorMetricUnavailable();return "unsupported";}
-  if(!settings?.apiKey){pending(key,"请先在连接与密钥设置中配置行情 API Key。","warning");return "needs_key";}
-  const ctl=new AbortController();controllers[key]=ctl;pending(key,"正在读取…","pending");
-  try{let data;if(key==="indices")data=await getMarketIndices(settings,ctl.signal);else if(key==="breadth")data=await getMarketBreadth(settings,ctl.signal);else if(key==="sectors")data=await getMarketSectors(settings,{type:sectorType,limit:10,signal:ctl.signal});else if(key==="pool")data=await getMarketLimitPool(settings,{type:poolType,limit:30,signal:ctl.signal});else if(key==="hot")data=await getMarketHotStocks(settings,{type:hotType,limit:20,signal:ctl.signal});else return "failed";
-   if(ctl.signal.aborted||generation[key]!==seq)return "cancelled";if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data);else if(key==="pool")renderPool(data);else renderHotStocks(data);return "received";
-  }catch(err){
+ function safeOverviewUi(operation){try{operation();return true;}catch{return false;}}
+ function safeOverviewError(error){try{return errorMessage(error);}catch{return "未知异常";}}
+ function cancel(key){const controller=controllers[key];delete controllers[key];generation[key]++;try{controller?.abort();}catch{}}
+ async function load(key){
+  let seq=null,settings=null,ctl=null;
+  try{
+   cancel(key);seq=generation[key];settings=typeof getSettings==="function"?getSettings():null;
+   if(key==="sectors"&&sectorMetric!=="change"){showSectorMetricUnavailable();return "unsupported";}
+   if(!settings?.apiKey){pending(key,"请先在连接与密钥设置中配置行情 API Key。","warning");return "needs_key";}
+   ctl=new AbortController();controllers[key]=ctl;pending(key,"正在读取…","pending");
+   let data;
+   if(key==="indices")data=await getMarketIndices(settings,ctl.signal);
+   else if(key==="breadth")data=await getMarketBreadth(settings,ctl.signal);
+   else if(key==="sectors")data=await getMarketSectors(settings,{type:sectorType,limit:10,signal:ctl.signal});
+   else if(key==="pool")data=await getMarketLimitPool(settings,{type:poolType,limit:30,signal:ctl.signal});
+   else if(key==="hot")data=await getMarketHotStocks(settings,{type:hotType,limit:20,signal:ctl.signal});
+   else return "failed";
    if(ctl.signal.aborted||generation[key]!==seq)return "cancelled";
-   pending(key,errorMessage(err),"error");
-   const status=Number(err?.status);
-   if(status===404)return "unsupported";
-   if(status===503)return "provider_unavailable";
+   if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data);else if(key==="pool")renderPool(data);else renderHotStocks(data);
+   return "received";
+  }catch(error){
+   if(ctl?.signal.aborted||(seq!==null&&generation[key]!==seq))return "cancelled";
+   safeOverviewUi(()=>pending(key,safeOverviewError(error),"error"));
+   const status=Number(error?.status);
+   if(status===404)return "unsupported";if(status===503)return "provider_unavailable";
    if(status===401||status===403)return "auth_failed";
    return "failed";
-  }finally{if(generation[key]===seq)delete controllers[key];}
+  }finally{
+   if(seq!==null&&generation[key]===seq)safeOverviewUi(()=>{if(controllers[key]===ctl)delete controllers[key];});
+  }
  }
- async function refresh(keys=KEYS,statusSelector="#market-overview-updated"){const requested=Array.isArray(keys)?keys.filter(key=>KEYS.includes(key)):KEYS;const currentGeneration=(refreshGenerations[statusSelector]||0)+1;refreshGenerations[statusSelector]=currentGeneration;const status=$(statusSelector),settings=typeof getSettings==="function"?getSettings():null;if(status)status.textContent=settings?.apiKey?"正在刷新市场模块…":"配置行情 API Key 后加载市场数据";const outcomes=await Promise.all(requested.map(load));if(currentGeneration!==refreshGenerations[statusSelector])return;if(status)status.textContent=summarizeMarketOverviewRefresh(outcomes,Boolean(settings?.apiKey));}
+ async function refresh(keys=KEYS,statusSelector="#market-overview-updated"){
+  const requested=Array.isArray(keys)?keys.filter(key=>KEYS.includes(key)):KEYS;
+  const currentGeneration=(refreshGenerations[statusSelector]||0)+1;
+  refreshGenerations[statusSelector]=currentGeneration;
+  let status=null,settings=null;
+  try{
+   settings=typeof getSettings==="function"?getSettings():null;
+   safeOverviewUi(()=>{status=$(statusSelector);if(status)status.textContent=settings?.apiKey?"正在刷新市场模块…":"配置行情 API Key 后加载市场数据";});
+   const outcomes=await Promise.all(requested.map(load));
+   if(currentGeneration!==refreshGenerations[statusSelector])return outcomes;
+   safeOverviewUi(()=>{if(status)status.textContent=summarizeMarketOverviewRefresh(outcomes,Boolean(settings?.apiKey));});
+   return outcomes;
+  }catch(error){
+   if(currentGeneration!==refreshGenerations[statusSelector])return [];
+   const message="市场模块刷新失败："+safeOverviewError(error);
+   safeOverviewUi(()=>{if(!status)status=$(statusSelector);if(status)status.textContent=message;});
+   return [];
+  }
+ }
  function invalidateConnection(){
-  KEYS.forEach(key=>{
-   cancel(key);
-   pending(key,"行情连接配置已变更，旧结果已清除，请重新刷新。","warning");
-  });
   Object.keys(refreshGenerations).forEach(selector=>{refreshGenerations[selector]+=1;});
-  ["#market-overview-updated","#market-data-updated"].forEach(selector=>{
+  KEYS.forEach(key=>{
+   safeOverviewUi(()=>cancel(key));
+   safeOverviewUi(()=>pending(key,"行情连接配置已变更，旧结果已清除，请重新刷新。","warning"));
+  });
+  ["#market-overview-updated","#market-data-updated"].forEach(selector=>safeOverviewUi(()=>{
    const node=$(selector);
    if(node)node.textContent="行情连接配置已变更，旧结果已清除，请重新刷新市场模块。";
-  });
+  }));
  }
+
  $("#refresh-market-overview")?.addEventListener("click",()=>{void refresh(["indices","breadth"],"#market-overview-updated");});
  $("#refresh-market-data")?.addEventListener("click",()=>{void refresh(["sectors","pool","hot"],"#market-data-updated");});
  document.querySelectorAll("[data-sector-type]").forEach(button=>button.addEventListener("click",()=>{sectorType=button.dataset.sectorType==="concept"?"concept":"industry";document.querySelectorAll("[data-sector-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("sectors");}));

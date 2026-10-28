@@ -18,7 +18,9 @@ function errorMessage(e){if(Number(e?.status)===404)return "当前 market-data �
 export function bindMarketActivity(getSettings,onSelectStock){
  const controllers={},generation={dragon:0,calendar:0};let dragonPage=1,dragonHasMore=false,dragonDate="",monthOffset=0;
  const settings=()=>typeof getSettings==="function"?getSettings():null;
- function abort(key){controllers[key]?.abort();delete controllers[key];generation[key]++;}
+ function safeActivityUi(operation){try{operation();return true;}catch{return false;}}
+ function safeActivityError(error){try{return errorMessage(error);}catch{return "未知异常";}}
+ function abort(key){const controller=controllers[key];delete controllers[key];generation[key]++;try{controller?.abort();}catch{}}
  function renderDragon(data,append){
   const root=$("#dragon-tiger-body"),items=Array.isArray(data?.items)?data.items.filter(x=>x&&typeof x==="object"):[];
   if(!append)root.replaceChildren();
@@ -48,34 +50,44 @@ export function bindMarketActivity(getSettings,onSelectStock){
   const next=$("#dragon-tiger-next");next.hidden=true;next.disabled=true;next.textContent="加载下一页";
  }
  async function loadDragon({append=false}={}){
-  abort("dragon");const seq=generation.dragon,cfg=settings();
-  if(!cfg?.apiKey){
-   messageRow($("#dragon-tiger-body"),"请先配置行情 API Key。",6);
-   badge("dragon-tiger-quality","需配置 Key");
-   errorBox("dragon-tiger-error","");
-   meta("dragon-tiger-meta","");
-   clearReasons("dragon-tiger-reasons");
-   dragonHasMore=false;$("#dragon-tiger-next").hidden=true;$("#dragon-tiger-next").disabled=true;
-   return;
-  }
-  if(!append){
-   dragonPage=1;dragonHasMore=false;dragonDate=$("#dragon-tiger-date").value;
-   messageRow($("#dragon-tiger-body"),"正在读取龙虎榜…",6);
-   badge("dragon-tiger-quality","加载中","unknown");meta("dragon-tiger-meta","");
-   clearReasons("dragon-tiger-reasons");$("#dragon-tiger-next").hidden=true;
-  } else {$("#dragon-tiger-next").disabled=true;$("#dragon-tiger-next").textContent="正在加载…";}
-  errorBox("dragon-tiger-error","");const ctl=new AbortController();controllers.dragon=ctl;
-  try{const data=await getMarketDragonTiger(cfg,{date:dragonDate,page:append?dragonPage+1:1,pageSize:50,signal:ctl.signal});if(ctl.signal.aborted||seq!==generation.dragon)return;renderDragon(data,append);}
-  catch(e){
-   if(ctl.signal.aborted||seq!==generation.dragon)return;
-   errorBox("dragon-tiger-error",errorMessage(e));
+  let seq=null,cfg=null,ctl=null;
+  try{
+   abort("dragon");seq=generation.dragon;cfg=settings();
+   if(!cfg?.apiKey){
+    messageRow($("#dragon-tiger-body"),"请先配置行情 API Key。",6);
+    badge("dragon-tiger-quality","需配置 Key");
+    errorBox("dragon-tiger-error","");meta("dragon-tiger-meta","");clearReasons("dragon-tiger-reasons");
+    dragonHasMore=false;const next=$("#dragon-tiger-next");next.hidden=true;next.disabled=true;
+    return "needs_key";
+   }
    if(!append){
-    badge("dragon-tiger-quality","读取失败","invalid");meta("dragon-tiger-meta","");
-    clearReasons("dragon-tiger-reasons");
-    messageRow($("#dragon-tiger-body"),"龙虎榜暂不可用，请查看错误说明后重试。",6);
+    dragonPage=1;dragonHasMore=false;dragonDate=$("#dragon-tiger-date").value;
+    messageRow($("#dragon-tiger-body"),"正在读取龙虎榜…",6);
+    badge("dragon-tiger-quality","加载中","unknown");meta("dragon-tiger-meta","");
+    clearReasons("dragon-tiger-reasons");$("#dragon-tiger-next").hidden=true;
+   }else{$("#dragon-tiger-next").disabled=true;$("#dragon-tiger-next").textContent="正在加载…";}
+   errorBox("dragon-tiger-error","");
+   ctl=new AbortController();controllers.dragon=ctl;
+   const data=await getMarketDragonTiger(cfg,{date:dragonDate,page:append?dragonPage+1:1,pageSize:50,signal:ctl.signal});
+   if(ctl.signal.aborted||seq!==generation.dragon)return "cancelled";
+   renderDragon(data,append);return "received";
+  }catch(error){
+   if(ctl?.signal.aborted||(seq!==null&&seq!==generation.dragon))return "cancelled";
+   const message=safeActivityError(error);
+   safeActivityUi(()=>errorBox("dragon-tiger-error",message));
+   if(!append){
+    safeActivityUi(()=>badge("dragon-tiger-quality","读取失败","invalid"));
+    safeActivityUi(()=>meta("dragon-tiger-meta",""));
+    safeActivityUi(()=>clearReasons("dragon-tiger-reasons"));
+    safeActivityUi(()=>messageRow($("#dragon-tiger-body"),"龙虎榜暂不可用，请查看错误说明后重试。",6));
+   }
+   return "failed";
+  }finally{
+   if(seq!==null&&generation.dragon===seq){
+    safeActivityUi(()=>{if(controllers.dragon===ctl)delete controllers.dragon;});
+    safeActivityUi(()=>{const next=$("#dragon-tiger-next");if(next){next.disabled=!dragonHasMore;next.textContent=dragonHasMore?"加载下一页":"没有更多页";}});
    }
   }
-  finally{if(generation.dragon===seq){delete controllers.dragon;$("#dragon-tiger-next").disabled=!dragonHasMore;$("#dragon-tiger-next").textContent=dragonHasMore?"加载下一页":"没有更多页";}}
  }
  function setMonth(offset){monthOffset=offset;const range=monthRange(offset);$("#calendar-start-date").value=range.start;$("#calendar-end-date").value=range.end;meta("calendar-month-label",range.start.slice(0,7));}
  function calendarTimestamp(value){
@@ -148,63 +160,68 @@ function renderCalendar(data){
   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","日期范围已变化，请点击“读取交易日历”加载新条件。"));
  }
  async function loadCalendar(){
-  abort("calendar");const seq=generation.calendar,cfg=settings(),start=$("#calendar-start-date").value,end=$("#calendar-end-date").value;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||start>end){
-   const message="请选择有效日期，并确保开始日期不晚于结束日期。";
-   errorBox("trading-calendar-error",message);badge("trading-calendar-quality","日期无效","invalid");
-   meta("trading-calendar-meta","");clearReasons("trading-calendar-reasons");
-   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return;
-  }
-  const a=Date.parse(start+"T00:00:00Z"),b=Date.parse(end+"T00:00:00Z");
-  if(!Number.isFinite(a)||!Number.isFinite(b)||b-a>366*86400000){
-   const message="日期区间最多 367 个自然日，请缩小范围。";
-   errorBox("trading-calendar-error",message);badge("trading-calendar-quality","日期范围无效","invalid");
-   meta("trading-calendar-meta","");clearReasons("trading-calendar-reasons");
-   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return;
-  }
-  if(!cfg?.apiKey){
-   const message="请先在连接与密钥设置中配置行情 API Key。";
-   errorBox("trading-calendar-error",message);badge("trading-calendar-quality","需配置 Key");
-   meta("trading-calendar-meta","数据未读取 · 需要 API Key");clearReasons("trading-calendar-reasons");
-   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return;
-  }
-  errorBox("trading-calendar-error","");
-  meta("calendar-month-label",start.slice(0,7)+(start.slice(0,7)===end.slice(0,7)?"":" — "+end.slice(0,7)));
-  badge("trading-calendar-quality","加载中","unknown");
-  meta("trading-calendar-meta","请求 "+start+" 至 "+end+" · 正在读取");
-  clearReasons("trading-calendar-reasons");
-  $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","正在读取交易日历…"));const ctl=new AbortController();controllers.calendar=ctl;
-  try{const data=await getTradingCalendar(cfg,{start,end,signal:ctl.signal});if(ctl.signal.aborted||seq!==generation.calendar)return;renderCalendar(data);}
-  catch(e){
-   if(ctl.signal.aborted||seq!==generation.calendar)return;
-   badge("trading-calendar-quality","读取失败","invalid");errorBox("trading-calendar-error",errorMessage(e));
-   meta("trading-calendar-meta","请求 "+start+" 至 "+end+" · 本次未返回数据");
+  let seq=null,cfg=null,start="",end="",ctl=null;
+  try{
+   abort("calendar");seq=generation.calendar;cfg=settings();
+   start=$("#calendar-start-date").value;end=$("#calendar-end-date").value;
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||start>end){
+    const message="请选择有效日期，并确保开始日期不晚于结束日期。";
+    errorBox("trading-calendar-error",message);badge("trading-calendar-quality","日期无效","invalid");
+    meta("trading-calendar-meta","");clearReasons("trading-calendar-reasons");
+    $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return "invalid";
+   }
+   const a=Date.parse(start+"T00:00:00Z"),b=Date.parse(end+"T00:00:00Z");
+   if(!Number.isFinite(a)||!Number.isFinite(b)||b-a>366*86400000){
+    const message="日期区间最多 367 个自然日，请缩小范围。";
+    errorBox("trading-calendar-error",message);badge("trading-calendar-quality","日期范围无效","invalid");
+    meta("trading-calendar-meta","");clearReasons("trading-calendar-reasons");
+    $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return "invalid";
+   }
+   if(!cfg?.apiKey){
+    const message="请先在连接与密钥设置中配置行情 API Key。";
+    errorBox("trading-calendar-error",message);badge("trading-calendar-quality","需配置 Key");
+    meta("trading-calendar-meta","数据未读取 · 需要 API Key");clearReasons("trading-calendar-reasons");
+    $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state",message));return "needs_key";
+   }
+   errorBox("trading-calendar-error","");
+   meta("calendar-month-label",start.slice(0,7)+(start.slice(0,7)===end.slice(0,7)?"":" — "+end.slice(0,7)));
+   badge("trading-calendar-quality","加载中","unknown");
+   meta("trading-calendar-meta","请求 "+start+" 至 "+end+" · 正在读取");
    clearReasons("trading-calendar-reasons");
-   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","交易日历暂不可用，请查看错误说明后重试。"));
+   $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","正在读取交易日历…"));
+   ctl=new AbortController();controllers.calendar=ctl;
+   const data=await getTradingCalendar(cfg,{start,end,signal:ctl.signal});
+   if(ctl.signal.aborted||seq!==generation.calendar)return "cancelled";
+   renderCalendar(data);return "received";
+  }catch(error){
+   if(ctl?.signal.aborted||(seq!==null&&seq!==generation.calendar))return "cancelled";
+   const message=safeActivityError(error);
+   safeActivityUi(()=>badge("trading-calendar-quality","读取失败","invalid"));
+   safeActivityUi(()=>errorBox("trading-calendar-error",message));
+   safeActivityUi(()=>meta("trading-calendar-meta","请求 "+start+" 至 "+end+" · 本次未返回数据"));
+   safeActivityUi(()=>clearReasons("trading-calendar-reasons"));
+   safeActivityUi(()=>$("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","交易日历暂不可用，请查看错误说明后重试。")));
+   return "failed";
+  }finally{
+   if(seq!==null&&generation.calendar===seq)safeActivityUi(()=>{if(controllers.calendar===ctl)delete controllers.calendar;});
   }
-  finally{if(generation.calendar===seq)delete controllers.calendar;}
  }
  function invalidateConnection() {
-  abort("dragon");
-  abort("calendar");
-  dragonPage=1;
-  dragonHasMore=false;
-  errorBox("dragon-tiger-error","");
-  badge("dragon-tiger-quality","连接配置已变更","unknown");
-  meta("dragon-tiger-meta","连接配置已变更，请重新读取龙虎榜。");
-  clearReasons("dragon-tiger-reasons");
-  messageRow($("#dragon-tiger-body"),"连接配置已变更，旧结果已清除，请重新读取龙虎榜。",6);
-  const next=$("#dragon-tiger-next");
-  next.hidden=true;
-  next.disabled=true;
-  next.textContent="加载下一页";
-
-  errorBox("trading-calendar-error","");
-  badge("trading-calendar-quality","连接配置已变更","unknown");
-  meta("trading-calendar-meta","连接配置已变更，请重新读取交易日历。");
-  clearReasons("trading-calendar-reasons");
-  $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","连接配置已变更，旧结果已清除，请重新读取交易日历。"));
+  safeActivityUi(()=>abort("dragon"));safeActivityUi(()=>abort("calendar"));
+  dragonPage=1;dragonHasMore=false;
+  safeActivityUi(()=>errorBox("dragon-tiger-error",""));
+  safeActivityUi(()=>badge("dragon-tiger-quality","连接配置已变更","unknown"));
+  safeActivityUi(()=>meta("dragon-tiger-meta","连接配置已变更，请重新读取龙虎榜。"));
+  safeActivityUi(()=>clearReasons("dragon-tiger-reasons"));
+  safeActivityUi(()=>messageRow($("#dragon-tiger-body"),"连接配置已变更，旧结果已清除，请重新读取龙虎榜。",6));
+  safeActivityUi(()=>{const next=$("#dragon-tiger-next");next.hidden=true;next.disabled=true;next.textContent="加载下一页";});
+  safeActivityUi(()=>errorBox("trading-calendar-error",""));
+  safeActivityUi(()=>badge("trading-calendar-quality","连接配置已变更","unknown"));
+  safeActivityUi(()=>meta("trading-calendar-meta","连接配置已变更，请重新读取交易日历。"));
+  safeActivityUi(()=>clearReasons("trading-calendar-reasons"));
+  safeActivityUi(()=>$("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","连接配置已变更，旧结果已清除，请重新读取交易日历。")));
  }
+
  const today=chinaParts();$("#dragon-tiger-date").value=dateKey(today.year,today.month,today.day);setMonth(0);
  $("#load-dragon-tiger").addEventListener("click",()=>void loadDragon());$("#dragon-tiger-next").addEventListener("click",()=>{if(dragonHasMore)void loadDragon({append:true});});
  $("#dragon-tiger-date").addEventListener("change",invalidateDragonFilter);
