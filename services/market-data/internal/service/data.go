@@ -454,6 +454,9 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 			return fmt.Errorf("limit-pool quality status %q is unsupported", snapshot.QualityStatus)
 		}
+		if snapshot.QualityStatus == model.QualityValid && strings.TrimSpace(snapshot.ProviderReportDate) == "" {
+			return errors.New("limit-pool cannot be valid without a provider report date")
+		}
 		seen := make(map[string]bool, len(snapshot.Items))
 		hasDegradedItem := false
 		for _, item := range snapshot.Items {

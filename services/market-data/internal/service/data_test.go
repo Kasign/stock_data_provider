@@ -2683,3 +2683,28 @@ func TestValidateSectorRankingSnapshotRejectsUnderfilledPage(t *testing.T) {
 		t.Fatalf("underfilled sector-ranking page must be rejected so fallback can continue, got %v", err)
 	}
 }
+
+
+func TestValidateLimitPoolRejectsValidSnapshotWithoutProviderReportDate(t *testing.T) {
+	now := time.Now().UTC()
+	change := 10.0
+	makeSnapshot := func() *model.LimitPoolSnapshot {
+		return &model.LimitPoolSnapshot{
+			PoolType: "up", TradeDate: "2026-10-23", Total: 1, HasData: true,
+			Items: []model.LimitPoolItem{{
+				Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", ChangePercent: &change,
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
+			}},
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
+		}
+	}
+
+	snapshot := makeSnapshot()
+	if err := validateLimitPoolSnapshot("up", "2026-10-23", 10, snapshot); err == nil || !strings.Contains(err.Error(), "provider report date") {
+		t.Fatalf("valid limit-pool data must include a verified source report date, got %v", err)
+	}
+	snapshot.ProviderReportDate = "2026-10-23"
+	if err := validateLimitPoolSnapshot("up", "2026-10-23", 10, snapshot); err != nil {
+		t.Fatalf("valid limit-pool data with matching source report date should pass, got %v", err)
+	}
+}
