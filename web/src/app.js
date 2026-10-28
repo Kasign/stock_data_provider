@@ -3112,7 +3112,8 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   }
   state.settings = nextSettings;
   if (analysisBaseChanged) invalidateActiveTaskForAnalysisBaseChange(previousSettings.analysisBase, nextSettings.analysisBase);
-  if (previousSettings.apiKey !== nextSettings.apiKey || previousSettings.marketBase !== nextSettings.marketBase) {
+  const marketConnectionChanged = previousSettings.apiKey !== nextSettings.apiKey || previousSettings.marketBase !== nextSettings.marketBase;
+  if (marketConnectionChanged) {
     cancelQuoteQuery({
       clearResults: true,
       symbol: $("#symbol-input").value.trim(),
@@ -3122,6 +3123,9 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
     state.stockSearchResults = [];
     $("#stock-search-results").replaceChildren();
     hideStockSearch();
+  }
+  if (analysisBaseChanged || marketConnectionChanged) {
+    dataCenter.invalidate("连接配置已变更，旧的数据中心检查结果已作废。请使用新配置重新检查服务与 Provider 能力。");
   }
   initialConnectionDraft = null;
   $("#settings-dialog").close();

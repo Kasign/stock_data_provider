@@ -276,18 +276,50 @@ export function bindDataCenter(getSettings) {
             ? "检查已完成，但有服务、依赖或 Provider 状态无法确认。不能仅凭分析服务不可达就断定 MariaDB/Redis 故障。"
             : "基础检查完成：当前页面、服务端点和已报告的依赖状态已检查。Provider 能力清单仍只是配置声明，未实测项目已计入未知数量。");
     } catch (error) {
+      if (current !== generation) return;
       setBadge("#data-center-summary-status", "failed", "检查过程异常");
       setText("#data-center-summary-message", safeError(error));
     } finally {
-      checking = false;
-      if (button) {
-        button.disabled = false;
-        button.textContent = "重新检查";
-        button.removeAttribute("aria-busy");
+      if (current === generation) {
+        checking = false;
+        if (button) {
+          button.disabled = false;
+          button.textContent = "重新检查";
+          button.removeAttribute("aria-busy");
+        }
       }
     }
   }
 
+  function invalidate(message = "连接配置已变更，之前的检查结果已作废。请重新检查。") {
+    generation += 1;
+    checking = false;
+    if (button) {
+      button.disabled = false;
+      button.textContent = "立即检查";
+      button.removeAttribute("aria-busy");
+    }
+
+    setBadge("#data-center-summary-status", "unknown", "需重新检查");
+    setText("#data-center-summary-message", message);
+    setBadge("#data-center-last-check", "unknown", "尚未检查");
+
+    [
+      "#data-service-webui-status", "#data-service-market-live", "#data-service-market-ready",
+      "#data-service-analysis-live", "#data-service-analysis-ready", "#data-service-mariadb-status",
+      "#data-service-redis-status", "#data-center-provider-status"
+    ].forEach((selector) => setBadge(selector, "unknown", "需重新检查"));
+    [
+      "#data-service-webui-detail", "#data-service-market-detail", "#data-service-analysis-detail",
+      "#data-service-mariadb-detail", "#data-service-redis-detail"
+    ].forEach((selector) => setText(selector, "连接配置已变更，尚未重新检查。"));
+    setText("#data-center-provider-summary", "连接配置已变更，尚未重新读取 Provider 能力清单。");
+    const providerList = $("#data-center-provider-list");
+    if (providerList) providerList.replaceChildren();
+    ["#data-center-count-healthy", "#data-center-count-failed", "#data-center-count-unknown"]
+      .forEach((selector) => setText(selector, "—"));
+  }
+
   button?.addEventListener("click", () => { void refresh(); });
-  return { refresh };
+  return { refresh, invalidate };
 }

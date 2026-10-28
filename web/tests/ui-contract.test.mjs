@@ -237,6 +237,15 @@ test("topbar service health checks have bounded timeouts and pass abort signals"
   assert.match(app, /async function refreshServices\(\)[\s\S]*?Promise\.all\(\[[\s\S]*?runHealthCheck\(marketHealth, settings\)[\s\S]*?runHealthCheck\(analysisHealth, settings\)/);
 });
 
+test("data-center checks are invalidated when a saved API connection changes", () => {
+  assert.match(dataCenter, /let generation = 0;/);
+  assert.match(dataCenter, /if \(current !== generation\) return;/);
+  assert.match(dataCenter, /function invalidate\(message = "连接配置已变更，之前的检查结果已作废。请重新检查。"\) \{[\s\S]*?generation \+= 1;[\s\S]*?checking = false;[\s\S]*?setBadge\("#data-center-summary-status", "unknown", "需重新检查"\)/);
+  assert.match(dataCenter, /finally \{[\s\S]*?if \(current === generation\) \{[\s\S]*?checking = false;/);
+  assert.match(dataCenter, /return \{ refresh, invalidate \};/);
+  assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(analysisBaseChanged \|\| marketConnectionChanged\) \{\s*dataCenter\.invalidate\(/);
+});
+
 test("service health and provider-list refreshes ignore superseded responses", () => {
   assert.match(app, /let serviceRefreshGeneration = 0;/);
   assert.match(app, /let sourceRefreshGeneration = 0;/);
