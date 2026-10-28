@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -172,5 +173,48 @@ func TestIndexConstituentsFallsBackFromUnknownQualityEntries(t *testing.T) {
 	}
 	if first.constituentCalls != 1 || second.constituentCalls != 1 {
 		t.Fatalf("expected both constituent providers to be called once, first=%d second=%d", first.constituentCalls, second.constituentCalls)
+	}
+}
+
+
+func TestIndexConstituentsLegacyCacheWithoutCoverageCountIsDegraded(t *testing.T) {
+	mem := newMemoryCache()
+	cached := indexConstituentsDegradedDataForTest("tushare")
+	cached.QualityStatus = model.QualityValid
+	cached.ProviderReturned = 0
+	cached.ProviderReportDate = time.Now().In(marketLocation()).Format("2006-01-02")
+	payload, err := json.Marshal(cached)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v2:index-constituents:auto:000300.SH"] = payload
+
+	fallback := &indexCatalogQualityFallbackProvider{
+		name: "tushare", constituents: indexConstituentsDegradedDataForTest("tushare"),
+	}
+	svc := &DataService{
+		cache: mem,
+		indexCatalogProviders: []provider.IndexCatalogProvider{fallback},
+	}
+
+	got, hit, err := svc.IndexConstituentsFromSource(context.Background(), "000300.SH", "")
+	if err != nil || !hit {
+		t.Fatalf("legacy constituent cache should remain usable with downgraded quality: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("legacy cache without source coverage count must be degraded, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_constituent_source_coverage_unreported" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("legacy cache must expose missing source coverage reason: %v", got.QualityReasons)
+	}
+	if fallback.constituentCalls != 0 {
+		t.Fatalf("valid cache hit should not fetch provider, calls=%d", fallback.constituentCalls)
 	}
 }

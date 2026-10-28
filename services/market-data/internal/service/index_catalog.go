@@ -452,6 +452,10 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.IndexConstituentSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+			// 兼容历史缓存：未记录源端覆盖计数的非 unknown 成分快照必须降级，不能因缓存命中绕过覆盖检查。
+			if cached.QualityStatus != model.QualityUnknown {
+				markIndexConstituentCoverage(&cached)
+			}
 			ttl := 30 * time.Minute
 			if cached.QualityStatus != model.QualityValid {
 				ttl = 5 * time.Minute
