@@ -1360,7 +1360,7 @@ function renderResearchOverview() {
   setText("#research-overview-source", matched ? (quote.source || "未报告") : (symbol && state.isQuerying ? "读取中…" : "未加载"));
   let barsSymbol = "";
   try { barsSymbol = normalizeSymbol(state.technicalSymbol || ""); } catch {}
-  const hasBars = Boolean(symbol && barsSymbol === symbol);
+  const hasBars = Boolean(symbol && barsSymbol && sameMarketSymbol(barsSymbol, symbol));
   const latest = hasBars ? [...state.technicalRows].reverse().find(row => row && row.close != null) : null;
   const technical = key => !hasBars ? (symbol && state.isQuerying ? "读取中…" : "未加载") : (Number.isFinite(latest?.[key]) ? latest[key].toFixed(2) : "数据不足");
   setText("#research-overview-ma5", technical("ma5"));

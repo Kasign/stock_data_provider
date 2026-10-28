@@ -162,6 +162,9 @@ test("individual stock research uses one detail workspace without duplicate chip
   }
   assert.ok(!html.includes('id="stock-supplemental-panel"'), "old duplicate chip/flow panel must be gone");
   assert.ok(app.includes("function renderResearchOverview()"));
+  const researchOverviewRenderer = app.match(/function renderResearchOverview\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(researchOverviewRenderer, /sameMarketSymbol\(barsSymbol,\s*symbol\)/, "研究摘要 MA 必须复用 A 股证券代码比较规则");
+  assert.doesNotMatch(researchOverviewRenderer, /barsSymbol\s*===\s*symbol/, "不得用原始代码字符串判断均线是否属于当前标的");
   assert.ok(app.includes('function openResearchStock(symbol, name = "")'));
   assert.ok(app.includes("await stockResearch.refresh()"));
   assert.ok(!app.includes("loadSupplementalData") && !app.includes("resetSupplementPanel"));
