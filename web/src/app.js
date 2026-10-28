@@ -3408,20 +3408,31 @@ async function createTask(event) {
     feedback.textContent = error.message;
     return;
   }
+  let button = null;
+  let taskType = "";
+  let payload = null;
+  let idempotencyKey = "";
+  let requestAnalysisBase = state.settings.analysisBase;
+  let requestAnalysisGeneration = state.analysisConnectionGeneration;
+  let requestSettings = { ...state.settings, analysisBase: requestAnalysisBase };
+  let creationContextGeneration = state.taskContextGeneration;
+  let creationHistoryGeneration = state.taskHistoryGeneration;
+
+  try {
   feedback.hidden = true;
   feedback.textContent = "";
-  const button = $("#create-task-button");
+  button = $("#create-task-button");
   button.disabled = true;
   button.textContent = "正在写入任务队列…";
-  const taskType = $("#task-type").value;
-  const payload = { task_type: taskType, symbols };
-  const idempotencyKey = $("#idempotency-key").value.trim();
-  const requestAnalysisBase = state.settings.analysisBase;
-  const requestAnalysisGeneration = state.analysisConnectionGeneration;
-  const requestSettings = { ...state.settings, analysisBase: requestAnalysisBase };
+  taskType = $("#task-type").value;
+  payload = { task_type: taskType, symbols };
+  idempotencyKey = $("#idempotency-key").value.trim();
+  requestAnalysisBase = state.settings.analysisBase;
+  requestAnalysisGeneration = state.analysisConnectionGeneration;
+  requestSettings = { ...state.settings, analysisBase: requestAnalysisBase };
   state.taskContextGeneration += 1;
-  const creationContextGeneration = state.taskContextGeneration;
-  const creationHistoryGeneration = state.taskHistoryGeneration;
+  creationContextGeneration = state.taskContextGeneration;
+  creationHistoryGeneration = state.taskHistoryGeneration;
   state.runResultGeneration += 1;
   releaseRunResultReloadBusy();
   stopTaskPolling();
@@ -3452,7 +3463,6 @@ async function createTask(event) {
   $("#task-result-structured").replaceChildren();
   $("#task-result-warnings").replaceChildren();
 
-  try {
     const response = await createAnalysisTask(requestSettings, payload, idempotencyKey);
     const task = response.task || response;
     const responseSymbolsMatch = task?.symbols === undefined ||
@@ -3580,6 +3590,7 @@ async function createTask(event) {
     // 即使幂等命中已结束任务，也先读取并排空阶段事件，再加载最终 Run 报告。
     state.pollTimer = window.setTimeout(() => pollTaskSafely(generation), 500);
   } catch (error) {
+    try {
     if (creationContextGeneration !== state.taskContextGeneration) {
       feedback.hidden = false;
       feedback.textContent = requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase
@@ -3593,13 +3604,36 @@ async function createTask(event) {
     feedback.textContent = requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase
       ? "分析 API 地址在提交期间已变化，无法确认旧连接是否创建了任务：" + errorMessage(error) + "。请核实旧服务后再决定是否重试。"
       : error?.creationOutcomeUnknown ? error.message : "创建任务失败：" + errorMessage(error);
+    } catch (recoveryError) {
+      try {
+        feedback.hidden = false;
+        const message = typeof recoveryError?.message === "string" ? recoveryError.message : "未知异常";
+        feedback.textContent = "处理任务提交结果时发生异常，且无法更新原始错误提示：" + message;
+      } catch {
+        // 错误反馈不可用时，仍必须进入 finally 恢复提交锁。
+      }
+    }
   } finally {
+    // 先释放逻辑提交锁，再尽力恢复 DOM；恢复失败也不能让 Promise 再次拒绝。
     state.isCreatingTask = false;
-    button.disabled = false;
-    button.replaceChildren(document.createTextNode("创建并跟踪任务 "));
-    const arrow = document.createElement("span");
-    arrow.textContent = "→";
-    button.append(arrow);
+    try {
+      if (button) {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.replaceChildren(document.createTextNode("创建并跟踪任务 "));
+        const arrow = document.createElement("span");
+        arrow.textContent = "→";
+        button.append(arrow);
+      }
+    } catch (unlockError) {
+      try {
+        feedback.hidden = false;
+        const message = typeof unlockError?.message === "string" ? unlockError.message : "未知异常";
+        feedback.textContent = "任务提交流程已结束，但创建按钮状态恢复失败：" + message + "。请重新载入页面后重试。";
+      } catch {
+        // finally 中的反馈或 DOM 异常不得形成未处理的 Promise rejection。
+      }
+    }
   }
 }
 

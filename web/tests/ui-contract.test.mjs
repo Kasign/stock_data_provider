@@ -300,6 +300,25 @@ test("task polling errors mark last-known status stale and successful refresh cl
   assert.ok(manualRefresh.includes("正在手动刷新任务状态与阶段事件"), "手动刷新开始后应立即反馈，避免旧错误提示看起来未响应");
 });
 
+test("创建任务的前置 UI 异常也会释放提交锁和按钮", () => {
+  const start = app.indexOf("async function createTask(event) {");
+  const end = app.indexOf("\nfunction startAnalysisForSymbol(", start);
+  const creator = start >= 0 && end > start ? app.slice(start, end) : "";
+  const declarations = creator.indexOf("let button = null;");
+  const protectedTry = creator.indexOf("try {", declarations);
+  const buttonSetup = creator.indexOf('button = $("#create-task-button");', protectedTry);
+  const networkCall = creator.indexOf("await createAnalysisTask(", protectedTry);
+  const outerCatch = creator.lastIndexOf("} catch (error) {");
+  const outerFinally = creator.lastIndexOf("} finally {");
+  assert.ok(declarations >= 0 && protectedTry > declarations && protectedTry < buttonSetup, "按钮查询与初始化必须位于统一 try 内");
+  assert.ok(protectedTry < networkCall && outerCatch > networkCall && outerFinally > outerCatch, "准备阶段和网络请求必须共享统一 catch/finally");
+  assert.match(creator.slice(outerCatch), /catch \(recoveryError\)[\s\S]*?无法更新原始错误提示[\s\S]*?finally/);
+  assert.match(creator.slice(outerFinally), /state\.isCreatingTask = false;[\s\S]*?try \{[\s\S]*?button\.disabled = false;[\s\S]*?catch \(unlockError\)/);
+  assert.match(creator.slice(outerFinally), /finally 中的反馈或 DOM 异常不得形成未处理的 Promise rejection/);
+  assert.match(creator, /creationContextGeneration = state\.taskContextGeneration/);
+  assert.match(creator, /creationHistoryGeneration = state\.taskHistoryGeneration/);
+});
+
 test("new task creation responses cannot poison requested symbols or run/status identity", () => {
   const createStart = app.indexOf("async function createTask(event) {");
   const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
@@ -318,7 +337,7 @@ test("late task creation responses cannot replace the task selected while submis
   const createStart = app.indexOf("async function createTask(event) {");
   const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
   const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
-  assert.match(creator, /state\.taskContextGeneration \+= 1;\s*const creationContextGeneration = state\.taskContextGeneration;/);
+  assert.match(creator, /state\.taskContextGeneration \+= 1;\s*creationContextGeneration = state\.taskContextGeneration;/);
   assert.match(creator, /if \(creationContextGeneration !== state\.taskContextGeneration\) \{[\s\S]*?upsertRecentTask\(endpointRecord, localStorage\)[\s\S]*?当前选中的任务不会被覆盖/);
   assert.match(creator, /catch \(error\) \{\s*if \(creationContextGeneration !== state\.taskContextGeneration\)/, "late create errors must not hide the currently selected task");
   const activateStart = app.indexOf("function activateTaskReference(record) {");
@@ -1698,7 +1717,7 @@ test("清空或导入本地任务历史会隔离在途创建请求的晚到响�
   const createEnd = app.indexOf("function startAnalysisForSymbol(", createStart + 1);
   const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
   assert.ok(creator, "任务创建方法必须存在");
-  assert.match(creator, /const creationHistoryGeneration = state\.taskHistoryGeneration;/);
+  assert.match(creator, /creationHistoryGeneration = state\.taskHistoryGeneration;/);
   assert.match(creator, /const taskHistoryWasReplaced = creationHistoryGeneration !== state\.taskHistoryGeneration;/);
   assert.match(creator, /if \(taskHistoryWasReplaced\) \{[\s\S]*?未重新写入该引用[\s\S]*?\} else \{[\s\S]*?upsertRecentTask\(endpointRecord, localStorage\)/);
   const clearStart = app.indexOf("function clearRecentTaskHistory() {");
