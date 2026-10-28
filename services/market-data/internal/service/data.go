@@ -1679,8 +1679,8 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 			return errors.New("chip-distribution provider date is in the future")
 		}
 	}
-	if strings.TrimSpace(item.Source) == "" || item.FetchedAt.IsZero() {
-		return errors.New("chip-distribution source or fetched_at is missing")
+	if strings.TrimSpace(item.Source) == "" || strings.TrimSpace(item.SourceVersion) == "" || item.FetchedAt.IsZero() {
+		return errors.New("chip-distribution source, source_version or fetched_at is missing")
 	}
 	if item.QualityStatus == model.QualityValid {
 		return errors.New("chip-distribution cannot be valid without verified publication availability time")
@@ -1706,8 +1706,8 @@ func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
 			return errors.New("capital-flow provider date is invalid or in the future")
 		}
 	}
-	if strings.TrimSpace(item.Source) == "" || item.FetchedAt.IsZero() {
-		return errors.New("capital-flow source or fetched_at is missing")
+	if strings.TrimSpace(item.Source) == "" || strings.TrimSpace(item.SourceVersion) == "" || item.FetchedAt.IsZero() {
+		return errors.New("capital-flow source, source_version or fetched_at is missing")
 	}
 	if item.Observations < 0 {
 		return errors.New("capital-flow observation count cannot be negative")

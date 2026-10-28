@@ -1506,6 +1506,26 @@ func (p *supplementCountingFakeProvider) FetchCapitalFlow(context.Context, strin
 	return p.flow, nil
 }
 
+func TestSupplementContractsRequireSourceVersion(t *testing.T) {
+	now := time.Now().UTC()
+	chip := &model.ChipDistribution{
+		Symbol: "600519.SH", AverageCost: 12.5, Source: "eastmoney", FetchedAt: now,
+		QualityStatus: model.QualityDegraded,
+	}
+	if err := validateChipDistributionSnapshot("600519.SH", chip); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("chip-distribution without source version must be rejected, got %v", err)
+	}
+
+	mainNetInflow := 120.0
+	flow := &model.CapitalFlow{
+		Symbol: "600519.SH", MainNetInflow: &mainNetInflow, Observations: 1,
+		Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+	}
+	if err := validateCapitalFlowSnapshot("600519.SH", flow); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("capital-flow without source version must be rejected, got %v", err)
+	}
+}
+
 func TestSupplementCachesReuseProviderContractValidation(t *testing.T) {
 	now := time.Now().UTC()
 	t.Run("invalid chip ratio cache is bypassed", func(t *testing.T) {
