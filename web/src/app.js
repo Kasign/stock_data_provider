@@ -586,7 +586,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
 
   const recentTasks = safeReadRecentTasks();
   const normalizeLocalSymbol = (value) => {
-    try { return normalizeSymbol(value); } catch { return String(value || "").trim().toUpperCase(); }
+    try { return comparableMarketSymbol(value); } catch { return String(value || "").trim().toUpperCase(); }
   };
   items.forEach((record) => {
     const row = document.createElement("article");
@@ -726,12 +726,8 @@ function addCurrentSymbolToWatchlist() {
   if (state.selectedStockSearchItem?.symbol === symbol && state.selectedStockSearchItem.name) {
     defaultName = state.selectedStockSearchItem.name;
   }
-  if (state.quote?.name && state.quote?.symbol) {
-    try {
-      if (normalizeSymbol(state.quote.symbol) === symbol) defaultName = state.quote.name;
-    } catch {
-      // A malformed server display symbol must not block saving the user-entered symbol.
-    }
+  if (state.quote?.name && state.quote?.symbol && sameMarketSymbol(state.quote.symbol, symbol)) {
+    defaultName = state.quote.name;
   }
 
   try {
