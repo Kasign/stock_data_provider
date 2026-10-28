@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1459,5 +1460,128 @@ func TestTushareStockAnnouncementsMarksDuplicateRows(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("missing duplicate-row quality reason: %v", got.QualityReasons)
+	}
+}
+
+func TestTushareDailyAppliesAdjustmentFactors(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	end := time.Now().In(location).AddDate(0, 0, -1)
+	start := end.AddDate(0, 0, -2)
+	startDate, endDate := start.Format("2006-01-02"), end.Format("2006-01-02")
+	startCompact, endCompact := start.Format("20060102"), end.Format("20060102")
+
+	for _, tc := range []struct {
+		name           string
+		basis          model.AdjustmentBasis
+		wantMethod     string
+		wantFirstOpen  float64
+		wantFirstClose float64
+		wantLastOpen   float64
+		wantLastClose  float64
+		wantReference  string
+	}{
+		{
+			name: "forward adjusted", basis: model.AdjustmentForward,
+			wantMethod: "tushare_adj_factor_qfq_v1", wantFirstOpen: 5, wantFirstClose: 5.5,
+			wantLastOpen: 20, wantLastClose: 21, wantReference: endDate,
+		},
+		{
+			name: "backward adjusted", basis: model.AdjustmentBackward,
+			wantMethod: "tushare_adj_factor_hfq_v1", wantFirstOpen: 20, wantFirstClose: 22,
+			wantLastOpen: 80, wantLastClose: 84,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dailyRequests, factorRequests := 0, 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					APIName string            `json:"api_name"`
+					Params  map[string]string `json:"params"`
+					Fields  string            `json:"fields"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Errorf("decode Tushare request: %v", err)
+					http.Error(w, "bad request", http.StatusBadRequest)
+					return
+				}
+				switch request.APIName {
+				case "daily":
+					dailyRequests++
+					if request.Params["ts_code"] != "600519.SH" || request.Params["start_date"] != startCompact || request.Params["end_date"] != endCompact {
+						t.Errorf("unexpected daily request params: %#v", request.Params)
+					}
+					writeTushareTestTable(w,
+						[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
+						[][]any{
+							{"600519.SH", startCompact, 10.0, 12.0, 9.0, 11.0, 10.0, 100.0, 100.0},
+							{"600519.SH", endCompact, 20.0, 22.0, 18.0, 21.0, 90.0, 200.0, 200.0},
+						},
+					)
+				case "adj_factor":
+					factorRequests++
+					if request.Params["ts_code"] != "600519.SH" || request.Params["start_date"] != startCompact || request.Params["end_date"] != endCompact {
+						t.Errorf("unexpected adj_factor request params: %#v", request.Params)
+					}
+					// 返回顺序故意倒置，换算逻辑不能依赖供应商行顺序。
+					writeTushareTestTable(w, []string{"ts_code", "trade_date", "adj_factor"}, [][]any{
+						{"600519.SH", endCompact, 4.0},
+						{"600519.SH", startCompact, 2.0},
+					})
+				default:
+					t.Errorf("unexpected Tushare API %q", request.APIName)
+					http.Error(w, "unexpected API", http.StatusBadRequest)
+				}
+			}))
+			defer server.Close()
+
+			provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+			bars, err := provider.FetchDailyBars(context.Background(), "600519.SH", startDate, endDate, 10, tc.basis)
+			if err != nil {
+				t.Fatalf("FetchDailyBars: %v", err)
+			}
+			if dailyRequests != 1 || factorRequests != 1 {
+				t.Fatalf("requests daily=%d adj_factor=%d, want one each", dailyRequests, factorRequests)
+			}
+			if len(bars) != 2 {
+				t.Fatalf("got %d bars, want 2", len(bars))
+			}
+			first, last := bars[0], bars[1]
+			if first.TradeDate != startDate || last.TradeDate != endDate {
+				t.Fatalf("unexpected sorted dates: %s, %s", first.TradeDate, last.TradeDate)
+			}
+			if first.Open != tc.wantFirstOpen || first.Close != tc.wantFirstClose || last.Open != tc.wantLastOpen || last.Close != tc.wantLastClose {
+				t.Fatalf("adjusted OHLC mismatch: first=(%.4f, %.4f) last=(%.4f, %.4f)", first.Open, first.Close, last.Open, last.Close)
+			}
+			for _, bar := range bars {
+				if bar.AdjustmentBasis != tc.basis || bar.AdjustmentMethod != tc.wantMethod {
+					t.Fatalf("adjustment metadata mismatch: %+v", bar)
+				}
+				if bar.Volume == nil || bar.Amount == nil || bar.RawVolume == nil || bar.RawAmount == nil {
+					t.Fatalf("volume/amount/raw provenance must remain intact: %+v", bar)
+				}
+			}
+			if first.AdjustmentRefDate != tc.wantReference || last.AdjustmentRefDate != tc.wantReference {
+				t.Fatalf("unexpected adjustment reference dates: %q, %q; want %q", first.AdjustmentRefDate, last.AdjustmentRefDate, tc.wantReference)
+			}
+		})
+	}
+}
+
+func TestApplyTushareAdjustmentRejectsMissingOrInvalidFactors(t *testing.T) {
+	bar := model.DailyBar{TradeDate: "2026-10-26", Open: 10, High: 11, Low: 9, Close: 10}
+	if _, err := applyTushareAdjustment([]model.DailyBar{bar}, map[string]float64{}, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "requires daily bars and adjustment factors") {
+		t.Fatalf("empty factors should be rejected explicitly, got %v", err)
+	}
+	if _, err := applyTushareAdjustment([]model.DailyBar{bar}, map[string]float64{"2026-10-26": 2}, model.AdjustmentForward); err != nil {
+		t.Fatalf("valid factor should succeed: %v", err)
+	}
+	if _, err := applyTushareAdjustment([]model.DailyBar{bar}, map[string]float64{"2026-10-27": 2}, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "missing for daily bar date") {
+		t.Fatalf("missing daily factor should be rejected, got %v", err)
+	}
+	if _, err := applyTushareAdjustment([]model.DailyBar{bar}, map[string]float64{"2026-10-26": math.NaN()}, model.AdjustmentForward); err == nil {
+		t.Fatal("non-finite reference factor should be rejected")
 	}
 }
