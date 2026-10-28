@@ -129,9 +129,9 @@
 ## 2. 明确尚未完成
 
 - 原 Python Provider 的完整替换与字段级等价尚未完成：Efinance、AkShare 等仍有 Python 聚合逻辑或本地算法需要逐函数对照；Pytdx、Tushare、TickFlow 已有部分 Go adapter，但权限、优先级、单位、日期覆盖和失败语义仍需确认；Longbridge、Futu、Finnhub、Alpha Vantage 等海外/账户型来源按需求暂缓。Yahoo Finance Chart API 提供可选日 K 与实时快照适配器（均默认关闭、缺成交额固定 degraded）；网易财经 Quote/CSV 已有独立 Go adapter，但实时行情与历史 CSV 必须分别验收。网易历史 CSV 曾返回 502，实时 Quote 在 GitHub Runner 上 DNS 解析失败；当前 `.env.example` 与 `configs/providers.json` 仍将二者默认启用为后置回退，生产稳定性未验收前可分别设置 `MARKET_DATA_NETEASE_QUOTE_ENABLED=false` 与 `MARKET_DATA_NETEASE_DAILY_BARS_ENABLED=false` 关闭。
-- 多个国内数据域已有 Go 原生适配器，但覆盖与质量不等于完整迁移：核心指数快照、指数目录/当前成分/指数日 K（成分来源返回/排除条数已显式暴露）、市场广度、行业/概念排行、涨跌停池、财务/估值、龙虎榜、个股公告和新闻候选源已部分接入。仍缺严格时点财报与历史成分/公司行动数据、权威交易日历驱动的盘中和节假日判断、排行榜与涨跌停池的全量覆盖审计（池子 total 大于 items 时服务层会降级并标记截断原因）、资金流/筹码精确可用时间，以及旧 Python 接口字段级对账；详见迁移矩阵和数据源扩展计划。
+- 多个国内数据域已有 Go 原生适配器，但覆盖与质量不等于完整迁移：核心指数快照、指数目录/当前成分/指数日 K（成分来源返回/排除条数已显式暴露）、市场广度、行业/概念排行、涨跌停池、财务/估值、龙虎榜、个股公告和新闻候选源已部分接入。Tushare 已新增按日期读取“不晚于请求日的最近权重报告”能力，但仍缺成员纳入/剔除的真实生效区间与历史版本归档；另外仍缺严格时点财报/公司行动因子、权威交易日历驱动的盘中和节假日判断、排行榜与涨跌停池的全量覆盖审计（池子 total 大于 items 时服务层会降级并标记截断原因）、资金流/筹码精确可用时间，以及旧 Python 接口字段级对账；详见迁移矩阵和数据源扩展计划。
 - `go-core` 的新闻链路现有原生候选源并保留 bridge 回退；非中国市场概况、LLM、部分持久化及通知仍有 Python bridge 依赖。
-- 同花顺 Go Provider 已按能力接入证券搜索、行情/日 K、指数目录/当前成分/指数历史 K、核心指数快照、滚动交易日历、财务指标与三张报表、批量估值、涨跌停池、龙虎榜、人气/飙升榜；各能力默认关闭或需显式开关且要求有效 API Key。历史成分、部分行业历史指标、字段级 1:1 Python 等价与账号权限/限流尚未确认。不得把“代码已接入”解读为生产权限和质量已验收；参考接口仓库 [Kasign/Financial-API](https://github.com/Kasign/Financial-API)。
+- 同花顺 Go Provider 已按能力接入证券搜索、行情/日 K、指数目录/当前成分/指数历史 K、核心指数快照、滚动交易日历、财务指标与三张报表、批量估值、涨跌停池、龙虎榜、人气/飙升榜；各能力默认关闭或需显式开关且要求有效 API Key。历史成分生效区间（当前 as_of 报告日查询仅由实现专用接口的 Provider 提供）、部分行业历史指标、字段级 1:1 Python 等价与账号权限/限流尚未确认。不得把“代码已接入”解读为生产权限和质量已验收；参考接口仓库 [Kasign/Financial-API](https://github.com/Kasign/Financial-API)。
 - 已实现 MariaDB `analysis_tasks`、有界 Go Worker、`POST /api/v1/analysis/tasks` 的 202 + task_id、任务状态查询和 `after_sequence` 阶段事件轮询；SSE、取消、自动重试与前端状态展示仍未完成。重启时遗留的 running 任务会显式标记为 `worker_interrupted`，不自动重跑。
 - 已完成一部分真实 Provider 请求及 MariaDB/Redis 链路验证，但目标环境的完整生产回归仍未完成；CI 绿色不能替代真实网络和端到端验收。
 

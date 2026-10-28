@@ -428,7 +428,8 @@ components:
       required: [index_symbol, items, total, source, fetched_at, quality_status]
       properties:
         index_symbol: {type: string}
-        provider_report_date: {type: string, format: date, description: Latest constituent/weight report date when exposed}
+        as_of_date: {type: string, format: date, description: Requested historical query date; distinct from the source report date}
+        provider_report_date: {type: string, format: date, description: Latest constituent/weight report date at or before as_of when historical query is requested}
         items:
           type: array
           items: {$ref: '#/components/schemas/IndexConstituent'}
@@ -735,6 +736,7 @@ components:
         sector_ranking_capable: {type: boolean}
         index_quote_capable: {type: boolean}
         index_catalog_capable: {type: boolean}
+        historical_index_constituents_capable: {type: boolean, description: Provider explicitly supports historical constituent report-date queries}
         market_breadth_capable: {type: boolean}
         limit_pool_capable: {type: boolean}
         stock_boards_capable: {type: boolean}
@@ -1043,19 +1045,21 @@ paths:
 
   /api/v1/market/indices/{symbol}/constituents:
     get:
-      summary: 获取指定指数最近可用的成分股快照
-      description: Tushare 返回最近可用权重日，可能滞后于当前交易日；同花顺返回当前成分快照。
+      summary: 获取指定指数的最近或指定日期之前的成分权重报告快照
+      description: 未提供 as_of 时保持原有当前/最近快照行为。提供 as_of 时只使用显式支持历史查询的 Provider；Tushare 返回不晚于请求日期的最新 index_weight 报告日。as_of_date 是请求日期，provider_report_date 是实际报告日。该接口不表示成分在报告日至下次报告日之间持续有效，也不是严格历史成员生效区间回放。
       security:
         - ApiKeyAuth: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
-        - {name: source, in: query, required: false, description: Pin the provider to the source returned by the index catalog; omitted means configured priority fallback, schema: {type: string, enum: [hithink, tushare]}}
+        - {name: source, in: query, required: false, description: 指定来源；未提供时仅在具备相应能力的来源间选择，schema: {type: string, enum: [hithink, tushare]}}
+        - {name: as_of, in: query, required: false, description: 返回不晚于该日期的最新历史权重报告；只支持 YYYY-MM-DD，不能替代成分生效区间，schema: {type: string, format: date}}
       responses:
         '200':
-          description: 指数成分股票目录及来源质量
+          description: 指数成分股票目录及来源质量；历史查询同时返回 as_of_date 与 provider_report_date
           content:
             application/json:
               schema: {$ref: '#/components/schemas/IndexConstituentSnapshot'}
+        '400': {description: Invalid date or source does not support historical query}
         '401': {description: API key required}
         '502': {description: All index constituent providers failed}
         '503': {description: No index catalog provider enabled}

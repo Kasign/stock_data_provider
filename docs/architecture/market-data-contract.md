@@ -183,6 +183,14 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 - `total` 与 `items` 表示规范化后实际返回的成分数量；`provider_returned` 表示来源在去重/名称补全前返回的候选成分条数；`excluded_count` 记录因重复或缺少可核验名称而被排除的候选条数。若 `provider_returned > 0`，必须满足 `provider_returned = total + excluded_count`。
 - 只要 `excluded_count > 0`，快照质量不得为 `valid`。旧缓存或旧 Provider 没有来源覆盖计数时，非空且原本为 `valid/degraded` 的快照必须降级并附加 `provider_constituent_source_coverage_unreported`；原本为 `unknown` 的快照保持 `unknown`，只补充覆盖原因，不能通过补元数据变成已确认数据。缓存命中与新 Provider 回包必须调用同一处理逻辑。这些字段描述当前来源快照的覆盖情况，并不代表历史成分生效日期已知。
 
+## 指数成分 as_of 查询契约
+
+- GET /api/v1/market/indices/{symbol}/constituents?as_of=YYYY-MM-DD 为可选的历史报告日查询；不传 as_of 时维持原有当前/最近成分快照行为。
+- 历史查询只选择实现 HistoricalIndexConstituentProvider 的 Provider，不允许将仅支持当前成分的来源作为历史查询的后备。当前接入的 Tushare 按月向前查询 index_weight，最多检索 120 个月，并只接受不晚于请求日期的源报告行。
+- 响应中的 as_of_date 表示请求日期，provider_report_date 表示源端实际权重报告日，两者不可混用。数据原因 provider_as_of_uses_latest_index_weight_report_not_effective_membership_interval 明确表明该实现是“指定日期之前最近一份权重报告”，并未证明每只证券的真实纳入/剔除生效区间。
+- 该接口不等于完整严格的 point-in-time 回放：查询仍依赖请求时上游可返回的数据，尚未持久化历史报告版本，也无法证明上游从未回补或修正报告。不得仅凭 as_of 参数宣称历史回测无前视偏差。
+- /api/v1/data-sources 的 historical_index_constituents_capable 只表示 Provider 实现了历史报告日查询契约，不代表已具备成员生效区间或历史修订归档。
+
 
 ## A 股证券名称/代码搜索
 
