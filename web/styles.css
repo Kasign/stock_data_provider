@@ -3237,7 +3237,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-activity-controls input { min-height: 38px; }
 .market-activity-controls .button { min-height: 38px; font-size: 12px; }
 .market-activity-table { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-.activity-stock-link { min-height: 32px; padding: 5px 0; font-size: 12px; }
+.activity-stock-link { min-height: 38px; padding: 5px 0; font-size: 12px; }
 .market-activity-footer span { font-size: 12px; }
 .market-activity-footer .button { min-height: 36px; font-size: 12px; }
 .calendar-month-navigation .icon-button { min-width: 38px; min-height: 38px; font-size: 13px; }

@@ -743,6 +743,7 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(finalCssRuleBody(".market-activity-controls label"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-activity-controls input"), /min-height: 38px/);
   assert.match(finalCssRuleBody(".market-activity-controls .button"), /min-height: 38px/);
+  assert.match(finalCssRuleBody(".activity-stock-link"), /min-height: 38px/);
   assert.match(finalCssRuleBody(".calendar-month-navigation .icon-button"), /min-width: 38px; min-height: 38px/);
   assert.match(finalCssRuleBody(".trading-calendar-weekdays span"), /font-size: 11px/);
   assert.match(stylesheet, /\.trading-calendar-day span \{ font-size: 11px; line-height: 1\.25; text-align: center; overflow-wrap: anywhere; \}/);
