@@ -399,6 +399,8 @@ test("connection-check results are isolated between saved settings and the modal
   assert.ok(savedCheck, "saved connection check must exist");
   assert.match(savedCheck, /const settingsToCheck = \{ \.\.\.state\.settings \};/);
   assert.match(savedCheck, /const generation = \+\+savedConnectionCheckGeneration/);
+  assert.match(savedCheck, /button\.setAttribute\("aria-busy", "true"\)/);
+  assert.match(savedCheck, /button\.removeAttribute\("aria-busy"\)/);
   assert.match(savedCheck, /if \(generation !== savedConnectionCheckGeneration\) return/);
   assert.match(savedCheck, /当前已保存的行情与分析 API 地址/);
   assert.match(savedCheck, /if \(generation === savedConnectionCheckGeneration\)[\s\S]*?button\.disabled = false/);
@@ -406,11 +408,14 @@ test("connection-check results are isolated between saved settings and the modal
   const draftCheck = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(draftCheck, "unsaved draft connection check must exist");
   assert.match(draftCheck, /const generation = \+\+draftConnectionCheckGeneration/);
+  assert.match(draftCheck, /button\.setAttribute\("aria-busy", "true"\)/);
+  assert.match(draftCheck, /button\.removeAttribute\("aria-busy"\)/);
   assert.match(draftCheck, /settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\)/);
   assert.match(draftCheck, /if \(generation !== draftConnectionCheckGeneration \|\| !\$\("#settings-dialog"\)\.open\) return/);
   assert.match(draftCheck, /connectionDraftChanged\(testedDraft, currentDraft\)/);
   assert.match(draftCheck, /if \(generation === draftConnectionCheckGeneration && \$\("#settings-dialog"\)\.open\)/);
   assert.match(app, /\$\("#settings-dialog"\)\.addEventListener\("close", \(\) => \{[\s\S]*?draftConnectionCheckGeneration \+= 1;[\s\S]*?\}\)/);
+  assert.match(app, /draftConnectionCheckGeneration \+= 1;[\s\S]*?\$\("#settings-check-draft-connection"\)\.removeAttribute\("aria-busy"\)/);
 });
 
 test("market connection changes invalidate all in-flight stock-research panels", () => {
