@@ -600,7 +600,7 @@ func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymb
 		}
 		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
 			// 无数据，或虽有 K 线但无法确认快照质量时，都先让后续来源尝试。
-			if unknownCandidate == nil || len(snapshot.Items) > len(unknownCandidate.Items) {
+			if betterUnknownIndexDailyBarsSnapshot(snapshot, unknownCandidate) {
 				unknownCandidate = snapshot
 			}
 			if len(snapshot.Items) == 0 {
