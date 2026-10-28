@@ -1182,6 +1182,9 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
     importBody,
     /localStorage\.removeItem\(TASK_REFERENCE_KEY\);[\s\S]*?applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?applyTheme\(imported\.theme\)/
   );
+  assert.match(importBody, /const importedActiveTaskId = state\.taskId;[\s\S]*?const importedActiveTaskBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase;/);
+  assert.match(importBody, /applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?state\.suppressedHistoryTaskId = importedActiveTaskId;[\s\S]*?state\.suppressedHistoryTaskBase = importedActiveTaskId \? importedActiveTaskBase : "";/,
+    "导入工作区后，旧活动任务不能在后续轮询中重新写回本地历史");
   const applyIndex = importBody.indexOf("applySettings(nextSettings, { persistPreviousActiveTask: false })");
   assert.ok(applyIndex >= 0, "workspace import must apply the validated settings");
   const rollbackIndex = importBody.indexOf("\n  } catch (error) {", applyIndex);
