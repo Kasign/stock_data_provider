@@ -3471,6 +3471,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (event.key !== "Tab" || window.innerWidth > 600) return;
+  if (document.querySelector("dialog[open]")) return;
   const sidebar = $(".sidebar");
   if (!sidebar.classList.contains("is-open")) return;
   const focusable = [...sidebar.querySelectorAll(
@@ -3670,7 +3671,10 @@ $("#refresh-button").addEventListener("click", async () => {
   }
 });
 $("#open-settings").addEventListener("click", openSettings);
-$("#open-settings-side").addEventListener("click", openSettings);
+$("#open-settings-side").addEventListener("click", () => {
+  setMobileNavigationOpen(false, { restoreFocus: true });
+  openSettings();
+});
 $("#save-settings").addEventListener("click", saveSettingsFromForm);
 $("#close-settings-dialog").addEventListener("click", closeSettingsWithGuard);
 $("#cancel-settings-dialog").addEventListener("click", closeSettingsWithGuard);

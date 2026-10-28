@@ -1169,3 +1169,9 @@ test("mobile navigation drawer moves focus inside and traps Tab navigation", () 
   assert.match(app, /lastFocusable\.focus\(\)[\s\S]*?firstFocusable\.focus\(\)/);
   assert.match(app, /setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)/);
 });
+
+ 
+test("移动侧栏打开连接设置时先关闭抽屉，模态对话框接管键盘焦点", () => {
+  assert.match(app, /if \(document\.querySelector\("dialog\[open\]"\)\) return;[\s\S]*?const sidebar = \$\("\.sidebar"\)/);
+  assert.match(app, /\$\("#open-settings-side"\)\.addEventListener\("click", \(\) => \{\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);\s*openSettings\(\);/);
+});
