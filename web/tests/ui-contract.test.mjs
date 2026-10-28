@@ -394,13 +394,23 @@ test("data-center checks are invalidated when a saved API connection changes", (
   assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(analysisBaseChanged \|\| marketConnectionChanged\) \{\s*dataCenter\.invalidate\(/);
 });
 
-test("connection-check failures ignore errors from a superseded configuration", () => {
-  const checkConnection = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.ok(checkConnection, "settings connection check must exist");
-  assert.match(checkConnection, /let settingsToCheck = null/);
-  assert.match(checkConnection, /catch \(error\) \{[\s\S]*?const currentDraft = readConnectionDraft\(\);[\s\S]*?connectionDraftChanged\(testedDraft, currentDraft\)/);
-  assert.match(checkConnection, /if \(configurationChanged\) \{[\s\S]*?旧错误已忽略，请使用当前配置重新检查/);
-  assert.match(checkConnection, /连接检查失败：[\s\S]*?finally \{/);
+test("connection-check results are isolated between saved settings and the modal draft", () => {
+  const savedCheck = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(savedCheck, "saved connection check must exist");
+  assert.match(savedCheck, /const settingsToCheck = \{ \.\.\.state\.settings \};/);
+  assert.match(savedCheck, /const generation = \+\+savedConnectionCheckGeneration/);
+  assert.match(savedCheck, /if \(generation !== savedConnectionCheckGeneration\) return/);
+  assert.match(savedCheck, /当前已保存的行情与分析 API 地址/);
+  assert.match(savedCheck, /if \(generation === savedConnectionCheckGeneration\)[\s\S]*?button\.disabled = false/);
+
+  const draftCheck = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.ok(draftCheck, "unsaved draft connection check must exist");
+  assert.match(draftCheck, /const generation = \+\+draftConnectionCheckGeneration/);
+  assert.match(draftCheck, /settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\)/);
+  assert.match(draftCheck, /if \(generation !== draftConnectionCheckGeneration \|\| !\$\("#settings-dialog"\)\.open\) return/);
+  assert.match(draftCheck, /connectionDraftChanged\(testedDraft, currentDraft\)/);
+  assert.match(draftCheck, /if \(generation === draftConnectionCheckGeneration && \$\("#settings-dialog"\)\.open\)/);
+  assert.match(app, /\$\("#settings-dialog"\)\.addEventListener\("close", \(\) => \{[\s\S]*?draftConnectionCheckGeneration \+= 1;[\s\S]*?\}\)/);
 });
 
 test("market connection changes invalidate all in-flight stock-research panels", () => {
@@ -703,6 +713,10 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /event\.preventDefault\(\);[\s\S]*?closeSettingsWithGuard\(\)/);
   assert.match(app, /mergeConnectionDraft\(readConnectionDraft\(\), state\.settings\)/);
   assert.match(app, /async function checkConnectionFromSettings\(\)/);
+  assert.match(app, /const settingsToCheck = \{ \.\.\.state\.settings \};[\s\S]*?currentSettings\.marketBase !== settingsToCheck\.marketBase/);
+  assert.match(app, /async function checkDraftConnectionFromSettings\(\)/);
+  assert.match(html, /id="settings-check-draft-connection"[^>]*>检查未保存配置<\/button>/);
+  assert.match(html, /id="settings-draft-connection-check"/);
   assert.match(app, /let settingsToCheck = null;[\s\S]*?settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);/);
   assert.match(app, /runHealthCheck\(marketHealth, settingsToCheck\)/);
   assert.match(app, /runHealthCheck\(analysisHealth, settingsToCheck\)/);
@@ -716,7 +730,7 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /currentSettingsToCheck\.marketBase !== settingsToCheck\.marketBase/);
   assert.match(app, /currentSettingsToCheck\.analysisBase !== settingsToCheck\.analysisBase/);
   assert.match(app, /currentSettingsToCheck\.apiKey !== settingsToCheck\.apiKey/);
-  assert.match(app, /连接地址、API Key 或已保存配置发生变化，已忽略旧结果/);
+  assert.match(app, /检查期间连接草稿或已保存配置发生变化，已忽略旧结果/);
   assert.match(app, /不会更改全局连接状态/);
   assert.match(html, /服务器配置 API 待接入/);
   assert.match(html, /服务器 \.env/);
