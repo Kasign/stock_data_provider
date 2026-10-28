@@ -86,7 +86,7 @@ func TestTencentQuoteDegradesFutureProviderTimestamp(t *testing.T) {
 	f[30], f[31], f[32], f[33], f[34] = "20991231112802", "-18.57", "-1.394", "1331.98", "1312"
 	f[35], f[37], f[38], f[44] = "1313.31/34136/4525398959", "452540", "5.0", "896.8"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintf(w, "v_sh600519=\\\"%s\\\";", strings.Join(f, "~"))
+		fmt.Fprintf(w, "v_sh600519=\"%s\";", strings.Join(f, "~"))
 	}))
 	defer server.Close()
 	p := NewTencent(2*time.Second)

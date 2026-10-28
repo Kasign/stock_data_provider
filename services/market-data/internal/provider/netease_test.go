@@ -167,7 +167,7 @@ func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
 
 
 func TestNeteaseFetchQuoteDegradesFutureProviderTimestamp(t *testing.T) {
-	payload := "_ntes_quote_callback({\\\"0600036\\\":{\\\"code\\\":\\\"0600036\\\",\\\"symbol\\\":\\\"600036\\\",\\\"name\\\":\\\"招商银行\\\",\\\"price\\\":42.35,\\\"percent\\\":0.0127,\\\"updown\\\":0.53,\\\"open\\\":41.70,\\\"high\\\":42.38,\\\"low\\\":41.57,\\\"yestclose\\\":41.82,\\\"volume\\\":56829700,\\\"turnover\\\":2386858667,\\\"time\\\":\\\"2099/12/31 11:07:58\\\"}});"
+	payload := `_ntes_quote_callback({"0600036":{"code":"0600036","symbol":"600036","name":"招商银行","price":42.35,"percent":0.0127,"updown":0.53,"open":41.70,"high":42.38,"low":41.57,"yestclose":41.82,"volume":56829700,"turnover":2386858667,"time":"2099/12/31 11:07:58"}});`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(payload)) }))
 	defer server.Close()
 	p := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")

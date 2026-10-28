@@ -92,7 +92,7 @@ func TestSinaFetchQuoteDegradesFutureProviderTimestamp(t *testing.T) {
 	fields[4], fields[5], fields[8], fields[9] = "10.50", "9.50", "10000", "102000"
 	fields[30], fields[31] = "2099-12-31", "15:00:00"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprintf(w, "var hq_str_sh600519=\\\"%s\\\";\\n", strings.Join(fields, ","))
+		_, _ = fmt.Fprintf(w, "var hq_str_sh600519=\"%s\";\n", strings.Join(fields, ","))
 	}))
 	defer server.Close()
 	q, err := NewSina(2*time.Second, server.URL+"/list=").FetchQuote(context.Background(), "600519.SH")
