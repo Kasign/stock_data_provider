@@ -979,3 +979,9 @@
 - 从其他页面首次进入问股时才执行视图切入同步；停留在问股页重复触发导航不会重置用户选择。
 - 补充静态 UI 契约与 API_CONTRACT 设计边界。Chat/消息/流式接口仍未接入，没有开放真实发送操作。
 - 本轮未手动运行测试、构建或浏览器自动化；提交后由 GitHub Actions 自动 Smoke 验证。
+
+## 2026-10-28 市场活动连接切换保护
+
+- 行情 API 路径或 API Key 实际变化时，applySettings 调用 marketActivity.invalidateConnection()，中止龙虎榜与交易日历的在途请求。
+- 失效处理会清除旧连接下的龙虎榜和交易日历结果、重置龙虎榜分页并更新状态提示；AbortSignal 与请求代次检查共同阻止迟到响应再次写回旧数据。
+- 代码与回归契约同属提交 175a9ac（https://github.com/Kasign/stock_data_provider/commit/175a9ac04379f89b404777b19eadf803d903f6aa）。本轮未运行测试、构建、浏览器自动化或 CI，新增断言尚未执行。
