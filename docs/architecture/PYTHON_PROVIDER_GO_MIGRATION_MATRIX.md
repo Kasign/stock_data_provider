@@ -323,3 +323,7 @@ Tushare 公告适配器对稳定 article ID 的重复记录仍只保留一条，
 ## 2026-10-28 涨跌停池证券过滤可见性
 
 Tushare 涨跌停池过滤非 A 股证券时，必须在父快照质量原因中标记 `provider_non_a_share_security_rows_excluded`。该约束只说明已观察到的源记录被过滤，不代表供应商原始全集覆盖完整；对应本地 HTTP fixture 测试源码待统一执行。
+
+## 2026-10-28 指数成分最新报告日语义
+
+指数成分快照必须先确定源端最新报告日，再统计支持及排除的源行。不能因最新日期的行被证券类型过滤而误用旧日期；`provider_returned` 与 `excluded_count` 必须与 `total` 对账。最新报告日无可用 A 股成员时应输出 `unknown` 候选并继续跨 Provider 回退。相关 HTTP fixture 测试源码已添加，待统一执行。

@@ -261,3 +261,7 @@ Tushare 公告端点返回完全重复的记录时，适配器按规范化的证
 ### 涨跌停池非 A 股记录过滤
 
 涨跌停池 Provider 过滤非 A 股证券时，必须在父快照的 `quality_reasons` 中记录 `provider_non_a_share_security_rows_excluded`。过滤可以避免 ETF 等非目标证券进入个股涨跌停池，但不能让上游返回行与标准化输出之间的差异静默消失；即使接受的 A 股条目仍可展示，快照也应保持降级。
+
+### 指数成分最新报告日与源记录覆盖
+
+选择指数成分快照时，应先依据源端 `trade_date` 确定最新报告日，再过滤不受支持的证券类型。不能因为最新报告日仅包含不受支持的证券而悄悄退回较旧报告日。`provider_returned` 应统计所选最新报告日的源记录；`excluded_count` 必须覆盖不受支持证券及名称无法核验的记录，且 `provider_returned = total + excluded_count`。最新报告日没有任何可用 A 股成分时，应返回带报告日与排除计数的 `unknown` 候选，让服务层继续尝试其他来源。

@@ -890,3 +890,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 ## 2026-10-28 Tushare 涨跌停池过滤质量补充
 
 Tushare `limit_list_d` 返回的非 A 股代码会被过滤，不进入标准化涨跌停池；此前该过滤没有留下质量原因。现在将 `provider_non_a_share_security_rows_excluded` 加入父快照原因列表，避免把过滤后的条目集合误认为与原始响应完全一致。已新增 HTTP fixture 回归测试源码，尚未执行。
+
+## 2026-10-28 指数成分报告日与覆盖计数复核
+
+- Tushare `index_weight` 现在先按源端日期选择最新报告日，再过滤非 A 股/无法标准化的成分记录，避免最新报告日因过滤后为空而错误回退到旧日期。
+- `ProviderReturned` 覆盖所选报告日的源记录；`ExcludedCount` 同时统计不受支持证券与名称无法核验的记录，保持 `ProviderReturned = Total + ExcludedCount`。
+- 最新报告日没有可用 A 股成分时，返回带日期与排除计数的 `unknown` 快照，让服务层继续回退，不再请求较旧月份补成分。新增两项 HTTP fixture 测试源码，尚未执行。
