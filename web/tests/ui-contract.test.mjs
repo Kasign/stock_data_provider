@@ -1474,14 +1474,14 @@ test("工作区导入与自选股存储使用同一规则识别带后缀的重�
 test("清空或导入本地任务历史会隔离在途创建请求的晚到响应", () => {
   assert.match(app, /taskHistoryGeneration: 0/);
   const createStart = app.indexOf("async function createTask(event) {");
-  const createEnd = app.indexOf("\\nfunction startAnalysisForSymbol(", createStart);
+  const createEnd = app.indexOf("function startAnalysisForSymbol(", createStart + 1);
   const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
   assert.ok(creator, "任务创建方法必须存在");
   assert.match(creator, /const creationHistoryGeneration = state\.taskHistoryGeneration;/);
   assert.match(creator, /const taskHistoryWasReplaced = creationHistoryGeneration !== state\.taskHistoryGeneration;/);
   assert.match(creator, /if \(taskHistoryWasReplaced\) \{[\s\S]*?未重新写入该引用[\s\S]*?\} else \{[\s\S]*?upsertRecentTask\(endpointRecord, localStorage\)/);
   const clearStart = app.indexOf("function clearRecentTaskHistory() {");
-  const clearEnd = app.indexOf("\\nfunction setWatchlistFeedback(", clearStart);
+  const clearEnd = app.indexOf("function setWatchlistFeedback(", clearStart + 1);
   const clearBody = clearStart >= 0 && clearEnd > clearStart ? app.slice(clearStart, clearEnd) : "";
   assert.match(clearBody, /state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
   const importBody = app.match(/async function importBrowserDataFile\(file\) \{[\s\S]*?\n\}/)?.[0] || "";
