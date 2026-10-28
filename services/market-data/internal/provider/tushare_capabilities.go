@@ -223,7 +223,7 @@ func (p *Tushare) FetchStockBasic(ctx context.Context, rawSymbol string) (*model
 		return nil, fmt.Errorf("Tushare stock_basic 未返回 %s", symbol)
 	}
 	var selected []json.RawMessage
-	for _, row := range table.rows {
+	for index, row := range table.rows {
 		code, readErr := table.stringValue(row, "ts_code")
 		if readErr != nil {
 			return nil, readErr
@@ -232,8 +232,10 @@ func (p *Tushare) FetchStockBasic(ctx context.Context, rawSymbol string) (*model
 		if normErr != nil || canonical != symbol {
 			return nil, fmt.Errorf("Tushare stock_basic 返回证券代码不匹配: requested=%s returned=%q", symbol, code)
 		}
+		if selected != nil {
+			return nil, fmt.Errorf("Tushare stock_basic 第 %d 行重复返回证券 %s", index, symbol)
+		}
 		selected = row
-		break
 	}
 	if selected == nil {
 		return nil, fmt.Errorf("Tushare stock_basic 未找到请求证券 %s", symbol)

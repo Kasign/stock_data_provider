@@ -363,6 +363,31 @@ func TestTushareStockBasicRejectsUnknownMarketInsteadOfAssumingMainBoard(t *test
 	}
 }
 
+
+
+func TestTushareStockBasicRejectsDuplicateRows(t *testing.T) {
+	fields := []string{"ts_code", "name", "industry", "market", "exchange", "list_status", "list_date", "delist_date"}
+	row := []any{"600519.SH", "贵州茅台", "白酒", "主板", "SSE", "L", "20010827", ""}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare stock_basic request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "stock_basic" || request.Params["ts_code"] != "600519.SH" {
+			t.Errorf("unexpected Tushare stock_basic request: %+v", request)
+		}
+		writeTushareTestTable(w, fields, [][]any{row, row})
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	if _, err := provider.FetchStockBasic(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), "重复返回证券") {
+		t.Fatalf("duplicate stock_basic rows must be rejected, got %v", err)
+	}
+}
+
 func TestTushareStockBasicMapsKnownMarketClassification(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeTushareTestTable(w,
