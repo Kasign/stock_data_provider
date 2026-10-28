@@ -68,17 +68,55 @@ test("renames and removes entries without retaining unrelated properties", () =>
   assert.deepEqual(readWatchlist(storage), []);
 });
 
-test("caps list size, skips malformed persisted entries and tolerates unavailable storage", () => {
+test("caps list size and applies a smaller read limit without changing the stored array", () => {
   const storage = makeStorage();
   for (let index = 0; index < MAX_WATCHLIST_ITEMS + 7; index++) {
     addWatchlistSymbol(String(index).padStart(6, "0"), "stock-" + index, storage, "2026-10-23T00:00:00Z");
   }
   assert.equal(readWatchlist(storage).length, MAX_WATCHLIST_ITEMS);
   assert.deepEqual(readWatchlist(storage, 0), []);
+  assert.equal(readWatchlistState(storage).storageValid, true);
+});
 
-  storage.setItem(WATCHLIST_KEY, JSON.stringify([{ symbol: "bad-symbol" }, { symbol: "600519.SH", name: "valid" }]));
-  assert.deepEqual(readWatchlist(storage), [{ symbol: "600519.SH", name: "valid", updated_at: "" }]);
+test("rejects partially malformed, duplicate and over-limit stored records without partial rewrites", () => {
+  const cases = [
+    [{ symbol: "bad-symbol" }, { symbol: "600519.SH", name: "valid" }],
+    [{ symbol: "600519.SH", name: "first" }, { symbol: "600519.SH", name: "duplicate" }],
+    Array.from({ length: MAX_WATCHLIST_ITEMS + 1 }, (_, index) => ({
+      symbol: String(index).padStart(6, "0"),
+      name: "stock-" + index
+    }))
+  ];
 
+  for (const records of cases) {
+    const original = JSON.stringify(records);
+    let stored = original;
+    let writes = 0;
+    const storage = {
+      getItem() { return stored; },
+      setItem(_key, value) { writes += 1; stored = String(value); }
+    };
+
+    const state = readWatchlistState(storage);
+    assert.equal(state.storageReadable, true);
+    assert.equal(state.storageValid, false);
+    assert.equal(state.reason, "invalid");
+
+    const added = addWatchlistSymbol("688001.SH", "测试股票", storage);
+    assert.equal(added.persisted, false);
+    assert.equal(added.storageValid, false);
+    const renamed = renameWatchlistSymbol("600519.SH", "核心观察", storage);
+    assert.equal(renamed.persisted, false);
+    assert.equal(renamed.storageValid, false);
+    const removed = removeWatchlistSymbol("600519.SH", storage);
+    assert.equal(removed.persisted, false);
+    assert.equal(removed.storageValid, false);
+    assert.equal(writes, 0, "invalid or truncated data must not be rewritten as a partial list");
+    assert.equal(stored, original, "the malformed original bytes must remain untouched");
+  }
+});
+
+test("tolerates unavailable storage without attempting writes", () => {
   let writes = 0;
   const brokenStorage = {
     getItem() { throw new Error("storage disabled"); },

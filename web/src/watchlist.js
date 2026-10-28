@@ -53,17 +53,27 @@ function readRecords(storage, limit = MAX_WATCHLIST_ITEMS) {
   }
 
   const maxItems = Math.max(0, Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : MAX_WATCHLIST_ITEMS);
-  if (maxItems === 0) return { items: [], storageReadable: true, storageValid: true, reason: "" };
   const records = [];
   const seen = new Set();
+  let malformedRecord = parsed.length > MAX_WATCHLIST_ITEMS;
+
+  // 先检查完整原始数组，再按读取上限返回；不能因跳过坏记录或截断超限记录而允许后续写回。
   for (const item of parsed) {
     const normalized = normalizeRecord(item);
-    if (!normalized || seen.has(normalized.symbol)) continue;
+    if (!normalized || seen.has(normalized.symbol)) {
+      malformedRecord = true;
+      continue;
+    }
     seen.add(normalized.symbol);
     records.push(normalized);
-    if (records.length >= maxItems) break;
   }
-  return { items: records, storageReadable: true, storageValid: true, reason: "" };
+
+  return {
+    items: records.slice(0, Math.min(maxItems, MAX_WATCHLIST_ITEMS)),
+    storageReadable: true,
+    storageValid: !malformedRecord,
+    reason: malformedRecord ? "invalid" : ""
+  };
 }
 
 export function readWatchlistState(storage, limit = MAX_WATCHLIST_ITEMS) {
