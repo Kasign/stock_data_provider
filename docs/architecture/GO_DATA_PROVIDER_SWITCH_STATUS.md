@@ -16,6 +16,13 @@
 - **URL 环境变量**：配置校验清单中的 27 个 HTTP(S) Provider URL 字段已与 `services/market-data/.env.example` 对照，未发现遗漏。新增 URL 必须同步配置字段、环境变量、URL 校验、根/服务模板、启动装配和文档。Pytdx 主机列表、BaoStock 主机/端口是 TCP 配置，不算 URL。
 - **默认能力文档**：已校正文案使其与 `providers.json` 对齐。当前默认配置启用网易行情/日 K 作为后置回退、BaoStock 财务/交易日历；这不代表相关上游在部署网络中已完成稳定性验收。Yahoo 默认关闭。README 已改为描述“部分国内数据域已接入”，同时明确字段覆盖、权限、质量和时点语义尚不等价。
 
+### Tushare 财务报表扩展（2026-10-28）
+
+- 已在现有 Tushare `FundamentalsProvider` 中增加 `income`、`balancesheet`、`cashflow` 三类报告端点，复用既有季度快照 API，不新增重复路由。
+- 新增分区 `income_statement`、`balance_sheet`、`cash_flow_statement`，仅选择目标报告期、`report_type=1` 的合并报表和已公开公告版本；公告日期优先使用实际公告日期 `f_ann_date`，缺失时才回退 `ann_date`，未来或报告期前的公告版本不选用。
+- 三张报表端点权限/响应失败时只把对应分区标记为降级，不丢弃已有六组标准指标；缺字段保留缺失并记录质量原因，不补零。
+- 代码与 HTTP fixture 测试源码已提交，本轮未运行测试、构建、CI 或真实 Provider 请求。Tushare 账号权限和字段级数据仍须统一验收。
+
 ### 质量与时间契约修复
 
 | 数据域 | 当前服务层约束 |

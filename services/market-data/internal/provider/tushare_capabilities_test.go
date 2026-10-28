@@ -15,6 +15,7 @@ import (
 type tushareIndexWeightRequest struct {
 	APIName string            `json:"api_name"`
 	Params  map[string]string `json:"params"`
+	Fields  string            `json:"fields"`
 }
 
 func writeTushareTestTable(w http.ResponseWriter, fields []string, items [][]any) {
@@ -427,6 +428,67 @@ func TestTushareIndexDailyBarsRejectsFutureEndDateBeforeRequest(t *testing.T) {
 	}
 }
 
+func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
+	const period = "20260630"
+	const announcementDate = "20260830"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare financial request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		fields := strings.Split(request.Fields, ",")
+		values := make([]any, len(fields))
+		for i, field := range fields {
+			switch field {
+			case "ts_code":
+				values[i] = "600519.SH"
+			case "ann_date", "f_ann_date":
+				values[i] = announcementDate
+			case "end_date":
+				values[i] = period
+			case "report_type":
+				values[i] = "1"
+			default:
+				values[i] = 1.0
+			}
+		}
+		switch request.APIName {
+		case "fina_indicator", "income", "balancesheet", "cashflow":
+			writeTushareTestTable(w, fields, [][]any{values})
+		default:
+			t.Errorf("unexpected Tushare financial endpoint %q", request.APIName)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	snapshot, err := client.FetchFundamentals(context.Background(), "600519.SH", 2026, 2)
+	if err != nil {
+		t.Fatalf("FetchFundamentals: %v", err)
+	}
+	if len(snapshot.Sections) != 9 {
+		t.Fatalf("expected six indicator groups plus three statements, got %d sections", len(snapshot.Sections))
+	}
+	for _, category := range []string{"income_statement", "balance_sheet", "cash_flow_statement"} {
+		found := false
+		for _, section := range snapshot.Sections {
+			if section.Category == category {
+				found = section.HasData && section.QualityStatus == model.QualityValid && section.PublicationDate == "2026-08-30"
+				if !found {
+					t.Fatalf("statement section %s missing expected values or publication date: %+v", category, section)
+				}
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected usable statement section %q", category)
+		}
+	}
+}
+
 func TestTushareIndexDailyBarsDegradesMissingProviderTimestamp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request tushareIndexWeightRequest
@@ -595,7 +657,16 @@ func TestTushareFundamentalsIgnoresFutureAnnouncementVersion(t *testing.T) {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		if request.APIName != "fina_indicator" || request.Params["ts_code"] != "600519.SH" || request.Params["period"] != periodEnd {
+		if request.APIName != "fina_indicator" {
+			// 三张财务报表在本用例中返回空表，重点验证公告日期门禁，不把其当成接口故障。
+			if request.APIName == "income" || request.APIName == "balancesheet" || request.APIName == "cashflow" {
+				writeTushareTestTable(w, strings.Split(request.Fields, ","), [][]any{})
+				return
+			}
+			t.Errorf("unexpected Tushare fundamentals request: %+v", request)
+			return
+		}
+		if request.Params["ts_code"] != "600519.SH" || request.Params["period"] != periodEnd {
 			t.Errorf("unexpected Tushare fundamentals request: %+v", request)
 		}
 		// 将未来公告放在第一行，确保适配器不会直接选择它。
