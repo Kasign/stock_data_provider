@@ -174,10 +174,10 @@ test("individual stock research uses one detail workspace without duplicate chip
   assert.ok(stylesheet.includes(".research-overview-grid") && stylesheet.includes(".supplement-quality-degraded"));
 });
 test("watchlist task and Run summaries refresh when background state changes", () => {
-  const taskRenderer = app.match(/function renderTask\\(task\\) \\{[\\s\\S]*?\\n\\}/)?.[0] || "";
-  const runRenderer = app.match(/function renderTaskResult\\(result\\) \\{[\\s\\S]*?\\n\\}/)?.[0] || "";
-  assert.match(taskRenderer, /if \\(state\\.view === "watchlist"\\) renderWatchlist\\(\\);/, "Task 状态更新时刷新可见自选卡片");
-  assert.match(runRenderer, /if \\(state\\.view === "watchlist"\\) renderWatchlist\\(\\);/, "Run 结果更新时刷新可见自选卡片");
+  const taskRenderer = app.match(/function renderTask\(task\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const runRenderer = app.match(/function renderTaskResult\(result\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(taskRenderer, /if \(state\.view === "watchlist"\) renderWatchlist\(\);/, "Task 状态更新时刷新可见自选卡片");
+  assert.match(runRenderer, /if \(state\.view === "watchlist"\) renderWatchlist\(\);/, "Run 结果更新时刷新可见自选卡片");
 });
 
 test("market overview refresh summaries are isolated by status region and guarded against stale runs", () => {
