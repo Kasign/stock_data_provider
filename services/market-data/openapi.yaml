@@ -152,7 +152,7 @@ components:
       type: object
       required: [category, has_data, metrics, quality_status]
       properties:
-        category: {type: string, enum: [profitability, operating, growth, solvency, cash_flow, dupont]}
+        category: {type: string, enum: [profitability, operating, growth, solvency, cash_flow, dupont, income_statement, balance_sheet, cash_flow_statement]}
         report_date: {type: string, format: date}
         publication_date: {type: string, format: date, description: Disclosure date for the selected provider revision; not an as_of historical revision selector}
         has_data: {type: boolean}
@@ -884,21 +884,24 @@ paths:
         '503': {description: No stock-basic provider enabled}
   /api/v1/stocks/{symbol}/fundamentals:
     get:
-      summary: Get quarterly financial indicators
+      summary: Get quarterly indicators and financial statement sections
       description: >-
-        Returns six groups of quarterly indicators for an explicit report period. report_date is the financial
-        period end; publication_date is the disclosure date of the selected provider revision. The endpoint returns the
-        latest revision available from the provider for that report period and has no as_of parameter or historical
-        restatement reconstruction. For point-in-time analysis, ignore values whose publication_date is after the
-        strategy reference date; this can omit the value rather than recover an earlier revision. Values preserve
-        provider-native numeric scale. This is an indicators API, not a complete financial-statement line-item API.
+        Returns six groups of quarterly financial indicators and may also include selected income-statement,
+        balance-sheet and cash-flow-statement line items when a configured provider supports them. Statement sections
+        are not full upstream statements; missing fields remain absent and each section carries its own quality state.
+        report_date is the financial period end; publication_date is the disclosure date of the selected provider
+        revision. Income and cash-flow statement values use a single-quarter consolidated report where supported;
+        balance-sheet values use the consolidated period-end report. The endpoint returns the latest revision available
+        from the provider for that report period and has no as_of parameter or historical restatement reconstruction.
+        For point-in-time analysis, a publication date after the strategy reference date must be excluded; an earlier
+        revision is not reconstructed. Values preserve provider-native numeric scale and explicit units.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: year, in: query, required: true, schema: {type: integer, minimum: 2007}}
         - {name: quarter, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 4}}
       responses:
         '200':
-          description: Quarterly financial indicators
+          description: Quarterly indicators and supported financial-statement sections
           content:
             application/json:
               schema: {$ref: '#/components/schemas/FundamentalsSnapshot'}
