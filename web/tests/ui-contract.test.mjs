@@ -120,7 +120,7 @@ test("browser-local watchlist is wired to existing query/analysis flows and stor
   assert.match(app, /removeWatchlistSymbol\(symbol, localStorage\)/);
   assert.match(app, /renameWatchlistSymbol\(record\.symbol, aliasInput\.value, localStorage\)/);
   assert.match(app, /function startAnalysisForSymbol\(input\)/);
-  assert.match(app, /state\.isQuerying[\s\S]*?主行情查询尚未完成/);
+  assert.match(app, /function startAnalysisForSymbol\(input\) \{[\s\S]*?symbol = normalizeAnalysisSymbol\(input\);[\s\S]*?\$\("#task-symbols"\)\.value = symbol;[\s\S]*?setView\("tasks"\);[\s\S]*?\$\("#task-form"\)\.requestSubmit\(\);/);
   assert.match(watchlistModule, /WATCHLIST_KEY/);
   assert.doesNotMatch(watchlistModule, /apiKey|runResult|report\s*:/i, "watchlist persistence must not include secrets or report payloads");
   assert.match(stylesheet, /\.watchlist-item\s*\{/);
@@ -133,7 +133,7 @@ test("analysis tasks can load the browser watchlist and withhold unavailable pos
   assert.match(html, /id="task-symbol-help"[^>]*role="status"/);
   assert.match(html, /<option value="watchlist_scan">自选股扫描（使用下方清单）<\/option>/);
   assert.match(html, /<option value="position_review" disabled>持仓复核（持仓账本接入后开放）<\/option>/);
-  assert.match(app, /function fillTaskSymbolsFromWatchlist\(\)[\s\S]*?const records = safeReadWatchlist\(\)[\s\S]*?parseAnalysisSymbols\(records\.map\(\(record\) => record\.symbol\)\.join\(","\)\)[\s\S]*?\$\("#task-type"\)\.value = "watchlist_scan"/);
+  assert.match(app, /function fillTaskSymbolsFromWatchlist\(\)[\s\S]*?const watchlistState = safeReadWatchlistState\(\);[\s\S]*?const records = watchlistState\.items;[\s\S]*?if \(!watchlistState\.storageReadable \|\| !watchlistState\.storageValid\)[\s\S]*?parseAnalysisSymbols\(records\.map\(\(record\) => record\.symbol\)\.join\(","\)\)[\s\S]*?\$\("#task-type"\)\.value = "watchlist_scan"/);
   assert.match(app, /\$\("#load-local-watchlist"\)\.addEventListener\("click", fillTaskSymbolsFromWatchlist\)/);
   assert.match(serviceWiring, /Version: "unconfigured-no-paper-ledger-v1"/);
   assert.match(serviceWiring, /AvailableCash: 0, TotalEquity: 0/);
@@ -189,7 +189,7 @@ test("stock research clears stale snapshots on reload, request errors, and missi
 });
 
 test("changing market API credentials invalidates old stock-search suggestions", () => {
-  assert.match(app, /function applySettings\(nextSettings\) \{[\s\S]*?previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase[\s\S]*?cancelStockSearchRequest\(\);[\s\S]*?state\.stockSearchResults = \[\];[\s\S]*?\$\("#stock-search-results"\)\.replaceChildren\(\);[\s\S]*?hideStockSearch\(\);/);
+  assert.match(app, /function applySettings\(nextSettings, \{ persistPreviousActiveTask = true \} = \{\}\) \{[\s\S]*?previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase[\s\S]*?cancelStockSearchRequest\(\);[\s\S]*?state\.stockSearchResults = \[\];[\s\S]*?\$\("#stock-search-results"\)\.replaceChildren\(\);[\s\S]*?hideStockSearch\(\);/);
   assert.match(app, /function cancelStockSearchRequest\(\)[\s\S]*?state\.stockSearchGeneration \+= 1;/);
 });
 
@@ -216,9 +216,9 @@ test("task polling and saved task references are scoped to the analysis API base
 test("service health and provider-list refreshes ignore superseded responses", () => {
   assert.match(app, /let serviceRefreshGeneration = 0;/);
   assert.match(app, /let sourceRefreshGeneration = 0;/);
-  assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, stale: true \};/);
+  assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};/);
   assert.match(app, /async function refreshSources\(\) \{[\s\S]*?const generation = \+\+sourceRefreshGeneration;[\s\S]*?if \(generation !== sourceRefreshGeneration\) return;/);
-  assert.match(app, /if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, stale: true \};[\s\S]*?setServiceStatus\("market"/);
+  assert.match(app, /if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};[\s\S]*?setServiceStatus\("market"/);
 });
 
 test("filter changes clear stale errors even when a prior query returned no data", () => {
@@ -311,7 +311,7 @@ test("light/dark theme is accessible, persisted locally, and independent of back
   assert.match(app, /setAttribute\("aria-label", "切换主题"\)/);
   assert.match(html, /id="theme-toggle-icon"/);
   assert.match(html, /id="theme-toggle-label"/);
-  assert.match(app, /import \{ applyTheme, persistTheme, readTheme \} from "\.\/theme\.js"/);
+  assert.match(app, /import \{ applyTheme, persistTheme, readTheme(?:, THEME_STORAGE_KEY)? \} from "\.\/theme\.js"/);
   assert.match(app, /\$\("#theme-toggle"\)\.addEventListener\("click"/);
   assert.match(stylesheet, /:root\[data-theme="light"\]\s*\{/);
   assert.match(stylesheet, /--bg:\s*#f3f6f9/);
@@ -357,7 +357,7 @@ test("new feature pages display unavailable states rather than production mock r
   assert.match(html, /不会用单次分析报告冒充多轮 AI 对话/);
   assert.match(html, /不能提交扫描，也不会用普通分析任务伪装成选股/);
   assert.match(html, /不会假保存规则/);
-  assert.match(html, /服务端配置 API 待接入/);
+  assert.match(html, /服务器配置 API 待接入/);
   assert.match(html, /服务端密码、权限、\.env、备份和恢复涉及认证/);
   assert.match(html, /data-theme-value="dark"/);
   assert.match(html, /data-theme-value="light"/);
@@ -457,7 +457,7 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /async function checkConnectionFromSettings\(\)[\s\S]*?const settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);[\s\S]*?Promise\.allSettled\(\[[\s\S]*?marketHealth\(settingsToCheck\)[\s\S]*?analysisHealth\(settingsToCheck\)/);
   assert.match(app, /currentDraft\.marketBase !== testedDraft\.marketBase \|\| currentDraft\.analysisBase !== testedDraft\.analysisBase/);
   assert.match(app, /不会更改全局连接状态/);
-  assert.match(html, /服务端配置 API 待接入/);
+  assert.match(html, /服务器配置 API 待接入/);
   assert.match(html, /服务器 \.env/);
   assert.match(html, /导出服务器配置（待接入）/);
   assert.match(html, /更改管理员密码（待接入）/);
@@ -662,7 +662,7 @@ test("primary workspace tabs keep market modules on the homepage without quick-l
 test("collapsed sidebar navigation remains accessible and unavailable modules disclose their status", () => {
   const navButtons = [...html.matchAll(/<button class="nav-link[^"]*"[^>]*data-view="([^"]+)"[^>]*>/g)];
   assert.deepEqual(navButtons.map((match) => match[1]), [
-    "research", "tasks", "notifications", "chat", "screening", "alerts", "settings"
+    "research", "tasks", "data", "notifications", "chat", "screening", "alerts", "settings"
   ], "sidebar should expose secondary tools while primary destinations live in workspace tabs");
   const workspaceTabs = [...html.matchAll(/<button class="workspace-tab[^"]*"[^>]*data-view="([^"]+)"[^>]*>/g)];
   assert.deepEqual(workspaceTabs.map((match) => match[1]), ["market", "stocks", "watchlist"]);
@@ -898,10 +898,15 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
   );
   const applyIndex = importBody.indexOf("applySettings(nextSettings, { persistPreviousActiveTask: false })");
   assert.ok(applyIndex >= 0, "workspace import must apply the validated settings");
+  const rollbackIndex = importBody.indexOf("\n  } catch (error) {", applyIndex);
+  assert.ok(rollbackIndex > applyIndex, "storage rollback must remain in the failure path");
   assert.doesNotMatch(
-    importBody.slice(applyIndex),
+    importBody.slice(applyIndex, rollbackIndex),
     /localStorage\.(?:setItem|removeItem)\(|persistTheme\(/,
-    "storage writes should finish before applying in-memory settings"
+    "the successful import path must finish storage writes before applying in-memory settings"
+  );
+  assert.match(importBody.slice(rollbackIndex), /storageKeys\.forEach\([\s\S]*?localStorage\.(?:setItem|removeItem)\(/,
+    "the failure path should attempt to restore the pre-import storage snapshot"
   );
 });
 
@@ -964,4 +969,13 @@ test("数据中心不会把缺少 status 的 2xx 回包标记为健康", () => {
   );
   assert.match(dataCenter, /const unknownServices = serviceStates\.filter\(\(status\) => status === "unknown"\)\.length;/);
   assert.match(dataCenter, /const unknown = unknownServices \+ unknownDependencies/);
+});
+
+
+test("最近任务本地存储不可读或损坏时不覆盖原始历史，导出不会静默遗漏记录", () => {
+  assert.match(recentTaskModule, /export function readRecentTasksState\(storage, limit = MAX_RECENT_TASKS\)/);
+  assert.match(recentTaskModule, /if \(!currentState\.storageReadable \|\| !currentState\.storageValid\) return currentState\.items/);
+  assert.match(app, /function safeReadRecentTasksState\(\)/);
+  assert.match(app, /function renderRecentTasks\(records\)[\s\S]*?historyState\.storageReadable[\s\S]*?historyState\.storageValid[\s\S]*?历史修改已暂停/);
+  assert.match(app, /recent_tasks: \(\(\) => \{[\s\S]*?recentTasksState\.storageReadable[\s\S]*?recentTasksState\.storageValid[\s\S]*?导出已取消/);
 });

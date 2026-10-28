@@ -23,6 +23,7 @@ const viewNavigation = [
   { name: "watchlist", selector: '.workspace-tab[data-view="watchlist"]' },
   { name: "research", selector: '.nav-link[data-view="research"]' },
   { name: "tasks", selector: '.nav-link[data-view="tasks"]' },
+  { name: "data", selector: '.nav-link[data-view="data"]' },
   { name: "notifications", selector: '.nav-link[data-view="notifications"]' },
   { name: "chat", selector: '.nav-link[data-view="chat"]' },
   { name: "screening", selector: '.nav-link[data-view="screening"]' },
@@ -88,7 +89,7 @@ try {
 
     await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
     await page.waitForFunction(
-      () => document.querySelectorAll(".nav-link[data-view]").length === 7 &&
+      () => document.querySelectorAll(".nav-link[data-view]").length === 8 &&
         document.querySelectorAll(".workspace-tab[data-view]").length === 3,
       null,
       { timeout: 10000 }
