@@ -122,6 +122,18 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 			return errors.New("index constituent provider_report_date is in the future")
 		}
 	}
+	if snapshot.AsOfDate != "" {
+		asOf, err := time.Parse("2006-01-02", snapshot.AsOfDate)
+		if err != nil || asOf.Format("2006-01-02") != snapshot.AsOfDate {
+			return errors.New("index constituent as_of_date is invalid")
+		}
+		if snapshot.AsOfDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+			return errors.New("index constituent as_of_date is in the future")
+		}
+		if snapshot.ProviderReportDate != "" && snapshot.ProviderReportDate > snapshot.AsOfDate {
+			return errors.New("index constituent provider_report_date is later than as_of_date")
+		}
+	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
 		return errors.New("index constituent provider_time is zero or in the future")
 	}
@@ -534,6 +546,116 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all index-constituent providers failed: %s", strings.Join(failures, "; "))
+}
+
+
+func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIndexSymbol, rawAsOfDate, rawSource string) (*model.IndexConstituentSnapshot, bool, error) {
+	indexSymbol, err := canonicalIndexSymbol(rawIndexSymbol)
+	if err != nil {
+		return nil, false, err
+	}
+	asOfDate := strings.TrimSpace(rawAsOfDate)
+	asOf, parseErr := time.Parse("2006-01-02", asOfDate)
+	if parseErr != nil || asOf.Format("2006-01-02") != asOfDate {
+		return nil, false, errors.New("as_of must use YYYY-MM-DD")
+	}
+	if asOfDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+		return nil, false, errors.New("as_of must not be in the future")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	selected, sourceKey, sourceErr := s.indexCatalogProvidersForSource(rawSource)
+	if sourceErr != nil {
+		return nil, false, sourceErr
+	}
+	providers := make([]provider.HistoricalIndexConstituentProvider, 0, len(selected))
+	for _, candidate := range selected {
+		if historical, ok := candidate.(provider.HistoricalIndexConstituentProvider); ok {
+			providers = append(providers, historical)
+		}
+	}
+	if len(providers) == 0 {
+		return nil, false, fmt.Errorf("no enabled index-constituent provider does not support historical as_of queries for source %q", sourceKey)
+	}
+
+	key := fmt.Sprintf("md:v1:index-constituents-asof:%s:%s:%s", sourceKey, indexSymbol, asOfDate)
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var cached model.IndexConstituentSnapshot
+		if json.Unmarshal(data, &cached) == nil &&
+			cached.AsOfDate == asOfDate &&
+			validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil &&
+			time.Since(cached.FetchedAt) >= 0 &&
+			len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown {
+			markIndexConstituentCoverage(&cached)
+			ttl := 24 * time.Hour
+			if cached.QualityStatus != model.QualityValid {
+				ttl = 6 * time.Hour
+			}
+			if time.Since(cached.FetchedAt) < ttl {
+				return &cached, true, nil
+			}
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("historical index constituents cache read failed", "symbol", indexSymbol, "as_of", asOfDate, "error", cacheErr)
+	}
+
+	var failures []string
+	var unknownCandidate *model.IndexConstituentSnapshot
+	for _, p := range providers {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		snapshot, fetchErr := p.FetchIndexConstituentsAsOf(ctx, indexSymbol, asOfDate)
+		if fetchErr != nil {
+			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot == nil || snapshot.AsOfDate != asOfDate {
+			failures = append(failures, p.Name()+": historical constituent response does not preserve requested as_of date")
+			continue
+		}
+		if len(snapshot.Items) > 0 && snapshot.ProviderReportDate == "" {
+			failures = append(failures, p.Name()+": historical constituent response has no source report date")
+			continue
+		}
+		if err := validateIndexConstituentsSnapshot(indexSymbol, snapshot); err != nil {
+			failures = append(failures, p.Name()+": "+err.Error())
+			continue
+		}
+		markIndexConstituentCoverage(snapshot)
+		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
+			if betterUnknownIndexConstituentSnapshot(snapshot, unknownCandidate) {
+				unknownCandidate = snapshot
+			}
+			continue
+		}
+		if payload, err := json.Marshal(snapshot); err == nil {
+			ttl := 24 * time.Hour
+			if snapshot.QualityStatus != model.QualityValid {
+				ttl = 6 * time.Hour
+			}
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+				s.logger.Warn("historical index constituents cache write failed", "symbol", indexSymbol, "as_of", asOfDate, "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("historical index constituents cache encode failed", "symbol", indexSymbol, "as_of", asOfDate, "error", err)
+		}
+		return snapshot, false, nil
+	}
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		reason := "index_constituents_as_of_fallback_exhausted_without_usable_quality"
+		if len(unknownCandidate.Items) == 0 {
+			reason = "index_constituents_as_of_fallback_exhausted_without_confirmed_data"
+		}
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		return unknownCandidate, false, nil
+	}
+	return nil, false, fmt.Errorf("all historical index-constituent providers failed: %s", strings.Join(failures, "; "))
 }
 
 func (s *DataService) IndexDailyBars(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate string) (*model.IndexDailyBarsSnapshot, bool, error) {

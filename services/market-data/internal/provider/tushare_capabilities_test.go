@@ -1597,3 +1597,97 @@ func TestApplyTushareAdjustmentRejectsMissingOrInvalidFactors(t *testing.T) {
 		t.Fatal("non-finite reference factor should be rejected")
 	}
 }
+
+func TestTushareIndexConstituentsAsOfUsesReportOnRequestedDateAndAllListingStatuses(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().In(location)
+	currentMonthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, location)
+	asOfTime := currentMonthStart.AddDate(0, 0, -1)
+	asOfDate := asOfTime.Format("2006-01-02")
+	wantStart := time.Date(asOfTime.Year(), asOfTime.Month(), 1, 0, 0, 0, 0, location).Format("20060102")
+	wantEnd := asOfTime.Format("20060102")
+	var gotStockBasicParams map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		switch request.APIName {
+		case "index_weight":
+			if request.Params["index_code"] != "000300.SH" || request.Params["start_date"] != wantStart || request.Params["end_date"] != wantEnd {
+				t.Errorf("unexpected historical index_weight window: %#v", request.Params)
+			}
+			writeTushareTestTable(w, []string{"index_code", "con_code", "trade_date", "weight"}, [][]any{
+				{"000300.SH", "600519.SH", asOfTime.AddDate(0, 0, -1).Format("20060102"), 2.5},
+				{"000300.SH", "600036.SH", asOfTime.Format("20060102"), 3.0},
+			})
+		case "stock_basic":
+			gotStockBasicParams = request.Params
+			writeTushareTestTable(w, []string{"ts_code", "name"}, [][]any{{"600036.SH", "招商银行"}})
+		default:
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected api", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	p := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := p.FetchIndexConstituentsAsOf(context.Background(), "000300.SH", asOfDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AsOfDate != asOfDate || got.ProviderReportDate != asOfDate || got.Total != 1 ||
+		got.ProviderReturned != 1 || got.Items[0].Symbol != "600036.SH" {
+		t.Fatalf("unexpected as-of constituent snapshot: %+v", got)
+	}
+	if _, hasStatusFilter := gotStockBasicParams["list_status"]; hasStatusFilter || len(gotStockBasicParams) != 0 {
+		t.Fatalf("historical name enrichment must include delisted securities, params=%#v", gotStockBasicParams)
+	}
+	foundBoundaryReason := false
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_as_of_uses_latest_index_weight_report_not_effective_membership_interval" {
+			foundBoundaryReason = true
+		}
+	}
+	if !foundBoundaryReason {
+		t.Fatalf("historical snapshot must disclose report-date semantics: %v", got.QualityReasons)
+	}
+}
+
+func TestTushareIndexConstituentsAsOfRejectsRowsAfterRequestedDate(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().In(location)
+	currentMonthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, location)
+	asOfTime := currentMonthStart.AddDate(0, 0, -1)
+	asOfDate := asOfTime.Format("2006-01-02")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "index_weight" {
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected api", http.StatusBadRequest)
+			return
+		}
+		writeTushareTestTable(w, []string{"index_code", "con_code", "trade_date", "weight"}, [][]any{
+			{"000300.SH", "600519.SH", asOfTime.AddDate(0, 0, 1).Format("20060102"), 2.5},
+		})
+	}))
+	defer server.Close()
+
+	p := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	if _, err := p.FetchIndexConstituentsAsOf(context.Background(), "000300.SH", asOfDate); err == nil || !strings.Contains(err.Error(), "日期无效或超出查询月份") {
+		t.Fatalf("provider over-returning a report after as_of must be rejected, got %v", err)
+	}
+}

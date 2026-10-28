@@ -408,6 +408,8 @@ type IndexConstituent struct {
 // IndexConstituentSnapshot 为指定指数或板块的当前成分股快照。
 type IndexConstituentSnapshot struct {
 	IndexSymbol        string             `json:"index_symbol"`
+	// AsOfDate 是请求的历史查询日期；ProviderReportDate 是实际采用的源端权重报告日，两者不能混为一谈。
+	AsOfDate           string             `json:"as_of_date,omitempty"`
 	ProviderReportDate string             `json:"provider_report_date,omitempty"`
 	Items              []IndexConstituent `json:"items"`
 	Total              int                `json:"total"`

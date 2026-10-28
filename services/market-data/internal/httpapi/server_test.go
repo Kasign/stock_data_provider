@@ -555,3 +555,79 @@ func TestStockSearchEndpointReturnsCanonicalMatchesAndValidatesParameters(t *tes
 		t.Fatalf("invalid limit status=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+type httpHistoricalIndexProvider struct{}
+
+func (httpHistoricalIndexProvider) Name() string { return "tushare" }
+func (httpHistoricalIndexProvider) FetchIndexCatalog(context.Context, string) (*model.IndexCatalogSnapshot, error) {
+	return nil, nil
+}
+func (httpHistoricalIndexProvider) FetchIndexConstituents(context.Context, string) (*model.IndexConstituentSnapshot, error) {
+	return nil, nil
+}
+func (httpHistoricalIndexProvider) FetchIndexConstituentsAsOf(_ context.Context, indexSymbol, asOfDate string) (*model.IndexConstituentSnapshot, error) {
+	location := marketLocationForHTTPTest()
+	asOf, _ := time.ParseInLocation("2006-01-02", asOfDate, location)
+	reportDate := asOf.AddDate(0, 0, -1).Format("2006-01-02")
+	now := time.Now().UTC()
+	return &model.IndexConstituentSnapshot{
+		IndexSymbol: indexSymbol, AsOfDate: asOfDate, ProviderReportDate: reportDate,
+		Items: []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}},
+		Total: 1, ProviderReturned: 1, Source: "tushare", SourceVersion: "http-index-asof-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"test_historical_constituent_snapshot"},
+	}, nil
+}
+func (httpHistoricalIndexProvider) FetchIndexDailyBars(context.Context, string, string, string) (*model.IndexDailyBarsSnapshot, error) {
+	return nil, nil
+}
+
+func marketLocationForHTTPTest() *time.Location {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return time.FixedZone("CST", 8*60*60)
+	}
+	return location
+}
+
+func TestIndexConstituentsAsOfEndpointReturnsRequestedDateAndReportDate(t *testing.T) {
+	p := httpHistoricalIndexProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetIndexCatalogProviders([]provider.IndexCatalogProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	location := marketLocationForHTTPTest()
+	asOfDate := time.Now().In(location).AddDate(0, 0, -4).Format("2006-01-02")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/indices/000300.SH/constituents?as_of="+asOfDate+"&source=tushare", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{`"as_of_date":"` + asOfDate + `"`, `"provider_report_date":"`, `"symbol":"600519.SH"`, `"quality_status":"degraded"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("historical constituent response missing %s: %s", want, w.Body.String())
+		}
+	}
+}
+
+func TestIndexConstituentsRejectsInvalidAsOfQueryAndCurrentOnlySource(t *testing.T) {
+	p := httpHistoricalIndexProvider{}
+	svc := service.NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000,
+		service.ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetIndexCatalogProviders([]provider.IndexCatalogProvider{p})
+	h := NewWithCapabilityInterfaces("secret", "forward_adjusted", svc, []provider.NamedProvider{p}, nil, nil, 2000, time.Second, nil).Handler()
+	for _, path := range []string{
+		"/api/v1/market/indices/000300.SH/constituents?as_of=2026-1-5",
+		"/api/v1/market/indices/000300.SH/constituents?as_of=2026-10-20&source=hithink",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-API-Key", "secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"VALIDATION_ERROR"`) {
+			t.Fatalf("invalid historical query %q status=%d body=%s", path, w.Code, w.Body.String())
+		}
+	}
+}

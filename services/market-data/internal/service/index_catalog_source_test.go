@@ -307,3 +307,61 @@ func TestIndexDailyBarsCachesUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 		t.Fatalf("missing fallback exhaustion marker or incomplete fallback: reasons=%v first=%d second=%d", got.QualityReasons, first.calls, second.calls)
 	}
 }
+
+type indexCatalogAsOfSourceTestProvider struct {
+	indexCatalogSourceTestProvider
+	snapshot     *model.IndexConstituentSnapshot
+	asOfCalls    int
+	currentCalls int
+}
+
+func (p *indexCatalogAsOfSourceTestProvider) FetchIndexConstituents(context.Context, string) (*model.IndexConstituentSnapshot, error) {
+	p.currentCalls++
+	return p.snapshot, nil
+}
+
+func (p *indexCatalogAsOfSourceTestProvider) FetchIndexConstituentsAsOf(_ context.Context, indexSymbol, asOfDate string) (*model.IndexConstituentSnapshot, error) {
+	p.asOfCalls++
+	out := *p.snapshot
+	out.IndexSymbol = indexSymbol
+	out.AsOfDate = asOfDate
+	out.Items = append([]model.IndexConstituent(nil), p.snapshot.Items...)
+	return &out, nil
+}
+
+func TestIndexConstituentsAsOfUsesOnlyHistoricalCapability(t *testing.T) {
+	now := time.Now().In(marketLocation())
+	asOfDate := now.AddDate(0, 0, -5).Format("2006-01-02")
+	reportDate := now.AddDate(0, 0, -6).Format("2006-01-02")
+	snapshot := &model.IndexConstituentSnapshot{
+		IndexSymbol: "000300.SH", ProviderReportDate: reportDate,
+		Items: []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}},
+		Total: 1, ProviderReturned: 1, Source: "tushare", SourceVersion: "test-index-constituents-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_as_of_uses_latest_index_weight_report_not_effective_membership_interval"},
+	}
+	p := &indexCatalogAsOfSourceTestProvider{
+		indexCatalogSourceTestProvider: indexCatalogSourceTestProvider{name: "tushare"},
+		snapshot: snapshot,
+	}
+	svc := &DataService{cache: cache.NewDisabled(), indexCatalogProviders: []provider.IndexCatalogProvider{p}}
+	got, hit, err := svc.IndexConstituentsAsOfFromSource(context.Background(), "000300.SH", asOfDate, "")
+	if err != nil || hit {
+		t.Fatalf("IndexConstituentsAsOfFromSource hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.AsOfDate != asOfDate || got.ProviderReportDate != reportDate || len(got.Items) != 1 {
+		t.Fatalf("unexpected historical constituent response: %+v", got)
+	}
+	if p.asOfCalls != 1 || p.currentCalls != 0 {
+		t.Fatalf("historical lookup must call only as-of capability, historical=%d current=%d", p.asOfCalls, p.currentCalls)
+	}
+}
+
+func TestIndexConstituentsAsOfDoesNotFallBackToCurrentOnlyProvider(t *testing.T) {
+	p := indexCatalogSourceTestProvider{name: "hithink"}
+	svc := &DataService{cache: cache.NewDisabled(), indexCatalogProviders: []provider.IndexCatalogProvider{p}}
+	_, _, err := svc.IndexConstituentsAsOfFromSource(context.Background(), "000300.SH", time.Now().In(marketLocation()).AddDate(0, 0, -2).Format("2006-01-02"), "")
+	if err == nil || !strings.Contains(err.Error(), "does not support historical as_of") {
+		t.Fatalf("current-only Provider must not be used for historical constituents, got %v", err)
+	}
+}

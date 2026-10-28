@@ -105,6 +105,13 @@ type IndexCatalogProvider interface {
 	FetchIndexDailyBars(ctx context.Context, indexSymbol, startDate, endDate string) (*model.IndexDailyBarsSnapshot, error)
 }
 
+// HistoricalIndexConstituentProvider 提供不晚于指定日期的指数成分权重快照。
+// 该接口与当前成分能力分离，避免把当前成分错误当作历史成分。
+type HistoricalIndexConstituentProvider interface {
+	NamedProvider
+	FetchIndexConstituentsAsOf(ctx context.Context, indexSymbol, asOfDate string) (*model.IndexConstituentSnapshot, error)
+}
+
 // ValuationProvider returns the latest PE/PB/PS/PCF snapshot for a bounded list of A-share symbols.
 type ValuationProvider interface {
 	NamedProvider

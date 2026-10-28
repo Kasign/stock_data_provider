@@ -1790,6 +1790,16 @@ type tushareWeightedConstituent struct {
 
 // FetchIndexConstituents returns the most recent monthly weight snapshot available in four months.
 func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol string) (*model.IndexConstituentSnapshot, error) {
+	return p.fetchIndexConstituents(ctx, rawIndexSymbol, "")
+}
+
+// FetchIndexConstituentsAsOf returns the latest Tushare index-weight report on or before asOfDate.
+// It does not claim an effective-date interval for membership changes.
+func (p *Tushare) FetchIndexConstituentsAsOf(ctx context.Context, rawIndexSymbol, asOfDate string) (*model.IndexConstituentSnapshot, error) {
+	return p.fetchIndexConstituents(ctx, rawIndexSymbol, asOfDate)
+}
+
+func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, rawAsOfDate string) (*model.IndexConstituentSnapshot, error) {
 	indexSymbol, err := canonicalTushareIndexSymbol(rawIndexSymbol)
 	if err != nil {
 		return nil, err
@@ -1807,21 +1817,42 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	}
 	nowLocal := time.Now().In(loc)
 	today := nowLocal.Format("2006-01-02")
-	monthStart := time.Date(nowLocal.Year(), nowLocal.Month(), 1, 0, 0, 0, 0, loc)
+	requestedAsOfDate := strings.TrimSpace(rawAsOfDate)
+	anchorDate := nowLocal
+	lookbackMonths := 4
+	reasons := []string{"provider_constituent_date_is_latest_available_weight_snapshot_not_intraday"}
+	var asOfTime time.Time
+	if requestedAsOfDate != "" {
+		var parseErr error
+		asOfTime, parseErr = time.ParseInLocation("2006-01-02", requestedAsOfDate, loc)
+		if parseErr != nil || asOfTime.Format("2006-01-02") != requestedAsOfDate {
+			return nil, fmt.Errorf("Tushare 指数成分 as_of 日期必须使用 YYYY-MM-DD")
+		}
+		if requestedAsOfDate > today {
+			return nil, fmt.Errorf("Tushare 指数成分 as_of 日期不能晚于当前日期")
+		}
+		anchorDate = asOfTime
+		lookbackMonths = 120
+		reasons = []string{"provider_as_of_uses_latest_index_weight_report_not_effective_membership_interval"}
+	}
+	monthStart := time.Date(anchorDate.Year(), anchorDate.Month(), 1, 0, 0, 0, 0, loc)
 
 	// index_weight is monthly data. Query one month at a time from newest to
 	// oldest; a single multi-month request can hit upstream result limits and
-	// silently omit members from the newest snapshot.
+	// silently omit members from the newest snapshot. Historical lookups keep
+	// each month isolated and never accept a report after the requested date.
 	latestDate := ""
 	latest := make([]tushareWeightedConstituent, 0)
-	reasons := []string{"provider_constituent_date_is_latest_available_weight_snapshot_not_intraday"}
 	foundMonth := false
-	for monthOffset := 0; monthOffset < 4; monthOffset++ {
+	for monthOffset := 0; monthOffset < lookbackMonths; monthOffset++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		windowStart := monthStart.AddDate(0, -monthOffset, 0)
 		windowEnd := windowStart.AddDate(0, 1, -1)
+		if requestedAsOfDate != "" && monthOffset == 0 && asOfTime.Before(windowEnd) {
+			windowEnd = asOfTime
+		}
 		startCompact := windowStart.Format("20060102")
 		endCompact := windowEnd.Format("20060102")
 		table, fetchErr := p.fetchCapabilityTable(ctx, "index_weight", map[string]string{
@@ -1894,10 +1925,14 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 
 	now := time.Now().UTC()
 	if !foundMonth || latestDate == "" || len(latest) == 0 {
+		noSnapshotReason := "provider_has_no_constituent_snapshot_in_recent_four_months"
+		if requestedAsOfDate != "" {
+			noSnapshotReason = "provider_has_no_index_weight_snapshot_on_or_before_requested_as_of_within_120_months"
+		}
 		return &model.IndexConstituentSnapshot{
-			IndexSymbol: indexSymbol, Items: []model.IndexConstituent{}, Total: 0, Source: p.Name(),
+			IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, Items: []model.IndexConstituent{}, Total: 0, Source: p.Name(),
 			SourceVersion: tushareIndexConstituentVersion, FetchedAt: now, QualityStatus: model.QualityUnknown,
-			QualityReasons: appendTushareReason(reasons, "provider_has_no_constituent_snapshot_in_recent_four_months"),
+			QualityReasons: appendTushareReason(reasons, noSnapshotReason),
 		}, nil
 	}
 	supportedCount := 0
@@ -1911,14 +1946,19 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 		reasons = appendTushareReason(reasons, "provider_unsupported_constituent_rows_excluded")
 		reasons = appendTushareReason(reasons, "provider_latest_constituent_snapshot_has_no_supported_a_share_members")
 		return &model.IndexConstituentSnapshot{
-			IndexSymbol: indexSymbol, ProviderReportDate: latestDate, Items: []model.IndexConstituent{}, Total: 0,
+			IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, ProviderReportDate: latestDate, Items: []model.IndexConstituent{}, Total: 0,
 			ProviderReturned: len(latest), ExcludedCount: len(latest), Source: p.Name(),
 			SourceVersion: tushareIndexConstituentVersion, FetchedAt: now, QualityStatus: model.QualityUnknown,
 			QualityReasons: reasons,
 		}, nil
 	}
 	// index_weight gives constituent codes but not names; enrich in one stock_basic call.
-	basic, err := p.fetchCapabilityTable(ctx, "stock_basic", map[string]string{"list_status": "L"}, "ts_code,name")
+	basicParams := map[string]string{"list_status": "L"}
+	if requestedAsOfDate != "" {
+		// 历史成分可能包含已退市证券；省略 list_status 以查询完整证券目录。
+		basicParams = map[string]string{}
+	}
+	basic, err := p.fetchCapabilityTable(ctx, "stock_basic", basicParams, "ts_code,name")
 	if err != nil {
 		return nil, fmt.Errorf("Tushare 指数成分名称补充失败: %w", err)
 	}
@@ -1969,7 +2009,7 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 		return nil, errors.New("Tushare 指数成分有代码但无法从股票目录解析任何名称")
 	}
 	return &model.IndexConstituentSnapshot{
-		IndexSymbol: indexSymbol, ProviderReportDate: latestDate, Items: items, Total: len(items),
+		IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, ProviderReportDate: latestDate, Items: items, Total: len(items),
 		ProviderReturned: len(latest), ExcludedCount: excludedCount, Source: p.Name(),
 		SourceVersion: tushareIndexConstituentVersion, FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,

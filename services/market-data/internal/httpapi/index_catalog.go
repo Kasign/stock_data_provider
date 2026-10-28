@@ -39,11 +39,49 @@ func validateIndexProviderSource(rawSource string) (string, string) {
 	}
 }
 
+func validateIndexConstituentsAsOfQuery(rawAsOfDate string) (string, string) {
+	asOfDate := strings.TrimSpace(rawAsOfDate)
+	if asOfDate == "" {
+		return "", ""
+	}
+	parsed, err := time.Parse("2006-01-02", asOfDate)
+	if err != nil || parsed.Format("2006-01-02") != asOfDate {
+		return "", "as_of must use YYYY-MM-DD"
+	}
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		location = time.FixedZone("CST", 8*60*60)
+	}
+	if asOfDate > time.Now().In(location).Format("2006-01-02") {
+		return "", "as_of must not be in the future"
+	}
+	return asOfDate, ""
+}
+
 func (s *Server) indexConstituents(w http.ResponseWriter, r *http.Request) {
 	indexSymbol := strings.TrimSpace(r.PathValue("symbol"))
 	source, validationErr := validateIndexProviderSource(r.URL.Query().Get("source"))
 	if validationErr != "" {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", validationErr, requestID(r))
+		return
+	}
+	asOfDate, asOfValidationErr := validateIndexConstituentsAsOfQuery(r.URL.Query().Get("as_of"))
+	if asOfValidationErr != "" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", asOfValidationErr, requestID(r))
+		return
+	}
+	if asOfDate != "" {
+		if source == "hithink" {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of queries currently require source=tushare or automatic selection; hithink only supports current constituents", requestID(r))
+			return
+		}
+		snapshot, cacheHit, err := s.svc.IndexConstituentsAsOfFromSource(r.Context(), indexSymbol, asOfDate, source)
+		if err != nil {
+			writeDomainErr(w, err, requestID(r))
+			return
+		}
+		setCacheHeader(w, cacheHit)
+		writeJSON(w, http.StatusOK, snapshot)
 		return
 	}
 	snapshot, cacheHit, err := s.svc.IndexConstituentsFromSource(r.Context(), indexSymbol, source)
