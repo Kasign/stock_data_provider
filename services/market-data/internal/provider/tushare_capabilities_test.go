@@ -795,6 +795,13 @@ func TestTushareIndexDailyBarsDegradesMissingProviderTimestamp(t *testing.T) {
 		!containsTushareReason(got.Items[0].QualityReasons, "provider_snapshot_timestamp_not_exposed") {
 		t.Fatalf("index daily bar without provider timestamp must preserve the quality reason: %+v", got.Items)
 	}
+	bar := got.Items[0]
+	if bar.Amount == nil || *bar.Amount != 120000000000 || bar.AmountUnit != "CNY" {
+		t.Fatalf("Tushare index_daily amount must convert thousand CNY to CNY, got amount=%v unit=%q", bar.Amount, bar.AmountUnit)
+	}
+	if bar.Volume == nil || *bar.Volume != 100000 || bar.VolumeUnit != "hands" {
+		t.Fatalf("Tushare index_daily volume must preserve hand unit, got volume=%v unit=%q", bar.Volume, bar.VolumeUnit)
+	}
 }
 
 func TestTushareIndexDailyBarsRejectsInt64VolumeOverflow(t *testing.T) {

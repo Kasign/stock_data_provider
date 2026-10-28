@@ -1927,8 +1927,7 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	}, nil
 }
 
-// FetchIndexDailyBars reads unadjusted index OHLC. Volume remains in hands and amount
-// is normalized from the documented thousand-CNY unit.
+// FetchIndexDailyBars 读取未复权指数 OHLC；成交量保留手口径，成交额按千元转成人民币元。
 func (p *Tushare) FetchIndexDailyBars(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate string) (*model.IndexDailyBarsSnapshot, error) {
 	indexSymbol, err := canonicalTushareIndexSymbol(rawIndexSymbol)
 	if err != nil {
