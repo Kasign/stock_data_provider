@@ -1151,3 +1151,14 @@ test("分析任务、阶段事件与 Run 响应必须匹配当前请求标识", 
   assert.match(app, /if \(result\?\.run_id !== runId\) \{[\s\S]*?Run 结果接口未返回 run_id/);
   assert.match(app, /!error\.responseIdentityMismatch && isRetryableApiError\(error\)/);
 });
+
+ 
+test("mobile navigation drawer moves focus inside and traps Tab navigation", () => {
+  assert.ok(app.includes('querySelector(".nav-link:not([disabled])")?.focus()'));
+  assert.ok(app.includes('if (event.key !== "Tab" || window.innerWidth > 600) return;'));
+  assert.match(app, /const sidebar = \$\("\.sidebar"\);[\s\S]*?if \(!sidebar\.classList\.contains\("is-open"\)\) return;/);
+  assert.match(app, /event\.shiftKey && \(document\.activeElement === firstFocusable \|\| !sidebar\.contains\(document\.activeElement\)\)/);
+  assert.match(app, /!event\.shiftKey && \(document\.activeElement === lastFocusable \|\| !sidebar\.contains\(document\.activeElement\)\)/);
+  assert.match(app, /lastFocusable\.focus\(\)[\s\S]*?firstFocusable\.focus\(\)/);
+  assert.match(app, /setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)/);
+});

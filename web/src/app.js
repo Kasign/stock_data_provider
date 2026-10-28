@@ -200,6 +200,7 @@ function setMobileNavigationOpen(open, { restoreFocus = false } = {}) {
   $("#mobile-menu-toggle").setAttribute("aria-expanded", String(isOpen));
   $("#mobile-menu-toggle").setAttribute("aria-label", isOpen ? "关闭导航" : "打开导航");
   $("#mobile-menu-toggle").title = isOpen ? "关闭导航" : "打开导航";
+  if (!wasOpen && isOpen) $(".sidebar").querySelector(".nav-link:not([disabled])")?.focus();
   if (wasOpen && !isOpen && restoreFocus) $("#mobile-menu-toggle").focus();
 }
 
@@ -3465,7 +3466,29 @@ $("#mobile-menu-toggle").addEventListener("click", () => {
 });
 $("#mobile-nav-overlay").addEventListener("click", () => setMobileNavigationOpen(false, { restoreFocus: true }));
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setMobileNavigationOpen(false, { restoreFocus: true });
+  if (event.key === "Escape") {
+    setMobileNavigationOpen(false, { restoreFocus: true });
+    return;
+  }
+  if (event.key !== "Tab" || window.innerWidth > 600) return;
+  const sidebar = $(".sidebar");
+  if (!sidebar.classList.contains("is-open")) return;
+  const focusable = [...sidebar.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true" && element.getClientRects().length > 0);
+  if (!focusable.length) {
+    event.preventDefault();
+    return;
+  }
+  const firstFocusable = focusable[0];
+  const lastFocusable = focusable[focusable.length - 1];
+  if (event.shiftKey && (document.activeElement === firstFocusable || !sidebar.contains(document.activeElement))) {
+    event.preventDefault();
+    lastFocusable.focus();
+  } else if (!event.shiftKey && (document.activeElement === lastFocusable || !sidebar.contains(document.activeElement))) {
+    event.preventDefault();
+    firstFocusable.focus();
+  }
 });
 window.addEventListener("resize", () => {
   if (window.innerWidth > 600) setMobileNavigationOpen(false);
