@@ -752,6 +752,13 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(finalCssRuleBody(".market-activity-controls label"), /font-size: 12px/);
   assert.match(finalCssRuleBody(".market-activity-controls input"), /min-height: 38px/);
   assert.match(finalCssRuleBody(".market-activity-controls .button"), /min-height: 38px/);
+  const readabilityStart = stylesheet.indexOf("/* 2026-10-27 readability pass: market overview, activity table, and calendar. */");
+  const mobileOverrideStart = stylesheet.indexOf("@media (max-width: 700px)", readabilityStart);
+  assert.ok(readabilityStart >= 0 && mobileOverrideStart > readabilityStart, "the general readability pass should precede responsive overrides");
+  const generalRules = stylesheet.slice(readabilityStart, mobileOverrideStart);
+  assert.match(generalRules, /\.market-activity-controls label \{[^}]*font-size: 12px;/, "desktop labels need a readable baseline");
+  assert.match(generalRules, /\.market-activity-controls input \{ min-height: 38px; \}/, "desktop date inputs need a 38px target");
+  assert.match(generalRules, /\.market-activity-controls \.button \{ min-height: 38px; font-size: 12px; \}/, "desktop buttons need a readable 38px baseline");
   assert.match(finalCssRuleBody(".activity-stock-link"), /min-height: 38px/);
   assert.match(finalCssRuleBody(".calendar-month-navigation .icon-button"), /min-width: 38px; min-height: 38px/);
   assert.match(finalCssRuleBody(".trading-calendar-weekdays span"), /font-size: 11px/);
