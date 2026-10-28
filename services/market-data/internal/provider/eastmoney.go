@@ -820,11 +820,18 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 	if quotePayload.Data == nil {
 		return nil, errors.New("Eastmoney hot-ranking quote enrichment returned no data")
 	}
+	requestedQuoteCodes := make(map[string]struct{}, len(ranked))
+	for _, item := range ranked {
+		requestedQuoteCodes[item.code] = struct{}{}
+	}
 	quotes := make(map[string]map[string]json.RawMessage, len(quotePayload.Data.Diff))
-	for _, row := range quotePayload.Data.Diff {
+	for index, row := range quotePayload.Data.Diff {
 		code := eastmoneyHotRowString(row, "f12")
 		if code == "" {
-			continue
+			return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment row %d is missing security code f12", index)
+		}
+		if _, requested := requestedQuoteCodes[code]; !requested {
+			return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment returned unrequested code %s", code)
 		}
 		if _, duplicate := quotes[code]; duplicate {
 			return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment contains duplicate code %s", code)

@@ -990,3 +990,51 @@ func TestEastmoneyDailyBarsMarksMissingProviderSymbolAsDegraded(t *testing.T) {
 		t.Fatalf("missing identity reason not exposed: %+v", bars[0].QualityReasons)
 	}
 }
+
+
+func TestEastmoneyFetchHotStocksRejectsUnrequestedQuoteEnrichmentCodes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rank":
+			fmt.Fprint(w, `{"code":0,"data":[{"sc":"SH600519","rk":1}]}`)
+		case "/quote":
+			fmt.Fprint(w, `{"rc":0,"data":{"diff":[
+				{"f12":"600519","f14":"贵州茅台","f2":1313.3,"f3":1.2},
+				{"f12":"000001","f14":"平安银行","f2":12.3,"f3":0.8}
+			]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(2*time.Second, "", "")
+	p.hotRankingURL = server.URL + "/rank"
+	p.indexURL = server.URL + "/quote"
+	_, err := p.FetchHotStocks(context.Background(), "popular", 10)
+	if err == nil || !strings.Contains(err.Error(), "unrequested code 000001") {
+		t.Fatalf("quote enrichment must not include securities absent from requested ranking codes, got %v", err)
+	}
+}
+
+func TestEastmoneyFetchHotStocksRejectsQuoteEnrichmentRowsWithoutCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rank":
+			fmt.Fprint(w, `{"code":0,"data":[{"sc":"SH600519","rk":1}]}`)
+		case "/quote":
+			fmt.Fprint(w, `{"rc":0,"data":{"diff":[{"f14":"贵州茅台","f2":1313.3,"f3":1.2}]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(2*time.Second, "", "")
+	p.hotRankingURL = server.URL + "/rank"
+	p.indexURL = server.URL + "/quote"
+	_, err := p.FetchHotStocks(context.Background(), "popular", 10)
+	if err == nil || !strings.Contains(err.Error(), "missing security code f12") {
+		t.Fatalf("quote enrichment row without identity must be rejected, got %v", err)
+	}
+}
