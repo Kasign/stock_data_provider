@@ -147,8 +147,12 @@ func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
 	if q.Symbol != "600036.SH" || q.Name != "招商银行" || q.Source != "netease" {
 		t.Fatalf("unexpected quote identity: %+v", q)
 	}
-	if q.CurrentPrice == nil || *q.CurrentPrice != 42.35 || q.ChangePercent == nil || *q.ChangePercent != 1.27 {
-		t.Fatalf("percent ratio was not normalized to percentage points: %+v", q)
+	wantChange := 42.35 - 41.82
+	wantChangePercent := wantChange / 41.82 * 100
+	if q.CurrentPrice == nil || *q.CurrentPrice != 42.35 ||
+		q.Change == nil || *q.Change != wantChange ||
+		q.ChangePercent == nil || *q.ChangePercent != wantChangePercent {
+		t.Fatalf("canonical change fields were not derived from latest/previous close: %+v", q)
 	}
 	if q.Volume == nil || *q.Volume != 56829700 || q.Amount == nil || *q.Amount != 2386858667 {
 		t.Fatalf("unexpected volume/amount: %+v", q)
@@ -158,6 +162,25 @@ func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
 	}
 	if q.QuoteTime == nil || q.QualityStatus != model.QualityValid {
 		t.Fatalf("timestamp or quality status incorrect: %+v", q)
+	}
+}
+
+
+func TestNeteaseFetchQuoteRejectsInconsistentChangeFields(t *testing.T) {
+	for name, payload := range map[string]string{
+		"change mismatch": "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600036\",\"name\":\"招商银行\",\"price\":42.35,\"percent\":0.0127,\"updown\":0.80,\"open\":41.70,\"high\":42.38,\"low\":41.57,\"yestclose\":41.82,\"volume\":56829700,\"turnover\":2386858667,\"time\":\"2026/10/23 11:07:58\"}});",
+		"percent mismatch": "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600036\",\"name\":\"招商银行\",\"price\":42.35,\"percent\":0.02,\"updown\":0.53,\"open\":41.70,\"high\":42.38,\"low\":41.57,\"yestclose\":41.82,\"volume\":56829700,\"turnover\":2386858667,\"time\":\"2026/10/23 11:07:58\"}});",
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(payload))
+			}))
+			defer server.Close()
+			p := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")
+			if _, err := p.FetchQuote(context.Background(), "600036.SH"); err == nil {
+				t.Fatal("inconsistent source change fields must be rejected")
+			}
+		})
 	}
 }
 
