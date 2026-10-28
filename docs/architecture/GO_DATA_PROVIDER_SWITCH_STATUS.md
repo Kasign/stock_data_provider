@@ -886,3 +886,7 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - 雪球热度榜调用方请求超过 50 条时，适配器实际请求上限固定为 50；新增 `provider_request_limit_capped_at_50`，避免将内部限额造成的覆盖不足静默呈现。
 - 可选 `rank_change` 的非空非法整数或越界值会被省略，并同时写入父快照与条目的 `provider_rank_change_invalid_or_out_of_range`，不再静默吞掉源端字段错误。
 - 已补本地 HTTP fixture 测试源码，覆盖 100 条请求被限为 50 条以及非法名次变化质量原因传播。本轮尚未执行 Go 测试、构建或真实上游请求。
+
+## 2026-10-28 Tushare 涨跌停池过滤质量补充
+
+Tushare `limit_list_d` 返回的非 A 股代码会被过滤，不进入标准化涨跌停池；此前该过滤没有留下质量原因。现在将 `provider_non_a_share_security_rows_excluded` 加入父快照原因列表，避免把过滤后的条目集合误认为与原始响应完全一致。已新增 HTTP fixture 回归测试源码，尚未执行。
