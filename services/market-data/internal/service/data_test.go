@@ -921,7 +921,7 @@ func TestStockBoardsValidatesIdentityAndReturnsSnapshot(t *testing.T) {
 	change := 1.25
 	snapshot := &model.StockBoardSnapshot{
 		Symbol: "600519.SH", Total: 1, HasData: true,
-		Items:  []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Items:  []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change, Source: "eastmoney", SourceVersion: "test-stock-boards-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		Source: "eastmoney", SourceVersion: "test-stock-boards-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}
@@ -935,11 +935,17 @@ func TestStockBoardsValidatesIdentityAndReturnsSnapshot(t *testing.T) {
 	if got.Symbol != "600519.SH" || !got.HasData || got.Total != 1 || got.Items[0].Code != "BK0477" {
 		t.Fatalf("unexpected stock boards result: %+v", got)
 	}
+	versionMismatch := *snapshot
+	versionMismatch.Items = append([]model.StockBoard(nil), snapshot.Items...)
+	versionMismatch.Items[0].SourceVersion = "older-version"
+	if err := validateStockBoardsSnapshot("600519.SH", &versionMismatch); err == nil || !strings.Contains(err.Error(), "source/version") {
+		t.Fatalf("mismatched stock-board item version must be rejected, got %v", err)
+	}
 }
 
 func TestStockBoardsRejectsProviderSymbolMismatch(t *testing.T) {
 	now := time.Now().UTC()
-	snapshot := &model.StockBoardSnapshot{Symbol: "000001.SZ", Total: 1, HasData: true, Items: []model.StockBoard{{Code: "BK1", Name: "测试", Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}}, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}
+	snapshot := &model.StockBoardSnapshot{Symbol: "000001.SZ", Total: 1, HasData: true, Items: []model.StockBoard{{Code: "BK1", Name: "测试", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}}, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}
 	p := stockBoardsFakeProvider{snapshot: snapshot}
 	svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
 	svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
@@ -1156,16 +1162,23 @@ func TestValidateSectorRankingSnapshotRejectsInvalidTotalsAndQuality(t *testing.
 	changePercent := 1.25
 	makeSnapshot := func() *model.SectorRankingSnapshot {
 		return &model.SectorRankingSnapshot{
-			Category: "industry", Total: 1, Source: "eastmoney", FetchedAt: now,
+			Category: "industry", Total: 1, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityDegraded,
 			Items: []model.SectorRanking{{
 				Rank: 1, Code: "BK0477", Name: "酿酒行业", Category: "industry",
-				ChangePercent: &changePercent, AmountUnit: "unknown", Source: "eastmoney",
+				ChangePercent: &changePercent, AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1",
 				FetchedAt: now, QualityStatus: model.QualityDegraded,
 			}},
 		}
 	}
 
+	t.Run("source version mismatch", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Items[0].SourceVersion = "older-version"
+		if err := validateSectorRankingSnapshot("industry", 10, snapshot); err == nil || !strings.Contains(err.Error(), "source/version") {
+			t.Fatalf("mismatched sector-ranking item version must be rejected, got %v", err)
+		}
+	})
 	t.Run("total below returned count", func(t *testing.T) {
 		snapshot := makeSnapshot()
 		snapshot.Total = 0
@@ -1210,7 +1223,7 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 	t.Run("stock board item degradation", func(t *testing.T) {
 		change := 1.2
 		snapshot := &model.StockBoardSnapshot{
-			Symbol: "600519.SH", Total: 1, HasData: true, Source: "eastmoney", FetchedAt: now,
+			Symbol: "600519.SH", Total: 1, HasData: true, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityValid,
 			Items: []model.StockBoard{{Code: "BK0477", Name: "酿酒行业", ChangePercent: &change,
 				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}},
@@ -1223,7 +1236,7 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 		snapshot := &model.HotRankingSnapshot{
 			RankingType: "popular", Total: 1, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 			Items: []model.HotRankingItem{{Rank: 1, Symbol: "600519.SH", Code: "600519",
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		}
 		if err := validateHotRankingSnapshot("popular", snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
 			t.Fatalf("hot-ranking snapshot must inherit item degradation, got %v", err)
@@ -1281,7 +1294,7 @@ func TestStockBoardsCachesUnknownEmptyResultBriefly(t *testing.T) {
 	p := &stockBoardsCountingFakeProvider{
 		snapshot: &model.StockBoardSnapshot{
 			Symbol: "600519.SH", Total: 0, HasData: false, Items: []model.StockBoard{},
-			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityUnknown,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityUnknown,
 			QualityReasons: []string{"provider_empty_membership_unconfirmed"},
 		},
 	}

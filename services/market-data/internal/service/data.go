@@ -857,8 +857,8 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if snapshot.Direction != "" && snapshot.Direction != "up" && snapshot.Direction != "down" {
 		return fmt.Errorf("sector-ranking direction %q is unsupported", snapshot.Direction)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("sector-ranking source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("sector-ranking source, source_version or fetched_at is missing")
 	}
 	if snapshot.QualityStatus == model.QualityValid {
 		return errors.New("sector-ranking snapshot cannot be valid without a provider snapshot timestamp")
@@ -882,8 +882,8 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 		if item.Rank < 1 {
 			return errors.New("sector-ranking item rank must be positive")
 		}
-		if item.Source != snapshot.Source {
-			return errors.New("sector-ranking item source differs from its snapshot source")
+		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion {
+			return errors.New("sector-ranking item source/version differs from its snapshot")
 		}
 		if item.QualityStatus == model.QualityValid {
 			return errors.New("sector-ranking item cannot be valid without a provider snapshot timestamp")
@@ -1382,8 +1382,8 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 	if err != nil || returnedSymbol != symbol {
 		return fmt.Errorf("stock-boards symbol mismatch: requested %s, returned %q", symbol, snapshot.Symbol)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("stock-boards source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("stock-boards source, source_version or fetched_at is missing")
 	}
 	if snapshot.Total < 0 || snapshot.Total > 1000 || len(snapshot.Items) > snapshot.Total {
 		return errors.New("stock-boards total/items count is invalid")
@@ -1409,8 +1409,8 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" {
 			return errors.New("stock-board item is missing code or name")
 		}
-		if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-			return errors.New("stock-board item source or fetched_at mismatch")
+		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+			return errors.New("stock-board item source/version or fetched_at mismatch")
 		}
 		if item.QualityStatus == model.QualityValid {
 			return errors.New("stock-board item cannot be valid without a provider snapshot timestamp")
