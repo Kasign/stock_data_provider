@@ -588,14 +588,23 @@ func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIn
 		if json.Unmarshal(data, &cached) == nil &&
 			cached.AsOfDate == asOfDate &&
 			validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil &&
-			time.Since(cached.FetchedAt) >= 0 &&
-			len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown {
+			time.Since(cached.FetchedAt) >= 0 {
 			markIndexConstituentCoverage(&cached)
 			ttl := 24 * time.Hour
-			if cached.QualityStatus != model.QualityValid {
+			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
+			if cached.QualityStatus == model.QualityUnknown {
+				ttl = 5 * time.Minute
+				for _, reason := range cached.QualityReasons {
+					if reason == "index_constituents_as_of_fallback_exhausted_without_confirmed_data" ||
+						reason == "index_constituents_as_of_fallback_exhausted_without_usable_quality" {
+						cacheEligible = true
+						break
+					}
+				}
+			} else if cached.QualityStatus != model.QualityValid {
 				ttl = 6 * time.Hour
 			}
-			if time.Since(cached.FetchedAt) < ttl {
+			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
 				return &cached, true, nil
 			}
 		}
@@ -653,6 +662,13 @@ func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIn
 			reason = "index_constituents_as_of_fallback_exhausted_without_confirmed_data"
 		}
 		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if payload, err := json.Marshal(unknownCandidate); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, 5*time.Minute); cacheErr != nil {
+				s.logger.Warn("historical index constituents unknown cache write failed", "symbol", indexSymbol, "as_of", asOfDate, "error", cacheErr)
+			}
+		} else {
+			s.logger.Warn("historical index constituents unknown cache encode failed", "symbol", indexSymbol, "as_of", asOfDate, "error", err)
+		}
 		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all historical index-constituent providers failed: %s", strings.Join(failures, "; "))

@@ -365,3 +365,35 @@ func TestIndexConstituentsAsOfDoesNotFallBackToCurrentOnlyProvider(t *testing.T)
 		t.Fatalf("current-only Provider must not be used for historical constituents, got %v", err)
 	}
 }
+
+ 
+func TestIndexConstituentsAsOfCachesUnknownOnlyAfterFallbackExhausted(t *testing.T) {
+	asOfDate := time.Now().In(marketLocation()).AddDate(0, 0, -20).Format("2006-01-02")
+	p := &indexCatalogAsOfSourceTestProvider{
+		indexCatalogSourceTestProvider: indexCatalogSourceTestProvider{name: "tushare"},
+		snapshot: &model.IndexConstituentSnapshot{
+			IndexSymbol: "000300.SH", Items: []model.IndexConstituent{}, Total: 0,
+			Source: "tushare", SourceVersion: "test-index-constituents-unknown-v1",
+			FetchedAt: time.Now().UTC(), QualityStatus: model.QualityUnknown,
+			QualityReasons: []string{"provider_has_no_index_weight_snapshot_on_or_before_requested_as_of_within_120_months"},
+		},
+	}
+	mem := newMemoryCache()
+	svc := &DataService{cache: mem, indexCatalogProviders: []provider.IndexCatalogProvider{p}}
+
+	first, hit, err := svc.IndexConstituentsAsOfFromSource(context.Background(), "000300.SH", asOfDate, "")
+	if err != nil || hit {
+		t.Fatalf("first historical lookup hit=%v err=%v", hit, err)
+	}
+	if first == nil || first.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected unknown historical snapshot, got %+v", first)
+	}
+
+	second, hit, err := svc.IndexConstituentsAsOfFromSource(context.Background(), "000300.SH", asOfDate, "")
+	if err != nil || !hit {
+		t.Fatalf("repeated historical lookup should use exhausted-fallback cache: hit=%v err=%v", hit, err)
+	}
+	if second == nil || second.QualityStatus != model.QualityUnknown || p.asOfCalls != 1 {
+		t.Fatalf("unknown cache changed quality or repeated upstream call: snapshot=%+v as_of_calls=%d", second, p.asOfCalls)
+	}
+}
