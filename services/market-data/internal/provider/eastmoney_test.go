@@ -804,3 +804,17 @@ func TestEastmoneyFetchHotStocksRejectsDuplicateQuoteEnrichmentCodes(t *testing.
 		t.Fatalf("duplicate quote enrichment code must not overwrite prior fields, got %v", err)
 	}
 }
+
+
+func TestEastmoneyHotRankingSymbolRejectsNonEquityCodes(t *testing.T) {
+	for _, raw := range []string{"SH510300", "SZ159919", "SH000001", "SZ399001", "SH113001", "SH900901"} {
+		if _, _, _, err := eastmoneyHotRankingSymbol(raw); err == nil {
+			t.Errorf("non-equity or unsupported code %s must not be returned as a hot stock", raw)
+		}
+	}
+	for _, raw := range []string{"SH600519", "SH688981", "SZ000001", "SZ300750"} {
+		if _, _, _, err := eastmoneyHotRankingSymbol(raw); err != nil {
+			t.Errorf("ordinary A-share code %s should remain supported: %v", raw, err)
+		}
+	}
+}

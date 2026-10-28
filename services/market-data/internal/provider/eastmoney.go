@@ -935,6 +935,21 @@ func eastmoneyHotRankingSymbol(raw string) (symbol, code, secid string, err erro
 			return "", "", "", fmt.Errorf("non-numeric stock code %q", raw)
 		}
 	}
+	// 热度榜契约是普通 A 股股票；仅识别交易所前缀会把 ETF、指数和可转债误作个股。
+	stockCode := false
+	prefixes := []string{"600", "601", "603", "605", "688", "689"}
+	if exchange == "SZ" {
+		prefixes = []string{"000", "001", "002", "003", "300", "301"}
+	}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(bare, prefix) {
+			stockCode = true
+			break
+		}
+	}
+	if !stockCode {
+		return "", "", "", fmt.Errorf("unsupported non-equity or unrecognized stock code %q", raw)
+	}
 	market := "1"
 	if exchange == "SZ" {
 		market = "0"
