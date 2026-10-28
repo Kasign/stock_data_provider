@@ -912,3 +912,7 @@ Tushare `stock_basic` 按 `ts_code` 查询单只证券时，原适配器只接�
 ## 2026-10-28 东财涨跌停池覆盖不足提示
 
 东财涨跌停池保留源端 `tc` 作为 `total`，当它大于响应 `pool` 条数时新增 `provider_total_exceeds_returned_rows` 质量原因，显式提示本次列表只覆盖部分源端记录。已新增 HTTP fixture 测试源码，尚未执行。
+
+## 2026-10-28 Tushare 涨跌停池重复证券门禁
+
+Tushare `limit_list_d` 现在检查同一响应中的普通 A 股证券代码唯一性；重复证券直接拒绝当前 Provider。已新增 HTTP fixture 回归测试源码，尚未执行 Go 测试、构建或真实上游请求。
