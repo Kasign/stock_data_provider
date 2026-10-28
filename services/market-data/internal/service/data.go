@@ -1161,6 +1161,7 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.StockBasic
 		if json.Unmarshal(data, &item) == nil && validateStockBasic(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 {
+			item.Symbol = symbol
 			maxAge := ttl
 			if item.QualityStatus == model.QualityDegraded {
 				maxAge = degradedTTL
@@ -1208,6 +1209,7 @@ func (s *DataService) StockBasic(ctx context.Context, rawSymbol string) (*model.
 			failures = append(failures, p.Name()+": stock-basic symbol mismatch")
 			continue
 		}
+		item.Symbol = symbol
 		if item.Source == "" {
 			item.Source = p.Name()
 		}
@@ -1518,6 +1520,7 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.StockBoardSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateStockBoardsSnapshot(symbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
+			cached.Symbol = symbol
 			ttl := positiveTTL
 			cacheEligible := cached.HasData && cached.QualityStatus != model.QualityUnknown
 			if !cached.HasData || cached.QualityStatus == model.QualityUnknown {
@@ -1557,6 +1560,12 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 			failures = append(failures, p.Name()+": empty stock-boards response")
 			continue
 		}
+		returnedSymbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
+		if symbolErr != nil || returnedSymbol != symbol {
+			failures = append(failures, p.Name()+": stock-boards symbol mismatch")
+			continue
+		}
+		item.Symbol = symbol
 		if item.Source == "" {
 			item.Source = p.Name()
 		}

@@ -1162,6 +1162,49 @@ func (f stockBoardsFakeProvider) FetchStockBoards(context.Context, string) (*mod
 	return f.snapshot, f.err
 }
 
+func TestStockBoardsNormalizesProviderAndCachedSymbols(t *testing.T) {
+	change := 1.25
+	makeSnapshot := func(symbol string) *model.StockBoardSnapshot {
+		now := time.Now().UTC()
+		return &model.StockBoardSnapshot{
+			Symbol: symbol, Total: 1, HasData: true,
+			Items: []model.StockBoard{{
+				Code: "BK0477", Name: "酿酒行业", ChangePercent: &change,
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			}},
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		}
+	}
+	t.Run("provider response", func(t *testing.T) {
+		p := stockBoardsFakeProvider{snapshot: makeSnapshot("600519")}
+		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+			ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+		svc.SetStockBoardsProviders([]provider.StockBoardsProvider{p})
+		got, hit, err := svc.StockBoards(context.Background(), "600519.SH")
+		if err != nil || hit {
+			t.Fatalf("StockBoards returned hit=%v err=%v", hit, err)
+		}
+		if got == nil || got.Symbol != "600519.SH" {
+			t.Fatalf("provider board symbol must be returned canonically, got %+v", got)
+		}
+	})
+	t.Run("cache payload", func(t *testing.T) {
+		legacy := makeSnapshot("600519")
+		encoded, err := json.Marshal(legacy)
+		if err != nil { t.Fatal(err) }
+		mem := newMemoryCache()
+		mem.values["md:v1:stock-boards:600519.SH"] = encoded
+		svc := NewWithCapabilities(nil, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+		got, hit, err := svc.StockBoards(context.Background(), "600519.SH")
+		if err != nil || !hit {
+			t.Fatalf("StockBoards cache returned hit=%v err=%v", hit, err)
+		}
+		if got == nil || got.Symbol != "600519.SH" {
+			t.Fatalf("cached board symbol must be returned canonically, got %+v", got)
+		}
+	})
+}
+
 func TestStockBoardsValidatesIdentityAndReturnsSnapshot(t *testing.T) {
 	now := time.Now().UTC()
 	change := 1.25
@@ -1679,6 +1722,46 @@ func (p *stockBasicFakeProvider) Name() string {
 func (p *stockBasicFakeProvider) FetchStockBasic(context.Context, string) (*model.StockBasic, error) {
 	p.calls++
 	return p.item, nil
+}
+
+func stockBasicIdentityFixtureForTest(symbol string) *model.StockBasic {
+	return &model.StockBasic{
+		Symbol: symbol, Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney",
+		SourceVersion: "eastmoney-stock-basic-v2", FetchedAt: time.Now().UTC(),
+		QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}
+}
+
+func TestStockBasicNormalizesProviderAndCachedSymbols(t *testing.T) {
+	t.Run("provider response", func(t *testing.T) {
+		p := &stockBasicFakeProvider{name: "eastmoney", item: stockBasicIdentityFixtureForTest("600519")}
+		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000,
+			ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+		svc.SetStockBasicProviders([]provider.StockBasicProvider{p})
+		got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+		if err != nil || hit {
+			t.Fatalf("StockBasic returned hit=%v err=%v", hit, err)
+		}
+		if got == nil || got.Symbol != "600519.SH" {
+			t.Fatalf("provider stock symbol must be returned canonically, got %+v", got)
+		}
+	})
+	t.Run("cache payload", func(t *testing.T) {
+		legacy := stockBasicIdentityFixtureForTest("600519")
+		encoded, err := json.Marshal(legacy)
+		if err != nil { t.Fatal(err) }
+		mem := newMemoryCache()
+		mem.values["md:v1:stock-basic:600519.SH"] = encoded
+		svc := NewWithCapabilities(nil, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+		got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+		if err != nil || !hit {
+			t.Fatalf("StockBasic cache returned hit=%v err=%v", hit, err)
+		}
+		if got == nil || got.Symbol != "600519.SH" {
+			t.Fatalf("cached stock symbol must be returned canonically, got %+v", got)
+		}
+	})
 }
 
 func TestStockBasicFallsBackFromOldNormalizationVersion(t *testing.T) {
