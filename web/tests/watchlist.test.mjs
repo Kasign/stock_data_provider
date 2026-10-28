@@ -32,6 +32,26 @@ test("adds normalized stock symbols, deduplicates and keeps the most recently us
   assert.equal(duplicate.items[0].updated_at, "2026-10-23T03:00:00Z");
 });
 
+test("treats a plain A-share code and its known exchange-suffixed code as one watchlist entry", () => {
+  const storage = makeStorage();
+  const first = addWatchlistSymbol("600519", "贵州茅台", storage, "2026-10-23T01:00:00Z");
+  const duplicate = addWatchlistSymbol("600519.SH", "new alias", storage, "2026-10-23T02:00:00Z");
+
+  assert.equal(first.added, true);
+  assert.equal(duplicate.added, false);
+  assert.deepEqual(duplicate.items.map((item) => item.symbol), ["600519"]);
+  assert.equal(duplicate.items[0].name, "贵州茅台");
+  assert.equal(duplicate.items[0].updated_at, "2026-10-23T02:00:00Z");
+
+  const renamed = renameWatchlistSymbol("600519.SH", "核心观察", storage);
+  assert.equal(renamed.changed, true);
+  assert.equal(renamed.items[0].name, "核心观察");
+
+  const removed = removeWatchlistSymbol("600519.SH", storage);
+  assert.equal(removed.removed, true);
+  assert.deepEqual(readWatchlist(storage), []);
+});
+
 test("rejects malformed symbols and sanitizes optional names", () => {
   const storage = makeStorage();
   assert.equal(addWatchlistSymbol("60051", "bad", storage).valid, false);
@@ -82,6 +102,7 @@ test("rejects partially malformed, duplicate and over-limit stored records witho
   const cases = [
     [{ symbol: "bad-symbol" }, { symbol: "600519.SH", name: "valid" }],
     [{ symbol: "600519.SH", name: "first" }, { symbol: "600519.SH", name: "duplicate" }],
+    [{ symbol: "600519", name: "plain code" }, { symbol: "600519.SH", name: "with suffix" }],
     Array.from({ length: MAX_WATCHLIST_ITEMS + 1 }, (_, index) => ({
       symbol: String(index).padStart(6, "0"),
       name: "stock-" + index
