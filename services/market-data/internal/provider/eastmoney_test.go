@@ -848,3 +848,75 @@ func TestEastmoneySectorRankingDistinguishesMissingTotalFromZeroWithRows(t *test
 		}
 	})
 }
+
+
+func TestEastmoneyFetchIndexQuotesRejectsContradictoryReportedTotal(t *testing.T) {
+	for _, body := range []struct {
+		name string
+		json string
+		want string
+	}{
+		{name: "zero with rows", json: `{"rc":0,"data":{"total":0,"diff":[{"f2":3200.5,"f3":0.8,"f12":"000001","f13":1}]}}`, want: "total=0 with non-empty rows"},
+		{name: "negative total", json: `{"rc":0,"data":{"total":-1,"diff":[{"f2":3200.5,"f3":0.8,"f12":"000001","f13":1}]}}`, want: "total is negative"},
+		{name: "total less than rows", json: `{"rc":0,"data":{"total":1,"diff":[{"f2":3200.5,"f3":0.8,"f12":"000001","f13":1},{"f2":3201.5,"f3":0.9,"f12":"399001","f13":0}]}}`, want: "reports total=1 with 2 returned rows"},
+	} {
+		t.Run(body.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, body.json)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+			_, err := p.FetchIndexQuotes(context.Background())
+			if err == nil || !strings.Contains(err.Error(), body.want) {
+				t.Fatalf("contradictory source total should be rejected, got %v", err)
+			}
+		})
+	}
+}
+
+func TestEastmoneyFetchIndexQuotesRejectsInvalidPricesAndOHLC(t *testing.T) {
+	for _, row := range []struct {
+		name string
+		json string
+	}{
+		{name: "zero price", json: `{"f2":0,"f3":0,"f12":"000001","f13":1}`},
+		{name: "negative price", json: `{"f2":-1,"f3":0,"f12":"000001","f13":1}`},
+		{name: "high below low", json: `{"f2":3200,"f3":0,"f15":3100,"f16":3150,"f17":3160,"f18":3180,"f12":"000001","f13":1}`},
+		{name: "price outside range", json: `{"f2":3300,"f3":0,"f15":3210,"f16":3180,"f17":3190,"f18":3176,"f12":"000001","f13":1}`},
+		{name: "nonpositive previous close", json: `{"f2":3200,"f3":0,"f18":0,"f12":"000001","f13":1}`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"rc":0,"data":{"total":1,"diff":[%s]}}`, row.json)
+			}))
+			defer server.Close()
+			p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+			_, err := p.FetchIndexQuotes(context.Background())
+			if err == nil || !strings.Contains(err.Error(), "rows failed index-code and price validation") {
+				t.Fatalf("invalid index price/OHLC row should not be accepted, got %v", err)
+			}
+		})
+	}
+}
+
+func TestEastmoneyFetchIndexQuotesNegativeAmountDegradesInsteadOfReturningNegativeAmount(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"total":1,"diff":[{"f2":3200.5,"f3":0.8,"f4":24.5,"f6":-10,"f12":"000001","f13":1,"f14":"上证指数","f15":3210,"f16":3180,"f17":3190,"f18":3176,"f86":"202610231500"}]}}`)
+	}))
+	defer server.Close()
+	p := NewEastmoneyConfiguredWithIndices(2*time.Second, "", "", "", "", server.URL, "")
+	snapshot, err := p.FetchIndexQuotes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Items) != 1 {
+		t.Fatalf("expected the valid price row to be preserved: %+v", snapshot)
+	}
+	item := snapshot.Items[0]
+	if item.Amount != nil || item.AmountUnit != "unknown" || item.QualityStatus != model.QualityDegraded {
+		t.Fatalf("negative amount must be omitted and quality downgraded: %+v", item)
+	}
+	if !strings.Contains(strings.Join(item.QualityReasons, ","), "provider_amount_negative_or_invalid") {
+		t.Fatalf("item should disclose invalid negative amount: %v", item.QualityReasons)
+	}
+}

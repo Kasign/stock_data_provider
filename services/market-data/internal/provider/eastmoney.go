@@ -2083,7 +2083,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	var payload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
-			Total int                          `json:"total"`
+			Total *int                         `json:"total"`
 			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
@@ -2093,11 +2093,29 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 	if payload.RC != nil && *payload.RC != 0 {
 		return nil, fmt.Errorf("Eastmoney index quote provider error rc=%d", *payload.RC)
 	}
-	if payload.Data == nil || len(payload.Data.Diff) == 0 {
+	if payload.Data == nil {
+		return nil, errors.New("Eastmoney index quote response has no data object")
+	}
+	if payload.Data.Total != nil {
+		if *payload.Data.Total < 0 {
+			return nil, fmt.Errorf("Eastmoney index quote total is negative: %d", *payload.Data.Total)
+		}
+		if *payload.Data.Total == 0 && len(payload.Data.Diff) > 0 {
+			return nil, errors.New("Eastmoney index quote reports total=0 with non-empty rows")
+		}
+		if *payload.Data.Total < len(payload.Data.Diff) {
+			return nil, fmt.Errorf("Eastmoney index quote reports total=%d with %d returned rows", *payload.Data.Total, len(payload.Data.Diff))
+		}
+	}
+	if len(payload.Data.Diff) == 0 {
 		return nil, errors.New("Eastmoney index quote returned no rows")
 	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.IndexQuoteSnapshot{Source: p.Name(), SourceVersion: "eastmoney-ulist-index-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityValid, Items: make([]model.MarketIndexQuote, 0, len(eastmoneyCoreIndexDefinitions))}
+	if payload.Data.Total != nil && *payload.Data.Total > len(payload.Data.Diff) {
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_total_exceeds_returned_rows")
+	}
 	seen := make(map[string]bool, len(eastmoneyCoreIndexDefinitions))
 	for _, raw := range payload.Data.Diff {
 		market, code := parseEastmoneyBoardString(raw, "f13"), parseEastmoneyBoardString(raw, "f12")
@@ -2117,14 +2135,34 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_name_missing_used_allowlisted_name")
 		}
 		price, changePercent := parseEastmoneyBoardNumber(raw, "f2"), parseEastmoneyBoardNumber(raw, "f3")
-		if price == nil || changePercent == nil {
+		if price == nil || *price <= 0 || changePercent == nil {
 			snapshot.QualityStatus = model.QualityDegraded
-			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_required_price_field_missing")
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_required_price_field_missing_or_invalid")
+			continue
+		}
+		openPrice := parseEastmoneyBoardNumber(raw, "f17")
+		high := parseEastmoneyBoardNumber(raw, "f15")
+		low := parseEastmoneyBoardNumber(raw, "f16")
+		prevClose := parseEastmoneyBoardNumber(raw, "f18")
+		invalidOptionalPrice := false
+		for _, value := range []*float64{openPrice, high, low, prevClose} {
+			if value != nil && *value <= 0 {
+				invalidOptionalPrice = true
+				break
+			}
+		}
+		if invalidOptionalPrice || (high != nil && low != nil && (*low > *high || *price < *low || *price > *high || (openPrice != nil && (*openPrice < *low || *openPrice > *high)))) {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_ohlc_invariant_failed")
 			continue
 		}
 		reasons := []string{}
 		amount := parseEastmoneyBoardNumber(raw, "f6")
 		amountUnit := "CNY"
+		if amount != nil && *amount < 0 {
+			amount = nil
+			reasons = append(reasons, "provider_amount_negative_or_invalid")
+		}
 		if amount == nil {
 			amountUnit = "unknown"
 			reasons = append(reasons, "provider_amount_missing")
@@ -2145,7 +2183,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		item := model.MarketIndexQuote{
 			Symbol: definition.Symbol, Code: definition.Code, Name: name,
 			LatestPrice: price, Change: parseEastmoneyBoardNumber(raw, "f4"), ChangePercent: changePercent,
-			Open: parseEastmoneyBoardNumber(raw, "f17"), High: parseEastmoneyBoardNumber(raw, "f15"), Low: parseEastmoneyBoardNumber(raw, "f16"), PrevClose: parseEastmoneyBoardNumber(raw, "f18"),
+			Open: openPrice, High: high, Low: low, PrevClose: prevClose,
 			Amount: amount, AmountUnit: amountUnit, QuoteTime: quoteTime, QuoteTimeSemantics: quoteTimeSemantics,
 			Source: p.Name(), SourceVersion: snapshot.SourceVersion, FetchedAt: fetchedAt, QualityStatus: model.QualityValid, QualityReasons: reasons,
 		}
