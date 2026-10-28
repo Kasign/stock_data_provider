@@ -645,3 +645,89 @@ func TestEastmoneyHotRankingEndpointsAreConfigurable(t *testing.T) {
 		t.Fatal("existing constructors must preserve the default Eastmoney ranking endpoints")
 	}
 }
+
+
+// eastmoneyStockSearchRowsForContractTest 生成用于分页契约测试的有效证券目录行。
+func eastmoneyStockSearchRowsForContractTest(start, count int) []map[string]any {
+	rows := make([]map[string]any, 0, count)
+	for index := start; index < start+count; index++ {
+		rows = append(rows, map[string]any{
+			"f12": fmt.Sprintf("%06d", 300000+index),
+			"f13": 0,
+			"f14": fmt.Sprintf("测试股票%d", index),
+		})
+	}
+	return rows
+}
+
+func TestEastmoneyStockSearchRejectsChangingTotalBetweenPages(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		page, err := strconv.Atoi(r.URL.Query().Get("pn"))
+		if err != nil {
+			t.Errorf("invalid page number: %v", err)
+		}
+		total := 101
+		count := 100
+		if page > 1 {
+			total = 102
+			count = 2
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"rc": 0,
+			"data": map[string]any{
+				"total": total,
+				"diff":  eastmoneyStockSearchRowsForContractTest((page-1)*100, count),
+			},
+		}); err != nil {
+			t.Errorf("encode page: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	p := &Eastmoney{client: server.Client(), stockListURL: server.URL, ut: "test-token"}
+	_, err := p.SearchStocks(context.Background(), "测试股票", 10)
+	if err == nil || !strings.Contains(err.Error(), "total changed across pages") {
+		t.Fatalf("directory with changing page totals must be rejected, got %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("pagination should stop when page total changes, got %d requests", requests)
+	}
+}
+
+func TestEastmoneyStockSearchRejectsPageRowsBeyondDeclaredTotal(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		page, err := strconv.Atoi(r.URL.Query().Get("pn"))
+		if err != nil {
+			t.Errorf("invalid page number: %v", err)
+		}
+		count := 100
+		if page > 1 {
+			count = 2 // total=101 时，末页最多只能返回 1 条。
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"rc": 0,
+			"data": map[string]any{
+				"total": 101,
+				"diff":  eastmoneyStockSearchRowsForContractTest((page-1)*100, count),
+			},
+		}); err != nil {
+			t.Errorf("encode page: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	p := &Eastmoney{client: server.Client(), stockListURL: server.URL, ut: "test-token"}
+	_, err := p.SearchStocks(context.Background(), "测试股票", 10)
+	if err == nil || !strings.Contains(err.Error(), "exceeding 1 rows implied by total 101") {
+		t.Fatalf("page rows beyond declared total must be rejected, got %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("pagination should stop on an overfull page, got %d requests", requests)
+	}
+}

@@ -1693,10 +1693,31 @@ func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSea
 			if total > eastmoneyStockSearchPageSize*eastmoneyStockSearchMaxPages {
 				return nil, model.QualityUnknown, nil, fmt.Errorf("Eastmoney stock-search directory total %d exceeds safety limit", total)
 			}
+		} else if payload.Data.Total != total {
+			// 全量目录没有源端快照令牌；分页总数漂移表示无法证明各页属于同一完整目录。
+			return nil, model.QualityUnknown, nil, fmt.Errorf(
+				"Eastmoney stock-search directory total changed across pages: first=%d page=%d got=%d",
+				total, page, payload.Data.Total,
+			)
+		}
+		expectedRows := total - (page-1)*eastmoneyStockSearchPageSize
+		if expectedRows > eastmoneyStockSearchPageSize {
+			expectedRows = eastmoneyStockSearchPageSize
+		}
+		if expectedRows <= 0 {
+			return nil, model.QualityUnknown, nil, fmt.Errorf(
+				"Eastmoney stock-search page %d exceeds the declared directory total %d", page, total,
+			)
 		}
 		rows, err := decodeEastmoneyBoardRows(payload.Data.Diff)
 		if err != nil {
 			return nil, model.QualityUnknown, nil, fmt.Errorf("decode Eastmoney stock-search rows: %w", err)
+		}
+		if len(rows) > expectedRows {
+			return nil, model.QualityUnknown, nil, fmt.Errorf(
+				"Eastmoney stock-search page %d returned %d rows, exceeding %d rows implied by total %d",
+				page, len(rows), expectedRows, total,
+			)
 		}
 		if len(rows) == 0 {
 			if page == 1 {
