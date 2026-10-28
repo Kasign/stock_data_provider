@@ -870,3 +870,10 @@
 - `activateTaskReference` 切换任务时清空阶段事件 Map，但原先没有重置 `selectedTaskEventSequence`；新任务若有相同 sequence，会误继承旧任务的选中状态。
 - 现在在渲染新任务事件前显式重置选择序号，事件列表仍按新任务真实回包决定默认选中项。
 - 已补静态 UI 契约和更新 HANDOFF、PROGRESS、REVIEW_CHECKLIST；这是纯前端选择状态，不改变服务端接口契约。本轮未手动运行测试、构建、CI、浏览器自动化或真实 Provider 请求。
+
+
+## 2026-10-28 — 修正自选股来源标签的声明顺序
+
+- Review 发现 `todayTaskUsesOtherEndpoint` 在 `todayTask` 声明之前读取变量，会在渲染自选股卡片时触发暂时性死区错误。
+- 调整局部声明顺序，并增加静态契约检查 `todayTask` 必须先于来源标签判断声明。
+- 未改变自选股筛选、地址比较或任务关联逻辑；未手动运行测试、构建、CI 或浏览器自动化。

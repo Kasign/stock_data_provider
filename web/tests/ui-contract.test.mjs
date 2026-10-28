@@ -186,6 +186,9 @@ test("watchlist labels task history from a different analysis API address", () =
   assert.ok(app.includes('const isOtherAnalysisBase = (task) => Boolean(task && String(task.analysis_base || state.settings.analysisBase) !== String(state.settings.analysisBase));'));
   assert.ok(app.includes('todayLine.textContent = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "")'));
   assert.ok(app.includes('(recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "")'));
+  const todayTaskDeclaration = app.indexOf("const todayTask = [...matchingTasks]");
+  const todayEndpointUse = app.indexOf("const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask)");
+  assert.ok(todayTaskDeclaration >= 0 && todayTaskDeclaration < todayEndpointUse, "必须先计算 todayTask 再读取其来源地址，避免暂时性死区");
 });
 
 test("watchlist task and Run summaries refresh when background state changes", () => {

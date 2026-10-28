@@ -650,12 +650,12 @@ function renderWatchlist(records, storageReadable, storageValid) {
     const recentTask = [...matchingTasks]
       .sort((a, b) => (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0))[0] || null;
     const todayKey = localCalendarDateKey(new Date());
-    const isOtherAnalysisBase = (task) => Boolean(task && String(task.analysis_base || state.settings.analysisBase) !== String(state.settings.analysisBase));
-    const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask);
-    const recentTaskUsesOtherEndpoint = isOtherAnalysisBase(recentTask);
     const todayTask = [...matchingTasks]
       .filter((task) => Boolean(todayKey) && localCalendarDateKey(task.created_at) === todayKey)
       .sort((a, b) => (Date.parse(b.created_at || "") || 0) - (Date.parse(a.created_at || "") || 0))[0] || null;
+    const isOtherAnalysisBase = (task) => Boolean(task && String(task.analysis_base || state.settings.analysisBase) !== String(state.settings.analysisBase));
+    const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask);
+    const recentTaskUsesOtherEndpoint = isOtherAnalysisBase(recentTask);
     const activeTaskMatches = Boolean(state.taskId) && Array.isArray(state.taskSymbols)
       && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
       && ["running", "started", "pending", "queued", "processing", "in-progress", "in_progress"].includes(String(state.taskStatus || "").toLowerCase());
