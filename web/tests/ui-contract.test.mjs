@@ -557,9 +557,10 @@ test("market connection changes invalidate all market overview requests and old 
   const end = marketOverview.indexOf("\n }", start);
   const body = start >= 0 && end > start ? marketOverview.slice(start, end) : "";
   assert.ok(body.includes("KEYS.forEach(key=>{"));
-  assert.ok(body.includes("cancel(key);"), "连接变更应中止各市场模块请求并推进 generation");
-  assert.ok(body.includes('pending(key,"行情连接配置已变更，旧结果已清除，请重新刷新。","warning")'));
+  assert.ok(body.includes("safeOverviewUi(()=>cancel(key));"), "连接变更应通过安全入口中止各市场模块请求并推进 generation");
+  assert.ok(body.includes('safeOverviewUi(()=>pending(key,"行情连接配置已变更，旧结果已清除，请重新刷新。","warning"));'));
   assert.ok(body.includes("refreshGenerations[selector]+=1;"), "作废旧刷新摘要回写");
+  assert.ok(body.indexOf("Object.keys(refreshGenerations)") < body.indexOf("KEYS.forEach(key=>{"), "必须先使所有旧汇总响应失效，再逐项清理模块");
   assert.ok(body.includes('"#market-overview-updated","#market-data-updated"'));
   assert.ok(marketOverview.includes("return {refresh,invalidateConnection};"));
   const settingsStart = app.indexOf("function applySettings(nextSettings,");
@@ -574,8 +575,8 @@ test("market connection changes invalidate in-flight dragon-tiger and calendar r
   const invalidateBody = invalidateStart >= 0 && invalidateEnd > invalidateStart
     ? marketActivity.slice(invalidateStart, invalidateEnd)
     : "";
-  assert.ok(invalidateBody.includes('abort("dragon");'), "连接配置变更应中止龙虎榜请求");
-  assert.ok(invalidateBody.includes('abort("calendar");'), "连接配置变更应中止交易日历请求");
+  assert.ok(invalidateBody.includes('safeActivityUi(()=>abort("dragon"))'), "连接配置变更应通过安全入口中止龙虎榜请求");
+  assert.ok(invalidateBody.includes('safeActivityUi(()=>abort("calendar"))'), "连接配置变更应通过安全入口中止交易日历请求");
   assert.ok(invalidateBody.includes('$("#dragon-tiger-body")'), "应清除旧龙虎榜结果");
   assert.ok(invalidateBody.includes('$("#trading-calendar-grid").replaceChildren'), "应清除旧交易日历结果");
   assert.ok(marketActivity.includes("return {refresh:()=>Promise.all([loadDragon(),loadCalendar()]),invalidateConnection};"));
