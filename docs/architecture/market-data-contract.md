@@ -161,3 +161,5 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 ### 非空 unknown 快照的回退规则
 
 涨跌停池和龙虎榜即使已返回结构完整的记录，只要父快照质量仍为 `unknown`，服务层就必须继续尝试后备 Provider。只有所有启用来源均无法提供非 unknown 结果时，才可择优保留非空 unknown 候选并记录对应的回退耗尽原因；这类结果只能短缓存。空 unknown 结果继续使用“未确认数据”的原因，不能被解释成零事件。
+
+个股所属板块与公告列表同样遵循非空 unknown 回退：即使 Provider 返回结构完整的条目，只要父级质量为 `unknown`，就必须尝试后续数据源；只有回退链耗尽后才以对应的 `*_fallback_exhausted_with_unconfirmed_quality` 或 `*_fallback_exhausted_without_usable_quality` 原因返回并短缓存。公告行本身仍需通过发布时间、来源链接、日期和分页契约校验，不能因为允许父级 unknown 而放宽行级检查。

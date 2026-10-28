@@ -29,6 +29,12 @@
 - 所有 Provider 都没有返回非 unknown 结果时，服务层按条目数和可用字段覆盖选择候选，标记 `*_fallback_exhausted_without_usable_quality` 或既有空结果原因，再使用短 TTL；旧 unknown 缓存如果没有回退耗尽标记，会在多 Provider 场景跳过。
 - 新增本地回归测试源码，未运行测试、构建、CI 或真实 Provider 请求。
 
+### 个股所属板块与公告的非空 unknown 回退（2026-10-28）
+
+- 个股所属板块和公告接口现在允许父快照质量为 `unknown`、但条目本身通过结构校验的结果进入回退链；多 Provider 场景会绕过未标记回退耗尽的 unknown 缓存。
+- 若没有后续 Provider 提供非 unknown 结果，按条目数与可用字段覆盖保留候选，记录 `stock_boards_fallback_exhausted_with_unconfirmed_quality` 或 `announcements_fallback_exhausted_without_usable_quality`，使用短 TTL。
+- 新增本地回归测试源码，未运行测试、构建、CI 或真实 Provider 请求。
+
 ### 质量与时间契约修复
 - **指数目录 unknown 候选择优**：回退链耗尽后，优先保留条目更多的目录；条目数相同则优先有可核验源端时间、且源端时间更新的快照。
 - 回退耗尽时使用字段覆盖评分选择 unknown 日 K 候选：先比较返回条目数，再比较涨跌幅、成交量/成交额及源端时间字段的覆盖数，覆盖相同时优先较新的源端时间。

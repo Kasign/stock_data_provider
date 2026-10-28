@@ -1337,7 +1337,7 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 	if snapshot.QualityStatus == model.QualityValid {
 		return errors.New("stock-boards cannot be valid without a provider snapshot timestamp")
 	}
-	if snapshot.QualityStatus != model.QualityDegraded {
+	if snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("stock-boards quality status %q is unsupported", snapshot.QualityStatus)
 	}
 	seen := make(map[string]struct{}, len(snapshot.Items))
@@ -1373,6 +1373,25 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 }
 
 // StockBoards obtains board membership without mixing it into quote or daily-bar fallback.
+// betterUnknownStockBoardsSnapshot 优先保留板块条目更多、涨跌幅字段覆盖更完整的 unknown 候选。
+func betterUnknownStockBoardsSnapshot(candidate, current *model.StockBoardSnapshot) bool {
+	if candidate == nil { return false }
+	if current == nil { return true }
+	if len(candidate.Items) != len(current.Items) { return len(candidate.Items) > len(current.Items) }
+	coverage := func(snapshot *model.StockBoardSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			if item.ChangePercent != nil { count++ }
+			if strings.TrimSpace(item.Name) != "" { count++ }
+			if strings.TrimSpace(item.Code) != "" { count++ }
+		}
+		return count
+	}
+	left, right := coverage(candidate), coverage(current)
+	if left != right { return left > right }
+	return candidate.FetchedAt.After(current.FetchedAt)
+}
+
 func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model.StockBoardSnapshot, bool, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
@@ -1391,13 +1410,13 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 		var cached model.StockBoardSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateStockBoardsSnapshot(symbol, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			ttl := positiveTTL
-			cacheEligible := cached.HasData
-			if !cached.HasData {
+			cacheEligible := cached.HasData && cached.QualityStatus != model.QualityUnknown
+			if !cached.HasData || cached.QualityStatus == model.QualityUnknown {
 				ttl = emptyTTL
-				// 兼容旧版本缓存：未知空结果若未记录回退链耗尽，不得阻止新版本尝试其他 Provider。
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "stock_boards_fallback_exhausted_without_confirmed_membership" {
+					if reason == "stock_boards_fallback_exhausted_without_confirmed_membership" ||
+						reason == "stock_boards_fallback_exhausted_with_unconfirmed_quality" {
 						fallbackExhausted = true
 						break
 					}
@@ -1415,7 +1434,7 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 		return nil, false, errors.New("no enabled stock-boards provider")
 	}
 	var failures []string
-	var unknownEmpty *model.StockBoardSnapshot
+	var unknownCandidate *model.StockBoardSnapshot
 	for _, p := range s.stockBoardsProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -1470,10 +1489,14 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if !item.HasData {
-			// 空成员列表只说明当前源无法确认归属，不代表没有所属板块；尝试后续 Provider。
-			unknownEmpty = item
-			failures = append(failures, p.Name()+": empty board membership is unknown, not confirmed zero")
+		if !item.HasData || item.QualityStatus == model.QualityUnknown {
+			// 空成员列表或有条目但质量未知，都不能跳过后备来源。
+			if betterUnknownStockBoardsSnapshot(item, unknownCandidate) { unknownCandidate = item }
+			if !item.HasData {
+				failures = append(failures, p.Name()+": empty board membership is unknown, not confirmed zero")
+			} else {
+				failures = append(failures, p.Name()+": board membership rows are present but snapshot quality is unknown")
+			}
 			continue
 		}
 		// 已确认有返回条目的快照可以缓存较长时间。
@@ -1487,16 +1510,18 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 		}
 		return item, false, nil
 	}
-	if unknownEmpty != nil {
-		// 只有回退链耗尽后才短缓存 unknown，且记录本次已尝试全部启用源。
-		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "stock_boards_fallback_exhausted_without_confirmed_membership")
-		payload, marshalErr := json.Marshal(unknownEmpty)
+	if unknownCandidate != nil {
+		reason := "stock_boards_fallback_exhausted_with_unconfirmed_quality"
+		if !unknownCandidate.HasData { reason = "stock_boards_fallback_exhausted_without_confirmed_membership" }
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		payload, marshalErr := json.Marshal(unknownCandidate)
 		if marshalErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, payload, emptyTTL); cacheErr != nil {
 				s.logger.Warn("stock-boards unknown cache write failed", "symbol", symbol, "error", cacheErr)
 			}
 		}
-		return unknownEmpty, false, nil
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all stock-boards providers failed: %s", strings.Join(failures, "; "))
 }
