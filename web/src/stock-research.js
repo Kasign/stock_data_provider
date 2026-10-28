@@ -53,8 +53,15 @@ export function bindStockResearch(getSettings,getSymbol){
    const panel=PANEL_CONFIG[key];clearPanel(key,panel.empty,symbol);setQuality(panel.quality,"unknown","未加载");
   });
   setText("stock-research-feedback",symbol?"标的已切换；请重新加载对应资料，避免沿用上一只股票的结果。":"请先输入代码，或从中文名称搜索结果中选择股票。");
-  const loadButton=$("#load-stock-research");
-  if(loadButton){loadButton.disabled=false;loadButton.textContent=symbol?"重新加载公司资料":"加载公司资料";}
+  [
+   ["#load-stock-research",symbol?"重新加载公司资料":"加载公司资料"],
+   ["#load-valuations","读取估值指标"],
+   ["#load-chip-distribution","读取筹码分布"],
+   ["#load-capital-flow","读取资金流"]
+  ].forEach(([selector,label])=>{
+   const button=$(selector);
+   if(button){button.disabled=false;button.textContent=label;}
+  });
   $("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="加载更多公告";
  }
  function syncSymbol(){
@@ -176,16 +183,28 @@ export function bindStockResearch(getSettings,getSymbol){
   const ok=await fetchOne("fundamentals",(settings,sym,signal)=>getStockFundamentals(settings,sym,{year,quarter,signal}),renderFundamentals);
   if(ok)setText("stock-research-feedback","季度财务指标已返回；请同时参考报告期、披露日期和质量状态。");
  }
- async function loadValuations(){
+ async function runSupplementRequest(buttonId,idleText,key,request,render,successMessage){
   const symbol=syncSymbol();
-  if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return;}
-  const button=$("#load-valuations");
+  if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return false;}
+  const button=$(buttonId);
   button.disabled=true;button.textContent="读取中…";
+  const operation=fetchOne(key,request,render);
+  const generation=state.generation[key];
   try{
-   const requestedSymbol=symbol.includes(".")?symbol:symbol;
-   const ok=await fetchOne("valuations",(settings,sym,signal)=>getMarketValuations(settings,[requestedSymbol],signal),renderValuations);
-   if(ok)setText("stock-research-feedback","估值快照已返回；请同时参考每只股票质量、供应商时间及缺失指标。");
-  }finally{button.disabled=false;button.textContent="读取估值指标";}
+   const ok=await operation;
+   if(ok&&generation===state.generation[key]&&symbol===state.symbol)setText("stock-research-feedback",successMessage);
+   return ok;
+  }finally{
+   if(generation===state.generation[key]&&symbol===state.symbol){
+    button.disabled=false;
+    button.textContent=idleText;
+   }
+  }
+ }
+ async function loadValuations(){
+  return runSupplementRequest("#load-valuations","读取估值指标","valuations",
+   (settings,sym,signal)=>getMarketValuations(settings,[sym],signal),renderValuations,
+   "估值快照已返回；请同时参考每只股票质量、供应商时间及缺失指标。");
  }
  function renderValuations(data,symbol){
   const requestedSymbol=String(data.requested_symbols?.[0]||symbol);
@@ -235,14 +254,9 @@ export function bindStockResearch(getSettings,getSymbol){
   return (amount>0?"+":"")+new Intl.NumberFormat("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount)+" 元";
  }
  async function loadChipDistribution(){
-  const symbol=syncSymbol();
-  if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return;}
-  const button=$("#load-chip-distribution");
-  button.disabled=true;button.textContent="读取中…";
-  try{
-   const ok=await fetchOne("chip",(settings,sym,signal)=>getChipDistribution(settings,sym,signal),renderChipDistribution);
-   if(ok)setText("stock-research-feedback","筹码分布快照已返回；请参考数据日期、质量状态及来源说明。");
-  }finally{button.disabled=false;button.textContent="读取筹码分布";}
+  return runSupplementRequest("#load-chip-distribution","读取筹码分布","chip",
+   getChipDistribution,renderChipDistribution,
+   "筹码分布快照已返回；请参考数据日期、质量状态及来源说明。");
  }
  function renderChipDistribution(data,symbol){
   setText("chip-symbol",data.symbol||symbol);setQuality("chip-quality",data.quality_status);
@@ -262,14 +276,9 @@ export function bindStockResearch(getSettings,getSymbol){
   reasons("chip-reasons",data.quality_reasons);
  }
  async function loadCapitalFlow(){
-  const symbol=syncSymbol();
-  if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return;}
-  const button=$("#load-capital-flow");
-  button.disabled=true;button.textContent="读取中…";
-  try{
-   const ok=await fetchOne("capitalFlow",(settings,sym,signal)=>getCapitalFlow(settings,sym,signal),renderCapitalFlow);
-   if(ok)setText("stock-research-feedback","资金流摘要已返回；请参考统计口径、观测数与质量状态。");
-  }finally{button.disabled=false;button.textContent="读取资金流";}
+  return runSupplementRequest("#load-capital-flow","读取资金流","capitalFlow",
+   getCapitalFlow,renderCapitalFlow,
+   "资金流摘要已返回；请参考统计口径、观测数与质量状态。");
  }
  function renderCapitalFlow(data,symbol){
   setText("capital-flow-symbol",data.symbol||symbol);setQuality("capital-flow-quality",data.quality_status);
