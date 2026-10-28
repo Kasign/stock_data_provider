@@ -555,7 +555,7 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /event\.preventDefault\(\);[\s\S]*?closeSettingsWithGuard\(\)/);
   assert.match(app, /mergeConnectionDraft\(readConnectionDraft\(\), state\.settings\)/);
   assert.match(app, /async function checkConnectionFromSettings\(\)/);
-  assert.match(app, /const settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);/);
+  assert.match(app, /let settingsToCheck = null;[\s\S]*?settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);/);
   assert.match(app, /runHealthCheck\(marketHealth, settingsToCheck\)/);
   assert.match(app, /runHealthCheck\(analysisHealth, settingsToCheck\)/);
   assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000)"));
