@@ -463,7 +463,7 @@ function renderResearchStockList() {
     try { symbol = normalizeSymbol(symbol); } catch { /* 不规范本地条目保留原始值并显示未加载。 */ }
     return { symbol, name: record.name || symbol };
   });
-  if (currentSymbol && !items.some((item) => item.symbol === currentSymbol)) {
+  if (currentSymbol && !items.some((item) => sameMarketSymbol(item.symbol, currentSymbol))) {
     items.unshift({ symbol: currentSymbol, name: quote.name || currentSymbol });
   }
   if (!items.length) {
@@ -484,18 +484,18 @@ function renderResearchStockList() {
     return;
   }
   const technicalSymbol = state.technicalSymbol;
-  const latest = technicalSymbol && technicalSymbol === currentSymbol
+  const latest = technicalSymbol && sameMarketSymbol(technicalSymbol, currentSymbol)
     ? [...state.technicalRows].reverse().find((row) => row && row.close !== null && row.close !== undefined) || null
     : null;
   const formatResearchMA = (period, isCurrent) => {
     if (!isCurrent) return "未加载";
-    if (!technicalSymbol || technicalSymbol !== currentSymbol) return state.isQuerying ? "读取中…" : "未加载";
+    if (!technicalSymbol || !sameMarketSymbol(technicalSymbol, currentSymbol)) return state.isQuerying ? "读取中…" : "未加载";
     if (!latest) return "数据不足";
     const value = latest["ma" + period];
     return Number.isFinite(value) ? value.toFixed(2) : "数据不足";
   };
   items.forEach((item) => {
-    const isCurrent = Boolean(currentSymbol) && item.symbol === currentSymbol && Boolean(quote);
+    const isCurrent = Boolean(currentSymbol) && sameMarketSymbol(item.symbol, currentSymbol) && Boolean(quote);
     const tr = document.createElement("tr"), nameCell = document.createElement("td");
     const name = document.createElement("strong"), symbol = document.createElement("small");
     name.className = "research-list-stock-name"; name.textContent = item.name || item.symbol;
@@ -1332,9 +1332,7 @@ function renderResearchOverview() {
   if (!$("#research-overview-symbol")) return;
   let symbol = "";
   try { symbol = getQuerySymbol(); } catch {}
-  let quoteSymbol = "";
-  try { quoteSymbol = state.quote ? normalizeSymbol(state.quote.symbol || "") : ""; } catch {}
-  const quote = symbol && quoteSymbol === symbol ? state.quote : null;
+  const quote = symbol && state.quote && sameMarketSymbol(state.quote.symbol || "", symbol) ? state.quote : null;
   const matched = Boolean(quote);
   const quality = String(quote?.quality_status || "unknown").toLowerCase();
   const qualityNode = $("#research-overview-quality");
@@ -2012,6 +2010,14 @@ function responseSymbolMismatch(payload, requestedSymbol, label) {
     // 无法规范化的响应标识必须按不匹配处理，不将其显示为当前标的数据。
   }
   return label + "返回的证券代码 " + responseSymbol + " 与请求标的 " + requestedSymbol + " 不匹配，已忽略结果。";
+}
+
+function sameMarketSymbol(left, right) {
+  try {
+    return comparableMarketSymbol(left) === comparableMarketSymbol(right);
+  } catch {
+    return false;
+  }
 }
 
 

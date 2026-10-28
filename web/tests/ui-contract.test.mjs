@@ -1233,3 +1233,13 @@ test("任务状态轮询不允许更换已建立的 task_id/run_id 关联", () =
   assert.match(poller, /任务状态接口返回的 run_id 与当前任务已关联的 Run 不一致/);
   assert.match(poller, /taskError = responseIdentityError\([\s\S]*?run_id 与当前任务已关联的 Run 不一致/);
 });
+
+ 
+test("个股行情、研究摘要与均线匹配时兼容纯六位代码和带交易所后缀代码", () => {
+  assert.match(app, /function sameMarketSymbol\(left, right\)/);
+  assert.match(app, /items\.some\(\(item\) => sameMarketSymbol\(item\.symbol, currentSymbol\)\)/);
+  assert.match(app, /technicalSymbol && sameMarketSymbol\(technicalSymbol, currentSymbol\)/);
+  assert.match(app, /!sameMarketSymbol\(technicalSymbol, currentSymbol\)/);
+  assert.match(app, /sameMarketSymbol\(item\.symbol, currentSymbol\) && Boolean\(quote\)/);
+  assert.match(app, /state\.quote && sameMarketSymbol\(state\.quote\.symbol \|\| "", symbol\)/);
+});
