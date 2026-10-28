@@ -1033,3 +1033,12 @@
 - 同时断言轮询回包必须匹配当前 poll generation、task_id 与分析 API 地址代际，避免旧请求覆盖新任务事件。
 - 回归契约提交：https://github.com/Kasign/stock_data_provider/commit/a07ff35d9487f3c30d0c98f59d81e60f69b815d7
 - 未运行本地 Node 测试或浏览器验收。
+
+
+## 2026-10-28 Run 报告重读并发锁
+
+- `loadTaskRunResult` 使用 `#reload-run-result` 的 disabled/loading 状态作为单次读取锁，自动重试期间也保持禁用；同一读取处于 loading/retrying 时，重复的程序化调用直接返回。
+- 读取生命周期通过 `finally` 收尾，但只有当前 `runResultGeneration` 有权恢复按钮，旧请求迟到后不能提前解锁新请求。
+- 新建任务、恢复最近任务和分析 API 地址切换都会先使旧读取代际失效，再复位按钮，避免上下文切换后按钮一直禁用。
+- 代码与回归契约：https://github.com/Kasign/stock_data_provider/commit/56b2a0112a1797b747357e450d25d9f8e5c5fc19
+- 本轮未执行本地 Node 测试/构建；以该提交对应的 GitHub Actions Smoke 为后续自动化参考。
