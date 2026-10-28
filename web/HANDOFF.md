@@ -1017,3 +1017,11 @@
 - 只有续读成功完成后才加载 Run；若遇到永久/契约错误，保留诊断并暂停事件自动续读，Run 结果仍可独立读取。
 - 代码与回归契约提交：https://github.com/Kasign/stock_data_provider/commit/bef394f96afbfe9337f9c000e8a61ad8a2de5762
 - 本轮未执行本地 Node 测试、构建或浏览器验收。
+
+
+## 2026-10-28 阶段事件续读恢复契约复核
+
+- 修正上一批终态临时错误重试静态断言中的过度转义，避免测试正则匹配字面反斜杠而不是实际源码。
+- 新增手动刷新契约：恢复 `taskEventsUnavailable` 后需重新发起轮询，同时保留 `taskEventCursor`，防止重复请求第一页或覆盖已读取的事件集合。
+- 测试契约提交：https://github.com/Kasign/stock_data_provider/commit/0990c86be02f862458e1e107ea242c80af152011
+- 未执行本地 Node 测试、构建或浏览器验收。
