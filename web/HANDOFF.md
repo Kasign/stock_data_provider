@@ -1110,3 +1110,10 @@
 - [d3aeb99 — 修复市场工作台模块刷新未处理拒绝](https://github.com/Kasign/stock_data_provider/commit/d3aeb997b994afc2eb7c934b0e9b9de2a08da37e)：市场总览和资金/活跃度模块独立收敛同步启动错误与异步拒绝，完成后汇总部分失败原因。
 
 所有代码修改与对应静态契约在同一次提交中；本轮另行更新本交接文档和检查清单。尚未运行本地 Node 测试、构建或人工浏览器验收。下一轮应核对最新 HEAD 的 Browser Smoke，并继续检查 `runQuoteQuery`、个股研究模块和数据中心刷新入口的 fire-and-forget Promise 是否都有内部 catch/finally 保护。
+
+
+## 2026-10-28 Run 结果按钮契约校准
+
+- 已修正既有静态契约：新建任务、恢复任务和分析 API 地址切换的旧解锁调用已迁移到 `releaseRunResultReloadBusy`，断言现在检查三条路径使用安全封装，不再期待直接调用底层 DOM 解锁函数。
+- 契约提交：https://github.com/Kasign/stock_data_provider/commit/446d57765c2f18367d2f63fd931bffc14b59ac9e
+- 本次为契约同步修正，没有修改运行时代码；仍未运行本地 Node 测试。

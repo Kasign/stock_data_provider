@@ -1423,3 +1423,10 @@
   - https://github.com/Kasign/stock_data_provider/commit/8ce02f5b3f3a84979e021ab81bd95178a4197516
   - https://github.com/Kasign/stock_data_provider/commit/d3aeb997b994afc2eb7c934b0e9b9de2a08da37e
 - 已核对静态源码结构和新增契约文本；本轮未运行本地 Node 测试、构建或人工浏览器验收。最新代码 HEAD 的 Browser Smoke 已触发，等待后续核对。
+
+
+## 2026-10-28 — Run 按钮安全解锁静态契约校准
+
+- Review 发现 Run 结果并发锁的旧静态契约仍统计上下文切换中的直接 `setRunResultReloadBusy(false)` 调用，但实现已统一切换到 `releaseRunResultReloadBusy` 安全入口。
+- 已将契约改为检查新建任务、恢复最近任务和分析 API 地址切换三条路径都调用安全解锁助手，避免后续回归因断言滞后而误报。
+- 契约校准提交：https://github.com/Kasign/stock_data_provider/commit/446d57765c2f18367d2f63fd931bffc14b59ac9e
