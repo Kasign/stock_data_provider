@@ -826,3 +826,9 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - 修复指数成分缓存命中遗漏覆盖质量降级的问题：非空旧缓存缺少 `provider_returned` 时，同样追加 `provider_constituent_source_coverage_unreported`；原本 `valid/degraded` 的结果降级，原本 `unknown` 的结果仍保持 unknown。
 - 新增旧缓存 valid 和 unknown 两种状态的回归测试源码。尚未运行测试、构建、CI 或真实 Provider 请求；统一验收仍需确认。
+
+
+### 涨跌停池源端日期质量校验（2026-10-28）
+
+- 服务层新增 valid 涨跌停池必须有 `provider_report_date` 的门禁；缺少源端报告日期的旧缓存或 Provider 回包不能被标为 valid，也不能绕过缓存校验。日期存在时仍须匹配请求交易日且不能晚于当前中国市场日期。
+- 新增有效状态缺少报告日期与报告日期匹配的测试源码。未执行测试、构建、CI 或真实 Provider 请求，待统一验收。
