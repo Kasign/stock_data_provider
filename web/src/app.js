@@ -2930,57 +2930,88 @@ async function loadTaskRunResult(runId, expectedTaskId) {
     ? "页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"
     : "";
   setRunResultReloadBusy(true);
-  state.runResultReadStatus = "loading";
-  state.runResultReadError = "";
-  if (state.view === "watchlist") renderWatchlist();
-  $("#task-result-section").hidden = false;
-  $("#task-result-note").textContent = "正在读取已保存的 Run 结果…" + (retainedResultNotice ? " " + retainedResultNotice : "");
 
   try {
+    state.runResultReadStatus = "loading";
+    state.runResultReadError = "";
+    if (state.view === "watchlist") renderWatchlist();
+    $("#task-result-section").hidden = false;
+    $("#task-result-note").textContent =
+      "正在读取已保存的 Run 结果…" + (retainedResultNotice ? " " + retainedResultNotice : "");
+
     while (true) {
-      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
-    try {
-      const result = await getAnalysisRun(requestSettings, runId);
-      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
-      if (result?.run_id !== runId) {
-        throw responseIdentityError(result?.run_id
-          ? "Run 结果接口返回了其他 Run 的结果，已忽略。"
-          : "Run 结果接口未返回 run_id，已忽略该响应。");
-      }
-      const symbolMismatch = runResultSymbolMismatch(result);
-      if (symbolMismatch) throw responseIdentityError(symbolMismatch);
-      state.runId = result.run_id;
-      persistTaskReference();
-      renderTaskResult(result);
-      return;
-    } catch (error) {
-      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
-      const delay = RUN_RESULT_RETRY_DELAYS_MS[retries];
-      if (delay !== undefined && !error.responseContractError && isRetryableApiError(error)) {
-        retries += 1;
-        state.runResultReadStatus = "retrying";
+      if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId ||
+          endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase ||
+          state.settings.analysisBase !== analysisBase) return;
+
+      try {
+        const result = await getAnalysisRun(requestSettings, runId);
+        if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId ||
+            endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase ||
+            state.settings.analysisBase !== analysisBase) return;
+        if (result?.run_id !== runId) {
+          throw responseIdentityError(result?.run_id
+            ? "Run 结果接口返回了其他 Run 的结果，已忽略。"
+            : "Run 结果接口未返回 run_id，已忽略该响应。");
+        }
+        const symbolMismatch = runResultSymbolMismatch(result);
+        if (symbolMismatch) throw responseIdentityError(symbolMismatch);
+        state.runId = result.run_id;
+        persistTaskReference();
+        renderTaskResult(result);
+        return;
+      } catch (error) {
+        if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId ||
+            endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase ||
+            state.settings.analysisBase !== analysisBase) return;
+        const delay = RUN_RESULT_RETRY_DELAYS_MS[retries];
+        if (delay !== undefined && !error.responseContractError && isRetryableApiError(error)) {
+          retries += 1;
+          state.runResultReadStatus = "retrying";
+          state.runResultReadError = errorMessage(error);
+          if (state.view === "watchlist") renderWatchlist();
+          $("#task-result-note").textContent =
+            "Run 结果暂时不可读（" + errorMessage(error) + "），将在 " + delay / 1000 +
+            " 秒后重试（" + retries + "/" + RUN_RESULT_RETRY_DELAYS_MS.length + "）…" +
+            (retainedResultNotice ? " " + retainedResultNotice : "");
+          await new Promise((resolve) => window.setTimeout(resolve, delay));
+          continue;
+        }
+        $("#task-result-note").textContent =
+          "读取结果失败：" + errorMessage(error) + "。可点击“重新读取结果”或“立即刷新状态”重试。" +
+          (retainedPreviousResult ? " 页面保留的是此前已成功读取的同一 Run 结果，本次读取未成功，不代表结果已更新。" : "");
+        state.runResultReadStatus = "error";
         state.runResultReadError = errorMessage(error);
         if (state.view === "watchlist") renderWatchlist();
-        $("#task-result-note").textContent =
-          `Run 结果暂时不可读（${errorMessage(error)}），将在 ${delay / 1000} 秒后重试（${retries}/${RUN_RESULT_RETRY_DELAYS_MS.length}）…` + (retainedResultNotice ? " " + retainedResultNotice : "");
-        await new Promise((resolve) => window.setTimeout(resolve, delay));
-        continue;
+        return;
       }
-      $("#task-result-note").textContent =
-        "读取结果失败：" + errorMessage(error) + "。可点击“重新读取结果”或“立即刷新状态”重试。" +
-        (retainedPreviousResult ? " 页面保留的是此前已成功读取的同一 Run 结果，本次读取未成功，不代表结果已更新。" : "");
-      state.runResultReadStatus = "error";
-      state.runResultReadError = errorMessage(error);
-      if (state.view === "watchlist") renderWatchlist();
-      return;
     }
+  } catch (error) {
+    if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId ||
+        endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase ||
+        state.settings.analysisBase !== analysisBase) return;
+
+    const message = errorMessage(error);
+    state.runResultReadStatus = "error";
+    state.runResultReadError = message;
+    try {
+      $("#task-result-note").textContent =
+        "读取 Run 结果时发生意外错误：" + message + "。请检查页面状态后重新读取。";
+    } catch (noteError) {
+      state.runResultReadError += "；错误提示更新失败：" + errorMessage(noteError);
+    }
+    if (state.view === "watchlist") {
+      try {
+        renderWatchlist();
+      } catch (renderError) {
+        state.runResultReadError += "；自选股卡片刷新失败：" + errorMessage(renderError);
+      }
     }
   } finally {
     // 旧任务的迟到 finally 不能解锁新任务的读取按钮。
     if (generation === state.runResultGeneration) setRunResultReloadBusy(false);
   }
 }
-
 function stopTaskPolling() {
   if (state.pollTimer) window.clearTimeout(state.pollTimer);
   state.pollTimer = null;

@@ -204,6 +204,25 @@ test("任务轮询意外异常会暂停自动刷新并保留手动重试入口",
   assert.ok(app.includes("void pollTaskSafely(generation).finally("), "手动刷新使用异常收敛入口并仍收尾忙碌状态");
 });
 
+
+test("Run 结果读取准备阶段异常也会复位忙碌锁", () => {
+  const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
+  const end = app.indexOf("\nfunction stopTaskPolling()", start);
+  const loader = start >= 0 && end > start ? app.slice(start, end) : "";
+  const busy = loader.indexOf("setRunResultReloadBusy(true);");
+  const outerTry = loader.indexOf("try {", busy);
+  const setupRender = loader.indexOf('if (state.view === "watchlist") renderWatchlist();', busy);
+  const whileStart = loader.indexOf("while (true)", busy);
+  const outerCatch = loader.lastIndexOf("} catch (error) {");
+  const outerFinally = loader.lastIndexOf("} finally {");
+  assert.ok(busy >= 0 && outerTry > busy && outerTry < setupRender, "初始状态和自选股重绘必须位于外层 try 内");
+  assert.ok(whileStart > setupRender && outerCatch > whileStart && outerFinally > outerCatch, "外层 catch/finally 必须包住完整读取生命周期");
+  const errorFlow = loader.slice(outerCatch);
+  assert.match(errorFlow, /generation !== state\.runResultGeneration[\s\S]*?state\.taskId !== expectedTaskId/);
+  assert.match(errorFlow, /state\.runResultReadStatus = "error";[\s\S]*?读取 Run 结果时发生意外错误/);
+  assert.match(errorFlow, /finally \{[\s\S]*?generation === state\.runResultGeneration\) setRunResultReloadBusy\(false\)/);
+});
+
 test("task polling errors mark last-known status stale and successful refresh clears it", () => {
   assert.ok(app.includes('taskStatusError: ""'));
   assert.ok(app.includes('taskStatusErrorRetrying: false'));
