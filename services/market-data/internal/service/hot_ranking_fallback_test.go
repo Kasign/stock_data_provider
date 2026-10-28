@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -280,5 +281,26 @@ func TestHotRankingCachesUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 	}
 	if first.calls != 1 || second.calls != 1 || cached == nil || cached.QualityStatus != model.QualityUnknown {
 		t.Fatalf("unexpected cached unknown result: %+v calls=%d/%d", cached, first.calls, second.calls)
+	}
+}
+
+
+func TestHotRankingFallsBackFromNonFiniteHeat(t *testing.T) {
+	invalid := populatedHotRankingForFallbackTest("eastmoney")
+	badHeat := math.NaN()
+	invalid.Items[0].Heat = &badHeat
+	primary := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: invalid}
+	fallback := &hotRankingFallbackTestProvider{name: "hithink", snapshot: populatedHotRankingForFallbackTest("hithink")}
+	svc := hotRankingFallbackService(cache.NewDisabled(), primary, fallback)
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit {
+		t.Fatalf("HotStocks returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "hithink" {
+		t.Fatalf("non-finite heat must reject the first provider and use fallback, got %+v", got)
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("non-finite heat must trigger provider fallback, calls=%d/%d", primary.calls, fallback.calls)
 	}
 }

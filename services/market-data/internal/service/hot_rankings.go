@@ -69,9 +69,9 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		if item.QualityStatus == model.QualityDegraded {
 			hasDegradedItem = true
 		}
-		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent} {
+		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.Heat} {
 			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
-				return errors.New("hot-ranking item contains a non-finite quote field")
+				return errors.New("hot-ranking item contains a non-finite numeric field")
 			}
 		}
 		if item.LatestPrice != nil && *item.LatestPrice <= 0 {
