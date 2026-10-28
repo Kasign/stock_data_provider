@@ -818,3 +818,35 @@ func TestEastmoneyHotRankingSymbolRejectsNonEquityCodes(t *testing.T) {
 		}
 	}
 }
+
+
+func TestEastmoneySectorRankingDistinguishesMissingTotalFromZeroWithRows(t *testing.T) {
+	row := `{"f2":1234.5,"f3":2.3,"f4":27.8,"f6":123456789,"f12":"BK0475","f14":"电池","f104":15,"f105":7,"f128":"宁德时代","f136":4.12}`
+
+	t.Run("explicit zero with rows is rejected", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rc":0,"data":{"total":0,"diff":[%s]}}`, row)
+		}))
+		defer server.Close()
+		p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+		_, err := p.FetchSectorRankings(context.Background(), "industry", 5)
+		if err == nil || !strings.Contains(err.Error(), "reports total=0 with non-empty rows") {
+			t.Fatalf("explicit zero total contradicting non-empty rows must be rejected, got %v", err)
+		}
+	})
+
+	t.Run("missing total is explicit lower-bound degradation", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rc":0,"data":{"diff":[%s]}}`, row)
+		}))
+		defer server.Close()
+		p := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+		got, err := p.FetchSectorRankings(context.Background(), "industry", 5)
+		if err != nil {
+			t.Fatalf("missing total should remain a degraded lower-bound candidate, got %v", err)
+		}
+		if got.Total != 1 || !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_total_missing_using_returned_count") {
+			t.Fatalf("missing source total was not disclosed as a lower bound: %+v", got)
+		}
+	})
+}

@@ -1833,7 +1833,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	var payload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
-			Total int                          `json:"total"`
+			Total *int `json:"total"`
 			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
@@ -1846,24 +1846,29 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	if payload.Data == nil || len(payload.Data.Diff) == 0 {
 		return nil, errors.New("Eastmoney sector ranking returned no rows")
 	}
-	if payload.Data.Total < 0 {
-		return nil, fmt.Errorf("Eastmoney sector ranking total is negative: %d", payload.Data.Total)
-	}
-	if payload.Data.Total > 0 {
+	reportedTotal := 0
+	if payload.Data.Total != nil {
+		reportedTotal = *payload.Data.Total
+		if reportedTotal < 0 {
+			return nil, fmt.Errorf("Eastmoney sector ranking total is negative: %d", reportedTotal)
+		}
+		if reportedTotal == 0 {
+			return nil, errors.New("Eastmoney sector ranking reports total=0 with non-empty rows")
+		}
 		expectedRows := limit
-		if payload.Data.Total < expectedRows {
-			expectedRows = payload.Data.Total
+		if reportedTotal < expectedRows {
+			expectedRows = reportedTotal
 		}
 		if len(payload.Data.Diff) != expectedRows {
 			return nil, fmt.Errorf(
 				"Eastmoney sector ranking returned %d rows, expected %d rows from total=%d and limit=%d",
-				len(payload.Data.Diff), expectedRows, payload.Data.Total, limit,
+				len(payload.Data.Diff), expectedRows, reportedTotal, limit,
 			)
 		}
 	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.SectorRankingSnapshot{
-		Category: category, Direction: direction, Total: payload.Data.Total, Source: p.Name(),
+		Category: category, Direction: direction, Total: reportedTotal, Source: p.Name(),
 		SourceVersion:  "eastmoney-sector-clist-v1",
 		FetchedAt:      fetchedAt,
 		QualityStatus:  model.QualityDegraded,
