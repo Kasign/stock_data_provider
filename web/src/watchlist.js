@@ -3,6 +3,16 @@ export const MAX_WATCHLIST_ITEMS = 50;
 
 const SYMBOL_PATTERN = /^\d{6}(?:\.(?:SH|SZ|BJ))?$/;
 
+// 将可识别的 A 股纯六位代码映射到默认交易所，确保和行情/研究模块的标的比较一致。
+function comparableSymbol(input) {
+  const symbol = String(input ?? "").trim().toUpperCase();
+  if (symbol.includes(".")) return symbol;
+  if (symbol.startsWith("6")) return symbol + ".SH";
+  if (/^[03]\d{5}$/.test(symbol)) return symbol + ".SZ";
+  if (/^(?:[48]\d{5}|92\d{4})$/.test(symbol)) return symbol + ".BJ";
+  return symbol;
+}
+
 function normalizeName(value, symbol) {
   const name = String(value ?? "")
     .replace(/[\u0000-\u001f\u007f]/g, "")
@@ -60,11 +70,16 @@ function readRecords(storage, limit = MAX_WATCHLIST_ITEMS) {
   // 先检查完整原始数组，再按读取上限返回；不能因跳过坏记录或截断超限记录而允许后续写回。
   for (const item of parsed) {
     const normalized = normalizeRecord(item);
-    if (!normalized || seen.has(normalized.symbol)) {
+    if (!normalized) {
       malformedRecord = true;
       continue;
     }
-    seen.add(normalized.symbol);
+    const identity = comparableSymbol(normalized.symbol);
+    if (seen.has(identity)) {
+      malformedRecord = true;
+      continue;
+    }
+    seen.add(identity);
     records.push(normalized);
   }
 
@@ -101,13 +116,15 @@ export function addWatchlistSymbol(symbol, name, storage, updatedAt = new Date()
     };
   }
 
-  const existing = current.find((item) => item.symbol === normalized.symbol);
+  const identity = comparableSymbol(normalized.symbol);
+  const existing = current.find((item) => comparableSymbol(item.symbol) === identity);
+  const storedSymbol = existing?.symbol || normalized.symbol;
   const next = {
-    symbol: normalized.symbol,
+    symbol: storedSymbol,
     name: existing?.name && existing.name !== existing.symbol ? existing.name : normalized.name,
     updated_at: String(updatedAt || new Date().toISOString())
   };
-  const items = [next, ...current.filter((item) => item.symbol !== next.symbol)]
+  const items = [next, ...current.filter((item) => comparableSymbol(item.symbol) !== identity)]
     .slice(0, MAX_WATCHLIST_ITEMS);
   const persisted = writeRecords(storage, items);
   return { items, added: !existing, valid: true, persisted, storageReadable: true, storageValid: true };
@@ -129,12 +146,13 @@ export function renameWatchlistSymbol(symbol, name, storage, updatedAt = new Dat
       storageReadable: currentState.storageReadable, storageValid: currentState.storageValid
     };
   }
-  const changed = current.some((item) => item.symbol === normalizedSymbol);
+  const identity = comparableSymbol(normalizedSymbol);
+  const changed = current.some((item) => comparableSymbol(item.symbol) === identity);
   if (!changed) {
     return { items: current, changed: false, valid: true, persisted: true, storageReadable: true, storageValid: true };
   }
-  const items = current.map((item) => item.symbol === normalizedSymbol
-    ? { ...item, name: normalizeName(name, normalizedSymbol), updated_at: String(updatedAt || new Date().toISOString()) }
+  const items = current.map((item) => comparableSymbol(item.symbol) === identity
+    ? { ...item, name: normalizeName(name, item.symbol), updated_at: String(updatedAt || new Date().toISOString()) }
     : item);
   const persisted = writeRecords(storage, items);
   return { items, changed: true, valid: true, persisted, storageReadable: true, storageValid: true };
@@ -156,7 +174,8 @@ export function removeWatchlistSymbol(symbol, storage) {
       storageReadable: currentState.storageReadable, storageValid: currentState.storageValid
     };
   }
-  const items = current.filter((item) => item.symbol !== normalizedSymbol);
+  const identity = comparableSymbol(normalizedSymbol);
+  const items = current.filter((item) => comparableSymbol(item.symbol) !== identity);
   const removed = items.length !== current.length;
   if (!removed) {
     return { items: current, removed: false, valid: true, persisted: true, storageReadable: true, storageValid: true };
