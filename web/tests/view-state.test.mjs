@@ -28,6 +28,8 @@ test("问股状态区分接口未接入、读取错误、空会话和真实消�
   assert.equal(resolveChatViewState({ supported: true, error: "读取失败", session: {} }), "error");
   assert.equal(resolveChatViewState({ supported: true, session: null, messages: [] }), "empty");
   assert.equal(resolveChatViewState({ supported: true, session: { id: "session-1" }, messages: null }), "error");
+  assert.equal(resolveChatViewState({ supported: true, session: "session-1", messages: [] }), "error");
+  assert.equal(resolveChatViewState({ supported: true, session: [], messages: [] }), "error");
   assert.equal(resolveChatViewState({ supported: true, session: { id: "session-1" }, messages: [] }), "empty");
   assert.equal(resolveChatViewState({ supported: true, session: { id: "session-1" }, messages: [{ id: "message-1" }] }), "loaded");
 });
