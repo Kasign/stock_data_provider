@@ -144,7 +144,7 @@ def fetch_stock_bundle(stock_code: str, lookback_days: int, as_of: datetime | No
             logger.debug("board lookup failed for %s: %s", code, type(exc).__name__)
             boards = []
             warnings.append(f"board_lookup_failed:{type(exc).__name__}")
-    
+
     if not bars:
         warnings.append("daily_bars_missing")
     if quote_payload is None:
