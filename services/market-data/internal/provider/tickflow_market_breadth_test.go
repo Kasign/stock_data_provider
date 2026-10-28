@@ -134,7 +134,7 @@ func TestTickFlowFetchMarketBreadthDegradesWideQuoteTimestampSpread(t *testing.T
 		got.NewestQuoteTime.Sub(*got.OldestQuoteTime) != 11*time.Minute {
 		t.Fatalf("wide timestamp spread must be exposed and degrade quality: %+v", got)
 	}
-	if !containsTickflowReason(got.QualityReasons, "provider_quote_timestamp_spread_exceeds_10_minutes") {
+	if !containsTickFlowReason(got.QualityReasons, "provider_quote_timestamp_spread_exceeds_10_minutes") {
 		t.Fatalf("missing timestamp spread quality reason: %v", got.QualityReasons)
 	}
 }
