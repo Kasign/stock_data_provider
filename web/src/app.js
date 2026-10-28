@@ -3662,6 +3662,9 @@ async function importBrowserDataFile(file) {
     setBrowserDataFeedback("导入失败：无法读取当前浏览器配置，尚未执行写入。" + (error?.message || ""), "error");
     return;
   }
+  // 导入完成后允许当前任务继续在页面中跟踪，但禁止它把引用重新写回被替换的本地历史。
+  const importedActiveTaskId = state.taskId;
+  const importedActiveTaskBase = state.taskAnalysisBase || state.settings.analysisBase;
   try {
     const nextSettings = saveSettings({
       marketBase: imported.marketBase,
@@ -3676,6 +3679,8 @@ async function importBrowserDataFile(file) {
     // 导入是替换操作，不应把导入前正在查看的旧任务重新写入任务历史。
     // 所有本地存储写入均在应用内存状态之前完成，避免写入异常造成 UI 与磁盘状态分叉。
     applySettings(nextSettings, { persistPreviousActiveTask: false });
+    state.suppressedHistoryTaskId = importedActiveTaskId;
+    state.suppressedHistoryTaskBase = importedActiveTaskId ? importedActiveTaskBase : "";
     applyTheme(imported.theme);
     syncThemeControl(imported.theme);
     syncSettingsThemeButtons(imported.theme);
