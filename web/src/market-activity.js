@@ -184,6 +184,27 @@ function renderCalendar(data){
   }
   finally{if(generation.calendar===seq)delete controllers.calendar;}
  }
+ function invalidateConnection() {
+  abort("dragon");
+  abort("calendar");
+  dragonPage=1;
+  dragonHasMore=false;
+  errorBox("dragon-tiger-error","");
+  badge("dragon-tiger-quality","连接配置已变更","unknown");
+  meta("dragon-tiger-meta","连接配置已变更，请重新读取龙虎榜。");
+  clearReasons("dragon-tiger-reasons");
+  messageRow($("#dragon-tiger-body"),"连接配置已变更，旧结果已清除，请重新读取龙虎榜。",6);
+  const next=$("#dragon-tiger-next");
+  next.hidden=true;
+  next.disabled=true;
+  next.textContent="加载下一页";
+
+  errorBox("trading-calendar-error","");
+  badge("trading-calendar-quality","连接配置已变更","unknown");
+  meta("trading-calendar-meta","连接配置已变更，请重新读取交易日历。");
+  clearReasons("trading-calendar-reasons");
+  $("#trading-calendar-grid").replaceChildren(el("p","market-empty-state","连接配置已变更，旧结果已清除，请重新读取交易日历。"));
+ }
  const today=chinaParts();$("#dragon-tiger-date").value=dateKey(today.year,today.month,today.day);setMonth(0);
  $("#load-dragon-tiger").addEventListener("click",()=>void loadDragon());$("#dragon-tiger-next").addEventListener("click",()=>{if(dragonHasMore)void loadDragon({append:true});});
  $("#dragon-tiger-date").addEventListener("change",invalidateDragonFilter);
@@ -195,5 +216,5 @@ function renderCalendar(data){
  $("#calendar-current-month").addEventListener("click",()=>{setMonth(0);void loadCalendar();});
  $("#calendar-next-month").addEventListener("click",()=>{setMonth(monthOffset+1);void loadCalendar();});
  $("#dragon-tiger-body").addEventListener("click",event=>{const b=event.target.closest("button[data-dragon-symbol]");if(b&&b.dataset.dragonSymbol&&typeof onSelectStock==="function")onSelectStock({symbol:b.dataset.dragonSymbol,name:b.dataset.dragonName||b.dataset.dragonSymbol});});
- return {refresh:()=>Promise.all([loadDragon(),loadCalendar()])};
+ return {refresh:()=>Promise.all([loadDragon(),loadCalendar()]),invalidateConnection};
 }

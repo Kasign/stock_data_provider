@@ -323,6 +323,25 @@ test("market overview refresh summaries are isolated by status region and guarde
   assert.match(marketOverview, /if\(currentGeneration!==refreshGenerations\[statusSelector\]\)return/);
 });
 
+test("market connection changes invalidate in-flight dragon-tiger and calendar requests", () => {
+  const invalidateStart = marketActivity.indexOf("function invalidateConnection() {");
+  const invalidateEnd = marketActivity.indexOf("\n }", invalidateStart);
+  const invalidateBody = invalidateStart >= 0 && invalidateEnd > invalidateStart
+    ? marketActivity.slice(invalidateStart, invalidateEnd)
+    : "";
+  assert.ok(invalidateBody.includes('abort("dragon");'), "连接配置变更应中止龙虎榜请求");
+  assert.ok(invalidateBody.includes('abort("calendar");'), "连接配置变更应中止交易日历请求");
+  assert.ok(invalidateBody.includes('$("#dragon-tiger-body")'), "应清除旧龙虎榜结果");
+  assert.ok(invalidateBody.includes('$("#trading-calendar-grid").replaceChildren'), "应清除旧交易日历结果");
+  assert.ok(marketActivity.includes("return {refresh:()=>Promise.all([loadDragon(),loadCalendar()]),invalidateConnection};"));
+  const settingsStart = app.indexOf("function applySettings(nextSettings,");
+  const settingsEnd = app.indexOf("\nfunction saveSettingsFromForm", settingsStart);
+  const settingsApplication = settingsStart >= 0 && settingsEnd > settingsStart
+    ? app.slice(settingsStart, settingsEnd)
+    : "";
+  assert.ok(settingsApplication.includes("marketActivity.invalidateConnection();"));
+});
+
 test("an older stock-research load cannot unlock the current stock's loading button", () => {
   assert.match(stockResearch, /loadResearchGeneration:0/);
   assert.match(stockResearch, /function reset\(symbol\)\{[\s\S]*?state\.loadResearchGeneration\+=1;[\s\S]*?\$\("#load-stock-research"\)/);

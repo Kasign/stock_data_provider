@@ -3553,6 +3553,7 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   if (analysisBaseChanged) invalidateActiveTaskForAnalysisBaseChange(previousSettings.analysisBase, nextSettings.analysisBase);
   const marketConnectionChanged = previousSettings.apiKey !== nextSettings.apiKey || previousSettings.marketBase !== nextSettings.marketBase;
   if (marketConnectionChanged) {
+    marketActivity.invalidateConnection();
     cancelQuoteQuery({
       clearResults: true,
       symbol: $("#symbol-input").value.trim(),
