@@ -63,6 +63,33 @@ func hotRankingFallbackService(cacheStore cache.Cache, providers ...provider.Hot
 	return svc
 }
 
+func TestHotRankingFallsBackFromUnorderedRanks(t *testing.T) {
+	invalid := populatedHotRankingForFallbackTest("eastmoney")
+	first := invalid.Items[0]
+	first.Rank = 2
+	second := first
+	second.Rank = 1
+	second.Symbol = "000001.SZ"
+	second.Code = "000001"
+	second.Name = "平安银行"
+	invalid.Items = []model.HotRankingItem{first, second}
+	invalid.Total = len(invalid.Items)
+	primary := &hotRankingFallbackTestProvider{name: "eastmoney", snapshot: invalid}
+	fallback := &hotRankingFallbackTestProvider{name: "hithink", snapshot: populatedHotRankingForFallbackTest("hithink")}
+	svc := hotRankingFallbackService(cache.NewDisabled(), primary, fallback)
+
+	got, hit, err := svc.HotStocks(context.Background(), "popular", 10)
+	if err != nil || hit {
+		t.Fatalf("HotStocks returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "hithink" || len(got.Items) != 1 {
+		t.Fatalf("unordered ranking items must reject the first provider and fall back, got %+v", got)
+	}
+	if primary.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("unordered ranking must trigger fallback, calls=%d/%d", primary.calls, fallback.calls)
+	}
+}
+
 func TestHotRankingFallsBackFromDuplicateRank(t *testing.T) {
 	invalid := populatedHotRankingForFallbackTest("eastmoney")
 	duplicate := invalid.Items[0]
