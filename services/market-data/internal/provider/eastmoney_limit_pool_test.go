@@ -141,3 +141,39 @@ func TestEastmoneyFetchLimitPoolPaginatesTruncatedPages(t *testing.T) {
 		}
 	}
 }
+
+
+func TestEastmoneyFetchLimitPoolRejectsRowsAboveSourceTotal(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	tradeDate := time.Now().In(loc).AddDate(0, 0, -1).Format("2006-01-02")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("pagesize"); got != "30" {
+			t.Errorf("pagesize=%q, want 30", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"rc": 0,
+			"data": {
+				"tc": 2,
+				"qdate": "` + strings.ReplaceAll(tradeDate, "-", "") + `",
+				"pool": [
+					{"c":"600519","n":"贵州茅台","m":"1","zdp":1.2},
+					{"c":"600036","n":"招商银行","m":"1","zdp":0.5},
+					{"c":"601318","n":"中国平安","m":"1","zdp":0.3}
+				]
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	provider := NewEastmoneyConfiguredWithDomesticMarketData(
+		2*time.Second, "", "", "", "", "", "", server.URL, "",
+	)
+	got, err := provider.FetchLimitPool(context.Background(), "up", tradeDate, 30)
+	if err == nil || !strings.Contains(err.Error(), "coverage mismatch") {
+		t.Fatalf("source total smaller than returned rows must be rejected: snapshot=%+v err=%v", got, err)
+	}
+}

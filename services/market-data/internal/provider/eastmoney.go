@@ -2724,8 +2724,23 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 				return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d total/pool mismatch after retry (tc=%d, first tc=%d, pool empty)", poolType, pageIndex, payload.Data.Total, firstTotal)
 			}
 		}
+		if payload.Data.Total < 0 {
+			return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d returned negative total %d", poolType, pageIndex, payload.Data.Total)
+		}
 		if len(payload.Data.Pool) > pageSize {
 			return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d returned %d rows above requested page size %d", poolType, pageIndex, len(payload.Data.Pool), pageSize)
+		}
+		// Validate raw rows against the source total before caller-limit truncation.
+		// Trimming extra rows could otherwise hide a contradictory tc/pool response.
+		expectedRows := payload.Data.Total - pageIndex*pageSize
+		if expectedRows < 0 {
+			expectedRows = 0
+		}
+		if expectedRows > pageSize {
+			expectedRows = pageSize
+		}
+		if len(payload.Data.Pool) != expectedRows {
+			return 0, nil, nil, fmt.Errorf("Eastmoney %s limit-pool page %d coverage mismatch: received %d rows, expected %d for source total %d", poolType, pageIndex, len(payload.Data.Pool), expectedRows, payload.Data.Total)
 		}
 		return payload.Data.Total, payload.Data.QDate, payload.Data.Pool, nil
 	}

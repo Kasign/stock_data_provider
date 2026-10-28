@@ -2753,3 +2753,25 @@ func TestValidateMarketBreadthRejectsOverflowingCategoryCounts(t *testing.T) {
 		t.Fatalf("integer overflow must not allow incoherent breadth counts, got %v", err)
 	}
 }
+
+
+func TestValidateSectorRankingSnapshotRejectsDroppedRowsWhenTotalWasMissing(t *testing.T) {
+	now := time.Now().UTC()
+	change := 2.3
+	snapshot := &model.SectorRankingSnapshot{
+		Category: "industry", Direction: "up", Total: 1,
+		Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{
+			"provider_total_missing_using_returned_count",
+			"provider_rows_dropped_after_validation",
+		},
+		Items: []model.SectorRanking{{
+			Rank: 1, Code: "BK0475", Name: "电池", Category: "industry", ChangePercent: &change,
+			AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
+			QualityStatus: model.QualityDegraded,
+		}},
+	}
+	if err := validateSectorRankingSnapshot("industry", 10, snapshot); err == nil || !strings.Contains(err.Error(), "dropped source rows") {
+		t.Fatalf("sector ranking that discarded malformed source rows must be rejected for provider fallback, got %v", err)
+	}
+}
