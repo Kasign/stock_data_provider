@@ -179,6 +179,12 @@ export function bindStockResearch(getSettings,getSymbol){
    }
   }
  }
+ function invalidateFundamentalsPeriod(){
+  abort("fundamentals");
+  clearPanel("fundamentals","财务报告期已变更，请重新加载财务指标。",state.symbol);
+  setQuality("fundamentals-quality","unknown","待重新加载");
+  setText("stock-research-feedback","财务报告期已变更，旧结果已清除；请重新加载。");
+ }
  async function loadFundamentals(){
   const symbol=syncSymbol();if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return;}
   const year=Number($("#fundamentals-year").value),quarter=Number($("#fundamentals-quarter").value);
@@ -340,6 +346,8 @@ export function bindStockResearch(getSettings,getSymbol){
   const period=currentYearAndQuarter();yearSelect.value=String(period.year);quarterSelect.value=String(period.quarter);
  }
  $("#load-stock-research")?.addEventListener("click",()=>{void loadResearch();});
+ $("#fundamentals-year")?.addEventListener("change",invalidateFundamentalsPeriod);
+ $("#fundamentals-quarter")?.addEventListener("change",invalidateFundamentalsPeriod);
  $("#load-fundamentals")?.addEventListener("click",()=>{void loadFundamentals();});
  $("#load-valuations")?.addEventListener("click",()=>{void loadValuations();});
  $("#load-chip-distribution")?.addEventListener("click",()=>{void loadChipDistribution();});

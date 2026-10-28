@@ -484,6 +484,12 @@ test("market activity date filter changes cancel old requests and clear mismatch
   assert.match(marketActivity, /\$\("#calendar-end-date"\)\.addEventListener\("change",invalidateCalendarFilter\)/);
 });
 
+test("changing fundamentals report period cancels old results until reloaded", () => {
+  assert.match(stockResearch, /function invalidateFundamentalsPeriod\(\)[\s\S]*?abort\("fundamentals"\)[\s\S]*?clearPanel\("fundamentals","财务报告期已变更[\s\S]*?setQuality\("fundamentals-quality","unknown","待重新加载"\)/);
+  assert.match(stockResearch, /\$\("#fundamentals-year"\)\?\.addEventListener\("change",invalidateFundamentalsPeriod\)/);
+  assert.match(stockResearch, /\$\("#fundamentals-quarter"\)\?\.addEventListener\("change",invalidateFundamentalsPeriod\)/);
+});
+
 test("provider capability definitions expose each backend capability once", () => {
   const definitionBlock = app.match(/const capabilityDefinitions = \[([\s\S]*?)\n  \];/);
   assert.ok(definitionBlock, "provider capability definitions must remain explicit");
