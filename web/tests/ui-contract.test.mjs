@@ -1128,3 +1128,15 @@ test("个股研究响应代码不匹配时忽略结果", () => {
   assert.match(stockResearch, /async function fetchOne\(key,request,render\)[\s\S]*?assertResponseSymbol\(data,symbol\);[\s\S]*?render\(data,symbol\)/);
   assert.match(stockResearch, /async function loadAnnouncements\(append=false\)[\s\S]*?getStockAnnouncements\(settings,symbol,[\s\S]*?assertResponseSymbol\(data,symbol\);[\s\S]*?const root=\$\("#announcement-list"\)/);
 });
+
+ 
+test("主行情、日 K 与统一快照拒绝证券代码不匹配的响应", () => {
+  assert.match(app, /function comparableMarketSymbol\(input\)/);
+  assert.match(app, /function responseSymbolMismatch\(payload, requestedSymbol, label\)/);
+  assert.match(app, /responseSymbolMismatch\(bundleResponse, symbol, "统一行情快照"\)/);
+  assert.match(app, /responseSymbolMismatch\(bundleResponse\.quote, symbol, "统一快照中的实时行情"\)/);
+  assert.match(app, /responseSymbolMismatch\(quoteResult\.value, symbol, "实时行情"\)/);
+  assert.match(app, /responseSymbolMismatch\(barsResult\.value, symbol, "日 K"\)/);
+  assert.match(app, /quote: null,[\s\S]*?warnings: \[\.\.\.\(Array\.isArray\(bundleResponse\.warnings\)/);
+  assert.ok(app.includes('return label + "返回的证券代码 " + responseSymbol + " 与请求标的 " + requestedSymbol + " 不匹配，已忽略结果。"'));
+});

@@ -1968,6 +1968,27 @@ function quoteQueryKey(symbol, startDate, endDate, limit, adjustment) {
   return JSON.stringify([symbol, startDate, endDate, limit, adjustment, normalizeBasePath(state.settings.marketBase, "/market-api")]);
 }
 
+function comparableMarketSymbol(input) {
+  const value = normalizeSymbol(input);
+  if (value.includes(".")) return value;
+  if (value.startsWith("6")) return value + ".SH";
+  if (/^[03]/.test(value)) return value + ".SZ";
+  if (/^(?:[48]\d{5}|92\d{4})$/.test(value)) return value + ".BJ";
+  return value;
+}
+
+function responseSymbolMismatch(payload, requestedSymbol, label) {
+  const responseSymbol = String(payload?.symbol ?? "").trim();
+  if (!responseSymbol) return "";
+  try {
+    if (comparableMarketSymbol(responseSymbol) === comparableMarketSymbol(requestedSymbol)) return "";
+  } catch {
+    // 无法规范化的响应标识必须按不匹配处理，不将其显示为当前标的数据。
+  }
+  return label + "返回的证券代码 " + responseSymbol + " 与请求标的 " + requestedSymbol + " 不匹配，已忽略结果。";
+}
+
+
 function handleQuoteCriteriaChange(message = "查询条件已变化，旧行情与日 K 已清除，请重新查询。") {
   cancelQuoteQuery({ clearResults: true, symbol: $("#symbol-input").value.trim(), message });
 }
@@ -2060,6 +2081,23 @@ async function runQuoteQuery(event) {
         barsResult = { status: "rejected", reason: error };
       }
     }
+    if (bundleResponse) {
+      const bundleMismatch = responseSymbolMismatch(bundleResponse, symbol, "统一行情快照");
+      if (bundleMismatch) {
+        bundleResponse = null;
+        quoteResult = { status: "rejected", reason: new Error(bundleMismatch) };
+        barsResult = { status: "rejected", reason: new Error(bundleMismatch) };
+      } else if (bundleResponse.quote && typeof bundleResponse.quote === "object") {
+        const quoteMismatch = responseSymbolMismatch(bundleResponse.quote, symbol, "统一快照中的实时行情");
+        if (quoteMismatch) {
+          bundleResponse = {
+            ...bundleResponse,
+            quote: null,
+            warnings: [...(Array.isArray(bundleResponse.warnings) ? bundleResponse.warnings : []), quoteMismatch]
+          };
+        }
+      }
+    }
   } else {
     // Bundle has no start/end query parameters; honor explicit date ranges with the existing daily-bars API.
     [quoteResult, barsResult] = await Promise.allSettled([
@@ -2069,6 +2107,16 @@ async function runQuoteQuery(event) {
   }
 
   if (controller.signal.aborted || generation !== state.quoteQueryGeneration) return;
+  if (!bundleResponse) {
+    if (quoteResult?.status === "fulfilled") {
+      const mismatch = responseSymbolMismatch(quoteResult.value, symbol, "实时行情");
+      if (mismatch) quoteResult = { status: "rejected", reason: new Error(mismatch) };
+    }
+    if (barsResult?.status === "fulfilled") {
+      const mismatch = responseSymbolMismatch(barsResult.value, symbol, "日 K");
+      if (mismatch) barsResult = { status: "rejected", reason: new Error(mismatch) };
+    }
+  }
   if (bundleResponse) {
     renderBundleSnapshotMetadata(bundleResponse);
     const bundleBars = Array.isArray(bundleResponse.daily_bars) ? bundleResponse.daily_bars : [];
