@@ -528,8 +528,7 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	}
 	now := time.Now().UTC()
 	sections := make([]model.FundamentalSection, 0, 6)
-	// index_daily 不提供可核验的源端快照时间，数据可以用于展示但不能标记为完全 valid。
-	snapshotReasons := []string{"provider_snapshot_timestamp_not_exposed"}
+	snapshotReasons := []string{}
 	allSectionsComplete := selectedAnnouncementDate != ""
 	if selectedAnnouncementDate == "" {
 		snapshotReasons = appendTushareReason(snapshotReasons, "provider_publication_date_missing")

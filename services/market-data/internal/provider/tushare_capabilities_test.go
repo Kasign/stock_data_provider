@@ -594,6 +594,11 @@ func TestTushareFundamentalsIgnoresFutureAnnouncementVersion(t *testing.T) {
 	if snapshot.QualityStatus == model.QualityValid {
 		t.Fatal("sparse indicator fixture should not be considered a complete valid snapshot")
 	}
+	for _, reason := range snapshot.QualityReasons {
+		if reason == "provider_snapshot_timestamp_not_exposed" {
+			t.Fatal("fundamentals must not inherit the index daily-bars timestamp quality reason")
+		}
+	}
 	for _, section := range snapshot.Sections {
 		for _, metric := range section.Metrics {
 			if metric.Key == "eps" {
