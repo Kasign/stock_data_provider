@@ -159,6 +159,13 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 		}
 		return nil, fmt.Errorf("Eastmoney stock-announcement response rejected: success=%d code=%q message=%q", payload.Success, code, message)
 	}
+	// 源端若回传分页元数据，必须与本次请求一致；不使用响应缺失字段伪造源端确认。
+	if payload.Data.PageIndex > 0 && payload.Data.PageIndex != page {
+		return nil, fmt.Errorf("Eastmoney announcement page_index=%d does not match requested page=%d", payload.Data.PageIndex, page)
+	}
+	if payload.Data.PageSize > 0 && payload.Data.PageSize != pageSize {
+		return nil, fmt.Errorf("Eastmoney announcement page_size=%d does not match requested page_size=%d", payload.Data.PageSize, pageSize)
+	}
 	total := payload.Data.TotalHits
 	if total < 0 {
 		return nil, fmt.Errorf("Eastmoney announcement total_hits is negative: %d", total)

@@ -112,3 +112,29 @@ func TestEastmoneyFetchStockAnnouncementsRejectsUnderfilledPage(t *testing.T) {
 		t.Fatalf("underfilled announcement page must be rejected, got %v", err)
 	}
 }
+
+
+func TestEastmoneyFetchStockAnnouncementsRejectsMismatchedPageMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		pageIndex  int
+		pageSize   int
+		wantError  string
+	}{
+		{name: "page index", pageIndex: 2, pageSize: 20, wantError: "page_index=2 does not match requested page=1"},
+		{name: "page size", pageIndex: 1, pageSize: 10, wantError: "page_size=10 does not match requested page_size=20"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"success":1,"data":{"page_index":%d,"page_size":%d,"total_hits":1,"list":[{"art_code":"AN202610231234567890","codes":[{"stock_code":"600036"}],"notice_date":"2026-10-23","title":"测试公告","display_time":"2026-10-23 18:30:00"}]}}`, tc.pageIndex, tc.pageSize)
+			}))
+			defer server.Close()
+
+			p := NewEastmoneyConfiguredWithAnnouncements(2*time.Second, "", "", "", "", "", "", "", "", "", server.URL, "")
+			_, err := p.FetchStockAnnouncements(context.Background(), "600036.SH", "2026-10-20", "2026-10-26", 1, 20)
+			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("mismatched source pagination metadata must be rejected, got %v", err)
+			}
+		})
+	}
+}
