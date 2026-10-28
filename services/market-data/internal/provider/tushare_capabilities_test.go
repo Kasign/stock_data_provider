@@ -680,6 +680,67 @@ func TestTushareLimitPoolMarksExcludedNonAShareRows(t *testing.T) {
 
 
 
+func TestTushareDragonTigerMarksExcludedNonAShareRows(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ",")
+	makeRow := func(symbol, name string) []any {
+		values := make([]any, len(fields))
+		for index, field := range fields {
+			switch field {
+			case "trade_date":
+				values[index] = "20261027"
+			case "ts_code":
+				values[index] = symbol
+			case "name":
+				values[index] = name
+			case "close":
+				values[index] = 1500.0
+			case "pct_change":
+				values[index] = 1.2
+			case "reason":
+				values[index] = "测试原因"
+			default:
+				values[index] = nil
+			}
+		}
+		return values
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare dragon-tiger request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "top_list" || request.Params["trade_date"] != "20261027" {
+			t.Errorf("unexpected Tushare dragon-tiger request: %+v", request)
+		}
+		writeTushareTestTable(w, fields, [][]any{
+			makeRow("600519.SH", "贵州茅台"),
+			makeRow("113001.SH", "测试可转债"),
+		})
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchDragonTiger(context.Background(), "2026-10-27", 1, 100)
+	if err != nil {
+		t.Fatalf("FetchDragonTiger: %v", err)
+	}
+	if got.Total != 2 || got.SourceReturned != 2 || got.Returned != 1 || got.ExcludedNonAShareCount != 1 || len(got.Items) != 1 {
+		t.Fatalf("source/accepted/excluded row counts do not reconcile: %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_non_a_share_security_rows_excluded" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing non-A-share exclusion reason: %v", got.QualityReasons)
+	}
+}
+
 func TestTushareDragonTigerRejectsDuplicateSymbols(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ",")
 	row := []any{"20261027", "600519.SH", "贵州茅台", 1500.0, 1.2, 0.5, 100000.0, 1000.0, 900.0, 1900.0, 100.0, 5.0, 1.2, "测试原因"}

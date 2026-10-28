@@ -1449,6 +1449,7 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		}
 		if !isTushareAShareSymbol(symbol) {
 			base.ExcludedNonAShareCount++
+			base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_non_a_share_security_rows_excluded")
 			continue
 		}
 		if _, duplicate := seenSymbols[symbol]; duplicate {
