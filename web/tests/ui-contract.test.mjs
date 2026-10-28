@@ -442,6 +442,12 @@ test("run-flow keeps cached events explicit during read errors and exports diagn
 });
 
 
+test("dragon-tiger rows only render stock navigation when a usable code exists", () => {
+  assert.match(marketActivity, /const symbol=String\(item\.symbol\|\|item\.code\|\|""\)\.trim\(\);/);
+  assert.match(marketActivity, /if\(symbol\)\{\s*const button=el\("button","activity-stock-link","查看行情"\);button\.type="button";button\.dataset\.dragonSymbol=symbol/);
+  assert.match(marketActivity, /button\[data-dragon-symbol\]/);
+});
+
 test("market activity clears stale calendar state for invalid input, missing key, loading, and failure", () => {
   assert.match(marketActivity, /function clearReasons\(id\)/);
   assert.match(marketActivity, /日期无效[\s\S]*?meta\("trading-calendar-meta",""\)[\s\S]*?clearReasons\("trading-calendar-reasons"\)/);

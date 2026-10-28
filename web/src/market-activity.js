@@ -25,8 +25,12 @@ export function bindMarketActivity(getSettings,onSelectStock){
   if(!items.length&&!append)messageRow(root,data?.has_data===false?"源端当前未确认有可展示的 A 股龙虎榜记录；盘后数据可能尚未发布，也可能有非 A 股记录被过滤。":"接口未返回龙虎榜明细。",6);
   items.forEach(item=>{
    const tr=document.createElement("tr"),stock=el("td","activity-stock-cell");
-   stock.append(el("strong","market-table-primary",item.name||"股票名称未报告"),el("small","market-table-secondary",item.symbol||item.code||"代码未报告"));
-   const button=el("button","activity-stock-link","查看行情");button.type="button";button.dataset.dragonSymbol=item.symbol||"";button.dataset.dragonName=item.name||item.symbol||"";stock.append(button);tr.append(stock);
+   const symbol=String(item.symbol||item.code||"").trim();
+   stock.append(el("strong","market-table-primary",item.name||"股票名称未报告"),el("small","market-table-secondary",symbol||"代码未报告"));
+   if(symbol){
+    const button=el("button","activity-stock-link","查看行情");button.type="button";button.dataset.dragonSymbol=symbol;button.dataset.dragonName=item.name||symbol;stock.append(button);
+   }
+   tr.append(stock);
    cell(tr,formatPercent(item.change_percent),direction(item.change_percent));cell(tr,amount(item.net_buy_amount_cny),direction(item.net_buy_amount_cny));cell(tr,amount(item.deal_amount_cny));
    const reason=el("td","dragon-tiger-reason",item.reason||item.explanation||"—");if(item.explanation)reason.title=item.explanation;tr.append(reason);
    const q=QUALITY.includes(String(item.quality_status||"").toLowerCase())?String(item.quality_status).toLowerCase():"unknown",td=el("td");td.append(el("span","quality-pill quality-"+q,qualityLabel(q)));tr.append(td);root.append(tr);
