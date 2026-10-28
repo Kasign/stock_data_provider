@@ -66,6 +66,8 @@ Tushare 日 K 的复权实现使用其独立 `adj_factor` 接口（参见[复权
 缺失成交额必须保持 null。经过 Go bridge 进入历史 Python 消费者的 map 时，也必须继续表示为 null，而不是 0。 Tushare 普通股票日 K 的 `daily.amount` 原始单位为千元，标准化 `amount` 必须乘以 1000 后以人民币元输出；原始数值同时保留在 `raw_amount`，并标注 `raw_amount_unit=thousand_CNY`，禁止将原始千元数直接作为 CNY 暴露。 Tushare 指数日 K 的 `index_daily.amount` 也必须乘以 1000 转为 CNY；指数成交量仍保留 `hands` 单位，不得误套用个股日 K 的股数转换。
 
 市场广度的涨停/跌停计数若存在必须非负且不能超过已覆盖证券数；越界计数表示供应商统计口径与本次覆盖集合不一致，应拒绝该快照并回退。市场广度的成交额是聚合字段：
+- 对可取得逐证券行情时间的来源，快照必须报告 `quote_timestamp_coverage_count`、`oldest_quote_time` 与 `newest_quote_time`，并确保两端时间与 `provider_report_date` 属于同一中国市场日期。覆盖数表示有效源时间戳数量；最早时间是保守的快照时间下界，不得误解为所有行情在同一时刻生成。
+- 若有效时间戳覆盖不完整，快照必须为 `degraded`。即使覆盖数量完整，只要最早和最新报价时间跨度超过 10 分钟，也必须降级并记录 `provider_quote_timestamp_spread_exceeds_10_minutes`。服务层会拒绝缺少完整源时间覆盖却标为 `valid` 的快照；东方财富未提供逐证券可核验行情时间时继续保持降级。
 
 东方财富涨跌停池中的板数、炸板次数等计数字段必须解析为非负整数，不能把小数静默截断。服务层还会拒绝涨跌停池条目的非有限数值、负计数/金额与“条目降级但快照 valid”的质量矛盾，避免错误值经缓存重新返回。当 `amount_coverage_count` 小于 `covered_securities` 时，`total_amount_cny` 必须为 `null`，且快照质量必须是 `degraded`，不能因涨跌分类覆盖完整而标记为 `valid`。服务层必须同时校验该约束，避免错误质量状态进入缓存或 API。返回条数还必须不超过供应商声明的 `total`；若 `total` 小于 `items` 条数，应拒绝该快照并触发回退，不允许通过缓存保留矛盾计数。
 

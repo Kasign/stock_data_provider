@@ -495,7 +495,7 @@ components:
 
     MarketBreadthSnapshot:
       type: object
-      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, amount_coverage_count, source, fetched_at, quality_status]
+      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, amount_coverage_count, quote_timestamp_coverage_count, source, fetched_at, quality_status]
       properties:
         market: {type: string, enum: [cn_a_share]}
         total_securities: {type: integer, minimum: 1, description: Sum of source change-distribution bucket counts; not independently verified against a security master}
@@ -508,6 +508,9 @@ components:
         limit_down_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-down pool endpoint, only when its report date matches the breadth report date; null means unknown}
         total_amount_cny: {type: number, nullable: true, description: Full A-share turnover sum in CNY; null unless all paginated securities have valid amounts, quote dates match provider_report_date, and security count matches the breadth distribution}
         amount_coverage_count: {type: integer, minimum: 0, description: Count of securities included in the aggregate; zero when full coverage or cross-source count alignment cannot be established}
+        quote_timestamp_coverage_count: {type: integer, minimum: 0, description: Number of universe quotes with a valid source timestamp}
+        oldest_quote_time: {type: string, format: date-time, nullable: true, description: Earliest valid source quote timestamp included in the universe snapshot; this is a conservative bound, not the exact snapshot time}
+        newest_quote_time: {type: string, format: date-time, nullable: true, description: Latest valid source quote timestamp included in the universe snapshot}
         provider_report_date: {type: string, format: date, description: Source report date used to align breadth buckets, limit pools, and full-market quote rows}
         source: {type: string}
         source_version: {type: string}
