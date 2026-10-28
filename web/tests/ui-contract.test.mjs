@@ -1596,6 +1596,14 @@ test("估值请求补齐交易所后缀，并只展示与当前标的匹配的�
 });
 
  
+test("个股研究准备阶段异常与 finally 异常不会遗留按钮锁", () => {
+  assert.match(stockResearch, /function safeResearchButton\(button,disabled,label\)[\s\S]*?catch\{return false\}/);
+  assert.match(stockResearch, /async function fetchOne\(key,request,render\)[\s\S]*?try\{\s*abort\(key\);[\s\S]*?await request\(settings,symbol,ctl\.signal\)[\s\S]*?finally\{/);
+  assert.match(stockResearch, /async function loadResearch\(\)[\s\S]*?safeResearchButton\(button,true,"正在加载…"[\s\S]*?finally\{[\s\S]*?safeResearchButton\(button,false,"重新加载公司资料"\)/);
+  assert.match(stockResearch, /async function runSupplementRequest\([\s\S]*?let symbol="",button=null,generation=null,ownsButton=false;[\s\S]*?try\{[\s\S]*?const operation=fetchOne\(key,request,render\)[\s\S]*?finally\{[\s\S]*?safeResearchButton\(button,false,idleText\)/);
+  assert.match(stockResearch, /async function loadAnnouncements\(append=false\)[\s\S]*?try\{[\s\S]*?safeResearchButton\(\$\("#load-more-announcements"\),true,"正在加载…"[\s\S]*?finally\{[\s\S]*?safeResearchButton\([\s\S]*?"加载更多公告"/);
+});
+
 test("个股研究响应代码不匹配时忽略结果", () => {
   assert.match(stockResearch, /function assertResponseSymbol\(data,requestedSymbol\)/);
   assert.match(stockResearch, /if\(responseSymbol&&!sameValuationSymbol\(responseSymbol,requestedSymbol\)\)/);

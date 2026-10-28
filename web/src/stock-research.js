@@ -20,6 +20,9 @@ function makeDl(items){const dl=el("dl","supplemental-fields");items.forEach(([l
 function reasons(id,rows){const root=$("#"+id);if(!root)return;root.replaceChildren();if(!Array.isArray(rows)||!rows.length){root.append(el("p","","接口未返回质量原因；请结合状态与时间判断。"));return;}rows.forEach(v=>root.append(el("p","",v)));}
 function clearReasons(id){const root=$("#"+id);if(root)root.replaceChildren();}
 function formatNumber(value){const number=finiteNumberOrNull(value);return number===null?"—":new Intl.NumberFormat("zh-CN",{maximumFractionDigits:4}).format(number);}
+function safeResearchButton(button,disabled,label){try{if(!button)return false;button.disabled=Boolean(disabled);button.removeAttribute("aria-busy");if(disabled)button.setAttribute("aria-busy","true");if(label!==undefined)button.textContent=label;return true;}catch{return false;}}
+function safeResearchFeedback(message){try{setText("stock-research-feedback",message);}catch{}}
+function safeResearchError(error){try{return responseError(error);}catch{return "未知异常";}}
 function responseError(err){if(Number(err?.status)===404)return "当前部署的 market-data 尚未提供该接口，请更新数据服务版本。";if(Number(err?.status)===503)return "对应数据源未启用或未配置，请检查 market-data 的 Provider 配置。";return describeApiError(err,"请求失败。");}
 function safeAnnouncementUrl(raw){try{const url=new URL(String(raw||""));return url.protocol==="https:"&&(url.hostname==="eastmoney.com"||url.hostname.endsWith(".eastmoney.com"))?url.href:"";}catch{return "";}}
 function currentYearAndQuarter(){const now=new Date();let year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3);if(quarter===0){year-=1;quarter=4;}return {year,quarter};}
@@ -94,24 +97,29 @@ export function bindStockResearch(getSettings,getSymbol){
   setText("stock-research-feedback",message);
  }
  async function fetchOne(key,request,render){
-  abort(key);const seq=state.generation[key],symbol=state.symbol;
-  if(!symbol)return false;
-  const settings=typeof getSettings==="function"?getSettings():null;
-  const panel=PANEL_CONFIG[key];if(!panel)return false;
-  if(!settings?.apiKey){markApiKeyRequired();return false;}
-  state.requested.add(key);
-  clearPanel(key,"正在读取本次请求，尚无新结果。",symbol);
-  setQuality(panel.quality,"unknown","读取中…");
-  const ctl=new AbortController();state.controllers[key]=ctl;
+  let symbol=state.symbol,settings=null,panel=PANEL_CONFIG[key],seq=null,ctl=null;
   try{
+   abort(key);seq=state.generation[key];symbol=state.symbol;
+   if(!symbol)return false;
+   settings=typeof getSettings==="function"?getSettings():null;
+   panel=PANEL_CONFIG[key];if(!panel)return false;
+   if(!settings?.apiKey){markApiKeyRequired();return false;}
+   state.requested.add(key);
+   clearPanel(key,"正在读取本次请求，尚无新结果。",symbol);
+   setQuality(panel.quality,"unknown","读取中…");
+   ctl=new AbortController();state.controllers[key]=ctl;
    const data=await request(settings,symbol,ctl.signal);
    if(ctl.signal.aborted||seq!==state.generation[key]||symbol!==state.symbol)return false;
-   assertResponseSymbol(data,symbol);
-   render(data,symbol);
-   return true;
+   assertResponseSymbol(data,symbol);render(data,symbol);return true;
+  }catch(err){
+   if(ctl?.signal.aborted||(seq!==null&&seq!==state.generation[key])||(symbol&&symbol!==state.symbol))return false;
+   try{if(panel)setQuality(panel.quality,"invalid","读取失败");}catch{}
+   try{if(panel)setError(panel.error,safeResearchError(err));}catch{}
+   safeResearchFeedback((panel?.symbol?("读取"+key+"失败："):"个股研究读取失败：")+safeResearchError(err));
+   return false;
+  }finally{
+   if(seq!==null&&seq===state.generation[key]){try{if(state.controllers[key]===ctl)delete state.controllers[key];}catch{}}
   }
-  catch(err){if(ctl.signal.aborted||seq!==state.generation[key]||symbol!==state.symbol)return false;setQuality(panel.quality,"invalid","读取失败");setError(panel.error,responseError(err));return false;}
-  finally{if(seq===state.generation[key])delete state.controllers[key];}
  }
  function renderProfile(data,symbol){
   setText("stock-profile-symbol",data.symbol||symbol);setQuality("profile-quality",data.quality_status);
@@ -128,25 +136,29 @@ export function bindStockResearch(getSettings,getSymbol){
   setText("stock-boards-meta","源端返回 "+(data.total??items.length)+" 条 · "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));reasons("stock-boards-reasons",data.quality_reasons);
  }
  async function loadAnnouncements(append=false){
-  const symbol=syncSymbol();if(!symbol)return false;
-  const settings=typeof getSettings==="function"?getSettings():null;
-  if(!settings?.apiKey){markApiKeyRequired();return false;}
-  if(!append)state.requested.add("announcements");
-  const replacingInFlight=state.announcementLoading;
-  if(replacingInFlight&&append)return false;
-  if(append&&!state.announcementHasMore)return false;
-  if(replacingInFlight){abort("announcements");state.announcementLoading=false;}
-  if(!append){
-   state.announcementPage=0;state.announcementHasMore=false;
-   clearPanel("announcements","正在读取本次公告，尚无新结果。",symbol);
-   setQuality("announcements-quality","unknown","读取中…");
-  }
-  setError("announcements-error","");
-  if(!replacingInFlight)abort("announcements");
-  const seq=state.generation.announcements,requestPage=append?state.announcementPage+1:1;
-  state.announcementLoading=true;$("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="正在加载…";
-  const ctl=new AbortController();state.controllers.announcements=ctl;
+  let symbol="",settings=null,seq=null,requestPage=1,ctl=null;
   try{
+   symbol=syncSymbol();if(!symbol)return false;
+   settings=typeof getSettings==="function"?getSettings():null;
+   if(!settings?.apiKey){markApiKeyRequired();return false;}
+   if(!append)state.requested.add("announcements");
+   const replacingInFlight=state.announcementLoading;
+   if(replacingInFlight&&append)return false;
+   if(append&&!state.announcementHasMore)return false;
+   if(replacingInFlight){abort("announcements");state.announcementLoading=false;}
+   else abort("announcements");
+   seq=state.generation.announcements;
+   requestPage=append?state.announcementPage+1:1;
+   state.announcementLoading=true;
+   ctl=new AbortController();state.controllers.announcements=ctl;
+   if(!append){
+    state.announcementPage=0;state.announcementHasMore=false;
+    clearPanel("announcements","正在读取本次公告，尚无新结果。",symbol);
+    setQuality("announcements-quality","unknown","读取中…");
+   }
+   setError("announcements-error","");
+   safeResearchButton($("#load-more-announcements"),true,"正在加载…");
+
    const data=await getStockAnnouncements(settings,symbol,{page:requestPage,pageSize:20,signal:ctl.signal});
    if(ctl.signal.aborted||seq!==state.generation.announcements||symbol!==state.symbol)return false;
    assertResponseSymbol(data,symbol);
@@ -170,37 +182,50 @@ export function bindStockResearch(getSettings,getSymbol){
    if(!items.length&&append)root.append(el("p","stock-research-empty","本页未返回新记录。"));
    return true;
   }catch(err){
-   if(ctl.signal.aborted||seq!==state.generation.announcements||symbol!==state.symbol)return false;
-   if(!append)setQuality("announcements-quality","invalid","读取失败");
-   setError("announcements-error",responseError(err));return false;
+   if(ctl?.signal.aborted||(seq!==null&&seq!==state.generation.announcements)||(symbol&&symbol!==state.symbol))return false;
+   try{if(!append)setQuality("announcements-quality","invalid","读取失败");}catch{}
+   try{setError("announcements-error",safeResearchError(err));}catch{}
+   safeResearchFeedback("公告读取失败："+safeResearchError(err));
+   return false;
   }finally{
-   if(seq===state.generation.announcements){
-    state.announcementLoading=false;delete state.controllers.announcements;
-    $("#load-more-announcements").disabled=!state.announcementHasMore;
-    $("#load-more-announcements").textContent=state.announcementHasMore?"加载更多公告":(state.announcementPage>0?"已加载当前可用公告":"加载更多公告");
+   if(seq!==null&&seq===state.generation.announcements){
+    state.announcementLoading=false;
+    try{if(state.controllers.announcements===ctl)delete state.controllers.announcements;}catch{}
+    safeResearchButton($("#load-more-announcements"),!state.announcementHasMore,
+      state.announcementHasMore?"加载更多公告":(state.announcementPage>0?"已加载当前可用公告":"加载更多公告"));
    }
   }
  }
  async function loadResearch(){
-  const symbol=syncSymbol(),settings=typeof getSettings==="function"?getSettings():null;
-  if(!symbol){setText("stock-research-feedback","请先输入有效股票代码，或从中文名称搜索建议中选择股票。");return;}
-  if(!settings?.apiKey){markApiKeyRequired();return;}
-  const requestGeneration=++state.loadResearchGeneration;
-  setText("stock-research-feedback","正在分别读取公司档案、所属板块和近期公告，各接口状态独立。");
-  $("#load-stock-research").disabled=true;$("#load-stock-research").textContent="正在加载…";
+  let symbol="",requestGeneration=null,button=null;
   try{
+   symbol=syncSymbol();
+   const settings=typeof getSettings==="function"?getSettings():null;
+   if(!symbol){safeResearchFeedback("请先输入有效股票代码，或从中文名称搜索建议中选择股票。");return false;}
+   if(!settings?.apiKey){markApiKeyRequired();return false;}
+   requestGeneration=++state.loadResearchGeneration;
+   safeResearchFeedback("正在分别读取公司档案、所属板块和近期公告，各接口状态独立。");
+   button=$("#load-stock-research");
+   safeResearchButton(button,true,"正在加载…");
    const results=await Promise.allSettled([
     fetchOne("profile",getStockProfile,renderProfile),
     fetchOne("boards",getStockBoards,renderBoards),
     loadAnnouncements(false)
    ]);
-   if(requestGeneration!==state.loadResearchGeneration||symbol!==state.symbol)return;
+   if(requestGeneration!==state.loadResearchGeneration||symbol!==state.symbol)return results;
    const failures=results.filter(r=>r.status==="rejected"||r.value===false).length;
-   setText("stock-research-feedback",failures===0?"公司资料、所属板块和公告请求已完成，请查看各自质量与来源时间。":failures+" 项读取未成功；其它模块仍独立展示，请分别查看对应错误。");
+   safeResearchFeedback(failures===0
+    ?"公司资料、所属板块和公告请求已完成，请查看各自质量与来源时间。"
+    :failures+" 项读取未成功；其它模块仍独立展示，请分别查看对应错误。");
+   return results;
+  }catch(error){
+   if(requestGeneration!==null&&(requestGeneration!==state.loadResearchGeneration||symbol!==state.symbol))return [];
+   safeResearchFeedback("公司资料加载流程异常："+safeResearchError(error));
+   return [];
   }finally{
-   if(requestGeneration===state.loadResearchGeneration&&symbol===state.symbol){
-    $("#load-stock-research").disabled=false;
-    $("#load-stock-research").textContent="重新加载公司资料";
+   if(requestGeneration!==null&&requestGeneration===state.loadResearchGeneration&&symbol===state.symbol){
+    try{if(!button)button=$("#load-stock-research");}catch{}
+    safeResearchButton(button,false,"重新加载公司资料");
    }
   }
  }
@@ -218,21 +243,22 @@ export function bindStockResearch(getSettings,getSymbol){
   if(ok)setText("stock-research-feedback","季度财务指标已返回；请同时参考报告期、披露日期和质量状态。");
  }
  async function runSupplementRequest(buttonId,idleText,key,request,render,successMessage){
-  const symbol=syncSymbol();
-  if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return false;}
-  const button=$(buttonId);
-  button.disabled=true;button.textContent="读取中…";
-  const operation=fetchOne(key,request,render);
-  const generation=state.generation[key];
+  let symbol="",button=null,generation=null,ownsButton=false;
   try{
+   symbol=syncSymbol();
+   if(!symbol){safeResearchFeedback("请先选择一只有效股票。");return false;}
+   button=$(buttonId);ownsButton=true;
+   safeResearchButton(button,true,"读取中…");
+   const operation=fetchOne(key,request,render);
+   generation=state.generation[key];
    const ok=await operation;
-   if(ok&&generation===state.generation[key]&&symbol===state.symbol)setText("stock-research-feedback",successMessage);
+   if(ok&&generation===state.generation[key]&&symbol===state.symbol)safeResearchFeedback(successMessage);
    return ok;
+  }catch(error){
+   if(!symbol||symbol===state.symbol)safeResearchFeedback("个股研究读取流程异常："+safeResearchError(error));
+   return false;
   }finally{
-   if(generation===state.generation[key]&&symbol===state.symbol){
-    button.disabled=false;
-    button.textContent=idleText;
-   }
+   if(ownsButton&&symbol===state.symbol&&(generation===null||generation===state.generation[key]))safeResearchButton(button,false,idleText);
   }
  }
  async function loadValuations(){
