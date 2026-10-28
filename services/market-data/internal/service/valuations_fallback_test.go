@@ -166,6 +166,15 @@ func TestValuationsPrefersUnknownSnapshotWithMoreExtendedMetrics(t *testing.T) {
 	}
 }
 
+func TestValidateValuationSnapshotRequiresSourceVersion(t *testing.T) {
+	snapshot := validValuationsForFallbackTest("eastmoney")
+	snapshot.SourceVersion = ""
+	snapshot.Items[0].SourceVersion = ""
+	if err := validateValuationSnapshot([]string{"600519.SH"}, snapshot); err == nil {
+		t.Fatal("expected valuation snapshot without a source version to be rejected")
+	}
+}
+
 func TestValuationsRejectsItemSourceVersionMismatchAndFallsBack(t *testing.T) {
 	mismatched := validValuationsForFallbackTest("eastmoney")
 	mismatched.Items[0].SourceVersion = "old-version"
