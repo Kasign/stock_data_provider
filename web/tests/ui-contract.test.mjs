@@ -760,14 +760,14 @@ test("chat workbench has context isolation and no production mock replies", () =
   assert.match(app, /function renderChatState\(snapshot\)[\s\S]*?resolveChatViewState\(snapshot\)/);
   assert.match(app, /chatStockContextCleared: false/);
   const syncStart = app.indexOf("function syncChatStockContextFromMarket() {");
-  const syncEnd = app.indexOf("\\nfunction ", syncStart);
+  const syncEnd = app.indexOf(String.fromCharCode(10) + "function ", syncStart);
   const contextSync = app.slice(syncStart, syncEnd);
   assert.match(contextSync, /if \(state\.chatStockContextCleared\) \{[\s\S]*?state\.chatStockContext = null;[\s\S]*?return;/);
   assert.match(contextSync, /state\.quote && typeof state\.quote\.symbol/);
   assert.match(app, /if \(nextView === "chat" && previousView !== "chat"\) syncChatStockContextFromMarket\(\)/);
   assert.match(app, /state\.chatStockContextCleared = true;\s*state\.chatStockContext = null;[\s\S]*?renderChatStockContext\(\)/);
   const quoteStart = app.indexOf("async function runQuoteQuery(event) {");
-  const quoteEnd = app.indexOf("\\nfunction ", quoteStart);
+  const quoteEnd = app.indexOf(String.fromCharCode(10) + "function ", quoteStart);
   const quoteQuery = app.slice(quoteStart, quoteEnd);
   assert.match(quoteQuery, /state\.chatStockContextCleared = false;[\s\S]*?const generation = \+\+state\.quoteQueryGeneration;/);
   assert.match(app, /renderChatState\(\{ supported: false \}\)/);
