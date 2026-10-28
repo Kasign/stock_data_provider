@@ -446,7 +446,7 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 		if snapshot.Total <= 0 || len(snapshot.Items) == 0 {
 			return errors.New("limit-pool claims data but has no total/items")
 		}
-		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 			return fmt.Errorf("limit-pool quality status %q is unsupported", snapshot.QualityStatus)
 		}
 		seen := make(map[string]bool, len(snapshot.Items))
@@ -517,6 +517,30 @@ func markLimitPoolTruncated(snapshot *model.LimitPoolSnapshot) {
 	snapshot.QualityReasons = append(snapshot.QualityReasons, reason)
 }
 
+// betterUnknownLimitPoolSnapshot 优先保留条目更多、可用封板/换手字段更完整的 unknown 池快照。
+func betterUnknownLimitPoolSnapshot(candidate, current *model.LimitPoolSnapshot) bool {
+	if candidate == nil { return false }
+	if current == nil { return true }
+	if len(candidate.Items) != len(current.Items) { return len(candidate.Items) > len(current.Items) }
+	coverage := func(snapshot *model.LimitPoolSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			for _, value := range []*float64{item.LastPrice, item.TurnoverRatioPercent, item.Turnover, item.SealMoney, item.MaxSealMoney} {
+				if value != nil { count++ }
+			}
+			for _, value := range []*int{item.ConsecutiveBoards, item.BrokenCount, item.OpenTimes} {
+				if value != nil { count++ }
+			}
+			if item.FirstTouchTime != "" { count++ }
+			if item.LastTouchTime != "" { count++ }
+		}
+		return count
+	}
+	left, right := coverage(candidate), coverage(current)
+	if left != right { return left > right }
+	return candidate.FetchedAt.After(current.FetchedAt)
+}
+
 func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, limit int) (*model.LimitPoolSnapshot, bool, error) {
 	poolType := strings.ToLower(strings.TrimSpace(rawType))
 	if poolType == "" {
@@ -545,7 +569,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	key := fmt.Sprintf("md:v1:limit-pool:%s:%s:%d", poolType, date, limit)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.LimitPoolSnapshot
-		if json.Unmarshal(data, &cached) == nil && cached.HasData && validateLimitPoolSnapshot(poolType, date, limit, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
+		if json.Unmarshal(data, &cached) == nil && cached.HasData && cached.QualityStatus != model.QualityUnknown && validateLimitPoolSnapshot(poolType, date, limit, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
 			// 兼容升级前缓存：若供应商总数大于实际条数，不能沿用缓存中的 valid。
 			markLimitPoolTruncated(&cached)
 			return &cached, true, nil
@@ -557,7 +581,7 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 		return nil, false, errors.New("no enabled limit-pool provider")
 	}
 	var failures []string
-	var unknownEmpty *model.LimitPoolSnapshot
+	var unknownCandidate *model.LimitPoolSnapshot
 	for _, p := range s.limitPoolProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -571,10 +595,14 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if !snapshot.HasData {
-			// Unknown empty is not proof of zero events; continue to the next source.
-			unknownEmpty = snapshot
-			failures = append(failures, p.Name()+": empty pool is unknown, not confirmed zero")
+		if !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
+			// 空池或有条目但父快照质量未知，都不能阻断后续 Provider。
+			if betterUnknownLimitPoolSnapshot(snapshot, unknownCandidate) { unknownCandidate = snapshot }
+			if !snapshot.HasData {
+				failures = append(failures, p.Name()+": empty pool is unknown, not confirmed zero")
+			} else {
+				failures = append(failures, p.Name()+": limit-pool rows are present but snapshot quality is unknown")
+			}
 			continue
 		}
 		// total 是供应商报告总量；当前接口没有分页游标，未返回完整条数时显式降级。
@@ -586,20 +614,13 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 		}
 		return snapshot, false, nil
 	}
-	if unknownEmpty != nil {
-		// 所有 Provider 都未能确认空池为真实零事件时，保留 unknown；不缓存，避免下一次请求跳过重新回退。
-		const reason = "limit_pool_fallback_exhausted_without_confirmed_data"
-		alreadyPresent := false
-		for _, existing := range unknownEmpty.QualityReasons {
-			if existing == reason {
-				alreadyPresent = true
-				break
-			}
-		}
-		if !alreadyPresent {
-			unknownEmpty.QualityReasons = append(unknownEmpty.QualityReasons, reason)
-		}
-		return unknownEmpty, false, nil
+	if unknownCandidate != nil {
+		reason := "limit_pool_fallback_exhausted_without_usable_quality"
+		if !unknownCandidate.HasData { reason = "limit_pool_fallback_exhausted_without_confirmed_data" }
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		// unknown 候选不缓存，避免下一次请求绕过 Provider 回退链。
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all limit-pool providers failed: %s", strings.Join(failures, "; "))
 }
@@ -648,7 +669,7 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 		if snapshot.HasMore != (page < snapshot.Pages) {
 			return errors.New("dragon-tiger has_more does not match provider page count")
 		}
-		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
+		if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 			return fmt.Errorf("dragon-tiger quality status %q is unsupported", snapshot.QualityStatus)
 		}
 		seen := make(map[string]struct{}, len(snapshot.Items))
@@ -705,6 +726,29 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 }
 
 // DragonTiger 获取指定交易日的龙虎榜分页。盘后报表未发布时，空结果保留为 unknown。
+// betterUnknownDragonTigerSnapshot 优先保留 A 股条目更多且金额/行情字段覆盖更完整的 unknown 龙虎榜快照。
+func betterUnknownDragonTigerSnapshot(candidate, current *model.DragonTigerSnapshot) bool {
+	if candidate == nil { return false }
+	if current == nil { return true }
+	if len(candidate.Items) != len(current.Items) { return len(candidate.Items) > len(current.Items) }
+	if candidate.SourceReturned != current.SourceReturned { return candidate.SourceReturned > current.SourceReturned }
+	if candidate.ExcludedNonAShareCount != current.ExcludedNonAShareCount { return candidate.ExcludedNonAShareCount < current.ExcludedNonAShareCount }
+	coverage := func(snapshot *model.DragonTigerSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			for _, value := range []*float64{item.ChangePercent, item.ClosePrice, item.NetBuyAmountCNY, item.BuyAmountCNY, item.SellAmountCNY, item.DealAmountCNY, item.DealAmountRatio} {
+				if value != nil { count++ }
+			}
+			if item.Reason != "" { count++ }
+			if item.Explanation != "" { count++ }
+		}
+		return count
+	}
+	left, right := coverage(candidate), coverage(current)
+	if left != right { return left > right }
+	return candidate.FetchedAt.After(current.FetchedAt)
+}
+
 func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pageSize int) (*model.DragonTigerSnapshot, bool, error) {
 	date, err := normalizeDragonTigerDate(rawDate)
 	if err != nil {
@@ -729,13 +773,13 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 		var cached model.DragonTigerSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateDragonTigerSnapshot(date, page, pageSize, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			expiry := ttl
-			cacheEligible := cached.HasData
-			if !cached.HasData {
+			cacheEligible := cached.HasData && cached.QualityStatus != model.QualityUnknown
+			if !cached.HasData || cached.QualityStatus == model.QualityUnknown {
 				expiry = emptyTTL
-				// 兼容旧缓存：未知空页若未记录回退链已耗尽，多 Provider 场景必须重新尝试后备源。
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "dragon_tiger_fallback_exhausted_without_confirmed_data" {
+					if reason == "dragon_tiger_fallback_exhausted_without_confirmed_data" ||
+						reason == "dragon_tiger_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
@@ -753,7 +797,7 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 		return nil, false, errors.New("no enabled dragon-tiger provider")
 	}
 	var failures []string
-	var unknownEmpty *model.DragonTigerSnapshot
+	var unknownCandidate *model.DragonTigerSnapshot
 	for _, p := range s.dragonTigerProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -767,10 +811,14 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if !snapshot.HasData {
-			// 空报告或该页未保留 A 股都不能直接证明无可用龙虎榜数据；尝试后续 Provider。
-			unknownEmpty = snapshot
-			failures = append(failures, p.Name()+": no confirmed A-share dragon-tiger rows on this page")
+		if !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
+			// 空报告、非 A 股空页或带有数据但质量未知，都继续尝试后备源。
+			if betterUnknownDragonTigerSnapshot(snapshot, unknownCandidate) { unknownCandidate = snapshot }
+			if !snapshot.HasData {
+				failures = append(failures, p.Name()+": no confirmed A-share dragon-tiger rows on this page")
+			} else {
+				failures = append(failures, p.Name()+": dragon-tiger rows are present but snapshot quality is unknown")
+			}
 			continue
 		}
 		if data, marshalErr := json.Marshal(snapshot); marshalErr == nil {
@@ -780,15 +828,17 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 		}
 		return snapshot, false, nil
 	}
-	if unknownEmpty != nil {
-		// 回退链耗尽后才短缓存 unknown，防止旧的首源空缓存挡住其他来源。
-		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "dragon_tiger_fallback_exhausted_without_confirmed_data")
-		if data, marshalErr := json.Marshal(unknownEmpty); marshalErr == nil {
+	if unknownCandidate != nil {
+		reason := "dragon_tiger_fallback_exhausted_without_usable_quality"
+		if !unknownCandidate.HasData { reason = "dragon_tiger_fallback_exhausted_without_confirmed_data" }
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
+		if data, marshalErr := json.Marshal(unknownCandidate); marshalErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, data, emptyTTL); cacheErr != nil {
 				s.logger.Warn("dragon-tiger unknown cache write failed", "date", date, "page", page, "error", cacheErr)
 			}
 		}
-		return unknownEmpty, false, nil
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all dragon-tiger providers failed: %s", strings.Join(failures, "; "))
 }
