@@ -118,7 +118,7 @@ test("Run 结果重读采用单次请求锁并只由当前代际解锁按钮", (
   assert.match(loader, /reload-run-result.*disabled[\s\S]*?\["loading", "retrying"\][\s\S]*?return;/);
   assert.match(loader, /setRunResultReloadBusy\(true\)/);
   assert.match(loader, /finally \{[\s\S]*?generation === state\.runResultGeneration\) setRunResultReloadBusy\(false\)/);
-  assert.equal((app.match(/state\.runResultGeneration \+= 1;\s*setRunResultReloadBusy\(false\);/g) || []).length, 3, "新建任务、恢复任务和分析地址切换都必须解除旧请求锁");
+  assert.equal((app.match(/state\.runResultGeneration \+= 1;\s*releaseRunResultReloadBusy\(\);/g) || []).length, 3, "新建任务、恢复任务和分析地址切换都必须通过安全入口解除旧请求锁");
 });
 
 test("watchlist marks a retained Run result when re-reading fails and refreshes on recovery", () => {
