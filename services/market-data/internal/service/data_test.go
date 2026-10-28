@@ -1553,6 +1553,66 @@ func TestValidateStockBasicRequiresSourceVersion(t *testing.T) {
 	}
 }
 
+func TestValidateStockBasicRejectsInvalidShareCounts(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(*model.StockBasic)
+		want  string
+	}{
+		{name: "total shares NaN", setup: func(item *model.StockBasic) { value := math.NaN(); item.TotalShares = &value }, want: "total_shares is non-finite"},
+		{name: "float shares infinity", setup: func(item *model.StockBasic) { value := math.Inf(1); item.FloatShares = &value }, want: "float_shares is non-finite"},
+		{name: "total shares zero", setup: func(item *model.StockBasic) { value := 0.0; item.TotalShares = &value }, want: "total_shares must be positive"},
+		{name: "float shares negative", setup: func(item *model.StockBasic) { value := -1.0; item.FloatShares = &value }, want: "float_shares must not be negative"},
+		{name: "float shares exceed total", setup: func(item *model.StockBasic) { value := 1_000_001.0; item.FloatShares = &value }, want: "float_shares must not exceed total_shares"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			total, floating := 1_000_000.0, 800_000.0
+			item := &model.StockBasic{
+				Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+				ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+				TotalShares: &total, FloatShares: &floating, FetchedAt: time.Now().UTC(),
+				QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+			}
+			tc.setup(item)
+			if err := validateStockBasic("600519.SH", item); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected stock-basic share validation error %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestStockBasicFallsBackWhenProviderHasInconsistentShareCounts(t *testing.T) {
+	now := time.Now().UTC()
+	total, invalidFloat := 1_000_000.0, 1_100_000.0
+	first := &stockBasicFakeProvider{name: "eastmoney", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+		TotalShares: &total, FloatShares: &invalidFloat, FetchedAt: now, QualityStatus: model.QualityDegraded,
+		NormalizationVer: normalize.Version,
+	}}
+	goodTotal, goodFloat := 1_000_000.0, 800_000.0
+	second := &stockBasicFakeProvider{name: "tushare", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", SourceVersion: "tushare-stock-basic-v1",
+		TotalShares: &goodTotal, FloatShares: &goodFloat, FetchedAt: now, QualityStatus: model.QualityDegraded,
+		NormalizationVer: normalize.Version,
+	}}
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil, newMemoryCache(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{first, second})
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("StockBasic hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.FloatShares == nil || *got.FloatShares != goodFloat {
+		t.Fatalf("expected fallback after invalid share counts, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("invalid share counts must trigger provider fallback, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
 func TestStockBasicFallsBackFromUnknownQualityProvider(t *testing.T) {
 	now := time.Now().UTC()
 	first := &stockBasicFakeProvider{name: "eastmoney", item: &model.StockBasic{

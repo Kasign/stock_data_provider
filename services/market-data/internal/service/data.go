@@ -1049,7 +1049,13 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 			return fmt.Errorf("stock-basic %s %q is invalid", field, value)
 		}
 	}
-	for field, value := range map[string]*float64{"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY, "float_market_cap_cny": item.FloatMarketCapCNY, "roe_percent": item.ROEPercent, "net_profit_margin_percent": item.NetProfitMarginPercent, "net_profit_cny": item.NetProfitCNY, "gross_margin_percent": item.GrossMarginPercent} {
+	for field, value := range map[string]*float64{
+		"pe_dynamic": item.DynamicPE, "pb": item.PB,
+		"market_cap_cny": item.MarketCapCNY, "float_market_cap_cny": item.FloatMarketCapCNY,
+		"total_shares": item.TotalShares, "float_shares": item.FloatShares,
+		"roe_percent": item.ROEPercent, "net_profit_margin_percent": item.NetProfitMarginPercent,
+		"net_profit_cny": item.NetProfitCNY, "gross_margin_percent": item.GrossMarginPercent,
+	} {
 		if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
 			return fmt.Errorf("stock-basic %s is non-finite", field)
 		}
@@ -1059,6 +1065,15 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 	}
 	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 {
 		return errors.New("stock-basic float_market_cap_cny must not be negative")
+	}
+	if item.TotalShares != nil && *item.TotalShares <= 0 {
+		return errors.New("stock-basic total_shares must be positive")
+	}
+	if item.FloatShares != nil && *item.FloatShares < 0 {
+		return errors.New("stock-basic float_shares must not be negative")
+	}
+	if item.TotalShares != nil && item.FloatShares != nil && *item.FloatShares > *item.TotalShares {
+		return errors.New("stock-basic float_shares must not exceed total_shares")
 	}
 	if item.QualityStatus == model.QualityValid {
 		return errors.New("stock-basic cannot be valid without a provider snapshot timestamp")
