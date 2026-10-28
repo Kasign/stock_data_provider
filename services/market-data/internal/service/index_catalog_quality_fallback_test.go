@@ -110,6 +110,32 @@ func TestIndexCatalogFallsBackFromUnknownQualityEntries(t *testing.T) {
 	}
 }
 
+func TestIndexConstituentsKeepsBestCoverageUnknownCandidate(t *testing.T) {
+	plain := indexConstituentsUnknownDataForTest("hithink")
+	rich := indexConstituentsUnknownDataForTest("tushare")
+	weight := 1.35
+	rich.Items[0].WeightPercent = &weight
+	reportTime := time.Now().UTC().Add(-time.Hour)
+	rich.ProviderTime = &reportTime
+	rich.ProviderReportDate = reportTime.Format("2006-01-02")
+	first := &indexCatalogQualityFallbackProvider{name: "hithink", constituents: plain}
+	second := &indexCatalogQualityFallbackProvider{name: "tushare", constituents: rich}
+	failed := &indexCatalogQualityFallbackProvider{name: "third-source", constituentErr: errors.New("test constituent endpoint unavailable")}
+	svc := indexCatalogQualityFallbackService(first, second, failed)
+
+	got, hit, err := svc.IndexConstituentsFromSource(context.Background(), "000300.SH", "")
+	if err != nil || hit {
+		t.Fatalf("IndexConstituentsFromSource returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.QualityStatus != model.QualityUnknown ||
+		got.Items[0].WeightPercent == nil || got.ProviderTime == nil || got.ProviderReportDate == "" {
+		t.Fatalf("expected the richer unknown constituent snapshot, got %+v", got)
+	}
+	if first.constituentCalls != 1 || second.constituentCalls != 1 || failed.constituentCalls != 1 {
+		t.Fatalf("expected all providers to be attempted, calls=%d/%d/%d", first.constituentCalls, second.constituentCalls, failed.constituentCalls)
+	}
+}
+
 func TestIndexConstituentsFallsBackFromUnknownQualityEntries(t *testing.T) {
 	first := &indexCatalogQualityFallbackProvider{name: "hithink", constituents: indexConstituentsUnknownDataForTest("hithink")}
 	second := &indexCatalogQualityFallbackProvider{name: "tushare", constituents: indexConstituentsDegradedDataForTest("tushare")}

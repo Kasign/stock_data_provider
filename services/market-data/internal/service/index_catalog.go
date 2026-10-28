@@ -365,6 +365,48 @@ func (s *DataService) IndexConstituents(ctx context.Context, rawIndexSymbol stri
 	return s.IndexConstituentsFromSource(ctx, rawIndexSymbol, "")
 }
 
+// betterUnknownIndexConstituentSnapshot 在回退耗尽后优先保留成分数更多、权重和源端时间信息更完整的候选。
+func betterUnknownIndexConstituentSnapshot(candidate, current *model.IndexConstituentSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	coverage := func(snapshot *model.IndexConstituentSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			if item.WeightPercent != nil {
+				count++
+			}
+		}
+		if snapshot.ProviderTime != nil {
+			count++
+		}
+		if strings.TrimSpace(snapshot.ProviderReportDate) != "" {
+			count++
+		}
+		return count
+	}
+	left, right := coverage(candidate), coverage(current)
+	if left != right {
+		return left > right
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime == nil {
+		return true
+	}
+	if candidate.ProviderTime == nil && current.ProviderTime != nil {
+		return false
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime != nil && !candidate.ProviderTime.Equal(*current.ProviderTime) {
+		return candidate.ProviderTime.After(*current.ProviderTime)
+	}
+	return candidate.ProviderReportDate > current.ProviderReportDate
+}
+
 func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexSymbol, rawSource string) (*model.IndexConstituentSnapshot, bool, error) {
 	indexSymbol, err := canonicalIndexSymbol(rawIndexSymbol)
 	if err != nil {
@@ -426,7 +468,7 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 			continue
 		}
 		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
-			if unknownCandidate == nil || len(snapshot.Items) > len(unknownCandidate.Items) {
+			if betterUnknownIndexConstituentSnapshot(snapshot, unknownCandidate) {
 				unknownCandidate = snapshot
 			}
 			if len(snapshot.Items) == 0 {

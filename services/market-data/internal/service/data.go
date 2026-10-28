@@ -1615,6 +1615,9 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 	chipProviders := make([]chipDistributionSource, 0, len(s.chipDistributionProviders)+len(s.supplementProviders))
 	seenChipProviders := make(map[string]struct{}, len(s.chipDistributionProviders)+len(s.supplementProviders))
 	for _, p := range s.chipDistributionProviders {
+		if p == nil {
+			continue
+		}
 		providerKey := strings.ToLower(strings.TrimSpace(p.Name()))
 		if _, exists := seenChipProviders[providerKey]; exists {
 			continue
@@ -1623,6 +1626,9 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		chipProviders = append(chipProviders, p)
 	}
 	for _, p := range s.supplementProviders {
+		if p == nil {
+			continue
+		}
 		providerKey := strings.ToLower(strings.TrimSpace(p.Name()))
 		if _, exists := seenChipProviders[providerKey]; exists {
 			continue

@@ -118,7 +118,8 @@ func TestChipDistributionDeduplicatesProviderNamesIgnoringCaseAndWhitespace(t *t
 	first := &chipFallbackTestProvider{name: "eastmoney", item: chipFallbackItem("eastmoney", model.QualityUnknown)}
 	duplicate := &chipFallbackTestProvider{name: " EASTMONEY ", err: errors.New("duplicate provider should not be called")}
 	fallback := &chipFallbackTestProvider{name: "miaoxiang", item: chipFallbackItem("miaoxiang", model.QualityDegraded)}
-	svc := chipFallbackService(first, duplicate, fallback)
+	svc := chipFallbackService(nil, first, duplicate, fallback)
+	svc.SetSupplementProviders([]provider.SupplementProvider{nil})
 
 	got, hit, err := svc.ChipDistribution(context.Background(), "600519.SH")
 	if err != nil || hit {
