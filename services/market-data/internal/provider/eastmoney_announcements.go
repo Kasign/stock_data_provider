@@ -116,6 +116,9 @@ func (p *Eastmoney) FetchStockAnnouncements(ctx context.Context, rawSymbol, star
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Eastmoney stock announcements only support common A-share equities, got %q", rawSymbol)
+	}
 	start, startErr := time.Parse("2006-01-02", strings.TrimSpace(startDate))
 	end, endErr := time.Parse("2006-01-02", strings.TrimSpace(endDate))
 	if startErr != nil || endErr != nil || start.Format("2006-01-02") != strings.TrimSpace(startDate) ||

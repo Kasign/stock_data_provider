@@ -1554,6 +1554,9 @@ func (p *Tushare) FetchStockAnnouncements(ctx context.Context, rawSymbol, rawSta
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tushare anns_d 仅支持普通 A 股股票，证券 %s 不在支持范围内", symbol)
+	}
 	startDate, endDate := strings.TrimSpace(rawStartDate), strings.TrimSpace(rawEndDate)
 	startCompact, err := tushareCompactDate(startDate)
 	if err != nil {

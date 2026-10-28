@@ -1343,6 +1343,24 @@ func TestTushareDailyRejectsNonAShareBeforeRequest(t *testing.T) {
 }
 
 
+func TestTushareAnnouncementsRejectsNonStockSecurities(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		http.Error(w, "should reject non-stock symbols before request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	for _, symbol := range []string{"510300.SH", "000300.SH", "113001.SH", "900901.SH", "159919.SZ"} {
+		if _, err := client.FetchStockAnnouncements(context.Background(), symbol, "2026-10-20", "2026-10-26", 1, 20); err == nil {
+			t.Errorf("non-common-A-share symbol %s must be rejected", symbol)
+		}
+	}
+	if called {
+		t.Fatal("non-stock announcement requests must be rejected before contacting Tushare")
+	}
+}
+
 func TestTushareStockAnnouncementsMarksDuplicateRows(t *testing.T) {
 	fields := []string{"ann_date", "ts_code", "name", "title", "url", "rec_time"}
 	row := []any{"20261023", "600519.SH", "贵州茅台", "测试公告", "https://example.test/notice/1", "2026-10-23 18:30:00"}
