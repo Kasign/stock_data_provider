@@ -2465,9 +2465,18 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	if !ok {
 		return nil, fmt.Errorf("unsupported limit-pool type %q; want up, down or broken", poolType)
 	}
-	date, err := time.Parse("2006-01-02", tradeDate)
-	if err != nil {
+	rawDate := strings.TrimSpace(tradeDate)
+	date, err := time.Parse("2006-01-02", rawDate)
+	if err != nil || date.Format("2006-01-02") != rawDate {
 		return nil, fmt.Errorf("invalid limit-pool trade date %q: expected YYYY-MM-DD", tradeDate)
+	}
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	today := time.Now().In(loc).Format("2006-01-02")
+	if rawDate > today {
+		return nil, fmt.Errorf("limit-pool trade date %s must not be in the future (China market date %s)", rawDate, today)
 	}
 	if limit <= 0 {
 		limit = 100
