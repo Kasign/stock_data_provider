@@ -404,6 +404,7 @@ test("connection-check results are isolated between saved settings and the modal
   assert.match(savedCheck, /if \(generation !== savedConnectionCheckGeneration\) return/);
   assert.match(savedCheck, /当前已保存的行情与分析 API 地址/);
   assert.match(savedCheck, /if \(generation === savedConnectionCheckGeneration\)[\s\S]*?button\.disabled = false/);
+  assert.match(app, /if \(analysisBaseChanged \|\| marketConnectionChanged\) \{[\s\S]*?savedConnectionCheckGeneration \+= 1;[\s\S]*?connectionCheckButton\.removeAttribute\("aria-busy"\);[\s\S]*?connectionCheckOutput\.textContent = "连接配置已变化，请重新检查当前已保存的配置。";[\s\S]*?dataCenter\.invalidate/);
 
   const draftCheck = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(draftCheck, "unsaved draft connection check must exist");
