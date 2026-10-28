@@ -240,8 +240,11 @@ func (p *Xueqiu) FetchHotStocks(ctx context.Context, rankingType string, limit i
 		return nil, fmt.Errorf("解析雪球榜单响应失败: %w", err)
 	}
 	if rawCode := bytes.TrimSpace(envelope["error_code"]); len(rawCode) > 0 {
-		code, parseErr := strconv.Atoi(strings.TrimSpace(strings.Trim(string(rawCode), "\"")))
-		if parseErr == nil && code != 0 {
+		code, parseErr := strconv.Atoi(strings.TrimSpace(strings.Trim(string(rawCode), "\\"")))
+		if parseErr != nil {
+			return nil, errors.New("雪球榜单响应 error_code 无效")
+		}
+		if code != 0 {
 			message := xueqiuString(envelope, "error_description")
 			if message == "" {
 				message = xueqiuString(envelope, "message")

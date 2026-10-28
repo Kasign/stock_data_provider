@@ -109,6 +109,32 @@ func TestXueqiuHotRankingMarksInvalidRankChange(t *testing.T) {
 	}
 }
 
+
+
+func TestXueqiuHotRankingRejectsMalformedErrorCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v5/stock/hot_stock/list.json" {
+			t.Errorf("request path=%q, want hot-stock list", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error_code": "not-a-number",
+			"data": map[string]any{
+				"timestamp": time.Now().Unix(),
+				"items": []map[string]any{{
+					"symbol": "SH600519", "name": "贵州茅台", "current": 1500.0,
+				}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := NewXueqiuConfigured(2*time.Second, server.URL, "")
+	if _, err := provider.FetchHotStocks(context.Background(), "popular", 10); err == nil || !strings.Contains(err.Error(), "error_code") {
+		t.Fatalf("malformed source error_code must reject the response, got %v", err)
+	}
+}
+
 func TestXueqiuFixtureSymbolCodesAreUnique(t *testing.T) {
 	rows := xueqiuFixtureRows(50)
 	seen := make(map[string]struct{}, len(rows))
