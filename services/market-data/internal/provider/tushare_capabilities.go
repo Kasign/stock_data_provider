@@ -632,6 +632,9 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 
 
 func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year, quarter int) (*model.FundamentalsSnapshot, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	symbol, err := tushareExchangeCode(rawSymbol)
 	if err != nil {
 		return nil, err

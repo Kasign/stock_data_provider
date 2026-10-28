@@ -465,7 +465,7 @@ func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 	defer server.Close()
 
 	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
-	snapshot, err := client.FetchFundamentals(context.Background(), "600519.SH", 2026, 2)
+	snapshot, err := client.FetchFundamentals(nil, "600519.SH", 2026, 2)
 	if err != nil {
 		t.Fatalf("FetchFundamentals: %v", err)
 	}
