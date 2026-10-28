@@ -35,6 +35,12 @@ function sameValuationSymbol(left,right) {
  try{return normalizeValuationSymbol(left)===normalizeValuationSymbol(right);}
  catch{return false;}
 }
+function assertResponseSymbol(data,requestedSymbol) {
+ const responseSymbol=String(data?.symbol||"").trim();
+ if(responseSymbol&&!sameValuationSymbol(responseSymbol,requestedSymbol)){
+  throw new Error("服务端返回证券代码 "+responseSymbol+" 与请求标的 "+requestedSymbol+" 不匹配，已忽略结果。");
+ }
+}
 export function bindStockResearch(getSettings,getSymbol){
  const state={symbol:"",generation:{profile:0,boards:0,fundamentals:0,announcements:0,valuations:0,chip:0,capitalFlow:0},controllers:{},requested:new Set(),announcementPage:0,announcementHasMore:false,announcementLoading:false,loadResearchGeneration:0};
  function resolvedSymbol(){try{return String(getSymbol?.()||"").trim();}catch{return "";}}
@@ -97,7 +103,13 @@ export function bindStockResearch(getSettings,getSymbol){
   clearPanel(key,"正在读取本次请求，尚无新结果。",symbol);
   setQuality(panel.quality,"unknown","读取中…");
   const ctl=new AbortController();state.controllers[key]=ctl;
-  try{const data=await request(settings,symbol,ctl.signal);if(ctl.signal.aborted||seq!==state.generation[key]||symbol!==state.symbol)return false;render(data,symbol);return true;}
+  try{
+   const data=await request(settings,symbol,ctl.signal);
+   if(ctl.signal.aborted||seq!==state.generation[key]||symbol!==state.symbol)return false;
+   assertResponseSymbol(data,symbol);
+   render(data,symbol);
+   return true;
+  }
   catch(err){if(ctl.signal.aborted||seq!==state.generation[key]||symbol!==state.symbol)return false;setQuality(panel.quality,"invalid","读取失败");setError(panel.error,responseError(err));return false;}
   finally{if(seq===state.generation[key])delete state.controllers[key];}
  }
@@ -137,6 +149,7 @@ export function bindStockResearch(getSettings,getSymbol){
   try{
    const data=await getStockAnnouncements(settings,symbol,{page:requestPage,pageSize:20,signal:ctl.signal});
    if(ctl.signal.aborted||seq!==state.generation.announcements||symbol!==state.symbol)return false;
+   assertResponseSymbol(data,symbol);
    const root=$("#announcement-list");
    if(!append)root.replaceChildren();
    const items=Array.isArray(data.items)?data.items:[ ];

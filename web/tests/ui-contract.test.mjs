@@ -1119,3 +1119,12 @@ test("估值请求补齐交易所后缀，并只展示与当前标的匹配的�
   assert.doesNotMatch(renderer, /items\[0\]/, "目标股票未匹配时不得退回展示列表第一条记录");
   assert.match(renderer, /估值接口返回的证券代码与当前标的不匹配，已忽略这些记录/);
 });
+
+ 
+test("个股研究响应代码不匹配时忽略结果", () => {
+  assert.match(stockResearch, /function assertResponseSymbol\(data,requestedSymbol\)/);
+  assert.match(stockResearch, /if\(responseSymbol&&!sameValuationSymbol\(responseSymbol,requestedSymbol\)\)/);
+  assert.match(stockResearch, /服务端返回证券代码 \+responseSymbol\+ 与请求标的 \+requestedSymbol\+ 不匹配，已忽略结果/);
+  assert.match(stockResearch, /async function fetchOne\(key,request,render\)[\s\S]*?assertResponseSymbol\(data,symbol\);[\s\S]*?render\(data,symbol\)/);
+  assert.match(stockResearch, /async function loadAnnouncements\(append=false\)[\s\S]*?getStockAnnouncements\(settings,symbol,[\s\S]*?assertResponseSymbol\(data,symbol\);[\s\S]*?const root=\$\("#announcement-list"\)/);
+});
