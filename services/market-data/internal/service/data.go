@@ -1454,21 +1454,27 @@ func (s *DataService) SetCapitalFlowProviders(providers []provider.CapitalFlowPr
 
 // CapitalFlowProviders 合并独立资金流 Provider 与旧版 SupplementProvider，按名称去重。
 func (s *DataService) CapitalFlowProviders() []provider.CapitalFlowProvider {
-	out := append([]provider.CapitalFlowProvider(nil), s.capitalFlowProviders...)
-	seen := make(map[string]struct{}, len(out)+len(s.supplementProviders))
-	for _, p := range out {
-		seen[p.Name()] = struct{}{}
+	out := make([]provider.CapitalFlowProvider, 0, len(s.capitalFlowProviders)+len(s.supplementProviders))
+	seen := make(map[string]struct{}, len(s.capitalFlowProviders)+len(s.supplementProviders))
+	appendUnique := func(p provider.CapitalFlowProvider) {
+		if p == nil {
+			return
+		}
+		name := strings.ToLower(strings.TrimSpace(p.Name()))
+		if _, exists := seen[name]; exists {
+			return
+		}
+		seen[name] = struct{}{}
+		out = append(out, p)
+	}
+	for _, p := range s.capitalFlowProviders {
+		appendUnique(p)
 	}
 	for _, p := range s.supplementProviders {
-		if _, exists := seen[p.Name()]; exists {
-			continue
-		}
-		out = append(out, p)
-		seen[p.Name()] = struct{}{}
+		appendUnique(p)
 	}
 	return out
 }
-
 func validateChipDistributionSnapshot(symbol string, item *model.ChipDistribution) error {
 	if item == nil {
 		return errors.New("chip-distribution response is empty")
@@ -1705,20 +1711,35 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
+	providers := s.CapitalFlowProviders()
 	key := "md:v1:capital-flow:" + symbol
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var item model.CapitalFlow
 		if json.Unmarshal(data, &item) == nil && validateCapitalFlowSnapshot(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
-			return &item, true, nil
+			cacheEligible := item.QualityStatus != model.QualityUnknown
+			if item.QualityStatus == model.QualityUnknown {
+				fallbackExhausted := false
+				for _, reason := range item.QualityReasons {
+					if reason == "capital_flow_fallback_exhausted_without_usable_quality" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				// 多 Provider 场景不让旧 unknown 缓存挡住后备源；只有明确记录回退耗尽才允许命中。
+				cacheEligible = fallbackExhausted || len(providers) <= 1
+			}
+			if cacheEligible {
+				return &item, true, nil
+			}
 		}
 	} else if cacheErr != nil {
 		s.logger.Warn("capital-flow cache read failed", "error", cacheErr)
 	}
-	providers := s.CapitalFlowProviders()
 	if len(providers) == 0 {
 		return nil, false, errors.New("no enabled capital-flow provider")
 	}
 	var failures []string
+	var unknownCandidate *model.CapitalFlow
 	for _, p := range providers {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -1756,6 +1777,14 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if item.QualityStatus == model.QualityUnknown {
+			// unknown 即使包含数值也不能抢先返回；优先给后续来源机会。
+			if unknownCandidate == nil {
+				unknownCandidate = item
+			}
+			failures = append(failures, p.Name()+": capital-flow quality is unknown")
+			continue
+		}
 		if encoded, encodeErr := json.Marshal(item); encodeErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, encoded, 5*time.Minute); cacheErr != nil {
 				s.logger.Warn("capital-flow cache write failed", "error", cacheErr)
@@ -1766,9 +1795,18 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, "capital_flow_fallback_exhausted_without_usable_quality")
+		if encoded, encodeErr := json.Marshal(unknownCandidate); encodeErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, encoded, 5*time.Minute); cacheErr != nil {
+				s.logger.Warn("capital-flow unknown cache write failed", "symbol", symbol, "error", cacheErr)
+			}
+		}
+		return unknownCandidate, false, nil
+	}
 	return nil, false, fmt.Errorf("all capital-flow providers failed: %s", strings.Join(failures, " | "))
 }
-
 func appendReason(reasons []string, value string) []string {
 	for _, reason := range reasons {
 		if reason == value {
