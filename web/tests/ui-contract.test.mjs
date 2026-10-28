@@ -218,6 +218,16 @@ test("轮询异常收敛中的诊断渲染失败不会再次拒绝 Promise", () 
   assert.ok(safePoll.includes("try {\n        stopTaskPolling();\n      } catch {}"));
 });
 
+test("手动刷新前置渲染异常仍会发起安全轮询并收尾按钮状态", () => {
+  const start = app.indexOf('$("#refresh-task").addEventListener("click"');
+  const end = app.indexOf('$("#recent-analysis-search")', start);
+  const handler = start >= 0 && end > start ? app.slice(start, end) : "";
+  assert.match(handler, /try \{[\s\S]*?setQualityPill[\s\S]*?renderWatchlist\(\);[\s\S]*?catch \(setupError\)/);
+  assert.match(handler, /catch \(setupError\)[\s\S]*?仍将继续读取服务端状态[\s\S]*?void pollTaskSafely\(generation\)\.finally\(/);
+  assert.match(handler, /void pollTaskSafely\(generation\)\.finally\(\(\) => \{\s*if \(generation === state\.pollGeneration\) \{\s*try \{\s*setTaskRefreshBusy\(false\);\s*\} catch \{/);
+  assert.match(handler, /finally 的按钮解锁不得再次形成未处理的 Promise rejection/);
+});
+
 test("Run 结果读取准备阶段异常也会复位忙碌锁", () => {
   const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
   const end = app.indexOf("\nfunction stopTaskPolling()", start);

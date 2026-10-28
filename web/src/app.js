@@ -4267,14 +4267,44 @@ $("#refresh-task").addEventListener("click", () => {
   if (!state.taskId || $("#refresh-task").disabled) return;
   state.taskEventsUnavailable = false;
   state.taskStatusLoading = true;
-  setQualityPill($("#task-status-pill"), "unknown", "正在刷新");
   stopTaskPolling();
   const generation = state.pollGeneration;
-  setTaskRefreshBusy(true);
-  $("#task-poll-label").textContent = "正在手动刷新任务状态与阶段事件…";
-  if (state.view === "watchlist") renderWatchlist();
+  try {
+    setTaskRefreshBusy(true);
+    setQualityPill($("#task-status-pill"), "unknown", "正在刷新");
+    const pollLabel = $("#task-poll-label");
+    if (pollLabel) pollLabel.textContent = "正在手动刷新任务状态与阶段事件…";
+    if (state.view === "watchlist") renderWatchlist();
+  } catch (setupError) {
+    let message = "未知异常";
+    try {
+      message = errorMessage(setupError);
+    } catch {
+      // 错误对象不可格式化时，仍继续发起服务端状态读取。
+    }
+    try {
+      state.taskStatusError = "刷新前置界面更新失败：" + message;
+    } catch {
+      // 前置诊断写入失败不能阻止任务状态请求。
+    }
+    try {
+      const pollLabel = $("#task-poll-label");
+      if (pollLabel) {
+        pollLabel.textContent =
+          "刷新前置界面更新失败：" + message + "；仍将继续读取服务端状态。";
+      }
+    } catch {
+      // 诊断节点不可更新时仍继续请求；不能让按钮永久停留在忙碌状态。
+    }
+  }
   void pollTaskSafely(generation).finally(() => {
-    if (generation === state.pollGeneration) setTaskRefreshBusy(false);
+    if (generation === state.pollGeneration) {
+      try {
+        setTaskRefreshBusy(false);
+      } catch {
+        // finally 的按钮解锁不得再次形成未处理的 Promise rejection。
+      }
+    }
   });
 });
 $("#recent-analysis-search").addEventListener("input", () => renderRecentTasks());
