@@ -985,3 +985,10 @@
 - 行情 API 路径或 API Key 实际变化时，applySettings 调用 marketActivity.invalidateConnection()，中止龙虎榜与交易日历的在途请求。
 - 失效处理会清除旧连接下的龙虎榜和交易日历结果、重置龙虎榜分页并更新状态提示；AbortSignal 与请求代次检查共同阻止迟到响应再次写回旧数据。
 - 代码与回归契约同属提交 175a9ac（https://github.com/Kasign/stock_data_provider/commit/175a9ac04379f89b404777b19eadf803d903f6aa）。本轮未运行测试、构建、浏览器自动化或 CI，新增断言尚未执行。
+
+## 2026-10-28 市场总览连接切换保护
+
+- 行情连接路径或 API Key 实际变化时，app.js 现在调用 marketOverview.invalidateConnection()；指数、市场广度、板块、涨跌停池和人气榜均中止在途请求、推进 generation 并清除旧数据。
+- 旧刷新汇总的 generation 同步失效，避免前一配置的完成回调覆盖“连接配置已变更”的新状态；与上一提交中的龙虎榜/交易日历失效逻辑分开维护。
+- 代码和回归契约提交：https://github.com/Kasign/stock_data_provider/commit/a6d546cc43fd7a2943e5440e23b33b721d7bbb98
+- 本轮未运行本地测试、构建或浏览器自动化；新加的静态契约等待后续统一执行。
