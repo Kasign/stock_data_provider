@@ -1167,3 +1167,11 @@
 - 已逐一对比 `services/market-data/internal/provider/tickflow_market_breadth_test.go`、`services/market-data/internal/service/data.go`、`services/market-data/openapi.yaml` 和 `docs/architecture/market-data-contract.md`，合并提交中的 Blob 与数据分支来源完全一致。
 - 本次只更新了 WebUI 分支引用，没有改动数据分支引用；此后常规 WebUI 任务仍限定修改 `web/**`，如需同步数据分支后续提交，先比较实际远端 HEAD 并按明确要求合并，不通过 rebase/强推改写历史。
 - 合并提交触发的 [WebUI browser smoke #40691844220](https://github.com/Kasign/stock_data_provider/actions/runs/40691844220) 在文档更新前核查时仍为运行中；本地未运行 Go suite、Node UI 契约、构建或人工浏览器验收。
+
+
+## 2026-10-28 — 第二轮合并收尾与 Run Flow 布局修复
+
+- 已将数据分支截至 `8c876d7002337af5f8b8ba08934ef08623f1c1b3` 的 3 个新增提交合入 WebUI 分支。合并提交：[4daf2d9 合并数据分支新增的数据质量校验](https://github.com/Kasign/stock_data_provider/commit/4daf2d96d179bfe4f7fab70d3b9229b53ba794f9)，第一父为 WebUI 原 HEAD `6d7b79e884c29de8f9a52b3440a31f1dcbb5ff46`，第二父为数据分支 `8c876d7002337af5f8b8ba08934ef08623f1c1b3`。新增的 5 个相关文件 Blob 与该数据分支版本完全一致。
+- 后续数据分支继续并发推进到 `2af98288c4c0a61f66ea9aac87fa5fd3715a4a5b`，较合并截止点新增 5 笔差异中的后续部分仍在数据分支：`c3a2c681398755eeba97bff4ebd7a8f4964a66a6`（东方财富热度榜补充行情证券身份覆盖校验及测试）和 `2af98288c4c0a61f66ea9aac87fa5fd3715a4a5b`（补充对应市场数据契约）。这两个提交未纳入后续 WebUI 专项提交；本轮转换到仅修改 `web/**` 后，不将新的数据层变更混入 UI 修复。
+- WebUI 修复：[576bf27 优化 Run Flow 未选中阶段时的时间线布局](https://github.com/Kasign/stock_data_provider/commit/576bf272299b2f76135424b40736e2377de5fbbb)。未选择阶段事件时，时间线占满可用宽度；选择事件后再恢复左右分栏。对应 `web/src/app.js`、`web/styles.css` 和 `web/tests/ui-contract.test.mjs` 在同一提交。
+- GitHub Actions Browser Smoke `#40693887176`（代码提交）在本次记录时仍为 `in_progress`，Chromium responsive layout checks 正在运行。未在本地执行 Node 测试、构建或人工浏览器验收。
