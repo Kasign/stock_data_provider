@@ -174,6 +174,17 @@ test("task restoration and manual refresh mark cached status as unconfirmed", ()
   assert.match(manual, /state\.taskStatusLoading = true;[\s\S]*?setQualityPill\(\$\("#task-status-pill"\), "unknown", "正在刷新"\)/);
 });
 
+test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
+  assert.match(app, /function setTaskRefreshBusy\(busy\) \{[\s\S]*?button\.disabled = Boolean\(busy\)[\s\S]*?button\.setAttribute\("aria-busy", "true"\)[\s\S]*?button\.textContent = "立即刷新状态"/);
+  const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
+  const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
+  const manual = manualStart >= 0 && manualEnd > manualStart ? app.slice(manualStart, manualEnd) : "";
+  assert.match(manual, /if \(!state\.taskId \|\| \$\("#refresh-task"\)\.disabled\) return/);
+  assert.match(manual, /stopTaskPolling\(\);[\s\S]*?setTaskRefreshBusy\(true\)/);
+  assert.match(manual, /pollTask\(generation\)\.finally\(\(\) => \{[\s\S]*?generation === state\.pollGeneration\) setTaskRefreshBusy\(false\)/);
+  assert.match(app, /function stopTaskPolling\(\) \{[\s\S]*?state\.pollGeneration \+= 1;\s*setTaskRefreshBusy\(false\)/);
+});
+
 test("task polling errors mark last-known status stale and successful refresh clears it", () => {
   assert.ok(app.includes('taskStatusError: ""'));
   assert.ok(app.includes('taskStatusErrorRetrying: false'));

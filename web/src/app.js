@@ -2891,6 +2891,19 @@ function runResultSymbolMismatch(result) {
     : "Run 结果中的标的列表与当前任务不一致，已忽略。";
 }
 
+function setTaskRefreshBusy(busy) {
+  const button = $("#refresh-task");
+  if (!button) return;
+  button.disabled = Boolean(busy);
+  if (busy) {
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "刷新中…";
+  } else {
+    button.removeAttribute("aria-busy");
+    button.textContent = "立即刷新状态";
+  }
+}
+
 function setRunResultReloadBusy(busy) {
   const button = $("#reload-run-result");
   if (!button) return;
@@ -2972,6 +2985,7 @@ function stopTaskPolling() {
   if (state.pollTimer) window.clearTimeout(state.pollTimer);
   state.pollTimer = null;
   state.pollGeneration += 1;
+  setTaskRefreshBusy(false);
 }
 
 async function pollTask(generation = state.pollGeneration) {
@@ -4135,15 +4149,18 @@ $("#task-symbols").addEventListener("input", () => {
   $("#task-symbol-help").textContent = "任务只分析输入框中的代码；载入本地自选股会替换当前输入内容。";
 });
 $("#refresh-task").addEventListener("click", () => {
-  if (!state.taskId) return;
+  if (!state.taskId || $("#refresh-task").disabled) return;
   state.taskEventsUnavailable = false;
   state.taskStatusLoading = true;
   setQualityPill($("#task-status-pill"), "unknown", "正在刷新");
   stopTaskPolling();
   const generation = state.pollGeneration;
+  setTaskRefreshBusy(true);
   $("#task-poll-label").textContent = "正在手动刷新任务状态与阶段事件…";
   if (state.view === "watchlist") renderWatchlist();
-  void pollTask(generation);
+  void pollTask(generation).finally(() => {
+    if (generation === state.pollGeneration) setTaskRefreshBusy(false);
+  });
 });
 $("#recent-analysis-search").addEventListener("input", () => renderRecentTasks());
 $("#clear-recent-analysis").addEventListener("click", clearRecentTaskHistory);
