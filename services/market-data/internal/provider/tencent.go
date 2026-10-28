@@ -212,6 +212,10 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			return nil, fmt.Errorf("invalid end date: %w", e)
 		}
 	}
+	// 日期区间错误必须在发起上游请求前拒绝，避免浪费调用额度或把上游错误当作参数错误。
+	if start != "" && end != "" && start > end {
+		return nil, errors.New("start date must not be after end date")
+	}
 	adjustCode, key := "", "day"
 	endpoint := p.noneKlineURL
 	switch adjustment {

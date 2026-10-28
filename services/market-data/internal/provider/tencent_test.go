@@ -293,6 +293,25 @@ func TestTencentStarMarketDailyVolumeAlreadyInShares(t *testing.T) {
 	}
 }
 
+func TestTencentDailyBarsRejectsReversedDateRangeBeforeRequest(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		fmt.Fprint(w, `{"data":{}}`)
+	}))
+	defer server.Close()
+
+	p := NewTencent(2 * time.Second)
+	p.noneKlineURL = server.URL
+	_, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-21", "2026-10-20", 10, model.AdjustmentNone)
+	if err == nil {
+		t.Fatal("reversed date range should be rejected")
+	}
+	if requests != 0 {
+		t.Fatalf("invalid date range must be rejected before upstream request, got %d request(s)", requests)
+	}
+}
+
 func TestTencentDailyBarsUsesRequestedAdjustmentEndpointAndPayloadKey(t *testing.T) {
 	type requestRecord struct {
 		path  string
