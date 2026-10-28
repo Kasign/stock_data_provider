@@ -461,10 +461,11 @@ func tushareFundamentalDefinitions() []struct {
 
 // FetchFundamentals reads one explicit report period and preserves the publication date separately.
 type tushareStatementMetricDefinition struct {
-	field string
-	key   string
-	name  string
-	unit  string
+	field    string
+	key      string
+	name     string
+	unit     string
+	required bool
 }
 
 type tushareStatementDefinition struct {
@@ -481,7 +482,7 @@ func tushareStatementDefinitions() []tushareStatementDefinition {
 			metrics: []tushareStatementMetricDefinition{
 				{field: "basic_eps", key: "basic_eps", name: "基本每股收益", unit: "CNY/share"},
 				{field: "diluted_eps", key: "diluted_eps", name: "稀释每股收益", unit: "CNY/share"},
-				{field: "total_revenue", key: "total_revenue", name: "营业总收入", unit: "CNY"},
+				{field: "total_revenue", key: "total_revenue", required: true, name: "营业总收入", unit: "CNY"},
 				{field: "revenue", key: "revenue", name: "营业收入", unit: "CNY"},
 				{field: "int_income", key: "interest_income", name: "利息收入", unit: "CNY"},
 				{field: "n_commis_income", key: "net_commission_income", name: "手续费及佣金净收入", unit: "CNY"},
@@ -495,10 +496,10 @@ func tushareStatementDefinitions() []tushareStatementDefinition {
 				{field: "operate_profit", key: "operating_profit", name: "营业利润", unit: "CNY"},
 				{field: "non_oper_income", key: "non_operating_income", name: "营业外收入", unit: "CNY"},
 				{field: "non_oper_exp", key: "non_operating_expenses", name: "营业外支出", unit: "CNY"},
-				{field: "total_profit", key: "total_profit", name: "利润总额", unit: "CNY"},
+				{field: "total_profit", key: "total_profit", required: true, name: "利润总额", unit: "CNY"},
 				{field: "income_tax", key: "income_tax", name: "所得税费用", unit: "CNY"},
-				{field: "n_income", key: "net_income", name: "净利润（含少数股东损益）", unit: "CNY"},
-				{field: "n_income_attr_p", key: "parent_net_income", name: "归属于母公司股东的净利润", unit: "CNY"},
+				{field: "n_income", key: "net_income", required: true, name: "净利润（含少数股东损益）", unit: "CNY"},
+				{field: "n_income_attr_p", key: "parent_net_income", required: true, name: "归属于母公司股东的净利润", unit: "CNY"},
 				{field: "minority_gain", key: "minority_profit", name: "少数股东损益", unit: "CNY"},
 				{field: "oth_compr_income", key: "other_comprehensive_income", name: "其他综合收益", unit: "CNY"},
 				{field: "t_compr_income", key: "total_comprehensive_income", name: "综合收益总额", unit: "CNY"},
@@ -537,7 +538,7 @@ func tushareStatementDefinitions() []tushareStatementDefinition {
 				{field: "goodwill", key: "goodwill", name: "商誉", unit: "CNY"},
 				{field: "defer_tax_assets", key: "deferred_tax_assets", name: "递延所得税资产", unit: "CNY"},
 				{field: "total_nca", key: "total_non_current_assets", name: "非流动资产合计", unit: "CNY"},
-				{field: "total_assets", key: "total_assets", name: "资产总计", unit: "CNY"},
+				{field: "total_assets", key: "total_assets", required: true, name: "资产总计", unit: "CNY"},
 				{field: "st_borr", key: "short_term_borrowings", name: "短期借款", unit: "CNY"},
 				{field: "notes_payable", key: "notes_payable", name: "应付票据", unit: "CNY"},
 				{field: "acct_payable", key: "accounts_payable", name: "应付账款", unit: "CNY"},
@@ -550,11 +551,11 @@ func tushareStatementDefinitions() []tushareStatementDefinition {
 				{field: "lt_borr", key: "long_term_borrowings", name: "长期借款", unit: "CNY"},
 				{field: "bond_payable", key: "bonds_payable", name: "应付债券", unit: "CNY"},
 				{field: "total_ncl", key: "total_non_current_liabilities", name: "非流动负债合计", unit: "CNY"},
-				{field: "total_liab", key: "total_liabilities", name: "负债合计", unit: "CNY"},
+				{field: "total_liab", key: "total_liabilities", required: true, name: "负债合计", unit: "CNY"},
 				{field: "treasury_share", key: "treasury_shares", name: "库存股", unit: "CNY"},
 				{field: "minority_int", key: "minority_interest", name: "少数股东权益", unit: "CNY"},
 				{field: "total_hldr_eqy_exc_min_int", key: "equity_excluding_minority", name: "股东权益合计（不含少数股东权益）", unit: "CNY"},
-				{field: "total_hldr_eqy_inc_min_int", key: "equity_including_minority", name: "股东权益合计（含少数股东权益）", unit: "CNY"},
+				{field: "total_hldr_eqy_inc_min_int", key: "equity_including_minority", required: true, name: "股东权益合计（含少数股东权益）", unit: "CNY"},
 				{field: "total_liab_hldr_eqy", key: "total_liabilities_and_equity", name: "负债和股东权益总计", unit: "CNY"},
 				{field: "contract_assets", key: "contract_assets", name: "合同资产", unit: "CNY"},
 				{field: "contract_liab", key: "contract_liabilities", name: "合同负债", unit: "CNY"},
@@ -573,7 +574,7 @@ func tushareStatementDefinitions() []tushareStatementDefinition {
 				{field: "c_paid_for_taxes", key: "cash_paid_for_taxes", name: "支付的各项税费", unit: "CNY"},
 				{field: "oth_cash_pay_oper_act", key: "cash_paid_for_other_operating_activities", name: "支付其他与经营活动有关的现金", unit: "CNY"},
 				{field: "st_cash_out_act", key: "total_cash_outflows_operating", name: "经营活动现金流出小计", unit: "CNY"},
-				{field: "n_cashflow_act", key: "net_operating_cash_flow", name: "经营活动产生的现金流量净额", unit: "CNY"},
+				{field: "n_cashflow_act", key: "net_operating_cash_flow", required: true, name: "经营活动产生的现金流量净额", unit: "CNY"},
 				{field: "oth_recp_ral_inv_act", key: "cash_received_from_other_investing_activities", name: "收到其他与投资活动有关的现金", unit: "CNY"},
 				{field: "c_disp_withdrwl_invest", key: "cash_received_from_investment_recovery", name: "收回投资收到的现金", unit: "CNY"},
 				{field: "c_recp_return_invest", key: "cash_received_from_investment_returns", name: "取得投资收益收到的现金", unit: "CNY"},
@@ -582,13 +583,13 @@ func tushareStatementDefinitions() []tushareStatementDefinition {
 				{field: "c_paid_invest", key: "cash_paid_for_investments", name: "投资支付的现金", unit: "CNY"},
 				{field: "oth_pay_ral_inv_act", key: "cash_paid_for_other_investing_activities", name: "支付其他与投资活动有关的现金", unit: "CNY"},
 				{field: "stot_out_inv_act", key: "total_cash_outflows_investing", name: "投资活动现金流出小计", unit: "CNY"},
-				{field: "n_cashflow_inv_act", key: "net_investing_cash_flow", name: "投资活动产生的现金流量净额", unit: "CNY"},
+				{field: "n_cashflow_inv_act", key: "net_investing_cash_flow", required: true, name: "投资活动产生的现金流量净额", unit: "CNY"},
 				{field: "c_recp_borrow", key: "cash_received_from_borrowings", name: "取得借款收到的现金", unit: "CNY"},
 				{field: "stot_cash_in_fnc_act", key: "total_cash_inflows_financing", name: "筹资活动现金流入小计", unit: "CNY"},
 				{field: "c_prepay_amt_borr", key: "cash_paid_for_debt_repayment", name: "偿还债务支付的现金", unit: "CNY"},
 				{field: "c_pay_dist_dpcp_int_exp", key: "cash_paid_for_dividends_profit_interest", name: "分配股利、利润或偿付利息支付的现金", unit: "CNY"},
 				{field: "stot_cashout_fnc_act", key: "total_cash_outflows_financing", name: "筹资活动现金流出小计", unit: "CNY"},
-				{field: "n_cash_flows_fnc_act", key: "net_financing_cash_flow", name: "筹资活动产生的现金流量净额", unit: "CNY"},
+				{field: "n_cash_flows_fnc_act", key: "net_financing_cash_flow", required: true, name: "筹资活动产生的现金流量净额", unit: "CNY"},
 				{field: "eff_fx_flu_cash", key: "effect_of_fx_changes_on_cash", name: "汇率变动对现金的影响", unit: "CNY"},
 				{field: "n_incr_cash_cash_equ", key: "net_increase_cash_equivalents", name: "现金及现金等价物净增加额", unit: "CNY"},
 				{field: "c_cash_equ_beg_period", key: "beginning_cash_and_equivalents", name: "期初现金及现金等价物余额", unit: "CNY"},
@@ -694,13 +695,16 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 		Metrics: make([]model.FundamentalMetric, 0, len(definition.metrics)),
 		QualityStatus: model.QualityValid,
 	}
-	missingCount := 0
+	requiredMissingCount := 0
 	for _, metric := range definition.metrics {
 		value, valueErr := table.optionalFloat(selected, metric.field)
 		if valueErr != nil || value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) {
-			missingCount++
-			reason := "statement_metric_missing_or_invalid:" + metric.field
-			section.QualityReasons = appendTushareReason(section.QualityReasons, reason)
+			// 非关键明细科目允许按行业/报表结构缺失；只记录关键汇总科目的缺失为质量问题。
+			if metric.required {
+				requiredMissingCount++
+				reason := "required_statement_metric_missing_or_invalid:" + metric.field
+				section.QualityReasons = appendTushareReason(section.QualityReasons, reason)
+			}
 			continue
 		}
 		section.Metrics = append(section.Metrics, model.FundamentalMetric{
@@ -708,9 +712,9 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 		})
 	}
 	section.HasData = len(section.Metrics) > 0
-	if missingCount > 0 {
+	if requiredMissingCount > 0 {
 		section.QualityStatus = model.QualityDegraded
-		section.QualityReasons = appendTushareReason(section.QualityReasons, "one_or_more_statement_fields_missing_or_invalid")
+		section.QualityReasons = appendTushareReason(section.QualityReasons, "one_or_more_required_statement_fields_missing_or_invalid")
 	}
 	if !section.HasData {
 		section.QualityStatus = model.QualityDegraded

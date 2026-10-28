@@ -628,6 +628,9 @@ func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 				values[i] = period
 			case "report_type":
 				values[i] = request.Params["report_type"]
+			case "rd_exp", "inventories", "finan_exp":
+				// 这些是按行业/报表结构可缺失的明细科目；缺失不能让完整关键汇总项整体降级。
+				values[i] = nil
 			default:
 				values[i] = 1.0
 			}

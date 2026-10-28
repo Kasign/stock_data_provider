@@ -20,7 +20,7 @@
 
 - 已在现有 Tushare `FundamentalsProvider` 中增加 `income`、`balancesheet`、`cashflow` 三类报告端点，复用既有季度快照 API，不新增重复路由。
 - 新增分区 `income_statement`、`balance_sheet`、`cash_flow_statement`，利润表/现金流量表的一季度使用 `report_type=1`（一季报本身为单季度累计口径），第二至第四季度使用 `report_type=2` 单季合并口径；资产负债表各季度均使用 `report_type=1` 期末合并口径，并筛选已公开公告版本；公告日期优先使用实际公告日期 `f_ann_date`，缺失时才回退 `ann_date`，未来或报告期前的公告版本不选用。 已扩展常见损益科目、费用/利润线、资产与负债分项、现金流入/流出小计、借款偿还及自由现金流字段；科目名称与原始字段一一对应，不合成不存在的上游科目。
-- 三张报表端点权限/响应失败时只把对应分区标记为降级，不丢弃已有六组标准指标；缺字段保留缺失并记录质量原因，不补零。 反向情况同样处理：若 `fina_indicator` 失败而任一报表端点仍可用，六组指标保留为显式降级/unknown 分区，已获得的报表数据仍能组成 degraded 快照，不会因首个端点失败整体退出。 若 `fina_indicator` 成功但没有已披露候选，父快照的 `quality_reasons` 也保留 `no_published_indicator_row_for_requested_period`，不会只在六个子分区记录原因。
+- 三张报表端点权限/响应失败时只把对应分区标记为降级，不丢弃已有六组标准指标；缺字段保留缺失并记录质量原因，不补零。 行业/报表结构可缺失的可选明细科目为空时不会单独降级；关键汇总科目缺失才附加 `required_statement_metric_missing_or_invalid:<field>` 并降低分区质量。 反向情况同样处理：若 `fina_indicator` 失败而任一报表端点仍可用，六组指标保留为显式降级/unknown 分区，已获得的报表数据仍能组成 degraded 快照，不会因首个端点失败整体退出。 若 `fina_indicator` 成功但没有已披露候选，父快照的 `quality_reasons` 也保留 `no_published_indicator_row_for_requested_period`，不会只在六个子分区记录原因。
 - 代码与 HTTP fixture 测试源码已提交，本轮未运行测试、构建、CI 或真实 Provider 请求。Tushare 账号权限和字段级数据仍须统一验收。
 
 ### 非空 unknown 快照的事件域回退补齐
