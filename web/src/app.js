@@ -133,6 +133,7 @@ const state = {
   taskSymbols: [],
   taskType: "post_market_scan",
   taskStatus: "",
+  taskStatusLoading: false,
   taskStatusError: "",
   taskStatusErrorRetrying: false,
   isCreatingTask: false,
@@ -664,7 +665,8 @@ function renderWatchlist(records, storageReadable, storageValid) {
     const recentTaskUsesOtherEndpoint = isOtherAnalysisBase(recentTask);
     const activeTaskMatches = Boolean(state.taskId) && Array.isArray(state.taskSymbols)
       && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
-      && ["running", "started", "pending", "queued", "processing", "in-progress", "in_progress"].includes(String(state.taskStatus || "").toLowerCase());
+      && (state.taskStatusLoading || Boolean(state.taskStatusError)
+        || ["running", "started", "pending", "queued", "processing", "in-progress", "in_progress"].includes(String(state.taskStatus || "").toLowerCase()));
     const todayLine = document.createElement("small");
     todayLine.className = "watchlist-tracking-line" + (todayTask ? " is-today" : " is-unknown");
     if (todayTask) {
@@ -680,9 +682,11 @@ function renderWatchlist(records, storageReadable, storageValid) {
     const taskLine = document.createElement("small");
     taskLine.className = "watchlist-tracking-line";
     taskLine.textContent = activeTaskMatches
-      ? state.taskStatusError
-        ? "当前任务：状态读取异常（上次状态：" + taskStatusLabel(state.taskStatus) + (state.taskStatusErrorRetrying ? "，自动重试中" : "，自动刷新已暂停") + "） · " + state.taskId
-        : "当前任务：" + taskStatusLabel(state.taskStatus) + " · " + state.taskId
+      ? state.taskStatusLoading
+        ? "当前任务：正在确认服务端状态（上次状态：" + taskStatusLabel(state.taskStatus) + "） · " + state.taskId
+        : state.taskStatusError
+          ? "当前任务：状态读取异常（上次状态：" + taskStatusLabel(state.taskStatus) + (state.taskStatusErrorRetrying ? "，自动重试中" : "，自动刷新已暂停") + "） · " + state.taskId
+          : "当前任务：" + taskStatusLabel(state.taskStatus) + " · " + state.taskId
       : recentTask
         ? "最近任务：" + taskStatusLabel(recentTask.status) + (recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "") + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
         : "最近任务：暂无本地任务记录（不代表从未分析）";
@@ -2915,6 +2919,7 @@ async function pollTask(generation = state.pollGeneration) {
         : "任务状态接口未返回有效状态，已暂停自动刷新。");
     } else {
       task = candidate;
+      state.taskStatusLoading = false;
       state.taskStatusError = "";
       state.taskStatusErrorRetrying = false;
       renderTask(task);
@@ -2970,6 +2975,7 @@ async function pollTask(generation = state.pollGeneration) {
   }
 
   if (taskError) {
+    state.taskStatusLoading = false;
     state.taskStatusError = errorMessage(taskError);
     state.taskStatusErrorRetrying = isRetryableApiError(taskError) && !taskError.responseContractError;
     setQualityPill($("#task-status-pill"), "unknown", state.taskStatusErrorRetrying ? "状态刷新失败" : "状态读取失败");
@@ -3071,6 +3077,7 @@ async function createTask(event) {
   state.taskSymbols = symbols;
   state.taskType = taskType;
   state.taskStatus = "";
+  state.taskStatusLoading = false;
   state.taskStatusError = "";
   state.taskStatusErrorRetrying = false;
   setQualityPill($("#task-status-pill"), "unknown", "正在恢复");
@@ -3168,6 +3175,7 @@ async function createTask(event) {
     state.taskSymbols = symbols;
     state.taskType = taskType;
     state.taskStatus = responseStatus;
+    state.taskStatusLoading = creationResponseWarnings.length > 0;
     persistTaskReference();
     feedback.hidden = true;
     const normalizedTask = {
@@ -3183,6 +3191,9 @@ async function createTask(event) {
       error_message: responseSymbolsMatch ? task.error_message : ""
     };
     renderTask(normalizedTask);
+    if (state.taskStatusLoading) {
+      setQualityPill($("#task-status-pill"), "unknown", "正在恢复");
+    }
     if (creationResponseWarnings.length) {
       $("#task-poll-label").textContent = "创建任务已确认；回包" + creationResponseWarnings.join("、") +
         "。已保留本次请求标的，正在通过服务端状态接口核实。";
@@ -3260,6 +3271,7 @@ function activateTaskReference(record) {
   state.taskSymbols = Array.isArray(record.symbols) ? record.symbols : [];
   state.taskType = record.task_type || "post_market_scan";
   state.taskStatus = record.status || "";
+  state.taskStatusLoading = true;
   state.taskStatusError = "";
   state.taskStatusErrorRetrying = false;
   state.lastRunResult = null;
@@ -3284,6 +3296,7 @@ function activateTaskReference(record) {
   setText("#task-id-value", state.taskId);
   setText("#task-run-id", state.runId);
   setText("#task-current-stage", "正在恢复任务");
+  setQualityPill($("#task-status-pill"), "unknown", "正在恢复");
   $("#task-poll-label").textContent = "正在从服务端恢复状态与阶段事件…";
   setView("tasks");
   renderRunStatus("");
@@ -3389,6 +3402,7 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.taskSymbols = [];
   state.taskType = "post_market_scan";
   state.taskStatus = "";
+  state.taskStatusLoading = false;
   state.taskStatusError = "";
   state.taskStatusErrorRetrying = false;
   state.lastRunResult = null;
@@ -3914,9 +3928,12 @@ $("#task-symbols").addEventListener("input", () => {
 $("#refresh-task").addEventListener("click", () => {
   if (!state.taskId) return;
   state.taskEventsUnavailable = false;
+  state.taskStatusLoading = true;
+  setQualityPill($("#task-status-pill"), "unknown", "正在刷新");
   stopTaskPolling();
   const generation = state.pollGeneration;
   $("#task-poll-label").textContent = "正在手动刷新任务状态与阶段事件…";
+  if (state.view === "watchlist") renderWatchlist();
   void pollTask(generation);
 });
 $("#recent-analysis-search").addEventListener("input", () => renderRecentTasks());

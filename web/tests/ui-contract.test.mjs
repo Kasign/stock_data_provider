@@ -95,6 +95,7 @@ test("restoring a recent task clears the previous task status badge while waitin
   const start = app.indexOf("function activateTaskReference(record) {");
   const end = app.indexOf("\nfunction ", start + 1);
   const restore = start >= 0 && end > start ? app.slice(start, end) : "";
+  assert.ok(restore.includes('state.taskStatusLoading = true;'), "恢复任务期间标记状态待确认");
   assert.ok(restore.includes('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");'), "恢复期间不沿用上一条任务的状态徽标");
   assert.ok(restore.indexOf('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");') < restore.indexOf("void pollTask(state.pollGeneration);"), "先显示恢复中，再请求服务端");
 });
@@ -128,6 +129,24 @@ test("watchlist marks a retained Run result when re-reading fails and refreshes 
   assert.match(loader, /state\.runResultReadStatus = "retrying"/);
   assert.match(loader, /state\.runResultReadStatus = "error"/);
   assert.match(loader, /if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
+});
+
+test("task restoration and manual refresh mark cached status as unconfirmed", () => {
+  assert.ok(app.includes("taskStatusLoading: false"));
+  const pollStart = app.indexOf("async function pollTask(");
+  const pollEnd = app.indexOf("\nasync function createTask(", pollStart);
+  const poller = app.slice(pollStart, pollEnd);
+  assert.match(poller, /task = candidate;\s*state\.taskStatusLoading = false;\s*state\.taskStatusError = ""/);
+  assert.match(poller, /if \(taskError\) \{\s*state\.taskStatusLoading = false;/);
+  const watchStart = app.indexOf("function renderWatchlist(");
+  const watchEnd = app.indexOf("\nfunction addCurrentSymbolToWatchlist(", watchStart);
+  const watchlist = app.slice(watchStart, watchEnd);
+  assert.match(watchlist, /state\.taskStatusLoading \|\| Boolean\(state\.taskStatusError\)/);
+  assert.match(watchlist, /正在确认服务端状态（上次状态：/);
+  const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
+  const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
+  const manual = app.slice(manualStart, manualEnd);
+  assert.match(manual, /state\.taskStatusLoading = true;[\s\S]*?setQualityPill\(\$\("#task-status-pill"\), "unknown", "正在刷新"\)/);
 });
 
 test("task polling errors mark last-known status stale and successful refresh clears it", () => {
