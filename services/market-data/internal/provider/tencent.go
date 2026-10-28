@@ -131,10 +131,12 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		return nil, fmt.Errorf("normalize Tencent quote volume: %w", conversionErr)
 	}
 	rawAmount, amount, amountField, rawAmountUnit := tencentQuoteAmount(fields, low, high, volume)
+	fetchedAt := time.Now().UTC()
 	var qtime *time.Time
 	if len(fields) > 30 {
 		qtime = parseTencentTime(fields[30])
 	}
+	qtime = validProviderSnapshotTime(qtime, fetchedAt)
 	var turnoverRate *float64
 	if parsed, parseErr := parsePositiveField(fields, 38); parseErr == nil {
 		// Tencent field 38 is interpreted as turnover rate by the existing
@@ -142,7 +144,7 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		turnoverRate = &parsed
 	}
 	rv := rawVol
-	q := &model.Quote{Symbol: symbol, Name: fields[1], CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: amount, TurnoverRate: turnoverRate, QuoteTime: qtime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), Source: p.Name(), SourceVersion: tencentVersion, RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+	q := &model.Quote{Symbol: symbol, Name: fields[1], CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: amount, TurnoverRate: turnoverRate, QuoteTime: qtime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: fetchedAt, NormalizedAt: fetchedAt, Source: p.Name(), SourceVersion: tencentVersion, RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 	if reportedSymbol == "" {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_symbol_missing_assumed_from_request")

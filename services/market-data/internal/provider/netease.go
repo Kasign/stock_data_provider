@@ -181,8 +181,8 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if amountErr == nil && rawAmount >= 0 && finiteNumber(rawAmount) {
 		amount = &rawAmount
 	}
-	quoteTime := parseNeteaseQuoteTime(firstNonEmptyString(row.Time, row.Update))
 	now := time.Now().UTC()
+	quoteTime := validProviderSnapshotTime(parseNeteaseQuoteTime(firstNonEmptyString(row.Time, row.Update)), now)
 	q := &model.Quote{
 		Symbol: symbol, Name: strings.TrimSpace(row.Name),
 		CurrentPrice: &price, Change: &change, ChangePercent: &changePercent,

@@ -404,6 +404,7 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 			quoteTime = &utc
 		}
 	}
+	quoteTime = validProviderSnapshotTime(quoteTime, fetchedAt)
 	quality := model.QualityValid
 	reasons := make([]string, 0, 3)
 	if name == "" {

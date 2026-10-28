@@ -667,8 +667,9 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		return nil, err
 	}
 	name := getString("f58")
-	providerTime := parseEastmoneyTime(getString("f86"))
-	quote := &model.Quote{Symbol: symbol, Name: name, CurrentPrice: price, Change: change, ChangePercent: pct, Open: open, High: high, Low: low, PrevClose: prev, Volume: volume, Amount: amount, VolumeRatio: volumeRatio, TurnoverRate: turnoverRate, QuoteTime: providerTime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), Source: p.Name(), SourceVersion: eastmoneyVersion, RawVolume: volumePtr, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "f48"), VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+	fetchedAt := time.Now().UTC()
+	providerTime := validProviderSnapshotTime(parseEastmoneyTime(getString("f86")), fetchedAt)
+	quote := &model.Quote{Symbol: symbol, Name: name, CurrentPrice: price, Change: change, ChangePercent: pct, Open: open, High: high, Low: low, PrevClose: prev, Volume: volume, Amount: amount, VolumeRatio: volumeRatio, TurnoverRate: turnoverRate, QuoteTime: providerTime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: fetchedAt, NormalizedAt: fetchedAt, Source: p.Name(), SourceVersion: eastmoneyVersion, RawVolume: volumePtr, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "f48"), VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 	if reportedSymbol == "" {
 		quote.QualityStatus = model.QualityDegraded
 		quote.QualityReasons = append(quote.QualityReasons, "provider_symbol_missing_assumed_from_request")
@@ -2202,7 +2203,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 			amountUnit = "unknown"
 			reasons = append(reasons, "provider_amount_missing")
 		}
-		quoteTime := parseEastmoneyTime(parseEastmoneyBoardString(raw, "f86"))
+		quoteTime := validProviderSnapshotTime(parseEastmoneyTime(parseEastmoneyBoardString(raw, "f86")), time.Now().UTC())
 		quoteTimeSemantics := ""
 		if quoteTime == nil {
 			reasons = append(reasons, "provider_snapshot_timestamp_not_exposed")
