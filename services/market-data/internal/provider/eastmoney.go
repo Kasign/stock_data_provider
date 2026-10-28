@@ -1284,7 +1284,9 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	if payload.Data == nil {
 		return nil, errors.New("eastmoney returned empty daily bars")
 	}
-	if reported := strings.TrimSpace(payload.Data.Code); reported != "" {
+	reported := strings.TrimSpace(payload.Data.Code)
+	reportedSymbolMissing := reported == ""
+	if !reportedSymbolMissing {
 		reportedSymbol, normalizeErr := normalize.NormalizeSymbol(reported)
 		if normalizeErr != nil || reportedSymbol != symbol {
 			return nil, fmt.Errorf("Eastmoney daily-bars symbol mismatch: requested %s got %q", symbol, reported)
@@ -1328,7 +1330,19 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	// 使用实际发给上游的查询区间（包括自动计算的回溯起始日）过滤结果。
 	startISO := beg[:4] + "-" + beg[4:6] + "-" + beg[6:]
 	endISO := end[:4] + "-" + end[4:6] + "-" + end[6:]
-	return normalizeProviderDailyBars(symbol, startISO, endISO, limit, out, rejectedRows)
+	bars, normalizeErr := normalizeProviderDailyBars(symbol, startISO, endISO, limit, out, rejectedRows)
+	if normalizeErr != nil {
+		return nil, normalizeErr
+	}
+	if reportedSymbolMissing {
+		for index := range bars {
+			if bars[index].QualityStatus == model.QualityValid || bars[index].QualityStatus == model.QualityUnknown || bars[index].QualityStatus == "" {
+				bars[index].QualityStatus = model.QualityDegraded
+			}
+			bars[index].QualityReasons = appendProviderQualityReason(bars[index].QualityReasons, "provider_symbol_missing_assumed_from_request")
+		}
+	}
+	return bars, nil
 }
 
 // eastmoneyDateRange preserves explicit caller ranges. When no start date is

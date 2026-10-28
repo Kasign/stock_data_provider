@@ -946,3 +946,26 @@ func TestEastmoneyFetchIndexQuotesRejectsInconsistentChangeFields(t *testing.T) 
 		})
 	}
 }
+
+
+func TestEastmoneyDailyBarsMarksMissingProviderSymbolAsDegraded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"name":"贵州茅台","klines":["2026-10-20,10.0,10.2,10.3,9.9,100,1020000,1.42,0.81,10.87,0.23"]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(2*time.Second, server.URL, server.URL)
+	bars, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-01", "2026-10-21", 10, model.AdjustmentForward)
+	if err != nil {
+		t.Fatalf("valid bars with missing source identity should be preserved as degraded, got %v", err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("bars=%d, want 1", len(bars))
+	}
+	if bars[0].QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing provider identity must downgrade bar quality, got %+v", bars[0])
+	}
+	if !strings.Contains(strings.Join(bars[0].QualityReasons, ","), "provider_symbol_missing_assumed_from_request") {
+		t.Fatalf("missing identity reason not exposed: %+v", bars[0].QualityReasons)
+	}
+}
