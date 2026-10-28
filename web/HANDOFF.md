@@ -1050,3 +1050,11 @@
 - 请求 Promise 的 `finally` 仅在轮询 generation 仍有效时复位按钮；`stopTaskPolling()` 也负责清锁，因此终态、永久错误、任务切换或分析 API 地址切换不遗留禁用按钮。
 - 代码与回归契约：https://github.com/Kasign/stock_data_provider/commit/eb1569b5154367d844a38505b50a1ab2e968c98d
 - 本轮未执行本地 Node 测试/构建；后续以对应 GitHub Actions Smoke 和统一浏览器验收为准。
+
+
+## 2026-10-28 Task 轮询意外异常收敛
+
+- 代码与静态回归契约提交：https://github.com/Kasign/stock_data_provider/commit/4b603a0c0e240d79f93fd2d25e572fed9e24822e
+- 定时续读、恢复任务、工具栏刷新和手动刷新均已改为通过 `pollTaskSafely`；未预期异常仅在 generation 与活动任务仍匹配时更新页面。
+- 异常时停止自动刷新、清除状态加载中标记、保存诊断并释放“立即刷新状态”按钮；旧任务迟到异常会被忽略。
+- 本轮未运行本地 Node 测试、构建或真实浏览器验收；待核对提交对应的 GitHub Actions Browser Smoke。
