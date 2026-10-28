@@ -1793,8 +1793,14 @@ async function checkConnectionFromSettings() {
       runHealthCheck(analysisHealth, settingsToCheck)
     ]);
     const currentDraft = readConnectionDraft();
-    if (currentDraft.marketBase !== testedDraft.marketBase || currentDraft.analysisBase !== testedDraft.analysisBase) {
-      output.textContent = "检查期间连接地址已再次修改，已忽略旧结果，请使用当前地址重新检查。";
+    const currentSettingsToCheck = mergeConnectionDraft(currentDraft, state.settings);
+    if (
+      connectionDraftChanged(testedDraft, currentDraft) ||
+      currentSettingsToCheck.marketBase !== settingsToCheck.marketBase ||
+      currentSettingsToCheck.analysisBase !== settingsToCheck.analysisBase ||
+      currentSettingsToCheck.apiKey !== settingsToCheck.apiKey
+    ) {
+      output.textContent = "检查期间连接地址、API Key 或已保存配置发生变化，已忽略旧结果，请使用当前配置重新检查。";
       output.className = "settings-inline-status is-warning";
       return;
     }

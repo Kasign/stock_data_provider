@@ -539,7 +539,12 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /const marketState = serviceHealthState\(marketResult\);/);
   assert.match(app, /const analysisState = serviceHealthState\(analysisResult\);/);
   assert.match(app, /API 状态未知（回包未提供可识别的健康状态）/);
-  assert.match(app, /currentDraft\.marketBase !== testedDraft\.marketBase \|\| currentDraft\.analysisBase !== testedDraft\.analysisBase/);
+  assert.match(app, /const currentSettingsToCheck = mergeConnectionDraft\(currentDraft, state\.settings\);/);
+  assert.match(app, /connectionDraftChanged\(testedDraft, currentDraft\)/);
+  assert.match(app, /currentSettingsToCheck\.marketBase !== settingsToCheck\.marketBase/);
+  assert.match(app, /currentSettingsToCheck\.analysisBase !== settingsToCheck\.analysisBase/);
+  assert.match(app, /currentSettingsToCheck\.apiKey !== settingsToCheck\.apiKey/);
+  assert.match(app, /连接地址、API Key 或已保存配置发生变化，已忽略旧结果/);
   assert.match(app, /不会更改全局连接状态/);
   assert.match(html, /服务器配置 API 待接入/);
   assert.match(html, /服务器 \.env/);
