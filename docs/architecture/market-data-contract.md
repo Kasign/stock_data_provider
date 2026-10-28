@@ -191,3 +191,9 @@ Go-core 请求基本面时，默认选择最近一个定期报告披露截止日
 涨跌停池和龙虎榜即使已返回结构完整的记录，只要父快照质量仍为 `unknown`，服务层就必须继续尝试后备 Provider。只有所有启用来源均无法提供非 unknown 结果时，才可择优保留非空 unknown 候选并记录对应的回退耗尽原因；这类结果只能短缓存。空 unknown 结果继续使用“未确认数据”的原因，不能被解释成零事件。
 
 个股所属板块与公告列表同样遵循非空 unknown 回退：即使 Provider 返回结构完整的条目，只要父级质量为 `unknown`，就必须尝试后续数据源；只有回退链耗尽后才以对应的 `*_fallback_exhausted_with_unconfirmed_quality` 或 `*_fallback_exhausted_without_usable_quality` 原因返回并短缓存。公告行本身仍需通过发布时间、来源链接、日期和分页契约校验，不能因为允许父级 unknown 而放宽行级检查。
+
+
+## 公告与龙虎榜的分页完整性
+
+- 公告 total / pages 表示本次查询范围的源端匹配总数与总页数。对于非空查询，当前页 returned 必须等于 min(page_size, total - (page-1)*page_size)；不足页或超额页视为源端计数/分页契约异常，拒绝该 Provider 并继续回退，不把部分记录当作完整有效页。total=0 仍表示尚未确认的空结果，不能据此证明没有公告。
+- 龙虎榜的 total/pages 保留源端报表总行数；source_returned 是当前页未过滤的源端行数，returned 是过滤非 A 股品种后的规范行数，excluded_non_a_share_count 只统计当前页被排除的行。因此 source_returned = returned + excluded_non_a_share_count，且 pages = ceil(total/page_size)、当前页源端原始行数必须等于总数推导的预期条数。仅条目质量为 degraded 并不能替代分页完整性校验；新 Provider 响应与缓存都必须经过相同的服务层门禁。
