@@ -150,12 +150,9 @@ func (p *Pytdx) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote,
 	if err != nil {
 		return nil, fmt.Errorf("Pytdx quote request: %w", err)
 	}
-	var found *protocol.Quote
-	for _, item := range response {
-		if pytdxQuoteMatchesSymbol(item, symbol) {
-			found = item
-			break
-		}
+	found, err := pytdxFindUniqueQuote(response, symbol)
+	if err != nil {
+		return nil, err
 	}
 	if found == nil || found.Kline == nil {
 		return nil, fmt.Errorf("Pytdx quote response did not contain requested symbol %s", symbol)
@@ -495,14 +492,33 @@ func pytdxWireSymbol(symbol string) string {
 	return strings.ToLower(parts[1]) + parts[0]
 }
 
-func pytdxQuoteMatchesSymbol(item *protocol.Quote, symbol string) bool {
-	if item == nil || item.Kline == nil {
+// pytdxFindUniqueQuote 按证券代码和交易所定位报价；重复身份即拒绝，不能静默使用首条。
+func pytdxFindUniqueQuote(response []*protocol.Quote, symbol string) (*protocol.Quote, error) {
+	var found *protocol.Quote
+	for _, item := range response {
+		if !pytdxQuoteIdentityMatchesSymbol(item, symbol) {
+			continue
+		}
+		if found != nil {
+			return nil, fmt.Errorf("Pytdx quote response contains duplicate records for requested symbol %s", symbol)
+		}
+		found = item
+	}
+	return found, nil
+}
+
+func pytdxQuoteIdentityMatchesSymbol(item *protocol.Quote, symbol string) bool {
+	if item == nil {
 		return false
 	}
 	parts := strings.Split(symbol, ".")
 	return len(parts) == 2 &&
 		strings.TrimSpace(item.Code) == parts[0] &&
 		strings.EqualFold(item.Exchange.String(), parts[1])
+}
+
+func pytdxQuoteMatchesSymbol(item *protocol.Quote, symbol string) bool {
+	return item != nil && item.Kline != nil && pytdxQuoteIdentityMatchesSymbol(item, symbol)
 }
 
 func pytdxPositiveFinite(value float64) bool {
