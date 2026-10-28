@@ -1139,3 +1139,10 @@
 - 分析 API 地址改变时，活动 Task、Run 与阶段事件会立即失效；补上可见自选股页的同步重渲染，清除卡片上已失效的活动任务/报告提示。
 - 保留按原分析地址区分的最近任务引用，不向新地址复用旧 task_id；仅在自选股页面可见时刷新，不扩大页面状态改动范围。
 - 已补静态 UI 契约并同步 API_CONTRACT、HANDOFF、PROGRESS、REVIEW_CHECKLIST；未手动运行测试、构建、CI、浏览器自动化或真实 Provider 请求。
+
+
+## 2026-10-28 — 后台 Task/Run 更新同步自选卡片
+
+- 修复自选股页面保持可见时，后台任务状态轮询或 Run 结果读取更新状态后卡片不刷新的问题。
+- `renderTask` 与 `renderTaskResult` 仅在当前视图为自选股时重渲染；现有 task_id、run_id、标的集合与 analysis_base 关联校验保持不变。
+- 已增加静态 UI 契约并同步 API_CONTRACT、HANDOFF、PROGRESS 和 REVIEW_CHECKLIST；未手动运行测试、构建、CI、浏览器自动化或真实 Provider 请求。

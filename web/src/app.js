@@ -2348,6 +2348,8 @@ function renderTask(task) {
       ? "任务状态每 2.5 秒刷新；阶段事件接口暂不可用，点击“立即刷新状态”可重新尝试。"
       : "每 2.5 秒轮询服务端状态";
   renderTaskFlowSummary();
+  // 自选股页可能在后台继续跟踪任务；同步最新的 Task 状态。
+  if (state.view === "watchlist") renderWatchlist();
 }
 
 function renderTaskEvents() {
@@ -2746,6 +2748,8 @@ function renderTaskResult(result) {
   $("#task-result-json").textContent = JSON.stringify(result, null, 2);
   $("#task-result-note").textContent = "Run ID：" + (result.run_id || state.runId || "—") + " · 状态：" + runStatusLabel(result.status) + "。结果以 Go API 返回为准，仅供研究与工程验证，不构成交易建议。";
   $("#task-result-section").hidden = false;
+  // Run 结果可能在用户停留自选股页面时到达，刷新卡片中的结果摘要。
+  if (state.view === "watchlist") renderWatchlist();
 }
 
 function normalizedTaskSymbolSet(symbols) {
