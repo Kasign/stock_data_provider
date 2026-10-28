@@ -7,7 +7,7 @@
 
 - 仓库：https://github.com/Kasign/stock_data_provider
 - **唯一 WebUI 开发分支：** `feat/webui-market-data-console`。
-- 本次开始时分支 HEAD：`859e0d0e1ec358dba4edd5e1803e5de90b12a3ee`；最近续接提交后的当前远程 HEAD：`e72a27c3fa5b2f67594a7c465b117f639c2e2d01`。之后仍以该分支最新远程 HEAD 为准，每次只修改 `web/**`。
+- 本次续接从分支 HEAD `859e0d0e1ec358dba4edd5e1803e5de90b12a3ee` 开始，并已直接向现有分支提交后续修改。之后始终以 `feat/webui-market-data-console` 的最新远程 HEAD 为准，只修改 `web/**`；本交接文档不固定记录当前 HEAD，避免因更新文档自身而立刻过期。
 - 不以数据集成分支为开发基础；不处理其他分支，不因其他分支的提交而重建、rebase 或改写本分支历史。
 - 不新建临时 WebUI 分支。新任务优先直接在现有 WebUI 分支上分组提交，避免重复迁移或重复实现。
 - PR #17（https://github.com/Kasign/stock_data_provider/pull/17）已于 2026-10-28 合并，合并提交为 `5d07e7211aa326908c3ebf7c8ee6c001433ee66f`；这是既有历史状态，不改变之后以 WebUI 分支为唯一开发基础的约定。PR #16 已关闭且未合并。
