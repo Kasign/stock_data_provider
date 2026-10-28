@@ -1,9 +1,9 @@
 package service
 
 import (
-	"strings"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +73,14 @@ func dragonTigerFallbackService(providers ...provider.DragonTigerProvider) *Data
 	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
 	svc.SetDragonTigerProviders(providers)
 	return svc
+}
+
+func TestDragonTigerRejectsMismatchedSymbolAndCode(t *testing.T) {
+	snapshot := dataDragonTigerForFallbackTest("eastmoney")
+	snapshot.Items[0].Code = "000001"
+	if err := validateDragonTigerSnapshot(snapshot.TradeDate, snapshot.Page, snapshot.PageSize, snapshot); err == nil || !strings.Contains(err.Error(), "symbol/code mismatch") {
+		t.Fatalf("dragon-tiger symbol/code mismatch must be rejected, got %v", err)
+	}
 }
 
 func TestDragonTigerFallsBackFromUnknownQualityRows(t *testing.T) {

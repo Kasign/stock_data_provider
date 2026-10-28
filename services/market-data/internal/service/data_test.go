@@ -1363,6 +1363,13 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 			t.Fatalf("mismatched limit-pool item version must be rejected, got %v", err)
 		}
 	})
+	 t.Run("symbol code mismatch", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Items[0].Code = "000001"
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "symbol/code mismatch") {
+			t.Fatalf("limit-pool symbol/code mismatch must be rejected, got %v", err)
+		}
+	})
 	t.Run("non-finite amount", func(t *testing.T) {
 		snapshot := makeSnapshot()
 		bad := math.NaN()

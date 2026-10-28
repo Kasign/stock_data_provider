@@ -459,6 +459,10 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.ChangePercent == nil {
 				return errors.New("limit-pool item missing required fields")
 			}
+			canonicalSymbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
+			if symbolErr != nil || canonicalSymbol != item.Symbol || item.Code != strings.Split(canonicalSymbol, ".")[0] {
+				return errors.New("limit-pool item symbol/code mismatch")
+			}
 			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 				return errors.New("limit-pool item source/version or fetched_at mismatch")
 			}
@@ -685,6 +689,10 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 		for _, item := range snapshot.Items {
 			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.TradeDate != tradeDate {
 				return errors.New("dragon-tiger item is missing identity fields or has mismatched trade date")
+			}
+			canonicalSymbol, symbolErr := normalize.NormalizeSymbol(item.Symbol)
+			if symbolErr != nil || canonicalSymbol != item.Symbol || item.Code != strings.Split(canonicalSymbol, ".")[0] {
+				return errors.New("dragon-tiger item symbol/code mismatch")
 			}
 			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
 				return errors.New("dragon-tiger item source/version, fetched_at, or quality is invalid")
