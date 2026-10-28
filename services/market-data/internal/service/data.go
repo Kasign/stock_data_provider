@@ -1555,26 +1555,49 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
-	key := "md:v1:chip:" + symbol
-	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
-		var item model.ChipDistribution
-		if json.Unmarshal(data, &item) == nil && validateChipDistributionSnapshot(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
-			return &item, true, nil
-		}
-	} else if cacheErr != nil {
-		s.logger.Warn("chip cache read failed", "error", cacheErr)
-	}
 	chipProviders := make([]chipDistributionSource, 0, len(s.chipDistributionProviders)+len(s.supplementProviders))
+	seenChipProviders := make(map[string]struct{}, len(s.chipDistributionProviders)+len(s.supplementProviders))
 	for _, p := range s.chipDistributionProviders {
+		if _, exists := seenChipProviders[p.Name()]; exists {
+			continue
+		}
+		seenChipProviders[p.Name()] = struct{}{}
 		chipProviders = append(chipProviders, p)
 	}
 	for _, p := range s.supplementProviders {
+		if _, exists := seenChipProviders[p.Name()]; exists {
+			continue
+		}
+		seenChipProviders[p.Name()] = struct{}{}
 		chipProviders = append(chipProviders, p)
 	}
 	if len(chipProviders) == 0 {
 		return nil, false, errors.New("no enabled chip-distribution provider")
 	}
+	key := "md:v1:chip:" + symbol
+	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
+		var item model.ChipDistribution
+		if json.Unmarshal(data, &item) == nil && validateChipDistributionSnapshot(symbol, &item) == nil && time.Since(item.FetchedAt) >= 0 && time.Since(item.FetchedAt) < 5*time.Minute {
+			cacheEligible := item.QualityStatus != model.QualityUnknown
+			if item.QualityStatus == model.QualityUnknown {
+				fallbackExhausted := false
+				for _, reason := range item.QualityReasons {
+					if reason == "chip_distribution_fallback_exhausted_without_usable_quality" {
+						fallbackExhausted = true
+						break
+					}
+				}
+				cacheEligible = fallbackExhausted || len(chipProviders) <= 1
+			}
+			if cacheEligible {
+				return &item, true, nil
+			}
+		}
+	} else if cacheErr != nil {
+		s.logger.Warn("chip cache read failed", "error", cacheErr)
+	}
 	var failures []string
+	var unknownCandidate *model.ChipDistribution
 	for _, p := range chipProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -1612,6 +1635,14 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if item.QualityStatus == model.QualityUnknown {
+			// Metrics may be present while their source quality remains unknown; try another source first.
+			if unknownCandidate == nil {
+				unknownCandidate = item
+			}
+			failures = append(failures, p.Name()+": chip-distribution quality is unknown")
+			continue
+		}
 		if encoded, encodeErr := json.Marshal(item); encodeErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, encoded, 5*time.Minute); cacheErr != nil {
 				s.logger.Warn("chip cache write failed", "error", cacheErr)
@@ -1621,6 +1652,16 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
+	}
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, "chip_distribution_fallback_exhausted_without_usable_quality")
+		if encoded, encodeErr := json.Marshal(unknownCandidate); encodeErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, encoded, 5*time.Minute); cacheErr != nil {
+				s.logger.Warn("chip unknown cache write failed", "symbol", symbol, "error", cacheErr)
+			}
+		}
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all chip-distribution providers failed: %s", strings.Join(failures, " | "))
 }

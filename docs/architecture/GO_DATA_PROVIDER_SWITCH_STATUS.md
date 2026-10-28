@@ -704,3 +704,8 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 
 - `StockBasic` 混合了当前估值/财务扩展字段，但 wire model 没有可核验的 Provider 快照时间；`StockBoards` 与 `SectorRanking` 同样没有独立快照时间字段。服务层现将供应商声明的 `valid` 下调为 `degraded` 并标记 `provider_snapshot_timestamp_not_exposed`；契约验证拒绝这些数据域在无 Provider 时间证据时保持 `valid`。旧的 valid 缓存会被验证拒绝并刷新。
 - 已补 StockBasic、StockBoards、SectorRanking 的测试源码；依约没有运行测试、构建、CI 或真实 Provider 请求。
+
+
+### 筹码快照未知质量的后备策略（2026-10-28）
+
+筹码快照若虽包含有效平均成本但 Provider 明确标记 `quality_unknown`，服务层现在会继续尝试其他启用来源；只有来源链耗尽后才返回 unknown，并加 `chip_distribution_fallback_exhausted_without_usable_quality`，短缓存 5 分钟。多 Provider 场景会绕过未带耗尽标记的旧 unknown 缓存；同时按 Provider 名称去重，避免同一源因兼容接口重复注册而重复请求。本轮仅新增代码与测试源码，未运行测试、构建、CI 或真实 Provider 请求。
