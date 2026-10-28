@@ -2,11 +2,13 @@ package provider
 
 import (
 	"context"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
 func TestEastmoneyStockSpecificEndpointsRejectNonStockSecuritiesBeforeRequest(t *testing.T) {
@@ -43,5 +45,48 @@ func TestEastmoneyStockSpecificEndpointsRejectNonStockSecuritiesBeforeRequest(t 
 	}
 	if requests != 0 {
 		t.Fatalf("non-stock security requests must be rejected before upstream access; got %d request(s)", requests)
+	}
+}
+
+func TestEastmoneyLimitPoolRejectsUnsupportedSecuritySymbols(t *testing.T) {
+	tests := []struct {
+		name         string
+		code         string
+		securityName string
+		market       string
+		wantError    bool
+		wantSymbol   string
+	}{
+		{name: "ETF", code: "510300", securityName: "沪深300ETF", market: "1", wantError: true},
+		{name: "index", code: "000300", securityName: "沪深300", market: "1", wantError: true},
+		{name: "B-share", code: "900901", securityName: "B股", market: "1", wantError: true},
+		{name: "exchange-mismatch", code: "600519", securityName: "贵州茅台", market: "0", wantError: true},
+		{name: "ordinary-SH-stock", code: "600519", securityName: "贵州茅台", market: "1", wantSymbol: "600519.SH"},
+		{name: "ordinary-BJ-stock", code: "830799", securityName: "北交所股票", market: "0", wantSymbol: "830799.BJ"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"rc":0,"data":{"tc":1,"qdate":"20261026","pool":[{"c":"%s","n":"%s","m":"%s","zdp":10}]}}`,
+					tt.code, tt.securityName, tt.market)
+			}))
+			defer server.Close()
+
+			p := NewEastmoney(2*time.Second, server.URL, server.URL)
+			p.limitPoolBaseURL = server.URL
+			got, err := p.FetchLimitPool(context.Background(), "up", "2026-10-26", 10)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("unsupported security %s must be rejected, got snapshot %+v", tt.code, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ordinary A-share should be accepted: %v", err)
+			}
+			if got == nil || len(got.Items) != 1 || got.Items[0].Symbol != tt.wantSymbol {
+				t.Fatalf("unexpected limit-pool items: %+v, want symbol %s", got, tt.wantSymbol)
+			}
+		})
 	}
 }

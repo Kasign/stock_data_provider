@@ -2666,6 +2666,9 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 			suffix = ".BJ"
 		}
 		symbol := code + suffix
+		if !isTushareAShareSymbol(symbol) {
+			return nil, fmt.Errorf("Eastmoney limit-pool row %d is not a supported ordinary A-share security: %s", index, symbol)
+		}
 		if _, exists := seen[symbol]; exists {
 			return nil, fmt.Errorf("Eastmoney limit-pool contains duplicate symbol %s", symbol)
 		}
