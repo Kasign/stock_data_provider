@@ -1295,7 +1295,7 @@ test("个股研究响应代码不匹配时忽略结果", () => {
 
  
 test("主行情、日 K 与统一快照拒绝证券代码不匹配的响应", () => {
-  assert.match(app, /function comparableMarketSymbol\(input\)/);
+  assert.match(format, /export function comparableMarketSymbol\(input\)/);
   assert.match(app, /function responseSymbolMismatch\(payload, requestedSymbol, label\)/);
   assert.match(app, /responseSymbolMismatch\(bundleResponse, symbol, "统一行情快照"\)/);
   assert.match(app, /responseSymbolMismatch\(bundleResponse\.quote, symbol, "统一快照中的实时行情"\)/);
@@ -1456,13 +1456,13 @@ test("switching task context or analysis API endpoint resets the stage-event fil
 
 
 test("工作区导入与自选股存储使用同一规则识别带后缀的重复证券", () => {
-  assert.match(app, /function comparableMarketSymbol\(input\)/);
+  assert.match(format, /export function comparableMarketSymbol\(input\)/);
   const importBody = app.match(/function validateBrowserDataPayload\(payload\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(importBody, "工作区数据导入必须先完成结构校验");
   assert.match(importBody, /const symbolIdentity = comparableMarketSymbol\(symbol\)/);
   assert.match(importBody, /seenSymbols\.has\(symbolIdentity\)/);
   assert.match(importBody, /自选股文件包含重复证券/);
-  assert.match(watchlistModule, /function comparableSymbol\(input\)/);
-  assert.match(watchlistModule, /const identity = comparableSymbol\(normalized\.symbol\)/);
+  assert.match(watchlistModule, /import \{ comparableMarketSymbol \} from "\.\/format\.js"/);
+  assert.match(watchlistModule, /const identity = comparableMarketSymbol\(normalized\.symbol\)/);
   assert.match(watchlistModule, /seen\.has\(identity\)/);
 });
