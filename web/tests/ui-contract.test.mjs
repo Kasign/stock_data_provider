@@ -186,6 +186,18 @@ test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
 });
 
 
+test("刷新当前页面会隔离刷新错误并安全释放工具栏按钮", () => {
+  const start = app.indexOf('$("#refresh-button").addEventListener("click", async () => {');
+  const end = app.indexOf('\n$("#open-settings").addEventListener("click", openSettings);', start);
+  const handler = start >= 0 && end > start ? app.slice(start, end) : "";
+  assert.match(handler, /let ownsBusyState = false;[\s\S]*?if \(button\?\.disabled\) return;[\s\S]*?ownsBusyState = true/);
+  assert.match(handler, /try \{\s*await refreshServices\(\);[\s\S]*?catch \(error\) \{\s*appendFailure\("当前页面刷新失败："/);
+  assert.match(handler, /finally \{[\s\S]*?if \(ownsBusyState\) \{[\s\S]*?button\.disabled = false;[\s\S]*?syncRefreshButtonContext\(\)/);
+  assert.match(handler, /catch \(error\) \{\s*appendFailure\("恢复刷新按钮失败："/);
+  assert.match(handler, /if \(failures\.length\) \{\s*button\.title = "刷新未完全成功："/);
+  assert.match(handler, /refreshSources\(\)[\s\S]*?dataCenter\.refresh\(\)[\s\S]*?pollTaskSafely\(generation\)/);
+});
+
 test("数据源能力刷新初始化或最终解锁异常不会产生未处理 rejection", () => {
   const start = app.indexOf("async function refreshSources() {");
   const end = app.indexOf("\nfunction shanghaiDateKey(", start);

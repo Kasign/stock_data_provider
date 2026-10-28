@@ -4552,32 +4552,72 @@ $("#watchlist-list").addEventListener("click", handleWatchlistAction);
 $("#reload-sources").addEventListener("click", refreshSources);
 syncRefreshButtonContext();
 $("#refresh-button").addEventListener("click", async () => {
-  const button = $("#refresh-button");
-  if (button.disabled) return;
-  button.disabled = true;
-  button.setAttribute("aria-busy", "true");
-  button.title = "正在刷新当前页面…";
+  let button = null;
+  let ownsBusyState = false;
+  const failures = [];
+  const appendFailure = (label, error) => {
+    let message = "未知异常";
+    try { message = errorMessage(error); } catch {}
+    failures.push(label + message);
+  };
+
   try {
-    await refreshServices();
-    if (state.view === "market") await refreshMarketWorkspace();
-    else if (state.view === "stocks") {
-      await refreshSources();
-      if (state.settings.apiKey) await runQuoteQuery();
-    } else if (state.view === "watchlist") renderWatchlist();
-    else if (state.view === "research") {
-      await stockResearch.refresh();
-      renderResearchStockList();
-    } else if (state.view === "data") {
-      await dataCenter.refresh();
-    } else if (state.view === "tasks" && state.taskId) {
-      stopTaskPolling();
-      const generation = state.pollGeneration;
-      await pollTaskSafely(generation);
+    button = $("#refresh-button");
+    if (button?.disabled) return;
+    ownsBusyState = true;
+
+    try {
+      if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        button.title = "正在刷新当前页面…";
+      }
+    } catch (error) {
+      appendFailure("刷新按钮状态更新失败：", error);
     }
+
+    // 当前页面数据刷新与按钮外观相互隔离，单个视图异常不会跳过 finally。
+    try {
+      await refreshServices();
+      if (state.view === "market") await refreshMarketWorkspace();
+      else if (state.view === "stocks") {
+        await refreshSources();
+        if (state.settings.apiKey) await runQuoteQuery();
+      } else if (state.view === "watchlist") renderWatchlist();
+      else if (state.view === "research") {
+        await stockResearch.refresh();
+        renderResearchStockList();
+      } else if (state.view === "data") {
+        await dataCenter.refresh();
+      } else if (state.view === "tasks" && state.taskId) {
+        stopTaskPolling();
+        const generation = state.pollGeneration;
+        await pollTaskSafely(generation);
+      }
+    } catch (error) {
+      appendFailure("当前页面刷新失败：", error);
+    }
+  } catch (error) {
+    appendFailure("启动当前页面刷新失败：", error);
   } finally {
-    button.disabled = false;
-    button.removeAttribute("aria-busy");
-    syncRefreshButtonContext();
+    if (ownsBusyState) {
+      try {
+        if (!button) button = $("#refresh-button");
+        if (button) {
+          button.disabled = false;
+          button.removeAttribute("aria-busy");
+          syncRefreshButtonContext();
+          if (failures.length) {
+            button.title = "刷新未完全成功：" + failures.join("；");
+          }
+        }
+      } catch (error) {
+        appendFailure("恢复刷新按钮失败：", error);
+        try {
+          if (button) button.title = "刷新收尾异常：" + failures.join("；");
+        } catch {}
+      }
+    }
   }
 });
 $("#open-settings").addEventListener("click", openSettings);
