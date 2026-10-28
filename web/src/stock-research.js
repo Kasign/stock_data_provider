@@ -236,12 +236,28 @@ export function bindStockResearch(getSettings,getSymbol){
   setText("stock-research-feedback","财务报告期已变更，旧结果已清除；请重新加载。");
  }
  async function loadFundamentals(){
-  const symbol=syncSymbol();if(!symbol){setText("stock-research-feedback","请先选择一只有效股票。");return;}
-  const year=Number($("#fundamentals-year").value),quarter=Number($("#fundamentals-quarter").value);
-  if(!Number.isInteger(year)||year<2007||!Number.isInteger(quarter)||quarter<1||quarter>4){abort("fundamentals");clearPanel("fundamentals","报告期参数无效；请修正后重新加载。",symbol);setQuality("fundamentals-quality","unknown","参数无效");setError("fundamentals-error","财务报告期不正确。");setText("stock-research-feedback","财务报告期不正确。");return;}
-  const ok=await fetchOne("fundamentals",(settings,sym,signal)=>getStockFundamentals(settings,sym,{year,quarter,signal}),renderFundamentals);
-  if(ok)setText("stock-research-feedback","季度财务指标已返回；请同时参考报告期、披露日期和质量状态。");
+  let symbol="";
+  try{
+   symbol=syncSymbol();
+   if(!symbol){safeResearchFeedback("请先选择一只有效股票。");return false;}
+   const year=Number($("#fundamentals-year").value),quarter=Number($("#fundamentals-quarter").value);
+   if(!Number.isInteger(year)||year<2007||!Number.isInteger(quarter)||quarter<1||quarter>4){
+    try{abort("fundamentals");}catch{}
+    try{clearPanel("fundamentals","报告期参数无效；请修正后重新加载。",symbol);}catch{}
+    try{setQuality("fundamentals-quality","unknown","参数无效");}catch{}
+    try{setError("fundamentals-error","财务报告期不正确。");}catch{}
+    safeResearchFeedback("财务报告期不正确。");
+    return false;
+   }
+   const ok=await fetchOne("fundamentals",(settings,sym,signal)=>getStockFundamentals(settings,sym,{year,quarter,signal}),renderFundamentals);
+   if(ok)safeResearchFeedback("季度财务指标已返回；请同时参考报告期、披露日期和质量状态。");
+   return ok;
+  }catch(error){
+   safeResearchFeedback("季度财务指标读取流程异常："+safeResearchError(error));
+   return false;
+  }
  }
+
  async function runSupplementRequest(buttonId,idleText,key,request,render,successMessage){
   let symbol="",button=null,generation=null,ownsButton=false;
   try{

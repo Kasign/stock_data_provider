@@ -1609,6 +1609,15 @@ test("估值请求补齐交易所后缀，并只展示与当前标的匹配的�
 });
 
  
+test("季度财务指标读取的报告期校验与成功提示异常不会向外拒绝", () => {
+  const loader = stockResearch.match(/async function loadFundamentals\(\)\{[\s\S]*?\n \}/)?.[0] || "";
+  assert.ok(loader);
+  assert.match(loader, /try\{[\s\S]*?syncSymbol\(\)/);
+  assert.match(loader, /if\(!Number\.isInteger\(year\)[\s\S]*?safeResearchFeedback\("财务报告期不正确。"\)/);
+  assert.match(loader, /const ok=await fetchOne\("fundamentals"[\s\S]*?季度财务指标已返回/);
+  assert.match(loader, /catch\(error\)\{\s*safeResearchFeedback\("季度财务指标读取流程异常："+safeResearchError\(error\)\);\s*return false;/);
+});
+
 test("个股研究准备阶段异常与 finally 异常不会遗留按钮锁", () => {
   assert.match(stockResearch, /function safeResearchButton\(button,disabled,label\)[\s\S]*?catch\{return false\}/);
   assert.match(stockResearch, /async function fetchOne\(key,request,render\)[\s\S]*?try\{\s*abort\(key\);[\s\S]*?await request\(settings,symbol,ctl\.signal\)[\s\S]*?finally\{/);
