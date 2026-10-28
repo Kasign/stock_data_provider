@@ -2746,6 +2746,24 @@ function renderTaskResult(result) {
   $("#task-result-section").hidden = false;
 }
 
+function runResultSymbolMismatch(result) {
+  const expectedRaw = Array.isArray(state.taskSymbols) ? state.taskSymbols : [];
+  if (!expectedRaw.length) return "";
+  const actualRaw = result?.request?.symbols;
+  if (!Array.isArray(actualRaw)) {
+    return "Run 结果未返回请求标的列表，无法确认是否属于当前任务，已忽略。";
+  }
+  try {
+    const normalizeSet = (symbols) => [...new Set(symbols.map(normalizeAnalysisSymbol))].sort();
+    const expected = normalizeSet(expectedRaw);
+    const actual = normalizeSet(actualRaw);
+    if (expected.length && JSON.stringify(expected) === JSON.stringify(actual)) return "";
+  } catch {
+    // 无法规范化的结果标的代码视为不能与当前任务匹配。
+  }
+  return "Run 结果中的标的列表与当前任务不一致，已忽略。";
+}
+
 async function loadTaskRunResult(runId, expectedTaskId) {
   const analysisBase = state.taskAnalysisBase || state.settings.analysisBase;
   if (analysisBase !== state.settings.analysisBase || state.taskId !== expectedTaskId) return;
@@ -2766,6 +2784,8 @@ async function loadTaskRunResult(runId, expectedTaskId) {
           ? "Run 结果接口返回了其他 Run 的结果，已忽略。"
           : "Run 结果接口未返回 run_id，已忽略该响应。");
       }
+      const symbolMismatch = runResultSymbolMismatch(result);
+      if (symbolMismatch) throw responseIdentityError(symbolMismatch);
       state.runId = result.run_id;
       persistTaskReference();
       renderTaskResult(result);

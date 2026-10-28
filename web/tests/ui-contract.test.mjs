@@ -1210,3 +1210,13 @@ test("任务状态和阶段事件响应结构无效时暂停重试，未知状�
   assert.match(app, /if \(!isRetryableApiError\(eventError\) \|\| eventError\.responseContractError\) state\.taskEventsUnavailable = true/);
   assert.match(app, /if \(delay !== undefined && !error\.responseContractError && isRetryableApiError\(error\)\)/);
 });
+
+ 
+test("Run 结果必须与当前任务标的集合一致后才允许渲染", () => {
+  assert.match(app, /function runResultSymbolMismatch\(result\)/);
+  assert.match(app, /const expectedRaw = Array\.isArray\(state\.taskSymbols\) \? state\.taskSymbols : \[\]/);
+  assert.match(app, /Run 结果未返回请求标的列表，无法确认是否属于当前任务，已忽略/);
+  assert.match(app, /normalizeSet\(expectedRaw\)[\s\S]*?normalizeSet\(actualRaw\)[\s\S]*?JSON\.stringify\(expected\) === JSON\.stringify\(actual\)/);
+  assert.match(app, /const symbolMismatch = runResultSymbolMismatch\(result\);[\s\S]*?if \(symbolMismatch\) throw responseIdentityError\(symbolMismatch\);[\s\S]*?renderTaskResult\(result\)/);
+  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase/);
+});
