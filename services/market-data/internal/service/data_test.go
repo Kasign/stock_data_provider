@@ -180,12 +180,12 @@ func validValuationSnapshotForValidationTest() *model.ValuationSnapshot {
 		Symbol: symbol, Code: "600519",
 		PETTM: valuationFloatPointerForValidationTest(18.4), PEMRQ: valuationFloatPointerForValidationTest(6.1), PEStatic: valuationFloatPointerForValidationTest(22.5),
 		PBMRQ: valuationFloatPointerForValidationTest(6.1), PSTTM: valuationFloatPointerForValidationTest(7.2), PCFTTM: valuationFloatPointerForValidationTest(9.0),
-		Source: "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Source: "tushare", SourceVersion: "tushare-daily-basic-v2", FetchedAt: now, QualityStatus: model.QualityDegraded,
 	}
 	return &model.ValuationSnapshot{
 		RequestedSymbols: []string{symbol}, Total: 1, Items: []model.ValuationItem{item},
 		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
-		Source:             "tushare", FetchedAt: now, QualityStatus: model.QualityDegraded,
+		Source:             "tushare", SourceVersion: "tushare-daily-basic-v2", FetchedAt: now, QualityStatus: model.QualityDegraded,
 	}
 }
 
@@ -708,9 +708,8 @@ func TestNearLiveAsOfDoesNotIncludeQuoteTimestampAfterCutoff(t *testing.T) {
 	q.QuoteTime = &providerTime
 	vol := int64(1000)
 	amount := float64(10500)
-	p := fakeProvider{name: "eastmoney", quote: q, bars: []model.DailyBar{{			SourceVersion: "test-v1",
-
-		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
+	p := fakeProvider{name: "eastmoney", quote: q, bars: []model.DailyBar{{
+			SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
 	}}}
@@ -970,8 +969,8 @@ func TestDailyBarsFallbackWarningsExposeMissingAmount(t *testing.T) {
 	primary := fakeProvider{name: "eastmoney", barsErr: errors.New("temporary EOF")}
 	fallback := fakeProvider{
 		name: "tencent",
-		bars: []model.DailyBar{{			SourceVersion: "test-v1",
-
+		bars: []model.DailyBar{{
+			SourceVersion: "test-v1",
 			Symbol: "600519.SH", TradeDate: "2026-10-21", Period: "1d",
 			Open: 1331.88, High: 1331.98, Low: 1302.36, Close: 1309.69,
 			Volume: &volume, Amount: nil, AdjustmentBasis: model.AdjustmentForward,
@@ -2072,8 +2071,8 @@ func TestDailyBarTimestampsAreStampedByService(t *testing.T) {
 	future := time.Now().UTC().Add(24 * time.Hour)
 	p := fakeProvider{
 		name: "eastmoney",
-		bars: []model.DailyBar{{			SourceVersion: "test-v1",
-
+		bars: []model.DailyBar{{
+			SourceVersion: "test-v1",
 			Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 			Open: 10, High: 11, Low: 9, Close: 10.5,
 			Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentNone,
@@ -2131,8 +2130,8 @@ func TestDailyBarsCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
 	volume := int64(1000)
 	amount := 10500.0
 	future := time.Now().UTC().Add(24 * time.Hour)
-	cached := model.DailyBar{			SourceVersion: "test-v1",
-
+	cached := model.DailyBar{
+		SourceVersion: "test-v1",
 		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 		Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward,
