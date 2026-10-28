@@ -53,6 +53,21 @@ func capitalFlowFallbackItemForTest(source string, quality model.QualityStatus) 
 	}
 }
 
+func TestCapitalFlowFallsBackWhenSourceVersionIsMissing(t *testing.T) {
+	missingVersion := capitalFlowFallbackItemForTest("eastmoney", model.QualityDegraded)
+	missingVersion.SourceVersion = ""
+	first := &capitalFlowFallbackTestProvider{name: "eastmoney", item: missingVersion}
+	second := &capitalFlowFallbackTestProvider{name: "miaoxiang", item: capitalFlowFallbackItemForTest("miaoxiang", model.QualityDegraded)}
+
+	got, hit, err := capitalFlowServiceForFallbackTest(first, second).CapitalFlow(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("CapitalFlow returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "miaoxiang" || first.calls != 1 || second.calls != 1 {
+		t.Fatalf("missing source version must trigger fallback: got=%+v calls=%d/%d", got, first.calls, second.calls)
+	}
+}
+
 func TestCapitalFlowFallsBackWhenFirstProviderHasNoUsableMetrics(t *testing.T) {
 	now := time.Now().UTC()
 	today := time.Now().In(marketLocation()).Format("2006-01-02")

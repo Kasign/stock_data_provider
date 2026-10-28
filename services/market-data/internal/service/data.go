@@ -1824,9 +1824,7 @@ func (s *DataService) ChipDistribution(ctx context.Context, rawSymbol string) (*
 		}
 		item.Symbol = symbol
 		item.Source = p.Name()
-		if strings.TrimSpace(item.SourceVersion) == "" {
-			item.SourceVersion = "unknown"
-		}
+
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
 		item.FetchedAt = time.Now().UTC()
 		if item.QualityStatus == "" {
@@ -1994,9 +1992,7 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 		}
 		item.Symbol = symbol
 		item.Source = p.Name()
-		if strings.TrimSpace(item.SourceVersion) == "" {
-			item.SourceVersion = "unknown"
-		}
+
 		// fetched_at 表示服务收到回包的时刻，不信任上游同名字段。
 		item.FetchedAt = time.Now().UTC()
 		if item.QualityStatus == "" {

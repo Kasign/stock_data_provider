@@ -48,6 +48,21 @@ func chipFallbackItem(source string, quality model.QualityStatus) *model.ChipDis
 	}
 }
 
+func TestChipDistributionFallsBackWhenSourceVersionIsMissing(t *testing.T) {
+	missingVersion := chipFallbackItem("eastmoney", model.QualityDegraded)
+	missingVersion.SourceVersion = ""
+	first := &chipFallbackTestProvider{name: "eastmoney", item: missingVersion}
+	second := &chipFallbackTestProvider{name: "miaoxiang", item: chipFallbackItem("miaoxiang", model.QualityDegraded)}
+
+	got, hit, err := chipFallbackService(first, second).ChipDistribution(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("ChipDistribution returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "miaoxiang" || first.calls != 1 || second.calls != 1 {
+		t.Fatalf("missing source version must trigger fallback: got=%+v calls=%d/%d", got, first.calls, second.calls)
+	}
+}
+
 func TestChipDistributionFallsBackFromUnknownQualitySnapshot(t *testing.T) {
 	unknown := &chipFallbackTestProvider{name: "eastmoney", item: chipFallbackItem("eastmoney", model.QualityUnknown)}
 	fallback := &chipFallbackTestProvider{name: "miaoxiang", item: chipFallbackItem("miaoxiang", model.QualityDegraded)}
