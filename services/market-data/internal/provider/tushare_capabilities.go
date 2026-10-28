@@ -599,16 +599,24 @@ func tushareStatementDefinitions() []tushareStatementDefinition {
 		},
 	}
 }
+// tushareStatementReportType 返回合并报表的查询类型：一季报本身是单季度值，后续季度才取单季合并类型。
+func tushareStatementReportType(apiName, periodDate string) string {
+	if apiName != "income" && apiName != "cashflow" {
+		return "1"
+	}
+	if strings.HasSuffix(periodDate, "-03-31") {
+		return "1"
+	}
+	return "2"
+}
+
 func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompact, periodDate string, definition tushareStatementDefinition) (model.FundamentalSection, error) {
 	fields := []string{"ts_code", "ann_date", "f_ann_date", "end_date", "report_type"}
 	for _, metric := range definition.metrics {
 		fields = append(fields, metric.field)
 	}
 	// 利润表和现金流量表使用单季合并报表；资产负债表是期末时点数据，使用最新合并报表。
-	reportType := "1"
-	if definition.apiName == "income" || definition.apiName == "cashflow" {
-		reportType = "2"
-	}
+	reportType := tushareStatementReportType(definition.apiName, periodDate)
 	table, err := p.fetchCapabilityTable(ctx, definition.apiName, map[string]string{
 		"ts_code": symbol, "period": periodCompact, "report_type": reportType,
 	}, strings.Join(fields, ","))

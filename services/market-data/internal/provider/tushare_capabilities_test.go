@@ -573,6 +573,32 @@ func TestTushareFundamentalsUsesStatementsWhenIndicatorEndpointFails(t *testing.
 	}
 }
 
+
+func TestTushareStatementReportTypeForQuarterBoundaries(t *testing.T) {
+	tests := []struct {
+		name       string
+		apiName    string
+		periodDate string
+		want       string
+	}{
+		{name: "income first quarter", apiName: "income", periodDate: "2026-03-31", want: "1"},
+		{name: "income second quarter", apiName: "income", periodDate: "2026-06-30", want: "2"},
+		{name: "income third quarter", apiName: "income", periodDate: "2026-09-30", want: "2"},
+		{name: "income annual quarter", apiName: "income", periodDate: "2026-12-31", want: "2"},
+		{name: "cashflow first quarter", apiName: "cashflow", periodDate: "2026-03-31", want: "1"},
+		{name: "cashflow second quarter", apiName: "cashflow", periodDate: "2026-06-30", want: "2"},
+		{name: "balance sheet first quarter", apiName: "balancesheet", periodDate: "2026-03-31", want: "1"},
+		{name: "balance sheet annual", apiName: "balancesheet", periodDate: "2026-12-31", want: "1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tushareStatementReportType(tt.apiName, tt.periodDate); got != tt.want {
+				t.Fatalf("tushareStatementReportType(%q, %q) = %q, want %q", tt.apiName, tt.periodDate, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 	const period = "20260630"
 	const announcementDate = "20260830"
