@@ -124,6 +124,7 @@ test("task polling errors mark last-known status stale and successful refresh cl
   assert.ok(watchlistRenderer.includes("自动重试中") && watchlistRenderer.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
   const manualRefresh = app.slice(app.indexOf('$("#refresh-task").addEventListener("click"'), app.indexOf('$("#recent-analysis-search")'));
   assert.ok(manualRefresh.includes("state.taskEventsUnavailable = false") && manualRefresh.includes("pollTask(generation)"), "手动刷新重新尝试任务与事件读取");
+  assert.ok(manualRefresh.includes("正在手动刷新任务状态与阶段事件"), "手动刷新开始后应立即反馈，避免旧错误提示看起来未响应");
 });
 
 test("new task creation responses cannot poison requested symbols or run/status identity", () => {

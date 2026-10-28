@@ -3882,6 +3882,7 @@ $("#refresh-task").addEventListener("click", () => {
   state.taskEventsUnavailable = false;
   stopTaskPolling();
   const generation = state.pollGeneration;
+  $("#task-poll-label").textContent = "正在手动刷新任务状态与阶段事件…";
   void pollTask(generation);
 });
 $("#recent-analysis-search").addEventListener("input", () => renderRecentTasks());
