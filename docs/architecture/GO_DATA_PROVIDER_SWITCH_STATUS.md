@@ -904,3 +904,7 @@ Tushare `limit_list_d` 返回的非 A 股代码会被过滤，不进入标准化
 ## 2026-10-28 Tushare 龙虎榜重复证券门禁
 
 Tushare `top_list` 分页现在维护证券代码集合；同页中普通 A 股证券重复时直接拒绝 Provider 候选，避免同一证券重复参与龙虎榜统计。新增 HTTP fixture 测试源码，未执行 Go 测试或真实上游请求。
+
+## 2026-10-28 Tushare 股票基础资料重复行门禁
+
+Tushare `stock_basic` 按 `ts_code` 查询单只证券时，原适配器只接收首条匹配行，忽略后续重复行。现在一旦发现重复身份便拒绝当前 Provider 候选，并新增 HTTP fixture 回归测试源码；尚未执行测试或真实请求。
