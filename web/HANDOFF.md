@@ -1042,3 +1042,11 @@
 - 新建任务、恢复最近任务和分析 API 地址切换都会先使旧读取代际失效，再复位按钮，避免上下文切换后按钮一直禁用。
 - 代码与回归契约：https://github.com/Kasign/stock_data_provider/commit/56b2a0112a1797b747357e450d25d9f8e5c5fc19
 - 本轮未执行本地 Node 测试/构建；以该提交对应的 GitHub Actions Smoke 为后续自动化参考。
+
+
+## 2026-10-28 Task 状态刷新单次请求锁
+
+- “立即刷新状态”新增忙碌状态，手动请求期间禁用按钮，重复点击不会并发请求 Task 与阶段事件。
+- 请求 Promise 的 `finally` 仅在轮询 generation 仍有效时复位按钮；`stopTaskPolling()` 也负责清锁，因此终态、永久错误、任务切换或分析 API 地址切换不遗留禁用按钮。
+- 代码与回归契约：https://github.com/Kasign/stock_data_provider/commit/eb1569b5154367d844a38505b50a1ab2e968c98d
+- 本轮未执行本地 Node 测试/构建；后续以对应 GitHub Actions Smoke 和统一浏览器验收为准。
