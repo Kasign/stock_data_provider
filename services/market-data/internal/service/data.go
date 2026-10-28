@@ -1090,6 +1090,9 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if strings.TrimSpace(item.SourceVersion) == "" {
 		return errors.New("stock-basic source_version is missing")
 	}
+	if item.NormalizationVer != normalize.Version {
+		return fmt.Errorf("stock-basic normalization_version %q is unsupported; want %q", item.NormalizationVer, normalize.Version)
+	}
 	if item.FetchedAt.IsZero() {
 		return errors.New("stock-basic fetched_at is missing")
 	}

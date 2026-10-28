@@ -1581,6 +1581,65 @@ func (p *stockBasicFakeProvider) FetchStockBasic(context.Context, string) (*mode
 	return p.item, nil
 }
 
+func TestStockBasicFallsBackFromOldNormalizationVersion(t *testing.T) {
+	now := time.Now().UTC()
+	old := &stockBasicFakeProvider{name: "eastmoney", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+		FetchedAt: now, QualityStatus: model.QualityDegraded, NormalizationVer: "old-normalization-v1",
+	}}
+	current := &stockBasicFakeProvider{name: "tushare", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", SourceVersion: "tushare-stock-basic-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}}
+	svc := NewWithCapabilities([]provider.NamedProvider{old, current}, nil, nil, newMemoryCache(), nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{old, current})
+
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("StockBasic returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.NormalizationVer != normalize.Version {
+		t.Fatalf("old normalization contract must fall back to current version: %+v", got)
+	}
+	if old.calls != 1 || current.calls != 1 {
+		t.Fatalf("normalization-version mismatch must trigger fallback, calls=%d/%d", old.calls, current.calls)
+	}
+}
+
+func TestStockBasicCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
+	now := time.Now().UTC()
+	legacy := &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "eastmoney-stock-basic-v2",
+		FetchedAt: now.Add(-time.Minute), QualityStatus: model.QualityDegraded, NormalizationVer: "old-normalization-v1",
+	}
+	encoded, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem := newMemoryCache()
+	mem.values["md:v1:stock-basic:600519.SH"] = encoded
+	current := &stockBasicFakeProvider{name: "tushare", item: &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", SourceVersion: "tushare-stock-basic-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}}
+	svc := NewWithCapabilities([]provider.NamedProvider{current}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
+		ResilienceConfig{Retries: 0, CircuitFailureThreshold: 3, CircuitCooldown: time.Second}, nil)
+	svc.SetStockBasicProviders([]provider.StockBasicProvider{current})
+
+	got, hit, err := svc.StockBasic(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("old-normalization cache should be bypassed: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || current.calls != 1 {
+		t.Fatalf("expected a fresh current-normalization record, got %+v calls=%d", got, current.calls)
+	}
+}
+
 func TestValidateStockBasicRequiresSourceVersion(t *testing.T) {
 	item := &model.StockBasic{
 		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
