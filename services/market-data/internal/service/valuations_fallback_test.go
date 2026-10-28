@@ -124,6 +124,48 @@ func TestValuationsKeepsBestCoverageUnknownSnapshotAfterFallbackExhaustion(t *te
 	}
 }
 
+func TestValuationsPrefersUnknownSnapshotWithMoreExtendedMetrics(t *testing.T) {
+	requested := []string{"600519.SH", "000858.SZ"}
+	baseline := unknownValuationsWithCoverageForTest("eastmoney", requested, []string{})
+	extended := unknownValuationsWithCoverageForTest("tushare", requested, []string{})
+	for i := range extended.Items {
+		turnoverRate := 1.1
+		floatTurnoverRate := 1.2
+		volumeRatio := 1.3
+		dividendYield := 1.4
+		dividendYieldTTM := 1.5
+		item := &extended.Items[i]
+		item.TurnoverRatePercent = &turnoverRate
+		item.FloatTurnoverRatePercent = &floatTurnoverRate
+		item.VolumeRatio = &volumeRatio
+		item.DividendYieldPercent = &dividendYield
+		item.DividendYieldTTMPercent = &dividendYieldTTM
+	}
+
+	first := &valuationFallbackTestProvider{name: "eastmoney", snapshot: baseline}
+	second := &valuationFallbackTestProvider{name: "tushare", snapshot: extended}
+	got, hit, err := valuationFallbackService(first, second).Valuations(context.Background(), requested)
+	if err != nil || hit {
+		t.Fatalf("Valuations returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.QualityStatus != model.QualityUnknown || len(got.Items) != len(requested) {
+		t.Fatalf("expected unknown snapshot with more mapped fields, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected both unknown providers to be attempted, calls=%d/%d", first.calls, second.calls)
+	}
+	foundExhausted := false
+	for _, reason := range got.QualityReasons {
+		if reason == "valuations_fallback_exhausted_without_usable_quality" {
+			foundExhausted = true
+			break
+		}
+	}
+	if !foundExhausted {
+		t.Fatalf("expected fallback-exhaustion reason, got %v", got.QualityReasons)
+	}
+}
+
 func TestValuationsReturnsUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 	first := &valuationFallbackTestProvider{name: "eastmoney", snapshot: unknownValuationsForFallbackTest("eastmoney")}
 	second := &valuationFallbackTestProvider{name: "tushare", err: errors.New("test provider unavailable")}

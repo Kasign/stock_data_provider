@@ -135,11 +135,14 @@ func betterUnknownValuationSnapshot(candidate, current *model.ValuationSnapshot)
 	metricCount := func(snapshot *model.ValuationSnapshot) int {
 		count := 0
 		for _, item := range snapshot.Items {
-			for _, value := range []*float64{item.PETTM, item.PEMRQ, item.PEStatic, item.PBMRQ, item.PSTTM, item.PCFTTM} {
+			for _, value := range []*float64{
+				item.PETTM, item.PEMRQ, item.PEStatic, item.PBMRQ, item.PSTTM, item.PCFTTM,
+				item.TurnoverRatePercent, item.FloatTurnoverRatePercent, item.VolumeRatio,
+				item.DividendYieldPercent, item.DividendYieldTTMPercent,
+			} {
 				if value != nil {
 					count++
 				}
-			}
 		}
 		return count
 	}

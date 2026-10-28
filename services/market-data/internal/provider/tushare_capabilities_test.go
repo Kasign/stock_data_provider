@@ -241,10 +241,9 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 			if request.Params["trade_date"] != tradeDate {
 				t.Errorf("daily_basic trade_date = %q, want %q", request.Params["trade_date"], tradeDate)
 			}
-			for _, field := range []string{"turnover_rate", "turnover_rate_f", "volume_ratio", "dv_ratio", "dv_ttm"} {
-				if !strings.Contains(","+request.Fields+",", ","+field+",") {
-					t.Errorf("daily_basic request fields %q do not include %q", request.Fields, field)
-				}
+			expectedFields := "ts_code,trade_date,pe,pe_ttm,pb,ps_ttm,turnover_rate,turnover_rate_f,volume_ratio,dv_ratio,dv_ttm"
+			if request.Fields != expectedFields {
+				t.Errorf("daily_basic request fields = %q, want exactly %q", request.Fields, expectedFields)
 			}
 			writeTushareTestTable(w, []string{
 				"ts_code", "trade_date", "pe", "pe_ttm", "pb", "ps_ttm",
@@ -268,6 +267,9 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 		t.Fatalf("unexpected valuation snapshot: %+v", got)
 	}
 	item := got.Items[0]
+	if got.SourceVersion != "tushare-daily-basic-v2" || item.SourceVersion != "tushare-daily-basic-v2" {
+		t.Fatalf("unexpected Tushare valuation field version: snapshot=%q item=%q", got.SourceVersion, item.SourceVersion)
+	}
 	if item.PEStatic == nil || *item.PEStatic != 22.5 {
 		t.Fatalf("expected source-native static PE, got %+v", item.PEStatic)
 	}
