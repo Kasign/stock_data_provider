@@ -43,7 +43,7 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 	seenRanks := make(map[int]struct{}, len(snapshot.Items))
 	previousRank := 0
 	hasDegradedItem := false
-	for _, item := range snapshot.Items {
+	for index, item := range snapshot.Items {
 		symbol, err := normalize.NormalizeSymbol(item.Symbol)
 		if err != nil || symbol != item.Symbol || item.Code != strings.Split(symbol, ".")[0] || item.Rank < 1 {
 			return errors.New("hot-ranking item has invalid symbol/code/rank")
@@ -58,6 +58,9 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		seenRanks[item.Rank] = struct{}{}
 		if item.Rank <= previousRank {
 			return errors.New("hot-ranking items are not ordered by increasing rank")
+		}
+		if item.Rank != index+1 {
+			return errors.New("hot-ranking ranks are not contiguous from 1")
 		}
 		previousRank = item.Rank
 		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
