@@ -1497,7 +1497,7 @@ test("增量阶段事件不会覆盖已读取的相同或更旧序号", () => {
 test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 Run 报告", () => {
   assert.match(app, /taskEventCursor: 0/);
   const pollStart = app.indexOf("async function pollTask(");
-  const pollEnd = app.indexOf("\\nasync function createTask(", pollStart);
+  const pollEnd = app.indexOf("\nasync function createTask(", pollStart);
   const poller = pollStart >= 0 && pollEnd > pollStart ? app.slice(pollStart, pollEnd) : "";
   assert.match(poller, /const requestedEventCursor = state\.taskEventCursor/);
   assert.match(poller, /getAnalysisTaskEvents\(requestSettings, taskId, requestedEventCursor\)/);
