@@ -1478,6 +1478,14 @@ test("阶段事件严格校验数值序号与 event 对象结构", () => {
 });
 
  
+test("阶段事件的 run_id 必须匹配当前任务关联的 Run", () => {
+  assert.match(app, /const expectedEventRunId = state\.runId \|\| task\?\.run_id \|\| ""/);
+  assert.match(app, /const eventRunId = typeof item\.event\.run_id === "string" \? item\.event\.run_id\.trim\(\) : ""/);
+  assert.match(app, /!expectedEventRunId \|\| !eventRunId \|\| eventRunId !== expectedEventRunId/);
+  assert.match(app, /Run ID 缺失或与当前任务关联的 Run 不一致，已忽略/);
+  assert.match(app, /字段无效的阶段事件（序号或 event 结构不符合契约），已忽略/);
+});
+
 test("增量阶段事件不会覆盖已读取的相同或更旧序号", () => {
   assert.match(app, /const previousSequence = state\.taskSequence/);
   assert.match(app, /sequence <= previousSequence \|\| state\.taskEvents\.has\(sequence\)/);

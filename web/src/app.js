@@ -3019,27 +3019,43 @@ async function pollTask(generation = state.pollGeneration) {
     } else {
       state.taskEventsLoaded = true;
       state.taskEventsError = "";
-      let ignoredCount = 0;
+      let invalidStructureCount = 0;
+      let mismatchedRunCount = 0;
+      let ignoredSequenceCount = 0;
       const previousSequence = state.taskSequence;
+      const expectedEventRunId = state.runId || task?.run_id || "";
       for (const item of eventPayload.events) {
         const sequence = typeof item?.sequence === "number" ? item.sequence : NaN;
         if (!item || typeof item !== "object" || Array.isArray(item) ||
             !Number.isSafeInteger(sequence) || sequence < 1 ||
             !item.event || typeof item.event !== "object" || Array.isArray(item.event)) {
-          ignoredCount += 1;
+          invalidStructureCount += 1;
+          continue;
+        }
+        const eventRunId = typeof item.event.run_id === "string" ? item.event.run_id.trim() : "";
+        if (!expectedEventRunId || !eventRunId || eventRunId !== expectedEventRunId) {
+          mismatchedRunCount += 1;
           continue;
         }
         if (sequence <= previousSequence || state.taskEvents.has(sequence)) {
-          ignoredCount += 1;
+          ignoredSequenceCount += 1;
           continue;
         }
         const normalized = { ...item, sequence };
         state.taskEvents.set(sequence, normalized);
         state.taskSequence = Math.max(state.taskSequence, sequence);
       }
-      if (ignoredCount) {
-        state.taskEventsError = "服务端返回 " + ignoredCount + " 条无效、重复或旧序号的阶段事件，已忽略。";
+      const ignoredReasons = [];
+      if (invalidStructureCount) {
+        ignoredReasons.push("字段无效的阶段事件（序号或 event 结构不符合契约），已忽略 " + invalidStructureCount + " 条");
       }
+      if (mismatchedRunCount) {
+        ignoredReasons.push("Run ID 缺失或与当前任务关联的 Run 不一致，已忽略 " + mismatchedRunCount + " 条");
+      }
+      if (ignoredSequenceCount) {
+        ignoredReasons.push("重复或旧序号的阶段事件，已忽略 " + ignoredSequenceCount + " 条");
+      }
+      if (ignoredReasons.length) state.taskEventsError = ignoredReasons.join("；") + "。";
       renderTaskEvents();
     }
   } else {
