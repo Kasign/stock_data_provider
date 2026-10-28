@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  comparableMarketSymbol,
   describeApiError,
   finiteNumberOrNull,
   formatCompact,
@@ -28,6 +29,16 @@ test("accepts plain six digit symbols and exchange-qualified symbols", () => {
   assert.equal(normalizeSymbol(" 600519 "), "600519");
   assert.equal(normalizeSymbol("000001.sz"), "000001.SZ");
   assert.throws(() => normalizeSymbol("60051"), /格式不正确/);
+});
+
+test("shares A-share identity mapping across plain and exchange-suffixed symbols", () => {
+  assert.equal(comparableMarketSymbol("600519"), "600519.SH");
+  assert.equal(comparableMarketSymbol("600519.SH"), "600519.SH");
+  assert.equal(comparableMarketSymbol("000001"), "000001.SZ");
+  assert.equal(comparableMarketSymbol("430047"), "430047.BJ");
+  assert.equal(comparableMarketSymbol("920001"), "920001.BJ");
+  assert.equal(comparableMarketSymbol("123456"), "123456", "unknown exchange must not be guessed");
+  assert.throws(() => comparableMarketSymbol("not-a-stock"), /格式不正确/);
 });
 
 test("parses lists, removes duplicates and caps the payload size", () => {
