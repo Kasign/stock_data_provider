@@ -61,6 +61,9 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tencent stock quote only supports common A-share equities, got %q", rawSymbol)
+	}
 	apiCode, err := tencentCode(symbol)
 	if err != nil {
 		return nil, err
@@ -177,6 +180,9 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tencent daily bars only support common A-share equities, got %q", rawSymbol)
 	}
 	apiCode, err := tencentCode(symbol)
 	if err != nil {
