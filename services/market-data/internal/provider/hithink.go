@@ -146,6 +146,11 @@ type hithinkIndexDefinition struct {
 	Name   string
 }
 
+const (
+	hithinkIndexChangeTolerance             = 0.05
+	hithinkIndexChangePercentTolerancePP    = 0.15
+)
+
 var hithinkCoreIndexDefinitions = []hithinkIndexDefinition{
 	{Symbol: "000001.SH", Code: "000001", Name: "上证指数"},
 	{Symbol: "399001.SZ", Code: "399001", Name: "深证成指"},
@@ -245,13 +250,20 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "one_or_more_index_rows_have_invalid_required_prices")
 			continue
 		}
+		// 涨跌额与涨跌幅以最新价、昨收价计算为规范值；源端扩展字段仅用于交叉校验。
 		change := *item.LastPrice - *item.PreviousPrice
-		if item.PriceChange != nil && hithinkFinite(*item.PriceChange) {
-			change = *item.PriceChange
-		}
 		changePercent := change / *item.PreviousPrice * 100
-		if item.ChangeRatio != nil && hithinkFinite(*item.ChangeRatio) {
-			changePercent = *item.ChangeRatio
+		if item.PriceChange != nil &&
+			(!hithinkFinite(*item.PriceChange) || math.Abs(*item.PriceChange-change) > hithinkIndexChangeTolerance) {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+			continue
+		}
+		if item.ChangeRatio != nil &&
+			(!hithinkFinite(*item.ChangeRatio) || math.Abs(*item.ChangeRatio-changePercent) > hithinkIndexChangePercentTolerancePP) {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
+			continue
 		}
 		name := strings.TrimSpace(item.Name)
 		if name == "" {
