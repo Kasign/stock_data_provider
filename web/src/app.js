@@ -32,6 +32,7 @@ import { clearRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTa
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
+  comparableMarketSymbol,
   describeApiError,
   formatCompact,
   formatDate,
@@ -2034,15 +2035,6 @@ function cancelQuoteQuery({ clearResults = false, symbol = "", message = "当前
 
 function quoteQueryKey(symbol, startDate, endDate, limit, adjustment) {
   return JSON.stringify([symbol, startDate, endDate, limit, adjustment, normalizeBasePath(state.settings.marketBase, "/market-api")]);
-}
-
-function comparableMarketSymbol(input) {
-  const value = normalizeSymbol(input);
-  if (value.includes(".")) return value;
-  if (value.startsWith("6")) return value + ".SH";
-  if (/^[03]/.test(value)) return value + ".SZ";
-  if (/^(?:[48]\d{5}|92\d{4})$/.test(value)) return value + ".BJ";
-  return value;
 }
 
 function responseSymbolMismatch(payload, requestedSymbol, label) {
