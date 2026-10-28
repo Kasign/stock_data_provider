@@ -30,3 +30,43 @@ func TestEastmoneyFetchLimitPoolRejectsFutureTradeDateWithoutCallingProvider(t *
 		t.Fatalf("future limit-pool date must be rejected before request: err=%v called=%v", err, called)
 	}
 }
+
+func TestEastmoneyFetchLimitPoolMarksPartialCoverage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/getTopicZTPool") {
+			t.Errorf("path=%q, want getTopicZTPool", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"rc": 0,
+			"data": {
+				"tc": 2,
+				"qdate": "20261027",
+				"pool": [{"c":"600519","n":"贵州茅台","m":"1","zdp":1.2}]
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	provider := NewEastmoneyConfiguredWithDomesticMarketData(
+		2*time.Second, "", "", "", "", "", "", server.URL, "",
+	)
+	got, err := provider.FetchLimitPool(context.Background(), "up", "2026-10-27", 1)
+	if err != nil {
+		t.Fatalf("FetchLimitPool: %v", err)
+	}
+	if got.Total != 2 || len(got.Items) != 1 {
+		t.Fatalf("fixture should contain total=2 but one returned row, got %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_total_exceeds_returned_rows" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("partial limit-pool coverage must be explicit: %v", got.QualityReasons)
+	}
+}
+
