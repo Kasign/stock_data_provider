@@ -145,6 +145,8 @@ type StockBasic struct {
 	Industry               string        `json:"industry,omitempty"`
 	MarketCapCNY           *float64      `json:"market_cap_cny,omitempty"`
 	FloatMarketCapCNY      *float64      `json:"float_market_cap_cny,omitempty"`
+	TotalShares            *float64      `json:"total_shares,omitempty"`
+	FloatShares            *float64      `json:"float_shares,omitempty"`
 	BoardCode              string        `json:"board_code,omitempty"`
 	ROEPercent             *float64      `json:"roe_percent,omitempty"`
 	NetProfitMarginPercent *float64      `json:"net_profit_margin_percent,omitempty"`

@@ -397,7 +397,7 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 		Symbol: symbol, Name: name, IPODate: ipoDate, OutDate: outDate,
 		SecurityType: 1, SecurityTypeLabel: "stock",
 		ListingStatus: status, ListingStatusLabel: statusLabel,
-		Source: p.Name(), SourceVersion: "eastmoney-f10-market-profile-v2",
+		Source: p.Name(), SourceVersion: "eastmoney-f10-market-profile-v3",
 		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
 		QualityReasons:   []string{"market_profile_timestamp_not_exposed"},
 		NormalizationVer: normalize.Version,
@@ -412,7 +412,7 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	}
 	quoteParams := url.Values{
 		"secid":  []string{secid},
-		"fields": []string{"f57,f58,f162,f167,f127,f116,f117,f198,f173,f187,f105,f186"},
+		"fields": []string{"f57,f58,f162,f167,f127,f116,f117,f84,f85,f198,f173,f187,f105,f186"},
 		"fltt":   []string{"2"},
 		"invt":   []string{"2"},
 		"ut":     []string{p.ut},
@@ -447,6 +447,8 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	item.Industry = readEastmoneyField(quotePayload.Data, "f127")
 	item.MarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f116"])
 	item.FloatMarketCapCNY = parseEastmoneyProfileNumber(quotePayload.Data["f117"])
+	item.TotalShares = parseEastmoneyProfileNumber(quotePayload.Data["f84"])
+	item.FloatShares = parseEastmoneyProfileNumber(quotePayload.Data["f85"])
 	item.BoardCode = readEastmoneyField(quotePayload.Data, "f198")
 	item.ROEPercent = parseEastmoneyProfileNumber(quotePayload.Data["f173"])
 	item.NetProfitMarginPercent = parseEastmoneyProfileNumber(quotePayload.Data["f187"])
@@ -455,7 +457,9 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 
 	for key, value := range map[string]*float64{
 		"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY,
-		"float_market_cap_cny": item.FloatMarketCapCNY, "roe_percent": item.ROEPercent,
+		"float_market_cap_cny": item.FloatMarketCapCNY,
+		"total_shares": item.TotalShares, "float_shares": item.FloatShares,
+		"roe_percent": item.ROEPercent,
 		"net_profit_margin_percent": item.NetProfitMarginPercent, "net_profit_cny": item.NetProfitCNY,
 		"gross_margin_percent": item.GrossMarginPercent,
 	} {
@@ -470,6 +474,18 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	if item.FloatMarketCapCNY != nil && *item.FloatMarketCapCNY < 0 {
 		item.FloatMarketCapCNY = nil
 		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_float_market_cap_cny_negative")
+	}
+	if item.TotalShares != nil && *item.TotalShares <= 0 {
+		item.TotalShares = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_total_shares_non_positive")
+	}
+	if item.FloatShares != nil && *item.FloatShares < 0 {
+		item.FloatShares = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_float_shares_negative")
+	}
+	if item.TotalShares != nil && item.FloatShares != nil && *item.FloatShares > *item.TotalShares {
+		item.FloatShares = nil
+		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_float_shares_exceed_total_shares")
 	}
 	if item.Industry == "" {
 		item.QualityReasons = appendUniqueEastmoneyReason(item.QualityReasons, "market_profile_industry_missing")

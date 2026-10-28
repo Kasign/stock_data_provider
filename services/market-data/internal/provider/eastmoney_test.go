@@ -253,6 +253,7 @@ func TestEastmoneyRejectsKlineSymbolMismatch(t *testing.T) {
 
 func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	var gotQueries []url.Values
+	var quoteFields string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		if query.Get("reportName") != "" && r.Header.Get("Referer") != "https://emweb.securities.eastmoney.com/" {
@@ -266,7 +267,8 @@ func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 			gotQueries = append(gotQueries, query)
 			fmt.Fprint(w, `{"success":true,"result":{"data":[{"SECUCODE":"600519.SH","SECURITY_CODE":"600519","STR_NAMEA":"贵州茅台","ORG_NAME":"贵州茅台酒股份有限公司"}]}}`)
 		default:
-			fmt.Fprint(w, `{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f162":25.1,"f167":8.2,"f127":"白酒","f116":1000000000000,"f117":900000000000,"f198":"BK0450","f173":25,"f187":50,"f105":80000000000,"f186":90}}`)
+			quoteFields = query.Get("fields")
+			fmt.Fprint(w, `{"rc":0,"data":{"f57":"600519","f58":"贵州茅台","f162":25.1,"f167":8.2,"f127":"白酒","f116":1000000000000,"f117":900000000000,"f84":1200000000,"f85":950000000,"f198":"BK0450","f173":25,"f187":50,"f105":80000000000,"f186":90}}`)
 		}
 	}))
 	defer server.Close()
@@ -288,6 +290,14 @@ func TestEastmoneyFetchStockBasicNormalizesF10IdentityAndDates(t *testing.T) {
 	}
 	if item.DynamicPE == nil || *item.DynamicPE != 25.1 || item.Industry != "白酒" {
 		t.Fatalf("market-profile fields were not normalized: %+v", item)
+	}
+	if item.TotalShares == nil || *item.TotalShares != 1200000000 || item.FloatShares == nil || *item.FloatShares != 950000000 {
+		t.Fatalf("share-count fields were not mapped: total=%v float=%v", item.TotalShares, item.FloatShares)
+	}
+	fields := make(map[string]bool)
+	for _, field := range strings.Split(quoteFields, ",") { fields[field] = true }
+	if !fields["f84"] || !fields["f85"] {
+		t.Fatalf("quote fields must request total and floating shares: %q", quoteFields)
 	}
 	if len(gotQueries) != 2 || gotQueries[0].Get("reportName") != "RPT_PCF10_ORG_ISSUEINFO" || gotQueries[1].Get("reportName") != "RPT_F10_BASIC_ORGINFO" {
 		t.Fatalf("unexpected F10 requests: %+v", gotQueries)

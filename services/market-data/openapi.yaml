@@ -314,6 +314,8 @@ components:
         industry: {type: string, nullable: true}
         market_cap_cny: {type: number, nullable: true, description: Total market capitalization in CNY}
         float_market_cap_cny: {type: number, nullable: true, description: Floating market capitalization in CNY}
+        total_shares: {type: number, nullable: true, description: Total share capital in shares, from Eastmoney f84; may be missing}
+        float_shares: {type: number, nullable: true, description: Floating share capital in shares, from Eastmoney f85; may be missing or excluded if greater than total shares}
         board_code: {type: string, nullable: true, description: Eastmoney board code}
         roe_percent: {type: number, nullable: true, description: Return on equity in percentage points}
         net_profit_margin_percent: {type: number, nullable: true, description: Net profit margin in percentage points}
