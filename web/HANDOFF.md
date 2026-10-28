@@ -1058,3 +1058,11 @@
 - 定时续读、恢复任务、工具栏刷新和手动刷新均已改为通过 `pollTaskSafely`；未预期异常仅在 generation 与活动任务仍匹配时更新页面。
 - 异常时停止自动刷新、清除状态加载中标记、保存诊断并释放“立即刷新状态”按钮；旧任务迟到异常会被忽略。
 - 本轮未运行本地 Node 测试、构建或真实浏览器验收；待核对提交对应的 GitHub Actions Browser Smoke。
+
+
+## 2026-10-28 Run 结果读取启动异常收尾
+
+- 代码与静态回归契约提交：https://github.com/Kasign/stock_data_provider/commit/628d1cc09338da67b4d15ac6424c5258433f46d7
+- 修复点是：忙碌锁设置后立即进入外层 `try`，初始状态写入、自选股重绘、结果区域更新与读取循环都在其保护范围内。
+- 外层 catch 在当前任务/Run 代际仍有效时记录读取错误并尝试显示提示；finally 仍只允许当前 `runResultGeneration` 释放按钮。
+- 本轮未运行本地 Node 测试、构建或真实浏览器验收；待核对对应 GitHub Actions Browser Smoke。

@@ -744,3 +744,11 @@
 - [x] 未预期错误会结束 loading 标记、记录错误、停止自动轮询并保留手动重试入口。
 - [x] 旧 `pollGeneration` 的异常不能覆盖当前任务；自选股视图刷新异常不会再次冒泡。
 - [x] 增加 UI 静态回归契约；本轮未执行 Node 测试或人工浏览器验收。
+
+
+## 2026-10-28 Run 结果读取启动异常
+
+- [x] `setRunResultReloadBusy(true)` 后，初始化状态、自选股重绘和结果区域更新都位于外层 `try/finally` 内。
+- [x] 启动阶段异常会进入外层 catch，写入失败状态和诊断，不产生未处理的读取 Promise rejection。
+- [x] finally 仅在 `runResultGeneration` 仍匹配时释放按钮；旧任务异常不能覆盖当前结果。
+- [x] 已新增静态 UI 回归契约；本轮未运行 Node 测试或人工浏览器验收。
