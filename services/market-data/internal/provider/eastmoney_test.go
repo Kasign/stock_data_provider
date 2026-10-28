@@ -566,10 +566,8 @@ func TestEastmoneySearchStocksContinuesAfterProviderPageCap(t *testing.T) {
 		for index := start; index < end; index++ {
 			code := fmt.Sprintf("%06d", 300000+index)
 			name := fmt.Sprintf("测试股票%d", index)
+			// 300xxx 属于深市代码段，目录 fixture 的市场字段保持一致。
 			market := 0
-			if index%2 == 0 {
-				market = 1
-			}
 			if index == 100 {
 				code, name, market = "600519", "贵州茅台", 1
 			}

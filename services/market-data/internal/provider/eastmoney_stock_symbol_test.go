@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,5 +89,45 @@ func TestEastmoneyLimitPoolRejectsUnsupportedSecuritySymbols(t *testing.T) {
 				t.Fatalf("unexpected limit-pool items: %+v, want symbol %s", got, tt.wantSymbol)
 			}
 		})
+	}
+}
+
+
+func TestEastmoneyStockSearchDropsNonAshareAndMarketMismatchRows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"total":7,"diff":[
+			{"f12":"600519","f13":1,"f14":"贵州茅台"},
+			{"f12":"000858","f13":0,"f14":"五粮液"},
+			{"f12":"830799","f13":0,"f14":"北交所样例"},
+			{"f12":"510300","f13":1,"f14":"沪深300ETF"},
+			{"f12":"000300","f13":1,"f14":"沪深300指数"},
+			{"f12":"900901","f13":1,"f14":"B股"},
+			{"f12":"600519","f13":0,"f14":"市场字段不一致"}
+		]}}`)
+	}))
+	defer server.Close()
+
+	p := &Eastmoney{client: server.Client(), stockListURL: server.URL, ut: "test-token"}
+	items, quality, reasons, err := p.fetchStockSearchIndex(context.Background())
+	if err != nil {
+		t.Fatalf("stock search directory should tolerate and mark rejected non-A-share rows: %v", err)
+	}
+	got := make(map[string]bool, len(items))
+	for _, item := range items {
+		got[item.Symbol] = true
+	}
+	for _, symbol := range []string{"600519.SH", "000858.SZ", "830799.BJ"} {
+		if !got[symbol] {
+			t.Errorf("expected supported A-share %s in directory, got %v", symbol, got)
+		}
+	}
+	if len(items) != 3 {
+		t.Fatalf("non-A-share and mismatched-market rows must be dropped; got %d items: %+v", len(items), items)
+	}
+	if quality != model.QualityDegraded {
+		t.Fatalf("dropping unsupported securities must mark directory degraded, got %s", quality)
+	}
+	if !strings.Contains(strings.Join(reasons, ","), "provider_non_a_share_security_rows_dropped") {
+		t.Fatalf("quality reasons should disclose filtered non-A-share rows, got %v", reasons)
 	}
 }

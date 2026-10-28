@@ -1764,12 +1764,20 @@ func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSea
 		for _, row := range rows {
 			code := parseEastmoneyBoardString(row, "f12")
 			name := parseEastmoneyBoardString(row, "f14")
-			if code == "" || name == "" {
+			market := parseEastmoneyBoardString(row, "f13")
+			if code == "" || name == "" || (market != "0" && market != "1") {
 				quality = model.QualityDegraded
 				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
 				continue
 			}
-			symbol, normalizeErr := normalize.NormalizeSymbol(code)
+			suffix := ".SZ"
+			if market == "1" {
+				suffix = ".SH"
+			}
+			if strings.HasPrefix(code, "8") || strings.HasPrefix(code, "4") || strings.HasPrefix(code, "920") {
+				suffix = ".BJ"
+			}
+			symbol, normalizeErr := normalize.NormalizeSymbol(code + suffix)
 			if normalizeErr != nil {
 				quality = model.QualityDegraded
 				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
@@ -1779,6 +1787,11 @@ func (p *Eastmoney) fetchStockSearchIndex(ctx context.Context) ([]model.StockSea
 			if len(parts) != 2 {
 				quality = model.QualityDegraded
 				reasons = appendUniqueEastmoneyReason(reasons, "provider_rows_dropped_after_validation")
+				continue
+			}
+			if !isTushareAShareSymbol(symbol) {
+				quality = model.QualityDegraded
+				reasons = appendUniqueEastmoneyReason(reasons, "provider_non_a_share_security_rows_dropped")
 				continue
 			}
 			if _, exists := seen[symbol]; exists {
