@@ -147,8 +147,8 @@ type hithinkIndexDefinition struct {
 }
 
 const (
-	hithinkIndexChangeTolerance             = 0.05
-	hithinkIndexChangePercentTolerancePP    = 0.15
+	hithinkChangeTolerance             = 0.05
+	hithinkChangePercentTolerancePP    = 0.15
 )
 
 var hithinkCoreIndexDefinitions = []hithinkIndexDefinition{
@@ -254,13 +254,13 @@ func (p *Hithink) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsh
 		change := *item.LastPrice - *item.PreviousPrice
 		changePercent := change / *item.PreviousPrice * 100
 		if item.PriceChange != nil &&
-			(!hithinkFinite(*item.PriceChange) || math.Abs(*item.PriceChange-change) > hithinkIndexChangeTolerance) {
+			(!hithinkFinite(*item.PriceChange) || math.Abs(*item.PriceChange-change) > hithinkChangeTolerance) {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
 			continue
 		}
 		if item.ChangeRatio != nil &&
-			(!hithinkFinite(*item.ChangeRatio) || math.Abs(*item.ChangeRatio-changePercent) > hithinkIndexChangePercentTolerancePP) {
+			(!hithinkFinite(*item.ChangeRatio) || math.Abs(*item.ChangeRatio-changePercent) > hithinkChangePercentTolerancePP) {
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
 			continue
@@ -1482,6 +1482,7 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		Timestamp *int64 `json:"timestamp"`
 		Item      []struct {
 			THSCode       string   `json:"thscode"`
+			Name          string   `json:"name"`
 			LastPrice     *float64 `json:"last_price"`
 			PriceChange   *float64 `json:"price_change"`
 			ChangeRatio   *float64 `json:"price_change_ratio_pct"`
@@ -1498,6 +1499,7 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	}
 	var item *struct {
 		THSCode       string   `json:"thscode"`
+		Name          string   `json:"name"`
 		LastPrice     *float64 `json:"last_price"`
 		PriceChange   *float64 `json:"price_change"`
 		ChangeRatio   *float64 `json:"price_change_ratio_pct"`
@@ -1526,32 +1528,56 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		return nil, errors.New("同花顺行情 OHLC/价格字段不满足数据契约")
 	}
 
+	// 涨跌额与涨跌幅始终以最新价、昨收价计算；源端扩展值只用于交叉校验。
 	change := *item.LastPrice - *item.PreviousPrice
-	if item.PriceChange != nil && hithinkFinite(*item.PriceChange) {
-		change = *item.PriceChange
-	}
 	changePercent := change / *item.PreviousPrice * 100
-	if item.ChangeRatio != nil && hithinkFinite(*item.ChangeRatio) {
-		changePercent = *item.ChangeRatio
+	if item.PriceChange != nil &&
+		(!hithinkFinite(*item.PriceChange) || math.Abs(*item.PriceChange-change) > hithinkChangeTolerance) {
+		return nil, errors.New("同花顺行情涨跌额与最新价/昨收价不一致")
 	}
+	if item.ChangeRatio != nil &&
+		(!hithinkFinite(*item.ChangeRatio) || math.Abs(*item.ChangeRatio-changePercent) > hithinkChangePercentTolerancePP) {
+		return nil, errors.New("同花顺行情涨跌幅与最新价/昨收价不一致")
+	}
+
 	now := time.Now().UTC()
+	var quoteTime *time.Time
+	quoteTimeSemantics := ""
+	if data.Timestamp != nil && *data.Timestamp > 0 {
+		value := time.UnixMilli(*data.Timestamp).UTC()
+		if !value.After(now.Add(5 * time.Minute)) {
+			quoteTime = &value
+			quoteTimeSemantics = "provider_snapshot_time"
+		}
+	}
 	var volume *int64
 	var rawVolume *float64
 	var amount, rawAmount *float64
-	quality := model.QualityDegraded
-	reasons := []string{"provider_quote_timestamp_not_available_for_symbol_query"}
+	quality := model.QualityValid
+	reasons := []string{}
+	if quoteTime == nil {
+		quality = model.QualityDegraded
+		reasons = append(reasons, "provider_snapshot_timestamp_missing_or_invalid")
+	}
 	if v, ok := hithinkNonNegativeInt64(item.Volume); ok {
 		volume = &v
 		vRaw := *item.Volume
 		rawVolume = &vRaw
 	} else {
+		quality = model.QualityDegraded
 		reasons = append(reasons, "volume_missing_or_invalid")
 	}
 	if item.Turnover != nil && hithinkNonNegativeFinite(*item.Turnover) {
 		v := *item.Turnover
 		amount, rawAmount = &v, &v
 	} else {
+		quality = model.QualityDegraded
 		reasons = append(reasons, "amount_missing_or_invalid")
+	}
+	name := strings.TrimSpace(item.Name)
+	if name == "" {
+		quality = model.QualityDegraded
+		reasons = append(reasons, "provider_quote_name_missing")
 	}
 	qualityReason := []string(nil)
 	if len(reasons) > 0 {
@@ -1564,6 +1590,7 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	}
 	return &model.Quote{
 		Symbol:           symbol,
+		Name:             name,
 		CurrentPrice:     item.LastPrice,
 		Change:           &change,
 		ChangePercent:    &changePercent,
@@ -1571,6 +1598,8 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		High:             item.HighPrice,
 		Low:              item.LowPrice,
 		PrevClose:        item.PreviousPrice,
+		QuoteTime:        quoteTime,
+		QuoteTimeSemantics: quoteTimeSemantics,
 		Volume:           volume,
 		Amount:           amount,
 		FetchedAt:        now,
