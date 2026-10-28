@@ -2260,13 +2260,24 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			candidates := make([]model.DailyBar, 0, len(v.Bars))
 			contractMismatch := false
 			cacheNow := time.Now()
+			cachedSource, cachedSourceVersion := "", ""
 			for _, bar := range v.Bars {
 				cachedSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
-				if symbolErr != nil || cachedSymbol != symbol || bar.AdjustmentBasis != basis || bar.NormalizationVer != normalize.Version ||
+				source := strings.TrimSpace(bar.Source)
+				sourceVersion := strings.TrimSpace(bar.SourceVersion)
+				if symbolErr != nil || cachedSymbol != symbol || source == "" || sourceVersion == "" ||
+					bar.AdjustmentBasis != basis || bar.NormalizationVer != normalize.Version ||
 					!serviceTimestampIsSane(bar.FetchedAt, cacheNow) || !serviceTimestampIsSane(bar.NormalizedAt, cacheNow) {
 					contractMismatch = true
 					break
 				}
+				if cachedSource == "" {
+					cachedSource, cachedSourceVersion = source, sourceVersion
+				} else if source != cachedSource || sourceVersion != cachedSourceVersion {
+					contractMismatch = true
+					break
+				}
+				bar.Source, bar.SourceVersion = source, sourceVersion
 				candidates = append(candidates, bar)
 			}
 			if !contractMismatch {
@@ -2329,6 +2340,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			continue
 		}
 		contractError := ""
+		providerSourceVersion := ""
 		for _, bar := range bars {
 			if strings.TrimSpace(bar.Symbol) != "" {
 				providerSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
@@ -2341,6 +2353,17 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				contractError = "provider returned K-lines with an adjustment basis different from the requested basis"
 				break
 			}
+			sourceVersion := strings.TrimSpace(bar.SourceVersion)
+			if sourceVersion == "" {
+				contractError = "provider returned daily bars without source_version"
+				break
+			}
+			if providerSourceVersion == "" {
+				providerSourceVersion = sourceVersion
+			} else if sourceVersion != providerSourceVersion {
+				contractError = "provider returned daily bars with mixed source_version values"
+				break
+			}
 		}
 		if contractError != "" {
 			s.breaker.Failure(breakerKey)
@@ -2351,6 +2374,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		for j := range bars {
 			bars[j].Symbol = symbol
 			bars[j].Source = p.Name()
+			bars[j].SourceVersion = strings.TrimSpace(bars[j].SourceVersion)
 			bars[j].RequestID = fetchID
 			if isCurrentIncompleteSessionBar(bars[j].TradeDate, time.Now()) {
 				bars[j].IsPartial = true
@@ -2732,14 +2756,15 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 	groups := map[string]*group{}
 	for _, bar := range bars {
 		source := strings.TrimSpace(bar.Source)
-		if source == "" {
+		sourceVersion := strings.TrimSpace(bar.SourceVersion)
+		if source == "" || sourceVersion == "" {
 			continue
 		}
 		refDate := strings.TrimSpace(bar.AdjustmentRefDate)
 		if basis != model.AdjustmentNone && refDate == "" {
 			continue
 		}
-		key := source + "|" + refDate + "|" + bar.NormalizationVer
+		key := source + "|" + sourceVersion + "|" + refDate + "|" + bar.NormalizationVer
 		g := groups[key]
 		if g == nil {
 			g = &group{}

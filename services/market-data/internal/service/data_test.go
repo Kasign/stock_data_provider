@@ -315,7 +315,7 @@ func TestHistoricalBundleDoesNotFetchRealtimeQuote(t *testing.T) {
 	p := fakeProvider{name: "eastmoney", quoteErr: errors.New("quote should not be called")}
 	v := int64(1000)
 	amount := float64(10500)
-	p.bars = []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &v, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
+	p.bars = []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &v, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
 	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 60, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	asOf, _ := time.Parse(time.RFC3339, "2026-10-20T08:00:00Z")
 	b, err := s.Bundle(context.Background(), "600519", 60, asOf, true, model.AdjustmentForward)
@@ -339,8 +339,8 @@ func TestHistoricalBundleCutsOffCurrentIncompleteDayAndWarnsAboutAdjustmentLooka
 	vol := int64(1000)
 	amount := float64(10500)
 	p := fakeProvider{name: "eastmoney", seenEnd: &seenEnd, bars: []model.DailyBar{
-		{Symbol: "600519.SH", TradeDate: "2026-10-16", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
-		{Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-16", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
 	}}
 	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 60, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	b, err := s.Bundle(context.Background(), "600519", 60, asOf, true, model.AdjustmentForward)
@@ -507,12 +507,12 @@ func TestDailyBarsRejectsCacheWithWrongAdjustmentBasis(t *testing.T) {
 	mem := newMemoryCache()
 	vol := int64(10000)
 	amt := float64(100000)
-	cached := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amt, AdjustmentBasis: model.AdjustmentBackward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
+	cached := []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amt, AdjustmentBasis: model.AdjustmentBackward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
 	payload, _ := json.Marshal(map[string]any{"bars": cached, "warnings": []string{}})
 	mem.values["md:v4:bars:600519.SH:::forward_adjusted:120"] = payload
 	providerVol := int64(20000)
 	providerAmt := float64(200000)
-	p := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &providerVol, Amount: &providerAmt, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
+	p := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &providerVol, Amount: &providerAmt, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
 	s := New([]provider.Provider{p}, mem, nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bars, hit, _, err := s.DailyBars(context.Background(), "600519.SH", "", "", 120, model.AdjustmentForward)
 	if err != nil {
@@ -526,11 +526,101 @@ func TestDailyBarsRejectsCacheWithWrongAdjustmentBasis(t *testing.T) {
 	}
 }
 
+func dailyBarForVersionContractTest(sourceVersion, tradeDate string) model.DailyBar {
+	volume := int64(10000)
+	amount := 100000.0
+	return model.DailyBar{
+		Symbol: "600519.SH", TradeDate: tradeDate, Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
+		AdjustmentBasis: model.AdjustmentForward, Source: "fixture-provider", SourceVersion: sourceVersion,
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityDegraded,
+	}
+}
+
+func TestDailyBarsFallsBackWhenProviderSourceVersionIsMissing(t *testing.T) {
+	primaryBar := dailyBarForVersionContractTest("placeholder", "2026-10-20")
+	primaryBar.SourceVersion = ""
+	fallbackBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	primary := fakeProvider{name: "eastmoney", bars: []model.DailyBar{primaryBar}}
+	fallback := fakeProvider{name: "tencent", bars: []model.DailyBar{fallbackBar}}
+	svc := New([]provider.Provider{primary, fallback}, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].SourceVersion != "tencent-daily-bars-v1" {
+		t.Fatalf("daily bars without source version must trigger fallback: %+v", bars)
+	}
+}
+
+func TestDailyBarsRejectsMixedProviderSourceVersionsAsAWhole(t *testing.T) {
+	primary := fakeProvider{name: "eastmoney", bars: []model.DailyBar{
+		dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20"),
+		dailyBarForVersionContractTest("eastmoney-daily-bars-v2", "2026-10-21"),
+	}}
+	fallbackVersion := "tencent-daily-bars-v1"
+	fallback := fakeProvider{name: "tencent", bars: []model.DailyBar{
+		dailyBarForVersionContractTest(fallbackVersion, "2026-10-20"),
+		dailyBarForVersionContractTest(fallbackVersion, "2026-10-21"),
+	}}
+	svc := New([]provider.Provider{primary, fallback}, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-21", 2, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars returned hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 2 || bars[0].Source != "tencent" || bars[1].Source != "tencent" ||
+		bars[0].SourceVersion != fallbackVersion || bars[1].SourceVersion != fallbackVersion {
+		t.Fatalf("mixed-version response must be discarded as a whole: %+v", bars)
+	}
+}
+
+func TestDailyBarsCacheWithoutSourceVersionIsBypassed(t *testing.T) {
+	mem := newMemoryCache()
+	legacy := dailyBarForVersionContractTest("", "2026-10-20")
+	legacy.FetchedAt = time.Now().UTC()
+	legacy.NormalizedAt = time.Now().UTC()
+	legacy.NormalizationVer = normalize.Version
+	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{legacy}, "warnings": []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v4:bars:600519.SH:2026-10-20:2026-10-20:forward_adjusted:1"] = payload
+	fresh := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	svc := New([]provider.Provider{fakeProvider{name: "tencent", bars: []model.DailyBar{fresh}}}, mem, nil,
+		time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("daily-bar cache without source version must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Source != "tencent" || bars[0].SourceVersion != fresh.SourceVersion {
+		t.Fatalf("expected versioned Provider response after cache bypass: %+v", bars)
+	}
+}
+
+func TestCoherentStoredSeriesDoesNotMixSourceVersions(t *testing.T) {
+	first := model.DailyBar{
+		Source: "eastmoney", SourceVersion: "eastmoney-bars-v1", TradeDate: "2026-10-20",
+		AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version,
+	}
+	second := first
+	second.TradeDate = "2026-10-21"
+	second.SourceVersion = "eastmoney-bars-v2"
+	series, reason := coherentStoredSeries([]model.DailyBar{first, second}, model.AdjustmentNone)
+	if reason != "" || len(series) != 1 {
+		t.Fatalf("stored daily bars must be partitioned by source version: bars=%+v reason=%s", series, reason)
+	}
+}
+
 func TestDailyBarsRejectsProviderAdjustmentMismatchAndUsesFallback(t *testing.T) {
 	wrongVol, rightVol := int64(10000), int64(20000)
 	amount := float64(100000)
-	wrong := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &wrongVol, Amount: &amount, AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
-	right := fakeProvider{name: "tencent", bars: []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &rightVol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "tencent", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
+	wrong := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &wrongVol, Amount: &amount, AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
+	right := fakeProvider{name: "tencent", bars: []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &rightVol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "tencent", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
 	s := New([]provider.Provider{wrong, right}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bars, hit, _, err := s.DailyBars(context.Background(), "600519.SH", "", "", 120, model.AdjustmentForward)
 	if err != nil {
@@ -593,7 +683,7 @@ func TestQuoteCacheReturnsCanonicalSymbol(t *testing.T) {
 func TestDailyBarsRejectsMixedAdjustmentResponseAsAWhole(t *testing.T) {
 	vol := int64(10000)
 	amount := float64(100000)
-	valid := model.DailyBar{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}
+	valid := model.DailyBar{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}
 	wrong := valid
 	wrong.TradeDate = "2026-10-19"
 	wrong.AdjustmentBasis = model.AdjustmentNone
@@ -618,7 +708,8 @@ func TestNearLiveAsOfDoesNotIncludeQuoteTimestampAfterCutoff(t *testing.T) {
 	q.QuoteTime = &providerTime
 	vol := int64(1000)
 	amount := float64(10500)
-	p := fakeProvider{name: "eastmoney", quote: q, bars: []model.DailyBar{{
+	p := fakeProvider{name: "eastmoney", quote: q, bars: []model.DailyBar{{			SourceVersion: "test-v1",
+
 		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
@@ -666,7 +757,7 @@ func TestDailyBarsCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
 	mem := newMemoryCache()
 	volume := int64(1000)
 	amount := float64(10500)
-	old := model.DailyBar{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: "1"}
+	old := model.DailyBar{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: "1"}
 	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{old}, "warnings": []string{}})
 	if err != nil {
 		t.Fatal(err)
@@ -735,8 +826,8 @@ func TestDailyBarsBoundsImplicitEndDateToTodayAndDropsFutureRows(t *testing.T) {
 	volume := int64(1000)
 	amount := 10500.0
 	p := fakeProvider{name: "eastmoney", seenEnd: &seenEnd, bars: []model.DailyBar{
-		{Symbol: "600519.SH", TradeDate: currentDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
-		{Symbol: "600519.SH", TradeDate: futureDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: currentDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
+		{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: futureDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
 	}}
 	s := New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bars, _, warnings, err := s.DailyBars(context.Background(), "600519", "", "", 120, model.AdjustmentForward)
@@ -765,17 +856,17 @@ func containsTestWarning(warnings []string, target string) bool {
 
 func TestPreferPartialBarsChoosesNewestSeriesWhenCountsTie(t *testing.T) {
 	current := []model.DailyBar{
-		{TradeDate: "2026-10-20"},
-		{TradeDate: "2026-10-21"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-20"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-21"},
 	}
 	newer := []model.DailyBar{
-		{TradeDate: "2026-10-21"},
-		{TradeDate: "2026-10-22"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-21"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-22"},
 	}
 	longerButOlder := []model.DailyBar{
-		{TradeDate: "2026-10-18"},
-		{TradeDate: "2026-10-19"},
-		{TradeDate: "2026-10-20"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-18"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-19"},
+		{SourceVersion: "test-v1", TradeDate: "2026-10-20"},
 	}
 
 	if !preferPartialBars(newer, current) {
@@ -818,7 +909,7 @@ func TestCoverageSufficientRejectsSparseLookback(t *testing.T) {
 
 func TestDailyBarsCachePartialCandleRefreshesAfterClose(t *testing.T) {
 	loc := marketLocation()
-	bar := model.DailyBar{TradeDate: "2026-10-21", IsPartial: true}
+	bar := model.DailyBar{SourceVersion: "test-v1", TradeDate: "2026-10-21", IsPartial: true}
 	before := time.Date(2026, 10, 21, 15, 3, 0, 0, loc)
 	after := time.Date(2026, 10, 21, 15, 6, 0, 0, loc)
 	if dailyBarsCacheNeedsPostCloseRefresh([]model.DailyBar{bar}, before) {
@@ -830,7 +921,7 @@ func TestDailyBarsCachePartialCandleRefreshesAfterClose(t *testing.T) {
 }
 
 func TestCoherentStoredSeriesNeverMixesProvidersAndRejectsUnknownAdjustedReference(t *testing.T) {
-	a := model.DailyBar{Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version}
+	a := model.DailyBar{SourceVersion: "test-v1", Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version}
 	b := a
 	b.Source = "tencent"
 	b.TradeDate = "2026-10-21"
@@ -838,7 +929,7 @@ func TestCoherentStoredSeriesNeverMixesProvidersAndRejectsUnknownAdjustedReferen
 	if reason != "" || len(series) != 1 || series[0].Source == "" {
 		t.Fatalf("should return a single source series, got %+v reason=%s", series, reason)
 	}
-	_, reason = coherentStoredSeries([]model.DailyBar{{Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward, NormalizationVer: normalize.Version}}, model.AdjustmentForward)
+	_, reason = coherentStoredSeries([]model.DailyBar{{SourceVersion: "test-v1", Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward, NormalizationVer: normalize.Version}}, model.AdjustmentForward)
 	if reason == "" {
 		t.Fatal("adjusted series with unknown reference date must be rejected")
 	}
@@ -879,7 +970,8 @@ func TestDailyBarsFallbackWarningsExposeMissingAmount(t *testing.T) {
 	primary := fakeProvider{name: "eastmoney", barsErr: errors.New("temporary EOF")}
 	fallback := fakeProvider{
 		name: "tencent",
-		bars: []model.DailyBar{{
+		bars: []model.DailyBar{{			SourceVersion: "test-v1",
+
 			Symbol: "600519.SH", TradeDate: "2026-10-21", Period: "1d",
 			Open: 1331.88, High: 1331.98, Low: 1302.36, Close: 1309.69,
 			Volume: &volume, Amount: nil, AdjustmentBasis: model.AdjustmentForward,
@@ -1980,7 +2072,8 @@ func TestDailyBarTimestampsAreStampedByService(t *testing.T) {
 	future := time.Now().UTC().Add(24 * time.Hour)
 	p := fakeProvider{
 		name: "eastmoney",
-		bars: []model.DailyBar{{
+		bars: []model.DailyBar{{			SourceVersion: "test-v1",
+
 			Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 			Open: 10, High: 11, Low: 9, Close: 10.5,
 			Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentNone,
@@ -2038,7 +2131,8 @@ func TestDailyBarsCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
 	volume := int64(1000)
 	amount := 10500.0
 	future := time.Now().UTC().Add(24 * time.Hour)
-	cached := model.DailyBar{
+	cached := model.DailyBar{			SourceVersion: "test-v1",
+
 		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 		Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward,
