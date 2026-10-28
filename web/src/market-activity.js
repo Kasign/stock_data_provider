@@ -78,18 +78,54 @@ export function bindMarketActivity(getSettings,onSelectStock){
   finally{if(generation.dragon===seq){delete controllers.dragon;$("#dragon-tiger-next").disabled=!dragonHasMore;$("#dragon-tiger-next").textContent=dragonHasMore?"加载下一页":"没有更多页";}}
  }
  function setMonth(offset){monthOffset=offset;const range=monthRange(offset);$("#calendar-start-date").value=range.start;$("#calendar-end-date").value=range.end;meta("calendar-month-label",range.start.slice(0,7));}
- function renderCalendar(data){
+ function calendarTimestamp(value){
+  const date=String(value??"");
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return NaN;
+  const timestamp=Date.parse(date+"T00:00:00Z");
+  return Number.isFinite(timestamp)&&new Date(timestamp).toISOString().slice(0,10)===date?timestamp:NaN;
+}
+function renderCalendarDay(root,date,item){
+  if(!item){
+   const day=el("div","trading-calendar-day is-missing-day");
+   day.append(el("strong","",date.slice(-2)),el("span","","未返回"));
+   day.title=date+" · 接口未返回该日期的交易日状态";root.append(day);return;
+  }
+  const status=item.is_trading_day===true?"is-trading-day":item.is_trading_day===false?"is-closed-day":"is-unknown-day";
+  const label=item.is_trading_day===true?"交易日":item.is_trading_day===false?"休市":"未确认";
+  const day=el("div","trading-calendar-day "+status);
+  day.append(el("strong","",String(item.date||date).slice(-2)),el("span","",label));
+  day.title=(item.date||date)+" · "+(item.is_trading_day===true?"服务端确认交易日":item.is_trading_day===false?"服务端确认非交易日":"服务端未报告交易状态");
+  root.append(day);
+}
+function renderCalendar(data){
   const root=$("#trading-calendar-grid"),items=Array.isArray(data?.items)?data.items.filter(x=>x&&typeof x==="object"):[];root.replaceChildren();
+  const start=String(data?.start_date||$("#calendar-start-date")?.value||items[0]?.date||"");
+  const end=String(data?.end_date||$("#calendar-end-date")?.value||items[items.length-1]?.date||start);
+  const startTime=calendarTimestamp(start),endTime=calendarTimestamp(end);
+  const validRange=Number.isFinite(startTime)&&Number.isFinite(endTime)&&endTime>=startTime&&(endTime-startTime)/86400000<=366;
+  const expectedDays=validRange?Math.round((endTime-startTime)/86400000)+1:null;
+  let missingDates=0;
   if(!items.length)root.append(el("p","market-empty-state","接口未返回交易日历明细；不会通过周一至周五自行推断交易日。"));
+  else if(!validRange)root.append(el("p","market-empty-state","接口返回的日期范围无效，无法可靠对齐交易日历。"));
   else{
-   const start=String(data.start_date||items[0].date||"");const weekday=/^\d{4}-\d{2}-\d{2}$/.test(start)?new Date(start+"T00:00:00Z").getUTCDay():0;
+   const weekday=new Date(startTime).getUTCDay();
    for(let i=0;i<weekday;i++)root.append(el("span","trading-calendar-padding",""));
-   items.forEach(item=>{const day=el("div","trading-calendar-day "+(item.is_trading_day?"is-trading-day":"is-closed-day"));day.append(el("strong","",String(item.date||"").slice(-2)),el("span","",item.is_trading_day?"交易日":"休市"));day.title=(item.date||"日期未报告")+" · "+(item.is_trading_day?"服务端确认交易日":"服务端确认非交易日");root.append(day);});
+   const byDate=new Map();
+   items.forEach(item=>{const date=String(item.date||"");if(Number.isFinite(calendarTimestamp(date))&&date>=start&&date<=end)byDate.set(date,item);});
+   for(let timestamp=startTime;timestamp<=endTime;timestamp+=86400000){
+    const date=new Date(timestamp).toISOString().slice(0,10),item=byDate.get(date);
+    if(!item)missingDates++;
+    renderCalendarDay(root,date,item);
+   }
   }
   badge("trading-calendar-quality",qualityLabel(data?.quality_status),data?.quality_status);
-  meta("trading-calendar-meta",["请求 "+(data?.start_date||"未报告")+" 至 "+(data?.end_date||"未报告"),"覆盖 "+items.length+" / "+(data?.total_days??"未报告")+" 天","交易日 "+(data?.trading_days??"未报告")+" 天","来源 "+(data?.source||"未报告"),"获取 "+formatDateTime(data?.fetched_at)].join(" · "));
+  meta("trading-calendar-meta",["请求 "+(data?.start_date||start||"未报告")+" 至 "+(data?.end_date||end||"未报告"),"覆盖 "+items.length+" / "+(data?.total_days??"未报告")+" 天","交易日 "+(data?.trading_days??"未报告")+" 天","来源 "+(data?.source||"未报告"),"获取 "+formatDateTime(data?.fetched_at)].join(" · "));
   const rr=$("#trading-calendar-reasons");rr.replaceChildren();const rs=Array.isArray(data?.quality_reasons)?data.quality_reasons:[];rr.hidden=!rs.length;rs.forEach(x=>rr.append(el("li","",x)));
-  if(Number.isFinite(Number(data?.total_days))&&Number(data.total_days)!==items.length)root.prepend(el("p","calendar-coverage-warning","返回日期数与源端报告天数不一致，请勿将不完整日历用于交易日判断。"));
+  const totalDays=data?.total_days;
+  const hasReportedTotal=totalDays!==null&&totalDays!==undefined&&totalDays!==""&&Number.isFinite(Number(totalDays));
+  const reportedMismatch=hasReportedTotal&&Number(totalDays)!==items.length;
+  const rangeMismatch=expectedDays!==null&&expectedDays!==items.length;
+  if(missingDates>0||reportedMismatch||rangeMismatch||(!validRange&&items.length))root.prepend(el("p","calendar-coverage-warning","返回日期数与请求范围或源端报告天数不一致；缺失日期会标示为“未返回”，请勿将不完整日历用于交易日判断。"));
  }
  function invalidateCalendarFilter(){
   abort("calendar");

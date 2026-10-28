@@ -260,7 +260,7 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 | GET /market-api/api/v1/market/dragon-tiger?date=2026-10-26&page=1&page_size=50 | 日期可省略（默认中国时区当日）；page 从 1 开始，page_size 为 1–500。展示 A 股明细、净买入/成交金额（人民币元）、涨跌幅及成交占比（百分点）、上榜原因、质量与获取时间。source_returned 和 excluded_non_a_share_count 用于解释源端原始记录及被过滤的非 A 股产品；has_data=false 不等于确认当日无人上榜。 |
 | GET /market-api/api/v1/market/trading-calendar?start=2026-10-01&end=2026-10-31 | start/end 必填、闭区间。页面展示服务端逐日 is_trading_day 标记，不以星期几推断交易状态，并核对 items 数量与 total_days 的一致性。 |
 
-龙虎榜支持服务端分页，并可跳转到已有个股行情查询。交易日历支持指定范围和月份快捷切换。Provider 未启用、旧服务缺少接口或源端尚未发布数据时明确显示状态。
+龙虎榜支持服务端分页，并可跳转到已有个股行情查询。交易日历支持指定范围和月份快捷切换。Provider 未启用、旧服务缺少接口或源端尚未发布数据时明确显示状态。前端按请求范围的真实日期对齐网格；缺失日期显式标示“未返回”，`is_trading_day` 缺失或非布尔值显示“未确认”，不得误显示为“休市”。
 
 ## Provider 能力清单的前端映射
 

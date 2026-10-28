@@ -466,6 +466,16 @@ test("market activity clears stale calendar state for invalid input, missing key
 });
 
 
+test("trading calendar aligns actual dates and keeps missing status distinct from market closure", () => {
+  assert.match(marketActivity, /function calendarTimestamp\(value\)/);
+  assert.match(marketActivity, /for\(let timestamp=startTime;timestamp<=endTime;timestamp\+=86400000\)/);
+  assert.match(marketActivity, /function renderCalendarDay\(root,date,item\)/);
+  assert.match(marketActivity, /item\.is_trading_day===true\?"is-trading-day":item\.is_trading_day===false\?"is-closed-day":"is-unknown-day"/);
+  assert.match(marketActivity, /is-missing-day[\s\S]*?接口未返回该日期的交易日状态/);
+  assert.match(marketActivity, /missingDates>0\|\|reportedMismatch\|\|rangeMismatch/);
+  assert.match(stylesheet, /\.trading-calendar-day\.is-unknown-day span,[\s\S]*?\.trading-calendar-day\.is-missing-day span/);
+});
+
 test("market activity date filter changes cancel old requests and clear mismatched results", () => {
   assert.match(marketActivity, /function invalidateDragonFilter\(\)[\s\S]*?abort\("dragon"\);[\s\S]*?dragonHasMore=false[\s\S]*?交易日期已变化/);
   assert.match(marketActivity, /function invalidateCalendarFilter\(\)[\s\S]*?abort\("calendar"\);[\s\S]*?日期筛选已变更[\s\S]*?日期范围已变化/);

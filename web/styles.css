@@ -2301,6 +2301,14 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .trading-calendar-day.is-closed-day span {
   color:var(--text-dim)
 }
+.trading-calendar-day.is-unknown-day span,
+.trading-calendar-day.is-missing-day span {
+  color:var(--warning)
+}
+.trading-calendar-day.is-missing-day {
+  border-style:dashed;
+  background:var(--panel)
+}
 .market-activity-widget .market-quality-reasons {
   padding-left:18px
 }
