@@ -1275,6 +1275,32 @@ func TestValidateMarketBreadthRequiresSourceVersion(t *testing.T) {
 	}
 }
 
+func TestValidateMarketBreadthRejectsLimitCountsAboveCoverage(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		up, down int
+	}{
+		{name: "limit up", up: 4, down: 1},
+		{name: "limit down", up: 1, down: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			up, down, amount := tc.up, tc.down, 100.0
+			snapshot := &model.MarketBreadthSnapshot{
+				Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+				AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
+				LimitUpCount: &up, LimitDownCount: &down,
+				TotalAmountCNY: &amount, AmountCoverageCount: 3,
+				ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+				QualityStatus: model.QualityDegraded,
+			}
+			if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "outside covered-securities bounds") {
+				t.Fatalf("limit counts must not exceed covered securities, got %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateMarketBreadthRequiresDegradedQualityForPartialAmountCoverage(t *testing.T) {
 	snapshot := &model.MarketBreadthSnapshot{
 		Market:              "cn_a_share",

@@ -59,7 +59,7 @@
 
 缺失成交额必须保持 null。经过 Go bridge 进入历史 Python 消费者的 map 时，也必须继续表示为 null，而不是 0。 Tushare 普通股票日 K 的 `daily.amount` 原始单位为千元，标准化 `amount` 必须乘以 1000 后以人民币元输出；原始数值同时保留在 `raw_amount`，并标注 `raw_amount_unit=thousand_CNY`，禁止将原始千元数直接作为 CNY 暴露。 Tushare 指数日 K 的 `index_daily.amount` 也必须乘以 1000 转为 CNY；指数成交量仍保留 `hands` 单位，不得误套用个股日 K 的股数转换。
 
-市场广度的成交额是聚合字段：
+市场广度的涨停/跌停计数若存在必须非负且不能超过已覆盖证券数；越界计数表示供应商统计口径与本次覆盖集合不一致，应拒绝该快照并回退。市场广度的成交额是聚合字段：
 
 东方财富涨跌停池中的板数、炸板次数等计数字段必须解析为非负整数，不能把小数静默截断。服务层还会拒绝涨跌停池条目的非有限数值、负计数/金额与“条目降级但快照 valid”的质量矛盾，避免错误值经缓存重新返回。当 `amount_coverage_count` 小于 `covered_securities` 时，`total_amount_cny` 必须为 `null`，且快照质量必须是 `degraded`，不能因涨跌分类覆盖完整而标记为 `valid`。服务层必须同时校验该约束，避免错误质量状态进入缓存或 API。
 
