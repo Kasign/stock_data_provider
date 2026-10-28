@@ -1443,3 +1443,14 @@
   - https://github.com/Kasign/stock_data_provider/commit/ef1118689b14ecb2901efeeff1e7dd5ac0ccf693
   - https://github.com/Kasign/stock_data_provider/commit/84c3e4f053f362163f285f0025b7d024eeede779
 - 结构级静态源码检查和新增契约文本检查已完成；未运行本地 Node 测试、构建或人工浏览器验收。前三个代码提交的 Browser Smoke 已通过；84c3e4f 的 Browser Smoke 仍在运行。
+
+
+## 2026-10-28 — 市场总览、龙虎榜与交易日历生命周期
+
+- 市场总览模块：`load(key)` 将取消/代际推进、配置读取、加载态和响应渲染纳入保护范围；异常 UI 更新会返回明确状态而非冒泡。汇总刷新也保护配置读取、状态提示与汇总回写，连接切换先递增汇总 generation，再逐项清理模块。
+- 市场活动模块：龙虎榜与交易日历的配置读取、初始状态更新、接口请求和错误显示现在共享 try/catch/finally；龙虎榜分页按钮和控制器清理分别保护，避免 DOM 异常跳过解锁。
+- 市场活动/总览的连接失效更新改成逐项安全处理；旧请求 generation 先失效，单一面板渲染错误不阻断其他面板清理。
+- 代码及契约提交：
+  - https://github.com/Kasign/stock_data_provider/commit/19a930b4a14a0f533d8309d4b9d52cbe3b7f1192
+  - https://github.com/Kasign/stock_data_provider/commit/0c34d67357491ab7334a181c333db1c01193ad2f
+- 已完成静态源码和契约内容复核；未运行本地 Node 测试、构建或人工浏览器验收。市场模块代码提交的 Browser Smoke 结果需后续核对。

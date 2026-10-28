@@ -1129,3 +1129,11 @@
 - [84c3e4f — 修复季度财务指标读取异常收尾](https://github.com/Kasign/stock_data_provider/commit/84c3e4f053f362163f285f0025b7d024eeede779)：报告期读取/校验和成功/失败提示使用统一 catch，避免 `void loadFundamentals()` 将意外异常传播为未处理 rejection。
 
 所有代码修改与对应回归契约在同一提交中。本轮没有运行本地 Node 测试、构建或人工浏览器验收；前三个代码提交的 Browser Smoke 已通过，84c3e4f 的 Actions 结果需后续确认。
+
+
+## 2026-10-28 市场工作台共享模块异常收尾
+
+- [19a930b — 修复市场工作台请求异常收尾](https://github.com/Kasign/stock_data_provider/commit/19a930b4a14a0f533d8309d4b9d52cbe3b7f1192)：市场总览各模块的取消、初始化、请求、渲染和清理纳入保护；龙虎榜与交易日历同样安全处理加载态、请求错误和最终清理。
+- [0c34d67 — 校准市场连接失效回归契约](https://github.com/Kasign/stock_data_provider/commit/0c34d67357491ab7334a181c333db1c01193ad2f)：将旧断言更新为验证安全封装调用，并增加先失效汇总 generation、再清理模块的契约。
+- 市场连接配置变化时先使旧请求/旧摘要失效，再逐项清理 UI，避免一块 DOM 失败就留下其他模块的旧连接结果。
+- 本轮未运行本地 Node 测试、构建或人工浏览器验收；需核对当前 HEAD 对应的 Browser Smoke。
