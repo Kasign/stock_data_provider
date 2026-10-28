@@ -126,6 +126,18 @@ test("task polling errors mark last-known status stale and successful refresh cl
   assert.ok(manualRefresh.includes("state.taskEventsUnavailable = false") && manualRefresh.includes("pollTask(generation)"), "手动刷新重新尝试任务与事件读取");
 });
 
+test("new task creation responses cannot poison requested symbols or run/status identity", () => {
+  const createStart = app.indexOf("async function createTask(event) {");
+  const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
+  const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
+  assert.match(creator, /const responseSymbolsMatch = task\?\.symbols === undefined \|\|[\s\S]*?sameTaskSymbolSet\(symbols, task\.symbols\)/);
+  assert.match(creator, /const responseRunId = responseSymbolsMatch && responseRunIdValid \? task\.run_id : ""/);
+  assert.match(creator, /const responseStatus = responseSymbolsMatch && responseStatusValid \? task\.status : ""/);
+  assert.match(creator, /const normalizedTask = \{[\s\S]*?task_id: task\.task_id,[\s\S]*?run_id: responseRunId,[\s\S]*?status: responseStatus,[\s\S]*?task_type: taskType,[\s\S]*?symbols,/);
+  assert.match(creator, /if \(creationResponseWarnings\.length \|\| !TERMINAL_TASK_STATUSES\.has\(responseStatus\)\) \{[\s\S]*?pollTask\(generation\)/);
+  assert.match(creator, /current_stage: responseSymbolsMatch \? task\.current_stage : "等待服务端确认"/);
+});
+
 test("late task creation responses cannot replace the task selected while submission is pending", () => {
   assert.ok(app.includes("taskContextGeneration: 0"), "task selection context has its own generation");
   const createStart = app.indexOf("async function createTask(event) {");

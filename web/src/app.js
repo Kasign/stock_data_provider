@@ -3061,15 +3061,27 @@ async function createTask(event) {
   try {
     const response = await createAnalysisTask(requestSettings, payload, idempotencyKey);
     const task = response.task || response;
+    const responseSymbolsMatch = task?.symbols === undefined ||
+      (Array.isArray(task.symbols) && sameTaskSymbolSet(symbols, task.symbols));
+    const responseStatusValid = typeof task?.status === "string" && TASK_STATUSES.has(task.status);
+    const responseRunIdValid = typeof task?.run_id === "string" && Boolean(task.run_id.trim());
+    // POST 回包不完整时保留请求上下文，随后由 Task 状态接口补齐权威字段。
+    const responseRunId = responseSymbolsMatch && responseRunIdValid ? task.run_id : "";
+    const responseStatus = responseSymbolsMatch && responseStatusValid ? task.status : "";
+    const responseCreatedAt = typeof task?.created_at === "string" ? task.created_at : "";
+    const creationResponseWarnings = [];
+    if (!responseStatusValid) creationResponseWarnings.push("状态缺失或不受支持");
+    if (!responseRunIdValid) creationResponseWarnings.push("Run ID 缺失或格式无效");
+    if (!responseSymbolsMatch) creationResponseWarnings.push("回包标的列表无效或与本次请求不一致");
     if (requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase) {
       if (typeof task?.task_id === "string" && task.task_id.trim()) {
         const endpointRecord = {
           task_id: task.task_id,
-          run_id: task.run_id || "",
-          created_at: typeof task.created_at === "string" ? task.created_at : "",
-          symbols: Array.isArray(task.symbols) ? task.symbols : symbols,
-          task_type: task.task_type || taskType,
-          status: task.status || "",
+          run_id: responseRunId,
+          created_at: responseCreatedAt,
+          symbols,
+          task_type: taskType,
+          status: responseStatus,
           updated_at: new Date().toISOString(),
           analysis_base: requestAnalysisBase
         };
@@ -3091,11 +3103,11 @@ async function createTask(event) {
       if (typeof task?.task_id === "string" && task.task_id.trim()) {
         const endpointRecord = {
           task_id: task.task_id,
-          run_id: task.run_id || "",
-          created_at: typeof task.created_at === "string" ? task.created_at : "",
-          symbols: Array.isArray(task.symbols) ? task.symbols : symbols,
-          task_type: task.task_type || taskType,
-          status: task.status || "",
+          run_id: responseRunId,
+          created_at: responseCreatedAt,
+          symbols,
+          task_type: taskType,
+          status: responseStatus,
           updated_at: new Date().toISOString(),
           analysis_base: requestAnalysisBase
         };
@@ -3120,19 +3132,38 @@ async function createTask(event) {
     state.suppressedHistoryTaskId = "";
     state.suppressedHistoryTaskBase = "";
     state.taskId = task.task_id;
-    state.taskCreatedAt = typeof task.created_at === "string" ? task.created_at : "";
-    state.runId = task.run_id || "";
+    state.taskCreatedAt = responseCreatedAt;
+    state.runId = responseRunId;
     state.taskAnalysisBase = requestAnalysisBase;
+    state.taskSymbols = symbols;
+    state.taskType = taskType;
+    state.taskStatus = responseStatus;
     persistTaskReference();
     feedback.hidden = true;
-    renderTask(task);
+    const normalizedTask = {
+      ...task,
+      task_id: task.task_id,
+      run_id: responseRunId,
+      status: responseStatus,
+      task_type: taskType,
+      symbols,
+      current_stage: responseSymbolsMatch ? task.current_stage : "等待服务端确认",
+      completed_stages: responseSymbolsMatch ? task.completed_stages : undefined,
+      failure_code: responseSymbolsMatch ? task.failure_code : "",
+      error_message: responseSymbolsMatch ? task.error_message : ""
+    };
+    renderTask(normalizedTask);
+    if (creationResponseWarnings.length) {
+      $("#task-poll-label").textContent = "创建任务已确认；回包" + creationResponseWarnings.join("、") +
+        "。已保留本次请求标的，正在通过服务端状态接口核实。";
+    }
     renderTaskEvents();
     openRunFlowDrawer();
     const generation = state.pollGeneration;
-    if (!TERMINAL_TASK_STATUSES.has(task.status)) {
+    if (creationResponseWarnings.length || !TERMINAL_TASK_STATUSES.has(responseStatus)) {
       state.pollTimer = window.setTimeout(() => pollTask(generation), 500);
-    } else if (task.run_id || state.runId) {
-      void loadTaskRunResult(task.run_id || state.runId, task.task_id);
+    } else if (responseRunId) {
+      void loadTaskRunResult(responseRunId, task.task_id);
     }
   } catch (error) {
     if (creationContextGeneration !== state.taskContextGeneration) {
