@@ -186,6 +186,18 @@ test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
 });
 
 
+test("数据源能力刷新初始化或最终解锁异常不会产生未处理 rejection", () => {
+  const start = app.indexOf("async function refreshSources() {");
+  const end = app.indexOf("\nfunction shanghaiDateKey(", start);
+  const refresh = start >= 0 && end > start ? app.slice(start, end) : "";
+  assert.match(refresh, /let button = null;[\s\S]*?let list = null;[\s\S]*?try \{/);
+  assert.match(refresh, /showMessage\("正在读取当前连接配置对应的数据源能力…"/);
+  assert.match(refresh, /try \{\s*if \(button\) \{\s*button\.disabled = true;[\s\S]*?catch \{/);
+  assert.match(refresh, /const payload = await getDataSources\(settings\);[\s\S]*?generation !== sourceRefreshGeneration/);
+  assert.match(refresh, /catch \(error\) \{\s*if \(generation !== sourceRefreshGeneration\) return;[\s\S]*?showMessage\(message, "empty-row error-text"\)/);
+  assert.match(refresh, /finally \{[\s\S]*?if \(generation === sourceRefreshGeneration\) \{[\s\S]*?try \{[\s\S]*?button\.disabled = false;[\s\S]*?catch \{/);
+});
+
 test("已保存连接检查与草稿检查的初始化/解锁异常不会产生未处理 rejection", () => {
   assert.match(app, /function settingsCheckErrorMessage\(error\) \{[\s\S]*?try \{\s*return errorMessage\(error\);\s*\} catch/);
   assert.match(app, /function writeSettingsCheckOutputSafely\(output, message, className/);

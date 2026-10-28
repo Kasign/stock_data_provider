@@ -2069,52 +2069,89 @@ async function checkDraftConnectionFromSettings() {
 async function refreshSources() {
   const generation = ++sourceRefreshGeneration;
   const settings = state.settings;
-  const button = $("#reload-sources");
-  const list = $("#data-source-list");
+  let button = null;
+  let list = null;
+
   const showMessage = (message, className = "empty-row") => {
-    list.replaceChildren();
-    const hint = document.createElement("div");
-    hint.className = className;
-    hint.textContent = message;
-    list.append(hint);
+    try {
+      if (!list) list = $("#data-source-list");
+      if (!list) return false;
+      list.replaceChildren();
+      const hint = document.createElement("div");
+      hint.className = className;
+      hint.textContent = message;
+      list.append(hint);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const setSourceTextSafely = (selector, value) => {
+    try {
+      setText(selector, value);
+    } catch {
+      // 列表或摘要节点更新失败时，仍应让请求和按钮收尾继续。
+    }
   };
 
-  // 开始新请求时立即清除旧连接的 Provider 声明，避免旧配置结果被当作当前结果。
-  list.replaceChildren();
-  setText("#source-count", "—");
-  setText("#normalization-version", "归一化版本 —");
-  state.sourceCount = 0;
-  if (button) {
-    button.disabled = true;
-    button.textContent = "读取中…";
-    button.setAttribute("aria-busy", "true");
-  }
-
   try {
+    try { button = $("#reload-sources"); } catch {}
+    try { list = $("#data-source-list"); } catch {}
+
+    // 初始化 UI 独立保护；局部 DOM 故障不能阻止读取当前配置能力。
+    showMessage("正在读取当前连接配置对应的数据源能力…");
+    setSourceTextSafely("#source-count", "—");
+    setSourceTextSafely("#normalization-version", "归一化版本 —");
+    state.sourceCount = 0;
+    try {
+      if (button) {
+        button.disabled = true;
+        button.textContent = "读取中…";
+        button.setAttribute("aria-busy", "true");
+      }
+    } catch {
+      // 若按钮无法更新，仍继续执行能力读取。
+    }
+
     if (!settings.apiKey) {
       if (generation !== sourceRefreshGeneration) return;
       showMessage("尚未配置行情 API Key。密钥保存在当前浏览器本地。");
       return;
     }
 
-    showMessage("正在读取当前连接配置对应的数据源能力…");
     const payload = await getDataSources(settings);
     if (generation !== sourceRefreshGeneration) return;
-    renderSources(payload);
+    try {
+      renderSources(payload);
+    } catch (error) {
+      let message = "未知异常";
+      try { message = errorMessage(error); } catch {}
+      showMessage("数据源能力已读取，但页面渲染失败：" + message, "empty-row error-text");
+    }
   } catch (error) {
     if (generation !== sourceRefreshGeneration) return;
-    showMessage(errorMessage(error), "empty-row error-text");
-    setText("#source-count", "—");
-    setText("#normalization-version", "归一化版本 —");
+    let message = "未知异常";
+    try { message = errorMessage(error); } catch {}
+    showMessage(message, "empty-row error-text");
+    setSourceTextSafely("#source-count", "—");
+    setSourceTextSafely("#normalization-version", "归一化版本 —");
     state.sourceCount = 0;
   } finally {
-    if (generation === sourceRefreshGeneration && button) {
-      button.disabled = false;
-      button.removeAttribute("aria-busy");
-      button.textContent = "刷新 ↻";
+    if (generation === sourceRefreshGeneration) {
+      try {
+        if (!button) button = $("#reload-sources");
+        if (button) {
+          button.disabled = false;
+          button.removeAttribute("aria-busy");
+          button.textContent = "刷新 ↻";
+        }
+      } catch {
+        // 刷新按钮 DOM 不可用时，finally 不能再制造未处理的 Promise rejection。
+      }
     }
   }
 }
+
 
 function shanghaiDateKey(value = new Date()) {
   const parts = new Intl.DateTimeFormat("en", {
