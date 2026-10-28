@@ -232,18 +232,31 @@ test("Run 结果读取准备阶段异常也会复位忙碌锁", () => {
   const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
   const end = app.indexOf("\nfunction stopTaskPolling()", start);
   const loader = start >= 0 && end > start ? app.slice(start, end) : "";
+  const outerTry = loader.indexOf("try {");
   const busy = loader.indexOf("setRunResultReloadBusy(true);");
-  const outerTry = loader.indexOf("try {", busy);
   const setupRender = loader.indexOf('if (state.view === "watchlist") renderWatchlist();', busy);
   const whileStart = loader.indexOf("while (true)", busy);
   const outerCatch = loader.lastIndexOf("} catch (error) {");
   const outerFinally = loader.lastIndexOf("} finally {");
-  assert.ok(busy >= 0 && outerTry > busy && outerTry < setupRender, "初始状态和自选股重绘必须位于外层 try 内");
+  assert.ok(outerTry >= 0 && busy > outerTry && busy < setupRender, "忙碌锁设置、初始化和自选股重绘必须位于外层 try 内");
   assert.ok(whileStart > setupRender && outerCatch > whileStart && outerFinally > outerCatch, "外层 catch/finally 必须包住完整读取生命周期");
   const errorFlow = loader.slice(outerCatch);
   assert.match(errorFlow, /generation !== state\.runResultGeneration[\s\S]*?state\.taskId !== expectedTaskId/);
+  assert.match(errorFlow, /describeErrorSafely[\s\S]*?try \{\s*return errorMessage\(value\);\s*\} catch/);
   assert.match(errorFlow, /state\.runResultReadStatus = "error";[\s\S]*?读取 Run 结果时发生意外错误/);
-  assert.match(errorFlow, /finally \{[\s\S]*?generation === state\.runResultGeneration\) setRunResultReloadBusy\(false\)/);
+  assert.match(errorFlow, /appendReadDiagnostic\("错误提示更新失败：[\s\S]*?appendReadDiagnostic\("自选股卡片刷新失败：/);
+  assert.match(errorFlow, /finally \{[\s\S]*?if \(generation === state\.runResultGeneration\) \{\s*try \{\s*setRunResultReloadBusy\(false\);\s*\} catch \(unlockError\)/);
+  assert.match(errorFlow, /最终收尾本身必须保持不抛错/);
+});
+
+test("Run 结果的异常诊断与按钮解锁失败不会产生二次拒绝", () => {
+  const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
+  const end = app.indexOf("\nfunction stopTaskPolling()", start);
+  const loader = start >= 0 && end > start ? app.slice(start, end) : "";
+  const tail = loader.slice(loader.lastIndexOf("} finally {"));
+  assert.match(tail, /generation === state\.runResultGeneration[\s\S]*?try \{\s*setRunResultReloadBusy\(false\);\s*\} catch \(unlockError\)/);
+  assert.match(tail, /重新启用结果读取按钮失败：[\s\S]*?catch \{\s*\/\/ 最终收尾本身必须保持不抛错/);
+  assert.match(loader, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|[\s\S]*?state\.settings\.analysisBase !== analysisBase\) return;/);
 });
 
 test("task polling errors mark last-known status stale and successful refresh clears it", () => {

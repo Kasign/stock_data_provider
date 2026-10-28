@@ -2929,9 +2929,9 @@ async function loadTaskRunResult(runId, expectedTaskId) {
   const retainedResultNotice = retainedPreviousResult
     ? "页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"
     : "";
-  setRunResultReloadBusy(true);
-
   try {
+    // 忙碌锁自身也可能遇到 DOM 异常，必须处于统一 catch/finally 保护内。
+    setRunResultReloadBusy(true);
     state.runResultReadStatus = "loading";
     state.runResultReadError = "";
     if (state.view === "watchlist") renderWatchlist();
@@ -2991,25 +2991,61 @@ async function loadTaskRunResult(runId, expectedTaskId) {
         endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase ||
         state.settings.analysisBase !== analysisBase) return;
 
-    const message = errorMessage(error);
-    state.runResultReadStatus = "error";
-    state.runResultReadError = message;
+    const describeErrorSafely = (value) => {
+      try {
+        return errorMessage(value);
+      } catch {
+        return "未知异常";
+      }
+    };
+    const appendReadDiagnostic = (message) => {
+      try {
+        state.runResultReadError = [state.runResultReadError, message].filter(Boolean).join("；");
+      } catch {
+        // 错误状态本身无法写入时，不再让诊断路径产生第二个异常。
+      }
+    };
+    const message = describeErrorSafely(error);
     try {
-      $("#task-result-note").textContent =
-        "读取 Run 结果时发生意外错误：" + message + "。请检查页面状态后重新读取。";
+      state.runResultReadStatus = "error";
+    } catch {}
+    try {
+      state.runResultReadError = message;
+    } catch {}
+
+    try {
+      const note = $("#task-result-note");
+      if (note) {
+        note.textContent =
+          "读取 Run 结果时发生意外错误：" + message + "。请检查页面状态后重新读取。";
+      }
     } catch (noteError) {
-      state.runResultReadError += "；错误提示更新失败：" + errorMessage(noteError);
+      appendReadDiagnostic("错误提示更新失败：" + describeErrorSafely(noteError));
     }
+
     if (state.view === "watchlist") {
       try {
         renderWatchlist();
       } catch (renderError) {
-        state.runResultReadError += "；自选股卡片刷新失败：" + errorMessage(renderError);
+        appendReadDiagnostic("自选股卡片刷新失败：" + describeErrorSafely(renderError));
       }
     }
   } finally {
-    // 旧任务的迟到 finally 不能解锁新任务的读取按钮。
-    if (generation === state.runResultGeneration) setRunResultReloadBusy(false);
+    // 旧任务的迟到 finally 不能解锁新任务的读取按钮；解锁异常也不得向外传播。
+    if (generation === state.runResultGeneration) {
+      try {
+        setRunResultReloadBusy(false);
+      } catch (unlockError) {
+        try {
+          state.runResultReadError = [
+            state.runResultReadError,
+            "重新启用结果读取按钮失败：" + (typeof unlockError?.message === "string" ? unlockError.message : "未知异常")
+          ].filter(Boolean).join("；");
+        } catch {
+          // 最终收尾本身必须保持不抛错。
+        }
+      }
+    }
   }
 }
 function stopTaskPolling() {
