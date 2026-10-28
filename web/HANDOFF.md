@@ -8,7 +8,7 @@
 - 仓库：https://github.com/Kasign/stock_data_provider
 - **唯一 WebUI 开发分支：** `feat/webui-market-data-console`。
 - 本次续接从分支 HEAD `859e0d0e1ec358dba4edd5e1803e5de90b12a3ee` 开始，并已直接向现有分支提交后续修改。之后始终以 `feat/webui-market-data-console` 的最新远程 HEAD 为准，只修改 `web/**`；本交接文档不固定记录当前 HEAD，避免因更新文档自身而立刻过期。
-- 不以数据集成分支为开发基础；不处理其他分支，不因其他分支的提交而重建、rebase 或改写本分支历史。
+- 数据分支已按用户明确要求在 2026-10-28 以双父 merge commit 合入；详见本文末尾“数据分支合并与冲突处理”。后续以 WebUI 分支最新远端 HEAD 为准，常规 WebUI 需求仍只改 `web/**`；若需要同步数据分支后续提交，先核对实际 HEAD 与差异，再显式合并，不 rebase、不强推。
 - 不新建临时 WebUI 分支。新任务优先直接在现有 WebUI 分支上分组提交，避免重复迁移或重复实现。
 - PR #17（https://github.com/Kasign/stock_data_provider/pull/17）已于 2026-10-28 合并，合并提交为 `5d07e7211aa326908c3ebf7c8ee6c001433ee66f`；这是既有历史状态，不改变之后以 WebUI 分支为唯一开发基础的约定。PR #16 已关闭且未合并。
 - 既有 WebUI 提交包括：`4443b9d7` 整理新增区块的样式排版；`63265425` 将新增区块 10–11px 辅助文字提升到 12px；`74ac4663` 增加字号契约测试；`e2a1ea47` 修复分区导航焦点、可见区块高亮和工作区导入时的任务引用隔离；`dc7daefb` 修复板块切换未接入维度时旧请求覆盖占位的问题；`0c91313e` 补充状态一致性契约测试源码。
@@ -1156,3 +1156,14 @@
 - [0c34d67 — 校准市场连接失效回归契约](https://github.com/Kasign/stock_data_provider/commit/0c34d67357491ab7334a181c333db1c01193ad2f)：将旧断言更新为验证安全封装调用，并增加先失效汇总 generation、再清理模块的契约。
 - 市场连接配置变化时先使旧请求/旧摘要失效，再逐项清理 UI，避免一块 DOM 失败就留下其他模块的旧连接结果。
 - 本轮未运行本地 Node 测试、构建或人工浏览器验收；需核对当前 HEAD 对应的 Browser Smoke。
+
+
+## 2026-10-28 数据分支合并与冲突处理（当前事实）
+
+- 已将数据分支 `feat/full-go-data-providers-api-switch` 的当时最新 HEAD `90b5086dfc2c977ecf9f8ef0d5955c1b6ad5299f` 合入本分支。
+- 合并提交：[4e6cc6ab 合并国内 A 股数据分支并解决 WebUI 冲突](https://github.com/Kasign/stock_data_provider/commit/4e6cc6abaf3a04479291a03d6cf187572d510d59)。第一父提交是合并前 WebUI HEAD `aa91e0f7ae1d509cec580e5e43e11867628dddd1`，第二父提交是数据分支 HEAD `90b5086dfc2c977ecf9f8ef0d5955c1b6ad5299f`。
+- 合并树以数据分支完整文件树为基础，保留 Go market-data 服务、Provider、Python Bridge、Go adapter、OpenAPI 与架构文档；再合并 WebUI 分支独有变更，并对双方都修改的 13 个 WebUI 文件做三方处理。
+- 冲突解决原则：重叠的 WebUI 实现保留当前 WebUI 版本（其中包含更新的存储校验、证券代码归一化、请求代际、异常收尾和回归契约）；共享文档保留最新 WebUI 状态描述，并合并未冲突的数据分支记录。检查了关键 WebUI 文件无冲突标记。
+- 已逐一对比 `services/market-data/internal/provider/tickflow_market_breadth_test.go`、`services/market-data/internal/service/data.go`、`services/market-data/openapi.yaml` 和 `docs/architecture/market-data-contract.md`，合并提交中的 Blob 与数据分支来源完全一致。
+- 本次只更新了 WebUI 分支引用，没有改动数据分支引用；此后常规 WebUI 任务仍限定修改 `web/**`，如需同步数据分支后续提交，先比较实际远端 HEAD 并按明确要求合并，不通过 rebase/强推改写历史。
+- 合并提交触发的 [WebUI browser smoke #40691844220](https://github.com/Kasign/stock_data_provider/actions/runs/40691844220) 在文档更新前核查时仍为运行中；本地未运行 Go suite、Node UI 契约、构建或人工浏览器验收。

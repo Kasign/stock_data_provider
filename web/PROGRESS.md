@@ -1454,3 +1454,11 @@
   - https://github.com/Kasign/stock_data_provider/commit/19a930b4a14a0f533d8309d4b9d52cbe3b7f1192
   - https://github.com/Kasign/stock_data_provider/commit/0c34d67357491ab7334a181c333db1c01193ad2f
 - 已完成静态源码和契约内容复核；未运行本地 Node 测试、构建或人工浏览器验收。市场模块代码提交的 Browser Smoke 结果需后续核对。
+
+
+## 2026-10-28 — 数据分支合并与冲突解决
+
+- 已以 `4e6cc6abaf3a04479291a03d6cf187572d510d59` 将数据分支当时最新 HEAD `90b5086dfc2c977ecf9f8ef0d5955c1b6ad5299f` 合入 WebUI 分支；双父节点正确，WebUI 是第一父，数据分支是第二父。
+- 合并结果保留了数据分支完整服务端树及 25 个 WebUI 差异文件；对 13 个两边均修改的文件做三方比较，重叠的较旧 UI 实现采用当前 WebUI 版本，未冲突数据分支内容和最新后端服务树保留。
+- TickFlow 市场广度测试、market-data 服务实现、OpenAPI 和市场数据契约文件的合并 Blob 与来源分支一致；抽查 10 个关键文件无冲突标记。
+- [Browser Smoke #40691844220](https://github.com/Kasign/stock_data_provider/actions/runs/40691844220) 当时仍在运行。本地未运行 Go suite、Node UI 契约、构建或人工浏览器验收。
