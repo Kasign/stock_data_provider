@@ -2748,6 +2748,21 @@ function renderTaskResult(result) {
   $("#task-result-section").hidden = false;
 }
 
+function normalizedTaskSymbolSet(symbols) {
+  return [...new Set(symbols.map(normalizeAnalysisSymbol))].sort();
+}
+
+function sameTaskSymbolSet(expectedRaw, actualRaw) {
+  if (!Array.isArray(expectedRaw) || !Array.isArray(actualRaw)) return false;
+  try {
+    const expected = normalizedTaskSymbolSet(expectedRaw);
+    const actual = normalizedTaskSymbolSet(actualRaw);
+    return expected.length > 0 && JSON.stringify(expected) === JSON.stringify(actual);
+  } catch {
+    return false;
+  }
+}
+
 function runResultSymbolMismatch(result) {
   const expectedRaw = Array.isArray(state.taskSymbols) ? state.taskSymbols : [];
   if (!expectedRaw.length) return "";
@@ -2755,15 +2770,9 @@ function runResultSymbolMismatch(result) {
   if (!Array.isArray(actualRaw)) {
     return "Run 结果未返回请求标的列表，无法确认是否属于当前任务，已忽略。";
   }
-  try {
-    const normalizeSet = (symbols) => [...new Set(symbols.map(normalizeAnalysisSymbol))].sort();
-    const expected = normalizeSet(expectedRaw);
-    const actual = normalizeSet(actualRaw);
-    if (expected.length && JSON.stringify(expected) === JSON.stringify(actual)) return "";
-  } catch {
-    // 无法规范化的结果标的代码视为不能与当前任务匹配。
-  }
-  return "Run 结果中的标的列表与当前任务不一致，已忽略。";
+  return sameTaskSymbolSet(expectedRaw, actualRaw)
+    ? ""
+    : "Run 结果中的标的列表与当前任务不一致，已忽略。";
 }
 
 async function loadTaskRunResult(runId, expectedTaskId) {
@@ -2849,6 +2858,11 @@ async function pollTask(generation = state.pollGeneration) {
       taskError = responseContractError("任务状态接口未返回有效 run_id，已暂停自动刷新。");
     } else if (state.runId && candidate.run_id !== state.runId) {
       taskError = responseIdentityError("任务状态接口返回的 run_id 与当前任务已关联的 Run 不一致，已忽略。");
+    } else if (candidate.symbols !== undefined && !Array.isArray(candidate.symbols)) {
+      taskError = responseContractError("任务状态接口返回的标的列表结构无效，已暂停自动刷新。");
+    } else if (Array.isArray(candidate.symbols) && state.taskSymbols.length &&
+               !sameTaskSymbolSet(state.taskSymbols, candidate.symbols)) {
+      taskError = responseIdentityError("任务状态接口返回的标的列表与当前任务不一致，已忽略。");
     } else if (typeof candidate.status !== "string" || !TASK_STATUSES.has(candidate.status)) {
       taskError = responseContractError(candidate.status
         ? "任务状态接口返回了未支持的状态“" + String(candidate.status) + "”，已暂停自动刷新。"

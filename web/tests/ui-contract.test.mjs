@@ -1218,7 +1218,7 @@ test("Run 结果必须与当前任务标的集合一致后才允许渲染", () =
   assert.match(app, /function runResultSymbolMismatch\(result\)/);
   assert.match(app, /const expectedRaw = Array\.isArray\(state\.taskSymbols\) \? state\.taskSymbols : \[\]/);
   assert.match(app, /Run 结果未返回请求标的列表，无法确认是否属于当前任务，已忽略/);
-  assert.match(app, /normalizeSet\(expectedRaw\)[\s\S]*?normalizeSet\(actualRaw\)[\s\S]*?JSON\.stringify\(expected\) === JSON\.stringify\(actual\)/);
+  assert.match(app, /function sameTaskSymbolSet\(expectedRaw, actualRaw\)[\s\S]*?normalizedTaskSymbolSet\(expectedRaw\)[\s\S]*?normalizedTaskSymbolSet\(actualRaw\)[\s\S]*?JSON\.stringify\(expected\) === JSON\.stringify\(actual\)/);
   assert.match(app, /const symbolMismatch = runResultSymbolMismatch\(result\);[\s\S]*?if \(symbolMismatch\) throw responseIdentityError\(symbolMismatch\);[\s\S]*?renderTaskResult\(result\)/);
   assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase/);
 });
@@ -1268,4 +1268,13 @@ test("增量阶段事件不会覆盖已读取的相同或更旧序号", () => {
   assert.match(app, /sequence <= previousSequence \|\| state\.taskEvents\.has\(sequence\)/);
   assert.match(app, /state\.taskEvents\.set\(sequence, normalized\)/);
   assert.match(app, /无效、重复或旧序号的阶段事件，已忽略/);
+});
+
+ 
+test("任务状态回包不能替换任务标的集合，Run 与任务复用同一规范化比较", () => {
+  assert.match(app, /function sameTaskSymbolSet\(expectedRaw, actualRaw\)/);
+  assert.match(app, /candidate\.symbols !== undefined && !Array\.isArray\(candidate\.symbols\)/);
+  assert.match(app, /Array\.isArray\(candidate\.symbols\) && state\.taskSymbols\.length &&[\s\S]*?!sameTaskSymbolSet\(state\.taskSymbols, candidate\.symbols\)/);
+  assert.match(app, /任务状态接口返回的标的列表与当前任务不一致，已忽略/);
+  assert.match(app, /function runResultSymbolMismatch\(result\)[\s\S]*?sameTaskSymbolSet\(expectedRaw, actualRaw\)/);
 });
