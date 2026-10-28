@@ -22,7 +22,7 @@ import (
 const tushareVersion = "tushare-pro-daily-v2-adjustment-factor"
 
 // Tushare 通过 HTTP JSON 接口读取 A 股日 K。需要用户自己的 Token，默认关闭。
-// daily 接口返回原始 OHLC；不能满足请求复权口径时明确失败，不伪装复权数据。
+// daily 接口返回原始 OHLC；前/后复权通过 adj_factor 明确换算，因子不完整时拒绝结果。
 type Tushare struct {
 	client   *http.Client
 	endpoint string

@@ -1478,20 +1478,24 @@ func TestTushareDailyAppliesAdjustmentFactors(t *testing.T) {
 		basis          model.AdjustmentBasis
 		wantMethod     string
 		wantFirstOpen  float64
+		wantFirstHigh  float64
+		wantFirstLow   float64
 		wantFirstClose float64
 		wantLastOpen   float64
+		wantLastHigh   float64
+		wantLastLow    float64
 		wantLastClose  float64
 		wantReference  string
 	}{
 		{
 			name: "forward adjusted", basis: model.AdjustmentForward,
-			wantMethod: "tushare_adj_factor_qfq_v1", wantFirstOpen: 5, wantFirstClose: 5.5,
-			wantLastOpen: 20, wantLastClose: 21, wantReference: endDate,
+			wantMethod: "tushare_adj_factor_qfq_v1", wantFirstOpen: 5, wantFirstHigh: 6, wantFirstLow: 4.5, wantFirstClose: 5.5,
+			wantLastOpen: 20, wantLastHigh: 22, wantLastLow: 18, wantLastClose: 21, wantReference: endDate,
 		},
 		{
 			name: "backward adjusted", basis: model.AdjustmentBackward,
-			wantMethod: "tushare_adj_factor_hfq_v1", wantFirstOpen: 20, wantFirstClose: 22,
-			wantLastOpen: 80, wantLastClose: 84,
+			wantMethod: "tushare_adj_factor_hfq_v1", wantFirstOpen: 20, wantFirstHigh: 24, wantFirstLow: 18, wantFirstClose: 22,
+			wantLastOpen: 80, wantLastHigh: 88, wantLastLow: 72, wantLastClose: 84,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1552,8 +1556,10 @@ func TestTushareDailyAppliesAdjustmentFactors(t *testing.T) {
 			if first.TradeDate != startDate || last.TradeDate != endDate {
 				t.Fatalf("unexpected sorted dates: %s, %s", first.TradeDate, last.TradeDate)
 			}
-			if first.Open != tc.wantFirstOpen || first.Close != tc.wantFirstClose || last.Open != tc.wantLastOpen || last.Close != tc.wantLastClose {
-				t.Fatalf("adjusted OHLC mismatch: first=(%.4f, %.4f) last=(%.4f, %.4f)", first.Open, first.Close, last.Open, last.Close)
+			if first.Open != tc.wantFirstOpen || first.High != tc.wantFirstHigh || first.Low != tc.wantFirstLow || first.Close != tc.wantFirstClose ||
+				last.Open != tc.wantLastOpen || last.High != tc.wantLastHigh || last.Low != tc.wantLastLow || last.Close != tc.wantLastClose {
+				t.Fatalf("adjusted OHLC mismatch: first=(%.4f, %.4f, %.4f, %.4f) last=(%.4f, %.4f, %.4f, %.4f)",
+					first.Open, first.High, first.Low, first.Close, last.Open, last.High, last.Low, last.Close)
 			}
 			for _, bar := range bars {
 				if bar.AdjustmentBasis != tc.basis || bar.AdjustmentMethod != tc.wantMethod {
@@ -1561,6 +1567,12 @@ func TestTushareDailyAppliesAdjustmentFactors(t *testing.T) {
 				}
 				if bar.Volume == nil || bar.Amount == nil || bar.RawVolume == nil || bar.RawAmount == nil {
 					t.Fatalf("volume/amount/raw provenance must remain intact: %+v", bar)
+				}
+				if bar.TradeDate == startDate && (*bar.Amount != 100000 || *bar.Volume != 10000 || *bar.RawAmount != 100 || *bar.RawVolume != 100) {
+					t.Fatalf("first bar volume/amount must not be adjusted: %+v", bar)
+				}
+				if bar.TradeDate == endDate && (*bar.Amount != 200000 || *bar.Volume != 20000 || *bar.RawAmount != 200 || *bar.RawVolume != 200) {
+					t.Fatalf("last bar volume/amount must not be adjusted: %+v", bar)
 				}
 			}
 			if first.AdjustmentRefDate != tc.wantReference || last.AdjustmentRefDate != tc.wantReference {
