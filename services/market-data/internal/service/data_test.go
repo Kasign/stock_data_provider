@@ -228,8 +228,27 @@ func validQuote(source string) *model.Quote {
 	vol := int64(3413600)
 	amount := 4525398959.0
 	qt := now
-	return &model.Quote{Symbol: "600519.SH", Name: "贵州茅台", CurrentPrice: &p, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &vol, Amount: &amount, QuoteTime: &qt, FetchedAt: now, NormalizedAt: now, Source: source, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+	return &model.Quote{Symbol: "600519.SH", Name: "贵州茅台", CurrentPrice: &p, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &vol, Amount: &amount, QuoteTime: &qt, FetchedAt: now, NormalizedAt: now, Source: source, SourceVersion: source + "-quote-v1", VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 }
+func TestQuoteFallsBackWhenProviderSourceVersionIsMissing(t *testing.T) {
+	missingVersion := validQuote("eastmoney")
+	missingVersion.SourceVersion = ""
+	fallback := validQuote("tencent")
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", quote: missingVersion},
+		fakeProvider{name: "tencent", quote: fallback},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("Quote returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" || got.SourceVersion != fallback.SourceVersion || got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("quote without source version must fall back to a versioned provider: %+v", got)
+	}
+}
+
 func TestQuotePreservesPriceWhenAmountMissingAndMarksUnitUnknown(t *testing.T) {
 	q := validQuote("eastmoney")
 	q.Amount = nil
@@ -527,6 +546,28 @@ func TestDailyBarsRejectsStartAfterEnd(t *testing.T) {
 	_, _, _, err := s.DailyBars(context.Background(), "600519", "2026-10-21", "2026-10-20", 20, model.AdjustmentForward)
 	if err == nil {
 		t.Fatal("start date after end date must be rejected")
+	}
+}
+
+func TestQuoteCacheWithoutSourceVersionIsBypassed(t *testing.T) {
+	mem := newMemoryCache()
+	legacy := validQuote("eastmoney")
+	legacy.SourceVersion = ""
+	payload, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem.values["md:v4:quote:600519.SH"] = payload
+	fresh := validQuote("tencent")
+	svc := New([]provider.Provider{fakeProvider{name: "tencent", quote: fresh}}, mem, nil, time.Second, time.Second, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	got, hit, err := svc.Quote(context.Background(), "600519.SH")
+	if err != nil || hit {
+		t.Fatalf("quote cache without source version must be bypassed: hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tencent" {
+		t.Fatalf("expected fresh versioned quote after cache bypass, got %+v", got)
 	}
 }
 

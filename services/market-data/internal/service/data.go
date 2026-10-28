@@ -2078,7 +2078,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 				q.Symbol = cachedSymbol
 			}
 			cacheNow := time.Now()
-			if symbolErr == nil && cachedSymbol == symbol && q.NormalizationVer == normalize.Version &&
+			if symbolErr == nil && cachedSymbol == symbol && strings.TrimSpace(q.SourceVersion) != "" && q.NormalizationVer == normalize.Version &&
 				serviceTimestampIsSane(q.FetchedAt, cacheNow) && serviceTimestampIsSane(q.NormalizedAt, cacheNow) &&
 				normalize.ValidateQuote(&q) == nil {
 				applyQuoteFreshness(&q, time.Now())
@@ -2130,6 +2130,12 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			errs = append(errs, p.Name()+": empty quote without error")
 			continue
 		}
+		if strings.TrimSpace(q.SourceVersion) == "" {
+			s.breaker.Failure(breakerKey)
+			errs = append(errs, p.Name()+": quote source_version is missing")
+			continue
+		}
+		q.SourceVersion = strings.TrimSpace(q.SourceVersion)
 		// fetched_at 是服务接收到 Provider 回包的时间，不能信任上游同名字段。
 		receivedAt := time.Now().UTC()
 		if strings.TrimSpace(q.Symbol) != "" {
