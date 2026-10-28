@@ -152,6 +152,37 @@ func TestStockSearchPrefersLaterNonStaleProvider(t *testing.T) {
 	}
 }
 
+func TestStockSearchKeepsBestCoverageStaleCandidate(t *testing.T) {
+	now := time.Now().UTC()
+	more := populatedStockSearchForFallbackTest("eastmoney")
+	more.QualityStatus = model.QualityStale
+	more.FetchedAt = now.Add(-time.Minute)
+	more.Items = append(more.Items, model.StockSearchItem{
+		Symbol: "000858.SZ", Code: "000858", Name: "五粮液", Exchange: "SZ",
+	})
+	more.Total = len(more.Items)
+
+	less := populatedStockSearchForFallbackTest("tencent")
+	less.QualityStatus = model.QualityStale
+	less.FetchedAt = now
+	failed := &stockSearchFallbackTestProvider{name: "third-source", err: errors.New("test search endpoint unavailable")}
+	first := &stockSearchFallbackTestProvider{name: "eastmoney", snapshot: more}
+	second := &stockSearchFallbackTestProvider{name: "tencent", snapshot: less}
+	svc := &DataService{stockSearchProviders: []provider.StockSearchProvider{first, second, failed}}
+
+	got, err := svc.SearchStocks(context.Background(), "贵州茅台", 10)
+	if err != nil {
+		t.Fatalf("stale matches should remain available as last resort: %v", err)
+	}
+	if got == nil || got.Source != "eastmoney" || got.QualityStatus != model.QualityStale || len(got.Items) != 2 {
+		t.Fatalf("expected the stale candidate with the better match coverage, got %+v", got)
+	}
+	if !hasStockSearchReason(got.QualityReasons, "stock_search_fallback_exhausted_using_stale_directory") ||
+		first.calls != 1 || second.calls != 1 || failed.calls != 1 {
+		t.Fatalf("missing stale fallback marker or incomplete fallback: reasons=%v calls=%d/%d/%d", got.QualityReasons, first.calls, second.calls, failed.calls)
+	}
+}
+
 func TestStockSearchReturnsStaleMatchesOnlyAfterFallbackExhaustion(t *testing.T) {
 	first := &stockSearchFallbackTestProvider{name: "eastmoney", snapshot: populatedStockSearchForFallbackTest("eastmoney")}
 	first.snapshot.QualityStatus = model.QualityStale

@@ -1194,7 +1194,11 @@ func (s *DataService) SearchStocks(ctx context.Context, rawQuery string, limit i
 		}
 		if snapshot.QualityStatus == model.QualityStale {
 			// 旧目录有匹配项时保留为最终后备，但先尝试后续来源获取更新结果。
-			staleMatches = snapshot
+			// 所有来源均失败时优先保留匹配覆盖更完整的候选；条数相同时选较新抓取的快照。
+			if staleMatches == nil || len(snapshot.Items) > len(staleMatches.Items) ||
+				(len(snapshot.Items) == len(staleMatches.Items) && snapshot.FetchedAt.After(staleMatches.FetchedAt)) {
+				staleMatches = snapshot
+			}
 			failures = append(failures, p.Name()+": stale stock-search matches retained as fallback")
 			continue
 		}
