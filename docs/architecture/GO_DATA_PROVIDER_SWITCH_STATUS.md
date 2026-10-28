@@ -909,9 +909,11 @@ Tushare `top_list` 分页现在维护证券代码集合；同页中普通 A 股�
 
 Tushare `stock_basic` 按 `ts_code` 查询单只证券时，原适配器只接收首条匹配行，忽略后续重复行。现在一旦发现重复身份便拒绝当前 Provider 候选，并新增 HTTP fixture 回归测试源码；尚未执行测试或真实请求。
 
-## 2026-10-28 东财涨跌停池覆盖不足提示
+## 2026-10-28 东财涨跌停池覆盖不足提示与分页补齐
 
-东财涨跌停池保留源端 `tc` 作为 `total`，当它大于响应 `pool` 条数时新增 `provider_total_exceeds_returned_rows` 质量原因，显式提示本次列表只覆盖部分源端记录。已新增 HTTP fixture 测试源码，尚未执行。
+最初版本会保留源端 `tc` 作为 `total`，当第一页的 `pool` 条数不足时附加 `provider_total_exceeds_returned_rows`，但没有尝试请求后续页。后续功能提交已补齐内部分页：每页最多 30 条，按 `Pageindex` 递增，直到满足 `min(tc, limit)`；多页 `tc/qdate` 不一致、达到目标前出现空页或分页契约错误时，拒绝该候选让服务层尝试后备源。若调用方的 `limit` 低于 `tc`，仍会保留截断质量原因。
+
+新增本地 HTTP fixture，模拟 65 条记录分三页完整返回，并断言记录顺序、页数和没有错误截断标记。测试源码已提交，尚未运行 Go 测试、构建、CI 或真实 Provider 请求；源端时间戳仍不可核验，因此快照不会仅因分页完整而升为 `valid`。
 
 ## 2026-10-28 Tushare 涨跌停池重复证券门禁
 
