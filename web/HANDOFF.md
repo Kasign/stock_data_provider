@@ -999,3 +999,13 @@
 - 结构错误、Run 身份不匹配、重复或旧序号分别计数并展示诊断，避免混合数据只显示成笼统的事件错误。
 - 代码与 UI 回归契约提交：https://github.com/Kasign/stock_data_provider/commit/1b781d6117f3dbc358fd78146b2b656eb49ca5bd
 - 本轮未执行本地 Node 测试；对应静态契约等待后续统一执行。
+
+
+## 2026-10-28 阶段事件分页与终态排空
+
+- Task 事件请求改用独立服务端游标 `taskEventCursor`，不再只依赖通过身份校验的事件推进游标；按合法的 `next_after_sequence` 前进，避免坏事件让同一页永久重复。
+- 游标必须为安全整数、不回退，且不能小于本页可识别的最高合法序号；有事件但游标未推进时按响应契约错误暂停续读。
+- 每页 100 条。Task 已结束但当前页仍满 100 条且游标推进时，立即续读后续页；事件页排空或遇到明确接口错误后，再按终态分支读取 Run 报告。创建接口幂等命中终态 Task 也先经过 Task/事件轮询。
+- 主要功能提交：https://github.com/Kasign/stock_data_provider/commit/42e548510ab7253abda37433113d91ea1b03ac67
+- 回归测试边界修正：https://github.com/Kasign/stock_data_provider/commit/2081df7876e4788e9edbebac35cc9a65146925af
+- 未执行本地 Node 测试、构建或浏览器验收；后续以最新提交对应的 GitHub Actions Smoke 状态为准。
