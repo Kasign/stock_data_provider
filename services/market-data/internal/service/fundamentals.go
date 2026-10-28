@@ -113,10 +113,10 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 }
 
 func fundamentalsCacheTTL(snapshot *model.FundamentalsSnapshot) time.Duration {
-	if snapshot == nil || !snapshot.HasData {
+	if snapshot == nil || !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
 		return 5 * time.Minute
 	}
-	if snapshot.QualityStatus != model.QualityValid {
+	if snapshot.QualityStatus == model.QualityDegraded {
 		return time.Hour
 	}
 	return 12 * time.Hour
@@ -148,15 +148,17 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		var cached model.FundamentalsSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateFundamentalsSnapshot(symbol, year, quarter, &cached) == nil && time.Since(cached.FetchedAt) >= 0 {
 			ttl := fundamentalsCacheTTL(&cached)
-			cacheEligible := cached.HasData
-			if !cached.HasData {
+			cacheEligible := cached.QualityStatus != model.QualityUnknown
+			if cached.QualityStatus == model.QualityUnknown {
 				fallbackExhausted := false
 				for _, reason := range cached.QualityReasons {
-					if reason == "fundamentals_fallback_exhausted_without_confirmed_data" {
+					if reason == "fundamentals_fallback_exhausted_without_confirmed_data" ||
+						reason == "fundamentals_fallback_exhausted_without_usable_quality" {
 						fallbackExhausted = true
 						break
 					}
 				}
+				// 多 Provider 场景忽略未记录回退耗尽标记的 unknown 缓存，让更可靠来源有机会刷新结果。
 				cacheEligible = fallbackExhausted || len(s.fundamentalsProviders) <= 1
 			}
 			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
@@ -170,7 +172,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		return nil, false, errors.New("no enabled fundamentals provider")
 	}
 	var failures []string
-	var unknownEmpty *model.FundamentalsSnapshot
+	var unknownCandidate *model.FundamentalsSnapshot
 	for _, p := range s.fundamentalsProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -188,9 +190,17 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
-		if !snapshot.HasData {
-			unknownEmpty = snapshot
-			failures = append(failures, p.Name()+": no report-period metrics")
+		if !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
+			// Unknown-quality metrics may lack a provable publication date; keep them as a final candidate,
+			// but allow later providers to return a point-in-time safer snapshot first.
+			if unknownCandidate == nil || (snapshot.HasData && !unknownCandidate.HasData) {
+				unknownCandidate = snapshot
+			}
+			if !snapshot.HasData {
+				failures = append(failures, p.Name()+": no report-period metrics")
+			} else {
+				failures = append(failures, p.Name()+": fundamentals quality is unknown")
+			}
 			continue
 		}
 		payload, err := json.Marshal(snapshot)
@@ -204,15 +214,19 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		}
 		return snapshot, false, nil
 	}
-	if unknownEmpty != nil {
-		unknownEmpty.QualityStatus = model.QualityUnknown
-		unknownEmpty.QualityReasons = appendReason(unknownEmpty.QualityReasons, "fundamentals_fallback_exhausted_without_confirmed_data")
-		if payload, err := json.Marshal(unknownEmpty); err == nil {
-			if cacheErr := s.cache.Set(ctx, key, payload, fundamentalsCacheTTL(unknownEmpty)); cacheErr != nil {
+	if unknownCandidate != nil {
+		unknownCandidate.QualityStatus = model.QualityUnknown
+		if unknownCandidate.HasData {
+			unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, "fundamentals_fallback_exhausted_without_usable_quality")
+		} else {
+			unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, "fundamentals_fallback_exhausted_without_confirmed_data")
+		}
+		if payload, err := json.Marshal(unknownCandidate); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, fundamentalsCacheTTL(unknownCandidate)); cacheErr != nil {
 				s.logger.Warn("fundamentals unknown cache write failed", "symbol", symbol, "year", year, "quarter", quarter, "error", cacheErr)
 			}
 		}
-		return unknownEmpty, false, nil
+		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all fundamentals providers failed: %s", strings.Join(failures, "; "))
 }
