@@ -112,6 +112,8 @@ const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
 let initialConnectionDraft = null;
 let serviceRefreshGeneration = 0;
 let sourceRefreshGeneration = 0;
+let savedConnectionCheckGeneration = 0;
+let draftConnectionCheckGeneration = 0;
 
 const state = {
   settings: loadSettings(),
@@ -1308,7 +1310,7 @@ const REFRESH_BUTTON_CONTEXT = Object.freeze({
   screening: { label: "检查服务连接（选股接口待接入）", title: "选股任务与候选 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   alerts: { label: "检查服务连接（告警接口待接入）", title: "告警规则与触发记录 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   data: { label: "立即检查服务与数据源能力", title: "检查行情/分析服务存活和就绪状态，并读取 Provider 能力声明；不代表逐 Provider 实时探测。" },
-  settings: { label: "检查服务连接", title: "重新检查已保存的行情/分析服务地址；未保存的地址请使用设置表单中的“检查连接”。" }
+  settings: { label: "检查服务连接", title: "检查当前已保存的行情/分析 API；未保存的连接草稿可在设置弹窗中使用“检查未保存配置”。" }
 });
 
 function syncRefreshButtonContext() {
@@ -1850,9 +1852,74 @@ async function refreshServices() {
   return { marketOK, analysisOK, marketState, analysisState, stale: false };
 }
 
+function describeConnectionHealthResults(marketResult, analysisResult) {
+  const marketState = serviceHealthState(marketResult);
+  const analysisState = serviceHealthState(analysisResult);
+  const describe = (name, result, status) => {
+    if (status === "healthy") return name + " API 就绪";
+    if (status === "failed") return name + " API 不可用（" + errorMessage(result.error) + "）";
+    if (status === "unknown") return name + " API 状态未知（回包未提供可识别的健康状态）";
+    return name + " API 返回需关注的状态（" + String(result.data?.status || "未知") + "）";
+  };
+  return {
+    text: describe("行情", marketResult, marketState) + "；" + describe("分析", analysisResult, analysisState),
+    className: marketState === "healthy" && analysisState === "healthy"
+      ? "settings-inline-status is-success"
+      : "settings-inline-status is-warning"
+  };
+}
+
 async function checkConnectionFromSettings() {
   const button = $("#settings-check-connection");
   const output = $("#settings-connection-check");
+  const settingsToCheck = { ...state.settings };
+  const generation = ++savedConnectionCheckGeneration;
+  button.disabled = true;
+  button.textContent = "检查中…";
+  output.textContent = "正在检查当前已保存的行情与分析 API 地址…";
+  output.className = "settings-inline-status";
+  try {
+    const [marketResult, analysisResult] = await Promise.all([
+      runHealthCheck(marketHealth, settingsToCheck),
+      runHealthCheck(analysisHealth, settingsToCheck)
+    ]);
+    if (generation !== savedConnectionCheckGeneration) return;
+    const currentSettings = state.settings;
+    if (
+      currentSettings.marketBase !== settingsToCheck.marketBase ||
+      currentSettings.analysisBase !== settingsToCheck.analysisBase ||
+      currentSettings.apiKey !== settingsToCheck.apiKey
+    ) {
+      output.textContent = "检查期间已保存的连接配置发生变化，旧结果已忽略，请使用当前配置重新检查。";
+      output.className = "settings-inline-status is-warning";
+      return;
+    }
+    const summary = describeConnectionHealthResults(marketResult, analysisResult);
+    output.textContent = "已保存连接配置检查结果：" + summary.text +
+      "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。";
+    output.className = summary.className;
+  } catch (error) {
+    if (generation !== savedConnectionCheckGeneration) return;
+    const currentSettings = state.settings;
+    const configurationChanged = currentSettings.marketBase !== settingsToCheck.marketBase ||
+      currentSettings.analysisBase !== settingsToCheck.analysisBase ||
+      currentSettings.apiKey !== settingsToCheck.apiKey;
+    output.textContent = configurationChanged
+      ? "检查期间已保存的连接配置发生变化，旧错误已忽略，请使用当前配置重新检查。"
+      : "连接检查失败：" + errorMessage(error);
+    output.className = "settings-inline-status is-warning";
+  } finally {
+    if (generation === savedConnectionCheckGeneration) {
+      button.disabled = false;
+      button.textContent = "检查连接";
+    }
+  }
+}
+
+async function checkDraftConnectionFromSettings() {
+  const button = $("#settings-check-draft-connection");
+  const output = $("#settings-draft-connection-check");
+  const generation = ++draftConnectionCheckGeneration;
   const testedDraft = readConnectionDraft();
   let settingsToCheck = null;
   button.disabled = true;
@@ -1860,12 +1927,13 @@ async function checkConnectionFromSettings() {
   output.textContent = "正在测试表单中的行情与分析 API 地址；本次检查不会保存配置…";
   output.className = "settings-inline-status";
   try {
-    // 使用表单草稿而不是已保存设置；健康检查不保存草稿。
+    // 草稿检查只验证弹窗中的未保存配置，不写入全局设置。
     settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
     const [marketResult, analysisResult] = await Promise.all([
       runHealthCheck(marketHealth, settingsToCheck),
       runHealthCheck(analysisHealth, settingsToCheck)
     ]);
+    if (generation !== draftConnectionCheckGeneration || !$("#settings-dialog").open) return;
     const currentDraft = readConnectionDraft();
     const currentSettingsToCheck = mergeConnectionDraft(currentDraft, state.settings);
     if (
@@ -1874,26 +1942,16 @@ async function checkConnectionFromSettings() {
       currentSettingsToCheck.analysisBase !== settingsToCheck.analysisBase ||
       currentSettingsToCheck.apiKey !== settingsToCheck.apiKey
     ) {
-      output.textContent = "检查期间连接地址、API Key 或已保存配置发生变化，已忽略旧结果，请使用当前配置重新检查。";
+      output.textContent = "检查期间连接草稿或已保存配置发生变化，已忽略旧结果，请重新检查当前草稿。";
       output.className = "settings-inline-status is-warning";
       return;
     }
-    const marketState = serviceHealthState(marketResult);
-    const analysisState = serviceHealthState(analysisResult);
-    const describe = (name, result, status) => {
-      if (status === "healthy") return name + " API 就绪";
-      if (status === "failed") return name + " API 不可用（" + errorMessage(result.error) + "）";
-      if (status === "unknown") return name + " API 状态未知（回包未提供可识别的健康状态）";
-      return name + " API 返回需关注的状态（" + String(result.data?.status || "未知") + "）";
-    };
-    const marketMessage = describe("行情", marketResult, marketState);
-    const analysisMessage = describe("分析", analysisResult, analysisState);
-    output.textContent = "表单地址检查结果（尚未保存）：" + marketMessage + "；" + analysisMessage +
+    const summary = describeConnectionHealthResults(marketResult, analysisResult);
+    output.textContent = "表单地址检查结果（尚未保存）：" + summary.text +
       "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。";
-    output.className = marketState === "healthy" && analysisState === "healthy"
-      ? "settings-inline-status is-success"
-      : "settings-inline-status is-warning";
+    output.className = summary.className;
   } catch (error) {
+    if (generation !== draftConnectionCheckGeneration || !$("#settings-dialog").open) return;
     const currentDraft = readConnectionDraft();
     let configurationChanged = connectionDraftChanged(testedDraft, currentDraft);
     if (!configurationChanged && settingsToCheck) {
@@ -1906,18 +1964,18 @@ async function checkConnectionFromSettings() {
         configurationChanged = true;
       }
     }
-    if (configurationChanged) {
-      output.textContent = "检查期间连接地址、API Key 或已保存配置发生变化，旧错误已忽略，请使用当前配置重新检查。";
-      output.className = "settings-inline-status is-warning";
-      return;
-    }
-    output.textContent = "连接检查失败：" + errorMessage(error);
+    output.textContent = configurationChanged
+      ? "检查期间连接草稿或已保存配置发生变化，旧错误已忽略，请重新检查当前草稿。"
+      : "连接检查失败：" + errorMessage(error);
     output.className = "settings-inline-status is-warning";
   } finally {
-    button.disabled = false;
-    button.textContent = "重新检查";
+    if (generation === draftConnectionCheckGeneration && $("#settings-dialog").open) {
+      button.disabled = false;
+      button.textContent = "检查未保存配置";
+    }
   }
 }
+
 
 async function refreshSources() {
   const generation = ++sourceRefreshGeneration;
