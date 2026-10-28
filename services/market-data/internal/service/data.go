@@ -444,8 +444,8 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			return fmt.Errorf("limit-pool provider report date does not match requested trade date: requested=%s returned=%s", tradeDate, snapshot.ProviderReportDate)
 		}
 	}
-	if snapshot.Total < 0 || len(snapshot.Items) > limit {
-		return errors.New("limit-pool total is negative or item count exceeds requested limit")
+	if snapshot.Total < len(snapshot.Items) || snapshot.Total < 0 || len(snapshot.Items) > limit {
+		return errors.New("limit-pool total is negative/below returned items or item count exceeds requested limit")
 	}
 	if snapshot.HasData {
 		if snapshot.Total <= 0 || len(snapshot.Items) == 0 {
