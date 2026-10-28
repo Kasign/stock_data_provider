@@ -146,6 +146,130 @@ func TestTushareIndexConstituentsQueriesOnlyNewestAvailableMonth(t *testing.T) {
 	}
 }
 
+
+
+func TestTushareIndexConstituentsCountsUnsupportedRowsAtLatestReportDate(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().In(location)
+	date := today.Format("20060102")
+	monthStart, monthEnd := tushareTestMonthWindow(today, 0)
+	fields := []string{"index_code", "con_code", "trade_date", "weight"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		switch request.APIName {
+		case "index_weight":
+			if request.Params["index_code"] != "000300.SH" || request.Params["start_date"] != monthStart || request.Params["end_date"] != monthEnd {
+				t.Errorf("unexpected index_weight request params: %#v", request.Params)
+			}
+			writeTushareTestTable(w, fields, [][]any{
+				{"000300.SH", "510300.SH", date, 1.1},
+				{"000300.SH", "600519.SH", date, 3.5},
+				{"000300.SH", "600036.SH", date, 2.0},
+			})
+		case "stock_basic":
+			writeTushareTestTable(w, []string{"ts_code", "name"}, [][]any{
+				{"600519.SH", "贵州茅台"},
+				{"600036.SH", "招商银行"},
+			})
+		default:
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected api", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := provider.FetchIndexConstituents(context.Background(), "000300.SH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ProviderReportDate != today.Format("2006-01-02") || got.Total != 2 || got.ProviderReturned != 3 || got.ExcludedCount != 1 {
+		t.Fatalf("source/accepted/excluded counts must include unsupported rows: %+v", got)
+	}
+	if got.QualityStatus != model.QualityDegraded || len(got.Items) != 2 {
+		t.Fatalf("unsupported constituent rows must be excluded and disclosed: %+v", got)
+	}
+	found := false
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_unsupported_constituent_rows_excluded" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing unsupported-row quality reason: %v", got.QualityReasons)
+	}
+}
+
+func TestTushareIndexConstituentsDoesNotFallBackPastUnsupportedLatestReportDate(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().In(location)
+	currentStart, currentEnd := tushareTestMonthWindow(today, 0)
+	previousStart, previousEnd := tushareTestMonthWindow(today, 1)
+	previousMonthEnd := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, location).AddDate(0, 0, -1)
+	var weightStarts []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		switch request.APIName {
+		case "index_weight":
+			start := request.Params["start_date"]
+			weightStarts = append(weightStarts, start)
+			if start == currentStart {
+				rows := [][]any{{"000300.SH", "510300.SH", today.Format("20060102"), 1.0}}
+				if today.Day() > 1 {
+					rows = append(rows, []any{"000300.SH", "600519.SH", today.AddDate(0, 0, -1).Format("20060102"), 3.5})
+				}
+				writeTushareTestTable(w, []string{"index_code", "con_code", "trade_date", "weight"}, rows)
+			} else if start == previousStart {
+				if request.Params["end_date"] != previousEnd {
+					t.Errorf("previous month end = %q, want %q", request.Params["end_date"], previousEnd)
+				}
+				writeTushareTestTable(w, []string{"index_code", "con_code", "trade_date", "weight"}, [][]any{
+					{"000300.SH", "600519.SH", previousMonthEnd.Format("20060102"), 3.0},
+				})
+			} else {
+				t.Errorf("unexpected index_weight start date %q (current %q)", start, currentStart)
+				writeTushareTestTable(w, []string{"index_code", "con_code", "trade_date", "weight"}, [][]any{})
+			}
+		case "stock_basic":
+			t.Errorf("unsupported-only latest snapshot should not require name enrichment")
+			writeTushareTestTable(w, []string{"ts_code", "name"}, [][]any{{"600519.SH", "贵州茅台"}})
+		default:
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected api", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := provider.FetchIndexConstituents(context.Background(), "000300.SH")
+	if err != nil {
+		t.Fatalf("unsupported latest constituents should return an unknown snapshot for fallback: %v", err)
+	}
+	if len(weightStarts) != 1 || weightStarts[0] != currentStart {
+		t.Fatalf("provider must not silently fall back to an older report date, requested windows=%v", weightStarts)
+	}
+	if got.ProviderReportDate != today.Format("2006-01-02") || got.Total != 0 || got.ProviderReturned != 1 || got.ExcludedCount != 1 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("expected unknown snapshot with latest report date and excluded counts, got %+v", got)
+	}
+}
+
 func TestTushareIndexConstituentsFallsBackToPreviousMonth(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {

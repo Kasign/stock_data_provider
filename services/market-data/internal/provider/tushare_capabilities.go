@@ -1767,8 +1767,9 @@ func (p *Tushare) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 }
 
 type tushareWeightedConstituent struct {
-	symbol string
-	weight *float64
+	symbol   string
+	weight   *float64
+	excluded bool
 }
 
 // FetchIndexConstituents returns the most recent monthly weight snapshot available in four months.
@@ -1842,6 +1843,14 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 			}
 			constituent, symbolErr := normalize.NormalizeSymbol(constituentRaw)
 			if symbolErr != nil || !isTushareAShareSymbol(constituent) {
+				// 先按源端日期选择最新报告日，再记录不支持的证券；不能让过滤操作把报告日倒退。
+				if date > monthLatestDate {
+					monthLatestDate = date
+					monthLatest = monthLatest[:0]
+				}
+				if date == monthLatestDate {
+					monthLatest = append(monthLatest, tushareWeightedConstituent{excluded: true})
+				}
 				continue
 			}
 			weight, readErr := table.optionalFloat(row, "weight")
@@ -1875,6 +1884,23 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 			QualityReasons: appendTushareReason(reasons, "provider_has_no_constituent_snapshot_in_recent_four_months"),
 		}, nil
 	}
+	supportedCount := 0
+	for _, entry := range latest {
+		if !entry.excluded {
+			supportedCount++
+		}
+	}
+	if supportedCount == 0 {
+		// 最新源报告日有记录，但没有受支持的 A 股成分；保留日期与覆盖计数，交由服务层继续回退。
+		reasons = appendTushareReason(reasons, "provider_unsupported_constituent_rows_excluded")
+		reasons = appendTushareReason(reasons, "provider_latest_constituent_snapshot_has_no_supported_a_share_members")
+		return &model.IndexConstituentSnapshot{
+			IndexSymbol: indexSymbol, ProviderReportDate: latestDate, Items: []model.IndexConstituent{}, Total: 0,
+			ProviderReturned: len(latest), ExcludedCount: len(latest), Source: p.Name(),
+			SourceVersion: tushareIndexConstituentVersion, FetchedAt: now, QualityStatus: model.QualityUnknown,
+			QualityReasons: reasons,
+		}, nil
+	}
 	// index_weight gives constituent codes but not names; enrich in one stock_basic call.
 	basic, err := p.fetchCapabilityTable(ctx, "stock_basic", map[string]string{"list_status": "L"}, "ts_code,name")
 	if err != nil {
@@ -1905,6 +1931,11 @@ func (p *Tushare) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	seen := make(map[string]struct{}, len(latest))
 	excludedCount := 0
 	for _, entry := range latest {
+		if entry.excluded {
+			excludedCount++
+			reasons = appendTushareReason(reasons, "provider_unsupported_constituent_rows_excluded")
+			continue
+		}
 		if _, duplicate := seen[entry.symbol]; duplicate {
 			return nil, fmt.Errorf("Tushare 指数成分 %s 在最新快照中重复", entry.symbol)
 		}
