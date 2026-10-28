@@ -1,16 +1,17 @@
 # WebUI 产品功能扩展与实施任务清单
 
-更新时间：2026-10-27（PR #17 开放中；全站 Review 持续进行）
+更新时间：2026-10-28（WebUI 分支持续 Review；PR #17 已合并）
 目标仓库：Kasign/stock_data_provider
-当前 WebUI 分支：feat/webui-market-data-console（PR #17，尚未合并）
+唯一 WebUI 开发分支：feat/webui-market-data-console
 参考项目版本：ZhuLinsen/daily_stock_analysis，main = ec66bf46caf6993f673bd4be59c883754667b686
 
 ## 当前有效规划（2026-10-27；优先于下方历史任务记录）
 
 本轮重整目标是重新安排页面信息架构，**保留和强化现有数据能力**。模块可先完成 UI；缺少数据时必须准确显示“规划中/接口待接入”，不能使用 mock 行情。
 
-- 当前 WebUI 源码分支：`feat/webui-market-data-console`，当前变更由 PR #17 跟踪；PR #16 已关闭。
-- 本轮继续只修改 `web/**`，不创建新的 WebUI 分支、不重写提交父节点；集成分支有新提交时先检查改动路径是否与 `web/**` 重叠。
+- 唯一开发基线为 `feat/webui-market-data-console` 的最新远程 HEAD；后续修改只允许触及 `web/**`。
+- PR #17 已于 2026-10-28 合并，是历史交付记录；PR #16 已关闭且未合并。当前没有由 PR #17 跟踪的开放任务。
+- 不以其他分支为开发基础，不创建临时 WebUI 分支，不改写历史或重复迁移已完成内容。新任务优先直接在既有 WebUI 分支分组提交。
 - 页面逐项规格：[UI_LAYOUT_PLAN.md](./UI_LAYOUT_PLAN.md)。
 - 当前接口、缺失数据能力、服务诊断和建议后端任务：[DATA_CAPABILITY_GAPS.md](./DATA_CAPABILITY_GAPS.md)。
 - 实际路由与 API 语义：[API_CONTRACT.md](./API_CONTRACT.md)。

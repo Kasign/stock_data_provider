@@ -1,18 +1,17 @@
-## 2026-10-27 当前全站 Review 补充
+## 2026-10-28 WebUI 分支续接 Review
 
-- [x] 核对 PR #17、源分支和目标分支：继续在 `feat/webui-market-data-console` 开发，不重写父节点；当前 PR 保持未合并。
-- [x] 自选股空字符串/空白内容不会再被当作有效空列表，自选修改在异常状态下不调用写入。
-- [x] 最近任务历史增加存储可读性/数据有效性状态；损坏或部分损坏时，新增/移除阻止覆盖，界面不再显示为普通空列表。
-- [x] 浏览器数据导出在最近任务历史损坏/不可读时取消，避免生成看似完整但遗漏任务引用的备份。
-- [x] 增加对应单元测试与 UI 契约测试源码。
-- [ ] 新跟进提交的 GitHub Actions 待确认；不将此前提交的绿色结果错误套用到新 HEAD。
-- [ ] 实机验收主题、响应式、键盘导航、真实 API 与 NAS/1Panel 反向代理仍待统一执行。
+- [x] 复核当前唯一开发基线为 `feat/webui-market-data-console`；本次不切换到其他分支、不新建临时分支。
+- [x] 更正文档中的 PR #17 状态：PR #17 已合并，PR #16 已关闭且未合并；历史 PR 不再作为当前开发任务。
+- [x] 确认最近一次 WebUI 源分支 HEAD `859e0d0e1ec358dba4edd5e1803e5de90b12a3ee` 的 WebUI checks 与 Chromium smoke 成功；该结论仅对该 HEAD 有效。
+- [x] 最近任务/自选股存储异常保护及对应回归测试源码已补充。
+- [ ] 逐页核对请求取消/generation、旧响应覆盖、切换标的后的 Quote/MA/质量状态和 Task/Run 分析服务地址隔离。
+- [ ] 分区检查表单/对话框焦点、键盘导航、主题 Token、错误/空/未知状态与 CSS 断点；保持规则顺序，禁止一次性重写整个样式表。
+- [ ] 在真实浏览器统一验收深浅主题、320/375/600/768/900/1280/1600px、键盘/减少动态效果、真实 API 状态和 NAS/1Panel 反向代理。
+- [ ] 按当前约定不运行测试、构建、CI、浏览器自动化或 Provider 请求，除非用户后续明确要求。
 
-更新时间：2026-10-27  
 仓库：`Kasign/stock_data_provider`  
-当前工作分支：`feat/webui-market-data-console`；目标分支：`feat/full-go-data-providers-api-switch`。  
-PR #17 开放中、未合并；PR #16 已关闭。PR #17 原 HEAD 的 WebUI checks 与 Chromium browser smoke 已通过；本次新增提交需以自身 Actions 结果为准。历史 Review/Actions 结果仅适用于对应 HEAD。  
-范围：只修改 `web/`；不修改 Go、Provider、数据库、API 契约、根目录 Compose 或数据分支。
+唯一 WebUI 开发分支：`feat/webui-market-data-console`。  
+范围：只修改 `web/**`；不切换或处理其他分支。
 
 ## 2026-10-27 PR #14 合入后的新增区块可读性复核
 

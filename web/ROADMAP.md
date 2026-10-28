@@ -1,9 +1,8 @@
 # WebUI 产品路线图（当前有效版本）
 
-更新时间：2026-10-27（PR #14 已合入，后续分支进行 CSS 收尾）
-当前 WebUI 后续分支：`feat/webui-css-polish`
-集成目标分支：`feat/full-go-data-providers-api-switch`
-范围：WebUI 信息架构、排版、真实 API 接入依赖和验收路线。保持原生 HTML/CSS/JavaScript ES Modules，不复制参考项目的前端技术栈。
+更新时间：2026-10-28（WebUI 分支继续开发）
+唯一 WebUI 开发分支：`feat/webui-market-data-console`
+范围：仅 `web/**` 下的信息架构、排版、真实 API 接入状态与验收路线。保持原生 HTML/CSS/JavaScript ES Modules，不复制参考项目的前端技术栈。
 
 ## 当前有效文档
 

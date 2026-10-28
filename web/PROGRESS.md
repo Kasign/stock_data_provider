@@ -1,12 +1,11 @@
-## 2026-10-27 当前全站 Review（PR #17）
+## 2026-10-28 WebUI 续接状态（以 WebUI 分支为唯一基线）
 
-- 当前分支：`feat/webui-market-data-console`；目标分支：`feat/full-go-data-providers-api-switch`；PR #17 开放中、未合并，PR #16 已关闭。
-- 本轮不重建分支、不 rebase、不改动 Go/Provider/数据库/API 契约/Compose；目标分支新增提交落在数据服务和架构文档路径，没有与本次 WebUI 改动范围重叠。
-- 修正浏览器自选股空字符串被当作空数组的问题，并增加空白/非数组存储内容不覆盖原始数据的回归测试。
-- 修正最近任务历史在存储不可读、JSON 损坏或包含无法识别记录时被当作空列表的问题；读-改-写不会回写部分历史，导出不再静默遗漏损坏的任务记录。
-- 同步任务历史错误空态、导出保护、UI 契约与交接/进度/Review 文档的当前 PR 状态。
-- PR #17 原 HEAD `23a53c40f10351665673fb2373779e35bfb36cfb` 对应 WebUI checks 与 Chromium smoke 成功；跟进提交应查看自己的 Actions 结果。没有本地反复执行测试、构建或真实 Provider 请求。
-- 真实浏览器数据、深浅主题、键盘路径与 NAS/1Panel 部署仍待用户统一验收。
+- 唯一 WebUI 开发分支：`feat/webui-market-data-console`；本次开始时远程 HEAD 为 `859e0d0e1ec358dba4edd5e1803e5de90b12a3ee`。
+- 后续所有修改均从该 WebUI 分支最新远程 HEAD 开始，只修改 `web/**`；不切换到数据集成分支，不处理其他分支，不新建临时分支或重写历史。
+- PR #17 已于 2026-10-28 合并，是历史记录；PR #16 已关闭且未合并。不要再将 PR #17 标记为开放或当前开发任务。
+- WebUI 源分支原 HEAD `859e0d0e1ec358dba4edd5e1803e5de90b12a3ee` 的 WebUI checks 与 Chromium browser smoke 成功（对应 PR #17 的 Actions）；该结果只适用于该 HEAD。
+- 自选股和最近任务本地存储的读取异常、损坏数据及写入反馈保护已落地源码；相关测试源码已补充，但按协作约定本轮不运行自动化测试、构建、CI、浏览器自动化或真实 Provider 请求。
+- 本轮前端待办以文档状态收敛、跨页面请求/状态一致性 Review、CSS 分区维护与 Run Flow 人工验收准备为主；真实浏览器、深浅主题、键盘路径、真实 API 和 NAS/1Panel 验收仍待统一执行。
 
 # WebUI 实施进度
 
