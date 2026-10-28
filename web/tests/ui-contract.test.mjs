@@ -1435,22 +1435,20 @@ test("任务状态回包不能替换任务标的集合，Run 与任务复用同�
   assert.match(app, /任务状态接口返回的标的列表与当前任务不一致，已忽略/);
   assert.match(app, /function runResultSymbolMismatch\(result\)[\s\S]*?sameTaskSymbolSet\(expectedRaw, actualRaw\)/);
 });
-
-
 test("switching task context or analysis API endpoint resets the stage-event filter", () => {
   const contexts = [
-    ["recent task activation", "function activateTaskReference(record) {", "\\nfunction restoreLastTask("],
-    ["task creation", "async function createTask(event) {", "\\nfunction startAnalysisForSymbol("],
-    ["analysis API endpoint change", "function invalidateActiveTaskForAnalysisBaseChange(", "\\nfunction applySettings(")
+    ["recent task activation", "function activateTaskReference(record) {", "function restoreLastTask("],
+    ["task creation", "async function createTask(event) {", "function startAnalysisForSymbol("],
+    ["analysis API endpoint change", "function invalidateActiveTaskForAnalysisBaseChange(", "function applySettings("]
   ];
   for (const [label, startMarker, endMarker] of contexts) {
     const start = app.indexOf(startMarker);
-    const end = app.indexOf(endMarker.replaceAll("\\\\n", "\\n"), start + startMarker.length);
+    const end = app.indexOf(endMarker, start + startMarker.length);
     assert.ok(start >= 0 && end > start, label + " state-reset function must exist");
     const body = app.slice(start, end);
     assert.match(
       body,
-      /state\\.taskEvents\\.clear\\(\\);\\s*state\\.taskEventFilter = "all";\\s*state\\.taskEventsLoaded = false;/,
+      /state\.taskEvents\.clear\(\);\s*state\.taskEventFilter = "all";\s*state\.taskEventsLoaded = false;/,
       label + " must clear prior task events and restore the default filter"
     );
   }
