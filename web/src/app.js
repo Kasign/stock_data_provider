@@ -3478,6 +3478,10 @@ function openSettings() {
     : "连接配置仅保存在当前浏览器。";
   initialConnectionDraft = readConnectionDraft();
   syncConnectionDraftState();
+  $("#settings-check-draft-connection").disabled = false;
+  $("#settings-check-draft-connection").textContent = "检查未保存配置";
+  $("#settings-draft-connection-check").textContent = "尚未检查未保存配置。";
+  $("#settings-draft-connection-check").className = "settings-inline-status";
   $("#settings-dialog").showModal();
 }
 
@@ -3855,6 +3859,7 @@ $("#research-add-watchlist").addEventListener("click", () => {
 $("#research-start-analysis").addEventListener("click", () => startAnalysisForSymbol($("#symbol-input").value));
 $("#settings-open-connection").addEventListener("click", openSettings);
 $("#settings-check-connection").addEventListener("click", checkConnectionFromSettings);
+$("#settings-check-draft-connection").addEventListener("click", checkDraftConnectionFromSettings);
 $("#settings-view-data-sources").addEventListener("click", () => {
   setView("data");
 });
@@ -4022,6 +4027,10 @@ $("#toggle-market-key-visibility").addEventListener("click", () => {
   setMarketKeyVisibility($("#market-key-input").type === "password");
 });
 $("#settings-dialog").addEventListener("close", () => {
+  // 关闭弹窗后作废草稿检查结果；迟到的健康回包不能覆盖下一次打开的状态。
+  draftConnectionCheckGeneration += 1;
+  $("#settings-check-draft-connection").disabled = false;
+  $("#settings-check-draft-connection").textContent = "检查未保存配置";
   setMarketKeyVisibility(false);
   initialConnectionDraft = null;
   $("#save-settings").disabled = false;
