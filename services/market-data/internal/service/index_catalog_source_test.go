@@ -221,6 +221,40 @@ func TestIndexDailyBarsLegacyUnknownQualityCacheDoesNotBlockFallback(t *testing.
 	}
 }
 
+func TestIndexDailyBarsKeepsUnknownCandidateWithMoreFieldCoverage(t *testing.T) {
+	sparse := populatedIndexDailyBarsForFallbackTest("hithink")
+	sparse.QualityStatus = model.QualityUnknown
+	sparse.QualityReasons = []string{"provider_index_quality_unknown"}
+	sparse.Items[0].ChangePercent = nil
+	sparse.Items[0].Volume = nil
+	sparse.Items[0].VolumeUnit = "unknown"
+	sparse.Items[0].Amount = nil
+	sparse.Items[0].AmountUnit = "unknown"
+
+	full := populatedIndexDailyBarsForFallbackTest("tushare")
+	full.QualityStatus = model.QualityUnknown
+	full.QualityReasons = []string{"provider_index_quality_unknown"}
+	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: sparse}
+	second := &indexDailyBarsFallbackTestProvider{name: "tushare", snapshot: full}
+	failed := &indexDailyBarsFallbackTestProvider{name: "third-source", err: errors.New("test index endpoint unavailable")}
+	svc := &DataService{
+		cache: cache.NewDisabled(),
+		indexCatalogProviders: []provider.IndexCatalogProvider{first, second, failed},
+	}
+
+	got, hit, err := svc.IndexDailyBarsFromSource(context.Background(), "000300.SH", "2026-10-20", "2026-10-23", "")
+	if err != nil || hit {
+		t.Fatalf("IndexDailyBarsFromSource returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.QualityStatus != model.QualityUnknown ||
+		len(got.Items) != 1 || got.Items[0].Volume == nil || got.Items[0].Amount == nil || got.Items[0].ChangePercent == nil {
+		t.Fatalf("expected the more complete unknown daily-bars candidate, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 || failed.calls != 1 {
+		t.Fatalf("expected all providers to be tried, calls=%d/%d/%d", first.calls, second.calls, failed.calls)
+	}
+}
+
 func TestIndexDailyBarsCachesUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: unknownIndexDailyBarsForFallbackTest("hithink")}
 	second := &indexDailyBarsFallbackTestProvider{name: "tushare", err: errors.New("test endpoint unavailable")}

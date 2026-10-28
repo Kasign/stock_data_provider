@@ -320,7 +320,7 @@ func (s *DataService) IndexCatalog(ctx context.Context, rawTag string) (*model.I
 			continue
 		}
 		if snapshot.QualityStatus == model.QualityUnknown {
-			if unknownCandidate == nil || len(snapshot.Items) > len(unknownCandidate.Items) {
+			if betterUnknownIndexDailyBarsSnapshot(snapshot, unknownCandidate) {
 				unknownCandidate = snapshot
 			}
 			if len(snapshot.Items) == 0 {
@@ -469,6 +469,54 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 
 func (s *DataService) IndexDailyBars(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate string) (*model.IndexDailyBarsSnapshot, bool, error) {
 	return s.IndexDailyBarsFromSource(ctx, rawIndexSymbol, rawStartDate, rawEndDate, "")
+}
+
+// betterUnknownIndexDailyBarsSnapshot 在回退耗尽后优先保留日 K 条目数相同但成交量、成交额、涨跌幅更完整的快照。
+func betterUnknownIndexDailyBarsSnapshot(candidate, current *model.IndexDailyBarsSnapshot) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	coverage := func(snapshot *model.IndexDailyBarsSnapshot) int {
+		count := 0
+		for _, item := range snapshot.Items {
+			if item.ChangePercent != nil {
+				count++
+			}
+			if item.Volume != nil {
+				count++
+			}
+			if item.Amount != nil {
+				count++
+			}
+			if item.ProviderTime != nil {
+				count++
+			}
+		}
+		if snapshot.ProviderTime != nil {
+			count++
+		}
+		return count
+	}
+	left, right := coverage(candidate), coverage(current)
+	if left != right {
+		return left > right
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime == nil {
+		return true
+	}
+	if candidate.ProviderTime == nil && current.ProviderTime != nil {
+		return false
+	}
+	if candidate.ProviderTime != nil && current.ProviderTime != nil && !candidate.ProviderTime.Equal(*current.ProviderTime) {
+		return candidate.ProviderTime.After(*current.ProviderTime)
+	}
+	return false
 }
 
 func (s *DataService) IndexDailyBarsFromSource(ctx context.Context, rawIndexSymbol, rawStartDate, rawEndDate, rawSource string) (*model.IndexDailyBarsSnapshot, bool, error) {
