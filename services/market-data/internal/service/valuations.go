@@ -77,8 +77,9 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 			return fmt.Errorf("valuation provider returned duplicate symbol %q", symbol)
 		}
 		seen[symbol] = struct{}{}
-		if item.Code != strings.Split(symbol, ".")[0] || strings.TrimSpace(item.Source) == "" || item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-			return fmt.Errorf("valuation item %s has inconsistent identity/source metadata", symbol)
+		if item.Code != strings.Split(symbol, ".")[0] || strings.TrimSpace(item.Source) == "" ||
+			item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+			return fmt.Errorf("valuation item %s has inconsistent identity/source/version metadata", symbol)
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("valuation item %s has unsupported quality %q", symbol, item.QualityStatus)

@@ -166,6 +166,24 @@ func TestValuationsPrefersUnknownSnapshotWithMoreExtendedMetrics(t *testing.T) {
 	}
 }
 
+func TestValuationsRejectsItemSourceVersionMismatchAndFallsBack(t *testing.T) {
+	mismatched := validValuationsForFallbackTest("eastmoney")
+	mismatched.Items[0].SourceVersion = "old-version"
+	first := &valuationFallbackTestProvider{name: "eastmoney", snapshot: mismatched}
+	second := &valuationFallbackTestProvider{name: "tushare", snapshot: validValuationsForFallbackTest("tushare")}
+
+	got, hit, err := valuationFallbackService(first, second).Valuations(context.Background(), []string{"600519.SH"})
+	if err != nil || hit {
+		t.Fatalf("Valuations returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tushare" || got.Items[0].SourceVersion != got.SourceVersion {
+		t.Fatalf("expected fallback to a source-version-consistent snapshot, got %+v", got)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected version mismatch to trigger fallback, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
 func TestValuationsReturnsUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 	first := &valuationFallbackTestProvider{name: "eastmoney", snapshot: unknownValuationsForFallbackTest("eastmoney")}
 	second := &valuationFallbackTestProvider{name: "tushare", err: errors.New("test provider unavailable")}
