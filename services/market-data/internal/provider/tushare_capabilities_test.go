@@ -241,6 +241,11 @@ func TestTushareValuationKeepsStaticPESeparateFromMRQ(t *testing.T) {
 			if request.Params["trade_date"] != tradeDate {
 				t.Errorf("daily_basic trade_date = %q, want %q", request.Params["trade_date"], tradeDate)
 			}
+			for _, field := range []string{"turnover_rate", "turnover_rate_f", "volume_ratio", "dv_ratio", "dv_ttm"} {
+				if !strings.Contains(","+request.Fields+",", ","+field+",") {
+					t.Errorf("daily_basic request fields %q do not include %q", request.Fields, field)
+				}
+			}
 			writeTushareTestTable(w, []string{
 				"ts_code", "trade_date", "pe", "pe_ttm", "pb", "ps_ttm",
 				"turnover_rate", "turnover_rate_f", "volume_ratio", "dv_ratio", "dv_ttm",

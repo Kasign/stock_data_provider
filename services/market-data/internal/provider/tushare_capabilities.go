@@ -24,7 +24,7 @@ const (
 	tushareStockBasicVersion   = "tushare-stock-basic-v1"
 	tushareCalendarVersion     = "tushare-trade-calendar-v1"
 	tushareFundamentalsVersion = "tushare-fina-indicator-v1"
-	tushareValuationVersion    = "tushare-daily-basic-v1"
+	tushareValuationVersion    = "tushare-daily-basic-v2"
 )
 
 // tushareTable 为 Tushare Pro 的通用字段/行响应提供按列名读取能力。
