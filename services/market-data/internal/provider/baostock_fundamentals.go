@@ -143,9 +143,19 @@ func (p *Baostock) FetchFundamentals(ctx context.Context, rawSymbol string, year
 		}
 		section.ReportDate, section.PublicationDate = record.ReportDate, record.PublicationDate
 		degraded := false
-		if _, dateErr := time.Parse("2006-01-02", record.PublicationDate); dateErr != nil {
+		publicationDate := strings.TrimSpace(record.PublicationDate)
+		if _, dateErr := time.Parse("2006-01-02", publicationDate); dateErr != nil {
 			degraded = true
 			section.QualityReasons = append(section.QualityReasons, "publication_date_missing_or_invalid")
+		} else {
+			loc, locErr := time.LoadLocation("Asia/Shanghai")
+			if locErr != nil {
+				loc = time.FixedZone("CST", 8*60*60)
+			}
+			chinaToday := time.Now().In(loc).Format("2006-01-02")
+			if publicationDate > chinaToday {
+				return nil, fmt.Errorf("BaoStock %s publication date %s is after China market date %s", mapping.Category, publicationDate, chinaToday)
+			}
 		}
 		for _, metric := range mapping.Fields {
 			raw := strings.TrimSpace(record.Fields[metric.SourceField])
