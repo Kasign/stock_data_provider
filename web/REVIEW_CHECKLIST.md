@@ -2,7 +2,7 @@
 
 - [x] 复核当前唯一开发基线为 `feat/webui-market-data-console`；本次不切换到其他分支、不新建临时分支。
 - [x] 更正文档中的 PR #17 状态：PR #17 已合并，PR #16 已关闭且未合并；历史 PR 不再作为当前开发任务。
-- [x] 确认最近一次 WebUI 源分支 HEAD `859e0d0e1ec358dba4edd5e1803e5de90b12a3ee` 的 WebUI checks 与 Chromium smoke 成功；该结论仅对该 HEAD 有效。
+- [x] 确认 PR #17 合并前源分支 HEAD `859e0d0e1ec358dba4edd5e1803e5de90b12a3ee` 的 WebUI checks 与 Chromium smoke 成功；该结论仅对该 HEAD 有效，不覆盖后续续接提交。
 - [x] 最近任务/自选股存储异常保护及对应回归测试源码已补充。
 - [ ] 逐页核对请求取消/generation、旧响应覆盖、切换标的后的 Quote/MA/质量状态和 Task/Run 分析服务地址隔离。
 - [ ] 分区检查表单/对话框焦点、键盘导航、主题 Token、错误/空/未知状态与 CSS 断点；保持规则顺序，禁止一次性重写整个样式表。
