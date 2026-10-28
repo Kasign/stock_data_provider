@@ -1,5 +1,5 @@
 import { getCapitalFlow, getChipDistribution, getMarketValuations, getStockAnnouncements, getStockBoards, getStockFundamentals, getStockProfile } from "./api.js";
-import { describeApiError, formatDateTime, formatPercent, qualityLabel } from "./format.js";
+import { describeApiError, formatDateTime, formatPercent, normalizeSymbol, qualityLabel } from "./format.js";
 const $=(s)=>document.querySelector(s);
 const QUALITY=["valid","degraded","stale","invalid","unknown"];
 const CATEGORY={profitability:"盈利能力",operating:"营运能力",growth:"成长能力",solvency:"偿债能力",cash_flow:"现金流",dupont:"杜邦分析"};
@@ -23,6 +23,18 @@ function formatNumber(value){if(value===null||value===undefined||value===""||!Nu
 function responseError(err){if(Number(err?.status)===404)return "当前部署的 market-data 尚未提供该接口，请更新数据服务版本。";if(Number(err?.status)===503)return "对应数据源未启用或未配置，请检查 market-data 的 Provider 配置。";return describeApiError(err,"请求失败。");}
 function safeAnnouncementUrl(raw){try{const url=new URL(String(raw||""));return url.protocol==="https:"&&(url.hostname==="eastmoney.com"||url.hostname.endsWith(".eastmoney.com"))?url.href:"";}catch{return "";}}
 function currentYearAndQuarter(){const now=new Date();let year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3);if(quarter===0){year-=1;quarter=4;}return {year,quarter};}
+function normalizeValuationSymbol(input) {
+ const value=normalizeSymbol(input);
+ if(value.includes("."))return value;
+ if(value.startsWith("6"))return value+".SH";
+ if(/^[03]/.test(value))return value+".SZ";
+ if(/^(?:[48]\d{5}|92\d{4})$/.test(value))return value+".BJ";
+ throw new Error("无法从该六位代码判断交易所，请输入带 .SH、.SZ 或 .BJ 后缀的 A 股代码。");
+}
+function sameValuationSymbol(left,right) {
+ try{return normalizeValuationSymbol(left)===normalizeValuationSymbol(right);}
+ catch{return false;}
+}
 export function bindStockResearch(getSettings,getSymbol){
  const state={symbol:"",generation:{profile:0,boards:0,fundamentals:0,announcements:0,valuations:0,chip:0,capitalFlow:0},controllers:{},requested:new Set(),announcementPage:0,announcementHasMore:false,announcementLoading:false,loadResearchGeneration:0};
  function resolvedSymbol(){try{return String(getSymbol?.()||"").trim();}catch{return "";}}
@@ -212,7 +224,7 @@ export function bindStockResearch(getSettings,getSymbol){
  }
  async function loadValuations(){
   return runSupplementRequest("#load-valuations","读取估值指标","valuations",
-   (settings,sym,signal)=>getMarketValuations(settings,[sym],signal),renderValuations,
+   (settings,sym,signal)=>getMarketValuations(settings,[normalizeValuationSymbol(sym)],signal),renderValuations,
    "估值快照已返回；请同时参考每只股票质量、供应商时间及缺失指标。");
  }
  function renderValuations(data,symbol){
@@ -221,8 +233,8 @@ export function bindStockResearch(getSettings,getSymbol){
   setQuality("valuations-quality",data.quality_status);
   const root=$("#valuation-content");root.replaceChildren();
   const items=Array.isArray(data.items)?data.items.filter(item=>item&&typeof item==="object"):[];
-  const targetSymbol=requestedSymbol.toUpperCase();
-  const item=items.find(value=>String(value.symbol||"").trim().toUpperCase()===targetSymbol);
+  const targetSymbol=normalizeValuationSymbol(requestedSymbol);
+  const item=items.find(value=>sameValuationSymbol(value.symbol,targetSymbol));
   if(!item){
    const message=items.length
     ?"估值接口返回的证券代码与当前标的不匹配，已忽略这些记录。"

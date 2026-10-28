@@ -1105,11 +1105,17 @@ test("最近任务本地存储不可读或损坏时不覆盖原始历史，导�
 });
 
 
-test("估值响应只展示与当前请求标的匹配的记录", () => {
+test("估值请求补齐交易所后缀，并只展示与当前标的匹配的记录", () => {
   const renderer = stockResearch.match(/function renderValuations\(data,symbol\)\{[\s\S]*?\n \}\n function fractionPercent/)?.[0] || "";
   assert.ok(renderer, "估值渲染器应存在");
+  assert.match(stockResearch, /function normalizeValuationSymbol\(input\)/);
+  assert.ok(stockResearch.includes('if(value.startsWith("6"))return value+".SH";'));
+  assert.ok(stockResearch.includes('if(/^[03]/.test(value))return value+".SZ";'));
+  assert.ok(stockResearch.includes('return value+".BJ";'));
+  assert.ok(stockResearch.includes("getMarketValuations(settings,[normalizeValuationSymbol(sym)],signal)"));
   assert.match(renderer, /const requestedSymbol=String\(symbol\|\|data\.requested_symbols\?\.\[0\]\|\|"\)\.trim\(\)/);
-  assert.match(renderer, /items\.find\(value=>String\(value\.symbol\|\|""\)\.trim\(\)\.toUpperCase\(\)===targetSymbol\)/);
+  assert.match(renderer, /const targetSymbol=normalizeValuationSymbol\(requestedSymbol\)/);
+  assert.match(renderer, /items\.find\(value=>sameValuationSymbol\(value\.symbol,targetSymbol\)\)/);
   assert.doesNotMatch(renderer, /items\[0\]/, "目标股票未匹配时不得退回展示列表第一条记录");
   assert.match(renderer, /估值接口返回的证券代码与当前标的不匹配，已忽略这些记录/);
 });

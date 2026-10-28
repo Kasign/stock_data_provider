@@ -274,7 +274,7 @@ Phase 1 仍使用已有接口 `GET /api/v1/analysis/tasks/{task_id}`、`GET /api
 
 当前数据分支 `feat/full-go-data-providers-api-switch` 的 `services/market-data/internal/httpapi/server.go` 已注册此路由，响应定义可见 Go 模型 `ValuationSnapshot` / `ValuationItem`；数据分支已在提交 [`c37270a`](https://github.com/Kasign/stock_data_provider/commit/c37270a41a593488767982e5da819d99ba9f2189) 中补齐该路由及 `ValuationSnapshot` / `ValuationItem` Schema，同时修复了 `SourceStatus` 声明并补齐相关 Provider 能力字段。旧部署仍可能返回 404；无启用估值 Provider 时会返回 503。旧部署可能返回 404，前端会提示更新 market-data；无启用估值 Provider 时会显示服务端 503，不伪造指标。
 
-响应快照包含 `requested_symbols`、`total`、`items`、可选 `missing_symbols`、可选 `provider_timestamp`、`source`、`fetched_at`、`quality_status` 和质量原因。每只股票的指标字段为 `pe_ttm`、`pe_mrq`、`pb_mrq`、`ps_ttm`、`pcf_ttm`，可以为 null 或负数；前端保留该语义，不补零，不据此生成买卖信号。
+响应快照包含 `requested_symbols`、`total`、`items`、可选 `missing_symbols`、可选 `provider_timestamp`、`source`、`fetched_at`、`quality_status` 和质量原因。 WebUI 允许既有输入框中的纯六位代码用于查询；调用估值接口前，对可识别的 A 股代码补齐交易所后缀（6 开头补 `.SH`，0/3 开头补 `.SZ`，4/8/92 开头补 `.BJ`），已带后缀的代码保持不变。无法从代码前缀可靠识别交易所时，前端提示用户输入后缀，不发送猜测的估值请求。每只股票的指标字段为 `pe_ttm`、`pe_mrq`、`pb_mrq`、`ps_ttm`、`pcf_ttm`，可以为 null 或负数；前端保留该语义，不补零，不据此生成买卖信号。
 
 
 ## 个股筹码分布与资金流 API
