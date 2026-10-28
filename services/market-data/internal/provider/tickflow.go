@@ -771,6 +771,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 		partialCoverage bool
 	}
 	industries := make([]industryValue, 0, len(industrySymbols))
+	industriesWithoutUsableChanges := 0
 	for name, symbols := range industrySymbols {
 		value := industryValue{id: industryIDs[name], name: name}
 		for symbol := range symbols {
@@ -806,6 +807,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 			}
 		}
 		if value.changeCount == 0 {
+			industriesWithoutUsableChanges++
 			continue
 		}
 		industries = append(industries, value)
@@ -834,6 +836,11 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	}
 	if timestampIncomplete {
 		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, "one_or_more_quote_timestamps_missing_or_invalid")
+	}
+	if industriesWithoutUsableChanges > 0 {
+		snapshot.QualityReasons = appendTickflowUniqueReason(
+			snapshot.QualityReasons, "one_or_more_industries_omitted_without_valid_constituent_quote_changes",
+		)
 	}
 	for i, item := range industries {
 		if i >= limit {

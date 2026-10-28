@@ -721,3 +721,8 @@ Review 发现旧实现将最近四个月的 `index_weight` 记录放在单次请
 - `GET /api/v1/market/sectors` 新增 `direction=up|down`，默认 `up` 保持旧调用兼容。东方财富按 `f3` 涨跌幅请求 `po=1/0` 并在服务端稳定排序；返回快照显式带 `direction`，缓存键按方向区分。
 - 新增可选 `DirectionalSectorRankingProvider`，不要求现有 Provider 全部同步实现。TickFlow SW1 仅在能获得完整行业候选集合时提供领跌榜；若返回候选被截断，会报错并触发后备源，而不会将领涨前 N 项反向冒充领跌榜。TickFlow 结果仍是成分股平均涨跌幅估算并保持 degraded。
 - 已补方向排序与服务契约测试源码；本轮未运行测试、构建、CI 或真实 Provider 请求。
+
+
+### TickFlow SW1 行业榜整行业缺失质量说明（2026-10-28）
+
+若某个 SW1 行业的所有成分股都缺少有效最新价/昨收价，估算榜会保留全集 `total`，跳过无法计算涨跌幅的行业，并新增 `one_or_more_industries_omitted_without_valid_constituent_quote_changes` 质量原因。此前仅对至少有一条可计算成分股的行业附加部分覆盖原因，无法显式说明整行业被跳过。新增测试源码覆盖该边界，未运行测试、构建、CI 或真实 Provider 请求。
