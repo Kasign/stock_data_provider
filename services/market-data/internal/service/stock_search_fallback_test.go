@@ -51,6 +51,14 @@ func populatedStockSearchForFallbackTest(source string) *model.StockSearchSnapsh
 	}
 }
 
+func TestStockSearchRejectsMissingSourceVersion(t *testing.T) {
+	snapshot := populatedStockSearchForFallbackTest("eastmoney")
+	snapshot.SourceVersion = ""
+	if err := validateStockSearchSnapshot("贵州茅台", 10, snapshot); err == nil {
+		t.Fatal("stock-search snapshot without source version must be rejected")
+	}
+}
+
 func TestStockSearchFallsBackAfterUnknownEmptyMatch(t *testing.T) {
 	first := &stockSearchFallbackTestProvider{name: "eastmoney", snapshot: unknownStockSearchForFallbackTest("eastmoney")}
 	second := &stockSearchFallbackTestProvider{name: "tencent", snapshot: populatedStockSearchForFallbackTest("tencent")}

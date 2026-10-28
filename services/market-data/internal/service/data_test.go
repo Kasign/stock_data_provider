@@ -973,6 +973,19 @@ func TestQuoteCacheRejectsLegacyUnverifiedTencentVolume(t *testing.T) {
 }
 
 
+func TestValidateMarketBreadthRequiresSourceVersion(t *testing.T) {
+	amount := 100.0
+	snapshot := &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+		AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1, AmountCoverageCount: 3,
+		TotalAmountCNY: &amount, ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
+		Source: "eastmoney", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+	}
+	if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("market-breadth snapshot without source version must be rejected, got %v", err)
+	}
+}
+
 func TestValidateMarketBreadthRequiresDegradedQualityForPartialAmountCoverage(t *testing.T) {
 	snapshot := &model.MarketBreadthSnapshot{
 		Market:              "cn_a_share",
@@ -984,6 +997,7 @@ func TestValidateMarketBreadthRequiresDegradedQualityForPartialAmountCoverage(t 
 		AmountCoverageCount: 2,
 		ProviderReportDate:  "2026-10-23",
 		Source:              "eastmoney",
+		SourceVersion:       "test-v1",
 		FetchedAt:           time.Now().UTC(),
 		QualityStatus:       model.QualityValid,
 	}
@@ -1212,7 +1226,7 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 			Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
 			AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
 			TotalAmountCNY: &amount, AmountCoverageCount: 3,
-			ProviderReportDate: "2026-10-23", Source: "eastmoney", FetchedAt: now,
+			ProviderReportDate: "2026-10-23", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityValid,
 			QualityReasons: []string{"market_amount_quotes_collected_non_atomically"},
 		}
@@ -1388,17 +1402,28 @@ func (p *stockBasicFakeProvider) FetchStockBasic(context.Context, string) (*mode
 	return p.item, nil
 }
 
+func TestValidateStockBasicRequiresSourceVersion(t *testing.T) {
+	item := &model.StockBasic{
+		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded, NormalizationVer: normalize.Version,
+	}
+	if err := validateStockBasic("600519.SH", item); err == nil || !strings.Contains(err.Error(), "source_version") {
+		t.Fatalf("stock-basic item without source version must be rejected, got %v", err)
+	}
+}
+
 func TestStockBasicFallsBackFromUnknownQualityProvider(t *testing.T) {
 	now := time.Now().UTC()
 	first := &stockBasicFakeProvider{name: "eastmoney", item: &model.StockBasic{
 		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
-		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", FetchedAt: now,
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 		QualityStatus: model.QualityUnknown, NormalizationVer: normalize.Version,
 	}}
 	marketCap := 2000000000000.0
 	second := &stockBasicFakeProvider{name: "tushare", item: &model.StockBasic{
 		Symbol: "600519.SH", Name: "贵州茅台", SecurityType: 1, SecurityTypeLabel: "stock",
-		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", FetchedAt: now,
+		ListingStatus: 1, ListingStatusLabel: "listed", Source: "tushare", SourceVersion: "test-v1", FetchedAt: now,
 		MarketCapCNY: &marketCap, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"}, NormalizationVer: normalize.Version,
 	}}
@@ -1425,7 +1450,7 @@ func TestStockBasicRetainsUnknownAfterFallbackExhaustion(t *testing.T) {
 			Symbol: "600519.SH", Name: "贵州茅台",
 			SecurityType: 1, SecurityTypeLabel: "stock",
 			ListingStatus: 1, ListingStatusLabel: "listed",
-			Source: "eastmoney", FetchedAt: now,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 			QualityStatus: model.QualityUnknown,
 			NormalizationVer: normalize.Version,
 		},

@@ -330,8 +330,8 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 			return errors.New("partial market-breadth amount coverage cannot have valid quality")
 		}
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("market-breadth source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("market-breadth source, source_version or fetched_at is missing")
 	}
 	reportDate := strings.TrimSpace(snapshot.ProviderReportDate)
 	parsedReportDate, reportDateErr := time.Parse("2006-01-02", reportDate)
@@ -1069,6 +1069,9 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 	if strings.TrimSpace(item.Source) == "" {
 		return errors.New("stock-basic source is missing")
 	}
+	if strings.TrimSpace(item.SourceVersion) == "" {
+		return errors.New("stock-basic source_version is missing")
+	}
 	if item.FetchedAt.IsZero() {
 		return errors.New("stock-basic fetched_at is missing")
 	}
@@ -1342,8 +1345,8 @@ func validateStockSearchSnapshot(query string, limit int, snapshot *model.StockS
 	if strings.TrimSpace(snapshot.Query) != query {
 		return errors.New("stock-search query mismatch")
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("stock-search source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("stock-search source, source_version or fetched_at is missing")
 	}
 	if snapshot.Total < 0 || snapshot.Total < len(snapshot.Items) || len(snapshot.Items) > limit {
 		return errors.New("stock-search total or item count is invalid")
