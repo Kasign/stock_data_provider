@@ -123,6 +123,8 @@ const state = {
   technicalRows: [],
   technicalSymbol: "",
   chartMeta: { adjustmentBasis: "unknown", volumeUnit: "", amountUnit: "", qualityStatus: "unknown" },
+  // 当前任务选择代际用于隔离创建请求的晚到响应。
+  taskContextGeneration: 0,
   taskId: "",
   runId: "",
   taskAnalysisBase: "",
@@ -3030,6 +3032,8 @@ async function createTask(event) {
   const requestAnalysisBase = state.settings.analysisBase;
   const requestAnalysisGeneration = state.analysisConnectionGeneration;
   const requestSettings = { ...state.settings, analysisBase: requestAnalysisBase };
+  state.taskContextGeneration += 1;
+  const creationContextGeneration = state.taskContextGeneration;
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = "";
@@ -3082,6 +3086,32 @@ async function createTask(event) {
       }
       return;
     }
+    // 创建请求等待期间可能切换到历史任务；晚到的有效结果只保留引用，不接管当前页面。
+    if (creationContextGeneration !== state.taskContextGeneration) {
+      if (typeof task?.task_id === "string" && task.task_id.trim()) {
+        const endpointRecord = {
+          task_id: task.task_id,
+          run_id: task.run_id || "",
+          created_at: typeof task.created_at === "string" ? task.created_at : "",
+          symbols: Array.isArray(task.symbols) ? task.symbols : symbols,
+          task_type: task.task_type || taskType,
+          status: task.status || "",
+          updated_at: new Date().toISOString(),
+          analysis_base: requestAnalysisBase
+        };
+        try { renderRecentTasks(upsertRecentTask(endpointRecord, localStorage)); } catch { renderRecentTasks(); }
+        setRecentTasksFeedback(
+          "新建任务已创建，但提交期间当前任务已切换。新任务已保存到最近分析列表；当前选中的任务不会被覆盖。",
+          "warning"
+        );
+        feedback.hidden = false;
+        feedback.textContent = "新建任务 " + task.task_id + " 已创建并保存到最近分析列表；页面继续跟踪当前选中的任务。";
+      } else {
+        feedback.hidden = false;
+        feedback.textContent = "提交期间当前任务已切换，但新建任务响应没有有效 task_id，无法安全绑定或记录。请核实服务端任务记录，避免盲目重复提交。";
+      }
+      return;
+    }
     if (!task || typeof task.task_id !== "string" || !task.task_id.trim()) {
       const error = new Error("分析服务返回成功响应，但缺少有效 task_id，无法确认任务是否已创建。请检查服务端任务记录后再决定是否重试，避免盲目重复提交。");
       error.creationOutcomeUnknown = true;
@@ -3105,6 +3135,13 @@ async function createTask(event) {
       void loadTaskRunResult(task.run_id || state.runId, task.task_id);
     }
   } catch (error) {
+    if (creationContextGeneration !== state.taskContextGeneration) {
+      feedback.hidden = false;
+      feedback.textContent = requestAnalysisGeneration !== state.analysisConnectionGeneration || requestAnalysisBase !== state.settings.analysisBase
+        ? "提交期间分析 API 地址已变化且当前任务上下文已切换，无法确认旧连接是否创建了任务：" + errorMessage(error) + "。请核实旧服务后再决定是否重试。"
+        : "提交期间当前任务已切换；本次创建失败或结果未知，没有覆盖当前任务界面：" + errorMessage(error);
+      return;
+    }
     $("#task-empty").hidden = false;
     $("#task-detail").hidden = true;
     feedback.hidden = false;
@@ -3152,6 +3189,7 @@ function activateTaskReference(record) {
   }
   state.suppressedHistoryTaskId = "";
   state.suppressedHistoryTaskBase = "";
+  state.taskContextGeneration += 1;
   state.runResultGeneration += 1;
   stopTaskPolling();
   state.taskId = record.task_id;
@@ -3277,6 +3315,7 @@ function closeSettingsWithGuard() {
 }
 
 function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
+  state.taskContextGeneration += 1;
   state.analysisConnectionGeneration += 1;
   state.runResultGeneration += 1;
   stopTaskPolling();

@@ -126,6 +126,22 @@ test("task polling errors mark last-known status stale and successful refresh cl
   assert.ok(manualRefresh.includes("state.taskEventsUnavailable = false") && manualRefresh.includes("pollTask(generation)"), "手动刷新重新尝试任务与事件读取");
 });
 
+test("late task creation responses cannot replace the task selected while submission is pending", () => {
+  assert.ok(app.includes("taskContextGeneration: 0"), "task selection context has its own generation");
+  const createStart = app.indexOf("async function createTask(event) {");
+  const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
+  const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
+  assert.match(creator, /state\.taskContextGeneration \+= 1;\s*const creationContextGeneration = state\.taskContextGeneration;/);
+  assert.match(creator, /if \(creationContextGeneration !== state\.taskContextGeneration\) \{[\s\S]*?upsertRecentTask\(endpointRecord, localStorage\)[\s\S]*?当前选中的任务不会被覆盖/);
+  assert.match(creator, /catch \(error\) \{\s*if \(creationContextGeneration !== state\.taskContextGeneration\)/, "late create errors must not hide the currently selected task");
+  const activateStart = app.indexOf("function activateTaskReference(record) {");
+  const activateEnd = app.indexOf("\nfunction restoreLastTask(", activateStart);
+  assert.match(app.slice(activateStart, activateEnd), /state\.taskContextGeneration \+= 1;/);
+  const invalidateStart = app.indexOf("function invalidateActiveTaskForAnalysisBaseChange(");
+  const invalidateEnd = app.indexOf("\nfunction applySettings(", invalidateStart);
+  assert.match(app.slice(invalidateStart, invalidateEnd), /state\.taskContextGeneration \+= 1;/);
+});
+
 test("polling pauses on permanent API errors and Run reads use bounded, stale-safe retries", () => {
   assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTask\(generation\), 5000\);/);
   assert.match(app, /const RUN_RESULT_RETRY_DELAYS_MS = \[1000, 2500, 5000\]/);
