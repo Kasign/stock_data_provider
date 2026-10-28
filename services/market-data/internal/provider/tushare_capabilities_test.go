@@ -639,6 +639,31 @@ func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 			t.Fatalf("expected usable statement section %q", category)
 		}
 	}
+		// 字段清单来自 Tushare 三张报表接口；fixture 对每个请求字段返回数值，验证扩展字段没有丢失。
+		for _, expectedMetric := range []struct {
+			category string
+			key      string
+		}{
+			{category: "income_statement", key: "ebitda"},
+			{category: "balance_sheet", key: "total_liabilities_and_equity"},
+			{category: "cash_flow_statement", key: "free_cash_flow"},
+		} {
+			found := false
+			for _, section := range snapshot.Sections {
+				if section.Category != expectedMetric.category {
+					continue
+				}
+				for _, metric := range section.Metrics {
+					if metric.Key == expectedMetric.key && metric.SourceField != "" {
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				t.Fatalf("expected extended statement metric %s.%s to be mapped", expectedMetric.category, expectedMetric.key)
+			}
+		}
 }
 
 func TestTushareIndexDailyBarsDegradesMissingProviderTimestamp(t *testing.T) {
