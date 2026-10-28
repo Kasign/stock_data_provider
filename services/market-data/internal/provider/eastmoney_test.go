@@ -29,6 +29,11 @@ func TestEastmoneyQuoteNormalizesUnitsAndProviderTime(t *testing.T) {
 	if *q.CurrentPrice != 1313.31 {
 		t.Fatalf("price=%v", *q.CurrentPrice)
 	}
+	wantChange := *q.CurrentPrice - *q.PrevClose
+	wantChangePercent := wantChange / *q.PrevClose * 100
+	if q.Change == nil || *q.Change != wantChange || q.ChangePercent == nil || *q.ChangePercent != wantChangePercent {
+		t.Fatalf("change fields must be canonical: %+v", q)
+	}
 	if *q.Volume != 3413600 {
 		t.Fatalf("volume shares=%d", *q.Volume)
 	}

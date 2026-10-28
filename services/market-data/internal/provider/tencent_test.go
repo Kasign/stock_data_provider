@@ -67,6 +67,11 @@ func TestTencentQuoteNormalizesVolumeAndAmount(t *testing.T) {
 	if q.Name != "贵州茅台" {
 		t.Fatalf("name=%s", q.Name)
 	}
+	wantChange := *q.CurrentPrice - *q.PrevClose
+	wantChangePercent := wantChange / *q.PrevClose * 100
+	if q.Change == nil || *q.Change != wantChange || q.ChangePercent == nil || *q.ChangePercent != wantChangePercent {
+		t.Fatalf("change fields must be canonical: %+v", q)
+	}
 	if q.TurnoverRate == nil || *q.TurnoverRate != 5.0 {
 		t.Fatalf("Tencent turnover rate must be returned in percentage points, got %v", q.TurnoverRate)
 	}

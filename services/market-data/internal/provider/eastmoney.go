@@ -684,6 +684,11 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 	if err := normalize.ValidateQuote(quote); err != nil {
 		return nil, fmt.Errorf("Eastmoney quote data contract: %w", err)
 	}
+	// 源端涨跌字段已通过容差校验；输出值统一以最新价和昨收价计算。
+	canonicalChange := *quote.CurrentPrice - *quote.PrevClose
+	canonicalChangePercent := canonicalChange / *quote.PrevClose * 100
+	quote.Change = &canonicalChange
+	quote.ChangePercent = &canonicalChangePercent
 	return quote, nil
 }
 

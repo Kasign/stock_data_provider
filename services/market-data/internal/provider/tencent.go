@@ -173,6 +173,11 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if !volumeVerified {
 		return nil, errors.New("Tencent quote volume unit cannot be confirmed; refusing to assume 100-share lots")
 	}
+	// ValidateQuote 先校验源端涨跌字段；规范输出随后统一按最新价和昨收价计算。
+	canonicalChange := *q.CurrentPrice - *q.PrevClose
+	canonicalChangePercent := canonicalChange / *q.PrevClose * 100
+	q.Change = &canonicalChange
+	q.ChangePercent = &canonicalChangePercent
 	return q, nil
 }
 
