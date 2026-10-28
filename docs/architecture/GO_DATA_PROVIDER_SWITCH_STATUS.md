@@ -920,3 +920,7 @@ Tushare `limit_list_d` 现在检查同一响应中的普通 A 股证券代码唯
 ## 2026-10-28 个股公告证券类型门禁
 
 东方财富公告与 Tushare `anns_d` Provider 现会在请求上游之前校验证券是否属于受支持的普通 A 股代码段，拒绝 ETF、指数、可转债、B 股等非股票证券。已增加两个 Provider 的 HTTP fixture 测试源码，尚未执行。
+
+## 2026-10-28 Tushare 龙虎榜非 A 股过滤原因
+
+Tushare `top_list` 将非普通 A 股记录计入 `ExcludedNonAShareCount` 时，现在同步在父快照加入 `provider_non_a_share_security_rows_excluded`。新增混合普通股票/可转债回包的 HTTP fixture 测试源码，尚未执行。
