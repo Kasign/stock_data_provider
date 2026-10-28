@@ -109,6 +109,27 @@ test("failed Run refresh distinguishes the last verified same-Run result from a 
   assert.ok(loader.includes("renderTaskResult(result);"), "只有本次 Run 身份和标的校验通过才替换报告内容");
 });
 
+test("watchlist marks a retained Run result when re-reading fails and refreshes on recovery", () => {
+  assert.ok(app.includes('runResultReadStatus: ""'));
+  assert.ok(app.includes('runResultReadError: ""'));
+  const watchlistStart = app.indexOf("function renderWatchlist(");
+  const watchlistEnd = app.indexOf("\nfunction addCurrentSymbolToWatchlist(", watchlistStart);
+  const watchlist = app.slice(watchlistStart, watchlistEnd);
+  assert.match(watchlist, /readState === "loading"[\s\S]*?正在重读，尚未确认/);
+  assert.match(watchlist, /readState === "retrying"[\s\S]*?重试中，尚未确认/);
+  assert.match(watchlist, /readState === "error"[\s\S]*?本次读取失败/);
+  const resultStart = app.indexOf("function renderTaskResult(result) {");
+  const resultEnd = app.indexOf("\nfunction ", resultStart + 10);
+  assert.match(app.slice(resultStart, resultEnd), /state\.runResultReadStatus = "";[\s\S]*?state\.runResultReadError = ""/);
+  const loaderStart = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
+  const loaderEnd = app.indexOf("\nfunction stopTaskPolling()", loaderStart);
+  const loader = app.slice(loaderStart, loaderEnd);
+  assert.match(loader, /state\.runResultReadStatus = retainedPreviousResult \? "loading" : ""/);
+  assert.match(loader, /state\.runResultReadStatus = "retrying"/);
+  assert.match(loader, /state\.runResultReadStatus = "error"/);
+  assert.match(loader, /if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
+});
+
 test("task polling errors mark last-known status stale and successful refresh clears it", () => {
   assert.ok(app.includes('taskStatusError: ""'));
   assert.ok(app.includes('taskStatusErrorRetrying: false'));

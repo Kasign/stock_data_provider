@@ -137,6 +137,8 @@ const state = {
   taskStatusErrorRetrying: false,
   isCreatingTask: false,
   lastRunResult: null,
+  runResultReadStatus: "",
+  runResultReadError: "",
   runResultGeneration: 0,
   taskSequence: 0,
   taskEvents: new Map(),
@@ -697,7 +699,18 @@ function renderWatchlist(records, storageReadable, storageValid) {
       const corePass = state.lastRunResult.quality?.core_pass;
       const qualityState = corePass === true ? "核心质量门禁通过" : corePass === false ? "核心质量门禁未通过" : "核心质量门禁未报告";
       const warnings = Array.isArray(state.lastRunResult.warnings) ? " · 警告 " + state.lastRunResult.warnings.length + " 项" : "";
-      resultLine.textContent = "本页已载入结果：" + runStatusLabel(state.lastRunResult.status) + " · " + qualityState + warnings;
+      const readState = state.runResultReadStatus;
+      const readLabel = readState === "loading"
+        ? "本页保留旧结果（正在重读，尚未确认）："
+        : readState === "retrying"
+          ? "本页保留旧结果（重试中，尚未确认）："
+          : readState === "error"
+            ? "本页保留旧结果（本次读取失败）："
+            : "本页已载入结果：";
+      const readError = ["retrying", "error"].includes(readState) && state.runResultReadError
+        ? " · 重读提示：" + state.runResultReadError
+        : "";
+      resultLine.textContent = readLabel + runStatusLabel(state.lastRunResult.status) + " · " + qualityState + warnings + readError;
     } else {
       resultLine.textContent = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
     }
@@ -2557,6 +2570,8 @@ function resultPairs(record, fields) {
 
 function renderTaskResult(result) {
   state.lastRunResult = result;
+  state.runResultReadStatus = "";
+  state.runResultReadError = "";
   state.runId = result.run_id || state.runId;
   renderRunStatus(result.status || "");
   renderTaskFlowSummary();
@@ -2799,6 +2814,9 @@ async function loadTaskRunResult(runId, expectedTaskId) {
   const retainedResultNotice = retainedPreviousResult
     ? "页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"
     : "";
+  state.runResultReadStatus = retainedPreviousResult ? "loading" : "";
+  state.runResultReadError = "";
+  if (state.view === "watchlist" && retainedPreviousResult) renderWatchlist();
   $("#task-result-section").hidden = false;
   $("#task-result-note").textContent = "正在读取已保存的 Run 结果…" + (retainedResultNotice ? " " + retainedResultNotice : "");
 
@@ -2823,6 +2841,11 @@ async function loadTaskRunResult(runId, expectedTaskId) {
       const delay = RUN_RESULT_RETRY_DELAYS_MS[retries];
       if (delay !== undefined && !error.responseContractError && isRetryableApiError(error)) {
         retries += 1;
+        if (retainedPreviousResult) {
+          state.runResultReadStatus = "retrying";
+          state.runResultReadError = errorMessage(error);
+          if (state.view === "watchlist") renderWatchlist();
+        }
         $("#task-result-note").textContent =
           `Run 结果暂时不可读（${errorMessage(error)}），将在 ${delay / 1000} 秒后重试（${retries}/${RUN_RESULT_RETRY_DELAYS_MS.length}）…` + (retainedResultNotice ? " " + retainedResultNotice : "");
         await new Promise((resolve) => window.setTimeout(resolve, delay));
@@ -2831,6 +2854,11 @@ async function loadTaskRunResult(runId, expectedTaskId) {
       $("#task-result-note").textContent =
         "读取结果失败：" + errorMessage(error) + "。可点击“重新读取结果”或“立即刷新状态”重试。" +
         (retainedPreviousResult ? " 页面保留的是此前已成功读取的同一 Run 结果，本次读取未成功，不代表结果已更新。" : "");
+      if (retainedPreviousResult) {
+        state.runResultReadStatus = "error";
+        state.runResultReadError = errorMessage(error);
+        if (state.view === "watchlist") renderWatchlist();
+      }
       return;
     }
   }
@@ -3047,6 +3075,8 @@ async function createTask(event) {
   state.taskStatusErrorRetrying = false;
   setQualityPill($("#task-status-pill"), "unknown", "正在恢复");
   state.lastRunResult = null;
+  state.runResultReadStatus = "";
+  state.runResultReadError = "";
   state.taskSequence = 0;
   state.taskEvents.clear();
   state.taskEventsLoaded = false;
@@ -3233,6 +3263,8 @@ function activateTaskReference(record) {
   state.taskStatusError = "";
   state.taskStatusErrorRetrying = false;
   state.lastRunResult = null;
+  state.runResultReadStatus = "";
+  state.runResultReadError = "";
   state.taskSequence = 0;
   state.taskEvents.clear();
   state.taskEventsLoaded = false;
@@ -3360,6 +3392,8 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.taskStatusError = "";
   state.taskStatusErrorRetrying = false;
   state.lastRunResult = null;
+  state.runResultReadStatus = "";
+  state.runResultReadError = "";
   state.taskSequence = 0;
   state.taskEvents.clear();
   state.taskEventsLoaded = false;
