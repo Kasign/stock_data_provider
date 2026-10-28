@@ -1252,3 +1252,12 @@ test("自选股报价和任务引用的股票代码比较兼容交易所后缀�
   assert.match(app, /state\.taskSymbols\.some\(\(value\) => normalizeLocalSymbol\(value\) === itemSymbol\)/);
   assert.match(app, /state\.quote\?\.name && state\.quote\?\.symbol && sameMarketSymbol\(state\.quote\.symbol, symbol\)/);
 });
+
+ 
+test("阶段事件严格校验数值序号与 event 对象结构", () => {
+  assert.match(app, /const sequence = typeof item\?\.sequence === "number" \? item\.sequence : NaN/);
+  assert.match(app, /!Number\.isSafeInteger\(sequence\) \|\| sequence < 1/);
+  assert.match(app, /!item\.event \|\| typeof item\.event !== "object" \|\| Array\.isArray\(item\.event\)/);
+  assert.match(app, /字段无效的阶段事件（序号或 event 结构不符合契约），已忽略/);
+  assert.doesNotMatch(app, /const sequence = Number\(item\?\.sequence\)/, "boolean sequence must not coerce to integer 1");
+});

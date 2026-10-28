@@ -2876,8 +2876,10 @@ async function pollTask(generation = state.pollGeneration) {
       state.taskEventsError = "";
       let malformedCount = 0;
       for (const item of eventPayload.events) {
-        const sequence = Number(item?.sequence);
-        if (!item || typeof item !== "object" || !Number.isSafeInteger(sequence) || sequence < 1) {
+        const sequence = typeof item?.sequence === "number" ? item.sequence : NaN;
+        if (!item || typeof item !== "object" || Array.isArray(item) ||
+            !Number.isSafeInteger(sequence) || sequence < 1 ||
+            !item.event || typeof item.event !== "object" || Array.isArray(item.event)) {
           malformedCount += 1;
           continue;
         }
@@ -2886,7 +2888,7 @@ async function pollTask(generation = state.pollGeneration) {
         state.taskSequence = Math.max(state.taskSequence, sequence);
       }
       if (malformedCount) {
-        state.taskEventsError = "服务端返回 " + malformedCount + " 条序号无效的事件，已忽略。";
+        state.taskEventsError = "服务端返回 " + malformedCount + " 条字段无效的阶段事件（序号或 event 结构不符合契约），已忽略。";
       }
       renderTaskEvents();
     }
