@@ -1505,6 +1505,7 @@ test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 R
   assert.match(poller, /state\.taskEventCursor = nextAfterSequence/);
   assert.match(poller, /eventPageHasMore = eventPayload\.events\.length >= TASK_EVENT_PAGE_SIZE &&[\s\S]*?nextAfterSequence > requestedEventCursor/);
   assert.match(poller, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?if \(eventPageHasMore && !eventError && !eventsSkipped\) \{[\s\S]*?正在继续读取剩余阶段事件[\s\S]*?setTimeout\(\(\) => pollTask\(generation\), 0\)[\s\S]*?return;[\s\S]*?stopTaskPolling\(\)[\s\S]*?loadTaskRunResult/);
+  assert.match(poller, /if \\(eventError && isRetryableApiError\\(eventError\\) && !eventError\\.responseContractError\\) \\{[\\s\\S]*?5 秒后自动重试[\\s\\S]*?setTimeout\\(\\(\\) => pollTask\\(generation\\), 5000\\)/);
   assert.equal((app.match(/state\.taskSequence = 0;\s*state\.taskEventCursor = 0;/g) || []).length, 3, "新建、恢复和清空任务时都重置独立事件游标");
 });
 

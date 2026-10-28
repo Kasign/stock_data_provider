@@ -3107,6 +3107,13 @@ async function pollTask(generation = state.pollGeneration) {
   }
 
   if (task && TERMINAL_TASK_STATUSES.has(task.status)) {
+    if (eventError && isRetryableApiError(eventError) && !eventError.responseContractError) {
+      $("#task-poll-label").textContent =
+        "任务已结束；阶段事件暂时读取失败：" + errorMessage(eventError) +
+        "，5 秒后自动重试；续读完成前不会加载 Run 报告。";
+      state.pollTimer = window.setTimeout(() => pollTask(generation), 5000);
+      return;
+    }
     if (eventPageHasMore && !eventError && !eventsSkipped) {
       $("#task-poll-label").textContent = "任务已结束，正在继续读取剩余阶段事件…";
       state.pollTimer = window.setTimeout(() => pollTask(generation), 0);
