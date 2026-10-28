@@ -1056,14 +1056,21 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 	makeSnapshot := func() *model.LimitPoolSnapshot {
 		return &model.LimitPoolSnapshot{
 			PoolType: "up", TradeDate: "2026-10-23", Total: 1, HasData: true,
-			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			Items: []model.LimitPoolItem{{
 				Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", ChangePercent: &change,
-				Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
+				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			}},
 		}
 	}
 
+	t.Run("source version mismatch", func(t *testing.T) {
+		snapshot := makeSnapshot()
+		snapshot.Items[0].SourceVersion = "older-version"
+		if err := validateLimitPoolSnapshot("up", "2026-10-23", 30, snapshot); err == nil || !strings.Contains(err.Error(), "source/version") {
+			t.Fatalf("mismatched limit-pool item version must be rejected, got %v", err)
+		}
+	})
 	t.Run("non-finite amount", func(t *testing.T) {
 		snapshot := makeSnapshot()
 		bad := math.NaN()
@@ -1110,11 +1117,11 @@ func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {
 	change := 1.5
 	snapshot := &model.LimitPoolSnapshot{
 		PoolType: "up", TradeDate: "2026-10-23", ProviderReportDate: "2026-10-23",
-		Total: 2, HasData: true, Source: "eastmoney", FetchedAt: now,
+		Total: 2, HasData: true, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
 		QualityStatus: model.QualityValid,
 		Items: []model.LimitPoolItem{{
 			Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", ChangePercent: &change,
-			Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityValid,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 		}},
 	}
 	markLimitPoolTruncated(snapshot)

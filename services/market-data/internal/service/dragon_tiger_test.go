@@ -35,6 +35,12 @@ func TestDragonTigerValidatesDateAndPreservesSignedNetBuy(t *testing.T) {
 		Items: []model.DragonTigerItem{item}, Source: "eastmoney", SourceVersion: "test",
 		FetchedAt: now, QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}
+	versionMismatch := *snapshot
+	versionMismatch.Items = append([]model.DragonTigerItem(nil), snapshot.Items...)
+	versionMismatch.Items[0].SourceVersion = "older-version"
+	if err := validateDragonTigerSnapshot("2026-10-22", 1, 100, &versionMismatch); err == nil {
+		t.Fatal("dragon-tiger item source version must match parent snapshot")
+	}
 	qualityMismatch := *snapshot
 	qualityMismatch.QualityStatus = model.QualityValid
 	if err := validateDragonTigerSnapshot("2026-10-22", 1, 100, &qualityMismatch); err == nil {

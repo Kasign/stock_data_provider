@@ -424,8 +424,8 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 	if snapshot.PoolType != poolType || snapshot.TradeDate != tradeDate {
 		return fmt.Errorf("limit-pool identity mismatch: requested %s/%s got %s/%s", poolType, tradeDate, snapshot.PoolType, snapshot.TradeDate)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("limit-pool source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("limit-pool source, source_version or fetched_at is missing")
 	}
 	if snapshot.ProviderReportDate != "" {
 		parsed, dateErr := time.Parse("2006-01-02", snapshot.ProviderReportDate)
@@ -455,8 +455,8 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.ChangePercent == nil {
 				return errors.New("limit-pool item missing required fields")
 			}
-			if item.Source != snapshot.Source || item.FetchedAt.IsZero() {
-				return errors.New("limit-pool item source or fetched_at mismatch")
+			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
+				return errors.New("limit-pool item source/version or fetched_at mismatch")
 			}
 			if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 				return fmt.Errorf("limit-pool item %s has unsupported quality %q", item.Symbol, item.QualityStatus)
@@ -653,8 +653,8 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 	if snapshot.TradeDate != tradeDate || snapshot.Page != page || snapshot.PageSize != pageSize {
 		return fmt.Errorf("dragon-tiger request identity mismatch: wanted %s/%d/%d, got %s/%d/%d", tradeDate, page, pageSize, snapshot.TradeDate, snapshot.Page, snapshot.PageSize)
 	}
-	if strings.TrimSpace(snapshot.Source) == "" || snapshot.FetchedAt.IsZero() {
-		return errors.New("dragon-tiger source or fetched_at is missing")
+	if strings.TrimSpace(snapshot.Source) == "" || strings.TrimSpace(snapshot.SourceVersion) == "" || snapshot.FetchedAt.IsZero() {
+		return errors.New("dragon-tiger source, source_version or fetched_at is missing")
 	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.SourceReturned < 0 ||
 		snapshot.ExcludedNonAShareCount < 0 || snapshot.Returned != len(snapshot.Items) ||
@@ -682,8 +682,8 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 			if strings.TrimSpace(item.Symbol) == "" || strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.TradeDate != tradeDate {
 				return errors.New("dragon-tiger item is missing identity fields or has mismatched trade date")
 			}
-			if item.Source != snapshot.Source || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
-				return errors.New("dragon-tiger item source, fetched_at, or quality is invalid")
+			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
+				return errors.New("dragon-tiger item source/version, fetched_at, or quality is invalid")
 			}
 			if item.QualityStatus == model.QualityDegraded {
 				hasDegradedItem = true
