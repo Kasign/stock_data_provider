@@ -186,6 +186,29 @@ test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
 });
 
 
+test("已保存连接检查与草稿检查的初始化/解锁异常不会产生未处理 rejection", () => {
+  assert.match(app, /function settingsCheckErrorMessage\(error\) \{[\s\S]*?try \{\s*return errorMessage\(error\);\s*\} catch/);
+  assert.match(app, /function writeSettingsCheckOutputSafely\(output, message, className/);
+  assert.match(app, /function releaseSettingsCheckButtonSafely\(button, label\) \{[\s\S]*?button\.disabled = false;[\s\S]*?catch/);
+
+  const savedStart = app.indexOf("async function checkConnectionFromSettings() {");
+  const savedEnd = app.indexOf("\nasync function checkDraftConnectionFromSettings()", savedStart);
+  const saved = savedStart >= 0 && savedEnd > savedStart ? app.slice(savedStart, savedEnd) : "";
+  assert.ok(saved.indexOf("try {") < saved.indexOf('button = $("#settings-check-connection");'));
+  assert.match(saved, /try \{[\s\S]*?button\.disabled = true;[\s\S]*?await Promise\.all\([\s\S]*?finally \{[\s\S]*?releaseSettingsCheckButtonSafely\(button, "检查连接"\)/);
+  assert.match(saved, /generation !== savedConnectionCheckGeneration/);
+  assert.match(saved, /currentSettings\.analysisBase !== settingsToCheck\.analysisBase/);
+
+  const draftStart = app.indexOf("async function checkDraftConnectionFromSettings() {");
+  const draftEnd = app.indexOf("\nasync function refreshSources()", draftStart);
+  const draft = draftStart >= 0 && draftEnd > draftStart ? app.slice(draftStart, draftEnd) : "";
+  assert.ok(draft.indexOf("try {") < draft.indexOf("testedDraft = readConnectionDraft();"));
+  assert.match(draft, /generation !== draftConnectionCheckGeneration[\s\S]*?settingsDialogIsOpenSafely\(\)/);
+  assert.match(draft, /connectionDraftChanged\(testedDraft, currentDraft\)/);
+  assert.match(draft, /finally \{[\s\S]*?releaseSettingsCheckButtonSafely\(button, "检查未保存配置"\)/);
+  assert.match(draft, /settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\)/);
+});
+
 test("applySettings 的单项清理失败不会阻断其余配置应用步骤", () => {
   assert.match(app, /function runSettingsApplyStep\(label, operation, failures\) \{[\s\S]*?operation\(\)[\s\S]*?result\.catch\(\(error\) => \{[\s\S]*?failures\.push\(label \+ message\)/);
   assert.match(app, /function reportSettingsApplyFailures\(failures\) \{[\s\S]*?settings-connection-check[\s\S]*?is-warning/);

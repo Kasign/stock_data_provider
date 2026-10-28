@@ -1871,17 +1871,58 @@ function describeConnectionHealthResults(marketResult, analysisResult) {
   };
 }
 
-async function checkConnectionFromSettings() {
-  const button = $("#settings-check-connection");
-  const output = $("#settings-connection-check");
-  const settingsToCheck = { ...state.settings };
-  const generation = ++savedConnectionCheckGeneration;
-  button.disabled = true;
-  button.setAttribute("aria-busy", "true");
-  button.textContent = "检查中…";
-  output.textContent = "正在检查当前已保存的行情与分析 API 地址…";
-  output.className = "settings-inline-status";
+function settingsCheckErrorMessage(error) {
   try {
+    return errorMessage(error);
+  } catch {
+    return "未知异常";
+  }
+}
+
+function writeSettingsCheckOutputSafely(output, message, className = "settings-inline-status is-warning") {
+  try {
+    if (!output) return false;
+    output.textContent = message;
+    output.className = className;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function releaseSettingsCheckButtonSafely(button, label) {
+  try {
+    if (!button) return;
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    button.textContent = label;
+  } catch {
+    // 控件不可写时也不能让检查流程的 finally 再次抛错。
+  }
+}
+
+function settingsDialogIsOpenSafely() {
+  try {
+    return Boolean($("#settings-dialog")?.open);
+  } catch {
+    return false;
+  }
+}
+
+async function checkConnectionFromSettings() {
+  const generation = ++savedConnectionCheckGeneration;
+  let button = null;
+  let output = null;
+  let settingsToCheck = null;
+  try {
+    button = $("#settings-check-connection");
+    output = $("#settings-connection-check");
+    settingsToCheck = { ...state.settings };
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "检查中…";
+    writeSettingsCheckOutputSafely(output, "正在检查当前已保存的行情与分析 API 地址…", "settings-inline-status");
+
     const [marketResult, analysisResult] = await Promise.all([
       runHealthCheck(marketHealth, settingsToCheck),
       runHealthCheck(analysisHealth, settingsToCheck)
@@ -1893,52 +1934,73 @@ async function checkConnectionFromSettings() {
       currentSettings.analysisBase !== settingsToCheck.analysisBase ||
       currentSettings.apiKey !== settingsToCheck.apiKey
     ) {
-      output.textContent = "检查期间已保存的连接配置发生变化，旧结果已忽略，请使用当前配置重新检查。";
-      output.className = "settings-inline-status is-warning";
+      writeSettingsCheckOutputSafely(
+        output,
+        "检查期间已保存的连接配置发生变化，旧结果已忽略，请使用当前配置重新检查。",
+        "settings-inline-status is-warning"
+      );
       return;
     }
     const summary = describeConnectionHealthResults(marketResult, analysisResult);
-    output.textContent = "已保存连接配置检查结果：" + summary.text +
-      "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。";
-    output.className = summary.className;
+    writeSettingsCheckOutputSafely(
+      output,
+      "已保存连接配置检查结果：" + summary.text +
+        "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。",
+      summary.className
+    );
   } catch (error) {
     if (generation !== savedConnectionCheckGeneration) return;
     const currentSettings = state.settings;
-    const configurationChanged = currentSettings.marketBase !== settingsToCheck.marketBase ||
+    const configurationChanged = settingsToCheck && (
+      currentSettings.marketBase !== settingsToCheck.marketBase ||
       currentSettings.analysisBase !== settingsToCheck.analysisBase ||
-      currentSettings.apiKey !== settingsToCheck.apiKey;
-    output.textContent = configurationChanged
-      ? "检查期间已保存的连接配置发生变化，旧错误已忽略，请使用当前配置重新检查。"
-      : "连接检查失败：" + errorMessage(error);
-    output.className = "settings-inline-status is-warning";
+      currentSettings.apiKey !== settingsToCheck.apiKey
+    );
+    let message = "连接检查失败：" + settingsCheckErrorMessage(error);
+    if (!settingsToCheck) message = "连接检查未能启动：" + settingsCheckErrorMessage(error);
+    else if (configurationChanged) {
+      message = "检查期间已保存的连接配置发生变化，旧错误已忽略，请使用当前配置重新检查。";
+    }
+    if (!output) {
+      try { output = $("#settings-connection-check"); } catch {}
+    }
+    writeSettingsCheckOutputSafely(output, message, "settings-inline-status is-warning");
   } finally {
     if (generation === savedConnectionCheckGeneration) {
-      button.disabled = false;
-      button.removeAttribute("aria-busy");
-      button.textContent = "检查连接";
+      if (!button) {
+        try { button = $("#settings-check-connection"); } catch {}
+      }
+      releaseSettingsCheckButtonSafely(button, "检查连接");
     }
   }
 }
 
 async function checkDraftConnectionFromSettings() {
-  const button = $("#settings-check-draft-connection");
-  const output = $("#settings-draft-connection-check");
   const generation = ++draftConnectionCheckGeneration;
-  const testedDraft = readConnectionDraft();
+  let button = null;
+  let output = null;
+  let testedDraft = null;
   let settingsToCheck = null;
-  button.disabled = true;
-  button.setAttribute("aria-busy", "true");
-  button.textContent = "检查中…";
-  output.textContent = "正在测试表单中的行情与分析 API 地址；本次检查不会保存配置…";
-  output.className = "settings-inline-status";
   try {
+    button = $("#settings-check-draft-connection");
+    output = $("#settings-draft-connection-check");
+    testedDraft = readConnectionDraft();
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "检查中…";
+    writeSettingsCheckOutputSafely(
+      output,
+      "正在测试表单中的行情与分析 API 地址；本次检查不会保存配置…",
+      "settings-inline-status"
+    );
+
     // 草稿检查只验证弹窗中的未保存配置，不写入全局设置。
     settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
     const [marketResult, analysisResult] = await Promise.all([
       runHealthCheck(marketHealth, settingsToCheck),
       runHealthCheck(analysisHealth, settingsToCheck)
     ]);
-    if (generation !== draftConnectionCheckGeneration || !$("#settings-dialog").open) return;
+    if (generation !== draftConnectionCheckGeneration || !settingsDialogIsOpenSafely()) return;
     const currentDraft = readConnectionDraft();
     const currentSettingsToCheck = mergeConnectionDraft(currentDraft, state.settings);
     if (
@@ -1947,19 +2009,33 @@ async function checkDraftConnectionFromSettings() {
       currentSettingsToCheck.analysisBase !== settingsToCheck.analysisBase ||
       currentSettingsToCheck.apiKey !== settingsToCheck.apiKey
     ) {
-      output.textContent = "检查期间连接草稿或已保存配置发生变化，已忽略旧结果，请重新检查当前草稿。";
-      output.className = "settings-inline-status is-warning";
+      writeSettingsCheckOutputSafely(
+        output,
+        "检查期间连接草稿或已保存配置发生变化，已忽略旧结果，请重新检查当前草稿。",
+        "settings-inline-status is-warning"
+      );
       return;
     }
     const summary = describeConnectionHealthResults(marketResult, analysisResult);
-    output.textContent = "表单地址检查结果（尚未保存）：" + summary.text +
-      "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。";
-    output.className = summary.className;
+    writeSettingsCheckOutputSafely(
+      output,
+      "表单地址检查结果（尚未保存）：" + summary.text +
+        "。健康检查不验证 Provider 的每次真实请求，也不会更改全局连接状态。",
+      summary.className
+    );
   } catch (error) {
-    if (generation !== draftConnectionCheckGeneration || !$("#settings-dialog").open) return;
-    const currentDraft = readConnectionDraft();
-    let configurationChanged = connectionDraftChanged(testedDraft, currentDraft);
-    if (!configurationChanged && settingsToCheck) {
+    if (generation !== draftConnectionCheckGeneration || !settingsDialogIsOpenSafely()) return;
+    let configurationChanged = false;
+    let currentDraft = null;
+    if (testedDraft) {
+      try {
+        currentDraft = readConnectionDraft();
+        configurationChanged = connectionDraftChanged(testedDraft, currentDraft);
+      } catch {
+        configurationChanged = true;
+      }
+    }
+    if (!configurationChanged && settingsToCheck && currentDraft) {
       try {
         const currentSettingsToCheck = mergeConnectionDraft(currentDraft, state.settings);
         configurationChanged = currentSettingsToCheck.marketBase !== settingsToCheck.marketBase ||
@@ -1969,15 +2045,22 @@ async function checkDraftConnectionFromSettings() {
         configurationChanged = true;
       }
     }
-    output.textContent = configurationChanged
-      ? "检查期间连接草稿或已保存配置发生变化，旧错误已忽略，请重新检查当前草稿。"
-      : "连接检查失败：" + errorMessage(error);
-    output.className = "settings-inline-status is-warning";
+    let message = testedDraft
+      ? "连接检查失败：" + settingsCheckErrorMessage(error)
+      : "草稿连接检查未能启动：" + settingsCheckErrorMessage(error);
+    if (configurationChanged) {
+      message = "检查期间连接草稿或已保存配置发生变化，旧错误已忽略，请重新检查当前草稿。";
+    }
+    if (!output) {
+      try { output = $("#settings-draft-connection-check"); } catch {}
+    }
+    writeSettingsCheckOutputSafely(output, message, "settings-inline-status is-warning");
   } finally {
-    if (generation === draftConnectionCheckGeneration && $("#settings-dialog").open) {
-      button.disabled = false;
-      button.removeAttribute("aria-busy");
-      button.textContent = "检查未保存配置";
+    if (generation === draftConnectionCheckGeneration) {
+      if (!button) {
+        try { button = $("#settings-check-draft-connection"); } catch {}
+      }
+      releaseSettingsCheckButtonSafely(button, "检查未保存配置");
     }
   }
 }
