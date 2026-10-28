@@ -1581,6 +1581,45 @@ func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {
 }
 
 
+func TestValidateSectorRankingSnapshotEnforcesRankAndDirectionOrder(t *testing.T) {
+	makeSnapshot := func(direction string, firstRank, secondRank int, firstChange, secondChange float64) *model.SectorRankingSnapshot {
+		now := time.Now().UTC()
+		return &model.SectorRankingSnapshot{
+			Category: "industry", Direction: direction, Total: 2,
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
+			Items: []model.SectorRanking{
+				{Rank: firstRank, Code: "BK0001", Name: "行业一", Category: "industry", ChangePercent: &firstChange,
+					AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+				{Rank: secondRank, Code: "BK0002", Name: "行业二", Category: "industry", ChangePercent: &secondChange,
+					AmountUnit: "unknown", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded},
+			},
+		}
+	}
+	cases := []struct {
+		name string
+		snapshot *model.SectorRankingSnapshot
+		wantError string
+	}{
+		{name: "rank order", snapshot: makeSnapshot("up", 2, 1, 2, 1), wantError: "increasing rank"},
+		{name: "up direction", snapshot: makeSnapshot("up", 1, 2, 1, 2), wantError: "descending change percent"},
+		{name: "down direction", snapshot: makeSnapshot("down", 1, 2, 2, 1), wantError: "ascending change percent"},
+		{name: "valid up order", snapshot: makeSnapshot("up", 1, 2, 2, 1)},
+		{name: "valid down order", snapshot: makeSnapshot("down", 1, 2, 1, 2)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateSectorRankingSnapshot("industry", 10, tc.snapshot)
+			if tc.wantError == "" {
+				if err != nil { t.Fatalf("expected valid direction ordering, got %v", err) }
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantError, err)
+			}
+		})
+	}
+}
+
 func TestValidateSectorRankingSnapshotRejectsInvalidTotalsAndQuality(t *testing.T) {
 	now := time.Now().UTC()
 	changePercent := 1.25

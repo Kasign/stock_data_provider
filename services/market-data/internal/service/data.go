@@ -887,8 +887,14 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	}
 	seenCodes := make(map[string]bool, len(snapshot.Items))
 	seenRanks := make(map[int]bool, len(snapshot.Items))
+	direction := snapshot.Direction
+	if direction == "" {
+		direction = "up"
+	}
+	previousRank := 0
+	previousChange := 0.0
 	hasDegradedItem := false
-	for _, item := range snapshot.Items {
+	for index, item := range snapshot.Items {
 		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.Category != category || item.ChangePercent == nil {
 			return errors.New("sector-ranking item has missing code/name/change-percent or mismatched category")
 		}
@@ -932,6 +938,20 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 			return fmt.Errorf("sector-ranking duplicate rank %d", item.Rank)
 		}
 		seenRanks[item.Rank] = true
+		currentChange := *item.ChangePercent
+		if index > 0 {
+			if item.Rank <= previousRank {
+				return errors.New("sector-ranking items are not ordered by increasing rank")
+			}
+			if direction == "up" && currentChange > previousChange {
+				return errors.New("sector-ranking up direction is not sorted by descending change percent")
+			}
+			if direction == "down" && currentChange < previousChange {
+				return errors.New("sector-ranking down direction is not sorted by ascending change percent")
+			}
+		}
+		previousRank = item.Rank
+		previousChange = currentChange
 		if item.QualityStatus == model.QualityDegraded {
 			hasDegradedItem = true
 		}
