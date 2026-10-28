@@ -188,3 +188,17 @@ func TestEastmoneyFetchDragonTigerRejectsInconsistentPageCount(t *testing.T) {
 		t.Fatalf("inconsistent source pages must be rejected, got %v", err)
 	}
 }
+
+
+func TestEastmoneyFetchDragonTigerRejectsExplicitFailureWithRows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"success":false,"code":0,"message":"数据暂不可用","result":{"pages":1,"count":1,"data":[{"SECURITY_CODE":"600519","SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-10-22 00:00:00","BILLBOARD_NET_AMT":"100","BILLBOARD_BUY_AMT":"200","BILLBOARD_SELL_AMT":"100","CLOSE_PRICE":"1313.3","CHANGE_RATE":"1.2","DEAL_AMOUNT_RATIO":"2.1"}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	_, err := p.FetchDragonTiger(context.Background(), "2026-10-22", 1, 100)
+	if err == nil || !strings.Contains(err.Error(), "success=false") {
+		t.Fatalf("explicit provider failure must reject even populated result data, got %v", err)
+	}
+}

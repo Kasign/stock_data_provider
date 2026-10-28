@@ -70,6 +70,9 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 	if err := p.getJSONWithRetry(ctx, p.dragonTigerURL, params, &payload, 8*time.Second); err != nil {
 		return nil, fmt.Errorf("Eastmoney dragon-tiger request: %w", err)
 	}
+	if payload.Success != nil && !*payload.Success {
+		return nil, fmt.Errorf("Eastmoney dragon-tiger response indicates success=false (code=%d message=%q)", payload.Code, payload.Message)
+	}
 	if payload.Result == nil {
 		// 东方财富对没有匹配记录的日期可能返回 code=9201，而不是 result.count=0。
 		// 该响应表示“当前没有可用报表”，不能伪造成经过确认的零上榜。
