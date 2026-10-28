@@ -2874,21 +2874,26 @@ async function pollTask(generation = state.pollGeneration) {
     } else {
       state.taskEventsLoaded = true;
       state.taskEventsError = "";
-      let malformedCount = 0;
+      let ignoredCount = 0;
+      const previousSequence = state.taskSequence;
       for (const item of eventPayload.events) {
         const sequence = typeof item?.sequence === "number" ? item.sequence : NaN;
         if (!item || typeof item !== "object" || Array.isArray(item) ||
             !Number.isSafeInteger(sequence) || sequence < 1 ||
             !item.event || typeof item.event !== "object" || Array.isArray(item.event)) {
-          malformedCount += 1;
+          ignoredCount += 1;
+          continue;
+        }
+        if (sequence <= previousSequence || state.taskEvents.has(sequence)) {
+          ignoredCount += 1;
           continue;
         }
         const normalized = { ...item, sequence };
         state.taskEvents.set(sequence, normalized);
         state.taskSequence = Math.max(state.taskSequence, sequence);
       }
-      if (malformedCount) {
-        state.taskEventsError = "服务端返回 " + malformedCount + " 条字段无效的阶段事件（序号或 event 结构不符合契约），已忽略。";
+      if (ignoredCount) {
+        state.taskEventsError = "服务端返回 " + ignoredCount + " 条无效、重复或旧序号的阶段事件，已忽略。";
       }
       renderTaskEvents();
     }
