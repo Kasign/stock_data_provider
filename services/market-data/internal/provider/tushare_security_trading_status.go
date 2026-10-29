@@ -368,13 +368,15 @@ func delistingStatusFromHistoricalName(name string) model.DelistingStatus {
 	if normalized == "" || strings.HasPrefix(normalized, "PT") {
 		return model.DelistingStatusUnknown
 	}
+	// 历史名称只能提供退市状态线索，不能证明“正常”或权威退市事件。
+	// 仅对明确出现的退市整理/退市/摘牌名称返回候选分类；其余情况保持 unknown。
 	if strings.Contains(normalized, "退市整理") {
 		return model.DelistingStatusDelistingPeriod
 	}
 	if strings.Contains(normalized, "退市") || strings.Contains(normalized, "摘牌") {
 		return model.DelistingStatusDelistingRisk
 	}
-	return model.DelistingStatusNormal
+	return model.DelistingStatusUnknown
 }
 
 func (p *Tushare) fetchSecurityTradingDay(ctx context.Context, exchange, compactDate string) (bool, error) {

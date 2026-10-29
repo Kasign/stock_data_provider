@@ -125,8 +125,8 @@ func TestDelistingStatusFromHistoricalName(t *testing.T) {
 		name string
 		want model.DelistingStatus
 	}{
-		{name: "贵州茅台", want: model.DelistingStatusNormal},
-		{name: "*ST贵州", want: model.DelistingStatusNormal},
+		{name: "贵州茅台", want: model.DelistingStatusUnknown},
+		{name: "*ST贵州", want: model.DelistingStatusUnknown},
 		{name: "退市整理某股", want: model.DelistingStatusDelistingPeriod},
 		{name: "退市某股", want: model.DelistingStatusDelistingRisk},
 		{name: "某股摘牌", want: model.DelistingStatusDelistingRisk},
