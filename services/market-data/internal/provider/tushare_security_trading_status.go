@@ -43,9 +43,9 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 		ctx = context.Background()
 	}
 
-	basic, err := p.FetchStockBasic(ctx, symbol)
+	listingDate, err := p.fetchSecurityListingDate(ctx, symbol)
 	if err != nil {
-		return nil, fmt.Errorf("Tushare stock_basic for listing date: %w", err)
+		return nil, fmt.Errorf("Tushare stock_basic for historical listing date: %w", err)
 	}
 	exchange, err := tushareCalendarExchange(symbol)
 	if err != nil {
@@ -69,7 +69,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 		TradeDate: date,
 		RiskWarningStatus: model.RiskWarningUnknown,
 		DelistingStatus: model.DelistingStatusUnknown,
-		ListingDate: strings.TrimSpace(basic.IPODate),
+		ListingDate: listingDate,
 		IsTradingDay: tradingDay,
 		TradingDayKnown: true,
 		SuspensionStatus: suspension,
@@ -97,13 +97,13 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "historical_security_name_does_not_prove_risk_warning_or_delisting_status")
 		}
 	}
-	if strings.TrimSpace(basic.IPODate) == "" {
+	if strings.TrimSpace(listingDate) == "" {
 		result.ListingStatusKnown = false
 		result.QualityStatus = model.QualityUnknown
 		result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "listing_date_missing")
 	} else {
-		listingDate, parseErr := time.Parse("2006-01-02", basic.IPODate)
-		if parseErr != nil || listingDate.Format("2006-01-02") != basic.IPODate || listingDate.After(tradeDate) {
+		listingDateValue, parseErr := time.Parse("2006-01-02", listingDate)
+		if parseErr != nil || listingDateValue.Format("2006-01-02") != listingDate || listingDateValue.After(tradeDate) {
 			result.ListingStatusKnown = false
 			result.QualityStatus = model.QualityUnknown
 			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "listing_date_invalid_or_after_requested_trade_date")
@@ -139,6 +139,60 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	}
 	result.QualityReasons = dedupeSecurityStatusReasons(result.QualityReasons)
 	return result, nil
+}
+
+
+// fetchSecurityListingDate 显式查询 L/D/P 状态，避免 Tushare stock_basic 默认只返回 L 状态。
+// 历史证券已退市时仍需其原始上市日期；任何身份冲突、状态错配或异常市场分类都会被拒绝。
+func (p *Tushare) fetchSecurityListingDate(ctx context.Context, symbol string) (string, error) {
+	for _, listStatus := range []string{"L", "D", "P"} {
+		table, err := p.fetchCapabilityTable(ctx, "stock_basic", map[string]string{
+			"ts_code": symbol, "list_status": listStatus,
+		}, "ts_code,list_status,list_date,market")
+		if err != nil {
+			return "", err
+		}
+		if len(table.rows) == 0 {
+			continue
+		}
+		if len(table.rows) != 1 {
+			return "", fmt.Errorf("Tushare stock_basic 状态 %s 对 %s 返回 %d 行，无法唯一定位证券", listStatus, symbol, len(table.rows))
+		}
+		row := table.rows[0]
+		code, err := table.stringValue(row, "ts_code")
+		if err != nil {
+			return "", err
+		}
+		canonical, err := normalize.NormalizeSymbol(code)
+		if err != nil || canonical != symbol {
+			return "", fmt.Errorf("Tushare stock_basic 返回证券代码不匹配: requested=%s returned=%q", symbol, code)
+		}
+		returnedStatus, err := table.stringValue(row, "list_status")
+		if err != nil {
+			return "", err
+		}
+		if strings.ToUpper(strings.TrimSpace(returnedStatus)) != listStatus {
+			return "", fmt.Errorf("Tushare stock_basic 返回状态 %q 与请求状态 %q 不匹配", returnedStatus, listStatus)
+		}
+		market, err := table.stringValue(row, "market")
+		if err != nil {
+			return "", err
+		}
+		switch strings.TrimSpace(market) {
+		case "主板", "创业板", "科创板", "北交所":
+		default:
+			return "", fmt.Errorf("Tushare stock_basic 返回未知或缺失的 A 股市场分类 %q", market)
+		}
+		listDateRaw, err := table.stringValue(row, "list_date")
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(listDateRaw) == "" {
+			return "", nil
+		}
+		return tushareISODate(listDateRaw)
+	}
+	return "", fmt.Errorf("Tushare stock_basic 未在 L/D/P 状态目录中找到 %s", symbol)
 }
 
 type effectiveTushareSecurityName struct {

@@ -210,3 +210,79 @@ func TestTushareFetchSecurityTradingStatusUsesSSECalendarForBeijingExchange(t *t
 		t.Fatalf("expected explicit reason for unknown Beijing Exchange listing-day number: %+v", got.QualityReasons)
 	}
 }
+
+
+func TestTushareFetchSecurityTradingStatusFindsDelistedSecurityBasicRow(t *testing.T) {
+	var stockBasicStatuses []string
+	var tradeCalendarExchange string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			APIName string            `json:"api_name"`
+			Params  map[string]string `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		var fields []string
+		var items [][]any
+		switch request.APIName {
+		case "stock_basic":
+			status := request.Params["list_status"]
+			stockBasicStatuses = append(stockBasicStatuses, status)
+			fields = []string{"ts_code", "list_status", "list_date", "market"}
+			switch status {
+			case "L":
+				items = [][]any{}
+			case "D":
+				items = [][]any{{"920001.BJ", "D", "20200101", "北交所"}}
+			case "P":
+				items = [][]any{}
+			default:
+				t.Errorf("unexpected stock_basic list_status %q", status)
+			}
+		case "namechange":
+			fields = []string{"ts_code", "name", "start_date", "end_date", "ann_date", "change_reason"}
+			items = [][]any{
+				{"920001.BJ", "北证示例", "20200101", "20261019", "20200101", "上市"},
+				{"920001.BJ", "退市整理示例", "20261020", nil, "20261019", "退市整理"},
+			}
+		case "trade_cal":
+			tradeCalendarExchange = request.Params["exchange"]
+			fields = []string{"exchange", "cal_date", "is_open"}
+			items = [][]any{{"SSE", "20261022", "1"}}
+		case "suspend_d":
+			fields = []string{"ts_code", "trade_date", "suspend_timing", "suspend_type"}
+			items = [][]any{}
+		default:
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected API", http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"msg":  "",
+			"data": map[string]any{"fields": fields, "items": items},
+		})
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "fixture-token")
+	got, err := client.FetchSecurityTradingStatus(context.Background(), "920001.BJ", "2026-10-22")
+	if err != nil {
+		t.Fatalf("FetchSecurityTradingStatus for delisted symbol: %v", err)
+	}
+	if len(stockBasicStatuses) != 2 || stockBasicStatuses[0] != "L" || stockBasicStatuses[1] != "D" {
+		t.Fatalf("expected L then D status lookup to find the historical security: %v", stockBasicStatuses)
+	}
+	if got.ListingDate != "2020-01-01" {
+		t.Fatalf("expected original listing date for delisted security, got %+v", got)
+	}
+	if got.DelistingStatus != model.DelistingStatusDelistingPeriod || got.RiskWarningStatus != model.RiskWarningUnknown {
+		t.Fatalf("expected delisting-period classification without treating it as normal ST status: %+v", got)
+	}
+	if tradeCalendarExchange != "SSE" || !got.TradingDayKnown {
+		t.Fatalf("expected documented shared market calendar for Beijing Exchange, got exchange=%q status=%+v", tradeCalendarExchange, got)
+	}
+}
