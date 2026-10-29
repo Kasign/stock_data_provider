@@ -162,6 +162,25 @@ try {
 
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/indices")) {
         marketIndexRequestCount += 1;
+        if (marketScenario === "success") {
+          return json(200, {
+            status: "ok",
+            source: "browser-test-fixture",
+            fetched_at: "2026-10-28T07:00:00Z",
+            items: [{
+              name: "测试指数",
+              code: "TEST-INDEX",
+              symbol: "000001.SH",
+              current_price: 3000,
+              change: 10,
+              change_percent: 0.5,
+              quote_time: "2026-10-28T07:00:00Z",
+              source: "browser-test-fixture",
+              quality_status: "valid",
+              quality_reasons: []
+            }]
+          });
+        }
         const item = marketOverviewErrors[marketScenario] || marketOverviewErrors["503"];
         if (marketScenario === "network") return route.abort("failed");
         return json(item.status, {
@@ -368,6 +387,18 @@ try {
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
 
+      // Seed a visible prior success so every failure also proves the old market result is cleared.
+      marketScenario = "success";
+      const seedRequestCount = marketIndexRequestCount;
+      await page.locator("#refresh-market-overview").click();
+      await page.waitForFunction(
+        () => document.querySelector("#market-index-grid .market-index-card")?.textContent.includes("测试指数"),
+        null,
+        { timeout: 8000 }
+      );
+      assert.equal(marketIndexRequestCount, seedRequestCount + 1, "market overview success seed should request indices once");
+      assert.match(await page.locator("#market-index-grid").textContent(), /测试指数/);
+
       // Home-market errors must preserve HTTP meaning instead of asserting every 401/403 is an API-key fault.
       for (const scenario of ["401", "403", "404", "503", "network"]) {
         const expected = marketOverviewErrors[scenario];
@@ -390,6 +421,7 @@ try {
           refreshSummary: document.querySelector("#market-overview-updated")?.textContent || ""
         }));
         assert.match(indexState.message, new RegExp(expected.expected));
+        assert.doesNotMatch(indexState.message, /测试指数/, scenario + " must clear the previous index cards");
         assert.doesNotMatch(indexState.message, /行情服务 API Key 验证失败/);
         assert.equal(indexState.status, "读取失败");
         assert.match(indexState.className, /is-unavailable/);
