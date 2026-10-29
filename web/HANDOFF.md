@@ -1390,3 +1390,12 @@
 - [8ebfbe5 — 补充最近任务持久化失败的界面契约](https://github.com/Kasign/stock_data_provider/commit/8ebfbe5502da5ee3ad257475af959aba480e13e8)：补充新增/删除持久化确认和界面完整字段校验的静态回归契约。
 - 当前 GitHub 连接器返回这些提交的 combined status 为空，且 commit workflow 查询仅覆盖 PR 触发运行；因此尚不能确认本批 CI 结果。本轮未执行本地 Node 测试或 Browser Smoke，后续需核实最新分支 HEAD 对应的 WebUI checks 和 Browser Smoke。
 - 后续任务继续仅修改 `web/**`；保持一个逻辑缺陷对应一个代码/测试提交，避免把无关样式、数据层和部署改动混入本批。
+
+
+### 2026-10-29 补充：迟到任务响应统一持久化反馈
+
+- [e027b2e — 统一迟到任务响应的历史持久化反馈](https://github.com/Kasign/stock_data_provider/commit/e027b2ea3d3b5a28dd4665e52d80fba51f71df67)：将旧分析地址/当前任务已切换时的两条迟到创建响应路径统一使用完整记录持久化确认结果，避免写入失败时仍显示“已保存”。
+- [58b37b2 — 校准迟到任务历史失败提示文案](https://github.com/Kasign/stock_data_provider/commit/58b37b2a5dc31f87de13704d68cbbee9186a239d)：统一失败提示，并根据持久化确认结果更新旧连接路径反馈。
+- [848c30a — 同步迟到任务响应持久化契约断言](https://github.com/Kasign/stock_data_provider/commit/848c30aa39fafecb2697f9c3712c30a6fa1791e6)：更新当前任务切换与历史被替换场景的静态断言。
+- [34d4f15 — 校准最近任务持久化失败文案契约](https://github.com/Kasign/stock_data_provider/commit/34d4f157999add869bc9d1203a3aed6940a19230)：同步新增持久化失败提示的文案断言。
+- 截至 34d4f157999add869bc9d1203a3aed6940a19230，combined status 查询仍未返回检查项；当前连接器的 workflow-run 查询不覆盖 push 触发运行。本批尚未实际运行 npm test、npm run check 或 Browser Smoke，不能标记为通过。
