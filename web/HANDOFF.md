@@ -1194,3 +1194,14 @@
 - 代码提交对应的 Browser Smoke #40802278245 在创建文档记录时仍为 in_progress，需后续核对结论。
 - 最新核实的数据分支 HEAD 为 86fbb250cae16d50d49231b1e72e98719e877340，新增内容仅修正 TickFlow 市场广度时间戳偏差测试边界；此服务端提交不在 WebUI 分支。本轮只修改 web/**。
 
+
+
+## 2026-10-29 — 交易日历范围校验修复与烟测结果
+
+- [x] 交易日历响应范围校验代码与行为测试提交：275f7570eae9ac2b371a027604a21653c06b91ed。
+- [x] Browser Smoke 曾因新增 export 函数误放在 bindMarketActivity 函数体内部而失败，报错 Unexpected token 'export'；这是真实模块解析缺陷，并非等待超时或环境波动。
+- [x] 修复提交：[7429c501 修正交易日历校验函数的模块作用域](https://github.com/Kasign/stock_data_provider/commit/7429c501330b3863e60a5304f7148d1175463982)，已将纯校验函数移动到模块顶层。
+- [x] [Browser Smoke #40802836160](https://github.com/Kasign/stock_data_provider/actions/runs/40802836160) 对修复提交已成功。另新增诊断断言的提交 0b8fd5b 在修复前会提前报告启动异常，不再只显示 stocks-view 超时。
+- [x] 修正错误提示清理规则的转义问题，并补充多行/制表符元数据测试（提交 32c35d4）。
+- [ ] 新增的 web/tests/market-activity.test.mjs 尚未在本地单独运行；完整 Node UI 测试、构建、真实 API 与 NAS/1Panel 人工验收仍未执行。
+- 数据分支本轮核对 HEAD 为 16944cd5e98b900e3aa5c4636ec185f947e1d497；不把数据分支的独立 Provider/测试变更合入 WebUI 功能提交。
