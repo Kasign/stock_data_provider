@@ -483,7 +483,7 @@ components:
         weight_percent: {type: number, nullable: true, description: Provider-reported constituent weight in percentage points}
     IndexConstituentSnapshot:
       type: object
-      required: [index_symbol, items, total, source, fetched_at, quality_status]
+      required: [index_symbol, items, total, provider_returned, source, fetched_at, quality_status]
       properties:
         index_symbol: {type: string}
         as_of_date: {type: string, format: date, description: Requested historical query date; distinct from the source report date}
