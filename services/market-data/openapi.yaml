@@ -98,6 +98,7 @@ components:
         provider_timestamp: {type: string, format: date-time, nullable: true}
         fetched_at: {type: string, format: date-time}
         normalized_at: {type: string, format: date-time}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System record time of this revision; returned for as_of queries only}
         raw_volume: {type: number, nullable: true}
         raw_volume_unit: {type: string}
         raw_amount: {type: number, nullable: true}
@@ -120,6 +121,8 @@ components:
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         volume_unit: {type: string, enum: [shares]}
         amount_unit: {type: string, enum: [CNY]}
+        point_in_time: {type: boolean, description: True only when the response was reconstructed from revisions recorded by the requested as_of timestamp}
+        as_of: {type: string, format: date-time, description: Requested system-observation cutoff for PIT queries}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         warnings: {type: array, items: {type: string}}
         bars: {type: array, items: {$ref: '#/components/schemas/DailyBar'}}
@@ -826,23 +829,26 @@ paths:
         '504': {description: All quote providers timed out}
   /api/v1/bars/{symbol}/daily:
     get:
+      description: Without as_of, returns the current provider-selected series. With as_of, reads only locally recorded versions observed by that timestamp; it never calls live Providers or falls back to the current-value table.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: start, in: query, schema: {type: string, format: date}}
         - {name: end, in: query, schema: {type: string, format: date}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 2000}}
         - {name: adjustment, in: query, schema: {$ref: '#/components/schemas/RequestAdjustmentBasis'}}
+        - {name: as_of, in: query, schema: {type: string, format: date-time}, description: Optional RFC3339 system-observation cutoff; future timestamps are rejected}
       responses:
         '200':
-          description: Daily bar collection
+          description: Daily bar collection; PIT responses include point_in_time and each selected bar's system_observed_at
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DailyBarsResponse'}
-        '400': {description: Invalid symbol, date range, limit or adjustment}
+        '400': {description: Invalid symbol, date range, limit, adjustment or as_of timestamp}
         '401': {description: API key required}
-        '502': {description: All providers failed}
-        '503': {description: No daily-bar provider enabled}
-        '504': {description: All providers timed out}
+        '404': {description: No coherent daily-bar revisions recorded by the requested as_of timestamp}
+        '502': {description: All live Providers failed}
+        '503': {description: No daily-bar Provider enabled for live reads, or PIT revision storage unavailable}
+        '504': {description: All live Providers timed out}
   /api/v1/bundles/{symbol}:
     get:
       parameters:
