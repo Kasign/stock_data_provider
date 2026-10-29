@@ -83,6 +83,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	}
 
 	historicalRiskStatus := model.RiskWarningUnknown
+	historicalNameSuggestsDelisting := false
 	if nameErr != nil {
 		result.RiskWarningStatus = model.RiskWarningUnknown
 		result.QualityStatus = model.QualityUnknown
@@ -91,6 +92,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 		result.SecurityName = name.Name
 		result.NameEffectiveFrom = name.StartDate
 		result.NameEffectiveTo = name.EndDate
+		historicalNameSuggestsDelisting = strings.Contains(name.Name, "退市") || strings.Contains(name.Name, "摘牌")
 		historicalRiskStatus = riskWarningStatusFromHistoricalName(name.Name)
 		result.DelistingStatus = delistingStatusFromHistoricalName(name.Name)
 		if historicalRiskStatus == model.RiskWarningUnknown || result.DelistingStatus == model.DelistingStatusUnknown {
@@ -117,11 +119,16 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "authoritative_historical_risk_warning_status_unavailable")
 		}
 	} else if result.DelistingStatus == model.DelistingStatusDelistingRisk ||
-		result.DelistingStatus == model.DelistingStatusDelistingPeriod {
-		// 退市风险/退市整理期间的涨跌幅规则需单独解析，不能把 ST 名单结果直接解释为该类证券的规则状态。
+		result.DelistingStatus == model.DelistingStatusDelistingPeriod ||
+		(historicalNameSuggestsDelisting && authoritativeRiskStatus == model.RiskWarningNormal) {
+		// 名称出现退市线索时，空 ST 名单不能证明普通状态；特殊涨跌幅制度仍需独立事件证据。
 		result.RiskWarningStatus = model.RiskWarningUnknown
 		result.QualityStatus = model.QualityUnknown
-		result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "risk_warning_status_suppressed_for_delisting_price_limit_regime")
+		reason := "risk_warning_status_suppressed_for_delisting_price_limit_regime"
+		if historicalNameSuggestsDelisting && result.DelistingStatus == model.DelistingStatusUnknown {
+			reason = "risk_warning_status_not_assumed_normal_for_possible_delisting_name"
+		}
+		result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, reason)
 	} else if historicalRiskStatus != model.RiskWarningUnknown && historicalRiskStatus != authoritativeRiskStatus {
 		result.RiskWarningStatus = model.RiskWarningUnknown
 		result.QualityStatus = model.QualityUnknown
