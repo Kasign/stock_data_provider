@@ -27,12 +27,15 @@ export function readTheme(storage) {
 export function persistTheme(value, storage) {
   const theme = normalizeTheme(value);
   const target = resolveStorage(storage);
+  if (!target) return { theme, persisted: false };
+
   try {
-    target?.setItem(THEME_STORAGE_KEY, theme);
+    target.setItem(THEME_STORAGE_KEY, theme);
+    return { theme, persisted: target.getItem(THEME_STORAGE_KEY) === theme };
   } catch {
     // The theme still applies for this page session when storage is unavailable.
+    return { theme, persisted: false };
   }
-  return theme;
 }
 
 export function applyTheme(value, root) {
