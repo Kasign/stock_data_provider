@@ -93,3 +93,20 @@ CREATE TABLE IF NOT EXISTS market_data_fundamental_versions (
   KEY idx_market_fundamental_observed (recorded_at),
   KEY idx_market_fundamental_identity_asof (symbol, report_year, report_quarter, source, recorded_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Historical security name, risk-warning and suspension observations are append-only by content revision.
+CREATE TABLE IF NOT EXISTS market_data_security_trading_status_versions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  symbol VARCHAR(16) NOT NULL,
+  trade_date DATE NOT NULL,
+  source VARCHAR(64) NOT NULL,
+  revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  recorded_at DATETIME(6) NOT NULL,
+  fetched_at DATETIME(6) NOT NULL,
+  quality_status VARCHAR(16) NOT NULL,
+  metadata JSON NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_market_security_status_identity_asof (symbol, trade_date, source, recorded_at, id),
+  KEY idx_market_security_status_date_asof (symbol, trade_date, recorded_at),
+  KEY idx_market_security_status_observed (recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
