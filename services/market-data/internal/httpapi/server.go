@@ -189,6 +189,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
 	mux.Handle("GET /api/v1/market/dragon-tiger", s.auth(http.HandlerFunc(s.dragonTiger)))
 	mux.Handle("GET /api/v1/market/trading-calendar", s.auth(http.HandlerFunc(s.tradingCalendar)))
+	mux.Handle("GET /api/v1/market/session", s.auth(http.HandlerFunc(s.marketSession)))
 	mux.Handle("GET /api/v1/stocks/search", s.auth(http.HandlerFunc(s.searchStocks)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/boards", s.auth(http.HandlerFunc(s.stockBoards)))
