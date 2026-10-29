@@ -28,6 +28,7 @@ import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
 import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
+import { bindExistingApiTools } from "./existing-api-tools.js";
 import { clearRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
@@ -180,6 +181,7 @@ const state = {
 const marketOverview = bindMarketOverview(() => state.settings, (item, source) => selectStockFromMarket(item, source));
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
 const dataCenter = bindDataCenter(() => state.settings);
+bindExistingApiTools(() => state.settings);
 const marketActivity = bindMarketActivity(
   () => state.settings,
   (item) => selectStockFromMarket(item, "龙虎榜")
