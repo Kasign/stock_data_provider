@@ -7,6 +7,8 @@ import "time"
 type MarketSessionSnapshot struct {
 	Market              string        `json:"market"`
 	At                  time.Time     `json:"at"`
+	ServerTime          time.Time     `json:"server_time"`
+	TimeZone            string        `json:"time_zone"`
 	LocalDate           string        `json:"local_date"`
 	LocalTime           string        `json:"local_time"`
 	IsTradingDay        bool          `json:"is_trading_day"`
