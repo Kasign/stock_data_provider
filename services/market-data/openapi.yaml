@@ -234,6 +234,24 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
+    MarketSessionSnapshot:
+      type: object
+      required: [market, at, local_date, local_time, is_trading_day, phase, is_trading_session, is_continuous_trading, is_auction, source, fetched_at, quality_status]
+      properties:
+        market: {type: string, enum: [cn_a_share]}
+        at: {type: string, format: date-time, description: Requested instant, normalized to UTC in the response}
+        local_date: {type: string, format: date, description: Date in Asia/Shanghai}
+        local_time: {type: string, description: Local clock time in Asia/Shanghai, HH:MM:SS}
+        is_trading_day: {type: boolean, description: Determined by configured provider-backed trading calendar}
+        phase: {type: string, enum: [non_trading_day, pre_open, opening_auction, auction_pause, continuous_morning, lunch_break, continuous_afternoon, closing_auction, closed]}
+        is_trading_session: {type: boolean, description: True for opening auction, continuous sessions, and closing auction; false during breaks}
+        is_continuous_trading: {type: boolean}
+        is_auction: {type: boolean}
+        source: {type: string, description: Trading-calendar provider used for the date classification}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     StockAnnouncement:
       type: object
       required: [article_id, symbol, title, announcement_date, source, source_version, fetched_at, quality_status]
@@ -1144,6 +1162,22 @@ paths:
         '400': {description: Invalid or excessive date range}
         '401': {description: API key required}
         '502': {description: All trading-calendar providers failed or returned incomplete data}
+        '503': {description: No trading-calendar provider enabled}
+  /api/v1/market/session:
+    get:
+      summary: Get the scheduled A-share market session for a timestamp
+      description: Uses the provider-backed trading calendar for the requested date and the standard Asia/Shanghai session schedule. It does not determine individual-stock suspension, security-specific price limits, or emergency exchange interruptions. When at is omitted, current server time is used.
+      parameters:
+        - {name: at, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp; response includes the Asia/Shanghai date and time}
+      responses:
+        '200':
+          description: Scheduled market session, calendar source and quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketSessionSnapshot'}
+        '400': {description: Invalid RFC3339 timestamp}
+        '401': {description: API key required}
+        '502': {description: Calendar provider failed or returned incomplete data}
         '503': {description: No trading-calendar provider enabled}
   /api/v1/market/breadth:
     get:
