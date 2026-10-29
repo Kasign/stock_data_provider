@@ -206,7 +206,7 @@ func TestResolvePriceLimitRuleWithEvidenceRejectsMismatchedSymbol(t *testing.T) 
 func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDate(t *testing.T) {
 	base := model.SecurityTradingStatusSnapshot{
 		Symbol: "600519.SH", TradeDate: "2026-07-06",
-		RiskWarningStatus: model.RiskWarningNormal,
+		RiskWarningStatus:       model.RiskWarningNormal,
 		ListingTradingDayNumber: 100, ListingStatusKnown: true,
 		IsTradingDay: true, TradingDayKnown: true,
 		QualityStatus: model.QualityValid,
@@ -215,7 +215,7 @@ func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDa
 		Symbol: "600519.SH", Status: model.PriceLimitExceptionNone,
 		EffectiveFrom: "2026-07-01", EffectiveTo: "2026-07-31",
 		Source: "exchange calendar", SourceURL: "https://example.com/calendar",
-		ObservedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+		ObservedAt:        time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		CoverageConfirmed: true,
 	}
 
