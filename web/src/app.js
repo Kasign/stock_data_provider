@@ -4482,8 +4482,9 @@ async function importBrowserDataFile(file) {
   // 导入完成后允许当前任务继续在页面中跟踪，但禁止它把引用重新写回被替换的本地历史。
   const importedActiveTaskId = state.taskId;
   const importedActiveTaskBase = state.taskAnalysisBase || state.settings.analysisBase;
+  let nextSettings;
   try {
-    const nextSettings = saveSettings({
+    nextSettings = saveSettings({
       marketBase: imported.marketBase,
       analysisBase: imported.analysisBase,
       apiKey: state.settings.apiKey
@@ -4506,9 +4507,29 @@ async function importBrowserDataFile(file) {
         throw new Error("浏览器存储未能确认写入：" + key);
       }
     }
+  } catch (error) {
+    const rollbackFailures = [];
+    storageKeys.forEach((key) => {
+      try {
+        const value = previous.get(key);
+        if (value === null || value === undefined) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+        if (localStorage.getItem(key) !== (value ?? null)) {
+          rollbackFailures.push(key);
+        }
+      } catch {
+        rollbackFailures.push(key);
+      }
+    });
+    const rollbackMessage = rollbackFailures.length
+      ? "；且无法确认以下数据已恢复：" + [...new Set(rollbackFailures)].join("、") + "。请重新载入页面并检查本地数据。"
+      : "；已回读确认导入前的本地存储已恢复。";
+    setBrowserDataFeedback("导入失败" + rollbackMessage + " 原因：" + (error?.message || "本地存储不可用。"), "error");
+    return;
+  }
 
-    // 导入是替换操作，不应把导入前正在查看的旧任务重新写入任务历史。
-    // 所有本地存储写入均在应用内存状态之前完成，避免写入异常造成 UI 与磁盘状态分叉。
+  // 存储事务已提交。界面刷新异常不能再回滚持久化数据，以免内存与已导入数据进一步分叉。
+  try {
     applySettings(nextSettings, { persistPreviousActiveTask: false });
     // 将导入视为历史替换：在途的创建请求不能接管当前任务，也不能把新记录写回导入的列表。
     state.taskHistoryGeneration += 1;
@@ -4522,16 +4543,10 @@ async function importBrowserDataFile(file) {
     renderRecentTasks();
     setBrowserDataFeedback("导入完成：主题、同源 API 路径、自选股与本地任务引用已更新。原有 API Key 已保留。", "success");
   } catch (error) {
-    storageKeys.forEach((key) => {
-      try {
-        const value = previous.get(key);
-        if (value === null || value === undefined) localStorage.removeItem(key);
-        else localStorage.setItem(key, value);
-      } catch {
-        // 浏览器存储发生故障时尽力回滚；无法写入时需要用户重新载入确认实际状态。
-      }
-    });
-    setBrowserDataFeedback("导入失败，已尝试恢复导入前的浏览器存储：" + (error?.message || "本地存储不可用。"), "error");
+    setBrowserDataFeedback(
+      "本地数据已导入，但页面状态刷新未完成；请重新载入页面。原因：" + (error?.message || "界面更新异常。"),
+      "error"
+    );
   }
 }
 
