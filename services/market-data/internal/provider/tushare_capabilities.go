@@ -1204,7 +1204,8 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 		return nil, fmt.Errorf("Tushare 不支持涨跌停池类型 %q；可选 up/down/broken", rawPoolType)
 	}
 	if limit <= 0 {
-		limit = 30
+		// 与 HTTP/Service 层默认值保持一致，避免直接调用 Provider 时悄悄只返回 30 条。
+		limit = 100
 	}
 	if limit > 100 {
 		return nil, errors.New("Tushare 涨跌停池单页条数不能超过 100")

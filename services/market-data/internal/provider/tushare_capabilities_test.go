@@ -1691,3 +1691,55 @@ func TestTushareIndexConstituentsAsOfRejectsRowsAfterRequestedDate(t *testing.T)
 		t.Fatalf("provider over-returning a report after as_of must be rejected, got %v", err)
 	}
 }
+
+
+func TestTushareLimitPoolDefaultsToServiceLimit(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
+	rows := make([][]any, 35)
+	for index := range rows {
+		values := make([]any, len(fields))
+		for column, field := range fields {
+			switch field {
+			case "trade_date":
+				values[column] = "20261027"
+			case "ts_code":
+				values[column] = fmt.Sprintf("%06d.SH", 600000+index)
+			case "industry":
+				values[column] = "银行"
+			case "name":
+				values[column] = fmt.Sprintf("测试股票%d", index+1)
+			case "close":
+				values[column] = 10.0
+			case "pct_chg":
+				values[column] = 1.2
+			case "limit":
+				values[column] = "U"
+			default:
+				values[column] = nil
+			}
+		}
+		rows[index] = values
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare limit-pool request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "limit_list_d" {
+			t.Errorf("api_name=%q, want limit_list_d", request.APIName)
+		}
+		writeTushareTestTable(w, fields, rows)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchLimitPool(context.Background(), "up", "2026-10-27", 0)
+	if err != nil {
+		t.Fatalf("FetchLimitPool with default limit: %v", err)
+	}
+	if got.Total != len(rows) || len(got.Items) != len(rows) {
+		t.Fatalf("default Tushare limit should match the service's 100-row default, got total=%d items=%d want=%d", got.Total, len(got.Items), len(rows))
+	}
+}
