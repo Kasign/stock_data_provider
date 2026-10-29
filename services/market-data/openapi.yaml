@@ -214,7 +214,7 @@ components:
           items: {type: string}
     SecurityTradingStatusSnapshot:
       type: object
-      required: [symbol, trade_date, risk_warning_status, listing_status_known, is_trading_day, trading_day_known, suspension_status, source, source_version, fetched_at, quality_status]
+      required: [symbol, trade_date, risk_warning_status, delisting_status, listing_status_known, is_trading_day, trading_day_known, suspension_status, source, source_version, fetched_at, quality_status]
       properties:
         symbol: {type: string}
         trade_date: {type: string, format: date}
@@ -222,6 +222,7 @@ components:
         name_effective_from: {type: string, format: date}
         name_effective_to: {type: string, format: date}
         risk_warning_status: {type: string, enum: [unknown, normal, risk_warning]}
+        delisting_status: {type: string, enum: [unknown, normal, delisting_risk, delisting_period], description: Conservative historical-name classification; unknown does not imply normal}
         listing_date: {type: string, format: date}
         listing_trading_day_number: {type: integer, minimum: 0, description: One-based number of exchange trading sessions since listing when verifiable}
         listing_status_known: {type: boolean}
