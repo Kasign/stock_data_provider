@@ -485,3 +485,9 @@ PIT 版本只能重建启用版本化后实际记录过的快照。迁移前未�
 该解析器目前是内部纯规则能力，不是证券状态 Provider，也尚未开放 HTTP 路由。`risk_warning_status`、上市交易日序号和特别无涨跌幅事件必须来自相应历史时点可核验的数据；任何必需输入缺失时输出 `status=unknown` 和质量原因，不能把未知状态折算成普通股票。它尚不判断停牌、临时停市、复牌首日或公司行动对价格参考值的影响，也不会推算涨跌停价的交易所舍入细节。
 
 官方依据：上交所《上海证券交易所交易规则（2026年修订）》自 2026-07-06 生效（https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/exchange/c/c_20260424_10816482.shtml）；深交所《深圳证券交易所交易规则（2026年修订）》（https://docs.static.szse.cn/www/lawrules/rule/trade/current/W020260424690713155663.pdf）及主板风险警示限制比例调整说明（https://www.szse.cn/aboutus/trends/news/t20250627_614643.html）；北交所交易规则说明（https://www.bse.cn/qt/200025234.html）。
+
+### 历史证券交易状态查询
+
+`GET /api/v1/stocks/{symbol}/trading-status?date=YYYY-MM-DD` 是按指定历史日期返回的证券状态证据接口。当前 Tushare 适配器读取 `stock_basic` 的上市日期、`namechange` 的名称生效区间、交易所 `trade_cal` 和 `suspend_d` 的停复牌记录。有效名称以 `start_date`/`end_date` 判断；仅对名称明确带 `ST`、`*ST`、`S*ST` 或 `SST` 标记的记录返回风险警示，未知名称或名称记录区间不完整则返回 `risk_warning_status=unknown`。上市交易日序号只在能以对应交易所日历验证时返回；当前无法验证北交所上市交易日序号，结果将保持未知。停牌和复牌使用来源原始 `suspend_type` 与 `suspend_timing`，全天停牌、盘中停牌或复牌事件分开表达。
+
+启用配置需要 Provider 本身启用，并同时将 `stock_basic`、`trading_calendar` 与 `security_trading_status` 能力设为 `true`；这些依赖用于验证上市日期和交易日，不代表当前接口返回的每个状态字段都会有数据。未配置该能力返回 503；源端失败时按 Provider 顺序尝试下一来源；返回 200 不代表全部字段都已知，必须同时检查 `quality_status` 和各个字段的 `unknown`/`*_known` 标记。该接口当前是按需查询、`Cache-Control: no-store`，尚未将每次结果追加保存到数据库；它不是用于回溯系统过去“当时已知内容”的 PIT 存档。停牌历史记录的源端完整性和 ST 名称标记推断仍需以交易所官方公告及 Tushare 原始字段进行整体验收。
