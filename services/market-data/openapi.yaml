@@ -597,7 +597,10 @@ components:
       required: [type, total, items, source, source_version, fetched_at, quality_status]
       properties:
         type: {type: string, enum: [popular, surge, followers]}
-        total: {type: integer, minimum: 0, description: Number of rows returned in this response, not the full A-share universe}
+        total: {type: integer, minimum: 0, description: Number of normalized rows in this response; not the full ranking count when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw ranking rows returned by the provider before caller-limit truncation and filtering}
+        excluded_rows: {type: integer, minimum: 0, description: Source rows explicitly excluded during normalization, such as duplicate security identities}
+        total_is_lower_bound: {type: boolean, description: True when the source does not report an authoritative total for the ranking}
         items: {type: array, items: {$ref: '#/components/schemas/HotRankingItem'}}
         provider_time: {type: string, format: date-time, nullable: true, description: Provider data-ready timestamp when present; not a guaranteed exact quote time}
         source: {type: string}

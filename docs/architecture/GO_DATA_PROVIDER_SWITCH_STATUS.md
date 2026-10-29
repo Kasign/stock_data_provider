@@ -976,7 +976,7 @@ Tencent 个股报价和日 K 入口新增普通 A 股范围门禁，在上游请
 ## 仍未闭环的功能（2026-10-29）
 
 1. **执行自动化验收**：对根 module、`go-core`、`services/market-data` 执行 `gofmt` 检查、`go test ./...`、`go test -race ./...`、`go vet ./...`；然后针对目标 Docker 网络做有控制的真实 Provider 请求与字段单位对账。静态审查不能替代这些验收。
-2. **榜单与涨跌停池的源端覆盖账本**：涨跌停池现已输出原始返回条数、非 A 股排除数，并在 Tushare `limit_list_d` 触及 2500 行时把总数显式标记为下界；Tushare 龙虎榜 `top_list` 也在 10000 行边界标记下界。剩余工作是继续统一热度榜、行业/概念排行的源端总数、过滤数、截断及返回下界语义，不能把过滤或来源上限造成的缺失伪装成完整结果。
+2. **榜单与涨跌停池的源端覆盖账本**：涨跌停池、Tushare 龙虎榜与 Eastmoney/同花顺热度榜现已输出源端返回数量，并对已知截断或未提供权威总数的榜单显式标记下界；热度榜重复过滤量也可对账。剩余工作是继续统一行业/概念排行以及其他榜单的源端总数、过滤数、截断与返回下界语义，不能把过滤或来源上限造成的缺失伪装成完整结果。
 3. **严格历史时点数据**：财报修订版本、历史公司行动/复权因子版本、指数成分真实纳入/剔除生效区间目前没有完整持久化和回放能力；当前指数 `as_of` 只表示不晚于请求日期的最近权重报告，不能作为严格 PIT。
 4. **原 Python 能力的字段级等价**：继续对照 Efinance/AkShare 相关调用链，验证证券范围、字段映射、单位、日期覆盖、空结果及错误/回退语义；不得仅凭 Go 路由已存在就标记迁移完成。
 5. **交易制度与市场时间**：建设权威交易日历驱动的盘中/休市判定和可版本化的 ST、停牌、涨跌停等规则，补足当前仅靠时钟与部分规则推断的边界。
@@ -995,3 +995,10 @@ Tencent 个股报价和日 K 入口新增普通 A 股范围门禁，在上游请
 - Tushare `limit_list_d` 返回达到 2500 行时，`total` 明确只是下界，并记录 `provider_response_may_be_capped_at_2500_rows` 与 `provider_limit_pool_total_is_lower_bound`。
 - `DragonTigerSnapshot` 新增 `total_is_lower_bound`。Tushare `top_list` 达到 10000 行时记录 `provider_response_may_be_capped_at_10000_rows` 与 `provider_dragon_tiger_total_is_lower_bound`，避免把由截断行数计算出的分页数当作权威总页数。
 - 新增 2500 行与 10000 行边界 HTTP fixture 测试源码，并更新 OpenAPI 与数据契约。当前仅提交代码和测试源码，没有执行 Go 测试、构建、CI 或真实 Provider 请求；待统一验收。
+
+
+## 2026-10-29 热度榜源端计数与过滤账本
+
+- `HotRankingSnapshot` 新增 `provider_returned`、`excluded_rows` 和 `total_is_lower_bound`。Eastmoney 记录热度榜原始返回条数；同花顺保留源端原始条数并计数去重时排除的重复证券。
+- Eastmoney 与同花顺都没有可用于当前查询的权威排行榜总数，`total` 仍与实际输出 `items` 数保持一致以兼容服务层契约，同时明确标记为下界并增加 `provider_total_missing_using_returned_count`。
+- 新增两个 HTTP fixture 测试源码，覆盖请求 limit 截断与同花顺重复证券排除计数；本轮仍不执行 Go 测试、构建、CI 或真实 Provider 请求，统一放到开发任务完成后验收。
