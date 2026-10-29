@@ -1057,8 +1057,15 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 	now := time.Now().UTC()
 	snapshot := &model.IndexCatalogSnapshot{
 		Tag: tag, Items: make([]model.IndexCatalogItem, 0, len(data.Item)),
+		ProviderReturned: len(data.Item),
 		Source: p.Name(), SourceVersion: hithinkVersion + "-index-catalog-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	if len(data.Item) == 30000 {
+		// 正好触及本地安全边界时，无法证明来源没有在更早位置截断。
+		snapshot.TotalIsLowerBound = true
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_catalog_response_hits_30000_item_safety_boundary")
 	}
 	snapshot.ProviderTime = hithinkProviderTime(data.Timestamp, now)
 	if snapshot.ProviderTime == nil {
@@ -1073,6 +1080,7 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 			return nil, fmt.Errorf("同花顺指数/板块目录第 %d 项缺少有效代码或名称", index)
 		}
 		if _, exists := seen[symbol]; exists {
+			snapshot.ExcludedRows++
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_catalog_symbol_dropped")
 			continue
