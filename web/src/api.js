@@ -106,6 +106,76 @@ export function getMarketHotStocks(settings, { type = "popular", limit = 10, sig
   return request(settings.marketBase, "/api/v1/market/hot-stocks?" + query.toString(), { apiKey: settings.apiKey, signal });
 }
 export function getMarketIndices(settings, signal) { return request(settings.marketBase, "/api/v1/market/indices", { apiKey: settings.apiKey, signal }); }
+export function getMarketSession(settings, at = "", signal) {
+  const query = new URLSearchParams();
+  if (at) query.set("at", at);
+  return request(settings.marketBase, "/api/v1/market/session" + (query.size ? "?" + query.toString() : ""), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getIndexCatalog(settings, { tag = "cn_concept", signal } = {}) {
+  const allowedTags = new Set(["cn_concept", "region", "tszs", "industry", "tushare"]);
+  const normalizedTag = allowedTags.has(String(tag)) ? String(tag) : "cn_concept";
+  const query = new URLSearchParams({ tag: normalizedTag });
+  return request(settings.marketBase, "/api/v1/market/index-catalog?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getIndexConstituents(settings, symbol, { source = "", asOf = "", signal } = {}) {
+  const normalizedSymbol = String(symbol ?? "").trim();
+  if (!normalizedSymbol) return Promise.reject(new Error("指数代码不能为空。"));
+  const query = new URLSearchParams();
+  if (source) query.set("source", source);
+  if (asOf) query.set("as_of", asOf);
+  const suffix = query.size ? "?" + query.toString() : "";
+  return request(settings.marketBase, "/api/v1/market/indices/" + encodeURIComponent(normalizedSymbol) + "/constituents" + suffix, {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getIndexDailyBars(settings, symbol, { start, end, source = "", signal } = {}) {
+  const normalizedSymbol = String(symbol ?? "").trim();
+  if (!normalizedSymbol) return Promise.reject(new Error("指数代码不能为空。"));
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(start ?? "")) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(end ?? ""))) {
+    return Promise.reject(new Error("指数日线需要有效的开始和结束日期。"));
+  }
+  if (String(start) > String(end)) return Promise.reject(new Error("开始日期不能晚于结束日期。"));
+  const query = new URLSearchParams({ start: String(start), end: String(end) });
+  if (source) query.set("source", source);
+  return request(settings.marketBase, "/api/v1/market/indices/" + encodeURIComponent(normalizedSymbol) + "/daily?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getStockPriceLimitRule(settings, symbol, date, signal) {
+  const normalizedSymbol = String(symbol ?? "").trim();
+  if (!normalizedSymbol) return Promise.reject(new Error("股票代码不能为空。"));
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(date ?? ""))) return Promise.reject(new Error("涨跌幅规则查询需要有效的交易日期。"));
+  const query = new URLSearchParams({ date: String(date) });
+  return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(normalizedSymbol) + "/price-limit-rule?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getStockTradingStatus(settings, symbol, date, { asOf = "", signal } = {}) {
+  const normalizedSymbol = String(symbol ?? "").trim();
+  if (!normalizedSymbol) return Promise.reject(new Error("股票代码不能为空。"));
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(date ?? ""))) return Promise.reject(new Error("交易状态查询需要有效的交易日期。"));
+  const query = new URLSearchParams({ date: String(date) });
+  if (asOf) query.set("as_of", asOf);
+  return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(normalizedSymbol) + "/trading-status?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
 export function getMarketBreadth(settings, signal) { return request(settings.marketBase, "/api/v1/market/breadth", { apiKey: settings.apiKey, signal }); }
 export function getMarketSectors(settings, { type = "industry", limit = 10, signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit)});return request(settings.marketBase,"/api/v1/market/sectors?"+query.toString(),{apiKey:settings.apiKey,signal}); }
 export function getMarketLimitPool(settings, { type = "up", limit = 30, date = "", signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit)});if(date)query.set("date",date);return request(settings.marketBase,"/api/v1/market/limit-pools?"+query.toString(),{apiKey:settings.apiKey,signal}); }
