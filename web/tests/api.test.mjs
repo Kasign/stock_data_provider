@@ -14,6 +14,7 @@ import {
   getMarketSession,
   getStockPriceLimitRule,
   getStockTradingStatus,
+  getTradingCalendar,
   getDataSources,
   getQuote,
   searchStocks,
@@ -339,6 +340,21 @@ test("newly integrated market endpoints encode symbols, preserve explicit source
     assert.equal(requests[4].url, "/market-api/api/v1/stocks/600519.SH/price-limit-rule?date=2026-10-28");
     assert.equal(requests[5].url, "/market-api/api/v1/stocks/600519.SH/trading-status?date=2026-10-28&as_of=2026-10-29T09%3A00%3A00%2B08%3A00");
     assert.ok(requests.every(request => request.headers["X-API-Key"] === "market-secret"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("validates trading calendar dates and range before issuing requests", async () => {
+  const originalFetch = globalThis.fetch;
+  let count = 0;
+  globalThis.fetch = async () => { count += 1; return jsonResponse({ items: [] }); };
+  try {
+    const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+    await assert.rejects(getTradingCalendar(settings, { start: "2026-02-30", end: "2026-10-01" }), /有效的开始和结束日期/);
+    await assert.rejects(getTradingCalendar(settings, { start: "2026-10-02", end: "2026-10-01" }), /开始日期不能晚于结束日期/);
+    await getTradingCalendar(settings, { start: "2026-10-01", end: "2026-10-29" });
+    assert.equal(count, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
