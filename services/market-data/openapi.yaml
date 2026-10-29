@@ -436,7 +436,10 @@ components:
         items:
           type: array
           items: {$ref: '#/components/schemas/IndexConstituent'}
-        total: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0, description: Normalized item count; may be a lower bound when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw rows on the latest selected report date before A-share filtering and name enrichment}
+        excluded_count: {type: integer, minimum: 0, description: Rows excluded due to unsupported securities or missing verified names}
+        total_is_lower_bound: {type: boolean, description: True when the selected monthly index_weight response hits the 5000-row boundary and may be truncated}
         provider_time: {type: string, format: date-time, nullable: true}
         source: {type: string}
         source_version: {type: string}

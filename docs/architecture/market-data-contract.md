@@ -290,7 +290,9 @@ Tushare 公告端点返回完全重复的记录时，适配器按规范化的证
 
 ### 指数成分最新报告日与源记录覆盖
 
-选择指数成分快照时，应先依据源端 `trade_date` 确定最新报告日，再过滤不受支持的证券类型。不能因为最新报告日仅包含不受支持的证券而悄悄退回较旧报告日。`provider_returned` 应统计所选最新报告日的源记录；`excluded_count` 必须覆盖不受支持证券及名称无法核验的记录，且 `provider_returned = total + excluded_count`。最新报告日没有任何可用 A 股成分时，应返回带报告日与排除计数的 `unknown` 候选，让服务层继续尝试其他来源。
+选择指数成分快照时，应先依据源端 `trade_date` 确定最新报告日，再过滤不受支持的证券类型。不能因为最新报告日仅包含不受支持的证券而悄悄退回较旧报告日。`provider_returned` 应统计所选最新报告日的源记录；`excluded_count` 必须覆盖不受支持证券及名称无法核验的记录。最新报告日没有任何可用 A 股成分时，应返回带报告日与排除计数的 `unknown` 候选，让服务层继续尝试其他来源。
+
+Tushare `index_weight` 适配器按月独立查询，以避免跨多月结果被总行数限制截断。若被选月度响应达到 5000 行，必须保留 `provider_monthly_index_weight_result_is_large_and_may_be_truncated`，并将 `total_is_lower_bound=true` 暴露给调用方；此时 `total` 不能被解释为权威成分总数。该标记只描述来源覆盖边界，并不代表已获得成分股真实纳入/剔除生效区间。
 
 ### 雪球榜单源端状态码校验
 
