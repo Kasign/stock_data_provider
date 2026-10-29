@@ -300,11 +300,13 @@ func TestTushareFetchSecurityTradingStatusFindsDelistedSecurityBasicRow(t *testi
 func TestFetchHistoricalRiskWarningStatusUsesExactDailyStockSTList(t *testing.T) {
 	cases := []struct {
 		name string
+		fields []string
 		items [][]any
 		want model.RiskWarningStatus
 		wantErr bool
 	}{
 		{name: "not in ST list means normal", items: [][]any{}, want: model.RiskWarningNormal},
+		{name: "empty response without schema is unknown", fields: []string{}, items: [][]any{}, want: model.RiskWarningUnknown, wantErr: true},
 		{name: "matching ST row", items: [][]any{{"600519.SH", "*ST贵州", "20261022", "ST", "风险警示板"}}, want: model.RiskWarningApplied},
 		{name: "wrong symbol", items: [][]any{{"600000.SH", "ST浦发", "20261022", "ST", "风险警示板"}}, want: model.RiskWarningUnknown, wantErr: true},
 		{name: "wrong date", items: [][]any{{"600519.SH", "*ST贵州", "20261021", "ST", "风险警示板"}}, want: model.RiskWarningUnknown, wantErr: true},
@@ -325,7 +327,10 @@ func TestFetchHistoricalRiskWarningStatusUsesExactDailyStockSTList(t *testing.T)
 				if request.APIName != "stock_st" || request.Params["ts_code"] != "600519.SH" || request.Params["trade_date"] != "20261022" {
 					t.Errorf("unexpected stock_st request: %+v", request)
 				}
-				fields := []string{"ts_code", "name", "trade_date", "type", "type_name"}
+				fields := tc.fields
+				if fields == nil {
+					fields = []string{"ts_code", "name", "trade_date", "type", "type_name"}
+				}
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"code": 0, "msg": "",
 					"data": map[string]any{"fields": fields, "items": tc.items},

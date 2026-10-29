@@ -229,6 +229,12 @@ func (p *Tushare) fetchSecurityListingDate(ctx context.Context, symbol string) (
 	if err != nil {
 		return model.RiskWarningUnknown, err
 	}
+	// 即使名单为空，也必须确认响应提供了该接口的完整字段结构；不把异常空包当作“非 ST”。
+	for _, field := range []string{"ts_code", "name", "trade_date", "type", "type_name"} {
+		if _, ok := table.positions[field]; !ok {
+			return model.RiskWarningUnknown, fmt.Errorf("Tushare stock_st 空间或记录响应缺少必需字段 %q", field)
+		}
+	}
 	if len(table.rows) == 0 {
 		return model.RiskWarningNormal, nil
 	}
