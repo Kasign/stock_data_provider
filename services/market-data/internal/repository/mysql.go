@@ -307,6 +307,7 @@ func dailyBarRevisionHash(bar model.DailyBar) (string, error) {
 	fingerprint := bar
 	fingerprint.FetchedAt = time.Time{}
 	fingerprint.NormalizedAt = time.Time{}
+	fingerprint.SystemObservedAt = nil
 	payload, err := json.Marshal(fingerprint)
 	if err != nil {
 		return "", err
@@ -329,7 +330,7 @@ func (s *Store) ListBarsAsOf(ctx context.Context, symbol, start, end string, adj
 		return nil, errors.New("daily-bar as-of limit must not be negative")
 	}
 	asOfText := asOf.UTC().Format("2006-01-02 15:04:05.999999")
-	query := `SELECT v.metadata
+	query := `SELECT v.metadata, DATE_FORMAT(v.recorded_at, '%Y-%m-%d %H:%i:%s.%f')
 FROM market_data_daily_bar_versions AS v
 WHERE v.symbol=? AND v.adjustment_basis=?
   AND (?='' OR v.trade_date>=?) AND (?='' OR v.trade_date<=?)
@@ -344,11 +345,13 @@ WHERE v.symbol=? AND v.adjustment_basis=?
 ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
 	args := []any{symbol, string(adjust), start, start, end, end, asOfText, asOfText}
 	if limit > 0 {
-		if limit > int(^uint(0)>>1)/4 {
+		// PIT 查询需要比较多个来源的同日修订后再择取一致的来源序列。
+		// 为多个 Provider 预留行数，避免 LIMIT 先截断低优先级来源而误判覆盖不足。
+		if limit > int(^uint(0)>>1)/16 {
 			return nil, errors.New("daily-bar as-of limit overflows query row limit")
 		}
 		query += ` LIMIT ?`
-		args = append(args, limit*4)
+		args = append(args, limit*16)
 	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -358,7 +361,8 @@ ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
 	out := []model.DailyBar{}
 	for rows.Next() {
 		var metadata []byte
-		if err := rows.Scan(&metadata); err != nil {
+		var recordedAtText string
+		if err := rows.Scan(&metadata, &recordedAtText); err != nil {
 			return nil, err
 		}
 		var bar model.DailyBar
@@ -366,6 +370,11 @@ ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
 			// Keep other source/date versions usable if one historic metadata blob is damaged.
 			continue
 		}
+		recordedAt, err := time.ParseInLocation("2006-01-02 15:04:05.000000", recordedAtText, time.UTC)
+		if err != nil {
+			return nil, fmt.Errorf("parse daily-bar record timestamp: %w", err)
+		}
+		bar.SystemObservedAt = &recordedAt
 		out = append(out, bar)
 	}
 	if err := rows.Err(); err != nil {
