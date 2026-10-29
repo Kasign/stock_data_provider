@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 // RiskWarningStatus must come from a source-backed security status effective on TradeDate.
 // Unknown is not equivalent to Normal.
 type RiskWarningStatus string
@@ -42,6 +44,7 @@ type PriceLimitRuleSnapshot struct {
 	ListingTradingDayNumber int                 `json:"listing_trading_day_number,omitempty"`
 	ListingStatusKnown      bool                `json:"listing_status_known"`
 	SpecialExceptionStatus  PriceLimitException `json:"special_exception_status"`
+	SpecialExceptionEvidence *PriceLimitEventEvidence `json:"special_exception_evidence,omitempty"`
 	Status                  PriceLimitStatus    `json:"status"`
 	LimitPercent            *float64            `json:"limit_percent,omitempty"`
 	NoLimitReason           string              `json:"no_limit_reason,omitempty"`
@@ -52,4 +55,19 @@ type PriceLimitRuleSnapshot struct {
 	RuleSourceURL           string              `json:"rule_source_url"`
 	QualityStatus           QualityStatus       `json:"quality_status"`
 	QualityReasons          []string            `json:"quality_reasons,omitempty"`
+}
+
+ 
+// PriceLimitEventEvidence records the source-backed evidence used to resolve a special
+// no-limit event. A missing event is only confirmed when the source guarantees coverage.
+type PriceLimitEventEvidence struct {
+	Symbol            string              `json:"symbol"`
+	Status            PriceLimitException `json:"status"`
+	EffectiveFrom     string              `json:"effective_from"`
+	EffectiveTo       string              `json:"effective_to,omitempty"`
+	Source            string              `json:"source"`
+	SourceURL         string              `json:"source_url"`
+	AnnouncementID    string              `json:"announcement_id,omitempty"`
+	ObservedAt        time.Time           `json:"observed_at"`
+	CoverageConfirmed bool                `json:"coverage_confirmed"`
 }

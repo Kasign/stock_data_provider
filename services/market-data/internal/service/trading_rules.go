@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -124,6 +125,87 @@ func ResolvePriceLimitRule(
 	result.QualityStatus = model.QualityValid
 	return result, nil
 }
+
+
+ // ResolvePriceLimitRuleWithEvidence is the source-validated entry point for special-event
+ // rules. ResolvePriceLimitRule remains a pure policy helper and must not be fed guessed events.
+ func ResolvePriceLimitRuleWithEvidence(
+ 	rawSymbol, tradeDate string,
+ 	riskStatus model.RiskWarningStatus,
+ 	listingTradingDayNumber int,
+ 	listingStatusKnown bool,
+ 	evidence *model.PriceLimitEventEvidence,
+ ) (*model.PriceLimitRuleSnapshot, error) {
+ 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 	parsedDate, err := time.Parse("2006-01-02", tradeDate)
+ 	if err != nil || parsedDate.Format("2006-01-02") != tradeDate {
+ 		return nil, fmt.Errorf("invalid trade date %q", tradeDate)
+ 	}
+
+ 	status := model.PriceLimitExceptionUnknown
+ 	incompleteReason := ""
+ 	if evidence != nil {
+ 		evidenceSymbol, symbolErr := normalize.NormalizeSymbol(evidence.Symbol)
+ 		if symbolErr != nil || evidenceSymbol != symbol {
+ 			return nil, fmt.Errorf("price-limit event evidence symbol does not match request %q", symbol)
+ 		}
+ 		switch evidence.Status {
+ 		case model.PriceLimitExceptionUnknown, model.PriceLimitExceptionNone,
+ 			model.PriceLimitExceptionRelistingFirst, model.PriceLimitExceptionDelistingFirst,
+ 			model.PriceLimitExceptionExchangeSpecial:
+ 		default:
+ 			return nil, fmt.Errorf("unsupported event evidence status %q", evidence.Status)
+ 		}
+ 		sourceURL, urlErr := url.Parse(strings.TrimSpace(evidence.SourceURL))
+ 		if strings.TrimSpace(evidence.Source) == "" || urlErr != nil ||
+ 			sourceURL.Host == "" || (sourceURL.Scheme != "http" && sourceURL.Scheme != "https") ||
+ 			evidence.ObservedAt.IsZero() {
+ 			incompleteReason = "price_limit_event_evidence_source_or_observation_missing"
+ 		} else if evidence.Status == model.PriceLimitExceptionNone {
+ 			if !evidence.CoverageConfirmed {
+ 				incompleteReason = "price_limit_no_event_not_confirmed_by_complete_source"
+ 			} else {
+ 				status = model.PriceLimitExceptionNone
+ 			}
+ 		} else if evidence.Status == model.PriceLimitExceptionUnknown {
+ 			incompleteReason = "price_limit_special_exception_status_unverified"
+ 		} else {
+ 			from, fromErr := time.Parse("2006-01-02", evidence.EffectiveFrom)
+ 			to := from
+ 			var toErr error
+ 			if evidence.EffectiveTo != "" {
+ 				to, toErr = time.Parse("2006-01-02", evidence.EffectiveTo)
+ 			}
+ 			if fromErr != nil || from.Format("2006-01-02") != evidence.EffectiveFrom ||
+ 				toErr != nil || (evidence.EffectiveTo != "" && to.Format("2006-01-02") != evidence.EffectiveTo) ||
+ 				to.Before(from) || parsedDate.Before(from) || parsedDate.After(to) ||
+ 				strings.TrimSpace(evidence.AnnouncementID) == "" {
+ 				incompleteReason = "price_limit_special_event_evidence_incomplete_or_out_of_range"
+ 			} else {
+ 				status = evidence.Status
+ 			}
+ 		}
+ 	} else {
+ 		incompleteReason = "price_limit_event_evidence_missing"
+ 	}
+
+ 	result, err := ResolvePriceLimitRule(symbol, tradeDate, riskStatus, listingTradingDayNumber, listingStatusKnown, status)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 	result.SpecialExceptionEvidence = evidence
+ 	if incompleteReason != "" {
+ 		appendReasonOnce(&result.QualityReasons, incompleteReason)
+ 		result.Status = model.PriceLimitStatusUnknown
+ 		result.LimitPercent = nil
+ 		result.NoLimitReason = ""
+ 		result.QualityStatus = model.QualityUnknown
+ 	}
+ 	return result, nil
+ }
 
 func identifyAshareBoard(symbol string) (market, board, boardStart, ruleURL string, err error) {
 	parts := strings.Split(symbol, ".")

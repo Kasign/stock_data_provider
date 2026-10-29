@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
@@ -130,5 +131,53 @@ func TestResolvePriceLimitRuleRejectsContradictoryAndInvalidInputs(t *testing.T)
 				t.Fatalf("expected invalid input to return an error and no snapshot, got snapshot=%+v err=%v", got, err)
 			}
 		})
+	}
+}
+
+func TestResolvePriceLimitRuleWithEvidenceRequiresSourceBackedEvents(t *testing.T) {
+	base := model.PriceLimitEventEvidence{
+		Symbol: "600519.SH", Status: model.PriceLimitExceptionRelistingFirst,
+		EffectiveFrom: "2026-07-06", EffectiveTo: "2026-07-06",
+		Source: "exchange notice", SourceURL: "https://example.com/notice/123",
+		AnnouncementID: "notice-123", ObservedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+	}
+	cases := []struct {
+		name        string
+		evidence    *model.PriceLimitEventEvidence
+		date        string
+		wantStatus  model.PriceLimitStatus
+		wantQuality model.QualityStatus
+	}{
+		{name: "complete event", evidence: &base, date: "2026-07-06", wantStatus: model.PriceLimitStatusNoLimit, wantQuality: model.QualityValid},
+		{name: "event outside effective date", evidence: &base, date: "2026-07-07", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
+		{name: "missing evidence", evidence: nil, date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
+		{name: "missing announcement", evidence: func() *model.PriceLimitEventEvidence { v := base; v.AnnouncementID = ""; return &v }(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
+		{name: "unconfirmed no event", evidence: func() *model.PriceLimitEventEvidence { v := base; v.Status = model.PriceLimitExceptionNone; v.CoverageConfirmed = false; return &v }(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ResolvePriceLimitRuleWithEvidence("600519.SH", tc.date,
+				model.RiskWarningNormal, 100, true, tc.evidence)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != tc.wantStatus || got.QualityStatus != tc.wantQuality {
+				t.Fatalf("got status=%s quality=%s reasons=%v; want status=%s quality=%s",
+					got.Status, got.QualityStatus, got.QualityReasons, tc.wantStatus, tc.wantQuality)
+			}
+		})
+	}
+}
+
+func TestResolvePriceLimitRuleWithEvidenceRejectsMismatchedSymbol(t *testing.T) {
+	evidence := &model.PriceLimitEventEvidence{
+		Symbol: "000001.SZ", Status: model.PriceLimitExceptionRelistingFirst,
+		EffectiveFrom: "2026-07-06", EffectiveTo: "2026-07-06",
+		Source: "exchange notice", SourceURL: "https://example.com/notice/123",
+		AnnouncementID: "notice-123", ObservedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+	}
+	if got, err := ResolvePriceLimitRuleWithEvidence("600519.SH", "2026-07-06",
+		model.RiskWarningNormal, 100, true, evidence); err == nil || got != nil {
+		t.Fatalf("expected mismatched event identity to be rejected, got snapshot=%+v err=%v", got, err)
 	}
 }
