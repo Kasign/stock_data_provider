@@ -45,6 +45,7 @@ type DragonTigerSnapshot struct {
 	Page                   int               `json:"page"`
 	PageSize               int               `json:"page_size"`
 	Total                  int               `json:"total"`
+	TotalIsLowerBound      bool              `json:"total_is_lower_bound,omitempty"`
 	Pages                  int               `json:"pages"`
 	Returned               int               `json:"returned"`
 	SourceReturned         int               `json:"source_returned"`

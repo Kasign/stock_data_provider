@@ -1414,17 +1414,23 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	}
 	now := time.Now().UTC()
 	total := len(table.rows)
+	totalIsLowerBound := total >= 10000
 	pages := 0
 	if total > 0 {
 		pages = (total + pageSize - 1) / pageSize
 	}
 	base := &model.DragonTigerSnapshot{
 		TradeDate: tradeDate, ProviderReportDate: "", Page: page, PageSize: pageSize,
-		Total: total, Pages: pages, SourceReturned: 0, ExcludedNonAShareCount: 0,
+		Total: total, TotalIsLowerBound: totalIsLowerBound, Pages: pages,
+		SourceReturned: 0, ExcludedNonAShareCount: 0,
 		HasData: false, HasMore: false, Items: []model.DragonTigerItem{},
 		Source: p.Name(), SourceVersion: "tushare-top-list-v1", FetchedAt: now,
 		QualityStatus:  model.QualityUnknown,
 		QualityReasons: []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"},
+	}
+	if totalIsLowerBound {
+		base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_response_may_be_capped_at_10000_rows")
+		base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_dragon_tiger_total_is_lower_bound")
 	}
 	if total == 0 {
 		base.QualityReasons = appendTushareReason(base.QualityReasons, "empty_dragon_tiger_report_cannot_confirm_zero_events_or_unavailable_source")
@@ -1526,9 +1532,6 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	// 只有实际收到且逐条核对过交易日的源记录，才能证明 ProviderReportDate。
 	base.ProviderReportDate = tradeDate
 	base.Returned = len(base.Items)
-	if total >= 10000 {
-		base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_response_may_be_capped_at_10000_rows")
-	}
 	if base.Returned == 0 {
 		base.QualityStatus = model.QualityUnknown
 		return base, nil

@@ -1814,3 +1814,79 @@ func TestTushareLimitPoolMarks2500RowBoundaryAsLowerBound(t *testing.T) {
 		}
 	}
 }
+
+
+func TestTushareDragonTigerMarks10000RowBoundaryAsLowerBound(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ",")
+	prefixes := []struct {
+		prefix string
+		exchange string
+	}{
+		{prefix: "600", exchange: "SH"},
+		{prefix: "601", exchange: "SH"},
+		{prefix: "603", exchange: "SH"},
+		{prefix: "605", exchange: "SH"},
+		{prefix: "688", exchange: "SH"},
+		{prefix: "689", exchange: "SH"},
+		{prefix: "000", exchange: "SZ"},
+		{prefix: "001", exchange: "SZ"},
+		{prefix: "002", exchange: "SZ"},
+		{prefix: "003", exchange: "SZ"},
+	}
+	rows := make([][]any, 10000)
+	for index := range rows {
+		group := index / 1000
+		suffix := index % 1000
+		values := make([]any, len(fields))
+		for column, field := range fields {
+			switch field {
+			case "trade_date":
+				values[column] = "20261027"
+			case "ts_code":
+				values[column] = fmt.Sprintf("%s%03d.%s", prefixes[group].prefix, suffix, prefixes[group].exchange)
+			case "name":
+				values[column] = fmt.Sprintf("测试股票%d", index+1)
+			case "close":
+				values[column] = 10.0
+			case "pct_change":
+				values[column] = 1.2
+			case "reason":
+				values[column] = "测试原因"
+			default:
+				values[column] = nil
+			}
+		}
+		rows[index] = values
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare dragon-tiger request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "top_list" {
+			t.Errorf("api_name=%q, want top_list", request.APIName)
+		}
+		writeTushareTestTable(w, fields, rows)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchDragonTiger(context.Background(), "2026-10-27", 1, 100)
+	if err != nil {
+		t.Fatalf("FetchDragonTiger: %v", err)
+	}
+	if got.Total != 10000 || got.Pages != 100 || got.SourceReturned != 100 || len(got.Items) != 100 {
+		t.Fatalf("unexpected dragon-tiger pagination at source cap: total=%d pages=%d source_returned=%d items=%d", got.Total, got.Pages, got.SourceReturned, len(got.Items))
+	}
+	if !got.TotalIsLowerBound {
+		t.Fatal("a 10000-row response must not be presented as an authoritative full total")
+	}
+	for _, reason := range []string{"provider_response_may_be_capped_at_10000_rows", "provider_dragon_tiger_total_is_lower_bound"} {
+		if !containsTushareReason(got.QualityReasons, reason) {
+			t.Errorf("missing lower-bound quality reason %q: %v", reason, got.QualityReasons)
+		}
+	}
+}
