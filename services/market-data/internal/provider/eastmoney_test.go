@@ -418,6 +418,10 @@ func TestEastmoneyFetchSectorRankingsParsesBoardContract(t *testing.T) {
 			if len(snapshot.Items) != 5 || snapshot.Category != tc.category || snapshot.Total != 120 {
 				t.Fatalf("unexpected snapshot metadata: %+v", snapshot)
 			}
+			if snapshot.ProviderReturned != 5 || snapshot.ExcludedRows != 0 || snapshot.TotalIsLowerBound {
+				t.Fatalf("unexpected sector coverage ledger: returned=%d excluded=%d lower_bound=%v",
+					snapshot.ProviderReturned, snapshot.ExcludedRows, snapshot.TotalIsLowerBound)
+			}
 			item := snapshot.Items[0]
 			if item.Code != "BK0475" || item.Name != "电池" || item.LeadingStock != "宁德时代" {
 				t.Fatalf("unexpected board identity: %+v", item)
@@ -1063,5 +1067,33 @@ func TestEastmoneyFetchHotStocksReportsSourceCoverageAsLowerBound(t *testing.T) 
 	if got.Total != 1 || len(got.Items) != 1 || got.ProviderReturned != 2 || !got.TotalIsLowerBound {
 		t.Fatalf("unexpected hot-ranking source ledger: total=%d items=%d provider_returned=%d lower_bound=%v",
 			got.Total, len(got.Items), got.ProviderReturned, got.TotalIsLowerBound)
+	}
+}
+
+
+func TestEastmoneyFetchSectorRankingsMarksMissingTotalAndExcludedRows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"diff":[
+			{"f2":10,"f3":2.3,"f4":0.15,"f6":100000,"f12":"BK0475","f14":"电池"},
+			{"f2":8,"f4":0.05,"f6":80000,"f12":"BK0476","f14":"缺涨跌幅"},
+			{"f2":9,"f3":0.5,"f4":0.05,"f6":90000,"f12":"BK0477","f14":"食品"}
+		]}}`)
+	}))
+	defer server.Close()
+
+	provider := NewEastmoneyConfiguredWithMarketData(2*time.Second, "", "", "", server.URL, "")
+	got, err := provider.FetchSectorRankings(context.Background(), "industry", 10)
+	if err != nil {
+		t.Fatalf("FetchSectorRankings: %v", err)
+	}
+	if got.Total != 2 || len(got.Items) != 2 || got.ProviderReturned != 3 ||
+		got.ExcludedRows != 1 || !got.TotalIsLowerBound {
+		t.Fatalf("unexpected source coverage ledger: total=%d items=%d returned=%d excluded=%d lower_bound=%v",
+			got.Total, len(got.Items), got.ProviderReturned, got.ExcludedRows, got.TotalIsLowerBound)
+	}
+	for _, reason := range []string{"provider_total_missing_using_returned_count", "provider_rows_dropped_after_validation"} {
+		if !strings.Contains(strings.Join(got.QualityReasons, ","), reason) {
+			t.Errorf("missing source coverage reason %q: %v", reason, got.QualityReasons)
+		}
 	}
 }

@@ -205,15 +205,18 @@ type SectorRanking struct {
 }
 
 type SectorRankingSnapshot struct {
-	Category       string          `json:"category"`
-	Direction      string          `json:"direction"`
-	Total          int             `json:"total"`
-	Items          []SectorRanking `json:"items"`
-	Source         string          `json:"source"`
-	SourceVersion  string          `json:"source_version,omitempty"`
-	FetchedAt      time.Time       `json:"fetched_at"`
-	QualityStatus  QualityStatus   `json:"quality_status"`
-	QualityReasons []string        `json:"quality_reasons,omitempty"`
+	Category          string          `json:"category"`
+	Direction         string          `json:"direction"`
+	Total             int             `json:"total"`
+	ProviderReturned  int             `json:"provider_returned,omitempty"`
+	ExcludedRows      int             `json:"excluded_rows,omitempty"`
+	TotalIsLowerBound bool            `json:"total_is_lower_bound,omitempty"`
+	Items             []SectorRanking `json:"items"`
+	Source            string          `json:"source"`
+	SourceVersion     string          `json:"source_version,omitempty"`
+	FetchedAt         time.Time       `json:"fetched_at"`
+	QualityStatus     QualityStatus   `json:"quality_status"`
+	QualityReasons    []string        `json:"quality_reasons,omitempty"`
 }
 
 // MarketIndexQuote is an index snapshot, not an equity quote. Index symbols use an independent allow-listed namespace.
@@ -296,20 +299,20 @@ type LimitPoolItem struct {
 }
 
 type LimitPoolSnapshot struct {
-	PoolType              string          `json:"type"`
-	TradeDate             string          `json:"trade_date"`
-	ProviderReportDate    string          `json:"provider_report_date,omitempty"`
-	Total                 int             `json:"total"`
-	ProviderReturned      int             `json:"provider_returned,omitempty"`
-	ExcludedNonAShareCount int            `json:"excluded_non_a_share_count,omitempty"`
-	TotalIsLowerBound     bool            `json:"total_is_lower_bound,omitempty"`
-	HasData               bool            `json:"has_data"`
-	Items              []LimitPoolItem `json:"items"`
-	Source             string          `json:"source"`
-	SourceVersion      string          `json:"source_version,omitempty"`
-	FetchedAt          time.Time       `json:"fetched_at"`
-	QualityStatus      QualityStatus   `json:"quality_status"`
-	QualityReasons     []string        `json:"quality_reasons,omitempty"`
+	PoolType               string          `json:"type"`
+	TradeDate              string          `json:"trade_date"`
+	ProviderReportDate     string          `json:"provider_report_date,omitempty"`
+	Total                  int             `json:"total"`
+	ProviderReturned       int             `json:"provider_returned,omitempty"`
+	ExcludedNonAShareCount int             `json:"excluded_non_a_share_count,omitempty"`
+	TotalIsLowerBound      bool            `json:"total_is_lower_bound,omitempty"`
+	HasData                bool            `json:"has_data"`
+	Items                  []LimitPoolItem `json:"items"`
+	Source                 string          `json:"source"`
+	SourceVersion          string          `json:"source_version,omitempty"`
+	FetchedAt              time.Time       `json:"fetched_at"`
+	QualityStatus          QualityStatus   `json:"quality_status"`
+	QualityReasons         []string        `json:"quality_reasons,omitempty"`
 }
 
 type FundamentalMetric struct {

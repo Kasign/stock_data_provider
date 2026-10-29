@@ -1909,7 +1909,8 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 		return nil, errors.New("Eastmoney sector ranking returned no rows")
 	}
 	reportedTotal := 0
-	if payload.Data.Total != nil {
+	sourceTotalKnown := payload.Data.Total != nil
+	if sourceTotalKnown {
 		reportedTotal = *payload.Data.Total
 		if reportedTotal < 0 {
 			return nil, fmt.Errorf("Eastmoney sector ranking total is negative: %d", reportedTotal)
@@ -1930,18 +1931,19 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.SectorRankingSnapshot{
-		Category: category, Direction: direction, Total: reportedTotal, Source: p.Name(),
-		SourceVersion:  "eastmoney-sector-clist-v1",
-		FetchedAt:      fetchedAt,
-		QualityStatus:  model.QualityDegraded,
+		Category: category, Direction: direction, Total: reportedTotal,
+		ProviderReturned: len(payload.Data.Diff), TotalIsLowerBound: !sourceTotalKnown,
+		Source: p.Name(), SourceVersion: "eastmoney-sector-clist-v1",
+		FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
-		Items:          make([]model.SectorRanking, 0, len(payload.Data.Diff)),
+		Items: make([]model.SectorRanking, 0, len(payload.Data.Diff)),
 	}
 	for _, raw := range payload.Data.Diff {
 		code := parseEastmoneyBoardString(raw, "f12")
 		name := parseEastmoneyBoardString(raw, "f14")
 		changePercent := parseEastmoneyBoardNumber(raw, "f3")
 		if code == "" || name == "" || changePercent == nil {
+			snapshot.ExcludedRows++
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_rows_failed_required_field_validation")
 			continue
 		}

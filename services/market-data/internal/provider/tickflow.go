@@ -855,8 +855,9 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 		return left > right
 	})
 	snapshot := &model.SectorRankingSnapshot{
-		Category: category, Total: len(industrySymbols), Source: p.Name(),
-		SourceVersion: tickflowVersion + "-sw1-sector-rankings-v1", FetchedAt: fetchedAt,
+		Category: category, Total: len(industrySymbols),
+		ProviderReturned: len(industrySymbols), ExcludedRows: industriesWithoutUsableChanges,
+		Source: p.Name(), SourceVersion: tickflowVersion + "-sw1-sector-rankings-v1", FetchedAt: fetchedAt,
 		QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{
 			"provider_snapshot_time_not_exposed_for_aggregated_sector",
