@@ -45,7 +45,10 @@ function pending(key,msg,tone="pending") {
  if(key==="pool"){tableMessage($("#market-pool-body"),msg);const node=$("#market-sentiment-pool");if(node)node.textContent="本次数据不可用";}
  if(key==="hot")tableMessage($("#market-hot-stocks-body"),msg);
 }
-function errorMessage(err) { if(Number(err?.status)===404)return "当前部署的行情服务尚未提供此接口，请更新 market-data 服务后再刷新。";if([401,403].includes(Number(err?.status)))return "行情服务 API Key 验证失败，请检查连接与密钥设置。";return describeApiError(err,"读取市场数据失败。"); }
+export function describeMarketOverviewError(err) {
+ return describeApiError(err, "读取市场数据失败。");
+}
+function errorMessage(err) { return describeMarketOverviewError(err); }
 function renderIndices(data) {
  const root=$("#market-index-grid"),items=Array.isArray(data?.items)?data.items.filter(v=>v&&typeof v==="object"):[ ];root.replaceChildren();
  if(!items.length){empty(root,"接口已响应，但未返回可展示的指数明细。");badge("market-indices-status","未返回指数明细","warning");meta("market-indices-meta",["来源 "+(data?.source||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);return;}
