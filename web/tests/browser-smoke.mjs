@@ -470,6 +470,9 @@ try {
           qualityText: document.querySelector("#quote-quality")?.textContent.trim(),
           qualityClass: document.querySelector("#quote-quality")?.className || "",
           quoteTime: document.querySelector("#metric-quote-time")?.textContent.trim(),
+          barsMeta: document.querySelector("#bars-meta")?.textContent.trim(),
+          barsCaption: document.querySelector("#bars-caption")?.textContent || "",
+          barsRows: document.querySelector("#bars-body")?.textContent || "",
           marketHealth: document.querySelector("#market-health-dot")?.className || "",
           analysisHealth: document.querySelector("#analysis-health-dot")?.className || "",
           overallConnection: document.querySelector("#connection-dot")?.className || ""
@@ -482,6 +485,10 @@ try {
         assert.equal(failedQuote.qualityText, "未取得报价", scenario + " must not present a failed quote as healthy");
         assert.match(failedQuote.qualityClass, /quality-unknown/);
         assert.equal(failedQuote.quoteTime, "行情时间未报告", scenario + " must clear the previous quote timestamp");
+        // Quote and daily bars are independent requests: a quote failure must not erase a successful bars response.
+        assert.equal(failedQuote.barsMeta, "1 根", scenario + " must retain the successful daily-bars response");
+        assert.match(failedQuote.barsCaption, /600519\.SH/, scenario + " daily-bars caption must match the requested symbol");
+        assert.match(failedQuote.barsRows, /123\.45/, scenario + " must keep the valid daily close even when Quote fails");
         assert.doesNotMatch(failedQuote.marketHealth, /is-online/, scenario + " must not report a healthy market API");
         assert.doesNotMatch(failedQuote.analysisHealth, /is-online/, scenario + " must not report a healthy analysis API");
         assert.doesNotMatch(failedQuote.overallConnection, /is-online/, scenario + " must not report healthy overall connectivity");
