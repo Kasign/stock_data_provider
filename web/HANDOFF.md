@@ -1437,3 +1437,18 @@
 - 回滚过程现在逐项回读原值；静默恢复失败会列出未能确认恢复的键，不再统一声称已恢复。
 - [25518de — 校准工作区导入事务与回滚契约](https://github.com/Kasign/stock_data_provider/commit/25518def981a54a338c7617ceee5674711b08cf2)：静态契约覆盖事务阶段顺序、回滚回读检查，以及 UI 刷新异常不再修改已提交存储。
 - 本轮未运行 Node 测试、完整检查或 Browser Smoke；需要核对最新 HEAD 的真实 Actions 结果后再判断通过情况。
+
+
+### 2026-10-29 本地存储全链路收敛与新功能规划前检查
+
+- [973fe64 — 校验连接设置保存与清除结果](https://github.com/Kasign/stock_data_provider/commit/973fe6419e6f2e0d0e76bf5d36cd0dae81884cbb)：`saveSettings` 写入后精确回读比较，`clearSettings` 删除后确认键已不存在；静默忽略写入/删除时抛出明确错误，不把连接配置假报为已保存。
+- [b6c1a0b — 补充连接设置静默持久化失败回归测试](https://github.com/Kasign/stock_data_provider/commit/b6c1a0b30c22d6060d1bfaebf0b8fc5f4b644df9)：新增 `settings-storage.test.mjs`，覆盖正常规范化保存、静默写入失败、静默删除失败及存储异常。
+- [9e66d77 — 校验主题偏好写入结果](https://github.com/Kasign/stock_data_provider/commit/9e66d77ecffb6ec18113de567cd5656d8d28fc69)：主题持久化返回 `{ theme, persisted }`，区分本次页面可应用与浏览器偏好确实保存。
+- [d88f08a — 明确提示主题偏好未能持久化](https://github.com/Kasign/stock_data_provider/commit/d88f08a3138a4665ba5c85d7996356f20d6c2aa2)：主题仍可在当前页面切换，但持久化未确认时会通过主题按钮提示；设置页也会显示反馈。
+- [f4c6952 — 补充主题偏好静默写入失败回归测试](https://github.com/Kasign/stock_data_provider/commit/f4c6952d17794c789319c38591836dae1aee69bc)：覆盖存储异常与 setItem 静默忽略写入。
+- [f929b55 — 校验活动任务引用并独立保存最近任务历史](https://github.com/Kasign/stock_data_provider/commit/f929b5588214c106a2ec6e96c9e4afaf3035f547)：活动任务单键写入后回读确认；即使该键失败，也独立尝试保存最近任务列表，按实际结果给出反馈。
+- [75b5f19 — 补充活动任务引用静默失败契约](https://github.com/Kasign/stock_data_provider/commit/75b5f19b08c83a6c865ff37f6e4a563c62342eaf)：静态回归契约覆盖活动任务引用回读、历史独立保存及失败提示。
+- [a01af09 — 校准主题持久化失败提示契约](https://github.com/Kasign/stock_data_provider/commit/a01af095e6666cfb33923eddae1e5a07dff1fe75)：同步主题按钮无障碍标签和失败提示的静态断言。
+- 已复核工作区导入事务、最近任务新增/删除/清空、自选股写入、连接设置保存/清除、主题偏好、活动任务引用这几类本地存储路径。已知直接写入路径均有回读验证或明确错误反馈；导入回滚后重新载入的浏览器端端到端行为仍需 Browser Smoke / 人工验收。
+- `.github/workflows/webui-browser-smoke.yml` 配置了本分支 push 触发器；但当前 GitHub 连接器只返回 PR 触发的 workflow runs，无法据此列出 push 触发的 Browser Smoke。最新提交的 combined status 也未提供检查项。本轮没有实际执行 `npm test`、`npm run check` 或浏览器验收，不能标记通过。
+- 新功能规划前建议先做一次全量自动验收并确认已有页面的真实后端能力边界。候选优先级：①基于已接入接口完善个股研究与市场工作台的可用流程；②自选股的行情摘要/刷新状态与排序；③任务结果的可追溯导出与错误诊断；④只有后端接口与权限契约明确后，才实现通知、对话、选股、预警等当前占位页面，禁止用假数据伪装可用功能。
