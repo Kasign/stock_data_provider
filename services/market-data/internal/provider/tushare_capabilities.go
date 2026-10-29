@@ -1064,11 +1064,6 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		if readErr != nil {
 			return nil, readErr
 		}
-		if isTushareConvertibleBondCode(rawSymbol) {
-			base.ExcludedNonAShareCount++
-			base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_non_a_share_security_rows_excluded")
-			continue
-		}
 		symbol, symbolErr := normalize.NormalizeSymbol(rawSymbol)
 		if symbolErr != nil {
 			return nil, fmt.Errorf("Tushare daily_basic 第 %d 行代码无效: %q", index, rawSymbol)
@@ -1488,6 +1483,11 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		rawSymbol, readErr := table.stringValue(row, "ts_code")
 		if readErr != nil {
 			return nil, readErr
+		}
+		if isTushareConvertibleBondCode(rawSymbol) {
+			base.ExcludedNonAShareCount++
+			base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_non_a_share_security_rows_excluded")
+			continue
 		}
 		symbol, symbolErr := normalize.NormalizeSymbol(rawSymbol)
 		if symbolErr != nil {
