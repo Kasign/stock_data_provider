@@ -457,3 +457,7 @@ Tencent 个股报价和日 K 接口必须在生成请求参数前验证证券属
 财务接口 `GET /api/v1/stocks/{symbol}/fundamentals?year=YYYY&quarter=Q&as_of=RFC3339` 使用版本表，不请求实时 Provider。返回值是每个来源在 `as_of` 之前已记录的最新版本，再按质量择优；`system_observed_at` 表示该版本被系统记录的时刻。每个有数据的分区必须有可核验的披露日期，且其 `publication_date` 必须早于 `as_of` 在 `Asia/Shanghai` 时区对应的自然日。由于源端通常只给出披露日期而没有披露时刻，同日披露不能被证明在请求时刻前可用，因此保守剔除；披露日期缺失的分区也会被剔除，并将结果质量降级。不存在可用版本时返回 `404 PIT_REVISION_NOT_FOUND`；未配置本地版本存储时返回 `503 PIT_STORAGE_UNAVAILABLE`，不会悄悄回退到当前值。
 
 PIT 版本只能重建启用版本化后实际记录过的快照。迁移前未留存的财务历史修订无法凭当前最新快照补造；`as_of` 也不等于上游的真实发布时间，来源优先级和公司行动/复权因子历史仍需独立处理。
+
+### 指数/板块目录的来源覆盖账本
+
+指数/板块目录快照额外提供 `provider_returned`、`excluded_rows` 与 `total_is_lower_bound`。目前同花顺目录将原始 `item` 数记录为 `provider_returned`，重复代码被剔除时计入 `excluded_rows`；因此在非截断响应中必须满足 `provider_returned = total + excluded_rows`。若原始返回恰好达到本地 30000 项安全边界，无法证明上游没有截断，服务会标记 `total_is_lower_bound=true` 并降级质量。无效代码/名称仍视为当前 Provider 响应不可信，触发服务层回退，而不会把格式错误的条目计入正常目录。

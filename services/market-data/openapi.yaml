@@ -406,13 +406,16 @@ components:
         tag: {type: string}
     IndexCatalogSnapshot:
       type: object
-      required: [tag, items, total, source, fetched_at, quality_status]
+      required: [tag, items, total, provider_returned, excluded_rows, total_is_lower_bound, source, fetched_at, quality_status]
       properties:
         tag: {type: string}
         items:
           type: array
           items: {$ref: '#/components/schemas/IndexCatalogItem'}
-        total: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0, description: Normalized unique catalog rows retained after source-row filtering}
+        provider_returned: {type: integer, minimum: 0, description: Raw catalog rows returned by the source before duplicate filtering}
+        excluded_rows: {type: integer, minimum: 0, description: Duplicate source rows excluded from the normalized catalog}
+        total_is_lower_bound: {type: boolean, description: True when the response reaches the local 30000-row safety boundary and completeness cannot be established}
         provider_time: {type: string, format: date-time, nullable: true}
         source: {type: string}
         source_version: {type: string}
