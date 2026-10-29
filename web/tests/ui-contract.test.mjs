@@ -420,7 +420,7 @@ test("late task creation responses cannot replace the task selected while submis
   const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
   const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
   assert.match(creator, /state\.taskContextGeneration \+= 1;\s*creationContextGeneration = state\.taskContextGeneration;/);
-  assert.match(creator, /if \(creationContextGeneration !== state\.taskContextGeneration\) \{[\s\S]*?upsertRecentTask\(endpointRecord, localStorage\)[\s\S]*?当前选中的任务不会被覆盖/);
+  assert.match(creator, /if \(creationContextGeneration !== state\.taskContextGeneration\) \{[\s\S]*?persistRecentTaskHistory\(endpointRecord\)[\s\S]*?当前选中的任务不会被覆盖/);
   assert.match(creator, /catch \(error\) \{\s*try \{\s*if \(creationContextGeneration !== state\.taskContextGeneration\)/, "late create errors must not hide the currently selected task");
   const activateStart = app.indexOf("function activateTaskReference(record) {");
   const activateEnd = app.indexOf("\nfunction restoreLastTask(", activateStart);
@@ -1930,7 +1930,7 @@ test("清空或导入本地任务历史会隔离在途创建请求的晚到响�
   assert.ok(creator, "任务创建方法必须存在");
   assert.match(creator, /creationHistoryGeneration = state\.taskHistoryGeneration;/);
   assert.match(creator, /const taskHistoryWasReplaced = creationHistoryGeneration !== state\.taskHistoryGeneration;/);
-  assert.match(creator, /if \(taskHistoryWasReplaced\) \{[\s\S]*?未重新写入该引用[\s\S]*?\} else \{[\s\S]*?upsertRecentTask\(endpointRecord, localStorage\)/);
+  assert.match(creator, /if \(taskHistoryWasReplaced\) \{[\s\S]*?未重新写入该引用[\s\S]*?\} else \{[\s\S]*?persistRecentTaskHistory\(endpointRecord\)/);
   const clearStart = app.indexOf("function clearRecentTaskHistory() {");
   const clearEnd = app.indexOf("function setWatchlistFeedback(", clearStart + 1);
   const clearBody = clearStart >= 0 && clearEnd > clearStart ? app.slice(clearStart, clearEnd) : "";
