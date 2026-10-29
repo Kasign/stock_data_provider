@@ -268,13 +268,13 @@ function persistTaskReference() {
       }) : "";
       if (historyComparable !== comparable) {
         record.updated_at = previous?.updated_at || new Date().toISOString();
-        renderRecentTasks(upsertRecentTask(record, localStorage));
+        persistRecentTaskHistory(record);
       }
       return;
     }
     record.updated_at = new Date().toISOString();
     localStorage.setItem(TASK_REFERENCE_KEY, JSON.stringify(record));
-    renderRecentTasks(upsertRecentTask(record, localStorage));
+    persistRecentTaskHistory(record);
   } catch {
     // Storage can be disabled or full; the current page session should still work.
   }
@@ -367,6 +367,25 @@ function safeReadRecentTasksState() {
 
 function safeReadRecentTasks() {
   return safeReadRecentTasksState().items;
+}
+
+function persistRecentTaskHistory(record) {
+  const history = upsertRecentTask(record, localStorage);
+  renderRecentTasks(history);
+
+  const storageState = safeReadRecentTasksState();
+  if (!storageState.storageReadable || !storageState.storageValid) return;
+  const persisted = history.some((item) =>
+    item.task_id === record.task_id &&
+    item.analysis_base === (record.analysis_base || state.settings.analysisBase) &&
+    item.run_id === (record.run_id || "")
+  );
+  if (!persisted) {
+    setRecentTasksFeedback(
+      "任务已创建，但浏览器存储不可用，最近任务引用未保存；刷新后可能无法从本地列表找回。",
+      "warning"
+    );
+  }
 }
 
 function setRecentTasksFeedback(message, kind = "info") {
