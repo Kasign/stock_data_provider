@@ -99,5 +99,5 @@ WebUI 已接入/计划使用的核心能力包括：
 | 6 个新增接口的路由/Handler | 已在 `server.go` 注册；目录、成分、指数日线、交易时段、涨跌幅规则、交易状态各有独立 Handler | `a65ac54d` 静态核对 | 相关 Handler 单测存在；最新代码 CI 待结果 | 已完成代码级初核，待核 Provider 能力与实际响应 |
 | 单位、百分比和时间语义 | OpenAPI 已声明价格 CNY/share、成交量 shares、金额 CNY、百分比百分点；交易时段补充 `server_time` 与 `time_zone=Asia/Shanghai` | `72e9faf` | Go 测试待结果 | 部分修复，需继续对照实际 JSON |
 | 质量状态与 null/unknown 语义 | 涨跌幅规则缺少可信状态/特殊事件证据时返回 unknown；历史交易状态保留 unknown 与 PIT 存储边界；指数快照校验覆盖和来源质量 | 当前 Handler/Service/Model 核对 | 既有测试覆盖部分边界 | 已有保护，仍需补齐跨层契约测试 |
-| OpenAPI 与鉴权定义一致性 | 修复 `ApiKeyAuth` 引用与定义的名称不一致；为目录、交易时段、涨跌幅规则、交易状态补齐 API Key security 声明；指数成分/日线统一引用 `ApiKey` | `72e9faf` | OpenAPI 检查随 CI 验证 | 已修复，待 CI |
+| OpenAPI 与鉴权定义一致性 | 修复 `ApiKeyAuth` 引用与定义的名称不一致；为六个重点接口统一 `ApiKey` 鉴权声明；发现并删除指数目录操作重复的 `security` 键；契约测试校验 YAML 可解析、六个接口各自仅声明一次鉴权 | `72e9faf`、`eb4524c`、`940a3a8` | 最新 HEAD 的 Go 全量测试/契约测试 CI 待完成；旧 HEAD 结果不能代替本次验证 | 代码已修复，等待最新 CI 确认 |
 | 批量概览、历史情绪、市场资金流、板块排行、Provider 诊断 | 逐项区分已有数据域与真正新增能力；历史情绪需要持久化快照，市场级资金流必须有独立净流入口径，Provider 诊断需主动探测与限流 | 下一阶段任务规划 | 尚未实施 | 待评估，不得标为已实现 |
