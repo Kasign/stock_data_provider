@@ -207,6 +207,7 @@ func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDa
 	base := model.SecurityTradingStatusSnapshot{
 		Symbol: "600519.SH", TradeDate: "2026-07-06",
 		RiskWarningStatus:       model.RiskWarningNormal,
+		DelistingStatus:         model.DelistingStatusNormal,
 		ListingTradingDayNumber: 100, ListingStatusKnown: true,
 		IsTradingDay: true, TradingDayKnown: true,
 		QualityStatus: model.QualityValid,
