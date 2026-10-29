@@ -1211,5 +1211,5 @@ Tencent 个股报价和日 K 入口新增普通 A 股范围门禁，在上游请
 
 - 涨跌幅规则解析入口现在会拒绝 `QualityStatus=unknown` 的历史交易状态快照，即使证券代码、日期、来源版本等字段表面完整，也不输出确定的涨跌幅百分比。
 - 特殊事件规则仍依赖独立、可验证的事件证据；当前尚未接入交易所特殊事件的独立 Provider 与持久化闭环，因此不能将复牌首日、重新上市、退市整理首日等事件按普通规则推断。
-- `ResolvePriceLimitRuleFromTradingStatus` 已连接历史交易状态快照和事件证据的纯服务解析逻辑，但尚未形成面向外部调用的完整 HTTP 规则查询闭环。后续应先建立独立事件 Provider 契约，再接入服务选择、存储和 API，避免暴露接受调用方自报证据的接口。
+- `ResolvePriceLimitRuleFromTradingStatus` 已连接历史交易状态快照和事件证据解析；新增 `GET /api/v1/stocks/{symbol}/price-limit-rule?date=YYYY-MM-DD`，由服务端读取交易状态并从独立事件 Provider 获取证据。缺少 Provider、证据无效或交易状态不可用时，API 返回 `unknown` 且不输出涨跌幅百分比。该接口已接入路由与 OpenAPI，但当前尚无接入的交易所权威特殊事件 Provider，因此不能据此声称重新上市、退市整理首日、复牌首日和临时停市等事件已得到真实数据支持。
 - Provider 契约后续优先处理：事件证据来源/公告标识、有效日期覆盖、抓取时间、质量状态一致性；未完成的能力保持明确 `unknown`，不伪装成已支持。
