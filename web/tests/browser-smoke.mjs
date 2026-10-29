@@ -209,7 +209,7 @@ try {
         dataSourcesRequestCount += 1;
         if (dataSourceScenario === "network") return route.abort("failed");
         if (dataSourceScenario === "delayed-success") {
-          await new Promise((resolve) => setTimeout(resolve, 600));
+          await new Promise((resolve) => setTimeout(resolve, 1600));
           return json(200, {
             sources: [{
               name: "测试 Provider",
@@ -623,6 +623,49 @@ try {
       await page.waitForTimeout(250);
       assert.equal(dataSourcesRequestCount, recoveryRequestCount + 1, "successful retry should not trigger a hidden duplicate request");
 
+      // Changing the market connection while the Provider read is in flight must invalidate its late response.
+      dataSourceScenario = "delayed-success";
+      const inFlightRequestCount = dataSourcesRequestCount;
+      await page.locator("#data-center-check").click();
+      await page.waitForFunction(() => {
+        const summary = document.querySelector("#data-center-provider-summary")?.textContent || "";
+        const list = document.querySelector("#data-center-provider-list")?.textContent || "";
+        return summary.includes("旧清单暂不展示") &&
+          list.includes("正在读取 Provider 能力清单") &&
+          !list.includes("测试 Provider");
+      }, null, { timeout: 5000 });
+      assert.equal(dataSourcesRequestCount, inFlightRequestCount + 1, "in-flight Provider check should issue one request");
+
+      await page.locator("#open-settings").click();
+      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#market-base-input").fill("/market-api-v2");
+      await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
+      await page.locator("#save-settings").click();
+      await page.waitForFunction(() => {
+        const summary = document.querySelector("#data-center-summary-message")?.textContent || "";
+        const list = document.querySelector("#data-center-provider-list")?.textContent || "";
+        return !document.querySelector("#settings-dialog")?.open &&
+          summary.includes("连接配置已变更") &&
+          !list.includes("测试 Provider");
+      }, null, { timeout: 5000 });
+
+      // Allow the old request to resolve; its older generation still must not repopulate Provider state.
+      await page.waitForTimeout(1800);
+      const staleProviderState = await page.evaluate(() => ({
+        summary: document.querySelector("#data-center-provider-summary")?.textContent || "",
+        list: document.querySelector("#data-center-provider-list")?.textContent || "",
+        status: document.querySelector("#data-center-provider-status")?.textContent.trim() || "",
+        buttonText: document.querySelector("#data-center-check")?.textContent.trim() || "",
+        buttonDisabled: document.querySelector("#data-center-check")?.disabled
+      }));
+      assert.match(staleProviderState.summary, /连接配置已变更/);
+      assert.doesNotMatch(staleProviderState.list, /测试 Provider/, "late old-connection response must not repopulate Provider list");
+      assert.equal(staleProviderState.status, "需重新检查");
+      assert.equal(staleProviderState.buttonText, "立即检查");
+      assert.equal(staleProviderState.buttonDisabled, false);
+      assert.equal(dataSourcesRequestCount, inFlightRequestCount + 1, "invalidated old request must not cause a hidden follow-up request");
+
+      dataSourceScenario = "success";
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
     }
