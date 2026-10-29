@@ -1470,3 +1470,12 @@
 - WebUI 修复提交：`576bf272299b2f76135424b40736e2377de5fbbb`。无选中事件时 Run Flow 时间线使用整宽，有选中事件时显示右侧诊断栏；新增静态 UI 契约。
 - `WebUI browser smoke #40693887176` 在记录时仍运行中；本地 Node 测试、构建与人工浏览器验收未执行。
 - 当前数据分支 HEAD 已继续推进到 `2af98288c4c0a61f66ea9aac87fa5fd3715a4a5b`；较已合入的 `8c876d7` 多出两项热度榜补充行情身份覆盖代码/测试与契约变更，未混入本轮仅限 `web/**` 的 UI 修复。
+
+
+## 2026-10-29 — 最新 Actions 与数据分支差异复核
+
+- [x] Run Flow 代码提交 `576bf272299b2f76135424b40736e2377de5fbbb` 的 [Browser Smoke #40693887176](https://github.com/Kasign/stock_data_provider/actions/runs/40693887176) 已成功。
+- [x] 文档提交 `b8d0508094dbe5621405d5df07d0321b4cac39d4` 的 [Browser Smoke #40694280409](https://github.com/Kasign/stock_data_provider/actions/runs/40694280409) 已成功。
+- [x] 两个合并前提提交的 Browser Smoke #40691844220、#40692098667 同样已成功。
+- 数据分支在上次记录的 `2af98288c4c0a61f66ea9aac87fa5fd3715a4a5b` 后继续推进至 `86fbb250cae16d50d49231b1e72e98719e877340`，新增提交“修正市场广度时间戳偏差测试边界”，仅修改 `services/market-data/internal/provider/tickflow_market_breadth_test.go`。此提交未合入 WebUI 分支，也未改动数据分支引用。
+- 本轮继续遵守 UI 专项仅修改 `web/**` 的约束；本地 Node 测试、完整构建、人工浏览器与 NAS/1Panel 验收仍未执行。

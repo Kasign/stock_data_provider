@@ -843,3 +843,10 @@
 - [x] `4e6cc6abaf3a04479291a03d6cf187572d510d59` 的 Browser Smoke #40691844220 已完成并成功。
 - [x] `6d7b79e884c29de8f9a52b3440a31f1dcbb5ff46` 的 Browser Smoke #40692098667 已完成并成功。
 - [ ] 当前 WebUI 专项代码提交验收以 #40693887176 的最终结果为准，不能引用较早 HEAD 的成功记录代替。
+
+
+## 2026-10-29 — Browser Smoke 状态复核
+
+- [x] `576bf272299b2f76135424b40736e2377de5fbbb` 的 Browser Smoke #40693887176 已成功。
+- [x] `b8d0508094dbe5621405d5df07d0321b4cac39d4` 的 Browser Smoke #40694280409 已成功。
+- [ ] 本地 Node 测试、完整构建、真实浏览器人工验收及 NAS/1Panel 验收仍待统一执行。

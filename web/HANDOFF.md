@@ -1175,3 +1175,12 @@
 - 后续数据分支继续并发推进到 `2af98288c4c0a61f66ea9aac87fa5fd3715a4a5b`，较合并截止点新增 5 笔差异中的后续部分仍在数据分支：`c3a2c681398755eeba97bff4ebd7a8f4964a66a6`（东方财富热度榜补充行情证券身份覆盖校验及测试）和 `2af98288c4c0a61f66ea9aac87fa5fd3715a4a5b`（补充对应市场数据契约）。这两个提交未纳入后续 WebUI 专项提交；本轮转换到仅修改 `web/**` 后，不将新的数据层变更混入 UI 修复。
 - WebUI 修复：[576bf27 优化 Run Flow 未选中阶段时的时间线布局](https://github.com/Kasign/stock_data_provider/commit/576bf272299b2f76135424b40736e2377de5fbbb)。未选择阶段事件时，时间线占满可用宽度；选择事件后再恢复左右分栏。对应 `web/src/app.js`、`web/styles.css` 和 `web/tests/ui-contract.test.mjs` 在同一提交。
 - GitHub Actions Browser Smoke `#40693887176`（代码提交）在本次记录时仍为 `in_progress`，Chromium responsive layout checks 正在运行。未在本地执行 Node 测试、构建或人工浏览器验收。
+
+
+## 2026-10-29 — 最新 Actions 与数据分支差异复核
+
+- [x] Run Flow 代码提交 `576bf272299b2f76135424b40736e2377de5fbbb` 的 [Browser Smoke #40693887176](https://github.com/Kasign/stock_data_provider/actions/runs/40693887176) 已成功。
+- [x] 文档提交 `b8d0508094dbe5621405d5df07d0321b4cac39d4` 的 [Browser Smoke #40694280409](https://github.com/Kasign/stock_data_provider/actions/runs/40694280409) 已成功。
+- [x] 两个合并前提提交的 Browser Smoke #40691844220、#40692098667 同样已成功。
+- 数据分支在上次记录的 `2af98288c4c0a61f66ea9aac87fa5fd3715a4a5b` 后继续推进至 `86fbb250cae16d50d49231b1e72e98719e877340`，新增提交“修正市场广度时间戳偏差测试边界”，仅修改 `services/market-data/internal/provider/tickflow_market_breadth_test.go`。此提交未合入 WebUI 分支，也未改动数据分支引用。
+- 本轮继续遵守 UI 专项仅修改 `web/**` 的约束；本地 Node 测试、完整构建、人工浏览器与 NAS/1Panel 验收仍未执行。
