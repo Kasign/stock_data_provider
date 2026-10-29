@@ -1191,7 +1191,7 @@ func TestTushareDailyDegradesMissingChangePercent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeTushareTestTable(w,
 			[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
-			[][]any{{"600519.SH", today, 100.0, 102.0, 99.0, 101.0, nil, 1200.0, 456.0}},
+			[][]any{{"600519.SH", today, 100.0, 102.0, 99.0, 101.0, nil, 1200.0, 12120.0}},
 		)
 	}))
 	defer server.Close()
@@ -1368,7 +1368,7 @@ func TestTushareFundamentalsRejectsMissingAnnouncementDate(t *testing.T) {
 
 	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
 	_, err := provider.FetchFundamentals(context.Background(), "600519.SH", 2025, 4)
-	if err == nil || !strings.Contains(err.Error(), "未返回") {
+	if err == nil || !strings.Contains(err.Error(), "没有可用财务指标或报表字段") {
 		t.Fatalf("financial data without an announcement date must be excluded, got %v", err)
 	}
 }
