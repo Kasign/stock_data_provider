@@ -96,7 +96,7 @@ func TestValidateFundamentalsSnapshotRejectsDuplicateMetricKeys(t *testing.T) {
 
 func TestValidateFundamentalsSnapshotRejectsBlankMetricMetadata(t *testing.T) {
 	cases := []struct {
-		name string
+		name   string
 		mutate func(*model.FundamentalMetric)
 	}{
 		{name: "blank key", mutate: func(metric *model.FundamentalMetric) { metric.Key = "  " }},
@@ -157,7 +157,6 @@ func TestValidateFundamentalsSnapshotAcceptsPointInTimeValidSnapshot(t *testing.
 		t.Fatalf("valid published fundamentals snapshot should pass: %v", err)
 	}
 }
-
 
 func TestValidateFundamentalsSnapshotAcceptsOptionalFinancialStatements(t *testing.T) {
 	snapshot := validFundamentalsSnapshotForTest()
@@ -877,7 +876,7 @@ func TestNearLiveAsOfDoesNotIncludeQuoteTimestampAfterCutoff(t *testing.T) {
 	vol := int64(1000)
 	amount := float64(10500)
 	p := fakeProvider{name: "eastmoney", quote: q, bars: []model.DailyBar{{
-			SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
+		SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &vol, Amount: &amount, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
 	}}}
@@ -1139,7 +1138,7 @@ func TestDailyBarsFallbackWarningsExposeMissingAmount(t *testing.T) {
 		name: "tencent",
 		bars: []model.DailyBar{{
 			SourceVersion: "test-v1",
-			Symbol: "600519.SH", TradeDate: "2026-10-21", Period: "1d",
+			Symbol:        "600519.SH", TradeDate: "2026-10-21", Period: "1d",
 			Open: 1331.88, High: 1331.98, Low: 1302.36, Close: 1309.69,
 			Volume: &volume, Amount: nil, AdjustmentBasis: model.AdjustmentForward,
 			Source: "tencent", VolumeUnit: "shares", AmountUnit: "unknown",
@@ -1253,7 +1252,9 @@ func TestStockBoardsNormalizesProviderAndCachedSymbols(t *testing.T) {
 	t.Run("cache payload", func(t *testing.T) {
 		legacy := makeSnapshot("600519")
 		encoded, err := json.Marshal(legacy)
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		mem := newMemoryCache()
 		mem.values["md:v1:stock-boards:600519.SH"] = encoded
 		svc := NewWithCapabilities(nil, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
@@ -1323,7 +1324,6 @@ func TestQuoteCacheRejectsLegacyUnverifiedTencentVolume(t *testing.T) {
 	}
 }
 
-
 func TestValidateMarketBreadthRequiresSourceVersion(t *testing.T) {
 	amount := 100.0
 	snapshot := &model.MarketBreadthSnapshot{
@@ -1339,7 +1339,7 @@ func TestValidateMarketBreadthRequiresSourceVersion(t *testing.T) {
 
 func TestValidateMarketBreadthRejectsLimitCountsAboveCoverage(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name     string
 		up, down int
 	}{
 		{name: "limit up", up: 4, down: 1},
@@ -1353,7 +1353,7 @@ func TestValidateMarketBreadthRejectsLimitCountsAboveCoverage(t *testing.T) {
 				LimitUpCount: &up, LimitDownCount: &down,
 				TotalAmountCNY: &amount, AmountCoverageCount: 3,
 				ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
-				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+				Source:             "eastmoney", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
 				QualityStatus: model.QualityDegraded,
 			}
 			if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "outside covered-securities bounds") {
@@ -1387,7 +1387,6 @@ func TestValidateMarketBreadthRequiresDegradedQualityForPartialAmountCoverage(t 
 		t.Fatalf("partial amount coverage with degraded quality should remain usable: %v", err)
 	}
 }
-
 
 func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *testing.T) {
 	now := time.Now().UTC()
@@ -1429,7 +1428,6 @@ func TestValidateIndexQuoteSnapshotRejectsInvalidPricesAndQualityMismatch(t *tes
 		t.Fatalf("snapshot must inherit item degradation, got %v", err)
 	}
 }
-
 
 func TestIndexQuoteRejectsInvalidSymbolOrCode(t *testing.T) {
 	now := time.Now().UTC()
@@ -1548,7 +1546,6 @@ func TestValidateLimitPoolRejectsInvalidNumericFieldsAndQualityMismatch(t *testi
 	})
 }
 
-
 func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {
 	now := time.Now().UTC()
 	change := 1.5
@@ -1587,7 +1584,6 @@ func TestMarkLimitPoolTruncatedDowngradesIncompleteSnapshot(t *testing.T) {
 	}
 }
 
-
 func TestValidateSectorRankingSnapshotEnforcesRankAndDirectionOrder(t *testing.T) {
 	makeSnapshot := func(direction string, firstRank, secondRank int, firstChange, secondChange float64) *model.SectorRankingSnapshot {
 		now := time.Now().UTC()
@@ -1603,8 +1599,8 @@ func TestValidateSectorRankingSnapshotEnforcesRankAndDirectionOrder(t *testing.T
 		}
 	}
 	cases := []struct {
-		name string
-		snapshot *model.SectorRankingSnapshot
+		name      string
+		snapshot  *model.SectorRankingSnapshot
 		wantError string
 	}{
 		{name: "rank order", snapshot: makeSnapshot("up", 2, 1, 2, 1), wantError: "increasing rank"},
@@ -1617,7 +1613,9 @@ func TestValidateSectorRankingSnapshotEnforcesRankAndDirectionOrder(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			err := validateSectorRankingSnapshot("industry", 10, tc.snapshot)
 			if tc.wantError == "" {
-				if err != nil { t.Fatalf("expected valid direction ordering, got %v", err) }
+				if err != nil {
+					t.Fatalf("expected valid direction ordering, got %v", err)
+				}
 				return
 			}
 			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
@@ -1673,7 +1671,6 @@ func TestValidateSectorRankingSnapshotRejectsInvalidTotalsAndQuality(t *testing.
 	})
 }
 
-
 func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T) {
 	now := time.Now().UTC()
 	t.Run("non-atomic market breadth", func(t *testing.T) {
@@ -1683,7 +1680,7 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 			AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
 			TotalAmountCNY: &amount, AmountCoverageCount: 3,
 			ProviderReportDate: "2026-10-23", Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
-			QualityStatus: model.QualityValid,
+			QualityStatus:  model.QualityValid,
 			QualityReasons: []string{"market_amount_quotes_collected_non_atomically"},
 		}
 		if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid") {
@@ -1714,7 +1711,6 @@ func TestSnapshotQualityMustReflectDegradedItemsAndNonAtomicBreadth(t *testing.T
 	})
 }
 
-
 func TestSnapshotSourceTimesRejectMissingOrFutureValues(t *testing.T) {
 	now := time.Now().UTC()
 	t.Run("future index quote time", func(t *testing.T) {
@@ -1739,13 +1735,12 @@ func TestSnapshotSourceTimesRejectMissingOrFutureValues(t *testing.T) {
 			RankingType: "popular", Total: 1, Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
 			Items: []model.HotRankingItem{{Rank: 1, Symbol: "600519.SH", Code: "600519",
 				Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid}},
-	}
+		}
 		if err := validateHotRankingSnapshot("popular", snapshot); err == nil || !strings.Contains(err.Error(), "without provider time") {
 			t.Fatalf("hot ranking without provider time must not be valid, got %v", err)
 		}
 	})
 }
-
 
 type stockBoardsCountingFakeProvider struct {
 	snapshot *model.StockBoardSnapshot
@@ -1789,7 +1784,6 @@ func TestStockBoardsCachesUnknownEmptyResultBriefly(t *testing.T) {
 		t.Fatalf("cached result must remain unknown and avoid another provider call: snapshot=%+v calls=%d", second, p.calls)
 	}
 }
-
 
 type fundamentalsCountingFakeProvider struct {
 	snapshot *model.FundamentalsSnapshot
@@ -1839,7 +1833,6 @@ func TestFundamentalsUnknownSnapshotWithDataUsesShortCacheTTL(t *testing.T) {
 	}
 }
 
-
 type stockBasicFakeProvider struct {
 	name  string
 	item  *model.StockBasic
@@ -1884,7 +1877,9 @@ func TestStockBasicNormalizesProviderAndCachedSymbols(t *testing.T) {
 	t.Run("cache payload", func(t *testing.T) {
 		legacy := stockBasicIdentityFixtureForTest("600519")
 		encoded, err := json.Marshal(legacy)
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		mem := newMemoryCache()
 		mem.values["md:v1:stock-basic:600519.SH"] = encoded
 		svc := NewWithCapabilities(nil, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
@@ -1991,7 +1986,11 @@ func TestValidateStockBasicRejectsInvalidShareCounts(t *testing.T) {
 		{name: "total shares zero", setup: func(item *model.StockBasic) { value := 0.0; item.TotalShares = &value }, want: "total_shares must be positive"},
 		{name: "float shares negative", setup: func(item *model.StockBasic) { value := -1.0; item.FloatShares = &value }, want: "float_shares must not be negative"},
 		{name: "float shares exceed total", setup: func(item *model.StockBasic) { value := 1_000_001.0; item.FloatShares = &value }, want: "float_shares must not exceed total_shares"},
-		{name: "float market cap exceeds total", setup: func(item *model.StockBasic) { total, floating := 1_000_000.0, 1_000_001.0; item.MarketCapCNY = &total; item.FloatMarketCapCNY = &floating }, want: "float_market_cap_cny must not exceed market_cap_cny"},
+		{name: "float market cap exceeds total", setup: func(item *model.StockBasic) {
+			total, floating := 1_000_000.0, 1_000_001.0
+			item.MarketCapCNY = &total
+			item.FloatMarketCapCNY = &floating
+		}, want: "float_market_cap_cny must not exceed market_cap_cny"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2079,7 +2078,7 @@ func TestStockBasicRetainsUnknownAfterFallbackExhaustion(t *testing.T) {
 			SecurityType: 1, SecurityTypeLabel: "stock",
 			ListingStatus: 1, ListingStatusLabel: "listed",
 			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
-			QualityStatus: model.QualityUnknown,
+			QualityStatus:    model.QualityUnknown,
 			NormalizationVer: normalize.Version,
 		},
 	}
@@ -2105,7 +2104,6 @@ func TestStockBasicRetainsUnknownAfterFallbackExhaustion(t *testing.T) {
 		t.Fatalf("unknown stock-basic record is missing its fallback-exhaustion reason: %+v", got.QualityReasons)
 	}
 }
-
 
 type supplementCountingFakeProvider struct {
 	chip      *model.ChipDistribution
@@ -2214,7 +2212,6 @@ func TestSupplementCachesReuseProviderContractValidation(t *testing.T) {
 	})
 }
 
-
 func TestSupplementQualityCannotBeValidWithoutAvailabilityTime(t *testing.T) {
 	now := time.Now().UTC()
 	mainInflow, fiveDay := 120.0, 500.0
@@ -2249,7 +2246,6 @@ func TestSupplementQualityCannotBeValidWithoutAvailabilityTime(t *testing.T) {
 		t.Fatalf("capital-flow result without availability timestamp must be degraded: %+v", flow)
 	}
 }
-
 
 func TestSupplementCacheRejectsOldValidQualityWithoutAvailabilityTime(t *testing.T) {
 	now := time.Now().UTC()
@@ -2303,7 +2299,6 @@ func TestSupplementCacheRejectsOldValidQualityWithoutAvailabilityTime(t *testing
 	})
 }
 
-
 func TestValidateFundamentalsSnapshotRejectsFutureReportPeriod(t *testing.T) {
 	snapshot := validFundamentalsSnapshotForTest()
 	futureYear := time.Now().In(marketLocation()).Year() + 1
@@ -2320,7 +2315,6 @@ func TestValidateFundamentalsSnapshotRejectsFutureReportPeriod(t *testing.T) {
 	}
 }
 
-
 func TestValidateFundamentalsSnapshotRejectsPublicationBeforeReportPeriodEnd(t *testing.T) {
 	snapshot := validFundamentalsSnapshotForTest()
 	for index := range snapshot.Sections {
@@ -2330,7 +2324,6 @@ func TestValidateFundamentalsSnapshotRejectsPublicationBeforeReportPeriodEnd(t *
 		t.Fatalf("publication before period end must be rejected, got %v", err)
 	}
 }
-
 
 func TestIndexCatalogUnknownCacheUsesShortTTL(t *testing.T) {
 	if got := indexCatalogCacheTTL(&model.IndexCatalogSnapshot{QualityStatus: model.QualityUnknown}); got != 5*time.Minute {
@@ -2352,7 +2345,6 @@ func TestValidateIndexConstituentsRejectsFutureReportDate(t *testing.T) {
 		t.Fatalf("future constituent report date must be rejected, got %v", err)
 	}
 }
-
 
 func TestIndexConstituentCoverageCountersAndLegacyDowngrade(t *testing.T) {
 	now := time.Now().UTC()
@@ -2423,7 +2415,7 @@ func TestValidateIndexDailyBarsRejectsQualityAndUnitMismatch(t *testing.T) {
 				Volume: &volume, Amount: &amount, VolumeUnit: "shares", AmountUnit: "CNY",
 				Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			}},
-			Total: 1, Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
+			Total: 1, Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, ProviderTime: &now, QualityStatus: model.QualityValid,
 		}
 	}
 	t.Run("parent quality", func(t *testing.T) {
@@ -2459,7 +2451,6 @@ func TestValidateIndexDailyBarsRejectsQualityAndUnitMismatch(t *testing.T) {
 		}
 	})
 }
-
 
 func TestSupplementFetchedAtUsesServiceReceiveTime(t *testing.T) {
 	future := time.Now().UTC().Add(24 * time.Hour)
@@ -2537,7 +2528,6 @@ func TestFundamentalsFetchedAtUsesServiceReceiveTime(t *testing.T) {
 	}
 }
 
-
 func TestQuoteTimestampsAreStampedByService(t *testing.T) {
 	q := validQuote("eastmoney")
 	future := time.Now().UTC().Add(24 * time.Hour)
@@ -2569,7 +2559,7 @@ func TestDailyBarTimestampsAreStampedByService(t *testing.T) {
 		name: "eastmoney",
 		bars: []model.DailyBar{{
 			SourceVersion: "test-v1",
-			Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+			Symbol:        "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 			Open: 10, High: 11, Low: 9, Close: 10.5,
 			Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentNone,
 			Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY",
@@ -2595,7 +2585,6 @@ func TestDailyBarTimestampsAreStampedByService(t *testing.T) {
 		t.Fatalf("daily-bar normalized_at must use service normalization time: start=%s normalized_at=%s end=%s", start, bars[0].NormalizedAt, end)
 	}
 }
-
 
 func TestQuoteCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
 	mem := newMemoryCache()
@@ -2628,7 +2617,7 @@ func TestDailyBarsCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
 	future := time.Now().UTC().Add(24 * time.Hour)
 	cached := model.DailyBar{
 		SourceVersion: "test-v1",
-		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Symbol:        "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 		Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &volume, Amount: &amount, AdjustmentBasis: model.AdjustmentForward,
 		Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY",
@@ -2656,7 +2645,6 @@ func TestDailyBarsCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
 	}
 }
 
-
 func TestDailyBarsRejectsNonCanonicalRequestDate(t *testing.T) {
 	svc := New([]provider.Provider{fakeProvider{name: "eastmoney"}}, cache.NewDisabled(), nil,
 		time.Second, time.Second, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -2664,7 +2652,6 @@ func TestDailyBarsRejectsNonCanonicalRequestDate(t *testing.T) {
 		t.Fatal("non-canonical start date must be rejected before provider/cache lookup")
 	}
 }
-
 
 func TestValidateSectorRankingSnapshotRejectsUnderfilledPage(t *testing.T) {
 	now := time.Now().UTC()
@@ -2683,7 +2670,6 @@ func TestValidateSectorRankingSnapshotRejectsUnderfilledPage(t *testing.T) {
 		t.Fatalf("underfilled sector-ranking page must be rejected so fallback can continue, got %v", err)
 	}
 }
-
 
 func TestValidateLimitPoolRejectsValidSnapshotWithoutProviderReportDate(t *testing.T) {
 	now := time.Now().UTC()
@@ -2709,7 +2695,6 @@ func TestValidateLimitPoolRejectsValidSnapshotWithoutProviderReportDate(t *testi
 	}
 }
 
-
 func TestValidateMarketBreadthRequiresConsistentQuoteTimestampCoverage(t *testing.T) {
 	location := marketLocation()
 	oldest := time.Now().In(location).Add(-time.Minute).UTC()
@@ -2721,7 +2706,7 @@ func TestValidateMarketBreadthRequiresConsistentQuoteTimestampCoverage(t *testin
 		AmountCoverageCount: 3, QuoteTimestampCoverageCount: 3,
 		OldestQuoteTime: &oldest, NewestQuoteTime: &newest, TotalAmountCNY: &amount,
 		ProviderReportDate: oldest.In(location).Format("2006-01-02"),
-		Source: "tickflow", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
+		Source:             "tickflow", SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
 		QualityStatus: model.QualityValid,
 	}
 	if err := validateMarketBreadth(snapshot); err != nil {
@@ -2738,7 +2723,6 @@ func TestValidateMarketBreadthRequiresConsistentQuoteTimestampCoverage(t *testin
 	}
 }
 
-
 func TestValidateMarketBreadthRejectsOverflowingCategoryCounts(t *testing.T) {
 	maxInt := int(^uint(0) >> 1)
 	snapshot := &model.MarketBreadthSnapshot{
@@ -2746,14 +2730,13 @@ func TestValidateMarketBreadthRejectsOverflowingCategoryCounts(t *testing.T) {
 		AdvancingCount: maxInt, DecliningCount: maxInt, UnchangedCount: 5,
 		AmountCoverageCount: 0, QuoteTimestampCoverageCount: 0,
 		ProviderReportDate: time.Now().In(marketLocation()).Format("2006-01-02"),
-		Source: "untrusted-fixture", SourceVersion: "test-overflow-v1",
+		Source:             "untrusted-fixture", SourceVersion: "test-overflow-v1",
 		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
 	}
 	if err := validateMarketBreadth(snapshot); err == nil || !strings.Contains(err.Error(), "category counts do not reconcile") {
 		t.Fatalf("integer overflow must not allow incoherent breadth counts, got %v", err)
 	}
 }
-
 
 func TestValidateSectorRankingSnapshotRejectsDroppedRowsWhenTotalWasMissing(t *testing.T) {
 	now := time.Now().UTC()

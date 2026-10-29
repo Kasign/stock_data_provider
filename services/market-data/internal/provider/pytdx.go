@@ -420,8 +420,8 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			RawVolume:        &rawVolumeCopy,
 			RawVolumeUnit:    "hands",
 			RawAmount:        amountInfo.RawAmount,
-			RawAmountUnit:   amountInfo.RawAmountUnit,
-			RawAmountField:  amountInfo.RawAmountField,
+			RawAmountUnit:    amountInfo.RawAmountUnit,
+			RawAmountField:   amountInfo.RawAmountField,
 			VolumeUnit:       "shares",
 			AmountUnit:       amountInfo.AmountUnit,
 			QualityStatus:    quality,
@@ -474,6 +474,9 @@ func pytdxDomesticSymbol(raw string) (string, error) {
 	parts := strings.Split(symbol, ".")
 	if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") {
 		return "", fmt.Errorf("Pytdx adapter only accepts domestic SH/SZ/BJ equities, got %q", raw)
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return "", fmt.Errorf("Pytdx adapter only accepts common A-share equities, got %q", raw)
 	}
 	wireSymbol := pytdxWireSymbol(symbol)
 	if wireSymbol == "" || !protocol.IsStock(wireSymbol) {

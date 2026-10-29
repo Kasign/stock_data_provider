@@ -107,6 +107,10 @@ func TestTickFlowFetchSectorRankingsBuildsSW1IndustryRanking(t *testing.T) {
 	if got.Category != "industry" || got.Total != 2 || len(got.Items) != 2 {
 		t.Fatalf("unexpected SW1 ranking snapshot: %+v", got)
 	}
+	if got.ProviderReturned != 2 || got.ExcludedRows != 0 || got.TotalIsLowerBound {
+		t.Fatalf("unexpected SW1 coverage ledger: returned=%d excluded=%d lower_bound=%v",
+			got.ProviderReturned, got.ExcludedRows, got.TotalIsLowerBound)
+	}
 	if got.QualityStatus != model.QualityDegraded {
 		t.Fatalf("constituent-average rankings should be degraded: %+v", got.QualityStatus)
 	}
@@ -149,7 +153,6 @@ func TestTickFlowFetchSectorRankingsDoesNotMislabelConceptsAsSW1(t *testing.T) {
 	}
 }
 
-
 func TestTickFlowFetchSectorRankingsReportsOmittedIndustryWithoutValidChanges(t *testing.T) {
 	server := newTickFlowSectorFixture(t, tickflowSectorTestSymbols, "300001.SZ")
 	defer server.Close()
@@ -161,6 +164,10 @@ func TestTickFlowFetchSectorRankingsReportsOmittedIndustryWithoutValidChanges(t 
 	}
 	if got.Total != 2 || len(got.Items) != 1 {
 		t.Fatalf("expected total universe and only one usable industry row, got total=%d items=%d", got.Total, len(got.Items))
+	}
+	if got.ProviderReturned != 2 || got.ExcludedRows != 1 || got.TotalIsLowerBound {
+		t.Fatalf("expected one omitted industry in coverage ledger: returned=%d excluded=%d lower_bound=%v",
+			got.ProviderReturned, got.ExcludedRows, got.TotalIsLowerBound)
 	}
 	if !containsTickFlowReason(got.QualityReasons, "one_or_more_industries_omitted_without_valid_constituent_quote_changes") {
 		t.Fatalf("missing quality reason for an industry omitted due to invalid constituent quotes: %+v", got.QualityReasons)

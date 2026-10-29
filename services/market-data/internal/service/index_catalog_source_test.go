@@ -66,8 +66,6 @@ func TestIndexCatalogProvidersForSourceRejectsUnavailableProvider(t *testing.T) 
 	}
 }
 
-
-
 func TestIndexSnapshotContractsRequireSourceVersion(t *testing.T) {
 	catalog := indexCatalogDegradedDataForTest("hithink", "tushare")
 	catalog.SourceVersion = ""
@@ -117,12 +115,11 @@ func TestIndexDailyBarsRejectsFutureEndDateBeforeProviderSelection(t *testing.T)
 	}
 }
 
-
 type indexDailyBarsFallbackTestProvider struct {
-	name string
+	name     string
 	snapshot *model.IndexDailyBarsSnapshot
-	err error
-	calls int
+	err      error
+	calls    int
 }
 
 func (p *indexDailyBarsFallbackTestProvider) Name() string { return p.name }
@@ -183,7 +180,7 @@ func TestIndexDailyBarsFallsBackAfterUnknownEmptyProvider(t *testing.T) {
 	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: unknownIndexDailyBarsForFallbackTest("hithink")}
 	second := &indexDailyBarsFallbackTestProvider{name: "tushare", snapshot: populatedIndexDailyBarsForFallbackTest("tushare")}
 	svc := &DataService{
-		cache: cache.NewDisabled(),
+		cache:                 cache.NewDisabled(),
 		indexCatalogProviders: []provider.IndexCatalogProvider{first, second},
 	}
 	got, hit, err := svc.IndexDailyBarsFromSource(context.Background(), "000300.SH", "2026-10-20", "2026-10-23", "")
@@ -209,7 +206,7 @@ func TestIndexDailyBarsFallsBackFromUnknownQualityRows(t *testing.T) {
 	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: unknownQualityIndexDailyBarsForFallbackTest("hithink")}
 	second := &indexDailyBarsFallbackTestProvider{name: "tushare", snapshot: populatedIndexDailyBarsForFallbackTest("tushare")}
 	svc := &DataService{
-		cache: cache.NewDisabled(),
+		cache:                 cache.NewDisabled(),
 		indexCatalogProviders: []provider.IndexCatalogProvider{first, second},
 	}
 
@@ -236,7 +233,7 @@ func TestIndexDailyBarsLegacyUnknownQualityCacheDoesNotBlockFallback(t *testing.
 	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: legacy}
 	second := &indexDailyBarsFallbackTestProvider{name: "tushare", snapshot: populatedIndexDailyBarsForFallbackTest("tushare")}
 	svc := &DataService{
-		cache: mem,
+		cache:                 mem,
 		indexCatalogProviders: []provider.IndexCatalogProvider{first, second},
 	}
 
@@ -266,7 +263,7 @@ func TestIndexDailyBarsKeepsUnknownCandidateWithMoreFieldCoverage(t *testing.T) 
 	second := &indexDailyBarsFallbackTestProvider{name: "tushare", snapshot: full}
 	failed := &indexDailyBarsFallbackTestProvider{name: "third-source", err: errors.New("test index endpoint unavailable")}
 	svc := &DataService{
-		cache: cache.NewDisabled(),
+		cache:                 cache.NewDisabled(),
 		indexCatalogProviders: []provider.IndexCatalogProvider{first, second, failed},
 	}
 
@@ -287,7 +284,7 @@ func TestIndexDailyBarsCachesUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 	first := &indexDailyBarsFallbackTestProvider{name: "hithink", snapshot: unknownIndexDailyBarsForFallbackTest("hithink")}
 	second := &indexDailyBarsFallbackTestProvider{name: "tushare", err: errors.New("test endpoint unavailable")}
 	svc := &DataService{
-		cache: newMemoryCache(),
+		cache:                 newMemoryCache(),
 		indexCatalogProviders: []provider.IndexCatalogProvider{first, second},
 	}
 	got, hit, err := svc.IndexDailyBarsFromSource(context.Background(), "000300.SH", "2026-10-20", "2026-10-23", "")
@@ -342,7 +339,7 @@ func TestIndexConstituentsAsOfUsesOnlyHistoricalCapability(t *testing.T) {
 	}
 	p := &indexCatalogAsOfSourceTestProvider{
 		indexCatalogSourceTestProvider: indexCatalogSourceTestProvider{name: "tushare"},
-		snapshot: snapshot,
+		snapshot:                       snapshot,
 	}
 	svc := &DataService{cache: cache.NewDisabled(), indexCatalogProviders: []provider.IndexCatalogProvider{p}}
 	got, hit, err := svc.IndexConstituentsAsOfFromSource(context.Background(), "000300.SH", asOfDate, "")
@@ -366,7 +363,6 @@ func TestIndexConstituentsAsOfDoesNotFallBackToCurrentOnlyProvider(t *testing.T)
 	}
 }
 
- 
 func TestIndexConstituentsAsOfCachesUnknownOnlyAfterFallbackExhausted(t *testing.T) {
 	asOfDate := time.Now().In(marketLocation()).AddDate(0, 0, -20).Format("2006-01-02")
 	p := &indexCatalogAsOfSourceTestProvider{

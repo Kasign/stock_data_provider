@@ -133,7 +133,6 @@ func containsTickFlowReason(reasons []string, wanted string) bool {
 	return false
 }
 
-
 func TestTickFlowFetchIndexQuotesDropsInconsistentChangeExtensions(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC().Add(-time.Minute).UnixMilli()

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -58,7 +59,6 @@ func TestTushareDailyRejectsEmptyOrDuplicateFieldNames(t *testing.T) {
 		})
 	}
 }
-
 
 func TestTushareDailyNormalizesAmountFromThousandCNYToCNY(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -147,8 +147,6 @@ func TestTushareIndexConstituentsQueriesOnlyNewestAvailableMonth(t *testing.T) {
 	}
 }
 
-
-
 func TestTushareIndexConstituentsCountsUnsupportedRowsAtLatestReportDate(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
@@ -216,7 +214,7 @@ func TestTushareIndexConstituentsDoesNotFallBackPastUnsupportedLatestReportDate(
 		t.Fatal(err)
 	}
 	today := time.Now().In(location)
-	currentStart, currentEnd := tushareTestMonthWindow(today, 0)
+	currentStart, _ := tushareTestMonthWindow(today, 0)
 	previousStart, previousEnd := tushareTestMonthWindow(today, 1)
 	previousMonthEnd := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, location).AddDate(0, 0, -1)
 	var weightStarts []string
@@ -364,8 +362,6 @@ func TestTushareStockBasicRejectsUnknownMarketInsteadOfAssumingMainBoard(t *test
 	}
 }
 
-
-
 func TestTushareStockBasicRejectsDuplicateRows(t *testing.T) {
 	fields := []string{"ts_code", "name", "industry", "market", "exchange", "list_status", "list_date", "delist_date"}
 	row := []any{"600519.SH", "贵州茅台", "白酒", "主板", "SSE", "L", "20010827", ""}
@@ -494,7 +490,6 @@ func containsTushareReason(reasons []string, target string) bool {
 	return false
 }
 
-
 func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
@@ -533,9 +528,6 @@ func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
 		t.Fatalf("unexpected daily bars result: %+v", bars)
 	}
 }
-
-
-
 
 func TestTushareLimitPoolRejectsDuplicateSymbols(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
@@ -608,8 +600,6 @@ func TestTushareLimitPoolEmptyResultDoesNotInventProviderReportDate(t *testing.T
 	}
 }
 
-
-
 func TestTushareLimitPoolMarksExcludedNonAShareRows(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
 	makeRow := func(symbol, name string) []any {
@@ -664,6 +654,9 @@ func TestTushareLimitPoolMarksExcludedNonAShareRows(t *testing.T) {
 	if got.Total != 1 || len(got.Items) != 1 || got.Items[0].Symbol != "600519.SH" {
 		t.Fatalf("non-A-share rows must not enter the pool, got %+v", got)
 	}
+	if got.ProviderReturned != 2 || got.ExcludedNonAShareCount != 1 || got.TotalIsLowerBound {
+		t.Fatalf("source coverage ledger mismatch: returned=%d excluded=%d lower_bound=%v", got.ProviderReturned, got.ExcludedNonAShareCount, got.TotalIsLowerBound)
+	}
 	if got.QualityStatus != model.QualityDegraded {
 		t.Fatalf("filtered provider rows must remain visible as degraded quality, got %+v", got)
 	}
@@ -678,8 +671,6 @@ func TestTushareLimitPoolMarksExcludedNonAShareRows(t *testing.T) {
 		t.Fatalf("missing non-A-share exclusion reason: %v", got.QualityReasons)
 	}
 }
-
-
 
 func TestTushareDragonTigerMarksExcludedNonAShareRows(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ",")
@@ -986,7 +977,6 @@ func TestTushareFundamentalsUsesStatementsWhenIndicatorEndpointFails(t *testing.
 	}
 }
 
-
 func TestTushareStatementReportTypeForQuarterBoundaries(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -1016,7 +1006,6 @@ func TestTushareStatementReportTypeForQuarterBoundaries(t *testing.T) {
 	}
 }
 
-
 func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 	const period = "20260630"
 	const announcementDate = "20260830"
@@ -1027,12 +1016,14 @@ func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		expectedReportType := "2"
-		if request.APIName == "balancesheet" {
-			expectedReportType = "1"
-		}
-		if request.Params["report_type"] != expectedReportType {
-			t.Errorf("%s report_type=%q, want %q", request.APIName, request.Params["report_type"], expectedReportType)
+		if request.APIName == "income" || request.APIName == "cashflow" || request.APIName == "balancesheet" {
+			expectedReportType := "2"
+			if request.APIName == "balancesheet" {
+				expectedReportType = "1"
+			}
+			if request.Params["report_type"] != expectedReportType {
+				t.Errorf("%s report_type=%q, want %q", request.APIName, request.Params["report_type"], expectedReportType)
+			}
 		}
 		fields := strings.Split(request.Fields, ",")
 		values := make([]any, len(fields))
@@ -1086,35 +1077,35 @@ func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 			t.Fatalf("expected usable statement section %q", category)
 		}
 	}
-		// 字段清单来自 Tushare 三张报表接口；fixture 对每个请求字段返回数值，验证扩展字段没有丢失。
-		for _, expectedMetric := range []struct {
-			category string
-			key      string
-		}{
-			{category: "income_statement", key: "ebitda"},
-			{category: "income_statement", key: "commission_income"},
-			{category: "balance_sheet", key: "total_liabilities_and_equity"},
-			{category: "balance_sheet", key: "right_of_use_assets"},
-			{category: "cash_flow_statement", key: "free_cash_flow"},
-			{category: "cash_flow_statement", key: "cash_received_tax_refunds"},
-			{category: "cash_flow_statement", key: "other_financing_cash_paid"},
-		} {
-			found := false
-			for _, section := range snapshot.Sections {
-				if section.Category != expectedMetric.category {
-					continue
-				}
-				for _, metric := range section.Metrics {
-					if metric.Key == expectedMetric.key && metric.SourceField != "" {
-						found = true
-						break
-					}
-				}
+	// 字段清单来自 Tushare 三张报表接口；fixture 对每个请求字段返回数值，验证扩展字段没有丢失。
+	for _, expectedMetric := range []struct {
+		category string
+		key      string
+	}{
+		{category: "income_statement", key: "ebitda"},
+		{category: "income_statement", key: "commission_income"},
+		{category: "balance_sheet", key: "total_liabilities_and_equity"},
+		{category: "balance_sheet", key: "right_of_use_assets"},
+		{category: "cash_flow_statement", key: "free_cash_flow"},
+		{category: "cash_flow_statement", key: "cash_received_tax_refunds"},
+		{category: "cash_flow_statement", key: "other_financing_cash_paid"},
+	} {
+		found := false
+		for _, section := range snapshot.Sections {
+			if section.Category != expectedMetric.category {
+				continue
 			}
-			if !found {
-				t.Fatalf("expected extended statement metric %s.%s to be mapped", expectedMetric.category, expectedMetric.key)
+			for _, metric := range section.Metrics {
+				if metric.Key == expectedMetric.key && metric.SourceField != "" {
+					found = true
+					break
+				}
 			}
 		}
+		if !found {
+			t.Fatalf("expected extended statement metric %s.%s to be mapped", expectedMetric.category, expectedMetric.key)
+		}
+	}
 }
 
 func TestTushareIndexDailyBarsDegradesMissingProviderTimestamp(t *testing.T) {
@@ -1200,7 +1191,7 @@ func TestTushareDailyDegradesMissingChangePercent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeTushareTestTable(w,
 			[]string{"ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol", "amount"},
-			[][]any{{"600519.SH", today, 100.0, 102.0, 99.0, 101.0, nil, 1200.0, 456.0}},
+			[][]any{{"600519.SH", today, 100.0, 102.0, 99.0, 101.0, nil, 1200.0, 12120.0}},
 		)
 	}))
 	defer server.Close()
@@ -1250,7 +1241,6 @@ func TestTushareDailyRejectsFractionalVolumeInHands(t *testing.T) {
 		t.Fatalf("fractional volume in hands must not be rounded into shares, got %v", err)
 	}
 }
-
 
 func TestTushareFundamentalsIgnoresFutureAnnouncementVersion(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
@@ -1338,7 +1328,6 @@ func TestTushareFundamentalsIgnoresFutureAnnouncementVersion(t *testing.T) {
 	t.Fatal("expected a selected EPS metric from the already-published version")
 }
 
-
 func TestTushareFundamentalsRejectsMissingAnnouncementDate(t *testing.T) {
 	fields := strings.Split("ts_code,ann_date,end_date,eps,dt_eps,roe,roe_waa,roe_dt,roa,netprofit_margin,grossprofit_margin,assets_turn,inv_turn,ar_turn,ca_turn,fa_turn,netprofit_yoy,or_yoy,assets_yoy,eqt_yoy,current_ratio,quick_ratio,cash_ratio,debt_to_assets,ocf_to_or,ocf_to_profit,ocf_to_debt,dupont_roe,dupont_asset_turn,dupont_pnitoni,dupont_tax_burden,dupont_intburden", ",")
 	periodEnd := "20251231"
@@ -1379,11 +1368,10 @@ func TestTushareFundamentalsRejectsMissingAnnouncementDate(t *testing.T) {
 
 	provider := NewTushareConfigured(2*time.Second, server.URL, "test-token")
 	_, err := provider.FetchFundamentals(context.Background(), "600519.SH", 2025, 4)
-	if err == nil || !strings.Contains(err.Error(), "未返回") {
+	if err == nil || !strings.Contains(err.Error(), "没有可用财务指标或报表字段") {
 		t.Fatalf("financial data without an announcement date must be excluded, got %v", err)
 	}
 }
-
 
 func TestTushareDailyRejectsNonAShareBeforeRequest(t *testing.T) {
 	requests := 0
@@ -1403,7 +1391,6 @@ func TestTushareDailyRejectsNonAShareBeforeRequest(t *testing.T) {
 		t.Fatalf("unsupported security types must be rejected before upstream access; got %d request(s)", requests)
 	}
 }
-
 
 func TestTushareAnnouncementsRejectsNonStockSecurities(t *testing.T) {
 	called := false
@@ -1582,7 +1569,7 @@ func TestTushareDailyAppliesAdjustmentFactors(t *testing.T) {
 	}
 }
 
-func TestApplyTushareAdjustmentRejectsMissingOrInvalidFactors(t *testing.T) {
+func TestApplyTushareAdjustmentRejectsMissingOrInvalidFactorsAcrossDailySeries(t *testing.T) {
 	bar := model.DailyBar{TradeDate: "2026-10-26", Open: 10, High: 11, Low: 9, Close: 10}
 	if _, err := applyTushareAdjustment([]model.DailyBar{bar}, map[string]float64{}, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "requires daily bars and adjustment factors") {
 		t.Fatalf("empty factors should be rejected explicitly, got %v", err)
@@ -1689,5 +1676,262 @@ func TestTushareIndexConstituentsAsOfRejectsRowsAfterRequestedDate(t *testing.T)
 	p := NewTushareConfigured(2*time.Second, server.URL, "test-token")
 	if _, err := p.FetchIndexConstituentsAsOf(context.Background(), "000300.SH", asOfDate); err == nil || !strings.Contains(err.Error(), "日期无效或超出查询月份") {
 		t.Fatalf("provider over-returning a report after as_of must be rejected, got %v", err)
+	}
+}
+
+func TestTushareLimitPoolDefaultsToServiceLimit(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
+	rows := make([][]any, 35)
+	for index := range rows {
+		values := make([]any, len(fields))
+		for column, field := range fields {
+			switch field {
+			case "trade_date":
+				values[column] = "20261027"
+			case "ts_code":
+				values[column] = fmt.Sprintf("%06d.SH", 600000+index)
+			case "industry":
+				values[column] = "银行"
+			case "name":
+				values[column] = fmt.Sprintf("测试股票%d", index+1)
+			case "close":
+				values[column] = 10.0
+			case "pct_chg":
+				values[column] = 1.2
+			case "limit":
+				values[column] = "U"
+			default:
+				values[column] = nil
+			}
+		}
+		rows[index] = values
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare limit-pool request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "limit_list_d" {
+			t.Errorf("api_name=%q, want limit_list_d", request.APIName)
+		}
+		writeTushareTestTable(w, fields, rows)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchLimitPool(context.Background(), "up", "2026-10-27", 0)
+	if err != nil {
+		t.Fatalf("FetchLimitPool with default limit: %v", err)
+	}
+	if got.Total != len(rows) || len(got.Items) != len(rows) {
+		t.Fatalf("default Tushare limit should match the service's 100-row default, got total=%d items=%d want=%d", got.Total, len(got.Items), len(rows))
+	}
+	if got.ProviderReturned != len(rows) || got.TotalIsLowerBound || got.ExcludedNonAShareCount != 0 {
+		t.Fatalf("unexpected source coverage ledger: returned=%d excluded=%d lower_bound=%v", got.ProviderReturned, got.ExcludedNonAShareCount, got.TotalIsLowerBound)
+	}
+}
+
+func TestTushareLimitPoolMarks2500RowBoundaryAsLowerBound(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
+	prefixes := []string{"600", "601", "603"}
+	rows := make([][]any, 2500)
+	for index := range rows {
+		prefixIndex := index / 1000
+		suffix := index % 1000
+		prefix := prefixes[prefixIndex]
+		values := make([]any, len(fields))
+		for column, field := range fields {
+			switch field {
+			case "trade_date":
+				values[column] = "20261027"
+			case "ts_code":
+				values[column] = fmt.Sprintf("%s%03d.SH", prefix, suffix)
+			case "industry":
+				values[column] = "测试行业"
+			case "name":
+				values[column] = fmt.Sprintf("测试股票%d", index+1)
+			case "close":
+				values[column] = 10.0
+			case "pct_chg":
+				values[column] = 1.2
+			case "limit":
+				values[column] = "U"
+			default:
+				values[column] = nil
+			}
+		}
+		rows[index] = values
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare limit-pool request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "limit_list_d" {
+			t.Errorf("api_name=%q, want limit_list_d", request.APIName)
+		}
+		writeTushareTestTable(w, fields, rows)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchLimitPool(context.Background(), "up", "2026-10-27", 100)
+	if err != nil {
+		t.Fatalf("FetchLimitPool: %v", err)
+	}
+	if got.Total != 2500 || len(got.Items) != 100 || got.ProviderReturned != 2500 {
+		t.Fatalf("unexpected source counts at cap boundary: total=%d items=%d returned=%d", got.Total, len(got.Items), got.ProviderReturned)
+	}
+	if !got.TotalIsLowerBound {
+		t.Fatal("a 2500-row response must not be presented as an authoritative full total")
+	}
+	for _, reason := range []string{"provider_response_may_be_capped_at_2500_rows", "provider_limit_pool_total_is_lower_bound"} {
+		if !containsTushareReason(got.QualityReasons, reason) {
+			t.Errorf("missing lower-bound quality reason %q: %v", reason, got.QualityReasons)
+		}
+	}
+}
+
+func TestTushareDragonTigerMarks10000RowBoundaryAsLowerBound(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ",")
+	prefixes := []struct {
+		prefix   string
+		exchange string
+	}{
+		{prefix: "600", exchange: "SH"},
+		{prefix: "601", exchange: "SH"},
+		{prefix: "603", exchange: "SH"},
+		{prefix: "605", exchange: "SH"},
+		{prefix: "688", exchange: "SH"},
+		{prefix: "689", exchange: "SH"},
+		{prefix: "000", exchange: "SZ"},
+		{prefix: "001", exchange: "SZ"},
+		{prefix: "002", exchange: "SZ"},
+		{prefix: "003", exchange: "SZ"},
+	}
+	rows := make([][]any, 10000)
+	for index := range rows {
+		group := index / 1000
+		suffix := index % 1000
+		values := make([]any, len(fields))
+		for column, field := range fields {
+			switch field {
+			case "trade_date":
+				values[column] = "20261027"
+			case "ts_code":
+				values[column] = fmt.Sprintf("%s%03d.%s", prefixes[group].prefix, suffix, prefixes[group].exchange)
+			case "name":
+				values[column] = fmt.Sprintf("测试股票%d", index+1)
+			case "close":
+				values[column] = 10.0
+			case "pct_change":
+				values[column] = 1.2
+			case "reason":
+				values[column] = "测试原因"
+			default:
+				values[column] = nil
+			}
+		}
+		rows[index] = values
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare dragon-tiger request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "top_list" {
+			t.Errorf("api_name=%q, want top_list", request.APIName)
+		}
+		writeTushareTestTable(w, fields, rows)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchDragonTiger(context.Background(), "2026-10-27", 1, 100)
+	if err != nil {
+		t.Fatalf("FetchDragonTiger: %v", err)
+	}
+	if got.Total != 10000 || got.Pages != 100 || got.SourceReturned != 100 || len(got.Items) != 100 {
+		t.Fatalf("unexpected dragon-tiger pagination at source cap: total=%d pages=%d source_returned=%d items=%d", got.Total, got.Pages, got.SourceReturned, len(got.Items))
+	}
+	if !got.TotalIsLowerBound {
+		t.Fatal("a 10000-row response must not be presented as an authoritative full total")
+	}
+	for _, reason := range []string{"provider_response_may_be_capped_at_10000_rows", "provider_dragon_tiger_total_is_lower_bound"} {
+		if !containsTushareReason(got.QualityReasons, reason) {
+			t.Errorf("missing lower-bound quality reason %q: %v", reason, got.QualityReasons)
+		}
+	}
+}
+
+func TestTushareIndexConstituentsMarks5000RowBoundaryAsLowerBound(t *testing.T) {
+	indexFields := []string{"index_code", "con_code", "trade_date", "weight"}
+	basicFields := []string{"ts_code", "name"}
+	prefixes := []struct {
+		prefix   string
+		exchange string
+	}{
+		{prefix: "600", exchange: "SH"},
+		{prefix: "601", exchange: "SH"},
+		{prefix: "603", exchange: "SH"},
+		{prefix: "605", exchange: "SH"},
+		{prefix: "688", exchange: "SH"},
+		{prefix: "689", exchange: "SH"},
+		{prefix: "000", exchange: "SZ"},
+		{prefix: "001", exchange: "SZ"},
+		{prefix: "002", exchange: "SZ"},
+		{prefix: "003", exchange: "SZ"},
+	}
+	weightRows := make([][]any, 5000)
+	basicRows := make([][]any, 5000)
+	for index := range weightRows {
+		prefix := prefixes[index/500]
+		code := fmt.Sprintf("%s%03d.%s", prefix.prefix, index%500, prefix.exchange)
+		weightRows[index] = []any{"000300.SH", code, "20261015", 0.02}
+		basicRows[index] = []any{code, fmt.Sprintf("测试成分股%d", index+1)}
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare index-constituent request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		switch request.APIName {
+		case "index_weight":
+			writeTushareTestTable(w, indexFields, weightRows)
+		case "stock_basic":
+			writeTushareTestTable(w, basicFields, basicRows)
+		default:
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected API", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchIndexConstituentsAsOf(context.Background(), "000300.SH", "2026-10-20")
+	if err != nil {
+		t.Fatalf("FetchIndexConstituentsAsOf: %v", err)
+	}
+	if got.ProviderReportDate != "2026-10-15" || got.ProviderReturned != 5000 ||
+		got.Total != 5000 || len(got.Items) != 5000 {
+		t.Fatalf("unexpected index-weight coverage at source cap: report=%s returned=%d total=%d items=%d",
+			got.ProviderReportDate, got.ProviderReturned, got.Total, len(got.Items))
+	}
+	if !got.TotalIsLowerBound {
+		t.Fatal("a 5000-row monthly index_weight response must not be treated as authoritative full membership")
+	}
+	if !containsTushareReason(got.QualityReasons, "provider_monthly_index_weight_result_is_large_and_may_be_truncated") {
+		t.Fatalf("missing source-cap reason: %v", got.QualityReasons)
 	}
 }

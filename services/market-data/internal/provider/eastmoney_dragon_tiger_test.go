@@ -157,7 +157,6 @@ func TestEastmoneyFetchDragonTigerTreatsCode9201AsUnknownEmptyReport(t *testing.
 	}
 }
 
-
 func TestEastmoneyFetchDragonTigerRejectsUnderfilledPage(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -188,7 +187,6 @@ func TestEastmoneyFetchDragonTigerRejectsInconsistentPageCount(t *testing.T) {
 		t.Fatalf("inconsistent source pages must be rejected, got %v", err)
 	}
 }
-
 
 func TestEastmoneyFetchDragonTigerRejectsExplicitFailureWithRows(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

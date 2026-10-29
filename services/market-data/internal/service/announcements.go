@@ -130,21 +130,37 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 // StockAnnouncements returns paginated announcements for one A-share and an explicit date range.
 // betterUnknownAnnouncementSnapshot 优先保留公告条数更多、源端发布时间覆盖更完整的 unknown 候选。
 func betterUnknownAnnouncementSnapshot(candidate, current *model.StockAnnouncementSnapshot) bool {
-	if candidate == nil { return false }
-	if current == nil { return true }
-	if len(candidate.Items) != len(current.Items) { return len(candidate.Items) > len(current.Items) }
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
 	coverage := func(snapshot *model.StockAnnouncementSnapshot) int {
 		count := 0
 		for _, item := range snapshot.Items {
-			if item.PublishedAt != nil { count++ }
-			if strings.TrimSpace(item.SourceURL) != "" { count++ }
-			if strings.TrimSpace(item.Category) != "" { count++ }
-			if strings.TrimSpace(item.TitleChinese) != "" { count++ }
+			if item.PublishedAt != nil {
+				count++
+			}
+			if strings.TrimSpace(item.SourceURL) != "" {
+				count++
+			}
+			if strings.TrimSpace(item.Category) != "" {
+				count++
+			}
+			if strings.TrimSpace(item.TitleChinese) != "" {
+				count++
+			}
 		}
 		return count
 	}
 	left, right := coverage(candidate), coverage(current)
-	if left != right { return left > right }
+	if left != right {
+		return left > right
+	}
 	return candidate.FetchedAt.After(current.FetchedAt)
 }
 
@@ -217,7 +233,9 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 			continue
 		}
 		if !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
-			if betterUnknownAnnouncementSnapshot(snapshot, unknownCandidate) { unknownCandidate = snapshot }
+			if betterUnknownAnnouncementSnapshot(snapshot, unknownCandidate) {
+				unknownCandidate = snapshot
+			}
 			if !snapshot.HasData {
 				failures = append(failures, p.Name()+": announcement absence is not confirmed")
 			} else {
@@ -238,7 +256,9 @@ func (s *DataService) StockAnnouncements(ctx context.Context, rawSymbol, rawStar
 	}
 	if unknownCandidate != nil {
 		reason := "announcements_fallback_exhausted_without_usable_quality"
-		if !unknownCandidate.HasData { reason = "announcements_fallback_exhausted_without_confirmed_data" }
+		if !unknownCandidate.HasData {
+			reason = "announcements_fallback_exhausted_without_confirmed_data"
+		}
 		unknownCandidate.QualityStatus = model.QualityUnknown
 		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
 		if encoded, marshalErr := json.Marshal(unknownCandidate); marshalErr == nil {

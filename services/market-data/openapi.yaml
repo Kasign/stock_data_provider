@@ -98,6 +98,7 @@ components:
         provider_timestamp: {type: string, format: date-time, nullable: true}
         fetched_at: {type: string, format: date-time}
         normalized_at: {type: string, format: date-time}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System record time of this revision; returned for as_of queries only}
         raw_volume: {type: number, nullable: true}
         raw_volume_unit: {type: string}
         raw_amount: {type: number, nullable: true}
@@ -120,6 +121,8 @@ components:
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         volume_unit: {type: string, enum: [shares]}
         amount_unit: {type: string, enum: [CNY]}
+        point_in_time: {type: boolean, description: True only when the response was reconstructed from revisions recorded by the requested as_of timestamp}
+        as_of: {type: string, format: date-time, description: Requested system-observation cutoff for PIT queries}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         warnings: {type: array, items: {type: string}}
         bars: {type: array, items: {$ref: '#/components/schemas/DailyBar'}}
@@ -171,6 +174,7 @@ components:
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System recording time of the selected version, returned for as_of queries; not an upstream publication timestamp}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
     StockBoard:
@@ -190,10 +194,13 @@ components:
           items: {type: string}
     StockBoardSnapshot:
       type: object
-      required: [symbol, total, has_data, items, source, fetched_at, quality_status]
+      required: [symbol, total, provider_returned, excluded_rows, total_is_lower_bound, has_data, items, source, fetched_at, quality_status]
       properties:
         symbol: {type: string}
-        total: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0, description: Normalized board rows retained after filtering}
+        provider_returned: {type: integer, minimum: 0, description: Raw source board rows received before normalization}
+        excluded_rows: {type: integer, minimum: 0, description: Source rows explicitly excluded during normalization; currently zero when invalid/duplicate rows cause Provider fallback}
+        total_is_lower_bound: {type: boolean, description: True when the Eastmoney response reaches its 1000-row request boundary and full coverage cannot be established}
         has_data: {type: boolean, description: False means the provider returned an ambiguous empty list, not confirmed zero memberships}
         items:
           type: array
@@ -205,6 +212,31 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
+    SecurityTradingStatusSnapshot:
+      type: object
+      required: [symbol, trade_date, risk_warning_status, delisting_status, listing_status_known, is_trading_day, trading_day_known, suspension_status, source, source_version, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        trade_date: {type: string, format: date}
+        security_name: {type: string, description: Historical name effective on trade_date}
+        name_effective_from: {type: string, format: date}
+        name_effective_to: {type: string, format: date}
+        risk_warning_status: {type: string, enum: [unknown, normal, risk_warning]}
+        delisting_status: {type: string, enum: [unknown, normal, delisting_risk, delisting_period], description: Conservative historical-name classification; unknown does not imply normal}
+        listing_date: {type: string, format: date}
+        listing_trading_day_number: {type: integer, minimum: 0, description: One-based number of exchange trading sessions since listing when verifiable}
+        listing_status_known: {type: boolean}
+        is_trading_day: {type: boolean}
+        trading_day_known: {type: boolean}
+        suspension_status: {type: string, enum: [unknown, not_trading_day, no_suspension_event, suspended, intraday_suspension, resumed]}
+        suspension_timing: {type: string, description: Provider suspension/resumption timing as reported}
+        suspension_type: {type: string, description: Provider-native suspension type code or combined event codes}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System time when this source-content revision was recorded; present when local revision storage is enabled and the record time can be verified}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     TradingCalendarDay:
       type: object
       required: [date, is_trading_day]
@@ -230,6 +262,24 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
+    MarketSessionSnapshot:
+      type: object
+      required: [market, at, local_date, local_time, is_trading_day, phase, is_trading_session, is_continuous_trading, is_auction, source, fetched_at, quality_status]
+      properties:
+        market: {type: string, enum: [cn_a_share]}
+        at: {type: string, format: date-time, description: Requested instant, normalized to UTC in the response}
+        local_date: {type: string, format: date, description: Date in Asia/Shanghai}
+        local_time: {type: string, description: Local clock time in Asia/Shanghai, HH:MM:SS}
+        is_trading_day: {type: boolean, description: Determined by configured provider-backed trading calendar}
+        phase: {type: string, enum: [non_trading_day, pre_open, opening_auction, auction_pause, continuous_morning, lunch_break, continuous_afternoon, closing_auction, closed]}
+        is_trading_session: {type: boolean, description: True for opening auction, continuous sessions, and closing auction; false during breaks}
+        is_continuous_trading: {type: boolean}
+        is_auction: {type: boolean}
+        source: {type: string, description: Trading-calendar provider used for the date classification}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     StockAnnouncement:
       type: object
       required: [article_id, symbol, title, announcement_date, source, source_version, fetched_at, quality_status]
@@ -357,7 +407,10 @@ components:
       properties:
         category: {type: string, enum: [industry, concept]}
         direction: {type: string, enum: [up, down]}
-        total: {type: integer}
+        total: {type: integer, minimum: 0, description: Source-reported sector count or best available count; only a lower bound when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw CLIST rows or SW1 industry universes received before caller-limit truncation}
+        excluded_rows: {type: integer, minimum: 0, description: Source ranking rows omitted due to invalid required fields or no usable constituent quote changes}
+        total_is_lower_bound: {type: boolean, description: True when source total is absent and only the normalized returned count is known}
         items:
           type: array
           items: {$ref: '#/components/schemas/SectorRanking'}
@@ -402,13 +455,16 @@ components:
         tag: {type: string}
     IndexCatalogSnapshot:
       type: object
-      required: [tag, items, total, source, fetched_at, quality_status]
+      required: [tag, items, total, provider_returned, excluded_rows, total_is_lower_bound, source, fetched_at, quality_status]
       properties:
         tag: {type: string}
         items:
           type: array
           items: {$ref: '#/components/schemas/IndexCatalogItem'}
-        total: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0, description: Normalized unique catalog rows retained after source-row filtering}
+        provider_returned: {type: integer, minimum: 0, description: Raw catalog rows returned by the source before duplicate filtering}
+        excluded_rows: {type: integer, minimum: 0, description: Duplicate source rows excluded from the normalized catalog}
+        total_is_lower_bound: {type: boolean, description: True when the response reaches the local 30000-row safety boundary and completeness cannot be established}
         provider_time: {type: string, format: date-time, nullable: true}
         source: {type: string}
         source_version: {type: string}
@@ -433,7 +489,10 @@ components:
         items:
           type: array
           items: {$ref: '#/components/schemas/IndexConstituent'}
-        total: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0, description: Normalized item count; may be a lower bound when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw rows on the latest selected report date before A-share filtering and name enrichment}
+        excluded_count: {type: integer, minimum: 0, description: Rows excluded due to unsupported securities or missing verified names}
+        total_is_lower_bound: {type: boolean, description: True when the selected monthly index_weight response hits the 5000-row boundary and may be truncated}
         provider_time: {type: string, format: date-time, nullable: true}
         source: {type: string}
         source_version: {type: string}
@@ -559,7 +618,8 @@ components:
         provider_report_date: {type: string, format: date, nullable: true}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
-        total: {type: integer, minimum: 0, description: Provider-reported rows across pages}
+        total: {type: integer, minimum: 0, description: Raw row count observed before source caps; only a lower bound when total_is_lower_bound is true}
+        total_is_lower_bound: {type: boolean, description: True when the source response may be capped and total/pages describe only observed rows}
         pages: {type: integer, minimum: 0}
         returned: {type: integer, minimum: 0, description: Accepted A-share stock rows in this provider page}
         source_returned: {type: integer, minimum: 0, description: Raw records returned by the provider for this page before filtering non-A-share products}
@@ -596,7 +656,10 @@ components:
       required: [type, total, items, source, source_version, fetched_at, quality_status]
       properties:
         type: {type: string, enum: [popular, surge, followers]}
-        total: {type: integer, minimum: 0, description: Number of rows returned in this response, not the full A-share universe}
+        total: {type: integer, minimum: 0, description: Number of normalized rows in this response; not the full ranking count when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw ranking rows returned by the provider before caller-limit truncation and filtering}
+        excluded_rows: {type: integer, minimum: 0, description: Source rows explicitly excluded during normalization, such as duplicate security identities}
+        total_is_lower_bound: {type: boolean, description: True when the source does not report an authoritative total for the ranking}
         items: {type: array, items: {$ref: '#/components/schemas/HotRankingItem'}}
         provider_time: {type: string, format: date-time, nullable: true, description: Provider data-ready timestamp when present; not a guaranteed exact quote time}
         source: {type: string}
@@ -634,7 +697,10 @@ components:
         type: {type: string, enum: [up, down, broken]}
         trade_date: {type: string, format: date, description: Requested date, not overwritten by provider qdate}
         provider_report_date: {type: string, format: date, nullable: true, description: Provider report date for diagnostics}
-        total: {type: integer, minimum: 0, description: Provider-reported pool count}
+        total: {type: integer, minimum: 0, description: Best available pool count before caller limit; may be a lower bound when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw source rows received before A-share filtering and caller-limit truncation; paginated providers count rows received across pages}
+        excluded_non_a_share_count: {type: integer, minimum: 0, description: Non-A-share source records excluded from normalized items}
+        total_is_lower_bound: {type: boolean, description: True when a provider row cap prevents treating total as the authoritative full count}
         has_data: {type: boolean, description: False means unknown or unavailable, not a verified zero}
         items: {type: array, items: {$ref: '#/components/schemas/LimitPoolItem'}}
         source: {type: string}
@@ -749,6 +815,7 @@ components:
         announcements_capable: {type: boolean}
         dragon_tiger_capable: {type: boolean}
         trading_calendar_capable: {type: boolean}
+        security_trading_status_capable: {type: boolean, description: Provider can return dated historical name and suspension evidence}
         chip_capable: {type: boolean}
         capital_flow_capable: {type: boolean}
     DataSourcesResponse:
@@ -788,23 +855,26 @@ paths:
         '504': {description: All quote providers timed out}
   /api/v1/bars/{symbol}/daily:
     get:
+      description: Without as_of, returns the current provider-selected series. With as_of, reads only locally recorded versions observed by that timestamp; it never calls live Providers or falls back to the current-value table.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: start, in: query, schema: {type: string, format: date}}
         - {name: end, in: query, schema: {type: string, format: date}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 2000}}
         - {name: adjustment, in: query, schema: {$ref: '#/components/schemas/RequestAdjustmentBasis'}}
+        - {name: as_of, in: query, schema: {type: string, format: date-time}, description: Optional RFC3339 system-observation cutoff; future timestamps are rejected}
       responses:
         '200':
-          description: Daily bar collection
+          description: Daily bar collection; PIT responses include point_in_time and each selected bar's system_observed_at
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DailyBarsResponse'}
-        '400': {description: Invalid symbol, date range, limit or adjustment}
+        '400': {description: Invalid symbol, date range, limit, adjustment or as_of timestamp}
         '401': {description: API key required}
-        '502': {description: All providers failed}
-        '503': {description: No daily-bar provider enabled}
-        '504': {description: All providers timed out}
+        '404': {description: No coherent daily-bar revisions recorded by the requested as_of timestamp}
+        '502': {description: All live Providers failed}
+        '503': {description: No daily-bar Provider enabled for live reads, or PIT revision storage unavailable}
+        '504': {description: All live Providers timed out}
   /api/v1/bundles/{symbol}:
     get:
       parameters:
@@ -894,6 +964,62 @@ paths:
         '401': {description: API key required}
         '502': {description: All stock-basic providers failed}
         '503': {description: No stock-basic provider enabled}
+  /api/v1/stocks/{symbol}/price-limit-rule:
+    get:
+      summary: Resolve the effective A-share price-limit rule
+      description: Combines historical security status, official rule tables and independently sourced special-event evidence. Missing status/event evidence returns an unknown rule and never assumes that no special event occurred.
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+        - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
+      responses:
+        '200':
+          description: Price-limit rule result. Unknown status means the evidence is insufficient to use a limit percentage.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [symbol, trade_date, status, quality_status, quality_reasons]
+                properties:
+                  symbol: {type: string}
+                  market: {type: string}
+                  board: {type: string}
+                  trade_date: {type: string, format: date}
+                  risk_warning_status: {type: string}
+                  listing_trading_day_number: {type: integer}
+                  listing_status_known: {type: boolean}
+                  special_exception_status: {type: string}
+                  special_exception_evidence: {type: object, nullable: true}
+                  status: {type: string, enum: [unknown, limited, no_limit]}
+                  limit_percent: {type: number, nullable: true, description: Percentage points; absent for unknown/no-limit rules}
+                  no_limit_reason: {type: string}
+                  rule_version: {type: string}
+                  rule_effective_from: {type: string, format: date}
+                  rule_effective_to: {type: string, format: date}
+                  rule_source: {type: string}
+                  rule_source_url: {type: string, format: uri}
+                  quality_status: {$ref: '#/components/schemas/QualityStatus'}
+                  quality_reasons: {type: array, items: {type: string}}
+        '400': {description: Invalid symbol or trade date}
+        '401': {description: API key required}
+  /api/v1/stocks/{symbol}/trading-status:
+    get:
+      summary: Get historical trading-status evidence for one A-share
+      description: Uses Tushare historical name-change, trading-calendar and suspension records to provide date-specific risk-warning, delisting and suspension evidence. Each source-content change is appended to local revision storage when MariaDB is enabled. Optional as_of reads only locally recorded versions known by that system timestamp and never falls back to live Providers. Missing or ambiguous evidence remains unknown; no-limit exception events are not inferred.
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+        - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
+        - {name: as_of, in: query, required: false, schema: {type: string, format: date-time}, description: Optional system-observation cutoff. When supplied, reads only locally recorded revisions and never calls a live Provider.}
+      responses:
+        '200':
+          description: Historical security status and quality metadata. Unknown status fields are valid response states when source evidence is incomplete.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityTradingStatusSnapshot'}
+        '400': {description: Invalid symbol, trade date or as_of timestamp}
+        '401': {description: API key required}
+        '404': {description: No usable status revision was recorded by the requested as_of timestamp}
+        '502': {description: All configured security-status Providers failed for a live read}
+        '503': {description: No security-trading-status Provider enabled, or local PIT revision storage unavailable}
   /api/v1/stocks/{symbol}/fundamentals:
     get:
       summary: Get quarterly indicators and financial statement sections
@@ -903,24 +1029,28 @@ paths:
         are not full upstream statements; missing fields remain absent and each section carries its own quality state.
         report_date is the financial period end; publication_date is the disclosure date of the selected provider
         revision. Income and cash-flow statement values use a single-quarter consolidated report where supported;
-        balance-sheet values use the consolidated period-end report. The endpoint returns the latest revision available
-        from the provider for that report period and has no as_of parameter or historical restatement reconstruction.
-        For point-in-time analysis, a publication date after the strategy reference date must be excluded; an earlier
-        revision is not reconstructed. Values preserve provider-native numeric scale and explicit units.
+        balance-sheet values use the consolidated period-end report. Without as_of, the endpoint returns the latest
+        usable provider result. With as_of, it only reads locally recorded revisions observed by that timestamp and
+        never falls back to a live request. Since publication_time is not available for every metric, sections with a
+        missing publication date or a publication date on/after the as_of date in Asia/Shanghai are excluded
+        conservatively. Historical revisions can only be reconstructed for snapshots recorded after PIT storage began.
+        Values preserve provider-native numeric scale and explicit units.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: year, in: query, required: true, schema: {type: integer, minimum: 2007}}
         - {name: quarter, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 4}}
+        - {name: as_of, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp. Reads locally recorded versions known by this system timestamp; it does not call live Providers. Sections whose publication date cannot be proven to precede the Asia/Shanghai date of as_of are excluded.}
       responses:
         '200':
-          description: Quarterly indicators and supported financial-statement sections
+          description: Quarterly indicators and supported financial-statement sections; system_observed_at is included for PIT responses
           content:
             application/json:
               schema: {$ref: '#/components/schemas/FundamentalsSnapshot'}
-        '400': {description: Invalid symbol, report year or quarter}
+        '400': {description: Invalid symbol, report year, quarter or as_of timestamp}
         '401': {description: API key required}
+        '404': {description: No usable financial revision was recorded by the requested as_of timestamp}
         '502': {description: Provider failed or returned invalid financial data}
-        '503': {description: No fundamentals provider enabled}
+        '503': {description: No fundamentals provider enabled for live reads, or PIT revision storage is unavailable}
   /api/v1/stocks/{symbol}/chip-distribution:
     get:
       summary: Get a stock chip-distribution snapshot
@@ -1120,6 +1250,22 @@ paths:
         '400': {description: Invalid or excessive date range}
         '401': {description: API key required}
         '502': {description: All trading-calendar providers failed or returned incomplete data}
+        '503': {description: No trading-calendar provider enabled}
+  /api/v1/market/session:
+    get:
+      summary: Get the scheduled A-share market session for a timestamp
+      description: Uses the provider-backed trading calendar for the requested date and the standard Asia/Shanghai session schedule. It does not determine individual-stock suspension, security-specific price limits, or emergency exchange interruptions. When at is omitted, current server time is used.
+      parameters:
+        - {name: at, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp; response includes the Asia/Shanghai date and time}
+      responses:
+        '200':
+          description: Scheduled market session, calendar source and quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketSessionSnapshot'}
+        '400': {description: Invalid RFC3339 timestamp}
+        '401': {description: API key required}
+        '502': {description: Calendar provider failed or returned incomplete data}
         '503': {description: No trading-calendar provider enabled}
   /api/v1/market/breadth:
     get:

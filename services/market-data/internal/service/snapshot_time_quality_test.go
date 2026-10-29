@@ -11,7 +11,7 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
 )
 
-type snapshotTimeStockBasicProvider struct { item *model.StockBasic }
+type snapshotTimeStockBasicProvider struct{ item *model.StockBasic }
 
 func (p snapshotTimeStockBasicProvider) Name() string { return "eastmoney" }
 
@@ -20,7 +20,7 @@ func (p snapshotTimeStockBasicProvider) FetchStockBasic(context.Context, string)
 	return &out, nil
 }
 
-type snapshotTimeStockBoardsProvider struct { item *model.StockBoardSnapshot }
+type snapshotTimeStockBoardsProvider struct{ item *model.StockBoardSnapshot }
 
 func (p snapshotTimeStockBoardsProvider) Name() string { return "eastmoney" }
 
@@ -30,7 +30,7 @@ func (p snapshotTimeStockBoardsProvider) FetchStockBoards(context.Context, strin
 	return &out, nil
 }
 
-type snapshotTimeSectorRankingProvider struct { item *model.SectorRankingSnapshot }
+type snapshotTimeSectorRankingProvider struct{ item *model.SectorRankingSnapshot }
 
 func (p snapshotTimeSectorRankingProvider) Name() string { return "eastmoney" }
 

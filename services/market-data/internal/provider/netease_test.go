@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -94,7 +95,9 @@ func TestNeteaseAmbiguousVolumeUnitDoesNotProduceNormalizedShares(t *testing.T) 
 func TestNeteaseDateRangeRejectsFutureEndDate(t *testing.T) {
 	now := time.Now()
 	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
 	future := now.In(loc).AddDate(0, 0, 1).Format("2006-01-02")
 	if _, _, err := neteaseDateRange("2026-10-20", future, 10, now); err == nil || !strings.Contains(err.Error(), "end date must not be after today") {
 		t.Fatalf("future Netease end date must be rejected, got %v", err)
@@ -159,10 +162,10 @@ func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
 	}
 	wantChange := 42.35 - 41.82
 	wantChangePercent := wantChange / 41.82 * 100
-	if q.CurrentPrice == nil || *q.CurrentPrice != 42.35 ||
-		q.Change == nil || *q.Change != wantChange ||
-		q.ChangePercent == nil || *q.ChangePercent != wantChangePercent {
-		t.Fatalf("canonical change fields were not derived from latest/previous close: %+v", q)
+	if q.CurrentPrice == nil || math.Abs(*q.CurrentPrice-42.35) > 1e-9 ||
+		q.Change == nil || math.Abs(*q.Change-wantChange) > 1e-9 ||
+		q.ChangePercent == nil || math.Abs(*q.ChangePercent-wantChangePercent) > 1e-9 {
+		t.Fatalf("canonical change fields were not derived from latest/previous close (want change=%.12f percent=%.12f): %+v", wantChange, wantChangePercent, q)
 	}
 	if q.Volume == nil || *q.Volume != 56829700 || q.Amount == nil || *q.Amount != 2386858667 {
 		t.Fatalf("unexpected volume/amount: %+v", q)
@@ -175,14 +178,15 @@ func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
 	}
 }
 
-
 func TestNeteaseFetchQuoteDegradesFutureProviderTimestamp(t *testing.T) {
 	payload := `_ntes_quote_callback({"0600036":{"code":"0600036","symbol":"600036","name":"招商银行","price":42.35,"percent":0.0127,"updown":0.53,"open":41.70,"high":42.38,"low":41.57,"yestclose":41.82,"volume":56829700,"turnover":2386858667,"time":"2099/12/31 11:07:58"}});`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(payload)) }))
 	defer server.Close()
 	p := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")
 	q, err := p.FetchQuote(context.Background(), "600036.SH")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if q.QuoteTime != nil || q.QualityStatus != model.QualityDegraded {
 		t.Fatalf("future provider timestamp must be omitted and quality degraded: %+v", q)
 	}
@@ -190,7 +194,7 @@ func TestNeteaseFetchQuoteDegradesFutureProviderTimestamp(t *testing.T) {
 
 func TestNeteaseFetchQuoteRejectsInconsistentChangeFields(t *testing.T) {
 	for name, payload := range map[string]string{
-		"change mismatch": "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600036\",\"name\":\"招商银行\",\"price\":42.35,\"percent\":0.0127,\"updown\":0.80,\"open\":41.70,\"high\":42.38,\"low\":41.57,\"yestclose\":41.82,\"volume\":56829700,\"turnover\":2386858667,\"time\":\"2026/10/23 11:07:58\"}});",
+		"change mismatch":  "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600036\",\"name\":\"招商银行\",\"price\":42.35,\"percent\":0.0127,\"updown\":0.80,\"open\":41.70,\"high\":42.38,\"low\":41.57,\"yestclose\":41.82,\"volume\":56829700,\"turnover\":2386858667,\"time\":\"2026/10/23 11:07:58\"}});",
 		"percent mismatch": "_ntes_quote_callback({\"0600036\":{\"code\":\"0600036\",\"symbol\":\"600036\",\"name\":\"招商银行\",\"price\":42.35,\"percent\":0.02,\"updown\":0.53,\"open\":41.70,\"high\":42.38,\"low\":41.57,\"yestclose\":41.82,\"volume\":56829700,\"turnover\":2386858667,\"time\":\"2026/10/23 11:07:58\"}});",
 	} {
 		t.Run(name, func(t *testing.T) {

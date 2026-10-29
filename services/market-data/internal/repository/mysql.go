@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -92,11 +94,78 @@ func (s *Store) Migrate(ctx context.Context) error {
  metadata JSON NOT NULL,
  PRIMARY KEY (id), UNIQUE KEY uq_market_bar_source_basis (symbol, trade_date, period, adjustment_basis, source), KEY idx_market_bar_lookup (symbol, trade_date, adjustment_basis)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+		`CREATE TABLE IF NOT EXISTS market_data_daily_bar_versions (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ symbol VARCHAR(16) NOT NULL,
+ trade_date DATE NOT NULL,
+ period VARCHAR(8) NOT NULL DEFAULT '1d',
+ adjustment_basis VARCHAR(24) NOT NULL,
+ source VARCHAR(64) NOT NULL,
+ revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ recorded_at DATETIME(6) NOT NULL,
+ open_price DECIMAL(20,8) NOT NULL,
+ high_price DECIMAL(20,8) NOT NULL,
+ low_price DECIMAL(20,8) NOT NULL,
+ close_price DECIMAL(20,8) NOT NULL,
+ volume_shares BIGINT NULL,
+ amount_cny DECIMAL(24,2) NULL,
+ change_percent DECIMAL(16,8) NULL,
+ fetched_at DATETIME(6) NOT NULL,
+ normalized_at DATETIME(6) NOT NULL,
+ quality_status VARCHAR(16) NOT NULL,
+ metadata JSON NOT NULL,
+ PRIMARY KEY (id),
+ KEY idx_market_bar_revision_identity_asof (symbol, trade_date, period, adjustment_basis, source, recorded_at, id),
+ KEY idx_market_bar_revision_asof (symbol, trade_date, adjustment_basis, recorded_at),
+ KEY idx_market_bar_revision_observed (recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+		`CREATE TABLE IF NOT EXISTS market_data_fundamental_versions (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ symbol VARCHAR(16) NOT NULL,
+ report_year SMALLINT NOT NULL,
+ report_quarter TINYINT NOT NULL,
+ source VARCHAR(64) NOT NULL,
+ revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ recorded_at DATETIME(6) NOT NULL,
+ fetched_at DATETIME(6) NOT NULL,
+ quality_status VARCHAR(16) NOT NULL,
+ metadata JSON NOT NULL,
+ PRIMARY KEY (id),
+ KEY idx_market_fundamental_asof (symbol, report_year, report_quarter, recorded_at),
+ KEY idx_market_fundamental_observed (recorded_at),
+ KEY idx_market_fundamental_identity_asof (symbol, report_year, report_quarter, source, recorded_at, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+		`CREATE TABLE IF NOT EXISTS market_data_security_trading_status_versions (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ symbol VARCHAR(16) NOT NULL,
+ trade_date DATE NOT NULL,
+ source VARCHAR(64) NOT NULL,
+ revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ recorded_at DATETIME(6) NOT NULL,
+ fetched_at DATETIME(6) NOT NULL,
+ quality_status VARCHAR(16) NOT NULL,
+ metadata JSON NOT NULL,
+ PRIMARY KEY (id),
+ KEY idx_market_security_status_identity_asof (symbol, trade_date, source, recorded_at, id),
+ KEY idx_market_security_status_date_asof (symbol, trade_date, recorded_at),
+ KEY idx_market_security_status_observed (recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("market-data schema migration: %w", err)
 		}
+	}
+	// 旧版修订表曾对内容哈希建立全历史唯一约束，会错误阻止 A→B→A 的回归修订。
+	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_daily_bar_versions",
+		"uq_market_bar_revision_content", "idx_market_bar_revision_identity_asof",
+		"symbol, trade_date, period, adjustment_basis, source, recorded_at, id"); err != nil {
+		return fmt.Errorf("migrate daily-bar revision index: %w", err)
+	}
+	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_fundamental_versions",
+		"uq_market_fundamental_revision_content", "idx_market_fundamental_identity_asof",
+		"symbol, report_year, report_quarter, source, recorded_at, id"); err != nil {
+		return fmt.Errorf("migrate fundamentals revision index: %w", err)
 	}
 	// CREATE TABLE IF NOT EXISTS does not add new columns to an already existing
 	// deployment. Use information_schema checks so the migration works on both
@@ -111,6 +180,37 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (s *Store) ensureNonUniqueHistoryIndex(ctx context.Context, table, legacyIndex, indexName, columns string) error {
+	// 所有标识符和列定义均为包内常量，不接受请求参数。
+	var legacyCount int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, table, legacyIndex).Scan(&legacyCount); err != nil {
+		return err
+	}
+	if legacyCount > 0 && legacyIndex != indexName {
+		if _, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table, legacyIndex)); err != nil {
+			return err
+		}
+	}
+	var count, nonUnique int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(NON_UNIQUE), 1)
+FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, table, indexName).Scan(&count, &nonUnique); err != nil {
+		return err
+	}
+	if count > 0 && nonUnique == 0 {
+		if _, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table, indexName)); err != nil {
+			return err
+		}
+		count = 0
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s)", indexName, table, columns))
+	return err
 }
 
 func (s *Store) ensureColumn(ctx context.Context, table, column, definition string) error {
@@ -178,10 +278,30 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	}
 	defer tx.Rollback()
 	stmt := `INSERT INTO market_data_daily_bars (symbol,trade_date,period,adjustment_basis,source,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE open_price=VALUES(open_price),high_price=VALUES(high_price),low_price=VALUES(low_price),close_price=VALUES(close_price),volume_shares=VALUES(volume_shares),amount_cny=VALUES(amount_cny),change_percent=VALUES(change_percent),fetched_at=VALUES(fetched_at),normalized_at=VALUES(normalized_at),quality_status=VALUES(quality_status),metadata=VALUES(metadata)`
+	versionStmt := `INSERT INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 	for _, bar := range bars {
 		metadata, e := json.Marshal(bar)
 		if e != nil {
 			return e
+		}
+		revisionHash, e := dailyBarRevisionHash(bar)
+		if e != nil {
+			return fmt.Errorf("fingerprint daily bar %s %s: %w", bar.Symbol, bar.TradeDate, e)
+		}
+		var latestHash string
+		lookupErr := tx.QueryRowContext(ctx, `SELECT revision_hash FROM market_data_daily_bar_versions
+WHERE symbol=? AND trade_date=? AND period=? AND adjustment_basis=? AND source=?
+ORDER BY recorded_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+			bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source).Scan(&latestHash)
+		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+			return fmt.Errorf("read latest daily bar revision %s %s: %w", bar.Symbol, bar.TradeDate, lookupErr)
+		}
+		if shouldRecordRevision(latestHash, lookupErr == nil, revisionHash) {
+			recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
+			_, e = tx.ExecContext(ctx, versionStmt, bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source, revisionHash, recordedAt, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Amount, bar.ChangePercent, bar.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), bar.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(bar.QualityStatus), metadata)
+			if e != nil {
+				return fmt.Errorf("record daily bar revision %s %s: %w", bar.Symbol, bar.TradeDate, e)
+			}
 		}
 		_, e = tx.ExecContext(ctx, stmt, bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Amount, bar.ChangePercent, bar.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), bar.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(bar.QualityStatus), metadata)
 		if e != nil {
@@ -190,6 +310,204 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	}
 	return tx.Commit()
 }
+
+func shouldRecordRevision(previousHash string, hasPrevious bool, nextHash string) bool {
+	return !hasPrevious || previousHash != nextHash
+}
+
+func dailyBarRevisionHash(bar model.DailyBar) (string, error) {
+	// 获取/归一化时间变化本身不是行情修订；只对内容、来源版本、单位和质量变化生成新版本。
+	fingerprint := bar
+	fingerprint.FetchedAt = time.Time{}
+	fingerprint.NormalizedAt = time.Time{}
+	fingerprint.SystemObservedAt = nil
+	payload, err := json.Marshal(fingerprint)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// ListBarsAsOf returns the latest recorded revision per source and date that was
+// already observed by the service at asOf. It deliberately returns different
+// providers independently; provider-priority resolution remains a service concern.
+func (s *Store) ListBarsAsOf(ctx context.Context, symbol, start, end string, adjust model.AdjustmentBasis, asOf time.Time, limit int) ([]model.DailyBar, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("MariaDB store disabled")
+	}
+	if asOf.IsZero() {
+		return nil, errors.New("daily-bar as-of timestamp must not be zero")
+	}
+	if limit < 0 {
+		return nil, errors.New("daily-bar as-of limit must not be negative")
+	}
+	asOfText := asOf.UTC().Format("2006-01-02 15:04:05.999999")
+	query := `SELECT v.metadata, DATE_FORMAT(v.recorded_at, '%Y-%m-%d %H:%i:%s.%f')
+FROM market_data_daily_bar_versions AS v
+WHERE v.symbol=? AND v.adjustment_basis=?
+  AND (?='' OR v.trade_date>=?) AND (?='' OR v.trade_date<=?)
+  AND v.recorded_at<=?
+  AND NOT EXISTS (
+    SELECT 1 FROM market_data_daily_bar_versions AS newer
+    WHERE newer.symbol=v.symbol AND newer.trade_date=v.trade_date
+      AND newer.period=v.period AND newer.adjustment_basis=v.adjustment_basis
+      AND newer.source=v.source AND newer.recorded_at<=?
+      AND (newer.recorded_at>v.recorded_at OR (newer.recorded_at=v.recorded_at AND newer.id>v.id))
+  )
+ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
+	args := []any{symbol, string(adjust), start, start, end, end, asOfText, asOfText}
+	if limit > 0 {
+		// PIT 查询需要比较多个来源的同日修订后再择取一致的来源序列。
+		// 为多个 Provider 预留行数，避免 LIMIT 先截断低优先级来源而误判覆盖不足。
+		if limit > int(^uint(0)>>1)/16 {
+			return nil, errors.New("daily-bar as-of limit overflows query row limit")
+		}
+		query += ` LIMIT ?`
+		args = append(args, limit*16)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query daily-bar revisions as of %s: %w", asOfText, err)
+	}
+	defer rows.Close()
+	out := []model.DailyBar{}
+	for rows.Next() {
+		var metadata []byte
+		var recordedAtText string
+		if err := rows.Scan(&metadata, &recordedAtText); err != nil {
+			return nil, err
+		}
+		var bar model.DailyBar
+		if err := json.Unmarshal(metadata, &bar); err != nil {
+			// Keep other source/date versions usable if one historic metadata blob is damaged.
+			continue
+		}
+		recordedAt, err := time.ParseInLocation("2006-01-02 15:04:05.000000", recordedAtText, time.UTC)
+		if err != nil {
+			return nil, fmt.Errorf("parse daily-bar record timestamp: %w", err)
+		}
+		bar.SystemObservedAt = &recordedAt
+		out = append(out, bar)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func fundamentalsRevisionHash(snapshot model.FundamentalsSnapshot) (string, error) {
+	fingerprint := snapshot
+	fingerprint.FetchedAt = time.Time{}
+	fingerprint.SystemObservedAt = nil
+	payload, err := json.Marshal(fingerprint)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// SaveFundamentals 追加保存财务快照的不同内容版本，不覆盖此前已观察到的修订。
+func (s *Store) SaveFundamentals(ctx context.Context, snapshot *model.FundamentalsSnapshot) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	if snapshot == nil {
+		return errors.New("fundamentals snapshot is nil")
+	}
+	if snapshot.Symbol == "" || snapshot.Source == "" || snapshot.Year < 2000 ||
+		snapshot.Quarter < 1 || snapshot.Quarter > 4 || snapshot.FetchedAt.IsZero() {
+		return errors.New("fundamentals snapshot identity, period, source or fetched_at is invalid")
+	}
+	stored := *snapshot
+	stored.SystemObservedAt = nil
+	metadata, err := json.Marshal(&stored)
+	if err != nil {
+		return err
+	}
+	revisionHash, err := fundamentalsRevisionHash(stored)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin fundamentals revision transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var latestHash string
+	lookupErr := tx.QueryRowContext(ctx, `SELECT revision_hash FROM market_data_fundamental_versions
+WHERE symbol=? AND report_year=? AND report_quarter=? AND source=?
+ORDER BY recorded_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+		stored.Symbol, stored.Year, stored.Quarter, stored.Source).Scan(&latestHash)
+	if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+		return fmt.Errorf("read latest fundamentals revision %s %dQ%d: %w", stored.Symbol, stored.Year, stored.Quarter, lookupErr)
+	}
+	if shouldRecordRevision(latestHash, lookupErr == nil, revisionHash) {
+		recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
+		_, err = tx.ExecContext(ctx, `INSERT INTO market_data_fundamental_versions
+(symbol,report_year,report_quarter,source,revision_hash,recorded_at,fetched_at,quality_status,metadata)
+VALUES (?,?,?,?,?,?,?,?,?)`,
+			stored.Symbol, stored.Year, stored.Quarter, stored.Source, revisionHash, recordedAt,
+			stored.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(stored.QualityStatus), metadata)
+		if err != nil {
+			return fmt.Errorf("record fundamentals revision %s %dQ%d: %w", stored.Symbol, stored.Year, stored.Quarter, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ListFundamentalsAsOf 读取截至系统观察时点、每个来源当时最新的报告版本。
+func (s *Store) ListFundamentalsAsOf(ctx context.Context, symbol string, year, quarter int, asOf time.Time) ([]model.FundamentalsSnapshot, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("MariaDB fundamentals revision storage disabled")
+	}
+	if asOf.IsZero() {
+		return nil, errors.New("fundamentals as_of timestamp must not be zero")
+	}
+	if year < 2000 || quarter < 1 || quarter > 4 {
+		return nil, errors.New("fundamentals report period is invalid")
+	}
+	asOfText := asOf.UTC().Format("2006-01-02 15:04:05.999999")
+	rows, err := s.db.QueryContext(ctx, `SELECT v.metadata, DATE_FORMAT(v.recorded_at, '%Y-%m-%d %H:%i:%s.%f')
+FROM market_data_fundamental_versions AS v
+WHERE v.symbol=? AND v.report_year=? AND v.report_quarter=? AND v.recorded_at<=?
+  AND NOT EXISTS (
+    SELECT 1 FROM market_data_fundamental_versions AS newer
+    WHERE newer.symbol=v.symbol AND newer.report_year=v.report_year AND newer.report_quarter=v.report_quarter
+      AND newer.source=v.source AND newer.recorded_at<=?
+      AND (newer.recorded_at>v.recorded_at OR (newer.recorded_at=v.recorded_at AND newer.id>v.id))
+  )
+ORDER BY v.recorded_at DESC, v.source ASC`, symbol, year, quarter, asOfText, asOfText)
+	if err != nil {
+		return nil, fmt.Errorf("query fundamentals revisions as of %s: %w", asOfText, err)
+	}
+	defer rows.Close()
+	out := []model.FundamentalsSnapshot{}
+	for rows.Next() {
+		var metadata []byte
+		var recordedAtText string
+		if err := rows.Scan(&metadata, &recordedAtText); err != nil {
+			return nil, err
+		}
+		var snapshot model.FundamentalsSnapshot
+		if err := json.Unmarshal(metadata, &snapshot); err != nil {
+			return nil, fmt.Errorf("decode fundamentals revision metadata: %w", err)
+		}
+		recordedAt, err := time.ParseInLocation("2006-01-02 15:04:05.000000", recordedAtText, time.UTC)
+		if err != nil {
+			return nil, fmt.Errorf("parse fundamentals record timestamp: %w", err)
+		}
+		snapshot.SystemObservedAt = &recordedAt
+		out = append(out, snapshot)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (s *Store) ListBars(ctx context.Context, symbol, start, end string, adjust model.AdjustmentBasis, limit int) ([]model.DailyBar, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB store disabled")

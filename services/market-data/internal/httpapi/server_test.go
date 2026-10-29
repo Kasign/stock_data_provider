@@ -55,7 +55,7 @@ func (p httpFakeProvider) FetchSectorRankingsDirection(ctx context.Context, cate
 	return snapshot, err
 }
 func (httpFakeProvider) FetchStockBasic(_ context.Context, symbol string) (*model.StockBasic, error) {
-	return &model.StockBasic{Symbol: symbol, Name: "测试证券", IPODate: "2000-01-01", SecurityType: 1, SecurityTypeLabel: "stock", ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid}, nil
+	return &model.StockBasic{Symbol: symbol, Name: "测试证券", IPODate: "2000-01-01", SecurityType: 1, SecurityTypeLabel: "stock", ListingStatus: 1, ListingStatusLabel: "listed", Source: "eastmoney", SourceVersion: "test-stock-basic-v1", FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid}, nil
 }
 func (httpFakeProvider) FetchStockBoards(_ context.Context, symbol string) (*model.StockBoardSnapshot, error) {
 	now := time.Now().UTC()
@@ -114,7 +114,7 @@ func (httpFakeProvider) FetchQuote(context.Context, string) (*model.Quote, error
 	change := 0.2
 	pct := 2.04
 	t := time.Now().UTC()
-	return &model.Quote{Symbol: "600519.SH", Name: "test", CurrentPrice: &p, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &vol, Amount: &amount, QuoteTime: &t, FetchedAt: t, NormalizedAt: t, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid}, nil
+	return &model.Quote{Symbol: "600519.SH", Name: "test", CurrentPrice: &p, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &vol, Amount: &amount, QuoteTime: &t, FetchedAt: t, NormalizedAt: t, Source: "eastmoney", SourceVersion: "test-quote-v1", VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid}, nil
 }
 func (httpFakeProvider) FetchDailyBars(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, error) {
 	v := int64(100000)
@@ -126,7 +126,7 @@ func (httpFakeProvider) FetchMarketBreadth(_ context.Context) (*model.MarketBrea
 	now := time.Now().UTC()
 	amount := 1000000.0
 	return &model.MarketBreadthSnapshot{
-		Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 3,
+		Market: "cn_a_share", ProviderReportDate: now.Format("2006-01-02"), TotalSecurities: 3, CoveredSecurities: 3,
 		AdvancingCount: 1, DecliningCount: 1, UnchangedCount: 1,
 		TotalAmountCNY: &amount, AmountCoverageCount: 3, Source: "eastmoney",
 		SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded,
@@ -138,7 +138,7 @@ func (httpFakeProvider) FetchLimitPool(_ context.Context, poolType, tradeDate st
 	change := 10.0
 	return &model.LimitPoolSnapshot{
 		PoolType: poolType, TradeDate: tradeDate, Total: 1, HasData: true,
-		Items:  []model.LimitPoolItem{{Symbol: "600519.SH", Code: "600519", Name: "测试证券", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Items:  []model.LimitPoolItem{{Symbol: "600519.SH", Code: "600519", Name: "测试证券", ChangePercent: &change, Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}, nil

@@ -95,6 +95,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	announcementsEnabled := map[string]bool{}
 	stockBoardsEnabled := map[string]bool{}
 	tradingCalendarEnabled := map[string]bool{}
+	securityTradingStatusEnabled := map[string]bool{}
 	fundamentalsEnabled := map[string]bool{}
 	valuationEnabled := map[string]bool{}
 	indexCatalogEnabled := map[string]bool{}
@@ -103,6 +104,15 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	capitalFlowEnabled := map[string]bool{}
 	hotRankingEnabled := map[string]bool{}
 	if svc != nil {
+		var priceLimitEventProviders []provider.PriceLimitEventProvider
+		for _, p := range allProviders {
+			if eventProvider, ok := p.(provider.PriceLimitEventProvider); ok {
+				priceLimitEventProviders = append(priceLimitEventProviders, eventProvider)
+			}
+		}
+		if len(priceLimitEventProviders) > 0 {
+			svc.SetPriceLimitEventProviders(priceLimitEventProviders)
+		}
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
 		}
@@ -133,6 +143,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.TradingCalendarProviders() {
 			tradingCalendarEnabled[p.Name()] = true
 		}
+		for _, p := range svc.SecurityTradingStatusProviders() {
+			securityTradingStatusEnabled[p.Name()] = true
+		}
 		for _, p := range svc.FundamentalsProviders() {
 			fundamentalsEnabled[p.Name()] = true
 		}
@@ -162,7 +175,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			StockBasicCapable: stockBasicEnabled[name], StockSearchCapable: stockSearchEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
-			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
+			SecurityTradingStatusCapable: securityTradingStatusEnabled[name], FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
@@ -189,7 +202,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/market/limit-pools", s.auth(http.HandlerFunc(s.limitPool)))
 	mux.Handle("GET /api/v1/market/dragon-tiger", s.auth(http.HandlerFunc(s.dragonTiger)))
 	mux.Handle("GET /api/v1/market/trading-calendar", s.auth(http.HandlerFunc(s.tradingCalendar)))
+	mux.Handle("GET /api/v1/market/session", s.auth(http.HandlerFunc(s.marketSession)))
 	mux.Handle("GET /api/v1/stocks/search", s.auth(http.HandlerFunc(s.searchStocks)))
+	mux.Handle("GET /api/v1/stocks/{symbol}/trading-status", s.auth(http.HandlerFunc(s.securityTradingStatus)))
+	mux.Handle("GET /api/v1/stocks/{symbol}/price-limit-rule", s.auth(http.HandlerFunc(s.priceLimitRule)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/profile", s.auth(http.HandlerFunc(s.stockBasic)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/boards", s.auth(http.HandlerFunc(s.stockBoards)))
 	mux.Handle("GET /api/v1/stocks/{symbol}/announcements", s.auth(http.HandlerFunc(s.stockAnnouncements)))
@@ -224,6 +240,20 @@ func (s *Server) quote(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, q)
 }
 func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
+	asOfValues, hasAsOf := r.URL.Query()["as_of"]
+	var asOf time.Time
+	if hasAsOf {
+		if len(asOfValues) != 1 || strings.TrimSpace(asOfValues[0]) == "" {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a single RFC3339 timestamp", requestID(r))
+			return
+		}
+		parsed, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(asOfValues[0]))
+		if parseErr != nil || parsed.After(time.Now().UTC()) {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a valid non-future RFC3339 timestamp", requestID(r))
+			return
+		}
+		asOf = parsed
+	}
 	rawSymbol := r.PathValue("symbol")
 	symbol, symbolErr := normalize.NormalizeSymbol(rawSymbol)
 	if symbolErr != nil {
@@ -248,6 +278,36 @@ func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
 	basis, err := normalize.Adjustment(adjustment)
 	if err != nil {
 		writeErr(w, 400, "VALIDATION_ERROR", err.Error(), requestID(r))
+		return
+	}
+	if hasAsOf {
+		bars, warnings, err := s.svc.DailyBarsAsOf(r.Context(), symbol, start, end, limit, basis, asOf)
+		switch {
+		case errors.Is(err, service.ErrDailyBarsAsOfUnavailable):
+			writeErr(w, http.StatusServiceUnavailable, "PIT_STORAGE_UNAVAILABLE", "daily-bar point-in-time storage is not enabled", requestID(r))
+			return
+		case errors.Is(err, service.ErrDailyBarsAsOfNotFound):
+			writeErr(w, http.StatusNotFound, "PIT_REVISION_NOT_FOUND", "no coherent daily-bar revisions were recorded by the requested as_of time", requestID(r))
+			return
+		case err != nil:
+			writeDomainErr(w, err, requestID(r))
+			return
+		}
+		quality := model.QualityValid
+		if normalize.HasQualityDegradingBarWarnings(warnings) {
+			quality = model.QualityDegraded
+		}
+		for _, bar := range bars {
+			if bar.QualityStatus != model.QualityValid {
+				quality = model.QualityDegraded
+				break
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"symbol": symbol, "period": "1d", "adjustment_basis": basis,
+			"volume_unit": "shares", "amount_unit": "CNY", "quality_status": quality,
+			"warnings": warnings, "point_in_time": true, "as_of": asOf.UTC(), "bars": bars,
+		})
 		return
 	}
 	bars, hit, warnings, err := s.svc.DailyBars(r.Context(), symbol, start, end, limit, basis)

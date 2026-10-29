@@ -17,25 +17,26 @@ import (
 )
 
 type ProviderSettings struct {
-	Enabled          bool `json:"enabled"`
-	Quote            bool `json:"quote"`
-	DailyBars        bool `json:"daily_bars"`
-	StockBasic       bool `json:"stock_basic"`
-	StockSearch      bool `json:"stock_search"`
-	SectorRankings   bool `json:"sector_rankings"`
-	IndexQuotes      bool `json:"index_quotes"`
-	MarketBreadth    bool `json:"market_breadth"`
-	LimitPools       bool `json:"limit_pools"`
-	StockBoards      bool `json:"stock_boards"`
-	TradingCalendar  bool `json:"trading_calendar"`
-	Fundamentals     bool `json:"fundamentals"`
-	Valuations       bool `json:"valuations"`
-	IndexCatalog     bool `json:"index_catalog"`
-	ChipDistribution bool `json:"chip_distribution"`
-	CapitalFlow      bool `json:"capital_flow"`
-	HotRankings      bool `json:"hot_rankings"`
-	DragonTiger      bool `json:"dragon_tiger"`
-	Announcements    bool `json:"announcements"`
+	Enabled               bool `json:"enabled"`
+	Quote                 bool `json:"quote"`
+	DailyBars             bool `json:"daily_bars"`
+	StockBasic            bool `json:"stock_basic"`
+	StockSearch           bool `json:"stock_search"`
+	SectorRankings        bool `json:"sector_rankings"`
+	IndexQuotes           bool `json:"index_quotes"`
+	MarketBreadth         bool `json:"market_breadth"`
+	LimitPools            bool `json:"limit_pools"`
+	StockBoards           bool `json:"stock_boards"`
+	TradingCalendar       bool `json:"trading_calendar"`
+	SecurityTradingStatus bool `json:"security_trading_status"`
+	Fundamentals          bool `json:"fundamentals"`
+	Valuations            bool `json:"valuations"`
+	IndexCatalog          bool `json:"index_catalog"`
+	ChipDistribution      bool `json:"chip_distribution"`
+	CapitalFlow           bool `json:"capital_flow"`
+	HotRankings           bool `json:"hot_rankings"`
+	DragonTiger           bool `json:"dragon_tiger"`
+	Announcements         bool `json:"announcements"`
 }
 
 type Config struct {
@@ -125,7 +126,7 @@ func defaultProviderFile() providerFile {
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
 			"netease":   {Enabled: true, Quote: true, DailyBars: true},
-			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false},
+			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, SecurityTradingStatus: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false},
 			"tickflow":  {Enabled: true, Quote: false, DailyBars: true, SectorRankings: false, IndexQuotes: false, MarketBreadth: false},
 			"pytdx":     {Enabled: true, Quote: true, DailyBars: true},
 			"xueqiu":    {Enabled: false, HotRankings: false},

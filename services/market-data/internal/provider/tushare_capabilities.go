@@ -637,6 +637,7 @@ func tushareStatementDefinitions() []tushareStatementDefinition {
 		},
 	}
 }
+
 // tushareStatementReportType 返回合并报表的查询类型：一季报本身是单季度值，后续季度才取单季合并类型。
 func tushareStatementReportType(apiName, periodDate string) string {
 	if apiName != "income" && apiName != "cashflow" {
@@ -722,14 +723,14 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 	if selected == nil {
 		return model.FundamentalSection{
 			Category: definition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},
-			QualityStatus: model.QualityUnknown,
+			QualityStatus:  model.QualityUnknown,
 			QualityReasons: []string{"no_statement_row_with_confirmed_publication_date_for_requested_period"},
 		}, nil
 	}
 
 	section := model.FundamentalSection{
 		Category: definition.category, ReportDate: periodDate, PublicationDate: selectedPublicationDate,
-		Metrics: make([]model.FundamentalMetric, 0, len(definition.metrics)),
+		Metrics:       make([]model.FundamentalMetric, 0, len(definition.metrics)),
 		QualityStatus: model.QualityValid,
 	}
 	requiredMissingCount := 0
@@ -760,7 +761,6 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 	return section, nil
 }
 
-
 func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year, quarter int) (*model.FundamentalsSnapshot, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -768,6 +768,9 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	symbol, err := tushareExchangeCode(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tushare fundamentals only support common A-share equities, got %q", rawSymbol)
 	}
 	period, err := tushareQuarterEnd(year, quarter)
 	if err != nil {
@@ -910,7 +913,7 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			}
 			section = model.FundamentalSection{
 				Category: statementDefinition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},
-				QualityStatus: model.QualityDegraded,
+				QualityStatus:  model.QualityDegraded,
 				QualityReasons: []string{"provider_statement_endpoint_unavailable"},
 			}
 			snapshotReasons = appendTushareReason(snapshotReasons, statementDefinition.category+"_provider_unavailable")
@@ -1020,6 +1023,9 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		symbol, err := tushareExchangeCode(raw)
 		if err != nil {
 			return nil, err
+		}
+		if !isTushareAShareSymbol(symbol) {
+			return nil, fmt.Errorf("Tushare daily_basic only supports common A-share equities, got %q", raw)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
 			continue
@@ -1204,7 +1210,8 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 		return nil, fmt.Errorf("Tushare 不支持涨跌停池类型 %q；可选 up/down/broken", rawPoolType)
 	}
 	if limit <= 0 {
-		limit = 30
+		// 与 HTTP/Service 层默认值保持一致，避免直接调用 Provider 时悄悄只返回 30 条。
+		limit = 100
 	}
 	if limit > 100 {
 		return nil, errors.New("Tushare 涨跌停池单页条数不能超过 100")
@@ -1239,9 +1246,12 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	now := time.Now().UTC()
 	allItems := make([]model.LimitPoolItem, 0, len(table.rows))
 	reasons := []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"}
-	if len(table.rows) >= 2500 {
+	totalIsLowerBound := len(table.rows) >= 2500
+	if totalIsLowerBound {
 		reasons = appendTushareReason(reasons, "provider_response_may_be_capped_at_2500_rows")
+		reasons = appendTushareReason(reasons, "provider_limit_pool_total_is_lower_bound")
 	}
+	excludedNonAShareCount := 0
 	seenSymbols := make(map[string]struct{}, len(table.rows))
 	for index, row := range table.rows {
 		rowDateRaw, readErr := table.stringValue(row, "trade_date")
@@ -1265,6 +1275,7 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行证券代码无效: %q", index, rawSymbol)
 		}
 		if !isTushareAShareSymbol(symbol) {
+			excludedNonAShareCount++
 			reasons = appendTushareReason(reasons, "provider_non_a_share_security_rows_excluded")
 			continue
 		}
@@ -1347,7 +1358,8 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	if len(allItems) == 0 {
 		return &model.LimitPoolSnapshot{
 			PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: providerReportDate,
-			Total: 0, HasData: false, Items: []model.LimitPoolItem{},
+			Total: 0, ProviderReturned: len(table.rows), ExcludedNonAShareCount: excludedNonAShareCount,
+			TotalIsLowerBound: totalIsLowerBound, HasData: false, Items: []model.LimitPoolItem{},
 			Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
 			QualityStatus:  model.QualityUnknown,
 			QualityReasons: append(reasons, "empty_limit_pool_cannot_confirm_zero_events_or_unavailable_source"),
@@ -1359,10 +1371,33 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	}
 	return &model.LimitPoolSnapshot{
 		PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: providerReportDate,
-		Total: total, HasData: true, Items: allItems,
+		Total: total, ProviderReturned: len(table.rows), ExcludedNonAShareCount: excludedNonAShareCount,
+		TotalIsLowerBound: totalIsLowerBound, HasData: true, Items: allItems,
 		Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 	}, nil
+}
+
+func isTushareConvertibleBondCode(raw string) bool {
+	code := strings.ToUpper(strings.TrimSpace(raw))
+	parts := strings.Split(code, ".")
+	if len(parts) != 2 || len(parts[0]) != 6 {
+		return false
+	}
+	for _, r := range parts[0] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	switch {
+	case strings.HasPrefix(code, "110"), strings.HasPrefix(code, "111"),
+		strings.HasPrefix(code, "113"), strings.HasPrefix(code, "118"),
+		strings.HasPrefix(code, "123"), strings.HasPrefix(code, "127"),
+		strings.HasPrefix(code, "128"), strings.HasPrefix(code, "129"):
+		return true
+	default:
+		return false
+	}
 }
 
 // FetchDragonTiger returns one page of top_list rows and keeps unverified currency fields out of *_CNY values.
@@ -1401,17 +1436,23 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	}
 	now := time.Now().UTC()
 	total := len(table.rows)
+	totalIsLowerBound := total >= 10000
 	pages := 0
 	if total > 0 {
 		pages = (total + pageSize - 1) / pageSize
 	}
 	base := &model.DragonTigerSnapshot{
 		TradeDate: tradeDate, ProviderReportDate: "", Page: page, PageSize: pageSize,
-		Total: total, Pages: pages, SourceReturned: 0, ExcludedNonAShareCount: 0,
+		Total: total, TotalIsLowerBound: totalIsLowerBound, Pages: pages,
+		SourceReturned: 0, ExcludedNonAShareCount: 0,
 		HasData: false, HasMore: false, Items: []model.DragonTigerItem{},
 		Source: p.Name(), SourceVersion: "tushare-top-list-v1", FetchedAt: now,
 		QualityStatus:  model.QualityUnknown,
 		QualityReasons: []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"},
+	}
+	if totalIsLowerBound {
+		base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_response_may_be_capped_at_10000_rows")
+		base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_dragon_tiger_total_is_lower_bound")
 	}
 	if total == 0 {
 		base.QualityReasons = appendTushareReason(base.QualityReasons, "empty_dragon_tiger_report_cannot_confirm_zero_events_or_unavailable_source")
@@ -1442,6 +1483,11 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 		rawSymbol, readErr := table.stringValue(row, "ts_code")
 		if readErr != nil {
 			return nil, readErr
+		}
+		if isTushareConvertibleBondCode(rawSymbol) {
+			base.ExcludedNonAShareCount++
+			base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_non_a_share_security_rows_excluded")
+			continue
 		}
 		symbol, symbolErr := normalize.NormalizeSymbol(rawSymbol)
 		if symbolErr != nil {
@@ -1513,9 +1559,6 @@ func (p *Tushare) FetchDragonTiger(ctx context.Context, rawTradeDate string, pag
 	// 只有实际收到且逐条核对过交易日的源记录，才能证明 ProviderReportDate。
 	base.ProviderReportDate = tradeDate
 	base.Returned = len(base.Items)
-	if total >= 10000 {
-		base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_response_may_be_capped_at_10000_rows")
-	}
 	if base.Returned == 0 {
 		base.QualityStatus = model.QualityUnknown
 		return base, nil
@@ -1844,6 +1887,7 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 	latestDate := ""
 	latest := make([]tushareWeightedConstituent, 0)
 	foundMonth := false
+	monthlyResultMayBeTruncated := false
 	for monthOffset := 0; monthOffset < lookbackMonths; monthOffset++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -1862,6 +1906,7 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 			return nil, fetchErr
 		}
 		if len(table.rows) >= 5000 {
+			monthlyResultMayBeTruncated = true
 			reasons = appendTushareReason(reasons, "provider_monthly_index_weight_result_is_large_and_may_be_truncated")
 		}
 
@@ -1947,7 +1992,8 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 		reasons = appendTushareReason(reasons, "provider_latest_constituent_snapshot_has_no_supported_a_share_members")
 		return &model.IndexConstituentSnapshot{
 			IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, ProviderReportDate: latestDate, Items: []model.IndexConstituent{}, Total: 0,
-			ProviderReturned: len(latest), ExcludedCount: len(latest), Source: p.Name(),
+			ProviderReturned: len(latest), ExcludedCount: len(latest),
+			TotalIsLowerBound: monthlyResultMayBeTruncated, Source: p.Name(),
 			SourceVersion: tushareIndexConstituentVersion, FetchedAt: now, QualityStatus: model.QualityUnknown,
 			QualityReasons: reasons,
 		}, nil
@@ -2010,7 +2056,8 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 	}
 	return &model.IndexConstituentSnapshot{
 		IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, ProviderReportDate: latestDate, Items: items, Total: len(items),
-		ProviderReturned: len(latest), ExcludedCount: excludedCount, Source: p.Name(),
+		ProviderReturned: len(latest), ExcludedCount: excludedCount,
+		TotalIsLowerBound: monthlyResultMayBeTruncated, Source: p.Name(),
 		SourceVersion: tushareIndexConstituentVersion, FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 	}, nil

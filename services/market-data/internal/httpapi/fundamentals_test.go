@@ -47,8 +47,8 @@ func TestFundamentalsRouteRequiresExplicitPeriod(t *testing.T) {
 		{"/api/v1/stocks/600519/fundamentals", http.StatusBadRequest, ""},
 		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=5", http.StatusBadRequest, ""},
 		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2", http.StatusOK, ""},
-		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2&as_of=2026-07-01T00%3A00%3A00Z", http.StatusBadRequest, "as_of is not supported"},
-		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2&as_of=", http.StatusBadRequest, "as_of is not supported"},
+		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2&as_of=2026-07-01T00%3A00%3A00Z", http.StatusServiceUnavailable, "fundamentals point-in-time storage is not enabled"},
+		{"/api/v1/stocks/600519/fundamentals?year=2026&quarter=2&as_of=", http.StatusBadRequest, "as_of must be a single RFC3339 timestamp"},
 	} {
 		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 		req.Header.Set("X-API-Key", "secret")

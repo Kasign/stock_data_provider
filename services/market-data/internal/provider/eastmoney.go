@@ -231,10 +231,16 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 	now := time.Now().UTC()
 	snapshot := &model.StockBoardSnapshot{
 		Symbol: symbol, Total: payload.Data.Total, HasData: payload.Data.Total > 0,
-		Items:  make([]model.StockBoard, 0, len(rows)),
-		Source: p.Name(), SourceVersion: "eastmoney-slist-stock-boards-v1",
+		ProviderReturned: len(rows),
+		Items:            make([]model.StockBoard, 0, len(rows)),
+		Source:           p.Name(), SourceVersion: "eastmoney-slist-stock-boards-v1",
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+	if payload.Data.Total == 1000 {
+		// 请求本身最多返回 1000 条；命中边界时不能声称已取得完整板块列表。
+		snapshot.TotalIsLowerBound = true
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_stock_boards_response_may_be_capped_at_1000_rows")
 	}
 	if !snapshot.HasData {
 		snapshot.QualityStatus = model.QualityUnknown
@@ -470,8 +476,8 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	for key, value := range map[string]*float64{
 		"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY,
 		"float_market_cap_cny": item.FloatMarketCapCNY,
-		"total_shares": item.TotalShares, "float_shares": item.FloatShares,
-		"roe_percent": item.ROEPercent,
+		"total_shares":         item.TotalShares, "float_shares": item.FloatShares,
+		"roe_percent":               item.ROEPercent,
 		"net_profit_margin_percent": item.NetProfitMarginPercent, "net_profit_cny": item.NetProfitCNY,
 		"gross_margin_percent": item.GrossMarginPercent,
 	} {
@@ -820,11 +826,18 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 	if quotePayload.Data == nil {
 		return nil, errors.New("Eastmoney hot-ranking quote enrichment returned no data")
 	}
+	requestedQuoteCodes := make(map[string]struct{}, len(ranked))
+	for _, item := range ranked {
+		requestedQuoteCodes[item.code] = struct{}{}
+	}
 	quotes := make(map[string]map[string]json.RawMessage, len(quotePayload.Data.Diff))
-	for _, row := range quotePayload.Data.Diff {
+	for index, row := range quotePayload.Data.Diff {
 		code := eastmoneyHotRowString(row, "f12")
 		if code == "" {
-			continue
+			return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment row %d is missing security code f12", index)
+		}
+		if _, requested := requestedQuoteCodes[code]; !requested {
+			return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment returned unrequested code %s", code)
 		}
 		if _, duplicate := quotes[code]; duplicate {
 			return nil, fmt.Errorf("Eastmoney hot-ranking quote enrichment contains duplicate code %s", code)
@@ -835,9 +848,10 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 	sourceVersion := eastmoneyVersion + "-hot-ranking-v1"
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, len(ranked)),
+		ProviderReturned: len(rankRows), TotalIsLowerBound: true,
 		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
 		QualityStatus:  model.QualityDegraded,
-		QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed"},
+		QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed", "provider_total_missing_using_returned_count"},
 	}
 	for _, ranking := range ranked {
 		item := model.HotRankingItem{
@@ -1887,7 +1901,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	var payload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
-			Total *int `json:"total"`
+			Total *int                         `json:"total"`
 			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
@@ -1901,7 +1915,8 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 		return nil, errors.New("Eastmoney sector ranking returned no rows")
 	}
 	reportedTotal := 0
-	if payload.Data.Total != nil {
+	sourceTotalKnown := payload.Data.Total != nil
+	if sourceTotalKnown {
 		reportedTotal = *payload.Data.Total
 		if reportedTotal < 0 {
 			return nil, fmt.Errorf("Eastmoney sector ranking total is negative: %d", reportedTotal)
@@ -1922,10 +1937,10 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.SectorRankingSnapshot{
-		Category: category, Direction: direction, Total: reportedTotal, Source: p.Name(),
-		SourceVersion:  "eastmoney-sector-clist-v1",
-		FetchedAt:      fetchedAt,
-		QualityStatus:  model.QualityDegraded,
+		Category: category, Direction: direction, Total: reportedTotal,
+		ProviderReturned: len(payload.Data.Diff), TotalIsLowerBound: !sourceTotalKnown,
+		Source: p.Name(), SourceVersion: "eastmoney-sector-clist-v1",
+		FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 		Items:          make([]model.SectorRanking, 0, len(payload.Data.Diff)),
 	}
@@ -1934,6 +1949,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 		name := parseEastmoneyBoardString(raw, "f14")
 		changePercent := parseEastmoneyBoardNumber(raw, "f3")
 		if code == "" || name == "" || changePercent == nil {
+			snapshot.ExcludedRows++
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_rows_failed_required_field_validation")
 			continue
 		}
@@ -1971,6 +1987,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	}
 	return snapshot, nil
 }
+
 // decodeEastmoneyBoardRows accepts array payloads and Eastmoney's indexed-object shape
 // ({"0": {...}, "1": {...}}). Numeric index ordering is preserved explicitly because
 // Go map iteration order is intentionally unspecified.
@@ -2189,7 +2206,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		if prevClose != nil {
 			priceChange := *price - *prevClose
 			if (change != nil && math.Abs(*change-priceChange) > eastmoneyIndexChangeTolerance) ||
-				math.Abs(*changePercent-priceChange / *prevClose * 100) > eastmoneyIndexChangePercentTolerancePP {
+				math.Abs(*changePercent - priceChange / *prevClose * 100) > eastmoneyIndexChangePercentTolerancePP {
 				snapshot.QualityStatus = model.QualityDegraded
 				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
 				continue
@@ -2747,12 +2764,14 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 
 	var sourceTotal int
 	var sourceQDate json.RawMessage
+	sourceRowsReturned := 0
 	poolRows := make([]map[string]json.RawMessage, 0, limit)
 	for pageIndex := 0; pageIndex < 100; pageIndex++ {
 		total, qdate, rows, requestErr := requestPage(pageIndex)
 		if requestErr != nil {
 			return nil, requestErr
 		}
+		sourceRowsReturned += len(rows)
 		if pageIndex == 0 {
 			sourceTotal, sourceQDate = total, qdate
 			if total == 0 && len(rows) == 0 {
@@ -2793,8 +2812,9 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	fetchedAt, requestedDate := time.Now().UTC(), date.Format("2006-01-02")
 	snapshot := &model.LimitPoolSnapshot{
 		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(strings.Trim(strings.TrimSpace(string(sourceQDate)), `"`)),
-		Total: sourceTotal, HasData: sourceTotal > 0 && len(poolRows) > 0,
-		Items: make([]model.LimitPoolItem, 0, len(poolRows)), Source: p.Name(),
+		Total: sourceTotal, ProviderReturned: sourceRowsReturned,
+		HasData: sourceTotal > 0 && len(poolRows) > 0,
+		Items:   make([]model.LimitPoolItem, 0, len(poolRows)), Source: p.Name(),
 		SourceVersion: "eastmoney-push2ex-limit-pool-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed", "requested_trade_date_is_authoritative"},
 	}

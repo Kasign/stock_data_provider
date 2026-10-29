@@ -11,7 +11,7 @@ import (
 )
 
 type fakeBaoStockFinancialClient struct {
-	noDataCategory string
+	noDataCategory  string
 	publicationDate string
 }
 
@@ -69,7 +69,9 @@ func TestBaostockFundamentalsPreservesRatioAndDisclosureDate(t *testing.T) {
 
 func TestBaostockFundamentalsRejectsFutureReportingPeriod(t *testing.T) {
 	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil { loc = time.FixedZone("CST", 8*60*60) }
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
 	now := time.Now().In(loc)
 	today := now.Format("2006-01-02")
 	quarter := int((int(now.Month())-1)/3) + 1

@@ -92,11 +92,15 @@ func TestDragonTigerFallsBackFromUnknownQualityRows(t *testing.T) {
 	fallback := &dragonTigerFallbackTestProvider{name: "hithink", snapshot: dataDragonTigerForFallbackTest("hithink")}
 	svc := dragonTigerFallbackService(first, fallback)
 	got, hit, err := svc.DragonTiger(context.Background(), date, 1, 100)
-	if err != nil || hit { t.Fatalf("DragonTiger returned hit=%v err=%v", hit, err) }
+	if err != nil || hit {
+		t.Fatalf("DragonTiger returned hit=%v err=%v", hit, err)
+	}
 	if got == nil || got.Source != "hithink" || got.QualityStatus != model.QualityDegraded {
 		t.Fatalf("expected degraded fallback rather than unknown rows, got %+v", got)
 	}
-	if first.calls != 1 || fallback.calls != 1 { t.Fatalf("expected both providers to be attempted, calls=%d/%d", first.calls, fallback.calls) }
+	if first.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("expected both providers to be attempted, calls=%d/%d", first.calls, fallback.calls)
+	}
 }
 
 func TestDragonTigerReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
@@ -108,12 +112,16 @@ func TestDragonTigerReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) 
 	failed := &dragonTigerFallbackTestProvider{name: "hithink", err: errors.New("test provider unavailable")}
 	svc := dragonTigerFallbackService(first, failed)
 	got, hit, err := svc.DragonTiger(context.Background(), date, 1, 100)
-	if err != nil || hit { t.Fatalf("DragonTiger returned hit=%v err=%v", hit, err) }
+	if err != nil || hit {
+		t.Fatalf("DragonTiger returned hit=%v err=%v", hit, err)
+	}
 	if got == nil || !got.HasData || got.QualityStatus != model.QualityUnknown ||
 		!strings.Contains(strings.Join(got.QualityReasons, ","), "dragon_tiger_fallback_exhausted_without_usable_quality") {
 		t.Fatalf("expected retained unknown rows after fallback exhaustion, got %+v", got)
 	}
-	if first.calls != 1 || failed.calls != 1 { t.Fatalf("expected all providers to be attempted, calls=%d/%d", first.calls, failed.calls) }
+	if first.calls != 1 || failed.calls != 1 {
+		t.Fatalf("expected all providers to be attempted, calls=%d/%d", first.calls, failed.calls)
+	}
 }
 
 func TestDragonTigerFallsBackAfterUnknownEmptyReport(t *testing.T) {

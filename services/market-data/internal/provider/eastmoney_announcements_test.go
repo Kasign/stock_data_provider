@@ -99,7 +99,6 @@ func TestEastmoneyAnnouncementDisplayTimeParserDoesNotUseNoticeDateAsTimestamp(t
 	}
 }
 
-
 func TestEastmoneyFetchStockAnnouncementsRejectsUnderfilledPage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"success":1,"data":{"page_index":1,"page_size":20,"total_hits":21,"list":[{"art_code":"AN202610231234567890","codes":[{"stock_code":"600036"}],"notice_date":"2026-10-23","title":"测试公告","display_time":"2026-10-23 18:30:00"}]}}`)
@@ -113,13 +112,12 @@ func TestEastmoneyFetchStockAnnouncementsRejectsUnderfilledPage(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyFetchStockAnnouncementsRejectsMismatchedPageMetadata(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		pageIndex  int
-		pageSize   int
-		wantError  string
+		name      string
+		pageIndex int
+		pageSize  int
+		wantError string
 	}{
 		{name: "page index", pageIndex: 2, pageSize: 20, wantError: "page_index=2 does not match requested page=1"},
 		{name: "page size", pageIndex: 1, pageSize: 10, wantError: "page_size=10 does not match requested page_size=20"},
@@ -156,4 +154,3 @@ func TestEastmoneyAnnouncementsRejectsNonStockSecurities(t *testing.T) {
 		t.Fatal("non-stock announcement requests must be rejected before contacting Eastmoney")
 	}
 }
-

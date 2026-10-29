@@ -1,8 +1,8 @@
 package provider
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -133,7 +133,6 @@ func containsHithinkReason(reasons []string, expected string) bool {
 	return false
 }
 
-
 func TestHithinkFundamentalsRejectsDuplicateStatementRowsForTargetReport(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
@@ -150,8 +149,8 @@ func TestHithinkFundamentalsRejectsDuplicateStatementRowsForTargetReport(t *test
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"code": 0,
 				"data": map[string]any{"item": []map[string]any{
-					{"thscode":"600519.SH","period_end_ms":periodEnd,"report_date_ms":publicationDate,"operating_income":1000.0},
-					{"thscode":"600519.SH","period_end_ms":periodEnd,"report_date_ms":publicationDate,"operating_income":2000.0},
+					{"thscode": "600519.SH", "period_end_ms": periodEnd, "report_date_ms": publicationDate, "operating_income": 1000.0},
+					{"thscode": "600519.SH", "period_end_ms": periodEnd, "report_date_ms": publicationDate, "operating_income": 2000.0},
 				}},
 			})
 		case "/api/a-share/financials/balance-sheets", "/api/a-share/financials/cash-flow-statements":

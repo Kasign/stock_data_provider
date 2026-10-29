@@ -36,7 +36,6 @@ var tickflowCoreIndexDefinitions = []tickflowIndexDefinition{
 	{Symbol: "000300.SH", Code: "000300", Name: "沪深300"},
 }
 
-
 type TickFlow struct {
 	client       *http.Client
 	apiURL       string
@@ -310,7 +309,6 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 	return snapshot, nil
 }
 
-
 const tickflowBreadthMaxQuoteTimestampSpread = 10 * time.Minute
 
 func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadthSnapshot, error) {
@@ -540,7 +538,6 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 	return snapshot, nil
 }
-
 
 func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, limit int) (*model.SectorRankingSnapshot, error) {
 	category := strings.ToLower(strings.TrimSpace(rawCategory))
@@ -855,8 +852,9 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 		return left > right
 	})
 	snapshot := &model.SectorRankingSnapshot{
-		Category: category, Total: len(industrySymbols), Source: p.Name(),
-		SourceVersion: tickflowVersion + "-sw1-sector-rankings-v1", FetchedAt: fetchedAt,
+		Category: category, Total: len(industrySymbols),
+		ProviderReturned: len(industrySymbols), ExcludedRows: industriesWithoutUsableChanges,
+		Source: p.Name(), SourceVersion: tickflowVersion + "-sw1-sector-rankings-v1", FetchedAt: fetchedAt,
 		QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{
 			"provider_snapshot_time_not_exposed_for_aggregated_sector",
@@ -1185,7 +1183,6 @@ func (p *TickFlow) getJSON(ctx context.Context, baseURL, path string, query url.
 	return readBoundedBody(resp.Body, maxProviderPayloadBytes)
 }
 
-
 func (p *TickFlow) postJSON(ctx context.Context, baseURL, path string, payload any, authenticated bool) ([]byte, error) {
 	if p == nil || p.client == nil {
 		return nil, errors.New("TickFlow HTTP client is not configured")
@@ -1246,6 +1243,9 @@ func tickflowDomesticSymbol(raw string) (string, error) {
 	parts := strings.Split(symbol, ".")
 	if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") {
 		return "", fmt.Errorf("TickFlow Go adapter only accepts domestic SH/SZ/BJ securities, got %q", raw)
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return "", fmt.Errorf("TickFlow stock endpoints only support common A-share equities, got %q", raw)
 	}
 	return symbol, nil
 }
@@ -1339,7 +1339,7 @@ func tickflowProviderQuoteTime(timestamp int64, reference time.Time) *time.Time 
 	value := time.UnixMilli(timestamp).UTC()
 	return &value
 }
- 
+
 // tickflowLimitRatio follows the domestic A-share limit rules used by the original Python adapter.
 // Beijing-market rules take precedence, followed by STAR/ChiNext, ST, then the main board.
 // Without a main-board name, ST status is unknown, so no limit ratio is inferred.
@@ -1393,4 +1393,3 @@ func tickflowLimitPrice(prevClose, ratio float64, upper bool) (float64, float64,
 	}
 	return roundedPrice, tolerance, true
 }
-

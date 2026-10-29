@@ -70,22 +70,21 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 	if err := p.getJSONWithRetry(ctx, p.dragonTigerURL, params, &payload, 8*time.Second); err != nil {
 		return nil, fmt.Errorf("Eastmoney dragon-tiger request: %w", err)
 	}
+	if payload.Result == nil && payload.Code == 9201 && strings.TrimSpace(payload.Message) == "返回数据为空" {
+		// 东方财富对没有匹配记录的日期返回 code=9201；这是未知空报表，不是请求失败或确认零上榜。
+		return &model.DragonTigerSnapshot{
+			TradeDate: tradeDate, Page: page, PageSize: pageSize, Total: 0, Pages: 0,
+			Returned: 0, SourceReturned: 0, ExcludedNonAShareCount: 0, HasData: false, HasMore: false,
+			Items: []model.DragonTigerItem{}, Source: p.Name(),
+			SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: time.Now().UTC(),
+			QualityStatus:  model.QualityUnknown,
+			QualityReasons: []string{"provider_returned_empty_report_cannot_distinguish_no_events_from_unavailable_or_not_yet_published", "provider_empty_response_code_9201"},
+		}, nil
+	}
 	if payload.Success != nil && !*payload.Success {
 		return nil, fmt.Errorf("Eastmoney dragon-tiger response indicates success=false (code=%d message=%q)", payload.Code, payload.Message)
 	}
 	if payload.Result == nil {
-		// 东方财富对没有匹配记录的日期可能返回 code=9201，而不是 result.count=0。
-		// 该响应表示“当前没有可用报表”，不能伪造成经过确认的零上榜。
-		if payload.Code == 9201 && strings.TrimSpace(payload.Message) == "返回数据为空" {
-			return &model.DragonTigerSnapshot{
-				TradeDate: tradeDate, Page: page, PageSize: pageSize, Total: 0, Pages: 0,
-				Returned: 0, SourceReturned: 0, ExcludedNonAShareCount: 0, HasData: false, HasMore: false,
-				Items: []model.DragonTigerItem{}, Source: p.Name(),
-				SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: time.Now().UTC(),
-				QualityStatus:  model.QualityUnknown,
-				QualityReasons: []string{"provider_returned_empty_report_cannot_distinguish_no_events_from_unavailable_or_not_yet_published", "provider_empty_response_code_9201"},
-			}, nil
-		}
 		return nil, fmt.Errorf("Eastmoney dragon-tiger response is missing result/count (code=%d message=%q success=%v)", payload.Code, payload.Message, payload.Success)
 	}
 	if payload.Result.Count == nil {

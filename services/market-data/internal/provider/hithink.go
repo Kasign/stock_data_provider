@@ -147,8 +147,8 @@ type hithinkIndexDefinition struct {
 }
 
 const (
-	hithinkChangeTolerance             = 0.05
-	hithinkChangePercentTolerancePP    = 0.15
+	hithinkChangeTolerance          = 0.05
+	hithinkChangePercentTolerancePP = 0.15
 )
 
 var hithinkCoreIndexDefinitions = []hithinkIndexDefinition{
@@ -484,9 +484,10 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 	sourceVersion := hithinkVersion + "-hot-ranking-v1"
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, min(limit, len(data.Item))),
+		ProviderReturned: len(data.Item), TotalIsLowerBound: true,
 		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
 		QualityStatus:  model.QualityDegraded,
-		QualityReasons: []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal"},
+		QualityReasons: []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal", "provider_total_missing_using_returned_count"},
 	}
 	if data.Timestamp != nil && *data.Timestamp > 0 {
 		candidate := time.UnixMilli(*data.Timestamp).UTC()
@@ -524,6 +525,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 			return nil, fmt.Errorf("同花顺榜单第 %d 行排名无效", index)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
+			snapshot.ExcludedRows++
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_hot_ranking_symbol_dropped")
 			continue
 		}
@@ -662,7 +664,8 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 	}
 	sourceVersion := hithinkVersion + "-limit-" + poolType + "-pool-v2"
 	snapshot := &model.LimitPoolSnapshot{
-		PoolType: poolType, TradeDate: rawDate, ProviderReportDate: reportDate, Total: total,
+		PoolType: poolType, TradeDate: rawDate, ProviderReportDate: reportDate,
+		Total: total, ProviderReturned: len(data.Item),
 		HasData: len(data.Item) > 0, Items: make([]model.LimitPoolItem, 0, len(data.Item)),
 		Source: p.Name(), SourceVersion: sourceVersion,
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
@@ -1054,8 +1057,15 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 	now := time.Now().UTC()
 	snapshot := &model.IndexCatalogSnapshot{
 		Tag: tag, Items: make([]model.IndexCatalogItem, 0, len(data.Item)),
-		Source: p.Name(), SourceVersion: hithinkVersion + "-index-catalog-v1",
+		ProviderReturned: len(data.Item),
+		Source:           p.Name(), SourceVersion: hithinkVersion + "-index-catalog-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
+	}
+	if len(data.Item) == 30000 {
+		// 正好触及本地安全边界时，无法证明来源没有在更早位置截断。
+		snapshot.TotalIsLowerBound = true
+		snapshot.QualityStatus = model.QualityDegraded
+		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_catalog_response_hits_30000_item_safety_boundary")
 	}
 	snapshot.ProviderTime = hithinkProviderTime(data.Timestamp, now)
 	if snapshot.ProviderTime == nil {
@@ -1070,6 +1080,7 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 			return nil, fmt.Errorf("同花顺指数/板块目录第 %d 项缺少有效代码或名称", index)
 		}
 		if _, exists := seen[symbol]; exists {
+			snapshot.ExcludedRows++
 			snapshot.QualityStatus = model.QualityDegraded
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_catalog_symbol_dropped")
 			continue
@@ -1126,7 +1137,7 @@ func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	snapshot := &model.IndexConstituentSnapshot{
 		IndexSymbol: indexSymbol, Items: make([]model.IndexConstituent, 0, len(data.Item)),
 		ProviderReturned: len(data.Item),
-		Source: p.Name(), SourceVersion: hithinkVersion + "-index-constituents-v1",
+		Source:           p.Name(), SourceVersion: hithinkVersion + "-index-constituents-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
 	snapshot.ProviderTime = hithinkProviderTime(data.Timestamp, now)
@@ -1844,7 +1855,7 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		snapshot.Sections = append(snapshot.Sections, model.FundamentalSection{
 			Category: category, ReportDate: reportDate,
 			Metrics: []model.FundamentalMetric{}, HasData: false,
-			QualityStatus: model.QualityUnknown,
+			QualityStatus:  model.QualityUnknown,
 			QualityReasons: []string{"provider_fundamental_ability_not_returned"},
 		})
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_fundamental_ability_missing:"+category)
@@ -2242,6 +2253,9 @@ func hithinkDomesticSymbol(raw string) (string, error) {
 	parts := strings.Split(symbol, ".")
 	if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") {
 		return "", fmt.Errorf("同花顺 A 股适配器只支持 SH/SZ/BJ 证券，收到 %q", raw)
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return "", fmt.Errorf("同花顺个股接口仅支持 A 股普通股票，收到 %q", raw)
 	}
 	return symbol, nil
 }

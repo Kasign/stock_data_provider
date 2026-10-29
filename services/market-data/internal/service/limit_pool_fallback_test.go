@@ -79,11 +79,15 @@ func TestLimitPoolFallsBackFromUnknownQualityRows(t *testing.T) {
 	fallback := &limitPoolFallbackTestProvider{name: "hithink", snapshot: dataLimitPoolForTest("hithink", tradeDate)}
 	svc := newLimitPoolFallbackService(first, fallback)
 	got, hit, err := svc.LimitPool(context.Background(), "up", tradeDate, 100)
-	if err != nil || hit { t.Fatalf("LimitPool returned hit=%v err=%v", hit, err) }
+	if err != nil || hit {
+		t.Fatalf("LimitPool returned hit=%v err=%v", hit, err)
+	}
 	if got == nil || got.Source != "hithink" || got.QualityStatus != model.QualityDegraded {
 		t.Fatalf("expected degraded fallback instead of unknown-quality rows, got %+v", got)
 	}
-	if first.calls != 1 || fallback.calls != 1 { t.Fatalf("expected both providers to be attempted, calls=%d/%d", first.calls, fallback.calls) }
+	if first.calls != 1 || fallback.calls != 1 {
+		t.Fatalf("expected both providers to be attempted, calls=%d/%d", first.calls, fallback.calls)
+	}
 }
 
 func TestLimitPoolReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
@@ -96,7 +100,9 @@ func TestLimitPoolReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
 	failed := &limitPoolFallbackTestProvider{name: "hithink", err: errors.New("test provider unavailable")}
 	svc := newLimitPoolFallbackService(first, failed)
 	got, hit, err := svc.LimitPool(context.Background(), "up", tradeDate, 100)
-	if err != nil || hit { t.Fatalf("LimitPool returned hit=%v err=%v", hit, err) }
+	if err != nil || hit {
+		t.Fatalf("LimitPool returned hit=%v err=%v", hit, err)
+	}
 	if got == nil || !got.HasData || got.QualityStatus != model.QualityUnknown ||
 		!strings.Contains(strings.Join(got.QualityReasons, ","), "limit_pool_fallback_exhausted_without_usable_quality") {
 		t.Fatalf("expected retained unknown rows and exhaustion reason, got %+v", got)
@@ -104,7 +110,9 @@ func TestLimitPoolReturnsUnknownRowsOnlyAfterFallbackExhaustion(t *testing.T) {
 	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_limit_pool_response_truncated") {
 		t.Fatalf("unknown snapshot must preserve the source coverage/truncation reason: %v", got.QualityReasons)
 	}
-	if first.calls != 1 || failed.calls != 1 { t.Fatalf("expected all providers to be attempted, calls=%d/%d", first.calls, failed.calls) }
+	if first.calls != 1 || failed.calls != 1 {
+		t.Fatalf("expected all providers to be attempted, calls=%d/%d", first.calls, failed.calls)
+	}
 }
 
 func TestLimitPoolFallsBackAfterUnknownEmptyProvider(t *testing.T) {

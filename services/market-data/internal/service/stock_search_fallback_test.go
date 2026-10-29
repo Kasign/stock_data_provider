@@ -45,7 +45,7 @@ func populatedStockSearchForFallbackTest(source string) *model.StockSearchSnapsh
 	now := time.Now().UTC()
 	return &model.StockSearchSnapshot{
 		Query: "贵州茅台", Total: 1,
-		Items: []model.StockSearchItem{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", Exchange: "SH"}},
+		Items:  []model.StockSearchItem{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", Exchange: "SH"}},
 		Source: source, SourceVersion: "test-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_directory_timestamp_not_exposed"},
 	}

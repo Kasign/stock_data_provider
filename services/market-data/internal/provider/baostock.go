@@ -177,6 +177,9 @@ func baostockSecurityCode(symbol string) (string, error) {
 	if len(parts) != 2 {
 		return "", fmt.Errorf("BaoStock requires a canonical symbol with exchange suffix: %q", symbol)
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return "", fmt.Errorf("BaoStock daily K-lines only support common A-share equities, got %q", symbol)
+	}
 	switch parts[1] {
 	case "SH":
 		return "sh." + parts[0], nil

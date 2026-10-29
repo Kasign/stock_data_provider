@@ -546,6 +546,9 @@ func neteaseCode(symbol string) (string, error) {
 	if len(parts) != 2 || len(parts[0]) != 6 {
 		return "", fmt.Errorf("unsupported Netease symbol %q", symbol)
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return "", fmt.Errorf("Netease only supports common A-share equities, got %q", symbol)
+	}
 	switch parts[1] {
 	case "SH":
 		return "0" + parts[0], nil

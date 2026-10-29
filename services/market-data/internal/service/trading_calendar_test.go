@@ -30,12 +30,18 @@ func (c *tradingCalendarTestCache) Set(_ context.Context, key string, value []by
 func (*tradingCalendarTestCache) Ping(context.Context) error { return nil }
 
 type testTradingCalendarProvider struct {
+	name     string
 	snapshot *model.TradingCalendarSnapshot
 	err      error
 	calls    int
 }
 
-func (p *testTradingCalendarProvider) Name() string { return "calendar-test" }
+func (p *testTradingCalendarProvider) Name() string {
+	if p.name != "" {
+		return p.name
+	}
+	return "calendar-test"
+}
 
 func (p *testTradingCalendarProvider) FetchTradingCalendar(context.Context, string, string) (*model.TradingCalendarSnapshot, error) {
 	p.calls++
@@ -104,4 +110,57 @@ func TestTradingCalendarRejectsExcessiveOrReversedRange(t *testing.T) {
 			t.Fatalf("expected range %q..%q to fail", tc.start, tc.end)
 		}
 	}
+}
+
+func TestTradingCalendarPrefersExplicitFullDateSource(t *testing.T) {
+	inferred := validTestTradingCalendar()
+	inferred.Source = "inferred-calendar"
+	inferred.QualityReasons = []string{"provider_returns_trading_days_only_non_trading_dates_inferred"}
+	complete := validTestTradingCalendar()
+	complete.Source = "complete-calendar"
+	complete.QualityReasons = []string{"provider_snapshot_timestamp_not_exposed"}
+	first := &testTradingCalendarProvider{name: "inferred-calendar", snapshot: inferred}
+	second := &testTradingCalendarProvider{name: "complete-calendar", snapshot: complete}
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil,
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{first, second})
+
+	got, hit, err := svc.TradingCalendar(context.Background(), "2026-10-22", "2026-10-24")
+	if err != nil || hit {
+		t.Fatalf("calendar selection failed: hit=%v err=%v", hit, err)
+	}
+	if got.Source != "complete-calendar" {
+		t.Fatalf("expected explicit full-date source, got %q", got.Source)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("expected to compare configured sources, calls=%d/%d", first.calls, second.calls)
+	}
+}
+
+func TestTradingCalendarMarksConflictingSourcesDegraded(t *testing.T) {
+	firstSnapshot := validTestTradingCalendar()
+	firstSnapshot.Source = "calendar-a"
+	secondSnapshot := validTestTradingCalendar()
+	secondSnapshot.Source = "calendar-b"
+	secondSnapshot.Items[1].IsTradingDay = false
+	secondSnapshot.TradingDays = 1
+	first := &testTradingCalendarProvider{name: "calendar-a", snapshot: firstSnapshot}
+	second := &testTradingCalendarProvider{name: "calendar-b", snapshot: secondSnapshot}
+	svc := NewWithCapabilities([]provider.NamedProvider{first, second}, nil, nil,
+		cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetTradingCalendarProviders([]provider.TradingCalendarProvider{first, second})
+
+	got, hit, err := svc.TradingCalendar(context.Background(), "2026-10-22", "2026-10-24")
+	if err != nil || hit {
+		t.Fatalf("calendar conflict flow failed: hit=%v err=%v", hit, err)
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("conflicting sources must be degraded, got %s", got.QualityStatus)
+	}
+	for _, reason := range got.QualityReasons {
+		if reason == "provider_trading_calendar_sources_disagree" {
+			return
+		}
+	}
+	t.Fatalf("conflict reason is missing: %v", got.QualityReasons)
 }

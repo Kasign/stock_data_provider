@@ -96,7 +96,9 @@ func TestSinaFetchQuoteDegradesFutureProviderTimestamp(t *testing.T) {
 	}))
 	defer server.Close()
 	q, err := NewSina(2*time.Second, server.URL+"/list=").FetchQuote(context.Background(), "600519.SH")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if q.QuoteTime != nil || q.QualityStatus != model.QualityDegraded {
 		t.Fatalf("future provider timestamp must be omitted and quality degraded: %+v", q)
 	}

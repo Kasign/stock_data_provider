@@ -24,7 +24,7 @@ func (p *legacySectorRankingProviderForDirectionTest) FetchSectorRankings(_ cont
 func TestSectorRankingsByDirectionDoesNotUseLegacyProviderForBottomRanking(t *testing.T) {
 	legacy := &legacySectorRankingProviderForDirectionTest{}
 	svc := &DataService{
-		cache: cache.NewDisabled(),
+		cache:                  cache.NewDisabled(),
 		sectorRankingProviders: []provider.SectorRankingProvider{legacy},
 	}
 	_, _, err := svc.SectorRankingsByDirection(context.Background(), "industry", "down", 10)

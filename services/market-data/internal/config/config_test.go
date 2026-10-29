@@ -854,7 +854,6 @@ func TestLoadAcceptsXueqiuInProviderPriority(t *testing.T) {
 	}
 }
 
-
 func TestLoadRejectsProviderEndpointWithEmptyQueryOrFragment(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -891,12 +890,11 @@ func TestLoadTickFlowIndexQuotesRequiresAPIKey(t *testing.T) {
 	t.Setenv("MARKET_DATA_TICKFLOW_DAILY_BARS_ENABLED", "")
 	t.Setenv("MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED", "")
 
-	want := "MARKET_DATA_TICKFLOW_QUOTE_ENABLED, MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED or MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY"
+	want := "MARKET_DATA_TICKFLOW_QUOTE_ENABLED, MARKET_DATA_TICKFLOW_SECTOR_RANKINGS_ENABLED, MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED or MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY"
 	if _, err := Load(); err == nil || err.Error() != want {
 		t.Fatalf("TickFlow index quotes without API key must fail configuration validation, got %v", err)
 	}
 }
-
 
 func TestLoadTickFlowMarketBreadthRequiresAPIKey(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "providers.json")
@@ -915,12 +913,11 @@ func TestLoadTickFlowMarketBreadthRequiresAPIKey(t *testing.T) {
 	t.Setenv("MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED", "")
 	t.Setenv("MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED", "")
 
-	want := "MARKET_DATA_TICKFLOW_QUOTE_ENABLED, MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED or MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY"
+	want := "MARKET_DATA_TICKFLOW_QUOTE_ENABLED, MARKET_DATA_TICKFLOW_SECTOR_RANKINGS_ENABLED, MARKET_DATA_TICKFLOW_INDEX_QUOTES_ENABLED or MARKET_DATA_TICKFLOW_MARKET_BREADTH_ENABLED=true requires MARKET_DATA_TICKFLOW_API_KEY or TICKFLOW_API_KEY"
 	if _, err := Load(); err == nil || err.Error() != want {
 		t.Fatalf("TickFlow market breadth without API key must fail configuration validation, got %v", err)
 	}
 }
-
 
 func TestLoadTickFlowSectorRankingsRequiresAPIKey(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "providers.json")

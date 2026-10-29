@@ -16,11 +16,26 @@ var tickflowBreadthFixtureSymbols = []string{"600000.SH", "000001.SZ", "300001.S
 
 func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFor, omitNameFor string, timestampSkew ...time.Duration) *httptest.Server {
 	t.Helper()
-	timestamp := time.Now().UTC().Add(-time.Minute).UnixMilli()
+	now := time.Now().UTC()
+	timestampTime := now.Add(-time.Minute)
 	var skewMillis int64
 	if len(timestampSkew) > 0 {
 		skewMillis = timestampSkew[0].Milliseconds()
+		// Near China midnight, move the fixture's anchor to yesterday 23:59 so
+		// an intentional timestamp skew cannot accidentally span two report dates.
+		if skewMillis > 0 {
+			location, err := time.LoadLocation("Asia/Shanghai")
+			if err != nil {
+				location = time.FixedZone("CST", 8*60*60)
+			}
+			localNow := now.In(location)
+			midnight := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, location)
+			if localNow.Sub(midnight) <= time.Duration(skewMillis)*time.Millisecond+time.Minute {
+				timestampTime = midnight.Add(-time.Minute)
+			}
+		}
 	}
+	timestamp := timestampTime.UnixMilli()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-api-key") != "test-api-key" {
 			t.Errorf("x-api-key header was not forwarded")
@@ -119,7 +134,6 @@ func TestTickFlowFetchMarketBreadthCalculatesCompleteSnapshot(t *testing.T) {
 	}
 }
 
-
 func TestTickFlowFetchMarketBreadthDegradesWideQuoteTimestampSpread(t *testing.T) {
 	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "", "", 11*time.Minute)
 	defer server.Close()
@@ -166,7 +180,6 @@ func TestTickFlowFetchMarketBreadthDegradesMissingAmount(t *testing.T) {
 	}
 }
 
-
 func TestTickFlowLimitRatioMatchesAShareRules(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -210,7 +223,6 @@ func TestTickFlowLimitPriceMatchesCentRoundingAndTolerance(t *testing.T) {
 		t.Fatal("non-positive previous close must be rejected")
 	}
 }
-
 
 func TestTickFlowFetchMarketBreadthDegradesUnavailableLimitCounts(t *testing.T) {
 	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "", "000001.SZ")

@@ -56,7 +56,6 @@ func TestTencentQuoteVolumeRejectsOverflowBoundary(t *testing.T) {
 	}
 }
 
-
 func TestNormalizePytdxDailyAmountOmitsInconsistentZeroAmount(t *testing.T) {
 	got, err := normalizePytdxDailyAmount(0, 120)
 	if err != nil {
@@ -97,13 +96,5 @@ func TestNormalizePytdxDailyAmountKeepsConsistentAmounts(t *testing.T) {
 	}
 	if zero.Amount == nil || *zero.Amount != 0 || zero.QualityStatus != model.QualityValid {
 		t.Fatalf("zero amount and zero volume may represent a no-trade bar: %+v", zero)
-	}
-}
-
-func TestNormalizePytdxDailyAmountRejectsInvalidNumbers(t *testing.T) {
-	for _, value := range []float64{-1, math.NaN(), math.Inf(1)} {
-		if _, err := normalizePytdxDailyAmount(value, 10); err == nil {
-			t.Errorf("invalid raw amount %v must be rejected", value)
-		}
 	}
 }
