@@ -283,8 +283,10 @@ export function bindDataCenter(getSettings) {
       const providerUnprobed = sources.ok && Array.isArray(sources.data?.sources)
         ? sources.data.sources.filter((source) => source && typeof source === "object" && source.enabled === true).length
         : 0;
+      const endpointOrDependencyFailures = failedServices + failedDependencies + degradedServices;
+      const providerReadFailed = !sources.ok && !sources.skipped;
       const unknown = unknownServices + unknownDependencies + (sources.skipped ? 1 : 0) + providerUnprobed;
-      const failed = failedServices + failedDependencies + degradedServices + (!sources.ok && !sources.skipped ? 1 : 0);
+      const failed = endpointOrDependencyFailures + (providerReadFailed ? 1 : 0);
       setText("#data-center-count-healthy", healthyServices + healthyDependencies);
       setText("#data-center-count-failed", failed);
       setText("#data-center-count-unknown", unknown);
@@ -292,9 +294,12 @@ export function bindDataCenter(getSettings) {
       setBadge("#data-center-summary-status", allNormal ? "healthy" : failed ? "unhealthy" : "unknown",
         allNormal ? "基础检查完成" : failed ? "存在异常" : "部分状态未知");
       setBadge("#data-center-last-check", "unknown", "检查于 " + timestamp);
+      const failureReasons = [];
+      if (endpointOrDependencyFailures) failureReasons.push("服务端点或已明确报告的依赖异常/降级");
+      if (providerReadFailed) failureReasons.push("Provider 能力清单读取失败");
       setText("#data-center-summary-message",
         failed
-          ? "检查完成：发现服务端点或已明确报告的依赖异常/降级。请查看对应错误摘要与部署日志；其它检查已独立完成。"
+          ? "检查完成：" + failureReasons.join("；") + "。请查看对应错误摘要与部署日志；其它检查已独立完成。"
           : unknown
             ? "检查已完成，但有服务、依赖或 Provider 状态无法确认。不能仅凭分析服务不可达就断定 MariaDB/Redis 故障。"
             : "基础检查完成：当前页面、服务端点和已报告的依赖状态已检查。Provider 能力清单仍只是配置声明，未实测项目已计入未知数量。");

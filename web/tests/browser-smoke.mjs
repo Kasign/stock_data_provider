@@ -560,6 +560,7 @@ try {
 
         const providerState = await page.evaluate(() => ({
           summary: document.querySelector("#data-center-provider-summary")?.textContent || "",
+          overallSummary: document.querySelector("#data-center-summary-message")?.textContent || "",
           status: document.querySelector("#data-center-provider-status")?.textContent.trim() || "",
           className: document.querySelector("#data-center-provider-status")?.className || "",
           list: document.querySelector("#data-center-provider-list")?.textContent || "",
@@ -567,6 +568,7 @@ try {
           redis: document.querySelector("#data-service-redis-status")?.textContent.trim() || ""
         }));
         assert.match(providerState.summary, new RegExp(expected.expected));
+        assert.match(providerState.overallSummary, /Provider 能力清单读取失败/, scenario + " should be visible in the overall data-center summary");
         assert.equal(providerState.status, "读取失败");
         assert.match(providerState.className, /is-unavailable/);
         assert.doesNotMatch(providerState.list, /测试 Provider/, scenario + " must clear the prior Provider row");
