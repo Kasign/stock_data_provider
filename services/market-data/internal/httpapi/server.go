@@ -188,6 +188,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /health/live", s.live)
 	mux.HandleFunc("GET /health/ready", s.ready)
 	mux.Handle("GET /api/v1/quotes/{symbol}", s.auth(http.HandlerFunc(s.quote)))
+	mux.Handle("GET /api/v1/market/quotes", s.auth(http.HandlerFunc(s.batchQuotes)))
 	mux.Handle("GET /api/v1/bars/{symbol}/daily", s.auth(http.HandlerFunc(s.bars)))
 	mux.Handle("GET /api/v1/bundles/{symbol}", s.auth(http.HandlerFunc(s.bundle)))
 	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
