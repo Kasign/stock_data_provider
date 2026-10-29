@@ -1399,3 +1399,10 @@
 - [848c30a — 同步迟到任务响应持久化契约断言](https://github.com/Kasign/stock_data_provider/commit/848c30aa39fafecb2697f9c3712c30a6fa1791e6)：更新当前任务切换与历史被替换场景的静态断言。
 - [34d4f15 — 校准最近任务持久化失败文案契约](https://github.com/Kasign/stock_data_provider/commit/34d4f157999add869bc9d1203a3aed6940a19230)：同步新增持久化失败提示的文案断言。
 - 截至 34d4f157999add869bc9d1203a3aed6940a19230，combined status 查询仍未返回检查项；当前连接器的 workflow-run 查询不覆盖 push 触发运行。本批尚未实际运行 npm test、npm run check 或 Browser Smoke，不能标记为通过。
+
+
+### 2026-10-29 最近任务完整字段持久化校验
+
+- `d77481d5d379c28d2d75f299329904cdb7e81a36`：最近任务写入成功后，回读确认由仅比较 task_id / analysis_base / run_id 扩展为比较完整引用字段，包括 created_at、symbols、task_type、status、updated_at，避免存储层静默改变业务字段时被误判为持久化成功。
+- `f48cc69dd11a7288224ebe05e7574e92b9bfcb69`：新增独立回归测试，模拟 setItem 未抛错但回读内容被静默改变的情况，确认 UI 返回值不会把不匹配的新记录当作已持久化。
+- 当前 connector 的 commit status 与 PR workflow-run 查询均未返回本批最新提交的运行结果；本执行环境无法解析 github.com，不能 clone 仓库，因此没有实际运行 `npm test`、`npm run check` 或本地 Browser Smoke。不得将本批标记为测试通过；需核实 push 触发的 WebUI Checks 与 Browser Smoke。
