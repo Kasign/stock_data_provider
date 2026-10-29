@@ -378,11 +378,11 @@ func TestFetchDragonTigerDateChecksRawSourceCounts(t *testing.T) {
 	date := "2026-10-23"
 	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	cases := []struct {
-		name          string
-		total         int
+		name           string
+		total          int
 		sourceReturned int
-		excluded      int
-		wantComplete  bool
+		excluded       int
+		wantComplete   bool
 	}{
 		{name: "incomplete source rows", total: 2, sourceReturned: 1, excluded: 0, wantComplete: false},
 		{name: "excluded non-A-share rows counted", total: 2, sourceReturned: 2, excluded: 1, wantComplete: true},
