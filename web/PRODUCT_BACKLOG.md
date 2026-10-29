@@ -38,6 +38,8 @@
 - [x] 首页市场总览覆盖同一 401/403/404/503/网络失败矩阵，并先显示成功的测试指数，再验证每种错误后旧指数卡片清空、模块状态降级、刷新摘要计数正确且没有静默重试。
 - [x] 数据中心 Provider 清单也完成 401/403/404/503/网络失败浏览器矩阵：先成功读出测试 Provider，再验证失败后旧行清空、错误信息与状态准确、无静默重试；无分析 readiness 证据时 MariaDB/Redis 保持未知。
 - [x] 健康就绪接口 HTTP 200 但缺少可识别 status 字段时，行情/分析 readiness 显示 warning/未知而非绿色；MariaDB/Redis 仍未知。
+- [x] 同一 200/无 status 健康响应下，顶栏行情/分析状态也显示未知，整体连接不在线；顶栏和数据中心的健康证据门槛保持一致。
+- [x] 最新 WebUI checks [#40821797427](https://github.com/Kasign/stock_data_provider/actions/runs/40821797427) 与 Browser Smoke [#40821797385](https://github.com/Kasign/stock_data_provider/actions/runs/40821797385) 均通过（HEAD `c67805e11a3e5c3d879405c0a266cc8c60b0cd22`）。
 - [x] 首页市场错误矩阵后的手动刷新恢复指数卡片与状态，且仅发起一个新请求。
 - [x] 数据中心 Provider 清单错误矩阵后的手动检查恢复成功列表，清除旧错误，不重复请求。
 - [x] 数据中心总摘要区分服务/依赖异常与 Provider 清单读取失败。

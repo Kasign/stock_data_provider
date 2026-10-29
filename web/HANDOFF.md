@@ -1,5 +1,14 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新顶栏/数据中心健康证据一致性
+
+- Chromium 在同一隔离上下文中让行情与分析 readiness 返回 HTTP 200 但缺少可识别 `status` 字段。
+- 数据中心和顶栏都必须显示“状态未知”；市场/分析状态指示器使用 unknown 样式，整体连接不能显示为在线。
+- 该场景在设置连接路径切换为 `/market-api-v2` 后仍使用匹配的本地健康响应桩，避免测试返回静态服务器 404 而误判。
+- 最新代码 HEAD `c67805e11a3e5c3d879405c0a266cc8c60b0cd22` 的 WebUI checks [#40821797427](https://github.com/Kasign/stock_data_provider/actions/runs/40821797427) 与 Browser Smoke [#40821797385](https://github.com/Kasign/stock_data_provider/actions/runs/40821797385) 均通过。
+- 真实 Provider/API Key/NAS/1Panel 仍需单独验收。
+
+
 ## 2026-10-29 最新键盘焦点陷阱回归
 
 - 最新代码 HEAD：`0456746a1cee7f988cda094a783878c1d59a19d2`；完整 WebUI checks [#40818132283](https://github.com/Kasign/stock_data_provider/actions/runs/40818132283) 通过，Chromium Browser Smoke [#40818132254](https://github.com/Kasign/stock_data_provider/actions/runs/40818132254) 通过。

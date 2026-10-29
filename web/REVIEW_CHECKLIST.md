@@ -1,3 +1,9 @@
+## 2026-10-29 后续追加 — 顶栏健康状态证据一致性
+
+- [x] 200 但缺少可识别 status 时，数据中心与顶栏都显示未知/警告，不显示绿色。
+- [x] 更新行情 API 路径后的同源健康响应仍被本地测试桩正确匹配。
+- [x] 最新 HEAD `c67805e11a3e5c3d879405c0a266cc8c60b0cd22` 的 checks [#40821797427](https://github.com/Kasign/stock_data_provider/actions/runs/40821797427) 与 Browser Smoke [#40821797385](https://github.com/Kasign/stock_data_provider/actions/runs/40821797385) 均通过。
+
 ## 2026-10-29 后续追加 — 设置弹窗键盘焦点陷阱
 
 - [x] 模态框打开时，连续 12 次 Tab 焦点保持在设置弹窗内。

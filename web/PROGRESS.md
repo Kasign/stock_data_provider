@@ -1,3 +1,10 @@
+## 2026-10-29 — 顶栏与数据中心健康证据一致性
+
+- 在数据中心已覆盖的 HTTP 200/缺少 status 场景上，新增顶栏浏览器断言：行情与分析状态均为“状态未知”，两个指示灯均为 unknown，整体连接不在线。
+- 测试也覆盖用户保存过新的同源行情路径后，健康响应桩仍跟随当前路径，避免将路径切换误判为服务不健康。
+- 最新 WebUI checks [#40821797427](https://github.com/Kasign/stock_data_provider/actions/runs/40821797427) 和 Browser Smoke [#40821797385](https://github.com/Kasign/stock_data_provider/actions/runs/40821797385) 均通过，代码 HEAD `c67805e11a3e5c3d879405c0a266cc8c60b0cd22`。
+
+
 ## 2026-10-29 — 设置弹窗键盘焦点陷阱
 
 - 全局键盘处理先检查打开的模态框，再进行移动侧栏处理。
