@@ -1,6 +1,6 @@
 # WebUI 产品功能扩展与实施任务清单
 
-更新时间：2026-10-28（WebUI 分支持续 Review；PR #17 已合并）
+更新时间：2026-10-29（健康检查质量门禁和 Browser Smoke 扩展已通过）
 目标仓库：Kasign/stock_data_provider
 唯一 WebUI 开发分支：feat/webui-market-data-console
 参考项目版本：ZhuLinsen/daily_stock_analysis，main = ec66bf46caf6993f673bd4be59c883754667b686
@@ -16,6 +16,17 @@
 - 当前接口、缺失数据能力、服务诊断和建议后端任务：[DATA_CAPABILITY_GAPS.md](./DATA_CAPABILITY_GAPS.md)。
 - 实际路由与 API 语义：[API_CONTRACT.md](./API_CONTRACT.md)。
 - 当前有效实施顺序：先重整首页市场总览、个股研究列表/详情、自选股、分析任务/详情内运行流、数据中心和设置；然后补齐国内市场情绪历史、市场/板块资金流、多维板块排序、股票批量概览和逐 Provider 诊断；全球市场最后推进。
+
+### 2026-10-29 质量门禁续接
+
+- [x] 健康检查模块行为测试与 JS 语法检查入口已补齐。
+- [x] 修正与当前多模块实现不匹配的静态 UI 契约断言；保留请求代际、错误分类、连接隔离和按钮收尾语义。
+- [x] 完整 WebUI checks 通过：[运行 #40809497077](https://github.com/Kasign/stock_data_provider/actions/runs/40809497077)。
+- [x] Browser Smoke 增加 skip-link 键盘可见性与主题切换往返断言：[运行 #40809497236](https://github.com/Kasign/stock_data_provider/actions/runs/40809497236)。
+- [ ] 人工检查浅色/深色主题对比度、键盘/减少动态效果及研究详情锚点；自动化 smoke 只证明固定 503 后端下的布局与控件行为。
+- [ ] 对接真实 404/503/401/403 与网络错误状态，确认真实 API Key 代理和 NAS/1Panel 运行环境。
+- 后续 CSS 整理以具体可证明的问题为单位。不得对不同 media query 下的重复 selector 做机械合并或整表重写。
+
 
 ## 当前不依赖数据层的前端收尾（2026-10-27）
 

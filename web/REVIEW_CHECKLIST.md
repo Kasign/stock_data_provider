@@ -1,3 +1,15 @@
+## 2026-10-29 自动化质量门禁与键盘/主题 smoke
+
+- [x] 核对唯一开发分支 `feat/webui-market-data-console`；本轮只改 WebUI 与专用检查/测试文件。
+- [x] 健康检查模块加入行为测试：成功、异常、超时 AbortSignal、迟到成功响应不覆盖超时。
+- [x] `npm run check` 覆盖 `src/health-check.js`；完整 WebUI checks [#40809497077](https://github.com/Kasign/stock_data_provider/actions/runs/40809497077) 通过（Compose 配置、JS 语法、Node 测试、Nginx 镜像）。
+- [x] Browser Smoke [#40809497236](https://github.com/Kasign/stock_data_provider/actions/runs/40809497236) 通过：7 种视口、导航、横向溢出、Run Flow 和 Escape、skip-link 键盘焦点/可见性、深浅主题往返和辅助状态。
+- [x] 浏览器测试固定返回 503，不注入虚假行情/任务数据；真实 API 状态和 Provider 数据质量仍未由此验收。
+- [x] CSS 结构检查未发现可安全机械删除的相邻完全重复规则；保留不同断点下的覆盖顺序。
+- [ ] 人工检查深浅主题视觉对比度、移动端触控体验、键盘连续导航及减少动态效果。
+- [ ] NAS/1Panel 真实服务与反向代理验收：API Key 传递、真实接口状态、Provider 质量与服务依赖状态。
+
+
 ## 2026-10-28 WebUI 分支续接 Review
 
 - [x] 复核当前唯一开发基线为 `feat/webui-market-data-console`；本次不切换到其他分支、不新建临时分支。
@@ -18,7 +30,7 @@
 - [ ] 逐页核对请求取消/generation、旧响应覆盖、切换标的后的 Quote/MA/质量状态和 Task/Run 分析服务地址隔离。
 - [ ] 分区检查表单/对话框焦点、键盘导航、主题 Token、错误/空/未知状态与 CSS 断点；保持规则顺序，禁止一次性重写整个样式表。
 - [ ] 在真实浏览器统一验收深浅主题、320/375/600/768/900/1280/1600px、键盘/减少动态效果、真实 API 状态和 NAS/1Panel 反向代理。
-- [ ] 按当前约定不运行测试、构建、CI、浏览器自动化或 Provider 请求，除非用户后续明确要求。
+- [x] 此处为 2026-10-28 的历史约定；2026-10-29 用户要求继续开发后已执行最新 WebUI checks 和 Browser Smoke，结果见本文件顶部最新记录。
 
 仓库：`Kasign/stock_data_provider`  
 唯一 WebUI 开发分支：`feat/webui-market-data-console`。  

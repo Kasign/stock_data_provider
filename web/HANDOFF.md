@@ -1,7 +1,20 @@
 # WebUI 任务交接上下文
 
-最后更新：2026-10-28（WebUI 分支续接；PR #17 已合并）
+最后更新：2026-10-29（健康检查、测试契约与浏览器交互验收已推进）
 用途：从新对话恢复 WebUI 开发进度、当前分支、剩余任务与验收边界。
+
+## 2026-10-29 最新续接（优先于下方历史记录）
+
+- 唯一开发分支仍为 `feat/webui-market-data-console`；本批没有修改数据层分支、Go、Provider、数据库或根目录 Compose。
+- 补齐 `web/src/health-check.js` 的 4 组行为测试：正常结果、拒绝/同步异常、超时中止、迟到成功不得改写超时结果；`web/package.json` 的语法检查现在也包含该模块。
+- 修正静态 UI 契约断言，使其覆盖拆分后的运行时模块并匹配当前安全收尾、请求代际和诊断文案。没有删掉整组行为测试，也没有为让 CI 变绿而修改行情/任务业务逻辑。
+- `web/.github/workflows/webui-check.yml` 已支持在 WebUI 分支 push 时运行完整检查。
+- Browser Smoke 新增键盘首焦点 skip-link、焦点可见轮廓，以及深色→浅色→深色主题往返、`aria-pressed`、标签和 `color-scheme` 验证；可见性断言会等待 CSS 过渡完成。
+- WebUI checks [#40809497077](https://github.com/Kasign/stock_data_provider/actions/runs/40809497077) 通过；Chromium Browser Smoke [#40809497236](https://github.com/Kasign/stock_data_provider/actions/runs/40809497236) 通过。两者对应代码提交 `fb3fad7d84581dbfeba1ef69df927ce1ff72adc0`；本次文档提交会继续推进分支 HEAD。
+- Browser Smoke 覆盖 320/375/600/768/900/1280/1600px、导航/整页横向溢出、Run Flow 布局及 Escape 关闭、主题切换和键盘跳转。测试 API 仍固定为 503，不能据此认定真实行情 API 或 NAS/1Panel 已验收。
+- CSS 审查未发现可直接删除的相邻完全重复规则；大量重复 selector 实际对应断点或局部覆盖。后续不做整表重写，只有在证明规则无引用/无行为作用后才清理。
+- 下一步：继续小范围审查状态/样式的实际问题，并保持新增行为与回归测试同提交；真实 API 状态矩阵、深浅主题人工视觉检查和 NAS/1Panel 代理联调仍是独立验收项。
+
 
 ## 当前仓库状态（以 WebUI 分支为准）
 

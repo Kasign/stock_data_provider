@@ -1,3 +1,16 @@
+## 2026-10-29 — 健康检查质量门禁与主题/键盘浏览器烟测
+
+- 在 `web/tests/health-check.test.mjs` 新增 4 组行为回归，覆盖成功、异常、超时中止及超时后迟到响应保护。
+- `web/package.json` 的 `npm run check` 纳入 `src/health-check.js`；`.github/workflows/webui-check.yml` 在 `feat/webui-market-data-console` push 时执行完整 WebUI 检查。
+- 静态契约测试已更新到当前拆分模块及安全包装实现；修正了过时的函数文本、文案和 CSS 最终覆盖断言。
+- `web/tests/browser-smoke.mjs` 增加 skip-link 首个键盘焦点和焦点可见性检查，以及主题深/浅往返、`aria-pressed`、标签和 CSS `color-scheme` 检查；可见性断言先等待 CSS 过渡完成。
+- 完整 WebUI checks [#40809497077](https://github.com/Kasign/stock_data_provider/actions/runs/40809497077) 与 Browser Smoke [#40809497236](https://github.com/Kasign/stock_data_provider/actions/runs/40809497236) 均通过，对应代码提交 `fb3fad7d84581dbfeba1ef69df927ce1ff72adc0`。
+- Browser Smoke 的后端 API 故意固定为 503；本次通过不等于真实行情/分析服务、Provider 字段质量或 NAS/1Panel 部署验收通过。
+- 对 `styles.css` 做了重复规则结构检查；没有发现可安全机械删除的相邻完全重复规则。避免大面积删除或合并不同断点的覆盖规则。
+
+下一步优先项：有针对性地审查 CSS/视图控制器中可证明的问题；不要重复执行已经通过的静态 Review。真实 API 错误矩阵和部署侧反向代理仍需单独验收。
+
+
 
 
 ## 2026-10-28 — 问股股票上下文显式清除保护
