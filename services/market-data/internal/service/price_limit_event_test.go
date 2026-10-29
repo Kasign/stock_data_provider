@@ -10,9 +10,9 @@ import (
 )
 
 type priceLimitEventTestProvider struct {
-	name string
+	name     string
 	evidence *model.PriceLimitEventEvidence
-	err error
+	err      error
 }
 
 func (p priceLimitEventTestProvider) Name() string { return p.name }
@@ -51,7 +51,7 @@ func TestPriceLimitEventEvidenceAcceptsValidatedProviderEvidence(t *testing.T) {
 
 func TestPriceLimitEventEvidenceRejectsMismatchedAndIncompleteEvidence(t *testing.T) {
 	cases := []struct {
-		name string
+		name   string
 		mutate func(*model.PriceLimitEventEvidence)
 	}{
 		{name: "symbol mismatch", mutate: func(e *model.PriceLimitEventEvidence) { e.Symbol = "000001.SZ" }},
