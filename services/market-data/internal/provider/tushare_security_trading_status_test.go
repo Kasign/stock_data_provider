@@ -116,3 +116,23 @@ func TestRiskWarningStatusFromHistoricalNameDoesNotGuessUnknownNames(t *testing.
 		}
 	}
 }
+
+func TestDelistingStatusFromHistoricalName(t *testing.T) {
+	cases := []struct {
+		name string
+		want model.DelistingStatus
+	}{
+		{name: "贵州茅台", want: model.DelistingStatusNormal},
+		{name: "*ST贵州", want: model.DelistingStatusNormal},
+		{name: "退市整理某股", want: model.DelistingStatusDelistingPeriod},
+		{name: "退市某股", want: model.DelistingStatusDelistingRisk},
+		{name: "某股摘牌", want: model.DelistingStatusDelistingRisk},
+		{name: "", want: model.DelistingStatusUnknown},
+		{name: "PT某股", want: model.DelistingStatusUnknown},
+	}
+	for _, tc := range cases {
+		if got := delistingStatusFromHistoricalName(tc.name); got != tc.want {
+			t.Errorf("delistingStatusFromHistoricalName(%q)=%q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
