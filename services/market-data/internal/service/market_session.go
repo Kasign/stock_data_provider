@@ -33,6 +33,8 @@ func (s *DataService) MarketSession(ctx context.Context, at time.Time) (*model.M
 	return &model.MarketSessionSnapshot{
 		Market:              "cn_a_share",
 		At:                  at.UTC(),
+		ServerTime:          now,
+		TimeZone:            "Asia/Shanghai",
 		LocalDate:           date,
 		LocalTime:           local.Format("15:04:05"),
 		IsTradingDay:        calendar.Items[0].IsTradingDay,
