@@ -364,18 +364,9 @@ func riskWarningStatusFromHistoricalName(name string) model.RiskWarningStatus {
 }
 
 func delistingStatusFromHistoricalName(name string) model.DelistingStatus {
-	normalized := strings.ToUpper(strings.TrimSpace(name))
-	if normalized == "" || strings.HasPrefix(normalized, "PT") {
-		return model.DelistingStatusUnknown
-	}
-	// 历史名称只能提供退市状态线索，不能证明“正常”或权威退市事件。
-	// 仅对明确出现的退市整理/退市/摘牌名称返回候选分类；其余情况保持 unknown。
-	if strings.Contains(normalized, "退市整理") {
-		return model.DelistingStatusDelistingPeriod
-	}
-	if strings.Contains(normalized, "退市") || strings.Contains(normalized, "摘牌") {
-		return model.DelistingStatusDelistingRisk
-	}
+	// 历史名称（包括“退市整理”等字样）不是交易所事件记录，不能单独作为涨跌幅规则输入。
+	// 在接入可核验的退市/重新上市/退市整理事件源前，统一返回 unknown，避免把名称线索当成确定状态。
+	_ = name
 	return model.DelistingStatusUnknown
 }
 
