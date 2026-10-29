@@ -77,6 +77,7 @@
       "daily_bars": false,
       "stock_basic": false,
       "trading_calendar": false,
+      "security_trading_status": false,
       "fundamentals": false,
       "valuations": false,
       "limit_pools": false,
