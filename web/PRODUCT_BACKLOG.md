@@ -1,3 +1,6 @@
+- [x] 浏览器存储整体不可读时，自选股显示明确不可用态、暂停改名/移除且不误报添加成功；注入写入/移除失败时，改名/添加/移除显示警告，并验证存储原始内容未变化。
+- [x] 对应最新 WebUI checks [#40829979460](https://github.com/Kasign/stock_data_provider/actions/runs/40829979460) 与 Browser Smoke [#40829979373](https://github.com/Kasign/stock_data_provider/actions/runs/40829979373) 通过（HEAD `1de0952485f23335fc903327633e389596136262`）。
+
 - [x] 保存连接与未保存草稿分别覆盖 401/403/404/503/网络失败；已保存值、已保存反馈与未保存草稿互不污染。
 - [x] 两类检查的迟到响应竞态均已回归：保存新连接后旧探针结果无效；草稿在途时变更路径后旧结果被忽略。
 - [x] 最新检查 [#40829190517](https://github.com/Kasign/stock_data_provider/actions/runs/40829190517) 与 Browser Smoke [#40829190473](https://github.com/Kasign/stock_data_provider/actions/runs/40829190473) 通过（HEAD `9dfe85bdd75defe7a9958bf7a40c2d0a394d0458`）。

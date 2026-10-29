@@ -1,3 +1,11 @@
+## 2026-10-29 后续追加 — 自选股本地存储故障 UI 验收
+
+- [x] localStorage 读取直接抛错时页面无未处理浏览器错误，自选股显示不可用，改名/移除控件不渲染；添加失败没有“已保存”反馈。
+- [x] setItem/removeItem 写入失败时，自选股改名、添加、移除均明确显示临时变更警告，原始存储内容保持不变。
+- [x] HEAD `1de0952485f23335fc903327633e389596136262` 的 WebUI checks [#40829979460](https://github.com/Kasign/stock_data_provider/actions/runs/40829979460) 和 Browser Smoke [#40829979373](https://github.com/Kasign/stock_data_provider/actions/runs/40829979373) 均通过。
+- [ ] 最近任务本地存储在浏览器无法读写时仍需独立 UI 行为验收。
+
+
 ## 2026-10-29 后续追加 — 保存/草稿健康检查竞态
 
 - [x] 已保存连接健康检查与草稿健康检查均覆盖 401/403/404/503/网络失败。

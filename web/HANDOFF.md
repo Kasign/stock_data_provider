@@ -1,5 +1,13 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新本地存储故障浏览器验收
+
+- 最新代码提交 `1de0952485f23335fc903327633e389596136262` 的 WebUI checks [#40829979460](https://github.com/Kasign/stock_data_provider/actions/runs/40829979460) 与 Browser Smoke [#40829979373](https://github.com/Kasign/stock_data_provider/actions/runs/40829979373) 均通过。
+- 新增独立 Chromium 场景模拟 `window.localStorage` getter 抛出 SecurityError：页面启动无未处理错误；自选股显示“无法读取浏览器自选股存储”，计数显示不可用，不渲染改名/移除控件；尝试加入自选会报告保存失败，而不显示已保存。
+- 新增配额/权限写入失败场景：自选股预置有效记录但对该 key 的 `setItem` / `removeItem` 抛错。改名、添加、移除分别显示“当前页面临时变更”警告；检查 original storage bytes 一直不变，不会谎称操作已持久化。
+- 以上为浏览器端补测；真实浏览器隐私策略、跨站隔离规则和 NAS/1Panel 部署仍需实际部署环境复核。
+
+
 ## 2026-10-29 最新连接检查竞态回归
 
 - 最新代码 HEAD `9dfe85bdd75defe7a9958bf7a40c2d0a394d0458` 的 WebUI checks [#40829190517](https://github.com/Kasign/stock_data_provider/actions/runs/40829190517) 与 Browser Smoke [#40829190473](https://github.com/Kasign/stock_data_provider/actions/runs/40829190473) 均通过。

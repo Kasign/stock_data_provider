@@ -1,3 +1,10 @@
+## 2026-10-29 — 自选股本地存储不可用与写入失败的浏览器回归
+
+- 在独立 Chromium 上下文覆盖 localStorage getter 抛出 SecurityError：应用正常启动，自选股进入明确不可用状态，计数显示“不可用 / 50”，不显示任何改名/移除控件；尝试加入股票不会误报已保存。
+- 在另一个上下文对自选股 key 的 setItem/removeItem 注入 QuotaExceededError/SecurityError：改名、添加、移除均显示仅当前页面临时结果/警告，不显示持久化成功；存储原始 bytes 始终保持不变。
+- 最新 WebUI checks [#40829979460](https://github.com/Kasign/stock_data_provider/actions/runs/40829979460) 和 Browser Smoke [#40829979373](https://github.com/Kasign/stock_data_provider/actions/runs/40829979373) 均通过，对应 HEAD `1de0952485f23335fc903327633e389596136262`。
+
+
 ## 2026-10-29 — 保存连接与草稿检查的竞态隔离
 
 - 在原有 10 组保存/草稿连接错误矩阵后，增加两个异步竞态回归。
