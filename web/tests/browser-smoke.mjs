@@ -1349,6 +1349,148 @@ try {
     await context.close();
   }
 
+  // Storage access denied by the browser: the app must remain interactive and must not report a saved watchlist.
+  const blockedStorageContext = await browser.newContext({ viewport: { width: 320, height: 812 }, reducedMotion: "reduce" });
+  await blockedStorageContext.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("Storage access is blocked by browser smoke", "SecurityError");
+      }
+    });
+  });
+  const blockedStoragePage = await blockedStorageContext.newPage();
+  const blockedStorageErrors = [];
+  blockedStoragePage.on("pageerror", (error) => blockedStorageErrors.push(error.message));
+  await blockedStoragePage.route("**/*", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.includes("/api/") || pathname.endsWith("/health/ready") || pathname.endsWith("/readyz")) {
+      return route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Storage access browser test: backend intentionally unavailable" })
+      });
+    }
+    return route.continue();
+  });
+  await blockedStoragePage.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
+  await blockedStoragePage.locator("#market-view").waitFor({ state: "visible" });
+  assert.deepEqual(blockedStorageErrors, [], "blocked localStorage must not crash initial app rendering");
+
+  await blockedStoragePage.locator('.workspace-tab[data-view="stocks"]').click();
+  await blockedStoragePage.locator("#stocks-view").waitFor({ state: "visible" });
+  await blockedStoragePage.locator("#add-to-watchlist-button").click();
+  await blockedStoragePage.waitForFunction(
+    () => document.querySelector("#watchlist-feedback")?.textContent.includes("浏览器本地存储不可用，无法保存自选股。"),
+    null,
+    { timeout: 5000 }
+  );
+  const blockedAddFeedback = await blockedStoragePage.locator("#watchlist-feedback").textContent();
+  assert.doesNotMatch(blockedAddFeedback, /已将 .* 加入本地自选|已在自选列表中/);
+  assert.match(await blockedStoragePage.locator("#watchlist-feedback").getAttribute("class"), /watchlist-feedback-error/);
+
+  await blockedStoragePage.locator('.workspace-tab[data-view="watchlist"]').click();
+  await blockedStoragePage.locator("#watchlist-view").waitFor({ state: "visible" });
+  await blockedStoragePage.locator(".watchlist-storage-unavailable").waitFor({ state: "visible" });
+  const blockedWatchlistState = await blockedStoragePage.evaluate(() => ({
+    warning: document.querySelector(".watchlist-storage-unavailable")?.textContent || "",
+    count: document.querySelector("#watchlist-count")?.textContent.trim() || "",
+    items: document.querySelectorAll("#watchlist-list .watchlist-item").length,
+    actions: document.querySelectorAll("#watchlist-list [data-watchlist-action]").length,
+    scope: document.querySelector("#research-list-scope")?.textContent.trim() || ""
+  }));
+  assert.match(blockedWatchlistState.warning, /无法读取浏览器自选股存储/);
+  assert.match(blockedWatchlistState.warning, /添加、改名和移除已暂停/);
+  assert.equal(blockedWatchlistState.count, "不可用 / 50");
+  assert.equal(blockedWatchlistState.items, 0);
+  assert.equal(blockedWatchlistState.actions, 0, "unreadable storage must not render rename/remove controls");
+  assert.equal(blockedWatchlistState.scope, "本地自选不可读取");
+  assert.deepEqual(blockedStorageErrors, [], "blocked localStorage must not create unhandled browser errors");
+  await blockedStorageContext.close();
+
+  // A browser quota/write failure keeps the current page usable, but add/rename/remove must not claim persistence.
+  const quotaContext = await browser.newContext({ viewport: { width: 320, height: 812 }, reducedMotion: "reduce" });
+  const watchlistKey = "stock-provider-webui.watchlist.v1";
+  const originalWatchlist = JSON.stringify([{
+    symbol: "600519.SH",
+    name: "贵州茅台",
+    updated_at: "2026-10-28T07:00:00Z"
+  }]);
+  await quotaContext.addInitScript((seed) => {
+    const key = "stock-provider-webui.watchlist.v1";
+    window.localStorage.setItem(key, seed);
+    const originalSetItem = Storage.prototype.setItem;
+    const originalRemoveItem = Storage.prototype.removeItem;
+    Storage.prototype.setItem = function (name, value) {
+      if (name === key) throw new DOMException("Quota exceeded by browser smoke", "QuotaExceededError");
+      return originalSetItem.call(this, name, value);
+    };
+    Storage.prototype.removeItem = function (name) {
+      if (name === key) throw new DOMException("Storage write disabled by browser smoke", "SecurityError");
+      return originalRemoveItem.call(this, name);
+    };
+  }, originalWatchlist);
+  const quotaPage = await quotaContext.newPage();
+  const quotaErrors = [];
+  quotaPage.on("pageerror", (error) => quotaErrors.push(error.message));
+  await quotaPage.route("**/*", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.includes("/api/") || pathname.endsWith("/health/ready") || pathname.endsWith("/readyz")) {
+      return route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Storage quota browser test: backend intentionally unavailable" })
+      });
+    }
+    return route.continue();
+  });
+  await quotaPage.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
+  await quotaPage.locator('.workspace-tab[data-view="watchlist"]').click();
+  await quotaPage.locator("#watchlist-view").waitFor({ state: "visible" });
+  await quotaPage.locator("#watchlist-list .watchlist-item").waitFor({ state: "visible" });
+
+  const renameInput = quotaPage.locator("#watchlist-list .watchlist-name-input").first();
+  await renameInput.fill("临时重命名");
+  await renameInput.press("Tab");
+  await quotaPage.waitForFunction(
+    () => document.querySelector("#watchlist-feedback")?.textContent.includes("名称已在当前页面临时更新，但浏览器存储不可用"),
+    null,
+    { timeout: 5000 }
+  );
+  assert.match(await quotaPage.locator("#watchlist-feedback").getAttribute("class"), /watchlist-feedback-warning/);
+  assert.doesNotMatch(await quotaPage.locator("#watchlist-feedback").textContent(), /已保存 .* 的自定义名称/);
+  assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), watchlistKey), originalWatchlist,
+    "a failed rename write must preserve the stored watchlist bytes");
+
+  await quotaPage.locator('.workspace-tab[data-view="stocks"]').click();
+  await quotaPage.locator("#stocks-view").waitFor({ state: "visible" });
+  await quotaPage.locator("#symbol-input").fill("000001.SZ");
+  await quotaPage.locator("#add-to-watchlist-button").click();
+  await quotaPage.waitForFunction(
+    () => document.querySelector("#watchlist-feedback")?.textContent.includes("已在当前页面临时加入自选，但浏览器存储不可用，刷新后可能丢失"),
+    null,
+    { timeout: 5000 }
+  );
+  assert.match(await quotaPage.locator("#watchlist-feedback").getAttribute("class"), /watchlist-feedback-warning/);
+  assert.doesNotMatch(await quotaPage.locator("#watchlist-feedback").textContent(), /已将 .* 加入本地自选/);
+  assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), watchlistKey), originalWatchlist,
+    "a failed add write must not change the stored watchlist bytes");
+
+  await quotaPage.locator('.workspace-tab[data-view="watchlist"]').click();
+  await quotaPage.locator("#watchlist-view").waitFor({ state: "visible" });
+  await quotaPage.locator('#watchlist-list [data-watchlist-action="remove"][data-symbol="600519.SH"]').click();
+  await quotaPage.waitForFunction(
+    () => document.querySelector("#watchlist-feedback")?.textContent.includes("已在当前页面临时移除，但浏览器存储不可用，刷新后可能恢复"),
+    null,
+    { timeout: 5000 }
+  );
+  assert.match(await quotaPage.locator("#watchlist-feedback").getAttribute("class"), /watchlist-feedback-warning/);
+  assert.doesNotMatch(await quotaPage.locator("#watchlist-feedback").textContent(), /已从本地自选中移除/);
+  assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), watchlistKey), originalWatchlist,
+    "a failed remove write must preserve the original stored watchlist bytes");
+  assert.deepEqual(quotaErrors, [], "quota failures must be handled without unhandled browser errors");
+  await quotaContext.close();
+
   console.log("PASS all " + viewports.length + " responsive browser viewports");
   console.log("Screenshots: " + screenshotDir);
 } finally {
