@@ -302,6 +302,14 @@ func (s *DataService) TradingCalendarProviders() []provider.TradingCalendarProvi
 	return append([]provider.TradingCalendarProvider(nil), s.tradingCalendarProviders...)
 }
 
+func (s *DataService) SetSecurityTradingStatusProviders(providers []provider.SecurityTradingStatusProvider) {
+	s.securityTradingStatusProviders = append([]provider.SecurityTradingStatusProvider(nil), providers...)
+}
+
+func (s *DataService) SecurityTradingStatusProviders() []provider.SecurityTradingStatusProvider {
+	return append([]provider.SecurityTradingStatusProvider(nil), s.securityTradingStatusProviders...)
+}
+
 func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 	if snapshot == nil {
 		return errors.New("market-breadth provider returned an empty snapshot")
