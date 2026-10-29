@@ -200,9 +200,11 @@ try {
       // Settings tests intentionally change API prefixes; saved and unsaved probes share this deterministic error matrix.
       if (viewport.width === 320 && settingsConnectionScenario !== "default" &&
           (pathname.endsWith("/health/ready") || pathname.endsWith("/readyz"))) {
+        const scenario = settingsConnectionScenario;
         settingsConnectionRequestCount += 1;
-        if (settingsConnectionScenario === "network") return route.abort("failed");
-        const item = settingsConnectionErrors[settingsConnectionScenario];
+        if (scenario === "network") return route.abort("failed");
+        const item = settingsConnectionErrors[scenario === "delayed" ? "503" : scenario];
+        if (scenario === "delayed") await new Promise((resolve) => setTimeout(resolve, 1500));
         return json(item.status, {
           status: "unavailable",
           error: {
@@ -212,7 +214,7 @@ try {
           }
         });
       }
-      if (pathname.endsWith("/health/ready") || pathname.endsWith("/analysis-api/readyz")) {
+      if (pathname.endsWith("/health/ready") || pathname.endsWith("/readyz")) {
         if (viewport.width === 320 && healthScenario === "missing-status") {
           return json(200, { message: "HTTP success without an explicit health status" });
         }
@@ -1120,6 +1122,49 @@ try {
       await page.locator("#settings-dialog").waitFor({ state: "hidden" });
       assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeChecks,
         "discarding an unsaved draft must preserve the saved local settings");
+
+      // A health check started on the previous connection must not overwrite the invalidation message after saving new paths.
+      const requestsBeforeStaleHealth = settingsConnectionRequestCount;
+      settingsConnectionScenario = "delayed";
+      await page.locator("#settings-check-connection").click();
+      await page.waitForFunction(() => document.querySelector("#settings-check-connection")?.disabled === true, null, { timeout: 3000 });
+      await page.waitForTimeout(120);
+      assert.equal(settingsConnectionRequestCount, requestsBeforeStaleHealth + 2,
+        "the stale-health race must have both old endpoint requests in flight");
+
+      settingsConnectionScenario = "default";
+      await page.locator("#open-settings").click();
+      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#market-base-input").fill("/race-market-api");
+      await page.locator("#analysis-base-input").fill("/race-analysis-api");
+      await page.locator("#save-settings").click();
+      await page.locator("#settings-dialog").waitFor({ state: "hidden" });
+      await page.waitForFunction(() => {
+        try {
+          const settings = JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}");
+          return settings.marketBase === "/race-market-api" && settings.analysisBase === "/race-analysis-api";
+        } catch {
+          return false;
+        }
+      }, null, { timeout: 5000 });
+      await page.waitForFunction(
+        () => document.querySelector("#settings-connection-check")?.textContent === "连接配置已变化，请重新检查当前已保存的配置。",
+        null,
+        { timeout: 5000 }
+      );
+
+      await page.waitForTimeout(1700);
+      assert.equal(settingsConnectionRequestCount, requestsBeforeStaleHealth + 2,
+        "late old health responses must not initiate hidden requests");
+      assert.equal(
+        await page.locator("#settings-connection-check").textContent(),
+        "连接配置已变化，请重新检查当前已保存的配置。",
+        "late responses from the old API paths must not overwrite the new-configuration warning"
+      );
+      assert.doesNotMatch(await page.locator("#settings-connection-check").textContent(), /健康探针服务暂不可用|HTTP 503/);
+      assert.equal(await page.locator("#settings-check-connection").isDisabled(), false,
+        "saving new connection paths must release the saved-check button even while old requests are pending");
+
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
 
