@@ -1479,3 +1479,13 @@
 - [x] 两个合并前提提交的 Browser Smoke #40691844220、#40692098667 同样已成功。
 - 数据分支在上次记录的 `2af98288c4c0a61f66ea9aac87fa5fd3715a4a5b` 后继续推进至 `86fbb250cae16d50d49231b1e72e98719e877340`，新增提交“修正市场广度时间戳偏差测试边界”，仅修改 `services/market-data/internal/provider/tickflow_market_breadth_test.go`。此提交未合入 WebUI 分支，也未改动数据分支引用。
 - 本轮继续遵守 UI 专项仅修改 `web/**` 的约束；本地 Node 测试、完整构建、人工浏览器与 NAS/1Panel 验收仍未执行。
+
+
+## 2026-10-29 — 交易日历响应范围校验
+
+- 新增代码与行为测试提交：[275f7570 拒绝展示日期范围错配的交易日历响应](https://github.com/Kasign/stock_data_provider/commit/275f7570eae9ac2b371a027604a21653c06b91ed)。
+- web/src/market-activity.js 导出纯校验函数并在渲染前检查显式返回的 start_date/end_date。日期与当前请求不一致、显式 null 或空值时按读取失败处理，旧结果不被误显示；为兼容旧服务，完全省略范围元数据仍允许按请求范围对齐。
+- 新增 web/tests/market-activity.test.mjs 行为测试，覆盖完全匹配、兼容缺省元数据、开始/结束日期错配及显式空值。已写入测试源码，当前未本地运行 Node 测试。
+- 代码提交对应的 Browser Smoke #40802278245 在创建文档记录时仍为 in_progress，需后续核对结论。
+- 最新核实的数据分支 HEAD 为 86fbb250cae16d50d49231b1e72e98719e877340，新增内容仅修正 TickFlow 市场广度时间戳偏差测试边界；此服务端提交不在 WebUI 分支。本轮只修改 web/**。
+
