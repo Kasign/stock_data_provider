@@ -62,6 +62,7 @@ func TestSecurityTradingStatusReturnsValidatedHistoricalEvidence(t *testing.T) {
 func TestSecurityTradingStatusKeepsUnknownEvidenceUnknown(t *testing.T) {
 	snapshot := validSecurityTradingStatusFixture("unknown-source")
 	snapshot.RiskWarningStatus = model.RiskWarningUnknown
+	snapshot.DelistingStatus = model.DelistingStatusUnknown
 	snapshot.SecurityName = ""
 	snapshot.NameEffectiveFrom = ""
 	snapshot.ListingStatusKnown = false
