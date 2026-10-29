@@ -55,7 +55,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
    background: linear-gradient(135deg, #6ce9c3, #39c9a4);
    box-shadow: 0 5px 22px rgba(50, 208, 161, .11);
 }
-.brand-mark span { color: #fff; }
 .brand-copy { display: flex; flex-direction: column; gap: 4px; }
 .brand-copy strong { font-size: 14px; letter-spacing: -.2px; }
 .brand-copy small { font-size: 9px; letter-spacing: 1.5px; color: var(--text-dim); }
