@@ -57,7 +57,7 @@ func unknownStockBoardsForFallbackTest(source string) *model.StockBoardSnapshot 
 func validStockBoardsForFallbackTest(source string) *model.StockBoardSnapshot {
 	now := time.Now().UTC()
 	return &model.StockBoardSnapshot{
-		Symbol: "600519.SH", Total: 1, HasData: true,
+		Symbol: "600519.SH", Total: 1, ProviderReturned: 1, HasData: true,
 		Items: []model.StockBoard{{
 			Code: "BK0450", Name: "白酒", Source: source, SourceVersion: "test-v1",
 			FetchedAt: now, QualityStatus: model.QualityDegraded,
