@@ -1165,6 +1165,52 @@ try {
       assert.equal(await page.locator("#settings-check-connection").isDisabled(), false,
         "saving new connection paths must release the saved-check button even while old requests are pending");
 
+      // A draft check whose endpoints change while in flight must report the old result as stale.
+      const savedSettingsBeforeDraftRace = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
+      const savedFeedbackBeforeDraftRace = await page.locator("#settings-connection-check").textContent();
+      await page.locator("#open-settings").click();
+      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#market-base-input").fill("/draft-race-market");
+      await page.locator("#analysis-base-input").fill("/draft-race-analysis");
+
+      const requestsBeforeDraftRace = settingsConnectionRequestCount;
+      settingsConnectionScenario = "delayed";
+      await page.locator("#settings-check-draft-connection").click();
+      await page.waitForFunction(
+        () => document.querySelector("#settings-check-draft-connection")?.disabled === true,
+        null,
+        { timeout: 3000 }
+      );
+      await page.waitForTimeout(120);
+      assert.equal(settingsConnectionRequestCount, requestsBeforeDraftRace + 2,
+        "draft race should have both old draft health probes in flight");
+
+      settingsConnectionScenario = "default";
+      await page.locator("#market-base-input").fill("/edited-market-draft");
+      await page.locator("#analysis-base-input").fill("/edited-analysis-draft");
+      await page.waitForFunction(
+        () => document.querySelector("#settings-draft-connection-check")?.textContent.includes("检查期间连接草稿或已保存配置发生变化，已忽略旧结果"),
+        null,
+        { timeout: 5000 }
+      );
+
+      const staleDraftFeedback = await page.locator("#settings-draft-connection-check").textContent();
+      assert.doesNotMatch(staleDraftFeedback, /健康探针服务暂不可用|HTTP 503/,
+        "old delayed draft responses must not overwrite the stale-result warning");
+      assert.equal(settingsConnectionRequestCount, requestsBeforeDraftRace + 2,
+        "stale draft results must not trigger any extra requests");
+      assert.equal(await page.locator("#settings-connection-check").textContent(), savedFeedbackBeforeDraftRace,
+        "draft edits/results must not change saved-check feedback");
+      assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraftRace,
+        "editing a draft while its check is in flight must not persist the new draft paths");
+
+      settingsConnectionScenario = "default";
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.locator("#cancel-settings-dialog").click();
+      await page.locator("#settings-dialog").waitFor({ state: "hidden" });
+      assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraftRace,
+        "discarding the raced draft must preserve the existing saved endpoints");
+
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
 
