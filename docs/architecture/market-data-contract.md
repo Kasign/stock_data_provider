@@ -296,7 +296,16 @@ Tushare 公告端点返回完全重复的记录时，适配器按规范化的证
 
 ### 涨跌停池源端总数与实际返回覆盖
 
-东财涨跌停池若源端总数 `tc` 大于当前响应 `pool` 条数，必须在父快照记录 `provider_total_exceeds_returned_rows`。此差异可能来自请求上限截断或源端返回不完整；保留 `total` 并不足以让使用方知道当前条目覆盖不足，不能静默当作完整列表。
+涨跌停池快照使用三个覆盖字段与一个明确标记表达来源完整性：
+
+- `total` 是调用方条数上限截断之前的最佳可用总数；当 `total_is_lower_bound=true` 时，它只是已观察到的下界，不能当作权威全量计数。
+- `provider_returned` 记录本次为构造候选而实际收到的源端原始行数，分页源按已获取的页累计；它可能大于最终 `items` 条数，因为调用方上限会截断列表。
+- `excluded_non_a_share_count` 记录被普通 A 股证券门禁排除的源端行。过滤数量必须可对账，不能静默从源端返回数中消失。
+- `total_is_lower_bound` 只有在来源的行数上限造成总数无法确认时置为 true；同时父快照质量原因必须说明上限及下界语义。
+
+东财涨跌停池若源端总数 `tc` 大于当前响应 `pool` 条数，必须记录 `provider_total_exceeds_returned_rows`。其内部分页要在源端总数稳定、报告日期一致且每页原始行数与预期相符的前提下继续取数；请求上限导致的截断仍需显式暴露。
+
+Tushare `limit_list_d` 未提供独立的权威总数，返回达到 2500 行时必须附加 `provider_response_may_be_capped_at_2500_rows` 和 `provider_limit_pool_total_is_lower_bound`，将 `total_is_lower_bound` 设为 true，并保留 `provider_returned` 与 `excluded_non_a_share_count`。不能把过滤后的数量宣称为权威源端总数。
 
 ### 涨跌停池证券唯一性
 

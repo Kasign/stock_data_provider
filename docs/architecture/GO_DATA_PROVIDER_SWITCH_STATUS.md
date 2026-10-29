@@ -976,7 +976,7 @@ Tencent 个股报价和日 K 入口新增普通 A 股范围门禁，在上游请
 ## 仍未闭环的功能（2026-10-29）
 
 1. **执行自动化验收**：对根 module、`go-core`、`services/market-data` 执行 `gofmt` 检查、`go test ./...`、`go test -race ./...`、`go vet ./...`；然后针对目标 Docker 网络做有控制的真实 Provider 请求与字段单位对账。静态审查不能替代这些验收。
-2. **榜单与涨跌停池的源端覆盖账本**：继续区分源端原始总数、原始返回条数、被过滤条数和规范化后的 items。重点检查 Tushare `limit_list_d` 在 2500 条上限附近的覆盖语义，以及行情榜/行业榜在 total 缺失时如何准确表达返回下界；不能把过滤或来源上限造成的缺失伪装成完整结果。
+2. **榜单与涨跌停池的源端覆盖账本**：涨跌停池现已输出原始返回条数、非 A 股排除数，并在 Tushare `limit_list_d` 触及 2500 行时把总数显式标记为下界；Tushare 龙虎榜 `top_list` 也在 10000 行边界标记下界。剩余工作是继续统一热度榜、行业/概念排行的源端总数、过滤数、截断及返回下界语义，不能把过滤或来源上限造成的缺失伪装成完整结果。
 3. **严格历史时点数据**：财报修订版本、历史公司行动/复权因子版本、指数成分真实纳入/剔除生效区间目前没有完整持久化和回放能力；当前指数 `as_of` 只表示不晚于请求日期的最近权重报告，不能作为严格 PIT。
 4. **原 Python 能力的字段级等价**：继续对照 Efinance/AkShare 相关调用链，验证证券范围、字段映射、单位、日期覆盖、空结果及错误/回退语义；不得仅凭 Go 路由已存在就标记迁移完成。
 5. **交易制度与市场时间**：建设权威交易日历驱动的盘中/休市判定和可版本化的 ST、停牌、涨跌停等规则，补足当前仅靠时钟与部分规则推断的边界。
@@ -987,3 +987,11 @@ Tencent 个股报价和日 K 入口新增普通 A 股范围门禁，在上游请
 - **补齐 Tushare 财务与估值接口门禁**：`fina_indicator` 与 `daily_basic` 在发起上游请求前校验普通 A 股证券，避免以外部合法六位证券代码误调用个股财务/估值数据集。
 - 新增 `domestic_stock_symbol_contract_test.go`，覆盖普通沪深股票正例与 ETF、指数、B 股、可转债负例，并验证 Tushare 财务/估值请求在拒绝非法证券时不会触发 HTTP 请求。
 - 本次代码与测试源码已提交；当前尚未执行 Go 测试、race、vet、构建或真实 Provider 请求，测试结果未确认。由于提交要求使用 `[skip ci]`，常规提交触发路径不会运行；当前可用 GitHub 工具没有工作流手动 dispatch 写入能力，需在后续可用环境中统一验收。
+
+
+## 2026-10-29 涨跌停池与龙虎榜源端覆盖账本
+
+- `LimitPoolSnapshot` 新增 `provider_returned`、`excluded_non_a_share_count` 与 `total_is_lower_bound`。东方财富按实际收到的分页原始行累计 `provider_returned`；同花顺记录返回条数；Tushare 分别记录原始表行数和被过滤非 A 股行数。
+- Tushare `limit_list_d` 返回达到 2500 行时，`total` 明确只是下界，并记录 `provider_response_may_be_capped_at_2500_rows` 与 `provider_limit_pool_total_is_lower_bound`。
+- `DragonTigerSnapshot` 新增 `total_is_lower_bound`。Tushare `top_list` 达到 10000 行时记录 `provider_response_may_be_capped_at_10000_rows` 与 `provider_dragon_tiger_total_is_lower_bound`，避免把由截断行数计算出的分页数当作权威总页数。
+- 新增 2500 行与 10000 行边界 HTTP fixture 测试源码，并更新 OpenAPI 与数据契约。当前仅提交代码和测试源码，没有执行 Go 测试、构建、CI 或真实 Provider 请求；待统一验收。

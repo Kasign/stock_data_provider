@@ -559,7 +559,8 @@ components:
         provider_report_date: {type: string, format: date, nullable: true}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
-        total: {type: integer, minimum: 0, description: Provider-reported rows across pages}
+        total: {type: integer, minimum: 0, description: Raw row count observed before source caps; only a lower bound when total_is_lower_bound is true}
+        total_is_lower_bound: {type: boolean, description: True when the source response may be capped and total/pages describe only observed rows}
         pages: {type: integer, minimum: 0}
         returned: {type: integer, minimum: 0, description: Accepted A-share stock rows in this provider page}
         source_returned: {type: integer, minimum: 0, description: Raw records returned by the provider for this page before filtering non-A-share products}
@@ -634,7 +635,10 @@ components:
         type: {type: string, enum: [up, down, broken]}
         trade_date: {type: string, format: date, description: Requested date, not overwritten by provider qdate}
         provider_report_date: {type: string, format: date, nullable: true, description: Provider report date for diagnostics}
-        total: {type: integer, minimum: 0, description: Provider-reported pool count}
+        total: {type: integer, minimum: 0, description: Best available pool count before caller limit; may be a lower bound when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw source rows received before A-share filtering and caller-limit truncation; paginated providers count rows received across pages}
+        excluded_non_a_share_count: {type: integer, minimum: 0, description: Non-A-share source records excluded from normalized items}
+        total_is_lower_bound: {type: boolean, description: True when a provider row cap prevents treating total as the authoritative full count}
         has_data: {type: boolean, description: False means unknown or unavailable, not a verified zero}
         items: {type: array, items: {$ref: '#/components/schemas/LimitPoolItem'}}
         source: {type: string}
