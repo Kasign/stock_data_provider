@@ -84,7 +84,7 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 			item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return fmt.Errorf("valuation item %s has inconsistent identity/source/version metadata", symbol)
 		}
-		if item.FetchedAt.After(time.Now().Add(5*time.Minute)) {
+		if item.FetchedAt.After(time.Now().Add(5 * time.Minute)) {
 			return fmt.Errorf("valuation item %s fetched_at is in the future", symbol)
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
