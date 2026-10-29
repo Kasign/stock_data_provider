@@ -231,10 +231,16 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 	now := time.Now().UTC()
 	snapshot := &model.StockBoardSnapshot{
 		Symbol: symbol, Total: payload.Data.Total, HasData: payload.Data.Total > 0,
-		Items:  make([]model.StockBoard, 0, len(rows)),
+		ProviderReturned: len(rows),
+		Items: make([]model.StockBoard, 0, len(rows)),
 		Source: p.Name(), SourceVersion: "eastmoney-slist-stock-boards-v1",
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}
+	if payload.Data.Total == 1000 {
+		// 请求本身最多返回 1000 条；命中边界时不能声称已取得完整板块列表。
+		snapshot.TotalIsLowerBound = true
+		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_stock_boards_response_may_be_capped_at_1000_rows")
 	}
 	if !snapshot.HasData {
 		snapshot.QualityStatus = model.QualityUnknown
