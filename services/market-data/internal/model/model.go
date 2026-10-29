@@ -398,8 +398,11 @@ type IndexCatalogItem struct {
 type IndexCatalogSnapshot struct {
 	Tag            string             `json:"tag"`
 	Items          []IndexCatalogItem `json:"items"`
-	Total          int                `json:"total"`
-	ProviderTime   *time.Time         `json:"provider_time,omitempty"`
+	Total             int        `json:"total"`
+	ProviderReturned  int        `json:"provider_returned"`
+	ExcludedRows      int        `json:"excluded_rows"`
+	TotalIsLowerBound bool       `json:"total_is_lower_bound"`
+	ProviderTime      *time.Time `json:"provider_time,omitempty"`
 	Source         string             `json:"source"`
 	SourceVersion  string             `json:"source_version,omitempty"`
 	FetchedAt      time.Time          `json:"fetched_at"`
