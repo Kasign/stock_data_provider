@@ -1406,3 +1406,9 @@
 - `d77481d5d379c28d2d75f299329904cdb7e81a36`：最近任务写入成功后，回读确认由仅比较 task_id / analysis_base / run_id 扩展为比较完整引用字段，包括 created_at、symbols、task_type、status、updated_at，避免存储层静默改变业务字段时被误判为持久化成功。
 - `f48cc69dd11a7288224ebe05e7574e92b9bfcb69`：新增独立回归测试，模拟 setItem 未抛错但回读内容被静默改变的情况，确认 UI 返回值不会把不匹配的新记录当作已持久化。
 - 当前 connector 的 commit status 与 PR workflow-run 查询均未返回本批最新提交的运行结果；本执行环境无法解析 github.com，不能 clone 仓库，因此没有实际运行 `npm test`、`npm run check` 或本地 Browser Smoke。不得将本批标记为测试通过；需核实 push 触发的 WebUI Checks 与 Browser Smoke。
+
+
+### 2026-10-29 最近任务清空静默失败回归覆盖
+
+- [8565c6b — 补充最近任务清空静默失败回归测试](https://github.com/Kasign/stock_data_provider/commit/8565c6b0b8ae3c467017f7940c4cefbb7c3fdb83)：覆盖浏览器存储的 `removeItem` 未抛错但未真正删除的情况，确保清空操作回读验证失败时保留原列表，不向界面返回虚假的空历史。
+- 本轮只增加针对性测试，没有改动任务历史实现逻辑；尚未在本执行环境运行 Node 测试。最新提交 CI 状态仍需从 push 触发的 Actions 页面确认。
