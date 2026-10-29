@@ -54,7 +54,7 @@ type PriceLimitRuleSnapshot struct {
 	RuleSource               string                   `json:"rule_source"`
 	RuleSourceURL            string                   `json:"rule_source_url"`
 	QualityStatus            QualityStatus            `json:"quality_status"`
-	QualityReasons           []string                 `json:"quality_reasons,omitempty"`
+	QualityReasons           []string                 `json:"quality_reasons"`
 }
 
 // PriceLimitEventEvidence records the source-backed evidence used to resolve a special
