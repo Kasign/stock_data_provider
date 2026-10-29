@@ -3149,6 +3149,9 @@ var (
 // DailyBarsAsOf reconstructs a single source-coherent bar series from locally recorded revisions.
 // It never calls a live Provider and never substitutes the current-value table.
 func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time) ([]model.DailyBar, []string, error) {
+	if s == nil {
+		return nil, nil, ErrDailyBarsAsOfUnavailable
+	}
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, nil, err
