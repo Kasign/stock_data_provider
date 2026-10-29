@@ -374,7 +374,6 @@ func TestFetchStockBundleBuildsDragonTigerSummaryWithQualityBoundary(t *testing.
 	}
 }
 
-
 func TestFetchDragonTigerDateChecksRawSourceCounts(t *testing.T) {
 	date := "2026-10-23"
 	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)
@@ -419,7 +418,6 @@ func TestFetchDragonTigerDateChecksRawSourceCounts(t *testing.T) {
 		})
 	}
 }
-
 
 func TestFetchStockProfileMapsValuationProfitabilityAndProvenance(t *testing.T) {
 	fetchedAt := time.Now().UTC().Format(time.RFC3339Nano)

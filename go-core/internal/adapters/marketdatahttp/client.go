@@ -295,22 +295,22 @@ type wireDragonTigerItem struct {
 }
 
 type wireDragonTigerSnapshot struct {
-	TradeDate      string                `json:"trade_date"`
-	Page           int                   `json:"page"`
-	PageSize       int                   `json:"page_size"`
-	Total          int                   `json:"total"`
-	Pages          int                   `json:"pages"`
-	Returned       int                   `json:"returned"`
+	TradeDate              string                `json:"trade_date"`
+	Page                   int                   `json:"page"`
+	PageSize               int                   `json:"page_size"`
+	Total                  int                   `json:"total"`
+	Pages                  int                   `json:"pages"`
+	Returned               int                   `json:"returned"`
 	SourceReturned         int                   `json:"source_returned"`
 	ExcludedNonAShareCount int                   `json:"excluded_non_a_share_count"`
 	HasData                bool                  `json:"has_data"`
-	HasMore        bool                  `json:"has_more"`
-	Items          []wireDragonTigerItem `json:"items"`
-	Source         string                `json:"source"`
-	SourceVersion  string                `json:"source_version"`
-	FetchedAt      time.Time             `json:"fetched_at"`
-	QualityStatus  string                `json:"quality_status"`
-	QualityReasons []string              `json:"quality_reasons"`
+	HasMore                bool                  `json:"has_more"`
+	Items                  []wireDragonTigerItem `json:"items"`
+	Source                 string                `json:"source"`
+	SourceVersion          string                `json:"source_version"`
+	FetchedAt              time.Time             `json:"fetched_at"`
+	QualityStatus          string                `json:"quality_status"`
+	QualityReasons         []string              `json:"quality_reasons"`
 }
 
 type dragonTigerDateResult struct {

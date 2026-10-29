@@ -160,6 +160,7 @@ func betterUnknownValuationSnapshot(candidate, current *model.ValuationSnapshot)
 				if value != nil {
 					count++
 				}
+			}
 		}
 		return count
 	}
