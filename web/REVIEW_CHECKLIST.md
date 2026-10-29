@@ -1,3 +1,13 @@
+## 2026-10-29 后续追加 — 保存/草稿连接错误隔离
+
+- [x] 已保存连接与未保存草稿均覆盖 401/403/404/503/网络失败。
+- [x] 每个场景各发起行情/分析两项健康探针一次，不发生静默重试。
+- [x] 已保存连接检查不修改 localStorage；草稿检查不污染已保存输出、不写入草稿路径，放弃后存储值不变。
+- [x] 浏览器使用此前真实保存的 API 路径作为基线，不假设固定默认路径。
+- [x] HEAD `fffac2436257fca7d7789e01dc91719d02f3ed0e` 的 WebUI checks [#40828373061](https://github.com/Kasign/stock_data_provider/actions/runs/40828373061) 与 Browser Smoke [#40828373063](https://github.com/Kasign/stock_data_provider/actions/runs/40828373063) 均通过。
+- [ ] 真实 API/NAS/1Panel 联调仍需部署环境验收。
+
+
 ## 2026-10-29 后续追加 — 本地自选 storage SecurityError
 
 - [x] `getItem` 对自选键抛出 SecurityError 时，界面不展示成功或空列表，不覆盖原始数据，计数显示不可用、反馈为错误。

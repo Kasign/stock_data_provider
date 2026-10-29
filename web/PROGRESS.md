@@ -1,3 +1,12 @@
+## 2026-10-29 — 保存连接与未保存草稿错误隔离
+
+- `web/tests/browser-smoke.mjs` 新增已保存连接与未保存草稿两条路径的 401/403/404/503/网络失败矩阵，共 10 组场景。
+- 每组验证行情/分析健康探针各请求一次、无静默重试、提示区分错误状态。已保存检查不修改 localStorage；草稿检查使用不同 API 路径，不覆盖已保存检查反馈，也不写入新路径；放弃草稿后原存储值保持不变。
+- 修正测试前置条件：使用当前真实保存的同源 API 路径，不再硬编码 `/market-api` / `/analysis-api`。
+- WebUI checks [#40828373061](https://github.com/Kasign/stock_data_provider/actions/runs/40828373061) 与 Browser Smoke [#40828373063](https://github.com/Kasign/stock_data_provider/actions/runs/40828373063) 对应最新 HEAD `fffac2436257fca7d7789e01dc91719d02f3ed0e`，均通过。
+- 本批没有修改业务实现；真实后端健康状态、认证与 NAS/1Panel 代理仍需单独验收。
+
+
 ## 2026-10-29 — 自选存储读取与写入错误完整浏览器反馈
 
 - Chromium 真实页面流程覆盖损坏 JSON、`setItem` quota error 与 `getItem` SecurityError。
