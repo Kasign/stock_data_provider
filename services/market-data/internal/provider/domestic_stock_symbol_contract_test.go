@@ -11,7 +11,7 @@ import (
 
 func TestDomesticStockProviderSymbolHelpersRejectNonCommonEquities(t *testing.T) {
 	validators := []struct {
-		name string
+		name     string
 		validate func(string) (string, error)
 	}{
 		{name: "Sina", validate: func(s string) (string, error) { return sinaCode(s) }},
