@@ -8,6 +8,12 @@ import {
   getDailyBars,
   getChipDistribution,
   getCapitalFlow,
+  getIndexCatalog,
+  getIndexConstituents,
+  getIndexDailyBars,
+  getMarketSession,
+  getStockPriceLimitRule,
+  getStockTradingStatus,
   getDataSources,
   getQuote,
   searchStocks,
@@ -304,6 +310,50 @@ test("propagates ordinary fetch network failures so the UI can classify them for
       getQuote({ marketBase: "/market-api", apiKey: "market-secret" }, "600519.SH"),
       (error) => error === failure
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("newly integrated market endpoints encode symbols, preserve explicit source and date filters", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), ...init });
+    return jsonResponse({ quality_status: "valid", items: [] });
+  };
+  try {
+    const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+    await getMarketSession(settings);
+    await getIndexCatalog(settings, { tag: "industry" });
+    await getIndexConstituents(settings, "IDX/000300", { source: "tushare", asOf: "2026-10-28" });
+    await getIndexDailyBars(settings, "IDX/000300", { source: "hithink", start: "2026-10-01", end: "2026-10-28" });
+    await getStockPriceLimitRule(settings, "600519.SH", "2026-10-28");
+    await getStockTradingStatus(settings, "600519.SH", "2026-10-28", { asOf: "2026-10-29T09:00:00+08:00" });
+
+    assert.equal(requests[0].url, "/market-api/api/v1/market/session");
+    assert.equal(requests[1].url, "/market-api/api/v1/market/index-catalog?tag=industry");
+    assert.equal(requests[2].url, "/market-api/api/v1/market/indices/IDX%2F000300/constituents?source=tushare&as_of=2026-10-28");
+    assert.equal(requests[3].url, "/market-api/api/v1/market/indices/IDX%2F000300/daily?start=2026-10-01&end=2026-10-28&source=hithink");
+    assert.equal(requests[4].url, "/market-api/api/v1/stocks/600519.SH/price-limit-rule?date=2026-10-28");
+    assert.equal(requests[5].url, "/market-api/api/v1/stocks/600519.SH/trading-status?date=2026-10-28&as_of=2026-10-29T09%3A00%3A00%2B08%3A00");
+    assert.ok(requests.every(request => request.headers["X-API-Key"] === "market-secret"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rejects malformed or reversed dates before issuing market requests", async () => {
+  const originalFetch = globalThis.fetch;
+  let count = 0;
+  globalThis.fetch = async () => { count += 1; return jsonResponse({}); };
+  try {
+    const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+    await assert.rejects(getIndexDailyBars(settings, "000300.SH", { start: "2026-02-30", end: "2026-10-01" }), /有效的开始和结束日期/);
+    await assert.rejects(getIndexDailyBars(settings, "000300.SH", { start: "2026-10-02", end: "2026-10-01" }), /开始日期不能晚于结束日期/);
+    await assert.rejects(getStockPriceLimitRule(settings, "600519.SH", "2026-1-01"), /有效的交易日期/);
+    assert.equal(count, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
