@@ -857,6 +857,47 @@ paths:
       responses:
         '200': {description: Configured dependencies are ready}
         '503': {description: Configured dependencies are not ready}
+  /api/v1/market/quotes:
+    get:
+      summary: 批量获取指定 A 股证券的实时行情
+      description: 仅查询调用方明确提供的证券列表，不代表全市场扫描。最多 50 个不重复证券；部分证券失败时仍返回逐项结果和整体降级质量。
+      security:
+        - ApiKey: []
+      parameters:
+        - name: symbols
+          in: query
+          required: true
+          description: 逗号分隔的 A 股代码，支持规范化后的六位代码或带交易所后缀代码。
+          schema:
+            type: string
+            example: "600519.SH,000001.SZ"
+      responses:
+        '200':
+          description: 行情批量结果；部分失败仍以逐项状态返回
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, succeeded, failed, fetched_at, quality_status]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [symbol, quality_status]
+                      properties:
+                        symbol: {type: string}
+                        quote: {$ref: '#/components/schemas/Quote'}
+                        error_code: {type: string, enum: [QUOTE_UNAVAILABLE]}
+                        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+                  total: {type: integer}
+                  succeeded: {type: integer}
+                  failed: {type: integer}
+                  fetched_at: {type: string, format: date-time}
+                  quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        '400': {description: 证券列表缺失、重复、非法或超过 50 项}
+        '401': {description: API key required}
+
   /api/v1/quotes/{symbol}:
     get:
       parameters:
