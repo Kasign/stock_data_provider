@@ -120,8 +120,11 @@ type StockBoard struct {
 
 type StockBoardSnapshot struct {
 	Symbol         string        `json:"symbol"`
-	Total          int           `json:"total"`
-	HasData        bool          `json:"has_data"`
+	Total             int           `json:"total"`
+	ProviderReturned  int           `json:"provider_returned"`
+	ExcludedRows      int           `json:"excluded_rows"`
+	TotalIsLowerBound bool          `json:"total_is_lower_bound"`
+	HasData           bool          `json:"has_data"`
 	Items          []StockBoard  `json:"items"`
 	Source         string        `json:"source"`
 	SourceVersion  string        `json:"source_version,omitempty"`
