@@ -90,6 +90,14 @@ type TradingCalendarProvider interface {
 	FetchTradingCalendar(ctx context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error)
 }
 
+ // SecurityTradingStatusProvider returns dated trading-day, effective-name and suspension evidence
+ // for one A-share. A missing/ambiguous effective record must be represented as unknown or an error,
+ // never silently treated as normal status.
+type SecurityTradingStatusProvider interface {
+	NamedProvider
+	FetchSecurityTradingStatus(ctx context.Context, symbol, tradeDate string) (*model.SecurityTradingStatusSnapshot, error)
+}
+
 // FundamentalsProvider returns financial indicators for an explicit report period.
 type FundamentalsProvider interface {
 	NamedProvider
