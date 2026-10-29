@@ -88,6 +88,8 @@ try {
     let dataSourceScenario = "success";
     let dataSourcesRequestCount = 0;
     let healthScenario = "unavailable";
+    let settingsConnectionScenario = "default";
+    let settingsConnectionRequestCount = 0;
     const quoteFixture = {
       symbol: "600519.SH",
       name: "贵州茅台",
@@ -169,6 +171,13 @@ try {
       "503": { status: 503, code: "provider_unavailable", message: "Provider 清单服务暂不可用", requestId: "req-data-503", expected: "Provider 清单服务暂不可用" },
       network: { status: 0, expected: "网络请求失败" }
     };
+    const settingsConnectionErrors = {
+      "401": { status: 401, code: "auth_required", message: "credentials required", requestId: "req-settings-401", expected: "接口认证失败" },
+      "403": { status: 403, code: "access_denied", message: "permission denied", requestId: "req-settings-403", expected: "当前请求被服务拒绝" },
+      "404": { status: 404, code: "route_not_found", message: "health route not found", requestId: "req-settings-404", expected: "接口或资源不存在" },
+      "503": { status: 503, code: "probe_unavailable", message: "健康探针服务暂不可用", requestId: "req-settings-503", expected: "健康探针服务暂不可用" },
+      network: { status: 0, expected: "网络请求失败" }
+    };
 
     if (viewport.width === 320) {
       await context.addInitScript(() => {
@@ -188,7 +197,21 @@ try {
         body: JSON.stringify(body)
       });
 
-      // Settings tests intentionally change the market base path; health fixtures must follow any same-origin prefix.
+      // Settings tests intentionally change API prefixes; saved and unsaved probes share this deterministic error matrix.
+      if (viewport.width === 320 && settingsConnectionScenario !== "default" &&
+          (pathname.endsWith("/health/ready") || pathname.endsWith("/readyz"))) {
+        settingsConnectionRequestCount += 1;
+        if (settingsConnectionScenario === "network") return route.abort("failed");
+        const item = settingsConnectionErrors[settingsConnectionScenario];
+        return json(item.status, {
+          status: "unavailable",
+          error: {
+            code: item.code,
+            message: item.message,
+            request_id: item.requestId
+          }
+        });
+      }
       if (pathname.endsWith("/health/ready") || pathname.endsWith("/analysis-api/readyz")) {
         if (viewport.width === 320 && healthScenario === "missing-status") {
           return json(200, { message: "HTTP success without an explicit health status" });
@@ -1008,6 +1031,95 @@ try {
         "closing settings with Escape should restore focus to its opener"
       );
 
+      await page.locator('.workspace-tab[data-view="market"]').click();
+      await page.locator("#market-view").waitFor({ state: "visible" });
+
+      // Saved connection and unsaved draft checks must preserve error distinctions and remain isolated.
+      const settingsMenu = page.locator("#mobile-menu-toggle");
+      if (await settingsMenu.isVisible() && (await settingsMenu.getAttribute("aria-expanded")) !== "true") {
+        await settingsMenu.click();
+      }
+      await page.locator('.nav-link[data-view="settings"]').click();
+      await page.locator("#settings-view").waitFor({ state: "visible" });
+
+      const savedSettingsBeforeChecks = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
+      assert.ok(savedSettingsBeforeChecks, "connection checks require persisted local settings");
+      const parsedSavedSettings = JSON.parse(savedSettingsBeforeChecks);
+      assert.equal(parsedSavedSettings.marketBase, "/market-api");
+      assert.equal(parsedSavedSettings.analysisBase, "/analysis-api");
+      assert.equal(parsedSavedSettings.apiKey, "browser-test-key");
+
+      for (const scenario of ["401", "403", "404", "503", "network"]) {
+        const expected = settingsConnectionErrors[scenario];
+        const requestsBefore = settingsConnectionRequestCount;
+        settingsConnectionScenario = scenario;
+        await page.locator("#settings-check-connection").click();
+        await page.waitForFunction(
+          (expectedMessage) => document.querySelector("#settings-connection-check")?.textContent.includes(expectedMessage),
+          expected.expected,
+          { timeout: 10000 }
+        );
+        assert.equal(settingsConnectionRequestCount, requestsBefore + 2,
+          "saved connection " + scenario + " should check market and analysis endpoints once each");
+        await page.waitForTimeout(250);
+        assert.equal(settingsConnectionRequestCount, requestsBefore + 2,
+          "saved connection " + scenario + " must not retry silently");
+        assert.match(await page.locator("#settings-connection-check").textContent(), /已保存连接配置检查结果：/);
+        assert.match(await page.locator("#settings-connection-check").getAttribute("class"), /is-warning/);
+        assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeChecks,
+          "saved connection check " + scenario + " must not mutate local settings");
+        await page.waitForFunction(
+          () => !document.querySelector("#settings-check-connection")?.disabled,
+          null,
+          { timeout: 3000 }
+        );
+      }
+      const savedCheckTextBeforeDraft = await page.locator("#settings-connection-check").textContent();
+      const savedSettingsBeforeDraft = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
+
+      await page.locator("#open-settings").click();
+      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#market-base-input").fill("/draft-market-api");
+      await page.locator("#analysis-base-input").fill("/draft-analysis-api");
+      assert.equal(await page.locator("#save-settings").isDisabled(), false,
+        "changing API paths should mark settings as an unsaved draft");
+
+      for (const scenario of ["401", "403", "404", "503", "network"]) {
+        const expected = settingsConnectionErrors[scenario];
+        const requestsBefore = settingsConnectionRequestCount;
+        settingsConnectionScenario = scenario;
+        await page.locator("#settings-check-draft-connection").click();
+        await page.waitForFunction(
+          (expectedMessage) => document.querySelector("#settings-draft-connection-check")?.textContent.includes(expectedMessage),
+          expected.expected,
+          { timeout: 10000 }
+        );
+        assert.equal(settingsConnectionRequestCount, requestsBefore + 2,
+          "draft connection " + scenario + " should check its two unsaved paths once each");
+        await page.waitForTimeout(250);
+        assert.equal(settingsConnectionRequestCount, requestsBefore + 2,
+          "draft connection " + scenario + " must not retry silently");
+        const draftText = await page.locator("#settings-draft-connection-check").textContent();
+        assert.match(draftText, /表单地址检查结果（尚未保存）：/);
+        assert.match(draftText, new RegExp(expected.expected));
+        assert.match(await page.locator("#settings-draft-connection-check").getAttribute("class"), /is-warning/);
+        assert.equal(await page.locator("#settings-connection-check").textContent(), savedCheckTextBeforeDraft,
+          "draft connection " + scenario + " must not overwrite saved-check feedback");
+        assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraft,
+          "draft connection " + scenario + " must not persist unsaved API paths");
+        await page.waitForFunction(
+          () => !document.querySelector("#settings-check-draft-connection")?.disabled,
+          null,
+          { timeout: 3000 }
+        );
+      }
+
+      settingsConnectionScenario = "default";
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.locator("#cancel-settings-dialog").click();
+      await page.locator("#settings-dialog").waitFor({ state: "hidden" });
+      assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeChecks,
+        "discarding an unsaved draft must preserve the saved local settings");
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
 
