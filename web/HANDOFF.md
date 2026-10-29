@@ -1,5 +1,14 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新标的切换迟到行情回归
+
+- Browser Smoke 新增真实页面级竞态：先让 `600519.SH` 返回 5 根日 K 并产生有效 MA5，再让该标的报价请求延迟返回；在旧请求仍在途时改为 `000001.SH` 并发起新查询。
+- 新标的成功后断言 Quote 标题/价格/质量、日 K 标的、技术 MA5/MA20 与研究摘要都属于 `000001.SH`；新标的仅有 1 根日 K 时，MA5/MA20 必须回到“样本不足”，不能保留旧标的 MA5。
+- 等待旧请求的延迟响应尝试返回后再次确认新标的快照、质量和均线状态未被覆盖。
+- 最新代码 HEAD `6bf1e34746da12d410c45d2766422447179b56f4` 的 WebUI checks [#40822295596](https://github.com/Kasign/stock_data_provider/actions/runs/40822295596) 与 Browser Smoke [#40822295705](https://github.com/Kasign/stock_data_provider/actions/runs/40822295705) 均通过。
+- 该测试使用本地确定性响应桩；真实 Provider 的数据质量与 NAS/1Panel 环境仍需独立验收。
+
+
 ## 2026-10-29 最新顶栏/数据中心健康证据一致性
 
 - Chromium 在同一隔离上下文中让行情与分析 readiness 返回 HTTP 200 但缺少可识别 `status` 字段。

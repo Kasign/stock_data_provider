@@ -1,3 +1,10 @@
+## 2026-10-29 — 切换标的时迟到 Quote/MA 响应隔离
+
+- Browser Smoke 新增 320px 隔离上下文的迟到请求竞态：为旧标的建立 5 根日 K 的有效 MA5，再延迟旧 Quote 回包，切换到新标的并成功读取一条日 K。
+- 新标的渲染完成后等待旧请求延迟窗口，断言旧行情无法覆盖新 Quote、质量、日 K 或 MA；新标的不足 5/20 个有效收盘价时分别显示“样本不足”。
+- 最新 HEAD `6bf1e34746da12d410c45d2766422447179b56f4` 的 WebUI checks [#40822295596](https://github.com/Kasign/stock_data_provider/actions/runs/40822295596) 与 Browser Smoke [#40822295705](https://github.com/Kasign/stock_data_provider/actions/runs/40822295705) 均通过。
+
+
 ## 2026-10-29 — 顶栏与数据中心健康证据一致性
 
 - 在数据中心已覆盖的 HTTP 200/缺少 status 场景上，新增顶栏浏览器断言：行情与分析状态均为“状态未知”，两个指示灯均为 unknown，整体连接不在线。

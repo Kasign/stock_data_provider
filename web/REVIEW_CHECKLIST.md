@@ -1,3 +1,11 @@
+## 2026-10-29 后续追加 — 迟到 Quote/MA 跨标的隔离
+
+- [x] 旧标的拥有有效 MA5 时，模拟旧 Quote 请求迟到；切换到新标的后新 Quote 与一根日 K 成功返回。
+- [x] 新结果及旧请求延迟窗口结束后，均验证 Quote 标题/价格/质量、日 K symbol、MA5/MA20 与研究摘要仍属于新标的；数据不足不得沿用旧 MA。
+- [x] 最新 HEAD `6bf1e34746da12d410c45d2766422447179b56f4` 的 WebUI checks [#40822295596](https://github.com/Kasign/stock_data_provider/actions/runs/40822295596) 与 Browser Smoke [#40822295705](https://github.com/Kasign/stock_data_provider/actions/runs/40822295705) 均通过。
+- [ ] 真实 Provider 数据质量与 NAS/1Panel 部署仍需独立验收。
+
+
 ## 2026-10-29 后续追加 — 顶栏健康状态证据一致性
 
 - [x] 200 但缺少可识别 status 时，数据中心与顶栏都显示未知/警告，不显示绿色。
