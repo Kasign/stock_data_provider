@@ -263,7 +263,6 @@ func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDa
 	})
 }
 
-
 func hasRuleReason(reasons []string, expected string) bool {
 	for _, reason := range reasons {
 		if reason == expected {
