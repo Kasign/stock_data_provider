@@ -234,7 +234,7 @@ components:
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
-        system_observed_at: {type: string, format: date-time, nullable: true, description: System time when this source-content revision was recorded; present in as_of responses}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System time when this source-content revision was recorded; present when local revision storage is enabled and the record time can be verified}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
     TradingCalendarDay:
