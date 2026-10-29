@@ -1247,6 +1247,9 @@ func tickflowDomesticSymbol(raw string) (string, error) {
 	if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") {
 		return "", fmt.Errorf("TickFlow Go adapter only accepts domestic SH/SZ/BJ securities, got %q", raw)
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return "", fmt.Errorf("TickFlow stock endpoints only support common A-share equities, got %q", raw)
+	}
 	return symbol, nil
 }
 

@@ -475,6 +475,9 @@ func pytdxDomesticSymbol(raw string) (string, error) {
 	if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") {
 		return "", fmt.Errorf("Pytdx adapter only accepts domestic SH/SZ/BJ equities, got %q", raw)
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return "", fmt.Errorf("Pytdx adapter only accepts common A-share equities, got %q", raw)
+	}
 	wireSymbol := pytdxWireSymbol(symbol)
 	if wireSymbol == "" || !protocol.IsStock(wireSymbol) {
 		return "", fmt.Errorf("Pytdx adapter only accepts A-share equity codes, not index or unsupported security %q", raw)

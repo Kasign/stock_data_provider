@@ -2243,6 +2243,9 @@ func hithinkDomesticSymbol(raw string) (string, error) {
 	if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") {
 		return "", fmt.Errorf("同花顺 A 股适配器只支持 SH/SZ/BJ 证券，收到 %q", raw)
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return "", fmt.Errorf("同花顺个股接口仅支持 A 股普通股票，收到 %q", raw)
+	}
 	return symbol, nil
 }
 

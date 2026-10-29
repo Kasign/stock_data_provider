@@ -473,6 +473,9 @@ func sinaCode(symbol string) (string, error) {
 	if len(parts) != 2 || len(parts[0]) != 6 {
 		return "", fmt.Errorf("Sina supports six-digit mainland A-share symbols only, got %q", symbol)
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return "", fmt.Errorf("Sina only supports common A-share equities, got %q", symbol)
+	}
 	switch parts[1] {
 	case "SH":
 		return "sh" + parts[0], nil

@@ -769,6 +769,9 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 	if err != nil {
 		return nil, err
 	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tushare fundamentals only support common A-share equities, got %q", rawSymbol)
+	}
 	period, err := tushareQuarterEnd(year, quarter)
 	if err != nil {
 		return nil, err
@@ -1020,6 +1023,9 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		symbol, err := tushareExchangeCode(raw)
 		if err != nil {
 			return nil, err
+		}
+		if !isTushareAShareSymbol(symbol) {
+			return nil, fmt.Errorf("Tushare daily_basic only supports common A-share equities, got %q", raw)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
 			continue
