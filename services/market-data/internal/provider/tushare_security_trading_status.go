@@ -83,9 +83,10 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 		result.NameEffectiveFrom = name.StartDate
 		result.NameEffectiveTo = name.EndDate
 		result.RiskWarningStatus = riskWarningStatusFromHistoricalName(name.Name)
-		if result.RiskWarningStatus == model.RiskWarningUnknown {
+		result.DelistingStatus = delistingStatusFromHistoricalName(name.Name)
+		if result.RiskWarningStatus == model.RiskWarningUnknown || result.DelistingStatus == model.DelistingStatusUnknown {
 			result.QualityStatus = model.QualityUnknown
-			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "historical_security_name_does_not_prove_risk_warning_status")
+			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "historical_security_name_does_not_prove_risk_warning_or_delisting_status")
 		}
 	}
 	if strings.TrimSpace(basic.IPODate) == "" {
@@ -208,10 +209,26 @@ func riskWarningStatusFromHistoricalName(name string) model.RiskWarningStatus {
 			return model.RiskWarningApplied
 		}
 	}
-	if normalized == "" || strings.HasPrefix(normalized, "PT") {
+	// Delisting-period names follow a separate price-limit regime; do not mistake them for normal stocks.
+	if normalized == "" || strings.HasPrefix(normalized, "PT") ||
+		strings.Contains(normalized, "退市") || strings.Contains(normalized, "摘牌") {
 		return model.RiskWarningUnknown
 	}
 	return model.RiskWarningNormal
+}
+
+func delistingStatusFromHistoricalName(name string) model.DelistingStatus {
+	normalized := strings.ToUpper(strings.TrimSpace(name))
+	if normalized == "" || strings.HasPrefix(normalized, "PT") {
+		return model.DelistingStatusUnknown
+	}
+	if strings.Contains(normalized, "退市整理") {
+		return model.DelistingStatusDelistingPeriod
+	}
+	if strings.Contains(normalized, "退市") || strings.Contains(normalized, "摘牌") {
+		return model.DelistingStatusDelistingRisk
+	}
+	return model.DelistingStatusNormal
 }
 
 func (p *Tushare) fetchSecurityTradingDay(ctx context.Context, exchange, compactDate string) (bool, error) {
