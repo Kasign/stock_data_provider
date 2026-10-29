@@ -1016,3 +1016,10 @@ Tencent 个股报价和日 K 入口新增普通 A 股范围门禁，在上游请
 - `IndexConstituentSnapshot` 新增 `total_is_lower_bound`。Tushare `index_weight` 月度响应达到 5000 行时，在质量原因之外同时暴露结构化下界标记；无论该报告日含有可用 A 股成分还是仅含不支持证券，都会保留标记。
 - 新增 5000 行边界 HTTP fixture 测试源码，覆盖报告日、原始返回数、规范化条数及下界标记；未执行测试、构建、CI 或真实 Provider 请求。
 - 该修改只解决源端行数边界的可见性，不声称恢复指数成分的真实生效区间或严格 PIT 历史能力。
+
+
+## 2026-10-29 交易日历多来源择优与冲突标记
+
+- `DataService.TradingCalendar` 不再在第一个结构完整的 Provider 处提前返回，而是比较全部已配置来源，并优先选择明确覆盖逐日日期的日历，而不是从交易日列表推断非交易日的来源。
+- 如果来源对任一日期的 `is_trading_day` 状态有冲突，返回证据评分较高的候选，并降级质量、增加 `provider_trading_calendar_sources_disagree`。缓存仍保存所选结果和冲突状态。
+- 新增服务层 fixture 测试源码，覆盖来源择优与跨源冲突；当前未执行 Go 测试、构建、CI 或真实 Provider 请求。权威交易所日历和临时交易安排仍需后续整体验收。
