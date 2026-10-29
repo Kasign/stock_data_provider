@@ -109,9 +109,21 @@ try {
         outlineWidth: style.outlineWidth
       };
     });
+    await page.waitForFunction(() => {
+      const element = document.querySelector(".skip-link");
+      if (!element || document.activeElement !== element) return false;
+      const top = element.getBoundingClientRect().top;
+      return top >= 0 && top < 60;
+    }, null, { timeout: 2000 });
+    const visibleSkipLinkState = await page.locator(".skip-link").evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return { top: rect.top, outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+    });
     assert.equal(skipLinkState.focused, true, "the first keyboard tab stop should be the skip-to-content link");
-    assert.ok(skipLinkState.top >= 0 && skipLinkState.top < 60, "the skip link must become visible when focused");
-    assert.notEqual(skipLinkState.outlineStyle, "none", "the focused skip link must have a visible outline");
+    assert.ok(visibleSkipLinkState.top >= 0 && visibleSkipLinkState.top < 60, "the skip link must become visible when focused");
+    assert.notEqual(visibleSkipLinkState.outlineStyle, "none", "the focused skip link must have a visible outline");
+    assert.notEqual(visibleSkipLinkState.outlineWidth, "0px", "the focused skip link outline must be non-zero");
     assert.notEqual(skipLinkState.outlineWidth, "0px", "the focused skip link outline must be non-zero");
 
     // Each browser context starts with isolated storage; verify both theme directions and their accessible state.
