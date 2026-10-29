@@ -35,7 +35,7 @@ func validSecurityTradingStatusFixture(source string) *model.SecurityTradingStat
 	return &model.SecurityTradingStatusSnapshot{
 		Symbol: "600519.SH", TradeDate: "2026-10-22",
 		SecurityName: "*ST贵州", NameEffectiveFrom: "2026-10-20",
-		RiskWarningStatus: model.RiskWarningApplied,
+		RiskWarningStatus: model.RiskWarningApplied, DelistingStatus: model.DelistingStatusNormal,
 		ListingDate: "2026-10-20", ListingTradingDayNumber: 3, ListingStatusKnown: true,
 		IsTradingDay: true, TradingDayKnown: true,
 		SuspensionStatus: model.SuspensionStatusIntraday, SuspensionTiming: "09:30-10:00", SuspensionType: "S",
