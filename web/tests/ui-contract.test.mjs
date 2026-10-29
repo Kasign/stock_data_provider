@@ -1625,6 +1625,14 @@ test("最近任务本地存储不可读或损坏时不覆盖原始历史，导�
 });
 
 
+test("最近任务新增与删除必须确认完整记录已持久化，失败时保留原列表", () => {
+  assert.match(recentTaskModule, /storage\.setItem\(RECENT_TASKS_KEY, JSON\.stringify\(records\)\)[\s\S]*?const persistedState = readRecentTasksState\(storage, limit\)[\s\S]*?return persisted \? persistedState\.items : currentState\.items/);
+  assert.match(recentTaskModule, /if \(JSON\.stringify\(persistedState\.items\) !== JSON\.stringify\(records\)\) return currentState\.items/);
+  assert.match(recentTaskModule, /删除未成功持久化时保留原列表/);
+  assert.match(app, /function persistRecentTaskHistory\(record\)[\s\S]*?const expected = \{[\s\S]*?JSON\.stringify\(item\.symbols\) === JSON\.stringify\(expected\.symbols\)[\s\S]*?最近任务引用未保存/);
+});
+
+
 test("估值请求补齐交易所后缀，并只展示与当前标的匹配的记录", () => {
   const renderer = stockResearch.match(/function renderValuations\(data,symbol\)\{[\s\S]*?\n \}\n function fractionPercent/)?.[0] || "";
   assert.ok(renderer, "估值渲染器应存在");
