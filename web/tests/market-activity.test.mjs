@@ -52,3 +52,13 @@ test("rejects explicitly empty or null range metadata instead of treating it as 
     /开始日期.*null/
   );
 });
+
+test("normalizes newline and tab characters in malformed response metadata", () => {
+  const message = calendarResponseRangeError(
+    { start_date: "wrong\nrange\tvalue", end_date: "2026-10-31" },
+    "2026-10-01",
+    "2026-10-31"
+  );
+  assert.match(message, /wrong range value/);
+  assert.doesNotMatch(message, /[\r\n\t]/);
+});

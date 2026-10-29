@@ -106,7 +106,7 @@ export function calendarResponseRangeError(data, requestedStart, requestedEnd) {
     if (!Object.prototype.hasOwnProperty.call(response, field)) continue;
     const actual = response[field];
     if (actual !== expected) {
-      const reported = actual === null ? "null" : String(actual).replace(/[\\r\\n\\t]+/g, " ").slice(0, 40);
+      const reported = actual === null ? "null" : String(actual).replace(/\s+/g, " ").slice(0, 40);
       return "交易日历响应" + label + "（" + reported + "）与本次请求的 " + expected + " 不一致，已拒绝展示该结果。";
     }
   }
