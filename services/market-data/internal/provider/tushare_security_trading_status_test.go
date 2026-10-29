@@ -47,7 +47,7 @@ func TestTushareFetchSecurityTradingStatusUsesEffectiveNameAndSuspensionRecords(
 			switch {
 			case request.Params["start_date"] == "20261022" && request.Params["end_date"] == "20261022":
 				items = [][]any{{request.Params["exchange"],"20261022","1"}}
-			case request.Params["start_date"] == "20261020" && request.Params["end_date"] == "20261022" && request.Params["is_open"] == "1":
+			case request.Params["start_date"] == "20261020" && request.Params["end_date"] == "20261022":
 				items = [][]any{
 					{request.Params["exchange"],"20261020","1"},
 					{request.Params["exchange"],"20261021","1"},
@@ -84,7 +84,7 @@ func TestTushareFetchSecurityTradingStatusUsesEffectiveNameAndSuspensionRecords(
 	if got.SecurityName!="*ST贵州" || got.RiskWarningStatus!=model.RiskWarningApplied {
 		t.Fatalf("historical effective name was not applied: %+v",got)
 	}
-	if got.NameEffectiveFrom!="20261020" || got.NameEffectiveTo!="" {
+	if got.NameEffectiveFrom!="2026-10-20" || got.NameEffectiveTo!="" {
 		t.Fatalf("unexpected effective name interval: %+v",got)
 	}
 	if !got.ListingStatusKnown || got.ListingTradingDayNumber!=3 || got.ListingDate!="2026-10-20" {
