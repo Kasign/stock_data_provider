@@ -1644,6 +1644,17 @@ test("最近任务新增与删除必须确认完整记录已持久化，失败�
 });
 
 
+test("活动任务引用静默写入失败时仍独立保存最近任务历史并明确提示", () => {
+  assert.match(
+    app,
+    /const serializedReference = JSON\.stringify\(record\);[\s\S]*?localStorage\.setItem\(TASK_REFERENCE_KEY, serializedReference\);[\s\S]*?taskReferencePersisted = localStorage\.getItem\(TASK_REFERENCE_KEY\) === serializedReference/
+  );
+  assert.match(
+    app,
+    /const historyPersisted = persistRecentTaskHistory\(record\);[\s\S]*?if \(!taskReferencePersisted\)[\s\S]*?最近任务已保存，但活动任务引用未能确认持久化/
+  );
+});
+
 test("估值请求补齐交易所后缀，并只展示与当前标的匹配的记录", () => {
   const renderer = stockResearch.match(/function renderValuations\(data,symbol\)\{[\s\S]*?\n \}\n function fractionPercent/)?.[0] || "";
   assert.ok(renderer, "估值渲染器应存在");
