@@ -484,9 +484,10 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 	sourceVersion := hithinkVersion + "-hot-ranking-v1"
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, min(limit, len(data.Item))),
+		ProviderReturned: len(data.Item), TotalIsLowerBound: true,
 		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
 		QualityStatus:  model.QualityDegraded,
-		QualityReasons: []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal"},
+		QualityReasons: []string{"provider_hot_ranking_is_delayed_not_a_real_time_trading_signal", "provider_total_missing_using_returned_count"},
 	}
 	if data.Timestamp != nil && *data.Timestamp > 0 {
 		candidate := time.UnixMilli(*data.Timestamp).UTC()
@@ -524,6 +525,7 @@ func (p *Hithink) FetchHotStocks(ctx context.Context, rankingType string, limit 
 			return nil, fmt.Errorf("同花顺榜单第 %d 行排名无效", index)
 		}
 		if _, duplicate := seen[symbol]; duplicate {
+			snapshot.ExcludedRows++
 			snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "duplicate_hot_ranking_symbol_dropped")
 			continue
 		}

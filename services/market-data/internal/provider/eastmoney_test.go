@@ -1038,3 +1038,30 @@ func TestEastmoneyFetchHotStocksRejectsQuoteEnrichmentRowsWithoutCode(t *testing
 		t.Fatalf("quote enrichment row without identity must be rejected, got %v", err)
 	}
 }
+
+
+func TestEastmoneyFetchHotStocksReportsSourceCoverageAsLowerBound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rank":
+			fmt.Fprint(w, `{"code":0,"data":[{"sc":"SH600519","rk":1},{"sc":"SZ000001","rk":2}]}`)
+		case "/quote":
+			fmt.Fprint(w, `{"rc":0,"data":{"diff":[{"f12":"600519","f14":"贵州茅台","f2":1313.3,"f3":1.2}]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(2*time.Second, "", "")
+	p.hotRankingURL = server.URL + "/rank"
+	p.indexURL = server.URL + "/quote"
+	got, err := p.FetchHotStocks(context.Background(), "popular", 1)
+	if err != nil {
+		t.Fatalf("FetchHotStocks: %v", err)
+	}
+	if got.Total != 1 || len(got.Items) != 1 || got.ProviderReturned != 2 || !got.TotalIsLowerBound {
+		t.Fatalf("unexpected hot-ranking source ledger: total=%d items=%d provider_returned=%d lower_bound=%v",
+			got.Total, len(got.Items), got.ProviderReturned, got.TotalIsLowerBound)
+	}
+}

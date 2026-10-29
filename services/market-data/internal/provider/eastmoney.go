@@ -842,9 +842,10 @@ func (p *Eastmoney) FetchHotStocks(ctx context.Context, rankingType string, limi
 	sourceVersion := eastmoneyVersion + "-hot-ranking-v1"
 	snapshot := &model.HotRankingSnapshot{
 		RankingType: rankingType, Items: make([]model.HotRankingItem, 0, len(ranked)),
+		ProviderReturned: len(rankRows), TotalIsLowerBound: true,
 		Source: p.Name(), SourceVersion: sourceVersion, FetchedAt: now,
 		QualityStatus:  model.QualityDegraded,
-		QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed"},
+		QualityReasons: []string{"provider_ranking_snapshot_timestamp_not_exposed", "provider_total_missing_using_returned_count"},
 	}
 	for _, ranking := range ranked {
 		item := model.HotRankingItem{
