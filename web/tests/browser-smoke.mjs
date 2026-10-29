@@ -97,6 +97,53 @@ try {
     );
     assert.equal(await page.locator("#market-view").isVisible(), true, "market overview must be the initial view");
 
+    // Keyboard users must be able to reveal and activate the skip link before traversing the dashboard.
+    await page.keyboard.press("Tab");
+    const skipLinkState = await page.locator(".skip-link").evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        focused: document.activeElement === element,
+        top: rect.top,
+        outlineStyle: style.outlineStyle,
+        outlineWidth: style.outlineWidth
+      };
+    });
+    assert.equal(skipLinkState.focused, true, "the first keyboard tab stop should be the skip-to-content link");
+    assert.ok(skipLinkState.top >= 0 && skipLinkState.top < 60, "the skip link must become visible when focused");
+    assert.notEqual(skipLinkState.outlineStyle, "none", "the focused skip link must have a visible outline");
+    assert.notEqual(skipLinkState.outlineWidth, "0px", "the focused skip link outline must be non-zero");
+
+    // Each browser context starts with isolated storage; verify both theme directions and their accessible state.
+    const themeToggle = page.locator("#theme-toggle");
+    const initialTheme = await page.evaluate(() => ({
+      theme: document.documentElement.dataset.theme,
+      colorScheme: getComputedStyle(document.documentElement).colorScheme
+    }));
+    assert.equal(initialTheme.theme, "dark", "a fresh browser context should start in the default dark theme");
+    assert.equal(initialTheme.colorScheme, "dark", "dark theme should set the browser color scheme");
+    assert.equal(await themeToggle.getAttribute("aria-pressed"), "false", "dark theme toggle should report not pressed");
+
+    await themeToggle.click();
+    const lightTheme = await page.evaluate(() => ({
+      theme: document.documentElement.dataset.theme,
+      colorScheme: getComputedStyle(document.documentElement).colorScheme
+    }));
+    assert.equal(lightTheme.theme, "light", "theme toggle should apply light theme");
+    assert.equal(lightTheme.colorScheme, "light", "light theme should set the browser color scheme");
+    assert.equal(await themeToggle.getAttribute("aria-pressed"), "true", "light theme toggle should report pressed");
+    assert.equal((await page.locator("#theme-toggle-label").textContent()).trim(), "深色", "light theme toggle should offer the dark theme");
+
+    await themeToggle.click();
+    const restoredTheme = await page.evaluate(() => ({
+      theme: document.documentElement.dataset.theme,
+      colorScheme: getComputedStyle(document.documentElement).colorScheme
+    }));
+    assert.equal(restoredTheme.theme, "dark", "theme toggle should restore dark theme");
+    assert.equal(restoredTheme.colorScheme, "dark", "restored dark theme should set the browser color scheme");
+    assert.equal(await themeToggle.getAttribute("aria-pressed"), "false", "restored dark theme should report not pressed");
+    assert.equal((await page.locator("#theme-toggle-label").textContent()).trim(), "浅色", "dark theme toggle should offer the light theme");
+
     const assertNoHorizontalOverflow = async (stage) => {
       const dimensions = await page.evaluate(() => ({
         viewport: window.innerWidth,
