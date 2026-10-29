@@ -264,10 +264,12 @@ components:
           items: {type: string}
     MarketSessionSnapshot:
       type: object
-      required: [market, at, local_date, local_time, is_trading_day, phase, is_trading_session, is_continuous_trading, is_auction, source, fetched_at, quality_status]
+      required: [market, at, server_time, time_zone, local_date, local_time, is_trading_day, phase, is_trading_session, is_continuous_trading, is_auction, source, fetched_at, quality_status]
       properties:
         market: {type: string, enum: [cn_a_share]}
         at: {type: string, format: date-time, description: Requested instant, normalized to UTC in the response}
+        server_time: {type: string, format: date-time, description: Actual server response-generation time in UTC; distinct from the requested at instant}
+        time_zone: {type: string, enum: [Asia/Shanghai], description: Time zone used for local_date, local_time and session calculation}
         local_date: {type: string, format: date, description: Date in Asia/Shanghai}
         local_time: {type: string, description: Local clock time in Asia/Shanghai, HH:MM:SS}
         is_trading_day: {type: boolean, description: Determined by configured provider-backed trading calendar}
@@ -968,6 +970,8 @@ paths:
     get:
       summary: Resolve the effective A-share price-limit rule
       description: Combines historical security status, official rule tables and independently sourced special-event evidence. Missing status/event evidence returns an unknown rule and never assumes that no special event occurred.
+      security:
+        - ApiKey: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
@@ -1005,6 +1009,8 @@ paths:
     get:
       summary: Get historical trading-status evidence for one A-share
       description: Uses Tushare historical name-change, trading-calendar and suspension records to provide date-specific risk-warning, delisting and suspension evidence. Each source-content change is appended to local revision storage when MariaDB is enabled. Optional as_of reads only locally recorded versions known by that system timestamp and never falls back to live Providers. Missing or ambiguous evidence remains unknown; no-limit exception events are not inferred.
+      security:
+        - ApiKey: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
@@ -1162,7 +1168,9 @@ paths:
       summary: 获取同花顺或 Tushare 国内指数目录
       description: tag=tushare 返回 Tushare index_basic 目录；其他 tag 由兼容的同花顺 Provider 提供。Tushare 指数代码保留 .SH/.SZ/.CSI 后缀。
       security:
-        - ApiKeyAuth: []
+        - ApiKey: []
+      security:
+        - ApiKey: []
       parameters:
         - {name: tag, in: query, required: false, schema: {type: string, enum: [cn_concept, region, tszs, industry, tushare], default: cn_concept}}
       responses:
@@ -1181,7 +1189,7 @@ paths:
       summary: 获取指定指数的最近或指定日期之前的成分权重报告快照
       description: 未提供 as_of 时保持原有当前/最近快照行为。提供 as_of 时只使用显式支持历史查询的 Provider；Tushare 返回不晚于请求日期的最新 index_weight 报告日。as_of_date 是请求日期，provider_report_date 是实际报告日。该接口不表示成分在报告日至下次报告日之间持续有效，也不是严格历史成员生效区间回放。
       security:
-        - ApiKeyAuth: []
+        - ApiKey: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
         - {name: source, in: query, required: false, description: 指定来源；未提供时仅在具备相应能力的来源间选择，schema: {type: string, enum: [hithink, tushare]}}
@@ -1202,7 +1210,7 @@ paths:
       summary: 获取指定指数的历史日线
       description: Tushare 日线成交量以手为单位，成交额按千元换算为人民币元。
       security:
-        - ApiKeyAuth: []
+        - ApiKey: []
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
         - {name: start, in: query, required: true, schema: {type: string, format: date}}
@@ -1223,7 +1231,7 @@ paths:
     get:
       summary: Get quotes for an allow-listed set of core market indices
       security:
-        - ApiKeyAuth: []
+        - ApiKey: []
       responses:
         '200':
           description: Index quote snapshot with explicit source and quality metadata
@@ -1255,6 +1263,8 @@ paths:
     get:
       summary: Get the scheduled A-share market session for a timestamp
       description: Uses the provider-backed trading calendar for the requested date and the standard Asia/Shanghai session schedule. It does not determine individual-stock suspension, security-specific price limits, or emergency exchange interruptions. When at is omitted, current server time is used.
+      security:
+        - ApiKey: []
       parameters:
         - {name: at, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp; response includes the Asia/Shanghai date and time}
       responses:
