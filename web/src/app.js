@@ -4493,6 +4493,20 @@ async function importBrowserDataFile(file) {
     localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks));
     localStorage.removeItem(TASK_REFERENCE_KEY);
 
+    // 浏览器存储适配层可能静默忽略写入；应用内存状态切换前必须逐项回读确认。
+    const expectedStorage = new Map([
+      [SETTINGS_KEY, JSON.stringify(nextSettings)],
+      [THEME_STORAGE_KEY, imported.theme],
+      [WATCHLIST_KEY, JSON.stringify(imported.watchlist)],
+      [RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks)],
+      [TASK_REFERENCE_KEY, null]
+    ]);
+    for (const [key, expectedValue] of expectedStorage) {
+      if (localStorage.getItem(key) !== expectedValue) {
+        throw new Error("浏览器存储未能确认写入：" + key);
+      }
+    }
+
     // 导入是替换操作，不应把导入前正在查看的旧任务重新写入任务历史。
     // 所有本地存储写入均在应用内存状态之前完成，避免写入异常造成 UI 与磁盘状态分叉。
     applySettings(nextSettings, { persistPreviousActiveTask: false });
