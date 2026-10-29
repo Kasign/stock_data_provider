@@ -110,14 +110,21 @@ export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, anal
 
 export function clearRecentTasks(storage) {
   // 只有用户显式确认清空时才允许删除损坏的本地历史。
+  const currentState = readRecentTasksState(storage);
   try {
     storage.removeItem(RECENT_TASKS_KEY);
   } catch {
     try {
       storage.setItem(RECENT_TASKS_KEY, "[]");
     } catch {
-      // Browser storage may be disabled; clearing is best-effort.
+      // 浏览器存储不可写时保留原状态，避免界面误报已清空。
+      return currentState.items;
     }
+  }
+
+  const clearedState = readRecentTasksState(storage);
+  if (!clearedState.storageReadable || !clearedState.storageValid || clearedState.items.length > 0) {
+    return currentState.items;
   }
   return [];
 }
