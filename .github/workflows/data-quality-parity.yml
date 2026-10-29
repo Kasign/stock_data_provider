@@ -55,6 +55,7 @@ jobs:
           set -euo pipefail
           grep -q 'legacy_provider_unit_contract_unverified' python_bridge/capabilities/market_data.py
           grep -q 'adjustment_basis_unverified' python_bridge/capabilities/market_data.py
-          grep -q 'GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md' docs/architecture/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md
+          grep -q '必须保留的 Go 数据质量与单位统一改进' docs/architecture/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md
+          grep -q '不得为了追求与旧 Python 返回值表面一致' docs/architecture/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md
           grep -q 'TestLegacyPythonBridgeAndGoQualityContract' services/market-data/internal/normalize/quality_parity_test.go
           echo 'Legacy unknown-quality markers and parity report are present.'
