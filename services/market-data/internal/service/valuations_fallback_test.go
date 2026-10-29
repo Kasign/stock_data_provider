@@ -203,6 +203,23 @@ func TestValidateValuationSnapshotRequiresSourceVersion(t *testing.T) {
 	}
 }
 
+func TestValidateValuationSnapshotRejectsFutureFetchTimestamps(t *testing.T) {
+	t.Run("snapshot", func(t *testing.T) {
+		snapshot := validValuationsForFallbackTest("eastmoney")
+		snapshot.FetchedAt = time.Now().Add(10 * time.Minute)
+		if err := validateValuationSnapshot([]string{"600519.SH"}, snapshot); err == nil {
+			t.Fatal("expected future snapshot fetched_at to be rejected")
+		}
+	})
+	t.Run("item", func(t *testing.T) {
+		snapshot := validValuationsForFallbackTest("eastmoney")
+		snapshot.Items[0].FetchedAt = time.Now().Add(10 * time.Minute)
+		if err := validateValuationSnapshot([]string{"600519.SH"}, snapshot); err == nil {
+			t.Fatal("expected future item fetched_at to be rejected")
+		}
+	})
+}
+
 func TestValuationsRejectsItemSourceVersionMismatchAndFallsBack(t *testing.T) {
 	mismatched := validValuationsForFallbackTest("eastmoney")
 	mismatched.Items[0].SourceVersion = "old-version"

@@ -29,6 +29,9 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("valuation snapshot source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().Add(5 * time.Minute)) {
+		return errors.New("valuation snapshot fetched_at is in the future")
+	}
 	if snapshot.ProviderReportDate != "" {
 		reportDate, dateErr := time.Parse("2006-01-02", snapshot.ProviderReportDate)
 		if dateErr != nil || reportDate.Format("2006-01-02") != snapshot.ProviderReportDate {
@@ -80,6 +83,9 @@ func validateValuationSnapshot(requested []string, snapshot *model.ValuationSnap
 		if item.Code != strings.Split(symbol, ".")[0] || strings.TrimSpace(item.Source) == "" ||
 			item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return fmt.Errorf("valuation item %s has inconsistent identity/source/version metadata", symbol)
+		}
+		if item.FetchedAt.After(time.Now().Add(5*time.Minute)) {
+			return fmt.Errorf("valuation item %s fetched_at is in the future", symbol)
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("valuation item %s has unsupported quality %q", symbol, item.QualityStatus)
