@@ -70,7 +70,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 		Source: p.Name(),
 		SourceVersion: tushareSecurityTradingStatusVersion,
 		FetchedAt: time.Now().UTC(),
-		QualityStatus: model.QualityValid,
+		QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_exact_snapshot_time_not_exposed"},
 	}
 
@@ -224,6 +224,10 @@ func (p *Tushare) fetchSecurityTradingDay(ctx context.Context, exchange, compact
 	if len(table.rows) != 1 {
 		return false, fmt.Errorf("expected one calendar row for %s/%s, received %d", exchange, compactDate, len(table.rows))
 	}
+	exchangeValue, err := table.stringValue(table.rows[0], "exchange")
+	if err != nil || !strings.EqualFold(strings.TrimSpace(exchangeValue), exchange) {
+		return false, fmt.Errorf("calendar exchange does not match requested exchange %s", exchange)
+	}
 	date, err := table.stringValue(table.rows[0], "cal_date")
 	if err != nil {
 		return false, err
@@ -260,13 +264,21 @@ func (p *Tushare) countListingTradingDays(ctx context.Context, exchange string, 
 		startCompact := start.Format("20060102")
 		endCompact := end.Format("20060102")
 		table, err := p.fetchCapabilityTable(ctx, "trade_cal", map[string]string{
-			"exchange": exchange, "start_date": startCompact, "end_date": endCompact, "is_open": "1",
+			"exchange": exchange, "start_date": startCompact, "end_date": endCompact,
 		}, "exchange,cal_date,is_open")
 		if err != nil {
 			return 0, err
 		}
+		expectedDays := int(end.Sub(start)/(24*time.Hour)) + 1
+		if len(table.rows) != expectedDays {
+			return 0, fmt.Errorf("listing calendar coverage mismatch for %s..%s: expected %d dates, received %d", startCompact, endCompact, expectedDays, len(table.rows))
+		}
 		seen := make(map[string]struct{}, len(table.rows))
 		for index, row := range table.rows {
+			exchangeValue, err := table.stringValue(row, "exchange")
+			if err != nil || !strings.EqualFold(strings.TrimSpace(exchangeValue), exchange) {
+				return 0, fmt.Errorf("listing calendar row %d has mismatched exchange %q", index, exchangeValue)
+			}
 			dateRaw, err := table.stringValue(row, "cal_date")
 			if err != nil {
 				return 0, fmt.Errorf("listing calendar row %d: %w", index, err)
@@ -279,15 +291,24 @@ func (p *Tushare) countListingTradingDays(ctx context.Context, exchange string, 
 				return 0, fmt.Errorf("listing calendar returned out-of-range date %s", date)
 			}
 			if _, duplicate := seen[date]; duplicate {
-				return 0, fmt.Errorf("listing calendar returned duplicate open date %s", date)
+				return 0, fmt.Errorf("listing calendar returned duplicate date %s", date)
 			}
 			seen[date] = struct{}{}
 			open, err := table.stringValue(row, "is_open")
-			if err != nil || strings.TrimSpace(open) != "1" {
-				return 0, fmt.Errorf("listing calendar returned a non-open row for %s", date)
+			if err != nil {
+				return 0, fmt.Errorf("listing calendar row %s has no is_open value", date)
+			}
+			switch strings.TrimSpace(open) {
+			case "1":
+				count++
+			case "0":
+			default:
+				return 0, fmt.Errorf("listing calendar row %s has invalid is_open value %q", date, open)
 			}
 		}
-		count += len(table.rows)
+		if len(seen) != expectedDays {
+			return 0, fmt.Errorf("listing calendar has incomplete date coverage for %s..%s", startCompact, endCompact)
+		}
 		start = end.AddDate(0, 0, 1)
 	}
 	return count, nil
