@@ -4488,6 +4488,15 @@ $("#mobile-menu-toggle").addEventListener("click", () => {
 $("#mobile-nav-overlay").addEventListener("click", () => setMobileNavigationOpen(false, { restoreFocus: true }));
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    const openDialog = document.querySelector("dialog[open]");
+    if (openDialog) {
+      // 焦点暂时落在对话框外时，仍应先关闭设置弹窗并遵守未保存更改确认。
+      if (openDialog.id === "settings-dialog") {
+        event.preventDefault();
+        closeSettingsWithGuard();
+      }
+      return;
+    }
     setMobileNavigationOpen(false, { restoreFocus: true });
     return;
   }

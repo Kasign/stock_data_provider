@@ -1683,7 +1683,9 @@ test("分析任务、阶段事件与 Run 响应必须匹配当前请求标识", 
  
 test("mobile navigation drawer moves focus inside and traps Tab navigation", () => {
   assert.ok(app.includes('querySelector(".nav-link:not([disabled])")?.focus()'));
-  assert.ok(app.includes('if (event.key !== "Tab" || window.innerWidth > 600) return;'));
+  assert.ok(app.includes('if (event.key !== "Tab") return;'));
+  assert.ok(app.includes('const openDialog = document.querySelector("dialog[open]");'));
+  assert.ok(app.includes('if (openDialog.id === "settings-dialog") {'));
   assert.match(app, /const sidebar = \$\("\.sidebar"\);[\s\S]*?if \(!sidebar\.classList\.contains\("is-open"\)\) return;/);
   assert.match(app, /event\.shiftKey && \(document\.activeElement === firstFocusable \|\| !sidebar\.contains\(document\.activeElement\)\)/);
   assert.match(app, /!event\.shiftKey && \(document\.activeElement === lastFocusable \|\| !sidebar\.contains\(document\.activeElement\)\)/);
@@ -1693,7 +1695,11 @@ test("mobile navigation drawer moves focus inside and traps Tab navigation", () 
 
  
 test("移动侧栏打开连接设置时先关闭抽屉，模态对话框接管键盘焦点", () => {
-  assert.match(app, /if \(document\.querySelector\("dialog\[open\]"\)\) return;[\s\S]*?const sidebar = \$\("\.sidebar"\)/);
+  assert.ok(app.includes('const dialog = document.querySelector("dialog[open]");'));
+  assert.ok(app.includes('if (dialog) {'));
+  assert.ok(app.includes('!dialog.contains(document.activeElement)'));
+  assert.ok(app.includes('if (window.innerWidth > 600) return;'));
+  assert.ok(app.includes('const sidebar = $(".sidebar");'));
   assert.match(app, /\$\("#open-settings-side"\)\.addEventListener\("click", \(\) => \{\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);\s*openSettings\(\);/);
 });
 
