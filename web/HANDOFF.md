@@ -1,5 +1,14 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新键盘焦点陷阱回归
+
+- 最新代码 HEAD：`0456746a1cee7f988cda094a783878c1d59a19d2`；完整 WebUI checks [#40818132283](https://github.com/Kasign/stock_data_provider/actions/runs/40818132283) 通过，Chromium Browser Smoke [#40818132254](https://github.com/Kasign/stock_data_provider/actions/runs/40818132254) 通过。
+- 设置弹窗新增 12 次连续 Tab 焦点循环检查；焦点必须始终留在模态框内。Escape 关闭后焦点返回到“连接设置”打开按钮。
+- 本轮发现并修复全局 Escape 处理顺序：有打开的设置对话框时优先处理对话框并走未保存更改确认；只有没有打开模态框时才关闭移动导航。移动侧栏原有 Tab 焦点循环仍保留。
+- 静态 UI 契约与现有实现顺序已同步；成功报价种子测试不再错误假定同标的刷新时必须先把价格清成短横线，错误场景仍继续严格检查失败后旧行情清除。
+- 本轮浏览器仍使用确定性本地响应桩；真实 Provider/API Key/NAS/1Panel 端到端验收继续单独保留。
+
+
 ## 2026-10-29 最新 Provider 请求代际与连接切换验收
 
 - 最新浏览器回归提交：`42251268991a879deb74b7b2e787daaa076e4d5b`。

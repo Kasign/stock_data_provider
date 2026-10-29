@@ -1,5 +1,14 @@
 # WebUI 产品功能扩展与实施任务清单
 
+## 2026-10-29 最新键盘可访问性验收
+
+- [x] 设置对话框的前向 Tab 焦点陷阱已通过 Chromium 验证（连续 12 次 Tab 均留在弹窗内）。
+- [x] Escape 关闭设置弹窗后焦点返回原始打开按钮。
+- [x] 模态框优先处理不改变移动侧栏原有焦点循环。
+- [x] 最新 WebUI checks [#40818132283](https://github.com/Kasign/stock_data_provider/actions/runs/40818132283) 与 Browser Smoke [#40818132254](https://github.com/Kasign/stock_data_provider/actions/runs/40818132254) 均通过。
+- [ ] 真实 Provider/API Key/NAS/1Panel 部署验收仍需独立完成。
+
+
 更新时间：2026-10-29（健康检查质量门禁和 Browser Smoke 扩展已通过）
 目标仓库：Kasign/stock_data_provider
 唯一 WebUI 开发分支：feat/webui-market-data-console

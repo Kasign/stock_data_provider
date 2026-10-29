@@ -1,3 +1,12 @@
+## 2026-10-29 后续追加 — 设置弹窗键盘焦点陷阱
+
+- [x] 模态框打开时，连续 12 次 Tab 焦点保持在设置弹窗内。
+- [x] Escape 优先处理设置弹窗，关闭后焦点回到原始打开按钮。
+- [x] 有未保存更改时仍使用关闭确认；移动侧栏 Tab 循环继续保留。
+- [x] 最新 HEAD `0456746a1cee7f988cda094a783878c1d59a19d2` 的 WebUI checks [#40818132283](https://github.com/Kasign/stock_data_provider/actions/runs/40818132283) 与 Browser Smoke [#40818132254](https://github.com/Kasign/stock_data_provider/actions/runs/40818132254) 均通过。
+- [ ] 真实 Provider 与 NAS/1Panel 端到端验收仍待单独验证。
+
+
 ## 2026-10-29 后续追加 — Provider 清单连接切换竞态
 
 - [x] 已增加 Chromium 场景：在 Provider 请求尚未完成时保存新的行情 API 路径，旧响应迟到后不能回填 Provider 或覆盖失效提示。

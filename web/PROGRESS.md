@@ -1,3 +1,12 @@
+## 2026-10-29 — 设置弹窗键盘焦点陷阱
+
+- 全局键盘处理先检查打开的模态框，再进行移动侧栏处理。
+- Escape 遇到设置弹窗时优先执行关闭保护逻辑，未保存草稿仍保留确认；无弹窗时才关闭移动导航。
+- Chromium 在 320px 场景连续发送 12 次 Tab，焦点始终留在设置弹窗；Escape 关闭弹窗后焦点恢复到打开按钮。
+- 最新 HEAD `0456746a1cee7f988cda094a783878c1d59a19d2` 的 WebUI checks [#40818132283](https://github.com/Kasign/stock_data_provider/actions/runs/40818132283) 与 Browser Smoke [#40818132254](https://github.com/Kasign/stock_data_provider/actions/runs/40818132254) 均通过。
+- 修正浏览器成功报价种子检查的无效中间态假设；错误响应后的旧行情清除断言保持不变。
+
+
 ## 2026-10-29 — Provider 清单连接切换竞态回归
 
 - 浏览器烟测在 Provider 清单请求仍未完成时，使用真实设置对话框切换行情 API 路径并保存。
