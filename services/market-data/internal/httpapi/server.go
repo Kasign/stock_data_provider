@@ -95,6 +95,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	announcementsEnabled := map[string]bool{}
 	stockBoardsEnabled := map[string]bool{}
 	tradingCalendarEnabled := map[string]bool{}
+	securityTradingStatusEnabled := map[string]bool{}
 	fundamentalsEnabled := map[string]bool{}
 	valuationEnabled := map[string]bool{}
 	indexCatalogEnabled := map[string]bool{}
@@ -133,6 +134,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.TradingCalendarProviders() {
 			tradingCalendarEnabled[p.Name()] = true
 		}
+		for _, p := range svc.SecurityTradingStatusProviders() {
+			securityTradingStatusEnabled[p.Name()] = true
+		}
 		for _, p := range svc.FundamentalsProviders() {
 			fundamentalsEnabled[p.Name()] = true
 		}
@@ -162,7 +166,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			StockBasicCapable: stockBasicEnabled[name], StockSearchCapable: stockSearchEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
-			FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
+			SecurityTradingStatusCapable: securityTradingStatusEnabled[name], FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {
