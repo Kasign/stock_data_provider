@@ -161,7 +161,8 @@ try {
         body: JSON.stringify(body)
       });
 
-      if (pathname === "/market-api/health/ready" || pathname === "/analysis-api/readyz") {
+      // Settings tests intentionally change the market base path; health fixtures must follow any same-origin prefix.
+      if (pathname.endsWith("/health/ready") || pathname.endsWith("/analysis-api/readyz")) {
         if (viewport.width === 320 && healthScenario === "missing-status") {
           return json(200, { message: "HTTP success without an explicit health status" });
         }
