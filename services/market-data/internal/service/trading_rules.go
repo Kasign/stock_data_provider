@@ -350,7 +350,7 @@ func ResolvePriceLimitRuleFromTradingStatus(
 		return result, nil
 	}
 
-	return ResolvePriceLimitRuleWithEvidence(
+	result, err := ResolvePriceLimitRuleWithEvidence(
 		symbol,
 		tradeDate,
 		tradingStatus.RiskWarningStatus,
@@ -358,4 +358,27 @@ func ResolvePriceLimitRuleFromTradingStatus(
 		tradingStatus.ListingStatusKnown,
 		evidence,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	// 退市状态未知或处于退市整理期时，不能套用普通板块涨跌幅规则。
+	// 只有与请求日期匹配、已通过来源契约校验的明确特殊事件，才能独立决定无涨跌幅限制。
+	delistingStatusNeedsReview := tradingStatus.DelistingStatus == model.DelistingStatusUnknown ||
+		tradingStatus.DelistingStatus == model.DelistingStatusDelistingPeriod
+	explicitSpecialEvent := result.SpecialExceptionStatus == model.PriceLimitExceptionRelistingFirst ||
+		result.SpecialExceptionStatus == model.PriceLimitExceptionDelistingFirst ||
+		result.SpecialExceptionStatus == model.PriceLimitExceptionExchangeSpecial
+	if delistingStatusNeedsReview && !(explicitSpecialEvent && result.Status == model.PriceLimitStatusNoLimit) {
+		if tradingStatus.DelistingStatus == model.DelistingStatusUnknown {
+			appendReasonOnce(&result.QualityReasons, "delisting_status_unverified_for_price_limit_rule")
+		} else {
+			appendReasonOnce(&result.QualityReasons, "delisting_period_requires_exchange_specific_price_limit_rule")
+		}
+		result.Status = model.PriceLimitStatusUnknown
+		result.LimitPercent = nil
+		result.NoLimitReason = ""
+		result.QualityStatus = model.QualityUnknown
+	}
+	return result, nil
 }
