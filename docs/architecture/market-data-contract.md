@@ -471,3 +471,9 @@ PIT 版本只能重建启用版本化后实际记录过的快照。迁移前未�
 `GET /api/v1/market/session?at=RFC3339`（省略 `at` 时使用服务端当前时间）先通过已配置交易日历 Provider 确认 `Asia/Shanghai` 本地日期是否为交易日，再依据固定时段输出 `phase`、`is_trading_session`、`is_continuous_trading` 与 `is_auction`。时段边界按左闭右开区间计算：09:15–09:25 开盘集合竞价；09:25–09:30 竞价间隔；09:30–11:30 上午连续交易；11:30–13:00 午间休市；13:00–14:57 下午连续交易；14:57–15:00 收盘集合竞价。其余交易日时刻为开盘前或收市后；非交易日优先返回 `non_trading_day`。
 
 这是市场级计划时段，而非个股能否下单的最终判断。该接口尚不感知个股临时停牌、ST/退市整理状态、证券各板块不同的涨跌幅限制、交易所临时停市或特殊交易安排；使用方不能只凭 `is_trading_session=true` 推断具体证券当前可交易。若日历 Provider 质量降级，结果会保留其降级状态和原因。
+
+### 日 K 历史版本 `as_of` API
+
+日 K 接口 `GET /api/v1/bars/{symbol}/daily?as_of=RFC3339` 在传入 `as_of` 后只读取 `market_data_daily_bar_versions` 中 `recorded_at` 不晚于该时刻的版本，不请求实时 Provider，也不回退当前值表。服务先分别选出各来源当时最新的内容版本，再按来源、来源版本、复权参考日期和归一化版本选择一条一致序列，拒绝跨来源拼接；每根 K 线通过 `system_observed_at` 暴露本服务实际记录该修订的时刻，响应带 `point_in_time=true` 和归一化后的 `as_of`。
+
+不存在一致且可用的历史序列时返回 `404 PIT_REVISION_NOT_FOUND`；未启用本地历史版本存储时返回 `503 PIT_STORAGE_UNAVAILABLE`。指定 `as_of` 不得为未来时间，`end` 不能晚于 `as_of` 在上海时区的自然日期。当前复权 Provider 若无法提供可核验的共同复权参考日期，复权历史序列会被拒绝，而不是把不同复权基准混在一起。版本只能重建从启用版本化后实际记录过的行情，不等于恢复供应商过去未入库的历史数据。
