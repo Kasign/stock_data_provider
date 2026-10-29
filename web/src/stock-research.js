@@ -68,6 +68,18 @@ export function bindStockResearch(getSettings,getSymbol){
  }
  function reset(symbol){
   state.loadResearchGeneration+=1;
+  // 历史状态查询跟随当前研究标的，切换股票时清除上一只股票的查询结果。
+  const statusSymbol=$("#stock-status-symbol");
+  if(statusSymbol)statusSymbol.value=symbol;
+  const statusFeedback=$("#stock-status-feedback");
+  if(statusFeedback)statusFeedback.textContent=symbol?"当前研究标的已更新；请选择交易日期后查询历史状态与涨跌幅规则。":"选择研究标的后可查询历史交易状态与涨跌幅规则。";
+  [
+   ["#stock-trading-status-result","交易状态尚未查询。"],
+   ["#stock-price-limit-result","涨跌幅规则尚未查询。"]
+  ].forEach(([selector,message])=>{
+   const root=$(selector);
+   if(root)root.replaceChildren(el("dt","","状态"),el("dd","",message));
+  });
   Object.keys(state.generation).forEach(abort);state.symbol=symbol;state.requested.clear();state.announcementPage=0;state.announcementHasMore=false;state.announcementLoading=false;
   setText("stock-research-target",symbol?"当前标的："+symbol:"请先输入代码，或从中文名称搜索结果中选择股票");
   Object.keys(PANEL_CONFIG).forEach(key=>{
