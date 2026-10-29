@@ -99,10 +99,3 @@ func TestNormalizePytdxDailyAmountKeepsConsistentAmounts(t *testing.T) {
 	}
 }
 
-func TestNormalizePytdxDailyAmountRejectsInvalidNumbers(t *testing.T) {
-	for _, value := range []float64{-1, math.NaN(), math.Inf(1)} {
-		if _, err := normalizePytdxDailyAmount(value, 10); err == nil {
-			t.Errorf("invalid raw amount %v must be rejected", value)
-		}
-	}
-}

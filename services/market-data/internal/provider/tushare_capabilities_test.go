@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -213,7 +214,7 @@ func TestTushareIndexConstituentsDoesNotFallBackPastUnsupportedLatestReportDate(
 		t.Fatal(err)
 	}
 	today := time.Now().In(location)
-	currentStart, currentEnd := tushareTestMonthWindow(today, 0)
+	currentStart, _ := tushareTestMonthWindow(today, 0)
 	previousStart, previousEnd := tushareTestMonthWindow(today, 1)
 	previousMonthEnd := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, location).AddDate(0, 0, -1)
 	var weightStarts []string
@@ -1566,7 +1567,7 @@ func TestTushareDailyAppliesAdjustmentFactors(t *testing.T) {
 	}
 }
 
-func TestApplyTushareAdjustmentRejectsMissingOrInvalidFactors(t *testing.T) {
+func TestApplyTushareAdjustmentRejectsMissingOrInvalidFactorsAcrossDailySeries(t *testing.T) {
 	bar := model.DailyBar{TradeDate: "2026-10-26", Open: 10, High: 11, Low: 9, Close: 10}
 	if _, err := applyTushareAdjustment([]model.DailyBar{bar}, map[string]float64{}, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "requires daily bars and adjustment factors") {
 		t.Fatalf("empty factors should be rejected explicitly, got %v", err)

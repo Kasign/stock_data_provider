@@ -13,16 +13,16 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
 )
 
-type fundamentalsFallbackTestProvider struct {
+type unknownEmptyFundamentalsFallbackTestProvider struct {
 	name     string
 	snapshot *model.FundamentalsSnapshot
 	err      error
 	calls    int
 }
 
-func (p *fundamentalsFallbackTestProvider) Name() string { return p.name }
+func (p *unknownEmptyFundamentalsFallbackTestProvider) Name() string { return p.name }
 
-func (p *fundamentalsFallbackTestProvider) FetchFundamentals(_ context.Context, symbol string, year, quarter int) (*model.FundamentalsSnapshot, error) {
+func (p *unknownEmptyFundamentalsFallbackTestProvider) FetchFundamentals(_ context.Context, symbol string, year, quarter int) (*model.FundamentalsSnapshot, error) {
 	p.calls++
 	if p.err != nil {
 		return nil, p.err
@@ -86,7 +86,7 @@ func (p *indexCatalogFallbackTestProvider) FetchIndexDailyBars(context.Context, 
 	return nil, errors.New("unused test index daily bars")
 }
 
-func fundamentalsFallbackService(providers ...provider.FundamentalsProvider) *DataService {
+func unknownEmptyFundamentalsFallbackService(providers ...provider.FundamentalsProvider) *DataService {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, logger)
 	svc.SetFundamentalsProviders(providers)
@@ -126,9 +126,9 @@ func validIndexConstituentsForFallbackTest(source string) *model.IndexConstituen
 }
 
 func TestFundamentalsFallsBackAfterUnknownEmptyReportPeriod(t *testing.T) {
-	first := &fundamentalsFallbackTestProvider{name: "baostock", snapshot: unknownFundamentalsForFallbackTest("baostock")}
-	second := &fundamentalsFallbackTestProvider{name: "tushare", snapshot: validFundamentalsForFallbackTest("tushare")}
-	got, hit, err := fundamentalsFallbackService(first, second).Fundamentals(context.Background(), "600519.SH", 2025, 4)
+	first := &unknownEmptyFundamentalsFallbackTestProvider{name: "baostock", snapshot: unknownFundamentalsForFallbackTest("baostock")}
+	second := &unknownEmptyFundamentalsFallbackTestProvider{name: "tushare", snapshot: validFundamentalsForFallbackTest("tushare")}
+	got, hit, err := unknownEmptyFundamentalsFallbackService(first, second).Fundamentals(context.Background(), "600519.SH", 2025, 4)
 	if err != nil || hit {
 		t.Fatalf("Fundamentals returned hit=%v err=%v", hit, err)
 	}
