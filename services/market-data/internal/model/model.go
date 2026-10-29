@@ -78,6 +78,7 @@ type DailyBar struct {
 	ProviderTime      *time.Time      `json:"provider_timestamp,omitempty"`
 	FetchedAt         time.Time       `json:"fetched_at"`
 	NormalizedAt      time.Time       `json:"normalized_at"`
+	SystemObservedAt  *time.Time      `json:"system_observed_at,omitempty"`
 	RawVolume         *float64        `json:"raw_volume,omitempty"`
 	RawVolumeUnit     string          `json:"raw_volume_unit,omitempty"`
 	RawAmount         *float64        `json:"raw_amount,omitempty"`
