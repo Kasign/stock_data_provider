@@ -265,9 +265,15 @@ Tushare 公告端点返回完全重复的记录时，适配器按规范化的证
 东方财富热度榜仅接受普通沪深 A 股代码段。市场标记和六位数字本身不足以证明是股票；ETF、指数、可转债、B 股及无法映射到已支持普通股票代码段的记录必须拒绝当前榜单候选并触发后备源，不能把它们标准化成个股。北交所暂不在该东方财富热度榜适配器支持范围内。
 
 
-### 行业/概念排行的显式总数
+### 行业/概念排行的显式总数与覆盖账本
 
 东方财富行业/概念排行响应若提供 `total`，该值必须为正且与本页原始返回条数满足 `len(diff)=min(limit,total)`；显式 `total=0` 但同时返回条目属于源端矛盾，必须拒绝并回退。只有 `total` 字段确实缺失时，才允许使用已解析返回数作为下界，并附加 `provider_total_missing_using_returned_count`，保持 degraded。不能将缺失字段与显式零值混为一谈。
+
+行业排行快照统一提供 `provider_returned`、`excluded_rows` 和 `total_is_lower_bound`：
+
+- Eastmoney 的 `provider_returned` 为本次 CLIST 响应的原始 `diff` 行数；必填字段无效而未输出的行计入 `excluded_rows`。显式 `total` 被保留为来源计数；若缺失，则 `total` 只能使用已解析输出数，且必须设置 `total_is_lower_bound=true`。
+- TickFlow 的 `provider_returned` 为完整发现并校验过的 SW1 行业池数；由于没有任何成分报价可用于计算涨跌幅而被跳过的行业计入 `excluded_rows`。源端行业池总数已完整校验时 `total_is_lower_bound=false`，但缺失行业仍必须通过质量原因显式披露。
+- 请求 `limit` 只限制 `items`，不能覆盖原始返回数或源端总数。若必填字段过滤导致候选不完整，服务层应拒绝当前 Provider 并继续回退；覆盖字段用于诊断源端差异，不表示允许不完整榜单直接进入分析主流程。
 
 
 ### 热度榜排名连续性
