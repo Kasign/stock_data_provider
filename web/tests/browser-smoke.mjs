@@ -540,11 +540,54 @@ try {
         { timeout: 5000 }
       );
 
+      // First fail B's quote while B's daily bars succeed; then manually retry B before A's late response attempts to return.
+      quoteScenario = "503";
+      await submitQuote.click();
+      await page.waitForFunction(
+        () => document.querySelector("#market-notice")?.textContent.includes("上游 Provider 暂不可用") &&
+          document.querySelector("#metric-price")?.textContent.trim() === "—" &&
+          document.querySelector("#quote-quality")?.textContent.trim() === "未取得报价" &&
+          document.querySelector("#bars-caption")?.textContent.includes("000001.SH") &&
+          document.querySelector("#bars-meta")?.textContent.trim() === "1 根" &&
+          document.querySelector("#technical-ma-5")?.textContent.trim() === "样本不足",
+        null,
+        { timeout: 10000 }
+      );
+      assert.equal(quoteRequestCount, staleRequestCount + 2, "B's first request should fail Quote while its daily bars request succeeds");
+      const partialBState = await page.evaluate(() => ({
+        quoteTitle: document.querySelector("#quote-title")?.textContent || "",
+        price: document.querySelector("#metric-price")?.textContent.trim() || "",
+        quality: document.querySelector("#quote-quality")?.textContent.trim() || "",
+        qualityClass: document.querySelector("#quote-quality")?.className || "",
+        barsCaption: document.querySelector("#bars-caption")?.textContent || "",
+        barsMeta: document.querySelector("#bars-meta")?.textContent.trim() || "",
+        barsRows: document.querySelector("#bars-body")?.textContent || "",
+        technicalMA5: document.querySelector("#technical-ma-5")?.textContent.trim() || "",
+        technicalMA20: document.querySelector("#technical-ma-20")?.textContent.trim() || "",
+        overviewSymbol: document.querySelector("#research-overview-symbol")?.textContent || "",
+        overviewMA5: document.querySelector("#research-overview-ma5")?.textContent.trim() || ""
+      }));
+      assert.match(partialBState.quoteTitle, /000001\.SH/);
+      assert.equal(partialBState.price, "—", "B's failed Quote must not show A's old price");
+      assert.equal(partialBState.quality, "未取得报价");
+      assert.match(partialBState.qualityClass, /quality-unknown/);
+      assert.match(partialBState.barsCaption, /000001\.SH/);
+      assert.equal(partialBState.barsMeta, "1 根");
+      assert.match(partialBState.barsRows, /10\.25/, "B's valid daily close should remain visible after the Quote 503");
+      assert.equal(partialBState.technicalMA5, "样本不足");
+      assert.equal(partialBState.technicalMA20, "样本不足");
+      assert.match(partialBState.overviewSymbol, /000001\.SH/);
+      assert.equal(partialBState.overviewMA5, "数据不足");
+      await page.waitForTimeout(250);
+      assert.equal(quoteRequestCount, staleRequestCount + 2, "B's quote failure must not trigger a silent retry");
+
       quoteScenario = "success";
+      await page.waitForFunction(() => !document.querySelector("#quote-form button[type='submit']")?.disabled, null, { timeout: 5000 });
       await submitQuote.click();
       await page.waitForFunction(
         () => document.querySelector("#quote-title")?.textContent.includes("000001.SH") &&
           document.querySelector("#metric-price")?.textContent.trim() === "10.25" &&
+          document.querySelector("#quote-quality")?.textContent.trim() === "质量正常" &&
           document.querySelector("#bars-caption")?.textContent.includes("000001.SH") &&
           document.querySelector("#bars-meta")?.textContent.trim() === "1 根" &&
           document.querySelector("#technical-ma-5")?.textContent.trim() === "样本不足" &&
@@ -552,7 +595,7 @@ try {
         null,
         { timeout: 10000 }
       );
-      assert.equal(quoteRequestCount, staleRequestCount + 2, "switching to the new symbol should issue one additional quote request");
+      assert.equal(quoteRequestCount, staleRequestCount + 3, "manual retry should issue exactly one B quote request");
       const newSymbolState = await page.evaluate(() => ({
         quoteTitle: document.querySelector("#quote-title")?.textContent || "",
         price: document.querySelector("#metric-price")?.textContent.trim() || "",
@@ -574,7 +617,7 @@ try {
       assert.equal(newSymbolState.technicalMA20, "样本不足");
       assert.equal(newSymbolState.overviewMA5, "数据不足");
 
-      // Let the old request's delayed server response attempt to arrive after B has rendered.
+      // Let the old request's delayed server response attempt to arrive after B has failed and then recovered.
       await page.waitForTimeout(1800);
       const finalSymbolState = await page.evaluate(() => ({
         quoteTitle: document.querySelector("#quote-title")?.textContent || "",
@@ -590,7 +633,7 @@ try {
       assert.match(finalSymbolState.barsCaption, /000001\.SH/, "a late A response must not overwrite B's daily bars");
       assert.equal(finalSymbolState.technicalMA5, "样本不足", "a late A response must not restore A's MA5");
       assert.equal(finalSymbolState.technicalMA20, "样本不足", "a late A response must not restore A's MA20");
-      assert.equal(quoteRequestCount, staleRequestCount + 2, "late response must not cause a hidden additional request");
+      assert.equal(quoteRequestCount, staleRequestCount + 3, "late response must not cause a hidden additional request");
 
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
