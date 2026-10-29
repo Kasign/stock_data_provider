@@ -135,3 +135,24 @@ test("does not overwrite blank, malformed, non-array, or partially malformed his
     assert.equal(storage.getItem(RECENT_TASKS_KEY), raw, "original stored bytes must remain unchanged");
   }
 });
+
+
+test("does not return a new history item when browser storage rejects the write", () => {
+  const stored = new Map();
+  const storage = {
+    getItem(key) { return stored.has(key) ? stored.get(key) : null; },
+    setItem() { throw new DOMException("Quota exceeded", "QuotaExceededError"); },
+    removeItem(key) { stored.delete(key); }
+  };
+
+  const returned = upsertRecentTask({
+    task_id: "task-not-persisted",
+    analysis_base: "/analysis-api",
+    status: "queued"
+  }, storage);
+
+  assert.deepEqual(returned, []);
+  assert.deepEqual(readRecentTasksState(storage), {
+    items: [], storageReadable: true, storageValid: true, reason: ""
+  });
+});
