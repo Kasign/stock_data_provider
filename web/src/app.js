@@ -1720,7 +1720,7 @@ function renderTechnicalSummary(snapshot = calculateTechnicalIndicators(state.ba
   state.technicalRows = snapshot.rows;
   const latest = snapshot.latest;
   const close = latest?.close;
-  [5,20,60].forEach((period)=>{
+  [5,20,60,120,250].forEach((period)=>{
     const value=latest?.["ma"+period],valueNode=$("#technical-ma-"+period),deltaNode=$("#technical-ma-"+period+"-change");
     valueNode.textContent=Number.isFinite(value)?value.toFixed(2):"样本不足";
     deltaNode.classList.remove("positive","negative");
@@ -4785,7 +4785,7 @@ $("#chart-view-candles").addEventListener("click", () => setChartView("candles")
 document.querySelectorAll("[data-ma-period]").forEach((control)=>{
   control.addEventListener("change",()=>{
     const period=Number(control.dataset.maPeriod);
-    if(![5,20,60].includes(period))return;
+    if(![5,20,60,120,250].includes(period))return;
     state.movingAverages=control.checked?[...new Set([...state.movingAverages,period])].sort((a,b)=>a-b):state.movingAverages.filter((item)=>item!==period);
     renderChartView();
   });
