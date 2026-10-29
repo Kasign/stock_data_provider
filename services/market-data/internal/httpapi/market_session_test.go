@@ -71,7 +71,7 @@ func TestMarketSessionRouteReturnsScheduledPhase(t *testing.T) {
 		!got.IsTradingSession || !got.IsContinuousTrading || got.IsAuction {
 		t.Fatalf("unexpected market-session payload: %+v", got)
 	}
-	if got.Source != "market-session-fixture" || got.LocalDate != "2026-10-22" || got.LocalTime != "09:30:00" {
+	if got.Source != "market-session-fixture" || got.LocalDate != "2026-10-22" || got.LocalTime != "09:30:00" || got.TimeZone != "Asia/Shanghai" || got.ServerTime.IsZero() {
 		t.Fatalf("market-session source/local time is incorrect: %+v", got)
 	}
 }
