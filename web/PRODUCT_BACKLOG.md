@@ -1,3 +1,7 @@
+- [x] 保存连接与未保存草稿分别覆盖 401/403/404/503/网络失败；已保存值、已保存反馈与未保存草稿互不污染。
+- [x] 两类检查的迟到响应竞态均已回归：保存新连接后旧探针结果无效；草稿在途时变更路径后旧结果被忽略。
+- [x] 最新检查 [#40829190517](https://github.com/Kasign/stock_data_provider/actions/runs/40829190517) 与 Browser Smoke [#40829190473](https://github.com/Kasign/stock_data_provider/actions/runs/40829190473) 通过（HEAD `9dfe85bdd75defe7a9958bf7a40c2d0a394d0458`）。
+
 - [x] 保存连接与未保存草稿分别完成 401/403/404/503/网络失败浏览器矩阵：无静默重试、保存值不变、草稿反馈不覆盖已保存结果、草稿路径不落盘。
 - [x] 最新 checks [#40828373061](https://github.com/Kasign/stock_data_provider/actions/runs/40828373061) 与 Browser Smoke [#40828373063](https://github.com/Kasign/stock_data_provider/actions/runs/40828373063) 通过（HEAD `fffac2436257fca7d7789e01dc91719d02f3ed0e`）。
 

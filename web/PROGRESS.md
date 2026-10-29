@@ -1,3 +1,12 @@
+## 2026-10-29 — 保存连接与草稿检查的竞态隔离
+
+- 在原有 10 组保存/草稿连接错误矩阵后，增加两个异步竞态回归。
+- 已保存检查：延迟旧 API 路径的两项健康探针，期间保存新路径；保存动作使旧 generation 失效，迟到 503 不会覆盖“连接配置已变化”提示，也不会重发请求或遗留按钮锁。
+- 草稿检查：两项旧探针在途时修改草稿路径；旧结果必须被忽略，不得覆盖最新草稿提示、已保存检查反馈或 localStorage。
+- 最新 HEAD `9dfe85bdd75defe7a9958bf7a40c2d0a394d0458` 的 WebUI checks [#40829190517](https://github.com/Kasign/stock_data_provider/actions/runs/40829190517) 与 Browser Smoke [#40829190473](https://github.com/Kasign/stock_data_provider/actions/runs/40829190473) 均通过。
+- 实际部署中的真实 API 状态仍需 NAS/1Panel 验收。
+
+
 ## 2026-10-29 — 保存连接与未保存草稿错误隔离
 
 - `web/tests/browser-smoke.mjs` 新增已保存连接与未保存草稿两条路径的 401/403/404/503/网络失败矩阵，共 10 组场景。

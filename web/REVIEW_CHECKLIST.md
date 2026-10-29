@@ -1,3 +1,12 @@
+## 2026-10-29 后续追加 — 保存/草稿健康检查竞态
+
+- [x] 已保存连接健康检查与草稿健康检查均覆盖 401/403/404/503/网络失败。
+- [x] 保存路径改变时，旧连接探针迟到回包不能覆盖当前配置变化提示或留下按钮锁。
+- [x] 草稿路径在健康探针在途时发生变化，旧回包被忽略，不覆盖最新草稿提示，不写入 localStorage。
+- [x] HEAD `9dfe85bdd75defe7a9958bf7a40c2d0a394d0458` 对应 WebUI checks [#40829190517](https://github.com/Kasign/stock_data_provider/actions/runs/40829190517) 和 Browser Smoke [#40829190473](https://github.com/Kasign/stock_data_provider/actions/runs/40829190473) 均通过。
+- [ ] 真实 API、实际 Provider 与 NAS/1Panel 反向代理仍需独立验收。
+
+
 ## 2026-10-29 后续追加 — 保存/草稿连接错误隔离
 
 - [x] 已保存连接与未保存草稿均覆盖 401/403/404/503/网络失败。
