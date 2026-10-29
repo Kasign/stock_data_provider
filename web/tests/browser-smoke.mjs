@@ -375,7 +375,7 @@ try {
       quoteScenario = "success";
       await page.waitForFunction(() => !document.querySelector("#quote-form button[type='submit']")?.disabled, null, { timeout: 5000 });
       await submitQuote.click();
-      await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "—", null, { timeout: 3000 });
+      // Successful refreshes may retain a prior same-symbol quote while loading; only wait for the success payload here.
       await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "123.45", null, { timeout: 10000 });
       await page.waitForFunction(() =>
         document.querySelector("#market-health-text")?.textContent === "不可用" &&
