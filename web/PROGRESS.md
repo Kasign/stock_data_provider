@@ -1,3 +1,12 @@
+## 2026-10-29 — 首页市场状态矩阵与旧结果清理
+
+- 首页市场总览新增浏览器状态矩阵：401、403、404、503 与普通网络失败，验证错误提示、模块状态、刷新摘要与无静默重试。
+- 测试先返回一个有效的“测试指数”结果，再逐项返回错误；验证指数列表不会保留上一次的指数卡片。
+- 市场总览刷新同时检查指数和市场广度。两者在 503 下均失败时摘要计为 Provider 不可用 2 个，避免把两个模块的刷新误算成一个。
+- 最新 HEAD `f32a7190cb753b27f169c10a680e927719e09f34` 对应 WebUI checks [#40812808507](https://github.com/Kasign/stock_data_provider/actions/runs/40812808507) 和 Browser Smoke [#40812808557](https://github.com/Kasign/stock_data_provider/actions/runs/40812808557)，均通过。
+- 自动化以本地测试响应为数据，不代表真实 Provider/API Key/反向代理或 NAS/1Panel 生产环境验收。
+
+
 ## 2026-10-29 — API 错误矩阵与首页鉴权错误修正
 
 - `web/src/format.js` 将浏览器 `Failed to fetch` / `NetworkError` / `Load failed` 归类为中文网络连接、反向代理与服务状态提示；HTTP 状态、错误码和 request ID 的展示行为保留。

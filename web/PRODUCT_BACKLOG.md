@@ -26,6 +26,8 @@
 - [x] 清理 6 组在 HTML/运行时 JS 中无引用的历史样式，并保留动态图表/运行流状态与有效主题规则；样式提交的检查和 Browser Smoke 均通过（[#40810083891](https://github.com/Kasign/stock_data_provider/actions/runs/40810083891)、[#40810083745](https://github.com/Kasign/stock_data_provider/actions/runs/40810083745)）。
 - [x] Browser Smoke 在 320px 隔离上下文中验证浅色主题在页面刷新后仍能恢复，最后回到深色；最新检查与烟测均通过（[#40810222011](https://github.com/Kasign/stock_data_provider/actions/runs/40810222011)、[#40810221922](https://github.com/Kasign/stock_data_provider/actions/runs/40810221922)）。
 - [x] 完成报价 API 的 401/403/404/503/网络失败端到端矩阵：检查准确文案、旧行情/报价时间清除、unknown 质量、连接状态不误报健康、无静默后台重试和手动重试恢复。
+- [x] 首页市场总览覆盖同一 401/403/404/503/网络失败矩阵，并先显示成功的测试指数，再验证每种错误后旧指数卡片清空、模块状态降级、刷新摘要计数正确且没有静默重试。
+- [x] 最新 WebUI checks [#40812808507](https://github.com/Kasign/stock_data_provider/actions/runs/40812808507) 和 Browser Smoke [#40812808557](https://github.com/Kasign/stock_data_provider/actions/runs/40812808557) 均通过（HEAD `f32a7190cb753b27f169c10a680e927719e09f34`）。
 - [x] 修复首页市场总览将所有 401/403 都归因于 API Key 的误导文案，使用共享状态描述；增加单测和首页 401/403 浏览器回归。
 - [x] 最新完整检查 [#40812213468](https://github.com/Kasign/stock_data_provider/actions/runs/40812213468) 与 Browser Smoke [#40812213510](https://github.com/Kasign/stock_data_provider/actions/runs/40812213510) 通过（代码 HEAD `360182366b866692ee8c5b1c77d4f77924a6ad32`）。
 - [ ] 仍需在真实 Provider/API 与 NAS/1Panel 环境验收鉴权、代理和实际数据质量；本地浏览器桩不能替代线上验收。

@@ -1,3 +1,12 @@
+## 2026-10-29 后续追加 — 首页市场旧结果清除回归
+
+- [x] 首页市场总览状态矩阵覆盖 401/403/404/503/普通网络失败，逐项断言错误提示、状态、摘要和请求次数。
+- [x] 首页市场测试先建立成功指数卡片，再验证每种失败都不会残留上一份指数数据。
+- [x] 503 时摘要按实际刷新范围计数：指数与市场广度两个模块都不可用时，显示 Provider 不可用 2 个。
+- [x] HEAD `f32a7190cb753b27f169c10a680e927719e09f34` 的 WebUI checks [#40812808507](https://github.com/Kasign/stock_data_provider/actions/runs/40812808507) 和 Browser Smoke [#40812808557](https://github.com/Kasign/stock_data_provider/actions/runs/40812808557) 均通过。
+- [ ] 真实 Provider、认证和 NAS/1Panel 部署仍需独立验收；自动化矩阵用确定性测试响应。
+
+
 ## 2026-10-29 后续续接 — API 状态矩阵和市场总览鉴权文案
 
 - [x] HTTP 401/403/404/503 单测验证状态、code、request ID 保留；普通 Fetch 网络失败由 UI 分类为中文网络/代理提示。
