@@ -215,6 +215,8 @@ func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDa
 		DelistingStatus:         model.DelistingStatusNormal,
 		ListingTradingDayNumber: 100, ListingStatusKnown: true,
 		IsTradingDay: true, TradingDayKnown: true,
+		Source: "fixture-provider", SourceVersion: "fixture-v1",
+		FetchedAt: time.Now().UTC(),
 		QualityStatus: model.QualityValid,
 	}
 	evidence := &model.PriceLimitEventEvidence{
@@ -256,6 +258,33 @@ func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDa
 		}
 		if got.Status != model.PriceLimitStatusUnknown || got.LimitPercent != nil {
 			t.Fatalf("non-trading date must not produce a price-limit result, got %+v", got)
+		}
+	})
+
+
+	t.Run("missing source provenance cannot produce a rule", func(t *testing.T) {
+		status := base
+		status.Source = ""
+		got, err := ResolvePriceLimitRuleFromTradingStatus("600519.SH", "2026-07-06", &status, evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != model.PriceLimitStatusUnknown || got.LimitPercent != nil ||
+			!hasRuleReason(got.QualityReasons, "security_trading_status_source_provenance_missing_or_invalid") {
+			t.Fatalf("missing source provenance must fail closed, got %+v", got)
+		}
+	})
+
+	t.Run("future source fetch time cannot produce a rule", func(t *testing.T) {
+		status := base
+		status.FetchedAt = time.Now().UTC().Add(24 * time.Hour)
+		got, err := ResolvePriceLimitRuleFromTradingStatus("600519.SH", "2026-07-06", &status, evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != model.PriceLimitStatusUnknown || got.LimitPercent != nil ||
+			!hasRuleReason(got.QualityReasons, "security_trading_status_source_provenance_missing_or_invalid") {
+			t.Fatalf("future source fetch time must fail closed, got %+v", got)
 		}
 	})
 
