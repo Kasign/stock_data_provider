@@ -174,7 +174,7 @@ func boardPriceLimit(board, tradeDate string, riskStatus model.RiskWarningStatus
 		if tradeDate >= mainBoardRiskWarningChangeDate {
 			return 10, "cn-mainboard-10-percent-current-v2", mainBoardRiskWarningChangeDate, "", false
 		}
-		return 10, "cn-mainboard-10-percent-v1", "", "2026-07-05", false
+		return 10, "cn-mainboard-10-percent-v1", "", "", false
 	case "chinext":
 		if tradeDate >= chiNextTwentyPercentDate {
 			return 20, "cn-chinext-20-percent-2020-08-24", chiNextTwentyPercentDate, "", false
