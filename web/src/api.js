@@ -22,12 +22,19 @@ export function saveSettings(settings) {
     analysisBase: normalizeBasePath(settings.analysisBase, DEFAULTS.analysisBase),
     apiKey: String(settings.apiKey ?? "").trim()
   };
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(value));
+  const serialized = JSON.stringify(value);
+  localStorage.setItem(SETTINGS_KEY, serialized);
+  if (localStorage.getItem(SETTINGS_KEY) !== serialized) {
+    throw new Error("设置未能保存到当前浏览器，请检查存储权限或可用空间。");
+  }
   return value;
 }
 
 export function clearSettings() {
   localStorage.removeItem(SETTINGS_KEY);
+  if (localStorage.getItem(SETTINGS_KEY) !== null) {
+    throw new Error("未能确认本地连接设置已清除，请检查浏览器存储后重试。");
+  }
   return { ...DEFAULTS };
 }
 
