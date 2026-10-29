@@ -264,15 +264,26 @@ try {
     }
 
     if (viewport.width === 320) {
+      const savedSettings = await page.evaluate(() => {
+        try { return JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}"); }
+        catch { return {}; }
+      });
+      assert.equal(savedSettings.apiKey, "browser-test-key", "the isolated API-error scenario must load its test API key");
+
+      await page.locator("#bar-start-date").fill("2026-10-01");
+      await page.locator("#bar-end-date").fill("2026-10-28");
+      const submitQuote = page.locator("#quote-form button[type='submit']");
+
+      // Explicitly seed a prior valid quote after configuring the range, instead of depending on startup auto-refresh timing.
+      quoteScenario = "success";
+      await page.waitForFunction(() => !document.querySelector("#quote-form button[type='submit']")?.disabled, null, { timeout: 5000 });
+      await submitQuote.click();
+      await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "—", null, { timeout: 3000 });
       await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "123.45", null, { timeout: 10000 });
       await page.waitForFunction(() =>
         document.querySelector("#market-health-text")?.textContent === "不可用" &&
         document.querySelector("#analysis-health-text")?.textContent === "不可用",
       null, { timeout: 10000 });
-
-      await page.locator("#bar-start-date").fill("2026-10-01");
-      await page.locator("#bar-end-date").fill("2026-10-28");
-      const submitQuote = page.locator("#quote-form button[type='submit']");
 
       for (const scenario of ["401", "403", "404", "503", "network"]) {
         const expected = quoteErrors[scenario];
