@@ -200,7 +200,6 @@ func ResolvePriceLimitRuleWithEvidence(
 	return result, nil
 }
 
-
 func priceLimitEvidenceCoversDate(evidence *model.PriceLimitEventEvidence, date time.Time) bool {
 	from, err := time.Parse("2006-01-02", evidence.EffectiveFrom)
 	if err != nil || from.Format("2006-01-02") != evidence.EffectiveFrom {
