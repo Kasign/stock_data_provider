@@ -77,7 +77,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 			Returned: 0, SourceReturned: 0, ExcludedNonAShareCount: 0, HasData: false, HasMore: false,
 			Items: []model.DragonTigerItem{}, Source: p.Name(),
 			SourceVersion: "eastmoney-datacenter-dragon-tiger-v1", FetchedAt: time.Now().UTC(),
-			QualityStatus: model.QualityUnknown,
+			QualityStatus:  model.QualityUnknown,
 			QualityReasons: []string{"provider_returned_empty_report_cannot_distinguish_no_events_from_unavailable_or_not_yet_published", "provider_empty_response_code_9201"},
 		}, nil
 	}

@@ -1383,7 +1383,6 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	}, nil
 }
 
-
 func isTushareConvertibleBondCode(raw string) bool {
 	code := strings.ToUpper(strings.TrimSpace(raw))
 	parts := strings.Split(code, ".")
