@@ -216,7 +216,7 @@ func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDa
 		ListingTradingDayNumber: 100, ListingStatusKnown: true,
 		IsTradingDay: true, TradingDayKnown: true,
 		Source: "fixture-provider", SourceVersion: "fixture-v1",
-		FetchedAt: time.Now().UTC(),
+		FetchedAt:     time.Now().UTC(),
 		QualityStatus: model.QualityValid,
 	}
 	evidence := &model.PriceLimitEventEvidence{
@@ -260,7 +260,6 @@ func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDa
 			t.Fatalf("non-trading date must not produce a price-limit result, got %+v", got)
 		}
 	})
-
 
 	t.Run("missing source provenance cannot produce a rule", func(t *testing.T) {
 		status := base
