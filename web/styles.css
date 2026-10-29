@@ -4439,3 +4439,6 @@ td {
   outline-offset: 4px;
   border-radius: 3px;
 }
+
+/* 左侧导航分组：核心行情、研究任务与系统配置分层展示。 */
+.side-nav-section-label { padding-top: 16px; padding-bottom: 4px; }
