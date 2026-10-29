@@ -203,15 +203,16 @@ function selectStockFromMarket(item, source = "市场榜单") {
   void runQuoteQuery();
 }
 
-function syncThemeControl(theme) {
+function syncThemeControl(theme, persistenceWarning = false) {
   const current = theme === "light" ? "light" : "dark";
   const target = current === "dark" ? "light" : "dark";
   const targetLabel = target === "light" ? "浅色" : "深色";
+  const warning = persistenceWarning ? "；当前页面已切换，但未能确认主题偏好已保存" : "";
   $("#theme-toggle-icon").textContent = target === "light" ? "☼" : "☾";
   $("#theme-toggle-label").textContent = targetLabel;
-  $("#theme-toggle").setAttribute("aria-label", "切换主题");
+  $("#theme-toggle").setAttribute("aria-label", persistenceWarning ? "切换主题；当前主题未能保存" : "切换主题");
   $("#theme-toggle").setAttribute("aria-pressed", String(current === "light"));
-  $("#theme-toggle").title = "当前" + (current === "light" ? "浅色" : "深色") + "主题；点击切换至" + targetLabel + "主题";
+  $("#theme-toggle").title = "当前" + (current === "light" ? "浅色" : "深色") + "主题；点击切换至" + targetLabel + "主题" + warning;
 }
 
 function setMobileNavigationOpen(open, { restoreFocus = false } = {}) {
@@ -4554,9 +4555,9 @@ async function importBrowserDataFile(file) {
 syncThemeControl(readTheme());
 $("#theme-toggle").addEventListener("click", () => {
   const nextTheme = readTheme() === "dark" ? "light" : "dark";
-  persistTheme(nextTheme);
-  applyTheme(nextTheme);
-  syncThemeControl(nextTheme);
+  const result = persistTheme(nextTheme);
+  applyTheme(result.theme);
+  syncThemeControl(result.theme, !result.persisted);
 });
 $("#mobile-menu-toggle").addEventListener("click", () => {
   setMobileNavigationOpen(!$(".sidebar").classList.contains("is-open"));
@@ -4673,10 +4674,13 @@ bindSectionNavigation("[data-settings-target]", "settingsTarget");
 bindSectionNavigation("[data-research-detail-target]", "researchDetailTarget");
 document.querySelectorAll("[data-theme-value]").forEach((button) => {
   button.addEventListener("click", () => {
-    const theme = persistTheme(button.dataset.themeValue);
-    applyTheme(theme);
-    syncThemeControl(theme);
-    syncSettingsThemeButtons(theme);
+    const result = persistTheme(button.dataset.themeValue);
+    applyTheme(result.theme);
+    syncThemeControl(result.theme, !result.persisted);
+    syncSettingsThemeButtons(result.theme);
+    $("#settings-feedback").textContent = result.persisted
+      ? "主题偏好已保存。"
+      : "主题已在当前页面切换，但未能确认保存；重新载入后可能恢复旧主题。";
   });
 });
 document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
