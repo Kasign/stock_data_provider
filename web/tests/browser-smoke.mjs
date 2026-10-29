@@ -80,12 +80,101 @@ try {
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
 
-    // API is intentionally unavailable in this layout-only test; never invent market or task data.
-    await page.route("**/api/**", (route) => route.fulfill({
-      status: 503,
-      contentType: "application/json",
-      body: JSON.stringify({ error: "Browser layout test: backend intentionally unavailable" })
-    }));
+    // API responses are deterministic fixtures only: one isolated viewport exercises failures, others stay unavailable.
+    let quoteScenario = "success";
+    let quoteRequestCount = 0;
+    const quoteFixture = {
+      symbol: "600519.SH",
+      name: "贵州茅台",
+      current_price: 123.45,
+      change: 1.23,
+      change_percent: 1.01,
+      amount: 123450,
+      volume: 1000,
+      turnover_rate: 1.2,
+      volume_ratio: 1.05,
+      source: "browser-test-fixture",
+      quote_time: "2026-10-28T07:00:00Z",
+      quality_status: "valid",
+      quality_reasons: []
+    };
+    const barsFixture = {
+      symbol: "600519.SH",
+      bars: [{
+        trade_date: "2026-10-28",
+        open: 122.5,
+        high: 124,
+        low: 121.8,
+        close: 123.45,
+        volume: 1000,
+        amount: 123450,
+        change_percent: 1.01
+      }],
+      adjustment_basis: "forward_adjusted",
+      volume_unit: "shares",
+      amount_unit: "CNY",
+      quality_status: "valid",
+      warnings: []
+    };
+    const quoteErrors = {
+      "401": { status: 401, code: "auth_required", message: "credentials required", requestId: "req-browser-401", expected: "接口认证失败" },
+      "403": { status: 403, code: "access_denied", message: "permission denied", requestId: "req-browser-403", expected: "当前请求被服务拒绝" },
+      "404": { status: 404, code: "quote_not_found", message: "quote does not exist", requestId: "req-browser-404", expected: "接口或资源不存在" },
+      "503": { status: 503, code: "provider_unavailable", message: "上游 Provider 暂不可用", requestId: "req-browser-503", expected: "上游 Provider 暂不可用" },
+      network: { status: 0, expected: "网络请求失败" }
+    };
+
+    if (viewport.width === 320) {
+      await context.addInitScript(() => {
+        localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
+          marketBase: "/market-api",
+          analysisBase: "/analysis-api",
+          apiKey: "browser-test-key"
+        }));
+      });
+    }
+
+    await page.route("**/*", async (route) => {
+      const pathname = new URL(route.request().url()).pathname;
+      const json = (status, body) => route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify(body)
+      });
+
+      if (pathname === "/market-api/health/ready" || pathname === "/analysis-api/readyz") {
+        return json(503, { status: "unavailable", error: "browser test backend unavailable" });
+      }
+
+      if (viewport.width === 320 && pathname.includes("/api/v1/bundles/")) {
+        // Exercise the supported legacy fallback so the successful quote can seed a prior snapshot.
+        return json(404, { error: { code: "route_not_found", message: "bundle endpoint unavailable" } });
+      }
+
+      if (viewport.width === 320 && pathname.includes("/api/v1/quotes/")) {
+        quoteRequestCount += 1;
+        if (quoteScenario === "network") return route.abort("failed");
+        if (quoteScenario === "success") return json(200, quoteFixture);
+        const item = quoteErrors[quoteScenario];
+        return json(item.status, {
+          error: {
+            code: item.code,
+            message: item.message,
+            request_id: item.requestId
+          }
+        });
+      }
+
+      if (viewport.width === 320 && pathname.includes("/api/v1/bars/") && pathname.endsWith("/daily")) {
+        return json(200, barsFixture);
+      }
+
+      if (pathname.includes("/api/")) {
+        return json(503, { error: "Browser layout test: backend intentionally unavailable" });
+      }
+
+      return route.continue();
+    });
 
     await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
     assert.deepEqual(pageErrors, [], "browser page errors after initial load at " + viewport.width + "px: " + pageErrors.join(" | "));
@@ -172,6 +261,67 @@ try {
 
       await page.locator("#theme-toggle").click();
       assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark", "theme should return to dark after persistence check");
+    }
+
+    if (viewport.width === 320) {
+      await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "123.45", null, { timeout: 10000 });
+      await page.waitForFunction(() =>
+        document.querySelector("#market-health-text")?.textContent === "不可用" &&
+        document.querySelector("#analysis-health-text")?.textContent === "不可用",
+      null, { timeout: 10000 });
+
+      await page.locator("#bar-start-date").fill("2026-10-01");
+      await page.locator("#bar-end-date").fill("2026-10-28");
+      const submitQuote = page.locator("#quote-form button[type='submit']");
+
+      for (const scenario of ["401", "403", "404", "503", "network"]) {
+        const expected = quoteErrors[scenario];
+        const requestsBeforeFailure = quoteRequestCount;
+        quoteScenario = scenario;
+        await submitQuote.click();
+
+        await page.waitForFunction(
+          (expectedMessage) => document.querySelector("#market-notice")?.textContent.includes(expectedMessage),
+          expected.expected,
+          { timeout: 8000 }
+        );
+        assert.equal(quoteRequestCount, requestsBeforeFailure + 1, scenario + " should make one quote request");
+        await page.waitForTimeout(250);
+        assert.equal(quoteRequestCount, requestsBeforeFailure + 1, scenario + " should not silently retry in the background");
+
+        const failedQuote = await page.evaluate(() => ({
+          price: document.querySelector("#metric-price")?.textContent.trim(),
+          change: document.querySelector("#metric-change")?.textContent.trim(),
+          amount: document.querySelector("#metric-amount")?.textContent.trim(),
+          volume: document.querySelector("#metric-volume")?.textContent.trim(),
+          turnover: document.querySelector("#metric-turnover")?.textContent.trim(),
+          qualityText: document.querySelector("#quote-quality")?.textContent.trim(),
+          qualityClass: document.querySelector("#quote-quality")?.className || "",
+          lastUpdated: document.querySelector("#last-updated")?.textContent.trim(),
+          marketHealth: document.querySelector("#market-health-dot")?.className || "",
+          analysisHealth: document.querySelector("#analysis-health-dot")?.className || "",
+          overallConnection: document.querySelector("#connection-dot")?.className || ""
+        }));
+        assert.equal(failedQuote.price, "—", scenario + " must clear the previous price");
+        assert.equal(failedQuote.change, "本次报价不可用", scenario + " must not retain old change data");
+        assert.equal(failedQuote.amount, "—", scenario + " must not retain old turnover amount");
+        assert.equal(failedQuote.volume, "—", scenario + " must not retain old volume");
+        assert.equal(failedQuote.turnover, "—", scenario + " must not retain old turnover rate");
+        assert.equal(failedQuote.qualityText, "未取得报价", scenario + " must not present a failed quote as healthy");
+        assert.match(failedQuote.qualityClass, /quality-unknown/);
+        assert.equal(failedQuote.lastUpdated, "—", scenario + " must clear the previous quote timestamp");
+        assert.doesNotMatch(failedQuote.marketHealth, /is-online/, scenario + " must not report a healthy market API");
+        assert.doesNotMatch(failedQuote.analysisHealth, /is-online/, scenario + " must not report a healthy analysis API");
+        assert.doesNotMatch(failedQuote.overallConnection, /is-online/, scenario + " must not report healthy overall connectivity");
+
+        // A user-initiated retry must issue exactly one new request and restore data only after success.
+        quoteScenario = "success";
+        await submitQuote.click();
+        await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "—", null, { timeout: 3000 });
+        await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "123.45", null, { timeout: 8000 });
+        assert.equal(quoteRequestCount, requestsBeforeFailure + 2, scenario + " manual retry should make one new request");
+        assert.equal(await page.locator("#quote-quality").textContent().then((value) => value.trim()), "质量正常");
+      }
     }
 
     const assertNoHorizontalOverflow = async (stage) => {

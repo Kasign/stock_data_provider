@@ -139,21 +139,26 @@ export function isRetryableApiError(error) {
 
 export function describeApiError(error, fallback = "请求失败") {
   const status = Number(error?.status);
+  const rawMessage = String(error?.message || "").trim();
+  const hasHttpStatus = Number.isFinite(status) && status > 0;
+  const networkFailure = !hasHttpStatus && /failed to fetch|fetch failed|networkerror|load failed/i.test(rawMessage);
   let message;
-  if (status === 401) {
+  if (networkFailure) {
+    message = "网络请求失败，请检查网络连接、反向代理及服务状态。";
+  } else if (status === 401) {
     message = "接口认证失败，请检查当前服务的认证与反向代理配置。";
   } else if (status === 403) {
     message = "当前请求被服务拒绝，请检查访问权限。";
   } else if (status === 404) {
     message = "接口或资源不存在，请检查 API 路径、服务版本及资源 ID。";
   } else if (status === 502 || status === 503 || status === 504) {
-    message = error?.message || "后端服务暂不可用。";
+    message = rawMessage || "后端服务暂不可用。";
   } else {
-    message = error?.message || fallback;
+    message = rawMessage || fallback;
   }
 
   const details = [];
-  if (Number.isFinite(status) && status > 0) details.push("HTTP " + status);
+  if (hasHttpStatus) details.push("HTTP " + status);
   const code = String(error?.code || "").trim();
   if (code && code !== "http_error") details.push("code=" + code);
   const requestId = String(error?.requestId || "").trim();

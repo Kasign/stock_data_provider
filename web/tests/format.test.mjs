@@ -100,6 +100,34 @@ test("formats API errors without assuming every 401 is a market API-key problem"
 });
 
 
+test("describes HTTP error matrix distinctly and turns browser fetch failures into actionable Chinese feedback", () => {
+  const cases = [
+    { status: 401, code: "auth_required", expected: /接口认证失败/ },
+    { status: 403, code: "access_denied", expected: /当前请求被服务拒绝/ },
+    { status: 404, code: "route_not_found", expected: /接口或资源不存在/ },
+    { status: 503, code: "provider_unavailable", message: "上游 Provider 暂不可用", expected: /上游 Provider 暂不可用/ }
+  ];
+
+  for (const item of cases) {
+    const message = describeApiError({
+      status: item.status,
+      code: item.code,
+      requestId: "req-" + item.status,
+      message: item.message || "server diagnostic"
+    });
+    assert.match(message, item.expected, "HTTP " + item.status + " should have a specific diagnostic");
+    assert.match(message, new RegExp("HTTP " + item.status));
+    assert.match(message, new RegExp("code=" + item.code));
+    assert.match(message, new RegExp("request_id=req-" + item.status));
+  }
+
+  const networkMessage = describeApiError(new TypeError("Failed to fetch"));
+  assert.match(networkMessage, /网络请求失败/);
+  assert.match(networkMessage, /检查网络连接、反向代理及服务状态/);
+  assert.doesNotMatch(networkMessage, /Failed to fetch/);
+  assert.equal(isRetryableApiError(new TypeError("Failed to fetch")), true);
+});
+
 test("classifies transient request failures separately from permanent client errors", () => {
   for (const error of [
     new Error("network offline"),

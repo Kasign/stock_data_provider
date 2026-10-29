@@ -262,3 +262,49 @@ test("searches stocks by Chinese name through the authenticated market API and f
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("preserves the full 401/403/404/503 HTTP error matrix without converting failures to data", async () => {
+  const originalFetch = globalThis.fetch;
+  const cases = [
+    { status: 401, code: "auth_required", message: "credentials required" },
+    { status: 403, code: "access_denied", message: "permission denied" },
+    { status: 404, code: "quote_not_found", message: "quote does not exist" },
+    { status: 503, code: "provider_unavailable", message: "upstream provider unavailable" }
+  ];
+  try {
+    for (const item of cases) {
+      globalThis.fetch = async () => jsonResponse({
+        error: { code: item.code, message: item.message, request_id: "req-" + item.status }
+      }, item.status);
+
+      await assert.rejects(
+        getQuote({ marketBase: "/market-api", apiKey: "market-secret" }, "600519.SH"),
+        (error) => {
+          assert.equal(error.status, item.status);
+          assert.equal(error.code, item.code);
+          assert.equal(error.message, item.message);
+          assert.equal(error.requestId, "req-" + item.status);
+          return true;
+        },
+        "HTTP " + item.status + " must reject rather than return an empty/success payload"
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("propagates ordinary fetch network failures so the UI can classify them for retry", async () => {
+  const originalFetch = globalThis.fetch;
+  const failure = new TypeError("Failed to fetch");
+  globalThis.fetch = async () => { throw failure; };
+  try {
+    await assert.rejects(
+      getQuote({ marketBase: "/market-api", apiKey: "market-secret" }, "600519.SH"),
+      (error) => error === failure
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
