@@ -26,9 +26,33 @@ func (s *Server) securityTradingStatus(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "date must not be in the future in Asia/Shanghai", requestID(r))
 		return
 	}
-	snapshot, err := s.svc.SecurityTradingStatus(r.Context(), r.PathValue("symbol"), date)
-	if err != nil {
-		writeDomainErr(w, err, requestID(r))
+	asOfValues, hasAsOf := r.URL.Query()["as_of"]
+	var snapshot *model.SecurityTradingStatusSnapshot
+	var snapshotErr error
+	if hasAsOf {
+		if len(asOfValues) != 1 || strings.TrimSpace(asOfValues[0]) == "" {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a single RFC3339 timestamp", requestID(r))
+			return
+		}
+		asOf, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(asOfValues[0]))
+		if parseErr != nil || asOf.After(time.Now().UTC()) {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "as_of must be a valid non-future RFC3339 timestamp", requestID(r))
+			return
+		}
+		snapshot, snapshotErr = s.svc.SecurityTradingStatusAsOf(r.Context(), r.PathValue("symbol"), date, asOf)
+		switch {
+		case errors.Is(snapshotErr, service.ErrSecurityTradingStatusAsOfUnavailable):
+			writeErr(w, http.StatusServiceUnavailable, "PIT_STORAGE_UNAVAILABLE", "security-trading-status point-in-time storage is not enabled", requestID(r))
+			return
+		case errors.Is(snapshotErr, service.ErrSecurityTradingStatusAsOfNotFound):
+			writeErr(w, http.StatusNotFound, "PIT_REVISION_NOT_FOUND", "no usable security-trading-status revision was recorded by the requested as_of time", requestID(r))
+			return
+		}
+	} else {
+		snapshot, snapshotErr = s.svc.SecurityTradingStatus(r.Context(), r.PathValue("symbol"), date)
+	}
+	if snapshotErr != nil {
+		writeDomainErr(w, snapshotErr, requestID(r))
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
