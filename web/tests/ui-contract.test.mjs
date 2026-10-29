@@ -87,8 +87,8 @@ test("Go rejected Run status maps to a failed task instead of false success", ()
 test("task restoration validates local references and guards stale asynchronous responses", () => {
   assert.match(app, /function restoreLastTask\(\)[\s\S]*?JSON\.parse\(localStorage\.getItem\(TASK_REFERENCE_KEY\) \|\| "null"\)[\s\S]*?catch \{[\s\S]*?return false;[\s\S]*?return activateTaskReference\(record\);/);
   assert.match(app, /function activateTaskReference\(record\)[\s\S]*?if \(!record \|\| typeof record\.task_id !== "string" \|\| !record\.task_id\.trim\(\)\) return false;[\s\S]*?stopTaskPolling\(\);[\s\S]*?state\.taskEvents\.clear\(\);[\s\S]*?void pollTaskSafely\(state\.pollGeneration\);/);
-  assert.match(app, /if \(generation !== state\.pollGeneration \|\| taskId !== state\.taskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
-  assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase \|\| state\.settings\.analysisBase !== analysisBase\) return;/);
+  assert.match(app, /if \(generation !== state\.pollGeneration \|\| taskId !== state\.taskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase \|\|\s*state\.settings\.analysisBase !== analysisBase\) return;/);
+  assert.match(app, /if \(generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase \|\|\s*state\.settings\.analysisBase !== analysisBase\) return;/);
   assert.match(app, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?stopTaskPolling\(\);[\s\S]*?const runId = task\.run_id \|\| state\.runId;[\s\S]*?if \(runId\) void loadTaskRunResult\(runId, taskId\);/);
   assert.match(recentTaskModule, /return \{[\s\S]*?task_id: record\.task_id\.trim\(\)[\s\S]*?status: typeof record\.status === "string" \? record\.status : ""/);
 });
@@ -120,7 +120,7 @@ test("Run 结果重读采用单次请求锁并只由当前代际解锁按钮", (
   const loader = loaderStart >= 0 && loaderEnd > loaderStart ? app.slice(loaderStart, loaderEnd) : "";
   assert.match(loader, /reload-run-result.*disabled[\s\S]*?\["loading", "retrying"\][\s\S]*?return;/);
   assert.match(loader, /setRunResultReloadBusy\(true\)/);
-  assert.match(loader, /finally \{[\s\S]*?generation === state\.runResultGeneration\) setRunResultReloadBusy\(false\)/);
+  assert.match(loader, /finally \{[\s\S]*?if \(generation === state\.runResultGeneration\) \{[\s\S]*?setRunResultReloadBusy\(false\);[\s\S]*?\}\s*\}/);
   assert.equal((app.match(/state\.runResultGeneration \+= 1;\s*releaseRunResultReloadBusy\(\);/g) || []).length, 3, "新建任务、恢复任务和分析地址切换都必须通过安全入口解除旧请求锁");
 });
 
@@ -184,7 +184,7 @@ test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
   const manual = manualStart >= 0 && manualEnd > manualStart ? app.slice(manualStart, manualEnd) : "";
   assert.match(manual, /if \(!state\.taskId \|\| \$\("#refresh-task"\)\.disabled\) return/);
   assert.match(manual, /stopTaskPolling\(\);[\s\S]*?setTaskRefreshBusy\(true\)/);
-  assert.match(manual, /pollTaskSafely\(generation\)\.finally\(\(\) => \{[\s\S]*?generation === state\.pollGeneration\) setTaskRefreshBusy\(false\)/);
+  assert.match(manual, /pollTaskSafely\(generation\)\.finally\(\(\) => \{\s*if \(generation === state\.pollGeneration\) \{[\s\S]*?setTaskRefreshBusy\(false\);[\s\S]*?\} catch \{/);
   assert.match(app, /function stopTaskPolling\(\) \{[\s\S]*?state\.pollGeneration \+= 1;\s*setTaskRefreshBusy\(false\)/);
 });
 
@@ -375,7 +375,9 @@ test("task polling errors mark last-known status stale and successful refresh cl
   const watchlistRenderer = app.slice(app.indexOf("function renderWatchlist("), app.indexOf("\nfunction addCurrentSymbolToWatchlist("));
   assert.ok(watchlistRenderer.includes("状态读取异常（上次状态："), "自选卡片应将上次状态标为未验证");
   assert.ok(watchlistRenderer.includes("自动重试中") && watchlistRenderer.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
-  const manualRefresh = app.slice(app.indexOf('$("#refresh-task").addEventListener("click"'), app.indexOf('$("#recent-analysis-search")'));
+  const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
+  const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
+  const manualRefresh = app.slice(manualStart, manualEnd);
   assert.ok(manualRefresh.includes("state.taskEventsUnavailable = false") && manualRefresh.includes("pollTaskSafely(generation)"), "手动刷新重新尝试任务与事件读取");
   assert.ok(manualRefresh.includes("正在手动刷新任务状态与阶段事件"), "手动刷新开始后应立即反馈，避免旧错误提示看起来未响应");
 });
@@ -419,7 +421,7 @@ test("late task creation responses cannot replace the task selected while submis
   const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
   assert.match(creator, /state\.taskContextGeneration \+= 1;\s*creationContextGeneration = state\.taskContextGeneration;/);
   assert.match(creator, /if \(creationContextGeneration !== state\.taskContextGeneration\) \{[\s\S]*?upsertRecentTask\(endpointRecord, localStorage\)[\s\S]*?当前选中的任务不会被覆盖/);
-  assert.match(creator, /catch \(error\) \{\s*if \(creationContextGeneration !== state\.taskContextGeneration\)/, "late create errors must not hide the currently selected task");
+  assert.match(creator, /catch \(error\) \{\s*try \{\s*if \(creationContextGeneration !== state\.taskContextGeneration\)/, "late create errors must not hide the currently selected task");
   const activateStart = app.indexOf("function activateTaskReference(record) {");
   const activateEnd = app.indexOf("\nfunction restoreLastTask(", activateStart);
   assert.match(app.slice(activateStart, activateEnd), /state\.taskContextGeneration \+= 1;/);
@@ -431,7 +433,7 @@ test("late task creation responses cannot replace the task selected while submis
 test("polling pauses on permanent API errors and Run reads use bounded, stale-safe retries", () => {
   assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\) \{[\s\S]*?自动刷新已暂停[\s\S]*?return;[\s\S]*?state\.pollTimer = window\.setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\);/);
   assert.match(app, /const RUN_RESULT_RETRY_DELAYS_MS = \[1000, 2500, 5000\]/);
-  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration/);
+  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /state\.runResultGeneration \+= 1/);
   assert.match(app, /isRetryableApiError\(error\)/);
 });
@@ -569,7 +571,7 @@ test("market connection changes invalidate all market overview requests and old 
   const settingsStart = app.indexOf("function applySettings(nextSettings,");
   const settingsEnd = app.indexOf("\nfunction saveSettingsFromForm", settingsStart);
   const settingsApplication = settingsStart >= 0 && settingsEnd > settingsStart ? app.slice(settingsStart, settingsEnd) : "";
-  assert.ok(settingsApplication.includes("marketOverview.invalidateConnection();"));
+  assert.ok(settingsApplication.includes("marketOverview.invalidateConnection()"), "连接变更通过安全步骤失效首页请求");
 });
 
 test("market connection changes invalidate in-flight dragon-tiger and calendar requests", () => {
@@ -588,18 +590,18 @@ test("market connection changes invalidate in-flight dragon-tiger and calendar r
   const settingsApplication = settingsStart >= 0 && settingsEnd > settingsStart
     ? app.slice(settingsStart, settingsEnd)
     : "";
-  assert.ok(settingsApplication.includes("marketActivity.invalidateConnection();"));
+  assert.ok(settingsApplication.includes("marketActivity.invalidateConnection()"), "连接变更通过安全步骤失效龙虎榜和交易日历请求");
 });
 
 test("an older stock-research load cannot unlock the current stock's loading button", () => {
   assert.match(stockResearch, /loadResearchGeneration:0/);
   assert.match(stockResearch, /function reset\(symbol\)\{[\s\S]*?state\.loadResearchGeneration\+=1;[\s\S]*?\$\("#load-stock-research"\)/);
-  assert.match(stockResearch, /async function loadResearch\(\)\{[\s\S]*?const requestGeneration=\+\+state\.loadResearchGeneration;[\s\S]*?await Promise\.allSettled\([\s\S]*?requestGeneration!==state\.loadResearchGeneration\|\|symbol!==state\.symbol[\s\S]*?finally\{[\s\S]*?requestGeneration===state\.loadResearchGeneration&&symbol===state\.symbol/);
+  assert.match(stockResearch, /async function loadResearch\(\)\{[\s\S]*?requestGeneration=\+\+state\.loadResearchGeneration;[\s\S]*?await Promise\.allSettled\([\s\S]*?requestGeneration!==state\.loadResearchGeneration\|\|symbol!==state\.symbol[\s\S]*?finally\{[\s\S]*?requestGeneration===state\.loadResearchGeneration&&symbol===state\.symbol/);
 });
 
 test("stale stock research detail requests cannot unlock buttons for a different symbol", () => {
   assert.match(stockResearch, /function reset\(symbol\)[\s\S]*?\["#load-valuations","读取估值指标"\][\s\S]*?\["#load-chip-distribution","读取筹码分布"\][\s\S]*?\["#load-capital-flow","读取资金流"\]/);
-  assert.match(stockResearch, /async function runSupplementRequest\(buttonId,idleText,key,request,render,successMessage\)[\s\S]*?const operation=fetchOne\(key,request,render\)[\s\S]*?const generation=state\.generation\[key\][\s\S]*?generation===state\.generation\[key\]&&symbol===state\.symbol/);
+  assert.match(stockResearch, /async function runSupplementRequest\(buttonId,idleText,key,request,render,successMessage\)[\s\S]*?const operation=fetchOne\(key,request,render\)[\s\S]*?generation=state\.generation\[key\][\s\S]*?generation===state\.generation\[key\]&&symbol===state\.symbol/);
   assert.match(stockResearch, /async function loadValuations\(\)\{[\s\S]*?runSupplementRequest\("#load-valuations"/);
   assert.match(stockResearch, /async function loadChipDistribution\(\)\{[\s\S]*?runSupplementRequest\("#load-chip-distribution"/);
   assert.match(stockResearch, /async function loadCapitalFlow\(\)\{[\s\S]*?runSupplementRequest\("#load-capital-flow"/);
@@ -617,11 +619,11 @@ test("stock research clears stale snapshots on reload, request errors, and missi
   assert.match(app, /stockResearch\.invalidate\(/);
   assert.match(stockResearch, /if\(!append\)setQuality\("announcements-quality","invalid","读取失败"\)/);
   assert.match(stockResearch, /const replacingInFlight=state\.announcementLoading;[\s\S]*?if\(replacingInFlight&&append\)return false;[\s\S]*?if\(replacingInFlight\)\{abort\("announcements"\);state\.announcementLoading=false;\}/);
-  assert.match(stockResearch, /if\(!replacingInFlight\)abort\("announcements"\);\s*const seq=state\.generation\.announcements/);
+  assert.match(stockResearch, /if\(replacingInFlight&&append\)return false;[\s\S]*?if\(replacingInFlight\)\{abort\("announcements"\);state\.announcementLoading=false;\}\s*else abort\("announcements"\);\s*seq=state\.generation\.announcements/);
 });
 
 test("changing market API credentials invalidates old stock-search suggestions", () => {
-  assert.match(app, /function applySettings\(nextSettings, \{ persistPreviousActiveTask = true \} = \{\}\) \{[\s\S]*?previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase[\s\S]*?cancelStockSearchRequest\(\);[\s\S]*?state\.stockSearchResults = \[\];[\s\S]*?\$\("#stock-search-results"\)\.replaceChildren\(\);[\s\S]*?hideStockSearch\(\);/);
+  assert.match(app, /function applySettings\(nextSettings, \{ persistPreviousActiveTask = true \} = \{\}\) \{[\s\S]*?previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase[\s\S]*?runSettingsApplyStep\("取消股票搜索请求失败：", \(\) => cancelStockSearchRequest\(\), failures\);[\s\S]*?state\.stockSearchResults = \[\];[\s\S]*?runSettingsApplyStep\("清理股票搜索结果失败：", \(\) => \$\("#stock-search-results"\)\.replaceChildren\(\), failures\);[\s\S]*?runSettingsApplyStep\("关闭股票搜索面板失败：", \(\) => hideStockSearch\(\), failures\);/);
   assert.match(app, /function cancelStockSearchRequest\(\)[\s\S]*?state\.stockSearchGeneration \+= 1;/);
 });
 
@@ -637,7 +639,7 @@ test("task polling and saved task references are scoped to the analysis API base
   assert.match(app, /taskAnalysisBase: ""/);
   assert.match(app, /analysisConnectionGeneration: 0/);
   assert.match(app, /function invalidateActiveTaskForAnalysisBaseChange\(/);
-  assert.match(app, /if \(analysisBaseChanged\) invalidateActiveTaskForAnalysisBaseChange\(/);
+  assert.match(app, /if \(analysisBaseChanged\) \{[\s\S]*?invalidateActiveTaskForAnalysisBaseChange\(/);
   assert.match(app, /endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /const taskAnalysisBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase;[\s\S]*?analysis_base: taskAnalysisBase/);
   assert.match(app, /旧任务不再自动轮询/);
@@ -659,26 +661,26 @@ test("data-center checks are invalidated when a saved API connection changes", (
   assert.match(dataCenter, /function invalidate\(message = "连接配置已变更，之前的检查结果已作废。请重新检查。"\) \{[\s\S]*?generation \+= 1;[\s\S]*?checking = false;[\s\S]*?setBadge\("#data-center-summary-status", "unknown", "需重新检查"\)/);
   assert.match(dataCenter, /finally \{[\s\S]*?if \(current === generation\) \{[\s\S]*?checking = false;/);
   assert.match(dataCenter, /return \{ refresh, invalidate \};/);
-  assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(analysisBaseChanged \|\| marketConnectionChanged\) \{\s*dataCenter\.invalidate\(/);
+  assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(analysisBaseChanged \|\| marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("失效数据中心检查结果失败：", \(\) =>\s*dataCenter\.invalidate\(/);
 });
 
 test("connection-check results are isolated between saved settings and the modal draft", () => {
   const savedCheck = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(savedCheck, "saved connection check must exist");
-  assert.match(savedCheck, /const settingsToCheck = \{ \.\.\.state\.settings \};/);
+  assert.match(savedCheck, /settingsToCheck = \{ \.\.\.state\.settings \};/);
   assert.match(savedCheck, /const generation = \+\+savedConnectionCheckGeneration/);
   assert.match(savedCheck, /button\.setAttribute\("aria-busy", "true"\)/);
-  assert.match(savedCheck, /button\.removeAttribute\("aria-busy"\)/);
+  assert.match(savedCheck, /releaseSettingsCheckButtonSafely\(button, "检查连接"\)/);
   assert.match(savedCheck, /if \(generation !== savedConnectionCheckGeneration\) return/);
   assert.match(savedCheck, /当前已保存的行情与分析 API 地址/);
-  assert.match(savedCheck, /if \(generation === savedConnectionCheckGeneration\)[\s\S]*?button\.disabled = false/);
-  assert.match(app, /if \(analysisBaseChanged \|\| marketConnectionChanged\) \{[\s\S]*?savedConnectionCheckGeneration \+= 1;[\s\S]*?connectionCheckButton\.removeAttribute\("aria-busy"\);[\s\S]*?connectionCheckOutput\.textContent = "连接配置已变化，请重新检查当前已保存的配置。";[\s\S]*?dataCenter\.invalidate/);
+  assert.match(savedCheck, /if \(generation === savedConnectionCheckGeneration\)[\s\S]*?releaseSettingsCheckButtonSafely\(button, "检查连接"\)/);
+  assert.match(app, /if \(analysisBaseChanged \|\| marketConnectionChanged\) \{[\s\S]*?savedConnectionCheckGeneration \+= 1;[\s\S]*?runSettingsApplyStep\("恢复连接检查按钮失败：", \(\) => \{[\s\S]*?button\.removeAttribute\("aria-busy"\);[\s\S]*?runSettingsApplyStep\("更新连接检查提示失败：", \(\) => \{[\s\S]*?连接配置已变化，请重新检查当前已保存的配置。[\s\S]*?runSettingsApplyStep\("失效数据中心检查结果失败：", \(\) =>\s*dataCenter\.invalidate/);
 
   const draftCheck = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(draftCheck, "unsaved draft connection check must exist");
   assert.match(draftCheck, /const generation = \+\+draftConnectionCheckGeneration/);
   assert.match(draftCheck, /button\.setAttribute\("aria-busy", "true"\)/);
-  assert.match(draftCheck, /button\.removeAttribute\("aria-busy"\)/);
+  assert.match(draftCheck, /releaseSettingsCheckButtonSafely\(button, "检查未保存配置"\)/);
   assert.match(draftCheck, /settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\)/);
   assert.match(draftCheck, /if \(generation !== draftConnectionCheckGeneration \|\| !\$\("#settings-dialog"\)\.open\) return/);
   assert.match(draftCheck, /connectionDraftChanged\(testedDraft, currentDraft\)/);
@@ -688,14 +690,14 @@ test("connection-check results are isolated between saved settings and the modal
 });
 
 test("market connection changes invalidate all in-flight stock-research panels", () => {
-  assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(marketConnectionChanged\) \{[\s\S]*?cancelStockSearchRequest\(\);[\s\S]*?stockResearch\.invalidate\("行情连接配置已变更，旧研究请求已作废，请重新加载对应资料。"\);\s*\}/);
+  assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\| previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("取消股票搜索请求失败：", \(\) => cancelStockSearchRequest\(\), failures\);[\s\S]*?runSettingsApplyStep\("失效个股研究请求失败：", \(\) =>\s*stockResearch\.invalidate\("行情连接配置已变更，旧研究请求已作废，请重新加载对应资料。"\), failures\);/);
   assert.match(stockResearch, /function invalidate\(message="行情连接配置已变更，请重新加载个股研究资料。"\)\{\s*reset\(resolvedSymbol\(\)\);[\s\S]*?Object\.keys\(state\.generation\)\.forEach\(abort\)/);
 });
 
 test("service health and provider-list refreshes ignore superseded responses", () => {
   assert.match(app, /let serviceRefreshGeneration = 0;/);
   assert.match(app, /let sourceRefreshGeneration = 0;/);
-  assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};/);
+  assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}/);
   assert.match(app, /async function refreshSources\(\) \{[\s\S]*?const generation = \+\+sourceRefreshGeneration;[\s\S]*?if \(generation !== sourceRefreshGeneration\) return;/);
   assert.match(app, /if \(generation !== serviceRefreshGeneration\) return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};[\s\S]*?setServiceStatus\("market"/);
 });
@@ -703,7 +705,7 @@ test("service health and provider-list refreshes ignore superseded responses", (
 test("provider capability refresh clears old connection data and owns its loading state", () => {
   const refreshSources = app.match(/async function refreshSources\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refreshSources, "refreshSources implementation must exist");
-  assert.match(refreshSources, /list\.replaceChildren\(\);[\s\S]*?setText\("#source-count", "—"\);[\s\S]*?state\.sourceCount = 0/);
+  assert.match(refreshSources, /showMessage\("正在读取当前连接配置对应的数据源能力…"\);[\s\S]*?setSourceTextSafely\("#source-count", "—"\);[\s\S]*?state\.sourceCount = 0/);
   assert.match(refreshSources, /button\.disabled = true;[\s\S]*?button\.setAttribute\("aria-busy", "true"\)/);
   assert.match(refreshSources, /正在读取当前连接配置对应的数据源能力/);
   assert.match(refreshSources, /showMessage\(errorMessage\(error\), "empty-row error-text"\)/);
@@ -735,7 +737,7 @@ test("analysis task submission prevents concurrent duplicate requests and releas
   assert.match(app, /isCreatingTask: false/);
   assert.match(app, /async function createTask\(event\)[\s\S]*?event\.preventDefault\(\);[\s\S]*?if \(state\.isCreatingTask\)[\s\S]*?分析任务正在提交[\s\S]*?return;[\s\S]*?state\.isCreatingTask = true;[\s\S]*?parseAnalysisSymbols/);
   assert.match(app, /catch \(error\) \{\s*state\.isCreatingTask = false;[\s\S]*?return;/);
-  assert.match(app, /finally \{\s*state\.isCreatingTask = false;[\s\S]*?button\.disabled = false;/);
+  assert.match(app, /finally \{[\s\S]*?state\.isCreatingTask = false;[\s\S]*?button\.disabled = false;/);
   assert.match(apiClient, /headersKey \? \{ "Idempotency-Key": headersKey \} : \{\}/);
 });
 
@@ -784,7 +786,7 @@ test("recent analysis history supports search, single removal and local-only cle
   assert.match(app, /function renderRecentTasks\([\s\S]*?recent-analysis-search[\s\S]*?record\.task_id[\s\S]*?taskStatusLabel\(record\.status\)/);
   assert.match(app, /function removeRecentTaskReference\(taskId, analysisBase = ""\)[\s\S]*?removeRecentTask\(taskId, localStorage, undefined, analysisBase\)[\s\S]*?const persistedState = safeReadRecentTasksState\(\)[\s\S]*?targetStillExists[\s\S]*?服务端任务和报告不会被删除/);
   assert.match(app, /function removeRecentTaskReference[\s\S]*?无法确认最近任务引用已移除/);
-  assert.match(app, /function clearRecentTaskHistory\(\)[\s\S]*?clearRecentTasks\(localStorage\)[\s\S]*?const clearedState = safeReadRecentTasksState\(\)[\s\S]*?无法确认最近任务历史已清空[\s\S]*?服务端记录未删除/);
+  assert.match(app, /function clearRecentTaskHistory\(\)[\s\S]*?clearRecentTasks\(localStorage\)[\s\S]*?const clearedState = safeReadRecentTasksState\(\)[\s\S]*?未能确认最近任务历史已清空[\s\S]*?服务端记录未删除/);
   assert.match(app, /state\.suppressedHistoryTaskId === state\.taskId/);
   assert.match(app, /if \(state\.taskId === taskId && \(!analysisBase \|\| state\.taskAnalysisBase === analysisBase\)\) \{[\s\S]*?state\.suppressedHistoryTaskId = taskId/);
   assert.match(recentTaskModule, /export function removeRecentTask\(/);
@@ -819,7 +821,7 @@ test("mobile navigation drawer restores readable labels and can close via overla
   assert.match(html, /id="mobile-menu-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="primary-sidebar"/);
   assert.match(app, /function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\)/);
   assert.match(app, /\$\("#mobile-nav-overlay"\)\.addEventListener\("click", \(\) => setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)\)/);
-  assert.match(app, /if \(event\.key === "Escape"\) setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)/);
+  assert.match(app, /if \(event\.key === "Escape"\) \{\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);\s*return;\s*\}/);
   assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.sidebar\.is-open \{ transform: translateX\(0\); \}/);
   assert.match(stylesheet, /\.mobile-nav-overlay:not\(\[hidden\]\)/);
 });
@@ -989,7 +991,7 @@ test("settings center groups configuration by ownership and prevents fake server
   assert.match(app, /event\.preventDefault\(\);[\s\S]*?closeSettingsWithGuard\(\)/);
   assert.match(app, /mergeConnectionDraft\(readConnectionDraft\(\), state\.settings\)/);
   assert.match(app, /async function checkConnectionFromSettings\(\)/);
-  assert.match(app, /const settingsToCheck = \{ \.\.\.state\.settings \};[\s\S]*?currentSettings\.marketBase !== settingsToCheck\.marketBase/);
+  assert.match(app, /settingsToCheck = \{ \.\.\.state\.settings \};[\s\S]*?currentSettings\.marketBase !== settingsToCheck\.marketBase/);
   assert.match(app, /async function checkDraftConnectionFromSettings\(\)/);
   assert.match(html, /id="settings-check-draft-connection"[^>]*>检查未保存配置<\/button>/);
   assert.match(html, /id="settings-draft-connection-check"/);
@@ -1059,7 +1061,7 @@ test("chat workbench has context isolation and no production mock replies", () =
   const quoteStart = app.indexOf("async function runQuoteQuery(event) {");
   const quoteEnd = app.indexOf(String.fromCharCode(10) + "function ", quoteStart);
   const quoteQuery = app.slice(quoteStart, quoteEnd);
-  assert.match(quoteQuery, /state\.chatStockContextCleared = false;[\s\S]*?const generation = \+\+state\.quoteQueryGeneration;/);
+  assert.match(quoteQuery, /const generation = \+\+state\.quoteQueryGeneration;[\s\S]*?try \{\s*state\.chatStockContextCleared = false;/);
   assert.match(app, /renderChatState\(\{ supported: false \}\)/);
   assert.match(html, /id="chat-send" type="button" disabled/);
   assert.match(html, /id="chat-stop" type="button" disabled/);
@@ -1181,8 +1183,9 @@ test("stock research toolbar controls use readable labels and touch-sized target
   assert.match(finalCssRuleBody(".stock-research-toolbar label"), /font-size:12px/);
   assert.match(finalCssRuleBody(".stock-research-toolbar select"), /min-height:38px/);
   assert.match(finalCssRuleBody(".stock-research-toolbar select"), /font-size:12px/);
-  assert.match(finalCssRuleBody(".stock-research-toolbar .button"), /min-height:38px/);
-  assert.match(finalCssRuleBody(".stock-research-toolbar .button"), /font-size:12px/);
+  const toolbarButtonRules = [...stylesheet.matchAll(/\.stock-research-toolbar \.button\s*\{([^}]*)\}/g)].map((match) => match[1]);
+  assert.ok(toolbarButtonRules.some((body) => /min-height:\s*38px/.test(body)), "toolbar button must have a touch-sized minimum height");
+  assert.ok(toolbarButtonRules.some((body) => /font-size:\s*12px/.test(body)), "toolbar button label must remain readable");
 });
 
 test("market overview and activity use readable secondary text and touch-sized controls", () => {
@@ -1492,7 +1495,7 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
 test("切换到尚未接入的板块维度时，旧请求不能覆盖能力占位", () => {
   assert.match(
     marketOverview,
-    /async function load\(key\)\{cancel\(key\);const seq=generation\[key\],[\s\S]*?if\(key==="sectors"&&sectorMetric!=="change"\)\{showSectorMetricUnavailable\(\);return "unsupported";\}/
+    /async function load\(key\)\s*\{[\s\S]*?cancel\(key\);seq=generation\[key\],[\s\S]*?if\(key==="sectors"&&sectorMetric!=="change"\)\{showSectorMetricUnavailable\(\);return "unsupported";\}/
   );
   assert.match(
     marketOverview,
@@ -1556,7 +1559,7 @@ test("行情查询初始化与 finally 渲染异常不会遗留查询按钮锁",
 test("市场工作台各模块刷新失败会独立收敛并显示诊断", () => {
   const refresh = app.match(/function refreshMarketWorkspace\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refresh, "refreshMarketWorkspace implementation must exist");
-  assert.match(refresh, /const startModule = \(label, operation\) => \{[\s\S]*?Promise\.resolve\(operation\)\.then/);
+  assert.match(refresh, /const startModule = \(label, operation\) => \{[\s\S]*?Promise\.resolve\(operation\(\)\)\.then/);
   assert.match(refresh, /\(error\) => \(\{ label, ok: false, error \}\)/);
   assert.match(refresh, /catch \(error\) \{[\s\S]*?return Promise\.resolve\(\{ label, ok: false, error \}\)/);
   assert.match(refresh, /startModule\("市场总览"[\s\S]*?startModule\("资金与活跃度"/);
@@ -1620,7 +1623,7 @@ test("估值请求补齐交易所后缀，并只展示与当前标的匹配的�
   assert.match(stockResearch, /const normalized=comparableMarketSymbol\(value\)/);
   assert.match(stockResearch, /if\(!value\.includes\("\."\)&&normalized===value\)[\s\S]*?无法从该六位代码判断交易所/);
   assert.ok(stockResearch.includes("getMarketValuations(settings,[normalizeValuationSymbol(sym)],signal)"));
-  assert.match(renderer, /const requestedSymbol=String\(symbol\|\|data\.requested_symbols\?\.\[0\]\|\|"\)\.trim\(\)/);
+  assert.ok(renderer.includes('const requestedSymbol=String(symbol||data.requested_symbols?.[0]||"").trim();'));
   assert.match(renderer, /const targetSymbol=normalizeValuationSymbol\(requestedSymbol\)/);
   assert.match(renderer, /items\.find\(value=>sameValuationSymbol\(value\.symbol,targetSymbol\)\)/);
   assert.doesNotMatch(renderer, /items\[0\]/, "目标股票未匹配时不得退回展示列表第一条记录");
@@ -1634,11 +1637,11 @@ test("季度财务指标读取的报告期校验与成功提示异常不会向�
   assert.match(loader, /try\{[\s\S]*?syncSymbol\(\)/);
   assert.match(loader, /if\(!Number\.isInteger\(year\)[\s\S]*?safeResearchFeedback\("财务报告期不正确。"\)/);
   assert.match(loader, /const ok=await fetchOne\("fundamentals"[\s\S]*?季度财务指标已返回/);
-  assert.match(loader, /catch\(error\)\{\s*safeResearchFeedback\("季度财务指标读取流程异常："+safeResearchError\(error\)\);\s*return false;/);
+  assert.match(loader, /catch\(error\)\{\s*safeResearchFeedback\("季度财务指标读取流程异常：" \+ safeResearchError\(error\)\);\s*return false;/);
 });
 
 test("个股研究准备阶段异常与 finally 异常不会遗留按钮锁", () => {
-  assert.match(stockResearch, /function safeResearchButton\(button,disabled,label\)[\s\S]*?catch\{return false\}/);
+  assert.match(stockResearch, /function safeResearchButton\(button,disabled,label\)[\s\S]*?catch\{return false;\}/);
   assert.match(stockResearch, /async function fetchOne\(key,request,render\)[\s\S]*?try\{\s*abort\(key\);[\s\S]*?await request\(settings,symbol,ctl\.signal\)[\s\S]*?finally\{/);
   assert.match(stockResearch, /async function loadResearch\(\)[\s\S]*?safeResearchButton\(button,true,"正在加载…"[\s\S]*?finally\{[\s\S]*?safeResearchButton\(button,false,"重新加载公司资料"\)/);
   assert.match(stockResearch, /async function runSupplementRequest\([\s\S]*?let symbol="",button=null,generation=null,ownsButton=false;[\s\S]*?try\{[\s\S]*?const operation=fetchOne\(key,request,render\)[\s\S]*?finally\{[\s\S]*?safeResearchButton\(button,false,idleText\)/);
@@ -1648,7 +1651,7 @@ test("个股研究准备阶段异常与 finally 异常不会遗留按钮锁", ()
 test("个股研究响应代码不匹配时忽略结果", () => {
   assert.match(stockResearch, /function assertResponseSymbol\(data,requestedSymbol\)/);
   assert.match(stockResearch, /if\(responseSymbol&&!sameValuationSymbol\(responseSymbol,requestedSymbol\)\)/);
-  assert.match(stockResearch, /服务端返回证券代码 \+responseSymbol\+ 与请求标的 \+requestedSymbol\+ 不匹配，已忽略结果/);
+  assert.ok(stockResearch.includes('"服务端返回证券代码 "+responseSymbol+" 与请求标的 "+requestedSymbol+" 不匹配，已忽略结果。'));
   assert.match(stockResearch, /async function fetchOne\(key,request,render\)[\s\S]*?assertResponseSymbol\(data,symbol\);[\s\S]*?render\(data,symbol\)/);
   assert.match(stockResearch, /async function loadAnnouncements\(append=false\)[\s\S]*?getStockAnnouncements\(settings,symbol,[\s\S]*?assertResponseSymbol\(data,symbol\);[\s\S]*?const root=\$\("#announcement-list"\)/);
 });
@@ -1737,7 +1740,7 @@ test("Run 结果必须与当前任务标的集合一致后才允许渲染", () =
   assert.match(app, /Run 结果未返回请求标的列表，无法确认是否属于当前任务，已忽略/);
   assert.match(app, /function sameTaskSymbolSet\(expectedRaw, actualRaw\)[\s\S]*?normalizedTaskSymbolSet\(expectedRaw\)[\s\S]*?normalizedTaskSymbolSet\(actualRaw\)[\s\S]*?JSON\.stringify\(expected\) === JSON\.stringify\(actual\)/);
   assert.match(app, /const symbolMismatch = runResultSymbolMismatch\(result\);[\s\S]*?if \(symbolMismatch\) throw responseIdentityError\(symbolMismatch\);[\s\S]*?renderTaskResult\(result\)/);
-  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\| endpointGeneration !== state\.analysisConnectionGeneration \|\| state\.taskAnalysisBase !== analysisBase/);
+  assert.match(app, /generation !== state\.runResultGeneration \|\| state\.taskId !== expectedTaskId \|\|\s*endpointGeneration !== state\.analysisConnectionGeneration \|\|\s*state\.taskAnalysisBase !== analysisBase/);
 });
 
  
@@ -1792,7 +1795,7 @@ test("增量阶段事件不会覆盖已读取的相同或更旧序号", () => {
   assert.match(app, /const previousSequence = state\.taskSequence/);
   assert.match(app, /sequence <= previousSequence \|\| state\.taskEvents\.has\(sequence\)/);
   assert.match(app, /state\.taskEvents\.set\(sequence, normalized\)/);
-  assert.match(app, /无效、重复或旧序号的阶段事件，已忽略/);
+  assert.match(app, /重复或旧序号的阶段事件，已忽略/);
 });
 
 test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 Run 报告", () => {
@@ -1831,7 +1834,10 @@ test("分析 API 切换期间的 UI 清理异常不会中断配置应用", () =>
   const applyStart = app.indexOf("function applySettings(");
   const applyEnd = app.indexOf("\nfunction saveSettingsFromForm(", applyStart);
   const apply = applyStart >= 0 && applyEnd > applyStart ? app.slice(applyStart, applyEnd) : "";
-  assert.match(apply, /if \(analysisBaseChanged\) invalidateActiveTaskForAnalysisBaseChange[\s\S]*?const marketConnectionChanged[\s\S]*?dataCenter\.invalidate[\s\S]*?\$\("#settings-dialog"\)\.close\(\)/);
+  assert.match(apply, /if \(analysisBaseChanged\) \{[\s\S]*?runSettingsApplyStep\("清理旧分析任务失败：", \(\) =>\s*invalidateActiveTaskForAnalysisBaseChange\(previousSettings\.analysisBase, nextSettings\.analysisBase\), failures\);/);
+  assert.match(apply, /if \(marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("失效市场总览请求失败：", \(\) => marketOverview\.invalidateConnection\(\), failures\);[\s\S]*?runSettingsApplyStep\("失效市场活动请求失败：", \(\) => marketActivity\.invalidateConnection\(\), failures\);/);
+  assert.match(apply, /if \(analysisBaseChanged \|\| marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("失效数据中心检查结果失败：", \(\) =>\s*dataCenter\.invalidate\(/);
+  assert.match(apply, /runSettingsApplyStep\("关闭连接设置窗口失败：", \(\) => \$\("#settings-dialog"\)\.close\(\), failures\);/);
 });
 
 test("任务切换和分析连接切换会重置事件游标并隔离迟到轮询", () => {
