@@ -666,6 +666,25 @@ try {
       assert.equal(dataSourcesRequestCount, inFlightRequestCount + 1, "invalidated old request must not cause a hidden follow-up request");
 
       dataSourceScenario = "success";
+
+      // Keyboard dismissal of the settings dialog must restore focus to its opener.
+      const settingsOpener = page.locator("#open-settings");
+      await settingsOpener.click();
+      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#settings-dialog").evaluate((dialog) => dialog.open), true);
+      assert.equal(
+        await page.evaluate(() => Boolean(document.activeElement?.closest("#settings-dialog"))),
+        true,
+        "settings modal should contain focus while open"
+      );
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !document.querySelector("#settings-dialog")?.open, null, { timeout: 3000 });
+      assert.equal(
+        await settingsOpener.evaluate((element) => document.activeElement === element),
+        true,
+        "closing settings with Escape should restore focus to its opener"
+      );
+
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
     }
