@@ -121,6 +121,33 @@ try {
       quality_status: "valid",
       warnings: []
     };
+    const quoteForSymbol = (symbol) => symbol === "000001.SH"
+      ? {
+          ...quoteFixture,
+          symbol,
+          name: "测试新标的",
+          current_price: 10.25,
+          change: -0.25,
+          change_percent: -2.38,
+          amount: 10125,
+          volume: 985,
+          turnover_rate: 0.82,
+          volume_ratio: 0.95,
+          quote_time: "2026-10-29T01:00:00Z"
+        }
+      : { ...quoteFixture, symbol };
+    const maSeedBars = [121, 122, 123, 124, 125].map((close, index) => ({
+      trade_date: ["2026-10-22", "2026-10-23", "2026-10-26", "2026-10-27", "2026-10-28"][index],
+      open: close - 0.2,
+      high: close + 0.5,
+      low: close - 0.5,
+      close,
+      volume: 1000 + index,
+      amount: close * (1000 + index),
+      change_percent: index ? 0.8 : null,
+      quality_status: "valid",
+      source: "browser-test-fixture"
+    }));
     const quoteErrors = {
       "401": { status: 401, code: "auth_required", message: "credentials required", requestId: "req-browser-401", expected: "接口认证失败" },
       "403": { status: 403, code: "access_denied", message: "permission denied", requestId: "req-browser-403", expected: "当前请求被服务拒绝" },
@@ -242,8 +269,23 @@ try {
 
       if (viewport.width === 320 && pathname.includes("/api/v1/quotes/")) {
         quoteRequestCount += 1;
+        const requestedSymbol = decodeURIComponent(pathname.split("/api/v1/quotes/")[1] || "");
         if (quoteScenario === "network") return route.abort("failed");
-        if (quoteScenario === "success") return json(200, quoteFixture);
+        if (quoteScenario === "delayed-old" && requestedSymbol === "600519.SH") {
+          await page.evaluate(() => { window.__browserTestDelayedQuoteStarted = true; });
+          const delayedBody = JSON.stringify(quoteForSymbol(requestedSymbol));
+          setTimeout(() => {
+            void route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: delayedBody
+            }).catch(() => {});
+          }, 1600);
+          return;
+        }
+        if (quoteScenario === "success" || quoteScenario === "ma-seed") {
+          return json(200, quoteForSymbol(requestedSymbol));
+        }
         const item = quoteErrors[quoteScenario];
         return json(item.status, {
           error: {
@@ -255,7 +297,28 @@ try {
       }
 
       if (viewport.width === 320 && pathname.includes("/api/v1/bars/") && pathname.endsWith("/daily")) {
-        return json(200, barsFixture);
+        const requestedSymbol = decodeURIComponent((pathname.split("/api/v1/bars/")[1] || "").split("/")[0]);
+        if (quoteScenario === "ma-seed" && requestedSymbol === "600519.SH") {
+          return json(200, { ...barsFixture, symbol: requestedSymbol, bars: maSeedBars });
+        }
+        if (requestedSymbol === "000001.SH") {
+          return json(200, {
+            ...barsFixture,
+            symbol: requestedSymbol,
+            bars: [{
+              ...barsFixture.bars[0],
+              trade_date: "2026-10-28",
+              open: 10.1,
+              high: 10.5,
+              low: 9.8,
+              close: 10.25,
+              volume: 985,
+              amount: 10125,
+              change_percent: -2.38
+            }]
+          });
+        }
+        return json(200, { ...barsFixture, symbol: requestedSymbol });
       }
 
       if (pathname.includes("/api/")) {
@@ -431,6 +494,96 @@ try {
         assert.equal(quoteRequestCount, requestsBeforeFailure + 2, scenario + " manual retry should make one new request");
         assert.equal(await page.locator("#quote-quality").textContent().then((value) => value.trim()), "质量正常");
       }
+
+      // Seed a distinguishable MA5 for A, then let A's quote response arrive after switching to B.
+      quoteScenario = "ma-seed";
+      const maSeedRequestCount = quoteRequestCount;
+      await page.waitForFunction(() => !document.querySelector("#quote-form button[type='submit']")?.disabled, null, { timeout: 5000 });
+      await submitQuote.click();
+      await page.waitForFunction(
+        () => document.querySelector("#bars-meta")?.textContent.trim() === "5 根" &&
+          /^\d+\.\d{2}$/.test(document.querySelector("#technical-ma-5")?.textContent.trim() || "") &&
+          document.querySelector("#quote-quality")?.textContent.trim() === "质量正常",
+        null,
+        { timeout: 10000 }
+      );
+      assert.equal(quoteRequestCount, maSeedRequestCount + 1, "MA seed query should issue one quote request");
+      const oldSymbolMA5 = (await page.locator("#technical-ma-5").textContent()).trim();
+      assert.notEqual(oldSymbolMA5, "样本不足", "the old symbol must have a real MA5 before the race test");
+
+      quoteScenario = "delayed-old";
+      await page.evaluate(() => { delete window.__browserTestDelayedQuoteStarted; });
+      const staleRequestCount = quoteRequestCount;
+      await submitQuote.click();
+      await page.waitForFunction(
+        () => window.__browserTestDelayedQuoteStarted === true &&
+          document.querySelector("#quote-form")?.classList.contains("is-loading") &&
+          document.querySelector("#query-hint")?.textContent.includes("正在查询 600519.SH"),
+        null,
+        { timeout: 5000 }
+      );
+      assert.equal(quoteRequestCount, staleRequestCount + 1, "the old-symbol request must be in flight before switching symbols");
+
+      await page.locator("#symbol-input").fill("000001.SH");
+      await page.waitForFunction(
+        () => document.querySelector("#symbol-input")?.value === "000001.SH" &&
+          document.querySelector("#metric-price")?.textContent.trim() === "—" &&
+          !document.querySelector("#quote-form button[type='submit']")?.disabled,
+        null,
+        { timeout: 5000 }
+      );
+
+      quoteScenario = "success";
+      await submitQuote.click();
+      await page.waitForFunction(
+        () => document.querySelector("#quote-title")?.textContent.includes("000001.SH") &&
+          document.querySelector("#metric-price")?.textContent.trim() === "10.25" &&
+          document.querySelector("#bars-caption")?.textContent.includes("000001.SH") &&
+          document.querySelector("#bars-meta")?.textContent.trim() === "1 根" &&
+          document.querySelector("#technical-ma-5")?.textContent.trim() === "样本不足" &&
+          document.querySelector("#technical-ma-20")?.textContent.trim() === "样本不足",
+        null,
+        { timeout: 10000 }
+      );
+      assert.equal(quoteRequestCount, staleRequestCount + 2, "switching to the new symbol should issue one additional quote request");
+      const newSymbolState = await page.evaluate(() => ({
+        quoteTitle: document.querySelector("#quote-title")?.textContent || "",
+        price: document.querySelector("#metric-price")?.textContent.trim() || "",
+        quality: document.querySelector("#quote-quality")?.textContent.trim() || "",
+        barsCaption: document.querySelector("#bars-caption")?.textContent || "",
+        barsMeta: document.querySelector("#bars-meta")?.textContent.trim() || "",
+        technicalMA5: document.querySelector("#technical-ma-5")?.textContent.trim() || "",
+        technicalMA20: document.querySelector("#technical-ma-20")?.textContent.trim() || "",
+        overviewSymbol: document.querySelector("#research-overview-symbol")?.textContent || "",
+        overviewMA5: document.querySelector("#research-overview-ma5")?.textContent.trim() || ""
+      }));
+      assert.match(newSymbolState.quoteTitle, /测试新标的.*000001\.SH/);
+      assert.equal(newSymbolState.price, "10.25");
+      assert.equal(newSymbolState.quality, "质量正常");
+      assert.match(newSymbolState.barsCaption, /000001\.SH/);
+      assert.match(newSymbolState.overviewSymbol, /000001\.SH/);
+      assert.notEqual(newSymbolState.technicalMA5, oldSymbolMA5, "the old symbol's MA5 must not survive the new-symbol response");
+      assert.equal(newSymbolState.technicalMA5, "样本不足");
+      assert.equal(newSymbolState.technicalMA20, "样本不足");
+      assert.equal(newSymbolState.overviewMA5, "数据不足");
+
+      // Let the old request's delayed server response attempt to arrive after B has rendered.
+      await page.waitForTimeout(1800);
+      const finalSymbolState = await page.evaluate(() => ({
+        quoteTitle: document.querySelector("#quote-title")?.textContent || "",
+        price: document.querySelector("#metric-price")?.textContent.trim() || "",
+        quality: document.querySelector("#quote-quality")?.textContent.trim() || "",
+        barsCaption: document.querySelector("#bars-caption")?.textContent || "",
+        technicalMA5: document.querySelector("#technical-ma-5")?.textContent.trim() || "",
+        technicalMA20: document.querySelector("#technical-ma-20")?.textContent.trim() || ""
+      }));
+      assert.match(finalSymbolState.quoteTitle, /测试新标的.*000001\.SH/);
+      assert.equal(finalSymbolState.price, "10.25", "a late A quote must not overwrite B's price");
+      assert.equal(finalSymbolState.quality, "质量正常", "a late A quote must not overwrite B's quality status");
+      assert.match(finalSymbolState.barsCaption, /000001\.SH/, "a late A response must not overwrite B's daily bars");
+      assert.equal(finalSymbolState.technicalMA5, "样本不足", "a late A response must not restore A's MA5");
+      assert.equal(finalSymbolState.technicalMA20, "样本不足", "a late A response must not restore A's MA20");
+      assert.equal(quoteRequestCount, staleRequestCount + 2, "late response must not cause a hidden additional request");
 
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
