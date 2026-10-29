@@ -4491,8 +4491,33 @@ document.addEventListener("keydown", (event) => {
     setMobileNavigationOpen(false, { restoreFocus: true });
     return;
   }
-  if (event.key !== "Tab" || window.innerWidth > 600) return;
-  if (document.querySelector("dialog[open]")) return;
+  if (event.key !== "Tab") return;
+
+  // 模态对话框必须先处理焦点循环，不能让焦点落到遮罩后的页面。
+  const dialog = document.querySelector("dialog[open]");
+  if (dialog) {
+    const focusable = [...dialog.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter((element) => !element.hidden &&
+      element.getAttribute("aria-hidden") !== "true" &&
+      element.getClientRects().length > 0);
+    if (!focusable.length) {
+      event.preventDefault();
+      return;
+    }
+    const firstFocusable = focusable[0];
+    const lastFocusable = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === firstFocusable || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      lastFocusable.focus();
+    } else if (!event.shiftKey && (document.activeElement === lastFocusable || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      firstFocusable.focus();
+    }
+    return;
+  }
+
+  if (window.innerWidth > 600) return;
   const sidebar = $(".sidebar");
   if (!sidebar.classList.contains("is-open")) return;
   const focusable = [...sidebar.querySelectorAll(
