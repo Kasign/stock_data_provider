@@ -1420,3 +1420,12 @@
 - 同一提交增加 `watchlist.test.mjs` 回归测试，覆盖添加、改名和移除的静默写入失败。
 - [8565c6b — 补充最近任务清空静默失败回归测试](https://github.com/Kasign/stock_data_provider/commit/8565c6b0b8ae3c467017f7940c4cefbb7c3fdb83)：覆盖 `removeItem` 未报错但实际未清空的情况。
 - 最新分支提交仍需核实 Actions 状态；本执行环境未运行 Node 测试或 Browser Smoke，不将这些改动标记为测试通过。
+
+
+### 2026-10-29 并行收敛：工作区导入与最近任务引用完整性
+
+- [e77a2ba — 校验工作区导入的本地存储写入结果](https://github.com/Kasign/stock_data_provider/commit/e77a2ba5cae43f9b95e62c62fa9d2d3134df3620)：工作区导入在切换内存状态前逐项回读确认设置、主题、自选股、最近任务和活动任务引用清理结果。浏览器存储静默忽略写入时进入失败/回滚路径，不再直接报告导入成功。
+- [2efecd9 — 补充工作区导入静默写入失败契约](https://github.com/Kasign/stock_data_provider/commit/2efecd9f0655f7b90376f96d2a0c4e4f352f4a3f)：静态契约要求导入的每个存储值都先通过回读检查，再应用内存设置。
+- [ae0b188 — 拒绝重复的最近任务本地引用](https://github.com/Kasign/stock_data_provider/commit/ae0b188b9bde4a00d5c899e3210bfadb7fb6e2ea)：同一分析服务地址下重复的 task_id 被视为损坏历史；保留首条可读引用、将存储标记为无效，并阻止后续写入覆盖原始记录。不同分析服务地址下的同名 task_id 仍可分别保留。
+- [d6d19e0 — 补充重复最近任务引用回归测试](https://github.com/Kasign/stock_data_provider/commit/d6d19e0cbad2f2874bb3cf4b619149ba8cb7f54c)：覆盖重复引用识别、不同服务地址区分和不覆盖原始存储。
+- 本轮尚未在本地执行 `npm test`、`npm run check` 或浏览器验收。需继续核对最新提交的 WebUI Checks / Browser Smoke；connector 的 commit status 与 PR 触发 workflow 查询可能不包含 push 触发运行，因此空结果不代表通过。
