@@ -39,6 +39,10 @@ func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
 			end = start + len(path) + next
 		}
 		section := text[start:end]
+		securityCount := strings.Count(section, "      security:")
+		if securityCount != 1 {
+			t.Errorf("OpenAPI path %s must declare security exactly once; found %d declarations", path, securityCount)
+		}
 		if !strings.Contains(section, "security:\n        - ApiKey: []") {
 			t.Errorf("OpenAPI path %s must declare the X-API-Key security used by the server", path)
 		}
