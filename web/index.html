@@ -100,6 +100,28 @@
               <div class="market-planned-state"><strong>历史资金趋势 · 数据能力待接入</strong><p>当前个股资金流不能直接相加冒充全市场流向；历史趋势需要后端快照存储和查询 API。</p></div>
             </section>
           </div>
+          <section class="panel existing-api-panel" aria-labelledby="index-tools-title">
+            <div class="panel-heading"><div><h2 id="index-tools-title">指数目录与历史数据</h2><p>接入指数目录、成分权重报告、指数历史日线和交易时段接口；来源与质量以服务端回包为准。</p></div><span class="quality-pill quality-unknown" id="index-tools-quality">未加载</span></div>
+            <div class="existing-api-toolbar">
+              <label class="field">目录类型<select id="index-catalog-tag"><option value="cn_concept">概念</option><option value="industry">行业</option><option value="region">地域</option><option value="tszs">同花顺指数</option><option value="tushare">Tushare 指数</option></select></label>
+              <button class="button button-secondary" id="load-index-catalog" type="button">读取指数目录</button>
+              <label class="field">指数代码<input id="index-tool-symbol" value="000300.SH" maxlength="32" placeholder="例如 000300.SH"></label>
+              <label class="field">历史报告日期<input id="index-constituents-date" type="date"></label>
+              <button class="button button-secondary" id="load-index-constituents" type="button">读取成分</button>
+              <label class="field">日线开始<input id="index-daily-start" type="date"></label>
+              <label class="field">日线结束<input id="index-daily-end" type="date"></label>
+              <button class="button button-secondary" id="load-index-daily" type="button">读取指数日线</button>
+              <button class="button button-secondary" id="load-market-session" type="button">刷新交易时段</button>
+            </div>
+            <p class="market-widget-meta" id="index-tools-feedback" role="status" aria-live="polite">尚未请求指数目录或历史数据。</p>
+            <div class="existing-api-results-grid">
+              <section><h3>指数目录</h3><div class="table-scroll"><table><thead><tr><th>代码</th><th>名称</th><th>类型</th></tr></thead><tbody id="index-catalog-body"><tr><td colspan="3" class="table-empty">点击“读取指数目录”。</td></tr></tbody></table></div></section>
+              <section><h3>指数成分</h3><div class="table-scroll"><table><thead><tr><th>股票</th><th>代码</th><th>权重</th></tr></thead><tbody id="index-constituents-body"><tr><td colspan="3" class="table-empty">输入指数代码后读取。</td></tr></tbody></table></div></section>
+              <section><h3>指数历史日线</h3><div class="table-scroll"><table><thead><tr><th>日期</th><th>开盘</th><th>最高</th><th>最低</th><th>收盘</th><th>成交量</th></tr></thead><tbody id="index-daily-body"><tr><td colspan="6" class="table-empty">选择日期范围后读取。</td></tr></tbody></table></div></section>
+            </div>
+            <div class="market-session-summary" id="market-session-summary" role="status" aria-live="polite">交易时段：等待读取。</div>
+          </section>
+
           <section class="panel market-overview-panel" id="market-lists-panel" aria-labelledby="market-lists-title"><div class="panel-heading market-overview-heading">
             <div><h2 id="market-lists-title">行业、涨跌停与个股人气</h2><p>列表用于描述市场表现；排名与涨跌幅不是投资建议，也不代表全市场完整覆盖。</p></div>
             <div class="market-overview-actions"><span class="market-overview-updated" id="market-data-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-data" type="button">刷新市场榜单 ↻</button></div>
@@ -316,6 +338,20 @@
               <button class="button button-secondary" id="research-open-chart" type="button">查看图表与完整日 K</button>
               <button class="button button-secondary" id="research-add-watchlist" type="button">加入本地自选</button>
               <button class="button button-primary" id="research-start-analysis" type="button">发起分析任务</button>
+            </div>
+          </section>
+          <section class="panel existing-api-panel" aria-labelledby="stock-status-tools-title">
+            <div class="panel-heading"><div><h2 id="stock-status-tools-title">历史交易状态与涨跌幅规则</h2><p>查询指定交易日的停复牌/风险警示证据和有效涨跌幅规则。未知状态代表证据不足，不会自动当作正常或无涨跌幅限制。</p></div></div>
+            <div class="existing-api-toolbar">
+              <label class="field">股票代码<input id="stock-status-symbol" maxlength="32" placeholder="例如 600519.SH"></label>
+              <label class="field">交易日期<input id="stock-status-date" type="date"></label>
+              <button class="button button-secondary" id="load-stock-trading-status" type="button">读取交易状态</button>
+              <button class="button button-secondary" id="load-stock-limit-rule" type="button">读取涨跌幅规则</button>
+            </div>
+            <p class="market-widget-meta" id="stock-status-feedback" role="status" aria-live="polite">输入股票代码和历史交易日期后查询。</p>
+            <div class="existing-api-results-grid stock-status-results-grid">
+              <section><h3>交易状态</h3><dl id="stock-trading-status-result" class="existing-api-detail-list"><dt>状态</dt><dd>未查询</dd></dl></section>
+              <section><h3>涨跌幅规则</h3><dl id="stock-price-limit-result" class="existing-api-detail-list"><dt>状态</dt><dd>未查询</dd></dl></dl></section>
             </div>
           </section>
           <section class="panel stock-research-panel" id="stock-research-panel" aria-labelledby="stock-research-title">
