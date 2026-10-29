@@ -1429,3 +1429,11 @@
 - [ae0b188 — 拒绝重复的最近任务本地引用](https://github.com/Kasign/stock_data_provider/commit/ae0b188b9bde4a00d5c899e3210bfadb7fb6e2ea)：同一分析服务地址下重复的 task_id 被视为损坏历史；保留首条可读引用、将存储标记为无效，并阻止后续写入覆盖原始记录。不同分析服务地址下的同名 task_id 仍可分别保留。
 - [d6d19e0 — 补充重复最近任务引用回归测试](https://github.com/Kasign/stock_data_provider/commit/d6d19e0cbad2f2874bb3cf4b619149ba8cb7f54c)：覆盖重复引用识别、不同服务地址区分和不覆盖原始存储。
 - 本轮尚未在本地执行 `npm test`、`npm run check` 或浏览器验收。需继续核对最新提交的 WebUI Checks / Browser Smoke；connector 的 commit status 与 PR 触发 workflow 查询可能不包含 push 触发运行，因此空结果不代表通过。
+
+
+### 2026-10-29 工作区导入事务边界修正
+
+- [2f931b4 — 隔离工作区导入的存储事务与界面刷新](https://github.com/Kasign/stock_data_provider/commit/2f931b410c342581826de0aef5acc2ad2f941156)：将持久化写入/回读校验与后续 UI 应用拆成两个阶段。只有存储阶段失败才尝试恢复旧数据；存储已提交后若界面刷新异常，不再错误回滚持久化数据，而是明确提示重新载入页面。
+- 回滚过程现在逐项回读原值；静默恢复失败会列出未能确认恢复的键，不再统一声称已恢复。
+- [25518de — 校准工作区导入事务与回滚契约](https://github.com/Kasign/stock_data_provider/commit/25518def981a54a338c7617ceee5674711b08cf2)：静态契约覆盖事务阶段顺序、回滚回读检查，以及 UI 刷新异常不再修改已提交存储。
+- 本轮未运行 Node 测试、完整检查或 Browser Smoke；需要核对最新 HEAD 的真实 Actions 结果后再判断通过情况。
