@@ -233,6 +233,8 @@
                     <label><input type="checkbox" data-ma-period="5" checked /><span>MA5</span></label>
                     <label><input type="checkbox" data-ma-period="20" checked /><span>MA20</span></label>
                     <label><input type="checkbox" data-ma-period="60" /><span>MA60</span></label>
+                    <label><input type="checkbox" data-ma-period="120" /><span>MA120（半年）</span></label>
+                    <label><input type="checkbox" data-ma-period="250" /><span>MA250（全年）</span></label>
                   </div>
                   <div class="chart-view-toggle" role="group" aria-label="图表类型">
                     <button class="chart-view-button is-active" id="chart-view-close" type="button" aria-pressed="true">收盘线</button>
@@ -248,11 +250,7 @@
               <div class="chart-foot"><span>价格单位：CNY / 股</span><span id="chart-quality-note">质量状态待确认</span></div>
             </section>
 
-            <section class="panel source-panel" id="source-panel">
-              <div class="panel-heading"><div><h2>数据源能力</h2><p>后端注册的 Provider 与能力声明</p></div><button class="text-button" id="reload-sources" type="button">刷新 ↻</button></div>
-              <div class="source-summary"><strong id="source-count">—</strong><span>个已注册来源</span><span class="source-version" id="normalization-version">归一化版本 —</span></div>
-              <div class="source-list" id="data-source-list"><div class="empty-row">填写 API Key 后加载数据源列表。</div></div>
-            </section>
+
           </div>
 
           <section class="panel technical-panel" id="technical-indicators-panel" aria-labelledby="technical-indicators-title">
@@ -263,7 +261,9 @@
             <div class="technical-metric-grid">
               <article class="technical-metric-card"><div class="technical-metric-label">MA5 <span>短期均线</span></div><strong id="technical-ma-5">—</strong><small id="technical-ma-5-change">等待日 K</small></article>
               <article class="technical-metric-card"><div class="technical-metric-label">MA20 <span>中期均线</span></div><strong id="technical-ma-20">—</strong><small id="technical-ma-20-change">等待日 K</small></article>
-              <article class="technical-metric-card"><div class="technical-metric-label">MA60 <span>长期均线</span></div><strong id="technical-ma-60">—</strong><small id="technical-ma-60-change">等待日 K</small></article>
+              <article class="technical-metric-card"><div class="technical-metric-label">MA60 <span>约一季度</span></div><strong id="technical-ma-60">—</strong><small id="technical-ma-60-change">等待日 K</small></article>
+              <article class="technical-metric-card"><div class="technical-metric-label">MA120 <span>约半年</span></div><strong id="technical-ma-120">—</strong><small id="technical-ma-120-change">至少需要 120 个有效收盘价</small></article>
+              <article class="technical-metric-card"><div class="technical-metric-label">MA250 <span>约一年</span></div><strong id="technical-ma-250">—</strong><small id="technical-ma-250-change">至少需要 250 个有效收盘价</small></article>
               <article class="technical-metric-card technical-rsi-metric"><div class="technical-metric-label">RSI(14) <span>相对强弱</span></div><strong id="technical-rsi-value">—</strong><small id="technical-rsi-state">至少需要 15 个有效收盘价</small></article>
               <article class="technical-metric-card technical-macd-metric">
                 <div class="technical-metric-label">MACD(12,26,9) <span>DIF / DEA / 柱值</span></div>
@@ -312,15 +312,15 @@
 
 
         <section class="view" id="research-view" hidden>
-          <div class="page-heading"><div><p class="eyebrow">STOCK RESEARCH / 04</p><h1>个股研究</h1><p class="page-subtitle">从自选股与当前研究标的进入专业详情，按需读取行情、技术、财务、估值、资金与筹码、公告和数据质量。当前没有全市场批量概览接口，未读取的股票不会显示虚构数据。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索股票并加载行情 →</button></div>
+          <div class="page-heading"><div><p class="eyebrow">STOCK DEEP DIVE / 04</p><h1>个股深度研究</h1><p class="page-subtitle">工作流：从自选股或行情页选定一只股票 → 查看当前标的摘要 → 按需加载财务、估值、资金、筹码与公告。此页聚焦单股研究，不负责全市场筛选；未请求的数据不会自动填充。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索股票并加载行情 →</button></div>
           <section class="panel research-list-panel" aria-labelledby="research-list-title">
-            <div class="panel-heading"><div><h2 id="research-list-title">研究列表</h2><p>来源为浏览器本地自选股与当前已查询标的；只有当前已读取的标的才显示实际指标。</p></div><span class="availability-pill is-local" id="research-list-scope">当前浏览器 · 未批量拉取</span></div>
+            <div class="panel-heading"><div><h2 id="research-list-title">研究标的与快捷入口</h2><p>这里只汇总本地自选股和本次已查询的股票，用于切换研究对象；不会自动批量请求全市场行情。</p></div><span class="availability-pill is-local" id="research-list-scope">当前浏览器 · 未批量拉取</span></div>
             <div class="table-scroll research-list-table-scroll"><table><thead><tr><th>股票</th><th>最新价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th><th>量比</th><th>MA5</th><th>MA20</th><th>数据质量</th><th>操作</th></tr></thead><tbody id="research-stock-list-body"><tr><td colspan="10" class="table-empty">当前没有自选股或已查询标的。</td></tr></tbody></table></div>
             <p class="market-widget-meta">未加载标的显示“未加载”，不自动对所有自选逐只请求；如需全市场/大量股票排序，需先增加批量股票概览 API。</p>
           </section>
           <section class="panel research-overview-panel" id="research-overview-panel" aria-labelledby="research-overview-title">
             <div class="panel-heading">
-              <div><h2 id="research-overview-title">当前研究标的</h2><p>报价、技术指标与专业资料按当前股票展示；未加载数据不会用旧标的快照填充。</p></div>
+              <div><h2 id="research-overview-title">当前标的摘要</h2><p>展示当前选中股票已获取的关键数据；更深入的资料在下方按需加载。</p></div>
               <span class="supplement-quality supplement-quality-unknown" id="research-overview-quality">未加载</span>
             </div>
             <div class="research-overview-context"><strong id="research-overview-symbol">尚未选择标的</strong><span id="research-overview-meta">行情时间、获取时间与来源将在实际回包后显示。</span></div>
@@ -737,6 +737,11 @@
             <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">KV</span><div><h2>Redis</h2><p>由分析服务就绪结果报告</p></div></div><span class="availability-pill is-readonly" id="data-service-redis-status">未知</span><p class="data-center-service-detail" id="data-service-redis-detail">没有独立状态证据时不推断缓存故障。</p></article>
           </section>
           <section class="panel data-center-providers-panel" aria-labelledby="data-center-providers-title"><div class="panel-heading"><div><h2 id="data-center-providers-title">Provider 与数据能力</h2><p>能力清单只表示配置/注册声明，不等于 Provider 当前实时可用。</p></div><span class="availability-pill is-readonly" id="data-center-provider-status">尚未读取</span></div><div class="data-center-provider-summary" id="data-center-provider-summary">配置行情 API Key 并执行检查后读取能力清单。</div><div class="data-center-provider-list" id="data-center-provider-list"><div class="empty-row">尚未检查数据源能力。</div></div><p class="data-center-diagnostic-note">当前没有逐 Provider / capability 的受控真实探测 API。此处不会把“已注册”显示为“健康”；待数据层巡检 API 接入后，再显示最近探测时间、耗时与诊断结果。</p></section>
+          <section class="panel source-panel" id="source-panel">
+              <div class="panel-heading"><div><h2>数据源能力</h2><p>后端注册的 Provider 与能力声明</p></div><button class="text-button" id="reload-sources" type="button">刷新 ↻</button></div>
+              <div class="source-summary"><strong id="source-count">—</strong><span>个已注册来源</span><span class="source-version" id="normalization-version">归一化版本 —</span></div>
+              <div class="source-list" id="data-source-list"><div class="empty-row">填写 API Key 后加载数据源列表。</div></div>
+            </section>
         </section>
 <section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
           <div class="page-heading">
