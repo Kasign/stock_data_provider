@@ -100,6 +100,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	announcementProviders := make([]provider.AnnouncementProvider, 0, len(available))
 	stockBoardsProviders := make([]provider.StockBoardsProvider, 0, len(available))
 	tradingCalendarProviders := make([]provider.TradingCalendarProvider, 0, len(available))
+	securityTradingStatusProviders := make([]provider.SecurityTradingStatusProvider, 0, len(available))
 	fundamentalsProviders := make([]provider.FundamentalsProvider, 0, len(available))
 	valuationProviders := make([]provider.ValuationProvider, 0, len(available))
 	indexCatalogProviders := make([]provider.IndexCatalogProvider, 0, len(available))
@@ -194,6 +195,19 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			}
 			tradingCalendarProviders = append(tradingCalendarProviders, capability)
 		}
+		if settings.SecurityTradingStatus {
+			if !settings.StockBasic {
+				return fmt.Errorf("provider %q security_trading_status requires stock_basic to be enabled for listing-date verification", name)
+			}
+			if !settings.TradingCalendar {
+				return fmt.Errorf("provider %q security_trading_status requires trading_calendar to be enabled", name)
+			}
+			capability, ok := p.(provider.SecurityTradingStatusProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for security trading status but does not implement SecurityTradingStatusProvider", name)
+			}
+			securityTradingStatusProviders = append(securityTradingStatusProviders, capability)
+		}
 		if settings.Fundamentals {
 			capability, ok := p.(provider.FundamentalsProvider)
 			if !ok {
@@ -282,6 +296,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	ds.SetAnnouncementProviders(announcementProviders)
 	ds.SetStockBoardsProviders(stockBoardsProviders)
 	ds.SetTradingCalendarProviders(tradingCalendarProviders)
+	ds.SetSecurityTradingStatusProviders(securityTradingStatusProviders)
 	ds.SetFundamentalsProviders(fundamentalsProviders)
 	ds.SetValuationProviders(valuationProviders)
 	ds.SetIndexCatalogProviders(indexCatalogProviders)
