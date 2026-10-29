@@ -19,15 +19,20 @@
           <span class="brand-mark">K<span>.</span></span>
           <span class="brand-copy"><strong>Market Console</strong><small>GO DATA PLATFORM</small></span>
         </a>
-        <div class="side-label">功能区</div>
+        <div class="side-label">市场</div>
         <nav class="side-nav" aria-label="主导航">
+          <button class="nav-link" type="button" data-view="market" aria-label="首页" title="首页"><span class="nav-icon" aria-hidden="true">⌂</span><span>首页</span></button>
+          <button class="nav-link" type="button" data-view="stocks" aria-label="个股行情" title="个股行情"><span class="nav-icon" aria-hidden="true">↗</span><span>个股行情</span></button>
+          <button class="nav-link" type="button" data-view="watchlist" aria-label="自选股" title="自选股"><span class="nav-icon" aria-hidden="true">☆</span><span>自选股</span></button>
           <button class="nav-link" type="button" data-view="research" aria-label="个股研究" title="个股研究"><span class="nav-icon" aria-hidden="true">⌑</span><span>个股研究</span></button>
-          <button class="nav-link" type="button" data-view="tasks" aria-label="分析任务" title="分析任务"><span class="nav-icon" aria-hidden="true">↗</span><span>分析任务</span></button>
-          <button class="nav-link" type="button" data-view="data" aria-label="数据中心" title="数据中心"><span class="nav-icon" aria-hidden="true">▤</span><span>数据中心</span></button>
-          <button class="nav-link" type="button" data-view="notifications" aria-label="通知中心" title="通知中心"><span class="nav-icon" aria-hidden="true">♧</span><span>通知中心</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
-          <button class="nav-link" type="button" data-view="chat" aria-label="问股" title="问股"><span class="nav-icon" aria-hidden="true">✦</span><span>问股</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
+          <div class="side-label side-nav-section-label">研究与任务</div>
+          <button class="nav-link" type="button" data-view="tasks" aria-label="分析任务" title="分析任务"><span class="nav-icon" aria-hidden="true">▤</span><span>分析任务</span></button>
           <button class="nav-link" type="button" data-view="screening" aria-label="选股" title="选股"><span class="nav-icon" aria-hidden="true">⌕</span><span>选股</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
           <button class="nav-link" type="button" data-view="alerts" aria-label="告警" title="告警"><span class="nav-icon" aria-hidden="true">⚑</span><span>告警</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
+          <button class="nav-link" type="button" data-view="chat" aria-label="问股" title="问股"><span class="nav-icon" aria-hidden="true">✦</span><span>问股</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
+          <div class="side-label side-nav-section-label">系统</div>
+          <button class="nav-link" type="button" data-view="data" aria-label="数据中心" title="数据中心"><span class="nav-icon" aria-hidden="true">▥</span><span>数据中心</span></button>
+          <button class="nav-link" type="button" data-view="notifications" aria-label="通知中心" title="通知中心"><span class="nav-icon" aria-hidden="true">♧</span><span>通知中心</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
           <button class="nav-link" type="button" data-view="settings" aria-label="设置中心" title="设置中心"><span class="nav-icon" aria-hidden="true">⚙</span><span>设置中心</span></button>
         </nav>
         <div class="sidebar-bottom">
@@ -52,12 +57,6 @@
             <button class="avatar-button" id="open-settings" type="button" aria-label="连接设置" title="连接设置">⚙</button>
           </div>
         </header>
-
-        <nav class="workspace-tabs" aria-label="核心工作区">
-          <button class="workspace-tab active" type="button" data-view="market" aria-current="page">首页</button>
-          <button class="workspace-tab" type="button" data-view="stocks">个股行情</button>
-          <button class="workspace-tab" type="button" data-view="watchlist">自选股</button>
-        </nav>
 
         <section class="view" id="market-view">
           <div class="page-heading">
