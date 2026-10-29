@@ -270,8 +270,15 @@ try {
       });
       assert.equal(savedSettings.apiKey, "browser-test-key", "the isolated API-error scenario must load its test API key");
 
-      await page.locator("#bar-start-date").fill("2026-10-01");
-      await page.locator("#bar-end-date").fill("2026-10-28");
+      // Date range controls are intentionally hidden at narrow widths; set their values while submitting via the visible form button.
+      await page.evaluate(() => {
+        const start = document.querySelector("#bar-start-date");
+        const end = document.querySelector("#bar-end-date");
+        start.value = "2026-10-01";
+        end.value = "2026-10-28";
+        start.dispatchEvent(new Event("change", { bubbles: true }));
+        end.dispatchEvent(new Event("change", { bubbles: true }));
+      });
       const submitQuote = page.locator("#quote-form button[type='submit']");
 
       // Explicitly seed a prior valid quote after configuring the range, instead of depending on startup auto-refresh timing.
