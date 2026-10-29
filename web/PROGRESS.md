@@ -1,3 +1,11 @@
+## 2026-10-29 — 市场与 Provider 清单错误后的手动恢复
+
+- 首页市场总览错误矩阵后补上手动恢复：服务恢复后再次刷新，索引卡片重新显示、错误状态清除、索引请求只新增一次且无隐藏重复请求。
+- Provider 清单错误矩阵后补上手动恢复：再次点击数据中心检查，Provider 行与“已读取能力声明”恢复，旧错误内容清除、请求只新增一次。
+- 修复数据中心总摘要，使服务/依赖异常与 Provider 清单读取失败分别可见。
+- 最新代码 HEAD `75a5de71b4ffc37fba3a5099159e7b2a33ac8bce` 的 WebUI checks [#40816231911](https://github.com/Kasign/stock_data_provider/actions/runs/40816231911) 与 Browser Smoke [#40816231865](https://github.com/Kasign/stock_data_provider/actions/runs/40816231865) 均通过。
+
+
 ## 2026-10-29 — 健康就绪状态证据与依赖未知状态
 
 - 浏览器烟测新增 HTTP 200、但未包含可识别 `status` 字段的健康就绪响应。行情与分析服务就绪状态必须显示“状态未报告”并使用 warning 样式，不能显示绿色。

@@ -1,3 +1,12 @@
+## 2026-10-29 后续追加 — 手动恢复与诊断摘要
+
+- [x] 首页市场错误矩阵后手动刷新可恢复指数卡片与状态；新请求次数严格为 1。
+- [x] Provider 清单错误矩阵后手动执行数据中心检查，可恢复成功列表与状态并清除旧错误；新请求次数严格为 1。
+- [x] 数据中心总摘要分别说明服务/依赖异常与 Provider 清单读取失败。
+- [x] 最新 HEAD `75a5de71b4ffc37fba3a5099159e7b2a33ac8bce` 的 WebUI checks [#40816231911](https://github.com/Kasign/stock_data_provider/actions/runs/40816231911) 与 Browser Smoke [#40816231865](https://github.com/Kasign/stock_data_provider/actions/runs/40816231865) 均通过。
+- [ ] 真实 Provider/API Key/NAS/1Panel 部署与人工视觉检查仍需独立验收。
+
+
 ## 2026-10-29 后续追加 — 健康探针 200/无状态响应
 
 - [x] Provider 清单 HTTP 401/403/404/503/网络失败矩阵通过。

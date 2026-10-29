@@ -1,5 +1,15 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新恢复路径与诊断摘要
+
+- 最新功能测试提交：`75a5de71b4ffc37fba3a5099159e7b2a33ac8bce`。在行情查询、首页市场、数据中心 Provider 清单各自的失败矩阵之外，增加失败后用户手动重试成功的验证。
+- 首页市场：在 401/403/404/503/网络断开后手动刷新，确认指数卡片重新显示、模块状态恢复且仅发起一次新的指数请求。
+- 数据中心 Provider：在 401/403/404/503/网络断开后再次点“立即检查”，确认 Provider 行重新显示、旧错误内容清除、成功状态恢复且无重复请求。
+- `web/src/data-center.js` 总摘要现在分别描述“服务端点或依赖异常/降级”和“Provider 能力清单读取失败”，不再在 Provider 单项失败时只给出不够具体的总览文字。
+- 最新 HEAD 的 WebUI checks [#40816231911](https://github.com/Kasign/stock_data_provider/actions/runs/40816231911) 与 Browser Smoke [#40816231865](https://github.com/Kasign/stock_data_provider/actions/runs/40816231865) 均通过。
+- 自动化仍使用确定性浏览器响应桩，真实 Provider、真实 API Key、反向代理和 NAS/1Panel 部署需单独验收。
+
+
 ## 2026-10-29 最新数据中心健康状态证据测试
 
 - Provider 清单 401/403/404/503/网络失败矩阵已通过，先读取一个有效 Provider 再验证错误后的旧行清理、错误分类、无静默重试；MariaDB/Redis 在分析 readiness 不可确认时保持未知。
