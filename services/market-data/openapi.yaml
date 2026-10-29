@@ -191,10 +191,13 @@ components:
           items: {type: string}
     StockBoardSnapshot:
       type: object
-      required: [symbol, total, has_data, items, source, fetched_at, quality_status]
+      required: [symbol, total, provider_returned, excluded_rows, total_is_lower_bound, has_data, items, source, fetched_at, quality_status]
       properties:
         symbol: {type: string}
-        total: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0, description: Normalized board rows retained after filtering}
+        provider_returned: {type: integer, minimum: 0, description: Raw source board rows received before normalization}
+        excluded_rows: {type: integer, minimum: 0, description: Source rows explicitly excluded during normalization; currently zero when invalid/duplicate rows cause Provider fallback}
+        total_is_lower_bound: {type: boolean, description: True when the Eastmoney response reaches its 1000-row request boundary and full coverage cannot be established}
         has_data: {type: boolean, description: False means the provider returned an ambiguous empty list, not confirmed zero memberships}
         items:
           type: array
