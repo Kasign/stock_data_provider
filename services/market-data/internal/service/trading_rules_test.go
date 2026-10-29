@@ -152,7 +152,12 @@ func TestResolvePriceLimitRuleWithEvidenceRequiresSourceBackedEvents(t *testing.
 		{name: "event outside effective date", evidence: &base, date: "2026-07-07", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
 		{name: "missing evidence", evidence: nil, date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
 		{name: "missing announcement", evidence: func() *model.PriceLimitEventEvidence { v := base; v.AnnouncementID = ""; return &v }(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
-		{name: "unconfirmed no event", evidence: func() *model.PriceLimitEventEvidence { v := base; v.Status = model.PriceLimitExceptionNone; v.CoverageConfirmed = false; return &v }(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
+		{name: "unconfirmed no event", evidence: func() *model.PriceLimitEventEvidence {
+			v := base
+			v.Status = model.PriceLimitExceptionNone
+			v.CoverageConfirmed = false
+			return &v
+		}(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

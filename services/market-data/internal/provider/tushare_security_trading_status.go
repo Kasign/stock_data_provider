@@ -146,7 +146,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 			result.QualityStatus = model.QualityUnknown
 			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "listing_trading_day_number_not_verified_for_beijing_exchange")
 		} else {
-			count, countErr := p.countListingTradingDays(ctx, exchange, listingDate, tradeDate)
+			count, countErr := p.countListingTradingDays(ctx, exchange, listingDateValue, tradeDate)
 			if countErr != nil || count < 1 {
 				result.ListingStatusKnown = false
 				result.QualityStatus = model.QualityUnknown
