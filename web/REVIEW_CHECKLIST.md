@@ -867,3 +867,11 @@
 - [x] 修复校验函数误放在 bindMarketActivity 函数体内导致的 Unexpected token 'export'：提交 7429c501。
 - [x] Browser Smoke #40802836160 已成功。
 - [ ] 新增 Node 行为测试未本地运行；完整 Node 测试、构建和人工真实环境验收仍待执行。
+
+## 2026-10-29 — 数据分支与最终烟测复核
+
+- [x] 数据分支最新核对 HEAD 16944cd5e98b900e3aa5c4636ec185f947e1d497；新增 Tushare 涨跌停池默认条数与覆盖测试，仅数据分支保留，未混入 WebUI 提交。
+- [x] 交易日历校验模块作用域修复 Browser Smoke #40802836160 成功；后续文档提交 #40802964859 成功。
+- [x] PR #1 继续保持 Open / Draft。
+- [x] 本地使用 Node 对交易日历范围校验纯函数的 5 个等价用例通过。
+- [ ] 仓库完整 npm test、全量构建、真实 API 与 NAS/1Panel 人工验收未执行；容器无法解析 github.com，故未能 clone 仓库跑完整测试套件。

@@ -1205,3 +1205,12 @@
 - [x] 修正错误提示清理规则的转义问题，并补充多行/制表符元数据测试（提交 32c35d4）。
 - [ ] 新增的 web/tests/market-activity.test.mjs 尚未在本地单独运行；完整 Node UI 测试、构建、真实 API 与 NAS/1Panel 人工验收仍未执行。
 - 数据分支本轮核对 HEAD 为 16944cd5e98b900e3aa5c4636ec185f947e1d497；不把数据分支的独立 Provider/测试变更合入 WebUI 功能提交。
+
+
+## 2026-10-29 — 最新数据分支差异与验收收尾
+
+- 数据分支从 86fbb250cae16d50d49231b1e72e98719e877340 前进到 16944cd5e98b900e3aa5c4636ec185f947e1d497，新增提交“统一 Tushare 涨跌停池默认返回条数”，修改 Tushare Provider 默认请求条数（30 → 100）并新增 35 条默认覆盖测试。该提交未合入 WebUI 分支；继续遵守本轮 UI 功能只修改 web/** 的边界，不把新的服务端改动混入 UI 提交。
+- [x] 修复交易日历校验模块作用域后的 [Browser Smoke #40802836160](https://github.com/Kasign/stock_data_provider/actions/runs/40802836160) 成功。
+- [x] 记录上述修复的文档提交 [Browser Smoke #40802964859](https://github.com/Kasign/stock_data_provider/actions/runs/40802964859) 成功。
+- [x] PR #1 仍为 Open / Draft，未合并、未关闭；数据分支 HEAD 以远端实时状态为准。
+- 新增行为逻辑的 5 个本地 Node 等价用例已通过；仓库完整 npm test 尚未运行。尝试克隆仓库以执行完整套件时，当前容器因 DNS 无法解析 github.com 失败。Browser Smoke 不代表完整 Node 测试、真实 Provider 请求或 NAS/1Panel 验收。
