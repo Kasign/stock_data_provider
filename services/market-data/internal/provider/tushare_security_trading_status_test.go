@@ -36,6 +36,9 @@ func TestTushareFetchSecurityTradingStatusUsesEffectiveNameAndSuspensionRecords(
 		case "stock_basic":
 			fields = []string{"ts_code","name","industry","market","exchange","list_status","list_date","delist_date"}
 			items = [][]any{{"600519.SH","贵州茅台","白酒","主板","SSE","L","20261020",nil}}
+		case "stock_st":
+			fields = []string{"ts_code","name","trade_date","type","type_name}
+			items = [][]any{{"600519.SH", "*ST贵州", "20261022", "ST", "风险警示板"}}
 		case "namechange":
 			fields = []string{"ts_code","name","start_date","end_date","ann_date","change_reason"}
 			items = [][]any{
@@ -95,7 +98,7 @@ func TestTushareFetchSecurityTradingStatusUsesEffectiveNameAndSuspensionRecords(
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if calls["stock_basic"]!=1 || calls["namechange"]!=1 || calls["suspend_d"]!=1 || calls["trade_cal"]!=2 {
+	if calls["stock_basic"]!=1 || calls["namechange"]!=1 || calls["suspend_d"]!=1 || calls["trade_cal"]!=2 || calls["stock_st"]!=1 {
 		t.Fatalf("unexpected Tushare capability calls: %+v",calls)
 	}
 }
@@ -158,6 +161,9 @@ func TestTushareFetchSecurityTradingStatusUsesSSECalendarForBeijingExchange(t *t
 		case "stock_basic":
 			fields = []string{"ts_code", "name", "industry", "market", "exchange", "list_status", "list_date", "delist_date"}
 			items = [][]any{{"920001.BJ", "北证示例", "综合", "北交所", "BSE", "L", "20200101", nil}}
+		case "stock_st":
+			fields = []string{"ts_code", "name", "trade_date", "type", "type_name"}
+			items = [][]any{}
 		case "namechange":
 			fields = []string{"ts_code", "name", "start_date", "end_date", "ann_date", "change_reason"}
 			items = [][]any{{"920001.BJ", "北证示例", "20200101", nil, "20200101", "上市"}}
@@ -242,6 +248,9 @@ func TestTushareFetchSecurityTradingStatusFindsDelistedSecurityBasicRow(t *testi
 			default:
 				t.Errorf("unexpected stock_basic list_status %q", status)
 			}
+		case "stock_st":
+			fields = []string{"ts_code", "name", "trade_date", "type", "type_name"}
+			items = [][]any{}
 		case "namechange":
 			fields = []string{"ts_code", "name", "start_date", "end_date", "ann_date", "change_reason"}
 			items = [][]any{
@@ -284,5 +293,61 @@ func TestTushareFetchSecurityTradingStatusFindsDelistedSecurityBasicRow(t *testi
 	}
 	if tradeCalendarExchange != "SSE" || !got.TradingDayKnown {
 		t.Fatalf("expected documented shared market calendar for Beijing Exchange, got exchange=%q status=%+v", tradeCalendarExchange, got)
+	}
+}
+
+
+func TestFetchHistoricalRiskWarningStatusUsesExactDailyStockSTList(t *testing.T) {
+	cases := []struct {
+		name string
+		items [][]any
+		want model.RiskWarningStatus
+		wantErr bool
+	}{
+		{name: "not in ST list means normal", items: [][]any{}, want: model.RiskWarningNormal},
+		{name: "matching ST row", items: [][]any{{"600519.SH", "*ST贵州", "20261022", "ST", "风险警示板"}}, want: model.RiskWarningApplied},
+		{name: "wrong symbol", items: [][]any{{"600000.SH", "ST浦发", "20261022", "ST", "风险警示板"}}, want: model.RiskWarningUnknown, wantErr: true},
+		{name: "wrong date", items: [][]any{{"600519.SH", "*ST贵州", "20261021", "ST", "风险警示板"}}, want: model.RiskWarningUnknown, wantErr: true},
+		{name: "duplicate rows", items: [][]any{{"600519.SH", "*ST贵州", "20261022", "ST", "风险警示板"}, {"600519.SH", "*ST贵州", "20261022", "ST", "风险警示板"}}, want: model.RiskWarningUnknown, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					APIName string `json:"api_name"`
+					Params map[string]string `json:"params"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Errorf("decode request: %v", err)
+					http.Error(w, "bad request", http.StatusBadRequest)
+					return
+				}
+				if request.APIName != "stock_st" || request.Params["ts_code"] != "600519.SH" || request.Params["trade_date"] != "20261022" {
+					t.Errorf("unexpected stock_st request: %+v", request)
+				}
+				fields := []string{"ts_code", "name", "trade_date", "type", "type_name"}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"code": 0, "msg": "",
+					"data": map[string]any{"fields": fields, "items": tc.items},
+				})
+			}))
+			defer server.Close()
+			client := NewTushareConfigured(2*time.Second, server.URL, "fixture-token")
+			got, err := client.fetchHistoricalRiskWarningStatus(context.Background(), "600519.SH", "20261022")
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error=%v, wantErr=%v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Fatalf("status=%q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFetchHistoricalRiskWarningStatusDoesNotAssumePre2000Normal(t *testing.T) {
+	client := NewTushareConfigured(2*time.Second, "http://127.0.0.1:1", "fixture-token")
+	got, err := client.fetchHistoricalRiskWarningStatus(context.Background(), "600519.SH", "19991231")
+	if err == nil || got != model.RiskWarningUnknown {
+		t.Fatalf("pre-2000 status must remain unknown without an upstream request: status=%q err=%v", got, err)
 	}
 }

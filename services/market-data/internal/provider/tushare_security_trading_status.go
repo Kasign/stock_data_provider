@@ -11,7 +11,7 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
 )
 
-const tushareSecurityTradingStatusVersion = "tushare-namechange-suspend-d-trade-cal-v1"
+const tushareSecurityTradingStatusVersion = "tushare-stock-st-namechange-suspend-d-trade-cal-v2"
 
 // FetchSecurityTradingStatus reconstructs date-effective security status using source records.
 // It intentionally does not substitute the current stock name for a missing historical name row.
@@ -82,6 +82,7 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 		QualityReasons: []string{"provider_exact_snapshot_time_not_exposed"},
 	}
 
+	historicalRiskStatus := model.RiskWarningUnknown
 	if nameErr != nil {
 		result.RiskWarningStatus = model.RiskWarningUnknown
 		result.QualityStatus = model.QualityUnknown
@@ -90,12 +91,32 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 		result.SecurityName = name.Name
 		result.NameEffectiveFrom = name.StartDate
 		result.NameEffectiveTo = name.EndDate
-		result.RiskWarningStatus = riskWarningStatusFromHistoricalName(name.Name)
+		historicalRiskStatus = riskWarningStatusFromHistoricalName(name.Name)
 		result.DelistingStatus = delistingStatusFromHistoricalName(name.Name)
-		if result.RiskWarningStatus == model.RiskWarningUnknown || result.DelistingStatus == model.DelistingStatusUnknown {
+		if historicalRiskStatus == model.RiskWarningUnknown || result.DelistingStatus == model.DelistingStatusUnknown {
 			result.QualityStatus = model.QualityUnknown
 			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "historical_security_name_does_not_prove_risk_warning_or_delisting_status")
 		}
+	}
+
+	// stock_st 是按交易日提供的风险警示板名单；名称前缀只作为一致性校验，不作为权威状态回退。
+	authoritativeRiskStatus, riskStatusErr := p.fetchHistoricalRiskWarningStatus(ctx, symbol, compactDate)
+	if riskStatusErr != nil {
+		result.RiskWarningStatus = model.RiskWarningUnknown
+		result.QualityStatus = model.QualityUnknown
+		result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "authoritative_historical_risk_warning_status_unavailable")
+	} else if result.DelistingStatus == model.DelistingStatusDelistingRisk ||
+		result.DelistingStatus == model.DelistingStatusDelistingPeriod {
+		// 退市风险/退市整理期间的涨跌幅规则需单独解析，不能把 ST 名单结果直接解释为该类证券的规则状态。
+		result.RiskWarningStatus = model.RiskWarningUnknown
+		result.QualityStatus = model.QualityUnknown
+		result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "risk_warning_status_suppressed_for_delisting_price_limit_regime")
+	} else if historicalRiskStatus != model.RiskWarningUnknown && historicalRiskStatus != authoritativeRiskStatus {
+		result.RiskWarningStatus = model.RiskWarningUnknown
+		result.QualityStatus = model.QualityUnknown
+		result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "historical_name_and_authoritative_st_list_conflict")
+	} else {
+		result.RiskWarningStatus = authoritativeRiskStatus
 	}
 	if strings.TrimSpace(listingDate) == "" {
 		result.ListingStatusKnown = false
@@ -193,6 +214,52 @@ func (p *Tushare) fetchSecurityListingDate(ctx context.Context, symbol string) (
 		return tushareISODate(listDateRaw)
 	}
 	return "", fmt.Errorf("Tushare stock_basic 未在 L/D/P 状态目录中找到 %s", symbol)
+}
+
+
+ // fetchHistoricalRiskWarningStatus 用 Tushare stock_st 的指定交易日名单确认 ST 状态。
+ // 该接口历史数据从 2000-01-01 开始；历史范围外或请求失败时返回错误而不是推断为正常。
+ func (p *Tushare) fetchHistoricalRiskWarningStatus(ctx context.Context, symbol, compactDate string) (model.RiskWarningStatus, error) {
+	if compactDate < "20000101" {
+		return model.RiskWarningUnknown, errors.New("Tushare stock_st 历史数据从 20000101 开始")
+	}
+	table, err := p.fetchCapabilityTable(ctx, "stock_st", map[string]string{
+		"ts_code": symbol, "trade_date": compactDate,
+	}, "ts_code,name,trade_date,type,type_name")
+	if err != nil {
+		return model.RiskWarningUnknown, err
+	}
+	if len(table.rows) == 0 {
+		return model.RiskWarningNormal, nil
+	}
+	if len(table.rows) != 1 {
+		return model.RiskWarningUnknown, fmt.Errorf("Tushare stock_st 对 %s/%s 返回重复记录 %d 行", symbol, compactDate, len(table.rows))
+	}
+	row := table.rows[0]
+	code, err := table.stringValue(row, "ts_code")
+	if err != nil {
+		return model.RiskWarningUnknown, err
+	}
+	canonical, err := normalize.NormalizeSymbol(code)
+	if err != nil || canonical != symbol {
+		return model.RiskWarningUnknown, fmt.Errorf("Tushare stock_st 返回证券代码不匹配: requested=%s returned=%q", symbol, code)
+	}
+	dateRaw, err := table.stringValue(row, "trade_date")
+	if err != nil {
+		return model.RiskWarningUnknown, err
+	}
+	rowDate, err := tushareCompactDate(dateRaw)
+	if err != nil || rowDate != compactDate {
+		return model.RiskWarningUnknown, fmt.Errorf("Tushare stock_st 返回日期不匹配: requested=%s returned=%q", compactDate, dateRaw)
+	}
+	statusType, err := table.stringValue(row, "type")
+	if err != nil {
+		return model.RiskWarningUnknown, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(statusType), "ST") {
+		return model.RiskWarningUnknown, fmt.Errorf("Tushare stock_st 返回未知类型 %q", statusType)
+	}
+	return model.RiskWarningApplied, nil
 }
 
 type effectiveTushareSecurityName struct {
