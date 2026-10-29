@@ -104,6 +104,15 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	capitalFlowEnabled := map[string]bool{}
 	hotRankingEnabled := map[string]bool{}
 	if svc != nil {
+		var priceLimitEventProviders []provider.PriceLimitEventProvider
+		for _, p := range allProviders {
+			if eventProvider, ok := p.(provider.PriceLimitEventProvider); ok {
+				priceLimitEventProviders = append(priceLimitEventProviders, eventProvider)
+			}
+		}
+		if len(priceLimitEventProviders) > 0 {
+			svc.SetPriceLimitEventProviders(priceLimitEventProviders)
+		}
 		for _, p := range svc.StockBasicProviders() {
 			stockBasicEnabled[p.Name()] = true
 		}
