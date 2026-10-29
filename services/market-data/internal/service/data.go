@@ -37,8 +37,9 @@ type DataService struct {
 	dragonTigerProviders      []provider.DragonTigerProvider
 	announcementProviders     []provider.AnnouncementProvider
 	stockBoardsProviders      []provider.StockBoardsProvider
-	tradingCalendarProviders  []provider.TradingCalendarProvider
-	fundamentalsProviders     []provider.FundamentalsProvider
+	tradingCalendarProviders       []provider.TradingCalendarProvider
+	securityTradingStatusProviders []provider.SecurityTradingStatusProvider
+	fundamentalsProviders           []provider.FundamentalsProvider
 	valuationProviders        []provider.ValuationProvider
 	indexCatalogProviders     []provider.IndexCatalogProvider
 	chipDistributionProviders []provider.ChipDistributionProvider
