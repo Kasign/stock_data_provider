@@ -637,6 +637,7 @@ func tushareStatementDefinitions() []tushareStatementDefinition {
 		},
 	}
 }
+
 // tushareStatementReportType 返回合并报表的查询类型：一季报本身是单季度值，后续季度才取单季合并类型。
 func tushareStatementReportType(apiName, periodDate string) string {
 	if apiName != "income" && apiName != "cashflow" {
@@ -722,14 +723,14 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 	if selected == nil {
 		return model.FundamentalSection{
 			Category: definition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},
-			QualityStatus: model.QualityUnknown,
+			QualityStatus:  model.QualityUnknown,
 			QualityReasons: []string{"no_statement_row_with_confirmed_publication_date_for_requested_period"},
 		}, nil
 	}
 
 	section := model.FundamentalSection{
 		Category: definition.category, ReportDate: periodDate, PublicationDate: selectedPublicationDate,
-		Metrics: make([]model.FundamentalMetric, 0, len(definition.metrics)),
+		Metrics:       make([]model.FundamentalMetric, 0, len(definition.metrics)),
 		QualityStatus: model.QualityValid,
 	}
 	requiredMissingCount := 0
@@ -759,7 +760,6 @@ func (p *Tushare) fetchStatementSection(ctx context.Context, symbol, periodCompa
 	}
 	return section, nil
 }
-
 
 func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year, quarter int) (*model.FundamentalsSnapshot, error) {
 	if ctx == nil {
@@ -913,7 +913,7 @@ func (p *Tushare) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 			}
 			section = model.FundamentalSection{
 				Category: statementDefinition.category, ReportDate: periodDate, Metrics: []model.FundamentalMetric{},
-				QualityStatus: model.QualityDegraded,
+				QualityStatus:  model.QualityDegraded,
 				QualityReasons: []string{"provider_statement_endpoint_unavailable"},
 			}
 			snapshotReasons = appendTushareReason(snapshotReasons, statementDefinition.category+"_provider_unavailable")

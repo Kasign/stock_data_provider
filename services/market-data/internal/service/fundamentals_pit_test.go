@@ -22,11 +22,11 @@ func TestFilterFundamentalsSnapshotAsOfExcludesUnprovenPublications(t *testing.T
 		Symbol: "600519.SH", Year: 2025, Quarter: 4, HasData: true, QualityStatus: model.QualityDegraded,
 		Sections: []model.FundamentalSection{
 			{Category: "profitability", PublicationDate: "2026-08-19", HasData: true, QualityStatus: model.QualityDegraded,
-				Metrics: []model.FundamentalMetric{{Key:"roe",Name:"净资产收益率",Value:0.12,Unit:"ratio",SourceField:"roe"}}},
+				Metrics: []model.FundamentalMetric{{Key: "roe", Name: "净资产收益率", Value: 0.12, Unit: "ratio", SourceField: "roe"}}},
 			{Category: "growth", PublicationDate: "2026-08-20", HasData: true, QualityStatus: model.QualityDegraded,
-				Metrics: []model.FundamentalMetric{{Key:"growth",Name:"营收增长率",Value:0.08,Unit:"ratio",SourceField:"growth"}}},
+				Metrics: []model.FundamentalMetric{{Key: "growth", Name: "营收增长率", Value: 0.08, Unit: "ratio", SourceField: "growth"}}},
 			{Category: "cash_flow", PublicationDate: "", HasData: true, QualityStatus: model.QualityDegraded,
-				Metrics: []model.FundamentalMetric{{Key:"cash",Name:"现金流",Value:1,Unit:"CNY",SourceField:"cash"}}},
+				Metrics: []model.FundamentalMetric{{Key: "cash", Name: "现金流", Value: 1, Unit: "CNY", SourceField: "cash"}}},
 		},
 	}
 	filtered, usable := filterFundamentalsSnapshotAsOf(snapshot, asOf)

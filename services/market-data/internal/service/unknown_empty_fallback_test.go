@@ -14,32 +14,38 @@ import (
 )
 
 type fundamentalsFallbackTestProvider struct {
-	name string
+	name     string
 	snapshot *model.FundamentalsSnapshot
-	err error
-	calls int
+	err      error
+	calls    int
 }
 
 func (p *fundamentalsFallbackTestProvider) Name() string { return p.name }
 
 func (p *fundamentalsFallbackTestProvider) FetchFundamentals(_ context.Context, symbol string, year, quarter int) (*model.FundamentalsSnapshot, error) {
 	p.calls++
-	if p.err != nil { return nil, p.err }
-	if p.snapshot == nil { return nil, errors.New("test fundamentals snapshot is nil") }
+	if p.err != nil {
+		return nil, p.err
+	}
+	if p.snapshot == nil {
+		return nil, errors.New("test fundamentals snapshot is nil")
+	}
 	out := *p.snapshot
 	out.Symbol, out.Year, out.Quarter = symbol, year, quarter
 	out.Sections = append([]model.FundamentalSection(nil), p.snapshot.Sections...)
-	for i := range out.Sections { out.Sections[i].Metrics = append([]model.FundamentalMetric(nil), p.snapshot.Sections[i].Metrics...) }
+	for i := range out.Sections {
+		out.Sections[i].Metrics = append([]model.FundamentalMetric(nil), p.snapshot.Sections[i].Metrics...)
+	}
 	return &out, nil
 }
 
 type indexCatalogFallbackTestProvider struct {
-	name string
-	catalog *model.IndexCatalogSnapshot
-	constituents *model.IndexConstituentSnapshot
-	catalogErr error
-	constituentsErr error
-	catalogCalls int
+	name             string
+	catalog          *model.IndexCatalogSnapshot
+	constituents     *model.IndexConstituentSnapshot
+	catalogErr       error
+	constituentsErr  error
+	catalogCalls     int
 	constituentCalls int
 }
 
@@ -47,19 +53,29 @@ func (p *indexCatalogFallbackTestProvider) Name() string { return p.name }
 
 func (p *indexCatalogFallbackTestProvider) FetchIndexCatalog(_ context.Context, tag string) (*model.IndexCatalogSnapshot, error) {
 	p.catalogCalls++
-	if p.catalogErr != nil { return nil, p.catalogErr }
-	if p.catalog == nil { return nil, errors.New("test index catalog is nil") }
+	if p.catalogErr != nil {
+		return nil, p.catalogErr
+	}
+	if p.catalog == nil {
+		return nil, errors.New("test index catalog is nil")
+	}
 	out := *p.catalog
 	out.Tag = tag
 	out.Items = append([]model.IndexCatalogItem(nil), p.catalog.Items...)
-	for i := range out.Items { out.Items[i].Tag = tag }
+	for i := range out.Items {
+		out.Items[i].Tag = tag
+	}
 	return &out, nil
 }
 
 func (p *indexCatalogFallbackTestProvider) FetchIndexConstituents(_ context.Context, indexSymbol string) (*model.IndexConstituentSnapshot, error) {
 	p.constituentCalls++
-	if p.constituentsErr != nil { return nil, p.constituentsErr }
-	if p.constituents == nil { return nil, errors.New("test index constituents is nil") }
+	if p.constituentsErr != nil {
+		return nil, p.constituentsErr
+	}
+	if p.constituents == nil {
+		return nil, errors.New("test index constituents is nil")
+	}
 	out := *p.constituents
 	out.IndexSymbol = indexSymbol
 	out.Items = append([]model.IndexConstituent(nil), p.constituents.Items...)
@@ -113,7 +129,9 @@ func TestFundamentalsFallsBackAfterUnknownEmptyReportPeriod(t *testing.T) {
 	first := &fundamentalsFallbackTestProvider{name: "baostock", snapshot: unknownFundamentalsForFallbackTest("baostock")}
 	second := &fundamentalsFallbackTestProvider{name: "tushare", snapshot: validFundamentalsForFallbackTest("tushare")}
 	got, hit, err := fundamentalsFallbackService(first, second).Fundamentals(context.Background(), "600519.SH", 2025, 4)
-	if err != nil || hit { t.Fatalf("Fundamentals returned hit=%v err=%v", hit, err) }
+	if err != nil || hit {
+		t.Fatalf("Fundamentals returned hit=%v err=%v", hit, err)
+	}
 	if got == nil || !got.HasData || got.Source != "tushare" || first.calls != 1 || second.calls != 1 {
 		t.Fatalf("expected the second provider's financial metrics, snapshot=%+v calls=%d/%d", got, first.calls, second.calls)
 	}
@@ -125,7 +143,9 @@ func TestIndexCatalogFallsBackAfterUnknownEmptyCatalog(t *testing.T) {
 	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
 	svc.SetIndexCatalogProviders([]provider.IndexCatalogProvider{first, second})
 	got, hit, err := svc.IndexCatalog(context.Background(), "cn_concept")
-	if err != nil || hit { t.Fatalf("IndexCatalog returned hit=%v err=%v", hit, err) }
+	if err != nil || hit {
+		t.Fatalf("IndexCatalog returned hit=%v err=%v", hit, err)
+	}
 	if got == nil || len(got.Items) != 1 || got.Source != "hithink" || first.catalogCalls != 1 || second.catalogCalls != 1 {
 		t.Fatalf("expected fallback index catalog, snapshot=%+v calls=%d/%d", got, first.catalogCalls, second.catalogCalls)
 	}
@@ -137,7 +157,9 @@ func TestIndexConstituentsFallsBackAfterUnknownEmptyMembership(t *testing.T) {
 	svc := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Second, 120, 2000, ResilienceConfig{}, nil)
 	svc.SetIndexCatalogProviders([]provider.IndexCatalogProvider{first, second})
 	got, hit, err := svc.IndexConstituentsFromSource(context.Background(), "000300.SH", "")
-	if err != nil || hit { t.Fatalf("IndexConstituents returned hit=%v err=%v", hit, err) }
+	if err != nil || hit {
+		t.Fatalf("IndexConstituents returned hit=%v err=%v", hit, err)
+	}
 	if got == nil || len(got.Items) != 1 || got.Source != "tushare" || first.constituentCalls != 1 || second.constituentCalls != 1 {
 		t.Fatalf("expected fallback index constituents, snapshot=%+v calls=%d/%d", got, first.constituentCalls, second.constituentCalls)
 	}

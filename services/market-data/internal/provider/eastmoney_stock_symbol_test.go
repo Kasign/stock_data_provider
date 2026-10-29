@@ -31,7 +31,10 @@ func TestEastmoneyStockSpecificEndpointsRejectNonStockSecuritiesBeforeRequest(t 
 		call func(string) error
 	}{
 		{"quote", func(symbol string) error { _, err := p.FetchQuote(ctx, symbol); return err }},
-		{"daily_bars", func(symbol string) error { _, err := p.FetchDailyBars(ctx, symbol, "2026-10-20", "2026-10-26", 10, model.AdjustmentNone); return err }},
+		{"daily_bars", func(symbol string) error {
+			_, err := p.FetchDailyBars(ctx, symbol, "2026-10-20", "2026-10-26", 10, model.AdjustmentNone)
+			return err
+		}},
 		{"stock_basic", func(symbol string) error { _, err := p.FetchStockBasic(ctx, symbol); return err }},
 		{"stock_boards", func(symbol string) error { _, err := p.FetchStockBoards(ctx, symbol); return err }},
 		{"chip_distribution", func(symbol string) error { _, err := p.FetchChipDistribution(ctx, symbol); return err }},
@@ -92,7 +95,6 @@ func TestEastmoneyLimitPoolRejectsUnsupportedSecuritySymbols(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyStockSearchDropsNonAshareAndMarketMismatchRows(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"rc":0,"data":{"total":7,"diff":[
@@ -131,7 +133,6 @@ func TestEastmoneyStockSearchDropsNonAshareAndMarketMismatchRows(t *testing.T) {
 		t.Fatalf("quality reasons should disclose filtered non-A-share rows, got %v", reasons)
 	}
 }
-
 
 func TestParseEastmoneyLimitTimeValidatesClockRange(t *testing.T) {
 	for _, tt := range []struct {

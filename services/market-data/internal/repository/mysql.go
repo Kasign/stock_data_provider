@@ -182,7 +182,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return nil
 }
 
-
 func (s *Store) ensureNonUniqueHistoryIndex(ctx context.Context, table, legacyIndex, indexName, columns string) error {
 	// 所有标识符和列定义均为包内常量，不接受请求参数。
 	var legacyCount int
@@ -312,7 +311,6 @@ ORDER BY recorded_at DESC, id DESC LIMIT 1 FOR UPDATE`,
 	return tx.Commit()
 }
 
-
 func shouldRecordRevision(previousHash string, hasPrevious bool, nextHash string) bool {
 	return !hasPrevious || previousHash != nextHash
 }
@@ -397,7 +395,6 @@ ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
 	}
 	return out, nil
 }
-
 
 func fundamentalsRevisionHash(snapshot model.FundamentalsSnapshot) (string, error) {
 	fingerprint := snapshot

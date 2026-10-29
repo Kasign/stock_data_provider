@@ -129,7 +129,7 @@ func tencentStockSearchTerm(query string) string {
 }
 
 // isTencentAshareStockCode 过滤 Smartbox 的 ETF、指数、可转债等非普通 A 股证券代码。
- // Smartbox 的 t=all 结果仅给出交易所标记与代码，交易所标记本身不能证明证券类型。
+// Smartbox 的 t=all 结果仅给出交易所标记与代码，交易所标记本身不能证明证券类型。
 func isTencentAshareStockCode(code, exchange string) bool {
 	if len(code) != 6 {
 		return false

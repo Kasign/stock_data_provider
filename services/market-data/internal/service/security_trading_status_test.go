@@ -22,8 +22,12 @@ func (p *securityTradingStatusTestProvider) Name() string { return p.name }
 
 func (p *securityTradingStatusTestProvider) FetchSecurityTradingStatus(context.Context, string, string) (*model.SecurityTradingStatusSnapshot, error) {
 	p.calls++
-	if p.err != nil { return nil, p.err }
-	if p.snapshot == nil { return nil, errors.New("test status is nil") }
+	if p.err != nil {
+		return nil, p.err
+	}
+	if p.snapshot == nil {
+		return nil, errors.New("test status is nil")
+	}
 	out := *p.snapshot
 	out.QualityReasons = append([]string(nil), p.snapshot.QualityReasons...)
 	return &out, nil
@@ -49,7 +53,9 @@ func TestSecurityTradingStatusReturnsValidatedHistoricalEvidence(t *testing.T) {
 	second := &securityTradingStatusTestProvider{name: "good-source", snapshot: validSecurityTradingStatusFixture("good-source")}
 	svc := &DataService{securityTradingStatusProviders: []provider.SecurityTradingStatusProvider{first, second}}
 	got, err := svc.SecurityTradingStatus(context.Background(), "600519.SH", "2026-10-22")
-	if err != nil { t.Fatalf("SecurityTradingStatus: %v", err) }
+	if err != nil {
+		t.Fatalf("SecurityTradingStatus: %v", err)
+	}
 	if got.Source != "good-source" || got.RiskWarningStatus != model.RiskWarningApplied ||
 		got.SuspensionStatus != model.SuspensionStatusIntraday || got.ListingTradingDayNumber != 3 {
 		t.Fatalf("unexpected status result: %+v", got)
@@ -72,7 +78,9 @@ func TestSecurityTradingStatusKeepsUnknownEvidenceUnknown(t *testing.T) {
 	p := &securityTradingStatusTestProvider{name: "unknown-source", snapshot: snapshot}
 	svc := &DataService{securityTradingStatusProviders: []provider.SecurityTradingStatusProvider{p}}
 	got, err := svc.SecurityTradingStatus(context.Background(), "600519.SH", "2026-10-22")
-	if err != nil { t.Fatalf("incomplete evidence should remain an explicit result, got %v", err) }
+	if err != nil {
+		t.Fatalf("incomplete evidence should remain an explicit result, got %v", err)
+	}
 	if got.RiskWarningStatus != model.RiskWarningUnknown || got.SuspensionStatus != model.SuspensionStatusUnknown ||
 		got.QualityStatus != model.QualityUnknown {
 		t.Fatalf("unknown inputs were promoted to normal/valid: %+v", got)

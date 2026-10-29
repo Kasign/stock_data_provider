@@ -232,8 +232,8 @@ func (p *Eastmoney) FetchStockBoards(ctx context.Context, rawSymbol string) (*mo
 	snapshot := &model.StockBoardSnapshot{
 		Symbol: symbol, Total: payload.Data.Total, HasData: payload.Data.Total > 0,
 		ProviderReturned: len(rows),
-		Items: make([]model.StockBoard, 0, len(rows)),
-		Source: p.Name(), SourceVersion: "eastmoney-slist-stock-boards-v1",
+		Items:            make([]model.StockBoard, 0, len(rows)),
+		Source:           p.Name(), SourceVersion: "eastmoney-slist-stock-boards-v1",
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}
@@ -476,8 +476,8 @@ func (p *Eastmoney) FetchStockBasic(ctx context.Context, rawSymbol string) (*mod
 	for key, value := range map[string]*float64{
 		"pe_dynamic": item.DynamicPE, "pb": item.PB, "market_cap_cny": item.MarketCapCNY,
 		"float_market_cap_cny": item.FloatMarketCapCNY,
-		"total_shares": item.TotalShares, "float_shares": item.FloatShares,
-		"roe_percent": item.ROEPercent,
+		"total_shares":         item.TotalShares, "float_shares": item.FloatShares,
+		"roe_percent":               item.ROEPercent,
 		"net_profit_margin_percent": item.NetProfitMarginPercent, "net_profit_cny": item.NetProfitCNY,
 		"gross_margin_percent": item.GrossMarginPercent,
 	} {
@@ -1901,7 +1901,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	var payload struct {
 		RC   *int `json:"rc"`
 		Data *struct {
-			Total *int `json:"total"`
+			Total *int                         `json:"total"`
 			Diff  []map[string]json.RawMessage `json:"diff"`
 		} `json:"data"`
 	}
@@ -1942,7 +1942,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 		Source: p.Name(), SourceVersion: "eastmoney-sector-clist-v1",
 		FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
-		Items: make([]model.SectorRanking, 0, len(payload.Data.Diff)),
+		Items:          make([]model.SectorRanking, 0, len(payload.Data.Diff)),
 	}
 	for _, raw := range payload.Data.Diff {
 		code := parseEastmoneyBoardString(raw, "f12")
@@ -1987,6 +1987,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	}
 	return snapshot, nil
 }
+
 // decodeEastmoneyBoardRows accepts array payloads and Eastmoney's indexed-object shape
 // ({"0": {...}, "1": {...}}). Numeric index ordering is preserved explicitly because
 // Go map iteration order is intentionally unspecified.
@@ -2205,7 +2206,7 @@ func (p *Eastmoney) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnap
 		if prevClose != nil {
 			priceChange := *price - *prevClose
 			if (change != nil && math.Abs(*change-priceChange) > eastmoneyIndexChangeTolerance) ||
-				math.Abs(*changePercent-priceChange / *prevClose * 100) > eastmoneyIndexChangePercentTolerancePP {
+				math.Abs(*changePercent - priceChange / *prevClose * 100) > eastmoneyIndexChangePercentTolerancePP {
 				snapshot.QualityStatus = model.QualityDegraded
 				snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_index_change_fields_inconsistent")
 				continue
@@ -2813,7 +2814,7 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(strings.Trim(strings.TrimSpace(string(sourceQDate)), `"`)),
 		Total: sourceTotal, ProviderReturned: sourceRowsReturned,
 		HasData: sourceTotal > 0 && len(poolRows) > 0,
-		Items: make([]model.LimitPoolItem, 0, len(poolRows)), Source: p.Name(),
+		Items:   make([]model.LimitPoolItem, 0, len(poolRows)), Source: p.Name(),
 		SourceVersion: "eastmoney-push2ex-limit-pool-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed", "requested_trade_date_is_authoritative"},
 	}

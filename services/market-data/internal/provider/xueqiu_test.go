@@ -109,8 +109,6 @@ func TestXueqiuHotRankingMarksInvalidRankChange(t *testing.T) {
 	}
 }
 
-
-
 func TestXueqiuHotRankingRejectsMalformedErrorCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v5/stock/hot_stock/list.json" {

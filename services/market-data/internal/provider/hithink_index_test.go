@@ -14,11 +14,11 @@ import (
 
 func TestHithinkFetchIndexQuotesCrossChecksReportedChanges(t *testing.T) {
 	cases := []struct {
-		name             string
-		priceChange      float64
-		changeRatio      float64
-		wantDropped      bool
-		wantQuality      model.QualityStatus
+		name        string
+		priceChange float64
+		changeRatio float64
+		wantDropped bool
+		wantQuality model.QualityStatus
 	}{
 		{
 			name:        "reported values within rounding tolerance use calculated values",
@@ -59,16 +59,16 @@ func TestHithinkFetchIndexQuotesCrossChecksReportedChanges(t *testing.T) {
 				items := make([]map[string]any, 0, len(hithinkCoreIndexDefinitions))
 				for _, definition := range hithinkCoreIndexDefinitions {
 					row := map[string]any{
-						"thscode": definition.Symbol,
-						"name": definition.Name,
-						"last_price": 101.0,
-						"price_change": 1.0,
+						"thscode":                definition.Symbol,
+						"name":                   definition.Name,
+						"last_price":             101.0,
+						"price_change":           1.0,
 						"price_change_ratio_pct": 1.0,
-						"open_price": 99.0,
-						"high_price": 102.0,
-						"low_price": 98.0,
-						"prev_price": 100.0,
-						"turnover": 123456.0,
+						"open_price":             99.0,
+						"high_price":             102.0,
+						"low_price":              98.0,
+						"prev_price":             100.0,
+						"turnover":               123456.0,
 					}
 					if definition.Symbol == "000001.SH" {
 						row["price_change"] = tc.priceChange
@@ -80,7 +80,7 @@ func TestHithinkFetchIndexQuotesCrossChecksReportedChanges(t *testing.T) {
 					"code": 0,
 					"data": map[string]any{
 						"timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli(),
-						"item": items,
+						"item":      items,
 					},
 				}
 				if err := json.NewEncoder(w).Encode(payload); err != nil {
@@ -136,21 +136,21 @@ func TestHithinkFetchIndexQuotesMissingOptionalChangesUsesCalculatedValues(t *te
 		items := make([]map[string]any, 0, len(hithinkCoreIndexDefinitions))
 		for _, definition := range hithinkCoreIndexDefinitions {
 			items = append(items, map[string]any{
-				"thscode": definition.Symbol,
-				"name": definition.Name,
+				"thscode":    definition.Symbol,
+				"name":       definition.Name,
 				"last_price": 101.0,
 				"open_price": 99.0,
 				"high_price": 102.0,
-				"low_price": 98.0,
+				"low_price":  98.0,
 				"prev_price": 100.0,
-				"turnover": 123456.0,
+				"turnover":   123456.0,
 			})
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"code": 0,
 			"data": map[string]any{
 				"timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli(),
-				"item": items,
+				"item":      items,
 			},
 		})
 	}))
@@ -169,8 +169,6 @@ func TestHithinkFetchIndexQuotesMissingOptionalChangesUsesCalculatedValues(t *te
 		t.Fatalf("unexpected calculated changes: %+v", got.Items[0])
 	}
 }
-
-
 
 func TestHithinkFetchQuoteUsesCalculatedChangesAndSnapshotTimestamp(t *testing.T) {
 	now := time.Now().UTC()
@@ -263,7 +261,6 @@ func TestHithinkFetchQuoteRejectsInconsistentReportedChanges(t *testing.T) {
 	}
 }
 
-
 func TestHithinkFetchQuoteRejectsDuplicateRequestedSecurityRows(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/a-share/prices/snapshot" {
@@ -281,7 +278,7 @@ func TestHithinkFetchQuoteRejectsDuplicateRequestedSecurityRows(t *testing.T) {
 			"code": 0,
 			"data": map[string]any{
 				"timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli(),
-				"item": []map[string]any{row, row},
+				"item":      []map[string]any{row, row},
 			},
 		})
 	}))
@@ -292,7 +289,6 @@ func TestHithinkFetchQuoteRejectsDuplicateRequestedSecurityRows(t *testing.T) {
 		t.Fatalf("duplicate quote identity must be rejected rather than selecting the first row, got %v", err)
 	}
 }
-
 
 func TestHithinkFetchIndexCatalogTracksRawAndExcludedRows(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

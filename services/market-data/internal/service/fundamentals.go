@@ -141,9 +141,9 @@ func betterUnknownFundamentalsSnapshot(candidate, current *model.FundamentalsSna
 		return candidate.HasData
 	}
 	type coverage struct {
-		dataSections       int
-		metricCount        int
-		publicationDates   int
+		dataSections     int
+		metricCount      int
+		publicationDates int
 	}
 	score := func(snapshot *model.FundamentalsSnapshot) coverage {
 		result := coverage{}
@@ -282,7 +282,6 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 	}
 	return nil, false, fmt.Errorf("all fundamentals providers failed: %s", strings.Join(failures, "; "))
 }
-
 
 var (
 	ErrFundamentalsAsOfUnavailable = errors.New("fundamentals point-in-time storage is not enabled")

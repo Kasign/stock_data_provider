@@ -14,10 +14,10 @@ import (
 )
 
 type hotRankingFallbackTestProvider struct {
-	name string
+	name     string
 	snapshot *model.HotRankingSnapshot
-	err error
-	calls int
+	err      error
+	calls    int
 }
 
 func (p *hotRankingFallbackTestProvider) Name() string { return p.name }
@@ -284,7 +284,6 @@ func TestHotRankingCachesUnknownOnlyAfterFallbackExhaustion(t *testing.T) {
 	}
 }
 
-
 func TestHotRankingFallsBackFromNonFiniteHeat(t *testing.T) {
 	invalid := populatedHotRankingForFallbackTest("eastmoney")
 	badHeat := math.NaN()
@@ -304,7 +303,6 @@ func TestHotRankingFallsBackFromNonFiniteHeat(t *testing.T) {
 		t.Fatalf("non-finite heat must trigger provider fallback, calls=%d/%d", primary.calls, fallback.calls)
 	}
 }
-
 
 func TestHotRankingFallsBackFromRankGap(t *testing.T) {
 	invalid := populatedHotRankingForFallbackTest("eastmoney")

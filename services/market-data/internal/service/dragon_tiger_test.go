@@ -89,7 +89,6 @@ func TestValidateDragonTigerSnapshotRejectsMissingRowsForNonzeroTotal(t *testing
 	}
 }
 
-
 func TestValidateDragonTigerSnapshotRejectsUnderfilledSourcePage(t *testing.T) {
 	now := time.Now().UTC()
 	change, closePrice := 1.5, 10.0

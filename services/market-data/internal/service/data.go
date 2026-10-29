@@ -25,36 +25,36 @@ type chipDistributionSource interface {
 }
 
 type DataService struct {
-	providers                 []provider.NamedProvider
-	quoteProviders            []provider.QuoteProvider
-	barProviders              []provider.DailyBarProvider
-	stockBasicProviders       []provider.StockBasicProvider
-	stockSearchProviders      []provider.StockSearchProvider
-	sectorRankingProviders    []provider.SectorRankingProvider
-	indexQuoteProviders       []provider.IndexQuoteProvider
-	marketBreadthProviders    []provider.MarketBreadthProvider
-	limitPoolProviders        []provider.LimitPoolProvider
-	dragonTigerProviders      []provider.DragonTigerProvider
-	announcementProviders     []provider.AnnouncementProvider
-	stockBoardsProviders      []provider.StockBoardsProvider
+	providers                      []provider.NamedProvider
+	quoteProviders                 []provider.QuoteProvider
+	barProviders                   []provider.DailyBarProvider
+	stockBasicProviders            []provider.StockBasicProvider
+	stockSearchProviders           []provider.StockSearchProvider
+	sectorRankingProviders         []provider.SectorRankingProvider
+	indexQuoteProviders            []provider.IndexQuoteProvider
+	marketBreadthProviders         []provider.MarketBreadthProvider
+	limitPoolProviders             []provider.LimitPoolProvider
+	dragonTigerProviders           []provider.DragonTigerProvider
+	announcementProviders          []provider.AnnouncementProvider
+	stockBoardsProviders           []provider.StockBoardsProvider
 	tradingCalendarProviders       []provider.TradingCalendarProvider
 	securityTradingStatusProviders []provider.SecurityTradingStatusProvider
-	fundamentalsProviders           []provider.FundamentalsProvider
-	valuationProviders        []provider.ValuationProvider
-	indexCatalogProviders     []provider.IndexCatalogProvider
-	chipDistributionProviders []provider.ChipDistributionProvider
-	capitalFlowProviders      []provider.CapitalFlowProvider
-	hotRankingProviders       []provider.HotRankingProvider
-	supplementProviders       []provider.SupplementProvider
-	maxBars                   int
-	retries                   int
-	breaker                   *circuitBreaker
-	cache                     cache.Cache
-	store                     *repository.Store
-	quoteTTL                  time.Duration
-	barsTTL                   time.Duration
-	defaultBars               int
-	logger                    *slog.Logger
+	fundamentalsProviders          []provider.FundamentalsProvider
+	valuationProviders             []provider.ValuationProvider
+	indexCatalogProviders          []provider.IndexCatalogProvider
+	chipDistributionProviders      []provider.ChipDistributionProvider
+	capitalFlowProviders           []provider.CapitalFlowProvider
+	hotRankingProviders            []provider.HotRankingProvider
+	supplementProviders            []provider.SupplementProvider
+	maxBars                        int
+	retries                        int
+	breaker                        *circuitBreaker
+	cache                          cache.Cache
+	store                          *repository.Store
+	quoteTTL                       time.Duration
+	barsTTL                        time.Duration
+	defaultBars                    int
+	logger                         *slog.Logger
 }
 
 func New(providers []provider.Provider, c cache.Cache, store *repository.Store, quoteTTL, barsTTL time.Duration, defaultBars int, logger *slog.Logger) *DataService {
@@ -363,7 +363,7 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 		}
 		if snapshot.QuoteTimestampCoverageCount == snapshot.CoveredSecurities &&
 			snapshot.NewestQuoteTime.Sub(*snapshot.OldestQuoteTime) > 10*time.Minute &&
-			 snapshot.QualityStatus == model.QualityValid {
+			snapshot.QualityStatus == model.QualityValid {
 			return errors.New("market-breadth cannot be valid when quote timestamp spread exceeds 10 minutes")
 		}
 	}
@@ -562,7 +562,6 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 	return nil
 }
 
-
 func markLimitPoolTruncated(snapshot *model.LimitPoolSnapshot) {
 	if snapshot == nil || !snapshot.HasData || snapshot.Total <= len(snapshot.Items) {
 		return
@@ -580,25 +579,41 @@ func markLimitPoolTruncated(snapshot *model.LimitPoolSnapshot) {
 
 // betterUnknownLimitPoolSnapshot 优先保留条目更多、可用封板/换手字段更完整的 unknown 池快照。
 func betterUnknownLimitPoolSnapshot(candidate, current *model.LimitPoolSnapshot) bool {
-	if candidate == nil { return false }
-	if current == nil { return true }
-	if len(candidate.Items) != len(current.Items) { return len(candidate.Items) > len(current.Items) }
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
 	coverage := func(snapshot *model.LimitPoolSnapshot) int {
 		count := 0
 		for _, item := range snapshot.Items {
 			for _, value := range []*float64{item.LastPrice, item.TurnoverRatioPercent, item.Turnover, item.SealMoney, item.MaxSealMoney} {
-				if value != nil { count++ }
+				if value != nil {
+					count++
+				}
 			}
 			for _, value := range []*int{item.ConsecutiveBoards, item.BrokenCount, item.OpenTimes} {
-				if value != nil { count++ }
+				if value != nil {
+					count++
+				}
 			}
-			if item.FirstTouchTime != "" { count++ }
-			if item.LastTouchTime != "" { count++ }
+			if item.FirstTouchTime != "" {
+				count++
+			}
+			if item.LastTouchTime != "" {
+				count++
+			}
 		}
 		return count
 	}
 	left, right := coverage(candidate), coverage(current)
-	if left != right { return left > right }
+	if left != right {
+		return left > right
+	}
 	return candidate.FetchedAt.After(current.FetchedAt)
 }
 
@@ -662,7 +677,9 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 		}
 		if !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
 			// 空池或有条目但父快照质量未知，都不能阻断后续 Provider。
-			if betterUnknownLimitPoolSnapshot(snapshot, unknownCandidate) { unknownCandidate = snapshot }
+			if betterUnknownLimitPoolSnapshot(snapshot, unknownCandidate) {
+				unknownCandidate = snapshot
+			}
 			if !snapshot.HasData {
 				failures = append(failures, p.Name()+": empty pool is unknown, not confirmed zero")
 			} else {
@@ -681,7 +698,9 @@ func (s *DataService) LimitPool(ctx context.Context, rawType, rawDate string, li
 	}
 	if unknownCandidate != nil {
 		reason := "limit_pool_fallback_exhausted_without_usable_quality"
-		if !unknownCandidate.HasData { reason = "limit_pool_fallback_exhausted_without_confirmed_data" }
+		if !unknownCandidate.HasData {
+			reason = "limit_pool_fallback_exhausted_without_confirmed_data"
+		}
 		unknownCandidate.QualityStatus = model.QualityUnknown
 		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
 		// unknown 候选不缓存，避免下一次请求绕过 Provider 回退链。
@@ -811,24 +830,42 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 // DragonTiger 获取指定交易日的龙虎榜分页。盘后报表未发布时，空结果保留为 unknown。
 // betterUnknownDragonTigerSnapshot 优先保留 A 股条目更多且金额/行情字段覆盖更完整的 unknown 龙虎榜快照。
 func betterUnknownDragonTigerSnapshot(candidate, current *model.DragonTigerSnapshot) bool {
-	if candidate == nil { return false }
-	if current == nil { return true }
-	if len(candidate.Items) != len(current.Items) { return len(candidate.Items) > len(current.Items) }
-	if candidate.SourceReturned != current.SourceReturned { return candidate.SourceReturned > current.SourceReturned }
-	if candidate.ExcludedNonAShareCount != current.ExcludedNonAShareCount { return candidate.ExcludedNonAShareCount < current.ExcludedNonAShareCount }
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
+	if candidate.SourceReturned != current.SourceReturned {
+		return candidate.SourceReturned > current.SourceReturned
+	}
+	if candidate.ExcludedNonAShareCount != current.ExcludedNonAShareCount {
+		return candidate.ExcludedNonAShareCount < current.ExcludedNonAShareCount
+	}
 	coverage := func(snapshot *model.DragonTigerSnapshot) int {
 		count := 0
 		for _, item := range snapshot.Items {
 			for _, value := range []*float64{item.ChangePercent, item.ClosePrice, item.NetBuyAmountCNY, item.BuyAmountCNY, item.SellAmountCNY, item.DealAmountCNY, item.DealAmountRatio} {
-				if value != nil { count++ }
+				if value != nil {
+					count++
+				}
 			}
-			if item.Reason != "" { count++ }
-			if item.Explanation != "" { count++ }
+			if item.Reason != "" {
+				count++
+			}
+			if item.Explanation != "" {
+				count++
+			}
 		}
 		return count
 	}
 	left, right := coverage(candidate), coverage(current)
-	if left != right { return left > right }
+	if left != right {
+		return left > right
+	}
 	return candidate.FetchedAt.After(current.FetchedAt)
 }
 
@@ -896,7 +933,9 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 		}
 		if !snapshot.HasData || snapshot.QualityStatus == model.QualityUnknown {
 			// 空报告、非 A 股空页或带有数据但质量未知，都继续尝试后备源。
-			if betterUnknownDragonTigerSnapshot(snapshot, unknownCandidate) { unknownCandidate = snapshot }
+			if betterUnknownDragonTigerSnapshot(snapshot, unknownCandidate) {
+				unknownCandidate = snapshot
+			}
 			if !snapshot.HasData {
 				failures = append(failures, p.Name()+": no confirmed A-share dragon-tiger rows on this page")
 			} else {
@@ -913,7 +952,9 @@ func (s *DataService) DragonTiger(ctx context.Context, rawDate string, page, pag
 	}
 	if unknownCandidate != nil {
 		reason := "dragon_tiger_fallback_exhausted_without_usable_quality"
-		if !unknownCandidate.HasData { reason = "dragon_tiger_fallback_exhausted_without_confirmed_data" }
+		if !unknownCandidate.HasData {
+			reason = "dragon_tiger_fallback_exhausted_without_confirmed_data"
+		}
 		unknownCandidate.QualityStatus = model.QualityUnknown
 		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
 		if data, marshalErr := json.Marshal(unknownCandidate); marshalErr == nil {
@@ -1223,23 +1264,33 @@ func validateStockBasic(symbol string, item *model.StockBasic) error {
 // StockBasic loads security identity and listing data from independent stock-basic providers.
 // betterUnknownStockBasic 优先保留可选基础资料字段覆盖更多的 unknown 记录。
 func betterUnknownStockBasic(candidate, current *model.StockBasic) bool {
-	if candidate == nil { return false }
-	if current == nil { return true }
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
 	coverage := func(item *model.StockBasic) int {
 		count := 0
 		for _, value := range []*float64{
 			item.DynamicPE, item.PB, item.MarketCapCNY, item.FloatMarketCapCNY,
 			item.ROEPercent, item.NetProfitMarginPercent, item.NetProfitCNY, item.GrossMarginPercent,
 		} {
-			if value != nil { count++ }
+			if value != nil {
+				count++
+			}
 		}
 		for _, value := range []string{item.IPODate, item.OutDate, item.Industry, item.BoardCode, item.SourceVersion} {
-			if strings.TrimSpace(value) != "" { count++ }
+			if strings.TrimSpace(value) != "" {
+				count++
+			}
 		}
 		return count
 	}
 	left, right := coverage(candidate), coverage(current)
-	if left != right { return left > right }
+	if left != right {
+		return left > right
+	}
 	return candidate.FetchedAt.After(current.FetchedAt)
 }
 
@@ -1593,20 +1644,34 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 // StockBoards obtains board membership without mixing it into quote or daily-bar fallback.
 // betterUnknownStockBoardsSnapshot 优先保留板块条目更多、涨跌幅字段覆盖更完整的 unknown 候选。
 func betterUnknownStockBoardsSnapshot(candidate, current *model.StockBoardSnapshot) bool {
-	if candidate == nil { return false }
-	if current == nil { return true }
-	if len(candidate.Items) != len(current.Items) { return len(candidate.Items) > len(current.Items) }
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	if len(candidate.Items) != len(current.Items) {
+		return len(candidate.Items) > len(current.Items)
+	}
 	coverage := func(snapshot *model.StockBoardSnapshot) int {
 		count := 0
 		for _, item := range snapshot.Items {
-			if item.ChangePercent != nil { count++ }
-			if strings.TrimSpace(item.Name) != "" { count++ }
-			if strings.TrimSpace(item.Code) != "" { count++ }
+			if item.ChangePercent != nil {
+				count++
+			}
+			if strings.TrimSpace(item.Name) != "" {
+				count++
+			}
+			if strings.TrimSpace(item.Code) != "" {
+				count++
+			}
 		}
 		return count
 	}
 	left, right := coverage(candidate), coverage(current)
-	if left != right { return left > right }
+	if left != right {
+		return left > right
+	}
 	return candidate.FetchedAt.After(current.FetchedAt)
 }
 
@@ -1716,7 +1781,9 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 		}
 		if !item.HasData || item.QualityStatus == model.QualityUnknown {
 			// 空成员列表或有条目但质量未知，都不能跳过后备来源。
-			if betterUnknownStockBoardsSnapshot(item, unknownCandidate) { unknownCandidate = item }
+			if betterUnknownStockBoardsSnapshot(item, unknownCandidate) {
+				unknownCandidate = item
+			}
 			if !item.HasData {
 				failures = append(failures, p.Name()+": empty board membership is unknown, not confirmed zero")
 			} else {
@@ -1737,7 +1804,9 @@ func (s *DataService) StockBoards(ctx context.Context, rawSymbol string) (*model
 	}
 	if unknownCandidate != nil {
 		reason := "stock_boards_fallback_exhausted_with_unconfirmed_quality"
-		if !unknownCandidate.HasData { reason = "stock_boards_fallback_exhausted_without_confirmed_membership" }
+		if !unknownCandidate.HasData {
+			reason = "stock_boards_fallback_exhausted_without_confirmed_membership"
+		}
 		unknownCandidate.QualityStatus = model.QualityUnknown
 		unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, reason)
 		payload, marshalErr := json.Marshal(unknownCandidate)

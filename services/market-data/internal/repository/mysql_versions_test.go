@@ -78,21 +78,27 @@ func TestFundamentalsRevisionHashIgnoresFetchTimestamps(t *testing.T) {
 		Sections: []model.FundamentalSection{{
 			Category: "profitability", ReportDate: "2026-06-30", PublicationDate: "2026-08-29",
 			HasData: true, QualityStatus: model.QualityValid,
-			Metrics: []model.FundamentalMetric{{Key:"roe", Name:"净资产收益率", Value:0.12, Unit:"ratio", SourceField:"roe"}},
+			Metrics: []model.FundamentalMetric{{Key: "roe", Name: "净资产收益率", Value: 0.12, Unit: "ratio", SourceField: "roe"}},
 		}},
 		Source: "tushare", SourceVersion: "fixture-v1", FetchedAt: fetched, QualityStatus: model.QualityValid,
 	}
 	first, err := fundamentalsRevisionHash(snapshot)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	snapshot.FetchedAt = fetched.Add(time.Hour)
 	second, err := fundamentalsRevisionHash(snapshot)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if first != second {
 		t.Fatal("fetch timestamps alone must not create a new fundamentals revision")
 	}
 	snapshot.Sections[0].Metrics[0].Value = 0.13
 	third, err := fundamentalsRevisionHash(snapshot)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if first == third {
 		t.Fatal("a changed financial metric must create a new fundamentals revision")
 	}

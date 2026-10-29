@@ -20,18 +20,24 @@ func TestSecurityTradingStatusRevisionHashIgnoresObservationTimestamps(t *testin
 		FetchedAt: fetchedAt, SystemObservedAt: &observedAt, QualityStatus: model.QualityValid,
 	}
 	first, err := securityTradingStatusRevisionHash(snapshot)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	snapshot.FetchedAt = fetchedAt.Add(5 * time.Minute)
 	laterObserved := observedAt.Add(5 * time.Minute)
 	snapshot.SystemObservedAt = &laterObserved
 	second, err := securityTradingStatusRevisionHash(snapshot)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if first != second {
 		t.Fatal("fetch/record timestamps alone must not create a new content revision")
 	}
 	snapshot.SuspensionStatus = model.SuspensionStatusSuspended
 	third, err := securityTradingStatusRevisionHash(snapshot)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if first == third {
 		t.Fatal("changed suspension evidence must create a new content revision")
 	}

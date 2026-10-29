@@ -236,7 +236,6 @@ func TestRawSharesToInt64RejectsInvalidAndOverflowValues(t *testing.T) {
 	}
 }
 
-
 func TestValidateAndSortBarsRejectsNonCanonicalDates(t *testing.T) {
 	volume := int64(1000)
 	bars := []model.DailyBar{{

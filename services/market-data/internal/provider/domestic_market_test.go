@@ -507,7 +507,6 @@ func TestEastmoneyFetchLimitPoolRejectsInvalidPoolType(t *testing.T) {
 	}
 }
 
-
 func TestParseEastmoneyBoardIntegerRejectsInvalidCounts(t *testing.T) {
 	cases := []struct {
 		name  string

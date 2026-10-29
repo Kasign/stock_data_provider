@@ -28,7 +28,7 @@ func TestTickFlowFetchQuoteKeepsVolumeInShares(t *testing.T) {
 			"open": 100.0, "high": 102.0, "low": 99.0,
 			"volume": tickflowVolumeFixture, "amount": 123456789.0,
 			"timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli(),
-			"ext": map[string]any{"change_amount": 1.0, "change_pct": 0.01},
+			"ext":       map[string]any{"change_amount": 1.0, "change_pct": 0.01},
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": []map[string]any{row}})
 	}))
@@ -71,7 +71,7 @@ func TestTickFlowFetchDailyBarsKeepsVolumeInShares(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
 			"timestamp": []int64{timestamp},
-			"open": []float64{100}, "high": []float64{102}, "low": []float64{99}, "close": []float64{101},
+			"open":      []float64{100}, "high": []float64{102}, "low": []float64{99}, "close": []float64{101},
 			"volume": []float64{tickflowVolumeFixture}, "amount": []float64{123456789}, "prev_close": []float64{100},
 		}})
 	}))
@@ -112,7 +112,7 @@ func TestTickFlowDailyBarsDerivesChangeAfterChronologicalSort(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
 			"timestamp": []int64{latestDay.UnixMilli(), previousDay.UnixMilli()},
-			"open": []float64{108, 99}, "high": []float64{112, 102}, "low": []float64{107, 98}, "close": []float64{110, 100},
+			"open":      []float64{108, 99}, "high": []float64{112, 102}, "low": []float64{107, 98}, "close": []float64{110, 100},
 			"volume": []float64{1000, 2000}, "amount": []float64{110000, 100000},
 		}})
 	}))
@@ -161,7 +161,7 @@ func TestTickFlowDailyBarsRejectsMismatchedOptionalArrays(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				data := map[string]any{
 					"timestamp": []int64{day1.UnixMilli(), day2.UnixMilli()},
-					"open": []float64{100, 101}, "high": []float64{102, 103}, "low": []float64{99, 100}, "close": []float64{101, 102},
+					"open":      []float64{100, 101}, "high": []float64{102, 103}, "low": []float64{99, 100}, "close": []float64{101, 102},
 					"volume": []float64{1000, 2000}, "amount": []float64{10000, 20000},
 					"prev_close": []float64{100, 101},
 				}
@@ -178,4 +178,3 @@ func TestTickFlowDailyBarsRejectsMismatchedOptionalArrays(t *testing.T) {
 		})
 	}
 }
-

@@ -59,7 +59,6 @@ func TestTushareDailyRejectsEmptyOrDuplicateFieldNames(t *testing.T) {
 	}
 }
 
-
 func TestTushareDailyNormalizesAmountFromThousandCNYToCNY(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
@@ -146,8 +145,6 @@ func TestTushareIndexConstituentsQueriesOnlyNewestAvailableMonth(t *testing.T) {
 		t.Fatalf("unexpected index constituent snapshot: %+v", got)
 	}
 }
-
-
 
 func TestTushareIndexConstituentsCountsUnsupportedRowsAtLatestReportDate(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
@@ -364,8 +361,6 @@ func TestTushareStockBasicRejectsUnknownMarketInsteadOfAssumingMainBoard(t *test
 	}
 }
 
-
-
 func TestTushareStockBasicRejectsDuplicateRows(t *testing.T) {
 	fields := []string{"ts_code", "name", "industry", "market", "exchange", "list_status", "list_date", "delist_date"}
 	row := []any{"600519.SH", "贵州茅台", "白酒", "主板", "SSE", "L", "20010827", ""}
@@ -494,7 +489,6 @@ func containsTushareReason(reasons []string, target string) bool {
 	return false
 }
 
-
 func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
@@ -533,9 +527,6 @@ func TestTushareDailyCanonicalizesEndDateBeforeFutureDateCheck(t *testing.T) {
 		t.Fatalf("unexpected daily bars result: %+v", bars)
 	}
 }
-
-
-
 
 func TestTushareLimitPoolRejectsDuplicateSymbols(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
@@ -608,8 +599,6 @@ func TestTushareLimitPoolEmptyResultDoesNotInventProviderReportDate(t *testing.T
 	}
 }
 
-
-
 func TestTushareLimitPoolMarksExcludedNonAShareRows(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
 	makeRow := func(symbol, name string) []any {
@@ -681,8 +670,6 @@ func TestTushareLimitPoolMarksExcludedNonAShareRows(t *testing.T) {
 		t.Fatalf("missing non-A-share exclusion reason: %v", got.QualityReasons)
 	}
 }
-
-
 
 func TestTushareDragonTigerMarksExcludedNonAShareRows(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ",")
@@ -989,7 +976,6 @@ func TestTushareFundamentalsUsesStatementsWhenIndicatorEndpointFails(t *testing.
 	}
 }
 
-
 func TestTushareStatementReportTypeForQuarterBoundaries(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -1018,7 +1004,6 @@ func TestTushareStatementReportTypeForQuarterBoundaries(t *testing.T) {
 		})
 	}
 }
-
 
 func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 	const period = "20260630"
@@ -1089,35 +1074,35 @@ func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 			t.Fatalf("expected usable statement section %q", category)
 		}
 	}
-		// 字段清单来自 Tushare 三张报表接口；fixture 对每个请求字段返回数值，验证扩展字段没有丢失。
-		for _, expectedMetric := range []struct {
-			category string
-			key      string
-		}{
-			{category: "income_statement", key: "ebitda"},
-			{category: "income_statement", key: "commission_income"},
-			{category: "balance_sheet", key: "total_liabilities_and_equity"},
-			{category: "balance_sheet", key: "right_of_use_assets"},
-			{category: "cash_flow_statement", key: "free_cash_flow"},
-			{category: "cash_flow_statement", key: "cash_received_tax_refunds"},
-			{category: "cash_flow_statement", key: "other_financing_cash_paid"},
-		} {
-			found := false
-			for _, section := range snapshot.Sections {
-				if section.Category != expectedMetric.category {
-					continue
-				}
-				for _, metric := range section.Metrics {
-					if metric.Key == expectedMetric.key && metric.SourceField != "" {
-						found = true
-						break
-					}
-				}
+	// 字段清单来自 Tushare 三张报表接口；fixture 对每个请求字段返回数值，验证扩展字段没有丢失。
+	for _, expectedMetric := range []struct {
+		category string
+		key      string
+	}{
+		{category: "income_statement", key: "ebitda"},
+		{category: "income_statement", key: "commission_income"},
+		{category: "balance_sheet", key: "total_liabilities_and_equity"},
+		{category: "balance_sheet", key: "right_of_use_assets"},
+		{category: "cash_flow_statement", key: "free_cash_flow"},
+		{category: "cash_flow_statement", key: "cash_received_tax_refunds"},
+		{category: "cash_flow_statement", key: "other_financing_cash_paid"},
+	} {
+		found := false
+		for _, section := range snapshot.Sections {
+			if section.Category != expectedMetric.category {
+				continue
 			}
-			if !found {
-				t.Fatalf("expected extended statement metric %s.%s to be mapped", expectedMetric.category, expectedMetric.key)
+			for _, metric := range section.Metrics {
+				if metric.Key == expectedMetric.key && metric.SourceField != "" {
+					found = true
+					break
+				}
 			}
 		}
+		if !found {
+			t.Fatalf("expected extended statement metric %s.%s to be mapped", expectedMetric.category, expectedMetric.key)
+		}
+	}
 }
 
 func TestTushareIndexDailyBarsDegradesMissingProviderTimestamp(t *testing.T) {
@@ -1254,7 +1239,6 @@ func TestTushareDailyRejectsFractionalVolumeInHands(t *testing.T) {
 	}
 }
 
-
 func TestTushareFundamentalsIgnoresFutureAnnouncementVersion(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
@@ -1341,7 +1325,6 @@ func TestTushareFundamentalsIgnoresFutureAnnouncementVersion(t *testing.T) {
 	t.Fatal("expected a selected EPS metric from the already-published version")
 }
 
-
 func TestTushareFundamentalsRejectsMissingAnnouncementDate(t *testing.T) {
 	fields := strings.Split("ts_code,ann_date,end_date,eps,dt_eps,roe,roe_waa,roe_dt,roa,netprofit_margin,grossprofit_margin,assets_turn,inv_turn,ar_turn,ca_turn,fa_turn,netprofit_yoy,or_yoy,assets_yoy,eqt_yoy,current_ratio,quick_ratio,cash_ratio,debt_to_assets,ocf_to_or,ocf_to_profit,ocf_to_debt,dupont_roe,dupont_asset_turn,dupont_pnitoni,dupont_tax_burden,dupont_intburden", ",")
 	periodEnd := "20251231"
@@ -1387,7 +1370,6 @@ func TestTushareFundamentalsRejectsMissingAnnouncementDate(t *testing.T) {
 	}
 }
 
-
 func TestTushareDailyRejectsNonAShareBeforeRequest(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1406,7 +1388,6 @@ func TestTushareDailyRejectsNonAShareBeforeRequest(t *testing.T) {
 		t.Fatalf("unsupported security types must be rejected before upstream access; got %d request(s)", requests)
 	}
 }
-
 
 func TestTushareAnnouncementsRejectsNonStockSecurities(t *testing.T) {
 	called := false
@@ -1695,7 +1676,6 @@ func TestTushareIndexConstituentsAsOfRejectsRowsAfterRequestedDate(t *testing.T)
 	}
 }
 
-
 func TestTushareLimitPoolDefaultsToServiceLimit(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
 	rows := make([][]any, 35)
@@ -1749,7 +1729,6 @@ func TestTushareLimitPoolDefaultsToServiceLimit(t *testing.T) {
 		t.Fatalf("unexpected source coverage ledger: returned=%d excluded=%d lower_bound=%v", got.ProviderReturned, got.ExcludedNonAShareCount, got.TotalIsLowerBound)
 	}
 }
-
 
 func TestTushareLimitPoolMarks2500RowBoundaryAsLowerBound(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
@@ -1814,7 +1793,6 @@ func TestTushareLimitPoolMarks2500RowBoundaryAsLowerBound(t *testing.T) {
 		}
 	}
 }
-
 
 func TestTushareDragonTigerMarks10000RowBoundaryAsLowerBound(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ",")
@@ -1890,7 +1868,6 @@ func TestTushareDragonTigerMarks10000RowBoundaryAsLowerBound(t *testing.T) {
 		}
 	}
 }
-
 
 func TestTushareIndexConstituentsMarks5000RowBoundaryAsLowerBound(t *testing.T) {
 	indexFields := []string{"index_code", "con_code", "trade_date", "weight"}

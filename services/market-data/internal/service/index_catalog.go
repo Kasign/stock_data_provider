@@ -168,7 +168,6 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 	return nil
 }
 
-
 func markIndexConstituentCoverage(snapshot *model.IndexConstituentSnapshot) {
 	if snapshot == nil || snapshot.Total == 0 || snapshot.ProviderReturned > 0 {
 		return
@@ -555,7 +554,6 @@ func (s *DataService) IndexConstituentsFromSource(ctx context.Context, rawIndexS
 	}
 	return nil, false, fmt.Errorf("all index-constituent providers failed: %s", strings.Join(failures, "; "))
 }
-
 
 func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIndexSymbol, rawAsOfDate, rawSource string) (*model.IndexConstituentSnapshot, bool, error) {
 	indexSymbol, err := canonicalIndexSymbol(rawIndexSymbol)

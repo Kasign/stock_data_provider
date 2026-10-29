@@ -45,8 +45,8 @@ func capitalFlowFallbackItemForTest(source string, quality model.QualityStatus) 
 	five := 500.0
 	ten := 900.0
 	return &model.CapitalFlow{
-		Symbol: "600519.SH",
-		ProviderDate: time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02"),
+		Symbol:        "600519.SH",
+		ProviderDate:  time.Now().In(marketLocation()).AddDate(0, 0, -1).Format("2006-01-02"),
 		MainNetInflow: &main, Inflow5D: &five, Inflow10D: &ten, Observations: 10,
 		Source: source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
 		QualityStatus: quality, QualityReasons: []string{"test_quality"},

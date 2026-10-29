@@ -31,20 +31,20 @@ func (s *DataService) MarketSession(ctx context.Context, at time.Time) (*model.M
 	phase, inSession, continuous, auction := scheduledMarketSession(calendar.Items[0].IsTradingDay, local.Hour(), local.Minute())
 	now := time.Now().UTC()
 	return &model.MarketSessionSnapshot{
-		Market: "cn_a_share",
-		At: at.UTC(),
-		LocalDate: date,
-		LocalTime: local.Format("15:04:05"),
-		IsTradingDay: calendar.Items[0].IsTradingDay,
-		Phase: phase,
-		IsTradingSession: inSession,
+		Market:              "cn_a_share",
+		At:                  at.UTC(),
+		LocalDate:           date,
+		LocalTime:           local.Format("15:04:05"),
+		IsTradingDay:        calendar.Items[0].IsTradingDay,
+		Phase:               phase,
+		IsTradingSession:    inSession,
 		IsContinuousTrading: continuous,
-		IsAuction: auction,
-		Source: calendar.Source,
-		SourceVersion: calendar.SourceVersion,
-		FetchedAt: now,
-		QualityStatus: calendar.QualityStatus,
-		QualityReasons: append([]string(nil), calendar.QualityReasons...),
+		IsAuction:           auction,
+		Source:              calendar.Source,
+		SourceVersion:       calendar.SourceVersion,
+		FetchedAt:           now,
+		QualityStatus:       calendar.QualityStatus,
+		QualityReasons:      append([]string(nil), calendar.QualityReasons...),
 	}, nil
 }
 

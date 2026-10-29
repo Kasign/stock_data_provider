@@ -56,7 +56,6 @@ func TestTencentQuoteVolumeRejectsOverflowBoundary(t *testing.T) {
 	}
 }
 
-
 func TestNormalizePytdxDailyAmountOmitsInconsistentZeroAmount(t *testing.T) {
 	got, err := normalizePytdxDailyAmount(0, 120)
 	if err != nil {

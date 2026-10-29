@@ -134,7 +134,6 @@ func TestTickFlowFetchMarketBreadthCalculatesCompleteSnapshot(t *testing.T) {
 	}
 }
 
-
 func TestTickFlowFetchMarketBreadthDegradesWideQuoteTimestampSpread(t *testing.T) {
 	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "", "", 11*time.Minute)
 	defer server.Close()
@@ -181,7 +180,6 @@ func TestTickFlowFetchMarketBreadthDegradesMissingAmount(t *testing.T) {
 	}
 }
 
-
 func TestTickFlowLimitRatioMatchesAShareRules(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -225,7 +223,6 @@ func TestTickFlowLimitPriceMatchesCentRoundingAndTolerance(t *testing.T) {
 		t.Fatal("non-positive previous close must be rejected")
 	}
 }
-
 
 func TestTickFlowFetchMarketBreadthDegradesUnavailableLimitCounts(t *testing.T) {
 	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols, "", "000001.SZ")

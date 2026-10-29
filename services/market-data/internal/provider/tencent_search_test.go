@@ -127,7 +127,6 @@ func TestTencentSmartboxUnescapesUnicodeName(t *testing.T) {
 	}
 }
 
-
 func TestTencentSearchStocksFiltersNonEquitySecurities(t *testing.T) {
 	body := []byte(`v_hint="sh~510300~沪深300ETF^sz~159919~沪深300ETF^sh~000001~上证指数^sz~399001~深证成指^sh~113001~可转债^sh~600519~贵州茅台^sz~300750~宁德时代^bj~430047~诺思兰德^";`)
 	got, err := parseTencentSmartboxStocks(body)

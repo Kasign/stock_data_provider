@@ -854,7 +854,6 @@ func TestLoadAcceptsXueqiuInProviderPriority(t *testing.T) {
 	}
 }
 
-
 func TestLoadRejectsProviderEndpointWithEmptyQueryOrFragment(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -897,7 +896,6 @@ func TestLoadTickFlowIndexQuotesRequiresAPIKey(t *testing.T) {
 	}
 }
 
-
 func TestLoadTickFlowMarketBreadthRequiresAPIKey(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "providers.json")
 	data := "{\"provider_priority\":[\"tickflow\"],\"adjustment_basis\":\"forward_adjusted\",\"providers\":{\"tickflow\":{\"enabled\":true,\"quote\":false,\"daily_bars\":true,\"index_quotes\":false,\"market_breadth\":true}}}"
@@ -920,7 +918,6 @@ func TestLoadTickFlowMarketBreadthRequiresAPIKey(t *testing.T) {
 		t.Fatalf("TickFlow market breadth without API key must fail configuration validation, got %v", err)
 	}
 }
-
 
 func TestLoadTickFlowSectorRankingsRequiresAPIKey(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "providers.json")

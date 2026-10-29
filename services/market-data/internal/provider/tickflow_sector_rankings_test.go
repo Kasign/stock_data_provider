@@ -153,7 +153,6 @@ func TestTickFlowFetchSectorRankingsDoesNotMislabelConceptsAsSW1(t *testing.T) {
 	}
 }
 
-
 func TestTickFlowFetchSectorRankingsReportsOmittedIndustryWithoutValidChanges(t *testing.T) {
 	server := newTickFlowSectorFixture(t, tickflowSectorTestSymbols, "300001.SZ")
 	defer server.Close()

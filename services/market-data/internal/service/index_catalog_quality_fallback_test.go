@@ -13,12 +13,12 @@ import (
 )
 
 type indexCatalogQualityFallbackProvider struct {
-	name          string
-	catalog       *model.IndexCatalogSnapshot
-	constituents  *model.IndexConstituentSnapshot
-	catalogErr    error
-	constituentErr error
-	catalogCalls  int
+	name             string
+	catalog          *model.IndexCatalogSnapshot
+	constituents     *model.IndexConstituentSnapshot
+	catalogErr       error
+	constituentErr   error
+	catalogCalls     int
 	constituentCalls int
 }
 
@@ -75,7 +75,7 @@ func indexCatalogDegradedDataForTest(source, tag string) *model.IndexCatalogSnap
 func indexConstituentsUnknownDataForTest(source string) *model.IndexConstituentSnapshot {
 	return &model.IndexConstituentSnapshot{
 		IndexSymbol: "000300.SH", Total: 1, ProviderReturned: 1,
-		Items: []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}},
+		Items:  []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}},
 		Source: source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
 		QualityStatus: model.QualityUnknown, QualityReasons: []string{"provider_constituent_timestamp_unknown"},
 	}
@@ -84,7 +84,7 @@ func indexConstituentsUnknownDataForTest(source string) *model.IndexConstituentS
 func indexConstituentsDegradedDataForTest(source string) *model.IndexConstituentSnapshot {
 	return &model.IndexConstituentSnapshot{
 		IndexSymbol: "000300.SH", Total: 1, ProviderReturned: 1,
-		Items: []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}},
+		Items:  []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}},
 		Source: source, SourceVersion: "test-v1", FetchedAt: time.Now().UTC(),
 		QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_constituent_timestamp_not_exposed"},
 	}
@@ -176,7 +176,6 @@ func TestIndexConstituentsFallsBackFromUnknownQualityEntries(t *testing.T) {
 	}
 }
 
-
 func TestIndexConstituentsLegacyCacheWithoutCoverageCountIsDegraded(t *testing.T) {
 	mem := newMemoryCache()
 	cached := indexConstituentsDegradedDataForTest("tushare")
@@ -193,7 +192,7 @@ func TestIndexConstituentsLegacyCacheWithoutCoverageCountIsDegraded(t *testing.T
 		name: "tushare", constituents: indexConstituentsDegradedDataForTest("tushare"),
 	}
 	svc := &DataService{
-		cache: mem,
+		cache:                 mem,
 		indexCatalogProviders: []provider.IndexCatalogProvider{fallback},
 	}
 
@@ -219,7 +218,6 @@ func TestIndexConstituentsLegacyCacheWithoutCoverageCountIsDegraded(t *testing.T
 	}
 }
 
-
 func TestIndexConstituentsUnknownCacheWithoutCoverageCountRemainsUnknown(t *testing.T) {
 	mem := newMemoryCache()
 	cached := indexConstituentsUnknownDataForTest("tushare")
@@ -234,7 +232,7 @@ func TestIndexConstituentsUnknownCacheWithoutCoverageCountRemainsUnknown(t *test
 		name: "tushare", constituents: indexConstituentsDegradedDataForTest("tushare"),
 	}
 	svc := &DataService{
-		cache: mem,
+		cache:                 mem,
 		indexCatalogProviders: []provider.IndexCatalogProvider{fallback},
 	}
 

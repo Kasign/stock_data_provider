@@ -145,7 +145,6 @@ func TestEastmoneyFetchLimitPoolPaginatesTruncatedPages(t *testing.T) {
 	}
 }
 
-
 func TestEastmoneyFetchLimitPoolRejectsRowsAboveSourceTotal(t *testing.T) {
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {

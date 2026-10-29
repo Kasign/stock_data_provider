@@ -112,7 +112,6 @@ func TestTradingCalendarRejectsExcessiveOrReversedRange(t *testing.T) {
 	}
 }
 
-
 func TestTradingCalendarPrefersExplicitFullDateSource(t *testing.T) {
 	inferred := validTestTradingCalendar()
 	inferred.Source = "inferred-calendar"

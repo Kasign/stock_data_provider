@@ -147,8 +147,8 @@ type hithinkIndexDefinition struct {
 }
 
 const (
-	hithinkChangeTolerance             = 0.05
-	hithinkChangePercentTolerancePP    = 0.15
+	hithinkChangeTolerance          = 0.05
+	hithinkChangePercentTolerancePP = 0.15
 )
 
 var hithinkCoreIndexDefinitions = []hithinkIndexDefinition{
@@ -1058,7 +1058,7 @@ func (p *Hithink) FetchIndexCatalog(ctx context.Context, rawTag string) (*model.
 	snapshot := &model.IndexCatalogSnapshot{
 		Tag: tag, Items: make([]model.IndexCatalogItem, 0, len(data.Item)),
 		ProviderReturned: len(data.Item),
-		Source: p.Name(), SourceVersion: hithinkVersion + "-index-catalog-v1",
+		Source:           p.Name(), SourceVersion: hithinkVersion + "-index-catalog-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
 	if len(data.Item) == 30000 {
@@ -1137,7 +1137,7 @@ func (p *Hithink) FetchIndexConstituents(ctx context.Context, rawIndexSymbol str
 	snapshot := &model.IndexConstituentSnapshot{
 		IndexSymbol: indexSymbol, Items: make([]model.IndexConstituent, 0, len(data.Item)),
 		ProviderReturned: len(data.Item),
-		Source: p.Name(), SourceVersion: hithinkVersion + "-index-constituents-v1",
+		Source:           p.Name(), SourceVersion: hithinkVersion + "-index-constituents-v1",
 		FetchedAt: now, QualityStatus: model.QualityValid,
 	}
 	snapshot.ProviderTime = hithinkProviderTime(data.Timestamp, now)
@@ -1855,7 +1855,7 @@ func (p *Hithink) FetchFundamentals(ctx context.Context, rawSymbol string, year,
 		snapshot.Sections = append(snapshot.Sections, model.FundamentalSection{
 			Category: category, ReportDate: reportDate,
 			Metrics: []model.FundamentalMetric{}, HasData: false,
-			QualityStatus: model.QualityUnknown,
+			QualityStatus:  model.QualityUnknown,
 			QualityReasons: []string{"provider_fundamental_ability_not_returned"},
 		})
 		snapshot.QualityReasons = appendUniqueHithinkReason(snapshot.QualityReasons, "provider_fundamental_ability_missing:"+category)
