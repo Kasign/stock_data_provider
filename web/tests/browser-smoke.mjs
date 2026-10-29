@@ -126,8 +126,11 @@ try {
       network: { status: 0, expected: "网络请求失败" }
     };
     const marketOverviewErrors = {
-      "401": { status: 401, code: "auth_required", message: "credentials required", requestId: "req-overview-401", expected: "接口认证失败" },
-      "403": { status: 403, code: "access_denied", message: "permission denied", requestId: "req-overview-403", expected: "当前请求被服务拒绝" }
+      "401": { status: 401, code: "auth_required", message: "credentials required", requestId: "req-overview-401", expected: "接口认证失败", summary: "鉴权失败 1 个" },
+      "403": { status: 403, code: "access_denied", message: "permission denied", requestId: "req-overview-403", expected: "当前请求被服务拒绝", summary: "鉴权失败 1 个" },
+      "404": { status: 404, code: "route_not_found", message: "route not found", requestId: "req-overview-404", expected: "接口或资源不存在", summary: "接口尚未提供 1 个" },
+      "503": { status: 503, code: "provider_unavailable", message: "上游 Provider 暂不可用", requestId: "req-overview-503", expected: "上游 Provider 暂不可用", summary: "Provider 不可用 1 个" },
+      network: { status: 0, expected: "网络请求失败", summary: "读取失败 1 个" }
     };
 
     if (viewport.width === 320) {
@@ -159,12 +162,8 @@ try {
 
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/indices")) {
         marketIndexRequestCount += 1;
-        const item = marketOverviewErrors[marketScenario] || {
-          status: 503,
-          code: "provider_unavailable",
-          message: "上游 Provider 暂不可用",
-          requestId: "req-overview-503"
-        };
+        const item = marketOverviewErrors[marketScenario] || marketOverviewErrors["503"];
+        if (marketScenario === "network") return route.abort("failed");
         return json(item.status, {
           error: {
             code: item.code,
@@ -370,7 +369,7 @@ try {
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // Home-market errors must preserve HTTP meaning instead of asserting every 401/403 is an API-key fault.
-      for (const scenario of ["401", "403"]) {
+      for (const scenario of ["401", "403", "404", "503", "network"]) {
         const expected = marketOverviewErrors[scenario];
         const requestsBeforeFailure = marketIndexRequestCount;
         marketScenario = scenario;
@@ -380,9 +379,9 @@ try {
           expected.expected,
           { timeout: 8000 }
         );
-        assert.equal(marketIndexRequestCount, requestsBeforeFailure + 1, "market overview HTTP " + scenario + " should request indices once");
+        assert.equal(marketIndexRequestCount, requestsBeforeFailure + 1, "market overview " + scenario + " should request indices once");
         await page.waitForTimeout(250);
-        assert.equal(marketIndexRequestCount, requestsBeforeFailure + 1, "market overview HTTP " + scenario + " should not retry silently");
+        assert.equal(marketIndexRequestCount, requestsBeforeFailure + 1, "market overview " + scenario + " should not retry silently");
 
         const indexState = await page.evaluate(() => ({
           message: document.querySelector("#market-index-grid")?.textContent || "",
@@ -394,7 +393,7 @@ try {
         assert.doesNotMatch(indexState.message, /行情服务 API Key 验证失败/);
         assert.equal(indexState.status, "读取失败");
         assert.match(indexState.className, /is-unavailable/);
-        assert.match(indexState.refreshSummary, /鉴权失败 1 个/);
+        assert.ok(indexState.refreshSummary.includes(expected.summary), "market overview " + scenario + " should have a distinct summary");
       }
     }
 
