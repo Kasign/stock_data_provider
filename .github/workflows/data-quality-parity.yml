@@ -1,0 +1,60 @@
+name: Go-Python data quality parity
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/full-go-data-providers-api-switch
+    paths:
+      - 'services/market-data/internal/normalize/**'
+      - 'python_bridge/capabilities/market_data.py'
+      - 'docs/architecture/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md'
+      - 'docs/architecture/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md'
+      - '.github/workflows/data-quality-parity.yml'
+  pull_request:
+    paths:
+      - 'services/market-data/internal/normalize/**'
+      - 'python_bridge/capabilities/market_data.py'
+      - 'docs/architecture/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md'
+      - 'docs/architecture/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md'
+      - '.github/workflows/data-quality-parity.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-quality-parity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-contract:
+    name: Data quality contract regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: services/market-data/go.sum
+
+      - name: Run Python-to-Go parity contract tests
+        working-directory: services/market-data
+        run: go test ./internal/normalize -run TestLegacyPythonBridgeAndGoQualityContract -count=1 -v
+
+      - name: Run market-data Go tests
+        working-directory: services/market-data
+        run: go test ./...
+
+      - name: Verify legacy Python quality markers and report
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'legacy_provider_unit_contract_unverified' python_bridge/capabilities/market_data.py
+          grep -q 'adjustment_basis_unverified' python_bridge/capabilities/market_data.py
+          grep -q 'GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md' docs/architecture/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md
+          grep -q 'TestLegacyPythonBridgeAndGoQualityContract' services/market-data/internal/normalize/quality_parity_test.go
+          echo 'Legacy unknown-quality markers and parity report are present.'
