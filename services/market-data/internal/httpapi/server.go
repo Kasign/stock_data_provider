@@ -294,6 +294,7 @@ func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
 			writeDomainErr(w, err, requestID(r))
 			return
 		}
+		bars = service.CalculateMovingAverages(bars)
 		quality := model.QualityValid
 		if normalize.HasQualityDegradingBarWarnings(warnings) {
 			quality = model.QualityDegraded
@@ -321,6 +322,7 @@ func (s *Server) bars(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("X-Cache", "MISS")
 	}
+	bars = service.CalculateMovingAverages(bars)
 	quality := model.QualityValid
 	if normalize.HasQualityDegradingBarWarnings(warnings) {
 		quality = model.QualityDegraded

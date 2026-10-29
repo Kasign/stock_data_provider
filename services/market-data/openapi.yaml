@@ -78,7 +78,7 @@ components:
         normalization_version: {type: string}
     DailyBar:
       type: object
-      required: [symbol, trade_date, period, open, high, low, close, volume, adjustment_basis, source, fetched_at, normalized_at, volume_unit, amount_unit, quality_status, normalization_version]
+      required: [symbol, trade_date, period, open, high, low, close, ma5, ma20, ma120, ma250, volume, adjustment_basis, source, fetched_at, normalized_at, volume_unit, amount_unit, quality_status, normalization_version]
       properties:
         symbol: {type: string}
         trade_date: {type: string, format: date}
@@ -88,6 +88,10 @@ components:
         high: {type: number, description: CNY/share}
         low: {type: number, description: CNY/share}
         close: {type: number, description: CNY/share}
+        ma5: {type: number, nullable: true, description: Mean close over the latest 5 trading sessions using the same adjustment basis; null when insufficient or invalid history}
+        ma20: {type: number, nullable: true, description: Mean close over the latest 20 trading sessions using the same adjustment basis; null when insufficient or invalid history}
+        ma120: {type: number, nullable: true, description: Mean close over the latest 120 trading sessions, an approximate half-year trading window; null when insufficient or invalid history}
+        ma250: {type: number, nullable: true, description: Mean close over the latest 250 trading sessions, an approximate full-year trading window; null when insufficient or invalid history}
         volume: {type: integer, format: int64, nullable: true, description: Shares}
         amount: {type: number, nullable: true, description: CNY}
         change_percent: {type: number, nullable: true, description: Percentage points}

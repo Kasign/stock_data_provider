@@ -11,10 +11,10 @@ import (
 )
 
 type batchQuoteItem struct {
-	Symbol        string               `json:"symbol"`
-	Quote         *model.Quote         `json:"quote,omitempty"`
-	ErrorCode     string               `json:"error_code,omitempty"`
-	QualityStatus model.QualityStatus  `json:"quality_status"`
+	Symbol        string              `json:"symbol"`
+	Quote         *model.Quote        `json:"quote,omitempty"`
+	ErrorCode     string              `json:"error_code,omitempty"`
+	QualityStatus model.QualityStatus `json:"quality_status"`
 }
 
 func (s *Server) batchQuotes(w http.ResponseWriter, r *http.Request) {

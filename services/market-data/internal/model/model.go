@@ -67,6 +67,10 @@ type DailyBar struct {
 	High              float64         `json:"high"`
 	Low               float64         `json:"low"`
 	Close             float64         `json:"close"`
+	MA5               *float64        `json:"ma5"`
+	MA20              *float64        `json:"ma20"`
+	MA120             *float64        `json:"ma120"`
+	MA250             *float64        `json:"ma250"`
 	Volume            *int64          `json:"volume"`
 	Amount            *float64        `json:"amount"`
 	ChangePercent     *float64        `json:"change_percent"`
