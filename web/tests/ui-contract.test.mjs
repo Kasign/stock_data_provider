@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -21,6 +21,9 @@ const [html, app, format, domain, openapi, recentTaskModule, stylesheet, watchli
   readFile(new URL("../src/health-check.js", import.meta.url), "utf8")
 ]);
 
+// UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
+const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck].join("\n");
+
 function finalCssRuleBody(selector) {
   const start = stylesheet.lastIndexOf(selector);
   assert.notEqual(start, -1, "stylesheet should contain " + selector);
@@ -37,7 +40,7 @@ test("static DOM IDs referenced by the WebUI exist and are unique", () => {
   const idSet = new Set(htmlIds);
   const staticSelectors = [...app.matchAll(/\$\(["']#([a-zA-Z][\w-]*)["']\)/g)].map((match) => match[1]);
   const missing = [...new Set(staticSelectors.filter((id) => !idSet.has(id)))];
-  assert.deepEqual(missing, [], "app.js references missing static DOM IDs: " + missing.join(", "));
+  assert.deepEqual(missing, [], "WebUI runtime JavaScript references missing static DOM IDs: " + missing.join(", "));
 });
 
 test("structured result renderer uses fields declared by Go RunResult", () => {
