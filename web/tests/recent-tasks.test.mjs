@@ -35,6 +35,27 @@ test("caps browser history and rejects malformed stored records", () => {
   });
 });
 
+test("rejects duplicate task references for the same analysis service without rewriting stored data", () => {
+  const records = [
+    { task_id: "task-a", analysis_base: "/api", run_id: "run-1" },
+    { task_id: "task-a", analysis_base: "/api", run_id: "run-2" },
+    { task_id: "task-a", analysis_base: "/other-api", run_id: "run-3" }
+  ];
+  const original = JSON.stringify(records);
+  const storage = makeStorage({ [RECENT_TASKS_KEY]: original });
+
+  const state = readRecentTasksState(storage);
+  assert.equal(state.storageReadable, true);
+  assert.equal(state.storageValid, false);
+  assert.equal(state.reason, "invalid");
+  assert.deepEqual(state.items.map((item) => [item.task_id, item.analysis_base]), [
+    ["task-a", "/api"],
+    ["task-a", "/other-api"]
+  ]);
+  assert.deepEqual(upsertRecentTask({ task_id: "task-b" }, storage), state.items);
+  assert.equal(storage.getItem(RECENT_TASKS_KEY), original, "invalid history must not be rewritten as a partial list");
+});
+
 test("storage failures do not throw or write task history after an unsuccessful read", () => {
   let writes = 0;
   const storage = {
