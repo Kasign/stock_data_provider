@@ -1,3 +1,12 @@
+## 2026-10-29 — 数据中心 Provider 清单错误矩阵
+
+- 在 Chromium 320px 隔离上下文新增数据中心 Provider 清单 401/403/404/503/网络失败矩阵。
+- 先返回成功的测试 Provider，再模拟每种失败；校验错误语义、状态标签、清除旧 Provider 行与无静默重试。
+- 同时确认分析服务就绪不可用时 MariaDB/Redis 为“未知”，不把缺少证据当成数据库故障。
+- 最新 WebUI checks [#40813258411](https://github.com/Kasign/stock_data_provider/actions/runs/40813258411) 与 Browser Smoke [#40813258387](https://github.com/Kasign/stock_data_provider/actions/runs/40813258387) 均通过，对应 HEAD `d91fd0263ba4f2ec09dd3809d3a9347542f5ffa4`。
+- 真实 Provider/API Key/NAS/1Panel 仍不在本地 mock 烟测的验证范围。
+
+
 ## 2026-10-29 — 首页市场状态矩阵与旧结果清理
 
 - 首页市场总览新增浏览器状态矩阵：401、403、404、503 与普通网络失败，验证错误提示、模块状态、刷新摘要与无静默重试。

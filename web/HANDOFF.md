@@ -1,5 +1,14 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新数据中心 Provider 清单矩阵
+
+- 浏览器烟测现同时覆盖行情查询、首页市场总览和数据中心 Provider 清单三个独立错误矩阵。
+- 数据中心矩阵先加载一个成功的“测试 Provider”，再逐项模拟 401/403/404/503/网络断开。每次失败验证错误说明、读取失败状态、旧 Provider 行清空、无静默重试。
+- 当分析服务就绪探针不可读时，MariaDB/Redis 仍必须显示“未知”，不能因 Provider 清单或分析服务失败就猜测依赖损坏。
+- 最新代码提交 `d91fd0263ba4f2ec09dd3809d3a9347542f5ffa4` 的 WebUI checks [#40813258411](https://github.com/Kasign/stock_data_provider/actions/runs/40813258411) 与 Browser Smoke [#40813258387](https://github.com/Kasign/stock_data_provider/actions/runs/40813258387) 均通过。
+- 这些回归仍使用本地确定性响应桩；真实 Provider、认证凭证与 NAS/1Panel 代理环境需要独立部署验收。
+
+
 ## 2026-10-29 最新首页市场错误矩阵补充
 
 - 在上一批报价错误矩阵之外，首页市场总览也已覆盖 401/403/404/503/网络断开，并断言状态、文案、刷新摘要分别匹配鉴权失败、权限拒绝、接口缺失、Provider 不可用和网络失败。

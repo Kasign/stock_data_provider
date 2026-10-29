@@ -1,3 +1,12 @@
+## 2026-10-29 后续追加 — 数据中心 Provider 清单错误场景
+
+- [x] 数据中心 Provider 清单 HTTP 401/403/404/503/网络失败浏览器验证通过。
+- [x] 错误场景前先返回一个有效 Provider；失败后不残留该 Provider 行，不发生静默重试。
+- [x] 分析服务 readiness 失败时 MariaDB/Redis 保持“未知”，避免从上游服务故障推测数据库/缓存状态。
+- [x] HEAD `d91fd0263ba4f2ec09dd3809d3a9347542f5ffa4` 的 WebUI checks [#40813258411](https://github.com/Kasign/stock_data_provider/actions/runs/40813258411) 和 Browser Smoke [#40813258387](https://github.com/Kasign/stock_data_provider/actions/runs/40813258387) 均通过。
+- [ ] 真实 Provider、实际认证凭证和 NAS/1Panel 环境需另行验收。
+
+
 ## 2026-10-29 后续追加 — 首页市场旧结果清除回归
 
 - [x] 首页市场总览状态矩阵覆盖 401/403/404/503/普通网络失败，逐项断言错误提示、状态、摘要和请求次数。
