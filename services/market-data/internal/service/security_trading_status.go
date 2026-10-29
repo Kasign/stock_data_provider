@@ -48,6 +48,24 @@ func (s *DataService) SecurityTradingStatus(ctx context.Context, rawSymbol, rawT
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		if s.store != nil {
+			if saveErr := s.store.SaveSecurityTradingStatus(ctx, candidate); saveErr != nil {
+				candidate.QualityStatus = model.QualityDegraded
+				candidate.QualityReasons = appendReason(candidate.QualityReasons, "security_trading_status_revision_persistence_failed")
+				if s.logger != nil {
+					s.logger.Warn("security-trading-status revision write failed", "symbol", symbol, "trade_date", tradeDate, "source", p.Name(), "error", saveErr)
+				}
+			} else if revisions, readErr := s.store.ListSecurityTradingStatusAsOf(ctx, symbol, tradeDate, time.Now().UTC()); readErr == nil {
+				for index := range revisions {
+					if revisions[index].Source == p.Name() {
+						candidate.SystemObservedAt = revisions[index].SystemObservedAt
+						break
+					}
+				}
+			} else if s.logger != nil {
+				s.logger.Warn("security-trading-status record-time lookup failed", "symbol", symbol, "trade_date", tradeDate, "source", p.Name(), "error", readErr)
+			}
+		}
 		score := securityTradingStatusEvidenceScore(candidate)
 		if score > bestScore {
 			best, bestScore = candidate, score
