@@ -1405,31 +1405,78 @@ try {
   assert.equal(blockedWatchlistState.items, 0);
   assert.equal(blockedWatchlistState.actions, 0, "unreadable storage must not render rename/remove controls");
   assert.equal(blockedWatchlistState.scope, "本地自选不可读取");
+
+  // Recent task history must show its own unavailable state and must not claim that a clear operation succeeded.
+  await blockedStoragePage.locator('.nav-link[data-view="tasks"]').click();
+  await blockedStoragePage.locator("#tasks-view").waitFor({ state: "visible" });
+  await blockedStoragePage.waitForFunction(
+    () => document.querySelector("#recent-analysis-count")?.textContent.trim() === "不可用 / 10" &&
+      document.querySelector("#recent-analysis-feedback")?.textContent.includes("无法读取浏览器最近任务存储"),
+    null,
+    { timeout: 5000 }
+  );
+  const blockedRecentState = await blockedStoragePage.evaluate(() => ({
+    count: document.querySelector("#recent-analysis-count")?.textContent.trim() || "",
+    feedback: document.querySelector("#recent-analysis-feedback")?.textContent || "",
+    feedbackClass: document.querySelector("#recent-analysis-feedback")?.className || "",
+    rows: document.querySelectorAll("#recent-analysis-list .recent-analysis-item").length,
+    removeActions: document.querySelectorAll("#recent-analysis-list [data-remove-task-id]").length
+  }));
+  assert.equal(blockedRecentState.count, "不可用 / 10");
+  assert.match(blockedRecentState.feedback, /无法读取浏览器最近任务存储/);
+  assert.match(blockedRecentState.feedbackClass, /is-error/);
+  assert.equal(blockedRecentState.rows, 0);
+  assert.equal(blockedRecentState.removeActions, 0);
+
+  blockedStoragePage.once("dialog", (dialog) => dialog.accept());
+  await blockedStoragePage.locator("#clear-recent-analysis").click();
+  await blockedStoragePage.waitForFunction(
+    () => document.querySelector("#recent-analysis-feedback")?.textContent.includes("未能确认最近任务历史已清空"),
+    null,
+    { timeout: 5000 }
+  );
+  const blockedClearFeedback = await blockedStoragePage.locator("#recent-analysis-feedback").textContent();
+  assert.match(blockedClearFeedback, /未能确认最近任务历史已清空/);
+  assert.doesNotMatch(blockedClearFeedback, /本地最近任务列表已清空/);
   assert.deepEqual(blockedStorageErrors, [], "blocked localStorage must not create unhandled browser errors");
   await blockedStorageContext.close();
 
   // A browser quota/write failure keeps the current page usable, but add/rename/remove must not claim persistence.
   const quotaContext = await browser.newContext({ viewport: { width: 320, height: 812 }, reducedMotion: "reduce" });
   const watchlistKey = "stock-provider-webui.watchlist.v1";
+  const recentTasksKey = "stock-provider-webui.recent-analysis.v1";
   const originalWatchlist = JSON.stringify([{
     symbol: "600519.SH",
     name: "贵州茅台",
     updated_at: "2026-10-28T07:00:00Z"
   }]);
+  const originalRecentTasks = JSON.stringify([{
+    task_id: "task-browser-storage-001",
+    run_id: "",
+    created_at: "2026-10-28T07:00:00Z",
+    symbols: ["600519.SH"],
+    task_type: "post_market_scan",
+    status: "succeeded",
+    analysis_base: "/analysis-api",
+    updated_at: "2026-10-28T07:00:00Z"
+  }]);
   await quotaContext.addInitScript((seed) => {
-    const key = "stock-provider-webui.watchlist.v1";
-    window.localStorage.setItem(key, seed);
+    const watchlistKey = "stock-provider-webui.watchlist.v1";
+    const recentTasksKey = "stock-provider-webui.recent-analysis.v1";
+    const blockedKeys = new Set([watchlistKey, recentTasksKey]);
+    window.localStorage.setItem(watchlistKey, seed.watchlist);
+    window.localStorage.setItem(recentTasksKey, seed.recentTasks);
     const originalSetItem = Storage.prototype.setItem;
     const originalRemoveItem = Storage.prototype.removeItem;
     Storage.prototype.setItem = function (name, value) {
-      if (name === key) throw new DOMException("Quota exceeded by browser smoke", "QuotaExceededError");
+      if (blockedKeys.has(name)) throw new DOMException("Quota exceeded by browser smoke", "QuotaExceededError");
       return originalSetItem.call(this, name, value);
     };
     Storage.prototype.removeItem = function (name) {
-      if (name === key) throw new DOMException("Storage write disabled by browser smoke", "SecurityError");
+      if (blockedKeys.has(name)) throw new DOMException("Storage write disabled by browser smoke", "SecurityError");
       return originalRemoveItem.call(this, name);
     };
-  }, originalWatchlist);
+  }, { watchlist: originalWatchlist, recentTasks: originalRecentTasks });
   const quotaPage = await quotaContext.newPage();
   const quotaErrors = [];
   quotaPage.on("pageerror", (error) => quotaErrors.push(error.message));
@@ -1489,6 +1536,36 @@ try {
   assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), watchlistKey), originalWatchlist,
     "a failed remove write must preserve the original stored watchlist bytes");
   assert.deepEqual(quotaErrors, [], "quota failures must be handled without unhandled browser errors");
+
+  // Recent-task removal and clearing must also verify the write, because the storage module returns a best-effort array.
+  await quotaPage.locator('.nav-link[data-view="tasks"]').click();
+  await quotaPage.locator("#tasks-view").waitFor({ state: "visible" });
+  await quotaPage.locator('#recent-analysis-list [data-remove-task-id="task-browser-storage-001"]').waitFor({ state: "visible" });
+  await quotaPage.locator('#recent-analysis-list [data-remove-task-id="task-browser-storage-001"]').click();
+  await quotaPage.waitForFunction(
+    () => document.querySelector("#recent-analysis-feedback")?.textContent.includes("无法确认最近任务引用已移除"),
+    null,
+    { timeout: 5000 }
+  );
+  const failedRecentRemove = await quotaPage.locator("#recent-analysis-feedback").textContent();
+  assert.match(failedRecentRemove, /无法确认最近任务引用已移除/);
+  assert.doesNotMatch(failedRecentRemove, /已从当前浏览器移除该任务引用/);
+  assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), recentTasksKey), originalRecentTasks,
+    "a failed recent-task removal must preserve the original stored history bytes");
+
+  quotaPage.once("dialog", (dialog) => dialog.accept());
+  await quotaPage.locator("#clear-recent-analysis").click();
+  await quotaPage.waitForFunction(
+    () => document.querySelector("#recent-analysis-feedback")?.textContent.includes("未能确认最近任务历史已清空"),
+    null,
+    { timeout: 5000 }
+  );
+  const failedRecentClear = await quotaPage.locator("#recent-analysis-feedback").textContent();
+  assert.match(failedRecentClear, /未能确认最近任务历史已清空/);
+  assert.doesNotMatch(failedRecentClear, /本地最近任务列表已清空/);
+  assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), recentTasksKey), originalRecentTasks,
+    "a failed recent-task clear must preserve the original stored history bytes");
+  assert.deepEqual(quotaErrors, [], "recent-task storage failures must not create unhandled browser errors");
   await quotaContext.close();
 
   console.log("PASS all " + viewports.length + " responsive browser viewports");
