@@ -317,7 +317,7 @@ try {
           turnover: document.querySelector("#metric-turnover")?.textContent.trim(),
           qualityText: document.querySelector("#quote-quality")?.textContent.trim(),
           qualityClass: document.querySelector("#quote-quality")?.className || "",
-          lastUpdated: document.querySelector("#last-updated")?.textContent.trim(),
+          quoteTime: document.querySelector("#metric-quote-time")?.textContent.trim(),
           marketHealth: document.querySelector("#market-health-dot")?.className || "",
           analysisHealth: document.querySelector("#analysis-health-dot")?.className || "",
           overallConnection: document.querySelector("#connection-dot")?.className || ""
@@ -329,7 +329,7 @@ try {
         assert.equal(failedQuote.turnover, "—", scenario + " must not retain old turnover rate");
         assert.equal(failedQuote.qualityText, "未取得报价", scenario + " must not present a failed quote as healthy");
         assert.match(failedQuote.qualityClass, /quality-unknown/);
-        assert.equal(failedQuote.lastUpdated, "—", scenario + " must clear the previous quote timestamp");
+        assert.equal(failedQuote.quoteTime, "行情时间未报告", scenario + " must clear the previous quote timestamp");
         assert.doesNotMatch(failedQuote.marketHealth, /is-online/, scenario + " must not report a healthy market API");
         assert.doesNotMatch(failedQuote.analysisHealth, /is-online/, scenario + " must not report a healthy analysis API");
         assert.doesNotMatch(failedQuote.overallConnection, /is-online/, scenario + " must not report healthy overall connectivity");
