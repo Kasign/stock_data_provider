@@ -5056,15 +5056,10 @@ renderAlertCollection({ supported: false }, "attempts", "[data-alert-delivery-st
 renderRecentTasks();
 renderWatchlist();
 configureDateInputs();
-setView(window.location.hash.slice(1), { updateHash: false, refreshData: false });
+// 每次重新进入应用都从首页开始；任务引用仍保留，但不强制跳转到运行流。
+window.history.replaceState(null, "", window.location.pathname + window.location.search);
+setView("market", { updateHash: false, refreshData: false });
 syncSettingsThemeButtons(readTheme());
 void refreshServices();
-const restoredTask = restoreLastTask();
-if (!restoredTask) {
-  if (state.view === "market") void refreshMarketWorkspace();
-  else if (state.view === "stocks") {
-    void refreshSources();
-    if (state.settings.apiKey) void runQuoteQuery();
-    else setText("#query-hint", "尚未配置行情 API Key。点击右上角设置按钮后填写 MARKET_DATA_API_KEY。");
-  } else if (state.view === "research") stockResearch.syncSymbol();
-}
+restoreLastTask();
+void refreshMarketWorkspace();
