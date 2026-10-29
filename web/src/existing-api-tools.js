@@ -110,7 +110,7 @@ export function bindExistingApiTools(getSettings) {
     const asOf = $("#index-constituents-date").value;
     button.disabled = true;
     try {
-      const data = await getIndexConstituents(settings(), symbol, { asOf });
+      const data = await getIndexConstituents(settings(), symbol, { asOf, source: $("#index-tool-source").value });
       const items = Array.isArray(data?.items) ? data.items : [];
       renderRows("#index-constituents-body", items, [item => item.name, item => item.symbol || item.code, item => item.weight_percent == null ? "未提供" : item.weight_percent + "%"], "接口成功响应，但没有成分记录。");
       setQuality(data.quality_status);
@@ -128,7 +128,7 @@ export function bindExistingApiTools(getSettings) {
     const end = $("#index-daily-end").value;
     button.disabled = true;
     try {
-      const data = await getIndexDailyBars(settings(), symbol, { start, end });
+      const data = await getIndexDailyBars(settings(), symbol, { start, end, source: $("#index-tool-source").value });
       const items = Array.isArray(data?.items) ? data.items : [];
       renderRows("#index-daily-body", items, [
         item => item.trade_date,
