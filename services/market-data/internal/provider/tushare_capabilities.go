@@ -1064,6 +1064,11 @@ func (p *Tushare) FetchValuations(ctx context.Context, rawSymbols []string) (*mo
 		if readErr != nil {
 			return nil, readErr
 		}
+		if isTushareConvertibleBondCode(rawSymbol) {
+			base.ExcludedNonAShareCount++
+			base.QualityReasons = appendTushareReason(base.QualityReasons, "provider_non_a_share_security_rows_excluded")
+			continue
+		}
 		symbol, symbolErr := normalize.NormalizeSymbol(rawSymbol)
 		if symbolErr != nil {
 			return nil, fmt.Errorf("Tushare daily_basic 第 %d 行代码无效: %q", index, rawSymbol)
@@ -1376,6 +1381,29 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 		Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 	}, nil
+}
+
+
+func isTushareConvertibleBondCode(raw string) bool {
+	code := strings.ToUpper(strings.TrimSpace(raw))
+	parts := strings.Split(code, ".")
+	if len(parts) != 2 || len(parts[0]) != 6 {
+		return false
+	}
+	for _, r := range parts[0] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	switch {
+	case strings.HasPrefix(code, "110"), strings.HasPrefix(code, "111"),
+		strings.HasPrefix(code, "113"), strings.HasPrefix(code, "118"),
+		strings.HasPrefix(code, "123"), strings.HasPrefix(code, "127"),
+		strings.HasPrefix(code, "128"), strings.HasPrefix(code, "129"):
+		return true
+	default:
+		return false
+	}
 }
 
 // FetchDragonTiger returns one page of top_list rows and keeps unverified currency fields out of *_CNY values.

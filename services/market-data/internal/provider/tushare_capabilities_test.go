@@ -1016,12 +1016,14 @@ func TestTushareFundamentalsMapsThreeFinancialStatements(t *testing.T) {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		expectedReportType := "2"
-		if request.APIName == "balancesheet" {
-			expectedReportType = "1"
-		}
-		if request.Params["report_type"] != expectedReportType {
-			t.Errorf("%s report_type=%q, want %q", request.APIName, request.Params["report_type"], expectedReportType)
+		if request.APIName == "income" || request.APIName == "cashflow" || request.APIName == "balancesheet" {
+			expectedReportType := "2"
+			if request.APIName == "balancesheet" {
+				expectedReportType = "1"
+			}
+			if request.Params["report_type"] != expectedReportType {
+				t.Errorf("%s report_type=%q, want %q", request.APIName, request.Params["report_type"], expectedReportType)
+			}
 		}
 		fields := strings.Split(request.Fields, ",")
 		values := make([]any, len(fields))

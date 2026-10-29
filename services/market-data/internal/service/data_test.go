@@ -2415,7 +2415,7 @@ func TestValidateIndexDailyBarsRejectsQualityAndUnitMismatch(t *testing.T) {
 				Volume: &volume, Amount: &amount, VolumeUnit: "shares", AmountUnit: "CNY",
 				Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityDegraded,
 			}},
-			Total: 1, Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, QualityStatus: model.QualityValid,
+			Total: 1, Source: "tushare", SourceVersion: "test-v1", FetchedAt: now, ProviderTime: &now, QualityStatus: model.QualityValid,
 		}
 	}
 	t.Run("parent quality", func(t *testing.T) {

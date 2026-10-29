@@ -138,7 +138,7 @@ func (httpFakeProvider) FetchLimitPool(_ context.Context, poolType, tradeDate st
 	change := 10.0
 	return &model.LimitPoolSnapshot{
 		PoolType: poolType, TradeDate: tradeDate, Total: 1, HasData: true,
-		Items:  []model.LimitPoolItem{{Symbol: "600519.SH", Code: "600519", Name: "测试证券", ChangePercent: &change, Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded}},
+		Items:  []model.LimitPoolItem{{Symbol: "600519.SH", Code: "600519", Name: "测试证券", ChangePercent: &change, Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded}},
 		Source: "eastmoney", SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 	}, nil

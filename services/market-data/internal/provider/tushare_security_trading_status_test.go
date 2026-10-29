@@ -289,8 +289,8 @@ func TestTushareFetchSecurityTradingStatusFindsDelistedSecurityBasicRow(t *testi
 	if got.ListingDate != "2020-01-01" {
 		t.Fatalf("expected original listing date for delisted security, got %+v", got)
 	}
-	if got.DelistingStatus != model.DelistingStatusDelistingPeriod || got.RiskWarningStatus != model.RiskWarningUnknown {
-		t.Fatalf("expected delisting-period classification without treating it as normal ST status: %+v", got)
+	if got.DelistingStatus != model.DelistingStatusUnknown || got.RiskWarningStatus != model.RiskWarningUnknown {
+		t.Fatalf("historical name alone must not prove delisting or risk-warning status: %+v", got)
 	}
 	if tradeCalendarExchange != "SSE" || !got.TradingDayKnown {
 		t.Fatalf("expected documented shared market calendar for Beijing Exchange, got exchange=%q status=%+v", tradeCalendarExchange, got)
