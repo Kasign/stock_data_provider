@@ -156,3 +156,22 @@ test("does not return a new history item when browser storage rejects the write"
     items: [], storageReadable: true, storageValid: true, reason: ""
   });
 });
+
+
+test("keeps the existing task list when removing a task cannot be persisted", () => {
+  const stored = new Map();
+  const seedStorage = makeStorage();
+  upsertRecentTask({ task_id: "task-a", status: "running" }, seedStorage);
+  upsertRecentTask({ task_id: "task-b", status: "succeeded" }, seedStorage);
+  stored.set(RECENT_TASKS_KEY, seedStorage.getItem(RECENT_TASKS_KEY));
+  const storage = {
+    getItem(key) { return stored.has(key) ? stored.get(key) : null; },
+    setItem() { throw new DOMException("Quota exceeded", "QuotaExceededError"); },
+    removeItem(key) { stored.delete(key); }
+  };
+
+  const returned = removeRecentTask("task-b", storage);
+
+  assert.deepEqual(returned.map((item) => item.task_id), ["task-b", "task-a"]);
+  assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+});
