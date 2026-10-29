@@ -1,5 +1,13 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新 Provider 请求代际与连接切换验收
+
+- 最新浏览器回归提交：`42251268991a879deb74b7b2e787daaa076e4d5b`。
+- 在数据中心 Provider 清单请求延迟返回时，通过真实设置对话框把行情 API 路径从 `/market-api` 改为 `/market-api-v2`；保存后确认数据中心清单已清空且显示“连接配置已变更”，等待旧请求真正 resolve 后再次确认旧 Provider 仍未回填、状态为“需重新检查”、按钮已恢复，且没有额外请求。
+- WebUI checks [#40816630351](https://github.com/Kasign/stock_data_provider/actions/runs/40816630351) 和 Browser Smoke [#40816630301](https://github.com/Kasign/stock_data_provider/actions/runs/40816630301) 对应上述 HEAD，均通过。
+- 本轮仍未连接真实 Provider；所有 HTTP/网络错误和延迟响应均为确定性测试桩。真实 API Key 与 NAS/1Panel 代理验收仍单独保留。
+
+
 ## 2026-10-29 最新恢复路径与诊断摘要
 
 - 最新功能测试提交：`75a5de71b4ffc37fba3a5099159e7b2a33ac8bce`。在行情查询、首页市场、数据中心 Provider 清单各自的失败矩阵之外，增加失败后用户手动重试成功的验证。

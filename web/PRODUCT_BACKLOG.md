@@ -32,6 +32,8 @@
 - [x] 首页市场错误矩阵后的手动刷新恢复指数卡片与状态，且仅发起一个新请求。
 - [x] 数据中心 Provider 清单错误矩阵后的手动检查恢复成功列表，清除旧错误，不重复请求。
 - [x] 数据中心总摘要区分服务/依赖异常与 Provider 清单读取失败。
+- [x] 浏览器回归覆盖 Provider 清单请求在途时切换并保存新的行情 API 路径；迟到的旧连接响应不会回写旧 Provider，也不会覆盖“需重新检查”状态。
+- [x] 最新 checks [#40816630351](https://github.com/Kasign/stock_data_provider/actions/runs/40816630351) 和 Browser Smoke [#40816630301](https://github.com/Kasign/stock_data_provider/actions/runs/40816630301) 通过（HEAD `42251268991a879deb74b7b2e787daaa076e4d5b`）。
 - [x] 最新 checks [#40816231911](https://github.com/Kasign/stock_data_provider/actions/runs/40816231911) 和 Browser Smoke [#40816231865](https://github.com/Kasign/stock_data_provider/actions/runs/40816231865) 通过（HEAD `75a5de71b4ffc37fba3a5099159e7b2a33ac8bce`）。
 - [x] 最新 WebUI checks [#40813557024](https://github.com/Kasign/stock_data_provider/actions/runs/40813557024) 与 Browser Smoke [#40813556922](https://github.com/Kasign/stock_data_provider/actions/runs/40813556922) 通过（HEAD `ce421c0b2151850f6648801cd871e4bb33da235b`）。
 - [x] 最新 WebUI checks [#40813258411](https://github.com/Kasign/stock_data_provider/actions/runs/40813258411) 与 Browser Smoke [#40813258387](https://github.com/Kasign/stock_data_provider/actions/runs/40813258387) 均通过（HEAD `d91fd0263ba4f2ec09dd3809d3a9347542f5ffa4`）。

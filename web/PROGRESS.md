@@ -1,3 +1,10 @@
+## 2026-10-29 — Provider 清单连接切换竞态回归
+
+- 浏览器烟测在 Provider 清单请求仍未完成时，使用真实设置对话框切换行情 API 路径并保存。
+- 配置保存会使原检查代际失效，并清空旧 Provider 清单；旧请求延迟完成后不得将旧连接的数据重新写回，检查按钮必须恢复“立即检查/可用”状态。
+- 对应完整检查 [#40816630351](https://github.com/Kasign/stock_data_provider/actions/runs/40816630351) 与 Browser Smoke [#40816630301](https://github.com/Kasign/stock_data_provider/actions/runs/40816630301) 均通过，代码 HEAD `42251268991a879deb74b7b2e787daaa076e4d5b`。
+
+
 ## 2026-10-29 — 市场与 Provider 清单错误后的手动恢复
 
 - 首页市场总览错误矩阵后补上手动恢复：服务恢复后再次刷新，索引卡片重新显示、错误状态清除、索引请求只新增一次且无隐藏重复请求。

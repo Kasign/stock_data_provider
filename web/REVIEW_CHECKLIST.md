@@ -1,3 +1,11 @@
+## 2026-10-29 后续追加 — Provider 清单连接切换竞态
+
+- [x] 已增加 Chromium 场景：在 Provider 请求尚未完成时保存新的行情 API 路径，旧响应迟到后不能回填 Provider 或覆盖失效提示。
+- [x] 数据中心按钮在连接变更失效流程后恢复可用；旧请求结束不触发额外请求。
+- [x] HEAD `42251268991a879deb74b7b2e787daaa076e4d5b` 的 WebUI checks [#40816630351](https://github.com/Kasign/stock_data_provider/actions/runs/40816630351) 与 Browser Smoke [#40816630301](https://github.com/Kasign/stock_data_provider/actions/runs/40816630301) 均通过。
+- [ ] 真实 Provider 和 NAS/1Panel 反向代理仍需单独验收。
+
+
 ## 2026-10-29 后续追加 — 手动恢复与诊断摘要
 
 - [x] 首页市场错误矩阵后手动刷新可恢复指数卡片与状态；新请求次数严格为 1。
