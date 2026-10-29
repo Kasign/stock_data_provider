@@ -475,6 +475,32 @@ try {
         assert.ok(indexState.refreshSummary.includes(expected.summary), "market overview " + scenario + " should have a distinct summary");
       }
 
+      // A manual refresh after any market error must restore a successful index response without a hidden duplicate request.
+      marketScenario = "success";
+      const marketRecoveryCount = marketIndexRequestCount;
+      await page.waitForFunction(
+        () => !document.querySelector("#refresh-market-overview")?.disabled,
+        null,
+        { timeout: 10000 }
+      );
+      await page.locator("#refresh-market-overview").click();
+      await page.waitForFunction(
+        () => document.querySelector("#market-index-grid")?.textContent.includes("测试指数"),
+        null,
+        { timeout: 10000 }
+      );
+      assert.equal(marketIndexRequestCount, marketRecoveryCount + 1, "manual market overview retry should make exactly one new index request");
+      const recoveredIndexState = await page.evaluate(() => ({
+        status: document.querySelector("#market-indices-status")?.textContent.trim() || "",
+        className: document.querySelector("#market-indices-status")?.className || "",
+        message: document.querySelector("#market-index-grid")?.textContent || ""
+      }));
+      assert.match(recoveredIndexState.message, /测试指数/);
+      assert.doesNotMatch(recoveredIndexState.status, /读取失败/);
+      assert.doesNotMatch(recoveredIndexState.className, /is-unavailable/);
+      await page.waitForTimeout(250);
+      assert.equal(marketIndexRequestCount, marketRecoveryCount + 1, "manual market overview retry should not silently duplicate the request");
+
       // Data Center must classify Provider-list errors independently from service probes and clear old capability rows.
       const menu = page.locator("#mobile-menu-toggle");
       if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
