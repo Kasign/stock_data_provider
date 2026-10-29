@@ -80,10 +80,19 @@ func TestSecurityTradingStatusKeepsUnknownEvidenceUnknown(t *testing.T) {
 
 func TestSecurityTradingStatusRejectsFutureDateAndMissingProvider(t *testing.T) {
 	svc := &DataService{}
-	_, err := svc.SecurityTradingStatus(context.Background(), "600519.SH", time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02"))
+	_, err := svc.SecurityTradingStatus(context.Background(), "600519.SH", "2026-10-22")
 	if err == nil || !strings.Contains(err.Error(), "no enabled") {
 		t.Fatalf("missing provider should fail explicitly, got %v", err)
 	}
-	_, err = svc.SecurityTradingStatus(context.Background(), "600519.SH", time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02"))
-	if err == nil { t.Fatal("future date must be rejected") }
+	pastSnapshot := validSecurityTradingStatusFixture("future-date-provider")
+	futureProvider := &securityTradingStatusTestProvider{name: "future-date-provider", snapshot: pastSnapshot}
+	svc.SetSecurityTradingStatusProviders([]provider.SecurityTradingStatusProvider{futureProvider})
+	futureDate := time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
+	_, err = svc.SecurityTradingStatus(context.Background(), "600519.SH", futureDate)
+	if err == nil || !strings.Contains(err.Error(), "must not be in the future") {
+		t.Fatalf("future date must be rejected before provider calls, got %v", err)
+	}
+	if futureProvider.calls != 0 {
+		t.Fatalf("future date must not call provider, calls=%d", futureProvider.calls)
+	}
 }
