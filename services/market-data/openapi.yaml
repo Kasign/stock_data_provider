@@ -234,6 +234,7 @@ components:
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System time when this source-content revision was recorded; present in as_of responses}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
     TradingCalendarDay:
@@ -966,20 +967,22 @@ paths:
   /api/v1/stocks/{symbol}/trading-status:
     get:
       summary: Get historical trading-status evidence for one A-share
-      description: Uses Tushare historical name-change, trading-calendar and suspension records to provide date-specific risk-warning evidence, listing-session count and suspension status. Missing or ambiguous evidence remains unknown. This endpoint does not persist a historical snapshot and does not report a verified no-limit exception event.
+      description: Uses Tushare historical name-change, trading-calendar and suspension records to provide date-specific risk-warning, delisting and suspension evidence. Each source-content change is appended to local revision storage when MariaDB is enabled. Optional as_of reads only locally recorded versions known by that system timestamp and never falls back to live Providers. Missing or ambiguous evidence remains unknown; no-limit exception events are not inferred.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
+        - {name: as_of, in: query, required: false, schema: {type: string, format: date-time}, description: Optional system-observation cutoff. When supplied, reads only locally recorded revisions and never calls a live Provider.}
       responses:
         '200':
           description: Historical security status and quality metadata. Unknown status fields are valid response states when source evidence is incomplete.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SecurityTradingStatusSnapshot'}
-        '400': {description: Invalid symbol or trade date}
+        '400': {description: Invalid symbol, trade date or as_of timestamp}
         '401': {description: API key required}
-        '502': {description: All configured security-status Providers failed}
-        '503': {description: No security-trading-status Provider enabled}
+        '404': {description: No usable status revision was recorded by the requested as_of timestamp}
+        '502': {description: All configured security-status Providers failed for a live read}
+        '503': {description: No security-trading-status Provider enabled, or local PIT revision storage unavailable}
   /api/v1/stocks/{symbol}/fundamentals:
     get:
       summary: Get quarterly indicators and financial statement sections
