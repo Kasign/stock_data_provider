@@ -358,6 +358,17 @@ func ResolvePriceLimitRuleFromTradingStatus(
 		return result, nil
 	}
 
+	if tradingStatus.QualityStatus == model.QualityUnknown {
+		result, resolveErr := ResolvePriceLimitRuleWithEvidence(
+			symbol, tradeDate, model.RiskWarningUnknown, 0, false, nil,
+		)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		appendReasonOnce(&result.QualityReasons, "security_trading_status_quality_unknown")
+		return result, nil
+	}
+
 	if !tradingStatus.TradingDayKnown || !tradingStatus.IsTradingDay {
 		result, resolveErr := ResolvePriceLimitRuleWithEvidence(
 			symbol, tradeDate, model.RiskWarningUnknown, 0, false, nil,

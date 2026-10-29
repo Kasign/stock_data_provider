@@ -274,6 +274,19 @@ func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDa
 		}
 	})
 
+	t.Run("unknown quality status cannot produce a rule", func(t *testing.T) {
+		status := base
+		status.QualityStatus = model.QualityUnknown
+		got, err := ResolvePriceLimitRuleFromTradingStatus("600519.SH", "2026-07-06", &status, evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != model.PriceLimitStatusUnknown || got.LimitPercent != nil ||
+			!hasRuleReason(got.QualityReasons, "security_trading_status_quality_unknown") {
+			t.Fatalf("unknown-quality status must fail closed, got %+v", got)
+		}
+	})
+
 	t.Run("future source fetch time cannot produce a rule", func(t *testing.T) {
 		status := base
 		status.FetchedAt = time.Now().UTC().Add(24 * time.Hour)
