@@ -709,6 +709,37 @@ try {
 
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
+
+      // The topbar health summary must use the same evidence threshold as Data Center.
+      healthScenario = "missing-status";
+      const refreshButton = page.locator("#refresh-button");
+      await page.waitForFunction(() => !document.querySelector("#refresh-button")?.disabled, null, { timeout: 10000 });
+      await refreshButton.click();
+      await page.waitForFunction(
+        () => document.querySelector("#market-health-text")?.textContent === "状态未知" &&
+          document.querySelector("#analysis-health-text")?.textContent === "状态未知" &&
+          document.querySelector("#market-health-dot")?.classList.contains("is-unknown") &&
+          document.querySelector("#analysis-health-dot")?.classList.contains("is-unknown"),
+        null,
+        { timeout: 10000 }
+      );
+      const topbarHealth = await page.evaluate(() => ({
+        marketLabel: document.querySelector("#market-health-text")?.textContent.trim() || "",
+        marketDot: document.querySelector("#market-health-dot")?.className || "",
+        analysisLabel: document.querySelector("#analysis-health-text")?.textContent.trim() || "",
+        analysisDot: document.querySelector("#analysis-health-dot")?.className || "",
+        connectionLabel: document.querySelector("#connection-text")?.textContent.trim() || "",
+        connectionDot: document.querySelector("#connection-dot")?.className || ""
+      }));
+      assert.equal(topbarHealth.marketLabel, "状态未知");
+      assert.match(topbarHealth.marketDot, /is-unknown/);
+      assert.doesNotMatch(topbarHealth.marketDot, /is-online/);
+      assert.equal(topbarHealth.analysisLabel, "状态未知");
+      assert.match(topbarHealth.analysisDot, /is-unknown/);
+      assert.doesNotMatch(topbarHealth.analysisDot, /is-online/);
+      assert.doesNotMatch(topbarHealth.connectionDot, /is-online/);
+      assert.match(topbarHealth.connectionDot, /is-unknown/);
+      healthScenario = "unavailable";
     }
 
     const assertNoHorizontalOverflow = async (stage) => {
