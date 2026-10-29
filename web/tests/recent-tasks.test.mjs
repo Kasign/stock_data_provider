@@ -175,3 +175,19 @@ test("keeps the existing task list when removing a task cannot be persisted", ()
   assert.deepEqual(returned.map((item) => item.task_id), ["task-b", "task-a"]);
   assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
 });
+
+
+test("keeps the existing task list when clearing history cannot be persisted", () => {
+  const seedStorage = makeStorage();
+  upsertRecentTask({ task_id: "task-a" }, seedStorage);
+  upsertRecentTask({ task_id: "task-b" }, seedStorage);
+  const raw = seedStorage.getItem(RECENT_TASKS_KEY);
+  const storage = {
+    getItem() { return raw; },
+    removeItem() { throw new DOMException("Storage unavailable", "SecurityError"); },
+    setItem() { throw new DOMException("Storage unavailable", "SecurityError"); }
+  };
+
+  assert.deepEqual(clearRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+  assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+});
