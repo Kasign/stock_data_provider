@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
@@ -12,6 +14,10 @@ func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
 		t.Fatalf("read OpenAPI specification: %v", err)
 	}
 	text := string(spec)
+	var document map[string]any
+	if err := yaml.Unmarshal(spec, &document); err != nil {
+		t.Fatalf("OpenAPI must be valid YAML without duplicate mapping keys: %v", err)
+	}
 	if !strings.Contains(text, "    ApiKey:\n      type: apiKey\n      in: header\n      name: X-API-Key") {
 		t.Fatal("OpenAPI must define the ApiKey scheme used by the HTTP server")
 	}
