@@ -100,11 +100,22 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	}
 
 	// stock_st 是按交易日提供的风险警示板名单；名称前缀只作为一致性校验，不作为权威状态回退。
-	authoritativeRiskStatus, riskStatusErr := p.fetchHistoricalRiskWarningStatus(ctx, symbol, compactDate)
+	authoritativeRiskStatus := model.RiskWarningUnknown
+	var riskStatusErr error
+	if !tradingDay {
+		// stock_st 是交易日名单；无交易日的空响应不能证明该证券属于普通状态。
+		riskStatusErr = errors.New("Tushare stock_st 只能确认交易日的风险警示状态")
+	} else {
+		authoritativeRiskStatus, riskStatusErr = p.fetchHistoricalRiskWarningStatus(ctx, symbol, compactDate)
+	}
 	if riskStatusErr != nil {
 		result.RiskWarningStatus = model.RiskWarningUnknown
 		result.QualityStatus = model.QualityUnknown
-		result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "authoritative_historical_risk_warning_status_unavailable")
+		if !tradingDay {
+			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "authoritative_st_list_requires_trading_date")
+		} else {
+			result.QualityReasons = appendUniqueSecurityStatusReason(result.QualityReasons, "authoritative_historical_risk_warning_status_unavailable")
+		}
 	} else if result.DelistingStatus == model.DelistingStatusDelistingRisk ||
 		result.DelistingStatus == model.DelistingStatusDelistingPeriod {
 		// 退市风险/退市整理期间的涨跌幅规则需单独解析，不能把 ST 名单结果直接解释为该类证券的规则状态。

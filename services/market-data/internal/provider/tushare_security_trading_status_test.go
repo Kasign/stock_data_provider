@@ -356,3 +356,70 @@ func TestFetchHistoricalRiskWarningStatusDoesNotAssumePre2000Normal(t *testing.T
 		t.Fatalf("pre-2000 status must remain unknown without an upstream request: status=%q err=%v", got, err)
 	}
 }
+
+
+func TestTushareFetchSecurityTradingStatusDoesNotInferNormalSTStateOnNonTradingDate(t *testing.T) {
+	stockSTCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			APIName string            `json:"api_name"`
+			Params  map[string]string `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		var fields []string
+		var items [][]any
+		switch request.APIName {
+		case "stock_basic":
+			fields = []string{"ts_code", "list_status", "list_date", "market"}
+			items = [][]any{{"920001.BJ", "L", "20200101", "北交所"}}
+		case "namechange":
+			fields = []string{"ts_code", "name", "start_date", "end_date", "ann_date", "change_reason"}
+			items = [][]any{{"920001.BJ", "北证示例", "20200101", nil, "20200101", "上市"}}
+		case "trade_cal":
+			fields = []string{"exchange", "cal_date", "is_open"}
+			items = [][]any{{"SSE", "20261024", "0"}}
+		case "suspend_d":
+			fields = []string{"ts_code", "trade_date", "suspend_timing", "suspend_type"}
+			items = [][]any{}
+		case "stock_st":
+			stockSTCalls++
+			t.Errorf("stock_st must not be queried for a non-trading date")
+			fields = []string{"ts_code", "name", "trade_date", "type", "type_name"}
+			items = [][]any{}
+		default:
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected API", http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0, "msg": "",
+			"data": map[string]any{"fields": fields, "items": items},
+		})
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "fixture-token")
+	got, err := client.FetchSecurityTradingStatus(context.Background(), "920001.BJ", "2026-10-24")
+	if err != nil {
+		t.Fatalf("FetchSecurityTradingStatus: %v", err)
+	}
+	if got.IsTradingDay || !got.TradingDayKnown {
+		t.Fatalf("expected a verified non-trading date, got %+v", got)
+	}
+	if got.RiskWarningStatus != model.RiskWarningUnknown {
+		t.Fatalf("risk warning status must remain unknown without a daily ST-list snapshot: %+v", got)
+	}
+	if stockSTCalls != 0 {
+		t.Fatalf("unexpected stock_st calls: %d", stockSTCalls)
+	}
+	for _, reason := range got.QualityReasons {
+		if reason == "authoritative_st_list_requires_trading_date" {
+			return
+		}
+	}
+	t.Fatalf("expected explicit non-trading-date quality reason: %v", got.QualityReasons)
+}
