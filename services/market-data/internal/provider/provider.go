@@ -98,6 +98,13 @@ type SecurityTradingStatusProvider interface {
 	FetchSecurityTradingStatus(ctx context.Context, symbol, tradeDate string) (*model.SecurityTradingStatusSnapshot, error)
 }
 
+// PriceLimitEventProvider returns source-backed special no-limit event evidence for an exact A-share date.
+// Implementations must not infer a confirmed absence unless the source guarantees complete coverage.
+type PriceLimitEventProvider interface {
+	NamedProvider
+	FetchPriceLimitEventEvidence(ctx context.Context, symbol, tradeDate string) (*model.PriceLimitEventEvidence, error)
+}
+
 // FundamentalsProvider returns financial indicators for an explicit report period.
 type FundamentalsProvider interface {
 	NamedProvider

@@ -65,6 +65,9 @@ type PriceLimitEventEvidence struct {
 	EffectiveFrom     string              `json:"effective_from"`
 	EffectiveTo       string              `json:"effective_to,omitempty"`
 	Source            string              `json:"source"`
+	SourceVersion     string              `json:"source_version"`
+	QualityStatus     QualityStatus       `json:"quality_status"`
+	QualityReasons    []string            `json:"quality_reasons,omitempty"`
 	SourceURL         string              `json:"source_url"`
 	AnnouncementID    string              `json:"announcement_id,omitempty"`
 	ObservedAt        time.Time           `json:"observed_at"`

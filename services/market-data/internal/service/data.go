@@ -39,6 +39,7 @@ type DataService struct {
 	stockBoardsProviders           []provider.StockBoardsProvider
 	tradingCalendarProviders       []provider.TradingCalendarProvider
 	securityTradingStatusProviders []provider.SecurityTradingStatusProvider
+	priceLimitEventProviders       []provider.PriceLimitEventProvider
 	fundamentalsProviders          []provider.FundamentalsProvider
 	valuationProviders             []provider.ValuationProvider
 	indexCatalogProviders          []provider.IndexCatalogProvider
@@ -308,6 +309,14 @@ func (s *DataService) SetSecurityTradingStatusProviders(providers []provider.Sec
 
 func (s *DataService) SecurityTradingStatusProviders() []provider.SecurityTradingStatusProvider {
 	return append([]provider.SecurityTradingStatusProvider(nil), s.securityTradingStatusProviders...)
+}
+
+func (s *DataService) SetPriceLimitEventProviders(providers []provider.PriceLimitEventProvider) {
+	s.priceLimitEventProviders = append([]provider.PriceLimitEventProvider(nil), providers...)
+}
+
+func (s *DataService) PriceLimitEventProviders() []provider.PriceLimitEventProvider {
+	return append([]provider.PriceLimitEventProvider(nil), s.priceLimitEventProviders...)
 }
 
 func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
