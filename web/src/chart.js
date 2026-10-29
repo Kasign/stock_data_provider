@@ -93,7 +93,7 @@ function candleTitle(point, options = {}) {
 }
 
 
-const TECHNICAL_MA_PERIODS = Object.freeze([5, 20, 60]);
+const TECHNICAL_MA_PERIODS = Object.freeze([5, 20, 60, 120, 250]);
 const RSI_PERIOD = 14;
 const MACD_FAST_PERIOD = 12;
 const MACD_SLOW_PERIOD = 26;
