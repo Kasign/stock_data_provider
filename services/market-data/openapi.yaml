@@ -212,6 +212,22 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
+    PriceLimitEventEvidence:
+      type: object
+      required: [symbol, status, effective_from, source, source_version, quality_status, source_url, observed_at, coverage_confirmed]
+      properties:
+        symbol: {type: string}
+        status: {type: string, enum: [unknown, none, relisting_first_day, delisting_first_day, exchange_specified]}
+        effective_from: {type: string, format: date}
+        effective_to: {type: string, format: date}
+        source: {type: string}
+        source_version: {type: string}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+        source_url: {type: string, format: uri}
+        announcement_id: {type: string}
+        observed_at: {type: string, format: date-time}
+        coverage_confirmed: {type: boolean, description: True only when the provider confirms complete coverage for a no-event result}
     SecurityTradingStatusSnapshot:
       type: object
       required: [symbol, trade_date, risk_warning_status, delisting_status, listing_status_known, is_trading_day, trading_day_known, suspension_status, source, source_version, fetched_at, quality_status]
@@ -992,7 +1008,7 @@ paths:
                   listing_trading_day_number: {type: integer}
                   listing_status_known: {type: boolean}
                   special_exception_status: {type: string}
-                  special_exception_evidence: {type: object, nullable: true}
+                  special_exception_evidence: {$ref: '#/components/schemas/PriceLimitEventEvidence', nullable: true}
                   status: {type: string, enum: [unknown, limited, no_limit]}
                   limit_percent: {type: number, nullable: true, description: Percentage points; absent for unknown/no-limit rules}
                   no_limit_reason: {type: string}

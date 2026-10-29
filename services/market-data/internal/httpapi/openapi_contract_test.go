@@ -81,4 +81,22 @@ func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
 	if !strings.Contains(constituentsSchema, "required: [index_symbol, items, total, provider_returned, source, fetched_at, quality_status]") {
 		t.Error("IndexConstituentSnapshot must require provider_returned because the Go model always serializes it")
 	}
+
+	if !strings.Contains(text, "special_exception_evidence: {$ref: '#/components/schemas/PriceLimitEventEvidence', nullable: true}") {
+		t.Error("PriceLimitRuleSnapshot must reference the structured special-event evidence schema")
+	}
+	evidenceStart := strings.Index(text, "    PriceLimitEventEvidence:")
+	if evidenceStart < 0 {
+		t.Fatal("PriceLimitEventEvidence schema missing")
+	}
+	evidenceEnd := strings.Index(text[evidenceStart+len("    PriceLimitEventEvidence:"):], "\n    SecurityTradingStatusSnapshot:")
+	if evidenceEnd < 0 {
+		t.Fatal("PriceLimitEventEvidence schema boundary missing")
+	}
+	evidenceSchema := text[evidenceStart : evidenceStart+len("    PriceLimitEventEvidence:")+evidenceEnd]
+	for _, field := range []string{"effective_from:", "source_version:", "quality_status:", "source_url:", "observed_at:", "coverage_confirmed:"} {
+		if !strings.Contains(evidenceSchema, field) {
+			t.Errorf("PriceLimitEventEvidence schema missing %q", field)
+		}
+	}
 }
