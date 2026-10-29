@@ -56,14 +56,24 @@ func (s *DataService) SecurityTradingStatus(ctx context.Context, rawSymbol, rawT
 					s.logger.Warn("security-trading-status revision write failed", "symbol", symbol, "trade_date", tradeDate, "source", p.Name(), "error", saveErr)
 				}
 			} else if revisions, readErr := s.store.ListSecurityTradingStatusAsOf(ctx, symbol, tradeDate, time.Now().UTC()); readErr == nil {
+				foundObservationTime := false
 				for index := range revisions {
 					if revisions[index].Source == p.Name() {
 						candidate.SystemObservedAt = revisions[index].SystemObservedAt
+						foundObservationTime = candidate.SystemObservedAt != nil
 						break
 					}
 				}
-			} else if s.logger != nil {
-				s.logger.Warn("security-trading-status record-time lookup failed", "symbol", symbol, "trade_date", tradeDate, "source", p.Name(), "error", readErr)
+				if !foundObservationTime {
+					candidate.QualityStatus = model.QualityDegraded
+					candidate.QualityReasons = appendReason(candidate.QualityReasons, "security_trading_status_system_observation_time_unavailable")
+				}
+			} else {
+				candidate.QualityStatus = model.QualityDegraded
+				candidate.QualityReasons = appendReason(candidate.QualityReasons, "security_trading_status_system_observation_time_unavailable")
+				if s.logger != nil {
+					s.logger.Warn("security-trading-status record-time lookup failed", "symbol", symbol, "trade_date", tradeDate, "source", p.Name(), "error", readErr)
+				}
 			}
 		}
 		score := securityTradingStatusEvidenceScore(candidate)
