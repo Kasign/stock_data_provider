@@ -575,6 +575,26 @@ try {
         assert.equal(providerState.redis, "未知", "unavailable analysis readiness must not guess Redis failure");
       }
 
+      // A failed Provider-list read is recoverable: the next user-triggered check must repopulate the current list.
+      dataSourceScenario = "success";
+      const recoveryRequestCount = dataSourcesRequestCount;
+      await page.waitForFunction(() => !document.querySelector("#data-center-check")?.disabled, null, { timeout: 10000 });
+      await page.locator("#data-center-check").click();
+      await page.waitForFunction(
+        () => document.querySelector("#data-center-provider-list")?.textContent.includes("测试 Provider") &&
+          document.querySelector("#data-center-provider-status")?.textContent.trim() === "已读取能力声明",
+        null,
+        { timeout: 10000 }
+      );
+      assert.equal(dataSourcesRequestCount, recoveryRequestCount + 1, "a manual Provider retry should make exactly one new request");
+      assert.doesNotMatch(
+        await page.locator("#data-center-provider-list").textContent(),
+        /仅 Provider 清单请求失败/,
+        "successful retry should clear stale error content"
+      );
+      await page.waitForTimeout(250);
+      assert.equal(dataSourcesRequestCount, recoveryRequestCount + 1, "successful retry should not trigger a hidden duplicate request");
+
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
     }
