@@ -23,6 +23,8 @@
 - [x] 修正与当前多模块实现不匹配的静态 UI 契约断言；保留请求代际、错误分类、连接隔离和按钮收尾语义。
 - [x] 完整 WebUI checks 通过：[运行 #40809497077](https://github.com/Kasign/stock_data_provider/actions/runs/40809497077)。
 - [x] Browser Smoke 增加 skip-link 键盘可见性与主题切换往返断言：[运行 #40809497236](https://github.com/Kasign/stock_data_provider/actions/runs/40809497236)。
+- [x] 清理 6 组在 HTML/运行时 JS 中无引用的历史样式，并保留动态图表/运行流状态与有效主题规则；样式提交的检查和 Browser Smoke 均通过（[#40810083891](https://github.com/Kasign/stock_data_provider/actions/runs/40810083891)、[#40810083745](https://github.com/Kasign/stock_data_provider/actions/runs/40810083745)）。
+- [x] Browser Smoke 在 320px 隔离上下文中验证浅色主题在页面刷新后仍能恢复，最后回到深色；最新检查与烟测均通过（[#40810222011](https://github.com/Kasign/stock_data_provider/actions/runs/40810222011)、[#40810221922](https://github.com/Kasign/stock_data_provider/actions/runs/40810221922)）。
 - [ ] 人工检查浅色/深色主题对比度、键盘/减少动态效果及研究详情锚点；自动化 smoke 只证明固定 503 后端下的布局与控件行为。
 - [ ] 对接真实 404/503/401/403 与网络错误状态，确认真实 API Key 代理和 NAS/1Panel 运行环境。
 - 后续 CSS 整理以具体可证明的问题为单位。不得对不同 media query 下的重复 selector 做机械合并或整表重写。

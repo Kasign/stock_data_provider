@@ -3,6 +3,16 @@
 最后更新：2026-10-29（健康检查、测试契约与浏览器交互验收已推进）
 用途：从新对话恢复 WebUI 开发进度、当前分支、剩余任务与验收边界。
 
+## 2026-10-29 最新代码与验收（优先）
+
+- 最新功能提交：`d7e6043ecb778eecbc3e7e32f9ebca0c5384a10e`（主题偏好刷新持久性 Browser Smoke）。
+- CSS 清理提交：`df2b71c97a6c603f61b7609dd1b7cfe5599b6f3c`。删除已核实在 HTML/运行时 JS 中无引用的旧导航计数、任务网格、功能占位页、旧设置分类卡片样式；保留被动态运行流/图表状态使用的 class 及测试明确覆盖的结构化结果样式。
+- 浏览器烟测新增 320px 隔离上下文中的主题持久化回归：深色切至浅色、刷新、确认 `data-theme`、`color-scheme`、`aria-pressed` 及标签仍为浅色，再恢复深色。
+- 最新 WebUI checks [#40810222011](https://github.com/Kasign/stock_data_provider/actions/runs/40810222011) 与 Browser Smoke [#40810221922](https://github.com/Kasign/stock_data_provider/actions/runs/40810221922) 均通过，且对应上述最新代码 HEAD。
+- CSS 清理提交对应的 WebUI checks [#40810083891](https://github.com/Kasign/stock_data_provider/actions/runs/40810083891) 和 Browser Smoke [#40810083745](https://github.com/Kasign/stock_data_provider/actions/runs/40810083745) 也均通过。
+- 自动化 Browser Smoke 仍将 API 固定返回 503；真实 401/403/404、上游 Provider 数据质量、真实部署和 NAS/1Panel 代理状态仍未验收。
+
+
 ## 2026-10-29 最新续接（优先于下方历史记录）
 
 - 唯一开发分支仍为 `feat/webui-market-data-console`；本批没有修改数据层分支、Go、Provider、数据库或根目录 Compose。

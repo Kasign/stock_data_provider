@@ -1,3 +1,12 @@
+## 2026-10-29 — 历史样式清理与主题偏好持久化回归
+
+- 对 `web/styles.css` 做全量 class 引用筛查后，移除只存在于样式表、HTML/运行时 JS 无引用的旧规则：`.nav-count`、`.task-grid`、`.feature-empty-panel`、`.feature-meta`、`.chat-empty` 和 `.settings-category-card` 的旧样式及覆盖。保留 `.feature-empty` 与仍有运行/测试用途的规则。
+- 样式清理提交 `df2b71c97a6c603f61b7609dd1b7cfe5599b6f3c` 的完整检查 [#40810083891](https://github.com/Kasign/stock_data_provider/actions/runs/40810083891) 和 Browser Smoke [#40810083745](https://github.com/Kasign/stock_data_provider/actions/runs/40810083745) 均通过。
+- Browser Smoke 再增加主题偏好持久性场景，仅在 320px 隔离浏览器上下文运行一次：切为浅色并刷新，验证主题、`color-scheme`、按钮 `aria-pressed` 和标签均从本地存储恢复；随后复原深色。
+- 最新主题持久性提交 `d7e6043ecb778eecbc3e7e32f9ebca0c5384a10e` 对应 WebUI checks [#40810222011](https://github.com/Kasign/stock_data_provider/actions/runs/40810222011) 与 Browser Smoke [#40810221922](https://github.com/Kasign/stock_data_provider/actions/runs/40810221922)，均已通过。
+- 自动化浏览器的 API 仍固定 503，不代表真实认证错误、Provider 质量或 NAS/1Panel 环境已经验收。
+
+
 ## 2026-10-29 — 健康检查质量门禁与主题/键盘浏览器烟测
 
 - 在 `web/tests/health-check.test.mjs` 新增 4 组行为回归，覆盖成功、异常、超时中止及超时后迟到响应保护。

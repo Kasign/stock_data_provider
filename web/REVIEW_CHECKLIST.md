@@ -1,3 +1,10 @@
+## 2026-10-29 后续追加 — CSS 死规则与主题持久性
+
+- [x] 清理在 HTML/运行时 JS 中无引用的历史 CSS class；保留动态运行流/图表状态 class 及仍受测试约束的结果样式。
+- [x] CSS 清理对应的完整 WebUI checks [#40810083891](https://github.com/Kasign/stock_data_provider/actions/runs/40810083891) 与 Browser Smoke [#40810083745](https://github.com/Kasign/stock_data_provider/actions/runs/40810083745) 通过。
+- [x] 新增主题偏好刷新持久性检查：浅色主题刷新后可恢复主题、辅助状态和按钮标签；完整检查 [#40810222011](https://github.com/Kasign/stock_data_provider/actions/runs/40810222011)、Browser Smoke [#40810221922](https://github.com/Kasign/stock_data_provider/actions/runs/40810221922) 均通过。
+- [ ] 保留真实 API 鉴权/错误状态与 NAS/1Panel 端到端验收；固定 503 的烟测不可替代。
+
 ## 2026-10-29 自动化质量门禁与键盘/主题 smoke
 
 - [x] 核对唯一开发分支 `feat/webui-market-data-console`；本轮只改 WebUI 与专用检查/测试文件。
