@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -161,10 +162,10 @@ func TestNeteaseFetchQuoteParsesJSONPAndNormalizesPercent(t *testing.T) {
 	}
 	wantChange := 42.35 - 41.82
 	wantChangePercent := wantChange / 41.82 * 100
-	if q.CurrentPrice == nil || *q.CurrentPrice != 42.35 ||
-		q.Change == nil || *q.Change != wantChange ||
-		q.ChangePercent == nil || *q.ChangePercent != wantChangePercent {
-		t.Fatalf("canonical change fields were not derived from latest/previous close: %+v", q)
+	if q.CurrentPrice == nil || math.Abs(*q.CurrentPrice-42.35) > 1e-9 ||
+		q.Change == nil || math.Abs(*q.Change-wantChange) > 1e-9 ||
+		q.ChangePercent == nil || math.Abs(*q.ChangePercent-wantChangePercent) > 1e-9 {
+		t.Fatalf("canonical change fields were not derived from latest/previous close (want change=%.12f percent=%.12f): %+v", wantChange, wantChangePercent, q)
 	}
 	if q.Volume == nil || *q.Volume != 56829700 || q.Amount == nil || *q.Amount != 2386858667 {
 		t.Fatalf("unexpected volume/amount: %+v", q)
