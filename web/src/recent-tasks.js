@@ -76,8 +76,13 @@ export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
     if (!persistedState.storageReadable || !persistedState.storageValid) return currentState.items;
     const persisted = persistedState.items.some((item) =>
       item.task_id === normalized.task_id &&
+      item.run_id === normalized.run_id &&
+      item.created_at === normalized.created_at &&
+      item.task_type === normalized.task_type &&
+      item.status === normalized.status &&
       item.analysis_base === normalized.analysis_base &&
-      item.run_id === normalized.run_id
+      item.updated_at === normalized.updated_at &&
+      JSON.stringify(item.symbols) === JSON.stringify(normalized.symbols)
     );
     // 只有回读确认成功后，才把新增记录交给界面展示为最近历史。
     return persisted ? persistedState.items : currentState.items;
