@@ -1497,6 +1497,11 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
     /localStorage\.(?:setItem|removeItem)\(|persistTheme\(/,
     "the successful import path must finish storage writes before applying in-memory settings"
   );
+  assert.match(
+    importBody,
+    /const expectedStorage = new Map\(\[[\s\S]*?\[TASK_REFERENCE_KEY, null\][\s\S]*?for \(const \[key, expectedValue\] of expectedStorage\)[\s\S]*?localStorage\.getItem\(key\) !== expectedValue[\s\S]*?throw new Error\("浏览器存储未能确认写入："/,
+    "workspace import must verify every stored value before changing in-memory state"
+  );
   assert.match(importBody.slice(rollbackIndex), /storageKeys\.forEach\([\s\S]*?localStorage\.(?:setItem|removeItem)\(/,
     "the failure path should attempt to restore the pre-import storage snapshot"
   );
