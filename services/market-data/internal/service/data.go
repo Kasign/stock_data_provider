@@ -1526,6 +1526,14 @@ func validateStockBoardsSnapshot(symbol string, snapshot *model.StockBoardSnapsh
 	if snapshot.Total < 0 || snapshot.Total > 1000 || len(snapshot.Items) > snapshot.Total {
 		return errors.New("stock-boards total/items count is invalid")
 	}
+	if snapshot.ProviderReturned < 0 || snapshot.ExcludedRows < 0 ||
+		(snapshot.ProviderReturned > 0 && (snapshot.ExcludedRows > snapshot.ProviderReturned ||
+			snapshot.ProviderReturned != snapshot.Total+snapshot.ExcludedRows)) {
+		return errors.New("stock-boards source coverage counters do not reconcile")
+	}
+	if snapshot.TotalIsLowerBound && snapshot.QualityStatus == model.QualityValid {
+		return errors.New("lower-bound stock boards cannot be marked valid")
+	}
 	if !snapshot.HasData {
 		if snapshot.Total != 0 || len(snapshot.Items) != 0 || snapshot.QualityStatus != model.QualityUnknown {
 			return errors.New("empty stock-board response must remain unknown, not a verified zero-membership result")
