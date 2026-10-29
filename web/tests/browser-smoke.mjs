@@ -156,6 +156,24 @@ try {
     assert.equal(await themeToggle.getAttribute("aria-pressed"), "false", "restored dark theme should report not pressed");
     assert.equal((await page.locator("#theme-toggle-label").textContent()).trim(), "浅色", "dark theme toggle should offer the light theme");
 
+    // Check local theme persistence once; each viewport uses a fresh isolated browser context.
+    if (viewport.width === 320) {
+      await themeToggle.click();
+      await page.reload({ waitUntil: "load", timeout: 30000 });
+      await page.locator("#market-view").waitFor({ state: "visible" });
+      const persistedTheme = await page.evaluate(() => ({
+        theme: document.documentElement.dataset.theme,
+        colorScheme: getComputedStyle(document.documentElement).colorScheme
+      }));
+      assert.equal(persistedTheme.theme, "light", "light theme preference should persist after page reload");
+      assert.equal(persistedTheme.colorScheme, "light", "reloaded light theme should restore browser color scheme");
+      assert.equal(await page.locator("#theme-toggle").getAttribute("aria-pressed"), "true", "reloaded light theme should restore pressed state");
+      assert.equal((await page.locator("#theme-toggle-label").textContent()).trim(), "深色", "reloaded light theme should offer dark theme");
+
+      await page.locator("#theme-toggle").click();
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark", "theme should return to dark after persistence check");
+    }
+
     const assertNoHorizontalOverflow = async (stage) => {
       const dimensions = await page.evaluate(() => ({
         viewport: window.innerWidth,
