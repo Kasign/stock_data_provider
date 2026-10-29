@@ -138,7 +138,7 @@ func TestResolvePriceLimitRuleWithEvidenceRequiresSourceBackedEvents(t *testing.
 	base := model.PriceLimitEventEvidence{
 		Symbol: "600519.SH", Status: model.PriceLimitExceptionRelistingFirst,
 		EffectiveFrom: "2026-07-06", EffectiveTo: "2026-07-06",
-		Source: "exchange notice", SourceURL: "https://example.com/notice/123",
+		Source: "exchange notice", SourceVersion: "notice-v1", QualityStatus: model.QualityValid, SourceURL: "https://example.com/notice/123",
 		AnnouncementID: "notice-123", ObservedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 	}
 	cases := []struct {
@@ -165,6 +165,8 @@ func TestResolvePriceLimitRuleWithEvidenceRequiresSourceBackedEvents(t *testing.
 			v.CoverageConfirmed = true
 			return &v
 		}(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
+		{name: "missing source version", evidence: func() *model.PriceLimitEventEvidence { v := base; v.SourceVersion = ""; return &v }(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
+		{name: "unknown evidence quality", evidence: func() *model.PriceLimitEventEvidence { v := base; v.QualityStatus = model.QualityUnknown; return &v }(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
 		{name: "event outside effective date", evidence: &base, date: "2026-07-07", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
 		{name: "missing evidence", evidence: nil, date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
 		{name: "future evidence observation time", evidence: func() *model.PriceLimitEventEvidence {
@@ -222,7 +224,7 @@ func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDa
 	evidence := &model.PriceLimitEventEvidence{
 		Symbol: "600519.SH", Status: model.PriceLimitExceptionNone,
 		EffectiveFrom: "2026-07-01", EffectiveTo: "2026-07-31",
-		Source: "exchange calendar", SourceURL: "https://example.com/calendar",
+		Source: "exchange calendar", SourceVersion: "calendar-v1", QualityStatus: model.QualityValid, SourceURL: "https://example.com/calendar",
 		ObservedAt:        time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		CoverageConfirmed: true,
 	}

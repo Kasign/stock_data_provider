@@ -159,7 +159,8 @@ func ResolvePriceLimitRuleWithEvidence(
 			return nil, fmt.Errorf("unsupported event evidence status %q", evidence.Status)
 		}
 		sourceURL, urlErr := url.Parse(strings.TrimSpace(evidence.SourceURL))
-		if strings.TrimSpace(evidence.Source) == "" || urlErr != nil ||
+		if strings.TrimSpace(evidence.Source) == "" || !hasIdentifiableSourceVersion(evidence.SourceVersion) ||
+			evidence.QualityStatus != model.QualityValid || urlErr != nil ||
 			sourceURL.Host == "" || (sourceURL.Scheme != "http" && sourceURL.Scheme != "https") ||
 			evidence.ObservedAt.IsZero() {
 			incompleteReason = "price_limit_event_evidence_source_or_observation_missing"
