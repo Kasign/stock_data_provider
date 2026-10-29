@@ -2,6 +2,15 @@ package model
 
 import "time"
 
+type DelistingStatus string
+
+const (
+	DelistingStatusUnknown         DelistingStatus = "unknown"
+	DelistingStatusNormal          DelistingStatus = "normal"
+	DelistingStatusDelistingRisk   DelistingStatus = "delisting_risk"
+	DelistingStatusDelistingPeriod DelistingStatus = "delisting_period"
+)
+
 type SuspensionStatus string
 
 const (
@@ -22,6 +31,7 @@ type SecurityTradingStatusSnapshot struct {
 	NameEffectiveFrom       string             `json:"name_effective_from,omitempty"`
 	NameEffectiveTo         string             `json:"name_effective_to,omitempty"`
 	RiskWarningStatus       RiskWarningStatus  `json:"risk_warning_status"`
+	DelistingStatus          DelistingStatus     `json:"delisting_status"`
 	ListingDate             string             `json:"listing_date,omitempty"`
 	ListingTradingDayNumber int                `json:"listing_trading_day_number,omitempty"`
 	ListingStatusKnown      bool               `json:"listing_status_known"`
