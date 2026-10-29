@@ -79,3 +79,14 @@ func TestSecurityTradingStatusHTTPRequiresExactDate(t *testing.T) {
 		}
 	}
 }
+
+func TestSecurityTradingStatusHTTPAsOfRequiresLocalStorage(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/stocks/600519.SH/trading-status?date=2026-10-22&as_of=2026-10-23T00%3A00%3A00Z", nil)
+	req.Header.Set("X-API-Key", "secret")
+	recorder := httptest.NewRecorder()
+	securityStatusTestHandler().ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("PIT storage disabled status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
