@@ -691,6 +691,47 @@ try {
         }
       });
 
+      // When storage reads are denied, do not treat the list as empty or rewrite the unreadable original bytes.
+      const seedWatchlistRaw = JSON.stringify([{
+        symbol: "600519.SH",
+        name: "贵州茅台",
+        updated_at: "2026-10-29T05:00:00Z"
+      }]);
+      await page.evaluate(({ key, raw }) => {
+        window.__browserTestOriginalGetItem = Storage.prototype.getItem;
+        localStorage.setItem(key, raw);
+        Storage.prototype.getItem = function(storageKey) {
+          if (storageKey === key) throw new DOMException("Blocked by browser settings", "SecurityError");
+          return window.__browserTestOriginalGetItem.call(this, storageKey);
+        };
+      }, { key: watchlistStorageKey, raw: seedWatchlistRaw });
+      await page.locator("#add-to-watchlist-button").click();
+      await page.waitForFunction(
+        () => document.querySelector("#watchlist-feedback")?.textContent.includes("无法读取浏览器自选股存储，未添加或覆盖任何数据"),
+        null,
+        { timeout: 5000 }
+      );
+      const unreadableWatchlistState = await page.evaluate((key) => ({
+        stored: window.__browserTestOriginalGetItem.call(localStorage, key),
+        count: document.querySelector("#watchlist-count")?.textContent.trim() || "",
+        list: document.querySelector("#watchlist-list")?.textContent || "",
+        feedback: document.querySelector("#watchlist-feedback")?.textContent || "",
+        feedbackClass: document.querySelector("#watchlist-feedback")?.className || ""
+      }), watchlistStorageKey);
+      assert.equal(unreadableWatchlistState.stored, seedWatchlistRaw, "denied reads must not overwrite the original watchlist bytes");
+      assert.equal(unreadableWatchlistState.count, "不可用 / 50");
+      assert.match(unreadableWatchlistState.list, /无法读取浏览器自选股存储/);
+      assert.match(unreadableWatchlistState.feedbackClass, /watchlist-feedback-error/);
+      assert.match(unreadableWatchlistState.feedback, /未添加或覆盖任何数据/);
+      assert.doesNotMatch(unreadableWatchlistState.feedback, /已将 .* 加入本地自选/);
+      await page.evaluate((key) => {
+        if (window.__browserTestOriginalGetItem) {
+          Storage.prototype.getItem = window.__browserTestOriginalGetItem;
+          delete window.__browserTestOriginalGetItem;
+        }
+        localStorage.removeItem(key);
+      }, watchlistStorageKey);
+
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
 
