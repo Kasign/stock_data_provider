@@ -274,8 +274,23 @@ function persistTaskReference() {
       return;
     }
     record.updated_at = new Date().toISOString();
-    localStorage.setItem(TASK_REFERENCE_KEY, JSON.stringify(record));
-    persistRecentTaskHistory(record);
+    let taskReferencePersisted = false;
+    try {
+      const serializedReference = JSON.stringify(record);
+      localStorage.setItem(TASK_REFERENCE_KEY, serializedReference);
+      taskReferencePersisted = localStorage.getItem(TASK_REFERENCE_KEY) === serializedReference;
+    } catch {
+      // 活动任务引用与最近任务历史分别确认；单个键写入失败不应阻止历史列表尝试保存。
+    }
+    const historyPersisted = persistRecentTaskHistory(record);
+    if (!taskReferencePersisted) {
+      setRecentTasksFeedback(
+        historyPersisted
+          ? "最近任务已保存，但活动任务引用未能确认持久化；刷新后可能无法自动恢复当前任务。"
+          : "任务已创建，但活动任务引用与最近任务历史均未能确认持久化；刷新后可能无法从本地找回。",
+        "warning"
+      );
+    }
   } catch {
     // 本地引用写入失败不阻断当前任务，但必须明确提示刷新后可能无法找回。
     setRecentTasksFeedback(
