@@ -1377,3 +1377,16 @@
 - 本轮结束前再次核实数据分支 HEAD 已从 16944cd5e98b900e3aa5c4636ec185f947e1d497 推进到 a9a9507fd93285b5415643024dc9e1a9ead4046c。
 - 新增提交仅更新 docs/architecture/GO_DATA_PROVIDER_SWITCH_STATUS.md 与 docs/architecture/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md，记录已补充但尚未执行的国内数据层测试、质量契约及后续未完成事项；没有新增运行时代码。
 - 该数据分支提交未合入 WebUI；本轮仅在 web/** 记录状态，未修改数据分支引用或 PR #1。
+
+
+## 2026-10-29 — 最近任务历史持久化失败收尾
+
+- [bcb6738 — 修复最近任务写入失败时的历史展示](https://github.com/Kasign/stock_data_provider/commit/bcb673828e8d0e4bc2762adff26299dd8b9a1a85)：新增记录仅在写入并回读确认后返回；写入失败时保留原历史。
+- [6720343 — 补充最近任务存储写入失败回归测试](https://github.com/Kasign/stock_data_provider/commit/67203437fd37ee7f9bb4e149d4d8c33176998c4f)：覆盖浏览器存储抛出 QuotaExceededError。
+- [b2d276f — 明确提示最近任务历史持久化失败](https://github.com/Kasign/stock_data_provider/commit/b2d276f6cbf93d9ba2731fc4d3d8c33176998c4f)：界面提示任务已创建但本地历史引用未保存，并核对完整记录字段，避免旧记录掩盖失败。
+- [f834b10 — 校验最近任务历史的完整持久化内容](https://github.com/Kasign/stock_data_provider/commit/f834b10775b065b980d804c2215c12b9f5d6a425)：核对任务状态、Run、时间、分析服务地址、任务类型及证券列表。
+- [495baa6 — 修复最近任务删除失败时的列表状态](https://github.com/Kasign/stock_data_provider/commit/495baa61a963edba6cefdff0598658509fd6d9fb)：删除后回读校验；写入失败或回读不一致时保留原列表。
+- [8868951 — 补充最近任务删除持久化失败回归测试](https://github.com/Kasign/stock_data_provider/commit/88689510d1b1ca8a0cbb5d4311ea6f9cc622521e)：覆盖存储拒绝写入时保留原始任务引用。
+- [8ebfbe5 — 补充最近任务持久化失败的界面契约](https://github.com/Kasign/stock_data_provider/commit/8ebfbe5502da5ee3ad257475af959aba480e13e8)：补充新增/删除持久化确认和界面完整字段校验的静态回归契约。
+- 当前 GitHub 连接器返回这些提交的 combined status 为空，且 commit workflow 查询仅覆盖 PR 触发运行；因此尚不能确认本批 CI 结果。本轮未执行本地 Node 测试或 Browser Smoke，后续需核实最新分支 HEAD 对应的 WebUI checks 和 Browser Smoke。
+- 后续任务继续仅修改 `web/**`；保持一个逻辑缺陷对应一个代码/测试提交，避免把无关样式、数据层和部署改动混入本批。
