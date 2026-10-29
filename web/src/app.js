@@ -374,7 +374,7 @@ function persistRecentTaskHistory(record) {
   renderRecentTasks(history);
 
   const storageState = safeReadRecentTasksState();
-  if (!storageState.storageReadable || !storageState.storageValid) return;
+  if (!storageState.storageReadable || !storageState.storageValid) return false;
   const expected = {
     task_id: String(record.task_id || "").trim(),
     run_id: typeof record.run_id === "string" ? record.run_id : "",
@@ -401,6 +401,7 @@ function persistRecentTaskHistory(record) {
       "warning"
     );
   }
+  return persisted;
 }
 
 function setRecentTasksFeedback(message, kind = "info") {
@@ -3765,9 +3766,11 @@ async function createTask(event) {
           feedback.hidden = false;
           feedback.textContent = "旧连接已返回任务 ID，但本地历史已被替换；本次未重新写入任务引用。任务 ID：" + task.task_id + "。";
         } else {
-          try { renderRecentTasks(upsertRecentTask(endpointRecord, localStorage)); } catch { renderRecentTasks(); }
+          const historyPersisted = persistRecentTaskHistory(endpointRecord);
           setRecentTasksFeedback(
-            "任务已在旧分析 API 地址 " + requestAnalysisBase + " 创建，并已保存到最近分析列表。当前地址已改变；切回原地址后才能继续读取。",
+            historyPersisted
+              ? "任务已在旧分析 API 地址 " + requestAnalysisBase + " 创建，并已保存到最近分析列表。当前地址已改变；切回原地址后才能继续读取。"
+              : "任务已在旧分析 API 地址创建，但最近任务引用未能确认持久化。任务 ID：" + task.task_id + "；请切回原地址核实.",
             "warning"
           );
           feedback.hidden = false;
@@ -3800,13 +3803,17 @@ async function createTask(event) {
           feedback.hidden = false;
           feedback.textContent = "提交前的任务请求已返回任务 ID，但本地历史已被替换；本次未重新写入任务引用。任务 ID：" + task.task_id + "。";
         } else {
-          try { renderRecentTasks(upsertRecentTask(endpointRecord, localStorage)); } catch { renderRecentTasks(); }
+          const historyPersisted = persistRecentTaskHistory(endpointRecord);
           setRecentTasksFeedback(
-            "新建任务已创建，但提交期间当前任务已切换。新任务已保存到最近分析列表；当前选中的任务不会被覆盖。",
+            historyPersisted
+              ? "新建任务已创建并保存到最近分析列表；当前选中的任务不会被覆盖。"
+              : "新建任务已创建，但最近任务引用未能确认持久化。任务 ID：" + task.task_id + "；当前选中的任务不会被覆盖.",
             "warning"
           );
           feedback.hidden = false;
-          feedback.textContent = "新建任务 " + task.task_id + " 已创建并保存到最近分析列表；页面继续跟踪当前选中的任务。";
+          feedback.textContent = historyPersisted
+            ? "新建任务 " + task.task_id + " 已记录到本地历史；页面继续跟踪当前选中的任务。"
+            : "新建任务 " + task.task_id + " 已创建，但本地历史未能确认保存。页面继续跟踪当前选中的任务。";
         }
       } else {
         feedback.hidden = false;
