@@ -1412,3 +1412,11 @@
 
 - [8565c6b — 补充最近任务清空静默失败回归测试](https://github.com/Kasign/stock_data_provider/commit/8565c6b0b8ae3c467017f7940c4cefbb7c3fdb83)：覆盖浏览器存储的 `removeItem` 未抛错但未真正删除的情况，确保清空操作回读验证失败时保留原列表，不向界面返回虚假的空历史。
 - 本轮只增加针对性测试，没有改动任务历史实现逻辑；尚未在本执行环境运行 Node 测试。最新提交 CI 状态仍需从 push 触发的 Actions 页面确认。
+
+
+### 2026-10-29 自选股静默写入失败校验
+
+- [045dfe7 — 校验自选股列表写入后的持久化结果](https://github.com/Kasign/stock_data_provider/commit/045dfe7186a340751a4e0ddd6b69a052694ed36)：自选股添加、改名、移除共用的写入函数现在会回读并逐条比较规范化记录；即使存储接口未抛错但静默丢弃/修改数据，也会返回 `persisted: false`。
+- 同一提交增加 `watchlist.test.mjs` 回归测试，覆盖添加、改名和移除的静默写入失败。
+- [8565c6b — 补充最近任务清空静默失败回归测试](https://github.com/Kasign/stock_data_provider/commit/8565c6b0b8ae3c467017f7940c4cefbb7c3fdb83)：覆盖 `removeItem` 未报错但实际未清空的情况。
+- 最新分支提交仍需核实 Actions 状态；本执行环境未运行 Node 测试或 Browser Smoke，不将这些改动标记为测试通过。
