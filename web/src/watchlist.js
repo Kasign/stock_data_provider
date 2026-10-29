@@ -28,9 +28,12 @@ function normalizeRecord(record) {
 function writeRecords(storage, records) {
   try {
     storage.setItem(WATCHLIST_KEY, JSON.stringify(records));
-    return true;
+    const persistedState = readRecords(storage);
+    return persistedState.storageReadable &&
+      persistedState.storageValid &&
+      JSON.stringify(persistedState.items) === JSON.stringify(records);
   } catch {
-    // 保留本次页面的操作结果，但明确告知调用方没有持久化成功。
+    // 写入或回读失败时明确报告未持久化，避免把静默失败当作成功。
     return false;
   }
 }

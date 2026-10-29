@@ -184,6 +184,29 @@ test("reports persistence failures without claiming browser data was saved", () 
   assert.deepEqual(removed.items.map((item) => item.symbol), []);
 });
 
+test("detects watchlist writes that return successfully but do not persist the requested records", () => {
+  const seed = JSON.stringify([{ symbol: "600519.SH", name: "贵州茅台", updated_at: "2026-10-20T00:00:00Z" }]);
+  const storage = {
+    getItem() { return seed; },
+    // Simulate a storage adapter that silently ignores writes.
+    setItem() {}
+  };
+
+  const added = addWatchlistSymbol("000001.SZ", "平安银行", storage, "2026-10-23T07:00:00Z");
+  assert.equal(added.valid, true);
+  assert.equal(added.persisted, false);
+  assert.deepEqual(added.items.map((item) => item.symbol), ["000001.SZ", "600519.SH"]);
+
+  const renamed = renameWatchlistSymbol("600519.SH", "核心观察", storage, "2026-10-23T08:00:00Z");
+  assert.equal(renamed.valid, true);
+  assert.equal(renamed.persisted, false);
+
+  const removed = removeWatchlistSymbol("600519.SH", storage);
+  assert.equal(removed.valid, true);
+  assert.equal(removed.removed, true);
+  assert.equal(removed.persisted, false);
+});
+
 test("does not overwrite malformed stored data when reading or parsing fails", () => {
   let writes = 0;
   const storage = {
