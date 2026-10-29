@@ -59,7 +59,8 @@ function renderDetail(selector, values) {
 }
 function errorText(error) {
   if (Number(error?.status) === 404) return "当前服务未找到对应数据或历史记录。";
-  if (Number(error?.status) === 503) return "接口已存在，但当前 Provider 或历史存储不可用。";
+  if (Number(error?.status) === 503 || Number(error?.status) === 502) return "上游 Provider 不可用或返回的数据不完整，请查看服务端诊断。";
+  if (Number(error?.status) === 400) return "请求参数不符合接口要求，请检查股票代码、指数代码和日期范围。";
   if ([401, 403].includes(Number(error?.status))) return "API Key 验证失败，请检查设置中心的行情服务密钥。";
   return String(error?.message || "请求失败").slice(0, 300);
 }
@@ -222,4 +223,7 @@ export function bindExistingApiTools(getSettings) {
   }
   $("#load-stock-trading-status")?.addEventListener("click", () => loadStockStatus("trading-status"));
   $("#load-stock-limit-rule")?.addEventListener("click", () => loadStockStatus("limit-rule"));
+
+  // 首页默认展示服务端交易时段；没有 API Key 时不发起无效请求。
+  if (settings().apiKey) $("#load-market-session")?.click();
 }
