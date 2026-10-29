@@ -48,7 +48,7 @@ func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
 	if sessionStart < 0 {
 		t.Fatal("MarketSessionSnapshot schema missing")
 	}
-	sessionEnd := strings.Index(text[sessionStart+len("    MarketSessionSnapshot:"):], "\n    ")
+	sessionEnd := strings.Index(text[sessionStart+len("    MarketSessionSnapshot:"):], "\n    StockAnnouncement:")
 	if sessionEnd < 0 {
 		sessionEnd = len(text) - sessionStart
 	}
