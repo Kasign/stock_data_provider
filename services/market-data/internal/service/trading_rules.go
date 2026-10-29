@@ -163,6 +163,8 @@ func ResolvePriceLimitRuleWithEvidence(
 			sourceURL.Host == "" || (sourceURL.Scheme != "http" && sourceURL.Scheme != "https") ||
 			evidence.ObservedAt.IsZero() {
 			incompleteReason = "price_limit_event_evidence_source_or_observation_missing"
+		} else if evidence.ObservedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+			incompleteReason = "price_limit_event_evidence_observation_time_in_future"
 		} else if evidence.Status == model.PriceLimitExceptionNone {
 			if !evidence.CoverageConfirmed {
 				incompleteReason = "price_limit_no_event_not_confirmed_by_complete_source"
