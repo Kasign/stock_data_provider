@@ -691,7 +691,8 @@ test("connection-check results are isolated between saved settings and the modal
 
 test("market connection changes invalidate all in-flight stock-research panels", () => {
   assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\|\s*previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("取消股票搜索请求失败：", \(\) => cancelStockSearchRequest\(\), failures\);[\s\S]*?runSettingsApplyStep\("失效个股研究请求失败：", \(\) =>\s*stockResearch\.invalidate\("行情连接配置已变更，旧研究请求已作废，请重新加载对应资料。"\), failures\);/);
-  assert.match(stockResearch, /function invalidate\(message="行情连接配置已变更，请重新加载个股研究资料。"\)\{\s*reset\(resolvedSymbol\(\)\);[\s\S]*?Object\.keys\(state\.generation\)\.forEach\(abort\)/);
+  assert.match(stockResearch, /function invalidate\(message="行情连接配置已变更，请重新加载个股研究资料。"\)\{\s*reset\(resolvedSymbol\(\)\);[\s\S]*?if\(!settings\?\.apiKey\)\{markApiKeyRequired\(\);return;\}/);
+  assert.match(stockResearch, /function reset\(symbol\)\{[\s\S]*?Object\.keys\(state\.generation\)\.forEach\(abort\)/);
 });
 
 test("service health and provider-list refreshes ignore superseded responses", () => {
@@ -709,7 +710,7 @@ test("provider capability refresh clears old connection data and owns its loadin
   assert.match(refreshSources, /button\.disabled = true;[\s\S]*?button\.setAttribute\("aria-busy", "true"\)/);
   assert.match(refreshSources, /正在读取当前连接配置对应的数据源能力/);
   assert.match(refreshSources, /showMessage\(message, "empty-row error-text"\)/);
-  assert.match(refreshSources, /finally \{[\s\S]*?if \(generation === sourceRefreshGeneration && button\)[\s\S]*?button\.disabled = false;[\s\S]*?button\.removeAttribute\("aria-busy"\)/);
+  assert.match(refreshSources, /finally \{[\s\S]*?if \(generation === sourceRefreshGeneration\) \{[\s\S]*?if \(!button\) button = \$\("#reload-sources"\);[\s\S]*?if \(button\) \{[\s\S]*?button\.disabled = false;[\s\S]*?button\.removeAttribute\("aria-busy"\)/);
 });
 
 test("filter changes clear stale errors even when a prior query returned no data", () => {
