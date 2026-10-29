@@ -635,6 +635,62 @@ try {
       assert.equal(finalSymbolState.technicalMA20, "样本不足", "a late A response must not restore A's MA20");
       assert.equal(quoteRequestCount, staleRequestCount + 3, "late response must not cause a hidden additional request");
 
+      // Local watchlist data must never be silently repaired or reported as saved after browser storage errors.
+      const watchlistStorageKey = "stock-provider-webui.watchlist.v1";
+      await page.evaluate((key) => localStorage.setItem(key, "{malformed"), watchlistStorageKey);
+      await page.locator("#add-to-watchlist-button").click();
+      await page.waitForFunction(
+        () => document.querySelector("#watchlist-feedback")?.textContent.includes("本地自选数据格式异常，未添加或覆盖任何数据"),
+        null,
+        { timeout: 5000 }
+      );
+      const malformedWatchlistState = await page.evaluate((key) => ({
+        stored: localStorage.getItem(key),
+        count: document.querySelector("#watchlist-count")?.textContent.trim() || "",
+        list: document.querySelector("#watchlist-list")?.textContent || "",
+        feedback: document.querySelector("#watchlist-feedback")?.textContent || "",
+        feedbackClass: document.querySelector("#watchlist-feedback")?.className || ""
+      }), watchlistStorageKey);
+      assert.equal(malformedWatchlistState.stored, "{malformed", "a malformed stored watchlist must remain byte-for-byte unchanged");
+      assert.equal(malformedWatchlistState.count, "不可用 / 50");
+      assert.match(malformedWatchlistState.list, /本地自选数据格式异常/);
+      assert.match(malformedWatchlistState.feedbackClass, /watchlist-feedback-error/);
+      assert.doesNotMatch(malformedWatchlistState.feedback, /已将 .* 加入本地自选/);
+
+      await page.evaluate((key) => {
+        localStorage.removeItem(key);
+        window.__browserTestOriginalSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function(storageKey, value) {
+          if (storageKey === key) throw new DOMException("Quota exceeded", "QuotaExceededError");
+          return window.__browserTestOriginalSetItem.call(this, storageKey, value);
+        };
+      }, watchlistStorageKey);
+      await page.locator("#add-to-watchlist-button").click();
+      await page.waitForFunction(
+        () => document.querySelector("#watchlist-feedback")?.textContent.includes("已在当前页面临时加入自选，但浏览器存储不可用，刷新后可能丢失"),
+        null,
+        { timeout: 5000 }
+      );
+      const failedWatchlistWrite = await page.evaluate((key) => ({
+        stored: localStorage.getItem(key),
+        count: document.querySelector("#watchlist-count")?.textContent.trim() || "",
+        list: document.querySelector("#watchlist-list")?.textContent || "",
+        feedback: document.querySelector("#watchlist-feedback")?.textContent || "",
+        feedbackClass: document.querySelector("#watchlist-feedback")?.className || ""
+      }), watchlistStorageKey);
+      assert.equal(failedWatchlistWrite.stored, null, "a failed storage write must not leave a misleading saved value");
+      assert.equal(failedWatchlistWrite.count, "1 / 50");
+      assert.match(failedWatchlistWrite.list, /000001\.SH/);
+      assert.match(failedWatchlistWrite.feedbackClass, /watchlist-feedback-warning/);
+      assert.match(failedWatchlistWrite.feedback, /刷新后可能丢失/);
+      assert.doesNotMatch(failedWatchlistWrite.feedback, /已将 .* 加入本地自选。/);
+      await page.evaluate(() => {
+        if (window.__browserTestOriginalSetItem) {
+          Storage.prototype.setItem = window.__browserTestOriginalSetItem;
+          delete window.__browserTestOriginalSetItem;
+        }
+      });
+
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
 
