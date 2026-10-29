@@ -85,6 +85,8 @@ try {
     let quoteRequestCount = 0;
     let marketScenario = "503";
     let marketIndexRequestCount = 0;
+    let dataSourceScenario = "success";
+    let dataSourcesRequestCount = 0;
     const quoteFixture = {
       symbol: "600519.SH",
       name: "贵州茅台",
@@ -131,6 +133,13 @@ try {
       "404": { status: 404, code: "route_not_found", message: "route not found", requestId: "req-overview-404", expected: "接口或资源不存在", summary: "接口尚未提供 1 个" },
       "503": { status: 503, code: "provider_unavailable", message: "上游 Provider 暂不可用", requestId: "req-overview-503", expected: "上游 Provider 暂不可用", summary: "Provider 不可用 2 个" },
       network: { status: 0, expected: "网络请求失败", summary: "读取失败 1 个" }
+    };
+    const dataSourceErrors = {
+      "401": { status: 401, code: "auth_required", message: "credentials required", requestId: "req-data-401", expected: "接口认证失败" },
+      "403": { status: 403, code: "access_denied", message: "permission denied", requestId: "req-data-403", expected: "当前请求被服务拒绝" },
+      "404": { status: 404, code: "route_not_found", message: "data source route not found", requestId: "req-data-404", expected: "接口或资源不存在" },
+      "503": { status: 503, code: "provider_unavailable", message: "Provider 清单服务暂不可用", requestId: "req-data-503", expected: "Provider 清单服务暂不可用" },
+      network: { status: 0, expected: "网络请求失败" }
     };
 
     if (viewport.width === 320) {
@@ -183,6 +192,29 @@ try {
         }
         const item = marketOverviewErrors[marketScenario] || marketOverviewErrors["503"];
         if (marketScenario === "network") return route.abort("failed");
+        return json(item.status, {
+          error: {
+            code: item.code,
+            message: item.message,
+            request_id: item.requestId
+          }
+        });
+      }
+
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/data-sources")) {
+        dataSourcesRequestCount += 1;
+        if (dataSourceScenario === "network") return route.abort("failed");
+        if (dataSourceScenario === "success") {
+          return json(200, {
+            sources: [{
+              name: "测试 Provider",
+              enabled: true,
+              quote_capable: true,
+              daily_bar_capable: true
+            }]
+          });
+        }
+        const item = dataSourceErrors[dataSourceScenario];
         return json(item.status, {
           error: {
             code: item.code,
@@ -427,6 +459,61 @@ try {
         assert.match(indexState.className, /is-unavailable/);
         assert.ok(indexState.refreshSummary.includes(expected.summary), "market overview " + scenario + " should have a distinct summary");
       }
+
+      // Data Center must classify Provider-list errors independently from service probes and clear old capability rows.
+      const menu = page.locator("#mobile-menu-toggle");
+      if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
+        await menu.click();
+      }
+      await page.locator('.nav-link[data-view="data"]').click();
+      await page.locator("#data-view").waitFor({ state: "visible" });
+
+      dataSourceScenario = "success";
+      const dataSeedCount = dataSourcesRequestCount;
+      await page.locator("#data-center-check").click();
+      await page.waitForFunction(
+        () => document.querySelector("#data-center-provider-list")?.textContent.includes("测试 Provider"),
+        null,
+        { timeout: 10000 }
+      );
+      assert.equal(dataSourcesRequestCount, dataSeedCount + 1, "data center success seed should request Provider list once");
+
+      for (const scenario of ["401", "403", "404", "503", "network"]) {
+        const expected = dataSourceErrors[scenario];
+        const requestsBeforeFailure = dataSourcesRequestCount;
+        dataSourceScenario = scenario;
+        const checkButton = page.locator("#data-center-check");
+        await page.waitForFunction(() => !document.querySelector("#data-center-check")?.disabled, null, { timeout: 10000 });
+        await checkButton.click();
+
+        await page.waitForFunction(
+          (expectedMessage) => document.querySelector("#data-center-provider-summary")?.textContent.includes(expectedMessage),
+          expected.expected,
+          { timeout: 10000 }
+        );
+        assert.equal(dataSourcesRequestCount, requestsBeforeFailure + 1, "data center " + scenario + " should request Provider list once");
+        await page.waitForTimeout(250);
+        assert.equal(dataSourcesRequestCount, requestsBeforeFailure + 1, "data center " + scenario + " should not retry silently");
+
+        const providerState = await page.evaluate(() => ({
+          summary: document.querySelector("#data-center-provider-summary")?.textContent || "",
+          status: document.querySelector("#data-center-provider-status")?.textContent.trim() || "",
+          className: document.querySelector("#data-center-provider-status")?.className || "",
+          list: document.querySelector("#data-center-provider-list")?.textContent || "",
+          mariadb: document.querySelector("#data-service-mariadb-status")?.textContent.trim() || "",
+          redis: document.querySelector("#data-service-redis-status")?.textContent.trim() || ""
+        }));
+        assert.match(providerState.summary, new RegExp(expected.expected));
+        assert.equal(providerState.status, "读取失败");
+        assert.match(providerState.className, /is-unavailable/);
+        assert.doesNotMatch(providerState.list, /测试 Provider/, scenario + " must clear the prior Provider row");
+        assert.match(providerState.list, /仅 Provider 清单请求失败/);
+        assert.equal(providerState.mariadb, "未知", "unavailable analysis readiness must not guess MariaDB failure");
+        assert.equal(providerState.redis, "未知", "unavailable analysis readiness must not guess Redis failure");
+      }
+
+      await page.locator('.workspace-tab[data-view="market"]').click();
+      await page.locator("#market-view").waitFor({ state: "visible" });
     }
 
     const assertNoHorizontalOverflow = async (stage) => {
