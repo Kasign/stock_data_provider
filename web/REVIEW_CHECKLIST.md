@@ -1,3 +1,12 @@
+## 2026-10-29 后续追加 — 健康探针 200/无状态响应
+
+- [x] Provider 清单 HTTP 401/403/404/503/网络失败矩阵通过。
+- [x] 就绪接口 HTTP 200 但无可识别 status 字段时，市场与分析就绪显示 warning/未知，不误报健康。
+- [x] 缺少分析 readiness 依赖证据时，MariaDB/Redis 保持未知。
+- [x] 最新 HEAD `ce421c0b2151850f6648801cd871e4bb33da235b` 的 checks [#40813557024](https://github.com/Kasign/stock_data_provider/actions/runs/40813557024) 和 Browser Smoke [#40813556922](https://github.com/Kasign/stock_data_provider/actions/runs/40813556922) 均通过。
+- [ ] 真实 Provider/API Key/NAS/1Panel 环境仍待独立验收。
+
+
 ## 2026-10-29 后续追加 — 数据中心 Provider 清单错误场景
 
 - [x] 数据中心 Provider 清单 HTTP 401/403/404/503/网络失败浏览器验证通过。

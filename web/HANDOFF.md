@@ -1,5 +1,13 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新数据中心健康状态证据测试
+
+- Provider 清单 401/403/404/503/网络失败矩阵已通过，先读取一个有效 Provider 再验证错误后的旧行清理、错误分类、无静默重试；MariaDB/Redis 在分析 readiness 不可确认时保持未知。
+- 新增健康就绪探针 HTTP 200 但缺少可识别 `status` 字段的浏览器回归：行情与分析服务均显示“状态未报告”/warning，不能显示健康或就绪；MariaDB/Redis 继续显示未知。
+- 最新代码 HEAD `ce421c0b2151850f6648801cd871e4bb33da235b` 的 WebUI checks [#40813557024](https://github.com/Kasign/stock_data_provider/actions/runs/40813557024) 与 Browser Smoke [#40813556922](https://github.com/Kasign/stock_data_provider/actions/runs/40813556922) 均通过。
+- 自动化使用本地确定性响应桩，未验证真实 Provider/API Key 或 NAS/1Panel 环境。
+
+
 ## 2026-10-29 最新数据中心 Provider 清单矩阵
 
 - 浏览器烟测现同时覆盖行情查询、首页市场总览和数据中心 Provider 清单三个独立错误矩阵。

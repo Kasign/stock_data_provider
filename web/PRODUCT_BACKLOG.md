@@ -28,6 +28,8 @@
 - [x] 完成报价 API 的 401/403/404/503/网络失败端到端矩阵：检查准确文案、旧行情/报价时间清除、unknown 质量、连接状态不误报健康、无静默后台重试和手动重试恢复。
 - [x] 首页市场总览覆盖同一 401/403/404/503/网络失败矩阵，并先显示成功的测试指数，再验证每种错误后旧指数卡片清空、模块状态降级、刷新摘要计数正确且没有静默重试。
 - [x] 数据中心 Provider 清单也完成 401/403/404/503/网络失败浏览器矩阵：先成功读出测试 Provider，再验证失败后旧行清空、错误信息与状态准确、无静默重试；无分析 readiness 证据时 MariaDB/Redis 保持未知。
+- [x] 健康就绪接口 HTTP 200 但缺少可识别 status 字段时，行情/分析 readiness 显示 warning/未知而非绿色；MariaDB/Redis 仍未知。
+- [x] 最新 WebUI checks [#40813557024](https://github.com/Kasign/stock_data_provider/actions/runs/40813557024) 与 Browser Smoke [#40813556922](https://github.com/Kasign/stock_data_provider/actions/runs/40813556922) 通过（HEAD `ce421c0b2151850f6648801cd871e4bb33da235b`）。
 - [x] 最新 WebUI checks [#40813258411](https://github.com/Kasign/stock_data_provider/actions/runs/40813258411) 与 Browser Smoke [#40813258387](https://github.com/Kasign/stock_data_provider/actions/runs/40813258387) 均通过（HEAD `d91fd0263ba4f2ec09dd3809d3a9347542f5ffa4`）。
 - [x] 最新 WebUI checks [#40812808507](https://github.com/Kasign/stock_data_provider/actions/runs/40812808507) 和 Browser Smoke [#40812808557](https://github.com/Kasign/stock_data_provider/actions/runs/40812808557) 均通过（HEAD `f32a7190cb753b27f169c10a680e927719e09f34`）。
 - [x] 修复首页市场总览将所有 401/403 都归因于 API Key 的误导文案，使用共享状态描述；增加单测和首页 401/403 浏览器回归。

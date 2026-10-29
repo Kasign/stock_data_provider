@@ -1,3 +1,11 @@
+## 2026-10-29 — 健康就绪状态证据与依赖未知状态
+
+- 浏览器烟测新增 HTTP 200、但未包含可识别 `status` 字段的健康就绪响应。行情与分析服务就绪状态必须显示“状态未报告”并使用 warning 样式，不能显示绿色。
+- 同一场景下分析服务没有返回独立依赖状态，MariaDB/Redis 都保持“未知”。
+- 与 Provider 清单 401/403/404/503/网络失败矩阵组合，确认旧 Provider 行清空、错误可读且无静默重试。
+- 最新 HEAD `ce421c0b2151850f6648801cd871e4bb33da235b` 的 WebUI checks [#40813557024](https://github.com/Kasign/stock_data_provider/actions/runs/40813557024) 和 Browser Smoke [#40813556922](https://github.com/Kasign/stock_data_provider/actions/runs/40813556922) 均通过。
+
+
 ## 2026-10-29 — 数据中心 Provider 清单错误矩阵
 
 - 在 Chromium 320px 隔离上下文新增数据中心 Provider 清单 401/403/404/503/网络失败矩阵。
