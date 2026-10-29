@@ -1490,12 +1490,18 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
     "导入工作区后，旧活动任务不能在后续轮询中重新写回本地历史");
   const applyIndex = importBody.indexOf("applySettings(nextSettings, { persistPreviousActiveTask: false })");
   assert.ok(applyIndex >= 0, "workspace import must apply the validated settings");
-  const rollbackIndex = importBody.indexOf("\n  } catch (error) {", applyIndex);
-  assert.ok(rollbackIndex > applyIndex, "storage rollback must remain in the failure path");
+  const rollbackIndex = importBody.indexOf("const rollbackFailures = []");
+  assert.ok(rollbackIndex > 0 && rollbackIndex < applyIndex,
+    "storage rollback must finish before the in-memory settings are applied");
+  assert.match(importBody.slice(rollbackIndex, applyIndex),
+    /localStorage\.(?:setItem|removeItem)\([\s\S]*?localStorage\.getItem\(key\) !== \(value \?\? null\)[\s\S]*?rollbackFailures\.push\(key\)/,
+    "rollback must read back every restored key and report silent failures");
+  const uiFailureIndex = importBody.indexOf("页面状态刷新未完成", applyIndex);
+  assert.ok(uiFailureIndex > applyIndex, "UI refresh failures must be reported separately after storage commit");
   assert.doesNotMatch(
-    importBody.slice(applyIndex, rollbackIndex),
+    importBody.slice(applyIndex, uiFailureIndex),
     /localStorage\.(?:setItem|removeItem)\(|persistTheme\(/,
-    "the successful import path must finish storage writes before applying in-memory settings"
+    "post-commit UI refresh must not mutate or roll back the imported storage"
   );
   assert.match(
     importBody,
