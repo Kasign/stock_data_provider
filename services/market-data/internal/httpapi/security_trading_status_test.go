@@ -22,7 +22,7 @@ func (securityStatusHTTPFixture) FetchSecurityTradingStatus(_ context.Context, s
 	return &model.SecurityTradingStatusSnapshot{
 		Symbol: symbol, TradeDate: tradeDate,
 		SecurityName: "*ST贵州", NameEffectiveFrom: "2026-10-20",
-		RiskWarningStatus: model.RiskWarningApplied,
+		RiskWarningStatus: model.RiskWarningApplied, DelistingStatus: model.DelistingStatusNormal,
 		ListingDate: "2026-10-20", ListingTradingDayNumber: 3, ListingStatusKnown: true,
 		IsTradingDay: true, TradingDayKnown: true,
 		SuspensionStatus: model.SuspensionStatusIntraday, SuspensionTiming: "09:30-10:00", SuspensionType: "S",
