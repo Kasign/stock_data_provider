@@ -276,7 +276,11 @@ function persistTaskReference() {
     localStorage.setItem(TASK_REFERENCE_KEY, JSON.stringify(record));
     persistRecentTaskHistory(record);
   } catch {
-    // Storage can be disabled or full; the current page session should still work.
+    // 本地引用写入失败不阻断当前任务，但必须明确提示刷新后可能无法找回。
+    setRecentTasksFeedback(
+      "任务已创建，但浏览器存储不可用，任务引用未保存；刷新后可能无法从本地列表找回。",
+      "warning"
+    );
   }
 }
 
