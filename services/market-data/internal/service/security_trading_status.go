@@ -78,6 +78,15 @@ func validateSecurityTradingStatusSnapshot(symbol, tradeDate, providerName strin
 		!serviceTimestampIsSane(snapshot.FetchedAt, time.Now().UTC()) {
 		return errors.New("security-trading-status source, version or fetched_at is missing/invalid")
 	}
+	switch snapshot.DelistingStatus {
+	case model.DelistingStatusUnknown:
+		if snapshot.QualityStatus == model.QualityValid {
+			return errors.New("unknown delisting status cannot be marked valid")
+		}
+	case model.DelistingStatusNormal, model.DelistingStatusDelistingRisk, model.DelistingStatusDelistingPeriod:
+	default:
+		return fmt.Errorf("unsupported delisting status %q", snapshot.DelistingStatus)
+	}
 	switch snapshot.RiskWarningStatus {
 	case model.RiskWarningUnknown:
 		if snapshot.QualityStatus == model.QualityValid {
@@ -131,6 +140,7 @@ func validateSecurityTradingStatusSnapshot(symbol, tradeDate, providerName strin
 		return fmt.Errorf("unsupported security-trading-status quality %q", snapshot.QualityStatus)
 	}
 	if snapshot.RiskWarningStatus == model.RiskWarningUnknown ||
+		snapshot.DelistingStatus == model.DelistingStatusUnknown ||
 		!snapshot.TradingDayKnown || snapshot.SuspensionStatus == model.SuspensionStatusUnknown ||
 		!snapshot.ListingStatusKnown {
 		if snapshot.QualityStatus == model.QualityValid {
