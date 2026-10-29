@@ -1860,6 +1860,7 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 	latestDate := ""
 	latest := make([]tushareWeightedConstituent, 0)
 	foundMonth := false
+	monthlyResultMayBeTruncated := false
 	for monthOffset := 0; monthOffset < lookbackMonths; monthOffset++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -1878,6 +1879,7 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 			return nil, fetchErr
 		}
 		if len(table.rows) >= 5000 {
+			monthlyResultMayBeTruncated = true
 			reasons = appendTushareReason(reasons, "provider_monthly_index_weight_result_is_large_and_may_be_truncated")
 		}
 
@@ -1963,7 +1965,8 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 		reasons = appendTushareReason(reasons, "provider_latest_constituent_snapshot_has_no_supported_a_share_members")
 		return &model.IndexConstituentSnapshot{
 			IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, ProviderReportDate: latestDate, Items: []model.IndexConstituent{}, Total: 0,
-			ProviderReturned: len(latest), ExcludedCount: len(latest), Source: p.Name(),
+			ProviderReturned: len(latest), ExcludedCount: len(latest),
+			TotalIsLowerBound: monthlyResultMayBeTruncated, Source: p.Name(),
 			SourceVersion: tushareIndexConstituentVersion, FetchedAt: now, QualityStatus: model.QualityUnknown,
 			QualityReasons: reasons,
 		}, nil
@@ -2026,7 +2029,8 @@ func (p *Tushare) fetchIndexConstituents(ctx context.Context, rawIndexSymbol, ra
 	}
 	return &model.IndexConstituentSnapshot{
 		IndexSymbol: indexSymbol, AsOfDate: requestedAsOfDate, ProviderReportDate: latestDate, Items: items, Total: len(items),
-		ProviderReturned: len(latest), ExcludedCount: excludedCount, Source: p.Name(),
+		ProviderReturned: len(latest), ExcludedCount: excludedCount,
+		TotalIsLowerBound: monthlyResultMayBeTruncated, Source: p.Name(),
 		SourceVersion: tushareIndexConstituentVersion, FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 	}, nil

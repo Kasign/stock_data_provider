@@ -423,9 +423,10 @@ type IndexConstituentSnapshot struct {
 	Items              []IndexConstituent `json:"items"`
 	Total              int                `json:"total"`
 	// ProviderReturned 表示所选来源在成分规范化/名称补全前返回的候选行数。
-	ProviderReturned int `json:"provider_returned"`
+	ProviderReturned  int  `json:"provider_returned"`
 	// ExcludedCount 记录最新源端报告日中因证券类型不受支持或缺少可核验名称而未进入 Items 的行数。
-	ExcludedCount int `json:"excluded_count,omitempty"`
+	ExcludedCount     int  `json:"excluded_count,omitempty"`
+	TotalIsLowerBound bool `json:"total_is_lower_bound,omitempty"`
 	ProviderTime       *time.Time         `json:"provider_time,omitempty"`
 	Source             string             `json:"source"`
 	SourceVersion      string             `json:"source_version,omitempty"`

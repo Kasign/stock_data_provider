@@ -1890,3 +1890,68 @@ func TestTushareDragonTigerMarks10000RowBoundaryAsLowerBound(t *testing.T) {
 		}
 	}
 }
+
+
+func TestTushareIndexConstituentsMarks5000RowBoundaryAsLowerBound(t *testing.T) {
+	indexFields := []string{"index_code", "con_code", "trade_date", "weight"}
+	basicFields := []string{"ts_code", "name"}
+	prefixes := []struct {
+		prefix   string
+		exchange string
+	}{
+		{prefix: "600", exchange: "SH"},
+		{prefix: "601", exchange: "SH"},
+		{prefix: "603", exchange: "SH"},
+		{prefix: "605", exchange: "SH"},
+		{prefix: "688", exchange: "SH"},
+		{prefix: "689", exchange: "SH"},
+		{prefix: "000", exchange: "SZ"},
+		{prefix: "001", exchange: "SZ"},
+		{prefix: "002", exchange: "SZ"},
+		{prefix: "003", exchange: "SZ"},
+	}
+	weightRows := make([][]any, 5000)
+	basicRows := make([][]any, 5000)
+	for index := range weightRows {
+		prefix := prefixes[index/500]
+		code := fmt.Sprintf("%s%03d.%s", prefix.prefix, index%500, prefix.exchange)
+		weightRows[index] = []any{"000300.SH", code, "20261015", 0.02}
+		basicRows[index] = []any{code, fmt.Sprintf("测试成分股%d", index+1)}
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare index-constituent request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		switch request.APIName {
+		case "index_weight":
+			writeTushareTestTable(w, indexFields, weightRows)
+		case "stock_basic":
+			writeTushareTestTable(w, basicFields, basicRows)
+		default:
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected API", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchIndexConstituentsAsOf(context.Background(), "000300.SH", "2026-10-20")
+	if err != nil {
+		t.Fatalf("FetchIndexConstituentsAsOf: %v", err)
+	}
+	if got.ProviderReportDate != "2026-10-15" || got.ProviderReturned != 5000 ||
+		got.Total != 5000 || len(got.Items) != 5000 {
+		t.Fatalf("unexpected index-weight coverage at source cap: report=%s returned=%d total=%d items=%d",
+			got.ProviderReportDate, got.ProviderReturned, got.Total, len(got.Items))
+	}
+	if !got.TotalIsLowerBound {
+		t.Fatal("a 5000-row monthly index_weight response must not be treated as authoritative full membership")
+	}
+	if !containsTushareReason(got.QualityReasons, "provider_monthly_index_weight_result_is_large_and_may_be_truncated") {
+		t.Fatalf("missing source-cap reason: %v", got.QualityReasons)
+	}
+}
