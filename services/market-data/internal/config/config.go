@@ -27,8 +27,9 @@ type ProviderSettings struct {
 	MarketBreadth    bool `json:"market_breadth"`
 	LimitPools       bool `json:"limit_pools"`
 	StockBoards      bool `json:"stock_boards"`
-	TradingCalendar  bool `json:"trading_calendar"`
-	Fundamentals     bool `json:"fundamentals"`
+	TradingCalendar       bool `json:"trading_calendar"`
+	SecurityTradingStatus  bool `json:"security_trading_status"`
+	Fundamentals           bool `json:"fundamentals"`
 	Valuations       bool `json:"valuations"`
 	IndexCatalog     bool `json:"index_catalog"`
 	ChipDistribution bool `json:"chip_distribution"`
@@ -125,7 +126,7 @@ func defaultProviderFile() providerFile {
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
 			"netease":   {Enabled: true, Quote: true, DailyBars: true},
-			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false},
+			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, SecurityTradingStatus: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false},
 			"tickflow":  {Enabled: true, Quote: false, DailyBars: true, SectorRankings: false, IndexQuotes: false, MarketBreadth: false},
 			"pytdx":     {Enabled: true, Quote: true, DailyBars: true},
 			"xueqiu":    {Enabled: false, HotRankings: false},
