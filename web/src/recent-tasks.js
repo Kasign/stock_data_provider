@@ -39,12 +39,19 @@ export function readRecentTasksState(storage, limit = MAX_RECENT_TASKS) {
 
   let malformedRecord = false;
   const records = [];
+  const seenReferences = new Set();
   for (const item of parsed) {
     const normalized = normalizeRecord(item);
     if (!normalized) {
       malformedRecord = true;
       continue;
     }
+    const identity = JSON.stringify([normalized.task_id, normalized.analysis_base]);
+    if (seenReferences.has(identity)) {
+      malformedRecord = true;
+      continue;
+    }
+    seenReferences.add(identity);
     records.push(normalized);
   }
 
