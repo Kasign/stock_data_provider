@@ -212,6 +212,29 @@ components:
         quality_reasons:
           type: array
           items: {type: string}
+    SecurityTradingStatusSnapshot:
+      type: object
+      required: [symbol, trade_date, risk_warning_status, listing_status_known, is_trading_day, trading_day_known, suspension_status, source, source_version, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        trade_date: {type: string, format: date}
+        security_name: {type: string, description: Historical name effective on trade_date}
+        name_effective_from: {type: string, format: date}
+        name_effective_to: {type: string, format: date}
+        risk_warning_status: {type: string, enum: [unknown, normal, risk_warning]}
+        listing_date: {type: string, format: date}
+        listing_trading_day_number: {type: integer, minimum: 0, description: One-based number of exchange trading sessions since listing when verifiable}
+        listing_status_known: {type: boolean}
+        is_trading_day: {type: boolean}
+        trading_day_known: {type: boolean}
+        suspension_status: {type: string, enum: [unknown, not_trading_day, no_suspension_event, suspended, intraday_suspension, resumed]}
+        suspension_timing: {type: string, description: Provider suspension/resumption timing as reported}
+        suspension_type: {type: string, description: Provider-native suspension type code or combined event codes}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     TradingCalendarDay:
       type: object
       required: [date, is_trading_day]
@@ -790,6 +813,7 @@ components:
         announcements_capable: {type: boolean}
         dragon_tiger_capable: {type: boolean}
         trading_calendar_capable: {type: boolean}
+        security_trading_status_capable: {type: boolean, description: Provider can return dated historical name and suspension evidence}
         chip_capable: {type: boolean}
         capital_flow_capable: {type: boolean}
     DataSourcesResponse:
@@ -938,6 +962,23 @@ paths:
         '401': {description: API key required}
         '502': {description: All stock-basic providers failed}
         '503': {description: No stock-basic provider enabled}
+  /api/v1/stocks/{symbol}/trading-status:
+    get:
+      summary: Get historical trading-status evidence for one A-share
+      description: Uses Tushare historical name-change, trading-calendar and suspension records to provide date-specific risk-warning evidence, listing-session count and suspension status. Missing or ambiguous evidence remains unknown. This endpoint does not persist a historical snapshot and does not report a verified no-limit exception event.
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+        - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
+      responses:
+        '200':
+          description: Historical security status and quality metadata. Unknown status fields are valid response states when source evidence is incomplete.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityTradingStatusSnapshot'}
+        '400': {description: Invalid symbol or trade date}
+        '401': {description: API key required}
+        '502': {description: All configured security-status Providers failed}
+        '503': {description: No security-trading-status Provider enabled}
   /api/v1/stocks/{symbol}/fundamentals:
     get:
       summary: Get quarterly indicators and financial statement sections
