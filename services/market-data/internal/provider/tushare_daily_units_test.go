@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,12 +17,12 @@ func TestTushareDailyBarsNormalizesHandsAndThousandCNY(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("request method = %s, want POST", r.Method)
 		}
-		var body strings.Builder
-		if _, err := body.ReadFrom(r.Body); err != nil {
+		rawBody, err := io.ReadAll(r.Body)
+		if err != nil {
 			t.Fatalf("read request body: %v", err)
 		}
-		if !strings.Contains(body.String(), "\"api_name\":\"daily\"") {
-			t.Fatalf("unexpected Tushare request body: %s", body.String())
+		if !strings.Contains(string(rawBody), "\"api_name\":\"daily\"") {
+			t.Fatalf("unexpected Tushare request body: %s", string(rawBody))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"code":0,"msg":"","data":{"fields":["ts_code","trade_date","open","high","low","close","pct_chg","vol","amount"],"items":[["600519.SH","20261028",10,11,9,10,1.0,100,100]]}}`)
