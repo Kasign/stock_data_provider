@@ -801,7 +801,8 @@ test("light/dark theme is accessible, persisted locally, and independent of back
   const module = await readFile(new URL("../src/theme.js", import.meta.url), "utf8");
   assert.match(html, /name="color-scheme" content="light dark"/);
   assert.match(html, /id="theme-toggle"[^>]*aria-label="切换主题"[^>]*aria-pressed="false"/);
-  assert.match(app, /setAttribute\("aria-label", "切换主题"\)/);
+  assert.match(app, /setAttribute\("aria-label", persistenceWarning \? "切换主题；当前主题未能保存" : "切换主题"\)/);
+  assert.match(app, /const warning = persistenceWarning \? "；当前页面已切换，但未能确认主题偏好已保存" : ""/);
   assert.match(html, /id="theme-toggle-icon"/);
   assert.match(html, /id="theme-toggle-label"/);
   assert.match(app, /import \{ applyTheme, persistTheme, readTheme(?:, THEME_STORAGE_KEY)? \} from "\.\/theme\.js"/);
