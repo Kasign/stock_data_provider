@@ -95,6 +95,9 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 		return nil, false, errors.New("no enabled trading-calendar provider")
 	}
 	var failures []string
+	var best *model.TradingCalendarSnapshot
+	bestScore := -1
+	hasConflict := false
 	for _, p := range s.tradingCalendarProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -112,12 +115,66 @@ func (s *DataService) TradingCalendar(ctx context.Context, rawStartDate, rawEndD
 			failures = append(failures, p.Name()+": returned date count does not match request")
 			continue
 		}
-		if data, marshalErr := json.Marshal(snapshot); marshalErr == nil {
-			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
-				s.logger.Warn("trading-calendar cache write failed", "start_date", startDate, "end_date", endDate, "error", cacheErr)
-			}
+		if best != nil && !sameTradingCalendarDays(best, snapshot) {
+			hasConflict = true
 		}
-		return snapshot, false, nil
+		score := tradingCalendarEvidenceScore(snapshot)
+		if score > bestScore {
+			best, bestScore = snapshot, score
+		}
 	}
-	return nil, false, fmt.Errorf("all trading-calendar providers failed: %s", strings.Join(failures, "; "))
+	if best == nil {
+		return nil, false, fmt.Errorf("all trading-calendar providers failed: %s", strings.Join(failures, "; "))
+	}
+	if hasConflict {
+		best.QualityStatus = model.QualityDegraded
+		best.QualityReasons = appendTradingCalendarReason(best.QualityReasons, "provider_trading_calendar_sources_disagree")
+	}
+	if data, marshalErr := json.Marshal(best); marshalErr == nil {
+		if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+			s.logger.Warn("trading-calendar cache write failed", "start_date", startDate, "end_date", endDate, "error", cacheErr)
+		}
+	}
+	return best, false, nil
+}
+
+func tradingCalendarEvidenceScore(snapshot *model.TradingCalendarSnapshot) int {
+	if snapshot == nil {
+		return -1
+	}
+	score := 100
+	for _, reason := range snapshot.QualityReasons {
+		switch reason {
+		case "provider_returns_trading_days_only_non_trading_dates_inferred":
+			// 由交易日反推非交易日的来源，不能优先于明确覆盖完整日期范围的日历。
+			score -= 60
+		case "provider_snapshot_timestamp_missing", "provider_snapshot_timestamp_not_exposed":
+			score -= 5
+		}
+	}
+	if snapshot.QualityStatus == model.QualityValid {
+		score += 10
+	}
+	return score
+}
+
+func sameTradingCalendarDays(left, right *model.TradingCalendarSnapshot) bool {
+	if left == nil || right == nil || len(left.Items) != len(right.Items) {
+		return false
+	}
+	for i := range left.Items {
+		if left.Items[i].Date != right.Items[i].Date || left.Items[i].IsTradingDay != right.Items[i].IsTradingDay {
+			return false
+		}
+	}
+	return true
+}
+
+func appendTradingCalendarReason(reasons []string, reason string) []string {
+	for _, existing := range reasons {
+		if existing == reason {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
 }
