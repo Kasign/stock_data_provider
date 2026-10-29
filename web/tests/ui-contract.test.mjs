@@ -1629,7 +1629,7 @@ test("最近任务新增与删除必须确认完整记录已持久化，失败�
   assert.match(recentTaskModule, /storage\.setItem\(RECENT_TASKS_KEY, JSON\.stringify\(records\)\)[\s\S]*?const persistedState = readRecentTasksState\(storage, limit\)[\s\S]*?return persisted \? persistedState\.items : currentState\.items/);
   assert.match(recentTaskModule, /if \(JSON\.stringify\(persistedState\.items\) !== JSON\.stringify\(records\)\) return currentState\.items/);
   assert.match(recentTaskModule, /删除未成功持久化时保留原列表/);
-  assert.match(app, /function persistRecentTaskHistory\(record\)[\s\S]*?const expected = \{[\s\S]*?JSON\.stringify\(item\.symbols\) === JSON\.stringify\(expected\.symbols\)[\s\S]*?最近任务引用未保存/);
+  assert.match(app, /function persistRecentTaskHistory\(record\)[\s\S]*?const expected = \{[\s\S]*?JSON\.stringify\(item\.symbols\) === JSON\.stringify\(expected\.symbols\)[\s\S]*?最近任务引用未能确认持久化/);
 });
 
 
