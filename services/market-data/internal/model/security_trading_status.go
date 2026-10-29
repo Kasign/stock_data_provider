@@ -43,6 +43,7 @@ type SecurityTradingStatusSnapshot struct {
 	Source                  string             `json:"source"`
 	SourceVersion           string             `json:"source_version"`
 	FetchedAt               time.Time          `json:"fetched_at"`
+	SystemObservedAt         *time.Time         `json:"system_observed_at,omitempty"`
 	QualityStatus           QualityStatus      `json:"quality_status"`
 	QualityReasons          []string           `json:"quality_reasons,omitempty"`
 }
