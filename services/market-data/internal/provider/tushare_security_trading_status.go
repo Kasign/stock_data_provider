@@ -61,6 +61,8 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	result := &model.SecurityTradingStatusSnapshot{
 		Symbol: symbol,
 		TradeDate: date,
+		RiskWarningStatus: model.RiskWarningUnknown,
+		DelistingStatus: model.DelistingStatusUnknown,
 		ListingDate: strings.TrimSpace(basic.IPODate),
 		IsTradingDay: tradingDay,
 		TradingDayKnown: true,
