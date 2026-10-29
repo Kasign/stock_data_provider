@@ -83,12 +83,12 @@ func TestResolvePriceLimitRuleIPOAndSpecialNoLimitEvents(t *testing.T) {
 
 func TestResolvePriceLimitRuleReturnsUnknownForUnverifiedInputs(t *testing.T) {
 	cases := []struct {
-		name string
-		risk model.RiskWarningStatus
-		day  int
-		known bool
+		name      string
+		risk      model.RiskWarningStatus
+		day       int
+		known     bool
 		exception model.PriceLimitException
-		date string
+		date      string
 	}{
 		{name: "unknown special event", risk: model.RiskWarningNormal, day: 2000, known: true, exception: model.PriceLimitExceptionUnknown, date: "2026-07-06"},
 		{name: "unknown historical risk status", risk: model.RiskWarningUnknown, day: 2000, known: true, exception: model.PriceLimitExceptionNone, date: "2026-07-05"},
@@ -109,12 +109,12 @@ func TestResolvePriceLimitRuleReturnsUnknownForUnverifiedInputs(t *testing.T) {
 
 func TestResolvePriceLimitRuleRejectsContradictoryAndInvalidInputs(t *testing.T) {
 	cases := []struct {
-		name string
-		symbol string
-		date string
-		risk model.RiskWarningStatus
-		day int
-		known bool
+		name      string
+		symbol    string
+		date      string
+		risk      model.RiskWarningStatus
+		day       int
+		known     bool
 		exception model.PriceLimitException
 	}{
 		{name: "known listing day must be positive", symbol: "600519.SH", date: "2026-07-06", risk: model.RiskWarningNormal, day: 0, known: true, exception: model.PriceLimitExceptionNone},

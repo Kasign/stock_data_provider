@@ -65,9 +65,9 @@ func TestApplyTushareAdjustmentRejectsMissingOrInvalidFactors(t *testing.T) {
 		return []model.DailyBar{{TradeDate: "2026-10-28", Open: 10, High: 12, Low: 9, Close: 11}}
 	}
 	cases := []struct {
-		name string
+		name    string
 		factors map[string]float64
-		basis model.AdjustmentBasis
+		basis   model.AdjustmentBasis
 	}{
 		{name: "missing bar factor", factors: map[string]float64{"2026-10-27": 1}, basis: model.AdjustmentForward},
 		{name: "zero factor", factors: map[string]float64{"2026-10-28": 0}, basis: model.AdjustmentForward},

@@ -19,10 +19,10 @@ const (
 )
 
 const (
-	sseTradingRuleURL = "https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/exchange/c/c_20260424_10816482.shtml"
-	szseTradingRuleURL = "https://docs.static.szse.cn/www/lawrules/rule/trade/current/W020260424690713155663.pdf"
+	sseTradingRuleURL        = "https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/exchange/c/c_20260424_10816482.shtml"
+	szseTradingRuleURL       = "https://docs.static.szse.cn/www/lawrules/rule/trade/current/W020260424690713155663.pdf"
 	szseRiskWarningChangeURL = "https://www.szse.cn/aboutus/trends/news/t20250627_614643.html"
-	beijingTradingRuleURL = "https://www.bse.cn/qt/200025234.html"
+	beijingTradingRuleURL    = "https://www.bse.cn/qt/200025234.html"
 )
 
 // ResolvePriceLimitRule resolves the effective percentage rule for an A-share symbol and trade date.

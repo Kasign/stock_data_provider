@@ -65,21 +65,21 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	suspension, suspensionTiming, suspensionType, suspensionReasons, suspensionErr := p.fetchSuspensionOnDate(ctx, symbol, compactDate, tradingDay)
 
 	result := &model.SecurityTradingStatusSnapshot{
-		Symbol: symbol,
-		TradeDate: date,
+		Symbol:            symbol,
+		TradeDate:         date,
 		RiskWarningStatus: model.RiskWarningUnknown,
-		DelistingStatus: model.DelistingStatusUnknown,
-		ListingDate: listingDate,
-		IsTradingDay: tradingDay,
-		TradingDayKnown: true,
-		SuspensionStatus: suspension,
-		SuspensionTiming: suspensionTiming,
-		SuspensionType: suspensionType,
-		Source: p.Name(),
-		SourceVersion: tushareSecurityTradingStatusVersion,
-		FetchedAt: time.Now().UTC(),
-		QualityStatus: model.QualityDegraded,
-		QualityReasons: []string{"provider_exact_snapshot_time_not_exposed"},
+		DelistingStatus:   model.DelistingStatusUnknown,
+		ListingDate:       listingDate,
+		IsTradingDay:      tradingDay,
+		TradingDayKnown:   true,
+		SuspensionStatus:  suspension,
+		SuspensionTiming:  suspensionTiming,
+		SuspensionType:    suspensionType,
+		Source:            p.Name(),
+		SourceVersion:     tushareSecurityTradingStatusVersion,
+		FetchedAt:         time.Now().UTC(),
+		QualityStatus:     model.QualityDegraded,
+		QualityReasons:    []string{"provider_exact_snapshot_time_not_exposed"},
 	}
 
 	historicalRiskStatus := model.RiskWarningUnknown
@@ -173,7 +173,6 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	return result, nil
 }
 
-
 // fetchSecurityListingDate 显式查询 L/D/P 状态，避免 Tushare stock_basic 默认只返回 L 状态。
 // 历史证券已退市时仍需其原始上市日期；任何身份冲突、状态错配或异常市场分类都会被拒绝。
 func (p *Tushare) fetchSecurityListingDate(ctx context.Context, symbol string) (string, error) {
@@ -227,10 +226,9 @@ func (p *Tushare) fetchSecurityListingDate(ctx context.Context, symbol string) (
 	return "", fmt.Errorf("Tushare stock_basic 未在 L/D/P 状态目录中找到 %s", symbol)
 }
 
-
- // fetchHistoricalRiskWarningStatus 用 Tushare stock_st 的指定交易日名单确认 ST 状态。
- // 该接口历史数据从 2000-01-01 开始；历史范围外或请求失败时返回错误而不是推断为正常。
- func (p *Tushare) fetchHistoricalRiskWarningStatus(ctx context.Context, symbol, compactDate string) (model.RiskWarningStatus, error) {
+// fetchHistoricalRiskWarningStatus 用 Tushare stock_st 的指定交易日名单确认 ST 状态。
+// 该接口历史数据从 2000-01-01 开始；历史范围外或请求失败时返回错误而不是推断为正常。
+func (p *Tushare) fetchHistoricalRiskWarningStatus(ctx context.Context, symbol, compactDate string) (model.RiskWarningStatus, error) {
 	if compactDate < "20000101" {
 		return model.RiskWarningUnknown, errors.New("Tushare stock_st 历史数据从 20000101 开始")
 	}
