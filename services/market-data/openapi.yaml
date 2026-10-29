@@ -171,6 +171,7 @@ components:
         source: {type: string}
         source_version: {type: string}
         fetched_at: {type: string, format: date-time}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System recording time of the selected version, returned for as_of queries; not an upstream publication timestamp}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
     StockBoard:
@@ -916,24 +917,28 @@ paths:
         are not full upstream statements; missing fields remain absent and each section carries its own quality state.
         report_date is the financial period end; publication_date is the disclosure date of the selected provider
         revision. Income and cash-flow statement values use a single-quarter consolidated report where supported;
-        balance-sheet values use the consolidated period-end report. The endpoint returns the latest revision available
-        from the provider for that report period and has no as_of parameter or historical restatement reconstruction.
-        For point-in-time analysis, a publication date after the strategy reference date must be excluded; an earlier
-        revision is not reconstructed. Values preserve provider-native numeric scale and explicit units.
+        balance-sheet values use the consolidated period-end report. Without as_of, the endpoint returns the latest
+        usable provider result. With as_of, it only reads locally recorded revisions observed by that timestamp and
+        never falls back to a live request. Since publication_time is not available for every metric, sections with a
+        missing publication date or a publication date on/after the as_of date in Asia/Shanghai are excluded
+        conservatively. Historical revisions can only be reconstructed for snapshots recorded after PIT storage began.
+        Values preserve provider-native numeric scale and explicit units.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: year, in: query, required: true, schema: {type: integer, minimum: 2007}}
         - {name: quarter, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 4}}
+        - {name: as_of, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp. Reads locally recorded versions known by this system timestamp; it does not call live Providers. Sections whose publication date cannot be proven to precede the Asia/Shanghai date of as_of are excluded.}
       responses:
         '200':
-          description: Quarterly indicators and supported financial-statement sections
+          description: Quarterly indicators and supported financial-statement sections; system_observed_at is included for PIT responses
           content:
             application/json:
               schema: {$ref: '#/components/schemas/FundamentalsSnapshot'}
-        '400': {description: Invalid symbol, report year or quarter}
+        '400': {description: Invalid symbol, report year, quarter or as_of timestamp}
         '401': {description: API key required}
+        '404': {description: No usable financial revision was recorded by the requested as_of timestamp}
         '502': {description: Provider failed or returned invalid financial data}
-        '503': {description: No fundamentals provider enabled}
+        '503': {description: No fundamentals provider enabled for live reads, or PIT revision storage is unavailable}
   /api/v1/stocks/{symbol}/chip-distribution:
     get:
       summary: Get a stock chip-distribution snapshot
