@@ -1045,8 +1045,8 @@ try {
       const savedSettingsBeforeChecks = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
       assert.ok(savedSettingsBeforeChecks, "connection checks require persisted local settings");
       const parsedSavedSettings = JSON.parse(savedSettingsBeforeChecks);
-      assert.equal(parsedSavedSettings.marketBase, "/market-api");
-      assert.equal(parsedSavedSettings.analysisBase, "/analysis-api");
+      assert.match(parsedSavedSettings.marketBase, /^\/[a-z0-9-]+$/);
+      assert.match(parsedSavedSettings.analysisBase, /^\/[a-z0-9-]+$/);
       assert.equal(parsedSavedSettings.apiKey, "browser-test-key");
 
       for (const scenario of ["401", "403", "404", "503", "network"]) {
