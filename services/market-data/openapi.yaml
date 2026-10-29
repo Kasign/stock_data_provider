@@ -1169,8 +1169,6 @@ paths:
       description: tag=tushare 返回 Tushare index_basic 目录；其他 tag 由兼容的同花顺 Provider 提供。Tushare 指数代码保留 .SH/.SZ/.CSI 后缀。
       security:
         - ApiKey: []
-      security:
-        - ApiKey: []
       parameters:
         - {name: tag, in: query, required: false, schema: {type: string, enum: [cn_concept, region, tszs, industry, tushare], default: cn_concept}}
       responses:
