@@ -677,6 +677,17 @@ try {
         true,
         "settings modal should contain focus while open"
       );
+      for (let tabIndex = 0; tabIndex < 12; tabIndex += 1) {
+        await page.keyboard.press("Tab");
+        assert.equal(
+          await page.evaluate(() => {
+            const dialog = document.querySelector("#settings-dialog");
+            return Boolean(dialog?.open && dialog.contains(document.activeElement));
+          }),
+          true,
+          "Tab " + (tabIndex + 1) + " must keep focus inside the settings modal"
+        );
+      }
       await page.keyboard.press("Escape");
       await page.waitForFunction(() => !document.querySelector("#settings-dialog")?.open, null, { timeout: 3000 });
       assert.equal(
