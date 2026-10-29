@@ -461,3 +461,7 @@ PIT 版本只能重建启用版本化后实际记录过的快照。迁移前未�
 ### 指数/板块目录的来源覆盖账本
 
 指数/板块目录快照额外提供 `provider_returned`、`excluded_rows` 与 `total_is_lower_bound`。目前同花顺目录将原始 `item` 数记录为 `provider_returned`，重复代码被剔除时计入 `excluded_rows`；因此在非截断响应中必须满足 `provider_returned = total + excluded_rows`。若原始返回恰好达到本地 30000 项安全边界，无法证明上游没有截断，服务会标记 `total_is_lower_bound=true` 并降级质量。无效代码/名称仍视为当前 Provider 响应不可信，触发服务层回退，而不会把格式错误的条目计入正常目录。
+
+### 个股所属板块列表的来源覆盖账本
+
+`StockBoardSnapshot` 提供 `provider_returned`、`excluded_rows` 和 `total_is_lower_bound`。东方财富所属板块接口每次请求最多 1000 行，`provider_returned` 记录实际收到的原始行数；当源端总数恰为 1000 时，响应可能已经触及请求上限，因此必须置 `total_is_lower_bound=true` 并保持降级，不能把 1000 当作已证明的完整板块数。当前适配器遇到无效代码/名称或重复板块会拒绝该 Provider 候选并触发服务层回退，不静默过滤，因此成功结果的 `excluded_rows` 为 0，并要求 `provider_returned = total + excluded_rows`。空列表仍是未确认的 unknown，不能解释为该证券确定没有板块归属。
