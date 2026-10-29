@@ -1,3 +1,13 @@
+## 2026-10-29 — API 错误矩阵与首页鉴权错误修正
+
+- `web/src/format.js` 将浏览器 `Failed to fetch` / `NetworkError` / `Load failed` 归类为中文网络连接、反向代理与服务状态提示；HTTP 状态、错误码和 request ID 的展示行为保留。
+- `web/tests/api.test.mjs` 新增 401/403/404/503 结构化错误矩阵和普通 fetch 网络失败传播测试；`web/tests/format.test.mjs` 新增错误文案和网络重试分类测试。
+- `web/tests/browser-smoke.mjs` 在 320px 隔离上下文验证报价接口 401/403/404/503/网络断开：每次失败只请求一次、不会自动静默重试、旧报价指标/报价时间被清除、报价质量回到 unknown、连接状态不误报健康；用户手动重试成功后才恢复行情。
+- 修复 `web/src/market-overview.js` 对 401/403 的误导文案，移除“一律是 API Key 验证失败”的猜测，统一使用共享错误描述；新增 `web/tests/market-overview.test.mjs`，以及首页市场 401/403 的浏览器回归。
+- 最新 WebUI checks [#40812213468](https://github.com/Kasign/stock_data_provider/actions/runs/40812213468) 和 Browser Smoke [#40812213510](https://github.com/Kasign/stock_data_provider/actions/runs/40812213510) 均通过，对应代码 HEAD `360182366b866692ee8c5b1c77d4f77924a6ad32`。
+- 自动化响应使用本地确定性桩。真实 Provider 错误、线上数据质量、API Key/反向代理配置和 NAS/1Panel 环境仍需另行验收。
+
+
 ## 2026-10-29 — 历史样式清理与主题偏好持久化回归
 
 - 对 `web/styles.css` 做全量 class 引用筛查后，移除只存在于样式表、HTML/运行时 JS 无引用的旧规则：`.nav-count`、`.task-grid`、`.feature-empty-panel`、`.feature-meta`、`.chat-empty` 和 `.settings-category-card` 的旧样式及覆盖。保留 `.feature-empty` 与仍有运行/测试用途的规则。

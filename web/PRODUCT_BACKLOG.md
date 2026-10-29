@@ -25,6 +25,10 @@
 - [x] Browser Smoke 增加 skip-link 键盘可见性与主题切换往返断言：[运行 #40809497236](https://github.com/Kasign/stock_data_provider/actions/runs/40809497236)。
 - [x] 清理 6 组在 HTML/运行时 JS 中无引用的历史样式，并保留动态图表/运行流状态与有效主题规则；样式提交的检查和 Browser Smoke 均通过（[#40810083891](https://github.com/Kasign/stock_data_provider/actions/runs/40810083891)、[#40810083745](https://github.com/Kasign/stock_data_provider/actions/runs/40810083745)）。
 - [x] Browser Smoke 在 320px 隔离上下文中验证浅色主题在页面刷新后仍能恢复，最后回到深色；最新检查与烟测均通过（[#40810222011](https://github.com/Kasign/stock_data_provider/actions/runs/40810222011)、[#40810221922](https://github.com/Kasign/stock_data_provider/actions/runs/40810221922)）。
+- [x] 完成报价 API 的 401/403/404/503/网络失败端到端矩阵：检查准确文案、旧行情/报价时间清除、unknown 质量、连接状态不误报健康、无静默后台重试和手动重试恢复。
+- [x] 修复首页市场总览将所有 401/403 都归因于 API Key 的误导文案，使用共享状态描述；增加单测和首页 401/403 浏览器回归。
+- [x] 最新完整检查 [#40812213468](https://github.com/Kasign/stock_data_provider/actions/runs/40812213468) 与 Browser Smoke [#40812213510](https://github.com/Kasign/stock_data_provider/actions/runs/40812213510) 通过（代码 HEAD `360182366b866692ee8c5b1c77d4f77924a6ad32`）。
+- [ ] 仍需在真实 Provider/API 与 NAS/1Panel 环境验收鉴权、代理和实际数据质量；本地浏览器桩不能替代线上验收。
 - [ ] 人工检查浅色/深色主题对比度、键盘/减少动态效果及研究详情锚点；自动化 smoke 只证明固定 503 后端下的布局与控件行为。
 - [ ] 对接真实 404/503/401/403 与网络错误状态，确认真实 API Key 代理和 NAS/1Panel 运行环境。
 - 后续 CSS 整理以具体可证明的问题为单位。不得对不同 media query 下的重复 selector 做机械合并或整表重写。

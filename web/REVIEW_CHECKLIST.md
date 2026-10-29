@@ -1,3 +1,12 @@
+## 2026-10-29 后续续接 — API 状态矩阵和市场总览鉴权文案
+
+- [x] HTTP 401/403/404/503 单测验证状态、code、request ID 保留；普通 Fetch 网络失败由 UI 分类为中文网络/代理提示。
+- [x] 报价浏览器矩阵：错误提示、旧 quote 指标与报价时间清除、unknown 质量、连接状态不误报健康、无后台静默重试、手动重试成功恢复。
+- [x] 修正首页市场总览把 401/403 一律说成 API Key 错误的文案，增加错误描述单测和 Chromium 回归。
+- [x] 最新 HEAD `360182366b866692ee8c5b1c77d4f77924a6ad32` 的 WebUI checks [#40812213468](https://github.com/Kasign/stock_data_provider/actions/runs/40812213468) 和 Browser Smoke [#40812213510](https://github.com/Kasign/stock_data_provider/actions/runs/40812213510) 均通过。
+- [ ] 线上真实 API Key、HTTP 鉴权/代理以及 NAS/1Panel 的真实 Provider 数据质量仍需部署环境验收。
+
+
 ## 2026-10-29 后续追加 — CSS 死规则与主题持久性
 
 - [x] 清理在 HTML/运行时 JS 中无引用的历史 CSS class；保留动态运行流/图表状态 class 及仍受测试约束的结果样式。
