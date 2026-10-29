@@ -4461,3 +4461,99 @@ td {
 .existing-api-panel .is-error { color: var(--danger); }
 @media (min-width: 1500px) { .existing-api-results-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .existing-api-results-grid { grid-template-columns: minmax(0, 1fr); } }
+
+
+/* 2026 行情研究台视觉基线：统一层级、留白、交互和窄屏可读性。 */
+:root {
+  --radius: 12px;
+  --space-page: clamp(16px, 2.1vw, 30px);
+  --focus-ring: color-mix(in srgb, var(--accent) 75%, white);
+}
+.main-area {
+  padding-left: var(--space-page);
+  padding-right: var(--space-page);
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  gap: 14px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+}
+.view {
+  max-width: 1680px;
+  margin-inline: auto;
+}
+.panel {
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .10);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.panel-heading {
+  gap: 14px;
+}
+.panel-heading > div:first-child {
+  min-width: 0;
+}
+.panel-heading h2 {
+  letter-spacing: -.2px;
+}
+.side-label {
+  letter-spacing: .08em;
+}
+.side-nav {
+  gap: 4px;
+}
+.nav-link {
+  min-height: 40px;
+  border-radius: 8px;
+}
+.nav-link.active {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.side-nav-section-label {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.button, .text-button, .nav-link, .icon-button, .avatar-button {
+  transition: color .15s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+:root[data-theme="light"] .topbar {
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+}
+:root[data-theme="light"] .panel {
+  box-shadow: 0 6px 22px rgba(34, 57, 74, .045);
+}
+:root[data-theme="light"] .nav-link.active {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+@media (min-width: 1500px) {
+  .main-area { padding-left: 34px; padding-right: 34px; }
+}
+@media (max-width: 900px) {
+  .main-area { padding-left: 20px; padding-right: 20px; }
+  .topbar { gap: 10px; }
+}
+@media (max-width: 600px) {
+  .main-area { padding-left: 13px; padding-right: 13px; }
+  .topbar { min-height: 58px; height: auto; }
+  .breadcrumb { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .topbar-actions { gap: 6px; }
+  .environment-chip { max-width: 112px; padding: 6px 8px; overflow: hidden; }
+  .environment-chip > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .view { padding-top: 20px; }
+  .page-heading { margin-bottom: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
