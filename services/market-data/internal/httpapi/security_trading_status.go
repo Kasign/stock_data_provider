@@ -1,9 +1,13 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/service"
 )
 
 func (s *Server) securityTradingStatus(w http.ResponseWriter, r *http.Request) {
