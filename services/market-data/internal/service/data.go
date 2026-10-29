@@ -2798,9 +2798,14 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		age := time.Since(asOf)
 		quoteAllowed = age >= 0 && age <= 2*time.Minute
 	}
-	requestLookback := lookback
+	outputLookback := lookback
+	// 为计算 MA250，额外读取前置交易日作为预热窗口；最终响应仍遵守 lookback。
+	requestLookback := lookback + 249
 	if excludeAsOfDate && requestLookback < s.maxBars {
 		requestLookback++ // keep the requested count after dropping the cutoff date
+	}
+	if requestLookback > s.maxBars {
+		requestLookback = s.maxBars
 	}
 	bars, _, warnings, err := s.DailyBars(ctx, symbol, "", end, requestLookback, basis)
 	if err != nil {
@@ -2817,6 +2822,10 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 		}
 		bars = filtered
 		warnings = append(warnings, "as_of_date_daily_bar_excluded_before_market_close")
+	}
+	bars = CalculateMovingAverages(bars)
+	if len(bars) > outputLookback {
+		bars = bars[len(bars)-outputLookback:]
 	}
 	bundle := &model.Bundle{Symbol: symbol, DailyBars: bars, Sources: map[string]string{}, Warnings: append([]string{}, warnings...), QualityStatus: model.QualityValid}
 	if asOfProvided && basis != model.AdjustmentNone && time.Since(asOf) > 5*time.Minute {
@@ -2877,6 +2886,12 @@ func (s *DataService) Bundle(ctx context.Context, rawSymbol string, lookback int
 	if len(bars) == 0 {
 		bundle.QualityStatus = model.QualityDegraded
 		bundle.Warnings = append(bundle.Warnings, "daily_bars_missing")
+	} else {
+		latest := bars[len(bars)-1]
+		if latest.MA5 == nil || latest.MA20 == nil || latest.MA120 == nil || latest.MA250 == nil {
+			bundle.QualityStatus = model.QualityDegraded
+			bundle.Warnings = append(bundle.Warnings, "moving_average_history_insufficient")
+		}
 	}
 	bundle.SnapshotID = newFetchID()
 	bundle.FetchedAt = time.Now().UTC()
