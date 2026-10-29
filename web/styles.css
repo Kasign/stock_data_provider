@@ -4442,3 +4442,21 @@ td {
 
 /* 左侧导航分组：核心行情、研究任务与系统配置分层展示。 */
 .side-nav-section-label { padding-top: 16px; padding-bottom: 4px; }
+
+/* 已声明后端 API 的可操作查询区，保持结果来源与质量信息可见。 */
+.existing-api-panel { margin-top: 18px; padding: 18px; }
+.existing-api-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.existing-api-toolbar .field { flex: 1 1 140px; }
+.existing-api-toolbar .button { flex: 0 0 auto; }
+.existing-api-results-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.existing-api-results-grid > section { min-width: 0; padding: 13px; border: 1px solid var(--border-soft); border-radius: 10px; background: rgba(8, 14, 20, .35); }
+.existing-api-results-grid > section h3 { margin: 0 0 10px; color: var(--text-soft); font-size: 12px; }
+.existing-api-results-grid .table-scroll { max-height: 320px; overflow: auto; }
+.existing-api-detail-list { display: grid; grid-template-columns: minmax(100px, .7fr) minmax(0, 1.3fr); gap: 8px 12px; margin: 0; font-size: 11px; }
+.existing-api-detail-list dt { color: var(--text-dim); }
+.existing-api-detail-list dd { min-width: 0; margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.existing-api-detail-list a { color: var(--accent); }
+.market-session-summary { margin-top: 14px; padding: 12px; border: 1px solid var(--border-soft); border-radius: 8px; color: var(--text-soft); line-height: 1.7; overflow-wrap: anywhere; }
+.existing-api-panel .is-error { color: var(--danger); }
+@media (min-width: 1500px) { .existing-api-results-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .existing-api-results-grid { grid-template-columns: minmax(0, 1fr); } }
