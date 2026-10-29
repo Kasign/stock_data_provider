@@ -528,8 +528,9 @@ type SourceStatus struct {
 	StockBoardsCapable     bool   `json:"stock_boards_capable,omitempty"`
 	DragonTigerCapable     bool   `json:"dragon_tiger_capable,omitempty"`
 	AnnouncementsCapable   bool   `json:"announcements_capable,omitempty"`
-	TradingCalendarCapable bool   `json:"trading_calendar_capable,omitempty"`
-	FundamentalsCapable    bool   `json:"fundamentals_capable,omitempty"`
+	TradingCalendarCapable       bool `json:"trading_calendar_capable,omitempty"`
+	SecurityTradingStatusCapable  bool `json:"security_trading_status_capable,omitempty"`
+	FundamentalsCapable            bool `json:"fundamentals_capable,omitempty"`
 	ValuationCapable       bool   `json:"valuation_capable,omitempty"`
 	IndexCatalogCapable    bool   `json:"index_catalog_capable,omitempty"`
 	HistoricalIndexConstituentsCapable bool `json:"historical_index_constituents_capable"`
