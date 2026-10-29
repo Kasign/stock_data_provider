@@ -83,6 +83,8 @@ try {
     // API responses are deterministic fixtures only: one isolated viewport exercises failures, others stay unavailable.
     let quoteScenario = "success";
     let quoteRequestCount = 0;
+    let marketScenario = "503";
+    let marketIndexRequestCount = 0;
     const quoteFixture = {
       symbol: "600519.SH",
       name: "贵州茅台",
@@ -123,6 +125,10 @@ try {
       "503": { status: 503, code: "provider_unavailable", message: "上游 Provider 暂不可用", requestId: "req-browser-503", expected: "上游 Provider 暂不可用" },
       network: { status: 0, expected: "网络请求失败" }
     };
+    const marketOverviewErrors = {
+      "401": { status: 401, code: "auth_required", message: "credentials required", requestId: "req-overview-401", expected: "接口认证失败" },
+      "403": { status: 403, code: "access_denied", message: "permission denied", requestId: "req-overview-403", expected: "当前请求被服务拒绝" }
+    };
 
     if (viewport.width === 320) {
       await context.addInitScript(() => {
@@ -149,6 +155,23 @@ try {
       if (viewport.width === 320 && pathname.includes("/api/v1/bundles/")) {
         // Exercise the supported legacy fallback so the successful quote can seed a prior snapshot.
         return json(404, { error: { code: "route_not_found", message: "bundle endpoint unavailable" } });
+      }
+
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/indices")) {
+        marketIndexRequestCount += 1;
+        const item = marketOverviewErrors[marketScenario] || {
+          status: 503,
+          code: "provider_unavailable",
+          message: "上游 Provider 暂不可用",
+          requestId: "req-overview-503"
+        };
+        return json(item.status, {
+          error: {
+            code: item.code,
+            message: item.message,
+            request_id: item.requestId
+          }
+        });
       }
 
       if (viewport.width === 320 && pathname.includes("/api/v1/quotes/")) {
@@ -345,6 +368,34 @@ try {
 
       await page.locator('.workspace-tab[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
+
+      // Home-market errors must preserve HTTP meaning instead of asserting every 401/403 is an API-key fault.
+      for (const scenario of ["401", "403"]) {
+        const expected = marketOverviewErrors[scenario];
+        const requestsBeforeFailure = marketIndexRequestCount;
+        marketScenario = scenario;
+        await page.locator("#refresh-market-overview").click();
+        await page.waitForFunction(
+          (expectedMessage) => document.querySelector("#market-index-grid")?.textContent.includes(expectedMessage),
+          expected.expected,
+          { timeout: 8000 }
+        );
+        assert.equal(marketIndexRequestCount, requestsBeforeFailure + 1, "market overview HTTP " + scenario + " should request indices once");
+        await page.waitForTimeout(250);
+        assert.equal(marketIndexRequestCount, requestsBeforeFailure + 1, "market overview HTTP " + scenario + " should not retry silently");
+
+        const indexState = await page.evaluate(() => ({
+          message: document.querySelector("#market-index-grid")?.textContent || "",
+          status: document.querySelector("#market-indices-status")?.textContent.trim() || "",
+          className: document.querySelector("#market-indices-status")?.className || "",
+          refreshSummary: document.querySelector("#market-overview-updated")?.textContent || ""
+        }));
+        assert.match(indexState.message, new RegExp(expected.expected));
+        assert.doesNotMatch(indexState.message, /行情服务 API Key 验证失败/);
+        assert.equal(indexState.status, "读取失败");
+        assert.match(indexState.className, /is-unavailable/);
+        assert.match(indexState.refreshSummary, /鉴权失败 1 个/);
+      }
     }
 
     const assertNoHorizontalOverflow = async (stage) => {
