@@ -1,5 +1,14 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新跨标的部分失败/恢复矩阵
+
+- Browser Smoke 在 320px 隔离上下文完成 A→B 竞态验证：A（600519.SH）先拥有 5 根有效日 K/MA5，A 的 Quote 请求延迟；切到 B（000001.SH）后，B Quote 返回 503，但 B 的日 K 返回有效数据。
+- 报价失败时验证 B 的报价价格清空、质量未知，同时 B 的日 K 收盘价 10.25 保留，MA5/MA20 按样本不足显示；不会保留 A 的有效 MA5。
+- 用户手动重试 B 后，Quote 恢复成功；随后等待 A 的迟到请求尝试返回，再确认 B 的 Quote、质量、日 K 和 MA 状态不被覆盖。
+- 最新代码 HEAD `4961712922e18fa61ae686f6ec9154f143c177ba` 的 WebUI checks [#40822836098](https://github.com/Kasign/stock_data_provider/actions/runs/40822836098) 与 Browser Smoke [#40822836089](https://github.com/Kasign/stock_data_provider/actions/runs/40822836089) 均通过。
+- 自动化使用本地确定性响应桩；真实 Provider/NAS/1Panel 仍需独立验收。
+
+
 ## 2026-10-29 最新标的切换迟到行情回归
 
 - Browser Smoke 新增真实页面级竞态：先让 `600519.SH` 返回 5 根日 K 并产生有效 MA5，再让该标的报价请求延迟返回；在旧请求仍在途时改为 `000001.SH` 并发起新查询。

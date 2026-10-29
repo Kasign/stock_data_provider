@@ -1,3 +1,11 @@
+## 2026-10-29 — 跨标的部分失败、手动恢复与迟到回包
+
+- 在 Chromium 中先为 600519.SH 建立有效 MA5，再延迟其 Quote 响应并切换到 000001.SH。
+- 新标的 B 先出现 Quote 503、同时 Daily Bars 成功：验证价格/质量状态清空、B 的 K 线仍保留、MA5/MA20 显示样本不足，不继承 A 的 MA5。
+- 手动重试 B 后 Quote 成功；旧 A 响应尝试迟到返回后，B 的价格、质量、日 K 和均线状态保持不变。
+- 最新 HEAD `4961712922e18fa61ae686f6ec9154f143c177ba` 对应 WebUI checks [#40822836098](https://github.com/Kasign/stock_data_provider/actions/runs/40822836098) 与 Browser Smoke [#40822836089](https://github.com/Kasign/stock_data_provider/actions/runs/40822836089)，均通过。
+
+
 ## 2026-10-29 — 切换标的时迟到 Quote/MA 响应隔离
 
 - Browser Smoke 新增 320px 隔离上下文的迟到请求竞态：为旧标的建立 5 根日 K 的有效 MA5，再延迟旧 Quote 回包，切换到新标的并成功读取一条日 K。

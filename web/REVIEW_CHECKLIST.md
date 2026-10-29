@@ -1,3 +1,11 @@
+## 2026-10-29 后续追加 — Quote 失败时保留成功日 K，并隔离旧标的
+
+- [x] A 先有有效 MA5，A Quote 延迟；切换到 B 后模拟 Quote 503、Daily Bars 成功。B 的日 K 保留，Quote 指标/质量状态不伪造，A 的 MA5 不残留。
+- [x] 手动重试 B 后 Quote 恢复；旧 A 回包尝试迟到返回后，B 的报价、质量、日 K 与 MA 仍保持正确。
+- [x] 最新 HEAD `4961712922e18fa61ae686f6ec9154f143c177ba` 的 WebUI checks [#40822836098](https://github.com/Kasign/stock_data_provider/actions/runs/40822836098) 与 Browser Smoke [#40822836089](https://github.com/Kasign/stock_data_provider/actions/runs/40822836089) 通过。
+- [ ] 真实 Provider/NAS/1Panel 部署仍需独立验收。
+
+
 ## 2026-10-29 后续追加 — 迟到 Quote/MA 跨标的隔离
 
 - [x] 旧标的拥有有效 MA5 时，模拟旧 Quote 请求迟到；切换到新标的后新 Quote 与一根日 K 成功返回。

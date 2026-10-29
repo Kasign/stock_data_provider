@@ -340,7 +340,7 @@
 - [x] 开始新一轮查询时清空旧标的实时行情并显示本次加载状态。
 - [x] 报价失败时清空所有报价卡片字段、来源和行情时间。
 - [x] 保留报价与日 K 分别成功/失败的能力，不让一端失败覆盖另一端成功数据。
-- [ ] 用户统一测试先成功查询 A 再查询失败标的 B 的情况，以及报价失败但日 K 成功时的显示。
+- [x] Chromium 回归已验证先成功查询 A，再切换到 B 并遇到 Quote 503、Daily Bars 成功；B 的日 K 保留、A 的报价/MA 不残留，手动重试后恢复 Quote，A 的迟到回包不能覆盖 B。对应 WebUI checks [#40822836098](https://github.com/Kasign/stock_data_provider/actions/runs/40822836098) 与 Browser Smoke [#40822836089](https://github.com/Kasign/stock_data_provider/actions/runs/40822836089) 通过。
 - 本批未运行测试、未触发 CI。
 
 
