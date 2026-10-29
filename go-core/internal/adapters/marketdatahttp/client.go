@@ -1055,9 +1055,7 @@ func fundamentalsMap(snapshot wireFundamentalsSnapshot) map[string]any {
 		"quality_reasons": snapshot.QualityReasons,
 	}
 	for key, value := range metrics {
-		if !strings.Contains(key, ".") {
-			result[key] = value
-		}
+		result[key] = value
 	}
 	return result
 }
