@@ -465,3 +465,9 @@ PIT 版本只能重建启用版本化后实际记录过的快照。迁移前未�
 ### 个股所属板块列表的来源覆盖账本
 
 `StockBoardSnapshot` 提供 `provider_returned`、`excluded_rows` 和 `total_is_lower_bound`。东方财富所属板块接口每次请求最多 1000 行，`provider_returned` 记录实际收到的原始行数；当源端总数恰为 1000 时，响应可能已经触及请求上限，因此必须置 `total_is_lower_bound=true` 并保持降级，不能把 1000 当作已证明的完整板块数。当前适配器遇到无效代码/名称或重复板块会拒绝该 Provider 候选并触发服务层回退，不静默过滤，因此成功结果的 `excluded_rows` 为 0，并要求 `provider_returned = total + excluded_rows`。空列表仍是未确认的 unknown，不能解释为该证券确定没有板块归属。
+
+### 市场统一交易时段判定
+
+`GET /api/v1/market/session?at=RFC3339`（省略 `at` 时使用服务端当前时间）先通过已配置交易日历 Provider 确认 `Asia/Shanghai` 本地日期是否为交易日，再依据固定时段输出 `phase`、`is_trading_session`、`is_continuous_trading` 与 `is_auction`。时段边界按左闭右开区间计算：09:15–09:25 开盘集合竞价；09:25–09:30 竞价间隔；09:30–11:30 上午连续交易；11:30–13:00 午间休市；13:00–14:57 下午连续交易；14:57–15:00 收盘集合竞价。其余交易日时刻为开盘前或收市后；非交易日优先返回 `non_trading_day`。
+
+这是市场级计划时段，而非个股能否下单的最终判断。该接口尚不感知个股临时停牌、ST/退市整理状态、证券各板块不同的涨跌幅限制、交易所临时停市或特殊交易安排；使用方不能只凭 `is_trading_session=true` 推断具体证券当前可交易。若日历 Provider 质量降级，结果会保留其降级状态和原因。
