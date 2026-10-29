@@ -292,3 +292,50 @@ func TestHithinkFetchQuoteRejectsDuplicateRequestedSecurityRows(t *testing.T) {
 		t.Fatalf("duplicate quote identity must be rejected rather than selecting the first row, got %v", err)
 	}
 }
+
+
+func TestHithinkFetchIndexCatalogTracksRawAndExcludedRows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/a-share-index/catalog/ths-index-list" {
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("X-api-key") != "unit-test-key" {
+			t.Errorf("missing API key header")
+			http.Error(w, "missing API key", http.StatusUnauthorized)
+			return
+		}
+		payload := map[string]any{
+			"code": 0,
+			"data": map[string]any{
+				"timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli(),
+				"item": []map[string]any{
+					{"thscode": "000001.SH", "name": "上证指数"},
+					{"thscode": "000001.SH", "name": "上证指数重复"},
+					{"thscode": "399001.SZ", "name": "深证成指"},
+				},
+			},
+		}
+		if err := json.NewEncoder(w).Encode(payload); err != nil {
+			t.Errorf("encode fixture response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewHithinkConfigured(2*time.Second, server.URL, "unit-test-key")
+	got, err := client.FetchIndexCatalog(context.Background(), "tszs")
+	if err != nil {
+		t.Fatalf("FetchIndexCatalog: %v", err)
+	}
+	if got.ProviderReturned != 3 || got.ExcludedRows != 1 || got.Total != 2 || len(got.Items) != 2 {
+		t.Fatalf("unexpected catalog coverage: returned=%d excluded=%d total=%d items=%d",
+			got.ProviderReturned, got.ExcludedRows, got.Total, len(got.Items))
+	}
+	if got.TotalIsLowerBound {
+		t.Fatal("ordinary catalog response must not be marked as lower-bound")
+	}
+	if got.QualityStatus != model.QualityDegraded {
+		t.Fatalf("duplicate source rows must degrade the catalog, got %s", got.QualityStatus)
+	}
+}
