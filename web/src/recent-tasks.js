@@ -72,10 +72,19 @@ export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
 
   try {
     storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
+    const persistedState = readRecentTasksState(storage, limit);
+    if (!persistedState.storageReadable || !persistedState.storageValid) return currentState.items;
+    const persisted = persistedState.items.some((item) =>
+      item.task_id === normalized.task_id &&
+      item.analysis_base === normalized.analysis_base &&
+      item.run_id === normalized.run_id
+    );
+    // 只有回读确认成功后，才把新增记录交给界面展示为最近历史。
+    return persisted ? persistedState.items : currentState.items;
   } catch {
-    // 最近任务历史是可选能力；写入失败时当前任务仍可继续，但不声称已持久化。
+    // 最近任务历史是可选能力；写入失败时不把未持久化记录作为历史返回。
+    return currentState.items;
   }
-  return records;
 }
 
 export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, analysisBase = "") {
