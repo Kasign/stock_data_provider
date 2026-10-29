@@ -375,10 +375,25 @@ function persistRecentTaskHistory(record) {
 
   const storageState = safeReadRecentTasksState();
   if (!storageState.storageReadable || !storageState.storageValid) return;
+  const expected = {
+    task_id: String(record.task_id || "").trim(),
+    run_id: typeof record.run_id === "string" ? record.run_id : "",
+    created_at: typeof record.created_at === "string" ? record.created_at : "",
+    symbols: Array.isArray(record.symbols) ? record.symbols.filter((item) => typeof item === "string") : [],
+    task_type: typeof record.task_type === "string" ? record.task_type : "post_market_scan",
+    status: typeof record.status === "string" ? record.status : "",
+    analysis_base: typeof record.analysis_base === "string" ? record.analysis_base.trim() : "",
+    updated_at: typeof record.updated_at === "string" ? record.updated_at : ""
+  };
   const persisted = history.some((item) =>
-    item.task_id === record.task_id &&
-    item.analysis_base === (record.analysis_base || state.settings.analysisBase) &&
-    item.run_id === (record.run_id || "")
+    item.task_id === expected.task_id &&
+    item.run_id === expected.run_id &&
+    item.created_at === expected.created_at &&
+    item.task_type === expected.task_type &&
+    item.status === expected.status &&
+    item.analysis_base === expected.analysis_base &&
+    item.updated_at === expected.updated_at &&
+    JSON.stringify(item.symbols) === JSON.stringify(expected.symbols)
   );
   if (!persisted) {
     setRecentTasksFeedback(
