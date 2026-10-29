@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS market_data_daily_bar_versions (
   quality_status VARCHAR(16) NOT NULL,
   metadata JSON NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_market_bar_revision_content (symbol, trade_date, period, adjustment_basis, source, revision_hash),
+  KEY idx_market_bar_revision_identity_asof (symbol, trade_date, period, adjustment_basis, source, recorded_at, id),
   KEY idx_market_bar_revision_asof (symbol, trade_date, adjustment_basis, recorded_at),
   KEY idx_market_bar_revision_observed (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

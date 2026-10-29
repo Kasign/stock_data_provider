@@ -47,3 +47,26 @@ func TestDailyBarRevisionHashIgnoresFetchTimestamps(t *testing.T) {
 		t.Fatal("a changed close price must produce a new content revision")
 	}
 }
+
+func TestShouldRecordRevisionComparesOnlyLatestVersion(t *testing.T) {
+	var latest string
+	hasLatest := false
+	for _, revision := range []struct {
+		hash string
+		want bool
+	}{
+		{hash: "A", want: true},
+		{hash: "A", want: false},
+		{hash: "B", want: true},
+		{hash: "A", want: true}, // 内容恢复为旧值时，也必须写入新的观察版本。
+		{hash: "A", want: false},
+	} {
+		got := shouldRecordRevision(latest, hasLatest, revision.hash)
+		if got != revision.want {
+			t.Fatalf("shouldRecordRevision(previous=%q, next=%q)=%v want %v", latest, revision.hash, got, revision.want)
+		}
+		if got {
+			latest, hasLatest = revision.hash, true
+		}
+	}
+}

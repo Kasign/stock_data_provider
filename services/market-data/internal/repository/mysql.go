@@ -115,7 +115,7 @@ func (s *Store) Migrate(ctx context.Context) error {
  quality_status VARCHAR(16) NOT NULL,
  metadata JSON NOT NULL,
  PRIMARY KEY (id),
- UNIQUE KEY uq_market_bar_revision_content (symbol, trade_date, period, adjustment_basis, source, revision_hash),
+ KEY idx_market_bar_revision_identity_asof (symbol, trade_date, period, adjustment_basis, source, recorded_at, id),
  KEY idx_market_bar_revision_asof (symbol, trade_date, adjustment_basis, recorded_at),
  KEY idx_market_bar_revision_observed (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
@@ -124,6 +124,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("market-data schema migration: %w", err)
 		}
+	}
+	// 旧版修订表曾对内容哈希建立全历史唯一约束，会错误阻止 A→B→A 的回归修订。
+	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_daily_bar_versions",
+		"uq_market_bar_revision_content", "idx_market_bar_revision_identity_asof",
+		"symbol, trade_date, period, adjustment_basis, source, recorded_at, id"); err != nil {
+		return fmt.Errorf("migrate daily-bar revision index: %w", err)
 	}
 	// CREATE TABLE IF NOT EXISTS does not add new columns to an already existing
 	// deployment. Use information_schema checks so the migration works on both
@@ -138,6 +144,38 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+
+func (s *Store) ensureNonUniqueHistoryIndex(ctx context.Context, table, legacyIndex, indexName, columns string) error {
+	// 所有标识符和列定义均为包内常量，不接受请求参数。
+	var legacyCount int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, table, legacyIndex).Scan(&legacyCount); err != nil {
+		return err
+	}
+	if legacyCount > 0 && legacyIndex != indexName {
+		if _, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table, legacyIndex)); err != nil {
+			return err
+		}
+	}
+	var count, nonUnique int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(NON_UNIQUE), 1)
+FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`, table, indexName).Scan(&count, &nonUnique); err != nil {
+		return err
+	}
+	if count > 0 && nonUnique == 0 {
+		if _, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table, indexName)); err != nil {
+			return err
+		}
+		count = 0
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s)", indexName, table, columns))
+	return err
 }
 
 func (s *Store) ensureColumn(ctx context.Context, table, column, definition string) error {
@@ -205,7 +243,7 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	}
 	defer tx.Rollback()
 	stmt := `INSERT INTO market_data_daily_bars (symbol,trade_date,period,adjustment_basis,source,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE open_price=VALUES(open_price),high_price=VALUES(high_price),low_price=VALUES(low_price),close_price=VALUES(close_price),volume_shares=VALUES(volume_shares),amount_cny=VALUES(amount_cny),change_percent=VALUES(change_percent),fetched_at=VALUES(fetched_at),normalized_at=VALUES(normalized_at),quality_status=VALUES(quality_status),metadata=VALUES(metadata)`
-	versionStmt := `INSERT INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE revision_hash=VALUES(revision_hash)`
+	versionStmt := `INSERT INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 	for _, bar := range bars {
 		metadata, e := json.Marshal(bar)
 		if e != nil {
@@ -215,10 +253,20 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 		if e != nil {
 			return fmt.Errorf("fingerprint daily bar %s %s: %w", bar.Symbol, bar.TradeDate, e)
 		}
-		recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
-		_, e = tx.ExecContext(ctx, versionStmt, bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source, revisionHash, recordedAt, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Amount, bar.ChangePercent, bar.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), bar.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(bar.QualityStatus), metadata)
-		if e != nil {
-			return fmt.Errorf("record daily bar revision %s %s: %w", bar.Symbol, bar.TradeDate, e)
+		var latestHash string
+		lookupErr := tx.QueryRowContext(ctx, `SELECT revision_hash FROM market_data_daily_bar_versions
+WHERE symbol=? AND trade_date=? AND period=? AND adjustment_basis=? AND source=?
+ORDER BY recorded_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+			bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source).Scan(&latestHash)
+		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+			return fmt.Errorf("read latest daily bar revision %s %s: %w", bar.Symbol, bar.TradeDate, lookupErr)
+		}
+		if shouldRecordRevision(latestHash, lookupErr == nil, revisionHash) {
+			recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
+			_, e = tx.ExecContext(ctx, versionStmt, bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source, revisionHash, recordedAt, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Amount, bar.ChangePercent, bar.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), bar.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(bar.QualityStatus), metadata)
+			if e != nil {
+				return fmt.Errorf("record daily bar revision %s %s: %w", bar.Symbol, bar.TradeDate, e)
+			}
 		}
 		_, e = tx.ExecContext(ctx, stmt, bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Amount, bar.ChangePercent, bar.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), bar.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(bar.QualityStatus), metadata)
 		if e != nil {
@@ -228,6 +276,10 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	return tx.Commit()
 }
 
+
+func shouldRecordRevision(previousHash string, hasPrevious bool, nextHash string) bool {
+	return !hasPrevious || previousHash != nextHash
+}
 
 func dailyBarRevisionHash(bar model.DailyBar) (string, error) {
 	// 获取/归一化时间变化本身不是行情修订；只对内容、来源版本、单位和质量变化生成新版本。
