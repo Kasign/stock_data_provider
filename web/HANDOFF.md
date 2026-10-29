@@ -1,5 +1,13 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新本地自选存储异常回归
+
+- Chromium 在 320px 隔离上下文验证损坏的自选 JSON：点击“加入自选”后显示数据格式异常，原始 `{malformed` 字节不变、计数显示不可用，未宣称成功添加。
+- 同一场景再模拟 `localStorage.setItem` 抛出 `QuotaExceededError`：当前页面允许临时展示刚加入的标的，但提示“刷新后可能丢失”，反馈样式为 warning，存储键仍不存在，不会错误显示持久化成功。
+- 最新代码 HEAD `f320cd25b9beda1998f8ba44dc53653880b67bd3` 对应 WebUI checks [#40823264939](https://github.com/Kasign/stock_data_provider/actions/runs/40823264939) 与 Browser Smoke [#40823264960](https://github.com/Kasign/stock_data_provider/actions/runs/40823264960) 均通过。
+- 此轮覆盖损坏内容与写入配额失败，不代表浏览器彻底禁用存储/读取权限被拒绝的真实人工验收已完成。
+
+
 ## 2026-10-29 最新跨标的部分失败/恢复矩阵
 
 - Browser Smoke 在 320px 隔离上下文完成 A→B 竞态验证：A（600519.SH）先拥有 5 根有效日 K/MA5，A 的 Quote 请求延迟；切到 B（000001.SH）后，B Quote 返回 503，但 B 的日 K 返回有效数据。

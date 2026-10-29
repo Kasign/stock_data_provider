@@ -1,3 +1,11 @@
+## 2026-10-29 — 自选股 UI 存储异常与反馈回归
+
+- 浏览器烟测新增损坏 localStorage 值场景：加入自选后应显示格式异常，不清理/覆盖原始 JSON，且不反馈保存成功。
+- 模拟 watchlist 专用 `setItem` 抛出 `QuotaExceededError`：界面可在当前页面临时展示该标的，但明确 warning“刷新后可能丢失”，存储键没有写入。
+- 最新 HEAD `f320cd25b9beda1998f8ba44dc53653880b67bd3` 的 WebUI checks [#40823264939](https://github.com/Kasign/stock_data_provider/actions/runs/40823264939) 和 Browser Smoke [#40823264960](https://github.com/Kasign/stock_data_provider/actions/runs/40823264960) 均通过。
+- 彻底禁用浏览器 storage/getItem 读取失败的实际浏览器人工场景仍待完整验收。
+
+
 ## 2026-10-29 — 跨标的部分失败、手动恢复与迟到回包
 
 - 在 Chromium 中先为 600519.SH 建立有效 MA5，再延迟其 Quote 响应并切换到 000001.SH。

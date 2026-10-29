@@ -1,3 +1,11 @@
+## 2026-10-29 后续追加 — 自选存储异常与持久化反馈
+
+- [x] 损坏 JSON 点击加入自选后，原始数据不被覆盖，列表显示不可用，反馈为错误而不是保存成功。
+- [x] 模拟 watchlist 的 `setItem` quota error 后，当前页面显示临时条目并明确提示刷新后可能丢失，storage key 仍未写入，feedback 使用 warning。
+- [x] 最新 HEAD `f320cd25b9beda1998f8ba44dc53653880b67bd3` 的 checks [#40823264939](https://github.com/Kasign/stock_data_provider/actions/runs/40823264939) 与 Browser Smoke [#40823264960](https://github.com/Kasign/stock_data_provider/actions/runs/40823264960) 均通过。
+- [ ] 浏览器整体 storage API 不可读/不可写的人工验收仍待完成。
+
+
 ## 2026-10-29 后续追加 — Quote 失败时保留成功日 K，并隔离旧标的
 
 - [x] A 先有有效 MA5，A Quote 延迟；切换到 B 后模拟 Quote 503、Daily Bars 成功。B 的日 K 保留，Quote 指标/质量状态不伪造，A 的 MA5 不残留。
