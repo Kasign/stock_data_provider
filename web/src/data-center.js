@@ -194,6 +194,20 @@ export function bindDataCenter(getSettings) {
       } catch {
         // 初始提示失败不能阻止检查请求，也不能跳过最终解锁。
       }
+      try {
+        setBadge("#data-center-provider-status", "unknown", "读取中");
+        setText("#data-center-provider-summary", "正在读取当前连接配置的 Provider 能力清单；旧清单暂不展示。");
+        const providerList = $("#data-center-provider-list");
+        if (providerList) {
+          providerList.replaceChildren();
+          const empty = document.createElement("div");
+          empty.className = "empty-row";
+          empty.textContent = "正在读取 Provider 能力清单…";
+          providerList.append(empty);
+        }
+      } catch {
+        // Provider 加载占位失败不能阻止健康探针和 Provider 请求。
+      }
 
       const checks = await Promise.all([
         runHealthCheck(checkWebUI, settings),

@@ -208,6 +208,17 @@ try {
       if (viewport.width === 320 && pathname.endsWith("/api/v1/data-sources")) {
         dataSourcesRequestCount += 1;
         if (dataSourceScenario === "network") return route.abort("failed");
+        if (dataSourceScenario === "delayed-success") {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          return json(200, {
+            sources: [{
+              name: "测试 Provider",
+              enabled: true,
+              quote_capable: true,
+              daily_bar_capable: true
+            }]
+          });
+        }
         if (dataSourceScenario === "success") {
           return json(200, {
             sources: [{
@@ -481,6 +492,25 @@ try {
         { timeout: 10000 }
       );
       assert.equal(dataSourcesRequestCount, dataSeedCount + 1, "data center success seed should request Provider list once");
+
+      // A pending refresh must not display a prior Provider record as the current connection's result.
+      dataSourceScenario = "delayed-success";
+      const pendingRequestCount = dataSourcesRequestCount;
+      await page.locator("#data-center-check").click();
+      await page.waitForFunction(() => {
+        const summary = document.querySelector("#data-center-provider-summary")?.textContent || "";
+        const list = document.querySelector("#data-center-provider-list")?.textContent || "";
+        return summary.includes("旧清单暂不展示") &&
+          list.includes("正在读取 Provider 能力清单") &&
+          !list.includes("测试 Provider");
+      }, null, { timeout: 5000 });
+      assert.equal(dataSourcesRequestCount, pendingRequestCount + 1, "pending Provider refresh should make one request");
+      await page.waitForFunction(
+        () => document.querySelector("#data-center-provider-list")?.textContent.includes("测试 Provider"),
+        null,
+        { timeout: 10000 }
+      );
+      dataSourceScenario = "success";
 
       // HTTP 200 without a recognized status is unknown, not healthy/green.
       healthScenario = "missing-status";
