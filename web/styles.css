@@ -1602,7 +1602,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 /* Market overview: server-backed data, no synthetic fallbacks. */
 .market-overview-panel {
   display:grid;
-  gap:18px
+  gap:18px;
+  padding:18px
 }
 .market-overview-heading {
   align-items:flex-start
@@ -2109,7 +2110,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 /* Market activity: leaderboard and server-backed trading calendar. */
 .market-activity-panel {
   display:grid;
-  gap:14px
+  gap:14px;
+  padding:18px
 }
 .market-activity-grid {
   display:grid;
