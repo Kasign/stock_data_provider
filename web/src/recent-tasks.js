@@ -98,10 +98,14 @@ export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, anal
   );
   try {
     storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
+    const persistedState = readRecentTasksState(storage, limit);
+    if (!persistedState.storageReadable || !persistedState.storageValid) return currentState.items;
+    if (JSON.stringify(persistedState.items) !== JSON.stringify(records)) return currentState.items;
+    return persistedState.items;
   } catch {
-    // 保持当前页面可用；存储异常状态会由界面明确提示。
+    // 删除未成功持久化时保留原列表，避免界面误报已删除。
+    return currentState.items;
   }
-  return records;
 }
 
 export function clearRecentTasks(storage) {
