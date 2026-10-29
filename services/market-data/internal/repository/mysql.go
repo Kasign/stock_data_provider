@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -92,6 +94,31 @@ func (s *Store) Migrate(ctx context.Context) error {
  metadata JSON NOT NULL,
  PRIMARY KEY (id), UNIQUE KEY uq_market_bar_source_basis (symbol, trade_date, period, adjustment_basis, source), KEY idx_market_bar_lookup (symbol, trade_date, adjustment_basis)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+		`CREATE TABLE IF NOT EXISTS market_data_daily_bar_versions (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ symbol VARCHAR(16) NOT NULL,
+ trade_date DATE NOT NULL,
+ period VARCHAR(8) NOT NULL DEFAULT '1d',
+ adjustment_basis VARCHAR(24) NOT NULL,
+ source VARCHAR(64) NOT NULL,
+ revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ recorded_at DATETIME(6) NOT NULL,
+ open_price DECIMAL(20,8) NOT NULL,
+ high_price DECIMAL(20,8) NOT NULL,
+ low_price DECIMAL(20,8) NOT NULL,
+ close_price DECIMAL(20,8) NOT NULL,
+ volume_shares BIGINT NULL,
+ amount_cny DECIMAL(24,2) NULL,
+ change_percent DECIMAL(16,8) NULL,
+ fetched_at DATETIME(6) NOT NULL,
+ normalized_at DATETIME(6) NOT NULL,
+ quality_status VARCHAR(16) NOT NULL,
+ metadata JSON NOT NULL,
+ PRIMARY KEY (id),
+ UNIQUE KEY uq_market_bar_revision_content (symbol, trade_date, period, adjustment_basis, source, revision_hash),
+ KEY idx_market_bar_revision_asof (symbol, trade_date, adjustment_basis, recorded_at),
+ KEY idx_market_bar_revision_observed (recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
@@ -178,10 +205,20 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	}
 	defer tx.Rollback()
 	stmt := `INSERT INTO market_data_daily_bars (symbol,trade_date,period,adjustment_basis,source,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE open_price=VALUES(open_price),high_price=VALUES(high_price),low_price=VALUES(low_price),close_price=VALUES(close_price),volume_shares=VALUES(volume_shares),amount_cny=VALUES(amount_cny),change_percent=VALUES(change_percent),fetched_at=VALUES(fetched_at),normalized_at=VALUES(normalized_at),quality_status=VALUES(quality_status),metadata=VALUES(metadata)`
+	versionStmt := `INSERT IGNORE INTO market_data_daily_bar_versions (symbol,trade_date,period,adjustment_basis,source,revision_hash,recorded_at,open_price,high_price,low_price,close_price,volume_shares,amount_cny,change_percent,fetched_at,normalized_at,quality_status,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 	for _, bar := range bars {
 		metadata, e := json.Marshal(bar)
 		if e != nil {
 			return e
+		}
+		revisionHash, e := dailyBarRevisionHash(bar)
+		if e != nil {
+			return fmt.Errorf("fingerprint daily bar %s %s: %w", bar.Symbol, bar.TradeDate, e)
+		}
+		recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
+		_, e = tx.ExecContext(ctx, versionStmt, bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source, revisionHash, recordedAt, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Amount, bar.ChangePercent, bar.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), bar.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(bar.QualityStatus), metadata)
+		if e != nil {
+			return fmt.Errorf("record daily bar revision %s %s: %w", bar.Symbol, bar.TradeDate, e)
 		}
 		_, e = tx.ExecContext(ctx, stmt, bar.Symbol, bar.TradeDate, bar.Period, string(bar.AdjustmentBasis), bar.Source, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Amount, bar.ChangePercent, bar.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), bar.NormalizedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(bar.QualityStatus), metadata)
 		if e != nil {
@@ -190,6 +227,80 @@ func (s *Store) UpsertBars(ctx context.Context, bars []model.DailyBar) error {
 	}
 	return tx.Commit()
 }
+
+
+func dailyBarRevisionHash(bar model.DailyBar) (string, error) {
+	// 获取/归一化时间变化本身不是行情修订；只对内容、来源版本、单位和质量变化生成新版本。
+	fingerprint := bar
+	fingerprint.FetchedAt = time.Time{}
+	fingerprint.NormalizedAt = time.Time{}
+	payload, err := json.Marshal(fingerprint)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// ListBarsAsOf returns the latest recorded revision per source and date that was
+// already observed by the service at asOf. It deliberately returns different
+// providers independently; provider-priority resolution remains a service concern.
+func (s *Store) ListBarsAsOf(ctx context.Context, symbol, start, end string, adjust model.AdjustmentBasis, asOf time.Time, limit int) ([]model.DailyBar, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("MariaDB store disabled")
+	}
+	if asOf.IsZero() {
+		return nil, errors.New("daily-bar as-of timestamp must not be zero")
+	}
+	if limit < 0 {
+		return nil, errors.New("daily-bar as-of limit must not be negative")
+	}
+	asOfText := asOf.UTC().Format("2006-01-02 15:04:05.999999")
+	query := `SELECT v.metadata
+FROM market_data_daily_bar_versions AS v
+WHERE v.symbol=? AND v.adjustment_basis=?
+  AND (?='' OR v.trade_date>=?) AND (?='' OR v.trade_date<=?)
+  AND v.recorded_at<=?
+  AND NOT EXISTS (
+    SELECT 1 FROM market_data_daily_bar_versions AS newer
+    WHERE newer.symbol=v.symbol AND newer.trade_date=v.trade_date
+      AND newer.period=v.period AND newer.adjustment_basis=v.adjustment_basis
+      AND newer.source=v.source AND newer.recorded_at<=?
+      AND (newer.recorded_at>v.recorded_at OR (newer.recorded_at=v.recorded_at AND newer.id>v.id))
+  )
+ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
+	args := []any{symbol, string(adjust), start, start, end, end, asOfText, asOfText}
+	if limit > 0 {
+		if limit > int(^uint(0)>>1)/4 {
+			return nil, errors.New("daily-bar as-of limit overflows query row limit")
+		}
+		query += ` LIMIT ?`
+		args = append(args, limit*4)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query daily-bar revisions as of %s: %w", asOfText, err)
+	}
+	defer rows.Close()
+	out := []model.DailyBar{}
+	for rows.Next() {
+		var metadata []byte
+		if err := rows.Scan(&metadata); err != nil {
+			return nil, err
+		}
+		var bar model.DailyBar
+		if err := json.Unmarshal(metadata, &bar); err != nil {
+			// Keep other source/date versions usable if one historic metadata blob is damaged.
+			continue
+		}
+		out = append(out, bar)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (s *Store) ListBars(ctx context.Context, symbol, start, end string, adjust model.AdjustmentBasis, limit int) ([]model.DailyBar, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("MariaDB store disabled")
