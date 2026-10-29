@@ -68,4 +68,17 @@ func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
 			t.Errorf("MarketSessionSnapshot schema missing %q", field)
 		}
 	}
+
+	constituentsStart := strings.Index(text, "    IndexConstituentSnapshot:")
+	if constituentsStart < 0 {
+		t.Fatal("IndexConstituentSnapshot schema missing")
+	}
+	constituentsEnd := strings.Index(text[constituentsStart+len("    IndexConstituentSnapshot:"):], "\n    IndexDailyBar:")
+	if constituentsEnd < 0 {
+		t.Fatal("IndexConstituentSnapshot schema boundary missing")
+	}
+	constituentsSchema := text[constituentsStart : constituentsStart+len("    IndexConstituentSnapshot:")+constituentsEnd]
+	if !strings.Contains(constituentsSchema, "required: [index_symbol, items, total, provider_returned, source, fetched_at, quality_status]") {
+		t.Error("IndexConstituentSnapshot must require provider_returned because the Go model always serializes it")
+	}
 }
