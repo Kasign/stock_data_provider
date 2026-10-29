@@ -37,7 +37,7 @@ func TestTushareFetchSecurityTradingStatusUsesEffectiveNameAndSuspensionRecords(
 			fields = []string{"ts_code","name","industry","market","exchange","list_status","list_date","delist_date"}
 			items = [][]any{{"600519.SH","贵州茅台","白酒","主板","SSE","L","20261020",nil}}
 		case "stock_st":
-			fields = []string{"ts_code","name","trade_date","type","type_name}
+			fields = []string{"ts_code","name","trade_date","type","type_name"}
 			items = [][]any{{"600519.SH", "*ST贵州", "20261022", "ST", "风险警示板"}}
 		case "namechange":
 			fields = []string{"ts_code","name","start_date","end_date","ann_date","change_reason"}
