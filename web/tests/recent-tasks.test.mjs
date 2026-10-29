@@ -99,6 +99,22 @@ test("clears local task references without touching unrelated storage keys", () 
   assert.equal(storage.getItem(RECENT_TASKS_KEY), null);
 });
 
+test("keeps task history when storage silently ignores removeItem during clear", () => {
+  const seedStorage = makeStorage();
+  upsertRecentTask({ task_id: "task-a" }, seedStorage);
+  upsertRecentTask({ task_id: "task-b" }, seedStorage);
+  const raw = seedStorage.getItem(RECENT_TASKS_KEY);
+  const storage = {
+    getItem() { return raw; },
+    // Some adapters can fail silently instead of throwing.
+    removeItem() {},
+    setItem() {}
+  };
+
+  assert.deepEqual(clearRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+  assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+});
+
 test("remove and clear operations tolerate disabled browser storage", () => {
   const storage = {
     getItem() { throw new Error("storage disabled"); },
