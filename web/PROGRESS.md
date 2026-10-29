@@ -1,3 +1,10 @@
+## 2026-10-29 — 自选存储读取与写入错误完整浏览器反馈
+
+- Chromium 真实页面流程覆盖损坏 JSON、`setItem` quota error 与 `getItem` SecurityError。
+- 损坏/不可读数据不得被覆盖，计数显示不可用且操作被暂停；写入失败只能显示当前页面临时条目，并以 warning 明确提示刷新后可能丢失。
+- 最新 HEAD `d59712ab551308d259ea7f1f337a0db494c3f26a` 对应 WebUI checks [#40823565781](https://github.com/Kasign/stock_data_provider/actions/runs/40823565781) 与 Browser Smoke [#40823565777](https://github.com/Kasign/stock_data_provider/actions/runs/40823565777)，均通过。
+
+
 ## 2026-10-29 — 自选股 UI 存储异常与反馈回归
 
 - 浏览器烟测新增损坏 localStorage 值场景：加入自选后应显示格式异常，不清理/覆盖原始 JSON，且不反馈保存成功。

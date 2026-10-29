@@ -1,5 +1,13 @@
 # WebUI 任务交接上下文
 
+## 2026-10-29 最新自选存储读取/写入异常验收
+
+- 在 320px Chromium 场景中，损坏自选 JSON 被原样保留并显示错误；配额写入失败只允许当前页面临时显示，并提示刷新后可能丢失，不报“已保存”。
+- 新增 `localStorage.getItem` 对自选键抛出 `SecurityError` 场景：列表明确显示不可读取，操作反馈为错误，计数不可用，原始存储记录逐字节保持不变。
+- 最新代码 HEAD `d59712ab551308d259ea7f1f337a0db494c3f26a` 的 WebUI checks [#40823565781](https://github.com/Kasign/stock_data_provider/actions/runs/40823565781) 与 Browser Smoke [#40823565777](https://github.com/Kasign/stock_data_provider/actions/runs/40823565777) 均通过。
+- 本轮覆盖读取 SecurityError、坏 JSON 与写入配额异常；完整禁用浏览器存储的真实环境验收仍保留为独立人工任务。
+
+
 ## 2026-10-29 最新本地自选存储异常回归
 
 - Chromium 在 320px 隔离上下文验证损坏的自选 JSON：点击“加入自选”后显示数据格式异常，原始 `{malformed` 字节不变、计数显示不可用，未宣称成功添加。

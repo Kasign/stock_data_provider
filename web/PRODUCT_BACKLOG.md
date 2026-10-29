@@ -529,7 +529,8 @@
 - [x] 读取失败/格式异常时阻止自选股添加、改名、移除的写入，防止把空列表写回覆盖原始数据。
 - [x] 浏览器数据导出与任务表单载入会在无法读取有效自选数据时明确失败，而非静默当作空列表。
 - [x] Chromium 已覆盖自选损坏 JSON 与 `setItem` 配额失败：原始坏数据保留、错误/warning 正确、写入失败不假报持久化；对应检查 [#40823264939](https://github.com/Kasign/stock_data_provider/actions/runs/40823264939) 与烟测 [#40823264960](https://github.com/Kasign/stock_data_provider/actions/runs/40823264960) 通过。
-- [ ] 浏览器完全禁用存储、`getItem` 拒绝访问与真实刷新恢复仍需独立人工验收。
+- [x] Chromium 已直接模拟自选键的 `getItem` 抛出 `SecurityError`：旧数据原样保留，UI 显示不可读与错误状态；最新 checks [#40823565781](https://github.com/Kasign/stock_data_provider/actions/runs/40823565781) 和 smoke [#40823565777](https://github.com/Kasign/stock_data_provider/actions/runs/40823565777) 通过。
+- [ ] 浏览器整体禁用存储的实际设备/浏览器验收仍需执行。
 
 ## 2026-10-27 全站 Review 新增事项
 

@@ -1,3 +1,11 @@
+## 2026-10-29 后续追加 — 本地自选 storage SecurityError
+
+- [x] `getItem` 对自选键抛出 SecurityError 时，界面不展示成功或空列表，不覆盖原始数据，计数显示不可用、反馈为错误。
+- [x] 结合损坏 JSON 与 quota write failure，当前页面临时写入提示与真实持久化状态保持一致。
+- [x] 最新 HEAD `d59712ab551308d259ea7f1f337a0db494c3f26a` 的 checks [#40823565781](https://github.com/Kasign/stock_data_provider/actions/runs/40823565781) 与 Browser Smoke [#40823565777](https://github.com/Kasign/stock_data_provider/actions/runs/40823565777) 均通过。
+- [ ] 整体禁用 storage 的实际用户环境仍需验收。
+
+
 ## 2026-10-29 后续追加 — 自选存储异常与持久化反馈
 
 - [x] 损坏 JSON 点击加入自选后，原始数据不被覆盖，列表显示不可用，反馈为错误而不是保存成功。
