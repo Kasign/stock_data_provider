@@ -1509,3 +1509,10 @@
 - [x] 记录上述修复的文档提交 [Browser Smoke #40802964859](https://github.com/Kasign/stock_data_provider/actions/runs/40802964859) 成功。
 - [x] PR #1 仍为 Open / Draft，未合并、未关闭；数据分支 HEAD 以远端实时状态为准。
 - 新增行为逻辑的 5 个本地 Node 等价用例已通过；仓库完整 npm test 尚未运行。尝试克隆仓库以执行完整套件时，当前容器因 DNS 无法解析 github.com 失败。Browser Smoke 不代表完整 Node 测试、真实 Provider 请求或 NAS/1Panel 验收。
+
+
+## 2026-10-29 — 数据分支再次推进（仅记录，不混入 UI 提交）
+
+- 本轮结束前再次核实数据分支 HEAD 已从 16944cd5e98b900e3aa5c4636ec185f947e1d497 推进到 a9a9507fd93285b5415643024dc9e1a9ead4046c。
+- 新增提交仅更新 docs/architecture/GO_DATA_PROVIDER_SWITCH_STATUS.md 与 docs/architecture/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md，记录已补充但尚未执行的国内数据层测试、质量契约及后续未完成事项；没有新增运行时代码。
+- 该数据分支提交未合入 WebUI；本轮仅在 web/** 记录状态，未修改数据分支引用或 PR #1。
