@@ -264,6 +264,8 @@ try {
     }
 
     if (viewport.width === 320) {
+      await page.locator('.workspace-tab[data-view="stocks"]').click();
+      await page.locator("#stocks-view").waitFor({ state: "visible" });
       const savedSettings = await page.evaluate(() => {
         try { return JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}"); }
         catch { return {}; }
@@ -340,6 +342,9 @@ try {
         assert.equal(quoteRequestCount, requestsBeforeFailure + 2, scenario + " manual retry should make one new request");
         assert.equal(await page.locator("#quote-quality").textContent().then((value) => value.trim()), "质量正常");
       }
+
+      await page.locator('.workspace-tab[data-view="market"]').click();
+      await page.locator("#market-view").waitFor({ state: "visible" });
     }
 
     const assertNoHorizontalOverflow = async (stage) => {
