@@ -19,7 +19,7 @@ var (
 // SecurityTradingStatusAsOf only reads the append-only local revision table.
 // It never calls live Providers or substitutes a currently fetched historical record.
 func (s *DataService) SecurityTradingStatusAsOf(ctx context.Context, rawSymbol, rawTradeDate string, asOf time.Time) (*model.SecurityTradingStatusSnapshot, error) {
-	if s == nil || s.store == nil {
+	if s == nil {
 		return nil, ErrSecurityTradingStatusAsOfUnavailable
 	}
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
@@ -33,6 +33,12 @@ func (s *DataService) SecurityTradingStatusAsOf(ctx context.Context, rawSymbol, 
 	}
 	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
 		return nil, errors.New("security-trading-status as_of must be a valid non-future timestamp")
+	}
+	if date > time.Now().In(marketLocation()).Format("2006-01-02") {
+		return nil, errors.New("trade date must not be in the future in Asia/Shanghai")
+	}
+	if s.store == nil {
+		return nil, ErrSecurityTradingStatusAsOfUnavailable
 	}
 	if ctx == nil {
 		ctx = context.Background()
