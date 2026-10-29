@@ -202,3 +202,62 @@ func TestResolvePriceLimitRuleWithEvidenceRejectsMismatchedSymbol(t *testing.T) 
 		t.Fatalf("expected mismatched event identity to be rejected, got snapshot=%+v err=%v", got, err)
 	}
 }
+
+func TestResolvePriceLimitRuleFromTradingStatusRequiresMatchingVerifiedTradingDate(t *testing.T) {
+	base := model.SecurityTradingStatusSnapshot{
+		Symbol: "600519.SH", TradeDate: "2026-07-06",
+		RiskWarningStatus: model.RiskWarningNormal,
+		ListingTradingDayNumber: 100, ListingStatusKnown: true,
+		IsTradingDay: true, TradingDayKnown: true,
+		QualityStatus: model.QualityValid,
+	}
+	evidence := &model.PriceLimitEventEvidence{
+		Symbol: "600519.SH", Status: model.PriceLimitExceptionNone,
+		EffectiveFrom: "2026-07-01", EffectiveTo: "2026-07-31",
+		Source: "exchange calendar", SourceURL: "https://example.com/calendar",
+		ObservedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+		CoverageConfirmed: true,
+	}
+
+	t.Run("verified trading day uses status and event evidence", func(t *testing.T) {
+		got, err := ResolvePriceLimitRuleFromTradingStatus("600519.SH", "2026-07-06", &base, evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != model.PriceLimitStatusLimited || got.LimitPercent == nil || *got.LimitPercent != 10 {
+			t.Fatalf("expected verified 10%% rule, got %+v", got)
+		}
+	})
+
+	t.Run("unknown trading calendar cannot use event evidence to claim a rule", func(t *testing.T) {
+		status := base
+		status.TradingDayKnown = false
+		got, err := ResolvePriceLimitRuleFromTradingStatus("600519.SH", "2026-07-06", &status, evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != model.PriceLimitStatusUnknown || got.LimitPercent != nil || got.QualityStatus != model.QualityUnknown {
+			t.Fatalf("unknown calendar must keep result unknown, got %+v", got)
+		}
+	})
+
+	t.Run("known non-trading day is not assigned a price-limit rule", func(t *testing.T) {
+		status := base
+		status.IsTradingDay = false
+		got, err := ResolvePriceLimitRuleFromTradingStatus("600519.SH", "2026-07-06", &status, evidence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != model.PriceLimitStatusUnknown || got.LimitPercent != nil {
+			t.Fatalf("non-trading date must not produce a price-limit result, got %+v", got)
+		}
+	})
+
+	t.Run("mismatched status date is rejected", func(t *testing.T) {
+		status := base
+		status.TradeDate = "2026-07-07"
+		if got, err := ResolvePriceLimitRuleFromTradingStatus("600519.SH", "2026-07-06", &status, evidence); err == nil || got != nil {
+			t.Fatalf("expected date mismatch to fail, got snapshot=%+v err=%v", got, err)
+		}
+	})
+}

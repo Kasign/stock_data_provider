@@ -299,3 +299,63 @@ func ipoNoLimitWindow(board, tradeDate string) (threshold int, version, effectiv
 		return 0, "unknown", "", ""
 	}
 }
+
+// ResolvePriceLimitRuleFromTradingStatus joins the historical security-status snapshot with
+// separately sourced special-event evidence. It never treats an unknown/non-trading date as
+// evidence that a special exception did not occur.
+func ResolvePriceLimitRuleFromTradingStatus(
+	rawSymbol, tradeDate string,
+	tradingStatus *model.SecurityTradingStatusSnapshot,
+	evidence *model.PriceLimitEventEvidence,
+) (*model.PriceLimitRuleSnapshot, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	parsedDate, err := time.Parse("2006-01-02", tradeDate)
+	if err != nil || parsedDate.Format("2006-01-02") != tradeDate {
+		return nil, fmt.Errorf("invalid trade date %q", tradeDate)
+	}
+
+	if tradingStatus == nil {
+		result, resolveErr := ResolvePriceLimitRuleWithEvidence(
+			symbol, tradeDate, model.RiskWarningUnknown, 0, false, nil,
+		)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		appendReasonOnce(&result.QualityReasons, "security_trading_status_evidence_missing")
+		return result, nil
+	}
+
+	statusSymbol, symbolErr := normalize.NormalizeSymbol(tradingStatus.Symbol)
+	if symbolErr != nil || statusSymbol != symbol {
+		return nil, fmt.Errorf("security trading-status symbol does not match request %q", symbol)
+	}
+	if tradingStatus.TradeDate != tradeDate {
+		return nil, fmt.Errorf("security trading-status date %q does not match request %q", tradingStatus.TradeDate, tradeDate)
+	}
+	if !tradingStatus.TradingDayKnown || !tradingStatus.IsTradingDay {
+		result, resolveErr := ResolvePriceLimitRuleWithEvidence(
+			symbol, tradeDate, model.RiskWarningUnknown, 0, false, nil,
+		)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if !tradingStatus.TradingDayKnown {
+			appendReasonOnce(&result.QualityReasons, "trading_day_status_unverified")
+		} else {
+			appendReasonOnce(&result.QualityReasons, "price_limit_rule_not_applicable_non_trading_day")
+		}
+		return result, nil
+	}
+
+	return ResolvePriceLimitRuleWithEvidence(
+		symbol,
+		tradeDate,
+		tradingStatus.RiskWarningStatus,
+		tradingStatus.ListingTradingDayNumber,
+		tradingStatus.ListingStatusKnown,
+		evidence,
+	)
+}
