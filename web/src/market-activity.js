@@ -15,6 +15,23 @@ function cell(row,value,cls=""){row.append(el("td",cls,value===null||value===und
 function amount(v){const n=finiteNumberOrNull(v);if(n===null)return "—";return (n>0?"+":n<0?"−":"")+formatCompact(Math.abs(n))+" 元";}
 function direction(v){const n=finiteNumberOrNull(v);if(n===null)return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat";}
 function errorMessage(e){if(Number(e?.status)===404)return "当前 market-data 版本尚未提供此接口，请更新数据服务后再刷新。";if(Number(e?.status)===503)return "对应 Provider 未启用或未配置，请检查 market-data 数据源设置。";if([401,403].includes(Number(e?.status)))return "API Key 验证失败，请检查连接与密钥设置。";return describeApiError(e,"读取数据失败。");}
+export function calendarResponseRangeError(data, requestedStart, requestedEnd) {
+  const response = data && typeof data === "object" ? data : {};
+  for (const [field, expected, label] of [
+    ["start_date", requestedStart, "开始日期"],
+    ["end_date", requestedEnd, "结束日期"]
+  ]) {
+    // 兼容旧服务省略范围元数据；一旦服务端显式返回字段，就必须与本次请求一致。
+    if (!Object.prototype.hasOwnProperty.call(response, field)) continue;
+    const actual = response[field];
+    if (actual !== expected) {
+      const reported = actual === null ? "null" : String(actual).replace(/\s+/g, " ").slice(0, 40);
+      return "交易日历响应" + label + "（" + reported + "）与本次请求的 " + expected + " 不一致，已拒绝展示该结果。";
+    }
+  }
+  return null;
+}
+
 export function bindMarketActivity(getSettings,onSelectStock){
  const controllers={},generation={dragon:0,calendar:0};let dragonPage=1,dragonHasMore=false,dragonDate="",monthOffset=0;
  const settings=()=>typeof getSettings==="function"?getSettings():null;
@@ -96,23 +113,6 @@ export function bindMarketActivity(getSettings,onSelectStock){
   const timestamp=Date.parse(date+"T00:00:00Z");
   return Number.isFinite(timestamp)&&new Date(timestamp).toISOString().slice(0,10)===date?timestamp:NaN;
 }
-export function calendarResponseRangeError(data, requestedStart, requestedEnd) {
-  const response = data && typeof data === "object" ? data : {};
-  for (const [field, expected, label] of [
-    ["start_date", requestedStart, "开始日期"],
-    ["end_date", requestedEnd, "结束日期"]
-  ]) {
-    // 兼容旧服务省略范围元数据；一旦服务端显式返回字段，就必须与本次请求一致。
-    if (!Object.prototype.hasOwnProperty.call(response, field)) continue;
-    const actual = response[field];
-    if (actual !== expected) {
-      const reported = actual === null ? "null" : String(actual).replace(/\s+/g, " ").slice(0, 40);
-      return "交易日历响应" + label + "（" + reported + "）与本次请求的 " + expected + " 不一致，已拒绝展示该结果。";
-    }
-  }
-  return null;
-}
-
 function renderCalendarDay(root,date,item){
   if(!item){
    const day=el("div","trading-calendar-day is-missing-day");
