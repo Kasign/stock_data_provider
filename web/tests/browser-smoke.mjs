@@ -88,6 +88,7 @@ try {
     }));
 
     await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
+    assert.deepEqual(pageErrors, [], "browser page errors after initial load at " + viewport.width + "px: " + pageErrors.join(" | "));
     await page.waitForFunction(
       () => document.querySelectorAll(".nav-link[data-view]").length === 8 &&
         document.querySelectorAll(".workspace-tab[data-view]").length === 3,
@@ -125,6 +126,7 @@ try {
       }
       const navigationButton = page.locator(entry.selector);
       await navigationButton.click();
+      assert.deepEqual(pageErrors, [], "browser page errors after navigating to " + viewName + " at " + viewport.width + "px: " + pageErrors.join(" | "));
       await page.locator("#" + viewName + "-view").waitFor({ state: "visible" });
       assert.equal(
         await page.locator(".view:not([hidden])").count(),
