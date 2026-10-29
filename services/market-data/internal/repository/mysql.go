@@ -119,6 +119,22 @@ func (s *Store) Migrate(ctx context.Context) error {
  KEY idx_market_bar_revision_asof (symbol, trade_date, adjustment_basis, recorded_at),
  KEY idx_market_bar_revision_observed (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+		`CREATE TABLE IF NOT EXISTS market_data_fundamental_versions (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ symbol VARCHAR(16) NOT NULL,
+ report_year SMALLINT NOT NULL,
+ report_quarter TINYINT NOT NULL,
+ source VARCHAR(64) NOT NULL,
+ revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ recorded_at DATETIME(6) NOT NULL,
+ fetched_at DATETIME(6) NOT NULL,
+ quality_status VARCHAR(16) NOT NULL,
+ metadata JSON NOT NULL,
+ PRIMARY KEY (id),
+ KEY idx_market_fundamental_asof (symbol, report_year, report_quarter, recorded_at),
+ KEY idx_market_fundamental_observed (recorded_at),
+ KEY idx_market_fundamental_identity_asof (symbol, report_year, report_quarter, source, recorded_at, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
@@ -130,6 +146,11 @@ func (s *Store) Migrate(ctx context.Context) error {
 		"uq_market_bar_revision_content", "idx_market_bar_revision_identity_asof",
 		"symbol, trade_date, period, adjustment_basis, source, recorded_at, id"); err != nil {
 		return fmt.Errorf("migrate daily-bar revision index: %w", err)
+	}
+	if err := s.ensureNonUniqueHistoryIndex(ctx, "market_data_fundamental_versions",
+		"uq_market_fundamental_revision_content", "idx_market_fundamental_identity_asof",
+		"symbol, report_year, report_quarter, source, recorded_at, id"); err != nil {
+		return fmt.Errorf("migrate fundamentals revision index: %w", err)
 	}
 	// CREATE TABLE IF NOT EXISTS does not add new columns to an already existing
 	// deployment. Use information_schema checks so the migration works on both
@@ -346,6 +367,119 @@ ORDER BY v.trade_date DESC, v.recorded_at DESC, v.source ASC`
 			continue
 		}
 		out = append(out, bar)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+
+func fundamentalsRevisionHash(snapshot model.FundamentalsSnapshot) (string, error) {
+	fingerprint := snapshot
+	fingerprint.FetchedAt = time.Time{}
+	fingerprint.SystemObservedAt = nil
+	payload, err := json.Marshal(fingerprint)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// SaveFundamentals 追加保存财务快照的不同内容版本，不覆盖此前已观察到的修订。
+func (s *Store) SaveFundamentals(ctx context.Context, snapshot *model.FundamentalsSnapshot) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	if snapshot == nil {
+		return errors.New("fundamentals snapshot is nil")
+	}
+	if snapshot.Symbol == "" || snapshot.Source == "" || snapshot.Year < 2000 ||
+		snapshot.Quarter < 1 || snapshot.Quarter > 4 || snapshot.FetchedAt.IsZero() {
+		return errors.New("fundamentals snapshot identity, period, source or fetched_at is invalid")
+	}
+	stored := *snapshot
+	stored.SystemObservedAt = nil
+	metadata, err := json.Marshal(&stored)
+	if err != nil {
+		return err
+	}
+	revisionHash, err := fundamentalsRevisionHash(stored)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin fundamentals revision transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var latestHash string
+	lookupErr := tx.QueryRowContext(ctx, `SELECT revision_hash FROM market_data_fundamental_versions
+WHERE symbol=? AND report_year=? AND report_quarter=? AND source=?
+ORDER BY recorded_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+		stored.Symbol, stored.Year, stored.Quarter, stored.Source).Scan(&latestHash)
+	if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+		return fmt.Errorf("read latest fundamentals revision %s %dQ%d: %w", stored.Symbol, stored.Year, stored.Quarter, lookupErr)
+	}
+	if shouldRecordRevision(latestHash, lookupErr == nil, revisionHash) {
+		recordedAt := time.Now().UTC().Format("2006-01-02 15:04:05.999999")
+		_, err = tx.ExecContext(ctx, `INSERT INTO market_data_fundamental_versions
+(symbol,report_year,report_quarter,source,revision_hash,recorded_at,fetched_at,quality_status,metadata)
+VALUES (?,?,?,?,?,?,?,?,?)`,
+			stored.Symbol, stored.Year, stored.Quarter, stored.Source, revisionHash, recordedAt,
+			stored.FetchedAt.UTC().Format("2006-01-02 15:04:05.999999"), string(stored.QualityStatus), metadata)
+		if err != nil {
+			return fmt.Errorf("record fundamentals revision %s %dQ%d: %w", stored.Symbol, stored.Year, stored.Quarter, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ListFundamentalsAsOf 读取截至系统观察时点、每个来源当时最新的报告版本。
+func (s *Store) ListFundamentalsAsOf(ctx context.Context, symbol string, year, quarter int, asOf time.Time) ([]model.FundamentalsSnapshot, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("MariaDB fundamentals revision storage disabled")
+	}
+	if asOf.IsZero() {
+		return nil, errors.New("fundamentals as_of timestamp must not be zero")
+	}
+	if year < 2000 || quarter < 1 || quarter > 4 {
+		return nil, errors.New("fundamentals report period is invalid")
+	}
+	asOfText := asOf.UTC().Format("2006-01-02 15:04:05.999999")
+	rows, err := s.db.QueryContext(ctx, `SELECT v.metadata, DATE_FORMAT(v.recorded_at, '%Y-%m-%d %H:%i:%s.%f')
+FROM market_data_fundamental_versions AS v
+WHERE v.symbol=? AND v.report_year=? AND v.report_quarter=? AND v.recorded_at<=?
+  AND NOT EXISTS (
+    SELECT 1 FROM market_data_fundamental_versions AS newer
+    WHERE newer.symbol=v.symbol AND newer.report_year=v.report_year AND newer.report_quarter=v.report_quarter
+      AND newer.source=v.source AND newer.recorded_at<=?
+      AND (newer.recorded_at>v.recorded_at OR (newer.recorded_at=v.recorded_at AND newer.id>v.id))
+  )
+ORDER BY v.recorded_at DESC, v.source ASC`, symbol, year, quarter, asOfText, asOfText)
+	if err != nil {
+		return nil, fmt.Errorf("query fundamentals revisions as of %s: %w", asOfText, err)
+	}
+	defer rows.Close()
+	out := []model.FundamentalsSnapshot{}
+	for rows.Next() {
+		var metadata []byte
+		var recordedAtText string
+		if err := rows.Scan(&metadata, &recordedAtText); err != nil {
+			return nil, err
+		}
+		var snapshot model.FundamentalsSnapshot
+		if err := json.Unmarshal(metadata, &snapshot); err != nil {
+			return nil, fmt.Errorf("decode fundamentals revision metadata: %w", err)
+		}
+		recordedAt, err := time.ParseInLocation("2006-01-02 15:04:05.000000", recordedAtText, time.UTC)
+		if err != nil {
+			return nil, fmt.Errorf("parse fundamentals record timestamp: %w", err)
+		}
+		snapshot.SystemObservedAt = &recordedAt
+		out = append(out, snapshot)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

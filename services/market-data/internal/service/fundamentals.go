@@ -211,6 +211,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 				cacheEligible = fallbackExhausted || len(s.fundamentalsProviders) <= 1
 			}
 			if cacheEligible && time.Since(cached.FetchedAt) < ttl {
+				s.saveFundamentalsRevision(ctx, &cached)
 				return &cached, true, nil
 			}
 		}
@@ -252,6 +253,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 			}
 			continue
 		}
+		s.saveFundamentalsRevision(ctx, snapshot)
 		payload, err := json.Marshal(snapshot)
 		if err != nil {
 			s.logger.Warn("fundamentals cache encode failed", "symbol", symbol, "year", year, "quarter", quarter, "error", err)
@@ -270,6 +272,7 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		} else {
 			unknownCandidate.QualityReasons = appendReason(unknownCandidate.QualityReasons, "fundamentals_fallback_exhausted_without_confirmed_data")
 		}
+		s.saveFundamentalsRevision(ctx, unknownCandidate)
 		if payload, err := json.Marshal(unknownCandidate); err == nil {
 			if cacheErr := s.cache.Set(ctx, key, payload, fundamentalsCacheTTL(unknownCandidate)); cacheErr != nil {
 				s.logger.Warn("fundamentals unknown cache write failed", "symbol", symbol, "year", year, "quarter", quarter, "error", cacheErr)
@@ -278,4 +281,109 @@ func (s *DataService) Fundamentals(ctx context.Context, rawSymbol string, year, 
 		return unknownCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all fundamentals providers failed: %s", strings.Join(failures, "; "))
+}
+
+
+var (
+	ErrFundamentalsAsOfUnavailable = errors.New("fundamentals point-in-time storage is not enabled")
+	ErrFundamentalsAsOfNotFound    = errors.New("no usable fundamentals revision was recorded by the requested as_of time")
+)
+
+func (s *DataService) saveFundamentalsRevision(ctx context.Context, snapshot *model.FundamentalsSnapshot) {
+	if s == nil || s.store == nil || snapshot == nil {
+		return
+	}
+	if err := s.store.SaveFundamentals(ctx, snapshot); err != nil && s.logger != nil {
+		s.logger.Warn("fundamentals revision write failed", "symbol", snapshot.Symbol, "year", snapshot.Year,
+			"quarter", snapshot.Quarter, "source", snapshot.Source, "error", err)
+	}
+}
+
+// FundamentalsAsOf reads only locally recorded revisions and never calls a live Provider.
+// A missing or same-day disclosure date is not sufficient evidence for strict timestamp PIT.
+func (s *DataService) FundamentalsAsOf(ctx context.Context, rawSymbol string, year, quarter int, asOf time.Time) (*model.FundamentalsSnapshot, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	if year < 2007 || year > time.Now().Year() || quarter < 1 || quarter > 4 {
+		return nil, errors.New("fundamental report year/quarter is invalid")
+	}
+	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
+		return nil, errors.New("fundamentals as_of must be a valid non-future timestamp")
+	}
+	if fundamentalPeriodEnd(year, quarter) > time.Now().In(marketLocation()).Format("2006-01-02") {
+		return nil, errors.New("fundamental report period must not be in the future")
+	}
+	if s == nil || s.store == nil {
+		return nil, ErrFundamentalsAsOfUnavailable
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	snapshots, err := s.store.ListFundamentalsAsOf(ctx, symbol, year, quarter, asOf)
+	if err != nil {
+		return nil, err
+	}
+	var best *model.FundamentalsSnapshot
+	bestScore := -1
+	for index := range snapshots {
+		candidate := &snapshots[index]
+		if validateFundamentalsSnapshot(symbol, year, quarter, candidate) != nil ||
+			candidate.FetchedAt.After(asOf) || candidate.SystemObservedAt == nil ||
+			candidate.SystemObservedAt.After(asOf) || !candidate.HasData ||
+			candidate.QualityStatus == model.QualityUnknown {
+			continue
+		}
+		filtered, usable := filterFundamentalsSnapshotAsOf(candidate, asOf)
+		if !usable || filtered == nil {
+			continue
+		}
+		score := 0
+		if filtered.QualityStatus == model.QualityValid {
+			score = 2
+		} else if filtered.QualityStatus == model.QualityDegraded {
+			score = 1
+		}
+		if best == nil || score > bestScore ||
+			(score == bestScore && filtered.SystemObservedAt != nil && best.SystemObservedAt != nil &&
+				filtered.SystemObservedAt.After(*best.SystemObservedAt)) {
+			best, bestScore = filtered, score
+		}
+	}
+	if best == nil {
+		return nil, ErrFundamentalsAsOfNotFound
+	}
+	return best, nil
+}
+
+func filterFundamentalsSnapshotAsOf(snapshot *model.FundamentalsSnapshot, asOf time.Time) (*model.FundamentalsSnapshot, bool) {
+	if snapshot == nil || asOf.IsZero() {
+		return nil, false
+	}
+	asOfDate := asOf.In(marketLocation()).Format("2006-01-02")
+	filtered := *snapshot
+	filtered.Sections = make([]model.FundamentalSection, 0, len(snapshot.Sections))
+	hasUsableData, excludedSection := false, false
+	for _, original := range snapshot.Sections {
+		section := original
+		if section.HasData && (strings.TrimSpace(section.PublicationDate) == "" || section.PublicationDate >= asOfDate) {
+			// 只有披露日期没有披露时刻时，同一自然日不能证明在 as_of 时刻之前已公开。
+			section.HasData = false
+			section.Metrics = []model.FundamentalMetric{}
+			section.QualityStatus = model.QualityUnknown
+			section.QualityReasons = appendReason(section.QualityReasons, "pit_section_excluded_publication_date_not_provably_before_as_of")
+			excludedSection = true
+		}
+		if section.HasData && len(section.Metrics) > 0 {
+			hasUsableData = true
+		}
+		filtered.Sections = append(filtered.Sections, section)
+	}
+	filtered.HasData = hasUsableData
+	if excludedSection {
+		filtered.QualityStatus = model.QualityDegraded
+		filtered.QualityReasons = appendReason(filtered.QualityReasons, "pit_excluded_undated_or_not_yet_proven_publication_section")
+	}
+	return &filtered, hasUsableData
 }

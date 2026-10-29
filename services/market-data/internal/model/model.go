@@ -341,8 +341,9 @@ type FundamentalsSnapshot struct {
 	Sections       []FundamentalSection `json:"sections"`
 	Source         string               `json:"source"`
 	SourceVersion  string               `json:"source_version,omitempty"`
-	FetchedAt      time.Time            `json:"fetched_at"`
-	QualityStatus  QualityStatus        `json:"quality_status"`
+	FetchedAt        time.Time            `json:"fetched_at"`
+	SystemObservedAt *time.Time           `json:"system_observed_at,omitempty"`
+	QualityStatus    QualityStatus        `json:"quality_status"`
 	QualityReasons []string             `json:"quality_reasons,omitempty"`
 }
 

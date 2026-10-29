@@ -75,3 +75,21 @@ CREATE TABLE IF NOT EXISTS market_data_daily_bar_versions (
   KEY idx_market_bar_revision_asof (symbol, trade_date, adjustment_basis, recorded_at),
   KEY idx_market_bar_revision_observed (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 财务快照按来源保留内容修订版本，支持基于系统观察时间的 PIT 查询。
+CREATE TABLE IF NOT EXISTS market_data_fundamental_versions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  symbol VARCHAR(16) NOT NULL,
+  report_year SMALLINT NOT NULL,
+  report_quarter TINYINT NOT NULL,
+  source VARCHAR(64) NOT NULL,
+  revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  recorded_at DATETIME(6) NOT NULL,
+  fetched_at DATETIME(6) NOT NULL,
+  quality_status VARCHAR(16) NOT NULL,
+  metadata JSON NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_market_fundamental_asof (symbol, report_year, report_quarter, recorded_at),
+  KEY idx_market_fundamental_observed (recorded_at),
+  KEY idx_market_fundamental_identity_asof (symbol, report_year, report_quarter, source, recorded_at, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
