@@ -319,3 +319,71 @@
 - 数据层单位与质量契约：`docs/architecture/market-data-contract.md`
 - 分析任务 OpenAPI：`docs/architecture/analysis-tasks.openapi.yaml`
 - 行情服务 OpenAPI：`services/market-data/openapi.yaml`
+
+
+---
+
+## 11. 代码现状对账（2026-10-29）
+
+### 11.1 判定口径
+
+本节是静态代码对账，不是运行环境验收。
+
+- **已接入（代码）**：页面逻辑能找到对应 API 调用路径；不代表线上 Provider 一定可用。
+- **部分接入**：已有页面或部分接口，但关键能力、历史数据、持久化或错误状态尚未闭环。
+- **仅有封装/待核实调用**：api.js 有请求函数，但 app.js 未发现实际调用；不能计为页面已接通。
+- **UI 已有、API 缺失**：页面或控件存在，但没有相应后端 API 封装/真实服务端能力。
+- **待服务端确认**：前端路径已写，仍需以数据分支的 OpenAPI、路由、Handler、Provider 和测试确认真实可用性。
+
+### 11.2 页面/模块状态矩阵
+
+| 页面/模块 | 当前代码证据 | 状态 | 主要缺口/下一步 |
+|---|---|---|---|
+| 市场总览 | market-view 及指数、广度、板块、涨跌停、人气等组件存在；健康检查和 Provider 清单已接入 | 部分接入 | 逐项确认指数、广度、板块、涨跌停、人气的实际请求与渲染；交易日历、指数趋势和统一摘要需核实；不得用成交额冒充净流入 |
+| 市场热点 | 首页已有板块、涨跌停池、人气榜等区域 | 部分接入 | 独立热点工作台、排行维度切换、完整候选/分页、板块详情和历史趋势未形成闭环；多维排行按 API-03 补齐 |
+| 个股行情/深度研究 | stocks-view、research-view 和详情区域存在；股票搜索、Bundle、报价、日 K 函数在 app.js 中有引用 | 部分接入 | 核对 MA、公司资料/财务/公告/估值/筹码/资金流的真实调用、字段和缺失状态；全市场扫描不应逐股并发请求 |
+| 自选与观察 | watchlist-view、分组/列表相关 DOM 存在 | UI 已有，服务端能力待补 | api.js 没有自选股 CRUD/同步封装；若仅浏览器维护，必须明确为本地数据，不可声称服务端保存。对应 API-02、API-06 |
+| 选股与筛选 | screening-view、条件输入、候选列表、历史分页控件存在；分析任务接口有封装并被引用 | 部分接入 | 任务提交/进度不等于候选列表、筛选历史已闭环；缺少专用查询契约时明确不可用，不使用静态样例。对应 API-01、API-09 |
+| 分析任务 | tasks-view 存在，创建/状态/事件/run API 有封装且被引用 | 部分接入 | 核对任务列表、分页、取消/重试、错误恢复；单任务查询不等于任务列表 API |
+| 告警与事件 | alerts-view 存在；api.js 未提供告警规则 CRUD/事件查询封装 | UI 已有，API 缺失 | 规则管理、触发记录、市场/公告事件需 API-07；不得显示虚构触发记录 |
+| 研究记录/复盘 | 可读取单次分析 run 结果；没有研究历史列表 API 封装 | 部分接入 | 需要历史列表、筛选、分页、场景验证与复盘统计（API-09、API-10）；单个 run 查询不能代替研究记录库 |
+| 通知 | notifications-view 存在；没有通知列表/已读状态请求封装 | UI 已有，API 缺失 | 通知查询、已读状态、批量标记及来源事件需 API-08 |
+| 问答/研究助手 | chat-view 有会话、上下文、发送/重试等 UI；api.js 未发现聊天/会话接口封装 | UI 已有，API 缺失 | 会话 CRUD、流式消息、上下文引用、停止/重试需 API-15；UI 不代表模型服务已连通 |
+| 数据中心 | data-view、立即检查、行情/分析服务状态、Provider 清单区域存在；健康与 getDataSources 已接入 | 部分接入 | 健康接口和能力清单不等于 Provider 实时探测；MariaDB/Redis 子状态只能依据分析服务真实响应。诊断历史和逐能力探测需 API-11、API-12 |
+| 设置中心 | 设置表单与连接检查存在；设置读写使用浏览器本地存储 | 部分接入 | 区分浏览器连接参数与服务端配置；本地保存不代表 Provider 配置已更新；禁止在日志中输出 API Key |
+| 全球市场联动 | 尚无可确认的全球指数/跨市场时区与交易日历闭环 | 规划 | 对应 API-14；先评估数据源、授权、延迟、币种、时区和可比时点 |
+
+### 11.3 前端 API 封装核对表
+
+以下来自 api.js 函数定义与 app.js 静态引用。静态引用不保证运行时每条分支都会触发；未引用封装也不代表服务端接口不存在。
+
+| API 能力 | 前端封装/调用现状 | 当前判断 |
+|---|---|---|
+| 行情服务 liveness/readiness | marketLiveness、marketHealth 有引用 | 已接入代码；需保留单项失败隔离 |
+| 分析服务 liveness/readiness | analysisLiveness、analysisHealth 有引用 | 已接入代码；依赖子状态以真实响应为准 |
+| Provider/数据源清单 | getDataSources 有引用 | 仅是配置/能力清单，不是实时探测 |
+| 股票搜索 | searchStocks 有引用 | 已接入代码；字段与参数仍需按 OpenAPI 核对 |
+| 单股行情 Bundle | getMarketBundle 有引用 | 已接入代码；核对质量、快照 ID、分析参考时点 |
+| 单股报价、日 K | getQuote、getDailyBars 有引用 | 已接入代码；避免与 Bundle 重复请求，复权/日期/单位需核对 |
+| 分析任务创建/状态/事件/run | createAnalysisTask、getAnalysisTask、getAnalysisTaskEvents、getAnalysisRun 有引用 | 已有单任务流程封装；不能推断任务或研究历史列表已存在 |
+| 指数、交易时段、指数目录/成分/日线 | getMarketIndices、getMarketSession、getIndexCatalog、getIndexConstituents、getIndexDailyBars 未发现明确引用 | 仅有封装；需接入页面并确认真实路由/Provider |
+| 市场广度、板块、涨跌停、人气、龙虎榜、交易日历、估值 | 对应 getMarketBreadth、getMarketSectors、getMarketLimitPool、getMarketHotStocks、getMarketDragonTiger、getTradingCalendar、getMarketValuations 未发现明确函数名调用 | 有封装但接线待核实，不能仅凭封装标记完成 |
+| 个股资料、板块、财务、公告、涨跌幅规则、交易状态、筹码、资金流 | getStockProfile、getStockBoards、getStockFundamentals、getStockAnnouncements、getStockPriceLimitRule、getStockTradingStatus、getChipDistribution、getCapitalFlow 多数未发现明确调用 | 详情区块存在不代表数据已接通；需补调用及加载/错误/unknown 状态 |
+| 告警、通知、研究历史、筛选历史查询 | 没有对应完整 API 封装 | 需要 API-07/08/09/10 |
+| Provider 实时探测/诊断历史 | 没有对应封装 | 需要 API-11/12；不可将 getDataSources 当作探测 |
+| 聊天/会话/流式响应 | 没有对应封装 | 需要 API-15 |
+
+### 11.4 下一轮实施顺序
+
+1. **P0：页面接线盘点落地**。逐个组件确认 app.js 实际请求、响应字段及 loading/error/unknown/empty 状态，优先完成已有封装但未接线的市场数据与个股详情区块。
+2. **P0：避免重复请求**。个股研究优先评估用 getMarketBundle 一次取得报价和日 K，避免同页重复调用 getQuote/getDailyBars；只有存在独立刷新或参数差异时才拆分请求。
+3. **P1：列表与流程闭环**。筛选结果、任务列表/历史、研究历史、自选持久化、告警、通知、聊天按真实服务能力逐步接入；没有后端 API 的先定义契约，不造假数据。
+4. **P1：市场总览与热点**。逐项接线指数、广度、板块、涨跌停、人气、龙虎榜、日历并核对覆盖与质量；情绪历史、多维榜和市场级资金流按新增 API 推进。
+5. **P2：数据中心增强**。在健康/能力清单基础上增加服务端真实 Provider 诊断和历史，不把配置声明显示成实时健康。
+6. 每完成一个模块，同步更新状态与数据分支缺口文档；本分支只改 web/**，Go/OpenAPI/Provider 另行提交到数据分支。
+
+### 11.5 本轮核对边界
+
+- 已读取 WebUI 分支的 web/index.html、web/src/app.js、web/src/api.js、web/API_CONTRACT.md、web/DATA_CAPABILITY_GAPS.md。
+- 已读取数据分支的 docs/architecture/webui-api-contract-gaps.md，并区分路由/Handler 初核与 Provider/真实响应仍待确认。
+- 本轮未运行浏览器、后端、Provider 请求、测试或 CI；本节是静态代码盘点，不是运行验收。
