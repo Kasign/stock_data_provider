@@ -1,11 +1,45 @@
 package service
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
+
+func TestPriceLimitRuleAlwaysSerializesQualityReasons(t *testing.T) {
+	snapshot, err := ResolvePriceLimitRule(
+		"600519.SH", "2026-07-06",
+		model.RiskWarningNormal, 2000, true, model.PriceLimitExceptionNone,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.QualityReasons) != 0 {
+		t.Fatalf("expected no quality reasons for verified rule, got %v", snapshot.QualityReasons)
+	}
+
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatal(err)
+	}
+	value, exists := payload["quality_reasons"]
+	if !exists {
+		t.Fatalf("quality_reasons is required by OpenAPI but missing from JSON: %s", encoded)
+	}
+	var reasons []string
+	if err := json.Unmarshal(value, &reasons); err != nil {
+		t.Fatalf("decode quality_reasons: %v", err)
+	}
+	if reasons == nil || len(reasons) != 0 {
+		t.Fatalf("quality_reasons must serialize as an empty array, got %s", value)
+	}
+}
 
 func TestResolvePriceLimitRuleMainboardRiskWarningChangeDate(t *testing.T) {
 	before, err := ResolvePriceLimitRule("000001.SZ", "2026-07-05",
