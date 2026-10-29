@@ -296,11 +296,14 @@ type LimitPoolItem struct {
 }
 
 type LimitPoolSnapshot struct {
-	PoolType           string          `json:"type"`
-	TradeDate          string          `json:"trade_date"`
-	ProviderReportDate string          `json:"provider_report_date,omitempty"`
-	Total              int             `json:"total"`
-	HasData            bool            `json:"has_data"`
+	PoolType              string          `json:"type"`
+	TradeDate             string          `json:"trade_date"`
+	ProviderReportDate    string          `json:"provider_report_date,omitempty"`
+	Total                 int             `json:"total"`
+	ProviderReturned      int             `json:"provider_returned,omitempty"`
+	ExcludedNonAShareCount int            `json:"excluded_non_a_share_count,omitempty"`
+	TotalIsLowerBound     bool            `json:"total_is_lower_bound,omitempty"`
+	HasData               bool            `json:"has_data"`
 	Items              []LimitPoolItem `json:"items"`
 	Source             string          `json:"source"`
 	SourceVersion      string          `json:"source_version,omitempty"`

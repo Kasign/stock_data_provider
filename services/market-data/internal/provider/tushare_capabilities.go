@@ -1246,9 +1246,12 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	now := time.Now().UTC()
 	allItems := make([]model.LimitPoolItem, 0, len(table.rows))
 	reasons := []string{"provider_amount_units_not_normalized", "provider_exact_snapshot_time_not_exposed"}
-	if len(table.rows) >= 2500 {
+	totalIsLowerBound := len(table.rows) >= 2500
+	if totalIsLowerBound {
 		reasons = appendTushareReason(reasons, "provider_response_may_be_capped_at_2500_rows")
+		reasons = appendTushareReason(reasons, "provider_limit_pool_total_is_lower_bound")
 	}
+	excludedNonAShareCount := 0
 	seenSymbols := make(map[string]struct{}, len(table.rows))
 	for index, row := range table.rows {
 		rowDateRaw, readErr := table.stringValue(row, "trade_date")
@@ -1272,6 +1275,7 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 			return nil, fmt.Errorf("Tushare 涨跌停池第 %d 行证券代码无效: %q", index, rawSymbol)
 		}
 		if !isTushareAShareSymbol(symbol) {
+			excludedNonAShareCount++
 			reasons = appendTushareReason(reasons, "provider_non_a_share_security_rows_excluded")
 			continue
 		}
@@ -1354,7 +1358,8 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	if len(allItems) == 0 {
 		return &model.LimitPoolSnapshot{
 			PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: providerReportDate,
-			Total: 0, HasData: false, Items: []model.LimitPoolItem{},
+			Total: 0, ProviderReturned: len(table.rows), ExcludedNonAShareCount: excludedNonAShareCount,
+			TotalIsLowerBound: totalIsLowerBound, HasData: false, Items: []model.LimitPoolItem{},
 			Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
 			QualityStatus:  model.QualityUnknown,
 			QualityReasons: append(reasons, "empty_limit_pool_cannot_confirm_zero_events_or_unavailable_source"),
@@ -1366,7 +1371,8 @@ func (p *Tushare) FetchLimitPool(ctx context.Context, rawPoolType, rawTradeDate 
 	}
 	return &model.LimitPoolSnapshot{
 		PoolType: poolType, TradeDate: tradeDate, ProviderReportDate: providerReportDate,
-		Total: total, HasData: true, Items: allItems,
+		Total: total, ProviderReturned: len(table.rows), ExcludedNonAShareCount: excludedNonAShareCount,
+		TotalIsLowerBound: totalIsLowerBound, HasData: true, Items: allItems,
 		Source: p.Name(), SourceVersion: "tushare-limit-list-v1", FetchedAt: now,
 		QualityStatus: model.QualityDegraded, QualityReasons: reasons,
 	}, nil

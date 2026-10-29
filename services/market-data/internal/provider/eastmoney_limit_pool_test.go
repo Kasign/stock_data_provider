@@ -132,6 +132,9 @@ func TestEastmoneyFetchLimitPoolPaginatesTruncatedPages(t *testing.T) {
 	if got.Total != total || len(got.Items) != total {
 		t.Fatalf("limit pool should return all %d rows after pagination, total=%d items=%d", total, got.Total, len(got.Items))
 	}
+	if got.ProviderReturned != total {
+		t.Fatalf("source coverage ledger should count the raw rows returned across pages, got %d want %d", got.ProviderReturned, total)
+	}
 	if got.Items[0].Code != "600001" || got.Items[len(got.Items)-1].Code != "600065" {
 		t.Fatalf("pagination order/range mismatch: first=%+v last=%+v", got.Items[0], got.Items[len(got.Items)-1])
 	}

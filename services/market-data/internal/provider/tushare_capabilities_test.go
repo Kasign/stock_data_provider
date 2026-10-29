@@ -664,6 +664,9 @@ func TestTushareLimitPoolMarksExcludedNonAShareRows(t *testing.T) {
 	if got.Total != 1 || len(got.Items) != 1 || got.Items[0].Symbol != "600519.SH" {
 		t.Fatalf("non-A-share rows must not enter the pool, got %+v", got)
 	}
+	if got.ProviderReturned != 2 || got.ExcludedNonAShareCount != 1 || got.TotalIsLowerBound {
+		t.Fatalf("source coverage ledger mismatch: returned=%d excluded=%d lower_bound=%v", got.ProviderReturned, got.ExcludedNonAShareCount, got.TotalIsLowerBound)
+	}
 	if got.QualityStatus != model.QualityDegraded {
 		t.Fatalf("filtered provider rows must remain visible as degraded quality, got %+v", got)
 	}
@@ -1741,5 +1744,73 @@ func TestTushareLimitPoolDefaultsToServiceLimit(t *testing.T) {
 	}
 	if got.Total != len(rows) || len(got.Items) != len(rows) {
 		t.Fatalf("default Tushare limit should match the service's 100-row default, got total=%d items=%d want=%d", got.Total, len(got.Items), len(rows))
+	}
+	if got.ProviderReturned != len(rows) || got.TotalIsLowerBound || got.ExcludedNonAShareCount != 0 {
+		t.Fatalf("unexpected source coverage ledger: returned=%d excluded=%d lower_bound=%v", got.ProviderReturned, got.ExcludedNonAShareCount, got.TotalIsLowerBound)
+	}
+}
+
+
+func TestTushareLimitPoolMarks2500RowBoundaryAsLowerBound(t *testing.T) {
+	fields := strings.Split("trade_date,ts_code,industry,name,close,pct_chg,amount,limit_amount,float_mv,total_mv,turnover_ratio,fd_amount,first_time,last_time,open_times,up_stat,limit_times,limit", ",")
+	prefixes := []string{"600", "601", "603"}
+	rows := make([][]any, 2500)
+	for index := range rows {
+		prefixIndex := index / 1000
+		suffix := index % 1000
+		prefix := prefixes[prefixIndex]
+		values := make([]any, len(fields))
+		for column, field := range fields {
+			switch field {
+			case "trade_date":
+				values[column] = "20261027"
+			case "ts_code":
+				values[column] = fmt.Sprintf("%s%03d.SH", prefix, suffix)
+			case "industry":
+				values[column] = "测试行业"
+			case "name":
+				values[column] = fmt.Sprintf("测试股票%d", index+1)
+			case "close":
+				values[column] = 10.0
+			case "pct_chg":
+				values[column] = 1.2
+			case "limit":
+				values[column] = "U"
+			default:
+				values[column] = nil
+			}
+		}
+		rows[index] = values
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request tushareIndexWeightRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode Tushare limit-pool request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if request.APIName != "limit_list_d" {
+			t.Errorf("api_name=%q, want limit_list_d", request.APIName)
+		}
+		writeTushareTestTable(w, fields, rows)
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "test-token")
+	got, err := client.FetchLimitPool(context.Background(), "up", "2026-10-27", 100)
+	if err != nil {
+		t.Fatalf("FetchLimitPool: %v", err)
+	}
+	if got.Total != 2500 || len(got.Items) != 100 || got.ProviderReturned != 2500 {
+		t.Fatalf("unexpected source counts at cap boundary: total=%d items=%d returned=%d", got.Total, len(got.Items), got.ProviderReturned)
+	}
+	if !got.TotalIsLowerBound {
+		t.Fatal("a 2500-row response must not be presented as an authoritative full total")
+	}
+	for _, reason := range []string{"provider_response_may_be_capped_at_2500_rows", "provider_limit_pool_total_is_lower_bound"} {
+		if !containsTushareReason(got.QualityReasons, reason) {
+			t.Errorf("missing lower-bound quality reason %q: %v", reason, got.QualityReasons)
+		}
 	}
 }

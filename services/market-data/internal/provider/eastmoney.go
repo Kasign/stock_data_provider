@@ -2754,12 +2754,14 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 
 	var sourceTotal int
 	var sourceQDate json.RawMessage
+	sourceRowsReturned := 0
 	poolRows := make([]map[string]json.RawMessage, 0, limit)
 	for pageIndex := 0; pageIndex < 100; pageIndex++ {
 		total, qdate, rows, requestErr := requestPage(pageIndex)
 		if requestErr != nil {
 			return nil, requestErr
 		}
+		sourceRowsReturned += len(rows)
 		if pageIndex == 0 {
 			sourceTotal, sourceQDate = total, qdate
 			if total == 0 && len(rows) == 0 {
@@ -2800,7 +2802,8 @@ func (p *Eastmoney) FetchLimitPool(ctx context.Context, poolType, tradeDate stri
 	fetchedAt, requestedDate := time.Now().UTC(), date.Format("2006-01-02")
 	snapshot := &model.LimitPoolSnapshot{
 		PoolType: poolType, TradeDate: requestedDate, ProviderReportDate: normalizeEastmoneyCompactDate(strings.Trim(strings.TrimSpace(string(sourceQDate)), `"`)),
-		Total: sourceTotal, HasData: sourceTotal > 0 && len(poolRows) > 0,
+		Total: sourceTotal, ProviderReturned: sourceRowsReturned,
+		HasData: sourceTotal > 0 && len(poolRows) > 0,
 		Items: make([]model.LimitPoolItem, 0, len(poolRows)), Source: p.Name(),
 		SourceVersion: "eastmoney-push2ex-limit-pool-v1", FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed", "requested_trade_date_is_authoritative"},

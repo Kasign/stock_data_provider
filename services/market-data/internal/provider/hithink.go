@@ -662,7 +662,8 @@ func (p *Hithink) FetchLimitPool(ctx context.Context, poolType, tradeDate string
 	}
 	sourceVersion := hithinkVersion + "-limit-" + poolType + "-pool-v2"
 	snapshot := &model.LimitPoolSnapshot{
-		PoolType: poolType, TradeDate: rawDate, ProviderReportDate: reportDate, Total: total,
+		PoolType: poolType, TradeDate: rawDate, ProviderReportDate: reportDate,
+		Total: total, ProviderReturned: len(data.Item),
 		HasData: len(data.Item) > 0, Items: make([]model.LimitPoolItem, 0, len(data.Item)),
 		Source: p.Name(), SourceVersion: sourceVersion,
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
