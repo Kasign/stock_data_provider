@@ -166,21 +166,15 @@ func ResolvePriceLimitRuleWithEvidence(
 		} else if evidence.Status == model.PriceLimitExceptionNone {
 			if !evidence.CoverageConfirmed {
 				incompleteReason = "price_limit_no_event_not_confirmed_by_complete_source"
+			} else if !priceLimitEvidenceCoversDate(evidence, parsedDate) {
+				incompleteReason = "price_limit_no_event_evidence_coverage_range_missing_or_out_of_range"
 			} else {
 				status = model.PriceLimitExceptionNone
 			}
 		} else if evidence.Status == model.PriceLimitExceptionUnknown {
 			incompleteReason = "price_limit_special_exception_status_unverified"
 		} else {
-			from, fromErr := time.Parse("2006-01-02", evidence.EffectiveFrom)
-			to := from
-			var toErr error
-			if evidence.EffectiveTo != "" {
-				to, toErr = time.Parse("2006-01-02", evidence.EffectiveTo)
-			}
-			if fromErr != nil || from.Format("2006-01-02") != evidence.EffectiveFrom ||
-				toErr != nil || (evidence.EffectiveTo != "" && to.Format("2006-01-02") != evidence.EffectiveTo) ||
-				to.Before(from) || parsedDate.Before(from) || parsedDate.After(to) ||
+			if !priceLimitEvidenceCoversDate(evidence, parsedDate) ||
 				strings.TrimSpace(evidence.AnnouncementID) == "" {
 				incompleteReason = "price_limit_special_event_evidence_incomplete_or_out_of_range"
 			} else {
@@ -204,6 +198,22 @@ func ResolvePriceLimitRuleWithEvidence(
 		result.QualityStatus = model.QualityUnknown
 	}
 	return result, nil
+}
+
+
+func priceLimitEvidenceCoversDate(evidence *model.PriceLimitEventEvidence, date time.Time) bool {
+	from, err := time.Parse("2006-01-02", evidence.EffectiveFrom)
+	if err != nil || from.Format("2006-01-02") != evidence.EffectiveFrom {
+		return false
+	}
+	to := from
+	if evidence.EffectiveTo != "" {
+		to, err = time.Parse("2006-01-02", evidence.EffectiveTo)
+		if err != nil || to.Format("2006-01-02") != evidence.EffectiveTo {
+			return false
+		}
+	}
+	return !to.Before(from) && !date.Before(from) && !date.After(to)
 }
 
 func identifyAshareBoard(symbol string) (market, board, boardStart, ruleURL string, err error) {

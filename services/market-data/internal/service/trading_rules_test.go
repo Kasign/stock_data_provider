@@ -149,6 +149,8 @@ func TestResolvePriceLimitRuleWithEvidenceRequiresSourceBackedEvents(t *testing.
 		wantQuality model.QualityStatus
 	}{
 		{name: "complete event", evidence: &base, date: "2026-07-06", wantStatus: model.PriceLimitStatusNoLimit, wantQuality: model.QualityValid},
+		{name: "confirmed no event with date coverage", evidence: func() *model.PriceLimitEventEvidence { v := base; v.Status = model.PriceLimitExceptionNone; v.EffectiveFrom = "2026-07-01"; v.EffectiveTo = "2026-07-31"; v.CoverageConfirmed = true; return &v }(), date: "2026-07-06", wantStatus: model.PriceLimitStatusLimited, wantQuality: model.QualityValid},
+		{name: "confirmed no event outside coverage", evidence: func() *model.PriceLimitEventEvidence { v := base; v.Status = model.PriceLimitExceptionNone; v.EffectiveFrom = "2026-07-07"; v.EffectiveTo = "2026-07-31"; v.CoverageConfirmed = true; return &v }(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
 		{name: "event outside effective date", evidence: &base, date: "2026-07-07", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
 		{name: "missing evidence", evidence: nil, date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
 		{name: "missing announcement", evidence: func() *model.PriceLimitEventEvidence { v := base; v.AnnouncementID = ""; return &v }(), date: "2026-07-06", wantStatus: model.PriceLimitStatusUnknown, wantQuality: model.QualityUnknown},
