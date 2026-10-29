@@ -1819,7 +1819,7 @@ func TestTushareLimitPoolMarks2500RowBoundaryAsLowerBound(t *testing.T) {
 func TestTushareDragonTigerMarks10000RowBoundaryAsLowerBound(t *testing.T) {
 	fields := strings.Split("trade_date,ts_code,name,close,pct_change,turnover_rate,amount,l_sell,l_buy,l_amount,net_amount,net_rate,amount_rate,reason", ",")
 	prefixes := []struct {
-		prefix string
+		prefix   string
 		exchange string
 	}{
 		{prefix: "600", exchange: "SH"},
