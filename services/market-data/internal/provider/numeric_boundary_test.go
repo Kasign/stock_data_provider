@@ -98,4 +98,3 @@ func TestNormalizePytdxDailyAmountKeepsConsistentAmounts(t *testing.T) {
 		t.Fatalf("zero amount and zero volume may represent a no-trade bar: %+v", zero)
 	}
 }
-
