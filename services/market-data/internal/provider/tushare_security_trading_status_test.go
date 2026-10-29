@@ -136,3 +136,77 @@ func TestDelistingStatusFromHistoricalName(t *testing.T) {
 		}
 	}
 }
+
+
+func TestTushareFetchSecurityTradingStatusUsesSSECalendarForBeijingExchange(t *testing.T) {
+	tradeCalendarCalls := 0
+	tradeCalendarExchange := ""
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			APIName string            `json:"api_name"`
+			Params  map[string]string `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		var fields []string
+		var items [][]any
+		switch request.APIName {
+		case "stock_basic":
+			fields = []string{"ts_code", "name", "industry", "market", "exchange", "list_status", "list_date", "delist_date"}
+			items = [][]any{{"920001.BJ", "北证示例", "综合", "北交所", "BSE", "L", "20200101", nil}}
+		case "namechange":
+			fields = []string{"ts_code", "name", "start_date", "end_date", "ann_date", "change_reason"}
+			items = [][]any{{"920001.BJ", "北证示例", "20200101", nil, "20200101", "上市"}}
+		case "trade_cal":
+			tradeCalendarCalls++
+			tradeCalendarExchange = request.Params["exchange"]
+			fields = []string{"exchange", "cal_date", "is_open"}
+			if request.Params["start_date"] != "20261022" || request.Params["end_date"] != "20261022" {
+				t.Errorf("unexpected trade_cal date range: %+v", request.Params)
+			}
+			items = [][]any{{"SSE", "20261022", "1"}}
+		case "suspend_d":
+			fields = []string{"ts_code", "trade_date", "suspend_timing", "suspend_type"}
+			items = [][]any{}
+		default:
+			t.Errorf("unexpected Tushare api_name %q", request.APIName)
+			http.Error(w, "unexpected API", http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 0,
+			"msg":  "",
+			"data": map[string]any{"fields": fields, "items": items},
+		})
+	}))
+	defer server.Close()
+
+	client := NewTushareConfigured(2*time.Second, server.URL, "fixture-token")
+	got, err := client.FetchSecurityTradingStatus(context.Background(), "920001.BJ", "2026-10-22")
+	if err != nil {
+		t.Fatalf("FetchSecurityTradingStatus: %v", err)
+	}
+	if tradeCalendarExchange != "SSE" || tradeCalendarCalls != 1 {
+		t.Fatalf("Beijing Exchange must use the documented SSE calendar proxy only for market-day status, exchange=%q calls=%d", tradeCalendarExchange, tradeCalendarCalls)
+	}
+	if !got.TradingDayKnown || !got.IsTradingDay {
+		t.Fatalf("market trading-day status should be backed by the documented calendar: %+v", got)
+	}
+	if got.ListingStatusKnown || got.ListingTradingDayNumber != 0 {
+		t.Fatalf("Beijing Exchange listing-trading-day number must remain unknown rather than estimated: %+v", got)
+	}
+	foundReason := false
+	for _, reason := range got.QualityReasons {
+		if reason == "listing_trading_day_number_not_verified_for_beijing_exchange" {
+			foundReason = true
+			break
+		}
+	}
+	if !foundReason {
+		t.Fatalf("expected explicit reason for unknown Beijing Exchange listing-day number: %+v", got.QualityReasons)
+	}
+}

@@ -51,7 +51,13 @@ func (p *Tushare) FetchSecurityTradingStatus(ctx context.Context, rawSymbol, raw
 	if err != nil {
 		return nil, err
 	}
-	tradingDay, err := p.fetchSecurityTradingDay(ctx, exchange, compactDate)
+	// Tushare trade_cal 不接受 BSE 参数，官方文档说明北交所交易日历参考沪深交易所。
+	// 这里仅借用相同的市场交易日历；上市交易日序号仍由下方 BSE 分支保守标记为未知。
+	calendarExchange := exchange
+	if exchange == "BSE" {
+		calendarExchange = "SSE"
+	}
+	tradingDay, err := p.fetchSecurityTradingDay(ctx, calendarExchange, compactDate)
 	if err != nil {
 		return nil, fmt.Errorf("Tushare trade_cal for %s: %w", date, err)
 	}
