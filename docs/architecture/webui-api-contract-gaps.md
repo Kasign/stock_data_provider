@@ -103,4 +103,8 @@ WebUI 已接入/计划使用的核心能力包括：
 | 指数成分覆盖计数字段 | Go `IndexConstituentSnapshot.ProviderReturned` 无 `omitempty`，响应始终序列化；OpenAPI 原先未将 `provider_returned` 列为必填，现已对齐并加入契约测试 | `806679f` | 最新 HEAD CI 待结果 | 已修复，待 CI |
 | 质量状态与 null/unknown 语义 | 涨跌幅规则缺少可信状态/特殊事件证据时返回 unknown；历史交易状态保留 unknown 与 PIT 存储边界；指数快照校验覆盖和来源质量 | 当前 Handler/Service/Model 核对 | 既有测试覆盖部分边界 | 已有保护，仍需补齐跨层契约测试 |
 | OpenAPI 与鉴权定义一致性 | 修复 `ApiKeyAuth` 引用与定义的名称不一致；为六个重点接口统一 `ApiKey` 鉴权声明；发现并删除指数目录操作重复的 `security` 键；契约测试校验 YAML 可解析、六个接口各自仅声明一次鉴权 | `72e9faf`、`eb4524c`、`940a3a8` | 最新 HEAD 的 Go 全量测试/契约测试 CI 待完成；旧 HEAD 结果不能代替本次验证 | 代码已修复，等待最新 CI 确认 |
-| 批量概览、历史情绪、市场资金流、板块排行、Provider 诊断 | 逐项区分已有数据域与真正新增能力；历史情绪需要持久化快照，市场级资金流必须有独立净流入口径，Provider 诊断需主动探测与限流 | 下一阶段任务规划 | 尚未实施 | 待评估，不得标为已实现 |
+| 全市场批量概览 | 当前路由有单股 quote/bundle、股票搜索及有限数量估值查询；未见统一全市场分页概览 API，也未见服务端统一 MA5/MA20 计算契约 | `server.go` 路由与 OpenAPI 核对 | 尚未实施 | 确认缺口；优先新增批量概览，必须包含证券范围、分页、最后有效交易日、复权口径和逐股质量 |
+| 市场广度、板块排行、个股资金流 | `/market/breadth`、`/market/sectors`、`/stocks/{symbol}/capital-flow` 已有路由与 Provider 能力接口；但市场广度成交额不等于净流入，板块排行当前仅定义 `type`、`direction`、`limit`，没有近 5 日涨幅/板块资金净流入等排序契约，个股资金流不等于市场级资金流 | `server.go`、`provider.go`、`model.go`、`openapi.yaml` | 部分已实现；未证明所有 Provider 都可用 | 保留现有能力；后续补板块多维真实排序与独立市场级资金流，不得以成交额冒充净流入 |
+| 历史市场情绪快照 | 当前即时广度和涨跌停池已有 API；未见历史情绪快照的定时持久化与按交易日查询 API | 当前路由及模型目录核对 | 尚未实施 | 确认缺口；先定义分子/分母、覆盖率和质量，再新增存储及历史查询 |
+| Provider/能力真实诊断 | `/api/v1/data-sources` 返回 Provider 配置与静态能力清单；不等于实时探测，未见逐 Provider/capability 主动探测、冷却/限频和最近成功时间的诊断 API | `server.go` 的 `dataSources` 与 `SourceStatus` | 部分已有静态清单；实时诊断尚未实施 | 确认缺口；在限流、超时、并发上限及敏感错误脱敏约束下新增 |
+| 全球市场指数与日历 | 当前数据域以国内 A 股及配置的国内指数为主，未确认完整全球指数报价与全球交易日历能力 | 当前 Provider 能力接口与 OpenAPI 核对 | 尚未实施/待评估 | P2；先确认来源、授权、时区、币种和延迟，再决定接口 |
