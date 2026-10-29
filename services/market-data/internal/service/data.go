@@ -3140,3 +3140,95 @@ func absDuration(d time.Duration) time.Duration {
 	}
 	return d
 }
+
+var (
+	ErrDailyBarsAsOfUnavailable = errors.New("daily-bar point-in-time storage is not enabled")
+	ErrDailyBarsAsOfNotFound    = errors.New("no coherent daily-bar revisions were recorded by the requested as_of time")
+)
+
+// DailyBarsAsOf reconstructs a single source-coherent bar series from locally recorded revisions.
+// It never calls a live Provider and never substitutes the current-value table.
+func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end string, limit int, basis model.AdjustmentBasis, asOf time.Time) ([]model.DailyBar, []string, error) {
+	symbol, err := normalize.NormalizeSymbol(rawSymbol)
+	if err != nil {
+		return nil, nil, err
+	}
+	if asOf.IsZero() || asOf.After(time.Now().UTC()) {
+		return nil, nil, errors.New("daily-bar as_of must be a valid non-future timestamp")
+	}
+	if limit <= 0 {
+		limit = s.defaultBars
+	}
+	if limit > s.maxBars {
+		limit = s.maxBars
+	}
+	if start != "" {
+		parsed, parseErr := time.Parse("2006-01-02", start)
+		if parseErr != nil || parsed.Format("2006-01-02") != start {
+			return nil, nil, fmt.Errorf("invalid start date %q", start)
+		}
+	}
+	asOfDate := asOf.In(marketLocation()).Format("2006-01-02")
+	if end == "" {
+		end = asOfDate
+	}
+	parsedEnd, err := time.Parse("2006-01-02", end)
+	if err != nil || parsedEnd.Format("2006-01-02") != end {
+		return nil, nil, fmt.Errorf("invalid end date %q", end)
+	}
+	if end > asOfDate {
+		return nil, nil, errors.New("end date must not be after as_of date in Asia/Shanghai")
+	}
+	if start != "" && start > end {
+		return nil, nil, errors.New("start date must not be after end date")
+	}
+	if basis != model.AdjustmentNone && basis != model.AdjustmentForward && basis != model.AdjustmentBackward {
+		return nil, nil, fmt.Errorf("unsupported adjustment basis %q", basis)
+	}
+	if s == nil || s.store == nil {
+		return nil, nil, ErrDailyBarsAsOfUnavailable
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	revisions, err := s.store.ListBarsAsOf(ctx, symbol, start, end, basis, asOf, limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	candidates := make([]model.DailyBar, 0, len(revisions))
+	for _, bar := range revisions {
+		candidateSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
+		if symbolErr != nil || candidateSymbol != symbol || bar.AdjustmentBasis != basis ||
+			bar.NormalizationVer != normalize.Version || !hasIdentifiableSourceVersion(strings.TrimSpace(bar.SourceVersion)) ||
+			bar.FetchedAt.IsZero() || bar.NormalizedAt.IsZero() || bar.FetchedAt.After(asOf) ||
+			bar.NormalizedAt.After(asOf) || bar.SystemObservedAt == nil || bar.SystemObservedAt.After(asOf) {
+			continue
+		}
+		candidates = append(candidates, bar)
+	}
+	coherent, coherenceErr := coherentStoredSeries(candidates, basis)
+	if len(coherent) == 0 {
+		if coherenceErr != "" {
+			return nil, nil, fmt.Errorf("%w: %s", ErrDailyBarsAsOfNotFound, coherenceErr)
+		}
+		return nil, nil, ErrDailyBarsAsOfNotFound
+	}
+	bars, warnings := normalize.ValidateAndSortBars(symbol, coherent, start, end, limit)
+	if len(bars) == 0 {
+		return nil, nil, ErrDailyBarsAsOfNotFound
+	}
+	warnings = append(warnings, "daily_bars_reconstructed_from_recorded_revisions")
+	if !coverageSufficient(start, end, limit, len(bars)) {
+		warnings = append(warnings, "point_in_time_daily_bar_coverage_below_requested_threshold")
+		for i := range bars {
+			if bars[i].QualityStatus == model.QualityValid {
+				bars[i].QualityStatus = model.QualityDegraded
+			}
+			appendReasonOnce(&bars[i].QualityReasons, "point_in_time_daily_bar_coverage_below_requested_threshold")
+		}
+	}
+	return bars, dedupeStrings(warnings), nil
+}
