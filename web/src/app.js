@@ -397,7 +397,7 @@ function persistRecentTaskHistory(record) {
   );
   if (!persisted) {
     setRecentTasksFeedback(
-      "任务已创建，但浏览器存储不可用，最近任务引用未保存；刷新后可能无法从本地列表找回。",
+      "任务已创建，但最近任务引用未能确认持久化；刷新后可能无法从本地列表找回。",
       "warning"
     );
   }
@@ -3770,11 +3770,13 @@ async function createTask(event) {
           setRecentTasksFeedback(
             historyPersisted
               ? "任务已在旧分析 API 地址 " + requestAnalysisBase + " 创建，并已保存到最近分析列表。当前地址已改变；切回原地址后才能继续读取。"
-              : "任务已在旧分析 API 地址创建，但最近任务引用未能确认持久化。任务 ID：" + task.task_id + "；请切回原地址核实.",
+              : "任务已在旧分析 API 地址创建，但最近任务引用未能确认持久化。任务 ID：" + task.task_id + "；请切回原地址核实。",
             "warning"
           );
           feedback.hidden = false;
-          feedback.textContent = "任务已在旧连接创建并记录；当前界面不会把它绑定到新分析 API。切回原地址后可从最近分析恢复。";
+          feedback.textContent = historyPersisted
+            ? "任务已在旧连接创建并记录；当前界面不会把它绑定到新分析 API。切回原地址后可从最近分析恢复。"
+            : "任务已在旧连接创建，但本地历史未能确认保存。任务 ID：" + task.task_id + "。";
         }
       } else {
         feedback.hidden = false;
@@ -3807,7 +3809,7 @@ async function createTask(event) {
           setRecentTasksFeedback(
             historyPersisted
               ? "新建任务已创建并保存到最近分析列表；当前选中的任务不会被覆盖。"
-              : "新建任务已创建，但最近任务引用未能确认持久化。任务 ID：" + task.task_id + "；当前选中的任务不会被覆盖.",
+              : "新建任务已创建，但最近任务引用未能确认持久化。任务 ID：" + task.task_id + "；当前选中的任务不会被覆盖。",
             "warning"
           );
           feedback.hidden = false;
