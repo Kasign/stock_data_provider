@@ -5061,5 +5061,4 @@ window.history.replaceState(null, "", window.location.pathname + window.location
 setView("market", { updateHash: false, refreshData: false });
 syncSettingsThemeButtons(readTheme());
 void refreshServices();
-restoreLastTask();
 void refreshMarketWorkspace();
