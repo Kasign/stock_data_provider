@@ -87,6 +87,7 @@ try {
     let marketIndexRequestCount = 0;
     let dataSourceScenario = "success";
     let dataSourcesRequestCount = 0;
+    let healthScenario = "unavailable";
     const quoteFixture = {
       symbol: "600519.SH",
       name: "贵州茅台",
@@ -161,6 +162,9 @@ try {
       });
 
       if (pathname === "/market-api/health/ready" || pathname === "/analysis-api/readyz") {
+        if (viewport.width === 320 && healthScenario === "missing-status") {
+          return json(200, { message: "HTTP success without an explicit health status" });
+        }
         return json(503, { status: "unavailable", error: "browser test backend unavailable" });
       }
 
@@ -477,6 +481,35 @@ try {
         { timeout: 10000 }
       );
       assert.equal(dataSourcesRequestCount, dataSeedCount + 1, "data center success seed should request Provider list once");
+
+      // HTTP 200 without a recognized status is unknown, not healthy/green.
+      healthScenario = "missing-status";
+      await page.locator("#data-center-check").click();
+      await page.waitForFunction(
+        () => document.querySelector("#data-service-market-ready")?.textContent.includes("状态未报告") &&
+          document.querySelector("#data-service-analysis-ready")?.textContent.includes("状态未报告"),
+        null,
+        { timeout: 10000 }
+      );
+      const missingHealthStatus = await page.evaluate(() => ({
+        marketText: document.querySelector("#data-service-market-ready")?.textContent.trim() || "",
+        marketClass: document.querySelector("#data-service-market-ready")?.className || "",
+        analysisText: document.querySelector("#data-service-analysis-ready")?.textContent.trim() || "",
+        analysisClass: document.querySelector("#data-service-analysis-ready")?.className || "",
+        mariadb: document.querySelector("#data-service-mariadb-status")?.textContent.trim() || "",
+        redis: document.querySelector("#data-service-redis-status")?.textContent.trim() || ""
+      }));
+      assert.match(missingHealthStatus.marketText, /状态未报告/);
+      assert.match(missingHealthStatus.marketClass, /is-warning/);
+      assert.doesNotMatch(missingHealthStatus.marketClass, /is-local|is-success/);
+      assert.match(missingHealthStatus.analysisText, /状态未报告/);
+      assert.match(missingHealthStatus.analysisClass, /is-warning/);
+      assert.doesNotMatch(missingHealthStatus.analysisClass, /is-local|is-success/);
+      assert.equal(missingHealthStatus.mariadb, "未知");
+      assert.equal(missingHealthStatus.redis, "未知");
+
+      healthScenario = "unavailable";
+      await page.waitForFunction(() => !document.querySelector("#data-center-check")?.disabled, null, { timeout: 10000 });
 
       for (const scenario of ["401", "403", "404", "503", "network"]) {
         const expected = dataSourceErrors[scenario];
