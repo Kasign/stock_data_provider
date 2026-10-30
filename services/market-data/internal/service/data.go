@@ -120,6 +120,29 @@ func (s *DataService) Providers() []provider.NamedProvider {
 	return append([]provider.NamedProvider(nil), s.providers...)
 }
 
+// ProviderDiagnostics 仅汇总当前接入的行情与日 K 能力；状态来自真实请求，不主动探测数据源。
+func (s *DataService) ProviderDiagnostics() []map[string]any {
+	capabilities := make(map[string]map[string]bool)
+	for _, p := range s.quoteProviders {
+		if capabilities[p.Name()] == nil { capabilities[p.Name()] = make(map[string]bool) }
+		capabilities[p.Name()]["quote"] = true
+	}
+	for _, p := range s.barProviders {
+		if capabilities[p.Name()] == nil { capabilities[p.Name()] = make(map[string]bool) }
+		capabilities[p.Name()]["daily_bars"] = true
+	}
+	result := make([]map[string]any, 0, len(capabilities))
+	for name, caps := range capabilities {
+		item := map[string]any{"provider": name, "capabilities": make([]CircuitDiagnostic, 0, len(caps))}
+		keys := make(map[string]string, len(caps))
+		for capability := range caps { keys[name+":"+capability] = capability }
+		item["capabilities"] = s.breaker.Diagnostics(keys)
+		result = append(result, item)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i]["provider"].(string) < result[j]["provider"].(string) })
+	return result
+}
+
 func (s *DataService) SetStockBasicProviders(providers []provider.StockBasicProvider) {
 	s.stockBasicProviders = append([]provider.StockBasicProvider(nil), providers...)
 }
