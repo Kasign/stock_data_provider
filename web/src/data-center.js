@@ -246,7 +246,8 @@ function renderProviderDiagnostics(payload) {
       const top = document.createElement("div");
       top.className = "data-center-diagnostic-capability-heading";
       const label = document.createElement("strong");
-      const capabilityName = String(capability.capability || "");\n      label.textContent = DIAGNOSTIC_CAPABILITY_LABELS[capabilityName] || capabilityName || "未命名能力";
+      const capabilityName = String(capability.capability || "");
+      label.textContent = DIAGNOSTIC_CAPABILITY_LABELS[capabilityName] || capabilityName || "未命名能力";
       const state = document.createElement("span");
       state.className = "data-center-diagnostic-state is-" + status.replace(/_/g, "-");
       state.textContent = DIAGNOSTIC_STATUS[status];
