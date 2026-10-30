@@ -20,7 +20,7 @@ function normalizeWatchlistDisplayOrder(value) {
   return [...new Set([...requested, ...WATCHLIST_DISPLAY_FIELDS])];
 }
 
-const SORT_MODES = new Set(["updated", "symbol", "name"]);
+const SORT_MODES = new Set(["updated", "symbol", "name", "price", "change", "amount", "turnover"]);
 const SORT_DIRECTIONS = new Set(["asc", "desc"]);
 
 export function normalizePreferences(value = {}) {
