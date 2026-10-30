@@ -338,6 +338,9 @@ type FundamentalSection struct {
 	Category        string              `json:"category"`
 	ReportDate      string              `json:"report_date,omitempty"`
 	PublicationDate string              `json:"publication_date,omitempty"`
+	// AvailableAt 是该财务分区首次可供市场参与者使用的精确时间，统一使用带时区的时间戳。
+	// 它不同于报告期末、供应商更新时间和本服务采集时间。
+	AvailableAt     *time.Time          `json:"available_at,omitempty"`
 	HasData         bool                `json:"has_data"`
 	Metrics         []FundamentalMetric `json:"metrics"`
 	QualityStatus   QualityStatus       `json:"quality_status"`

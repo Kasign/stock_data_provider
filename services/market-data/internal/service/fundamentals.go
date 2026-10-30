@@ -68,8 +68,8 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 				return fmt.Errorf("fundamentals section %s report period is in the future", section.Category)
 			}
 			if section.PublicationDate == "" {
-				if section.QualityStatus == model.QualityValid {
-					return fmt.Errorf("fundamentals section %s cannot be valid without a publication date", section.Category)
+				if section.AvailableAt == nil && section.QualityStatus == model.QualityValid {
+					return fmt.Errorf("fundamentals section %s cannot be valid without publication_date or available_at", section.Category)
 				}
 			} else {
 				publicationDate, dateErr := time.Parse("2006-01-02", section.PublicationDate)
@@ -81,6 +81,15 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 				}
 				if section.PublicationDate > today {
 					return fmt.Errorf("fundamentals section %s publication date is in the future", section.Category)
+				}
+			}
+			if section.AvailableAt != nil {
+				if section.AvailableAt.IsZero() || section.AvailableAt.After(time.Now().UTC()) {
+					return fmt.Errorf("fundamentals section %s has invalid or future available_at", section.Category)
+				}
+				availableDate := section.AvailableAt.In(marketLocation()).Format("2006-01-02")
+				if availableDate < section.ReportDate || (section.PublicationDate != "" && availableDate != section.PublicationDate) {
+					return fmt.Errorf("fundamentals section %s available_at conflicts with report/publication date", section.Category)
 				}
 			}
 			if section.QualityStatus != model.QualityValid {
@@ -366,13 +375,22 @@ func filterFundamentalsSnapshotAsOf(snapshot *model.FundamentalsSnapshot, asOf t
 	hasUsableData, excludedSection := false, false
 	for _, original := range snapshot.Sections {
 		section := original
-		if section.HasData && (strings.TrimSpace(section.PublicationDate) == "" || section.PublicationDate >= asOfDate) {
-			// 只有披露日期没有披露时刻时，同一自然日不能证明在 as_of 时刻之前已公开。
-			section.HasData = false
-			section.Metrics = []model.FundamentalMetric{}
-			section.QualityStatus = model.QualityUnknown
-			section.QualityReasons = appendReason(section.QualityReasons, "pit_section_excluded_publication_date_not_provably_before_as_of")
-			excludedSection = true
+		if section.HasData {
+			availableBeforeAsOf := false
+			if section.AvailableAt != nil && !section.AvailableAt.IsZero() {
+				// 精确披露时间允许同一自然日内进行 PIT 判断，边界采用闭区间。
+				availableBeforeAsOf = !section.AvailableAt.After(asOf)
+			} else {
+				// 只有披露日期没有披露时刻时，必须早于 as_of 所在自然日才可证明已公开。
+				availableBeforeAsOf = strings.TrimSpace(section.PublicationDate) != "" && section.PublicationDate < asOfDate
+			}
+			if !availableBeforeAsOf {
+				section.HasData = false
+				section.Metrics = []model.FundamentalMetric{}
+				section.QualityStatus = model.QualityUnknown
+				section.QualityReasons = appendReason(section.QualityReasons, "pit_section_excluded_available_at_not_proven_before_as_of")
+				excludedSection = true
+			}
 		}
 		if section.HasData && len(section.Metrics) > 0 {
 			hasUsableData = true
