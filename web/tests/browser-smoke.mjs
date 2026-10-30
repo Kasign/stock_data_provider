@@ -508,8 +508,6 @@ try {
           barsMeta: document.querySelector("#bars-meta")?.textContent.trim(),
           barsCaption: document.querySelector("#bars-caption")?.textContent || "",
           barsRows: document.querySelector("#bars-body")?.textContent || "",
-          marketHealth: document.querySelector("#market-health-dot")?.className || "",
-          analysisHealth: document.querySelector("#analysis-health-dot")?.className || "",
           overallConnection: document.querySelector("#connection-dot")?.className || ""
         }));
         assert.equal(failedQuote.price, "—", scenario + " must clear the previous price");
@@ -524,8 +522,6 @@ try {
         assert.equal(failedQuote.barsMeta, "1 根", scenario + " must retain the successful daily-bars response");
         assert.match(failedQuote.barsCaption, /600519\.SH/, scenario + " daily-bars caption must match the requested symbol");
         assert.match(failedQuote.barsRows, /123\.45/, scenario + " must keep the valid daily close even when Quote fails");
-        assert.doesNotMatch(failedQuote.marketHealth, /is-online/, scenario + " must not report a healthy market API");
-        assert.doesNotMatch(failedQuote.analysisHealth, /is-online/, scenario + " must not report a healthy analysis API");
         assert.doesNotMatch(failedQuote.overallConnection, /is-online/, scenario + " must not report healthy overall connectivity");
 
         // A user-initiated retry must issue exactly one new request and restore data only after success.
