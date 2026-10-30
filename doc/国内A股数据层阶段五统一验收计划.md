@@ -55,3 +55,46 @@
 ## 六、当前边界
 
 阶段五不重新扩展数据层架构，不为通过验收而降低 PIT、数据覆盖或质量门禁。真实凭据、Provider 实际响应和部署环境不可由静态代码审查替代。
+
+
+## 七、阶段五首轮 CI 与真实 Provider 验收记录（2026-10-30）
+
+- 验收代码 SHA：`a19a827d485e7273cafbae84664ce3f3a9d2d932`
+- Go 测试工作流：`41018469135`
+- Go/Python 质量契约工作流：`41018469120`
+- 真实 Provider 探测工作流：`41018469167`
+- WebUI 检查工作流：`41018469096`
+
+| 验收项 | 结果 | 证据/说明 |
+|---|---|---|
+| 根模块 Go test/race/vet | 通过 | Go 测试工作流 |
+| go-core Go test/race/vet | 通过 | Go 测试工作流 |
+| market-data Go test/race/vet | 通过 | Go 测试工作流 |
+| Go/Python 质量契约回归 | 通过 | Python-to-Go 契约测试、market-data 全量 Go 测试及旧 Python 质量标记检查通过 |
+| MariaDB 11.4 迁移与 PIT 持久化 | 通过 | 重复迁移、因子/公司行动修订、重复采集去重、as_of 历史还原、重连读取均通过 |
+| Docker Compose 配置与部署脚本语法 | 通过 | Go 测试工作流 |
+| Docker 镜像构建 | 执行中 | 该记录编写时 market-data 镜像仍在构建，未标记通过 |
+| WebUI 检查 | 通过 | WebUI 检查工作流 |
+| 真实 Provider 探测 | 部分通过 | 25 项探测中 22 项返回，3 项 Eastmoney 请求遇到 HTTP 502 |
+
+### 真实 Provider 探测观察
+
+成功返回的能力包括 Sina/Tencent 报价与日 K、Tencent 股票搜索、Eastmoney 公告/股票板块/行业概念排行/指数行情/市场广度/涨跌停池/日 K/龙虎榜、Baostock 交易日历与日 K、Yahoo 报价与日 K。
+
+本次 3 项失败均为 Eastmoney 股票搜索或报价请求 HTTP 502（包括备用 delay 域名报价），不是 Go 归一化断言失败。该失败必须保留在验收报告中，不能以其他 Eastmoney 数据域成功抵消。
+
+部分返回数据按契约降级：
+- Sina 日 K 未返回成交额，保持 `amount=null`，单位 unknown，质量降级。
+- Tencent 报价的成交量单位需要根据行情字段关系推断，因此质量降级；日 K 未提供可验证成交额，同样保持 null。
+- Yahoo 报价/日 K 未提供成交额，保持 null 并降级。
+- Baostock 交易日历、Eastmoney 龙虎榜未提供精确快照时间，按时间戳缺失降级。
+
+### 本轮尚未覆盖
+
+- Tushare adj_factor、dividend、index_weight 的真实 Token 权限与数据响应验收。
+- TickFlow 等需要密钥/授权的数据源真实请求。
+- 生产 MariaDB 实例上的升级迁移、服务重启和数据库断连恢复；CI MariaDB 通过不等同于生产部署验收。
+- Eastmoney 502 的跨时段复测和备用源切换效果。
+- Go/Python 业务字段级真实样本差分与跨市场状态黄金样例集。当前契约回归通过不等于全量字段差分完成。
+
+后续推进应优先补齐真实样本差分、Tushare 权限请求和生产部署验收；Eastmoney 502 作为外部源波动继续记录，不应通过放宽错误校验来消除失败。
