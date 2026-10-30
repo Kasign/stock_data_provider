@@ -23,6 +23,7 @@
 | GET | /health/live | 行情服务存活检查 | 无额外参数；详见 OpenAPI | marketLiveness | 否 |
 | GET | /health/ready | 行情服务就绪检查 | 无额外参数；详见 OpenAPI | marketHealth | 否 |
 | GET | /api/v1/market/quotes | 批量获取指定股票实时行情（最多 50 只） | symbols：逗号分隔，必填，最多 50 个且不得重复 | getMarketQuotes（已封装；自选股页按需调用） | 是 |
+| GET | /api/v1/market/stocks | 全市场 A 股分页行情概览，可选返回 MA5/MA20 | page、page_size（1–100）、include_ma、adjustment | getMarketStocks | 是 |
 | GET | /api/v1/quotes/{symbol} | 单只股票实时行情 | 路径参数 symbol | getQuote | 是 |
 | GET | /api/v1/bars/{symbol}/daily | 单只股票日 K（支持日期范围、复权及 as_of 历史观察时点） | 路径参数 symbol；start、end、limit（1–2000）、adjustment、as_of | getDailyBars | 是 |
 | GET | /api/v1/bundles/{symbol} | 单只股票行情与日 K 统一快照 | 路径参数 symbol；lookback_days（20–2000）、adjustment、as_of | getMarketBundle | 是 |
@@ -76,7 +77,8 @@
 | 自选股 | 浏览器本地清单；`getMarketQuotes` 批量刷新最多 50 只；研究列表复用已加载行情 | 已支持真实批量行情刷新和行情字段排序；没有跨设备服务端自选持久化 |
 | 数据中心 | WebUI 页面检查、行情 live/ready、分析 healthz/readyz、Provider 静态能力清单 | 不直连数据库；能力声明不是实时健康 |
 | Provider 运行诊断 | 服务端 /api/v1/data-sources/diagnostics | 已有路由；仅覆盖 quote/daily_bars 进程内熔断器观测，当前页面尚未调用 |
-| 选股、告警、通知、问股 | 当前为前端入口/状态能力 | 不能把 UI 状态当作服务端任务、规则或投递记录；后端闭环仍需补齐 |
+| 选股 | 本地条件方案已支持；`/api/v1/market/stocks` 仅提供全市场分页行情与可选 MA5/MA20 | 尚无服务端筛选条件、策略 CRUD、扫描任务、候选结果和选股历史 API；不能用单页过滤伪装全市场扫描 |
+| 告警、通知、问股 | 当前为前端入口/状态能力 | 不能把 UI 状态当作服务端规则、投递记录或问答结果；后端闭环仍需补齐 |
 
 ## 5. 数据层接口的重要约束
 
@@ -103,7 +105,8 @@
 - 市场情绪指标及历史快照（需有可追溯历史数据，不能仅用当前涨跌分布替代）。
 - 板块多维排行与资金流入排行（需核实接口是否提供相应排序字段）。
 - 自选股批量概览（批量 quote 已由 WebUI `getMarketQuotes` 封装并用于自选股刷新；MA/资金等扩展字段仍需明确是否纳入批量接口，不能将单股研究字段当作批量 quote 已返回）。
-- 选股规则执行、告警规则/评估/触发记录、通知渠道与投递结果。
+- 选股规则执行、策略保存/扫描任务/候选结果/历史记录；当前 `/api/v1/market/stocks` 是分页行情，不包含筛选表达式和执行语义。
+- 告警规则/评估/触发记录、通知渠道与投递结果。
 - Provider 主动探测与逐能力健康检查（当前 diagnostics 只读业务请求形成的熔断状态）。
 - 全球市场联动数据。
 

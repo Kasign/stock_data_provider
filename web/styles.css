@@ -4999,3 +4999,16 @@ button:disabled {
 .watchlist-select-label { align-self:flex-start; }
 .watchlist-select-visible-label input,.watchlist-select-label input { width:16px; height:16px; accent-color:var(--accent); }
 #watchlist-bulk-count { color:var(--text-dim); font-size:12px; }
+
+.screening-saved-plans { margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
+.screening-saved-plans-heading h3 { margin:0 0 4px; font-size:14px; }
+.screening-saved-plans-heading p { margin:0; color:var(--text-dim); font-size:12px; line-height:1.6; }
+.screening-saved-plan-form { display:flex; align-items:end; flex-wrap:wrap; gap:9px; margin:12px 0; }
+.screening-saved-plan-form .field { flex:1 1 220px; margin:0; }
+.screening-saved-plan-list { display:grid; gap:8px; padding:0; margin:10px 0 0; list-style:none; }
+.screening-saved-plan { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:9px; }
+.screening-saved-plan.is-selected { border-color:var(--accent); background:var(--panel-raised); }
+.screening-saved-plan strong,.screening-saved-plan small { display:block; }
+.screening-saved-plan small { margin-top:4px; color:var(--text-dim); font-size:11px; }
+.screening-saved-plan-actions { display:flex; gap:7px; flex-wrap:wrap; }
+@media(max-width:640px) { .screening-saved-plan { align-items:flex-start; flex-direction:column; } .screening-saved-plan-actions { width:100%; } .screening-saved-plan-actions button { flex:1; } }

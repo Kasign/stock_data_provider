@@ -4,7 +4,7 @@ import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.j
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
 import { resolveScreeningCapability, resolveScreeningTaskState, resolveScreeningCollectionState } from "./screening-state.js";
-import { buildScreeningDraftSummary, createScreeningCondition, formatScreeningCondition } from "./screening-draft.js";
+import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, formatScreeningCondition, readScreeningPlans, saveScreeningPlan } from "./screening-draft.js";
 import { resolveAlertCapability, resolveAlertEvaluationState, resolveAlertCollectionState } from "./alert-state.js";
 import {
   analysisHealth,
@@ -1568,67 +1568,96 @@ function syncChatStockContextFromMarket() {
 }
 
 const screeningDraftConditions = [];
+let screeningDraftLogic = "and";
+let selectedScreeningPlanId = "";
 
 function renderScreeningDraftConditions() {
-  const root = $("#screening-condition-list");
-  const summary = buildScreeningDraftSummary(screeningDraftConditions);
+  const root = $("#screening-condition-list"), summary = buildScreeningDraftSummary(screeningDraftConditions, screeningDraftLogic);
   root.replaceChildren();
   if (!summary.count) {
-    const empty = document.createElement("li");
-    empty.className = "empty-row";
-    empty.textContent = "尚未添加条件";
-    root.append(empty);
+    const empty = document.createElement("li"); empty.className = "empty-row"; empty.textContent = "尚未添加条件"; root.append(empty);
   } else {
     summary.conditions.forEach((label, index) => {
-      const item = document.createElement("li");
-      item.className = "screening-condition-item";
-      const text = document.createElement("span");
-      text.textContent = label;
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "button button-secondary";
-      remove.dataset.screeningConditionRemove = String(index);
-      remove.textContent = "移除";
-      remove.setAttribute("aria-label", "移除条件：" + label);
-      item.append(text, remove);
-      root.append(item);
+      const item = document.createElement("li"); item.className = "screening-condition-item";
+      const text = document.createElement("span"); text.textContent = (index ? summary.logic.toUpperCase() + " · " : "") + label;
+      const remove = document.createElement("button"); remove.type = "button"; remove.className = "button button-secondary";
+      remove.dataset.screeningConditionRemove = String(index); remove.textContent = "移除"; remove.setAttribute("aria-label", "移除条件：" + label);
+      item.append(text, remove); root.append(item);
     });
   }
-  const summaryRoot = $("#screening-request-summary");
-  if (summaryRoot) {
-    const paragraph = summaryRoot.querySelector("p");
-    if (paragraph) paragraph.textContent = summary.description;
-  }
+  const paragraph = $("#screening-request-summary")?.querySelector("p");
+  if (paragraph) paragraph.textContent = summary.description;
 }
-
-$("#screening-condition-add").addEventListener("click", () => {
-  const result = createScreeningCondition(
-    $("#screening-condition-field").value,
-    $("#screening-condition-operator").value,
-    $("#screening-condition-value").value
-  );
-  const feedback = $("#screening-condition-feedback");
-  if (!result.valid) {
-    feedback.textContent = result.reason === "range" ? "数值超出该指标允许范围，请调整后重试。" : "请选择有效指标并输入有效数值。";
-    feedback.dataset.state = "error";
-    return;
+function renderScreeningPlans() {
+  const root = $("#screening-saved-plan-list"); if (!root) return;
+  root.replaceChildren();
+  const state = readScreeningPlans();
+  if (!state.readable || !state.valid) {
+    const message = document.createElement("li"); message.className = "empty-row";
+    message.textContent = !state.readable ? "浏览器本地存储不可用，无法读取筛选方案。" : "本地筛选方案格式异常，已暂停修改；请先检查或备份浏览器数据。";
+    root.append(message); return;
   }
-  screeningDraftConditions.push(result.condition);
-  $("#screening-condition-value").value = "";
-  feedback.textContent = "已添加条件。当前仅为页面内存草稿。";
-  feedback.dataset.state = "success";
-  renderScreeningDraftConditions();
+  if (!state.plans.length) {
+    const empty = document.createElement("li"); empty.className = "empty-row"; empty.textContent = "暂无已保存方案。保存后仅在当前浏览器可用。"; root.append(empty); return;
+  }
+  state.plans.forEach((plan) => {
+    const item = document.createElement("li"); item.className = "screening-saved-plan" + (plan.id === selectedScreeningPlanId ? " is-selected" : "");
+    const detail = document.createElement("div"), title = document.createElement("strong"), meta = document.createElement("small");
+    title.textContent = plan.name; meta.textContent = plan.conditions.length + " 条条件 · " + plan.logic.toUpperCase() + " · 更新于 " + formatDateTime(plan.updated_at);
+    detail.append(title, meta);
+    const actions = document.createElement("div"); actions.className = "screening-saved-plan-actions";
+    const load = document.createElement("button"); load.type = "button"; load.className = "button button-secondary"; load.dataset.screeningPlanLoad = plan.id; load.textContent = "载入";
+    const remove = document.createElement("button"); remove.type = "button"; remove.className = "button button-secondary"; remove.dataset.screeningPlanDelete = plan.id; remove.textContent = "删除";
+    actions.append(load, remove); item.append(detail, actions); root.append(item);
+  });
+}
+function loadScreeningPlan(id) {
+  const state = readScreeningPlans(), plan = state.plans.find((item) => item.id === id);
+  if (!state.readable || !state.valid || !plan) return false;
+  screeningDraftConditions.splice(0, screeningDraftConditions.length, ...plan.conditions);
+  screeningDraftLogic = plan.logic; selectedScreeningPlanId = plan.id;
+  $("#screening-condition-logic").value = plan.logic; $("#screening-plan-name").value = plan.name;
+  $("#screening-condition-feedback").textContent = "已载入本地方案“" + plan.name + "”；编辑后需点击保存才会更新方案。";
+  $("#screening-condition-feedback").dataset.state = "success";
+  renderScreeningDraftConditions(); renderScreeningPlans(); return true;
+}
+function saveCurrentScreeningPlan(asNew = false) {
+  const result = saveScreeningPlan({ id: asNew ? "" : selectedScreeningPlanId, name: $("#screening-plan-name").value, conditions: screeningDraftConditions, logic: screeningDraftLogic });
+  const feedback = $("#screening-condition-feedback");
+  if (!result.saved) {
+    const messages = { "storage-invalid": "本地筛选方案存储不可用或格式异常，未保存。", "invalid-name": "请输入方案名称，最多 40 个字符。", "empty-conditions": "至少添加一条有效条件后才能保存方案。", "invalid-logic": "请选择 AND 或 OR 组合关系。", "duplicate-name": "已有同名方案；请修改名称或载入原方案后更新。", limit: "本地最多保存 30 个筛选方案。", "persistence-failed": "保存失败，浏览器未能确认方案写入。" };
+    feedback.textContent = messages[result.reason] || "保存筛选方案失败。"; feedback.dataset.state = "error"; return;
+  }
+  selectedScreeningPlanId = result.plan.id;
+  feedback.textContent = (asNew ? "已另存为新方案：" : "已保存方案：") + result.plan.name + "。仅保存在当前浏览器。";
+  feedback.dataset.state = "success"; renderScreeningPlans();
+}
+function removeScreeningPlan(id) {
+  const result = deleteScreeningPlan(id);
+  if (!result.deleted) { $("#screening-condition-feedback").textContent = "删除方案失败；请检查本地存储状态。"; $("#screening-condition-feedback").dataset.state = "error"; return; }
+  if (selectedScreeningPlanId === id) { selectedScreeningPlanId = ""; $("#screening-plan-name").value = ""; }
+  $("#screening-condition-feedback").textContent = "已删除本地筛选方案。"; $("#screening-condition-feedback").dataset.state = "success"; renderScreeningPlans();
+}
+$("#screening-condition-logic").addEventListener("change", (event) => { screeningDraftLogic = event.target.value === "or" ? "or" : "and"; renderScreeningDraftConditions(); });
+$("#screening-condition-add").addEventListener("click", () => {
+  const result = createScreeningCondition($("#screening-condition-field").value, $("#screening-condition-operator").value, $("#screening-condition-value").value);
+  const feedback = $("#screening-condition-feedback");
+  if (!result.valid) { feedback.textContent = result.reason === "range" ? "数值超出该指标允许范围，请调整后重试。" : "请选择有效指标并输入有效数值。"; feedback.dataset.state = "error"; return; }
+  screeningDraftConditions.push(result.condition); $("#screening-condition-value").value = "";
+  feedback.textContent = "已添加条件。当前为本地条件草稿，不会执行扫描。"; feedback.dataset.state = "success"; renderScreeningDraftConditions();
 });
 $("#screening-condition-list").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-screening-condition-remove]");
-  if (!button) return;
-  const index = Number(button.dataset.screeningConditionRemove);
-  if (!Number.isInteger(index) || index < 0 || index >= screeningDraftConditions.length) return;
-  screeningDraftConditions.splice(index, 1);
-  $("#screening-condition-feedback").textContent = "已移除条件。";
-  renderScreeningDraftConditions();
+  const button = event.target.closest("[data-screening-condition-remove]"); if (!button) return;
+  const index = Number(button.dataset.screeningConditionRemove); if (!Number.isInteger(index) || index < 0 || index >= screeningDraftConditions.length) return;
+  screeningDraftConditions.splice(index, 1); $("#screening-condition-feedback").textContent = "已移除条件。"; renderScreeningDraftConditions();
 });
-renderScreeningDraftConditions();
+$("#screening-plan-save").addEventListener("click", () => saveCurrentScreeningPlan(false));
+$("#screening-plan-save-as").addEventListener("click", () => saveCurrentScreeningPlan(true));
+$("#screening-saved-plan-list").addEventListener("click", (event) => {
+  const load = event.target.closest("[data-screening-plan-load]"); if (load) { loadScreeningPlan(load.dataset.screeningPlanLoad); return; }
+  const remove = event.target.closest("[data-screening-plan-delete]"); if (remove) removeScreeningPlan(remove.dataset.screeningPlanDelete);
+});
+renderScreeningDraftConditions(); renderScreeningPlans();
 
 function renderScreeningCapability(snapshot) {
   const current = resolveScreeningCapability(snapshot);
