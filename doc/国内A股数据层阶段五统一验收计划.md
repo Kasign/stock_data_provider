@@ -428,9 +428,9 @@
 
 当前边界与后续工作：
 
-1. 当前探测执行仍是同步批次，尚未实现请求参数中的 scope/markets/symbols/checks 过滤；需下一步补齐请求参数和按范围执行。
-2. API 路由目前没有独立的 API 自检项；下一步通过 httptest 对真实 handler 执行连通性、鉴权、参数错误和响应契约检查。
-3. Provider 级逐项结果仍需补充请求摘要、返回行数/覆盖率、样本证券和数据时效证据；目前错误信息和质量原因已先行补齐。
+1. 已支持请求体 `scope=all/core`、`capabilities` 白名单和 `timeout_seconds=1..30`（默认 12 秒）；显式能力列表会精确收窄探测范围，core 与白名单冲突时返回参数错误。`markets`、`symbols`、`checks` 仍未实现。
+2. 已新增真实 HTTP Handler 的 `httptest` 覆盖：API Key 鉴权、空请求体兼容、core 范围、能力白名单、非法 JSON/字段/能力/超时、重复能力、超大请求体和响应汇总。OpenAPI 同步声明请求体及安全要求。
+3. Provider 级逐项结果仍需补充请求摘要、返回行数/覆盖率、样本证券和数据时效证据；当前仍以状态、质量原因和脱敏错误证据为主。
 4. 对未注册 Provider 的能力标记为 not_configured；凭据已配置但授权不足、限流等情况必须继续走真实错误分类。无凭据 Provider 不发请求。
-5. 当前扩展尚未完成统一构建验收；以最新 Go Actions 结果为准，不把代码提交视为编译通过。
+5. 本轮请求范围功能尚待最新 HEAD 的 Go 单测、Race、Vet、OpenAPI 契约和 Docker 构建结果确认；未完成最新 SHA 验收前不记录为通过。
 
