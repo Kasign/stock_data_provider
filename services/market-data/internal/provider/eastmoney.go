@@ -1896,6 +1896,13 @@ func (p *Eastmoney) FetchSectorRankingsByMetric(ctx context.Context, rawCategory
 	if !ok {
 		return nil, fmt.Errorf("unsupported sector category %q; want industry or concept", rawCategory)
 	}
+	direction := strings.ToLower(strings.TrimSpace(rawDirection))
+	if direction == "" {
+		direction = "up"
+	}
+	if direction != "up" && direction != "down" {
+		return nil, fmt.Errorf("unsupported sector ranking direction %q; want up or down", rawDirection)
+	}
 	sortBy := strings.ToLower(strings.TrimSpace(rawSortBy))
 	if sortBy == "" {
 		sortBy = "change_percent"
@@ -1904,14 +1911,7 @@ func (p *Eastmoney) FetchSectorRankingsByMetric(ctx context.Context, rawCategory
 		return p.fetchSectorRankings5D(ctx, category, direction, limit)
 	}
 	if sortBy != "change_percent" && sortBy != "amount" {
-		return nil, fmt.Errorf("unsupported sector ranking sort_by %q; want change_percent or amount", rawSortBy)
-	}
-	direction := strings.ToLower(strings.TrimSpace(rawDirection))
-	if direction == "" {
-		direction = "up"
-	}
-	if direction != "up" && direction != "down" {
-		return nil, fmt.Errorf("unsupported sector ranking direction %q; want up or down", rawDirection)
+		return nil, fmt.Errorf("unsupported sector ranking sort_by %q; want change_percent, amount or change_5d", rawSortBy)
 	}
 	sortField := "f3"
 	if sortBy == "amount" {

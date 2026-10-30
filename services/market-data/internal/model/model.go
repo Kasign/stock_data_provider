@@ -221,6 +221,7 @@ type SectorRankingSnapshot struct {
 	ProviderReturned  int             `json:"provider_returned,omitempty"`
 	ExcludedRows      int             `json:"excluded_rows,omitempty"`
 	TotalIsLowerBound bool            `json:"total_is_lower_bound,omitempty"`
+	ProviderReportDate string          `json:"provider_report_date,omitempty"`
 	Items             []SectorRanking `json:"items"`
 	Source            string          `json:"source"`
 	SourceVersion     string          `json:"source_version,omitempty"`
