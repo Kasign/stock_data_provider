@@ -48,6 +48,26 @@ func TestMarketCapitalFlowPreservesProviderSeriesAndCache(t *testing.T) {
 	}
 }
 
+type marketCapitalFlowWrongSourceFake struct {
+	marketCapitalFlowFake
+}
+
+func (p *marketCapitalFlowWrongSourceFake) Name() string { return "configured-provider" }
+
+func TestMarketCapitalFlowRejectsMismatchedProviderIdentity(t *testing.T) {
+	netAmount := 1.0
+	fake := &marketCapitalFlowWrongSourceFake{marketCapitalFlowFake{snapshot: &model.MarketCapitalFlowSnapshot{
+		Total: 1, Items: []model.MarketCapitalFlowItem{{TradeDate: "2026-10-29", NetAmountCNY: &netAmount}},
+		Source: "unrelated-provider", SourceVersion: "unrelated-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
+	}}}
+	svc := NewWithCapabilities(nil, nil, nil, nil, nil, time.Minute, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	svc.SetMarketCapitalFlowProviders([]provider.MarketCapitalFlowProvider{fake})
+	if _, _, err := svc.MarketCapitalFlow(context.Background(), "2026-10-29", "2026-10-29"); err == nil {
+		t.Fatal("provider response source must match the configured provider identity")
+	}
+}
+
 func TestMarketCapitalFlowRejectsUnorderedOrOutOfRangeRows(t *testing.T) {
 	now := time.Now().UTC()
 	snapshot := &model.MarketCapitalFlowSnapshot{

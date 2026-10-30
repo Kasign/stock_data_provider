@@ -24,6 +24,12 @@ func (s *DataService) MarketCapitalFlowProviders() []provider.MarketCapitalFlowP
 // MarketCapitalFlow returns provider-reported market-wide capital-flow history.
 // It never derives a market total by summing a partial set of individual stocks.
 func (s *DataService) MarketCapitalFlow(ctx context.Context, startDate, endDate string) (*model.MarketCapitalFlowSnapshot, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	start, err := time.Parse("2006-01-02", startDate)
 	if err != nil || start.Format("2006-01-02") != startDate {
 		return nil, false, errors.New("market-capital-flow start must use YYYY-MM-DD")
@@ -45,12 +51,22 @@ func (s *DataService) MarketCapitalFlow(ctx context.Context, startDate, endDate 
 	}
 	failures := make([]string, 0, len(providers))
 	for _, p := range providers {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
 		if p == nil {
 			continue
 		}
 		snapshot, fetchErr := p.FetchMarketCapitalFlow(ctx, startDate, endDate)
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
 		if fetchErr != nil {
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot != nil && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": provider source does not match configured provider")
 			continue
 		}
 		if validateErr := validateMarketCapitalFlowSnapshot(startDate, endDate, snapshot); validateErr != nil {
