@@ -153,3 +153,37 @@ func TestProviderProbeReportsUnconfiguredCoreCapabilities(t *testing.T) {
 		t.Fatal("trading_calendar missing from diagnostic coverage report")
 	}
 }
+
+
+func TestProviderProbeOptionsLimitSelectedCapabilities(t *testing.T) {
+	p := providerProbeQuoteFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	if run.Total != 1 || run.Scope != "all" || run.TimeoutSeconds != 5 || len(run.RequestedCapabilities) != 1 || run.RequestedCapabilities[0] != "quote" {
+		t.Fatalf("unexpected filtered probe metadata: %+v", run)
+	}
+	if run.Items[0].Capability != "quote" || run.Items[0].Status != "returned" {
+		t.Fatalf("unexpected filtered probe items: %+v", run.Items)
+	}
+}
+
+func TestProviderProbeOptionsValidateScopeCapabilityAndTimeout(t *testing.T) {
+	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	cases := []ProviderProbeOptions{
+		{Scope: "unknown", TimeoutSeconds: 5},
+		{Scope: "core", Capabilities: []string{"stock_universe"}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"unknown"}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"quote", "quote"}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"quote"}, TimeoutSeconds: 31},
+	}
+	for i, options := range cases {
+		if _, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), options); err == nil {
+			t.Errorf("case %d should reject invalid options: %+v", i, options)
+		}
+	}
+}
