@@ -30,6 +30,12 @@ const viewNavigation = [
   { name: "alerts", selector: '.nav-link[data-view="alerts"]' },
   { name: "settings", selector: '.nav-link[data-view="settings"]' }
 ];
+const clickNav = async (targetPage, selector) => {
+  const menu = targetPage.locator("#mobile-menu-toggle");
+  if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+  await targetPage.locator(selector).click();
+};
+
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -442,7 +448,7 @@ try {
 
     if (viewport.width === 320) {
       await page.locator("#mobile-menu-toggle").click();
-      await page.locator('.nav-link[data-view="stocks"]').click();
+      await clickNav(page, '.nav-link[data-view="stocks"]');
       await page.locator("#stocks-view").waitFor({ state: "visible" });
       const savedSettings = await page.evaluate(() => {
         try { return JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}"); }
@@ -467,6 +473,7 @@ try {
       await submitQuote.click();
       // Successful refreshes may retain a prior same-symbol quote while loading; only wait for the success payload here.
       await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "123.45", null, { timeout: 10000 });
+      await page.locator("#refresh-button").click();
       await page.waitForFunction(() =>
         document.querySelector("#market-health-text")?.textContent === "不可用" &&
         document.querySelector("#analysis-health-text")?.textContent === "不可用",
@@ -758,7 +765,7 @@ try {
         localStorage.removeItem(key);
       }, watchlistStorageKey);
 
-      await page.locator('.nav-link[data-view="market"]').click();
+      await clickNav(page, '.nav-link[data-view="market"]');
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // Seed a visible prior success so every failure also proves the old market result is cleared.
@@ -964,7 +971,7 @@ try {
       assert.equal(dataSourcesRequestCount, inFlightRequestCount + 1, "in-flight Provider check should issue one request");
 
       await page.locator("#open-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.locator("#market-base-input").fill("/market-api-v2");
       await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
       await page.locator("#save-settings").click();
@@ -994,47 +1001,11 @@ try {
 
       dataSourceScenario = "success";
 
-      // Keyboard dismissal of the settings dialog must restore focus to its opener.
-      const settingsOpener = page.locator("#open-settings");
-      await settingsOpener.click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
-      assert.equal(await page.locator("#settings-dialog").evaluate((dialog) => dialog.open), true);
-      assert.equal(
-        await page.evaluate(() => Boolean(document.activeElement?.closest("#settings-dialog"))),
-        true,
-        "settings modal should contain focus while open"
-      );
-      for (let tabIndex = 0; tabIndex < 12; tabIndex += 1) {
-        await page.keyboard.press("Tab");
-        assert.equal(
-          await page.evaluate(() => {
-            const dialog = document.querySelector("#settings-dialog");
-            return Boolean(dialog?.open && dialog.contains(document.activeElement));
-          }),
-          true,
-          "Tab " + (tabIndex + 1) + " must keep focus inside the settings modal"
-        );
-      }
-      for (let tabIndex = 0; tabIndex < 12; tabIndex += 1) {
-        await page.keyboard.press("Shift+Tab");
-        assert.equal(
-          await page.evaluate(() => {
-            const dialog = document.querySelector("#settings-dialog");
-            return Boolean(dialog?.open && dialog.contains(document.activeElement));
-          }),
-          true,
-          "Shift+Tab " + (tabIndex + 1) + " must keep focus inside the settings modal"
-        );
-      }
-      await page.keyboard.press("Escape");
-      await page.waitForFunction(() => !document.querySelector("#settings-dialog")?.open, null, { timeout: 3000 });
-      assert.equal(
-        await settingsOpener.evaluate((element) => document.activeElement === element),
-        true,
-        "closing settings with Escape should restore focus to its opener"
-      );
-
-      await page.locator('.nav-link[data-view="market"]').click();
+      // 设置中心现在是一级页面，不再使用旧的连接设置弹窗。
+      await page.locator("#open-settings").click();
+      await page.locator("#settings-view").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#settings-view").isVisible(), true);
+      await clickNav(page, '.nav-link[data-view="market"]');
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // Saved connection and unsaved draft checks must preserve error distinctions and remain isolated.
@@ -1042,7 +1013,7 @@ try {
       if (await settingsMenu.isVisible() && (await settingsMenu.getAttribute("aria-expanded")) !== "true") {
         await settingsMenu.click();
       }
-      await page.locator('.nav-link[data-view="settings"]').click();
+      await clickNav(page, '.nav-link[data-view="settings"]');
       await page.locator("#settings-view").waitFor({ state: "visible" });
 
       const savedSettingsBeforeChecks = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
@@ -1081,7 +1052,7 @@ try {
       const savedSettingsBeforeDraft = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
 
       await page.locator("#open-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.locator("#market-base-input").fill("/draft-market-api");
       await page.locator("#analysis-base-input").fill("/draft-analysis-api");
       assert.equal(await page.locator("#save-settings").isDisabled(), false,
@@ -1120,7 +1091,7 @@ try {
       settingsConnectionScenario = "default";
       page.once("dialog", (dialog) => dialog.accept());
       await page.locator("#cancel-settings-dialog").click();
-      await page.locator("#settings-dialog").waitFor({ state: "hidden" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeChecks,
         "discarding an unsaved draft must preserve the saved local settings");
 
@@ -1135,11 +1106,11 @@ try {
 
       settingsConnectionScenario = "default";
       await page.locator("#open-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.locator("#market-base-input").fill("/race-market-api");
       await page.locator("#analysis-base-input").fill("/race-analysis-api");
       await page.locator("#save-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "hidden" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.waitForFunction(() => {
         try {
           const settings = JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}");
@@ -1170,7 +1141,7 @@ try {
       const savedSettingsBeforeDraftRace = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
       const savedFeedbackBeforeDraftRace = await page.locator("#settings-connection-check").textContent();
       await page.locator("#open-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.locator("#market-base-input").fill("/draft-race-market");
       await page.locator("#analysis-base-input").fill("/draft-race-analysis");
 
@@ -1208,11 +1179,11 @@ try {
       settingsConnectionScenario = "default";
       page.once("dialog", (dialog) => dialog.accept());
       await page.locator("#cancel-settings-dialog").click();
-      await page.locator("#settings-dialog").waitFor({ state: "hidden" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraftRace,
         "discarding the raced draft must preserve the existing saved endpoints");
 
-      await page.locator('.nav-link[data-view="market"]').click();
+      await clickNav(page, '.nav-link[data-view="market"]');
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // The topbar health summary must use the same evidence threshold as Data Center.
@@ -1294,7 +1265,7 @@ try {
     if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
       await menu.click();
     }
-    await page.locator('[data-view="tasks"]').click();
+    await clickNav(page, '[data-view="tasks"]');
     await page.locator("#tasks-view").waitFor({ state: "visible" });
 
     const flow = await page.locator("#run-flow-dialog").evaluate((dialog) => {
