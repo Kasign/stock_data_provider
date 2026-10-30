@@ -130,7 +130,9 @@ func (s *DataService) ProviderDiagnostics() []map[string]any {
 		capabilities[p.Name()]["quote"] = true
 	}
 	for _, p := range s.barProviders {
-		if capabilities[p.Name()] == nil { capabilities[p.Name()] = make(map[string]bool) }
+		if capabilities[p.Name()] == nil {
+			capabilities[p.Name()] = make(map[string]bool)
+		}
 		capabilities[p.Name()]["daily_bars"] = true
 	}
 	result := make([]map[string]any, 0, len(capabilities))
