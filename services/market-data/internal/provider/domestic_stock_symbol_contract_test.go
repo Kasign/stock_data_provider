@@ -67,7 +67,7 @@ func TestTushareStockFinancialAndValuationRejectNonCommonEquitiesBeforeRequest(t
 
 func TestDomesticStockProviderBeijingSymbolSupportMatrix(t *testing.T) {
 	unsupported := []struct {
-		name string
+		name     string
 		validate func(string) (string, error)
 	}{
 		{name: "Sina", validate: sinaCode},
@@ -121,9 +121,9 @@ func TestDomesticStockProviderMarketSegmentSymbolMappings(t *testing.T) {
 		{symbol: "920000.BJ"}, // 北交所
 	}
 	providers := []struct {
-		name string
+		name      string
 		mapSymbol func(string) (string, error)
-		want map[string]string
+		want      map[string]string
 	}{
 		{name: "Sina", mapSymbol: sinaCode, want: map[string]string{"600519.SH": "sh600519", "000001.SZ": "sz000001", "300750.SZ": "sz300750", "688981.SH": "sh688981"}},
 		{name: "Tencent", mapSymbol: tencentCode, want: map[string]string{"600519.SH": "sh600519", "000001.SZ": "sz000001", "300750.SZ": "sz300750", "688981.SH": "sh688981"}},
