@@ -68,7 +68,11 @@ func (p *Tushare) FetchCorporateActions(ctx context.Context, rawSymbol, startDat
 			inRange := func(date string) bool {
 				return date != "" && date >= startISO && date <= endISO
 			}
-			if !inRange(exDate) && !inRange(announcementDate) && !inRange(implementationDate) { continue }
+			eventDate := exDate
+			if eventDate == "" {
+				eventDate = announcementDate
+			}
+			if !inRange(eventDate) { continue }
 
 			status, rowErr := table.stringValue(row, "div_proc")
 			if rowErr != nil { return nil, rowErr }
