@@ -71,8 +71,16 @@ func (p *Eastmoney) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 	if payload.Data == nil || len(payload.Data.KLines) == 0 {
 		return nil, errors.New("Eastmoney capital-flow response has no daily observations")
 	}
-	if code := strings.TrimSpace(payload.Data.Code); code != "" && code != strings.Split(symbol, ".")[0] {
-		return nil, fmt.Errorf("Eastmoney capital-flow symbol mismatch: requested %s, returned code %q", symbol, code)
+	requestedCode := strings.Split(symbol, ".")[0]
+	returnedCode := strings.TrimSpace(payload.Data.Code)
+	if returnedCode == "" {
+		return nil, errors.New("Eastmoney capital-flow response is missing security code")
+	}
+	if len(returnedCode) != 6 {
+		return nil, fmt.Errorf("Eastmoney capital-flow response has invalid security code %q", returnedCode)
+	}
+	if returnedCode != requestedCode {
+		return nil, fmt.Errorf("Eastmoney capital-flow symbol mismatch: requested %s, returned code %q", symbol, returnedCode)
 	}
 
 	loc, locErr := time.LoadLocation("Asia/Shanghai")

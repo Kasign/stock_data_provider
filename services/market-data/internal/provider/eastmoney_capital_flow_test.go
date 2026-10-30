@@ -71,3 +71,32 @@ func TestEastmoneyCapitalFlowRejectsSymbolMismatch(t *testing.T) {
 		t.Fatalf("expected symbol mismatch, got %v", err)
 	}
 }
+
+
+func TestEastmoneyCapitalFlowRejectsMissingSecurityIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rc":0,"data":{"klines":["2026-10-26,100"]}}`))
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(time.Second, "", "").WithCapitalFlowURL(server.URL)
+	_, err := p.FetchCapitalFlow(context.Background(), "600519.SH")
+	if err == nil || !strings.Contains(err.Error(), "missing security code") {
+		t.Fatalf("missing returned security identity must be rejected, got %v", err)
+	}
+}
+
+func TestEastmoneyCapitalFlowRejectsMalformedSecurityIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rc":0,"data":{"code":"60051","klines":["2026-10-26,100"]}}`))
+	}))
+	defer server.Close()
+
+	p := NewEastmoney(time.Second, "", "").WithCapitalFlowURL(server.URL)
+	_, err := p.FetchCapitalFlow(context.Background(), "600519.SH")
+	if err == nil || !strings.Contains(err.Error(), "invalid security code") {
+		t.Fatalf("malformed returned security identity must be rejected, got %v", err)
+	}
+}
