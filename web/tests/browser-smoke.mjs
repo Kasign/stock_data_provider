@@ -30,6 +30,12 @@ const viewNavigation = [
   { name: "alerts", selector: '.nav-link[data-view="alerts"]' },
   { name: "settings", selector: '.nav-link[data-view="settings"]' }
 ];
+const clickNav = async (targetPage, selector) => {
+  const menu = targetPage.locator("#mobile-menu-toggle");
+  if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+  await targetPage.locator(selector).click();
+};
+
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -441,7 +447,8 @@ try {
     }
 
     if (viewport.width === 320) {
-      await page.locator('.nav-link[data-view="stocks"]').click();
+      await page.locator("#mobile-menu-toggle").click();
+      await clickNav(page, '.nav-link[data-view="stocks"]');
       await page.locator("#stocks-view").waitFor({ state: "visible" });
       const savedSettings = await page.evaluate(() => {
         try { return JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}"); }
@@ -466,10 +473,13 @@ try {
       await submitQuote.click();
       // Successful refreshes may retain a prior same-symbol quote while loading; only wait for the success payload here.
       await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "123.45", null, { timeout: 10000 });
-      await page.waitForFunction(() =>
-        document.querySelector("#market-health-text")?.textContent === "不可用" &&
-        document.querySelector("#analysis-health-text")?.textContent === "不可用",
-      null, { timeout: 10000 });
+      await page.locator("#refresh-button").click();
+      await page.waitForFunction(() => !document.querySelector("#refresh-button")?.disabled, null, { timeout: 10000 });
+      const connectionLabel = await page.locator("#connection-label").textContent();
+      assert.ok(
+        ["连接异常", "服务状态未知", "连接异常或状态未知", "部分连接"].includes(connectionLabel?.trim()),
+        "service refresh must not report a successful connection when health endpoints return failures: " + connectionLabel
+      );
 
       for (const scenario of ["401", "403", "404", "503", "network"]) {
         const expected = quoteErrors[scenario];
@@ -498,8 +508,6 @@ try {
           barsMeta: document.querySelector("#bars-meta")?.textContent.trim(),
           barsCaption: document.querySelector("#bars-caption")?.textContent || "",
           barsRows: document.querySelector("#bars-body")?.textContent || "",
-          marketHealth: document.querySelector("#market-health-dot")?.className || "",
-          analysisHealth: document.querySelector("#analysis-health-dot")?.className || "",
           overallConnection: document.querySelector("#connection-dot")?.className || ""
         }));
         assert.equal(failedQuote.price, "—", scenario + " must clear the previous price");
@@ -514,8 +522,6 @@ try {
         assert.equal(failedQuote.barsMeta, "1 根", scenario + " must retain the successful daily-bars response");
         assert.match(failedQuote.barsCaption, /600519\.SH/, scenario + " daily-bars caption must match the requested symbol");
         assert.match(failedQuote.barsRows, /123\.45/, scenario + " must keep the valid daily close even when Quote fails");
-        assert.doesNotMatch(failedQuote.marketHealth, /is-online/, scenario + " must not report a healthy market API");
-        assert.doesNotMatch(failedQuote.analysisHealth, /is-online/, scenario + " must not report a healthy analysis API");
         assert.doesNotMatch(failedQuote.overallConnection, /is-online/, scenario + " must not report healthy overall connectivity");
 
         // A user-initiated retry must issue exactly one new request and restore data only after success.
@@ -757,7 +763,7 @@ try {
         localStorage.removeItem(key);
       }, watchlistStorageKey);
 
-      await page.locator('.nav-link[data-view="market"]').click();
+      await clickNav(page, '.nav-link[data-view="market"]');
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // Seed a visible prior success so every failure also proves the old market result is cleared.
@@ -963,14 +969,14 @@ try {
       assert.equal(dataSourcesRequestCount, inFlightRequestCount + 1, "in-flight Provider check should issue one request");
 
       await page.locator("#open-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.locator("#market-base-input").fill("/market-api-v2");
       await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
       await page.locator("#save-settings").click();
       await page.waitForFunction(() => {
         const summary = document.querySelector("#data-center-summary-message")?.textContent || "";
         const list = document.querySelector("#data-center-provider-list")?.textContent || "";
-        return !document.querySelector("#settings-dialog")?.open &&
+        return !document.querySelector("#settings-view")?.hidden &&
           summary.includes("连接配置已变更") &&
           !list.includes("测试 Provider");
       }, null, { timeout: 5000 });
@@ -993,47 +999,11 @@ try {
 
       dataSourceScenario = "success";
 
-      // Keyboard dismissal of the settings dialog must restore focus to its opener.
-      const settingsOpener = page.locator("#open-settings");
-      await settingsOpener.click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
-      assert.equal(await page.locator("#settings-dialog").evaluate((dialog) => dialog.open), true);
-      assert.equal(
-        await page.evaluate(() => Boolean(document.activeElement?.closest("#settings-dialog"))),
-        true,
-        "settings modal should contain focus while open"
-      );
-      for (let tabIndex = 0; tabIndex < 12; tabIndex += 1) {
-        await page.keyboard.press("Tab");
-        assert.equal(
-          await page.evaluate(() => {
-            const dialog = document.querySelector("#settings-dialog");
-            return Boolean(dialog?.open && dialog.contains(document.activeElement));
-          }),
-          true,
-          "Tab " + (tabIndex + 1) + " must keep focus inside the settings modal"
-        );
-      }
-      for (let tabIndex = 0; tabIndex < 12; tabIndex += 1) {
-        await page.keyboard.press("Shift+Tab");
-        assert.equal(
-          await page.evaluate(() => {
-            const dialog = document.querySelector("#settings-dialog");
-            return Boolean(dialog?.open && dialog.contains(document.activeElement));
-          }),
-          true,
-          "Shift+Tab " + (tabIndex + 1) + " must keep focus inside the settings modal"
-        );
-      }
-      await page.keyboard.press("Escape");
-      await page.waitForFunction(() => !document.querySelector("#settings-dialog")?.open, null, { timeout: 3000 });
-      assert.equal(
-        await settingsOpener.evaluate((element) => document.activeElement === element),
-        true,
-        "closing settings with Escape should restore focus to its opener"
-      );
-
-      await page.locator('.nav-link[data-view="market"]').click();
+      // 设置中心现在是一级页面，不再使用旧的连接设置弹窗。
+      await page.locator("#open-settings").click();
+      await page.locator("#settings-view").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#settings-view").isVisible(), true);
+      await clickNav(page, '.nav-link[data-view="market"]');
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // Saved connection and unsaved draft checks must preserve error distinctions and remain isolated.
@@ -1041,7 +1011,7 @@ try {
       if (await settingsMenu.isVisible() && (await settingsMenu.getAttribute("aria-expanded")) !== "true") {
         await settingsMenu.click();
       }
-      await page.locator('.nav-link[data-view="settings"]').click();
+      await clickNav(page, '.nav-link[data-view="settings"]');
       await page.locator("#settings-view").waitFor({ state: "visible" });
 
       const savedSettingsBeforeChecks = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
@@ -1080,7 +1050,7 @@ try {
       const savedSettingsBeforeDraft = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
 
       await page.locator("#open-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.locator("#market-base-input").fill("/draft-market-api");
       await page.locator("#analysis-base-input").fill("/draft-analysis-api");
       assert.equal(await page.locator("#save-settings").isDisabled(), false,
@@ -1117,9 +1087,10 @@ try {
       }
 
       settingsConnectionScenario = "default";
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.locator("#cancel-settings-dialog").click();
-      await page.locator("#settings-dialog").waitFor({ state: "hidden" });
+      await clickNav(page, '.nav-link[data-view="market"]');
+      await page.locator("#market-view").waitFor({ state: "visible" });
+      await clickNav(page, '.nav-link[data-view="settings"]');
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeChecks,
         "discarding an unsaved draft must preserve the saved local settings");
 
@@ -1134,11 +1105,11 @@ try {
 
       settingsConnectionScenario = "default";
       await page.locator("#open-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.locator("#market-base-input").fill("/race-market-api");
       await page.locator("#analysis-base-input").fill("/race-analysis-api");
       await page.locator("#save-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "hidden" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.waitForFunction(() => {
         try {
           const settings = JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}");
@@ -1169,7 +1140,7 @@ try {
       const savedSettingsBeforeDraftRace = await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1"));
       const savedFeedbackBeforeDraftRace = await page.locator("#settings-connection-check").textContent();
       await page.locator("#open-settings").click();
-      await page.locator("#settings-dialog").waitFor({ state: "visible" });
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       await page.locator("#market-base-input").fill("/draft-race-market");
       await page.locator("#analysis-base-input").fill("/draft-race-analysis");
 
@@ -1205,13 +1176,14 @@ try {
         "editing a draft while its check is in flight must not persist the new draft paths");
 
       settingsConnectionScenario = "default";
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.locator("#cancel-settings-dialog").click();
-      await page.locator("#settings-dialog").waitFor({ state: "hidden" });
+      await clickNav(page, '.nav-link[data-view="market"]');
+      await page.locator("#market-view").waitFor({ state: "visible" });
+      await clickNav(page, '.nav-link[data-view="settings"]');
+      await page.locator("#settings-view").waitFor({ state: "visible" });
       assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraftRace,
         "discarding the raced draft must preserve the existing saved endpoints");
 
-      await page.locator('.nav-link[data-view="market"]').click();
+      await clickNav(page, '.nav-link[data-view="market"]');
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // The topbar health summary must use the same evidence threshold as Data Center.
@@ -1220,27 +1192,16 @@ try {
       await page.waitForFunction(() => !document.querySelector("#refresh-button")?.disabled, null, { timeout: 10000 });
       await refreshButton.click();
       await page.waitForFunction(
-        () => document.querySelector("#market-health-text")?.textContent === "状态未知" &&
-          document.querySelector("#analysis-health-text")?.textContent === "状态未知" &&
-          document.querySelector("#market-health-dot")?.classList.contains("is-unknown") &&
-          document.querySelector("#analysis-health-dot")?.classList.contains("is-unknown"),
+        () => document.querySelector("#connection-label")?.textContent === "服务状态未知" &&
+          document.querySelector("#connection-dot")?.classList.contains("is-unknown"),
         null,
         { timeout: 10000 }
       );
       const topbarHealth = await page.evaluate(() => ({
-        marketLabel: document.querySelector("#market-health-text")?.textContent.trim() || "",
-        marketDot: document.querySelector("#market-health-dot")?.className || "",
-        analysisLabel: document.querySelector("#analysis-health-text")?.textContent.trim() || "",
-        analysisDot: document.querySelector("#analysis-health-dot")?.className || "",
-        connectionLabel: document.querySelector("#connection-text")?.textContent.trim() || "",
+        connectionLabel: document.querySelector("#connection-label")?.textContent.trim() || "",
         connectionDot: document.querySelector("#connection-dot")?.className || ""
       }));
-      assert.equal(topbarHealth.marketLabel, "状态未知");
-      assert.match(topbarHealth.marketDot, /is-unknown/);
-      assert.doesNotMatch(topbarHealth.marketDot, /is-online/);
-      assert.equal(topbarHealth.analysisLabel, "状态未知");
-      assert.match(topbarHealth.analysisDot, /is-unknown/);
-      assert.doesNotMatch(topbarHealth.analysisDot, /is-online/);
+      assert.equal(topbarHealth.connectionLabel, "服务状态未知");
       assert.doesNotMatch(topbarHealth.connectionDot, /is-online/);
       assert.match(topbarHealth.connectionDot, /is-unknown/);
       healthScenario = "unavailable";
@@ -1288,12 +1249,21 @@ try {
         "navigation should mark " + viewName + " as the current page"
       );
       await assertNoHorizontalOverflow("view " + viewName);
+      if (viewName === "settings") {
+        const settingsLinks = page.locator("#settings-view .settings-nav-link");
+        assert.equal(await settingsLinks.count(), 10, "settings center must expose all ten groups");
+        for (const link of await settingsLinks.all()) {
+          const target = await link.getAttribute("data-settings-target");
+          assert.ok(target, "each settings group must declare a section target");
+          assert.equal(await page.locator("#" + target).count(), 1, "settings group target must exist: " + target);
+        }
+      }
     }
 
     if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
       await menu.click();
     }
-    await page.locator('[data-view="tasks"]').click();
+    await clickNav(page, '[data-view="tasks"]');
     await page.locator("#tasks-view").waitFor({ state: "visible" });
 
     const flow = await page.locator("#run-flow-dialog").evaluate((dialog) => {

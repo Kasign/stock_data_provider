@@ -1183,29 +1183,14 @@ function handleQuoteFormSubmit(event) {
   }
 }
 
-function setServiceStatus(prefix, status, text) {
-  const dot = $(`#${prefix}-health-dot`);
-  const label = $(`#${prefix}-health-text`);
-  dot.classList.toggle("is-online", status === "healthy");
-  dot.classList.toggle("is-offline", status === "failed");
-  dot.classList.toggle("is-unknown", status === "unknown" || status === "degraded");
-  label.textContent = text;
-}
-
 function serviceHealthState(result) {
   if (!result?.ok) return "failed";
   const status = String(result.data?.status || "").trim().toLowerCase();
   if (["ok", "ready", "healthy", "alive", "running"].includes(status)) return "healthy";
-  if (!status) return "unknown";
-  return "degraded";
+  if (["failed", "unhealthy", "unavailable", "error", "down"].includes(status)) return "failed";
+  if (["degraded", "partial"].includes(status)) return "degraded";
+  return "unknown";
 }
-
-function serviceHealthLabel(status) {
-  return status === "healthy" ? "就绪"
-    : status === "failed" ? "不可用"
-      : status === "degraded" ? "状态需关注" : "状态未知";
-}
-
 
 function setQualityPill(target, status, customText = "") {
   target.className = `quality-pill quality-${String(status || "unknown").toLowerCase()}`;
@@ -1407,7 +1392,7 @@ const REFRESH_BUTTON_CONTEXT = Object.freeze({
   screening: { label: "检查服务连接（选股接口待接入）", title: "选股任务与候选 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   alerts: { label: "检查服务连接（告警接口待接入）", title: "告警规则与触发记录 API 尚未接入；此操作只刷新行情与分析服务连接状态。" },
   data: { label: "立即检查服务与数据源能力", title: "检查行情/分析服务存活和就绪状态，并读取 Provider 能力声明；不代表逐 Provider 实时探测。" },
-  settings: { label: "检查服务连接", title: "检查当前已保存的行情/分析 API；未保存的连接草稿可在设置弹窗中使用“检查未保存配置”。" }
+  settings: { label: "检查服务连接", title: "检查当前已保存的行情/分析 API；未保存的连接草稿可在设置中心的连接与服务分组中检查。" }
 });
 
 function syncRefreshButtonContext() {
@@ -1463,6 +1448,7 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
   const requestedView = legacyMarketView ? "market" : view;
   const nextView = Object.hasOwn(VIEW_META, requestedView) ? requestedView : "market";
   const previousView = state.view;
+  if (previousView === "settings" && nextView !== "settings") setMarketKeyVisibility(false);
   state.view = nextView;
   if (legacyMarketView && window.location.hash === "#market-data") window.history.replaceState(null, "", "#market");
   syncRefreshButtonContext();
@@ -1982,8 +1968,6 @@ async function refreshServices() {
     }
 
     try {
-      setServiceStatus("market", marketState, serviceHealthLabel(marketState));
-      setServiceStatus("analysis", analysisState, serviceHealthLabel(analysisState));
       const connectionDot = $("#connection-dot");
       connectionDot.classList.toggle("is-online", marketOK && analysisOK);
       connectionDot.classList.toggle("is-offline", marketState === "failed" && analysisState === "failed");
@@ -2012,8 +1996,6 @@ async function refreshServices() {
     const message = "服务健康检查流程异常：" + settingsCheckErrorMessage(error);
     // 即使健康请求或状态渲染意外失败，也将错误转换为结果，避免 void 调用产生未处理 rejection。
     try {
-      setServiceStatus("market", "unknown", "状态未知");
-      setServiceStatus("analysis", "unknown", "状态未知");
     } catch {}
     try {
       const connectionDot = $("#connection-dot");
@@ -4121,7 +4103,7 @@ function syncConnectionDraftState() {
   const dirty = connectionDraftIsDirty();
   $("#connection-dirty-state").hidden = !dirty;
   $("#connection-dirty-state").textContent = dirty
-    ? "存在未保存更改。保存只会修改当前浏览器连接配置，不会更改服务器 .env。"
+    ? "存在未保存的连接配置更改。保存只会修改当前浏览器连接配置，不会更改服务器 .env。"
     : "没有未保存的连接配置更改。";
   $("#save-settings").disabled = !dirty;
   return dirty;
@@ -4134,7 +4116,35 @@ function setupSettingsNavigation() {
 
   const tools = document.createElement("div");
   tools.className = "settings-nav-tools";
-  tools.innerHTML = '<label class="settings-nav-search"><span class="sr-only">搜索设置分组</span><input type="search" id="settings-section-search" placeholder="搜索设置分组" autocomplete="off" /></label><div class="settings-nav-actions"><button type="button" data-settings-expand-all>全部展开</button><button type="button" data-settings-collapse-all>全部收起</button></div><p class="settings-nav-result" id="settings-nav-result" aria-live="polite"></p>';
+  const searchLabel = document.createElement("label");
+  searchLabel.className = "settings-nav-search";
+  const searchHint = document.createElement("span");
+  searchHint.className = "sr-only";
+  searchHint.textContent = "搜索设置分组";
+  const searchInput = document.createElement("input");
+  searchInput.type = "search";
+  searchInput.id = "settings-section-search";
+  searchInput.placeholder = "搜索设置分组";
+  searchInput.autocomplete = "off";
+  searchLabel.append(searchHint, searchInput);
+
+  const actions = document.createElement("div");
+  actions.className = "settings-nav-actions";
+  const expandAll = document.createElement("button");
+  expandAll.type = "button";
+  expandAll.dataset.settingsExpandAll = "";
+  expandAll.textContent = "全部展开";
+  const collapseAll = document.createElement("button");
+  collapseAll.type = "button";
+  collapseAll.dataset.settingsCollapseAll = "";
+  collapseAll.textContent = "全部收起";
+  actions.append(expandAll, collapseAll);
+
+  const resultStatus = document.createElement("p");
+  resultStatus.className = "settings-nav-result";
+  resultStatus.id = "settings-nav-result";
+  resultStatus.setAttribute("aria-live", "polite");
+  tools.append(searchLabel, actions, resultStatus);
   nav.prepend(tools);
 
   const links = Array.from(nav.querySelectorAll(".settings-nav-link"));
@@ -4981,7 +4991,7 @@ document.querySelectorAll("[data-theme-value]").forEach((button) => {
 document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
   button.addEventListener("click", () => {
     setView(button.dataset.view);
-    setMobileNavigationOpen(false);
+    setMobileNavigationOpen(false, { restoreFocus: true });
   });
 });
 document.querySelectorAll("[data-open-view]").forEach((button) => {
