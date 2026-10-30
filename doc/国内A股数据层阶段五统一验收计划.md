@@ -167,3 +167,15 @@
 - Eastmoney daily_bars（600036.SH）：连接 EOF。
 
 这些失败必须保留为源端可用性问题，不允许通过忽略错误或降级质量门禁来让探测变绿。
+
+
+## 十二、最新复测补记（2026-10-30 07:26 UTC）
+
+- 最新代码基线：`9318f27c69067bf3cdad19706d425551ff302a8f`（本节为文档更新，不改变 Go 代码）。
+- Go/Python 质量契约回归 Run `41019954339`：通过。
+- WebUI 检查 Run `41019954568`：通过。
+- 真实 Provider Run `41019954185`：探测步骤仍有 4 项失败，均为 Eastmoney HTTP 502（stock_search、sector_rankings、quote、备用 quote）；其余请求本轮返回成功。工作流设置 `continue-on-error`，不能把 Run conclusion=success 当作所有 Provider 全部通过。
+- 同花顺 `TestLiveHithinkCapabilities`：跳过，尚未启用 `include_hithink`，无真实 API Key 权限证据。
+- Go 测试 Run `41019954395`：根模块、go-core 的 test/race/vet 均通过，market-data 全量测试通过，MariaDB PIT 集成通过；market-data race 与镜像构建在后续提交触发并发取消后未完成。因此最新 market-data race/vet 仍需一次不被中断的完整验收。
+
+后续不要为消除 Eastmoney 502 而放宽 Provider 错误检查；应保留失败证据并继续推进可独立完成的字段差分和样本覆盖。

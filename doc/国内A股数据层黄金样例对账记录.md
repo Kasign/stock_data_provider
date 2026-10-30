@@ -89,3 +89,11 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 - Go 测试 Run `41019702930`：根模块与 go-core 的测试/race/vet 通过；market-data 全量测试通过，但 market-data race 在下一提交触发并发取消后中止，market-data vet 未执行。Docker 镜像构建和 MariaDB PIT 集成通过。
 - 真实 Provider Run `41019702953`：5 项 Eastmoney 请求失败（stock_search、sector_rankings、quote、备用 quote 为 HTTP 502；daily_bars 为 EOF）。其余成功只代表本次请求返回。
 - 同花顺可选测试 `TestLiveHithinkCapabilities` 被跳过，未提供 API Key，也未执行真实账号权限验收。
+
+
+## 8. 最新复测补记（2026-10-30）
+
+- Live provider Run `41019954185`：4 项失败，均为 Eastmoney HTTP 502（股票搜索、板块排行、主行情、备用行情）；本次日 K EOF 问题没有再次出现。
+- 同花顺可选探测仍跳过，不能据此判断账号权限。
+- Go/Python 质量契约回归 Run `41019954339` 通过；但它是契约/静态兼容检查，不是 Python/Go 真实数据值差分。
+- 最新 Go suite Run `41019954395` 的 market-data race 与 Docker 镜像构建被后续提交触发并发取消；根模块和 go-core test/race/vet、market-data 全量测试、MariaDB PIT 集成已通过。后续需要完整跑完 market-data race/vet 和镜像构建。
