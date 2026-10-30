@@ -30,6 +30,32 @@ type providerProbeJob struct {
 	run        providerProbeFunc
 }
 
+type providerProbeEvidenceContextKey struct{}
+
+type providerProbeEvidence struct {
+	sampleSymbol  string
+	sampleMarket  string
+	sampleDate    string
+	rowsReturned  int
+	rowsValidated int
+	providerTime  *time.Time
+}
+
+func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string, rowsReturned, rowsValidated int, providerTime *time.Time) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil {
+		return
+	}
+	evidence.sampleSymbol = symbol
+	if separator := strings.LastIndex(symbol, "."); separator >= 0 && separator+1 < len(symbol) {
+		evidence.sampleMarket = symbol[separator+1:]
+	}
+	evidence.sampleDate = sampleDate
+	evidence.rowsReturned = rowsReturned
+	evidence.rowsValidated = rowsValidated
+	evidence.providerTime = providerTime
+}
+
 // ProviderProbeOptions 控制主动诊断的执行范围和单项超时。
 type ProviderProbeOptions struct {
 	Scope          string
@@ -113,6 +139,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if q == nil {
 				return model.QualityUnknown, "", nil, errors.New("empty quote response")
 			}
+			recordProviderProbeEvidence(probeCtx, quoteSymbol, "", 1, 1, q.QuoteTime)
 			if q.Symbol != quoteSymbol {
 				return model.QualityInvalid, q.SourceVersion, nil, fmt.Errorf("quote contract invalid: symbol mismatch, got %q, want %q", q.Symbol, quoteSymbol)
 			}
@@ -136,6 +163,14 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				return model.QualityUnknown, "", nil, err
 			}
 			validated, warnings := normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
+			latestDate := ""
+			var providerTime *time.Time
+			if len(validated) > 0 {
+				latest := validated[len(validated)-1]
+				latestDate = latest.TradeDate
+				providerTime = latest.ProviderTime
+			}
+			recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
 			if len(validated) == 0 {
 				return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned no valid bars")
 			}
@@ -530,9 +565,17 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			// 等待并发槽位的时间不计入单项 Provider 超时，避免排队任务被误报为超时。
 			probeCtx, cancel := context.WithTimeout(ctx, time.Duration(options.TimeoutSeconds)*time.Second)
+			evidence := &providerProbeEvidence{}
+			probeCtx = context.WithValue(probeCtx, providerProbeEvidenceContextKey{}, evidence)
 			quality, version, reasons, err := job.run(probeCtx)
 			cancel()
 			<-sem
+			item.SampleSymbol = evidence.sampleSymbol
+			item.SampleMarket = evidence.sampleMarket
+			item.SampleDate = evidence.sampleDate
+			item.RowsReturned = evidence.rowsReturned
+			item.RowsValidated = evidence.rowsValidated
+			item.ProviderTime = evidence.providerTime
 			item.ElapsedMS = time.Since(checkedAt).Milliseconds()
 			item.CheckedAt = time.Now().UTC()
 			item.SourceVersion = version
