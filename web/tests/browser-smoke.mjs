@@ -83,6 +83,18 @@ try {
   for (const viewport of viewports) {
     const context = await browser.newContext({ viewport, reducedMotion: "reduce" });
     const page = await context.newPage();
+    await page.addInitScript(() => {
+      window.__pageErrorDetails = [];
+      window.addEventListener("error", (event) => {
+        window.__pageErrorDetails.push({
+          message: event.message,
+          filename: event.filename,
+          line: event.lineno,
+          column: event.colno,
+          stack: event.error?.stack || ""
+        });
+      });
+    });
     const pageErrors = [];
     const consoleErrors = [];
     const unexpectedNetworkFailures = [];
@@ -417,7 +429,7 @@ try {
     });
 
     await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
-    assert.deepEqual(pageErrors, [], "browser page errors after initial load at " + viewport.width + "px: " + pageErrors.join(" | "));
+    assert.deepEqual(pageErrors, [], "browser page errors after initial load at " + viewport.width + "px: " + pageErrors.join(" | ") + " details=" + JSON.stringify(await page.evaluate(() => window.__pageErrorDetails || [])));
     await page.waitForFunction(
       () => document.querySelectorAll(".nav-link[data-view]").length === 11 &&
         document.querySelectorAll(".workspace-tab[data-view]").length === 0,
