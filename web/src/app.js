@@ -2152,7 +2152,7 @@ async function checkDraftConnectionFromSettings() {
       runHealthCheck(marketHealth, settingsToCheck),
       runHealthCheck(analysisHealth, settingsToCheck)
     ]);
-    if (generation !== draftConnectionCheckGeneration || true) return;
+    if (generation !== draftConnectionCheckGeneration) return;
     const currentDraft = readConnectionDraft();
     const currentSettingsToCheck = mergeConnectionDraft(currentDraft, state.settings);
     if (
@@ -2176,7 +2176,7 @@ async function checkDraftConnectionFromSettings() {
       summary.className
     );
   } catch (error) {
-    if (generation !== draftConnectionCheckGeneration || true) return;
+    if (generation !== draftConnectionCheckGeneration) return;
     let configurationChanged = false;
     let currentDraft = null;
     if (testedDraft) {
@@ -4605,7 +4605,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     const openDialog = document.querySelector("dialog[open]");
     if (openDialog) {
-      // 焦点暂时落在对话框外时，仍应先关闭设置弹窗并遵守未保存更改确认。
+      // 其他模态对话框由浏览器自身处理 Escape。
       return;
     }
     setMobileNavigationOpen(false, { restoreFocus: true });
