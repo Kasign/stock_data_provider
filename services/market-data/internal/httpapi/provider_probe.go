@@ -15,11 +15,11 @@ import (
 type providerProbeRequest struct {
 	Scope          string   `json:"scope"`
 	Capabilities   []string `json:"capabilities"`
-	TimeoutSeconds int      `json:"timeout_seconds"`
+	TimeoutSeconds *int     `json:"timeout_seconds"`
 }
 
 func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
-	request := providerProbeRequest{Scope: "all", TimeoutSeconds: 12}
+	request := providerProbeRequest{Scope: "all"}
 	if r.Body != nil {
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*1024))
 		var raw json.RawMessage
@@ -52,10 +52,11 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "scope must be all or core", requestID(r))
 		return
 	}
-	if request.TimeoutSeconds == 0 {
-		request.TimeoutSeconds = 12
+	timeoutSeconds := 12
+	if request.TimeoutSeconds != nil {
+		timeoutSeconds = *request.TimeoutSeconds
 	}
-	if request.TimeoutSeconds < 1 || request.TimeoutSeconds > 30 {
+	if timeoutSeconds < 1 || timeoutSeconds > 30 {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "timeout_seconds must be between 1 and 30", requestID(r))
 		return
 	}
@@ -88,7 +89,7 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	run, err := s.svc.ProbeProviderCapabilitiesWithOptions(r.Context(), service.ProviderProbeOptions{
-		Scope: request.Scope, Capabilities: request.Capabilities, TimeoutSeconds: request.TimeoutSeconds,
+		Scope: request.Scope, Capabilities: request.Capabilities, TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), requestID(r))
