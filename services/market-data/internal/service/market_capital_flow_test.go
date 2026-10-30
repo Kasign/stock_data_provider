@@ -11,7 +11,7 @@ import (
 
 type marketCapitalFlowFake struct {
 	snapshot *model.MarketCapitalFlowSnapshot
-	err error
+	err      error
 }
 
 func (p *marketCapitalFlowFake) Name() string { return "tushare" }
