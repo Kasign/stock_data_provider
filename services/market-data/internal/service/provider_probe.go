@@ -248,7 +248,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if snapshot != nil {
 				symbol := ""
-				if len(snapshot.Items) > 0 { symbol = snapshot.Items[0].Symbol }
+				if len(snapshot.Items) > 0 {
+					symbol = snapshot.Items[0].Symbol
+				}
 				recordProviderProbeEvidence(probeCtx, symbol, "", len(snapshot.Items), len(snapshot.Items), nil)
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
@@ -326,7 +328,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				return model.QualityInvalid, v.SourceVersion, nil, errors.New("index-catalog response has inconsistent counts")
 			}
 			sample := ""
-			if len(v.Items) > 0 { sample = v.Items[0].Symbol }
+			if len(v.Items) > 0 {
+				sample = v.Items[0].Symbol
+			}
 			recordProviderProbeEvidence(probeCtx, sample, "", len(v.Items), len(v.Items), v.ProviderTime)
 			seen := make(map[string]bool, len(v.Items))
 			for _, item := range v.Items {
@@ -411,7 +415,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 			}
 			sample := ""
-			if len(v.Items) > 0 { sample = v.Items[0].Symbol }
+			if len(v.Items) > 0 {
+				sample = v.Items[0].Symbol
+			}
 			recordProviderProbeEvidence(probeCtx, sample, v.TradeDate, len(v.Items), len(v.Items), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
@@ -435,7 +441,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 			}
 			sample := ""
-			if len(v.Items) > 0 { sample = v.Items[0].Symbol }
+			if len(v.Items) > 0 {
+				sample = v.Items[0].Symbol
+			}
 			recordProviderProbeEvidence(probeCtx, sample, v.TradeDate, len(v.Items), len(v.Items), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
@@ -507,7 +515,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				return model.QualityInvalid, "", nil, err
 			}
 			sample := ""
-			if len(v.Items) > 0 { sample = v.Items[0].Symbol }
+			if len(v.Items) > 0 {
+				sample = v.Items[0].Symbol
+			}
 			recordProviderProbeEvidence(probeCtx, sample, "", len(v.Items), len(v.Items), v.ProviderTime)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
