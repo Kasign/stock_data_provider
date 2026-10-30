@@ -310,3 +310,8 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 ## 20. 覆盖率字段 gofmt 修复（2026-10-30）
 
 提交 `69736d1baaf8ef8dffe9b373d6edbcb5ba02d9c5` 的 market-data gofmt 检查发现两个结构体字段对齐不符合 gofmt，以及测试函数前存在多余空行。已修复格式，需以新 SHA 的完整 Go suite 与 Docker 构建结果复核。
+
+
+## 21. 北交所证券代码直指定路径补充
+
+BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过滤；仅指定 `920001.BJ` 时也应输出 `not_supported`，不能误计 failed。测试使用本地 fake，不触发上游请求。

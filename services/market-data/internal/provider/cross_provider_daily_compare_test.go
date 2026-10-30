@@ -99,7 +99,10 @@ func TestCompareCrossProviderDailyBarsRejectsInvalidMarketValues(t *testing.T) {
 		{name: "negative volume", mutate: func(bar *CrossProviderDailyBar) { bar.Volume = -1 }, reason: "negative_volume"},
 		{name: "negative amount", mutate: func(bar *CrossProviderDailyBar) { bar.Amount = crossProviderAmount(-1); bar.AmountUnit = "CNY" }, reason: "invalid_amount_value"},
 		{name: "nan amount", mutate: func(bar *CrossProviderDailyBar) { bar.Amount = crossProviderAmount(math.NaN()); bar.AmountUnit = "CNY" }, reason: "invalid_amount_value"},
-		{name: "infinite amount", mutate: func(bar *CrossProviderDailyBar) { bar.Amount = crossProviderAmount(math.Inf(1)); bar.AmountUnit = "CNY" }, reason: "invalid_amount_value"},
+		{name: "infinite amount", mutate: func(bar *CrossProviderDailyBar) {
+			bar.Amount = crossProviderAmount(math.Inf(1))
+			bar.AmountUnit = "CNY"
+		}, reason: "invalid_amount_value"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

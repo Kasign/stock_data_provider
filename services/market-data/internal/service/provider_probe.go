@@ -726,7 +726,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.QualityReasons = reasons
 			if err != nil {
 				setProbeFailure(&item, err)
-				if selectedMarket == "BSE" && isUnsupportedBeijingProbeError(err) {
+				if (selectedMarket == "BSE" || strings.HasSuffix(probeSymbol, ".BJ")) && isUnsupportedBeijingProbeError(err) {
 					item.Status = "not_supported"
 					item.ErrorCode = "market_not_supported"
 					item.ErrorStage = "configuration"

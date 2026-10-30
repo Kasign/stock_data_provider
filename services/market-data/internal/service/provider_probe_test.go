@@ -270,18 +270,31 @@ func TestProviderProbeMarksUnsupportedBeijingProviderWithoutFailure(t *testing.T
 		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil,
 		cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
 	)
-	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
-		Scope: "all", Capabilities: []string{"quote"}, Markets: []string{"BSE"}, TimeoutSeconds: 5,
-	})
-	if err != nil {
-		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	filters := []struct {
+		name    string
+		markets []string
+		symbols []string
+	}{
+		{name: "market filter", markets: []string{"BSE"}},
+		{name: "symbol filter", symbols: []string{"920001.BJ"}},
 	}
-	item, found := findProbeItem(run.Items, p.Name(), "quote")
-	if !found || item.Status != "not_supported" || item.ErrorCode != "market_not_supported" || item.ErrorStage != "configuration" {
-		t.Fatalf("unsupported BSE capability must not be counted as provider failure: %+v", run)
-	}
-	if run.NotSupported != 1 || run.Failed != 0 || run.Status != "degraded" {
-		t.Fatalf("unsupported provider summary is incorrect: %+v", run)
+	for _, filter := range filters {
+		t.Run(filter.name, func(t *testing.T) {
+			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+				Scope: "all", Capabilities: []string{"quote"}, Markets: filter.markets,
+				Symbols: filter.symbols, TimeoutSeconds: 5,
+			})
+			if err != nil {
+				t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+			}
+			item, found := findProbeItem(run.Items, p.Name(), "quote")
+			if !found || item.Status != "not_supported" || item.ErrorCode != "market_not_supported" || item.ErrorStage != "configuration" {
+				t.Fatalf("unsupported BSE capability must not be counted as provider failure: %+v", run)
+			}
+			if run.NotSupported != 1 || run.Failed != 0 || run.Status != "degraded" {
+				t.Fatalf("unsupported provider summary is incorrect: %+v", run)
+			}
+		})
 	}
 }
 

@@ -634,3 +634,8 @@
 
 - `69736d1baaf8ef8dffe9b373d6edbcb5ba02d9c5` 的 Go suite 在 gofmt 阶段失败，涉及 ProviderProbeItem 与 providerProbeEvidence 字段对齐，以及 Service 测试函数前多余空行。
 - 已按 gofmt 输出统一字段对齐并清理空行；本次失败未进入编译、单测或 Docker 镜像实际构建阶段。
+
+
+### 北交所证券代码直指定路径补齐（2026-10-30）
+
+BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols=["920001.BJ"]` 两种请求形式。比较器 NaN/Inf/负金额边界测试按 gofmt 规范排版。对应新提交以最新 HEAD 为准。
