@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -20,11 +20,12 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/data-center.js", import.meta.url), "utf8"),
   readFile(new URL("../src/health-check.js", import.meta.url), "utf8"),
   readFile(new URL("../../services/market-data/internal/httpapi/server.go", import.meta.url), "utf8"),
-  readFile(new URL("../../services/market-data/openapi.yaml", import.meta.url), "utf8")
+  readFile(new URL("../../services/market-data/openapi.yaml", import.meta.url), "utf8"),
+  readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8")
 ]);
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
-const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck].join("
+const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule].join("
 ");
 
 function finalCssRuleBody(selector) {
@@ -1955,6 +1956,27 @@ test("运行流采用全屏双栏工作区，节点和质量诊断可折叠", ()
   assert.match(stylesheet, /grid-template-columns:minmax\(300px,\.82fr\) minmax\(0,1\.18fr\)/);
   assert.match(stylesheet, /\.run-flow-node\[open\]/);
   assert.match(stylesheet, /@media \(max-width:900px\)[\s\S]*?run-flow-workspace/);
+});
+
+test("全市场分页行情只调用分页概览 API 并正确展示覆盖与质量状态", () => {
+  assert.match(app, /import \{ bindMarketStocks \} from "\.\/market-stocks\.js"/);
+  assert.match(app, /bindMarketStocks\([\s\S]*?selectStockFromMarket\(item, "全市场行情"\)/);
+  assert.match(marketStocksModule, /getMarketStocks\(settings, \{/);
+  assert.match(marketStocksModule, /coverage_ratio/);
+  assert.match(marketStocksModule, /total_is_lower_bound/);
+  assert.match(marketStocksModule, /item\?\.ma5/);
+  assert.match(marketStocksModule, /item\?\.ma20/);
+  assert.match(marketStocksModule, /quote\?\.quality_status/);
+  assert.match(marketStocksModule, /controller\.signal\.aborted \|\| generation !== state\.generation/);
+  assert.match(marketStocksModule, /state\.page \* state\.pageSize < total/);
+  assert.match(html, /id="market-stocks-page-size"/);
+  assert.match(html, /id="market-stocks-adjustment"/);
+  assert.match(html, /id="market-stocks-prev"/);
+  assert.match(html, /id="market-stocks-next"/);
+  assert.match(html, /当前页行情覆盖/);
+  assert.match(apiClient, /export function getMarketStocks/);
+  assert.match(marketOpenAPI, /coverage_ratio: \{type: number/);
+  assert.match(marketOpenAPI, /total_is_lower_bound: \{type: boolean/);
 });
 
 test("市场股票与情绪历史 API 封装保持真实接口契约", () => {

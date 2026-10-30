@@ -27,7 +27,7 @@
 | 批量行情 | `GET /api/v1/market/quotes` | `getMarketQuotes` | 仅查询明确传入的证券列表 |
 | 指数行情/目录/成分/日线 | `GET /api/v1/market/indices`、`index-catalog`、`indices/{symbol}/constituents`、`indices/{symbol}/daily` | 对应 `getMarketIndices`、`getIndexCatalog`、`getIndexConstituents`、`getIndexDailyBars` | 目录与行情快照不是同一资源 |
 | 市场广度/板块 | `GET /api/v1/market/breadth`、`/market/sectors` | `getMarketBreadth`、`getMarketSectors` | 按实际服务端质量字段展示 |
-| 全市场分页股票 | `GET /api/v1/market/stocks` | `getMarketStocks` | 分页返回证券目录与行情覆盖；MA 缺失保留 null |
+| 全市场分页股票 | `GET /api/v1/market/stocks` | `getMarketStocks`、`bindMarketStocks` | 个股行情页按需加载；分页展示报价、成交额、换手率、量比、MA5/MA20、页内覆盖率和质量原因；MA/报价缺失保留未提供状态 |
 | 市场情绪快照/历史 | `GET /api/v1/market/sentiment`、`/market/sentiment/history` | `getMarketSentiment`、`getMarketSentimentHistory` | 历史只读数据库已保存快照，不补造缺失交易日 |
 | 人气榜/涨跌停/龙虎榜/交易日历/时段 | `GET /api/v1/market/hot-stocks`、`limit-pools`、`dragon-tiger`、`trading-calendar`、`session` | 对应同名 `getMarket*` / `getTradingCalendar` 封装 | 不将缺失数据补成零 |
 | 个股行情/日 K/Bundle | `GET /api/v1/quotes/{symbol}`、`bars/{symbol}/daily`、`bundles/{symbol}` | `getQuote`、`getDailyBars`、`getMarketBundle` | 保留复权、来源与质量语义 |
@@ -75,3 +75,14 @@ WebUI 使用独立的 `analysisBase` 调用：
 3. 同花顺诊断不发起真实上游请求，不消耗第三方额度，不以 API Key 测试作为交付条件。
 4. 没有服务端 API 的设置项必须禁用并标记待接入；浏览器本地保存成功不能反馈为服务端配置成功。
 5. 任何未在当前 Handler 注册的 OpenAPI 路径不得被页面描述为生产可用能力。
+
+
+### 全市场分页行情页面
+
+- 入口位于“个股行情”页，用户点击“加载全市场”后才请求 `GET /api/v1/market/stocks`；不会在页面打开时自动遍历全市场。
+- 支持每页 20/50/100 条、前复权/后复权/不复权、上一页/下一页和当前页刷新。
+- 页面展示证券名称/代码、最新价、涨跌幅、成交额、换手率、量比、MA5/MA20、单条质量状态。
+- 汇总展示证券目录数量及是否下限、当前页行情成功/失败数与覆盖率、目录来源/版本/获取时间、行情获取时间和 MA 复权口径。
+- `coverage_ratio` 是当前页覆盖率，不解释为全市场覆盖率；`total_is_lower_bound=true` 时总数显示为“至少”。
+- MA 或行情字段为 null 时显示“—”，不补零；接口失败时清空当前表格并明确展示失败原因，不保留旧数据冒充新连接结果。
+- 点击单条记录进入该股票行情详情；全市场分页只读取用户当前请求页，不自动连续翻页。

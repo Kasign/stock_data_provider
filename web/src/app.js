@@ -26,6 +26,7 @@ import {
 } from "./api.js";
 import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart, renderMACDChart, renderRSIChart } from "./chart.js";
 import { bindMarketOverview } from "./market-overview.js";
+import { bindMarketStocks } from "./market-stocks.js";
 import { taskEventMatchesFilter } from "./task-event-filter.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
@@ -203,6 +204,10 @@ bindExistingApiTools(() => state.settings);
 const marketActivity = bindMarketActivity(
   () => state.settings,
   (item) => selectStockFromMarket(item, "龙虎榜")
+);
+const marketStocks = bindMarketStocks(
+  () => state.settings,
+  (item) => selectStockFromMarket(item, "全市场行情")
 );
 
 function setText(selector, value) {

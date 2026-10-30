@@ -213,6 +213,18 @@
 
           
 
+          <section class="panel market-stocks-panel" id="market-stocks-panel" aria-labelledby="market-stocks-title">
+            <div class="panel-heading"><div><h2 id="market-stocks-title">全市场分页行情</h2><p>基于已验证的 A 股证券目录分页读取真实行情与 MA5/MA20；覆盖率按当前页统计，不代表全市场覆盖。</p></div><span class="availability-pill is-readonly" id="market-stocks-status">尚未读取</span></div>
+            <div class="market-stocks-toolbar">
+              <label class="field"><span>每页数量</span><select id="market-stocks-page-size"><option value="20">20 条</option><option value="50" selected>50 条</option><option value="100">100 条</option></select></label>
+              <label class="field"><span>复权口径</span><select id="market-stocks-adjustment"><option value="forward_adjusted" selected>前复权</option><option value="backward_adjusted">后复权</option><option value="none">不复权</option></select></label>
+              <button class="button button-primary" id="load-market-stocks" type="button">加载全市场</button><button class="button button-secondary" id="reload-market-stocks" type="button" disabled>刷新当前页</button>
+            </div>
+            <div class="market-stocks-summary" id="market-stocks-summary" aria-live="polite">尚未发起全市场行情请求；不会自动遍历所有证券。</div>
+            <div class="table-scroll market-stocks-table-scroll"><table><thead><tr><th>股票</th><th>最新价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th><th>量比</th><th>MA5</th><th>MA20</th><th>行情质量</th><th>操作</th></tr></thead><tbody id="market-stocks-body"><tr><td colspan="10" class="table-empty">点击“加载全市场”后读取第一页。</td></tr></tbody></table></div>
+            <div class="market-stocks-pagination"><span id="market-stocks-page-label">第 0 页</span><div><button class="button button-secondary" id="market-stocks-prev" type="button" disabled>上一页</button><button class="button button-secondary" id="market-stocks-next" type="button" disabled>下一页</button></div></div>
+            <p class="market-widget-meta" id="market-stocks-meta">MA 缺失、行情失败与目录不完整均按服务端原始状态展示，不补零、不推断为无数据。</p>
+          </section>
           <div class="notice" id="market-notice" role="status" aria-live="polite" hidden></div>
 
           <section class="quote-section" id="stock-quote-section">
