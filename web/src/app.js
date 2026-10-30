@@ -157,6 +157,7 @@ const state = {
   taskEventsUnavailable: false,
   taskEventsError: "",
   selectedTaskEventSequence: null,
+  expandedTaskEventSequences: new Set(),
   taskEventFilter: "all",
   pollTimer: null,
   pollGeneration: 0,
@@ -2952,53 +2953,63 @@ function renderTaskEvents() {
     const selected = sequence === Number(state.selectedTaskEventSequence);
     const statusKey = taskEventStatusKey(event.status);
     const statusLabel = taskEventStatusLabel(event.status, statusKey);
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "event-row event-row-" + statusKey;
-    row.dataset.taskEventSequence = String(item.sequence);
-    row.setAttribute("aria-pressed", String(selected));
-    row.setAttribute("aria-label", "阶段：" + (event.stage || event.name || "分析阶段") + "；状态：" + statusLabel + "；事件序号：" + item.sequence);
-
+    const node = document.createElement("details");
+    node.className = "run-flow-node event-row event-row-" + statusKey;
+    node.dataset.eventSequence = String(item.sequence);
+    node.setAttribute("aria-pressed", String(selected));
+    node.open = selected || state.expandedTaskEventSequences.has(sequence);
+    const heading = document.createElement("summary");
+    heading.className = "run-flow-node-heading";
     const icon = document.createElement("span");
     icon.className = "event-status event-status-" + statusKey;
-    icon.textContent = ["succeeded", "success", "completed"].includes(statusKey)
-      ? "✓"
-      : ["failed", "error", "blocked", "rejected"].includes(statusKey)
-        ? "!"
+    icon.textContent = ["succeeded", "success", "completed"].includes(statusKey) ? "✓"
+      : ["failed", "error", "blocked", "rejected"].includes(statusKey) ? "!"
         : statusKey === "skipped" ? "–"
           : ["running", "started", "in-progress", "in_progress", "processing"].includes(statusKey) ? "↻" : "·";
-
     const body = document.createElement("span");
     body.className = "event-body";
     const title = document.createElement("strong");
     title.textContent = event.stage || event.name || "分析阶段";
-    const heading = document.createElement("span");
-    heading.className = "event-row-heading";
-    const stateBadge = document.createElement("span");
-    stateBadge.className = "event-state-label";
-    stateBadge.textContent = statusLabel;
-    heading.append(title, stateBadge);
-
-    const detail = document.createElement("span");
-    detail.className = "event-row-message";
-    detail.textContent = event.message || "服务端事件未提供描述";
-    body.append(heading, detail);
+    const titleLine = document.createElement("span");
+    titleLine.className = "event-row-heading";
+    const badge = document.createElement("span");
+    badge.className = "event-state-label";
+    badge.textContent = statusLabel;
+    titleLine.append(title, badge);
+    const meta = document.createElement("small");
+    const parts = ["#" + item.sequence, formatDateTime(event.at)];
+    if (event.duration_ms !== undefined && event.duration_ms !== null && event.duration_ms !== "" &&
+        Number.isFinite(Number(event.duration_ms)) && Number(event.duration_ms) >= 0) {
+      const duration = Number(event.duration_ms);
+      parts.push(duration >= 1000 ? (duration / 1000).toFixed(2) + " 秒" : duration + " 毫秒");
+    }
+    meta.textContent = parts.join(" · ");
+    body.append(titleLine, meta);
+    heading.append(icon, body);
+    node.append(heading);
+    const content = document.createElement("div");
+    content.className = "run-flow-node-content";
+    const message = document.createElement("p");
+    message.textContent = event.message || "服务端事件未提供描述";
+    content.append(message);
     if (event.error_code) {
       const diagnostic = document.createElement("span");
       diagnostic.className = "event-diagnostic";
       diagnostic.textContent = "错误代码：" + String(event.error_code);
-      body.append(diagnostic);
+      content.append(diagnostic);
     }
-    const meta = document.createElement("small");
-    const metaParts = ["#" + item.sequence, formatDateTime(event.at)];
-    if (event.duration_ms !== undefined && event.duration_ms !== null && event.duration_ms !== "" &&
-        Number.isFinite(Number(event.duration_ms)) && Number(event.duration_ms) >= 0) {
-      const durationMs = Number(event.duration_ms);
-      metaParts.push(durationMs >= 1000 ? (durationMs / 1000).toFixed(2) + " 秒" : durationMs + " 毫秒");
-    }
-    meta.textContent = metaParts.join(" · ");
-    row.append(icon, body, meta);
-    list.append(row);
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = "text-button run-flow-node-detail";
+    select.dataset.taskEventSequence = String(item.sequence);
+    select.textContent = selected ? "当前节点详情已显示" : "查看节点详情";
+    content.append(select);
+    node.append(content);
+    node.addEventListener("toggle", () => {
+      if (node.open) state.expandedTaskEventSequences.add(sequence);
+      else state.expandedTaskEventSequences.delete(sequence);
+    });
+    list.append(node);
   });
 
   const selected = events.find((item) => Number(item.sequence) === Number(state.selectedTaskEventSequence));
@@ -3028,7 +3039,16 @@ function createResultSection(root, title, description = "") {
   const grid = document.createElement("div");
   grid.className = "analysis-result-grid";
   section.append(grid);
-  root.append(section);
+  if (title === "数据质量与策略门禁") {
+    const disclosure = document.createElement("details");
+    disclosure.className = "analysis-result-disclosure";
+    const summary = document.createElement("summary");
+    summary.textContent = "数据质量与策略门禁 · 展开诊断";
+    disclosure.append(summary, section);
+    root.append(disclosure);
+  } else {
+    root.append(section);
+  }
   return grid;
 }
 
@@ -3076,6 +3096,7 @@ function resultPairs(record, fields) {
 }
 
 function renderTaskResult(result) {
+  $("#run-flow-result-empty")?.setAttribute("hidden", "");
   state.lastRunResult = result;
   state.runResultReadStatus = "";
   state.runResultReadError = "";
@@ -5127,6 +5148,7 @@ $("#task-events").addEventListener("click", (event) => {
   const row = event.target.closest("button[data-task-event-sequence]");
   if (!row) return;
   state.selectedTaskEventSequence = Number(row.dataset.taskEventSequence);
+  state.expandedTaskEventSequences.add(state.selectedTaskEventSequence);
   renderTaskEvents();
 });
 $("#quote-form").addEventListener("submit", handleQuoteFormSubmit);
