@@ -395,11 +395,23 @@
               <label class="field"><span>记录标题</span><input id="research-note-title" maxlength="100" required placeholder="例如：关注放量突破后的持续性"></label>
               <label class="field"><span>关联股票代码（可选）</span><input id="research-note-symbol" maxlength="32" placeholder="例如 600519.SH"></label>
               <label class="field"><span>标签（逗号分隔）</span><input id="research-note-tags" maxlength="160" placeholder="基本面, 观察中"></label>
+              <label class="field"><span>关联任务 ID（可选）</span><input id="research-note-task" maxlength="160" placeholder="从当前任务上下文自动填充"></label>
+              <label class="field"><span>关联 Run ID（可选）</span><input id="research-note-run" maxlength="160" placeholder="从当前 Run 上下文自动填充"></label>
               <label class="field"><span>研究内容</span><textarea id="research-note-content" rows="4" maxlength="10000" required placeholder="记录判断依据、风险因素和待验证事项"></textarea></label>
               <div class="research-note-actions"><button class="button button-primary" id="research-note-save" type="submit">保存记录</button><button class="button button-secondary" id="research-note-cancel" type="button" hidden>取消编辑</button><span id="research-note-feedback" role="status" aria-live="polite">最多保存 200 条记录；不会同步到服务端。</span></div>
             </form>
             <div class="research-note-toolbar"><label class="field"><span>检索记录</span><input id="research-note-search" type="search" placeholder="标题、内容、股票代码或标签"></label><label class="field"><span>股票筛选</span><input id="research-note-symbol-filter" placeholder="输入股票代码"></label></div>
             <div id="research-note-list" class="research-note-list" aria-live="polite"><p class="table-empty">尚无研究记录。</p></div>
+          </section>
+          <section class="panel research-reports-panel" aria-labelledby="research-reports-title">
+            <div class="panel-heading"><div><h2 id="research-reports-title">研究报告归档</h2><p>归档分析服务实际返回的 Run 结果，保留任务、Run、标的和质量门禁关联。</p></div><span class="availability-pill is-local">当前浏览器本地保存</span></div>
+            <div class="research-report-toolbar">
+              <label class="field"><span>检索报告</span><input id="research-report-search" type="search" placeholder="股票代码、Task ID、Run ID 或状态"></label>
+              <label class="field"><span>归档日期起</span><input id="research-report-from" type="date"></label>
+              <label class="field"><span>归档日期止</span><input id="research-report-to" type="date"></label>
+            </div>
+            <p id="research-report-feedback" class="field-hint" role="status" aria-live="polite">最多保存 30 份真实 Run 结果；不会同步到服务端。</p>
+            <div id="research-report-list" class="research-report-list" aria-live="polite"><p class="table-empty">尚无归档报告。</p></div>
           </section>
           <section class="panel existing-api-panel" aria-labelledby="stock-status-tools-title">
             <div class="panel-heading"><div><h2 id="stock-status-tools-title">历史交易状态与涨跌幅规则</h2><p>查询指定交易日的停复牌/风险警示证据和有效涨跌幅规则。未知状态代表证据不足，不会自动当作正常或无涨跌幅限制。</p></div></div>
@@ -519,7 +531,7 @@
                   <aside class="run-flow-result-column" aria-label="分析结果与节点诊断">
                     <div class="run-flow-result-empty" id="run-flow-result-empty">分析结果将在服务端 Run 完成并返回后显示；运行期间可在左侧查看实时阶段事件。</div>
                     <section id="task-result-section" class="task-result-section" hidden>
-                  <div class="event-heading result-heading"><div><h3>分析结果</h3><span>读取已保存的 Run 结果</span></div><div class="task-result-actions"><button class="text-button" id="reload-run-result" type="button">重新读取结果</button><button class="text-button" id="copy-run-json" type="button">复制 JSON</button><button class="text-button" id="copy-task-diagnostic" type="button">复制诊断</button><button class="text-button" id="download-run-markdown" type="button">下载 Markdown</button><button class="text-button" id="download-run-json" type="button">下载 JSON</button></div></div>
+                  <div class="event-heading result-heading"><div><h3>分析结果</h3><span>读取已保存的 Run 结果</span></div><div class="task-result-actions"><button class="text-button" id="reload-run-result" type="button">重新读取结果</button><button class="text-button" id="copy-run-json" type="button">复制 JSON</button><button class="text-button" id="archive-run-report" type="button">归档到研究记录</button><button class="text-button" id="copy-task-diagnostic" type="button">复制诊断</button><button class="text-button" id="download-run-markdown" type="button">下载 Markdown</button><button class="text-button" id="download-run-json" type="button">下载 JSON</button></div></div>
                   <p class="task-result-note" id="task-result-note">任务完成后自动读取结果。</p>
                   <div class="task-result-metrics" id="task-result-metrics"></div>
                   <div class="analysis-result-sections" id="task-result-structured"></div>

@@ -32,6 +32,7 @@ import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
 import { bindLocalAlertDrafts } from "./local-alert-drafts.js";
 import { bindResearchNotes } from "./research-notes.js";
+import { bindResearchReports } from "./research-reports.js";
 import { bindNotificationPreferences } from "./notification-preferences.js";
 import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
@@ -201,7 +202,8 @@ const marketOverview = bindMarketOverview(() => state.settings, (item, source) =
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
 const dataCenter = bindDataCenter(() => state.settings);
 bindLocalAlertDrafts({ root: document.querySelector("#alerts-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
-bindResearchNotes({ root: document.querySelector("#research-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
+bindResearchNotes({ root: document.querySelector("#research-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "", taskId: state.taskId, runId: state.runId }) });
+const researchReports = bindResearchReports({ root: document.querySelector("#research-view"), onOpenTask: (item) => { const record = safeReadRecentTasks().find((entry) => entry.task_id === item.taskId && String(entry.analysis_base || state.settings.analysisBase) === item.analysisBase); if (record) activateTaskReference(record); else { setView("tasks"); setText("#task-create-feedback", "本地最近任务中没有找到该报告关联的任务引用；报告内容仍可在研究记录中查看。"); } } });
 bindNotificationPreferences({ root: document.querySelector("#settings-notification-section") });
 bindExistingApiTools(() => state.settings);
 const marketActivity = bindMarketActivity(
@@ -5787,6 +5789,7 @@ $("#recent-analysis-list").addEventListener("click", (event) => {
 $("#reload-run-result").addEventListener("click", () => {
   if (state.taskId && state.runId) void loadTaskRunResult(state.runId, state.taskId);
 });
+$("#archive-run-report").addEventListener("click", () => { if (!state.lastRunResult) return; const outcome = researchReports.save(state.lastRunResult, { taskId: state.taskId, analysisBase: state.taskAnalysisBase || state.settings.analysisBase }); if (outcome.ok) $("#archive-run-report").textContent = outcome.duplicate ? "已归档" : "归档成功"; });
 $("#copy-run-json").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   if (!state.lastRunResult) return;
