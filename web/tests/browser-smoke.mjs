@@ -978,7 +978,7 @@ try {
       await page.waitForFunction(() => {
         const summary = document.querySelector("#data-center-summary-message")?.textContent || "";
         const list = document.querySelector("#data-center-provider-list")?.textContent || "";
-        return !document.querySelector("#settings-dialog")?.open &&
+        return !document.querySelector("#settings-view")?.hidden &&
           summary.includes("连接配置已变更") &&
           !list.includes("测试 Provider");
       }, null, { timeout: 5000 });
@@ -1089,8 +1089,9 @@ try {
       }
 
       settingsConnectionScenario = "default";
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.locator("#cancel-settings-dialog").click();
+      await clickNav(page, '.nav-link[data-view="market"]');
+      await page.locator("#market-view").waitFor({ state: "visible" });
+      await clickNav(page, '.nav-link[data-view="settings"]');
       await page.locator("#settings-view").waitFor({ state: "visible" });
       assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeChecks,
         "discarding an unsaved draft must preserve the saved local settings");
@@ -1177,8 +1178,9 @@ try {
         "editing a draft while its check is in flight must not persist the new draft paths");
 
       settingsConnectionScenario = "default";
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.locator("#cancel-settings-dialog").click();
+      await clickNav(page, '.nav-link[data-view="market"]');
+      await page.locator("#market-view").waitFor({ state: "visible" });
+      await clickNav(page, '.nav-link[data-view="settings"]');
       await page.locator("#settings-view").waitFor({ state: "visible" });
       assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraftRace,
         "discarding the raced draft must preserve the existing saved endpoints");
