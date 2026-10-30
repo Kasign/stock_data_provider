@@ -599,17 +599,21 @@ components:
         checked_at: {type: string, format: date-time}
     ProviderProbeRun:
       type: object
-      required: [run_id, status, persisted, started_at, finished_at, total, returned, degraded, failed, items]
+      required: [run_id, status, persisted, started_at, finished_at, total, returned, degraded, unknown, failed, skipped, not_configured, not_supported, items]
       properties:
         run_id: {type: string}
-        status: {type: string, enum: [success, degraded, failed, no_capabilities_configured]}
+        status: {type: string, enum: [success, degraded, failed, not_configured, no_capabilities_configured]}
         persisted: {type: boolean, description: False when MariaDB storage is not configured}
         started_at: {type: string, format: date-time}
         finished_at: {type: string, format: date-time}
         total: {type: integer}
         returned: {type: integer}
         degraded: {type: integer}
+        unknown: {type: integer}
         failed: {type: integer}
+        skipped: {type: integer}
+        not_configured: {type: integer}
+        not_supported: {type: integer}
         items: {type: array, items: {$ref: '#/components/schemas/ProviderProbeItem'}}
     ProviderProbeHistory:
       type: object

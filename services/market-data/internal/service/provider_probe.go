@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -182,6 +183,225 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 			return snapshot.QualityStatus, snapshot.SourceVersion, []string{"market_capital_flow_history_probe"}, nil
 		})
 	}
+
+	// 以下检查覆盖非行情类的重要业务能力。探测只校验返回契约，不把空数据自动视为成功。
+	loc := marketLocation()
+	nowLocal := time.Now().In(loc)
+	probeDate := nowLocal.Format("2006-01-02")
+	calendarStart := nowLocal.AddDate(0, 0, -14).Format("2006-01-02")
+	calendarEnd := nowLocal.AddDate(0, 0, 14).Format("2006-01-02")
+	for _, p := range s.indexCatalogProviders {
+		p := p
+		add(p.Name(), "index_catalog", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchIndexCatalog(probeCtx, "industry")
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if v == nil || v.Tag != "industry" || v.Source == "" || v.FetchedAt.IsZero() {
+				return model.QualityInvalid, "", nil, errors.New("index-catalog response missing requested tag/source/fetched_at")
+			}
+			if v.Total < len(v.Items) || v.ProviderReturned < len(v.Items) {
+				return model.QualityInvalid, v.SourceVersion, nil, errors.New("index-catalog response has inconsistent counts")
+			}
+			seen := make(map[string]bool, len(v.Items))
+			for _, item := range v.Items {
+				if item.Symbol == "" || item.Name == "" || seen[item.Symbol] {
+					return model.QualityInvalid, v.SourceVersion, nil, errors.New("index-catalog row has missing or duplicate identity")
+				}
+				seen[item.Symbol] = true
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.securityTradingStatusProviders {
+		p := p
+		add(p.Name(), "security_trading_status", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchSecurityTradingStatus(probeCtx, barsSymbol, probeDate)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if v == nil || v.Symbol != barsSymbol || v.TradeDate != probeDate || v.Source == "" || v.FetchedAt.IsZero() {
+				return model.QualityInvalid, "", nil, errors.New("security-trading-status response missing requested symbol/date/source/fetched_at")
+			}
+			if !v.TradingDayKnown || !v.ListingStatusKnown || v.SuspensionStatus == model.SuspensionStatusUnknown || v.RiskWarningStatus == model.RiskWarningUnknown || v.DelistingStatus == model.DelistingStatusUnknown {
+				return model.QualityDegraded, v.SourceVersion, appendReason(v.QualityReasons, "security_status_contains_unknown_fields"), nil
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.priceLimitEventProviders {
+		p := p
+		add(p.Name(), "price_limit_event", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchPriceLimitEventEvidence(probeCtx, barsSymbol, probeDate)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if v == nil || v.Symbol != barsSymbol || v.Source == "" || v.SourceVersion == "" || v.ObservedAt.IsZero() {
+				return model.QualityInvalid, "", nil, errors.New("price-limit-event evidence missing symbol/source/version/observed_at")
+			}
+			if !v.CoverageConfirmed || v.Status == model.PriceLimitExceptionUnknown {
+				return model.QualityDegraded, v.SourceVersion, appendReason(v.QualityReasons, "special_event_absence_not_confirmed"), nil
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.stockBoardsProviders {
+		p := p
+		add(p.Name(), "stock_boards", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchStockBoards(probeCtx, barsSymbol)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if v == nil || v.Symbol != barsSymbol || v.Source == "" || v.FetchedAt.IsZero() {
+				return model.QualityInvalid, "", nil, errors.New("stock-boards response missing symbol/source/fetched_at or has wrong symbol")
+			}
+			if v.Total < 0 || v.ProviderReturned < len(v.Items) || (v.HasData && len(v.Items) == 0) {
+				return model.QualityInvalid, v.SourceVersion, nil, errors.New("stock-boards response has inconsistent counts")
+			}
+			for _, item := range v.Items {
+				if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.Source != v.Source {
+					return model.QualityInvalid, v.SourceVersion, nil, errors.New("stock-boards row missing identity or source")
+				}
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.limitPoolProviders {
+		p := p
+		add(p.Name(), "limit_pool", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchLimitPool(probeCtx, "up", probeDate, 20)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if v == nil || v.TradeDate != probeDate || v.Source == "" || v.FetchedAt.IsZero() {
+				return model.QualityInvalid, "", nil, errors.New("limit-pool response missing requested trade date/source/fetched_at")
+			}
+			if v.Total < 0 || v.ProviderReturned < len(v.Items) || (v.HasData && len(v.Items) == 0) {
+				return model.QualityInvalid, v.SourceVersion, nil, errors.New("limit-pool response has inconsistent counts")
+			}
+			for _, item := range v.Items {
+				if item.Symbol == "" || item.Code == "" || item.Name == "" {
+					return model.QualityInvalid, v.SourceVersion, nil, errors.New("limit-pool row missing security identity")
+				}
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.dragonTigerProviders {
+		p := p
+		add(p.Name(), "dragon_tiger", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchDragonTiger(probeCtx, probeDate, 1, 20)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if v == nil || v.TradeDate != probeDate || v.Source == "" || v.FetchedAt.IsZero() {
+				return model.QualityInvalid, "", nil, errors.New("dragon-tiger response missing requested trade date/source/fetched_at")
+			}
+			if v.Total < 0 || v.Returned != len(v.Items) || v.SourceReturned < v.Returned {
+				return model.QualityInvalid, v.SourceVersion, nil, errors.New("dragon-tiger response has inconsistent pagination counts")
+			}
+			for _, item := range v.Items {
+				if item.Symbol == "" || item.Code == "" || item.TradeDate != probeDate {
+					return model.QualityInvalid, v.SourceVersion, nil, errors.New("dragon-tiger row has invalid security identity or trade date")
+				}
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.announcementProviders {
+		p := p
+		add(p.Name(), "announcements", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchStockAnnouncements(probeCtx, barsSymbol, calendarStart, probeDate, 1, 20)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err := validateStockAnnouncementSnapshot(barsSymbol, calendarStart, probeDate, 1, 20, v); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.tradingCalendarProviders {
+		p := p
+		add(p.Name(), "trading_calendar", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchTradingCalendar(probeCtx, calendarStart, calendarEnd)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err := validateTradingCalendarSnapshot(v, calendarStart, calendarEnd); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.fundamentalsProviders {
+		p := p
+		add(p.Name(), "fundamentals", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchFundamentals(probeCtx, barsSymbol, nowLocal.Year(), 2)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err := validateFundamentalsSnapshot(barsSymbol, nowLocal.Year(), 2, v); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.valuationProviders {
+		p := p
+		add(p.Name(), "valuations", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchValuations(probeCtx, []string{barsSymbol})
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err := validateValuationSnapshot([]string{barsSymbol}, v); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.hotRankingProviders {
+		p := p
+		add(p.Name(), "hot_ranking", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchHotStocks(probeCtx, "popular", 20)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err := validateHotRankingSnapshot("popular", v); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.capitalFlowProviders {
+		p := p
+		add(p.Name(), "capital_flow", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchCapitalFlow(probeCtx, barsSymbol)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if v == nil || v.Symbol != barsSymbol || v.Source == "" || v.FetchedAt.IsZero() {
+				return model.QualityInvalid, "", nil, errors.New("capital-flow response missing requested symbol/source/fetched_at")
+			}
+			for _, value := range []*float64{v.MainNetInflow, v.Inflow5D, v.Inflow10D} {
+				if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
+					return model.QualityInvalid, v.SourceVersion, nil, errors.New("capital-flow response contains non-finite amount")
+				}
+			}
+			if v.Observations < 0 { return model.QualityInvalid, v.SourceVersion, nil, errors.New("capital-flow response has negative observation count") }
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	for _, p := range s.chipDistributionProviders {
+		p := p
+		add(p.Name(), "chip_distribution", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			v, err := p.FetchChipDistribution(probeCtx, barsSymbol)
+			if err != nil { return model.QualityUnknown, "", nil, err }
+			if v == nil || v.Symbol != barsSymbol || v.Source == "" || v.FetchedAt.IsZero() {
+				return model.QualityInvalid, "", nil, errors.New("chip-distribution response missing requested symbol/source/fetched_at")
+			}
+			if math.IsNaN(v.AverageCost) || math.IsInf(v.AverageCost, 0) || v.AverageCost < 0 {
+				return model.QualityInvalid, v.SourceVersion, nil, errors.New("chip-distribution response has invalid average cost")
+			}
+			if v.Cost90Low != nil && v.Cost90High != nil && *v.Cost90Low > *v.Cost90High {
+				return model.QualityInvalid, v.SourceVersion, nil, errors.New("chip-distribution 90-percent cost range is inverted")
+			}
+			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
+		})
+	}
+	// 固定核心能力清单：未注册 Provider 的能力也必须显式出现在诊断报告中。
+	requiredCapabilities := []string{"quote", "daily_bars", "stock_basic", "stock_search", "stock_universe", "index_quotes", "index_catalog", "market_breadth", "sector_rankings", "market_capital_flow", "limit_pool", "dragon_tiger", "announcements", "trading_calendar", "security_trading_status", "price_limit_event", "stock_boards", "fundamentals", "valuations", "hot_ranking", "capital_flow", "chip_distribution"}
+	configured := make(map[string]bool, len(requiredCapabilities))
+	for _, job := range jobs { configured[job.capability] = true }
+	for _, p := range s.providers {
+		if universeProvider, ok := p.(provider.StockUniverseProvider); ok {
+			// 全市场证券目录可能返回数千条记录，默认轻量探测不下载完整目录；明确记录为 skipped。
+			configured["stock_universe"] = true
+			add(universeProvider.Name(), "stock_universe", func(context.Context) (model.QualityStatus, string, []string, error) {
+				return model.QualityUnknown, "", []string{"full_market_universe_excluded_from_lightweight_probe"}, errors.New("probe skipped: full-market universe scan is intentionally excluded from lightweight diagnostics")
+			})
+		}
+	}
+	for _, capability := range requiredCapabilities {
+		if configured[capability] { continue }
+		jobs = append(jobs, providerProbeJob{provider: "system", capability: capability, run: func(context.Context) (model.QualityStatus, string, []string, error) { return model.QualityUnknown, "", nil, errors.New("capability has no registered provider") }})
+	}
 	run.Total = len(jobs)
 	results := make([]model.ProviderProbeItem, len(jobs))
 	sem := make(chan struct{}, 4)
@@ -211,11 +431,23 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 			item.QualityReasons = reasons
 			if err != nil {
 				setProbeFailure(&item, err)
+				if strings.Contains(err.Error(), "probe skipped:") {
+					item.Status = "skipped"
+					item.ErrorCode = "probe_skipped_by_policy"
+					item.ErrorStage = "configuration"
+				} else if job.provider == "system" && strings.Contains(err.Error(), "no registered provider") {
+					item.Status = "not_configured"
+					item.ErrorCode = "provider_not_configured"
+					item.ErrorStage = "configuration"
+				}
 			} else {
 				item.QualityStatus = quality
-				if quality == model.QualityValid {
+				switch quality {
+				case model.QualityValid:
 					item.Status = "returned"
-				} else {
+				case model.QualityUnknown:
+					item.Status = "returned_unknown"
+				default:
 					item.Status = "returned_degraded"
 				}
 			}
@@ -236,17 +468,22 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 			run.Returned++
 		case "returned_degraded":
 			run.Degraded++
+		case "returned_unknown":
+			run.Unknown++
+		case "not_configured":
+			run.NotConfigured++
+		case "skipped":
+			run.Skipped++
+		case "not_supported":
+			run.NotSupported++
 		default:
 			run.Failed++
 		}
 	}
 	run.Status = "success"
-	if run.Degraded > 0 {
-		run.Status = "degraded"
-	}
-	if run.Failed > 0 {
-		run.Status = "failed"
-	}
+	if run.Degraded > 0 || run.Unknown > 0 || run.NotConfigured > 0 || run.Skipped > 0 || run.NotSupported > 0 { run.Status = "degraded" }
+	if run.Failed > 0 { run.Status = "failed" }
+	if run.NotConfigured == run.Total && run.Total > 0 { run.Status = "not_configured" }
 	run.FinishedAt = time.Now().UTC()
 	if len(jobs) == 0 {
 		run.Status = "no_capabilities_configured"

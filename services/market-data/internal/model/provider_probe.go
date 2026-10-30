@@ -27,8 +27,12 @@ type ProviderProbeRun struct {
 	FinishedAt time.Time           `json:"finished_at"`
 	Total      int                 `json:"total"`
 	Returned   int                 `json:"returned"`
-	Degraded   int                 `json:"degraded"`
-	Failed     int                 `json:"failed"`
+	Degraded      int                 `json:"degraded"`
+	Unknown       int                 `json:"unknown"`
+	Failed        int                 `json:"failed"`
+	Skipped       int                 `json:"skipped"`
+	NotConfigured int                 `json:"not_configured"`
+	NotSupported  int                 `json:"not_supported"`
 	Items      []ProviderProbeItem `json:"items"`
 }
 

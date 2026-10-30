@@ -91,3 +91,15 @@ func TestProviderProbeFailureClassification(t *testing.T) {
 		})
 	}
 }
+
+
+func TestProviderProbeReportsUnconfiguredCoreCapabilities(t *testing.T) {
+	p := providerProbeQuoteFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilities(context.Background())
+	if err != nil { t.Fatalf("ProbeProviderCapabilities() error = %v", err) }
+	if run.NotConfigured == 0 { t.Fatalf("expected missing core capabilities to be reported, got %+v", run) }
+	found := false
+	for _, item := range run.Items { if item.Capability == "trading_calendar" { found = true; if item.Status != "not_configured" || item.ErrorStage != "configuration" { t.Fatalf("unexpected result: %+v", item) } } }
+	if !found { t.Fatal("trading_calendar missing from diagnostic coverage report") }
+}
