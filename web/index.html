@@ -727,7 +727,7 @@
                 <label class="field"><span>规则状态</span><select id="alert-rule-enabled"><option value="true">草稿启用</option><option value="false">草稿停用</option></select></label>
               </div>
               <p class="field-hint">以上是本地规则草稿支持的条件类型，仅用于整理监控意图，不会读取行情、后台评估或触发通知。</p>
-              <div class="alert-rule-form-footer"><span class="field-hint">草稿仅保存在当前浏览器；服务端规则、评估、触发历史与通知投递仍待接入。</span><div class="alert-rule-actions"><button class="button button-secondary" id="alert-rule-cancel" type="button" hidden>取消编辑</button><button class="button button-primary" id="alert-rule-submit" type="submit">保存本地草稿</button></div></div>
+              <div class="alert-rule-form-footer"><span class="field-hint">草稿仅保存在当前浏览器；服务端规则、评估、触发历史与通知投递仍待接入。</span><div class="alert-rule-actions"><button class="button button-secondary" id="alert-rule-test" type="button" disabled aria-disabled="true">单次评估（服务端待接入）</button><button class="button button-secondary" id="alert-rule-cancel" type="button" hidden>取消编辑</button><button class="button button-primary" id="alert-rule-submit" type="submit">保存本地草稿</button></div></div>
             </form>
             <div class="alert-rule-list-state" data-alert-rules-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取规则</strong><p>服务端规则列表由 API 提供；本地草稿单独列在下方。</p></div>
             <div class="alert-rule-list-state" data-alert-rules-state="empty" hidden><span class="notification-state-mark" aria-hidden="true">▤</span><strong>服务端没有已保存的告警规则</strong><p>只有收到真实 API 的空列表后才能显示此状态；本地草稿不计入服务端规则。</p></div>
