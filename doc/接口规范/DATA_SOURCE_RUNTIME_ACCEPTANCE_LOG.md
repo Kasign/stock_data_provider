@@ -305,3 +305,8 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 - 市场广度诊断新增明确覆盖分母字段；其他能力尚未确认分母时不输出 coverage_ratio。
 - 北交所映射矩阵已落到既有测试；不支持 Provider 在 BSE 定向探测中归类为 not_supported。
 - 当前最新提交与 CI 结论以后续远端 HEAD 和对应 Actions 为准。
+
+
+## 20. 覆盖率字段 gofmt 修复（2026-10-30）
+
+提交 `69736d1baaf8ef8dffe9b373d6edbcb5ba02d9c5` 的 market-data gofmt 检查发现两个结构体字段对齐不符合 gofmt，以及测试函数前存在多余空行。已修复格式，需以新 SHA 的完整 Go suite 与 Docker 构建结果复核。

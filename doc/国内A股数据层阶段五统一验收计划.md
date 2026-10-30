@@ -628,3 +628,9 @@
 - 北交所：已复核现有映射矩阵，并将明确不支持的 BJ Provider 探测归类为 not_supported；在线权限和数据样本仍待验。
 - 覆盖率：市场广度已输出 total/returned/validated/missing/excluded 与 validated/total；其他能力只在获得可信分母后逐项扩展。
 - 最近相关代码提交：`35d442f`、`7e3b6c2`、`8226d6d`、`bdc3e88`、`5cc765d`、`69736d1`。其中部分中间提交因 gofmt 失败或被后续提交取消；最终验收只看分支最新 SHA。
+
+
+### 覆盖率字段提交的格式检查修复（2026-10-30）
+
+- `69736d1baaf8ef8dffe9b373d6edbcb5ba02d9c5` 的 Go suite 在 gofmt 阶段失败，涉及 ProviderProbeItem 与 providerProbeEvidence 字段对齐，以及 Service 测试函数前多余空行。
+- 已按 gofmt 输出统一字段对齐并清理空行；本次失败未进入编译、单测或 Docker 镜像实际构建阶段。

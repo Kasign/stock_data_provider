@@ -285,7 +285,6 @@ func TestProviderProbeMarksUnsupportedBeijingProviderWithoutFailure(t *testing.T
 	}
 }
 
-
 func TestRecordProviderProbeCoverageCountsPreservesDenominator(t *testing.T) {
 	evidence := &providerProbeEvidence{}
 	ctx := context.WithValue(context.Background(), providerProbeEvidenceContextKey{}, evidence)

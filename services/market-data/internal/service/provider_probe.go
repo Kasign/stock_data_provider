@@ -33,9 +33,9 @@ type providerProbeJob struct {
 type providerProbeEvidenceContextKey struct{}
 
 type providerProbeEvidence struct {
-	sampleSymbol  string
-	sampleMarket  string
-	sampleDate    string
+	sampleSymbol      string
+	sampleMarket      string
+	sampleDate        string
 	rowsReturned      int
 	rowsValidated     int
 	coverageTotal     *int
