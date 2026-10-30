@@ -163,6 +163,12 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if selectedMarket != "" && !probeSymbolMatchesBoard(probeSymbol, selectedMarket) {
 		return nil, fmt.Errorf("provider-probe symbol %q does not belong to market %q", probeSymbol, selectedMarket)
 	}
+	if selectedMarket != "" {
+		options.Markets = []string{selectedMarket}
+	}
+	if len(options.Symbols) == 1 {
+		options.Symbols = []string{probeSymbol}
+	}
 	if len(options.Markets) > 0 || len(options.Symbols) > 0 {
 		if len(options.Capabilities) == 0 {
 			return nil, errors.New("provider-probe markets or symbols require an explicit stock-scoped capabilities list")
