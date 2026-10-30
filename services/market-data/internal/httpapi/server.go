@@ -389,8 +389,8 @@ func (s *Server) dataSourceDiagnostics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"items": s.svc.ProviderDiagnostics(),
-		"scope": []string{"quote", "daily_bars"},
+		"items":         s.svc.ProviderDiagnostics(),
+		"scope":         []string{"quote", "daily_bars"},
 		"observed_from": "in_process_circuit_breaker",
 	})
 }
