@@ -538,14 +538,14 @@ test("individual stock research uses one detail workspace without duplicate chip
     assert.ok(html.includes('id="' + id + '"'), "research field must exist: " + id);
   }
   assert.ok(!html.includes('id="stock-supplemental-panel"'), "old duplicate chip/flow panel must be gone");
-  const researchView = html.match(/<section class="view" id="research-view"[\\s\\S]*?(?=<section class="view")/)?.[0] || "";
+  const researchView = html.match(/<section class="view" id="research-view"[\s\S]*?(?=<section class="view")/)?.[0] || "";
   for (const id of ["daily-chart-panel", "technical-indicators-panel", "historical-bars-panel", "research-detail-profile", "research-detail-fundamentals", "research-detail-valuations", "research-detail-capital-flow", "research-detail-chip", "research-detail-announcements"]) {
     assert.ok(researchView.includes('id="' + id + '"'), "unified research workspace must contain " + id);
   }
   assert.match(researchView, /data-research-detail-target="daily-chart-panel"/);
   assert.match(researchView, /data-research-detail-target="technical-indicators-panel"/);
-  assert.match(app, /function openResearchChartView\\(\\)[\\s\\S]*?setView\\("research"\\)[\\s\\S]*?daily-chart-panel/);
-  assert.match(stockResearch, /runSupplementRequest\\("#load-fundamentals"/);
+  assert.match(app, /function openResearchChartView\(\)[\s\S]*?setView\("research"\)[\s\S]*?daily-chart-panel/);
+  assert.match(stockResearch, /runSupplementRequest\("#load-fundamentals"/);
   assert.match(stockResearch, /接口请求成功，但没有返回可展示的筹码指标/);
   assert.match(stockResearch, /接口请求成功，但没有返回可展示的资金流指标/);
 
