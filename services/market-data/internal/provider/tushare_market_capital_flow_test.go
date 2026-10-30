@@ -13,11 +13,11 @@ import (
 )
 
 func TestTushareMarketCapitalFlowParsesAndSortsDailyRows(t *testing.T) {
-	fields := []string{"trade_date","close_sh","pct_change_sh","close_sz","pct_change_sz","net_amount","net_amount_rate","buy_elg_amount","buy_elg_amount_rate","buy_lg_amount","buy_lg_amount_rate","buy_md_amount","buy_md_amount_rate","buy_sm_amount","buy_sm_amount_rate"}
+	fields := []string{"trade_date", "close_sh", "pct_change_sh", "close_sz", "pct_change_sz", "net_amount", "net_amount_rate", "buy_elg_amount", "buy_elg_amount_rate", "buy_lg_amount", "buy_lg_amount_rate", "buy_md_amount", "buy_md_amount_rate", "buy_sm_amount", "buy_sm_amount_rate"}
 	row := func(date string, net string) []any {
 		return []any{date, 3260.5, 0.8, 10500.2, 1.1, net, 2.5, 1000, 0.3, 2000, 0.4, -500, -0.1, -2500, -0.6}
 	}
-	payload, _ := json.Marshal(map[string]any{"code":0,"data":map[string]any{"fields":fields,"items":[][]any{row("20261029","123456789"),row("20261028","-23456789")}}})
+	payload, _ := json.Marshal(map[string]any{"code": 0, "data": map[string]any{"fields": fields, "items": [][]any{row("20261029", "123456789"), row("20261028", "-23456789")}}})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&request)
@@ -48,9 +48,9 @@ func TestTushareMarketCapitalFlowParsesAndSortsDailyRows(t *testing.T) {
 }
 
 func TestTushareMarketCapitalFlowPreservesNullAsMissing(t *testing.T) {
-	fields := []string{"trade_date","close_sh","pct_change_sh","close_sz","pct_change_sz","net_amount","net_amount_rate","buy_elg_amount","buy_elg_amount_rate","buy_lg_amount","buy_lg_amount_rate","buy_md_amount","buy_md_amount_rate","buy_sm_amount","buy_sm_amount_rate"}
-	items := [][]any{{"20261029",3260.5,0.8,10500.2,1.1,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil}}
-	payload, _ := json.Marshal(map[string]any{"code":0,"data":map[string]any{"fields":fields,"items":items}})
+	fields := []string{"trade_date", "close_sh", "pct_change_sh", "close_sz", "pct_change_sz", "net_amount", "net_amount_rate", "buy_elg_amount", "buy_elg_amount_rate", "buy_lg_amount", "buy_lg_amount_rate", "buy_md_amount", "buy_md_amount_rate", "buy_sm_amount", "buy_sm_amount_rate"}
+	items := [][]any{{"20261029", 3260.5, 0.8, 10500.2, 1.1, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}}
+	payload, _ := json.Marshal(map[string]any{"code": 0, "data": map[string]any{"fields": fields, "items": items}})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(payload) }))
 	defer server.Close()
 	got, err := NewTushareConfigured(3*time.Second, server.URL, "test-token").FetchMarketCapitalFlow(context.Background(), "2026-10-29", "2026-10-29")
@@ -64,7 +64,7 @@ func TestTushareMarketCapitalFlowPreservesNullAsMissing(t *testing.T) {
 
 func TestTushareMarketCapitalFlowRejectsDuplicateDates(t *testing.T) {
 	fields := []string{"trade_date", "net_amount"}
-	payload, _ := json.Marshal(map[string]any{"code":0,"data":map[string]any{"fields":fields,"items":[][]any{{"20261029", 1.0},{"20261029", 2.0}}}})
+	payload, _ := json.Marshal(map[string]any{"code": 0, "data": map[string]any{"fields": fields, "items": [][]any{{"20261029", 1.0}, {"20261029", 2.0}}}})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(payload) }))
 	defer server.Close()
 	_, err := NewTushareConfigured(3*time.Second, server.URL, "test-token").FetchMarketCapitalFlow(context.Background(), "2026-10-29", "2026-10-29")

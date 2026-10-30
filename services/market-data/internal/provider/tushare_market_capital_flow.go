@@ -54,10 +54,10 @@ func (p *Tushare) FetchMarketCapitalFlow(ctx context.Context, startDate, endDate
 	fields := "trade_date,close_sh,pct_change_sh,close_sz,pct_change_sz,net_amount,net_amount_rate,buy_elg_amount,buy_elg_amount_rate,buy_lg_amount,buy_lg_amount_rate,buy_md_amount,buy_md_amount_rate,buy_sm_amount,buy_sm_amount_rate"
 	payload := map[string]any{
 		"api_name": "moneyflow_mkt_dc",
-		"token": p.token,
+		"token":    p.token,
 		"params": map[string]string{
 			"start_date": start.Format("20060102"),
-			"end_date": end.Format("20060102"),
+			"end_date":   end.Format("20060102"),
 		},
 		"fields": fields,
 	}

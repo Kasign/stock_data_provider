@@ -52,7 +52,7 @@ func TestMarketCapitalFlowRejectsUnorderedOrOutOfRangeRows(t *testing.T) {
 	now := time.Now().UTC()
 	snapshot := &model.MarketCapitalFlowSnapshot{
 		StartDate: "2026-10-28", EndDate: "2026-10-29", Total: 1,
-		Items: []model.MarketCapitalFlowItem{{TradeDate: "2026-10-30"}},
+		Items:  []model.MarketCapitalFlowItem{{TradeDate: "2026-10-30"}},
 		Source: "tushare", SourceVersion: "tushare-moneyflow-mkt-dc-v1",
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
 	}

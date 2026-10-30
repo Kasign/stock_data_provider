@@ -571,21 +571,21 @@ type ChipDistribution struct {
 // 只有所需观测值全部可用时，才会填充 5/10 日合计字段。
 
 type MarketCapitalFlowItem struct {
-	TradeDate                    string   `json:"trade_date"`
-	CloseSH                      *float64 `json:"close_sh,omitempty"`
-	ChangePercentSH              *float64 `json:"change_percent_sh,omitempty"`
-	CloseSZ                      *float64 `json:"close_sz,omitempty"`
-	ChangePercentSZ              *float64 `json:"change_percent_sz,omitempty"`
-	NetAmountCNY                 *float64 `json:"net_amount_cny,omitempty"`
-	NetAmountRatePercent         *float64 `json:"net_amount_rate_percent,omitempty"`
-	ExtraLargeNetInflowCNY       *float64 `json:"extra_large_net_inflow_cny,omitempty"`
-	ExtraLargeNetInflowRatePct   *float64 `json:"extra_large_net_inflow_rate_percent,omitempty"`
-	LargeNetInflowCNY            *float64 `json:"large_net_inflow_cny,omitempty"`
-	LargeNetInflowRatePercent    *float64 `json:"large_net_inflow_rate_percent,omitempty"`
-	MediumNetInflowCNY           *float64 `json:"medium_net_inflow_cny,omitempty"`
-	MediumNetInflowRatePercent   *float64 `json:"medium_net_inflow_rate_percent,omitempty"`
-	SmallNetInflowCNY            *float64 `json:"small_net_inflow_cny,omitempty"`
-	SmallNetInflowRatePercent    *float64 `json:"small_net_inflow_rate_percent,omitempty"`
+	TradeDate                  string   `json:"trade_date"`
+	CloseSH                    *float64 `json:"close_sh,omitempty"`
+	ChangePercentSH            *float64 `json:"change_percent_sh,omitempty"`
+	CloseSZ                    *float64 `json:"close_sz,omitempty"`
+	ChangePercentSZ            *float64 `json:"change_percent_sz,omitempty"`
+	NetAmountCNY               *float64 `json:"net_amount_cny,omitempty"`
+	NetAmountRatePercent       *float64 `json:"net_amount_rate_percent,omitempty"`
+	ExtraLargeNetInflowCNY     *float64 `json:"extra_large_net_inflow_cny,omitempty"`
+	ExtraLargeNetInflowRatePct *float64 `json:"extra_large_net_inflow_rate_percent,omitempty"`
+	LargeNetInflowCNY          *float64 `json:"large_net_inflow_cny,omitempty"`
+	LargeNetInflowRatePercent  *float64 `json:"large_net_inflow_rate_percent,omitempty"`
+	MediumNetInflowCNY         *float64 `json:"medium_net_inflow_cny,omitempty"`
+	MediumNetInflowRatePercent *float64 `json:"medium_net_inflow_rate_percent,omitempty"`
+	SmallNetInflowCNY          *float64 `json:"small_net_inflow_cny,omitempty"`
+	SmallNetInflowRatePercent  *float64 `json:"small_net_inflow_rate_percent,omitempty"`
 }
 
 type MarketCapitalFlowSnapshot struct {

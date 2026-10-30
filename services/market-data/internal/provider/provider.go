@@ -170,7 +170,6 @@ type SupplementProvider interface {
 	FetchCapitalFlow(ctx context.Context, symbol string) (*model.CapitalFlow, error)
 }
 
-
 // MarketCapitalFlowProvider provides a date-scoped market-wide capital-flow series.
 type MarketCapitalFlowProvider interface {
 	NamedProvider
