@@ -1,8 +1,10 @@
 # 数据层 API 接口清单与 WebUI 接入映射
 
 更新日期：2026-10-30
-适用分支：feat/webui-market-data-console
-核对依据：当前分支 services/market-data/openapi.yaml、services/market-data/internal/httpapi/server.go、web/src/api.js 及页面模块。服务端路由与 OpenAPI 已逐项核对。字段类型、完整响应 Schema 和状态码以 OpenAPI 为准。
+适用分支：feat/full-go-data-providers-api-switch（已包含 feat/webui-market-data-console 的 WebUI 合并内容）
+核对依据：当前目标分支 services/market-data/openapi.yaml、services/market-data/internal/httpapi/server.go、web/src/api.js 及页面模块。服务端路由与 OpenAPI 已逐项核对。字段类型、完整响应 Schema 和状态码以 OpenAPI 为准。
+
+说明：接口已注册/已封装不代表 Provider 已启用或真实数据已验收。Provider 代码能力、默认开关和运行验收状态见 [Python Provider → Go 迁移矩阵](./接口规范/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md) 与 [数据源真实环境验收记录](./接口规范/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)。
 
 ## 1. 接口边界
 

@@ -1,7 +1,9 @@
 # Go 与 Python 数据服务实现及数据质量对比报告
 
 - 检查分支：`feat/full-go-data-providers-api-switch`
-- 检查基线：`d2f5740be3f8f6365788b1c59ed43fa0f1d5f197`
+- 历史质量契约检查基线：`d2f5740be3f8f6365788b1c59ed43fa0f1d5f197`
+- 本轮静态盘点基线：`4c603172448102058f95e6bc625494436a8402c9`（2026-10-30）
+- 当前 Provider 代码能力、默认开关和 Python bridge 调用以 [迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md) 为准；本报告不代表已完成真实请求对账。
 - 报告性质：代码/文档静态对照 + Go 质量契约自动化回归；不等同于对所有上游的实时数据抓取对账。
 - 原则：已实现不代表生产可用；CI 通过不代表字段级等价；未核实的字段必须保持 unknown/null/degraded，不能猜测补齐。
 
@@ -22,6 +24,8 @@
 后续任何迁移矩阵、差分测试和重构评审都应遵循本声明。发现旧 Python 行为与 Go 质量契约冲突时，默认保留 Go 的严格处理，并记录为兼容差异；只有经过明确的数据契约评审，才能调整规则。
 
 ## 1. 总结
+
+本轮阶段一已补充当前分支 Provider 代码/配置静态盘点。矩阵区分“代码实现”“默认开关”和“真实运行验收”，不能将其中任一项替代另外两项。
 
 1. A 股主行情路径已经有原生 Go 服务，包含多个独立 Provider、质量归一化、缓存/存储和显式质量状态。
 2. Python 代码没有全部删除。仓库仍有 `python_bridge/`、`internal/adapters/pythonapi/`、`go-core/internal/adapters/pythonbridge/`、`cmd/pythonapi-smoke/`。Python bridge 仍服务新闻搜索、LLM、通知、持久化以及部分兼容/辅助能力；旧 Python 行情 API 适配器也仍在仓库中。
