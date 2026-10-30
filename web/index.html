@@ -303,6 +303,7 @@
               <label class="field watchlist-search-field"><span>搜索自选</span><input id="watchlist-search" type="search" autocomplete="off" placeholder="输入股票代码或名称" aria-label="搜索本地自选股"></label>
               <label class="field watchlist-sort-field"><span>排序</span><select id="watchlist-sort" aria-label="自选股排序"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option></select></label>
               <span class="watchlist-filter-count" id="watchlist-filter-count" aria-live="polite">显示全部自选</span>
+              <div class="watchlist-quote-actions"><button class="button button-secondary" id="refresh-watchlist-quotes" type="button">刷新批量行情</button><span id="watchlist-quote-refresh-status" class="watchlist-quote-refresh-status" role="status" aria-live="polite">批量行情按需读取，不会在打开自选股时自动请求。</span></div>
             </div>
             <div class="watchlist-list" id="watchlist-list"><div class="empty-row">点击“加入自选”后，可从这里快速查询行情或发起分析。</div></div>
           </section>

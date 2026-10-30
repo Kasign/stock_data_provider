@@ -95,6 +95,20 @@ export function analysisHealth(settings, signal) {
 export function getDataSources(settings, signal) {
   return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey, signal });
 }
+export function getMarketQuotes(settings, symbols, signal) {
+  const values = Array.isArray(symbols) ? symbols.map((value) => String(value ?? "").trim().toUpperCase()) : [];
+  if (!values.length || values.length > 50 || values.some((value) => !value)) {
+    return Promise.reject(new Error("批量行情查询需要 1–50 个非空 A 股代码。"));
+  }
+  if (new Set(values).size !== values.length) {
+    return Promise.reject(new Error("批量行情查询不允许重复证券代码。"));
+  }
+  const query = new URLSearchParams({ symbols: values.join(",") });
+  return request(settings.marketBase, "/api/v1/market/quotes?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
 export function getDataSourceDiagnostics(settings, signal) {
   return request(settings.marketBase, "/api/v1/data-sources/diagnostics", { apiKey: settings.apiKey, signal });
 }

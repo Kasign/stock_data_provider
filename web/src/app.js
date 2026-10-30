@@ -15,6 +15,7 @@ import {
   getDailyBars,
   getDataSources,
   getMarketBundle,
+  getMarketQuotes,
   getQuote,
   searchStocks,
   loadSettings,
@@ -177,7 +178,12 @@ const state = {
   suppressedHistoryTaskBase: "",
   chatStockContext: null,
   // 用户主动清除后，禁止旧行情与页面切换重新注入股票上下文，直到开始新的行情查询。
-  chatStockContextCleared: false
+  chatStockContextCleared: false,
+  watchlistQuotes: new Map(),
+  watchlistQuoteStatus: "idle",
+  watchlistQuoteMessage: "批量行情按需读取，不会在打开自选股时自动请求。",
+  watchlistQuoteGeneration: 0,
+  watchlistQuoteController: null
 };
 
 const marketOverview = bindMarketOverview(() => state.settings, (item, source) => selectStockFromMarket(item, source));
@@ -627,9 +633,106 @@ function localCalendarDateKey(value) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
+function normalizeWatchlistQuoteSymbol(value) {
+  try { return comparableMarketSymbol(value); } catch { return String(value || "").trim().toUpperCase(); }
+}
+
+function invalidateWatchlistQuotes() {
+  state.watchlistQuoteGeneration += 1;
+  try { state.watchlistQuoteController?.abort(); } catch {}
+  state.watchlistQuoteController = null;
+  state.watchlistQuotes.clear();
+  state.watchlistQuoteStatus = "idle";
+  state.watchlistQuoteMessage = "行情连接配置已变更，旧批量快照已清除，请重新刷新。";
+  const button = $("#refresh-watchlist-quotes");
+  if (button) {
+    button.disabled = false;
+    button.textContent = "刷新批量行情";
+    button.removeAttribute("aria-busy");
+  }
+  if (state.view === "watchlist") renderWatchlist();
+}
+
+async function refreshWatchlistQuotes() {
+  const button = $("#refresh-watchlist-quotes");
+  const watchlistState = safeReadWatchlistState();
+  if (!watchlistState.storageReadable || !watchlistState.storageValid) {
+    state.watchlistQuoteStatus = "error";
+    state.watchlistQuoteMessage = "本地自选清单不可读取或格式异常，未发送批量行情请求。";
+    renderWatchlist();
+    return;
+  }
+  const symbols = watchlistState.items.map((item) => item.symbol);
+  if (!symbols.length) {
+    state.watchlistQuoteStatus = "empty";
+    state.watchlistQuoteMessage = "当前没有自选股，无需请求批量行情。";
+    renderWatchlist();
+    return;
+  }
+  if (!state.settings?.apiKey) {
+    state.watchlistQuoteStatus = "needs-key";
+    state.watchlistQuoteMessage = "请先在设置中心配置行情 API Key，再刷新批量行情。";
+    renderWatchlist();
+    return;
+  }
+
+  try { state.watchlistQuoteController?.abort(); } catch {}
+  const controller = new AbortController();
+  const generation = ++state.watchlistQuoteGeneration;
+  state.watchlistQuoteController = controller;
+  state.watchlistQuoteStatus = "loading";
+  state.watchlistQuoteMessage = "正在请求 " + symbols.length + " 只自选股的批量行情…";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "刷新中…";
+    button.setAttribute("aria-busy", "true");
+  }
+  renderWatchlist();
+
+  try {
+    const payload = await getMarketQuotes(state.settings, symbols, controller.signal);
+    if (controller.signal.aborted || generation !== state.watchlistQuoteGeneration) return;
+    const nextQuotes = new Map();
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    items.forEach((item) => {
+      const key = normalizeWatchlistQuoteSymbol(item?.symbol);
+      if (!key) return;
+      nextQuotes.set(key, {
+        quote: item.quote && typeof item.quote === "object" ? item.quote : null,
+        errorCode: String(item.error_code || ""),
+        qualityStatus: String(item.quality_status || item.quote?.quality_status || "unknown"),
+        fetchedAt: String(payload.fetched_at || "")
+      });
+    });
+    state.watchlistQuotes = nextQuotes;
+    state.watchlistQuoteStatus = "loaded";
+    state.watchlistQuoteMessage = "批量行情已返回 " + Number(payload.succeeded ?? items.filter((item) => item?.quote).length)
+      + " / " + Number(payload.total ?? symbols.length) + " 只；失败 "
+      + Number(payload.failed ?? items.filter((item) => !item?.quote).length) + " 只"
+      + " · 整体质量 " + qualityLabel(payload.quality_status)
+      + " · 快照 " + (payload.fetched_at ? formatDateTime(payload.fetched_at) : "时间未报告");
+  } catch (error) {
+    if (controller.signal.aborted || generation !== state.watchlistQuoteGeneration) return;
+    state.watchlistQuoteStatus = "error";
+    state.watchlistQuoteMessage = "批量行情读取失败：" + describeApiError(error, "请求失败。")
+      + (state.watchlistQuotes.size ? "；保留上次成功快照并标记为旧数据。" : "");
+  } finally {
+    if (generation === state.watchlistQuoteGeneration) {
+      state.watchlistQuoteController = null;
+      if (button) {
+        button.disabled = false;
+        button.textContent = "刷新批量行情";
+        button.removeAttribute("aria-busy");
+      }
+      renderWatchlist();
+    }
+  }
+}
+
 function renderWatchlist(records, storageReadable, storageValid) {
   const root = $("#watchlist-list");
   root.replaceChildren();
+  setText("#watchlist-quote-refresh-status", state.watchlistQuoteMessage);
   if (records === undefined) {
     const readState = safeReadWatchlistState();
     records = readState.items;
@@ -684,9 +787,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
   }
 
   const recentTasks = safeReadRecentTasks();
-  const normalizeLocalSymbol = (value) => {
-    try { return comparableMarketSymbol(value); } catch { return String(value || "").trim().toUpperCase(); }
-  };
+  const normalizeLocalSymbol = normalizeWatchlistQuoteSymbol;
   visibleItems.forEach((record) => {
     const row = document.createElement("article");
     row.className = "watchlist-item";
@@ -739,11 +840,26 @@ function renderWatchlist(records, storageReadable, storageValid) {
     tracking.className = "watchlist-tracking-summary";
     const itemSymbol = normalizeLocalSymbol(record.symbol);
     const quoteMatches = Boolean(state.quote?.symbol) && normalizeLocalSymbol(state.quote.symbol) === itemSymbol;
+    const batchQuote = state.watchlistQuotes.get(itemSymbol);
+    const currentQuote = batchQuote?.quote || (quoteMatches ? state.quote : null);
     const quoteLine = document.createElement("small");
     quoteLine.className = "watchlist-tracking-line";
-    quoteLine.textContent = quoteMatches
-      ? "行情快照：" + formatPrice(state.quote.current_price) + " · " + formatPercent(state.quote.change_percent) + " · " + (state.quote.quote_time ? formatDateTime(state.quote.quote_time) : "时间未报告") + " · " + qualityLabel(state.quote.quality_status)
-      : "当前行情：未加载（点击“查行情”读取）";
+    if (batchQuote?.errorCode) {
+      quoteLine.textContent = "批量行情不可用：" + batchQuote.errorCode + " · " + qualityLabel(batchQuote.qualityStatus);
+    } else if (currentQuote) {
+      const oldSnapshot = state.watchlistQuoteStatus === "error" && batchQuote;
+      quoteLine.textContent = (oldSnapshot ? "上次成功快照：" : "行情快照：")
+        + formatPrice(currentQuote.current_price) + " · " + formatPercent(currentQuote.change_percent)
+        + " · " + (currentQuote.quote_time ? formatDateTime(currentQuote.quote_time) : "时间未报告")
+        + " · " + qualityLabel(batchQuote?.qualityStatus || currentQuote.quality_status)
+        + (batchQuote?.fetchedAt ? " · 批量采集 " + formatDateTime(batchQuote.fetchedAt) : "");
+    } else if (state.watchlistQuoteStatus === "loading") {
+      quoteLine.textContent = "批量行情读取中…";
+    } else if (state.watchlistQuoteStatus === "loaded") {
+      quoteLine.textContent = "本次批量响应未包含该证券，质量未知。";
+    } else {
+      quoteLine.textContent = "当前行情：未加载（可刷新批量行情或点击“查行情”读取）";
+    }
     const matchingTasks = recentTasks.filter((task) =>
       Array.isArray(task.symbols) && task.symbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
     );
@@ -4379,6 +4495,7 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   }
 
   if (marketConnectionChanged) {
+    runSettingsApplyStep("失效自选股批量行情失败：", () => invalidateWatchlistQuotes(), failures);
     runSettingsApplyStep("失效市场总览请求失败：", () => marketOverview.invalidateConnection(), failures);
     runSettingsApplyStep("失效市场活动请求失败：", () => marketActivity.invalidateConnection(), failures);
     runSettingsApplyStep("清理旧行情结果失败：", () => cancelQuoteQuery({
@@ -5081,6 +5198,7 @@ document.querySelectorAll("[data-ma-period]").forEach((control)=>{
 $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
+$("#refresh-watchlist-quotes").addEventListener("click", () => { void refreshWatchlistQuotes(); });
 $("#watchlist-search").addEventListener("input", () => renderWatchlist());
 $("#watchlist-sort").addEventListener("change", () => {
   persistLocalPreferences();

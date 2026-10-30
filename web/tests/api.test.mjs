@@ -17,6 +17,7 @@ import {
   getTradingCalendar,
   getDataSources,
   getDataSourceDiagnostics,
+  getMarketQuotes,
   getQuote,
   searchStocks,
   marketHealth
@@ -407,6 +408,38 @@ test("reads provider runtime diagnostics with the market API key and caller sign
     assert.equal(request.url, "/market-api/api/v1/data-sources/diagnostics");
     assert.equal(request.headers["X-API-Key"], "market-secret");
     assert.equal(request.signal, controller.signal);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("requests the explicit watchlist symbols through the bounded batch-quote endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url: String(url), ...init };
+    return jsonResponse({
+      items: [{ symbol: "600519.SH", quote: { current_price: 1500 }, quality_status: "valid" }],
+      total: 1,
+      succeeded: 1,
+      failed: 0,
+      fetched_at: "2026-10-30T07:00:00Z",
+      quality_status: "valid"
+    });
+  };
+  try {
+    const result = await getMarketQuotes({
+      marketBase: "/market-api",
+      apiKey: "market-secret"
+    }, ["600519.SH"], controller.signal);
+    assert.equal(result.succeeded, 1);
+    assert.equal(request.url, "/market-api/api/v1/market/quotes?symbols=600519.SH");
+    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.signal, controller.signal);
+    await assert.rejects(getMarketQuotes({ marketBase: "/market-api" }, ["600519.SH", "600519.SH"]), /不允许重复/);
+    await assert.rejects(getMarketQuotes({ marketBase: "/market-api" }, Array.from({ length: 51 }, (_, index) => String(600000 + index))), /1–50/);
   } finally {
     globalThis.fetch = originalFetch;
   }

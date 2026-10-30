@@ -1850,3 +1850,14 @@ test("数据中心读取并展示真实 Provider 运行诊断，且不将未观�
   assert.match(html, /id="data-center-diagnostics-list"/);
   assert.doesNotMatch(html, /当前没有逐 Provider \/ capability 的受控真实探测 API/);
 });
+
+
+test("自选股批量行情只请求当前本地清单并在连接变更时清除旧快照", () => {
+  assert.match(apiClient, /export function getMarketQuotes\(settings, symbols, signal\)/);
+  assert.match(app, /function refreshWatchlistQuotes\(\)/);
+  assert.match(app, /getMarketQuotes\(state\.settings, symbols, controller\.signal\)/);
+  assert.match(app, /state\.watchlistQuotes = nextQuotes/);
+  assert.match(app, /invalidateWatchlistQuotes\(\)/);
+  assert.match(html, /id="refresh-watchlist-quotes"/);
+  assert.match(html, /id="watchlist-quote-refresh-status"/);
+});

@@ -4593,10 +4593,15 @@ button:disabled {
   color: var(--muted, #7b8494);
   font-size: 12px;
 }
+.watchlist-quote-actions { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.watchlist-quote-actions .button { min-height: 36px; white-space: nowrap; }
+.watchlist-quote-refresh-status { color: var(--text-dim); font-size: 11px; line-height: 1.5; }
+
 @media (max-width: 640px) {
   .watchlist-toolbar { align-items: stretch; }
   .watchlist-search-field, .watchlist-sort-field { flex: 1 1 100%; max-width: none; }
   .watchlist-filter-count { margin: 0; }
+  .watchlist-quote-actions { flex: 1 1 100%; align-items: flex-start; flex-direction: column; }
 }
 
 
