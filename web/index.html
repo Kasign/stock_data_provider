@@ -730,9 +730,9 @@
               <div class="alert-rule-form-footer"><span class="field-hint">草稿仅保存在当前浏览器；服务端规则、评估、触发历史与通知投递仍待接入。</span><div class="alert-rule-actions"><button class="button button-secondary" id="alert-rule-cancel" type="button" hidden>取消编辑</button><button class="button button-primary" id="alert-rule-submit" type="submit">保存本地草稿</button></div></div>
             </form>
             <div class="alert-rule-list-state" data-alert-rules-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取规则</strong><p>服务端规则列表由 API 提供；本地草稿单独列在下方。</p></div>
-            <div class="alert-rule-list-state" data-alert-rules-state="empty" hidden><span class="notification-state-mark" aria-hidden="true">▤</span><strong>没有已保存的告警规则</strong><p>只有收到真实 API 的空列表后才能显示此状态。</p></div>
+            <div class="alert-rule-list-state" data-alert-rules-state="empty" hidden><span class="notification-state-mark" aria-hidden="true">▤</span><strong>服务端没有已保存的告警规则</strong><p>只有收到真实 API 的空列表后才能显示此状态；本地草稿不计入服务端规则。</p></div>
             <div class="alert-rule-list-state" data-alert-rules-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>规则读取失败</strong><p id="alert-rules-error">请求错误与诊断等待真实 API 接入后显示。</p></div>
-            <div class="alert-rule-list-state" data-alert-rules-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>规则管理 API 尚未提供</strong><p>不会在浏览器中假保存规则、启停状态或删除操作。</p></div>
+            <div class="alert-rule-list-state" data-alert-rules-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>服务端规则管理 API 尚未提供</strong><p>此处服务端规则列表不可用；下方本地草稿可独立保存，但不会同步或执行。</p></div>
             <div class="alert-rule-list" id="alert-rule-list" data-alert-rules-state="loaded" hidden></div>
             <div class="local-alert-drafts"><div class="panel-heading"><div><h3>本地规则草稿</h3><p>仅用于记录规则意图，不执行行情监控或推送。</p></div><span class="availability-pill is-local">浏览器本地</span></div><div id="local-alert-draft-list" class="local-alert-draft-list"><p class="table-empty">尚无本地规则草稿。</p></div><p id="local-alert-draft-feedback" class="field-hint" role="status" aria-live="polite">最多保存 100 条草稿；浏览器数据清理后可能丢失。</p></div>
           </section>
