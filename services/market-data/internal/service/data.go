@@ -3547,6 +3547,9 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 		return nil, nil, ErrDailyBarsAsOfNotFound
 	}
 	warnings = append(warnings, "daily_bars_reconstructed_from_recorded_revisions")
+	if basis != model.AdjustmentNone {
+		warnings = append(warnings, "daily_bars_adjustment_rebuilt_from_point_in_time_factors")
+	}
 	if !coverageSufficient(start, end, limit, len(bars)) {
 		warnings = append(warnings, "point_in_time_daily_bar_coverage_below_requested_threshold")
 		for i := range bars {

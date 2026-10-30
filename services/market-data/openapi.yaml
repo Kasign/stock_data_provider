@@ -96,7 +96,11 @@ components:
         amount: {type: number, nullable: true, description: CNY}
         change_percent: {type: number, nullable: true, description: Percentage points}
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
-        adjustment_reference_date: {type: string, format: date}
+        adjustment_reference_date: {type: string, format: date, description: Reference date used by the PIT adjustment-factor reconstruction}
+        adjustment_method: {type: string, description: Adjustment algorithm identifier, for example cumulative_adj_factor_v1}
+        adjustment_factor_source: {type: string, description: Provider used for the adjustment factor series}
+        adjustment_factor_source_version: {type: string, description: Provider schema/data version used for the adjustment factor series}
+        adjustment_factor_system_observed_at: {type: string, format: date-time, nullable: true, description: System observation time of the factor revision applied to this bar}
         source: {type: string}
         source_version: {type: string}
         provider_timestamp: {type: string, format: date-time, nullable: true}

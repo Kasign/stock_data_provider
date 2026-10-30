@@ -173,3 +173,13 @@ Go 当前已为上述多项建立门禁，但需要确认这些门禁从 Provide
 - [Go 数据服务迁移状态](./GO_DATA_PROVIDER_SWITCH_STATUS.md)
 - [数据源扩展计划](./DATA_SOURCE_EXPANSION_PLAN.md)
 - [真实环境验收记录](./DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md)
+
+
+## 8. 第四阶段 PIT 实现增量（2026-10-30）
+
+- 日 K PIT 前/后复权现改为从已记录的未复权日 K 与同一 `as_of` 下可证明可用的复权因子重建；输出记录复权参考日期、因子 Provider、因子版本及系统观察时间。
+- 严格复权公式遵循 Tushare 累计后复权因子定义：前复权为 `raw × factor / reference_factor`，后复权为 `raw × factor`。本次实现只建立可复现的 Go 计算路径，不表示当前 Tushare 因子具备 PIT 可用时间证据。
+- Tushare `adj_factor` 未暴露精确首次可用时间；Tushare `dividend` 仅给日期字段；Tushare `index_weight` 是月度权重报告，未给出成员有效起止日期。相关严格 PIT 查询必须排除/降级，不能伪造时间字段。
+- 历史指数成分成员模型已分离 `effective_from/effective_to` 与权重报告日期，并在区间不覆盖查询日期、缺失时间证据或时间顺序异常时降级。
+- 因子和公司行动可见性门禁要求 `fetched_at`、`available_at`、`system_observed_at` 均不晚于 `as_of`；已补充相应边界测试。
+- 本节为代码静态状态。Go 测试、Python/Go 固定样本差分、真实 Provider 权限和 MariaDB 部署验收尚未执行，不应标记为通过。
