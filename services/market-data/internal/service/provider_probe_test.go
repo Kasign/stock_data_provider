@@ -154,7 +154,6 @@ func TestProviderProbeReportsUnconfiguredCoreCapabilities(t *testing.T) {
 	}
 }
 
-
 func TestProviderProbeOptionsLimitSelectedCapabilities(t *testing.T) {
 	p := providerProbeQuoteFake{}
 	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
