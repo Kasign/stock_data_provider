@@ -190,8 +190,14 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	add := func(name, capability string, fn providerProbeFunc) {
 		jobs = append(jobs, providerProbeJob{provider: name, capability: capability, run: fn})
 	}
-	quoteSymbol := probeSymbol
-	barsSymbol := probeSymbol
+	quoteSymbol := "600519.SH"
+	barsSymbol := "600036.SH"
+	searchSymbol := "600519"
+	if len(options.Markets) > 0 || len(options.Symbols) > 0 {
+		quoteSymbol = probeSymbol
+		barsSymbol = probeSymbol
+		searchSymbol = probeSymbol[:6]
+	}
 	for _, p := range s.quoteProviders {
 		p := p
 		add(p.Name(), "quote", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
@@ -277,11 +283,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	for _, p := range s.stockSearchProviders {
 		p := p
 		add(p.Name(), "stock_search", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
-			snapshot, err := p.SearchStocks(probeCtx, probeSymbol[:6], 1)
+			snapshot, err := p.SearchStocks(probeCtx, searchSymbol, 1)
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			if err := validateStockSearchSnapshot(probeSymbol[:6], 1, snapshot); err != nil {
+			if err := validateStockSearchSnapshot(searchSymbol, 1, snapshot); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
