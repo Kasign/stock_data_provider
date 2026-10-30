@@ -4826,3 +4826,22 @@ button:disabled {
   .run-flow-dialog .run-flow-meta-content .task-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .run-flow-dialog .run-flow-events-column { max-height:46dvh; }
 }
+
+
+.watchlist-import {
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid var(--line, rgba(128, 128, 128, .25));
+  border-radius: 12px;
+}
+.watchlist-import > summary { cursor: pointer; font-weight: 650; }
+.watchlist-import > p { margin: 10px 0; }
+.watchlist-import textarea { width: 100%; min-height: 112px; resize: vertical; }
+.watchlist-import-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.watchlist-import-actions span { flex: 1 1 240px; color: var(--muted, #888); font-size: 12px; }
+.watchlist-import-preview { max-height: 320px; margin-top: 10px; }
+.watchlist-import-preview table { width: 100%; border-collapse: collapse; }
+.watchlist-import-preview th, .watchlist-import-preview td { padding: 8px 10px; border-bottom: 1px solid var(--line, rgba(128,128,128,.2)); text-align: left; font-size: 12px; }
+@media (max-width: 640px) {
+  .watchlist-import-actions > button { flex: 1 1 100%; }
+}

@@ -32,7 +32,7 @@ import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
 import { clearRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
-import { addWatchlistSymbol, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
+import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
   comparableMarketSymbol,
@@ -184,7 +184,8 @@ const state = {
   watchlistQuoteStatus: "idle",
   watchlistQuoteMessage: "批量行情按需读取，不会在打开自选股时自动请求。",
   watchlistQuoteGeneration: 0,
-  watchlistQuoteController: null
+  watchlistQuoteController: null,
+  watchlistImportPreview: null
 };
 
 const marketOverview = bindMarketOverview(() => state.settings, (item, source) => selectStockFromMarket(item, source));
@@ -975,6 +976,126 @@ function renderWatchlist(records, storageReadable, storageValid) {
     root.append(row);
   });
   renderResearchStockList();
+}
+
+function parseWatchlistImportLine(line) {
+  const cells = [];
+  let value = "", quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') { value += '"'; index += 1; }
+      else quoted = !quoted;
+    } else if ((char === "," || char === "\\t" || char === ";") && !quoted) {
+      cells.push(value.trim()); value = "";
+    } else value += char;
+  }
+  cells.push(value.trim());
+  return cells;
+}
+
+function buildWatchlistImportPreview(rawText) {
+  const existingState = safeReadWatchlistState();
+  if (!existingState.storageReadable || !existingState.storageValid) {
+    return { rows: [], accepted: [], error: "当前本地自选数据不可读取或格式异常，已暂停导入。" };
+  }
+  const lines = String(rawText || "").replace(/^\\uFEFF/, "").split(/\\r?\\n/).filter((line) => line.trim());
+  const rows = [];
+  const accepted = [];
+  const seen = new Set(existingState.items.map((item) => comparableMarketSymbol(item.symbol)));
+  const remaining = Math.max(0, MAX_WATCHLIST_ITEMS - existingState.items.length);
+  let capacity = remaining;
+  lines.forEach((line, index) => {
+    const cells = parseWatchlistImportLine(line);
+    const rawSymbol = String(cells[0] || "").trim().toUpperCase();
+    const rawName = String(cells[1] || "").trim();
+    if (index === 0 && /^(代码|股票代码|symbol|code)$/i.test(rawSymbol)) return;
+    let symbol = rawSymbol;
+    if (/^\\d{6}$/.test(symbol)) {
+      if (/^(5|6|9)/.test(symbol)) symbol += ".SH";
+      else if (/^(4|8)/.test(symbol)) symbol += ".BJ";
+      else symbol += ".SZ";
+    }
+    if (!/^\\d{6}\\.(SH|SZ|BJ)$/.test(symbol)) {
+      rows.push({ line: index + 1, symbol: rawSymbol, name: rawName, status: "invalid", message: "代码格式无效" });
+      return;
+    }
+    const identity = comparableMarketSymbol(symbol);
+    if (seen.has(identity)) {
+      rows.push({ line: index + 1, symbol, name: rawName, status: "duplicate", message: "已存在或文件内重复" });
+      return;
+    }
+    seen.add(identity);
+    if (capacity <= 0) {
+      rows.push({ line: index + 1, symbol, name: rawName, status: "limit", message: "超过自选股上限" });
+      return;
+    }
+    capacity -= 1;
+    const record = { symbol, name: rawName || symbol };
+    accepted.push(record);
+    rows.push({ line: index + 1, ...record, status: "ready", message: "可导入" });
+  });
+  return {
+    rows, accepted, remaining, counts: {
+      total: rows.length,
+      ready: accepted.length,
+      duplicate: rows.filter((item) => item.status === "duplicate").length,
+      invalid: rows.filter((item) => item.status === "invalid").length,
+      limit: rows.filter((item) => item.status === "limit").length
+    }
+  };
+}
+
+function renderWatchlistImportPreview(preview) {
+  const root = $("#watchlist-import-preview");
+  const confirm = $("#watchlist-import-confirm");
+  if (!root || !confirm) return;
+  root.replaceChildren();
+  state.watchlistImportPreview = preview;
+  if (preview.error) {
+    root.textContent = preview.error;
+    confirm.disabled = true;
+    setText("#watchlist-import-summary", preview.error);
+    return;
+  }
+  const counts = preview.counts;
+  setText("#watchlist-import-summary", "可导入 " + counts.ready + " 只 · 重复 " + counts.duplicate
+    + " 只 · 无效 " + counts.invalid + " 条 · 超出上限 " + counts.limit + " 只");
+  const table = document.createElement("table");
+  table.innerHTML = "<thead><tr><th>行</th><th>代码</th><th>名称</th><th>结果</th></tr></thead>";
+  const body = document.createElement("tbody");
+  preview.rows.forEach((item) => {
+    const row = document.createElement("tr");
+    [item.line, item.symbol, item.name || "—", item.message].forEach((value) => {
+      const cell = document.createElement("td"); cell.textContent = String(value); row.append(cell);
+    });
+    body.append(row);
+  });
+  table.append(body);
+  root.append(table);
+  confirm.disabled = counts.ready === 0;
+}
+
+function previewWatchlistImport() {
+  const preview = buildWatchlistImportPreview($("#watchlist-import-text").value);
+  renderWatchlistImportPreview(preview);
+}
+
+function confirmWatchlistImport() {
+  const preview = state.watchlistImportPreview;
+  if (!preview || !Array.isArray(preview.accepted) || !preview.accepted.length) return;
+  const result = importWatchlistSymbols(preview.accepted, localStorage);
+  if (!result.storageReadable || !result.storageValid || !result.persisted) {
+    setWatchlistFeedback("导入未能确认完整写入浏览器存储，请检查存储空间；不会报告导入成功。", "error");
+    return;
+  }
+  $("#watchlist-import-text").value = "";
+  $("#watchlist-import-preview").replaceChildren();
+  $("#watchlist-import-confirm").disabled = true;
+  setText("#watchlist-import-summary", "已导入 " + result.imported.length + " 只股票。");
+  state.watchlistImportPreview = null;
+  renderWatchlist();
+  setWatchlistFeedback("已导入 " + result.imported.length + " 只股票；重复、无效及超出上限的记录未写入。");
 }
 
 function addCurrentSymbolToWatchlist() {
@@ -5226,6 +5347,8 @@ document.querySelectorAll("[data-ma-period]").forEach((control)=>{
 $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
+$("#watchlist-import-preview-button").addEventListener("click", previewWatchlistImport);
+$("#watchlist-import-confirm").addEventListener("click", confirmWatchlistImport);
 $("#refresh-watchlist-quotes").addEventListener("click", () => { void refreshWatchlistQuotes(); });
 $("#watchlist-search").addEventListener("input", () => renderWatchlist());
 $("#watchlist-sort").addEventListener("change", () => {
