@@ -33,6 +33,7 @@ import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
 import { clearRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
+import { assignWatchlistGroup, createWatchlistGroup, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP } from "./watchlist-groups.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
   comparableMarketSymbol,
@@ -769,9 +770,13 @@ function renderWatchlist(records, storageReadable, storageValid) {
   const keyword = String($("#watchlist-search")?.value || "").trim().toLocaleLowerCase();
   const preferences = readPreferences();
   const sortMode = $("#watchlist-sort")?.value || preferences.watchlistSort;
-  const visibleItems = items.filter((record) => !keyword
-    || String(record.symbol || "").toLocaleLowerCase().includes(keyword)
-    || String(record.name || "").toLocaleLowerCase().includes(keyword));
+  const groupState = readWatchlistGroups(localStorage);
+  const selectedGroup = $("#watchlist-group-filter")?.value || "all";
+  const visibleItems = items.filter((record) => {
+    const matchesKeyword = !keyword || String(record.symbol || "").toLocaleLowerCase().includes(keyword)
+      || String(record.name || "").toLocaleLowerCase().includes(keyword);
+    return matchesKeyword && (selectedGroup === "all" || (groupState.assignments[record.symbol] || DEFAULT_WATCHLIST_GROUP) === selectedGroup);
+  });
   const direction = preferences.watchlistSortDirection === "asc" ? 1 : -1;
   if (sortMode === "symbol") visibleItems.sort((a, b) => direction * a.symbol.localeCompare(b.symbol, "zh-CN"));
   else if (sortMode === "name") visibleItems.sort((a, b) => direction * (a.name.localeCompare(b.name, "zh-CN") || a.symbol.localeCompare(b.symbol)));
@@ -972,6 +977,16 @@ function renderWatchlist(records, storageReadable, storageValid) {
       if (action === "remove") button.setAttribute("aria-label", "移除自选 " + record.symbol);
       actions.append(button);
     }
+    const groupSelect = document.createElement("select");
+    groupSelect.className = "watchlist-item-group";
+    groupSelect.dataset.watchlistGroupSymbol = record.symbol;
+    groupSelect.setAttribute("aria-label", record.symbol + " 所属分组");
+    groupState.groups.forEach((group) => {
+      const option = document.createElement("option");
+      option.value = group; option.textContent = group; groupSelect.append(option);
+    });
+    groupSelect.value = groupState.assignments[record.symbol] || DEFAULT_WATCHLIST_GROUP;
+    actions.append(groupSelect);
     row.append(main, actions);
     root.append(row);
   });
@@ -1697,7 +1712,8 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
   if (previousView === "settings" && nextView !== "settings") setMarketKeyVisibility(false);
   state.view = nextView;
   if (legacyMarketView && window.location.hash === "#market-data") window.history.replaceState(null, "", "#market");
-  syncRefreshButtonContext();
+  syncWatchlistGroupControls();
+syncRefreshButtonContext();
   if (nextView === "settings" && previousView !== nextView) openSettings();
   if (refreshData && previousView !== nextView) {
     if (nextView === "market") void refreshMarketWorkspace();
@@ -4840,6 +4856,18 @@ function normalizeImportedPreferences(value) {
   };
 }
 
+function syncWatchlistGroupControls() {
+  const select = $("#watchlist-group-filter");
+  if (!select) return;
+  const previous = select.value || "all", result = readWatchlistGroups(localStorage);
+  select.replaceChildren();
+  const all = document.createElement("option"); all.value = "all"; all.textContent = "全部分组"; select.append(all);
+  result.groups.forEach((group) => { const option = document.createElement("option"); option.value = group; option.textContent = group; select.append(option); });
+  select.value = result.groups.includes(previous) ? previous : "all";
+  $("#watchlist-group-remove").disabled = select.value === "all" || select.value === DEFAULT_WATCHLIST_GROUP;
+  if (!result.valid) setWatchlistFeedback("自选分组存储不可用或格式异常；分组修改已暂停。", "error");
+}
+
 function syncWatchlistPreferenceControls(preferences = readPreferences()) {
   const normalized = preferences;
   const sort = $("#settings-watchlist-sort");
@@ -5355,6 +5383,30 @@ document.querySelectorAll("[data-ma-period]").forEach((control)=>{
 $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
+$("#watchlist-list").addEventListener("change", (event) => {
+  const select = event.target.closest("select[data-watchlist-group-symbol]");
+  if (!select) return;
+  const result = assignWatchlistGroup(select.dataset.watchlistGroupSymbol, select.value, localStorage);
+  if (result.persisted) { setWatchlistFeedback("已调整 " + select.dataset.watchlistGroupSymbol + " 的分组。"); renderWatchlist(); }
+  else setWatchlistFeedback("分组调整未能保存；请检查浏览器存储状态。", "error");
+});
+$("#watchlist-group-filter").addEventListener("change", () => renderWatchlist());
+$("#watchlist-group-create").addEventListener("click", () => {
+  const input = $("#watchlist-group-name"), result = createWatchlistGroup(input.value, localStorage);
+  if (!result.changed || !result.persisted) {
+    const messages = { "invalid-storage": "分组存储异常，未修改。", "invalid-name": "请输入有效分组名称（最多 20 字）。", duplicate: "分组名称已存在。", limit: "最多创建 12 个分组。" };
+    setWatchlistFeedback(messages[result.reason] || "分组未能保存。", "error"); return;
+  }
+  input.value = ""; syncWatchlistGroupControls(); setWatchlistFeedback("已创建分组。");
+});
+$("#watchlist-group-remove").addEventListener("click", () => {
+  const name = $("#watchlist-group-filter").value;
+  if (name === "all" || name === DEFAULT_WATCHLIST_GROUP) return;
+  const result = removeWatchlistGroup(name, localStorage);
+  if (!result.changed || !result.persisted) { setWatchlistFeedback("分组删除失败；请检查浏览器存储状态。", "error"); return; }
+  $("#watchlist-group-filter").value = "all"; syncWatchlistGroupControls(); renderWatchlist();
+  setWatchlistFeedback("已删除分组，组内股票已归入“未分组”。");
+});
 $("#watchlist-import-preview-button").addEventListener("click", previewWatchlistImport);
 $("#watchlist-import-confirm").addEventListener("click", confirmWatchlistImport);
 $("#refresh-watchlist-quotes").addEventListener("click", () => { void refreshWatchlistQuotes(); });

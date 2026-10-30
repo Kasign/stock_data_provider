@@ -302,8 +302,15 @@
             <div class="watchlist-toolbar">
               <label class="field watchlist-search-field"><span>搜索自选</span><input id="watchlist-search" type="search" autocomplete="off" placeholder="输入股票代码或名称" aria-label="搜索本地自选股"></label>
               <label class="field watchlist-sort-field"><span>排序</span><select id="watchlist-sort" aria-label="自选股排序"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option></select></label>
+              <label class="field watchlist-group-filter"><span>分组</span><select id="watchlist-group-filter" aria-label="按自选分组筛选"><option value="all">全部分组</option><option value="未分组">未分组</option></select></label>
               <span class="watchlist-filter-count" id="watchlist-filter-count" aria-live="polite">显示全部自选</span>
               <div class="watchlist-quote-actions"><button class="button button-secondary" id="refresh-watchlist-quotes" type="button">刷新批量行情</button><span id="watchlist-quote-refresh-status" class="watchlist-quote-refresh-status" role="status" aria-live="polite">批量行情按需读取，不会在打开自选股时自动请求。</span></div>
+            </div>
+            <div class="watchlist-group-manager" aria-label="自选分组管理">
+              <label class="field"><span>新建分组</span><input id="watchlist-group-name" maxlength="20" placeholder="例如：长期持有、短线观察"></label>
+              <button class="button button-secondary" id="watchlist-group-create" type="button">创建分组</button>
+              <button class="button button-secondary" id="watchlist-group-remove" type="button" disabled>删除当前分组</button>
+              <span class="market-widget-meta">分组与归属仅保存在当前浏览器；删除分组不会删除股票，组内股票会回到“未分组”。</span>
             </div>
             <details class="watchlist-import">
               <summary>批量导入自选股</summary>
