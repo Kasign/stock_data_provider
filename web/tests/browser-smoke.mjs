@@ -116,6 +116,7 @@ try {
     let marketIndexRequestCount = 0;
     let dataSourceScenario = "success";
     let dataSourcesRequestCount = 0;
+    let diagnosticsRequestCount = 0;
     let healthScenario = "unavailable";
     let settingsConnectionScenario = "default";
     let settingsConnectionRequestCount = 0;
@@ -318,6 +319,21 @@ try {
             message: item.message,
             request_id: item.requestId
           }
+        });
+      }
+
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/data-sources/diagnostics")) {
+        diagnosticsRequestCount += 1;
+        return json(200, {
+          items: [{
+            provider: "测试 Provider",
+            capabilities: [
+              { capability: "quote", status: "healthy", consecutive_failures: 0, total_success: 3, total_failure: 0, last_success_at: "2026-10-30T07:00:00Z", last_failure_at: null, open_until: null },
+              { capability: "daily_bars", status: "not_observed", consecutive_failures: 0, total_success: 0, total_failure: 0, last_success_at: null, last_failure_at: null, open_until: null }
+            ]
+          }],
+          scope: ["quote", "daily_bars"],
+          observed_from: "in_process_circuit_breaker"
         });
       }
 
@@ -866,13 +882,25 @@ try {
 
       dataSourceScenario = "success";
       const dataSeedCount = dataSourcesRequestCount;
+      const diagnosticsSeedCount = diagnosticsRequestCount;
       await page.locator("#data-center-check").click();
       await page.waitForFunction(
-        () => document.querySelector("#data-center-provider-list")?.textContent.includes("测试 Provider"),
+        () => document.querySelector("#data-center-provider-list")?.textContent.includes("测试 Provider") &&
+          document.querySelector("#data-center-diagnostics-list")?.textContent.includes("尚无业务观测"),
         null,
         { timeout: 10000 }
       );
       assert.equal(dataSourcesRequestCount, dataSeedCount + 1, "data center success seed should request Provider list once");
+      assert.equal(diagnosticsRequestCount, diagnosticsSeedCount + 1, "data center should read runtime diagnostics once");
+      const diagnosticState = await page.evaluate(() => ({
+        status: document.querySelector("#data-center-diagnostics-status")?.textContent.trim() || "",
+        summary: document.querySelector("#data-center-diagnostics-summary")?.textContent || "",
+        rows: document.querySelector("#data-center-diagnostics-list")?.textContent || ""
+      }));
+      assert.match(diagnosticState.status, /部分能力尚无观测/);
+      assert.match(diagnosticState.summary, /正常 1/);
+      assert.match(diagnosticState.summary, /未观测 1/);
+      assert.match(diagnosticState.rows, /累计成功 3/);
 
       // A pending refresh must not display a prior Provider record as the current connection's result.
       dataSourceScenario = "delayed-success";

@@ -4077,6 +4077,24 @@ td {
   font-size: 12px;
   line-height: 1.7;
 }
+.data-center-diagnostics-panel { margin-top: 14px; padding: 18px 19px; }
+.data-center-diagnostics-summary { margin: 11px 0; color: var(--text-dim); font-size: 12px; line-height: 1.7; }
+.data-center-diagnostics-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.data-center-diagnostic-provider { min-width: 0; padding: 13px; border: 1px solid var(--border-soft); border-radius: 9px; background: var(--panel-raised); }
+.data-center-diagnostic-provider-heading,
+.data-center-diagnostic-capability-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.data-center-diagnostic-provider-heading strong,
+.data-center-diagnostic-capability-heading strong { min-width: 0; color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+.data-center-diagnostic-provider-heading small,
+.data-center-diagnostic-capability small { color: var(--text-dim); font-size: 12px; line-height: 1.6; }
+.data-center-diagnostic-capabilities { display: grid; gap: 8px; margin-top: 10px; }
+.data-center-diagnostic-capability { display: grid; gap: 4px; min-width: 0; padding: 9px; border: 1px solid var(--border-soft); border-radius: 7px; background: var(--panel); }
+.data-center-diagnostic-state { flex: 0 0 auto; padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); font-size: 12px; }
+.data-center-diagnostic-state.is-healthy { color: var(--accent); }
+.data-center-diagnostic-state.is-degraded,
+.data-center-diagnostic-state.is-half-open { color: var(--warning); }
+.data-center-diagnostic-state.is-open { color: var(--danger); }
+@media (max-width: 850px) { .data-center-diagnostics-list { grid-template-columns: minmax(0, 1fr); } }
 .research-list-panel {
   margin-bottom: 14px;
   padding: 17px 19px;

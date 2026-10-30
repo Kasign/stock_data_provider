@@ -1,4 +1,4 @@
-import { analysisHealth, analysisLiveness, getDataSources, marketHealth, marketLiveness } from "./api.js";
+import { analysisHealth, analysisLiveness, getDataSources, getDataSourceDiagnostics, marketHealth, marketLiveness } from "./api.js";
 import { runHealthCheck } from "./health-check.js";
 import { describeApiError, formatDateTime } from "./format.js";
 
@@ -168,6 +168,126 @@ function renderDependency(selector, detailSelector, dependencies, name, analysis
   return "unknown";
 }
 
+
+const DIAGNOSTIC_STATUS = Object.freeze({
+  not_observed: "尚无业务观测",
+  healthy: "正常",
+  degraded: "降级",
+  open: "熔断开启",
+  half_open: "半开探测"
+});
+
+function renderProviderDiagnostics(payload) {
+  const root = $("#data-center-diagnostics-list");
+  if (!root) return;
+  const items = Array.isArray(payload?.items)
+    ? payload.items.filter((item) => item && typeof item === "object") : [];
+  const scope = Array.isArray(payload?.scope)
+    ? payload.scope.map((value) => String(value || "").trim()).filter(Boolean) : [];
+  root.replaceChildren();
+
+  if (!items.length) {
+    setBadge("#data-center-diagnostics-status", "unknown", "暂无观测记录");
+    setText("#data-center-diagnostics-summary", "诊断接口已响应，但当前进程没有返回 Provider 观测记录；这不代表 Provider 故障。");
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = "当前没有可展示的运行诊断记录。";
+    root.append(empty);
+    return;
+  }
+
+  const counts = { healthy: 0, degraded: 0, open: 0, half_open: 0, not_observed: 0 };
+  let capabilityCount = 0;
+  items.forEach((provider) => {
+    const row = document.createElement("article");
+    row.className = "data-center-diagnostic-provider";
+    const heading = document.createElement("div");
+    heading.className = "data-center-diagnostic-provider-heading";
+    const name = document.createElement("strong");
+    name.textContent = String(provider.provider || "未命名 Provider");
+    const capabilities = Array.isArray(provider.capabilities)
+      ? provider.capabilities.filter((item) => item && typeof item === "object") : [];
+    const summary = document.createElement("small");
+    summary.textContent = capabilities.length + " 项已纳入诊断的能力";
+    heading.append(name, summary);
+    const list = document.createElement("div");
+    list.className = "data-center-diagnostic-capabilities";
+
+    capabilities.forEach((capability) => {
+      const status = Object.hasOwn(DIAGNOSTIC_STATUS, capability.status)
+        ? capability.status : "not_observed";
+      counts[status] += 1;
+      capabilityCount += 1;
+      const item = document.createElement("div");
+      item.className = "data-center-diagnostic-capability";
+      const top = document.createElement("div");
+      top.className = "data-center-diagnostic-capability-heading";
+      const label = document.createElement("strong");
+      label.textContent = String(capability.capability || "未命名能力");
+      const state = document.createElement("span");
+      state.className = "data-center-diagnostic-state is-" + status.replace(/_/g, "-");
+      state.textContent = DIAGNOSTIC_STATUS[status];
+      top.append(label, state);
+
+      const stats = document.createElement("small");
+      stats.textContent = "累计成功 " + Number(capability.total_success || 0)
+        + " · 累计失败 " + Number(capability.total_failure || 0)
+        + " · 连续失败 " + Number(capability.consecutive_failures || 0);
+      const times = document.createElement("small");
+      const timeParts = [];
+      if (capability.last_success_at) timeParts.push("最近成功 " + formatDateTime(capability.last_success_at));
+      if (capability.last_failure_at) timeParts.push("最近失败 " + formatDateTime(capability.last_failure_at));
+      if (capability.open_until) timeParts.push("熔断截止 " + formatDateTime(capability.open_until));
+      times.textContent = timeParts.length ? timeParts.join(" · ") : "尚无成功/失败时间记录";
+      item.append(top, stats, times);
+      list.append(item);
+    });
+
+    if (!capabilities.length) {
+      const empty = document.createElement("small");
+      empty.textContent = "此 Provider 没有返回能力诊断记录。";
+      list.append(empty);
+    }
+    row.append(heading, list);
+    root.append(row);
+  });
+
+  const unhealthy = counts.open + counts.degraded + counts.half_open;
+  const unobserved = counts.not_observed;
+  const tone = unhealthy ? "degraded" : unobserved || !capabilityCount ? "unknown" : "healthy";
+  setBadge("#data-center-diagnostics-status", tone,
+    unhealthy ? "存在降级/熔断" : unobserved ? "部分能力尚无观测" : "已读取诊断");
+  setText("#data-center-diagnostics-summary", [
+    "Provider " + items.length + " 个",
+    "能力 " + capabilityCount + " 项",
+    "正常 " + counts.healthy,
+    "降级 " + counts.degraded,
+    "熔断 " + counts.open,
+    "半开 " + counts.half_open,
+    "未观测 " + counts.not_observed,
+    scope.length ? "范围 " + scope.join("、") : "",
+    payload?.observed_from ? "来源 " + String(payload.observed_from) : ""
+  ].filter(Boolean).join(" · "));
+}
+
+function showProviderDiagnosticsFailure(result) {
+  const root = $("#data-center-diagnostics-list");
+  setBadge("#data-center-diagnostics-status", result?.skipped ? "unknown" : "failed",
+    result?.skipped ? "需要 API Key" : "读取失败");
+  setText("#data-center-diagnostics-summary", result?.skipped
+    ? "配置行情 API Key 后读取进程内运行诊断。"
+    : "运行诊断接口读取失败：" + safeError(result?.error));
+  if (root) {
+    root.replaceChildren();
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = result?.skipped
+      ? "未执行诊断请求，不代表 Provider 不可用。"
+      : "诊断记录暂不可读；不据此推断 Provider 当前健康状态。";
+    root.append(empty);
+  }
+}
+
 export function bindDataCenter(getSettings) {
   let checking = false;
   let generation = 0;
@@ -218,11 +338,14 @@ export function bindDataCenter(getSettings) {
         runHealthCheck(analysisHealth, settings),
         settings?.apiKey
           ? runHealthCheck(getDataSources, settings)
+          : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 }),
+        settings?.apiKey
+          ? runHealthCheck(getDataSourceDiagnostics, settings)
           : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 })
       ]);
       if (current !== generation) return;
 
-      const [webUi, marketLive, marketReady, analysisLive, analysisReady, sources] = checks;
+      const [webUi, marketLive, marketReady, analysisLive, analysisReady, sources, diagnostics] = checks;
       const webUiState = probeState(webUi);
       setBadge("#data-service-webui-status", webUiState, webUiState === "healthy" ? "正常" : statusWord(webUiState));
       setText("#data-service-webui-detail", webUi.ok
@@ -270,6 +393,12 @@ export function bindDataCenter(getSettings) {
         empty.className = "empty-row";
         empty.textContent = "仅 Provider 清单请求失败；服务健康状态与其它检查结果仍保留。";
         root.append(empty);
+      }
+
+      if (diagnostics.ok) {
+        renderProviderDiagnostics(diagnostics.data);
+      } else {
+        showProviderDiagnosticsFailure(diagnostics);
       }
 
       const serviceStates = [webUiState, marketLiveState, marketReadyState, analysisLiveState, analysisReadyState];
@@ -360,9 +489,13 @@ export function bindDataCenter(getSettings) {
       "#data-service-mariadb-detail", "#data-service-redis-detail"
     ].forEach((selector) => safeInvalidateStep(() => setText(selector, "连接配置已变更，尚未重新检查。")));
     safeInvalidateStep(() => setText("#data-center-provider-summary", "连接配置已变更，尚未重新读取 Provider 能力清单。"));
+    safeInvalidateStep(() => setBadge("#data-center-diagnostics-status", "unknown", "需重新检查"));
+    safeInvalidateStep(() => setText("#data-center-diagnostics-summary", "连接配置已变更，尚未重新读取运行诊断。"));
     safeInvalidateStep(() => {
       const providerList = $("#data-center-provider-list");
       if (providerList) providerList.replaceChildren();
+      const diagnosticsList = $("#data-center-diagnostics-list");
+      if (diagnosticsList) diagnosticsList.replaceChildren();
     });
     ["#data-center-count-healthy", "#data-center-count-failed", "#data-center-count-unknown"]
       .forEach((selector) => safeInvalidateStep(() => setText(selector, "—")));

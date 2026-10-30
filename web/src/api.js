@@ -95,6 +95,9 @@ export function analysisHealth(settings, signal) {
 export function getDataSources(settings, signal) {
   return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey, signal });
 }
+export function getDataSourceDiagnostics(settings, signal) {
+  return request(settings.marketBase, "/api/v1/data-sources/diagnostics", { apiKey: settings.apiKey, signal });
+}
 export function getMarketValuations(settings, symbols, signal) {
   const normalizedSymbols = Array.isArray(symbols) ? symbols.map((item) => String(item ?? "").trim()).filter(Boolean) : [];
   if (!normalizedSymbols.length || normalizedSymbols.length > 100) {

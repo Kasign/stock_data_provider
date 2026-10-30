@@ -16,6 +16,7 @@ import {
   getStockTradingStatus,
   getTradingCalendar,
   getDataSources,
+  getDataSourceDiagnostics,
   getQuote,
   searchStocks,
   marketHealth
@@ -370,6 +371,42 @@ test("rejects malformed or reversed dates before issuing market requests", async
     await assert.rejects(getIndexDailyBars(settings, "000300.SH", { start: "2026-10-02", end: "2026-10-01" }), /开始日期不能晚于结束日期/);
     await assert.rejects(getStockPriceLimitRule(settings, "600519.SH", "2026-1-01"), /有效的交易日期/);
     assert.equal(count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("reads provider runtime diagnostics with the market API key and caller signal", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url: String(url), ...init };
+    return jsonResponse({
+      items: [{
+        provider: "eastmoney",
+        capabilities: [{
+          capability: "quote",
+          status: "not_observed",
+          consecutive_failures: 0,
+          total_success: 0,
+          total_failure: 0,
+          last_success_at: null,
+          last_failure_at: null,
+          open_until: null
+        }]
+      }],
+      scope: ["quote", "daily_bars"],
+      observed_from: "in_process_circuit_breaker"
+    });
+  };
+  try {
+    const result = await getDataSourceDiagnostics({ marketBase: "/market-api", apiKey: "market-secret" }, controller.signal);
+    assert.equal(result.observed_from, "in_process_circuit_breaker");
+    assert.equal(request.url, "/market-api/api/v1/data-sources/diagnostics");
+    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.signal, controller.signal);
   } finally {
     globalThis.fetch = originalFetch;
   }

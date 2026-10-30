@@ -1835,3 +1835,18 @@ test("个股行情默认请求复用统一快照；旧服务仅在 404 时回退
   assert.match(explicitQuery, /getQuote\(state\.settings, symbol, controller\.signal\)/);
   assert.match(explicitQuery, /getDailyBars\(state\.settings, symbol, \{ limit, adjustment, start: startDate, end: endDate \}/);
 });
+
+
+test("数据中心读取并展示真实 Provider 运行诊断，且不将未观测标记为健康", () => {
+  assert.match(apiClient, /export function getDataSourceDiagnostics\(settings, signal\)/);
+  assert.match(dataCenter, /runHealthCheck\(getDataSourceDiagnostics, settings\)/);
+  assert.match(dataCenter, /function renderProviderDiagnostics\(payload\)/);
+  assert.match(dataCenter, /not_observed: "尚无业务观测"/);
+  assert.match(dataCenter, /DIAGNOSTIC_STATUS\[status\]/);
+  assert.match(dataCenter, /累计成功/);
+  assert.match(dataCenter, /累计失败/);
+  assert.match(dataCenter, /连续失败/);
+  assert.match(dataCenter, /运行诊断接口读取失败/);
+  assert.match(html, /id="data-center-diagnostics-list"/);
+  assert.doesNotMatch(html, /当前没有逐 Provider \/ capability 的受控真实探测 API/);
+});
