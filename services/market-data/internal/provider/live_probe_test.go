@@ -209,14 +209,14 @@ func (b *liveProbeCaptureBody) Close() error {
 	return err
 }
 
-func liveProbeDailyContractError(bars []model.DailyBar, providerName, symbol string, basis model.AdjustmentBasis, startDate, endDate string, limit int) string {
+func liveProbeDailyContractError(bars []model.DailyBar, providerLabel, sourceName, symbol string, basis model.AdjustmentBasis, startDate, endDate string, limit int) string {
 	if limit > 0 && len(bars) > limit {
 		return fmt.Sprintf("provider returned %d bars above requested limit %d", len(bars), limit)
 	}
 	seenDates := make(map[string]struct{}, len(bars))
 	for index, bar := range bars {
-		if bar.Source != providerName || bar.Symbol != symbol {
-			return fmt.Sprintf("bar %d identity mismatch: symbol=%q source=%q", index, bar.Symbol, bar.Source)
+		if bar.Source != sourceName || bar.Symbol != symbol {
+			return fmt.Sprintf("provider %s bar %d identity mismatch: symbol=%q source=%q", providerLabel, index, bar.Symbol, bar.Source)
 		}
 		if bar.AdjustmentBasis != basis {
 			return fmt.Sprintf("bar %d adjustment mismatch: requested=%q got=%q", index, basis, bar.AdjustmentBasis)
@@ -270,14 +270,29 @@ func TestLiveProbeDailyContractRejectsLimitAndUnsortedBars(t *testing.T) {
 	older, newer := makeBar("2026-10-20"), makeBar("2026-10-21")
 	const startDate, endDate = "2026-10-19", "2026-10-22"
 
-	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 1); !strings.Contains(got, "above requested limit") {
+	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 1); !strings.Contains(got, "above requested limit") {
 		t.Fatalf("expected limit violation, got %q", got)
 	}
-	if got := liveProbeDailyContractError([]model.DailyBar{newer, older}, "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); !strings.Contains(got, "not sorted ascending") {
+	if got := liveProbeDailyContractError([]model.DailyBar{newer, older}, "eastmoney", "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); !strings.Contains(got, "not sorted ascending") {
 		t.Fatalf("expected unsorted bar violation, got %q", got)
 	}
-	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); got != "" {
+	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); got != "" {
 		t.Fatalf("valid ordered bars should pass the shared contract, got %q", got)
+	}
+}
+
+func TestLiveProbeDailyContractSeparatesDisplayLabelFromSource(t *testing.T) {
+	volume := int64(1000)
+	bar := model.DailyBar{
+		Symbol: "300750.SZ", TradeDate: "2026-10-29", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, VolumeUnit: "shares", AmountUnit: "unknown",
+		AdjustmentBasis: model.AdjustmentNone, Source: "sina",
+		QualityStatus: model.QualityDegraded,
+	}
+	const startDate, endDate = "2026-10-28", "2026-10-30"
+	if got := liveProbeDailyContractError([]model.DailyBar{bar}, "sina-chinext", "sina", "300750.SZ", model.AdjustmentNone, startDate, endDate, 8); got != "" {
+		t.Fatalf("display label must not be compared with canonical source, got %q", got)
 	}
 }
 
@@ -843,7 +858,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		}
 		contractError := ""
 		if callErr == nil && len(bars) > 0 {
-			contractError = liveProbeDailyContractError(bars, sourceName, symbol, basis, startDate, endDate, 8)
+			contractError = liveProbeDailyContractError(bars, providerName, sourceName, symbol, basis, startDate, endDate, 8)
 		}
 		switch {
 		case callErr != nil:
