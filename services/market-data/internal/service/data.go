@@ -293,6 +293,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 		return nil, false, errors.New("no enabled index-quote provider")
 	}
 	var failures []string
+	var degradedCandidate *model.IndexQuoteSnapshot
 	for _, p := range s.indexQuoteProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -318,6 +319,14 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			continue
 		}
 		s.breaker.Success(breakerKey)
+		if snapshot.QualityStatus == model.QualityDegraded {
+			// 降级快照保留为兜底候选，继续尝试后续 Provider，优先取得完整可信快照。
+			if degradedCandidate == nil {
+				degradedCandidate = snapshot
+			}
+			failures = append(failures, p.Name()+": valid contract but degraded quality")
+			continue
+		}
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
@@ -327,6 +336,18 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			s.logger.Warn("index quote cache encode failed", "error", marshalErr)
 		}
 		return snapshot, false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	if degradedCandidate != nil {
+		// 后续来源均未提供 valid 快照时，仍返回优先级最高的合法降级结果。
+		if payload, marshalErr := json.Marshal(degradedCandidate); marshalErr == nil {
+			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
+				s.logger.Warn("index quote degraded cache write failed", "error", cacheErr)
+			}
+		}
+		return degradedCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all index-quote providers failed: %s", strings.Join(failures, "; "))
 }
@@ -499,6 +520,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 		return nil, false, errors.New("no enabled market-breadth provider")
 	}
 	var failures []string
+	var degradedCandidate *model.MarketBreadthSnapshot
 	for _, p := range s.marketBreadthProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
@@ -524,12 +546,32 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			continue
 		}
 		s.breaker.Success(breakerKey)
+		if snapshot.QualityStatus == model.QualityDegraded {
+			// 市场广度的部分金额/时间覆盖必须保留降级，继续尝试后续完整来源。
+			if degradedCandidate == nil {
+				degradedCandidate = snapshot
+			}
+			failures = append(failures, p.Name()+": valid contract but degraded quality")
+			continue
+		}
 		if data, err := json.Marshal(snapshot); err == nil {
 			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
 				s.logger.Warn("market breadth cache write failed", "error", cacheErr)
 			}
 		}
 		return snapshot, false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	if degradedCandidate != nil {
+		// 只有后续来源均未提供 valid 快照时，才返回优先级最高的合法降级结果。
+		if data, err := json.Marshal(degradedCandidate); err == nil {
+			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
+				s.logger.Warn("market breadth degraded cache write failed", "error", cacheErr)
+			}
+		}
+		return degradedCandidate, false, nil
 	}
 	return nil, false, fmt.Errorf("all market-breadth providers failed: %s", strings.Join(failures, "; "))
 }
