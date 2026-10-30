@@ -181,4 +181,3 @@ func TestMarketBreadthMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
 		t.Fatalf("degraded fallback must preserve fallback provenance: %+v", got)
 	}
 }
-
