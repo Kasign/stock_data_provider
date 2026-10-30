@@ -51,6 +51,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if options.Scope == "" {
 		options.Scope = "all"
 	}
+	if options.Scope != "all" && options.Scope != "core" {
+		return nil, errors.New("provider-probe scope must be all or core")
+	}
 	if options.TimeoutSeconds == 0 {
 		options.TimeoutSeconds = 12
 	}
