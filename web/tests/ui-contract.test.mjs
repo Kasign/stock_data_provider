@@ -1902,7 +1902,8 @@ test("分析 API 切换期间的 UI 清理异常不会中断配置应用", () =>
   assert.match(apply, /if \(analysisBaseChanged\) \{[\s\S]*?runSettingsApplyStep\("清理旧分析任务失败：", \(\) =>\s*invalidateActiveTaskForAnalysisBaseChange\(previousSettings\.analysisBase, nextSettings\.analysisBase\), failures\);/);
   assert.match(apply, /if \(marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("失效市场总览请求失败：", \(\) => marketOverview\.invalidateConnection\(\), failures\);[\s\S]*?runSettingsApplyStep\("失效市场活动请求失败：", \(\) => marketActivity\.invalidateConnection\(\), failures\);/);
   assert.match(apply, /if \(analysisBaseChanged \|\| marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("失效数据中心检查结果失败：", \(\) =>\s*dataCenter\.invalidate\(/);
-  assert.match(apply, /runSettingsApplyStep\("重置连接配置表单失败：", \(\) => \{/);\n  assert.match(apply, /initialConnectionDraft = null;[\s\S]*?syncConnectionDraftState\(\)/);
+  assert.match(apply, /runSettingsApplyStep\("重置连接配置表单失败：", \(\) => \{/);
+  assert.match(apply, /initialConnectionDraft = null;[\s\S]*?syncConnectionDraftState\(\)/);
 });
 
 test("任务切换和分析连接切换会重置事件游标并隔离迟到轮询", () => {
