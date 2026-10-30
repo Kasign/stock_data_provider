@@ -31,9 +31,9 @@ type ProviderProbeItem struct {
 // ProviderProbeRun 是隔离于业务流量的主动探测批次。
 type ProviderProbeRun struct {
 	RunID                 string              `json:"run_id"`
-	Scope                 string              `json:"scope"`
+	Scope                 string              `json:"scope,omitempty"`
 	RequestedCapabilities []string            `json:"requested_capabilities,omitempty"`
-	TimeoutSeconds        int                 `json:"timeout_seconds"`
+	TimeoutSeconds        int                 `json:"timeout_seconds,omitempty"`
 	Status        string              `json:"status"`
 	Persisted     bool                `json:"persisted"`
 	StartedAt     time.Time           `json:"started_at"`
