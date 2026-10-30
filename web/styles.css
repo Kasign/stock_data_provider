@@ -4949,23 +4949,31 @@ button:disabled {
 /* 运行流详情改为非模态工作区：保留左侧主导航可交互。 */
 .run-flow-dialog[open] {
   position: fixed;
-  top: 0;
-  bottom: 0;
+  inset: 0;
   pointer-events: none;
   z-index: 6;
-  width: calc(100vw - 238px);
-  left: 238px;
-  right: 0;
-  margin: 0 0 0 auto;
+  width: 100vw;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
   background: transparent;
 }
 .run-flow-dialog[open] .task-status-panel {
+  width: calc(100vw - 238px);
+  margin-left: 238px;
   pointer-events: auto;
 }
+@media (max-width: 900px) and (min-width: 601px) {
+  .run-flow-dialog[open] .task-status-panel {
+    width: calc(100vw - 67px);
+    margin-left: 67px;
+  }
+}
 @media (max-width: 600px) {
-  .run-flow-dialog[open] {
-    left: 0;
+  .run-flow-dialog[open] .task-status-panel {
     width: 100vw;
+    margin-left: 0;
   }
 }
 
