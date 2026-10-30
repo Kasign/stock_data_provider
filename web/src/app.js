@@ -1448,6 +1448,7 @@ function setView(view, { updateHash = true, refreshData = true } = {}) {
   state.view = nextView;
   if (legacyMarketView && window.location.hash === "#market-data") window.history.replaceState(null, "", "#market");
   syncRefreshButtonContext();
+  if (nextView === "settings" && previousView !== nextView) openSettings();
   if (refreshData && previousView !== nextView) {
     if (nextView === "market") void refreshMarketWorkspace();
     else if (nextView === "stocks") void refreshSources();
@@ -2060,14 +2061,6 @@ function releaseSettingsCheckButtonSafely(button, label) {
   }
 }
 
-function settingsDialogIsOpenSafely() {
-  try {
-    return Boolean($("#settings-dialog")?.open);
-  } catch {
-    return false;
-  }
-}
-
 async function checkConnectionFromSettings() {
   const generation = ++savedConnectionCheckGeneration;
   let button = null;
@@ -2153,13 +2146,13 @@ async function checkDraftConnectionFromSettings() {
       "settings-inline-status"
     );
 
-    // 草稿检查只验证弹窗中的未保存配置，不写入全局设置。
+    // 草稿检查只验证设置页中的未保存配置，不写入全局设置。
     settingsToCheck = mergeConnectionDraft(testedDraft, state.settings);
     const [marketResult, analysisResult] = await Promise.all([
       runHealthCheck(marketHealth, settingsToCheck),
       runHealthCheck(analysisHealth, settingsToCheck)
     ]);
-    if (generation !== draftConnectionCheckGeneration || !settingsDialogIsOpenSafely()) return;
+    if (generation !== draftConnectionCheckGeneration || true) return;
     const currentDraft = readConnectionDraft();
     const currentSettingsToCheck = mergeConnectionDraft(currentDraft, state.settings);
     if (
@@ -2183,7 +2176,7 @@ async function checkDraftConnectionFromSettings() {
       summary.className
     );
   } catch (error) {
-    if (generation !== draftConnectionCheckGeneration || !settingsDialogIsOpenSafely()) return;
+    if (generation !== draftConnectionCheckGeneration || true) return;
     let configurationChanged = false;
     let currentDraft = null;
     if (testedDraft) {
@@ -2450,7 +2443,7 @@ async function runQuoteQuery(event) {
   if (!state.settings.apiKey) {
     cancelQuoteQuery({ clearResults: true, symbol, message: "请先在连接与密钥设置中配置行情 API Key。" });
     setNotice("请先打开“连接与密钥设置”，填写行情服务的 MARKET_DATA_API_KEY。", "warning");
-    $("#settings-dialog").showModal();
+    setView("settings");
     return;
   }
 
@@ -4135,12 +4128,7 @@ function openSettings() {
   $("#settings-check-draft-connection").textContent = "检查未保存配置";
   $("#settings-draft-connection-check").textContent = "尚未检查未保存配置。";
   $("#settings-draft-connection-check").className = "settings-inline-status";
-  $("#settings-dialog").showModal();
-}
 
-function closeSettingsWithGuard() {
-  if (connectionDraftIsDirty() && !window.confirm("存在未保存的连接配置更改。确定放弃这些更改并关闭吗？")) return;
-  $("#settings-dialog").close();
 }
 
 function safelyUpdateTaskContextUi(label, update) {
@@ -4325,7 +4313,20 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
   }
 
   initialConnectionDraft = null;
-  runSettingsApplyStep("关闭连接设置窗口失败：", () => $("#settings-dialog").close(), failures);
+  runSettingsApplyStep("重置连接配置表单失败：", () => {
+    $("#market-base-input").value = state.settings.marketBase;
+    $("#analysis-base-input").value = state.settings.analysisBase;
+    $("#market-key-input").value = "";
+    $("#market-key-input").placeholder = state.settings.apiKey ? "已配置 Key；留空保留当前值" : "填写 MARKET_DATA_API_KEY";
+    setMarketKeyVisibility(false);
+    $("#settings-feedback").textContent = state.settings.apiKey
+      ? "连接配置已保存。已保存的 Key 不会回显；留空会保留当前值。"
+      : "连接配置已保存到当前浏览器。";
+    initialConnectionDraft = readConnectionDraft();
+    syncConnectionDraftState();
+    $("#settings-draft-connection-check").textContent = "尚未检查未保存配置。";
+    $("#settings-draft-connection-check").className = "settings-inline-status";
+  }, failures);
 
   // 网络刷新与当前设置应用解耦，并显式收敛 Promise rejection。
   runSettingsApplyStep("刷新服务健康状态失败：", () => refreshServices(), failures);
@@ -4605,10 +4606,6 @@ document.addEventListener("keydown", (event) => {
     const openDialog = document.querySelector("dialog[open]");
     if (openDialog) {
       // 焦点暂时落在对话框外时，仍应先关闭设置弹窗并遵守未保存更改确认。
-      if (openDialog.id === "settings-dialog") {
-        event.preventDefault();
-        closeSettingsWithGuard();
-      }
       return;
     }
     setMobileNavigationOpen(false, { restoreFocus: true });
@@ -4689,7 +4686,6 @@ $("#research-add-watchlist").addEventListener("click", () => {
   if (feedback?.textContent) setText("#research-overview-note", feedback.textContent);
 });
 $("#research-start-analysis").addEventListener("click", () => startAnalysisForSymbol($("#symbol-input").value));
-$("#settings-open-connection").addEventListener("click", openSettings);
 $("#settings-check-connection").addEventListener("click", checkConnectionFromSettings);
 $("#settings-check-draft-connection").addEventListener("click", checkDraftConnectionFromSettings);
 $("#settings-view-data-sources").addEventListener("click", () => {
@@ -4888,26 +4884,9 @@ $("#refresh-button").addEventListener("click", async () => {
 });
 $("#open-settings").addEventListener("click", () => setView("settings"));
 $("#save-settings").addEventListener("click", saveSettingsFromForm);
-$("#close-settings-dialog").addEventListener("click", closeSettingsWithGuard);
-$("#cancel-settings-dialog").addEventListener("click", closeSettingsWithGuard);
 $("#settings-form").addEventListener("input", syncConnectionDraftState);
-$("#settings-dialog").addEventListener("cancel", (event) => {
-  if (!connectionDraftIsDirty()) return;
-  event.preventDefault();
-  closeSettingsWithGuard();
-});
 $("#toggle-market-key-visibility").addEventListener("click", () => {
   setMarketKeyVisibility($("#market-key-input").type === "password");
-});
-$("#settings-dialog").addEventListener("close", () => {
-  // 关闭弹窗后作废草稿检查结果；迟到的健康回包不能覆盖下一次打开的状态。
-  draftConnectionCheckGeneration += 1;
-  $("#settings-check-draft-connection").disabled = false;
-  $("#settings-check-draft-connection").removeAttribute("aria-busy");
-  $("#settings-check-draft-connection").textContent = "检查未保存配置";
-  setMarketKeyVisibility(false);
-  initialConnectionDraft = null;
-  $("#save-settings").disabled = false;
 });
 $("#clear-settings").addEventListener("click", clearLocalSettings);
 $("#task-form").addEventListener("submit", createTask);
