@@ -219,3 +219,93 @@
 - Yahoo 日 K 能返回，但成交额缺失且金额单位未知，继续保持 `null / unknown / degraded`。
 
 这些问题与上述探测器身份标签误报相互独立。不得因修复探测器而放宽源端错误、成交额缺失或数据质量门禁。
+
+## 十三、实时 Provider 凭据与探测结果分类规则（2026-10-30）
+
+本节作为后续实时探测的固定操作规范，后续复测直接引用本节，不再重复排查“失败是否由未配置 Key/Token 引起”。
+
+### 状态分类与处理规则
+
+| 状态/原因 | 判定条件 | 处理方式 | 是否计入探测失败 |
+|---|---|---|---|
+| skipped（未启用） | Provider 的 opt-in 开关未开启 | 不发请求，报告明确写出启用条件 | 否 |
+| skipped（缺少凭据） | 已选择执行可选 Provider，但必需 Token/API Key/Cookie 未配置 | 跳过该 Provider；报告写明缺少哪类配置，不打印凭据 | 否 |
+| failed（凭据无效/权限不足） | 已配置凭据并发出请求，源端返回鉴权错误或 capability 无权限 | 保留失败及错误码；区分账号认证与单项能力授权 | 是 |
+| failed（外部接口/网络） | 公共接口 HTTP 5xx、EOF、DNS、连接超时等 | 记录 Provider、能力、端点、错误类型和复测条件 | 是 |
+| returned_degraded | 请求成功，但成交额、成交量单位、时间戳或其他质量证据不完整 | 保留数据并降级质量，不伪造字段、不补零 | 不作为请求失败；质量门禁仍按契约判定 |
+| passed / returned | 请求与身份、字段、时间、单位等契约通过 | 记录当次通过能力和样本范围 | 否 |
+
+补充约束：
+- skipped 不等于 Provider 可用，也不能作为 Provider 已验证、可启用生产路由的证据。
+- 无凭据 Provider 不应阻断无凭据普通 CI；如果用户显式启用探测但没有配置凭据，仍按 skipped 处理，不应制造一次必然失败的网络请求。
+- 凭据不得通过聊天消息、日志、报告或文档传递；只允许使用本地环境变量或 GitHub Actions Secrets。
+- 已配置凭据后，鉴权失败、配额不足、单项 capability 无权限属于真实验收失败，不能再归类为“缺少凭据”。
+- 不得将公共接口 502、EOF、DNS 或 TCP 超时归因于 API Key 缺失；应保留独立网络故障记录。
+- 探测工作流的 continue-on-error 仅表示诊断结果不阻断普通 CI；必须检查 Job 日志和报告，不能只看 workflow conclusion。
+
+### 可选 Provider 的触发条件
+
+| Provider | 启用条件 | 凭据 | 当前规则 |
+|---|---|---|---|
+| Tushare | MARKET_DATA_LIVE_TUSHARE_TESTS=1；Actions 手动运行时由 include_tushare 控制 | MARKET_DATA_TUSHARE_TOKEN 或 TUSHARE_TOKEN；Actions 使用 TUSHARE_TOKEN Secret | 未启用或缺少 Token 时 skipped；配置 Token 后才验证真实权限 |
+| 同花顺 | MARKET_DATA_LIVE_HITHINK_TESTS=1；Actions 手动运行时由 include_hithink 控制 | MARKET_DATA_HITHINK_API_KEY 或 HITHINK_FINANCE_API_KEY；Actions 使用后者 Secret | 未启用或缺少 Key 时 skipped；配置 Key 后才验证各 capability 权限 |
+| 妙想 | MARKET_DATA_LIVE_MX_TESTS=1 | MX_APIKEY / MARKET_DATA_MX_API_KEY | 未启用或缺少 Key 时 skipped；该探测会消耗配额，按需手动执行 |
+| 雪球 | MARKET_DATA_LIVE_XUEQIU_TESTS=1 | MARKET_DATA_XUEQIU_COOKIE | 未启用时 skipped；需要登录态时才执行 |
+| NetEase | MARKET_DATA_LIVE_NETEASE_TESTS=1 | 无 API Key；公共端点 | 默认不重复触发不稳定请求；手动开启后 DNS/HTTP 错误仍记为网络失败 |
+| BaoStock | 由基础实时探测覆盖 | 无 API Key；TCP 登录服务 | 登录超时后依赖同一连接的后续能力可以 skipped，不能重复发起相同超时请求 |
+| Sina / Tencent / Eastmoney / Yahoo | 基础实时探测 | 公共端点 | 无凭据门槛；网络与数据质量问题必须如实记录 |
+
+### 最近一次实时探测结果（Run 41025531370）
+
+- 代码 SHA：f5d2b1a0c5338c21c55a3717c658632831241bc5
+- Job：123962636260，结论 failure；这是诊断探测，不影响普通 CI 的其他独立工作流。
+- 同轮 Go 测试 Run 41025531466：5 个 Job 全部通过，包含根模块、market-data、go-core、MariaDB/PIT、Compose 和 Docker 镜像构建。
+- Go/Python 质量契约 Run 41025535204：通过。
+- WebUI 检查 Run 41025531397：通过。
+
+实时探测日志中 7 项失败：
+1. Eastmoney 股票搜索：HTTP 502。
+2. Eastmoney 板块排行：HTTP 502（两项请求）。
+3. Eastmoney 实时行情：HTTP 502。
+4. Eastmoney 备用行情端点：HTTP 502。
+5. Eastmoney 历史日 K：连接 EOF。
+6. BaoStock 日 K 登录：TCP 读取超时。
+
+因此 Eastmoney 本轮实际有 6 项失败，BaoStock 有 1 项失败，合计 7 项。BaoStock 交易日历因前序登录 TCP 会话未建立而跳过，未重复请求。
+
+本轮其他状态：
+- NetEase quote 因 hosted runner DNS 解析失败而 skipped；历史 CSV 返回 HTTP 502 后按当前可选探测策略 skipped。手动启用后应重新检查并记录真实网络结果。
+- 同花顺未启用（MARKET_DATA_LIVE_HITHINK_TESTS 未设置为 1），测试 skipped；本轮没有同花顺账号权限结论。
+- 妙想 chip_distribution / capital_flow 因 opt-in 未启用且无 API Key 而 skipped；本轮没有妙想账号权限结论。
+- Tushare 可选能力测试没有包含在本轮 workflow 的 go test 正则中，因此本轮属于未执行，不应写成 skipped 或通过。后续已纳入手动探测入口后，再按 Token 配置情况判定。
+- 新浪、腾讯主板、创业板、科创板 quote / daily_bars 均有 returned 记录；跨市场身份标签修复后未再出现此前的身份误报。returned 仅表示响应通过对应探测断言，不替代跨市场黄金样例、成交量单位和数据质量验收。
+- Yahoo quote / daily_bars 返回数据；成交额缺失/单位不可验证时继续按 null/unknown/degraded 处理。
+- Eastmoney 的其他能力（公告、股票板块、指数行情、市场广度、涨跌停池、龙虎榜等）有 returned 记录；不能用这些成功项抵消失败接口。
+
+后续执行时只需：
+1. 确认本次要测的可选 Provider 是否启用、Secret 是否已配置；未配置即 skipped，不追问、不重复试错。
+2. 读取报告中的失败能力；区分鉴权错误、网络错误和数据质量降级。
+3. 仅对新增代码或明确要求复测的能力发起真实请求。
+4. 把新的 Run ID、SHA、失败/跳过/降级明细追加到本节或黄金样例记录，避免覆盖历史结果。
+
+## 十四、北交所 Provider 代码能力矩阵（静态代码核查，2026-10-30）
+
+本节描述当前 Go 适配器代码明确支持的证券代码映射，不等于对应源站当前网络可用，也不等于真实账号权限验收通过。
+
+| Provider | 北交所代码映射/入口 | 当前代码结论 | 证据与限制 |
+|---|---|---|---|
+| Eastmoney | eastmoneySecID 将 .BJ 映射为 0.代码；证券目录/涨停池解析支持 .BJ | 代码支持 | 本轮实时探测 Eastmoney 部分接口 502；北交所行情/日 K 尚未作为独立黄金样例完成真实验收 |
+| Tushare | 证券交易所后缀校验接受 BJ；A 股代码识别接受 4/8/92 开头六位代码 | 代码支持 | Token、接口权限、真实返回和分页仍需单独验证 |
+| TickFlow | tickflowDomesticSymbol 接受 SH/SZ/BJ，并通过 A 股普通股票代码校验 | 代码支持 | 需 API Key 和对应能力授权；未配置时跳过 |
+| 同花顺 | hithinkDomesticSymbol 接受 SH/SZ/BJ，并通过 A 股普通股票代码校验 | 代码支持 | 需 API Key 和具体 capability 权限；未配置时跳过 |
+| Pytdx | pytdxDomesticSymbol 接受 SH/SZ/BJ；pytdxWireSymbol 保留交易所前缀，例如 920000.BJ -> bj920000 | 代码支持 | 代码与协议映射有单测；仍需真实服务器样本确认覆盖与成交量单位 |
+| Sina | sinaCode 只映射 SH/SZ | 明确不支持 | BJ 后缀返回 unsupported，不应发起请求 |
+| Tencent | tencentCode 明确拒绝 BJ | 明确不支持 | BJ 后缀返回 unsupported，不应发起请求 |
+| NetEase | neteaseCode 只映射 SH/SZ | 明确不支持 | BJ 后缀返回 unsupported，不应发起请求 |
+| BaoStock | baostockSecurityCode 只映射 SH/SZ | 明确不支持 | BJ 后缀返回 unsupported，不应发起请求 |
+
+北交所能力验收规则：
+- 代码映射支持与真实源端可用性分开记录；不支持的 Provider 应明确 unsupported，不能记为 DNS、HTTP 或账号失败。
+- 代码映射支持的 Provider，仍须验证证券代码身份、交易所、OHLC、成交量单位、复权口径、交易日期和质量状态。
+- 不允许只凭 isTushareAShareSymbol 接受 BJ 就推断所有 Provider 都支持北交所；必须逐个检查 Provider 的代码转换函数。
+- 北交所黄金样例暂不固化，待至少一个可用 Provider 返回真实、可校验的报价和日 K 样本后再增加 fixture。
