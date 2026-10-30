@@ -447,18 +447,19 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 			defer wg.Done()
 			item := model.ProviderProbeItem{Provider: job.provider, Capability: job.capability, Status: "failed", QualityStatus: model.QualityUnknown}
 			checkedAt := time.Now().UTC()
-			probeCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
-			defer cancel()
 			select {
 			case sem <- struct{}{}:
-			case <-probeCtx.Done():
-				setProbeFailure(&item, probeCtx.Err())
+			case <-ctx.Done():
+				setProbeFailure(&item, ctx.Err())
 				item.ElapsedMS = time.Since(checkedAt).Milliseconds()
 				item.CheckedAt = time.Now().UTC()
 				results[index] = item
 				return
 			}
+			// 等待并发槽位的时间不计入单项 Provider 超时，避免排队任务被误报为超时。
+			probeCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
 			quality, version, reasons, err := job.run(probeCtx)
+			cancel()
 			<-sem
 			item.ElapsedMS = time.Since(checkedAt).Milliseconds()
 			item.CheckedAt = time.Now().UTC()
