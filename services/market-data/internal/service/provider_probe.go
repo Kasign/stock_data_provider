@@ -50,6 +50,9 @@ func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string,
 	if separator := strings.LastIndex(symbol, "."); separator >= 0 && separator+1 < len(symbol) {
 		evidence.sampleMarket = symbol[separator+1:]
 	}
+	if sampleDate == "" && providerTime != nil && !providerTime.IsZero() {
+		sampleDate = providerTime.In(marketLocation()).Format("2006-01-02")
+	}
 	evidence.sampleDate = sampleDate
 	evidence.rowsReturned = rowsReturned
 	evidence.rowsValidated = rowsValidated
