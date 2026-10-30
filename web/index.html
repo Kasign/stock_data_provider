@@ -844,14 +844,14 @@
               </section>
 
               <section class="settings-section" id="settings-basic-section" aria-labelledby="settings-basic-title">
-                <div class="settings-section-heading"><div><h2 id="settings-basic-title">基础设置</h2><p>定义工作台默认市场、行情展示、查询范围与分析任务默认参数。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="settings-section-heading"><div><h2 id="settings-basic-title">基础设置</h2><p>定义工作台默认市场、行情展示、查询范围与分析任务默认参数。</p></div><span class="availability-pill is-local">部分浏览器本地配置</span></div>
                 <div class="panel settings-config-panel">
-                  <div class="settings-group-heading"><div><strong>市场与行情默认值</strong><p>以下字段为待落地的服务端配置项，不代表当前部署已使用这些值。</p></div><span class="settings-config-scope">建议配置项</span></div>
+                  <div class="settings-group-heading"><div><strong>市场与行情默认值</strong><p>默认日 K 条数和复权方式保存在当前浏览器；市场、交易所等仍需服务端能力支持。</p></div><span class="settings-config-scope">建议配置项</span></div>
                   <div class="settings-field-grid">
                     <label class="field"><span>默认市场</span><select disabled><option>中国 A 股（CN）</option></select><small>决定新建研究与筛选任务的默认市场范围。</small></label>
                     <label class="field"><span>默认交易所范围</span><select disabled><option>沪市 / 深市 / 北交所</option></select><small>需由证券主数据定义实际可选范围。</small></label>
-                    <label class="field"><span>默认复权方式</span><select disabled><option>不复权 / 前复权 / 后复权</option></select><small>影响日 K 与技术指标的计算口径。</small></label>
-                    <label class="field"><span>默认日 K 查询范围</span><select disabled><option>60 / 120 / 250 / 500 个交易日</option></select><small>仅作为新查询的初始值，不应改变已保存报告口径。</small></label>
+                    <label class="field"><span>默认复权方式</span><select id="settings-default-adjustment"><option value="forward_adjusted">前复权</option><option value="backward_adjusted">后复权</option><option value="none">不复权</option></select><small>仅作为新日 K 查询的初始口径。</small></label>
+                    <label class="field"><span>默认日 K 查询范围</span><select id="settings-default-bar-limit"><option value="60">近 60 根</option><option value="120">近 120 根</option><option value="250">近 250 根</option></select><small>仅影响个股行情页下一次新查询的默认条数。</small></label>
                     <label class="field"><span>默认行情刷新间隔</span><select disabled><option>手动 / 15 秒 / 30 秒 / 60 秒</option></select><small>自动刷新必须服从服务端限流和交易时段。</small></label>
                     <label class="field"><span>工作台时区</span><input disabled value="Asia/Shanghai" /><small>展示和日期边界使用的时区，不改变 Provider 原始时间。</small></label>
                   </div>

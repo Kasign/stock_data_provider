@@ -4513,7 +4513,7 @@ function normalizeImportedPreferences(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("本地偏好字段必须是对象。");
   }
-  const allowed = new Set(["watchlistSort", "watchlistSortDirection", "watchlistDisplayFields", "marketColorScheme", "priceDigits", "percentDigits", "amountDisplayUnit"]);
+  const allowed = new Set(["watchlistSort", "watchlistSortDirection", "watchlistDisplayFields", "marketColorScheme", "priceDigits", "percentDigits", "amountDisplayUnit", "dailyBarLimit", "dailyAdjustment"]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     throw new Error("本地偏好包含不支持的字段。");
   }
@@ -4531,6 +4531,8 @@ function normalizeImportedPreferences(value) {
   if (value.priceDigits !== undefined && ![2, 3].includes(value.priceDigits)) throw new Error("价格精度无效。");
   if (value.percentDigits !== undefined && ![2, 3].includes(value.percentDigits)) throw new Error("涨跌幅精度无效。");
   if (value.amountDisplayUnit !== undefined && !["compact", "raw"].includes(value.amountDisplayUnit)) throw new Error("成交额单位显示无效。");
+  if (value.dailyBarLimit !== undefined && ![60, 120, 250].includes(Number(value.dailyBarLimit))) throw new Error("默认日 K 条数无效。");
+  if (value.dailyAdjustment !== undefined && !["forward_adjusted", "backward_adjusted", "none"].includes(value.dailyAdjustment)) throw new Error("默认复权方式无效。");
   return {
     watchlistSort: value.watchlistSort || DEFAULT_PREFERENCES.watchlistSort,
     watchlistSortDirection: value.watchlistSortDirection || DEFAULT_PREFERENCES.watchlistSortDirection,
@@ -4540,7 +4542,9 @@ function normalizeImportedPreferences(value) {
     marketColorScheme: value.marketColorScheme || DEFAULT_PREFERENCES.marketColorScheme,
     priceDigits: value.priceDigits || DEFAULT_PREFERENCES.priceDigits,
     percentDigits: value.percentDigits || DEFAULT_PREFERENCES.percentDigits,
-    amountDisplayUnit: value.amountDisplayUnit || DEFAULT_PREFERENCES.amountDisplayUnit
+    amountDisplayUnit: value.amountDisplayUnit || DEFAULT_PREFERENCES.amountDisplayUnit,
+    dailyBarLimit: [60, 120, 250].includes(Number(value.dailyBarLimit)) ? Number(value.dailyBarLimit) : DEFAULT_PREFERENCES.dailyBarLimit,
+    dailyAdjustment: value.dailyAdjustment || DEFAULT_PREFERENCES.dailyAdjustment
   };
 }
 
@@ -4566,6 +4570,14 @@ function syncWatchlistPreferenceControls(preferences = readPreferences()) {
     if (control) control.value = value;
   });
   document.documentElement.dataset.marketColorScheme = normalized.marketColorScheme;
+  const barLimit = $("#settings-default-bar-limit");
+  const adjustment = $("#settings-default-adjustment");
+  if (barLimit) barLimit.value = String(normalized.dailyBarLimit);
+  if (adjustment) adjustment.value = normalized.dailyAdjustment;
+  const queryLimit = $("#bar-limit");
+  const queryAdjustment = $("#adjustment");
+  if (queryLimit) queryLimit.value = String(normalized.dailyBarLimit);
+  if (queryAdjustment) queryAdjustment.value = normalized.dailyAdjustment;
 }
 
 function persistWatchlistPreferences() {
@@ -4578,7 +4590,9 @@ function persistWatchlistPreferences() {
       marketColorScheme: $("#settings-market-color-scheme")?.value || readPreferences().marketColorScheme,
       priceDigits: Number($("#settings-price-digits")?.value || readPreferences().priceDigits),
       percentDigits: Number($("#settings-percent-digits")?.value || readPreferences().percentDigits),
-      amountDisplayUnit: $("#settings-amount-unit")?.value || readPreferences().amountDisplayUnit
+      amountDisplayUnit: $("#settings-amount-unit")?.value || readPreferences().amountDisplayUnit,
+      dailyBarLimit: Number($("#settings-default-bar-limit")?.value || readPreferences().dailyBarLimit),
+      dailyAdjustment: $("#settings-default-adjustment")?.value || readPreferences().dailyAdjustment
     });
     syncWatchlistPreferenceControls(preferences);
     $("#local-preferences-feedback").textContent = "自选股默认排序偏好已保存到当前浏览器。";
@@ -5004,7 +5018,7 @@ document.querySelectorAll("[data-watchlist-display-field]").forEach((input) => {
     renderWatchlist();
   });
 });
-["#settings-market-color-scheme", "#settings-price-digits", "#settings-percent-digits", "#settings-amount-unit"].forEach((selector) => {
+["#settings-market-color-scheme", "#settings-price-digits", "#settings-percent-digits", "#settings-amount-unit", "#settings-default-bar-limit", "#settings-default-adjustment"].forEach((selector) => {
   $(selector).addEventListener("change", () => {
     persistWatchlistPreferences();
     renderWatchlist();

@@ -9,7 +9,9 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   marketColorScheme: "cn",
   priceDigits: 2,
   percentDigits: 2,
-  amountDisplayUnit: "compact"
+  amountDisplayUnit: "compact",
+  dailyBarLimit: 120,
+  dailyAdjustment: "forward_adjusted"
 });
 
 const SORT_MODES = new Set(["updated", "symbol", "name"]);
@@ -28,7 +30,9 @@ export function normalizePreferences(value = {}) {
     marketColorScheme: ["cn", "reverse"].includes(source.marketColorScheme) ? source.marketColorScheme : DEFAULT_PREFERENCES.marketColorScheme,
     priceDigits: [2, 3].includes(source.priceDigits) ? source.priceDigits : DEFAULT_PREFERENCES.priceDigits,
     percentDigits: [2, 3].includes(source.percentDigits) ? source.percentDigits : DEFAULT_PREFERENCES.percentDigits,
-    amountDisplayUnit: ["compact", "raw"].includes(source.amountDisplayUnit) ? source.amountDisplayUnit : DEFAULT_PREFERENCES.amountDisplayUnit
+    amountDisplayUnit: ["compact", "raw"].includes(source.amountDisplayUnit) ? source.amountDisplayUnit : DEFAULT_PREFERENCES.amountDisplayUnit,
+    dailyBarLimit: [60, 120, 250].includes(Number(source.dailyBarLimit)) ? Number(source.dailyBarLimit) : DEFAULT_PREFERENCES.dailyBarLimit,
+    dailyAdjustment: ["forward_adjusted", "backward_adjusted", "none"].includes(source.dailyAdjustment) ? source.dailyAdjustment : DEFAULT_PREFERENCES.dailyAdjustment
   };
 }
 
