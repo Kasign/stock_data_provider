@@ -601,6 +601,7 @@ components:
         sample_date: {type: string, format: date}
         rows_returned: {type: integer, minimum: 0}
         rows_validated: {type: integer, minimum: 0}
+        coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: Coverage of securities with usable data when applicable}
         provider_time: {type: string, format: date-time, nullable: true}
         checked_at: {type: string, format: date-time}
     ProviderProbeRequest:
