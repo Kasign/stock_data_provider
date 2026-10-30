@@ -249,7 +249,7 @@
             <div class="watchlist-feedback" id="watchlist-feedback" role="status" aria-live="polite" hidden></div>
             <div class="watchlist-toolbar">
               <label class="field watchlist-search-field"><span>搜索自选</span><input id="watchlist-search" type="search" autocomplete="off" placeholder="输入股票代码或名称" aria-label="搜索本地自选股"></label>
-              <label class="field watchlist-sort-field"><span>排序</span><select id="watchlist-sort" aria-label="自选股排序"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option></select></label>
+              <label class="field watchlist-sort-field"><span>排序</span><select id="watchlist-sort" aria-label="自选股排序"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option><option value="price">最新价</option><option value="change">涨跌幅</option><option value="amount">成交额</option><option value="turnover">换手率</option></select></label>
               <label class="field watchlist-group-filter"><span>分组</span><select id="watchlist-group-filter" aria-label="按自选分组筛选"><option value="all">全部分组</option><option value="未分组">未分组</option></select></label>
               <span class="watchlist-filter-count" id="watchlist-filter-count" aria-live="polite">显示全部自选</span>
               <div class="watchlist-quote-actions"><button class="button button-secondary" id="refresh-watchlist-quotes" type="button">刷新批量行情</button><span id="watchlist-quote-refresh-status" class="watchlist-quote-refresh-status" role="status" aria-live="polite">批量行情按需读取，不会在打开自选股时自动请求。</span></div>
@@ -873,7 +873,7 @@
                 <div class="panel settings-config-panel">
                   <div class="settings-group-heading"><div><strong>自选股展示偏好</strong><p>控制自选列表的默认排序；页面工具栏仍可临时切换排序字段。</p></div><span class="settings-config-scope">浏览器本地</span></div>
                   <div class="settings-field-grid">
-                    <label class="field"><span>默认排序字段</span><select id="settings-watchlist-sort"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option></select></label>
+                    <label class="field"><span>默认排序字段</span><select id="settings-watchlist-sort"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option><option value="price">最新价</option><option value="change">涨跌幅</option><option value="amount">成交额</option><option value="turnover">换手率</option></select></label>
                     <label class="field"><span>默认排序方向</span><select id="settings-watchlist-direction"><option value="desc">降序</option><option value="asc">升序</option></select></label>
                   </div>
                   <div class="settings-connection-actions"><button class="button button-secondary" id="reset-local-preferences" type="button">恢复本地偏好默认值</button></div>
