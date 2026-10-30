@@ -210,7 +210,7 @@ go test ./internal/provider -run '^TestLiveProviderProbe
 - 新增 httptest：鉴权、空 body 兼容、core 过滤、能力白名单、非法请求、超大 body；Service 层增加能力范围与参数校验测试。
 - 本次只使用无 Provider 的测试服务，不触发真实供应商请求，不需要 Key/Token。
 
-尚未实现：markets、symbols、checks 过滤；逐项请求摘要、返回行数/覆盖率、样本证券/日期和 freshness 证据。当前提交仍需等待最新 SHA 的完整 CI 与 Docker 构建确认。
+后续仍需实现：checks 过滤、多板块/多证券批量过滤，以及逐项请求摘要和完整覆盖率分母契约。单板块/单证券定向过滤和主要能力的样本/行数/时效证据已在后续章节补充；未覆盖能力仍保持证据字段为空，不以系统采集时间冒充源端时间。CI 状态以当前分支最新 SHA 对应工作流为准。
 
 
 ## 10. 核心行情探测证据字段（2026-10-30）
