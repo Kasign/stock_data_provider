@@ -270,7 +270,7 @@ func TestHistoricalConstituentSnapshotWithoutEffectiveIntervalsIsDegraded(t *tes
 
 func TestHistoricalConstituentSnapshotWithCompleteIntervalKeepsQuality(t *testing.T) {
 	available:=time.Date(2026,9,1,8,0,0,0,time.UTC); observed:=available.Add(time.Minute)
-	snapshot:=&model.IndexConstituentSnapshot{IndexSymbol:"000300.SH",AsOfDate:"2026-10-01",Total:1,
+	snapshot:=&model.IndexConstituentSnapshot{IndexSymbol:"000300.SH",AsOfDate:"2026-10-01",FetchedAt:observed.Add(2*time.Minute),Total:1,
 		Items:[]model.IndexConstituent{{Symbol:"600519.SH",Code:"600519",Name:"贵州茅台",EffectiveFrom:"2026-09-01",EffectiveTo:"2026-12-31",AvailableAt:&available,SystemObservedAt:&observed}},
 		QualityStatus:model.QualityValid}
 	markHistoricalConstituentIntervalQuality(snapshot)
