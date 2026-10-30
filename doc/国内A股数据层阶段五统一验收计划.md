@@ -458,3 +458,19 @@
 - Provider 的 `FetchedAt` 不冒充 ProviderTime；只有源端明确提供的 Provider 时间才写入 `provider_time`。
 
 仍未完成：markets/symbols 请求过滤、各能力完整的覆盖率分母契约、HTTP API 的端到端运行验收，以及需要凭据的真实 Provider 请求。
+
+
+### 市场与证券定向诊断（2026-10-30）
+
+统一诊断接口已开始支持 `markets`、`symbols` 两个请求字段，仍复用 `POST /api/v1/data-sources/probe`，不新增路由。
+
+- `markets` 当前接受单个板块：`SH_MAIN`（沪市主板）、`SZ_MAIN`（深市主板）、`CHINEXT`（创业板）、`STAR`（科创板）、`BSE`（北交所）。
+- `symbols` 当前接受单个证券代码，格式为六位代码加交易所后缀，例如 `600519.SH`、`000001.SZ`、`920001.BJ`。
+- 单次请求最多指定一个 `market` 和一个 `symbol`；批量多证券/多板块任务暂不在同步轻量诊断中展开，避免请求耗时和上游并发不可控。
+- 仅允许与单证券样本直接相关的能力：quote、daily_bars、stock_basic、stock_search、security_trading_status、price_limit_event、stock_boards、announcements、fundamentals、valuations、capital_flow、chip_distribution。
+- 指定 markets/symbols 时必须显式提供 `capabilities`；市场广度、行业排行、指数行情等市场级能力不接受证券范围过滤，混合请求会被拒绝，避免响应看似已过滤但实际仍查询全市场。
+- 仅指定 market 时使用该板块的固定样本证券；同时指定 symbol 时会校验证券代码是否属于该板块。指定 symbol 但不指定 market 时，根据代码后缀记录 SH/SZ/BJ 交易所。
+- 响应批次回显 `requested_markets`、`requested_symbols`；每项仍记录实际样本证券与交易所。
+- OpenAPI、HTTP Handler 和 Service 层均增加参数约束及测试。
+
+当前限制：市场过滤是按板块固定样本证券定向探测，不是对该板块全量证券扫描；一次只支持一个样本。全市场证券目录仍按轻量诊断策略跳过。后续如需批量诊断，应采用受控异步批次和限速，不应直接扩大同步请求并发。
