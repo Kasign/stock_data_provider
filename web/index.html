@@ -743,8 +743,13 @@
         </section>
 <section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
           <div class="page-heading">
-            <div><p class="eyebrow">WORKSPACE / SETTINGS</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">按配置归属分组。每项都标明是本地偏好、浏览器连接配置，还是需要服务端 API 的系统配置。</p></div>
-            <div class="feature-status"><span class="availability-pill is-unavailable">服务器配置 API 待接入</span></div>
+            <div><p class="eyebrow">WORKSPACE / SETTINGS</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">集中管理工作台偏好、服务连接、数据策略与自动化配置。每项均标明保存位置和当前可用状态。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable">服务端配置管理待接入</span></div>
+          </div>
+          <div class="settings-overview-strip">
+            <article><span class="settings-overview-icon">01</span><div><strong>浏览器本地</strong><p>当前浏览器可立即保存</p></div><span class="availability-pill is-local">可用</span></article>
+            <article><span class="settings-overview-icon">02</span><div><strong>服务端只读</strong><p>可查看真实能力，不可修改</p></div><span class="availability-pill is-readonly">只读</span></article>
+            <article><span class="settings-overview-icon">03</span><div><strong>服务端管理</strong><p>等待配置 Schema 与鉴权 API</p></div><span class="availability-pill is-unavailable">待接入</span></article>
           </div>
           <div class="settings-layout">
             <nav class="settings-nav" aria-label="设置分组">
@@ -752,115 +757,222 @@
               <button class="settings-nav-link" type="button" data-settings-target="settings-connection-section">连接与服务</button>
               <button class="settings-nav-link" type="button" data-settings-target="settings-local-data-section">浏览器本地数据</button>
               <button class="settings-nav-link" type="button" data-settings-target="settings-basic-section">基础设置</button>
-              <button class="settings-nav-link" type="button" data-settings-target="settings-data-source-section">数据源</button>
-              <button class="settings-nav-link" type="button" data-settings-target="settings-ai-section">AI 与问股</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-data-source-section">数据源管理</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-ai-section">AI 模型与问股</button>
               <button class="settings-nav-link" type="button" data-settings-target="settings-notification-section">通知渠道</button>
               <button class="settings-nav-link" type="button" data-settings-target="settings-scheduler-section">任务调度</button>
-              <button class="settings-nav-link" type="button" data-settings-target="settings-screening-section">选股</button>
-              <button class="settings-nav-link" type="button" data-settings-target="settings-security-section">系统安全与备份</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-screening-section">选股默认项</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-security-section">安全与备份</button>
             </nav>
             <div class="settings-content">
               <section class="settings-section" id="settings-display-section" aria-labelledby="settings-display-title">
-                <div class="settings-section-heading"><div><h2 id="settings-display-title">显示偏好</h2><p>仅影响当前浏览器中的 WebUI 外观。</p></div><span class="availability-pill is-local">本地偏好</span></div>
-                <div class="panel settings-theme-panel">
-                  <div><strong>颜色主题</strong><p>深色或浅色主题保存在当前浏览器；存储被禁用时只影响当前页面会话，不会修改服务器配置。</p></div>
-                  <div class="settings-theme-options" role="group" aria-label="颜色主题">
-                    <button class="button button-secondary" type="button" data-theme-value="dark" aria-pressed="false">深色主题</button>
-                    <button class="button button-secondary" type="button" data-theme-value="light" aria-pressed="false">浅色主题</button>
+                <div class="settings-section-heading"><div><h2 id="settings-display-title">显示偏好</h2><p>控制当前浏览器中的页面外观；主题选择会立即生效并尝试保存。</p></div><span class="availability-pill is-local">本地偏好</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>外观主题</strong><p>切换后立即应用到当前工作台。</p></div><span class="settings-config-scope">localStorage</span></div>
+                  <div class="settings-theme-options settings-theme-options-expanded" role="group" aria-label="颜色主题">
+                    <button class="settings-theme-choice" type="button" data-theme-value="dark" aria-pressed="false"><span class="settings-theme-preview is-dark" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>深色主题</strong><small>适合长时间查看行情与图表</small></span><span class="settings-theme-check">✓</span></button>
+                    <button class="settings-theme-choice" type="button" data-theme-value="light" aria-pressed="false"><span class="settings-theme-preview is-light" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>浅色主题</strong><small>适合明亮环境与日间使用</small></span><span class="settings-theme-check">✓</span></button>
                   </div>
+                  <p class="field-hint">当前仅提供已实现的主题设置。字号、紧凑密度、图表动画和默认首页尚未形成独立持久化配置，本页不会显示无效开关。</p>
                 </div>
               </section>
 
               <section class="settings-section" id="settings-connection-section" aria-labelledby="settings-connection-title">
-                <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务</h2><p>健康检查确认 API 端点是否可响应，不代表每个 Provider 都实时可用。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
+                <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务</h2><p>配置浏览器访问行情服务和分析服务的同源代理路径，并验证两项服务的健康端点。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
                 <form id="settings-form" class="panel settings-connection-form">
-                  <div class="settings-connection-intro"><div><strong>行情与分析 API</strong><p>配置 WebUI 访问 Go 行情服务和分析服务的同源路径。所有连接配置保存在当前浏览器，不会修改服务器 .env。</p></div><span class="availability-pill is-local">浏览器本地保存</span></div>
-                  <label class="field"><span>行情 API 路径</span><input id="market-base-input" value="/market-api" required /></label>
-                  <div class="field"><label for="market-key-input">行情服务 API Key</label><div class="secret-input-row"><input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写新 Key；留空保留已配置值" /><button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button></div><p class="field-hint" id="market-key-help">这是部署管理员自行生成的服务访问密钥，不是第三方行情 Provider 的密钥。部署环境变量名为 MARKET_DATA_API_KEY；这里只保存到当前浏览器 localStorage，不会自动修改服务器配置或生成后端密钥。已配置的 Key 不会回显；留空表示保留当前值，输入新值表示替换。需要删除时请使用“清除本地设置”。部署端可在服务器终端执行 <code>openssl rand -hex 32</code> 生成密钥。</p></div>
-                  <label class="field"><span>分析 API 路径</span><input id="analysis-base-input" value="/analysis-api" required /></label>
-                  <div class="settings-storage-boundary"><strong>配置与数据存储说明</strong><p>WebUI 不直连数据库。API Key、自选股和最近任务引用保存在当前浏览器；行情服务和分析服务分别使用后端配置的 MariaDB/Redis。分析任务、阶段事件及 Run 结果由分析服务持久化。</p></div>
-                  <p class="security-note">安全提示：不要分享带有 API Key 的浏览器会话。对公网部署前，应在 OpenResty 或身份认证层增加访问控制；行情服务密钥本身不等于用户认证。</p>
+                  <div class="settings-group-heading"><div><strong>行情数据服务</strong><p>负责行情、日 K、证券资料和数据源能力查询。</p></div><span class="settings-config-scope">stock-analysis-data</span></div>
+                  <label class="field"><span>行情 API 基础路径</span><input id="market-base-input" value="/market-api" required autocomplete="url" placeholder="/market-api" /><small>同源反向代理路径，不填写 Docker 服务名、协议或端口。默认由 Nginx 将其转发到行情服务。</small></label>
+                  <div class="field"><label for="market-key-input">行情服务 API Key</label><div class="secret-input-row"><input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写新 Key；留空保留已配置值" /><button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button></div><p class="field-hint" id="market-key-help">这是部署管理员生成的内部服务访问密钥，不是第三方 Provider 密钥。对应服务端环境变量为 MARKET_DATA_API_KEY。已保存的 Key 不回显；留空保留当前值，输入新值才会替换。需要删除时使用下方“清除本地连接设置”。服务器端可运行 <code>openssl rand -hex 32</code> 生成。</p></div>
+                  <div class="settings-inline-info"><strong>请求认证方式</strong><span>浏览器请求行情接口时通过 <code>X-API-Key</code> 请求头发送。密钥只保存在当前浏览器，不会写入 URL 或前端源码。</span></div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>分析任务服务</strong><p>负责分析任务创建、阶段事件、运行结果和任务状态查询。</p></div><span class="settings-config-scope">stock-analysis-server</span></div>
+                  <label class="field"><span>分析 API 基础路径</span><input id="analysis-base-input" value="/analysis-api" required autocomplete="url" placeholder="/analysis-api" /><small>同源反向代理路径。分析服务当前不复用行情 API Key；不要把两种服务认证混为一谈。</small></label>
+                  <div class="settings-connection-status-grid">
+                    <div><span class="settings-status-label">已保存配置检查</span><p id="settings-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未执行连接检查。</p></div>
+                    <div><span class="settings-status-label">未保存草稿检查</span><p id="settings-draft-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未检查未保存配置。</p></div>
+                  </div>
                   <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>存在未保存的连接配置更改。</p>
-                  <p class="settings-inline-status" id="settings-connection-check" role="status" aria-live="polite">尚未执行连接检查。</p>
-                  <p class="settings-inline-status" id="settings-draft-connection-check" role="status" aria-live="polite">尚未检查未保存配置。</p>
-                  <div class="settings-connection-actions"><button class="button button-secondary" id="clear-settings" type="button">清除本地设置</button><button class="button button-secondary" id="settings-check-connection" type="button">检查已保存配置</button><button class="button button-secondary" id="settings-check-draft-connection" type="button">检查未保存配置</button><span class="grow"></span><button class="button button-primary" id="save-settings" type="button">保存连接配置</button></div>
+                  <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查已保存配置</button><button class="button button-secondary" id="settings-check-draft-connection" type="button">检查当前草稿</button><span class="grow"></span><button class="button button-secondary" id="clear-settings" type="button">清除本地连接设置</button><button class="button button-primary" id="save-settings" type="button">保存连接配置</button></div>
                   <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite"></p>
+                  <div class="settings-storage-boundary"><strong>连接配置的作用范围</strong><p>保存只更新当前浏览器的连接路径和行情 API Key，不会修改服务器 .env、Docker 网络、Nginx 上游或数据库连接。服务状态与依赖健康请前往数据中心查看；健康检查成功不代表每个 Provider 的数据能力均可用。</p></div>
+                  <p class="security-note">安全提示：localStorage 不是密钥保险箱，同一浏览器来源下的脚本可读取其中内容。不要分享已配置密钥的浏览器会话；公网部署必须在反向代理或身份认证层限制访问。</p>
                 </form>
               </section>
 
               <section class="settings-section" id="settings-local-data-section" aria-labelledby="settings-local-data-title">
-                <div class="settings-section-heading"><div><h2 id="settings-local-data-title">浏览器本地数据</h2><p>只管理当前浏览器的主题、同源 API 路径、自选股与最近任务引用，不会写入服务器。</p></div><span class="availability-pill is-local">浏览器本地</span></div>
-                <div class="panel settings-browser-data-panel">
-                  <div class="settings-browser-data-copy"><strong>个人工作区导入与导出</strong><p>用于更换浏览器或迁移个人列表。导出文件不包含 API Key、行情快照或完整分析报告；最近任务引用可能包含股票代码、任务 ID 与分析服务路径，请妥善保管。</p></div>
-                  <div class="settings-browser-data-actions"><button class="button button-secondary" id="export-browser-data" type="button">导出本地数据</button><button class="button button-primary" id="import-browser-data" type="button">导入本地数据</button><input id="browser-data-file" type="file" accept="application/json,.json" hidden /></div>
+                <div class="settings-section-heading"><div><h2 id="settings-local-data-title">浏览器本地数据</h2><p>管理当前浏览器保存的工作区资料。不会连接数据库，也不会跨设备自动同步。</p></div><span class="availability-pill is-local">浏览器本地</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>工作区备份文件</strong><p>用于迁移浏览器或保存个人研究清单。</p></div><span class="settings-config-scope">JSON · 最大 1 MiB</span></div>
+                  <div class="settings-local-data-grid">
+                    <article><strong>包含内容</strong><p>主题偏好、行情/分析 API 路径、自选股清单、最近任务引用。</p></article>
+                    <article><strong>排除内容</strong><p>API Key、行情缓存、完整分析报告、服务器 .env 和数据库数据。</p></article>
+                  </div>
+                  <div class="settings-connection-actions settings-browser-data-actions"><button class="button button-secondary" id="export-browser-data" type="button">导出工作区 JSON</button><button class="button button-primary" id="import-browser-data" type="button">导入工作区 JSON</button><input id="browser-data-file" type="file" accept="application/json,.json" hidden /></div>
                   <p class="settings-inline-status" id="browser-data-feedback" role="status" aria-live="polite">尚未导入或导出。</p>
-                  <p class="field-hint">导入将替换主题、API 路径、自选股和最近任务引用，并保留当前 API Key。文件仅恢复浏览器本地数据，不是服务器备份。</p>
+                  <p class="field-hint">导入前会校验文件格式、版本和条目；确认后替换对应本地数据并保留当前 API Key。任务引用可能包含股票代码、任务 ID 与分析服务路径，请妥善保管。</p>
+                </div>
+                <div class="panel settings-config-panel settings-local-storage-panel">
+                  <div class="settings-group-heading"><div><strong>本地存储说明</strong><p>以下项目由当前浏览器管理。</p></div><span class="settings-config-scope">非服务端数据</span></div>
+                  <dl class="settings-config-list"><dt>主题偏好</dt><dd>当前浏览器 localStorage</dd><dt>行情 API Key 与路径</dt><dd>当前浏览器 localStorage</dd><dt>自选股</dt><dd>当前浏览器 localStorage，最多 50 条</dd><dt>最近任务引用</dt><dd>当前浏览器 localStorage，最多 10 条引用</dd><dt>分析任务与完整结果</dt><dd>由分析服务持久化到服务端；浏览器仅保存引用</dd></dl>
                 </div>
               </section>
 
               <section class="settings-section" id="settings-basic-section" aria-labelledby="settings-basic-title">
-                <div class="settings-section-heading"><div><h2 id="settings-basic-title">基础设置</h2><p>默认市场、查询参数和分析默认值属于服务端产品配置；当前 API 没有对应配置 schema 或保存端点。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
+                <div class="settings-section-heading"><div><h2 id="settings-basic-title">基础设置</h2><p>定义工作台默认市场、行情展示、查询范围与分析任务默认参数。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
                 <div class="panel settings-config-panel">
-                  <div class="feature-form-grid">
-                    <label class="field"><span>默认市场</span><select disabled aria-disabled="true"><option>等待服务端配置 schema</option></select></label>
-                    <label class="field"><span>默认日 K 范围</span><select disabled aria-disabled="true"><option>等待服务端配置 schema</option></select></label>
-                    <label class="field"><span>默认分析类型</span><select disabled aria-disabled="true"><option>等待服务端配置 schema</option></select></label>
-                    <label class="field"><span>时区</span><input disabled aria-disabled="true" value="Asia/Shanghai（当前页面日期校验）" /></label>
+                  <div class="settings-group-heading"><div><strong>市场与行情默认值</strong><p>以下字段为待落地的服务端配置项，不代表当前部署已使用这些值。</p></div><span class="settings-config-scope">建议配置项</span></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认市场</span><select disabled><option>中国 A 股（CN）</option></select><small>决定新建研究与筛选任务的默认市场范围。</small></label>
+                    <label class="field"><span>默认交易所范围</span><select disabled><option>沪市 / 深市 / 北交所</option></select><small>需由证券主数据定义实际可选范围。</small></label>
+                    <label class="field"><span>默认复权方式</span><select disabled><option>不复权 / 前复权 / 后复权</option></select><small>影响日 K 与技术指标的计算口径。</small></label>
+                    <label class="field"><span>默认日 K 查询范围</span><select disabled><option>60 / 120 / 250 / 500 个交易日</option></select><small>仅作为新查询的初始值，不应改变已保存报告口径。</small></label>
+                    <label class="field"><span>默认行情刷新间隔</span><select disabled><option>手动 / 15 秒 / 30 秒 / 60 秒</option></select><small>自动刷新必须服从服务端限流和交易时段。</small></label>
+                    <label class="field"><span>工作台时区</span><input disabled value="Asia/Shanghai" /><small>展示和日期边界使用的时区，不改变 Provider 原始时间。</small></label>
                   </div>
-                  <p class="field-hint">这些字段是配置范围说明，不是已保存的服务器设置。服务端接口接入前不允许提交。</p>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>分析任务默认值</strong><p>只影响新建任务的初始参数；风险门禁和服务端策略不可由前端默认值覆盖。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认分析类型</span><select disabled><option>盘后分析 / 个股研究 / 自定义任务</option></select></label>
+                    <label class="field"><span>默认分析周期</span><select disabled><option>日线 / 周线 / 月线</option></select></label>
+                    <label class="field"><span>默认数据截止日</span><select disabled><option>最近有效交易日</option></select></label>
+                    <label class="field"><span>默认并发任务数</span><input type="number" disabled placeholder="由服务端任务限额决定" /></label>
+                  </div>
+                  <p class="settings-boundary-note">接口接入后应读取服务端配置版本，保存时携带版本号进行冲突检测；当前不提供虚假的保存按钮。</p>
                 </div>
               </section>
 
               <section class="settings-section" id="settings-data-source-section" aria-labelledby="settings-data-source-title">
-                <div class="settings-section-heading"><div><h2 id="settings-data-source-title">数据源</h2><p>当前可读取后端注册的 Provider 清单与能力声明；注册信息不等同于实时请求成功。</p></div><span class="availability-pill is-readonly">已有只读接口</span></div>
-                <div class="panel settings-connection-card">
-                  <div><strong>数据源能力清单</strong><p>真实清单在行情总览显示。服务端没有通用的数据源启停、优先级编辑或密钥管理 API。</p></div>
-                  <button class="button button-secondary" id="settings-view-data-sources" type="button">打开数据中心 →</button>
+                <div class="settings-section-heading"><div><h2 id="settings-data-source-title">数据源管理</h2><p>查看 Provider 能力与未来的路由策略配置。注册状态、实时探测和数据质量是不同维度。</p></div><span class="availability-pill is-readonly">能力清单只读</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>Provider 能力与状态</strong><p>真实注册清单与能力声明统一在数据中心查看。</p></div><button class="button button-secondary" id="settings-view-data-sources" type="button">打开数据中心</button></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>数据源启用 / 禁用</span><select disabled><option>服务端 Provider 管理 API 待接入</option></select><small>不能仅在浏览器隐藏数据源来代表服务端停用。</small></label>
+                    <label class="field"><span>数据源优先级</span><select disabled><option>服务端路由策略 API 待接入</option></select><small>需要按数据能力分别定义优先级和回退策略。</small></label>
+                    <label class="field"><span>失败回退策略</span><select disabled><option>服务端策略配置待接入</option></select><small>超时、限流、空数据和质量降级不能共用一种回退规则。</small></label>
+                    <label class="field"><span>Provider 凭据管理</span><input disabled placeholder="密钥托管与脱敏 API 待接入" /><small>凭据不能写入浏览器 localStorage 或前端导出文件。</small></label>
+                  </div>
+                  <div class="settings-boundary-note">当前只读接口返回 Provider 注册信息与能力声明，不提供启停、排序、密钥修改或真实探测操作。</div>
                 </div>
               </section>
 
               <section class="settings-section" id="settings-ai-section" aria-labelledby="settings-ai-title">
-                <div class="settings-section-heading"><div><h2 id="settings-ai-title">AI 模型与问股</h2><p>模型提供商、Agent 策略、上下文和成本限制需要服务端 schema 与权限控制。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
-                <div class="panel settings-unavailable-panel">
-                  <h3>尚无模型配置 API</h3><p>不会在前端存储伪造的模型密钥或显示虚假的连通测试结果。接入后应提供脱敏回显、模型列表、配置版本和真实测试请求。</p>
-                  <button class="button button-secondary" type="button" disabled aria-disabled="true">测试模型连接（待接入）</button>
+                <div class="settings-section-heading"><div><h2 id="settings-ai-title">AI 模型与问股</h2><p>管理模型 Provider、默认模型、推理策略、上下文与成本预算。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>模型服务连接</strong><p>模型凭据必须由服务端安全保存，页面只允许脱敏状态回显。</p></div><span class="settings-config-scope">建议配置项</span></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>模型 Provider</span><select disabled><option>OpenAI 兼容 / 自建 Gateway / 其他</option></select></label>
+                    <label class="field"><span>服务地址</span><input disabled placeholder="https://.../v1" /><small>仅允许管理员配置的可信地址，不能由普通浏览器任意指定探测目标。</small></label>
+                    <label class="field"><span>默认模型 ID</span><input disabled placeholder="例如 provider/model-id" /></label>
+                    <label class="field"><span>模型 API Key</span><input type="password" disabled placeholder="由服务端托管，前端不回显" /></label>
+                    <label class="field"><span>推理强度</span><select disabled><option>低 / 中 / 高</option></select></label>
+                    <label class="field"><span>响应超时</span><input type="number" disabled placeholder="秒" /></label>
+                    <label class="field"><span>最大上下文长度</span><input type="number" disabled placeholder="Token 数" /></label>
+                    <label class="field"><span>单次输出上限</span><input type="number" disabled placeholder="Token 数" /></label>
+                  </div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>问股与研究策略</strong><p>策略选择必须与后端实际注册的 Agent/工具清单一致。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认问股模式</span><select disabled><option>行情问答 / 个股研究 / 深度分析</option></select></label>
+                    <label class="field"><span>上下文窗口策略</span><select disabled><option>最近消息 / 摘要 + 最近消息</option></select></label>
+                    <label class="field"><span>每日 Token 预算</span><input type="number" disabled placeholder="Token 数" /></label>
+                    <label class="field"><span>单用户并发上限</span><input type="number" disabled placeholder="请求数" /></label>
+                  </div>
+                  <p class="settings-boundary-note">尚无模型配置 Schema、密钥托管、模型列表和真实连通测试 API；本页字段仅用于明确完整配置范围，不保存任何模型密钥。</p>
                 </div>
               </section>
 
               <section class="settings-section" id="settings-notification-section" aria-labelledby="settings-notification-title">
-                <div class="settings-section-heading"><div><h2 id="settings-notification-title">通知渠道</h2><p>渠道配置、敏感凭据和单渠道投递测试应由服务端管理。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
-                <div class="panel settings-unavailable-panel">
-                  <h3>尚未接入渠道配置</h3><p>当前不能保存 Telegram、邮件或 Webhook 凭据，也不能模拟“测试成功”。通知收件箱和告警投递尝试是独立能力。</p>
-                  <button class="button button-secondary" type="button" disabled aria-disabled="true">添加通知渠道（待接入）</button>
+                <div class="settings-section-heading"><div><h2 id="settings-notification-title">通知渠道</h2><p>配置通知发送渠道、接收目标、触发事件和投递策略。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>渠道连接</strong><p>渠道凭据应加密托管，修改后需支持脱敏回显和单渠道测试。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>通知渠道类型</span><select disabled><option>邮件 / Telegram / Webhook</option></select></label>
+                    <label class="field"><span>渠道名称</span><input disabled placeholder="例如：个人通知" /></label>
+                    <label class="field"><span>接收地址 / Chat ID</span><input disabled placeholder="邮箱、Chat ID 或接收端标识" /></label>
+                    <label class="field"><span>Webhook 地址</span><input disabled placeholder="由服务端白名单与 SSRF 防护校验" /></label>
+                    <label class="field"><span>渠道凭据</span><input type="password" disabled placeholder="服务端加密保存，不回显原文" /></label>
+                    <label class="field"><span>渠道启用状态</span><select disabled><option>启用 / 停用</option></select></label>
+                  </div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>通知订阅与投递</strong><p>通知偏好与告警规则分开管理；投递失败应保留可追踪记录。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>订阅事件</span><input disabled placeholder="任务完成、任务失败、风险阻断、系统异常" /></label>
+                    <label class="field"><span>免打扰时段</span><input disabled placeholder="开始时间 — 结束时间" /></label>
+                    <label class="field"><span>失败重试次数</span><input type="number" disabled placeholder="由服务端投递策略定义" /></label>
+                    <label class="field"><span>单渠道速率限制</span><input type="number" disabled placeholder="条 / 分钟" /></label>
+                  </div>
+                  <p class="settings-boundary-note">通知收件箱、渠道配置、订阅关系与投递记录是不同资源；相关服务端 API 尚未接入。</p>
                 </div>
               </section>
 
               <section class="settings-section" id="settings-scheduler-section" aria-labelledby="settings-scheduler-title">
-                <div class="settings-section-heading"><div><h2 id="settings-scheduler-title">任务调度</h2><p>计划启停、执行时间、调度器健康状态与立即运行都必须有服务端状态与持久化。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
-                <div class="panel settings-unavailable-panel">
-                  <h3>尚无调度配置接口</h3><p>当前可通过任务页手动创建现有分析任务，但不能在这里配置周期任务或声称服务器调度已启用。</p>
-                  <button class="button button-secondary" type="button" disabled aria-disabled="true">编辑调度计划（待接入）</button>
+                <div class="settings-section-heading"><div><h2 id="settings-scheduler-title">任务调度</h2><p>管理周期任务的触发时间、执行范围、并发与失败策略。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>调度计划</strong><p>调度配置必须由服务端持久化，且按交易日历解释执行时间。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>调度器状态</span><select disabled><option>启用 / 暂停（服务端状态）</option></select></label>
+                    <label class="field"><span>执行频率</span><select disabled><option>每日 / 每周 / 自定义 Cron</option></select></label>
+                    <label class="field"><span>执行时间</span><input type="time" disabled /></label>
+                    <label class="field"><span>交易日范围</span><select disabled><option>仅交易日 / 每个自然日 / 指定日期</option></select></label>
+                    <label class="field"><span>调度时区</span><input disabled value="Asia/Shanghai" /></label>
+                    <label class="field"><span>关联分析任务类型</span><select disabled><option>盘后扫描 / 自选股复盘 / 自定义任务</option></select></label>
+                    <label class="field"><span>最大并发执行数</span><input type="number" disabled placeholder="任务数" /></label>
+                    <label class="field"><span>失败重试策略</span><select disabled><option>不重试 / 固定间隔 / 指数退避</option></select></label>
+                  </div>
+                  <div class="settings-boundary-note">当前任务页支持手动创建已有分析任务；没有周期调度 CRUD、调度器状态和执行历史 API。</div>
                 </div>
               </section>
 
               <section class="settings-section" id="settings-screening-section" aria-labelledby="settings-screening-title">
-                <div class="settings-section-heading"><div><h2 id="settings-screening-title">选股默认项</h2><p>默认策略、市场、候选上限和筛选条件必须与后端策略清单一致。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
-                <div class="panel settings-unavailable-panel">
-                  <h3>尚无选股配置 schema</h3><p>选股页面目前只说明能力缺口；不会将多股票分析任务当作条件筛选。</p>
-                  <button class="button button-secondary" type="button" disabled aria-disabled="true">保存选股默认项（待接入）</button>
+                <div class="settings-section-heading"><div><h2 id="settings-screening-title">选股默认项</h2><p>定义条件选股的默认市场、策略、扫描范围与候选数量。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>扫描默认参数</strong><p>默认值必须来自后端策略 Schema，不能与多股票分析任务混用。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认市场</span><select disabled><option>中国 A 股</option></select></label>
+                    <label class="field"><span>默认策略</span><select disabled><option>等待服务端策略清单</option></select></label>
+                    <label class="field"><span>扫描证券范围</span><select disabled><option>全市场 / 沪深主板 / 创业板 / 科创板 / 北交所</option></select></label>
+                    <label class="field"><span>候选结果上限</span><input type="number" disabled placeholder="条数" /></label>
+                    <label class="field"><span>最小成交额</span><input type="number" disabled placeholder="人民币元" /></label>
+                    <label class="field"><span>最小上市天数</span><input type="number" disabled placeholder="交易日" /></label>
+                    <label class="field"><span>ST / 风险警示过滤</span><select disabled><option>排除 / 保留 / 由策略决定</option></select></label>
+                    <label class="field"><span>停牌证券过滤</span><select disabled><option>排除 / 保留 / 由策略决定</option></select></label>
+                  </div>
+                  <div class="settings-boundary-note">后续还需支持策略参数 Schema、条件组合、扫描任务、命中解释和历史结果；当前页面不会伪造候选结果或扫描记录。</div>
                 </div>
               </section>
 
               <section class="settings-section" id="settings-security-section" aria-labelledby="settings-security-title">
-                <div class="settings-section-heading"><div><h2 id="settings-security-title">服务器安全与配置备份</h2><p>服务端密码、权限、.env、备份和恢复涉及认证、授权、审计、版本冲突与原子写入。</p></div><span class="availability-pill is-unavailable">服务端待接入</span></div>
-                <div class="panel settings-unavailable-panel">
-                  <h3>未开放服务器配置写入</h3><p>浏览器没有访问 NAS 文件系统的权限。这里不会假装设置/删除管理员密码，也不会用本地文件导入导出来冒充服务器备份。</p>
-                  <div class="settings-unavailable-actions"><button class="button button-secondary" type="button" disabled aria-disabled="true">更改管理员密码（待接入）</button><button class="button button-secondary" type="button" disabled aria-disabled="true">导出服务器配置（待接入）</button><button class="button button-secondary" type="button" disabled aria-disabled="true">导入服务器配置（待接入）</button></div>
+                <div class="settings-section-heading"><div><h2 id="settings-security-title">安全与备份</h2><p>服务器身份认证、服务密钥、访问控制和配置备份必须由受保护的服务端接口管理。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>身份认证与访问控制</strong><p>管理员登录态与行情服务 API Key 是两套独立机制。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>管理员登录方式</span><select disabled><option>服务端会话认证待接入</option></select></label>
+                    <label class="field"><span>管理员密码</span><input type="password" disabled placeholder="服务端密码哈希与修改接口待接入" /></label>
+                    <label class="field"><span>会话有效期</span><input type="number" disabled placeholder="分钟" /></label>
+                    <label class="field"><span>登录失败锁定策略</span><input disabled placeholder="失败次数 / 锁定时长" /></label>
+                    <label class="field"><span>管理 API 访问范围</span><select disabled><option>仅内网 / 可信代理 / 指定网段</option></select></label>
+                    <label class="field"><span>操作审计</span><select disabled><option>记录配置修改、密钥轮换与备份操作</option></select></label>
+                  </div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>服务密钥管理</strong><p>仅管理服务访问密钥，不用于表示用户登录身份。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>行情服务 API Key 轮换</span><input disabled placeholder="服务端密钥轮换与版本状态待接入" /></label>
+                    <label class="field"><span>密钥最近轮换时间</span><input disabled placeholder="服务端审计记录待接入" /></label>
+                  </div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>服务器配置备份与恢复</strong><p>浏览器工作区 JSON 不包含服务器配置，不可用于恢复部署环境。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>自动备份频率</span><select disabled><option>每日 / 每周 / 手动</option></select></label>
+                    <label class="field"><span>备份保留数量</span><input type="number" disabled placeholder="份数" /></label>
+                    <label class="field"><span>备份内容范围</span><select disabled><option>应用配置 / 数据库 / 配置与数据库</option></select></label>
+                    <label class="field"><span>最近备份状态</span><input disabled placeholder="需要服务端备份任务与审计 API" /></label>
+                  </div>
+                  <p class="settings-boundary-note">目前没有管理员认证、服务器配置读写、密钥轮换、审计和备份恢复 API。相关控件保持禁用；不会在浏览器端比对密码或模拟服务器文件操作。</p>
                 </div>
               </section>
             </div>
           </div>
-        </section>
+        </section>>
 
 <footer class="page-footer"><span>行情研究台 · Go 数据服务</span><span>行情与分析结果仅供研究；数据质量与时点限制须独立评估。</span></footer>
       </main>
