@@ -4152,7 +4152,7 @@ function activateTaskReference(record) {
     $("#task-empty").hidden = true;
     $("#task-detail").hidden = false;
     $("#task-result-section").hidden = true;
-  $("#run-flow-result-empty")?.removeAttribute("hidden");
+    $("#run-flow-result-empty")?.removeAttribute("hidden");
     $("#task-result-metrics").replaceChildren();
     $("#task-result-structured").replaceChildren();
     $("#task-result-warnings").replaceChildren();
