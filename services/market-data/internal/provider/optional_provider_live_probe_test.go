@@ -164,7 +164,6 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
 	})
 
-
 	run("index_catalog", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchIndexCatalog(ctx, "tushare")
 		if err != nil {
@@ -301,7 +300,6 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		}
 		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
 	})
-
 
 	tradeDate := endDate
 	run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
