@@ -37,7 +37,7 @@ func TestProviderActiveProbeRunsOutsideBusinessCircuitBreaker(t *testing.T) {
 	if !found || item.Status != "returned" {
 		t.Fatalf("expected a successful quote probe, got %+v", run.Items)
 	}
-	if item.SampleSymbol != "600519.SH" || item.SampleMarket != "SH" || item.RowsReturned != 1 || item.RowsValidated != 1 || item.ProviderTime == nil {
+	if item.SampleSymbol != "600519.SH" || item.SampleMarket != "SH" || item.SampleDate == "" || item.RowsReturned != 1 || item.RowsValidated != 1 || item.ProviderTime == nil {
 		t.Fatalf("quote probe is missing sample and freshness evidence: %+v", item)
 	}
 }
