@@ -4980,3 +4980,7 @@ button:disabled {
 @media (max-width: 800px) {
   .research-workspace-nav { top: 4px; }
 }
+
+#research-view .chart-panel h2:focus,
+#research-view .technical-panel h2:focus,
+#research-view .bars-panel h2:focus { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
