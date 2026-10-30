@@ -1966,6 +1966,8 @@ test("个股研究列表复用自选股批量行情并区分失败与旧快照",
   assert.match(renderer, /const itemQuote = isCurrent \? quote : batchRecord\?\.quote/);
   assert.match(renderer, /batchQuoteFailed \? "行情失败" : "未加载"/);
   assert.match(renderer, /旧快照 · /);
+  assert.match(renderer, /\["loading", "error"\]\.includes\(state\.watchlistQuoteStatus\)/);
+  assert.match(renderer, /旧快照 · 刷新中/);
   assert.match(renderer, /最近一次批量刷新失败，当前保留此前成功快照/);
   assert.match(renderer, /formatResearchMA\(5, isCurrent\)/);
   assert.match(renderer, /formatResearchMA\(20, isCurrent\)/);

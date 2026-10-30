@@ -616,12 +616,13 @@ function renderResearchStockList() {
         const qualityStatus = isCurrent ? itemQuote.quality_status : (batchRecord?.qualityStatus || itemQuote?.quality_status || "unknown");
         const pill = document.createElement("span");
         pill.className = "mini-quality mini-quality-" + String(qualityStatus || "unknown").toLowerCase();
-        const stale = Boolean(batchRecord?.quote && state.watchlistQuoteStatus === "error");
-        pill.textContent = stale ? "旧快照 · " + qualityLabel(qualityStatus) : (batchRecord && !batchRecord.quote ? "行情失败" : hasQuote ? qualityLabel(qualityStatus) : "未加载");
+        const stale = Boolean(batchRecord?.quote && ["loading", "error"].includes(state.watchlistQuoteStatus));
+        const staleLabel = state.watchlistQuoteStatus === "loading" ? "旧快照 · 刷新中" : "旧快照 · 刷新失败";
+        pill.textContent = stale ? staleLabel + " · " + qualityLabel(qualityStatus) : (batchRecord && !batchRecord.quote ? "行情失败" : hasQuote ? qualityLabel(qualityStatus) : "未加载");
         const detail = [
           batchRecord?.errorCode || "",
           batchRecord?.fetchedAt ? "批量快照 " + formatDateTime(batchRecord.fetchedAt) : "",
-          stale ? "最近一次批量刷新失败，当前保留此前成功快照。" : ""
+          stale ? (state.watchlistQuoteStatus === "loading" ? "批量行情正在刷新，当前暂时保留此前成功快照。" : "最近一次批量刷新失败，当前保留此前成功快照。") : ""
         ].filter(Boolean);
         pill.title = detail.join("；") || (Array.isArray(itemQuote?.quality_reasons) ? itemQuote.quality_reasons.join("；") : "未加载行情");
         cell.append(pill);
