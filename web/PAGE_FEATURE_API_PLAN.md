@@ -387,3 +387,22 @@
 - 已读取 WebUI 分支的 web/index.html、web/src/app.js、web/src/api.js、web/API_CONTRACT.md、web/DATA_CAPABILITY_GAPS.md。
 - 已读取数据分支的 docs/architecture/webui-api-contract-gaps.md，并区分路由/Handler 初核与 Provider/真实响应仍待确认。
 - 本轮未运行浏览器、后端、Provider 请求、测试或 CI；本节是静态代码盘点，不是运行验收。
+
+
+### 11.6 对模块化接线的补充核正（2026-10-30）
+
+上一节 11.3 的静态引用统计只检查了 app.js 对 API 函数名的直接引用，未沿 import 继续检查模块内部调用，因此对部分能力的接线判断过于保守。按模块实现复核后，以下结论以本节为准：
+
+| 模块文件 | 已确认的 API 调用 | 页面接线结论 |
+|---|---|---|
+| `web/src/market-overview.js` | `getMarketIndices`、`getMarketBreadth`、`getMarketSectors`、`getMarketLimitPool`、`getMarketHotStocks` | 已由 app.js 的 `bindMarketOverview` 初始化；市场总览五类数据均有刷新流程、独立结果处理和连接失效清理。此前不能写成“只有封装未调用” |
+| `web/src/market-activity.js` | `getMarketDragonTiger`、`getTradingCalendar` | 已由 `bindMarketActivity` 初始化；龙虎榜和交易日历有独立加载、分页/日期参数、错误展示及刷新流程 |
+| `web/src/stock-research.js` | `getStockProfile`、`getStockBoards`、`getStockAnnouncements`、`getStockFundamentals`、`getMarketValuations`、`getChipDistribution`、`getCapitalFlow` | 已由 `bindStockResearch` 初始化；资料/板块/公告有组合加载入口，财务、估值、筹码、资金流有独立加载入口；按需刷新已加载模块 |
+| `web/src/existing-api-tools.js` | `getMarketSession`、`getIndexCatalog`、`getIndexConstituents`、`getIndexDailyBars`、`getStockTradingStatus`、`getStockPriceLimitRule` | 已在应用启动时绑定事件；指数目录/成分/日线、交易时段、个股交易状态/涨跌幅规则有手动查询入口 |
+| `web/src/data-center.js` | 行情/分析服务 liveness/readiness、`getDataSources` | 已由 `bindDataCenter` 初始化；需继续区分能力清单与实时探测，不得扩大为 Provider 在线状态 |
+
+因此，11.2 与 11.3 中“未发现明确调用”的相关条目应按上述模块调用修正：指数、广度、板块、涨跌停、人气、龙虎榜、交易日历、个股资料、板块、财务、公告、估值、筹码和资金流并非单纯只有 API 封装，而是已有前端模块实际调用路径。它们仍属于“代码已接线、运行可用性待环境验证”，不能据此宣称后端 Provider 数据完整或线上可用。
+
+当前更明确的缺口仍是服务端业务闭环：自选股跨设备持久化、筛选能力/历史列表、任务列表查询、告警规则与触发记录、通知、研究历史/复盘、聊天会话/流式 API，以及 Provider 实时诊断/历史。浏览器本地自选和最近任务记录只代表本机浏览器数据，不计作服务端持久化。
+
+本轮进一步静态确认 app.js 启动时确实绑定上述模块；未运行浏览器或真实后端请求。后续开发不应重复为这些模块“补接线”，应先针对剩余业务缺口和页面交互断点开展实现。
