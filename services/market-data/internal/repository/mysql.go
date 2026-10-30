@@ -206,7 +206,7 @@ func (s *Store) Migrate(ctx context.Context) error {
  KEY idx_market_corporate_action_event_asof (symbol, provider_event_id, source, recorded_at, id),
  KEY idx_market_corporate_action_announcement (symbol, announcement_date),
  KEY idx_market_corporate_action_observed (recorded_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
