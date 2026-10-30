@@ -1183,15 +1183,6 @@ function handleQuoteFormSubmit(event) {
   }
 }
 
-function setServiceStatus(prefix, status, text) {
-  const dot = $(`#${prefix}-health-dot`);
-  const label = $(`#${prefix}-health-text`);
-  dot.classList.toggle("is-online", status === "healthy");
-  dot.classList.toggle("is-offline", status === "failed");
-  dot.classList.toggle("is-unknown", status === "unknown" || status === "degraded");
-  label.textContent = text;
-}
-
 function serviceHealthState(result) {
   if (!result?.ok) return "failed";
   const status = String(result.data?.status || "").trim().toLowerCase();
@@ -1200,13 +1191,6 @@ function serviceHealthState(result) {
   if (["degraded", "partial"].includes(status)) return "degraded";
   return "unknown";
 }
-
-function serviceHealthLabel(status) {
-  return status === "healthy" ? "就绪"
-    : status === "failed" ? "不可用"
-      : status === "degraded" ? "状态需关注" : "状态未知";
-}
-
 
 function setQualityPill(target, status, customText = "") {
   target.className = `quality-pill quality-${String(status || "unknown").toLowerCase()}`;
@@ -1984,8 +1968,6 @@ async function refreshServices() {
     }
 
     try {
-      setServiceStatus("market", marketState, serviceHealthLabel(marketState));
-      setServiceStatus("analysis", analysisState, serviceHealthLabel(analysisState));
       const connectionDot = $("#connection-dot");
       connectionDot.classList.toggle("is-online", marketOK && analysisOK);
       connectionDot.classList.toggle("is-offline", marketState === "failed" && analysisState === "failed");
