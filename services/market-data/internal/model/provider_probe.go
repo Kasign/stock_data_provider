@@ -28,9 +28,14 @@ type ProviderProbeItem struct {
 	SampleSymbol   string        `json:"sample_symbol,omitempty"`
 	SampleMarket   string        `json:"sample_market,omitempty"`
 	SampleDate     string        `json:"sample_date,omitempty"`
-	RowsReturned   int           `json:"rows_returned,omitempty"`
-	RowsValidated  int           `json:"rows_validated,omitempty"`
-	CoverageRatio  *float64      `json:"coverage_ratio,omitempty"`
+	RowsReturned      int           `json:"rows_returned,omitempty"`
+	RowsValidated     int           `json:"rows_validated,omitempty"`
+	CoverageTotal     *int          `json:"coverage_total,omitempty"`
+	CoverageReturned  *int          `json:"coverage_returned,omitempty"`
+	CoverageValidated *int          `json:"coverage_validated,omitempty"`
+	CoverageMissing   *int          `json:"coverage_missing,omitempty"`
+	CoverageExcluded  *int          `json:"coverage_excluded,omitempty"`
+	CoverageRatio     *float64      `json:"coverage_ratio,omitempty"`
 	ProviderTime   *time.Time    `json:"provider_time,omitempty"`
 	CheckedAt      time.Time     `json:"checked_at"`
 }

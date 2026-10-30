@@ -606,3 +606,17 @@
 - 提交 `bdc3e8820e188926cdb4ea17172c5ce5b80b9831` 的 Go suite 未进入编译/测试阶段，market-data Job 的 gofmt 发现 `provider_probe_test.go` 新增类型前有多余空行。
 - 同步的 Docker market-data 镜像在相同 gofmt 前置步骤停止，不是代码编译或镜像运行问题。
 - 已清理测试文件格式；下一 SHA 重新执行 Go suite 和镜像构建。
+
+
+### 覆盖率分母契约首批落地（2026-10-30）
+
+主动诊断结果新增可选字段 `coverage_total`、`coverage_returned`、`coverage_validated`、`coverage_missing`、`coverage_excluded`。字段定义：
+
+- total：可证明的预期样本总量。
+- returned：该分母范围内源端实际返回数量。
+- validated：返回且通过身份/质量校验的数量。
+- missing：预期但源端未返回的数量。
+- excluded：已返回但被明确排除的数量。
+- ratio = validated / total；分母未知或为 0 时不输出比例和分母字段。
+
+当前先在市场广度探测落地：total 使用快照的 TotalSecurities，returned/validated 使用 CoveredSecurities，missing 为两者差值，excluded 为 0。其他能力未取得可信分母时继续不输出，不以分页数或样本数冒充全市场覆盖率。后续按各业务快照的真实总数/排除数逐项扩展。

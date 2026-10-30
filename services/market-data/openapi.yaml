@@ -601,7 +601,12 @@ components:
         sample_date: {type: string, format: date}
         rows_returned: {type: integer, minimum: 0}
         rows_validated: {type: integer, minimum: 0}
-        coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: Coverage of securities with usable data when applicable}
+        coverage_total: {type: integer, minimum: 0, description: Explicit expected population denominator; omitted when the source cannot prove it}
+        coverage_returned: {type: integer, minimum: 0, description: Records returned within the declared denominator}
+        coverage_validated: {type: integer, minimum: 0, description: Returned records passing identity and quality validation}
+        coverage_missing: {type: integer, minimum: 0, description: Expected records not returned by the source}
+        coverage_excluded: {type: integer, minimum: 0, description: Returned records explicitly excluded by validation}
+        coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: coverage_validated divided by coverage_total; omitted when the denominator is unknown}
         provider_time: {type: string, format: date-time, nullable: true}
         checked_at: {type: string, format: date-time}
     ProviderProbeRequest:

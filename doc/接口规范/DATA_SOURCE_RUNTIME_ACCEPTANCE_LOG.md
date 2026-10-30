@@ -291,3 +291,8 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 ## 17. 北交所诊断测试 gofmt 修复（2026-10-30）
 
 提交 `bdc3e8820e188926cdb4ea17172c5ce5b80b9831` 的 Go suite 仅因 `provider_probe_test.go` 新增类型前多一行空白而在 gofmt 检查失败；Docker 镜像构建在相同前置检查处中止。已移除多余空行，后续需以新 SHA 的 Go test/race/vet 和镜像构建结果确认。
+
+
+## 18. 覆盖率分母字段首批实现（2026-10-30）
+
+主动诊断 ProviderProbeItem 与 OpenAPI 新增 coverage_total/returned/validated/missing/excluded。当前仅市场广度有明确总体证券数，按 TotalSecurities 与 CoveredSecurities 计算；其他能力无可信分母时保持字段缺失。ratio 使用 validated/total，不用 returned/total 替代质量覆盖率。新增 Service 单测校验分母、缺失、排除和比例关系。
