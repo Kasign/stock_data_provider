@@ -99,6 +99,7 @@ func TestProviderProbeEndpointRejectsInvalidRequests(t *testing.T) {
 		{name: "unknown capability", body: `{"capabilities":["unknown_capability"]}`},
 		{name: "duplicate capability", body: `{"capabilities":["quote","quote"]}`},
 		{name: "capability outside core", body: `{"scope":"core","capabilities":["stock_universe"]}`},
+		{name: "timeout zero", body: `{"timeout_seconds":0}`},
 		{name: "timeout too small", body: `{"timeout_seconds":0.5}`},
 		{name: "timeout too large", body: `{"timeout_seconds":31}`},
 		{name: "multiple JSON values", body: `{"scope":"core"} {}`},
