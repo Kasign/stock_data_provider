@@ -441,6 +441,7 @@ try {
     }
 
     if (viewport.width === 320) {
+      await page.locator("#mobile-menu-toggle").click();
       await page.locator('.nav-link[data-view="stocks"]').click();
       await page.locator("#stocks-view").waitFor({ state: "visible" });
       const savedSettings = await page.evaluate(() => {

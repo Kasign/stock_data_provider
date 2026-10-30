@@ -808,7 +808,7 @@
                 <form id="settings-form" class="panel settings-connection-form">
                   <div class="settings-group-heading"><div><strong>行情数据服务</strong><p>负责行情、日 K、证券资料和数据源能力查询。</p></div><span class="settings-config-scope">stock-analysis-data</span></div>
                   <label class="field"><span>行情 API 基础路径</span><input id="market-base-input" value="/market-api" required autocomplete="url" placeholder="/market-api" /><small>同源反向代理路径，不填写 Docker 服务名、协议或端口。默认由 Nginx 将其转发到行情服务。</small></label>
-                  <div class="field"><label for="market-key-input">行情服务 API Key</label><div class="secret-input-row"><input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写新 Key；留空保留已配置值" /><button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button></div><p class="field-hint" id="market-key-help">这是部署管理员生成的内部服务访问密钥，不是第三方 Provider 密钥。对应服务端环境变量为 MARKET_DATA_API_KEY。已保存的 Key 不回显；留空保留当前值，输入新值才会替换。需要删除时使用下方“清除本地连接设置”。服务器端可运行 <code>openssl rand -hex 32</code> 生成。</p></div>
+                  <div class="field"><label for="market-key-input">行情服务 API Key</label><div class="secret-input-row"><input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写新 Key；留空保留已配置值" /><button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button></div><p class="field-hint" id="market-key-help">这是部署管理员自行生成并配置的内部服务访问密钥，不是第三方 Provider 密钥。对应服务端环境变量为 MARKET_DATA_API_KEY。已保存的 Key 不回显；留空保留当前值，输入新值才会替换。需要删除时使用下方“清除本地连接设置”。服务器端可运行 <code>openssl rand -hex 32</code> 生成。</p></div>
                   <div class="settings-inline-info"><strong>请求认证方式</strong><span>浏览器请求行情接口时通过 <code>X-API-Key</code> 请求头发送。密钥只保存在当前浏览器，不会写入 URL 或前端源码。</span></div>
                   <div class="settings-divider"></div>
                   <div class="settings-group-heading"><div><strong>分析任务服务</strong><p>负责分析任务创建、阶段事件、运行结果和任务状态查询。</p></div><span class="settings-config-scope">stock-analysis-server</span></div>
@@ -833,6 +833,7 @@
                     <article><strong>包含内容</strong><p>主题偏好、行情/分析 API 路径、自选股清单、最近任务引用。</p></article>
                     <article><strong>排除内容</strong><p>API Key、行情缓存、完整分析报告、服务器 .env 和数据库数据。</p></article>
                   </div>
+                  <p class="field-hint"><strong id="storage-boundary-title">存储边界</strong>：仅保存在当前浏览器；不会连接数据库，也不会跨设备自动同步。</p>
                   <div class="settings-connection-actions settings-browser-data-actions"><button class="button button-secondary" id="export-browser-data" type="button">导出工作区 JSON</button><button class="button button-primary" id="import-browser-data" type="button">导入工作区 JSON</button><input id="browser-data-file" type="file" accept="application/json,.json" hidden />
                   <dialog class="browser-data-import-dialog" id="browser-data-import-dialog" aria-labelledby="browser-data-import-title">
                     <form method="dialog" class="browser-data-import-card">
