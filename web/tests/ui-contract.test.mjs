@@ -1056,7 +1056,7 @@ test("alert center separates rule CRUD, evaluation state, trigger history and de
   assert.match(app, /function renderAlertEvaluation\(snapshot\)[\s\S]*?resolveAlertEvaluationState\(snapshot\)/);
   assert.match(app, /renderAlertCapability\(\{ supported: false \}\)/);
   assert.match(app, /renderAlertEvaluation\(\{ supported: false \}\)/);
-  assert.match(html, /id="alert-rule-submit" type="button" disabled/);
+  assert.match(html, /id="alert-rule-submit" type="submit"/);
   assert.match(html, /id="alert-rule-test" type="button" disabled/);
   assert.doesNotMatch(app, /alert.*localStorage/i);
 });
