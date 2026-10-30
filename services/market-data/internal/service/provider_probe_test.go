@@ -82,7 +82,6 @@ func findProbeItem(items []model.ProviderProbeItem, providerName, capability str
 	return model.ProviderProbeItem{}, false
 }
 
-
 type providerProbeMissingIdentityFake struct{}
 
 func (providerProbeMissingIdentityFake) Name() string { return "probe-missing-identity" }
