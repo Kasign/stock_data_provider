@@ -1551,7 +1551,7 @@ test("季度财务指标读取的报告期校验与成功提示异常不会向�
   assert.ok(loader);
   assert.match(loader, /try\{[\s\S]*?syncSymbol\(\)/);
   assert.match(loader, /if\(!Number\.isInteger\(year\)[\s\S]*?safeResearchFeedback\("财务报告期不正确。"\)/);
-  assert.match(loader, /const ok=await fetchOne\("fundamentals"[\s\S]*?季度财务指标已返回/);
+  assert.match(loader, /return runSupplementRequest\("#load-fundamentals","读取财务指标","fundamentals"[\s\S]*?季度财务指标已返回/);
   assert.match(loader, /catch\(error\)\{\s*safeResearchFeedback\("季度财务指标读取流程异常："\+safeResearchError\(error\)\);\s*return false;/);
 });
 
