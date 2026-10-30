@@ -30,14 +30,71 @@ type providerProbeJob struct {
 	run        providerProbeFunc
 }
 
-// ProbeProviderCapabilities 主动探测已启用 Provider 的核心能力。
-// 每个探测直接调用对应 Provider，不经过业务请求的熔断统计；单项超时和并发均受限。
+// ProviderProbeOptions 控制主动诊断的执行范围和单项超时。
+type ProviderProbeOptions struct {
+	Scope          string
+	Capabilities   []string
+	TimeoutSeconds int
+}
+
+// ProbeProviderCapabilities 保留旧调用方式，默认执行全部诊断能力。
 func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.ProviderProbeRun, error) {
+	return s.ProbeProviderCapabilitiesWithOptions(ctx, ProviderProbeOptions{Scope: "all", TimeoutSeconds: 12})
+}
+
+// ProbeProviderCapabilitiesWithOptions 主动探测已启用 Provider 的能力。
+// 每个探测直接调用对应 Provider，不经过业务请求的熔断统计；单项超时和并发均受限。
+func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, options ProviderProbeOptions) (*model.ProviderProbeRun, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if options.Scope == "" {
+		options.Scope = "all"
+	}
+	if options.TimeoutSeconds == 0 {
+		options.TimeoutSeconds = 12
+	}
+	if options.TimeoutSeconds < 1 || options.TimeoutSeconds > 30 {
+		return nil, errors.New("provider-probe timeout_seconds must be between 1 and 30")
+	}
+	allowed := make(map[string]bool, len(model.ProviderProbeCapabilities()))
+	for _, capability := range model.ProviderProbeCapabilities() {
+		allowed[capability] = true
+	}
+	selected := make(map[string]bool)
+	if options.Scope == "core" {
+		for _, capability := range model.ProviderProbeCoreCapabilities() {
+			selected[capability] = true
+		}
+	} else if options.Scope != "all" {
+		return nil, errors.New("provider-probe scope must be all or core")
+	}
+	if len(options.Capabilities) > 0 {
+		for _, capability := range options.Capabilities {
+			if !allowed[capability] {
+				return nil, fmt.Errorf("provider-probe capability %q is not supported", capability)
+			}
+			if options.Scope == "core" && !selected[capability] {
+				return nil, fmt.Errorf("provider-probe capability %q is outside core scope", capability)
+			}
+			selected[capability] = true
+		}
+	}
+	if options.Scope == "all" && len(options.Capabilities) == 0 {
+		for capability := range allowed {
+			selected[capability] = true
+		}
+	}
+	if len(selected) == 0 {
+		return nil, errors.New("provider-probe capabilities must not be empty")
+	}
 	startedAt := time.Now().UTC()
-	run := &model.ProviderProbeRun{RunID: newFetchID(), StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
+	requested := make([]string, 0, len(selected))
+	for capability := range selected {
+		requested = append(requested, capability)
+	}
+	sort.Strings(requested)
+	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
 	jobs := make([]providerProbeJob, 0)
 	add := func(name, capability string, fn providerProbeFunc) {
 		jobs = append(jobs, providerProbeJob{provider: name, capability: capability, run: fn})
@@ -415,7 +472,18 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		})
 	}
 	// 固定核心能力清单：未注册 Provider 的能力也必须显式出现在诊断报告中。
-	requiredCapabilities := []string{"quote", "daily_bars", "stock_basic", "stock_search", "stock_universe", "index_quotes", "index_catalog", "market_breadth", "sector_rankings", "market_capital_flow", "limit_pool", "dragon_tiger", "announcements", "trading_calendar", "security_trading_status", "price_limit_event", "stock_boards", "fundamentals", "valuations", "hot_ranking", "capital_flow", "chip_distribution"}
+	requiredCapabilities := make([]string, 0, len(selected))
+	for capability := range selected {
+		requiredCapabilities = append(requiredCapabilities, capability)
+	}
+	sort.Strings(requiredCapabilities)
+	filteredJobs := make([]providerProbeJob, 0, len(jobs))
+	for _, job := range jobs {
+		if selected[job.capability] {
+			filteredJobs = append(filteredJobs, job)
+		}
+	}
+	jobs = filteredJobs
 	configured := make(map[string]bool, len(requiredCapabilities))
 	for _, job := range jobs {
 		configured[job.capability] = true
@@ -457,7 +525,7 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 				return
 			}
 			// 等待并发槽位的时间不计入单项 Provider 超时，避免排队任务被误报为超时。
-			probeCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+			probeCtx, cancel := context.WithTimeout(ctx, time.Duration(options.TimeoutSeconds)*time.Second)
 			quality, version, reasons, err := job.run(probeCtx)
 			cancel()
 			<-sem
