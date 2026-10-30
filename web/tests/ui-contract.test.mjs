@@ -1984,7 +1984,7 @@ test("行情服务接口文档、Handler 与 WebUI 调用边界明确区分", ()
   assert.match(apiClient, /getDataSourceDiagnostics/);
   assert.doesNotMatch(apiClient, /data-sources\/probe/, "WebUI 不应为同花顺诊断调用主动探测接口");
   assert.match(marketOpenAPI, /\/api\/v1\/market\/capital-flow:/, "OpenAPI 当前声明了市场级资金流接口");
-  assert.doesNotMatch(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/market\/capital-flow"/, "市场级资金流尚无 Handler 注册");
+  assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/market\/capital-flow"/, "市场级资金流 Handler 已在合并后的数据分支注册");
   assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/stocks\/\{symbol\}\/capital-flow"/, "个股资金流 Handler 已注册");
   assert.match(apiClient, /export function getCapitalFlow/);
   assert.doesNotMatch(apiClient, /export function getMarketCapitalFlow/, "WebUI 不应把未注册的市场级资金流接口当作可用能力");
