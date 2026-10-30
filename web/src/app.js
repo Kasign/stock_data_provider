@@ -809,6 +809,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
   const sortMode = $("#watchlist-sort")?.value || preferences.watchlistSort;
   const groupState = readWatchlistGroups(safeWatchlistGroupStorage());
   const selectedGroup = $("#watchlist-group-filter")?.value || "all";
+  const normalizeLocalSymbol = normalizeWatchlistQuoteSymbol;
   const visibleItems = items.filter((record) => {
     const matchesKeyword = !keyword || String(record.symbol || "").toLocaleLowerCase().includes(keyword)
       || String(record.name || "").toLocaleLowerCase().includes(keyword);
@@ -837,7 +838,6 @@ function renderWatchlist(records, storageReadable, storageValid) {
   }
 
   const recentTasks = safeReadRecentTasks();
-  const normalizeLocalSymbol = normalizeWatchlistQuoteSymbol;
   sortedItems.forEach((record) => {
     const row = document.createElement("article");
     row.className = "watchlist-item";
