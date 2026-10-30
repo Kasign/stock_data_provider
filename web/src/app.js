@@ -4159,11 +4159,11 @@ function setupSettingsNavigation() {
   collapseAll.textContent = "全部收起";
   actions.append(expandAll, collapseAll);
 
-  const result = document.createElement("p");
-  result.className = "settings-nav-result";
-  result.id = "settings-nav-result";
-  result.setAttribute("aria-live", "polite");
-  tools.append(searchLabel, actions, result);
+  const resultStatus = document.createElement("p");
+  resultStatus.className = "settings-nav-result";
+  resultStatus.id = "settings-nav-result";
+  resultStatus.setAttribute("aria-live", "polite");
+  tools.append(searchLabel, actions, resultStatus);
   nav.prepend(tools);
 
   const links = Array.from(nav.querySelectorAll(".settings-nav-link"));
