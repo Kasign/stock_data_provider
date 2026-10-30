@@ -315,3 +315,11 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 ## 21. 北交所证券代码直指定路径补充
 
 BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过滤；仅指定 `920001.BJ` 时也应输出 `not_supported`，不能误计 failed。测试使用本地 fake，不触发上游请求。
+
+
+## 22. 创业板/科创板真实黄金样例（Run 41042950111）
+
+- 已将 `300750.SZ`（创业板）和 `688981.SH`（科创板）的 Sina/Tencent quote 与日 K 脱敏样例固化至 `live_market_cross_market_golden_20261030.json`。
+- Sina/Tencent 两侧日 K 均返回 8 条记录，artifact 中保留 3 条样本行；两边质量状态均 degraded，成交额缺失、金额单位 unknown，不能作为 matched 基准。
+- 新增回归测试逐市场调用统一比较器，必须返回 not_comparable；不把 quote returned 或 daily bars returned 等同于 quality valid。
+- Run 41042950111 真实探测失败项：Eastmoney stock_search、quote、delayed quote HTTP 502；NetEase quote DNS 失败、daily CSV HTTP 502 并按策略 skipped。不是凭据缺失。

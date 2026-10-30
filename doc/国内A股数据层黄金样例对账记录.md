@@ -129,3 +129,11 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 ## 11. 真实夹具单位声明补充（2026-10-30）
 
 600036.SH 日 K 两侧的标准成交量单位明确记录为 `shares`。测试转换从来源级 `volume_unit` 读取，不根据 Provider 名称或数值大小推断单位。成交额仍为 null/unknown，质量仍为 degraded。
+
+
+## 12. 创业板/科创板真实样例归档（Run 41042950111）
+
+- 真实样本：创业板 `300750.SZ`、科创板 `688981.SH`；Sina/Tencent quote 与日 K 已归档。
+- Sina quote quality=valid；Tencent quote quality=degraded。两市场日 K 的 Sina/Tencent 均为 degraded，成交额 null、amount_unit=unknown；Sina 另有 symbol echo contract warning。
+- 该批次只证明板块样本能取回数据，不证明日 K 跨 Provider 一致。统一比较器的预期为 not_comparable。
+- 真实采集来源 SHA `720f2fc685376e29452ce3742ba398ff79089a03`，workflow Run `41042950111`。原始脱敏报告已保留为 Actions artifact。

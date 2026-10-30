@@ -61,6 +61,44 @@ type liveGoldenFixture struct {
 	} `json:"daily_bars_comparison"`
 }
 
+type liveCrossMarketQuote struct {
+	Source         string   `json:"source"`
+	SourceVersion  string   `json:"source_version"`
+	Symbol         string   `json:"symbol"`
+	QuoteTime      string   `json:"quote_time"`
+	VolumeUnit     string   `json:"volume_unit"`
+	AmountUnit     string   `json:"amount_unit"`
+	QualityStatus  string   `json:"quality_status"`
+	QualityReasons []string `json:"quality_reasons"`
+}
+
+type liveCrossMarketDailySource struct {
+	Source          string          `json:"source"`
+	SourceVersion   string          `json:"source_version"`
+	AdjustmentBasis string          `json:"adjustment_basis"`
+	QualityStatus   string          `json:"quality_status"`
+	VolumeUnit      string          `json:"volume_unit"`
+	AmountUnit      string          `json:"amount_unit"`
+	QualityReasons  []string        `json:"quality_reasons"`
+	Bars            []liveGoldenBar `json:"bars"`
+}
+
+type liveCrossMarketSample struct {
+	Market    string                       `json:"market"`
+	Symbol    string                       `json:"symbol"`
+	Quotes    []liveCrossMarketQuote       `json:"quotes"`
+	DailyBars []liveCrossMarketDailySource `json:"daily_bars"`
+}
+
+type liveCrossMarketFixture struct {
+	SchemaVersion int                     `json:"schema_version"`
+	WorkflowRunID int64                   `json:"workflow_run_id"`
+	SourceCommit  string                  `json:"source_commit"`
+	CapturedAt    string                  `json:"captured_at"`
+	Runner        string                  `json:"runner"`
+	Markets       []liveCrossMarketSample `json:"markets"`
+}
+
 func loadLiveGoldenFixture(t *testing.T) liveGoldenFixture {
 	t.Helper()
 	path := filepath.Join("testdata", "live_market_golden_20261030.json")
@@ -186,4 +224,68 @@ func TestLiveGoldenCrossProviderQuoteAndDailyBarsParity(t *testing.T) {
 		t.Fatalf("degraded live golden fixture must be rejected as a trusted comparison baseline: %+v", comparison)
 	}
 
+}
+
+
+func TestLiveCrossMarketGoldenDailyBarsRemainNotComparableWhenDegraded(t *testing.T) {
+	path := filepath.Join("testdata", "live_market_cross_market_golden_20261030.json")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read cross-market golden fixture: %v", err)
+	}
+	var fixture liveCrossMarketFixture
+	if err := json.Unmarshal(content, &fixture); err != nil {
+		t.Fatalf("decode cross-market golden fixture: %v", err)
+	}
+	if fixture.SchemaVersion != 1 || fixture.WorkflowRunID != 41042950111 ||
+		fixture.SourceCommit != "720f2fc685376e29452ce3742ba398ff79089a03" ||
+		fixture.CapturedAt == "" || len(fixture.Markets) != 2 {
+		t.Fatalf("cross-market fixture provenance is incomplete: %+v", fixture)
+	}
+	for _, market := range fixture.Markets {
+		t.Run(market.Market, func(t *testing.T) {
+			if market.Symbol == "" || len(market.Quotes) != 2 || len(market.DailyBars) != 2 {
+				t.Fatalf("market fixture is incomplete: %+v", market)
+			}
+			for _, quote := range market.Quotes {
+				if quote.Symbol != market.Symbol || quote.Source == "" || quote.SourceVersion == "" ||
+					quote.QuoteTime == "" || quote.VolumeUnit != "shares" || quote.AmountUnit != "CNY" {
+					t.Fatalf("quote sample identity or units are invalid: %+v", quote)
+				}
+			}
+			left, right := market.DailyBars[0], market.DailyBars[1]
+			if left.Source == right.Source || left.SourceVersion == "" || right.SourceVersion == "" ||
+				left.AdjustmentBasis != "none" || right.AdjustmentBasis != "none" ||
+				left.QualityStatus != "degraded" || right.QualityStatus != "degraded" ||
+				left.VolumeUnit != "shares" || right.VolumeUnit != "shares" ||
+				left.AmountUnit != "unknown" || right.AmountUnit != "unknown" {
+				t.Fatalf("daily-bar sample must preserve source, adjustment and degraded unit evidence: left=%+v right=%+v", left, right)
+			}
+			leftSnapshot := CrossProviderDailySnapshot{
+				Provider: left.Source, SourceVersion: left.SourceVersion, Symbol: market.Symbol,
+				AdjustmentBasis: left.AdjustmentBasis, QualityStatus: left.QualityStatus,
+				Bars: crossMarketGoldenBars(left.Bars, left.VolumeUnit, left.AmountUnit),
+			}
+			rightSnapshot := CrossProviderDailySnapshot{
+				Provider: right.Source, SourceVersion: right.SourceVersion, Symbol: market.Symbol,
+				AdjustmentBasis: right.AdjustmentBasis, QualityStatus: right.QualityStatus,
+				Bars: crossMarketGoldenBars(right.Bars, right.VolumeUnit, right.AmountUnit),
+			}
+			got := CompareCrossProviderDailyBars(leftSnapshot, rightSnapshot)
+			if got.Status != CrossProviderDailyNotComparable || got.Reason != "quality_status_must_be_valid" {
+				t.Fatalf("degraded cross-market golden bars must not pass comparison: %+v", got)
+			}
+		})
+	}
+}
+
+func crossMarketGoldenBars(bars []liveGoldenBar, volumeUnit, amountUnit string) []CrossProviderDailyBar {
+	out := make([]CrossProviderDailyBar, 0, len(bars))
+	for _, bar := range bars {
+		out = append(out, CrossProviderDailyBar{
+			TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low,
+			Close: bar.Close, Volume: bar.Volume, VolumeUnit: volumeUnit, AmountUnit: amountUnit,
+		})
+	}
+	return out
 }

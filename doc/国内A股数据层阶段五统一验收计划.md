@@ -510,7 +510,7 @@
 |---|---|---|---|
 | P0-1 | 跨 Provider 日 K 比较器接入黄金夹具 | 已完成（真实降级夹具调用路径已接入；真实 matched 证据仍待） | 真实黄金夹具调用统一比较器；降级样例明确得到 not_comparable；独立 valid 合成契约样例验证 matched/partial/mismatch |
 | P0-2 | 比较器输入边界校验 | 已完成（静态契约边界与单测已补齐） | 拒绝非正/NaN/Inf OHLC、OHLC 关系错误、负成交量、负/非有限成交额；日期重复/非法和空集合状态明确 |
-| P0-3 | 跨市场黄金样例 | 待完成 | 创业板 300750.SZ、科创板 688981.SH 有真实有效样例后固化；按 Provider 分别验证代码映射、成交量单位和质量状态 |
+| P0-3 | 跨市场黄金样例 | 部分完成（创业板/科创板真实降级样例已归档；有效 matched 样例待取得） | 创业板 300750.SZ、科创板 688981.SH 有真实有效样例后固化；按 Provider 分别验证代码映射、成交量单位和质量状态 |
 | P0-4 | 北交所支持矩阵 | 部分完成（代码映射矩阵和 not_supported 诊断分类已补齐；真实在线样本待验） | 逐 Provider 记录 BJ 代码映射和能力支持；新浪、腾讯、网易、BaoStock 当前明确不支持时标记 not_supported，不发请求、不计失败；至少一个真实支持源返回有效样本后再固化黄金夹具 |
 | P0-5 | 特殊交易样例 | 待完成 | 停牌、新股上市、除权除息、非交易日各有固定样本与预期行为；不得用工作日推断交易日 |
 | P0-6 | 统一诊断 checks 过滤 | 待完成 | `POST /api/v1/data-sources/probe` 支持 connectivity、contract、quality、freshness、cross_provider、storage；未知/重复/冲突值明确 400，空值保持旧请求行为 |
@@ -639,3 +639,16 @@
 ### 北交所证券代码直指定路径补齐（2026-10-30）
 
 BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols=["920001.BJ"]` 两种请求形式。比较器 NaN/Inf/负金额边界测试按 gofmt 规范排版。对应新提交以最新 HEAD 为准。
+
+
+### 创业板/科创板真实样例采集（2026-10-30，Run 41042950111）
+
+从 Live provider probe artifact 固化了创业板 `300750.SZ` 和科创板 `688981.SH` 的真实报价与日 K 样例，新增 `testdata/live_market_cross_market_golden_20261030.json`：
+
+- Sina/Tencent 在两个板块的 quote 和 daily_bars 均返回；Sina quote 为 valid，Tencent quote 为 degraded（成交量单位推断/volume_ratio 不支持）。
+- Sina/Tencent 日 K 均为 degraded：成交额缺失且 amount_unit=unknown；Sina 另有 Provider 日 K 响应未回显证券代码的契约告警。
+- 两侧日 K 成交量单位均为 shares，复权口径均为 none；样例覆盖 2026-10-27 至 2026-10-29 三个交易日。
+- 新测试把这些真实样例送入统一比较器，要求结果为 `not_comparable / quality_status_must_be_valid`。这证明拒绝降级数据的链路，不代表日 K 已对账成功。
+- 采集来源：commit `720f2fc685376e29452ce3742ba398ff79089a03`，GitHub Actions Live provider probe Run `41042950111`。原始脱敏报告作为 workflow artifact 保存。
+
+本轮同一 Run 的其他真实 Provider 结论：Eastmoney stock_search/quote/delayed quote 返回 HTTP 502；NetEase quote DNS 失败、历史 CSV HTTP 502 后按现有策略 skipped。此类公共源故障不归因于缺少 Key/Token。
