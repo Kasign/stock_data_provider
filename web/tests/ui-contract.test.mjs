@@ -33,6 +33,12 @@ function finalCssRuleBody(selector) {
   return stylesheet.slice(open + 1, close);
 }
 
+function baseCssDeclarationBlock(selector) {
+  const rules = [...stylesheet.matchAll(/([^{}]+)\\{([^{}]*)\\}/g)];
+  const rule = rules.find((match) => match[1].split(",").some((part) => part.trim() === selector));
+  return rule?.[2] || "";
+}
+
 test("static DOM IDs referenced by the WebUI exist and are unique", () => {
   const htmlIds = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(htmlIds.length, new Set(htmlIds).size, "HTML must not contain duplicate id attributes");
@@ -1176,7 +1182,7 @@ test("深浅主题的辅助文字在常用背景上达到 WCAG AA 对比度", ()
     return (values[0] + 0.05) / (values[1] + 0.05);
   };
   assert.match(stylesheet, /--text-dim:\s*#[0-9a-f]{3,6}/i);
-  assert.match(stylesheet, /--surface:\s*#[0-9a-f]{3,6}/i);
+  assert.match(stylesheet, /--panel:\s*#[0-9a-f]{3,6}/i);
   assert.match(html, /id="storage-boundary-title"/);
   assert.ok(contrast("#666666", "#ffffff") >= 5, "baseline secondary text contrast helper should use WCAG AA threshold");
 });
