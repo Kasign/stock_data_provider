@@ -85,6 +85,20 @@ func assertGoldenNear(t *testing.T, field string, left, right, tolerance float64
 	}
 }
 
+func liveGoldenDailySnapshot(source liveGoldenDailySource, symbol, adjustment string) CrossProviderDailySnapshot {
+	bars := make([]CrossProviderDailyBar, 0, len(source.Bars))
+	for _, bar := range source.Bars {
+		bars = append(bars, CrossProviderDailyBar{
+			TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
+			Volume: bar.Volume, VolumeUnit: "shares", Amount: source.Amount, AmountUnit: source.AmountUnit,
+		})
+	}
+	return CrossProviderDailySnapshot{
+		Provider: source.Source, SourceVersion: source.SourceVersion, Symbol: symbol,
+		AdjustmentBasis: adjustment, QualityStatus: source.QualityStatus, Bars: bars,
+	}
+}
+
 func TestLiveGoldenCrossProviderQuoteAndDailyBarsParity(t *testing.T) {
 	fixture := loadLiveGoldenFixture(t)
 
@@ -160,4 +174,12 @@ func TestLiveGoldenCrossProviderQuoteAndDailyBarsParity(t *testing.T) {
 			t.Fatalf("daily %s volume difference=%v shares exceeds captured rounding tolerance", a.TradeDate, delta)
 		}
 	}
+	comparison := CompareCrossProviderDailyBars(
+		liveGoldenDailySnapshot(left, fixture.Daily.Symbol, fixture.Daily.Adjustment),
+		liveGoldenDailySnapshot(right, fixture.Daily.Symbol, fixture.Daily.Adjustment),
+	)
+	if comparison.Status != CrossProviderDailyNotComparable || comparison.Reason != "quality_status_must_be_valid" {
+		t.Fatalf("degraded live golden fixture must be rejected as a trusted comparison baseline: %+v", comparison)
+	}
+
 }

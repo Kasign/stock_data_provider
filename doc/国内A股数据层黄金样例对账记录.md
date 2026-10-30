@@ -116,3 +116,11 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 结果分为 `matched`、`partial`、`mismatch`、`not_comparable`。其中 `partial` 不能当作完全通过，`not_comparable` 不能当作失败行情，也不能计入通过率。当前 600036.SH 新浪/腾讯日 K 黄金夹具两侧均为 degraded，成交额缺失，因此只证明质量降级被保留，不构成比较器 matched 样例。
 
 新增固定测试覆盖身份/复权前置条件、降级质量拒绝、核心字段一致、成交额缺失、日期集合不一致及 OHLC 超差。真实 Provider 多源复验仍待单独执行；本轮不需要 Key/Token，也没有发起上游请求。
+
+
+## 10. 比较器接入状态与样例边界（2026-10-30）
+
+- 固定真实夹具 `600036.SH` 已纳入统一比较器调用路径；两侧质量状态均为 degraded，因此预期结果是 `not_comparable`，原因 `quality_status_must_be_valid`。
+- 本夹具仍保留真实源数据、成交量差异和成交额 null/unknown；不得修改为 valid 或补算成交额。
+- 合成 valid fixture 的 matched/partial/mismatch 仅用于比较器逻辑测试，不属于真实 Provider 数据证据。
+- 后续新增创业板、科创板、北交所及停牌、新股、除权除息、非交易日样例时，必须记录原始来源、采集时间、源提交和 workflow Run ID；无真实有效样本时只记录待办，不生成伪造黄金值。

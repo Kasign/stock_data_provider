@@ -82,3 +82,29 @@ func TestCompareCrossProviderDailyBarsDetectsFieldMismatch(t *testing.T) {
 		t.Fatalf("expected mismatch, got %+v", got)
 	}
 }
+
+
+func TestCompareCrossProviderDailyBarsRejectsInvalidMarketValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*CrossProviderDailyBar)
+		reason string
+	}{
+		{name: "zero close", mutate: func(bar *CrossProviderDailyBar) { bar.Close = 0 }, reason: "invalid_ohlc_value"},
+		{name: "invalid high low relation", mutate: func(bar *CrossProviderDailyBar) { bar.High = 40 }, reason: "invalid_ohlc_relationship"},
+		{name: "negative volume", mutate: func(bar *CrossProviderDailyBar) { bar.Volume = -1 }, reason: "negative_volume"},
+		{name: "negative amount", mutate: func(bar *CrossProviderDailyBar) { bar.Amount = crossProviderAmount(-1); bar.AmountUnit = "CNY" }, reason: "invalid_amount_value"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			leftBar, rightBar := crossProviderBar("2026-10-29"), crossProviderBar("2026-10-29")
+			test.mutate(&rightBar)
+			left := crossProviderSnapshot("sina", "none", "valid", leftBar)
+			right := crossProviderSnapshot("tencent", "none", "valid", rightBar)
+			got := CompareCrossProviderDailyBars(left, right)
+			if got.Status != CrossProviderDailyNotComparable || got.Reason != "right_2026-10-29_"+test.reason {
+				t.Fatalf("unexpected result: %+v", got)
+			}
+		})
+	}
+}

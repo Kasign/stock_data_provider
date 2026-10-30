@@ -108,6 +108,14 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 			result.Reason = "volume_unit_must_be_shares"
 			return result
 		}
+		if reason := validateCrossProviderDailyBar(a); reason != "" {
+			result.Reason = "left_" + date + "_" + reason
+			return result
+		}
+		if reason := validateCrossProviderDailyBar(b); reason != "" {
+			result.Reason = "right_" + date + "_" + reason
+			return result
+		}
 		for _, field := range []struct {
 			name        string
 			left, right float64
@@ -167,6 +175,26 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 		result.Status = CrossProviderDailyMatched
 	}
 	return result
+}
+
+func validateCrossProviderDailyBar(bar CrossProviderDailyBar) string {
+	prices := []float64{bar.Open, bar.High, bar.Low, bar.Close}
+	for _, value := range prices {
+		if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
+			return "invalid_ohlc_value"
+		}
+	}
+	if bar.Low > bar.High || bar.Open < bar.Low || bar.Open > bar.High ||
+		bar.Close < bar.Low || bar.Close > bar.High {
+		return "invalid_ohlc_relationship"
+	}
+	if bar.Volume < 0 {
+		return "negative_volume"
+	}
+	if bar.Amount != nil && (math.IsNaN(*bar.Amount) || math.IsInf(*bar.Amount, 0) || *bar.Amount < 0) {
+		return "invalid_amount_value"
+	}
+	return ""
 }
 
 func indexCrossProviderBars(bars []CrossProviderDailyBar) (map[string]CrossProviderDailyBar, []string, string) {

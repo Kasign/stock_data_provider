@@ -488,3 +488,78 @@
 - 固定测试覆盖复权口径不一致、证券不一致、质量降级、日期集合不同、成交额缺失和字段超差。
 
 当前黄金样例中的新浪/腾讯日 K 两侧均为 degraded（成交额缺失），因此可用于归一化行为回归，但不能作为该比较器的 `matched` 证据。真实 Provider 结果仍需在凭据与网络条件满足后单独验收。
+
+
+---
+
+## 十五、阶段五剩余任务总清单与执行顺序（2026-10-30，接续基线）
+
+本节是后续开发的唯一任务入口。后续每轮先更新本节状态，再推进代码；历史章节保留作为证据，不再重复从头 Review。
+
+### 当前基线
+
+- 目标分支：`feat/full-go-data-providers-api-switch`。
+- 本节整理时远端 HEAD：`b2a08820e41c4afffdf320e172670421b014f68f`。
+- PR #1：Open Draft，未合并；禁止合并或改动 PR 目标分支。
+- 上一提交的 Go test suite、WebUI checks、Go/Python quality parity 均通过；Live provider probe 的探测 Job 失败，不能把 workflow 的 continue-on-error/最终状态当作 Provider 全部可用。
+- 现有新浪/腾讯 600036.SH 日 K 黄金样例两侧均为 degraded，成交额缺失；只可做质量降级回归，不可作为 matched 证据。
+
+### P0：代码闭环（先做，不等待用户 Key）
+
+| 顺序 | 任务 | 当前状态 | 完成标准 |
+|---|---|---|---|
+| P0-1 | 跨 Provider 日 K 比较器接入黄金夹具 | 进行中 | 真实黄金夹具调用统一比较器；降级样例明确得到 not_comparable；独立 valid 合成契约样例验证 matched/partial/mismatch |
+| P0-2 | 比较器输入边界校验 | 待完成 | 拒绝非正/NaN/Inf OHLC、OHLC 关系错误、负成交量、负/非有限成交额；日期重复/非法和空集合状态明确 |
+| P0-3 | 跨市场黄金样例 | 待完成 | 创业板 300750.SZ、科创板 688981.SH 有真实有效样例后固化；按 Provider 分别验证代码映射、成交量单位和质量状态 |
+| P0-4 | 北交所支持矩阵 | 待完成 | 逐 Provider 记录 BJ 代码映射和能力支持；新浪、腾讯、网易、BaoStock 当前明确不支持时标记 not_supported，不发请求、不计失败；至少一个真实支持源返回有效样本后再固化黄金夹具 |
+| P0-5 | 特殊交易样例 | 待完成 | 停牌、新股上市、除权除息、非交易日各有固定样本与预期行为；不得用工作日推断交易日 |
+| P0-6 | 统一诊断 checks 过滤 | 待完成 | `POST /api/v1/data-sources/probe` 支持 connectivity、contract、quality、freshness、cross_provider、storage；未知/重复/冲突值明确 400，空值保持旧请求行为 |
+| P0-7 | 覆盖率分母契约 | 待完成 | 明确 total、returned、validated、missing、excluded、coverage_ratio；分母来源可追溯，分母未知时 ratio=null，禁止用返回数自作分母 |
+| P0-8 | 诊断逐项证据 | 部分完成 | 每项记录脱敏 request_summary、返回/有效记录数、源端时间、质量原因、错误阶段；不适用字段为空，不用 FetchedAt 冒充 ProviderTime |
+| P0-9 | 历史诊断与兼容 | 待完成 | MariaDB 保存/查询新字段；旧历史 JSON 可读；存储未配置/故障明确 storage 状态，不伪装诊断通过 |
+| P0-10 | 统一诊断端到端 | 待完成 | HTTP Handler → Service → Provider → 标准化/质量校验 → MariaDB 持久化/查询的集成测试覆盖成功、降级、失败、跳过和不支持 |
+
+### P0：业务数据质量契约补齐
+
+按现有模型和校验函数增量补齐，不重写 Provider 架构：
+
+1. quote：证券身份、价格范围、涨跌额/涨跌幅关系、OHLC、昨收、成交量/成交额单位。
+2. daily_bars：日期排序/重复、OHLC 关系、复权口径、成交量单位、成交额缺失语义。
+3. stock_basic/security status：代码、交易所、板块、上市/退市状态和生效日期。
+4. fundamentals：报告期、公告时间、修订版本、字段缺失与零值语义。
+5. valuations：PE/PB/市值字段单位、时点和负值/无穷值边界。
+6. capital_flow/chip_distribution：观察日期、金额单位、价格区间、集中度及源端发布时间。
+7. sector/index：成分归属、生效时间、排行统计口径、覆盖率分母。
+8. limit_pool/dragon_tiger/announcements/trading_calendar：交易日期、状态、证券身份、席位金额单位、公告关联、交易所日历完整性。
+
+完成标准：每类能力有有效、缺失、异常、过期和不支持样例；质量状态与 API/OpenAPI/诊断输出一致；不得补零或推断源端时间。
+
+### P1：真实 Provider 验收（凭据/网络具备后执行）
+
+- Eastmoney：公共接口 502/EOF 跨时段复测，分别记录接口，不用其他能力成功抵消失败。
+- BaoStock：登录超时、日 K、交易日历；区分网络超时和账号问题。
+- Sina/Tencent/NetEase：行情与日 K 的原始单位、标准单位、金额字段和质量原因。
+- TickFlow：只有配置 API Key 后验收行情、市场广度、行业排行。
+- Tushare：只有配置 Token 并确认积分后验收日 K、复权因子、财务、估值和指数。
+- 同花顺：只有配置 API Key 并启用手动 workflow 后逐项验收能力权限。
+- 妙想、雪球：分别按 API Key/Cookie 和接口权限验收资金流、筹码、人气榜。
+- 未配置凭据的 Provider 继续 skipped/not_configured；明确不支持的市场/能力为 not_supported；公共源网络故障单独 failed。
+
+真实请求记录必须包含 SHA、Provider/capability、脱敏样本、请求范围、耗时、HTTP/业务状态、返回/有效行数、覆盖率分母、字段单位、源端时间、质量状态和结论。
+
+### P2：集中验收与收尾
+
+1. Go 全模块 test/race/vet、gofmt、Go/Python 质量契约、MariaDB PIT 集成。
+2. Docker Compose、两个 Go 镜像构建和部署脚本。
+3. OpenAPI 与 Handler/Service/历史数据兼容检查。
+4. 真实 Provider 结果归档，明确未配置、权限阻塞、不支持、网络失败和质量降级。
+5. 输出国内 A 股 Provider 能力矩阵及《国内 A 股数据层迁移验收报告》。
+
+### 执行约束
+
+- 先完成 P0 代码闭环，再集中跑全量回归；开发中不反复触发完整 CI。
+- 需要 Key/Token 的真实请求不作为代码任务阻塞条件；用户未配置时跳过并记录。
+- 先用固定夹具和 httptest 补齐契约；真实数据样例只能来自有来源、时间、SHA、Run ID 的脱敏真实响应。
+- 多证券/多 Provider 批量诊断必须使用受控异步任务、限速和并发控制，不扩大同步 HTTP 请求。
+- 每轮更新本节任务状态、运行验收日志和黄金样例记录；完成项写提交 SHA，未完成项保留负责人/依赖/验收条件。
+- PR #1 保持 Open Draft，不执行合并。
