@@ -30,7 +30,7 @@ func TestEastmoneySectorRankingByFiveDayChangeUsesFullBoardUniverse(t *testing.T
 	}))
 	defer server.Close()
 
-	p := NewEastmoneyConfiguredWithMarketData(3*time.Second, server.URL, server.URL, "", server.URL, "", "")
+	p := NewEastmoneyConfiguredWithMarketData(3*time.Second, server.URL, server.URL, "", server.URL, "")
 	got, err := p.FetchSectorRankingsByMetric(context.Background(), "industry", "change_5d", "up", 2)
 	if err != nil {
 		t.Fatal(err)
