@@ -1969,6 +1969,9 @@ test("全市场分页行情只调用分页概览 API 并正确展示覆盖与质
   assert.match(marketStocksModule, /quote\?\.quality_status/);
   assert.match(marketStocksModule, /controller\.signal\.aborted \|\| generation !== state\.generation/);
   assert.match(marketStocksModule, /state\.page \* state\.pageSize < total/);
+  assert.match(app, /失效全市场分页行情失败：[\s\S]*?marketStocks\.invalidate\(\)/);
+  assert.match(marketStocksModule, /qualityPill\.title = qualityReasons\.join/);
+  assert.match(marketStocksModule, /prev\.disabled = busy \|\| state\.page <= 1/);
   assert.match(html, /id="market-stocks-page-size"/);
   assert.match(html, /id="market-stocks-adjustment"/);
   assert.match(html, /id="market-stocks-prev"/);

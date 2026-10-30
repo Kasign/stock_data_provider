@@ -4740,6 +4740,7 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
     runSettingsApplyStep("失效自选股批量行情失败：", () => invalidateWatchlistQuotes(), failures);
     runSettingsApplyStep("失效市场总览请求失败：", () => marketOverview.invalidateConnection(), failures);
     runSettingsApplyStep("失效市场活动请求失败：", () => marketActivity.invalidateConnection(), failures);
+    runSettingsApplyStep("失效全市场分页行情失败：", () => marketStocks.invalidate(), failures);
     runSettingsApplyStep("清理旧行情结果失败：", () => cancelQuoteQuery({
       clearResults: true,
       symbol: $("#symbol-input").value.trim(),

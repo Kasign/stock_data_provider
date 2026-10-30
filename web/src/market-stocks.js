@@ -44,7 +44,7 @@ export function bindMarketStocks(getSettings, onSelectStock) {
       if (node) node.disabled = busy;
     });
     const prev = $("#market-stocks-prev"), next = $("#market-stocks-next");
-    if (prev) prev.disabled = busy || state.page <= 1 || !state.hasResult;
+    if (prev) prev.disabled = busy || state.page <= 1;
     if (next) next.disabled = busy || !state.hasNext;
     const load = $("#load-market-stocks"), reload = $("#reload-market-stocks");
     if (load) load.textContent = busy ? "读取中…" : (state.hasResult ? "重新加载全市场" : "加载全市场");
@@ -76,7 +76,14 @@ export function bindMarketStocks(getSettings, onSelectStock) {
       ].forEach((value, index) => row.append(element("td", index === 1 ? changeClass : "", value)));
       const quality = item?.quality_status || quote?.quality_status || "unknown";
       const qualityCell = element("td");
-      qualityCell.append(element("span", "mini-quality mini-quality-" + String(quality).toLowerCase(), qualityLabel(quality)));
+      const qualityPill = element("span", "mini-quality mini-quality-" + String(quality).toLowerCase(), qualityLabel(quality));
+      const qualityReasons = [
+        ...(Array.isArray(item?.quality_reasons) ? item.quality_reasons : []),
+        ...(Array.isArray(quote?.quality_reasons) ? quote.quality_reasons : [])
+      ].filter(Boolean);
+      qualityPill.title = qualityReasons.join("；") || item?.error_code || "服务端未提供详细质量原因";
+      qualityPill.setAttribute("aria-label", qualityLabel(quality) + "：" + qualityPill.title);
+      qualityCell.append(qualityPill);
       row.append(qualityCell);
       const actionCell = element("td"), action = element("button", "button button-secondary market-stocks-row-action", "查看详情");
       action.type = "button";
