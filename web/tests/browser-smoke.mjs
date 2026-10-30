@@ -86,7 +86,7 @@ try {
     const pageErrors = [];
     const consoleErrors = [];
     const unexpectedNetworkFailures = [];
-    page.on("pageerror", (error) => pageErrors.push(error.message));
+    page.on("pageerror", (error) => pageErrors.push(error.stack || error.message));
     page.on("console", (message) => {
       if (message.type() !== "error") return;
       const detail = message.text();
