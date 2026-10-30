@@ -203,3 +203,24 @@ func TestRecordProviderProbeCoverageAcceptsOnlyValidRatios(t *testing.T) {
 		t.Fatalf("invalid coverage ratio must not overwrite valid evidence, got %+v", evidence.coverageRatio)
 	}
 }
+
+
+func TestRecordProviderProbeEvidenceOnlyClassifiesAshareMarkets(t *testing.T) {
+	for _, test := range []struct {
+		symbol string
+		want   string
+	}{
+		{symbol: "600519.SH", want: "SH"},
+		{symbol: "000001.SZ", want: "SZ"},
+		{symbol: "920001.BJ", want: "BJ"},
+		{symbol: "885001.TI", want: ""},
+		{symbol: "000001.IND", want: ""},
+	} {
+		evidence := &providerProbeEvidence{}
+		ctx := context.WithValue(context.Background(), providerProbeEvidenceContextKey{}, evidence)
+		recordProviderProbeEvidence(ctx, test.symbol, "", 1, 1, nil)
+		if evidence.sampleMarket != test.want {
+			t.Errorf("symbol %q market = %q, want %q", test.symbol, evidence.sampleMarket, test.want)
+		}
+	}
+}
