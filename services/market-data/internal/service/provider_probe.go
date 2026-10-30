@@ -139,7 +139,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if q == nil {
 				return model.QualityUnknown, "", nil, errors.New("empty quote response")
 			}
-			recordProviderProbeEvidence(probeCtx, quoteSymbol, "", 1, 1, q.QuoteTime)
+			recordProviderProbeEvidence(probeCtx, quoteSymbol, "", 1, 0, q.QuoteTime)
 			if q.Symbol != quoteSymbol {
 				return model.QualityInvalid, q.SourceVersion, nil, fmt.Errorf("quote contract invalid: symbol mismatch, got %q, want %q", q.Symbol, quoteSymbol)
 			}
@@ -152,6 +152,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if q.SourceVersion == "" {
 				return model.QualityInvalid, "", nil, errors.New("quote source version missing")
 			}
+			recordProviderProbeEvidence(probeCtx, quoteSymbol, "", 1, 1, q.QuoteTime)
 			return q.QualityStatus, q.SourceVersion, append([]string(nil), q.QualityReasons...), nil
 		})
 	}
