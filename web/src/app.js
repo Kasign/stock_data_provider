@@ -3164,8 +3164,8 @@ function renderSelectedTaskEvent(item) {
 }
 function renderTask(task) {
   state.taskStatus = task.status || state.taskStatus;
-  state.taskFailureCode = typeof task.failure_code === "string" ? task.failure_code.slice(0, 120) : "";
-  state.taskErrorMessage = typeof task.error_message === "string" ? task.error_message.slice(0, 240) : "";
+  state.taskFailureCode = typeof task.failure_code === "string" ? task.failure_code.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) : "";
+  state.taskErrorMessage = typeof task.error_message === "string" ? task.error_message.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 240) : "";
   if (typeof task.created_at === "string" && task.created_at) state.taskCreatedAt = task.created_at;
   if (task.run_id) state.runId = task.run_id;
   if (task.task_type) state.taskType = task.task_type;
