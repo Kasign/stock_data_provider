@@ -112,6 +112,9 @@ func TestMiaoXiangCapitalFlowRequiresCompleteWindow(t *testing.T) {
 	if got.QualityStatus != model.QualityDegraded || got.Observations != 5 {
 		t.Fatalf("unexpected flow quality: %+v", got)
 	}
+	if got.ProviderDate != "2026-10-21" {
+		t.Fatalf("capital-flow provider date must reflect the latest observation: %q", got.ProviderDate)
+	}
 }
 
 func TestMiaoXiangCapitalFlowSumsCompleteRows(t *testing.T) {
@@ -178,5 +181,28 @@ func TestNewMiaoXiangRejectsPlaceholderKeyAndInvalidEndpoint(t *testing.T) {
 	}
 	if _, err := NewMiaoXiang("mx-test-key-12345678", "file:///tmp/mx", time.Second); err == nil {
 		t.Fatal("non-HTTP(S) endpoint must be rejected")
+	}
+}
+
+
+func TestMiaoXiangCapitalFlowRejectsInvalidObservationDates(t *testing.T) {
+	cases := []struct {
+		name string
+		dates string
+		want string
+	}{
+		{name: "missing date", dates: `["2026-10-21",""]`, want: "invalid observation date"},
+		{name: "duplicate date", dates: `["2026-10-21","2026-10-21"]`, want: "duplicate date"},
+		{name: "future date", dates: `["2099-10-21"]`, want: "in the future"},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			response := `{"status":0,"data":{"dataTableDTOList":[{"nameMap":{"0":"主力净流入金额"},"table":{"headName":` + item.dates + `,"0":["1亿","2亿"]}}]}}`
+			p, _, cleanup := newMiaoXiangTestServer(t, response, nil)
+			defer cleanup()
+			if _, err := p.FetchCapitalFlow(context.Background(), "600519"); err == nil || !strings.Contains(err.Error(), item.want) {
+				t.Fatalf("invalid observation dates must be rejected with %q, got %v", item.want, err)
+			}
+		})
 	}
 }
