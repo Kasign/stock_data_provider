@@ -140,3 +140,19 @@ export function clearRecentTasks(storage) {
   }
   return [];
 }
+
+export function filterRecentTasks(items = [], filters = {}) {
+  if (!Array.isArray(items)) return [];
+  const keyword = String(filters.search || "").trim().toLocaleLowerCase();
+  const status = String(filters.status || "all");
+  const taskType = String(filters.taskType || "all");
+  return items.filter((record) => {
+    if (status !== "all" && String(record.status || "").toLowerCase() !== status) return false;
+    if (taskType !== "all" && String(record.task_type || "") !== taskType) return false;
+    if (!keyword) return true;
+    return [
+      record.task_id, record.run_id, ...(record.symbols || []), record.task_type,
+      record.status, record.updated_at, record.created_at, record.analysis_base
+    ].some((value) => String(value || "").toLocaleLowerCase().includes(keyword));
+  });
+}

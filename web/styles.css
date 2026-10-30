@@ -4862,3 +4862,6 @@ button:disabled {
 #screening-condition-feedback[data-state="error"] { color:var(--danger); }
 #screening-condition-feedback[data-state="success"] { color:var(--success); }
 @media (max-width:720px) { .screening-condition-controls { grid-template-columns:1fr 1fr; } .screening-condition-controls .button { grid-column:1/-1; } }
+
+.recent-analysis-tools .recent-analysis-filter { min-width:120px; flex:0 1 150px; margin:0; }
+.recent-analysis-tools .recent-analysis-filter span { font-size:12px; color:var(--muted); }

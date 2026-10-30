@@ -32,7 +32,7 @@ import { bindDataCenter } from "./data-center.js";
 import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
-import { clearRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
+import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { assignWatchlistGroup, createWatchlistGroup, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP } from "./watchlist-groups.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
@@ -332,17 +332,12 @@ function renderRecentTasks(records) {
   }
   setRecentTasksFeedback("");
   const allItems = Array.isArray(records) ? records : historyState.items;
-  const search = $("#recent-analysis-search").value.trim().toLocaleLowerCase();
-  const items = search ? allItems.filter((record) => [
-    record.task_id,
-    record.run_id,
-    ...(record.symbols || []),
-    record.task_type,
-    record.status,
-    taskStatusLabel(record.status),
-    record.updated_at
-  ].some((value) => String(value || "").toLocaleLowerCase().includes(search))) : allItems;
-  setText("#recent-analysis-count", allItems.length + " / 10");
+  const items = filterRecentTasks(allItems, {
+    search: $("#recent-analysis-search").value,
+    status: $("#recent-analysis-status").value,
+    taskType: $("#recent-analysis-type").value
+  });
+  setText("#recent-analysis-count", items.length + " / " + allItems.length + "（最多 10）");
 
   if (!allItems.length || !items.length) {
     const empty = document.createElement("div");
@@ -5646,6 +5641,8 @@ $("#refresh-task").addEventListener("click", () => {
   });
 });
 $("#recent-analysis-search").addEventListener("input", () => renderRecentTasks());
+$("#recent-analysis-status").addEventListener("change", () => renderRecentTasks());
+$("#recent-analysis-type").addEventListener("change", () => renderRecentTasks());
 $("#clear-recent-analysis").addEventListener("click", clearRecentTaskHistory);
 $("#recent-analysis-list").addEventListener("click", (event) => {
   const removeButton = event.target.closest("button[data-remove-task-id]");

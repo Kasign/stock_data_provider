@@ -406,6 +406,8 @@
             <div class="panel-heading"><div><h2>最近分析</h2><p>仅保存在当前浏览器的任务引用，不保存完整报告或替代服务端历史。</p></div><span class="soft-badge" id="recent-analysis-count">0 / 10</span></div>
             <div class="recent-analysis-tools">
               <label class="recent-analysis-search"><span>搜索最近任务</span><input id="recent-analysis-search" type="search" placeholder="股票代码、任务 ID、状态…" autocomplete="off" /></label>
+              <label class="field recent-analysis-filter"><span>状态</span><select id="recent-analysis-status"><option value="all">全部状态</option><option value="queued">排队中</option><option value="running">运行中</option><option value="succeeded">已完成</option><option value="partial">部分完成</option><option value="failed">失败</option></select></label>
+              <label class="field recent-analysis-filter"><span>任务类型</span><select id="recent-analysis-type"><option value="all">全部类型</option><option value="post_market_scan">盘后扫描</option><option value="watchlist_scan">自选股扫描</option></select></label>
               <button class="button button-secondary recent-analysis-clear" id="clear-recent-analysis" type="button">清空本地列表</button>
             </div>
             <p class="recent-analysis-feedback" id="recent-analysis-feedback" role="status" aria-live="polite" hidden></p>
