@@ -45,7 +45,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		token = os.Getenv("TUSHARE_TOKEN")
 	}
 	if token == "" {
-		t.Fatal("MARKET_DATA_LIVE_TUSHARE_TESTS=1 requires MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN")
+		t.Skip("Tushare live probe skipped: MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN is not configured")
 	}
 
 	endpoint := os.Getenv("MARKET_DATA_TUSHARE_API_URL")
@@ -218,7 +218,7 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		apiKey = os.Getenv("HITHINK_FINANCE_API_KEY")
 	}
 	if apiKey == "" {
-		t.Fatal("MARKET_DATA_LIVE_HITHINK_TESTS=1 requires MARKET_DATA_HITHINK_API_KEY or HITHINK_FINANCE_API_KEY")
+		t.Skip("Hithink live probe skipped: MARKET_DATA_HITHINK_API_KEY or HITHINK_FINANCE_API_KEY is not configured")
 	}
 	baseURL := os.Getenv("MARKET_DATA_HITHINK_BASE_URL")
 	client := NewHithinkConfigured(25*time.Second, baseURL, apiKey)
