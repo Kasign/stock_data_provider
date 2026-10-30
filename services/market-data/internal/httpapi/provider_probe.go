@@ -28,7 +28,8 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(raw) > 0 {
-			if raw[0] != '{' {
+			trimmed := bytes.TrimSpace(raw)
+			if len(trimmed) == 0 || trimmed[0] != '{' {
 				writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "request body must be a JSON object", requestID(r))
 				return
 			}
