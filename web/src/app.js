@@ -4685,13 +4685,46 @@ async function importBrowserDataFile(file) {
     setBrowserDataFeedback("导入失败：" + (error?.message || "文件不是有效的工作区 JSON。"), "error");
     return;
   }
-  const confirmed = window.confirm(
-    "将替换当前浏览器的主题、本地偏好、API 路径、自选股与最近任务引用。\n" +
-    "当前 API Key 会保留；不会修改服务器 .env，也不会恢复行情缓存或完整分析报告。继续吗？"
-  );
-  if (!confirmed) {
+  const currentWatchlist = safeReadWatchlistState();
+  const currentRecentTasks = safeReadRecentTasksState();
+  const currentWatchlistItems = currentWatchlist.storageReadable && currentWatchlist.storageValid ? currentWatchlist.items : [];
+  const currentRecentTaskItems = currentRecentTasks.storageReadable && currentRecentTasks.storageValid ? currentRecentTasks.items : [];
+  const watchlistIdentity = (record) => comparableMarketSymbol(record.symbol);
+  const existingSymbols = new Set(currentWatchlistItems.map(watchlistIdentity));
+  const existingTaskIds = new Set(currentRecentTaskItems.map((record) => record.task_id));
+  const watchlistConflicts = imported.watchlist.filter((record) => existingSymbols.has(watchlistIdentity(record))).length;
+  const taskConflicts = imported.recentTasks.filter((record) => existingTaskIds.has(record.task_id)).length;
+  const preview = [
+    "工作区文件预览：",
+    "自选股：" + imported.watchlist.length + " 条（与当前重复 " + watchlistConflicts + " 条）",
+    "最近任务：" + imported.recentTasks.length + " 条（与当前重复 " + taskConflicts + " 条）",
+    "主题、偏好和 API 路径将采用文件中的设置；当前 API Key 保留。",
+    "",
+    "输入 replace：完全替换两组清单",
+    "输入 merge：合并清单，文件中的同代码/同任务 ID 覆盖当前记录",
+    "其他输入：取消导入"
+  ].join("\\n");
+  const strategy = String(window.prompt(preview, "replace") || "").trim().toLowerCase();
+  if (!["replace", "merge"].includes(strategy)) {
     setBrowserDataFeedback("已取消导入，现有本地数据未更改。");
     return;
+  }
+  if (strategy === "merge") {
+    if (!currentWatchlist.storageReadable || !currentWatchlist.storageValid
+      || !currentRecentTasks.storageReadable || !currentRecentTasks.storageValid) {
+      setBrowserDataFeedback("合并失败：当前自选股或最近任务存储不可读取/格式异常。为避免覆盖未知数据，请先检查本地存储。", "error");
+      return;
+    }
+    const mergedWatchlist = new Map(currentWatchlistItems.map((record) => [watchlistIdentity(record), record]));
+    imported.watchlist.forEach((record) => mergedWatchlist.set(watchlistIdentity(record), record));
+    const mergedRecentTasks = new Map(currentRecentTaskItems.map((record) => [record.task_id, record]));
+    imported.recentTasks.forEach((record) => mergedRecentTasks.set(record.task_id, record));
+    if (mergedWatchlist.size > MAX_WATCHLIST_ITEMS || mergedRecentTasks.size > MAX_RECENT_TASKS) {
+      setBrowserDataFeedback("合并失败：合并后自选股 " + mergedWatchlist.size + " 条、最近任务 " + mergedRecentTasks.size + " 条，超过本地上限（" + MAX_WATCHLIST_ITEMS + " / " + MAX_RECENT_TASKS + "）。未写入任何数据。", "error");
+      return;
+    }
+    imported.watchlist = [...mergedWatchlist.values()];
+    imported.recentTasks = [...mergedRecentTasks.values()];
   }
 
   const storageKeys = [SETTINGS_KEY, THEME_STORAGE_KEY, PREFERENCES_KEY, WATCHLIST_KEY, RECENT_TASKS_KEY, TASK_REFERENCE_KEY];
