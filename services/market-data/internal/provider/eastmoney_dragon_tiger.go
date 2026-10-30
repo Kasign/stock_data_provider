@@ -146,6 +146,7 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 		if date != tradeDate {
 			return nil, fmt.Errorf("Eastmoney dragon-tiger row %d trade date %q does not match requested date %q", index, date, tradeDate)
 		}
+		code := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_CODE"))
 		if securityType == "060" {
 			// 东方财富龙虎榜返回中包含可转债（例如代码 113711），不能把它混入 A 股股票分析。
 			// 保留供应商原始总数与分页，并单独统计排除行数。
@@ -153,7 +154,12 @@ func (p *Eastmoney) FetchDragonTiger(ctx context.Context, tradeDate string, page
 			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_non_a_share_security_rows_excluded")
 			continue
 		}
-		code := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_CODE"))
+		if securityType == "058001002" || strings.HasPrefix(code, "900") || strings.HasPrefix(code, "200") {
+			// B 股同样不属于当前 A 股数据契约；仅排除并计数，不让单条 B 股污染整页 A 股数据。
+			snapshot.ExcludedNonAShareCount++
+			snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_b_share_security_rows_excluded")
+			continue
+		}
 		symbol, normalizedCode, symbolErr := eastmoneyDragonTigerSymbol(raw, code)
 		name := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECURITY_NAME_ABBR"))
 		securityCode := strings.TrimSpace(parseEastmoneyBoardString(raw, "SECUCODE"))

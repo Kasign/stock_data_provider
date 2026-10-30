@@ -121,6 +121,52 @@ func TestEastmoneyFetchDragonTigerExcludesConvertibleBondRecords(t *testing.T) {
 	}
 }
 
+func TestEastmoneyFetchDragonTigerExcludesBShareRows(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":2,"data":[
+			{"SECURITY_CODE":"600519","SECUCODE":"600519.SH","SECURITY_NAME_ABBR":"贵州茅台","TRADE_DATE":"2026-10-23 00:00:00","CLOSE_PRICE":"1313.31","CHANGE_RATE":"1.25","BILLBOARD_NET_AMT":"123456.78","BILLBOARD_BUY_AMT":"234567.89","BILLBOARD_SELL_AMT":"111111.11","BILLBOARD_DEAL_AMT":"345678.90","DEAL_AMOUNT_RATIO":"2.4","EXPLAIN":"日涨幅偏离值达到7%","SECURITY_TYPE_CODE":"058001001"},
+			{"SECURITY_CODE":"900920","SECUCODE":"900920.SH","SECURITY_NAME_ABBR":"B股测试样本","TRADE_DATE":"2026-10-23 00:00:00","CLOSE_PRICE":"1.23","CHANGE_RATE":"1.2","BILLBOARD_NET_AMT":"1000","BILLBOARD_BUY_AMT":"2000","BILLBOARD_SELL_AMT":"1000","BILLBOARD_DEAL_AMT":"3000","DEAL_AMOUNT_RATIO":"1.2","EXPLAIN":"B股公开信息","SECURITY_TYPE_CODE":"058001002"}
+		]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchDragonTiger(context.Background(), "2026-10-23", 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 2 || got.SourceReturned != 2 || got.Returned != 1 ||
+		got.ExcludedNonAShareCount != 1 || !got.HasData {
+		t.Fatalf("B-share row should be explicitly excluded while preserving A-share rows: %+v", got)
+	}
+	if len(got.Items) != 1 || got.Items[0].Symbol != "600519.SH" {
+		t.Fatalf("only the A-share row should remain: %+v", got.Items)
+	}
+	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_b_share_security_rows_excluded") {
+		t.Fatalf("B-share exclusion should be visible in quality reasons: %+v", got.QualityReasons)
+	}
+}
+
+func TestEastmoneyFetchDragonTigerBShareOnlyPageRemainsUnknown(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"result":{"pages":1,"count":1,"data":[{"SECURITY_CODE":"900920","SECUCODE":"900920.SH","SECURITY_NAME_ABBR":"B股测试样本","TRADE_DATE":"2026-10-23 00:00:00","CLOSE_PRICE":"1.23","CHANGE_RATE":"1.2","BILLBOARD_NET_AMT":"1000","BILLBOARD_BUY_AMT":"2000","BILLBOARD_SELL_AMT":"1000","BILLBOARD_DEAL_AMT":"3000","DEAL_AMOUNT_RATIO":"1.2","EXPLAIN":"B股公开信息","SECURITY_TYPE_CODE":"058001002"}]}}`)
+	}))
+	defer server.Close()
+
+	p := NewEastmoneyConfiguredWithDragonTiger(2*time.Second, "", "", "", "", "", "", "", "", server.URL, "")
+	got, err := p.FetchDragonTiger(context.Background(), "2026-10-23", 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.HasData || got.Total != 1 || got.SourceReturned != 1 ||
+		got.Returned != 0 || got.ExcludedNonAShareCount != 1 || got.QualityStatus != model.QualityUnknown {
+		t.Fatalf("B-share-only page must remain unknown, not a confirmed empty A-share report: %+v", got)
+	}
+	if !strings.Contains(strings.Join(got.QualityReasons, ","), "provider_b_share_security_rows_excluded") {
+		t.Fatalf("B-share-only exclusion reason is missing: %+v", got.QualityReasons)
+	}
+}
+
 func TestEastmoneyFetchDragonTigerBondOnlyPageRemainsUnknown(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"result":{"pages":1,"count":1,"data":[{"SECURITY_CODE":"113711","SECUCODE":"113711.SH","SECURITY_NAME_ABBR":"N常青转","TRADE_DATE":"2026-10-23 00:00:00","BILLBOARD_NET_AMT":"7284700","BILLBOARD_BUY_AMT":"32062300","BILLBOARD_SELL_AMT":"24777600","BILLBOARD_DEAL_AMT":"90319700","DEAL_AMOUNT_RATIO":"62.93","EXPLAIN":"可转债上市首日交易公开信息","SECURITY_TYPE_CODE":"060"}]}}`)
