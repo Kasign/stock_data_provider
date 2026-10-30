@@ -93,6 +93,7 @@ func TestProviderProbeEndpointRejectsInvalidRequests(t *testing.T) {
 		body string
 	}{
 		{name: "malformed JSON", body: `{"scope":`},
+		{name: "non-object JSON", body: `null`},
 		{name: "unknown field", body: `{"scope":"all","unknown":true}`},
 		{name: "invalid scope", body: `{"scope":"everything"}`},
 		{name: "unknown capability", body: `{"capabilities":["unknown_capability"]}`},
