@@ -574,6 +574,41 @@ components:
           type: array
           items: {type: string}
 
+    MarketSentimentSnapshot:
+      type: object
+      required: [market, trade_date, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, source, fetched_at, quality_status]
+      properties:
+        market: {type: string, enum: [cn_a_share]}
+        trade_date: {type: string, format: date}
+        provider_report_date: {type: string, format: date}
+        total_securities: {type: integer, minimum: 0}
+        covered_securities: {type: integer, minimum: 0}
+        advancing_count: {type: integer, minimum: 0}
+        declining_count: {type: integer, minimum: 0}
+        unchanged_count: {type: integer, minimum: 0}
+        unclassified_count: {type: integer, minimum: 0}
+        limit_up_count: {type: integer, nullable: true, description: Null when the matching limit-up pool is unavailable or unverified}
+        limit_down_count: {type: integer, nullable: true, description: Null when the matching limit-down pool is unavailable or unverified}
+        broken_board_count: {type: integer, nullable: true, description: Null when the matching broken-board pool is unavailable or unverified}
+        limit_up_count_is_lower_bound: {type: boolean}
+        limit_down_count_is_lower_bound: {type: boolean}
+        broken_board_count_is_lower_bound: {type: boolean}
+        pool_sources: {type: object, additionalProperties: {type: string}}
+        pool_source_versions: {type: object, additionalProperties: {type: string}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    MarketSentimentHistory:
+      type: object
+      required: [market, start_date, end_date, items, total]
+      properties:
+        market: {type: string}
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        items: {type: array, items: {$ref: '#/components/schemas/MarketSentimentSnapshot'}}
+        total: {type: integer}
     MarketBreadthSnapshot:
       type: object
       required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, amount_coverage_count, quote_timestamp_coverage_count, source, fetched_at, quality_status]
@@ -1394,6 +1429,40 @@ paths:
         '401': {description: API key required}
         '502': {description: Calendar provider failed or returned incomplete data}
         '503': {description: No trading-calendar provider enabled}
+  /api/v1/market/sentiment:
+    get:
+      summary: Get and persist the current A-share market sentiment snapshot
+      description: >-
+        Combines the market breadth snapshot with same-date limit-up, limit-down and broken-board pool counts.
+        Missing or unverifiable pool counts remain null, never zero. A snapshot is persisted only when MariaDB storage
+        is configured. Live collection is limited to the current China market date; historical dates are read-only.
+      parameters:
+        - {name: date, in: query, required: false, schema: {type: string, format: date}, description: Defaults to the current Asia/Shanghai date; only the current date can be collected}
+      responses:
+        '200':
+          description: Market sentiment snapshot with source and quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketSentimentSnapshot'}
+        '400': {description: Invalid or historical collection date}
+        '401': {description: API key required}
+        '502': {description: Market breadth provider failed}
+  /api/v1/market/sentiment/history:
+    get:
+      summary: Get persisted daily A-share market sentiment snapshots
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500, default: 366}}
+      responses:
+        '200':
+          description: Persisted snapshots; missing trading dates are not synthesized
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketSentimentHistory'}
+        '400': {description: Invalid date range or limit}
+        '401': {description: API key required}
+        '503': {description: MariaDB history storage is unavailable}
   /api/v1/market/breadth:
     get:
       summary: Get Eastmoney A-share market-breadth distribution

@@ -52,6 +52,18 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return nil
 	}
 	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS market_data_sentiment_snapshots (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ market VARCHAR(32) NOT NULL,
+ trade_date DATE NOT NULL,
+ fetched_at DATETIME(6) NOT NULL,
+ source VARCHAR(128) NOT NULL,
+ quality_status VARCHAR(16) NOT NULL,
+ metadata JSON NOT NULL,
+ PRIMARY KEY (id),
+ KEY idx_market_sentiment_day (market, trade_date, id),
+ KEY idx_market_sentiment_fetched (fetched_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 		`CREATE TABLE IF NOT EXISTS market_data_quotes (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
  symbol VARCHAR(16) NOT NULL,
