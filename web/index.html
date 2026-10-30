@@ -19,27 +19,20 @@
           <span class="brand-mark" aria-hidden="true">K</span>
           <span class="brand-copy"><strong>行情研究台</strong><small>A 股市场数据与研究</small></span>
         </a>
-        <div class="side-label">市场观察</div>
         <nav class="side-nav" aria-label="主导航">
           <button class="nav-link" type="button" data-view="market" aria-label="市场总览" title="市场总览"><span class="nav-icon" aria-hidden="true">⌂</span><span>市场总览</span></button>
           <button class="nav-link" type="button" data-view="stocks" aria-label="个股行情" title="个股行情"><span class="nav-icon" aria-hidden="true">↗</span><span>个股行情</span></button>
           <button class="nav-link" type="button" data-view="watchlist" aria-label="自选与观察" title="自选与观察"><span class="nav-icon" aria-hidden="true">☆</span><span>自选与观察</span></button>
           <button class="nav-link" type="button" data-view="research" aria-label="个股深度研究" title="个股深度研究"><span class="nav-icon" aria-hidden="true">⌑</span><span>个股深度研究</span></button>
-          <div class="side-label side-nav-section-label">研究工作流</div>
           <button class="nav-link" type="button" data-view="tasks" aria-label="分析任务" title="分析任务"><span class="nav-icon" aria-hidden="true">▤</span><span>分析任务</span></button>
           <button class="nav-link" type="button" data-view="screening" aria-label="选股与筛选" title="选股与筛选"><span class="nav-icon" aria-hidden="true">⌕</span><span>选股与筛选</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
           <button class="nav-link" type="button" data-view="alerts" aria-label="告警" title="告警"><span class="nav-icon" aria-hidden="true">⚑</span><span>告警</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
           <button class="nav-link" type="button" data-view="chat" aria-label="问股" title="问股"><span class="nav-icon" aria-hidden="true">✦</span><span>问股</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
-          <div class="side-label side-nav-section-label">运行与设置</div>
-          <button class="nav-link" type="button" data-view="data" aria-label="数据中心" title="数据中心"><span class="nav-icon" aria-hidden="true">▥</span><span>数据中心</span></button>
           <button class="nav-link" type="button" data-view="notifications" aria-label="通知中心" title="通知中心"><span class="nav-icon" aria-hidden="true">♧</span><span>通知中心</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
+          <button class="nav-link" type="button" data-view="data" aria-label="数据中心" title="数据中心"><span class="nav-icon" aria-hidden="true">▥</span><span>数据中心</span></button>
           <button class="nav-link" type="button" data-view="settings" aria-label="设置中心" title="设置中心"><span class="nav-icon" aria-hidden="true">⚙</span><span>设置中心</span></button>
         </nav>
         <div class="sidebar-bottom">
-          <div class="side-label">服务状态</div>
-          <div class="mini-service"><span class="status-dot" id="market-health-dot"></span><span><strong>行情服务</strong><small id="market-health-text">尚未检查</small></span></div>
-          <div class="mini-service"><span class="status-dot" id="analysis-health-dot"></span><span><strong>分析服务</strong><small id="analysis-health-text">尚未检查</small></span></div>
-          <button class="settings-link" id="open-settings-side" type="button">⚙ <span>连接与密钥设置</span></button>
           <p class="sidebar-footnote">研究工具 · 不执行真实交易</p>
         </div>
       </aside>
@@ -54,7 +47,7 @@
             <button class="text-button topbar-notifications" id="topbar-notifications" type="button" aria-label="打开通知中心">通知</button>
             <button class="icon-button" id="refresh-button" type="button" aria-label="刷新数据" title="刷新数据">↻</button>
             <button class="icon-button theme-toggle" id="theme-toggle" type="button" aria-label="切换主题" aria-pressed="false" title="当前深色主题；点击切换至浅色主题"><span id="theme-toggle-icon" aria-hidden="true">☼</span><span class="theme-toggle-label" id="theme-toggle-label">浅色</span></button>
-            <button class="avatar-button" id="open-settings" type="button" aria-label="连接设置" title="连接设置">⚙</button>
+            <button class="avatar-button" id="open-settings" type="button" aria-label="打开设置中心" title="设置中心">⚙</button>
           </div>
         </header>
 
@@ -750,7 +743,7 @@
         </section>
 <section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
           <div class="page-heading">
-            <div><p class="eyebrow">PREFERENCES / 07</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">按配置归属分组。每项都标明是本地偏好、浏览器连接配置，还是需要服务端 API 的系统配置。</p></div>
+            <div><p class="eyebrow">WORKSPACE / SETTINGS</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">按配置归属分组。每项都标明是本地偏好、浏览器连接配置，还是需要服务端 API 的系统配置。</p></div>
             <div class="feature-status"><span class="availability-pill is-unavailable">服务器配置 API 待接入</span></div>
           </div>
           <div class="settings-layout">
@@ -779,7 +772,7 @@
               </section>
 
               <section class="settings-section" id="settings-connection-section" aria-labelledby="settings-connection-title">
-                <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务状态</h2><p>健康检查确认 API 端点是否可响应，不代表每个 Provider 都实时可用。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
+                <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务</h2><p>健康检查确认 API 端点是否可响应，不代表每个 Provider 都实时可用。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
                 <div class="panel settings-connection-card">
                   <div><strong>行情与分析 API</strong><p>同源路径与行情服务 API Key 由当前浏览器保存。API Key 是内部服务访问凭据，不是用户登录认证，也不会写入服务器 .env。</p>
                     <p id="settings-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未执行连接检查。</p>
