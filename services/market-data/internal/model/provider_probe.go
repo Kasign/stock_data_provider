@@ -30,6 +30,7 @@ type ProviderProbeItem struct {
 	SampleDate     string        `json:"sample_date,omitempty"`
 	RowsReturned   int           `json:"rows_returned,omitempty"`
 	RowsValidated  int           `json:"rows_validated,omitempty"`
+	CoverageRatio  *float64      `json:"coverage_ratio,omitempty"`
 	ProviderTime   *time.Time    `json:"provider_time,omitempty"`
 	CheckedAt      time.Time     `json:"checked_at"`
 }
