@@ -43,26 +43,37 @@ export function normalizePreferences(value = {}) {
   };
 }
 
-export function readPreferences(storage = globalThis.localStorage) {
+function resolveStorage(storage) {
+  if (storage !== undefined) return storage;
   try {
-    const raw = storage?.getItem(PREFERENCES_KEY);
+    return globalThis.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function readPreferences(storage) {
+  const target = resolveStorage(storage);
+  try {
+    const raw = target?.getItem(PREFERENCES_KEY);
     return normalizePreferences(raw ? JSON.parse(raw) : {});
   } catch {
     return { ...DEFAULT_PREFERENCES };
   }
 }
 
-export function savePreferences(value, storage = globalThis.localStorage) {
+export function savePreferences(value, storage) {
   const preferences = normalizePreferences(value);
-  if (!storage) throw new Error("浏览器本地存储不可用。");
+  const target = resolveStorage(storage);
+  if (!target) throw new Error("浏览器本地存储不可用。");
   const serialized = JSON.stringify(preferences);
-  storage.setItem(PREFERENCES_KEY, serialized);
-  if (storage.getItem(PREFERENCES_KEY) !== serialized) {
+  target.setItem(PREFERENCES_KEY, serialized);
+  if (target.getItem(PREFERENCES_KEY) !== serialized) {
     throw new Error("偏好设置未能保存，请检查浏览器存储权限或可用空间。");
   }
   return preferences;
 }
 
-export function resetPreferences(storage = globalThis.localStorage) {
+export function resetPreferences(storage) {
   return savePreferences(DEFAULT_PREFERENCES, storage);
 }

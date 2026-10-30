@@ -345,7 +345,7 @@ function renderRecentTasks(records) {
     return;
   }
 
-  visibleItems.forEach((record) => {
+  items.forEach((record) => {
     const item = document.createElement("article");
     item.className = "recent-analysis-item";
 
