@@ -69,3 +69,15 @@
 本组样例判定为：**Go 双 Provider 样例一致（存在可解释成交量精度差异）；字段缺失与质量状态符合预期。**
 
 Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖仍为待验收，不能据此宣布阶段五完成。
+
+
+## 6. 同花顺真实权限验收的执行入口
+
+当前代码已存在 `TestLiveHithinkCapabilities`，本轮补齐 GitHub Actions 手动执行入口：
+1. 在仓库 Secrets 设置 `HITHINK_FINANCE_API_KEY`。
+2. 手动运行 `Live provider probe` workflow，勾选 `include_hithink`。
+3. 检查报告中的每个 capability 状态、返回行数和质量降级原因。
+4. 日 K 分别验证 none、forward、backward 三种复权方式。
+5. 对 `2001`、`2003`、限流、空结果和字段不完整分别记录，不得因某一接口成功而启用全部能力。
+
+当前仓库没有可读取的账号 Key，因此这次仅补齐可重复的安全验收流程，不代表已完成同花顺真实请求。

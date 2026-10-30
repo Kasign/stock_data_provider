@@ -121,3 +121,15 @@
 - 真实 Provider 探测：诊断任务报告 5 项失败（Eastmoney HTTP 502/备用请求失败），不阻断普通 CI；其他返回项仅代表当次成功。Hithink 可选探测未在本轮启用。
 
 下一批黄金样例按优先级覆盖：北交所、创业板、科创板、停牌/新股、除权日与非交易日；之后需要取得旧 Python manager 的相同证券/日期输出，才能进行 Go/Python 字段差分。
+
+
+## 九、同花顺真实请求验收入口补齐（2026-10-30）
+
+此前 `TestLiveHithinkCapabilities` 已存在，但 Live provider workflow 未设置同花顺环境变量，因此普通 CI 不会执行该测试。现已补齐手动验收入口：
+- GitHub Actions：Live provider probe
+- 手动运行时启用 `include_hithink`
+- 在仓库 Actions Secrets 中配置 `HITHINK_FINANCE_API_KEY`
+- Workflow 将密钥仅注入环境变量，不打印、不写入报告
+- 测试覆盖 quote、daily_bars（none/forward/backward 三种复权）、核心指数行情、人气榜、估值、交易日历、涨停池、龙虎榜、指数目录、指数成分、指数日 K、财务指标与报表
+
+未配置 Secret 或未手动启用时，同花顺探测仍会跳过；这不是通过，也不会影响无凭据的普通 CI。探测通过仅证明当次账号权限和返回契约，不自动打开生产 Provider 开关。
