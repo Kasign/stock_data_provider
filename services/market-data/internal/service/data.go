@@ -3513,7 +3513,9 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 		return nil, nil, err
 	}
 	storageBasis := basis
-	if basis != model.AdjustmentNone { storageBasis = model.AdjustmentNone }
+	if basis != model.AdjustmentNone {
+		storageBasis = model.AdjustmentNone
+	}
 	revisions, err := s.store.ListBarsAsOf(ctx, symbol, start, end, storageBasis, asOf, limit)
 	if err != nil {
 		return nil, nil, err
@@ -3539,9 +3541,13 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	bars, warnings := normalize.ValidateAndSortBars(symbol, coherent, start, end, limit)
 	if basis != model.AdjustmentNone {
 		factors, factorErr := s.AdjustmentFactorsAsOf(ctx, symbol, start, end, asOf)
-		if factorErr != nil { return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr) }
+		if factorErr != nil {
+			return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
+		}
 		bars, factorErr = rebuildAdjustedDailyBars(bars, factors, basis, end)
-		if factorErr != nil { return nil, nil, fmt.Errorf("%w: %v", ErrDailyBarsAsOfNotFound, factorErr) }
+		if factorErr != nil {
+			return nil, nil, fmt.Errorf("%w: %v", ErrDailyBarsAsOfNotFound, factorErr)
+		}
 	}
 	if len(bars) == 0 {
 		return nil, nil, ErrDailyBarsAsOfNotFound
