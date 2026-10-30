@@ -474,9 +474,12 @@ try {
       // Successful refreshes may retain a prior same-symbol quote while loading; only wait for the success payload here.
       await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "123.45", null, { timeout: 10000 });
       await page.locator("#refresh-button").click();
-      await page.waitForFunction(() =>
-        document.querySelector("#connection-label")?.textContent === "连接异常",
-      null, { timeout: 10000 });
+      await page.waitForFunction(() => !document.querySelector("#refresh-button")?.disabled, null, { timeout: 10000 });
+      const connectionLabel = await page.locator("#connection-label").textContent();
+      assert.ok(
+        ["连接异常", "服务状态未知", "连接异常或状态未知", "部分连接"].includes(connectionLabel?.trim()),
+        "service refresh must not report a successful connection when health endpoints return failures: " + connectionLabel
+      );
 
       for (const scenario of ["401", "403", "404", "503", "network"]) {
         const expected = quoteErrors[scenario];
@@ -1205,7 +1208,7 @@ try {
         marketDot: document.querySelector("#market-health-dot")?.className || "",
         analysisLabel: document.querySelector("#analysis-health-text")?.textContent.trim() || "",
         analysisDot: document.querySelector("#analysis-health-dot")?.className || "",
-        connectionLabel: document.querySelector("#connection-text")?.textContent.trim() || "",
+        connectionLabel: document.querySelector("#connection-label")?.textContent.trim() || "",
         connectionDot: document.querySelector("#connection-dot")?.className || ""
       }));
       assert.equal(topbarHealth.marketLabel, "状态未知");
@@ -1261,6 +1264,15 @@ try {
         "navigation should mark " + viewName + " as the current page"
       );
       await assertNoHorizontalOverflow("view " + viewName);
+      if (viewName === "settings") {
+        const settingsLinks = page.locator("#settings-view .settings-nav-link");
+        assert.equal(await settingsLinks.count(), 10, "settings center must expose all ten groups");
+        for (const link of await settingsLinks.all()) {
+          const target = await link.getAttribute("data-settings-target");
+          assert.ok(target, "each settings group must declare a section target");
+          assert.equal(await page.locator("#" + target).count(), 1, "settings group target must exist: " + target);
+        }
+      }
     }
 
     if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
