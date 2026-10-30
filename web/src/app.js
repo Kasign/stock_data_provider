@@ -1996,8 +1996,6 @@ async function refreshServices() {
     const message = "服务健康检查流程异常：" + settingsCheckErrorMessage(error);
     // 即使健康请求或状态渲染意外失败，也将错误转换为结果，避免 void 调用产生未处理 rejection。
     try {
-      setServiceStatus("market", "unknown", "状态未知");
-      setServiceStatus("analysis", "unknown", "状态未知");
     } catch {}
     try {
       const connectionDot = $("#connection-dot");
