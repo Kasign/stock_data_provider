@@ -25,8 +25,7 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
 ]);
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
-const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule].join("
-");
+const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule].join("\n");
 
 function finalCssRuleBody(selector) {
   const start = stylesheet.lastIndexOf(selector);
@@ -106,8 +105,7 @@ test("task/event endpoint parameters and status vocabulary remain grounded in th
 
 test("Go rejected Run status maps to a failed task instead of false success", () => {
   assert.match(domain, /RunStatusRejected\s+RunStatus\s*=\s*"rejected_request"/);
-  const mapper = taskQueue.match(/func taskStatusForRun\(status domain\.RunStatus\) string \{[\s\S]*?
-\}/)?.[0] || "";
+  const mapper = taskQueue.match(/func taskStatusForRun\(status domain\.RunStatus\) string \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(mapper, "Go task queue must have an explicit Run-to-Task status mapper");
   assert.match(mapper, /case domain\.RunStatusFailed,\s*domain\.RunStatusRejected:\s*return "failed"/);
 });
@@ -125,8 +123,7 @@ test("task restoration validates local references and guards stale asynchronous 
 
 test("restoring a recent task clears the previous task status badge while waiting", () => {
   const start = app.indexOf("function activateTaskReference(record) {");
-  const end = app.indexOf("
-function ", start + 1);
+  const end = app.indexOf("\nfunction ", start + 1);
   const restore = start >= 0 && end > start ? app.slice(start, end) : "";
   assert.ok(restore.includes('state.taskStatusLoading = true;'), "恢复任务期间标记状态待确认");
   assert.ok(restore.includes('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");'), "恢复期间不沿用上一条任务的状态徽标");
@@ -135,8 +132,7 @@ function ", start + 1);
 
 test("failed Run refresh distinguishes the last verified same-Run result from a new read", () => {
   const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
-  const end = app.indexOf("
-function stopTaskPolling()", start);
+  const end = app.indexOf("\nfunction stopTaskPolling()", start);
   const loader = start >= 0 && end > start ? app.slice(start, end) : "";
   assert.ok(loader.includes("const retainedPreviousResult = Boolean(state.lastRunResult && state.lastRunResult.run_id === runId);"));
   assert.ok(loader.includes("页面保留的是此前已成功读取的同一 Run 结果，本次读取尚未确认。"));
@@ -147,8 +143,7 @@ function stopTaskPolling()", start);
 test("Run 结果重读采用单次请求锁并只由当前代际解锁按钮", () => {
   assert.match(app, /function setRunResultReloadBusy\(busy\) \{[\s\S]*?button\.disabled = Boolean\(busy\)[\s\S]*?button\.setAttribute\("aria-busy", "true"\)[\s\S]*?button\.textContent = "重新读取结果"/);
   const loaderStart = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
-  const loaderEnd = app.indexOf("
-function stopTaskPolling()", loaderStart);
+  const loaderEnd = app.indexOf("\nfunction stopTaskPolling()", loaderStart);
   const loader = loaderStart >= 0 && loaderEnd > loaderStart ? app.slice(loaderStart, loaderEnd) : "";
   assert.match(loader, /reload-run-result.*disabled[\s\S]*?\["loading", "retrying"\][\s\S]*?return;/);
   assert.match(loader, /setRunResultReloadBusy\(true\)/);
@@ -160,19 +155,16 @@ test("watchlist marks a retained Run result when re-reading fails and refreshes 
   assert.ok(app.includes('runResultReadStatus: ""'));
   assert.ok(app.includes('runResultReadError: ""'));
   const watchlistStart = app.indexOf("function renderWatchlist(");
-  const watchlistEnd = app.indexOf("
-function addCurrentSymbolToWatchlist(", watchlistStart);
+  const watchlistEnd = app.indexOf("\nfunction addCurrentSymbolToWatchlist(", watchlistStart);
   const watchlist = app.slice(watchlistStart, watchlistEnd);
   assert.match(watchlist, /readState === "loading"[\s\S]*?正在重读，尚未确认/);
   assert.match(watchlist, /readState === "retrying"[\s\S]*?重试中，尚未确认/);
   assert.match(watchlist, /readState === "error"[\s\S]*?本次读取失败/);
   const resultStart = app.indexOf("function renderTaskResult(result) {");
-  const resultEnd = app.indexOf("
-function ", resultStart + 10);
+  const resultEnd = app.indexOf("\nfunction ", resultStart + 10);
   assert.match(app.slice(resultStart, resultEnd), /state\.runResultReadStatus = "";[\s\S]*?state\.runResultReadError = ""/);
   const loaderStart = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
-  const loaderEnd = app.indexOf("
-function stopTaskPolling()", loaderStart);
+  const loaderEnd = app.indexOf("\nfunction stopTaskPolling()", loaderStart);
   const loader = app.slice(loaderStart, loaderEnd);
   assert.match(watchlist, /activeRunReadMatches[\s\S]*?当前 Run 结果：正在读取服务端结果/);
   assert.match(watchlist, /当前 Run 结果：暂时不可读，正在自动重试/);
@@ -184,29 +176,25 @@ function stopTaskPolling()", loaderStart);
 
 test("creation, contract confirmation, and history restoration use distinct task status labels", () => {
   const createStart = app.indexOf("async function createTask(event) {");
-  const createEnd = app.indexOf("
-function startAnalysisForSymbol(", createStart);
+  const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
   const creator = app.slice(createStart, createEnd);
   assert.ok(creator.includes('setQualityPill($("#task-status-pill"), "unknown", "正在创建");'));
   assert.ok(creator.includes('setQualityPill($("#task-status-pill"), "unknown", "正在确认");'));
   assert.ok(!creator.includes('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");'));
   const restoreStart = app.indexOf("function activateTaskReference(record) {");
-  const restoreEnd = app.indexOf("
-function restoreLastTask(", restoreStart);
+  const restoreEnd = app.indexOf("\nfunction restoreLastTask(", restoreStart);
   assert.ok(app.slice(restoreStart, restoreEnd).includes('setQualityPill($("#task-status-pill"), "unknown", "正在恢复");'));
 });
 
 test("task restoration and manual refresh mark cached status as unconfirmed", () => {
   assert.ok(app.includes("taskStatusLoading: false"));
   const pollStart = app.indexOf("async function pollTask(");
-  const pollEnd = app.indexOf("
-async function createTask(", pollStart);
+  const pollEnd = app.indexOf("\nasync function createTask(", pollStart);
   const poller = app.slice(pollStart, pollEnd);
   assert.match(poller, /task = candidate;\s*state\.taskStatusLoading = false;\s*state\.taskStatusError = ""/);
   assert.match(poller, /if \(taskError\) \{\s*state\.taskStatusLoading = false;/);
   const watchStart = app.indexOf("function renderWatchlist(");
-  const watchEnd = app.indexOf("
-function addCurrentSymbolToWatchlist(", watchStart);
+  const watchEnd = app.indexOf("\nfunction addCurrentSymbolToWatchlist(", watchStart);
   const watchlist = app.slice(watchStart, watchEnd);
   assert.match(watchlist, /state\.taskStatusLoading \|\| Boolean\(state\.taskStatusError\)/);
   assert.match(watchlist, /正在确认服务端状态（上次状态：/);
@@ -230,8 +218,7 @@ test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
 
 test("刷新当前页面会隔离刷新错误并安全释放工具栏按钮", () => {
   const start = app.indexOf('$("#refresh-button").addEventListener("click", async () => {');
-  const end = app.indexOf('
-});', start);
+  const end = app.indexOf('\n});', start);
   const handler = start >= 0 && end > start ? app.slice(start, end) : "";
   assert.ok(handler, "刷新按钮必须绑定当前页面刷新流程");
   assert.match(handler, /let ownsBusyState = false/);
@@ -242,8 +229,7 @@ test("刷新当前页面会隔离刷新错误并安全释放工具栏按钮", ()
 });
 test("数据源能力刷新初始化或最终解锁异常不会产生未处理 rejection", () => {
   const start = app.indexOf("async function refreshSources() {");
-  const end = app.indexOf("
-function shanghaiDateKey(", start);
+  const end = app.indexOf("\nfunction shanghaiDateKey(", start);
   const refresh = start >= 0 && end > start ? app.slice(start, end) : "";
   assert.match(refresh, /let button = null;[\s\S]*?let list = null;[\s\S]*?try \{/);
   assert.match(refresh, /showMessage\("正在读取当前连接配置对应的数据源能力…"/);
@@ -254,10 +240,8 @@ function shanghaiDateKey(", start);
 });
 
 test("已保存连接检查与草稿检查的初始化/解锁异常不会产生未处理 rejection", () => {
-  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?
-\}/)?.[0] || "";
-  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(saved, /generation !== savedConnectionCheckGeneration/);
   assert.match(saved, /finally[\s\S]*?releaseSettingsCheckButtonSafely/);
   assert.match(draft, /generation !== draftConnectionCheckGeneration/);
@@ -266,8 +250,7 @@ test("已保存连接检查与草稿检查的初始化/解锁异常不会产生�
 });
 test("applySettings 的单项清理失败不会阻断其余配置应用步骤", () => {
   const start = app.indexOf("function applySettings(");
-  const end = app.indexOf("
-function saveSettingsFromForm(", start);
+  const end = app.indexOf("\nfunction saveSettingsFromForm(", start);
   const apply = start >= 0 && end > start ? app.slice(start, end) : "";
   assert.ok(apply);
   assert.match(apply, /runSettingsApplyStep\("清理旧分析任务失败："/);
@@ -278,8 +261,7 @@ function saveSettingsFromForm(", start);
 test("任务切换与分析 API 切换不会被按钮解锁异常中断", () => {
   assert.match(app, /function releaseRunResultReloadBusy\(\) \{[\s\S]*?try \{\s*setRunResultReloadBusy\(false\);\s*\} catch[\s\S]*?继续完成上下文切换/);
 
-  const stop = app.match(/function stopTaskPolling\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const stop = app.match(/function stopTaskPolling\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(stop, "停止轮询共用函数必须存在");
   assert.match(stop, /state\.pollGeneration \+= 1;[\s\S]*?try \{[\s\S]*?setTaskRefreshBusy\(false\);[\s\S]*?catch/);
   assert.match(stop, /const timer = state\.pollTimer;\s*state\.pollTimer = null/);
@@ -301,8 +283,7 @@ test("任务切换与分析 API 切换不会被按钮解锁异常中断", () => 
 
 test("恢复最近任务时界面渲染失败仍会启动安全轮询", () => {
   const start = app.indexOf("function activateTaskReference(record) {");
-  const end = app.indexOf("
-function restoreLastTask(", start);
+  const end = app.indexOf("\nfunction restoreLastTask(", start);
   const activate = start >= 0 && end > start ? app.slice(start, end) : "";
   const taskBinding = activate.indexOf("state.taskId = record.task_id;");
   const uiTry = activate.indexOf("try {", taskBinding);
@@ -316,8 +297,7 @@ function restoreLastTask(", start);
 
 test("任务轮询意外异常会暂停自动刷新并保留手动重试入口", () => {
   const safeStart = app.indexOf("function pollTaskSafely(");
-  const safeEnd = app.indexOf("
-async function createTask(", safeStart);
+  const safeEnd = app.indexOf("\nasync function createTask(", safeStart);
   const safePoll = safeStart >= 0 && safeEnd > safeStart ? app.slice(safeStart, safeEnd) : "";
   assert.match(safePoll, /return pollTask\(generation\)\.catch\(\(error\) => \{/);
   assert.match(safePoll, /generation !== state\.pollGeneration \|\| !state\.taskId\) return/);
@@ -336,8 +316,7 @@ async function createTask(", safeStart);
 
 test("轮询异常收敛中的诊断渲染失败不会再次拒绝 Promise", () => {
   const safeStart = app.indexOf("function pollTaskSafely(");
-  const safeEnd = app.indexOf("
-async function createTask(", safeStart);
+  const safeEnd = app.indexOf("\nasync function createTask(", safeStart);
   const safePoll = safeStart >= 0 && safeEnd > safeStart ? app.slice(safeStart, safeEnd) : "";
   assert.ok(safePoll.includes("return pollTask(generation).catch((error) => {"));
   assert.ok(safePoll.includes("generation !== state.pollGeneration || !state.taskId"));
@@ -345,9 +324,7 @@ async function createTask(", safeStart);
   assert.ok(safePoll.includes('appendRecoveryError("轮询诊断更新失败：", renderError);'));
   assert.ok(safePoll.includes('appendRecoveryError("自选股卡片刷新失败：", renderError);'));
   assert.ok(safePoll.includes("异常收敛中的异常也不得形成新的未处理 Promise rejection"));
-  assert.ok(safePoll.includes("try {
-        stopTaskPolling();
-      } catch {}"));
+  assert.ok(safePoll.includes("try {\n        stopTaskPolling();\n      } catch {}"));
 });
 
 test("手动刷新前置渲染异常仍会发起安全轮询并收尾按钮状态", () => {
@@ -362,8 +339,7 @@ test("手动刷新前置渲染异常仍会发起安全轮询并收尾按钮状�
 
 test("Run 结果读取准备阶段异常也会复位忙碌锁", () => {
   const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
-  const end = app.indexOf("
-function stopTaskPolling()", start);
+  const end = app.indexOf("\nfunction stopTaskPolling()", start);
   const loader = start >= 0 && end > start ? app.slice(start, end) : "";
   const outerTry = loader.indexOf("try {");
   const busy = loader.indexOf("setRunResultReloadBusy(true);");
@@ -384,8 +360,7 @@ function stopTaskPolling()", start);
 
 test("Run 结果的异常诊断与按钮解锁失败不会产生二次拒绝", () => {
   const start = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
-  const end = app.indexOf("
-function stopTaskPolling()", start);
+  const end = app.indexOf("\nfunction stopTaskPolling()", start);
   const loader = start >= 0 && end > start ? app.slice(start, end) : "";
   const tail = loader.slice(loader.lastIndexOf("} finally {"));
   assert.match(tail, /generation === state\.runResultGeneration[\s\S]*?try \{\s*setRunResultReloadBusy\(false\);\s*\} catch \(unlockError\)/);
@@ -397,15 +372,13 @@ test("task polling errors mark last-known status stale and successful refresh cl
   assert.ok(app.includes('taskStatusError: ""'));
   assert.ok(app.includes('taskStatusErrorRetrying: false'));
   const pollStart = app.indexOf("async function pollTask(");
-  const pollEnd = app.indexOf("
-async function createTask(", pollStart);
+  const pollEnd = app.indexOf("\nasync function createTask(", pollStart);
   const poller = pollStart >= 0 && pollEnd > pollStart ? app.slice(pollStart, pollEnd) : "";
   assert.ok(poller.includes("state.taskStatusError = errorMessage(taskError);"), "任务状态读取失败时保存提示");
   assert.ok(poller.includes("state.taskStatusErrorRetrying = isRetryableApiError(taskError) && !taskError.responseContractError;"), "区分自动重试与永久暂停");
   assert.ok(poller.includes('state.taskStatusError = "";'), "下一次有效 Task 回包清除旧错误");
   assert.ok(poller.includes('setQualityPill($("#task-status-pill"), "unknown", state.taskStatusErrorRetrying ? "状态刷新失败" : "状态读取失败")'), "任务状态徽标不得继续冒充为已确认的 running/succeeded");
-  const watchlistRenderer = app.slice(app.indexOf("function renderWatchlist("), app.indexOf("
-function addCurrentSymbolToWatchlist("));
+  const watchlistRenderer = app.slice(app.indexOf("function renderWatchlist("), app.indexOf("\nfunction addCurrentSymbolToWatchlist("));
   assert.ok(watchlistRenderer.includes("状态读取异常（上次状态："), "自选卡片应将上次状态标为未验证");
   assert.ok(watchlistRenderer.includes("自动重试中") && watchlistRenderer.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
   const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
@@ -417,8 +390,7 @@ function addCurrentSymbolToWatchlist("));
 
 test("创建任务的前置 UI 异常也会释放提交锁和按钮", () => {
   const start = app.indexOf("async function createTask(event) {");
-  const end = app.indexOf("
-function startAnalysisForSymbol(", start);
+  const end = app.indexOf("\nfunction startAnalysisForSymbol(", start);
   const creator = start >= 0 && end > start ? app.slice(start, end) : "";
   const declarations = creator.indexOf("let button = null;");
   const protectedTry = creator.indexOf("try {", declarations);
@@ -437,8 +409,7 @@ function startAnalysisForSymbol(", start);
 
 test("new task creation responses cannot poison requested symbols or run/status identity", () => {
   const createStart = app.indexOf("async function createTask(event) {");
-  const createEnd = app.indexOf("
-function startAnalysisForSymbol(", createStart);
+  const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
   const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
   assert.match(creator, /const responseSymbolsMatch = task\?\.symbols === undefined \|\|[\s\S]*?sameTaskSymbolSet\(symbols, task\.symbols\)/);
   assert.match(creator, /const responseRunId = responseSymbolsMatch && responseRunIdValid \? task\.run_id : ""/);
@@ -452,19 +423,16 @@ function startAnalysisForSymbol(", createStart);
 test("late task creation responses cannot replace the task selected while submission is pending", () => {
   assert.ok(app.includes("taskContextGeneration: 0"), "task selection context has its own generation");
   const createStart = app.indexOf("async function createTask(event) {");
-  const createEnd = app.indexOf("
-function startAnalysisForSymbol(", createStart);
+  const createEnd = app.indexOf("\nfunction startAnalysisForSymbol(", createStart);
   const creator = createStart >= 0 && createEnd > createStart ? app.slice(createStart, createEnd) : "";
   assert.match(creator, /state\.taskContextGeneration \+= 1;\s*creationContextGeneration = state\.taskContextGeneration;/);
   assert.match(creator, /if \(creationContextGeneration !== state\.taskContextGeneration\) \{[\s\S]*?persistRecentTaskHistory\(endpointRecord\)[\s\S]*?当前选中的任务不会被覆盖/);
   assert.match(creator, /catch \(error\) \{\s*try \{\s*if \(creationContextGeneration !== state\.taskContextGeneration\)/, "late create errors must not hide the currently selected task");
   const activateStart = app.indexOf("function activateTaskReference(record) {");
-  const activateEnd = app.indexOf("
-function restoreLastTask(", activateStart);
+  const activateEnd = app.indexOf("\nfunction restoreLastTask(", activateStart);
   assert.match(app.slice(activateStart, activateEnd), /state\.taskContextGeneration \+= 1;/);
   const invalidateStart = app.indexOf("function invalidateActiveTaskForAnalysisBaseChange(");
-  const invalidateEnd = app.indexOf("
-function applySettings(", invalidateStart);
+  const invalidateEnd = app.indexOf("\nfunction applySettings(", invalidateStart);
   assert.match(app.slice(invalidateStart, invalidateEnd), /state\.taskContextGeneration \+= 1;/);
 });
 
@@ -550,8 +518,7 @@ test("individual stock research uses one detail workspace without duplicate chip
   assert.match(stockResearch, /接口请求成功，但没有返回可展示的资金流指标/);
 
   assert.ok(app.includes("function renderResearchOverview()"));
-  const researchOverviewRenderer = app.match(/function renderResearchOverview\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const researchOverviewRenderer = app.match(/function renderResearchOverview\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(researchOverviewRenderer, /sameMarketSymbol\(barsSymbol,\s*symbol\)/, "研究摘要 MA 必须复用 A 股证券代码比较规则");
   assert.doesNotMatch(researchOverviewRenderer, /barsSymbol\s*===\s*symbol/, "不得用原始代码字符串判断均线是否属于当前标的");
   assert.ok(app.includes('function openResearchStock(symbol, name = "")'));
@@ -564,8 +531,7 @@ test("individual stock research uses one detail workspace without duplicate chip
 });
 test("restoring a task resets the previous stage-event selection", () => {
   const restoreStart = app.indexOf("function activateTaskReference(record) {");
-  const restoreEnd = app.indexOf("
-function ", restoreStart + 1);
+  const restoreEnd = app.indexOf("\nfunction ", restoreStart + 1);
   const restoreTask = restoreStart >= 0 && restoreEnd > restoreStart ? app.slice(restoreStart, restoreEnd) : "";
   assert.ok(restoreTask.includes("state.taskEvents.clear();"), "恢复任务前清空上一任务事件");
   assert.ok(restoreTask.includes("state.selectedTaskEventSequence = null;"), "恢复任务时清空旧事件选中序号");
@@ -582,10 +548,8 @@ test("watchlist labels task history from a different analysis API address", () =
 });
 
 test("watchlist task and Run summaries refresh when background state changes", () => {
-  const taskRenderer = app.match(/function renderTask\(task\) \{[\s\S]*?
-\}/)?.[0] || "";
-  const runRenderer = app.match(/function renderTaskResult\(result\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const taskRenderer = app.match(/function renderTask\(task\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const runRenderer = app.match(/function renderTaskResult\(result\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(taskRenderer, /if \(state\.view === "watchlist"\) renderWatchlist\(\);/, "Task 状态更新时刷新可见自选卡片");
   assert.match(runRenderer, /if \(state\.view === "watchlist"\) renderWatchlist\(\);/, "Run 结果更新时刷新可见自选卡片");
 });
@@ -612,8 +576,7 @@ test("market overview refresh summaries are isolated by status region and guarde
 
 test("market connection changes invalidate all market overview requests and old summaries", () => {
   const start = marketOverview.indexOf("function invalidateConnection(){");
-  const end = marketOverview.indexOf("
- }", start);
+  const end = marketOverview.indexOf("\n }", start);
   const body = start >= 0 && end > start ? marketOverview.slice(start, end) : "";
   assert.ok(body.includes("KEYS.forEach(key=>{"));
   assert.ok(body.includes("safeOverviewUi(()=>cancel(key));"), "连接变更应通过安全入口中止各市场模块请求并推进 generation");
@@ -623,16 +586,14 @@ test("market connection changes invalidate all market overview requests and old 
   assert.ok(body.includes('"#market-overview-updated","#market-data-updated"'));
   assert.ok(marketOverview.includes("return {refresh,invalidateConnection};"));
   const settingsStart = app.indexOf("function applySettings(nextSettings,");
-  const settingsEnd = app.indexOf("
-function saveSettingsFromForm", settingsStart);
+  const settingsEnd = app.indexOf("\nfunction saveSettingsFromForm", settingsStart);
   const settingsApplication = settingsStart >= 0 && settingsEnd > settingsStart ? app.slice(settingsStart, settingsEnd) : "";
   assert.ok(settingsApplication.includes("marketOverview.invalidateConnection()"), "连接变更通过安全步骤失效首页请求");
 });
 
 test("market connection changes invalidate in-flight dragon-tiger and calendar requests", () => {
   const invalidateStart = marketActivity.indexOf("function invalidateConnection() {");
-  const invalidateEnd = marketActivity.indexOf("
- }", invalidateStart);
+  const invalidateEnd = marketActivity.indexOf("\n }", invalidateStart);
   const invalidateBody = invalidateStart >= 0 && invalidateEnd > invalidateStart
     ? marketActivity.slice(invalidateStart, invalidateEnd)
     : "";
@@ -642,8 +603,7 @@ test("market connection changes invalidate in-flight dragon-tiger and calendar r
   assert.ok(invalidateBody.includes('$("#trading-calendar-grid").replaceChildren'), "应清除旧交易日历结果");
   assert.ok(marketActivity.includes("return {refresh:()=>Promise.all([loadDragon(),loadCalendar()]),invalidateConnection};"));
   const settingsStart = app.indexOf("function applySettings(nextSettings,");
-  const settingsEnd = app.indexOf("
-function saveSettingsFromForm", settingsStart);
+  const settingsEnd = app.indexOf("\nfunction saveSettingsFromForm", settingsStart);
   const settingsApplication = settingsStart >= 0 && settingsEnd > settingsStart
     ? app.slice(settingsStart, settingsEnd)
     : "";
@@ -700,8 +660,7 @@ test("task polling and saved task references are scoped to the analysis API base
   assert.match(app, /endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /const taskAnalysisBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase;[\s\S]*?analysis_base: taskAnalysisBase/);
   assert.match(app, /旧任务不再自动轮询/);
-  const baseInvalidation = app.match(/function invalidateActiveTaskForAnalysisBaseChange\([\s\S]*?
-\}/)?.[0] || "";
+  const baseInvalidation = app.match(/function invalidateActiveTaskForAnalysisBaseChange\([\s\S]*?\n\}/)?.[0] || "";
   assert.match(baseInvalidation, /safelyUpdateTaskContextUi\("重绘自选股卡片失败：", \(\) => renderWatchlist\(\)\)/, "切换分析地址后应在安全清理步骤中重绘自选卡片");
   assert.match(app, /if \(requestedBase !== state\.settings\.analysisBase\)/);
   assert.match(recentTaskModule, /analysis_base: typeof record\.analysis_base === "string"/);
@@ -723,10 +682,8 @@ test("data-center checks are invalidated when a saved API connection changes", (
 });
 
 test("connection-check results are isolated between saved settings and unsaved draft", () => {
-  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?
-\}/)?.[0] || "";
-  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(saved, /const generation = \+\+savedConnectionCheckGeneration/);
   assert.match(saved, /currentSettings\.marketBase !== settingsToCheck\.marketBase/);
   assert.match(draft, /const generation = \+\+draftConnectionCheckGeneration/);
@@ -749,8 +706,7 @@ test("service health and provider-list refreshes ignore superseded responses", (
 });
 
 test("provider capability refresh clears old connection data and owns its loading state", () => {
-  const refreshSources = app.match(/async function refreshSources\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const refreshSources = app.match(/async function refreshSources\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refreshSources, "refreshSources implementation must exist");
   assert.match(refreshSources, /showMessage\("正在读取当前连接配置对应的数据源能力…"\);[\s\S]*?setSourceTextSafely\("#source-count", "—"\);[\s\S]*?state\.sourceCount = 0/);
   assert.match(refreshSources, /button\.disabled = true;[\s\S]*?button\.setAttribute\("aria-busy", "true"\)/);
@@ -844,8 +800,7 @@ test("light/dark theme is accessible, persisted locally, and independent of back
 });
 
 test("mobile navigation drawer restores readable labels and can close via overlay or Escape", () => {
-  const drawer = app.match(/function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const drawer = app.match(/function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(drawer, /aria-expanded/);
   assert.match(drawer, /isOpen \? "关闭导航" : "打开导航"/);
   assert.match(drawer, /if \(wasOpen && !isOpen && restoreFocus\) \$\("#mobile-menu-toggle"\)\.focus\(\)/);
@@ -974,8 +929,7 @@ test("manual trading-calendar date ranges keep month navigation in sync", () => 
 });
 
 test("provider capability definitions expose each backend capability once", () => {
-  const definitionBlock = app.match(/const capabilityDefinitions = \[([\s\S]*?)
-  \];/);
+  const definitionBlock = app.match(/const capabilityDefinitions = \[([\s\S]*?)\n  \];/);
   assert.ok(definitionBlock, "provider capability definitions must remain explicit");
   const keys = [...definitionBlock[1].matchAll(/\["([^"]+)",\s*"[^"]+"\]/g)].map((match) => match[1]);
   assert.equal(new Set(keys).size, keys.length, "one capability must not render multiple labels");
@@ -1135,8 +1089,7 @@ test("stock-name autocomplete uses the real market API and accessible, stale-saf
   assert.match(app, /function chooseStockSearchResult\(/);
   assert.match(app, /error\.status === 404/);
   assert.match(stylesheet, /\.stock-search-option/);
-  assert.doesNotMatch(app, /localStorage[^
-]*stockSearch/i, "stock results must come from the API, not browser-side mock data");
+  assert.doesNotMatch(app, /localStorage[^\n]*stockSearch/i, "stock results must come from the API, not browser-side mock data");
 });
 
 
@@ -1401,8 +1354,7 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
     app,
     /function applySettings\(nextSettings, \{ persistPreviousActiveTask = true \} = \{\}\)/
   );
-  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(
     importBody,
     /localStorage\.removeItem\(TASK_REFERENCE_KEY\);[\s\S]*?applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?applyTheme\(imported\.theme\)/
@@ -1464,15 +1416,13 @@ test("快照来源、估值与补充指标使用可读的 12px 辅助文字", ()
 });
 
 test("数据中心检查初始化与 finally 解锁异常不会破坏 generation 收尾", () => {
-  const refresh = dataCenter.match(/async function refresh\(\) \{[\s\S]*?
-  \}/)?.[0] || "";
+  const refresh = dataCenter.match(/async function refresh\(\) \{[\s\S]*?\n  \}/)?.[0] || "";
   assert.ok(refresh);
   assert.match(refresh, /checking = true;[\s\S]*?try \{\s*settings = typeof getSettings/);
   assert.match(refresh, /按钮 DOM 更新失败不能阻止服务探测[\s\S]*?await Promise\.all/);
   assert.match(refresh, /catch \(error\) \{\s*if \(current !== generation\) return;[\s\S]*?safeError\(error\)/);
   assert.match(refresh, /finally \{[\s\S]*?checking = false;[\s\S]*?button\.disabled = false;[\s\S]*?finally 产生新的 rejection/);
-  const invalidate = dataCenter.match(/function invalidate\(message = [\s\S]*?
-  \}/)?.[0] || "";
+  const invalidate = dataCenter.match(/function invalidate\(message = [\s\S]*?\n  \}/)?.[0] || "";
   assert.match(invalidate, /generation \+= 1;[\s\S]*?safeInvalidateStep/);
   assert.match(invalidate, /safeInvalidateStep\(\(\) => setBadge\("#data-center-summary-status"/);
   assert.match(invalidate, /forEach\(\(selector\) => safeInvalidateStep/);
@@ -1487,8 +1437,7 @@ test("数据中心超时后即使探针迟到返回，也不能覆盖为成功",
 
 test("行情查询初始化与 finally 渲染异常不会遗留查询按钮锁", () => {
   const start = app.indexOf("async function runQuoteQuery(event) {");
-  const end = app.indexOf("
-function ", start + 20);
+  const end = app.indexOf("\nfunction ", start + 20);
   const query = start >= 0 && end > start ? app.slice(start, end) : "";
   const tryStart = query.indexOf("try {", query.indexOf("const generation = ++state.quoteQueryGeneration;"));
   assert.ok(tryStart >= 0, "请求生命周期必须有主 try");
@@ -1503,8 +1452,7 @@ function ", start + 20);
 });
 
 test("市场工作台各模块刷新失败会独立收敛并显示诊断", () => {
-  const refresh = app.match(/function refreshMarketWorkspace\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const refresh = app.match(/function refreshMarketWorkspace\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refresh, "refreshMarketWorkspace implementation must exist");
   assert.match(refresh, /const startModule = \(label, operation\) => \{[\s\S]*?Promise\.resolve\(operation\(\)\)\.then/);
   assert.match(refresh, /\(error\) => \(\{ label, ok: false, error \}\)/);
@@ -1515,8 +1463,7 @@ test("市场工作台各模块刷新失败会独立收敛并显示诊断", () =>
 });
 
 test("服务健康刷新把请求与 DOM 异常收敛为结果", () => {
-  const refresh = app.match(/async function refreshServices\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const refresh = app.match(/async function refreshServices\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refresh, "refreshServices implementation must exist");
   assert.match(refresh, /try \{[\s\S]*?await Promise\.all\(\[[\s\S]*?runHealthCheck\(marketHealth, settings\)/);
   assert.match(refresh, /catch \(renderError\)[\s\S]*?状态显示更新失败[\s\S]*?return \{ marketOK, analysisOK, marketState, analysisState, stale: false, renderError: message \}/);
@@ -1526,8 +1473,7 @@ test("服务健康刷新把请求与 DOM 异常收敛为结果", () => {
 });
 
 test("服务健康刷新不会覆盖行情查询区域的独立提示", () => {
-  const refreshServices = app.match(/async function refreshServices\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const refreshServices = app.match(/async function refreshServices\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refreshServices, "refreshServices implementation must exist");
   assert.doesNotMatch(
     refreshServices,
@@ -1585,9 +1531,7 @@ test("活动任务引用静默写入失败时仍独立保存最近任务历史�
 });
 
 test("估值请求补齐交易所后缀，并只展示与当前标的匹配的记录", () => {
-  const renderer = stockResearch.match(/function renderValuations\(data,symbol\)\{[\s\S]*?
- \}
- function fractionPercent/)?.[0] || "";
+  const renderer = stockResearch.match(/function renderValuations\(data,symbol\)\{[\s\S]*?\n \}\n function fractionPercent/)?.[0] || "";
   assert.ok(renderer, "估值渲染器应存在");
   assert.match(stockResearch, /function normalizeValuationSymbol\(input\)/);
   assert.match(stockResearch, /import \{ comparableMarketSymbol, .* from "\.\/format\.js"/);
@@ -1603,8 +1547,7 @@ test("估值请求补齐交易所后缀，并只展示与当前标的匹配的�
 
  
 test("季度财务指标读取的报告期校验与成功提示异常不会向外拒绝", () => {
-  const loader = stockResearch.match(/async function loadFundamentals\(\)\{[\s\S]*?
- \}/)?.[0] || "";
+  const loader = stockResearch.match(/async function loadFundamentals\(\)\{[\s\S]*?\n \}/)?.[0] || "";
   assert.ok(loader);
   assert.match(loader, /try\{[\s\S]*?syncSymbol\(\)/);
   assert.match(loader, /if\(!Number\.isInteger\(year\)[\s\S]*?safeResearchFeedback\("财务报告期不正确。"\)/);
@@ -1711,8 +1654,7 @@ test("Run 结果必须与当前任务标的集合一致后才允许渲染", () =
 
  
 test("任务状态轮询不允许更换已建立的 task_id/run_id 关联", () => {
-  const poller = app.match(/async function pollTask\([\s\S]*?
-\}/)?.[0] || "";
+  const poller = app.match(/async function pollTask\([\s\S]*?\n\}/)?.[0] || "";
   assert.ok(poller, "task poller must exist");
   assert.match(poller, /candidate\.task_id !== taskId/);
   assert.match(poller, /typeof candidate\.run_id !== "string" \|\| !candidate\.run_id\.trim\(\)/);
@@ -1769,8 +1711,7 @@ test("增量阶段事件不会覆盖已读取的相同或更旧序号", () => {
 test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 Run 报告", () => {
   assert.match(app, /taskEventCursor: 0/);
   const pollStart = app.indexOf("async function pollTask(");
-  const pollEnd = app.indexOf("
-async function createTask(", pollStart);
+  const pollEnd = app.indexOf("\nasync function createTask(", pollStart);
   const poller = pollStart >= 0 && pollEnd > pollStart ? app.slice(pollStart, pollEnd) : "";
   assert.match(poller, /const requestedEventCursor = state\.taskEventCursor/);
   assert.match(poller, /getAnalysisTaskEvents\(requestSettings, taskId, requestedEventCursor\)/);
@@ -1789,25 +1730,19 @@ async function createTask(", pollStart);
 });
 
 test("分析 API 切换期间的 UI 清理异常不会中断配置应用", () => {
-  const helper = app.match(/function safelyUpdateTaskContextUi\(label, update\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const helper = app.match(/function safelyUpdateTaskContextUi\(label, update\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(helper, /try \{\s*update\(\);\s*\} catch \(error\)/);
   assert.match(helper, /部分界面清理失败[\s\S]*?catch/);
 
   const invalidateStart = app.indexOf("function invalidateActiveTaskForAnalysisBaseChange(");
-  const invalidateEnd = app.indexOf("
-function applySettings(", invalidateStart);
+  const invalidateEnd = app.indexOf("\nfunction applySettings(", invalidateStart);
   const invalidate = invalidateStart >= 0 && invalidateEnd > invalidateStart
     ? app.slice(invalidateStart, invalidateEnd) : "";
   assert.match(invalidate, /state\.taskId = "";[\s\S]*?safelyUpdateTaskContextUi\("清理任务详情失败：[\s\S]*?safelyUpdateTaskContextUi\("重绘阶段事件失败：[\s\S]*?safelyUpdateTaskContextUi\("重绘自选股卡片失败：/);
-  assert.doesNotMatch(invalidate, /(^|
-)\s*renderTaskEvents\(\);|(^|
-)\s*renderTaskFlowSummary\(\);|(^|
-)\s*renderRecentTasks\(\);/);
+  assert.doesNotMatch(invalidate, /(^|\n)\s*renderTaskEvents\(\);|(^|\n)\s*renderTaskFlowSummary\(\);|(^|\n)\s*renderRecentTasks\(\);/);
 
   const applyStart = app.indexOf("function applySettings(");
-  const applyEnd = app.indexOf("
-function saveSettingsFromForm(", applyStart);
+  const applyEnd = app.indexOf("\nfunction saveSettingsFromForm(", applyStart);
   const apply = applyStart >= 0 && applyEnd > applyStart ? app.slice(applyStart, applyEnd) : "";
   assert.match(apply, /if \(analysisBaseChanged\) \{[\s\S]*?runSettingsApplyStep\("清理旧分析任务失败：", \(\) =>\s*invalidateActiveTaskForAnalysisBaseChange\(previousSettings\.analysisBase, nextSettings\.analysisBase\), failures\);/);
   assert.match(apply, /if \(marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("失效市场总览请求失败：", \(\) => marketOverview\.invalidateConnection\(\), failures\);[\s\S]*?runSettingsApplyStep\("失效市场活动请求失败：", \(\) => marketActivity\.invalidateConnection\(\), failures\);/);
@@ -1863,8 +1798,7 @@ test("switching task context or analysis API endpoint resets the stage-event fil
 
 test("工作区导入与自选股存储使用同一规则识别带后缀的重复证券", () => {
   assert.match(format, /export function comparableMarketSymbol\(input\)/);
-  const importBody = app.match(/function validateBrowserDataPayload\(payload\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const importBody = app.match(/function validateBrowserDataPayload\(payload\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(importBody, "工作区数据导入必须先完成结构校验");
   assert.match(importBody, /const symbolIdentity = comparableMarketSymbol\(symbol\)/);
   assert.match(importBody, /seenSymbols\.has\(symbolIdentity\)/);
@@ -1888,15 +1822,13 @@ test("清空或导入本地任务历史会隔离在途创建请求的晚到响�
   const clearEnd = app.indexOf("function setWatchlistFeedback(", clearStart + 1);
   const clearBody = clearStart >= 0 && clearEnd > clearStart ? app.slice(clearStart, clearEnd) : "";
   assert.match(clearBody, /state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
-  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(importBody, /applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
 });
 
 test("个股行情默认请求复用统一快照；旧服务仅在 404 时回退，显式日期范围尊重独立日 K 参数", () => {
   const start = app.indexOf("async function runQuoteQuery(event) {");
-  const end = app.indexOf("
-function ", start + 20);
+  const end = app.indexOf("\nfunction ", start + 20);
   const query = start >= 0 && end > start ? app.slice(start, end) : "";
   assert.ok(query, "主行情查询流程必须存在");
 
