@@ -1471,7 +1471,7 @@ test("服务健康刷新不会覆盖行情查询区域的独立提示", () => {
 test("侧栏与顶栏服务状态只有在明确健康回包时才显示正常", () => {
   assert.ok(app.includes('if (!result?.ok) return "failed";'));
   assert.ok(app.includes('const status = String(result.data?.status || "").trim().toLowerCase();'));
-  assert.ok(app.includes('if (!status) return "unknown";'));
+  assert.match(app, /function serviceHealthState\(result\)[\s\S]*?return "unknown";/);
   assert.match(app, /function setServiceStatus\(prefix, status, text\)[\s\S]*?status === "healthy"[\s\S]*?status === "unknown" \|\| status === "degraded"/);
   assert.match(stylesheet, /\.status-dot\.is-unknown\s*\{[^}]*background:\s*var\(--text-dim\)/);
 });

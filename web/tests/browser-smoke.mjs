@@ -475,8 +475,7 @@ try {
       await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "123.45", null, { timeout: 10000 });
       await page.locator("#refresh-button").click();
       await page.waitForFunction(() =>
-        document.querySelector("#market-health-text")?.textContent === "不可用" &&
-        document.querySelector("#analysis-health-text")?.textContent === "不可用",
+        document.querySelector("#connection-label")?.textContent === "连接异常",
       null, { timeout: 10000 });
 
       for (const scenario of ["401", "403", "404", "503", "network"]) {
