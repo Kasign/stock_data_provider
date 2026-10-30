@@ -434,3 +434,12 @@
 4. 对未注册 Provider 的能力标记为 not_configured；凭据已配置但授权不足、限流等情况必须继续走真实错误分类。无凭据 Provider 不发请求。
 5. 本轮请求范围功能尚待最新 HEAD 的 Go 单测、Race、Vet、OpenAPI 契约和 Docker 构建结果确认；未完成最新 SHA 验收前不记录为通过。
 
+
+
+### 诊断证据字段补充（2026-10-30）
+
+- ProviderProbeItem 新增请求样本证券、市场、样本日期、原始返回行数、校验后行数及 Provider 数据时间字段。
+- quote 探测已输出固定样本 `600519.SH`、市场 `SH`、返回/校验记录数和 ProviderTime。
+- daily_bars 探测已输出固定样本 `600036.SH`、最新有效交易日、原始返回行数、校验后行数及可用的 ProviderTime。
+- 证据只在 Provider 实际返回相应字段时填写，不从系统抓取时间伪造 Provider 数据时间；字段缺失继续保持空值。
+- OpenAPI 已同步新增字段。其余能力的行数/覆盖率与时效证据仍需按各自快照结构逐步补齐。
