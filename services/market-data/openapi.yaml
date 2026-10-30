@@ -647,6 +647,42 @@ components:
               quality_reasons: {type: array, items: {type: string}}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
+    MarketCapitalFlowItem:
+      type: object
+      required: [trade_date]
+      properties:
+        trade_date: {type: string, format: date}
+        close_sh: {type: number, nullable: true, description: Shanghai Composite close in index points}
+        change_percent_sh: {type: number, nullable: true, description: Shanghai Composite daily change in percentage points}
+        close_sz: {type: number, nullable: true, description: Shenzhen Component close in index points}
+        change_percent_sz: {type: number, nullable: true, description: Shenzhen Component daily change in percentage points}
+        net_amount_cny: {type: number, nullable: true, description: Market-wide main net inflow in CNY}
+        net_amount_rate_percent: {type: number, nullable: true, description: Market-wide main net inflow ratio in percentage points}
+        extra_large_net_inflow_cny: {type: number, nullable: true}
+        extra_large_net_inflow_rate_percent: {type: number, nullable: true}
+        large_net_inflow_cny: {type: number, nullable: true}
+        large_net_inflow_rate_percent: {type: number, nullable: true}
+        medium_net_inflow_cny: {type: number, nullable: true}
+        medium_net_inflow_rate_percent: {type: number, nullable: true}
+        small_net_inflow_cny: {type: number, nullable: true}
+        small_net_inflow_rate_percent: {type: number, nullable: true}
+    MarketCapitalFlowSnapshot:
+      type: object
+      required: [start_date, end_date, total, items, source, source_version, fetched_at, quality_status]
+      properties:
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        total: {type: integer, minimum: 1}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/MarketCapitalFlowItem'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
     MarketSentimentSnapshot:
       type: object
       required: [market, trade_date, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, source, fetched_at, quality_status]
@@ -1560,6 +1596,30 @@ paths:
         '401': {description: API key required}
         '502': {description: All complete-universe providers failed}
         '503': {description: No configured Provider exposes a complete A-share universe}
+  /api/v1/market/capital-flow:
+    get:
+      summary: Get Tushare market-wide daily capital-flow history
+      description: >-
+        Returns the provider-reported market-wide moneyflow_mkt_dc series. Values are CNY and rates are percentage
+        points. This is not calculated by summing a partial set of individual stocks. The endpoint requires a Tushare
+        token with the moneyflow_mkt_dc permission (documented minimum 120 points); source timestamps are not precise,
+        so the result remains degraded. The requested range is inclusive and capped at 2000 calendar days.
+      security:
+        - ApiKey: []
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: Market-wide daily capital-flow history with explicit quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketCapitalFlowSnapshot'}
+        '400': {description: Invalid date range}
+        '401': {description: API key required}
+        '502': {description: Market capital-flow provider failed or returned invalid data}
+        '503': {description: No market capital-flow provider enabled}
+
   /api/v1/market/sentiment:
     get:
       summary: Get and persist the current A-share market sentiment snapshot

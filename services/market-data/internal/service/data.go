@@ -45,6 +45,7 @@ type DataService struct {
 	indexCatalogProviders          []provider.IndexCatalogProvider
 	chipDistributionProviders      []provider.ChipDistributionProvider
 	capitalFlowProviders           []provider.CapitalFlowProvider
+	marketCapitalFlowProviders     []provider.MarketCapitalFlowProvider
 	hotRankingProviders            []provider.HotRankingProvider
 	supplementProviders            []provider.SupplementProvider
 	maxBars                        int

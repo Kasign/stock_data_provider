@@ -544,6 +544,7 @@ type SourceStatus struct {
 	ChipCapable                        bool   `json:"chip_capable,omitempty"`
 	HotRankingCapable                  bool   `json:"hot_ranking_capable,omitempty"`
 	CapitalFlowCapable                 bool   `json:"capital_flow_capable,omitempty"`
+	MarketCapitalFlowCapable           bool   `json:"market_capital_flow_capable,omitempty"`
 }
 
 // ChipDistribution 表示妙想补充接口返回的筹码快照。上游用百分比表示的比例字段会归一化为 [0,1] 小数。
@@ -568,6 +569,37 @@ type ChipDistribution struct {
 
 // CapitalFlow 表示以人民币元计量的个股主力资金流摘要。ProviderDate 是最近一条观测的源端日期，不代表精确可用时间。
 // 只有所需观测值全部可用时，才会填充 5/10 日合计字段。
+
+type MarketCapitalFlowItem struct {
+	TradeDate                    string   `json:"trade_date"`
+	CloseSH                      *float64 `json:"close_sh,omitempty"`
+	ChangePercentSH              *float64 `json:"change_percent_sh,omitempty"`
+	CloseSZ                      *float64 `json:"close_sz,omitempty"`
+	ChangePercentSZ              *float64 `json:"change_percent_sz,omitempty"`
+	NetAmountCNY                 *float64 `json:"net_amount_cny,omitempty"`
+	NetAmountRatePercent         *float64 `json:"net_amount_rate_percent,omitempty"`
+	ExtraLargeNetInflowCNY       *float64 `json:"extra_large_net_inflow_cny,omitempty"`
+	ExtraLargeNetInflowRatePct   *float64 `json:"extra_large_net_inflow_rate_percent,omitempty"`
+	LargeNetInflowCNY            *float64 `json:"large_net_inflow_cny,omitempty"`
+	LargeNetInflowRatePercent    *float64 `json:"large_net_inflow_rate_percent,omitempty"`
+	MediumNetInflowCNY           *float64 `json:"medium_net_inflow_cny,omitempty"`
+	MediumNetInflowRatePercent   *float64 `json:"medium_net_inflow_rate_percent,omitempty"`
+	SmallNetInflowCNY            *float64 `json:"small_net_inflow_cny,omitempty"`
+	SmallNetInflowRatePercent    *float64 `json:"small_net_inflow_rate_percent,omitempty"`
+}
+
+type MarketCapitalFlowSnapshot struct {
+	StartDate      string                  `json:"start_date"`
+	EndDate        string                  `json:"end_date"`
+	Total          int                     `json:"total"`
+	Items          []MarketCapitalFlowItem `json:"items"`
+	Source         string                  `json:"source"`
+	SourceVersion  string                  `json:"source_version"`
+	FetchedAt      time.Time               `json:"fetched_at"`
+	QualityStatus  QualityStatus           `json:"quality_status"`
+	QualityReasons []string                `json:"quality_reasons,omitempty"`
+}
+
 type CapitalFlow struct {
 	Symbol         string        `json:"symbol"`
 	ProviderDate   string        `json:"provider_date,omitempty"`

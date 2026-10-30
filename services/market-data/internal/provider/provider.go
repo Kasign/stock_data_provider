@@ -169,3 +169,10 @@ type SupplementProvider interface {
 	FetchChipDistribution(ctx context.Context, symbol string) (*model.ChipDistribution, error)
 	FetchCapitalFlow(ctx context.Context, symbol string) (*model.CapitalFlow, error)
 }
+
+
+// MarketCapitalFlowProvider provides a date-scoped market-wide capital-flow series.
+type MarketCapitalFlowProvider interface {
+	NamedProvider
+	FetchMarketCapitalFlow(ctx context.Context, startDate, endDate string) (*model.MarketCapitalFlowSnapshot, error)
+}

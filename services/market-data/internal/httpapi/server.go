@@ -102,6 +102,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 	historicalIndexConstituentsEnabled := map[string]bool{}
 	chipEnabled := map[string]bool{}
 	capitalFlowEnabled := map[string]bool{}
+	marketCapitalFlowEnabled := map[string]bool{}
 	hotRankingEnabled := map[string]bool{}
 	if svc != nil {
 		var priceLimitEventProviders []provider.PriceLimitEventProvider
@@ -164,6 +165,9 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 		for _, p := range svc.CapitalFlowProviders() {
 			capitalFlowEnabled[p.Name()] = true
 		}
+		for _, p := range svc.MarketCapitalFlowProviders() {
+			marketCapitalFlowEnabled[p.Name()] = true
+		}
 		for _, p := range svc.HotRankingProviders() {
 			hotRankingEnabled[p.Name()] = true
 		}
@@ -175,7 +179,7 @@ func NewWithCapabilityInterfaces(apiKey, defaultAdjustment string, svc *service.
 			StockBasicCapable: stockBasicEnabled[name], StockSearchCapable: stockSearchEnabled[name], SectorRankingCapable: sectorRankingEnabled[name],
 			IndexQuoteCapable: indexQuoteEnabled[name], MarketBreadthCapable: marketBreadthEnabled[name], LimitPoolCapable: limitPoolEnabled[name],
 			StockBoardsCapable: stockBoardsEnabled[name], TradingCalendarCapable: tradingCalendarEnabled[name],
-			SecurityTradingStatusCapable: securityTradingStatusEnabled[name], FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
+			SecurityTradingStatusCapable: securityTradingStatusEnabled[name], FundamentalsCapable: fundamentalsEnabled[name], ValuationCapable: valuationEnabled[name], IndexCatalogCapable: indexCatalogEnabled[name], HistoricalIndexConstituentsCapable: historicalIndexConstituentsEnabled[name], ChipCapable: chipEnabled[name], CapitalFlowCapable: capitalFlowEnabled[name], MarketCapitalFlowCapable: marketCapitalFlowEnabled[name], HotRankingCapable: hotRankingEnabled[name], DragonTigerCapable: dragonTigerEnabled[name], AnnouncementsCapable: announcementsEnabled[name],
 		})
 	}
 	if requestTimeout <= 0 {

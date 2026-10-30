@@ -83,7 +83,8 @@
       "limit_pools": false,
       "dragon_tiger": false,
       "announcements": false,
-      "index_catalog": false
+      "index_catalog": false,
+      "market_capital_flow": false
     },
     "tickflow": {
       "enabled": true,

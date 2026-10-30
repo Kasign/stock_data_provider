@@ -126,7 +126,7 @@ func defaultProviderFile() providerFile {
 			"sina":      {Enabled: true, Quote: true, DailyBars: true},
 			"yahoo":     {Enabled: false, Quote: false, DailyBars: false},
 			"netease":   {Enabled: true, Quote: true, DailyBars: true},
-			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, SecurityTradingStatus: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false},
+			"tushare":   {Enabled: false, Quote: false, DailyBars: false, StockBasic: false, TradingCalendar: false, SecurityTradingStatus: false, Fundamentals: false, Valuations: false, LimitPools: false, DragonTiger: false, Announcements: false, IndexCatalog: false, MarketCapitalFlow: false},
 			"tickflow":  {Enabled: true, Quote: false, DailyBars: true, SectorRankings: false, IndexQuotes: false, MarketBreadth: false},
 			"pytdx":     {Enabled: true, Quote: true, DailyBars: true},
 			"xueqiu":    {Enabled: false, HotRankings: false},

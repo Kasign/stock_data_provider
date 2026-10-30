@@ -106,6 +106,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	indexCatalogProviders := make([]provider.IndexCatalogProvider, 0, len(available))
 	chipDistributionProviders := make([]provider.ChipDistributionProvider, 0, len(available))
 	capitalFlowProviders := make([]provider.CapitalFlowProvider, 0, len(available))
+	marketCapitalFlowProviders := make([]provider.MarketCapitalFlowProvider, 0, len(available))
 	hotRankingProviders := make([]provider.HotRankingProvider, 0, len(available))
 	for _, name := range cfg.ProviderPriority {
 		p, ok := available[name]
@@ -243,6 +244,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			}
 			capitalFlowProviders = append(capitalFlowProviders, capability)
 		}
+		if settings.MarketCapitalFlow {
+			capability, ok := p.(provider.MarketCapitalFlowProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for market capital flow but does not implement MarketCapitalFlowProvider", name)
+			}
+			marketCapitalFlowProviders = append(marketCapitalFlowProviders, capability)
+		}
 		if settings.HotRankings {
 			capability, ok := p.(provider.HotRankingProvider)
 			if !ok {
@@ -302,6 +310,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	ds.SetIndexCatalogProviders(indexCatalogProviders)
 	ds.SetChipDistributionProviders(chipDistributionProviders)
 	ds.SetCapitalFlowProviders(capitalFlowProviders)
+	ds.SetMarketCapitalFlowProviders(marketCapitalFlowProviders)
 	ds.SetHotRankingProviders(hotRankingProviders)
 	handler := httpapi.NewWithCapabilityInterfaces(cfg.APIKey, cfg.Adjustment, ds, allProviders, quoteProviders, barProviders, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
