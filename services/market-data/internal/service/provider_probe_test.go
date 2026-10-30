@@ -190,7 +190,6 @@ func TestProviderProbeOptionsValidateScopeCapabilityAndTimeout(t *testing.T) {
 	}
 }
 
-
 func TestRecordProviderProbeCoverageAcceptsOnlyValidRatios(t *testing.T) {
 	evidence := &providerProbeEvidence{}
 	ctx := context.WithValue(context.Background(), providerProbeEvidenceContextKey{}, evidence)
