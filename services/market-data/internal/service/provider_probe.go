@@ -237,6 +237,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err := validateIndexQuoteSnapshot(snapshot); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
+			if snapshot != nil {
+				symbol := ""
+				if len(snapshot.Items) > 0 { symbol = snapshot.Items[0].Symbol }
+				recordProviderProbeEvidence(probeCtx, symbol, "", len(snapshot.Items), len(snapshot.Items), nil)
+			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
 	}
@@ -250,6 +255,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err := validateMarketBreadth(snapshot); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
+			if snapshot != nil {
+				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, snapshot.CoveredSecurities, snapshot.CoveredSecurities, snapshot.NewestQuoteTime)
+			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
 	}
@@ -262,6 +270,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if err := validateSectorRankingSnapshot("industry", 5, snapshot); err != nil {
 				return model.QualityInvalid, "", nil, err
+			}
+			if snapshot != nil {
+				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, len(snapshot.Items), len(snapshot.Items), nil)
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
@@ -302,6 +313,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if v.Total < len(v.Items) || v.ProviderReturned < len(v.Items) {
 				return model.QualityInvalid, v.SourceVersion, nil, errors.New("index-catalog response has inconsistent counts")
 			}
+			sample := ""
+			if len(v.Items) > 0 { sample = v.Items[0].Symbol }
+			recordProviderProbeEvidence(probeCtx, sample, "", len(v.Items), len(v.Items), v.ProviderTime)
 			seen := make(map[string]bool, len(v.Items))
 			for _, item := range v.Items {
 				if item.Symbol == "" || item.Name == "" || seen[item.Symbol] {
@@ -362,6 +376,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					return model.QualityInvalid, v.SourceVersion, nil, errors.New("stock-boards row missing identity or source")
 				}
 			}
+			recordProviderProbeEvidence(probeCtx, barsSymbol, probeDate, len(v.Items), len(v.Items), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -383,6 +398,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					return model.QualityInvalid, v.SourceVersion, nil, errors.New("limit-pool row missing security identity")
 				}
 			}
+			sample := ""
+			if len(v.Items) > 0 { sample = v.Items[0].Symbol }
+			recordProviderProbeEvidence(probeCtx, sample, v.TradeDate, len(v.Items), len(v.Items), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -404,6 +422,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					return model.QualityInvalid, v.SourceVersion, nil, errors.New("dragon-tiger row has invalid security identity or trade date")
 				}
 			}
+			sample := ""
+			if len(v.Items) > 0 { sample = v.Items[0].Symbol }
+			recordProviderProbeEvidence(probeCtx, sample, v.TradeDate, len(v.Items), len(v.Items), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -417,6 +438,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err := validateStockAnnouncementSnapshot(barsSymbol, calendarStart, probeDate, 1, 20, v); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
+			recordProviderProbeEvidence(probeCtx, barsSymbol, probeDate, len(v.Items), len(v.Items), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -430,6 +452,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err := validateTradingCalendarSnapshot(v, calendarStart, calendarEnd); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
+			recordProviderProbeEvidence(probeCtx, "", calendarEnd, len(v.Items), len(v.Items), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -443,6 +466,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err := validateFundamentalsSnapshot(barsSymbol, nowLocal.Year(), 2, v); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
+			recordProviderProbeEvidence(probeCtx, barsSymbol, "", len(v.Sections), len(v.Sections), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -456,6 +480,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err := validateValuationSnapshot([]string{barsSymbol}, v); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
+			recordProviderProbeEvidence(probeCtx, barsSymbol, v.ProviderReportDate, len(v.Items), len(v.Items), v.ProviderTimestamp)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -469,6 +494,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err := validateHotRankingSnapshot("popular", v); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
+			sample := ""
+			if len(v.Items) > 0 { sample = v.Items[0].Symbol }
+			recordProviderProbeEvidence(probeCtx, sample, "", len(v.Items), len(v.Items), v.ProviderTime)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -490,6 +518,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if v.Observations < 0 {
 				return model.QualityInvalid, v.SourceVersion, nil, errors.New("capital-flow response has negative observation count")
 			}
+			recordProviderProbeEvidence(probeCtx, barsSymbol, v.ProviderDate, v.Observations, v.Observations, nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -509,6 +538,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if v.Cost90Low != nil && v.Cost90High != nil && *v.Cost90Low > *v.Cost90High {
 				return model.QualityInvalid, v.SourceVersion, nil, errors.New("chip-distribution 90-percent cost range is inverted")
 			}
+			recordProviderProbeEvidence(probeCtx, barsSymbol, v.ProviderDate, 1, 1, nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
