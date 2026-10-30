@@ -4968,3 +4968,15 @@ button:disabled {
     width: 100vw;
   }
 }
+
+
+/* 个股研究工作区的统一分区导航与锚点定位。 */
+.research-workspace-nav { position: sticky; top: 8px; z-index: 4; margin: 14px 0 18px; }
+#research-view #daily-chart-panel,
+#research-view #technical-indicators-panel,
+#research-view #historical-bars-panel,
+#research-view [id^="research-detail-"] { scroll-margin-top: 82px; }
+#research-view .research-overview-panel { scroll-margin-top: 82px; }
+@media (max-width: 800px) {
+  .research-workspace-nav { top: 4px; }
+}

@@ -221,7 +221,7 @@
               <button class="button button-primary" id="load-market-stocks" type="button">加载全市场</button><button class="button button-secondary" id="reload-market-stocks" type="button" disabled>刷新当前页</button>
             </div>
             <div class="market-stocks-summary" id="market-stocks-summary" aria-live="polite">尚未发起全市场行情请求；不会自动遍历所有证券。</div>
-            <div class="table-scroll market-stocks-table-scroll"><table><thead><tr><th>股票</th><th>最新价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th><th>量比</th><th>MA5</th><th>MA20</th><th>行情质量</th><th>操作</th></tr></thead><tbody id="market-stocks-body"><tr><td colspan="10" class="table-empty">点击“加载全市场”后读取第一页。</td></tr></tbody></table></div>
+            <div class="table-scroll market-stocks-table-scroll"><table><thead><tr><th>股票</th><th>最新价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th><th>量比</th><th>MA5</th><th>MA20</th><th>行情质量</th><th>操作</th></tr></thead><tbody id="market-stocks-body"><tr><td colspan="10" class="table-empty">点击“加载全市场”后读取第一页；按服务端证券目录顺序展示，不在前端对分页结果二次排序。</td></tr></tbody></table></div>
             <div class="market-stocks-pagination"><span id="market-stocks-page-label">第 0 页</span><div><button class="button button-secondary" id="market-stocks-prev" type="button" disabled>上一页</button><button class="button button-secondary" id="market-stocks-next" type="button" disabled>下一页</button></div></div>
             <p class="market-widget-meta" id="market-stocks-meta">MA 缺失、行情失败与目录不完整均按服务端原始状态展示，不补零、不推断为无数据。</p>
           </section>
@@ -238,7 +238,85 @@
             </div>
           </section>
 
-          <div class="content-grid">
+
+        </section>
+
+
+        <section class="view" id="watchlist-view" hidden>
+          <div class="page-heading"><div><p class="eyebrow">WATCHLIST / 03</p><h1>自选股</h1><p class="page-subtitle">这是当前浏览器本地保存的股票列表，不会同步到服务器。可在个股查询页添加股票，或从列表直接查询、发起分析。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索并添加自选 →</button></div>
+          <section class="panel watchlist-panel" id="watchlist-panel" aria-labelledby="watchlist-title">
+            <div class="panel-heading"><div><h2 id="watchlist-title">本地自选股</h2><p>仅保存在当前浏览器；不上传服务器，也不保存 API Key 或分析报告。</p></div><span class="soft-badge" id="watchlist-count">0 / 50</span></div>
+            <div class="watchlist-feedback" id="watchlist-feedback" role="status" aria-live="polite" hidden></div>
+            <div class="watchlist-toolbar">
+              <label class="field watchlist-search-field"><span>搜索自选</span><input id="watchlist-search" type="search" autocomplete="off" placeholder="输入股票代码或名称" aria-label="搜索本地自选股"></label>
+              <label class="field watchlist-sort-field"><span>排序</span><select id="watchlist-sort" aria-label="自选股排序"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option></select></label>
+              <label class="field watchlist-group-filter"><span>分组</span><select id="watchlist-group-filter" aria-label="按自选分组筛选"><option value="all">全部分组</option><option value="未分组">未分组</option></select></label>
+              <span class="watchlist-filter-count" id="watchlist-filter-count" aria-live="polite">显示全部自选</span>
+              <div class="watchlist-quote-actions"><button class="button button-secondary" id="refresh-watchlist-quotes" type="button">刷新批量行情</button><span id="watchlist-quote-refresh-status" class="watchlist-quote-refresh-status" role="status" aria-live="polite">批量行情按需读取，不会在打开自选股时自动请求。</span></div>
+            </div>
+            <div class="watchlist-group-manager" aria-label="自选分组管理">
+              <label class="field"><span>新建分组</span><input id="watchlist-group-name" maxlength="20" placeholder="例如：长期持有、短线观察"></label>
+              <button class="button button-secondary" id="watchlist-group-create" type="button">创建分组</button>
+              <button class="button button-secondary" id="watchlist-group-remove" type="button" disabled>删除当前分组</button>
+              <span class="watchlist-group-note">分组与归属仅保存在当前浏览器；删除分组不会删除股票，组内股票会回到“未分组”。</span>
+            </div>
+            <details class="watchlist-import">
+              <summary>批量导入自选股</summary>
+              <p class="market-widget-meta">支持每行一个股票代码，或“代码,名称”两列；也支持制表符分隔。六位代码按现有证券代码规范识别交易所；无法可靠推断的代码保留原样，不强行补充后缀。导入前先预览，最多保存 50 只。数据仅保存在当前浏览器。</p>
+              <label class="field"><span>粘贴股票列表</span><textarea id="watchlist-import-text" rows="5" placeholder="代码,名称&#10;600519,贵州茅台&#10;000858,五粮液"></textarea></label>
+              <div class="watchlist-import-actions"><button class="button button-secondary" id="watchlist-import-preview-button" type="button">预览导入</button><span id="watchlist-import-summary" role="status" aria-live="polite">尚未生成导入预览。</span><button class="button button-primary" id="watchlist-import-confirm" type="button" disabled>确认导入</button></div>
+              <div class="watchlist-import-preview table-scroll" id="watchlist-import-preview"></div>
+            </details>
+            <div class="watchlist-list" id="watchlist-list"><div class="empty-row">点击“加入自选”后，可从这里快速查询行情或发起分析。</div></div>
+          </section>
+        </section>
+
+
+        <section class="view" id="research-view" hidden>
+          <div class="page-heading"><div><p class="eyebrow">STOCK DEEP DIVE / 04</p><h1>个股深度研究</h1><p class="page-subtitle">统一研究工作区：行情摘要、日 K、技术指标、财务、估值、个股资金流、筹码与公告按同一标的组织；未请求的数据不会自动填充。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索股票并加载行情 →</button></div>
+          <section class="panel research-list-panel" aria-labelledby="research-list-title">
+            <div class="panel-heading"><div><h2 id="research-list-title">研究标的与快捷入口</h2><p>这里只汇总本地自选股和本次已查询的股票，用于切换研究对象；不会自动批量请求全市场行情。</p></div><span class="availability-pill is-local" id="research-list-scope">当前浏览器 · 未批量拉取</span></div>
+            <div class="table-scroll research-list-table-scroll"><table><thead><tr><th>股票</th><th>最新价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th><th>量比</th><th>MA5</th><th>MA20</th><th>数据质量</th><th>操作</th></tr></thead><tbody id="research-stock-list-body"><tr><td colspan="10" class="table-empty">当前没有自选股或已查询标的。</td></tr></tbody></table></div>
+            <p class="market-widget-meta">未加载标的显示“未加载”，不自动对所有自选逐只请求；如需全市场/大量股票排序，需先增加批量股票概览 API。</p>
+          </section>
+          <section class="panel research-overview-panel" id="research-overview-panel" aria-labelledby="research-overview-title">
+            <div class="panel-heading">
+              <div><h2 id="research-overview-title">当前标的摘要</h2><p>展示当前选中股票已获取的关键数据；更深入的资料在下方按需加载。</p></div>
+              <span class="supplement-quality supplement-quality-unknown" id="research-overview-quality">未加载</span>
+            </div>
+            <div class="research-overview-context"><strong id="research-overview-symbol">尚未选择标的</strong><span id="research-overview-meta">行情时间、获取时间与来源将在实际回包后显示。</span></div>
+            <div class="research-overview-grid" aria-label="当前股票关键指标">
+              <article class="research-overview-metric"><span>最新价</span><strong id="research-overview-price">未加载</strong></article>
+              <article class="research-overview-metric"><span>涨跌额 / 涨跌幅</span><strong id="research-overview-change">未加载</strong></article>
+              <article class="research-overview-metric"><span>成交额</span><strong id="research-overview-amount">未加载</strong></article>
+              <article class="research-overview-metric"><span>换手率</span><strong id="research-overview-turnover">未加载</strong></article>
+              <article class="research-overview-metric"><span>量比</span><strong id="research-overview-volume-ratio">未加载</strong></article>
+              <article class="research-overview-metric"><span>MA5</span><strong id="research-overview-ma5">未加载</strong></article>
+              <article class="research-overview-metric"><span>MA20</span><strong id="research-overview-ma20">未加载</strong></article>
+              <article class="research-overview-metric"><span>行情来源</span><strong id="research-overview-source">未加载</strong></article>
+            </div>
+            <p class="research-overview-note" id="research-overview-note" role="status" aria-live="polite">从研究列表选择股票后，行情摘要会在本页展示；公司资料、财务、估值、资金、筹码和公告按需读取。</p>
+            <div class="research-overview-actions">
+              <button class="button button-secondary" id="research-open-chart" type="button">定位到日 K 走势</button>
+              <button class="button button-secondary" id="research-add-watchlist" type="button">加入本地自选</button>
+              <button class="button button-primary" id="research-start-analysis" type="button">发起分析任务</button>
+            </div>
+          </section>
+          <nav class="research-detail-nav research-workspace-nav" aria-label="个股研究分区">
+            <span class="research-detail-nav-label">研究视图</span>
+            <button class="research-detail-nav-link is-active" type="button" data-research-detail-target="research-overview-panel" aria-current="location">行情摘要</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="daily-chart-panel">日 K 走势</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="technical-indicators-panel">技术指标</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="historical-bars-panel">历史日 K</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-profile">上市档案</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-boards">行业与概念</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-fundamentals">财务指标</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-valuations">估值指标</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-capital-flow">个股资金流</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-chip">筹码分布</button>
+            <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-announcements">近期公告</button>
+          </nav>
+<div class="content-grid">
             <section class="panel chart-panel" id="daily-chart-panel">
               <div class="panel-heading chart-panel-heading"><div><h2 id="chart-title">收盘价走势</h2><p id="chart-caption">日 K 数据 · 按交易日期升序展示</p></div>
                 <div class="chart-heading-actions">
@@ -309,72 +387,7 @@
             </div>
             <div class="table-footer"><span id="bars-warning">显示最近交易日，最新日期在前</span><span id="bars-adjustment">复权口径 —</span></div>
           </section>
-          
-          
-        
-        </section>
 
-
-        <section class="view" id="watchlist-view" hidden>
-          <div class="page-heading"><div><p class="eyebrow">WATCHLIST / 03</p><h1>自选股</h1><p class="page-subtitle">这是当前浏览器本地保存的股票列表，不会同步到服务器。可在个股查询页添加股票，或从列表直接查询、发起分析。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索并添加自选 →</button></div>
-          <section class="panel watchlist-panel" id="watchlist-panel" aria-labelledby="watchlist-title">
-            <div class="panel-heading"><div><h2 id="watchlist-title">本地自选股</h2><p>仅保存在当前浏览器；不上传服务器，也不保存 API Key 或分析报告。</p></div><span class="soft-badge" id="watchlist-count">0 / 50</span></div>
-            <div class="watchlist-feedback" id="watchlist-feedback" role="status" aria-live="polite" hidden></div>
-            <div class="watchlist-toolbar">
-              <label class="field watchlist-search-field"><span>搜索自选</span><input id="watchlist-search" type="search" autocomplete="off" placeholder="输入股票代码或名称" aria-label="搜索本地自选股"></label>
-              <label class="field watchlist-sort-field"><span>排序</span><select id="watchlist-sort" aria-label="自选股排序"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option></select></label>
-              <label class="field watchlist-group-filter"><span>分组</span><select id="watchlist-group-filter" aria-label="按自选分组筛选"><option value="all">全部分组</option><option value="未分组">未分组</option></select></label>
-              <span class="watchlist-filter-count" id="watchlist-filter-count" aria-live="polite">显示全部自选</span>
-              <div class="watchlist-quote-actions"><button class="button button-secondary" id="refresh-watchlist-quotes" type="button">刷新批量行情</button><span id="watchlist-quote-refresh-status" class="watchlist-quote-refresh-status" role="status" aria-live="polite">批量行情按需读取，不会在打开自选股时自动请求。</span></div>
-            </div>
-            <div class="watchlist-group-manager" aria-label="自选分组管理">
-              <label class="field"><span>新建分组</span><input id="watchlist-group-name" maxlength="20" placeholder="例如：长期持有、短线观察"></label>
-              <button class="button button-secondary" id="watchlist-group-create" type="button">创建分组</button>
-              <button class="button button-secondary" id="watchlist-group-remove" type="button" disabled>删除当前分组</button>
-              <span class="watchlist-group-note">分组与归属仅保存在当前浏览器；删除分组不会删除股票，组内股票会回到“未分组”。</span>
-            </div>
-            <details class="watchlist-import">
-              <summary>批量导入自选股</summary>
-              <p class="market-widget-meta">支持每行一个股票代码，或“代码,名称”两列；也支持制表符分隔。六位代码按现有证券代码规范识别交易所；无法可靠推断的代码保留原样，不强行补充后缀。导入前先预览，最多保存 50 只。数据仅保存在当前浏览器。</p>
-              <label class="field"><span>粘贴股票列表</span><textarea id="watchlist-import-text" rows="5" placeholder="代码,名称&#10;600519,贵州茅台&#10;000858,五粮液"></textarea></label>
-              <div class="watchlist-import-actions"><button class="button button-secondary" id="watchlist-import-preview-button" type="button">预览导入</button><span id="watchlist-import-summary" role="status" aria-live="polite">尚未生成导入预览。</span><button class="button button-primary" id="watchlist-import-confirm" type="button" disabled>确认导入</button></div>
-              <div class="watchlist-import-preview table-scroll" id="watchlist-import-preview"></div>
-            </details>
-            <div class="watchlist-list" id="watchlist-list"><div class="empty-row">点击“加入自选”后，可从这里快速查询行情或发起分析。</div></div>
-          </section>
-        </section>
-
-
-        <section class="view" id="research-view" hidden>
-          <div class="page-heading"><div><p class="eyebrow">STOCK DEEP DIVE / 04</p><h1>个股深度研究</h1><p class="page-subtitle">工作流：从自选股或行情页选定一只股票 → 查看当前标的摘要 → 按需加载财务、估值、资金、筹码与公告。此页聚焦单股研究，不负责全市场筛选；未请求的数据不会自动填充。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索股票并加载行情 →</button></div>
-          <section class="panel research-list-panel" aria-labelledby="research-list-title">
-            <div class="panel-heading"><div><h2 id="research-list-title">研究标的与快捷入口</h2><p>这里只汇总本地自选股和本次已查询的股票，用于切换研究对象；不会自动批量请求全市场行情。</p></div><span class="availability-pill is-local" id="research-list-scope">当前浏览器 · 未批量拉取</span></div>
-            <div class="table-scroll research-list-table-scroll"><table><thead><tr><th>股票</th><th>最新价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th><th>量比</th><th>MA5</th><th>MA20</th><th>数据质量</th><th>操作</th></tr></thead><tbody id="research-stock-list-body"><tr><td colspan="10" class="table-empty">当前没有自选股或已查询标的。</td></tr></tbody></table></div>
-            <p class="market-widget-meta">未加载标的显示“未加载”，不自动对所有自选逐只请求；如需全市场/大量股票排序，需先增加批量股票概览 API。</p>
-          </section>
-          <section class="panel research-overview-panel" id="research-overview-panel" aria-labelledby="research-overview-title">
-            <div class="panel-heading">
-              <div><h2 id="research-overview-title">当前标的摘要</h2><p>展示当前选中股票已获取的关键数据；更深入的资料在下方按需加载。</p></div>
-              <span class="supplement-quality supplement-quality-unknown" id="research-overview-quality">未加载</span>
-            </div>
-            <div class="research-overview-context"><strong id="research-overview-symbol">尚未选择标的</strong><span id="research-overview-meta">行情时间、获取时间与来源将在实际回包后显示。</span></div>
-            <div class="research-overview-grid" aria-label="当前股票关键指标">
-              <article class="research-overview-metric"><span>最新价</span><strong id="research-overview-price">未加载</strong></article>
-              <article class="research-overview-metric"><span>涨跌额 / 涨跌幅</span><strong id="research-overview-change">未加载</strong></article>
-              <article class="research-overview-metric"><span>成交额</span><strong id="research-overview-amount">未加载</strong></article>
-              <article class="research-overview-metric"><span>换手率</span><strong id="research-overview-turnover">未加载</strong></article>
-              <article class="research-overview-metric"><span>量比</span><strong id="research-overview-volume-ratio">未加载</strong></article>
-              <article class="research-overview-metric"><span>MA5</span><strong id="research-overview-ma5">未加载</strong></article>
-              <article class="research-overview-metric"><span>MA20</span><strong id="research-overview-ma20">未加载</strong></article>
-              <article class="research-overview-metric"><span>行情来源</span><strong id="research-overview-source">未加载</strong></article>
-            </div>
-            <p class="research-overview-note" id="research-overview-note" role="status" aria-live="polite">从研究列表选择股票后，行情摘要会在本页展示；公司资料、财务、估值、资金、筹码和公告按需读取。</p>
-            <div class="research-overview-actions">
-              <button class="button button-secondary" id="research-open-chart" type="button">查看图表与完整日 K</button>
-              <button class="button button-secondary" id="research-add-watchlist" type="button">加入本地自选</button>
-              <button class="button button-primary" id="research-start-analysis" type="button">发起分析任务</button>
-            </div>
-          </section>
           <section class="panel research-notes-panel" aria-labelledby="research-notes-title">
             <div class="panel-heading"><div><h2 id="research-notes-title">研究记录</h2><p>记录当前标的的研究判断、观察要点与后续跟踪事项。</p></div><span class="availability-pill is-local">仅当前浏览器保存</span></div>
             <form id="research-note-form" class="research-note-form">
@@ -405,16 +418,7 @@
             <div class="panel-heading supplemental-heading"><div><h2 id="stock-research-title">公司资料、财务与公告</h2><p>读取当前股票的真实档案、所属板块、季度财务指标和公告。各数据源独立标注质量与时间。</p></div><button class="button button-secondary" id="load-stock-research" type="button">加载公司资料</button></div>
             <div class="supplemental-context"><span id="stock-research-target">尚未选择标的</span><span>公告默认读取最近 7 个日历日；空结果不代表已确认没有公告。</span></div>
             <p class="supplemental-feedback" id="stock-research-feedback" role="status" aria-live="polite">选择股票后按需加载，公司资料与公告不会阻塞实时行情。</p>
-            <nav class="research-detail-nav" aria-label="专业研究资料分区">
-               <span class="research-detail-nav-label">快速定位</span>
-               <button class="research-detail-nav-link is-active" type="button" data-research-detail-target="research-detail-profile" aria-current="location">上市档案</button>
-               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-boards">行业与概念</button>
-               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-fundamentals">财务指标</button>
-               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-valuations">估值指标</button>
-               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-chip">筹码分布</button>
-               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-capital-flow">资金流向</button>
-               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-announcements">近期公告</button>
-             </nav>
+
              <div class="supplemental-grid stock-research-grid">
               <article class="supplemental-card" id="research-detail-profile"><div class="supplemental-card-heading"><div><h3>上市档案</h3><small id="stock-profile-symbol">尚未选择</small></div><span class="supplement-quality supplement-quality-unknown" id="profile-quality">未加载</span></div><div id="stock-profile-fields"><p class="stock-research-empty">选择股票并加载后显示上市资料。</p></div><div class="supplemental-reasons" id="stock-profile-reasons"><p>加载后显示质量原因。</p></div><p class="supplemental-error" id="stock-profile-error" hidden></p><p class="market-widget-meta" id="stock-profile-meta"></p></article>
               <article class="supplemental-card" id="research-detail-boards"><div class="supplemental-card-heading"><div><h3>所属行业与概念</h3><small id="stock-boards-symbol">尚未选择</small></div><span class="supplement-quality supplement-quality-unknown" id="boards-quality">未加载</span></div><div class="stock-board-list" id="stock-board-list"><p class="stock-research-empty">加载后显示所属板块。</p></div><div class="supplemental-reasons" id="stock-boards-reasons"><p>加载后显示质量原因。</p></div><p class="supplemental-error" id="stock-boards-error" hidden></p><p class="market-widget-meta" id="stock-boards-meta"></p></article>

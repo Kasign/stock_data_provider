@@ -624,7 +624,12 @@ function renderResearchStockList() {
           batchRecord?.fetchedAt ? "批量快照 " + formatDateTime(batchRecord.fetchedAt) : "",
           stale ? (state.watchlistQuoteStatus === "loading" ? "批量行情正在刷新，当前暂时保留此前成功快照。" : "最近一次批量刷新失败，当前保留此前成功快照。") : ""
         ].filter(Boolean);
-        pill.title = detail.join("；") || (Array.isArray(itemQuote?.quality_reasons) ? itemQuote.quality_reasons.join("；") : "未加载行情");
+        pill.title = [
+          ...detail,
+          ...(Array.isArray(batchRecord?.qualityReasons) ? batchRecord.qualityReasons : []),
+          ...(Array.isArray(itemQuote?.quality_reasons) ? itemQuote.quality_reasons : []),
+          itemQuote?.quote_time ? "行情时间 " + formatDateTime(itemQuote.quote_time) : ""
+        ].filter(Boolean).join("；") || "未加载行情";
         cell.append(pill);
         return cell;
       })()
@@ -731,6 +736,10 @@ async function refreshWatchlistQuotes() {
         quote: item.quote && typeof item.quote === "object" ? item.quote : null,
         errorCode: String(item.error_code || ""),
         qualityStatus: String(item.quality_status || item.quote?.quality_status || "unknown"),
+        qualityReasons: [
+          ...(Array.isArray(item.quality_reasons) ? item.quality_reasons : []),
+          ...(Array.isArray(item.quote?.quality_reasons) ? item.quote.quality_reasons : [])
+        ].filter(Boolean),
         fetchedAt: String(payload.fetched_at || "")
       });
     });
@@ -878,6 +887,12 @@ function renderWatchlist(records, storageReadable, storageValid) {
     const currentQuote = batchQuote?.quote || (quoteMatches ? state.quote : null);
     const quoteLine = document.createElement("small");
     quoteLine.className = "watchlist-tracking-line";
+    quoteLine.title = [
+      batchQuote?.errorCode || "",
+      ...(Array.isArray(batchQuote?.qualityReasons) ? batchQuote.qualityReasons : []),
+      batchQuote?.fetchedAt ? "批量采集 " + formatDateTime(batchQuote.fetchedAt) : "",
+      currentQuote?.quote_time ? "行情时间 " + formatDateTime(currentQuote.quote_time) : ""
+    ].filter(Boolean).join("；") || "行情质量原因未报告";
     if (batchQuote?.errorCode) {
       quoteLine.textContent = "批量行情不可用：" + batchQuote.errorCode + " · " + qualityLabel(batchQuote.qualityStatus);
     } else if (currentQuote) {
@@ -1967,7 +1982,8 @@ function openResearchChartView() {
   try { q = state.quote ? normalizeSymbol(state.quote.symbol || "") : ""; } catch {}
   try { bars = state.technicalSymbol ? normalizeSymbol(state.technicalSymbol) : ""; } catch {}
   const quoteMatches = q === symbol && Boolean(state.quote), barsMatch = bars === symbol;
-  setView("stocks");
+  setView("research");
+  $("#daily-chart-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   if (!quoteMatches || !barsMatch) void runQuoteQuery();
 }
 

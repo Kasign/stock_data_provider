@@ -261,9 +261,9 @@ export function bindStockResearch(getSettings,getSymbol){
     safeResearchFeedback("财务报告期不正确。");
     return false;
    }
-   const ok=await fetchOne("fundamentals",(settings,sym,signal)=>getStockFundamentals(settings,sym,{year,quarter,signal}),renderFundamentals);
-   if(ok)safeResearchFeedback("季度财务指标已返回；请同时参考报告期、披露日期和质量状态。");
-   return ok;
+   return runSupplementRequest("#load-fundamentals","读取财务指标","fundamentals",
+    (settings,sym,signal)=>getStockFundamentals(settings,sym,{year,quarter,signal}),renderFundamentals,
+    "季度财务指标已返回；请同时参考报告期、披露日期和质量状态。");
   }catch(error){
    safeResearchFeedback("季度财务指标读取流程异常："+safeResearchError(error));
    return false;
@@ -351,6 +351,12 @@ export function bindStockResearch(getSettings,getSymbol){
  function renderChipDistribution(data,symbol){
   setText("chip-symbol",data.symbol||symbol);setQuality("chip-quality",data.quality_status);
   const root=$("#chip-distribution-content");root.replaceChildren();
+  const values=[data.average_cost,data.cost_90_low,data.cost_90_high,data.cost_70_low,data.cost_70_high,data.profit_ratio,data.concentration_90,data.concentration_70];
+  if(data.has_data===false||!values.some(value=>finiteNumberOrNull(value)!==null)){
+   root.append(el("p","stock-research-empty",data.has_data===false?"服务端未确认可用筹码数据；该状态不代表筹码指标为 0。":"接口请求成功，但没有返回可展示的筹码指标。"));
+   setText("chip-meta","来源 "+(data.source||"未报告")+" · 数据日期 "+(data.date||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+   reasons("chip-reasons",data.quality_reasons);return;
+  }
   const metrics=[
    ["平均持仓成本",data.average_cost===null||data.average_cost===undefined?"未提供":formatNumber(data.average_cost)+" 元"],
    ["90% 成本区间",costBand(data.cost_90_low,data.cost_90_high)],
@@ -374,6 +380,12 @@ export function bindStockResearch(getSettings,getSymbol){
   setText("capital-flow-symbol",data.symbol||symbol);setQuality("capital-flow-quality",data.quality_status);
   const root=$("#capital-flow-content");root.replaceChildren();
   const observations=finiteNumberOrNull(data.observations);
+  const flowValues=[data.main_net_inflow_yuan,data.inflow_5d_yuan,data.inflow_10d_yuan];
+  if(data.has_data===false||(!flowValues.some(value=>finiteNumberOrNull(value)!==null)&&!(Number.isFinite(observations)&&observations>0))){
+   root.append(el("p","stock-research-empty",data.has_data===false?"服务端未确认可用个股资金流数据；缺失值不解释为 0。":"接口请求成功，但没有返回可展示的资金流指标。"));
+   setText("capital-flow-meta","来源 "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+   reasons("capital-flow-reasons",data.quality_reasons);return;
+  }
   const metrics=[
    ["主力净流入",formatYuan(data.main_net_inflow_yuan)],
    ["5 日净流入合计",formatYuan(data.inflow_5d_yuan)],
