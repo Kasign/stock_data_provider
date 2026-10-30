@@ -618,7 +618,9 @@ components:
           type: array
           maxItems: 1
           description: One explicit A-share symbol per request, format 600519.SH/000001.SZ/920001.BJ
-          items: {type: string, pattern: '^\\d{6}\\.(SH|SZ|BJ)
+          items: {type: string, pattern: '^\d{6}\.(SH|SZ|BJ)$'}
+        capabilities:
+          type: array
           uniqueItems: true
           items:
             type: string
