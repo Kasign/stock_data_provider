@@ -1208,6 +1208,13 @@ func (s *DataService) SectorRankingsByDirection(ctx context.Context, rawCategory
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
+		// 先判断 Provider 是否具备目标方向能力，避免不支持的请求占用半开探测名额。
+		if direction == "down" {
+			if _, ok := p.(provider.DirectionalSectorRankingProvider); !ok {
+				failures = append(failures, p.Name()+": provider does not support down sector ranking")
+				continue
+			}
+		}
 		breakerKey := p.Name() + ":sector_rankings"
 		if !s.breaker.Allow(breakerKey) {
 			failures = append(failures, p.Name()+": circuit breaker is open")
