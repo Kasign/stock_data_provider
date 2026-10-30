@@ -4863,7 +4863,7 @@ function safeWatchlistGroupStorage() {
 function syncWatchlistGroupControls() {
   const select = $("#watchlist-group-filter");
   if (!select) return;
-  const previous = select.value || "all", result = readWatchlistGroups(localStorage);
+  const previous = select.value || "all", result = readWatchlistGroups(safeWatchlistGroupStorage());
   select.replaceChildren();
   const all = document.createElement("option"); all.value = "all"; all.textContent = "全部分组"; select.append(all);
   result.groups.forEach((group) => { const option = document.createElement("option"); option.value = group; option.textContent = group; select.append(option); });
