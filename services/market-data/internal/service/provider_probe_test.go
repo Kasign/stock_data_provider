@@ -223,3 +223,36 @@ func TestRecordProviderProbeEvidenceOnlyClassifiesAshareMarkets(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderProbeOptionsApplyMarketAndSymbolSample(t *testing.T) {
+	p := providerProbeQuoteFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, Markets: []string{"CHINEXT"}, Symbols: []string{"300750.SZ"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("filtered probe returned error: %v", err)
+	}
+	if len(run.Items) != 1 || run.Items[0].SampleSymbol != "300750.SZ" || run.Items[0].SampleMarket != "SZ" {
+		t.Fatalf("unexpected selected sample evidence: %+v", run)
+	}
+	if len(run.RequestedMarkets) != 1 || run.RequestedMarkets[0] != "CHINEXT" || len(run.RequestedSymbols) != 1 || run.RequestedSymbols[0] != "300750.SZ" {
+		t.Fatalf("unexpected requested filters: %+v", run)
+	}
+}
+
+func TestProviderProbeOptionsValidateMarketAndSymbolFilters(t *testing.T) {
+	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	cases := []ProviderProbeOptions{
+		{Scope: "all", Capabilities: []string{"quote"}, Markets: []string{"UNKNOWN"}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"quote"}, Markets: []string{"STAR"}, Symbols: []string{"300750.SZ"}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"quote"}, Symbols: []string{"600519"}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"quote"}, Markets: []string{"SH_MAIN", "STAR"}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"market_breadth"}, Markets: []string{"SH_MAIN"}, TimeoutSeconds: 5},
+	}
+	for i, options := range cases {
+		if _, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), options); err == nil {
+			t.Errorf("case %d should reject invalid filters: %+v", i, options)
+		}
+	}
+}
