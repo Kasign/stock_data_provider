@@ -791,12 +791,12 @@
                   </div>
                   <div class="settings-connection-actions"><button class="button button-secondary" id="reset-local-preferences" type="button">恢复本地偏好默认值</button></div>
                   <div class="settings-group-heading"><div><strong>自选股信息显示</strong><p>控制自选股卡片中显示的辅助信息；股票代码、名称和操作入口始终保留。</p></div><span class="settings-config-scope">即时生效</span></div>
-                  <div class="settings-watchlist-display-options">
-                    <label><input type="checkbox" data-watchlist-display-field value="updated" checked /><span>添加/更新时间</span></label>
-                    <label><input type="checkbox" data-watchlist-display-field value="quote" checked /><span>当前行情快照</span></label>
-                    <label><input type="checkbox" data-watchlist-display-field value="today" checked /><span>今日分析记录</span></label>
-                    <label><input type="checkbox" data-watchlist-display-field value="task" checked /><span>当前/最近任务状态</span></label>
-                    <label><input type="checkbox" data-watchlist-display-field value="result" checked /><span>分析结果摘要</span></label>
+                  <div class="settings-watchlist-display-options" id="watchlist-field-order-list">
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="updated"><label><input type="checkbox" data-watchlist-display-field value="updated" checked /><span>添加/更新时间</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="添加/更新时间上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="添加/更新时间下移">下移</button></div></div>
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="quote"><label><input type="checkbox" data-watchlist-display-field value="quote" checked /><span>当前行情快照</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="当前行情快照上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="当前行情快照下移">下移</button></div></div>
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="today"><label><input type="checkbox" data-watchlist-display-field value="today" checked /><span>今日分析记录</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="今日分析记录上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="今日分析记录下移">下移</button></div></div>
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="task"><label><input type="checkbox" data-watchlist-display-field value="task" checked /><span>当前/最近任务状态</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="当前/最近任务状态上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="当前/最近任务状态下移">下移</button></div></div>
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="result"><label><input type="checkbox" data-watchlist-display-field value="result" checked /><span>分析结果摘要</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="分析结果摘要上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="分析结果摘要下移">下移</button></div></div>
                   </div>
                   <p class="settings-inline-status" id="local-preferences-feedback" role="status" aria-live="polite">自选股排序和信息显示偏好保存在当前浏览器。</p>
                   <p class="field-hint">恢复默认值会重置本地行情颜色、数字精度、单位、自选股展示/排序和默认日 K 查询偏好；不会清除主题、API Key、连接路径、自选股或最近任务引用。</p>
@@ -833,7 +833,15 @@
                     <article><strong>包含内容</strong><p>主题偏好、行情/分析 API 路径、自选股清单、最近任务引用。</p></article>
                     <article><strong>排除内容</strong><p>API Key、行情缓存、完整分析报告、服务器 .env 和数据库数据。</p></article>
                   </div>
-                  <div class="settings-connection-actions settings-browser-data-actions"><button class="button button-secondary" id="export-browser-data" type="button">导出工作区 JSON</button><button class="button button-primary" id="import-browser-data" type="button">导入工作区 JSON</button><input id="browser-data-file" type="file" accept="application/json,.json" hidden /></div>
+                  <div class="settings-connection-actions settings-browser-data-actions"><button class="button button-secondary" id="export-browser-data" type="button">导出工作区 JSON</button><button class="button button-primary" id="import-browser-data" type="button">导入工作区 JSON</button><input id="browser-data-file" type="file" accept="application/json,.json" hidden />
+                  <dialog class="browser-data-import-dialog" id="browser-data-import-dialog" aria-labelledby="browser-data-import-title">
+                    <form method="dialog" class="browser-data-import-card">
+                      <div class="settings-group-heading"><div><strong id="browser-data-import-title">导入工作区预览</strong><p>确认导入范围与冲突处理方式后再写入浏览器。</p></div><button class="text-button" value="cancel" aria-label="关闭导入预览">关闭</button></div>
+                      <p id="browser-data-import-summary" class="settings-inline-status"></p><p id="browser-data-import-current" class="field-hint"></p><p id="browser-data-import-settings" class="field-hint"></p>
+                      <div class="browser-data-import-strategies"><button class="button button-primary" id="browser-data-import-replace" type="button">替换导入</button><button class="button button-secondary" id="browser-data-import-merge" type="button">合并导入</button><button class="button button-secondary" value="cancel">取消</button></div>
+                      <p id="browser-data-import-merge-hint" class="field-hint"></p>
+                    </form>
+                  </dialog></div>
                   <p class="settings-inline-status" id="browser-data-feedback" role="status" aria-live="polite">尚未导入或导出。</p>
                   <p class="field-hint">导入前会校验文件格式、版本和条目；确认后替换对应本地数据并保留当前 API Key。任务引用可能包含股票代码、任务 ID 与分析服务路径，请妥善保管。</p>
                 </div>
