@@ -305,6 +305,13 @@
               <span class="watchlist-filter-count" id="watchlist-filter-count" aria-live="polite">显示全部自选</span>
               <div class="watchlist-quote-actions"><button class="button button-secondary" id="refresh-watchlist-quotes" type="button">刷新批量行情</button><span id="watchlist-quote-refresh-status" class="watchlist-quote-refresh-status" role="status" aria-live="polite">批量行情按需读取，不会在打开自选股时自动请求。</span></div>
             </div>
+            <details class="watchlist-import">
+              <summary>批量导入自选股</summary>
+              <p class="market-widget-meta">支持每行一个股票代码，或“代码,名称”两列；也支持制表符分隔。六位代码按现有证券代码规范识别交易所；无法可靠推断的代码保留原样，不强行补充后缀。导入前先预览，最多保存 50 只。数据仅保存在当前浏览器。</p>
+              <label class="field"><span>粘贴股票列表</span><textarea id="watchlist-import-text" rows="5" placeholder="代码,名称&#10;600519,贵州茅台&#10;000858,五粮液"></textarea></label>
+              <div class="watchlist-import-actions"><button class="button button-secondary" id="watchlist-import-preview-button" type="button">预览导入</button><span id="watchlist-import-summary" role="status" aria-live="polite">尚未生成导入预览。</span><button class="button button-primary" id="watchlist-import-confirm" type="button" disabled>确认导入</button></div>
+              <div class="watchlist-import-preview table-scroll" id="watchlist-import-preview"></div>
+            </details>
             <div class="watchlist-list" id="watchlist-list"><div class="empty-row">点击“加入自选”后，可从这里快速查询行情或发起分析。</div></div>
           </section>
         </section>
