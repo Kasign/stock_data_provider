@@ -8,6 +8,8 @@ on:
     paths:
       - 'services/market-data/internal/normalize/**'
       - 'python_bridge/capabilities/market_data.py'
+      - 'scripts/compare_market_data_exports.py'
+      - 'scripts/test_compare_market_data_exports.py'
       - 'doc/接口规范/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md'
       - 'doc/接口规范/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md'
       - '.github/workflows/data-quality-parity.yml'
@@ -15,6 +17,8 @@ on:
     paths:
       - 'services/market-data/internal/normalize/**'
       - 'python_bridge/capabilities/market_data.py'
+      - 'scripts/compare_market_data_exports.py'
+      - 'scripts/test_compare_market_data_exports.py'
       - 'doc/接口规范/PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md'
       - 'doc/接口规范/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md'
       - '.github/workflows/data-quality-parity.yml'
@@ -40,6 +44,14 @@ jobs:
         with:
           go-version: '1.23.x'
           cache-dependency-path: services/market-data/go.sum
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test Python and Go sample comparison utility
+        run: python -m unittest scripts/test_compare_market_data_exports.py -v
 
       - name: Run Python-to-Go parity contract tests
         working-directory: services/market-data
