@@ -151,7 +151,7 @@ const state = {
   taskStatus: "",
   taskFailureCode: "",
   taskErrorMessage: "",
-  taskStatusLoading: false;
+  taskStatusLoading: false,
   taskStatusError: "",
   taskStatusErrorRetrying: false,
   isCreatingTask: false,
