@@ -597,11 +597,26 @@ components:
         error_message: {type: string, description: Sanitized and length-limited actionable failure summary; credentials and URL queries are redacted}
         http_status: {type: integer, minimum: 100, maximum: 599}
         checked_at: {type: string, format: date-time}
+    ProviderProbeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        scope: {type: string, enum: [all, core], default: all}
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [quote, daily_bars, stock_basic, stock_search, stock_universe, index_quotes, index_catalog, market_breadth, sector_rankings, market_capital_flow, limit_pool, dragon_tiger, announcements, trading_calendar, security_trading_status, price_limit_event, stock_boards, fundamentals, valuations, hot_ranking, capital_flow, chip_distribution]
+        timeout_seconds: {type: integer, minimum: 1, maximum: 30, default: 12}
     ProviderProbeRun:
       type: object
-      required: [run_id, status, persisted, started_at, finished_at, total, returned, degraded, unknown, failed, skipped, not_configured, not_supported, items]
+      required: [run_id, scope, timeout_seconds, status, persisted, started_at, finished_at, total, returned, degraded, unknown, failed, skipped, not_configured, not_supported, items]
       properties:
         run_id: {type: string}
+        scope: {type: string, enum: [all, core]}
+        requested_capabilities: {type: array, items: {type: string}}
+        timeout_seconds: {type: integer, minimum: 1, maximum: 30}
         status: {type: string, enum: [success, degraded, failed, not_configured, no_capabilities_configured]}
         persisted: {type: boolean, description: False when MariaDB storage is not configured}
         started_at: {type: string, format: date-time}
@@ -1112,20 +1127,36 @@ paths:
         '504': {description: Providers timed out}
   /api/v1/data-sources/probe:
     post:
-      summary: Actively probe enabled Provider capabilities and persist a sanitized run
+      tags: [Data Sources]
+      summary: 主动诊断 Provider 能力
       description: >-
-        Executes bounded sample requests directly against each registered Provider capability. Probes are isolated
-        from business request circuit-breaker statistics, run with per-capability timeouts and limited concurrency,
-        and never return raw upstream errors, request URLs or credentials. The run is persisted when MariaDB is configured; otherwise persisted=false and history remains unavailable.
+        默认空请求体执行全部能力。scope=core 执行核心能力；capabilities 非空时仅执行指定能力。
+        timeout_seconds 为单项 Provider 请求超时，范围 1 到 30 秒，默认 12 秒。
+        探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。
+      security:
+        - ApiKey: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderProbeRequest'
+            examples:
+              core:
+                summary: 核心能力诊断
+                value: {scope: core, timeout_seconds: 12}
+              selected:
+                summary: 仅检查行情
+                value: {scope: all, capabilities: [quote], timeout_seconds: 8}
       responses:
         '200':
-          description: Probe batch and per-capability outcomes
+          description: 诊断批次与各能力结果
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ProviderProbeRun'}
-        '401': {description: API key required}
-        '502': {description: Probe execution failed}
-        '503': {description: Provider-probe history storage is unavailable}
+        '400': {description: 请求参数或 JSON 格式无效}
+        '401': {description: API Key 缺失或无效}
+        '500': {description: 诊断结果持久化失败}
   /api/v1/data-sources/probe/history:
     get:
       summary: List recent persisted Provider probe runs
