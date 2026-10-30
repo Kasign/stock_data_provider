@@ -1963,25 +1963,24 @@ test("设置中心导航、区块和本地配置交互保持一致", () => {
   assert.equal(targets.length, 10, "设置中心应保留 10 个已规划分组");
   assert.deepEqual([...targets].sort(), [...sections].sort(), "每个设置导航必须唯一对应一个内容区块");
   assert.equal(new Set(targets).size, targets.length, "设置导航目标不能重复");
-  assert.doesNotMatch(html, /<\\/(?:section|div|main|form|nav|article|aside|footer)>>/, "HTML 不能包含多余的闭合标签字符");
-  assert.match(app, /resetPreferences\\(\\)/, "恢复本地偏好必须调用统一的本地偏好存储模块");
-  assert.match(app, /bindNotificationPreferences\\(/, "通知本地偏好必须通过独立模块绑定");
+  assert.doesNotMatch(html, /<\/(?:section|div|main|form|nav|article|aside|footer)>>/, "HTML 不能包含多余的闭合标签字符");
+  assert.match(app, /resetPreferences\(\)/, "恢复本地偏好必须调用统一的本地偏好存储模块");
+  assert.match(app, /bindNotificationPreferences\(/, "通知本地偏好必须通过独立模块绑定");
   assert.match(html, /保存本地偏好/);
   assert.match(html, /保存渠道（待接入）/);
   assert.match(html, /发送测试（待接入）/);
 });
 
 test("行情服务接口文档、Handler 与 WebUI 调用边界明确区分", () => {
-  assert.match(marketHTTPServer, /mux\\.HandleFunc\\("GET \\/health\\/live"/);
-  assert.match(marketHTTPServer, /mux\\.HandleFunc\\("GET \\/health\\/ready"/);
-  assert.match(marketHTTPServer, /mux\\.Handle\\("GET \\/api\\/v1\\/data-sources\\/diagnostics"/);
-  assert.match(marketHTTPServer, /mux\\.Handle\\("POST \\/api\\/v1\\/data-sources\\/probe"/);
+  assert.match(marketHTTPServer, /mux\.HandleFunc\("GET \/health\/live"/);
+  assert.match(marketHTTPServer, /mux\.HandleFunc\("GET \/health\/ready"/);
+  assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/data-sources\/diagnostics"/);
+  assert.match(marketHTTPServer, /mux\.Handle\("POST \/api\/v1\/data-sources\/probe"/);
   assert.match(apiClient, /getDataSourceDiagnostics/);
-  assert.doesNotMatch(apiClient, /data-sources\\/probe/, "WebUI 不应为同花顺诊断调用主动探测接口");
-  assert.match(marketOpenAPI, /\\/api\\/v1\\/market\\/capital-flow:/, "OpenAPI 当前声明了市场级资金流接口");
-  assert.doesNotMatch(marketHTTPServer, /mux\\.Handle\\("GET \\/api\\/v1\\/market\\/capital-flow"/, "市场级资金流尚无 Handler 注册");
-  assert.match(marketHTTPServer, /mux\\.Handle\\("GET \\/api\\/v1\\/stocks\\/\\{symbol\\}\\/capital-flow"/, "个股资金流 Handler 已注册");
+  assert.doesNotMatch(apiClient, /data-sources\/probe/, "WebUI 不应为同花顺诊断调用主动探测接口");
+  assert.match(marketOpenAPI, /\/api\/v1\/market\/capital-flow:/, "OpenAPI 当前声明了市场级资金流接口");
+  assert.doesNotMatch(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/market\/capital-flow"/, "市场级资金流尚无 Handler 注册");
+  assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/stocks\/\{symbol\}\/capital-flow"/, "个股资金流 Handler 已注册");
   assert.match(apiClient, /export function getCapitalFlow/);
   assert.doesNotMatch(apiClient, /export function getMarketCapitalFlow/, "WebUI 不应把未注册的市场级资金流接口当作可用能力");
 });
-
