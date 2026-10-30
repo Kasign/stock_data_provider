@@ -4909,3 +4909,36 @@ button:disabled {
 .notification-preference-events input { width:auto; }
 #notification-preferences-feedback[data-state="error"] { color:var(--danger); }
 @media(max-width:640px) { .data-center-hithink-card dl { grid-template-columns:1fr; gap:4px; } .data-center-hithink-card dd { margin-bottom:8px; } }
+
+
+.market-sentiment-history {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.market-sentiment-history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin: 12px 0;
+}
+.market-sentiment-history-controls label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.market-sentiment-history-controls input {
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.market-sentiment-history-controls button:disabled {
+  opacity: .6;
+  cursor: wait;
+}

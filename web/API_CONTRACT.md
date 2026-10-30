@@ -27,6 +27,8 @@
 | 批量行情 | `GET /api/v1/market/quotes` | `getMarketQuotes` | 仅查询明确传入的证券列表 |
 | 指数行情/目录/成分/日线 | `GET /api/v1/market/indices`、`index-catalog`、`indices/{symbol}/constituents`、`indices/{symbol}/daily` | 对应 `getMarketIndices`、`getIndexCatalog`、`getIndexConstituents`、`getIndexDailyBars` | 目录与行情快照不是同一资源 |
 | 市场广度/板块 | `GET /api/v1/market/breadth`、`/market/sectors` | `getMarketBreadth`、`getMarketSectors` | 按实际服务端质量字段展示 |
+| 全市场分页股票 | `GET /api/v1/market/stocks` | `getMarketStocks` | 分页返回证券目录与行情覆盖；MA 缺失保留 null |
+| 市场情绪快照/历史 | `GET /api/v1/market/sentiment`、`/market/sentiment/history` | `getMarketSentiment`、`getMarketSentimentHistory` | 历史只读数据库已保存快照，不补造缺失交易日 |
 | 人气榜/涨跌停/龙虎榜/交易日历/时段 | `GET /api/v1/market/hot-stocks`、`limit-pools`、`dragon-tiger`、`trading-calendar`、`session` | 对应同名 `getMarket*` / `getTradingCalendar` 封装 | 不将缺失数据补成零 |
 | 个股行情/日 K/Bundle | `GET /api/v1/quotes/{symbol}`、`bars/{symbol}/daily`、`bundles/{symbol}` | `getQuote`、`getDailyBars`、`getMarketBundle` | 保留复权、来源与质量语义 |
 | 个股资料/财务/公告/板块 | `GET /api/v1/stocks/{symbol}/profile`、`fundamentals`、`announcements`、`boards` | 对应 `getStock*` 封装 | 分别处理空结果、分页和报告期 |
@@ -36,7 +38,7 @@
 
 - `services/market-data/openapi.yaml` 声明了 `GET /api/v1/market/capital-flow`，但当前 `server.go` 没有注册对应 Handler，WebUI 也没有该接口封装。当前不能将市场级资金流标记为可用。
 - 个股资金流 `GET /api/v1/stocks/{symbol}/capital-flow` 已注册 Handler，并有 `getCapitalFlow` 封装。不得用个股资金流冒充市场级资金流。
-- `GET /api/v1/market/stocks` 已有 Handler 和 OpenAPI 声明，但当前 `api.js` 没有对应封装；目前不视为 WebUI 已接入的全市场概览能力。
+- `GET /api/v1/market/stocks`、`GET /api/v1/market/sentiment`、`GET /api/v1/market/sentiment/history` 已注册 Handler，且现已提供 WebUI API 封装；市场股票分页尚未接入具体展示列表，情绪历史已提供手动日期范围查询入口。
 - `POST /api/v1/data-sources/probe` 是主动探测接口。数据中心的同花顺状态展示不得调用该接口；本页面仅读取 `GET /api/v1/data-sources` 与只读运行诊断快照。不得要求用户提供同花顺 API Key 来完成 UI 验收。
 
 ## 3. 分析任务服务边界

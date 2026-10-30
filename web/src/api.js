@@ -130,6 +130,45 @@ export function getMarketHotStocks(settings, { type = "popular", limit = 10, sig
   return request(settings.marketBase, "/api/v1/market/hot-stocks?" + query.toString(), { apiKey: settings.apiKey, signal });
 }
 export function getMarketIndices(settings, signal) { return request(settings.marketBase, "/api/v1/market/indices", { apiKey: settings.apiKey, signal }); }
+
+export function getMarketStocks(settings, { page = 1, pageSize = 50, includeMA = true, adjustment = "forward_adjusted", signal } = {}) {
+  const normalizedPage = Math.max(1, Math.min(10000, Math.trunc(Number(page) || 1)));
+  const normalizedPageSize = Math.max(1, Math.min(100, Math.trunc(Number(pageSize) || 50)));
+  const allowedAdjustments = new Set(["none", "forward_adjusted", "backward_adjusted"]);
+  const normalizedAdjustment = allowedAdjustments.has(String(adjustment)) ? String(adjustment) : "forward_adjusted";
+  const query = new URLSearchParams({
+    page: String(normalizedPage),
+    page_size: String(normalizedPageSize),
+    include_ma: String(Boolean(includeMA)),
+    adjustment: normalizedAdjustment
+  });
+  return request(settings.marketBase, "/api/v1/market/stocks?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+export function getMarketSentiment(settings, { date = "", signal } = {}) {
+  if (date && !isValidISODate(date)) return Promise.reject(new Error("市场情绪快照日期必须是有效日期。"));
+  const query = new URLSearchParams();
+  if (date) query.set("date", date);
+  const suffix = query.size ? "?" + query.toString() : "";
+  return request(settings.marketBase, "/api/v1/market/sentiment" + suffix, {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+export function getMarketSentimentHistory(settings, { start, end, limit = 120, signal } = {}) {
+  if (!isValidISODate(start) || !isValidISODate(end)) {
+    return Promise.reject(new Error("市场情绪历史查询需要有效的开始和结束日期。"));
+  }
+  if (start > end) return Promise.reject(new Error("市场情绪历史开始日期不能晚于结束日期。"));
+  const normalizedLimit = Math.max(1, Math.min(500, Math.trunc(Number(limit) || 120)));
+  const query = new URLSearchParams({ start, end, limit: String(normalizedLimit) });
+  return request(settings.marketBase, "/api/v1/market/sentiment/history?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
 export function getMarketSession(settings, at = "", signal) {
   const query = new URLSearchParams();
   if (at) query.set("at", at);

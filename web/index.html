@@ -81,7 +81,16 @@
                 <article class="market-extension-metric"><small>平盘家数</small><strong id="market-sentiment-unchanged">—</strong><span>来自市场广度接口</span></article>
                 <article class="market-extension-metric"><small>当前查看的交易池</small><strong id="market-sentiment-pool">尚未读取</strong><span>随涨跌停池选项更新，不等于情绪综合分</span></article>
               </div>
-              <div class="market-planned-state" id="market-sentiment-history-state"><strong>情绪历史曲线 · 数据能力待接入</strong><p>需要持续采集并保存每日/盘中快照。尚未积累的历史数据不会用当前数值拼接。</p></div>
+              <section class="market-sentiment-history" aria-labelledby="market-sentiment-history-title">
+                <div class="market-overview-widget-heading"><div><h3 id="market-sentiment-history-title">已保存的每日情绪快照</h3><p>只读取服务端持久化记录；没有保存的数据日期不会补造。</p></div><span class="availability-pill is-readonly" id="market-sentiment-history-status">选择日期范围</span></div>
+                <div class="market-sentiment-history-controls">
+                  <label>开始日期<input id="market-sentiment-history-start" type="date"></label>
+                  <label>结束日期<input id="market-sentiment-history-end" type="date"></label>
+                  <button class="button button-secondary" id="load-market-sentiment-history" type="button">读取历史</button>
+                </div>
+                <div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>交易日</th><th>上涨</th><th>下跌</th><th>平盘</th><th>涨停</th><th>跌停</th><th>质量</th></tr></thead><tbody id="market-sentiment-history-body"><tr><td colspan="7" class="table-empty">选择日期范围后读取已保存快照。</td></tr></tbody></table></div>
+                <p class="market-widget-meta" id="market-sentiment-history-meta"></p>
+              </section>
               <p class="market-widget-meta" id="market-sentiment-meta">尚未取得当日市场广度数据。</p>
             </section>
             <section class="panel market-extension-panel" id="market-money-flow-panel" aria-labelledby="market-money-flow-title">

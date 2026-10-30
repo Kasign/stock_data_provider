@@ -1,4 +1,4 @@
-import { getMarketBreadth, getMarketHotStocks, getMarketIndices, getMarketLimitPool, getMarketSectors } from "./api.js";
+import { getMarketBreadth, getMarketHotStocks, getMarketIndices, getMarketLimitPool, getMarketSentimentHistory, getMarketSectors } from "./api.js";
 import { describeApiError, finiteNumberOrNull, formatCompact, formatDateTime, formatPercent, formatPrice, qualityLabel } from "./format.js";
 const $ = (s) => document.querySelector(s);
 const KEYS = ["indices", "breadth", "sectors", "pool", "hot"];
@@ -192,6 +192,43 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  document.querySelectorAll("[data-sector-metric]").forEach(button=>button.addEventListener("click",()=>{sectorMetric=["change","amount","five-day","flow"].includes(button.dataset.sectorMetric)?button.dataset.sectorMetric:"change";document.querySelectorAll("[data-sector-metric]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("sectors");}));
  document.querySelectorAll("[data-pool-type]").forEach(button=>button.addEventListener("click",()=>{poolType=["up","down","broken"].includes(button.dataset.poolType)?button.dataset.poolType:"up";document.querySelectorAll("[data-pool-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("pool");}));
  document.querySelectorAll("[data-hot-type]").forEach(button=>button.addEventListener("click",()=>{hotType=["popular","surge"].includes(button.dataset.hotType)?button.dataset.hotType:"popular";document.querySelectorAll("[data-hot-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("hot");}));
+
+ async function loadSentimentHistory() {
+  const status=$("#market-sentiment-history-status");
+  const body=$("#market-sentiment-history-body");
+  const start=$("#market-sentiment-history-start")?.value || "";
+  const end=$("#market-sentiment-history-end")?.value || "";
+  if(!start||!end){if(status)status.textContent="请选择开始和结束日期";return;}
+  const settings=typeof getSettings==="function"?getSettings():null;
+  if(!settings?.apiKey){if(status)status.textContent="请先配置行情 API Key";return;}
+  const button=$("#load-market-sentiment-history");
+  const previous=button?.textContent;
+  if(button){button.disabled=true;button.textContent="读取中…";}
+  const controller=new AbortController();
+  try{
+   if(status)status.textContent="正在读取已持久化的情绪快照…";
+   const data=await getMarketSentimentHistory(settings,{start,end,limit:120,signal:controller.signal});
+   const items=Array.isArray(data?.items)?data.items:[];
+   if(body){
+    body.replaceChildren();
+    if(!items.length){const row=document.createElement("tr"),cell=el("td","table-empty","该日期范围内没有已保存的情绪快照；不会用当前行情补造历史。");cell.colSpan=7;row.append(cell);body.append(row);}
+    items.forEach(item=>{
+     const row=document.createElement("tr");
+     [item.trade_date,count(item.advancing_count),count(item.declining_count),count(item.unchanged_count),count(item.limit_up_count),count(item.limit_down_count),qualityLabel(item.quality_status)].forEach(value=>row.append(el("td","",value)));
+     body.append(row);
+    });
+   }
+   if(status)status.textContent="已读取 "+items.length+"/"+count(data?.total)+" 条持久化快照";
+   meta("market-sentiment-history-meta",["请求 "+(data?.start_date||start)+" 至 "+(data?.end_date||end),"数据条数 "+count(data?.total),"按服务端已保存记录展示"]);
+  }catch(error){
+   if(status)status.textContent="读取失败："+safeOverviewError(error);
+   if(body){body.replaceChildren();const row=document.createElement("tr"),cell=el("td","table-empty","历史快照读取失败；请检查数据库历史存储与行情服务状态。");cell.colSpan=7;row.append(cell);body.append(row);}
+  }finally{
+   if(button){button.disabled=false;button.textContent=previous||"读取历史";}
+  }
+ }
+ $("#load-market-sentiment-history")?.addEventListener("click",()=>{void loadSentimentHistory();});
+
  $("#market-hot-stocks-body")?.addEventListener("click",event=>{const button=event.target.closest("button[data-hot-symbol]");if(!button||!button.dataset.hotSymbol||typeof onSelectStock!=="function")return;onSelectStock({symbol:button.dataset.hotSymbol,name:button.dataset.hotName||button.dataset.hotSymbol},"人气/飙升榜");});
  return {refresh,invalidateConnection};
 }

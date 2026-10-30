@@ -1957,6 +1957,26 @@ test("运行流采用全屏双栏工作区，节点和质量诊断可折叠", ()
   assert.match(stylesheet, /@media \(max-width:900px\)[\s\S]*?run-flow-workspace/);
 });
 
+test("市场股票与情绪历史 API 封装保持真实接口契约", () => {
+  assert.match(apiClient, /export function getMarketStocks/);
+  assert.match(apiClient, /\/api\/v1\/market\/stocks\?/);
+  assert.match(apiClient, /page_size: String\(normalizedPageSize\)/);
+  assert.match(apiClient, /export function getMarketSentiment\(/);
+  assert.match(apiClient, /\/api\/v1\/market\/sentiment/);
+  assert.match(apiClient, /export function getMarketSentimentHistory/);
+  assert.match(apiClient, /\/api\/v1\/market\/sentiment\/history\?/);
+  assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/market\/stocks"/);
+  assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/market\/sentiment"/);
+  assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/market\/sentiment\/history"/);
+  assert.match(marketOpenAPI, /\/api\/v1\/market\/stocks:/);
+  assert.match(marketOpenAPI, /\/api\/v1\/market\/sentiment:/);
+  assert.match(marketOpenAPI, /\/api\/v1\/market\/sentiment\/history:/);
+  assert.match(html, /id="market-sentiment-history-start"/);
+  assert.match(html, /id="market-sentiment-history-end"/);
+  assert.match(app, /getMarketSentimentHistory/);
+  assert.match(app, /不会用当前行情补造历史/);
+});
+
 test("设置中心导航、区块和本地配置交互保持一致", () => {
   const targets = [...html.matchAll(/data-settings-target="([^"]+)"/g)].map((match) => match[1]);
   const sections = [...html.matchAll(/<section[^>]*class="[^"]*settings-section[^"]*"[^>]*id="([^"]+)"/g)].map((match) => match[1]);
