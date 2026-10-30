@@ -54,11 +54,11 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 			if q == nil {
 				return model.QualityUnknown, "", nil, errors.New("empty quote response")
 			}
-			if q.Symbol == "" {
-				q.Symbol = quoteSymbol
+			if q.Symbol != quoteSymbol {
+				return model.QualityInvalid, q.SourceVersion, nil, fmt.Errorf("quote response symbol mismatch: got %q, want %q", q.Symbol, quoteSymbol)
 			}
 			if q.Source == "" {
-				q.Source = p.Name()
+				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote source missing")
 			}
 			if err := normalize.ValidateQuote(q); err != nil {
 				return model.QualityInvalid, q.SourceVersion, nil, err
