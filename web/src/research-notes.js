@@ -27,6 +27,8 @@ export function writeResearchNotes(items, storage) {
   if(normalized.some(x=>!x)) return {ok:false,reason:"invalid"};
   try {
     const target=safeStorage(storage); if(!target) return {ok:false,reason:"unavailable"};
+    const existing=readResearchNotes(target);
+    if(!existing.readable||!existing.valid) return {ok:false,reason:"invalid-storage"};
     target.setItem(RESEARCH_NOTES_KEY,JSON.stringify(normalized));
     const check=readResearchNotes(target);
     return check.readable&&check.valid&&check.items.length===normalized.length?{ok:true}:{ok:false,reason:"verify"};
@@ -37,7 +39,7 @@ export function filterResearchNotes(items, query="", symbol="") {
   return (Array.isArray(items)?items:[]).filter(n=>(!s||n.symbol.toLowerCase().includes(s))&&(!q||[n.title,n.content,n.symbol,...n.tags].join(" ").toLowerCase().includes(q))).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 export function bindResearchNotes({root=document, getContext=()=>({}), storage}={}) {
-  const $=id=>root.querySelector("#"+id), form=$("#research-note-form"); if(!form)return;
+  const $=selector=>root.querySelector(selector.startsWith("#")?selector:"#"+selector), form=$("#research-note-form"); if(!form)return;
   let editingId="";
   const feedback=(message,error=false)=>{const el=$("#research-note-feedback");el.textContent=message;el.dataset.state=error?"error":"ok";};
   const state=()=>readResearchNotes(storage);
