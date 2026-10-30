@@ -955,6 +955,47 @@ paths:
         '401': {description: API key required}
         '502': {description: Providers failed}
         '504': {description: Providers timed out}
+  /api/v1/data-sources/diagnostics:
+    get:
+      tags: [Data Sources]
+      summary: 查询数据源运行诊断
+      description: 基于进程内真实行情与日 K 请求记录返回状态，不主动探测 Provider；服务重启后历史计数重置。
+      security:
+        - ApiKey: []
+      responses:
+        '200':
+          description: Provider 运行诊断
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, scope, observed_from]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [provider, capabilities]
+                      properties:
+                        provider: {type: string}
+                        capabilities:
+                          type: array
+                          items:
+                            type: object
+                            required: [capability, status, consecutive_failures, total_success, total_failure]
+                            properties:
+                              capability: {type: string, enum: [quote, daily_bars]}
+                              status: {type: string, enum: [not_observed, healthy, degraded, open, half_open]}
+                              consecutive_failures: {type: integer}
+                              total_success: {type: integer, format: int64}
+                              total_failure: {type: integer, format: int64}
+                              last_success_at: {type: string, format: date-time, nullable: true}
+                              last_failure_at: {type: string, format: date-time, nullable: true}
+                              open_until: {type: string, format: date-time, nullable: true}
+                  scope:
+                    type: array
+                    items: {type: string}
+                  observed_from: {type: string, enum: [in_process_circuit_breaker]}
   /api/v1/data-sources:
     get:
       responses:

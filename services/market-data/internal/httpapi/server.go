@@ -192,6 +192,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/bars/{symbol}/daily", s.auth(http.HandlerFunc(s.bars)))
 	mux.Handle("GET /api/v1/bundles/{symbol}", s.auth(http.HandlerFunc(s.bundle)))
 	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
+	mux.Handle("GET /api/v1/data-sources/diagnostics", s.auth(http.HandlerFunc(s.dataSourceDiagnostics)))
 	mux.Handle("GET /api/v1/market/sectors", s.auth(http.HandlerFunc(s.sectorRankings)))
 	mux.Handle("GET /api/v1/market/indices", s.auth(http.HandlerFunc(s.indexQuotes)))
 	mux.Handle("GET /api/v1/market/valuations", s.auth(http.HandlerFunc(s.valuations)))
@@ -379,6 +380,19 @@ func (s *Server) dataSources(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(sources, func(i, j int) bool { return sources[i].Name < sources[j].Name })
 	writeJSON(w, 200, map[string]any{"sources": sources, "normalization_version": normalize.Version})
+}
+
+// dataSourceDiagnostics 返回真实业务请求形成的运行诊断，不执行额外探测请求。
+func (s *Server) dataSourceDiagnostics(w http.ResponseWriter, r *http.Request) {
+	if s.svc == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"items": []any{}, "scope": []string{"quote", "daily_bars"}})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": s.svc.ProviderDiagnostics(),
+		"scope": []string{"quote", "daily_bars"},
+		"observed_from": "in_process_circuit_breaker",
+	})
 }
 
 func (s *Server) indexQuotes(w http.ResponseWriter, r *http.Request) {
