@@ -11,6 +11,7 @@ import (
 )
 
 type sentimentBreadthProvider struct{ snapshot *model.MarketBreadthSnapshot }
+
 func (p sentimentBreadthProvider) Name() string { return "eastmoney" }
 func (p sentimentBreadthProvider) FetchMarketBreadth(context.Context) (*model.MarketBreadthSnapshot, error) {
 	return p.snapshot, nil
@@ -31,19 +32,30 @@ func TestMarketSentimentKeepsUnavailablePoolCountsNull(t *testing.T) {
 		cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
 	ds.SetMarketBreadthProviders([]provider.MarketBreadthProvider{sentimentBreadthProvider{snapshot: breadth}})
 	snapshot, err := ds.MarketSentiment(context.Background(), "")
-	if err != nil { t.Fatalf("MarketSentiment() error = %v", err) }
-	if snapshot.TotalSecurities != 3 || snapshot.AdvancingCount != 1 { t.Fatalf("unexpected breadth values: %+v", snapshot) }
+	if err != nil {
+		t.Fatalf("MarketSentiment() error = %v", err)
+	}
+	if snapshot.TotalSecurities != 3 || snapshot.AdvancingCount != 1 {
+		t.Fatalf("unexpected breadth values: %+v", snapshot)
+	}
 	if snapshot.LimitUpCount != nil || snapshot.LimitDownCount != nil || snapshot.BrokenBoardCount != nil {
 		t.Fatalf("unavailable pool counts must remain null: %+v", snapshot)
 	}
 	for _, reason := range []string{"limit_pool_up_unavailable", "limit_pool_down_unavailable", "limit_pool_broken_unavailable"} {
 		found := false
-		for _, got := range snapshot.QualityReasons { if got == reason { found = true; break } }
+		for _, got := range snapshot.QualityReasons {
+			if got == reason {
+				found = true
+				break
+			}
+		}
 		if !found {
 			t.Errorf("missing quality reason %q in %v", reason, snapshot.QualityReasons)
 		}
 	}
-	if snapshot.QualityStatus != model.QualityDegraded { t.Fatalf("quality_status = %q, want degraded", snapshot.QualityStatus) }
+	if snapshot.QualityStatus != model.QualityDegraded {
+		t.Fatalf("quality_status = %q, want degraded", snapshot.QualityStatus)
+	}
 }
 
 func TestMarketSentimentDoesNotCollectHistoricalDate(t *testing.T) {

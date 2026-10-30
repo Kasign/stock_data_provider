@@ -63,7 +63,9 @@ func (s *DataService) StockUniverse(ctx context.Context) (*model.StockUniverseSn
 
 // MarketStocks returns one bounded page of the complete A-share universe with quote and optional MA enrichment.
 func (s *DataService) MarketStocks(ctx context.Context, page, pageSize int, includeMA bool, basis model.AdjustmentBasis) (*model.MarketStocksSnapshot, error) {
-	if ctx == nil { ctx = context.Background() }
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if page < 1 || page > 10000 {
 		return nil, errors.New("market-stocks page must be between 1 and 10000")
 	}

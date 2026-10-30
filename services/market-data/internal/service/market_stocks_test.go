@@ -24,7 +24,7 @@ func (p marketStocksFake) SearchStocks(_ context.Context, query string, limit in
 }
 func (p marketStocksFake) FetchQuote(_ context.Context, symbol string) (*model.Quote, error) {
 	now := time.Now().UTC()
-	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 10.0, 9.0, 11.0, 8.0, 9.0, 100000.0
+	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 11.111111, 9.0, 11.0, 8.0, 9.0, 100000.0
 	volume := int64(10000)
 	return &model.Quote{
 		Symbol: symbol, Name: "测试", CurrentPrice: &price, Change: &change, ChangePercent: &pct,

@@ -37,13 +37,13 @@ func (s *DataService) MarketSentiment(ctx context.Context, rawDate string) (*mod
 	item := &model.MarketSentimentSnapshot{
 		Market: "cn_a_share", TradeDate: tradeDate,
 		ProviderReportDate: breadth.ProviderReportDate,
-		TotalSecurities: breadth.TotalSecurities, CoveredSecurities: breadth.CoveredSecurities,
+		TotalSecurities:    breadth.TotalSecurities, CoveredSecurities: breadth.CoveredSecurities,
 		AdvancingCount: breadth.AdvancingCount, DecliningCount: breadth.DecliningCount,
 		UnchangedCount: breadth.UnchangedCount, UnclassifiedCount: breadth.UnclassifiedCount,
 		Source: breadth.Source, SourceVersion: breadth.SourceVersion,
 		FetchedAt: now, QualityStatus: breadth.QualityStatus,
 		QualityReasons: append([]string(nil), breadth.QualityReasons...),
-		PoolSources: make(map[string]string), PoolSourceVersions: make(map[string]string),
+		PoolSources:    make(map[string]string), PoolSourceVersions: make(map[string]string),
 	}
 	if item.ProviderReportDate == "" {
 		item.QualityStatus = model.QualityDegraded
