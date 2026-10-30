@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -21,14 +22,26 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 	request := providerProbeRequest{Scope: "all", TimeoutSeconds: 12}
 	if r.Body != nil {
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*1024))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&request); err != nil && err != io.EOF {
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil && err != io.EOF {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "request body must be valid JSON and no larger than 8 KB", requestID(r))
 			return
 		}
-		if err := decoder.Decode(&struct{}{}); err != io.EOF {
-			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "request body must contain exactly one JSON object", requestID(r))
-			return
+		if len(raw) > 0 {
+			if raw[0] != '{' {
+				writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "request body must be a JSON object", requestID(r))
+				return
+			}
+			if err := decoder.Decode(&json.RawMessage{}); err != io.EOF {
+				writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "request body must contain exactly one JSON object", requestID(r))
+				return
+			}
+			requestDecoder := json.NewDecoder(bytes.NewReader(raw))
+			requestDecoder.DisallowUnknownFields()
+			if err := requestDecoder.Decode(&request); err != nil {
+				writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "request body contains unsupported fields or invalid values", requestID(r))
+				return
+			}
 		}
 	}
 	if request.Scope == "" {
