@@ -135,6 +135,24 @@ func (s *DataService) ProviderDiagnostics() []map[string]any {
 		}
 		capabilities[p.Name()]["daily_bars"] = true
 	}
+	for _, p := range s.indexQuoteProviders {
+		if capabilities[p.Name()] == nil {
+			capabilities[p.Name()] = make(map[string]bool)
+		}
+		capabilities[p.Name()]["index_quotes"] = true
+	}
+	for _, p := range s.marketBreadthProviders {
+		if capabilities[p.Name()] == nil {
+			capabilities[p.Name()] = make(map[string]bool)
+		}
+		capabilities[p.Name()]["market_breadth"] = true
+	}
+	for _, p := range s.sectorRankingProviders {
+		if capabilities[p.Name()] == nil {
+			capabilities[p.Name()] = make(map[string]bool)
+		}
+		capabilities[p.Name()]["sector_rankings"] = true
+	}
 	result := make([]map[string]any, 0, len(capabilities))
 	for name, caps := range capabilities {
 		item := map[string]any{"provider": name, "capabilities": make([]CircuitDiagnostic, 0, len(caps))}
@@ -279,15 +297,27 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
+		breakerKey := p.Name() + ":index_quotes"
+		if !s.breaker.Allow(breakerKey) {
+			failures = append(failures, p.Name()+": circuit breaker is open")
+			continue
+		}
 		snapshot, fetchErr := p.FetchIndexQuotes(ctx)
 		if fetchErr != nil {
+			if ctx.Err() != nil {
+				s.breaker.Abandon(breakerKey)
+				return nil, false, ctx.Err()
+			}
+			s.breaker.Failure(breakerKey)
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
 		if err := validateIndexQuoteSnapshot(snapshot); err != nil {
+			s.breaker.Failure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		s.breaker.Success(breakerKey)
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
@@ -473,15 +503,27 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
+		breakerKey := p.Name() + ":market_breadth"
+		if !s.breaker.Allow(breakerKey) {
+			failures = append(failures, p.Name()+": circuit breaker is open")
+			continue
+		}
 		snapshot, fetchErr := p.FetchMarketBreadth(ctx)
 		if fetchErr != nil {
+			if ctx.Err() != nil {
+				s.breaker.Abandon(breakerKey)
+				return nil, false, ctx.Err()
+			}
+			s.breaker.Failure(breakerKey)
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
 		if err := validateMarketBreadth(snapshot); err != nil {
+			s.breaker.Failure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		s.breaker.Success(breakerKey)
 		if data, err := json.Marshal(snapshot); err == nil {
 			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {
 				s.logger.Warn("market breadth cache write failed", "error", cacheErr)
@@ -1166,16 +1208,32 @@ func (s *DataService) SectorRankingsByDirection(ctx context.Context, rawCategory
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
+		breakerKey := p.Name() + ":sector_rankings"
+		if !s.breaker.Allow(breakerKey) {
+			failures = append(failures, p.Name()+": circuit breaker is open")
+			continue
+		}
 		var snapshot *model.SectorRankingSnapshot
 		var fetchErr error
+		calledProvider := true
 		if directional, ok := p.(provider.DirectionalSectorRankingProvider); ok {
 			snapshot, fetchErr = directional.FetchSectorRankingsDirection(ctx, category, direction, limit)
 		} else if direction == "up" {
 			snapshot, fetchErr = p.FetchSectorRankings(ctx, category, limit)
 		} else {
+			calledProvider = false
 			fetchErr = fmt.Errorf("provider does not support %s sector ranking", direction)
 		}
 		if fetchErr != nil {
+			if ctx.Err() != nil {
+				s.breaker.Abandon(breakerKey)
+				return nil, false, ctx.Err()
+			}
+			if calledProvider {
+				s.breaker.Failure(breakerKey)
+			} else {
+				s.breaker.Abandon(breakerKey)
+			}
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
 			continue
 		}
@@ -1199,9 +1257,11 @@ func (s *DataService) SectorRankingsByDirection(ctx context.Context, rawCategory
 			}
 		}
 		if err := validateSectorRankingSnapshot(category, limit, snapshot); err != nil {
+			s.breaker.Failure(breakerKey)
 			failures = append(failures, p.Name()+": "+err.Error())
 			continue
 		}
+		s.breaker.Success(breakerKey)
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
 			if cacheErr := s.cache.Set(ctx, key, payload, ttl); cacheErr != nil {
