@@ -18,7 +18,7 @@ func (providerProbeQuoteFake) FetchQuote(_ context.Context, symbol string) (*mod
 	now := time.Now().UTC()
 	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 11.111111, 9.0, 11.0, 8.0, 9.0, 100000.0
 	volume := int64(10000)
-	return &model.Quote{Symbol:symbol, Name:"测试", CurrentPrice:&price, Change:&change, ChangePercent:&pct, Open:&open, High:&high, Low:&low, PrevClose:&prev, Volume:&volume, Amount:&amount, QuoteTime:&now, QuoteTimeSemantics:"provider_snapshot_time", FetchedAt:now, NormalizedAt:now, Source:"probe-test", SourceVersion:"probe-quote-v1", VolumeUnit:"shares", AmountUnit:"CNY", AdjustmentBasis:model.AdjustmentNone, QualityStatus:model.QualityValid, NormalizationVer:normalize.Version}, nil
+	return &model.Quote{Symbol: symbol, Name: "测试", CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: &amount, QuoteTime: &now, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: now, NormalizedAt: now, Source: "probe-test", SourceVersion: "probe-quote-v1", VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}, nil
 }
 
 func TestProviderActiveProbeRunsOutsideBusinessCircuitBreaker(t *testing.T) {

@@ -215,6 +215,7 @@ type SectorRanking struct {
 type SectorRankingSnapshot struct {
 	Category          string          `json:"category"`
 	Direction         string          `json:"direction"`
+	SortBy            string          `json:"sort_by,omitempty"`
 	Total             int             `json:"total"`
 	ProviderReturned  int             `json:"provider_returned,omitempty"`
 	ExcludedRows      int             `json:"excluded_rows,omitempty"`

@@ -1121,6 +1121,13 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if snapshot.Direction != "" && snapshot.Direction != "up" && snapshot.Direction != "down" {
 		return fmt.Errorf("sector-ranking direction %q is unsupported", snapshot.Direction)
 	}
+	sortBy := snapshot.SortBy
+	if sortBy == "" {
+		sortBy = "change_percent"
+	}
+	if sortBy != "change_percent" && sortBy != "amount" {
+		return fmt.Errorf("sector-ranking sort_by %q is unsupported", sortBy)
+	}
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("sector-ranking source, source_version or fetched_at is missing")
 	}
@@ -1155,7 +1162,7 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 		direction = "up"
 	}
 	previousRank := 0
-	previousChange := 0.0
+	previousMetric := 0.0
 	hasDegradedItem := false
 	for index, item := range snapshot.Items {
 		if strings.TrimSpace(item.Code) == "" || strings.TrimSpace(item.Name) == "" || item.Category != category || item.ChangePercent == nil {
@@ -1201,20 +1208,26 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 			return fmt.Errorf("sector-ranking duplicate rank %d", item.Rank)
 		}
 		seenRanks[item.Rank] = true
-		currentChange := *item.ChangePercent
+		currentMetric := *item.ChangePercent
+		if sortBy == "amount" {
+			if item.Amount == nil || item.AmountUnit != "CNY" {
+				return fmt.Errorf("sector-ranking item %s has no verified CNY amount for amount ranking", item.Code)
+			}
+			currentMetric = *item.Amount
+		}
 		if index > 0 {
 			if item.Rank <= previousRank {
 				return errors.New("sector-ranking items are not ordered by increasing rank")
 			}
-			if direction == "up" && currentChange > previousChange {
-				return errors.New("sector-ranking up direction is not sorted by descending change percent")
+			if direction == "up" && currentMetric > previousMetric {
+				return fmt.Errorf("sector-ranking %s up direction is not sorted descending", sortBy)
 			}
-			if direction == "down" && currentChange < previousChange {
-				return errors.New("sector-ranking down direction is not sorted by ascending change percent")
+			if direction == "down" && currentMetric < previousMetric {
+				return fmt.Errorf("sector-ranking %s down direction is not sorted ascending", sortBy)
 			}
 		}
 		previousRank = item.Rank
-		previousChange = currentChange
+		previousMetric = currentMetric
 		if item.QualityStatus == model.QualityDegraded {
 			hasDegradedItem = true
 		}
@@ -1230,9 +1243,20 @@ func (s *DataService) SectorRankings(ctx context.Context, rawCategory string, li
 }
 
 func (s *DataService) SectorRankingsByDirection(ctx context.Context, rawCategory, rawDirection string, limit int) (*model.SectorRankingSnapshot, bool, error) {
+	return s.SectorRankingsByMetric(ctx, rawCategory, "change_percent", rawDirection, limit)
+}
+
+func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, rawSortBy, rawDirection string, limit int) (*model.SectorRankingSnapshot, bool, error) {
 	category := strings.ToLower(strings.TrimSpace(rawCategory))
 	if category != "industry" && category != "concept" {
 		return nil, false, fmt.Errorf("unsupported sector category %q; want industry or concept", rawCategory)
+	}
+	sortBy := strings.ToLower(strings.TrimSpace(rawSortBy))
+	if sortBy == "" {
+		sortBy = "change_percent"
+	}
+	if sortBy != "change_percent" && sortBy != "amount" {
+		return nil, false, fmt.Errorf("unsupported sector ranking sort_by %q; want change_percent or amount", rawSortBy)
 	}
 	direction := strings.ToLower(strings.TrimSpace(rawDirection))
 	if direction == "" {
@@ -1254,10 +1278,10 @@ func (s *DataService) SectorRankingsByDirection(ctx context.Context, rawCategory
 		return nil, false, err
 	}
 	const ttl = time.Minute
-	key := fmt.Sprintf("md:v2:sector-ranking:%s:%s:%d", category, direction, limit)
+	key := fmt.Sprintf("md:v3:sector-ranking:%s:%s:%s:%d", category, sortBy, direction, limit)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.SectorRankingSnapshot
-		if json.Unmarshal(data, &cached) == nil && validateSectorRankingSnapshot(category, limit, &cached) == nil &&
+		if json.Unmarshal(data, &cached) == nil && cached.SortBy == sortBy && validateSectorRankingSnapshot(category, limit, &cached) == nil &&
 			time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < ttl {
 			return &cached, true, nil
 		}
@@ -1272,12 +1296,12 @@ func (s *DataService) SectorRankingsByDirection(ctx context.Context, rawCategory
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
-		// 先判断 Provider 是否具备目标方向能力，避免不支持的请求占用半开探测名额。
-		if direction == "down" {
-			if _, ok := p.(provider.DirectionalSectorRankingProvider); !ok {
-				failures = append(failures, p.Name()+": provider does not support down sector ranking")
-				continue
-			}
+		// 先判断 Provider 是否具备目标指标/方向能力，避免不支持的请求占用半开探测名额。
+		_, metricCapable := p.(provider.MetricSectorRankingProvider)
+		_, directionalCapable := p.(provider.DirectionalSectorRankingProvider)
+		if !metricCapable && ((sortBy != "change_percent") || (direction == "down" && !directionalCapable)) {
+			failures = append(failures, p.Name()+": provider does not support requested sector ranking metric/direction")
+			continue
 		}
 		breakerKey := p.Name() + ":sector_rankings"
 		if !s.breaker.Allow(breakerKey) {
@@ -1287,13 +1311,15 @@ func (s *DataService) SectorRankingsByDirection(ctx context.Context, rawCategory
 		var snapshot *model.SectorRankingSnapshot
 		var fetchErr error
 		calledProvider := true
-		if directional, ok := p.(provider.DirectionalSectorRankingProvider); ok {
+		if metricProvider, ok := p.(provider.MetricSectorRankingProvider); ok {
+			snapshot, fetchErr = metricProvider.FetchSectorRankingsByMetric(ctx, category, sortBy, direction, limit)
+		} else if directional, ok := p.(provider.DirectionalSectorRankingProvider); ok && sortBy == "change_percent" {
 			snapshot, fetchErr = directional.FetchSectorRankingsDirection(ctx, category, direction, limit)
-		} else if direction == "up" {
+		} else if direction == "up" && sortBy == "change_percent" {
 			snapshot, fetchErr = p.FetchSectorRankings(ctx, category, limit)
 		} else {
 			calledProvider = false
-			fetchErr = fmt.Errorf("provider does not support %s sector ranking", direction)
+			fetchErr = fmt.Errorf("provider does not support %s sector ranking sorted by %s", direction, sortBy)
 		}
 		if fetchErr != nil {
 			if ctx.Err() != nil {
@@ -1313,7 +1339,12 @@ func (s *DataService) SectorRankingsByDirection(ctx context.Context, rawCategory
 				failures = append(failures, p.Name()+": provider returned a different sector ranking direction")
 				continue
 			}
+			if snapshot.SortBy != "" && snapshot.SortBy != sortBy {
+				failures = append(failures, p.Name()+": provider returned a different sector ranking sort_by")
+				continue
+			}
 			snapshot.Direction = direction
+			snapshot.SortBy = sortBy
 		}
 		if snapshot != nil && snapshot.QualityStatus == model.QualityValid {
 			snapshot.QualityStatus = model.QualityDegraded

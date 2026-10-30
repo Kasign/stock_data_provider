@@ -422,6 +422,14 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "type must be industry or concept", requestID(r))
 		return
 	}
+	sortBy := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("sort_by")))
+	if sortBy == "" {
+		sortBy = "change_percent"
+	}
+	if sortBy != "change_percent" && sortBy != "amount" {
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "sort_by must be change_percent or amount", requestID(r))
+		return
+	}
 	direction := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("direction")))
 	if direction == "" {
 		direction = "up"
@@ -439,7 +447,7 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	snapshot, cacheHit, err := s.svc.SectorRankingsByDirection(r.Context(), category, direction, limit)
+	snapshot, cacheHit, err := s.svc.SectorRankingsByMetric(r.Context(), category, sortBy, direction, limit)
 	if err != nil {
 		writeDomainErr(w, err, requestID(r))
 		return

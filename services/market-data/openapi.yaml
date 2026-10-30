@@ -429,6 +429,7 @@ components:
       properties:
         category: {type: string, enum: [industry, concept]}
         direction: {type: string, enum: [up, down]}
+        sort_by: {type: string, enum: [change_percent, amount]}
         total: {type: integer, minimum: 0, description: Source-reported sector count or best available count; only a lower bound when total_is_lower_bound is true}
         provider_returned: {type: integer, minimum: 0, description: Raw CLIST rows or SW1 industry universes received before caller-limit truncation}
         excluded_rows: {type: integer, minimum: 0, description: Source ranking rows omitted due to invalid required fields or no usable constituent quote changes}

@@ -51,6 +51,12 @@ type SectorRankingProvider interface {
 	FetchSectorRankings(ctx context.Context, category string, limit int) (*model.SectorRankingSnapshot, error)
 }
 
+// MetricSectorRankingProvider 可选地支持按不同指标排序；旧 Provider 仍可只提供涨跌幅排名。
+type MetricSectorRankingProvider interface {
+	NamedProvider
+	FetchSectorRankingsByMetric(ctx context.Context, category, sortBy, direction string, limit int) (*model.SectorRankingSnapshot, error)
+}
+
 // DirectionalSectorRankingProvider 可选地支持领涨/领跌两种排名；旧 Provider 仍可只提供默认领涨榜。
 type DirectionalSectorRankingProvider interface {
 	NamedProvider

@@ -1883,6 +1883,10 @@ func (p *Eastmoney) FetchSectorRankings(ctx context.Context, rawCategory string,
 }
 
 func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategory, rawDirection string, limit int) (*model.SectorRankingSnapshot, error) {
+	return p.FetchSectorRankingsByMetric(ctx, rawCategory, "change_percent", rawDirection, limit)
+}
+
+func (p *Eastmoney) FetchSectorRankingsByMetric(ctx context.Context, rawCategory, rawSortBy, rawDirection string, limit int) (*model.SectorRankingSnapshot, error) {
 	category := strings.ToLower(strings.TrimSpace(rawCategory))
 	filters := map[string]string{
 		"industry": "m:90+t:2+f:!50",
@@ -1892,12 +1896,23 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	if !ok {
 		return nil, fmt.Errorf("unsupported sector category %q; want industry or concept", rawCategory)
 	}
+	sortBy := strings.ToLower(strings.TrimSpace(rawSortBy))
+	if sortBy == "" {
+		sortBy = "change_percent"
+	}
+	if sortBy != "change_percent" && sortBy != "amount" {
+		return nil, fmt.Errorf("unsupported sector ranking sort_by %q; want change_percent or amount", rawSortBy)
+	}
 	direction := strings.ToLower(strings.TrimSpace(rawDirection))
 	if direction == "" {
 		direction = "up"
 	}
 	if direction != "up" && direction != "down" {
 		return nil, fmt.Errorf("unsupported sector ranking direction %q; want up or down", rawDirection)
+	}
+	sortField := "f3"
+	if sortBy == "amount" {
+		sortField = "f6"
 	}
 	sortOrder := "1"
 	if direction == "down" {
@@ -1911,7 +1926,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	}
 	params := url.Values{
 		"pn": {"1"}, "pz": {strconv.Itoa(limit)}, "po": {sortOrder}, "np": {"1"},
-		"ut": {p.ut}, "fltt": {"2"}, "invt": {"2"}, "fid": {"f3"},
+		"ut": {p.ut}, "fltt": {"2"}, "invt": {"2"}, "fid": {sortField},
 		"fs": {filter}, "fields": {"f2,f3,f4,f6,f12,f14,f104,f105,f128,f136"},
 		"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 	}
@@ -1954,7 +1969,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	}
 	fetchedAt := time.Now().UTC()
 	snapshot := &model.SectorRankingSnapshot{
-		Category: category, Direction: direction, Total: reportedTotal,
+		Category: category, Direction: direction, SortBy: sortBy, Total: reportedTotal,
 		ProviderReturned: len(payload.Data.Diff), TotalIsLowerBound: !sourceTotalKnown,
 		Source: p.Name(), SourceVersion: "eastmoney-sector-clist-v1",
 		FetchedAt: fetchedAt, QualityStatus: model.QualityDegraded,
@@ -1999,7 +2014,7 @@ func (p *Eastmoney) FetchSectorRankingsDirection(ctx context.Context, rawCategor
 	if len(snapshot.Items) < len(payload.Data.Diff) {
 		snapshot.QualityReasons = appendUniqueEastmoneyReason(snapshot.QualityReasons, "provider_rows_dropped_after_validation")
 	}
-	if err := sortSectorRankingSnapshot(snapshot, direction); err != nil {
+	if err := sortSectorRankingSnapshotByMetric(snapshot, direction, sortBy); err != nil {
 		return nil, err
 	}
 	return snapshot, nil

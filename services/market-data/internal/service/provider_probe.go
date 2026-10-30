@@ -11,7 +11,6 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
 )
 
 type providerProbeFunc func(context.Context) (model.QualityStatus, string, []string, error)
