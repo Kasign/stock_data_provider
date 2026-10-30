@@ -1158,7 +1158,7 @@ paths:
                             type: object
                             required: [capability, status, consecutive_failures, total_success, total_failure]
                             properties:
-                              capability: {type: string, enum: [quote, daily_bars]}
+                              capability: {type: string, enum: [quote, daily_bars, index_quotes, market_breadth, sector_rankings]}
                               status: {type: string, enum: [not_observed, healthy, degraded, open, half_open]}
                               consecutive_failures: {type: integer}
                               total_success: {type: integer, format: int64}

@@ -184,7 +184,7 @@ function renderDependency(selector, detailSelector, dependencies, name, analysis
 }
 
 
-const DIAGNOSTIC_STATUS = Object.freeze({
+const DIAGNOSTIC_CAPABILITY_LABELS = Object.freeze({\n  quote: "实时行情",\n  daily_bars: "日 K",\n  index_quotes: "指数行情",\n  market_breadth: "市场广度",\n  sector_rankings: "板块排行"\n});\n\nconst DIAGNOSTIC_STATUS = Object.freeze({
   not_observed: "尚无业务观测",
   healthy: "正常",
   degraded: "降级",
@@ -238,7 +238,7 @@ function renderProviderDiagnostics(payload) {
       const top = document.createElement("div");
       top.className = "data-center-diagnostic-capability-heading";
       const label = document.createElement("strong");
-      label.textContent = String(capability.capability || "未命名能力");
+      const capabilityName = String(capability.capability || "");\n      label.textContent = DIAGNOSTIC_CAPABILITY_LABELS[capabilityName] || capabilityName || "未命名能力";
       const state = document.createElement("span");
       state.className = "data-center-diagnostic-state is-" + status.replace(/_/g, "-");
       state.textContent = DIAGNOSTIC_STATUS[status];
@@ -288,10 +288,10 @@ function renderProviderDiagnostics(payload) {
 function showProviderDiagnosticsFailure(result) {
   const root = $("#data-center-diagnostics-list");
   setBadge("#data-center-diagnostics-status", result?.skipped ? "unknown" : "failed",
-    result?.skipped ? "需要 API Key" : "读取失败");
+    result?.skipped ? "需要行情服务 API Key" : "读取失败");
   setText("#data-center-diagnostics-summary", result?.skipped
-    ? "配置行情 API Key 后读取进程内运行诊断。"
-    : "运行诊断接口读取失败：" + safeError(result?.error));
+    ? "配置 WebUI 访问行情服务所需的 API Key 后，仅读取服务端已有的进程内统计；不会测试同花顺 API Key 或请求上游。"
+    : "只读运行诊断接口读取失败：" + safeError(result?.error));
   if (root) {
     root.replaceChildren();
     const empty = document.createElement("div");
