@@ -1849,7 +1849,7 @@ test("数据中心读取并展示真实 Provider 运行诊断，且不将未观�
   assert.match(dataCenter, /连续失败/);
   assert.match(dataCenter, /运行诊断接口读取失败/);
   assert.match(dataCenter, /data-center-hithink-status/);
-  assert.match(dataCenter, /MARKET_DATA_HITHINK_ENABLED/);
+  assert.match(html, /MARKET_DATA_HITHINK_ENABLED/);
   assert.match(html, /id="data-center-hithink-title"/);
   assert.match(html, /MARKET_DATA_HITHINK_API_KEY/);
   assert.match(html, /id="data-center-diagnostics-list"/);
