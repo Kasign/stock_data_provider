@@ -1,9 +1,14 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/service"
 )
 
 type providerProbeRequest struct {
@@ -67,11 +72,6 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-	}
-	if len(request.Capabilities) == 0 && request.Scope == "all" {
-		// 空列表表示使用 scope 默认能力集合。
-	} else if len(request.Capabilities) == 0 && request.Scope == "core" {
-		// core scope 本身提供默认能力集合。
 	}
 	run, err := s.svc.ProbeProviderCapabilitiesWithOptions(r.Context(), service.ProviderProbeOptions{
 		Scope: request.Scope, Capabilities: request.Capabilities, TimeoutSeconds: request.TimeoutSeconds,
