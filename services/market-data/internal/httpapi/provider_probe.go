@@ -15,6 +15,8 @@ import (
 type providerProbeRequest struct {
 	Scope          string   `json:"scope"`
 	Capabilities   []string `json:"capabilities"`
+	Markets        []string `json:"markets"`
+	Symbols        []string `json:"symbols"`
 	TimeoutSeconds *int     `json:"timeout_seconds"`
 }
 
@@ -89,7 +91,7 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	run, err := s.svc.ProbeProviderCapabilitiesWithOptions(r.Context(), service.ProviderProbeOptions{
-		Scope: request.Scope, Capabilities: request.Capabilities, TimeoutSeconds: timeoutSeconds,
+		Scope: request.Scope, Capabilities: request.Capabilities, Markets: request.Markets, Symbols: request.Symbols, TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), requestID(r))
