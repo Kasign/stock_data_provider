@@ -4869,7 +4869,7 @@ button:disabled {
 
 /* 研究记录：本地笔记编辑与检索 */
 .research-note-form,.research-note-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
-.research-note-form .field:nth-child(4){grid-column:1/-1}
+.research-note-form .field:nth-child(6){grid-column:1/-1}
 .research-note-form textarea{width:100%;resize:vertical}
 .research-note-actions{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .research-note-actions span{color:var(--text-dim);font-size:11px}
@@ -4881,7 +4881,7 @@ button:disabled {
 .research-note-card p{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-soft);font-size:12px;line-height:1.7}
 .research-note-meta,.research-note-tags{color:var(--text-dim);font-size:11px}
 .research-note-card-actions{display:flex;gap:7px;flex-wrap:wrap}
-@media(max-width:640px){.research-note-form,.research-note-toolbar{grid-template-columns:1fr}.research-note-form .field:nth-child(4){grid-column:auto}.research-note-card header{flex-direction:column}}
+@media(max-width:640px){.research-note-form,.research-note-toolbar{grid-template-columns:1fr}.research-note-form .field:nth-child(6){grid-column:auto}.research-note-card header{flex-direction:column}}
 
 
 /* 本地告警规则草稿；不代表后台监控能力 */
@@ -5016,7 +5016,7 @@ button:disabled {
 .recent-analysis-failure { display:block; margin-top:4px; color:var(--danger); font-size:11px; line-height:1.55; overflow-wrap:anywhere; }
 
 .research-note-form{grid-template-columns:repeat(2,minmax(0,1fr))}
-.research-note-form .field:nth-child(4){grid-column:1/-1}
+.research-note-form .field:nth-child(6){grid-column:1/-1}
 #research-note-feedback[data-state="error"],#research-report-feedback[data-state="error"]{color:var(--danger)}
 .research-report-toolbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}
 .research-report-list{display:grid;gap:10px}
@@ -5026,4 +5026,4 @@ button:disabled {
 .research-report-card details{margin:10px 0}
 .research-report-markdown{max-height:440px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:var(--panel);border-radius:8px;font-size:11px;line-height:1.6}
 .research-report-actions{display:flex;gap:7px;flex-wrap:wrap}
-@media(max-width:640px){.research-note-form,.research-note-toolbar,.research-report-toolbar{grid-template-columns:1fr}.research-note-form .field:nth-child(4){grid-column:auto}}
+@media(max-width:640px){.research-note-form,.research-note-toolbar,.research-report-toolbar{grid-template-columns:1fr}.research-note-form .field:nth-child(6){grid-column:auto}}
