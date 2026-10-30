@@ -1388,7 +1388,7 @@ paths:
           schema: {type: integer, minimum: 1, maximum: 100, default: 10}
         - name: direction
           in: query
-          description: Return largest percentage movers first (up) or smallest first (down).
+          description: Return the largest selected metric first (up) or the smallest first (down).
           schema: {type: string, enum: [up, down], default: up}
       responses:
         '200':

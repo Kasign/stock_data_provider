@@ -1220,9 +1220,15 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 				return errors.New("sector-ranking items are not ordered by increasing rank")
 			}
 			if direction == "up" && currentMetric > previousMetric {
+				if sortBy == "change_percent" {
+					return errors.New("sector-ranking up direction is not sorted by descending change percent")
+				}
 				return fmt.Errorf("sector-ranking %s up direction is not sorted descending", sortBy)
 			}
 			if direction == "down" && currentMetric < previousMetric {
+				if sortBy == "change_percent" {
+					return errors.New("sector-ranking down direction is not sorted by ascending change percent")
+				}
 				return fmt.Errorf("sector-ranking %s down direction is not sorted ascending", sortBy)
 			}
 		}
@@ -1300,7 +1306,11 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 		_, metricCapable := p.(provider.MetricSectorRankingProvider)
 		_, directionalCapable := p.(provider.DirectionalSectorRankingProvider)
 		if !metricCapable && ((sortBy != "change_percent") || (direction == "down" && !directionalCapable)) {
-			failures = append(failures, p.Name()+": provider does not support requested sector ranking metric/direction")
+			if sortBy == "change_percent" && direction == "down" {
+				failures = append(failures, p.Name()+": provider does not support down sector ranking")
+			} else {
+				failures = append(failures, p.Name()+": provider does not support requested sector ranking metric/direction")
+			}
 			continue
 		}
 		breakerKey := p.Name() + ":sector_rankings"
