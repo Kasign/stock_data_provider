@@ -640,7 +640,7 @@
           </div>
           <section class="panel feature-callout" role="status" aria-live="polite">
             <span class="feature-callout-icon" aria-hidden="true">i</span>
-            <div><h2 id="screening-capability-title">选股能力当前不可用</h2><p id="screening-capability-description">当前 Go 服务没有策略列表、筛选配置、扫描任务、候选结果或选股历史 API。不能提交扫描，也不会用普通分析任务伪装成选股。</p></div>
+            <div><h2 id="screening-capability-title">选股能力当前不可用</h2><p id="screening-capability-description">当前 Go 服务已有全市场分页行情及可选 MA5/MA20，但没有服务端筛选表达式、策略管理、扫描任务、候选结果或选股历史 API。当前只能保存本地条件方案，不能提交扫描，也不会用普通分析任务伪装成选股。</p></div>
           </section>
 
           <section class="screening-summary-grid" aria-label="选股运行摘要">
@@ -661,7 +661,7 @@
               <label class="field"><span>最低换手率（%）</span><input id="screening-min-turnover" type="number" disabled aria-disabled="true" placeholder="参数范围待后端定义" /></label>
             </div>
             <section class="screening-condition-builder" aria-labelledby="screening-condition-title">
-              <div class="screening-condition-heading"><div><h3 id="screening-condition-title">自定义筛选条件</h3><p>支持本地编辑涨跌幅、换手率、成交额及均线条件；当前仅生成草稿，不会提交扫描。</p></div><span class="availability-pill is-readonly">本地草稿</span></div>
+              <div class="screening-condition-heading"><div><h3 id="screening-condition-title">自定义筛选条件</h3><p>支持本地编辑并保存涨跌幅、换手率、成交额及均线条件；当前不会提交服务端扫描。</p></div><span class="availability-pill is-readonly">本地草稿</span></div>
               <div class="screening-condition-controls">
                 <label class="field"><span>组合关系</span><select id="screening-condition-logic"><option value="and">全部满足（AND）</option><option value="or">任一满足（OR）</option></select></label>
                 <label class="field"><span>指标</span><select id="screening-condition-field">
@@ -673,7 +673,7 @@
               </div>
               <ul class="screening-condition-list" id="screening-condition-list" aria-label="已添加筛选条件"><li class="empty-row">尚未添加条件</li></ul>
               <section class="screening-saved-plans" aria-labelledby="screening-saved-plans-title"><div class="screening-saved-plans-heading"><div><h3 id="screening-saved-plans-title">本地筛选方案</h3><p>最多保存 30 个方案，仅保存在当前浏览器；不代表服务端策略或扫描历史。</p></div></div><div class="screening-saved-plan-form"><label class="field"><span>方案名称</span><input id="screening-plan-name" type="text" maxlength="40" placeholder="例如：趋势突破观察"></label><button class="button button-secondary" id="screening-plan-save" type="button">保存 / 更新</button><button class="button button-secondary" id="screening-plan-save-as" type="button">另存为新方案</button></div><ul id="screening-saved-plan-list" class="screening-saved-plan-list"><li class="empty-row">正在读取本地方案…</li></ul></section>
-              <p class="field-hint" id="screening-condition-feedback" role="status" aria-live="polite">条件仅保存在当前页面内存中，刷新页面后清空。</p>
+              <p class="field-hint" id="screening-condition-feedback" role="status" aria-live="polite">条件先在页面内存编辑；保存为方案后写入当前浏览器本地存储，不会提交服务端。</p>
             </section>
             <div class="screening-request-summary" id="screening-request-summary" role="status" aria-live="polite"><strong>提交前摘要</strong><p>尚不能生成扫描请求摘要。服务端提供策略及参数 schema 后，页面才会展示将要提交的真实参数。</p></div>
             <div class="feature-action-row"><span class="field-hint">所有配置控件和提交动作均待真实选股 API 接入。</span><button class="button button-primary" id="screening-submit" type="button" disabled aria-disabled="true">提交扫描（待接入）</button></div>
