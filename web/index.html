@@ -773,12 +773,19 @@
 
               <section class="settings-section" id="settings-connection-section" aria-labelledby="settings-connection-title">
                 <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务</h2><p>健康检查确认 API 端点是否可响应，不代表每个 Provider 都实时可用。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
-                <div class="panel settings-connection-card">
-                  <div><strong>行情与分析 API</strong><p>同源路径与行情服务 API Key 由当前浏览器保存。API Key 是内部服务访问凭据，不是用户登录认证，也不会写入服务器 .env。</p>
-                    <p id="settings-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未执行连接检查。</p>
-                  </div>
-                  <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查连接</button><button class="button button-primary" id="settings-open-connection" type="button">编辑连接配置</button></div>
-                </div>
+                <form id="settings-form" class="panel settings-connection-form">
+                  <div class="settings-connection-intro"><div><strong>行情与分析 API</strong><p>配置 WebUI 访问 Go 行情服务和分析服务的同源路径。所有连接配置保存在当前浏览器，不会修改服务器 .env。</p></div><span class="availability-pill is-local">浏览器本地保存</span></div>
+                  <label class="field"><span>行情 API 路径</span><input id="market-base-input" value="/market-api" required /></label>
+                  <div class="field"><label for="market-key-input">行情服务 API Key</label><div class="secret-input-row"><input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写新 Key；留空保留已配置值" /><button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button></div><p class="field-hint" id="market-key-help">这是部署管理员自行生成的服务访问密钥，不是第三方行情 Provider 的密钥。部署环境变量名为 MARKET_DATA_API_KEY；这里只保存到当前浏览器 localStorage，不会自动修改服务器配置或生成后端密钥。已配置的 Key 不会回显；留空表示保留当前值，输入新值表示替换。需要删除时请使用“清除本地设置”。部署端可在服务器终端执行 <code>openssl rand -hex 32</code> 生成密钥。</p></div>
+                  <label class="field"><span>分析 API 路径</span><input id="analysis-base-input" value="/analysis-api" required /></label>
+                  <div class="settings-storage-boundary"><strong>配置与数据存储说明</strong><p>WebUI 不直连数据库。API Key、自选股和最近任务引用保存在当前浏览器；行情服务和分析服务分别使用后端配置的 MariaDB/Redis。分析任务、阶段事件及 Run 结果由分析服务持久化。</p></div>
+                  <p class="security-note">安全提示：不要分享带有 API Key 的浏览器会话。对公网部署前，应在 OpenResty 或身份认证层增加访问控制；行情服务密钥本身不等于用户认证。</p>
+                  <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>存在未保存的连接配置更改。</p>
+                  <p class="settings-inline-status" id="settings-connection-check" role="status" aria-live="polite">尚未执行连接检查。</p>
+                  <p class="settings-inline-status" id="settings-draft-connection-check" role="status" aria-live="polite">尚未检查未保存配置。</p>
+                  <div class="settings-connection-actions"><button class="button button-secondary" id="clear-settings" type="button">清除本地设置</button><button class="button button-secondary" id="settings-check-connection" type="button">检查已保存配置</button><button class="button button-secondary" id="settings-check-draft-connection" type="button">检查未保存配置</button><span class="grow"></span><button class="button button-primary" id="save-settings" type="button">保存连接配置</button></div>
+                  <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite"></p>
+                </form>
               </section>
 
               <section class="settings-section" id="settings-local-data-section" aria-labelledby="settings-local-data-title">
@@ -859,32 +866,6 @@
       </main>
     </div>
 
-    <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
-      <form method="dialog" id="settings-form">
-        <div class="dialog-heading"><div><p class="eyebrow">CONNECTION</p><h2 id="settings-title">连接与密钥设置</h2></div><button class="icon-button" id="close-settings-dialog" type="button" aria-label="关闭设置">×</button></div>
-        <p class="dialog-intro">默认路径由 WebUI 的 Nginx 反向代理转发。密钥只保存在当前浏览器 localStorage，不写入仓库或服务端配置。</p>
-        <section class="storage-boundary" aria-labelledby="storage-boundary-title">
-          <h3 id="storage-boundary-title">API 和数据分别存在哪里？</h3>
-          <p><strong>当前 WebUI：</strong>只负责页面和请求转发，不直连数据库。API Key、自选股和最近任务引用保存在当前浏览器；最近任务列表最多 10 条，不保存完整报告。</p>
-          <p><strong>Go 行情服务：</strong>负责请求和归一化行情 Provider 数据，按自身配置使用独立的 MariaDB/Redis。具体行情记录是否持久化取决于后端接口实现。</p>
-          <p><strong>Go 分析服务：</strong>分析任务、阶段事件、Run 结果及快照由后端持久化到 MariaDB；Redis 用于缓存结果/快照，MariaDB 是最终事实源。</p>
-        </section>
-        <label class="field"><span>行情 API 路径</span><input id="market-base-input" value="/market-api" required /></label>
-        <div class="field">
-          <label for="market-key-input">行情服务 API Key</label>
-          <div class="secret-input-row">
-            <input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写新 Key；留空保留已配置值" />
-            <button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button>
-          </div>
-        </div>
-        <p class="field-hint" id="market-key-help">这是部署管理员自行生成的服务访问密钥，不是第三方行情 Provider 的密钥。部署环境变量名为 MARKET_DATA_API_KEY；这里只保存到当前浏览器 localStorage，不会自动修改服务器配置或生成后端密钥。已配置的 Key 不会回显；留空表示保留当前值，输入新值表示替换。需要删除时请使用“清除本地设置”。部署端可在服务器终端执行 <code>openssl rand -hex 32</code> 生成密钥。</p>
-        <label class="field"><span>分析 API 路径</span><input id="analysis-base-input" value="/analysis-api" required /></label>
-        <div class="security-note">安全提示：不要将带有 API Key 的浏览器会话分享给他人。对公网部署前，应在 OpenResty 或身份认证层增加访问控制；行情服务密钥本身不等于用户认证。</div>
-        <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>存在未保存的连接配置更改。</p>
-        <p class="settings-inline-status" id="settings-draft-connection-check" role="status" aria-live="polite">尚未检查未保存配置。</p>
-        <div class="dialog-actions"><button class="button button-secondary" id="clear-settings" type="button">清除本地设置</button><button class="button button-secondary" id="settings-check-draft-connection" type="button">检查未保存配置</button><span class="grow"></span><button class="button button-secondary" id="cancel-settings-dialog" type="button">取消</button><button class="button button-primary" id="save-settings" type="button">保存本地连接配置</button></div>
-        <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite"></p>
-      </form>
-    </dialog>
+
   </body>
 </html>
