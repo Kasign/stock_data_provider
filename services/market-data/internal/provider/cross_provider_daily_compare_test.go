@@ -1,6 +1,9 @@
 package provider
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func crossProviderAmount(value float64) *float64 { return &value }
 
@@ -91,6 +94,8 @@ func TestCompareCrossProviderDailyBarsRejectsInvalidMarketValues(t *testing.T) {
 		reason string
 	}{
 		{name: "zero close", mutate: func(bar *CrossProviderDailyBar) { bar.Close = 0 }, reason: "invalid_ohlc_value"},
+		{name: "nan open", mutate: func(bar *CrossProviderDailyBar) { bar.Open = math.NaN() }, reason: "invalid_ohlc_value"},
+		{name: "infinite high", mutate: func(bar *CrossProviderDailyBar) { bar.High = math.Inf(1) }, reason: "invalid_ohlc_value"},
 		{name: "invalid high low relation", mutate: func(bar *CrossProviderDailyBar) { bar.High = 40 }, reason: "invalid_ohlc_relationship"},
 		{name: "negative volume", mutate: func(bar *CrossProviderDailyBar) { bar.Volume = -1 }, reason: "negative_volume"},
 		{name: "negative amount", mutate: func(bar *CrossProviderDailyBar) { bar.Amount = crossProviderAmount(-1); bar.AmountUnit = "CNY" }, reason: "invalid_amount_value"},
@@ -106,5 +111,24 @@ func TestCompareCrossProviderDailyBarsRejectsInvalidMarketValues(t *testing.T) {
 				t.Fatalf("unexpected result: %+v", got)
 			}
 		})
+	}
+}
+
+
+func TestCompareCrossProviderDailyBarsRejectsEmptyAndInvalidDateSets(t *testing.T) {
+	left := crossProviderSnapshot("sina", "none", "valid")
+	right := crossProviderSnapshot("tencent", "none", "valid")
+	if got := CompareCrossProviderDailyBars(left, right); got.Status != CrossProviderDailyNotComparable || got.Reason != "trade_date_set_mismatch" {
+		t.Fatalf("empty bars must be not comparable, got %+v", got)
+	}
+	left.Bars = []CrossProviderDailyBar{crossProviderBar("2026-02-30")}
+	right.Bars = []CrossProviderDailyBar{crossProviderBar("2026-02-30")}
+	if got := CompareCrossProviderDailyBars(left, right); got.Status != CrossProviderDailyNotComparable || got.Reason != "left_invalid_trade_date" {
+		t.Fatalf("invalid calendar date must be not comparable, got %+v", got)
+	}
+	left.Bars = []CrossProviderDailyBar{crossProviderBar("2026-10-29"), crossProviderBar("2026-10-29")}
+	right.Bars = []CrossProviderDailyBar{crossProviderBar("2026-10-29")}
+	if got := CompareCrossProviderDailyBars(left, right); got.Status != CrossProviderDailyNotComparable || got.Reason != "left_duplicate_trade_date" {
+		t.Fatalf("duplicate trade date must be not comparable, got %+v", got)
 	}
 }

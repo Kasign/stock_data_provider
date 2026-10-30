@@ -81,7 +81,8 @@
           "close": 42.94,
           "volume": 108749446
         }
-      ]
+      ],
+      "volume_unit": "shares"
     },
     "tencent": {
       "source": "tencent",
@@ -114,7 +115,8 @@
           "close": 42.94,
           "volume": 108749400
         }
-      ]
+      ],
+      "volume_unit": "shares"
     }
   }
 }

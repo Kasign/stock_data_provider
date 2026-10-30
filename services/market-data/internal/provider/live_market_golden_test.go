@@ -37,6 +37,7 @@ type liveGoldenBar struct {
 type liveGoldenDailySource struct {
 	Source        string          `json:"source"`
 	SourceVersion string          `json:"source_version"`
+	VolumeUnit    string          `json:"volume_unit"`
 	Amount        *float64        `json:"amount"`
 	AmountUnit    string          `json:"amount_unit"`
 	QualityStatus string          `json:"quality_status"`
@@ -90,7 +91,7 @@ func liveGoldenDailySnapshot(source liveGoldenDailySource, symbol, adjustment st
 	for _, bar := range source.Bars {
 		bars = append(bars, CrossProviderDailyBar{
 			TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
-			Volume: bar.Volume, VolumeUnit: "shares", Amount: source.Amount, AmountUnit: source.AmountUnit,
+			Volume: bar.Volume, VolumeUnit: source.VolumeUnit, Amount: source.Amount, AmountUnit: source.AmountUnit,
 		})
 	}
 	return CrossProviderDailySnapshot{
@@ -143,6 +144,9 @@ func TestLiveGoldenCrossProviderQuoteAndDailyBarsParity(t *testing.T) {
 	if left.Source != "sina" || right.Source != "tencent" ||
 		left.SourceVersion == "" || right.SourceVersion == "" {
 		t.Fatalf("daily source provenance is incomplete: sina=%+v tencent=%+v", left, right)
+	}
+	if left.VolumeUnit != "shares" || right.VolumeUnit != "shares" {
+		t.Fatalf("daily volume unit must be explicitly normalized to shares: sina=%q tencent=%q", left.VolumeUnit, right.VolumeUnit)
 	}
 	if left.Amount != nil || right.Amount != nil || left.AmountUnit != "unknown" || right.AmountUnit != "unknown" {
 		t.Fatalf("daily amount must remain null/unknown for both sources: sina=%+v tencent=%+v", left, right)

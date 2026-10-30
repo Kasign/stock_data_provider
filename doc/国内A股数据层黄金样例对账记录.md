@@ -124,3 +124,8 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 - 本夹具仍保留真实源数据、成交量差异和成交额 null/unknown；不得修改为 valid 或补算成交额。
 - 合成 valid fixture 的 matched/partial/mismatch 仅用于比较器逻辑测试，不属于真实 Provider 数据证据。
 - 后续新增创业板、科创板、北交所及停牌、新股、除权除息、非交易日样例时，必须记录原始来源、采集时间、源提交和 workflow Run ID；无真实有效样本时只记录待办，不生成伪造黄金值。
+
+
+## 11. 真实夹具单位声明补充（2026-10-30）
+
+600036.SH 日 K 两侧的标准成交量单位明确记录为 `shares`。测试转换从来源级 `volume_unit` 读取，不根据 Provider 名称或数值大小推断单位。成交额仍为 null/unknown，质量仍为 degraded。
