@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -41,7 +42,7 @@ func TestEastmoneySectorRankingByFiveDayChangeUsesFullBoardUniverse(t *testing.T
 	if len(got.Items) != 2 || got.Items[0].Code != "BK0002" || got.Items[0].Rank != 1 {
 		t.Fatalf("unexpected five-day order: %+v", got.Items)
 	}
-	if got.Items[0].ChangePercent5D == nil || *got.Items[0].ChangePercent5D != 20 {
+	if got.Items[0].ChangePercent5D == nil || math.Abs(*got.Items[0].ChangePercent5D-20) > 1e-9 {
 		t.Fatalf("five-day return = %v, want 20", got.Items[0].ChangePercent5D)
 	}
 	if got.QualityStatus != model.QualityDegraded {

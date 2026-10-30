@@ -1392,6 +1392,11 @@ paths:
           in: query
           description: Return the largest selected metric first (up) or the smallest first (down). change_5d is derived from six daily board-index closes; amount requires verified CNY values.
           schema: {type: string, enum: [up, down], default: up}
+        - name: sort_by
+          in: query
+          required: false
+          description: change_percent is today's change; amount is CNY turnover; change_5d is derived from six daily board-index closes.
+          schema: {type: string, enum: [change_percent, amount, change_5d], default: change_percent}
       responses:
         '200':
           description: Current provider ranking snapshot with source and quality metadata
