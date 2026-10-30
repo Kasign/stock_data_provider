@@ -2,6 +2,16 @@ package model
 
 import "time"
 
+// ProviderProbeCapabilities 返回诊断接口支持的能力标识。
+func ProviderProbeCapabilities() []string {
+	return []string{"quote", "daily_bars", "stock_basic", "stock_search", "stock_universe", "index_quotes", "index_catalog", "market_breadth", "sector_rankings", "market_capital_flow", "limit_pool", "dragon_tiger", "announcements", "trading_calendar", "security_trading_status", "price_limit_event", "stock_boards", "fundamentals", "valuations", "hot_ranking", "capital_flow", "chip_distribution"}
+}
+
+// ProviderProbeCoreCapabilities 返回核心行情和证券基础能力集合。
+func ProviderProbeCoreCapabilities() []string {
+	return []string{"quote", "daily_bars", "stock_basic", "trading_calendar", "index_quotes", "market_breadth"}
+}
+
 // ProviderProbeItem 是一次主动能力探测结果。错误信息经过脱敏和长度限制，不回传凭据或完整查询 URL。
 type ProviderProbeItem struct {
 	Provider       string        `json:"provider"`
