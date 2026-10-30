@@ -343,7 +343,7 @@ function renderRecentTasks(records) {
     return;
   }
 
-  items.forEach((record) => {
+  visibleItems.forEach((record) => {
     const item = document.createElement("article");
     item.className = "recent-analysis-item";
 
@@ -654,6 +654,26 @@ function renderWatchlist(records, storageReadable, storageValid) {
     const empty = document.createElement("div");
     empty.className = "empty-row";
     empty.textContent = "暂无自选股。可先在上方输入代码，再点击“加入自选”。";
+    root.append(empty);
+    renderResearchStockList();
+    return;
+  }
+
+  const keyword = String($("#watchlist-search")?.value || "").trim().toLocaleLowerCase();
+  const sortMode = $("#watchlist-sort")?.value || "updated";
+  const visibleItems = items.filter((record) => !keyword
+    || String(record.symbol || "").toLocaleLowerCase().includes(keyword)
+    || String(record.name || "").toLocaleLowerCase().includes(keyword));
+  if (sortMode === "symbol") visibleItems.sort((a, b) => a.symbol.localeCompare(b.symbol, "zh-CN"));
+  else if (sortMode === "name") visibleItems.sort((a, b) => a.name.localeCompare(b.name, "zh-CN") || a.symbol.localeCompare(b.symbol));
+  else visibleItems.sort((a, b) => (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0));
+  setText("#watchlist-filter-count", keyword
+    ? "匹配 " + visibleItems.length + " / " + items.length + " 只"
+    : "显示全部 " + items.length + " 只");
+  if (!visibleItems.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = keyword ? "没有匹配的自选股。可尝试股票代码或自定义名称。" : "暂无自选股。";
     root.append(empty);
     renderResearchStockList();
     return;
@@ -4793,6 +4813,8 @@ document.querySelectorAll("[data-ma-period]").forEach((control)=>{
 $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
+$("#watchlist-search").addEventListener("input", () => renderWatchlist());
+$("#watchlist-sort").addEventListener("change", () => renderWatchlist());
 $("#reload-sources").addEventListener("click", refreshSources);
 syncRefreshButtonContext();
 $("#refresh-button").addEventListener("click", async () => {
