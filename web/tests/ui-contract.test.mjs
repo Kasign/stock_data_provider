@@ -105,8 +105,7 @@ test("task/event endpoint parameters and status vocabulary remain grounded in th
 
 test("Go rejected Run status maps to a failed task instead of false success", () => {
   assert.match(domain, /RunStatusRejected\s+RunStatus\s*=\s*"rejected_request"/);
-  const mapper = taskQueue.match(/func taskStatusForRun\(status domain\.RunStatus\) string \{[\s\S]*?
-\}/)?.[0] || "";
+  const mapper = taskQueue.match(/func taskStatusForRun\(status domain\.RunStatus\) string \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(mapper, "Go task queue must have an explicit Run-to-Task status mapper");
   assert.match(mapper, /case domain\.RunStatusFailed,\s*domain\.RunStatusRejected:\s*return "failed"/);
 });
@@ -253,10 +252,8 @@ function shanghaiDateKey(", start);
 });
 
 test("已保存连接检查与草稿检查的初始化/解锁异常不会产生未处理 rejection", () => {
-  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?
-\}/)?.[0] || "";
-  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(saved, /generation !== savedConnectionCheckGeneration/);
   assert.match(saved, /finally[\s\S]*?releaseSettingsCheckButtonSafely/);
   assert.match(draft, /generation !== draftConnectionCheckGeneration/);
@@ -277,8 +274,7 @@ function saveSettingsFromForm(", start);
 test("任务切换与分析 API 切换不会被按钮解锁异常中断", () => {
   assert.match(app, /function releaseRunResultReloadBusy\(\) \{[\s\S]*?try \{\s*setRunResultReloadBusy\(false\);\s*\} catch[\s\S]*?继续完成上下文切换/);
 
-  const stop = app.match(/function stopTaskPolling\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const stop = app.match(/function stopTaskPolling\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(stop, "停止轮询共用函数必须存在");
   assert.match(stop, /state\.pollGeneration \+= 1;[\s\S]*?try \{[\s\S]*?setTaskRefreshBusy\(false\);[\s\S]*?catch/);
   assert.match(stop, /const timer = state\.pollTimer;\s*state\.pollTimer = null/);
@@ -538,8 +534,7 @@ test("individual stock research uses one detail workspace without duplicate chip
   }
   assert.ok(!html.includes('id="stock-supplemental-panel"'), "old duplicate chip/flow panel must be gone");
   assert.ok(app.includes("function renderResearchOverview()"));
-  const researchOverviewRenderer = app.match(/function renderResearchOverview\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const researchOverviewRenderer = app.match(/function renderResearchOverview\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(researchOverviewRenderer, /sameMarketSymbol\(barsSymbol,\s*symbol\)/, "研究摘要 MA 必须复用 A 股证券代码比较规则");
   assert.doesNotMatch(researchOverviewRenderer, /barsSymbol\s*===\s*symbol/, "不得用原始代码字符串判断均线是否属于当前标的");
   assert.ok(app.includes('function openResearchStock(symbol, name = "")'));
@@ -570,10 +565,8 @@ test("watchlist labels task history from a different analysis API address", () =
 });
 
 test("watchlist task and Run summaries refresh when background state changes", () => {
-  const taskRenderer = app.match(/function renderTask\(task\) \{[\s\S]*?
-\}/)?.[0] || "";
-  const runRenderer = app.match(/function renderTaskResult\(result\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const taskRenderer = app.match(/function renderTask\(task\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const runRenderer = app.match(/function renderTaskResult\(result\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(taskRenderer, /if \(state\.view === "watchlist"\) renderWatchlist\(\);/, "Task 状态更新时刷新可见自选卡片");
   assert.match(runRenderer, /if \(state\.view === "watchlist"\) renderWatchlist\(\);/, "Run 结果更新时刷新可见自选卡片");
 });
@@ -688,8 +681,7 @@ test("task polling and saved task references are scoped to the analysis API base
   assert.match(app, /endpointGeneration !== state\.analysisConnectionGeneration/);
   assert.match(app, /const taskAnalysisBase = state\.taskAnalysisBase \|\| state\.settings\.analysisBase;[\s\S]*?analysis_base: taskAnalysisBase/);
   assert.match(app, /旧任务不再自动轮询/);
-  const baseInvalidation = app.match(/function invalidateActiveTaskForAnalysisBaseChange\([\s\S]*?
-\}/)?.[0] || "";
+  const baseInvalidation = app.match(/function invalidateActiveTaskForAnalysisBaseChange\([\s\S]*?\n\}/)?.[0] || "";
   assert.match(baseInvalidation, /safelyUpdateTaskContextUi\("重绘自选股卡片失败：", \(\) => renderWatchlist\(\)\)/, "切换分析地址后应在安全清理步骤中重绘自选卡片");
   assert.match(app, /if \(requestedBase !== state\.settings\.analysisBase\)/);
   assert.match(recentTaskModule, /analysis_base: typeof record\.analysis_base === "string"/);
@@ -711,10 +703,8 @@ test("data-center checks are invalidated when a saved API connection changes", (
 });
 
 test("connection-check results are isolated between saved settings and unsaved draft", () => {
-  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?
-\}/)?.[0] || "";
-  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(saved, /const generation = \+\+savedConnectionCheckGeneration/);
   assert.match(saved, /currentSettings\.marketBase !== settingsToCheck\.marketBase/);
   assert.match(draft, /const generation = \+\+draftConnectionCheckGeneration/);
@@ -737,8 +727,7 @@ test("service health and provider-list refreshes ignore superseded responses", (
 });
 
 test("provider capability refresh clears old connection data and owns its loading state", () => {
-  const refreshSources = app.match(/async function refreshSources\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const refreshSources = app.match(/async function refreshSources\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refreshSources, "refreshSources implementation must exist");
   assert.match(refreshSources, /showMessage\("正在读取当前连接配置对应的数据源能力…"\);[\s\S]*?setSourceTextSafely\("#source-count", "—"\);[\s\S]*?state\.sourceCount = 0/);
   assert.match(refreshSources, /button\.disabled = true;[\s\S]*?button\.setAttribute\("aria-busy", "true"\)/);
@@ -832,8 +821,7 @@ test("light/dark theme is accessible, persisted locally, and independent of back
 });
 
 test("mobile navigation drawer restores readable labels and can close via overlay or Escape", () => {
-  const drawer = app.match(/function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const drawer = app.match(/function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(drawer, /aria-expanded/);
   assert.match(drawer, /isOpen \? "关闭导航" : "打开导航"/);
   assert.match(drawer, /if \(wasOpen && !isOpen && restoreFocus\) \$\("#mobile-menu-toggle"\)\.focus\(\)/);
@@ -1389,8 +1377,7 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
     app,
     /function applySettings\(nextSettings, \{ persistPreviousActiveTask = true \} = \{\}\)/
   );
-  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(
     importBody,
     /localStorage\.removeItem\(TASK_REFERENCE_KEY\);[\s\S]*?applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?applyTheme\(imported\.theme\)/
@@ -1452,15 +1439,13 @@ test("快照来源、估值与补充指标使用可读的 12px 辅助文字", ()
 });
 
 test("数据中心检查初始化与 finally 解锁异常不会破坏 generation 收尾", () => {
-  const refresh = dataCenter.match(/async function refresh\(\) \{[\s\S]*?
-  \}/)?.[0] || "";
+  const refresh = dataCenter.match(/async function refresh\(\) \{[\s\S]*?\n  \}/)?.[0] || "";
   assert.ok(refresh);
   assert.match(refresh, /checking = true;[\s\S]*?try \{\s*settings = typeof getSettings/);
   assert.match(refresh, /按钮 DOM 更新失败不能阻止服务探测[\s\S]*?await Promise\.all/);
   assert.match(refresh, /catch \(error\) \{\s*if \(current !== generation\) return;[\s\S]*?safeError\(error\)/);
   assert.match(refresh, /finally \{[\s\S]*?checking = false;[\s\S]*?button\.disabled = false;[\s\S]*?finally 产生新的 rejection/);
-  const invalidate = dataCenter.match(/function invalidate\(message = [\s\S]*?
-  \}/)?.[0] || "";
+  const invalidate = dataCenter.match(/function invalidate\(message = [\s\S]*?\n  \}/)?.[0] || "";
   assert.match(invalidate, /generation \+= 1;[\s\S]*?safeInvalidateStep/);
   assert.match(invalidate, /safeInvalidateStep\(\(\) => setBadge\("#data-center-summary-status"/);
   assert.match(invalidate, /forEach\(\(selector\) => safeInvalidateStep/);
@@ -1491,8 +1476,7 @@ function ", start + 20);
 });
 
 test("市场工作台各模块刷新失败会独立收敛并显示诊断", () => {
-  const refresh = app.match(/function refreshMarketWorkspace\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const refresh = app.match(/function refreshMarketWorkspace\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refresh, "refreshMarketWorkspace implementation must exist");
   assert.match(refresh, /const startModule = \(label, operation\) => \{[\s\S]*?Promise\.resolve\(operation\(\)\)\.then/);
   assert.match(refresh, /\(error\) => \(\{ label, ok: false, error \}\)/);
@@ -1503,8 +1487,7 @@ test("市场工作台各模块刷新失败会独立收敛并显示诊断", () =>
 });
 
 test("服务健康刷新把请求与 DOM 异常收敛为结果", () => {
-  const refresh = app.match(/async function refreshServices\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const refresh = app.match(/async function refreshServices\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refresh, "refreshServices implementation must exist");
   assert.match(refresh, /try \{[\s\S]*?await Promise\.all\(\[[\s\S]*?runHealthCheck\(marketHealth, settings\)/);
   assert.match(refresh, /catch \(renderError\)[\s\S]*?状态显示更新失败[\s\S]*?return \{ marketOK, analysisOK, marketState, analysisState, stale: false, renderError: message \}/);
@@ -1514,8 +1497,7 @@ test("服务健康刷新把请求与 DOM 异常收敛为结果", () => {
 });
 
 test("服务健康刷新不会覆盖行情查询区域的独立提示", () => {
-  const refreshServices = app.match(/async function refreshServices\(\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const refreshServices = app.match(/async function refreshServices\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(refreshServices, "refreshServices implementation must exist");
   assert.doesNotMatch(
     refreshServices,
@@ -1573,8 +1555,7 @@ test("活动任务引用静默写入失败时仍独立保存最近任务历史�
 });
 
 test("估值请求补齐交易所后缀，并只展示与当前标的匹配的记录", () => {
-  const renderer = stockResearch.match(/function renderValuations\(data,symbol\)\{[\s\S]*?
- \}
+  const renderer = stockResearch.match(/function renderValuations\(data,symbol\)\{[\s\S]*?\n \}
  function fractionPercent/)?.[0] || "";
   assert.ok(renderer, "估值渲染器应存在");
   assert.match(stockResearch, /function normalizeValuationSymbol\(input\)/);
@@ -1591,8 +1572,7 @@ test("估值请求补齐交易所后缀，并只展示与当前标的匹配的�
 
  
 test("季度财务指标读取的报告期校验与成功提示异常不会向外拒绝", () => {
-  const loader = stockResearch.match(/async function loadFundamentals\(\)\{[\s\S]*?
- \}/)?.[0] || "";
+  const loader = stockResearch.match(/async function loadFundamentals\(\)\{[\s\S]*?\n \}/)?.[0] || "";
   assert.ok(loader);
   assert.match(loader, /try\{[\s\S]*?syncSymbol\(\)/);
   assert.match(loader, /if\(!Number\.isInteger\(year\)[\s\S]*?safeResearchFeedback\("财务报告期不正确。"\)/);
@@ -1699,8 +1679,7 @@ test("Run 结果必须与当前任务标的集合一致后才允许渲染", () =
 
  
 test("任务状态轮询不允许更换已建立的 task_id/run_id 关联", () => {
-  const poller = app.match(/async function pollTask\([\s\S]*?
-\}/)?.[0] || "";
+  const poller = app.match(/async function pollTask\([\s\S]*?\n\}/)?.[0] || "";
   assert.ok(poller, "task poller must exist");
   assert.match(poller, /candidate\.task_id !== taskId/);
   assert.match(poller, /typeof candidate\.run_id !== "string" \|\| !candidate\.run_id\.trim\(\)/);
@@ -1777,8 +1756,7 @@ async function createTask(", pollStart);
 });
 
 test("分析 API 切换期间的 UI 清理异常不会中断配置应用", () => {
-  const helper = app.match(/function safelyUpdateTaskContextUi\(label, update\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const helper = app.match(/function safelyUpdateTaskContextUi\(label, update\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(helper, /try \{\s*update\(\);\s*\} catch \(error\)/);
   assert.match(helper, /部分界面清理失败[\s\S]*?catch/);
 
@@ -1851,8 +1829,7 @@ test("switching task context or analysis API endpoint resets the stage-event fil
 
 test("工作区导入与自选股存储使用同一规则识别带后缀的重复证券", () => {
   assert.match(format, /export function comparableMarketSymbol\(input\)/);
-  const importBody = app.match(/function validateBrowserDataPayload\(payload\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const importBody = app.match(/function validateBrowserDataPayload\(payload\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(importBody, "工作区数据导入必须先完成结构校验");
   assert.match(importBody, /const symbolIdentity = comparableMarketSymbol\(symbol\)/);
   assert.match(importBody, /seenSymbols\.has\(symbolIdentity\)/);
@@ -1876,8 +1853,7 @@ test("清空或导入本地任务历史会隔离在途创建请求的晚到响�
   const clearEnd = app.indexOf("function setWatchlistFeedback(", clearStart + 1);
   const clearBody = clearStart >= 0 && clearEnd > clearStart ? app.slice(clearStart, clearEnd) : "";
   assert.match(clearBody, /state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
-  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?
-\}/)?.[0] || "";
+  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(importBody, /applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
 });
 
