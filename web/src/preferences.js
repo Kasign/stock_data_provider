@@ -1,8 +1,11 @@
 export const PREFERENCES_KEY = "stock-provider-webui.preferences.v1";
 
+export const WATCHLIST_DISPLAY_FIELDS = Object.freeze(["updated", "quote", "today", "task", "result"]);
+
 export const DEFAULT_PREFERENCES = Object.freeze({
   watchlistSort: "updated",
-  watchlistSortDirection: "desc"
+  watchlistSortDirection: "desc",
+  watchlistDisplayFields: [...WATCHLIST_DISPLAY_FIELDS]
 });
 
 const SORT_MODES = new Set(["updated", "symbol", "name"]);
@@ -14,7 +17,10 @@ export function normalizePreferences(value = {}) {
     watchlistSort: SORT_MODES.has(source.watchlistSort) ? source.watchlistSort : DEFAULT_PREFERENCES.watchlistSort,
     watchlistSortDirection: SORT_DIRECTIONS.has(source.watchlistSortDirection)
       ? source.watchlistSortDirection
-      : DEFAULT_PREFERENCES.watchlistSortDirection
+      : DEFAULT_PREFERENCES.watchlistSortDirection,
+    watchlistDisplayFields: Array.isArray(source.watchlistDisplayFields)
+      ? WATCHLIST_DISPLAY_FIELDS.filter((field) => source.watchlistDisplayFields.includes(field))
+      : [...DEFAULT_PREFERENCES.watchlistDisplayFields]
   };
 }
 

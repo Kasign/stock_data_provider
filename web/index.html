@@ -782,8 +782,16 @@
                     <label class="field"><span>默认排序方向</span><select id="settings-watchlist-direction"><option value="desc">降序</option><option value="asc">升序</option></select></label>
                   </div>
                   <div class="settings-connection-actions"><button class="button button-secondary" id="reset-local-preferences" type="button">恢复本地偏好默认值</button></div>
-                  <p class="settings-inline-status" id="local-preferences-feedback" role="status" aria-live="polite">自选股排序偏好保存在当前浏览器，不影响自选股内容。</p>
-                  <p class="field-hint">恢复默认值只重置自选股排序字段与方向，不会清除主题、API Key、连接路径、自选股或最近任务引用。</p>
+                  <div class="settings-group-heading"><div><strong>自选股信息显示</strong><p>控制自选股卡片中显示的辅助信息；股票代码、名称和操作入口始终保留。</p></div><span class="settings-config-scope">即时生效</span></div>
+                  <div class="settings-watchlist-display-options">
+                    <label><input type="checkbox" data-watchlist-display-field value="updated" checked /><span>添加/更新时间</span></label>
+                    <label><input type="checkbox" data-watchlist-display-field value="quote" checked /><span>当前行情快照</span></label>
+                    <label><input type="checkbox" data-watchlist-display-field value="today" checked /><span>今日分析记录</span></label>
+                    <label><input type="checkbox" data-watchlist-display-field value="task" checked /><span>当前/最近任务状态</span></label>
+                    <label><input type="checkbox" data-watchlist-display-field value="result" checked /><span>分析结果摘要</span></label>
+                  </div>
+                  <p class="settings-inline-status" id="local-preferences-feedback" role="status" aria-live="polite">自选股排序和信息显示偏好保存在当前浏览器。</p>
+                  <p class="field-hint">恢复默认值只重置自选股排序与信息显示偏好，不会清除主题、API Key、连接路径、自选股或最近任务引用。</p>
                 </div>
               </section>
 

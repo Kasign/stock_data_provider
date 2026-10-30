@@ -1,5 +1,5 @@
 import { applyTheme, persistTheme, readTheme, THEME_STORAGE_KEY } from "./theme.js";
-import { DEFAULT_PREFERENCES, PREFERENCES_KEY, readPreferences, resetPreferences, savePreferences } from "./preferences.js";
+import { DEFAULT_PREFERENCES, PREFERENCES_KEY, WATCHLIST_DISPLAY_FIELDS, readPreferences, resetPreferences, savePreferences } from "./preferences.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
@@ -731,7 +731,8 @@ function renderWatchlist(records, storageReadable, storageValid) {
     meta.className = "watchlist-item-meta";
     meta.textContent = "添加/更新于 " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录");
     aliasLabel.append(aliasCaption, aliasInput);
-    main.append(symbol, aliasLabel, meta);
+    main.append(symbol, aliasLabel);
+    if (preferences.watchlistDisplayFields.includes("updated")) main.append(meta);
 
     const tracking = document.createElement("div");
     tracking.className = "watchlist-tracking-summary";
@@ -824,8 +825,20 @@ function renderWatchlist(records, storageReadable, storageValid) {
     } else {
       resultLine.textContent = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
     }
-    tracking.append(quoteLine, todayLine, taskLine, resultLine);
-    main.append(tracking);
+    const displayFieldNodes = {
+      quote: quoteLine,
+      today: todayLine,
+      task: taskLine,
+      result: resultLine
+    };
+    const visibleTrackingNodes = preferences.watchlistDisplayFields
+      .filter((field) => field !== "updated")
+      .map((field) => displayFieldNodes[field])
+      .filter(Boolean);
+    if (visibleTrackingNodes.length) {
+      tracking.append(...visibleTrackingNodes);
+      main.append(tracking);
+    }
 
     const actions = document.createElement("div");
     actions.className = "watchlist-actions";
@@ -4500,7 +4513,7 @@ function normalizeImportedPreferences(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("本地偏好字段必须是对象。");
   }
-  const allowed = new Set(["watchlistSort", "watchlistSortDirection"]);
+  const allowed = new Set(["watchlistSort", "watchlistSortDirection", "watchlistDisplayFields"]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     throw new Error("本地偏好包含不支持的字段。");
   }
@@ -4510,9 +4523,16 @@ function normalizeImportedPreferences(value) {
   if (value.watchlistSortDirection !== undefined && !["asc", "desc"].includes(value.watchlistSortDirection)) {
     throw new Error("自选股排序方向无效。");
   }
+  if (value.watchlistDisplayFields !== undefined && (!Array.isArray(value.watchlistDisplayFields)
+    || value.watchlistDisplayFields.some((field) => !WATCHLIST_DISPLAY_FIELDS.includes(field)))) {
+    throw new Error("自选股展示字段配置无效。");
+  }
   return {
     watchlistSort: value.watchlistSort || DEFAULT_PREFERENCES.watchlistSort,
-    watchlistSortDirection: value.watchlistSortDirection || DEFAULT_PREFERENCES.watchlistSortDirection
+    watchlistSortDirection: value.watchlistSortDirection || DEFAULT_PREFERENCES.watchlistSortDirection,
+    watchlistDisplayFields: value.watchlistDisplayFields === undefined
+      ? [...DEFAULT_PREFERENCES.watchlistDisplayFields]
+      : WATCHLIST_DISPLAY_FIELDS.filter((field) => value.watchlistDisplayFields.includes(field))
   };
 }
 
@@ -4524,13 +4544,18 @@ function syncWatchlistPreferenceControls(preferences = readPreferences()) {
   if (sort) sort.value = normalized.watchlistSort;
   if (direction) direction.value = normalized.watchlistSortDirection;
   if (listSort) listSort.value = normalized.watchlistSort;
+  document.querySelectorAll("[data-watchlist-display-field]").forEach((input) => {
+    input.checked = normalized.watchlistDisplayFields.includes(input.value);
+  });
 }
 
 function persistWatchlistPreferences() {
   try {
     const preferences = savePreferences({
       watchlistSort: $("#watchlist-sort")?.value || $("#settings-watchlist-sort")?.value,
-      watchlistSortDirection: $("#settings-watchlist-direction")?.value || readPreferences().watchlistSortDirection
+      ...readPreferences(),
+      watchlistSortDirection: $("#settings-watchlist-direction")?.value || readPreferences().watchlistSortDirection,
+      watchlistDisplayFields: [...document.querySelectorAll("[data-watchlist-display-field]:checked")].map((input) => input.value)
     });
     syncWatchlistPreferenceControls(preferences);
     $("#local-preferences-feedback").textContent = "自选股默认排序偏好已保存到当前浏览器。";
@@ -4949,6 +4974,12 @@ $("#settings-watchlist-sort").addEventListener("change", () => {
 $("#settings-watchlist-direction").addEventListener("change", () => {
   persistWatchlistPreferences();
   renderWatchlist();
+});
+document.querySelectorAll("[data-watchlist-display-field]").forEach((input) => {
+  input.addEventListener("change", () => {
+    persistWatchlistPreferences();
+    renderWatchlist();
+  });
 });
 $("#reset-local-preferences").addEventListener("click", () => {
   try {

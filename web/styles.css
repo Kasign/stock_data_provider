@@ -4692,3 +4692,30 @@ button:disabled {
  .settings-section-heading { align-items:flex-start; }
  .settings-section-toggle { margin-top:2px; }
 }
+
+
+/* 自选股信息显示偏好 */
+.settings-watchlist-display-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  padding: 12px 0;
+}
+.settings-watchlist-display-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.settings-watchlist-display-options input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+@media (max-width: 640px) {
+  .settings-watchlist-display-options { grid-template-columns: 1fr; }
+}
