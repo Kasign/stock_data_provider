@@ -4580,3 +4580,21 @@ button:disabled {
   .watchlist-search-field, .watchlist-sort-field { flex: 1 1 100%; max-width: none; }
   .watchlist-filter-count { margin: 0; }
 }
+
+
+/* 连接配置直接属于设置中心页面，不再使用独立模态弹窗。 */
+.settings-connection-form { display: flex; flex-direction: column; gap: 16px; padding: 20px; min-width: 0; }
+.settings-connection-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.settings-connection-intro p, .settings-storage-boundary p { margin: 6px 0 0; color: var(--text-soft); font-size: 13px; line-height: 1.75; }
+.settings-storage-boundary { padding: 13px 15px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+.settings-storage-boundary strong { font-size: 13px; }
+.settings-connection-form .field { margin: 0; }
+.settings-connection-form .security-note { margin: 0; }
+.settings-connection-form .settings-dirty-state { margin: 0; }
+.settings-connection-form .settings-connection-actions { align-items: center; }
+.settings-connection-form .settings-feedback { margin: 0; }
+@media (max-width: 640px) {
+  .settings-connection-intro { flex-direction: column; }
+  .settings-connection-form .settings-connection-actions { align-items: stretch; }
+  .settings-connection-form .settings-connection-actions .grow { display: none; }
+}
