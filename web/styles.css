@@ -4848,5 +4848,5 @@ button:disabled {
 
 .watchlist-group-manager { display:flex; align-items:end; flex-wrap:wrap; gap:10px; margin:12px 0; padding:12px; border:1px solid var(--line,rgba(128,128,128,.22)); border-radius:10px; }
 .watchlist-group-manager .field { min-width:180px; flex:0 1 260px; }
-.watchlist-group-manager .market-widget-meta { flex:1 1 100%; margin:0; }
+.watchlist-group-manager .watchlist-group-note { flex:1 1 100%; margin:0; color:var(--muted); font-size:12px; }
 .watchlist-item-group { max-width:140px; min-height:34px; border:1px solid var(--line); border-radius:8px; padding:4px 8px; background:var(--surface); color:var(--text); }
