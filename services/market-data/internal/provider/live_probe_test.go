@@ -1005,6 +1005,30 @@ func TestLiveProviderProbe(t *testing.T) {
 		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 
+	// Cross-market coverage: Shenzhen ChiNext and Shanghai STAR Market are probed
+	// independently so a Shanghai Main Board success cannot stand in for them.
+	for _, marketSample := range []struct {
+		name   string
+		symbol string
+	}{
+		{name: "chinext", symbol: "300750.SZ"},
+		{name: "star_market", symbol: "688981.SH"},
+	} {
+		symbol := marketSample.symbol
+		runQuote("sina-"+marketSample.name, "sina", symbol, sina.client, func(ctx context.Context) (*model.Quote, error) {
+			return sina.FetchQuote(ctx, symbol)
+		})
+		runQuote("tencent-"+marketSample.name, "tencent", symbol, tencent.client, func(ctx context.Context) (*model.Quote, error) {
+			return tencent.FetchQuote(ctx, symbol)
+		})
+		runDaily("sina-"+marketSample.name, symbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return sina.FetchDailyBars(ctx, symbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+		runDaily("tencent-"+marketSample.name, symbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+	}
+
 	eastmoney := NewEastmoney(12*time.Second, "", "")
 	runStockBasic("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBasic, error) {
 		return eastmoney.FetchStockBasic(ctx, dailySymbol)
