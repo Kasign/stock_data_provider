@@ -195,3 +195,19 @@ go test ./internal/provider -run '^TestLiveProviderProbe
 - 交易日历、公告、财务、估值、人气榜复用业务质量校验函数。
 
 执行限制：本轮没有发起任何真实 Provider 请求，没有要求或读取新的 Key/Token。GitHub Actions 是否覆盖最新 SHA 仍需确认；未取得最新 SHA 的成功结果前，不记录为构建或测试通过。实时 Provider workflow 继续按无凭据跳过策略执行，不能将 workflow success 视为全部 Provider 可用。
+
+
+## 9. 统一诊断接口请求范围与 Handler 自检（2026-10-30）
+
+目标分支：`feat/full-go-data-providers-api-switch`。
+
+- `POST /api/v1/data-sources/probe` 保持原路由和空请求体默认行为。
+- 新增可选请求体：`scope`（`all`/`core`）、`capabilities` 白名单、`timeout_seconds`（1–30 秒，默认 12 秒，按单项 Provider 请求计时）。
+- 指定 `capabilities` 时仅执行列表内能力；未指定时由 scope 选择默认集合。core 默认集合为 quote、daily_bars、stock_basic、trading_calendar、index_quotes、market_breadth。
+- 能力白名单未知项、重复项、core 范围外能力、非法 JSON、未知字段、非对象 JSON、多个 JSON 值、超时越界和超过 8 KB 的请求体均返回 400。
+- 响应批次记录 scope、requested_capabilities、timeout_seconds；旧历史记录缺少这些字段时通过 omitempty 保持 JSON 输出兼容。
+- OpenAPI 已补充请求体、能力枚举、超时边界和 API Key 安全声明。
+- 新增 httptest：鉴权、空 body 兼容、core 过滤、能力白名单、非法请求、超大 body；Service 层增加能力范围与参数校验测试。
+- 本次只使用无 Provider 的测试服务，不触发真实供应商请求，不需要 Key/Token。
+
+尚未实现：markets、symbols、checks 过滤；逐项请求摘要、返回行数/覆盖率、样本证券/日期和 freshness 证据。当前提交仍需等待最新 SHA 的完整 CI 与 Docker 构建确认。
