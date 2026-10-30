@@ -34,19 +34,19 @@ type ProviderProbeRun struct {
 	Scope                 string              `json:"scope,omitempty"`
 	RequestedCapabilities []string            `json:"requested_capabilities,omitempty"`
 	TimeoutSeconds        int                 `json:"timeout_seconds,omitempty"`
-	Status        string              `json:"status"`
-	Persisted     bool                `json:"persisted"`
-	StartedAt     time.Time           `json:"started_at"`
-	FinishedAt    time.Time           `json:"finished_at"`
-	Total         int                 `json:"total"`
-	Returned      int                 `json:"returned"`
-	Degraded      int                 `json:"degraded"`
-	Unknown       int                 `json:"unknown"`
-	Failed        int                 `json:"failed"`
-	Skipped       int                 `json:"skipped"`
-	NotConfigured int                 `json:"not_configured"`
-	NotSupported  int                 `json:"not_supported"`
-	Items         []ProviderProbeItem `json:"items"`
+	Status                string              `json:"status"`
+	Persisted             bool                `json:"persisted"`
+	StartedAt             time.Time           `json:"started_at"`
+	FinishedAt            time.Time           `json:"finished_at"`
+	Total                 int                 `json:"total"`
+	Returned              int                 `json:"returned"`
+	Degraded              int                 `json:"degraded"`
+	Unknown               int                 `json:"unknown"`
+	Failed                int                 `json:"failed"`
+	Skipped               int                 `json:"skipped"`
+	NotConfigured         int                 `json:"not_configured"`
+	NotSupported          int                 `json:"not_supported"`
+	Items                 []ProviderProbeItem `json:"items"`
 }
 
 // ProviderProbeHistory 是最近的主动探测批次列表。
