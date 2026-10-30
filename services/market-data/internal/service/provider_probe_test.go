@@ -82,6 +82,33 @@ func findProbeItem(items []model.ProviderProbeItem, providerName, capability str
 	return model.ProviderProbeItem{}, false
 }
 
+
+type providerProbeMissingIdentityFake struct{}
+
+func (providerProbeMissingIdentityFake) Name() string { return "probe-missing-identity" }
+func (providerProbeMissingIdentityFake) FetchQuote(ctx context.Context, symbol string) (*model.Quote, error) {
+	quote, err := (providerProbeQuoteFake{}).FetchQuote(ctx, symbol)
+	if err != nil {
+		return nil, err
+	}
+	quote.Symbol = ""
+	quote.Source = ""
+	return quote, nil
+}
+
+func TestProviderProbeRejectsQuoteWithoutIdentity(t *testing.T) {
+	p := providerProbeMissingIdentityFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilities(context.Background())
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilities() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "quote")
+	if !found || item.Status != "failed" || item.ErrorCode != "contract_invalid" {
+		t.Fatalf("expected missing quote identity to fail contract validation, got %+v", run)
+	}
+}
+
 func TestProviderProbeFailureClassification(t *testing.T) {
 	cases := []struct {
 		message string
