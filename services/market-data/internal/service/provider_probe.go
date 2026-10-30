@@ -38,7 +38,16 @@ type providerProbeEvidence struct {
 	sampleDate    string
 	rowsReturned  int
 	rowsValidated int
+	coverageRatio *float64
 	providerTime  *time.Time
+}
+
+func recordProviderProbeCoverage(ctx context.Context, coverage float64) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil || math.IsNaN(coverage) || math.IsInf(coverage, 0) || coverage < 0 || coverage > 1 {
+		return
+	}
+	evidence.coverageRatio = &coverage
 }
 
 func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string, rowsReturned, rowsValidated int, providerTime *time.Time) {
@@ -257,6 +266,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if snapshot != nil {
 				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, snapshot.CoveredSecurities, snapshot.CoveredSecurities, snapshot.NewestQuoteTime)
+				if snapshot.TotalSecurities > 0 {
+					recordProviderProbeCoverage(probeCtx, float64(snapshot.CoveredSecurities)/float64(snapshot.TotalSecurities))
+				}
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
@@ -609,6 +621,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.SampleDate = evidence.sampleDate
 			item.RowsReturned = evidence.rowsReturned
 			item.RowsValidated = evidence.rowsValidated
+			item.CoverageRatio = evidence.coverageRatio
 			item.ProviderTime = evidence.providerTime
 			item.ElapsedMS = time.Since(checkedAt).Milliseconds()
 			item.CheckedAt = time.Now().UTC()
