@@ -189,3 +189,18 @@ func TestProviderProbeOptionsValidateScopeCapabilityAndTimeout(t *testing.T) {
 		}
 	}
 }
+
+
+func TestRecordProviderProbeCoverageAcceptsOnlyValidRatios(t *testing.T) {
+	evidence := &providerProbeEvidence{}
+	ctx := context.WithValue(context.Background(), providerProbeEvidenceContextKey{}, evidence)
+	valid := 0.75
+	recordProviderProbeCoverage(ctx, valid)
+	if evidence.coverageRatio == nil || *evidence.coverageRatio != valid {
+		t.Fatalf("expected coverage ratio %v, got %+v", valid, evidence.coverageRatio)
+	}
+	recordProviderProbeCoverage(ctx, 1.01)
+	if evidence.coverageRatio == nil || *evidence.coverageRatio != valid {
+		t.Fatalf("invalid coverage ratio must not overwrite valid evidence, got %+v", evidence.coverageRatio)
+	}
+}
