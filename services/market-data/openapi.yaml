@@ -439,6 +439,7 @@ components:
           items: {$ref: '#/components/schemas/SectorRanking'}
         source: {type: string}
         source_version: {type: string}
+        provider_report_date: {type: string, format: date}
         fetched_at: {type: string, format: date-time}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons:
@@ -1388,7 +1389,7 @@ paths:
           schema: {type: integer, minimum: 1, maximum: 100, default: 10}
         - name: direction
           in: query
-          description: Return the largest selected metric first (up) or the smallest first (down).
+          description: Return the largest selected metric first (up) or the smallest first (down). change_5d is derived from six daily board-index closes; amount requires verified CNY values.
           schema: {type: string, enum: [up, down], default: up}
       responses:
         '200':
@@ -1396,7 +1397,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SectorRankingSnapshot'}
-        '400': {description: Invalid sector type, direction or limit}
+        '400': {description: Invalid sector type, sort_by, direction or limit}
         '401': {description: API key required}
         '502': {description: All sector-ranking providers failed}
         '503': {description: No sector-ranking provider enabled}

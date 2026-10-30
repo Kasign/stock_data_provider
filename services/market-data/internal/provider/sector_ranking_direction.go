@@ -33,6 +33,11 @@ func sortSectorRankingSnapshotByMetric(snapshot *model.SectorRankingSnapshot, di
 				return nil, errors.New("sector-ranking item is missing change percent")
 			}
 			return item.ChangePercent, nil
+		case "change_5d":
+			if item.ChangePercent5D == nil {
+				return nil, errors.New("sector-ranking item is missing 5-day change percent")
+			}
+			return item.ChangePercent5D, nil
 		case "amount":
 			if item.Amount == nil || item.AmountUnit != "CNY" {
 				return nil, errors.New("sector-ranking item is missing verified CNY amount")

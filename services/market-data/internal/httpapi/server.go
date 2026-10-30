@@ -427,7 +427,7 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 		sortBy = "change_percent"
 	}
 	if sortBy != "change_percent" && sortBy != "amount" {
-		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "sort_by must be change_percent or amount", requestID(r))
+		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "sort_by must be change_percent, amount or change_5d", requestID(r))
 		return
 	}
 	direction := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("direction")))

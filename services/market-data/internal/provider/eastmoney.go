@@ -1900,6 +1900,9 @@ func (p *Eastmoney) FetchSectorRankingsByMetric(ctx context.Context, rawCategory
 	if sortBy == "" {
 		sortBy = "change_percent"
 	}
+	if sortBy == "change_5d" {
+		return p.fetchSectorRankings5D(ctx, category, direction, limit)
+	}
 	if sortBy != "change_percent" && sortBy != "amount" {
 		return nil, fmt.Errorf("unsupported sector ranking sort_by %q; want change_percent or amount", rawSortBy)
 	}

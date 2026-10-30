@@ -198,6 +198,7 @@ type SectorRanking struct {
 	LatestPrice         *float64      `json:"latest_price,omitempty"`
 	Change              *float64      `json:"change,omitempty"`
 	ChangePercent       *float64      `json:"change_percent,omitempty"`
+	ChangePercent5D     *float64      `json:"change_percent_5d,omitempty"`
 	Amount              *float64      `json:"amount,omitempty"`
 	AmountUnit          string        `json:"amount_unit"`
 	AdvancingCount      *int          `json:"advancing_count,omitempty"`

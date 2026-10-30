@@ -1125,7 +1125,7 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if sortBy == "" {
 		sortBy = "change_percent"
 	}
-	if sortBy != "change_percent" && sortBy != "amount" {
+	if sortBy != "change_percent" && sortBy != "amount" && sortBy != "change_5d" {
 		return fmt.Errorf("sector-ranking sort_by %q is unsupported", sortBy)
 	}
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
@@ -1180,7 +1180,7 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 		if item.FetchedAt.IsZero() || item.QualityStatus != model.QualityDegraded {
 			return errors.New("sector-ranking item has invalid retrieval time or quality status")
 		}
-		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.Amount, item.LeaderChangePercent} {
+		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.ChangePercent5D, item.Amount, item.LeaderChangePercent} {
 			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
 				return fmt.Errorf("sector-ranking item %s contains a non-finite numeric value", item.Code)
 			}
@@ -1209,6 +1209,12 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 		}
 		seenRanks[item.Rank] = true
 		currentMetric := *item.ChangePercent
+		if sortBy == "change_5d" {
+			if item.ChangePercent5D == nil {
+				return fmt.Errorf("sector-ranking item %s has no 5-day change percent", item.Code)
+			}
+			currentMetric = *item.ChangePercent5D
+		}
 		if sortBy == "amount" {
 			if item.Amount == nil || item.AmountUnit != "CNY" {
 				return fmt.Errorf("sector-ranking item %s has no verified CNY amount for amount ranking", item.Code)
