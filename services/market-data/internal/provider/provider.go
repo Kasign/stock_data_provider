@@ -33,6 +33,12 @@ type StockBasicProvider interface {
 	FetchStockBasic(ctx context.Context, symbol string) (*model.StockBasic, error)
 }
 
+// StockUniverseProvider 返回完整且分页已核验的 A 股证券目录。
+type StockUniverseProvider interface {
+	NamedProvider
+	ListStockUniverse(ctx context.Context) (*model.StockUniverseSnapshot, error)
+}
+
 // StockSearchProvider 从真实证券目录按名称或代码搜索股票，不承担实时行情查询。
 type StockSearchProvider interface {
 	NamedProvider

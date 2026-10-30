@@ -1572,6 +1572,23 @@ const (
 	eastmoneyStockSearchRetryDelay = 30 * time.Second
 )
 
+// ListStockUniverse returns the complete validated A-share directory used by market-wide pagination.
+func (p *Eastmoney) ListStockUniverse(ctx context.Context) (*model.StockUniverseSnapshot, error) {
+	items, fetchedAt, quality, reasons, stale, err := p.loadStockSearchIndex(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("eastmoney stock universe: %w", err)
+	}
+	if stale {
+		quality = model.QualityStale
+		reasons = appendUniqueEastmoneyReason(reasons, "provider_refresh_failed_cached_directory_used")
+	}
+	return &model.StockUniverseSnapshot{
+		Items: items, Total: len(items), TotalIsLowerBound: quality != model.QualityValid,
+		Source: p.Name(), SourceVersion: "eastmoney-stock-universe-clist-v1",
+		FetchedAt: fetchedAt, QualityStatus: quality, QualityReasons: reasons,
+	}, nil
+}
+
 // SearchStocks searches Eastmoney's real A-share security directory by Chinese name or code.
 // The directory is cached for six hours so autocomplete does not trigger a full-market request
 // on every keystroke. The response intentionally contains identity only, not quote data.

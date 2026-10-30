@@ -574,6 +574,43 @@ components:
           type: array
           items: {type: string}
 
+    MarketStocksSnapshot:
+      type: object
+      required: [page, page_size, total, total_is_lower_bound, returned, quote_succeeded, quote_failed, coverage_ratio, include_ma, ma_adjustment_basis, universe_source, universe_source_version, universe_fetched_at, fetched_at, items, quality_status]
+      properties:
+        page: {type: integer}
+        page_size: {type: integer}
+        total: {type: integer, description: Total securities in the complete directory}
+        total_is_lower_bound: {type: boolean, description: True when the source directory was degraded or incomplete}
+        returned: {type: integer, description: Number of securities in this page}
+        quote_succeeded: {type: integer}
+        quote_failed: {type: integer}
+        coverage_ratio: {type: number, minimum: 0, maximum: 1, description: Quote success ratio for this page only}
+        include_ma: {type: boolean}
+        ma_adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
+        universe_source: {type: string}
+        universe_source_version: {type: string}
+        universe_fetched_at: {type: string, format: date-time}
+        fetched_at: {type: string, format: date-time}
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              symbol: {type: string}
+              code: {type: string}
+              name: {type: string}
+              exchange: {type: string}
+              quote: {$ref: '#/components/schemas/Quote'}
+              ma5: {type: number, nullable: true}
+              ma20: {type: number, nullable: true}
+              ma_adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
+              ma_provider: {type: string}
+              error_code: {type: string}
+              quality_status: {$ref: '#/components/schemas/QualityStatus'}
+              quality_reasons: {type: array, items: {type: string}}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     MarketSentimentSnapshot:
       type: object
       required: [market, trade_date, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, source, fetched_at, quality_status]
@@ -1429,6 +1466,29 @@ paths:
         '401': {description: API key required}
         '502': {description: Calendar provider failed or returned incomplete data}
         '503': {description: No trading-calendar provider enabled}
+  /api/v1/market/stocks:
+    get:
+      summary: Get a paginated A-share market overview with quotes and optional moving averages
+      description: >-
+        Uses the validated A-share security directory as the universe and returns only the requested page. Quote
+        coverage_ratio is scoped to that page. When include_ma=true, MA5 and MA20 are calculated from daily bars
+        using the explicitly selected adjustment basis; unavailable or insufficient history remains null. Directory
+        incompleteness is exposed through total_is_lower_bound and degraded quality rather than hidden.
+      parameters:
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 10000, default: 1}}
+        - {name: page_size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+        - {name: include_ma, in: query, required: false, schema: {type: boolean, default: true}}
+        - {name: adjustment, in: query, required: false, schema: {$ref: '#/components/schemas/RequestAdjustmentBasis'}}
+      responses:
+        '200':
+          description: One page of A-share overview records with per-item and aggregate quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketStocksSnapshot'}
+        '400': {description: Invalid page, page_size, include_ma or adjustment}
+        '401': {description: API key required}
+        '502': {description: All complete-universe providers failed}
+        '503': {description: No configured Provider exposes a complete A-share universe}
   /api/v1/market/sentiment:
     get:
       summary: Get and persist the current A-share market sentiment snapshot
