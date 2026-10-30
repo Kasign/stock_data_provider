@@ -999,6 +999,22 @@
                     <label class="field"><span>单渠道速率限制</span><input type="number" disabled placeholder="条 / 分钟" /></label>
                   </div>
                   <p class="settings-boundary-note">通知收件箱、渠道配置、订阅关系与投递记录是不同资源；相关服务端 API 尚未接入。</p>
+                  <section class="notification-preferences-draft" aria-labelledby="notification-preferences-title">
+                    <div class="settings-group-heading"><div><strong id="notification-preferences-title">本地通知偏好草稿</strong><p>仅记录个人关注事件与免打扰时段，不代表服务端已订阅，也不会发送通知。</p></div><span class="availability-pill is-local">仅当前浏览器</span></div>
+                    <form id="notification-preferences-form">
+                      <fieldset class="notification-preference-events"><legend>关注事件</legend>
+                        <label><input type="checkbox" name="notification-event" value="task_completed"> 分析任务完成</label>
+                        <label><input type="checkbox" name="notification-event" value="task_failed"> 分析任务失败</label>
+                        <label><input type="checkbox" name="notification-event" value="risk_blocked"> 风险门禁阻断</label>
+                        <label><input type="checkbox" name="notification-event" value="system_error"> 系统异常</label>
+                      </fieldset>
+                      <div class="settings-field-grid notification-quiet-hours">
+                        <label class="field"><span>免打扰开始</span><input id="notification-quiet-start" type="time" required></label>
+                        <label class="field"><span>免打扰结束</span><input id="notification-quiet-end" type="time" required></label>
+                      </div>
+                      <div class="research-note-actions"><button class="button button-secondary" id="notification-preferences-save" type="submit">保存本地偏好</button><span id="notification-preferences-feedback" role="status" aria-live="polite">尚未读取本地偏好。</span></div>
+                    </form>
+                  </section>
                 </div>
               </section>
 

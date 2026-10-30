@@ -31,6 +31,7 @@ import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
 import { bindLocalAlertDrafts } from "./local-alert-drafts.js";
 import { bindResearchNotes } from "./research-notes.js";
+import { bindNotificationPreferences } from "./notification-preferences.js";
 import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
@@ -197,6 +198,7 @@ const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymb
 const dataCenter = bindDataCenter(() => state.settings);
 bindLocalAlertDrafts({ root: document.querySelector("#alerts-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
 bindResearchNotes({ root: document.querySelector("#research-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
+bindNotificationPreferences({ root: document.querySelector("#settings-notification-section") });
 bindExistingApiTools(() => state.settings);
 const marketActivity = bindMarketActivity(
   () => state.settings,
