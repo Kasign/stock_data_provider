@@ -111,31 +111,40 @@ def fetch_stock_bundle(stock_code: str, lookback_days: int, as_of: datetime | No
     else:
         quote_payload = None
         warnings.append("realtime_quote_skipped_as_of_not_live; latest quote must not leak into a historical analysis")
-    try:
-        raw_chip = _jsonable(manager.get_chip_distribution(code))
-        chip = {
-            "profit_ratio": _jsonable(raw_chip.get("profit_ratio")),
-            "concentration_90": _jsonable(raw_chip.get("concentration_90")),
-            "concentration_70": _jsonable(raw_chip.get("concentration_70")),
-            "cost_average": _jsonable(raw_chip.get("avg_cost", raw_chip.get("cost_average"))),
-            "raw": raw_chip,
-        } if isinstance(raw_chip, dict) else None
-    except Exception as exc:
-        logger.warning("chip distribution fetch failed for %s: %s", code, type(exc).__name__)
+    auxiliary_is_current = abs((datetime.now(market_tz) - date_anchor).total_seconds()) <= 90
+    if not auxiliary_is_current:
+        # 兼容桥只提供最新辅助快照；历史 as_of 请求不得混入当前筹码、财务或板块数据。
         chip = None
-        warnings.append(f"chip_fetch_failed:{type(exc).__name__}")
-    try:
-        fundamentals = _jsonable(manager.get_fundamental_context(code))
-    except Exception as exc:
-        logger.warning("fundamental context fetch failed for %s: %s", code, type(exc).__name__)
         fundamentals = None
-        warnings.append(f"fundamentals_fetch_failed:{type(exc).__name__}")
-    try:
-        boards = _jsonable(manager.get_belong_boards(code)) or []
-    except Exception as exc:
-        logger.debug("board lookup failed for %s: %s", code, type(exc).__name__)
         boards = []
-        warnings.append(f"board_lookup_failed:{type(exc).__name__}")
+        warnings.append("auxiliary_data_skipped_for_historical_as_of_point_in_time_unavailable")
+    else:
+        try:
+            raw_chip = _jsonable(manager.get_chip_distribution(code))
+            chip = {
+                "profit_ratio": _jsonable(raw_chip.get("profit_ratio")),
+                "concentration_90": _jsonable(raw_chip.get("concentration_90")),
+                "concentration_70": _jsonable(raw_chip.get("concentration_70")),
+                "cost_average": _jsonable(raw_chip.get("avg_cost", raw_chip.get("cost_average"))),
+                "raw": raw_chip,
+            } if isinstance(raw_chip, dict) else None
+        except Exception as exc:
+            logger.warning("chip distribution fetch failed for %s: %s", code, type(exc).__name__)
+            chip = None
+            warnings.append(f"chip_fetch_failed:{type(exc).__name__}")
+        try:
+            fundamentals = _jsonable(manager.get_fundamental_context(code))
+        except Exception as exc:
+            logger.warning("fundamental context fetch failed for %s: %s", code, type(exc).__name__)
+            fundamentals = None
+            warnings.append(f"fundamentals_fetch_failed:{type(exc).__name__}")
+        try:
+            boards = _jsonable(manager.get_belong_boards(code)) or []
+        except Exception as exc:
+            logger.debug("board lookup failed for %s: %s", code, type(exc).__name__)
+            boards = []
+            warnings.append(f"board_lookup_failed:{type(exc).__name__}")
+
     if not bars:
         warnings.append("daily_bars_missing")
     if quote_payload is None:

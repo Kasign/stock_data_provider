@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -38,6 +39,22 @@ type breakerState struct {
 	failures      int
 	openUntil     time.Time
 	probeInFlight bool
+	lastSuccessAt time.Time
+	lastFailureAt time.Time
+	totalSuccess  uint64
+	totalFailure  uint64
+}
+
+// CircuitDiagnostic 是熔断器基于真实业务调用维护的只读运行状态。
+type CircuitDiagnostic struct {
+	Capability       string     `json:"capability"`
+	Status           string     `json:"status"`
+	ConsecutiveFails int        `json:"consecutive_failures"`
+	TotalSuccess     uint64     `json:"total_success"`
+	TotalFailure     uint64     `json:"total_failure"`
+	LastSuccessAt    *time.Time `json:"last_success_at"`
+	LastFailureAt    *time.Time `json:"last_failure_at"`
+	OpenUntil        *time.Time `json:"open_until"`
 }
 
 type circuitBreaker struct {
@@ -86,7 +103,12 @@ func (b *circuitBreaker) Allow(key string) bool {
 func (b *circuitBreaker) Success(key string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.states[key] = &breakerState{}
+	state := b.state(key)
+	state.failures = 0
+	state.openUntil = time.Time{}
+	state.probeInFlight = false
+	state.lastSuccessAt = b.now().UTC()
+	state.totalSuccess++
 }
 
 // Abandon releases a half-open probe when the caller cancels the request. Caller
@@ -105,6 +127,8 @@ func (b *circuitBreaker) Failure(key string) {
 	defer b.mu.Unlock()
 	state := b.state(key)
 	now := b.now()
+	state.lastFailureAt = now.UTC()
+	state.totalFailure++
 	if state.probeInFlight {
 		state.failures = b.threshold
 		state.openUntil = now.Add(b.cooldown)
@@ -189,4 +213,47 @@ func retryBars(ctx context.Context, retries int, fetch func(context.Context) ([]
 		return nil, fmt.Errorf("provider call failed after %d attempt(s): %w", retries+1, err)
 	}
 	return bars, nil
+}
+
+// Diagnostics 返回指定 Provider 能力的熔断状态快照，不触发任何 Provider 请求。
+func (b *circuitBreaker) Diagnostics(keys map[string]string) []CircuitDiagnostic {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	result := make([]CircuitDiagnostic, 0, len(keys))
+	now := b.now()
+	for key, capability := range keys {
+		state := b.states[key]
+		item := CircuitDiagnostic{Capability: capability, Status: "not_observed"}
+		if state != nil {
+			item.ConsecutiveFails = state.failures
+			item.TotalSuccess = state.totalSuccess
+			item.TotalFailure = state.totalFailure
+			if !state.lastSuccessAt.IsZero() {
+				value := state.lastSuccessAt
+				item.LastSuccessAt = &value
+			}
+			if !state.lastFailureAt.IsZero() {
+				value := state.lastFailureAt
+				item.LastFailureAt = &value
+			}
+			if !state.openUntil.IsZero() {
+				if now.Before(state.openUntil) {
+					item.Status = "open"
+					value := state.openUntil.UTC()
+					item.OpenUntil = &value
+				} else if state.probeInFlight {
+					item.Status = "half_open"
+				} else {
+					item.Status = "half_open"
+				}
+			} else if state.totalFailure > 0 && state.lastFailureAt.After(state.lastSuccessAt) {
+				item.Status = "degraded"
+			} else if state.totalSuccess > 0 {
+				item.Status = "healthy"
+			}
+		}
+		result = append(result, item)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Capability < result[j].Capability })
+	return result
 }

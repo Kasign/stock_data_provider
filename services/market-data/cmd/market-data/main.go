@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/baostock"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/cache"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/config"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/httpapi"
@@ -22,6 +23,7 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel(os.Getenv("LOG_LEVEL"))}))
+	slog.SetDefault(logger)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, logger); err != nil {
@@ -58,13 +60,54 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 		c = redis
 	}
-	available := map[string]provider.Provider{
-		"eastmoney": provider.NewEastmoney(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL),
-		"tencent":   provider.NewTencentConfigured(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL),
+	baostockClient := baostock.NewClient(baostock.Config{
+		Host:           cfg.BaostockHost,
+		Port:           cfg.BaostockPort,
+		UserID:         cfg.BaostockUserID,
+		Password:       cfg.BaostockPassword,
+		ConnectTimeout: cfg.BaostockConnectTimeout,
+		RequestTimeout: cfg.BaostockRequestTimeout,
+	})
+	defer func() {
+		if err := baostockClient.Close(); err != nil {
+			logger.Warn("关闭 BaoStock 客户端失败", "error", err)
+		}
+	}()
+	available := map[string]provider.NamedProvider{
+		"eastmoney": provider.NewEastmoneyConfiguredWithAnnouncements(cfg.ProviderTimeout, cfg.EastmoneyQuoteURL, cfg.EastmoneyKlineURL, cfg.EastmoneyStockBasicURL, cfg.EastmoneySectorRankingURL, cfg.EastmoneyIndexURL, cfg.EastmoneyMarketStocksURL, cfg.EastmoneyLimitPoolBaseURL, cfg.EastmoneyStockBoardsURL, cfg.EastmoneyDragonTigerURL, cfg.EastmoneyAnnouncementsURL, cfg.EastmoneyUT).WithHotRankingURLs(cfg.EastmoneyHotRankingsURL, cfg.EastmoneyHotSurgeURL).WithCapitalFlowURL(cfg.EastmoneyCapitalFlowURL),
+		"hithink":   provider.NewHithinkConfigured(cfg.ProviderTimeout, cfg.HithinkBaseURL, cfg.HithinkAPIKey),
+		"baostock":  provider.NewBaostock(baostockClient),
+		"tencent":   provider.NewTencentConfiguredWithSearchURL(cfg.ProviderTimeout, cfg.TencentQuoteURL, cfg.TencentKlineURL, cfg.TencentNoneKlineURL, cfg.TencentStockSearchURL),
+		"sina":      provider.NewSinaConfigured(cfg.ProviderTimeout, cfg.SinaQuoteURL, cfg.SinaKlineURL),
+		"yahoo":     provider.NewYahooFinance(cfg.ProviderTimeout, cfg.YahooChartURL),
+		"netease":   provider.NewNeteaseConfigured(cfg.ProviderTimeout, cfg.NeteaseQuoteURL, cfg.NeteaseHistoryURL),
+		"tushare":   provider.NewTushareConfigured(cfg.ProviderTimeout, cfg.TushareAPIURL, cfg.TushareToken),
+		"tickflow":  provider.NewTickFlowConfigured(cfg.ProviderTimeout, cfg.TickFlowAPIURL, cfg.TickFlowFreeAPIURL, cfg.TickFlowAPIKey),
+		"pytdx":     provider.NewPytdx(cfg.ProviderTimeout, cfg.PytdxHosts...),
+		"xueqiu":    provider.NewXueqiuConfigured(cfg.ProviderTimeout, cfg.XueqiuBaseURL, cfg.XueqiuCookie),
 	}
 	allProviders := make([]provider.NamedProvider, 0, len(available))
 	quoteProviders := make([]provider.QuoteProvider, 0, len(available))
 	barProviders := make([]provider.DailyBarProvider, 0, len(available))
+	stockBasicProviders := make([]provider.StockBasicProvider, 0, len(available))
+	stockSearchProviders := make([]provider.StockSearchProvider, 0, len(available))
+	activeProviders := make(map[string]provider.NamedProvider, len(available))
+	sectorRankingProviders := make([]provider.SectorRankingProvider, 0, len(available))
+	indexQuoteProviders := make([]provider.IndexQuoteProvider, 0, len(available))
+	marketBreadthProviders := make([]provider.MarketBreadthProvider, 0, len(available))
+	limitPoolProviders := make([]provider.LimitPoolProvider, 0, len(available))
+	dragonTigerProviders := make([]provider.DragonTigerProvider, 0, len(available))
+	announcementProviders := make([]provider.AnnouncementProvider, 0, len(available))
+	stockBoardsProviders := make([]provider.StockBoardsProvider, 0, len(available))
+	tradingCalendarProviders := make([]provider.TradingCalendarProvider, 0, len(available))
+	securityTradingStatusProviders := make([]provider.SecurityTradingStatusProvider, 0, len(available))
+	fundamentalsProviders := make([]provider.FundamentalsProvider, 0, len(available))
+	valuationProviders := make([]provider.ValuationProvider, 0, len(available))
+	indexCatalogProviders := make([]provider.IndexCatalogProvider, 0, len(available))
+	chipDistributionProviders := make([]provider.ChipDistributionProvider, 0, len(available))
+	capitalFlowProviders := make([]provider.CapitalFlowProvider, 0, len(available))
+	marketCapitalFlowProviders := make([]provider.MarketCapitalFlowProvider, 0, len(available))
+	hotRankingProviders := make([]provider.HotRankingProvider, 0, len(available))
 	for _, name := range cfg.ProviderPriority {
 		p, ok := available[name]
 		if !ok {
@@ -75,20 +118,203 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			continue
 		}
 		allProviders = append(allProviders, p)
+		activeProviders[name] = p
 		if settings.Quote {
-			quoteProviders = append(quoteProviders, p)
+			quoteProvider, ok := p.(provider.QuoteProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for quotes but does not implement QuoteProvider", name)
+			}
+			quoteProviders = append(quoteProviders, quoteProvider)
 		}
 		if settings.DailyBars {
-			barProviders = append(barProviders, p)
+			barProvider, ok := p.(provider.DailyBarProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for daily bars but does not implement DailyBarProvider", name)
+			}
+			barProviders = append(barProviders, barProvider)
 		}
+		if settings.StockBasic {
+			stockBasicProvider, ok := p.(provider.StockBasicProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for stock basics but does not implement StockBasicProvider", name)
+			}
+			stockBasicProviders = append(stockBasicProviders, stockBasicProvider)
+		}
+		if settings.SectorRankings {
+			sectorRankingProvider, ok := p.(provider.SectorRankingProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for sector rankings but does not implement SectorRankingProvider", name)
+			}
+			sectorRankingProviders = append(sectorRankingProviders, sectorRankingProvider)
+		}
+		if settings.IndexQuotes {
+			indexQuoteProvider, ok := p.(provider.IndexQuoteProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for index quotes but does not implement IndexQuoteProvider", name)
+			}
+			indexQuoteProviders = append(indexQuoteProviders, indexQuoteProvider)
+		}
+		if settings.MarketBreadth {
+			capability, ok := p.(provider.MarketBreadthProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for market breadth but does not implement MarketBreadthProvider", name)
+			}
+			marketBreadthProviders = append(marketBreadthProviders, capability)
+		}
+		if settings.LimitPools {
+			capability, ok := p.(provider.LimitPoolProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for limit pools but does not implement LimitPoolProvider", name)
+			}
+			limitPoolProviders = append(limitPoolProviders, capability)
+		}
+		if settings.Announcements {
+			capability, ok := p.(provider.AnnouncementProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for announcements but does not implement AnnouncementProvider", name)
+			}
+			announcementProviders = append(announcementProviders, capability)
+		}
+		if settings.DragonTiger {
+			capability, ok := p.(provider.DragonTigerProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for dragon-tiger but does not implement DragonTigerProvider", name)
+			}
+			dragonTigerProviders = append(dragonTigerProviders, capability)
+		}
+		if settings.StockBoards {
+			capability, ok := p.(provider.StockBoardsProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for stock boards but does not implement StockBoardsProvider", name)
+			}
+			stockBoardsProviders = append(stockBoardsProviders, capability)
+		}
+		if settings.TradingCalendar {
+			capability, ok := p.(provider.TradingCalendarProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for trading calendar but does not implement TradingCalendarProvider", name)
+			}
+			tradingCalendarProviders = append(tradingCalendarProviders, capability)
+		}
+		if settings.SecurityTradingStatus {
+			if !settings.StockBasic {
+				return fmt.Errorf("provider %q security_trading_status requires stock_basic to be enabled for listing-date verification", name)
+			}
+			if !settings.TradingCalendar {
+				return fmt.Errorf("provider %q security_trading_status requires trading_calendar to be enabled", name)
+			}
+			capability, ok := p.(provider.SecurityTradingStatusProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for security trading status but does not implement SecurityTradingStatusProvider", name)
+			}
+			securityTradingStatusProviders = append(securityTradingStatusProviders, capability)
+		}
+		if settings.Fundamentals {
+			capability, ok := p.(provider.FundamentalsProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for fundamentals but does not implement FundamentalsProvider", name)
+			}
+			fundamentalsProviders = append(fundamentalsProviders, capability)
+		}
+		if settings.Valuations {
+			capability, ok := p.(provider.ValuationProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for valuations but does not implement ValuationProvider", name)
+			}
+			valuationProviders = append(valuationProviders, capability)
+		}
+		if settings.IndexCatalog {
+			capability, ok := p.(provider.IndexCatalogProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for index catalog but does not implement IndexCatalogProvider", name)
+			}
+			indexCatalogProviders = append(indexCatalogProviders, capability)
+		}
+		if settings.ChipDistribution {
+			capability, ok := p.(provider.ChipDistributionProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for chip distribution but does not implement ChipDistributionProvider", name)
+			}
+			chipDistributionProviders = append(chipDistributionProviders, capability)
+		}
+		if settings.CapitalFlow {
+			capability, ok := p.(provider.CapitalFlowProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for capital flow but does not implement CapitalFlowProvider", name)
+			}
+			capitalFlowProviders = append(capitalFlowProviders, capability)
+		}
+		if settings.MarketCapitalFlow {
+			capability, ok := p.(provider.MarketCapitalFlowProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for market capital flow but does not implement MarketCapitalFlowProvider", name)
+			}
+			marketCapitalFlowProviders = append(marketCapitalFlowProviders, capability)
+		}
+		if settings.HotRankings {
+			capability, ok := p.(provider.HotRankingProvider)
+			if !ok {
+				return fmt.Errorf("provider %q is configured for hot rankings but does not implement HotRankingProvider", name)
+			}
+			hotRankingProviders = append(hotRankingProviders, capability)
+		}
+	}
+	// 股票搜索使用独立的源优先级：腾讯 Smartbox 按关键词检索，避免冷启动时扫描全市场目录；东方财富保留为后备。
+	searchPriority := []string{"tencent", "eastmoney"}
+	searchPriority = append(searchPriority, cfg.ProviderPriority...)
+	seenSearchProviders := make(map[string]struct{}, len(searchPriority))
+	for _, name := range searchPriority {
+		if _, seen := seenSearchProviders[name]; seen {
+			continue
+		}
+		seenSearchProviders[name] = struct{}{}
+		p, enabled := activeProviders[name]
+		if !enabled {
+			continue
+		}
+		if !cfg.ProviderSettings[name].StockSearch {
+			continue
+		}
+		searchProvider, ok := p.(provider.StockSearchProvider)
+		if !ok {
+			return fmt.Errorf("provider %q is configured for stock search but does not implement StockSearchProvider", name)
+		}
+		stockSearchProviders = append(stockSearchProviders, searchProvider)
 	}
 	if len(allProviders) == 0 {
 		return errors.New("provider priority has no enabled providers")
 	}
 	ds := service.NewWithCapabilities(allProviders, quoteProviders, barProviders, c, store, cfg.QuoteCacheTTL, cfg.BarsCacheTTL, cfg.DefaultDailyBars, cfg.MaxDailyBars, service.ResilienceConfig{Retries: cfg.ProviderRetries, CircuitFailureThreshold: cfg.CircuitFailureThreshold, CircuitCooldown: cfg.CircuitCooldown}, logger)
+	supplementProviders := make([]provider.SupplementProvider, 0, 1)
+	if cfg.MXEnabled {
+		mx, mxErr := provider.NewMiaoXiang(cfg.MXAPIKey, cfg.MXAPIURL, cfg.MXAPITimeout)
+		if mxErr != nil {
+			return fmt.Errorf("configure MiaoXiang supplemental provider: %w", mxErr)
+		}
+		supplementProviders = append(supplementProviders, mx)
+	}
+	ds.SetSupplementProviders(supplementProviders)
+	ds.SetStockBasicProviders(stockBasicProviders)
+	ds.SetStockSearchProviders(stockSearchProviders)
+	ds.SetSectorRankingProviders(sectorRankingProviders)
+	ds.SetIndexQuoteProviders(indexQuoteProviders)
+	ds.SetMarketBreadthProviders(marketBreadthProviders)
+	ds.SetLimitPoolProviders(limitPoolProviders)
+	ds.SetDragonTigerProviders(dragonTigerProviders)
+	ds.SetAnnouncementProviders(announcementProviders)
+	ds.SetStockBoardsProviders(stockBoardsProviders)
+	ds.SetTradingCalendarProviders(tradingCalendarProviders)
+	ds.SetSecurityTradingStatusProviders(securityTradingStatusProviders)
+	ds.SetFundamentalsProviders(fundamentalsProviders)
+	ds.SetValuationProviders(valuationProviders)
+	ds.SetIndexCatalogProviders(indexCatalogProviders)
+	ds.SetChipDistributionProviders(chipDistributionProviders)
+	ds.SetCapitalFlowProviders(capitalFlowProviders)
+	ds.SetMarketCapitalFlowProviders(marketCapitalFlowProviders)
+	ds.SetHotRankingProviders(hotRankingProviders)
 	handler := httpapi.NewWithCapabilityInterfaces(cfg.APIKey, cfg.Adjustment, ds, allProviders, quoteProviders, barProviders, cfg.MaxDailyBars, cfg.RequestTimeout, logger)
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: cfg.RequestTimeout + 2*time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
-	logger.Info("market-data service starting", "addr", cfg.HTTPAddr, "providers", strings.Join(providerNames(allProviders), ","), "quote_providers", strings.Join(providerNames(quoteProviders), ","), "daily_bar_providers", strings.Join(providerNames(barProviders), ","), "mariadb_enabled", store != nil, "redis_enabled", cfg.RedisAddr != "", "adjustment", cfg.Adjustment)
+	logger.Info("market-data service starting", "addr", cfg.HTTPAddr, "providers", strings.Join(providerNames(allProviders), ","), "quote_providers", strings.Join(providerNames(quoteProviders), ","), "daily_bar_providers", strings.Join(providerNames(barProviders), ","), "mariadb_enabled", store != nil, "redis_enabled", cfg.RedisAddr != "", "adjustment", cfg.Adjustment, "mx_enabled", cfg.MXEnabled)
 	errCh := make(chan error, 1)
 	go func() { errCh <- server.ListenAndServe() }()
 	select {

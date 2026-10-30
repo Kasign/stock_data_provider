@@ -41,6 +41,36 @@ func TestValidateAndSortBars(t *testing.T) {
 	}
 }
 
+func TestInvalidOHLCWarningIncludesDroppedRowContext(t *testing.T) {
+	volume := int64(1000)
+	bad := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 11, High: 10, Low: 9, Close: 9.5, Volume: &volume,
+		AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+	}
+	got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{bad}, "", "2026-10-22", 10)
+	if len(got) != 0 || !containsWarning(warnings, "invalid_ohlc_bar_dropped") {
+		t.Fatalf("invalid OHLC row should be dropped, got bars=%+v warnings=%v", got, warnings)
+	}
+	wantDetail := "invalid_ohlc_bar_detail:trade_date=2026-10-20,open=11,high=10,low=9,close=9.5"
+	if !containsWarning(warnings, wantDetail) {
+		t.Fatalf("expected row-level OHLC diagnostic %q, got %v", wantDetail, warnings)
+	}
+}
+
+func TestBarWarningsDistinguishTruncationFromQualityLoss(t *testing.T) {
+	if HasQualityDegradingBarWarnings([]string{"bars_truncated_to_limit"}) {
+		t.Fatal("intentional result cap must not degrade otherwise valid bars")
+	}
+	if !HasQualityDegradingBarWarnings([]string{"invalid_ohlc_bar_dropped", "bars_truncated_to_limit"}) {
+		t.Fatal("invalid OHLC data must still degrade the result")
+	}
+	if !HasQualityDegradingBarWarnings([]string{"provider_unavailable_served_from_mariadb"}) {
+		t.Fatal("stale provider fallback must degrade the result")
+	}
+}
+
 func TestAdjustedBarsDoNotCompareUnadjustedTurnoverToAdjustedOHLC(t *testing.T) {
 	volume := int64(1000)
 	amount := 100000.0 // implied raw traded price 100; adjusted candle is around 10.
@@ -84,6 +114,43 @@ func TestQuoteRejectsInconsistentPriceScale(t *testing.T) {
 	}
 }
 
+func TestValidateQuoteRejectsInconsistentChangeFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*model.Quote)
+	}{
+		{
+			name: "change amount mismatch",
+			mutate: func(q *model.Quote) {
+				q.Change = ptrFloat(1.5)
+			},
+		},
+		{
+			name: "change percentage mismatch",
+			mutate: func(q *model.Quote) {
+				q.ChangePercent = ptrFloat(10)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			q := validQuoteForNormalizationTest()
+			tc.mutate(q)
+			if err := ValidateQuote(q); err == nil {
+				t.Fatal("inconsistent change fields must be rejected")
+			}
+		})
+	}
+}
+
+func TestValidateQuoteAllowsRoundedChangePercentage(t *testing.T) {
+	q := validQuoteForNormalizationTest()
+	q.ChangePercent = ptrFloat(11.1) // displayed percentage may be rounded to one decimal
+	if err := ValidateQuote(q); err != nil {
+		t.Fatalf("provider percentage rounding within tolerance should pass: %v", err)
+	}
+}
+
 func TestValidateQuoteAllowsMissingAmountAsDegradedWithoutClaimingCNY(t *testing.T) {
 	q := validQuoteForNormalizationTest()
 	q.Amount = nil
@@ -110,7 +177,7 @@ func TestValidateAndSortBarsRejectsNonFiniteChangePercentAndDegradesMissingAmoun
 	volume := int64(1000)
 	nan := math.NaN()
 	bars := []model.DailyBar{
-		{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: nil, ChangePercent: nil, AdjustmentBasis: model.AdjustmentForward, Source: "tencent", VolumeUnit: "shares", AmountUnit: "", QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: nil, ChangePercent: nil, AdjustmentBasis: model.AdjustmentForward, Source: "tencent", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
 		{Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: ptrFloat(10000), ChangePercent: &nan, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid},
 	}
 	got, warnings := ValidateAndSortBars("600519.SH", bars, "", "", 10)
@@ -130,7 +197,7 @@ func TestValidateAndSortBarsRejectsNonFiniteChangePercentAndDegradesMissingAmoun
 
 func validQuoteForNormalizationTest() *model.Quote {
 	now := time.Now().UTC()
-	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 10.0, 9.0, 11.0, 8.0, 9.0, 100000.0
+	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 100.0/9.0, 9.0, 11.0, 8.0, 9.0, 100000.0
 	volume := int64(10000)
 	return &model.Quote{Symbol: "600519.SH", Source: "eastmoney", CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: &amount, QuoteTime: &now, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid}
 }
@@ -150,7 +217,7 @@ func TestHandsToSharesRejectsInvalidAndOverflowValues(t *testing.T) {
 	if err != nil || got != 3413600 {
 		t.Fatalf("HandsToShares(34136)=(%d,%v), want 3413600", got, err)
 	}
-	for _, value := range []float64{-1, math.NaN(), math.Inf(1), math.MaxFloat64} {
+	for _, value := range []float64{-1, 1.5, math.NaN(), math.Inf(1), math.MaxFloat64} {
 		if _, err := HandsToShares(value); err == nil {
 			t.Errorf("HandsToShares(%v) should fail", value)
 		}
@@ -162,9 +229,30 @@ func TestRawSharesToInt64RejectsInvalidAndOverflowValues(t *testing.T) {
 	if err != nil || got != 4421640 {
 		t.Fatalf("RawSharesToInt64=(%d,%v), want 4421640", got, err)
 	}
-	for _, value := range []float64{-1, math.NaN(), math.Inf(1), math.MaxFloat64, float64(math.MaxInt64)} {
+	for _, value := range []float64{-1, 1.5, math.NaN(), math.Inf(1), math.MaxFloat64, float64(math.MaxInt64)} {
 		if _, err := RawSharesToInt64(value); err == nil {
 			t.Errorf("RawSharesToInt64(%v) should fail", value)
 		}
+	}
+}
+
+func TestValidateAndSortBarsRejectsNonCanonicalDates(t *testing.T) {
+	volume := int64(1000)
+	bars := []model.DailyBar{{
+		Symbol: "600519.SH", TradeDate: "2026-10-2", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, AdjustmentBasis: model.AdjustmentForward,
+		Source: "eastmoney", VolumeUnit: "shares", QualityStatus: model.QualityValid,
+	}}
+	got, warnings := ValidateAndSortBars("600519.SH", bars, "", "2026-10-31", 10)
+	if len(got) != 0 || !containsWarning(warnings, "invalid_trade_date_dropped") {
+		t.Fatalf("non-canonical trade date must be dropped: bars=%+v warnings=%v", got, warnings)
+	}
+
+	if got, warnings := ValidateAndSortBars("600519.SH", bars, "2026-1-01", "2026-10-31", 10); len(got) != 0 || !containsWarning(warnings, "invalid_start_date") {
+		t.Fatalf("non-canonical start date must be rejected: bars=%+v warnings=%v", got, warnings)
+	}
+	if got, warnings := ValidateAndSortBars("600519.SH", bars, "", "2026-10-2", 10); len(got) != 0 || !containsWarning(warnings, "invalid_end_date") {
+		t.Fatalf("non-canonical end date must be rejected: bars=%+v warnings=%v", got, warnings)
 	}
 }

@@ -98,3 +98,26 @@ func TestReadResultMapsNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRequestIDIsReturnedAndInvalidIDIsReplaced(t *testing.T) {
+	api, err := New(&fakeRunner{}, &fakeStore{}, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	valid := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	valid.Header.Set("X-Request-ID", "test-request-123")
+	validResponse := httptest.NewRecorder()
+	api.Handler().ServeHTTP(validResponse, valid)
+	if got := validResponse.Header().Get("X-Request-ID"); got != "test-request-123" {
+		t.Fatalf("valid request ID was not propagated: got %q", got)
+	}
+
+	invalid := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	invalid.Header.Set("X-Request-ID", "value containing spaces")
+	invalidResponse := httptest.NewRecorder()
+	api.Handler().ServeHTTP(invalidResponse, invalid)
+	if got := invalidResponse.Header().Get("X-Request-ID"); got == "" || got == "value containing spaces" {
+		t.Fatalf("invalid request ID was not replaced safely: got %q", got)
+	}
+}

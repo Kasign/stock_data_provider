@@ -3,10 +3,13 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -27,17 +30,22 @@ type Store interface {
 type Server struct {
 	runner          Runner
 	store           Store
+	tasks           taskService
 	analysisTimeout time.Duration
 }
 
 func New(runner Runner, store Store, analysisTimeout time.Duration) (*Server, error) {
+	return NewWithTasks(runner, store, analysisTimeout, nil)
+}
+
+func NewWithTasks(runner Runner, store Store, analysisTimeout time.Duration, tasks taskService) (*Server, error) {
 	if runner == nil || store == nil {
 		return nil, errors.New("http API runner and store are required")
 	}
 	if analysisTimeout <= 0 {
-		analysisTimeout = 3 * time.Minute
+		analysisTimeout = 5 * time.Minute
 	}
-	return &Server{runner: runner, store: store, analysisTimeout: analysisTimeout}, nil
+	return &Server{runner: runner, store: store, tasks: tasks, analysisTimeout: analysisTimeout}, nil
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -46,14 +54,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /", s.handleRoot)
 	mux.HandleFunc("POST /api/v1/analysis/runs", s.handleCreateRun)
 	mux.HandleFunc("GET /api/v1/analysis/runs/", s.handleGetRun)
-	return requestLog(recoverer(mux))
+	mux.HandleFunc("POST /api/v1/analysis/tasks", s.handleCreateTask)
+	mux.HandleFunc("GET /api/v1/analysis/tasks/", s.handleTaskRoute)
+	return requestIDMiddleware(requestLog(recoverer(mux)))
 }
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		writeError(w, http.StatusNotFound, "not_found", "route not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"service": "stock-analysis-go", "api_version": "v1", "health": "/healthz", "readiness": "/readyz", "create_analysis": "POST /api/v1/analysis/runs", "query_analysis": "GET /api/v1/analysis/runs/{run_id}", "query_events": "GET /api/v1/analysis/runs/{run_id}/events"})
+	writeJSON(w, http.StatusOK, map[string]any{"service": "stock-analysis-go", "api_version": "v1", "health": "/healthz", "readiness": "/readyz", "create_analysis": "POST /api/v1/analysis/runs", "query_analysis": "GET /api/v1/analysis/runs/{run_id}", "query_events": "GET /api/v1/analysis/runs/{run_id}/events", "create_task": "POST /api/v1/analysis/tasks", "query_task": "GET /api/v1/analysis/tasks/{task_id}", "query_task_events": "GET /api/v1/analysis/tasks/{task_id}/events"})
 }
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC()})
@@ -105,10 +115,28 @@ func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 		req.AsOfMode = domain.AsOfModeRealtimeSnapshot
 	}
 
+	slog.Info("分析任务开始",
+		"service", "stock-analysis-api",
+		"request_id", requestIDFromContext(r),
+		"task_type", req.TaskType,
+		"market_id", req.MarketID,
+		"as_of", req.AsOf.UTC().Format(time.RFC3339Nano),
+		"as_of_mode", req.AsOfMode,
+		"symbols_count", len(req.Symbols),
+		"strategies_count", len(req.StrategyIDs))
+	started := time.Now()
 	ctx, cancel := context.WithTimeout(r.Context(), s.analysisTimeout)
 	defer cancel()
 	result, err := s.runner.Run(ctx, req)
 	if err != nil {
+		slog.Error("分析任务失败",
+			"service", "stock-analysis-api",
+			"request_id", requestIDFromContext(r),
+			"run_id", result.RunID,
+			"task_type", req.TaskType,
+			"duration_ms", time.Since(started).Milliseconds(),
+			"error_type", fmt.Sprintf("%T", err),
+			"error", boundedLogText(err.Error(), 300))
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": map[string]string{"code": "analysis_failed", "message": err.Error()}, "partial_result": result})
 		return
 	}
@@ -116,6 +144,19 @@ func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 	if result.Status == domain.RunStatusRejected {
 		status = http.StatusBadRequest
 	}
+	slog.Info("分析任务完成",
+		"service", "stock-analysis-api",
+		"request_id", requestIDFromContext(r),
+		"run_id", result.RunID,
+		"task_type", result.Request.TaskType,
+		"run_status", result.Status,
+		"duration_ms", time.Since(started).Milliseconds(),
+		"stage_events_count", len(result.Events),
+		"signals_count", len(result.Signals),
+		"plans_count", len(result.Plans),
+		"warnings_count", len(result.Warnings),
+		"quality_core_pass", result.Quality.CorePass,
+		"failure_code", failureCode(result.Failure))
 	writeJSON(w, status, result)
 }
 func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
@@ -191,6 +232,20 @@ func fillDefaults(req *domain.RunRequest) {
 		req.DataPolicyVersion = "baseline-quality-v1"
 	}
 }
+func failureCode(failure *domain.Failure) string {
+	if failure == nil {
+		return ""
+	}
+	return failure.Code
+}
+
+func boundedLogText(value string, limit int) string {
+	if len(value) > limit {
+		return value[:limit]
+	}
+	return value
+}
+
 func mustLocation(name string) *time.Location {
 	loc, err := time.LoadLocation(name)
 	if err != nil {
@@ -206,24 +261,107 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
-		log.Printf("WARN: write HTTP response failed: %v", err)
+		slog.Error("HTTP response serialization failed", "service", "stock-analysis-api", "error", err.Error())
 	}
 }
 func recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if v := recover(); v != nil {
-				log.Printf("ERROR: panic handling %s %s: %v", r.Method, r.URL.Path, v)
+				slog.Error("panic while handling HTTP request", "service", "stock-analysis-api", "request_id", requestIDFromContext(r), "method", r.Method, "path", boundedLogPath(r.URL.Path), "panic_type", fmt.Sprintf("%T", v))
 				writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 			}
 		}()
 		next.ServeHTTP(w, r)
 	})
 }
+func requestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if !validRequestID(id) {
+			id = newRequestID()
+		}
+		w.Header().Set("X-Request-ID", id)
+		ctx := context.WithValue(r.Context(), requestIDKey{}, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+type requestIDKey struct{}
+
+func requestIDFromContext(r *http.Request) string {
+	value, _ := r.Context().Value(requestIDKey{}).(string)
+	return value
+}
+
+func validRequestID(value string) bool {
+	if value == "" || len(value) > 128 {
+		return false
+	}
+	for _, r := range value {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' || r == ':') {
+			return false
+		}
+	}
+	return true
+}
+
+func newRequestID() string {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err == nil {
+		return hex.EncodeToString(value[:])
+	}
+	return time.Now().UTC().Format("20060102T150405.000000000Z")
+}
+
+// requestLog 只记录请求元数据，不记录请求体、响应体、查询参数或鉴权头。
 func requestLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("http method=%s path=%s duration_ms=%d remote=%s", r.Method, r.URL.Path, time.Since(started).Milliseconds(), r.RemoteAddr)
+		recorder := &statusRecorder{ResponseWriter: w}
+		next.ServeHTTP(recorder, r)
+		status := recorder.status
+		if status == 0 {
+			status = http.StatusOK
+		}
+		slog.Info("HTTP 请求完成",
+			"service", "stock-analysis-api",
+			"request_id", requestIDFromContext(r),
+			"method", r.Method,
+			"path", boundedLogPath(r.URL.Path),
+			"status_code", status,
+			"duration_ms", time.Since(started).Milliseconds(),
+			"response_bytes", recorder.bytes)
 	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (w *statusRecorder) WriteHeader(code int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusRecorder) Write(data []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	n, err := w.ResponseWriter.Write(data)
+	w.bytes += n
+	return n, err
+}
+
+func boundedLogPath(path string) string {
+	if len(path) > 160 {
+		return path[:160]
+	}
+	return path
 }

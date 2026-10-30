@@ -1,0 +1,216 @@
+openapi: 3.0.3
+info:
+  title: Go 分析异步任务 API
+  version: 1.0.0
+  description: >
+    通过 MariaDB 持久化的任务表和分析阶段事件，提供异步分析任务创建、状态查询和增量进度轮询。
+    SSE、任务取消和自动重试不在当前版本范围内。
+servers:
+  - url: http://127.0.0.1:8092
+paths:
+  /api/v1/analysis/tasks:
+    post:
+      summary: 创建异步分析任务
+      description: 校验请求后将任务写入 MariaDB 队列，返回 task_id；不会等待分析完成。可用 Idempotency-Key 避免客户端重试时重复创建。
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+          description: 同一 key 配合同一请求返回已有任务；同一 key 用于不同请求时返回 409。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisRequest'
+      responses:
+        '202':
+          description: 新任务已持久化并排队。
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTaskResponse'
+        '200':
+          description: 命中幂等 key，返回已存在的任务。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTaskResponse'
+        '400':
+          description: JSON 无效或历史分析缺少显式 as_of。
+        '409':
+          description: Idempotency-Key 与已保存的不同请求冲突。
+        '413':
+          description: 请求体超过 1 MiB。
+        '415':
+          description: Content-Type 不是 application/json。
+        '429':
+          description: 等待队列达到配置上限。
+        '503':
+          description: 异步 Worker 未配置。
+  /api/v1/analysis/tasks/{task_id}:
+    get:
+      summary: 查询异步任务状态
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '200':
+          description: 当前任务状态。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [task]
+                properties:
+                  task:
+                    $ref: '#/components/schemas/Task'
+        '404':
+          description: task_id 不存在。
+  /api/v1/analysis/tasks/{task_id}/events:
+    get:
+      summary: 增量读取分析阶段事件
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - in: query
+          name: after_sequence
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: 仅返回 sequence 大于该值的事件。
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        '200':
+          description: 已持久化的阶段事件；排队期间可以为空。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskEventsResponse'
+        '400':
+          description: after_sequence 或 limit 无效。
+        '404':
+          description: task_id 不存在。
+components:
+  parameters:
+    TaskID:
+      in: path
+      name: task_id
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+  schemas:
+    AnalysisRequest:
+      type: object
+      description: 字段定义与 domain.RunRequest 一致；未知字段会被拒绝。
+      properties:
+        task_type:
+          type: string
+        as_of:
+          type: string
+          format: date-time
+        universe_id:
+          type: string
+        symbols:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+        portfolio_id:
+          type: string
+        market_id:
+          type: string
+        strategy_ids:
+          type: array
+          items:
+            type: string
+        strategy_config_version:
+          type: string
+        risk_config_version:
+          type: string
+        trading_rules_version:
+          type: string
+        data_policy_version:
+          type: string
+    Task:
+      type: object
+      required: [task_id, run_id, status, task_type, completed_stages, created_at]
+      properties:
+        task_id:
+          type: string
+        run_id:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, succeeded, partial, failed]
+        task_type:
+          type: string
+        current_stage:
+          type: string
+        completed_stages:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        failure_code:
+          type: string
+        error_message:
+          type: string
+    CreateTaskResponse:
+      type: object
+      required: [task, status_url, events_url]
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        status_url:
+          type: string
+        events_url:
+          type: string
+    TaskEvent:
+      type: object
+      required: [sequence, event]
+      properties:
+        sequence:
+          type: integer
+          format: int64
+        event:
+          type: object
+          description: 原始 domain.StageEvent 结构。
+    TaskEventsResponse:
+      type: object
+      required: [task_id, events, next_after_sequence]
+      properties:
+        task_id:
+          type: string
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskEvent'
+        next_after_sequence:
+          type: integer
+          format: int64

@@ -60,6 +60,14 @@ func BuildStockContext(bundle domain.StockBundle, technical domain.TechnicalSnap
 	if bundle.Chip == nil {
 		missing = append(missing, "chip_distribution")
 	}
+	if len(bundle.Boards) == 0 {
+		missing = append(missing, "stock_boards")
+		warnings = append(warnings, "未获得可信的个股所属板块快照")
+	}
+	if bundle.CapitalFlow == nil {
+		missing = append(missing, "capital_flow")
+		warnings = append(warnings, "未获得可用的个股资金流数据")
+	}
 	dailyMetricMissing := map[string]struct{}{}
 	basisSeen := map[string]struct{}{}
 	latestCompletedBasis := ""
@@ -132,7 +140,8 @@ func BuildStockContext(bundle domain.StockBundle, technical domain.TechnicalSnap
 	return domain.AnalysisContext{
 		Code: bundle.Code, Name: bundle.Name, Market: inferMarket(bundle.Code), AsOf: asOfTime,
 		Quote: bundle.Quote, DailyBars: bundle.DailyBars, Technical: technical, Phase: phase,
-		Chip: bundle.Chip, Fundamentals: bundle.Fundamentals, Boards: bundle.Boards,
+		Chip: bundle.Chip, CapitalFlow: bundle.CapitalFlow, DragonTiger: bundle.DragonTiger, StockProfile: bundle.Profile,
+		Fundamentals: bundle.Fundamentals, Boards: bundle.Boards,
 		News: news, Warnings: warnings,
 		DataQuality: domain.DataQuality{Level: level, Score: qualityScore, Missing: missing, Warnings: warnings, Sources: bundle.Sources},
 	}
@@ -180,6 +189,30 @@ func ToLegacyAnalyzerContext(input domain.AnalysisContext) map[string]any {
 		"technical_indicators": input.Technical,
 		"fundamental_context":  input.Fundamentals,
 		"belong_boards":        input.Boards,
+		"capital_flow_context": input.CapitalFlow,
+		"capital_flow":         input.CapitalFlow,
+		"dragon_tiger_context": input.DragonTiger,
+		"dragon_tiger":         input.DragonTiger,
+	}
+	if profile := input.StockProfile; profile != nil {
+		ctx["stock_profile_context"] = profile
+		ctx["stock_profile"] = profile
+		ctx["stock_info"] = map[string]any{
+			"symbol": profile.Symbol, "name": profile.Name, "ipo_date": profile.IPODate,
+			"out_date": profile.OutDate, "security_type": profile.SecurityType,
+			"security_type_label": profile.SecurityTypeLabel, "listing_status": profile.ListingStatus,
+			"listing_status_label": profile.ListingStatusLabel, "industry": profile.Industry,
+			"board_code": profile.BoardCode, "source": profile.Source, "quality_status": profile.QualityStatus,
+		}
+		ctx["enhanced_data"] = map[string]any{
+			"pe_dynamic": profile.DynamicPE, "pb": profile.PB, "industry": profile.Industry,
+			"market_cap_cny": profile.MarketCapCNY, "float_market_cap_cny": profile.FloatMarketCapCNY,
+			"board_code": profile.BoardCode, "roe_percent": profile.ROEPercent,
+			"net_profit_margin_percent": profile.NetProfitMarginPercent, "net_profit_cny": profile.NetProfitCNY,
+			"gross_margin_percent": profile.GrossMarginPercent, "source": profile.Source,
+			"source_version": profile.SourceVersion, "fetched_at": profile.FetchedAt,
+			"quality_status": profile.QualityStatus, "quality_reasons": profile.QualityReasons,
+		}
 	}
 	// The legacy GeminiAnalyzer expects a `today`/`yesterday` price-table shape,
 	// a separate realtime overlay, and the singular `chip` key. Completed daily

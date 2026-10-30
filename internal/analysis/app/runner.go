@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"time"
@@ -392,30 +393,55 @@ func (r *Runner) stage(ctx context.Context, result *domain.RunResult, name strin
 	started := r.deps.Clock.Now()
 	startEvent := domain.StageEvent{RunID: result.RunID, Stage: name, Status: domain.StageStatusStarted, At: started}
 	result.Events = append(result.Events, startEvent)
+	slog.Info("分析步骤开始",
+		"service", "stock-analysis-api", "run_id", result.RunID, "stage", name,
+		"status", domain.StageStatusStarted)
 	if err := r.deps.Store.AppendEvent(ctx, startEvent); err != nil {
 		result.Failure = &domain.Failure{Code: "audit_write_failed", Stage: name, Message: err.Error()}
+		slog.Error("分析步骤状态写入失败",
+			"service", "stock-analysis-api", "run_id", result.RunID, "stage", name,
+			"status", "audit_write_failed", "error", boundedStageError(err.Error(), 300))
 		return fmt.Errorf("write stage-start event: %w", err)
 	}
 
 	stageErr := fn()
 	finished := r.deps.Clock.Now()
+	duration := finished.Sub(started).Milliseconds()
 	status := domain.StageStatusSucceeded
 	message := ""
 	if stageErr != nil {
 		status = domain.StageStatusFailed
 		message = stageErr.Error()
 		result.Failure = &domain.Failure{Code: "stage_failed", Stage: name, Message: message}
+		slog.Error("分析步骤失败",
+			"service", "stock-analysis-api", "run_id", result.RunID, "stage", name,
+			"status", status, "duration_ms", duration,
+			"error_type", fmt.Sprintf("%T", stageErr), "error", boundedStageError(message, 300))
+	} else {
+		slog.Info("分析步骤完成",
+			"service", "stock-analysis-api", "run_id", result.RunID, "stage", name,
+			"status", status, "duration_ms", duration)
 	}
 	endEvent := domain.StageEvent{
 		RunID: result.RunID, Stage: name, Status: status, At: finished,
-		DurationMS: finished.Sub(started).Milliseconds(), Message: message,
+		DurationMS: duration, Message: message,
 	}
 	result.Events = append(result.Events, endEvent)
 	if err := r.deps.Store.AppendEvent(ctx, endEvent); err != nil {
 		result.Failure = &domain.Failure{Code: "audit_write_failed", Stage: name, Message: err.Error()}
+		slog.Error("分析步骤完成状态写入失败",
+			"service", "stock-analysis-api", "run_id", result.RunID, "stage", name,
+			"duration_ms", duration, "error", boundedStageError(err.Error(), 300))
 		return errors.Join(stageErr, fmt.Errorf("write stage-finish event: %w", err))
 	}
 	return stageErr
+}
+
+func boundedStageError(value string, limit int) string {
+	if len(value) > limit {
+		return value[:limit]
+	}
+	return value
 }
 
 func validateRunID(runID string) error {

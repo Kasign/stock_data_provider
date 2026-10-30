@@ -57,6 +57,7 @@ components:
         volume_ratio: {type: number, nullable: true, description: Provider volume ratio; null when unsupported}
         turnover_rate: {type: number, nullable: true, description: Percentage points; 1.25 means 1.25%}
         quote_time: {type: string, format: date-time, nullable: true, description: Provider quote timestamp; never use fetch time as a replacement}
+        quote_time_semantics: {type: string, description: Semantics of quote_time reported by the provider, e.g. provider_snapshot_time}
         fetched_at: {type: string, format: date-time}
         normalized_at: {type: string, format: date-time}
         source: {type: string}
@@ -77,7 +78,7 @@ components:
         normalization_version: {type: string}
     DailyBar:
       type: object
-      required: [symbol, trade_date, period, open, high, low, close, volume, adjustment_basis, source, fetched_at, normalized_at, volume_unit, amount_unit, quality_status, normalization_version]
+      required: [symbol, trade_date, period, open, high, low, close, ma5, ma20, ma120, ma250, volume, adjustment_basis, source, fetched_at, normalized_at, volume_unit, amount_unit, quality_status, normalization_version]
       properties:
         symbol: {type: string}
         trade_date: {type: string, format: date}
@@ -87,16 +88,25 @@ components:
         high: {type: number, description: CNY/share}
         low: {type: number, description: CNY/share}
         close: {type: number, description: CNY/share}
+        ma5: {type: number, nullable: true, description: Mean close over the latest 5 trading sessions using the same adjustment basis; null when insufficient or invalid history}
+        ma20: {type: number, nullable: true, description: Mean close over the latest 20 trading sessions using the same adjustment basis; null when insufficient or invalid history}
+        ma120: {type: number, nullable: true, description: Mean close over the latest 120 trading sessions, an approximate half-year trading window; null when insufficient or invalid history}
+        ma250: {type: number, nullable: true, description: Mean close over the latest 250 trading sessions, an approximate full-year trading window; null when insufficient or invalid history}
         volume: {type: integer, format: int64, nullable: true, description: Shares}
         amount: {type: number, nullable: true, description: CNY}
         change_percent: {type: number, nullable: true, description: Percentage points}
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
-        adjustment_reference_date: {type: string, format: date}
+        adjustment_reference_date: {type: string, format: date, description: Reference date used by the PIT adjustment-factor reconstruction}
+        adjustment_method: {type: string, description: Adjustment algorithm identifier, for example cumulative_adj_factor_v1}
+        adjustment_factor_source: {type: string, description: Provider used for the adjustment factor series}
+        adjustment_factor_source_version: {type: string, description: Provider schema/data version used for the adjustment factor series}
+        adjustment_factor_system_observed_at: {type: string, format: date-time, nullable: true, description: System observation time of the factor revision applied to this bar}
         source: {type: string}
         source_version: {type: string}
         provider_timestamp: {type: string, format: date-time, nullable: true}
         fetched_at: {type: string, format: date-time}
         normalized_at: {type: string, format: date-time}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System record time of this revision; returned for as_of queries only}
         raw_volume: {type: number, nullable: true}
         raw_volume_unit: {type: string}
         raw_amount: {type: number, nullable: true}
@@ -119,6 +129,8 @@ components:
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         volume_unit: {type: string, enum: [shares]}
         amount_unit: {type: string, enum: [CNY]}
+        point_in_time: {type: boolean, description: True only when the response was reconstructed from revisions recorded by the requested as_of timestamp}
+        as_of: {type: string, format: date-time, description: Requested system-observation cutoff for PIT queries}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         warnings: {type: array, items: {type: string}}
         bars: {type: array, items: {$ref: '#/components/schemas/DailyBar'}}
@@ -138,6 +150,864 @@ components:
         analysis_reference_time: {type: string, format: date-time}
         fetched_at: {type: string, format: date-time, description: Completion time after all bundle fetches have finished}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
+    FundamentalMetric:
+      type: object
+      required: [key, name, value, unit, source_field]
+      properties:
+        key: {type: string}
+        name: {type: string}
+        value: {type: number}
+        unit: {type: string}
+        source_field: {type: string}
+    FundamentalSection:
+      type: object
+      required: [category, has_data, metrics, quality_status]
+      properties:
+        category: {type: string, enum: [profitability, operating, growth, solvency, cash_flow, dupont, income_statement, balance_sheet, cash_flow_statement]}
+        report_date: {type: string, format: date}
+        publication_date: {type: string, format: date, description: Disclosure date for the selected provider revision; not an as_of historical revision selector}
+        has_data: {type: boolean}
+        metrics: {type: array, items: {$ref: '#/components/schemas/FundamentalMetric'}}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    FundamentalsSnapshot:
+      type: object
+      required: [symbol, year, quarter, has_data, sections, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        year: {type: integer}
+        quarter: {type: integer, minimum: 1, maximum: 4}
+        has_data: {type: boolean}
+        sections: {type: array, items: {$ref: '#/components/schemas/FundamentalSection'}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System recording time of the selected version, returned for as_of queries; not an upstream publication timestamp}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    StockBoard:
+      type: object
+      required: [code, name, source, fetched_at, quality_status]
+      properties:
+        code: {type: string, description: Eastmoney board code, for example BK0477}
+        name: {type: string}
+        change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
+        change_percent_5d: {type: number, nullable: true, description: Five-trading-session return derived from six daily closes; percentage points}
+        source: {type: string}
+        source_version: {type: string}
+        provider_report_date: {type: string, format: date, description: Source report date; not an exact snapshot time}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    StockBoardSnapshot:
+      type: object
+      required: [symbol, total, provider_returned, excluded_rows, total_is_lower_bound, has_data, items, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        total: {type: integer, minimum: 0, description: Normalized board rows retained after filtering}
+        provider_returned: {type: integer, minimum: 0, description: Raw source board rows received before normalization}
+        excluded_rows: {type: integer, minimum: 0, description: Source rows explicitly excluded during normalization; currently zero when invalid/duplicate rows cause Provider fallback}
+        total_is_lower_bound: {type: boolean, description: True when the Eastmoney response reaches its 1000-row request boundary and full coverage cannot be established}
+        has_data: {type: boolean, description: False means the provider returned an ambiguous empty list, not confirmed zero memberships}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/StockBoard'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    PriceLimitEventEvidence:
+      type: object
+      required: [symbol, status, effective_from, source, source_version, quality_status, source_url, observed_at, coverage_confirmed]
+      properties:
+        symbol: {type: string}
+        status: {type: string, enum: [unknown, none, relisting_first_day, delisting_first_day, exchange_specified]}
+        effective_from: {type: string, format: date}
+        effective_to: {type: string, format: date}
+        source: {type: string}
+        source_version: {type: string}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+        source_url: {type: string, format: uri}
+        announcement_id: {type: string}
+        observed_at: {type: string, format: date-time}
+        coverage_confirmed: {type: boolean, description: True only when the provider confirms complete coverage for a no-event result}
+    SecurityTradingStatusSnapshot:
+      type: object
+      required: [symbol, trade_date, risk_warning_status, delisting_status, listing_status_known, is_trading_day, trading_day_known, suspension_status, source, source_version, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        trade_date: {type: string, format: date}
+        security_name: {type: string, description: Historical name effective on trade_date}
+        name_effective_from: {type: string, format: date}
+        name_effective_to: {type: string, format: date}
+        risk_warning_status: {type: string, enum: [unknown, normal, risk_warning]}
+        delisting_status: {type: string, enum: [unknown, normal, delisting_risk, delisting_period], description: Conservative historical-name classification; unknown does not imply normal}
+        listing_date: {type: string, format: date}
+        listing_trading_day_number: {type: integer, minimum: 0, description: One-based number of exchange trading sessions since listing when verifiable}
+        listing_status_known: {type: boolean}
+        is_trading_day: {type: boolean}
+        trading_day_known: {type: boolean}
+        suspension_status: {type: string, enum: [unknown, not_trading_day, no_suspension_event, suspended, intraday_suspension, resumed]}
+        suspension_timing: {type: string, description: Provider suspension/resumption timing as reported}
+        suspension_type: {type: string, description: Provider-native suspension type code or combined event codes}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        system_observed_at: {type: string, format: date-time, nullable: true, description: System time when this source-content revision was recorded; present when local revision storage is enabled and the record time can be verified}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    TradingCalendarDay:
+      type: object
+      required: [date, is_trading_day]
+      properties:
+        date: {type: string, format: date}
+        is_trading_day: {type: boolean, description: Explicit provider flag; false is a non-trading day, not a missing row}
+    TradingCalendarSnapshot:
+      type: object
+      required: [market, start_date, end_date, total_days, trading_days, items, source, fetched_at, quality_status]
+      properties:
+        market: {type: string, enum: [cn_a_share]}
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        total_days: {type: integer, minimum: 1}
+        trading_days: {type: integer, minimum: 0}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/TradingCalendarDay'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    MarketSessionSnapshot:
+      type: object
+      required: [market, at, server_time, time_zone, local_date, local_time, is_trading_day, phase, is_trading_session, is_continuous_trading, is_auction, source, fetched_at, quality_status]
+      properties:
+        market: {type: string, enum: [cn_a_share]}
+        at: {type: string, format: date-time, description: Requested instant, normalized to UTC in the response}
+        server_time: {type: string, format: date-time, description: Actual server response-generation time in UTC; distinct from the requested at instant}
+        time_zone: {type: string, enum: [Asia/Shanghai], description: Time zone used for local_date, local_time and session calculation}
+        local_date: {type: string, format: date, description: Date in Asia/Shanghai}
+        local_time: {type: string, description: Local clock time in Asia/Shanghai, HH:MM:SS}
+        is_trading_day: {type: boolean, description: Determined by configured provider-backed trading calendar}
+        phase: {type: string, enum: [non_trading_day, pre_open, opening_auction, auction_pause, continuous_morning, lunch_break, continuous_afternoon, closing_auction, closed]}
+        is_trading_session: {type: boolean, description: True for opening auction, continuous sessions, and closing auction; false during breaks}
+        is_continuous_trading: {type: boolean}
+        is_auction: {type: boolean}
+        source: {type: string, description: Trading-calendar provider used for the date classification}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    StockAnnouncement:
+      type: object
+      required: [article_id, symbol, title, announcement_date, source, source_version, fetched_at, quality_status]
+      properties:
+        article_id: {type: string, description: Eastmoney art_code, unique within an announcement feed}
+        symbol: {type: string}
+        stock_name: {type: string}
+        title: {type: string}
+        title_chinese: {type: string}
+        title_english: {type: string}
+        category_code: {type: string}
+        category: {type: string}
+        announcement_date: {type: string, format: date, description: Source notice_date; separate from fetch time}
+        published_at: {type: string, format: date-time, nullable: true, description: Parsed from source display_time only; absent when source supplies no exact time}
+        display_time: {type: string, description: Original source display_time text}
+        sort_date: {type: string, description: Original source ordering timestamp}
+        ei_time: {type: string, description: Original Eastmoney eiTime metadata}
+        language: {type: string}
+        source_type: {type: string}
+        source_url: {type: string, format: uri, description: Official article detail URL assembled from verified stock code and art_code}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time, description: Retrieval time; never used as announcement publishing time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    StockAnnouncementSnapshot:
+      type: object
+      required: [symbol, start_date, end_date, page, page_size, total, pages, returned, has_data, has_more, items, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string}
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0, description: Source-reported total hits across date range}
+        pages: {type: integer, minimum: 0}
+        returned: {type: integer, minimum: 0, description: Records on this page}
+        has_data: {type: boolean, description: False plus quality unknown means source returned no records, not proof that no announcements exist}
+        has_more: {type: boolean}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/StockAnnouncement'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    StockSearchItem:
+      type: object
+      required: [symbol, code, name, exchange]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string, example: '600519'}
+        name: {type: string, example: 贵州茅台}
+        exchange: {type: string, enum: [SH, SZ, BJ]}
+    StockSearchSnapshot:
+      type: object
+      required: [query, total, items, source, fetched_at, quality_status]
+      properties:
+        query: {type: string}
+        total: {type: integer, minimum: 0, description: Number of matching candidates reported/retained by the selected Provider; not the total number of listed A-share securities}
+        items: {type: array, items: {$ref: '#/components/schemas/StockSearchItem'}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time, description: Time the market-data service fetched the stock directory result; not a quote timestamp}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    StockBasic:
+      type: object
+      required: [symbol, name, security_type, security_type_label, listing_status, listing_status_label, source, fetched_at, quality_status, normalization_version]
+      properties:
+        symbol: {type: string}
+        name: {type: string}
+        ipo_date: {type: string, format: date}
+        out_date: {type: string, format: date}
+        security_type: {type: integer}
+        security_type_label: {type: string}
+        listing_status: {type: integer}
+        listing_status_label: {type: string}
+        pe_dynamic: {type: number, nullable: true, description: Dynamic price-to-earnings ratio; negative or missing values are preserved}
+        pb: {type: number, nullable: true, description: Price-to-book ratio; may be missing}
+        industry: {type: string, nullable: true}
+        market_cap_cny: {type: number, nullable: true, description: Total market capitalization in CNY}
+        float_market_cap_cny: {type: number, nullable: true, description: Floating market capitalization in CNY}
+        total_shares: {type: number, nullable: true, description: Total share capital in shares, from Eastmoney f84; may be missing}
+        float_shares: {type: number, nullable: true, description: Floating share capital in shares, from Eastmoney f85; may be missing or excluded if greater than total shares}
+        board_code: {type: string, nullable: true, description: Eastmoney board code}
+        roe_percent: {type: number, nullable: true, description: Return on equity in percentage points}
+        net_profit_margin_percent: {type: number, nullable: true, description: Net profit margin in percentage points}
+        net_profit_cny: {type: number, nullable: true, description: Net profit amount in CNY as reported by the current market-profile endpoint}
+        gross_margin_percent: {type: number, nullable: true, description: Gross margin in percentage points}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+        normalization_version: {type: string}
+    SectorRanking:
+      type: object
+      required: [rank, code, name, category, amount_unit, source, fetched_at, quality_status]
+      properties:
+        rank: {type: integer}
+        code: {type: string}
+        name: {type: string}
+        category: {type: string, enum: [industry, concept]}
+        latest_price: {type: number, nullable: true}
+        change: {type: number, nullable: true}
+        change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
+        amount: {type: number, nullable: true}
+        amount_unit: {type: string, enum: [CNY, unknown]}
+        advancing_count: {type: integer, nullable: true}
+        declining_count: {type: integer, nullable: true}
+        leading_stock: {type: string}
+        leader_change_percent: {type: number, nullable: true}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    SectorRankingSnapshot:
+      type: object
+      required: [category, direction, total, items, source, fetched_at, quality_status]
+      properties:
+        category: {type: string, enum: [industry, concept]}
+        direction: {type: string, enum: [up, down]}
+        sort_by: {type: string, enum: [change_percent, amount, change_5d]}
+        total: {type: integer, minimum: 0, description: Source-reported sector count or best available count; only a lower bound when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw CLIST rows or SW1 industry universes received before caller-limit truncation}
+        excluded_rows: {type: integer, minimum: 0, description: Source ranking rows omitted due to invalid required fields or no usable constituent quote changes}
+        total_is_lower_bound: {type: boolean, description: True when source total is absent and only the normalized returned count is known}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/SectorRanking'}
+        source: {type: string}
+        source_version: {type: string}
+        provider_report_date: {type: string, format: date}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    MarketIndexQuote:
+      type: object
+      required: [symbol, code, name, amount_unit, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, description: Allow-listed index symbol, not normalized as an equity symbol}
+        code: {type: string}
+        name: {type: string}
+        latest_price: {type: number, nullable: true}
+        change: {type: number, nullable: true}
+        change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
+        open: {type: number, nullable: true}
+        high: {type: number, nullable: true}
+        low: {type: number, nullable: true}
+        prev_close: {type: number, nullable: true}
+        amount: {type: number, nullable: true}
+        amount_unit: {type: string, enum: [CNY, unknown]}
+        quote_time: {type: string, format: date-time, nullable: true}
+        quote_time_semantics: {type: string}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    IndexCatalogItem:
+      type: object
+      required: [symbol, name, tag]
+      properties:
+        symbol: {type: string, description: Index/provider-specific code; may use .TI/.SH/.SZ/.CSI suffixes}
+        name: {type: string}
+        tag: {type: string}
+    IndexCatalogSnapshot:
+      type: object
+      required: [tag, items, total, provider_returned, excluded_rows, total_is_lower_bound, source, fetched_at, quality_status]
+      properties:
+        tag: {type: string}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/IndexCatalogItem'}
+        total: {type: integer, minimum: 0, description: Normalized unique catalog rows retained after source-row filtering}
+        provider_returned: {type: integer, minimum: 0, description: Raw catalog rows returned by the source before duplicate filtering}
+        excluded_rows: {type: integer, minimum: 0, description: Duplicate source rows excluded from the normalized catalog}
+        total_is_lower_bound: {type: boolean, description: True when the response reaches the local 30000-row safety boundary and completeness cannot be established}
+        provider_time: {type: string, format: date-time, nullable: true}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    IndexConstituent:
+      type: object
+      required: [symbol, code, name]
+      properties:
+        symbol: {type: string}
+        code: {type: string}
+        name: {type: string}
+        weight_percent: {type: number, nullable: true, description: Provider-reported constituent weight in percentage points}
+    IndexConstituentSnapshot:
+      type: object
+      required: [index_symbol, items, total, provider_returned, source, fetched_at, quality_status]
+      properties:
+        index_symbol: {type: string}
+        as_of_date: {type: string, format: date, description: Requested historical query date; distinct from the source report date}
+        provider_report_date: {type: string, format: date, description: Latest constituent/weight report date at or before as_of when historical query is requested}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/IndexConstituent'}
+        total: {type: integer, minimum: 0, description: Normalized item count; may be a lower bound when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw rows on the latest selected report date before A-share filtering and name enrichment}
+        excluded_count: {type: integer, minimum: 0, description: Rows excluded due to unsupported securities or missing verified names}
+        total_is_lower_bound: {type: boolean, description: True when the selected monthly index_weight response hits the 5000-row boundary and may be truncated}
+        provider_time: {type: string, format: date-time, nullable: true}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    IndexDailyBar:
+      type: object
+      required: [index_symbol, trade_date, open, high, low, close, volume_unit, amount_unit, source, fetched_at, quality_status]
+      properties:
+        index_symbol: {type: string}
+        trade_date: {type: string, format: date}
+        open: {type: number}
+        high: {type: number}
+        low: {type: number}
+        close: {type: number}
+        change_percent: {type: number, nullable: true}
+        volume: {type: integer, nullable: true}
+        amount: {type: number, nullable: true}
+        volume_unit: {type: string}
+        amount_unit: {type: string}
+        source: {type: string}
+        source_version: {type: string}
+        provider_time: {type: string, format: date-time, nullable: true}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    IndexDailyBarsSnapshot:
+      type: object
+      required: [index_symbol, start_date, end_date, items, total, source, fetched_at, quality_status]
+      properties:
+        index_symbol: {type: string}
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/IndexDailyBar'}
+        total: {type: integer, minimum: 0}
+        provider_time: {type: string, format: date-time, nullable: true}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    IndexQuoteSnapshot:
+      type: object
+      required: [items, source, fetched_at, quality_status]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/MarketIndexQuote'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+
+    ProviderProbeItem:
+      type: object
+      required: [provider, capability, status, elapsed_ms, quality_status, checked_at]
+      properties:
+        provider: {type: string}
+        capability: {type: string}
+        status: {type: string, enum: [returned, returned_degraded, returned_unknown, failed, skipped, not_configured, not_supported]}
+        elapsed_ms: {type: integer, minimum: 0}
+        source_version: {type: string}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+        error_code: {type: string, description: Stable machine-readable failure classification}
+        error_stage: {type: string, enum: [timeout, cancellation, rate_limit, provider_auth, provider_permission, contract, connect, http, provider, configuration]}
+        error_message: {type: string, description: Sanitized and length-limited actionable failure summary; credentials and URL queries are redacted}
+        http_status: {type: integer, minimum: 100, maximum: 599}
+        sample_symbol: {type: string, description: Requested sample security code}
+        sample_market: {type: string, enum: [SH, SZ, BJ]}
+        sample_date: {type: string, format: date}
+        rows_returned: {type: integer, minimum: 0}
+        rows_validated: {type: integer, minimum: 0}
+        coverage_total: {type: integer, minimum: 0, description: Explicit expected population denominator; omitted when the source cannot prove it}
+        coverage_returned: {type: integer, minimum: 0, description: Records returned within the declared denominator}
+        coverage_validated: {type: integer, minimum: 0, description: Returned records passing identity and quality validation}
+        coverage_missing: {type: integer, minimum: 0, description: Expected records not returned by the source}
+        coverage_excluded: {type: integer, minimum: 0, description: Returned records explicitly excluded by validation}
+        coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: coverage_validated divided by coverage_total; omitted when the denominator is unknown}
+        provider_time: {type: string, format: date-time, nullable: true}
+        checked_at: {type: string, format: date-time}
+    ProviderProbeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        scope: {type: string, enum: [all, core], default: all}
+        markets:
+          type: array
+          maxItems: 1
+          description: One board sample per request; values SH_MAIN, SZ_MAIN, CHINEXT, STAR, BSE
+          items: {type: string, enum: [SH_MAIN, SZ_MAIN, CHINEXT, STAR, BSE]}
+        symbols:
+          type: array
+          maxItems: 1
+          description: One explicit A-share symbol per request, format 600519.SH/000001.SZ/920001.BJ
+          items: {type: string, pattern: '^\d{6}\.(SH|SZ|BJ)$'}
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [quote, daily_bars, stock_basic, stock_search, stock_universe, index_quotes, index_catalog, market_breadth, sector_rankings, market_capital_flow, limit_pool, dragon_tiger, announcements, trading_calendar, security_trading_status, price_limit_event, stock_boards, fundamentals, valuations, hot_ranking, capital_flow, chip_distribution]
+        timeout_seconds: {type: integer, minimum: 1, maximum: 30, default: 12}
+    ProviderProbeRun:
+      type: object
+      required: [run_id, status, persisted, started_at, finished_at, total, returned, degraded, unknown, failed, skipped, not_configured, not_supported, items]
+      properties:
+        run_id: {type: string}
+        scope: {type: string, enum: [all, core]}
+        requested_capabilities: {type: array, items: {type: string}}
+        requested_markets: {type: array, items: {type: string, enum: [SH_MAIN, SZ_MAIN, CHINEXT, STAR, BSE]}}
+        requested_symbols: {type: array, items: {type: string}}
+        timeout_seconds: {type: integer, minimum: 1, maximum: 30}
+        status: {type: string, enum: [success, degraded, failed, not_configured, no_capabilities_configured]}
+        persisted: {type: boolean, description: False when MariaDB storage is not configured}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+        total: {type: integer}
+        returned: {type: integer}
+        degraded: {type: integer}
+        unknown: {type: integer}
+        failed: {type: integer}
+        skipped: {type: integer}
+        not_configured: {type: integer}
+        not_supported: {type: integer}
+        items: {type: array, items: {$ref: '#/components/schemas/ProviderProbeItem'}}
+    ProviderProbeHistory:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ProviderProbeRun'}}
+        total: {type: integer}
+    MarketStocksSnapshot:
+      type: object
+      required: [page, page_size, total, total_is_lower_bound, returned, quote_succeeded, quote_failed, coverage_ratio, include_ma, ma_adjustment_basis, universe_source, universe_source_version, universe_fetched_at, fetched_at, items, quality_status]
+      properties:
+        page: {type: integer}
+        page_size: {type: integer}
+        total: {type: integer, description: Total securities in the complete directory}
+        total_is_lower_bound: {type: boolean, description: True when the source directory was degraded or incomplete}
+        returned: {type: integer, description: Number of securities in this page}
+        quote_succeeded: {type: integer}
+        quote_failed: {type: integer}
+        coverage_ratio: {type: number, minimum: 0, maximum: 1, description: Quote success ratio for this page only}
+        include_ma: {type: boolean}
+        ma_adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
+        universe_source: {type: string}
+        universe_source_version: {type: string}
+        universe_fetched_at: {type: string, format: date-time}
+        fetched_at: {type: string, format: date-time}
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              symbol: {type: string}
+              code: {type: string}
+              name: {type: string}
+              exchange: {type: string}
+              quote: {$ref: '#/components/schemas/Quote'}
+              ma5: {type: number, nullable: true}
+              ma20: {type: number, nullable: true}
+              ma_adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
+              ma_provider: {type: string}
+              error_code: {type: string}
+              quality_status: {$ref: '#/components/schemas/QualityStatus'}
+              quality_reasons: {type: array, items: {type: string}}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    MarketCapitalFlowItem:
+      type: object
+      required: [trade_date]
+      properties:
+        trade_date: {type: string, format: date}
+        close_sh: {type: number, nullable: true, description: Shanghai Composite close in index points}
+        change_percent_sh: {type: number, nullable: true, description: Shanghai Composite daily change in percentage points}
+        close_sz: {type: number, nullable: true, description: Shenzhen Component close in index points}
+        change_percent_sz: {type: number, nullable: true, description: Shenzhen Component daily change in percentage points}
+        net_amount_cny: {type: number, nullable: true, description: Market-wide main net inflow in CNY}
+        net_amount_rate_percent: {type: number, nullable: true, description: Market-wide main net inflow ratio in percentage points}
+        extra_large_net_inflow_cny: {type: number, nullable: true}
+        extra_large_net_inflow_rate_percent: {type: number, nullable: true}
+        large_net_inflow_cny: {type: number, nullable: true}
+        large_net_inflow_rate_percent: {type: number, nullable: true}
+        medium_net_inflow_cny: {type: number, nullable: true}
+        medium_net_inflow_rate_percent: {type: number, nullable: true}
+        small_net_inflow_cny: {type: number, nullable: true}
+        small_net_inflow_rate_percent: {type: number, nullable: true}
+    MarketCapitalFlowSnapshot:
+      type: object
+      required: [start_date, end_date, total, items, source, source_version, fetched_at, quality_status]
+      properties:
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        total: {type: integer, minimum: 1}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/MarketCapitalFlowItem'}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons:
+          type: array
+          items: {type: string}
+    MarketSentimentSnapshot:
+      type: object
+      required: [market, trade_date, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, source, fetched_at, quality_status]
+      properties:
+        market: {type: string, enum: [cn_a_share]}
+        trade_date: {type: string, format: date}
+        provider_report_date: {type: string, format: date}
+        total_securities: {type: integer, minimum: 0}
+        covered_securities: {type: integer, minimum: 0}
+        advancing_count: {type: integer, minimum: 0}
+        declining_count: {type: integer, minimum: 0}
+        unchanged_count: {type: integer, minimum: 0}
+        unclassified_count: {type: integer, minimum: 0}
+        limit_up_count: {type: integer, nullable: true, description: Null when the matching limit-up pool is unavailable or unverified}
+        limit_down_count: {type: integer, nullable: true, description: Null when the matching limit-down pool is unavailable or unverified}
+        broken_board_count: {type: integer, nullable: true, description: Null when the matching broken-board pool is unavailable or unverified}
+        limit_up_count_is_lower_bound: {type: boolean}
+        limit_down_count_is_lower_bound: {type: boolean}
+        broken_board_count_is_lower_bound: {type: boolean}
+        pool_sources: {type: object, additionalProperties: {type: string}}
+        pool_source_versions: {type: object, additionalProperties: {type: string}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    MarketSentimentHistory:
+      type: object
+      required: [market, start_date, end_date, items, total]
+      properties:
+        market: {type: string}
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        items: {type: array, items: {$ref: '#/components/schemas/MarketSentimentSnapshot'}}
+        total: {type: integer}
+    MarketBreadthSnapshot:
+      type: object
+      required: [market, total_securities, covered_securities, advancing_count, declining_count, unchanged_count, unclassified_count, limit_up_count, limit_down_count, amount_coverage_count, quote_timestamp_coverage_count, source, fetched_at, quality_status]
+      properties:
+        market: {type: string, enum: [cn_a_share]}
+        total_securities: {type: integer, minimum: 1, description: Sum of source change-distribution bucket counts; not independently verified against a security master}
+        covered_securities: {type: integer, minimum: 1, description: Count represented by provider distribution buckets; equals total_securities}
+        advancing_count: {type: integer, minimum: 0}
+        declining_count: {type: integer, minimum: 0}
+        unchanged_count: {type: integer, minimum: 0}
+        unclassified_count: {type: integer, minimum: 0}
+        limit_up_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-up pool endpoint, only when its report date matches the breadth report date; null means unknown}
+        limit_down_count: {type: integer, minimum: 0, nullable: true, description: Source total count from the limit-down pool endpoint, only when its report date matches the breadth report date; null means unknown}
+        total_amount_cny: {type: number, nullable: true, description: Full A-share turnover sum in CNY; null unless all paginated securities have valid amounts, quote dates match provider_report_date, and security count matches the breadth distribution}
+        amount_coverage_count: {type: integer, minimum: 0, description: Count of securities included in the aggregate; zero when full coverage or cross-source count alignment cannot be established}
+        quote_timestamp_coverage_count: {type: integer, minimum: 0, description: Number of universe quotes with a valid source timestamp}
+        oldest_quote_time: {type: string, format: date-time, nullable: true, description: Earliest valid source quote timestamp included in the universe snapshot; this is a conservative bound, not the exact snapshot time}
+        newest_quote_time: {type: string, format: date-time, nullable: true, description: Latest valid source quote timestamp included in the universe snapshot}
+        provider_report_date: {type: string, format: date, description: Source report date used to align breadth buckets, limit pools, and full-market quote rows}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    DragonTigerItem:
+      type: object
+      required: [symbol, code, name, trade_date, source, source_version, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string}
+        name: {type: string}
+        trade_date: {type: string, format: date}
+        change_percent: {type: number, nullable: true, description: Percentage points}
+        close_price_cny: {type: number, nullable: true, description: CNY/share}
+        net_buy_amount_cny: {type: number, nullable: true, description: Net buying amount in CNY; negative values are valid}
+        buy_amount_cny: {type: number, nullable: true, description: Buying amount in CNY}
+        sell_amount_cny: {type: number, nullable: true, description: Selling amount in CNY}
+        deal_amount_cny: {type: number, nullable: true, description: Turnover amount in CNY}
+        deal_amount_ratio: {type: number, nullable: true, description: Percentage points}
+        provider_buy_value: {type: number, nullable: true, description: Raw provider buy amount; currency unit may be undocumented}
+        provider_sell_value: {type: number, nullable: true, description: Raw provider sell amount; currency unit may be undocumented}
+        provider_deal_value: {type: number, nullable: true, description: Raw provider turnover amount; currency unit may be undocumented}
+        provider_net_value: {type: number, nullable: true, description: Raw provider net amount; currency unit may be undocumented}
+        provider_net_rate: {type: number, nullable: true, description: Raw provider net rate; unit follows provider contract}
+        provider_org_net_value: {type: number, nullable: true, description: Raw provider organization net amount; currency unit may be undocumented}
+        provider_hot_money_net_value: {type: number, nullable: true, description: Raw provider hot-money net amount; currency unit may be undocumented}
+        provider_amount_unit: {type: string, nullable: true, description: Provider-reported currency unit or provider_defined when not verified}
+        hot_rank: {type: integer, nullable: true}
+        range_days: {type: integer, nullable: true}
+        concepts: {type: array, items: {type: string}}
+        reason: {type: string}
+        explanation: {type: string}
+        security_type_code: {type: string}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    DragonTigerSnapshot:
+      type: object
+      required: [trade_date, page, page_size, total, pages, returned, source_returned, excluded_non_a_share_count, has_data, has_more, items, source, fetched_at, quality_status]
+      properties:
+        trade_date: {type: string, format: date}
+        provider_report_date: {type: string, format: date, nullable: true}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1}
+        total: {type: integer, minimum: 0, description: Raw row count observed before source caps; only a lower bound when total_is_lower_bound is true}
+        total_is_lower_bound: {type: boolean, description: True when the source response may be capped and total/pages describe only observed rows}
+        pages: {type: integer, minimum: 0}
+        returned: {type: integer, minimum: 0, description: Accepted A-share stock rows in this provider page}
+        source_returned: {type: integer, minimum: 0, description: Raw records returned by the provider for this page before filtering non-A-share products}
+        excluded_non_a_share_count: {type: integer, minimum: 0, description: Known non-A-share records, such as convertible bonds, excluded from returned items}
+        has_data: {type: boolean, description: False means no supported A-share row on this page; inspect excluded count and has_more}
+        has_more: {type: boolean}
+        items: {type: array, items: {$ref: '#/components/schemas/DragonTigerItem'}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    HotRankingItem:
+      type: object
+      required: [rank, symbol, code, source, source_version, fetched_at, quality_status]
+      properties:
+        rank: {type: integer, minimum: 1, description: Provider-assigned ranking position}
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string, example: "600519"}
+        name: {type: string, nullable: true}
+        latest_price: {type: number, nullable: true, description: Latest provider-enriched price in CNY/share}
+        change: {type: number, nullable: true, description: Price change in CNY/share}
+        change_percent: {type: number, nullable: true, description: Percentage points; 10 means 10 percent}
+        rank_change: {type: integer, nullable: true, description: Surge ranking's provider-reported rank movement; sign follows upstream semantics}
+        heat: {type: number, nullable: true, description: Provider-reported ranking heat; scale is provider-defined}
+        rank_trend: {type: string, nullable: true, description: Provider-reported ranking trend label}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    HotRankingSnapshot:
+      type: object
+      required: [type, total, items, source, source_version, fetched_at, quality_status]
+      properties:
+        type: {type: string, enum: [popular, surge, followers]}
+        total: {type: integer, minimum: 0, description: Number of normalized rows in this response; not the full ranking count when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw ranking rows returned by the provider before caller-limit truncation and filtering}
+        excluded_rows: {type: integer, minimum: 0, description: Source rows explicitly excluded during normalization, such as duplicate security identities}
+        total_is_lower_bound: {type: boolean, description: True when the source does not report an authoritative total for the ranking}
+        items: {type: array, items: {$ref: '#/components/schemas/HotRankingItem'}}
+        provider_time: {type: string, format: date-time, nullable: true, description: Provider data-ready timestamp when present; not a guaranteed exact quote time}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    LimitPoolItem:
+      type: object
+      required: [symbol, code, name, change_percent, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string}
+        name: {type: string}
+        change_percent: {type: number, description: Percentage points; 10 means 10 percent}
+        last_price: {type: number, nullable: true, description: Latest provider price in CNY/share when available}
+        first_touch_time: {type: string, description: First limit touch time as reported by the provider}
+        last_touch_time: {type: string, description: Last limit touch time as reported by the provider}
+        open_times: {type: integer, nullable: true, description: Number of limit-up board openings for broken-board pool only}
+        turnover_ratio_percent: {type: number, nullable: true, description: Provider-reported turnover ratio in percentage points}
+        turnover: {type: number, nullable: true, description: Provider-reported turnover value; consult provider_amount_unit}
+        provider_amount_unit: {type: string, description: Unit of provider-sourced money fields; provider_defined does not mean CNY}
+        consecutive_boards: {type: integer, nullable: true}
+        broken_count: {type: integer, nullable: true}
+        industry: {type: string}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    LimitPoolSnapshot:
+      type: object
+      required: [type, trade_date, total, has_data, items, source, fetched_at, quality_status]
+      properties:
+        type: {type: string, enum: [up, down, broken]}
+        trade_date: {type: string, format: date, description: Requested date, not overwritten by provider qdate}
+        provider_report_date: {type: string, format: date, nullable: true, description: Provider report date for diagnostics}
+        total: {type: integer, minimum: 0, description: Best available pool count before caller limit; may be a lower bound when total_is_lower_bound is true}
+        provider_returned: {type: integer, minimum: 0, description: Raw source rows received before A-share filtering and caller-limit truncation; paginated providers count rows received across pages}
+        excluded_non_a_share_count: {type: integer, minimum: 0, description: Non-A-share source records excluded from normalized items}
+        total_is_lower_bound: {type: boolean, description: True when a provider row cap prevents treating total as the authoritative full count}
+        has_data: {type: boolean, description: False means unknown or unavailable, not a verified zero}
+        items: {type: array, items: {$ref: '#/components/schemas/LimitPoolItem'}}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    ChipDistribution:
+      type: object
+      required: [symbol, average_cost, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        date: {type: string, format: date, nullable: true, description: Normalized chip snapshot date}
+        average_cost: {type: number, exclusiveMinimum: 0, description: Average holder cost in CNY/share}
+        cost_90_low: {type: number, nullable: true, description: Lower edge of the 90 percent cost band in CNY/share}
+        cost_90_high: {type: number, nullable: true, description: Upper edge of the 90 percent cost band in CNY/share}
+        cost_70_low: {type: number, nullable: true, description: Lower edge of the 70 percent cost band in CNY/share}
+        cost_70_high: {type: number, nullable: true, description: Upper edge of the 70 percent cost band in CNY/share}
+        source_version: {type: string}
+        profit_ratio: {type: number, nullable: true, minimum: 0, maximum: 1, description: Profit ratio normalized to a 0–1 fraction}
+        concentration_90: {type: number, nullable: true, minimum: 0, maximum: 1, description: 90 percent cost concentration normalized to a 0–1 fraction}
+        concentration_70: {type: number, nullable: true, minimum: 0, maximum: 1, description: 70 percent cost concentration normalized to a 0–1 fraction}
+        source: {type: string}
+        provider_date: {type: string, nullable: true, description: Original provider report date}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    CapitalFlow:
+      type: object
+      required: [symbol, observations, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        provider_date: {type: string, format: date, description: Date of the latest provider observation; not an exact available timestamp}
+        source_version: {type: string}
+        main_net_inflow_yuan: {type: number, nullable: true, description: Provider-reported main net inflow in CNY yuan}
+        inflow_5d_yuan: {type: number, nullable: true, description: Five-day net-inflow aggregate in CNY yuan when all required observations exist}
+        inflow_10d_yuan: {type: number, nullable: true, description: Ten-day net-inflow aggregate in CNY yuan when all required observations exist}
+        observations: {type: integer, minimum: 0, description: Number of observations used by the provider calculation}
+        source: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    ValuationItem:
+      type: object
+      required: [symbol, code, pe_ttm, pe_mrq, pe_static, pb_mrq, ps_ttm, pcf_ttm, source, fetched_at, quality_status]
+      properties:
+        symbol: {type: string, example: 600519.SH}
+        code: {type: string, example: "600519"}
+        name: {type: string}
+        pe_ttm: {type: number, nullable: true, description: Price-to-earnings ratio on trailing twelve-month earnings; may be negative or null}
+        pe_mrq: {type: number, nullable: true, description: Price-to-earnings ratio on most recent quarter basis; may be negative or null}
+        pe_static: {type: number, nullable: true, description: Provider-native P/E based on net profit (for Tushare daily_basic pe); not equivalent to pe_mrq}
+        pb_mrq: {type: number, nullable: true, description: Price-to-book ratio on most recent quarter basis; may be null}
+        ps_ttm: {type: number, nullable: true, description: Price-to-sales ratio on trailing twelve-month basis; may be negative or null}
+        pcf_ttm: {type: number, nullable: true, description: Price-to-cash-flow ratio on trailing twelve-month basis; may be negative or null}
+        turnover_rate_percent: {type: number, nullable: true, description: Daily turnover rate in percentage points}
+        float_turnover_rate_percent: {type: number, nullable: true, description: Daily free-float turnover rate in percentage points}
+        volume_ratio: {type: number, nullable: true, description: Daily volume ratio; provider-native ratio, not a percentage}
+        dividend_yield_percent: {type: number, nullable: true, description: Provider-reported dividend yield in percentage points}
+        dividend_yield_ttm_percent: {type: number, nullable: true, description: Provider-reported trailing twelve-month dividend yield in percentage points}
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+    ValuationSnapshot:
+      type: object
+      required: [requested_symbols, total, items, source, fetched_at, quality_status]
+      properties:
+        requested_symbols:
+          type: array
+          items: {type: string, example: 600519.SH}
+        total: {type: integer, minimum: 0, description: Number of returned valuation records}
+        items: {type: array, items: {$ref: '#/components/schemas/ValuationItem'}}
+        missing_symbols:
+          type: array
+          items: {type: string}
+          description: Requested canonical symbols not returned by the provider; omitted when none
+        provider_report_date:
+          type: string
+          format: date
+          description: Trading/report date supplied by the provider; not an exact snapshot timestamp
+        provider_timestamp:
+          type: string
+          format: date-time
+          description: Latest valid provider time among the valuation metrics; does not mean each metric was updated at this time
+        source: {type: string}
+        source_version: {type: string}
+        fetched_at: {type: string, format: date-time}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
     SourceStatus:
       type: object
       required: [name, enabled, quote_capable, daily_bar_capable]
@@ -146,6 +1016,24 @@ components:
         enabled: {type: boolean}
         quote_capable: {type: boolean}
         daily_bar_capable: {type: boolean}
+        stock_basic_capable: {type: boolean}
+        stock_search_capable: {type: boolean}
+        sector_ranking_capable: {type: boolean}
+        index_quote_capable: {type: boolean}
+        index_catalog_capable: {type: boolean}
+        historical_index_constituents_capable: {type: boolean, description: Provider explicitly supports historical constituent report-date queries}
+        market_breadth_capable: {type: boolean}
+        limit_pool_capable: {type: boolean}
+        stock_boards_capable: {type: boolean}
+        fundamentals_capable: {type: boolean}
+        valuation_capable: {type: boolean}
+        hot_ranking_capable: {type: boolean}
+        announcements_capable: {type: boolean}
+        dragon_tiger_capable: {type: boolean}
+        trading_calendar_capable: {type: boolean}
+        security_trading_status_capable: {type: boolean, description: Provider can return dated historical name and suspension evidence}
+        chip_capable: {type: boolean}
+        capital_flow_capable: {type: boolean}
     DataSourcesResponse:
       type: object
       required: [sources, normalization_version]
@@ -167,6 +1055,47 @@ paths:
       responses:
         '200': {description: Configured dependencies are ready}
         '503': {description: Configured dependencies are not ready}
+  /api/v1/market/quotes:
+    get:
+      summary: 批量获取指定 A 股证券的实时行情
+      description: 仅查询调用方明确提供的证券列表，不代表全市场扫描。最多 50 个不重复证券；部分证券失败时仍返回逐项结果和整体降级质量。
+      security:
+        - ApiKey: []
+      parameters:
+        - name: symbols
+          in: query
+          required: true
+          description: 逗号分隔的 A 股代码，支持规范化后的六位代码或带交易所后缀代码。
+          schema:
+            type: string
+            example: "600519.SH,000001.SZ"
+      responses:
+        '200':
+          description: 行情批量结果；部分失败仍以逐项状态返回
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, succeeded, failed, fetched_at, quality_status]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [symbol, quality_status]
+                      properties:
+                        symbol: {type: string}
+                        quote: {$ref: '#/components/schemas/Quote'}
+                        error_code: {type: string, enum: [QUOTE_UNAVAILABLE]}
+                        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+                  total: {type: integer}
+                  succeeded: {type: integer}
+                  failed: {type: integer}
+                  fetched_at: {type: string, format: date-time}
+                  quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        '400': {description: 证券列表缺失、重复、非法或超过 50 项}
+        '401': {description: API key required}
+
   /api/v1/quotes/{symbol}:
     get:
       parameters:
@@ -183,23 +1112,26 @@ paths:
         '504': {description: All quote providers timed out}
   /api/v1/bars/{symbol}/daily:
     get:
+      description: Without as_of, returns the current provider-selected series. With as_of, reads only locally recorded versions observed by that timestamp; it never calls live Providers or falls back to the current-value table.
       parameters:
         - {name: symbol, in: path, required: true, schema: {type: string}}
         - {name: start, in: query, schema: {type: string, format: date}}
         - {name: end, in: query, schema: {type: string, format: date}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 2000}}
         - {name: adjustment, in: query, schema: {$ref: '#/components/schemas/RequestAdjustmentBasis'}}
+        - {name: as_of, in: query, schema: {type: string, format: date-time}, description: Optional RFC3339 system-observation cutoff; future timestamps are rejected}
       responses:
         '200':
-          description: Daily bar collection
+          description: Daily bar collection; PIT responses include point_in_time and each selected bar's system_observed_at
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DailyBarsResponse'}
-        '400': {description: Invalid symbol, date range, limit or adjustment}
+        '400': {description: Invalid symbol, date range, limit, adjustment or as_of timestamp}
         '401': {description: API key required}
-        '502': {description: All providers failed}
-        '503': {description: No daily-bar provider enabled}
-        '504': {description: All providers timed out}
+        '404': {description: No coherent daily-bar revisions recorded by the requested as_of timestamp}
+        '502': {description: All live Providers failed}
+        '503': {description: No daily-bar Provider enabled for live reads, or PIT revision storage unavailable}
+        '504': {description: All live Providers timed out}
   /api/v1/bundles/{symbol}:
     get:
       parameters:
@@ -217,6 +1149,93 @@ paths:
         '401': {description: API key required}
         '502': {description: Providers failed}
         '504': {description: Providers timed out}
+  /api/v1/data-sources/probe:
+    post:
+      tags: [Data Sources]
+      summary: 主动诊断 Provider 能力
+      description: >-
+        默认空请求体执行全部能力。scope=core 执行核心能力；capabilities 非空时仅执行指定能力。
+        timeout_seconds 为单项 Provider 请求超时，范围 1 到 30 秒，默认 12 秒。
+        探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。
+      security:
+        - ApiKey: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderProbeRequest'
+            examples:
+              core:
+                summary: 核心能力诊断
+                value: {scope: core, timeout_seconds: 12}
+              selected:
+                summary: 仅检查行情
+                value: {scope: all, capabilities: [quote], timeout_seconds: 8}
+      responses:
+        '200':
+          description: 诊断批次与各能力结果
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderProbeRun'}
+        '400': {description: 请求参数或 JSON 格式无效}
+        '401': {description: API Key 缺失或无效}
+        '500': {description: 诊断结果持久化失败}
+  /api/v1/data-sources/probe/history:
+    get:
+      summary: List recent persisted Provider probe runs
+      parameters:
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Recent sanitized probe runs
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderProbeHistory'}
+        '400': {description: Invalid limit}
+        '401': {description: API key required}
+        '503': {description: Provider-probe history storage is unavailable}
+  /api/v1/data-sources/diagnostics:
+    get:
+      tags: [Data Sources]
+      summary: 查询数据源运行诊断
+      description: 基于进程内真实行情与日 K 请求记录返回状态，不主动探测 Provider；服务重启后历史计数重置。
+      security:
+        - ApiKey: []
+      responses:
+        '200':
+          description: Provider 运行诊断
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, scope, observed_from]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [provider, capabilities]
+                      properties:
+                        provider: {type: string}
+                        capabilities:
+                          type: array
+                          items:
+                            type: object
+                            required: [capability, status, consecutive_failures, total_success, total_failure]
+                            properties:
+                              capability: {type: string, enum: [quote, daily_bars]}
+                              status: {type: string, enum: [not_observed, healthy, degraded, open, half_open]}
+                              consecutive_failures: {type: integer}
+                              total_success: {type: integer, format: int64}
+                              total_failure: {type: integer, format: int64}
+                              last_success_at: {type: string, format: date-time, nullable: true}
+                              last_failure_at: {type: string, format: date-time, nullable: true}
+                              open_until: {type: string, format: date-time, nullable: true}
+                  scope:
+                    type: array
+                    items: {type: string}
+                  observed_from: {type: string, enum: [in_process_circuit_breaker]}
   /api/v1/data-sources:
     get:
       responses:
@@ -226,3 +1245,542 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DataSourcesResponse'}
         '401': {description: API key required}
+
+  /api/v1/stocks/search:
+    get:
+      summary: 搜索 A 股证券名称或代码
+      description: >-
+        查询已启用的国内证券搜索 Provider。q 支持中文名称、六位代码或带市场后缀的标准代码；
+        limit 控制返回条数，最多 50。结果是证券目录匹配候选，不是实时行情，fetched_at 不代表 quote_time。
+        未知或降级质量必须由调用方按 quality_status 与 quality_reasons 处理。
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 64}, description: Chinese name, six-digit code or normalized symbol}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 50, default: 10}}
+      responses:
+        '200':
+          description: Canonical A-share search candidates
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockSearchSnapshot'}
+        '400': {description: Empty/overlong query or invalid limit}
+        '401': {description: API key required}
+        '502': {description: All stock-search providers failed or returned invalid data}
+        '503': {description: No stock-search provider enabled}
+
+  /api/v1/stocks/{symbol}/announcements:
+    get:
+      summary: 获取单只 A 股指定日期区间内的公告
+      description: >-
+        查询东方财富公告列表。start_date/end_date 包含首尾，最多 366 天；缺省日期范围为中国时区最近 7 个日历日。
+        announcement_date、published_at 与 fetched_at 分别表示源端公告日期、源端展示时间（可解析时）和采集时间。
+        空列表为 quality unknown，不表示已证明该区间没有公告。公告能力独立配置，默认关闭。
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string, example: 600036.SH}}
+        - {name: start_date, in: query, schema: {type: string, format: date}}
+        - {name: end_date, in: query, schema: {type: string, format: date}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, maximum: 1000, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Announcement page with source publication metadata and quality
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockAnnouncementSnapshot'}
+        '400': {description: Invalid symbol, date range or pagination}
+        '401': {description: API key required}
+        '502': {description: Provider unavailable or returned inconsistent data}
+  /api/v1/stocks/{symbol}/profile:
+    get:
+      summary: Get single-security identity, listing metadata and current market-profile fields
+      description: PE/PB, industry, market capitalization, ROE, margins and net profit come from Eastmoney quote fields. The upstream does not expose a verifiable timestamp for these fields, so profile quality is degraded; use quarterly fundamentals for report-period and publication-date semantics.
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Stock identity from the configured stock-basic provider
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockBasic'}
+        '400': {description: Invalid symbol}
+        '401': {description: API key required}
+        '502': {description: All stock-basic providers failed}
+        '503': {description: No stock-basic provider enabled}
+  /api/v1/stocks/{symbol}/price-limit-rule:
+    get:
+      summary: Resolve the effective A-share price-limit rule
+      description: Combines historical security status, official rule tables and independently sourced special-event evidence. Missing status/event evidence returns an unknown rule and never assumes that no special event occurred.
+      security:
+        - ApiKey: []
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+        - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
+      responses:
+        '200':
+          description: Price-limit rule result. Unknown status means the evidence is insufficient to use a limit percentage.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [symbol, trade_date, status, quality_status, quality_reasons]
+                properties:
+                  symbol: {type: string}
+                  market: {type: string}
+                  board: {type: string}
+                  trade_date: {type: string, format: date}
+                  risk_warning_status: {type: string}
+                  listing_trading_day_number: {type: integer}
+                  listing_status_known: {type: boolean}
+                  special_exception_status: {type: string}
+                  special_exception_evidence: {$ref: '#/components/schemas/PriceLimitEventEvidence', nullable: true}
+                  status: {type: string, enum: [unknown, limited, no_limit]}
+                  limit_percent: {type: number, nullable: true, description: Percentage points; absent for unknown/no-limit rules}
+                  no_limit_reason: {type: string}
+                  rule_version: {type: string}
+                  rule_effective_from: {type: string, format: date}
+                  rule_effective_to: {type: string, format: date}
+                  rule_source: {type: string}
+                  rule_source_url: {type: string, format: uri}
+                  quality_status: {$ref: '#/components/schemas/QualityStatus'}
+                  quality_reasons: {type: array, items: {type: string}}
+        '400': {description: Invalid symbol or trade date}
+        '401': {description: API key required}
+  /api/v1/stocks/{symbol}/trading-status:
+    get:
+      summary: Get historical trading-status evidence for one A-share
+      description: Uses Tushare historical name-change, trading-calendar and suspension records to provide date-specific risk-warning, delisting and suspension evidence. Each source-content change is appended to local revision storage when MariaDB is enabled. Optional as_of reads only locally recorded versions known by that system timestamp and never falls back to live Providers. Missing or ambiguous evidence remains unknown; no-limit exception events are not inferred.
+      security:
+        - ApiKey: []
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+        - {name: date, in: query, required: true, schema: {type: string, format: date}, description: Historical exchange date in YYYY-MM-DD format; future dates are rejected}
+        - {name: as_of, in: query, required: false, schema: {type: string, format: date-time}, description: Optional system-observation cutoff. When supplied, reads only locally recorded revisions and never calls a live Provider.}
+      responses:
+        '200':
+          description: Historical security status and quality metadata. Unknown status fields are valid response states when source evidence is incomplete.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityTradingStatusSnapshot'}
+        '400': {description: Invalid symbol, trade date or as_of timestamp}
+        '401': {description: API key required}
+        '404': {description: No usable status revision was recorded by the requested as_of timestamp}
+        '502': {description: All configured security-status Providers failed for a live read}
+        '503': {description: No security-trading-status Provider enabled, or local PIT revision storage unavailable}
+  /api/v1/stocks/{symbol}/fundamentals:
+    get:
+      summary: Get quarterly indicators and financial statement sections
+      description: >-
+        Returns six groups of quarterly financial indicators and may also include selected income-statement,
+        balance-sheet and cash-flow-statement line items when a configured provider supports them. Statement sections
+        are not full upstream statements; missing fields remain absent and each section carries its own quality state.
+        report_date is the financial period end; publication_date is the disclosure date of the selected provider
+        revision. Income and cash-flow statement values use a single-quarter consolidated report where supported;
+        balance-sheet values use the consolidated period-end report. Without as_of, the endpoint returns the latest
+        usable provider result. With as_of, it only reads locally recorded revisions observed by that timestamp and
+        never falls back to a live request. Since publication_time is not available for every metric, sections with a
+        missing publication date or a publication date on/after the as_of date in Asia/Shanghai are excluded
+        conservatively. Historical revisions can only be reconstructed for snapshots recorded after PIT storage began.
+        Values preserve provider-native numeric scale and explicit units.
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+        - {name: year, in: query, required: true, schema: {type: integer, minimum: 2007}}
+        - {name: quarter, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 4}}
+        - {name: as_of, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp. Reads locally recorded versions known by this system timestamp; it does not call live Providers. Sections whose publication date cannot be proven to precede the Asia/Shanghai date of as_of are excluded.}
+      responses:
+        '200':
+          description: Quarterly indicators and supported financial-statement sections; system_observed_at is included for PIT responses
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FundamentalsSnapshot'}
+        '400': {description: Invalid symbol, report year, quarter or as_of timestamp}
+        '401': {description: API key required}
+        '404': {description: No usable financial revision was recorded by the requested as_of timestamp}
+        '502': {description: Provider failed or returned invalid financial data}
+        '503': {description: No fundamentals provider enabled for live reads, or PIT revision storage is unavailable}
+  /api/v1/stocks/{symbol}/chip-distribution:
+    get:
+      summary: Get a stock chip-distribution snapshot
+      description: >-
+        Returns the latest provider-backed cost distribution for one A-share. Profit ratio and concentration values
+        are normalized to fractions from 0 to 1 by the service. Missing optional values remain absent; the snapshot
+        includes provider/source date, fetch time, source and quality reasons. This endpoint is not a prediction signal.
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string, example: 600519.SH}}
+      responses:
+        '200':
+          description: Chip-distribution snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChipDistribution'}
+        '400': {description: Invalid or unsupported symbol}
+        '401': {description: API key required}
+        '502': {description: All chip-distribution providers failed or returned invalid data}
+        '503': {description: No chip-distribution provider enabled}
+  /api/v1/stocks/{symbol}/capital-flow:
+    get:
+      summary: Get a stock capital-flow summary
+      description: >-
+        Amounts are CNY yuan. Main net inflow is the provider's reported observation, not a complete order-book audit.
+        Five-day and ten-day aggregates are populated only when their required observations are available; missing
+        values remain absent. provider_date is the newest observation date, not an exact availability timestamp. The snapshot includes observation count, source, fetch time and quality reasons.
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string, example: 600519.SH}}
+      responses:
+        '200':
+          description: Capital-flow summary with CNY yuan amounts
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CapitalFlow'}
+        '400': {description: Invalid or unsupported symbol}
+        '401': {description: API key required}
+        '502': {description: All capital-flow providers failed or returned invalid data}
+        '503': {description: No capital-flow provider enabled}
+  /api/v1/stocks/{symbol}/boards:
+    get:
+      summary: Get the boards associated with one A-share
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Board membership snapshot; quality is degraded when the provider exposes no verifiable snapshot time
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockBoardSnapshot'}
+        '400': {description: Invalid symbol}
+        '401': {description: API key required}
+        '502': {description: All stock-boards providers failed or returned incomplete data}
+        '503': {description: No stock-boards provider enabled}
+
+  /api/v1/market/valuations:
+    get:
+      summary: Get valuation snapshots for up to 100 A-share symbols
+      description: >-
+        Returns provider-reported valuation ratios. Individual metrics can be null or negative; null is missing data, not zero.
+        provider_timestamp is the latest valid provider timestamp among the valuation metrics and does not imply that every
+        metric was updated at that exact time. The endpoint validates symbols, canonicalizes six-digit A-share codes and
+        returns missing_symbols for requested symbols omitted by the provider.
+      parameters:
+        - name: symbols
+          in: query
+          required: true
+          description: Comma-separated list of 1–100 six-digit A-share codes; SH/SZ/BJ suffixes are accepted and canonicalized.
+          schema:
+            type: string
+            example: 600519.SH,000001.SZ
+      responses:
+        '200':
+          description: Batch valuation snapshot with per-symbol and aggregate quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ValuationSnapshot'}
+        '400': {description: Missing symbols, more than 100 raw entries, empty tokens, or invalid/B-share symbol}
+        '401': {description: API key required}
+        '502': {description: All valuation providers failed or returned invalid data}
+        '503': {description: No valuation provider enabled}
+
+  /api/v1/market/sectors:
+    get:
+      summary: Get live industry or concept board rankings
+      parameters:
+        - name: type
+          in: query
+          schema: {type: string, enum: [industry, concept], default: industry}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+        - name: direction
+          in: query
+          description: Return the largest selected metric first (up) or the smallest first (down). change_5d is derived from six daily board-index closes; amount requires verified CNY values.
+          schema: {type: string, enum: [up, down], default: up}
+        - name: sort_by
+          in: query
+          required: false
+          description: change_percent is today's change; amount is CNY turnover; change_5d is derived from six daily board-index closes.
+          schema: {type: string, enum: [change_percent, amount, change_5d], default: change_percent}
+      responses:
+        '200':
+          description: Current provider ranking snapshot with source and quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SectorRankingSnapshot'}
+        '400': {description: Invalid sector type, sort_by, direction or limit}
+        '401': {description: API key required}
+        '502': {description: All sector-ranking providers failed}
+        '503': {description: No sector-ranking provider enabled}
+
+  /api/v1/market/index-catalog:
+    get:
+      summary: 获取同花顺或 Tushare 国内指数目录
+      description: tag=tushare 返回 Tushare index_basic 目录；其他 tag 由兼容的同花顺 Provider 提供。Tushare 指数代码保留 .SH/.SZ/.CSI 后缀。
+      security:
+        - ApiKey: []
+      parameters:
+        - {name: tag, in: query, required: false, schema: {type: string, enum: [cn_concept, region, tszs, industry, tushare], default: cn_concept}}
+      responses:
+        '200':
+          description: 指数/板块目录和来源质量
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexCatalogSnapshot'}
+        '400': {description: Invalid index catalog tag}
+        '401': {description: API key required}
+        '502': {description: All index catalog providers failed}
+        '503': {description: No index catalog provider enabled}
+
+  /api/v1/market/indices/{symbol}/constituents:
+    get:
+      summary: 获取指定指数的最近或指定日期之前的成分权重报告快照
+      description: 未提供 as_of 时保持原有当前/最近快照行为。提供 as_of 时只使用显式支持历史查询的 Provider；Tushare 返回不晚于请求日期的最新 index_weight 报告日。as_of_date 是请求日期，provider_report_date 是实际报告日。该接口不表示成分在报告日至下次报告日之间持续有效，也不是严格历史成员生效区间回放。
+      security:
+        - ApiKey: []
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "000300.SH"
+        - name: source
+          in: query
+          required: false
+          description: "指定来源；未提供时仅在具备相应能力的来源间选择"
+          schema:
+            type: string
+            enum: [hithink, tushare]
+        - name: as_of
+          in: query
+          required: false
+          description: "返回不晚于该日期的最新历史权重报告；只支持 YYYY-MM-DD，不能替代成分生效区间"
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 指数成分股票目录及来源质量；历史查询同时返回 as_of_date 与 provider_report_date
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexConstituentSnapshot'}
+        '400': {description: Invalid date or source does not support historical query}
+        '401': {description: API key required}
+        '502': {description: All index constituent providers failed}
+        '503': {description: No index catalog provider enabled}
+
+  /api/v1/market/indices/{symbol}/daily:
+    get:
+      summary: 获取指定指数的历史日线
+      description: Tushare 日线成交量以手为单位，成交额按千元换算为人民币元。
+      security:
+        - ApiKey: []
+      parameters:
+        - {name: symbol, in: path, required: true, schema: {type: string, example: 000300.SH}}
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+        - {name: source, in: query, required: false, description: Pin the provider to the source returned by the index catalog; omitted means configured priority fallback, schema: {type: string, enum: [hithink, tushare]}}
+      responses:
+        '200':
+          description: 指数历史日线及来源质量
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexDailyBarsSnapshot'}
+        '400': {description: Invalid date range or index symbol}
+        '401': {description: API key required}
+        '502': {description: All index daily-bar providers failed}
+        '503': {description: No index catalog provider enabled}
+
+  /api/v1/market/indices:
+    get:
+      summary: Get quotes for an allow-listed set of core market indices
+      security:
+        - ApiKey: []
+      responses:
+        '200':
+          description: Index quote snapshot with explicit source and quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IndexQuoteSnapshot'}
+        '401': {description: API key required}
+        '502': {description: All index-quote providers failed}
+        '503': {description: No index-quote provider enabled}
+
+  /api/v1/market/trading-calendar:
+    get:
+      summary: Get the explicit A-share trading calendar for an inclusive date range
+      description: Returns one row for every calendar date, including weekends and holidays. The endpoint rejects missing date coverage and does not infer trading days from weekdays.
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: Complete trading-calendar range and source quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TradingCalendarSnapshot'}
+        '400': {description: Invalid or excessive date range}
+        '401': {description: API key required}
+        '502': {description: All trading-calendar providers failed or returned incomplete data}
+        '503': {description: No trading-calendar provider enabled}
+  /api/v1/market/session:
+    get:
+      summary: Get the scheduled A-share market session for a timestamp
+      description: Uses the provider-backed trading calendar for the requested date and the standard Asia/Shanghai session schedule. It does not determine individual-stock suspension, security-specific price limits, or emergency exchange interruptions. When at is omitted, current server time is used.
+      security:
+        - ApiKey: []
+      parameters:
+        - {name: at, in: query, required: false, schema: {type: string, format: date-time}, description: Optional RFC3339 timestamp; response includes the Asia/Shanghai date and time}
+      responses:
+        '200':
+          description: Scheduled market session, calendar source and quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketSessionSnapshot'}
+        '400': {description: Invalid RFC3339 timestamp}
+        '401': {description: API key required}
+        '502': {description: Calendar provider failed or returned incomplete data}
+        '503': {description: No trading-calendar provider enabled}
+  /api/v1/market/stocks:
+    get:
+      summary: Get a paginated A-share market overview with quotes and optional moving averages
+      description: >-
+        Uses the validated A-share security directory as the universe and returns only the requested page. Quote
+        coverage_ratio is scoped to that page. When include_ma=true, MA5 and MA20 are calculated from daily bars
+        using the explicitly selected adjustment basis; unavailable or insufficient history remains null. Directory
+        incompleteness is exposed through total_is_lower_bound and degraded quality rather than hidden.
+      parameters:
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 10000, default: 1}}
+        - {name: page_size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+        - {name: include_ma, in: query, required: false, schema: {type: boolean, default: true}}
+        - {name: adjustment, in: query, required: false, schema: {$ref: '#/components/schemas/RequestAdjustmentBasis'}}
+      responses:
+        '200':
+          description: One page of A-share overview records with per-item and aggregate quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketStocksSnapshot'}
+        '400': {description: Invalid page, page_size, include_ma or adjustment}
+        '401': {description: API key required}
+        '502': {description: All complete-universe providers failed}
+        '503': {description: No configured Provider exposes a complete A-share universe}
+  /api/v1/market/capital-flow:
+    get:
+      summary: Get Tushare market-wide daily capital-flow history
+      description: >-
+        Returns the provider-reported market-wide moneyflow_mkt_dc series. Values are CNY and rates are percentage
+        points. This is not calculated by summing a partial set of individual stocks. The endpoint requires a Tushare
+        token with the moneyflow_mkt_dc permission (documented minimum 120 points); source timestamps are not precise,
+        so the result remains degraded. The requested range is inclusive and capped at 2000 calendar days.
+      security:
+        - ApiKey: []
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: Market-wide daily capital-flow history with explicit quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketCapitalFlowSnapshot'}
+        '400': {description: Invalid date range}
+        '401': {description: API key required}
+        '502': {description: Market capital-flow provider failed or returned invalid data}
+        '503': {description: No market capital-flow provider enabled}
+
+  /api/v1/market/sentiment:
+    get:
+      summary: Get and persist the current A-share market sentiment snapshot
+      description: >-
+        Combines the market breadth snapshot with same-date limit-up, limit-down and broken-board pool counts.
+        Missing or unverifiable pool counts remain null, never zero. A snapshot is persisted only when MariaDB storage
+        is configured. Live collection is limited to the current China market date; historical dates are read-only.
+      parameters:
+        - {name: date, in: query, required: false, schema: {type: string, format: date}, description: Defaults to the current Asia/Shanghai date; only the current date can be collected}
+      responses:
+        '200':
+          description: Market sentiment snapshot with source and quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketSentimentSnapshot'}
+        '400': {description: Invalid or historical collection date}
+        '401': {description: API key required}
+        '502': {description: Market breadth provider failed}
+  /api/v1/market/sentiment/history:
+    get:
+      summary: Get persisted daily A-share market sentiment snapshots
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500, default: 366}}
+      responses:
+        '200':
+          description: Persisted snapshots; missing trading dates are not synthesized
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketSentimentHistory'}
+        '400': {description: Invalid date range or limit}
+        '401': {description: API key required}
+        '503': {description: MariaDB history storage is unavailable}
+  /api/v1/market/breadth:
+    get:
+      summary: Get Eastmoney A-share market-breadth distribution
+      description: Aggregates Eastmoney market-wide change-distribution buckets and date-aligned limit-pool totals. total_securities is the sum of distribution bucket counts, not an independently verified security-master count. total_amount_cny is populated only when CLIST turnover pages are complete, contain valid unique securities with quote dates matching provider_report_date, and their coverage count matches the distribution total; otherwise it remains null and amount_coverage_count is zero. The multi-page collection is not an atomic snapshot, and the source exposes no verifiable intraday timestamp, so quality remains degraded.
+      responses:
+        '200':
+          description: Market breadth including universe coverage and data quality
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketBreadthSnapshot'}
+        '401': {description: API key required}
+        '502': {description: Provider returned incomplete or invalid data}
+        '503': {description: No market breadth provider enabled}
+  /api/v1/market/hot-stocks:
+    get:
+      summary: Get domestic popularity, surge-proxy or follower ranking
+      description: Eastmoney is preferred, Tonghuashun is the next optional fallback, and Xueqiu is an opt-in last fallback. Xueqiu surge uses the market-wide percentage-mover order as a proxy and is not equivalent to Eastmoney's hot-up list. Ranking data may be delayed, so successful snapshots remain degraded. total counts rows returned in this bounded response, not all securities in the market.
+      parameters:
+        - {name: type, in: query, required: false, schema: {type: string, enum: [popular, surge, followers], default: popular}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+      responses:
+        '200':
+          description: Bounded ranking snapshot with price enrichment and data-quality metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HotRankingSnapshot'}
+        '400': {description: Invalid ranking type or limit}
+        '401': {description: API key required}
+        '502': {description: Provider returned invalid or unavailable data}
+        '503': {description: No hot-ranking provider enabled}
+  /api/v1/market/dragon-tiger:
+    get:
+      summary: 获取指定交易日龙虎榜盘后分页
+      description: 金额为人民币元，涨跌幅和成交占比为百分点。源端未提供精确快照时间时保持 degraded；空报表为 unknown，不证明当日零上榜。
+      parameters:
+        - {name: date, in: query, required: false, description: 默认中国时区当日；盘后报告可能尚未发布, schema: {type: string, format: date}}
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 1}}
+        - {name: page_size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+      responses:
+        '200':
+          description: 龙虎榜分页；has_data=false 时质量为 unknown
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DragonTigerSnapshot'}
+        '400': {description: Invalid date or page parameters}
+        '401': {description: API key required}
+        '502': {description: Provider returned invalid or unavailable data}
+  /api/v1/market/limit-pools:
+    get:
+      summary: Get limit-up, limit-down or broken-board pool
+      parameters:
+        - {name: type, in: query, schema: {type: string, enum: [up, down, broken], default: up}}
+        - {name: date, in: query, description: Query date in Shanghai time, defaults to today's calendar date, schema: {type: string, format: date}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 30}}
+      responses:
+        '200':
+          description: Pool snapshot; has_data=false is unknown/unavailable rather than a verified zero count
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LimitPoolSnapshot'}
+        '400': {description: Invalid type, date or limit}
+        '401': {description: API key required}
+        '502': {description: Provider failed or returned invalid data}
+        '503': {description: No limit-pool provider enabled}

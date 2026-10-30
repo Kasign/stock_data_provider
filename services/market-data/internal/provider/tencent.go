@@ -24,6 +24,7 @@ type Tencent struct {
 	quoteURL     string
 	klineURL     string
 	noneKlineURL string
+	searchURL    string
 }
 
 func NewTencent(timeout time.Duration) *Tencent {
@@ -31,6 +32,11 @@ func NewTencent(timeout time.Duration) *Tencent {
 }
 
 func NewTencentConfigured(timeout time.Duration, quoteURL, klineURL, noneKlineURL string) *Tencent {
+	return NewTencentConfiguredWithSearchURL(timeout, quoteURL, klineURL, noneKlineURL, "")
+}
+
+// NewTencentConfiguredWithSearchURL configures the Smartbox keyword-search endpoint independently.
+func NewTencentConfiguredWithSearchURL(timeout time.Duration, quoteURL, klineURL, noneKlineURL, stockSearchURL string) *Tencent {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -43,7 +49,10 @@ func NewTencentConfigured(timeout time.Duration, quoteURL, klineURL, noneKlineUR
 	if noneKlineURL == "" {
 		noneKlineURL = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
 	}
-	return &Tencent{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL}
+	if stockSearchURL == "" {
+		stockSearchURL = defaultTencentStockSearchURL
+	}
+	return &Tencent{client: &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}, quoteURL: quoteURL, klineURL: klineURL, noneKlineURL: noneKlineURL, searchURL: stockSearchURL}
 }
 func (p *Tencent) Name() string { return "tencent" }
 
@@ -51,6 +60,9 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tencent stock quote only supports common A-share equities, got %q", rawSymbol)
 	}
 	apiCode, err := tencentCode(symbol)
 	if err != nil {
@@ -119,10 +131,12 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		return nil, fmt.Errorf("normalize Tencent quote volume: %w", conversionErr)
 	}
 	rawAmount, amount, amountField, rawAmountUnit := tencentQuoteAmount(fields, low, high, volume)
+	fetchedAt := time.Now().UTC()
 	var qtime *time.Time
 	if len(fields) > 30 {
 		qtime = parseTencentTime(fields[30])
 	}
+	qtime = validProviderSnapshotTime(qtime, fetchedAt)
 	var turnoverRate *float64
 	if parsed, parseErr := parsePositiveField(fields, 38); parseErr == nil {
 		// Tencent field 38 is interpreted as turnover rate by the existing
@@ -130,7 +144,7 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		turnoverRate = &parsed
 	}
 	rv := rawVol
-	q := &model.Quote{Symbol: symbol, Name: fields[1], CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: amount, TurnoverRate: turnoverRate, QuoteTime: qtime, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), Source: p.Name(), SourceVersion: tencentVersion, RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+	q := &model.Quote{Symbol: symbol, Name: fields[1], CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: amount, TurnoverRate: turnoverRate, QuoteTime: qtime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: fetchedAt, NormalizedAt: fetchedAt, Source: p.Name(), SourceVersion: tencentVersion, RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: optionalUnit(amount, "CNY"), AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 	if reportedSymbol == "" {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_symbol_missing_assumed_from_request")
@@ -145,7 +159,7 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	}
 	if !volumeVerified {
 		q.QualityStatus = model.QualityDegraded
-		q.QualityReasons = append(q.QualityReasons, "volume_unit_assumed_without_turnover_crosscheck")
+		q.QualityReasons = append(q.QualityReasons, "volume_unit_unverified")
 	} else if strings.HasSuffix(rawVolumeUnit, "_inferred") {
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "volume_unit_inferred_from_turnover_metrics")
@@ -155,6 +169,17 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		q.QualityReasons = append(q.QualityReasons, "provider_timestamp_missing")
 	}
 	q.QualityReasons = append(q.QualityReasons, "volume_ratio_unsupported_by_tencent_quote_contract")
+	if err := normalize.ValidateQuote(q); err != nil {
+		return nil, fmt.Errorf("Tencent quote data contract: %w", err)
+	}
+	if !volumeVerified {
+		return nil, errors.New("Tencent quote volume unit cannot be confirmed; refusing to assume 100-share lots")
+	}
+	// ValidateQuote 先校验源端涨跌字段；规范输出随后统一按最新价和昨收价计算。
+	canonicalChange := *q.CurrentPrice - *q.PrevClose
+	canonicalChangePercent := canonicalChange / *q.PrevClose * 100
+	q.Change = &canonicalChange
+	q.ChangePercent = &canonicalChangePercent
 	return q, nil
 }
 
@@ -162,6 +187,9 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
+	}
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tencent daily bars only support common A-share equities, got %q", rawSymbol)
 	}
 	apiCode, err := tencentCode(symbol)
 	if err != nil {
@@ -183,6 +211,21 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		if _, e := time.Parse("2006-01-02", end); e != nil {
 			return nil, fmt.Errorf("invalid end date: %w", e)
 		}
+	}
+	// 日期边界和区间错误必须在发起上游请求前拒绝，避免浪费调用额度并防止未来日期进入日 K 链路。
+	loc, locErr := time.LoadLocation("Asia/Shanghai")
+	if locErr != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	today := time.Now().In(loc).Format("2006-01-02")
+	if start != "" && start > today {
+		return nil, errors.New("Tencent start date must not be after today in Asia/Shanghai")
+	}
+	if end != "" && end > today {
+		return nil, errors.New("Tencent end date must not be after today in Asia/Shanghai")
+	}
+	if start != "" && end != "" && start > end {
+		return nil, errors.New("start date must not be after end date")
 	}
 	adjustCode, key := "", "day"
 	endpoint := p.noneKlineURL
@@ -226,8 +269,10 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		return nil, fmt.Errorf("decode Tencent %s rows: %w", key, err)
 	}
 	out := make([]model.DailyBar, 0, len(rows))
+	rejectedRows := 0
 	for _, row := range rows {
 		if len(row) < 6 {
+			rejectedRows++
 			continue
 		}
 		// Only the first six columns are mandatory and stable across Tencent
@@ -253,6 +298,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			}
 		}
 		if !valid {
+			rejectedRows++
 			continue
 		}
 		open, e1 := strconv.ParseFloat(vals[1], 64)
@@ -260,11 +306,13 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		high, e3 := strconv.ParseFloat(vals[3], 64)
 		low, e4 := strconv.ParseFloat(vals[4], 64)
 		rawVol, e5 := strconv.ParseFloat(vals[5], 64)
-		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || math.IsNaN(open) || math.IsInf(open, 0) || math.IsNaN(closeV) || math.IsInf(closeV, 0) || math.IsNaN(high) || math.IsInf(high, 0) || math.IsNaN(low) || math.IsInf(low, 0) {
+		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || !finiteNumber(open) || !finiteNumber(closeV) || !finiteNumber(high) || !finiteNumber(low) {
+			rejectedRows++
 			continue
 		}
 		shares, conversionErr := tencentDailyVolumeToShares(rawVol, symbol)
 		if conversionErr != nil {
+			rejectedRows++
 			continue
 		}
 		rv := rawVol
@@ -273,42 +321,20 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		if strings.HasPrefix(code, "688") || strings.HasPrefix(code, "689") {
 			rawVolumeUnit = "shares"
 		}
+		// Tencent's public front-end K-line payload has six observed fields:
+		// date, open, close, high, low and volume. There is no official public
+		// field contract for trailing values, so never infer turnover from row[6].
+		// Missing amount must remain explicit rather than being fabricated.
 		var rawAmount *float64
 		var amount *float64
-		if len(row) > 6 {
-			if rawAmountText, ok := jsonScalarText(row[6]); ok {
-				if candidate, parseErr := strconv.ParseFloat(rawAmountText, 64); parseErr == nil && !math.IsNaN(candidate) && !math.IsInf(candidate, 0) && candidate >= 0 {
-					averagePriceOK := candidate == 0 && shares == 0
-					if candidate > 0 && shares > 0 {
-						// Turnover/volume stay on the raw trading basis, while qfq/hfq
-						// OHLC can be adjusted. Compare only for unadjusted candles.
-						averagePriceOK = adjustment != model.AdjustmentNone
-						if adjustment == model.AdjustmentNone {
-							average := candidate / float64(shares)
-							averagePriceOK = average >= low*0.5 && average <= high*2
-						}
-					}
-					if averagePriceOK {
-						amount = &candidate
-						rawAmount = &candidate
-					}
-				}
-			}
-		}
-		quality := model.QualityValid
-		reasons := []string(nil)
-		if amount == nil {
-			quality = model.QualityDegraded
-			reasons = append(reasons, "amount_missing_or_unconfirmed_from_provider")
-		}
-		b := model.DailyBar{Symbol: symbol, TradeDate: vals[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: amount, AdjustmentBasis: adjustment, Source: p.Name(), SourceVersion: tencentVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "kline_field_6"), VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version}
+		quality := model.QualityDegraded
+		reasons := []string{"tencent_daily_kline_has_no_verified_amount_field"}
+		amountUnit := "unknown"
+		b := model.DailyBar{Symbol: symbol, TradeDate: vals[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: amount, AdjustmentBasis: adjustment, Source: p.Name(), SourceVersion: tencentVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rv, RawVolumeUnit: rawVolumeUnit, RawAmount: rawAmount, RawAmountUnit: optionalUnit(rawAmount, "CNY"), RawAmountField: optionalUnitName(rawAmount, "kline_field_6"), VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version}
 		out = append(out, b)
 	}
 
-	if len(out) == 0 {
-		return nil, errors.New("tencent returned no parsable daily bars")
-	}
-	return out, nil
+	return normalizeProviderDailyBars(symbol, start, end, limit, out, rejectedRows)
 }
 
 // Tencent quote payloads expose turnover at field 35's price/volume/amount
@@ -320,7 +346,7 @@ func tencentQuoteVolume(fields []string, rawVolume, price float64) (int64, strin
 	if math.IsNaN(rawVolume) || math.IsInf(rawVolume, 0) || rawVolume < 0 {
 		return 0, "unknown", false, errors.New("raw Tencent quote volume must be finite and non-negative")
 	}
-	if rawVolume > float64(math.MaxInt64)/100 {
+	if rawVolume >= float64(math.MaxInt64)/100 {
 		return 0, "unknown", false, errors.New("raw Tencent quote volume overflows normalized shares")
 	}
 	// Tencent's public field 6 does not have a reliable unit declaration across
@@ -345,10 +371,11 @@ func tencentQuoteVolume(fields []string, rawVolume, price float64) (int64, strin
 			}
 		}
 	}
-	// Preserve compatibility with the legacy fallback, but mark it explicitly as
-	// assumed/degraded so downstream consumers can gate volume-sensitive analysis.
-	shares, err := normalize.HandsToShares(rawVolume)
-	return shares, "hands_assumed", false, err
+	// Unit inference must be supported by both turnover rate and circulating
+	// market value. If those fields are absent or contradictory, leave the
+	// normalized value unavailable so FetchQuote can reject this provider result
+	// and let the service try the next configured source.
+	return 0, "unknown", false, nil
 }
 
 func parsePositiveField(fields []string, index int) (float64, error) {
@@ -411,20 +438,6 @@ func optionalUnitName(value *float64, unit string) string {
 		return ""
 	}
 	return unit
-}
-
-func jsonScalarText(raw json.RawMessage) (string, bool) {
-	var text string
-	if err := json.Unmarshal(raw, &text); err == nil {
-		return strings.TrimSpace(text), strings.TrimSpace(text) != ""
-	}
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.UseNumber()
-	var number json.Number
-	if err := decoder.Decode(&number); err == nil {
-		return number.String(), true
-	}
-	return "", false
 }
 
 func optionalUnit(value *float64, unit string) string {
@@ -499,9 +512,18 @@ func tencentCode(symbol string) (string, error) {
 		return "", fmt.Errorf("Tencent unsupported exchange %s", exchange)
 	}
 }
+func tencentChinaLocation(loadLocation func(string) (*time.Location, error)) *time.Location {
+	loc, err := loadLocation("Asia/Shanghai")
+	if err != nil || loc == nil {
+		// 精简容器可能没有 zoneinfo 数据；腾讯返回的是中国本地行情时间，回退到固定 UTC+8。
+		return time.FixedZone("CST", 8*60*60)
+	}
+	return loc
+}
+
 func parseTencentTime(s string) *time.Time {
 	s = strings.TrimSpace(s)
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	loc := tencentChinaLocation(time.LoadLocation)
 	for _, layout := range []string{"20060102150405", "200601021504", "2006-01-02 15:04:05"} {
 		if t, e := time.ParseInLocation(layout, s, loc); e == nil {
 			t = t.UTC()

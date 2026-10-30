@@ -12,7 +12,12 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
-const Version = "3"
+const Version = "4"
+
+const (
+	quoteChangeToleranceCNY       = 0.02
+	quoteChangePercentTolerancePP = 0.15
+)
 
 var symbolPattern = regexp.MustCompile(`^[0-9]{6}(\.(SH|SZ|BJ))?$`)
 
@@ -70,6 +75,9 @@ func HandsToShares(raw float64) (int64, error) {
 	if !finite(raw) || raw < 0 {
 		return 0, errors.New("raw volume in hands must be finite and non-negative")
 	}
+	if math.Trunc(raw) != raw {
+		return 0, errors.New("raw volume in hands must be an integer; fractional volume is not supported")
+	}
 	if raw >= float64(math.MaxInt64)/100 {
 		return 0, errors.New("raw volume in hands overflows normalized shares")
 	}
@@ -84,10 +92,13 @@ func RawSharesToInt64(raw float64) (int64, error) {
 	if !finite(raw) || raw < 0 {
 		return 0, errors.New("raw volume in shares must be finite and non-negative")
 	}
+	if math.Trunc(raw) != raw {
+		return 0, errors.New("raw volume in shares must be an integer; fractional volume is not supported")
+	}
 	if raw >= float64(math.MaxInt64) {
 		return 0, errors.New("raw volume in shares overflows int64")
 	}
-	return int64(math.Round(raw)), nil
+	return int64(raw), nil
 }
 
 func ValidateQuote(q *model.Quote) error {
@@ -124,6 +135,16 @@ func ValidateQuote(q *model.Quote) error {
 	for name, p := range map[string]*float64{"change": q.Change, "change_percent": q.ChangePercent, "volume_ratio": q.VolumeRatio, "turnover_rate": q.TurnoverRate} {
 		if p != nil && (!finite(*p) || ((name == "volume_ratio" || name == "turnover_rate") && *p < 0)) {
 			return fmt.Errorf("quote %s must be finite and non-negative when present", name)
+		}
+	}
+	expectedChange := *q.CurrentPrice - *q.PrevClose
+	if q.Change != nil && math.Abs(*q.Change-expectedChange) > quoteChangeToleranceCNY {
+		return errors.New("quote change is inconsistent with current_price minus prev_close")
+	}
+	if q.ChangePercent != nil {
+		expectedChangePercent := expectedChange / *q.PrevClose * 100
+		if !finite(expectedChangePercent) || math.Abs(*q.ChangePercent-expectedChangePercent) > quoteChangePercentTolerancePP {
+			return errors.New("quote change_percent is inconsistent with current_price and prev_close")
 		}
 	}
 	if q.Volume == nil || *q.Volume < 0 {
@@ -168,19 +189,23 @@ func ValidateQuote(q *model.Quote) error {
 func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string, limit int) ([]model.DailyBar, []string) {
 	warnings := make([]string, 0)
 	if start != "" {
-		if _, err := time.Parse("2006-01-02", start); err != nil {
+		parsed, err := time.Parse("2006-01-02", start)
+		if err != nil || parsed.Format("2006-01-02") != start {
 			return nil, []string{"invalid_start_date"}
 		}
 	}
 	if end != "" {
-		if _, err := time.Parse("2006-01-02", end); err != nil {
+		parsed, err := time.Parse("2006-01-02", end)
+		if err != nil || parsed.Format("2006-01-02") != end {
 			return nil, []string{"invalid_end_date"}
 		}
 	}
 	seen := map[string]bool{}
 	valid := make([]model.DailyBar, 0, len(bars))
+	ohlcDiagnosticCount := 0
 	for _, b := range bars {
-		if _, err := time.Parse("2006-01-02", b.TradeDate); err != nil {
+		parsedTradeDate, err := time.Parse("2006-01-02", b.TradeDate)
+		if err != nil || parsedTradeDate.Format("2006-01-02") != b.TradeDate {
 			warnings = append(warnings, "invalid_trade_date_dropped")
 			continue
 		}
@@ -197,6 +222,14 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 		}
 		if !finite(b.Open) || !finite(b.High) || !finite(b.Low) || !finite(b.Close) || b.Open <= 0 || b.High <= 0 || b.Low <= 0 || b.Close <= 0 || b.Low > b.High || b.Open < b.Low || b.Open > b.High || b.Close < b.Low || b.Close > b.High {
 			warnings = append(warnings, "invalid_ohlc_bar_dropped")
+			// Keep the stable warning code and add bounded context so operators can
+			// identify the source row without logging or returning the raw response.
+			if ohlcDiagnosticCount < 5 {
+				warnings = append(warnings, fmt.Sprintf("invalid_ohlc_bar_detail:trade_date=%s,open=%v,high=%v,low=%v,close=%v", b.TradeDate, b.Open, b.High, b.Low, b.Close))
+			} else if ohlcDiagnosticCount == 5 {
+				warnings = append(warnings, "invalid_ohlc_bar_details_truncated")
+			}
+			ohlcDiagnosticCount++
 			continue
 		}
 		if b.Volume == nil || *b.Volume < 0 {
@@ -250,9 +283,8 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			if b.QualityStatus == model.QualityValid || b.QualityStatus == "" {
 				b.QualityStatus = model.QualityDegraded
 			}
-			if strings.TrimSpace(b.AmountUnit) == "" {
-				b.AmountUnit = "unknown"
-			}
+			// AmountUnit describes the actual amount value. A provider cannot assert CNY when amount is null.
+			b.AmountUnit = "unknown"
 			b.QualityReasons = appendReasonUnique(b.QualityReasons, "amount_missing_from_provider")
 			b.QualityReasons = appendReasonUnique(b.QualityReasons, "amount_unit_unknown_because_amount_missing")
 		} else if b.AmountUnit != "CNY" {
@@ -281,6 +313,18 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 		warnings = append(warnings, "bars_truncated_to_limit")
 	}
 	return valid, unique(warnings)
+}
+
+// HasQualityDegradingBarWarnings distinguishes data-quality warnings from the
+// informational notice emitted when a response is capped to the requested limit.
+func HasQualityDegradingBarWarnings(warnings []string) bool {
+	for _, warning := range warnings {
+		if warning == "" || warning == "bars_truncated_to_limit" {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }

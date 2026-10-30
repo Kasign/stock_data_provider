@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="面向 A 股市场观察、个股行情分析与走势跟踪的研究工作台。" />
+    <title>行情研究台 · A 股市场与个股研究</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/src/theme.js"></script>
+    <script type="module" src="/src/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳转到主内容</a>
+    <div class="app-shell">
+      <aside class="sidebar" id="primary-sidebar">
+        <a class="brand" href="/" aria-label="A股研究工作台首页">
+          <span class="brand-mark" aria-hidden="true">K</span>
+          <span class="brand-copy"><strong>行情研究台</strong><small>A 股市场数据与研究</small></span>
+        </a>
+        <nav class="side-nav" aria-label="主导航">
+          <button class="nav-link" type="button" data-view="market" aria-label="市场总览" title="市场总览"><span class="nav-icon" aria-hidden="true">⌂</span><span>市场总览</span></button>
+          <button class="nav-link" type="button" data-view="stocks" aria-label="个股行情" title="个股行情"><span class="nav-icon" aria-hidden="true">↗</span><span>个股行情</span></button>
+          <button class="nav-link" type="button" data-view="watchlist" aria-label="自选与观察" title="自选与观察"><span class="nav-icon" aria-hidden="true">☆</span><span>自选与观察</span></button>
+          <button class="nav-link" type="button" data-view="research" aria-label="个股深度研究" title="个股深度研究"><span class="nav-icon" aria-hidden="true">⌑</span><span>个股深度研究</span></button>
+          <button class="nav-link" type="button" data-view="tasks" aria-label="分析任务" title="分析任务"><span class="nav-icon" aria-hidden="true">▤</span><span>分析任务</span></button>
+          <button class="nav-link" type="button" data-view="screening" aria-label="选股与筛选" title="选股与筛选"><span class="nav-icon" aria-hidden="true">⌕</span><span>选股与筛选</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
+          <button class="nav-link" type="button" data-view="alerts" aria-label="告警" title="告警"><span class="nav-icon" aria-hidden="true">⚑</span><span>告警</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
+          <button class="nav-link" type="button" data-view="chat" aria-label="问股" title="问股"><span class="nav-icon" aria-hidden="true">✦</span><span>问股</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
+          <button class="nav-link" type="button" data-view="notifications" aria-label="通知中心" title="通知中心"><span class="nav-icon" aria-hidden="true">♧</span><span>通知中心</span><span class="nav-link-state" title="后端接口待接入">待接入</span></button>
+          <button class="nav-link" type="button" data-view="data" aria-label="数据中心" title="数据中心"><span class="nav-icon" aria-hidden="true">▥</span><span>数据中心</span></button>
+          <button class="nav-link" type="button" data-view="settings" aria-label="设置中心" title="设置中心"><span class="nav-icon" aria-hidden="true">⚙</span><span>设置中心</span></button>
+        </nav>
+        <div class="sidebar-bottom">
+          <p class="sidebar-footnote">研究工具 · 不执行真实交易</p>
+        </div>
+      </aside>
+      <button class="mobile-nav-overlay" id="mobile-nav-overlay" type="button" aria-label="关闭导航" hidden></button>
+
+      <main class="main-area" id="main-content" tabindex="-1">
+        <header class="topbar">
+          <button class="icon-button mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" aria-controls="primary-sidebar" title="打开导航">☰</button>
+          <div class="breadcrumb"><span>行情研究台</span><span class="breadcrumb-sep">/</span><strong id="breadcrumb-current">行情工作台</strong></div>
+          <div class="topbar-actions">
+            <span class="environment-chip"><span class="status-dot" id="connection-dot"></span><span id="connection-label">等待连接</span></span>
+            <button class="text-button topbar-notifications" id="topbar-notifications" type="button" aria-label="打开通知中心">通知</button>
+            <button class="icon-button" id="refresh-button" type="button" aria-label="刷新数据" title="刷新数据">↻</button>
+            <button class="icon-button theme-toggle" id="theme-toggle" type="button" aria-label="切换主题" aria-pressed="false" title="当前深色主题；点击切换至浅色主题"><span id="theme-toggle-icon" aria-hidden="true">☼</span><span class="theme-toggle-label" id="theme-toggle-label">浅色</span></button>
+            <button class="avatar-button" id="open-settings" type="button" aria-label="打开设置中心" title="设置中心">⚙</button>
+          </div>
+        </header>
+
+        <section class="view" id="market-view">
+          <div class="page-heading">
+            <div><p class="eyebrow">市场总览</p><p class="page-subtitle">从指数与市场广度开始，查看当日情绪、市场成交与资金、热点板块、涨跌停池、人气榜、龙虎榜和交易日历。每个模块独立呈现来源、时间与数据质量。</p></div>
+            
+          </div>
+
+          
+
+          <section class="panel market-overview-panel" id="market-overview-panel" aria-labelledby="market-overview-title">
+            <div class="panel-heading market-overview-heading"><div><h2 id="market-overview-title">A 股市场概况</h2><p>核心指数与市场涨跌分布。数据及质量状态来自行情服务真实回包。</p></div><div class="market-overview-actions"><span class="market-overview-updated" id="market-overview-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-overview" type="button">刷新指数与广度 ↻</button></div></div>
+            <section class="market-overview-index-section" aria-labelledby="market-indices-title"><div class="market-overview-subheading"><h3 id="market-indices-title">核心指数</h3><span id="market-indices-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-index-grid" id="market-index-grid"><p class="market-empty-state">配置行情 API Key 后加载核心指数。</p></div><p class="market-widget-meta" id="market-indices-meta"></p></section>
+            <section class="market-breadth-strip" aria-labelledby="market-breadth-title"><div class="market-overview-subheading"><div><h3 id="market-breadth-title">市场涨跌分布</h3><p>样本来自后端分布桶，不代表已独立核验的全市场证券总数。</p></div><span id="market-breadth-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-breadth-values" id="market-breadth-values"><p class="market-empty-state">等待市场广度数据。</p></div><p class="market-widget-meta" id="market-breadth-meta"></p><details class="market-quality-reasons" id="market-breadth-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
+            
+          </section>
+
+          
+
+          
+          
+
+
+          <div class="market-research-extension-grid">
+            <section class="panel market-extension-panel" id="market-sentiment-panel" aria-labelledby="market-sentiment-title">
+              <div class="panel-heading"><div><h2 id="market-sentiment-title">市场情绪</h2><p>先看可核验的涨跌分布与当日交易池数据；暂不生成缺乏依据的综合情绪分。</p></div><span class="availability-pill is-readonly">即时指标</span></div>
+              <div class="market-sentiment-metrics">
+                <article class="market-extension-metric"><small>上涨家数</small><strong id="market-sentiment-advancing">—</strong><span>来自市场广度接口</span></article>
+                <article class="market-extension-metric"><small>下跌家数</small><strong id="market-sentiment-declining">—</strong><span>来自市场广度接口</span></article>
+                <article class="market-extension-metric"><small>平盘家数</small><strong id="market-sentiment-unchanged">—</strong><span>来自市场广度接口</span></article>
+                <article class="market-extension-metric"><small>当前查看的交易池</small><strong id="market-sentiment-pool">尚未读取</strong><span>随涨跌停池选项更新，不等于情绪综合分</span></article>
+              </div>
+              <div class="market-planned-state" id="market-sentiment-history-state"><strong>情绪历史曲线 · 数据能力待接入</strong><p>需要持续采集并保存每日/盘中快照。尚未积累的历史数据不会用当前数值拼接。</p></div>
+              <p class="market-widget-meta" id="market-sentiment-meta">尚未取得当日市场广度数据。</p>
+            </section>
+            <section class="panel market-extension-panel" id="market-money-flow-panel" aria-labelledby="market-money-flow-title">
+              <div class="panel-heading"><div><h2 id="market-money-flow-title">市场成交与资金流向</h2><p>成交活跃度与资金净流入是不同指标，必须分开统计。</p></div><span class="availability-pill is-readonly">能力分层</span></div>
+              <div class="market-money-grid">
+                <article class="market-extension-metric"><small>市场广度返回的成交额（人民币）</small><strong id="market-money-turnover">—</strong><span id="market-money-turnover-note">需先加载市场广度</span></article>
+                <article class="market-extension-metric market-extension-metric-planned"><small>全市场资金净流入</small><strong>接口待接入</strong><span>需要市场级资金流 Provider 与明确统计口径</span></article>
+              </div>
+              <div class="market-planned-state"><strong>历史资金趋势 · 数据能力待接入</strong><p>当前个股资金流不能直接相加冒充全市场流向；历史趋势需要后端快照存储和查询 API。</p></div>
+            </section>
+          </div>
+          <section class="panel existing-api-panel" aria-labelledby="index-tools-title">
+            <div class="panel-heading"><div><h2 id="index-tools-title">指数目录与历史数据</h2><p>接入指数目录、成分权重报告、指数历史日线和交易时段接口；来源与质量以服务端回包为准。</p></div><span class="quality-pill quality-unknown" id="index-tools-quality">未加载</span></div>
+            <div class="existing-api-toolbar">
+              <label class="field">目录类型<select id="index-catalog-tag"><option value="cn_concept">概念</option><option value="industry">行业</option><option value="region">地域</option><option value="tszs">同花顺指数</option><option value="tushare">Tushare 指数</option></select></label>
+              <button class="button button-secondary" id="load-index-catalog" type="button">读取指数目录</button>
+              <label class="field">指数代码<input id="index-tool-symbol" value="000300.SH" maxlength="32" placeholder="例如 000300.SH"></label>
+              <label class="field">数据来源<select id="index-tool-source"><option value="">自动选择</option><option value="hithink">同花顺</option><option value="tushare">Tushare</option></select></label>
+              <label class="field">历史报告日期<input id="index-constituents-date" type="date"></label>
+              <button class="button button-secondary" id="load-index-constituents" type="button">读取成分</button>
+              <label class="field">日线开始<input id="index-daily-start" type="date"></label>
+              <label class="field">日线结束<input id="index-daily-end" type="date"></label>
+              <button class="button button-secondary" id="load-index-daily" type="button">读取指数日线</button>
+              <button class="button button-secondary" id="load-market-session" type="button">刷新交易时段</button>
+            </div>
+            <p class="market-widget-meta" id="index-tools-feedback" role="status" aria-live="polite">尚未请求指数目录或历史数据。</p>
+            <div class="existing-api-results-grid">
+              <section><h3>指数目录</h3><div class="table-scroll"><table><thead><tr><th>代码</th><th>名称</th><th>类型</th></tr></thead><tbody id="index-catalog-body"><tr><td colspan="3" class="table-empty">点击“读取指数目录”。</td></tr></tbody></table></div></section>
+              <section><h3>指数成分</h3><div class="table-scroll"><table><thead><tr><th>股票</th><th>代码</th><th>权重</th></tr></thead><tbody id="index-constituents-body"><tr><td colspan="3" class="table-empty">输入指数代码后读取。</td></tr></tbody></table></div></section>
+              <section><h3>指数历史日线</h3><div class="table-scroll"><table><thead><tr><th>日期</th><th>开盘</th><th>最高</th><th>最低</th><th>收盘</th><th>成交量</th></tr></thead><tbody id="index-daily-body"><tr><td colspan="6" class="table-empty">选择日期范围后读取。</td></tr></tbody></table></div></section>
+            </div>
+            <div class="market-session-summary" id="market-session-summary" role="status" aria-live="polite">交易时段：等待读取。</div>
+          </section>
+
+          <section class="panel market-overview-panel" id="market-lists-panel" aria-labelledby="market-lists-title"><div class="panel-heading market-overview-heading">
+            <div><h2 id="market-lists-title">行业、涨跌停与个股人气</h2><p>列表用于描述市场表现；排名与涨跌幅不是投资建议，也不代表全市场完整覆盖。</p></div>
+            <div class="market-overview-actions"><span class="market-overview-updated" id="market-data-updated" role="status" aria-live="polite">等待加载</span><button class="button button-secondary" id="refresh-market-data" type="button">刷新市场榜单 ↻</button></div>
+          </div><div class="market-overview-detail-grid">
+              <section class="market-overview-widget" aria-labelledby="market-sectors-title"><div class="market-overview-widget-heading"><div><h3 id="market-sectors-title">行业 / 概念排行</h3><p>按服务端排名展示，不生成前端投资结论。</p></div><span id="market-sector-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-overview-tabs market-sector-metrics" role="group" aria-label="板块排行维度"><button type="button" data-sector-metric="change" aria-pressed="true">今日涨幅</button><button type="button" data-sector-metric="amount" aria-pressed="false">成交额</button><button type="button" data-sector-metric="five-day" aria-pressed="false">近 5 日</button><button type="button" data-sector-metric="flow" aria-pressed="false">资金净流入</button></div><div class="market-overview-tabs" role="group" aria-label="板块排行类别"><button type="button" data-sector-type="industry" aria-pressed="true">行业</button><button type="button" data-sector-type="concept" aria-pressed="false">概念</button></div><div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>排名</th><th>板块</th><th>涨跌幅</th><th>领涨股</th><th>领涨幅</th></tr></thead><tbody id="market-sector-body"><tr><td colspan="5" class="table-empty">等待板块排行。</td></tr></tbody></table></div><p class="market-widget-meta" id="market-sector-meta"></p><details class="market-quality-reasons" id="market-sector-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
+              <section class="market-overview-widget" aria-labelledby="market-limit-pools-title"><div class="market-overview-widget-heading"><div><h3 id="market-limit-pools-title">涨跌停池</h3><p>未知池状态不会解释为 0 只股票。</p></div><span id="market-pool-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-overview-tabs" role="group" aria-label="涨跌停池类别"><button type="button" data-pool-type="up" aria-pressed="true">涨停</button><button type="button" data-pool-type="down" aria-pressed="false">跌停</button><button type="button" data-pool-type="broken" aria-pressed="false">炸板</button></div><div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>股票</th><th>涨跌幅</th><th>连板</th><th>首封 / 末封</th><th>行业</th></tr></thead><tbody id="market-pool-body"><tr><td colspan="5" class="table-empty">等待涨跌停池。</td></tr></tbody></table></div><p class="market-widget-meta" id="market-pool-meta"></p><details class="market-quality-reasons" id="market-pool-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
+              <section class="market-overview-widget market-hot-stocks-widget" aria-labelledby="market-hot-stocks-title"><div class="market-overview-widget-heading"><div><h3 id="market-hot-stocks-title">个股人气与飙升榜</h3><p>按 Provider 排名展示；采集时间不等于上游行情快照时间，排名本身不构成投资建议。</p></div><span id="market-hot-stocks-status" class="availability-pill is-readonly">等待读取</span></div><div class="market-overview-tabs" role="group" aria-label="个股人气排行类别"><button type="button" data-hot-type="popular" aria-pressed="true">人气榜</button><button type="button" data-hot-type="surge" aria-pressed="false">飙升榜</button></div><div class="table-scroll market-overview-table-scroll market-hot-stocks-table"><table><thead><tr><th>排名</th><th>股票</th><th>最新价 / 涨跌额</th><th>涨跌幅</th><th>源端排名变化</th></tr></thead><tbody id="market-hot-stocks-body"><tr><td colspan="5" class="table-empty">等待个股人气榜。</td></tr></tbody></table></div><p class="market-widget-meta" id="market-hot-stocks-meta"></p><details class="market-quality-reasons" id="market-hot-stocks-reasons" hidden><summary>数据质量说明</summary><ul></ul></details></section>
+            </div></section>
+                    
+          <section class="panel market-activity-panel" id="market-activity-panel" aria-labelledby="market-activity-title">
+            <div class="panel-heading"><div><h2 id="market-activity-title">市场活动与交易日历</h2><p>使用后端龙虎榜与显式交易日历。龙虎榜盘后数据可能延迟发布；交易日不通过星期规则推算。</p></div><span class="soft-badge">真实数据接口</span></div>
+            <div class="market-activity-grid">
+              <section class="market-activity-widget" aria-labelledby="dragon-tiger-title">
+                <div class="market-activity-heading"><div><h3 id="dragon-tiger-title">龙虎榜</h3><p>金额为人民币元；涨跌幅及成交占比使用百分点口径。</p></div><span id="dragon-tiger-quality" class="quality-pill quality-unknown">未加载</span></div>
+                <div class="market-activity-controls"><label>交易日期<input type="date" id="dragon-tiger-date" /></label><button class="button button-secondary" id="load-dragon-tiger" type="button">查询龙虎榜</button></div>
+                <p class="supplemental-error" id="dragon-tiger-error" hidden></p>
+                <div class="table-scroll market-activity-table"><table><thead><tr><th>股票</th><th>涨跌幅</th><th>净买入</th><th>成交额</th><th>上榜原因</th><th>质量</th></tr></thead><tbody id="dragon-tiger-body"><tr><td colspan="6" class="table-empty">等待龙虎榜数据。</td></tr></tbody></table></div>
+                <p class="market-widget-meta" id="dragon-tiger-meta"></p><ul class="market-quality-reasons" id="dragon-tiger-reasons" hidden></ul>
+                <div class="market-activity-footer"><span>每页 50 条，可按服务端分页继续加载。</span><button class="button button-secondary" id="dragon-tiger-next" type="button" hidden>加载下一页</button></div>
+              </section>
+              <section class="market-activity-widget" aria-labelledby="trading-calendar-title">
+                <div class="market-activity-heading"><div><h3 id="trading-calendar-title">A 股交易日历</h3><p>交易/休市状态来自 Provider 明确返回的逐日标记。</p></div><span id="trading-calendar-quality" class="quality-pill quality-unknown">未加载</span></div>
+                <div class="calendar-month-navigation"><button class="icon-button" id="calendar-previous-month" type="button" aria-label="上个月">‹</button><strong id="calendar-month-label">当前月份</strong><button class="icon-button" id="calendar-current-month" type="button">本月</button><button class="icon-button" id="calendar-next-month" type="button" aria-label="下个月">›</button></div>
+                <div class="market-activity-controls calendar-range-controls"><label>开始日期<input type="date" id="calendar-start-date" /></label><label>结束日期<input type="date" id="calendar-end-date" /></label><button class="button button-secondary" id="load-trading-calendar" type="button">查询范围</button></div>
+                <p class="supplemental-error" id="trading-calendar-error" hidden></p>
+                <div class="trading-calendar-weekdays" aria-hidden="true"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+                <div class="trading-calendar-grid" id="trading-calendar-grid"><p class="market-empty-state">等待交易日历。</p></div>
+                <p class="market-widget-meta" id="trading-calendar-meta"></p><ul class="market-quality-reasons" id="trading-calendar-reasons" hidden></ul>
+                <p class="stock-research-footnote">覆盖不完整时会显示警告；请勿将不完整日历用于交易日判断。</p>
+              </section>
+            </div>
+          </section>
+<section class="panel market-extension-panel market-global-panel" id="global-market-panel" aria-labelledby="global-market-title">
+            <div class="panel-heading"><div><h2 id="global-market-title">全球市场联动</h2><p>用于观察主要海外指数及宏观资产的关联表现；国内 A 股核心行情优先。</p></div><span class="availability-pill is-unavailable">数据源待确认</span></div>
+            <div class="market-global-grid">
+              <article class="market-global-placeholder"><strong>亚太市场</strong><span>恒生、日经等指数 · 接口待接入</span></article>
+              <article class="market-global-placeholder"><strong>美国市场</strong><span>标普 500、纳斯达克等指数 · 接口待接入</span></article>
+              <article class="market-global-placeholder"><strong>宏观资产</strong><span>美元、黄金、原油等 · 视数据源支持情况决定</span></article>
+            </div>
+            <p class="market-widget-meta">正式接入后需同时显示当地交易日期、时区、币种、源端报价时间、采集时间和质量状态；不将不同时段的行情直接作同一时点比较。</p>
+          </section>
+
+        </section>
+
+
+
+        <section class="view" id="stocks-view" hidden>
+          <div class="page-heading">
+            <div><p class="eyebrow">STOCK ANALYSIS / 02</p><h1>个股行情</h1><p class="page-subtitle">搜索股票名称或代码，查看价格、涨跌、成交额、成交量、换手率、量比、K 线与 MA5/MA20/MA60 等技术指标；公司资料、估值、筹码、资金流与公告在个股研究页继续查看。</p></div>
+            <div class="last-updated"><span class="status-dot"></span><span>最近刷新</span><strong id="last-updated">—</strong></div>
+          </div>
+          <section class="search-panel panel" id="stock-query-panel">
+            <div class="search-intro"><div class="panel-kicker">标的查询</div><div class="panel-muted">输入 A 股代码，查看标准化后的上游数据</div></div>
+            <form class="query-form" id="quote-form">
+              <div class="field symbol-field">
+                <label for="symbol-input">股票名称 / 代码</label>
+                <input id="symbol-input" name="symbol" value="600519.SH" placeholder="如 贵州茅台 / 600519.SH" maxlength="64" autocomplete="off" aria-autocomplete="list" aria-controls="stock-search-results" aria-expanded="false" aria-describedby="stock-search-status" required />
+                <div class="stock-search-dropdown" id="stock-search-dropdown" hidden>
+                  <div class="stock-search-status" id="stock-search-status" role="status" aria-live="polite"></div>
+                  <div class="stock-search-results" id="stock-search-results" role="listbox" aria-label="股票搜索结果"></div>
+                </div>
+              </div>
+              <label class="field"><span>日 K 条数</span><select id="bar-limit" name="limit"><option value="60">近 60 根</option><option value="120" selected>近 120 根</option><option value="250">近 250 根</option></select></label>
+              <label class="field"><span>复权口径</span><select id="adjustment" name="adjustment"><option value="forward_adjusted" selected>前复权</option><option value="backward_adjusted">后复权</option><option value="none">不复权</option></select></label>
+              <label class="field date-range-field"><span>开始日期（可选）</span><input id="bar-start-date" type="date" /></label>
+              <label class="field date-range-field"><span>结束日期（可选）</span><input id="bar-end-date" type="date" /></label>
+              <button class="button button-primary query-button" type="submit"><span>⌕</span> 查询行情</button>
+              <button class="button button-secondary query-watchlist-button" id="add-to-watchlist-button" type="button" title="将当前输入的股票代码加入本地自选">＋ 加入自选</button>
+            </form>
+            <div class="query-hint" id="query-hint">需在“连接与密钥设置”中填写行情服务 API Key。</div>
+            <section class="bundle-snapshot-strip" id="bundle-snapshot-strip" hidden aria-label="本次行情快照元数据" aria-live="polite">
+              <div class="bundle-snapshot-heading">
+                <div><p class="panel-kicker">统一行情快照</p><p class="bundle-snapshot-description">实时行情与日 K 使用的服务端快照元数据，可复制用于问题定位。</p></div>
+                <button class="button button-secondary" id="copy-bundle-snapshot" type="button">复制快照元数据</button>
+              </div>
+              <div class="bundle-snapshot-metrics">
+                <div><small>快照 ID</small><code id="bundle-snapshot-id">—</code></div>
+                <div><small>分析参考时间</small><strong id="bundle-analysis-reference-time">未报告</strong></div>
+                <div><small>采集完成时间</small><strong id="bundle-fetched-at">未报告</strong></div>
+                <div><small>整体质量</small><strong id="bundle-quality-status">未报告</strong></div>
+              </div>
+              <div class="bundle-snapshot-sources" id="bundle-snapshot-sources"></div>
+              <p class="bundle-snapshot-feedback" id="bundle-snapshot-feedback" role="status" aria-live="polite" hidden></p>
+            </section>
+          </section>
+
+          
+
+          <div class="notice" id="market-notice" role="status" aria-live="polite" hidden></div>
+
+          <section class="quote-section" id="stock-quote-section">
+            <div class="section-heading"><div><h2 id="quote-title">贵州茅台 <span>600519.SH</span></h2><p id="quote-subtitle">实时快照与行情质量</p></div><div class="quote-heading-actions"><div id="quote-quality" class="quality-pill quality-unknown">尚未查询</div><button class="button button-secondary" id="analyze-quote-button" type="button">分析当前股票 <span>→</span></button></div></div>
+            <div class="metric-grid" id="metric-grid">
+              <article class="metric-card metric-primary"><div class="metric-label">最新价</div><div class="metric-value" id="metric-price">—</div><div class="metric-foot" id="metric-change">等待行情</div></article>
+              <article class="metric-card"><div class="metric-label">成交额</div><div class="metric-value" id="metric-amount">—</div><div class="metric-foot">人民币 CNY</div></article>
+              <article class="metric-card"><div class="metric-label">成交量</div><div class="metric-value" id="metric-volume">—</div><div class="metric-foot">股 · Shares</div></article>
+              <article class="metric-card"><div class="metric-label">换手率</div><div class="metric-value" id="metric-turnover">—</div><div class="metric-foot" id="metric-volume-ratio">量比 —</div></article>
+              <article class="metric-card"><div class="metric-label">行情来源</div><div class="metric-value metric-source" id="metric-source">—</div><div class="metric-foot" id="metric-quote-time">行情时间 —</div></article>
+            </div>
+          </section>
+
+          <div class="content-grid">
+            <section class="panel chart-panel" id="daily-chart-panel">
+              <div class="panel-heading chart-panel-heading"><div><h2 id="chart-title">收盘价走势</h2><p id="chart-caption">日 K 数据 · 按交易日期升序展示</p></div>
+                <div class="chart-heading-actions">
+                  <div class="chart-legend" id="chart-legend"><span></span><span id="chart-legend-label">收盘价</span></div>
+                  <div class="chart-overlay-controls" role="group" aria-label="移动均线叠加">
+                    <label><input type="checkbox" data-ma-period="5" checked /><span>MA5</span></label>
+                    <label><input type="checkbox" data-ma-period="20" checked /><span>MA20</span></label>
+                    <label><input type="checkbox" data-ma-period="60" /><span>MA60</span></label>
+                    <label><input type="checkbox" data-ma-period="120" /><span>MA120（半年）</span></label>
+                    <label><input type="checkbox" data-ma-period="250" /><span>MA250（全年）</span></label>
+                  </div>
+                  <div class="chart-view-toggle" role="group" aria-label="图表类型">
+                    <button class="chart-view-button is-active" id="chart-view-close" type="button" aria-pressed="true">收盘线</button>
+                    <button class="chart-view-button" id="chart-view-candles" type="button" aria-pressed="false">K 线 + 成交量</button>
+                  </div>
+                </div>
+              </div>
+              <div class="chart-summary"><strong id="chart-last-close">—</strong><span id="chart-last-date">等待日 K 数据</span></div>
+              <div class="chart-wrap" id="chart-wrap">
+                <svg id="close-chart" viewBox="0 0 760 260" role="img" aria-label="收盘价走势" preserveAspectRatio="xMidYMid meet"></svg>
+                <div class="chart-empty" id="chart-empty">查询行情后显示历史走势</div>
+              </div>
+              <div class="chart-foot"><span>价格单位：CNY / 股</span><span id="chart-quality-note">质量状态待确认</span></div>
+            </section>
+
+
+          </div>
+
+          <section class="panel technical-panel" id="technical-indicators-panel" aria-labelledby="technical-indicators-title">
+            <div class="panel-heading technical-panel-heading">
+              <div><h2 id="technical-indicators-title">技术指标</h2><p>依据当前已加载的日 K 收盘价本地计算；样本不足时明确留空，不将指标解释为买卖建议。</p></div>
+              <span id="technical-indicator-status" class="availability-pill is-readonly">等待日 K 数据</span>
+            </div>
+            <div class="technical-metric-grid">
+              <article class="technical-metric-card"><div class="technical-metric-label">MA5 <span>短期均线</span></div><strong id="technical-ma-5">—</strong><small id="technical-ma-5-change">等待日 K</small></article>
+              <article class="technical-metric-card"><div class="technical-metric-label">MA20 <span>中期均线</span></div><strong id="technical-ma-20">—</strong><small id="technical-ma-20-change">等待日 K</small></article>
+              <article class="technical-metric-card"><div class="technical-metric-label">MA60 <span>约一季度</span></div><strong id="technical-ma-60">—</strong><small id="technical-ma-60-change">等待日 K</small></article>
+              <article class="technical-metric-card"><div class="technical-metric-label">MA120 <span>约半年</span></div><strong id="technical-ma-120">—</strong><small id="technical-ma-120-change">至少需要 120 个有效收盘价</small></article>
+              <article class="technical-metric-card"><div class="technical-metric-label">MA250 <span>约一年</span></div><strong id="technical-ma-250">—</strong><small id="technical-ma-250-change">至少需要 250 个有效收盘价</small></article>
+              <article class="technical-metric-card technical-rsi-metric"><div class="technical-metric-label">RSI(14) <span>相对强弱</span></div><strong id="technical-rsi-value">—</strong><small id="technical-rsi-state">至少需要 15 个有效收盘价</small></article>
+              <article class="technical-metric-card technical-macd-metric">
+                <div class="technical-metric-label">MACD(12,26,9) <span>DIF / DEA / 柱值</span></div>
+                <div class="technical-macd-values"><span>DIF <strong id="technical-macd-dif">—</strong></span><span>DEA <strong id="technical-macd-signal">—</strong></span><span>柱值 <strong id="technical-macd-histogram">—</strong></span></div>
+                <small id="technical-macd-state">通常需要至少 34 个有效收盘价形成完整信号线</small>
+              </article>
+            </div>
+            <div class="technical-chart-grid">
+              <section class="technical-chart-panel" aria-labelledby="technical-rsi-title">
+                <div class="technical-chart-heading"><h3 id="technical-rsi-title">RSI(14) 历史曲线</h3><span>参考线：30 / 70</span></div>
+                <div class="technical-chart-wrap"><svg id="technical-rsi-chart" class="technical-chart" viewBox="0 0 760 160" role="img" aria-label="RSI(14) 历史曲线"></svg><div id="technical-rsi-chart-empty" class="technical-chart-empty">日 K 样本不足，暂不能绘制 RSI。</div></div>
+              </section>
+              <section class="technical-chart-panel" aria-labelledby="technical-macd-title">
+                <div class="technical-chart-heading"><h3 id="technical-macd-title">MACD(12,26,9) 历史曲线</h3><span>柱值 = 2 × (DIF − DEA)</span></div>
+                <div class="technical-chart-legend"><span class="technical-legend-dif">DIF</span><span class="technical-legend-signal">DEA</span><span>柱体</span></div>
+                <div class="technical-chart-wrap"><svg id="technical-macd-chart" class="technical-chart" viewBox="0 0 760 160" role="img" aria-label="MACD(12,26,9) 历史曲线"></svg><div id="technical-macd-chart-empty" class="technical-chart-empty">日 K 样本不足，暂不能绘制 MACD。</div></div>
+              </section>
+            </div>
+            <p class="technical-sample-note" id="technical-sample-note">技术指标将在加载日 K 后计算。</p>
+          </section>
+
+          <section class="panel bars-panel" id="historical-bars-panel">
+            <div class="panel-heading"><div><h2>历史日 K</h2><p id="bars-caption">标准化 OHLC · 复权口径与质量随行返回</p></div><div class="table-meta" id="bars-meta">0 根</div></div>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>交易日期</th><th>开盘</th><th>最高</th><th>最低</th><th>收盘</th><th>涨跌幅</th><th>成交量</th><th>来源</th><th>质量</th></tr></thead>
+                <tbody id="bars-body"><tr><td colspan="9" class="table-empty">暂无数据，请先查询股票行情。</td></tr></tbody>
+              </table>
+            </div>
+            <div class="table-footer"><span id="bars-warning">显示最近交易日，最新日期在前</span><span id="bars-adjustment">复权口径 —</span></div>
+          </section>
+          
+          
+        
+        </section>
+
+
+        <section class="view" id="watchlist-view" hidden>
+          <div class="page-heading"><div><p class="eyebrow">WATCHLIST / 03</p><h1>自选股</h1><p class="page-subtitle">这是当前浏览器本地保存的股票列表，不会同步到服务器。可在个股查询页添加股票，或从列表直接查询、发起分析。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索并添加自选 →</button></div>
+          <section class="panel watchlist-panel" id="watchlist-panel" aria-labelledby="watchlist-title">
+            <div class="panel-heading"><div><h2 id="watchlist-title">本地自选股</h2><p>仅保存在当前浏览器；不上传服务器，也不保存 API Key 或分析报告。</p></div><span class="soft-badge" id="watchlist-count">0 / 50</span></div>
+            <div class="watchlist-feedback" id="watchlist-feedback" role="status" aria-live="polite" hidden></div>
+            <div class="watchlist-toolbar">
+              <label class="field watchlist-search-field"><span>搜索自选</span><input id="watchlist-search" type="search" autocomplete="off" placeholder="输入股票代码或名称" aria-label="搜索本地自选股"></label>
+              <label class="field watchlist-sort-field"><span>排序</span><select id="watchlist-sort" aria-label="自选股排序"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option></select></label>
+              <span class="watchlist-filter-count" id="watchlist-filter-count" aria-live="polite">显示全部自选</span>
+            </div>
+            <div class="watchlist-list" id="watchlist-list"><div class="empty-row">点击“加入自选”后，可从这里快速查询行情或发起分析。</div></div>
+          </section>
+        </section>
+
+
+        <section class="view" id="research-view" hidden>
+          <div class="page-heading"><div><p class="eyebrow">STOCK DEEP DIVE / 04</p><h1>个股深度研究</h1><p class="page-subtitle">工作流：从自选股或行情页选定一只股票 → 查看当前标的摘要 → 按需加载财务、估值、资金、筹码与公告。此页聚焦单股研究，不负责全市场筛选；未请求的数据不会自动填充。</p></div><button class="button button-primary" type="button" data-open-view="stocks">搜索股票并加载行情 →</button></div>
+          <section class="panel research-list-panel" aria-labelledby="research-list-title">
+            <div class="panel-heading"><div><h2 id="research-list-title">研究标的与快捷入口</h2><p>这里只汇总本地自选股和本次已查询的股票，用于切换研究对象；不会自动批量请求全市场行情。</p></div><span class="availability-pill is-local" id="research-list-scope">当前浏览器 · 未批量拉取</span></div>
+            <div class="table-scroll research-list-table-scroll"><table><thead><tr><th>股票</th><th>最新价</th><th>涨跌幅</th><th>成交额</th><th>换手率</th><th>量比</th><th>MA5</th><th>MA20</th><th>数据质量</th><th>操作</th></tr></thead><tbody id="research-stock-list-body"><tr><td colspan="10" class="table-empty">当前没有自选股或已查询标的。</td></tr></tbody></table></div>
+            <p class="market-widget-meta">未加载标的显示“未加载”，不自动对所有自选逐只请求；如需全市场/大量股票排序，需先增加批量股票概览 API。</p>
+          </section>
+          <section class="panel research-overview-panel" id="research-overview-panel" aria-labelledby="research-overview-title">
+            <div class="panel-heading">
+              <div><h2 id="research-overview-title">当前标的摘要</h2><p>展示当前选中股票已获取的关键数据；更深入的资料在下方按需加载。</p></div>
+              <span class="supplement-quality supplement-quality-unknown" id="research-overview-quality">未加载</span>
+            </div>
+            <div class="research-overview-context"><strong id="research-overview-symbol">尚未选择标的</strong><span id="research-overview-meta">行情时间、获取时间与来源将在实际回包后显示。</span></div>
+            <div class="research-overview-grid" aria-label="当前股票关键指标">
+              <article class="research-overview-metric"><span>最新价</span><strong id="research-overview-price">未加载</strong></article>
+              <article class="research-overview-metric"><span>涨跌额 / 涨跌幅</span><strong id="research-overview-change">未加载</strong></article>
+              <article class="research-overview-metric"><span>成交额</span><strong id="research-overview-amount">未加载</strong></article>
+              <article class="research-overview-metric"><span>换手率</span><strong id="research-overview-turnover">未加载</strong></article>
+              <article class="research-overview-metric"><span>量比</span><strong id="research-overview-volume-ratio">未加载</strong></article>
+              <article class="research-overview-metric"><span>MA5</span><strong id="research-overview-ma5">未加载</strong></article>
+              <article class="research-overview-metric"><span>MA20</span><strong id="research-overview-ma20">未加载</strong></article>
+              <article class="research-overview-metric"><span>行情来源</span><strong id="research-overview-source">未加载</strong></article>
+            </div>
+            <p class="research-overview-note" id="research-overview-note" role="status" aria-live="polite">从研究列表选择股票后，行情摘要会在本页展示；公司资料、财务、估值、资金、筹码和公告按需读取。</p>
+            <div class="research-overview-actions">
+              <button class="button button-secondary" id="research-open-chart" type="button">查看图表与完整日 K</button>
+              <button class="button button-secondary" id="research-add-watchlist" type="button">加入本地自选</button>
+              <button class="button button-primary" id="research-start-analysis" type="button">发起分析任务</button>
+            </div>
+          </section>
+          <section class="panel existing-api-panel" aria-labelledby="stock-status-tools-title">
+            <div class="panel-heading"><div><h2 id="stock-status-tools-title">历史交易状态与涨跌幅规则</h2><p>查询指定交易日的停复牌/风险警示证据和有效涨跌幅规则。未知状态代表证据不足，不会自动当作正常或无涨跌幅限制。</p></div></div>
+            <div class="existing-api-toolbar">
+              <label class="field">股票代码<input id="stock-status-symbol" maxlength="32" placeholder="例如 600519.SH"></label>
+              <label class="field">交易日期<input id="stock-status-date" type="date"></label>
+              <button class="button button-secondary" id="load-stock-trading-status" type="button">读取交易状态</button>
+              <button class="button button-secondary" id="load-stock-limit-rule" type="button">读取涨跌幅规则</button>
+            </div>
+            <p class="market-widget-meta" id="stock-status-feedback" role="status" aria-live="polite">输入股票代码和历史交易日期后查询。</p>
+            <div class="existing-api-results-grid stock-status-results-grid">
+              <section><h3>交易状态</h3><dl id="stock-trading-status-result" class="existing-api-detail-list"><dt>状态</dt><dd>未查询</dd></dl></section>
+              <section><h3>涨跌幅规则</h3><dl id="stock-price-limit-result" class="existing-api-detail-list"><dt>状态</dt><dd>未查询</dd></dl></section>
+            </div>
+          </section>
+          <section class="panel stock-research-panel" id="stock-research-panel" aria-labelledby="stock-research-title">
+            <div class="panel-heading supplemental-heading"><div><h2 id="stock-research-title">公司资料、财务与公告</h2><p>读取当前股票的真实档案、所属板块、季度财务指标和公告。各数据源独立标注质量与时间。</p></div><button class="button button-secondary" id="load-stock-research" type="button">加载公司资料</button></div>
+            <div class="supplemental-context"><span id="stock-research-target">尚未选择标的</span><span>公告默认读取最近 7 个日历日；空结果不代表已确认没有公告。</span></div>
+            <p class="supplemental-feedback" id="stock-research-feedback" role="status" aria-live="polite">选择股票后按需加载，公司资料与公告不会阻塞实时行情。</p>
+            <nav class="research-detail-nav" aria-label="专业研究资料分区">
+               <span class="research-detail-nav-label">快速定位</span>
+               <button class="research-detail-nav-link is-active" type="button" data-research-detail-target="research-detail-profile" aria-current="location">上市档案</button>
+               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-boards">行业与概念</button>
+               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-fundamentals">财务指标</button>
+               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-valuations">估值指标</button>
+               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-chip">筹码分布</button>
+               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-capital-flow">资金流向</button>
+               <button class="research-detail-nav-link" type="button" data-research-detail-target="research-detail-announcements">近期公告</button>
+             </nav>
+             <div class="supplemental-grid stock-research-grid">
+              <article class="supplemental-card" id="research-detail-profile"><div class="supplemental-card-heading"><div><h3>上市档案</h3><small id="stock-profile-symbol">尚未选择</small></div><span class="supplement-quality supplement-quality-unknown" id="profile-quality">未加载</span></div><div id="stock-profile-fields"><p class="stock-research-empty">选择股票并加载后显示上市资料。</p></div><div class="supplemental-reasons" id="stock-profile-reasons"><p>加载后显示质量原因。</p></div><p class="supplemental-error" id="stock-profile-error" hidden></p><p class="market-widget-meta" id="stock-profile-meta"></p></article>
+              <article class="supplemental-card" id="research-detail-boards"><div class="supplemental-card-heading"><div><h3>所属行业与概念</h3><small id="stock-boards-symbol">尚未选择</small></div><span class="supplement-quality supplement-quality-unknown" id="boards-quality">未加载</span></div><div class="stock-board-list" id="stock-board-list"><p class="stock-research-empty">加载后显示所属板块。</p></div><div class="supplemental-reasons" id="stock-boards-reasons"><p>加载后显示质量原因。</p></div><p class="supplemental-error" id="stock-boards-error" hidden></p><p class="market-widget-meta" id="stock-boards-meta"></p></article>
+              <article class="supplemental-card stock-fundamentals-card" id="research-detail-fundamentals"><div class="supplemental-card-heading"><div><h3>季度财务指标</h3><small id="fundamentals-symbol">尚未选择</small></div><span class="supplement-quality supplement-quality-unknown" id="fundamentals-quality">未加载</span></div><div class="stock-research-toolbar"><label>报告年<select id="fundamentals-year"></select></label><label>季度<select id="fundamentals-quarter"></select></label><button class="button button-secondary" id="load-fundamentals" type="button">读取财务指标</button></div><div id="fundamentals-content"><p class="stock-research-empty">选择报告期并加载财务指标。</p></div><div class="supplemental-reasons" id="fundamentals-reasons"><p>加载后显示质量原因。</p></div><p class="supplemental-error" id="fundamentals-error" hidden></p><p class="market-widget-meta" id="fundamentals-meta"></p><p class="stock-research-footnote">财务数值保留服务端提供的单位和数值口径；报告期与披露日期不同，历史研究应使用披露日期判断当时是否可见。</p></article>
+              <article class="supplemental-card stock-valuations-card" id="research-detail-valuations"><div class="supplemental-card-heading"><div><h3>估值指标</h3><small id="valuations-symbol">尚未选择</small></div><span class="supplement-quality supplement-quality-unknown" id="valuations-quality">未加载</span></div><div class="stock-valuation-toolbar"><span class="field-hint">不直接构成买卖结论；负值与未提供值按服务端原样展示。</span><button class="button button-secondary" id="load-valuations" type="button">读取估值指标</button></div><div id="valuation-content"><p class="stock-research-empty">选择股票并读取估值指标。</p></div><div class="supplemental-reasons" id="valuations-reasons"><p>读取后显示质量原因。</p></div><p class="supplemental-error" id="valuations-error" hidden></p><p class="market-widget-meta" id="valuations-meta"></p><p class="stock-research-footnote">TTM 表示滚动十二个月，MRQ 表示最近季度口径。估值指标可能滞后于实时行情，单项缺失不等于 0。</p></article>
+              <article class="supplemental-card stock-chip-card" id="research-detail-chip"><div class="supplemental-card-heading"><div><h3>筹码分布</h3><small id="chip-symbol">尚未选择</small></div><span class="supplement-quality supplement-quality-unknown" id="chip-quality">未加载</span></div><div class="stock-supplement-toolbar"><span class="field-hint">成本与获利比例均按真实回包显示，不代表未来价格预测。</span><button class="button button-secondary" id="load-chip-distribution" type="button">读取筹码分布</button></div><div id="chip-distribution-content"><p class="stock-research-empty">选择股票并读取筹码分布。</p></div><div class="supplemental-reasons" id="chip-reasons"><p>读取后显示质量原因。</p></div><p class="supplemental-error" id="chip-error" hidden></p><p class="market-widget-meta" id="chip-meta"></p><p class="stock-research-footnote">获利比例、90%/70% 成本集中度在 UI 中按百分比展示；成本区间以人民币元/股计。</p></article>
+              <article class="supplemental-card stock-capital-flow-card" id="research-detail-capital-flow"><div class="supplemental-card-heading"><div><h3>资金流摘要</h3><small id="capital-flow-symbol">尚未选择</small></div><span class="supplement-quality supplement-quality-unknown" id="capital-flow-quality">未加载</span></div><div class="stock-supplement-toolbar"><span class="field-hint">金额单位为人民币元；5/10 日合计缺失时不作补零。</span><button class="button button-secondary" id="load-capital-flow" type="button">读取资金流</button></div><div id="capital-flow-content"><p class="stock-research-empty">选择股票并读取资金流摘要。</p></div><div class="supplemental-reasons" id="capital-flow-reasons"><p>读取后显示质量原因。</p></div><p class="supplemental-error" id="capital-flow-error" hidden></p><p class="market-widget-meta" id="capital-flow-meta"></p><p class="stock-research-footnote">资金流为 Provider 统计结果，不代表对每笔订单或完整市场成交的独立审计。</p></article>
+              <article class="supplemental-card stock-announcements-card" id="research-detail-announcements"><div class="supplemental-card-heading"><div><h3>近期公告</h3><small id="announcements-symbol">尚未选择</small></div><span class="supplement-quality supplement-quality-unknown" id="announcements-quality">未加载</span></div><div class="stock-announcement-list" id="announcement-list"><p class="stock-research-empty">加载后显示数据源返回的公告。</p></div><div class="stock-announcement-footer"><p class="market-widget-meta" id="announcements-meta"></p><button class="button button-secondary" id="load-more-announcements" type="button" disabled>加载更多公告</button></div><div class="supplemental-reasons" id="announcements-reasons"><p>加载后显示质量原因。</p></div><p class="supplemental-error" id="announcements-error" hidden></p></article>
+            </div>
+          </section>
+        </section>
+
+
+
+        <section class="view" id="tasks-view" hidden>
+          <div class="page-heading">
+            <div><p class="eyebrow">ANALYSIS FLOW / 02</p><h1>分析任务</h1><p class="page-subtitle">使用 Go 分析 API 创建任务，并轮询持久化状态及阶段事件。进度以服务端事件为准，不虚构百分比。</p></div>
+            <div class="last-updated"><span class="status-dot"></span><span>队列模式</span><strong>异步持久化</strong></div>
+          </div>
+          <div class="task-workspace-grid">
+          <section class="panel recent-analysis-panel">
+            <div class="panel-heading"><div><h2>最近分析</h2><p>仅保存在当前浏览器的任务引用，不保存完整报告或替代服务端历史。</p></div><span class="soft-badge" id="recent-analysis-count">0 / 10</span></div>
+            <div class="recent-analysis-tools">
+              <label class="recent-analysis-search"><span>搜索最近任务</span><input id="recent-analysis-search" type="search" placeholder="股票代码、任务 ID、状态…" autocomplete="off" /></label>
+              <button class="button button-secondary recent-analysis-clear" id="clear-recent-analysis" type="button">清空本地列表</button>
+            </div>
+            <p class="recent-analysis-feedback" id="recent-analysis-feedback" role="status" aria-live="polite" hidden></p>
+            <div class="recent-analysis-list" id="recent-analysis-list"><div class="empty-row">完成一次分析后，这里会显示最近任务。</div></div>
+          </section>
+          
+            <section class="panel task-create-panel">
+              <div class="panel-heading"><div><h2>创建分析任务</h2><p>当前接入基础 Go 分析主流程</p></div><span class="soft-badge">POST · 202</span></div>
+              <form id="task-form" class="task-form">
+                <label class="field"><span>本次分析股票（最多 100 只）</span><textarea id="task-symbols" rows="3" placeholder="600519, 000001, 300750" required>600519</textarea></label>
+                <div class="task-symbol-toolbar">
+                  <button class="button button-secondary" id="load-local-watchlist" type="button">载入本地自选股</button>
+                  <p class="field-hint" id="task-symbol-help" role="status" aria-live="polite">任务只分析输入框中的代码；载入本地自选股会替换当前输入内容。</p>
+                </div>
+                <label class="field"><span>任务类型</span><select id="task-type"><option value="post_market_scan">盘后扫描</option><option value="watchlist_scan">自选股扫描（使用下方清单）</option><option value="position_review" disabled>持仓复核（持仓账本接入后开放）</option></select></label>
+                <label class="field"><span>幂等键（可选）</span><input id="idempotency-key" maxlength="128" placeholder="留空则由服务器正常创建" /></label>
+                <div class="inline-callout"><strong>能力边界</strong><span>任务只分析输入框中的代码；本地自选股可一键载入，但不会自动同步到服务端。当前没有真实持仓账本，因此“持仓复核”暂不可用。分析结果属于工程 MVP，可能被质量门禁标记为 partial 或阻断，不构成交易建议。</span></div>
+                <button class="button button-primary" id="create-task-button" type="submit">创建并跟踪任务 <span>→</span></button>
+                <p id="task-create-feedback" class="task-error" hidden></p>
+              </form>
+            </section>
+          </div>
+          <dialog class="run-flow-dialog" id="run-flow-dialog" aria-labelledby="run-flow-title">
+            <section class="panel task-status-panel">
+              <div class="panel-heading run-flow-header">
+                <div class="run-flow-title-group"><p class="eyebrow">TASK / RUN DETAILS</p><h2 id="run-flow-title">任务运行流</h2><p id="task-symbols-value">尚未选择任务</p></div>
+                <div class="run-flow-header-actions">
+                  <span class="quality-pill quality-unknown" id="task-status-pill">尚无任务</span>
+                  <span class="availability-pill is-readonly" id="task-run-status-pill">尚未关联 Run</span>
+                  <button class="icon-button run-flow-close" id="close-run-flow-dialog" type="button" aria-label="关闭任务运行流" title="关闭任务运行流" autofocus>×</button>
+                </div>
+              </div>
+              <div class="task-empty" id="task-empty"><div class="empty-icon">↗</div><strong>尚未选择任务</strong><span>提交任务后，这里会显示队列状态与阶段事件。</span></div>
+              <div id="task-detail" hidden>
+                <section class="run-flow-summary" id="task-flow-summary" aria-label="任务运行摘要">
+                <div><small>持久化阶段事件</small><strong id="task-summary-event-count">等待事件读取</strong></div>
+                <div><small>最新事件时间</small><strong id="task-summary-latest-event">未报告</strong></div>
+                <div><small>核心质量门禁</small><strong class="run-flow-summary-value is-unknown" id="task-summary-quality">等待 Run 结果</strong></div>
+                <div><small>分析警告数</small><strong id="task-summary-warning-count">等待 Run 结果</strong></div>
+              </section>
+              <div class="task-id-row"><span>Task ID</span><code id="task-id-value">—</code><button class="text-button" id="copy-task-id" type="button">复制</button></div>
+                <div class="task-facts">
+                  <div><small>关联 Run ID</small><strong id="task-run-id">—</strong></div>
+                  <div><small>当前阶段</small><strong id="task-current-stage">等待执行</strong></div>
+                  <div><small>已完成阶段</small><strong id="task-completed">未报告</strong></div>
+                  <div><small>创建时间</small><strong id="task-created">—</strong></div>
+                  <div><small>开始时间</small><strong id="task-started">—</strong></div>
+                  <div><small>结束时间</small><strong id="task-finished">—</strong></div>
+                </div>
+                <div id="task-error" class="task-error" hidden></div>
+                <div class="run-flow-events-column">
+                <div class="event-heading"><h3>阶段事件</h3><span>选择任一事件，在右侧查看状态、时间和诊断</span></div>
+                <p id="task-events-read-status" class="task-events-read-status" role="status" aria-live="polite" hidden></p>
+                <div class="task-event-filters" role="group" aria-label="阶段事件筛选">
+                  <button class="task-event-filter" type="button" data-task-event-filter="all" aria-pressed="true">全部 <span class="task-event-filter-count" data-filter-count="all">0</span></button>
+                  <button class="task-event-filter" type="button" data-task-event-filter="issues" aria-pressed="false">异常 / 降级 <span class="task-event-filter-count" data-filter-count="issues">0</span></button>
+                  <button class="task-event-filter" type="button" data-task-event-filter="active" aria-pressed="false">运行中 <span class="task-event-filter-count" data-filter-count="active">0</span></button>
+                  <button class="task-event-filter" type="button" data-task-event-filter="completed" aria-pressed="false">成功 / 跳过 <span class="task-event-filter-count" data-filter-count="completed">0</span></button>
+                </div>
+                <p id="task-event-filter-summary" class="task-event-filter-summary" role="status" aria-live="polite">等待服务端阶段事件。</p>
+                <div id="task-events" class="event-list"><div class="empty-row">等待服务端阶段事件。</div></div>
+                </div>
+                <section class="task-event-detail" id="task-event-detail" hidden aria-live="polite">
+                  <div class="event-detail-header">
+                    <div><h3 id="task-event-detail-title">阶段详情</h3><p id="task-event-detail-message">选择一个阶段事件查看服务端详情。</p></div>
+                    <span id="task-event-detail-status" class="availability-pill is-readonly">未选择</span>
+                  </div>
+                  <div class="event-detail-grid" id="task-event-detail-fields"></div>
+                  <details class="raw-result event-raw"><summary>查看此事件的原始 JSON</summary><pre id="task-event-json"></pre></details>
+                </section>
+                <section id="task-result-section" class="task-result-section" hidden>
+                  <div class="event-heading result-heading"><div><h3>分析结果</h3><span>读取已保存的 Run 结果</span></div><div class="task-result-actions"><button class="text-button" id="reload-run-result" type="button">重新读取结果</button><button class="text-button" id="copy-run-json" type="button">复制 JSON</button><button class="text-button" id="copy-task-diagnostic" type="button">复制诊断</button><button class="text-button" id="download-run-markdown" type="button">下载 Markdown</button><button class="text-button" id="download-run-json" type="button">下载 JSON</button></div></div>
+                  <p class="task-result-note" id="task-result-note">任务完成后自动读取结果。</p>
+                  <div class="task-result-metrics" id="task-result-metrics"></div>
+                  <div class="analysis-result-sections" id="task-result-structured"></div>
+                  <div class="task-result-warnings" id="task-result-warnings" hidden></div>
+                  <details class="raw-result"><summary>查看完整 Run JSON</summary><pre id="task-result-json"></pre></details>
+                </section>
+                <div class="task-actions"><button class="button button-secondary" id="refresh-task" type="button">立即刷新状态</button><span id="task-poll-label">未轮询</span></div>
+              </div>
+            </section>
+          </dialog>
+          <section class="panel contract-panel"><div class="panel-heading"><div><h2>运行边界</h2><p>当前 Go 分析接口公开的能力</p></div></div><div class="boundary-grid"><div><span>01</span><strong>异步任务</strong><p>任务先写入 MariaDB，再由 Worker 执行。</p></div><div><span>02</span><strong>事件读取</strong><p>仅展示已持久化阶段事件，排队时列表可以为空。</p></div><div><span>03</span><strong>风险门禁</strong><p>当前分析为可解释的基线流程，不代表成熟交易策略。</p></div></div></section>
+        </section>
+
+        <section class="view feature-view" id="notifications-view" hidden aria-labelledby="notifications-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">ACTIVITY / 03</p><h1 id="notifications-title">通知中心</h1><p class="page-subtitle">集中查看分析、告警和系统通知。通知记录、已读状态与未读数必须由服务端提供。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable" id="notification-capability-status">通知 API 尚未接入</span></div>
+          </div>
+          <section class="panel feature-callout" role="status" aria-live="polite">
+            <span class="feature-callout-icon" aria-hidden="true">i</span>
+            <div><h2>通知收件箱暂不可用</h2><p>当前 Go 服务没有通知收件箱、未读计数或已读状态 API。页面不会生成模拟通知、虚假未读角标或伪造的发送成功记录。通知渠道配置与真实单渠道测试属于设置中心；告警投递尝试属于告警诊断。</p></div>
+          </section>
+          <section class="panel notification-toolbar" aria-label="通知筛选条件">
+            <div class="notification-toolbar-heading"><div><h2>筛选通知</h2><p>接口接入后可按来源类别、状态与关键词筛选。</p></div><button class="button button-secondary" id="refresh-notifications" type="button" disabled aria-disabled="true">刷新（待接入）</button></div>
+            <div class="notification-filter-grid">
+              <label class="field"><span>通知类别</span><select id="notification-category-filter" disabled aria-disabled="true"><option>等待通知 API</option></select></label>
+              <label class="field"><span>通知状态</span><select id="notification-status-filter" disabled aria-disabled="true"><option>等待通知 API</option></select></label>
+              <label class="field notification-search-field"><span>关键词</span><input id="notification-search" type="search" disabled aria-disabled="true" placeholder="标题、来源或诊断内容" /></label>
+            </div>
+            <p class="field-hint">筛选和刷新目前不可执行，因为没有真实通知数据源；不会以“0 条通知”冒充服务端空结果。</p>
+          </section>
+          <div class="notifications-layout">
+            <section class="panel notification-list-panel" aria-labelledby="notification-list-title">
+              <div class="panel-heading"><div><h2 id="notification-list-title">通知记录</h2><p>按服务端时间倒序；来源包含分析、告警、系统与发送失败。</p></div><span class="availability-pill is-unavailable" id="notification-list-status">尚未加载</span></div>
+              <div class="notification-state" data-notification-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取通知</strong><p>正在向通知 API 请求最新记录。</p></div>
+              <div class="notification-state" data-notification-state="empty" hidden><span class="notification-state-mark" aria-hidden="true">▤</span><strong>服务端没有匹配的通知</strong><p>只有收到真实 API 的空数组后，才会展示此状态。</p></div>
+              <div class="notification-state" data-notification-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>通知接口尚未提供</strong><p>这是能力不可用状态，不代表服务器通知总数为零。</p><span class="availability-pill is-unavailable">后端待接入</span></div>
+              <div class="notification-state" data-notification-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>通知读取失败</strong><p id="notification-error-message">请检查服务状态与请求诊断。</p><button class="button button-secondary" id="retry-notifications" type="button" disabled aria-disabled="true">重试（待接入）</button></div>
+              <div class="notification-record-list" id="notification-record-list" data-notification-state="loaded" hidden aria-live="polite"></div>
+            </section>
+            <aside class="panel notification-detail-panel" aria-labelledby="notification-detail-title">
+              <div class="panel-heading"><div><h2 id="notification-detail-title">通知详情</h2><p>阅读状态与详情只有服务端 API 支持后才可变更。</p></div></div>
+              <div id="notification-detail-empty" class="notification-detail-empty"><span class="notification-state-mark" aria-hidden="true">↖</span><strong>尚未选择通知</strong><p>真实记录接入后，选中一条通知即可查看详情、来源和时间。</p></div>
+              <div id="notification-detail-content" class="notification-detail-content" hidden>
+                <dl><dt>标题</dt><dd id="notification-detail-subject">—</dd><dt>来源</dt><dd id="notification-detail-source">—</dd><dt>级别</dt><dd id="notification-detail-severity">—</dd><dt>时间</dt><dd id="notification-detail-time">—</dd><dt>状态</dt><dd id="notification-detail-status">—</dd></dl>
+                <div class="notification-detail-actions"><button class="button button-secondary" type="button" disabled aria-disabled="true">标记已读（待接入）</button><button class="button button-secondary" type="button" disabled aria-disabled="true">标记未读（待接入）</button></div>
+              </div>
+              <p class="notification-detail-boundary">已读、未读及详情查看状态当前没有服务器持久化支持；不会只在浏览器里假保存。</p>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view feature-view" id="chat-view" hidden aria-labelledby="chat-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">RESEARCH / 04</p><h1 id="chat-title">问股工作台</h1><p class="page-subtitle">在接入真实 Chat API 后支持多轮问答、股票上下文和策略研究；只有服务端返回的消息才会显示为模型回答。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable" id="chat-capability-status">Agent API 待接入</span></div>
+          </div>
+          <div class="chat-layout">
+            <aside class="panel chat-sessions-panel" aria-labelledby="chat-sessions-title">
+              <div class="panel-heading"><div><h2 id="chat-sessions-title">会话</h2><p>会话列表需要服务端持久化</p></div><span class="availability-pill is-unavailable" id="chat-session-status">不可用</span></div>
+              <button class="button button-primary" id="chat-new-session" type="button" disabled aria-disabled="true">＋ 新建会话（待接入）</button>
+              <div class="chat-session-list-state" id="chat-session-list-state" role="status" aria-live="polite">
+                <span class="feature-empty-icon" aria-hidden="true">▤</span><strong>会话 API 尚未接入</strong><p>当前不会在浏览器里假建、删除或保存会话。</p>
+              </div>
+              <div id="chat-session-list" class="chat-session-list" hidden></div>
+            </aside>
+
+            <section class="panel chat-conversation-panel" aria-labelledby="chat-conversation-title">
+              <div class="chat-panel-header">
+                <div><h2 id="chat-conversation-title">策略问股</h2><p>上下文与模式必须绑定当前会话，不沿用其他会话的旧响应。</p></div>
+                <span class="availability-pill is-unavailable">服务端待接入</span>
+              </div>
+              <div class="chat-context-strip">
+                <div class="chat-context-copy"><span class="chat-field-label">股票上下文</span><strong id="chat-stock-context">未选择股票上下文</strong><p id="chat-stock-context-status">从行情页进入后，可引用当前已查询的真实标的；不会自动复用历史上下文，也不会把旧会话的股票上下文带入新会话。</p></div>
+                <button class="button button-secondary" id="chat-clear-context" type="button" disabled aria-disabled="true">清除上下文</button>
+              </div>
+              <div class="chat-mode-row">
+                <label class="field"><span>分析模式 / 策略</span><select id="chat-mode-select" disabled aria-disabled="true"><option>等待服务端策略清单</option></select></label>
+                <span class="field-hint">没有策略接口时，不预置虚构的可用模型或策略。</span>
+              </div>
+
+              <div class="chat-transcript" aria-label="对话消息">
+                <div class="chat-state" data-chat-state="loading" hidden role="status" aria-live="polite"><span class="chat-state-icon" aria-hidden="true">◌</span><strong>正在载入会话</strong><p>正在请求真实会话与消息记录。</p></div>
+                <div class="chat-state" data-chat-state="empty" hidden><span class="chat-state-icon" aria-hidden="true">✦</span><strong>新会话尚无消息</strong><p>发送首条消息后，真实对话会显示在这里。</p></div>
+                <div class="chat-state" data-chat-state="unavailable" role="status" aria-live="polite"><span class="chat-state-icon" aria-hidden="true">⊘</span><strong>对话服务尚未接入</strong><p>当前 Go API 没有 Chat、会话、流式响应或服务端停止端点。不会用单次分析报告冒充多轮 AI 对话。</p><span class="availability-pill is-unavailable">无法发送</span></div>
+                <div class="chat-state" data-chat-state="error" hidden role="alert"><span class="chat-state-icon" aria-hidden="true">!</span><strong>会话读取失败</strong><p id="chat-error-message">请求错误与诊断将在真实 API 接入后显示。</p><button class="button button-secondary" id="chat-retry" type="button" disabled aria-disabled="true">重试（待接入）</button></div>
+                <div id="chat-message-list" class="chat-message-list" data-chat-state="loaded" hidden aria-live="polite"></div>
+              </div>
+              <div class="chat-message-actions" aria-label="消息操作">
+                <button class="text-button" id="chat-copy-message" type="button" disabled aria-disabled="true">复制回复（待接入）</button>
+                <button class="text-button" id="chat-export-session" type="button" disabled aria-disabled="true">导出会话（待接入）</button>
+                <button class="text-button" id="chat-retry-message" type="button" disabled aria-disabled="true">重试回答（待接入）</button>
+              </div>
+              <form class="chat-composer" id="chat-composer-form" aria-label="问股输入（暂不可用）">
+                <label class="field"><span>问题</span><textarea id="chat-composer-input" rows="3" maxlength="8000" placeholder="等待问股接口接入" disabled aria-describedby="chat-composer-help"></textarea></label>
+                <div class="chat-composer-footer"><span id="chat-composer-help">发送与停止操作需要真实会话 ID 和服务端取消语义。</span><div class="chat-submit-actions"><button class="button button-secondary" id="chat-stop" type="button" disabled aria-disabled="true">停止（待接入）</button><button class="button button-primary" id="chat-send" type="button" disabled aria-disabled="true">发送问题</button></div></div>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view feature-view" id="screening-view" hidden aria-labelledby="screening-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">DISCOVERY / 05</p><h1 id="screening-title">条件选股</h1><p class="page-subtitle">条件选股需要独立策略清单、扫描任务与候选解释 API；多股票分析任务不是选股引擎。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable" id="screening-capability-pill">选股 API 尚未接入</span></div>
+          </div>
+          <section class="panel feature-callout" role="status" aria-live="polite">
+            <span class="feature-callout-icon" aria-hidden="true">i</span>
+            <div><h2 id="screening-capability-title">选股能力当前不可用</h2><p id="screening-capability-description">当前 Go 服务没有策略列表、筛选配置、扫描任务、候选结果或选股历史 API。不能提交扫描，也不会用普通分析任务伪装成选股。</p></div>
+          </section>
+
+          <section class="screening-summary-grid" aria-label="选股运行摘要">
+            <article class="panel screening-summary-card"><span>能力状态</span><strong id="screening-summary-capability">不可用</strong><p>服务端能力检查待接入</p></article>
+            <article class="panel screening-summary-card"><span>扫描状态</span><strong id="screening-summary-run">—</strong><p>无可读取的真实扫描任务</p></article>
+            <article class="panel screening-summary-card"><span>候选结果</span><strong id="screening-summary-candidates">—</strong><p>不会推算或预置候选数量</p></article>
+            <article class="panel screening-summary-card"><span>最近扫描</span><strong id="screening-summary-last-run">—</strong><p>历史接口尚未提供</p></article>
+          </section>
+
+          <section class="panel feature-form-panel" aria-labelledby="screening-config-title">
+            <div class="panel-heading"><div><h2 id="screening-config-title">扫描条件</h2><p>表单字段需由后端 schema 和真实策略清单定义。</p></div><span class="availability-pill is-unavailable">不可提交</span></div>
+            <div class="feature-form-grid screening-form-grid">
+              <label class="field"><span>市场</span><select id="screening-market" disabled aria-disabled="true"><option>等待市场能力接口</option></select></label>
+              <label class="field"><span>股票池</span><select id="screening-universe" disabled aria-disabled="true"><option>等待股票池接口</option></select></label>
+              <label class="field"><span>策略</span><select id="screening-strategy" disabled aria-disabled="true"><option>等待策略清单接口</option></select></label>
+              <label class="field"><span>候选数量上限</span><input id="screening-candidate-limit" type="number" disabled aria-disabled="true" placeholder="由服务端 schema 定义" /></label>
+              <label class="field"><span>最低涨跌幅（%）</span><input id="screening-min-change" type="number" disabled aria-disabled="true" placeholder="参数范围待后端定义" /></label>
+              <label class="field"><span>最低换手率（%）</span><input id="screening-min-turnover" type="number" disabled aria-disabled="true" placeholder="参数范围待后端定义" /></label>
+            </div>
+            <div class="screening-request-summary" id="screening-request-summary" role="status" aria-live="polite"><strong>提交前摘要</strong><p>尚不能生成扫描请求摘要。服务端提供策略及参数 schema 后，页面才会展示将要提交的真实参数。</p></div>
+            <div class="feature-action-row"><span class="field-hint">所有配置控件和提交动作均待真实选股 API 接入。</span><button class="button button-primary" id="screening-submit" type="button" disabled aria-disabled="true">提交扫描（待接入）</button></div>
+          </section>
+
+          <section class="panel screening-run-panel" aria-labelledby="screening-run-title">
+            <div class="panel-heading"><div><h2 id="screening-run-title">扫描任务状态</h2><p>任务状态只能来自服务端扫描任务，而不是多股票分析任务。</p></div><div class="screening-run-actions"><span class="availability-pill is-unavailable" id="screening-run-status-pill">不可用</span><button class="button button-secondary" id="screening-refresh-run" type="button" disabled aria-disabled="true">刷新状态（待接入）</button></div></div>
+            <div class="screening-run-state" data-screening-run-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取扫描状态</strong><p>正在请求真实扫描任务状态。</p></div>
+            <div class="screening-run-state" data-screening-run-state="idle" hidden><span class="notification-state-mark" aria-hidden="true">—</span><strong>尚未发起扫描</strong><p>仅在选股 API 明确可用、用户提交真实请求后才展示此状态。</p></div>
+            <div class="screening-run-state" data-screening-run-state="queued" hidden><span class="notification-state-mark" aria-hidden="true">◷</span><strong>扫描已排队</strong><p>队列状态以服务端返回为准。</p></div>
+            <div class="screening-run-state" data-screening-run-state="running" hidden><span class="notification-state-mark" aria-hidden="true">◌</span><strong>扫描运行中</strong><p>不会根据耗时或阶段数生成虚假进度百分比。</p></div>
+            <div class="screening-run-state" data-screening-run-state="completed" hidden><span class="notification-state-mark" aria-hidden="true">✓</span><strong>扫描已完成</strong><p>只有服务端报告任务完成后才进入此状态。</p></div>
+            <div class="screening-run-state" data-screening-run-state="partial" hidden><span class="notification-state-mark" aria-hidden="true">!</span><strong>扫描部分完成</strong><p>部分结果及数据质量需由服务端解释。</p></div>
+            <div class="screening-run-state" data-screening-run-state="failed" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>扫描失败</strong><p id="screening-run-error">失败代码与诊断等待服务端响应。</p></div>
+            <div class="screening-run-state" data-screening-run-state="unknown" hidden><span class="notification-state-mark" aria-hidden="true">?</span><strong>扫描状态未知</strong><p>服务端未返回可识别状态。</p></div>
+            <div class="screening-run-state" data-screening-run-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>读取扫描状态失败</strong><p>请求错误与诊断等待真实 API 接入后显示。</p></div>
+            <div class="screening-run-state" data-screening-run-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>扫描任务 API 尚未提供</strong><p>这是接口不可用状态，不代表最近扫描失败或没有扫描历史。</p></div>
+          </section>
+
+          <div class="screening-results-layout">
+            <section class="panel screening-candidates-panel" aria-labelledby="screening-results-title">
+              <div class="panel-heading"><div><h2 id="screening-results-title">候选股票</h2><p>代码、名称、分数、筛选理由、来源、质量与时间须由后端返回。</p></div><span class="availability-pill is-unavailable" id="screening-results-status-pill">候选 API 待接入</span></div>
+              <div class="screening-results-filters">
+                <label class="field"><span>搜索候选</span><input id="screening-candidate-search" type="search" disabled aria-disabled="true" placeholder="股票代码或名称" /></label>
+                <label class="field"><span>数据质量</span><select id="screening-quality-filter" disabled aria-disabled="true"><option>等待候选 API</option></select></label>
+              </div>
+              <div class="screening-candidates-state" data-screening-results-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取候选结果</strong><p>候选数据来自服务端查询。</p></div>
+              <div class="screening-candidates-state" data-screening-results-state="empty" hidden><span class="notification-state-mark" aria-hidden="true">▤</span><strong>本次扫描没有匹配候选</strong><p>只有服务端返回真实空列表后，才会展示此状态。</p></div>
+              <div class="screening-candidates-state" data-screening-results-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>候选读取失败</strong><p id="screening-results-error">请求错误与诊断等待真实 API 接入后显示。</p><button class="button button-secondary" id="screening-retry-results" type="button" disabled aria-disabled="true">重试（待接入）</button></div>
+              <div class="screening-candidates-state" data-screening-results-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>候选结果 API 尚未提供</strong><p>不显示静态股票、虚构分数或示例选股理由。</p></div>
+              <div class="screening-candidate-list" id="screening-candidate-list" data-screening-results-state="loaded" hidden></div>
+            </section>
+            <section class="panel screening-hot-topics-panel" aria-labelledby="screening-hot-topics-title">
+              <div class="panel-heading"><div><h2 id="screening-hot-topics-title">热点板块 / 题材</h2><p>需要对应的实时行情接口。</p></div><span class="availability-pill is-unavailable">暂不可用</span></div>
+              <div class="screening-candidates-state is-compact"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>热点数据 API 尚未提供</strong><p>不会推断或静态展示热点排名。</p></div>
+            </section>
+          </div>
+
+          <section class="panel screening-history-panel" aria-labelledby="screening-history-title">
+            <div class="panel-heading"><div><h2 id="screening-history-title">选股历史</h2><p>历史分页与状态筛选需要服务端扫描记录。</p></div><span class="availability-pill is-unavailable" id="screening-history-status-pill">历史 API 待接入</span></div>
+            <div class="screening-history-filters">
+              <label class="field"><span>历史状态</span><select id="screening-history-status-filter" disabled aria-disabled="true"><option>等待历史 API</option></select></label>
+              <label class="field"><span>开始日期</span><input id="screening-history-from" type="date" disabled aria-disabled="true" /></label>
+              <label class="field"><span>结束日期</span><input id="screening-history-to" type="date" disabled aria-disabled="true" /></label>
+            </div>
+            <div class="screening-history-state" data-screening-history-state="loading" hidden role="status" aria-live="polite"><strong>正在读取选股历史</strong></div>
+            <div class="screening-history-state" data-screening-history-state="empty" hidden><strong>服务端没有匹配的历史记录</strong><p>只有接口返回真实空结果后才会显示。</p></div>
+            <div class="screening-history-state" data-screening-history-state="error" hidden role="alert"><strong>选股历史读取失败</strong></div>
+            <div class="screening-history-state" data-screening-history-state="unavailable" role="status" aria-live="polite"><strong>选股历史 API 尚未提供</strong><p>当前不能确认服务器是否存在历史任务。</p></div>
+            <div id="screening-history-list" class="screening-history-list" data-screening-history-state="loaded" hidden></div>
+            <div class="screening-history-pagination"><span>页码与总数等待服务端返回</span><div><button class="button button-secondary" id="screening-history-prev" type="button" disabled aria-disabled="true">上一页</button><button class="button button-secondary" id="screening-history-next" type="button" disabled aria-disabled="true">下一页</button></div></div>
+          </section>
+        </section>
+
+        <section class="view feature-view" id="alerts-view" hidden aria-labelledby="alerts-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">MONITORING / 06</p><h1 id="alerts-title">告警中心</h1><p class="page-subtitle">规则配置、规则触发历史和通知投递尝试是三类不同数据，需分别由服务端持久化并提供查询接口。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable" id="alert-capability-pill">告警 API 尚未接入</span><button class="button button-primary" id="alert-new-rule" type="button" disabled aria-disabled="true">新增规则（待接入）</button></div>
+          </div>
+          <section class="panel feature-callout" role="status" aria-live="polite">
+            <span class="feature-callout-icon" aria-hidden="true">i</span>
+            <div><h2 id="alert-capability-title">告警规则与后台评估不可用</h2><p id="alert-capability-description">当前后端没有规则 CRUD、后台评估调度、触发记录或通知投递尝试查询 API。此页面不会假保存规则、显示模拟触发记录或虚构通知成功状态。</p></div>
+          </section>
+          <section class="feature-card-grid alert-summary-grid" aria-label="告警数据摘要">
+            <article class="panel feature-summary-card"><span class="feature-card-label">告警规则</span><strong id="alert-summary-rule-count">—</strong><p>规则持久化 API 待接入</p><span class="availability-pill is-unavailable">不可用</span></article>
+            <article class="panel feature-summary-card"><span class="feature-card-label">触发历史</span><strong id="alert-summary-trigger-count">—</strong><p>评估与历史 API 待接入</p><span class="availability-pill is-unavailable">不可用</span></article>
+            <article class="panel feature-summary-card"><span class="feature-card-label">通知投递尝试</span><strong id="alert-summary-delivery-count">—</strong><p>投递诊断 API 待接入</p><span class="availability-pill is-unavailable">不可用</span></article>
+          </section>
+
+          <section class="panel alert-rules-panel" aria-labelledby="alert-rules-title">
+            <div class="panel-heading"><div><h2 id="alert-rules-title">规则管理</h2><p>范围、规则类型、阈值、严重级别和启停状态都需要由真实规则 schema 定义。</p></div><span class="availability-pill is-unavailable" id="alert-rules-status-pill">规则 API 待接入</span></div>
+            <form id="alert-rule-form" class="alert-rule-form" aria-label="告警规则表单（暂不可用）">
+              <div class="alert-rule-form-grid">
+                <label class="field"><span>规则名称</span><input id="alert-rule-name" type="text" disabled aria-disabled="true" placeholder="等待规则 API" /></label>
+                <label class="field"><span>监控范围</span><select id="alert-rule-scope" disabled aria-disabled="true"><option>等待范围 schema</option></select></label>
+                <label class="field"><span>规则类型</span><select id="alert-rule-type" disabled aria-disabled="true"><option>等待规则类型 schema</option></select></label>
+                <label class="field"><span>阈值 / 参数</span><input id="alert-rule-threshold" type="text" disabled aria-disabled="true" placeholder="等待字段类型与校验规则" /></label>
+                <label class="field"><span>严重级别</span><select id="alert-rule-severity" disabled aria-disabled="true"><option>等待严重级别 schema</option></select></label>
+                <label class="field"><span>规则状态</span><select id="alert-rule-enabled" disabled aria-disabled="true"><option>等待服务端状态字段</option></select></label>
+              </div>
+              <p class="field-hint">价格突破、涨跌幅、成交量、均线或 RSI/MACD 等规则类型仅为产品规划示例；没有服务端 schema 前不会把它们呈现为真实支持的类型。</p>
+              <div class="alert-rule-form-footer"><span class="field-hint">保存、启停、删除和单次测试需要服务端授权与审计。</span><div class="alert-rule-actions"><button class="button button-secondary" id="alert-rule-test" type="button" disabled aria-disabled="true">单次测试（待接入）</button><button class="button button-primary" id="alert-rule-submit" type="button" disabled aria-disabled="true">保存规则（待接入）</button></div></div>
+            </form>
+            <div class="alert-rule-list-state" data-alert-rules-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在读取规则</strong><p>规则列表由服务端提供。</p></div>
+            <div class="alert-rule-list-state" data-alert-rules-state="empty" hidden><span class="notification-state-mark" aria-hidden="true">▤</span><strong>没有已保存的告警规则</strong><p>只有收到真实 API 的空列表后才能显示此状态。</p></div>
+            <div class="alert-rule-list-state" data-alert-rules-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>规则读取失败</strong><p id="alert-rules-error">请求错误与诊断等待真实 API 接入后显示。</p></div>
+            <div class="alert-rule-list-state" data-alert-rules-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>规则管理 API 尚未提供</strong><p>不会在浏览器中假保存规则、启停状态或删除操作。</p></div>
+            <div class="alert-rule-list" id="alert-rule-list" data-alert-rules-state="loaded" hidden></div>
+          </section>
+
+          <section class="panel alert-evaluation-panel" aria-labelledby="alert-evaluation-title">
+            <div class="panel-heading"><div><h2 id="alert-evaluation-title">单次评估 / Dry Run</h2><p>triggered、not-triggered、evaluation-error、degraded 和 skipped 必须有明确含义，缺行情或过期数据不能静默当作未触发。</p></div><span class="availability-pill is-unavailable" id="alert-evaluation-status-pill">评估 API 待接入</span></div>
+            <div class="alert-evaluation-states">
+              <div class="alert-evaluation-state" data-alert-evaluation-state="loading" hidden role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">◌</span><strong>正在评估规则</strong><p>评估结果由服务端返回。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="idle" hidden><span class="notification-state-mark" aria-hidden="true">—</span><strong>尚未执行评估</strong><p>只有支持的规则进入真实评估后才展示此状态。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="triggered" hidden><span class="notification-state-mark" aria-hidden="true">!</span><strong>规则已触发</strong><p>触发结论与采样数据必须来自评估 API。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="not-triggered" hidden><span class="notification-state-mark" aria-hidden="true">✓</span><strong>规则未触发</strong><p>仅在服务端明确返回未触发后显示。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="evaluation-error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>规则评估错误</strong><p>规则执行错误不得混成“未触发”。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="degraded" hidden role="status"><span class="notification-state-mark" aria-hidden="true">!</span><strong>评估结果降级</strong><p>行情质量、缺字段或过期状态由服务端明确标注。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="skipped" hidden><span class="notification-state-mark" aria-hidden="true">–</span><strong>本次评估已跳过</strong><p>缺少必要数据时不能静默报告为未触发。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="error" hidden role="alert"><span class="notification-state-mark" aria-hidden="true">!</span><strong>评估请求失败</strong><p id="alert-evaluation-error">请求诊断等待真实 API 接入后显示。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="unknown" hidden><span class="notification-state-mark" aria-hidden="true">?</span><strong>评估状态未知</strong><p>服务端返回了无法识别的状态。</p></div>
+              <div class="alert-evaluation-state" data-alert-evaluation-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>规则评估 API 尚未提供</strong><p>当前没有可执行的后台评估或 dry-run 端点。</p></div>
+            </div>
+          </section>
+
+          <div class="alert-history-layout">
+            <section class="panel alert-history-panel" aria-labelledby="alert-history-title">
+              <div class="panel-heading"><div><h2 id="alert-history-title">触发历史</h2><p>按时间、股票、规则、状态筛选服务端持久化触发记录。</p></div><span class="availability-pill is-unavailable" id="alert-history-status-pill">历史 API 待接入</span></div>
+              <div class="alert-history-filters">
+                <label class="field"><span>股票代码</span><input id="alert-history-symbol" type="search" disabled aria-disabled="true" placeholder="股票代码" /></label>
+                <label class="field"><span>规则</span><select id="alert-history-rule" disabled aria-disabled="true"><option>等待规则 API</option></select></label>
+                <label class="field"><span>状态</span><select id="alert-history-status" disabled aria-disabled="true"><option>等待历史 API</option></select></label>
+                <label class="field"><span>开始日期</span><input id="alert-history-from" type="date" disabled aria-disabled="true" /></label>
+              </div>
+              <div class="alert-history-state" data-alert-history-state="loading" hidden role="status" aria-live="polite"><strong>正在读取触发历史</strong></div>
+              <div class="alert-history-state" data-alert-history-state="empty" hidden><strong>没有匹配的触发记录</strong><p>只有服务端返回真实空列表后才显示。</p></div>
+              <div class="alert-history-state" data-alert-history-state="error" hidden role="alert"><strong>触发历史读取失败</strong></div>
+              <div class="alert-history-state" data-alert-history-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>触发历史 API 尚未提供</strong><p>不代表服务器没有触发记录。</p></div>
+              <div class="alert-history-list" id="alert-history-list" data-alert-history-state="loaded" hidden></div>
+            </section>
+
+            <section class="panel alert-delivery-panel" aria-labelledby="alert-delivery-title">
+              <div class="panel-heading"><div><h2 id="alert-delivery-title">通知投递尝试</h2><p>与通知中心的收件箱记录分开。</p></div><span class="availability-pill is-unavailable" id="alert-delivery-status-pill">投递 API 待接入</span></div>
+              <div class="alert-delivery-summary"><span>渠道</span><strong>—</strong><span>结果 / 错误码</span><strong>—</strong><span>耗时 / 诊断</span><strong>—</strong></div>
+              <div class="alert-delivery-state" data-alert-delivery-state="loading" hidden role="status" aria-live="polite"><strong>正在读取投递尝试</strong></div>
+              <div class="alert-delivery-state" data-alert-delivery-state="empty" hidden><strong>没有匹配的投递尝试</strong><p>只有真实 API 返回空列表后才可展示。</p></div>
+              <div class="alert-delivery-state" data-alert-delivery-state="error" hidden role="alert"><strong>通知投递记录读取失败</strong></div>
+              <div class="alert-delivery-state" data-alert-delivery-state="unavailable" role="status" aria-live="polite"><span class="notification-state-mark" aria-hidden="true">⊘</span><strong>通知投递尝试 API 尚未提供</strong><p>不会展示模拟的“发送成功”、错误码或耗时。</p></div>
+              <div class="alert-delivery-list" id="alert-delivery-list" data-alert-delivery-state="loaded" hidden></div>
+            </section>
+          </div>
+        </section>
+
+                <section class="view feature-view data-center-view" id="data-view" hidden aria-labelledby="data-center-title">
+          <div class="page-heading"><div><p class="eyebrow">SERVICE HEALTH / 08</p><h1 id="data-center-title">数据中心</h1><p class="page-subtitle">查看 WebUI、行情服务、分析服务及可确认的数据库/缓存依赖状态。Provider 能力声明与实时健康检查分开显示。</p></div><div class="data-center-heading-actions"><span class="availability-pill is-readonly" id="data-center-last-check">尚未检查</span><button class="button button-primary" id="data-center-check" type="button">立即检查</button></div></div>
+          <section class="panel data-center-summary-panel" aria-labelledby="data-center-summary-title"><div class="panel-heading"><div><h2 id="data-center-summary-title">本次检查摘要</h2><p>每项检查独立完成；单项失败不会中断其他检查。</p></div><span class="availability-pill is-readonly" id="data-center-summary-status">等待检查</span></div><p class="data-center-summary-message" id="data-center-summary-message" role="status" aria-live="polite">点击“立即检查”读取当前服务状态。数据库或 Redis 缺少独立证据时会显示“未知”，不会猜测故障原因。</p><div class="data-center-summary-counts"><article><small>正常</small><strong id="data-center-count-healthy">—</strong></article><article><small>异常 / 降级</small><strong id="data-center-count-failed">—</strong></article><article><small>未知 / 未检查</small><strong id="data-center-count-unknown">—</strong></article></div></section>
+          <section class="data-center-service-grid" aria-label="服务与依赖状态">
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">UI</span><div><h2>WebUI / Nginx</h2><p>当前页面会话状态</p></div></div><span class="availability-pill is-local" id="data-service-webui-status">页面已加载</span><p class="data-center-service-detail" id="data-service-webui-detail">点击“立即检查”确认当前页面路径可响应。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">API</span><div><h2>行情服务</h2><p>stock-analysis-data</p></div></div><div class="data-center-check-row"><span>存活检查</span><strong id="data-service-market-live">尚未检查</strong></div><div class="data-center-check-row"><span>就绪检查</span><strong id="data-service-market-ready">尚未检查</strong></div><p class="data-center-service-detail" id="data-service-market-detail">检查时间与错误摘要将在检查后显示。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">API</span><div><h2>分析服务</h2><p>stock-analysis-server</p></div></div><div class="data-center-check-row"><span>存活检查</span><strong id="data-service-analysis-live">尚未检查</strong></div><div class="data-center-check-row"><span>就绪检查</span><strong id="data-service-analysis-ready">尚未检查</strong></div><p class="data-center-service-detail" id="data-service-analysis-detail">检查时间与错误摘要将在检查后显示。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">DB</span><div><h2>MariaDB</h2><p>由分析服务就绪结果报告</p></div></div><span class="availability-pill is-readonly" id="data-service-mariadb-status">未知</span><p class="data-center-service-detail" id="data-service-mariadb-detail">没有独立状态证据时不推断数据库故障。</p></article>
+            <article class="panel data-center-service-card"><div class="data-center-service-heading"><span class="data-center-service-icon">KV</span><div><h2>Redis</h2><p>由分析服务就绪结果报告</p></div></div><span class="availability-pill is-readonly" id="data-service-redis-status">未知</span><p class="data-center-service-detail" id="data-service-redis-detail">没有独立状态证据时不推断缓存故障。</p></article>
+          </section>
+          <section class="panel data-center-providers-panel" aria-labelledby="data-center-providers-title"><div class="panel-heading"><div><h2 id="data-center-providers-title">Provider 与数据能力</h2><p>能力清单只表示配置/注册声明，不等于 Provider 当前实时可用。</p></div><span class="availability-pill is-readonly" id="data-center-provider-status">尚未读取</span></div><div class="data-center-provider-summary" id="data-center-provider-summary">配置行情 API Key 并执行检查后读取能力清单。</div><div class="data-center-provider-list" id="data-center-provider-list"><div class="empty-row">尚未检查数据源能力。</div></div><p class="data-center-diagnostic-note">当前没有逐 Provider / capability 的受控真实探测 API。此处不会把“已注册”显示为“健康”；待数据层巡检 API 接入后，再显示最近探测时间、耗时与诊断结果。</p></section>
+          <section class="panel source-panel" id="source-panel">
+              <div class="panel-heading"><div><h2>数据源能力</h2><p>后端注册的 Provider 与能力声明</p></div><button class="text-button" id="reload-sources" type="button">刷新 ↻</button></div>
+              <div class="source-summary"><strong id="source-count">—</strong><span>个已注册来源</span><span class="source-version" id="normalization-version">归一化版本 —</span></div>
+              <div class="source-list" id="data-source-list"><div class="empty-row">填写 API Key 后加载数据源列表。</div></div>
+            </section>
+        </section>
+<section class="view feature-view" id="settings-view" hidden aria-labelledby="settings-page-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">WORKSPACE / SETTINGS</p><h1 id="settings-page-title">设置中心</h1><p class="page-subtitle">集中管理工作台偏好、服务连接、数据策略与自动化配置。每项均标明保存位置和当前可用状态。</p></div>
+            <div class="feature-status"><span class="availability-pill is-unavailable">服务端配置管理待接入</span></div>
+          </div>
+          <div class="settings-overview-strip">
+            <article><span class="settings-overview-icon">01</span><div><strong>浏览器本地</strong><p>当前浏览器可立即保存</p></div><span class="availability-pill is-local">可用</span></article>
+            <article><span class="settings-overview-icon">02</span><div><strong>服务端只读</strong><p>可查看真实能力，不可修改</p></div><span class="availability-pill is-readonly">只读</span></article>
+            <article><span class="settings-overview-icon">03</span><div><strong>服务端管理</strong><p>等待配置 Schema 与鉴权 API</p></div><span class="availability-pill is-unavailable">待接入</span></article>
+          </div>
+          <div class="settings-layout">
+            <nav class="settings-nav" aria-label="设置分组">
+              <button class="settings-nav-link is-active" type="button" data-settings-target="settings-display-section" aria-current="location">显示偏好</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-connection-section">连接与服务</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-local-data-section">浏览器本地数据</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-basic-section">基础设置</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-data-source-section">数据源管理</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-ai-section">AI 模型与问股</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-notification-section">通知渠道</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-scheduler-section">任务调度</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-screening-section">选股默认项</button>
+              <button class="settings-nav-link" type="button" data-settings-target="settings-security-section">安全与备份</button>
+            </nav>
+            <div class="settings-content">
+              <section class="settings-section" id="settings-display-section" aria-labelledby="settings-display-title">
+                <div class="settings-section-heading"><div><h2 id="settings-display-title">显示偏好</h2><p>控制当前浏览器中的页面外观；主题选择会立即生效并尝试保存。</p></div><span class="availability-pill is-local">本地偏好</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>外观主题</strong><p>切换后立即应用到当前工作台。</p></div><span class="settings-config-scope">localStorage</span></div>
+                  <div class="settings-theme-options settings-theme-options-expanded" role="group" aria-label="颜色主题">
+                    <button class="settings-theme-choice" type="button" data-theme-value="dark" aria-pressed="false"><span class="settings-theme-preview is-dark" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>深色主题</strong><small>适合长时间查看行情与图表</small></span><span class="settings-theme-check">✓</span></button>
+                    <button class="settings-theme-choice" type="button" data-theme-value="light" aria-pressed="false"><span class="settings-theme-preview is-light" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>浅色主题</strong><small>适合明亮环境与日间使用</small></span><span class="settings-theme-check">✓</span></button>
+                  </div>
+                  <p class="field-hint">主题在当前浏览器立即生效。字号、紧凑密度、图表动画和默认首页尚未形成独立持久化配置，本页不会显示无效开关。</p>
+                  <div class="settings-group-heading"><div><strong>行情颜色与数字格式</strong><p>影响全站共用的行情格式化函数和涨跌语义颜色。</p></div><span class="settings-config-scope">浏览器本地</span></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>涨跌颜色规则</span><select id="settings-market-color-scheme"><option value="cn">A 股习惯：红涨绿跌</option><option value="reverse">反向：绿涨红跌</option></select></label>
+                    <label class="field"><span>价格小数位</span><select id="settings-price-digits"><option value="2">2 位</option><option value="3">3 位</option></select></label>
+                    <label class="field"><span>涨跌幅小数位</span><select id="settings-percent-digits"><option value="2">2 位</option><option value="3">3 位</option></select></label>
+                    <label class="field"><span>成交额/成交量单位</span><select id="settings-amount-unit"><option value="compact">紧凑单位（万/亿）</option><option value="raw">完整数字</option></select></label>
+                  </div>
+                  <p class="field-hint">精度设置作用于全站共用的价格、百分比与紧凑数字格式化入口；原始数据和服务端返回值不会被修改。完整数字可能占用更多表格宽度。</p>
+                </div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>自选股展示偏好</strong><p>控制自选列表的默认排序；页面工具栏仍可临时切换排序字段。</p></div><span class="settings-config-scope">浏览器本地</span></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认排序字段</span><select id="settings-watchlist-sort"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option></select></label>
+                    <label class="field"><span>默认排序方向</span><select id="settings-watchlist-direction"><option value="desc">降序</option><option value="asc">升序</option></select></label>
+                  </div>
+                  <div class="settings-connection-actions"><button class="button button-secondary" id="reset-local-preferences" type="button">恢复本地偏好默认值</button></div>
+                  <div class="settings-group-heading"><div><strong>自选股信息显示</strong><p>控制自选股卡片中显示的辅助信息；股票代码、名称和操作入口始终保留。</p></div><span class="settings-config-scope">即时生效</span></div>
+                  <div class="settings-watchlist-display-options" id="watchlist-field-order-list">
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="updated"><label><input type="checkbox" data-watchlist-display-field value="updated" checked /><span>添加/更新时间</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="添加/更新时间上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="添加/更新时间下移">下移</button></div></div>
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="quote"><label><input type="checkbox" data-watchlist-display-field value="quote" checked /><span>当前行情快照</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="当前行情快照上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="当前行情快照下移">下移</button></div></div>
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="today"><label><input type="checkbox" data-watchlist-display-field value="today" checked /><span>今日分析记录</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="今日分析记录上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="今日分析记录下移">下移</button></div></div>
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="task"><label><input type="checkbox" data-watchlist-display-field value="task" checked /><span>当前/最近任务状态</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="当前/最近任务状态上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="当前/最近任务状态下移">下移</button></div></div>
+                    <div class="watchlist-field-order-item" data-watchlist-field-order="result"><label><input type="checkbox" data-watchlist-display-field value="result" checked /><span>分析结果摘要</span></label><div><button type="button" data-watchlist-field-order-move="up" aria-label="分析结果摘要上移">上移</button><button type="button" data-watchlist-field-order-move="down" aria-label="分析结果摘要下移">下移</button></div></div>
+                  </div>
+                  <p class="settings-inline-status" id="local-preferences-feedback" role="status" aria-live="polite">自选股排序和信息显示偏好保存在当前浏览器。</p>
+                  <p class="field-hint">恢复默认值会重置本地行情颜色、数字精度、单位、自选股展示/排序和默认日 K 查询偏好；不会清除主题、API Key、连接路径、自选股或最近任务引用。</p>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-connection-section" aria-labelledby="settings-connection-title">
+                <div class="settings-section-heading"><div><h2 id="settings-connection-title">连接与服务</h2><p>配置浏览器访问行情服务和分析服务的同源代理路径，并验证两项服务的健康端点。</p></div><span class="availability-pill is-local">浏览器连接配置</span></div>
+                <form id="settings-form" class="panel settings-connection-form">
+                  <div class="settings-group-heading"><div><strong>行情数据服务</strong><p>负责行情、日 K、证券资料和数据源能力查询。</p></div><span class="settings-config-scope">stock-analysis-data</span></div>
+                  <label class="field"><span>行情 API 基础路径</span><input id="market-base-input" value="/market-api" required autocomplete="url" placeholder="/market-api" /><small>同源反向代理路径，不填写 Docker 服务名、协议或端口。默认由 Nginx 将其转发到行情服务。</small></label>
+                  <div class="field"><label for="market-key-input">行情服务 API Key</label><div class="secret-input-row"><input id="market-key-input" type="password" autocomplete="new-password" aria-describedby="market-key-help" placeholder="填写新 Key；留空保留已配置值" /><button class="text-button secret-visibility-toggle" id="toggle-market-key-visibility" type="button" aria-controls="market-key-input" aria-pressed="false" aria-label="切换行情 API Key 明文显示">显示</button></div><p class="field-hint" id="market-key-help">这是部署管理员自行生成并配置的内部服务访问密钥，不是第三方 Provider 密钥。对应服务端环境变量为 MARKET_DATA_API_KEY。已保存的 Key 不回显；留空保留当前值，输入新值才会替换。需要删除时使用下方“清除本地连接设置”。服务器端可运行 <code>openssl rand -hex 32</code> 生成。</p></div>
+                  <div class="settings-inline-info"><strong>请求认证方式</strong><span>浏览器请求行情接口时通过 <code>X-API-Key</code> 请求头发送。密钥只保存在当前浏览器，不会写入 URL 或前端源码。</span></div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>分析任务服务</strong><p>负责分析任务创建、阶段事件、运行结果和任务状态查询。</p></div><span class="settings-config-scope">stock-analysis-server</span></div>
+                  <label class="field"><span>分析 API 基础路径</span><input id="analysis-base-input" value="/analysis-api" required autocomplete="url" placeholder="/analysis-api" /><small>同源反向代理路径。分析服务当前不复用行情 API Key；不要把两种服务认证混为一谈。</small></label>
+                  <div class="settings-connection-status-grid">
+                    <div><span class="settings-status-label">已保存配置检查</span><p id="settings-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未执行连接检查。</p></div>
+                    <div><span class="settings-status-label">未保存草稿检查</span><p id="settings-draft-connection-check" class="settings-inline-status" role="status" aria-live="polite">尚未检查未保存配置。</p></div>
+                  </div>
+                  <p class="settings-dirty-state" id="connection-dirty-state" role="status" aria-live="polite" hidden>存在未保存的连接配置更改。</p>
+                  <div class="settings-connection-actions"><button class="button button-secondary" id="settings-check-connection" type="button">检查已保存配置</button><button class="button button-secondary" id="settings-check-draft-connection" type="button">检查当前草稿</button><span class="grow"></span><button class="button button-secondary" id="clear-settings" type="button">清除本地连接设置</button><button class="button button-primary" id="save-settings" type="button">保存连接配置</button></div>
+                  <p class="settings-feedback" id="settings-feedback" role="status" aria-live="polite"></p>
+                  <div class="settings-storage-boundary"><strong>连接配置的作用范围</strong><p>保存只更新当前浏览器的连接路径和行情 API Key，不会修改服务器 .env、Docker 网络、Nginx 上游或数据库连接。服务状态与依赖健康请前往数据中心查看；健康检查成功不代表每个 Provider 的数据能力均可用。</p></div>
+                  <p class="security-note">安全提示：localStorage 不是密钥保险箱，同一浏览器来源下的脚本可读取其中内容。不要分享已配置密钥的浏览器会话；公网部署必须在反向代理或身份认证层限制访问。</p>
+                </form>
+              </section>
+
+              <section class="settings-section" id="settings-local-data-section" aria-labelledby="settings-local-data-title">
+                <div class="settings-section-heading"><div><h2 id="settings-local-data-title">浏览器本地数据</h2><p>管理当前浏览器保存的工作区资料。不会连接数据库，也不会跨设备自动同步。</p></div><span class="availability-pill is-local">浏览器本地</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>工作区备份文件</strong><p>用于迁移浏览器或保存个人研究清单。</p></div><span class="settings-config-scope">JSON · 最大 1 MiB</span></div>
+                  <div class="settings-local-data-grid">
+                    <article><strong>包含内容</strong><p>主题偏好、行情/分析 API 路径、自选股清单、最近任务引用。</p></article>
+                    <article><strong>排除内容</strong><p>API Key、行情缓存、完整分析报告、服务器 .env 和数据库数据。</p></article>
+                  </div>
+                  <p class="field-hint"><strong id="storage-boundary-title">存储边界</strong>：仅保存在当前浏览器；不会连接数据库，也不会跨设备自动同步。</p>
+                  <div class="settings-connection-actions settings-browser-data-actions"><button class="button button-secondary" id="export-browser-data" type="button">导出工作区 JSON</button><button class="button button-primary" id="import-browser-data" type="button">导入工作区 JSON</button><input id="browser-data-file" type="file" accept="application/json,.json" hidden />
+                  <dialog class="browser-data-import-dialog" id="browser-data-import-dialog" aria-labelledby="browser-data-import-title">
+                    <form method="dialog" class="browser-data-import-card">
+                      <div class="settings-group-heading"><div><strong id="browser-data-import-title">导入工作区预览</strong><p>确认导入范围与冲突处理方式后再写入浏览器。</p></div><button class="text-button" value="cancel" aria-label="关闭导入预览">关闭</button></div>
+                      <p id="browser-data-import-summary" class="settings-inline-status"></p><p id="browser-data-import-current" class="field-hint"></p><p id="browser-data-import-settings" class="field-hint"></p>
+                      <div class="browser-data-import-strategies"><button class="button button-primary" id="browser-data-import-replace" type="button">替换导入</button><button class="button button-secondary" id="browser-data-import-merge" type="button">合并导入</button><button class="button button-secondary" value="cancel">取消</button></div>
+                      <p id="browser-data-import-merge-hint" class="field-hint"></p>
+                    </form>
+                  </dialog></div>
+                  <p class="settings-inline-status" id="browser-data-feedback" role="status" aria-live="polite">尚未导入或导出。</p>
+                  <p class="field-hint">导入前会校验文件格式、版本和条目；确认后替换对应本地数据并保留当前 API Key。任务引用可能包含股票代码、任务 ID 与分析服务路径，请妥善保管。</p>
+                </div>
+                <div class="panel settings-config-panel settings-local-storage-panel">
+                  <div class="settings-group-heading"><div><strong>本地存储说明</strong><p>以下项目由当前浏览器管理。</p></div><span class="settings-config-scope">非服务端数据</span></div>
+                  <dl class="settings-config-list"><dt>主题偏好</dt><dd>当前浏览器 localStorage</dd><dt>行情 API Key 与路径</dt><dd>当前浏览器 localStorage</dd><dt>自选股</dt><dd>当前浏览器 localStorage，最多 50 条</dd><dt>最近任务引用</dt><dd>当前浏览器 localStorage，最多 10 条引用</dd><dt>分析任务与完整结果</dt><dd>由分析服务持久化到服务端；浏览器仅保存引用</dd></dl>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-basic-section" aria-labelledby="settings-basic-title">
+                <div class="settings-section-heading"><div><h2 id="settings-basic-title">基础设置</h2><p>定义工作台默认市场、行情展示、查询范围与分析任务默认参数。</p></div><span class="availability-pill is-local">部分浏览器本地配置</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>市场与行情默认值</strong><p>默认日 K 条数和复权方式保存在当前浏览器；市场、交易所等仍需服务端能力支持。</p></div><span class="settings-config-scope">建议配置项</span></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认市场</span><select disabled><option>中国 A 股（CN）</option></select><small>决定新建研究与筛选任务的默认市场范围。</small></label>
+                    <label class="field"><span>默认交易所范围</span><select disabled><option>沪市 / 深市 / 北交所</option></select><small>需由证券主数据定义实际可选范围。</small></label>
+                    <label class="field"><span>默认复权方式</span><select id="settings-default-adjustment"><option value="forward_adjusted">前复权</option><option value="backward_adjusted">后复权</option><option value="none">不复权</option></select><small>仅作为新日 K 查询的初始口径。</small></label>
+                    <label class="field"><span>默认日 K 查询范围</span><select id="settings-default-bar-limit"><option value="60">近 60 根</option><option value="120">近 120 根</option><option value="250">近 250 根</option></select><small>仅影响个股行情页下一次新查询的默认条数。</small></label>
+                    <label class="field"><span>默认行情刷新间隔</span><select disabled><option>手动 / 15 秒 / 30 秒 / 60 秒</option></select><small>自动刷新必须服从服务端限流和交易时段。</small></label>
+                    <label class="field"><span>工作台时区</span><input disabled value="Asia/Shanghai" /><small>展示和日期边界使用的时区，不改变 Provider 原始时间。</small></label>
+                  </div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>分析任务默认值</strong><p>只影响新建任务的初始参数；风险门禁和服务端策略不可由前端默认值覆盖。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认分析类型</span><select disabled><option>盘后分析 / 个股研究 / 自定义任务</option></select></label>
+                    <label class="field"><span>默认分析周期</span><select disabled><option>日线 / 周线 / 月线</option></select></label>
+                    <label class="field"><span>默认数据截止日</span><select disabled><option>最近有效交易日</option></select></label>
+                    <label class="field"><span>默认并发任务数</span><input type="number" disabled placeholder="由服务端任务限额决定" /></label>
+                  </div>
+                  <p class="settings-boundary-note">接口接入后应读取服务端配置版本，保存时携带版本号进行冲突检测；当前不提供虚假的保存按钮。</p>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-data-source-section" aria-labelledby="settings-data-source-title">
+                <div class="settings-section-heading"><div><h2 id="settings-data-source-title">数据源管理</h2><p>查看 Provider 能力与未来的路由策略配置。注册状态、实时探测和数据质量是不同维度。</p></div><span class="availability-pill is-readonly">能力清单只读</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>Provider 能力与状态</strong><p>真实注册清单与能力声明统一在数据中心查看。</p></div><button class="button button-secondary" id="settings-view-data-sources" type="button">打开数据中心</button></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>数据源启用 / 禁用</span><select disabled><option>服务端 Provider 管理 API 待接入</option></select><small>不能仅在浏览器隐藏数据源来代表服务端停用。</small></label>
+                    <label class="field"><span>数据源优先级</span><select disabled><option>服务端路由策略 API 待接入</option></select><small>需要按数据能力分别定义优先级和回退策略。</small></label>
+                    <label class="field"><span>失败回退策略</span><select disabled><option>服务端策略配置待接入</option></select><small>超时、限流、空数据和质量降级不能共用一种回退规则。</small></label>
+                    <label class="field"><span>Provider 凭据管理</span><input disabled placeholder="密钥托管与脱敏 API 待接入" /><small>凭据不能写入浏览器 localStorage 或前端导出文件。</small></label>
+                  </div>
+                  <div class="settings-boundary-note">当前只读接口返回 Provider 注册信息与能力声明，不提供启停、排序、密钥修改或真实探测操作。</div>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-ai-section" aria-labelledby="settings-ai-title">
+                <div class="settings-section-heading"><div><h2 id="settings-ai-title">AI 模型与问股</h2><p>管理模型 Provider、默认模型、推理策略、上下文与成本预算。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>模型服务连接</strong><p>模型凭据必须由服务端安全保存，页面只允许脱敏状态回显。</p></div><span class="settings-config-scope">建议配置项</span></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>模型 Provider</span><select disabled><option>OpenAI 兼容 / 自建 Gateway / 其他</option></select></label>
+                    <label class="field"><span>服务地址</span><input disabled placeholder="https://.../v1" /><small>仅允许管理员配置的可信地址，不能由普通浏览器任意指定探测目标。</small></label>
+                    <label class="field"><span>默认模型 ID</span><input disabled placeholder="例如 provider/model-id" /></label>
+                    <label class="field"><span>模型 API Key</span><input type="password" disabled placeholder="由服务端托管，前端不回显" /></label>
+                    <label class="field"><span>推理强度</span><select disabled><option>低 / 中 / 高</option></select></label>
+                    <label class="field"><span>响应超时</span><input type="number" disabled placeholder="秒" /></label>
+                    <label class="field"><span>最大上下文长度</span><input type="number" disabled placeholder="Token 数" /></label>
+                    <label class="field"><span>单次输出上限</span><input type="number" disabled placeholder="Token 数" /></label>
+                  </div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>问股与研究策略</strong><p>策略选择必须与后端实际注册的 Agent/工具清单一致。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认问股模式</span><select disabled><option>行情问答 / 个股研究 / 深度分析</option></select></label>
+                    <label class="field"><span>上下文窗口策略</span><select disabled><option>最近消息 / 摘要 + 最近消息</option></select></label>
+                    <label class="field"><span>每日 Token 预算</span><input type="number" disabled placeholder="Token 数" /></label>
+                    <label class="field"><span>单用户并发上限</span><input type="number" disabled placeholder="请求数" /></label>
+                  </div>
+                  <p class="settings-boundary-note">尚无模型配置 Schema、密钥托管、模型列表和真实连通测试 API；本页字段仅用于明确完整配置范围，不保存任何模型密钥。</p>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-notification-section" aria-labelledby="settings-notification-title">
+                <div class="settings-section-heading"><div><h2 id="settings-notification-title">通知渠道</h2><p>配置通知发送渠道、接收目标、触发事件和投递策略。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>渠道连接</strong><p>渠道凭据应加密托管，修改后需支持脱敏回显和单渠道测试。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>通知渠道类型</span><select disabled><option>邮件 / Telegram / Webhook</option></select></label>
+                    <label class="field"><span>渠道名称</span><input disabled placeholder="例如：个人通知" /></label>
+                    <label class="field"><span>接收地址 / Chat ID</span><input disabled placeholder="邮箱、Chat ID 或接收端标识" /></label>
+                    <label class="field"><span>Webhook 地址</span><input disabled placeholder="由服务端白名单与 SSRF 防护校验" /></label>
+                    <label class="field"><span>渠道凭据</span><input type="password" disabled placeholder="服务端加密保存，不回显原文" /></label>
+                    <label class="field"><span>渠道启用状态</span><select disabled><option>启用 / 停用</option></select></label>
+                  </div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>通知订阅与投递</strong><p>通知偏好与告警规则分开管理；投递失败应保留可追踪记录。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>订阅事件</span><input disabled placeholder="任务完成、任务失败、风险阻断、系统异常" /></label>
+                    <label class="field"><span>免打扰时段</span><input disabled placeholder="开始时间 — 结束时间" /></label>
+                    <label class="field"><span>失败重试次数</span><input type="number" disabled placeholder="由服务端投递策略定义" /></label>
+                    <label class="field"><span>单渠道速率限制</span><input type="number" disabled placeholder="条 / 分钟" /></label>
+                  </div>
+                  <p class="settings-boundary-note">通知收件箱、渠道配置、订阅关系与投递记录是不同资源；相关服务端 API 尚未接入。</p>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-scheduler-section" aria-labelledby="settings-scheduler-title">
+                <div class="settings-section-heading"><div><h2 id="settings-scheduler-title">任务调度</h2><p>管理周期任务的触发时间、执行范围、并发与失败策略。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>调度计划</strong><p>调度配置必须由服务端持久化，且按交易日历解释执行时间。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>调度器状态</span><select disabled><option>启用 / 暂停（服务端状态）</option></select></label>
+                    <label class="field"><span>执行频率</span><select disabled><option>每日 / 每周 / 自定义 Cron</option></select></label>
+                    <label class="field"><span>执行时间</span><input type="time" disabled /></label>
+                    <label class="field"><span>交易日范围</span><select disabled><option>仅交易日 / 每个自然日 / 指定日期</option></select></label>
+                    <label class="field"><span>调度时区</span><input disabled value="Asia/Shanghai" /></label>
+                    <label class="field"><span>关联分析任务类型</span><select disabled><option>盘后扫描 / 自选股复盘 / 自定义任务</option></select></label>
+                    <label class="field"><span>最大并发执行数</span><input type="number" disabled placeholder="任务数" /></label>
+                    <label class="field"><span>失败重试策略</span><select disabled><option>不重试 / 固定间隔 / 指数退避</option></select></label>
+                  </div>
+                  <div class="settings-boundary-note">当前任务页支持手动创建已有分析任务；没有周期调度 CRUD、调度器状态和执行历史 API。</div>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-screening-section" aria-labelledby="settings-screening-title">
+                <div class="settings-section-heading"><div><h2 id="settings-screening-title">选股默认项</h2><p>定义条件选股的默认市场、策略、扫描范围与候选数量。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>扫描默认参数</strong><p>默认值必须来自后端策略 Schema，不能与多股票分析任务混用。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认市场</span><select disabled><option>中国 A 股</option></select></label>
+                    <label class="field"><span>默认策略</span><select disabled><option>等待服务端策略清单</option></select></label>
+                    <label class="field"><span>扫描证券范围</span><select disabled><option>全市场 / 沪深主板 / 创业板 / 科创板 / 北交所</option></select></label>
+                    <label class="field"><span>候选结果上限</span><input type="number" disabled placeholder="条数" /></label>
+                    <label class="field"><span>最小成交额</span><input type="number" disabled placeholder="人民币元" /></label>
+                    <label class="field"><span>最小上市天数</span><input type="number" disabled placeholder="交易日" /></label>
+                    <label class="field"><span>ST / 风险警示过滤</span><select disabled><option>排除 / 保留 / 由策略决定</option></select></label>
+                    <label class="field"><span>停牌证券过滤</span><select disabled><option>排除 / 保留 / 由策略决定</option></select></label>
+                  </div>
+                  <div class="settings-boundary-note">后续还需支持策略参数 Schema、条件组合、扫描任务、命中解释和历史结果；当前页面不会伪造候选结果或扫描记录。</div>
+                </div>
+              </section>
+
+              <section class="settings-section" id="settings-security-section" aria-labelledby="settings-security-title">
+                <div class="settings-section-heading"><div><h2 id="settings-security-title">安全与备份</h2><p>服务器身份认证、服务密钥、访问控制和配置备份必须由受保护的服务端接口管理。</p></div><span class="availability-pill is-unavailable">服务端配置待接入</span></div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>身份认证与访问控制</strong><p>管理员登录态与行情服务 API Key 是两套独立机制。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>管理员登录方式</span><select disabled><option>服务端会话认证待接入</option></select></label>
+                    <label class="field"><span>管理员密码</span><input type="password" disabled placeholder="服务端密码哈希与修改接口待接入" /></label>
+                    <label class="field"><span>会话有效期</span><input type="number" disabled placeholder="分钟" /></label>
+                    <label class="field"><span>登录失败锁定策略</span><input disabled placeholder="失败次数 / 锁定时长" /></label>
+                    <label class="field"><span>管理 API 访问范围</span><select disabled><option>仅内网 / 可信代理 / 指定网段</option></select></label>
+                    <label class="field"><span>操作审计</span><select disabled><option>记录配置修改、密钥轮换与备份操作</option></select></label>
+                  </div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>服务密钥管理</strong><p>仅管理服务访问密钥，不用于表示用户登录身份。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>行情服务 API Key 轮换</span><input disabled placeholder="服务端密钥轮换与版本状态待接入" /></label>
+                    <label class="field"><span>密钥最近轮换时间</span><input disabled placeholder="服务端审计记录待接入" /></label>
+                  </div>
+                  <div class="settings-divider"></div>
+                  <div class="settings-group-heading"><div><strong>服务器配置备份与恢复</strong><p>浏览器工作区 JSON 不包含服务器配置，不可用于恢复部署环境。</p></div></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>自动备份频率</span><select disabled><option>每日 / 每周 / 手动</option></select></label>
+                    <label class="field"><span>备份保留数量</span><input type="number" disabled placeholder="份数" /></label>
+                    <label class="field"><span>备份内容范围</span><select disabled><option>应用配置 / 数据库 / 配置与数据库</option></select></label>
+                    <label class="field"><span>最近备份状态</span><input disabled placeholder="需要服务端备份任务与审计 API" /></label>
+                  </div>
+                  <p class="settings-boundary-note">目前没有管理员认证、服务器配置读写、密钥轮换、审计和备份恢复 API。相关控件保持禁用；不会在浏览器端比对密码或模拟服务器文件操作。</p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>>
+
+<footer class="page-footer"><span>行情研究台 · Go 数据服务</span><span>行情与分析结果仅供研究；数据质量与时点限制须独立评估。</span></footer>
+      </main>
+    </div>
+
+
+  </body>
+</html>
