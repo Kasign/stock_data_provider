@@ -1,4 +1,5 @@
 import { applyTheme, persistTheme, readTheme, THEME_STORAGE_KEY } from "./theme.js";
+import { DEFAULT_PREFERENCES, PREFERENCES_KEY, readPreferences, resetPreferences, savePreferences } from "./preferences.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
@@ -54,7 +55,7 @@ import {
 const $ = (selector) => document.querySelector(selector);
 const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
 const BROWSER_DATA_FORMAT = "stock-provider-webui-browser-data";
-const BROWSER_DATA_VERSION = 1;
+const BROWSER_DATA_VERSION = 2;
 const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
 const TASK_STATUSES = new Set(["queued", "running", "succeeded", "partial", "failed"]);
 const TASK_EVENT_STATUS_LABELS = Object.freeze({
@@ -660,13 +661,15 @@ function renderWatchlist(records, storageReadable, storageValid) {
   }
 
   const keyword = String($("#watchlist-search")?.value || "").trim().toLocaleLowerCase();
-  const sortMode = $("#watchlist-sort")?.value || "updated";
+  const preferences = readPreferences();
+  const sortMode = $("#watchlist-sort")?.value || preferences.watchlistSort;
   const visibleItems = items.filter((record) => !keyword
     || String(record.symbol || "").toLocaleLowerCase().includes(keyword)
     || String(record.name || "").toLocaleLowerCase().includes(keyword));
-  if (sortMode === "symbol") visibleItems.sort((a, b) => a.symbol.localeCompare(b.symbol, "zh-CN"));
-  else if (sortMode === "name") visibleItems.sort((a, b) => a.name.localeCompare(b.name, "zh-CN") || a.symbol.localeCompare(b.symbol));
-  else visibleItems.sort((a, b) => (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0));
+  const direction = preferences.watchlistSortDirection === "asc" ? 1 : -1;
+  if (sortMode === "symbol") visibleItems.sort((a, b) => direction * a.symbol.localeCompare(b.symbol, "zh-CN"));
+  else if (sortMode === "name") visibleItems.sort((a, b) => direction * (a.name.localeCompare(b.name, "zh-CN") || a.symbol.localeCompare(b.symbol)));
+  else visibleItems.sort((a, b) => direction * ((Date.parse(a.updated_at || "") || 0) - (Date.parse(b.updated_at || "") || 0)));
   setText("#watchlist-filter-count", keyword
     ? "匹配 " + visibleItems.length + " / " + items.length + " 只"
     : "显示全部 " + items.length + " 只");
@@ -4456,6 +4459,7 @@ function buildBrowserDataPayload() {
     exported_at: new Date().toISOString(),
     data: {
       theme: readTheme(),
+      preferences: readPreferences(),
       connection: { marketBase: state.settings.marketBase, analysisBase: state.settings.analysisBase },
       watchlist: (() => {
         const watchlistState = safeReadWatchlistState();
@@ -4492,13 +4496,59 @@ function downloadBrowserData() {
   }
 }
 
+function normalizeImportedPreferences(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("本地偏好字段必须是对象。");
+  }
+  const allowed = new Set(["watchlistSort", "watchlistSortDirection"]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new Error("本地偏好包含不支持的字段。");
+  }
+  if (value.watchlistSort !== undefined && !["updated", "symbol", "name"].includes(value.watchlistSort)) {
+    throw new Error("自选股默认排序字段无效。");
+  }
+  if (value.watchlistSortDirection !== undefined && !["asc", "desc"].includes(value.watchlistSortDirection)) {
+    throw new Error("自选股排序方向无效。");
+  }
+  return {
+    watchlistSort: value.watchlistSort || DEFAULT_PREFERENCES.watchlistSort,
+    watchlistSortDirection: value.watchlistSortDirection || DEFAULT_PREFERENCES.watchlistSortDirection
+  };
+}
+
+function syncWatchlistPreferenceControls(preferences = readPreferences()) {
+  const normalized = preferences;
+  const sort = $("#settings-watchlist-sort");
+  const direction = $("#settings-watchlist-direction");
+  const listSort = $("#watchlist-sort");
+  if (sort) sort.value = normalized.watchlistSort;
+  if (direction) direction.value = normalized.watchlistSortDirection;
+  if (listSort) listSort.value = normalized.watchlistSort;
+}
+
+function persistWatchlistPreferences() {
+  try {
+    const preferences = savePreferences({
+      watchlistSort: $("#settings-watchlist-sort")?.value || $("#watchlist-sort")?.value,
+      watchlistSortDirection: $("#settings-watchlist-direction")?.value || readPreferences().watchlistSortDirection
+    });
+    syncWatchlistPreferenceControls(preferences);
+    $("#local-preferences-feedback").textContent = "自选股默认排序偏好已保存到当前浏览器。";
+    return preferences;
+  } catch (error) {
+    $("#local-preferences-feedback").textContent = "偏好保存失败：" + (error?.message || "浏览器存储不可用。");
+    return readPreferences();
+  }
+}
+
 function validateBrowserDataPayload(payload) {
-  if (!payload || payload.format !== BROWSER_DATA_FORMAT || payload.version !== BROWSER_DATA_VERSION) {
+  if (!payload || payload.format !== BROWSER_DATA_FORMAT || ![1, BROWSER_DATA_VERSION].includes(payload.version)) {
     throw new Error("文件格式或版本不受支持。请使用本 WebUI 导出的 JSON 文件。");
   }
   const data = payload.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("缺少有效的 data 配置对象。");
   if (!["dark", "light"].includes(data.theme)) throw new Error("主题字段无效。");
+  const preferences = payload.version === 1 ? { ...DEFAULT_PREFERENCES } : normalizeImportedPreferences(data.preferences);
   if (!data.connection || typeof data.connection !== "object") throw new Error("缺少连接路径配置。");
   // 仅接受同源绝对路径，避免将导入文件变成任意外部请求目标。
   const marketBase = normalizeBasePath(data.connection.marketBase, "/market-api");
@@ -4556,7 +4606,7 @@ function validateBrowserDataPayload(payload) {
       updated_at: safeString(record.updated_at, 80)
     };
   });
-  return { theme: data.theme, marketBase, analysisBase, watchlist, recentTasks };
+  return { theme: data.theme, preferences, marketBase, analysisBase, watchlist, recentTasks };
 }
 
 async function importBrowserDataFile(file) {
@@ -4582,7 +4632,7 @@ async function importBrowserDataFile(file) {
     return;
   }
 
-  const storageKeys = [SETTINGS_KEY, THEME_STORAGE_KEY, WATCHLIST_KEY, RECENT_TASKS_KEY, TASK_REFERENCE_KEY];
+  const storageKeys = [SETTINGS_KEY, THEME_STORAGE_KEY, PREFERENCES_KEY, WATCHLIST_KEY, RECENT_TASKS_KEY, TASK_REFERENCE_KEY];
   const previous = new Map();
   try {
     storageKeys.forEach((key) => previous.set(key, localStorage.getItem(key)));
@@ -4601,6 +4651,7 @@ async function importBrowserDataFile(file) {
       apiKey: state.settings.apiKey
     });
     localStorage.setItem(THEME_STORAGE_KEY, imported.theme);
+    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(imported.preferences));
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify(imported.watchlist));
     localStorage.setItem(RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks));
     localStorage.removeItem(TASK_REFERENCE_KEY);
@@ -4609,6 +4660,7 @@ async function importBrowserDataFile(file) {
     const expectedStorage = new Map([
       [SETTINGS_KEY, JSON.stringify(nextSettings)],
       [THEME_STORAGE_KEY, imported.theme],
+      [PREFERENCES_KEY, JSON.stringify(imported.preferences)],
       [WATCHLIST_KEY, JSON.stringify(imported.watchlist)],
       [RECENT_TASKS_KEY, JSON.stringify(imported.recentTasks)],
       [TASK_REFERENCE_KEY, null]
@@ -4650,6 +4702,7 @@ async function importBrowserDataFile(file) {
     applyTheme(imported.theme);
     syncThemeControl(imported.theme);
     syncSettingsThemeButtons(imported.theme);
+    syncWatchlistPreferenceControls(imported.preferences);
     renderWatchlist();
     renderRecentTasks();
     setBrowserDataFeedback("导入完成：主题、同源 API 路径、自选股与本地任务引用已更新。原有 API Key 已保留。", "success");
@@ -4663,6 +4716,7 @@ async function importBrowserDataFile(file) {
 
 
 syncThemeControl(readTheme());
+syncWatchlistPreferenceControls();
 $("#theme-toggle").addEventListener("click", () => {
   const nextTheme = readTheme() === "dark" ? "light" : "dark";
   const result = persistTheme(nextTheme);
@@ -4883,7 +4937,29 @@ $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
 $("#watchlist-search").addEventListener("input", () => renderWatchlist());
-$("#watchlist-sort").addEventListener("change", () => renderWatchlist());
+$("#watchlist-sort").addEventListener("change", () => {
+  persistWatchlistPreferences();
+  renderWatchlist();
+});
+$("#settings-watchlist-sort").addEventListener("change", () => {
+  $("#watchlist-sort").value = $("#settings-watchlist-sort").value;
+  persistWatchlistPreferences();
+  renderWatchlist();
+});
+$("#settings-watchlist-direction").addEventListener("change", () => {
+  persistWatchlistPreferences();
+  renderWatchlist();
+});
+$("#reset-local-preferences").addEventListener("click", () => {
+  try {
+    const preferences = resetPreferences();
+    syncWatchlistPreferenceControls(preferences);
+    renderWatchlist();
+    $("#local-preferences-feedback").textContent = "本地偏好已恢复默认值；主题、连接密钥、自选股和任务引用均未修改。";
+  } catch (error) {
+    $("#local-preferences-feedback").textContent = "恢复默认值失败：" + (error?.message || "浏览器存储不可用。");
+  }
+});
 $("#reload-sources").addEventListener("click", refreshSources);
 syncRefreshButtonContext();
 $("#refresh-button").addEventListener("click", async () => {
