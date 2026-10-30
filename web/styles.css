@@ -4598,3 +4598,71 @@ button:disabled {
   .settings-connection-form .settings-connection-actions { align-items: stretch; }
   .settings-connection-form .settings-connection-actions .grow { display: none; }
 }
+
+/* 设置中心完善：配置归属、字段密度与真实能力边界。 */
+.settings-overview-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:0 0 18px; }
+.settings-overview-strip > article { display:flex; align-items:center; gap:12px; min-width:0; padding:13px 15px; border:1px solid var(--border); border-radius:11px; background:var(--panel); }
+.settings-overview-icon { display:grid; place-items:center; width:34px; height:34px; flex:0 0 34px; border-radius:9px; color:var(--accent); background:var(--accent-soft); font-size:11px; font-weight:750; }
+.settings-overview-strip strong { color:var(--text); font-size:13px; }
+.settings-overview-strip p { margin:3px 0 0; color:var(--text-dim); font-size:11px; }
+.settings-overview-strip .availability-pill { margin-left:auto; white-space:nowrap; }
+.settings-section { margin-bottom:22px; }
+.settings-section-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin:0 0 11px; }
+.settings-section-heading h2 { margin:0 0 5px; color:var(--text); font-size:17px; }
+.settings-section-heading p { margin:0; color:var(--text-soft); font-size:12px; line-height:1.65; }
+.settings-config-panel { padding:20px; }
+.settings-group-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin:0 0 15px; }
+.settings-group-heading strong { color:var(--text); font-size:14px; }
+.settings-group-heading p { margin:5px 0 0; color:var(--text-soft); font-size:12px; line-height:1.6; }
+.settings-config-scope { flex:0 0 auto; padding:4px 8px; border:1px solid var(--border-soft); border-radius:6px; color:var(--text-dim); font-size:10px; }
+.settings-field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 18px; }
+.settings-field-grid .field { min-width:0; }
+.settings-field-grid .field small, .settings-connection-form .field > small { color:var(--text-dim); font-size:11px; line-height:1.55; }
+.settings-field-grid .field input:disabled, .settings-field-grid .field select:disabled { opacity:.72; color:var(--text-soft); }
+.settings-divider { height:1px; margin:20px 0; background:var(--border-soft); }
+.settings-inline-info { display:flex; flex-direction:column; gap:5px; padding:12px 14px; border:1px solid var(--border-soft); border-radius:9px; background:var(--surface-soft); }
+.settings-inline-info strong, .settings-status-label { color:var(--text); font-size:12px; font-weight:650; }
+.settings-inline-info span { color:var(--text-soft); font-size:12px; line-height:1.65; }
+.settings-connection-status-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.settings-connection-status-grid > div { min-width:0; padding:11px 13px; border:1px solid var(--border-soft); border-radius:9px; background:var(--surface-soft); }
+.settings-connection-status-grid .settings-inline-status { min-height:2.2em; }
+.settings-connection-form .field { margin:0; }
+.settings-connection-form .field > small { display:block; }
+.settings-local-data-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+.settings-local-data-grid article { padding:13px; border:1px solid var(--border-soft); border-radius:9px; background:var(--surface-soft); }
+.settings-local-data-grid strong { color:var(--text); font-size:12px; }
+.settings-local-data-grid p { margin:6px 0 0; color:var(--text-soft); font-size:12px; line-height:1.65; }
+.settings-local-storage-panel { margin-top:12px; }
+.settings-config-list { display:grid; grid-template-columns:minmax(140px,.55fr) minmax(0,1.45fr); gap:10px 14px; margin:0; font-size:12px; }
+.settings-config-list dt { color:var(--text-dim); }
+.settings-config-list dd { min-width:0; margin:0; color:var(--text-soft); overflow-wrap:anywhere; }
+.settings-boundary-note { margin:18px 0 0; padding:11px 13px; border-left:3px solid var(--border); color:var(--text-dim); background:var(--surface-soft); font-size:12px; line-height:1.7; }
+.settings-theme-options-expanded { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.settings-theme-choice { display:flex; align-items:center; gap:13px; min-width:0; padding:13px; border:1px solid var(--border); border-radius:10px; color:var(--text); background:var(--surface-soft); text-align:left; cursor:pointer; }
+.settings-theme-choice:hover { border-color:var(--accent); }
+.settings-theme-choice.is-selected, .settings-theme-choice[aria-pressed="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.settings-theme-choice > span:nth-child(2) { display:flex; flex:1; flex-direction:column; gap:4px; min-width:0; }
+.settings-theme-choice strong { font-size:13px; }
+.settings-theme-choice small { color:var(--text-dim); font-size:11px; }
+.settings-theme-check { opacity:0; color:var(--accent); font-weight:800; }
+.settings-theme-choice[aria-pressed="true"] .settings-theme-check { opacity:1; }
+.settings-theme-preview { display:flex; flex-direction:column; gap:3px; width:48px; height:38px; flex:0 0 48px; padding:6px; border:1px solid var(--border); border-radius:6px; }
+.settings-theme-preview i { display:block; height:5px; border-radius:3px; background:currentColor; opacity:.65; }
+.settings-theme-preview.is-dark { color:#8fdcc3; background:#111c27; }
+.settings-theme-preview.is-light { color:#438e7b; background:#f4f8fa; }
+.settings-theme-preview i:nth-child(2) { width:70%; }
+.settings-theme-preview i:nth-child(3) { width:45%; }
+@media (max-width:900px) {
+ .settings-overview-strip { grid-template-columns:minmax(0,1fr); }
+ .settings-overview-strip > article { padding:11px 13px; }
+}
+@media (max-width:640px) {
+ .settings-field-grid,.settings-local-data-grid,.settings-theme-options-expanded,.settings-connection-status-grid { grid-template-columns:minmax(0,1fr); }
+ .settings-config-panel { padding:15px; }
+ .settings-group-heading,.settings-section-heading { flex-direction:column; }
+ .settings-connection-form .settings-connection-actions { align-items:stretch; }
+ .settings-connection-form .settings-connection-actions .grow { display:none; }
+ .settings-connection-form .settings-connection-actions .button { flex:1 1 100%; }
+ .settings-config-list { grid-template-columns:minmax(0,1fr); gap:4px; }
+ .settings-config-list dd { margin-bottom:8px; }
+}
