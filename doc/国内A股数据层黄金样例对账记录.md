@@ -97,3 +97,22 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 - 同花顺可选探测仍跳过，不能据此判断账号权限。
 - Go/Python 质量契约回归 Run `41019954339` 通过；但它是契约/静态兼容检查，不是 Python/Go 真实数据值差分。
 - 最新 Go suite Run `41019954395` 的 market-data race 与 Docker 镜像构建被后续提交触发并发取消；根模块和 go-core test/race/vet、market-data 全量测试、MariaDB PIT 集成已通过。后续需要完整跑完 market-data race/vet 和镜像构建。
+
+
+## 9. 跨 Provider 日 K 对账契约（2026-10-30）
+
+新增内部比较器 `CompareCrossProviderDailyBars`，用于避免只在单个测试中手写字段循环，当前不暴露 HTTP API。
+
+| 项目 | 对账规则 |
+|---|---|
+| 证券 | 两侧标准 symbol 必须完全一致 |
+| 交易日 | 两侧交易日期集合必须一致；不一致判为 `not_comparable` |
+| 复权 | `adjustment_basis` 必须一致；不同口径不能直接比较 |
+| 质量 | 两侧必须均为 `valid`；degraded/unknown 不作为基准 |
+| OHLC | 单字段绝对差不超过 0.001 |
+| 成交量 | 双方必须为 shares；差异不超过 50 股 |
+| 成交额 | 仅双方都有值且单位均为 CNY 时比较，差异不超过 1 CNY；否则该字段不可比较，不反推金额 |
+
+结果分为 `matched`、`partial`、`mismatch`、`not_comparable`。其中 `partial` 不能当作完全通过，`not_comparable` 不能当作失败行情，也不能计入通过率。当前 600036.SH 新浪/腾讯日 K 黄金夹具两侧均为 degraded，成交额缺失，因此只证明质量降级被保留，不构成比较器 matched 样例。
+
+新增固定测试覆盖身份/复权前置条件、降级质量拒绝、核心字段一致、成交额缺失、日期集合不一致及 OHLC 超差。真实 Provider 多源复验仍待单独执行；本轮不需要 Key/Token，也没有发起上游请求。

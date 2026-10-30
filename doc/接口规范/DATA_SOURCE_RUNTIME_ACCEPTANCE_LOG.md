@@ -238,3 +238,15 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 当前约束是单请求单板块、单证券，不代表全板块覆盖率，也不执行全市场扫描。多证券批量探测暂缓，待异步任务与限速策略设计后再实施。
 
 本节记录的是代码能力，不是 Provider 真实请求验收结果。未配置 Key/Token 的 Provider 仍不发起真实请求；代码实现、CI 通过和真实数据质量通过分别记录。
+
+
+## 11. 跨 Provider 日 K 对账契约开发记录（2026-10-30）
+
+- 新增内部比较器 `CompareCrossProviderDailyBars`，输入必须携带 Provider、来源版本、证券代码、复权口径、质量状态和逐日行情。
+- 不同证券、不同复权口径、不同交易日期集合、重复交易日、非法日期、成交量单位非 shares 均判为 `not_comparable`，不会将不一致条件误报为行情差异。
+- 质量状态必须双方均为 `valid`；任何一侧为 degraded/unknown 时拒绝作为对账基准。
+- OHLC 容差 0.001；成交量容差 50 股；双方均有 CNY 成交额时容差 1 CNY。成交额缺失/单位不明保留字段级 `not_comparable`，整体标记 `partial`。
+- 结果状态：`matched`（所有可比较字段通过）、`partial`（核心字段可比较但可选字段缺失/不可比较）、`mismatch`（至少一个字段超差）、`not_comparable`（身份、日期、质量或单位前置条件不满足）。
+- 本轮只增加本地静态契约与单测，不执行真实 Provider 请求，不需要 Key/Token；不代表任何供应商线上验收通过。
+
+后续：将同一比较契约接入跨市场黄金样例；补齐创业板、科创板、北交所、停牌、新股及除权日真实样本。批量 Provider 对账应放入受控异步任务，不能扩张同步诊断请求。
