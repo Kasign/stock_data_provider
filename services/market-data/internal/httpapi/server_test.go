@@ -144,6 +144,39 @@ func (httpFakeProvider) FetchLimitPool(_ context.Context, poolType, tradeDate st
 	}, nil
 }
 
+type httpMarketCapitalFlowFake struct {
+	httpFakeProvider
+}
+
+func (httpMarketCapitalFlowFake) FetchMarketCapitalFlow(_ context.Context, startDate, endDate string) (*model.MarketCapitalFlowSnapshot, error) {
+	now := time.Now().UTC()
+	netAmount := 123456.0
+	return &model.MarketCapitalFlowSnapshot{
+		StartDate: startDate, EndDate: endDate, Total: 1,
+		Items: []model.MarketCapitalFlowItem{{TradeDate: endDate, NetAmountCNY: &netAmount}},
+		Source: "eastmoney", SourceVersion: "test-market-capital-flow-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}, nil
+}
+
+func TestMarketCapitalFlowRouteIsRegisteredAndReturnsHistory(t *testing.T) {
+	p := httpMarketCapitalFlowFake{}
+	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.SetMarketCapitalFlowProviders([]provider.MarketCapitalFlowProvider{p})
+	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/capital-flow?start=2026-10-29&end=2026-10-29", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("market capital-flow route should return history, got status=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"net_amount_cny\":123456") {
+		t.Fatalf("market capital-flow response is missing provider-reported net amount: %s", w.Body.String())
+	}
+}
+
 func TestAuthIsRequiredForDataRoutes(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))

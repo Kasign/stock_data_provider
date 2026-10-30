@@ -206,6 +206,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/market/index-catalog", s.auth(http.HandlerFunc(s.indexCatalog)))
 	mux.Handle("GET /api/v1/market/indices/{symbol}/constituents", s.auth(http.HandlerFunc(s.indexConstituents)))
 	mux.Handle("GET /api/v1/market/indices/{symbol}/daily", s.auth(http.HandlerFunc(s.indexDailyBars)))
+	mux.Handle("GET /api/v1/market/capital-flow", s.auth(http.HandlerFunc(s.marketCapitalFlow)))
 	mux.Handle("GET /api/v1/market/breadth", s.auth(http.HandlerFunc(s.marketBreadth)))
 	mux.Handle("GET /api/v1/market/sentiment", s.auth(http.HandlerFunc(s.marketSentiment)))
 	mux.Handle("GET /api/v1/market/sentiment/history", s.auth(http.HandlerFunc(s.marketSentimentHistory)))
