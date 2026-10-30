@@ -256,3 +256,32 @@ func TestProviderProbeOptionsValidateMarketAndSymbolFilters(t *testing.T) {
 		}
 	}
 }
+
+
+type providerProbeUnsupportedBeijingFake struct{}
+
+func (providerProbeUnsupportedBeijingFake) Name() string { return "probe-sina" }
+func (providerProbeUnsupportedBeijingFake) FetchQuote(context.Context, string) (*model.Quote, error) {
+	return nil, errors.New(`Sina does not support exchange suffix "BJ"`)
+}
+
+func TestProviderProbeMarksUnsupportedBeijingProviderWithoutFailure(t *testing.T) {
+	p := providerProbeUnsupportedBeijingFake{}
+	ds := NewWithCapabilities(
+		[]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil,
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
+	)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, Markets: []string{"BSE"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "quote")
+	if !found || item.Status != "not_supported" || item.ErrorCode != "market_not_supported" || item.ErrorStage != "configuration" {
+		t.Fatalf("unsupported BSE capability must not be counted as provider failure: %+v", run)
+	}
+	if run.NotSupported != 1 || run.Failed != 0 || run.Status != "degraded" {
+		t.Fatalf("unsupported provider summary is incorrect: %+v", run)
+	}
+}

@@ -279,3 +279,10 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 - `35d442fa1049011219d38f2932bc3dcb611d1bca` 的 Go suite 中，market-data Job 的 gofmt 检查发现 `cross_provider_daily_compare_test.go` 函数间存在多余空行。
 - market-data Docker 镜像构建执行相同 gofmt 前置检查，因此同步失败；并非镜像编译或运行时问题。
 - 已移除多余空行，后续以修复 SHA 的 Go test/race/vet 和 Docker 构建结果作为验收依据。
+
+
+## 16. 北交所定向诊断不支持状态（2026-10-30）
+
+现有 Provider 代码映射测试确认：Sina、Tencent、NetEase、BaoStock 不接受 BJ 代码；Pytdx、Hithink、TickFlow、Tushare、Eastmoney 有代码级映射。代码级映射不代表上游在线能力已验收。
+
+统一诊断对 BSE 样本遇到明确的交易所不支持错误时，现标记 `not_supported / market_not_supported`，计入 NotSupported，不计入 Failed。此分类仅针对适配器在请求前明确拒绝的 BJ 代码；DNS、EOF、HTTP 5xx、权限问题仍按原错误分类。新增 Service 单测覆盖该状态汇总。

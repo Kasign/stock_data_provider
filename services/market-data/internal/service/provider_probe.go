@@ -700,7 +700,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.QualityReasons = reasons
 			if err != nil {
 				setProbeFailure(&item, err)
-				if strings.Contains(err.Error(), "probe skipped:") {
+				if selectedMarket == "BSE" && isUnsupportedBeijingProbeError(err) {
+					item.Status = "not_supported"
+					item.ErrorCode = "market_not_supported"
+					item.ErrorStage = "configuration"
+				} else if strings.Contains(err.Error(), "probe skipped:") {
 					item.Status = "skipped"
 					item.ErrorCode = "probe_skipped_by_policy"
 					item.ErrorStage = "configuration"
@@ -771,6 +775,17 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		}
 	}
 	return run, nil
+}
+
+func isUnsupportedBeijingProbeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "does not support beijing stock exchange") ||
+		strings.Contains(message, "does not support exchange suffix \"bj\"") ||
+		strings.Contains(message, "supports shanghai and shenzhen a-share symbols only") ||
+		strings.Contains(message, "currently support shanghai/shenzhen only")
 }
 
 func isStockScopedProbeCapability(capability string) bool {

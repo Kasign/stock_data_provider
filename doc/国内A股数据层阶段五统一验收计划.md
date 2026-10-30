@@ -580,3 +580,22 @@
 - 中间提交 `35d442fa1049011219d38f2932bc3dcb611d1bca` 的 Go suite 失败原因已定位：仅 `cross_provider_daily_compare_test.go` 存在多余空行，触发 gofmt 检查；Docker market-data 镜像构建在同一 gofmt 前置检查处终止，并非 Dockerfile 或业务构建错误。
 - 随后的 `7e3b6c2c8cb148106d4f5f98fa4184d0c52e795b` 已排队执行全量工作流；该 SHA 结果以 Actions 实际结论为准。
 - 本次修复仅规范 Go 格式，不调整业务逻辑；修复提交 SHA 以分支最新 HEAD 为准。
+
+
+### 北交所 Provider 代码映射矩阵复核（2026-10-30）
+
+现有 `TestDomesticStockProviderBeijingSymbolSupportMatrix` 和板块代码映射测试已明确以下**代码级**结论：
+
+| Provider | BJ 代码映射 | 当前代码结论 | 在线数据验收 |
+|---|---|---|---|
+| Sina | 不支持 | not_supported | 未执行 |
+| Tencent | 不支持 | not_supported | 未执行 |
+| NetEase | 不支持 | not_supported | 未执行 |
+| BaoStock | 不支持 | not_supported | 未执行 |
+| Pytdx | 支持 `bj######` | 已映射 | 未证明上游在线可用 |
+| Hithink | 保留 `######.BJ` | 已映射 | 需要 Key/权限 |
+| TickFlow | 保留 `######.BJ` | 已映射 | 需要 Key/权限 |
+| Tushare | 保留 `######.BJ` | 已映射 | 需要 Token/积分 |
+| Eastmoney | 映射为 `0.######` | 已映射 | 公共端点在线可用性待复验 |
+
+代码映射不等于供应商承诺支持，也不等于真实请求成功。BSE 定向诊断遇到 Sina/Tencent/NetEase/BaoStock 明确的交易所不支持错误时，结果应标记 `not_supported`，而不是 `failed`；适配器必须在发出上游 HTTP 请求前拒绝该证券。其他映射支持 Provider 仍需真实核对权限、代码身份、交易日期、OHLC、成交量单位和质量状态。
