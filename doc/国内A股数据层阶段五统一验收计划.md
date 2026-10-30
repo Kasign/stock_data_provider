@@ -145,3 +145,25 @@
 - 以上为固定源码静态对照，不是 Python/Go 实际数据值差分。双侧真实样本仍待在原 Python 运行环境导出。
 
 下一步：把固定 Python 基线对应的导出字段模板和 Go API 快照格式对齐，形成可重复的双侧样本差分入口；继续补充跨板块黄金样例。
+
+## 十一、最新验收流水线状态（2026-10-30）
+
+最新文档/基线提交：`25e2b3e010ba06257a1980cdb35d6925c32f7395`
+
+| 工作流 | Run ID | 结果 | 备注 |
+|---|---:|---|---|
+| Go/Python 质量契约回归 | 41019948107 | 通过 | Python-to-Go 契约测试、market-data Go 全量测试、旧 Python 质量标记检查均通过 |
+| Go 测试套件 | 41019702930 | 部分完成 | 根模块测试/race/vet 通过；go-core 测试/race/vet 通过；market-data 全量测试通过；market-data race 在后续提交触发并发取消后中止，vet 未执行 |
+| Docker / MariaDB | 41019702930 | 通过 | 两个 Go 镜像构建成功；MariaDB 11.4 PIT 集成通过；Compose 与部署脚本语法通过 |
+| WebUI 检查 | 41019703044 | 通过 | 未修改 WebUI 代码，仅验证分支工作区 |
+| 真实 Provider 探测 | 41019702953 | 诊断失败 | 5 项失败均来自 Eastmoney HTTP 502/EOF；该工作流 continue-on-error，不阻断普通 CI |
+| 同花顺可选探测 | 41019702953 | 跳过 | 未勾选 include_hithink，且没有本轮真实账号权限证据 |
+
+真实 Provider 5 项失败：
+- Eastmoney stock_search：HTTP 502。
+- Eastmoney sector_rankings：HTTP 502。
+- Eastmoney quote（600036.SH）：HTTP 502。
+- Eastmoney delay quote（600036.SH）：HTTP 502。
+- Eastmoney daily_bars（600036.SH）：连接 EOF。
+
+这些失败必须保留为源端可用性问题，不允许通过忽略错误或降级质量门禁来让探测变绿。

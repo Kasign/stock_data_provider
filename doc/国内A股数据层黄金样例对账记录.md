@@ -81,3 +81,11 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 5. 对 `2001`、`2003`、限流、空结果和字段不完整分别记录，不得因某一接口成功而启用全部能力。
 
 当前仓库没有可读取的账号 Key，因此这次仅补齐可重复的安全验收流程，不代表已完成同花顺真实请求。
+
+
+## 7. 后续 CI 验收状态补记（2026-10-30）
+
+- Go/Python 质量契约回归 Run `41019948107`：通过。
+- Go 测试 Run `41019702930`：根模块与 go-core 的测试/race/vet 通过；market-data 全量测试通过，但 market-data race 在下一提交触发并发取消后中止，market-data vet 未执行。Docker 镜像构建和 MariaDB PIT 集成通过。
+- 真实 Provider Run `41019702953`：5 项 Eastmoney 请求失败（stock_search、sector_rankings、quote、备用 quote 为 HTTP 502；daily_bars 为 EOF）。其余成功只代表本次请求返回。
+- 同花顺可选测试 `TestLiveHithinkCapabilities` 被跳过，未提供 API Key，也未执行真实账号权限验收。
