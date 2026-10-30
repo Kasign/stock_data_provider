@@ -4787,10 +4787,10 @@ button:disabled {
 .run-flow-dialog .run-flow-events-column { display:flex; flex-direction:column; }
 .run-flow-dialog .run-flow-events-column .event-heading { margin-top:0; }
 .run-flow-dialog #task-events { flex:1 1 auto; min-height:0; max-height:none; overflow:visible; }
-.run-flow-dialog .run-flow-node { border-bottom:1px solid var(--border-soft); }
-.run-flow-dialog .run-flow-node > summary { display:grid; grid-template-columns:22px minmax(0,1fr); align-items:center; gap:9px; padding:10px 7px; cursor:pointer; list-style:none; }
+.run-flow-dialog .run-flow-node { display:block; padding:0; border-bottom:1px solid var(--border-soft); }
+.run-flow-dialog .run-flow-node > summary { display:grid; grid-template-columns:22px minmax(0,1fr) 14px; align-items:center; gap:9px; padding:10px 7px; cursor:pointer; list-style:none; }
 .run-flow-dialog .run-flow-node > summary::-webkit-details-marker { display:none; }
-.run-flow-dialog .run-flow-node > summary::after { content:"⌄"; grid-column:2; justify-self:end; color:var(--text-dim); font-size:11px; margin-top:-14px; }
+.run-flow-dialog .run-flow-node > summary::after { content:"⌄"; grid-column:3; justify-self:end; color:var(--text-dim); font-size:11px; }
 .run-flow-dialog .run-flow-node[open] > summary::after { content:"⌃"; }
 .run-flow-dialog .run-flow-node[aria-pressed="true"] > summary { background:color-mix(in srgb,var(--accent) 8%,transparent); }
 .run-flow-dialog .run-flow-node .event-body { min-width:0; }
