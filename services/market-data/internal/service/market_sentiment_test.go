@@ -39,7 +39,9 @@ func TestMarketSentimentKeepsUnavailablePoolCountsNull(t *testing.T) {
 	for _, reason := range []string{"limit_pool_up_unavailable", "limit_pool_down_unavailable", "limit_pool_broken_unavailable"} {
 		found := false
 		for _, got := range snapshot.QualityReasons { if got == reason { found = true; break } }
-		if !found { t.Errorf("missing quality reason %q in %v", reason, snapshot.QualityReasons) }
+		if !found {
+			t.Errorf("missing quality reason %q in %v", reason, snapshot.QualityReasons)
+		}
 	}
 	if snapshot.QualityStatus != model.QualityDegraded { t.Fatalf("quality_status = %q, want degraded", snapshot.QualityStatus) }
 }
