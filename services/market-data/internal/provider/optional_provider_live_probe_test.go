@@ -125,7 +125,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		if len(bars) == 0 {
 			return 0, "", nil, errLiveProbeContract("daily_bars returned no rows in the recent date range")
 		}
-		if message := liveProbeDailyContractError(bars, "tushare", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
+		if message := liveProbeDailyContractError(bars, "tushare", "tushare", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
 			return len(bars), "", nil, errLiveProbeContract(message)
 		}
 		return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
@@ -267,7 +267,7 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 			if len(bars) == 0 {
 				return 0, "", nil, errLiveProbeContract(capability + " returned no rows in the recent date range")
 			}
-			if message := liveProbeDailyContractError(bars, "hithink", symbol, adjustment, startDate, endDate, 40); message != "" {
+			if message := liveProbeDailyContractError(bars, "hithink", "hithink", symbol, adjustment, startDate, endDate, 40); message != "" {
 				return len(bars), "", nil, errLiveProbeContract(message)
 			}
 			if adjustment != model.AdjustmentNone {
