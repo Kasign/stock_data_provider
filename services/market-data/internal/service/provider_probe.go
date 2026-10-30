@@ -158,6 +158,22 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
 	}
+	for _, p := range s.marketCapitalFlowProviders {
+		p := p
+		add(p.Name(), "market_capital_flow", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			loc := marketLocation()
+			end := time.Now().In(loc)
+			start := end.AddDate(0, 0, -14)
+			snapshot, err := p.FetchMarketCapitalFlow(probeCtx, start.Format("2006-01-02"), end.Format("2006-01-02"))
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
+			if err := validateMarketCapitalFlowSnapshot(start.Format("2006-01-02"), end.Format("2006-01-02"), snapshot); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
+			return snapshot.QualityStatus, snapshot.SourceVersion, []string{"market_capital_flow_history_probe"}, nil
+		})
+	}
 	run.Total = len(jobs)
 	results := make([]model.ProviderProbeItem, len(jobs))
 	sem := make(chan struct{}, 4)

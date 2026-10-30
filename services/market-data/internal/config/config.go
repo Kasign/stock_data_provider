@@ -34,6 +34,7 @@ type ProviderSettings struct {
 	IndexCatalog          bool `json:"index_catalog"`
 	ChipDistribution      bool `json:"chip_distribution"`
 	CapitalFlow           bool `json:"capital_flow"`
+	MarketCapitalFlow     bool `json:"market_capital_flow"`
 	HotRankings           bool `json:"hot_rankings"`
 	DragonTiger           bool `json:"dragon_tiger"`
 	Announcements         bool `json:"announcements"`
@@ -458,6 +459,7 @@ func overrideProvider(prefix string, p ProviderSettings) ProviderSettings {
 	p.IndexCatalog = boolEnv("MARKET_DATA_"+prefix+"_INDEX_CATALOG_ENABLED", p.IndexCatalog)
 	p.ChipDistribution = boolEnv("MARKET_DATA_"+prefix+"_CHIP_DISTRIBUTION_ENABLED", p.ChipDistribution)
 	p.CapitalFlow = boolEnv("MARKET_DATA_"+prefix+"_CAPITAL_FLOW_ENABLED", p.CapitalFlow)
+	p.MarketCapitalFlow = boolEnv("MARKET_DATA_"+prefix+"_MARKET_CAPITAL_FLOW_ENABLED", p.MarketCapitalFlow)
 	p.HotRankings = boolEnv("MARKET_DATA_"+prefix+"_HOT_RANKINGS_ENABLED", p.HotRankings)
 	return p
 }

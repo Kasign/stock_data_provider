@@ -63,8 +63,8 @@ func TestTushareMarketCapitalFlowPreservesNullAsMissing(t *testing.T) {
 }
 
 func TestTushareMarketCapitalFlowRejectsDuplicateDates(t *testing.T) {
-	fields := []string{"trade_date"}
-	payload, _ := json.Marshal(map[string]any{"code":0,"data":map[string]any{"fields":fields,"items":[][]any{{"20261029"},{"20261029"}}}})
+	fields := []string{"trade_date", "net_amount"}
+	payload, _ := json.Marshal(map[string]any{"code":0,"data":map[string]any{"fields":fields,"items":[][]any{{"20261029", 1.0},{"20261029", 2.0}}}})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(payload) }))
 	defer server.Close()
 	_, err := NewTushareConfigured(3*time.Second, server.URL, "test-token").FetchMarketCapitalFlow(context.Background(), "2026-10-29", "2026-10-29")
