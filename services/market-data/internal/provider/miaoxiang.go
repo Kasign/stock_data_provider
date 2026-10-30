@@ -193,7 +193,22 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 	}
 	rows := tableRows(*target)
 	series := make([]mxFlowObservation, 0, len(rows))
-	for _, row := range rows {
+	seenDates := make(map[string]struct{}, len(rows))
+	loc := time.FixedZone("CST", 8*60*60)
+	today := p.now().In(loc).Format("2006-01-02")
+	for index, row := range rows {
+		date := normalizeMXDate(row["_date"])
+		parsedDate, dateErr := time.Parse("2006-01-02", date)
+		if date == "" || dateErr != nil || parsedDate.Format("2006-01-02") != date {
+			return nil, fmt.Errorf("MX API capital-flow row %d has an invalid observation date", index)
+		}
+		if date > today {
+			return nil, fmt.Errorf("MX API capital-flow row %d date %s is in the future", index, date)
+		}
+		if _, exists := seenDates[date]; exists {
+			return nil, fmt.Errorf("MX API capital-flow response contains duplicate date %s", date)
+		}
+		seenDates[date] = struct{}{}
 		label := ""
 		for _, candidate := range []string{"主力净流入", "主力净流入资金", "主力净流入金额"} {
 			if _, ok := row[candidate]; ok {
@@ -201,14 +216,14 @@ func (p *MiaoXiang) FetchCapitalFlow(ctx context.Context, rawSymbol string) (*mo
 				break
 			}
 		}
-		series = append(series, mxFlowObservation{date: normalizeMXDate(row["_date"]), amount: parseMoneyYuanPtr(row[label])})
+		series = append(series, mxFlowObservation{date: date, amount: parseMoneyYuanPtr(row[label])})
 	}
 	sort.SliceStable(series, func(i, j int) bool { return series[i].date > series[j].date })
 	if len(series) == 0 {
 		return nil, errors.New("MX API capital-flow table is empty")
 	}
 	flow := &model.CapitalFlow{
-		Symbol: symbol, Source: p.Name(), SourceVersion: miaoXiangVersion, FetchedAt: p.now(), Observations: len(series),
+		Symbol: symbol, ProviderDate: series[0].date, Source: p.Name(), SourceVersion: miaoXiangVersion, FetchedAt: p.now(), Observations: len(series),
 		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"natural_language_supplemental_source", "publication_availability_timestamp_unavailable"},
 	}
