@@ -26,7 +26,7 @@ export function formatScreeningCondition(condition) {
   const field = SCREENING_FIELDS[condition.field], operator = SCREENING_OPERATORS[condition.operator];
   if (!field || !operator) return "";
   const digits = condition.field === "amount" ? 0 : 2;
-  return field.label + " " + operator.symbol + " " + Number(condition.value).toLocaleString("zh-CN", { maximumFractionDigits: digits }) + (field.unit ? " " + field.unit : "");
+  return field.label + " " + operator.symbol + " " + Number(condition.value).toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }) + (field.unit ? " " + field.unit : "");
 }
 export function buildScreeningDraftSummary(conditions = []) {
   const normalized = normalizeScreeningConditions(conditions);
