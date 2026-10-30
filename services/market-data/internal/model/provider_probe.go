@@ -25,6 +25,12 @@ type ProviderProbeItem struct {
 	ErrorStage     string        `json:"error_stage,omitempty"`
 	ErrorMessage   string        `json:"error_message,omitempty"`
 	HTTPStatus     int           `json:"http_status,omitempty"`
+	SampleSymbol   string        `json:"sample_symbol,omitempty"`
+	SampleMarket   string        `json:"sample_market,omitempty"`
+	SampleDate     string        `json:"sample_date,omitempty"`
+	RowsReturned   int           `json:"rows_returned,omitempty"`
+	RowsValidated  int           `json:"rows_validated,omitempty"`
+	ProviderTime   *time.Time    `json:"provider_time,omitempty"`
 	CheckedAt      time.Time     `json:"checked_at"`
 }
 
