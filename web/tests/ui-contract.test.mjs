@@ -34,7 +34,7 @@ function finalCssRuleBody(selector) {
 }
 
 function baseCssDeclarationBlock(selector) {
-  const rules = [...stylesheet.matchAll(/([^{}]+)\\{([^{}]*)\\}/g)];
+  const rules = [...stylesheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g)];
   const rule = rules.find((match) => match[1].split(",").some((part) => part.trim() === selector));
   return rule?.[2] || "";
 }
@@ -688,7 +688,7 @@ test("service health and provider-list refreshes ignore superseded responses", (
   assert.match(app, /let sourceRefreshGeneration = 0;/);
   assert.match(app, /async function refreshServices\(\) \{[\s\S]*?const generation = \+\+serviceRefreshGeneration;[\s\S]*?if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}/);
   assert.match(app, /async function refreshSources\(\) \{[\s\S]*?const generation = \+\+sourceRefreshGeneration;[\s\S]*?if \(generation !== sourceRefreshGeneration\) return;/);
-  assert.match(app, /if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}[\s\S]*?setServiceStatus\("market"/);
+  assert.match(app, /if \(generation !== serviceRefreshGeneration\) \{\s*return \{ marketOK, analysisOK, marketState, analysisState, stale: true \};\s*\}[\s\S]*?setText\("#connection-label", connectionLabel\)/);
 });
 
 test("provider capability refresh clears old connection data and owns its loading state", () => {
@@ -1471,8 +1471,9 @@ test("服务健康刷新不会覆盖行情查询区域的独立提示", () => {
 test("侧栏与顶栏服务状态只有在明确健康回包时才显示正常", () => {
   assert.ok(app.includes('if (!result?.ok) return "failed";'));
   assert.ok(app.includes('const status = String(result.data?.status || "").trim().toLowerCase();'));
-  assert.ok(app.includes('if (!status) return "unknown";'));
-  assert.match(app, /function setServiceStatus\(prefix, status, text\)[\s\S]*?status === "healthy"[\s\S]*?status === "unknown" \|\| status === "degraded"/);
+  assert.match(app, /function serviceHealthState\(result\)[\s\S]*?return "unknown";/);
+  assert.match(app, /setText\("#connection-label", connectionLabel\)/);
+  assert.doesNotMatch(app, /setServiceStatus\(/, "service refresh must not reference removed per-service sidebar elements");
   assert.match(stylesheet, /\.status-dot\.is-unknown\s*\{[^}]*background:\s*var\(--text-dim\)/);
 });
 

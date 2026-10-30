@@ -84,7 +84,30 @@ try {
     const context = await browser.newContext({ viewport, reducedMotion: "reduce" });
     const page = await context.newPage();
     const pageErrors = [];
+    const consoleErrors = [];
+    const unexpectedNetworkFailures = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() !== "error") return;
+      const detail = message.text();
+      // Mock API 4xx/5xx 与主动断网场景会产生浏览器资源错误；业务错误由页面状态和请求断言单独验收。
+      if (/Failed to load resource|net::ERR_FAILED/.test(detail)) return;
+      consoleErrors.push(detail);
+    });
+    page.on("requestfailed", (request) => {
+      const pathname = new URL(request.url()).pathname;
+      const expectedApiFailure = pathname.includes("/api/") ||
+        /\/(?:health\/(?:ready|live)|readyz|healthz)$/.test(pathname);
+      if (!expectedApiFailure) unexpectedNetworkFailures.push(request.method() + " " + pathname + ": " + (request.failure()?.errorText || "request failed"));
+    });
+    page.on("response", (response) => {
+      const pathname = new URL(response.url()).pathname;
+      const isApi = pathname.includes("/api/") ||
+        /\/(?:health\/(?:ready|live)|readyz|healthz)$/.test(pathname);
+      if (!isApi && response.status() >= 400) {
+        unexpectedNetworkFailures.push(response.status() + " " + pathname);
+      }
+    });
 
     // API responses are deterministic fixtures only: one isolated viewport exercises failures, others stay unavailable.
     let quoteScenario = "success";
@@ -474,10 +497,12 @@ try {
       // Successful refreshes may retain a prior same-symbol quote while loading; only wait for the success payload here.
       await page.waitForFunction(() => document.querySelector("#metric-price")?.textContent.trim() === "123.45", null, { timeout: 10000 });
       await page.locator("#refresh-button").click();
-      await page.waitForFunction(() =>
-        document.querySelector("#market-health-text")?.textContent === "不可用" &&
-        document.querySelector("#analysis-health-text")?.textContent === "不可用",
-      null, { timeout: 10000 });
+      await page.waitForFunction(() => !document.querySelector("#refresh-button")?.disabled, null, { timeout: 10000 });
+      const connectionLabel = await page.locator("#connection-label").textContent();
+      assert.ok(
+        ["连接异常", "服务状态未知", "连接异常或状态未知", "部分连接"].includes(connectionLabel?.trim()),
+        "service refresh must not report a successful connection when health endpoints return failures: " + connectionLabel
+      );
 
       for (const scenario of ["401", "403", "404", "503", "network"]) {
         const expected = quoteErrors[scenario];
@@ -506,8 +531,6 @@ try {
           barsMeta: document.querySelector("#bars-meta")?.textContent.trim(),
           barsCaption: document.querySelector("#bars-caption")?.textContent || "",
           barsRows: document.querySelector("#bars-body")?.textContent || "",
-          marketHealth: document.querySelector("#market-health-dot")?.className || "",
-          analysisHealth: document.querySelector("#analysis-health-dot")?.className || "",
           overallConnection: document.querySelector("#connection-dot")?.className || ""
         }));
         assert.equal(failedQuote.price, "—", scenario + " must clear the previous price");
@@ -522,8 +545,6 @@ try {
         assert.equal(failedQuote.barsMeta, "1 根", scenario + " must retain the successful daily-bars response");
         assert.match(failedQuote.barsCaption, /600519\.SH/, scenario + " daily-bars caption must match the requested symbol");
         assert.match(failedQuote.barsRows, /123\.45/, scenario + " must keep the valid daily close even when Quote fails");
-        assert.doesNotMatch(failedQuote.marketHealth, /is-online/, scenario + " must not report a healthy market API");
-        assert.doesNotMatch(failedQuote.analysisHealth, /is-online/, scenario + " must not report a healthy analysis API");
         assert.doesNotMatch(failedQuote.overallConnection, /is-online/, scenario + " must not report healthy overall connectivity");
 
         // A user-initiated retry must issue exactly one new request and restore data only after success.
@@ -840,7 +861,7 @@ try {
       if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
         await menu.click();
       }
-      await page.locator('.nav-link[data-view="data"]').click();
+      await clickNav(page, '.nav-link[data-view="data"]');
       await page.locator("#data-view").waitFor({ state: "visible" });
 
       dataSourceScenario = "success";
@@ -1194,27 +1215,16 @@ try {
       await page.waitForFunction(() => !document.querySelector("#refresh-button")?.disabled, null, { timeout: 10000 });
       await refreshButton.click();
       await page.waitForFunction(
-        () => document.querySelector("#market-health-text")?.textContent === "状态未知" &&
-          document.querySelector("#analysis-health-text")?.textContent === "状态未知" &&
-          document.querySelector("#market-health-dot")?.classList.contains("is-unknown") &&
-          document.querySelector("#analysis-health-dot")?.classList.contains("is-unknown"),
+        () => document.querySelector("#connection-label")?.textContent === "服务状态未知" &&
+          document.querySelector("#connection-dot")?.classList.contains("is-unknown"),
         null,
         { timeout: 10000 }
       );
       const topbarHealth = await page.evaluate(() => ({
-        marketLabel: document.querySelector("#market-health-text")?.textContent.trim() || "",
-        marketDot: document.querySelector("#market-health-dot")?.className || "",
-        analysisLabel: document.querySelector("#analysis-health-text")?.textContent.trim() || "",
-        analysisDot: document.querySelector("#analysis-health-dot")?.className || "",
-        connectionLabel: document.querySelector("#connection-text")?.textContent.trim() || "",
+        connectionLabel: document.querySelector("#connection-label")?.textContent.trim() || "",
         connectionDot: document.querySelector("#connection-dot")?.className || ""
       }));
-      assert.equal(topbarHealth.marketLabel, "状态未知");
-      assert.match(topbarHealth.marketDot, /is-unknown/);
-      assert.doesNotMatch(topbarHealth.marketDot, /is-online/);
-      assert.equal(topbarHealth.analysisLabel, "状态未知");
-      assert.match(topbarHealth.analysisDot, /is-unknown/);
-      assert.doesNotMatch(topbarHealth.analysisDot, /is-online/);
+      assert.equal(topbarHealth.connectionLabel, "服务状态未知");
       assert.doesNotMatch(topbarHealth.connectionDot, /is-online/);
       assert.match(topbarHealth.connectionDot, /is-unknown/);
       healthScenario = "unavailable";
@@ -1262,6 +1272,181 @@ try {
         "navigation should mark " + viewName + " as the current page"
       );
       await assertNoHorizontalOverflow("view " + viewName);
+      if (viewName === "settings") {
+        const settingsLinks = page.locator("#settings-view .settings-nav-link");
+        assert.equal(await settingsLinks.count(), 10, "settings center must expose all ten groups");
+        for (const link of await settingsLinks.all()) {
+          const target = await link.getAttribute("data-settings-target");
+          assert.ok(target, "each settings group must declare a section target");
+          assert.equal(await page.locator("#" + target).count(), 1, "settings group target must exist: " + target);
+        }
+
+        if (viewport.width === 320) {
+          const orderList = page.locator("#watchlist-field-order-list");
+          assert.equal(await orderList.locator("[data-watchlist-field-order]").count(), 5);
+          assert.equal(await page.locator("[data-watchlist-display-field]").count(), 5);
+          const readOrder = () => page.locator("#watchlist-field-order-list [data-watchlist-field-order]").evaluateAll((nodes) =>
+            nodes.map((node) => node.dataset.watchlistFieldOrder)
+          );
+          const initialOrder = await readOrder();
+          await orderList.locator("[data-watchlist-field-order-move='down']").first().click();
+          const reordered = await readOrder();
+          assert.notDeepEqual(reordered, initialOrder, "moving a watchlist field must change the visible order");
+          const firstVisibility = page.locator("[data-watchlist-display-field]").first();
+          const visibilityValue = await firstVisibility.inputValue();
+          const wasChecked = await firstVisibility.isChecked();
+          await firstVisibility.setChecked(!wasChecked);
+          await page.reload({ waitUntil: "load" });
+          await page.locator("#open-settings").click();
+          await page.locator("#settings-view").waitFor({ state: "visible" });
+          assert.deepEqual(await readOrder(), reordered, "watchlist field order must survive a full page reload");
+          assert.equal(
+            await page.locator("[data-watchlist-display-field]").first().isChecked(),
+            !wasChecked,
+            "watchlist field visibility must survive a full page reload"
+          );
+
+          const keys = {
+            settings: "stock-provider-webui.settings.v1",
+            theme: "stock-provider-webui.theme.v1",
+            preferences: "stock-provider-webui.preferences.v1",
+            watchlist: "stock-provider-webui.watchlist.v1",
+            tasks: "stock-provider-webui.recent-analysis.v1"
+          };
+          const currentTask = { task_id: "task-1", run_id: "run-1", symbols: ["600519.SH"], task_type: "post_market_scan", status: "running", analysis_base: "/analysis-api", updated_at: "2026-10-30T00:00:00Z" };
+          await page.evaluate(({ keys, currentTask }) => {
+            localStorage.setItem(keys.watchlist, JSON.stringify([{ symbol: "600519.SH", name: "原名称", updated_at: "2026-10-29T00:00:00Z" }]));
+            localStorage.setItem(keys.tasks, JSON.stringify([currentTask]));
+          }, { keys, currentTask });
+
+          const makeImportFile = (watchlist, recentTasks, preferences = {}) => ({
+            name: "workspace-test.json",
+            mimeType: "application/json",
+            buffer: Buffer.from(JSON.stringify({
+              format: "stock-provider-webui-browser-data",
+              version: 3,
+              data: {
+                theme: "dark",
+                preferences,
+                connection: { marketBase: "/market-api", analysisBase: "/analysis-api" },
+                watchlist,
+                recent_tasks: recentTasks
+              }
+            }))
+          });
+          const uploadWorkspace = async (file) => {
+            await page.locator("#browser-data-file").setInputFiles(file);
+            await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === true);
+          };
+          const currentImportedTasks = [
+            { ...currentTask, status: "succeeded" },
+            { task_id: "task-2", run_id: "run-2", symbols: ["000001.SZ"], task_type: "post_market_scan", status: "queued", analysis_base: "/analysis-api" }
+          ];
+          const mergeFile = makeImportFile([
+            { symbol: "600519", name: "导入名称", updated_at: "2026-10-30T00:00:00Z" },
+            { symbol: "000001.SZ", name: "平安银行", updated_at: "2026-10-30T00:00:00Z" }
+          ], currentImportedTasks, { watchlistSort: "name" });
+
+          await uploadWorkspace(mergeFile);
+          const preview = await page.locator("#browser-data-import-summary").textContent();
+          assert.match(preview, /冲突 1 条/, "preview must report the duplicate stock and task conflicts");
+          assert.match(await page.locator("#browser-data-import-current").textContent(), /1 条自选股，1 条最近任务/);
+          assert.match(await page.locator("#browser-data-import-settings").textContent(), /当前行情 API Key 保留/);
+          await page.keyboard.press("Escape");
+          await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
+          assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.watchlist), [
+            { symbol: "600519.SH", name: "原名称", updated_at: "2026-10-29T00:00:00Z" }
+          ], "cancel must not modify the current watchlist");
+
+          await uploadWorkspace(mergeFile);
+          await page.locator("#browser-data-import-merge").click();
+          await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
+          const mergeFeedback = await page.locator("#browser-data-feedback").textContent();
+          assert.match(mergeFeedback, /导入完成/, "merge import failed: " + mergeFeedback);
+          const merged = await page.evaluate((keys) => ({
+            settings: JSON.parse(localStorage.getItem(keys.settings)),
+            watchlist: JSON.parse(localStorage.getItem(keys.watchlist)),
+            tasks: JSON.parse(localStorage.getItem(keys.tasks)),
+            preferences: JSON.parse(localStorage.getItem(keys.preferences))
+          }), keys);
+          assert.equal(merged.settings.apiKey, "browser-test-key", "merge must preserve the current API Key");
+          assert.equal(merged.watchlist.length, 2);
+          assert.equal(merged.watchlist.find((item) => item.symbol.replace(/\\.(SH|SZ|BJ)$/, "") === "600519")?.name, "导入名称");
+          assert.equal(merged.tasks.length, 2);
+          assert.equal(merged.tasks.find((item) => item.task_id === "task-1")?.status, "succeeded");
+          assert.equal(merged.preferences.watchlistSort, "name");
+
+          const replaceFile = makeImportFile(
+            [{ symbol: "300750.SZ", name: "宁德时代", updated_at: "2026-10-30T00:00:00Z" }],
+            [{ task_id: "task-3", symbols: ["300750.SZ"], task_type: "post_market_scan", status: "queued", analysis_base: "/analysis-api" }]
+          );
+          await uploadWorkspace(replaceFile);
+          await page.locator("#browser-data-import-replace").click();
+          await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
+          const replaceFeedback = await page.locator("#browser-data-feedback").textContent();
+          assert.match(replaceFeedback, /导入完成/, "replace import failed: " + replaceFeedback);
+          const replaced = await page.evaluate((keys) => ({
+            settings: JSON.parse(localStorage.getItem(keys.settings)),
+            watchlist: JSON.parse(localStorage.getItem(keys.watchlist)),
+            tasks: JSON.parse(localStorage.getItem(keys.tasks))
+          }), keys);
+          assert.equal(replaced.settings.apiKey, "browser-test-key", "replace must preserve the current API Key");
+          assert.deepEqual(replaced.watchlist.map((item) => item.symbol), ["300750.SZ"]);
+          assert.deepEqual(replaced.tasks.map((item) => item.task_id), ["task-3"]);
+
+          const beforeInvalid = JSON.stringify(replaced.watchlist);
+          await page.locator("#browser-data-file").setInputFiles({
+            name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{")
+          });
+          await page.waitForFunction(() => document.querySelector("#browser-data-feedback")?.textContent.includes("导入失败"));
+          assert.equal(await page.evaluate((key) => localStorage.getItem(key), keys.watchlist), beforeInvalid);
+          await page.locator("#browser-data-file").setInputFiles({
+            name: "too-large.json", mimeType: "application/json", buffer: Buffer.alloc(1024 * 1024 + 1, 32)
+          });
+          await page.waitForFunction(() => document.querySelector("#browser-data-feedback")?.textContent.includes("超过 1 MiB 上限"));
+          assert.equal(await page.evaluate((key) => localStorage.getItem(key), keys.watchlist), beforeInvalid);
+
+          const fullWatchlist = Array.from({ length: 50 }, (_, index) => ({
+            symbol: String(600000 + index), name: "测试" + index, updated_at: ""
+          }));
+          await page.evaluate(({ key, records }) => localStorage.setItem(key, JSON.stringify(records)), { key: keys.watchlist, records: fullWatchlist });
+          await uploadWorkspace(makeImportFile([{ symbol: "688001.SH", name: "新增标的" }], []));
+          await page.locator("#browser-data-import-merge").click();
+          await page.waitForFunction(() => document.querySelector("#browser-data-feedback")?.textContent.includes("超过本地上限"));
+          assert.equal((await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).length, keys.watchlist)), 50);
+
+          await page.evaluate((key) => localStorage.setItem(key, "{"), keys.watchlist);
+          await uploadWorkspace(makeImportFile([{ symbol: "688001.SH", name: "新增标的" }], []));
+          assert.equal(await page.locator("#browser-data-import-merge").isDisabled(), true, "damaged local storage must disable merge");
+          await page.keyboard.press("Escape");
+          await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
+          assert.equal(await page.evaluate((key) => localStorage.getItem(key), keys.watchlist), "{");
+
+          const rollbackWatchlist = [{ symbol: "300750.SZ", name: "原始数据", updated_at: "" }];
+          await page.evaluate(({ keys, records }) => {
+            localStorage.setItem(keys.watchlist, JSON.stringify(records));
+            localStorage.setItem(keys.tasks, JSON.stringify([{ task_id: "task-3", analysis_base: "/analysis-api" }]));
+            const original = Storage.prototype.setItem;
+            let failOnce = true;
+            Storage.prototype.setItem = function (key, value) {
+              if (failOnce && key === keys.watchlist) {
+                failOnce = false;
+                throw new DOMException("quota exceeded", "QuotaExceededError");
+              }
+              return original.call(this, key, value);
+            };
+            window.__restoreStorageSetItem = () => { Storage.prototype.setItem = original; };
+          }, { keys, records: rollbackWatchlist });
+          await uploadWorkspace(makeImportFile([{ symbol: "688001.SH", name: "导入数据" }], []));
+          await page.locator("#browser-data-import-replace").click();
+          await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
+          const rollbackFeedback = await page.locator("#browser-data-feedback").textContent();
+          await page.evaluate(() => window.__restoreStorageSetItem?.());
+          assert.match(rollbackFeedback, /已回读确认导入前的本地存储已恢复/, "rollback result: " + rollbackFeedback);
+          assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.watchlist), rollbackWatchlist);
+          assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).map((item) => item.task_id), keys.tasks), ["task-3"]);
+        }
+      }
     }
 
     if (await menu.isVisible() && (await menu.getAttribute("aria-expanded")) !== "true") {
@@ -1318,7 +1503,9 @@ try {
     assert.equal(await page.locator("#run-flow-dialog").evaluate((dialog) => dialog.open), false, "Run Flow should close with Escape");
 
     assert.deepEqual(pageErrors, [], "browser page errors at " + viewport.width + "px: " + pageErrors.join(" | "));
-    console.log("PASS viewport " + viewport.width + "x" + viewport.height + ": navigation, overflow, Run Flow layout");
+    assert.deepEqual(consoleErrors, [], "unexpected browser console errors at " + viewport.width + "px: " + consoleErrors.join(" | "));
+    assert.deepEqual(unexpectedNetworkFailures, [], "unexpected non-API network failures at " + viewport.width + "px: " + unexpectedNetworkFailures.join(" | "));
+    console.log("PASS viewport " + viewport.width + "x" + viewport.height + ": navigation, overflow, focus, console, network, Run Flow layout");
 
     await context.close();
   }
@@ -1351,7 +1538,7 @@ try {
   await blockedStoragePage.locator("#market-view").waitFor({ state: "visible" });
   assert.deepEqual(blockedStorageErrors, [], "blocked localStorage must not crash initial app rendering");
 
-  await blockedStoragePage.locator('.nav-link[data-view="stocks"]').click();
+  await clickNav(blockedStoragePage, '.nav-link[data-view="stocks"]');
   await blockedStoragePage.locator("#stocks-view").waitFor({ state: "visible" });
   await blockedStoragePage.locator("#add-to-watchlist-button").click();
   await blockedStoragePage.waitForFunction(
@@ -1363,7 +1550,7 @@ try {
   assert.doesNotMatch(blockedAddFeedback, /已将 .* 加入本地自选|已在自选列表中/);
   assert.match(await blockedStoragePage.locator("#watchlist-feedback").getAttribute("class"), /watchlist-feedback-error/);
 
-  await blockedStoragePage.locator('.nav-link[data-view="watchlist"]').click();
+  await clickNav(blockedStoragePage, '.nav-link[data-view="watchlist"]');
   await blockedStoragePage.locator("#watchlist-view").waitFor({ state: "visible" });
   await blockedStoragePage.locator(".watchlist-storage-unavailable").waitFor({ state: "visible" });
   const blockedWatchlistState = await blockedStoragePage.evaluate(() => ({
@@ -1381,7 +1568,7 @@ try {
   assert.equal(blockedWatchlistState.scope, "本地自选不可读取");
 
   // Recent task history must show its own unavailable state and must not claim that a clear operation succeeded.
-  await blockedStoragePage.locator('.nav-link[data-view="tasks"]').click();
+  await clickNav(blockedStoragePage, '.nav-link[data-view="tasks"]');
   await blockedStoragePage.locator("#tasks-view").waitFor({ state: "visible" });
   await blockedStoragePage.waitForFunction(
     () => document.querySelector("#recent-analysis-count")?.textContent.trim() === "不可用 / 10" &&
@@ -1466,7 +1653,7 @@ try {
     return route.continue();
   });
   await quotaPage.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
-  await quotaPage.locator('.nav-link[data-view="watchlist"]').click();
+  await clickNav(quotaPage, '.nav-link[data-view="watchlist"]');
   await quotaPage.locator("#watchlist-view").waitFor({ state: "visible" });
   await quotaPage.locator("#watchlist-list .watchlist-item").waitFor({ state: "visible" });
 
@@ -1483,7 +1670,7 @@ try {
   assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), watchlistKey), originalWatchlist,
     "a failed rename write must preserve the stored watchlist bytes");
 
-  await quotaPage.locator('.nav-link[data-view="stocks"]').click();
+  await clickNav(quotaPage, '.nav-link[data-view="stocks"]');
   await quotaPage.locator("#stocks-view").waitFor({ state: "visible" });
   await quotaPage.locator("#symbol-input").fill("000001.SZ");
   await quotaPage.locator("#add-to-watchlist-button").click();
@@ -1497,7 +1684,7 @@ try {
   assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), watchlistKey), originalWatchlist,
     "a failed add write must not change the stored watchlist bytes");
 
-  await quotaPage.locator('.nav-link[data-view="watchlist"]').click();
+  await clickNav(quotaPage, '.nav-link[data-view="watchlist"]');
   await quotaPage.locator("#watchlist-view").waitFor({ state: "visible" });
   await quotaPage.locator('#watchlist-list [data-watchlist-action="remove"][data-symbol="600519.SH"]').click();
   await quotaPage.waitForFunction(
@@ -1512,7 +1699,7 @@ try {
   assert.deepEqual(quotaErrors, [], "quota failures must be handled without unhandled browser errors");
 
   // Recent-task removal and clearing must also verify the write, because the storage module returns a best-effort array.
-  await quotaPage.locator('.nav-link[data-view="tasks"]').click();
+  await clickNav(quotaPage, '.nav-link[data-view="tasks"]');
   await quotaPage.locator("#tasks-view").waitFor({ state: "visible" });
   await quotaPage.locator('#recent-analysis-list [data-remove-task-id="task-browser-storage-001"]').waitFor({ state: "visible" });
   await quotaPage.locator('#recent-analysis-list [data-remove-task-id="task-browser-storage-001"]').click();
