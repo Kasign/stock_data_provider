@@ -33,20 +33,28 @@ func (p *Tushare) FetchAdjustmentFactors(ctx context.Context, rawSymbol, startDa
 		return nil, fmt.Errorf("Tushare adjustment-factor end date: %w", err)
 	}
 	startISO, err := tushareISODate(startCompact)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	endISO, err := tushareISODate(endCompact)
-	if err != nil { return nil, err }
-	if startISO > endISO { return nil, fmt.Errorf("adjustment-factor start date must not be after end date") }
+	if err != nil {
+		return nil, err
+	}
+	if startISO > endISO {
+		return nil, fmt.Errorf("adjustment-factor start date must not be after end date")
+	}
 
 	values, err := p.fetchAdjustmentFactors(ctx, symbol, startISO, endISO)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	fetchedAt := time.Now().UTC()
 	out := make([]model.AdjustmentFactor, 0, len(values))
 	for tradeDate, factor := range values {
 		out = append(out, model.AdjustmentFactor{
 			Symbol: symbol, TradeDate: tradeDate, Factor: factor,
 			Source: p.Name(), SourceVersion: tushareVersion, FetchedAt: fetchedAt,
-			QualityStatus: model.QualityDegraded,
+			QualityStatus:  model.QualityDegraded,
 			QualityReasons: []string{"provider_available_at_not_exposed_by_adj_factor"},
 		})
 	}

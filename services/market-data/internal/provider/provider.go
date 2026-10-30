@@ -176,7 +176,6 @@ type MarketCapitalFlowProvider interface {
 	FetchMarketCapitalFlow(ctx context.Context, startDate, endDate string) (*model.MarketCapitalFlowSnapshot, error)
 }
 
- 
 // AdjustmentFactorProvider 提供原始累计复权因子，不得提前折算为调整后价格。
 type AdjustmentFactorProvider interface {
 	NamedProvider

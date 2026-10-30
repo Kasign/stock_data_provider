@@ -16,6 +16,8 @@ func TestTushareFetchAdjustmentFactorsRequiresToken(t *testing.T) {
 }
 
 func TestTushareAdjustmentFactorModelKeepsAvailabilityUnknown(t *testing.T) {
-	value := model.AdjustmentFactor{Source:"tushare", SourceVersion:tushareVersion, FetchedAt:time.Now().UTC(), QualityStatus:model.QualityDegraded}
-	if value.AvailableAt != nil { t.Fatal("Tushare adj_factor does not expose first-publication timestamp; available_at must remain unknown") }
+	value := model.AdjustmentFactor{Source: "tushare", SourceVersion: tushareVersion, FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded}
+	if value.AvailableAt != nil {
+		t.Fatal("Tushare adj_factor does not expose first-publication timestamp; available_at must remain unknown")
+	}
 }
