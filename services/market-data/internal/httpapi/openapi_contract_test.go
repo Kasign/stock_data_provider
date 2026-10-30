@@ -26,6 +26,7 @@ func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
 	}
 
 	paths := []string{
+		"/api/v1/data-sources/probe:",
 		"/api/v1/market/index-catalog:",
 		"/api/v1/market/indices/{symbol}/constituents:",
 		"/api/v1/market/indices/{symbol}/daily:",
@@ -99,4 +100,19 @@ func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
 			t.Errorf("PriceLimitEventEvidence schema missing %q", field)
 		}
 	}
+	probeRequestStart := strings.Index(text, "    ProviderProbeRequest:")
+	if probeRequestStart < 0 {
+		t.Fatal("ProviderProbeRequest schema missing")
+	}
+	probeRequestEnd := strings.Index(text[probeRequestStart+len("    ProviderProbeRequest:"):], "\n    ProviderProbeRun:")
+	if probeRequestEnd < 0 {
+		t.Fatal("ProviderProbeRequest schema boundary missing")
+	}
+	probeRequestSchema := text[probeRequestStart : probeRequestStart+len("    ProviderProbeRequest:")+probeRequestEnd]
+	for _, field := range []string{"scope:", "capabilities:", "timeout_seconds:", "uniqueItems: true", "maximum: 30"} {
+		if !strings.Contains(probeRequestSchema, field) {
+			t.Errorf("ProviderProbeRequest schema missing %q", field)
+		}
+	}
+
 }
