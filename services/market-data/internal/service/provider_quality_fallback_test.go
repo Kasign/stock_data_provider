@@ -86,7 +86,7 @@ func marketBreadthSnapshotForFallback(source string, quality model.QualityStatus
 func TestIndexQuotesFallsBackFromDegradedToValidProvider(t *testing.T) {
 	first := &qualityFallbackIndexQuoteProvider{name: "eastmoney", snapshot: indexQuoteSnapshotForFallback("eastmoney", model.QualityDegraded)}
 	second := &qualityFallbackIndexQuoteProvider{name: "tickflow", snapshot: indexQuoteSnapshotForFallback("tickflow", model.QualityValid)}
-	svc := &DataService{cache: cache.NewDisabled(), indexQuoteProviders: []provider.IndexQuoteProvider{first, second}}
+	svc := &DataService{cache: cache.NewDisabled(), breaker: newCircuitBreaker(3, time.Second), indexQuoteProviders: []provider.IndexQuoteProvider{first, second}}
 
 	got, hit, err := svc.IndexQuotes(context.Background())
 	if err != nil || hit {
@@ -103,7 +103,7 @@ func TestIndexQuotesFallsBackFromDegradedToValidProvider(t *testing.T) {
 func TestIndexQuotesKeepsPriorityDegradedCandidateWhenNoValidProvider(t *testing.T) {
 	first := &qualityFallbackIndexQuoteProvider{name: "eastmoney", snapshot: indexQuoteSnapshotForFallback("eastmoney", model.QualityDegraded)}
 	second := &qualityFallbackIndexQuoteProvider{name: "tickflow", err: errors.New("upstream unavailable")}
-	svc := &DataService{cache: cache.NewDisabled(), indexQuoteProviders: []provider.IndexQuoteProvider{first, second}}
+	svc := &DataService{cache: cache.NewDisabled(), breaker: newCircuitBreaker(3, time.Second), indexQuoteProviders: []provider.IndexQuoteProvider{first, second}}
 
 	got, hit, err := svc.IndexQuotes(context.Background())
 	if err != nil || hit {
@@ -120,7 +120,7 @@ func TestIndexQuotesKeepsPriorityDegradedCandidateWhenNoValidProvider(t *testing
 func TestMarketBreadthFallsBackFromDegradedToValidProvider(t *testing.T) {
 	first := &qualityFallbackMarketBreadthProvider{name: "eastmoney", snapshot: marketBreadthSnapshotForFallback("eastmoney", model.QualityDegraded)}
 	second := &qualityFallbackMarketBreadthProvider{name: "tickflow", snapshot: marketBreadthSnapshotForFallback("tickflow", model.QualityValid)}
-	svc := &DataService{cache: cache.NewDisabled(), marketBreadthProviders: []provider.MarketBreadthProvider{first, second}}
+	svc := &DataService{cache: cache.NewDisabled(), breaker: newCircuitBreaker(3, time.Second), marketBreadthProviders: []provider.MarketBreadthProvider{first, second}}
 
 	got, hit, err := svc.MarketBreadth(context.Background())
 	if err != nil || hit {
@@ -137,7 +137,7 @@ func TestMarketBreadthFallsBackFromDegradedToValidProvider(t *testing.T) {
 func TestMarketBreadthKeepsPriorityDegradedCandidateWhenNoValidProvider(t *testing.T) {
 	first := &qualityFallbackMarketBreadthProvider{name: "eastmoney", snapshot: marketBreadthSnapshotForFallback("eastmoney", model.QualityDegraded)}
 	second := &qualityFallbackMarketBreadthProvider{name: "tickflow", err: errors.New("upstream unavailable")}
-	svc := &DataService{cache: cache.NewDisabled(), marketBreadthProviders: []provider.MarketBreadthProvider{first, second}}
+	svc := &DataService{cache: cache.NewDisabled(), breaker: newCircuitBreaker(3, time.Second), marketBreadthProviders: []provider.MarketBreadthProvider{first, second}}
 
 	got, hit, err := svc.MarketBreadth(context.Background())
 	if err != nil || hit {
@@ -154,7 +154,7 @@ func TestMarketBreadthKeepsPriorityDegradedCandidateWhenNoValidProvider(t *testi
 func TestIndexQuotesMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
 	first := &qualityFallbackIndexQuoteProvider{name: "eastmoney", err: errors.New("primary unavailable")}
 	second := &qualityFallbackIndexQuoteProvider{name: "tickflow", snapshot: indexQuoteSnapshotForFallback("tickflow", model.QualityDegraded)}
-	svc := &DataService{cache: cache.NewDisabled(), indexQuoteProviders: []provider.IndexQuoteProvider{first, second}}
+	svc := &DataService{cache: cache.NewDisabled(), breaker: newCircuitBreaker(3, time.Second), indexQuoteProviders: []provider.IndexQuoteProvider{first, second}}
 
 	got, hit, err := svc.IndexQuotes(context.Background())
 	if err != nil || hit {
@@ -170,7 +170,7 @@ func TestIndexQuotesMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
 func TestMarketBreadthMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
 	first := &qualityFallbackMarketBreadthProvider{name: "eastmoney", err: errors.New("primary unavailable")}
 	second := &qualityFallbackMarketBreadthProvider{name: "tickflow", snapshot: marketBreadthSnapshotForFallback("tickflow", model.QualityDegraded)}
-	svc := &DataService{cache: cache.NewDisabled(), marketBreadthProviders: []provider.MarketBreadthProvider{first, second}}
+	svc := &DataService{cache: cache.NewDisabled(), breaker: newCircuitBreaker(3, time.Second), marketBreadthProviders: []provider.MarketBreadthProvider{first, second}}
 
 	got, hit, err := svc.MarketBreadth(context.Background())
 	if err != nil || hit {
