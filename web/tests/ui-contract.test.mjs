@@ -1961,3 +1961,28 @@ test("清空或导入本地任务历史会隔离在途创建请求的晚到响�
   const importBody = app.match(/async function importBrowserDataFile\(file\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(importBody, /applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
 });
+
+test("个股行情默认请求复用统一快照；旧服务仅在 404 时回退，显式日期范围尊重独立日 K 参数", () => {
+  const start = app.indexOf("async function runQuoteQuery(event) {");
+  const end = app.indexOf("\\nfunction ", start + 20);
+  const query = start >= 0 && end > start ? app.slice(start, end) : "";
+  assert.ok(query, "主行情查询流程必须存在");
+
+  const defaultRange = query.indexOf("if (!startDate && !endDate)");
+  const bundleRequest = query.indexOf("bundleResponse = await getMarketBundle", defaultRange);
+  assert.ok(defaultRange >= 0 && bundleRequest > defaultRange, "默认日期范围应先请求统一行情快照");
+
+  const fallbackStart = query.indexOf("if (error.status === 404)", bundleRequest);
+  const fallbackEnd = query.indexOf("if (bundleResponse)", fallbackStart);
+  const fallback = query.slice(fallbackStart, fallbackEnd);
+  assert.ok(fallbackStart > bundleRequest && fallbackEnd > fallbackStart);
+  assert.match(fallback, /usedLegacyBundleFallback = true/);
+  assert.match(fallback, /Promise\\.allSettled\\(\\[[\\s\\S]*?getQuote\\([\\s\\S]*?getDailyBars\\(/);
+  assert.doesNotMatch(fallback, /else\\s*\\{[\\s\\S]*?getQuote\\(/, "Bundle 非 404 失败不能再次触发两个 Provider 请求");
+
+  const explicitRange = query.indexOf("Bundle has no start/end query parameters");
+  assert.ok(explicitRange >= 0, "显式日期范围应走独立报价与日 K 请求");
+  const explicitQuery = query.slice(explicitRange);
+  assert.match(explicitQuery, /getQuote\\(state\\.settings, symbol, controller\\.signal\\)/);
+  assert.match(explicitQuery, /getDailyBars\\(state\\.settings, symbol, \\{ limit, adjustment, start: startDate, end: endDate \}/);
+});
