@@ -62,25 +62,24 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		allowed[capability] = true
 	}
 	selected := make(map[string]bool)
-	if options.Scope == "core" {
-		for _, capability := range model.ProviderProbeCoreCapabilities() {
-			selected[capability] = true
-		}
-	} else if options.Scope != "all" {
-		return nil, errors.New("provider-probe scope must be all or core")
-	}
 	if len(options.Capabilities) > 0 {
 		for _, capability := range options.Capabilities {
 			if !allowed[capability] {
 				return nil, fmt.Errorf("provider-probe capability %q is not supported", capability)
 			}
-			if options.Scope == "core" && !selected[capability] {
+			if selected[capability] {
+				return nil, fmt.Errorf("provider-probe capability %q is duplicated", capability)
+			}
+			if options.Scope == "core" && !containsString(model.ProviderProbeCoreCapabilities(), capability) {
 				return nil, fmt.Errorf("provider-probe capability %q is outside core scope", capability)
 			}
 			selected[capability] = true
 		}
-	}
-	if options.Scope == "all" && len(options.Capabilities) == 0 {
+	} else if options.Scope == "core" {
+		for _, capability := range model.ProviderProbeCoreCapabilities() {
+			selected[capability] = true
+		}
+	} else {
 		for capability := range allowed {
 			selected[capability] = true
 		}
