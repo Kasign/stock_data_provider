@@ -64,3 +64,48 @@ func TestTushareStockFinancialAndValuationRejectNonCommonEquitiesBeforeRequest(t
 		t.Fatalf("non-common-equity requests must be rejected before the upstream call; got %d requests", got)
 	}
 }
+
+func TestDomesticStockProviderBeijingSymbolSupportMatrix(t *testing.T) {
+	unsupported := []struct {
+		name string
+		validate func(string) (string, error)
+	}{
+		{name: "Sina", validate: sinaCode},
+		{name: "Tencent", validate: tencentCode},
+		{name: "NetEase", validate: neteaseCode},
+		{name: "BaoStock", validate: baostockSecurityCode},
+	}
+	for _, item := range unsupported {
+		t.Run(item.name+"_unsupported", func(t *testing.T) {
+			if got, err := item.validate("920000.BJ"); err == nil {
+				t.Fatalf("provider must explicitly reject unsupported Beijing symbol, got %q", got)
+			}
+		})
+	}
+
+	supported := []struct {
+		name string
+		validate func(string) (string, error)
+	}{
+		{name: "Pytdx", validate: pytdxDomesticSymbol},
+		{name: "Hithink", validate: hithinkDomesticSymbol},
+		{name: "TickFlow", validate: tickflowDomesticSymbol},
+	}
+	for _, item := range supported {
+		t.Run(item.name+"_supported", func(t *testing.T) {
+			if got, err := item.validate("920000.BJ"); err != nil || got != "920000.BJ" {
+				t.Fatalf("provider should preserve canonical Beijing symbol, got %q, err=%v", got, err)
+			}
+		})
+	}
+
+	if got, err := tushareExchangeCode("920000.BJ"); err != nil || got != "920000.BJ" {
+		t.Fatalf("Tushare should accept canonical Beijing symbol, got %q, err=%v", got, err)
+	}
+	if got, err := eastmoneySecID("920000.BJ"); err != nil || got != "0.920000" {
+		t.Fatalf("Eastmoney should map Beijing symbol to its market security ID, got %q, err=%v", got, err)
+	}
+	if got := pytdxWireSymbol("920000.BJ"); got != "bj920000" {
+		t.Fatalf("Pytdx should preserve the Beijing exchange prefix, got %q", got)
+	}
+}
