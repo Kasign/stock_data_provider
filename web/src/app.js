@@ -38,6 +38,7 @@ import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
 import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
+import { sortWatchlistItems } from "./watchlist-sort.js";
 import { assignWatchlistGroup, createWatchlistGroup, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP } from "./watchlist-groups.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
@@ -813,10 +814,16 @@ function renderWatchlist(records, storageReadable, storageValid) {
       || String(record.name || "").toLocaleLowerCase().includes(keyword);
     return matchesKeyword && (selectedGroup === "all" || (groupState.assignments[record.symbol] || DEFAULT_WATCHLIST_GROUP) === selectedGroup);
   });
-  const direction = preferences.watchlistSortDirection === "asc" ? 1 : -1;
-  if (sortMode === "symbol") visibleItems.sort((a, b) => direction * a.symbol.localeCompare(b.symbol, "zh-CN"));
-  else if (sortMode === "name") visibleItems.sort((a, b) => direction * (a.name.localeCompare(b.name, "zh-CN") || a.symbol.localeCompare(b.symbol)));
-  else visibleItems.sort((a, b) => direction * ((Date.parse(a.updated_at || "") || 0) - (Date.parse(b.updated_at || "") || 0)));
+  const sortedItems = sortWatchlistItems(visibleItems, {
+    mode: sortMode,
+    direction: preferences.watchlistSortDirection,
+    getQuote: (record) => {
+      const key = normalizeLocalSymbol(record.symbol);
+      const batchQuote = state.watchlistQuotes.get(key);
+      if (batchQuote?.quote) return batchQuote.quote;
+      return state.quote?.symbol && normalizeLocalSymbol(state.quote.symbol) === key ? state.quote : null;
+    }
+  });
   setText("#watchlist-filter-count", keyword
     ? "匹配 " + visibleItems.length + " / " + items.length + " 只"
     : "显示全部 " + items.length + " 只");
@@ -831,7 +838,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
 
   const recentTasks = safeReadRecentTasks();
   const normalizeLocalSymbol = normalizeWatchlistQuoteSymbol;
-  visibleItems.forEach((record) => {
+  sortedItems.forEach((record) => {
     const row = document.createElement("article");
     row.className = "watchlist-item";
     const main = document.createElement("div");
