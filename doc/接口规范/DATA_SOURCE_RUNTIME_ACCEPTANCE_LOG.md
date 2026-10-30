@@ -180,3 +180,18 @@ go test ./internal/provider -run '^TestLiveProviderProbe
 | — | — | — | — | 未执行 | 当前阶段尚未注入真实凭据，未发起可选 Provider 真实请求 |
 
 后续只追加有真实请求证据的记录。阶段二的代码入口和 CI 通过情况不得填入本表作为 Provider 在线验收通过证据。
+
+
+## 8. 统一主动诊断接口开发记录（2026-10-30）
+
+目标分支：`feat/full-go-data-providers-api-switch`。
+
+本轮代码新增/扩展：
+
+- ProviderProbeItem 错误阶段、脱敏错误摘要、HTTP 状态码。
+- ProviderProbeRun 未知、跳过、未配置、不支持计数。
+- 未注册的核心能力显式返回 `not_configured`；全市场目录扫描在轻量探测中明确 `skipped`。
+- 扩展非行情能力：板块、涨跌停池、龙虎榜、公告、交易日历、财务、估值、人气榜、个股资金流、筹码分布、指数目录、证券交易状态、涨跌幅特殊事件。
+- 交易日历、公告、财务、估值、人气榜复用业务质量校验函数。
+
+执行限制：本轮没有发起任何真实 Provider 请求，没有要求或读取新的 Key/Token。GitHub Actions 是否覆盖最新 SHA 仍需确认；未取得最新 SHA 的成功结果前，不记录为构建或测试通过。实时 Provider workflow 继续按无凭据跳过策略执行，不能将 workflow success 视为全部 Provider 可用。
