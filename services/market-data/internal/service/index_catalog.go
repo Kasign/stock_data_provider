@@ -168,6 +168,18 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 	return nil
 }
 
+// markHistoricalConstituentIntervalQuality 防止将历史权重快照误标为完整的成员生效区间。
+func markHistoricalConstituentIntervalQuality(snapshot *model.IndexConstituentSnapshot) {
+	if snapshot == nil || snapshot.AsOfDate == "" { return }
+	for _, item := range snapshot.Items {
+		if item.EffectiveFrom == "" || item.EffectiveTo == "" || item.AvailableAt == nil || item.SystemObservedAt == nil {
+			if snapshot.QualityStatus == model.QualityValid { snapshot.QualityStatus = model.QualityDegraded }
+			appendReasonOnce(&snapshot.QualityReasons, "historical_constituent_effective_interval_or_pit_timestamp_unavailable")
+			return
+		}
+	}
+}
+
 func markIndexConstituentCoverage(snapshot *model.IndexConstituentSnapshot) {
 	if snapshot == nil || snapshot.Total == 0 || snapshot.ProviderReturned > 0 {
 		return
@@ -596,6 +608,7 @@ func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIn
 			validateIndexConstituentsSnapshot(indexSymbol, &cached) == nil &&
 			time.Since(cached.FetchedAt) >= 0 {
 			markIndexConstituentCoverage(&cached)
+			markHistoricalConstituentIntervalQuality(&cached)
 			ttl := 24 * time.Hour
 			cacheEligible := len(cached.Items) > 0 && cached.QualityStatus != model.QualityUnknown
 			if cached.QualityStatus == model.QualityUnknown {
@@ -642,6 +655,7 @@ func (s *DataService) IndexConstituentsAsOfFromSource(ctx context.Context, rawIn
 			continue
 		}
 		markIndexConstituentCoverage(snapshot)
+		markHistoricalConstituentIntervalQuality(snapshot)
 		if snapshot.QualityStatus == model.QualityUnknown || len(snapshot.Items) == 0 {
 			if betterUnknownIndexConstituentSnapshot(snapshot, unknownCandidate) {
 				unknownCandidate = snapshot

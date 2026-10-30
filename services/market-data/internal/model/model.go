@@ -430,6 +430,12 @@ type IndexConstituent struct {
 	Code          string   `json:"code"`
 	Name          string   `json:"name"`
 	WeightPercent *float64 `json:"weight_percent,omitempty"`
+	// EffectiveFrom/EffectiveTo 是成员关系生效区间，不是权重报告日。
+	// 来源未明确提供时保持空值，禁止用 ProviderReportDate 推断。
+	EffectiveFrom    string     `json:"effective_from,omitempty"`
+	EffectiveTo      string     `json:"effective_to,omitempty"`
+	AvailableAt      *time.Time `json:"available_at,omitempty"`
+	SystemObservedAt *time.Time `json:"system_observed_at,omitempty"`
 }
 
 // IndexConstituentSnapshot 为指定指数或板块的当前成分股快照。
