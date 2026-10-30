@@ -14,6 +14,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
 )
 
 var (
@@ -194,7 +195,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "index_catalog", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchIndexCatalog(probeCtx, "industry")
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if v == nil || v.Tag != "industry" || v.Source == "" || v.FetchedAt.IsZero() {
 				return model.QualityInvalid, "", nil, errors.New("index-catalog response missing requested tag/source/fetched_at")
 			}
@@ -215,7 +218,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "security_trading_status", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchSecurityTradingStatus(probeCtx, barsSymbol, probeDate)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if v == nil || v.Symbol != barsSymbol || v.TradeDate != probeDate || v.Source == "" || v.FetchedAt.IsZero() {
 				return model.QualityInvalid, "", nil, errors.New("security-trading-status response missing requested symbol/date/source/fetched_at")
 			}
@@ -229,7 +234,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "price_limit_event", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchPriceLimitEventEvidence(probeCtx, barsSymbol, probeDate)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if v == nil || v.Symbol != barsSymbol || v.Source == "" || v.SourceVersion == "" || v.ObservedAt.IsZero() {
 				return model.QualityInvalid, "", nil, errors.New("price-limit-event evidence missing symbol/source/version/observed_at")
 			}
@@ -243,7 +250,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "stock_boards", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchStockBoards(probeCtx, barsSymbol)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if v == nil || v.Symbol != barsSymbol || v.Source == "" || v.FetchedAt.IsZero() {
 				return model.QualityInvalid, "", nil, errors.New("stock-boards response missing symbol/source/fetched_at or has wrong symbol")
 			}
@@ -262,7 +271,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "limit_pool", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchLimitPool(probeCtx, "up", probeDate, 20)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if v == nil || v.TradeDate != probeDate || v.Source == "" || v.FetchedAt.IsZero() {
 				return model.QualityInvalid, "", nil, errors.New("limit-pool response missing requested trade date/source/fetched_at")
 			}
@@ -281,7 +292,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "dragon_tiger", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchDragonTiger(probeCtx, probeDate, 1, 20)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if v == nil || v.TradeDate != probeDate || v.Source == "" || v.FetchedAt.IsZero() {
 				return model.QualityInvalid, "", nil, errors.New("dragon-tiger response missing requested trade date/source/fetched_at")
 			}
@@ -300,7 +313,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "announcements", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchStockAnnouncements(probeCtx, barsSymbol, calendarStart, probeDate, 1, 20)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if err := validateStockAnnouncementSnapshot(barsSymbol, calendarStart, probeDate, 1, 20, v); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
@@ -311,7 +326,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "trading_calendar", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchTradingCalendar(probeCtx, calendarStart, calendarEnd)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if err := validateTradingCalendarSnapshot(v, calendarStart, calendarEnd); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
@@ -322,7 +339,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "fundamentals", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchFundamentals(probeCtx, barsSymbol, nowLocal.Year(), 2)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if err := validateFundamentalsSnapshot(barsSymbol, nowLocal.Year(), 2, v); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
@@ -333,7 +352,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "valuations", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchValuations(probeCtx, []string{barsSymbol})
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if err := validateValuationSnapshot([]string{barsSymbol}, v); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
@@ -344,7 +365,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "hot_ranking", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchHotStocks(probeCtx, "popular", 20)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if err := validateHotRankingSnapshot("popular", v); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
@@ -355,7 +378,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "capital_flow", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchCapitalFlow(probeCtx, barsSymbol)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if v == nil || v.Symbol != barsSymbol || v.Source == "" || v.FetchedAt.IsZero() {
 				return model.QualityInvalid, "", nil, errors.New("capital-flow response missing requested symbol/source/fetched_at")
 			}
@@ -364,7 +389,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 					return model.QualityInvalid, v.SourceVersion, nil, errors.New("capital-flow response contains non-finite amount")
 				}
 			}
-			if v.Observations < 0 { return model.QualityInvalid, v.SourceVersion, nil, errors.New("capital-flow response has negative observation count") }
+			if v.Observations < 0 {
+				return model.QualityInvalid, v.SourceVersion, nil, errors.New("capital-flow response has negative observation count")
+			}
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
@@ -372,7 +399,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "chip_distribution", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			v, err := p.FetchChipDistribution(probeCtx, barsSymbol)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			if v == nil || v.Symbol != barsSymbol || v.Source == "" || v.FetchedAt.IsZero() {
 				return model.QualityInvalid, "", nil, errors.New("chip-distribution response missing requested symbol/source/fetched_at")
 			}
@@ -388,7 +417,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 	// 固定核心能力清单：未注册 Provider 的能力也必须显式出现在诊断报告中。
 	requiredCapabilities := []string{"quote", "daily_bars", "stock_basic", "stock_search", "stock_universe", "index_quotes", "index_catalog", "market_breadth", "sector_rankings", "market_capital_flow", "limit_pool", "dragon_tiger", "announcements", "trading_calendar", "security_trading_status", "price_limit_event", "stock_boards", "fundamentals", "valuations", "hot_ranking", "capital_flow", "chip_distribution"}
 	configured := make(map[string]bool, len(requiredCapabilities))
-	for _, job := range jobs { configured[job.capability] = true }
+	for _, job := range jobs {
+		configured[job.capability] = true
+	}
 	for _, p := range s.providers {
 		if universeProvider, ok := p.(provider.StockUniverseProvider); ok {
 			// 全市场证券目录可能返回数千条记录，默认轻量探测不下载完整目录；明确记录为 skipped。
@@ -399,8 +430,12 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		}
 	}
 	for _, capability := range requiredCapabilities {
-		if configured[capability] { continue }
-		jobs = append(jobs, providerProbeJob{provider: "system", capability: capability, run: func(context.Context) (model.QualityStatus, string, []string, error) { return model.QualityUnknown, "", nil, errors.New("capability has no registered provider") }})
+		if configured[capability] {
+			continue
+		}
+		jobs = append(jobs, providerProbeJob{provider: "system", capability: capability, run: func(context.Context) (model.QualityStatus, string, []string, error) {
+			return model.QualityUnknown, "", nil, errors.New("capability has no registered provider")
+		}})
 	}
 	run.Total = len(jobs)
 	results := make([]model.ProviderProbeItem, len(jobs))
@@ -481,9 +516,15 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		}
 	}
 	run.Status = "success"
-	if run.Degraded > 0 || run.Unknown > 0 || run.NotConfigured > 0 || run.Skipped > 0 || run.NotSupported > 0 { run.Status = "degraded" }
-	if run.Failed > 0 { run.Status = "failed" }
-	if run.NotConfigured == run.Total && run.Total > 0 { run.Status = "not_configured" }
+	if run.Degraded > 0 || run.Unknown > 0 || run.NotConfigured > 0 || run.Skipped > 0 || run.NotSupported > 0 {
+		run.Status = "degraded"
+	}
+	if run.Failed > 0 {
+		run.Status = "failed"
+	}
+	if run.NotConfigured == run.Total && run.Total > 0 {
+		run.Status = "not_configured"
+	}
 	run.FinishedAt = time.Now().UTC()
 	if len(jobs) == 0 {
 		run.Status = "no_capabilities_configured"

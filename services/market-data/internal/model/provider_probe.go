@@ -20,20 +20,20 @@ type ProviderProbeItem struct {
 
 // ProviderProbeRun 是隔离于业务流量的主动探测批次。
 type ProviderProbeRun struct {
-	RunID      string              `json:"run_id"`
-	Status     string              `json:"status"`
-	Persisted  bool                `json:"persisted"`
-	StartedAt  time.Time           `json:"started_at"`
-	FinishedAt time.Time           `json:"finished_at"`
-	Total      int                 `json:"total"`
-	Returned   int                 `json:"returned"`
+	RunID         string              `json:"run_id"`
+	Status        string              `json:"status"`
+	Persisted     bool                `json:"persisted"`
+	StartedAt     time.Time           `json:"started_at"`
+	FinishedAt    time.Time           `json:"finished_at"`
+	Total         int                 `json:"total"`
+	Returned      int                 `json:"returned"`
 	Degraded      int                 `json:"degraded"`
 	Unknown       int                 `json:"unknown"`
 	Failed        int                 `json:"failed"`
 	Skipped       int                 `json:"skipped"`
 	NotConfigured int                 `json:"not_configured"`
 	NotSupported  int                 `json:"not_supported"`
-	Items      []ProviderProbeItem `json:"items"`
+	Items         []ProviderProbeItem `json:"items"`
 }
 
 // ProviderProbeHistory 是最近的主动探测批次列表。
