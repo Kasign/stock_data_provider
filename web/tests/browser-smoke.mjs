@@ -1529,6 +1529,7 @@ try {
     const flow = await page.locator("#run-flow-dialog").evaluate((dialog) => {
       const emptyState = document.querySelector("#task-empty");
       const detail = document.querySelector("#task-detail");
+      const workspace = document.querySelector(".run-flow-workspace");
       const eventDetail = document.querySelector("#task-event-detail");
       if (emptyState) emptyState.hidden = true;
       if (detail) detail.hidden = false;
@@ -1537,6 +1538,7 @@ try {
 
       const rect = dialog.getBoundingClientRect();
       const detailRect = detail.getBoundingClientRect();
+      const workspaceRect = workspace.getBoundingClientRect();
       const eventDetailRect = eventDetail.getBoundingClientRect();
       return {
         left: rect.left,
@@ -1558,10 +1560,10 @@ try {
     assert.ok(flow.eventDetailRight <= flow.right + 1, "event detail must remain within the Run Flow dialog at " + viewport.width + "px");
     assert.ok(flow.documentWidth <= flow.viewportWidth + 1, "Run Flow must not introduce document horizontal overflow at " + viewport.width + "px");
 
-    if (viewport.width > 760) {
-      assert.ok(flow.detailColumns >= 2, "Run Flow should use split columns above 760px; got " + flow.detailColumns + " at " + viewport.width + "px");
+    if (viewport.width > 900) {
+      assert.ok(flow.workspaceColumns >= 2, "Run Flow should show timeline and results side by side above 900px; got " + flow.workspaceColumns + " at " + viewport.width + "px");
     } else {
-      assert.equal(flow.detailColumns, 1, "Run Flow should stack into one column at " + viewport.width + "px");
+      assert.equal(flow.workspaceColumns, 1, "Run Flow should stack into one column at " + viewport.width + "px");
     }
 
     await page.screenshot({
