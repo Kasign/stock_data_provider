@@ -1862,3 +1862,16 @@ test("自选股批量行情只请求当前本地清单并在连接变更时清�
   assert.match(html, /id="refresh-watchlist-quotes"/);
   assert.match(html, /id="watchlist-quote-refresh-status"/);
 });
+
+
+test("运行流采用全屏双栏工作区，节点和质量诊断可折叠", () => {
+  assert.match(html, /class="run-flow-workspace"/);
+  assert.match(html, /class="run-flow-result-column"/);
+  assert.match(html, /class="run-flow-event-inspector"/);
+  assert.match(app, /expandedTaskEventSequences/);
+  assert.match(app, /node\.addEventListener\("toggle"/);
+  assert.match(app, /title === "数据质量与策略门禁"[\s\S]*?analysis-result-disclosure/);
+  assert.match(stylesheet, /grid-template-columns:minmax\(300px,\.82fr\) minmax\(0,1\.18fr\)/);
+  assert.match(stylesheet, /\.run-flow-node\[open\]/);
+  assert.match(stylesheet, /@media \(max-width:900px\)[\s\S]*?run-flow-workspace/);
+});
