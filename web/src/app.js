@@ -4529,7 +4529,7 @@ function syncWatchlistPreferenceControls(preferences = readPreferences()) {
 function persistWatchlistPreferences() {
   try {
     const preferences = savePreferences({
-      watchlistSort: $("#settings-watchlist-sort")?.value || $("#watchlist-sort")?.value,
+      watchlistSort: $("#watchlist-sort")?.value || $("#settings-watchlist-sort")?.value,
       watchlistSortDirection: $("#settings-watchlist-direction")?.value || readPreferences().watchlistSortDirection
     });
     syncWatchlistPreferenceControls(preferences);
@@ -4624,7 +4624,7 @@ async function importBrowserDataFile(file) {
     return;
   }
   const confirmed = window.confirm(
-    "将替换当前浏览器的主题、API 路径、自选股与最近任务引用。\n" +
+    "将替换当前浏览器的主题、本地偏好、API 路径、自选股与最近任务引用。\n" +
     "当前 API Key 会保留；不会修改服务器 .env，也不会恢复行情缓存或完整分析报告。继续吗？"
   );
   if (!confirmed) {
@@ -4705,7 +4705,7 @@ async function importBrowserDataFile(file) {
     syncWatchlistPreferenceControls(imported.preferences);
     renderWatchlist();
     renderRecentTasks();
-    setBrowserDataFeedback("导入完成：主题、同源 API 路径、自选股与本地任务引用已更新。原有 API Key 已保留。", "success");
+    setBrowserDataFeedback("导入完成：主题、本地偏好、同源 API 路径、自选股与本地任务引用已更新。原有 API Key 已保留。", "success");
   } catch (error) {
     setBrowserDataFeedback(
       "本地数据已导入，但页面状态刷新未完成；请重新载入页面。原因：" + (error?.message || "界面更新异常。"),
