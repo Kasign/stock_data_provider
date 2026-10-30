@@ -611,7 +611,7 @@ components:
         timeout_seconds: {type: integer, minimum: 1, maximum: 30, default: 12}
     ProviderProbeRun:
       type: object
-      required: [run_id, scope, timeout_seconds, status, persisted, started_at, finished_at, total, returned, degraded, unknown, failed, skipped, not_configured, not_supported, items]
+      required: [run_id, status, persisted, started_at, finished_at, total, returned, degraded, unknown, failed, skipped, not_configured, not_supported, items]
       properties:
         run_id: {type: string}
         scope: {type: string, enum: [all, core]}
