@@ -188,6 +188,7 @@ components:
         code: {type: string, description: Eastmoney board code, for example BK0477}
         name: {type: string}
         change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
+        change_percent_5d: {type: number, nullable: true, description: Five-trading-session return derived from six daily closes; percentage points}
         source: {type: string}
         source_version: {type: string}
         provider_report_date: {type: string, format: date, description: Source report date; not an exact snapshot time}
@@ -429,7 +430,7 @@ components:
       properties:
         category: {type: string, enum: [industry, concept]}
         direction: {type: string, enum: [up, down]}
-        sort_by: {type: string, enum: [change_percent, amount]}
+        sort_by: {type: string, enum: [change_percent, amount, change_5d]}
         total: {type: integer, minimum: 0, description: Source-reported sector count or best available count; only a lower bound when total_is_lower_bound is true}
         provider_returned: {type: integer, minimum: 0, description: Raw CLIST rows or SW1 industry universes received before caller-limit truncation}
         excluded_rows: {type: integer, minimum: 0, description: Source ranking rows omitted due to invalid required fields or no usable constituent quote changes}

@@ -59,7 +59,7 @@ func TestEastmoneySectorRankingByFiveDayChangeRejectsIncompleteHistory(t *testin
 	}))
 	defer server.Close()
 
-	p := NewEastmoneyConfiguredWithMarketData(3*time.Second, server.URL, server.URL, "", server.URL, "", "")
+	p := NewEastmoneyConfiguredWithMarketData(3*time.Second, server.URL, server.URL, "", server.URL, "")
 	if _, err := p.FetchSectorRankingsByMetric(context.Background(), "industry", "change_5d", "up", 1); err == nil {
 		t.Fatal("fewer than six closes must not produce a five-day return")
 	}
