@@ -194,6 +194,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/bundles/{symbol}", s.auth(http.HandlerFunc(s.bundle)))
 	mux.Handle("GET /api/v1/data-sources", s.auth(http.HandlerFunc(s.dataSources)))
 	mux.Handle("GET /api/v1/data-sources/diagnostics", s.auth(http.HandlerFunc(s.dataSourceDiagnostics)))
+	mux.Handle("POST /api/v1/data-sources/probe", s.auth(http.HandlerFunc(s.dataSourceProbe)))
+	mux.Handle("GET /api/v1/data-sources/probe/history", s.auth(http.HandlerFunc(s.dataSourceProbeHistory)))
 	mux.Handle("GET /api/v1/market/sectors", s.auth(http.HandlerFunc(s.sectorRankings)))
 	mux.Handle("GET /api/v1/market/indices", s.auth(http.HandlerFunc(s.indexQuotes)))
 	mux.Handle("GET /api/v1/market/valuations", s.auth(http.HandlerFunc(s.valuations)))

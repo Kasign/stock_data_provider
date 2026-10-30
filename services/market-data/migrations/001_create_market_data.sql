@@ -123,3 +123,15 @@ CREATE TABLE IF NOT EXISTS market_data_sentiment_snapshots (
  KEY idx_market_sentiment_day (market, trade_date, id),
  KEY idx_market_sentiment_fetched (fetched_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS market_data_provider_probe_runs (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ run_id VARCHAR(64) NOT NULL,
+ started_at DATETIME(6) NOT NULL,
+ finished_at DATETIME(6) NOT NULL,
+ status VARCHAR(32) NOT NULL,
+ metadata JSON NOT NULL,
+ PRIMARY KEY (id),
+ UNIQUE KEY uk_provider_probe_run_id (run_id),
+ KEY idx_provider_probe_started_at (started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -574,6 +574,39 @@ components:
           type: array
           items: {type: string}
 
+    ProviderProbeItem:
+      type: object
+      required: [provider, capability, status, elapsed_ms, quality_status, checked_at]
+      properties:
+        provider: {type: string}
+        capability: {type: string}
+        status: {type: string, enum: [returned, returned_degraded, failed]}
+        elapsed_ms: {type: integer, minimum: 0}
+        source_version: {type: string}
+        quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        quality_reasons: {type: array, items: {type: string}}
+        error_code: {type: string, enum: [timeout, cancelled, contract_invalid, provider_error]}
+        checked_at: {type: string, format: date-time}
+    ProviderProbeRun:
+      type: object
+      required: [run_id, status, persisted, started_at, finished_at, total, returned, degraded, failed, items]
+      properties:
+        run_id: {type: string}
+        status: {type: string, enum: [success, degraded, failed, no_capabilities_configured]}
+        persisted: {type: boolean, description: False when MariaDB storage is not configured}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+        total: {type: integer}
+        returned: {type: integer}
+        degraded: {type: integer}
+        failed: {type: integer}
+        items: {type: array, items: {$ref: '#/components/schemas/ProviderProbeItem'}}
+    ProviderProbeHistory:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ProviderProbeRun'}}
+        total: {type: integer}
     MarketStocksSnapshot:
       type: object
       required: [page, page_size, total, total_is_lower_bound, returned, quote_succeeded, quote_failed, coverage_ratio, include_ma, ma_adjustment_basis, universe_source, universe_source_version, universe_fetched_at, fetched_at, items, quality_status]
@@ -1027,6 +1060,36 @@ paths:
         '401': {description: API key required}
         '502': {description: Providers failed}
         '504': {description: Providers timed out}
+  /api/v1/data-sources/probe:
+    post:
+      summary: Actively probe enabled Provider capabilities and persist a sanitized run
+      description: >-
+        Executes bounded sample requests directly against each registered Provider capability. Probes are isolated
+        from business request circuit-breaker statistics, run with per-capability timeouts and limited concurrency,
+        and never return raw upstream errors, request URLs or credentials. The run is persisted when MariaDB is configured; otherwise persisted=false and history remains unavailable.
+      responses:
+        '200':
+          description: Probe batch and per-capability outcomes
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderProbeRun'}
+        '401': {description: API key required}
+        '502': {description: Probe execution failed}
+        '503': {description: Provider-probe history storage is unavailable}
+  /api/v1/data-sources/probe/history:
+    get:
+      summary: List recent persisted Provider probe runs
+      parameters:
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Recent sanitized probe runs
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderProbeHistory'}
+        '400': {description: Invalid limit}
+        '401': {description: API key required}
+        '503': {description: Provider-probe history storage is unavailable}
   /api/v1/data-sources/diagnostics:
     get:
       tags: [Data Sources]
