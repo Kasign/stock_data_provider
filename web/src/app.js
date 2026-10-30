@@ -1012,11 +1012,11 @@ function buildWatchlistImportPreview(rawText) {
     if (index === 0 && /^(代码|股票代码|symbol|code)$/i.test(rawSymbol)) return;
     let symbol = rawSymbol;
     if (/^\d{6}$/.test(symbol)) {
-      if (/^(5|6|9)/.test(symbol)) symbol += ".SH";
-      else if (/^(4|8)/.test(symbol)) symbol += ".BJ";
-      else symbol += ".SZ";
+      if (symbol.startsWith("6")) symbol += ".SH";
+      else if (/^[03]/.test(symbol)) symbol += ".SZ";
+      else if (/^(?:[48]|92)/.test(symbol)) symbol += ".BJ";
     }
-    if (!/^\d{6}\.(SH|SZ|BJ)$/.test(symbol)) {
+    if (!/^\d{6}(?:\.(SH|SZ|BJ))?$/.test(symbol)) {
       rows.push({ line: index + 1, symbol: rawSymbol, name: rawName, status: "invalid", message: "代码格式无效" });
       return;
     }
