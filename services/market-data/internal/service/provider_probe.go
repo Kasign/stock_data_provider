@@ -70,7 +70,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if selected[capability] {
 				return nil, fmt.Errorf("provider-probe capability %q is duplicated", capability)
 			}
-			if options.Scope == "core" && !containsString(model.ProviderProbeCoreCapabilities(), capability) {
+			if options.Scope == "core" && !isCoreProbeCapability(capability) {
 				return nil, fmt.Errorf("provider-probe capability %q is outside core scope", capability)
 			}
 			selected[capability] = true
@@ -607,6 +607,15 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		}
 	}
 	return run, nil
+}
+
+func isCoreProbeCapability(capability string) bool {
+	for _, candidate := range model.ProviderProbeCoreCapabilities() {
+		if candidate == capability {
+			return true
+		}
+	}
+	return false
 }
 
 func classifyProbeError(err error) string {
