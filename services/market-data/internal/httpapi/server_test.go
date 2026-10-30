@@ -483,7 +483,7 @@ func (httpMetricSectorFake) FetchSectorRankingsByMetric(_ context.Context, categ
 	return &model.SectorRankingSnapshot{
 		Category: category, Direction: direction, SortBy: sortBy, Total: 1,
 		Source: "eastmoney", SourceVersion: "test", FetchedAt: now,
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 		Items: []model.SectorRanking{{
 			Rank: 1, Code: "BK0475", Name: "测试板块", Category: category,
