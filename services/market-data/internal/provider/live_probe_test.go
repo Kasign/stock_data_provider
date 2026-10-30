@@ -881,15 +881,15 @@ func TestLiveProviderProbe(t *testing.T) {
 			result.Status = "invalid"
 			result.Error = "MX API returned a nil chip distribution without an error"
 			failures = append(failures, "miaoxiang chip_distribution: nil result")
-		case item.Symbol != symbol || item.Source != mx.Name() || !finiteNumber(item.AverageCost) || item.AverageCost <= 0:
+		case item.Symbol != symbol || item.Source != mx.Name() || item.FetchedAt.IsZero() || !finiteNumber(item.AverageCost) || item.AverageCost <= 0:
 			result.Status = "invalid"
 			result.ChipDistribution = item
 			result.Error = "MX chip distribution identity or average-cost contract is invalid"
 			failures = append(failures, "miaoxiang chip_distribution: contract mismatch")
-		case item.QualityStatus == model.QualityInvalid:
+		case item.QualityStatus != model.QualityDegraded:
 			result.Status = "invalid"
 			result.ChipDistribution = item
-			result.Error = "MX chip distribution was marked invalid quality"
+			result.Error = "MX chip distribution must retain degraded publication-availability quality"
 			failures = append(failures, "miaoxiang chip_distribution: invalid quality")
 		default:
 			// 妙想缺少明确可用时间，degraded 是预期结果，不能要求它伪装成 valid。
@@ -921,15 +921,15 @@ func TestLiveProviderProbe(t *testing.T) {
 			result.Status = "invalid"
 			result.Error = "MX API returned a nil capital-flow response without an error"
 			failures = append(failures, "miaoxiang capital_flow: nil result")
-		case item.Symbol != symbol || item.Source != mx.Name() || item.Observations < 0:
+		case item.Symbol != symbol || item.Source != mx.Name() || item.FetchedAt.IsZero() || item.Observations <= 0 || item.ProviderDate == "":
 			result.Status = "invalid"
 			result.CapitalFlow = item
 			result.Error = "MX capital-flow identity or observation count is invalid"
 			failures = append(failures, "miaoxiang capital_flow: contract mismatch")
-		case item.QualityStatus == model.QualityInvalid:
+		case item.QualityStatus != model.QualityDegraded:
 			result.Status = "invalid"
 			result.CapitalFlow = item
-			result.Error = "MX capital flow was marked invalid quality"
+			result.Error = "MX capital flow must retain degraded publication-availability quality"
 			failures = append(failures, "miaoxiang capital_flow: invalid quality")
 		case item.MainNetInflow != nil && !finiteNumber(*item.MainNetInflow),
 			item.Inflow5D != nil && !finiteNumber(*item.Inflow5D),
