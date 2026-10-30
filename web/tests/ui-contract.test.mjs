@@ -1499,7 +1499,7 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
     app,
     /function applySettings\(nextSettings, \{ persistPreviousActiveTask = true \} = \{\}\)/
   );
-  const importBody = app.match(/async function importBrowserDataFile\(file\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(
     importBody,
     /localStorage\.removeItem\(TASK_REFERENCE_KEY\);[\s\S]*?applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?applyTheme\(imported\.theme\)/
@@ -1902,7 +1902,7 @@ test("分析 API 切换期间的 UI 清理异常不会中断配置应用", () =>
   assert.match(apply, /if \(analysisBaseChanged\) \{[\s\S]*?runSettingsApplyStep\("清理旧分析任务失败：", \(\) =>\s*invalidateActiveTaskForAnalysisBaseChange\(previousSettings\.analysisBase, nextSettings\.analysisBase\), failures\);/);
   assert.match(apply, /if \(marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("失效市场总览请求失败：", \(\) => marketOverview\.invalidateConnection\(\), failures\);[\s\S]*?runSettingsApplyStep\("失效市场活动请求失败：", \(\) => marketActivity\.invalidateConnection\(\), failures\);/);
   assert.match(apply, /if \(analysisBaseChanged \|\| marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("失效数据中心检查结果失败：", \(\) =>\s*dataCenter\.invalidate\(/);
-  assert.match(apply, /runSettingsApplyStep\("关闭连接设置窗口失败：", \(\) => \$\("#settings-dialog"\)\.close\(\), failures\);/);
+  assert.match(apply, /runSettingsApplyStep\("重置连接配置表单失败：", \(\) => \{/);\n  assert.match(apply, /initialConnectionDraft = null;[\s\S]*?syncConnectionDraftState\(\)/);
 });
 
 test("任务切换和分析连接切换会重置事件游标并隔离迟到轮询", () => {
@@ -1976,7 +1976,7 @@ test("清空或导入本地任务历史会隔离在途创建请求的晚到响�
   const clearEnd = app.indexOf("function setWatchlistFeedback(", clearStart + 1);
   const clearBody = clearStart >= 0 && clearEnd > clearStart ? app.slice(clearStart, clearEnd) : "";
   assert.match(clearBody, /state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
-  const importBody = app.match(/async function importBrowserDataFile\(file\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(importBody, /applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
 });
 
