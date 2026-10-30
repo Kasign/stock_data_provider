@@ -136,8 +136,8 @@ def markdown_report(py, go, key_field, tolerances, differences, missing_python, 
     for category, count in sorted(counts.items()):
         lines.append(f"- {category}: {count}")
     lines += ["", "## 记录覆盖差异", ""]
-    lines.append("- Python 独有键：" + (", ".join(missing_python) if missing_python else "无"))
-    lines.append("- Go 独有键：" + (", ".join(missing_go) if missing_go else "无"))
+    lines.append("- Python 独有键：" + (", ".join(missing_go) if missing_go else "无"))
+    lines.append("- Go 独有键：" + (", ".join(missing_python) if missing_python else "无"))
     lines += ["", "## 字段差异明细", ""]
     if not differences:
         lines.append("无字段差异。")
@@ -202,9 +202,8 @@ def main() -> int:
             args.output.write_text(report, encoding="utf-8")
         else:
             print(report)
-        # Quality metadata differences are intentionally visible but do not mask data-field parity.
-        blocking = [item for item in differences if item[2] != "quality_difference"]
-        return 1 if missing_python or missing_go or blocking else 0
+        # Quality metadata is part of the data contract; any difference blocks a clean parity result.
+        return 1 if missing_python or missing_go or differences else 0
     except InputError as exc:
         print(f"输入错误：{exc}", file=sys.stderr)
         return 2
