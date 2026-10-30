@@ -296,3 +296,12 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 ## 18. 覆盖率分母字段首批实现（2026-10-30）
 
 主动诊断 ProviderProbeItem 与 OpenAPI 新增 coverage_total/returned/validated/missing/excluded。当前仅市场广度有明确总体证券数，按 TotalSecurities 与 CoveredSecurities 计算；其他能力无可信分母时保持字段缺失。ratio 使用 validated/total，不用 returned/total 替代质量覆盖率。新增 Service 单测校验分母、缺失、排除和比例关系。
+
+
+## 19. 比较器与覆盖率任务状态更新（2026-10-30）
+
+- 比较器已接入真实 600036.SH 黄金夹具；夹具 degraded 时得到 not_comparable；合成 valid 输入测试覆盖 matched/partial/mismatch。
+- 输入边界覆盖正数/有限 OHLC、OHLC 关系、负成交量、负/NaN/Inf 成交额、空/非法/重复日期集合。
+- 市场广度诊断新增明确覆盖分母字段；其他能力尚未确认分母时不输出 coverage_ratio。
+- 北交所映射矩阵已落到既有测试；不支持 Provider 在 BSE 定向探测中归类为 not_supported。
+- 当前最新提交与 CI 结论以后续远端 HEAD 和对应 Actions 为准。

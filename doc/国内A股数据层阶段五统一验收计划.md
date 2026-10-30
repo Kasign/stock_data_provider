@@ -508,13 +508,13 @@
 
 | 顺序 | 任务 | 当前状态 | 完成标准 |
 |---|---|---|---|
-| P0-1 | 跨 Provider 日 K 比较器接入黄金夹具 | 进行中 | 真实黄金夹具调用统一比较器；降级样例明确得到 not_comparable；独立 valid 合成契约样例验证 matched/partial/mismatch |
-| P0-2 | 比较器输入边界校验 | 待完成 | 拒绝非正/NaN/Inf OHLC、OHLC 关系错误、负成交量、负/非有限成交额；日期重复/非法和空集合状态明确 |
+| P0-1 | 跨 Provider 日 K 比较器接入黄金夹具 | 已完成（真实降级夹具调用路径已接入；真实 matched 证据仍待） | 真实黄金夹具调用统一比较器；降级样例明确得到 not_comparable；独立 valid 合成契约样例验证 matched/partial/mismatch |
+| P0-2 | 比较器输入边界校验 | 已完成（静态契约边界与单测已补齐） | 拒绝非正/NaN/Inf OHLC、OHLC 关系错误、负成交量、负/非有限成交额；日期重复/非法和空集合状态明确 |
 | P0-3 | 跨市场黄金样例 | 待完成 | 创业板 300750.SZ、科创板 688981.SH 有真实有效样例后固化；按 Provider 分别验证代码映射、成交量单位和质量状态 |
-| P0-4 | 北交所支持矩阵 | 待完成 | 逐 Provider 记录 BJ 代码映射和能力支持；新浪、腾讯、网易、BaoStock 当前明确不支持时标记 not_supported，不发请求、不计失败；至少一个真实支持源返回有效样本后再固化黄金夹具 |
+| P0-4 | 北交所支持矩阵 | 部分完成（代码映射矩阵和 not_supported 诊断分类已补齐；真实在线样本待验） | 逐 Provider 记录 BJ 代码映射和能力支持；新浪、腾讯、网易、BaoStock 当前明确不支持时标记 not_supported，不发请求、不计失败；至少一个真实支持源返回有效样本后再固化黄金夹具 |
 | P0-5 | 特殊交易样例 | 待完成 | 停牌、新股上市、除权除息、非交易日各有固定样本与预期行为；不得用工作日推断交易日 |
 | P0-6 | 统一诊断 checks 过滤 | 待完成 | `POST /api/v1/data-sources/probe` 支持 connectivity、contract、quality、freshness、cross_provider、storage；未知/重复/冲突值明确 400，空值保持旧请求行为 |
-| P0-7 | 覆盖率分母契约 | 待完成 | 明确 total、returned、validated、missing、excluded、coverage_ratio；分母来源可追溯，分母未知时 ratio=null，禁止用返回数自作分母 |
+| P0-7 | 覆盖率分母契约 | 部分完成（市场广度已有显式分母；其他能力待扩展） | 明确 total、returned、validated、missing、excluded、coverage_ratio；分母来源可追溯，分母未知时 ratio=null，禁止用返回数自作分母 |
 | P0-8 | 诊断逐项证据 | 部分完成 | 每项记录脱敏 request_summary、返回/有效记录数、源端时间、质量原因、错误阶段；不适用字段为空，不用 FetchedAt 冒充 ProviderTime |
 | P0-9 | 历史诊断与兼容 | 待完成 | MariaDB 保存/查询新字段；旧历史 JSON 可读；存储未配置/故障明确 storage 状态，不伪装诊断通过 |
 | P0-10 | 统一诊断端到端 | 待完成 | HTTP Handler → Service → Provider → 标准化/质量校验 → MariaDB 持久化/查询的集成测试覆盖成功、降级、失败、跳过和不支持 |
@@ -620,3 +620,11 @@
 - ratio = validated / total；分母未知或为 0 时不输出比例和分母字段。
 
 当前先在市场广度探测落地：total 使用快照的 TotalSecurities，returned/validated 使用 CoveredSecurities，missing 为两者差值，excluded 为 0。其他能力未取得可信分母时继续不输出，不以分页数或样本数冒充全市场覆盖率。后续按各业务快照的真实总数/排除数逐项扩展。
+
+
+### 最新代码推进状态（2026-10-30）
+
+- 比较器接入和边界校验：P0-1/P0-2 已完成代码侧工作；真实跨 Provider valid 黄金样例仍未取得，不能宣布真实 matched 验收通过。
+- 北交所：已复核现有映射矩阵，并将明确不支持的 BJ Provider 探测归类为 not_supported；在线权限和数据样本仍待验。
+- 覆盖率：市场广度已输出 total/returned/validated/missing/excluded 与 validated/total；其他能力只在获得可信分母后逐项扩展。
+- 最近相关代码提交：`35d442f`、`7e3b6c2`、`8226d6d`、`bdc3e88`、`5cc765d`、`69736d1`。其中部分中间提交因 gofmt 失败或被后续提交取消；最终验收只看分支最新 SHA。
