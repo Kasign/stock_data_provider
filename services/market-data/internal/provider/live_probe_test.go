@@ -562,7 +562,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		case item.Symbol != symbol || item.Source != providerName || strings.TrimSpace(item.Name) == "":
 			result.Status, result.Error, result.StockBasic = "invalid", "stock-basic identity/name contract mismatch", item
 			failures = append(failures, providerName+" stock_basic: contract mismatch")
-		case item.QualityStatus == model.QualityDegraded && hasLiveProbeQualityReason(item.QualityReasons, "provider_snapshot_timestamp_not_exposed"):
+		case item.QualityStatus == model.QualityDegraded && (hasLiveProbeQualityReason(item.QualityReasons, "provider_snapshot_timestamp_not_exposed") || hasLiveProbeQualityReason(item.QualityReasons, "market_profile_timestamp_not_exposed")):
 			// 静态身份字段没有源端快照时间时应保留 degraded；这不是身份数据无效。
 			result.Status, result.StockBasic = "returned_degraded", item
 		case item.QualityStatus != model.QualityValid:
