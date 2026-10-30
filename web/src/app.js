@@ -3001,7 +3001,7 @@ function renderRunStatus(status = "") {
 
 function openRunFlowDrawer() {
   const dialog = $("#run-flow-dialog");
-  if (!dialog.open) dialog.showModal();
+  if (!dialog.open) dialog.show();
 }
 
 

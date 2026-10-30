@@ -4945,3 +4945,23 @@ button:disabled {
 
 
 .market-stocks-panel{margin:0 0 18px}.market-stocks-toolbar{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:14px 0}.market-stocks-toolbar .field{min-width:120px;margin:0}.market-stocks-summary{margin:10px 0;color:var(--text-dim);font-size:12px;line-height:1.6}.market-stocks-table-scroll{max-height:560px}.market-stocks-table-scroll table{min-width:980px}.market-stocks-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;color:var(--text-dim);font-size:12px}.market-stocks-pagination>div{display:flex;gap:8px}.market-stocks-pagination button:disabled,.market-stocks-toolbar button:disabled{opacity:.55;cursor:not-allowed}.market-stocks-stock-name{display:block;font-weight:650}.market-stocks-stock-symbol{display:block;margin-top:3px;color:var(--text-dim);font-size:11px}.market-stocks-row-action{min-height:28px;padding:4px 9px;font-size:11px}
+
+/* 运行流详情改为非模态工作区：保留左侧主导航可交互。 */
+.run-flow-dialog[open] {
+  pointer-events: none;
+  z-index: 6;
+  width: calc(100vw - 238px);
+  left: 238px;
+  right: 0;
+  margin: 0 0 0 auto;
+  background: transparent;
+}
+.run-flow-dialog[open] .task-status-panel {
+  pointer-events: auto;
+}
+@media (max-width: 600px) {
+  .run-flow-dialog[open] {
+    left: 0;
+    width: 100vw;
+  }
+}

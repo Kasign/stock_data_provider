@@ -875,7 +875,7 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
     assert.match(html, new RegExp('id="' + id + '"'), "run-flow field is missing: " + id);
   }
   assert.match(html, /<dialog class="run-flow-dialog" id="run-flow-dialog"/);
-  assert.match(app, /function openRunFlowDrawer\(\)[\s\S]*?dialog\.showModal\(\)/);
+  assert.match(app, /function openRunFlowDrawer\(\)[\s\S]*?dialog\.show\(\)/);
   assert.match(app, /function renderSelectedTaskEvent\(item\)[\s\S]*?detailLayout\?\.classList\.remove\("has-selected-event"\)[\s\S]*?detailLayout\?\.classList\.add\("has-selected-event"\)/);
   assert.match(stylesheet, /\.run-flow-dialog #task-detail:not\(\[hidden\]\):not\(\.has-selected-event\)\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\);\s*\}/);
   assert.match(app, /function activateTaskReference\(record\)[\s\S]*?openRunFlowDrawer\(\)[\s\S]*?pollTaskSafely\(state\.pollGeneration\)/);
@@ -2043,4 +2043,11 @@ test("行情服务接口文档、Handler 与 WebUI 调用边界明确区分", ()
   assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/stocks\/\{symbol\}\/capital-flow"/, "个股资金流 Handler 已注册");
   assert.match(apiClient, /export function getCapitalFlow/);
   assert.doesNotMatch(apiClient, /export function getMarketCapitalFlow/, "WebUI 不应把未注册的市场级资金流接口当作可用能力");
+});
+
+
+test("运行流详情不再阻断左侧主导航点击", () => {
+  assert.match(app, /function openRunFlowDrawer\(\)[\s\S]*?dialog\.show\(\)/);
+  assert.match(stylesheet, /\.run-flow-dialog\[open\]\s*\{[^}]*pointer-events:\s*none/);
+  assert.match(stylesheet, /\.run-flow-dialog\[open\]\s*\.task-status-panel\s*\{\s*pointer-events:\s*auto/);
 });
