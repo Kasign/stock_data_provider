@@ -488,13 +488,15 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	for _, job := range jobs {
 		configured[job.capability] = true
 	}
-	for _, p := range s.providers {
-		if universeProvider, ok := p.(provider.StockUniverseProvider); ok {
-			// 全市场证券目录可能返回数千条记录，默认轻量探测不下载完整目录；明确记录为 skipped。
-			configured["stock_universe"] = true
-			add(universeProvider.Name(), "stock_universe", func(context.Context) (model.QualityStatus, string, []string, error) {
-				return model.QualityUnknown, "", []string{"full_market_universe_excluded_from_lightweight_probe"}, errors.New("probe skipped: full-market universe scan is intentionally excluded from lightweight diagnostics")
-			})
+	if selected["stock_universe"] {
+		for _, p := range s.providers {
+			if universeProvider, ok := p.(provider.StockUniverseProvider); ok {
+				// 全市场证券目录可能返回数千条记录，默认轻量探测不下载完整目录；明确记录为 skipped。
+				configured["stock_universe"] = true
+				add(universeProvider.Name(), "stock_universe", func(context.Context) (model.QualityStatus, string, []string, error) {
+					return model.QualityUnknown, "", []string{"full_market_universe_excluded_from_lightweight_probe"}, errors.New("probe skipped: full-market universe scan is intentionally excluded from lightweight diagnostics")
+				})
+			}
 		}
 	}
 	for _, capability := range requiredCapabilities {
