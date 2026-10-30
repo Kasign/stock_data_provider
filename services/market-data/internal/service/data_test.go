@@ -2461,7 +2461,7 @@ func TestSupplementFetchedAtUsesServiceReceiveTime(t *testing.T) {
 			FetchedAt: future, QualityStatus: model.QualityDegraded,
 		},
 		flow: &model.CapitalFlow{
-			Symbol: "600519.SH", MainNetInflow: &mainInflow, Inflow5D: &fiveDay,
+			Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), MainNetInflow: &mainInflow, Inflow5D: &fiveDay,
 			Observations: 5, SourceVersion: "test", FetchedAt: future,
 			QualityStatus: model.QualityDegraded,
 		},
