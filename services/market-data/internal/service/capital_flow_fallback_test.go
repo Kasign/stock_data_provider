@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -202,7 +203,6 @@ func TestCapitalFlowProvidersDeduplicatesNames(t *testing.T) {
 		t.Fatalf("expected providers with duplicate names to be deduplicated, got %d", len(got))
 	}
 }
-
 
 func TestValidateCapitalFlowSnapshotRequiresProviderDate(t *testing.T) {
 	item := capitalFlowFallbackItemForTest("eastmoney", model.QualityDegraded)

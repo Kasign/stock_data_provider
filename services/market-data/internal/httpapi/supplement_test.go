@@ -31,7 +31,8 @@ func (supplementHTTPFake) FetchChipDistribution(_ context.Context, symbol string
 func (supplementHTTPFake) FetchCapitalFlow(_ context.Context, symbol string) (*model.CapitalFlow, error) {
 	amount := 1000000.0
 	return &model.CapitalFlow{
-		Symbol: symbol, MainNetInflow: &amount, Source: "miaoxiang", SourceVersion: "test-v1",
+		Symbol: symbol, ProviderDate: time.Now().In(time.FixedZone("CST", 8*60*60)).Format("2006-01-02"),
+		MainNetInflow: &amount, Source: "miaoxiang", SourceVersion: "test-v1",
 		FetchedAt: time.Now().UTC(), Observations: 1, QualityStatus: model.QualityDegraded,
 	}, nil
 }
