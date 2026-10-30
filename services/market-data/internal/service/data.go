@@ -1268,7 +1268,7 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 	if sortBy == "" {
 		sortBy = "change_percent"
 	}
-	if sortBy != "change_percent" && sortBy != "amount" {
+	if sortBy != "change_percent" && sortBy != "amount" && sortBy != "change_5d" {
 		return nil, false, fmt.Errorf("unsupported sector ranking sort_by %q; want change_percent or amount", rawSortBy)
 	}
 	direction := strings.ToLower(strings.TrimSpace(rawDirection))

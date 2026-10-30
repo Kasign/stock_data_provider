@@ -430,7 +430,7 @@ func (s *Server) sectorRankings(w http.ResponseWriter, r *http.Request) {
 	if sortBy == "" {
 		sortBy = "change_percent"
 	}
-	if sortBy != "change_percent" && sortBy != "amount" {
+	if sortBy != "change_percent" && sortBy != "amount" && sortBy != "change_5d" {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "sort_by must be change_percent, amount or change_5d", requestID(r))
 		return
 	}
