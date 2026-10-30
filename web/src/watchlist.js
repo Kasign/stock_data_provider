@@ -178,30 +178,3 @@ export function removeWatchlistSymbol(symbol, storage) {
   const persisted = writeRecords(storage, items);
   return { items, removed: true, valid: true, persisted, storageReadable: true, storageValid: true };
 }
-
-
-export function importWatchlistSymbols(records, storage, updatedAt = new Date().toISOString()) {
-  const currentState = readWatchlistState(storage);
-  if (!currentState.storageReadable || !currentState.storageValid) {
-    return { items: currentState.items, imported: [], skipped: Array.isArray(records) ? records.length : 0,
-      persisted: false, storageReadable: currentState.storageReadable, storageValid: currentState.storageValid };
-  }
-  const items = [...currentState.items];
-  const seen = new Set(items.map((item) => comparableMarketSymbol(item.symbol)));
-  const imported = [];
-  const source = Array.isArray(records) ? records : [];
-  for (const record of source) {
-    const normalized = normalizeRecord({ ...record, updated_at: updatedAt });
-    if (!normalized || items.length >= MAX_WATCHLIST_ITEMS) continue;
-    const identity = comparableMarketSymbol(normalized.symbol);
-    if (seen.has(identity)) continue;
-    seen.add(identity);
-    items.push(normalized);
-    imported.push(normalized);
-  }
-  if (!imported.length) {
-    return { items, imported, skipped: source.length, persisted: true, storageReadable: true, storageValid: true };
-  }
-  const persisted = writeRecords(storage, items);
-  return { items, imported, skipped: source.length - imported.length, persisted, storageReadable: true, storageValid: true };
-}

@@ -986,7 +986,7 @@ function parseWatchlistImportLine(line) {
     if (char === '"') {
       if (quoted && line[index + 1] === '"') { value += '"'; index += 1; }
       else quoted = !quoted;
-    } else if ((char === "," || char === "\\t" || char === ";") && !quoted) {
+    } else if ((char === "," || char === "\t" || char === ";") && !quoted) {
       cells.push(value.trim()); value = "";
     } else value += char;
   }
@@ -999,7 +999,7 @@ function buildWatchlistImportPreview(rawText) {
   if (!existingState.storageReadable || !existingState.storageValid) {
     return { rows: [], accepted: [], error: "当前本地自选数据不可读取或格式异常，已暂停导入。" };
   }
-  const lines = String(rawText || "").replace(/^\\uFEFF/, "").split(/\\r?\\n/).filter((line) => line.trim());
+  const lines = String(rawText || "").replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim());
   const rows = [];
   const accepted = [];
   const seen = new Set(existingState.items.map((item) => comparableMarketSymbol(item.symbol)));
@@ -1011,12 +1011,12 @@ function buildWatchlistImportPreview(rawText) {
     const rawName = String(cells[1] || "").trim();
     if (index === 0 && /^(代码|股票代码|symbol|code)$/i.test(rawSymbol)) return;
     let symbol = rawSymbol;
-    if (/^\\d{6}$/.test(symbol)) {
+    if (/^\d{6}$/.test(symbol)) {
       if (/^(5|6|9)/.test(symbol)) symbol += ".SH";
       else if (/^(4|8)/.test(symbol)) symbol += ".BJ";
       else symbol += ".SZ";
     }
-    if (!/^\\d{6}\\.(SH|SZ|BJ)$/.test(symbol)) {
+    if (!/^\d{6}\.(SH|SZ|BJ)$/.test(symbol)) {
       rows.push({ line: index + 1, symbol: rawSymbol, name: rawName, status: "invalid", message: "代码格式无效" });
       return;
     }
