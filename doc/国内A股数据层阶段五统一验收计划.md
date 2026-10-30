@@ -133,3 +133,15 @@
 - 测试覆盖 quote、daily_bars（none/forward/backward 三种复权）、核心指数行情、人气榜、估值、交易日历、涨停池、龙虎榜、指数目录、指数成分、指数日 K、财务指标与报表
 
 未配置 Secret 或未手动启用时，同花顺探测仍会跳过；这不是通过，也不会影响无凭据的普通 CI。探测通过仅证明当次账号权限和返回契约，不自动打开生产 Provider 开关。
+
+
+## 十、原 Python Provider 固定基线与静态字段差异已补齐（2026-10-30）
+
+- 原项目固定提交：`Kasign/daily_stock_analysis@7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32`（2026-10-17）。
+- 已确认旧 Python 实时行情链：Efinance → AkShare EM → AkShare Sina → AkShare Tencent。
+- 已确认默认日 K 顺序：Efinance → AkShare → Pytdx → BaoStock → YFinance → Tencent；Tushare/TickFlow 等依赖凭据加入。
+- 已识别旧 Python Efinance 缺失 volume/amount 补零、缺 open 时用 close 补 OHLC 的行为；Go 必须继续保留 null 和严格质量门禁。
+- 已识别 MA 指标字段差异：Python MA5/MA10/MA20 + volume_ratio；Go DailyBar 当前 MA5/MA20/MA120/MA250。需评估是否为接口能力缺口，不能直接把指标口径混为一致。
+- 以上为固定源码静态对照，不是 Python/Go 实际数据值差分。双侧真实样本仍待在原 Python 运行环境导出。
+
+下一步：把固定 Python 基线对应的导出字段模板和 Go API 快照格式对齐，形成可重复的双侧样本差分入口；继续补充跨板块黄金样例。

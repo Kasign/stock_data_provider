@@ -183,3 +183,18 @@ Go 当前已为上述多项建立门禁，但需要确认这些门禁从 Provide
 - 历史指数成分成员模型已分离 `effective_from/effective_to` 与权重报告日期，并在区间不覆盖查询日期、缺失时间证据或时间顺序异常时降级。
 - 因子和公司行动可见性门禁要求 `fetched_at`、`available_at`、`system_observed_at` 均不晚于 `as_of`；已补充相应边界测试。
 - 本节为代码静态状态。Go 测试、Python/Go 固定样本差分、真实 Provider 权限和 MariaDB 部署验收尚未执行，不应标记为通过。
+
+
+## 8. 原 Python Provider 源码基线与新增字段差异（2026-10-30）
+
+原 Python 项目已固定到 `Kasign/daily_stock_analysis@7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32`，不再只依赖当前 Go 仓库内的 bridge 片段。
+
+已确认的静态调用链：
+- 个股实时行情：Efinance → AkShare EM → AkShare Sina → AkShare Tencent。
+- 日 K：默认 Efinance P0 → AkShare P1 → Pytdx P2 → BaoStock P3 → YFinance P4 → Tencent P5；配置凭据后动态加入 Tushare/TickFlow 等。
+- Python BaseFetcher 对日 K 执行数值化、剔除 close/volume 缺失行、升序排序，并计算 MA5/MA10/MA20 和 volume_ratio。
+- Efinance 日 K 归一化会把缺失 volume/amount 补 0；缺 open 时会用 close 补齐 OHLC。
+- Go 当前明确保留 null/unknown/degraded、严格 OHLC 和单位校验，因此这些差异判为 **Go 更严格**，不能为了旧行为表面一致而回退。
+- Go 当前 DailyBar MA 字段集合与 Python 的 MA5/MA10/MA20/volume_ratio 不完全一致，MA10/volume_ratio 是需评估的接口能力差异。
+
+静态源码对照已完成，但真实 Python/Go 双侧字段差分仍未执行。原 Python 数据源包不在当前仓库，需在固定原项目运行环境导出相同样本后才能做数值级判定。固定样本、来源和日期口径规则见 [迁移矩阵](./PYTHON_PROVIDER_GO_MIGRATION_MATRIX.md)。
