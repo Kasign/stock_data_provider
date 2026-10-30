@@ -135,7 +135,7 @@ func (s *DataService) ProviderDiagnostics() []map[string]any {
 		}
 		capabilities[p.Name()]["daily_bars"] = true
 	}
-	for providerIndex, p := range s.indexQuoteProviders {
+	for _, p := range s.indexQuoteProviders {
 		if capabilities[p.Name()] == nil {
 			capabilities[p.Name()] = make(map[string]bool)
 		}
@@ -294,7 +294,7 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 	}
 	var failures []string
 	var degradedCandidate *model.IndexQuoteSnapshot
-	for _, p := range s.indexQuoteProviders {
+	for providerIndex, p := range s.indexQuoteProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -529,7 +529,7 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 	}
 	var failures []string
 	var degradedCandidate *model.MarketBreadthSnapshot
-	for _, p := range s.marketBreadthProviders {
+	for providerIndex, p := range s.marketBreadthProviders {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
