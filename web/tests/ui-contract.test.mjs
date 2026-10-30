@@ -34,7 +34,7 @@ function finalCssRuleBody(selector) {
 }
 
 function baseCssDeclarationBlock(selector) {
-  const rules = [...stylesheet.matchAll(/([^{}]+)\\{([^{}]*)\\}/g)];
+  const rules = [...stylesheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g)];
   const rule = rules.find((match) => match[1].split(",").some((part) => part.trim() === selector));
   return rule?.[2] || "";
 }
