@@ -193,7 +193,7 @@ func (s *Store) Migrate(ctx context.Context) error {
  symbol VARCHAR(16) NOT NULL,
  provider_event_id VARCHAR(128) NOT NULL,
  source VARCHAR(64) NOT NULL,
- ex_date DATE NOT NULL,
+ ex_date DATE NULL,
  announcement_date DATE NULL,
  revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
  recorded_at DATETIME(6) NOT NULL,

@@ -127,12 +127,13 @@ func (s *Store) SaveCorporateActions(ctx context.Context, values []model.Corpora
 	for _,value:=range values {
 		if strings.TrimSpace(value.Symbol)=="" || strings.TrimSpace(value.ProviderEventID)=="" ||
 			strings.TrimSpace(value.EventType)=="" || strings.TrimSpace(value.Source)=="" ||
-			!validISODate(value.ExDate,false) || !validISODate(value.AnnouncementDate,true) ||
+			!validISODate(value.ExDate,true) || !validISODate(value.AnnouncementDate,true) ||
+			(value.ExDate == "" && value.AnnouncementDate == "") || !validISODate(value.ImplementationAnnouncementDate,true) ||
 			!validISODate(value.RecordDate,true) || !validISODate(value.PayDate,true) ||
 			value.FetchedAt.IsZero() || !validObservedQuality(value.QualityStatus) {
 			return fmt.Errorf("invalid corporate-action event %s for %s",value.ProviderEventID,value.Symbol)
 		}
-		for _,number:=range []*float64{value.CashDividendCNY,value.BonusShareRatio,value.TransferShareRatio,value.RightsIssueRatio,value.RightsIssuePriceCNY} {
+		for _,number:=range []*float64{value.CashDividendCNY,value.CashDividendBeforeTaxCNY,value.BonusShareRatio,value.TransferShareRatio,value.RightsIssueRatio,value.RightsIssuePriceCNY} {
 			if number!=nil && (math.IsNaN(*number)||math.IsInf(*number,0)||*number<0) {
 				return fmt.Errorf("corporate-action event %s has invalid numeric terms",value.ProviderEventID)
 			}
@@ -150,7 +151,7 @@ WHERE symbol=? AND provider_event_id=? AND source=? ORDER BY recorded_at DESC,id
 		if lookupErr!=nil || latest!=hash {
 			_,err=tx.ExecContext(ctx,`INSERT INTO market_data_corporate_action_versions
 (symbol,provider_event_id,source,ex_date,announcement_date,revision_hash,recorded_at,fetched_at,available_at,quality_status,metadata)
-VALUES (?,?,?,?,?,?,?,?,?,?,?)`,value.Symbol,value.ProviderEventID,value.Source,value.ExDate,nullableDate(value.AnnouncementDate),hash,
+VALUES (?,?,?,?,?,?,?,?,?,?,?)`,value.Symbol,value.ProviderEventID,value.Source,nullableDate(value.ExDate),nullableDate(value.AnnouncementDate),hash,
 				time.Now().UTC(),value.FetchedAt.UTC(),nullableTime(value.AvailableAt),string(value.QualityStatus),metadata)
 			if err!=nil{tx.Rollback();return fmt.Errorf("insert corporate-action revision: %w",err)}
 		}
@@ -166,13 +167,13 @@ func (s *Store) ListCorporateActionsAsOf(ctx context.Context,symbol,startDate,en
 	asOfUTC:=asOf.UTC()
 	rows,err:=s.db.QueryContext(ctx,`SELECT v.metadata,DATE_FORMAT(v.recorded_at,'%Y-%m-%d %H:%i:%s.%f')
 FROM market_data_corporate_action_versions v
-WHERE v.symbol=? AND (?='' OR v.ex_date>=?) AND (?='' OR v.ex_date<=?) AND v.recorded_at<=?
+WHERE v.symbol=? AND (?='' OR COALESCE(v.ex_date,v.announcement_date)>=?) AND (?='' OR COALESCE(v.ex_date,v.announcement_date)<=?) AND v.recorded_at<=?
 AND NOT EXISTS (
  SELECT 1 FROM market_data_corporate_action_versions n
  WHERE n.symbol=v.symbol AND n.provider_event_id=v.provider_event_id AND n.source=v.source AND n.recorded_at<=?
  AND (n.recorded_at>v.recorded_at OR (n.recorded_at=v.recorded_at AND n.id>v.id))
 )
-ORDER BY v.ex_date ASC,v.source ASC,v.recorded_at DESC`,
+ORDER BY COALESCE(v.ex_date,v.announcement_date) ASC,v.source ASC,v.recorded_at DESC`,
 		symbol,startDate,startDate,endDate,endDate,asOfUTC,asOfUTC)
 	if err!=nil{return nil,fmt.Errorf("query corporate-action revisions: %w",err)}
 	defer rows.Close()

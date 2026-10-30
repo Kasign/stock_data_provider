@@ -103,8 +103,12 @@ func (s *DataService) RefreshCorporateActions(ctx context.Context, rawSymbol, st
 		if len(values) == 0 { failures = append(failures, p.Name()+": empty corporate-action response"); continue }
 		for i := range values {
 			eventSymbol, symbolErr := normalize.NormalizeSymbol(values[i].Symbol)
-			if symbolErr != nil || eventSymbol != symbol ||
-				(values[i].ExDate != "" && ((startDate != "" && values[i].ExDate < startDate) || (endDate != "" && values[i].ExDate > endDate))) {
+			eventDate := values[i].ExDate
+			if eventDate == "" {
+				eventDate = values[i].AnnouncementDate
+			}
+			if symbolErr != nil || eventSymbol != symbol || eventDate == "" ||
+				(startDate != "" && eventDate < startDate) || (endDate != "" && eventDate > endDate) {
 				fetchErr = fmt.Errorf("provider returned corporate action outside requested symbol/date scope: %s", values[i].ProviderEventID)
 				break
 			}

@@ -24,12 +24,15 @@ type CorporateAction struct {
 	Symbol string `json:"symbol"`
 	ProviderEventID string `json:"provider_event_id"`
 	EventType string `json:"event_type"`
+	EventStatus string `json:"event_status,omitempty"`
 	AnnouncementDate string `json:"announcement_date,omitempty"`
+	ImplementationAnnouncementDate string `json:"implementation_announcement_date,omitempty"`
 	AvailableAt *time.Time `json:"available_at,omitempty"`
 	RecordDate string `json:"record_date,omitempty"`
 	ExDate string `json:"ex_date"`
 	PayDate string `json:"pay_date,omitempty"`
-	CashDividendCNY *float64 `json:"cash_dividend_cny_per_share,omitempty"`
+	CashDividendCNY *float64 `json:"cash_dividend_after_tax_cny_per_share,omitempty"`
+	CashDividendBeforeTaxCNY *float64 `json:"cash_dividend_before_tax_cny_per_share,omitempty"`
 	BonusShareRatio *float64 `json:"bonus_share_ratio,omitempty"`
 	TransferShareRatio *float64 `json:"transfer_share_ratio,omitempty"`
 	RightsIssueRatio *float64 `json:"rights_issue_ratio,omitempty"`
