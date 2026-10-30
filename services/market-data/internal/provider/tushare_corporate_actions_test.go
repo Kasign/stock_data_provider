@@ -18,8 +18,12 @@ func TestTushareFetchCorporateActionsKeepsAnnouncementAndEffectiveDatesSeparate(
 	defer server.Close()
 	p := NewTushareConfigured(time.Second, server.URL, "test-token")
 	items, err := p.FetchCorporateActions(context.Background(), "600519.SH", "2026-03-01", "2026-06-30")
-	if err != nil { t.Fatal(err) }
-	if len(items) != 2 { t.Fatalf("got %d actions, want 2", len(items)) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("got %d actions, want 2", len(items))
+	}
 	got := items[0]
 	if got.AnnouncementDate != "2026-03-20" || got.ImplementationAnnouncementDate != "2026-06-10" || got.ExDate != "2026-06-16" {
 		t.Fatalf("announcement, implementation and ex-date must remain distinct: %+v", got)
