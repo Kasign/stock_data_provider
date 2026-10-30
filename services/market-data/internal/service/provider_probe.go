@@ -57,7 +57,10 @@ func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string,
 	}
 	evidence.sampleSymbol = symbol
 	if separator := strings.LastIndex(symbol, "."); separator >= 0 && separator+1 < len(symbol) {
-		evidence.sampleMarket = symbol[separator+1:]
+		market := strings.ToUpper(symbol[separator+1:])
+		if market == "SH" || market == "SZ" || market == "BJ" {
+			evidence.sampleMarket = market
+		}
 	}
 	if sampleDate == "" && providerTime != nil && !providerTime.IsZero() {
 		sampleDate = providerTime.In(marketLocation()).Format("2006-01-02")
@@ -472,7 +475,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err := validateTradingCalendarSnapshot(v, calendarStart, calendarEnd); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
-			recordProviderProbeEvidence(probeCtx, "", calendarEnd, len(v.Items), len(v.Items), nil)
+			sampleDate := calendarEnd
+			if len(v.Items) > 0 && v.Items[0].Date != "" {
+				sampleDate = v.Items[0].Date
+			}
+			recordProviderProbeEvidence(probeCtx, "", sampleDate, len(v.Items), len(v.Items), nil)
 			return v.QualityStatus, v.SourceVersion, append([]string(nil), v.QualityReasons...), nil
 		})
 	}
