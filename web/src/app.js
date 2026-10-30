@@ -683,7 +683,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
   const normalizeLocalSymbol = (value) => {
     try { return comparableMarketSymbol(value); } catch { return String(value || "").trim().toUpperCase(); }
   };
-  items.forEach((record) => {
+  visibleItems.forEach((record) => {
     const row = document.createElement("article");
     row.className = "watchlist-item";
     const main = document.createElement("div");
