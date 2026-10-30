@@ -4580,7 +4580,7 @@ function syncWatchlistPreferenceControls(preferences = readPreferences()) {
   if (queryAdjustment) queryAdjustment.value = normalized.dailyAdjustment;
 }
 
-function persistWatchlistPreferences() {
+function persistLocalPreferences() {
   try {
     const preferences = savePreferences({
       ...readPreferences(),
@@ -4595,7 +4595,7 @@ function persistWatchlistPreferences() {
       dailyAdjustment: $("#settings-default-adjustment")?.value || readPreferences().dailyAdjustment
     });
     syncWatchlistPreferenceControls(preferences);
-    $("#local-preferences-feedback").textContent = "自选股默认排序偏好已保存到当前浏览器。";
+    $("#local-preferences-feedback").textContent = "本地展示与查询偏好已保存到当前浏览器。";
     return preferences;
   } catch (error) {
     $("#local-preferences-feedback").textContent = "偏好保存失败：" + (error?.message || "浏览器存储不可用。");
@@ -4799,6 +4799,8 @@ async function importBrowserDataFile(file) {
     syncSettingsThemeButtons(imported.theme);
     syncWatchlistPreferenceControls(imported.preferences);
     renderWatchlist();
+    if (state.quote) renderQuote(state.quote);
+    if (state.view === "research") renderResearchOverview();
     renderRecentTasks();
     setBrowserDataFeedback("导入完成：主题、本地偏好、同源 API 路径、自选股与本地任务引用已更新。原有 API Key 已保留。", "success");
   } catch (error) {
@@ -5033,27 +5035,27 @@ $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchl
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
 $("#watchlist-search").addEventListener("input", () => renderWatchlist());
 $("#watchlist-sort").addEventListener("change", () => {
-  persistWatchlistPreferences();
+  persistLocalPreferences();
   renderWatchlist();
 });
 $("#settings-watchlist-sort").addEventListener("change", () => {
   $("#watchlist-sort").value = $("#settings-watchlist-sort").value;
-  persistWatchlistPreferences();
+  persistLocalPreferences();
   renderWatchlist();
 });
 $("#settings-watchlist-direction").addEventListener("change", () => {
-  persistWatchlistPreferences();
+  persistLocalPreferences();
   renderWatchlist();
 });
 document.querySelectorAll("[data-watchlist-display-field]").forEach((input) => {
   input.addEventListener("change", () => {
-    persistWatchlistPreferences();
+    persistLocalPreferences();
     renderWatchlist();
   });
 });
 ["#settings-market-color-scheme", "#settings-price-digits", "#settings-percent-digits", "#settings-amount-unit", "#settings-default-bar-limit", "#settings-default-adjustment"].forEach((selector) => {
   $(selector).addEventListener("change", () => {
-    persistWatchlistPreferences();
+    persistLocalPreferences();
     renderWatchlist();
     if (state.view === "stocks" && state.quote) renderQuote(state.quote);
     if (state.view === "research") renderResearchOverview();
@@ -5064,7 +5066,9 @@ $("#reset-local-preferences").addEventListener("click", () => {
     const preferences = resetPreferences();
     syncWatchlistPreferenceControls(preferences);
     renderWatchlist();
-    $("#local-preferences-feedback").textContent = "本地偏好已恢复默认值；主题、连接密钥、自选股和任务引用均未修改。";
+    if (state.quote) renderQuote(state.quote);
+    if (state.view === "research") renderResearchOverview();
+    $("#local-preferences-feedback").textContent = "本地展示与查询偏好已恢复默认值；主题、连接密钥、自选股和任务引用均未修改。";
   } catch (error) {
     $("#local-preferences-feedback").textContent = "恢复默认值失败：" + (error?.message || "浏览器存储不可用。");
   }
