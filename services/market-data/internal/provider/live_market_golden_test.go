@@ -48,13 +48,13 @@ type liveGoldenFixture struct {
 	Commit     string `json:"source_commit"`
 	RunID      int64  `json:"workflow_run_id"`
 	Quote      struct {
-		Symbol string          `json:"symbol"`
-		Sina   liveGoldenQuote `json:"sina"`
+		Symbol  string          `json:"symbol"`
+		Sina    liveGoldenQuote `json:"sina"`
 		Tencent liveGoldenQuote `json:"tencent"`
 	} `json:"quote_comparison"`
 	Daily struct {
-		Symbol     string `json:"symbol"`
-		Adjustment string `json:"adjustment_basis"`
+		Symbol     string                `json:"symbol"`
+		Adjustment string                `json:"adjustment_basis"`
 		Sina       liveGoldenDailySource `json:"sina"`
 		Tencent    liveGoldenDailySource `json:"tencent"`
 	} `json:"daily_bars_comparison"`
