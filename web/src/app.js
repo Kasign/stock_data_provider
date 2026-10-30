@@ -4513,7 +4513,7 @@ function normalizeImportedPreferences(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("本地偏好字段必须是对象。");
   }
-  const allowed = new Set(["watchlistSort", "watchlistSortDirection", "watchlistDisplayFields"]);
+  const allowed = new Set(["watchlistSort", "watchlistSortDirection", "watchlistDisplayFields", "marketColorScheme", "priceDigits", "percentDigits", "amountDisplayUnit"]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     throw new Error("本地偏好包含不支持的字段。");
   }
@@ -4527,12 +4527,20 @@ function normalizeImportedPreferences(value) {
     || value.watchlistDisplayFields.some((field) => !WATCHLIST_DISPLAY_FIELDS.includes(field)))) {
     throw new Error("自选股展示字段配置无效。");
   }
+  if (value.marketColorScheme !== undefined && !["cn", "reverse"].includes(value.marketColorScheme)) throw new Error("涨跌颜色方案无效。");
+  if (value.priceDigits !== undefined && ![2, 3].includes(value.priceDigits)) throw new Error("价格精度无效。");
+  if (value.percentDigits !== undefined && ![2, 3].includes(value.percentDigits)) throw new Error("涨跌幅精度无效。");
+  if (value.amountDisplayUnit !== undefined && !["compact", "raw"].includes(value.amountDisplayUnit)) throw new Error("成交额单位显示无效。");
   return {
     watchlistSort: value.watchlistSort || DEFAULT_PREFERENCES.watchlistSort,
     watchlistSortDirection: value.watchlistSortDirection || DEFAULT_PREFERENCES.watchlistSortDirection,
     watchlistDisplayFields: value.watchlistDisplayFields === undefined
       ? [...DEFAULT_PREFERENCES.watchlistDisplayFields]
-      : WATCHLIST_DISPLAY_FIELDS.filter((field) => value.watchlistDisplayFields.includes(field))
+      : WATCHLIST_DISPLAY_FIELDS.filter((field) => value.watchlistDisplayFields.includes(field)),
+    marketColorScheme: value.marketColorScheme || DEFAULT_PREFERENCES.marketColorScheme,
+    priceDigits: value.priceDigits || DEFAULT_PREFERENCES.priceDigits,
+    percentDigits: value.percentDigits || DEFAULT_PREFERENCES.percentDigits,
+    amountDisplayUnit: value.amountDisplayUnit || DEFAULT_PREFERENCES.amountDisplayUnit
   };
 }
 
@@ -4547,15 +4555,30 @@ function syncWatchlistPreferenceControls(preferences = readPreferences()) {
   document.querySelectorAll("[data-watchlist-display-field]").forEach((input) => {
     input.checked = normalized.watchlistDisplayFields.includes(input.value);
   });
+  const controls = {
+    "#settings-market-color-scheme": normalized.marketColorScheme,
+    "#settings-price-digits": String(normalized.priceDigits),
+    "#settings-percent-digits": String(normalized.percentDigits),
+    "#settings-amount-unit": normalized.amountDisplayUnit
+  };
+  Object.entries(controls).forEach(([selector, value]) => {
+    const control = $(selector);
+    if (control) control.value = value;
+  });
+  document.documentElement.dataset.marketColorScheme = normalized.marketColorScheme;
 }
 
 function persistWatchlistPreferences() {
   try {
     const preferences = savePreferences({
-      watchlistSort: $("#watchlist-sort")?.value || $("#settings-watchlist-sort")?.value,
       ...readPreferences(),
+      watchlistSort: $("#watchlist-sort")?.value || $("#settings-watchlist-sort")?.value,
       watchlistSortDirection: $("#settings-watchlist-direction")?.value || readPreferences().watchlistSortDirection,
-      watchlistDisplayFields: [...document.querySelectorAll("[data-watchlist-display-field]:checked")].map((input) => input.value)
+      watchlistDisplayFields: [...document.querySelectorAll("[data-watchlist-display-field]:checked")].map((input) => input.value),
+      marketColorScheme: $("#settings-market-color-scheme")?.value || readPreferences().marketColorScheme,
+      priceDigits: Number($("#settings-price-digits")?.value || readPreferences().priceDigits),
+      percentDigits: Number($("#settings-percent-digits")?.value || readPreferences().percentDigits),
+      amountDisplayUnit: $("#settings-amount-unit")?.value || readPreferences().amountDisplayUnit
     });
     syncWatchlistPreferenceControls(preferences);
     $("#local-preferences-feedback").textContent = "自选股默认排序偏好已保存到当前浏览器。";
@@ -4979,6 +5002,14 @@ document.querySelectorAll("[data-watchlist-display-field]").forEach((input) => {
   input.addEventListener("change", () => {
     persistWatchlistPreferences();
     renderWatchlist();
+  });
+});
+["#settings-market-color-scheme", "#settings-price-digits", "#settings-percent-digits", "#settings-amount-unit"].forEach((selector) => {
+  $(selector).addEventListener("change", () => {
+    persistWatchlistPreferences();
+    renderWatchlist();
+    if (state.view === "stocks" && state.quote) renderQuote(state.quote);
+    if (state.view === "research") renderResearchOverview();
   });
 });
 $("#reset-local-preferences").addEventListener("click", () => {

@@ -4719,3 +4719,14 @@ button:disabled {
 @media (max-width: 640px) {
   .settings-watchlist-display-options { grid-template-columns: 1fr; }
 }
+
+
+/* 涨跌颜色规则：默认 A 股红涨绿跌；反向方案只交换语义色，不改数值正负。 */
+:root[data-market-color-scheme="reverse"] {
+  --positive: #55d6a6;
+  --negative: #f17683;
+}
+:root[data-theme="light"][data-market-color-scheme="reverse"] {
+  --positive: #07875c;
+  --negative: #d63d4e;
+}

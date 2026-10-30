@@ -774,6 +774,14 @@
                     <button class="settings-theme-choice" type="button" data-theme-value="light" aria-pressed="false"><span class="settings-theme-preview is-light" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>浅色主题</strong><small>适合明亮环境与日间使用</small></span><span class="settings-theme-check">✓</span></button>
                   </div>
                   <p class="field-hint">主题在当前浏览器立即生效。字号、紧凑密度、图表动画和默认首页尚未形成独立持久化配置，本页不会显示无效开关。</p>
+                  <div class="settings-group-heading"><div><strong>行情颜色与数字格式</strong><p>影响全站共用的行情格式化函数和涨跌语义颜色。</p></div><span class="settings-config-scope">浏览器本地</span></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>涨跌颜色规则</span><select id="settings-market-color-scheme"><option value="cn">A 股习惯：红涨绿跌</option><option value="reverse">反向：绿涨红跌</option></select></label>
+                    <label class="field"><span>价格小数位</span><select id="settings-price-digits"><option value="2">2 位</option><option value="3">3 位</option></select></label>
+                    <label class="field"><span>涨跌幅小数位</span><select id="settings-percent-digits"><option value="2">2 位</option><option value="3">3 位</option></select></label>
+                    <label class="field"><span>成交额/成交量单位</span><select id="settings-amount-unit"><option value="compact">紧凑单位（万/亿）</option><option value="raw">完整数字</option></select></label>
+                  </div>
+                  <p class="field-hint">精度设置作用于全站共用的价格、百分比与紧凑数字格式化入口；原始数据和服务端返回值不会被修改。完整数字可能占用更多表格宽度。</p>
                 </div>
                 <div class="panel settings-config-panel">
                   <div class="settings-group-heading"><div><strong>自选股展示偏好</strong><p>控制自选列表的默认排序；页面工具栏仍可临时切换排序字段。</p></div><span class="settings-config-scope">浏览器本地</span></div>

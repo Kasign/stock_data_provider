@@ -1,3 +1,5 @@
+import { readPreferences } from "./preferences.js";
+
 export function normalizeBasePath(input, fallback) {
   const value = String(input ?? "").trim() || fallback;
   if (!value.startsWith("/") || value.startsWith("//") || value.includes("://")) {
@@ -55,22 +57,27 @@ export function finiteNumberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-export function formatPrice(value, digits = 2) {
+export function formatPrice(value, digits) {
   const number = finiteNumberOrNull(value);
   if (number === null) return "—";
-  return number.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  const precision = Number.isInteger(digits) ? digits : readPreferences().priceDigits;
+  return number.toLocaleString("zh-CN", { minimumFractionDigits: precision, maximumFractionDigits: precision });
 }
 
 export function formatCompact(value) {
   const number = finiteNumberOrNull(value);
   if (number === null) return "—";
-  return new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 2 }).format(number);
+  const preferences = readPreferences();
+  return preferences.amountDisplayUnit === "raw"
+    ? number.toLocaleString("zh-CN", { maximumFractionDigits: 0 })
+    : new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 2 }).format(number);
 }
 
-export function formatPercent(value, digits = 2) {
+export function formatPercent(value, digits) {
   const number = finiteNumberOrNull(value);
   if (number === null) return "—";
-  return `${number > 0 ? "+" : ""}${number.toFixed(digits)}%`;
+  const precision = Number.isInteger(digits) ? digits : readPreferences().percentDigits;
+  return `${number > 0 ? "+" : ""}${number.toFixed(precision)}%`;
 }
 
 export function formatDateTime(value) {

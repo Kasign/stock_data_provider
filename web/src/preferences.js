@@ -5,7 +5,11 @@ export const WATCHLIST_DISPLAY_FIELDS = Object.freeze(["updated", "quote", "toda
 export const DEFAULT_PREFERENCES = Object.freeze({
   watchlistSort: "updated",
   watchlistSortDirection: "desc",
-  watchlistDisplayFields: [...WATCHLIST_DISPLAY_FIELDS]
+  watchlistDisplayFields: [...WATCHLIST_DISPLAY_FIELDS],
+  marketColorScheme: "cn",
+  priceDigits: 2,
+  percentDigits: 2,
+  amountDisplayUnit: "compact"
 });
 
 const SORT_MODES = new Set(["updated", "symbol", "name"]);
@@ -20,7 +24,11 @@ export function normalizePreferences(value = {}) {
       : DEFAULT_PREFERENCES.watchlistSortDirection,
     watchlistDisplayFields: Array.isArray(source.watchlistDisplayFields)
       ? WATCHLIST_DISPLAY_FIELDS.filter((field) => source.watchlistDisplayFields.includes(field))
-      : [...DEFAULT_PREFERENCES.watchlistDisplayFields]
+      : [...DEFAULT_PREFERENCES.watchlistDisplayFields],
+    marketColorScheme: ["cn", "reverse"].includes(source.marketColorScheme) ? source.marketColorScheme : DEFAULT_PREFERENCES.marketColorScheme,
+    priceDigits: [2, 3].includes(source.priceDigits) ? source.priceDigits : DEFAULT_PREFERENCES.priceDigits,
+    percentDigits: [2, 3].includes(source.percentDigits) ? source.percentDigits : DEFAULT_PREFERENCES.percentDigits,
+    amountDisplayUnit: ["compact", "raw"].includes(source.amountDisplayUnit) ? source.amountDisplayUnit : DEFAULT_PREFERENCES.amountDisplayUnit
   };
 }
 
