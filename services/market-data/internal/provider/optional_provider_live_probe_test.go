@@ -59,8 +59,8 @@ func TestLiveTushareCapabilities(t *testing.T) {
 	now := time.Now().In(time.FixedZone("CST", 8*60*60))
 	startDate, endDate := optionalProbeDateRange(now)
 	const symbol = "600519.SH"
-	results := make([]optionalProviderProbeResult, 0, 6)
-	failures := make([]string, 0, 6)
+	results := make([]optionalProviderProbeResult, 0, 9)
+	failures := make([]string, 0, 9)
 
 	run := func(capability string, call func() (int, model.QualityStatus, []string, error)) {
 		started := time.Now()
@@ -164,6 +164,49 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
 	})
 
+
+	run("index_catalog", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchIndexCatalog(ctx, "tushare")
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Tag != "tushare" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+			item.Total != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("index_catalog identity/source/count/fetched_at mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("index_constituents", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchIndexConstituents(ctx, "000300.SH")
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+			item.ProviderReportDate == "" || item.Total != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("index_constituents identity/report-date/count/fetched_at mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("index_daily_bars", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchIndexDailyBars(ctx, "000300.SH", startDate, endDate)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+			item.StartDate != startDate || item.EndDate != endDate || item.Total != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("index_daily_bars identity/date-range/count/fetched_at mismatch")
+		}
+		for _, bar := range item.Items {
+			if bar.IndexSymbol != "000300.SH" || bar.TradeDate < startDate || bar.TradeDate > endDate ||
+				bar.Open <= 0 || bar.High <= 0 || bar.Low <= 0 || bar.Close <= 0 || bar.Low > bar.High ||
+				bar.Open < bar.Low || bar.Open > bar.High || bar.Close < bar.Low || bar.Close > bar.High {
+				return len(item.Items), "", nil, errLiveProbeContract("index_daily_bars row contract mismatch")
+			}
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
 	logOptionalProviderProbe(t, results, failures)
 }
 
@@ -186,8 +229,8 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 	now := time.Now().In(time.FixedZone("CST", 8*60*60))
 	startDate, endDate := optionalProbeDateRange(now)
 	const symbol = "600519.SH"
-	results := make([]optionalProviderProbeResult, 0, 5)
-	failures := make([]string, 0, 5)
+	results := make([]optionalProviderProbeResult, 0, 12)
+	failures := make([]string, 0, 12)
 
 	run := func(capability string, call func() (int, model.QualityStatus, []string, error)) {
 		started := time.Now()
@@ -259,6 +302,114 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
 	})
 
+
+	tradeDate := endDate
+	run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchTradingCalendar(ctx, startDate, endDate)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Market != "cn_a_share" || item.Source != "hithink" ||
+			item.StartDate != startDate || item.EndDate != endDate || item.FetchedAt.IsZero() ||
+			item.TotalDays != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("trading_calendar identity/date-range/count/fetched_at mismatch")
+		}
+		for i := len(item.Items) - 1; i >= 0; i-- {
+			if item.Items[i].IsTradingDay {
+				tradeDate = item.Items[i].Date
+				break
+			}
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("limit_up_pool", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchLimitPool(ctx, "up", tradeDate, 20)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.PoolType != "up" || item.TradeDate != tradeDate ||
+			item.Source != "hithink" || item.FetchedAt.IsZero() || item.Total < len(item.Items) {
+			return 0, "", nil, errLiveProbeContract("limit_up_pool identity/date/count/fetched_at mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("dragon_tiger", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchDragonTiger(ctx, tradeDate, 1, 20)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.TradeDate != tradeDate || item.Source != "hithink" ||
+			item.FetchedAt.IsZero() || item.Total < len(item.Items) || item.Returned != len(item.Items) {
+			return 0, "", nil, errLiveProbeContract("dragon_tiger identity/date/count/fetched_at mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	indexSymbol := ""
+	run("index_catalog_industry", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchIndexCatalog(ctx, "industry")
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Tag != "industry" || item.Source != "hithink" ||
+			item.FetchedAt.IsZero() || item.Total != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("index_catalog identity/count/fetched_at mismatch")
+		}
+		indexSymbol = item.Items[0].Symbol
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("index_constituents", func() (int, model.QualityStatus, []string, error) {
+		if indexSymbol == "" {
+			return 0, "", nil, errLiveProbeContract("index_constituents skipped because index catalog was unavailable")
+		}
+		item, err := client.FetchIndexConstituents(ctx, indexSymbol)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.IndexSymbol != indexSymbol || item.Source != "hithink" ||
+			item.FetchedAt.IsZero() || item.Total != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("index_constituents identity/count/fetched_at mismatch")
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("index_daily_bars", func() (int, model.QualityStatus, []string, error) {
+		if indexSymbol == "" {
+			return 0, "", nil, errLiveProbeContract("index_daily_bars skipped because index catalog was unavailable")
+		}
+		item, err := client.FetchIndexDailyBars(ctx, indexSymbol, startDate, endDate)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.IndexSymbol != indexSymbol || item.Source != "hithink" ||
+			item.FetchedAt.IsZero() || item.StartDate != startDate || item.EndDate != endDate ||
+			item.Total != len(item.Items) || len(item.Items) == 0 {
+			return 0, "", nil, errLiveProbeContract("index_daily_bars identity/date-range/count/fetched_at mismatch")
+		}
+		for _, bar := range item.Items {
+			if bar.IndexSymbol != indexSymbol || bar.TradeDate < startDate || bar.TradeDate > endDate ||
+				bar.Open <= 0 || bar.High <= 0 || bar.Low <= 0 || bar.Close <= 0 || bar.Low > bar.High ||
+				bar.Open < bar.Low || bar.Open > bar.High || bar.Close < bar.Low || bar.Close > bar.High {
+				return len(item.Items), "", nil, errLiveProbeContract("index_daily_bars row contract mismatch")
+			}
+		}
+		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+	})
+
+	run("fundamentals", func() (int, model.QualityStatus, []string, error) {
+		item, err := client.FetchFundamentals(ctx, symbol, 2025, 4)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Symbol != symbol || item.Year != 2025 || item.Quarter != 4 ||
+			item.Source != "hithink" || item.FetchedAt.IsZero() {
+			return 0, "", nil, errLiveProbeContract("fundamentals identity/period/source/fetched_at mismatch")
+		}
+		return len(item.Sections), item.QualityStatus, item.QualityReasons, nil
+	})
 	logOptionalProviderProbe(t, results, failures)
 }
 
