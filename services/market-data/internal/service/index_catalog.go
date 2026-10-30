@@ -170,14 +170,33 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 
 // markHistoricalConstituentIntervalQuality 防止将历史权重快照误标为完整的成员生效区间。
 func markHistoricalConstituentIntervalQuality(snapshot *model.IndexConstituentSnapshot) {
-	if snapshot == nil || snapshot.AsOfDate == "" { return }
+	if snapshot == nil || snapshot.AsOfDate == "" {
+		return
+	}
+	asOfDate, err := time.Parse("2006-01-02", snapshot.AsOfDate)
+	if err != nil {
+		degradeHistoricalConstituentInterval(snapshot)
+		return
+	}
 	for _, item := range snapshot.Items {
-		if item.EffectiveFrom == "" || item.EffectiveTo == "" || item.AvailableAt == nil || item.SystemObservedAt == nil {
-			if snapshot.QualityStatus == model.QualityValid { snapshot.QualityStatus = model.QualityDegraded }
-			appendReasonOnce(&snapshot.QualityReasons, "historical_constituent_effective_interval_or_pit_timestamp_unavailable")
+		from, fromErr := time.Parse("2006-01-02", item.EffectiveFrom)
+		to, toErr := time.Parse("2006-01-02", item.EffectiveTo)
+		if fromErr != nil || toErr != nil || from.After(asOfDate) || to.Before(asOfDate) ||
+			item.AvailableAt == nil || item.SystemObservedAt == nil ||
+			item.AvailableAt.IsZero() || item.SystemObservedAt.IsZero() ||
+			item.AvailableAt.After(snapshot.FetchedAt) || item.SystemObservedAt.Before(*item.AvailableAt) ||
+			item.SystemObservedAt.After(time.Now().Add(5*time.Minute)) {
+			degradeHistoricalConstituentInterval(snapshot)
 			return
 		}
 	}
+}
+
+func degradeHistoricalConstituentInterval(snapshot *model.IndexConstituentSnapshot) {
+	if snapshot.QualityStatus == model.QualityValid {
+		snapshot.QualityStatus = model.QualityDegraded
+	}
+	appendReasonOnce(&snapshot.QualityReasons, "historical_constituent_effective_interval_or_pit_timestamp_unavailable")
 }
 
 func markIndexConstituentCoverage(snapshot *model.IndexConstituentSnapshot) {

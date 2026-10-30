@@ -18,6 +18,19 @@ var (
 	ErrCorporateActionsAsOfNotFound = errors.New("no corporate-action revision with proven availability was recorded by as_of")
 )
 
+
+func adjustmentFactorVisibleAsOf(value model.AdjustmentFactor, asOf time.Time) bool {
+	return value.FetchedAt.IsZero() == false && !value.FetchedAt.After(asOf) &&
+		value.SystemObservedAt != nil && !value.SystemObservedAt.After(asOf) &&
+		value.AvailableAt != nil && !value.AvailableAt.IsZero() && !value.AvailableAt.After(asOf)
+}
+
+func corporateActionVisibleAsOf(value model.CorporateAction, asOf time.Time) bool {
+	return !value.FetchedAt.IsZero() && !value.FetchedAt.After(asOf) &&
+		value.SystemObservedAt != nil && !value.SystemObservedAt.After(asOf) &&
+		value.AvailableAt != nil && !value.AvailableAt.IsZero() && !value.AvailableAt.After(asOf)
+}
+
 // RefreshAdjustmentFactors 从已注册 Provider 采集原始复权因子并追加到历史版本存储。
 // Provider 没有提供 available_at 时保留 degraded；不推断因子首次公开时间。
 func (s *DataService) RefreshAdjustmentFactors(ctx context.Context, rawSymbol, startDate, endDate string) ([]model.AdjustmentFactor, error) {
@@ -79,7 +92,7 @@ func (s *DataService) AdjustmentFactorsAsOf(ctx context.Context, rawSymbol, star
 	if err != nil { return nil, err }
 	out := make([]model.AdjustmentFactor, 0, len(values))
 	for _, value := range values {
-		if value.SystemObservedAt == nil || value.SystemObservedAt.After(asOf) || value.AvailableAt == nil || value.AvailableAt.After(asOf) {
+		if !adjustmentFactorVisibleAsOf(value, asOf) {
 			continue
 		}
 		out = append(out, value)
@@ -144,7 +157,7 @@ func (s *DataService) CorporateActionsAsOf(ctx context.Context, rawSymbol, start
 	if err != nil { return nil, err }
 	out := make([]model.CorporateAction, 0, len(values))
 	for _, value := range values {
-		if value.SystemObservedAt == nil || value.SystemObservedAt.After(asOf) || value.AvailableAt == nil || value.AvailableAt.After(asOf) {
+		if !corporateActionVisibleAsOf(value, asOf) {
 			continue
 		}
 		out = append(out, value)
