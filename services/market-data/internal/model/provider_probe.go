@@ -40,6 +40,8 @@ type ProviderProbeRun struct {
 	RunID                 string              `json:"run_id"`
 	Scope                 string              `json:"scope,omitempty"`
 	RequestedCapabilities []string            `json:"requested_capabilities,omitempty"`
+	RequestedMarkets      []string            `json:"requested_markets,omitempty"`
+	RequestedSymbols      []string            `json:"requested_symbols,omitempty"`
 	TimeoutSeconds        int                 `json:"timeout_seconds,omitempty"`
 	Status                string              `json:"status"`
 	Persisted             bool                `json:"persisted"`
