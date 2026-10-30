@@ -25,12 +25,12 @@ func (p *Eastmoney) fetchSectorRankings5D(ctx context.Context, category, directi
 	}
 	const pageSize = 100
 	type board struct {
-		code, name string
-		change, amount *float64
-		amountUnit string
+		code, name           string
+		change, amount       *float64
+		amountUnit           string
 		advancing, declining *int
-		leader string
-		leaderChange *float64
+		leader               string
+		leaderChange         *float64
 	}
 	candidates := make([]board, 0, 256)
 	reportedTotal := -1
@@ -42,13 +42,13 @@ func (p *Eastmoney) fetchSectorRankings5D(ctx context.Context, category, directi
 			"pn": {strconv.Itoa(page)}, "pz": {strconv.Itoa(pageSize)}, "po": {"1"}, "np": {"1"},
 			"ut": {p.ut}, "fltt": {"2"}, "invt": {"2"}, "fid": {"f3"}, "fs": {filter},
 			"fields": {"f2,f3,f4,f6,f12,f14,f104,f105,f128,f136"},
-			"_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+			"_":      {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 		}
 		var payload struct {
-			RC *int `json:"rc"`
+			RC   *int `json:"rc"`
 			Data *struct {
-				Total *int `json:"total"`
-				Diff []map[string]json.RawMessage `json:"diff"`
+				Total *int                         `json:"total"`
+				Diff  []map[string]json.RawMessage `json:"diff"`
 			} `json:"data"`
 		}
 		if err := p.getJSONWithRetry(ctx, p.sectorRankingURL, params, &payload, 8*time.Second); err != nil {
@@ -105,7 +105,7 @@ func (p *Eastmoney) fetchSectorRankings5D(ctx context.Context, category, directi
 	type result struct {
 		item model.SectorRanking
 		date string
-		err error
+		err  error
 	}
 	jobs := make(chan board)
 	results := make(chan result, len(candidates))
@@ -155,10 +155,13 @@ func (p *Eastmoney) fetchSectorRankings5D(ctx context.Context, category, directi
 	if len(items) == 0 {
 		return nil, errors.New("Eastmoney sector 5-day ranking has no complete historical observations")
 	}
+	rankableTotal := len(items)
 	sort.Slice(items, func(i, j int) bool {
 		left, right := *items[i].ChangePercent5D, *items[j].ChangePercent5D
 		if left != right {
-			if direction == "up" { return left > right }
+			if direction == "up" {
+				return left > right
+			}
 			return left < right
 		}
 		return items[i].Code < items[j].Code
@@ -171,7 +174,6 @@ func (p *Eastmoney) fetchSectorRankings5D(ctx context.Context, category, directi
 	}
 	reasons := []string{"provider_snapshot_timestamp_not_exposed", "five_day_change_derived_from_six_daily_closes"}
 	total := reportedTotal
-	rankableTotal := len(items)
 	if failed > 0 {
 		reasons = append(reasons, "provider_historical_board_coverage_incomplete")
 		total = rankableTotal
@@ -188,23 +190,23 @@ func (p *Eastmoney) fetchSectorRankings5D(ctx context.Context, category, directi
 }
 
 func (p *Eastmoney) fetchSectorBoard5D(ctx context.Context, category string, candidate struct {
-	code, name string
-	change, amount *float64
-	amountUnit string
+	code, name           string
+	change, amount       *float64
+	amountUnit           string
 	advancing, declining *int
-	leader string
-	leaderChange *float64
+	leader               string
+	leaderChange         *float64
 }) (model.SectorRanking, string, error) {
 	params := url.Values{
 		"secid": {"90." + candidate.code}, "fields1": {"f1,f2,f3,f4,f5,f6"},
 		"fields2": {"f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"},
-		"klt": {"101"}, "fqt": {"0"}, "beg": {"0"}, "end": {"20500101"}, "lmt": {"6"},
+		"klt":     {"101"}, "fqt": {"0"}, "beg": {"0"}, "end": {"20500101"}, "lmt": {"6"},
 		"ut": {p.ut}, "_": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 	}
 	var payload struct {
-		RC *int `json:"rc"`
+		RC   *int `json:"rc"`
 		Data *struct {
-			Code string `json:"code"`
+			Code   string   `json:"code"`
 			KLines []string `json:"klines"`
 		} `json:"data"`
 	}
@@ -220,12 +222,17 @@ func (p *Eastmoney) fetchSectorBoard5D(ctx context.Context, category string, can
 	if len(payload.Data.KLines) < 6 {
 		return model.SectorRanking{}, "", errors.New("Eastmoney sector K-line has fewer than six daily closes")
 	}
-	type closeRow struct { date string; close float64 }
+	type closeRow struct {
+		date  string
+		close float64
+	}
 	rows := make([]closeRow, 0, len(payload.Data.KLines))
 	seen := map[string]bool{}
 	for _, line := range payload.Data.KLines {
 		parts := strings.Split(line, ",")
-		if len(parts) < 3 { return model.SectorRanking{}, "", errors.New("Eastmoney sector K-line row is incomplete") }
+		if len(parts) < 3 {
+			return model.SectorRanking{}, "", errors.New("Eastmoney sector K-line row is incomplete")
+		}
 		date := strings.TrimSpace(parts[0])
 		if _, err := time.Parse("2006-01-02", date); err != nil || seen[date] {
 			return model.SectorRanking{}, "", errors.New("Eastmoney sector K-line contains invalid or duplicate dates")
@@ -238,10 +245,14 @@ func (p *Eastmoney) fetchSectorBoard5D(ctx context.Context, category string, can
 		rows = append(rows, closeRow{date: date, close: closeValue})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].date < rows[j].date })
-	if len(rows) > 6 { rows = rows[len(rows)-6:] }
+	if len(rows) > 6 {
+		rows = rows[len(rows)-6:]
+	}
 	base, latest := rows[0].close, rows[len(rows)-1].close
 	value := (latest/base - 1) * 100
-	if math.IsNaN(value) || math.IsInf(value, 0) { return model.SectorRanking{}, "", errors.New("Eastmoney sector 5-day return is non-finite") }
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return model.SectorRanking{}, "", errors.New("Eastmoney sector 5-day return is non-finite")
+	}
 	item := model.SectorRanking{
 		Code: candidate.code, Name: candidate.name, Category: category,
 		ChangePercent: candidate.change, ChangePercent5D: &value,
@@ -249,7 +260,7 @@ func (p *Eastmoney) fetchSectorBoard5D(ctx context.Context, category string, can
 		AdvancingCount: candidate.advancing, DecliningCount: candidate.declining,
 		LeadingStock: candidate.leader, LeaderChangePercent: candidate.leaderChange,
 		Source: p.Name(), SourceVersion: "eastmoney-sector-5d-kline-v1",
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed", "five_day_change_derived_from_six_daily_closes"},
 	}
 	return item, rows[len(rows)-1].date, nil
