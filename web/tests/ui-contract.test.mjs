@@ -1661,7 +1661,8 @@ test("个股行情、研究摘要与均线匹配时兼容纯六位代码和带�
 
  
 test("自选股报价和任务引用的股票代码比较兼容交易所后缀差异", () => {
-  assert.match(app, /const normalizeLocalSymbol = \(value\) => \{\s*try \{ return comparableMarketSymbol\(value\);/);
+  assert.match(app, /function normalizeWatchlistQuoteSymbol\(value\) \{\s*try \{ return comparableMarketSymbol\(value\);/);
+  assert.match(app, /const normalizeLocalSymbol = normalizeWatchlistQuoteSymbol/);
   assert.match(app, /const quoteMatches = Boolean\(state\.quote\?\.symbol\) && normalizeLocalSymbol\(state\.quote\.symbol\) === itemSymbol/);
   assert.match(app, /task\.symbols\.some\(\(value\) => normalizeLocalSymbol\(value\) === itemSymbol\)/);
   assert.match(app, /state\.taskSymbols\.some\(\(value\) => normalizeLocalSymbol\(value\) === itemSymbol\)/);
