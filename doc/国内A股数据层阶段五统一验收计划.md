@@ -457,7 +457,7 @@
 - `coverage_ratio` 仅用于有明确分母的市场广度，不将分页返回比例误标为全市场覆盖率。
 - Provider 的 `FetchedAt` 不冒充 ProviderTime；只有源端明确提供的 Provider 时间才写入 `provider_time`。
 
-仍未完成：markets/symbols 请求过滤、各能力完整的覆盖率分母契约、HTTP API 的端到端运行验收，以及需要凭据的真实 Provider 请求。
+仍未完成：多板块/多证券批量过滤、各能力完整的覆盖率分母契约、HTTP API 的端到端运行验收，以及需要凭据的真实 Provider 请求。单板块/单证券定向过滤已在后续小节实现并记录。
 
 
 ### 市场与证券定向诊断（2026-10-30）
