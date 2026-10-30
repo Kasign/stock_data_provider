@@ -1196,8 +1196,9 @@ function serviceHealthState(result) {
   if (!result?.ok) return "failed";
   const status = String(result.data?.status || "").trim().toLowerCase();
   if (["ok", "ready", "healthy", "alive", "running"].includes(status)) return "healthy";
-  if (!status) return "unknown";
-  return "degraded";
+  if (["failed", "unhealthy", "unavailable", "error", "down"].includes(status)) return "failed";
+  if (["degraded", "partial"].includes(status)) return "degraded";
+  return "unknown";
 }
 
 function serviceHealthLabel(status) {

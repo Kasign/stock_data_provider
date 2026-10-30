@@ -62,8 +62,9 @@ function probeState(result, ready = false) {
   const raw = String(result.data?.status || "").trim().toLowerCase();
   if (!raw) return "unknown";
   if (["ok", "ready", "healthy", "alive", "running"].includes(raw)) return "healthy";
-  if (ready && ["degraded", "partial"].includes(raw)) return "degraded";
-  return "degraded";
+  if (["failed", "unhealthy", "unavailable", "error", "down"].includes(raw)) return "failed";
+  if (["degraded", "partial"].includes(raw)) return "degraded";
+  return "unknown";
 }
 
 function showCheck(selector, result, options = {}) {
