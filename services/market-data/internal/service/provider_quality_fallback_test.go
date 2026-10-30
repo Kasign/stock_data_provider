@@ -77,7 +77,6 @@ func marketBreadthSnapshotForFallback(source string, quality model.QualityStatus
 		snapshot.NewestQuoteTime = &now
 	} else {
 		snapshot.AmountCoverageCount = 2
-		snapshot.QuoteTimestampCoverageCount = 2
 		snapshot.QualityReasons = []string{"market_amount_quotes_collected_non_atomically"}
 	}
 	return snapshot
