@@ -1062,7 +1062,15 @@ function renderWatchlistImportPreview(preview) {
   setText("#watchlist-import-summary", "可导入 " + counts.ready + " 只 · 重复 " + counts.duplicate
     + " 只 · 无效 " + counts.invalid + " 条 · 超出上限 " + counts.limit + " 只");
   const table = document.createElement("table");
-  table.innerHTML = "<thead><tr><th>行</th><th>代码</th><th>名称</th><th>结果</th></tr></thead>";
+  const head = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  ["行", "代码", "名称", "结果"].forEach((label) => {
+    const cell = document.createElement("th");
+    cell.textContent = label;
+    headerRow.append(cell);
+  });
+  head.append(headerRow);
+  table.append(head);
   const body = document.createElement("tbody");
   preview.rows.forEach((item) => {
     const row = document.createElement("tr");
