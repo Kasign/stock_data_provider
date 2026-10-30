@@ -1958,6 +1958,19 @@ test("运行流采用全屏双栏工作区，节点和质量诊断可折叠", ()
   assert.match(stylesheet, /@media \(max-width:900px\)[\s\S]*?run-flow-workspace/);
 });
 
+test("个股研究列表复用自选股批量行情并区分失败与旧快照", () => {
+  const start = app.indexOf("function renderResearchStockList() {");
+  const end = app.indexOf("\nfunction safeReadWatchlistState()", start);
+  const renderer = app.slice(start, end);
+  assert.match(renderer, /state\.watchlistQuotes\.get\(normalizeWatchlistQuoteSymbol\(item\.symbol\)\)/);
+  assert.match(renderer, /const itemQuote = isCurrent \? quote : batchRecord\?\.quote/);
+  assert.match(renderer, /batchQuoteFailed \? "行情失败" : "未加载"/);
+  assert.match(renderer, /旧快照 · /);
+  assert.match(renderer, /最近一次批量刷新失败，当前保留此前成功快照/);
+  assert.match(renderer, /formatResearchMA\(5, isCurrent\)/);
+  assert.match(renderer, /formatResearchMA\(20, isCurrent\)/);
+});
+
 test("全市场分页行情只调用分页概览 API 并正确展示覆盖与质量状态", () => {
   assert.match(app, /import \{ bindMarketStocks \} from "\.\/market-stocks\.js"/);
   assert.match(app, /bindMarketStocks\([\s\S]*?selectStockFromMarket\(item, "全市场行情"\)/);

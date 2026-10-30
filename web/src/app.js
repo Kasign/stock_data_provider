@@ -589,27 +589,41 @@ function renderResearchStockList() {
   };
   items.forEach((item) => {
     const isCurrent = Boolean(currentSymbol) && sameMarketSymbol(item.symbol, currentSymbol) && Boolean(quote);
+    const batchRecord = isCurrent ? null : state.watchlistQuotes.get(normalizeWatchlistQuoteSymbol(item.symbol));
+    const itemQuote = isCurrent ? quote : batchRecord?.quote || null;
+    const hasQuote = Boolean(itemQuote);
+    const batchQuoteFailed = Boolean(batchRecord && !batchRecord.quote);
     const tr = document.createElement("tr"), nameCell = document.createElement("td");
     const name = document.createElement("strong"), symbol = document.createElement("small");
     name.className = "research-list-stock-name"; name.textContent = item.name || item.symbol;
     symbol.className = "research-list-symbol"; symbol.textContent = item.symbol; nameCell.append(name, symbol); tr.append(nameCell);
-    const missing = (value) => value === null || value === undefined || value === "" ? "—" : value;
-    const changePercent = isCurrent ? finiteNumberOrNull(quote.change_percent) : null;
-    const volumeRatio = isCurrent ? finiteNumberOrNull(quote.volume_ratio) : null;
+    const quoteValue = (value, formatter) => hasQuote
+      ? (value === null || value === undefined || value === "" ? "—" : formatter(value))
+      : (batchQuoteFailed ? "行情失败" : "未加载");
+    const changePercent = hasQuote ? finiteNumberOrNull(itemQuote.change_percent) : null;
+    const volumeRatio = hasQuote ? finiteNumberOrNull(itemQuote.volume_ratio) : null;
     const changeClass = changePercent !== null && changePercent > 0 ? "positive" : changePercent !== null && changePercent < 0 ? "negative" : "";
     tr.append(
-      makeCell(isCurrent ? formatPrice(quote.current_price) : "未加载"),
-      makeCell(isCurrent ? formatPercent(quote.change_percent) : "未加载", changeClass),
-      makeCell(isCurrent ? formatCompact(quote.amount) : "未加载"),
-      makeCell(isCurrent ? missing(quote.turnover_rate == null ? null : formatPercent(quote.turnover_rate)) : "未加载"),
-      makeCell(isCurrent ? (volumeRatio === null ? "—" : volumeRatio.toFixed(2)) : "未加载"),
+      makeCell(quoteValue(itemQuote?.current_price, (value) => formatPrice(value, 2))),
+      makeCell(quoteValue(itemQuote?.change_percent, formatPercent), changeClass),
+      makeCell(quoteValue(itemQuote?.amount, formatCompact)),
+      makeCell(quoteValue(itemQuote?.turnover_rate, formatPercent)),
+      makeCell(hasQuote ? (volumeRatio === null ? "—" : volumeRatio.toFixed(2)) : (batchQuoteFailed ? "行情失败" : "未加载")),
       makeCell(formatResearchMA(5, isCurrent)),
       makeCell(formatResearchMA(20, isCurrent)),
       (() => {
         const cell = document.createElement("td");
+        const qualityStatus = isCurrent ? itemQuote.quality_status : (batchRecord?.qualityStatus || itemQuote?.quality_status || "unknown");
         const pill = document.createElement("span");
-        pill.className = "mini-quality mini-quality-" + String(isCurrent ? quote.quality_status || "unknown" : "unknown").toLowerCase();
-        pill.textContent = isCurrent ? qualityLabel(quote.quality_status) : "未加载";
+        pill.className = "mini-quality mini-quality-" + String(qualityStatus || "unknown").toLowerCase();
+        const stale = Boolean(batchRecord?.quote && state.watchlistQuoteStatus === "error");
+        pill.textContent = stale ? "旧快照 · " + qualityLabel(qualityStatus) : (batchRecord && !batchRecord.quote ? "行情失败" : hasQuote ? qualityLabel(qualityStatus) : "未加载");
+        const detail = [
+          batchRecord?.errorCode || "",
+          batchRecord?.fetchedAt ? "批量快照 " + formatDateTime(batchRecord.fetchedAt) : "",
+          stale ? "最近一次批量刷新失败，当前保留此前成功快照。" : ""
+        ].filter(Boolean);
+        pill.title = detail.join("；") || (Array.isArray(itemQuote?.quality_reasons) ? itemQuote.quality_reasons.join("；") : "未加载行情");
         cell.append(pill);
         return cell;
       })()
@@ -619,13 +633,18 @@ function renderResearchStockList() {
     action.dataset.researchOpenSymbol = item.symbol;
     action.dataset.researchOpenName = item.name || item.symbol;
     action.textContent = "查看详情";
-    actionCell.append(action); tr.append(actionCell); root.append(tr);
+    actionCell.append(action); tr.append(action); root.append(tr);
   });
+  const quoteScope = state.watchlistQuoteStatus === "loaded"
+    ? " · 已读取自选股批量行情"
+    : state.watchlistQuoteStatus === "error" && state.watchlistQuotes.size
+      ? " · 批量刷新失败，显示旧快照"
+      : "";
   setText("#research-list-scope", !watchlistState.storageReadable
-    ? items.length + " 只当前标的 · 自选不可读取"
+    ? items.length + " 只当前标的 · 自选不可读取" + quoteScope
     : !watchlistState.storageValid
-      ? items.length + " 只当前标的 · 自选格式异常"
-      : items.length + " 只 · 当前浏览器列表");
+      ? items.length + " 只当前标的 · 自选格式异常" + quoteScope
+      : items.length + " 只 · 当前浏览器列表" + quoteScope);
   renderResearchOverview();
 }
 function safeReadWatchlistState() {
