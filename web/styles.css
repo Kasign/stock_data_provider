@@ -4557,3 +4557,26 @@ button:disabled {
     animation-iteration-count: 1 !important;
   }
 }
+
+
+/* 自选列表：本地搜索与排序工具栏 */
+
+.watchlist-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.watchlist-search-field { flex: 1 1 260px; max-width: 520px; }
+.watchlist-sort-field { flex: 0 1 180px; }
+.watchlist-filter-count {
+  margin: 0 0 10px auto;
+  color: var(--muted, #7b8494);
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .watchlist-toolbar { align-items: stretch; }
+  .watchlist-search-field, .watchlist-sort-field { flex: 1 1 100%; max-width: none; }
+  .watchlist-filter-count { margin: 0; }
+}
