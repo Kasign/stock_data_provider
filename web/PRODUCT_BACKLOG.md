@@ -1,30 +1,90 @@
+- [x] 浏览器存储整体不可读时，自选股显示明确不可用态、暂停改名/移除且不误报添加成功；注入写入/移除失败时，改名/添加/移除显示警告，并验证存储原始内容未变化。
+- [x] 对应最新 WebUI checks [#40829979460](https://github.com/Kasign/stock_data_provider/actions/runs/40829979460) 与 Browser Smoke [#40829979373](https://github.com/Kasign/stock_data_provider/actions/runs/40829979373) 通过（HEAD `1de0952485f23335fc903327633e389596136262`）。
+
+- [x] 保存连接与未保存草稿分别覆盖 401/403/404/503/网络失败；已保存值、已保存反馈与未保存草稿互不污染。
+- [x] 两类检查的迟到响应竞态均已回归：保存新连接后旧探针结果无效；草稿在途时变更路径后旧结果被忽略。
+- [x] 最新检查 [#40829190517](https://github.com/Kasign/stock_data_provider/actions/runs/40829190517) 与 Browser Smoke [#40829190473](https://github.com/Kasign/stock_data_provider/actions/runs/40829190473) 通过（HEAD `9dfe85bdd75defe7a9958bf7a40c2d0a394d0458`）。
+
+- [x] 保存连接与未保存草稿分别完成 401/403/404/503/网络失败浏览器矩阵：无静默重试、保存值不变、草稿反馈不覆盖已保存结果、草稿路径不落盘。
+- [x] 最新 checks [#40828373061](https://github.com/Kasign/stock_data_provider/actions/runs/40828373061) 与 Browser Smoke [#40828373063](https://github.com/Kasign/stock_data_provider/actions/runs/40828373063) 通过（HEAD `fffac2436257fca7d7789e01dc91719d02f3ed0e`）。
+
 # WebUI 产品功能扩展与实施任务清单
 
-更新时间：2026-10-27（PR #17 开放中；全站 Review 持续进行）
+## 2026-10-29 最新键盘可访问性验收
+
+- [x] 设置对话框的前向 Tab 焦点陷阱已通过 Chromium 验证（连续 12 次 Tab 均留在弹窗内）。
+- [x] Escape 关闭设置弹窗后焦点返回原始打开按钮。
+- [x] 模态框优先处理不改变移动侧栏原有焦点循环。
+- [x] 最新 WebUI checks [#40818132283](https://github.com/Kasign/stock_data_provider/actions/runs/40818132283) 与 Browser Smoke [#40818132254](https://github.com/Kasign/stock_data_provider/actions/runs/40818132254) 均通过。
+- [ ] 真实 Provider/API Key/NAS/1Panel 部署验收仍需独立完成。
+
+
+更新时间：2026-10-29（健康检查质量门禁和 Browser Smoke 扩展已通过）
 目标仓库：Kasign/stock_data_provider
-当前 WebUI 分支：feat/webui-market-data-console（PR #17，尚未合并）
+唯一 WebUI 开发分支：feat/webui-market-data-console
 参考项目版本：ZhuLinsen/daily_stock_analysis，main = ec66bf46caf6993f673bd4be59c883754667b686
 
 ## 当前有效规划（2026-10-27；优先于下方历史任务记录）
 
 本轮重整目标是重新安排页面信息架构，**保留和强化现有数据能力**。模块可先完成 UI；缺少数据时必须准确显示“规划中/接口待接入”，不能使用 mock 行情。
 
-- 当前 WebUI 源码分支：`feat/webui-market-data-console`，当前变更由 PR #17 跟踪；PR #16 已关闭。
-- 本轮继续只修改 `web/**`，不创建新的 WebUI 分支、不重写提交父节点；集成分支有新提交时先检查改动路径是否与 `web/**` 重叠。
+- 唯一开发基线为 `feat/webui-market-data-console` 的最新远程 HEAD；后续修改只允许触及 `web/**`。
+- PR #17 已于 2026-10-28 合并，是历史交付记录；PR #16 已关闭且未合并。当前没有由 PR #17 跟踪的开放任务。
+- 不以其他分支为开发基础，不创建临时 WebUI 分支，不改写历史或重复迁移已完成内容。新任务优先直接在既有 WebUI 分支分组提交。
 - 页面逐项规格：[UI_LAYOUT_PLAN.md](./UI_LAYOUT_PLAN.md)。
 - 当前接口、缺失数据能力、服务诊断和建议后端任务：[DATA_CAPABILITY_GAPS.md](./DATA_CAPABILITY_GAPS.md)。
 - 实际路由与 API 语义：[API_CONTRACT.md](./API_CONTRACT.md)。
 - 当前有效实施顺序：先重整首页市场总览、个股研究列表/详情、自选股、分析任务/详情内运行流、数据中心和设置；然后补齐国内市场情绪历史、市场/板块资金流、多维板块排序、股票批量概览和逐 Provider 诊断；全球市场最后推进。
+
+### 2026-10-29 质量门禁续接
+
+- [x] 健康检查模块行为测试与 JS 语法检查入口已补齐。
+- [x] 修正与当前多模块实现不匹配的静态 UI 契约断言；保留请求代际、错误分类、连接隔离和按钮收尾语义。
+- [x] 完整 WebUI checks 通过：[运行 #40809497077](https://github.com/Kasign/stock_data_provider/actions/runs/40809497077)。
+- [x] Browser Smoke 增加 skip-link 键盘可见性与主题切换往返断言：[运行 #40809497236](https://github.com/Kasign/stock_data_provider/actions/runs/40809497236)。
+- [x] 清理 6 组在 HTML/运行时 JS 中无引用的历史样式，并保留动态图表/运行流状态与有效主题规则；样式提交的检查和 Browser Smoke 均通过（[#40810083891](https://github.com/Kasign/stock_data_provider/actions/runs/40810083891)、[#40810083745](https://github.com/Kasign/stock_data_provider/actions/runs/40810083745)）。
+- [x] Browser Smoke 在 320px 隔离上下文中验证浅色主题在页面刷新后仍能恢复，最后回到深色；最新检查与烟测均通过（[#40810222011](https://github.com/Kasign/stock_data_provider/actions/runs/40810222011)、[#40810221922](https://github.com/Kasign/stock_data_provider/actions/runs/40810221922)）。
+- [x] 完成报价 API 的 401/403/404/503/网络失败端到端矩阵：检查准确文案、旧行情/报价时间清除、unknown 质量、连接状态不误报健康、无静默后台重试和手动重试恢复。
+- [x] 首页市场总览覆盖同一 401/403/404/503/网络失败矩阵，并先显示成功的测试指数，再验证每种错误后旧指数卡片清空、模块状态降级、刷新摘要计数正确且没有静默重试。
+- [x] 数据中心 Provider 清单也完成 401/403/404/503/网络失败浏览器矩阵：先成功读出测试 Provider，再验证失败后旧行清空、错误信息与状态准确、无静默重试；无分析 readiness 证据时 MariaDB/Redis 保持未知。
+- [x] 健康就绪接口 HTTP 200 但缺少可识别 status 字段时，行情/分析 readiness 显示 warning/未知而非绿色；MariaDB/Redis 仍未知。
+- [x] 同一 200/无 status 健康响应下，顶栏行情/分析状态也显示未知，整体连接不在线；顶栏和数据中心的健康证据门槛保持一致。
+- [x] 最新 WebUI checks [#40821797427](https://github.com/Kasign/stock_data_provider/actions/runs/40821797427) 与 Browser Smoke [#40821797385](https://github.com/Kasign/stock_data_provider/actions/runs/40821797385) 均通过（HEAD `c67805e11a3e5c3d879405c0a266cc8c60b0cd22`）。
+- [x] 首页市场错误矩阵后的手动刷新恢复指数卡片与状态，且仅发起一个新请求。
+- [x] 数据中心 Provider 清单错误矩阵后的手动检查恢复成功列表，清除旧错误，不重复请求。
+- [x] 数据中心总摘要区分服务/依赖异常与 Provider 清单读取失败。
+- [x] 浏览器回归覆盖 Provider 清单请求在途时切换并保存新的行情 API 路径；迟到的旧连接响应不会回写旧 Provider，也不会覆盖“需重新检查”状态。
+- [x] 最新 checks [#40816630351](https://github.com/Kasign/stock_data_provider/actions/runs/40816630351) 和 Browser Smoke [#40816630301](https://github.com/Kasign/stock_data_provider/actions/runs/40816630301) 通过（HEAD `42251268991a879deb74b7b2e787daaa076e4d5b`）。
+- [x] 最新 checks [#40816231911](https://github.com/Kasign/stock_data_provider/actions/runs/40816231911) 和 Browser Smoke [#40816231865](https://github.com/Kasign/stock_data_provider/actions/runs/40816231865) 通过（HEAD `75a5de71b4ffc37fba3a5099159e7b2a33ac8bce`）。
+- [x] 最新 WebUI checks [#40813557024](https://github.com/Kasign/stock_data_provider/actions/runs/40813557024) 与 Browser Smoke [#40813556922](https://github.com/Kasign/stock_data_provider/actions/runs/40813556922) 通过（HEAD `ce421c0b2151850f6648801cd871e4bb33da235b`）。
+- [x] 最新 WebUI checks [#40813258411](https://github.com/Kasign/stock_data_provider/actions/runs/40813258411) 与 Browser Smoke [#40813258387](https://github.com/Kasign/stock_data_provider/actions/runs/40813258387) 均通过（HEAD `d91fd0263ba4f2ec09dd3809d3a9347542f5ffa4`）。
+- [x] 最新 WebUI checks [#40812808507](https://github.com/Kasign/stock_data_provider/actions/runs/40812808507) 和 Browser Smoke [#40812808557](https://github.com/Kasign/stock_data_provider/actions/runs/40812808557) 均通过（HEAD `f32a7190cb753b27f169c10a680e927719e09f34`）。
+- [x] 修复首页市场总览将所有 401/403 都归因于 API Key 的误导文案，使用共享状态描述；增加单测和首页 401/403 浏览器回归。
+- [x] 最新完整检查 [#40812213468](https://github.com/Kasign/stock_data_provider/actions/runs/40812213468) 与 Browser Smoke [#40812213510](https://github.com/Kasign/stock_data_provider/actions/runs/40812213510) 通过（代码 HEAD `360182366b866692ee8c5b1c77d4f77924a6ad32`）。
+- [ ] 仍需在真实 Provider/API 与 NAS/1Panel 环境验收鉴权、代理和实际数据质量；本地浏览器桩不能替代线上验收。
+- [ ] 人工检查浅色/深色主题对比度、键盘/减少动态效果及研究详情锚点；自动化 smoke 只证明固定 503 后端下的布局与控件行为。
+- [ ] 对接真实 404/503/401/403 与网络错误状态，确认真实 API Key 代理和 NAS/1Panel 运行环境。
+- 后续 CSS 整理以具体可证明的问题为单位。不得对不同 media query 下的重复 selector 做机械合并或整表重写。
+
 
 ## 当前不依赖数据层的前端收尾（2026-10-27）
 
 - [x] 新增工作区/数据中心/研究模块样式分区整理，并修正新增区块覆盖全站 12px 辅助文字基线的问题。
 - [x] 修正研究/设置分区导航焦点与滚动高亮：点击支持键盘阅读，滚动状态根据全部可见区块计算。
 - [x] 修正浏览器工作区导入时旧活动任务可能重新写入任务引用的问题。
+- [x] 自选股读取全量校验原始数组；单条格式异常、重复证券代码（包括纯六位代码与已知交易所后缀别名）及超过 50 条上限时，会阻止写回，避免部分读取后覆盖原始记录。
+- [x] 个股研究聚合加载增加独立 generation，切换股票后旧请求不会更新新股票的加载按钮状态；切换时会取消旧分区请求并恢复按钮。
+- [x] 估值/筹码/资金流详情按钮统一按分区 generation 判断加载结果和 finally 状态，防止旧请求结束后提前解锁新请求。
 - [x] 修正切换到尚未接入的板块维度时，迟到的旧行情请求可能覆盖占位文案的问题。
 - [x] 修正数据中心健康检查的证据标准：HTTP 2xx 但没有可识别 `status` 字段时，状态为未知，不计为健康。
 - [x] 数据中心探针超时后复核 `timedOut` 标记，避免迟到 resolve 回包被统计为成功。
 - [x] 统一侧栏/顶栏和数据中心的健康回包证据标准及未知状态显示。
+- [x] 将顶栏、设置页连接测试和数据中心的健康探针统一为 `web/src/health-check.js`；所有检查共享 6 秒超时、AbortSignal、耗时统计和迟到响应保护。
+- [x] 更新 WebUI 静态契约测试以检查共享健康探针与新的结果结构；本轮没有执行自动化测试。
+- [x] 行情连接路径或 API Key 变化时，中止龙虎榜和交易日历的在途请求，清除旧连接结果并重置龙虎榜分页；对应 UI 契约已补充，尚未运行测试。
+- [x] 同类连接变更保护扩展到首页市场总览：中止指数、市场广度、板块、涨跌停池、人气榜的旧请求，清除旧结果并使旧刷新摘要失效；对应 UI 契约已补充，尚未运行测试。
+- [x] 阶段事件在通过外层 task_id 校验后，逐条核对 event.run_id 是否与当前任务已确认的 Run 一致；缺失或不匹配的事件不进入运行流，并按问题类型展示忽略原因。对应 UI 契约已补充，尚未运行测试。
+- [x] 终态任务的阶段事件使用独立 `next_after_sequence` 游标续读满页；Run 报告须等可续读事件页排空后才进入终态读取流程；阶段事件暂时性错误按 5 秒退避自动重试，永久/契约错误显示诊断后才允许结束自动续读；创建接口幂等命中终态任务同样遵循该流程。回归契约已补充，尚未执行测试。
 - [x] 隔离全局服务健康状态与行情查询提示，避免后台检查覆盖当前查询反馈。
 - [x] 分区整理日 K 技术指标、Bundle 快照来源、估值和个股补充指标样式，提升对应辅助标签至 12px，并补充静态契约。
 - [ ] 继续分区审查前端请求生命周期、表单/对话框焦点、错误反馈及主题 Token；改动需保持小批次，不整体重写 `app.js` 或 `styles.css`。
@@ -42,6 +102,7 @@
 - [x] 自选股已展示当前行情快照（仅匹配已查询的标的）、本地最近任务状态和当前页面已加载的 Run 结果；Run 结果必须同时匹配任务 ID、Run ID 和分析服务地址，防止旧结果串入新任务。无记录只显示未知，不显示“未分析”。
 - [x] 设置页按显示偏好、连接与服务、浏览器本地数据、基础设置、数据源、AI 与问股、通知渠道、任务调度、选股默认项、服务器安全与备份分为十组。浏览器本地导入/导出只覆盖主题、同源 API 路径、自选股与最近任务引用；当前 API Key 保留且不会出现在导出文件中。服务器配置/密码/.env 导入导出仍禁用，等待有权限控制的服务端 API。选股、问股、通知、告警仍需对应 API。
 - [x] 研究列表 MA5/MA20 状态区分“未加载”“读取中…”与“数据不足”；只有与当前 Quote 标的对应的日 K 才显示指标。
+- [x] 增加迟到 Quote 回归：旧标的在途请求未完成时切换到新标的，验证旧报价不能覆盖新 Quote、质量、日 K、技术 MA5/MA20 与研究摘要；新标的样本不足不沿用旧 MA。对应 WebUI checks [#40822295596](https://github.com/Kasign/stock_data_provider/actions/runs/40822295596) 与 Browser Smoke [#40822295705](https://github.com/Kasign/stock_data_provider/actions/runs/40822295705) 均通过。
 - [x] 设置中心增加浏览器本地工作区导入/导出，采用版本化 allowlist JSON、同源路径校验、条目数量/重复代码校验和导入确认；导入保留当前 API Key，并在存储快照读取失败时拒绝开始写入。
 - [ ] 保留请求取消、generation/stale-response 保护、真实数据/质量语义与错误恢复，不因排版重构修改业务口径。
 
@@ -289,7 +350,7 @@
 - [x] 开始新一轮查询时清空旧标的实时行情并显示本次加载状态。
 - [x] 报价失败时清空所有报价卡片字段、来源和行情时间。
 - [x] 保留报价与日 K 分别成功/失败的能力，不让一端失败覆盖另一端成功数据。
-- [ ] 用户统一测试先成功查询 A 再查询失败标的 B 的情况，以及报价失败但日 K 成功时的显示。
+- [x] Chromium 回归已验证先成功查询 A，再切换到 B 并遇到 Quote 503、Daily Bars 成功；B 的日 K 保留、A 的报价/MA 不残留，手动重试后恢复 Quote，A 的迟到回包不能覆盖 B。对应 WebUI checks [#40822836098](https://github.com/Kasign/stock_data_provider/actions/runs/40822836098) 与 Browser Smoke [#40822836089](https://github.com/Kasign/stock_data_provider/actions/runs/40822836089) 通过。
 - 本批未运行测试、未触发 CI。
 
 
@@ -477,7 +538,9 @@
 - [x] 区分有效空列表、浏览器存储不可读与已存 JSON 格式异常。
 - [x] 读取失败/格式异常时阻止自选股添加、改名、移除的写入，防止把空列表写回覆盖原始数据。
 - [x] 浏览器数据导出与任务表单载入会在无法读取有效自选数据时明确失败，而非静默当作空列表。
-- [ ] 用户统一验收浏览器禁止存储、损坏的本地 JSON 和刷新恢复行为；本批未执行自动化。
+- [x] Chromium 已覆盖自选损坏 JSON 与 `setItem` 配额失败：原始坏数据保留、错误/warning 正确、写入失败不假报持久化；对应检查 [#40823264939](https://github.com/Kasign/stock_data_provider/actions/runs/40823264939) 与烟测 [#40823264960](https://github.com/Kasign/stock_data_provider/actions/runs/40823264960) 通过。
+- [x] Chromium 已直接模拟自选键的 `getItem` 抛出 `SecurityError`：旧数据原样保留，UI 显示不可读与错误状态；最新 checks [#40823565781](https://github.com/Kasign/stock_data_provider/actions/runs/40823565781) 和 smoke [#40823565777](https://github.com/Kasign/stock_data_provider/actions/runs/40823565777) 通过。
+- [ ] 浏览器整体禁用存储的实际设备/浏览器验收仍需执行。
 
 ## 2026-10-27 全站 Review 新增事项
 
@@ -486,3 +549,110 @@
 - [x] 最近任务历史损坏时不再显示普通“暂无任务”；浏览器工作区导出拒绝导出缺失/不完整的任务历史。
 - [x] 对应回归测试源码已补充；不在本地反复运行测试/构建，后续以跟进提交自身的 GitHub Actions 结果为准。
 - [ ] 真实浏览器、深浅主题及 NAS/1Panel 验收仍由用户统一完成。
+
+
+- [x] 修正阶段事件终态临时错误重试的静态契约转义，并补充手动刷新重试需保留 `taskEventCursor` 的回归断言；未执行本地 Node 测试。
+
+- [x] 新增命名上下文的事件游标复位契约：新建任务、恢复最近任务、切换分析 API 地址均应清空旧事件与分页游标；迟到轮询按 generation/task_id/API 地址代际丢弃。静态契约尚未执行。
+
+
+- [x] Run 报告重读按钮增加单次请求锁，重复触发时不新开并发读取；请求进入 retrying 状态时保持锁，完成/失败后由当前代际复位。新建任务、恢复任务或变更分析 API 地址时先解除旧请求锁，避免旧任务失效后按钮继续禁用。源码与静态契约已提交，尚未运行 Node 测试。
+
+
+- [x] “立即刷新状态”在单次手动 Task/事件轮询期间禁用并显示忙碌状态，阻止连续点击产生并发轮询；轮询终态、永久失败、停止或切换上下文时复位，迟到的旧 generation 不负责解锁新轮询。新增静态契约，尚未运行 Node 测试。
+
+
+## 2026-10-28 — 已完成：Task 轮询意外异常收敛
+
+- [x] 定时续读、恢复任务、工具栏刷新和手动刷新统一通过异常兜底入口，避免轮询 Promise rejection 无人处理。
+- [x] 仅当前任务 generation 可应用异常；将状态恢复为非加载、记录错误、暂停自动刷新并释放手动刷新按钮。
+- [x] 增加静态回归契约，覆盖异常收敛、旧 generation 隔离和四类调用入口。
+- [ ] 本轮未执行本地 Node 测试或手动浏览器验收；以对应 GitHub Actions 和后续统一验收为准。
+
+
+## 2026-10-28 — 已完成：Run 结果启动异常收尾
+
+- [x] 将 Run 读取初始状态写入、自选股重绘与结果区域更新纳入外层 `try/catch/finally`。
+- [x] 启动或视图渲染阶段意外异常时，记录失败状态并尝试显示诊断；当前代际才可释放忙碌锁。
+- [x] 增加静态回归契约，检查启动阶段、外层异常分支和 finally 的覆盖关系。
+- [ ] 本轮未执行本地 Node 测试或手动浏览器验收。
+
+
+## 2026-10-29 — 数据分支合并后的功能盘点与缺口清单
+
+> 本节是当前阶段的功能基线，优先用于安排后续开发，避免重复实现已完成模块。判断分为“前端流程已实现”“后端接口已声明”“真实 Provider/部署已验收”三个层次；三者不能互相替代。此清单基于当前 WebUI 源码、API 客户端、OpenAPI 和数据能力文档，尚不代表合并后的生产环境已完成端到端验收。
+
+### 一、已有主体功能：不作为新功能重复开发
+
+- [x] **首页市场总览**：指数、市场广度、行业/概念排行、涨跌停池、人气榜、龙虎榜、交易日历已有页面和真实 API 接入。
+- [x] **个股研究**：股票搜索、行情、日 K、MA5/MA20、公司资料、板块、财务、估值、公告、筹码与个股资金流已有主要页面/调用能力；部分字段及 Provider 覆盖依数据源而异。
+- [x] **自选股**：浏览器本地清单及改名、添加、移除、存储错误反馈已有实现；这不等于服务端同步或跨设备共享。
+- [x] **分析任务主流程**：创建异步任务、查询单个 Task/Run、增量读取任务事件及展示结果已有实现。
+- [x] **数据中心基础巡检**：WebUI 当前路径、行情服务与分析服务 liveness/readiness、可读取的 MariaDB/Redis 子状态、Provider 能力声明已有实现。
+- [x] **WebUI 基础交互与质量门禁**：响应式布局、主题、键盘/弹窗交互、连接请求竞态、行情错误矩阵、本地存储异常等已有多轮自动化覆盖。仅在相关源码变更或出现失败证据时回归，不重复无差别检查。
+- [x] **本地设置和工作区数据**：连接设置、主题偏好及本地工作区导入/导出等已有前端实现；不等于服务端配置管理。
+
+### 二、合并后优先核实的接口接入项
+
+当前行情服务 OpenAPI 已声明以下能力，但 WebUI 的 `web/src/api.js` 尚未看到对应完整客户端封装。先核实实际 Handler、响应结构、Provider 支持和质量语义，再接入页面：
+
+- [ ] 指数目录：`GET /api/v1/market/index-catalog`
+- [ ] 指数成分股：`GET /api/v1/market/indices/{symbol}/constituents`
+- [ ] 指数历史日线：`GET /api/v1/market/indices/{symbol}/daily`
+- [ ] 市场交易时段：`GET /api/v1/market/session`
+- [ ] 个股涨跌停规则：`GET /api/v1/stocks/{symbol}/price-limit-rule`
+- [ ] 个股交易状态：`GET /api/v1/stocks/{symbol}/trading-status`
+
+> OpenAPI 路由声明不代表 Handler 已正确实现，也不代表真实 Provider 已在部署环境验收。接入时必须保留 source、时间、coverage、quality 和缺失语义，不得用默认值掩盖数据缺失。
+
+### 三、当前明确的产品/数据缺口
+
+#### P1：已有页面和数据能力的闭环
+
+- [ ] **分析任务服务端历史**：目前有单个 Task/Run 查询及浏览器最近任务引用；补齐服务端分页列表、过滤、排序及历史恢复所需契约。取消任务等能力需先核实后端是否支持。
+- [ ] **批量股票概览**：目前主要面向搜索结果、自选和已查询标的；全市场扫描需要后端分页证券范围、批量行情/均线、字段质量和数据日期契约，不能由前端逐股请求拼接。
+- [ ] **数据中心 Provider 诊断**：现有 Provider 清单是能力/配置声明，不是实时健康。新增受保护的逐 Provider、逐 capability 探测，包含超时/限频、安全错误摘要和最近结果；诊断历史另行设计。
+- [ ] **市场情绪历史**：已有部分即时广度和涨跌停数据；缺统一口径、定时快照存储和历史查询。真实积累前不得绘制虚构历史曲线。
+- [ ] **市场级/板块级资金流**：现有成交额不是资金净流入，个股资金流也不能代表市场级资金流。需要真实 Provider、明确统计口径/单位/时点/覆盖/质量及历史能力。
+- [ ] **热点板块多维排行**：今日涨幅已有基础；成交额完整排序、近 5 日涨幅、板块资金流仍需后端稳定 ID、完整候选范围、历史数据、排序/分页和质量契约。
+
+#### P1：尚未接入真实后端的产品模块
+
+- [ ] **条件选股**：页面结构和状态模型已有，实际创建/运行/候选结果不可用。需策略清单、参数校验、扫描任务、候选及命中解释、历史结果 API。
+- [ ] **告警**：页面结构已有；需规则 CRUD、评估/触发记录、投递状态及权限契约。
+- [ ] **通知中心**：页面结构已有；需服务端收件箱、未读计数、已读状态、渠道配置和投递记录。
+- [ ] **问股/对话**：页面结构和当前股票上下文展示已有；需真实 Chat/Agent API、会话持久化、多轮消息及策略/模式清单。
+- [ ] **服务端设置管理**：当前设置主要是浏览器本地连接/偏好；如要管理服务器配置，需要服务端 schema、读写、版本冲突、密钥脱敏、权限和审计。服务密钥与登录态必须分开设计。
+- [ ] **服务端配置备份恢复**：浏览器工作区导入/导出不能替代服务器配置和数据库备份恢复。
+
+#### P2：后续扩展
+
+- [ ] **全球市场联动**：单独评估数据源可达性、授权/费用、延迟、历史深度、币种、交易时区、交易日历和数据质量；不得阻塞国内 A 股主线。
+- [ ] **诊断历史与故障趋势**：在真实诊断 API 和存储策略稳定后，再增加最近成功时间、故障持续时间及趋势展示。
+
+### 四、建议开发顺序
+
+1. 先核实并接入“合并后优先核实的接口接入项”，复用后端已存在能力，不重做现有市场/个股页面。
+2. 补齐服务端分析历史和批量股票概览，解决已有流程的扩展性与可追溯性。
+3. 按数据契约推进市场情绪历史、市场/板块资金流、板块多维排行。
+4. 增加 Provider 真实诊断 API，再完善数据中心诊断展示与历史。
+5. 条件选股优先于告警、通知和问股；每个模块必须以真实后端契约为前提，不用 mock/fixture 冒充生产数据。
+6. 全球市场与服务端配置管理作为独立阶段评估。
+
+### 五、下一阶段：先调整 WebUI 样式
+
+- [ ] 本轮功能盘点完成后，下一步先集中处理 WebUI 样式和布局，不立即扩展新的业务模块。
+- [ ] 样式调整只改 `web/**`，沿用原生 HTML/CSS/ES Modules，不引入 React，不修改 Go 服务、Provider、数据库、API 或根目录部署配置。
+- [ ] 样式任务开始前先确定当前页面的视觉层级、工作区布局、卡片密度、间距、表格/图表对齐和移动端断点；优先解决用户可见的布局问题，避免重复审查已通过的业务错误矩阵。
+- [ ] 样式修改后仅运行与改动相关的检查，并记录对应提交的实际 CI 结果；没有结果时不得标记通过。
+
+
+## 2026-10-29 — 已有 API 接入第二轮收尾
+
+- [x] 新增 `web/src/existing-api-tools.js` 纳入 `npm run check` 的 JavaScript 语法检查，避免新增模块漏检。
+- [x] `web/tests/api.test.mjs` 增加 6 个新接入接口的路径、查询参数、URL 编码与 X-API-Key 传递契约测试。
+- [x] 增加日期范围倒置、非法日期和无效格式的请求前校验测试。
+- [x] 日期校验从正则格式匹配升级为真实日历日期校验，拒绝 2026-02-30 等不存在的日期。
+- [x] 查询失败提示保留服务端 request_id，便于根据请求编号排查 Provider 与服务端日志。
+- [ ] 本轮新增测试尚需由 WebUI checks 工作流实际执行；未取得运行结果前不标记测试通过。
+- [ ] 真实 Provider 的数据可用性、历史回溯能力及 NAS/1Panel 部署验收仍待执行。

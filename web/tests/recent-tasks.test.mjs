@@ -35,6 +35,27 @@ test("caps browser history and rejects malformed stored records", () => {
   });
 });
 
+test("rejects duplicate task references for the same analysis service without rewriting stored data", () => {
+  const records = [
+    { task_id: "task-a", analysis_base: "/api", run_id: "run-1" },
+    { task_id: "task-a", analysis_base: "/api", run_id: "run-2" },
+    { task_id: "task-a", analysis_base: "/other-api", run_id: "run-3" }
+  ];
+  const original = JSON.stringify(records);
+  const storage = makeStorage({ [RECENT_TASKS_KEY]: original });
+
+  const state = readRecentTasksState(storage);
+  assert.equal(state.storageReadable, true);
+  assert.equal(state.storageValid, false);
+  assert.equal(state.reason, "invalid");
+  assert.deepEqual(state.items.map((item) => [item.task_id, item.analysis_base]), [
+    ["task-a", "/api"],
+    ["task-a", "/other-api"]
+  ]);
+  assert.deepEqual(upsertRecentTask({ task_id: "task-b" }, storage), state.items);
+  assert.equal(storage.getItem(RECENT_TASKS_KEY), original, "invalid history must not be rewritten as a partial list");
+});
+
 test("storage failures do not throw or write task history after an unsuccessful read", () => {
   let writes = 0;
   const storage = {
@@ -99,6 +120,22 @@ test("clears local task references without touching unrelated storage keys", () 
   assert.equal(storage.getItem(RECENT_TASKS_KEY), null);
 });
 
+test("keeps task history when storage silently ignores removeItem during clear", () => {
+  const seedStorage = makeStorage();
+  upsertRecentTask({ task_id: "task-a" }, seedStorage);
+  upsertRecentTask({ task_id: "task-b" }, seedStorage);
+  const raw = seedStorage.getItem(RECENT_TASKS_KEY);
+  const storage = {
+    getItem() { return raw; },
+    // Some adapters can fail silently instead of throwing.
+    removeItem() {},
+    setItem() {}
+  };
+
+  assert.deepEqual(clearRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+  assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+});
+
 test("remove and clear operations tolerate disabled browser storage", () => {
   const storage = {
     getItem() { throw new Error("storage disabled"); },
@@ -134,4 +171,60 @@ test("does not overwrite blank, malformed, non-array, or partially malformed his
     assert.equal(writes, 0, "invalid history must not be replaced with a partial list");
     assert.equal(storage.getItem(RECENT_TASKS_KEY), raw, "original stored bytes must remain unchanged");
   }
+});
+
+
+test("does not return a new history item when browser storage rejects the write", () => {
+  const stored = new Map();
+  const storage = {
+    getItem(key) { return stored.has(key) ? stored.get(key) : null; },
+    setItem() { throw new DOMException("Quota exceeded", "QuotaExceededError"); },
+    removeItem(key) { stored.delete(key); }
+  };
+
+  const returned = upsertRecentTask({
+    task_id: "task-not-persisted",
+    analysis_base: "/analysis-api",
+    status: "queued"
+  }, storage);
+
+  assert.deepEqual(returned, []);
+  assert.deepEqual(readRecentTasksState(storage), {
+    items: [], storageReadable: true, storageValid: true, reason: ""
+  });
+});
+
+
+test("keeps the existing task list when removing a task cannot be persisted", () => {
+  const stored = new Map();
+  const seedStorage = makeStorage();
+  upsertRecentTask({ task_id: "task-a", status: "running" }, seedStorage);
+  upsertRecentTask({ task_id: "task-b", status: "succeeded" }, seedStorage);
+  stored.set(RECENT_TASKS_KEY, seedStorage.getItem(RECENT_TASKS_KEY));
+  const storage = {
+    getItem(key) { return stored.has(key) ? stored.get(key) : null; },
+    setItem() { throw new DOMException("Quota exceeded", "QuotaExceededError"); },
+    removeItem(key) { stored.delete(key); }
+  };
+
+  const returned = removeRecentTask("task-b", storage);
+
+  assert.deepEqual(returned.map((item) => item.task_id), ["task-b", "task-a"]);
+  assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+});
+
+
+test("keeps the existing task list when clearing history cannot be persisted", () => {
+  const seedStorage = makeStorage();
+  upsertRecentTask({ task_id: "task-a" }, seedStorage);
+  upsertRecentTask({ task_id: "task-b" }, seedStorage);
+  const raw = seedStorage.getItem(RECENT_TASKS_KEY);
+  const storage = {
+    getItem() { return raw; },
+    removeItem() { throw new DOMException("Storage unavailable", "SecurityError"); },
+    setItem() { throw new DOMException("Storage unavailable", "SecurityError"); }
+  };
+
+  assert.deepEqual(clearRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+  assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
 });

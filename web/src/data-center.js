@@ -1,4 +1,5 @@
 import { analysisHealth, analysisLiveness, getDataSources, marketHealth, marketLiveness } from "./api.js";
+import { runHealthCheck } from "./health-check.js";
 import { describeApiError, formatDateTime } from "./format.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -55,23 +56,6 @@ async function checkWebUI(_settings, signal) {
   return { status: "ok" };
 }
 
-function probe(fn, settings, timeoutMs = 6000) {
-  const controller = new AbortController();
-  const started = performance.now();
-  let timedOut = false;
-  const timeout = window.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-
-  return Promise.resolve()
-    .then(() => fn(settings, controller.signal))
-    .then((data) => timedOut
-      ? { ok: false, error: new Error("检查超时"), timedOut: true, durationMs: Math.round(performance.now() - started) }
-      : { ok: true, data, durationMs: Math.round(performance.now() - started) })
-    .catch((error) => ({ ok: false, error, timedOut, durationMs: Math.round(performance.now() - started) }))
-    .finally(() => window.clearTimeout(timeout));
-}
 
 function probeState(result, ready = false) {
   if (!result?.ok) return result?.timedOut ? "timeout" : "failed";
@@ -192,24 +176,47 @@ export function bindDataCenter(getSettings) {
     if (checking) return;
     checking = true;
     const current = ++generation;
-    const settings = typeof getSettings === "function" ? getSettings() : null;
-    if (button) {
-      button.disabled = true;
-      button.textContent = "检查中…";
-      button.setAttribute("aria-busy", "true");
-    }
-    setBadge("#data-center-summary-status", "unknown", "检查中");
-    setText("#data-center-summary-message", "正在检查服务存活/就绪状态与 Provider 能力清单；单项失败不会中断其他检查。");
-
+    let settings = null;
     try {
+      settings = typeof getSettings === "function" ? getSettings() : null;
+      try {
+        if (button) {
+          button.disabled = true;
+          button.textContent = "检查中…";
+          button.setAttribute("aria-busy", "true");
+        }
+      } catch {
+        // 按钮 DOM 更新失败不能阻止服务探测。
+      }
+      try {
+        setBadge("#data-center-summary-status", "unknown", "检查中");
+        setText("#data-center-summary-message", "正在检查服务存活/就绪状态与 Provider 能力清单；单项失败不会中断其他检查。");
+      } catch {
+        // 初始提示失败不能阻止检查请求，也不能跳过最终解锁。
+      }
+      try {
+        setBadge("#data-center-provider-status", "unknown", "读取中");
+        setText("#data-center-provider-summary", "正在读取当前连接配置的 Provider 能力清单；旧清单暂不展示。");
+        const providerList = $("#data-center-provider-list");
+        if (providerList) {
+          providerList.replaceChildren();
+          const empty = document.createElement("div");
+          empty.className = "empty-row";
+          empty.textContent = "正在读取 Provider 能力清单…";
+          providerList.append(empty);
+        }
+      } catch {
+        // Provider 加载占位失败不能阻止健康探针和 Provider 请求。
+      }
+
       const checks = await Promise.all([
-        probe(checkWebUI, settings),
-        probe(marketLiveness, settings),
-        probe(marketHealth, settings),
-        probe(analysisLiveness, settings),
-        probe(analysisHealth, settings),
+        runHealthCheck(checkWebUI, settings),
+        runHealthCheck(marketLiveness, settings),
+        runHealthCheck(marketHealth, settings),
+        runHealthCheck(analysisLiveness, settings),
+        runHealthCheck(analysisHealth, settings),
         settings?.apiKey
-          ? probe(getDataSources, settings)
+          ? runHealthCheck(getDataSources, settings)
           : Promise.resolve({ ok: false, skipped: true, error: new Error("需先配置行情 API Key"), durationMs: 0 })
       ]);
       if (current !== generation) return;
@@ -276,8 +283,10 @@ export function bindDataCenter(getSettings) {
       const providerUnprobed = sources.ok && Array.isArray(sources.data?.sources)
         ? sources.data.sources.filter((source) => source && typeof source === "object" && source.enabled === true).length
         : 0;
+      const endpointOrDependencyFailures = failedServices + failedDependencies + degradedServices;
+      const providerReadFailed = !sources.ok && !sources.skipped;
       const unknown = unknownServices + unknownDependencies + (sources.skipped ? 1 : 0) + providerUnprobed;
-      const failed = failedServices + failedDependencies + degradedServices + (!sources.ok && !sources.skipped ? 1 : 0);
+      const failed = endpointOrDependencyFailures + (providerReadFailed ? 1 : 0);
       setText("#data-center-count-healthy", healthyServices + healthyDependencies);
       setText("#data-center-count-failed", failed);
       setText("#data-center-count-unknown", unknown);
@@ -285,25 +294,78 @@ export function bindDataCenter(getSettings) {
       setBadge("#data-center-summary-status", allNormal ? "healthy" : failed ? "unhealthy" : "unknown",
         allNormal ? "基础检查完成" : failed ? "存在异常" : "部分状态未知");
       setBadge("#data-center-last-check", "unknown", "检查于 " + timestamp);
+      const failureReasons = [];
+      if (endpointOrDependencyFailures) failureReasons.push("服务端点或已明确报告的依赖异常/降级");
+      if (providerReadFailed) failureReasons.push("Provider 能力清单读取失败");
       setText("#data-center-summary-message",
         failed
-          ? "检查完成：发现服务端点或已明确报告的依赖异常/降级。请查看对应错误摘要与部署日志；其它检查已独立完成。"
+          ? "检查完成：" + failureReasons.join("；") + "。请查看对应错误摘要与部署日志；其它检查已独立完成。"
           : unknown
             ? "检查已完成，但有服务、依赖或 Provider 状态无法确认。不能仅凭分析服务不可达就断定 MariaDB/Redis 故障。"
             : "基础检查完成：当前页面、服务端点和已报告的依赖状态已检查。Provider 能力清单仍只是配置声明，未实测项目已计入未知数量。");
     } catch (error) {
-      setBadge("#data-center-summary-status", "failed", "检查过程异常");
-      setText("#data-center-summary-message", safeError(error));
+      if (current !== generation) return;
+      try {
+        setBadge("#data-center-summary-status", "failed", "检查过程异常");
+      } catch {}
+      try {
+        setText("#data-center-summary-message", safeError(error));
+      } catch {
+        // 故障提示不可写时，错误仍被捕获且 finally 会继续复位。
+      }
     } finally {
-      checking = false;
-      if (button) {
-        button.disabled = false;
-        button.textContent = "重新检查";
-        button.removeAttribute("aria-busy");
+      if (current === generation) {
+        checking = false;
+        try {
+          if (button) {
+            button.disabled = false;
+            button.textContent = "重新检查";
+            button.removeAttribute("aria-busy");
+          }
+        } catch {
+          // 数据中心按钮不可写时也不能让 finally 产生新的 rejection。
+        }
       }
     }
   }
 
+  function invalidate(message = "连接配置已变更，之前的检查结果已作废。请重新检查。") {
+    generation += 1;
+    checking = false;
+    try {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "立即检查";
+        button.removeAttribute("aria-busy");
+      }
+    } catch {
+      // 先递增 generation，旧请求不会覆盖新连接状态。
+    }
+
+    const safeInvalidateStep = (operation) => {
+      try { operation(); } catch {}
+    };
+    safeInvalidateStep(() => setBadge("#data-center-summary-status", "unknown", "需重新检查"));
+    safeInvalidateStep(() => setText("#data-center-summary-message", message));
+    safeInvalidateStep(() => setBadge("#data-center-last-check", "unknown", "尚未检查"));
+
+    [
+      "#data-service-webui-status", "#data-service-market-live", "#data-service-market-ready",
+      "#data-service-analysis-live", "#data-service-analysis-ready", "#data-service-mariadb-status",
+      "#data-service-redis-status", "#data-center-provider-status"
+    ].forEach((selector) => safeInvalidateStep(() => setBadge(selector, "unknown", "需重新检查")));
+    [
+      "#data-service-webui-detail", "#data-service-market-detail", "#data-service-analysis-detail",
+      "#data-service-mariadb-detail", "#data-service-redis-detail"
+    ].forEach((selector) => safeInvalidateStep(() => setText(selector, "连接配置已变更，尚未重新检查。")));
+    safeInvalidateStep(() => setText("#data-center-provider-summary", "连接配置已变更，尚未重新读取 Provider 能力清单。"));
+    safeInvalidateStep(() => {
+      const providerList = $("#data-center-provider-list");
+      if (providerList) providerList.replaceChildren();
+    });
+    ["#data-center-count-healthy", "#data-center-count-failed", "#data-center-count-unknown"]
+      .forEach((selector) => safeInvalidateStep(() => setText(selector, "—")));
+  }
   button?.addEventListener("click", () => { void refresh(); });
-  return { refresh };
+  return { refresh, invalidate };
 }

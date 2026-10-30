@@ -8,6 +8,13 @@ import {
   getDailyBars,
   getChipDistribution,
   getCapitalFlow,
+  getIndexCatalog,
+  getIndexConstituents,
+  getIndexDailyBars,
+  getMarketSession,
+  getStockPriceLimitRule,
+  getStockTradingStatus,
+  getTradingCalendar,
   getDataSources,
   getQuote,
   searchStocks,
@@ -258,6 +265,111 @@ test("searches stocks by Chinese name through the authenticated market API and f
     assert.equal(request.headers["X-API-Key"], "market-secret");
     assert.equal(request.signal, controller.signal);
     assert.equal(result.items[0].symbol, "600519.SH");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("preserves the full 401/403/404/503 HTTP error matrix without converting failures to data", async () => {
+  const originalFetch = globalThis.fetch;
+  const cases = [
+    { status: 401, code: "auth_required", message: "credentials required" },
+    { status: 403, code: "access_denied", message: "permission denied" },
+    { status: 404, code: "quote_not_found", message: "quote does not exist" },
+    { status: 503, code: "provider_unavailable", message: "upstream provider unavailable" }
+  ];
+  try {
+    for (const item of cases) {
+      globalThis.fetch = async () => jsonResponse({
+        error: { code: item.code, message: item.message, request_id: "req-" + item.status }
+      }, item.status);
+
+      await assert.rejects(
+        getQuote({ marketBase: "/market-api", apiKey: "market-secret" }, "600519.SH"),
+        (error) => {
+          assert.equal(error.status, item.status);
+          assert.equal(error.code, item.code);
+          assert.equal(error.message, item.message);
+          assert.equal(error.requestId, "req-" + item.status);
+          return true;
+        },
+        "HTTP " + item.status + " must reject rather than return an empty/success payload"
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("propagates ordinary fetch network failures so the UI can classify them for retry", async () => {
+  const originalFetch = globalThis.fetch;
+  const failure = new TypeError("Failed to fetch");
+  globalThis.fetch = async () => { throw failure; };
+  try {
+    await assert.rejects(
+      getQuote({ marketBase: "/market-api", apiKey: "market-secret" }, "600519.SH"),
+      (error) => error === failure
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("newly integrated market endpoints encode symbols, preserve explicit source and date filters", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), ...init });
+    return jsonResponse({ quality_status: "valid", items: [] });
+  };
+  try {
+    const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+    await getMarketSession(settings);
+    await getIndexCatalog(settings, { tag: "industry" });
+    await getIndexConstituents(settings, "IDX/000300", { source: "tushare", asOf: "2026-10-28" });
+    await getIndexDailyBars(settings, "IDX/000300", { source: "hithink", start: "2026-10-01", end: "2026-10-28" });
+    await getStockPriceLimitRule(settings, "600519.SH", "2026-10-28");
+    await getStockTradingStatus(settings, "600519.SH", "2026-10-28", { asOf: "2026-10-29T09:00:00+08:00" });
+
+    assert.equal(requests[0].url, "/market-api/api/v1/market/session");
+    assert.equal(requests[1].url, "/market-api/api/v1/market/index-catalog?tag=industry");
+    assert.equal(requests[2].url, "/market-api/api/v1/market/indices/IDX%2F000300/constituents?source=tushare&as_of=2026-10-28");
+    assert.equal(requests[3].url, "/market-api/api/v1/market/indices/IDX%2F000300/daily?start=2026-10-01&end=2026-10-28&source=hithink");
+    assert.equal(requests[4].url, "/market-api/api/v1/stocks/600519.SH/price-limit-rule?date=2026-10-28");
+    assert.equal(requests[5].url, "/market-api/api/v1/stocks/600519.SH/trading-status?date=2026-10-28&as_of=2026-10-29T09%3A00%3A00%2B08%3A00");
+    assert.ok(requests.every(request => request.headers["X-API-Key"] === "market-secret"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("validates trading calendar dates and range before issuing requests", async () => {
+  const originalFetch = globalThis.fetch;
+  let count = 0;
+  globalThis.fetch = async () => { count += 1; return jsonResponse({ items: [] }); };
+  try {
+    const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+    await assert.rejects(getTradingCalendar(settings, { start: "2026-02-30", end: "2026-10-01" }), /有效的开始和结束日期/);
+    await assert.rejects(getTradingCalendar(settings, { start: "2026-10-02", end: "2026-10-01" }), /开始日期不能晚于结束日期/);
+    await getTradingCalendar(settings, { start: "2026-10-01", end: "2026-10-29" });
+    assert.equal(count, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rejects malformed or reversed dates before issuing market requests", async () => {
+  const originalFetch = globalThis.fetch;
+  let count = 0;
+  globalThis.fetch = async () => { count += 1; return jsonResponse({}); };
+  try {
+    const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+    await assert.rejects(getIndexDailyBars(settings, "000300.SH", { start: "2026-02-30", end: "2026-10-01" }), /有效的开始和结束日期/);
+    await assert.rejects(getIndexDailyBars(settings, "000300.SH", { start: "2026-10-02", end: "2026-10-01" }), /开始日期不能晚于结束日期/);
+    await assert.rejects(getStockPriceLimitRule(settings, "600519.SH", "2026-1-01"), /有效的交易日期/);
+    assert.equal(count, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }

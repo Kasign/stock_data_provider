@@ -22,13 +22,27 @@ export function saveSettings(settings) {
     analysisBase: normalizeBasePath(settings.analysisBase, DEFAULTS.analysisBase),
     apiKey: String(settings.apiKey ?? "").trim()
   };
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(value));
+  const serialized = JSON.stringify(value);
+  localStorage.setItem(SETTINGS_KEY, serialized);
+  if (localStorage.getItem(SETTINGS_KEY) !== serialized) {
+    throw new Error("设置未能保存到当前浏览器，请检查存储权限或可用空间。");
+  }
   return value;
 }
 
 export function clearSettings() {
   localStorage.removeItem(SETTINGS_KEY);
+  if (localStorage.getItem(SETTINGS_KEY) !== null) {
+    throw new Error("未能确认本地连接设置已清除，请检查浏览器存储后重试。");
+  }
   return { ...DEFAULTS };
+}
+
+function isValidISODate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
 async function request(base, path, { apiKey = "", method = "GET", body, signal, headers: extraHeaders = {} } = {}) {
@@ -99,12 +113,82 @@ export function getMarketHotStocks(settings, { type = "popular", limit = 10, sig
   return request(settings.marketBase, "/api/v1/market/hot-stocks?" + query.toString(), { apiKey: settings.apiKey, signal });
 }
 export function getMarketIndices(settings, signal) { return request(settings.marketBase, "/api/v1/market/indices", { apiKey: settings.apiKey, signal }); }
+export function getMarketSession(settings, at = "", signal) {
+  const query = new URLSearchParams();
+  if (at) query.set("at", at);
+  return request(settings.marketBase, "/api/v1/market/session" + (query.size ? "?" + query.toString() : ""), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getIndexCatalog(settings, { tag = "cn_concept", signal } = {}) {
+  const allowedTags = new Set(["cn_concept", "region", "tszs", "industry", "tushare"]);
+  const normalizedTag = allowedTags.has(String(tag)) ? String(tag) : "cn_concept";
+  const query = new URLSearchParams({ tag: normalizedTag });
+  return request(settings.marketBase, "/api/v1/market/index-catalog?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getIndexConstituents(settings, symbol, { source = "", asOf = "", signal } = {}) {
+  const normalizedSymbol = String(symbol ?? "").trim();
+  if (!normalizedSymbol) return Promise.reject(new Error("指数代码不能为空。"));
+  const query = new URLSearchParams();
+  if (source) query.set("source", source);
+  if (asOf) query.set("as_of", asOf);
+  const suffix = query.size ? "?" + query.toString() : "";
+  return request(settings.marketBase, "/api/v1/market/indices/" + encodeURIComponent(normalizedSymbol) + "/constituents" + suffix, {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getIndexDailyBars(settings, symbol, { start, end, source = "", signal } = {}) {
+  const normalizedSymbol = String(symbol ?? "").trim();
+  if (!normalizedSymbol) return Promise.reject(new Error("指数代码不能为空。"));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start ?? "")) || !/^\d{4}-\d{2}-\d{2}$/.test(String(end ?? ""))) {
+    return Promise.reject(new Error("指数日线需要有效的开始和结束日期。"));
+  }
+  if (String(start) > String(end)) return Promise.reject(new Error("开始日期不能晚于结束日期。"));
+  const query = new URLSearchParams({ start: String(start), end: String(end) });
+  if (source) query.set("source", source);
+  return request(settings.marketBase, "/api/v1/market/indices/" + encodeURIComponent(normalizedSymbol) + "/daily?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getStockPriceLimitRule(settings, symbol, date, signal) {
+  const normalizedSymbol = String(symbol ?? "").trim();
+  if (!normalizedSymbol) return Promise.reject(new Error("股票代码不能为空。"));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ""))) return Promise.reject(new Error("涨跌幅规则查询需要有效的交易日期。"));
+  const query = new URLSearchParams({ date: String(date) });
+  return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(normalizedSymbol) + "/price-limit-rule?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
+export function getStockTradingStatus(settings, symbol, date, { asOf = "", signal } = {}) {
+  const normalizedSymbol = String(symbol ?? "").trim();
+  if (!normalizedSymbol) return Promise.reject(new Error("股票代码不能为空。"));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ""))) return Promise.reject(new Error("交易状态查询需要有效的交易日期。"));
+  const query = new URLSearchParams({ date: String(date) });
+  if (asOf) query.set("as_of", asOf);
+  return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(normalizedSymbol) + "/trading-status?" + query.toString(), {
+    apiKey: settings.apiKey,
+    signal
+  });
+}
+
 export function getMarketBreadth(settings, signal) { return request(settings.marketBase, "/api/v1/market/breadth", { apiKey: settings.apiKey, signal }); }
 export function getMarketSectors(settings, { type = "industry", limit = 10, signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit)});return request(settings.marketBase,"/api/v1/market/sectors?"+query.toString(),{apiKey:settings.apiKey,signal}); }
 export function getMarketLimitPool(settings, { type = "up", limit = 30, date = "", signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit)});if(date)query.set("date",date);return request(settings.marketBase,"/api/v1/market/limit-pools?"+query.toString(),{apiKey:settings.apiKey,signal}); }
 
 export function getMarketDragonTiger(settings,{date="",page=1,pageSize=50,signal}={}){const query=new URLSearchParams({page:String(page),page_size:String(pageSize)});if(date)query.set("date",date);return request(settings.marketBase,"/api/v1/market/dragon-tiger?"+query.toString(),{apiKey:settings.apiKey,signal});}
-export function getTradingCalendar(settings,{start,end,signal}={}){const query=new URLSearchParams({start:String(start),end:String(end)});return request(settings.marketBase,"/api/v1/market/trading-calendar?"+query.toString(),{apiKey:settings.apiKey,signal});}
+export function getTradingCalendar(settings,{start,end,signal}={}){if(!isValidISODate(start)||!isValidISODate(end))return Promise.reject(new Error("交易日历需要有效的开始和结束日期。"));if(start>end)return Promise.reject(new Error("交易日历开始日期不能晚于结束日期。"));const query=new URLSearchParams({start:String(start),end:String(end)});return request(settings.marketBase,"/api/v1/market/trading-calendar?"+query.toString(),{apiKey:settings.apiKey,signal});}
 
 export function getStockProfile(settings, symbol, signal) { return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/profile", { apiKey: settings.apiKey, signal }); }
 export function getStockBoards(settings, symbol, signal) { return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/boards", { apiKey: settings.apiKey, signal }); }

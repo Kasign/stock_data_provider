@@ -1,3 +1,5 @@
+import { readPreferences } from "./preferences.js";
+
 export function normalizeBasePath(input, fallback) {
   const value = String(input ?? "").trim() || fallback;
   if (!value.startsWith("/") || value.startsWith("//") || value.includes("://")) {
@@ -14,6 +16,16 @@ export function normalizeSymbol(input) {
   const value = String(input ?? "").trim().toUpperCase().replace(/\s+/g, "");
   if (/^\d{6}$/.test(value) || /^\d{6}\.(SH|SZ|BJ)$/.test(value)) return value;
   throw new Error("股票代码格式不正确，请输入 6 位代码或带交易所后缀的代码，例如 600519.SH。");
+}
+
+// 为行情、研究、自选股与工作区导入提供唯一的 A 股身份比较规则。
+export function comparableMarketSymbol(input) {
+  const value = normalizeSymbol(input);
+  if (value.includes(".")) return value;
+  if (value.startsWith("6")) return value + ".SH";
+  if (/^[03]\d{5}$/.test(value)) return value + ".SZ";
+  if (/^(?:[48]\d{5}|92\d{4})$/.test(value)) return value + ".BJ";
+  return value;
 }
 
 export function parseSymbols(input) {
@@ -37,22 +49,35 @@ export function parseAnalysisSymbols(input) {
   return symbols;
 }
 
-export function formatPrice(value, digits = 2) {
+export function finiteNumberOrNull(value) {
+  if (value === null || value === undefined ||
+      (typeof value !== "number" && typeof value !== "string") ||
+      (typeof value === "string" && !value.trim())) return null;
   const number = Number(value);
-  if (value === null || value === undefined || value === "" || !Number.isFinite(number)) return "—";
-  return number.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return Number.isFinite(number) ? number : null;
+}
+
+export function formatPrice(value, digits) {
+  const number = finiteNumberOrNull(value);
+  if (number === null) return "—";
+  const precision = Number.isInteger(digits) ? digits : readPreferences().priceDigits;
+  return number.toLocaleString("zh-CN", { minimumFractionDigits: precision, maximumFractionDigits: precision });
 }
 
 export function formatCompact(value) {
-  const number = Number(value);
-  if (value === null || value === undefined || value === "" || !Number.isFinite(number)) return "—";
-  return new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 2 }).format(number);
+  const number = finiteNumberOrNull(value);
+  if (number === null) return "—";
+  const preferences = readPreferences();
+  return preferences.amountDisplayUnit === "raw"
+    ? number.toLocaleString("zh-CN", { maximumFractionDigits: 0 })
+    : new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 2 }).format(number);
 }
 
-export function formatPercent(value, digits = 2) {
-  const number = Number(value);
-  if (value === null || value === undefined || value === "" || !Number.isFinite(number)) return "—";
-  return `${number > 0 ? "+" : ""}${number.toFixed(digits)}%`;
+export function formatPercent(value, digits) {
+  const number = finiteNumberOrNull(value);
+  if (number === null) return "—";
+  const precision = Number.isInteger(digits) ? digits : readPreferences().percentDigits;
+  return `${number > 0 ? "+" : ""}${number.toFixed(precision)}%`;
 }
 
 export function formatDateTime(value) {
@@ -121,21 +146,26 @@ export function isRetryableApiError(error) {
 
 export function describeApiError(error, fallback = "请求失败") {
   const status = Number(error?.status);
+  const rawMessage = String(error?.message || "").trim();
+  const hasHttpStatus = Number.isFinite(status) && status > 0;
+  const networkFailure = !hasHttpStatus && /failed to fetch|fetch failed|networkerror|load failed/i.test(rawMessage);
   let message;
-  if (status === 401) {
+  if (networkFailure) {
+    message = "网络请求失败，请检查网络连接、反向代理及服务状态。";
+  } else if (status === 401) {
     message = "接口认证失败，请检查当前服务的认证与反向代理配置。";
   } else if (status === 403) {
     message = "当前请求被服务拒绝，请检查访问权限。";
   } else if (status === 404) {
     message = "接口或资源不存在，请检查 API 路径、服务版本及资源 ID。";
   } else if (status === 502 || status === 503 || status === 504) {
-    message = error?.message || "后端服务暂不可用。";
+    message = rawMessage || "后端服务暂不可用。";
   } else {
-    message = error?.message || fallback;
+    message = rawMessage || fallback;
   }
 
   const details = [];
-  if (Number.isFinite(status) && status > 0) details.push("HTTP " + status);
+  if (hasHttpStatus) details.push("HTTP " + status);
   const code = String(error?.code || "").trim();
   if (code && code !== "http_error") details.push("code=" + code);
   const requestId = String(error?.requestId || "").trim();

@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  comparableMarketSymbol,
   describeApiError,
+  finiteNumberOrNull,
+  formatCompact,
   formatPercent,
   formatPrice,
   isRetryableApiError,
@@ -26,6 +29,16 @@ test("accepts plain six digit symbols and exchange-qualified symbols", () => {
   assert.equal(normalizeSymbol(" 600519 "), "600519");
   assert.equal(normalizeSymbol("000001.sz"), "000001.SZ");
   assert.throws(() => normalizeSymbol("60051"), /格式不正确/);
+});
+
+test("shares A-share identity mapping across plain and exchange-suffixed symbols", () => {
+  assert.equal(comparableMarketSymbol("600519"), "600519.SH");
+  assert.equal(comparableMarketSymbol("600519.SH"), "600519.SH");
+  assert.equal(comparableMarketSymbol("000001"), "000001.SZ");
+  assert.equal(comparableMarketSymbol("430047"), "430047.BJ");
+  assert.equal(comparableMarketSymbol("920001"), "920001.BJ");
+  assert.equal(comparableMarketSymbol("123456"), "123456", "unknown exchange must not be guessed");
+  assert.throws(() => comparableMarketSymbol("not-a-stock"), /格式不正确/);
 });
 
 test("parses lists, removes duplicates and caps the payload size", () => {
@@ -87,6 +100,34 @@ test("formats API errors without assuming every 401 is a market API-key problem"
 });
 
 
+test("describes HTTP error matrix distinctly and turns browser fetch failures into actionable Chinese feedback", () => {
+  const cases = [
+    { status: 401, code: "auth_required", expected: /接口认证失败/ },
+    { status: 403, code: "access_denied", expected: /当前请求被服务拒绝/ },
+    { status: 404, code: "route_not_found", expected: /接口或资源不存在/ },
+    { status: 503, code: "provider_unavailable", message: "上游 Provider 暂不可用", expected: /上游 Provider 暂不可用/ }
+  ];
+
+  for (const item of cases) {
+    const message = describeApiError({
+      status: item.status,
+      code: item.code,
+      requestId: "req-" + item.status,
+      message: item.message || "server diagnostic"
+    });
+    assert.match(message, item.expected, "HTTP " + item.status + " should have a specific diagnostic");
+    assert.match(message, new RegExp("HTTP " + item.status));
+    assert.match(message, new RegExp("code=" + item.code));
+    assert.match(message, new RegExp("request_id=req-" + item.status));
+  }
+
+  const networkMessage = describeApiError(new TypeError("Failed to fetch"));
+  assert.match(networkMessage, /网络请求失败/);
+  assert.match(networkMessage, /检查网络连接、反向代理及服务状态/);
+  assert.doesNotMatch(networkMessage, /Failed to fetch/);
+  assert.equal(isRetryableApiError(new TypeError("Failed to fetch")), true);
+});
+
 test("classifies transient request failures separately from permanent client errors", () => {
   for (const error of [
     new Error("network offline"),
@@ -105,4 +146,16 @@ test("classifies transient request failures separately from permanent client err
   for (const status of [400, 401, 403, 404, 405, 413, 415]) {
     assert.equal(isRetryableApiError({ status }), false, "should stop retrying HTTP " + status);
   }
+});
+
+ 
+test("numeric formatters reject booleans and non-scalar API values", () => {
+  for (const value of [true, false, {}, [], " "]) {
+    assert.equal(finiteNumberOrNull(value), null);
+    assert.equal(formatPrice(value), "—");
+    assert.equal(formatCompact(value), "—");
+    assert.equal(formatPercent(value), "—");
+  }
+  assert.equal(finiteNumberOrNull("12.5"), 12.5);
+  assert.equal(formatPrice("12.5"), "12.50");
 });

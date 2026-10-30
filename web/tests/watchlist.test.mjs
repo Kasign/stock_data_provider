@@ -32,6 +32,26 @@ test("adds normalized stock symbols, deduplicates and keeps the most recently us
   assert.equal(duplicate.items[0].updated_at, "2026-10-23T03:00:00Z");
 });
 
+test("treats a plain A-share code and its known exchange-suffixed code as one watchlist entry", () => {
+  const storage = makeStorage();
+  const first = addWatchlistSymbol("600519", "贵州茅台", storage, "2026-10-23T01:00:00Z");
+  const duplicate = addWatchlistSymbol("600519.SH", "new alias", storage, "2026-10-23T02:00:00Z");
+
+  assert.equal(first.added, true);
+  assert.equal(duplicate.added, false);
+  assert.deepEqual(duplicate.items.map((item) => item.symbol), ["600519"]);
+  assert.equal(duplicate.items[0].name, "贵州茅台");
+  assert.equal(duplicate.items[0].updated_at, "2026-10-23T02:00:00Z");
+
+  const renamed = renameWatchlistSymbol("600519.SH", "核心观察", storage);
+  assert.equal(renamed.changed, true);
+  assert.equal(renamed.items[0].name, "核心观察");
+
+  const removed = removeWatchlistSymbol("600519.SH", storage);
+  assert.equal(removed.removed, true);
+  assert.deepEqual(readWatchlist(storage), []);
+});
+
 test("rejects malformed symbols and sanitizes optional names", () => {
   const storage = makeStorage();
   assert.equal(addWatchlistSymbol("60051", "bad", storage).valid, false);
@@ -68,17 +88,56 @@ test("renames and removes entries without retaining unrelated properties", () =>
   assert.deepEqual(readWatchlist(storage), []);
 });
 
-test("caps list size, skips malformed persisted entries and tolerates unavailable storage", () => {
+test("caps list size and applies a smaller read limit without changing the stored array", () => {
   const storage = makeStorage();
   for (let index = 0; index < MAX_WATCHLIST_ITEMS + 7; index++) {
     addWatchlistSymbol(String(index).padStart(6, "0"), "stock-" + index, storage, "2026-10-23T00:00:00Z");
   }
   assert.equal(readWatchlist(storage).length, MAX_WATCHLIST_ITEMS);
   assert.deepEqual(readWatchlist(storage, 0), []);
+  assert.equal(readWatchlistState(storage).storageValid, true);
+});
 
-  storage.setItem(WATCHLIST_KEY, JSON.stringify([{ symbol: "bad-symbol" }, { symbol: "600519.SH", name: "valid" }]));
-  assert.deepEqual(readWatchlist(storage), [{ symbol: "600519.SH", name: "valid", updated_at: "" }]);
+test("rejects partially malformed, duplicate and over-limit stored records without partial rewrites", () => {
+  const cases = [
+    [{ symbol: "bad-symbol" }, { symbol: "600519.SH", name: "valid" }],
+    [{ symbol: "600519.SH", name: "first" }, { symbol: "600519.SH", name: "duplicate" }],
+    [{ symbol: "600519", name: "plain code" }, { symbol: "600519.SH", name: "with suffix" }],
+    Array.from({ length: MAX_WATCHLIST_ITEMS + 1 }, (_, index) => ({
+      symbol: String(index).padStart(6, "0"),
+      name: "stock-" + index
+    }))
+  ];
 
+  for (const records of cases) {
+    const original = JSON.stringify(records);
+    let stored = original;
+    let writes = 0;
+    const storage = {
+      getItem() { return stored; },
+      setItem(_key, value) { writes += 1; stored = String(value); }
+    };
+
+    const state = readWatchlistState(storage);
+    assert.equal(state.storageReadable, true);
+    assert.equal(state.storageValid, false);
+    assert.equal(state.reason, "invalid");
+
+    const added = addWatchlistSymbol("688001.SH", "测试股票", storage);
+    assert.equal(added.persisted, false);
+    assert.equal(added.storageValid, false);
+    const renamed = renameWatchlistSymbol("600519.SH", "核心观察", storage);
+    assert.equal(renamed.persisted, false);
+    assert.equal(renamed.storageValid, false);
+    const removed = removeWatchlistSymbol("600519.SH", storage);
+    assert.equal(removed.persisted, false);
+    assert.equal(removed.storageValid, false);
+    assert.equal(writes, 0, "invalid or truncated data must not be rewritten as a partial list");
+    assert.equal(stored, original, "the malformed original bytes must remain untouched");
+  }
+});
+
+test("tolerates unavailable storage without attempting writes", () => {
   let writes = 0;
   const brokenStorage = {
     getItem() { throw new Error("storage disabled"); },
@@ -123,6 +182,29 @@ test("reports persistence failures without claiming browser data was saved", () 
   assert.equal(removed.removed, true);
   assert.equal(removed.persisted, false);
   assert.deepEqual(removed.items.map((item) => item.symbol), []);
+});
+
+test("detects watchlist writes that return successfully but do not persist the requested records", () => {
+  const seed = JSON.stringify([{ symbol: "600519.SH", name: "贵州茅台", updated_at: "2026-10-20T00:00:00Z" }]);
+  const storage = {
+    getItem() { return seed; },
+    // Simulate a storage adapter that silently ignores writes.
+    setItem() {}
+  };
+
+  const added = addWatchlistSymbol("000001.SZ", "平安银行", storage, "2026-10-23T07:00:00Z");
+  assert.equal(added.valid, true);
+  assert.equal(added.persisted, false);
+  assert.deepEqual(added.items.map((item) => item.symbol), ["000001.SZ", "600519.SH"]);
+
+  const renamed = renameWatchlistSymbol("600519.SH", "核心观察", storage, "2026-10-23T08:00:00Z");
+  assert.equal(renamed.valid, true);
+  assert.equal(renamed.persisted, false);
+
+  const removed = removeWatchlistSymbol("600519.SH", storage);
+  assert.equal(removed.valid, true);
+  assert.equal(removed.removed, true);
+  assert.equal(removed.persisted, false);
 });
 
 test("does not overwrite malformed stored data when reading or parsing fails", () => {

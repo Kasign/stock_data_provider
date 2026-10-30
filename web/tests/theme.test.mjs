@@ -28,20 +28,29 @@ test("theme accepts only the supported light and dark values", () => {
 test("theme preference reads and persists without involving API settings", () => {
   const storage = memoryStorage();
   assert.equal(readTheme(storage), "dark");
-  assert.equal(persistTheme("light", storage), "light");
+  assert.deepEqual(persistTheme("light", storage), { theme: "light", persisted: true });
   assert.equal(readTheme(storage), "light");
   assert.equal(storage.getItem(THEME_STORAGE_KEY), "light");
   storage.setItem(THEME_STORAGE_KEY, "not-a-theme");
   assert.equal(readTheme(storage), "dark");
 });
 
-test("theme remains usable if browser storage throws", () => {
+test("theme remains usable if browser storage throws and reports the failed persistence", () => {
   const storage = {
     getItem() { throw new Error("storage denied"); },
     setItem() { throw new Error("storage full"); }
   };
   assert.equal(readTheme(storage), "dark");
-  assert.equal(persistTheme("light", storage), "light");
+  assert.deepEqual(persistTheme("light", storage), { theme: "light", persisted: false });
+});
+
+test("theme detects storage adapters that silently ignore writes", () => {
+  const storage = {
+    getItem() { return null; },
+    setItem() {},
+    removeItem() {}
+  };
+  assert.deepEqual(persistTheme("light", storage), { theme: "light", persisted: false });
 });
 
 test("applyTheme changes document theme metadata without a browser dependency", () => {

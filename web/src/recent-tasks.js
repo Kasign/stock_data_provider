@@ -39,12 +39,19 @@ export function readRecentTasksState(storage, limit = MAX_RECENT_TASKS) {
 
   let malformedRecord = false;
   const records = [];
+  const seenReferences = new Set();
   for (const item of parsed) {
     const normalized = normalizeRecord(item);
     if (!normalized) {
       malformedRecord = true;
       continue;
     }
+    const identity = JSON.stringify([normalized.task_id, normalized.analysis_base]);
+    if (seenReferences.has(identity)) {
+      malformedRecord = true;
+      continue;
+    }
+    seenReferences.add(identity);
     records.push(normalized);
   }
 
@@ -72,10 +79,24 @@ export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
 
   try {
     storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
+    const persistedState = readRecentTasksState(storage, limit);
+    if (!persistedState.storageReadable || !persistedState.storageValid) return currentState.items;
+    const persisted = persistedState.items.some((item) =>
+      item.task_id === normalized.task_id &&
+      item.run_id === normalized.run_id &&
+      item.created_at === normalized.created_at &&
+      item.task_type === normalized.task_type &&
+      item.status === normalized.status &&
+      item.analysis_base === normalized.analysis_base &&
+      item.updated_at === normalized.updated_at &&
+      JSON.stringify(item.symbols) === JSON.stringify(normalized.symbols)
+    );
+    // 只有回读确认成功后，才把新增记录交给界面展示为最近历史。
+    return persisted ? persistedState.items : currentState.items;
   } catch {
-    // 最近任务历史是可选能力；写入失败时当前任务仍可继续，但不声称已持久化。
+    // 最近任务历史是可选能力；写入失败时不把未持久化记录作为历史返回。
+    return currentState.items;
   }
-  return records;
 }
 
 export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, analysisBase = "") {
@@ -89,22 +110,33 @@ export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, anal
   );
   try {
     storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));
+    const persistedState = readRecentTasksState(storage, limit);
+    if (!persistedState.storageReadable || !persistedState.storageValid) return currentState.items;
+    if (JSON.stringify(persistedState.items) !== JSON.stringify(records)) return currentState.items;
+    return persistedState.items;
   } catch {
-    // 保持当前页面可用；存储异常状态会由界面明确提示。
+    // 删除未成功持久化时保留原列表，避免界面误报已删除。
+    return currentState.items;
   }
-  return records;
 }
 
 export function clearRecentTasks(storage) {
   // 只有用户显式确认清空时才允许删除损坏的本地历史。
+  const currentState = readRecentTasksState(storage);
   try {
     storage.removeItem(RECENT_TASKS_KEY);
   } catch {
     try {
       storage.setItem(RECENT_TASKS_KEY, "[]");
     } catch {
-      // Browser storage may be disabled; clearing is best-effort.
+      // 浏览器存储不可写时保留原状态，避免界面误报已清空。
+      return currentState.items;
     }
+  }
+
+  const clearedState = readRecentTasksState(storage);
+  if (!clearedState.storageReadable || !clearedState.storageValid || clearedState.items.length > 0) {
+    return currentState.items;
   }
   return [];
 }
