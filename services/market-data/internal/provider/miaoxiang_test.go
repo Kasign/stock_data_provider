@@ -184,7 +184,6 @@ func TestNewMiaoXiangRejectsPlaceholderKeyAndInvalidEndpoint(t *testing.T) {
 	}
 }
 
-
 func TestMiaoXiangCapitalFlowRejectsInvalidObservationDates(t *testing.T) {
 	cases := []struct {
 		name  string
