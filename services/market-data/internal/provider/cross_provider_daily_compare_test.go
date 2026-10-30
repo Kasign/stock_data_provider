@@ -86,7 +86,6 @@ func TestCompareCrossProviderDailyBarsDetectsFieldMismatch(t *testing.T) {
 	}
 }
 
-
 func TestCompareCrossProviderDailyBarsRejectsInvalidMarketValues(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -113,7 +112,6 @@ func TestCompareCrossProviderDailyBarsRejectsInvalidMarketValues(t *testing.T) {
 		})
 	}
 }
-
 
 func TestCompareCrossProviderDailyBarsRejectsEmptyAndInvalidDateSets(t *testing.T) {
 	left := crossProviderSnapshot("sina", "none", "valid")

@@ -573,3 +573,10 @@
 - 新增空交易日集合、非法日期、重复日期、NaN/Inf OHLC 和负金额边界测试。
 - 对应提交：`35d442fa1049011219d38f2932bc3dcb611d1bca`（比较器首次接入与任务清单）；本次补充提交 SHA 以远端分支最新 HEAD 为准。
 - 本次新增代码尚未触发或完成新 SHA 的 CI；不记录为测试通过。下一项代码工作进入统一诊断 `checks` 的分层设计与实现前置梳理。
+
+
+### 最新提交检查结果补记（2026-10-30）
+
+- 中间提交 `35d442fa1049011219d38f2932bc3dcb611d1bca` 的 Go suite 失败原因已定位：仅 `cross_provider_daily_compare_test.go` 存在多余空行，触发 gofmt 检查；Docker market-data 镜像构建在同一 gofmt 前置检查处终止，并非 Dockerfile 或业务构建错误。
+- 随后的 `7e3b6c2c8cb148106d4f5f98fa4184d0c52e795b` 已排队执行全量工作流；该 SHA 结果以 Actions 实际结论为准。
+- 本次修复仅规范 Go 格式，不调整业务逻辑；修复提交 SHA 以分支最新 HEAD 为准。

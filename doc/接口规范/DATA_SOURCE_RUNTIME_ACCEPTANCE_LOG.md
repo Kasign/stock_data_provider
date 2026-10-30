@@ -272,3 +272,10 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 - 新增空日期集合、非法日历日期、重复日期、NaN/Inf OHLC、负成交量、负成交额回归用例。
 - 真实 600036.SH 夹具的两侧来源级 `volume_unit` 显式记录为 shares；夹具转换函数读取该声明，不在测试代码中自行假设。
 - 以上是代码和静态夹具契约，不代表新的 Provider 在线验收。新 SHA 的 CI 尚未确认。
+
+
+## 15. Go 格式检查问题与修复记录（2026-10-30）
+
+- `35d442fa1049011219d38f2932bc3dcb611d1bca` 的 Go suite 中，market-data Job 的 gofmt 检查发现 `cross_provider_daily_compare_test.go` 函数间存在多余空行。
+- market-data Docker 镜像构建执行相同 gofmt 前置检查，因此同步失败；并非镜像编译或运行时问题。
+- 已移除多余空行，后续以修复 SHA 的 Go test/race/vet 和 Docker 构建结果作为验收依据。
