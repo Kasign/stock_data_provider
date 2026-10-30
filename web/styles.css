@@ -4882,3 +4882,15 @@ button:disabled {
 .research-note-meta,.research-note-tags{color:var(--text-dim);font-size:11px}
 .research-note-card-actions{display:flex;gap:7px;flex-wrap:wrap}
 @media(max-width:640px){.research-note-form,.research-note-toolbar{grid-template-columns:1fr}.research-note-form .field:nth-child(4){grid-column:auto}.research-note-card header{flex-direction:column}}
+
+
+/* 本地告警规则草稿；不代表后台监控能力 */
+.local-alert-drafts{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.local-alert-draft-list{display:grid;gap:9px}
+.local-alert-draft-card{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--panel-raised)}
+.local-alert-draft-card h4{margin:0 0 5px;font-size:13px}
+.local-alert-draft-card p{margin:3px 0;color:var(--text-dim);font-size:11px;line-height:1.6}
+.local-alert-draft-actions{display:flex;gap:6px;flex-wrap:wrap}
+.local-alert-draft-actions button{white-space:nowrap}
+#local-alert-draft-feedback[data-state="error"]{color:var(--danger)}
+@media(max-width:640px){.local-alert-draft-card{flex-direction:column}.local-alert-draft-actions{width:100%}.local-alert-draft-actions button{flex:1}}
