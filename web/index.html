@@ -773,7 +773,17 @@
                     <button class="settings-theme-choice" type="button" data-theme-value="dark" aria-pressed="false"><span class="settings-theme-preview is-dark" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>深色主题</strong><small>适合长时间查看行情与图表</small></span><span class="settings-theme-check">✓</span></button>
                     <button class="settings-theme-choice" type="button" data-theme-value="light" aria-pressed="false"><span class="settings-theme-preview is-light" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>浅色主题</strong><small>适合明亮环境与日间使用</small></span><span class="settings-theme-check">✓</span></button>
                   </div>
-                  <p class="field-hint">当前仅提供已实现的主题设置。字号、紧凑密度、图表动画和默认首页尚未形成独立持久化配置，本页不会显示无效开关。</p>
+                  <p class="field-hint">主题在当前浏览器立即生效。字号、紧凑密度、图表动画和默认首页尚未形成独立持久化配置，本页不会显示无效开关。</p>
+                </div>
+                <div class="panel settings-config-panel">
+                  <div class="settings-group-heading"><div><strong>自选股展示偏好</strong><p>控制自选列表的默认排序；页面工具栏仍可临时切换排序字段。</p></div><span class="settings-config-scope">浏览器本地</span></div>
+                  <div class="settings-field-grid">
+                    <label class="field"><span>默认排序字段</span><select id="settings-watchlist-sort"><option value="updated">最近更新</option><option value="symbol">股票代码</option><option value="name">名称</option></select></label>
+                    <label class="field"><span>默认排序方向</span><select id="settings-watchlist-direction"><option value="desc">降序</option><option value="asc">升序</option></select></label>
+                  </div>
+                  <div class="settings-connection-actions"><button class="button button-secondary" id="reset-local-preferences" type="button">恢复本地偏好默认值</button></div>
+                  <p class="settings-inline-status" id="local-preferences-feedback" role="status" aria-live="polite">自选股排序偏好保存在当前浏览器，不影响自选股内容。</p>
+                  <p class="field-hint">恢复默认值只重置自选股排序字段与方向，不会清除主题、API Key、连接路径、自选股或最近任务引用。</p>
                 </div>
               </section>
 
