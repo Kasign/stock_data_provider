@@ -98,3 +98,26 @@
 - Go/Python 业务字段级真实样本差分与跨市场状态黄金样例集。当前契约回归通过不等于全量字段差分完成。
 
 后续推进应优先补齐真实样本差分、Tushare 权限请求和生产部署验收；Eastmoney 502 作为外部源波动继续记录，不应通过放宽错误校验来消除失败。
+
+
+## 八、真实黄金样例首批结果（2026-10-30）
+
+已将本轮真实公网请求结果固化到：
+- `doc/国内A股数据层黄金样例对账记录.md`
+- `services/market-data/internal/provider/testdata/live_market_golden_20261030.json`
+- 回归测试：`TestLiveGoldenCrossProviderQuoteAndDailyBarsParity`
+
+首批样例：
+- 贵州茅台（600519.SH）新浪/Tencent 实时行情：价格、涨跌幅、OHLC、昨收、成交额一致；成交量相差 29 股；保留新浪 valid、腾讯 degraded。
+- 招商银行（600036.SH）2026-10-27 至 2026-10-29 日 K：三个交易日 OHLC 一致，成交量差异不超过 50 股；两个 Provider 的成交额都保持 null/unknown/degraded。
+- 样例来源为真实 Provider probe 的 Go 归一化结果，记录 Actions Run ID 和源提交；不属于 Python/Go 双侧等价证明。
+
+本轮 CI（源提交 `986ed9cabf7711884a288efb20044632b624d685`）结果：
+- Go 根模块、go-core、market-data 的 test/race/vet：通过。
+- MariaDB 11.4 PIT 持久化集成：通过。
+- Go/Python 质量契约回归：通过。
+- Compose、部署脚本语法、两个 Go 镜像构建：通过。
+- WebUI 检查：通过。
+- 真实 Provider 探测：诊断任务报告 5 项失败（Eastmoney HTTP 502/备用请求失败），不阻断普通 CI；其他返回项仅代表当次成功。Hithink 可选探测未在本轮启用。
+
+下一批黄金样例按优先级覆盖：北交所、创业板、科创板、停牌/新股、除权日与非交易日；之后需要取得旧 Python manager 的相同证券/日期输出，才能进行 Go/Python 字段差分。
