@@ -5010,7 +5010,7 @@ document.querySelectorAll("[data-theme-value]").forEach((button) => {
 document.querySelectorAll(".nav-link, .workspace-tab").forEach((button) => {
   button.addEventListener("click", () => {
     setView(button.dataset.view);
-    setMobileNavigationOpen(false);
+    setMobileNavigationOpen(false, { restoreFocus: true });
   });
 });
 document.querySelectorAll("[data-open-view]").forEach((button) => {
