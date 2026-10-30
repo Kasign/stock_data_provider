@@ -204,7 +204,6 @@ func TestRecordProviderProbeCoverageAcceptsOnlyValidRatios(t *testing.T) {
 	}
 }
 
-
 func TestRecordProviderProbeEvidenceOnlyClassifiesAshareMarkets(t *testing.T) {
 	for _, test := range []struct {
 		symbol string
