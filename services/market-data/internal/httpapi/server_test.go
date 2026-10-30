@@ -153,7 +153,7 @@ func (httpMarketCapitalFlowFake) FetchMarketCapitalFlow(_ context.Context, start
 	netAmount := 123456.0
 	return &model.MarketCapitalFlowSnapshot{
 		StartDate: startDate, EndDate: endDate, Total: 1,
-		Items: []model.MarketCapitalFlowItem{{TradeDate: endDate, NetAmountCNY: &netAmount}},
+		Items:  []model.MarketCapitalFlowItem{{TradeDate: endDate, NetAmountCNY: &netAmount}},
 		Source: "eastmoney", SourceVersion: "test-market-capital-flow-v1",
 		FetchedAt: now, QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
