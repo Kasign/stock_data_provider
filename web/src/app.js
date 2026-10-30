@@ -37,9 +37,9 @@ import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
 import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
-import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
+import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, removeWatchlistSymbols, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { sortWatchlistItems } from "./watchlist-sort.js";
-import { assignWatchlistGroup, createWatchlistGroup, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP } from "./watchlist-groups.js";
+import { assignWatchlistGroup, assignWatchlistGroups, createWatchlistGroup, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP } from "./watchlist-groups.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
   comparableMarketSymbol,
@@ -813,7 +813,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
   const visibleItems = items.filter((record) => {
     const matchesKeyword = !keyword || String(record.symbol || "").toLocaleLowerCase().includes(keyword)
       || String(record.name || "").toLocaleLowerCase().includes(keyword);
-    return matchesKeyword && (selectedGroup === "all" || (groupState.assignments[record.symbol] || DEFAULT_WATCHLIST_GROUP) === selectedGroup);
+    return matchesKeyword && (selectedGroup === "all" || (groupState.assignments[comparableMarketSymbol(record.symbol)] || groupState.assignments[record.symbol] || DEFAULT_WATCHLIST_GROUP) === selectedGroup);
   });
   const sortedItems = sortWatchlistItems(visibleItems, {
     mode: sortMode,
@@ -843,6 +843,11 @@ function renderWatchlist(records, storageReadable, storageValid) {
     row.className = "watchlist-item";
     const main = document.createElement("div");
     main.className = "watchlist-item-main";
+    const selectionLabel = document.createElement("label");
+    selectionLabel.className = "watchlist-select-label";
+    const selection = document.createElement("input");
+    selection.type = "checkbox"; selection.value = record.symbol; selection.dataset.watchlistSelectSymbol = "true";
+    selection.setAttribute("aria-label", "选择 " + record.symbol); selectionLabel.append(selection); main.append(selectionLabel);
 
     const symbol = document.createElement("strong");
     symbol.className = "watchlist-symbol";
@@ -1034,7 +1039,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
       const option = document.createElement("option");
       option.value = group; option.textContent = group; groupSelect.append(option);
     });
-    groupSelect.value = groupState.assignments[record.symbol] || DEFAULT_WATCHLIST_GROUP;
+    groupSelect.value = groupState.assignments[comparableMarketSymbol(record.symbol)] || groupState.assignments[record.symbol] || DEFAULT_WATCHLIST_GROUP;
     actions.append(groupSelect);
     row.append(main, actions);
     root.append(row);
@@ -1209,6 +1214,11 @@ function addCurrentSymbolToWatchlist() {
     setWatchlistFeedback("浏览器本地存储不可用，无法保存自选股。", "error");
   }
 }
+
+function selectedWatchlistSymbols() { return [...document.querySelectorAll("#watchlist-list [data-watchlist-select-symbol]:checked")].map((input) => input.value); }
+function updateWatchlistBulkControls() { const count = selectedWatchlistSymbols().length; setText("#watchlist-bulk-count", "已选择 " + count + " 只"); ["#watchlist-bulk-remove", "#watchlist-bulk-assign"].forEach((selector) => { const button = $(selector); if (button) button.disabled = count === 0; }); }
+function handleWatchlistBulkRemove() { const symbols = selectedWatchlistSymbols(); if (!symbols.length) return; const result = removeWatchlistSymbols(symbols, localStorage); if (!result.storageReadable || !result.storageValid || !result.persisted) { setWatchlistFeedback("批量移除未能确认保存；请检查浏览器存储状态，未确认写入任何部分结果。", "error"); return; } renderWatchlist(result.items, true, true); setWatchlistFeedback("已批量移除 " + result.removed.length + " 只自选股。"); }
+function handleWatchlistBulkAssign() { const symbols = selectedWatchlistSymbols(), group = $("#watchlist-bulk-group").value; if (!symbols.length) return; const result = assignWatchlistGroups(symbols, group, safeWatchlistGroupStorage()); if (!result.changed || !result.persisted) { setWatchlistFeedback("批量调整分组失败；请检查分组存储状态。", "error"); return; } renderWatchlist(); setWatchlistFeedback("已将 " + result.assignedCount + " 只股票调整至“" + group + "”。"); }
 
 function handleWatchlistAction(event) {
   const button = event.target.closest("button[data-watchlist-action]");
@@ -4981,6 +4991,8 @@ function syncWatchlistGroupControls() {
   select.replaceChildren();
   const all = document.createElement("option"); all.value = "all"; all.textContent = "全部分组"; select.append(all);
   result.groups.forEach((group) => { const option = document.createElement("option"); option.value = group; option.textContent = group; select.append(option); });
+  const bulkGroup = $("#watchlist-bulk-group");
+  if (bulkGroup) { const selected = bulkGroup.value; bulkGroup.replaceChildren(); result.groups.forEach((group) => { const option = document.createElement("option"); option.value = group; option.textContent = group; bulkGroup.append(option); }); bulkGroup.value = result.groups.includes(selected) ? selected : DEFAULT_WATCHLIST_GROUP; bulkGroup.disabled = !result.valid; }
   select.value = result.groups.includes(previous) ? previous : "all";
   $("#watchlist-group-remove").disabled = select.value === "all" || select.value === DEFAULT_WATCHLIST_GROUP;
   if (!result.valid) setWatchlistFeedback("自选分组存储不可用或格式异常；分组修改已暂停。", "error");
@@ -5501,7 +5513,11 @@ document.querySelectorAll("[data-ma-period]").forEach((control)=>{
 $("#analyze-quote-button").addEventListener("click", startQuoteAnalysis);
 $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchlist);
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
+$("#watchlist-select-visible").addEventListener("change", (event) => { document.querySelectorAll("#watchlist-list [data-watchlist-select-symbol]").forEach((input) => { input.checked = event.target.checked; }); updateWatchlistBulkControls(); });
+$("#watchlist-bulk-remove").addEventListener("click", handleWatchlistBulkRemove);
+$("#watchlist-bulk-assign").addEventListener("click", handleWatchlistBulkAssign);
 $("#watchlist-list").addEventListener("change", (event) => {
+  if (event.target.closest("[data-watchlist-select-symbol]")) { updateWatchlistBulkControls(); return; }
   const select = event.target.closest("select[data-watchlist-group-symbol]");
   if (!select) return;
   const result = assignWatchlistGroup(select.dataset.watchlistGroupSymbol, select.value, safeWatchlistGroupStorage());

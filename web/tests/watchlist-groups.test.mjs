@@ -27,3 +27,20 @@ test("浏览器禁止访问 localStorage 时安全降级",()=>{
  assert.equal(result.valid,false); assert.equal(result.readable,false);
  assert.equal(createWatchlistGroup("测试",blocked).reason,"invalid-storage");
 });
+
+test("分组归属统一使用证券标准身份，兼容无后缀代码", () => {
+ const db=storage(); createWatchlistGroup("核心观察",db);
+ assert.equal(assignWatchlistGroup("600519","核心观察",db).persisted,true);
+ assert.equal(readWatchlistGroups(db).assignments["600519.SH"],"核心观察");
+ assert.equal(assignWatchlistGroup("600519.SH",DEFAULT_WATCHLIST_GROUP,db).persisted,true);
+ assert.equal(readWatchlistGroups(db).assignments["600519.SH"],undefined);
+});
+test("批量分组调整一次性保存并支持回到未分组", async () => {
+ const { assignWatchlistGroups } = await import("../src/watchlist-groups.js");
+ const db=storage(); createWatchlistGroup("重点观察",db);
+ const result=assignWatchlistGroups(["600519","000858.SZ","600519.SH"],"重点观察",db);
+ assert.equal(result.persisted,true); assert.equal(result.assignedCount,2);
+ assert.equal(readWatchlistGroups(db).assignments["600519.SH"],"重点观察");
+ assert.equal(assignWatchlistGroups(["600519.SH"],DEFAULT_WATCHLIST_GROUP,db).persisted,true);
+ assert.equal(readWatchlistGroups(db).assignments["600519.SH"],undefined);
+});

@@ -254,3 +254,15 @@ test("rejects blank or non-array stored content instead of treating it as an emp
     assert.equal(writes, 0, "invalid stored content must never be replaced by a partial list");
   }
 });
+
+test("批量移除按证券身份去重并一次性持久化", async () => {
+ const { removeWatchlistSymbols } = await import("../src/watchlist.js");
+ const storage = makeStorage();
+ addWatchlistSymbol("600519", "贵州茅台", storage);
+ addWatchlistSymbol("000858.SZ", "五粮液", storage);
+ addWatchlistSymbol("000001.SZ", "平安银行", storage);
+ const result = removeWatchlistSymbols(["600519.SH", "000858", "600519"], storage);
+ assert.equal(result.persisted, true);
+ assert.deepEqual(result.removed.sort(), ["000858.SZ", "600519"]);
+ assert.deepEqual(readWatchlist(storage).map((item) => item.symbol), ["000001.SZ"]);
+});

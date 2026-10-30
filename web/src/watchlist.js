@@ -205,3 +205,13 @@ export function importWatchlistSymbols(records, storage, updatedAt = new Date().
   const persisted = writeRecords(storage, items);
   return { items, imported, skipped: source.length - imported.length, persisted, storageReadable: true, storageValid: true };
 }
+
+export function removeWatchlistSymbols(symbols, storage) {
+  const currentState = readWatchlistState(storage);
+  if (!currentState.storageReadable || !currentState.storageValid) return { items: currentState.items, removed: [], persisted: false, storageReadable: currentState.storageReadable, storageValid: currentState.storageValid };
+  const identities = new Set((Array.isArray(symbols) ? symbols : []).map((symbol) => String(symbol ?? "").trim().toUpperCase()).filter((symbol) => SYMBOL_PATTERN.test(symbol)).map(comparableMarketSymbol));
+  const removed = currentState.items.filter((item) => identities.has(comparableMarketSymbol(item.symbol))).map((item) => item.symbol);
+  if (!removed.length) return { items: currentState.items, removed, persisted: true, storageReadable: true, storageValid: true };
+  const items = currentState.items.filter((item) => !identities.has(comparableMarketSymbol(item.symbol)));
+  return { items, removed, persisted: writeRecords(storage, items), storageReadable: true, storageValid: true };
+}

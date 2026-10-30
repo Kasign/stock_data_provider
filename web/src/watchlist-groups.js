@@ -1,6 +1,7 @@
 export const WATCHLIST_GROUPS_KEY = "stock-provider-webui.watchlist-groups.v1";
 export const DEFAULT_WATCHLIST_GROUP = "未分组";
 export const MAX_WATCHLIST_GROUPS = 12;
+import { comparableMarketSymbol } from "./format.js";
 function cleanName(value) {
   return [...String(value ?? "")].filter((char) => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127).join("").trim().slice(0, 20).trim();
 }
@@ -16,7 +17,9 @@ export function readWatchlistGroups(storage) {
     const assignments = {};
     for (const [symbol, group] of Object.entries(data.assignments)) {
       if (!/^[0-9]{6}(\.(SH|SZ|BJ))?$/.test(symbol) || !groups.includes(group)) throw new Error("invalid");
-      assignments[symbol] = group;
+      const identity = comparableMarketSymbol(symbol);
+      if (assignments[identity] && assignments[identity] !== group) throw new Error("invalid");
+      assignments[identity] = group;
     }
     return { groups, assignments, valid: true, readable: true };
   } catch (error) { return { groups: [DEFAULT_WATCHLIST_GROUP], assignments: {}, valid: false, readable: error?.message === "invalid" }; }
@@ -37,8 +40,9 @@ export function createWatchlistGroup(name, storage) {
 export function assignWatchlistGroup(symbol, group, storage) {
   const state = readWatchlistGroups(storage), code = String(symbol ?? "").trim().toUpperCase();
   if (!state.valid || !/^[0-9]{6}(\.(SH|SZ|BJ))?$/.test(code) || !state.groups.includes(group)) return { ...state, changed: false, persisted: false };
+  const identity = comparableMarketSymbol(code);
   const assignments = { ...state.assignments };
-  if (group === DEFAULT_WATCHLIST_GROUP) delete assignments[code]; else assignments[code] = group;
+  if (group === DEFAULT_WATCHLIST_GROUP) delete assignments[identity]; else assignments[identity] = group;
   const next = { groups: state.groups, assignments };
   return { ...next, valid: true, readable: true, changed: true, persisted: save(next, storage) };
 }
@@ -48,4 +52,14 @@ export function removeWatchlistGroup(name, storage) {
   const assignments = Object.fromEntries(Object.entries(state.assignments).filter(([, group]) => group !== name));
   const next = { groups: state.groups.filter((group) => group !== name), assignments };
   return { ...next, valid: true, readable: true, changed: true, persisted: save(next, storage) };
+}
+export function assignWatchlistGroups(symbols, group, storage) {
+  const state = readWatchlistGroups(storage);
+  if (!state.valid || !state.groups.includes(group)) return { ...state, changed: false, persisted: false, reason: "invalid-state-or-group" };
+  const identities = [...new Set((Array.isArray(symbols) ? symbols : []).map((symbol) => String(symbol ?? "").trim().toUpperCase()).filter((symbol) => /^[0-9]{6}(\.(SH|SZ|BJ))?$/.test(symbol)).map(comparableMarketSymbol))];
+  if (!identities.length) return { ...state, changed: false, persisted: false, reason: "empty-selection" };
+  const assignments = { ...state.assignments };
+  identities.forEach((identity) => { if (group === DEFAULT_WATCHLIST_GROUP) delete assignments[identity]; else assignments[identity] = group; });
+  const next = { groups: state.groups, assignments };
+  return { ...next, valid: true, readable: true, changed: true, persisted: save(next, storage), assignedCount: identities.length };
 }
