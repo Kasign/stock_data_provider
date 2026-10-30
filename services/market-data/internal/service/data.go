@@ -124,7 +124,9 @@ func (s *DataService) Providers() []provider.NamedProvider {
 func (s *DataService) ProviderDiagnostics() []map[string]any {
 	capabilities := make(map[string]map[string]bool)
 	for _, p := range s.quoteProviders {
-		if capabilities[p.Name()] == nil { capabilities[p.Name()] = make(map[string]bool) }
+		if capabilities[p.Name()] == nil {
+			capabilities[p.Name()] = make(map[string]bool)
+		}
 		capabilities[p.Name()]["quote"] = true
 	}
 	for _, p := range s.barProviders {
@@ -135,7 +137,9 @@ func (s *DataService) ProviderDiagnostics() []map[string]any {
 	for name, caps := range capabilities {
 		item := map[string]any{"provider": name, "capabilities": make([]CircuitDiagnostic, 0, len(caps))}
 		keys := make(map[string]string, len(caps))
-		for capability := range caps { keys[name+":"+capability] = capability }
+		for capability := range caps {
+			keys[name+":"+capability] = capability
+		}
 		item["capabilities"] = s.breaker.Diagnostics(keys)
 		result = append(result, item)
 	}

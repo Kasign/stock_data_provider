@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sync"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
@@ -215,7 +215,6 @@ func retryBars(ctx context.Context, retries int, fetch func(context.Context) ([]
 	return bars, nil
 }
 
-
 // Diagnostics 返回指定 Provider 能力的熔断状态快照，不触发任何 Provider 请求。
 func (b *circuitBreaker) Diagnostics(keys map[string]string) []CircuitDiagnostic {
 	b.mu.Lock()
@@ -229,8 +228,14 @@ func (b *circuitBreaker) Diagnostics(keys map[string]string) []CircuitDiagnostic
 			item.ConsecutiveFails = state.failures
 			item.TotalSuccess = state.totalSuccess
 			item.TotalFailure = state.totalFailure
-			if !state.lastSuccessAt.IsZero() { value := state.lastSuccessAt; item.LastSuccessAt = &value }
-			if !state.lastFailureAt.IsZero() { value := state.lastFailureAt; item.LastFailureAt = &value }
+			if !state.lastSuccessAt.IsZero() {
+				value := state.lastSuccessAt
+				item.LastSuccessAt = &value
+			}
+			if !state.lastFailureAt.IsZero() {
+				value := state.lastFailureAt
+				item.LastFailureAt = &value
+			}
 			if !state.openUntil.IsZero() {
 				if now.Before(state.openUntil) {
 					item.Status = "open"

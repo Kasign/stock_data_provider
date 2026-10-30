@@ -49,14 +49,16 @@ func TestCircuitBreakerDiagnosticsKeepsCapabilitiesIndependent(t *testing.T) {
 	b := newCircuitBreaker(1, time.Minute)
 	b.Failure("provider:quote")
 	got := b.Diagnostics(map[string]string{
-		"provider:quote": "quote",
+		"provider:quote":      "quote",
 		"provider:daily_bars": "daily_bars",
 	})
 	if len(got) != 2 {
 		t.Fatalf("diagnostics count = %d", len(got))
 	}
 	states := map[string]string{}
-	for _, item := range got { states[item.Capability] = item.Status }
+	for _, item := range got {
+		states[item.Capability] = item.Status
+	}
 	if states["quote"] != "open" || states["daily_bars"] != "not_observed" {
 		t.Fatalf("capability states = %#v", states)
 	}
