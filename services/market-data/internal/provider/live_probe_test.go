@@ -447,6 +447,15 @@ func TestLiveProbeDragonTigerDateUsesLastTradingDay(t *testing.T) {
 	}
 }
 
+func hasLiveProbeQualityReason(reasons []string, target string) bool {
+	for _, reason := range reasons {
+		if reason == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestLiveProviderProbe(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_PROVIDER_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_PROVIDER_TESTS=1 to call real public provider endpoints")
@@ -553,8 +562,11 @@ func TestLiveProviderProbe(t *testing.T) {
 		case item.Symbol != symbol || item.Source != providerName || strings.TrimSpace(item.Name) == "":
 			result.Status, result.Error, result.StockBasic = "invalid", "stock-basic identity/name contract mismatch", item
 			failures = append(failures, providerName+" stock_basic: contract mismatch")
+		case item.QualityStatus == model.QualityDegraded && hasLiveProbeQualityReason(item.QualityReasons, "provider_snapshot_timestamp_not_exposed"):
+			// 静态身份字段没有源端快照时间时应保留 degraded；这不是身份数据无效。
+			result.Status, result.StockBasic = "returned_degraded", item
 		case item.QualityStatus != model.QualityValid:
-			result.Status, result.Error, result.StockBasic = "invalid", "stock-basic quality must be valid for this identity endpoint", item
+			result.Status, result.Error, result.StockBasic = "invalid", "stock-basic quality status is not acceptable for the identity contract", item
 			failures = append(failures, providerName+" stock_basic: invalid quality")
 		default:
 			result.Status, result.StockBasic = "returned", item
