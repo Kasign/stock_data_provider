@@ -3898,7 +3898,9 @@ async function createTask(event) {
   state.taskEventsUnavailable = false;
   state.taskEventsError = "";
   state.selectedTaskEventSequence = null;
+  state.expandedTaskEventSequences.clear();
   $("#task-result-section").hidden = true;
+  $("#run-flow-result-empty")?.removeAttribute("hidden");
   $("#task-result-metrics").replaceChildren();
   $("#task-result-structured").replaceChildren();
   $("#task-result-warnings").replaceChildren();
@@ -4141,6 +4143,7 @@ function activateTaskReference(record) {
   state.taskEventsUnavailable = false;
   state.taskEventsError = "";
   state.selectedTaskEventSequence = null;
+  state.expandedTaskEventSequences.clear();
   try {
     $("#task-symbols").value = state.taskSymbols.join(", ") || "600519";
     if (["post_market_scan", "watchlist_scan", "position_review"].includes(state.taskType)) {
@@ -4149,6 +4152,7 @@ function activateTaskReference(record) {
     $("#task-empty").hidden = true;
     $("#task-detail").hidden = false;
     $("#task-result-section").hidden = true;
+  $("#run-flow-result-empty")?.removeAttribute("hidden");
     $("#task-result-metrics").replaceChildren();
     $("#task-result-structured").replaceChildren();
     $("#task-result-warnings").replaceChildren();
@@ -4422,10 +4426,12 @@ function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.taskEventsUnavailable = false;
   state.taskEventsError = "";
   state.selectedTaskEventSequence = null;
+  state.expandedTaskEventSequences.clear();
   safelyUpdateTaskContextUi("清理任务详情失败：", () => {
     $("#task-empty").hidden = false;
     $("#task-detail").hidden = true;
     $("#task-result-section").hidden = true;
+  $("#run-flow-result-empty")?.removeAttribute("hidden");
     $("#task-result-metrics").replaceChildren();
     $("#task-result-structured").replaceChildren();
     $("#task-result-warnings").replaceChildren();
