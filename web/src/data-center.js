@@ -90,6 +90,21 @@ function renderProviderCapabilities(payload) {
   root.replaceChildren();
   const sources = Array.isArray(payload?.sources)
     ? payload.sources.filter((source) => source && typeof source === "object") : [];
+  const hithink = sources.find((source) => String(source.name || "").trim().toLowerCase() === "hithink");
+  const hithinkStatus = $("#data-center-hithink-status");
+  const hithinkDetail = $("#data-center-hithink-detail");
+  if (hithinkStatus) {
+    hithinkStatus.className = "availability-pill " + (hithink?.enabled ? "is-local" : "is-readonly");
+    hithinkStatus.textContent = hithink ? (hithink.enabled ? "已注册 · 已启用" : "已注册 · 已禁用") : "未在注册清单中";
+  }
+  if (hithinkDetail) {
+    const capabilities = hithink ? CAPABILITIES.filter(([key]) => hithink[key] === true).map(([, label]) => label) : [];
+    hithinkDetail.textContent = hithink
+      ? (hithink.enabled ? "服务端报告 Provider 已启用。" : "服务端报告 Provider 当前已禁用。")
+        + (capabilities.length ? " 注册能力：" + capabilities.join("、") + "。" : " 当前未返回已识别的能力声明。")
+        + "此状态不是实时上游健康探测。"
+      : "本次真实注册清单中没有名为 hithink 的 Provider；不能据此判断 API Key 是否配置。";
+  }
   setBadge("#data-center-provider-status", "unknown", "已读取能力声明");
   setText("#data-center-provider-summary", sources.length
     ? "已读取 " + sources.length + " 个 Provider 注册记录；此清单不执行上游实时探测。"
