@@ -140,8 +140,8 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		"SH_MAIN": "600519.SH",
 		"SZ_MAIN": "000001.SZ",
 		"CHINEXT": "300750.SZ",
-		"STAR": "688981.SH",
-		"BSE": "920001.BJ",
+		"STAR":    "688981.SH",
+		"BSE":     "920001.BJ",
 	}
 	selectedMarket := ""
 	if len(options.Markets) == 1 {
@@ -772,7 +772,6 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 	return run, nil
 }
-
 
 func isStockScopedProbeCapability(capability string) bool {
 	switch capability {
