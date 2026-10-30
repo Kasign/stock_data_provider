@@ -770,7 +770,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
   const keyword = String($("#watchlist-search")?.value || "").trim().toLocaleLowerCase();
   const preferences = readPreferences();
   const sortMode = $("#watchlist-sort")?.value || preferences.watchlistSort;
-  const groupState = readWatchlistGroups(localStorage);
+  const groupState = readWatchlistGroups(safeWatchlistGroupStorage());
   const selectedGroup = $("#watchlist-group-filter")?.value || "all";
   const visibleItems = items.filter((record) => {
     const matchesKeyword = !keyword || String(record.symbol || "").toLocaleLowerCase().includes(keyword)
@@ -4856,6 +4856,10 @@ function normalizeImportedPreferences(value) {
   };
 }
 
+function safeWatchlistGroupStorage() {
+  try { return window.localStorage; } catch { return null; }
+}
+
 function syncWatchlistGroupControls() {
   const select = $("#watchlist-group-filter");
   if (!select) return;
@@ -5386,13 +5390,13 @@ $("#watchlist-list").addEventListener("click", handleWatchlistAction);
 $("#watchlist-list").addEventListener("change", (event) => {
   const select = event.target.closest("select[data-watchlist-group-symbol]");
   if (!select) return;
-  const result = assignWatchlistGroup(select.dataset.watchlistGroupSymbol, select.value, localStorage);
+  const result = assignWatchlistGroup(select.dataset.watchlistGroupSymbol, select.value, safeWatchlistGroupStorage());
   if (result.persisted) { setWatchlistFeedback("已调整 " + select.dataset.watchlistGroupSymbol + " 的分组。"); renderWatchlist(); }
   else setWatchlistFeedback("分组调整未能保存；请检查浏览器存储状态。", "error");
 });
 $("#watchlist-group-filter").addEventListener("change", () => renderWatchlist());
 $("#watchlist-group-create").addEventListener("click", () => {
-  const input = $("#watchlist-group-name"), result = createWatchlistGroup(input.value, localStorage);
+  const input = $("#watchlist-group-name"), result = createWatchlistGroup(input.value, safeWatchlistGroupStorage());
   if (!result.changed || !result.persisted) {
     const messages = { "invalid-storage": "分组存储异常，未修改。", "invalid-name": "请输入有效分组名称（最多 20 字）。", duplicate: "分组名称已存在。", limit: "最多创建 12 个分组。" };
     setWatchlistFeedback(messages[result.reason] || "分组未能保存。", "error"); return;
@@ -5402,7 +5406,7 @@ $("#watchlist-group-create").addEventListener("click", () => {
 $("#watchlist-group-remove").addEventListener("click", () => {
   const name = $("#watchlist-group-filter").value;
   if (name === "all" || name === DEFAULT_WATCHLIST_GROUP) return;
-  const result = removeWatchlistGroup(name, localStorage);
+  const result = removeWatchlistGroup(name, safeWatchlistGroupStorage());
   if (!result.changed || !result.persisted) { setWatchlistFeedback("分组删除失败；请检查浏览器存储状态。", "error"); return; }
   $("#watchlist-group-filter").value = "all"; syncWatchlistGroupControls(); renderWatchlist();
   setWatchlistFeedback("已删除分组，组内股票已归入“未分组”。");
