@@ -18,9 +18,9 @@ const viewports = [
   { width: 1600, height: 1000 }
 ];
 const viewNavigation = [
-  { name: "market", selector: '.workspace-tab[data-view="market"]' },
-  { name: "stocks", selector: '.workspace-tab[data-view="stocks"]' },
-  { name: "watchlist", selector: '.workspace-tab[data-view="watchlist"]' },
+  { name: "market", selector: '.nav-link[data-view="market"]' },
+  { name: "stocks", selector: '.nav-link[data-view="stocks"]' },
+  { name: "watchlist", selector: '.nav-link[data-view="watchlist"]' },
   { name: "research", selector: '.nav-link[data-view="research"]' },
   { name: "tasks", selector: '.nav-link[data-view="tasks"]' },
   { name: "data", selector: '.nav-link[data-view="data"]' },
@@ -356,8 +356,8 @@ try {
     await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
     assert.deepEqual(pageErrors, [], "browser page errors after initial load at " + viewport.width + "px: " + pageErrors.join(" | "));
     await page.waitForFunction(
-      () => document.querySelectorAll(".nav-link[data-view]").length === 8 &&
-        document.querySelectorAll(".workspace-tab[data-view]").length === 3,
+      () => document.querySelectorAll(".nav-link[data-view]").length === 11 &&
+        document.querySelectorAll(".workspace-tab[data-view]").length === 0,
       null,
       { timeout: 10000 }
     );
@@ -441,7 +441,7 @@ try {
     }
 
     if (viewport.width === 320) {
-      await page.locator('.workspace-tab[data-view="stocks"]').click();
+      await page.locator('.nav-link[data-view="stocks"]').click();
       await page.locator("#stocks-view").waitFor({ state: "visible" });
       const savedSettings = await page.evaluate(() => {
         try { return JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1") || "{}"); }
@@ -757,7 +757,7 @@ try {
         localStorage.removeItem(key);
       }, watchlistStorageKey);
 
-      await page.locator('.workspace-tab[data-view="market"]').click();
+      await page.locator('.nav-link[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // Seed a visible prior success so every failure also proves the old market result is cleared.
@@ -1033,7 +1033,7 @@ try {
         "closing settings with Escape should restore focus to its opener"
       );
 
-      await page.locator('.workspace-tab[data-view="market"]').click();
+      await page.locator('.nav-link[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // Saved connection and unsaved draft checks must preserve error distinctions and remain isolated.
@@ -1211,7 +1211,7 @@ try {
       assert.equal(await page.evaluate(() => localStorage.getItem("stock-provider-webui.settings.v1")), savedSettingsBeforeDraftRace,
         "discarding the raced draft must preserve the existing saved endpoints");
 
-      await page.locator('.workspace-tab[data-view="market"]').click();
+      await page.locator('.nav-link[data-view="market"]').click();
       await page.locator("#market-view").waitFor({ state: "visible" });
 
       // The topbar health summary must use the same evidence threshold as Data Center.
@@ -1377,7 +1377,7 @@ try {
   await blockedStoragePage.locator("#market-view").waitFor({ state: "visible" });
   assert.deepEqual(blockedStorageErrors, [], "blocked localStorage must not crash initial app rendering");
 
-  await blockedStoragePage.locator('.workspace-tab[data-view="stocks"]').click();
+  await blockedStoragePage.locator('.nav-link[data-view="stocks"]').click();
   await blockedStoragePage.locator("#stocks-view").waitFor({ state: "visible" });
   await blockedStoragePage.locator("#add-to-watchlist-button").click();
   await blockedStoragePage.waitForFunction(
@@ -1389,7 +1389,7 @@ try {
   assert.doesNotMatch(blockedAddFeedback, /已将 .* 加入本地自选|已在自选列表中/);
   assert.match(await blockedStoragePage.locator("#watchlist-feedback").getAttribute("class"), /watchlist-feedback-error/);
 
-  await blockedStoragePage.locator('.workspace-tab[data-view="watchlist"]').click();
+  await blockedStoragePage.locator('.nav-link[data-view="watchlist"]').click();
   await blockedStoragePage.locator("#watchlist-view").waitFor({ state: "visible" });
   await blockedStoragePage.locator(".watchlist-storage-unavailable").waitFor({ state: "visible" });
   const blockedWatchlistState = await blockedStoragePage.evaluate(() => ({
@@ -1492,7 +1492,7 @@ try {
     return route.continue();
   });
   await quotaPage.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
-  await quotaPage.locator('.workspace-tab[data-view="watchlist"]').click();
+  await quotaPage.locator('.nav-link[data-view="watchlist"]').click();
   await quotaPage.locator("#watchlist-view").waitFor({ state: "visible" });
   await quotaPage.locator("#watchlist-list .watchlist-item").waitFor({ state: "visible" });
 
@@ -1509,7 +1509,7 @@ try {
   assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), watchlistKey), originalWatchlist,
     "a failed rename write must preserve the stored watchlist bytes");
 
-  await quotaPage.locator('.workspace-tab[data-view="stocks"]').click();
+  await quotaPage.locator('.nav-link[data-view="stocks"]').click();
   await quotaPage.locator("#stocks-view").waitFor({ state: "visible" });
   await quotaPage.locator("#symbol-input").fill("000001.SZ");
   await quotaPage.locator("#add-to-watchlist-button").click();
@@ -1523,7 +1523,7 @@ try {
   assert.equal(await quotaPage.evaluate((key) => localStorage.getItem(key), watchlistKey), originalWatchlist,
     "a failed add write must not change the stored watchlist bytes");
 
-  await quotaPage.locator('.workspace-tab[data-view="watchlist"]').click();
+  await quotaPage.locator('.nav-link[data-view="watchlist"]').click();
   await quotaPage.locator("#watchlist-view").waitFor({ state: "visible" });
   await quotaPage.locator('#watchlist-list [data-watchlist-action="remove"][data-symbol="600519.SH"]').click();
   await quotaPage.waitForFunction(

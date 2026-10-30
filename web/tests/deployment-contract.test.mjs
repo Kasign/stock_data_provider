@@ -8,7 +8,7 @@ const [compose, envExample, dockerfile, nginxConfig, nginxTemplate, readme] = aw
   readFile(new URL("../Dockerfile", import.meta.url), "utf8"),
   readFile(new URL("../nginx.conf", import.meta.url), "utf8"),
   readFile(new URL("../default.conf.template", import.meta.url), "utf8"),
-  readFile(new URL("../README.md", import.meta.url), "utf8")
+  readFile(new URL("../../doc/开发部署说明.md", import.meta.url), "utf8")
 ]);
 
 test("the root Compose file is the single deployment entry point", () => {

@@ -7,7 +7,7 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
   readFile(new URL("../../internal/analysis/domain/types.go", import.meta.url), "utf8"),
-  readFile(new URL("../../docs/architecture/analysis-tasks.openapi.yaml", import.meta.url), "utf8"),
+  readFile(new URL("../../doc/接口规范/分析任务.openapi.yaml", import.meta.url), "utf8"),
   readFile(new URL("../src/recent-tasks.js", import.meta.url), "utf8"),
   readFile(new URL("../styles.css", import.meta.url), "utf8"),
   readFile(new URL("../src/watchlist.js", import.meta.url), "utf8"),
@@ -41,6 +41,24 @@ test("static DOM IDs referenced by the WebUI exist and are unique", () => {
   const staticSelectors = [...app.matchAll(/\$\(["']#([a-zA-Z][\w-]*)["']\)/g)].map((match) => match[1]);
   const missing = [...new Set(staticSelectors.filter((id) => !idSet.has(id)))];
   assert.deepEqual(missing, [], "WebUI runtime JavaScript references missing static DOM IDs: " + missing.join(", "));
+});
+
+test("自选股辅助字段顺序与工作区导入预览契约完整", () => {
+  assert.equal([...html.matchAll(/data-watchlist-field-order="/g)].length, 5);
+  assert.equal([...html.matchAll(/data-watchlist-field-order-move="(?:up|down)"/g)].length, 10);
+  assert.match(app, /watchlistDisplayOrder: \[\.\.\.document\.querySelectorAll\("\[data-watchlist-field-order\]"\)\]/);
+  assert.match(app, /const visibleTrackingNodes = \(preferences\.watchlistDisplayOrder/);
+  assert.match(app, /updated: meta/);
+  assert.match(app, /const BROWSER_DATA_VERSION = 3/);
+  assert.match(app, /!\[1, 2, BROWSER_DATA_VERSION\]\.includes\(payload\.version\)/);
+  assert.match(html, /<dialog[^>]+id="browser-data-import-dialog"/);
+  assert.match(app, /watchlistConflicts[\s\S]*?taskConflicts[\s\S]*?showModal\(\)/);
+  assert.match(app, /browser-data-import-replace/);
+  assert.match(app, /browser-data-import-merge/);
+  assert.match(app, /const currentWatchlistItems = currentWatchlist\.storageReadable/);
+  assert.match(app, /rollbackFailures/);
+  assert.match(app, /apiKey: state\.settings\.apiKey/);
+  assert.doesNotMatch(app, /window\.prompt\(preview/);
 });
 
 test("structured result renderer uses fields declared by Go RunResult", () => {
