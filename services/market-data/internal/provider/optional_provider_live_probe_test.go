@@ -76,7 +76,9 @@ func TestLiveTushareCapabilities(t *testing.T) {
 
 	run("stock_basic", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchStockBasic(ctx, symbol)
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if item == nil || item.Symbol != symbol || item.Source != "tushare" || item.FetchedAt.IsZero() {
 			return 0, "", nil, errLiveProbeContract("stock_basic identity/source/fetched_at mismatch")
 		}
@@ -86,7 +88,9 @@ func TestLiveTushareCapabilities(t *testing.T) {
 	calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
 	calendar, calendarErr := client.FetchTradingCalendar(ctx, calendarStart, endDate)
 	run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
-		if calendarErr != nil { return 0, "", nil, calendarErr }
+		if calendarErr != nil {
+			return 0, "", nil, calendarErr
+		}
 		if calendar == nil || calendar.Market != "cn_a_share" || calendar.StartDate != calendarStart ||
 			calendar.EndDate != endDate || calendar.Source != "tushare" || calendar.FetchedAt.IsZero() {
 			return 0, "", nil, errLiveProbeContract("trading_calendar identity/source/date-range/fetched_at mismatch")
@@ -105,7 +109,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 
 	tradeDate := endDate
 	if calendarErr == nil && calendar != nil {
-		for i := len(calendar.Items)-1; i >= 0; i-- {
+		for i := len(calendar.Items) - 1; i >= 0; i-- {
 			if calendar.Items[i].IsTradingDay {
 				tradeDate = calendar.Items[i].Date
 				break
@@ -115,7 +119,9 @@ func TestLiveTushareCapabilities(t *testing.T) {
 
 	run("daily_bars", func() (int, model.QualityStatus, []string, error) {
 		bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, model.AdjustmentNone)
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if len(bars) == 0 {
 			return 0, "", nil, errLiveProbeContract("daily_bars returned no rows in the recent date range")
 		}
@@ -127,7 +133,9 @@ func TestLiveTushareCapabilities(t *testing.T) {
 
 	run("security_trading_status", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchSecurityTradingStatus(ctx, symbol, tradeDate)
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if item == nil || item.Symbol != symbol || item.TradeDate != tradeDate || item.Source != "tushare" || item.FetchedAt.IsZero() {
 			return 0, "", nil, errLiveProbeContract("security_trading_status identity/source/fetched_at mismatch")
 		}
@@ -136,7 +144,9 @@ func TestLiveTushareCapabilities(t *testing.T) {
 
 	run("fundamentals", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchFundamentals(ctx, symbol, 2025, 4)
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if item == nil || item.Symbol != symbol || item.Year != 2025 || item.Quarter != 4 || item.Source != "tushare" || item.FetchedAt.IsZero() {
 			return 0, "", nil, errLiveProbeContract("fundamentals identity/period/source/fetched_at mismatch")
 		}
@@ -145,7 +155,9 @@ func TestLiveTushareCapabilities(t *testing.T) {
 
 	run("valuations", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchValuations(ctx, []string{symbol})
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if item == nil || item.Source != "tushare" || item.FetchedAt.IsZero() || len(item.RequestedSymbols) != 1 || item.RequestedSymbols[0] != symbol {
 			return 0, "", nil, errLiveProbeContract("valuations request/source/fetched_at mismatch")
 		}
@@ -191,7 +203,9 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 
 	run("quote", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchQuote(ctx, symbol)
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if item == nil || item.Symbol != symbol || item.Source != "hithink" || item.FetchedAt.IsZero() || item.CurrentPrice == nil {
 			return 0, "", nil, errLiveProbeContract("quote identity/source/fetched_at/current_price mismatch")
 		}
@@ -200,7 +214,9 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 
 	run("daily_bars", func() (int, model.QualityStatus, []string, error) {
 		bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, model.AdjustmentNone)
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if len(bars) == 0 {
 			return 0, "", nil, errLiveProbeContract("daily_bars returned no rows in the recent date range")
 		}
@@ -212,7 +228,9 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 
 	run("index_quotes", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchIndexQuotes(ctx)
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if item == nil || item.Source != "hithink" || item.FetchedAt.IsZero() || len(item.Items) != len(hithinkCoreIndexDefinitions) {
 			return 0, "", nil, errLiveProbeContract("core index snapshot coverage mismatch")
 		}
@@ -221,7 +239,9 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 
 	run("hot_rankings_popular", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchHotStocks(ctx, "popular", 20)
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if item == nil || item.RankingType != "popular" || item.Source != "hithink" || item.FetchedAt.IsZero() || len(item.Items) == 0 {
 			return 0, "", nil, errLiveProbeContract("popular ranking identity/source/fetched_at/rows mismatch")
 		}
@@ -230,7 +250,9 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 
 	run("valuations", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchValuations(ctx, []string{symbol})
-		if err != nil { return 0, "", nil, err }
+		if err != nil {
+			return 0, "", nil, err
+		}
 		if item == nil || item.Source != "hithink" || item.FetchedAt.IsZero() || len(item.RequestedSymbols) != 1 || item.RequestedSymbols[0] != symbol {
 			return 0, "", nil, errLiveProbeContract("valuations request/source/fetched_at mismatch")
 		}

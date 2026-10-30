@@ -187,9 +187,9 @@ func TestNewMiaoXiangRejectsPlaceholderKeyAndInvalidEndpoint(t *testing.T) {
 
 func TestMiaoXiangCapitalFlowRejectsInvalidObservationDates(t *testing.T) {
 	cases := []struct {
-		name string
+		name  string
 		dates string
-		want string
+		want  string
 	}{
 		{name: "missing date", dates: `["2026-10-21",""]`, want: "invalid observation date"},
 		{name: "duplicate date", dates: `["2026-10-21","2026-10-21"]`, want: "duplicate date"},
