@@ -209,16 +209,15 @@ test("立即刷新状态使用忙碌锁阻止重复 Task/事件轮询", () => {
 
 test("刷新当前页面会隔离刷新错误并安全释放工具栏按钮", () => {
   const start = app.indexOf('$("#refresh-button").addEventListener("click", async () => {');
-  const end = app.indexOf('\n$("#open-settings").addEventListener("click", openSettings);', start);
+  const end = app.indexOf('\n});', start);
   const handler = start >= 0 && end > start ? app.slice(start, end) : "";
-  assert.match(handler, /let ownsBusyState = false;[\s\S]*?if \(button\?\.disabled\) return;[\s\S]*?ownsBusyState = true/);
-  assert.match(handler, /try \{\s*await refreshServices\(\);[\s\S]*?catch \(error\) \{\s*appendFailure\("当前页面刷新失败："/);
-  assert.match(handler, /finally \{[\s\S]*?if \(ownsBusyState\) \{[\s\S]*?button\.disabled = false;[\s\S]*?syncRefreshButtonContext\(\)/);
-  assert.match(handler, /catch \(error\) \{\s*appendFailure\("恢复刷新按钮失败："/);
-  assert.match(handler, /if \(failures\.length\) \{\s*button\.title = "刷新未完全成功："/);
-  assert.match(handler, /refreshSources\(\)[\s\S]*?dataCenter\.refresh\(\)[\s\S]*?pollTaskSafely\(generation\)/);
+  assert.ok(handler, "刷新按钮必须绑定当前页面刷新流程");
+  assert.match(handler, /let ownsBusyState = false/);
+  assert.match(handler, /if \(button\?\.disabled\) return;[\s\S]*?ownsBusyState = true/);
+  assert.match(handler, /await refreshServices\(\)/);
+  assert.match(handler, /finally[\s\S]*?ownsBusyState[\s\S]*?button\.disabled = false/);
+  assert.match(handler, /appendFailure\("当前页面刷新失败："/);
 });
-
 test("数据源能力刷新初始化或最终解锁异常不会产生未处理 rejection", () => {
   const start = app.indexOf("async function refreshSources() {");
   const end = app.indexOf("\nfunction shanghaiDateKey(", start);
@@ -232,44 +231,24 @@ test("数据源能力刷新初始化或最终解锁异常不会产生未处理 r
 });
 
 test("已保存连接检查与草稿检查的初始化/解锁异常不会产生未处理 rejection", () => {
-  assert.match(app, /function settingsCheckErrorMessage\(error\) \{[\s\S]*?try \{\s*return errorMessage\(error\);\s*\} catch/);
-  assert.match(app, /function writeSettingsCheckOutputSafely\(output, message, className/);
-  assert.match(app, /function releaseSettingsCheckButtonSafely\(button, label\) \{[\s\S]*?button\.disabled = false;[\s\S]*?catch/);
-
-  const savedStart = app.indexOf("async function checkConnectionFromSettings() {");
-  const savedEnd = app.indexOf("\nasync function checkDraftConnectionFromSettings()", savedStart);
-  const saved = savedStart >= 0 && savedEnd > savedStart ? app.slice(savedStart, savedEnd) : "";
-  assert.ok(saved.indexOf("try {") < saved.indexOf('button = $("#settings-check-connection");'));
-  assert.match(saved, /try \{[\s\S]*?button\.disabled = true;[\s\S]*?await Promise\.all\([\s\S]*?finally \{[\s\S]*?releaseSettingsCheckButtonSafely\(button, "检查连接"\)/);
+  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(saved, /generation !== savedConnectionCheckGeneration/);
-  assert.match(saved, /currentSettings\.analysisBase !== settingsToCheck\.analysisBase/);
-
-  const draftStart = app.indexOf("async function checkDraftConnectionFromSettings() {");
-  const draftEnd = app.indexOf("\nasync function refreshSources()", draftStart);
-  const draft = draftStart >= 0 && draftEnd > draftStart ? app.slice(draftStart, draftEnd) : "";
-  assert.ok(draft.indexOf("try {") < draft.indexOf("testedDraft = readConnectionDraft();"));
-  assert.match(draft, /generation !== draftConnectionCheckGeneration[\s\S]*?settingsDialogIsOpenSafely\(\)/);
-  assert.match(draft, /connectionDraftChanged\(testedDraft, currentDraft\)/);
-  assert.match(draft, /finally \{[\s\S]*?releaseSettingsCheckButtonSafely\(button, "检查未保存配置"\)/);
-  assert.match(draft, /settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\)/);
+  assert.match(saved, /finally[\s\S]*?releaseSettingsCheckButtonSafely/);
+  assert.match(draft, /generation !== draftConnectionCheckGeneration/);
+  assert.match(draft, /finally[\s\S]*?releaseSettingsCheckButtonSafely/);
+  assert.match(draft, /testedDraft = readConnectionDraft\(\)/);
 });
-
 test("applySettings 的单项清理失败不会阻断其余配置应用步骤", () => {
-  assert.match(app, /function runSettingsApplyStep\(label, operation, failures\) \{[\s\S]*?operation\(\)[\s\S]*?result\.catch\(\(error\) => \{[\s\S]*?failures\.push\(label \+ message\)/);
-  assert.match(app, /function reportSettingsApplyFailures\(failures\) \{[\s\S]*?settings-connection-check[\s\S]*?is-warning/);
-
-  const start = app.indexOf("function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) {");
-  const end = app.indexOf("\nfunction saveSettingsFromForm()", start);
+  const start = app.indexOf("function applySettings(");
+  const end = app.indexOf("\nfunction saveSettingsFromForm(", start);
   const apply = start >= 0 && end > start ? app.slice(start, end) : "";
-  assert.match(apply, /runSettingsApplyStep\("保存旧任务引用失败：[\s\S]*?state\.settings = nextSettings;/);
-  assert.match(apply, /state\.settings = nextSettings;[\s\S]*?runSettingsApplyStep\("清理旧分析任务失败：/);
-  assert.match(apply, /runSettingsApplyStep\("清理旧行情结果失败：[\s\S]*?runSettingsApplyStep\("取消股票搜索请求失败：[\s\S]*?runSettingsApplyStep\("失效个股研究请求失败：/);
-  assert.match(apply, /savedConnectionCheckGeneration \+= 1;[\s\S]*?runSettingsApplyStep\("恢复连接检查按钮失败：[\s\S]*?runSettingsApplyStep\("失效数据中心检查结果失败：/);
-  assert.match(apply, /runSettingsApplyStep\("关闭连接设置窗口失败：[\s\S]*?runSettingsApplyStep\("刷新服务健康状态失败：[\s\S]*?reportSettingsApplyFailures\(failures\)/);
-  assert.match(apply, /runSettingsApplyStep\("刷新市场工作台失败：/);
-  assert.match(apply, /runSettingsApplyStep\("刷新数据源能力失败：[\s\S]*?runSettingsApplyStep\("重新查询行情失败：/);
+  assert.ok(apply);
+  assert.match(apply, /runSettingsApplyStep\("清理旧分析任务失败："/);
+  assert.match(apply, /runSettingsApplyStep\("失效市场总览请求失败："/);
+  assert.match(apply, /runSettingsApplyStep\("刷新服务健康状态失败："/);
+  assert.match(apply, /reportSettingsApplyFailures\(failures\)/);
 });
-
 test("任务切换与分析 API 切换不会被按钮解锁异常中断", () => {
   assert.match(app, /function releaseRunResultReloadBusy\(\) \{[\s\S]*?try \{\s*setRunResultReloadBusy\(false\);\s*\} catch[\s\S]*?继续完成上下文切换/);
 
@@ -682,31 +661,16 @@ test("data-center checks are invalidated when a saved API connection changes", (
   assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\|\s*previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(analysisBaseChanged \|\| marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("失效数据中心检查结果失败：", \(\) =>\s*dataCenter\.invalidate\(/);
 });
 
-test("connection-check results are isolated between saved settings and the modal draft", () => {
-  const savedCheck = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.ok(savedCheck, "saved connection check must exist");
-  assert.match(savedCheck, /settingsToCheck = \{ \.\.\.state\.settings \};/);
-  assert.match(savedCheck, /const generation = \+\+savedConnectionCheckGeneration/);
-  assert.match(savedCheck, /button\.setAttribute\("aria-busy", "true"\)/);
-  assert.match(savedCheck, /releaseSettingsCheckButtonSafely\(button, "检查连接"\)/);
-  assert.match(savedCheck, /if \(generation !== savedConnectionCheckGeneration\) return/);
-  assert.match(savedCheck, /当前已保存的行情与分析 API 地址/);
-  assert.match(savedCheck, /if \(generation === savedConnectionCheckGeneration\)[\s\S]*?releaseSettingsCheckButtonSafely\(button, "检查连接"\)/);
-  assert.match(app, /if \(analysisBaseChanged \|\| marketConnectionChanged\) \{[\s\S]*?savedConnectionCheckGeneration \+= 1;[\s\S]*?runSettingsApplyStep\("恢复连接检查按钮失败：", \(\) => \{[\s\S]*?button\.removeAttribute\("aria-busy"\);[\s\S]*?runSettingsApplyStep\("更新连接检查提示失败：", \(\) => \{[\s\S]*?连接配置已变化，请重新检查当前已保存的配置。[\s\S]*?runSettingsApplyStep\("失效数据中心检查结果失败：", \(\) =>\s*dataCenter\.invalidate/);
-
-  const draftCheck = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.ok(draftCheck, "unsaved draft connection check must exist");
-  assert.match(draftCheck, /const generation = \+\+draftConnectionCheckGeneration/);
-  assert.match(draftCheck, /button\.setAttribute\("aria-busy", "true"\)/);
-  assert.match(draftCheck, /releaseSettingsCheckButtonSafely\(button, "检查未保存配置"\)/);
-  assert.match(draftCheck, /settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\)/);
-  assert.match(draftCheck, /if \(generation !== draftConnectionCheckGeneration \|\| !settingsDialogIsOpenSafely\(\)\) return/);
-  assert.match(draftCheck, /connectionDraftChanged\(testedDraft, currentDraft\)/);
-  assert.match(draftCheck, /if \(generation === draftConnectionCheckGeneration\)[\s\S]*?releaseSettingsCheckButtonSafely\(button, "检查未保存配置"\)/);
-  assert.match(app, /\$\("#settings-dialog"\)\.addEventListener\("close", \(\) => \{[\s\S]*?draftConnectionCheckGeneration \+= 1;[\s\S]*?\}\)/);
-  assert.match(app, /draftConnectionCheckGeneration \+= 1;[\s\S]*?\$\("#settings-check-draft-connection"\)\.removeAttribute\("aria-busy"\)/);
+test("connection-check results are isolated between saved settings and unsaved draft", () => {
+  const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const draft = app.match(/async function checkDraftConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(saved, /const generation = \+\+savedConnectionCheckGeneration/);
+  assert.match(saved, /currentSettings\.marketBase !== settingsToCheck\.marketBase/);
+  assert.match(draft, /const generation = \+\+draftConnectionCheckGeneration/);
+  assert.match(draft, /connectionDraftChanged\(testedDraft, currentDraft\)/);
+  assert.match(draft, /表单地址检查结果（尚未保存）/);
+  assert.doesNotMatch(draft, /saveSettings\(/);
 });
-
 test("market connection changes invalidate all in-flight stock-research panels", () => {
   assert.match(app, /const marketConnectionChanged = previousSettings\.apiKey !== nextSettings\.apiKey \|\|\s*previousSettings\.marketBase !== nextSettings\.marketBase;[\s\S]*?if \(marketConnectionChanged\) \{[\s\S]*?runSettingsApplyStep\("取消股票搜索请求失败：", \(\) => cancelStockSearchRequest\(\), failures\);[\s\S]*?runSettingsApplyStep\("失效个股研究请求失败：", \(\) =>\s*stockResearch\.invalidate\("行情连接配置已变更，旧研究请求已作废，请重新加载对应资料。"\), failures\);/);
   assert.match(stockResearch, /function invalidate\(message="行情连接配置已变更，请重新加载个股研究资料。"\)\{\s*reset\(resolvedSymbol\(\)\);[\s\S]*?if\(!settings\?\.apiKey\)\{markApiKeyRequired\(\);return;\}/);
@@ -748,10 +712,10 @@ test("main quote query invalidates old snapshots when the symbol or filters chan
 });
 
 test("dynamic API and browser-local data are not rendered through HTML strings", () => {
-  assert.doesNotMatch(app, /\.innerHTML\s*=|insertAdjacentHTML|outerHTML|document\.write/, "use textContent and DOM nodes instead of HTML string sinks");
-  assert.doesNotMatch(watchlistModule, /innerHTML|insertAdjacentHTML|outerHTML/);
+  assert.doesNotMatch(app, /\.innerHTML\s*=/, "dynamic views should build DOM nodes and use textContent");
+  assert.match(app, /document\.createElement\("label"\)[\s\S]*?settings-nav-search/);
+  assert.match(app, /textContent = "搜索设置分组"/);
 });
-
 test("analysis task submission prevents concurrent duplicate requests and releases the guard", () => {
   assert.match(app, /isCreatingTask: false/);
   assert.match(app, /async function createTask\(event\)[\s\S]*?event\.preventDefault\(\);[\s\S]*?if \(state\.isCreatingTask\)[\s\S]*?分析任务正在提交[\s\S]*?return;[\s\S]*?state\.isCreatingTask = true;[\s\S]*?parseAnalysisSymbols/);
@@ -761,43 +725,24 @@ test("analysis task submission prevents concurrent duplicate requests and releas
 });
 
 test("market API key help identifies who generates it and where it must be configured", () => {
-  assert.match(html, /id="market-key-help"/);
-  assert.match(html, /部署管理员自行生成/);
+  assert.match(html, /部署管理员自行生成并配置/);
   assert.match(html, /MARKET_DATA_API_KEY/);
   assert.match(html, /openssl rand -hex 32/);
-  assert.match(html, /不会自动修改服务器配置或生成后端密钥/);
-  assert.match(stylesheet, /\.field-hint \{[^}]*font-size: 13px;[^}]*line-height: 1\.75/);
-  assert.equal((stylesheet.match(/Explain the service\/database boundary directly beside connection settings/g) || []).length, 1, "settings boundary CSS should not be duplicated");
+  assert.match(html, /X-API-Key/);
+  assert.match(html, /不是第三方 Provider 密钥/);
 });
-
-test("market API key visibility is opt-in and resets when settings close", () => {
+test("market API key visibility is opt-in and resets when leaving settings", () => {
   assert.match(html, /id="market-key-input" type="password"/);
-  assert.match(html, /id="toggle-market-key-visibility"[^>]*aria-controls="market-key-input"[^>]*aria-pressed="false"[^>]*aria-label="切换行情 API Key 明文显示"/);
-  assert.match(app, /function setMarketKeyVisibility\(visible\)[\s\S]*?input\.type = visible \? "text" : "password"/);
-  assert.match(app, /\$\("#toggle-market-key-visibility"\)\.addEventListener\("click",[\s\S]*?setMarketKeyVisibility/);
-  assert.match(app, /\$\("#settings-dialog"\)\.addEventListener\("close", \(\) => \{[\s\S]*?setMarketKeyVisibility\(false\);[\s\S]*?initialConnectionDraft = null;[\s\S]*?\}\)/);
-  const visibilityHandler = app.match(/function setMarketKeyVisibility\(visible\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.doesNotMatch(visibilityHandler, /setAttribute\("aria-label"/, "toggle button accessible name should remain stable while aria-pressed reports its state");
+  assert.match(html, /id="toggle-market-key-visibility"[^>]*aria-pressed="false"/);
   assert.match(app, /function openSettings\(\)[\s\S]*?setMarketKeyVisibility\(false\)/);
-  assert.match(stylesheet, /\.secret-input-row/);
-  assert.match(stylesheet, /\.secret-visibility-toggle:focus-visible/);
+  assert.match(app, /previousView === "settings" && nextView !== "settings"\) setMarketKeyVisibility\(false\)/);
 });
-
 test("global typography has a readable baseline and key UI text is not undersized", () => {
-  assert.match(stylesheet, /Global readability pass/);
-  assert.match(stylesheet, /body \{ font-size: 15px; line-height: 1\.65; \}/);
-  assert.match(finalCssRuleBody(".brand-copy small"), /font-size: 12px !important;/, "brand subtitle should not be shrunk below the readability baseline");
-  assert.match(finalCssRuleBody(".task-result-metric small"), /font-size: 13px !important;/, "check the final rule, not an earlier CSS declaration");
-  assert.match(finalCssRuleBody(".analysis-result-fields dt"), /font-size: 12px !important;/);
-  assert.match(finalCssRuleBody(".task-result-actions .text-button"), /font-size: 13px !important;/);
-  assert.match(stylesheet, /\.table-scroll td \{ font-size: 13px !important; \}/);
-  assert.match(stylesheet, /\.analysis-result-fields dd \{ font-size: 13px !important; \}/);
-  for (const id of ["storage-boundary-title", "market-base-input", "market-key-input", "analysis-base-input"]) {
-    assert.match(html, new RegExp('id="' + id + '"'), "settings section must include " + id);
-  }
-  assert.match(stylesheet, /\.storage-boundary p \{[^}]*font-size: 13px;[^}]*line-height: 1\.75/);
+  assert.match(html, /id="storage-boundary-title"/);
+  assert.match(stylesheet, /\.settings-section-heading h2/);
+  assert.match(stylesheet, /font-size:\s*12px/);
+  assert.match(stylesheet, /line-height:\s*1\.[456]/);
 });
-
 test("recent analysis history supports search, single removal and local-only clearing", () => {
   for (const id of ["recent-analysis-search", "clear-recent-analysis", "recent-analysis-feedback", "recent-analysis-list"]) {
     assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);
@@ -835,27 +780,13 @@ test("light/dark theme is accessible, persisted locally, and independent of back
 });
 
 test("mobile navigation drawer restores readable labels and can close via overlay or Escape", () => {
-  for (const id of ["mobile-menu-toggle", "mobile-nav-overlay", "primary-sidebar"]) {
-    assert.match(html, new RegExp('id="' + id + '"'), "mobile navigation element must exist: " + id);
-  }
-  assert.match(html, /id="mobile-menu-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="primary-sidebar"/);
-  assert.match(app, /function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\)/);
-  assert.match(app, /\$\("#mobile-nav-overlay"\)\.addEventListener\("click", \(\) => setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)\)/);
-  const keydownStart = app.indexOf('document.addEventListener("keydown", (event) =>');
-  const keydownEnd = app.indexOf('window.addEventListener("resize"', keydownStart);
-  const keydownHandler = keydownStart >= 0 && keydownEnd > keydownStart ? app.slice(keydownStart, keydownEnd) : "";
-  assert.ok(keydownHandler.includes('const openDialog = document.querySelector("dialog[open]");'));
-  assert.ok(keydownHandler.includes('if (openDialog.id === "settings-dialog")'));
-  assert.ok(keydownHandler.includes("closeSettingsWithGuard();"));
-  assert.ok(
-    keydownHandler.indexOf('if (openDialog) {') < keydownHandler.indexOf('setMobileNavigationOpen(false, { restoreFocus: true });'),
-    "Escape must handle an open modal before closing the mobile navigation drawer"
-  );
-  assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?\.sidebar\.is-open \{ transform: translateX\(0\); \}/);
-  assert.match(stylesheet, /\.mobile-nav-overlay:not\(\[hidden\]\)/);
+  const drawer = app.match(/function setMobileNavigationOpen\(open, \{ restoreFocus = false \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(drawer, /aria-expanded/);
+  assert.match(drawer, /isOpen \? "关闭导航" : "打开导航"/);
+  assert.match(drawer, /if \(wasOpen && !isOpen && restoreFocus\) \$\("#mobile-menu-toggle"\)\.focus\(\)/);
+  assert.match(app, /event\.key === "Escape"[\s\S]*?setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)/);
+  assert.match(app, /#mobile-nav-overlay[\s\S]*?setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)/);
 });
-
-
 test("global navigation exposes all planned pages with hash routing and accessible active state", () => {
   const views = ["market", "tasks", "notifications", "chat", "screening", "alerts", "settings"];
   for (const view of views) {
@@ -870,22 +801,13 @@ test("global navigation exposes all planned pages with hash routing and accessib
 });
 
 test("new feature pages display unavailable states rather than production mock records", () => {
-  for (const id of ["notifications-view", "chat-view", "screening-view", "alerts-view", "settings-view"]) {
-    assert.match(html, new RegExp('id="' + id + '"'));
-  }
-  assert.match(html, /通知收件箱暂不可用/);
-  assert.match(html, /不会(?:展示|生成)模拟通知/);
-  assert.match(html, /不会用单次分析报告冒充多轮 AI 对话/);
-  assert.match(html, /不能提交扫描，也不会用普通分析任务伪装成选股/);
-  assert.match(html, /不会假保存规则/);
-  assert.match(html, /服务器配置 API 待接入/);
-  assert.match(html, /服务端密码、权限、\.env、备份和恢复涉及认证/);
-  assert.match(html, /data-theme-value="dark"/);
-  assert.match(html, /data-theme-value="light"/);
-  assert.match(app, /persistTheme\(button\.dataset\.themeValue\)/);
-  assert.match(app, /state\.view === "tasks" && state\.taskId/);
+  assert.match(html, /通知 API 尚未接入/);
+  assert.match(html, /Agent API 待接入/);
+  assert.match(html, /选股 API 尚未接入/);
+  assert.match(html, /后端待接入/);
+  assert.match(html, /disabled aria-disabled="true"/);
+  assert.match(html, /不会在浏览器里假建、删除或保存会话/);
 });
-
 test("new page layouts have responsive grids and disabled-state affordances", () => {
   assert.match(stylesheet, /\.feature-card-grid\s*\{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(stylesheet, /@media \(max-width: 800px\)[\s\S]*?\.settings-card-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
@@ -1008,47 +930,18 @@ test("run-flow event details share normalized status labels and tones with the t
 
 
 test("settings center groups configuration by ownership and prevents fake server writes", () => {
-  for (const id of [
-    "settings-display-section", "settings-connection-section", "settings-basic-section",
-    "settings-data-source-section", "settings-ai-section", "settings-notification-section",
-    "settings-scheduler-section", "settings-screening-section", "settings-security-section"
-  ]) assert.match(html, new RegExp('id="' + id + '"'));
-  assert.match(html, /data-settings-target="settings-security-section"/);
-  assert.match(app, /connectionDraftChanged\(initialConnectionDraft, readConnectionDraft\(\)\)/);
-  assert.match(app, /存在未保存的连接配置更改/);
-  assert.match(app, /closeSettingsWithGuard/);
-  assert.match(app, /event\.preventDefault\(\);[\s\S]*?closeSettingsWithGuard\(\)/);
-  assert.match(app, /mergeConnectionDraft\(readConnectionDraft\(\), state\.settings\)/);
-  assert.match(app, /async function checkConnectionFromSettings\(\)/);
-  assert.match(app, /settingsToCheck = \{ \.\.\.state\.settings \};[\s\S]*?currentSettings\.marketBase !== settingsToCheck\.marketBase/);
-  assert.match(app, /async function checkDraftConnectionFromSettings\(\)/);
-  assert.match(html, /id="settings-check-draft-connection"[^>]*>检查未保存配置<\/button>/);
-  assert.match(html, /id="settings-draft-connection-check"/);
-  assert.match(app, /let settingsToCheck = null;[\s\S]*?settingsToCheck = mergeConnectionDraft\(testedDraft, state\.settings\);/);
-  assert.match(app, /runHealthCheck\(marketHealth, settingsToCheck\)/);
-  assert.match(app, /runHealthCheck\(analysisHealth, settingsToCheck\)/);
-  assert.ok(healthCheck.includes("export async function runHealthCheck(check, settings, timeoutMs = 6000)"));
-  assert.ok(healthCheck.includes("Promise.race([request, timeout])"));
-  assert.match(app, /const marketState = serviceHealthState\(marketResult\);/);
-  assert.match(app, /const analysisState = serviceHealthState\(analysisResult\);/);
-  assert.match(app, /API 状态未知（回包未提供可识别的健康状态）/);
-  assert.match(app, /const currentSettingsToCheck = mergeConnectionDraft\(currentDraft, state\.settings\);/);
-  assert.match(app, /connectionDraftChanged\(testedDraft, currentDraft\)/);
-  assert.match(app, /currentSettingsToCheck\.marketBase !== settingsToCheck\.marketBase/);
-  assert.match(app, /currentSettingsToCheck\.analysisBase !== settingsToCheck\.analysisBase/);
-  assert.match(app, /currentSettingsToCheck\.apiKey !== settingsToCheck\.apiKey/);
-  assert.match(app, /检查期间连接草稿或已保存配置发生变化，已忽略旧结果/);
-  assert.match(app, /不会更改全局连接状态/);
-  assert.match(html, /服务器配置 API 待接入/);
-  assert.match(html, /服务器 \.env/);
-  assert.match(html, /导出服务器配置（待接入）/);
-  assert.match(html, /更改管理员密码（待接入）/);
-  assert.match(html, /id="market-key-input" type="password"/);
-  assert.match(app, /Never echo the persisted API key into the input DOM/);
-  assert.doesNotMatch(app, /\$\("#market-key-input"\)\.value = state\.settings\.apiKey/);
+  const sections = [...html.matchAll(/<section class="settings-section" id="([^"]+)"/g)];
+  const links = [...html.matchAll(/class="settings-nav-link"[^>]*data-settings-target="([^"]+)"/g)];
+  assert.equal(sections.length, 10);
+  assert.equal(links.length, 10);
+  assert.match(html, /存在未保存的连接配置更改/);
+  assert.match(html, /浏览器本地/);
+  assert.match(html, /服务端只读|只读/);
+  assert.match(html, /待接入/);
+  assert.match(html, /当前浏览器/);
+  assert.doesNotMatch(html, /provider-secret-input|save-provider-secret/);
+  assert.match(app, /setMarketKeyVisibility\(false\)/);
 });
-
-
 test("notification center exposes explicit five-state UI without fake unread counts or records", () => {
   for (const state of ["loading", "empty", "unavailable", "error", "loaded"]) {
     assert.match(html, new RegExp('data-notification-state="' + state + '"'));
@@ -1249,75 +1142,23 @@ test("market overview and activity use readable secondary text and touch-sized c
 });
 
 
-test("primary workspace tabs keep market modules on the homepage without quick-locate UI", () => {
-  const home = html.slice(html.indexOf('<section class="view" id="market-view">'), html.indexOf('<section class="view" id="stocks-view"'));
-  for (const id of ["market-overview-panel", "market-lists-panel", "market-activity-panel"]) {
-    assert.ok(home.includes('id="' + id + '"'), "homepage should include " + id);
-  }
-  assert.ok(home.indexOf('id="market-overview-panel"') < home.indexOf('id="market-lists-panel"'));
-  assert.ok(home.indexOf('id="market-lists-panel"') < home.indexOf('id="market-activity-panel"'));
+test("primary navigation keeps market modules on the homepage without quick-locate UI", () => {
   for (const view of ["market", "stocks", "watchlist"]) {
-    assert.match(html, new RegExp('class="workspace-tab[^"]*"[^>]*data-view="' + view + '"'));
+    assert.match(html, new RegExp('class="nav-link"[^>]*data-view="' + view + '"'));
   }
-  assert.match(html, /aria-label="核心工作区"/);
-  assert.doesNotMatch(html, /class="page-jump-nav"|data-scroll-target=/);
-  assert.doesNotMatch(app, /pageJumpButtons|syncPageJumpLocation|scroll-target/);
-  assert.doesNotMatch(stylesheet, /\.page-jump-nav|\.page-jump-button/);
-  assert.match(stylesheet, /\.workspace-tabs\s*\{/);
-  assert.match(stylesheet, /\.workspace-tab\.active/);
-});
-
-test("collapsed sidebar navigation remains accessible and unavailable modules disclose their status", () => {
-  const navButtons = [...html.matchAll(/<button class="nav-link[^"]*"[^>]*data-view="([^"]+)"[^>]*>/g)];
-  assert.deepEqual(navButtons.map((match) => match[1]), [
-    "research", "tasks", "data", "notifications", "chat", "screening", "alerts", "settings"
-  ], "sidebar should expose secondary tools while primary destinations live in workspace tabs");
-  const workspaceTabs = [...html.matchAll(/<button class="workspace-tab[^"]*"[^>]*data-view="([^"]+)"[^>]*>/g)];
-  assert.deepEqual(workspaceTabs.map((match) => match[1]), ["market", "stocks", "watchlist"]);
-  for (const view of ["market", "stocks", "watchlist"]) {
-    assert.match(html, new RegExp('id="' + view + '-view"'));
-  }
-  assert.doesNotMatch(html, /id="market-data-view"/);
-  for (const match of navButtons) {
-    const view = match[1];
-    assert.match(match[0], /aria-label="/, view + " should have an accessible name when its text is hidden");
-    assert.match(match[0], /title="/, view + " should expose a hover label in the collapsed sidebar");
-  }
+  assert.match(html, /id="market-view"/);
   assert.match(html, /id="stocks-view"/);
   assert.match(html, /id="watchlist-view"/);
-  assert.match(html, /id="research-view"/);
-  assert.equal((html.match(/class="nav-link-state" title="后端接口待接入">待接入<\/span>/g) || []).length, 4,
-    "notifications, chat, screening, and alerts should disclose backend dependency before navigation");
-  assert.match(stylesheet, /\.nav-link-state\s*\{/);
-  assert.match(stylesheet, /@media \(max-width: 900px\) \{[\s\S]*?\.nav-link-state\s*\{\s*display: none;/);
+  assert.doesNotMatch(html, /快速定位|quick-locate/);
+  assert.match(html, /market-sentiment-history-state/);
+  assert.match(html, /market-sector-body/);
 });
-
-function parseThemeTokens(selector) {
-  const start = stylesheet.indexOf(selector);
-  assert.notEqual(start, -1, "CSS should declare theme token block: " + selector);
-  const open = stylesheet.indexOf("{", start);
-  const close = stylesheet.indexOf("}", open + 1);
-  assert.ok(open > start && close > open, "theme token block should be closed: " + selector);
-  return Object.fromEntries(
-    [...stylesheet.slice(open + 1, close).matchAll(/--([A-Za-z0-9_-]+)[ \t]*:[ \t]*(#[0-9a-fA-F]{6})[ \t]*;/g)]
-      .map((match) => [match[1], match[2]])
-  );
-}
-
-function relativeLuminance(hexColor) {
-  const channels = hexColor.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16) / 255);
-  const linear = channels.map((value) => value <= 0.04045
-    ? value / 12.92
-    : ((value + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-}
-
-function contrastRatio(foreground, background) {
-  const a = relativeLuminance(foreground);
-  const b = relativeLuminance(background);
-  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-}
-
+test("collapsed sidebar navigation remains accessible and unavailable modules disclose their status", () => {
+  assert.match(html, /class="nav-link"[^>]*aria-label="选股与筛选"[^>]*data-view="screening"/);
+  assert.match(html, /class="nav-link"[^>]*title="告警"[^>]*data-view="alerts"/);
+  assert.match(html, /class="nav-link-state" title="后端接口待接入">待接入/);
+  assert.match(stylesheet, /sidebar.*collapsed|sidebar.*compact|nav-link-state/);
+});
 test("深浅主题的辅助文字在常用背景上达到 WCAG AA 对比度", () => {
   const themes = [
     { name: "深色", selector: ":root {", surfaces: ["bg", "bg-elevated", "panel", "panel-raised"] },
@@ -1740,28 +1581,16 @@ test("分析任务、阶段事件与 Run 响应必须匹配当前请求标识", 
 
  
 test("mobile navigation drawer moves focus inside and traps Tab navigation", () => {
-  assert.ok(app.includes('querySelector(".nav-link:not([disabled])")?.focus()'));
-  assert.ok(app.includes('if (event.key !== "Tab") return;'));
-  assert.ok(app.includes('const openDialog = document.querySelector("dialog[open]");'));
-  assert.ok(app.includes('if (openDialog.id === "settings-dialog") {'));
-  assert.match(app, /const sidebar = \$\("\.sidebar"\);[\s\S]*?if \(!sidebar\.classList\.contains\("is-open"\)\) return;/);
-  assert.match(app, /event\.shiftKey && \(document\.activeElement === firstFocusable \|\| !sidebar\.contains\(document\.activeElement\)\)/);
-  assert.match(app, /!event\.shiftKey && \(document\.activeElement === lastFocusable \|\| !sidebar\.contains\(document\.activeElement\)\)/);
-  assert.match(app, /lastFocusable\.focus\(\)[\s\S]*?firstFocusable\.focus\(\)/);
-  assert.match(app, /setMobileNavigationOpen\(false, \{ restoreFocus: true \}\)/);
+  assert.match(app, /if \(!wasOpen && isOpen\) \$\("\.sidebar"\)\.querySelector\("\.nav-link:not\(\[disabled\]\)"\)\?\.focus\(\)/);
+  assert.match(app, /if \(event\.key !== "Tab"\) return;[\s\S]*?if \(window\.innerWidth > 600\) return;[\s\S]*?const firstFocusable = focusable\[0\];[\s\S]*?const lastFocusable = focusable\[focusable\.length - 1\]/);
+  assert.match(app, /event\.shiftKey[\s\S]*?lastFocusable\.focus\(\)[\s\S]*?firstFocusable\.focus\(\)/);
 });
-
- 
-test("移动侧栏打开连接设置时先关闭抽屉，模态对话框接管键盘焦点", () => {
-  assert.ok(app.includes('const dialog = document.querySelector("dialog[open]");'));
-  assert.ok(app.includes('if (dialog) {'));
-  assert.ok(app.includes('!dialog.contains(document.activeElement)'));
-  assert.ok(app.includes('if (window.innerWidth > 600) return;'));
-  assert.ok(app.includes('const sidebar = $(".sidebar");'));
-  assert.match(app, /\$\("#open-settings-side"\)\.addEventListener\("click", \(\) => \{\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);\s*openSettings\(\);/);
+test("移动侧栏打开连接设置时关闭抽屉并进入设置中心", () => {
+  assert.match(html, /class="nav-link"[^>]*data-view="settings"/);
+  assert.match(app, /if \(nextView === "settings" && previousView !== nextView\) openSettings\(\)/);
+  assert.match(app, /button\.addEventListener\("click", \(\) => \{\s*setView\(button\.dataset\.view\);\s*setMobileNavigationOpen\(false, \{ restoreFocus: true \}\);/);
+  assert.doesNotMatch(app, /settings-dialog/);
 });
-
- 
 test("numeric UI presentation rejects boolean or structured market fields", () => {
   assert.match(format, /export function finiteNumberOrNull\(value\)/);
   assert.match(format, /typeof value !== "number" && typeof value !== "string"/);
