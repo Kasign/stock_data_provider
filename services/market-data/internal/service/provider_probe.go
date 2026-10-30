@@ -75,6 +75,8 @@ func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string,
 type ProviderProbeOptions struct {
 	Scope          string
 	Capabilities   []string
+	Markets        []string
+	Symbols        []string
 	TimeoutSeconds int
 }
 
@@ -131,19 +133,59 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if len(selected) == 0 {
 		return nil, errors.New("provider-probe capabilities must not be empty")
 	}
+	if len(options.Markets) > 1 || len(options.Symbols) > 1 {
+		return nil, errors.New("provider-probe currently accepts at most one market and one symbol per request")
+	}
+	marketSamples := map[string]string{
+		"SH_MAIN": "600519.SH",
+		"SZ_MAIN": "000001.SZ",
+		"CHINEXT": "300750.SZ",
+		"STAR": "688981.SH",
+		"BSE": "920001.BJ",
+	}
+	selectedMarket := ""
+	if len(options.Markets) == 1 {
+		selectedMarket = strings.ToUpper(strings.TrimSpace(options.Markets[0]))
+		if _, ok := marketSamples[selectedMarket]; !ok {
+			return nil, fmt.Errorf("provider-probe market %q is not supported", options.Markets[0])
+		}
+	}
+	probeSymbol := "600036.SH"
+	if selectedMarket != "" {
+		probeSymbol = marketSamples[selectedMarket]
+	}
+	if len(options.Symbols) == 1 {
+		probeSymbol = strings.ToUpper(strings.TrimSpace(options.Symbols[0]))
+		if !regexp.MustCompile("^\\d{6}\\.(SH|SZ|BJ)$").MatchString(probeSymbol) {
+			return nil, fmt.Errorf("provider-probe symbol %q must use six digits and SH/SZ/BJ suffix", options.Symbols[0])
+		}
+	}
+	if selectedMarket != "" && !probeSymbolMatchesBoard(probeSymbol, selectedMarket) {
+		return nil, fmt.Errorf("provider-probe symbol %q does not belong to market %q", probeSymbol, selectedMarket)
+	}
+	if len(options.Markets) > 0 || len(options.Symbols) > 0 {
+		if len(options.Capabilities) == 0 {
+			return nil, errors.New("provider-probe markets or symbols require an explicit stock-scoped capabilities list")
+		}
+		for capability := range selected {
+			if !isStockScopedProbeCapability(capability) {
+				return nil, fmt.Errorf("provider-probe capability %q cannot be filtered by market or symbol", capability)
+			}
+		}
+	}
 	startedAt := time.Now().UTC()
 	requested := make([]string, 0, len(selected))
 	for capability := range selected {
 		requested = append(requested, capability)
 	}
 	sort.Strings(requested)
-	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
+	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
 	jobs := make([]providerProbeJob, 0)
 	add := func(name, capability string, fn providerProbeFunc) {
 		jobs = append(jobs, providerProbeJob{provider: name, capability: capability, run: fn})
 	}
-	const quoteSymbol = "600519.SH"
-	const barsSymbol = "600036.SH"
+	quoteSymbol := probeSymbol
+	barsSymbol := probeSymbol
 	for _, p := range s.quoteProviders {
 		p := p
 		add(p.Name(), "quote", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
@@ -229,11 +271,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	for _, p := range s.stockSearchProviders {
 		p := p
 		add(p.Name(), "stock_search", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
-			snapshot, err := p.SearchStocks(probeCtx, "600519", 1)
+			snapshot, err := p.SearchStocks(probeCtx, probeSymbol[:6], 1)
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			if err := validateStockSearchSnapshot("600519", 1, snapshot); err != nil {
+			if err := validateStockSearchSnapshot(probeSymbol[:6], 1, snapshot); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
@@ -717,6 +759,37 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		}
 	}
 	return run, nil
+}
+
+
+func isStockScopedProbeCapability(capability string) bool {
+	switch capability {
+	case "quote", "daily_bars", "stock_basic", "stock_search", "security_trading_status", "price_limit_event", "stock_boards", "announcements", "fundamentals", "valuations", "capital_flow", "chip_distribution":
+		return true
+	default:
+		return false
+	}
+}
+
+func probeSymbolMatchesBoard(symbol, market string) bool {
+	if len(symbol) != 9 {
+		return false
+	}
+	code, exchange := symbol[:6], symbol[7:]
+	switch market {
+	case "SH_MAIN":
+		return exchange == "SH" && (strings.HasPrefix(code, "600") || strings.HasPrefix(code, "601") || strings.HasPrefix(code, "603") || strings.HasPrefix(code, "605"))
+	case "SZ_MAIN":
+		return exchange == "SZ" && (strings.HasPrefix(code, "000") || strings.HasPrefix(code, "001") || strings.HasPrefix(code, "002") || strings.HasPrefix(code, "003"))
+	case "CHINEXT":
+		return exchange == "SZ" && (strings.HasPrefix(code, "300") || strings.HasPrefix(code, "301"))
+	case "STAR":
+		return exchange == "SH" && (strings.HasPrefix(code, "688") || strings.HasPrefix(code, "689"))
+	case "BSE":
+		return exchange == "BJ"
+	default:
+		return false
+	}
 }
 
 func isCoreProbeCapability(capability string) bool {
