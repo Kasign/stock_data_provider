@@ -4,13 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+)
+
+var (
+	probeHTTPStatusPattern = regexp.MustCompile(`(?i)\bHTTP(?:\s+status)?\s*[:=]?\s*(\d{3})\b`)
+	probeURLQueryPattern   = regexp.MustCompile(`(?i)(https?://[^\s"'?]+)\?[^\s"' ]*`)
+	probeSecretPattern     = regexp.MustCompile(`(?i)(token|api[_-]?key|apikey|cookie|authorization)(["'=:\s]+)([^&\s,;"']+)`)
 )
 
 type providerProbeFunc func(context.Context) (model.QualityStatus, string, []string, error)
@@ -189,7 +197,7 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 			select {
 			case sem <- struct{}{}:
 			case <-probeCtx.Done():
-				item.ErrorCode = classifyProbeError(probeCtx.Err())
+				setProbeFailure(&item, probeCtx.Err())
 				item.ElapsedMS = time.Since(checkedAt).Milliseconds()
 				item.CheckedAt = time.Now().UTC()
 				results[index] = item
@@ -202,7 +210,7 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 			item.SourceVersion = version
 			item.QualityReasons = reasons
 			if err != nil {
-				item.ErrorCode = classifyProbeError(err)
+				setProbeFailure(&item, err)
 			} else {
 				item.QualityStatus = quality
 				if quality == model.QualityValid {
@@ -254,6 +262,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 }
 
 func classifyProbeError(err error) string {
+	if err == nil {
+		return ""
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "timeout"
 	}
@@ -261,10 +272,84 @@ func classifyProbeError(err error) string {
 		return "cancelled"
 	}
 	message := strings.ToLower(err.Error())
-	if strings.Contains(message, "contract") || strings.Contains(message, "invalid") || strings.Contains(message, "missing") {
+	switch {
+	case strings.Contains(message, "429"), strings.Contains(message, "too many requests"), strings.Contains(message, "rate limit"):
+		return "rate_limited"
+	case strings.Contains(message, "401"), strings.Contains(message, "unauthorized"), strings.Contains(message, "invalid token"):
+		return "authentication_failed"
+	case strings.Contains(message, "403"), strings.Contains(message, "forbidden"), strings.Contains(message, "permission denied"):
+		return "permission_denied"
+	}
+	if match := probeHTTPStatusPattern.FindStringSubmatch(err.Error()); len(match) == 2 {
+		return "http_" + match[1]
+	}
+	if strings.Contains(message, "contract") || strings.Contains(message, "invalid") || strings.Contains(message, "missing") || strings.Contains(message, "unexpected") {
 		return "contract_invalid"
 	}
+	if strings.Contains(message, "no such host") || strings.Contains(message, "dial tcp") ||
+		strings.Contains(message, "connection refused") || strings.Contains(message, "connection reset") ||
+		strings.Contains(message, "eof") || strings.Contains(message, "network is unreachable") {
+		return "network_error"
+	}
 	return "provider_error"
+}
+
+func probeHTTPStatus(err error) int {
+	if err == nil {
+		return 0
+	}
+	match := probeHTTPStatusPattern.FindStringSubmatch(err.Error())
+	if len(match) != 2 {
+		return 0
+	}
+	status, _ := strconv.Atoi(match[1])
+	return status
+}
+
+func sanitizeProbeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := probeURLQueryPattern.ReplaceAllString(err.Error(), `$1?[query redacted]`)
+	message = probeSecretPattern.ReplaceAllString(message, `$1$2[redacted]`)
+	message = strings.TrimSpace(message)
+	if len(message) > 400 {
+		message = message[:400] + "…"
+	}
+	return message
+}
+
+func probeErrorStage(code string) string {
+	switch {
+	case code == "timeout":
+		return "timeout"
+	case code == "cancelled":
+		return "cancellation"
+	case code == "rate_limited":
+		return "rate_limit"
+	case code == "authentication_failed":
+		return "provider_auth"
+	case code == "permission_denied":
+		return "provider_permission"
+	case code == "contract_invalid":
+		return "contract"
+	case code == "network_error":
+		return "connect"
+	case strings.HasPrefix(code, "http_"):
+		return "http"
+	default:
+		return "provider"
+	}
+}
+
+func setProbeFailure(item *model.ProviderProbeItem, err error) {
+	if item == nil || err == nil {
+		return
+	}
+	item.ErrorCode = classifyProbeError(err)
+	item.ErrorStage = probeErrorStage(item.ErrorCode)
+	item.ErrorMessage = sanitizeProbeError(err)
+	item.HTTPStatus = probeHTTPStatus(err)
 }
 
 // ProviderProbeHistory returns persisted active-probe runs.

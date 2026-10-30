@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// ProviderProbeItem 是一次主动能力探测结果。ErrorCode 仅暴露分类，不回传上游原始错误、URL 或凭据。
+// ProviderProbeItem 是一次主动能力探测结果。错误信息经过脱敏和长度限制，不回传凭据或完整查询 URL。
 type ProviderProbeItem struct {
 	Provider       string        `json:"provider"`
 	Capability     string        `json:"capability"`
@@ -12,6 +12,9 @@ type ProviderProbeItem struct {
 	QualityStatus  QualityStatus `json:"quality_status"`
 	QualityReasons []string      `json:"quality_reasons,omitempty"`
 	ErrorCode      string        `json:"error_code,omitempty"`
+	ErrorStage     string        `json:"error_stage,omitempty"`
+	ErrorMessage   string        `json:"error_message,omitempty"`
+	HTTPStatus     int           `json:"http_status,omitempty"`
 	CheckedAt      time.Time     `json:"checked_at"`
 }
 

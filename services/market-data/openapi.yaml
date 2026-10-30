@@ -592,7 +592,10 @@ components:
         source_version: {type: string}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
-        error_code: {type: string, enum: [timeout, cancelled, contract_invalid, provider_error]}
+        error_code: {type: string, description: Stable machine-readable failure classification}
+        error_stage: {type: string, enum: [timeout, cancellation, rate_limit, provider_auth, provider_permission, contract, connect, http, provider]}
+        error_message: {type: string, description: Sanitized and length-limited actionable failure summary; credentials and URL queries are redacted}
+        http_status: {type: integer, minimum: 100, maximum: 599}
         checked_at: {type: string, format: date-time}
     ProviderProbeRun:
       type: object

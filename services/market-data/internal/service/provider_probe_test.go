@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,5 +35,59 @@ func TestProviderActiveProbeRunsOutsideBusinessCircuitBreaker(t *testing.T) {
 	}
 	if run.Items[0].Capability != "quote" || run.Items[0].Provider != "probe-test" {
 		t.Fatalf("unexpected probe identity: %+v", run.Items[0])
+	}
+}
+
+
+type providerProbeFailQuoteFake struct {
+	message string
+}
+
+func (p providerProbeFailQuoteFake) Name() string { return "probe-fail-test" }
+func (p providerProbeFailQuoteFake) FetchQuote(context.Context, string) (*model.Quote, error) {
+	return nil, errors.New(p.message)
+}
+
+func TestProviderProbeFailureIncludesSanitizedHTTPDetails(t *testing.T) {
+	p := providerProbeFailQuoteFake{message: "upstream HTTP 502 Bad Gateway https://example.test/quote?api_key=secret-value"}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilities(context.Background())
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilities() error = %v", err)
+	}
+	if run.Failed != 1 || len(run.Items) != 1 {
+		t.Fatalf("expected one failed probe item, got %+v", run)
+	}
+	item := run.Items[0]
+	if item.ErrorCode != "http_502" || item.ErrorStage != "http" || item.HTTPStatus != 502 {
+		t.Fatalf("HTTP failure details were not classified: %+v", item)
+	}
+	if item.ErrorMessage == "" || !strings.Contains(item.ErrorMessage, "HTTP 502") {
+		t.Fatalf("sanitized failure message should retain actionable HTTP detail: %+v", item)
+	}
+	if strings.Contains(item.ErrorMessage, "secret-value") || strings.Contains(item.ErrorMessage, "api_key=") {
+		t.Fatalf("probe error message leaked a credential: %q", item.ErrorMessage)
+	}
+}
+
+func TestProviderProbeFailureClassification(t *testing.T) {
+	cases := []struct {
+		message string
+		code    string
+		stage   string
+	}{
+		{"HTTP 502 Bad Gateway", "http_502", "http"},
+		{"HTTP 429 Too Many Requests", "rate_limited", "rate_limit"},
+		{"HTTP 403 Forbidden", "permission_denied", "provider_permission"},
+		{"dial tcp: lookup example.test: no such host", "network_error", "connect"},
+		{"quote contract missing source version", "contract_invalid", "contract"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.code, func(t *testing.T) {
+			code := classifyProbeError(errors.New(tc.message))
+			if code != tc.code || probeErrorStage(code) != tc.stage {
+				t.Fatalf("classification = %q/%q, want %q/%q", code, probeErrorStage(code), tc.code, tc.stage)
+			}
+		})
 	}
 }
