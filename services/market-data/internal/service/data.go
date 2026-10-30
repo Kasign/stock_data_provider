@@ -323,6 +323,13 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			// 降级快照保留为兜底候选，继续尝试后续 Provider，优先取得完整可信快照。
 			if degradedCandidate == nil {
 				degradedCandidate = snapshot
+				if providerIndex > 0 {
+					degradedCandidate.QualityReasons = appendReason(degradedCandidate.QualityReasons, "provider_fallback_used")
+					for index := range degradedCandidate.Items {
+						degradedCandidate.Items[index].QualityStatus = model.QualityDegraded
+						degradedCandidate.Items[index].QualityReasons = appendReason(degradedCandidate.Items[index].QualityReasons, "provider_fallback_used")
+					}
+				}
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue
@@ -558,6 +565,9 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			// 市场广度的部分金额/时间覆盖必须保留降级，继续尝试后续完整来源。
 			if degradedCandidate == nil {
 				degradedCandidate = snapshot
+				if providerIndex > 0 {
+					degradedCandidate.QualityReasons = appendReason(degradedCandidate.QualityReasons, "provider_fallback_used")
+				}
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue

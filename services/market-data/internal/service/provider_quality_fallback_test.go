@@ -150,3 +150,35 @@ func TestMarketBreadthKeepsPriorityDegradedCandidateWhenNoValidProvider(t *testi
 		t.Fatalf("expected both providers to be tried, calls=%d/%d", first.calls, second.calls)
 	}
 }
+
+func TestIndexQuotesMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
+	first := &qualityFallbackIndexQuoteProvider{name: "eastmoney", err: errors.New("primary unavailable")}
+	second := &qualityFallbackIndexQuoteProvider{name: "tickflow", snapshot: indexQuoteSnapshotForFallback("tickflow", model.QualityDegraded)}
+	svc := &DataService{cache: cache.NewDisabled(), indexQuoteProviders: []provider.IndexQuoteProvider{first, second}}
+
+	got, hit, err := svc.IndexQuotes(context.Background())
+	if err != nil || hit {
+		t.Fatalf("IndexQuotes returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded ||
+		!hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") ||
+		!hasSnapshotQualityReason(got.Items[0].QualityReasons, "provider_fallback_used") {
+		t.Fatalf("degraded fallback must preserve fallback provenance: %+v", got)
+	}
+}
+
+func TestMarketBreadthMarksDegradedFallbackWhenPrimaryFails(t *testing.T) {
+	first := &qualityFallbackMarketBreadthProvider{name: "eastmoney", err: errors.New("primary unavailable")}
+	second := &qualityFallbackMarketBreadthProvider{name: "tickflow", snapshot: marketBreadthSnapshotForFallback("tickflow", model.QualityDegraded)}
+	svc := &DataService{cache: cache.NewDisabled(), marketBreadthProviders: []provider.MarketBreadthProvider{first, second}}
+
+	got, hit, err := svc.MarketBreadth(context.Background())
+	if err != nil || hit {
+		t.Fatalf("MarketBreadth returned hit=%v err=%v", hit, err)
+	}
+	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded ||
+		!hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
+		t.Fatalf("degraded fallback must preserve fallback provenance: %+v", got)
+	}
+}
+
