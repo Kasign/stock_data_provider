@@ -2140,7 +2140,7 @@ func TestSupplementContractsRequireSourceVersion(t *testing.T) {
 
 	mainNetInflow := 120.0
 	flow := &model.CapitalFlow{
-		Symbol: "600519.SH", MainNetInflow: &mainNetInflow, Observations: 1,
+		Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), MainNetInflow: &mainNetInflow, Observations: 1,
 		Source: "eastmoney", FetchedAt: now, QualityStatus: model.QualityDegraded,
 	}
 	if err := validateCapitalFlowSnapshot("600519.SH", flow); err == nil || !strings.Contains(err.Error(), "source_version") {
@@ -2196,7 +2196,7 @@ func TestSupplementCachesReuseProviderContractValidation(t *testing.T) {
 		mem := newMemoryCache()
 		mem.values["md:v1:capital-flow:600519.SH"] = encoded
 		p := &supplementCountingFakeProvider{flow: &model.CapitalFlow{
-			Symbol: "600519.SH", Observations: 5, Inflow5D: &goodFiveDay,
+			Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), Observations: 5, Inflow5D: &goodFiveDay,
 			SourceVersion: "test", FetchedAt: now, QualityStatus: model.QualityDegraded,
 		}}
 		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
@@ -2221,7 +2221,7 @@ func TestSupplementQualityCannotBeValidWithoutAvailabilityTime(t *testing.T) {
 			FetchedAt: now, QualityStatus: model.QualityValid,
 		},
 		flow: &model.CapitalFlow{
-			Symbol: "600519.SH", MainNetInflow: &mainInflow, Inflow5D: &fiveDay,
+			Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), MainNetInflow: &mainInflow, Inflow5D: &fiveDay,
 			Observations: 5, SourceVersion: "test", FetchedAt: now,
 			QualityStatus: model.QualityValid,
 		},
@@ -2286,7 +2286,7 @@ func TestSupplementCacheRejectsOldValidQualityWithoutAvailabilityTime(t *testing
 		}
 		mem := newMemoryCache()
 		mem.values["md:v1:capital-flow:600519.SH"] = encoded
-		fresh := &model.CapitalFlow{Symbol: "600519.SH", Observations: 5, Inflow5D: &fiveDay,
+		fresh := &model.CapitalFlow{Symbol: "600519.SH", ProviderDate: time.Now().In(marketLocation()).Format("2006-01-02"), Observations: 5, Inflow5D: &fiveDay,
 			SourceVersion: "current", FetchedAt: now, QualityStatus: model.QualityDegraded}
 		p := &supplementCountingFakeProvider{flow: fresh}
 		svc := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, mem, nil, time.Second, time.Minute, 120, 2000,
