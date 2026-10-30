@@ -286,3 +286,8 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 现有 Provider 代码映射测试确认：Sina、Tencent、NetEase、BaoStock 不接受 BJ 代码；Pytdx、Hithink、TickFlow、Tushare、Eastmoney 有代码级映射。代码级映射不代表上游在线能力已验收。
 
 统一诊断对 BSE 样本遇到明确的交易所不支持错误时，现标记 `not_supported / market_not_supported`，计入 NotSupported，不计入 Failed。此分类仅针对适配器在请求前明确拒绝的 BJ 代码；DNS、EOF、HTTP 5xx、权限问题仍按原错误分类。新增 Service 单测覆盖该状态汇总。
+
+
+## 17. 北交所诊断测试 gofmt 修复（2026-10-30）
+
+提交 `bdc3e8820e188926cdb4ea17172c5ce5b80b9831` 的 Go suite 仅因 `provider_probe_test.go` 新增类型前多一行空白而在 gofmt 检查失败；Docker 镜像构建在相同前置检查处中止。已移除多余空行，后续需以新 SHA 的 Go test/race/vet 和镜像构建结果确认。

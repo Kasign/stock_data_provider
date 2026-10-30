@@ -257,7 +257,6 @@ func TestProviderProbeOptionsValidateMarketAndSymbolFilters(t *testing.T) {
 	}
 }
 
-
 type providerProbeUnsupportedBeijingFake struct{}
 
 func (providerProbeUnsupportedBeijingFake) Name() string { return "probe-sina" }

@@ -599,3 +599,10 @@
 | Eastmoney | 映射为 `0.######` | 已映射 | 公共端点在线可用性待复验 |
 
 代码映射不等于供应商承诺支持，也不等于真实请求成功。BSE 定向诊断遇到 Sina/Tencent/NetEase/BaoStock 明确的交易所不支持错误时，结果应标记 `not_supported`，而不是 `failed`；适配器必须在发出上游 HTTP 请求前拒绝该证券。其他映射支持 Provider 仍需真实核对权限、代码身份、交易日期、OHLC、成交量单位和质量状态。
+
+
+### 北交所诊断分类回归的格式检查修复（2026-10-30）
+
+- 提交 `bdc3e8820e188926cdb4ea17172c5ce5b80b9831` 的 Go suite 未进入编译/测试阶段，market-data Job 的 gofmt 发现 `provider_probe_test.go` 新增类型前有多余空行。
+- 同步的 Docker market-data 镜像在相同 gofmt 前置步骤停止，不是代码编译或镜像运行问题。
+- 已清理测试文件格式；下一 SHA 重新执行 Go suite 和镜像构建。
