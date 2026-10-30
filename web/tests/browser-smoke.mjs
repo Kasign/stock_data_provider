@@ -1546,7 +1546,8 @@ try {
         width: rect.width,
         height: rect.height,
         detailWidth: detailRect.width,
-        workspaceColumns: getComputedStyle(workspace).gridTemplateColumns.split(" ").filter(Boolean).length,\n        workspaceWidth: workspaceRect.width,
+        workspaceColumns: getComputedStyle(workspace).gridTemplateColumns.split(" ").filter(Boolean).length,
+        workspaceWidth: workspaceRect.width,
         eventDetailRight: eventDetailRect.right,
         documentWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth
