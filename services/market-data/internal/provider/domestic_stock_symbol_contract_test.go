@@ -84,7 +84,7 @@ func TestDomesticStockProviderBeijingSymbolSupportMatrix(t *testing.T) {
 	}
 
 	supported := []struct {
-		name string
+		name     string
 		validate func(string) (string, error)
 	}{
 		{name: "Pytdx", validate: pytdxDomesticSymbol},
