@@ -55,7 +55,7 @@ import {
 const $ = (selector) => document.querySelector(selector);
 const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
 const BROWSER_DATA_FORMAT = "stock-provider-webui-browser-data";
-const BROWSER_DATA_VERSION = 2;
+const BROWSER_DATA_VERSION = 3;
 const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
 const TASK_STATUSES = new Set(["queued", "running", "succeeded", "partial", "failed"]);
 const TASK_EVENT_STATUS_LABELS = Object.freeze({
@@ -117,6 +117,7 @@ let serviceRefreshGeneration = 0;
 let sourceRefreshGeneration = 0;
 let savedConnectionCheckGeneration = 0;
 let draftConnectionCheckGeneration = 0;
+let pendingBrowserImport = null;
 
 const state = {
   settings: loadSettings(),
@@ -732,7 +733,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
     meta.textContent = "添加/更新于 " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录");
     aliasLabel.append(aliasCaption, aliasInput);
     main.append(symbol, aliasLabel);
-    if (preferences.watchlistDisplayFields.includes("updated")) main.append(meta);
+    // 更新时间与其他辅助字段统一按用户配置顺序渲染。
 
     const tracking = document.createElement("div");
     tracking.className = "watchlist-tracking-summary";
@@ -826,13 +827,14 @@ function renderWatchlist(records, storageReadable, storageValid) {
       resultLine.textContent = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
     }
     const displayFieldNodes = {
+      updated: meta,
       quote: quoteLine,
       today: todayLine,
       task: taskLine,
       result: resultLine
     };
-    const visibleTrackingNodes = preferences.watchlistDisplayFields
-      .filter((field) => field !== "updated")
+    const visibleTrackingNodes = (preferences.watchlistDisplayOrder || WATCHLIST_DISPLAY_FIELDS)
+      .filter((field) => preferences.watchlistDisplayFields.includes(field))
       .map((field) => displayFieldNodes[field])
       .filter(Boolean);
     if (visibleTrackingNodes.length) {
@@ -4513,7 +4515,7 @@ function normalizeImportedPreferences(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("本地偏好字段必须是对象。");
   }
-  const allowed = new Set(["watchlistSort", "watchlistSortDirection", "watchlistDisplayFields", "marketColorScheme", "priceDigits", "percentDigits", "amountDisplayUnit", "dailyBarLimit", "dailyAdjustment"]);
+  const allowed = new Set(["watchlistSort", "watchlistSortDirection", "watchlistDisplayFields", "watchlistDisplayOrder", "marketColorScheme", "priceDigits", "percentDigits", "amountDisplayUnit", "dailyBarLimit", "dailyAdjustment"]);
   if (Object.keys(value).some((key) => !allowed.has(key))) {
     throw new Error("本地偏好包含不支持的字段。");
   }
@@ -4527,6 +4529,12 @@ function normalizeImportedPreferences(value) {
     || value.watchlistDisplayFields.some((field) => !WATCHLIST_DISPLAY_FIELDS.includes(field)))) {
     throw new Error("自选股展示字段配置无效。");
   }
+  if (value.watchlistDisplayOrder !== undefined && (!Array.isArray(value.watchlistDisplayOrder)
+    || value.watchlistDisplayOrder.length !== WATCHLIST_DISPLAY_FIELDS.length
+    || new Set(value.watchlistDisplayOrder).size !== WATCHLIST_DISPLAY_FIELDS.length
+    || value.watchlistDisplayOrder.some((field) => !WATCHLIST_DISPLAY_FIELDS.includes(field)))) {
+    throw new Error("自选股字段顺序配置无效。");
+  }
   if (value.marketColorScheme !== undefined && !["cn", "reverse"].includes(value.marketColorScheme)) throw new Error("涨跌颜色方案无效。");
   if (value.priceDigits !== undefined && ![2, 3].includes(value.priceDigits)) throw new Error("价格精度无效。");
   if (value.percentDigits !== undefined && ![2, 3].includes(value.percentDigits)) throw new Error("涨跌幅精度无效。");
@@ -4539,6 +4547,7 @@ function normalizeImportedPreferences(value) {
     watchlistDisplayFields: value.watchlistDisplayFields === undefined
       ? [...DEFAULT_PREFERENCES.watchlistDisplayFields]
       : WATCHLIST_DISPLAY_FIELDS.filter((field) => value.watchlistDisplayFields.includes(field)),
+    watchlistDisplayOrder: Array.isArray(value.watchlistDisplayOrder) ? [...value.watchlistDisplayOrder] : [...DEFAULT_PREFERENCES.watchlistDisplayOrder],
     marketColorScheme: value.marketColorScheme || DEFAULT_PREFERENCES.marketColorScheme,
     priceDigits: value.priceDigits || DEFAULT_PREFERENCES.priceDigits,
     percentDigits: value.percentDigits || DEFAULT_PREFERENCES.percentDigits,
@@ -4559,6 +4568,18 @@ function syncWatchlistPreferenceControls(preferences = readPreferences()) {
   document.querySelectorAll("[data-watchlist-display-field]").forEach((input) => {
     input.checked = normalized.watchlistDisplayFields.includes(input.value);
   });
+  const orderRoot = $("#watchlist-field-order-list");
+  if (orderRoot) {
+    (normalized.watchlistDisplayOrder || DEFAULT_PREFERENCES.watchlistDisplayOrder).forEach((field) => {
+      const item = orderRoot.querySelector(`[data-watchlist-field-order="${field}"]`);
+      if (item) orderRoot.append(item);
+    });
+    orderRoot.querySelectorAll("[data-watchlist-field-order-move]").forEach((button) => {
+      const items = [...orderRoot.children];
+      const index = items.indexOf(button.closest("[data-watchlist-field-order]"));
+      button.disabled = button.dataset.watchlistFieldOrderMove === "up" ? index <= 0 : index >= items.length - 1;
+    });
+  }
   const controls = {
     "#settings-market-color-scheme": normalized.marketColorScheme,
     "#settings-price-digits": String(normalized.priceDigits),
@@ -4580,13 +4601,14 @@ function syncWatchlistPreferenceControls(preferences = readPreferences()) {
   if (queryAdjustment) queryAdjustment.value = normalized.dailyAdjustment;
 }
 
-function persistWatchlistPreferences() {
+function persistLocalPreferences() {
   try {
     const preferences = savePreferences({
       ...readPreferences(),
       watchlistSort: $("#watchlist-sort")?.value || $("#settings-watchlist-sort")?.value,
       watchlistSortDirection: $("#settings-watchlist-direction")?.value || readPreferences().watchlistSortDirection,
       watchlistDisplayFields: [...document.querySelectorAll("[data-watchlist-display-field]:checked")].map((input) => input.value),
+      watchlistDisplayOrder: [...document.querySelectorAll("[data-watchlist-field-order]")].map((item) => item.dataset.watchlistFieldOrder),
       marketColorScheme: $("#settings-market-color-scheme")?.value || readPreferences().marketColorScheme,
       priceDigits: Number($("#settings-price-digits")?.value || readPreferences().priceDigits),
       percentDigits: Number($("#settings-percent-digits")?.value || readPreferences().percentDigits),
@@ -4595,7 +4617,7 @@ function persistWatchlistPreferences() {
       dailyAdjustment: $("#settings-default-adjustment")?.value || readPreferences().dailyAdjustment
     });
     syncWatchlistPreferenceControls(preferences);
-    $("#local-preferences-feedback").textContent = "自选股默认排序偏好已保存到当前浏览器。";
+    $("#local-preferences-feedback").textContent = "本地展示与查询偏好已保存到当前浏览器。";
     return preferences;
   } catch (error) {
     $("#local-preferences-feedback").textContent = "偏好保存失败：" + (error?.message || "浏览器存储不可用。");
@@ -4604,7 +4626,7 @@ function persistWatchlistPreferences() {
 }
 
 function validateBrowserDataPayload(payload) {
-  if (!payload || payload.format !== BROWSER_DATA_FORMAT || ![1, BROWSER_DATA_VERSION].includes(payload.version)) {
+  if (!payload || payload.format !== BROWSER_DATA_FORMAT || ![1, 2, BROWSER_DATA_VERSION].includes(payload.version)) {
     throw new Error("文件格式或版本不受支持。请使用本 WebUI 导出的 JSON 文件。");
   }
   const data = payload.data;
@@ -4673,25 +4695,49 @@ function validateBrowserDataPayload(payload) {
 
 async function importBrowserDataFile(file) {
   if (!file) return;
-  if (file.size > 1024 * 1024) {
-    setBrowserDataFeedback("导入失败：文件超过 1 MiB 上限。", "error");
-    return;
-  }
-
+  if (file.size > 1024 * 1024) { setBrowserDataFeedback("导入失败：文件超过 1 MiB 上限。", "error"); return; }
   let imported;
-  try {
-    imported = validateBrowserDataPayload(JSON.parse(await file.text()));
-  } catch (error) {
-    setBrowserDataFeedback("导入失败：" + (error?.message || "文件不是有效的工作区 JSON。"), "error");
-    return;
-  }
-  const confirmed = window.confirm(
-    "将替换当前浏览器的主题、本地偏好、API 路径、自选股与最近任务引用。\n" +
-    "当前 API Key 会保留；不会修改服务器 .env，也不会恢复行情缓存或完整分析报告。继续吗？"
-  );
-  if (!confirmed) {
-    setBrowserDataFeedback("已取消导入，现有本地数据未更改。");
-    return;
+  try { imported = validateBrowserDataPayload(JSON.parse(await file.text())); }
+  catch (error) { setBrowserDataFeedback("导入失败：" + (error?.message || "文件不是有效的工作区 JSON。"), "error"); return; }
+  const currentWatchlist = safeReadWatchlistState();
+  const currentRecentTasks = safeReadRecentTasksState();
+  const currentWatchlistItems = currentWatchlist.storageReadable && currentWatchlist.storageValid ? currentWatchlist.items : [];
+  const currentRecentTaskItems = currentRecentTasks.storageReadable && currentRecentTasks.storageValid ? currentRecentTasks.items : [];
+  const watchlistIdentity = (record) => comparableMarketSymbol(record.symbol);
+  const existingSymbols = new Set(currentWatchlistItems.map(watchlistIdentity));
+  const existingTaskIds = new Set(currentRecentTaskItems.map((record) => record.task_id));
+  const watchlistConflicts = imported.watchlist.filter((record) => existingSymbols.has(watchlistIdentity(record))).length;
+  const taskConflicts = imported.recentTasks.filter((record) => existingTaskIds.has(record.task_id)).length;
+  $("#browser-data-import-summary").textContent = "文件包含自选股 " + imported.watchlist.length + " 条（冲突 " + watchlistConflicts + " 条），最近任务 " + imported.recentTasks.length + " 条（冲突 " + taskConflicts + " 条）。";
+  $("#browser-data-import-settings").textContent = "主题、本地偏好和 API 路径将采用文件中的设置；当前行情 API Key 保留。";
+  $("#browser-data-import-current").textContent = "当前浏览器：" + (currentWatchlist.storageReadable && currentWatchlist.storageValid ? currentWatchlistItems.length : "不可读取") + " 条自选股，" + (currentRecentTasks.storageReadable && currentRecentTasks.storageValid ? currentRecentTaskItems.length : "不可读取") + " 条最近任务。";
+  const mergeDisabled = !currentWatchlist.storageReadable || !currentWatchlist.storageValid || !currentRecentTasks.storageReadable || !currentRecentTasks.storageValid;
+  $("#browser-data-import-merge").disabled = mergeDisabled;
+  $("#browser-data-import-merge-hint").textContent = mergeDisabled ? "当前本地清单不可读取或格式异常，禁止合并以避免覆盖未知数据。" : "按股票代码和任务 ID 去重，导入文件中的同标识记录覆盖当前记录。";
+  pendingBrowserImport = { imported, currentWatchlist, currentRecentTasks };
+  if (!$("#browser-data-import-dialog").open) $("#browser-data-import-dialog").showModal();
+}
+
+async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, strategy) {
+  const currentWatchlistItems = currentWatchlist.storageReadable && currentWatchlist.storageValid ? currentWatchlist.items : [];
+  const currentRecentTaskItems = currentRecentTasks.storageReadable && currentRecentTasks.storageValid ? currentRecentTasks.items : [];
+  const watchlistIdentity = (record) => comparableMarketSymbol(record.symbol);
+  if (strategy === "merge") {
+    if (!currentWatchlist.storageReadable || !currentWatchlist.storageValid
+      || !currentRecentTasks.storageReadable || !currentRecentTasks.storageValid) {
+      setBrowserDataFeedback("合并失败：当前自选股或最近任务存储不可读取/格式异常。为避免覆盖未知数据，请先检查本地存储。", "error");
+      return;
+    }
+    const mergedWatchlist = new Map(currentWatchlistItems.map((record) => [watchlistIdentity(record), record]));
+    imported.watchlist.forEach((record) => mergedWatchlist.set(watchlistIdentity(record), record));
+    const mergedRecentTasks = new Map(currentRecentTaskItems.map((record) => [record.task_id, record]));
+    imported.recentTasks.forEach((record) => mergedRecentTasks.set(record.task_id, record));
+    if (mergedWatchlist.size > MAX_WATCHLIST_ITEMS || mergedRecentTasks.size > MAX_RECENT_TASKS) {
+      setBrowserDataFeedback("合并失败：合并后自选股 " + mergedWatchlist.size + " 条、最近任务 " + mergedRecentTasks.size + " 条，超过本地上限（" + MAX_WATCHLIST_ITEMS + " / " + MAX_RECENT_TASKS + "）。未写入任何数据。", "error");
+      return;
+    }
+    imported.watchlist = [...mergedWatchlist.values()];
+    imported.recentTasks = [...mergedRecentTasks.values()];
   }
 
   const storageKeys = [SETTINGS_KEY, THEME_STORAGE_KEY, PREFERENCES_KEY, WATCHLIST_KEY, RECENT_TASKS_KEY, TASK_REFERENCE_KEY];
@@ -4766,6 +4812,8 @@ async function importBrowserDataFile(file) {
     syncSettingsThemeButtons(imported.theme);
     syncWatchlistPreferenceControls(imported.preferences);
     renderWatchlist();
+    if (state.quote) renderQuote(state.quote);
+    if (state.view === "research") renderResearchOverview();
     renderRecentTasks();
     setBrowserDataFeedback("导入完成：主题、本地偏好、同源 API 路径、自选股与本地任务引用已更新。原有 API Key 已保留。", "success");
   } catch (error) {
@@ -4774,8 +4822,8 @@ async function importBrowserDataFile(file) {
       "error"
     );
   }
-}
 
+}
 
 syncThemeControl(readTheme());
 syncWatchlistPreferenceControls();
@@ -4881,6 +4929,31 @@ $("#settings-view-data-sources").addEventListener("click", () => {
 });
 $("#export-browser-data").addEventListener("click", downloadBrowserData);
 $("#import-browser-data").addEventListener("click", () => $("#browser-data-file").click());
+$("#browser-data-import-dialog").addEventListener("close", () => {
+  if (pendingBrowserImport) { pendingBrowserImport = null; setBrowserDataFeedback("已取消导入，现有本地数据未更改。"); }
+});
+$("#browser-data-import-replace").addEventListener("click", async () => {
+  if (!pendingBrowserImport) return;
+  const pending = pendingBrowserImport; pendingBrowserImport = null; $("#browser-data-import-dialog").close();
+  try { await applyBrowserDataImport(pending.imported, pending.currentWatchlist, pending.currentRecentTasks, "replace"); }
+  catch (error) { setBrowserDataFeedback("导入失败：" + (error?.message || "本地数据写入异常。"), "error"); }
+});
+$("#browser-data-import-merge").addEventListener("click", async () => {
+  if (!pendingBrowserImport) return;
+  const pending = pendingBrowserImport; pendingBrowserImport = null; $("#browser-data-import-dialog").close();
+  try { await applyBrowserDataImport(pending.imported, pending.currentWatchlist, pending.currentRecentTasks, "merge"); }
+  catch (error) { setBrowserDataFeedback("合并失败：" + (error?.message || "本地数据写入异常。"), "error"); }
+});
+document.querySelectorAll("[data-watchlist-field-order-move]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const item = button.closest("[data-watchlist-field-order]");
+    const list = $("#watchlist-field-order-list");
+    const sibling = button.dataset.watchlistFieldOrderMove === "up" ? item.previousElementSibling : item.nextElementSibling;
+    if (!item || !sibling) return;
+    if (button.dataset.watchlistFieldOrderMove === "up") list.insertBefore(item, sibling); else list.insertBefore(sibling, item);
+    const preferences = persistLocalPreferences(); syncWatchlistPreferenceControls(preferences); renderWatchlist();
+  });
+});
 $("#browser-data-file").addEventListener("change", async (event) => {
   const input = event.currentTarget;
   try {
@@ -5000,27 +5073,27 @@ $("#add-to-watchlist-button").addEventListener("click", addCurrentSymbolToWatchl
 $("#watchlist-list").addEventListener("click", handleWatchlistAction);
 $("#watchlist-search").addEventListener("input", () => renderWatchlist());
 $("#watchlist-sort").addEventListener("change", () => {
-  persistWatchlistPreferences();
+  persistLocalPreferences();
   renderWatchlist();
 });
 $("#settings-watchlist-sort").addEventListener("change", () => {
   $("#watchlist-sort").value = $("#settings-watchlist-sort").value;
-  persistWatchlistPreferences();
+  persistLocalPreferences();
   renderWatchlist();
 });
 $("#settings-watchlist-direction").addEventListener("change", () => {
-  persistWatchlistPreferences();
+  persistLocalPreferences();
   renderWatchlist();
 });
 document.querySelectorAll("[data-watchlist-display-field]").forEach((input) => {
   input.addEventListener("change", () => {
-    persistWatchlistPreferences();
+    persistLocalPreferences();
     renderWatchlist();
   });
 });
 ["#settings-market-color-scheme", "#settings-price-digits", "#settings-percent-digits", "#settings-amount-unit", "#settings-default-bar-limit", "#settings-default-adjustment"].forEach((selector) => {
   $(selector).addEventListener("change", () => {
-    persistWatchlistPreferences();
+    persistLocalPreferences();
     renderWatchlist();
     if (state.view === "stocks" && state.quote) renderQuote(state.quote);
     if (state.view === "research") renderResearchOverview();
@@ -5031,7 +5104,9 @@ $("#reset-local-preferences").addEventListener("click", () => {
     const preferences = resetPreferences();
     syncWatchlistPreferenceControls(preferences);
     renderWatchlist();
-    $("#local-preferences-feedback").textContent = "本地偏好已恢复默认值；主题、连接密钥、自选股和任务引用均未修改。";
+    if (state.quote) renderQuote(state.quote);
+    if (state.view === "research") renderResearchOverview();
+    $("#local-preferences-feedback").textContent = "本地展示与查询偏好已恢复默认值；主题、连接密钥、自选股和任务引用均未修改。";
   } catch (error) {
     $("#local-preferences-feedback").textContent = "恢复默认值失败：" + (error?.message || "浏览器存储不可用。");
   }

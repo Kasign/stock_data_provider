@@ -3,6 +3,7 @@ export const PREFERENCES_KEY = "stock-provider-webui.preferences.v1";
 export const WATCHLIST_DISPLAY_FIELDS = Object.freeze(["updated", "quote", "today", "task", "result"]);
 
 export const DEFAULT_PREFERENCES = Object.freeze({
+  watchlistDisplayOrder: [...WATCHLIST_DISPLAY_FIELDS],
   watchlistSort: "updated",
   watchlistSortDirection: "desc",
   watchlistDisplayFields: [...WATCHLIST_DISPLAY_FIELDS],
@@ -13,6 +14,11 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   dailyBarLimit: 120,
   dailyAdjustment: "forward_adjusted"
 });
+
+function normalizeWatchlistDisplayOrder(value) {
+  const requested = Array.isArray(value) ? value.filter((field) => WATCHLIST_DISPLAY_FIELDS.includes(field)) : [];
+  return [...new Set([...requested, ...WATCHLIST_DISPLAY_FIELDS])];
+}
 
 const SORT_MODES = new Set(["updated", "symbol", "name"]);
 const SORT_DIRECTIONS = new Set(["asc", "desc"]);
@@ -27,6 +33,7 @@ export function normalizePreferences(value = {}) {
     watchlistDisplayFields: Array.isArray(source.watchlistDisplayFields)
       ? WATCHLIST_DISPLAY_FIELDS.filter((field) => source.watchlistDisplayFields.includes(field))
       : [...DEFAULT_PREFERENCES.watchlistDisplayFields],
+    watchlistDisplayOrder: normalizeWatchlistDisplayOrder(source.watchlistDisplayOrder),
     marketColorScheme: ["cn", "reverse"].includes(source.marketColorScheme) ? source.marketColorScheme : DEFAULT_PREFERENCES.marketColorScheme,
     priceDigits: [2, 3].includes(source.priceDigits) ? source.priceDigits : DEFAULT_PREFERENCES.priceDigits,
     percentDigits: [2, 3].includes(source.percentDigits) ? source.percentDigits : DEFAULT_PREFERENCES.percentDigits,

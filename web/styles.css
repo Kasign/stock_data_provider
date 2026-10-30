@@ -4730,3 +4730,16 @@ button:disabled {
   --positive: #07875c;
   --negative: #d63d4e;
 }
+
+
+/* 自选股辅助字段排序 */
+.watchlist-field-order-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:1px solid var(--line);border-radius:9px}
+.watchlist-field-order-item>label{display:inline-flex;align-items:center;gap:9px;min-width:0}
+.watchlist-field-order-item>div{display:flex;gap:6px}
+.watchlist-field-order-item button{border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--muted);background:var(--surface);cursor:pointer}
+.watchlist-field-order-item button:disabled{opacity:.35;cursor:not-allowed}
+.browser-data-import-dialog{width:min(560px,calc(100vw - 32px));max-width:none;padding:0;border:1px solid var(--line);border-radius:16px;color:var(--text);background:var(--panel);box-shadow:0 24px 80px rgba(0,0,0,.35)}
+.browser-data-import-dialog::backdrop{background:rgba(5,12,24,.62);backdrop-filter:blur(3px)}
+.browser-data-import-card{display:grid;gap:14px;padding:22px}
+.browser-data-import-strategies{display:flex;flex-wrap:wrap;gap:8px}
+@media(max-width:600px){.watchlist-field-order-item{align-items:flex-start}.browser-data-import-card{padding:16px}.browser-data-import-strategies>button{flex:1 1 100%}}

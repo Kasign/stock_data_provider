@@ -148,7 +148,7 @@ export function getIndexConstituents(settings, symbol, { source = "", asOf = "",
 export function getIndexDailyBars(settings, symbol, { start, end, source = "", signal } = {}) {
   const normalizedSymbol = String(symbol ?? "").trim();
   if (!normalizedSymbol) return Promise.reject(new Error("指数代码不能为空。"));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start ?? "")) || !/^\d{4}-\d{2}-\d{2}$/.test(String(end ?? ""))) {
+  if (!isValidISODate(start) || !isValidISODate(end)) {
     return Promise.reject(new Error("指数日线需要有效的开始和结束日期。"));
   }
   if (String(start) > String(end)) return Promise.reject(new Error("开始日期不能晚于结束日期。"));
@@ -163,7 +163,7 @@ export function getIndexDailyBars(settings, symbol, { start, end, source = "", s
 export function getStockPriceLimitRule(settings, symbol, date, signal) {
   const normalizedSymbol = String(symbol ?? "").trim();
   if (!normalizedSymbol) return Promise.reject(new Error("股票代码不能为空。"));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ""))) return Promise.reject(new Error("涨跌幅规则查询需要有效的交易日期。"));
+  if (!isValidISODate(date)) return Promise.reject(new Error("涨跌幅规则查询需要有效的交易日期。"));
   const query = new URLSearchParams({ date: String(date) });
   return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(normalizedSymbol) + "/price-limit-rule?" + query.toString(), {
     apiKey: settings.apiKey,
@@ -174,7 +174,7 @@ export function getStockPriceLimitRule(settings, symbol, date, signal) {
 export function getStockTradingStatus(settings, symbol, date, { asOf = "", signal } = {}) {
   const normalizedSymbol = String(symbol ?? "").trim();
   if (!normalizedSymbol) return Promise.reject(new Error("股票代码不能为空。"));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ""))) return Promise.reject(new Error("交易状态查询需要有效的交易日期。"));
+  if (!isValidISODate(date)) return Promise.reject(new Error("交易状态查询需要有效的交易日期。"));
   const query = new URLSearchParams({ date: String(date) });
   if (asOf) query.set("as_of", asOf);
   return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(normalizedSymbol) + "/trading-status?" + query.toString(), {
