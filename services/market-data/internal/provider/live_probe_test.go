@@ -209,14 +209,14 @@ func (b *liveProbeCaptureBody) Close() error {
 	return err
 }
 
-func liveProbeDailyContractError(bars []model.DailyBar, providerName, symbol string, basis model.AdjustmentBasis, startDate, endDate string, limit int) string {
+func liveProbeDailyContractError(bars []model.DailyBar, providerLabel, sourceName, symbol string, basis model.AdjustmentBasis, startDate, endDate string, limit int) string {
 	if limit > 0 && len(bars) > limit {
 		return fmt.Sprintf("provider returned %d bars above requested limit %d", len(bars), limit)
 	}
 	seenDates := make(map[string]struct{}, len(bars))
 	for index, bar := range bars {
-		if bar.Source != providerName || bar.Symbol != symbol {
-			return fmt.Sprintf("bar %d identity mismatch: symbol=%q source=%q", index, bar.Symbol, bar.Source)
+		if bar.Source != sourceName || bar.Symbol != symbol {
+			return fmt.Sprintf("provider %s bar %d identity mismatch: symbol=%q source=%q", providerLabel, index, bar.Symbol, bar.Source)
 		}
 		if bar.AdjustmentBasis != basis {
 			return fmt.Sprintf("bar %d adjustment mismatch: requested=%q got=%q", index, basis, bar.AdjustmentBasis)
@@ -270,14 +270,29 @@ func TestLiveProbeDailyContractRejectsLimitAndUnsortedBars(t *testing.T) {
 	older, newer := makeBar("2026-10-20"), makeBar("2026-10-21")
 	const startDate, endDate = "2026-10-19", "2026-10-22"
 
-	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 1); !strings.Contains(got, "above requested limit") {
+	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 1); !strings.Contains(got, "above requested limit") {
 		t.Fatalf("expected limit violation, got %q", got)
 	}
-	if got := liveProbeDailyContractError([]model.DailyBar{newer, older}, "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); !strings.Contains(got, "not sorted ascending") {
+	if got := liveProbeDailyContractError([]model.DailyBar{newer, older}, "eastmoney", "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); !strings.Contains(got, "not sorted ascending") {
 		t.Fatalf("expected unsorted bar violation, got %q", got)
 	}
-	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); got != "" {
+	if got := liveProbeDailyContractError([]model.DailyBar{older, newer}, "eastmoney", "eastmoney", "600036.SH", model.AdjustmentForward, startDate, endDate, 8); got != "" {
 		t.Fatalf("valid ordered bars should pass the shared contract, got %q", got)
+	}
+}
+
+func TestLiveProbeDailyContractSeparatesDisplayLabelFromSource(t *testing.T) {
+	volume := int64(1000)
+	bar := model.DailyBar{
+		Symbol: "300750.SZ", TradeDate: "2026-10-29", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, VolumeUnit: "shares", AmountUnit: "unknown",
+		AdjustmentBasis: model.AdjustmentNone, Source: "sina",
+		QualityStatus: model.QualityDegraded,
+	}
+	const startDate, endDate = "2026-10-28", "2026-10-30"
+	if got := liveProbeDailyContractError([]model.DailyBar{bar}, "sina-chinext", "sina", "300750.SZ", model.AdjustmentNone, startDate, endDate, 8); got != "" {
+		t.Fatalf("display label must not be compared with canonical source, got %q", got)
 	}
 }
 
@@ -827,7 +842,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
+	runDaily := func(providerName, sourceName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
 			client.Transport = capture.transport()
@@ -843,7 +858,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		}
 		contractError := ""
 		if callErr == nil && len(bars) > 0 {
-			contractError = liveProbeDailyContractError(bars, providerName, symbol, basis, startDate, endDate, 8)
+			contractError = liveProbeDailyContractError(bars, providerName, sourceName, symbol, basis, startDate, endDate, 8)
 		}
 		switch {
 		case callErr != nil:
@@ -990,7 +1005,7 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("sina", "sina", quoteSymbol, sina.client, func(ctx context.Context) (*model.Quote, error) {
 		return sina.FetchQuote(ctx, quoteSymbol)
 	})
-	runDaily("sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("sina", "sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return sina.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
 	})
 
@@ -998,12 +1013,36 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("tencent", "tencent", quoteSymbol, tencent.client, func(ctx context.Context) (*model.Quote, error) {
 		return tencent.FetchQuote(ctx, quoteSymbol)
 	})
-	runDaily("tencent", dailySymbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
 	})
-	runDaily("tencent", dailySymbol, model.AdjustmentForward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentForward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
+
+	// Cross-market coverage: Shenzhen ChiNext and Shanghai STAR Market are probed
+	// independently so a Shanghai Main Board success cannot stand in for them.
+	for _, marketSample := range []struct {
+		name   string
+		symbol string
+	}{
+		{name: "chinext", symbol: "300750.SZ"},
+		{name: "star_market", symbol: "688981.SH"},
+	} {
+		symbol := marketSample.symbol
+		runQuote("sina-"+marketSample.name, "sina", symbol, sina.client, func(ctx context.Context) (*model.Quote, error) {
+			return sina.FetchQuote(ctx, symbol)
+		})
+		runQuote("tencent-"+marketSample.name, "tencent", symbol, tencent.client, func(ctx context.Context) (*model.Quote, error) {
+			return tencent.FetchQuote(ctx, symbol)
+		})
+		runDaily("sina-"+marketSample.name, "sina", symbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return sina.FetchDailyBars(ctx, symbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+		runDaily("tencent-"+marketSample.name, "tencent", symbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+	}
 
 	eastmoney := NewEastmoney(12*time.Second, "", "")
 	runStockBasic("eastmoney", dailySymbol, eastmoney.client, func(ctx context.Context) (*model.StockBasic, error) {
@@ -1038,14 +1077,14 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("eastmoney-delay", "eastmoney", dailySymbol, eastmoneyDelay.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoneyDelay.FetchQuote(ctx, dailySymbol)
 	})
-	runDaily("eastmoney", dailySymbol, model.AdjustmentForward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentForward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 
 	baostockClient := baostock.NewClient(baostock.Config{ConnectTimeout: 8 * time.Second, RequestTimeout: 20 * time.Second})
 	baostockProvider := NewBaostock(baostockClient)
 	beforeBaoStockDaily := len(report.Results)
-	runDaily("baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("baostock", "baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
 		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 	dailyProbePassed := len(report.Results) > beforeBaoStockDaily &&
@@ -1086,7 +1125,7 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("yahoo", "yahoo", quoteSymbol, yahoo.client, func(ctx context.Context) (*model.Quote, error) {
 		return yahoo.FetchQuote(ctx, quoteSymbol)
 	})
-	runDaily("yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 
@@ -1095,7 +1134,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		runQuote("netease", "netease", quoteSymbol, netease.client, func(ctx context.Context) (*model.Quote, error) {
 			return netease.FetchQuote(ctx, quoteSymbol)
 		})
-		runDaily("netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		runDaily("netease", "netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
 			return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
 		})
 	} else {

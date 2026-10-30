@@ -180,3 +180,109 @@ go test ./internal/provider -run '^TestLiveProviderProbe
 | — | — | — | — | 未执行 | 当前阶段尚未注入真实凭据，未发起可选 Provider 真实请求 |
 
 后续只追加有真实请求证据的记录。阶段二的代码入口和 CI 通过情况不得填入本表作为 Provider 在线验收通过证据。
+
+
+## 8. 统一主动诊断接口开发记录（2026-10-30）
+
+目标分支：`feat/full-go-data-providers-api-switch`。
+
+本轮代码新增/扩展：
+
+- ProviderProbeItem 错误阶段、脱敏错误摘要、HTTP 状态码。
+- ProviderProbeRun 未知、跳过、未配置、不支持计数。
+- 未注册的核心能力显式返回 `not_configured`；全市场目录扫描在轻量探测中明确 `skipped`。
+- 扩展非行情能力：板块、涨跌停池、龙虎榜、公告、交易日历、财务、估值、人气榜、个股资金流、筹码分布、指数目录、证券交易状态、涨跌幅特殊事件。
+- 交易日历、公告、财务、估值、人气榜复用业务质量校验函数。
+
+执行限制：本轮没有发起任何真实 Provider 请求，没有要求或读取新的 Key/Token。GitHub Actions 是否覆盖最新 SHA 仍需确认；未取得最新 SHA 的成功结果前，不记录为构建或测试通过。实时 Provider workflow 继续按无凭据跳过策略执行，不能将 workflow success 视为全部 Provider 可用。
+
+
+## 9. 统一诊断接口请求范围与 Handler 自检（2026-10-30）
+
+目标分支：`feat/full-go-data-providers-api-switch`。
+
+- `POST /api/v1/data-sources/probe` 保持原路由和空请求体默认行为。
+- 新增可选请求体：`scope`（`all`/`core`）、`capabilities` 白名单、`timeout_seconds`（1–30 秒，默认 12 秒，按单项 Provider 请求计时）。
+- 指定 `capabilities` 时仅执行列表内能力；未指定时由 scope 选择默认集合。core 默认集合为 quote、daily_bars、stock_basic、trading_calendar、index_quotes、market_breadth。
+- 能力白名单未知项、重复项、core 范围外能力、非法 JSON、未知字段、非对象 JSON、多个 JSON 值、超时越界和超过 8 KB 的请求体均返回 400。
+- 响应批次记录 scope、requested_capabilities、timeout_seconds；旧历史记录缺少这些字段时通过 omitempty 保持 JSON 输出兼容。
+- OpenAPI 已补充请求体、能力枚举、超时边界和 API Key 安全声明。
+- 新增 httptest：鉴权、空 body 兼容、core 过滤、能力白名单、非法请求、超大 body；Service 层增加能力范围与参数校验测试。
+- 本次只使用无 Provider 的测试服务，不触发真实供应商请求，不需要 Key/Token。
+
+后续仍需实现：checks 过滤、多板块/多证券批量过滤，以及逐项请求摘要和完整覆盖率分母契约。单板块/单证券定向过滤和主要能力的样本/行数/时效证据已在后续章节补充；未覆盖能力仍保持证据字段为空，不以系统采集时间冒充源端时间。CI 状态以当前分支最新 SHA 对应工作流为准。
+
+
+## 10. 核心行情探测证据字段（2026-10-30）
+
+ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`rows_returned`、`rows_validated`、`provider_time`。
+
+- quote：记录请求样本 `600519.SH`、市场 SH、返回/校验数及 ProviderTime。
+- daily_bars：记录请求样本 `600036.SH`、最新有效交易日、原始返回数、校验后数量及可用 ProviderTime。
+- 不使用 FetchedAt 或 CheckedAt 冒充 ProviderTime；上游未提供时间时保持空值。
+- 其他能力的记录数、覆盖率、请求摘要和时效证据尚未全部接入，后续按快照契约逐项扩展。
+
+最新代码提交需以 PR #1 的当前 HEAD 为准；本节不记录未经 CI 确认的构建结论。
+
+
+## 10. 市场与证券定向诊断请求（2026-10-30）
+
+统一诊断 API `POST /api/v1/data-sources/probe` 新增请求字段：
+
+- `markets`：当前最多一个板块，支持 `SH_MAIN`、`SZ_MAIN`、`CHINEXT`、`STAR`、`BSE`。
+- `symbols`：当前最多一个 A 股证券代码，格式为六位代码加 `.SH`、`.SZ` 或 `.BJ`。
+- 指定任一过滤条件时，必须同时显式指定 `capabilities`，且所有能力必须属于单证券范围；市场广度、指数、行业排行等全市场能力不允许与单证券过滤混用。
+- 仅指定板块时选择该板块固定样本；同时指定证券时校验证券代码与板块归属。只指定证券时按证券代码选择样本。
+- 响应批次回显 `requested_markets` 和 `requested_symbols`，各项继续返回实际样本证券/交易所证据。
+
+当前约束是单请求单板块、单证券，不代表全板块覆盖率，也不执行全市场扫描。多证券批量探测暂缓，待异步任务与限速策略设计后再实施。
+
+本节记录的是代码能力，不是 Provider 真实请求验收结果。未配置 Key/Token 的 Provider 仍不发起真实请求；代码实现、CI 通过和真实数据质量通过分别记录。
+
+
+## 11. 跨 Provider 日 K 对账契约开发记录（2026-10-30）
+
+- 新增内部比较器 `CompareCrossProviderDailyBars`，输入必须携带 Provider、来源版本、证券代码、复权口径、质量状态和逐日行情。
+- 不同证券、不同复权口径、不同交易日期集合、重复交易日、非法日期、成交量单位非 shares 均判为 `not_comparable`，不会将不一致条件误报为行情差异。
+- 质量状态必须双方均为 `valid`；任何一侧为 degraded/unknown 时拒绝作为对账基准。
+- OHLC 容差 0.001；成交量容差 50 股；双方均有 CNY 成交额时容差 1 CNY。成交额缺失/单位不明保留字段级 `not_comparable`，整体标记 `partial`。
+- 结果状态：`matched`（所有可比较字段通过）、`partial`（核心字段可比较但可选字段缺失/不可比较）、`mismatch`（至少一个字段超差）、`not_comparable`（身份、日期、质量或单位前置条件不满足）。
+- 本轮只增加本地静态契约与单测，不执行真实 Provider 请求，不需要 Key/Token；不代表任何供应商线上验收通过。
+
+后续：将同一比较契约接入跨市场黄金样例；补齐创业板、科创板、北交所、停牌、新股及除权日真实样本。批量 Provider 对账应放入受控异步任务，不能扩张同步诊断请求。
+
+
+## 12. 跨 Provider 日 K 比较器接入固定黄金样例（2026-10-30）
+
+代码基线：`b2a08820e41c4afffdf320e172670421b014f68f`。
+
+- 当前真实黄金夹具为 `600036.SH`，新浪和腾讯均为 `degraded`，成交额为 null/unknown。
+- 因比较器要求两侧均为 valid，该夹具必须得到 `not_comparable / quality_status_must_be_valid`，不得通过删除质量状态或伪造成交额来制造 matched。
+- valid 输入下的 matched/partial/mismatch 仍由独立合成契约测试验证；合成数据只证明比较器逻辑，不代表真实行情验收。
+- 下一步：在同一测试入口继续补充 OHLC 合法性、负成交量、负/非有限成交额边界；完成后再扩展跨市场夹具。
+
+## 13. 阶段五后续任务唯一清单
+
+阶段五完整 P0/P1/P2 任务、依赖关系和验收标准统一维护在《国内A股数据层阶段五统一验收计划》第十五节。本文件只记录实际执行证据，不重复维护第二份计划。每次开发后追加代码 SHA、测试/CI Run ID、Provider 请求结论；没有真实请求证据时保持未执行。
+
+
+## 14. 比较器输入边界与夹具单位声明补充（2026-10-30）
+
+- 比较器新增 OHLC 必须为正数且有限、High/Low/Open/Close 关系合法、成交量非负、成交额非负且有限的前置校验；非法行情返回 `not_comparable`，不误报为跨源 mismatch。
+- 新增空日期集合、非法日历日期、重复日期、NaN/Inf OHLC、负成交量、负成交额回归用例。
+- 真实 600036.SH 夹具的两侧来源级 `volume_unit` 显式记录为 shares；夹具转换函数读取该声明，不在测试代码中自行假设。
+- 以上是代码和静态夹具契约，不代表新的 Provider 在线验收。新 SHA 的 CI 尚未确认。
+
+
+## 15. Go 格式检查问题与修复记录（2026-10-30）
+
+- `35d442fa1049011219d38f2932bc3dcb611d1bca` 的 Go suite 中，market-data Job 的 gofmt 检查发现 `cross_provider_daily_compare_test.go` 函数间存在多余空行。
+- market-data Docker 镜像构建执行相同 gofmt 前置检查，因此同步失败；并非镜像编译或运行时问题。
+- 已移除多余空行，后续以修复 SHA 的 Go test/race/vet 和 Docker 构建结果作为验收依据。
+
+
+## 16. 北交所定向诊断不支持状态（2026-10-30）
+
+现有 Provider 代码映射测试确认：Sina、Tencent、NetEase、BaoStock 不接受 BJ 代码；Pytdx、Hithink、TickFlow、Tushare、Eastmoney 有代码级映射。代码级映射不代表上游在线能力已验收。
+
+统一诊断对 BSE 样本遇到明确的交易所不支持错误时，现标记 `not_supported / market_not_supported`，计入 NotSupported，不计入 Failed。此分类仅针对适配器在请求前明确拒绝的 BJ 代码；DNS、EOF、HTTP 5xx、权限问题仍按原错误分类。新增 Service 单测覆盖该状态汇总。

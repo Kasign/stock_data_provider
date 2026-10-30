@@ -1268,7 +1268,7 @@ func (s *DataService) SectorRankingsByMetric(ctx context.Context, rawCategory, r
 	if sortBy == "" {
 		sortBy = "change_percent"
 	}
-	if sortBy != "change_percent" && sortBy != "amount" {
+	if sortBy != "change_percent" && sortBy != "amount" && sortBy != "change_5d" {
 		return nil, false, fmt.Errorf("unsupported sector ranking sort_by %q; want change_percent or amount", rawSortBy)
 	}
 	direction := strings.ToLower(strings.TrimSpace(rawDirection))
@@ -3512,14 +3512,18 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	revisions, err := s.store.ListBarsAsOf(ctx, symbol, start, end, basis, asOf, limit)
+	storageBasis := basis
+	if basis != model.AdjustmentNone {
+		storageBasis = model.AdjustmentNone
+	}
+	revisions, err := s.store.ListBarsAsOf(ctx, symbol, start, end, storageBasis, asOf, limit)
 	if err != nil {
 		return nil, nil, err
 	}
 	candidates := make([]model.DailyBar, 0, len(revisions))
 	for _, bar := range revisions {
 		candidateSymbol, symbolErr := normalize.NormalizeSymbol(bar.Symbol)
-		if symbolErr != nil || candidateSymbol != symbol || bar.AdjustmentBasis != basis ||
+		if symbolErr != nil || candidateSymbol != symbol || bar.AdjustmentBasis != storageBasis ||
 			bar.NormalizationVer != normalize.Version || !hasIdentifiableSourceVersion(strings.TrimSpace(bar.SourceVersion)) ||
 			bar.FetchedAt.IsZero() || bar.NormalizedAt.IsZero() || bar.FetchedAt.After(asOf) ||
 			bar.NormalizedAt.After(asOf) || bar.SystemObservedAt == nil || bar.SystemObservedAt.After(asOf) {
@@ -3527,7 +3531,7 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 		}
 		candidates = append(candidates, bar)
 	}
-	coherent, coherenceErr := coherentStoredSeries(candidates, basis)
+	coherent, coherenceErr := coherentStoredSeries(candidates, storageBasis)
 	if len(coherent) == 0 {
 		if coherenceErr != "" {
 			return nil, nil, fmt.Errorf("%w: %s", ErrDailyBarsAsOfNotFound, coherenceErr)
@@ -3535,10 +3539,23 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 		return nil, nil, ErrDailyBarsAsOfNotFound
 	}
 	bars, warnings := normalize.ValidateAndSortBars(symbol, coherent, start, end, limit)
+	if basis != model.AdjustmentNone {
+		factors, factorErr := s.AdjustmentFactorsAsOf(ctx, symbol, start, end, asOf)
+		if factorErr != nil {
+			return nil, nil, fmt.Errorf("%w: cannot rebuild adjusted daily bars without point-in-time adjustment factors: %v", ErrDailyBarsAsOfNotFound, factorErr)
+		}
+		bars, factorErr = rebuildAdjustedDailyBars(bars, factors, basis, end)
+		if factorErr != nil {
+			return nil, nil, fmt.Errorf("%w: %v", ErrDailyBarsAsOfNotFound, factorErr)
+		}
+	}
 	if len(bars) == 0 {
 		return nil, nil, ErrDailyBarsAsOfNotFound
 	}
 	warnings = append(warnings, "daily_bars_reconstructed_from_recorded_revisions")
+	if basis != model.AdjustmentNone {
+		warnings = append(warnings, "daily_bars_adjustment_rebuilt_from_point_in_time_factors")
+	}
 	if !coverageSufficient(start, end, limit, len(bars)) {
 		warnings = append(warnings, "point_in_time_daily_bar_coverage_below_requested_threshold")
 		for i := range bars {

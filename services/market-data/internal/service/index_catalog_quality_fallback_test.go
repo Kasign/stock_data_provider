@@ -257,3 +257,42 @@ func TestIndexConstituentsUnknownCacheWithoutCoverageCountRemainsUnknown(t *test
 		t.Fatalf("eligible single-provider cache should not fetch source, calls=%d", fallback.constituentCalls)
 	}
 }
+
+func TestHistoricalConstituentSnapshotWithoutEffectiveIntervalsIsDegraded(t *testing.T) {
+	snapshot := &model.IndexConstituentSnapshot{IndexSymbol: "000300.SH", AsOfDate: "2026-10-01", Total: 1,
+		Items: []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台"}}, QualityStatus: model.QualityValid}
+	markHistoricalConstituentIntervalQuality(snapshot)
+	if snapshot.QualityStatus != model.QualityDegraded {
+		t.Fatalf("expected degraded, got %s", snapshot.QualityStatus)
+	}
+	if len(snapshot.QualityReasons) == 0 || snapshot.QualityReasons[len(snapshot.QualityReasons)-1] != "historical_constituent_effective_interval_or_pit_timestamp_unavailable" {
+		t.Fatalf("missing explicit interval-quality reason: %+v", snapshot.QualityReasons)
+	}
+}
+
+func TestHistoricalConstituentSnapshotWithCompleteIntervalKeepsQuality(t *testing.T) {
+	available := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	observed := available.Add(time.Minute)
+	snapshot := &model.IndexConstituentSnapshot{IndexSymbol: "000300.SH", AsOfDate: "2026-10-01", FetchedAt: observed.Add(2 * time.Minute), Total: 1,
+		Items:         []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台", EffectiveFrom: "2026-09-01", EffectiveTo: "2026-12-31", AvailableAt: &available, SystemObservedAt: &observed}},
+		QualityStatus: model.QualityValid}
+	markHistoricalConstituentIntervalQuality(snapshot)
+	if snapshot.QualityStatus != model.QualityValid {
+		t.Fatalf("complete interval evidence should preserve valid quality, got %s", snapshot.QualityStatus)
+	}
+}
+
+func TestHistoricalConstituentSnapshotRejectsIntervalNotCoveringAsOfDate(t *testing.T) {
+	available := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	observed := available.Add(time.Minute)
+	snapshot := &model.IndexConstituentSnapshot{
+		IndexSymbol: "000300.SH", AsOfDate: "2026-10-01", FetchedAt: observed.Add(time.Minute), Total: 1,
+		Items: []model.IndexConstituent{{Symbol: "600519.SH", Code: "600519", Name: "贵州茅台",
+			EffectiveFrom: "2026-10-02", EffectiveTo: "2026-12-31", AvailableAt: &available, SystemObservedAt: &observed}},
+		QualityStatus: model.QualityValid,
+	}
+	markHistoricalConstituentIntervalQuality(snapshot)
+	if snapshot.QualityStatus != model.QualityDegraded {
+		t.Fatalf("interval starting after as_of must be degraded, got %s", snapshot.QualityStatus)
+	}
+}

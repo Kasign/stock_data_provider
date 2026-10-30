@@ -45,7 +45,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		token = os.Getenv("TUSHARE_TOKEN")
 	}
 	if token == "" {
-		t.Fatal("MARKET_DATA_LIVE_TUSHARE_TESTS=1 requires MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN")
+		t.Skip("Tushare live probe skipped: MARKET_DATA_TUSHARE_TOKEN or TUSHARE_TOKEN is not configured")
 	}
 
 	endpoint := os.Getenv("MARKET_DATA_TUSHARE_API_URL")
@@ -125,7 +125,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		if len(bars) == 0 {
 			return 0, "", nil, errLiveProbeContract("daily_bars returned no rows in the recent date range")
 		}
-		if message := liveProbeDailyContractError(bars, "tushare", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
+		if message := liveProbeDailyContractError(bars, "tushare", "tushare", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
 			return len(bars), "", nil, errLiveProbeContract(message)
 		}
 		return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
@@ -218,7 +218,7 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		apiKey = os.Getenv("HITHINK_FINANCE_API_KEY")
 	}
 	if apiKey == "" {
-		t.Fatal("MARKET_DATA_LIVE_HITHINK_TESTS=1 requires MARKET_DATA_HITHINK_API_KEY or HITHINK_FINANCE_API_KEY")
+		t.Skip("Hithink live probe skipped: MARKET_DATA_HITHINK_API_KEY or HITHINK_FINANCE_API_KEY is not configured")
 	}
 	baseURL := os.Getenv("MARKET_DATA_HITHINK_BASE_URL")
 	client := NewHithinkConfigured(25*time.Second, baseURL, apiKey)
@@ -228,8 +228,8 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 	now := time.Now().In(time.FixedZone("CST", 8*60*60))
 	startDate, endDate := optionalProbeDateRange(now)
 	const symbol = "600519.SH"
-	results := make([]optionalProviderProbeResult, 0, 12)
-	failures := make([]string, 0, 12)
+	results := make([]optionalProviderProbeResult, 0, 14)
+	failures := make([]string, 0, 14)
 
 	run := func(capability string, call func() (int, model.QualityStatus, []string, error)) {
 		started := time.Now()
@@ -254,19 +254,32 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		return 1, item.QualityStatus, item.QualityReasons, nil
 	})
 
-	run("daily_bars", func() (int, model.QualityStatus, []string, error) {
-		bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, model.AdjustmentNone)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if len(bars) == 0 {
-			return 0, "", nil, errLiveProbeContract("daily_bars returned no rows in the recent date range")
-		}
-		if message := liveProbeDailyContractError(bars, "hithink", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
-			return len(bars), "", nil, errLiveProbeContract(message)
-		}
-		return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
-	})
+	for _, adjustment := range []model.AdjustmentBasis{
+		model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward,
+	} {
+		adjustment := adjustment
+		capability := "daily_bars_" + string(adjustment)
+		run(capability, func() (int, model.QualityStatus, []string, error) {
+			bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, adjustment)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if len(bars) == 0 {
+				return 0, "", nil, errLiveProbeContract(capability + " returned no rows in the recent date range")
+			}
+			if message := liveProbeDailyContractError(bars, "hithink", "hithink", symbol, adjustment, startDate, endDate, 40); message != "" {
+				return len(bars), "", nil, errLiveProbeContract(message)
+			}
+			if adjustment != model.AdjustmentNone {
+				for _, bar := range bars {
+					if bar.AdjustmentMethod != "hithink_api_"+string(adjustment) {
+						return len(bars), "", nil, errLiveProbeContract(capability + " adjustment method metadata mismatch")
+					}
+				}
+			}
+			return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
+		})
+	}
 
 	run("index_quotes", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchIndexQuotes(ctx)

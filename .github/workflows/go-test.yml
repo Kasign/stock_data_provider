@@ -85,6 +85,37 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: go vet ./...
 
+  market-data-mariadb-integration:
+    name: Market-data MariaDB migration and PIT persistence
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: market-data-ci
+          MARIADB_DATABASE: market_data_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: services/market-data/go.sum
+      - name: Run MariaDB migration and PIT persistence integration
+        working-directory: services/market-data
+        env:
+          MARKET_DATA_TEST_MYSQL_DSN: "root:market-data-ci@tcp(127.0.0.1:3306)/market_data_test?parseTime=true&loc=UTC"
+        run: go test ./internal/repository -run TestMariaDBRevisionPersistenceAndPointInTimeQueries -count=1 -v
+
   container-build:
     name: Validate Compose and build Docker images
     runs-on: ubuntu-latest

@@ -18,6 +18,16 @@ on:
         required: false
         default: false
         type: boolean
+      include_hithink:
+        description: "Probe Tonghuashun capabilities using the HITHINK_FINANCE_API_KEY repository secret"
+        required: false
+        default: false
+        type: boolean
+      include_tushare:
+        description: "Probe Tushare capabilities using the TUSHARE_TOKEN repository secret"
+        required: false
+        default: false
+        type: boolean
   pull_request:
     paths:
       - ".github/workflows/live-provider-smoke.yml"
@@ -53,10 +63,15 @@ jobs:
           LIVE_PROBE_QUOTE_SYMBOL: ${{ github.event.inputs.quote_symbol || '600519.SH' }}
           MARKET_DATA_LIVE_MX_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_mx && '1' || '0' }}
           MARKET_DATA_LIVE_NETEASE_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_netease && '1' || '0' }}
+          MARKET_DATA_LIVE_HITHINK_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_hithink && '1' || '0' }}
+          MARKET_DATA_LIVE_TUSHARE_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.include_tushare && '1' || '0' }}
+          MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          MARKET_DATA_HITHINK_API_KEY: ${{ secrets.HITHINK_FINANCE_API_KEY }}
+          MARKET_DATA_HITHINK_BASE_URL: https://fuyao.aicubes.cn
           MARKET_DATA_MX_API_KEY: ${{ secrets.MX_APIKEY }}
           MARKET_DATA_MX_API_URL: https://mkapi2.dfcfs.com/finskillshub/api/claw/query
         working-directory: services/market-data
-        run: go test -run '^TestLiveProviderProbe$' -count=1 -v ./internal/provider
+        run: go test -run '^TestLiveProviderProbe$|^TestLiveHithinkCapabilities$|^TestLiveTushareCapabilities$' -count=1 -v ./internal/provider
       - name: Print market-data probe report
         if: always()
         run: |

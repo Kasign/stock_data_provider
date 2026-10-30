@@ -146,7 +146,7 @@ func TestValidateFundamentalsSnapshotRejectsFuturePublicationDate(t *testing.T) 
 func TestValidateFundamentalsSnapshotRejectsValidSectionWithoutPublicationDate(t *testing.T) {
 	snapshot := validFundamentalsSnapshotForTest()
 	snapshot.Sections[0].PublicationDate = ""
-	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "cannot be valid without a publication date") {
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "publication_date or available_at") {
 		t.Fatalf("valid fundamentals without a publication date must be rejected, got %v", err)
 	}
 }

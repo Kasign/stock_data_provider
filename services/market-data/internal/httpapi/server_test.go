@@ -144,6 +144,39 @@ func (httpFakeProvider) FetchLimitPool(_ context.Context, poolType, tradeDate st
 	}, nil
 }
 
+type httpMarketCapitalFlowFake struct {
+	httpFakeProvider
+}
+
+func (httpMarketCapitalFlowFake) FetchMarketCapitalFlow(_ context.Context, startDate, endDate string) (*model.MarketCapitalFlowSnapshot, error) {
+	now := time.Now().UTC()
+	netAmount := 123456.0
+	return &model.MarketCapitalFlowSnapshot{
+		StartDate: startDate, EndDate: endDate, Total: 1,
+		Items:  []model.MarketCapitalFlowItem{{TradeDate: endDate, NetAmountCNY: &netAmount}},
+		Source: "eastmoney", SourceVersion: "test-market-capital-flow-v1",
+		FetchedAt: now, QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+	}, nil
+}
+
+func TestMarketCapitalFlowRouteIsRegisteredAndReturnsHistory(t *testing.T) {
+	p := httpMarketCapitalFlowFake{}
+	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.SetMarketCapitalFlowProviders([]provider.MarketCapitalFlowProvider{p})
+	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/capital-flow?start=2026-10-29&end=2026-10-29", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("market capital-flow route should return history, got status=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"net_amount_cny\":123456") {
+		t.Fatalf("market capital-flow response is missing provider-reported net amount: %s", w.Body.String())
+	}
+}
+
 func TestAuthIsRequiredForDataRoutes(t *testing.T) {
 	p := httpFakeProvider{}
 	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -434,6 +467,48 @@ func TestDataSourcesReportsQuoteOnlyProviderWithoutDailyBars(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("data-sources response missing %s: %s", want, body)
 		}
+	}
+}
+
+type httpMetricSectorFake struct {
+	httpFakeProvider
+}
+
+func (httpMetricSectorFake) FetchSectorRankingsByMetric(_ context.Context, category, sortBy, direction string, limit int) (*model.SectorRankingSnapshot, error) {
+	now := time.Now().UTC()
+	change, amount, change5d := 2.4, 987654321.0, 8.6
+	if limit < 1 {
+		return nil, context.Canceled
+	}
+	return &model.SectorRankingSnapshot{
+		Category: category, Direction: direction, SortBy: sortBy, Total: 1,
+		Source: "eastmoney", SourceVersion: "test", FetchedAt: now,
+		QualityStatus:  model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		Items: []model.SectorRanking{{
+			Rank: 1, Code: "BK0475", Name: "测试板块", Category: category,
+			ChangePercent: &change, ChangePercent5D: &change5d,
+			Amount: &amount, AmountUnit: "CNY",
+			Source: "eastmoney", SourceVersion: "test", FetchedAt: now,
+			QualityStatus: model.QualityDegraded, QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		}},
+	}, nil
+}
+
+func TestSectorRankingEndpointAcceptsFiveDayMetric(t *testing.T) {
+	p := httpMetricSectorFake{}
+	svc := service.New([]provider.Provider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.SetSectorRankingProviders([]provider.SectorRankingProvider{p})
+	h := New("secret", "forward_adjusted", svc, []provider.Provider{p}, nil).Handler()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/sectors?type=industry&sort_by=change_5d", nil)
+	req.Header.Set("X-API-Key", "secret")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("change_5d should be accepted end-to-end, got status=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "\"sort_by\":\"change_5d\"") {
+		t.Fatalf("response must identify the selected ranking metric: %s", w.Body.String())
 	}
 }
 

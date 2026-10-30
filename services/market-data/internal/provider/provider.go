@@ -175,3 +175,15 @@ type MarketCapitalFlowProvider interface {
 	NamedProvider
 	FetchMarketCapitalFlow(ctx context.Context, startDate, endDate string) (*model.MarketCapitalFlowSnapshot, error)
 }
+
+// AdjustmentFactorProvider 提供原始累计复权因子，不得提前折算为调整后价格。
+type AdjustmentFactorProvider interface {
+	NamedProvider
+	FetchAdjustmentFactors(ctx context.Context, symbol, startDate, endDate string) ([]model.AdjustmentFactor, error)
+}
+
+// CorporateActionProvider 提供公告日期和除权除息日期明确区分的公司行动事件。
+type CorporateActionProvider interface {
+	NamedProvider
+	FetchCorporateActions(ctx context.Context, symbol, startDate, endDate string) ([]model.CorporateAction, error)
+}

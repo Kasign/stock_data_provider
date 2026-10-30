@@ -24,6 +24,12 @@ func (s *DataService) MarketCapitalFlowProviders() []provider.MarketCapitalFlowP
 // MarketCapitalFlow returns provider-reported market-wide capital-flow history.
 // It never derives a market total by summing a partial set of individual stocks.
 func (s *DataService) MarketCapitalFlow(ctx context.Context, startDate, endDate string) (*model.MarketCapitalFlowSnapshot, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	start, err := time.Parse("2006-01-02", startDate)
 	if err != nil || start.Format("2006-01-02") != startDate {
 		return nil, false, errors.New("market-capital-flow start must use YYYY-MM-DD")
@@ -32,25 +38,42 @@ func (s *DataService) MarketCapitalFlow(ctx context.Context, startDate, endDate 
 	if err != nil || end.Format("2006-01-02") != endDate || end.Before(start) {
 		return nil, false, errors.New("market-capital-flow end must use YYYY-MM-DD and not precede start")
 	}
-	key := fmt.Sprintf("md:v1:market-capital-flow:%s:%s", startDate, endDate)
+	providers := s.MarketCapitalFlowProviders()
+	activeProviders := make([]provider.MarketCapitalFlowProvider, 0, len(providers))
+	providerNames := make([]string, 0, len(providers))
+	for _, p := range providers {
+		if p == nil {
+			continue
+		}
+		activeProviders = append(activeProviders, p)
+		providerNames = append(providerNames, p.Name())
+	}
+	if len(activeProviders) == 0 {
+		return nil, false, errors.New("no market-capital-flow provider enabled")
+	}
+	// Provider chain changes must not reuse a snapshot cached under a previous source configuration.
+	key := fmt.Sprintf("md:v2:market-capital-flow:%s:%s:%s", strings.Join(providerNames, ","), startDate, endDate)
 	if data, ok, cacheErr := s.cache.Get(ctx, key); cacheErr == nil && ok {
 		var cached model.MarketCapitalFlowSnapshot
 		if json.Unmarshal(data, &cached) == nil && validateMarketCapitalFlowSnapshot(startDate, endDate, &cached) == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < 15*time.Minute {
 			return &cached, true, nil
 		}
 	}
-	providers := s.MarketCapitalFlowProviders()
-	if len(providers) == 0 {
-		return nil, false, errors.New("no market-capital-flow provider enabled")
-	}
 	failures := make([]string, 0, len(providers))
-	for _, p := range providers {
-		if p == nil {
-			continue
+	for _, p := range activeProviders {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
 		}
 		snapshot, fetchErr := p.FetchMarketCapitalFlow(ctx, startDate, endDate)
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
 		if fetchErr != nil {
 			failures = append(failures, p.Name()+": "+fetchErr.Error())
+			continue
+		}
+		if snapshot != nil && snapshot.Source != p.Name() {
+			failures = append(failures, p.Name()+": provider source does not match configured provider")
 			continue
 		}
 		if validateErr := validateMarketCapitalFlowSnapshot(startDate, endDate, snapshot); validateErr != nil {

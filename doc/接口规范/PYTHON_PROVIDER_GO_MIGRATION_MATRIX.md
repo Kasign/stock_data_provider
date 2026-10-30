@@ -127,3 +127,60 @@ Python bridge 还包含 search、LLM、notification、persistence 等非行情�
 - Python 兼容仅在边界转换，不反向污染 Go 内部标准模型。
 - 删除旧 Python 适配器前，必须完成调用方迁移、固定样本对账和目标环境回归。
 - 本矩阵是静态盘点基线；真实运行验收记录维护在 `DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md`。
+
+
+## 8. 原 Python Provider 上游基线已固定（2026-10-30）
+
+本轮已定位并固定原项目源码，不再把“旧 Python 实现不在当前 Go 仓库”当作无法继续静态对照的理由。
+
+- 原仓库：`Kasign/daily_stock_analysis`
+- 分支：`main`
+- 固定提交：`7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32`
+- 提交日期：2026-10-17
+- 关键文件：
+  - `data_provider/base.py`
+  - `data_provider/efinance_fetcher.py`
+  - `data_provider/akshare_fetcher.py`
+  - `data_provider/tushare_fetcher.py`
+  - `data_provider/tickflow_fetcher.py`
+
+### 8.1 Python 实时行情调用链
+
+`DataFetcherManager.get_realtime_quote` 对普通 A 股按以下路径尝试：
+1. `EfinanceFetcher.get_realtime_quote`
+2. `AkshareFetcher.get_realtime_quote(source="em")`
+3. `AkshareFetcher.get_realtime_quote(source="sina")`
+4. `AkshareFetcher.get_realtime_quote(source="tencent")`
+5. 全部失败返回空结果。
+
+指数走独立固定来源链，不与普通个股路径混为一谈。
+
+### 8.2 Python 日 K 注册和回退链
+
+`DataFetcherManager._init_default_fetchers` 默认创建并按优先级排序：
+1. EfinanceFetcher（P0）
+2. AkshareFetcher（P1）
+3. PytdxFetcher（P2）
+4. BaostockFetcher（P3）
+5. YfinanceFetcher（P4）
+6. TencentFetcher（P5）
+
+配置 Tushare Token 时，额外创建 TushareFetcher，并由其初始化状态动态提升优先级；配置 TickFlow Key 时加入 TickFlowFetcher；妙想、长桥、富途等按各自凭据/端点可用性加入。日 K 管理器过滤市场与能力后逐源尝试，成功时返回 `(DataFrame, source_name)`。
+
+### 8.3 Python 字段处理与 Go 的确定差异
+
+| 字段/行为 | Python 固定源码 | Go 当前契约 | 判定 |
+|---|---|---|---|
+| Efinance 日 K 缺失 volume | `_normalize_data` 补为 0 | 保留 null/unknown/degraded 或拒绝不完整关键字段 | Go 更严格；不得为表面一致改成 0 |
+| Efinance 日 K 缺失 amount | `_normalize_data` 补为 0 | 保留 null/unknown/degraded | Go 更严格 |
+| Efinance OHLC 缺列 | 缺 open 时以 close 补 open/high/low | 严格 OHLC 检查，不能伪造完整价格区间 | Go 更严格 |
+| AkShare 日 K | 中文列名映射后交给 BaseFetcher 清洗 | Go Provider 各自显式字段映射、单位与质量校验 | 需要同一原始样本比较 |
+| Python BaseFetcher 清洗 | 数值化、剔除 close/volume 为空的行、日期升序 | Go 校验日期、OHLC、数量级、重复和来源质量 | 规则不完全相同，需记录可解释差异 |
+| Python 技术指标 | MA5/MA10/MA20、volume_ratio（前五日均量比较） | 当前 Go DailyBar 核心字段含 MA5/MA20/MA120/MA250，不等同 Python 指标集合 | Go 缺 MA10/volume_ratio 对应字段，属于接口能力差异 |
+| Python 实时行情 | Efinance 先尝试，再由 AkShare 分别尝试 EM/Sina/Tencent | Go 按配置的 Provider 能力优先级路由 | 路由顺序不是 1:1，需用来源链记录比较 |
+
+### 8.4 证据边界
+
+上述内容属于固定提交源码的静态调用链和字段处理对照，已经比之前的“缺少原始实现”更进一步，但仍不能证明两边实时数据值等价。当前 Go 仓库没有包含原 Python `data_provider` 包及其运行依赖；本轮未执行旧 Python Provider 的真实网络请求。
+
+后续字段级对账必须使用同一证券、同一交易日、同一复权基准，分别从固定 Python 提交和 Go 服务导出 JSON，再比较价格、成交量、成交额、指标、缺失值、来源和时间字段。旧 Python 将缺失值补零的行为应标记为“Go 更严格”，不得将其作为 Go 回归目标。
