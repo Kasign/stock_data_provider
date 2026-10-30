@@ -121,3 +121,32 @@ func TestProviderProbeEndpointRejectsOversizedBody(t *testing.T) {
 		t.Fatalf("oversized body status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestProviderProbeEndpointAcceptsMarketAndSymbolFilters(t *testing.T) {
+	response := performProviderProbeRequest(newProviderProbeHTTPTestHandler(), `{"scope":"all","capabilities":["quote"],"markets":["CHINEXT"],"symbols":["300750.SZ"]}`, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("market/symbol filter status=%d body=%s", response.Code, response.Body.String())
+	}
+	for _, expected := range []string{`"requested_markets":["CHINEXT"]`, `"requested_symbols":["300750.SZ"]`} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Fatalf("filtered probe response missing %s: %s", expected, response.Body.String())
+		}
+	}
+}
+
+func TestProviderProbeEndpointRejectsInvalidMarketAndSymbolFilters(t *testing.T) {
+	cases := []string{
+		`{"capabilities":["quote"],"markets":["UNKNOWN"]}`,
+		`{"capabilities":["quote"],"markets":["STAR"],"symbols":["300750.SZ"]}`,
+		`{"capabilities":["quote"],"symbols":["600519"]}`,
+		`{"capabilities":["quote"],"markets":["SH_MAIN","STAR"]}`,
+		`{"markets":["SH_MAIN"]}`,
+		`{"capabilities":["market_breadth"],"markets":["SH_MAIN"]}`,
+	}
+	for _, body := range cases {
+		response := performProviderProbeRequest(newProviderProbeHTTPTestHandler(), body, true)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("body %s: status=%d body=%s", body, response.Code, response.Body.String())
+		}
+	}
+}
