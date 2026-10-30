@@ -141,7 +141,7 @@ func (s *DataService) ProviderDiagnostics() []map[string]any {
 		}
 		capabilities[p.Name()]["index_quotes"] = true
 	}
-	for providerIndex, p := range s.marketBreadthProviders {
+	for _, p := range s.marketBreadthProviders {
 		if capabilities[p.Name()] == nil {
 			capabilities[p.Name()] = make(map[string]bool)
 		}
