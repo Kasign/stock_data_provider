@@ -135,13 +135,13 @@ func (s *DataService) ProviderDiagnostics() []map[string]any {
 		}
 		capabilities[p.Name()]["daily_bars"] = true
 	}
-	for _, p := range s.indexQuoteProviders {
+	for providerIndex, p := range s.indexQuoteProviders {
 		if capabilities[p.Name()] == nil {
 			capabilities[p.Name()] = make(map[string]bool)
 		}
 		capabilities[p.Name()]["index_quotes"] = true
 	}
-	for _, p := range s.marketBreadthProviders {
+	for providerIndex, p := range s.marketBreadthProviders {
 		if capabilities[p.Name()] == nil {
 			capabilities[p.Name()] = make(map[string]bool)
 		}
@@ -326,6 +326,14 @@ func (s *DataService) IndexQuotes(ctx context.Context) (*model.IndexQuoteSnapsho
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue
+		}
+		if providerIndex > 0 {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_fallback_used")
+			for index := range snapshot.Items {
+				snapshot.Items[index].QualityStatus = model.QualityDegraded
+				snapshot.Items[index].QualityReasons = appendReason(snapshot.Items[index].QualityReasons, "provider_fallback_used")
+			}
 		}
 		payload, marshalErr := json.Marshal(snapshot)
 		if marshalErr == nil {
@@ -553,6 +561,10 @@ func (s *DataService) MarketBreadth(ctx context.Context) (*model.MarketBreadthSn
 			}
 			failures = append(failures, p.Name()+": valid contract but degraded quality")
 			continue
+		}
+		if providerIndex > 0 {
+			snapshot.QualityStatus = model.QualityDegraded
+			snapshot.QualityReasons = appendReason(snapshot.QualityReasons, "provider_fallback_used")
 		}
 		if data, err := json.Marshal(snapshot); err == nil {
 			if cacheErr := s.cache.Set(ctx, key, data, ttl); cacheErr != nil {

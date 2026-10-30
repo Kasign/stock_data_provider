@@ -92,7 +92,7 @@ func TestIndexQuotesFallsBackFromDegradedToValidProvider(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("IndexQuotes returned hit=%v err=%v", hit, err)
 	}
-	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityValid {
+	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded || !hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
 		t.Fatalf("expected valid fallback index quote, got %+v", got)
 	}
 	if first.calls != 1 || second.calls != 1 {
@@ -126,7 +126,7 @@ func TestMarketBreadthFallsBackFromDegradedToValidProvider(t *testing.T) {
 	if err != nil || hit {
 		t.Fatalf("MarketBreadth returned hit=%v err=%v", hit, err)
 	}
-	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityValid {
+	if got == nil || got.Source != "tickflow" || got.QualityStatus != model.QualityDegraded || !hasSnapshotQualityReason(got.QualityReasons, "provider_fallback_used") {
 		t.Fatalf("expected valid fallback market breadth, got %+v", got)
 	}
 	if first.calls != 1 || second.calls != 1 {
