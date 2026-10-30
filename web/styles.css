@@ -4948,6 +4948,9 @@ button:disabled {
 
 /* 运行流详情改为非模态工作区：保留左侧主导航可交互。 */
 .run-flow-dialog[open] {
+  position: fixed;
+  top: 0;
+  bottom: 0;
   pointer-events: none;
   z-index: 6;
   width: calc(100vw - 238px);
