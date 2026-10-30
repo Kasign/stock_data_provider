@@ -135,3 +135,40 @@ CREATE TABLE IF NOT EXISTS market_data_provider_probe_runs (
  UNIQUE KEY uk_provider_probe_run_id (run_id),
  KEY idx_provider_probe_started_at (started_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 复权因子与公司行动均按内容修订追加保存，支持系统观察时间 PIT。
+CREATE TABLE IF NOT EXISTS market_data_adjustment_factor_versions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  symbol VARCHAR(16) NOT NULL,
+  trade_date DATE NOT NULL,
+  source VARCHAR(64) NOT NULL,
+  revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  recorded_at DATETIME(6) NOT NULL,
+  fetched_at DATETIME(6) NOT NULL,
+  available_at DATETIME(6) NULL,
+  quality_status VARCHAR(16) NOT NULL,
+  metadata JSON NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_market_adjustment_factor_asof (symbol, trade_date, source, recorded_at, id),
+  KEY idx_market_adjustment_factor_observed (recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS market_data_corporate_action_versions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  symbol VARCHAR(16) NOT NULL,
+  provider_event_id VARCHAR(128) NOT NULL,
+  source VARCHAR(64) NOT NULL,
+  ex_date DATE NOT NULL,
+  announcement_date DATE NULL,
+  revision_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  recorded_at DATETIME(6) NOT NULL,
+  fetched_at DATETIME(6) NOT NULL,
+  available_at DATETIME(6) NULL,
+  quality_status VARCHAR(16) NOT NULL,
+  metadata JSON NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_market_corporate_action_asof (symbol, ex_date, source, recorded_at, id),
+  KEY idx_market_corporate_action_event_asof (symbol, provider_event_id, source, recorded_at, id),
+  KEY idx_market_corporate_action_announcement (symbol, announcement_date),
+  KEY idx_market_corporate_action_observed (recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
