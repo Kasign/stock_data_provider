@@ -211,3 +211,15 @@ go test ./internal/provider -run '^TestLiveProviderProbe
 - 本次只使用无 Provider 的测试服务，不触发真实供应商请求，不需要 Key/Token。
 
 尚未实现：markets、symbols、checks 过滤；逐项请求摘要、返回行数/覆盖率、样本证券/日期和 freshness 证据。当前提交仍需等待最新 SHA 的完整 CI 与 Docker 构建确认。
+
+
+## 10. 核心行情探测证据字段（2026-10-30）
+
+ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`rows_returned`、`rows_validated`、`provider_time`。
+
+- quote：记录请求样本 `600519.SH`、市场 SH、返回/校验数及 ProviderTime。
+- daily_bars：记录请求样本 `600036.SH`、最新有效交易日、原始返回数、校验后数量及可用 ProviderTime。
+- 不使用 FetchedAt 或 CheckedAt 冒充 ProviderTime；上游未提供时间时保持空值。
+- 其他能力的记录数、覆盖率、请求摘要和时效证据尚未全部接入，后续按快照契约逐项扩展。
+
+最新代码提交需以 PR #1 的当前 HEAD 为准；本节不记录未经 CI 确认的构建结论。
