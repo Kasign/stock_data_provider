@@ -149,7 +149,9 @@ const state = {
   taskSymbols: [],
   taskType: "post_market_scan",
   taskStatus: "",
-  taskStatusLoading: false,
+  taskFailureCode: "",
+  taskErrorMessage: "",
+  taskStatusLoading: false;
   taskStatusError: "",
   taskStatusErrorRetrying: false,
   isCreatingTask: false,
@@ -264,6 +266,8 @@ function persistTaskReference() {
     symbols: state.taskSymbols,
     task_type: state.taskType,
     status: state.taskStatus,
+    failure_code: state.taskFailureCode,
+    error_message: state.taskErrorMessage,
     analysis_base: taskAnalysisBase
   };
   const comparable = JSON.stringify(record);
@@ -276,6 +280,8 @@ function persistTaskReference() {
       symbols: Array.isArray(previous.symbols) ? previous.symbols : [],
       task_type: previous.task_type || "post_market_scan",
       status: previous.status || "",
+      failure_code: previous.failure_code || "",
+      error_message: previous.error_message || "",
       analysis_base: previous.analysis_base || state.taskAnalysisBase || state.settings.analysisBase
     }) : "";
     if (previousComparable === comparable) {
@@ -291,6 +297,8 @@ function persistTaskReference() {
         symbols: Array.isArray(historyItem.symbols) ? historyItem.symbols : [],
         task_type: historyItem.task_type || "post_market_scan",
         status: historyItem.status || "",
+        failure_code: historyItem.failure_code || "",
+        error_message: historyItem.error_message || "",
         analysis_base: historyItem.analysis_base || taskAnalysisBase
       }) : "";
       if (historyComparable !== comparable) {
@@ -347,7 +355,9 @@ function renderRecentTasks(records) {
   const items = filterRecentTasks(allItems, {
     search: $("#recent-analysis-search").value,
     status: $("#recent-analysis-status").value,
-    taskType: $("#recent-analysis-type").value
+    taskType: $("#recent-analysis-type").value,
+    from: $("#recent-analysis-from").value,
+    to: $("#recent-analysis-to").value
   });
   setText("#recent-analysis-count", items.length + " / " + allItems.length + "（最多 10）");
 
@@ -379,6 +389,9 @@ function renderRecentTasks(records) {
     open.dataset.openTaskBase = recordAnalysisBase;
     const detail = document.createElement("small");
     detail.textContent = (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") + " · " + record.task_id + (isOtherEndpoint ? " · 旧分析 API 地址" : "");
+    const failure = document.createElement("small"); failure.className = "recent-analysis-failure";
+    failure.textContent = [record.failure_code ? "错误代码：" + record.failure_code : "", record.error_message || ""].filter(Boolean).join(" · ").slice(0, 300);
+    failure.hidden = !failure.textContent; if (failure.textContent) main.append(failure);
     const status = document.createElement("span");
     status.className = "recent-analysis-item-status";
     status.textContent = taskStatusLabel(record.status);
@@ -423,6 +436,8 @@ function persistRecentTaskHistory(record) {
     symbols: Array.isArray(record.symbols) ? record.symbols.filter((item) => typeof item === "string") : [],
     task_type: typeof record.task_type === "string" ? record.task_type : "post_market_scan",
     status: typeof record.status === "string" ? record.status : "",
+    failure_code: typeof record.failure_code === "string" ? record.failure_code : "",
+    error_message: typeof record.error_message === "string" ? record.error_message : "",
     analysis_base: typeof record.analysis_base === "string" ? record.analysis_base.trim() : "",
     updated_at: typeof record.updated_at === "string" ? record.updated_at : ""
   };
@@ -432,6 +447,8 @@ function persistRecentTaskHistory(record) {
     item.created_at === expected.created_at &&
     item.task_type === expected.task_type &&
     item.status === expected.status &&
+    item.failure_code === expected.failure_code &&
+    item.error_message === expected.error_message &&
     item.analysis_base === expected.analysis_base &&
     item.updated_at === expected.updated_at &&
     JSON.stringify(item.symbols) === JSON.stringify(expected.symbols)
@@ -3147,6 +3164,8 @@ function renderSelectedTaskEvent(item) {
 }
 function renderTask(task) {
   state.taskStatus = task.status || state.taskStatus;
+  state.taskFailureCode = typeof task.failure_code === "string" ? task.failure_code.slice(0, 120) : "";
+  state.taskErrorMessage = typeof task.error_message === "string" ? task.error_message.slice(0, 240) : "";
   if (typeof task.created_at === "string" && task.created_at) state.taskCreatedAt = task.created_at;
   if (task.run_id) state.runId = task.run_id;
   if (task.task_type) state.taskType = task.task_type;
@@ -4180,6 +4199,8 @@ async function createTask(event) {
   state.taskSymbols = symbols;
   state.taskType = taskType;
   state.taskStatus = "";
+  state.taskFailureCode = "";
+  state.taskErrorMessage = "";
   state.taskStatusLoading = false;
   state.taskStatusError = "";
   state.taskStatusErrorRetrying = false;
@@ -4426,6 +4447,8 @@ function activateTaskReference(record) {
   state.taskSymbols = Array.isArray(record.symbols) ? record.symbols : [];
   state.taskType = record.task_type || "post_market_scan";
   state.taskStatus = record.status || "";
+  state.taskFailureCode = record.failure_code || "";
+  state.taskErrorMessage = record.error_message || "";
   state.taskStatusLoading = true;
   state.taskStatusError = "";
   state.taskStatusErrorRetrying = false;
@@ -5743,6 +5766,8 @@ $("#refresh-task").addEventListener("click", () => {
 $("#recent-analysis-search").addEventListener("input", () => renderRecentTasks());
 $("#recent-analysis-status").addEventListener("change", () => renderRecentTasks());
 $("#recent-analysis-type").addEventListener("change", () => renderRecentTasks());
+$("#recent-analysis-from").addEventListener("change", () => renderRecentTasks());
+$("#recent-analysis-to").addEventListener("change", () => renderRecentTasks());
 $("#clear-recent-analysis").addEventListener("click", clearRecentTaskHistory);
 $("#recent-analysis-list").addEventListener("click", (event) => {
   const removeButton = event.target.closest("button[data-remove-task-id]");

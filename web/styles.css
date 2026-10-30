@@ -5012,3 +5012,5 @@ button:disabled {
 .screening-saved-plan small { margin-top:4px; color:var(--text-dim); font-size:11px; }
 .screening-saved-plan-actions { display:flex; gap:7px; flex-wrap:wrap; }
 @media(max-width:640px) { .screening-saved-plan { align-items:flex-start; flex-direction:column; } .screening-saved-plan-actions { width:100%; } .screening-saved-plan-actions button { flex:1; } }
+
+.recent-analysis-failure { display:block; margin-top:4px; color:var(--danger); font-size:11px; line-height:1.55; overflow-wrap:anywhere; }

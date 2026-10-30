@@ -89,7 +89,7 @@ test("stores only task references and excludes report payloads and secrets", () 
   const stored = JSON.parse(storage.getItem(RECENT_TASKS_KEY));
 
   assert.deepEqual(Object.keys(stored[0]).sort(), [
-    "analysis_base", "created_at", "run_id", "status", "symbols", "task_id", "task_type", "updated_at"
+    "analysis_base", "created_at", "error_message", "failure_code", "run_id", "status", "symbols", "task_id", "task_type", "updated_at"
   ].sort());
   assert.equal(records[0].task_id, "task-safe");
   assert.equal(records[0].created_at, "2026-10-27T01:20:00Z");

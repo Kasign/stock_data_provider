@@ -10,6 +10,8 @@ function normalizeRecord(record) {
     symbols: Array.isArray(record.symbols) ? record.symbols.filter((item) => typeof item === "string") : [],
     task_type: typeof record.task_type === "string" ? record.task_type : "post_market_scan",
     status: typeof record.status === "string" ? record.status : "",
+    failure_code: typeof record.failure_code === "string" ? record.failure_code.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) : "",
+    error_message: typeof record.error_message === "string" ? record.error_message.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 240) : "",
     analysis_base: typeof record.analysis_base === "string" ? record.analysis_base.trim() : "",
     updated_at: typeof record.updated_at === "string" ? record.updated_at : ""
   };
@@ -87,6 +89,8 @@ export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
       item.created_at === normalized.created_at &&
       item.task_type === normalized.task_type &&
       item.status === normalized.status &&
+      item.failure_code === normalized.failure_code &&
+      item.error_message === normalized.error_message &&
       item.analysis_base === normalized.analysis_base &&
       item.updated_at === normalized.updated_at &&
       JSON.stringify(item.symbols) === JSON.stringify(normalized.symbols)
@@ -146,13 +150,18 @@ export function filterRecentTasks(items = [], filters = {}) {
   const keyword = String(filters.search || "").trim().toLocaleLowerCase();
   const status = String(filters.status || "all");
   const taskType = String(filters.taskType || "all");
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(filters.from || "")) ? String(filters.from) : "";
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(filters.to || "")) ? String(filters.to) : "";
+  if (from && to && from > to) return [];
+  const localDate = (value) => { const timestamp = Date.parse(value || ""); if (!Number.isFinite(timestamp)) return ""; const date = new Date(timestamp); return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-"); };
   return items.filter((record) => {
     if (status !== "all" && String(record.status || "").toLowerCase() !== status) return false;
     if (taskType !== "all" && String(record.task_type || "") !== taskType) return false;
+    if (from || to) { const createdDate = localDate(record.created_at); if (!createdDate || (from && createdDate < from) || (to && createdDate > to)) return false; }
     if (!keyword) return true;
     return [
       record.task_id, record.run_id, ...(record.symbols || []), record.task_type,
-      record.status, record.updated_at, record.created_at, record.analysis_base
+      record.status, record.failure_code, record.error_message, record.updated_at, record.created_at, record.analysis_base
     ].some((value) => String(value || "").toLocaleLowerCase().includes(keyword));
   });
 }
