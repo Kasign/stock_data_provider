@@ -827,7 +827,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-	runDaily := func(providerName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
+	runDaily := func(providerName, sourceName, symbol string, basis model.AdjustmentBasis, client *http.Client, call func(context.Context) ([]model.DailyBar, error)) {
 		capture := &liveProbeCapture{}
 		if client != nil {
 			client.Transport = capture.transport()
@@ -843,7 +843,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		}
 		contractError := ""
 		if callErr == nil && len(bars) > 0 {
-			contractError = liveProbeDailyContractError(bars, providerName, symbol, basis, startDate, endDate, 8)
+			contractError = liveProbeDailyContractError(bars, sourceName, symbol, basis, startDate, endDate, 8)
 		}
 		switch {
 		case callErr != nil:
@@ -990,7 +990,7 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("sina", "sina", quoteSymbol, sina.client, func(ctx context.Context) (*model.Quote, error) {
 		return sina.FetchQuote(ctx, quoteSymbol)
 	})
-	runDaily("sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("sina", "sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return sina.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
 	})
 
@@ -998,10 +998,10 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("tencent", "tencent", quoteSymbol, tencent.client, func(ctx context.Context) (*model.Quote, error) {
 		return tencent.FetchQuote(ctx, quoteSymbol)
 	})
-	runDaily("tencent", dailySymbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
 	})
-	runDaily("tencent", dailySymbol, model.AdjustmentForward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentForward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 
@@ -1021,10 +1021,10 @@ func TestLiveProviderProbe(t *testing.T) {
 		runQuote("tencent-"+marketSample.name, "tencent", symbol, tencent.client, func(ctx context.Context) (*model.Quote, error) {
 			return tencent.FetchQuote(ctx, symbol)
 		})
-		runDaily("sina-"+marketSample.name, symbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		runDaily("sina-"+marketSample.name, "sina", symbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
 			return sina.FetchDailyBars(ctx, symbol, startDate, endDate, 8, model.AdjustmentNone)
 		})
-		runDaily("tencent-"+marketSample.name, symbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		runDaily("tencent-"+marketSample.name, "tencent", symbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
 			return tencent.FetchDailyBars(ctx, symbol, startDate, endDate, 8, model.AdjustmentNone)
 		})
 	}
@@ -1062,14 +1062,14 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("eastmoney-delay", "eastmoney", dailySymbol, eastmoneyDelay.client, func(ctx context.Context) (*model.Quote, error) {
 		return eastmoneyDelay.FetchQuote(ctx, dailySymbol)
 	})
-	runDaily("eastmoney", dailySymbol, model.AdjustmentForward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentForward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 
 	baostockClient := baostock.NewClient(baostock.Config{ConnectTimeout: 8 * time.Second, RequestTimeout: 20 * time.Second})
 	baostockProvider := NewBaostock(baostockClient)
 	beforeBaoStockDaily := len(report.Results)
-	runDaily("baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("baostock", "baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
 		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 	dailyProbePassed := len(report.Results) > beforeBaoStockDaily &&
@@ -1110,7 +1110,7 @@ func TestLiveProviderProbe(t *testing.T) {
 	runQuote("yahoo", "yahoo", quoteSymbol, yahoo.client, func(ctx context.Context) (*model.Quote, error) {
 		return yahoo.FetchQuote(ctx, quoteSymbol)
 	})
-	runDaily("yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+	runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
 
@@ -1119,7 +1119,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		runQuote("netease", "netease", quoteSymbol, netease.client, func(ctx context.Context) (*model.Quote, error) {
 			return netease.FetchQuote(ctx, quoteSymbol)
 		})
-		runDaily("netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		runDaily("netease", "netease", dailySymbol, model.AdjustmentNone, netease.client, func(ctx context.Context) ([]model.DailyBar, error) {
 			return netease.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
 		})
 	} else {
