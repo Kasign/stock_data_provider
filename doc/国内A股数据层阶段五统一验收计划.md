@@ -309,3 +309,107 @@
 - 代码映射支持的 Provider，仍须验证证券代码身份、交易所、OHLC、成交量单位、复权口径、交易日期和质量状态。
 - 不允许只凭 isTushareAShareSymbol 接受 BJ 就推断所有 Provider 都支持北交所；必须逐个检查 Provider 的代码转换函数。
 - 北交所黄金样例暂不固化，待至少一个可用 Provider 返回真实、可校验的报价和日 K 样本后再增加 fixture。
+
+## 十四、统一数据 API 诊断能力规划（2026-10-30）
+
+### 现状核对
+
+当前已存在以下接口，不重复新建同类入口：
+
+| 接口 | 当前职责 | 当前边界 |
+|---|---|---|
+| `GET /api/v1/data-sources` | 返回已注册 Provider 与能力配置 | 配置/能力清单，不代表真实连通或质量通过 |
+| `GET /api/v1/data-sources/diagnostics` | 返回业务请求形成的 Provider 运行诊断 | 当前主要覆盖 quote、daily_bars 熔断器状态；不主动探测，不做全量数据质量检查 |
+| `POST /api/v1/data-sources/probe` | 主动探测已启用 Provider 的能力 | 已覆盖 quote、daily_bars、stock_basic、stock_search、index_quotes、market_breadth、sector_rankings、market_capital_flow 等部分能力；结果字段目前以状态、质量、错误分类为主，详细错误证据和业务 API 端到端覆盖仍需补齐 |
+| `GET /api/v1/data-sources/probe/history` | 查询已持久化的探测批次 | 依赖 MariaDB；未配置存储时不能提供历史记录 |
+| `GET /health/live`、`GET /health/ready` | 进程存活与配置依赖就绪 | 不代表上游 Provider 可用，更不代表行情准确 |
+
+结论：以现有 `POST /api/v1/data-sources/probe` 为统一主动诊断入口进行增强；保留现有路由与旧字段兼容。运行态 `diagnostics`、Provider 能力清单及健康检查继续承担各自职责，不合并成含义模糊的单一状态。
+
+### 目标
+
+为所有重要数据服务提供可重复执行、可追溯、可解释的诊断能力，覆盖从 HTTP API 到 Provider，再到归一化数据质量和持久化的关键链路。诊断结果必须能明确回答：
+
+1. API 是否可访问、鉴权是否正确、响应结构是否符合契约。
+2. 对应 Provider 是否已配置、能力是否启用、凭据是否具备；是否实际发起请求。
+3. 上游连接是否成功，HTTP 状态、超时、DNS、EOF、限流和权限错误分别是什么。
+4. 返回的数据是否属于请求的证券、市场、日期和能力，关键字段、单位、时间及复权口径是否正确。
+5. 数据是否完整、是否陈旧、是否降级；与可比来源是否存在超出阈值的差异。
+6. 失败发生在哪个阶段、具体错误原因、证据摘要及建议复验动作是什么。
+
+### 诊断范围
+
+| 维度 | 检查内容 |
+|---|---|
+| API 连通性与契约 | 路由可达、HTTP 状态、鉴权、参数校验、响应 JSON/schema、耗时、超时 |
+| Provider 配置 | 注册状态、能力开关、必需凭据是否配置；只检查凭据存在性，不输出凭据 |
+| Provider 连通性 | DNS/连接/TLS、HTTP 状态、响应体类型、空响应、解析错误、限流、权限错误 |
+| 证券身份 | 规范代码、交易所、板块、普通股票类型；拒绝 ETF、指数、可转债等不匹配样本 |
+| 行情准确性 | 价格范围、OHLC 关系、昨收/涨跌额/涨跌幅关系、成交量与成交额单位 |
+| 日 K 准确性 | 日期连续性、重复记录、OHLC、成交量/额、复权基准、交易日边界 |
+| 数据完整性 | 必填字段、null/zero 语义、记录数、分页终止、覆盖率、重复/缺失 |
+| 数据时效性 | Provider 时间、采集时间、交易日期、缓存年龄、陈旧数据 |
+| 其他业务能力 | 证券资料、搜索、指数、市场广度、行业概念、涨跌停池、龙虎榜、交易日历、财务、估值、资金流、公告、成分股等按各自契约校验 |
+| 跨源一致性 | 相同证券/日期/复权口径下，对价格、OHLC、成交量和可验证金额做字段差异比较 |
+| 存储链路 | MariaDB 写入/读取、重复写入、历史探测查询；Redis 可用性与缓存命中状态 |
+
+### API 设计与兼容策略
+
+保留现有接口：
+
+- `POST /api/v1/data-sources/probe`：执行主动诊断。
+- `GET /api/v1/data-sources/probe/history`：查询历史批次。
+- `GET /api/v1/data-sources/diagnostics`：查询线上业务流量形成的运行态诊断。
+- `GET /api/v1/data-sources`：查询配置能力清单。
+
+在现有 POST 请求体中增加可选诊断参数，默认行为保持兼容：
+
+- `scope`：`all`、`core` 或指定能力集合。
+- `markets`：沪市主板、深市主板、创业板、科创板、北交所。
+- `symbols`：受控样本证券列表；默认使用固定脱敏样本。
+- `checks`：connectivity、contract、quality、freshness、cross_provider、storage。
+- `include_details`：是否返回字段级差异和脱敏证据。
+- `timeout_seconds`：受服务端上限约束，不允许调用方无限延长请求。
+
+当前同步执行模式先保持不变；当诊断项增多、执行时间可能超过 HTTP 超时后，再基于现有 run_id 与 MariaDB 记录扩展异步任务查询能力，不提前引入重复任务系统。
+
+### 统一结果模型
+
+每个诊断批次和每个检查项分别给出状态。批次汇总至少包含 total、passed、degraded、skipped、failed、not_configured；每项至少包含：
+
+- check_id、category、provider、capability、symbol、market、checked_at。
+- status、stage、error_code、error_message、recommendation。
+- elapsed_ms、http_status、attempt_count、response_bytes。
+- request_summary（脱敏）、response_summary（脱敏）。
+- expected、actual、difference、tolerance（适用时）。
+- quality_status、quality_reasons、source_version、provider_time、fetched_at。
+- evidence_refs 或有限大小的脱敏样本摘要。
+
+状态口径统一为：`passed`、`degraded`、`skipped`、`failed`、`not_configured`、`not_supported`。批次状态由检查项聚合产生，不允许用单一 Provider 成功覆盖其他能力失败。
+
+错误阶段至少区分：configuration、credential、dns、connect、tls、http、rate_limit、provider_auth、provider_permission、decode、identity、contract、quality、freshness、cross_provider、storage、timeout、cancelled。
+
+### 凭据、网络和质量门禁
+
+- Tushare、同花顺、TickFlow、妙想等需要凭据的 Provider：未配置凭据时标记 `skipped` 或 `not_configured`，不发真实请求，不计为失败，也不计为通过。
+- 已配置凭据后出现鉴权、积分、配额或单项能力授权问题，必须作为具体失败记录。
+- 公共接口仍可执行探测；DNS、连接超时、EOF、HTTP 502/5xx、限流分别保留，不能归因于缺少凭据。
+- 不输出 API Key、Token、Cookie、完整带查询参数 URL、原始敏感响应；错误消息需脱敏并限长。
+- `skipped`、`not_configured`、`not_supported` 均不能作为 Provider 可用性证据。
+- HTTP 200 不等于数据正确；字段、证券身份、交易日期、单位、复权、时效和质量状态仍需逐项检查。
+- 缺失成交额不得补零；未知单位、时间戳或复权语义继续降级；不因诊断接口建设而降低现有数据质量门槛。
+- 跨源比较只在样本身份、交易日、复权基准和单位一致时执行；不可比字段标记 not_applicable，不制造差异结论。
+- 诊断不得写入正式行情缓存或污染业务熔断统计；诊断请求并发、样本量和超时必须受限。
+
+### 实施顺序与验收
+
+1. **P0：诊断结果模型与错误细节**。扩展现有 ProviderProbeItem，增加错误阶段、脱敏错误摘要、检查阶段、样本身份和有限证据；保留现有 JSON 字段和历史记录兼容。
+2. **P0：覆盖面扩展**。按已注册能力矩阵补齐核心市场/个股/财务/指数/资金流/公告等检查项；无 Provider、未配置、未支持分别输出，不得静默漏项。
+3. **P0：数据质量断言**。统一接入现有 normalize 校验和各能力专用校验，覆盖证券身份、OHLC、成交量/额单位、日期、分页、时间和质量状态。
+4. **P0：跨源对账**。以固定黄金样例执行同日同口径比较，输出逐字段 expected/actual/difference；阈值必须有契约依据。
+5. **P1：API 契约与历史**。完善 OpenAPI、参数验证、历史详情、存储不可用语义和向后兼容测试。
+6. **P1：WebUI 对接**。数据中心提供一键诊断、批次概览、Provider/能力明细、失败阶段筛选、错误详情和历史报告；WebUI 仅展示 API 返回的真实状态。
+7. **最终验收**。使用 httptest 模拟成功、空响应、错误身份、单位异常、超时、HTTP 502、权限失败、凭据缺失、存储故障；再执行无凭据公共源诊断。需要真实 Key 的能力仅在用户配置凭据后单独验收。
+
+交付标准：每个重要数据能力都有明确检查项和状态；每个失败项都有可定位的错误阶段、错误代码和脱敏原因；未执行/跳过/不支持不会被显示为通过；报告可持久化查询；OpenAPI、自动化测试与 WebUI 展示口径一致。
+
