@@ -847,7 +847,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
     if (batchQuote?.errorCode) {
       quoteLine.textContent = "批量行情不可用：" + batchQuote.errorCode + " · " + qualityLabel(batchQuote.qualityStatus);
     } else if (currentQuote) {
-      const oldSnapshot = state.watchlistQuoteStatus === "error" && batchQuote;
+      const oldSnapshot = ["error", "loading"].includes(state.watchlistQuoteStatus) && batchQuote;
       quoteLine.textContent = (oldSnapshot ? "上次成功快照：" : "行情快照：")
         + formatPrice(currentQuote.current_price) + " · " + formatPercent(currentQuote.change_percent)
         + " · " + (currentQuote.quote_time ? formatDateTime(currentQuote.quote_time) : "时间未报告")

@@ -116,6 +116,7 @@ try {
     let marketIndexRequestCount = 0;
     let dataSourceScenario = "success";
     let dataSourcesRequestCount = 0;
+    let batchQuotesRequestCount = 0;
     let diagnosticsRequestCount = 0;
     let healthScenario = "unavailable";
     let settingsConnectionScenario = "default";
@@ -389,6 +390,23 @@ try {
           });
         }
         return json(200, { ...barsFixture, symbol: requestedSymbol });
+      }
+
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/quotes")) {
+        batchQuotesRequestCount += 1;
+        const symbols = new URL(route.request().url()).searchParams.get("symbols")?.split(",") || [];
+        return json(200, {
+          items: symbols.map((symbol) => ({
+            symbol,
+            quote: quoteForSymbol(symbol),
+            quality_status: "valid"
+          })),
+          total: symbols.length,
+          succeeded: symbols.length,
+          failed: 0,
+          fetched_at: "2026-10-30T07:00:00Z",
+          quality_status: "valid"
+        });
       }
 
       if (pathname.includes("/api/")) {
@@ -871,6 +889,31 @@ try {
       assert.doesNotMatch(recoveredIndexState.className, /is-unavailable/);
       await page.waitForTimeout(250);
       assert.equal(marketIndexRequestCount, marketRecoveryCount + 1, "manual market overview retry should not silently duplicate the request");
+
+      // 自选股只在用户主动刷新时调用批量行情接口，不逐只请求。
+      const watchlistKey = "stock-provider-webui.watchlist.v1";
+      const previousWatchlist = await page.evaluate((key) => localStorage.getItem(key), watchlistKey);
+      await page.evaluate((key) => localStorage.setItem(key, JSON.stringify([
+        { symbol: "600519.SH", name: "测试股票", updated_at: "2026-10-30T07:00:00Z" }
+      ])), watchlistKey);
+      await clickNav(page, '.nav-link[data-view="watchlist"]');
+      await page.locator("#watchlist-view").waitFor({ state: "visible" });
+      const batchQuotesBefore = batchQuotesRequestCount;
+      await page.locator("#refresh-watchlist-quotes").click();
+      await page.waitForFunction(
+        () => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("1 / 1 只") &&
+          document.querySelector("#watchlist-list")?.textContent.includes("123.45"),
+        null,
+        { timeout: 10000 }
+      );
+      assert.equal(batchQuotesRequestCount, batchQuotesBefore + 1, "watchlist refresh must use one batch request, not one request per symbol");
+      assert.match(await page.locator("#watchlist-quote-refresh-status").textContent(), /整体质量/);
+      await page.evaluate(({ key, value }) => {
+        if (value === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      }, { key: watchlistKey, value: previousWatchlist });
+      await clickNav(page, '.nav-link[data-view="market"]');
+      await page.locator("#market-view").waitFor({ state: "visible" });
 
       // Data Center must classify Provider-list errors independently from service probes and clear old capability rows.
       const menu = page.locator("#mobile-menu-toggle");
