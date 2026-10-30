@@ -77,6 +77,9 @@ type DailyBar struct {
 	AdjustmentBasis   AdjustmentBasis `json:"adjustment_basis"`
 	AdjustmentMethod  string          `json:"adjustment_method,omitempty"`
 	AdjustmentRefDate string          `json:"adjustment_reference_date,omitempty"`
+	AdjustmentFactorSource string `json:"adjustment_factor_source,omitempty"`
+	AdjustmentFactorSourceVersion string `json:"adjustment_factor_source_version,omitempty"`
+	AdjustmentFactorSystemObservedAt *time.Time `json:"adjustment_factor_system_observed_at,omitempty"`
 	Source            string          `json:"source"`
 	SourceVersion     string          `json:"source_version,omitempty"`
 	ProviderTime      *time.Time      `json:"provider_timestamp,omitempty"`
