@@ -4886,11 +4886,7 @@ $("#refresh-button").addEventListener("click", async () => {
     }
   }
 });
-$("#open-settings").addEventListener("click", openSettings);
-$("#open-settings-side").addEventListener("click", () => {
-  setMobileNavigationOpen(false, { restoreFocus: true });
-  openSettings();
-});
+$("#open-settings").addEventListener("click", () => setView("settings"));
 $("#save-settings").addEventListener("click", saveSettingsFromForm);
 $("#close-settings-dialog").addEventListener("click", closeSettingsWithGuard);
 $("#cancel-settings-dialog").addEventListener("click", closeSettingsWithGuard);
