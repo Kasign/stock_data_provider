@@ -12,6 +12,7 @@ import (
 )
 
 type providerProbeQuoteFake struct{}
+
 func (providerProbeQuoteFake) Name() string { return "probe-test" }
 func (providerProbeQuoteFake) FetchQuote(_ context.Context, symbol string) (*model.Quote, error) {
 	now := time.Now().UTC()
@@ -24,7 +25,9 @@ func TestProviderActiveProbeRunsOutsideBusinessCircuitBreaker(t *testing.T) {
 	p := providerProbeQuoteFake{}
 	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
 	run, err := ds.ProbeProviderCapabilities(context.Background())
-	if err != nil { t.Fatalf("ProbeProviderCapabilities() error = %v", err) }
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilities() error = %v", err)
+	}
 	if run.Total != 1 || run.Returned != 1 || run.Failed != 0 || run.Items[0].Status != "returned" || run.Persisted {
 		t.Fatalf("unexpected probe result: %+v", run)
 	}

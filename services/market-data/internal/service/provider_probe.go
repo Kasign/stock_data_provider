@@ -16,9 +16,9 @@ import (
 
 type providerProbeFunc func(context.Context) (model.QualityStatus, string, []string, error)
 type providerProbeJob struct {
-	provider string
+	provider   string
 	capability string
-	run providerProbeFunc
+	run        providerProbeFunc
 }
 
 // ProbeProviderCapabilities 主动探测已启用 Provider 的核心能力。
@@ -39,12 +39,24 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "quote", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			q, err := p.FetchQuote(probeCtx, quoteSymbol)
-			if err != nil { return model.QualityUnknown, "", nil, err }
-			if q == nil { return model.QualityUnknown, "", nil, errors.New("empty quote response") }
-			if q.Symbol == "" { q.Symbol = quoteSymbol }
-			if q.Source == "" { q.Source = p.Name() }
-			if err := normalize.ValidateQuote(q); err != nil { return model.QualityInvalid, q.SourceVersion, nil, err }
-			if q.SourceVersion == "" { return model.QualityInvalid, "", nil, errors.New("quote source version missing") }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
+			if q == nil {
+				return model.QualityUnknown, "", nil, errors.New("empty quote response")
+			}
+			if q.Symbol == "" {
+				q.Symbol = quoteSymbol
+			}
+			if q.Source == "" {
+				q.Source = p.Name()
+			}
+			if err := normalize.ValidateQuote(q); err != nil {
+				return model.QualityInvalid, q.SourceVersion, nil, err
+			}
+			if q.SourceVersion == "" {
+				return model.QualityInvalid, "", nil, errors.New("quote source version missing")
+			}
 			return q.QualityStatus, q.SourceVersion, append([]string(nil), q.QualityReasons...), nil
 		})
 	}
@@ -52,19 +64,33 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "daily_bars", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			bars, err := p.FetchDailyBars(probeCtx, barsSymbol, "", "", 5, model.AdjustmentNone)
-			if err != nil { return model.QualityUnknown, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
 			validated, warnings := normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
-			if len(validated) == 0 { return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned no valid bars") }
+			if len(validated) == 0 {
+				return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned no valid bars")
+			}
 			quality := model.QualityValid
 			version := ""
 			reasons := append([]string(nil), warnings...)
 			for _, bar := range validated {
-				if version == "" { version = bar.SourceVersion }
-				if bar.QualityStatus != model.QualityValid { quality = model.QualityDegraded }
-				for _, reason := range bar.QualityReasons { reasons = appendReason(reasons, reason) }
+				if version == "" {
+					version = bar.SourceVersion
+				}
+				if bar.QualityStatus != model.QualityValid {
+					quality = model.QualityDegraded
+				}
+				for _, reason := range bar.QualityReasons {
+					reasons = appendReason(reasons, reason)
+				}
 			}
-			if len(warnings) > 0 { quality = model.QualityDegraded }
-			if version == "" { return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing") }
+			if len(warnings) > 0 {
+				quality = model.QualityDegraded
+			}
+			if version == "" {
+				return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing")
+			}
 			return quality, version, reasons, nil
 		})
 	}
@@ -72,8 +98,12 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "stock_basic", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			item, err := p.FetchStockBasic(probeCtx, barsSymbol)
-			if err != nil { return model.QualityUnknown, "", nil, err }
-			if err := validateStockBasic(barsSymbol, item); err != nil { return model.QualityInvalid, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
+			if err := validateStockBasic(barsSymbol, item); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
 			return item.QualityStatus, item.SourceVersion, append([]string(nil), item.QualityReasons...), nil
 		})
 	}
@@ -81,8 +111,12 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "stock_search", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			snapshot, err := p.SearchStocks(probeCtx, "600519", 1)
-			if err != nil { return model.QualityUnknown, "", nil, err }
-			if err := validateStockSearchSnapshot("600519", 1, snapshot); err != nil { return model.QualityInvalid, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
+			if err := validateStockSearchSnapshot("600519", 1, snapshot); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
 	}
@@ -90,8 +124,12 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "index_quotes", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			snapshot, err := p.FetchIndexQuotes(probeCtx)
-			if err != nil { return model.QualityUnknown, "", nil, err }
-			if err := validateIndexQuoteSnapshot(snapshot); err != nil { return model.QualityInvalid, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
+			if err := validateIndexQuoteSnapshot(snapshot); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
 	}
@@ -99,8 +137,12 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "market_breadth", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			snapshot, err := p.FetchMarketBreadth(probeCtx)
-			if err != nil { return model.QualityUnknown, "", nil, err }
-			if err := validateMarketBreadth(snapshot); err != nil { return model.QualityInvalid, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
+			if err := validateMarketBreadth(snapshot); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
 	}
@@ -108,8 +150,12 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		p := p
 		add(p.Name(), "sector_rankings", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
 			snapshot, err := p.FetchSectorRankings(probeCtx, "industry", 5)
-			if err != nil { return model.QualityUnknown, "", nil, err }
-			if err := validateSectorRankingSnapshot("industry", 5, snapshot); err != nil { return model.QualityInvalid, "", nil, err }
+			if err != nil {
+				return model.QualityUnknown, "", nil, err
+			}
+			if err := validateSectorRankingSnapshot("industry", 5, snapshot); err != nil {
+				return model.QualityInvalid, "", nil, err
+			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
 	}
@@ -155,7 +201,9 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 	}
 	wg.Wait()
 	sort.Slice(results, func(i, j int) bool {
-		if results[i].Provider != results[j].Provider { return results[i].Provider < results[j].Provider }
+		if results[i].Provider != results[j].Provider {
+			return results[i].Provider < results[j].Provider
+		}
 		return results[i].Capability < results[j].Capability
 	})
 	run.Items = results
@@ -170,10 +218,16 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 		}
 	}
 	run.Status = "success"
-	if run.Degraded > 0 { run.Status = "degraded" }
-	if run.Failed > 0 { run.Status = "failed" }
+	if run.Degraded > 0 {
+		run.Status = "degraded"
+	}
+	if run.Failed > 0 {
+		run.Status = "failed"
+	}
 	run.FinishedAt = time.Now().UTC()
-	if len(jobs) == 0 { run.Status = "no_capabilities_configured" }
+	if len(jobs) == 0 {
+		run.Status = "no_capabilities_configured"
+	}
 	if s.store != nil {
 		run.Persisted = true
 		if err := s.store.SaveProviderProbeRun(ctx, run); err != nil {
@@ -185,8 +239,12 @@ func (s *DataService) ProbeProviderCapabilities(ctx context.Context) (*model.Pro
 }
 
 func classifyProbeError(err error) string {
-	if errors.Is(err, context.DeadlineExceeded) { return "timeout" }
-	if errors.Is(err, context.Canceled) { return "cancelled" }
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timeout"
+	}
+	if errors.Is(err, context.Canceled) {
+		return "cancelled"
+	}
 	message := strings.ToLower(err.Error())
 	if strings.Contains(message, "contract") || strings.Contains(message, "invalid") || strings.Contains(message, "missing") {
 		return "contract_invalid"
@@ -196,10 +254,18 @@ func classifyProbeError(err error) string {
 
 // ProviderProbeHistory returns persisted active-probe runs.
 func (s *DataService) ProviderProbeHistory(ctx context.Context, limit int) (*model.ProviderProbeHistory, error) {
-	if s.store == nil { return nil, errors.New("provider-probe history storage is not enabled") }
-	if limit == 0 { limit = 20 }
-	if limit < 1 || limit > 100 { return nil, errors.New("provider-probe history limit must be between 1 and 100") }
+	if s.store == nil {
+		return nil, errors.New("provider-probe history storage is not enabled")
+	}
+	if limit == 0 {
+		limit = 20
+	}
+	if limit < 1 || limit > 100 {
+		return nil, errors.New("provider-probe history limit must be between 1 and 100")
+	}
 	items, err := s.store.ListProviderProbeRuns(ctx, limit)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return &model.ProviderProbeHistory{Items: items, Total: len(items)}, nil
 }
