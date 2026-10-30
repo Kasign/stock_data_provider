@@ -202,3 +202,20 @@ func TestCapitalFlowProvidersDeduplicatesNames(t *testing.T) {
 		t.Fatalf("expected providers with duplicate names to be deduplicated, got %d", len(got))
 	}
 }
+
+
+func TestValidateCapitalFlowSnapshotRequiresProviderDate(t *testing.T) {
+	item := capitalFlowFallbackItemForTest("eastmoney", model.QualityDegraded)
+	item.ProviderDate = ""
+	if err := validateCapitalFlowSnapshot("600519.SH", item); err == nil || !strings.Contains(err.Error(), "provider date is missing") {
+		t.Fatalf("missing provider date must be rejected, got %v", err)
+	}
+}
+
+func TestValidateCapitalFlowSnapshotRejectsFutureFetchedAt(t *testing.T) {
+	item := capitalFlowFallbackItemForTest("eastmoney", model.QualityDegraded)
+	item.FetchedAt = time.Now().Add(10 * time.Minute)
+	if err := validateCapitalFlowSnapshot("600519.SH", item); err == nil || !strings.Contains(err.Error(), "fetched_at is in the future") {
+		t.Fatalf("future fetched_at must be rejected, got %v", err)
+	}
+}
