@@ -184,7 +184,15 @@ function renderDependency(selector, detailSelector, dependencies, name, analysis
 }
 
 
-const DIAGNOSTIC_CAPABILITY_LABELS = Object.freeze({\n  quote: "实时行情",\n  daily_bars: "日 K",\n  index_quotes: "指数行情",\n  market_breadth: "市场广度",\n  sector_rankings: "板块排行"\n});\n\nconst DIAGNOSTIC_STATUS = Object.freeze({
+const DIAGNOSTIC_CAPABILITY_LABELS = Object.freeze({
+  quote: "实时行情",
+  daily_bars: "日 K",
+  index_quotes: "指数行情",
+  market_breadth: "市场广度",
+  sector_rankings: "板块排行"
+});
+
+const DIAGNOSTIC_STATUS = Object.freeze({
   not_observed: "尚无业务观测",
   healthy: "正常",
   degraded: "降级",
