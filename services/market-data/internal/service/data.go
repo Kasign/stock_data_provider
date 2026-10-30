@@ -2038,15 +2038,20 @@ func validateCapitalFlowSnapshot(symbol string, item *model.CapitalFlow) error {
 	if err != nil || canonical != symbol || item.Symbol != symbol {
 		return errors.New("capital-flow symbol mismatch")
 	}
-	if strings.TrimSpace(item.ProviderDate) != "" {
-		parsed, dateErr := time.Parse("2006-01-02", item.ProviderDate)
-		today := time.Now().In(marketLocation()).Format("2006-01-02")
-		if dateErr != nil || parsed.Format("2006-01-02") != item.ProviderDate || item.ProviderDate > today {
-			return errors.New("capital-flow provider date is invalid or in the future")
-		}
+	providerDate := strings.TrimSpace(item.ProviderDate)
+	if providerDate == "" {
+		return errors.New("capital-flow provider date is missing")
+	}
+	parsedDate, dateErr := time.Parse("2006-01-02", providerDate)
+	today := time.Now().In(marketLocation()).Format("2006-01-02")
+	if dateErr != nil || parsedDate.Format("2006-01-02") != providerDate || providerDate > today {
+		return errors.New("capital-flow provider date is invalid or in the future")
 	}
 	if strings.TrimSpace(item.Source) == "" || !hasIdentifiableSourceVersion(item.SourceVersion) || item.FetchedAt.IsZero() {
 		return errors.New("capital-flow source/source_version is missing or unidentifiable, or fetched_at is missing")
+	}
+	if item.FetchedAt.After(time.Now().Add(5 * time.Minute)) {
+		return errors.New("capital-flow fetched_at is in the future")
 	}
 	if item.Observations < 0 {
 		return errors.New("capital-flow observation count cannot be negative")
