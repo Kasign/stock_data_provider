@@ -4,6 +4,7 @@ import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.j
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
 import { resolveScreeningCapability, resolveScreeningTaskState, resolveScreeningCollectionState } from "./screening-state.js";
+import { buildScreeningDraftSummary, createScreeningCondition, formatScreeningCondition } from "./screening-draft.js";
 import { resolveAlertCapability, resolveAlertEvaluationState, resolveAlertCollectionState } from "./alert-state.js";
 import {
   analysisHealth,
@@ -1507,6 +1508,69 @@ function syncChatStockContextFromMarket() {
     : null;
   renderChatStockContext();
 }
+
+const screeningDraftConditions = [];
+
+function renderScreeningDraftConditions() {
+  const root = $("#screening-condition-list");
+  const summary = buildScreeningDraftSummary(screeningDraftConditions);
+  root.replaceChildren();
+  if (!summary.count) {
+    const empty = document.createElement("li");
+    empty.className = "empty-row";
+    empty.textContent = "尚未添加条件";
+    root.append(empty);
+  } else {
+    summary.conditions.forEach((label, index) => {
+      const item = document.createElement("li");
+      item.className = "screening-condition-item";
+      const text = document.createElement("span");
+      text.textContent = label;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "button button-secondary";
+      remove.dataset.screeningConditionRemove = String(index);
+      remove.textContent = "移除";
+      remove.setAttribute("aria-label", "移除条件：" + label);
+      item.append(text, remove);
+      root.append(item);
+    });
+  }
+  const summaryRoot = $("#screening-request-summary");
+  if (summaryRoot) {
+    const paragraph = summaryRoot.querySelector("p");
+    if (paragraph) paragraph.textContent = summary.description;
+  }
+}
+
+$("#screening-condition-add").addEventListener("click", () => {
+  const result = createScreeningCondition(
+    $("#screening-condition-field").value,
+    $("#screening-condition-operator").value,
+    $("#screening-condition-value").value
+  );
+  const feedback = $("#screening-condition-feedback");
+  if (!result.valid) {
+    feedback.textContent = result.reason === "range" ? "数值超出该指标允许范围，请调整后重试。" : "请选择有效指标并输入有效数值。";
+    feedback.dataset.state = "error";
+    return;
+  }
+  screeningDraftConditions.push(result.condition);
+  $("#screening-condition-value").value = "";
+  feedback.textContent = "已添加条件。当前仅为页面内存草稿。";
+  feedback.dataset.state = "success";
+  renderScreeningDraftConditions();
+});
+$("#screening-condition-list").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-screening-condition-remove]");
+  if (!button) return;
+  const index = Number(button.dataset.screeningConditionRemove);
+  if (!Number.isInteger(index) || index < 0 || index >= screeningDraftConditions.length) return;
+  screeningDraftConditions.splice(index, 1);
+  $("#screening-condition-feedback").textContent = "已移除条件。";
+  renderScreeningDraftConditions();
+});
+renderScreeningDraftConditions();
 
 function renderScreeningCapability(snapshot) {
   const current = resolveScreeningCapability(snapshot);

@@ -620,6 +620,19 @@
               <label class="field"><span>最低涨跌幅（%）</span><input id="screening-min-change" type="number" disabled aria-disabled="true" placeholder="参数范围待后端定义" /></label>
               <label class="field"><span>最低换手率（%）</span><input id="screening-min-turnover" type="number" disabled aria-disabled="true" placeholder="参数范围待后端定义" /></label>
             </div>
+            <section class="screening-condition-builder" aria-labelledby="screening-condition-title">
+              <div class="screening-condition-heading"><div><h3 id="screening-condition-title">自定义筛选条件</h3><p>支持本地编辑涨跌幅、换手率、成交额及均线条件；当前仅生成草稿，不会提交扫描。</p></div><span class="availability-pill is-readonly">本地草稿</span></div>
+              <div class="screening-condition-controls">
+                <label class="field"><span>指标</span><select id="screening-condition-field">
+                  <option value="change_pct">涨跌幅</option><option value="turnover_rate">换手率</option><option value="amount">成交额</option><option value="ma5">MA5</option><option value="ma20">MA20</option>
+                </select></label>
+                <label class="field"><span>条件</span><select id="screening-condition-operator"><option value="gte">大于等于</option><option value="lte">小于等于</option></select></label>
+                <label class="field"><span>数值</span><input id="screening-condition-value" type="number" step="any" placeholder="输入阈值" /></label>
+                <button class="button button-secondary" id="screening-condition-add" type="button">添加条件</button>
+              </div>
+              <ul class="screening-condition-list" id="screening-condition-list" aria-label="已添加筛选条件"><li class="empty-row">尚未添加条件</li></ul>
+              <p class="field-hint" id="screening-condition-feedback" role="status" aria-live="polite">条件仅保存在当前页面内存中，刷新页面后清空。</p>
+            </section>
             <div class="screening-request-summary" id="screening-request-summary" role="status" aria-live="polite"><strong>提交前摘要</strong><p>尚不能生成扫描请求摘要。服务端提供策略及参数 schema 后，页面才会展示将要提交的真实参数。</p></div>
             <div class="feature-action-row"><span class="field-hint">所有配置控件和提交动作均待真实选股 API 接入。</span><button class="button button-primary" id="screening-submit" type="button" disabled aria-disabled="true">提交扫描（待接入）</button></div>
           </section>
