@@ -354,6 +354,18 @@
               <button class="button button-primary" id="research-start-analysis" type="button">发起分析任务</button>
             </div>
           </section>
+          <section class="panel research-notes-panel" aria-labelledby="research-notes-title">
+            <div class="panel-heading"><div><h2 id="research-notes-title">研究记录</h2><p>记录当前标的的研究判断、观察要点与后续跟踪事项。</p></div><span class="availability-pill is-local">仅当前浏览器保存</span></div>
+            <form id="research-note-form" class="research-note-form">
+              <label class="field"><span>记录标题</span><input id="research-note-title" maxlength="100" required placeholder="例如：关注放量突破后的持续性"></label>
+              <label class="field"><span>关联股票代码（可选）</span><input id="research-note-symbol" maxlength="32" placeholder="例如 600519.SH"></label>
+              <label class="field"><span>标签（逗号分隔）</span><input id="research-note-tags" maxlength="160" placeholder="基本面, 观察中"></label>
+              <label class="field"><span>研究内容</span><textarea id="research-note-content" rows="4" maxlength="10000" required placeholder="记录判断依据、风险因素和待验证事项"></textarea></label>
+              <div class="research-note-actions"><button class="button button-primary" id="research-note-save" type="submit">保存记录</button><button class="button button-secondary" id="research-note-cancel" type="button" hidden>取消编辑</button><span id="research-note-feedback" role="status" aria-live="polite">最多保存 200 条记录；不会同步到服务端。</span></div>
+            </form>
+            <div class="research-note-toolbar"><label class="field"><span>检索记录</span><input id="research-note-search" type="search" placeholder="标题、内容、股票代码或标签"></label><label class="field"><span>股票筛选</span><input id="research-note-symbol-filter" placeholder="输入股票代码"></label></div>
+            <div id="research-note-list" class="research-note-list" aria-live="polite"><p class="table-empty">尚无研究记录。</p></div>
+          </section>
           <section class="panel existing-api-panel" aria-labelledby="stock-status-tools-title">
             <div class="panel-heading"><div><h2 id="stock-status-tools-title">历史交易状态与涨跌幅规则</h2><p>查询指定交易日的停复牌/风险警示证据和有效涨跌幅规则。未知状态代表证据不足，不会自动当作正常或无涨跌幅限制。</p></div></div>
             <div class="existing-api-toolbar">

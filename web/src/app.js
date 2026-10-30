@@ -29,6 +29,7 @@ import { bindMarketOverview } from "./market-overview.js";
 import { taskEventMatchesFilter } from "./task-event-filter.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
+import { bindResearchNotes } from "./research-notes.js";
 import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
@@ -193,6 +194,7 @@ const state = {
 const marketOverview = bindMarketOverview(() => state.settings, (item, source) => selectStockFromMarket(item, source));
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
 const dataCenter = bindDataCenter(() => state.settings);
+bindResearchNotes({ root: document.querySelector("#research-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
 bindExistingApiTools(() => state.settings);
 const marketActivity = bindMarketActivity(
   () => state.settings,

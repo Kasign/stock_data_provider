@@ -4865,3 +4865,20 @@ button:disabled {
 
 .recent-analysis-tools .recent-analysis-filter { min-width:120px; flex:0 1 150px; margin:0; }
 .recent-analysis-tools .recent-analysis-filter span { font-size:12px; color:var(--muted); }
+
+
+/* 研究记录：本地笔记编辑与检索 */
+.research-note-form,.research-note-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.research-note-form .field:nth-child(4){grid-column:1/-1}
+.research-note-form textarea{width:100%;resize:vertical}
+.research-note-actions{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.research-note-actions span{color:var(--text-dim);font-size:11px}
+.research-note-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));padding-top:12px;border-top:1px solid var(--border-soft)}
+.research-note-list{display:grid;gap:10px}
+.research-note-card{padding:13px;border:1px solid var(--border);border-radius:10px;background:var(--panel-raised)}
+.research-note-card header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.research-note-card h3{margin:0;font-size:14px}
+.research-note-card p{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-soft);font-size:12px;line-height:1.7}
+.research-note-meta,.research-note-tags{color:var(--text-dim);font-size:11px}
+.research-note-card-actions{display:flex;gap:7px;flex-wrap:wrap}
+@media(max-width:640px){.research-note-form,.research-note-toolbar{grid-template-columns:1fr}.research-note-form .field:nth-child(4){grid-column:auto}.research-note-card header{flex-direction:column}}
