@@ -30,11 +30,12 @@ func TestProviderActiveProbeRunsOutsideBusinessCircuitBreaker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProbeProviderCapabilities() error = %v", err)
 	}
-	if run.Total != 1 || run.Returned != 1 || run.Failed != 0 || run.Items[0].Status != "returned" || run.Persisted {
-		t.Fatalf("unexpected probe result: %+v", run)
+	if run.Returned != 1 || run.Failed != 0 || run.NotConfigured == 0 || run.Persisted {
+		t.Fatalf("unexpected probe summary: %+v", run)
 	}
-	if run.Items[0].Capability != "quote" || run.Items[0].Provider != "probe-test" {
-		t.Fatalf("unexpected probe identity: %+v", run.Items[0])
+	item, found := findProbeItem(run.Items, "probe-test", "quote")
+	if !found || item.Status != "returned" {
+		t.Fatalf("expected a successful quote probe, got %+v", run.Items)
 	}
 }
 
@@ -54,10 +55,13 @@ func TestProviderProbeFailureIncludesSanitizedHTTPDetails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProbeProviderCapabilities() error = %v", err)
 	}
-	if run.Failed != 1 || len(run.Items) != 1 {
-		t.Fatalf("expected one failed probe item, got %+v", run)
+	if run.Failed != 1 || run.NotConfigured == 0 {
+		t.Fatalf("expected one failed probe and explicit unconfigured capabilities, got %+v", run)
 	}
-	item := run.Items[0]
+	item, found := findProbeItem(run.Items, "probe-fail-test", "quote")
+	if !found {
+		t.Fatalf("failed quote probe item not found: %+v", run.Items)
+	}
 	if item.ErrorCode != "http_502" || item.ErrorStage != "http" || item.HTTPStatus != 502 {
 		t.Fatalf("HTTP failure details were not classified: %+v", item)
 	}
@@ -67,6 +71,15 @@ func TestProviderProbeFailureIncludesSanitizedHTTPDetails(t *testing.T) {
 	if strings.Contains(item.ErrorMessage, "secret-value") || strings.Contains(item.ErrorMessage, "api_key=") {
 		t.Fatalf("probe error message leaked a credential: %q", item.ErrorMessage)
 	}
+}
+
+func findProbeItem(items []model.ProviderProbeItem, providerName, capability string) (model.ProviderProbeItem, bool) {
+	for _, item := range items {
+		if item.Provider == providerName && item.Capability == capability {
+			return item, true
+		}
+	}
+	return model.ProviderProbeItem{}, false
 }
 
 func TestProviderProbeFailureClassification(t *testing.T) {
