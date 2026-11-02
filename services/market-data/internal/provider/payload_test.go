@@ -8,8 +8,9 @@ import (
 	"testing"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 	"time"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 func TestReadBoundedBodyRejectsOversizedPayload(t *testing.T) {
@@ -93,11 +94,13 @@ func TestNormalizeProviderDailyBarsWithReportKeepsOriginalRows(t *testing.T) {
 	}
 }
 
-
 func TestProviderJSONValueTypeAndPreview(t *testing.T) {
-	cases := []struct { raw string; want string }{
-		{ "null", "null" }, { "\"abc\"", "string" }, { "12.5", "number" },
-		{ "true", "boolean" }, { "{}", "object" }, { "[]", "array" }, { "", "missing" },
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{"null", "null"}, {"\"abc\"", "string"}, {"12.5", "number"},
+		{"true", "boolean"}, {"{}", "object"}, {"[]", "array"}, {"", "missing"},
 	}
 	for _, item := range cases {
 		if got := providerJSONValueType([]byte(item.raw)); got != item.want {

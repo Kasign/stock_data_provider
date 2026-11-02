@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 	"golang.org/x/text/encoding/htmlindex"
 )
 
@@ -273,5 +274,34 @@ func TestSinaFetchDailyBarsRejectsUnverifiedAdjustmentAndDateRange(t *testing.T)
 	}
 	if _, _, err := sinaDailyDateRange("2026-10-20", "bad-date", 8, time.Now()); err == nil {
 		t.Fatal("invalid end date must be rejected")
+	}
+}
+
+func TestSinaDailyBarParseIssuesPreserveOriginalJSONRowIndex(t *testing.T) {
+	payload := []byte(`[{"day":"2026-10-21","open":"bad","high":"11","low":"9","close":"10.5","volume":"10000"},{"day":"2026-10-20","open":10,"high":11,"low":9,"close":10.2,"volume":5000}]`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewSinaConfigured(0, "http://127.0.0.1:1/unused", server.URL)
+	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("expected one valid bar, got %d", len(bars))
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "open" && issue.Code == "invalid_number" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected open issue at original JSON row 0, got %+v", reporter.Snapshot().Issues)
 	}
 }

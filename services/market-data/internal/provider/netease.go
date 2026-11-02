@@ -389,16 +389,20 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	rows := make([]model.DailyBar, 0, 256)
 	rejectedRows := 0
 	now := time.Now().UTC()
+	rowIndex := 0
 	for {
 		record, readErr := reader.Read()
 		if errors.Is(readErr, io.EOF) {
 			break
 		}
 		if readErr != nil {
+			addProviderParseIssue(ctx, rowIndex, "row", "csv_record", "invalid_csv_record", "valid CSV record", "string", "", "Netease CSV record could not be decoded")
 			rejectedRows++
+			rowIndex++
 			continue
 		}
 		if len(record) == 0 || (len(record) == 1 && strings.TrimSpace(record[0]) == "") {
+			rowIndex++
 			continue
 		}
 		get := func(name string) string {
@@ -408,14 +412,49 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			}
 			return strings.TrimSpace(record[index])
 		}
-		date, dateErr := time.Parse("2006-01-02", get("date"))
-		rowCode := neteaseCleanCode(get("code"))
-		openV, openErr := parseNeteaseNumber(get("open"))
-		highV, highErr := parseNeteaseNumber(get("high"))
-		lowV, lowErr := parseNeteaseNumber(get("low"))
-		closeV, closeErr := parseNeteaseNumber(get("close"))
-		rawVolume, volumeErr := parseNeteaseNumber(get("volume"))
-		rawAmount, amountErr := parseNeteaseNumber(get("amount"))
+		dateRaw, codeRaw := get("date"), get("code")
+		date, dateErr := time.Parse("2006-01-02", dateRaw)
+		rowCode := neteaseCleanCode(codeRaw)
+		openRaw, highRaw, lowRaw := get("open"), get("high"), get("low")
+		closeRaw, volumeRaw, amountRaw := get("close"), get("volume"), get("amount")
+		openV, openErr := parseNeteaseNumber(openRaw)
+		highV, highErr := parseNeteaseNumber(highRaw)
+		lowV, lowErr := parseNeteaseNumber(lowRaw)
+		closeV, closeErr := parseNeteaseNumber(closeRaw)
+		rawVolume, volumeErr := parseNeteaseNumber(volumeRaw)
+		rawAmount, amountErr := parseNeteaseNumber(amountRaw)
+		if dateErr != nil {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "日期", "invalid_date", "YYYY-MM-DD", "string", dateRaw, "Netease CSV trade date is invalid")
+		}
+		if rowCode == "" || rowCode != symbol[:6] {
+			addProviderParseIssue(ctx, rowIndex, "symbol", "股票代码", "symbol_mismatch", symbol[:6], "string", codeRaw, "Netease CSV security code is missing or does not match the request")
+		}
+		numericFields := []struct {
+			field         string
+			providerField string
+			raw           string
+			err           error
+			value         float64
+		}{
+			{"open", "开盘价", openRaw, openErr, openV},
+			{"high", "最高价", highRaw, highErr, highV},
+			{"low", "最低价", lowRaw, lowErr, lowV},
+			{"close", "收盘价", closeRaw, closeErr, closeV},
+			{"volume", "成交量", volumeRaw, volumeErr, rawVolume},
+			{"amount", "成交金额", amountRaw, amountErr, rawAmount},
+		}
+		for _, field := range numericFields {
+			invalid := field.err != nil || !finiteNumber(field.value)
+			if field.field != "amount" && field.field != "volume" && field.value <= 0 {
+				invalid = true
+			}
+			if (field.field == "amount" || field.field == "volume") && field.value < 0 {
+				invalid = true
+			}
+			if invalid {
+				addProviderParseIssue(ctx, rowIndex, field.field, field.providerField, "invalid_number", "finite non-negative numeric value", "string", field.raw, "Netease CSV numeric field is invalid")
+			}
+		}
 		if dateErr != nil || rowCode == "" || rowCode != symbol[:6] ||
 			openErr != nil || highErr != nil || lowErr != nil || closeErr != nil ||
 			volumeErr != nil || amountErr != nil || !finiteNumber(openV) || !finiteNumber(highV) ||
@@ -423,11 +462,13 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			!finiteNumber(rawAmount) || openV <= 0 || highV <= 0 || lowV <= 0 || closeV <= 0 ||
 			rawVolume < 0 || rawAmount < 0 {
 			rejectedRows++
+			rowIndex++
 			continue
 		}
 		tradeDate := date.Format("2006-01-02")
 		if tradeDate < startISO || tradeDate > endISO {
 			rejectedRows++
+			rowIndex++
 			continue
 		}
 		shares, volumeUnit, amount, amountUnit, quality, reasons := neteaseValidateTradingUnits(rawVolume, rawAmount, lowV, highV)
@@ -450,6 +491,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			}
 		}
 		rows = append(rows, bar)
+		rowIndex++
 	}
 	if len(rows) == 0 {
 		return nil, errors.New("Netease returned no valid daily bars in the requested date range")

@@ -131,27 +131,30 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 	}
 
 	type datedRow struct {
-		row  sinaKlineRow
-		date string
-	}
+		row      sinaKlineRow
+		rowIndex int
+		date     string
+}
 	dated := make([]datedRow, 0, len(rows))
 	oldestDate := ""
 	rejectedRows := 0
-	for _, row := range rows {
+	for rowIndex, row := range rows {
 		day := strings.TrimSpace(row.Day)
 		if len(day) < len("2006-01-02") {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "day", "invalid_date", "YYYY-MM-DD", "string", day, "Sina K-line trade date is missing or invalid")
 			rejectedRows++
 			continue
 		}
 		day = day[:len("2006-01-02")]
 		if _, err := time.Parse("2006-01-02", day); err != nil {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "day", "invalid_date", "YYYY-MM-DD", "string", day, "Sina K-line trade date is invalid")
 			rejectedRows++
 			continue
 		}
 		if oldestDate == "" || day < oldestDate {
 			oldestDate = day
 		}
-		dated = append(dated, datedRow{row: row, date: day})
+		dated = append(dated, datedRow{row: row, rowIndex: rowIndex, date: day})
 	}
 	// 新浪最多返回 1023 条。如果返回触顶而最老记录仍晚于请求开始日期，
 	// 明确报错而不是把不完整的历史区间伪装成成功响应。
@@ -167,16 +170,35 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 		lowV, errLow := parseSinaKlineNumber(item.row.Low)
 		closeV, errClose := parseSinaKlineNumber(item.row.Close)
 		rawVolume, errVolume := parseSinaKlineNumber(item.row.Volume)
-		if errOpen != nil || errHigh != nil || errLow != nil || errClose != nil || errVolume != nil {
+		values := []struct {
+			field string
+			raw json.RawMessage
+			err error
+			value float64
+		}{
+			{"open", item.row.Open, errOpen, openV},
+			{"high", item.row.High, errHigh, highV},
+			{"low", item.row.Low, errLow, lowV},
+			{"close", item.row.Close, errClose, closeV},
+			{"volume", item.row.Volume, errVolume, rawVolume},
+		}
+		invalid := false
+		for _, value := range values {
+			if value.err != nil || !finiteNumber(value.value) || (value.field != "volume" && value.value <= 0) || (value.field == "volume" && value.value < 0) {
+				invalid = true
+				addProviderParseIssue(ctx, item.rowIndex, value.field, value.field, "invalid_number", "finite non-negative numeric value", providerJSONValueType(value.raw), providerJSONPreview(value.raw), "Sina K-line numeric field is invalid")
+			}
+		}
+		if invalid {
 			rejectedRows++
 			continue
 		}
 		volume, err := normalize.RawSharesToInt64(rawVolume)
 		if err != nil {
+			addProviderParseIssue(ctx, item.rowIndex, "volume", "volume", "invalid_volume_unit", "non-negative share count", providerJSONValueType(item.row.Volume), providerJSONPreview(item.row.Volume), "Sina K-line volume cannot be normalized to shares")
 			rejectedRows++
 			continue
 		}
-		rawVolumeCopy := rawVolume
 		reasons := []string{"provider_amount_unavailable", "provider_symbol_not_echoed_by_kline_response"}
 		if item.date == time.Now().In(sinaChinaLocation()).Format("2006-01-02") {
 			reasons = append(reasons, "sina_current_day_daily_bar_may_be_partial")

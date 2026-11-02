@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 func TestNeteaseFetchDailyBarsParsesCSVAndSortsByDate(t *testing.T) {
@@ -234,5 +235,36 @@ func TestNeteaseQuoteTimestampParser(t *testing.T) {
 	}
 	if parseNeteaseQuoteTime("not-a-time") != nil {
 		t.Fatal("invalid timestamp must return nil")
+	}
+}
+
+func TestNeteaseDailyBarParseIssuesIncludeCSVRowAndField(t *testing.T) {
+	payload := "日期,股票代码,名称,收盘价,最高价,最低价,开盘价,成交量,成交金额\n" +
+		"2026-10-21,'600036,招商银行,invalid,42.60,42.00,42.60,74818026,3157692775.06\n" +
+		"2026-10-20,'600036,招商银行,42.52,43.13,42.18,42.95,76094847,3235055172.92\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewNetease(2*time.Second, server.URL)
+	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("expected one valid bar, got %d", len(bars))
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "close" && issue.Code == "invalid_number" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected close issue at CSV row 0, got %+v", reporter.Snapshot().Issues)
 	}
 }

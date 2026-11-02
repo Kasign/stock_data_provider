@@ -9,8 +9,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
@@ -145,7 +145,6 @@ func validProviderSnapshotTime(value *time.Time, reference time.Time) *time.Time
 	return value
 }
 
-
 // addProviderParseIssue 将 Adapter 解码边界的问题追加到当前请求报告。
 // 只接受字段值摘要，不接受完整响应、URL、Header 或认证信息。
 func addProviderParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, preview, message string) {
@@ -174,6 +173,9 @@ func providerJSONValueType(raw json.RawMessage) string {
 	value := bytes.TrimSpace(raw)
 	if len(value) == 0 {
 		return "missing"
+	}
+	if !json.Valid(value) {
+		return "invalid"
 	}
 	switch value[0] {
 	case 'n':
