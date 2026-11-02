@@ -1483,6 +1483,25 @@ try {
         }
 
         if (viewport.width === 320) {
+          const settingsKey = "stock-provider-webui.settings.v1";
+          await page.evaluate((key) => localStorage.setItem(key, JSON.stringify({
+            marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "saved-market-secret"
+          })), settingsKey);
+          await page.reload({ waitUntil: "load" });
+          await clickNav(page, '.nav-link[data-view="settings"]');
+          const marketKeyInput = page.locator("#market-key-input");
+          assert.equal(await marketKeyInput.getAttribute("type"), "password", "saved market API Key must remain masked");
+          assert.equal(await marketKeyInput.inputValue(), "", "saved API Key must never be echoed into the settings form");
+          const keyVisibility = page.locator("#toggle-market-key-visibility");
+          await keyVisibility.click();
+          assert.equal(await marketKeyInput.getAttribute("type"), "text", "explicit visibility toggle reveals only the current input value");
+          assert.equal(await keyVisibility.getAttribute("aria-pressed"), "true");
+          await keyVisibility.click();
+          assert.equal(await marketKeyInput.getAttribute("type"), "password");
+          assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), settingsKey), {
+            marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "saved-market-secret"
+          }, "visibility toggle must not alter persisted credentials");
+
           const settingsSearch = page.locator("#settings-section-search");
           await settingsSearch.fill("安全与备份");
           assert.equal(await settingsLinks.evaluateAll(nodes => nodes.filter(node => !node.hidden).length), 1, "settings search must filter groups by their content");
