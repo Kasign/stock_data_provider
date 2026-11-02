@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 func TestNormalizeSymbol(t *testing.T) {
@@ -255,4 +256,61 @@ func TestValidateAndSortBarsRejectsNonCanonicalDates(t *testing.T) {
 	if got, warnings := ValidateAndSortBars("600519.SH", bars, "", "2026-10-2", 10); len(got) != 0 || !containsWarning(warnings, "invalid_end_date") {
 		t.Fatalf("non-canonical end date must be rejected: bars=%+v warnings=%v", got, warnings)
 	}
+}
+
+
+func TestValidateQuoteWithReportPreservesLegacyAmountMutation(t *testing.T) {
+	quote := validQuoteForNormalizationTest()
+	quote.Amount = nil
+	quote.AmountUnit = "CNY"
+	quote.QualityStatus = model.QualityDegraded
+	report, err := ValidateQuoteWithReport(quote)
+	if err != nil {
+		t.Fatalf("legacy validation should accept degraded quote with missing amount: %v", err)
+	}
+	if !containsValidationIssue(report.Issues, "amount", "missing_optional") {
+		t.Fatalf("expected structured missing amount warning, got %+v", report)
+	}
+	if quote.AmountUnit != "unknown" || len(quote.QualityReasons) == 0 {
+		t.Fatalf("legacy amount-missing mutation was not preserved: %+v", quote)
+	}
+}
+
+func TestValidateAndSortBarsWithReportPreservesLegacyOutputAndAddsRowIndex(t *testing.T) {
+	volume := int64(100)
+	valid := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10, Volume: &volume,
+		VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward,
+		Source: "eastmoney", QualityStatus: model.QualityValid,
+	}
+	invalid := valid
+	invalid.TradeDate = "2026-10-21"
+	invalid.High = 8
+	legacyBars, legacyWarnings := ValidateAndSortBars("600519.SH", []model.DailyBar{valid, invalid}, "", "2026-10-22", 10)
+	reportedBars, reportedWarnings, report := ValidateAndSortBarsWithReport("600519.SH", []model.DailyBar{valid, invalid}, "", "2026-10-22", 10)
+	if len(legacyBars) != len(reportedBars) || len(legacyWarnings) != len(reportedWarnings) {
+		t.Fatalf("reporting changed legacy result shape: legacy=%+v/%v reported=%+v/%v", legacyBars, legacyWarnings, reportedBars, reportedWarnings)
+	}
+	if len(reportedBars) != 1 || reportedBars[0].TradeDate != "2026-10-20" {
+		t.Fatalf("legacy filtering behavior changed: %+v", reportedBars)
+	}
+	found := false
+	for _, item := range report.Issues {
+		if item.Field == "open,high,low,close" && item.RowIndex != nil && *item.RowIndex == 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected row-indexed OHLC issue, got %+v", report.Issues)
+	}
+}
+
+func containsValidationIssue(issues []validation.FieldIssue, field, code string) bool {
+	for _, item := range issues {
+		if item.Field == field && item.Code == code {
+			return true
+		}
+	}
+	return false
 }

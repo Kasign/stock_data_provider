@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/symbol"
 )
 
 const (
@@ -22,7 +22,7 @@ func ValidateQuote(q *model.Quote) Report {
 
 	if strings.TrimSpace(q.Symbol) == "" {
 		report.Add(issue(StageValidate, "symbol", "required", "canonical A-share symbol", "quote symbol is required", SeverityError))
-	} else if canonical, err := normalize.NormalizeSymbol(q.Symbol); err != nil || canonical != q.Symbol {
+	} else if canonical, err := symbol.Normalize(q.Symbol); err != nil || canonical != q.Symbol {
 		report.Add(issue(StageValidate, "symbol", "invalid_symbol", "canonical six-digit code with exchange suffix", "quote symbol is not canonical", SeverityError))
 	}
 	if strings.TrimSpace(q.Source) == "" {

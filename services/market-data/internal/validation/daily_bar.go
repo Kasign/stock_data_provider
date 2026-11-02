@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/symbol"
 )
 
 type DailyBarContext struct {
@@ -25,20 +25,20 @@ func ValidateDailyBar(bar model.DailyBar, ctx DailyBarContext) Report {
 	}
 
 	if strings.TrimSpace(ctx.RequestedSymbol) != "" {
-		requested, err := normalize.NormalizeSymbol(ctx.RequestedSymbol)
+		requested, err := symbol.Normalize(ctx.RequestedSymbol)
 		if err != nil || requested != ctx.RequestedSymbol {
 			add("requested_symbol", "invalid_symbol", "canonical A-share symbol", "requested symbol is not canonical", SeverityError)
 		} else if strings.TrimSpace(bar.Symbol) == "" {
 			add("symbol", "required", "provider symbol matching requested symbol", "daily bar symbol is missing", SeverityError)
 		} else {
-			actual, actualErr := normalize.NormalizeSymbol(bar.Symbol)
+			actual, actualErr := symbol.Normalize(bar.Symbol)
 			if actualErr != nil || actual != requested {
 				add("symbol", "identity_mismatch", requested, "provider daily bar symbol does not match requested symbol", SeverityError)
 			}
 		}
 	} else if strings.TrimSpace(bar.Symbol) == "" {
 		add("symbol", "required", "canonical A-share symbol", "daily bar symbol is required", SeverityError)
-	} else if canonical, err := normalize.NormalizeSymbol(bar.Symbol); err != nil || canonical != bar.Symbol {
+	} else if canonical, err := symbol.Normalize(bar.Symbol); err != nil || canonical != bar.Symbol {
 		add("symbol", "invalid_symbol", "canonical A-share symbol", "daily bar symbol is not canonical", SeverityError)
 	}
 
