@@ -721,3 +721,9 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - 发现只请求 quote capability、但默认 checks 包含 cross_provider 时，系统仍会输出一条 capability=daily_bars 的 cross_provider skipped 项，破坏 capability 白名单语义。
 - 已调整为：只有同一批次显式请求 daily_bars 时才执行跨源比较；否则返回不带 capability 的 skipped 结果（daily_bars_capability_not_requested）。
 - 对应回归测试补齐；最新 SHA CI 待确认。
+
+
+### 2026-11-02：能力白名单回归后的格式修复
+
+- Run `41376039461`（SHA `7a8104a`）的 market-data Job 在 gofmt 阶段仅发现 `provider_probe.go` 一个结果结构体字面对齐和 `provider_probe_test.go` 文件尾多余空行。
+- 已按 gofmt 规范修正；未进入该 Job 的编译/单测阶段。MariaDB PIT、根模块和 go-core 在该 SHA 均通过。

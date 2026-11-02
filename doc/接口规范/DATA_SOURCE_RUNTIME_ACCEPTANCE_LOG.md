@@ -372,3 +372,8 @@ Service 级 matched 测试的合成日 K 原先缺少成交额；Normalize 按�
 ## 29. checks 与 capability 白名单边界修正
 
 当请求只包含 quote 而默认 checks 包含 cross_provider 时，cross_provider 结果不应伪造 daily_bars capability 项。现要求同批次显式选择 daily_bars 才能执行跨源比较；否则返回 capability 为空的 skipped 结果，保持 capability 白名单响应边界。
+
+
+## 30. 能力白名单回归格式检查修复
+
+Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对齐和 Service 测试文件尾多余空行。已修复；该 Run 的 MariaDB PIT、根模块、go-core 通过，market-data Go suite/Docker 尚未进入编译阶段。

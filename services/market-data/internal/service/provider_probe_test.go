@@ -436,4 +436,3 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 		t.Fatalf("degraded snapshots must not be reported as cross-provider pass: %+v", results)
 	}
 }
-
