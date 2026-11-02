@@ -290,7 +290,7 @@ func TestYahooDateRangeAndEndpointShape(t *testing.T) {
 }
 
 func TestYahooDailyBarDecodeFailureAddsStructuredParseIssue(t *testing.T) {
-	payload := []byte(`{"chart":{"result":[{"meta":{"symbol":"600036.SS"},"timestamp":["not-a-timestamp"],"indicators":{"quote":[{"open":[10],"high":[11],"low":[9],"close":[10],"volume":[1000]}]}}],"error":null}}`)
+	payload := []byte(`{"chart":`)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(payload)
@@ -301,7 +301,7 @@ func TestYahooDailyBarDecodeFailureAddsStructuredParseIssue(t *testing.T) {
 	ctx := validation.WithReporter(context.Background(), reporter)
 	provider := NewYahooFinance(2*time.Second, server.URL)
 	if _, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone); err == nil {
-		t.Fatal("expected Yahoo response with invalid timestamp type to be rejected")
+		t.Fatal("expected malformed Yahoo chart JSON to be rejected")
 	}
 	report := reporter.Snapshot()
 	if report.TotalCount != 1 || len(report.Issues) != 1 {
@@ -354,3 +354,27 @@ func TestYahooFloatParserRejectsNonFiniteOverflow(t *testing.T) {
 	}
 }
 
+func TestYahooDailyBarInvalidFieldReportsRowAndProviderPath(t *testing.T) {
+	payload := []byte(`{"chart":{"result":[{"meta":{"symbol":"600036.SS"},"timestamp":[1792454400],"indicators":{"quote":[{"open":["bad"],"high":[11],"low":[9],"close":[10],"volume":[1000]}]}}],"error":null}}`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewYahooFinance(2*time.Second, server.URL)
+	if _, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone); err == nil {
+		t.Fatal("expected invalid Yahoo open value to be rejected")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 {
+		t.Fatalf("expected one field-level issue, got %+v", issues)
+	}
+	issue := issues[0]
+	if issue.Stage != validation.StageParse || issue.Field != "open" || issue.ProviderField != "indicators.quote[0].open" ||
+		issue.Code != "type_mismatch" || issue.RowIndex == nil || *issue.RowIndex != 0 {
+		t.Fatalf("unexpected Yahoo field issue: %+v", issue)
+	}
+}
