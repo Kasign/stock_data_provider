@@ -43,6 +43,13 @@ function baseCssDeclarationBlock(selector) {
   return rule?.[2] || "";
 }
 
+function sourceBetween(source, startMarker, endMarker, label) {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.ok(start >= 0 && end > start, label + " source boundaries must exist");
+  return source.slice(start, end);
+}
+
 test("notification quiet hours disclose local-time and overnight semantics", () => {
   assert.match(html, /时间按当前设备本地时钟记录/);
   assert.match(html, /结束时间早于开始时间表示跨午夜/);
@@ -1393,7 +1400,12 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
     app,
     /function applySettings\(nextSettings, \{ persistPreviousActiveTask = true \} = \{\}\)/
   );
-  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const importBody = sourceBetween(
+    app,
+    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, strategy) {",
+    "\n\nsyncThemeControl(readTheme());",
+    "工作区导入"
+  );
   assert.match(
     importBody,
     /localStorage\.removeItem\(TASK_REFERENCE_KEY\);[\s\S]*?applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?applyTheme\(imported\.theme\)/
@@ -1861,7 +1873,12 @@ test("清空或导入本地任务历史会隔离在途创建请求的晚到响�
   const clearEnd = app.indexOf("function setWatchlistFeedback(", clearStart + 1);
   const clearBody = clearStart >= 0 && clearEnd > clearStart ? app.slice(clearStart, clearEnd) : "";
   assert.match(clearBody, /state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
-  const importBody = app.match(/async function applyBrowserDataImport\(imported, currentWatchlist, currentRecentTasks, strategy\) \{[\s\S]*?\n\}/)?.[0] || "";
+  const importBody = sourceBetween(
+    app,
+    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, strategy) {",
+    "\n\nsyncThemeControl(readTheme());",
+    "工作区导入"
+  );
   assert.match(importBody, /applySettings\(nextSettings, \{ persistPreviousActiveTask: false \}\);[\s\S]*?state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
 });
 
