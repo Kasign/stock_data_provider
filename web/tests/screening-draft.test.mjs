@@ -7,7 +7,21 @@ test("accepts bounded numeric conditions for supported market fields", () => {
   assert.equal(createScreeningCondition("turnover_rate", "lte", "101").reason, "range");
   assert.equal(createScreeningCondition("unknown", "gte", "1").valid, false);
   assert.equal(createScreeningCondition("amount", "gte", "").valid, false);
+  assert.equal(createScreeningCondition("amount", "gte", "   ").valid, false);
+  assert.equal(createScreeningCondition("amount", "gte", null).valid, false);
 });
+test("validates the configured bounds for every supported screening field", () => {
+  for (const [field, min, max] of [
+    ["change_pct", -30, 30], ["turnover_rate", 0, 100], ["amount", 0, 100000000000],
+    ["ma5", 0, 1000000], ["ma20", 0, 1000000]
+  ]) {
+    assert.equal(createScreeningCondition(field, "gte", String(min)).valid, true, field + " minimum");
+    assert.equal(createScreeningCondition(field, "lte", String(max)).valid, true, field + " maximum");
+    assert.equal(createScreeningCondition(field, "gte", String(min - 1)).reason, "range", field + " below minimum");
+    assert.equal(createScreeningCondition(field, "lte", String(max + 1)).reason, "range", field + " above maximum");
+  }
+});
+
 test("normalizes conditions and describes AND/OR local drafts", () => {
   const list = normalizeScreeningConditions([{ field: "ma5", operator: "gte", value: 10 }, { field: "bad", operator: "gte", value: 2 }, { field: "ma20", operator: "gte", value: Infinity }]);
   assert.equal(list.length, 1);
@@ -25,6 +39,9 @@ test("saves, reloads, updates and deletes local screening plans", () => {
   assert.equal(created.saved, true); assert.equal(readScreeningPlans(storage).plans[0].name, "放量观察");
   const updated = saveScreeningPlan({ id: created.plan.id, name: "趋势观察", conditions: [...conditions, { field: "ma5", operator: "gte", value: 10 }], logic: "or" }, storage, "2026-10-30T11:00:00Z");
   assert.equal(updated.saved, true); assert.equal(updated.plan.created_at, "2026-10-30T10:00:00Z"); assert.equal(updated.plan.logic, "or");
+  const savedAs = saveScreeningPlan({ name: "另存方案", conditions, logic: "and" }, storage, "2026-10-30T12:00:00Z");
+  assert.equal(savedAs.saved, true); assert.notEqual(savedAs.plan.id, created.plan.id);
+  assert.equal(readScreeningPlans(storage).plans.length, 2);
   assert.equal(deleteScreeningPlan(created.plan.id, storage).deleted, true); assert.deepEqual(readScreeningPlans(storage).plans, []);
 });
 test("rejects duplicate names, empty plans and malformed storage without overwriting", () => {
@@ -37,6 +54,30 @@ test("rejects duplicate names, empty plans and malformed storage without overwri
   assert.equal(saveScreeningPlan({ name: "不能覆盖", conditions: condition }, broken).reason, "storage-invalid");
   assert.equal(broken.getItem(SCREENING_PLANS_KEY), "{broken");
 });
+test("rejects mixed invalid conditions instead of silently saving a partial plan", () => {
+  const storage = makeStorage();
+  const result = saveScreeningPlan({ name: "严格校验", conditions: [
+    { field: "ma5", operator: "gte", value: 10 },
+    { field: "unknown", operator: "gte", value: 1 }
+  ] }, storage);
+  assert.equal(result.reason, "invalid-conditions");
+  assert.equal(storage.getItem(SCREENING_PLANS_KEY), null);
+});
+
+test("supports save-as, enforces the 30-plan limit and rejects duplicate stored names", () => {
+  const storage = makeStorage();
+  for (let index = 0; index < 30; index += 1) {
+    assert.equal(saveScreeningPlan({ name: "方案 " + index, conditions: [{ field: "ma5", operator: "gte", value: index + 1 }] }, storage).saved, true);
+  }
+  assert.equal(saveScreeningPlan({ name: "第 31 个", conditions: [{ field: "ma5", operator: "gte", value: 1 }] }, storage).reason, "limit");
+  const duplicateNames = [
+    { id: "a", name: "同名", logic: "and", conditions: [{ field: "ma5", operator: "gte", value: 1 }], created_at: "2026-01-01", updated_at: "2026-01-01" },
+    { id: "b", name: "同名", logic: "or", conditions: [{ field: "ma20", operator: "lte", value: 10 }], created_at: "2026-01-01", updated_at: "2026-01-01" }
+  ];
+  const broken = makeStorage(JSON.stringify(duplicateNames));
+  assert.equal(readScreeningPlans(broken).valid, false);
+});
+
 test("reports unavailable storage and failed writes", () => {
   const blocked = { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } };
   assert.equal(readScreeningPlans(blocked).readable, false);

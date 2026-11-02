@@ -1644,7 +1644,7 @@ function saveCurrentScreeningPlan(asNew = false) {
   const result = saveScreeningPlan({ id: asNew ? "" : selectedScreeningPlanId, name: $("#screening-plan-name").value, conditions: screeningDraftConditions, logic: screeningDraftLogic });
   const feedback = $("#screening-condition-feedback");
   if (!result.saved) {
-    const messages = { "storage-invalid": "本地筛选方案存储不可用或格式异常，未保存。", "invalid-name": "请输入方案名称，最多 40 个字符。", "empty-conditions": "至少添加一条有效条件后才能保存方案。", "invalid-logic": "请选择 AND 或 OR 组合关系。", "duplicate-name": "已有同名方案；请修改名称或载入原方案后更新。", limit: "本地最多保存 30 个筛选方案。", "persistence-failed": "保存失败，浏览器未能确认方案写入。" };
+    const messages = { "storage-invalid": "本地筛选方案存储不可用或格式异常，未保存。", "invalid-name": "请输入方案名称，最多 40 个字符。", "empty-conditions": "至少添加一条有效条件后才能保存方案。", "invalid-conditions": "条件中包含无效指标或超出范围的数值，请检查后再保存。", "invalid-logic": "请选择 AND 或 OR 组合关系。", "duplicate-name": "已有同名方案；请修改名称或载入原方案后更新。", limit: "本地最多保存 30 个筛选方案。", "persistence-failed": "保存失败，浏览器未能确认方案写入。" };
     feedback.textContent = messages[result.reason] || "保存筛选方案失败。"; feedback.dataset.state = "error"; return;
   }
   selectedScreeningPlanId = result.plan.id;

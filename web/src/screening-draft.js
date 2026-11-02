@@ -19,8 +19,10 @@ function cleanPlanName(value) {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 40).trim();
 }
 export function createScreeningCondition(field, operator, rawValue) {
-  const definition = SCREENING_FIELDS[field], value = Number(rawValue);
-  if (!definition || !SCREENING_OPERATORS[operator] || rawValue === "" || !Number.isFinite(value)) return { valid: false, reason: "invalid" };
+  const definition = SCREENING_FIELDS[field];
+  if (!definition || !SCREENING_OPERATORS[operator] || rawValue === null || rawValue === undefined || String(rawValue).trim() === "") return { valid: false, reason: "invalid" };
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) return { valid: false, reason: "invalid" };
   if (value < definition.min || value > definition.max) return { valid: false, reason: "range" };
   return { valid: true, condition: { field, operator, value } };
 }
@@ -96,7 +98,9 @@ export function readScreeningPlans(storage) {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length > MAX_SCREENING_PLANS) throw new Error("invalid");
     const plans = parsed.map(normalizePlan);
-    if (plans.some((item) => !item) || new Set(plans.map((item) => item.id)).size !== plans.length) throw new Error("invalid");
+    const names = plans.map((item) => item?.name.toLocaleLowerCase());
+    if (plans.some((item) => !item) || new Set(plans.map((item) => item.id)).size !== plans.length ||
+        new Set(names).size !== names.length) throw new Error("invalid");
     return { plans, readable: true, valid: true, reason: "" };
   } catch { return { plans: [], readable: true, valid: false, reason: "invalid" }; }
 }
@@ -122,7 +126,9 @@ export function saveScreeningPlan({ id = "", name, conditions, logic = "and" } =
   const normalizedName = cleanPlanName(name), normalizedConditions = normalizeScreeningConditions(conditions);
   const normalizedLogic = logic === "or" || logic === "and" ? logic : "";
   if (!normalizedName) return { saved: false, reason: "invalid-name", plans: state.plans };
-  if (!normalizedConditions.length) return { saved: false, reason: "empty-conditions", plans: state.plans };
+  if (!Array.isArray(conditions)) return { saved: false, reason: "invalid-conditions", plans: state.plans };
+  if (!normalizedConditions.length && !conditions.length) return { saved: false, reason: "empty-conditions", plans: state.plans };
+  if (normalizedConditions.length !== conditions.length) return { saved: false, reason: "invalid-conditions", plans: state.plans };
   if (!normalizedLogic) return { saved: false, reason: "invalid-logic", plans: state.plans };
   const existing = id ? state.plans.find((item) => item.id === id) : null;
   if (id && !existing) return { saved: false, reason: "not-found", plans: state.plans };

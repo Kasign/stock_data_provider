@@ -1057,6 +1057,12 @@ test("screening workbench distinguishes unavailable capability from disabled and
   assert.match(app, /renderScreeningHistory\(\{ supported: false \}\)/);
   assert.match(screeningView, /id="screening-submit" type="button" disabled/);
   assert.match(screeningView, /当前页本地筛选/);
+  for (const id of ["screening-condition-logic", "screening-condition-field", "screening-condition-operator", "screening-condition-value", "screening-condition-add", "screening-plan-save", "screening-plan-save-as", "screening-saved-plan-list"]) {
+    assert.match(screeningView, new RegExp('id="' + id + '"'), "missing local screening control: " + id);
+  }
+  assert.match(app, /function loadScreeningPlan\(id\)[\s\S]*?screeningDraftLogic = plan\.logic[\s\S]*?renderScreeningDraftConditions\(\)/);
+  assert.match(app, /saveCurrentScreeningPlan\(true\)/);
+  assert.match(app, /createScreeningCondition\(\$\("#screening-condition-field"\)/);
   assert.match(app, /researchNotes\.createFromReport\(item\)/);
   assert.match(app, /onCreateNote:/);
   assert.match(app, /getCurrentPageSnapshot\(\)/);
