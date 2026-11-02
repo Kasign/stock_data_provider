@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearRecentTasks, MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel } from "../src/recent-tasks.js";
+import { clearRecentTasks, filterRecentTasks, MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel } from "../src/recent-tasks.js";
 
 function makeStorage(seed = {}) {
   const values = new Map(Object.entries(seed));
@@ -227,6 +227,37 @@ test("keeps the existing task list when clearing history cannot be persisted", (
 
   assert.deepEqual(clearRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
   assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+});
+
+test("rejects malformed symbol lists instead of silently presenting partial task references", () => {
+  for (const symbols of ["600519", [600519], ["600519", " "], Array.from({ length: 101 }, (_, index) => String(index))]) {
+    const storage = makeStorage();
+    storage.setItem(RECENT_TASKS_KEY, JSON.stringify([{ task_id: "task-invalid", symbols }]));
+    const state = readRecentTasksState(storage);
+    assert.equal(state.storageValid, false);
+    assert.equal(state.reason, "invalid");
+    assert.deepEqual(upsertRecentTask({ task_id: "task-new" }, storage), state.items);
+    assert.equal(JSON.parse(storage.getItem(RECENT_TASKS_KEY))[0].task_id, "task-invalid");
+  }
+});
+
+test("normalizes task references by trimming and deduplicating symbols and run IDs", () => {
+  const storage = makeStorage();
+  upsertRecentTask({ task_id: " task-a ", run_id: " run-a ", symbols: ["600519.SH", " 600519.SH ", "000001.SZ"] }, storage);
+  const [item] = readRecentTasks(storage);
+  assert.equal(item.task_id, "task-a");
+  assert.equal(item.run_id, "run-a");
+  assert.deepEqual(item.symbols, ["600519.SH", "000001.SZ"]);
+});
+
+test("rejects impossible calendar dates in recent-task filters", () => {
+  const items = [
+    { task_id: "task-a", created_at: "2026-10-30T00:00:00Z" },
+    { task_id: "task-b", created_at: "2026-11-01T00:00:00Z" }
+  ];
+  assert.deepEqual(filterRecentTasks(items, { from: "2026-10-32" }), []);
+  assert.deepEqual(filterRecentTasks(items, { to: "2026-02-29" }), []);
+  assert.deepEqual(filterRecentTasks(items, { from: "2026-10-30", to: "2026-10-31" }).map((item) => item.task_id), ["task-a"]);
 });
 
 test("labels historical task types and preserves unknown server task types", () => {

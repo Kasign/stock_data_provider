@@ -3,11 +3,14 @@ export const MAX_RECENT_TASKS = 10;
 
 function normalizeRecord(record) {
   if (!record || typeof record.task_id !== "string" || !record.task_id.trim()) return null;
+  if (record.symbols !== undefined && (!Array.isArray(record.symbols) ||
+      record.symbols.length > 100 ||
+      record.symbols.some((item) => typeof item !== "string" || !item.trim()))) return null;
   return {
     task_id: record.task_id.trim(),
-    run_id: typeof record.run_id === "string" ? record.run_id : "",
+    run_id: typeof record.run_id === "string" ? record.run_id.trim() : "",
     created_at: typeof record.created_at === "string" ? record.created_at : "",
-    symbols: Array.isArray(record.symbols) ? record.symbols.filter((item) => typeof item === "string") : [],
+    symbols: Array.isArray(record.symbols) ? [...new Set(record.symbols.map((item) => item.trim()))] : [],
     task_type: typeof record.task_type === "string" ? record.task_type : "post_market_scan",
     status: typeof record.status === "string" ? record.status : "",
     failure_code: typeof record.failure_code === "string" ? record.failure_code.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) : "",
@@ -156,13 +159,21 @@ export function recentTaskTypeLabel(taskType) {
   return RECENT_TASK_TYPE_LABELS[value] || (value ? "其他类型：" + value : "任务类型未报告");
 }
 
+function isValidDateOnly(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 export function filterRecentTasks(items = [], filters = {}) {
   if (!Array.isArray(items)) return [];
   const keyword = String(filters.search || "").trim().toLocaleLowerCase();
   const status = String(filters.status || "all");
   const taskType = String(filters.taskType || "all");
-  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(filters.from || "")) ? String(filters.from) : "";
-  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(filters.to || "")) ? String(filters.to) : "";
+  const rawFrom = String(filters.from || ""), rawTo = String(filters.to || "");
+  if ((rawFrom && !isValidDateOnly(rawFrom)) || (rawTo && !isValidDateOnly(rawTo))) return [];
+  const from = rawFrom, to = rawTo;
   if (from && to && from > to) return [];
   const localDate = (value) => { const timestamp = Date.parse(value || ""); if (!Number.isFinite(timestamp)) return ""; const date = new Date(timestamp); return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-"); };
   return items.filter((record) => {
