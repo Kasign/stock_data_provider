@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"time"
 
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
@@ -100,7 +100,7 @@ func TestProviderJSONValueTypeAndPreview(t *testing.T) {
 		want string
 	}{
 		{"null", "null"}, {"\"abc\"", "string"}, {"12.5", "number"},
-		{"true", "boolean"}, {"{}", "object"}, {"[]", "array"}, {"", "missing"},
+		{"true", "boolean"}, {"{}", "object"}, {"[]", "array"}, {"", "missing"}, {"{", "invalid"},
 	}
 	for _, item := range cases {
 		if got := providerJSONValueType([]byte(item.raw)); got != item.want {

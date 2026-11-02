@@ -172,8 +172,8 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 		rawVolume, errVolume := parseSinaKlineNumber(item.row.Volume)
 		values := []struct {
 			field string
-			raw json.RawMessage
-			err error
+			raw   json.RawMessage
+			err   error
 			value float64
 		}{
 			{"open", item.row.Open, errOpen, openV},
