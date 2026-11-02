@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assignWatchlistGroup, createWatchlistGroup, DEFAULT_WATCHLIST_GROUP, readWatchlistGroups, removeWatchlistGroup, WATCHLIST_GROUPS_KEY } from "../src/watchlist-groups.js";
+import { assignWatchlistGroup, createWatchlistGroup, DEFAULT_WATCHLIST_GROUP, normalizeWatchlistGroups, readWatchlistGroups, removeWatchlistGroup, WATCHLIST_GROUPS_KEY } from "../src/watchlist-groups.js";
 function storage(seed = null) { let value = seed; return { getItem() { return value; }, setItem(_key, next) { value = String(next); } }; }
 test("创建、分配和删除分组时保留股票清单本身", () => {
  const db=storage(); assert.equal(createWatchlistGroup("长期持有",db).persisted,true);
@@ -43,4 +43,19 @@ test("批量分组调整一次性保存并支持回到未分组", async () => {
  assert.equal(readWatchlistGroups(db).assignments["600519.SH"],"重点观察");
  assert.equal(assignWatchlistGroups(["600519.SH"],DEFAULT_WATCHLIST_GROUP,db).persisted,true);
  assert.equal(readWatchlistGroups(db).assignments["600519.SH"],undefined);
+});
+
+test("工作区分组数据规范化时校验组名、数量与证券归属", () => {
+  assert.deepEqual(normalizeWatchlistGroups(undefined), { groups: [DEFAULT_WATCHLIST_GROUP], assignments: {} });
+  assert.deepEqual(normalizeWatchlistGroups({
+    groups: [DEFAULT_WATCHLIST_GROUP, "核心观察"],
+    assignments: { "600519": "核心观察", "600519.SH": "核心观察", "000001.SZ": DEFAULT_WATCHLIST_GROUP }
+  }), { groups: [DEFAULT_WATCHLIST_GROUP, "核心观察"], assignments: { "600519.SH": "核心观察", "000001.SZ": DEFAULT_WATCHLIST_GROUP } });
+  for (const value of [
+    { groups: ["未分组", "未分组"], assignments: {} },
+    { groups: ["未分组", "核心观察"], assignments: { "600519.SH": "不存在的分组" } },
+    { groups: ["未分组", "核心观察"], assignments: { "bad-symbol": "核心观察" } },
+    { groups: ["未分组", ...Array.from({ length: 12 }, (_, index) => "G" + index)], assignments: {} }
+  ]) assert.throws(() => normalizeWatchlistGroups(value));
+  assert.throws(() => normalizeWatchlistGroups({ groups: ["未分组"], assignments: [] }));
 });

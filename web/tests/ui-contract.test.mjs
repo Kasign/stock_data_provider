@@ -1999,6 +1999,13 @@ test("市场股票与情绪历史 API 封装保持真实接口契约", () => {
   assert.match(app, /不会用当前行情补造历史/);
 });
 
+test("工作区备份必须包含自选股分组并在导入事务中回读", () => {
+  assert.match(app, /watchlist_groups:/);
+  assert.match(app, /normalizeWatchlistGroups\(data\.watchlist_groups\)/);
+  assert.match(app, /\[WATCHLIST_GROUPS_KEY, JSON\.stringify\(imported\.watchlistGroups\)\]/);
+  assert.match(app, /syncWatchlistGroupControls\(\);[\s\S]*?renderWatchlist\(\)/);
+});
+
 test("设置中心导航、区块和本地配置交互保持一致", () => {
   const targets = [...html.matchAll(/data-settings-target="([^"]+)"/g)].map((match) => match[1]);
   const sections = [...html.matchAll(/<section[^>]*class="[^"]*settings-section[^"]*"[^>]*id="([^"]+)"/g)].map((match) => match[1]);

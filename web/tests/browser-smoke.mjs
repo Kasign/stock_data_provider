@@ -1594,7 +1594,7 @@ try {
           assert.equal(afterPreferenceReset.tasks, beforePreferenceReset.tasks, "resetting display preferences must preserve recent task references");
           assert.deepEqual(afterPreferenceReset.preferences.watchlistDisplayOrder, ["updated", "quote", "today", "task", "result"]);
 
-          const makeImportFile = (watchlist, recentTasks, preferences = {}, version = 3) => ({
+          const makeImportFile = (watchlist, recentTasks, preferences = {}, version = 3, watchlistGroups) => ({
             name: "workspace-test.json",
             mimeType: "application/json",
             buffer: Buffer.from(JSON.stringify({
@@ -1605,7 +1605,8 @@ try {
                 preferences,
                 connection: { marketBase: "/market-api", analysisBase: "/analysis-api" },
                 watchlist,
-                recent_tasks: recentTasks
+                recent_tasks: recentTasks,
+                ...(watchlistGroups ? { watchlist_groups: watchlistGroups } : {})
               }
             }))
           });
@@ -1620,7 +1621,10 @@ try {
           const mergeFile = makeImportFile([
             { symbol: "600519", name: "导入名称", updated_at: "2026-10-30T00:00:00Z" },
             { symbol: "000001.SZ", name: "平安银行", updated_at: "2026-10-30T00:00:00Z" }
-          ], currentImportedTasks, { watchlistSort: "name" });
+          ], currentImportedTasks, { watchlistSort: "name" }, 3, {
+            groups: ["未分组", "核心观察"],
+            assignments: { "600519.SH": "核心观察" }
+          });
 
           await uploadWorkspace(mergeFile);
           const preview = await page.locator("#browser-data-import-summary").textContent();
@@ -1664,6 +1668,9 @@ try {
           assert.equal(merged.tasks.length, 2);
           assert.equal(merged.tasks.find((item) => item.task_id === "task-1")?.status, "succeeded");
           assert.equal(merged.preferences.watchlistSort, "name");
+          const mergedGroups = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), "stock-provider-webui.watchlist-groups.v1");
+          assert.ok(mergedGroups.groups.includes("测试分组") && mergedGroups.groups.includes("核心观察"), "merge must preserve current and imported watchlist groups");
+          assert.equal(mergedGroups.assignments["600519.SH"], "核心观察", "imported group assignment must override the same stock identity");
           assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark", "imported theme must update the running page");
           assert.equal(await page.locator("#settings-watchlist-sort").inputValue(), "name", "imported preferences must update settings controls");
           await clickNav(page, '.nav-link[data-view="watchlist"]');
@@ -1675,10 +1682,17 @@ try {
           assert.match(importedTaskListText || "", /task-2/, "recent task list did not refresh after import; rendered=" + importedTaskListText + "; storage=" + importedTaskStorage);
           await clickNav(page, '.nav-link[data-view="settings"]');
           await page.locator("#settings-view").waitFor({ state: "visible" });
+          const [workspaceDownload] = await Promise.all([
+            page.waitForEvent("download"),
+            page.locator("#export-browser-data").click()
+          ]);
+          const exportedWorkspace = JSON.parse(await readFile(await workspaceDownload.path(), "utf8"));
+          assert.deepEqual(exportedWorkspace.data.watchlist_groups, mergedGroups, "workspace export must preserve custom groups and symbol assignments");
 
           const replaceFile = makeImportFile(
             [{ symbol: "300750.SZ", name: "宁德时代", updated_at: "2026-10-30T00:00:00Z" }],
-            [{ task_id: "task-3", symbols: ["300750.SZ"], task_type: "post_market_scan", status: "queued", analysis_base: "/analysis-api" }]
+            [{ task_id: "task-3", symbols: ["300750.SZ"], task_type: "post_market_scan", status: "queued", analysis_base: "/analysis-api" }],
+            {}, 3, { groups: ["未分组", "趋势跟踪"], assignments: { "300750.SZ": "趋势跟踪" } }
           );
           await uploadWorkspace(replaceFile);
           await page.locator("#browser-data-import-replace").click();
@@ -1693,6 +1707,9 @@ try {
           assert.equal(replaced.settings.apiKey, "browser-test-key", "replace must preserve the current API Key");
           assert.deepEqual(replaced.watchlist.map((item) => item.symbol), ["300750.SZ"]);
           assert.deepEqual(replaced.tasks.map((item) => item.task_id), ["task-3"]);
+          assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), "stock-provider-webui.watchlist-groups.v1"), {
+            groups: ["未分组", "趋势跟踪"], assignments: { "300750.SZ": "趋势跟踪" }
+          }, "replace must restore imported watchlist groups and assignments");
 
           for (const legacyVersion of [1, 2]) {
             const legacyFile = makeImportFile(
@@ -1706,6 +1723,9 @@ try {
             await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
             const legacyPreferences = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.preferences);
             assert.deepEqual(legacyPreferences.watchlistDisplayOrder, ["updated", "quote", "today", "task", "result"], "v" + legacyVersion + " import must restore default field order");
+            assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), "stock-provider-webui.watchlist-groups.v1"), {
+              groups: ["未分组"], assignments: {}
+            }, "legacy v" + legacyVersion + " imports must default to the ungrouped watchlist");
           }
 
           const beforeInvalid = JSON.stringify(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.watchlist));
