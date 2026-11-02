@@ -58,27 +58,27 @@ type ProviderProbeCheckResult struct {
 
 // ProviderProbeRun 是隔离于业务流量的主动探测批次。
 type ProviderProbeRun struct {
-	RunID                 string              `json:"run_id"`
-	Scope                 string              `json:"scope,omitempty"`
-	RequestedCapabilities []string            `json:"requested_capabilities,omitempty"`
-	RequestedChecks       []string            `json:"requested_checks,omitempty"`
+	RunID                 string                     `json:"run_id"`
+	Scope                 string                     `json:"scope,omitempty"`
+	RequestedCapabilities []string                   `json:"requested_capabilities,omitempty"`
+	RequestedChecks       []string                   `json:"requested_checks,omitempty"`
 	CheckResults          []ProviderProbeCheckResult `json:"check_results,omitempty"`
-	RequestedMarkets      []string            `json:"requested_markets,omitempty"`
-	RequestedSymbols      []string            `json:"requested_symbols,omitempty"`
-	TimeoutSeconds        int                 `json:"timeout_seconds,omitempty"`
-	Status                string              `json:"status"`
-	Persisted             bool                `json:"persisted"`
-	StartedAt             time.Time           `json:"started_at"`
-	FinishedAt            time.Time           `json:"finished_at"`
-	Total                 int                 `json:"total"`
-	Returned              int                 `json:"returned"`
-	Degraded              int                 `json:"degraded"`
-	Unknown               int                 `json:"unknown"`
-	Failed                int                 `json:"failed"`
-	Skipped               int                 `json:"skipped"`
-	NotConfigured         int                 `json:"not_configured"`
-	NotSupported          int                 `json:"not_supported"`
-	Items                 []ProviderProbeItem `json:"items"`
+	RequestedMarkets      []string                   `json:"requested_markets,omitempty"`
+	RequestedSymbols      []string                   `json:"requested_symbols,omitempty"`
+	TimeoutSeconds        int                        `json:"timeout_seconds,omitempty"`
+	Status                string                     `json:"status"`
+	Persisted             bool                       `json:"persisted"`
+	StartedAt             time.Time                  `json:"started_at"`
+	FinishedAt            time.Time                  `json:"finished_at"`
+	Total                 int                        `json:"total"`
+	Returned              int                        `json:"returned"`
+	Degraded              int                        `json:"degraded"`
+	Unknown               int                        `json:"unknown"`
+	Failed                int                        `json:"failed"`
+	Skipped               int                        `json:"skipped"`
+	NotConfigured         int                        `json:"not_configured"`
+	NotSupported          int                        `json:"not_supported"`
+	Items                 []ProviderProbeItem        `json:"items"`
 }
 
 // ProviderProbeHistory 是最近的主动探测批次列表。
