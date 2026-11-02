@@ -1640,6 +1640,12 @@ try {
           ));
           await page.waitForFunction(() => document.querySelector("#browser-data-feedback")?.textContent.includes("导入失败"));
           assert.equal(await page.evaluate((key) => JSON.stringify(JSON.parse(localStorage.getItem(key))), keys.watchlist), beforeInvalid, "invalid field order must not modify current watchlist");
+          await page.locator("#browser-data-file").setInputFiles(makeImportFile(
+            [],
+            [{ task_id: "task-invalid-symbol", symbols: [" "], task_type: "post_market_scan", status: "queued" }]
+          ));
+          await page.waitForFunction(() => document.querySelector("#browser-data-feedback")?.textContent.includes("任务标的数量或格式无效"));
+          assert.equal(await page.evaluate((key) => JSON.stringify(JSON.parse(localStorage.getItem(key))), keys.watchlist), beforeInvalid, "blank task symbols must be rejected before import writes");
 
           await page.locator("#browser-data-file").setInputFiles({
             name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{")

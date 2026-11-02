@@ -5232,7 +5232,7 @@ function validateBrowserDataPayload(payload) {
     if (!taskId) throw new Error("最近任务引用中的 task_id 无效。");
     if (record.symbols !== undefined && !Array.isArray(record.symbols)) throw new Error("任务标的必须是数组。");
     const rawSymbols = Array.isArray(record.symbols) ? record.symbols : [];
-    if (rawSymbols.length > 100 || rawSymbols.some((item) => typeof item !== "string")) {
+    if (rawSymbols.length > 100 || rawSymbols.some((item) => typeof item !== "string" || !item.trim())) {
       throw new Error("任务标的数量或格式无效。");
     }
     const analysisBase = typeof record.analysis_base === "string" && record.analysis_base.trim()
