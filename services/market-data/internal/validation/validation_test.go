@@ -92,3 +92,32 @@ func TestValidateQuoteRejectsNonFiniteNumbers(t *testing.T) {
 		t.Fatalf("expected current_price non-finite issue, got %+v", report.Issues)
 	}
 }
+
+func TestReportHasErrorsWhenErrorIssueIsTruncated(t *testing.T) {
+	report := NewReport(1)
+	report.Add(issue(StageParse, "optional", "missing_optional", "optional", "not supplied", SeverityWarning))
+	report.Add(issue(StageParse, "price", "type_mismatch", "number", "wrong type", SeverityError))
+	if len(report.Issues) != 1 || !report.Truncated {
+		t.Fatalf("expected only first issue to be retained: %+v", report)
+	}
+	if report.ErrorCount != 1 || report.WarningCount != 1 || !report.HasErrors() {
+		t.Fatalf("truncated error must still fail the report: %+v", report)
+	}
+}
+
+func TestReportMergePreservesSeverityCountsBeyondIssueLimit(t *testing.T) {
+	left := NewReport(1)
+	left.Add(issue(StageParse, "a", "missing_optional", "optional", "missing", SeverityWarning))
+	left.Add(issue(StageParse, "b", "type_mismatch", "number", "bad type", SeverityError))
+	right := NewReport(2)
+	right.Add(issue(StageValidate, "c", "out_of_range", "positive", "bad range", SeverityError))
+	right.Add(issue(StageValidate, "d", "notice", "n/a", "notice", SeverityInfo))
+
+	merged := left.Merge(right)
+	if merged.TotalCount != 4 || merged.ErrorCount != 2 || merged.WarningCount != 1 || merged.InfoCount != 1 {
+		t.Fatalf("severity counters were not preserved: %+v", merged)
+	}
+	if !merged.HasErrors() || !merged.Truncated {
+		t.Fatalf("merged report must preserve failure and truncation: %+v", merged)
+	}
+}

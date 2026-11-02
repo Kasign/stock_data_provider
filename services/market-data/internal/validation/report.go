@@ -34,10 +34,13 @@ type FieldIssue struct {
 }
 
 type Report struct {
-	TotalCount int          `json:"total_count"`
-	Issues     []FieldIssue `json:"issues"`
-	Truncated  bool         `json:"truncated"`
-	maxIssues  int
+	TotalCount   int          `json:"total_count"`
+	ErrorCount   int          `json:"error_count"`
+	WarningCount int          `json:"warning_count"`
+	InfoCount    int          `json:"info_count"`
+	Issues       []FieldIssue `json:"issues"`
+	Truncated    bool         `json:"truncated"`
+	maxIssues    int
 }
 
 const DefaultMaxIssues = 100
@@ -49,11 +52,19 @@ func NewReport(maxIssues int) Report {
 	return Report{Issues: make([]FieldIssue, 0), maxIssues: maxIssues}
 }
 
-func (r *Report) Add(issue FieldIssue) {
+func (r *Report) Add(item FieldIssue) {
 	if r == nil {
 		return
 	}
 	r.TotalCount++
+	switch item.Severity {
+	case SeverityError:
+		r.ErrorCount++
+	case SeverityWarning:
+		r.WarningCount++
+	case SeverityInfo:
+		r.InfoCount++
+	}
 	if r.maxIssues <= 0 {
 		r.maxIssues = DefaultMaxIssues
 	}
@@ -61,12 +72,16 @@ func (r *Report) Add(issue FieldIssue) {
 		r.Truncated = true
 		return
 	}
-	r.Issues = append(r.Issues, issue)
+	r.Issues = append(r.Issues, item)
 }
 
 func (r Report) HasErrors() bool {
-	for _, issue := range r.Issues {
-		if issue.Severity == SeverityError {
+	if r.ErrorCount > 0 {
+		return true
+	}
+	// Compatibility for reports assembled as struct literals by older callers.
+	for _, item := range r.Issues {
+		if item.Severity == SeverityError {
 			return true
 		}
 	}
@@ -79,15 +94,37 @@ func (r Report) Merge(other Report) Report {
 		limit = DefaultMaxIssues
 	}
 	merged := NewReport(limit)
-	for _, issue := range r.Issues {
-		merged.Add(issue)
+	for _, item := range r.Issues {
+		merged.Add(item)
 	}
-	for _, issue := range other.Issues {
-		merged.Add(issue)
+	for _, item := range other.Issues {
+		merged.Add(item)
 	}
+	leftErrors, leftWarnings, leftInfo := r.severityCounts()
+	rightErrors, rightWarnings, rightInfo := other.severityCounts()
 	merged.TotalCount = r.TotalCount + other.TotalCount
+	merged.ErrorCount = leftErrors + rightErrors
+	merged.WarningCount = leftWarnings + rightWarnings
+	merged.InfoCount = leftInfo + rightInfo
 	merged.Truncated = merged.Truncated || r.Truncated || other.Truncated || merged.TotalCount > len(merged.Issues)
 	return merged
+}
+
+func (r Report) severityCounts() (errors, warnings, info int) {
+	if r.ErrorCount+r.WarningCount+r.InfoCount == r.TotalCount {
+		return r.ErrorCount, r.WarningCount, r.InfoCount
+	}
+	for _, item := range r.Issues {
+		switch item.Severity {
+		case SeverityError:
+			errors++
+		case SeverityWarning:
+			warnings++
+		case SeverityInfo:
+			info++
+		}
+	}
+	return errors, warnings, info
 }
 
 func issue(stage Stage, field, code, expected, message string, severity Severity) FieldIssue {
@@ -95,5 +132,6 @@ func issue(stage Stage, field, code, expected, message string, severity Severity
 }
 
 func (r Report) String() string {
-	return fmt.Sprintf("validation issues: %d (returned %d, truncated=%t)", r.TotalCount, len(r.Issues), r.Truncated)
+	return fmt.Sprintf("validation issues: %d (error=%d warning=%d info=%d returned=%d truncated=%t)",
+		r.TotalCount, r.ErrorCount, r.WarningCount, r.InfoCount, len(r.Issues), r.Truncated)
 }
