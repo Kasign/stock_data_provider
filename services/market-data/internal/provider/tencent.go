@@ -273,9 +273,10 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	}
 	out := make([]model.DailyBar, 0, len(rows))
 	rejectedRows := 0
-	for _, row := range rows {
+	for rowIndex, row := range rows {
 		if len(row) < 6 {
 			rejectedRows++
+			addProviderParseIssue(ctx, rowIndex, "row", "kline_row", "insufficient_columns", "at least 6 columns", "array", strconv.Itoa(len(row)), "Tencent K-line row has fewer than six required columns")
 			continue
 		}
 		// Only the first six columns are mandatory and stable across Tencent
@@ -297,7 +298,8 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 				vals[i] = number.String()
 			} else {
 				valid = false
-				break
+				fieldNames := []string{"trade_date", "open", "close", "high", "low", "volume"}
+				addProviderParseIssue(ctx, rowIndex, fieldNames[i], fmt.Sprintf("kline_row[%d]", i), "type_mismatch", "string or number", providerJSONValueType(row[i]), providerJSONPreview(row[i]), "Tencent K-line field has an unsupported JSON type")
 			}
 		}
 		if !valid {
@@ -311,6 +313,14 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		rawVol, e5 := strconv.ParseFloat(vals[5], 64)
 		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || !finiteNumber(open) || !finiteNumber(closeV) || !finiteNumber(high) || !finiteNumber(low) {
 			rejectedRows++
+			values := []struct { field string; raw string; err error }{
+				{"open", vals[1], e1}, {"close", vals[2], e2}, {"high", vals[3], e3}, {"low", vals[4], e4}, {"volume", vals[5], e5},
+			}
+			for _, value := range values {
+				if value.err != nil {
+					addProviderParseIssue(ctx, rowIndex, value.field, "kline_row", "invalid_number", "finite numeric value", "string", value.raw, "Tencent K-line numeric field could not be parsed")
+				}
+			}
 			continue
 		}
 		shares, conversionErr := tencentDailyVolumeToShares(rawVol, symbol)

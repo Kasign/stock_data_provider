@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
@@ -141,4 +143,64 @@ func validProviderSnapshotTime(value *time.Time, reference time.Time) *time.Time
 		return nil
 	}
 	return value
+}
+
+
+// addProviderParseIssue 将 Adapter 解码边界的问题追加到当前请求报告。
+// 只接受字段值摘要，不接受完整响应、URL、Header 或认证信息。
+func addProviderParseIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, preview, message string) {
+	preview = strings.ToValidUTF8(preview, "�")
+	preview = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, preview)
+	if utf8.RuneCountInString(preview) > 160 {
+		runes := []rune(preview)
+		preview = string(runes[:160])
+	}
+	row := rowIndex
+	report := validation.NewReport(validation.DefaultMaxIssues)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType, ActualPreview: preview,
+		Severity: validation.SeverityWarning, Message: message, RowIndex: &row,
+	})
+	validation.AddContextReport(ctx, report)
+}
+
+func providerJSONValueType(raw json.RawMessage) string {
+	value := bytes.TrimSpace(raw)
+	if len(value) == 0 {
+		return "missing"
+	}
+	switch value[0] {
+	case 'n':
+		return "null"
+	case '{':
+		return "object"
+	case '[':
+		return "array"
+	case '"':
+		return "string"
+	case 't', 'f':
+		return "boolean"
+	default:
+		return "number"
+	}
+}
+
+func providerJSONPreview(raw json.RawMessage) string {
+	value := bytes.TrimSpace(raw)
+	if len(value) == 0 || providerJSONValueType(raw) == "object" || providerJSONValueType(raw) == "array" {
+		return ""
+	}
+	if providerJSONValueType(raw) == "string" {
+		var decoded string
+		if json.Unmarshal(value, &decoded) == nil {
+			return decoded
+		}
+	}
+	return string(value)
 }

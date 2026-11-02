@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -89,5 +90,21 @@ func TestNormalizeProviderDailyBarsWithReportKeepsOriginalRows(t *testing.T) {
 	}
 	if !foundMismatch || !foundDuplicate {
 		t.Fatalf("expected original-row identity and duplicate diagnostics, got %+v", report)
+	}
+}
+
+
+func TestProviderJSONValueTypeAndPreview(t *testing.T) {
+	cases := []struct { raw string; want string }{
+		{ "null", "null" }, { "\"abc\"", "string" }, { "12.5", "number" },
+		{ "true", "boolean" }, { "{}", "object" }, { "[]", "array" }, { "", "missing" },
+	}
+	for _, item := range cases {
+		if got := providerJSONValueType([]byte(item.raw)); got != item.want {
+			t.Errorf("providerJSONValueType(%q) = %q, want %q", item.raw, got, item.want)
+		}
+	}
+	if got := providerJSONPreview(json.RawMessage("{\"secret\":\"not-exposed\"}")); got != "" {
+		t.Fatalf("object preview must be omitted, got %q", got)
 	}
 }
