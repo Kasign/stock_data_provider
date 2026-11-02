@@ -331,8 +331,8 @@ func TestYahooFieldParsersReportTypeNullAndInvalidValues(t *testing.T) {
 	}
 	want := []struct {
 		field string
-		code string
-		row int
+		code  string
+		row   int
 	}{{"close", "type_mismatch", 4}, {"high", "null_value", 5}, {"volume", "invalid_integer", 6}}
 	for i, item := range want {
 		got := issues[i]

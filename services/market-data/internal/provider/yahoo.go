@@ -464,7 +464,6 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, bars, rejectedRows)
 }
 
-
 func rawYahooArrayValue(values []json.RawMessage, index int) json.RawMessage {
 	if index < 0 || index >= len(values) {
 		return nil
@@ -515,7 +514,6 @@ func parseYahooInt64Field(ctx context.Context, rowIndex int, field, providerFiel
 	}
 	return value, true
 }
-
 
 func yahooFinanceTicker(symbol string) (string, error) {
 	parts := strings.Split(symbol, ".")
