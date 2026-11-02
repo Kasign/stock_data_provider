@@ -12,6 +12,7 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 type providerProbeQuoteFake struct{}
@@ -397,6 +398,47 @@ func (p providerProbeDailyBarsFake) FetchDailyBars(_ context.Context, symbol, _,
 		ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
 		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: p.quality,
 	}}, nil
+}
+
+
+type providerProbeDailyBarsReportedFake struct {
+	providerProbeDailyBarsFake
+}
+
+func (p providerProbeDailyBarsReportedFake) FetchDailyBars(ctx context.Context, symbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	bars, err := p.providerProbeDailyBarsFake.FetchDailyBars(ctx, symbol, startDate, endDate, limit, adjustment)
+	if err != nil {
+		return nil, err
+	}
+	if len(bars) > 0 {
+		bars[0].Amount = nil
+		bars[0].AmountUnit = "unknown"
+		bars[0].QualityStatus = model.QualityDegraded
+		bars[0].QualityReasons = []string{"amount_missing"}
+	}
+	report := validation.NewReport(10)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageValidate, Field: "amount", ProviderField: "amount",
+		Code: "missing_optional", Expected: "optional CNY amount",
+		Severity: validation.SeverityWarning, Message: "amount is unavailable",
+	})
+	validation.AddContextReport(ctx, report)
+	return bars, nil
+}
+
+func TestProviderProbeDoesNotDuplicateAdapterDailyBarIssues(t *testing.T) {
+	p := providerProbeDailyBarsReportedFake{providerProbeDailyBarsFake{name: "probe-reported-bars", close: 10.5, quality: model.QualityValid}}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found || item.ValidationTotalCount != 1 || len(item.ValidationIssues) != 1 {
+		t.Fatalf("adapter field issue was duplicated by Probe validation: %+v", run.Items)
+	}
 }
 
 func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {

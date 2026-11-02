@@ -297,8 +297,16 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			validated, warnings, report := normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, "", "", 5)
-			validation.AddContextReport(probeCtx, report)
+			var validated []model.DailyBar
+			var warnings []string
+			// Adapter 已在过滤前通过同一 Reporter 上报字段问题时，Probe 只复用旧校验结果，避免重复累计同一批字段问题。
+			if reporter := validation.ReporterFromContext(probeCtx); reporter != nil && reporter.Snapshot().TotalCount > 0 {
+				validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
+			} else {
+				var report validation.Report
+				validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, "", "", 5)
+				validation.AddContextReport(probeCtx, report)
+			}
 			latestDate := ""
 			var providerTime *time.Time
 			if len(validated) > 0 {
