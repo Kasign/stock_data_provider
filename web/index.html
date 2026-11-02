@@ -94,12 +94,22 @@
               <p class="market-widget-meta" id="market-sentiment-meta">尚未取得当日市场广度数据。</p>
             </section>
             <section class="panel market-extension-panel" id="market-money-flow-panel" aria-labelledby="market-money-flow-title">
-              <div class="panel-heading"><div><h2 id="market-money-flow-title">市场成交与资金流向</h2><p>成交活跃度与资金净流入是不同指标，必须分开统计。</p></div><span class="availability-pill is-readonly">能力分层</span></div>
+              <div class="panel-heading"><div><h2 id="market-money-flow-title">市场成交与资金流向</h2><p>成交额来自市场广度汇总；资金净流入来自市场级 Provider 原始统计，两者口径独立。</p></div><span class="availability-pill is-readonly" id="market-capital-flow-status">选择日期范围</span></div>
               <div class="market-money-grid">
                 <article class="market-extension-metric"><small>市场广度返回的成交额（人民币）</small><strong id="market-money-turnover">—</strong><span id="market-money-turnover-note">需先加载市场广度</span></article>
-                <article class="market-extension-metric market-extension-metric-planned"><small>全市场资金净流入</small><strong>接口待接入</strong><span>需要市场级资金流 Provider 与明确统计口径</span></article>
+                <article class="market-extension-metric"><small>市场级主力净流入</small><strong>按历史记录查询</strong><span>来源于 Tushare moneyflow_mkt_dc，不由个股资金流求和</span></article>
               </div>
-              <div class="market-planned-state"><strong>历史资金趋势 · 数据能力待接入</strong><p>当前个股资金流不能直接相加冒充全市场流向；历史趋势需要后端快照存储和查询 API。</p></div>
+              <section class="market-sentiment-history" aria-labelledby="market-capital-flow-history-title">
+                <div class="market-overview-widget-heading"><div><h3 id="market-capital-flow-history-title">市场级每日资金流历史</h3><p>金额单位为人民币，比例单位为百分点；数据质量与源端时间以服务端回包为准。</p></div></div>
+                <div class="market-sentiment-history-controls">
+                  <label>开始日期<input id="market-capital-flow-start" type="date"></label>
+                  <label>结束日期<input id="market-capital-flow-end" type="date"></label>
+                  <button class="button button-secondary" id="load-market-capital-flow" type="button">读取历史资金流</button>
+                </div>
+                <div class="table-scroll market-overview-table-scroll"><table><thead><tr><th>交易日</th><th>上证指数</th><th>深证成指</th><th>主力净流入</th><th>净流入比例</th></tr></thead><tbody id="market-capital-flow-body"><tr><td colspan="5" class="table-empty">选择日期范围后读取市场级资金流历史。</td></tr></tbody></table></div>
+                <p class="market-widget-meta" id="market-capital-flow-meta"></p>
+                <details class="market-quality-reasons" id="market-capital-flow-reasons" hidden><summary>数据质量说明</summary><ul></ul></details>
+              </section>
             </section>
           </div>
           <section class="panel existing-api-panel" aria-labelledby="index-tools-title">

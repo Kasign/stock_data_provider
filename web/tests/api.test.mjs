@@ -18,6 +18,7 @@ import {
   getDataSources,
   getDataSourceDiagnostics,
   getMarketQuotes,
+  getMarketCapitalFlow,
   getQuote,
   searchStocks,
   marketHealth
@@ -443,4 +444,31 @@ test("requests the explicit watchlist symbols through the bounded batch-quote en
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+
+test("queries market-wide capital-flow history with validated date range and authenticated cancellation", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url: String(url), ...init };
+    return jsonResponse({
+      start_date: "2026-10-01", end_date: "2026-10-30", total: 1,
+      items: [{ trade_date: "2026-10-30", net_amount_cny: 1500000000, net_amount_rate_percent: 0.35 }],
+      source: "tushare", source_version: "moneyflow_mkt_dc", fetched_at: "2026-10-30T08:00:00Z",
+      quality_status: "degraded", quality_reasons: ["源端时间精度不足"]
+    });
+  };
+  try {
+    const result = await getMarketCapitalFlow({ marketBase: "/market-api", apiKey: "market-secret" },
+      { start: "2026-10-01", end: "2026-10-30", signal: controller.signal });
+    assert.equal(result.items[0].net_amount_cny, 1500000000);
+    assert.equal(request.url, "/market-api/api/v1/market/capital-flow?start=2026-10-01&end=2026-10-30");
+    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.signal, controller.signal);
+    await assert.rejects(getMarketCapitalFlow({}, { start: "2026-02-30", end: "2026-10-30" }), /有效的开始和结束日期/);
+    await assert.rejects(getMarketCapitalFlow({}, { start: "2026-10-02", end: "2026-10-01" }), /不能晚于/);
+    await assert.rejects(getMarketCapitalFlow({}, { start: "2020-01-01", end: "2026-10-30" }), /不能超过 2000/);
+  } finally { globalThis.fetch = originalFetch; }
 });

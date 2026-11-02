@@ -32,11 +32,12 @@
 | 人气榜/涨跌停/龙虎榜/交易日历/时段 | `GET /api/v1/market/hot-stocks`、`limit-pools`、`dragon-tiger`、`trading-calendar`、`session` | 对应同名 `getMarket*` / `getTradingCalendar` 封装 | 不将缺失数据补成零 |
 | 个股行情/日 K/Bundle | `GET /api/v1/quotes/{symbol}`、`bars/{symbol}/daily`、`bundles/{symbol}` | `getQuote`、`getDailyBars`、`getMarketBundle` | 保留复权、来源与质量语义 |
 | 个股资料/财务/公告/板块 | `GET /api/v1/stocks/{symbol}/profile`、`fundamentals`、`announcements`、`boards` | 对应 `getStock*` 封装 | 分别处理空结果、分页和报告期 |
+| 市场级资金流 | `GET /api/v1/market/capital-flow` | `getMarketCapitalFlow` | start/end 闭区间，最多 2000 个自然日；Tushare `moneyflow_mkt_dc`，CNY/百分点，依赖有权限 Provider |
 | 个股筹码/资金流 | `GET /api/v1/stocks/{symbol}/chip-distribution`、`capital-flow` | `getChipDistribution`、`getCapitalFlow` | 个股资金流不是市场级资金流 |
 
 ### 已发现的契约差异
 
-- `services/market-data/openapi.yaml` 声明了 `GET /api/v1/market/capital-flow`，但当前 `server.go` 没有注册对应 Handler，WebUI 也没有该接口封装。当前不能将市场级资金流标记为可用。
+- `GET /api/v1/market/capital-flow` 已在当前 `server.go` 注册，并由 `market_capital_flow.go` 实现；WebUI 通过 `getMarketCapitalFlow` 按 start/end 日期范围读取。接口返回 Tushare `moneyflow_mkt_dc` 原始市场级序列，金额为 CNY、比例为百分点；需要启用且具备权限的 Tushare Token，Provider 不可用时返回 503，不能据此认定当前部署已有可用数据。
 - 个股资金流 `GET /api/v1/stocks/{symbol}/capital-flow` 已注册 Handler，并有 `getCapitalFlow` 封装。不得用个股资金流冒充市场级资金流。
 - `GET /api/v1/market/stocks`、`GET /api/v1/market/sentiment`、`GET /api/v1/market/sentiment/history` 已注册 Handler，且现已提供 WebUI API 封装；市场股票分页尚未接入具体展示列表，情绪历史已提供手动日期范围查询入口。
 - `POST /api/v1/data-sources/probe` 是主动探测接口。数据中心的同花顺状态展示不得调用该接口；本页面仅读取 `GET /api/v1/data-sources` 与只读运行诊断快照。不得要求用户提供同花顺 API Key 来完成 UI 验收。

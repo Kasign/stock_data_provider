@@ -1,6 +1,6 @@
 # WebUI 功能与页面说明
 
-更新日期：2026-10-30
+更新日期：2026-11-02
 开发分支：feat/webui-market-data-console
 技术栈：原生 HTML、CSS、JavaScript ES Modules；不使用 React。页面不伪造行情或服务端配置。
 
@@ -33,6 +33,8 @@
 - 涨停、跌停、炸板池。
 - 个股人气/飙升榜。
 - 市场时段状态、数据来源与质量提示。
+- 市场级每日资金流历史：按日期范围读取 Tushare `moneyflow_mkt_dc`，展示指数、主力净流入及比例、来源、采集时间和质量原因；Provider 未启用/无权限时显示真实错误。
+- 成交额与资金净流入分别展示；市场级资金流不是个股资金流求和。
 - 不以涨跌分布推算资金流，不以单日快照伪造历史情绪曲线。
 
 ### 3.2 个股行情与研究
@@ -107,7 +109,7 @@
 ## 7. 主要前端模块
 
 - web/src/api.js：HTTP 请求、认证头、参数校验与错误归一化。
-- web/src/market-overview.js：指数、市场宽度、板块、涨跌停池、人气榜。
+- web/src/market-overview.js：指数、市场宽度、市场级资金流历史、板块、涨跌停池、人气榜。
 - web/src/market-activity.js：龙虎榜、交易日历。
 - web/src/stock-research.js：个股研究补充数据。
 - web/src/data-center.js：服务检查与 Provider 能力清单。

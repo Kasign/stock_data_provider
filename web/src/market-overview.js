@@ -1,4 +1,4 @@
-import { getMarketBreadth, getMarketHotStocks, getMarketIndices, getMarketLimitPool, getMarketSentimentHistory, getMarketSectors } from "./api.js";
+import { getMarketBreadth, getMarketCapitalFlow, getMarketHotStocks, getMarketIndices, getMarketLimitPool, getMarketSentimentHistory, getMarketSectors } from "./api.js";
 import { describeApiError, finiteNumberOrNull, formatCompact, formatDateTime, formatPercent, formatPrice, qualityLabel } from "./format.js";
 const $ = (s) => document.querySelector(s);
 const KEYS = ["indices", "breadth", "sectors", "pool", "hot"];
@@ -114,8 +114,26 @@ function renderHotStocks(data) {
  meta("market-hot-stocks-meta",[(data?.type==="surge"?"飙升榜":"人气榜"),"当前返回 "+count(items.length)+" 条（非全市场总数）","来源 "+(data?.source||"未报告"),"采集时间 "+formatDateTime(data?.fetched_at),"源端未提供可独立核验的行情快照时间"]);
  qualityReasons("market-hot-stocks-reasons",data?.quality_reasons);
 }
+function renderMarketCapitalFlow(data) {
+ const root=$("#market-capital-flow-body"),items=Array.isArray(data?.items)?data.items.filter(item=>item&&typeof item==="object"):[];
+ if(root){
+  root.replaceChildren();
+  if(!items.length)tableMessage(root,"接口已响应，但该日期范围内没有可展示的市场级资金流记录。");
+  items.forEach(item=>{
+   const row=document.createElement("tr");cell(row,item.trade_date||"—");
+   const sh=el("td");sh.append(el("strong","market-table-primary",formatPrice(item.close_sh)),el("small","market-table-secondary","涨跌 "+formatPercent(item.change_percent_sh)));row.append(sh);
+   const sz=el("td");sz.append(el("strong","market-table-primary",formatPrice(item.close_sz)),el("small","market-table-secondary","涨跌 "+formatPercent(item.change_percent_sz)));row.append(sz);
+   const net=finiteNumberOrNull(item.net_amount_cny);cell(row,net===null?"—":(net>0?"+":"")+formatCompact(net)+" 元",dir(net));
+   cell(row,formatPercent(item.net_amount_rate_percent),dir(item.net_amount_rate_percent));root.append(row);
+  });
+ }
+ badge("market-capital-flow-status",items.length?qualityLabel(data?.quality_status):"暂无历史记录",items.length?"quality":"warning",data?.quality_status);
+ meta("market-capital-flow-meta",["请求 "+(data?.start_date||"未报告")+" 至 "+(data?.end_date||"未报告"),"返回 "+count(items.length)+" / "+count(data?.total)+" 条","来源 "+(data?.source||"未报告"),"采集时间 "+formatDateTime(data?.fetched_at)]);
+ qualityReasons("market-capital-flow-reasons",data?.quality_reasons);
+}
 export function bindMarketOverview(getSettings,onSelectStock) {
  const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",poolType="up",hotType="popular",refreshGenerations=Object.create(null);
+ let capitalFlowController=null,capitalFlowGeneration=0;
  function showSectorMetricUnavailable(metric=sectorMetric){
   const labels={amount:"成交额排行","five-day":"近 5 日涨幅",flow:"资金净流入"};
   const root=$("#market-sector-body");
@@ -180,9 +198,17 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    safeOverviewUi(()=>cancel(key));
    safeOverviewUi(()=>pending(key,"行情连接配置已变更，旧结果已清除，请重新刷新。","warning"));
   });
+  capitalFlowGeneration++;
+  try{capitalFlowController?.abort();}catch{}
+  capitalFlowController=null;
+  safeOverviewUi(()=>{
+   const status=$("#market-capital-flow-status"),body=$("#market-capital-flow-body");
+   if(status){status.textContent="连接已变更";status.className="availability-pill is-readonly";}
+   if(body)tableMessage(body,"行情连接配置已变更，请重新读取市场资金流。");
+   meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
+  });
   ["#market-overview-updated","#market-data-updated"].forEach(selector=>safeOverviewUi(()=>{
-   const node=$(selector);
-   if(node)node.textContent="行情连接配置已变更，旧结果已清除，请重新刷新市场模块。";
+   const node=$(selector);if(node)node.textContent="行情连接配置已变更，旧结果已清除，请重新刷新市场模块。";
   }));
  }
 
@@ -192,6 +218,41 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  document.querySelectorAll("[data-sector-metric]").forEach(button=>button.addEventListener("click",()=>{sectorMetric=["change","amount","five-day","flow"].includes(button.dataset.sectorMetric)?button.dataset.sectorMetric:"change";document.querySelectorAll("[data-sector-metric]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("sectors");}));
  document.querySelectorAll("[data-pool-type]").forEach(button=>button.addEventListener("click",()=>{poolType=["up","down","broken"].includes(button.dataset.poolType)?button.dataset.poolType:"up";document.querySelectorAll("[data-pool-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("pool");}));
  document.querySelectorAll("[data-hot-type]").forEach(button=>button.addEventListener("click",()=>{hotType=["popular","surge"].includes(button.dataset.hotType)?button.dataset.hotType:"popular";document.querySelectorAll("[data-hot-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("hot");}));
+
+ async function loadMarketCapitalFlow() {
+  const status=$("#market-capital-flow-status"),body=$("#market-capital-flow-body");
+  const start=$("#market-capital-flow-start")?.value||"",end=$("#market-capital-flow-end")?.value||"",button=$("#load-market-capital-flow");
+  if(!start||!end){if(status)status.textContent="请选择开始和结束日期";return;}
+  const settings=typeof getSettings==="function"?getSettings():null;
+  if(!settings?.apiKey){if(status)status.textContent="请先配置行情服务 API Key";if(body)tableMessage(body,"未配置行情服务 API Key，本次未发起请求。");return;}
+  const sequence=++capitalFlowGeneration;
+  try{capitalFlowController?.abort();}catch{}
+  const controller=new AbortController();capitalFlowController=controller;
+  if(button){button.disabled=true;button.textContent="读取中…";}
+  if(status){status.textContent="正在读取市场级资金流…";status.className="availability-pill is-readonly";}
+  if(body)tableMessage(body,"正在读取服务端市场级资金流历史…");
+  try{
+   const data=await getMarketCapitalFlow(settings,{start,end,signal:controller.signal});
+   if(controller.signal.aborted||sequence!==capitalFlowGeneration)return;
+   renderMarketCapitalFlow(data);
+  }catch(error){
+   if(controller.signal.aborted||sequence!==capitalFlowGeneration)return;
+   if(status){status.textContent=Number(error?.status)===503?"Provider 未启用或不可用":Number(error?.status)===502?"Provider 返回失败或无效数据":"读取失败";status.className="availability-pill is-unavailable";}
+   if(body)tableMessage(body,"市场级资金流读取失败："+safeOverviewError(error));
+   meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
+  }finally{
+   if(sequence===capitalFlowGeneration){
+    if(capitalFlowController===controller)capitalFlowController=null;
+    if(button){button.disabled=false;button.textContent="读取历史资金流";}
+   }
+  }
+ }
+ const dateFormatter=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"});
+ const today=dateFormatter.format(new Date()),defaultStart=dateFormatter.format(new Date(Date.now()-90*86400000));
+ const flowStart=$("#market-capital-flow-start"),flowEnd=$("#market-capital-flow-end");
+ if(flowStart&&!flowStart.value)flowStart.value=defaultStart;
+ if(flowEnd&&!flowEnd.value)flowEnd.value=today;
+ $("#load-market-capital-flow")?.addEventListener("click",()=>{void loadMarketCapitalFlow();});
 
  async function loadSentimentHistory() {
   const status=$("#market-sentiment-history-status");

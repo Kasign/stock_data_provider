@@ -1,6 +1,6 @@
 # 数据层 API 接口清单与 WebUI 接入映射
 
-更新日期：2026-10-30
+更新日期：2026-11-02
 适用分支：feat/full-go-data-providers-api-switch（已包含 feat/webui-market-data-console 的 WebUI 合并内容）
 核对依据：当前目标分支 services/market-data/openapi.yaml、services/market-data/internal/httpapi/server.go、web/src/api.js 及页面模块。服务端路由与 OpenAPI 已逐项核对。字段类型、完整响应 Schema 和状态码以 OpenAPI 为准。
 
@@ -27,7 +27,7 @@
 | GET | /api/v1/quotes/{symbol} | 单只股票实时行情 | 路径参数 symbol | getQuote | 是 |
 | GET | /api/v1/bars/{symbol}/daily | 单只股票日 K（支持日期范围、复权及 as_of 历史观察时点） | 路径参数 symbol；start、end、limit（1–2000）、adjustment、as_of | getDailyBars | 是 |
 | GET | /api/v1/bundles/{symbol} | 单只股票行情与日 K 统一快照 | 路径参数 symbol；lookback_days（20–2000）、adjustment、as_of | getMarketBundle | 是 |
-| GET | /api/v1/data-sources/diagnostics | Provider 业务请求熔断诊断（进程内真实请求观测） | 无额外参数；详见 OpenAPI | 未接入 WebUI | 是 |
+| GET | /api/v1/data-sources/diagnostics | Provider 业务请求熔断诊断（进程内真实请求观测） | 无额外参数；详见 OpenAPI | getDataSourceDiagnostics | 是 |
 | POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | 无请求体；单项超时和并发受限 | 未接入 WebUI | 是 |
 | GET | /api/v1/data-sources/probe/history | 主动探测历史批次 | limit（1–100，默认 20）；依赖 MariaDB | 未接入 WebUI | 是 |
 | GET | /api/v1/data-sources | Provider 注册信息与静态能力声明 | 无额外参数；详见 OpenAPI | getDataSources | 是 |
@@ -42,7 +42,7 @@
 | GET | /api/v1/stocks/{symbol}/boards | 单股所属行业/概念板块 | 无额外参数；详见 OpenAPI | getStockBoards | 是 |
 | GET | /api/v1/market/valuations | 最多 100 只股票估值快照 | symbols 必填，最多 100 个代码 | getMarketValuations | 是 |
 | GET | /api/v1/market/sectors | 行业/概念板块实时排行 | type（industry/concept）、direction（up/down）、sort_by（change_percent/amount/change_5d）、limit（1–100） | getMarketSectors | 是 |
-| GET | /api/v1/market/capital-flow | 市场级每日资金流历史序列（Tushare moneyflow_mkt_dc） | start、end 必填；闭区间，最长 2000 个自然日；需启用并配置有权限的 Tushare Token | 未接入 WebUI | 是 |
+| GET | /api/v1/market/capital-flow | 市场级每日资金流历史序列（Tushare moneyflow_mkt_dc） | start、end 必填；闭区间，最长 2000 个自然日；需启用并配置有权限的 Tushare Token | getMarketCapitalFlow | 是 |
 | GET | /api/v1/market/index-catalog | 国内指数/板块目录 | tag（cn_concept/region/tszs/industry/tushare） | getIndexCatalog | 是 |
 | GET | /api/v1/market/indices/{symbol}/constituents | 指定指数成分及权重快照 | 路径参数 symbol；source、as_of 可选 | getIndexConstituents | 是 |
 | GET | /api/v1/market/indices/{symbol}/daily | 指数/板块历史日线 | 路径参数 symbol；start、end 必填；source 可选 | getIndexDailyBars | 是 |
@@ -50,8 +50,8 @@
 | GET | /api/v1/market/trading-calendar | A 股交易日历 | start、end 必填（闭区间） | getTradingCalendar | 是 |
 | GET | /api/v1/market/session | A 股交易时段状态 | at 可选，RFC3339 时间 | getMarketSession | 是 |
 | GET | /api/v1/market/breadth | 全市场涨跌分布/市场宽度 | 无额外参数；详见 OpenAPI | getMarketBreadth | 是 |
-| GET | /api/v1/market/sentiment | 当前市场情绪快照（聚合市场宽度、涨跌停/炸板等） | 无额外参数；依数据源覆盖情况返回质量状态 | 未接入 WebUI | 是 |
-| GET | /api/v1/market/sentiment/history | 已持久化的市场情绪历史快照 | start、end、limit；依赖 MariaDB | 未接入 WebUI | 是 |
+| GET | /api/v1/market/sentiment | 当前市场情绪快照（聚合市场宽度、涨跌停/炸板等） | 无额外参数；依数据源覆盖情况返回质量状态 | getMarketSentiment | 是 |
+| GET | /api/v1/market/sentiment/history | 已持久化的市场情绪历史快照 | start、end、limit；依赖 MariaDB | getMarketSentimentHistory | 是 |
 | GET | /api/v1/market/hot-stocks | 个股人气/飙升等榜单 | type、limit（1–100） | getMarketHotStocks | 是 |
 | GET | /api/v1/market/dragon-tiger | 龙虎榜盘后分页 | date、page、page_size | getMarketDragonTiger | 是 |
 | GET | /api/v1/market/limit-pools | 涨停、跌停、炸板池 | type（up/down/broken）、date、limit（1–100） | getMarketLimitPool | 是 |
@@ -75,7 +75,7 @@
 
 | 页面/模块 | 当前调用 | 当前边界 |
 |---|---|---|
-| 市场总览 | 核心指数、市场宽度、板块排行、涨跌停池、人气榜 | 市场级资金流和市场情绪历史 API 已有服务端实现，尚未接入 WebUI；全球市场联动暂缓 |
+| 市场总览 | 核心指数、市场宽度、板块排行、涨跌停池、人气榜、市场情绪历史、市场级资金流历史 | 市场情绪历史与市场级资金流历史均已封装并提供页面入口；资金流依赖有权限的 Tushare Provider，需真实部署验收；全球市场联动暂缓 |
 | 市场活动 | 龙虎榜、交易日历 | 已接入；空榜/未知质量不能解释为确定的零条 |
 | 个股搜索与行情 | 股票搜索、单股行情、日 K、Bundle、数据源清单 | 已接入；行情质量与源端时间必须展示 |
 | 个股研究 | 档案、估值、财务、所属板块、公告、筹码分布、个股资金流 | 已封装/按需加载；具体 Provider 能力和数据质量依回包判断 |
@@ -105,7 +105,7 @@
 
 ## 7. 仍需数据层/产品评估的 API 需求
 
-- 板块资金净流入排行（需核实源字段语义、单位、报告时间和完整候选板块集）；市场级资金流和市场情绪历史已有服务端 API，仍需真实权限及部署验收。
+- 板块资金净流入排行（需核实源字段语义、单位、报告时间和完整候选板块集）；市场级资金流与市场情绪历史已有服务端 API 和 WebUI 接入，仍需真实权限及部署验收。
 - 板块多维排行与资金流入排行（需核实接口是否提供相应排序字段）。
 - 自选股批量概览（批量 quote 已由 WebUI `getMarketQuotes` 封装并用于自选股刷新；MA/资金等扩展字段仍需明确是否纳入批量接口，不能将单股研究字段当作批量 quote 已返回）。
 - 选股规则执行、策略保存/扫描任务/候选结果/历史记录；当前 `/api/v1/market/stocks` 是分页行情，不包含筛选表达式和执行语义。
