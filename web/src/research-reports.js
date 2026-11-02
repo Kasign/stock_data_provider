@@ -4,16 +4,26 @@ export const MAX_RESEARCH_REPORTS = 30;
 const MAX_REPORT_CHARS = 700000, MAX_TOTAL_CHARS = 4000000;
 function safeStorage(storage) { if (storage) return storage; try { return globalThis.localStorage; } catch { return null; } }
 function normalizeReport(item) {
-  if (!item || typeof item !== "object" || !item.result || typeof item.result !== "object") return null;
-  const runId = String(item.runId || "").trim(), analysisBase = String(item.analysisBase || "").trim();
-  if (!item.id || !runId || item.result.run_id !== runId) return null;
+  if (!item || typeof item !== "object" || Array.isArray(item) ||
+      !item.result || typeof item.result !== "object" || Array.isArray(item.result)) return null;
+  if (typeof item.id !== "string" || !item.id.trim() ||
+      typeof item.runId !== "string" || !item.runId.trim() || item.result.run_id !== item.runId.trim()) return null;
+  const analysisBase = item.analysisBase === undefined ? "" : item.analysisBase;
+  const taskId = item.taskId === undefined ? "" : item.taskId;
+  const status = item.status === undefined ? (item.result.status || "") : item.status;
+  const asOf = item.asOf === undefined ? "" : item.asOf;
+  const createdAt = item.createdAt === undefined ? "" : item.createdAt;
+  const symbols = item.symbols === undefined ? [] : item.symbols;
+  if (typeof analysisBase !== "string" || typeof taskId !== "string" || taskId.length > 160 ||
+      typeof status !== "string" || status.length > 80 || typeof asOf !== "string" || asOf.length > 80 ||
+      typeof createdAt !== "string" || !Array.isArray(symbols) || symbols.length > 50 ||
+      symbols.some(value => typeof value !== "string" || !value.trim() || value.trim().length > 32) ||
+      (item.corePass !== undefined && item.corePass !== null && typeof item.corePass !== "boolean")) return null;
   let serialized; try { serialized = JSON.stringify(item.result); } catch { return null; }
   if (!serialized || serialized.length > MAX_REPORT_CHARS) return null;
-  const symbols = Array.isArray(item.symbols) ? item.symbols.map(x => String(x).trim()).filter(Boolean).slice(0, 50) : [];
-  return { id: String(item.id), runId, taskId: String(item.taskId || "").slice(0, 160), analysisBase, symbols,
-    status: String(item.status || item.result.status || "").slice(0, 80),
-    corePass: typeof item.corePass === "boolean" ? item.corePass : null,
-    asOf: String(item.asOf || "").slice(0, 80), createdAt: String(item.createdAt || ""), result: item.result };
+  return { id: item.id.trim(), runId: item.runId.trim(), taskId, analysisBase: analysisBase.trim(),
+    symbols: symbols.map(value => value.trim()), status, corePass: item.corePass ?? null,
+    asOf, createdAt, result: item.result };
 }
 export function readResearchReports(storage) {
   try {

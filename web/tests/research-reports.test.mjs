@@ -9,4 +9,14 @@ test("搜索与归档日期过滤组合有效",()=>{const s=memory();saveResearc
 test("损坏归档数据不会被误判为空或覆盖",()=>{const s=memory();s.setItem(RESEARCH_REPORTS_KEY,"{");const before=s.getItem(RESEARCH_REPORTS_KEY);assert.equal(readResearchReports(s).valid,false);assert.equal(saveResearchReport(result(),{},s).ok,false);assert.equal(s.getItem(RESEARCH_REPORTS_KEY),before);});
 test("拒绝缺少 Run ID、单份过大和超过数量上限的归档",()=>{assert.equal(saveResearchReport({status:"completed"},{},memory()).ok,false);const large= result("large");large.warnings=["x".repeat(700001)];assert.equal(saveResearchReport(large,{},memory()).ok,false);assert.equal(saveResearchReport({status:"completed"},{},memory()).ok,false);const s=memory();for(let i=0;i<30;i++)assert.equal(saveResearchReport(result("run-"+i),{},s).ok,true);assert.equal(saveResearchReport(result("run-31"),{},s).reason,"limit");});
 
+test("拒绝异常或超长标的列表，不能静默截断归档内容", () => {
+  const s = memory();
+  const base = { id: "report-a", runId: "run-a", result: result("run-a") };
+  for (const symbols of ["600519.SH", [600519], ["", "600519.SH"], Array.from({ length: 51 }, () => "600519.SH"), ["x".repeat(33)]]) {
+    assert.equal(writeResearchReports([{ ...base, symbols }], s).reason, "invalid");
+    assert.equal(s.getItem(RESEARCH_REPORTS_KEY), null);
+  }
+  assert.equal(writeResearchReports([{ ...base, taskId: "x".repeat(161) }], s).reason, "invalid");
+});
+
 test("拒绝重复归档 ID，避免写入后才发现存储无效",()=>{const s=memory();const item={id:"same",runId:"run-1",result:result("run-1")};assert.equal(writeResearchReports([item,{...item,runId:"run-2",result:result("run-2")}],s).reason,"invalid");assert.equal(s.getItem(RESEARCH_REPORTS_KEY),null);});

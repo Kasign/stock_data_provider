@@ -75,7 +75,9 @@ export function bindResearchNotes({root=document, getContext=()=>({}), storage}=
     const current=state();if(!current.readable||!current.valid){feedback("存储不可用或数据异常，未写入。",true);return;}
     const now=new Date().toISOString(),existing=editingId?current.items.find(x=>x.id===editingId):null;
     const context=getContext()||{};
-    const note={id:editingId||("note-"+now+"-"+Math.random().toString(36).slice(2,8)),title,content,symbol:$("#research-note-symbol").value.trim()||String(context.symbol||""),taskId:$("#research-note-task").value.trim()||String(context.taskId||""),runId:$("#research-note-run").value.trim()||String(context.runId||""),tags:$("#research-note-tags").value.split(/[,，、]/).map(x=>x.trim()).filter(Boolean).slice(0,MAX_TAGS),createdAt:existing?.createdAt||now,updatedAt:now};
+    const tags=$("#research-note-tags").value.split(/[,，、]/).map(x=>x.trim()).filter(Boolean);
+    if(tags.length>MAX_TAGS||tags.some(tag=>tag.length>40)){feedback("标签最多 12 个，每个标签不超过 40 个字符。",true);return;}
+    const note={id:editingId||("note-"+now+"-"+Math.random().toString(36).slice(2,8)),title,content,symbol:$("#research-note-symbol").value.trim()||String(context.symbol||""),taskId:$("#research-note-task").value.trim()||String(context.taskId||""),runId:$("#research-note-run").value.trim()||String(context.runId||""),tags,createdAt:existing?.createdAt||now,updatedAt:now};
     const next=existing?current.items.map(x=>x.id===editingId?note:x):[note,...current.items];
     if(!existing&&next.length>MAX_RESEARCH_NOTES){feedback("最多保存 200 条，请先整理或删除旧记录。",true);return;}
     const saved=writeResearchNotes(next,storage);if(!saved.ok){feedback("保存失败，原有记录未确认写入："+saved.reason,true);return;}
