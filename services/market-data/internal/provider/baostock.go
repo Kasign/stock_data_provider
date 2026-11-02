@@ -169,7 +169,7 @@ func (p *Baostock) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		})
 	}
 	// 所有 Provider 都遵守 limit 上限；显式日期区间不能绕过返回条数限制。
-	return normalizeProviderDailyBars(symbol, start, end, limit, out, 0)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, start, end, limit, out, 0)
 }
 
 func baostockSecurityCode(symbol string) (string, error) {

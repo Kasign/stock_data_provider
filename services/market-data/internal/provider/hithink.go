@@ -1724,7 +1724,7 @@ func (p *Hithink) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			all[i].QualityReasons = append(all[i].QualityReasons, "change_percent_unavailable_for_first_bar")
 		}
 	}
-	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, all, 0)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, all, 0)
 }
 
 // FetchFundamentals 使用同花顺财务指标端点读取单个报告期的能力指标。

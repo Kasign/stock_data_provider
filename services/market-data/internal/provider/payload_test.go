@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"context"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 	"time"
 )
 
@@ -50,5 +54,37 @@ func TestValidProviderSnapshotTimeRejectsZeroAndFutureValues(t *testing.T) {
 	}
 	if got := validProviderSnapshotTime(&past, reference); got == nil || !got.Equal(past) {
 		t.Fatalf("older timestamp should remain valid for freshness handling, got %v", got)
+	}
+}
+
+
+func TestNormalizeProviderDailyBarsWithReportKeepsOriginalRows(t *testing.T) {
+	ctx := validation.WithReporter(context.Background(), validation.NewReporter(20))
+	volume := int64(1000)
+	amount := 10000.0
+	valid := model.DailyBar{
+		Symbol: "600000.SH", TradeDate: "2026-10-30", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, Amount: &amount, VolumeUnit: "shares", AmountUnit: "CNY",
+		AdjustmentBasis: model.AdjustmentNone, Source: "fixture", QualityStatus: model.QualityValid,
+	}
+	mismatch := valid
+	mismatch.Symbol = "000001.SZ"
+	bars := []model.DailyBar{valid, mismatch, valid}
+	got, err := normalizeProviderDailyBarsWithReport(ctx, "600000.SH", "2026-10-30", "2026-10-30", 10, bars, 0)
+	if err != nil {
+		t.Fatalf("normalizeProviderDailyBarsWithReport() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("normalized bars = %d, want 1", len(got))
+	}
+	report := validation.ReporterFromContext(ctx).Snapshot()
+	foundMismatch, foundDuplicate := false, false
+	for _, item := range report.Issues {
+		if item.Code == "identity_mismatch" && item.RowIndex != nil && *item.RowIndex == 1 { foundMismatch = true }
+		if item.Code == "duplicate_trade_date" && item.RowIndex != nil && *item.RowIndex == 2 { foundDuplicate = true }
+	}
+	if !foundMismatch || !foundDuplicate {
+		t.Fatalf("expected original-row identity and duplicate diagnostics, got %+v", report)
 	}
 }

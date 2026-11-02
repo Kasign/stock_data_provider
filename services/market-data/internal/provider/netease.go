@@ -454,7 +454,7 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	if len(rows) == 0 {
 		return nil, errors.New("Netease returned no valid daily bars in the requested date range")
 	}
-	return normalizeProviderDailyBars(symbol, startISO, endISO, limit, rows, rejectedRows)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, rows, rejectedRows)
 }
 
 func neteaseCSVColumns(header []string) map[string]int {

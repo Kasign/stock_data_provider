@@ -429,7 +429,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 			NormalizationVer: normalize.Version,
 		})
 	}
-	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
 }
 
 // pytdxDailyAmountInfo 在成交额与成交量明显矛盾时保留原始记录，将归一化成交额置空。

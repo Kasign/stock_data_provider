@@ -433,7 +433,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		}
 		bars = append(bars, bar)
 	}
-	return normalizeProviderDailyBars(symbol, startISO, endISO, limit, bars, rejectedRows)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, bars, rejectedRows)
 }
 
 func yahooFinanceTicker(symbol string) (string, error) {

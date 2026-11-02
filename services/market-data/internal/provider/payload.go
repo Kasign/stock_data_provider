@@ -2,14 +2,17 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 const maxProviderPayloadBytes int64 = 8 << 20
@@ -44,8 +47,13 @@ func decodeSingleJSON(body []byte, out any) error {
 	return nil
 }
 
-// normalizeProviderDailyBars 统一整理公开数据源的日 K 返回，避免顺序、重复日期或越界记录直接流入分析主链路。
+// normalizeProviderDailyBars 保留旧调用签名，兼容不需要请求级诊断的调用方。
 func normalizeProviderDailyBars(symbol, startDate, endDate string, limit int, bars []model.DailyBar, rejectedRows int) ([]model.DailyBar, error) {
+	return normalizeProviderDailyBarsWithReport(context.Background(), symbol, startDate, endDate, limit, bars, rejectedRows)
+}
+
+// normalizeProviderDailyBarsWithReport 在去重、过滤和排序前记录原始输入行诊断。
+func normalizeProviderDailyBarsWithReport(ctx context.Context, symbol, startDate, endDate string, limit int, bars []model.DailyBar, rejectedRows int) ([]model.DailyBar, error) {
 	if startDate != "" {
 		if _, err := time.Parse("2006-01-02", startDate); err != nil {
 			return nil, fmt.Errorf("invalid start date: %w", err)
@@ -60,20 +68,37 @@ func normalizeProviderDailyBars(symbol, startDate, endDate string, limit int, ba
 		return nil, errors.New("start date must not be after end date")
 	}
 
+	normalized, warnings, report := normalize.ValidateAndSortBarsWithReport(symbol, bars, startDate, endDate, limit)
 	hasSourceContractIssue := rejectedRows > 0
-	for _, bar := range bars {
+	seenDates := make(map[string]int, len(bars))
+	for rowIndex, bar := range bars {
 		if _, err := time.Parse("2006-01-02", bar.TradeDate); err != nil {
 			hasSourceContractIssue = true
 			continue
 		}
-		// 上游返回请求范围外的日期，不能静默地混入本次查询结果。
-		if (startDate != "" && bar.TradeDate < startDate) || (endDate != "" && bar.TradeDate > endDate) {
+		if firstIndex, exists := seenDates[bar.TradeDate]; exists {
 			hasSourceContractIssue = true
+			row := rowIndex
+			report.Add(validation.FieldIssue{
+				Stage: validation.StageNormalize, Field: "trade_date", ProviderField: "trade_date",
+				Code: "duplicate_trade_date", Expected: "one daily bar per trade date",
+				ActualType: "string", ActualPreview: bar.TradeDate,
+				Severity: validation.SeverityWarning,
+				Message: fmt.Sprintf("duplicate daily bar; first occurrence is row %d", firstIndex),
+				RowIndex: &row, Symbol: bar.Symbol, TradeDate: bar.TradeDate,
+			})
+		} else {
+			seenDates[bar.TradeDate] = rowIndex
 		}
 	}
-	normalized, warnings := normalize.ValidateAndSortBars(symbol, bars, startDate, endDate, limit)
-	if len(normalized) == 0 {
-		return nil, errors.New("provider returned no valid daily bars after normalization")
+	if rejectedRows > 0 {
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageParse, Field: "row", ProviderField: "daily_bar_row",
+			Code: "rows_rejected_during_parse", Expected: "provider rows matching the daily bar schema",
+			ActualType: "count", ActualPreview: strconv.Itoa(rejectedRows),
+			Severity: validation.SeverityWarning,
+			Message: "provider rows were rejected during parsing; row-level details are unavailable",
+		})
 	}
 	if hasSourceContractIssue || normalize.HasQualityDegradingBarWarnings(warnings) {
 		for i := range normalized {
@@ -85,6 +110,10 @@ func normalizeProviderDailyBars(symbol, startDate, endDate string, limit int, ba
 				normalized[i].QualityReasons = appendProviderQualityReason(normalized[i].QualityReasons, "provider_rows_rejected_during_parse")
 			}
 		}
+	}
+	validation.AddContextReport(ctx, report)
+	if len(normalized) == 0 {
+		return nil, errors.New("provider returned no valid daily bars after normalization")
 	}
 	return normalized, nil
 }

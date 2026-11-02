@@ -337,7 +337,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		out = append(out, b)
 	}
 
-	return normalizeProviderDailyBars(symbol, start, end, limit, out, rejectedRows)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, start, end, limit, out, rejectedRows)
 }
 
 // Tencent quote payloads expose turnover at field 35's price/volume/amount

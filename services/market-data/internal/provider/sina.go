@@ -194,7 +194,7 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 			NormalizationVer: normalize.Version,
 		})
 	}
-	return normalizeProviderDailyBars(symbol, startISO, endISO, limit, bars, rejectedRows)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, bars, rejectedRows)
 }
 
 type sinaKlineRow struct {
