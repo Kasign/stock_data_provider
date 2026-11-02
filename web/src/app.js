@@ -791,6 +791,7 @@ async function refreshWatchlistQuotes() {
 function renderWatchlist(records, storageReadable, storageValid) {
   const root = $("#watchlist-list");
   root.replaceChildren();
+  updateWatchlistBulkControls();
   setText("#watchlist-quote-refresh-status", state.watchlistQuoteMessage);
   if (records === undefined) {
     const readState = safeReadWatchlistState();
@@ -1064,6 +1065,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
     root.append(row);
   });
   renderResearchStockList();
+  updateWatchlistBulkControls();
 }
 
 function parseWatchlistImportLine(line) {
@@ -1235,7 +1237,21 @@ function addCurrentSymbolToWatchlist() {
 }
 
 function selectedWatchlistSymbols() { return [...document.querySelectorAll("#watchlist-list [data-watchlist-select-symbol]:checked")].map((input) => input.value); }
-function updateWatchlistBulkControls() { const count = selectedWatchlistSymbols().length; setText("#watchlist-bulk-count", "已选择 " + count + " 只"); ["#watchlist-bulk-remove", "#watchlist-bulk-assign"].forEach((selector) => { const button = $(selector); if (button) button.disabled = count === 0; }); }
+function updateWatchlistBulkControls() {
+  const inputs = [...document.querySelectorAll("#watchlist-list [data-watchlist-select-symbol]")];
+  const count = inputs.filter((input) => input.checked).length;
+  const selectVisible = $("#watchlist-select-visible");
+  if (selectVisible) {
+    selectVisible.checked = inputs.length > 0 && count === inputs.length;
+    selectVisible.indeterminate = count > 0 && count < inputs.length;
+    selectVisible.disabled = inputs.length === 0;
+  }
+  setText("#watchlist-bulk-count", "已选择 " + count + " 只");
+  ["#watchlist-bulk-remove", "#watchlist-bulk-assign"].forEach((selector) => {
+    const button = $(selector);
+    if (button) button.disabled = count === 0;
+  });
+}
 function handleWatchlistBulkRemove() { const symbols = selectedWatchlistSymbols(); if (!symbols.length) return; const result = removeWatchlistSymbols(symbols, localStorage); if (!result.storageReadable || !result.storageValid || !result.persisted) { setWatchlistFeedback("批量移除未能确认保存；请检查浏览器存储状态，未确认写入任何部分结果。", "error"); return; } renderWatchlist(result.items, true, true); setWatchlistFeedback("已批量移除 " + result.removed.length + " 只自选股。"); }
 function handleWatchlistBulkAssign() { const symbols = selectedWatchlistSymbols(), group = $("#watchlist-bulk-group").value; if (!symbols.length) return; const result = assignWatchlistGroups(symbols, group, safeWatchlistGroupStorage()); if (!result.changed || !result.persisted) { setWatchlistFeedback("批量调整分组失败；请检查分组存储状态。", "error"); return; } renderWatchlist(); setWatchlistFeedback("已将 " + result.assignedCount + " 只股票调整至“" + group + "”。"); }
 

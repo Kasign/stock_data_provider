@@ -1355,6 +1355,58 @@ try {
         "navigation should mark " + viewName + " as the current page"
       );
       await assertNoHorizontalOverflow("view " + viewName);
+      if (viewName === "watchlist" && viewport.width === 320) {
+        const watchlistKey = "stock-provider-webui.watchlist.v1";
+        const groupsKey = "stock-provider-webui.watchlist-groups.v1";
+        await page.evaluate(({ watchlistKey, groupsKey }) => {
+          localStorage.setItem(watchlistKey, JSON.stringify([
+            { symbol: "600519.SH", name: "贵州茅台", updated_at: "2026-10-29T00:00:00Z" },
+            { symbol: "000001.SZ", name: "平安银行", updated_at: "2026-10-28T00:00:00Z" },
+            { symbol: "300750.SZ", name: "宁德时代", updated_at: "2026-10-27T00:00:00Z" }
+          ]));
+          localStorage.setItem(groupsKey, JSON.stringify({ groups: ["未分组"], assignments: {} }));
+        }, { watchlistKey, groupsKey });
+        await page.reload({ waitUntil: "load" });
+        await clickNav(page, '.nav-link[data-view="watchlist"]');
+        const groupName = page.locator("#watchlist-group-name");
+        await groupName.fill("测试分组");
+        await page.locator("#watchlist-group-create").click();
+        await page.locator("#watchlist-bulk-group").selectOption("测试分组");
+        const selections = page.locator("#watchlist-list [data-watchlist-select-symbol]");
+        const selectAll = page.locator("#watchlist-select-visible");
+        await selections.nth(0).check();
+        assert.equal(await selectAll.isChecked(), false);
+        assert.equal(await selectAll.evaluate(element => element.indeterminate), true, "partial row selection must set select-all indeterminate");
+        await selections.nth(1).check();
+        assert.equal(await selectAll.evaluate(element => element.indeterminate), true);
+        await selections.nth(2).check();
+        assert.equal(await selectAll.isChecked(), true, "all visible rows selected individually must synchronize select-all");
+        assert.equal(await selectAll.evaluate(element => element.indeterminate), false);
+        await selections.nth(0).uncheck();
+        assert.equal(await selectAll.isChecked(), false);
+        assert.equal(await selectAll.evaluate(element => element.indeterminate), true, "unchecking one row must restore partial state");
+        for (const input of await selections.all()) await input.uncheck();
+        await selections.nth(0).check();
+        await selections.nth(1).check();
+        await page.locator("#watchlist-bulk-assign").click();
+        await page.waitForFunction(() => document.querySelector("#watchlist-bulk-count")?.textContent.includes("已选择 0 只"));
+        assert.deepEqual(await page.locator("#watchlist-list .watchlist-item-group").evaluateAll(nodes => nodes.map(node => node.value)), ["测试分组", "测试分组", "未分组"], "bulk group assignment must only affect selected rows");
+        assert.equal(await page.locator("#watchlist-bulk-remove").isDisabled(), true, "rendering after bulk assign must clear stale selection");
+        assert.equal(await selectAll.isChecked(), false);
+        assert.equal(await selectAll.evaluate(element => element.indeterminate), false);
+        await selections.nth(0).check();
+        await selections.nth(1).check();
+        await page.locator("#watchlist-bulk-remove").click();
+        await page.waitForFunction(key => JSON.parse(localStorage.getItem(key)).length === 1, watchlistKey);
+        assert.equal(await page.locator("#watchlist-bulk-remove").isDisabled(), true, "rendering after bulk remove must clear stale selection");
+        await page.locator(".watchlist-import > summary").click();
+        await page.locator("#watchlist-import-text").fill("600519,贵州茅台\n000858,五粮液\ninvalid,无效");
+        await page.locator("#watchlist-import-preview-button").click();
+        await page.waitForFunction(() => document.querySelector("#watchlist-import-summary")?.textContent.includes("可导入 2 只"));
+        assert.equal(await page.locator("#watchlist-import-confirm").isDisabled(), false);
+        await page.locator("#watchlist-import-confirm").click();
+        await page.waitForFunction(key => JSON.parse(localStorage.getItem(key)).length === 3, watchlistKey);
+      }
       if (viewName === "settings") {
         const settingsLinks = page.locator("#settings-view .settings-nav-link");
         assert.equal(await settingsLinks.count(), 10, "settings center must expose all ten groups");
@@ -1375,18 +1427,20 @@ try {
           await orderList.locator("[data-watchlist-field-order-move='down']").first().click();
           const reordered = await readOrder();
           assert.notDeepEqual(reordered, initialOrder, "moving a watchlist field must change the visible order");
-          const firstVisibility = page.locator("[data-watchlist-display-field]").first();
-          const visibilityValue = await firstVisibility.inputValue();
-          const wasChecked = await firstVisibility.isChecked();
-          await firstVisibility.setChecked(!wasChecked);
+          const visibilityInputs = page.locator("[data-watchlist-display-field]");
+          const initialVisibility = await visibilityInputs.evaluateAll(nodes => nodes.map(node => node.checked));
+          for (let index = 0; index < initialVisibility.length; index += 1) {
+            await visibilityInputs.nth(index).setChecked(!initialVisibility[index]);
+          }
+          const expectedVisibility = initialVisibility.map(value => !value);
           await page.reload({ waitUntil: "load" });
           await page.locator("#open-settings").click();
           await page.locator("#settings-view").waitFor({ state: "visible" });
           assert.deepEqual(await readOrder(), reordered, "watchlist field order must survive a full page reload");
-          assert.equal(
-            await page.locator("[data-watchlist-display-field]").first().isChecked(),
-            !wasChecked,
-            "watchlist field visibility must survive a full page reload"
+          assert.deepEqual(
+            await page.locator("[data-watchlist-display-field]").evaluateAll(nodes => nodes.map(node => node.checked)),
+            expectedVisibility,
+            "all five watchlist field visibility settings must survive a full page reload"
           );
 
           const keys = {

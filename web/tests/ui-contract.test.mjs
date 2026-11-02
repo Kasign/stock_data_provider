@@ -770,6 +770,12 @@ test("global typography has a readable baseline and key UI text is not undersize
   assert.match(stylesheet, /font-size:\s*12px/);
   assert.match(stylesheet, /line-height:\s*1\.[456]/);
 });
+test("watchlist bulk selection keeps select-all checked and indeterminate state synchronized", () => {
+  assert.match(app, /selectVisible\.checked = inputs\.length > 0 && count === inputs\.length/);
+  assert.match(app, /selectVisible\.indeterminate = count > 0 && count < inputs\.length/);
+  assert.match(app, /renderWatchlist\(records, storageReadable, storageValid\)[\s\S]*?updateWatchlistBulkControls\(\)/);
+});
+
 test("recent analysis history exposes historical-only task types", () => {
   assert.match(html, /<option value="position_review">持仓复核（历史记录）<\/option>/);
   assert.match(app, /recentTaskTypeLabel\(record\.task_type\)/);
