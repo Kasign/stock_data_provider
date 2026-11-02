@@ -2,9 +2,9 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
-	"context"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
@@ -57,7 +57,6 @@ func TestValidProviderSnapshotTimeRejectsZeroAndFutureValues(t *testing.T) {
 	}
 }
 
-
 func TestNormalizeProviderDailyBarsWithReportKeepsOriginalRows(t *testing.T) {
 	ctx := validation.WithReporter(context.Background(), validation.NewReporter(20))
 	volume := int64(1000)
@@ -81,8 +80,12 @@ func TestNormalizeProviderDailyBarsWithReportKeepsOriginalRows(t *testing.T) {
 	report := validation.ReporterFromContext(ctx).Snapshot()
 	foundMismatch, foundDuplicate := false, false
 	for _, item := range report.Issues {
-		if item.Code == "identity_mismatch" && item.RowIndex != nil && *item.RowIndex == 1 { foundMismatch = true }
-		if item.Code == "duplicate_trade_date" && item.RowIndex != nil && *item.RowIndex == 2 { foundDuplicate = true }
+		if item.Code == "identity_mismatch" && item.RowIndex != nil && *item.RowIndex == 1 {
+			foundMismatch = true
+		}
+		if item.Code == "duplicate_trade_date" && item.RowIndex != nil && *item.RowIndex == 2 {
+			foundDuplicate = true
+		}
 	}
 	if !foundMismatch || !foundDuplicate {
 		t.Fatalf("expected original-row identity and duplicate diagnostics, got %+v", report)

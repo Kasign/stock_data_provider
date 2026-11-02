@@ -84,7 +84,7 @@ func normalizeProviderDailyBarsWithReport(ctx context.Context, symbol, startDate
 				Code: "duplicate_trade_date", Expected: "one daily bar per trade date",
 				ActualType: "string", ActualPreview: bar.TradeDate,
 				Severity: validation.SeverityWarning,
-				Message: fmt.Sprintf("duplicate daily bar; first occurrence is row %d", firstIndex),
+				Message:  fmt.Sprintf("duplicate daily bar; first occurrence is row %d", firstIndex),
 				RowIndex: &row, Symbol: bar.Symbol, TradeDate: bar.TradeDate,
 			})
 		} else {
@@ -97,7 +97,7 @@ func normalizeProviderDailyBarsWithReport(ctx context.Context, symbol, startDate
 			Code: "rows_rejected_during_parse", Expected: "provider rows matching the daily bar schema",
 			ActualType: "count", ActualPreview: strconv.Itoa(rejectedRows),
 			Severity: validation.SeverityWarning,
-			Message: "provider rows were rejected during parsing; row-level details are unavailable",
+			Message:  "provider rows were rejected during parsing; row-level details are unavailable",
 		})
 	}
 	if hasSourceContractIssue || normalize.HasQualityDegradingBarWarnings(warnings) {
