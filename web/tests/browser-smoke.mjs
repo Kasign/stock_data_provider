@@ -1828,6 +1828,19 @@ try {
           assert.match(rollbackFeedback, /已回读确认导入前的本地存储已恢复/, "rollback result: " + rollbackFeedback);
           assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.watchlist), rollbackWatchlist);
           assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).map((item) => item.task_id), keys.tasks), ["task-3"]);
+
+          page.once("dialog", dialog => dialog.accept());
+          await page.locator("#clear-settings").click();
+          await page.waitForFunction(key => localStorage.getItem(key) === null, keys.settings);
+          assert.equal(await page.locator("#market-key-input").inputValue(), "", "clearing local connection settings must clear the current key input");
+          assert.equal(await page.locator("#market-base-input").inputValue(), "/market-api");
+          assert.equal(await page.locator("#analysis-base-input").inputValue(), "/analysis-api");
+          await page.locator("#market-base-input").fill("/market-api");
+          await page.locator("#analysis-base-input").fill("/analysis-api");
+          await page.locator("#market-key-input").fill("browser-test-key");
+          await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled);
+          await page.locator("#save-settings").click();
+          await page.waitForFunction(key => JSON.parse(localStorage.getItem(key) || "{}").apiKey === "browser-test-key", keys.settings);
         }
       }
     }
