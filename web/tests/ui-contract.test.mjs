@@ -1402,7 +1402,7 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
   );
   const importBody = sourceBetween(
     app,
-    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, strategy) {",
+    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups, strategy) {",
     "\n\nsyncThemeControl(readTheme());",
     "工作区导入"
   );
@@ -1875,7 +1875,7 @@ test("清空或导入本地任务历史会隔离在途创建请求的晚到响�
   assert.match(clearBody, /state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
   const importBody = sourceBetween(
     app,
-    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, strategy) {",
+    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups, strategy) {",
     "\n\nsyncThemeControl(readTheme());",
     "工作区导入"
   );
