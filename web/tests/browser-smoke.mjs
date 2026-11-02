@@ -1667,10 +1667,7 @@ try {
           assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark", "imported theme must update the running page");
           assert.equal(await page.locator("#settings-watchlist-sort").inputValue(), "name", "imported preferences must update settings controls");
           await clickNav(page, '.nav-link[data-view="watchlist"]');
-          await page.waitForTimeout(100);
-          const importedWatchlistText = await page.locator("#watchlist-list").textContent();
-          const importedWatchlistStorage = await page.evaluate((key) => localStorage.getItem(key), keys.watchlist);
-          assert.match(importedWatchlistText || "", /导入名称/, "watchlist did not refresh after import; rendered=" + importedWatchlistText + "; storage=" + importedWatchlistStorage);
+          await page.waitForFunction(() => [...document.querySelectorAll("#watchlist-list .watchlist-name-input")].some(input => input.value === "导入名称"));
           await clickNav(page, '.nav-link[data-view="tasks"]');
           await page.waitForTimeout(100);
           const importedTaskListText = await page.locator("#recent-analysis-list").textContent();
