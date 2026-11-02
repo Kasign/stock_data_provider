@@ -1483,6 +1483,24 @@ try {
         }
 
         if (viewport.width === 320) {
+          const settingsSearch = page.locator("#settings-section-search");
+          await settingsSearch.fill("安全与备份");
+          assert.equal(await settingsLinks.evaluateAll(nodes => nodes.filter(node => !node.hidden).length), 1, "settings search must filter groups by their content");
+          assert.match(await page.locator("#settings-nav-result").textContent(), /找到 1 个设置分组/);
+          await settingsSearch.fill("");
+          assert.equal(await settingsLinks.evaluateAll(nodes => nodes.filter(node => !node.hidden).length), 10, "clearing settings search must restore all groups");
+          await page.locator("[data-settings-collapse-all]").click();
+          assert.equal(await page.locator(".settings-section-toggle").evaluateAll(nodes => nodes.every(node => node.getAttribute("aria-expanded") === "false")), true, "collapse all must update every section state");
+          await page.locator("[data-settings-expand-all]").click();
+          assert.equal(await page.locator(".settings-section-toggle").evaluateAll(nodes => nodes.every(node => node.getAttribute("aria-expanded") === "true")), true, "expand all must restore every section");
+          for (const link of await settingsLinks.all()) {
+            const target = await link.getAttribute("data-settings-target");
+            await link.focus();
+            await page.keyboard.press("Enter");
+            assert.equal(await link.getAttribute("aria-current"), "location", "keyboard section navigation must update the active link");
+            assert.equal(await page.evaluate(() => document.activeElement?.closest(".settings-section")?.id), target, "keyboard section navigation must move focus to the target section heading");
+          }
+
           const orderList = page.locator("#watchlist-field-order-list");
           assert.equal(await orderList.locator("[data-watchlist-field-order]").count(), 5);
           assert.equal(await page.locator("[data-watchlist-display-field]").count(), 5);
