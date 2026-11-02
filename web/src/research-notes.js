@@ -3,11 +3,25 @@ export const MAX_RESEARCH_NOTES = 200;
 const MAX_TITLE = 100, MAX_CONTENT = 10000, MAX_TAGS = 12;
 function safeStorage(storage) { if (storage) return storage; try { return globalThis.localStorage; } catch { return null; } }
 function normalizeNote(note) {
-  if (!note || typeof note !== "object") return null;
-  const id=String(note.id||"").trim(), title=String(note.title||"").trim(), content=String(note.content||"").trim();
-  if (!id || !title || !content || title.length>MAX_TITLE || content.length>MAX_CONTENT) return null;
-  const tags=Array.isArray(note.tags)?note.tags.map(x=>String(x).trim()).filter(Boolean).slice(0,MAX_TAGS):[];
-  return {id,title,content,symbol:String(note.symbol||"").trim().slice(0,32),taskId:String(note.taskId||"").trim().slice(0,160),runId:String(note.runId||"").trim().slice(0,160),tags,createdAt:String(note.createdAt||""),updatedAt:String(note.updatedAt||"")};
+  if (!note || typeof note !== "object" || Array.isArray(note)) return null;
+  const id = typeof note.id === "string" ? note.id.trim() : "";
+  const title = typeof note.title === "string" ? note.title.trim() : "";
+  const content = typeof note.content === "string" ? note.content.trim() : "";
+  const symbol = note.symbol === undefined ? "" : note.symbol;
+  const taskId = note.taskId === undefined ? "" : note.taskId;
+  const runId = note.runId === undefined ? "" : note.runId;
+  const tags = note.tags === undefined ? [] : note.tags;
+  const createdAt = note.createdAt === undefined ? "" : note.createdAt;
+  const updatedAt = note.updatedAt === undefined ? "" : note.updatedAt;
+  if (!id || !title || !content || title.length > MAX_TITLE || content.length > MAX_CONTENT ||
+      typeof symbol !== "string" || symbol.trim().length > 32 ||
+      typeof taskId !== "string" || taskId.trim().length > 160 ||
+      typeof runId !== "string" || runId.trim().length > 160 ||
+      !Array.isArray(tags) || tags.length > MAX_TAGS ||
+      tags.some(tag => typeof tag !== "string" || !tag.trim() || tag.trim().length > 40) ||
+      typeof createdAt !== "string" || typeof updatedAt !== "string") return null;
+  return { id, title, content, symbol: symbol.trim(), taskId: taskId.trim(), runId: runId.trim(),
+    tags: tags.map(tag => tag.trim()), createdAt, updatedAt };
 }
 export function readResearchNotes(storage) {
   try {
