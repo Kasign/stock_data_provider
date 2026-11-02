@@ -1627,11 +1627,25 @@ try {
           assert.match(preview, /冲突 1 条/, "preview must report the duplicate stock and task conflicts");
           assert.match(await page.locator("#browser-data-import-current").textContent(), /1 条自选股，1 条最近任务/);
           assert.match(await page.locator("#browser-data-import-settings").textContent(), /当前行情 API Key 保留/);
+          await page.locator("#browser-data-import-dialog button[value='cancel']").last().click();
+          await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
+          assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.watchlist), [
+            { symbol: "600519.SH", name: "原名称", updated_at: "2026-10-29T00:00:00Z" }
+          ], "footer cancel must not modify the current watchlist");
+
+          await uploadWorkspace(mergeFile);
+          await page.locator("#browser-data-import-dialog button[aria-label='关闭导入预览']").click();
+          await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
+          assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.watchlist), [
+            { symbol: "600519.SH", name: "原名称", updated_at: "2026-10-29T00:00:00Z" }
+          ], "close button must not modify the current watchlist");
+
+          await uploadWorkspace(mergeFile);
           await page.keyboard.press("Escape");
           await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
           assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.watchlist), [
             { symbol: "600519.SH", name: "原名称", updated_at: "2026-10-29T00:00:00Z" }
-          ], "cancel must not modify the current watchlist");
+          ], "Escape must not modify the current watchlist");
 
           await uploadWorkspace(mergeFile);
           await page.locator("#browser-data-import-merge").click();
@@ -1650,6 +1664,14 @@ try {
           assert.equal(merged.tasks.length, 2);
           assert.equal(merged.tasks.find((item) => item.task_id === "task-1")?.status, "succeeded");
           assert.equal(merged.preferences.watchlistSort, "name");
+          assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark", "imported theme must update the running page");
+          assert.equal(await page.locator("#settings-watchlist-sort").inputValue(), "name", "imported preferences must update settings controls");
+          await clickNav(page, '.nav-link[data-view="watchlist"]');
+          await page.waitForFunction(() => document.querySelector("#watchlist-list")?.textContent.includes("导入名称"));
+          await clickNav(page, '.nav-link[data-view="tasks"]');
+          await page.waitForFunction(() => document.querySelector("#recent-analysis-list")?.textContent.includes("task-2"));
+          await clickNav(page, '.nav-link[data-view="settings"]');
+          await page.locator("#settings-view").waitFor({ state: "visible" });
 
           const replaceFile = makeImportFile(
             [{ symbol: "300750.SZ", name: "宁德时代", updated_at: "2026-10-30T00:00:00Z" }],
