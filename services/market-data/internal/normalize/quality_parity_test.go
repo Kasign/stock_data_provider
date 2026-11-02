@@ -7,22 +7,22 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 )
 
-// TestGoDataQualityContract records the intentional contract
-// difference: unverified-source bars carry unknown unit/adjustment metadata, while
+// TestLegacyPythonBridgeAndGoQualityContract records the intentional contract
+// difference: legacy Python bars carry unknown unit/adjustment metadata, while
 // native Go normalization requires explicit units and a supported price basis.
-func TestGoDataQualityContract(t *testing.T) {
-	t.Run("Go rejects unknown metadata rather than guessing", func(t *testing.T) {
+func TestLegacyPythonBridgeAndGoQualityContract(t *testing.T) {
+	t.Run("Go rejects legacy unknown metadata rather than guessing", func(t *testing.T) {
 		volume := int64(1000)
 		bar := model.DailyBar{
 			TradeDate: "2026-10-20", Period: "1d",
 			Open: 10, High: 11, Low: 9, Close: 10.5,
 			Volume: &volume, VolumeUnit: "unknown", AmountUnit: "unknown",
-			AdjustmentBasis: model.AdjustmentUnknown, Source: "unverified-provider",
+			AdjustmentBasis: model.AdjustmentUnknown, Source: "legacy-python",
 			QualityStatus: model.QualityUnknown,
 		}
 		got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{bar}, "", "", 10)
 		if len(got) != 0 {
-			t.Fatalf("row with unverified units/adjustment must not enter normalized Go series: %+v", got)
+			t.Fatalf("legacy row with unverified units/adjustment must not enter normalized Go series: %+v", got)
 		}
 		if !containsWarning(warnings, "bar_with_nonstandard_volume_unit_dropped") {
 			t.Fatalf("expected explicit unit-contract failure, warnings=%v", warnings)
