@@ -850,7 +850,16 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 	run.CheckResults = buildProviderProbeCheckResults(run.Items, requestedChecks)
 	if selectedChecks["cross_provider"] {
-		run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.FinishedAt)...)
+		if selected["daily_bars"] {
+			run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.FinishedAt)...)
+		} else {
+			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+				Check: "cross_provider", Provider: "system", Status: "skipped",
+				ErrorCode: "daily_bars_capability_not_requested",
+				ErrorMessage: "Cross-provider comparison requires daily_bars capability in the same probe run",
+				CheckedAt: run.FinishedAt,
+			})
+		}
 	}
 	if selectedChecks["storage"] && s.store == nil {
 		run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{

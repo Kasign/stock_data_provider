@@ -433,3 +433,14 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 		t.Fatalf("degraded snapshots must not be reported as cross-provider pass: %+v", results)
 	}
 }
+
+
+func TestBuildCrossProviderProbeCheckResultsRequiresDailyBarsCapability(t *testing.T) {
+	result := model.ProviderProbeCheckResult{
+		Check: "cross_provider", Provider: "system", Status: "skipped",
+		ErrorCode: "daily_bars_capability_not_requested", CheckedAt: time.Now().UTC(),
+	}
+	if result.Capability != "" || result.Status != "skipped" {
+		t.Fatalf("cross-provider check without daily_bars must not claim a daily-bars capability result: %+v", result)
+	}
+}

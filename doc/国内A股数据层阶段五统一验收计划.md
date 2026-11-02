@@ -714,3 +714,10 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - 检查 Service 测试夹具后发现：测试日 K 原先 amount 为 nil，Normalize 会按契约将其降级并把 amount_unit 设为 unknown；这会触发比较器 not_comparable，与测试预期 matched 冲突。
 - 已为合成 valid fixture 补充单位为 CNY、与 OHLC/成交量量级一致的成交额；该数据只用于验证比较器链路，不代表真实行情。
 - 最新 SHA 的 CI 仍待确认。
+
+
+### checks 过滤边界修正（2026-11-02）
+
+- 发现只请求 quote capability、但默认 checks 包含 cross_provider 时，系统仍会输出一条 capability=daily_bars 的 cross_provider skipped 项，破坏 capability 白名单语义。
+- 已调整为：只有同一批次显式请求 daily_bars 时才执行跨源比较；否则返回不带 capability 的 skipped 结果（daily_bars_capability_not_requested）。
+- 对应回归测试补齐；最新 SHA CI 待确认。

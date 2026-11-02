@@ -367,3 +367,8 @@ BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过
 ## 28. cross_provider 合成测试夹具质量修正（2026-11-02）
 
 Service 级 matched 测试的合成日 K 原先缺少成交额；Normalize 按既有契约将其标记 degraded，导致比较器应当拒绝。测试夹具已补充 CNY 成交额（仅合成测试），以验证 valid 输入下在线探测链路的 matched 分支；不作为真实 Provider 证据。
+
+
+## 29. checks 与 capability 白名单边界修正
+
+当请求只包含 quote 而默认 checks 包含 cross_provider 时，cross_provider 结果不应伪造 daily_bars capability 项。现要求同批次显式选择 daily_bars 才能执行跨源比较；否则返回 capability 为空的 skipped 结果，保持 capability 白名单响应边界。
