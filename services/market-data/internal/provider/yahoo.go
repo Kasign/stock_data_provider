@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -335,7 +336,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 	}
 	rawBars := make([]rawYahooBar, 0, len(result.Timestamp))
 	rejectedRows := 0
-	var adjclose []*float64
+	var adjclose []json.RawMessage
 	if len(result.Indicators.AdjClose) > 0 {
 		adjclose = result.Indicators.AdjClose[0].Values
 	}
@@ -360,6 +361,11 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		closeV, closeOK := parseYahooFloatField(ctx, index, "close", "indicators.quote[0].close", rawYahooArrayValue(quote.Close, index), "finite positive price")
 		volume, volumeOK := parseYahooInt64Field(ctx, index, "volume", "indicators.quote[0].volume", rawYahooArrayValue(quote.Volume, index), "non-negative integer shares")
 		if !openOK || !highOK || !lowOK || !closeOK || !volumeOK {
+			rejectedRows++
+			continue
+		}
+		if volume < 0 {
+			addProviderParseIssue(ctx, index, "volume", "indicators.quote[0].volume", "out_of_range", "non-negative integer shares", "number", fmt.Sprintf("%d", volume), "Yahoo Finance 成交量不能为负数")
 			rejectedRows++
 			continue
 		}
