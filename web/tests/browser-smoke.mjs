@@ -1389,7 +1389,7 @@ try {
         assert.equal(new URL(capitalFlowRequest.url).searchParams.get("end"), "2026-10-30");
         assert.equal(capitalFlowRequest.headers["x-api-key"], "browser-test-key");
         assert.equal(await page.locator("#market-capital-flow-body tr").count(), 2);
-        assert.match(await page.locator("#market-capital-flow-body tr").nth(0).textContent(), /\+1,500 元/);
+        assert.match(await page.locator("#market-capital-flow-body tr").nth(0).textContent(), /\+1500 元/, "capital-flow amount follows the default compact display preference");
         assert.match(await page.locator("#market-capital-flow-body tr").nth(1).textContent(), /—/);
         assert.match(await page.locator("#market-capital-flow-status").getAttribute("class"), /quality-degraded/);
         assert.match(await page.locator("#market-capital-flow-meta").textContent(), /版本 moneyflow_mkt_dc/);
