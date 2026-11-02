@@ -199,6 +199,7 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 			rejectedRows++
 			continue
 		}
+		rawVolumeCopy := rawVolume
 		reasons := []string{"provider_amount_unavailable", "provider_symbol_not_echoed_by_kline_response"}
 		if item.date == time.Now().In(sinaChinaLocation()).Format("2006-01-02") {
 			reasons = append(reasons, "sina_current_day_daily_bar_may_be_partial")
