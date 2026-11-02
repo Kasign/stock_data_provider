@@ -312,3 +312,45 @@ func TestYahooDailyBarDecodeFailureAddsStructuredParseIssue(t *testing.T) {
 		t.Fatalf("unexpected Yahoo parse issue: %+v", issue)
 	}
 }
+
+func TestYahooFieldParsersReportTypeNullAndInvalidValues(t *testing.T) {
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, ok := parseYahooFloatField(ctx, 4, "close", "indicators.quote[0].close", json.RawMessage(`"bad"`), "finite positive price"); ok {
+		t.Fatal("string close must be rejected")
+	}
+	if _, ok := parseYahooFloatField(ctx, 5, "high", "indicators.quote[0].high", json.RawMessage(`null`), "finite positive price"); ok {
+		t.Fatal("null high must be rejected")
+	}
+	if _, ok := parseYahooInt64Field(ctx, 6, "volume", "indicators.quote[0].volume", json.RawMessage(`1.5`), "non-negative integer shares"); ok {
+		t.Fatal("fractional volume must be rejected")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 3 {
+		t.Fatalf("expected 3 field issues, got %+v", issues)
+	}
+	want := []struct {
+		field string
+		code string
+		row int
+	}{{"close", "type_mismatch", 4}, {"high", "null_value", 5}, {"volume", "invalid_integer", 6}}
+	for i, item := range want {
+		got := issues[i]
+		if got.Stage != validation.StageParse || got.Field != item.field || got.Code != item.code || got.RowIndex == nil || *got.RowIndex != item.row {
+			t.Fatalf("issue[%d] = %+v, want field=%s code=%s row=%d", i, got, item.field, item.code, item.row)
+		}
+	}
+}
+
+func TestYahooFloatParserRejectsNonFiniteOverflow(t *testing.T) {
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, ok := parseYahooFloatField(ctx, 1, "open", "indicators.quote[0].open", json.RawMessage(`1e999`), "finite positive price"); ok {
+		t.Fatal("overflowing number must be rejected")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Code != "invalid_number" || issues[0].RowIndex == nil || *issues[0].RowIndex != 1 {
+		t.Fatalf("unexpected overflow diagnostic: %+v", issues)
+	}
+}
+
