@@ -400,7 +400,6 @@ func (p providerProbeDailyBarsFake) FetchDailyBars(_ context.Context, symbol, _,
 	}}, nil
 }
 
-
 type providerProbeDailyBarsReportedFake struct {
 	providerProbeDailyBarsFake
 }
