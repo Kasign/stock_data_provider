@@ -137,3 +137,14 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 - Sina quote quality=valid；Tencent quote quality=degraded。两市场日 K 的 Sina/Tencent 均为 degraded，成交额 null、amount_unit=unknown；Sina 另有 symbol echo contract warning。
 - 该批次只证明板块样本能取回数据，不证明日 K 跨 Provider 一致。统一比较器的预期为 not_comparable。
 - 真实采集来源 SHA `720f2fc685376e29452ce3742ba398ff79089a03`，workflow Run `41042950111`。原始脱敏报告已保留为 Actions artifact。
+
+
+## 12. 创业板与科创板真实降级样例（Run 41042950111）
+
+- 创业板：`300750.SZ`；科创板：`688981.SH`。
+- 采集源：Sina、Tencent；行情快照和日 K 均记录来源版本、源端时间/交易日期、单位、质量状态和降级原因。
+- Sina quote 为 valid，Tencent quote 为 degraded（成交量单位推断、volume_ratio 不支持）；两边日 K 均 degraded，成交额缺失且 amount_unit=unknown。Sina 日 K 还存在响应未回显证券代码的契约告警。
+- 日 K 两侧单位均为 shares，复权口径 none；真实样本不能作为 matched 基准。
+- 固定夹具路径：`services/market-data/internal/provider/testdata/live_market_cross_market_golden_20261030.json`。
+- 来源提交：`720f2fc685376e29452ce3742ba398ff79089a03`；Live provider probe Run：`41042950111`。
+- 自动化测试将两市场日 K 输入统一比较器，要求 `not_comparable / quality_status_must_be_valid`。这是质量门禁证据，不是跨 Provider 对账通过证据。

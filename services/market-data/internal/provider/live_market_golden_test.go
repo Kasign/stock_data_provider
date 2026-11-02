@@ -226,7 +226,6 @@ func TestLiveGoldenCrossProviderQuoteAndDailyBarsParity(t *testing.T) {
 
 }
 
-
 func TestLiveCrossMarketGoldenDailyBarsRemainNotComparableWhenDegraded(t *testing.T) {
 	path := filepath.Join("testdata", "live_market_cross_market_golden_20261030.json")
 	content, err := os.ReadFile(path)

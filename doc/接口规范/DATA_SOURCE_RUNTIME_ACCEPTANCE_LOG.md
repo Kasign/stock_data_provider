@@ -323,3 +323,13 @@ BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过
 - Sina/Tencent 两侧日 K 均返回 8 条记录，artifact 中保留 3 条样本行；两边质量状态均 degraded，成交额缺失、金额单位 unknown，不能作为 matched 基准。
 - 新增回归测试逐市场调用统一比较器，必须返回 not_comparable；不把 quote returned 或 daily bars returned 等同于 quality valid。
 - Run 41042950111 真实探测失败项：Eastmoney stock_search、quote、delayed quote HTTP 502；NetEase quote DNS 失败、daily CSV HTTP 502 并按策略 skipped。不是凭据缺失。
+
+
+## 23. 2026-11-02 接续检查与 gofmt 修复
+
+- 接续时远端 HEAD：`04932a7aed4bcc4bac45ef2c5f2042833e2a4708`；PR #1 Open Draft，未合并。
+- Run `41043889122` 的 Go suite 失败仅由 `live_market_golden_test.go` 多余空行触发 gofmt；Docker market-data image 在同一 gofmt 前置步骤失败。根模块、go-core、MariaDB migration/PIT persistence、WebUI checks、Go/Python parity 均通过。
+- 已清理该文件空行，等待修复 SHA 的 Actions 结果。
+- 创业板/科创板固定样例来源 Run `41042950111`；日 K 两侧均 degraded，成交额缺失，不可作为 matched 证据。
+- 当前覆盖率字段在 market_breadth 有显式总体分母；其他能力无可信分母时省略。
+- Live probe workflow 的最终 success 不等于所有 Provider 成功：同一批记录 Eastmoney HTTP 502、NetEase DNS/HTTP 502。

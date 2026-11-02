@@ -428,7 +428,7 @@
 
 当前边界与后续工作：
 
-1. 已支持请求体 `scope=all/core`、`capabilities` 白名单和 `timeout_seconds=1..30`（默认 12 秒）；显式能力列表会精确收窄探测范围，core 与白名单冲突时返回参数错误。`markets`、`symbols`、`checks` 仍未实现。
+1. 已支持请求体 `scope=all/core`、`capabilities` 白名单和 `timeout_seconds=1..30`（默认 12 秒）；显式能力列表会精确收窄探测范围，core 与白名单冲突时返回参数错误。`markets`、`symbols` 已实现单板块/单证券定向过滤；`checks` 仍未实现。
 2. 已新增真实 HTTP Handler 的 `httptest` 覆盖：API Key 鉴权、空请求体兼容、core 范围、能力白名单、非法 JSON/字段/能力/超时、重复能力、超大请求体和响应汇总。OpenAPI 同步声明请求体及安全要求。
 3. Provider 级逐项结果仍需补充请求摘要、返回行数/覆盖率、样本证券和数据时效证据；当前仍以状态、质量原因和脱敏错误证据为主。
 4. 对未注册 Provider 的能力标记为 not_configured；凭据已配置但授权不足、限流等情况必须继续走真实错误分类。无凭据 Provider 不发请求。
@@ -499,7 +499,7 @@
 ### 当前基线
 
 - 目标分支：`feat/full-go-data-providers-api-switch`。
-- 本节整理时远端 HEAD：`b2a08820e41c4afffdf320e172670421b014f68f`。
+- 本节初始整理基线为 `b2a08820e41c4afffdf320e172670421b014f68f`；本轮接续时远端 HEAD 为 `04932a7aed4bcc4bac45ef2c5f2042833e2a4708`。
 - PR #1：Open Draft，未合并；禁止合并或改动 PR 目标分支。
 - 上一提交的 Go test suite、WebUI checks、Go/Python quality parity 均通过；Live provider probe 的探测 Job 失败，不能把 workflow 的 continue-on-error/最终状态当作 Provider 全部可用。
 - 现有新浪/腾讯 600036.SH 日 K 黄金样例两侧均为 degraded，成交额缺失；只可做质量降级回归，不可作为 matched 证据。
@@ -510,11 +510,11 @@
 |---|---|---|---|
 | P0-1 | 跨 Provider 日 K 比较器接入黄金夹具 | 已完成（真实降级夹具调用路径已接入；真实 matched 证据仍待） | 真实黄金夹具调用统一比较器；降级样例明确得到 not_comparable；独立 valid 合成契约样例验证 matched/partial/mismatch |
 | P0-2 | 比较器输入边界校验 | 已完成（静态契约边界与单测已补齐） | 拒绝非正/NaN/Inf OHLC、OHLC 关系错误、负成交量、负/非有限成交额；日期重复/非法和空集合状态明确 |
-| P0-3 | 跨市场黄金样例 | 部分完成（创业板/科创板真实降级样例已归档；有效 matched 样例待取得） | 创业板 300750.SZ、科创板 688981.SH 有真实有效样例后固化；按 Provider 分别验证代码映射、成交量单位和质量状态 |
+| P0-3 | 跨市场黄金样例 | 部分完成（创业板/科创板 Sina/Tencent 真实降级样例已归档；有效 matched 样例待取得） | 创业板 300750.SZ、科创板 688981.SH 有真实有效样例后固化；按 Provider 分别验证代码映射、成交量单位和质量状态 |
 | P0-4 | 北交所支持矩阵 | 部分完成（代码映射矩阵和 not_supported 诊断分类已补齐；真实在线样本待验） | 逐 Provider 记录 BJ 代码映射和能力支持；新浪、腾讯、网易、BaoStock 当前明确不支持时标记 not_supported，不发请求、不计失败；至少一个真实支持源返回有效样本后再固化黄金夹具 |
 | P0-5 | 特殊交易样例 | 待完成 | 停牌、新股上市、除权除息、非交易日各有固定样本与预期行为；不得用工作日推断交易日 |
 | P0-6 | 统一诊断 checks 过滤 | 待完成 | `POST /api/v1/data-sources/probe` 支持 connectivity、contract、quality、freshness、cross_provider、storage；未知/重复/冲突值明确 400，空值保持旧请求行为 |
-| P0-7 | 覆盖率分母契约 | 部分完成（市场广度已有显式分母；其他能力待扩展） | 明确 total、returned、validated、missing、excluded、coverage_ratio；分母来源可追溯，分母未知时 ratio=null，禁止用返回数自作分母 |
+| P0-7 | 覆盖率分母契约 | 部分完成（市场广度已有 total/returned/validated/missing/excluded/ratio；其他能力待扩展） | 明确 total、returned、validated、missing、excluded、coverage_ratio；分母来源可追溯，分母未知时 ratio=null，禁止用返回数自作分母 |
 | P0-8 | 诊断逐项证据 | 部分完成 | 每项记录脱敏 request_summary、返回/有效记录数、源端时间、质量原因、错误阶段；不适用字段为空，不用 FetchedAt 冒充 ProviderTime |
 | P0-9 | 历史诊断与兼容 | 待完成 | MariaDB 保存/查询新字段；旧历史 JSON 可读；存储未配置/故障明确 storage 状态，不伪装诊断通过 |
 | P0-10 | 统一诊断端到端 | 待完成 | HTTP Handler → Service → Provider → 标准化/质量校验 → MariaDB 持久化/查询的集成测试覆盖成功、降级、失败、跳过和不支持 |
@@ -652,3 +652,24 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - 采集来源：commit `720f2fc685376e29452ce3742ba398ff79089a03`，GitHub Actions Live provider probe Run `41042950111`。原始脱敏报告作为 workflow artifact 保存。
 
 本轮同一 Run 的其他真实 Provider 结论：Eastmoney stock_search/quote/delayed quote 返回 HTTP 502；NetEase quote DNS 失败、历史 CSV HTTP 502 后按现有策略 skipped。此类公共源故障不归因于缺少 Key/Token。
+
+
+### 接续检查与本轮修复（2026-11-02）
+
+**当前远端基线（修复前）：** `04932a7aed4bcc4bac45ef2c5f2042833e2a4708`。PR #1 仍为 Open Draft，未合并。
+
+已确认前序开发结果：
+- 比较器真实夹具入口和输入边界校验已存在；600036.SH、300750.SZ、688981.SH 的 Sina/Tencent 日 K 因 amount 缺失、amount_unit unknown 保持 degraded，测试要求 not_comparable。
+- 创业板、科创板真实样例来源为 Live provider probe Run `41042950111`，源提交 `720f2fc685376e29452ce3742ba398ff79089a03`。两市场 quote 返回，但 Tencent quote degraded；两侧日 K 均 degraded。没有真实 matched 证据。
+- 北交所明确不支持 Provider 的诊断状态已覆盖 markets=BSE 与 symbols=920001.BJ 两种入口；Sina/Tencent/NetEase/BaoStock not_supported，其他代码映射不代表在线能力通过。
+- 覆盖率字段已在模型和 OpenAPI 声明：coverage_total/returned/validated/missing/excluded/ratio。当前只有 market_breadth 提供可证明的全市场分母；其他能力继续省略，不能以分页行数替代总数。
+
+**Run 41043889122（SHA 04932a7）检查结果：**
+- Go test suite：失败在 market-data 的 gofmt 检查，唯一文件为 `internal/provider/live_market_golden_test.go`，新增测试函数前存在多余空行；没有进入该模块的编译/单测阶段。
+- Docker market-data image：同一 gofmt 前置检查失败，未进入镜像编译阶段。
+- Go 根模块、go-core、MariaDB migration/PIT persistence：通过。
+- WebUI checks、Go/Python data quality parity：通过。
+- Live provider probe workflow：success，但真实探测内部仍记录 Eastmoney HTTP 502、NetEase DNS/HTTP 502；不能视为所有 Provider 可用。
+- 已移除 `live_market_golden_test.go` 的多余空行；本次修复 SHA 的完整 Go suite 与 Docker 结果待新 Actions 确认。
+
+**下一开发项：** 实现统一诊断 checks 过滤。先完成请求校验、响应回显、向后兼容和独立检查结果模型设计，再按 connectivity/contract/quality/freshness/cross_provider/storage 拆分执行，不能只增加一个未生效的请求字段，也不能为每个 check 重复请求上游。
