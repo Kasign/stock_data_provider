@@ -17,21 +17,21 @@ export function readResearchNotes(storage) {
     const parsed=JSON.parse(raw);
     if(!Array.isArray(parsed)||parsed.length>MAX_RESEARCH_NOTES) return {items:[],readable:true,valid:false};
     const items=parsed.map(normalizeNote);
-    if(items.some(x=>!x)) return {items:[],readable:true,valid:false};
+    if(items.some(x=>!x)||new Set(items.map(x=>x.id)).size!==items.length) return {items:[],readable:true,valid:false};
     return {items,readable:true,valid:true};
   } catch { return {items:[],readable:false,valid:false}; }
 }
 export function writeResearchNotes(items, storage) {
   if(!Array.isArray(items)||items.length>MAX_RESEARCH_NOTES) return {ok:false,reason:"limit"};
   const normalized=items.map(normalizeNote);
-  if(normalized.some(x=>!x)) return {ok:false,reason:"invalid"};
+  if(normalized.some(x=>!x)||new Set(normalized.map(x=>x.id)).size!==normalized.length) return {ok:false,reason:"invalid"};
   try {
     const target=safeStorage(storage); if(!target) return {ok:false,reason:"unavailable"};
     const existing=readResearchNotes(target);
     if(!existing.readable||!existing.valid) return {ok:false,reason:"invalid-storage"};
     target.setItem(RESEARCH_NOTES_KEY,JSON.stringify(normalized));
     const check=readResearchNotes(target);
-    return check.readable&&check.valid&&check.items.length===normalized.length?{ok:true}:{ok:false,reason:"verify"};
+    return check.readable&&check.valid&&JSON.stringify(check.items)===JSON.stringify(normalized)?{ok:true}:{ok:false,reason:"verify"};
   } catch { return {ok:false,reason:"unavailable"}; }
 }
 export function buildResearchNoteContextFromReport(report) {

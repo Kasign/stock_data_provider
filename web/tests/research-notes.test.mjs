@@ -12,3 +12,5 @@ test("关键词检索不执行 HTML",()=>{const x=note("1","<img src=x>","<scrip
 
 test("从归档报告创建笔记时准确继承股票、Task 和 Run 关联",()=>{const context=buildResearchNoteContextFromReport({runId:"run-9",taskId:"task-9",symbols:["600519.SH","000858.SZ"]});assert.deepEqual(context,{symbol:"600519.SH",taskId:"task-9",runId:"run-9"});});
 test("报告缺少有效 Run ID 时不创建关联上下文",()=>{assert.equal(buildResearchNoteContextFromReport({taskId:"task-1"}),null);});
+
+test("拒绝重复笔记 ID，且不会覆盖重复或损坏的旧数据",()=>{const s=memory();const duplicate=[note("same","第一条","内容一"),note("same","第二条","内容二")];assert.equal(writeResearchNotes(duplicate,s).reason,"invalid");s.setItem(RESEARCH_NOTES_KEY,JSON.stringify(duplicate));const before=s.getItem(RESEARCH_NOTES_KEY);assert.equal(readResearchNotes(s).valid,false);assert.equal(writeResearchNotes([note("new","新记录","内容")],s).reason,"invalid-storage");assert.equal(s.getItem(RESEARCH_NOTES_KEY),before);});

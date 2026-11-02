@@ -28,7 +28,7 @@ export function readResearchReports(storage) {
 }
 export function writeResearchReports(items, storage) {
   if (!Array.isArray(items) || items.length > MAX_RESEARCH_REPORTS) return { ok: false, reason: "limit" };
-  const normalized = items.map(normalizeReport); if (normalized.some(x => !x)) return { ok: false, reason: "invalid" };
+  const normalized = items.map(normalizeReport); if (normalized.some(x => !x) || new Set(normalized.map(x => x.id)).size !== normalized.length) return { ok: false, reason: "invalid" };
   let raw; try { raw = JSON.stringify(normalized); } catch { return { ok: false, reason: "invalid" }; }
   if (raw.length > MAX_TOTAL_CHARS) return { ok: false, reason: "storage-limit" };
   try {
@@ -36,7 +36,7 @@ export function writeResearchReports(items, storage) {
     const current = readResearchReports(target); if (!current.readable || !current.valid) return { ok: false, reason: "invalid-storage" };
     target.setItem(RESEARCH_REPORTS_KEY, raw);
     const check = readResearchReports(target);
-    return check.readable && check.valid && check.items.length === normalized.length ? { ok: true } : { ok: false, reason: "verify" };
+    return check.readable && check.valid && JSON.stringify(check.items) === JSON.stringify(normalized) ? { ok: true } : { ok: false, reason: "verify" };
   } catch { return { ok: false, reason: "unavailable" }; }
 }
 export function saveResearchReport(result, context = {}, storage) {
