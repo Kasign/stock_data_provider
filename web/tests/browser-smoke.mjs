@@ -1667,6 +1667,13 @@ try {
           await page.waitForFunction(() => document.querySelector("#browser-data-feedback")?.textContent.includes("超过本地上限"));
           assert.equal((await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).length, keys.watchlist)), 50);
 
+          const tooManyTasks = Array.from({ length: 11 }, (_, index) => ({
+            task_id: "task-limit-" + index, symbols: [], task_type: "post_market_scan", status: "queued", analysis_base: "/analysis-api"
+          }));
+          await page.locator("#browser-data-file").setInputFiles(makeImportFile([], tooManyTasks));
+          await page.waitForFunction(() => document.querySelector("#browser-data-feedback")?.textContent.includes("最近任务引用必须是数组，且不能超过 10 条"));
+          assert.equal((await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).length, keys.watchlist)), 50, "over-limit task history must be rejected before writing");
+
           await page.evaluate((key) => localStorage.setItem(key, "{"), keys.watchlist);
           await uploadWorkspace(makeImportFile([{ symbol: "688001.SH", name: "新增标的" }], []));
           assert.equal(await page.locator("#browser-data-import-merge").isDisabled(), true, "damaged local storage must disable merge");
