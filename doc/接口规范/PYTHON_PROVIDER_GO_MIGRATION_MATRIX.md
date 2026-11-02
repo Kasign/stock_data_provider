@@ -192,3 +192,11 @@ Python bridge 还包含 search、LLM、notification、persistence 等非行情�
 - 对缺失、null、类型不匹配、整数格式错误、非有限/溢出数值及复权因子异常记录结构化 Parse Issue。
 - 行号为 Yahoo chart timestamp 数组的原始索引；不回显完整响应。
 - null/缺失 OHLCV 点仍不作为交易日 K 入库，并增加 rejected-row 汇总；字段问题同时保留行号和 Provider 字段路径。
+
+
+### Go 通达信协议 Provider（历史名称 Pytdx）字段诊断（2026-11-02）
+
+- `pytdx.go` 使用 Go 原生 TDX TCP 客户端，不依赖 Python。
+- 已对 SDK 解码后的 Kline 时间、重复日期、OHLC、成交量、成交额增加结构化校验问题。
+- 金额/成交量零值矛盾、缺少前收盘价按 warning 记录，保持成交额/涨跌幅缺失语义。
+- SDK 底层协议解码失败仍为协议级错误；不声称具备原始二进制字段级诊断。
