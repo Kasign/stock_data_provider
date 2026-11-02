@@ -1567,12 +1567,18 @@ try {
             theme: "stock-provider-webui.theme.v1",
             preferences: "stock-provider-webui.preferences.v1",
             watchlist: "stock-provider-webui.watchlist.v1",
-            tasks: "stock-provider-webui.recent-analysis.v1"
+            tasks: "stock-provider-webui.recent-analysis.v1",
+            researchNotes: "stock-provider-webui.research-notes.v1"
           };
           const currentTask = { task_id: "task-1", run_id: "run-1", symbols: ["600519.SH"], task_type: "post_market_scan", status: "running", analysis_base: "/analysis-api", updated_at: "2026-10-30T00:00:00Z" };
           await page.evaluate(({ keys, currentTask }) => {
             localStorage.setItem(keys.watchlist, JSON.stringify([{ symbol: "600519.SH", name: "原名称", updated_at: "2026-10-29T00:00:00Z" }]));
             localStorage.setItem(keys.tasks, JSON.stringify([currentTask]));
+            localStorage.setItem(keys.researchNotes, JSON.stringify([{
+              id: "note-import-preserve", title: "导入前研究记录", content: "研究笔记不属于工作区备份，导入不得覆盖。",
+              symbol: "600519.SH", taskId: "task-1", runId: "run-1", tags: ["验收"],
+              createdAt: "2026-10-29T00:00:00Z", updatedAt: "2026-10-29T00:00:00Z"
+            }]));
           }, { keys, currentTask });
           const beforePreferenceReset = await page.evaluate((keys) => ({
             theme: localStorage.getItem(keys.theme),
@@ -1660,13 +1666,16 @@ try {
             settings: JSON.parse(localStorage.getItem(keys.settings)),
             watchlist: JSON.parse(localStorage.getItem(keys.watchlist)),
             tasks: JSON.parse(localStorage.getItem(keys.tasks)),
-            preferences: JSON.parse(localStorage.getItem(keys.preferences))
+            preferences: JSON.parse(localStorage.getItem(keys.preferences)),
+            researchNotes: JSON.parse(localStorage.getItem(keys.researchNotes))
           }), keys);
           assert.equal(merged.settings.apiKey, "browser-test-key", "merge must preserve the current API Key");
           assert.equal(merged.watchlist.length, 2);
           assert.equal(merged.watchlist.find((item) => item.symbol.replace(/\\.(SH|SZ|BJ)$/, "") === "600519")?.name, "导入名称");
           assert.equal(merged.tasks.length, 2);
           assert.equal(merged.tasks.find((item) => item.task_id === "task-1")?.status, "succeeded");
+          assert.equal(merged.researchNotes.length, 1, "workspace merge must preserve local research notes outside the backup format");
+          assert.equal(merged.researchNotes[0].id, "note-import-preserve");
           assert.equal(merged.preferences.watchlistSort, "name");
           const mergedGroups = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), "stock-provider-webui.watchlist-groups.v1");
           assert.ok(mergedGroups.groups.includes("测试分组") && mergedGroups.groups.includes("核心观察"), "merge must preserve current and imported watchlist groups");
@@ -1702,11 +1711,14 @@ try {
           const replaced = await page.evaluate((keys) => ({
             settings: JSON.parse(localStorage.getItem(keys.settings)),
             watchlist: JSON.parse(localStorage.getItem(keys.watchlist)),
-            tasks: JSON.parse(localStorage.getItem(keys.tasks))
+            tasks: JSON.parse(localStorage.getItem(keys.tasks)),
+            researchNotes: JSON.parse(localStorage.getItem(keys.researchNotes))
           }), keys);
           assert.equal(replaced.settings.apiKey, "browser-test-key", "replace must preserve the current API Key");
           assert.deepEqual(replaced.watchlist.map((item) => item.symbol), ["300750.SZ"]);
           assert.deepEqual(replaced.tasks.map((item) => item.task_id), ["task-3"]);
+          assert.equal(replaced.researchNotes.length, 1, "workspace replacement must preserve research notes outside the backup format");
+          assert.equal(replaced.researchNotes[0].id, "note-import-preserve");
           assert.deepEqual(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), "stock-provider-webui.watchlist-groups.v1"), {
             groups: ["未分组", "趋势跟踪"], assignments: { "300750.SZ": "趋势跟踪" }
           }, "replace must restore imported watchlist groups and assignments");
