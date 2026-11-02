@@ -17,6 +17,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 const (
@@ -322,7 +323,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 	for i := 1; i < len(all); i++ {
 		if all[i].Time.In(loc).Format("2006-01-02") == all[i-1].Time.In(loc).Format("2006-01-02") {
 			tradeDate := all[i].Time.In(loc).Format("2006-01-02")
-			addProviderParseIssue(ctx, i, "trade_date", "datetime", "duplicate_trade_date", "one daily bar per trade date", "date", tradeDate, "Go 通达信协议响应包含重复交易日")
+			addPytdxValidationIssue(ctx, i, "trade_date", "Time", "duplicate_trade_date", "one daily bar per trade date", "date", tradeDate, "Go 通达信协议响应包含重复交易日", validation.SeverityError)
 			return nil, fmt.Errorf("Pytdx returned duplicate daily bars on %s", tradeDate)
 		}
 	}
@@ -362,7 +363,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 	out := make([]model.DailyBar, 0, min(limit, len(adjusted)))
 	for i, item := range adjusted {
 		if item.Time.IsZero() {
-			addProviderParseIssue(ctx, i, "trade_date", "datetime", "invalid_date", "valid exchange timestamp", "zero_time", "", "Go 通达信协议响应缺少有效交易时间")
+			addPytdxValidationIssue(ctx, i, "trade_date", "Time", "invalid_date", "valid exchange timestamp", "zero_time", "", "Go 通达信协议响应缺少有效交易时间", validation.SeverityError)
 			return nil, fmt.Errorf("Pytdx returned an invalid timestamp at row %d", i)
 		}
 		tradeDate := item.Time.In(loc).Format("2006-01-02")
@@ -381,7 +382,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		}
 		volume, err := normalize.HandsToShares(rawVolume)
 		if err != nil {
-			addProviderParseIssue(ctx, i, "volume", "volume", "normalization_error", "non-negative integer number of hands", "number", fmt.Sprintf("%g", rawVolume), "Go 通达信协议成交量无法转换为标准股数")
+			addPytdxValidationIssue(ctx, i, "volume", "Volume", "normalization_error", "convertible non-negative integer number of hands", "number", fmt.Sprintf("%g", rawVolume), "Go 通达信协议成交量无法转换为标准股数", validation.SeverityError)
 			return nil, fmt.Errorf("normalize Pytdx volume on %s: %w", tradeDate, err)
 		}
 		var changePercent *float64
@@ -397,7 +398,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		} else {
 			quality = model.QualityDegraded
 			reasons = append(reasons, "provider_change_percent_unavailable_for_first_bar")
-			addProviderParseIssue(ctx, i, "change_percent", "last", "previous_close_unavailable", "positive previous close", "number", fmt.Sprintf("%g", item.Last.Float64()), "Go 通达信协议未提供可用于计算涨跌幅的前收盘价")
+			addPytdxValidationIssue(ctx, i, "change_percent", "Last", "previous_close_unavailable", "positive previous close", "number", fmt.Sprintf("%g", item.Last.Float64()), "Go 通达信协议未提供可用于计算涨跌幅的前收盘价", validation.SeverityWarning)
 		}
 		rawVolumeCopy := rawVolume
 		out = append(out, model.DailyBar{
@@ -432,6 +433,19 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
 }
 
+
+func addPytdxValidationIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, actualPreview, message string, severity validation.Severity) {
+	row := rowIndex
+	report := validation.NewReport(1)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageValidate, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType, ActualPreview: actualPreview,
+		Severity: severity, Message: message, RowIndex: &row,
+	})
+	validation.AddContextReport(ctx, report)
+}
+
+
 func validatePytdxDailyBarValues(ctx context.Context, rowIndex int, tradeDate string, open, high, low, closePrice, rawVolume, rawAmount float64) (pytdxDailyAmountInfo, error) {
 	prices := []struct {
 		field string
@@ -444,25 +458,25 @@ func validatePytdxDailyBarValues(ctx context.Context, rowIndex int, tradeDate st
 	}
 	for _, item := range prices {
 		if !pytdxPositiveFinite(item.value) {
-			addProviderParseIssue(ctx, rowIndex, item.field, item.field, "invalid_number", "finite positive price", "number", fmt.Sprintf("%g", item.value), "Go 通达信协议日 K 价格字段不是正有限数值")
+			addPytdxValidationIssue(ctx, rowIndex, item.field, strings.Title(item.field), "invalid_number", "finite positive price", "number", fmt.Sprintf("%g", item.value), "Go 通达信协议日 K 价格字段不是正有限数值", validation.SeverityError)
 			return pytdxDailyAmountInfo{}, fmt.Errorf("Pytdx %s price is invalid on %s", item.field, tradeDate)
 		}
 	}
 	if low > high || open < low || open > high || closePrice < low || closePrice > high {
-		addProviderParseIssue(ctx, rowIndex, "ohlc", "open/high/low/close", "ohlc_invariant_violation", "low <= open/close <= high", "number", "", "Go 通达信协议日 K OHLC 区间关系异常")
+		addPytdxValidationIssue(ctx, rowIndex, "ohlc", "Open/High/Low/Close", "ohlc_invariant_violation", "low <= open/close <= high", "number", "", "Go 通达信协议日 K OHLC 区间关系异常", validation.SeverityError)
 		return pytdxDailyAmountInfo{}, fmt.Errorf("Pytdx OHLC invariant failed on %s", tradeDate)
 	}
 	if !pytdxNonNegativeFinite(rawVolume) || math.Trunc(rawVolume) != rawVolume {
-		addProviderParseIssue(ctx, rowIndex, "volume", "vol", "invalid_number", "finite non-negative integer number of hands", "number", fmt.Sprintf("%g", rawVolume), "Go 通达信协议日 K 成交量必须是非负整数手")
+		addPytdxValidationIssue(ctx, rowIndex, "volume", "Volume", "invalid_number", "finite non-negative integer number of hands", "number", fmt.Sprintf("%g", rawVolume), "Go 通达信协议日 K 成交量必须是非负整数手", validation.SeverityError)
 		return pytdxDailyAmountInfo{}, fmt.Errorf("Pytdx contains invalid volume on %s", tradeDate)
 	}
 	amountInfo, err := normalizePytdxDailyAmount(rawAmount, rawVolume)
 	if err != nil {
-		addProviderParseIssue(ctx, rowIndex, "amount", "amount", "invalid_number", "finite non-negative amount in CNY", "number", fmt.Sprintf("%g", rawAmount), "Go 通达信协议日 K 成交额不是非负有限数值")
+		addPytdxValidationIssue(ctx, rowIndex, "amount", "Amount", "invalid_number", "finite non-negative amount in CNY", "number", fmt.Sprintf("%g", rawAmount), "Go 通达信协议日 K 成交额不是非负有限数值", validation.SeverityError)
 		return pytdxDailyAmountInfo{}, fmt.Errorf("Pytdx contains invalid amount on %s: %w", tradeDate, err)
 	}
 	if amountInfo.Amount == nil && amountInfo.QualityStatus == model.QualityDegraded {
-		addProviderParseIssue(ctx, rowIndex, "amount", "amount", "amount_volume_mismatch", "amount and volume should be jointly present or zero", "number", fmt.Sprintf("amount=%g; volume_hands=%g", rawAmount, rawVolume), "成交额与成交量零值关系不一致，成交额已置空并降级")
+		addPytdxValidationIssue(ctx, rowIndex, "amount", "Amount/Volume", "amount_volume_mismatch", "amount and volume should be jointly present or zero", "number", fmt.Sprintf("amount=%g; volume_hands=%g", rawAmount, rawVolume), "成交额与成交量零值关系不一致，成交额已置空并降级", validation.SeverityWarning)
 	}
 	return amountInfo, nil
 }
