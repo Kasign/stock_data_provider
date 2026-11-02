@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 func yahooFixture(t *testing.T, includeAdjusted bool, reportedSymbol string) (*httptest.Server, []int64) {
@@ -286,4 +287,28 @@ func TestYahooDateRangeAndEndpointShape(t *testing.T) {
 		t.Fatalf("start Unix timestamp round trip failed: %v", err)
 	}
 	_ = fmt.Sprintf("end timestamp=%d", end.Unix())
+}
+
+func TestYahooDailyBarDecodeFailureAddsStructuredParseIssue(t *testing.T) {
+	payload := []byte(`{"chart":{"result":[{"meta":{"symbol":"600036.SS"},"timestamp":[1792454400],"indicators":{"quote":[{"open":["not-a-number"],"high":[11],"low":[9],"close":[10],"volume":[1000]}]}}],"error":null}}`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewYahooFinance(2*time.Second, server.URL)
+	if _, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone); err == nil {
+		t.Fatal("expected Yahoo response with invalid OHLC type to be rejected")
+	}
+	report := reporter.Snapshot()
+	if report.TotalCount != 1 || len(report.Issues) != 1 {
+		t.Fatalf("expected one response-level parse issue, got %+v", report)
+	}
+	issue := report.Issues[0]
+	if issue.Stage != validation.StageParse || issue.Field != "chart_response" || issue.Code != "decode_error" || issue.RowIndex != nil {
+		t.Fatalf("unexpected Yahoo parse issue: %+v", issue)
+	}
 }

@@ -159,12 +159,16 @@ func addProviderParseIssue(ctx context.Context, rowIndex int, field, providerFie
 		runes := []rune(preview)
 		preview = string(runes[:160])
 	}
-	row := rowIndex
+	var row *int
+	if rowIndex >= 0 {
+		value := rowIndex
+		row = &value
+	}
 	report := validation.NewReport(validation.DefaultMaxIssues)
 	report.Add(validation.FieldIssue{
 		Stage: validation.StageParse, Field: field, ProviderField: providerField,
 		Code: code, Expected: expected, ActualType: actualType, ActualPreview: preview,
-		Severity: validation.SeverityWarning, Message: message, RowIndex: &row,
+		Severity: validation.SeverityWarning, Message: message, RowIndex: row,
 	})
 	validation.AddContextReport(ctx, report)
 }

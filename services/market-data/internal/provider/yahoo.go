@@ -304,6 +304,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		} `json:"chart"`
 	}
 	if err := decodeSingleJSON(body, &payload); err != nil {
+		addProviderParseIssue(ctx, -1, "chart_response", "chart.result[0].indicators.quote[0]", "decode_error", "valid Yahoo Finance chart JSON with numeric OHLCV arrays", providerJSONValueType(body), "", "Yahoo Finance chart response could not be decoded against the expected field contract")
 		return nil, fmt.Errorf("decode Yahoo Finance chart JSON: %w", err)
 	}
 	if payload.Chart.Error != nil {
