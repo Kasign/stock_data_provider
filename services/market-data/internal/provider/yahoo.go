@@ -319,6 +319,12 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 	if reported := strings.TrimSpace(result.Meta.Symbol); reported != "" && !strings.EqualFold(reported, yahooTicker) {
 		return nil, fmt.Errorf("Yahoo Finance ticker mismatch: requested %s got %q", yahooTicker, reported)
 	}
+	if len(result.Timestamp) == 0 {
+		addProviderParseIssue(ctx, -1, "timestamp", "chart.result[0].timestamp", "missing_field", "non-empty Unix timestamp array", "missing", "", "Yahoo Finance chart response 缺少交易时间数组")
+	}
+	if len(result.Indicators.Quote) == 0 {
+		addProviderParseIssue(ctx, -1, "quote", "chart.result[0].indicators.quote[0]", "missing_field", "one quote object containing OHLCV arrays", "missing", "", "Yahoo Finance chart response 缺少日 K 报价字段")
+	}
 	if len(result.Timestamp) == 0 || len(result.Indicators.Quote) == 0 {
 		return nil, errors.New("Yahoo Finance returned empty daily bars")
 	}
