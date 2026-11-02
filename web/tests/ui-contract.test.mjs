@@ -763,6 +763,12 @@ test("global typography has a readable baseline and key UI text is not undersize
   assert.match(stylesheet, /font-size:\s*12px/);
   assert.match(stylesheet, /line-height:\s*1\.[456]/);
 });
+test("recent analysis history exposes historical-only task types", () => {
+  assert.match(html, /<option value="position_review">持仓复核（历史记录）<\/option>/);
+  assert.match(app, /recentTaskTypeLabel\(record\.task_type\)/);
+  assert.match(recentTaskModule, /export function recentTaskTypeLabel\(/);
+});
+
 test("recent analysis history supports search, single removal and local-only clearing", () => {
   for (const id of ["recent-analysis-search", "clear-recent-analysis", "recent-analysis-feedback", "recent-analysis-list"]) {
     assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);

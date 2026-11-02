@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearRecentTasks, MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask } from "../src/recent-tasks.js";
+import { clearRecentTasks, MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel } from "../src/recent-tasks.js";
 
 function makeStorage(seed = {}) {
   const values = new Map(Object.entries(seed));
@@ -227,4 +227,12 @@ test("keeps the existing task list when clearing history cannot be persisted", (
 
   assert.deepEqual(clearRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
   assert.deepEqual(readRecentTasks(storage).map((item) => item.task_id), ["task-b", "task-a"]);
+});
+
+test("labels historical task types and preserves unknown server task types", () => {
+  assert.equal(recentTaskTypeLabel("post_market_scan"), "盘后扫描");
+  assert.equal(recentTaskTypeLabel("watchlist_scan"), "自选股扫描");
+  assert.equal(recentTaskTypeLabel("position_review"), "持仓复核");
+  assert.equal(recentTaskTypeLabel("future_task"), "其他类型：future_task");
+  assert.equal(recentTaskTypeLabel(""), "任务类型未报告");
 });

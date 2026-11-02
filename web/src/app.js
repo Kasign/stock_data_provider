@@ -37,7 +37,7 @@ import { bindNotificationPreferences } from "./notification-preferences.js";
 import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
-import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
+import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, removeWatchlistSymbols, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { sortWatchlistItems } from "./watchlist-sort.js";
 import { assignWatchlistGroup, assignWatchlistGroups, createWatchlistGroup, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP } from "./watchlist-groups.js";
@@ -390,7 +390,7 @@ function renderRecentTasks(records) {
     const isOtherEndpoint = recordAnalysisBase !== state.settings.analysisBase;
     open.dataset.openTaskBase = recordAnalysisBase;
     const detail = document.createElement("small");
-    detail.textContent = (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") + " · " + record.task_id + (isOtherEndpoint ? " · 旧分析 API 地址" : "");
+    detail.textContent = recentTaskTypeLabel(record.task_type) + " · " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") + " · " + record.task_id + (isOtherEndpoint ? " · 旧分析 API 地址" : "");
     const failure = document.createElement("small"); failure.className = "recent-analysis-failure";
     failure.textContent = [record.failure_code ? "错误代码：" + record.failure_code : "", record.error_message || ""].filter(Boolean).join(" · ").slice(0, 300);
     failure.hidden = !failure.textContent; if (failure.textContent) main.append(failure);

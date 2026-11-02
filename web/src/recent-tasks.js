@@ -145,6 +145,17 @@ export function clearRecentTasks(storage) {
   return [];
 }
 
+const RECENT_TASK_TYPE_LABELS = Object.freeze({
+  post_market_scan: "盘后扫描",
+  watchlist_scan: "自选股扫描",
+  position_review: "持仓复核"
+});
+
+export function recentTaskTypeLabel(taskType) {
+  const value = String(taskType || "").trim();
+  return RECENT_TASK_TYPE_LABELS[value] || (value ? "其他类型：" + value : "任务类型未报告");
+}
+
 export function filterRecentTasks(items = [], filters = {}) {
   if (!Array.isArray(items)) return [];
   const keyword = String(filters.search || "").trim().toLocaleLowerCase();
