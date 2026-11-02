@@ -42,7 +42,9 @@ test("saves, reloads, updates and deletes local screening plans", () => {
   const savedAs = saveScreeningPlan({ name: "另存方案", conditions, logic: "and" }, storage, "2026-10-30T12:00:00Z");
   assert.equal(savedAs.saved, true); assert.notEqual(savedAs.plan.id, created.plan.id);
   assert.equal(readScreeningPlans(storage).plans.length, 2);
-  assert.equal(deleteScreeningPlan(created.plan.id, storage).deleted, true); assert.deepEqual(readScreeningPlans(storage).plans, []);
+  assert.equal(deleteScreeningPlan(created.plan.id, storage).deleted, true);
+  assert.equal(deleteScreeningPlan(savedAs.plan.id, storage).deleted, true);
+  assert.deepEqual(readScreeningPlans(storage).plans, []);
 });
 test("rejects duplicate names, empty plans and malformed storage without overwriting", () => {
   const storage = makeStorage(), condition = [{ field: "ma20", operator: "lte", value: 30 }];
