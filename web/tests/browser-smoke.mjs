@@ -1500,6 +1500,21 @@ try {
             assert.equal(await link.getAttribute("aria-current"), "location", "keyboard section navigation must update the active link");
             assert.equal(await page.evaluate(() => document.activeElement?.closest(".settings-section")?.id), target, "keyboard section navigation must move focus to the target section heading");
           }
+          const keyInput = page.locator("#market-key-input");
+          assert.equal(await keyInput.getAttribute("type"), "password", "saved API Key input must default to masked");
+          assert.equal(await keyInput.inputValue(), "", "saved API Key must never be echoed into the input");
+          assert.match(await keyInput.getAttribute("placeholder"), /已配置 Key/);
+          await page.locator("#toggle-market-key-visibility").click();
+          assert.equal(await keyInput.getAttribute("type"), "text");
+          assert.equal(await keyInput.inputValue(), "", "showing the key must not reveal the saved value");
+          await page.locator("#toggle-market-key-visibility").click();
+          assert.equal(await keyInput.getAttribute("type"), "password");
+
+          await page.locator("#settings-default-bar-limit").selectOption("250");
+          await page.locator("#settings-default-adjustment").selectOption("backward_adjusted");
+          const persistedDefaults = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), "stock-provider-webui.preferences.v1");
+          assert.equal(persistedDefaults.dailyBarLimit, 250);
+          assert.equal(persistedDefaults.dailyAdjustment, "backward_adjusted");
 
           const orderList = page.locator("#watchlist-field-order-list");
           assert.equal(await orderList.locator("[data-watchlist-field-order]").count(), 5);
@@ -1526,6 +1541,8 @@ try {
             expectedVisibility,
             "all five watchlist field visibility settings must survive a full page reload"
           );
+          assert.equal(await page.locator("#settings-default-bar-limit").inputValue(), "250", "default daily bar count must survive reload");
+          assert.equal(await page.locator("#settings-default-adjustment").inputValue(), "backward_adjusted", "default adjustment must survive reload");
           await page.setViewportSize({ width: 1280, height: 900 });
           assert.deepEqual(await readOrder(), reordered, "desktop and mobile settings must share the same persisted field order");
           await page.setViewportSize({ width: 320, height: 800 });
@@ -1542,6 +1559,25 @@ try {
             localStorage.setItem(keys.watchlist, JSON.stringify([{ symbol: "600519.SH", name: "原名称", updated_at: "2026-10-29T00:00:00Z" }]));
             localStorage.setItem(keys.tasks, JSON.stringify([currentTask]));
           }, { keys, currentTask });
+          const beforePreferenceReset = await page.evaluate((keys) => ({
+            theme: localStorage.getItem(keys.theme),
+            settings: localStorage.getItem(keys.settings),
+            watchlist: localStorage.getItem(keys.watchlist),
+            tasks: localStorage.getItem(keys.tasks)
+          }), keys);
+          await page.locator("#reset-local-preferences").click();
+          const afterPreferenceReset = await page.evaluate((keys) => ({
+            theme: localStorage.getItem(keys.theme),
+            settings: localStorage.getItem(keys.settings),
+            watchlist: localStorage.getItem(keys.watchlist),
+            tasks: localStorage.getItem(keys.tasks),
+            preferences: JSON.parse(localStorage.getItem(keys.preferences))
+          }), keys);
+          assert.equal(afterPreferenceReset.theme, beforePreferenceReset.theme, "resetting display preferences must preserve the theme");
+          assert.equal(afterPreferenceReset.settings, beforePreferenceReset.settings, "resetting display preferences must preserve connection credentials");
+          assert.equal(afterPreferenceReset.watchlist, beforePreferenceReset.watchlist, "resetting display preferences must preserve watchlist data");
+          assert.equal(afterPreferenceReset.tasks, beforePreferenceReset.tasks, "resetting display preferences must preserve recent task references");
+          assert.deepEqual(afterPreferenceReset.preferences.watchlistDisplayOrder, ["updated", "quote", "today", "task", "result"]);
 
           const makeImportFile = (watchlist, recentTasks, preferences = {}, version = 3) => ({
             name: "workspace-test.json",
