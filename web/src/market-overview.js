@@ -204,6 +204,8 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   safeOverviewUi(()=>{
    const status=$("#market-capital-flow-status"),body=$("#market-capital-flow-body");
    if(status){status.textContent="连接已变更";status.className="availability-pill is-readonly";}
+   const button=$("#load-market-capital-flow");
+   if(button){button.disabled=false;button.textContent="读取历史资金流";}
    if(body)tableMessage(body,"行情连接配置已变更，请重新读取市场资金流。");
    meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
   });
