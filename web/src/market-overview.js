@@ -48,6 +48,18 @@ function pending(key,msg,tone="pending") {
 export function describeMarketOverviewError(err) {
  return describeApiError(err, "读取市场数据失败。");
 }
+
+export function defaultMarketCapitalFlowDateRange(now = new Date()) {
+ const parts = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit"
+ }).formatToParts(now);
+ const value = type => parts.find(part => part.type === type)?.value || "";
+ const end = value("year") + "-" + value("month") + "-" + value("day");
+ const [year, month, day] = end.split("-").map(Number);
+ const startDate = new Date(Date.UTC(year, month - 1, day - 89));
+ const start = startDate.getUTCFullYear() + "-" + String(startDate.getUTCMonth() + 1).padStart(2, "0") + "-" + String(startDate.getUTCDate()).padStart(2, "0");
+ return { start, end };
+}
 function errorMessage(err) { return describeMarketOverviewError(err); }
 function renderIndices(data) {
  const root=$("#market-index-grid"),items=Array.isArray(data?.items)?data.items.filter(v=>v&&typeof v==="object"):[ ];root.replaceChildren();
@@ -128,7 +140,7 @@ function renderMarketCapitalFlow(data) {
   });
  }
  badge("market-capital-flow-status",items.length?qualityLabel(data?.quality_status):"暂无历史记录",items.length?"quality":"warning",data?.quality_status);
- meta("market-capital-flow-meta",["请求 "+(data?.start_date||"未报告")+" 至 "+(data?.end_date||"未报告"),"返回 "+count(items.length)+" / "+count(data?.total)+" 条","来源 "+(data?.source||"未报告"),"采集时间 "+formatDateTime(data?.fetched_at)]);
+ meta("market-capital-flow-meta",["请求 "+(data?.start_date||"未报告")+" 至 "+(data?.end_date||"未报告"),"返回 "+count(items.length)+" / "+count(data?.total)+" 条","来源 "+(data?.source||"未报告"),"版本 "+(data?.source_version||"未报告"),"采集时间 "+formatDateTime(data?.fetched_at)]);
  qualityReasons("market-capital-flow-reasons",data?.quality_reasons);
 }
 export function bindMarketOverview(getSettings,onSelectStock) {
@@ -224,15 +236,26 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  async function loadMarketCapitalFlow() {
   const status=$("#market-capital-flow-status"),body=$("#market-capital-flow-body");
   const start=$("#market-capital-flow-start")?.value||"",end=$("#market-capital-flow-end")?.value||"",button=$("#load-market-capital-flow");
-  if(!start||!end){if(status)status.textContent="请选择开始和结束日期";return;}
+  if(!start||!end){
+   if(status){status.textContent="请选择开始和结束日期";status.className="availability-pill is-readonly";}
+   if(body)tableMessage(body,"请选择开始和结束日期；本次未发起请求。");
+   meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
+   return;
+  }
   const settings=typeof getSettings==="function"?getSettings():null;
-  if(!settings?.apiKey){if(status)status.textContent="请先配置行情服务 API Key";if(body)tableMessage(body,"未配置行情服务 API Key，本次未发起请求。");return;}
+  if(!settings?.apiKey){
+   if(status){status.textContent="请先配置行情服务 API Key";status.className="availability-pill is-unavailable";}
+   if(body)tableMessage(body,"未配置行情服务 API Key，本次未发起请求。");
+   meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
+   return;
+  }
   const sequence=++capitalFlowGeneration;
   try{capitalFlowController?.abort();}catch{}
   const controller=new AbortController();capitalFlowController=controller;
   if(button){button.disabled=true;button.textContent="读取中…";}
   if(status){status.textContent="正在读取市场级资金流…";status.className="availability-pill is-readonly";}
   if(body)tableMessage(body,"正在读取服务端市场级资金流历史…");
+  meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
   try{
    const data=await getMarketCapitalFlow(settings,{start,end,signal:controller.signal});
    if(controller.signal.aborted||sequence!==capitalFlowGeneration)return;
@@ -249,11 +272,10 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    }
   }
  }
- const dateFormatter=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"});
- const today=dateFormatter.format(new Date()),defaultStart=dateFormatter.format(new Date(Date.now()-90*86400000));
+ const defaultFlowRange = defaultMarketCapitalFlowDateRange();
  const flowStart=$("#market-capital-flow-start"),flowEnd=$("#market-capital-flow-end");
- if(flowStart&&!flowStart.value)flowStart.value=defaultStart;
- if(flowEnd&&!flowEnd.value)flowEnd.value=today;
+ if(flowStart&&!flowStart.value)flowStart.value=defaultFlowRange.start;
+ if(flowEnd&&!flowEnd.value)flowEnd.value=defaultFlowRange.end;
  $("#load-market-capital-flow")?.addEventListener("click",()=>{void loadMarketCapitalFlow();});
 
  async function loadSentimentHistory() {

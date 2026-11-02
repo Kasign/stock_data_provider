@@ -173,7 +173,8 @@ export function getMarketCapitalFlow(settings, { start, end, signal } = {}) {
   if (!isValidISODate(start) || !isValidISODate(end)) return Promise.reject(new Error("市场资金流查询需要有效的开始和结束日期。"));
   if (start > end) return Promise.reject(new Error("市场资金流查询开始日期不能晚于结束日期。"));
   const startTime = Date.parse(start + "T00:00:00Z"), endTime = Date.parse(end + "T00:00:00Z");
-  if (endTime - startTime > 2000 * 86400000) return Promise.reject(new Error("市场资金流查询范围不能超过 2000 个自然日。"));
+  // 闭区间包含首尾日期；差值达到 2000 天即为 2001 个自然日。
+  if (endTime - startTime >= 2000 * 86400000) return Promise.reject(new Error("市场资金流查询范围不能超过 2000 个自然日。"));
   const query = new URLSearchParams({ start, end });
   return request(settings.marketBase, "/api/v1/market/capital-flow?" + query.toString(), { apiKey: settings.apiKey, signal });
 }

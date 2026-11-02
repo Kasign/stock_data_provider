@@ -470,5 +470,10 @@ test("queries market-wide capital-flow history with validated date range and aut
     await assert.rejects(getMarketCapitalFlow({}, { start: "2026-02-30", end: "2026-10-30" }), /有效的开始和结束日期/);
     await assert.rejects(getMarketCapitalFlow({}, { start: "2026-10-02", end: "2026-10-01" }), /不能晚于/);
     await assert.rejects(getMarketCapitalFlow({}, { start: "2020-01-01", end: "2026-10-30" }), /不能超过 2000/);
+    const endTime = Date.parse("2026-10-30T00:00:00Z");
+    const startFor2000Days = new Date(endTime - 1999 * 86400000).toISOString().slice(0, 10);
+    const startFor2001Days = new Date(endTime - 2000 * 86400000).toISOString().slice(0, 10);
+    await getMarketCapitalFlow({ marketBase: "/market-api", apiKey: "market-secret" }, { start: startFor2000Days, end: "2026-10-30" });
+    await assert.rejects(getMarketCapitalFlow({}, { start: startFor2001Days, end: "2026-10-30" }), /不能超过 2000/);
   } finally { globalThis.fetch = originalFetch; }
 });

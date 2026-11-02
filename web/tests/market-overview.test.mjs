@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { describeMarketOverviewError } from "../src/market-overview.js";
+import { defaultMarketCapitalFlowDateRange, describeMarketOverviewError } from "../src/market-overview.js";
 
 test("market overview keeps authentication, permission, missing-route and provider errors distinct", () => {
   const cases = [
@@ -26,4 +26,13 @@ test("market overview keeps authentication, permission, missing-route and provid
 
   const networkMessage = describeMarketOverviewError(new TypeError("Failed to fetch"));
   assert.match(networkMessage, /网络请求失败/);
+});
+
+test("market capital-flow defaults to exactly 90 China calendar dates", () => {
+  assert.deepEqual(defaultMarketCapitalFlowDateRange(new Date("2026-11-02T15:30:00Z")), {
+    start: "2026-08-05", end: "2026-11-02"
+  });
+  assert.deepEqual(defaultMarketCapitalFlowDateRange(new Date("2026-11-02T16:30:00Z")), {
+    start: "2026-08-06", end: "2026-11-03"
+  });
 });

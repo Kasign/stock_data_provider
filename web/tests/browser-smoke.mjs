@@ -126,6 +126,9 @@ try {
     let quoteRequestCount = 0;
     let marketScenario = "503";
     let marketIndexRequestCount = 0;
+    let capitalFlowScenario = "success";
+    let capitalFlowRequestCount = 0;
+    let capitalFlowRequest = null;
     let dataSourceScenario = "success";
     let dataSourcesRequestCount = 0;
     let batchQuotesRequestCount = 0;
@@ -298,6 +301,22 @@ try {
             message: item.message,
             request_id: item.requestId
           }
+        });
+      }
+
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/capital-flow")) {
+        capitalFlowRequestCount += 1;
+        capitalFlowRequest = { url: route.request().url(), headers: route.request().headers() };
+        if (capitalFlowScenario === "network") return route.abort("failed");
+        if (capitalFlowScenario === "503") return json(503, { error: { code: "provider_unavailable", message: "Tushare Provider unavailable", request_id: "req-market-flow-503" } });
+        return json(200, {
+          start_date: "2026-10-01", end_date: "2026-10-30", total: 1,
+          items: [
+            { trade_date: "2026-10-30", close_sh: 3950.2, change_percent_sh: 0.5, close_sz: 12800.5, change_percent_sz: -0.2, net_amount_cny: 1500, net_amount_rate_percent: 0.35 },
+            { trade_date: "2026-10-29", close_sh: null, change_percent_sh: null, close_sz: null, change_percent_sz: null, net_amount_cny: null, net_amount_rate_percent: null }
+          ],
+          source: "tushare", source_version: "moneyflow_mkt_dc", fetched_at: "2026-10-30T08:00:00Z",
+          quality_status: "degraded", quality_reasons: ["源端时间精度不足"]
         });
       }
 
@@ -1355,6 +1374,47 @@ try {
         "navigation should mark " + viewName + " as the current page"
       );
       await assertNoHorizontalOverflow("view " + viewName);
+      if (viewName === "market" && viewport.width === 320) {
+        const range = await page.evaluate(() => ({
+          start: document.querySelector("#market-capital-flow-start")?.value || "",
+          end: document.querySelector("#market-capital-flow-end")?.value || ""
+        }));
+        const days = (Date.parse(range.end + "T00:00:00Z") - Date.parse(range.start + "T00:00:00Z")) / 86400000 + 1;
+        assert.equal(days, 90, "default market capital-flow range must include exactly 90 calendar dates");
+        await page.locator("#market-capital-flow-start").fill("2026-10-01");
+        await page.locator("#market-capital-flow-end").fill("2026-10-30");
+        await page.locator("#load-market-capital-flow").click();
+        await page.waitForFunction(() => document.querySelector("#market-capital-flow-body")?.textContent.includes("2026-10-30"));
+        assert.equal(new URL(capitalFlowRequest.url).searchParams.get("start"), "2026-10-01");
+        assert.equal(new URL(capitalFlowRequest.url).searchParams.get("end"), "2026-10-30");
+        assert.equal(capitalFlowRequest.headers["x-api-key"], "browser-test-key");
+        assert.equal(await page.locator("#market-capital-flow-body tr").count(), 2);
+        assert.match(await page.locator("#market-capital-flow-body tr").nth(0).textContent(), /\+1,500 元/);
+        assert.match(await page.locator("#market-capital-flow-body tr").nth(1).textContent(), /—/);
+        assert.match(await page.locator("#market-capital-flow-status").getAttribute("class"), /quality-degraded/);
+        assert.match(await page.locator("#market-capital-flow-meta").textContent(), /版本 moneyflow_mkt_dc/);
+        assert.match(await page.locator("#market-capital-flow-reasons").textContent(), /源端时间精度不足/);
+        const requestsBeforeMissing = capitalFlowRequestCount;
+        await page.locator("#market-capital-flow-start").fill("");
+        await page.locator("#load-market-capital-flow").click();
+        await page.waitForFunction(() => document.querySelector("#market-capital-flow-body")?.textContent.includes("请选择开始和结束日期"));
+        assert.equal(capitalFlowRequestCount, requestsBeforeMissing, "missing dates must not issue requests");
+        assert.doesNotMatch(await page.locator("#market-capital-flow-body").textContent(), /2026-10-30/, "old rows must be cleared for missing dates");
+        await page.locator("#market-capital-flow-start").fill("2026-10-01");
+        const requestsBeforeInvalid = capitalFlowRequestCount;
+        await page.locator("#market-capital-flow-start").fill("2026-10-31");
+        await page.locator("#market-capital-flow-end").fill("2026-10-01");
+        await page.locator("#load-market-capital-flow").click();
+        await page.waitForFunction(() => document.querySelector("#market-capital-flow-body")?.textContent.includes("开始日期不能晚于结束日期"));
+        assert.equal(capitalFlowRequestCount, requestsBeforeInvalid, "invalid date ranges must not issue requests");
+        capitalFlowScenario = "503";
+        await page.locator("#market-capital-flow-start").fill("2026-10-01");
+        await page.locator("#market-capital-flow-end").fill("2026-10-30");
+        await page.locator("#load-market-capital-flow").click();
+        await page.waitForFunction(() => document.querySelector("#market-capital-flow-body")?.textContent.includes("Tushare Provider unavailable"));
+        assert.doesNotMatch(await page.locator("#market-capital-flow-body").textContent(), /2026-10-30/);
+        assert.doesNotMatch(await page.locator("#market-capital-flow-meta").textContent(), /moneyflow_mkt_dc/);
+      }
       if (viewName === "watchlist" && viewport.width === 320) {
         const watchlistKey = "stock-provider-webui.watchlist.v1";
         const groupsKey = "stock-provider-webui.watchlist-groups.v1";
