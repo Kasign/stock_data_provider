@@ -890,7 +890,7 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 	results := make([]model.ProviderProbeCheckResult, 0, len(items)*len(requestedChecks))
 	for _, item := range items {
 		for _, check := range requestedChecks {
-			if check == "storage" {
+			if check == "storage" || check == "cross_provider" {
 				continue
 			}
 			result := model.ProviderProbeCheckResult{
@@ -983,7 +983,7 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 	for leftIndex := 0; leftIndex < len(validSnapshots); leftIndex++ {
 		for rightIndex := leftIndex + 1; rightIndex < len(validSnapshots); rightIndex++ {
 			left, right := validSnapshots[leftIndex], validSnapshots[rightIndex]
-			if left.Symbol != right.Symbol {
+			if left.Provider == right.Provider || left.Symbol != right.Symbol {
 				continue
 			}
 			comparison := provider.CompareCrossProviderDailyBars(*left, *right)
