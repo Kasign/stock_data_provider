@@ -362,3 +362,8 @@ BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过
 ## 27. checks 跨源接入格式修复（2026-11-02）
 
 `ce17ac11cd559385de24d4e0aa284904d1c6ab5a` 的 market-data Go suite 和 Docker image build 在 gofmt 阶段失败，涉及 model/service 字段对齐及两个测试文件的多余空行。MariaDB PIT persistence、根模块和 go-core 已通过；修复格式后等待新 SHA 验收。
+
+
+## 28. cross_provider 合成测试夹具质量修正（2026-11-02）
+
+Service 级 matched 测试的合成日 K 原先缺少成交额；Normalize 按既有契约将其标记 degraded，导致比较器应当拒绝。测试夹具已补充 CNY 成交额（仅合成测试），以验证 valid 输入下在线探测链路的 matched 分支；不作为真实 Provider 证据。

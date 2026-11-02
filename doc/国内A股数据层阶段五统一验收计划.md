@@ -707,3 +707,10 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - `ce17ac11cd559385de24d4e0aa284904d1c6ab5a` 的 market-data gofmt 检查发现 4 个 Go 文件仅有结构体字段对齐和测试函数前多余空行问题；Go test、Docker 构建因此在 gofmt 前置步骤停止。
 - MariaDB PIT persistence 在该 SHA 已通过，说明此前模型语法错误已修复。
 - 已统一 gofmt 格式，后续以最新 SHA 的完整 Go suite、Docker 和 parity 结果验收。
+
+
+### 在线 cross_provider 测试样本修正（2026-11-02）
+
+- 检查 Service 测试夹具后发现：测试日 K 原先 amount 为 nil，Normalize 会按契约将其降级并把 amount_unit 设为 unknown；这会触发比较器 not_comparable，与测试预期 matched 冲突。
+- 已为合成 valid fixture 补充单位为 CNY、与 OHLC/成交量量级一致的成交额；该数据只用于验证比较器链路，不代表真实行情。
+- 最新 SHA 的 CI 仍待确认。

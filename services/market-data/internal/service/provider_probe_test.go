@@ -384,13 +384,14 @@ type providerProbeDailyBarsFake struct {
 func (p providerProbeDailyBarsFake) Name() string { return p.name }
 func (p providerProbeDailyBarsFake) FetchDailyBars(_ context.Context, symbol, _, _ string, _ int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
 	volume := int64(10000)
+	amount := 100000.0
 	now := time.Now().UTC()
 	return []model.DailyBar{{
 		Symbol: symbol, TradeDate: "2026-10-29", Period: "1d",
-		Open: 10, High: 11, Low: 9, Close: p.close, Volume: &volume,
+		Open: 10, High: 11, Low: 9, Close: p.close, Volume: &volume, Amount: &amount,
 		AdjustmentBasis: adjustment, Source: p.name, SourceVersion: p.name + "-v1",
 		ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
-		VolumeUnit: "shares", AmountUnit: "unknown", QualityStatus: p.quality,
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: p.quality,
 	}}, nil
 }
 
