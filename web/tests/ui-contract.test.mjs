@@ -1082,6 +1082,11 @@ test("alert center separates rule CRUD, evaluation state, trigger history and de
   assert.match(html, /id="alert-rule-submit" type="submit"/);
   assert.match(html, /id="alert-rule-test" type="button" disabled/);
   assert.doesNotMatch(app, /alert.*localStorage/i);
+  assert.match(html, /id="alert-rule-symbol"/, "单只股票草稿必须有独立代码输入");
+  assert.match(html, /id="alert-rule-symbol-field"/);
+  assert.match(html, /id="alert-rule-scope"/);
+  assert.match(appSource, /bindLocalAlertDrafts/);
+
 });
 
 
