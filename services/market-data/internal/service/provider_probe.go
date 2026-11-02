@@ -15,6 +15,7 @@ import (
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 var (
@@ -46,6 +47,7 @@ type providerProbeEvidence struct {
 	coverageRatio     *float64
 	providerTime      *time.Time
 	dailySnapshot     *provider.CrossProviderDailySnapshot
+	validationReport  validation.Report
 }
 
 func recordProviderProbeCoverage(ctx context.Context, coverage float64) {
@@ -271,8 +273,15 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if q.Source == "" {
 				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote source missing")
 			}
-			if err := normalize.ValidateQuote(q); err != nil {
-				return model.QualityInvalid, q.SourceVersion, nil, err
+			reporter := validation.ReporterFromContext(probeCtx)
+			if reporter == nil || reporter.Snapshot().TotalCount == 0 {
+				report, validationErr := normalize.ValidateQuoteWithReport(q)
+				validation.AddContextReport(probeCtx, report)
+				if validationErr != nil {
+					return model.QualityInvalid, q.SourceVersion, nil, validationErr
+				}
+			} else if reporter.Snapshot().HasErrors() {
+				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote adapter reported field validation errors")
 			}
 			if q.SourceVersion == "" {
 				return model.QualityInvalid, "", nil, errors.New("quote source version missing")
@@ -288,7 +297,8 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			validated, warnings := normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
+			validated, warnings, report := normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, "", "", 5)
+			validation.AddContextReport(probeCtx, report)
 			latestDate := ""
 			var providerTime *time.Time
 			if len(validated) > 0 {
@@ -758,8 +768,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			// 等待并发槽位的时间不计入单项 Provider 超时，避免排队任务被误报为超时。
 			probeCtx, cancel := context.WithTimeout(ctx, time.Duration(options.TimeoutSeconds)*time.Second)
 			evidence := &providerProbeEvidence{}
+			reporter := validation.NewReporter(validation.DefaultMaxIssues)
 			probeCtx = context.WithValue(probeCtx, providerProbeEvidenceContextKey{}, evidence)
+			probeCtx = validation.WithReporter(probeCtx, reporter)
 			quality, version, reasons, err := job.run(probeCtx)
+			evidence.validationReport = reporter.Snapshot()
 			cancel()
 			<-sem
 			item.SampleSymbol = evidence.sampleSymbol
@@ -779,6 +792,19 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.CheckedAt = time.Now().UTC()
 			item.SourceVersion = version
 			item.QualityReasons = reasons
+			item.ValidationTotalCount = evidence.validationReport.TotalCount
+			item.ValidationErrorCount = evidence.validationReport.ErrorCount
+			item.ValidationWarningCount = evidence.validationReport.WarningCount
+			item.ValidationInfoCount = evidence.validationReport.InfoCount
+			item.ValidationTruncated = evidence.validationReport.Truncated
+			for _, issue := range evidence.validationReport.Issues {
+				item.ValidationIssues = append(item.ValidationIssues, model.ProviderProbeFieldIssue{
+					Stage: string(issue.Stage), Field: issue.Field, ProviderField: issue.ProviderField,
+					Code: issue.Code, Expected: issue.Expected, ActualType: issue.ActualType,
+					ActualPreview: issue.ActualPreview, Severity: string(issue.Severity), Message: issue.Message,
+					RowIndex: issue.RowIndex, Symbol: issue.Symbol, TradeDate: issue.TradeDate,
+				})
+			}
 			if err != nil {
 				setProbeFailure(&item, err)
 				if (selectedMarket == "BSE" || strings.HasSuffix(probeSymbol, ".BJ")) && isUnsupportedBeijingProbeError(err) {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -434,5 +435,35 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
 	if len(results) != 1 || results[0].Status != "skipped" || results[0].ErrorCode != "comparison_not_comparable" {
 		t.Fatalf("degraded snapshots must not be reported as cross-provider pass: %+v", results)
+	}
+}
+
+
+func TestProviderProbeFieldIssueJSONContainsSafeDiagnosticFields(t *testing.T) {
+	rowIndex := 3
+	item := model.ProviderProbeItem{
+		Provider: "test", Capability: "daily_bars", Status: "degraded",
+		ValidationTotalCount: 2, ValidationErrorCount: 1, ValidationWarningCount: 1,
+		ValidationIssues: []model.ProviderProbeFieldIssue{{
+			Stage: "validate", Field: "open", ProviderField: "f2", Code: "out_of_range",
+			Expected: "positive finite number", ActualType: "number", ActualPreview: "-1",
+			Severity: "error", Message: "daily bar open must be positive", RowIndex: &rowIndex,
+			Symbol: "600519.SH", TradeDate: "2026-10-30",
+		}},
+	}
+	data, err := json.Marshal(item)
+	if err != nil {
+		t.Fatalf("marshal probe item: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal probe item: %v", err)
+	}
+	if decoded["validation_total_count"] != float64(2) || decoded["validation_error_count"] != float64(1) {
+		t.Fatalf("validation counters missing from probe response: %s", data)
+	}
+	issues, ok := decoded["validation_issues"].([]any)
+	if !ok || len(issues) != 1 {
+		t.Fatalf("validation issue details missing from probe response: %s", data)
 	}
 }

@@ -13,6 +13,22 @@ func ProviderProbeCoreCapabilities() []string {
 }
 
 // ProviderProbeItem 是一次主动能力探测结果。错误信息经过脱敏和长度限制，不回传凭据或完整查询 URL。
+type ProviderProbeFieldIssue struct {
+	Stage         string  `json:"stage"`
+	Field         string  `json:"field"`
+	ProviderField string  `json:"provider_field,omitempty"`
+	Code          string  `json:"code"`
+	Expected      string  `json:"expected"`
+	ActualType    string  `json:"actual_type,omitempty"`
+	ActualPreview string  `json:"actual_preview,omitempty"`
+	Severity      string  `json:"severity"`
+	Message       string  `json:"message"`
+	RowIndex      *int    `json:"row_index,omitempty"`
+	Symbol        string  `json:"symbol,omitempty"`
+	TradeDate     string  `json:"trade_date,omitempty"`
+}
+
+// ProviderProbeItem struct is the response of one provider capability probe.
 type ProviderProbeItem struct {
 	Provider          string        `json:"provider"`
 	Capability        string        `json:"capability"`
@@ -21,6 +37,12 @@ type ProviderProbeItem struct {
 	SourceVersion     string        `json:"source_version,omitempty"`
 	QualityStatus     QualityStatus `json:"quality_status"`
 	QualityReasons    []string      `json:"quality_reasons,omitempty"`
+	ValidationTotalCount   int                       `json:"validation_total_count,omitempty"`
+	ValidationErrorCount   int                       `json:"validation_error_count,omitempty"`
+	ValidationWarningCount int                       `json:"validation_warning_count,omitempty"`
+	ValidationInfoCount    int                       `json:"validation_info_count,omitempty"`
+	ValidationTruncated    bool                      `json:"validation_truncated,omitempty"`
+	ValidationIssues       []ProviderProbeFieldIssue `json:"validation_issues,omitempty"`
 	ErrorCode         string        `json:"error_code,omitempty"`
 	ErrorStage        string        `json:"error_stage,omitempty"`
 	ErrorMessage      string        `json:"error_message,omitempty"`
