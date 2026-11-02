@@ -17,6 +17,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 	"golang.org/x/text/encoding/htmlindex"
 )
 
@@ -216,7 +217,9 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_name_missing")
 	}
-	if err := normalize.ValidateQuote(q); err != nil {
+	report, err := normalize.ValidateQuoteWithReport(q)
+	validation.AddContextReport(ctx, report)
+	if err != nil {
 		return nil, fmt.Errorf("Netease quote data contract: %w", err)
 	}
 	return q, nil

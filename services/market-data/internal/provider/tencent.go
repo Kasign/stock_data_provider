@@ -15,6 +15,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 const tencentVersion = "tencent-finance-api-v1"
@@ -169,7 +170,9 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		q.QualityReasons = append(q.QualityReasons, "provider_timestamp_missing")
 	}
 	q.QualityReasons = append(q.QualityReasons, "volume_ratio_unsupported_by_tencent_quote_contract")
-	if err := normalize.ValidateQuote(q); err != nil {
+	report, err := normalize.ValidateQuoteWithReport(q)
+	validation.AddContextReport(ctx, report)
+	if err != nil {
 		return nil, fmt.Errorf("Tencent quote data contract: %w", err)
 	}
 	if !volumeVerified {

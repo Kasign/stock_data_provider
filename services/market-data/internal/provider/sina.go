@@ -17,6 +17,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 	"golang.org/x/text/encoding/htmlindex"
 )
 
@@ -439,7 +440,9 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 		AdjustmentBasis: model.AdjustmentNone, QualityStatus: quality,
 		QualityReasons: reasons, NormalizationVer: normalize.Version,
 	}
-	if err := normalize.ValidateQuote(quote); err != nil {
+	report, err := normalize.ValidateQuoteWithReport(quote)
+	validation.AddContextReport(ctx, report)
+	if err != nil {
 		return nil, fmt.Errorf("Sina quote data contract: %w", err)
 	}
 	return quote, nil

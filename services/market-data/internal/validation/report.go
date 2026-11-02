@@ -1,6 +1,10 @@
 package validation
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"sync"
+)
 
 type Stage string
 
@@ -134,4 +138,61 @@ func issue(stage Stage, field, code, expected, message string, severity Severity
 func (r Report) String() string {
 	return fmt.Sprintf("validation issues: %d (error=%d warning=%d info=%d returned=%d truncated=%t)",
 		r.TotalCount, r.ErrorCount, r.WarningCount, r.InfoCount, len(r.Issues), r.Truncated)
+}
+
+
+type reporterContextKey struct{}
+
+// Reporter collects validation issues for one request. It is safe for concurrent
+// provider work and must not be reused across independent requests.
+type Reporter struct {
+	mu     sync.Mutex
+	report Report
+}
+
+func NewReporter(maxIssues int) *Reporter {
+	return &Reporter{report: NewReport(maxIssues)}
+}
+
+func WithReporter(ctx context.Context, reporter *Reporter) context.Context {
+	if ctx == nil || reporter == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, reporterContextKey{}, reporter)
+}
+
+func AddContextReport(ctx context.Context, report Report) {
+	if ctx == nil {
+		return
+	}
+	reporter, _ := ctx.Value(reporterContextKey{}).(*Reporter)
+	if reporter != nil {
+		reporter.AddReport(report)
+	}
+}
+
+func ReporterFromContext(ctx context.Context) *Reporter {
+	if ctx == nil {
+		return nil
+	}
+	reporter, _ := ctx.Value(reporterContextKey{}).(*Reporter)
+	return reporter
+}
+
+func (r *Reporter) AddReport(report Report) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.report = r.report.Merge(report)
+}
+
+func (r *Reporter) Snapshot() Report {
+	if r == nil {
+		return NewReport(DefaultMaxIssues)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.report
 }

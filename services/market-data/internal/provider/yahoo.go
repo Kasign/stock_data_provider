@@ -14,6 +14,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 const yahooFinanceVersion = "yahoo-finance-chart-v1"
@@ -206,7 +207,9 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 	if name == "" {
 		q.QualityReasons = append(q.QualityReasons, "provider_name_missing")
 	}
-	if err := normalize.ValidateQuote(q); err != nil {
+	report, err := normalize.ValidateQuoteWithReport(q)
+	validation.AddContextReport(ctx, report)
+	if err != nil {
 		return nil, fmt.Errorf("Yahoo Finance quote data contract: %w", err)
 	}
 	return q, nil

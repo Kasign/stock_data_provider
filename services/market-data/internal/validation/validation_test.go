@@ -1,7 +1,9 @@
 package validation
 
 import (
+	"context"
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
@@ -119,5 +121,32 @@ func TestReportMergePreservesSeverityCountsBeyondIssueLimit(t *testing.T) {
 	}
 	if !merged.HasErrors() || !merged.Truncated {
 		t.Fatalf("merged report must preserve failure and truncation: %+v", merged)
+	}
+}
+
+
+func TestReporterIsContextScopedAndMergesConcurrentReports(t *testing.T) {
+	reporter := NewReporter(10)
+	ctx := WithReporter(context.Background(), reporter)
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			AddContextReport(ctx, Report{TotalCount: 1, ErrorCount: 1, Issues: []FieldIssue{
+				issue(StageParse, "price", "type_mismatch", "number", "invalid type", SeverityError),
+			}})
+		}()
+	}
+	wg.Wait()
+	got := reporter.Snapshot()
+	if got.TotalCount != 4 || got.ErrorCount != 4 || !got.HasErrors() || len(got.Issues) != 4 {
+		t.Fatalf("unexpected concurrent report aggregation: %+v", got)
+	}
+	if ReporterFromContext(ctx) != reporter {
+		t.Fatal("reporter was not retained in request context")
+	}
+	if ReporterFromContext(context.Background()) != nil {
+		t.Fatal("reporter leaked into unrelated context")
 	}
 }
