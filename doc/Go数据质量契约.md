@@ -42,3 +42,8 @@ Python 下线以运行时和代码依赖为准，而不是只删除 `.py` 文件
 - Docker Compose、Dockerfile、CI、环境变量示例、OpenAPI 和文档不再要求 Python。
 - 原 Python bridge 提供的 LLM、搜索、通知、持久化及辅助数据能力，必须迁移到 Go 或明确移除对应业务能力后，才能删除最后的桥接调用。
 - 所有核心 Go 模块测试、race、vet、镜像构建和目标环境验收通过。
+
+
+## 5. Go 通达信协议 Provider 诊断边界
+
+Go 通达信协议客户端返回强类型 Kline/Quote，不是 Python pytdx 包。Adapter 可对解码后的字段、交易日期、OHLC、成交量和成交额执行结构化诊断；协议库在二进制解码阶段失败时，目前只返回协议级 error，无法可靠恢复具体字段字节位置。

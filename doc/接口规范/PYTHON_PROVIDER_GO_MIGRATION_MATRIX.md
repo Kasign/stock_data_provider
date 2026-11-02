@@ -7,3 +7,10 @@ undefined
 - Python bridge 当前仍被旧 `go-core` 分析流程用于 LLM、搜索、通知、持久化和部分辅助数据回退。必须先完成 Go 能力迁移，再删除 bridge 和 Go 适配器。
 - 数据质量约束迁移到 `doc/Go数据质量契约.md`，不再依赖 Python/Go 对照 CI。
 - 分阶段清单以 `doc/Python运行时下线计划.md` 为准。
+
+
+### Go 通达信协议 Provider（历史名称 Pytdx）
+
+- 实现语言：Go；底层使用 `github.com/injoyai/tdx`。
+- 不依赖 Python 解释器或 Python pytdx 包。
+- 作为国内 A 股行情备用源继续保留，字段诊断覆盖协议解码后的 Kline 结构。

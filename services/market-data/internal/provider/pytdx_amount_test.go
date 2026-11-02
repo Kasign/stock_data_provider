@@ -2,9 +2,11 @@ package provider
 
 import (
 	"math"
+	"context"
 	"testing"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 func TestNormalizePytdxDailyAmountPreservesConsistentValues(t *testing.T) {
@@ -61,5 +63,38 @@ func TestNormalizePytdxDailyAmountRejectsInvalidNumbers(t *testing.T) {
 				t.Fatalf("invalid amount/volume pair should be rejected")
 			}
 		})
+	}
+}
+
+func TestValidatePytdxDailyBarValuesReportsFieldIssue(t *testing.T) {
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := validatePytdxDailyBarValues(ctx, 7, "2026-10-20", 10, 11, 9, math.NaN(), 100, 10000)
+	if err == nil {
+		t.Fatal("expected invalid close price to fail")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 {
+		t.Fatalf("expected one structured issue, got %+v", issues)
+	}
+	issue := issues[0]
+	if issue.Stage != validation.StageParse || issue.Field != "close" || issue.ProviderField != "close" || issue.RowIndex == nil || *issue.RowIndex != 7 {
+		t.Fatalf("unexpected structured issue: %+v", issue)
+	}
+}
+
+func TestValidatePytdxDailyBarValuesReportsAmountVolumeMismatch(t *testing.T) {
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	info, err := validatePytdxDailyBarValues(ctx, 2, "2026-10-20", 10, 11, 9, 10.5, 100, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Amount != nil || info.QualityStatus != model.QualityDegraded {
+		t.Fatalf("mismatched amount must remain null and degraded: %+v", info)
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Code != "amount_volume_mismatch" || issues[0].RowIndex == nil || *issues[0].RowIndex != 2 {
+		t.Fatalf("expected amount/volume mismatch at row 2, got %+v", issues)
 	}
 }
