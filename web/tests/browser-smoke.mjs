@@ -1669,7 +1669,10 @@ try {
           await clickNav(page, '.nav-link[data-view="watchlist"]');
           await page.waitForFunction(() => document.querySelector("#watchlist-list")?.textContent.includes("导入名称"));
           await clickNav(page, '.nav-link[data-view="tasks"]');
-          await page.waitForFunction(() => document.querySelector("#recent-analysis-list")?.textContent.includes("task-2"));
+          await page.waitForTimeout(100);
+          const importedTaskListText = await page.locator("#recent-analysis-list").textContent();
+          const importedTaskStorage = await page.evaluate((key) => localStorage.getItem(key), keys.tasks);
+          assert.match(importedTaskListText || "", /task-2/, "recent task list did not refresh after import; rendered=" + importedTaskListText + "; storage=" + importedTaskStorage);
           await clickNav(page, '.nav-link[data-view="settings"]');
           await page.locator("#settings-view").waitFor({ state: "visible" });
 
