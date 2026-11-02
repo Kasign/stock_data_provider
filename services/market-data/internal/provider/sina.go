@@ -134,7 +134,7 @@ func (p *Sina) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate
 		row      sinaKlineRow
 		rowIndex int
 		date     string
-}
+	}
 	dated := make([]datedRow, 0, len(rows))
 	oldestDate := ""
 	rejectedRows := 0
