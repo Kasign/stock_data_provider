@@ -1044,6 +1044,8 @@ test("screening workbench distinguishes unavailable capability from disabled and
   assert.match(app, /renderScreeningHistory\(\{ supported: false \}\)/);
   assert.match(screeningView, /id="screening-submit" type="button" disabled/);
   assert.match(screeningView, /当前页本地筛选/);
+  assert.match(app, /researchNotes\.createFromReport\(item\)/);
+  assert.match(app, /onCreateNote:/);
   assert.match(app, /getCurrentPageSnapshot\(\)/);
   assert.match(app, /evaluateScreeningConditions\(snapshot\.items, screeningDraftConditions, screeningDraftLogic\)/);
   assert.match(app, /不代表全市场扫描/);

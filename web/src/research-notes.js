@@ -34,6 +34,15 @@ export function writeResearchNotes(items, storage) {
     return check.readable&&check.valid&&check.items.length===normalized.length?{ok:true}:{ok:false,reason:"verify"};
   } catch { return {ok:false,reason:"unavailable"}; }
 }
+export function buildResearchNoteContextFromReport(report) {
+  if (!report || typeof report !== "object") return null;
+  const runId = String(report.runId || report.result?.run_id || "").trim();
+  if (!runId) return null;
+  const symbols = Array.isArray(report.symbols) ? report.symbols : report.result?.request?.symbols;
+  const symbol = Array.isArray(symbols) ? String(symbols[0] || "").trim().slice(0, 32) : "";
+  return { symbol, taskId: String(report.taskId || "").trim().slice(0, 160), runId };
+}
+
 export function filterResearchNotes(items, query="", symbol="") {
   const q=String(query||"").trim().toLowerCase(), s=String(symbol||"").trim().toLowerCase();
   return (Array.isArray(items)?items:[]).filter(n=>(!s||n.symbol.toLowerCase().includes(s))&&(!q||[n.title,n.content,n.symbol,n.taskId,n.runId,...n.tags].join(" ").toLowerCase().includes(q))).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
@@ -87,4 +96,21 @@ export function bindResearchNotes({root=document, getContext=()=>({}), storage}=
   $("#research-note-task").value=String(context.taskId||"");
   $("#research-note-run").value=String(context.runId||"");
   render();
+  return {
+    createFromReport(report) {
+      const linked = buildResearchNoteContextFromReport(report);
+      if (!linked) return false;
+      editingId = "";
+      form.reset();
+      $("#research-note-title").value = "Run " + linked.runId + " 研究记录";
+      $("#research-note-symbol").value = linked.symbol;
+      $("#research-note-task").value = linked.taskId;
+      $("#research-note-run").value = linked.runId;
+      $("#research-note-cancel").hidden = true;
+      feedback("已填入报告关联信息，请补充研究内容后保存。");
+      form.scrollIntoView({ behavior: "smooth", block: "center" });
+      $("#research-note-content").focus();
+      return true;
+    }
+  };
 }

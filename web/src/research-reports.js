@@ -67,7 +67,7 @@ export function filterResearchReports(items, filters = {}) {
     return !q || [x.runId, x.taskId, x.status, x.asOf, ...x.symbols].join(" ").toLowerCase().includes(q);
   }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 }
-export function bindResearchReports({ root = document, storage, onOpenTask = () => {} } = {}) {
+export function bindResearchReports({ root = document, storage, onOpenTask = () => {}, onCreateNote = () => {} } = {}) {
   const $ = selector => root.querySelector(selector.startsWith("#") ? selector : "#" + selector), host = $("#research-report-list");
   if (!host) return { save: () => ({ ok: false, reason: "unavailable" }) };
   const feedback = (message, error = false) => { const node = $("#research-report-feedback"); node.textContent = message; node.dataset.state = error ? "error" : "ok"; };
@@ -84,7 +84,7 @@ export function bindResearchReports({ root = document, storage, onOpenTask = () 
       const details = document.createElement("details"), summary = document.createElement("summary"); summary.textContent = "查看报告详情";
       const pre = document.createElement("pre"); pre.className = "research-report-markdown"; pre.textContent = buildRunResultMarkdown(item.result); details.append(summary, pre);
       const actions = document.createElement("div"); actions.className = "research-report-actions";
-      [["下载 Markdown", "download"], ["打开关联任务", "open-task"], ["删除归档", "delete"]].forEach(([label, action]) => {
+      [["下载 Markdown", "download"], ["基于报告写笔记", "create-note"], ["打开关联任务", "open-task"], ["删除归档", "delete"]].forEach(([label, action]) => {
         const button = document.createElement("button"); button.type = "button"; button.className = "button button-secondary";
         button.textContent = label; button.dataset.reportAction = action; button.dataset.reportId = item.id;
         if (action === "open-task") button.disabled = !item.taskId;
@@ -107,6 +107,7 @@ export function bindResearchReports({ root = document, storage, onOpenTask = () 
     const current = readResearchReports(storage); if (!current.readable || !current.valid) { feedback("归档存储异常，未执行操作。", true); return; }
     const item = current.items.find(x => x.id === button.dataset.reportId); if (!item) return;
     if (button.dataset.reportAction === "open-task") { onOpenTask(item); return; }
+    if (button.dataset.reportAction === "create-note") { onCreateNote(item); return; }
     if (button.dataset.reportAction === "download") {
       const blob = new Blob([buildRunResultMarkdown(item.result)], { type: "text/markdown;charset=utf-8" });
       const url = URL.createObjectURL(blob), anchor = document.createElement("a"); anchor.href = url;
