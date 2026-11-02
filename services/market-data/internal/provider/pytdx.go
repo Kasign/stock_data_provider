@@ -433,7 +433,6 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
 }
 
-
 func addPytdxValidationIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, actualPreview, message string, severity validation.Severity) {
 	row := rowIndex
 	report := validation.NewReport(1)
@@ -444,7 +443,6 @@ func addPytdxValidationIssue(ctx context.Context, rowIndex int, field, providerF
 	})
 	validation.AddContextReport(ctx, report)
 }
-
 
 func validatePytdxDailyBarValues(ctx context.Context, rowIndex int, tradeDate string, open, high, low, closePrice, rawVolume, rawAmount float64) (pytdxDailyAmountInfo, error) {
 	prices := []struct {
