@@ -1525,9 +1525,19 @@ try {
           await page.locator("#toggle-market-key-visibility").click();
           assert.equal(await keyInput.getAttribute("type"), "password");
 
+          await page.locator("#settings-market-color-scheme").selectOption("reverse");
+          await page.locator("#settings-price-digits").selectOption("3");
+          await page.locator("#settings-percent-digits").selectOption("3");
+          await page.locator("#settings-amount-unit").selectOption("raw");
+          await page.locator("#settings-watchlist-direction").selectOption("asc");
           await page.locator("#settings-default-bar-limit").selectOption("250");
           await page.locator("#settings-default-adjustment").selectOption("backward_adjusted");
           const persistedDefaults = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), "stock-provider-webui.preferences.v1");
+          assert.equal(persistedDefaults.marketColorScheme, "reverse");
+          assert.equal(persistedDefaults.priceDigits, 3);
+          assert.equal(persistedDefaults.percentDigits, 3);
+          assert.equal(persistedDefaults.amountDisplayUnit, "raw");
+          assert.equal(persistedDefaults.watchlistSortDirection, "asc");
           assert.equal(persistedDefaults.dailyBarLimit, 250);
           assert.equal(persistedDefaults.dailyAdjustment, "backward_adjusted");
 
@@ -1556,8 +1566,14 @@ try {
             expectedVisibility,
             "all five watchlist field visibility settings must survive a full page reload"
           );
+          assert.equal(await page.locator("#settings-market-color-scheme").inputValue(), "reverse", "market color scheme must survive reload");
+          assert.equal(await page.locator("#settings-price-digits").inputValue(), "3", "price precision must survive reload");
+          assert.equal(await page.locator("#settings-percent-digits").inputValue(), "3", "percentage precision must survive reload");
+          assert.equal(await page.locator("#settings-amount-unit").inputValue(), "raw", "amount display unit must survive reload");
+          assert.equal(await page.locator("#settings-watchlist-direction").inputValue(), "asc", "watchlist sort direction must survive reload");
           assert.equal(await page.locator("#settings-default-bar-limit").inputValue(), "250", "default daily bar count must survive reload");
           assert.equal(await page.locator("#settings-default-adjustment").inputValue(), "backward_adjusted", "default adjustment must survive reload");
+          assert.equal(await page.locator("html").getAttribute("data-market-color-scheme"), "reverse", "market color semantics must be applied globally");
           await page.setViewportSize({ width: 1280, height: 900 });
           assert.deepEqual(await readOrder(), reordered, "desktop and mobile settings must share the same persisted field order");
           await page.setViewportSize({ width: 320, height: 800 });
