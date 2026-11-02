@@ -357,3 +357,8 @@ BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过
 ## 26. checks 首批实现编译问题
 
 提交 `ce4fdd76400d157ee4169481097f2ef438a65309` 的 Go 编译失败源于 `provider_probe.go` 模型文件缺少 `type ProviderProbeRun struct {` 声明。Go suite、Docker market-data build、MariaDB PIT 集成及 Go/Python parity 均因同一语法错误失败，非数据库/质量算法独立故障。已恢复结构体声明，待新 SHA CI 验证。
+
+
+## 27. checks 跨源接入格式修复（2026-11-02）
+
+`ce17ac11cd559385de24d4e0aa284904d1c6ab5a` 的 market-data Go suite 和 Docker image build 在 gofmt 阶段失败，涉及 model/service 字段对齐及两个测试文件的多余空行。MariaDB PIT persistence、根模块和 go-core 已通过；修复格式后等待新 SHA 验收。

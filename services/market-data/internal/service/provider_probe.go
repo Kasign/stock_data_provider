@@ -988,10 +988,12 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 			}
 			comparison := provider.CompareCrossProviderDailyBars(*left, *right)
 			result := model.ProviderProbeCheckResult{
-				Check: "cross_provider", Provider: left.Provider + "+" + right.Provider,
-				Capability: "daily_bars", CheckedAt: checkedAt,
+				Check:         "cross_provider",
+				Provider:      left.Provider + "+" + right.Provider,
+				Capability:    "daily_bars",
+				CheckedAt:     checkedAt,
 				ComparedDates: append([]string(nil), comparison.ComparedDates...),
-				FieldCount: len(comparison.Fields),
+				FieldCount:    len(comparison.Fields),
 			}
 			switch comparison.Status {
 			case provider.CrossProviderDailyMatched:
@@ -1016,10 +1018,13 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 	}
 	if len(results) == 0 {
 		results = append(results, model.ProviderProbeCheckResult{
-			Check: "cross_provider", Provider: "system", Capability: "daily_bars",
-			Status: "skipped", ErrorCode: "cross_provider_pair_unavailable",
+			Check:        "cross_provider",
+			Provider:     "system",
+			Capability:   "daily_bars",
+			Status:       "skipped",
+			ErrorCode:    "cross_provider_pair_unavailable",
 			ErrorMessage: "No two distinct providers returned comparable daily-bar snapshots for the same symbol",
-			CheckedAt: checkedAt,
+			CheckedAt:    checkedAt,
 		})
 	}
 	return results

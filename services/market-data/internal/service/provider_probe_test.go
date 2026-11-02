@@ -317,7 +317,6 @@ func TestRecordProviderProbeCoverageCountsPreservesDenominator(t *testing.T) {
 	}
 }
 
-
 func TestProviderProbeChecksFilterAndPreserveUnimplementedEvidence(t *testing.T) {
 	p := providerProbeQuoteFake{}
 	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
@@ -375,7 +374,6 @@ func TestBuildProviderProbeCheckResultsClassifiesNetworkAndContractFailures(t *t
 		t.Fatalf("unexpected check classification: %+v", results)
 	}
 }
-
 
 type providerProbeDailyBarsFake struct {
 	name string

@@ -700,3 +700,10 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - 提交 `ce4fdd76400d157ee4169481097f2ef438a65309` 因模型编辑时遗漏 `type ProviderProbeRun struct {` 声明，Go 编译与 market-data Docker 构建失败；MariaDB PIT Job 也因同一编译错误终止，不是数据库迁移故障。
 - 已恢复 ProviderProbeRun 结构体声明。修复 SHA 的 CI 结果待确认。
 - 此次失败不作为功能测试通过证据；后续需重新验证 Go suite、MariaDB PIT、Docker 和 Go/Python parity。
+
+
+### checks 在线对账阶段的格式修复（2026-11-02）
+
+- `ce17ac11cd559385de24d4e0aa284904d1c6ab5a` 的 market-data gofmt 检查发现 4 个 Go 文件仅有结构体字段对齐和测试函数前多余空行问题；Go test、Docker 构建因此在 gofmt 前置步骤停止。
+- MariaDB PIT persistence 在该 SHA 已通过，说明此前模型语法错误已修复。
+- 已统一 gofmt 格式，后续以最新 SHA 的完整 Go suite、Docker 和 parity 结果验收。

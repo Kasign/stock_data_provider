@@ -151,7 +151,6 @@ func TestProviderProbeEndpointRejectsInvalidMarketAndSymbolFilters(t *testing.T)
 	}
 }
 
-
 func TestProviderProbeEndpointFiltersChecks(t *testing.T) {
 	response := performProviderProbeRequest(newProviderProbeHTTPTestHandler(), `{"scope":"all","capabilities":["quote"],"checks":["quality","connectivity"]}`, true)
 	if response.Code != http.StatusOK {
