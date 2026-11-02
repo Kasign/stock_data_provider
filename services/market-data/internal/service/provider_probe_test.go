@@ -376,8 +376,8 @@ func TestBuildProviderProbeCheckResultsClassifiesNetworkAndContractFailures(t *t
 }
 
 type providerProbeDailyBarsFake struct {
-	name string
-	close float64
+	name    string
+	close   float64
 	quality model.QualityStatus
 }
 
