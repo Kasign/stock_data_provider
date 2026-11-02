@@ -319,7 +319,6 @@ func unique(in []string) []string {
 	return out
 }
 
-
 // ValidateQuoteWithReport collects structured issues before invoking the legacy
 // validator. The legacy validator remains authoritative for historical errors
 // and amount-missing mutations.

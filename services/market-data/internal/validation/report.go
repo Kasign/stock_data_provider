@@ -140,7 +140,6 @@ func (r Report) String() string {
 		r.TotalCount, r.ErrorCount, r.WarningCount, r.InfoCount, len(r.Issues), r.Truncated)
 }
 
-
 type reporterContextKey struct{}
 
 // Reporter collects validation issues for one request. It is safe for concurrent

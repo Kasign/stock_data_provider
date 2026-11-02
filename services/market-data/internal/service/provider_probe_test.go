@@ -438,7 +438,6 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 	}
 }
 
-
 func TestProviderProbeFieldIssueJSONContainsSafeDiagnosticFields(t *testing.T) {
 	rowIndex := 3
 	item := model.ProviderProbeItem{

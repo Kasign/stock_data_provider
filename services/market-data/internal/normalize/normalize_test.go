@@ -258,7 +258,6 @@ func TestValidateAndSortBarsRejectsNonCanonicalDates(t *testing.T) {
 	}
 }
 
-
 func TestValidateQuoteWithReportPreservesLegacyAmountMutation(t *testing.T) {
 	quote := validQuoteForNormalizationTest()
 	quote.Amount = nil

@@ -124,7 +124,6 @@ func TestReportMergePreservesSeverityCountsBeyondIssueLimit(t *testing.T) {
 	}
 }
 
-
 func TestReporterIsContextScopedAndMergesConcurrentReports(t *testing.T) {
 	reporter := NewReporter(10)
 	ctx := WithReporter(context.Background(), reporter)
