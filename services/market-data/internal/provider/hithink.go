@@ -2143,7 +2143,6 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s", tradeDate)
 			}
 			seen[tradeDate] = struct{}{}
-			open, high, low := open, high, low
 			if !hithinkPositiveFinite(open) || !hithinkPositiveFinite(high) || !hithinkPositiveFinite(low) || !hithinkPositiveFinite(closePrice) ||
 				low > high || open < low || open > high || closePrice < low || closePrice > high {
 				return nil, fmt.Errorf("同花顺日 K %s 的 OHLC 不满足数据约束", tradeDate)
@@ -2165,7 +2164,7 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 				}
 			} else {
 				volume = &v
-				raw := *item.Volume
+				raw := volumeValue
 				rawVolume = &raw
 			}
 			var amount *float64
@@ -2203,7 +2202,6 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 	}
 	return nil, fmt.Errorf("同花顺在 %d 页内未结束分页，拒绝返回可能不完整的 K 线", hithinkMaxPagesPerRange)
 }
-
 
 func parseHithinkDailyInt64(ctx context.Context, rowIndex int, field, providerField string, raw json.RawMessage, required bool) (int64, bool, error) {
 	value := strings.TrimSpace(string(raw))
