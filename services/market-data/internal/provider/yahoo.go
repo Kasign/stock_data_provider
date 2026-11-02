@@ -325,11 +325,17 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 	if len(result.Indicators.Quote) == 0 {
 		addProviderParseIssue(ctx, -1, "quote", "chart.result[0].indicators.quote[0]", "missing_field", "one quote object containing OHLCV arrays", "missing", "", "Yahoo Finance chart response 缺少日 K 报价字段")
 	}
-	if len(result.Timestamp) == 0 || len(result.Indicators.Quote) == 0 {
-		return nil, errors.New("Yahoo Finance returned empty daily bars")
+	if len(result.Timestamp) == 0 {
+		addProviderParseIssue(ctx, -1, "timestamp", "chart.result[0].timestamp", "missing_or_empty_field", "non-empty Unix timestamp array", "missing_or_empty", "", "Yahoo Finance 响应缺少有效时间戳数组")
+		return nil, errors.New("Yahoo Finance returned empty daily-bar timestamps")
+	}
+	if len(result.Indicators.Quote) == 0 {
+		addProviderParseIssue(ctx, -1, "quote", "chart.result[0].indicators.quote", "missing_or_empty_field", "at least one quote object", "missing_or_empty", "", "Yahoo Finance 响应缺少日 K quote 对象")
+		return nil, errors.New("Yahoo Finance returned no daily quote object")
 	}
 	quote := result.Indicators.Quote[0]
 	if adjustment != model.AdjustmentNone && len(result.Indicators.AdjClose) == 0 {
+		addProviderParseIssue(ctx, -1, "adjusted_close", "chart.result[0].indicators.adjclose", "missing_field", "adjusted-close array for adjusted requests", "missing", "", "Yahoo Finance 复权请求缺少 adjclose 数组")
 		return nil, errors.New("Yahoo Finance adjusted-close series is required for an adjusted request")
 	}
 

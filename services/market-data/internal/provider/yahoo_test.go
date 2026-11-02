@@ -247,9 +247,15 @@ func TestYahooFinanceUnadjustedDoesNotRequireAdjustedClose(t *testing.T) {
 func TestYahooFinanceRejectsAdjustedRequestWithoutAdjustedClose(t *testing.T) {
 	server, _ := yahooFixture(t, false, "600036.SS")
 	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
 	p := NewYahooFinance(2*time.Second, server.URL)
-	if _, err := p.FetchDailyBars(context.Background(), "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "adjusted-close series is required") {
+	if _, err := p.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "adjusted-close series is required") {
 		t.Fatalf("expected adjusted-close contract error, got %v", err)
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "adjusted_close" || issues[0].Code != "missing_field" || issues[0].RowIndex != nil {
+		t.Fatalf("expected response-level missing adjclose diagnostic, got %+v", issues)
 	}
 }
 
