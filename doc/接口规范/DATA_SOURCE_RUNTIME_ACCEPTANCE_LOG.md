@@ -343,3 +343,12 @@ BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过
 - freshness 尚无按 capability 的 SLA，只记录源端时间/age_seconds，状态保持 skipped；cross_provider 尚未接入在线逐日 bars snapshot，状态保持 skipped。
 - 一个 Provider 响应被多个检查维度复用，不会按 check 数量重复调用上游。
 - 新增 HTTP/Service 单测；CI 待最新 SHA 确认。
+
+
+## 25. 在线诊断跨 Provider 日 K 对账
+
+- 日 K Provider 单次请求返回后，Service 将标准化 bars snapshot 放入本轮 evidence，不重复请求。
+- 同一证券至少两个 Provider 返回快照时，调用统一比较器；比较结果映射到 cross_provider check_results。
+- matched → passed；partial → degraded；mismatch → failed；not_comparable → skipped。
+- 结果附 compared_dates、field_count、mismatch_count；无双源样本时明确 skipped。
+- 质量门禁保持不变：degraded/unknown 不作为可信对账基准。

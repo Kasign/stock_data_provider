@@ -45,6 +45,7 @@ type providerProbeEvidence struct {
 	coverageExcluded  *int
 	coverageRatio     *float64
 	providerTime      *time.Time
+	dailySnapshot     *provider.CrossProviderDailySnapshot
 }
 
 func recordProviderProbeCoverage(ctx context.Context, coverage float64) {
@@ -68,6 +69,14 @@ func recordProviderProbeCoverageCounts(ctx context.Context, total, returned, val
 	evidence.coverageMissing = &missing
 	evidence.coverageExcluded = &excluded
 	evidence.coverageRatio = &ratio
+}
+
+func recordProviderProbeDailySnapshot(ctx context.Context, snapshot *provider.CrossProviderDailySnapshot) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil || snapshot == nil {
+		return
+	}
+	evidence.dailySnapshot = snapshot
 }
 
 func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string, rowsReturned, rowsValidated int, providerTime *time.Time) {
@@ -310,6 +319,23 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if version == "" {
 				return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing")
+			}
+			snapshotBars := make([]provider.CrossProviderDailyBar, 0, len(validated))
+			for _, bar := range validated {
+				if bar.Volume == nil {
+					snapshotBars = nil
+					break
+				}
+				snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
+					TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
+					Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+				})
+			}
+			if len(snapshotBars) == len(validated) {
+				recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
+					Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
+					AdjustmentBasis: string(model.AdjustmentNone), QualityStatus: string(quality), Bars: snapshotBars,
+				})
 			}
 			return quality, version, reasons, nil
 		})
@@ -711,6 +737,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 	run.Total = len(jobs)
 	results := make([]model.ProviderProbeItem, len(jobs))
+	dailySnapshots := make([]*provider.CrossProviderDailySnapshot, len(jobs))
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
 	for i, job := range jobs {
@@ -747,6 +774,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.CoverageExcluded = evidence.coverageExcluded
 			item.CoverageRatio = evidence.coverageRatio
 			item.ProviderTime = evidence.providerTime
+			dailySnapshots[index] = evidence.dailySnapshot
 			item.ElapsedMS = time.Since(checkedAt).Milliseconds()
 			item.CheckedAt = time.Now().UTC()
 			item.SourceVersion = version
@@ -821,6 +849,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		run.Status = "no_capabilities_configured"
 	}
 	run.CheckResults = buildProviderProbeCheckResults(run.Items, requestedChecks)
+	if selectedChecks["cross_provider"] {
+		run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.FinishedAt)...)
+	}
 	if selectedChecks["storage"] && s.store == nil {
 		run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
 			Check: "storage", Provider: "system", Capability: "provider_probe_history",
@@ -931,15 +962,65 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 					// 没有按能力定义 freshness SLA 前，只报告时间证据，不宣称数据新鲜。
 					result.ErrorCode = "freshness_sla_not_configured"
 				}
-			case "cross_provider":
-				// 当前 ProviderProbeItem 仅保存摘要；真实跨源对账由黄金夹具比较器单独执行。
-				result.ErrorCode = "cross_provider_snapshot_not_captured"
 			}
 			if result.Status == "skipped" && result.ErrorMessage == "" {
 				result.ErrorMessage = providerProbeCheckMessage(result.ErrorCode)
 			}
 			results = append(results, result)
 		}
+	}
+	return results
+}
+
+func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDailySnapshot, checkedAt time.Time) []model.ProviderProbeCheckResult {
+	results := make([]model.ProviderProbeCheckResult, 0)
+	validSnapshots := make([]*provider.CrossProviderDailySnapshot, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		if snapshot != nil {
+			validSnapshots = append(validSnapshots, snapshot)
+		}
+	}
+	for leftIndex := 0; leftIndex < len(validSnapshots); leftIndex++ {
+		for rightIndex := leftIndex + 1; rightIndex < len(validSnapshots); rightIndex++ {
+			left, right := validSnapshots[leftIndex], validSnapshots[rightIndex]
+			if left.Symbol != right.Symbol {
+				continue
+			}
+			comparison := provider.CompareCrossProviderDailyBars(*left, *right)
+			result := model.ProviderProbeCheckResult{
+				Check: "cross_provider", Provider: left.Provider + "+" + right.Provider,
+				Capability: "daily_bars", CheckedAt: checkedAt,
+				ComparedDates: append([]string(nil), comparison.ComparedDates...),
+				FieldCount: len(comparison.Fields),
+			}
+			switch comparison.Status {
+			case provider.CrossProviderDailyMatched:
+				result.Status = "passed"
+			case provider.CrossProviderDailyPartial:
+				result.Status, result.ErrorCode = "degraded", "comparison_partial"
+			case provider.CrossProviderDailyMismatch:
+				result.Status, result.ErrorCode = "failed", "comparison_mismatch"
+			default:
+				result.Status, result.ErrorCode = "skipped", "comparison_not_comparable"
+			}
+			if comparison.Reason != "" {
+				result.ErrorMessage = comparison.Reason
+			}
+			for _, field := range comparison.Fields {
+				if field.Status == "mismatch" {
+					result.MismatchCount++
+				}
+			}
+			results = append(results, result)
+		}
+	}
+	if len(results) == 0 {
+		results = append(results, model.ProviderProbeCheckResult{
+			Check: "cross_provider", Provider: "system", Capability: "daily_bars",
+			Status: "skipped", ErrorCode: "cross_provider_pair_unavailable",
+			ErrorMessage: "No two distinct providers returned comparable daily-bar snapshots for the same symbol",
+			CheckedAt: checkedAt,
+		})
 	}
 	return results
 }
@@ -956,8 +1037,6 @@ func providerProbeCheckMessage(code string) string {
 		return "Source timestamp is recorded, but no capability-specific freshness SLA is configured"
 	case "provider_time_in_future":
 		return "Provider timestamp is later than the local check time"
-	case "cross_provider_snapshot_not_captured":
-		return "Cross-provider snapshots are not yet captured by the live probe pipeline"
 	case "contract_failed_before_quality_check":
 		return "Quality check was not run because the response contract failed"
 	default:

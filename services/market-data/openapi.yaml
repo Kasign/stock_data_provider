@@ -593,6 +593,9 @@ components:
         error_message: {type: string}
         provider_time: {type: string, format: date-time, nullable: true}
         age_seconds: {type: integer, description: Source timestamp age; does not imply freshness SLA passed}
+        compared_dates: {type: array, items: {type: string, format: date}}
+        field_count: {type: integer, minimum: 0}
+        mismatch_count: {type: integer, minimum: 0}
         checked_at: {type: string, format: date-time}
     ProviderProbeItem:
       type: object

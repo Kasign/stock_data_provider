@@ -685,3 +685,11 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - cross_provider 当前明确 skipped（cross_provider_snapshot_not_captured）：线上诊断 job 尚未把逐日 K 线样本传入比较器。固定黄金夹具仍独立覆盖比较器，不伪装成在线跨源诊断。
 - 当前 checks 是诊断结果维度过滤，不会减少所选 capability 的 Provider 请求；后续可在异步诊断任务中按 check 精确规划数据采集范围。
 - 新增 Service/HTTP 测试覆盖默认/指定 checks、未知/重复值、分类和未实现能力显式 skipped。完整 Go suite 与 Docker 结果以本提交 SHA 的 Actions 为准。
+
+
+### 2026-11-02：checks 在线跨 Provider 对账接入
+
+- 日 K 探测在一次 Provider 请求中捕获归一化 snapshot（仅在所有样本成交量存在时），请求结束后按相同证券两两调用 `CompareCrossProviderDailyBars`。
+- check_results 记录参与 Provider、状态、比较日期、字段数量和 mismatch 数量；degraded/unknown 样本由比较器拒绝，输出 skipped，不计为通过。
+- 若不足两个不同 Provider 返回同证券日 K，则输出 `cross_provider_pair_unavailable`，不会伪造 matched。
+- 本轮只比较同一请求样本和 `AdjustmentNone` 口径；其他复权口径、跨市场与多证券异步对账仍待扩展。

@@ -375,3 +375,62 @@ func TestBuildProviderProbeCheckResultsClassifiesNetworkAndContractFailures(t *t
 		t.Fatalf("unexpected check classification: %+v", results)
 	}
 }
+
+
+type providerProbeDailyBarsFake struct {
+	name string
+	close float64
+	quality model.QualityStatus
+}
+
+func (p providerProbeDailyBarsFake) Name() string { return p.name }
+func (p providerProbeDailyBarsFake) FetchDailyBars(_ context.Context, symbol, _, _ string, _ int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	volume := int64(10000)
+	now := time.Now().UTC()
+	return []model.DailyBar{{
+		Symbol: symbol, TradeDate: "2026-10-29", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: p.close, Volume: &volume,
+		AdjustmentBasis: adjustment, Source: p.name, SourceVersion: p.name + "-v1",
+		ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
+		VolumeUnit: "shares", AmountUnit: "unknown", QualityStatus: p.quality,
+	}}, nil
+}
+
+func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {
+	left := providerProbeDailyBarsFake{name: "probe-left", close: 10.5, quality: model.QualityValid}
+	right := providerProbeDailyBarsFake{name: "probe-right", close: 10.5, quality: model.QualityValid}
+	ds := NewWithCapabilities(
+		[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
+	)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Checks: []string{"cross_provider"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	if len(run.CheckResults) != 1 {
+		t.Fatalf("expected one cross-provider result, got %+v", run.CheckResults)
+	}
+	result := run.CheckResults[0]
+	if result.Status != "passed" || result.Provider != "probe-left+probe-right" || result.FieldCount != 6 || len(result.ComparedDates) != 1 {
+		t.Fatalf("unexpected cross-provider comparison result: %+v", result)
+	}
+}
+
+func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.T) {
+	left := &provider.CrossProviderDailySnapshot{
+		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "none", QualityStatus: "degraded",
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares"}},
+	}
+	right := &provider.CrossProviderDailySnapshot{
+		Provider: "right", SourceVersion: "right-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "none", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares"}},
+	}
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	if len(results) != 1 || results[0].Status != "skipped" || results[0].ErrorCode != "comparison_not_comparable" {
+		t.Fatalf("degraded snapshots must not be reported as cross-provider pass: %+v", results)
+	}
+}
