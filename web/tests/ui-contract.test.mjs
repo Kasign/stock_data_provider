@@ -2037,6 +2037,28 @@ test("设置中心导航、区块和本地配置交互保持一致", () => {
   assert.match(html, /发送测试（待接入）/);
 });
 
+test("未接入的服务端设置必须保持禁用并明确配置边界", () => {
+  const targets = [
+    "settings-data-source-section", "settings-ai-section",
+    "settings-scheduler-section", "settings-screening-section", "settings-security-section"
+  ];
+  for (const target of targets) {
+    const start = html.indexOf('id="' + target + '"');
+    const end = html.indexOf("</section>", start);
+    assert.ok(start >= 0 && end > start, target + " must exist");
+    const section = html.slice(start, end);
+    assert.match(section, /待接入|只读/);
+    const controls = [...section.matchAll(/<(?:input|select)\b[^>]*>/g)].map(match => match[0]);
+    assert.ok(controls.length > 0, target + " should expose its planned controls");
+    for (const control of controls) assert.match(control, /\bdisabled(?:\s|>|\/)/, target + " must not accept fake browser-side server configuration");
+  }
+  assert.match(html, /不能仅在浏览器隐藏数据源来代表服务端停用/);
+  assert.match(html, /凭据不能写入浏览器 localStorage/);
+  assert.match(html, /没有周期调度 CRUD/);
+  assert.match(html, /不会伪造候选结果或扫描记录/);
+  assert.match(html, /管理员登录态与行情服务 API Key 是两套独立机制/);
+});
+
 test("行情服务接口文档、Handler 与 WebUI 调用边界明确区分", () => {
   assert.match(marketHTTPServer, /mux\.HandleFunc\("GET \/health\/live"/);
   assert.match(marketHTTPServer, /mux\.HandleFunc\("GET \/health\/ready"/);

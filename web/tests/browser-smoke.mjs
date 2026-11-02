@@ -1574,6 +1574,8 @@ try {
           assert.equal(await page.locator("#settings-default-bar-limit").inputValue(), "250", "default daily bar count must survive reload");
           assert.equal(await page.locator("#settings-default-adjustment").inputValue(), "backward_adjusted", "default adjustment must survive reload");
           assert.equal(await page.locator("html").getAttribute("data-market-color-scheme"), "reverse", "market color semantics must be applied globally");
+          assert.equal(await page.locator("#bar-limit").inputValue(), "250", "new daily-bar query control must inherit the saved default limit");
+          assert.equal(await page.locator("#adjustment").inputValue(), "backward_adjusted", "new daily-bar query control must inherit the saved adjustment");
           await page.setViewportSize({ width: 1280, height: 900 });
           assert.deepEqual(await readOrder(), reordered, "desktop and mobile settings must share the same persisted field order");
           await page.setViewportSize({ width: 320, height: 800 });
