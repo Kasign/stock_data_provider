@@ -332,6 +332,9 @@ func TestProviderProbeChecksFilterAndPreserveUnimplementedEvidence(t *testing.T)
 	statuses := map[string]string{}
 	for _, result := range run.CheckResults {
 		statuses[result.Check] = result.Status
+		if result.Check == "cross_provider" && result.Capability != "" {
+			t.Fatalf("cross_provider must not report an unrequested daily_bars capability: %+v", result)
+		}
 	}
 	if statuses["connectivity"] != "passed" || statuses["quality"] != "passed" {
 		t.Fatalf("connectivity/quality check result is incorrect: %+v", run.CheckResults)
@@ -434,13 +437,3 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 	}
 }
 
-
-func TestBuildCrossProviderProbeCheckResultsRequiresDailyBarsCapability(t *testing.T) {
-	result := model.ProviderProbeCheckResult{
-		Check: "cross_provider", Provider: "system", Status: "skipped",
-		ErrorCode: "daily_bars_capability_not_requested", CheckedAt: time.Now().UTC(),
-	}
-	if result.Capability != "" || result.Status != "skipped" {
-		t.Fatalf("cross-provider check without daily_bars must not claim a daily-bars capability result: %+v", result)
-	}
-}
