@@ -310,7 +310,7 @@ try {
         if (capitalFlowScenario === "network") return route.abort("failed");
         if (capitalFlowScenario === "503") return json(503, { error: { code: "provider_unavailable", message: "Tushare Provider unavailable", request_id: "req-market-flow-503" } });
         return json(200, {
-          start_date: "2026-10-01", end_date: "2026-10-30", total: 1,
+          start_date: "2026-10-01", end_date: "2026-10-30", total: 2,
           items: [
             { trade_date: "2026-10-30", close_sh: 3950.2, change_percent_sh: 0.5, close_sz: 12800.5, change_percent_sz: -0.2, net_amount_cny: 1500, net_amount_rate_percent: 0.35 },
             { trade_date: "2026-10-29", close_sh: null, change_percent_sh: null, close_sz: null, change_percent_sz: null, net_amount_cny: null, net_amount_rate_percent: null }
@@ -1389,7 +1389,7 @@ try {
         assert.equal(new URL(capitalFlowRequest.url).searchParams.get("end"), "2026-10-30");
         assert.equal(capitalFlowRequest.headers["x-api-key"], "browser-test-key");
         assert.equal(await page.locator("#market-capital-flow-body tr").count(), 2);
-        assert.match(await page.locator("#market-capital-flow-body tr").nth(0).textContent(), /\+1500 元/, "capital-flow amount follows the default compact display preference");
+        assert.match(await page.locator("#market-capital-flow-body tr").nth(0).textContent(), /\+1500 元/);
         assert.match(await page.locator("#market-capital-flow-body tr").nth(1).textContent(), /—/);
         assert.match(await page.locator("#market-capital-flow-status").getAttribute("class"), /quality-degraded/);
         assert.match(await page.locator("#market-capital-flow-meta").textContent(), /版本 moneyflow_mkt_dc/);
@@ -1454,6 +1454,12 @@ try {
         assert.equal(await page.locator("#watchlist-bulk-remove").isDisabled(), true, "rendering after bulk assign must clear stale selection");
         assert.equal(await selectAll.isChecked(), false);
         assert.equal(await selectAll.evaluate(element => element.indeterminate), false);
+        await page.locator("#watchlist-group-filter").selectOption("测试分组");
+        assert.equal(await selections.count(), 2, "group filter must restrict the visible selection scope");
+        await selectAll.check();
+        assert.deepEqual(await selections.evaluateAll(nodes => nodes.map(node => node.checked)), [true, true], "select-all must select only currently filtered rows");
+        await page.locator("#watchlist-group-filter").selectOption("all");
+        assert.equal(await page.locator("#watchlist-bulk-count").textContent(), "已选择 0 只", "changing the filter must clear stale row selections");
         await selections.nth(0).check();
         await selections.nth(1).check();
         await page.locator("#watchlist-bulk-remove").click();
@@ -1502,6 +1508,9 @@ try {
             expectedVisibility,
             "all five watchlist field visibility settings must survive a full page reload"
           );
+          await page.setViewportSize({ width: 1280, height: 900 });
+          assert.deepEqual(await readOrder(), reordered, "desktop and mobile settings must share the same persisted field order");
+          await page.setViewportSize({ width: 320, height: 800 });
 
           const keys = {
             settings: "stock-provider-webui.settings.v1",
@@ -1516,12 +1525,12 @@ try {
             localStorage.setItem(keys.tasks, JSON.stringify([currentTask]));
           }, { keys, currentTask });
 
-          const makeImportFile = (watchlist, recentTasks, preferences = {}) => ({
+          const makeImportFile = (watchlist, recentTasks, preferences = {}, version = 3) => ({
             name: "workspace-test.json",
             mimeType: "application/json",
             buffer: Buffer.from(JSON.stringify({
               format: "stock-provider-webui-browser-data",
-              version: 3,
+              version,
               data: {
                 theme: "dark",
                 preferences,
@@ -1591,7 +1600,29 @@ try {
           assert.deepEqual(replaced.watchlist.map((item) => item.symbol), ["300750.SZ"]);
           assert.deepEqual(replaced.tasks.map((item) => item.task_id), ["task-3"]);
 
-          const beforeInvalid = JSON.stringify(replaced.watchlist);
+          for (const legacyVersion of [1, 2]) {
+            const legacyFile = makeImportFile(
+              [{ symbol: legacyVersion === 1 ? "600519.SH" : "000001.SZ", name: "旧版导入" }],
+              [],
+              { watchlistSort: "symbol" },
+              legacyVersion
+            );
+            await uploadWorkspace(legacyFile);
+            await page.locator("#browser-data-import-replace").click();
+            await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
+            const legacyPreferences = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.preferences);
+            assert.deepEqual(legacyPreferences.watchlistDisplayOrder, ["updated", "quote", "today", "task", "result"], "v" + legacyVersion + " import must restore default field order");
+          }
+
+          const beforeInvalid = JSON.stringify(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), keys.watchlist));
+          await page.locator("#browser-data-file").setInputFiles(makeImportFile(
+            [{ symbol: "300750.SZ", name: "非法顺序测试" }],
+            [],
+            { watchlistDisplayOrder: ["updated", "updated", "today", "task", "result"] }
+          ));
+          await page.waitForFunction(() => document.querySelector("#browser-data-feedback")?.textContent.includes("导入失败"));
+          assert.equal(await page.evaluate((key) => JSON.stringify(JSON.parse(localStorage.getItem(key))), keys.watchlist), beforeInvalid, "invalid field order must not modify current watchlist");
+
           await page.locator("#browser-data-file").setInputFiles({
             name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{")
           });
