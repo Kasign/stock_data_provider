@@ -8,7 +8,7 @@ import (
 )
 
 func floatPointer(value float64) *float64 { return &value }
-func intPointer(value int64) *int64 { return &value }
+func intPointer(value int64) *int64       { return &value }
 
 func TestValidateQuoteReturnsDeterministicCompleteIssuesWithoutMutation(t *testing.T) {
 	quote := &model.Quote{

@@ -42,7 +42,7 @@ func ValidateQuote(q *model.Quote) Report {
 	}
 
 	requiredPositive := []struct {
-		name string
+		name  string
 		value *float64
 	}{
 		{"current_price", q.CurrentPrice}, {"open", q.Open}, {"high", q.High},
@@ -62,8 +62,8 @@ func ValidateQuote(q *model.Quote) Report {
 	}
 
 	optionalNumbers := []struct {
-		name string
-		value *float64
+		name        string
+		value       *float64
 		nonNegative bool
 	}{
 		{"change", q.Change, false}, {"change_percent", q.ChangePercent, false},
