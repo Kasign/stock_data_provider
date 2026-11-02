@@ -73,6 +73,12 @@ components:
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
+        validation_total_count: {type: integer, minimum: 0, description: Total number of field validation issues before detail truncation}
+        validation_error_count: {type: integer, minimum: 0}
+        validation_warning_count: {type: integer, minimum: 0}
+        validation_info_count: {type: integer, minimum: 0}
+        validation_truncated: {type: boolean, description: True when validation_issues contains only a bounded subset of all issues}
+        validation_issues: {type: array, items: {$ref: '#/components/schemas/ProviderProbeFieldIssue'}, maxItems: 100}
         fallback_from: {type: string}
         fallback_reason: {type: string}
         normalization_version: {type: string}
@@ -597,6 +603,22 @@ components:
         field_count: {type: integer, minimum: 0}
         mismatch_count: {type: integer, minimum: 0}
         checked_at: {type: string, format: date-time}
+    ProviderProbeFieldIssue:
+      type: object
+      required: [stage, field, code, expected, severity, message]
+      properties:
+        stage: {type: string, enum: [parse, normalize, validate]}
+        field: {type: string}
+        provider_field: {type: string}
+        code: {type: string}
+        expected: {type: string}
+        actual_type: {type: string}
+        actual_preview: {type: string, maxLength: 160, description: Sanitized and length-limited value summary; must not contain credentials or full payloads}
+        severity: {type: string, enum: [error, warning, info]}
+        message: {type: string}
+        row_index: {type: integer, minimum: 0}
+        symbol: {type: string}
+        trade_date: {type: string, format: date}
     ProviderProbeItem:
       type: object
       required: [provider, capability, status, elapsed_ms, quality_status, checked_at]
