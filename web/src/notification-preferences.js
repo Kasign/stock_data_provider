@@ -7,11 +7,17 @@ function storageFor(storage) {
   try { return globalThis.localStorage; } catch { return null; }
 }
 
-function normalize(value) {
-  if (!value || typeof value !== "object" || !Array.isArray(value.events)) return null;
-  if (value.events.some((event) => !EVENTS.has(event))) return null;
+export function validateNotificationPreferences(value, { allowEqualQuietHours = false } = {}) {
+  if (!value || typeof value !== "object" || !Array.isArray(value.events)) return "invalid";
+  if (value.events.some((event) => !EVENTS.has(event))) return "invalid-events";
   const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-  if (!timePattern.test(String(value.quietStart || "")) || !timePattern.test(String(value.quietEnd || ""))) return null;
+  if (!timePattern.test(String(value.quietStart || "")) || !timePattern.test(String(value.quietEnd || ""))) return "invalid-time";
+  if (!allowEqualQuietHours && value.quietStart === value.quietEnd) return "equal-quiet-hours";
+  return "";
+}
+
+function normalize(value) {
+  if (validateNotificationPreferences(value, { allowEqualQuietHours: true })) return null;
   return { events: [...new Set(value.events)], quietStart: value.quietStart, quietEnd: value.quietEnd };
 }
 
@@ -29,8 +35,9 @@ export function readNotificationPreferences(storage) {
 }
 
 export function writeNotificationPreferences(value, storage) {
-  const normalized = normalize(value);
-  if (!normalized) return { ok: false, reason: "invalid" };
+  const validation = validateNotificationPreferences(value);
+  const normalized = validation ? null : normalize(value);
+  if (!normalized) return { ok: false, reason: validation || "invalid" };
   try {
     const target = storageFor(storage);
     if (!target) return { ok: false, reason: "unavailable" };
@@ -69,7 +76,9 @@ export function bindNotificationPreferences({ root = document, storage } = {}) {
     });
     $("#notification-quiet-start").value = result.value.quietStart;
     $("#notification-quiet-end").value = result.value.quietEnd;
-    feedback("偏好草稿仅保存在当前浏览器；不会创建通知渠道或触发真实发送。");
+    feedback(result.value.quietStart === result.value.quietEnd
+      ? "读取到旧版免打扰时间：开始与结束相同，含义不明确；请调整时间后再保存。"
+      : "偏好草稿仅保存在当前浏览器；不会创建通知渠道或触发真实发送。", result.value.quietStart === result.value.quietEnd);
   };
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -79,7 +88,13 @@ export function bindNotificationPreferences({ root = document, storage } = {}) {
       quietEnd: $("#notification-quiet-end").value
     };
     const saved = writeNotificationPreferences(value, storage);
-    feedback(saved.ok ? "本地通知偏好草稿已保存；当前没有服务端投递行为。" : "保存失败，原有偏好未确认修改：" + saved.reason, !saved.ok);
+    const messages = {
+      "equal-quiet-hours": "免打扰开始和结束时间不能相同；请设置一个明确的时间区间。",
+      "invalid-time": "免打扰时间格式无效，请检查开始和结束时间。",
+      "invalid-events": "关注事件包含不支持的类型，未保存。",
+      invalid: "通知偏好格式无效，未保存。"
+    };
+    feedback(saved.ok ? "本地通知偏好草稿已保存；当前没有服务端投递行为。" : (messages[saved.reason] || "保存失败，原有偏好未确认修改：" + saved.reason), !saved.ok);
   });
   render();
 }

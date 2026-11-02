@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readNotificationPreferences, writeNotificationPreferences, NOTIFICATION_PREFERENCES_KEY } from "../src/notification-preferences.js";
+import { readNotificationPreferences, writeNotificationPreferences, validateNotificationPreferences, NOTIFICATION_PREFERENCES_KEY } from "../src/notification-preferences.js";
 
 function memory() {
   const data = new Map();
@@ -27,4 +27,28 @@ test("损坏数据不会被误判为空或覆盖", () => {
   assert.equal(readNotificationPreferences(storage).valid, false);
   assert.equal(writeNotificationPreferences(valid, storage).ok, false);
   assert.equal(storage.getItem(NOTIFICATION_PREFERENCES_KEY), "{");
+});
+
+test("免打扰开始与结束不能相同，避免全天静默语义不明确", () => {
+  assert.equal(validateNotificationPreferences({ ...valid, quietStart: "08:00", quietEnd: "08:00" }), "equal-quiet-hours");
+  const storage = memory();
+  assert.deepEqual(writeNotificationPreferences({ ...valid, quietStart: "08:00", quietEnd: "08:00" }, storage), {
+    ok: false, reason: "equal-quiet-hours"
+  });
+  assert.equal(storage.getItem(NOTIFICATION_PREFERENCES_KEY), null);
+});
+
+test("历史相同起止时间仍可读取，但必须调整后才能重新保存", () => {
+  const storage = memory();
+  const legacy = { ...valid, quietStart: "08:00", quietEnd: "08:00" };
+  storage.setItem(NOTIFICATION_PREFERENCES_KEY, JSON.stringify(legacy));
+  assert.equal(readNotificationPreferences(storage).valid, true);
+  assert.deepEqual(readNotificationPreferences(storage).value, legacy);
+  assert.equal(writeNotificationPreferences(legacy, storage).reason, "equal-quiet-hours");
+  assert.equal(storage.getItem(NOTIFICATION_PREFERENCES_KEY), JSON.stringify(legacy));
+});
+
+test("跨午夜免打扰区间有效，且允许关闭全部事件关注", () => {
+  assert.equal(validateNotificationPreferences({ events: [], quietStart: "22:00", quietEnd: "08:00" }), "");
+  assert.equal(writeNotificationPreferences({ events: [], quietStart: "22:00", quietEnd: "08:00" }, memory()).ok, true);
 });

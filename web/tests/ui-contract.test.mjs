@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -21,7 +21,8 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/health-check.js", import.meta.url), "utf8"),
   readFile(new URL("../../services/market-data/internal/httpapi/server.go", import.meta.url), "utf8"),
   readFile(new URL("../../services/market-data/openapi.yaml", import.meta.url), "utf8"),
-  readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8")
+  readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/notification-preferences.js", import.meta.url), "utf8")
 ]);
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
@@ -41,6 +42,12 @@ function baseCssDeclarationBlock(selector) {
   const rule = rules.find((match) => match[1].split(",").some((part) => part.trim() === selector));
   return rule?.[2] || "";
 }
+
+test("notification quiet hours disclose local-time and overnight semantics", () => {
+  assert.match(html, /时间按当前设备本地时钟记录/);
+  assert.match(html, /结束时间早于开始时间表示跨午夜/);
+  assert.match(notificationPreferences, /equal-quiet-hours/);
+});
 
 test("static DOM IDs referenced by the WebUI exist and are unique", () => {
   const htmlIds = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
