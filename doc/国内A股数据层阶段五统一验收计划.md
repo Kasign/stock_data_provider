@@ -693,3 +693,10 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - check_results 记录参与 Provider、状态、比较日期、字段数量和 mismatch 数量；degraded/unknown 样本由比较器拒绝，输出 skipped，不计为通过。
 - 若不足两个不同 Provider 返回同证券日 K，则输出 `cross_provider_pair_unavailable`，不会伪造 matched。
 - 本轮只比较同一请求样本和 `AdjustmentNone` 口径；其他复权口径、跨市场与多证券异步对账仍待扩展。
+
+
+### checks 首批实现编译修复（2026-11-02）
+
+- 提交 `ce4fdd76400d157ee4169481097f2ef438a65309` 因模型编辑时遗漏 `type ProviderProbeRun struct {` 声明，Go 编译与 market-data Docker 构建失败；MariaDB PIT Job 也因同一编译错误终止，不是数据库迁移故障。
+- 已恢复 ProviderProbeRun 结构体声明。修复 SHA 的 CI 结果待确认。
+- 此次失败不作为功能测试通过证据；后续需重新验证 Go suite、MariaDB PIT、Docker 和 Go/Python parity。

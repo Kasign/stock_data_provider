@@ -57,6 +57,7 @@ type ProviderProbeCheckResult struct {
 }
 
 // ProviderProbeRun 是隔离于业务流量的主动探测批次。
+type ProviderProbeRun struct {
 	RunID                 string              `json:"run_id"`
 	Scope                 string              `json:"scope,omitempty"`
 	RequestedCapabilities []string            `json:"requested_capabilities,omitempty"`

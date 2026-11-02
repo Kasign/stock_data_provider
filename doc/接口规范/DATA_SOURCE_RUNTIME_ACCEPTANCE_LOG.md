@@ -352,3 +352,8 @@ BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过
 - matched → passed；partial → degraded；mismatch → failed；not_comparable → skipped。
 - 结果附 compared_dates、field_count、mismatch_count；无双源样本时明确 skipped。
 - 质量门禁保持不变：degraded/unknown 不作为可信对账基准。
+
+
+## 26. checks 首批实现编译问题
+
+提交 `ce4fdd76400d157ee4169481097f2ef438a65309` 的 Go 编译失败源于 `provider_probe.go` 模型文件缺少 `type ProviderProbeRun struct {` 声明。Go suite、Docker market-data build、MariaDB PIT 集成及 Go/Python parity 均因同一语法错误失败，非数据库/质量算法独立故障。已恢复结构体声明，待新 SHA CI 验证。
