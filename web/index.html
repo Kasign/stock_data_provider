@@ -696,6 +696,11 @@
                 <button class="button button-secondary" id="screening-condition-add" type="button">添加条件</button>
               </div>
               <ul class="screening-condition-list" id="screening-condition-list" aria-label="已添加筛选条件"><li class="empty-row">尚未添加条件</li></ul>
+              <section class="screening-local-filter" aria-labelledby="screening-local-filter-title">
+                <div class="screening-local-filter-heading"><div><h3 id="screening-local-filter-title">当前页本地筛选</h3><p>只筛选“个股行情”页最近一次成功加载的当前分页，不会自动翻页，也不代表全市场扫描。</p></div><button class="button button-secondary" id="screening-apply-current-page" type="button">应用条件到当前页</button></div>
+                <p class="field-hint" id="screening-local-results-summary" role="status" aria-live="polite">先加载全市场分页行情，再应用已添加的条件。</p>
+                <div class="table-scroll"><table><thead><tr><th>股票</th><th>涨跌幅</th><th>换手率</th><th>成交额</th><th>MA5</th><th>MA20</th><th>质量</th></tr></thead><tbody id="screening-local-results-body"><tr><td colspan="7" class="table-empty">尚未执行当前页筛选。</td></tr></tbody></table></div>
+              </section>
               <section class="screening-saved-plans" aria-labelledby="screening-saved-plans-title"><div class="screening-saved-plans-heading"><div><h3 id="screening-saved-plans-title">本地筛选方案</h3><p>最多保存 30 个方案，仅保存在当前浏览器；不代表服务端策略或扫描历史。</p></div></div><div class="screening-saved-plan-form"><label class="field"><span>方案名称</span><input id="screening-plan-name" type="text" maxlength="40" placeholder="例如：趋势突破观察"></label><button class="button button-secondary" id="screening-plan-save" type="button">保存 / 更新</button><button class="button button-secondary" id="screening-plan-save-as" type="button">另存为新方案</button></div><ul id="screening-saved-plan-list" class="screening-saved-plan-list"><li class="empty-row">正在读取本地方案…</li></ul></section>
               <p class="field-hint" id="screening-condition-feedback" role="status" aria-live="polite">条件先在页面内存编辑；保存为方案后写入当前浏览器本地存储，不会提交服务端。</p>
             </section>

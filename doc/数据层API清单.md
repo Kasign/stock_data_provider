@@ -87,6 +87,7 @@
 ## 5. 数据层接口的重要约束
 
 1. /api/v1/market/quotes?symbols=... 只查询调用方明确提供的最多 50 只股票，不是全市场扫描；逐项返回失败码，整体质量可降级。
+2. WebUI 本地选股只对 `/api/v1/market/stocks` 最近一次成功加载的当前分页执行条件判断；不自动翻页、不宣称全市场扫描。涨跌幅、换手率、成交额取自该页 quote，MA5/MA20 取自该页均线字段；null 按未知处理。
 2. /api/v1/data-sources 是 Provider 注册与能力声明；不能证明某个 Provider 当前可请求成功。
 3. /api/v1/data-sources/diagnostics 来源于真实 quote/daily_bars 请求形成的进程内熔断器状态，不会主动探测全部 Provider，服务重启后历史计数会重置。
 4. 日 K as_of 是系统观察时间点查询，只读取本地记录的历史版本；不是把当前 Provider 数据伪装成历史数据。

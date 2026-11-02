@@ -4,7 +4,7 @@ import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.j
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
 import { resolveScreeningCapability, resolveScreeningTaskState, resolveScreeningCollectionState } from "./screening-state.js";
-import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, formatScreeningCondition, readScreeningPlans, saveScreeningPlan } from "./screening-draft.js";
+import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, readScreeningPlans, saveScreeningPlan } from "./screening-draft.js";
 import { resolveAlertCapability, resolveAlertEvaluationState, resolveAlertCollectionState } from "./alert-state.js";
 import {
   analysisHealth,
@@ -1677,6 +1677,61 @@ $("#screening-saved-plan-list").addEventListener("click", (event) => {
   const remove = event.target.closest("[data-screening-plan-delete]"); if (remove) removeScreeningPlan(remove.dataset.screeningPlanDelete);
 });
 renderScreeningDraftConditions(); renderScreeningPlans();
+
+function renderScreeningLocalResults() {
+  const body = $("#screening-local-results-body"), summary = $("#screening-local-results-summary");
+  if (!body || !summary) return;
+  const snapshot = marketStocks.getCurrentPageSnapshot();
+  if (!snapshot.hasResult) {
+    summary.textContent = "尚未加载全市场分页行情。请先在“个股行情”页加载一页真实数据，再返回应用条件。";
+    body.replaceChildren();
+    const row = document.createElement("tr"), cell = document.createElement("td");
+    cell.className = "table-empty"; cell.colSpan = 7; cell.textContent = "当前没有可用于本地筛选的行情页。";
+    row.append(cell); body.append(row); return;
+  }
+  const result = evaluateScreeningConditions(snapshot.items, screeningDraftConditions, screeningDraftLogic);
+  if (!result.valid) {
+    summary.textContent = "请先添加至少一条有效条件；当前页 " + snapshot.items.length + " 条数据尚未筛选。";
+    body.replaceChildren();
+    const row = document.createElement("tr"), cell = document.createElement("td");
+    cell.className = "table-empty"; cell.colSpan = 7; cell.textContent = "暂无筛选条件。";
+    row.append(cell); body.append(row); return;
+  }
+  summary.textContent = "当前页范围：第 " + snapshot.page + " 页 / 每页 " + snapshot.pageSize + " 条 / 复权 " + snapshot.adjustment +
+    "；检查 " + result.examinedCount + " 条，命中 " + result.matchedItems.length + " 条，未命中 " +
+    result.unmatchedItems.length + " 条，因字段缺失无法判断 " + result.unknownItems.length + " 条。此结果仅限当前页，不代表全市场扫描。";
+  body.replaceChildren();
+  if (!result.matchedItems.length) {
+    const row = document.createElement("tr"), cell = document.createElement("td");
+    cell.className = "table-empty"; cell.colSpan = 7; cell.textContent = "当前页没有可确认命中的股票；请同时检查无法判断数量。";
+    row.append(cell); body.append(row); return;
+  }
+  result.matchedItems.forEach(item => {
+    const quote = item?.quote || {}, symbol = String(item?.symbol || item?.code || quote.symbol || "").trim();
+    const name = String(item?.name || quote.name || symbol || "未报告");
+    const row = document.createElement("tr"), stockCell = document.createElement("td");
+    const select = document.createElement("button"); select.type = "button"; select.className = "market-hot-stock-link";
+    select.dataset.screeningLocalSymbol = symbol; select.dataset.screeningLocalName = name;
+    select.disabled = !symbol; select.append(document.createTextNode(name), document.createElement("br"));
+    const code = document.createElement("small"); code.textContent = symbol || "代码未报告"; select.append(code); stockCell.append(select); row.append(stockCell);
+    [
+      formatPercent(quote.change_percent), formatPercent(quote.turnover_rate),
+      finiteNumberOrNull(quote.amount) === null ? "—" : formatCompact(quote.amount) + " 元",
+      finiteNumberOrNull(item.ma5) === null ? "—" : formatPrice(item.ma5),
+      finiteNumberOrNull(item.ma20) === null ? "—" : formatPrice(item.ma20)
+    ].forEach(value => { const cell = document.createElement("td"); cell.textContent = value; row.append(cell); });
+    const qualityCell = document.createElement("td"), quality = item.quality_status || quote.quality_status || "unknown";
+    qualityCell.textContent = qualityLabel(quality);
+    qualityCell.title = [...(Array.isArray(item.quality_reasons) ? item.quality_reasons : []), ...(Array.isArray(quote.quality_reasons) ? quote.quality_reasons : [])].join("；");
+    row.append(qualityCell); body.append(row);
+  });
+}
+$("#screening-apply-current-page")?.addEventListener("click", renderScreeningLocalResults);
+$("#screening-local-results-body")?.addEventListener("click", event => {
+  const button = event.target.closest("button[data-screening-local-symbol]");
+  if (!button || !button.dataset.screeningLocalSymbol) return;
+  selectStockFromMarket({ symbol: button.dataset.screeningLocalSymbol, name: button.dataset.screeningLocalName || button.dataset.screeningLocalSymbol }, "当前页本地筛选");
+});
 
 function renderScreeningCapability(snapshot) {
   const current = resolveScreeningCapability(snapshot);

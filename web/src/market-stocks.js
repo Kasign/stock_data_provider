@@ -24,7 +24,7 @@ function responseError(error) {
 }
 
 export function bindMarketStocks(getSettings, onSelectStock) {
-  const state = { page: 1, pageSize: 50, adjustment: "forward_adjusted", busy: false, hasResult: false, hasNext: false, generation: 0, controller: null };
+  const state = { page: 1, pageSize: 50, adjustment: "forward_adjusted", busy: false, hasResult: false, hasNext: false, items: [], loadedPage: null, loadedPageSize: null, loadedAdjustment: "", generation: 0, controller: null };
 
   function renderEmpty(message) {
     const body = $("#market-stocks-body");
@@ -101,6 +101,10 @@ export function bindMarketStocks(getSettings, onSelectStock) {
     const total = Number.isFinite(Number(data?.total)) ? Number(data.total) : null;
     const lowerBound = Boolean(data?.total_is_lower_bound);
     state.hasResult = true;
+    state.items = items.slice();
+    state.loadedPage = state.page;
+    state.loadedPageSize = state.pageSize;
+    state.loadedAdjustment = state.adjustment;
     state.hasNext = items.length >= state.pageSize && (lowerBound || total === null || state.page * state.pageSize < total);
     const coverage = finiteNumberOrNull(data?.coverage_ratio);
     const coverageText = coverage === null ? "未报告" : formatPercent(coverage * 100, 1);
@@ -159,6 +163,10 @@ export function bindMarketStocks(getSettings, onSelectStock) {
       if (meta) meta.textContent = "本次请求未取得新结果；列表已清空，避免将旧数据误认为当前连接的结果。";
       renderEmpty(responseError(error));
       state.hasResult = false;
+      state.items = [];
+      state.loadedPage = null;
+      state.loadedPageSize = null;
+      state.loadedAdjustment = "";
       state.hasNext = false;
       setBusy(false);
     } finally {
@@ -179,11 +187,19 @@ export function bindMarketStocks(getSettings, onSelectStock) {
   });
   setBusy(false);
   return {
+    getCurrentPageSnapshot() {
+      return { hasResult: state.hasResult, page: state.loadedPage, pageSize: state.loadedPageSize,
+        adjustment: state.loadedAdjustment, items: state.items.slice() };
+    },
     invalidate() {
       state.generation += 1;
       try { state.controller?.abort(); } catch {}
       state.controller = null;
       state.hasResult = false;
+      state.items = [];
+      state.loadedPage = null;
+      state.loadedPageSize = null;
+      state.loadedAdjustment = "";
       state.hasNext = false;
       renderEmpty("行情连接配置已变化，请重新加载。");
       const status = $("#market-stocks-status");

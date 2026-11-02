@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, formatScreeningCondition, normalizeScreeningConditions, readScreeningPlans, saveScreeningPlan, SCREENING_PLANS_KEY } from "../src/screening-draft.js";
+import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, normalizeScreeningConditions, readScreeningPlans, saveScreeningPlan, SCREENING_PLANS_KEY } from "../src/screening-draft.js";
 function makeStorage(seed = null) { let value = seed; return { getItem() { return value; }, setItem(_key, next) { value = String(next); }, removeItem() { value = null; } }; }
 test("accepts bounded numeric conditions for supported market fields", () => {
   assert.deepEqual(createScreeningCondition("change_pct", "gte", "2.5"), { valid: true, condition: { field: "change_pct", operator: "gte", value: 2.5 } });
@@ -43,4 +43,40 @@ test("reports unavailable storage and failed writes", () => {
   assert.equal(saveScreeningPlan({ name: "x", conditions: [{ field: "ma5", operator: "gte", value: 1 }] }, blocked).saved, false);
   let raw = null; const silent = { getItem() { return raw; }, setItem() {}, removeItem() { raw = null; } };
   assert.equal(saveScreeningPlan({ name: "x", conditions: [{ field: "ma5", operator: "gte", value: 1 }] }, silent).saved, false);
+});
+
+
+test("filters only supplied page rows and preserves unknown values under AND/OR logic", () => {
+  const rows = [
+    { symbol: "A", quote: { change_percent: 3, amount: 20000000 }, ma5: 12 },
+    { symbol: "B", quote: { change_percent: -1, amount: 5000000 }, ma5: 8 },
+    { symbol: "C", quote: { change_percent: null, amount: 30000000 }, ma5: null }
+  ];
+  const conditions = [{ field: "change_pct", operator: "gte", value: 1 }, { field: "ma5", operator: "gte", value: 10 }];
+  const andResult = evaluateScreeningConditions(rows, conditions, "and");
+  assert.deepEqual(andResult.matchedItems.map(item => item.symbol), ["A"]);
+  assert.deepEqual(andResult.unmatchedItems.map(item => item.symbol), ["B"]);
+  assert.deepEqual(andResult.unknownItems.map(item => item.symbol), ["C"]);
+  const orResult = evaluateScreeningConditions(rows, conditions, "or");
+  assert.deepEqual(orResult.matchedItems.map(item => item.symbol), ["A"]);
+  assert.deepEqual(orResult.unmatchedItems.map(item => item.symbol), ["B"]);
+  assert.deepEqual(orResult.unknownItems.map(item => item.symbol), ["C"]);
+  assert.equal(andResult.examinedCount, 3);
+  assert.equal(andResult.conditionCount, 2);
+  assert.deepEqual(rows.map(item => item.symbol), ["A", "B", "C"], "filtering must not mutate the loaded page");
+});
+
+test("OR logic can match on a known condition while another field is missing", () => {
+  const result = evaluateScreeningConditions([{ symbol: "A", quote: { change_percent: 4 }, ma20: null }], [
+    { field: "change_pct", operator: "gte", value: 2 }, { field: "ma20", operator: "gte", value: 10 }
+  ], "or");
+  assert.deepEqual(result.matchedItems.map(item => item.symbol), ["A"]);
+  assert.equal(result.unknownItems.length, 0);
+});
+
+test("rejects an empty condition set instead of returning every page row", () => {
+  const result = evaluateScreeningConditions([{ symbol: "A" }], [], "and");
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, "empty-conditions");
+  assert.equal(result.unknownItems.length, 1);
 });

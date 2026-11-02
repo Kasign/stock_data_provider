@@ -4857,6 +4857,13 @@ button:disabled {
 .screening-condition-heading p { margin:0; color:var(--muted); font-size:12px; line-height:1.6; }
 .screening-condition-controls { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)) auto; align-items:end; gap:10px; margin-top:14px; }
 .screening-condition-list { display:grid; gap:8px; padding:0; margin:12px 0 0; list-style:none; }
+.screening-local-filter { margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+.screening-local-filter-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.screening-local-filter-heading h3 { margin:0 0 4px; font-size:14px; }
+.screening-local-filter-heading p { margin:0; color:var(--muted); font-size:12px; line-height:1.6; }
+#screening-local-results-summary { margin:10px 0; }
+#screening-local-results-body .market-hot-stock-link { text-align:left; }
+@media(max-width:640px) { .screening-local-filter-heading { flex-direction:column; } .screening-local-filter-heading .button { width:100%; } }
 .screening-condition-item { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; }
 .screening-condition-item .button { min-height:30px; padding:4px 10px; }
 #screening-condition-feedback[data-state="error"] { color:var(--danger); }

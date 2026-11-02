@@ -36,6 +36,39 @@ export function formatScreeningCondition(condition) {
   const digits = condition.field === "amount" ? 0 : 2;
   return field.label + " " + operator.symbol + " " + Number(condition.value).toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }) + (field.unit ? " " + field.unit : "");
 }
+function screeningFieldValue(item, field) {
+  const quote = item?.quote && typeof item.quote === "object" ? item.quote : {};
+  const raw = field === "change_pct" ? quote.change_percent : field === "turnover_rate" ? quote.turnover_rate
+    : field === "amount" ? quote.amount : field === "ma5" ? item?.ma5 : field === "ma20" ? item?.ma20 : null;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+// Tri-state evaluation keeps missing market fields unknown instead of coercing them to zero.
+export function evaluateScreeningConditions(items = [], conditions = [], logic = "and") {
+  const normalized = normalizeScreeningConditions(conditions), rows = Array.isArray(items) ? items : [];
+  const normalizedLogic = logic === "or" ? "or" : "and";
+  if (!normalized.length) return { valid: false, reason: "empty-conditions", logic: normalizedLogic,
+    conditionCount: 0, examinedCount: rows.length, matchedItems: [], unmatchedItems: [], unknownItems: rows.slice() };
+  const matchedItems = [], unmatchedItems = [], unknownItems = [];
+  rows.forEach(item => {
+    const outcomes = normalized.map(condition => {
+      const value = screeningFieldValue(item, condition.field);
+      if (value === null) return null;
+      return condition.operator === "gte" ? value >= condition.value : value <= condition.value;
+    });
+    const result = normalizedLogic === "and"
+      ? outcomes.includes(false) ? false : outcomes.includes(null) ? null : true
+      : outcomes.includes(true) ? true : outcomes.includes(null) ? null : false;
+    if (result === true) matchedItems.push(item);
+    else if (result === false) unmatchedItems.push(item);
+    else unknownItems.push(item);
+  });
+  return { valid: true, reason: "", logic: normalizedLogic, conditionCount: normalized.length,
+    examinedCount: rows.length, matchedItems, unmatchedItems, unknownItems };
+}
+
 export function buildScreeningDraftSummary(conditions = [], logic = "and") {
   const normalized = normalizeScreeningConditions(conditions), normalizedLogic = logic === "or" ? "or" : "and";
   return {
