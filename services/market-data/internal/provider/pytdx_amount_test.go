@@ -78,7 +78,7 @@ func TestValidatePytdxDailyBarValuesReportsFieldIssue(t *testing.T) {
 		t.Fatalf("expected one structured issue, got %+v", issues)
 	}
 	issue := issues[0]
-	if issue.Stage != validation.StageValidate || issue.Field != "close" || issue.ProviderField != "close" || issue.RowIndex == nil || *issue.RowIndex != 7 {
+	if issue.Stage != validation.StageValidate || issue.Field != "close" || issue.ProviderField != "Close" || issue.RowIndex == nil || *issue.RowIndex != 7 {
 		t.Fatalf("unexpected structured issue: %+v", issue)
 	}
 }
