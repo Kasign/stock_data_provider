@@ -432,7 +432,6 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
 }
 
-
 func validatePytdxDailyBarValues(ctx context.Context, rowIndex int, tradeDate string, open, high, low, closePrice, rawVolume, rawAmount float64) (pytdxDailyAmountInfo, error) {
 	prices := []struct {
 		field string
@@ -467,7 +466,6 @@ func validatePytdxDailyBarValues(ctx context.Context, rowIndex int, tradeDate st
 	}
 	return amountInfo, nil
 }
-
 
 // pytdxDailyAmountInfo 在成交额与成交量明显矛盾时保留原始记录，将归一化成交额置空。
 type pytdxDailyAmountInfo struct {

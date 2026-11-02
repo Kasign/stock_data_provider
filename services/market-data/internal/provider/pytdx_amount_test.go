@@ -1,8 +1,8 @@
 package provider
 
 import (
-	"math"
 	"context"
+	"math"
 	"testing"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
