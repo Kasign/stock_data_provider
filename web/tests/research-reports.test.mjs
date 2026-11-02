@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {filterResearchReports,readResearchReports,saveResearchReport,RESEARCH_REPORTS_KEY} from "../src/research-reports.js";
+import {filterResearchReports,readResearchReports,saveResearchReport,writeResearchReports,RESEARCH_REPORTS_KEY} from "../src/research-reports.js";
 function memory(){const data=new Map();return {getItem:k=>data.has(k)?data.get(k):null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)};}
 const result=(id="run-1")=>({run_id:id,status:"completed",request:{symbols:["600519.SH"],as_of:"2026-10-30T09:30:00+08:00"},quality:{core_pass:true},signals:[],warnings:[]});
 test("归档保存完整 Run 结果并保留任务和 API 地址",()=>{const s=memory();assert.equal(saveResearchReport(result(),{taskId:"task-1",analysisBase:"https://analysis.example"},s).ok,true);const item=readResearchReports(s).items[0];assert.equal(item.taskId,"task-1");assert.equal(item.analysisBase,"https://analysis.example");assert.equal(item.result.run_id,"run-1");});
