@@ -778,6 +778,7 @@
               <div class="alert-rule-form-grid">
                 <label class="field"><span>规则名称</span><input id="alert-rule-name" type="text" maxlength="80" required placeholder="例如：茅台价格观察" /></label>
                 <label class="field"><span>监控范围</span><select id="alert-rule-scope"><option value="symbol">单只股票</option><option value="watchlist">当前自选股（草稿范围）</option></select></label>
+                <label class="field" id="alert-rule-symbol-field"><span>股票代码</span><input id="alert-rule-symbol" type="text" maxlength="32" required placeholder="例如 600519.SH" /></label>
                 <label class="field"><span>规则类型</span><select id="alert-rule-type"><option value="price_above">价格高于</option><option value="price_below">价格低于</option><option value="change_above">涨跌幅高于</option><option value="change_below">涨跌幅低于</option><option value="turnover_above">换手率高于</option></select></label>
                 <label class="field"><span>阈值 / 参数</span><input id="alert-rule-threshold" type="number" min="0" step="0.01" required placeholder="输入阈值" /></label>
                 <label class="field"><span>严重级别</span><select id="alert-rule-severity"><option value="info">提示</option><option value="warning">警告</option><option value="critical">重要</option></select></label>
