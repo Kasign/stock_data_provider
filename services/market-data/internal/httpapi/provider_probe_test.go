@@ -150,3 +150,31 @@ func TestProviderProbeEndpointRejectsInvalidMarketAndSymbolFilters(t *testing.T)
 		}
 	}
 }
+
+
+func TestProviderProbeEndpointFiltersChecks(t *testing.T) {
+	response := performProviderProbeRequest(newProviderProbeHTTPTestHandler(), `{"scope":"all","capabilities":["quote"],"checks":["quality","connectivity"]}`, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("checks filter status=%d body=%s", response.Code, response.Body.String())
+	}
+	for _, expected := range []string{`"requested_checks":["connectivity","quality"]`, `"check":"connectivity"`, `"check":"quality"`} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Fatalf("checks response missing %s: %s", expected, response.Body.String())
+		}
+	}
+	if strings.Contains(response.Body.String(), `"check":"storage"`) {
+		t.Fatalf("unrequested checks must not appear: %s", response.Body.String())
+	}
+}
+
+func TestProviderProbeEndpointRejectsUnknownAndDuplicateChecks(t *testing.T) {
+	for _, body := range []string{
+		`{"checks":["unknown"]}`,
+		`{"checks":["quality","quality"]}`,
+	} {
+		response := performProviderProbeRequest(newProviderProbeHTTPTestHandler(), body, true)
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"code":"VALIDATION_ERROR"`) {
+			t.Fatalf("invalid checks request status=%d body=%s", response.Code, response.Body.String())
+		}
+	}
+}

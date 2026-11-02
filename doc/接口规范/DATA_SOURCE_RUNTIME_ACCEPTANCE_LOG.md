@@ -333,3 +333,13 @@ BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过
 - 创业板/科创板固定样例来源 Run `41042950111`；日 K 两侧均 degraded，成交额缺失，不可作为 matched 证据。
 - 当前覆盖率字段在 market_breadth 有显式总体分母；其他能力无可信分母时省略。
 - Live probe workflow 的最终 success 不等于所有 Provider 成功：同一批记录 Eastmoney HTTP 502、NetEase DNS/HTTP 502。
+
+
+## 24. 统一诊断 checks 过滤首批实现（2026-11-02）
+
+- 请求体新增 checks；允许 connectivity、contract、quality、freshness、cross_provider、storage；空值默认全部，未知或重复值 400。
+- 响应新增 requested_checks、check_results；历史记录通过 JSON metadata 保存新字段，旧记录缺字段仍可反序列化。
+- connectivity、contract、quality 从已有 ProviderProbeItem 和错误阶段归类；storage 根据 MariaDB 实际写入结果归类。
+- freshness 尚无按 capability 的 SLA，只记录源端时间/age_seconds，状态保持 skipped；cross_provider 尚未接入在线逐日 bars snapshot，状态保持 skipped。
+- 一个 Provider 响应被多个检查维度复用，不会按 check 数量重复调用上游。
+- 新增 HTTP/Service 单测；CI 待最新 SHA 确认。

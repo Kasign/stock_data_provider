@@ -95,6 +95,7 @@ func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string,
 type ProviderProbeOptions struct {
 	Scope          string
 	Capabilities   []string
+	Checks         []string
 	Markets        []string
 	Symbols        []string
 	TimeoutSeconds int
@@ -123,6 +124,32 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if options.TimeoutSeconds < 1 || options.TimeoutSeconds > 30 {
 		return nil, errors.New("provider-probe timeout_seconds must be between 1 and 30")
 	}
+	allowedChecks := map[string]bool{
+		"connectivity": true, "contract": true, "quality": true,
+		"freshness": true, "cross_provider": true, "storage": true,
+	}
+	selectedChecks := make(map[string]bool, len(options.Checks))
+	if len(options.Checks) == 0 {
+		for check := range allowedChecks {
+			selectedChecks[check] = true
+		}
+	} else {
+		for _, check := range options.Checks {
+			if !allowedChecks[check] {
+				return nil, fmt.Errorf("provider-probe check %q is not supported", check)
+			}
+			if selectedChecks[check] {
+				return nil, fmt.Errorf("provider-probe check %q is duplicated", check)
+			}
+			selectedChecks[check] = true
+		}
+	}
+	requestedChecks := make([]string, 0, len(selectedChecks))
+	for check := range selectedChecks {
+		requestedChecks = append(requestedChecks, check)
+	}
+	sort.Strings(requestedChecks)
+
 	allowed := make(map[string]bool, len(model.ProviderProbeCapabilities()))
 	for _, capability := range model.ProviderProbeCapabilities() {
 		allowed[capability] = true
@@ -205,7 +232,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		requested = append(requested, capability)
 	}
 	sort.Strings(requested)
-	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
+	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
 	jobs := make([]providerProbeJob, 0)
 	add := func(name, capability string, fn providerProbeFunc) {
 		jobs = append(jobs, providerProbeJob{provider: name, capability: capability, run: fn})
@@ -793,14 +820,149 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if len(jobs) == 0 {
 		run.Status = "no_capabilities_configured"
 	}
+	run.CheckResults = buildProviderProbeCheckResults(run.Items, requestedChecks)
+	if selectedChecks["storage"] && s.store == nil {
+		run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+			Check: "storage", Provider: "system", Capability: "provider_probe_history",
+			Status: "not_configured", ErrorCode: "storage_not_configured",
+			ErrorMessage: "MariaDB provider-probe history storage is not enabled", CheckedAt: run.FinishedAt,
+		})
+	}
 	if s.store != nil {
 		run.Persisted = true
 		if err := s.store.SaveProviderProbeRun(ctx, run); err != nil {
 			run.Persisted = false
+			if selectedChecks["storage"] {
+				run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+					Check: "storage", Provider: "system", Capability: "provider_probe_history",
+					Status: "failed", ErrorCode: "storage_write_failed",
+					ErrorMessage: sanitizeProbeError(err), CheckedAt: time.Now().UTC(),
+				})
+			}
 			return run, fmt.Errorf("persist provider-probe run: %w", err)
+		}
+		if selectedChecks["storage"] {
+			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+				Check: "storage", Provider: "system", Capability: "provider_probe_history",
+				Status: "passed", CheckedAt: time.Now().UTC(),
+			})
+			if err := s.store.SaveProviderProbeRun(ctx, run); err != nil {
+				run.Persisted = false
+				return run, fmt.Errorf("persist provider-probe storage check result: %w", err)
+			}
 		}
 	}
 	return run, nil
+}
+
+func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedChecks []string) []model.ProviderProbeCheckResult {
+	results := make([]model.ProviderProbeCheckResult, 0, len(items)*len(requestedChecks))
+	for _, item := range items {
+		for _, check := range requestedChecks {
+			if check == "storage" {
+				continue
+			}
+			result := model.ProviderProbeCheckResult{
+				Check: check, Provider: item.Provider, Capability: item.Capability,
+				Status: "skipped", CheckedAt: item.CheckedAt, ProviderTime: item.ProviderTime,
+			}
+			switch check {
+			case "connectivity":
+				switch item.Status {
+				case "returned", "returned_degraded", "returned_unknown":
+					result.Status = "passed"
+				case "not_configured":
+					result.Status, result.ErrorCode = "not_configured", item.ErrorCode
+				case "not_supported":
+					result.Status, result.ErrorCode = "not_supported", item.ErrorCode
+				case "skipped":
+					result.Status, result.ErrorCode = "skipped", item.ErrorCode
+				default:
+					if item.ErrorStage == "contract" || item.ErrorCode == "contract_invalid" {
+						result.Status = "passed"
+					} else {
+						result.Status, result.ErrorCode = "failed", item.ErrorCode
+					}
+				}
+			case "contract":
+				switch {
+				case item.Status == "returned" || item.Status == "returned_degraded" || item.Status == "returned_unknown":
+					result.Status = "passed"
+				case item.Status == "failed" && (item.ErrorStage == "contract" || item.ErrorCode == "contract_invalid"):
+					result.Status, result.ErrorCode = "failed", item.ErrorCode
+				case item.Status == "not_configured":
+					result.Status, result.ErrorCode = "not_configured", item.ErrorCode
+				case item.Status == "not_supported":
+					result.Status, result.ErrorCode = "not_supported", item.ErrorCode
+				default:
+					result.ErrorCode = "provider_response_unavailable"
+				}
+			case "quality":
+				switch item.Status {
+				case "returned":
+					result.Status = "passed"
+				case "returned_degraded":
+					result.Status = "degraded"
+				case "returned_unknown":
+					result.ErrorCode = "quality_unknown"
+				case "failed":
+					if item.ErrorStage == "contract" || item.ErrorCode == "contract_invalid" {
+						result.ErrorCode = "contract_failed_before_quality_check"
+					} else {
+						result.Status, result.ErrorCode = "failed", item.ErrorCode
+					}
+				case "not_configured":
+					result.Status, result.ErrorCode = "not_configured", item.ErrorCode
+				case "not_supported":
+					result.Status, result.ErrorCode = "not_supported", item.ErrorCode
+				default:
+					result.ErrorCode = item.ErrorCode
+				}
+			case "freshness":
+				if item.ProviderTime == nil || item.ProviderTime.IsZero() {
+					result.ErrorCode = "provider_time_unavailable"
+					break
+				}
+				age := int64(item.CheckedAt.Sub(*item.ProviderTime).Seconds())
+				result.AgeSeconds = &age
+				if age < 0 {
+					result.Status, result.ErrorCode = "degraded", "provider_time_in_future"
+				} else {
+					// 没有按能力定义 freshness SLA 前，只报告时间证据，不宣称数据新鲜。
+					result.ErrorCode = "freshness_sla_not_configured"
+				}
+			case "cross_provider":
+				// 当前 ProviderProbeItem 仅保存摘要；真实跨源对账由黄金夹具比较器单独执行。
+				result.ErrorCode = "cross_provider_snapshot_not_captured"
+			}
+			if result.Status == "skipped" && result.ErrorMessage == "" {
+				result.ErrorMessage = providerProbeCheckMessage(result.ErrorCode)
+			}
+			results = append(results, result)
+		}
+	}
+	return results
+}
+
+func providerProbeCheckMessage(code string) string {
+	switch code {
+	case "provider_response_unavailable":
+		return "Provider response unavailable; contract check was not run"
+	case "quality_unknown":
+		return "Provider quality is unknown"
+	case "provider_time_unavailable":
+		return "Provider did not supply a source timestamp"
+	case "freshness_sla_not_configured":
+		return "Source timestamp is recorded, but no capability-specific freshness SLA is configured"
+	case "provider_time_in_future":
+		return "Provider timestamp is later than the local check time"
+	case "cross_provider_snapshot_not_captured":
+		return "Cross-provider snapshots are not yet captured by the live probe pipeline"
+	case "contract_failed_before_quality_check":
+		return "Quality check was not run because the response contract failed"
+	default:
+		return ""
+	}
 }
 
 func isUnsupportedBeijingProbeError(err error) bool {

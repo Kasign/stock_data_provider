@@ -40,11 +40,25 @@ type ProviderProbeItem struct {
 	CheckedAt         time.Time     `json:"checked_at"`
 }
 
+// ProviderProbeCheckResult 是从一次 Provider 响应中提取的独立诊断维度。
+type ProviderProbeCheckResult struct {
+	Check        string    `json:"check"`
+	Provider     string    `json:"provider,omitempty"`
+	Capability   string    `json:"capability,omitempty"`
+	Status       string    `json:"status"`
+	ErrorCode    string    `json:"error_code,omitempty"`
+	ErrorMessage string    `json:"error_message,omitempty"`
+	ProviderTime *time.Time `json:"provider_time,omitempty"`
+	AgeSeconds   *int64    `json:"age_seconds,omitempty"`
+	CheckedAt    time.Time `json:"checked_at"`
+}
+
 // ProviderProbeRun 是隔离于业务流量的主动探测批次。
-type ProviderProbeRun struct {
 	RunID                 string              `json:"run_id"`
 	Scope                 string              `json:"scope,omitempty"`
 	RequestedCapabilities []string            `json:"requested_capabilities,omitempty"`
+	RequestedChecks       []string            `json:"requested_checks,omitempty"`
+	CheckResults          []ProviderProbeCheckResult `json:"check_results,omitempty"`
 	RequestedMarkets      []string            `json:"requested_markets,omitempty"`
 	RequestedSymbols      []string            `json:"requested_symbols,omitempty"`
 	TimeoutSeconds        int                 `json:"timeout_seconds,omitempty"`

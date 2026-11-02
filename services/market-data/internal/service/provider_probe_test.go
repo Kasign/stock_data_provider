@@ -316,3 +316,62 @@ func TestRecordProviderProbeCoverageCountsPreservesDenominator(t *testing.T) {
 		t.Fatalf("inconsistent coverage counts must not overwrite valid evidence: %+v", evidence)
 	}
 }
+
+
+func TestProviderProbeChecksFilterAndPreserveUnimplementedEvidence(t *testing.T) {
+	p := providerProbeQuoteFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"quality", "connectivity", "freshness", "cross_provider"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	if strings.Join(run.RequestedChecks, ",") != "connectivity,cross_provider,freshness,quality" {
+		t.Fatalf("requested checks were not normalized: %+v", run.RequestedChecks)
+	}
+	statuses := map[string]string{}
+	for _, result := range run.CheckResults {
+		statuses[result.Check] = result.Status
+	}
+	if statuses["connectivity"] != "passed" || statuses["quality"] != "passed" {
+		t.Fatalf("connectivity/quality check result is incorrect: %+v", run.CheckResults)
+	}
+	if statuses["freshness"] != "skipped" || statuses["cross_provider"] != "skipped" {
+		t.Fatalf("checks without configured SLA/snapshot must remain explicitly skipped: %+v", run.CheckResults)
+	}
+	if len(run.CheckResults) != 4 {
+		t.Fatalf("checks filter should return only four requested dimensions, got %+v", run.CheckResults)
+	}
+}
+
+func TestProviderProbeRejectsUnknownOrDuplicateChecks(t *testing.T) {
+	for _, checks := range [][]string{{"unknown"}, {"quality", "quality"}} {
+		_, err := (&DataService{}).ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+			Scope: "all", Capabilities: []string{"quote"}, Checks: checks, TimeoutSeconds: 5,
+		})
+		if err == nil {
+			t.Fatalf("invalid checks %v should be rejected", checks)
+		}
+	}
+}
+
+func TestBuildProviderProbeCheckResultsClassifiesNetworkAndContractFailures(t *testing.T) {
+	now := time.Now().UTC()
+	items := []model.ProviderProbeItem{
+		{Provider: "network", Capability: "quote", Status: "failed", ErrorCode: "network_error", ErrorStage: "connect", CheckedAt: now},
+		{Provider: "contract", Capability: "quote", Status: "failed", ErrorCode: "contract_invalid", ErrorStage: "contract", CheckedAt: now},
+	}
+	results := buildProviderProbeCheckResults(items, []string{"connectivity", "contract"})
+	if len(results) != 4 {
+		t.Fatalf("unexpected check result count: %+v", results)
+	}
+	got := map[string]string{}
+	for _, result := range results {
+		got[result.Provider+"/"+result.Check] = result.Status
+	}
+	if got["network/connectivity"] != "failed" || got["network/contract"] != "skipped" ||
+		got["contract/connectivity"] != "passed" || got["contract/contract"] != "failed" {
+		t.Fatalf("unexpected check classification: %+v", results)
+	}
+}

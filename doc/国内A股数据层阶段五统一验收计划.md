@@ -673,3 +673,15 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - 已移除 `live_market_golden_test.go` 的多余空行；本次修复 SHA 的完整 Go suite 与 Docker 结果待新 Actions 确认。
 
 **下一开发项：** 实现统一诊断 checks 过滤。先完成请求校验、响应回显、向后兼容和独立检查结果模型设计，再按 connectivity/contract/quality/freshness/cross_provider/storage 拆分执行，不能只增加一个未生效的请求字段，也不能为每个 check 重复请求上游。
+
+
+### 2026-11-02：统一诊断 checks 过滤首批实现
+
+- `POST /api/v1/data-sources/probe` 新增 `checks` 白名单：connectivity、contract、quality、freshness、cross_provider、storage。
+- 空 checks 保持兼容，默认选择全部六类；未知值、重复值返回 400；响应回显排序后的 requested_checks，并输出 check_results。
+- 单次 Provider 请求结果被多个检查维度复用，不会按 check 数量重复请求上游。
+- connectivity/contract/quality 根据已有 Provider 结果和错误阶段分类；storage 在 MariaDB 写入成功后标记 passed，未配置存储标记 not_configured。
+- freshness 当前只记录 ProviderTime 和 age_seconds；尚未定义各能力的 freshness SLA，因此即使有时间戳也保持 skipped（freshness_sla_not_configured），不能将“有时间戳”当作“数据新鲜”。
+- cross_provider 当前明确 skipped（cross_provider_snapshot_not_captured）：线上诊断 job 尚未把逐日 K 线样本传入比较器。固定黄金夹具仍独立覆盖比较器，不伪装成在线跨源诊断。
+- 当前 checks 是诊断结果维度过滤，不会减少所选 capability 的 Provider 请求；后续可在异步诊断任务中按 check 精确规划数据采集范围。
+- 新增 Service/HTTP 测试覆盖默认/指定 checks、未知/重复值、分类和未实现能力显式 skipped。完整 Go suite 与 Docker 结果以本提交 SHA 的 Actions 为准。

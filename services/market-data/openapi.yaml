@@ -581,6 +581,19 @@ components:
           type: array
           items: {type: string}
 
+    ProviderProbeCheckResult:
+      type: object
+      required: [check, status, checked_at]
+      properties:
+        check: {type: string, enum: [connectivity, contract, quality, freshness, cross_provider, storage]}
+        provider: {type: string}
+        capability: {type: string}
+        status: {type: string, enum: [passed, degraded, skipped, failed, not_configured, not_supported]}
+        error_code: {type: string}
+        error_message: {type: string}
+        provider_time: {type: string, format: date-time, nullable: true}
+        age_seconds: {type: integer, description: Source timestamp age; does not imply freshness SLA passed}
+        checked_at: {type: string, format: date-time}
     ProviderProbeItem:
       type: object
       required: [provider, capability, status, elapsed_ms, quality_status, checked_at]
@@ -624,6 +637,11 @@ components:
           maxItems: 1
           description: One explicit A-share symbol per request, format 600519.SH/000001.SZ/920001.BJ
           items: {type: string, pattern: '^\d{6}\.(SH|SZ|BJ)$'}
+        checks:
+          type: array
+          uniqueItems: true
+          description: Diagnostic dimensions to return. Empty means all dimensions; provider fetches are reused and are not repeated per check.
+          items: {type: string, enum: [connectivity, contract, quality, freshness, cross_provider, storage]}
         capabilities:
           type: array
           uniqueItems: true
@@ -638,6 +656,8 @@ components:
         run_id: {type: string}
         scope: {type: string, enum: [all, core]}
         requested_capabilities: {type: array, items: {type: string}}
+        requested_checks: {type: array, items: {type: string, enum: [connectivity, contract, quality, freshness, cross_provider, storage]}}
+        check_results: {type: array, items: {$ref: '#/components/schemas/ProviderProbeCheckResult'}}
         requested_markets: {type: array, items: {type: string, enum: [SH_MAIN, SZ_MAIN, CHINEXT, STAR, BSE]}}
         requested_symbols: {type: array, items: {type: string}}
         timeout_seconds: {type: integer, minimum: 1, maximum: 30}
