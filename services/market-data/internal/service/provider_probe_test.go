@@ -724,3 +724,22 @@ func TestApplyFreshnessProbeResultsKeepsMissingMarketEvidenceUnknown(t *testing.
 		t.Fatalf("missing calendar evidence must not be reported fresh: %+v", result)
 	}
 }
+
+
+// TestRecordProviderProbeFetchedAtKeepsCollectionTimeSeparateFromSourceTime.
+func TestRecordProviderProbeFetchedAtKeepsCollectionTimeSeparateFromSourceTime(t *testing.T) {
+	evidence := &providerProbeEvidence{}
+	ctx := context.WithValue(context.Background(), providerProbeEvidenceContextKey{}, evidence)
+	fetchedAt := time.Date(2026, 11, 3, 10, 0, 2, 0, time.UTC)
+	recordProviderProbeFetchedAt(ctx, fetchedAt)
+	if evidence.fetchedAt == nil || !evidence.fetchedAt.Equal(fetchedAt) {
+		t.Fatalf("collection timestamp was not captured: %+v", evidence)
+	}
+	if evidence.providerTime != nil || evidence.providerTimeType != "" {
+		t.Fatalf("collection timestamp must not be promoted to source timestamp: %+v", evidence)
+	}
+	recordProviderProbeFetchedAt(ctx, time.Time{})
+	if evidence.fetchedAt == nil || !evidence.fetchedAt.Equal(fetchedAt) {
+		t.Fatalf("zero collection timestamp must not erase valid evidence: %+v", evidence)
+	}
+}

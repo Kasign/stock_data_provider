@@ -474,6 +474,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if snapshot != nil {
 				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, len(snapshot.Items), len(snapshot.Items), nil)
+				recordProviderProbeFetchedAt(probeCtx, snapshot.FetchedAt)
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
@@ -490,6 +491,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if err := validateMarketCapitalFlowSnapshot(start.Format("2006-01-02"), end.Format("2006-01-02"), snapshot); err != nil {
 				return model.QualityInvalid, "", nil, err
+			}
+			if snapshot != nil {
+				recordProviderProbeFetchedAt(probeCtx, snapshot.FetchedAt)
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, []string{"market_capital_flow_history_probe"}, nil
 		})

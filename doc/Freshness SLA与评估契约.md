@@ -157,3 +157,11 @@ Freshness Evaluator 的特殊交易样例采用显式上下文输入，不在 ev
 - Freshness 纯函数测试覆盖开盘集合竞价、竞价暂停、午休、非交易日、全天停牌、盘中临停、复牌、收盘集合竞价和源端时间超前。
 - 新股首日当前没有独立、可信的首日交易状态输入，因此明确不设置隐式宽限期；测试使用超过普通 Quote SLA 的源端时间，预期 stale，避免“新股”名称成为放宽质量门禁的理由。
 - 最新测试批次首次 CI 在 gofmt 前置检查失败，原因仅为测试文件末尾多余空行和结构体字段对齐；market-data 单测与 Docker 镜像构建均未执行到编译阶段。已按 gofmt 差异修正，并增加收盘集合竞价及新股无隐式宽限期断言。修复后结果以新 SHA 的 Actions 为准。
+
+
+## 13. 非实时数据域采集时间证据补齐
+
+- Sector Rankings 和 Market Capital Flow 的 Provider 响应对象已有明确的 `FetchedAt`，主动诊断现在将其记录到对应 ProviderProbeItem，并通过构建 CheckResult 的既有路径传递到 freshness 诊断项。
+- 这两个能力仍不提供可证明的精确源端更新时间：行业报告日期、资金流交易日期属于业务日期，不会提升为 `provider_time`；因此 Freshness 仍应为 unknown（source_time_missing），而不是因刚刚采集就判 fresh。
+- 增加采集时间记录器单测，确保 FetchedAt 不会被提升为 provider_time，零值也不会覆盖已有有效采集时间。
+- 当前明确可记录采集时间的响应域包括 Quote、Index、Market Breadth、Sector Rankings、Market Capital Flow；没有响应级采集时间字段的能力继续留空。
