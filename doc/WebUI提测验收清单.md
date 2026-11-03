@@ -586,4 +586,5 @@
 
 - [x] 浏览器数据导入的最近任务冲突判断与合并统一按 `task_id + analysis_base` 识别，避免不同分析服务的同 ID 任务相互覆盖。
 - [x] 增加跨分析服务同 ID 保留、同服务同 ID 覆盖的回归测试。
-- [ ] 本次修复的 WebUI Checks 与 Chromium Browser Smoke 待执行；通过前不标记自动化验收完成。
+- [x] WebUI Checks 通过（[运行记录 #41607602502](https://github.com/Kasign/stock_data_provider/actions/runs/41607602502)）。
+- [x] Chromium Browser Smoke 通过（[运行记录 #41607602571](https://github.com/Kasign/stock_data_provider/actions/runs/41607602571)）。
