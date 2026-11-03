@@ -632,4 +632,5 @@
 - [x] 指定服务删除时不会误删空服务地址或其他服务的同 ID 任务。
 - [x] 保留未指定服务时按 task_id 清理的原有行为。
 - [x] 增加任务身份回归测试。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待本次提交 CI 验证。
+- [x] WebUI Checks 成功（[运行记录 #41613627437](https://github.com/Kasign/stock_data_provider/actions/runs/41613627437)）。
+- [x] Chromium Browser Smoke 成功（[运行记录 #41613627591](https://github.com/Kasign/stock_data_provider/actions/runs/41613627591)）。
