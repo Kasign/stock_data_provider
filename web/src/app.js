@@ -5446,6 +5446,18 @@ async function importBrowserDataFile(file) {
   const currentWatchlist = safeReadWatchlistState();
   const currentRecentTasks = safeReadRecentTasksState();
   const currentWatchlistGroups = readWatchlistGroups(safeWatchlistGroupStorage());
+  // 预览与确认之间可能有其他标签页修改本地数据；合并前必须确认参与合并的快照未变化。
+  let previewStorageSnapshot;
+  try {
+    previewStorageSnapshot = new Map([
+      [WATCHLIST_KEY, localStorage.getItem(WATCHLIST_KEY)],
+      [WATCHLIST_GROUPS_KEY, localStorage.getItem(WATCHLIST_GROUPS_KEY)],
+      [RECENT_TASKS_KEY, localStorage.getItem(RECENT_TASKS_KEY)]
+    ]);
+  } catch (error) {
+    setBrowserDataFeedback("导入预览失败：无法读取当前浏览器数据快照。" + (error?.message || ""), "error");
+    return;
+  }
   const currentWatchlistItems = currentWatchlist.storageReadable && currentWatchlist.storageValid ? currentWatchlist.items : [];
   const currentRecentTaskItems = currentRecentTasks.storageReadable && currentRecentTasks.storageValid ? currentRecentTasks.items : [];
   const watchlistIdentity = (record) => comparableMarketSymbol(record.symbol);
@@ -5461,11 +5473,24 @@ async function importBrowserDataFile(file) {
     !currentWatchlistGroups.readable || !currentWatchlistGroups.valid;
   $("#browser-data-import-merge").disabled = mergeDisabled;
   $("#browser-data-import-merge-hint").textContent = mergeDisabled ? "当前自选股、分组或最近任务存储不可读取/格式异常，禁止合并以避免覆盖未知数据。" : "按股票代码和任务 ID 去重，导入文件中的同标识记录覆盖当前记录。";
-  pendingBrowserImport = { imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups };
+  pendingBrowserImport = { imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups, previewStorageSnapshot };
   if (!$("#browser-data-import-dialog").open) $("#browser-data-import-dialog").showModal();
 }
 
-async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups, strategy) {
+async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups, strategy, previewStorageSnapshot) {
+  if (strategy === "merge") {
+    try {
+      for (const [key, expectedValue] of previewStorageSnapshot || []) {
+        if (localStorage.getItem(key) !== expectedValue) {
+          setBrowserDataFeedback("合并已取消：预览后本地自选股、分组或任务引用发生变化，请重新选择文件并预览后再合并。当前数据未被修改。", "error");
+          return;
+        }
+      }
+    } catch (error) {
+      setBrowserDataFeedback("合并已取消：无法重新确认本地数据快照。" + (error?.message || ""), "error");
+      return;
+    }
+  }
   const currentWatchlistItems = currentWatchlist.storageReadable && currentWatchlist.storageValid ? currentWatchlist.items : [];
   const currentRecentTaskItems = currentRecentTasks.storageReadable && currentRecentTasks.storageValid ? currentRecentTasks.items : [];
   const watchlistIdentity = (record) => comparableMarketSymbol(record.symbol);
@@ -5694,13 +5719,13 @@ $("#browser-data-import-dialog").addEventListener("close", () => {
 $("#browser-data-import-replace").addEventListener("click", async () => {
   if (!pendingBrowserImport) return;
   const pending = pendingBrowserImport; pendingBrowserImport = null; $("#browser-data-import-dialog").close();
-  try { await applyBrowserDataImport(pending.imported, pending.currentWatchlist, pending.currentRecentTasks, pending.currentWatchlistGroups, "replace"); }
+  try { await applyBrowserDataImport(pending.imported, pending.currentWatchlist, pending.currentRecentTasks, pending.currentWatchlistGroups, "replace", pending.previewStorageSnapshot); }
   catch (error) { setBrowserDataFeedback("导入失败：" + (error?.message || "本地数据写入异常。"), "error"); }
 });
 $("#browser-data-import-merge").addEventListener("click", async () => {
   if (!pendingBrowserImport) return;
   const pending = pendingBrowserImport; pendingBrowserImport = null; $("#browser-data-import-dialog").close();
-  try { await applyBrowserDataImport(pending.imported, pending.currentWatchlist, pending.currentRecentTasks, pending.currentWatchlistGroups, "merge"); }
+  try { await applyBrowserDataImport(pending.imported, pending.currentWatchlist, pending.currentRecentTasks, pending.currentWatchlistGroups, "merge", pending.previewStorageSnapshot); }
   catch (error) { setBrowserDataFeedback("合并失败：" + (error?.message || "本地数据写入异常。"), "error"); }
 });
 document.querySelectorAll("[data-watchlist-field-order-move]").forEach((button) => {

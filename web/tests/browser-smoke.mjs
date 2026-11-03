@@ -1817,6 +1817,18 @@ try {
           ], "Escape must not modify the current watchlist");
 
           await uploadWorkspace(mergeFile);
+          await page.evaluate((key) => {
+            const current = JSON.parse(localStorage.getItem(key));
+            current.push({ symbol: "000002.SZ", name: "预览后新增", updated_at: "2026-11-03T00:00:00Z" });
+            localStorage.setItem(key, JSON.stringify(current));
+          }, keys.watchlist);
+          await page.locator("#browser-data-import-merge").click();
+          await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
+          const stalePreviewFeedback = await page.locator("#browser-data-feedback").textContent();
+          assert.match(stalePreviewFeedback, /预览后本地.*发生变化.*重新选择文件/, "stale merge preview must be rejected: " + stalePreviewFeedback);
+          assert.equal(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).length, keys.watchlist), 2, "stale merge must preserve changes made after preview");
+
+          await uploadWorkspace(mergeFile);
           await page.locator("#browser-data-import-merge").click();
           await page.waitForFunction(() => document.querySelector("#browser-data-import-dialog")?.open === false);
           const mergeFeedback = await page.locator("#browser-data-feedback").textContent();
@@ -1829,7 +1841,8 @@ try {
             researchNotes: JSON.parse(localStorage.getItem(keys.researchNotes))
           }), keys);
           assert.equal(merged.settings.apiKey, "browser-test-key", "merge must preserve the current API Key");
-          assert.equal(merged.watchlist.length, 2);
+          assert.equal(merged.watchlist.length, 3, "merge must retain records added after the stale preview was rejected");
+          assert.ok(merged.watchlist.some((item) => item.symbol === "000002.SZ"), "merge must preserve the post-preview local addition");
           assert.equal(merged.watchlist.find((item) => item.symbol.replace(/\\.(SH|SZ|BJ)$/, "") === "600519")?.name, "导入名称");
           assert.equal(merged.tasks.length, 2);
           assert.equal(merged.tasks.find((item) => item.task_id === "task-1")?.status, "succeeded");
