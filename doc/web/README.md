@@ -12,4 +12,4 @@
 - [WebUI 与 Go 数据层 API 缺口及字段契约整改清单](../接口规范/webui-api-contract-gaps.md)。
 - [数据层 API 接口清单与 WebUI 接入映射](../数据层API清单.md)。
 - 行情服务权威契约：../../services/market-data/openapi.yaml。
-- WebUI 实际请求契约：../../web/API_CONTRACT.md。
+- [WebUI 实际请求契约](./API_CONTRACT.md)。

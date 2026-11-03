@@ -52,7 +52,7 @@ WebUI 使用独立的 `analysisBase` 调用：
 - `GET /api/v1/analysis/runs/{run_id}`：读取分析结果。
 - 健康检查：`GET /healthz`、`GET /readyz`。
 
-这些路径属于分析服务，不属于行情服务 `server.go`。分析任务接口的字段契约以 `doc/接口规范/分析任务.openapi.yaml` 为准。
+这些路径属于分析服务，不属于行情服务 `server.go`。分析任务接口的字段契约以 `doc/api/分析任务.openapi.yaml` 为准。
 
 ## 4. 设置中心能力状态
 
