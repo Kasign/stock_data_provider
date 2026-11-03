@@ -74,7 +74,8 @@
 - [x] 结果行展示判断状态及质量原因；字段缺失仍进入待判断，不补零。
 - [x] 条件变化或载入方案后清除旧结果，必须重新应用当前页筛选。
 - [x] 清空条件只清理当前草稿，不删除本地已保存方案。
-- [ ] WebUI Checks 与 Chromium Browser Smoke：待本批验收。
+- [x] WebUI Checks：359/359 单元测试、JavaScript 语法、Compose 校验和 Nginx 镜像构建通过（[运行记录 #41597685605](https://github.com/Kasign/stock_data_provider/actions/runs/41597685605)）。
+- [x] Chromium Browser Smoke：本地筛选专项及全站既有专项通过（[运行记录 #41597685636](https://github.com/Kasign/stock_data_provider/actions/runs/41597685636)）。
 
 ## 2.3 研究记录与报告归档验收
 
