@@ -12,13 +12,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/baostock"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/cache"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/config"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/httpapi"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/repository"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/service"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/baostock"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/cache"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/config"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/httpapi"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/provider"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/repository"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/service"
 )
 
 func main() {

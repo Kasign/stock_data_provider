@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/domain"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/ports"
+	"github.com/Kasign/stock_data_provider/go-core/internal/domain"
+	"github.com/Kasign/stock_data_provider/go-core/internal/ports"
 )
 
 const (

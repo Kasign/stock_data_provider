@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 // fetchSectorRankings5D calculates five-trading-session return from each board's

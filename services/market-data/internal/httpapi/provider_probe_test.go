@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/cache"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/service"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/cache"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/service"
 )
 
 func newProviderProbeHTTPTestHandler() http.Handler {

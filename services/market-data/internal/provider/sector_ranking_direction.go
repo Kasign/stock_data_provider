@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 // sortSectorRankingSnapshot 保持旧调用兼容，默认按涨跌幅排序。

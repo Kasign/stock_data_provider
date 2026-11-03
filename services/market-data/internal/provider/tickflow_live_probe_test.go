@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 // TestLiveTickFlowCapabilities 是 TickFlow 已实现但默认关闭能力的独立真实请求验收入口。

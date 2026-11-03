@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 func floatPointer(value float64) *float64 { return &value }

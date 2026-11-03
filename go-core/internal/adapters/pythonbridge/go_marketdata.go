@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/marketdatahttp"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/domain"
+	"github.com/Kasign/stock_data_provider/go-core/internal/adapters/marketdatahttp"
+	"github.com/Kasign/stock_data_provider/go-core/internal/domain"
 )
 
 // GoMarketDataAdapter 将原生 Go 行情服务作为实时行情与日 K 的唯一来源，

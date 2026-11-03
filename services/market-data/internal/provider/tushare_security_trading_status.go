@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
 )
 
 const tushareSecurityTradingStatusVersion = "tushare-stock-st-namechange-suspend-d-trade-cal-v2"

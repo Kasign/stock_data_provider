@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/market"
+	"github.com/Kasign/stock_data_provider/go-core/internal/market"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/domain"
+	"github.com/Kasign/stock_data_provider/go-core/internal/domain"
 )
 
 func BuildStockContext(bundle domain.StockBundle, technical domain.TechnicalSnapshot, news []domain.NewsItem, asOf string) domain.AnalysisContext {

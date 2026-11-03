@@ -1,4 +1,4 @@
-module github.com/ZhuLinsen/daily_stock_analysis/services/market-data
+module github.com/Kasign/stock_data_provider/services/market-data
 
 go 1.23.0
 

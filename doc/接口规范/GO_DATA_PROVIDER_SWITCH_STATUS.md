@@ -104,3 +104,17 @@ Go 原生行情服务已覆盖国内 A 股多个主要数据域，具有独立 P
 | 板块近五日涨幅排行 | Provider/服务/API 已实现 | 拉取完整板块候选集，逐板块取六个日线收盘价计算；本轮修复 HTTP 与服务层对 `change_5d` 的参数拒绝，并补充端到端路由测试 |
 | 市场级资金流 | 已实现代码路径 | Tushare `moneyflow_mkt_dc` 日期区间查询；缺失字段保留 null，未暴露精确快照时间时保持 degraded；真实 Token/单位对账待验收 |
 | 严格 PIT | 未实现 | 财务修订、历史成分生效区间、公司行动与 available_at 仍需独立建设 |
+
+
+## 8. Go 模块路径身份迁移（2026-11-03）
+
+| 模块 | 迁移前 | 迁移后 |
+|---|---|---|
+| go-core | `github.com/ZhuLinsen/daily_stock_analysis/go-core` | `github.com/Kasign/stock_data_provider/go-core` |
+| market-data | `github.com/ZhuLinsen/daily_stock_analysis/services/market-data` | `github.com/Kasign/stock_data_provider/services/market-data` |
+
+- 已按完整 Git Tree 扫描全部 Go 文件及构建、部署、配置、文档文件；182 个 Go 文件的旧 import 已替换。
+- 根模块 `example.com/stock-analysis-flow` 与两个独立模块没有模块依赖关系，本次不修改根模块声明。
+- Docker 构建上下文分别位于独立模块目录，现有 Dockerfile 无需因模块路径变化调整。
+- 迁移验收脚本增加旧模块路径扫描和新模块声明检查。
+- 当前状态：代码与文档已整理，等待提交后 CI 全量验收；在最新 SHA 的测试、静态检查和镜像构建全部通过前，不宣布迁移最终完成。

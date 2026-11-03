@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/marketdatahttp"
+	"github.com/Kasign/stock_data_provider/go-core/internal/adapters/marketdatahttp"
 )
 
 func TestMarketDataAdapterOmitsEmptyAsOfFromLegacyRequests(t *testing.T) {

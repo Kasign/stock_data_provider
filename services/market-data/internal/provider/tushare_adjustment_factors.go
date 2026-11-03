@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 // FetchAdjustmentFactors 暴露 Tushare 原始 adj_factor，不在 Provider 层将因子折算成价格。

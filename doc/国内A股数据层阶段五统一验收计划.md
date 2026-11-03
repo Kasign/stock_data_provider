@@ -1058,13 +1058,17 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 该问题已由提交 `16e5a957404c822a0ec0542dda9fbe2813762dae` 修正：测试按解析阶段与公共校验阶段分别声明错误文本，不修改行情校验逻辑和质量门禁。
 - 2026-11-03 当前 HEAD `986162438824f895d50fbe31ac24225c10c9548b` 的 Go test suite（含 market-data、race、vet）、Docker 构建、Go/Python 质量契约、Live Provider probe 和 WebUI checks 均已通过。用户提供的同类失败日志不能代表该 HEAD 的当前构建状态。
 
-### Go 模块路径清理（待执行，独立任务）
+### Go 模块路径清理（代码迁移已完成，等待构建验收）
 
-- `services/market-data/go.mod` 声明的模块路径仍为 `github.com/ZhuLinsen/daily_stock_analysis/services/market-data`；`go-core/go.mod` 也沿用 `github.com/ZhuLinsen/daily_stock_analysis/go-core`。
-- 这是 Go 模块标识和包导入路径，不是 Docker 文件系统路径；它会直接显示在 Go test/build 输出中。
-- 当前仓库归属为 `github.com/Kasign/stock_data_provider`，旧路径来自上游/旧项目代码沿用，不应继续作为本仓库的模块身份。
-- 后续应先完整盘点两个独立 Go module 的源码 import、CI、Docker 构建、脚本和文档引用，再统一迁移为当前仓库路径；不得只改 go.mod 的 module 行，也不得遗漏跨模块依赖。
-- 此项与 Tencent 测试失败无关，不影响当前已通过的构建；完成全量引用盘点和迁移回归后再关闭。
+- `go-core/go.mod` 已迁移为 `github.com/Kasign/stock_data_provider/go-core`。
+- `services/market-data/go.mod` 已迁移为 `github.com/Kasign/stock_data_provider/services/market-data`。
+- 根模块 `go.mod` 使用独立的 `example.com/stock-analysis-flow` 标识，不属于本次两个独立模块的迁移范围，保持不变。
+- 基于 GitHub Git Trees API 获取完整递归 Tree：475 个条目，`truncated=false`；扫描全部 275 个 Go 文件及 128 个非 Go 文件。
+- 已统一替换 182 个 Go 源码/测试文件中的旧模块 import；两个 go.mod 已更新。go.sum 无自引用模块记录，无需修改。
+- Dockerfile、Compose、GitHub Actions 和部署脚本未发现旧模块路径硬编码；现有 CI 已分别覆盖根模块、go-core、market-data 的测试、race、vet，并构建两个 Go 镜像。
+- `scripts/verify-go-migration.sh` 增加旧 Go 模块路径残留检查及新 module 声明断言。
+- 文档中对原 Python 项目 `Kasign/daily_stock_analysis` 的历史来源说明保留，不将项目历史名称误判为 Go module import。
+- 本记录对应迁移代码批次；提交后仍须以最新 SHA 的 Go test/race/vet、质量契约和 Docker 构建结果作为最终验收依据。
 
 
 ## 2026-11-03 Pytdx Quote 原始结构化字段诊断补齐

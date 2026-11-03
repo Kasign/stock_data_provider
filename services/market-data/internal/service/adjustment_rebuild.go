@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 // rebuildAdjustedDailyBars 仅使用同一来源版本、且系统观察与市场可用时间均已证明的因子重建价格。
