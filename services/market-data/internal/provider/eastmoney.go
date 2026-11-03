@@ -1296,6 +1296,9 @@ func calculateEastmoneyChipMetrics(rows []eastmoneyChipKline) (eastmoneyChipMetr
 }
 
 func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
@@ -1403,7 +1406,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	// 使用实际发给上游的查询区间（包括自动计算的回溯起始日）过滤结果。
 	startISO := beg[:4] + "-" + beg[4:6] + "-" + beg[6:]
 	endISO := end[:4] + "-" + end[4:6] + "-" + end[6:]
-	bars, normalizeErr := normalizeProviderDailyBars(symbol, startISO, endISO, limit, out, rejectedRows)
+	bars, normalizeErr := normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, out, rejectedRows)
 	if normalizeErr != nil {
 		return nil, normalizeErr
 	}

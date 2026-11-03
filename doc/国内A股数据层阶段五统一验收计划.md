@@ -1109,3 +1109,21 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 本批最新 SHA 的 Go test suite（含 gofmt、单测、race、vet）、Go/Python 质量契约、MariaDB/PIT 集成、Docker 两镜像构建和 WebUI checks 通过；Live Provider probe 因 Eastmoney 多个接口 HTTP 502 失败，NetEase 网络异常被跳过，属于外部源可用性问题，不代表代码验收失败。
 
 **剩余工作：** Quote Provider 字段诊断覆盖已完成；下一阶段转入 DailyBar 边界质量审计（复权基准、停牌、非交易日、部分 K 线、日期边界、重复问题计数），再审计 Fundamentals / Valuations。Go 模块路径迁移仍作为独立待办，不与本批混做。
+
+
+
+### 2026-11-03：DailyBar 统一诊断边界审计启动
+
+**当前公共校验链路：**
+- `normalize.ValidateAndSortBarsWithReport` 在去重、过滤、排序前，对原始行执行 `validation.ValidateDailyBar`，报告证券身份、交易日期、请求区间、周期、OHLC、成交量/成交额单位与质量状态问题。
+- `normalizeProviderDailyBarsWithReport` 额外记录重复交易日、Provider 解析阶段拒绝行数量，并把问题合并到请求级 Reporter；仅超过 limit 的正常截断不降级。
+- 已核对 BaoStock、Tencent、Sina、NetEase、Yahoo、Pytdx、Hithink 等适配器存在上下文报告归一化路径；Eastmoney 和 Tushare 此前调用无 context 的兼容包装，导致诊断报告未进入当前请求 Reporter。本批已切换为传递请求 context 的 WithReport 入口，不改变返回数据和既有硬失败策略。
+
+**下一步重点核查：**
+1. 复权基准：请求口径、Provider 实际返回口径、调整因子来源/参考日/观测时间是否一致；禁止把未知复权数据标记为已复权。
+2. 停牌与非交易日：必须结合交易日历/证券状态判断；不能把无 K 线行直接认定为停牌，也不能把正常周末/节假日当缺失交易日。
+3. 部分 K 线：检查 `IsPartial` 与当日未收盘行情的处理；历史日线不能误把盘中未完成 bar 当完整日线。
+4. 日期边界：Asia/Shanghai 本地日期、开始/结束包含语义、自动回溯范围、Provider 超界返回和未来日期拒绝保持一致。
+5. 重复问题计数：区分解析拒绝、重复交易日、规范化丢弃和 limit 截断，避免重复统计同一行或漏掉原始行索引。
+
+当前只完成 Eastmoney/Tushare Reporter context 接入；上述边界审计尚未完成，不宣布 DailyBar 质量验收通过。
