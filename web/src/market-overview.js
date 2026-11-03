@@ -116,13 +116,13 @@ function renderSectors(data,metric="change",direction="up",requestedLimit=10) {
  else{items.forEach(item=>{const tr=document.createElement("tr");cell(tr,item.rank===null||item.rank===undefined?"—":count(item.rank),"market-rank-cell");const name=el("td");name.append(el("strong","market-table-primary",item.name||"名称未报告"),el("small","market-table-secondary",item.code||"代码未报告"));tr.append(name);const metricValue=sortBy==="amount"?finiteNumberOrNull(item.amount):sortBy==="change_5d"?item.change_percent_5d:item.change_percent;cell(tr,sectorMetricValue(item,sortBy),sortBy==="amount"?"market-rank-cell":dir(metricValue));cell(tr,item.leading_stock||"—");cell(tr,formatPercent(item.leader_change_percent),dir(item.leader_change_percent));root.append(tr);});badge("market-sector-status",qualityLabel(data.quality_status),"quality",data.quality_status);}
  meta("market-sector-meta",[(data?.category==="concept"?"概念":"行业")+"排行","排序维度 "+sortLabel,directionLabel,"请求上限 "+count(requestedLimit)+" 条","实际返回 "+count(items.length)+" 条","源端总数 "+count(data?.total),"来源 "+(data?.source||"未报告"),"源端日期 "+(data?.provider_report_date||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);qualityReasons("market-sector-reasons",data?.quality_reasons);
 }
-function renderPool(data) {
+function renderPool(data,requestedLimit=30) {
  const root=$("#market-pool-body"),items=Array.isArray(data?.items)?data.items.filter(v=>v&&typeof v==="object"):[ ];root.replaceChildren();
  if(!items.length){tableMessage(root,data?.has_data===false?"服务端未确认此池有可用数据；不能把当前空列表当作 0 只。":"接口未返回列表记录。");badge("market-pool-status",data?.has_data===false?"数据未确认":"暂无列表记录","warning");}
  else{items.forEach(item=>{const tr=document.createElement("tr"),stock=el("td"),symbol=String(item.symbol||item.code||"").trim(),name=String(item.name||symbol||"名称未报告");stock.append(el("strong","market-table-primary",name),el("small","market-table-secondary",symbol||"代码未报告"));if(symbol){const actions=el("div","market-stock-entry-actions");[["stocks","查看行情"],["research","深度研究"]].forEach(([target,label])=>{const button=el("button","button button-secondary market-stock-entry-action",label);button.type="button";button.dataset.poolSymbol=symbol;button.dataset.poolName=name;button.dataset.poolAction=target;actions.append(button);});stock.append(actions);}tr.append(stock);cell(tr,formatPercent(item.change_percent),dir(item.change_percent));cell(tr,item.consecutive_boards===null||item.consecutive_boards===undefined?"—":count(item.consecutive_boards)+" 板");cell(tr,(item.first_touch_time||"—")+" / "+(item.last_touch_time||"—"),"market-touch-time");cell(tr,item.industry||"—");root.append(tr);});badge("market-pool-status",qualityLabel(data.quality_status),"quality",data.quality_status);}
  const label=data?.type==="down"?"跌停池":data?.type==="broken"?"炸板池":"涨停池";
  if($("#market-sentiment-pool"))$("#market-sentiment-pool").textContent=data?.has_data===false?"数据未确认":label+" · "+count(data?.total)+" 只";
- meta("market-pool-meta",[label,"交易日期 "+(data?.trade_date||poolDate||"中国时区当日（默认）"),"源端数量 "+count(data?.total),"当前返回 "+count(items.length)+" 条","来源 "+(data?.source||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);qualityReasons("market-pool-reasons",data?.quality_reasons);
+ meta("market-pool-meta",[label,"交易日期 "+(data?.trade_date||poolDate||"中国时区当日（默认）"),"源端数量 "+count(data?.total),"请求上限 "+count(requestedLimit)+" 条","当前返回 "+count(items.length)+" 条","来源 "+(data?.source||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);qualityReasons("market-pool-reasons",data?.quality_reasons);
 }
 function renderHotStocks(data,requestedLimit=20) {
  const root=$("#market-hot-stocks-body"),items=Array.isArray(data?.items)?data.items.filter(item=>item&&typeof item==="object"):[];
@@ -168,7 +168,7 @@ function renderMarketCapitalFlow(data) {
  qualityReasons("market-capital-flow-reasons",data?.quality_reasons);
 }
 export function bindMarketOverview(getSettings,onSelectStock) {
- const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",sectorDirection="up",sectorLimit=10,poolType="up",poolDate="",hotType="popular",hotLimit=20,refreshGenerations=Object.create(null);
+ const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",sectorDirection="up",sectorLimit=10,poolType="up",poolDate="",poolLimit=30,hotType="popular",hotLimit=20,refreshGenerations=Object.create(null);
  let capitalFlowController=null,capitalFlowGeneration=0;
  function showSectorMetricUnavailable(metric=sectorMetric){
   const root=$("#market-sector-body");
@@ -191,11 +191,11 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    if(key==="indices")data=await getMarketIndices(settings,ctl.signal);
    else if(key==="breadth")data=await getMarketBreadth(settings,ctl.signal);
    else if(key==="sectors")data=await getMarketSectors(settings,{type:sectorType,limit:sectorLimit,direction:sectorDirection,sortBy:sectorMetricSortBy(sectorMetric),signal:ctl.signal});
-   else if(key==="pool")data=await getMarketLimitPool(settings,{type:poolType,limit:30,date:poolDate,signal:ctl.signal});
+   else if(key==="pool")data=await getMarketLimitPool(settings,{type:poolType,limit:poolLimit,date:poolDate,signal:ctl.signal});
    else if(key==="hot")data=await getMarketHotStocks(settings,{type:hotType,limit:hotLimit,signal:ctl.signal});
    else return "failed";
    if(ctl.signal.aborted||generation[key]!==seq)return "cancelled";
-   if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data,sectorMetric,sectorDirection,sectorLimit);else if(key==="pool")renderPool(data);else renderHotStocks(data,hotLimit);
+   if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data,sectorMetric,sectorDirection,sectorLimit);else if(key==="pool")renderPool(data,poolLimit);else renderHotStocks(data,hotLimit);
    return "received";
   }catch(error){
    if(ctl?.signal.aborted||(seq!==null&&generation[key]!==seq))return "cancelled";
@@ -257,6 +257,8 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  const sectorLimitControl=$("#market-sector-limit");
  sectorLimitControl?.addEventListener("change",event=>{const value=Number(event.target.value);sectorLimit=[10,20,50,100].includes(value)?value:10;if(sectorLimitControl.value!==String(sectorLimit))sectorLimitControl.value=String(sectorLimit);void load("sectors");});
  document.querySelectorAll("[data-pool-type]").forEach(button=>button.addEventListener("click",()=>{poolType=["up","down","broken"].includes(button.dataset.poolType)?button.dataset.poolType:"up";document.querySelectorAll("[data-pool-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("pool");}));
+ const poolLimitControl=$("#market-pool-limit");
+ poolLimitControl?.addEventListener("change",event=>{const value=Number(event.target.value);poolLimit=[10,20,30,50,100].includes(value)?value:30;if(poolLimitControl.value!==String(poolLimit))poolLimitControl.value=String(poolLimit);void load("pool");});
  $("#market-pool-date")?.addEventListener("change",event=>{poolDate=String(event.target.value||"");void load("pool");});
  document.querySelectorAll("[data-hot-type]").forEach(button=>button.addEventListener("click",()=>{hotType=["popular","surge"].includes(button.dataset.hotType)?button.dataset.hotType:"popular";document.querySelectorAll("[data-hot-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("hot");}));
  const hotLimitControl=$("#market-hot-stocks-limit");

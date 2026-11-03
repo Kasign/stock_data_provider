@@ -55,3 +55,14 @@ test("人气榜和飙升榜支持服务端结果数量选择", () => {
   assert.match(overview, /实际返回/);
   assert.match(overview, /hotLimit=\[10,20,50,100\]\.includes\(value\)\?value:20/);
 });
+
+
+test("涨跌停池支持服务端结果数量控制", () => {
+  assert.match(html, /id="market-pool-limit"/);
+  assert.match(html, /value="30" selected/);
+  assert.match(overview, /poolLimit=30/);
+  assert.match(overview, /limit:poolLimit/);
+  assert.match(overview, /function renderPool\(data,requestedLimit=30\)/);
+  assert.match(overview, /renderPool\(data,poolLimit\)/);
+  assert.match(overview, /poolLimit=\[10,20,30,50,100\]\.includes\(value\)\?value:30/);
+});

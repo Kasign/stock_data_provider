@@ -537,3 +537,12 @@
 - [x] 页面分别展示请求上限、实际返回条数；不将有界响应 `total` 解释为全市场总数。
 - [x] WebUI Checks：语法、单元测试、Compose 校验和 Nginx 镜像构建通过（[运行记录 #41595037137](https://github.com/Kasign/stock_data_provider/actions/runs/41595037137)）。
 - [x] Chromium Browser Smoke：7 种视口及热榜数量切换/榜单类型联动、Run Flow、个股研究、Provider 探测专项通过（[运行记录 #41595037090](https://github.com/Kasign/stock_data_provider/actions/runs/41595037090)）。
+
+
+## 13. 2026-11-03 涨跌停池数量控制
+
+- [ ] 涨停、跌停和炸板池支持 10 / 20 / 30 / 50 / 100 条档位，符合接口契约 1–100。
+- [ ] 切换数量只请求当前池；切换池类型时保留日期与数量。
+- [ ] 历史情绪日期联动继续传递相同交易日期，且使用当前数量档位。
+- [ ] 页面展示请求上限与实际返回条数；不将未知池状态解释为零条。
+- [ ] WebUI Checks 与 Chromium Browser Smoke：待本批验收。

@@ -359,7 +359,7 @@ try {
       }
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/limit-pools")) {
         const query = new URL(route.request().url()).searchParams;
-        limitPoolRequests.push({ date: query.get("date") || "", type: query.get("type") || "" });
+        limitPoolRequests.push({ date: query.get("date") || "", type: query.get("type") || "", limit: query.get("limit") || "" });
         return json(200, { type: query.get("type") || "up", trade_date: query.get("date") || "2026-10-30",
           total: 1, has_data: true, items: [], source: "browser-pool-fixture", fetched_at: "2026-10-30T08:00:00Z", quality_status: "valid", quality_reasons: [] });
       }
@@ -560,7 +560,7 @@ try {
       assert.equal(sentimentHistoryRequestCount, 1, "historical sentiment must come from persisted API records");
       await page.locator("#market-sentiment-history-body button[data-market-date-target='pool'][data-market-date-type='down']").click();
       await page.waitForFunction(() => document.querySelector("#market-pool-meta")?.textContent.includes("2026-10-29"));
-      assert.deepEqual(limitPoolRequests.at(-1), { date: "2026-10-29", type: "down" }, "sentiment history must drill into the same-date selected limit pool");
+      assert.deepEqual(limitPoolRequests.at(-1), { date: "2026-10-29", type: "down", limit: "30" }, "sentiment history must drill into the same-date selected limit pool");
       assert.equal(await page.locator("#market-pool-date").inputValue(), "2026-10-29");
       await page.locator("#market-sentiment-history-body button[data-market-date-target='dragon-tiger']").click();
       await page.waitForFunction(() => document.querySelector("#dragon-tiger-meta")?.textContent.includes("2026-10-29"));
@@ -597,6 +597,18 @@ try {
       assert.equal(sectorRequests.at(-1)?.sort_by, "change_5d");
       assert.match(await page.locator("#market-sector-meta").textContent(), /实际返回 2 条/);
 
+      const poolCountBefore = limitPoolRequests.length;
+      await page.locator("#market-pool-limit").selectOption("50");
+      await page.waitForFunction(() => document.querySelector("#market-pool-meta")?.textContent.includes("请求上限 50 条"));
+      assert.equal(limitPoolRequests.length, poolCountBefore + 1, "changing limit-pool count must only issue one pool request");
+      assert.deepEqual(limitPoolRequests.at(-1), { date: "2026-10-29", type: "down", limit: "50" });
+      await page.locator('[data-pool-type="broken"]').click();
+      await page.waitForFunction(() => document.querySelector("#market-pool-meta")?.textContent.includes("炸板池"));
+      assert.deepEqual(limitPoolRequests.at(-1), { date: "2026-10-29", type: "broken", limit: "50" }, "switching pool type must preserve date and result count");
+      await page.locator("#market-pool-limit").selectOption("30");
+      await page.locator('[data-pool-type="down"]').click();
+      await page.waitForFunction(() => document.querySelector("#market-pool-meta")?.textContent.includes("跌停池"));
+      await page.locator("#market-pool-limit").selectOption("50");
       const hotCountBefore = hotStockRequests.length;
       await page.locator("#market-hot-stocks-limit").selectOption("50");
       await page.waitForFunction(() => document.querySelector("#market-hot-stocks-meta")?.textContent.includes("请求上限 50 条"));
