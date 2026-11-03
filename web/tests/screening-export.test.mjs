@@ -11,7 +11,7 @@ test("exports judgment, quality and page metadata while leaving missing values b
     conditions: [{ field: "ma5", operator: "gte", value: 10 }]
   });
   assert.match(csv, /"证券代码","证券名称"/);
-  assert.match(csv, /"600001.SH","示例股票",,"2.5",1200000,"CNY",,"10","degraded","涨跌幅未报告","待判断","2","50","forward_adjusted"/);
+  assert.match(csv, /"600001.SH","示例股票",,2\.5,1200000,"CNY",,10,"degraded","涨跌幅未报告","待判断","2","50","forward_adjusted"/);
   assert.match(csv, /"当前页筛选结果"/);
   assert.match(csv, /缺失数值保持为空/);
 });
@@ -22,7 +22,7 @@ test("preserves numeric zero and neutralizes spreadsheet formulas in text fields
     quote: { change_percent: 0, turnover_rate: 0, amount: 0 }, ma5: 0, ma20: 0
   } }] });
   assert.ok(csv.includes("\"'=HYPERLINK(\"\"https://bad.example\"\",\"\"x\"\"),A\""));
-  assert.match(csv, /,"0","0","0",/);
+  assert.match(csv, /,0,0,0,,0,0,/);
 });
 
 test("does not fabricate data rows for an empty result set", () => {
