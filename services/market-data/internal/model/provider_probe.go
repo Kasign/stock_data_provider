@@ -76,16 +76,16 @@ type ProviderProbeFieldComparison struct {
 
 // ProviderProbeCheckResult 是从一次 Provider 响应中提取的独立诊断维度。
 type ProviderProbeCheckResult struct {
-	Check              string                         `json:"check"`
-	Provider           string                         `json:"provider,omitempty"`
-	Capability         string                         `json:"capability,omitempty"`
-	Status             string                         `json:"status"`
-	ErrorCode          string                         `json:"error_code,omitempty"`
-	ErrorMessage       string                         `json:"error_message,omitempty"`
-	ProviderTime       *time.Time                     `json:"provider_time,omitempty"`
-	AgeSeconds         *int64                         `json:"age_seconds,omitempty"`
-	ComparedDates      []string                       `json:"compared_dates,omitempty"`
-	FieldCount         int                            `json:"field_count,omitempty"`
+	Check         string     `json:"check"`
+	Provider      string     `json:"provider,omitempty"`
+	Capability    string     `json:"capability,omitempty"`
+	Status        string     `json:"status"`
+	ErrorCode     string     `json:"error_code,omitempty"`
+	ErrorMessage  string     `json:"error_message,omitempty"`
+	ProviderTime  *time.Time `json:"provider_time,omitempty"`
+	AgeSeconds    *int64     `json:"age_seconds,omitempty"`
+	ComparedDates []string   `json:"compared_dates,omitempty"`
+	FieldCount    int        `json:"field_count,omitempty"`
 	MismatchCount      int                            `json:"mismatch_count,omitempty"`
 	MatchedFieldCount  int                            `json:"matched_field_count,omitempty"`
 	NotComparableCount int                            `json:"not_comparable_count,omitempty"`

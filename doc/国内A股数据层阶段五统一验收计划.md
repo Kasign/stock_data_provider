@@ -746,3 +746,10 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - 本轮不调整 Python 迁移矩阵，不新增 Python 代码清理工作。
 
 本轮代码改动待本提交 SHA 的 Go test/race/vet、OpenAPI 契约测试和 Docker market-data 构建验证；未完成的检查不得提前标记通过。
+
+
+### 2026-11-03：统一诊断字段证据格式修复记录
+
+- 首轮 Go test suite 与 Docker market-data 构建在 gofmt 前置检查发现 `internal/model/provider_probe.go` 中模型声明之间缺少一行空行；没有进入 market-data 编译和单元测试阶段。
+- 已按 gofmt 要求修复，并补充价格字段 mismatch 的左右值、差值和容差断言。
+- 修复后完整 Go test/race/vet、Docker 构建结果以新提交 SHA 的 Actions 为准。

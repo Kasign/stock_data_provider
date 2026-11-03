@@ -559,3 +559,47 @@ func TestBuildProviderProbeCheckResultsMarksUnknownQualityAsDegraded(t *testing.
 		t.Fatalf("unknown quality must not be confused with a skipped check: %+v", results)
 	}
 }
+
+
+func TestBuildCrossProviderProbeCheckResultsExposesMismatchValuesAndTolerance(t *testing.T) {
+	left := &provider.CrossProviderDailySnapshot{
+		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "none", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{
+			TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10.5,
+			Volume: 100, VolumeUnit: "shares",
+		}},
+	}
+	right := &provider.CrossProviderDailySnapshot{
+		Provider: "right", SourceVersion: "right-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "none", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{
+			TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10.7,
+			Volume: 100, VolumeUnit: "shares",
+		}},
+	}
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	if len(results) != 1 {
+		t.Fatalf("expected one comparison result, got %+v", results)
+	}
+	result := results[0]
+	if result.Status != "failed" || result.MismatchCount != 1 || result.MatchedFieldCount != 4 ||
+		result.NotComparableCount != 1 || len(result.FieldComparisons) != 6 {
+		t.Fatalf("unexpected mismatch summary: %+v", result)
+	}
+	var closeField *model.ProviderProbeFieldComparison
+	for i := range result.FieldComparisons {
+		if strings.HasSuffix(result.FieldComparisons[i].Field, ".close") {
+			closeField = &result.FieldComparisons[i]
+			break
+		}
+	}
+	if closeField == nil || closeField.Status != "mismatch" || closeField.Left == nil ||
+		closeField.Right == nil || closeField.Difference == nil || closeField.Tolerance == nil {
+		t.Fatalf("close mismatch must expose both values, difference and tolerance: %+v", result.FieldComparisons)
+	}
+	if *closeField.Left != 10.5 || *closeField.Right != 10.7 || *closeField.Difference < 0.199 ||
+		*closeField.Difference > 0.201 || *closeField.Tolerance != 0.001 {
+		t.Fatalf("unexpected close mismatch evidence: %+v", closeField)
+	}
+}
