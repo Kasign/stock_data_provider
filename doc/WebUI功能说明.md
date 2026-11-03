@@ -137,6 +137,7 @@
 - web/src/data-center.js：服务检查与 Provider 能力清单。
 - web/src/preferences.js：浏览器展示/查询偏好。
 - web/src/watchlist.js、web/src/recent-tasks.js：本地自选与任务引用。
+- web/src/task-workflow.js：分析任务阶段事件分页响应校验、Run 身份校验、事件去重与续读判断。
 - web/src/app.js：页面状态、事件绑定、任务流程和工作区备份。
 
 ## 8. 不在 WebUI 分支擅自实现的事项

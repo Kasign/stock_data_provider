@@ -28,6 +28,7 @@ import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolu
 import { bindMarketOverview } from "./market-overview.js";
 import { bindMarketStocks } from "./market-stocks.js";
 import { taskEventMatchesFilter } from "./task-event-filter.js";
+import { validateTaskEventPage, TASK_EVENT_PAGE_SIZE } from "./task-workflow.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
 import { bindLocalAlertDrafts } from "./local-alert-drafts.js";
@@ -120,7 +121,6 @@ function taskEventStatusTone(statusKey) {
 }
 
 const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
-const TASK_EVENT_PAGE_SIZE = 100;
 let initialConnectionDraft = null;
 let serviceRefreshGeneration = 0;
 let sourceRefreshGeneration = 0;
@@ -3980,70 +3980,39 @@ async function pollTask(generation = state.pollGeneration) {
   if (eventResult.status === "fulfilled" && eventResult.value?.skipped === true) {
     eventsSkipped = true;
   } else if (eventResult.status === "fulfilled") {
-    const eventPayload = eventResult.value;
-    if (!eventPayload || typeof eventPayload !== "object" || Array.isArray(eventPayload) || !Array.isArray(eventPayload.events)) {
-      eventError = responseContractError("阶段事件接口返回的数据结构无效。");
-    } else if (eventPayload.task_id !== taskId) {
-      eventError = responseIdentityError(eventPayload.task_id
-        ? "阶段事件接口返回了其他任务的事件，已忽略。"
-        : "阶段事件接口未返回 task_id，已忽略该响应。");
+    const eventPage = validateTaskEventPage(eventResult.value, {
+      taskId,
+      runId: state.runId || task?.run_id || "",
+      afterSequence: requestedEventCursor,
+      highestSequence: state.taskSequence,
+      knownSequences: state.taskEvents
+    });
+    if (eventPage.error) {
+      eventError = eventPage.identityMismatch
+        ? responseIdentityError(eventPage.error)
+        : responseContractError(eventPage.error);
     } else {
-      const nextAfterSequence = eventPayload.next_after_sequence;
-      const highestReportedSequence = eventPayload.events.reduce((maximum, item) => {
-        const sequence = typeof item?.sequence === "number" ? item.sequence : NaN;
-        return Number.isSafeInteger(sequence) && sequence >= 1 ? Math.max(maximum, sequence) : maximum;
-      }, requestedEventCursor);
-      if (!Number.isSafeInteger(nextAfterSequence) ||
-          nextAfterSequence < requestedEventCursor ||
-          (eventPayload.events.length > 0 && nextAfterSequence <= requestedEventCursor) ||
-          nextAfterSequence < highestReportedSequence) {
-        eventError = responseContractError("阶段事件接口返回的 next_after_sequence 无效或未前进。");
-      } else {
-        // 请求游标独立于可显示的事件序号推进；单条坏事件不能卡住后续分页。
-        state.taskEventCursor = nextAfterSequence;
-        eventPageHasMore = eventPayload.events.length >= TASK_EVENT_PAGE_SIZE &&
-          nextAfterSequence > requestedEventCursor;
-        state.taskEventsLoaded = true;
-        state.taskEventsError = "";
-        let invalidStructureCount = 0;
-        let mismatchedRunCount = 0;
-        let ignoredSequenceCount = 0;
-        const previousSequence = state.taskSequence;
-        const expectedEventRunId = state.runId || task?.run_id || "";
-        for (const item of eventPayload.events) {
-          const sequence = typeof item?.sequence === "number" ? item.sequence : NaN;
-          if (!item || typeof item !== "object" || Array.isArray(item) ||
-              !Number.isSafeInteger(sequence) || sequence < 1 ||
-              !item.event || typeof item.event !== "object" || Array.isArray(item.event)) {
-            invalidStructureCount += 1;
-            continue;
-          }
-          const eventRunId = typeof item.event.run_id === "string" ? item.event.run_id.trim() : "";
-          if (!expectedEventRunId || !eventRunId || eventRunId !== expectedEventRunId) {
-            mismatchedRunCount += 1;
-            continue;
-          }
-          if (sequence <= previousSequence || state.taskEvents.has(sequence)) {
-            ignoredSequenceCount += 1;
-            continue;
-          }
-          const normalized = { ...item, sequence };
-          state.taskEvents.set(sequence, normalized);
-          state.taskSequence = Math.max(state.taskSequence, sequence);
-        }
-        const ignoredReasons = [];
-        if (invalidStructureCount) {
-          ignoredReasons.push("字段无效的阶段事件（序号或 event 结构不符合契约），已忽略 " + invalidStructureCount + " 条");
-        }
-        if (mismatchedRunCount) {
-          ignoredReasons.push("Run ID 缺失或与当前任务关联的 Run 不一致，已忽略 " + mismatchedRunCount + " 条");
-        }
-        if (ignoredSequenceCount) {
-          ignoredReasons.push("重复或旧序号的阶段事件，已忽略 " + ignoredSequenceCount + " 条");
-        }
-        if (ignoredReasons.length) state.taskEventsError = ignoredReasons.join("；") + "。";
-        renderTaskEvents();
+      // 分页游标与可显示事件序号分离；坏事件会报告数量，但不能卡住后续续读。
+      state.taskEventCursor = eventPage.nextAfterSequence;
+      eventPageHasMore = eventPage.hasMore;
+      state.taskEventsLoaded = true;
+      state.taskEventsError = "";
+      for (const item of eventPage.events) {
+        state.taskEvents.set(item.sequence, item);
+        state.taskSequence = Math.max(state.taskSequence, item.sequence);
       }
+      const ignoredReasons = [];
+      if (eventPage.rejected.invalidStructure) {
+        ignoredReasons.push("字段无效的阶段事件（序号或 event 结构不符合契约），已忽略 " + eventPage.rejected.invalidStructure + " 条");
+      }
+      if (eventPage.rejected.mismatchedRun) {
+        ignoredReasons.push("Run ID 缺失或与当前任务关联的 Run 不一致，已忽略 " + eventPage.rejected.mismatchedRun + " 条");
+      }
+      if (eventPage.rejected.ignoredSequence) {
+        ignoredReasons.push("重复或旧序号的阶段事件，已忽略 " + eventPage.rejected.ignoredSequence + " 条");
+      }
+      if (ignoredReasons.length) state.taskEventsError = ignoredReasons.join("；") + "。";
+      renderTaskEvents();
     }
   } else {
     eventError = eventResult.reason;
