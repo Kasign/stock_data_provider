@@ -1,0 +1,22 @@
+# This Dockerfile builds from the repository root. Never send secrets, local data,
+# generated artifacts or nested Go service env files to the Python bridge build context.
+.git
+**/.git
+.env
+**/.env
+**/.env.*
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+**/.pytest_cache
+node_modules
+**/node_modules
+data
+logs
+reports
+*.zip
+*.tar
+*.tar.gz
+*.db
+*.sqlite
+*.sqlite3

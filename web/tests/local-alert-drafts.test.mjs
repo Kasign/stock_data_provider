@@ -1,0 +1,11 @@
+import test from "node:test";import assert from "node:assert/strict";import {readLocalAlertDrafts,writeLocalAlertDrafts,validateLocalAlertDraft,LOCAL_ALERT_DRAFTS_KEY,MAX_LOCAL_ALERT_DRAFTS} from "../src/local-alert-drafts.js";
+function storage(){const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v)};}
+const draft=(id)=>({id,name:"价格观察",type:"price_above",threshold:100,symbol:"600519.SH",scope:"symbol",severity:"warning",enabled:true,createdAt:"2026-01-01",updatedAt:"2026-01-02"});
+test("草稿写入回读成功",()=>{const s=storage();assert.equal(writeLocalAlertDrafts([draft("a")],s).ok,true);assert.equal(readLocalAlertDrafts(s).items[0].threshold,100);});
+test("未知类型、负数阈值和损坏数据拒绝",()=>{const s=storage();assert.equal(writeLocalAlertDrafts([{...draft("a"),type:"invented"}],s).ok,false);assert.equal(writeLocalAlertDrafts([{...draft("a"),threshold:-1}],s).ok,false);s.setItem(LOCAL_ALERT_DRAFTS_KEY,"{");assert.equal(readLocalAlertDrafts(s).valid,false);});
+test("草稿数量上限",()=>assert.equal(writeLocalAlertDrafts(Array.from({length:MAX_LOCAL_ALERT_DRAFTS+1},(_,i)=>draft(String(i))),storage()).ok,false));
+
+test("单只股票规则必须填写代码，自选股范围不要求单一代码",()=>{assert.equal(validateLocalAlertDraft({...draft("a"),symbol:""}),"symbol-required");assert.equal(validateLocalAlertDraft({...draft("b"),symbol:"",scope:"watchlist"}),"");});
+test("价格与涨跌幅阈值按字段范围校验",()=>{assert.equal(validateLocalAlertDraft({...draft("a"),threshold:0}),"price-threshold");assert.equal(validateLocalAlertDraft({...draft("b"),type:"change_above",threshold:-3}),"");assert.equal(validateLocalAlertDraft({...draft("c"),type:"change_below",threshold:101}),"change-threshold");});
+test("损坏存储和重复 ID 不会被覆盖",()=>{const s=storage();s.setItem(LOCAL_ALERT_DRAFTS_KEY,"{");assert.equal(writeLocalAlertDrafts([draft("a")],s).reason,"invalid-storage");assert.equal(s.getItem(LOCAL_ALERT_DRAFTS_KEY),"{");s.setItem(LOCAL_ALERT_DRAFTS_KEY,JSON.stringify([draft("dup"),draft("dup")]));assert.equal(readLocalAlertDrafts(s).valid,false);assert.equal(writeLocalAlertDrafts([draft("new")],s).reason,"invalid-storage");});
+test("重复 ID 的新草稿拒绝写入",()=>{assert.equal(writeLocalAlertDrafts([draft("dup"),draft("dup")],storage()).reason,"invalid");});

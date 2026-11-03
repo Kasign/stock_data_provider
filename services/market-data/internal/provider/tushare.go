@@ -1,0 +1,486 @@
+package provider
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+)
+
+const tushareVersion = "tushare-pro-daily-v2-adjustment-factor"
+
+// Tushare 通过 HTTP JSON 接口读取 A 股日 K。需要用户自己的 Token，默认关闭。
+// daily 接口返回原始 OHLC；前/后复权通过 adj_factor 明确换算，因子不完整时拒绝结果。
+type Tushare struct {
+	client   *http.Client
+	endpoint string
+	token    string
+	rateMu   sync.Mutex
+	lastCall time.Time
+}
+
+func NewTushareConfigured(timeout time.Duration, endpoint, token string) *Tushare {
+	if timeout <= 0 {
+		timeout = 12 * time.Second
+	}
+	if strings.TrimSpace(endpoint) == "" {
+		endpoint = "https://api.tushare.pro"
+	}
+	return &Tushare{client: &http.Client{Timeout: timeout}, endpoint: strings.TrimSpace(endpoint), token: strings.TrimSpace(token)}
+}
+
+func (p *Tushare) Name() string { return "tushare" }
+
+func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	if p == nil || p.client == nil {
+		return nil, errors.New("Tushare HTTP client is not configured")
+	}
+	if p.token == "" {
+		return nil, errors.New("Tushare token is not configured")
+	}
+	symbol, err := tushareExchangeCode(rawSymbol)
+	if err != nil {
+		return nil, err
+	}
+	// daily 是普通 A 股日线接口；ETF、指数与其他证券类型必须走各自的接口，不能误标为股票 K 线。
+	if !isTushareAShareSymbol(symbol) {
+		return nil, fmt.Errorf("Tushare daily endpoint only supports common A-share equities, got %q", rawSymbol)
+	}
+	switch adjustment {
+	case model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward:
+	default:
+		return nil, fmt.Errorf("Tushare daily endpoint does not support adjustment basis %q", adjustment)
+	}
+	start, err := time.Parse("2006-01-02", strings.TrimSpace(startDate))
+	if err != nil {
+		return nil, fmt.Errorf("invalid Tushare start date %q", startDate)
+	}
+	end, err := time.Parse("2006-01-02", strings.TrimSpace(endDate))
+	if err != nil {
+		return nil, fmt.Errorf("invalid Tushare end date %q", endDate)
+	}
+	if start.After(end) {
+		return nil, errors.New("Tushare start date must not be after end date")
+	}
+	// 统一使用解析后的标准日期比较，避免接受首尾空白后又用原始字符串误判未来日期。
+	startDate = start.Format("2006-01-02")
+	endDate = end.Format("2006-01-02")
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*60*60)
+	}
+	if endDate > time.Now().In(loc).Format("2006-01-02") {
+		return nil, errors.New("Tushare end date must not be after today in Asia/Shanghai")
+	}
+	if limit <= 0 {
+		limit = 120
+	}
+	if limit > 2000 {
+		return nil, errors.New("Tushare daily-bar limit must not exceed 2000")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := p.waitForRateLimit(ctx); err != nil {
+		return nil, err
+	}
+
+	payload := map[string]any{
+		"api_name": "daily",
+		"token":    p.token,
+		"params":   map[string]string{"ts_code": symbol, "start_date": start.Format("20060102"), "end_date": end.Format("20060102")},
+		"fields":   "ts_code,trade_date,open,high,low,close,pct_chg,vol,amount",
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode Tushare daily request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create Tushare daily request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "MarketDataService/1.0")
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Tushare daily request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("Tushare HTTP status %d", resp.StatusCode)
+	}
+	raw, err := readBoundedBody(resp.Body, maxProviderPayloadBytes)
+	if err != nil {
+		return nil, fmt.Errorf("read Tushare daily response: %w", err)
+	}
+	var envelope struct {
+		Code *int   `json:"code"`
+		Msg  string `json:"msg"`
+		Data *struct {
+			Fields []string            `json:"fields"`
+			Items  [][]json.RawMessage `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, fmt.Errorf("decode Tushare daily response: %w", err)
+	}
+	if envelope.Code == nil {
+		return nil, errors.New("Tushare response is missing code")
+	}
+	if *envelope.Code != 0 {
+		msg := strings.TrimSpace(envelope.Msg)
+		if msg == "" {
+			msg = "unspecified provider error"
+		}
+		return nil, fmt.Errorf("Tushare provider error code=%d: %s", *envelope.Code, msg)
+	}
+	if envelope.Data == nil {
+		return nil, errors.New("Tushare response is missing data")
+	}
+	indices := make(map[string]int, len(envelope.Data.Fields))
+	for i, field := range envelope.Data.Fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			return nil, errors.New("Tushare daily response contains an empty field name")
+		}
+		if _, duplicate := indices[field]; duplicate {
+			return nil, fmt.Errorf("Tushare daily response contains duplicate field %q", field)
+		}
+		indices[field] = i
+	}
+	for _, required := range []string{"ts_code", "trade_date", "open", "high", "low", "close", "vol"} {
+		if _, ok := indices[required]; !ok {
+			return nil, fmt.Errorf("Tushare daily response is missing field %q", required)
+		}
+	}
+	if len(envelope.Data.Items) == 0 {
+		return nil, errors.New("Tushare returned no daily K-line rows")
+	}
+
+	get := func(row []json.RawMessage, field string, rowIndex int) (json.RawMessage, error) {
+		index, ok := indices[field]
+		if !ok {
+			return nil, nil
+		}
+		if index >= len(row) {
+			return nil, fmt.Errorf("Tushare row %d is missing value for field %q", rowIndex, field)
+		}
+		return row[index], nil
+	}
+	fetchedAt := time.Now().UTC()
+	out := make([]model.DailyBar, 0, len(envelope.Data.Items))
+	seenDates := make(map[string]struct{}, len(envelope.Data.Items))
+	for rowIndex, row := range envelope.Data.Items {
+		codeRaw, err := get(row, "ts_code", rowIndex)
+		if err != nil {
+			return nil, err
+		}
+		code, err := tushareString(codeRaw)
+		if err != nil || strings.ToUpper(strings.TrimSpace(code)) != symbol {
+			return nil, fmt.Errorf("Tushare row %d symbol mismatch: requested %s, returned %q", rowIndex, symbol, code)
+		}
+		dateRaw, err := get(row, "trade_date", rowIndex)
+		if err != nil {
+			return nil, err
+		}
+		dateText, err := tushareString(dateRaw)
+		if err != nil {
+			return nil, fmt.Errorf("Tushare row %d has an invalid trade date", rowIndex)
+		}
+		tradeDate, err := time.Parse("20060102", dateText)
+		if err != nil {
+			tradeDate, err = time.Parse("2006-01-02", dateText)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("Tushare row %d has invalid trade date %q", rowIndex, dateText)
+		}
+		isoDate := tradeDate.Format("2006-01-02")
+		if isoDate < start.Format("2006-01-02") || isoDate > end.Format("2006-01-02") {
+			return nil, fmt.Errorf("Tushare row %d date %s is outside requested range", rowIndex, isoDate)
+		}
+		if _, duplicate := seenDates[isoDate]; duplicate {
+			return nil, fmt.Errorf("Tushare returned duplicate trade date %s", isoDate)
+		}
+		seenDates[isoDate] = struct{}{}
+
+		readFloat := func(field string, positive bool) (float64, error) {
+			rawValue, e := get(row, field, rowIndex)
+			if e != nil {
+				return 0, e
+			}
+			value, e := tushareRawFloat(rawValue)
+			if e != nil || (positive && value <= 0) || (!positive && value < 0) {
+				return 0, fmt.Errorf("invalid Tushare %s on %s", field, isoDate)
+			}
+			return value, nil
+		}
+		open, err := readFloat("open", true)
+		if err != nil {
+			return nil, err
+		}
+		high, err := readFloat("high", true)
+		if err != nil {
+			return nil, err
+		}
+		low, err := readFloat("low", true)
+		if err != nil {
+			return nil, err
+		}
+		closePrice, err := readFloat("close", true)
+		if err != nil {
+			return nil, err
+		}
+		if low > high || open < low || open > high || closePrice < low || closePrice > high {
+			return nil, fmt.Errorf("Tushare OHLC invariant failed on %s", isoDate)
+		}
+		rawVolume, err := readFloat("vol", false)
+		if err != nil {
+			return nil, err
+		}
+		volume, err := normalize.HandsToShares(rawVolume)
+		if err != nil {
+			return nil, fmt.Errorf("normalize Tushare volume on %s: %w", isoDate, err)
+		}
+
+		var amount, rawAmount *float64
+		amountUnit, rawAmountUnit, rawAmountField := "unknown", "", ""
+		quality := model.QualityValid
+		var reasons []string
+		amountRaw, err := get(row, "amount", rowIndex)
+		if err != nil {
+			return nil, err
+		}
+		if len(bytes.TrimSpace(amountRaw)) == 0 || bytes.Equal(bytes.TrimSpace(amountRaw), []byte("null")) || bytes.Equal(bytes.TrimSpace(amountRaw), []byte("\"\"")) {
+			quality = model.QualityDegraded
+			reasons = append(reasons, "amount_missing_from_provider", "amount_unit_unknown_because_amount_missing")
+		} else {
+			value, parseErr := tushareRawFloat(amountRaw)
+			if parseErr != nil || value < 0 {
+				return nil, fmt.Errorf("invalid Tushare amount on %s", isoDate)
+			}
+			rawCopy := value
+			rawAmount = &rawCopy
+			rawAmountUnit, rawAmountField = "thousand_CNY", "amount"
+			normalizedAmount := value * 1000 // Tushare daily.amount uses thousand CNY.
+			if math.IsInf(normalizedAmount, 0) || math.IsNaN(normalizedAmount) {
+				return nil, fmt.Errorf("Tushare amount overflow on %s", isoDate)
+			}
+			amount = &normalizedAmount
+			amountUnit = "CNY"
+		}
+		rawVolumeCopy := rawVolume
+		pctRaw, err := get(row, "pct_chg", rowIndex)
+		if err != nil {
+			return nil, err
+		}
+		var pct *float64
+		pctBytes := bytes.TrimSpace(pctRaw)
+		if len(pctBytes) == 0 || bytes.Equal(pctBytes, []byte("null")) || bytes.Equal(pctBytes, []byte("\"\"")) {
+			quality = model.QualityDegraded
+			reasons = append(reasons, "provider_change_percent_unavailable")
+		} else {
+			value, parseErr := tushareRawFloat(pctRaw)
+			if parseErr == nil {
+				pct = &value
+			} else {
+				quality = model.QualityDegraded
+				reasons = append(reasons, "provider_change_percent_unavailable")
+			}
+		}
+		out = append(out, model.DailyBar{
+			Symbol: symbol, TradeDate: isoDate, Period: "1d",
+			Open: open, High: high, Low: low, Close: closePrice,
+			Volume: &volume, Amount: amount, ChangePercent: pct,
+			AdjustmentBasis: model.AdjustmentNone, AdjustmentMethod: "tushare_daily_raw_ohlc_no_adjustment",
+			Source: p.Name(), SourceVersion: tushareVersion, FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
+			RawVolume: &rawVolumeCopy, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
+			VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].TradeDate < out[j].TradeDate })
+	if adjustment != model.AdjustmentNone {
+		factors, factorErr := p.fetchAdjustmentFactors(ctx, symbol, startDate, endDate)
+		if factorErr != nil {
+			return nil, factorErr
+		}
+		if _, factorErr = applyTushareAdjustment(out, factors, adjustment); factorErr != nil {
+			return nil, factorErr
+		}
+	}
+	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
+}
+
+func (p *Tushare) fetchAdjustmentFactors(ctx context.Context, symbol, startDate, endDate string) (map[string]float64, error) {
+	startCompact, err := tushareCompactDate(startDate)
+	if err != nil {
+		return nil, fmt.Errorf("Tushare adjustment-factor start date: %w", err)
+	}
+	endCompact, err := tushareCompactDate(endDate)
+	if err != nil {
+		return nil, fmt.Errorf("Tushare adjustment-factor end date: %w", err)
+	}
+	table, err := p.fetchCapabilityTable(ctx, "adj_factor", map[string]string{
+		"ts_code": symbol, "start_date": startCompact, "end_date": endCompact,
+	}, "ts_code,trade_date,adj_factor")
+	if err != nil {
+		return nil, fmt.Errorf("fetch Tushare adjustment factors: %w", err)
+	}
+	if len(table.rows) == 0 {
+		return nil, errors.New("Tushare returned no adjustment-factor rows")
+	}
+	factors := make(map[string]float64, len(table.rows))
+	for rowIndex, row := range table.rows {
+		code, rowErr := table.stringValue(row, "ts_code")
+		if rowErr != nil || strings.ToUpper(strings.TrimSpace(code)) != symbol {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d symbol mismatch: requested %s, returned %q", rowIndex, symbol, code)
+		}
+		dateText, rowErr := table.stringValue(row, "trade_date")
+		if rowErr != nil {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d has an invalid trade date: %w", rowIndex, rowErr)
+		}
+		isoDate, rowErr := tushareISODate(dateText)
+		if rowErr != nil {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d date: %w", rowIndex, rowErr)
+		}
+		if isoDate < startDate || isoDate > endDate {
+			return nil, fmt.Errorf("Tushare adjustment-factor row %d date %s is outside requested range", rowIndex, isoDate)
+		}
+		if _, duplicate := factors[isoDate]; duplicate {
+			return nil, fmt.Errorf("Tushare returned duplicate adjustment factor for %s", isoDate)
+		}
+		factor, rowErr := table.optionalFloat(row, "adj_factor")
+		if rowErr != nil || factor == nil || *factor <= 0 {
+			return nil, fmt.Errorf("Tushare adjustment factor on %s must be a finite positive number", isoDate)
+		}
+		factors[isoDate] = *factor
+	}
+	return factors, nil
+}
+
+// applyTushareAdjustment 使用 Tushare 累计复权因子换算 OHLC；成交量与成交额保持原始日行情口径。
+func applyTushareAdjustment(bars []model.DailyBar, factors map[string]float64, adjustment model.AdjustmentBasis) (string, error) {
+	if adjustment != model.AdjustmentForward && adjustment != model.AdjustmentBackward {
+		return "", fmt.Errorf("Tushare adjustment-factor conversion does not support basis %q", adjustment)
+	}
+	if len(bars) == 0 || len(factors) == 0 {
+		return "", errors.New("Tushare adjustment requires daily bars and adjustment factors")
+	}
+	referenceDate := ""
+	referenceFactor := 0.0
+	for date, factor := range factors {
+		if date > referenceDate {
+			referenceDate = date
+			referenceFactor = factor
+		}
+	}
+	if adjustment == model.AdjustmentForward && referenceFactor <= 0 {
+		return "", errors.New("Tushare forward adjustment has no valid reference factor")
+	}
+	method := "tushare_adj_factor_qfq_v1"
+	if adjustment == model.AdjustmentBackward {
+		method = "tushare_adj_factor_hfq_v1"
+	}
+	for i := range bars {
+		factor, ok := factors[bars[i].TradeDate]
+		if !ok {
+			return "", fmt.Errorf("Tushare adjustment factor is missing for daily bar date %s", bars[i].TradeDate)
+		}
+		multiplier := factor
+		if adjustment == model.AdjustmentForward {
+			multiplier = factor / referenceFactor
+		}
+		if multiplier <= 0 || math.IsNaN(multiplier) || math.IsInf(multiplier, 0) {
+			return "", fmt.Errorf("Tushare adjustment multiplier is invalid on %s", bars[i].TradeDate)
+		}
+		for _, price := range []*float64{&bars[i].Open, &bars[i].High, &bars[i].Low, &bars[i].Close} {
+			*price *= multiplier
+			if *price <= 0 || math.IsNaN(*price) || math.IsInf(*price, 0) {
+				return "", fmt.Errorf("Tushare adjusted OHLC is invalid on %s", bars[i].TradeDate)
+			}
+		}
+		bars[i].AdjustmentBasis = adjustment
+		bars[i].AdjustmentMethod = method
+		if adjustment == model.AdjustmentForward {
+			bars[i].AdjustmentRefDate = referenceDate
+		}
+	}
+	if adjustment == model.AdjustmentForward {
+		return referenceDate, nil
+	}
+	return "", nil
+}
+
+func (p *Tushare) waitForRateLimit(ctx context.Context) error {
+	p.rateMu.Lock()
+	defer p.rateMu.Unlock()
+	if !p.lastCall.IsZero() {
+		delay := time.Until(p.lastCall.Add(700 * time.Millisecond))
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-timer.C:
+			}
+		}
+	}
+	p.lastCall = time.Now()
+	return nil
+}
+
+func tushareString(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", errors.New("empty Tushare string")
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return strings.TrimSpace(text), nil
+	}
+	var number json.Number
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&number); err != nil {
+		return "", err
+	}
+	return number.String(), nil
+}
+
+func tushareRawFloat(raw json.RawMessage) (float64, error) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return 0, errors.New("empty Tushare number")
+	}
+	var number float64
+	if err := json.Unmarshal(raw, &number); err == nil {
+		if math.IsNaN(number) || math.IsInf(number, 0) {
+			return 0, errors.New("non-finite Tushare number")
+		}
+		return number, nil
+	}
+	text, err := tushareString(raw)
+	if err != nil || text == "" {
+		return 0, errors.New("invalid Tushare number")
+	}
+	number, err = strconv.ParseFloat(text, 64)
+	if err != nil || math.IsNaN(number) || math.IsInf(number, 0) {
+		return 0, errors.New("invalid Tushare number")
+	}
+	return number, nil
+}
