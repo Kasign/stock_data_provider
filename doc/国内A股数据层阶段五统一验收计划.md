@@ -1166,3 +1166,70 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - MariaDB 复权序列筛选修正：前复权仍要求明确合法参考日期；后复权在方法明确时允许参考日期为空，以兼容累计复权因子算法。新增累计因子 HFQ fallback 回归测试；后复权若显式提供参考日期仍校验格式和方向。
 
 - Provider 复权元数据质量门禁：调整方法缺失时降级；前复权参考日缺失时降级；混合方法/参考日、非法参考日或参考日方向与请求结束边界错误时拒绝整组数据。Tencent 记录实际使用的 day/qfqday/hfqday 响应键，Eastmoney 记录请求 fqt 参数；不将请求参数伪装成源端回显。
+
+## 十三、统一诊断覆盖盘点与后续实施基线（2026-11-03）
+
+**盘点基线：**
+- 分支：`feat/full-go-data-providers-api-switch`
+- 代码 SHA：`1331f6644374f6d10282ef118e67d4a938920fc0`
+- Git Tree：递归获取 475 个条目，`truncated=false`。
+- PR #1：Open / Draft，未合并。
+- 本节是代码静态盘点与现有测试/工作流盘点，不代表本轮已执行生产环境真实 Provider 请求。
+
+**一、现有统一诊断入口（已存在，禁止重复建设）**
+
+- `POST /api/v1/data-sources/probe`：统一主动探测入口，受 market-data API Key 鉴权；支持 scope、capabilities、checks、markets、symbols、timeout_seconds。
+- `GET /api/v1/data-sources/probe/history`：查询已持久化的诊断批次。
+- 已有能力维度：quote、daily_bars、stock_basic、stock_search、stock_universe、index_quotes、index_catalog、market_breadth、sector_rankings、market_capital_flow、limit_pool、dragon_tiger、announcements、trading_calendar、security_trading_status、price_limit_event、stock_boards、fundamentals、valuations、hot_ranking、capital_flow、chip_distribution。
+- 已有检查维度：connectivity、contract、quality、freshness、cross_provider、storage。
+- 已有请求级 `validation.Reporter`，支持 parse / normalize / validate 分阶段问题、错误/警告计数、截断标记；Quote、DailyBar Probe 会采集 Reporter 结果。
+- Probe 有并发上限、单项超时、错误脱敏、样本/覆盖率/时间证据、MariaDB 诊断历史持久化。
+- 当前状态分类已有 returned、returned_degraded、returned_unknown、failed、skipped、not_configured、not_supported；不需要另起状态体系，但后续需补齐凭据状态和执行证据表达。
+
+**二、按数据域的接入矩阵**
+
+| 数据域/能力 | 统一 Probe 接入 | 现有质量检查 | 当前缺口/边界 |
+|---|---|---|---|
+| Quote | 已接入 | 八家 Quote Provider 字段级 Parse/Validate 覆盖；公共 Validator 与 Reporter 聚合 | 不代表每次真实上游请求均成功；按运行结果判断 |
+| DailyBar | 已接入 | 公共 DailyBar Validator、Reporter、覆盖率/交易日历、复权元数据和跨 Provider 日线字段对比已有基础 | Probe 当前不是完整复权矩阵；停牌/漏数、日期边界、特殊交易样例和计数口径仍需收尾 |
+| Fundamentals | 已接入 | Probe 调用 `validateFundamentalsSnapshot`；业务层已有报告期、公告日期、available_at、分区/指标、来源版本和 fetched_at 等校验；已有 PIT 查询/持久化 | 当前 Probe 校验以整体 error 为主，未接入字段级 Reporter；修订版本、公告前不可见、单位/字段映射和跨源差分尚未形成完整诊断项 |
+| Valuations | 已接入 | Probe 调用 `validateValuationSnapshot`；业务层已有证券身份、来源版本、时间、覆盖、缺失字段、有限数值及部分比例范围校验 | 当前 Probe 未接入字段级 Reporter；PE/PB/PS/PCF 口径、单位、TTM/静态/动态定义、PIT 和跨源可比性尚未完整诊断 |
+| Freshness | 部分接入 | 当前 SLA 注册覆盖 quote、index、market_breadth、sector、fund_flow | DailyBar、Fundamentals、Valuations 没有独立 freshness SLA；缺失源时间时应明确 skipped/unknown，不得宣称 fresh |
+| Cross-provider | 部分接入 | 当前有 DailyBar 同证券/日期/复权口径的字段比较 | Quote、Fundamentals、Valuations 等跨源对账未形成统一比较检查 |
+| Storage | 部分接入 | 当前 storage 检查验证 Provider Probe 历史是否可持久化 | 不等于行情/财务/估值业务数据表的写入、读取、重复写入和 PIT 历史还原验收 |
+| 交易日历/证券状态/公司行动 | 已有独立能力并被部分 Probe 使用 | 日历、证券交易状态、涨跌停事件等有响应契约检查 | 需组合用于 DailyBar 停牌、非交易日、漏数和特殊交易判定，不能把单一缺 K 线等同停牌 |
+
+**三、凭据与真实请求路径**
+
+- market-data 配置从环境变量读取 Tushare、Hithink、TickFlow、妙想等凭据；配置校验会在启用部分需凭据 Provider 且缺少凭据时阻止服务启动。凭据值不得进入诊断响应、日志或文档。
+- 当前 Live Provider workflow 为手动触发并上传脱敏报告；Hithink、Tushare、妙想有显式开关和 Secret 注入。
+- 当前 workflow 未发现 TickFlow API Key 的 Secret 注入，TickFlow 真实探测入口需单独核对/补齐。
+- Live workflow 设置 `continue-on-error: true`，因此 workflow 最终成功不等于 Provider 全部通过；必须读取报告中的每项状态。
+- 无凭据或未启用能力不应伪装成失败或通过。下一轮需区分“未配置凭据”“能力未启用”“已配置但未执行”“已执行失败”；对用户报告只展示配置状态，不展示 Secret。
+- 当前没有证据证明助手可直接读取部署服务器 Secret 或触发生产环境服务；生产真实请求只能通过部署端诊断 API 或有权限的 Actions 运行完成。未触发时必须记录未执行/阻塞。
+
+**四、统一诊断能力补齐原则**
+
+1. 保留现有 API、Probe 调度、Reporter、历史存储和状态模型；只补实际缺口。
+2. 数据域 Validator 继续归属各自业务包；统一 Probe 负责调用、汇总和持久化，不复制业务规则。
+3. Fundamentals / Valuations 后续补齐字段级诊断问题和结构化证据，避免只返回一条整体错误。
+4. 为 DailyBar、Fundamentals、Valuations 建立可配置质量检查项和独立 freshness / PIT / cross-provider 结果；没有可靠证据时返回 skipped 或 inconclusive，不得通过。
+5. 每项诊断保留代码 SHA、Provider、能力、样本、请求区间/报告期、来源版本、执行时间、行数/覆盖率、问题明细和状态。
+6. 真实 Provider、Mock/黄金样例、静态代码/单测三类证据分开记录；CI 通过不替代真实 Provider 验收。
+
+**五、调整后的批次与状态**
+
+| 批次 | 内容 | 状态 |
+|---|---|---|
+| Batch 0 | 统一诊断入口、能力注册、Reporter、凭据配置和 Live workflow 盘点 | 已完成静态盘点；待将 TickFlow Secret 入口及凭据状态表达纳入后续实现任务 |
+| Batch 1 | DailyBar 复权 Provider 矩阵和真实口径诊断 | 未完成 |
+| Batch 2 | DailyBar 停牌/非交易日/漏数、特殊交易和覆盖率诊断 | 未完成 |
+| Batch 3 | DailyBar 解析拒绝/重复/规范化丢弃/limit 截断计数及日期边界 | 未完成 |
+| Batch 4 | Fundamentals 字段级 Reporter、公告时间/PIT/修订/单位/覆盖诊断 | 未完成 |
+| Batch 5 | Valuations 字段级 Reporter、口径/单位/时间/PIT/跨源诊断 | 未完成 |
+| Batch 6 | 跨数据域、跨 Provider、数据库/API 与 PIT 对账 | 未完成 |
+| Batch 7 | 凭据可用 Provider 的真实请求、黄金样例、CI/部署验收 | 未完成 |
+| Batch 8 | 最终统一诊断验收报告与遗留风险 | 未完成 |
+
+**下一步执行顺序：** 先进入 Batch 1，盘点 DailyBar 实际注册 Provider、各 Provider 的复权请求参数/响应证据和当前测试覆盖，形成逐 Provider 口径矩阵；不重复已完成的 Quote 字段诊断，也不提前改造 Fundamentals/Valuations。
+
