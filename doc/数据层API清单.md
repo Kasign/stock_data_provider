@@ -27,7 +27,7 @@
 | GET | /api/v1/bars/{symbol}/daily | 单只股票日 K（支持日期范围、复权及 as_of 历史观察时点） | 路径参数 symbol；start、end、limit（1–2000）、adjustment、as_of | getDailyBars | 是 |
 | GET | /api/v1/bundles/{symbol} | 单只股票行情与日 K 统一快照 | 路径参数 symbol；lookback_days（20–2000）、adjustment、as_of | getMarketBundle | 是 |
 | GET | /api/v1/data-sources/diagnostics | Provider 业务请求熔断诊断（进程内真实请求观测） | 无额外参数；详见 OpenAPI | 未接入 WebUI | 是 |
-| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | 无请求体；单项超时和并发受限 | 未接入 WebUI | 是 |
+| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | scope、capabilities、checks、markets、symbols、daily_bar_adjustments、timeout_seconds；单项超时和并发受限 | 未接入 WebUI | 是 |
 | GET | /api/v1/data-sources/probe/history | 主动探测历史批次 | limit（1–100，默认 20）；依赖 MariaDB | 未接入 WebUI | 是 |
 | GET | /api/v1/data-sources | Provider 注册信息与静态能力声明 | 无额外参数；详见 OpenAPI | getDataSources | 是 |
 | GET | /api/v1/stocks/search | A 股证券名称/代码搜索 | q 必填（1–64 字符）；limit（1–50，默认 10） | searchStocks | 是 |
