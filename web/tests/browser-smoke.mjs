@@ -577,6 +577,16 @@ try {
       await page.waitForFunction(() => document.querySelector("#market-sector-meta")?.textContent.includes("从低到高"));
       assert.match(await page.locator("#market-sector-meta").textContent(), /从低到高/);
 
+      const sectorCountBefore = sectorRequests.length;
+      await page.locator("#market-sector-limit").selectOption("50");
+      await page.waitForFunction(() => document.querySelector("#market-sector-meta")?.textContent.includes("请求上限 50 条"));
+      assert.equal(sectorRequests.length, sectorCountBefore + 1, "changing sector limit must only issue one sector request");
+      assert.equal(sectorRequests.at(-1)?.limit, "50");
+      assert.equal(sectorRequests.at(-1)?.type, "industry");
+      assert.equal(sectorRequests.at(-1)?.direction, "down");
+      assert.equal(sectorRequests.at(-1)?.sort_by, "change_5d");
+      assert.match(await page.locator("#market-sector-meta").textContent(), /实际返回 2 条/);
+
       const beforeUnsupported = sectorRequests.length;
       await page.locator('[data-sector-metric="flow"]').click();
       await page.waitForFunction(() => document.querySelector("#market-sector-meta")?.textContent.includes("资金净流入"));

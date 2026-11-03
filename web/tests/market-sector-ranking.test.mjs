@@ -18,6 +18,15 @@ test("板块排行接入服务端成交额、五日涨幅和排序方向", () =>
   assert.match(html, /data-sector-metric="amount"/);
   assert.match(html, /data-sector-metric="five-day"/);
   assert.match(html, /data-sector-direction="down"/);
+  assert.match(html, /id="market-sector-limit"/);
+  assert.match(html, /value="10" selected/);
+  assert.match(html, /value="20"/);
+  assert.match(html, /value="50"/);
+  assert.match(html, /value="100"/);
+  assert.match(overview, /sectorLimit=10/);
+  assert.match(overview, /limit:sectorLimit/);
+  assert.match(overview, /请求上限/);
+  assert.match(overview, /实际返回/);
 });
 
 test("板块资金净流入仍明确标记为未接入，不以成交额代替", () => {
