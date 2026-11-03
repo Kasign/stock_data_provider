@@ -10,7 +10,7 @@ const [marketStocks, app] = await Promise.all([
 test("全市场分页行情同时提供行情详情和深度研究入口", () => {
   assert.match(marketStocks, /\["stocks", "查看行情"\]/);
   assert.match(marketStocks, /\["research", "深度研究"\]/);
-  assert.match(marketStocks, /data\.marketStockAction === "research" \? "research" : "stocks"/);
+  assert.match(marketStocks, /button\.dataset\.marketStockAction === "research" \? "research" : "stocks"/);
   assert.match(app, /function selectStockFromMarket\(item, source = "市场榜单", targetView = "stocks"\)/);
   assert.match(app, /setView\(targetView === "research" \? "research" : "stocks"\)/);
 });

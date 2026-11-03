@@ -1980,7 +1980,7 @@ test("个股研究列表复用自选股批量行情并区分失败与旧快照",
 
 test("全市场分页行情只调用分页概览 API 并正确展示覆盖与质量状态", () => {
   assert.match(app, /import \{ bindMarketStocks \} from "\.\/market-stocks\.js"/);
-  assert.match(app, /bindMarketStocks\([\s\S]*?selectStockFromMarket\(item, "全市场行情"\)/);
+  assert.match(app, /bindMarketStocks\([\s\S]*?selectStockFromMarket\(item, source, targetView\)/);
   assert.match(marketStocksModule, /getMarketStocks\(settings, \{/);
   assert.match(marketStocksModule, /coverage_ratio/);
   assert.match(marketStocksModule, /total_is_lower_bound/);
