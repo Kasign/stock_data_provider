@@ -94,6 +94,19 @@ try {
   await page.locator("#screening-local-result-filter").selectOption("all");
   assert.equal(await page.locator("#screening-local-results-body tr").count(), 3);
   assert.equal(marketStocksRequests, 1, "switching local result views must not re-fetch market data");
+  const exportButton = page.locator("#screening-local-export-csv");
+  assert.equal(await exportButton.isEnabled(), true);
+  const [csvDownload] = await Promise.all([page.waitForEvent("download"), exportButton.click()]);
+  assert.match(csvDownload.suggestedFilename(), /^当前页筛选-全部-\\d{8}-\\d{6}\\.csv$/);
+  const csvPath = await csvDownload.path();
+  const csvContent = await readFile(csvPath, "utf8");
+  assert.ok(csvContent.startsWith("\\uFEFF"), "CSV must include UTF-8 BOM");
+  assert.match(csvContent, /"测试命中"/);
+  assert.match(csvContent, /"测试未命中"/);
+  assert.match(csvContent, /"测试待判断"/);
+  assert.match(csvContent, /"MA5 字段缺失"/);
+  assert.match(csvContent, /"待判断"/);
+  assert.equal(marketStocksRequests, 1, "CSV export must not re-fetch market data");
 
   // 批量加入只作用于当前命中视图；重复加入不重复插入，明确选组时才调整既有归属。
   await page.locator("#screening-local-result-filter").selectOption("matched");

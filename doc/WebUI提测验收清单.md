@@ -570,3 +570,12 @@
 - [x] 成功后自选股列表同步刷新，不额外请求行情。
 - [x] 单元测试 365/365 通过；JavaScript 语法、Compose 校验及 Nginx 镜像构建通过（[WebUI Checks #41601074600](https://github.com/Kasign/stock_data_provider/actions/runs/41601074600)）。
 - [x] Chromium Browser Smoke 通过，覆盖 7 种视口及批量操作闭环（[Browser Smoke #41601074463](https://github.com/Kasign/stock_data_provider/actions/runs/41601074463)）。
+
+
+## 当前页筛选结果 CSV 导出（2026-11-03）
+- [x] 命中、未命中、待判断、全部四种范围均由当前视图决定导出集合。
+- [x] 导出真实行情字段、质量状态/原因、筛选判断、页码、页大小和复权口径。
+- [x] 缺失值为空、数值零保留为 0；CSV 引号/逗号转义及公式注入防护。
+- [x] UTF-8 BOM、CRLF、带结果范围和本地时间的文件名。
+- [x] 导出前校验行情快照，分页失效后不可导出旧结果。
+- [ ] WebUI Checks 与 Chromium Browser Smoke：待运行。

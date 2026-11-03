@@ -5,6 +5,7 @@ import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
 import { resolveScreeningCapability, resolveScreeningTaskState, resolveScreeningCollectionState } from "./screening-state.js";
 import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, readScreeningPlans, saveScreeningPlan, selectScreeningResultRows } from "./screening-draft.js";
+import { buildScreeningCSV } from "./screening-export.js";
 import { resolveAlertCapability, resolveAlertEvaluationState, resolveAlertCollectionState } from "./alert-state.js";
 import {
   analysisHealth,
@@ -1801,6 +1802,7 @@ function renderScreeningLocalResultRows() {
     body.append(row);
   });
   updateScreeningBatchControls();
+  const exportButton = $("#screening-local-export-csv"); if (exportButton) exportButton.disabled = rows.length === 0;
 }
 
 function renderScreeningLocalResults() {
@@ -1821,6 +1823,26 @@ function renderScreeningLocalResults() {
 }
 $("#screening-apply-current-page")?.addEventListener("click", renderScreeningLocalResults);
 $("#screening-local-result-filter")?.addEventListener("change", () => { screeningSelectedSymbols.clear(); renderScreeningLocalResultRows(); });
+$("#screening-local-export-csv")?.addEventListener("click", () => {
+  if (!screeningLocalEvaluation || !isCurrentScreeningSnapshot(screeningLocalEvaluation.snapshot)) {
+    invalidateScreeningLocalResults("行情分页已变化，请重新筛选后再导出。"); return;
+  }
+  const { snapshot, result } = screeningLocalEvaluation;
+  const filter = $("#screening-local-result-filter")?.value || "matched";
+  const rows = selectScreeningResultRows(result, filter);
+  if (!rows.length) return;
+  const csv = buildScreeningCSV({ rows, page: snapshot.page, pageSize: snapshot.pageSize,
+    adjustment: snapshot.adjustment, logic: result.logic, conditions: screeningDraftConditions });
+  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob), anchor = document.createElement("a");
+  const timestamp = new Date(), pad = value => String(value).padStart(2, "0");
+  const stamp = timestamp.getFullYear() + pad(timestamp.getMonth() + 1) + pad(timestamp.getDate()) + "-" +
+    pad(timestamp.getHours()) + pad(timestamp.getMinutes()) + pad(timestamp.getSeconds());
+  const labels = { matched: "命中", unmatched: "未命中", unknown: "待判断", all: "全部" };
+  anchor.href = url; anchor.download = "当前页筛选-" + labels[filter] + "-" + stamp + ".csv";
+  document.body.append(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+  setText("#screening-local-export-feedback", "已导出 " + rows.length + " 条当前页" + labels[filter] + "结果；缺失字段保持为空。");
+});
 $("#screening-local-results-body")?.addEventListener("change", (event) => {
   const checkbox = event.target.closest("input[data-screening-local-select-symbol]"); if (!checkbox) return;
   if (checkbox.checked) screeningSelectedSymbols.add(checkbox.value); else screeningSelectedSymbols.delete(checkbox.value);
