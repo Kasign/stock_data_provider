@@ -215,3 +215,26 @@ export function removeWatchlistSymbols(symbols, storage) {
   const items = currentState.items.filter((item) => !identities.has(comparableMarketSymbol(item.symbol)));
   return { items, removed, persisted: writeRecords(storage, items), storageReadable: true, storageValid: true };
 }
+
+
+export function addWatchlistSymbols(records, storage, updatedAt = new Date().toISOString()) {
+  const currentState = readWatchlistState(storage), source = Array.isArray(records) ? records : [];
+  if (!currentState.storageReadable || !currentState.storageValid) return {
+    items: currentState.items, added: [], duplicates: [], invalid: source.length, capacitySkipped: 0,
+    persisted: false, storageReadable: currentState.storageReadable, storageValid: currentState.storageValid
+  };
+  const items = [...currentState.items], seen = new Set(items.map((item) => comparableMarketSymbol(item.symbol)));
+  const added = [], duplicates = [], invalid = [];
+  let capacitySkipped = 0;
+  for (const record of source) {
+    const normalized = normalizeRecord({ ...record, updated_at: updatedAt });
+    if (!normalized) { invalid.push(String(record?.symbol ?? "")); continue; }
+    const identity = comparableMarketSymbol(normalized.symbol);
+    if (seen.has(identity)) { duplicates.push(normalized.symbol); continue; }
+    if (items.length >= MAX_WATCHLIST_ITEMS) { capacitySkipped += 1; continue; }
+    seen.add(identity); items.unshift(normalized); added.push(normalized);
+  }
+  if (!added.length) return { items: currentState.items, added, duplicates, invalid, capacitySkipped, persisted: true, storageReadable: true, storageValid: true };
+  const persisted = writeRecords(storage, items);
+  return { items: persisted ? items : currentState.items, added, duplicates, invalid, capacitySkipped, persisted, storageReadable: true, storageValid: true };
+}

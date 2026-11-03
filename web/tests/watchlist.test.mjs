@@ -266,3 +266,23 @@ test("批量移除按证券身份去重并一次性持久化", async () => {
  assert.deepEqual(result.removed.sort(), ["000858.SZ", "600519"]);
  assert.deepEqual(readWatchlist(storage).map((item) => item.symbol), ["000001.SZ"]);
 });
+
+
+test("batch add deduplicates existing and repeated symbols and preserves existing aliases", async () => {
+  const { addWatchlistSymbols } = await import("../src/watchlist.js");
+  const storage = makeStorage(); addWatchlistSymbol("600519.SH", "我的别名", storage);
+  const result = addWatchlistSymbols([{ symbol: "600519", name: "贵州茅台" }, { symbol: "000001.SZ", name: "平安银行" }, { symbol: "000001", name: "重复记录" }], storage);
+  assert.equal(result.persisted, true); assert.equal(result.added.length, 1);
+  assert.deepEqual(result.duplicates, ["600519", "000001"]);
+  assert.equal(result.items.find((item) => item.symbol === "600519.SH").name, "我的别名");
+});
+
+test("batch add reports invalid symbols and capacity overflow without exceeding the limit", async () => {
+  const { addWatchlistSymbols } = await import("../src/watchlist.js");
+  const storage = makeStorage();
+  const seed = Array.from({ length: MAX_WATCHLIST_ITEMS }, (_, index) => ({ symbol: String(index + 1).padStart(6, "0"), name: "股票" + index, updated_at: "" }));
+  storage.setItem(WATCHLIST_KEY, JSON.stringify(seed));
+  const result = addWatchlistSymbols([{ symbol: "bad" }, { symbol: "999999", name: "超限" }], storage);
+  assert.equal(result.persisted, true); assert.equal(result.invalid.length, 1);
+  assert.equal(result.capacitySkipped, 1); assert.equal(result.items.length, MAX_WATCHLIST_ITEMS);
+});

@@ -40,6 +40,7 @@ import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
 import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, removeWatchlistSymbols, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
+import { addScreeningResultsToWatchlist } from "./watchlist-batch.js";
 import { sortWatchlistItems } from "./watchlist-sort.js";
 import { assignWatchlistGroup, assignWatchlistGroups, createWatchlistGroup, normalizeWatchlistGroups, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP, WATCHLIST_GROUPS_KEY } from "./watchlist-groups.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
@@ -1619,9 +1620,11 @@ const screeningDraftConditions = [];
 let screeningDraftLogic = "and";
 let selectedScreeningPlanId = "";
 let screeningLocalEvaluation = null;
+let screeningSelectedSymbols = new Set();
 
 function invalidateScreeningLocalResults(message = "筛选条件已变化，请重新应用到当前页。") {
   screeningLocalEvaluation = null;
+  screeningSelectedSymbols.clear();
   const summary = $("#screening-local-results-summary"), body = $("#screening-local-results-body");
   if (summary) summary.textContent = message;
   if (body) {
@@ -1630,6 +1633,7 @@ function invalidateScreeningLocalResults(message = "筛选条件已变化，请�
     cell.className = "table-empty"; cell.colSpan = 8; cell.textContent = "尚未执行当前页筛选。";
     row.append(cell); body.append(row);
   }
+  updateScreeningBatchControls();
 }
 
 function renderScreeningDraftConditions() {
@@ -1759,18 +1763,23 @@ function renderScreeningLocalResultRows() {
     result.unmatchedItems.length + " 条，因字段缺失无法判断 " + result.unknownItems.length + " 条；当前显示" +
     filterLabels[filter] + " " + rows.length + " 条。结果仅限本页，不代表全市场扫描。";
   body.replaceChildren();
+  screeningSelectedSymbols.clear();
   if (!rows.length) {
     const row = document.createElement("tr"), cell = document.createElement("td");
-    cell.className = "table-empty"; cell.colSpan = 8;
+    cell.className = "table-empty"; cell.colSpan = 9;
     cell.textContent = filter === "matched" ? "当前页没有可确认命中的股票；请检查待判断数量。" :
       filter === "unknown" ? "当前页没有因字段缺失而待判断的股票。" :
       filter === "unmatched" ? "当前页没有明确未命中的股票。" : "当前页没有可展示的筛选记录。";
-    row.append(cell); body.append(row); return;
+    row.append(cell); body.append(row); updateScreeningBatchControls(); return;
   }
   rows.forEach(({ item, status }) => {
     const quote = item?.quote || {}, symbol = String(item?.symbol || item?.code || quote.symbol || "").trim();
     const name = String(item?.name || quote.name || symbol || "未报告");
-    const row = document.createElement("tr"), stockCell = document.createElement("td");
+    const row = document.createElement("tr"), checkCell = document.createElement("td"), stockCell = document.createElement("td");
+    const validSymbol = /^\d{6}(?:\.(?:SH|SZ|BJ))?$/.test(symbol.toUpperCase());
+    const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.value = symbol.toUpperCase();
+    checkbox.dataset.screeningLocalSelectSymbol = symbol.toUpperCase(); checkbox.disabled = !validSymbol;
+    checkbox.setAttribute("aria-label", "选择 " + name + " 加入自选股"); checkCell.append(checkbox); row.append(checkCell);
     const select = document.createElement("button"); select.type = "button"; select.className = "market-hot-stock-link";
     select.dataset.screeningLocalSymbol = symbol; select.dataset.screeningLocalName = name;
     select.disabled = !symbol; select.append(document.createTextNode(name), document.createElement("br"));
@@ -1791,6 +1800,7 @@ function renderScreeningLocalResultRows() {
     const judgmentCell = document.createElement("td"); judgmentCell.textContent = status; row.append(judgmentCell);
     body.append(row);
   });
+  updateScreeningBatchControls();
 }
 
 function renderScreeningLocalResults() {
@@ -1810,7 +1820,21 @@ function renderScreeningLocalResults() {
   renderScreeningLocalResultRows();
 }
 $("#screening-apply-current-page")?.addEventListener("click", renderScreeningLocalResults);
-$("#screening-local-result-filter")?.addEventListener("change", renderScreeningLocalResultRows);
+$("#screening-local-result-filter")?.addEventListener("change", () => { screeningSelectedSymbols.clear(); renderScreeningLocalResultRows(); });
+$("#screening-local-results-body")?.addEventListener("change", (event) => {
+  const checkbox = event.target.closest("input[data-screening-local-select-symbol]"); if (!checkbox) return;
+  if (checkbox.checked) screeningSelectedSymbols.add(checkbox.value); else screeningSelectedSymbols.delete(checkbox.value);
+  updateScreeningBatchControls();
+});
+$("#screening-local-select-visible")?.addEventListener("change", (event) => {
+  document.querySelectorAll("#screening-local-results-body input[data-screening-local-select-symbol]:not(:disabled)").forEach((checkbox) => {
+    checkbox.checked = event.target.checked;
+    if (event.target.checked) screeningSelectedSymbols.add(checkbox.value); else screeningSelectedSymbols.delete(checkbox.value);
+  });
+  updateScreeningBatchControls();
+});
+$("#screening-local-group")?.addEventListener("focus", syncScreeningBatchGroupOptions);
+$("#screening-local-add-watchlist")?.addEventListener("click", addSelectedScreeningResultsToWatchlist);
 document.querySelectorAll('.nav-link[data-view="screening"]').forEach((button) => {
   button.addEventListener("click", () => {
     if (screeningLocalEvaluation && !isCurrentScreeningSnapshot(screeningLocalEvaluation.snapshot)) {
@@ -1818,6 +1842,53 @@ document.querySelectorAll('.nav-link[data-view="screening"]').forEach((button) =
     }
   });
 });
+function syncScreeningBatchGroupOptions() {
+  const select = $("#screening-local-group"); if (!select) return;
+  const previous = select.value || "preserve", groups = readWatchlistGroups(safeWatchlistGroupStorage());
+  select.replaceChildren();
+  const preserve = document.createElement("option"); preserve.value = "preserve"; preserve.textContent = "保留已有分组（新股归入未分组）"; select.append(preserve);
+  if (groups.valid) groups.groups.forEach((group) => { const option = document.createElement("option"); option.value = group; option.textContent = "统一调整至：" + group; select.append(option); });
+  select.value = [...select.options].some((option) => option.value === previous) ? previous : "preserve";
+  select.disabled = !groups.valid;
+}
+function updateScreeningBatchControls() {
+  const boxes = [...document.querySelectorAll("#screening-local-results-body input[data-screening-local-select-symbol]:not(:disabled)")];
+  const selected = boxes.filter((box) => screeningSelectedSymbols.has(box.value)).length, all = $("#screening-local-select-visible");
+  if (all) { all.checked = boxes.length > 0 && selected === boxes.length; all.indeterminate = selected > 0 && selected < boxes.length; all.disabled = boxes.length === 0; }
+  setText("#screening-local-select-count", "已选择 " + selected + " 只");
+  const button = $("#screening-local-add-watchlist"); if (button) button.disabled = selected === 0;
+  syncScreeningBatchGroupOptions();
+}
+function addSelectedScreeningResultsToWatchlist() {
+  if (!screeningLocalEvaluation || !isCurrentScreeningSnapshot(screeningLocalEvaluation.snapshot)) {
+    invalidateScreeningLocalResults("行情分页已变化，请重新筛选后再加入自选股。"); return;
+  }
+  const filter = $("#screening-local-result-filter")?.value || "matched";
+  const rows = selectScreeningResultRows(screeningLocalEvaluation.result, filter), selected = new Set(screeningSelectedSymbols);
+  const records = rows.map(({ item }) => {
+    const quote = item?.quote || {};
+    return { symbol: String(item?.symbol || item?.code || quote.symbol || "").trim().toUpperCase(),
+      name: String(item?.name || quote.name || item?.symbol || item?.code || "未报告").trim() };
+  }).filter((record) => selected.has(record.symbol));
+  if (!records.length) return;
+  const group = $("#screening-local-group")?.value || "preserve";
+  let storage;
+  try { storage = window.localStorage; } catch { setText("#screening-local-batch-feedback", "浏览器本地存储不可用，未执行批量添加。"); return; }
+  const result = addScreeningResultsToWatchlist(records, storage, group === "preserve" ? null : group);
+  if (!result.persisted) {
+    setText("#screening-local-batch-feedback", result.rollbackSucceeded === false
+      ? "批量操作未能完整保存，且回滚未能确认；请立即检查自选股与分组数据。未报告成功。"
+      : result.reason === "invalid-group" ? "目标分组不存在或分组存储异常，未修改自选股。"
+      : "批量添加未能确认保存；已尝试回滚，请检查浏览器存储状态。");
+    return;
+  }
+  renderWatchlist(result.items, true, true);
+  setText("#screening-local-batch-feedback", "新增 " + result.added.length + " 只，重复跳过 " + result.duplicates.length +
+    " 只，无效 " + result.invalid.length + " 只，容量不足跳过 " + result.capacitySkipped + " 只" +
+    (result.assignedCount ? "；调整分组 " + result.assignedCount + " 只" : "") + "。");
+  screeningSelectedSymbols.clear(); renderScreeningLocalResultRows();
+}
+
 $("#screening-local-results-body")?.addEventListener("click", event => {
   const button = event.target.closest("button[data-screening-local-symbol]");
   if (!button || !button.dataset.screeningLocalSymbol) return;
