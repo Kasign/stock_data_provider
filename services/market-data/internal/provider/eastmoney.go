@@ -18,6 +18,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 const eastmoneyVersion = "eastmoney-stock-api-v1"
@@ -558,6 +559,80 @@ func parseEastmoneyProfileDate(value string) (string, error) {
 	return "", fmt.Errorf("eastmoney stock-basic date %q has an unsupported format", value)
 }
 
+func parseEastmoneyQuoteNumber(ctx context.Context, data map[string]json.RawMessage, providerField, field string, required bool) (*float64, error) {
+	raw, exists := data[providerField]
+	actualType := "missing"
+	preview := ""
+	value := ""
+	if exists {
+		trimmed := strings.TrimSpace(string(raw))
+		preview = trimmed
+		if len(preview) > 160 {
+			preview = preview[:160]
+		}
+		preview = strings.Map(func(r rune) rune {
+			if r < 0x20 || r == 0x7f {
+				return ' '
+			}
+			return r
+		}, preview)
+		switch {
+		case len(trimmed) == 0:
+			actualType = "missing"
+		case trimmed == "null":
+			actualType = "null"
+		case strings.HasPrefix(trimmed, "{"):
+			actualType = "object"
+		case strings.HasPrefix(trimmed, "["):
+			actualType = "array"
+		case trimmed == "true" || trimmed == "false":
+			actualType = "boolean"
+		case strings.HasPrefix(trimmed, "`"):
+			actualType = "string"
+		default:
+			actualType = "number"
+		}
+		if actualType == "string" {
+			if err := json.Unmarshal(raw, &value); err != nil {
+				actualType = "invalid"
+			}
+		} else if actualType == "number" {
+			value = trimmed
+		}
+	}
+	missing := !exists || actualType == "missing" || actualType == "null" || value == "" || value == "-"
+	addIssue := func(code, expected, message string, severity validation.Severity) {
+		report := validation.NewReport(4)
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageParse, Field: field, ProviderField: providerField,
+			Code: code, Expected: expected, ActualType: actualType,
+			ActualPreview: preview, Severity: severity, Message: message,
+		})
+		validation.AddContextReport(ctx, report)
+	}
+	if missing {
+		if required {
+			code := "missing"
+			if actualType == "null" {
+				code = "null_value"
+			}
+			addIssue(code, "required finite number", "Eastmoney quote source field is missing or null", validation.SeverityError)
+			return nil, fmt.Errorf("Eastmoney quote field %s (%s) is missing", field, providerField)
+		}
+		return nil, nil
+	}
+	if actualType != "number" && actualType != "string" {
+		addIssue("type_mismatch", "number or numeric string", "Eastmoney quote source field has an unsupported JSON type", validation.SeverityError)
+		return nil, fmt.Errorf("Eastmoney quote field %s (%s) has type %s", field, providerField, actualType)
+	}
+	number, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || math.IsNaN(number) || math.IsInf(number, 0) {
+		addIssue("invalid_number", "finite number", "Eastmoney quote source field is not a finite number", validation.SeverityError)
+		return nil, fmt.Errorf("Eastmoney quote field %s (%s) is not a finite number", field, providerField)
+	}
+	return &number, nil
+}
+
 func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
@@ -609,48 +684,24 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 			return nil, fmt.Errorf("Eastmoney quote symbol mismatch: requested %s got %q", symbol, reportedSymbol)
 		}
 	}
-	getNumber := func(key string) (*float64, error) {
-		s := getString(key)
-		if s == "" || s == "-" || s == "null" {
-			return nil, nil
+	parseErrors := make([]error, 0)
+	parseNumber := func(key, field string, required bool) *float64 {
+		value, parseErr := parseEastmoneyQuoteNumber(ctx, payload.Data, key, field, required)
+		if parseErr != nil {
+			parseErrors = append(parseErrors, parseErr)
 		}
-		v, e := strconv.ParseFloat(s, 64)
-		if e != nil || math.IsNaN(v) || math.IsInf(v, 0) {
-			return nil, fmt.Errorf("invalid Eastmoney numeric field %s", key)
-		}
-		return &v, nil
+		return value
 	}
-	price, err := getNumber("f43")
-	if err != nil {
-		return nil, err
-	}
-	high, err := getNumber("f44")
-	if err != nil {
-		return nil, err
-	}
-	low, err := getNumber("f45")
-	if err != nil {
-		return nil, err
-	}
-	open, err := getNumber("f46")
-	if err != nil {
-		return nil, err
-	}
-	prev, err := getNumber("f60")
-	if err != nil {
-		return nil, err
-	}
-	change, err := getNumber("f169")
-	if err != nil {
-		return nil, err
-	}
-	pct, err := getNumber("f170")
-	if err != nil {
-		return nil, err
-	}
-	rawVol, err := getNumber("f47")
-	if err != nil {
-		return nil, err
+	price := parseNumber("f43", "current_price", true)
+	high := parseNumber("f44", "high", true)
+	low := parseNumber("f45", "low", true)
+	open := parseNumber("f46", "open", true)
+	prev := parseNumber("f60", "prev_close", true)
+	change := parseNumber("f169", "change", false)
+	pct := parseNumber("f170", "change_percent", false)
+	rawVol := parseNumber("f47", "volume", true)
+	if len(parseErrors) > 0 {
+		return nil, fmt.Errorf("Eastmoney quote parse: %w", errors.Join(parseErrors...))
 	}
 	var volume *int64
 	var volumePtr *float64

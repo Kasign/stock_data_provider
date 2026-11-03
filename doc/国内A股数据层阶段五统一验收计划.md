@@ -1022,3 +1022,12 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 当前修复解决 Reporter 阶段判断和 Probe 重复校验问题，不代表所有 Quote Provider 都已完成字段级 Parse Reporter 接入。
 - 下一批优先补齐默认启用的 Eastmoney Quote 原始字段诊断；再评估 Pytdx 等 SDK Provider 的结构化字段问题表达，避免把 SDK 映射错误误写成 JSON 类型错误。
 - 只有 Quote Provider 的默认启用能力与可选启用能力均有明确诊断边界后，才进入 DailyBar Provider 全覆盖审计。
+
+
+### 2026-11-03：Eastmoney Quote 原始数值字段诊断
+
+- Eastmoney Quote 的数值字段从 RawMessage 逐字段解析，保留 Provider 字段名与标准字段名映射。
+- 必需数值字段覆盖 f43/current_price、f44/high、f45/low、f46/open、f60/prev_close、f47/volume；缺失、null、对象/数组/布尔类型、非法数值及 NaN/Inf 均写入请求级 Reporter 的 Parse Issue，并保持硬失败。
+- f169/change、f170/change_percent、f50/volume_ratio、f168/turnover_rate 仍按原有可选字段语义解析；不改变量额单位转换、涨跌交叉校验和 Quote 质量门禁。
+- 字段摘要限制 160 字符并清理控制字符；不记录完整响应。
+- 回归覆盖必需字段 missing、null、object、array、boolean、非法字符串和非有限数值。

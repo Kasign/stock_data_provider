@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 func TestEastmoneyQuoteNormalizesUnitsAndProviderTime(t *testing.T) {
@@ -53,6 +54,62 @@ func TestEastmoneyQuoteNormalizesUnitsAndProviderTime(t *testing.T) {
 		t.Fatalf("volume ratio/turnover rate must survive the provider contract: ratio=%v turnover=%v", q.VolumeRatio, q.TurnoverRate)
 	}
 }
+func TestEastmoneyQuoteReportsRawNumericFieldParseIssues(t *testing.T) {
+	cases := []struct {
+		name       string
+		remove     bool
+		value      any
+		wantCode   string
+		wantType   string
+	}{
+		{name: "missing", remove: true, wantCode: "missing", wantType: "missing"},
+		{name: "null", value: nil, wantCode: "null_value", wantType: "null"},
+		{name: "object", value: map[string]any{"unexpected": 1}, wantCode: "type_mismatch", wantType: "object"},
+		{name: "array", value: []any{1}, wantCode: "type_mismatch", wantType: "array"},
+		{name: "boolean", value: true, wantCode: "type_mismatch", wantType: "boolean"},
+		{name: "invalid numeric string", value: "not-a-price", wantCode: "invalid_number", wantType: "string"},
+		{name: "non finite", value: "NaN", wantCode: "invalid_number", wantType: "string"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := map[string]any{
+				"f43": 1313.31, "f44": 1331.98, "f45": 1312.00, "f46": 1331.88,
+				"f47": 34136, "f48": 4525398959, "f57": "600519", "f58": "贵州茅台",
+				"f60": 1331.88, "f86": "202610211128", "f169": -18.57, "f170": -1.394,
+				"f50": 2.13, "f168": 0.2,
+			}
+			if tc.remove {
+				delete(data, "f43")
+			} else {
+				data["f43"] = tc.value
+			}
+			body, err := json.Marshal(map[string]any{"rc": 0, "data": data})
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write(body)
+			}))
+			defer server.Close()
+			ctx := validation.WithReporter(context.Background(), validation.NewReporter(20))
+			_, fetchErr := NewEastmoney(2*time.Second, server.URL, server.URL).FetchQuote(ctx, "600519.SH")
+			if fetchErr == nil {
+				t.Fatal("invalid required source field must reject the quote")
+			}
+			report := validation.ReporterFromContext(ctx).Snapshot()
+			if report.TotalCount != 1 || len(report.Issues) != 1 {
+				t.Fatalf("expected one structured parse issue, got %+v", report)
+			}
+			issue := report.Issues[0]
+			if issue.Stage != validation.StageParse || issue.Field != "current_price" ||
+				issue.ProviderField != "f43" || issue.Code != tc.wantCode || issue.ActualType != tc.wantType ||
+				issue.Severity != validation.SeverityError {
+				t.Fatalf("unexpected parse issue: %+v", issue)
+			}
+		})
+	}
+}
+
 func TestEastmoneyQuoteAcceptsNumericUnixSecondsTimestamp(t *testing.T) {
 	timestamp := time.Now().UTC().Add(-time.Minute).Unix()
 	body := fmt.Sprintf(`{"rc":0,"data":{"f43":41.76,"f44":42.09,"f45":41.66,"f46":41.70,"f47":125595,"f48":525556667,"f57":"600036","f58":"招商银行","f60":41.82,"f86":%d,"f169":-0.06,"f170":-0.14,"f50":2.85,"f168":0.06}}`, timestamp)
