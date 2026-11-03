@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/cache"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/freshness"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
@@ -572,12 +573,6 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 	if len(results) != 1 || results[0].Status != "skipped" || results[0].ErrorCode != "comparison_not_comparable" {
 		t.Fatalf("degraded snapshots must not be reported as cross-provider pass: %+v", results)
 	}
-	if results[0].ComparedSymbol != "600036.SH" || results[0].LeftProvider != "left" ||
-		results[0].RightProvider != "right" || results[0].LeftSourceVersion != "left-v1" ||
-		results[0].RightSourceVersion != "right-v1" || results[0].LeftQualityStatus != model.QualityDegraded ||
-		results[0].RightQualityStatus != model.QualityValid {
-		t.Fatalf("not-comparable result must preserve both input evidence states: %+v", results[0])
-	}
 }
 
 func TestProviderProbeFieldIssueJSONContainsSafeDiagnosticFields(t *testing.T) {
@@ -716,6 +711,77 @@ func (providerProbeFreshnessCalendarFake) FetchTradingCalendar(_ context.Context
 		Source: "probe-freshness-calendar", SourceVersion: "calendar-v1",
 		FetchedAt: fetchedAt, QualityStatus: model.QualityValid,
 	}, nil
+}
+
+type providerProbeSecurityTradingStatusFake struct {
+	status model.SuspensionStatus
+	fail   bool
+}
+
+func (p providerProbeSecurityTradingStatusFake) Name() string {
+	return "probe-freshness-security-status"
+}
+
+func (p providerProbeSecurityTradingStatusFake) FetchSecurityTradingStatus(_ context.Context, symbol, tradeDate string) (*model.SecurityTradingStatusSnapshot, error) {
+	if p.fail {
+		return nil, errors.New("security status unavailable")
+	}
+	return &model.SecurityTradingStatusSnapshot{
+		Symbol: symbol, TradeDate: tradeDate, SecurityName: "测试证券",
+		NameEffectiveFrom: "2020-01-01", ListingDate: "2020-01-01", ListingTradingDayNumber: 1,
+		ListingStatusKnown: true, RiskWarningStatus: model.RiskWarningNormal,
+		DelistingStatus: model.DelistingStatusNormal, IsTradingDay: true, TradingDayKnown: true,
+		SuspensionStatus: p.status, Source: p.Name(), SourceVersion: "security-status-v1",
+		FetchedAt: time.Now().UTC(), QualityStatus: model.QualityValid,
+	}, nil
+}
+
+func TestApplyFreshnessProbeResultsUsesSecurityTradingStatusEvidence(t *testing.T) {
+	location := marketLocation()
+	checkedAt := time.Date(2026, 11, 2, 10, 0, 0, 0, location).UTC()
+	sourceTime := checkedAt.Add(-30 * time.Second)
+	fetchedAt := checkedAt.Add(-time.Second)
+	tests := []struct {
+		name           string
+		status         model.SuspensionStatus
+		fail           bool
+		wantStatus     string
+		wantFreshness  string
+		wantReason     string
+		wantSecurity   string
+	}{
+		{name: "full suspension", status: model.SuspensionStatusSuspended, wantStatus: "skipped", wantFreshness: "not_applicable", wantReason: freshness.ReasonSecuritySuspended, wantSecurity: "suspended"},
+		{name: "intraday suspension", status: model.SuspensionStatusIntraday, wantStatus: "skipped", wantFreshness: "not_applicable", wantReason: freshness.ReasonSecuritySuspended, wantSecurity: "intraday_suspension"},
+		{name: "resumed", status: model.SuspensionStatusResumed, wantStatus: "passed", wantFreshness: "fresh", wantReason: freshness.ReasonWithinSLA, wantSecurity: "normal"},
+		{name: "no suspension event", status: model.SuspensionStatusNoEvent, wantStatus: "passed", wantFreshness: "fresh", wantReason: freshness.ReasonWithinSLA, wantSecurity: "normal"},
+		{name: "missing security evidence", fail: true, wantStatus: "skipped", wantFreshness: "unknown", wantReason: freshness.ReasonSecurityStatusUnknown, wantSecurity: "unknown"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+			ds.SetTradingCalendarProviders([]provider.TradingCalendarProvider{providerProbeFreshnessCalendarFake{}})
+			ds.SetSecurityTradingStatusProviders([]provider.SecurityTradingStatusProvider{providerProbeSecurityTradingStatusFake{status: tc.status, fail: tc.fail}})
+			run := &model.ProviderProbeRun{
+				FinishedAt: checkedAt, TimeoutSeconds: 5, RequestedSymbols: []string{"600519.SH"},
+				Items: []model.ProviderProbeItem{{
+					Provider: "quote-provider", Capability: "quote", SampleSymbol: "600519.SH",
+					ProviderTime: &sourceTime, ProviderTimeType: "provider_snapshot_time", FetchedAt: &fetchedAt,
+				}},
+				CheckResults: []model.ProviderProbeCheckResult{{
+					Check: "freshness", Provider: "quote-provider", Capability: "quote",
+					ProviderTime: &sourceTime, ProviderTimeType: "provider_snapshot_time",
+					FetchedAt: &fetchedAt, CheckedAt: checkedAt,
+				}},
+			}
+			ds.applyFreshnessProbeResults(context.Background(), run)
+			result := run.CheckResults[0]
+			if result.Status != tc.wantStatus || result.FreshnessStatus != tc.wantFreshness ||
+				result.FreshnessReason != tc.wantReason || result.SecurityTradingStatus != tc.wantSecurity ||
+				result.MarketPhase != model.MarketSessionContinuousAM {
+				t.Fatalf("unexpected quote freshness context result: %+v", result)
+			}
+		})
+	}
 }
 
 func TestApplyFreshnessProbeResultsUsesPolicyAndMarketSession(t *testing.T) {

@@ -191,3 +191,16 @@ Freshness Evaluator 的特殊交易样例采用显式上下文输入，不在 ev
 
 本批首次 CI 的 market-data gofmt 前置检查发现 `ProviderProbeItem` 新增字段后，原有字段标签未按最长类型重新对齐；因此测试和镜像构建尚未进入编译阶段。已根据 CI 的 gofmt diff 对整个结构体统一格式，修复后必须以新 SHA 重新跑 market-data test、race、vet 和 Docker 构建。
 第二轮 CI 复核又发现该结构体与后续类型声明之间缺少 gofmt 要求的空行；已补齐。前两次失败均停留在格式检查阶段，没有进入 market-data 编译和单测，本批最终验收以再次触发的完整工作流为准。
+
+
+## 15. Quote 证券级停复牌上下文 Service 回归
+
+Service 层新增 fake Provider 集成测试，验证 `applyFreshnessProbeResults` 会真实调用证券级状态服务，并把状态转换为 Evaluator 上下文：
+
+- 全天停牌 `suspended`：Freshness 为 `not_applicable/security_suspended`。
+- 盘中临停 `intraday_suspension`：同样不累计行情更新 SLA。
+- 复牌 `resumed`：映射为正常交易，重新按普通 Quote SLA 判断，不设置未定义的复牌宽限。
+- 已确认无停牌事件 `no_suspension_event`：映射为正常交易。
+- 证券状态 Provider 失败：状态为 unknown，Freshness 为 `unknown/security_trading_status_unknown`，不能默认为正常交易。
+
+测试使用固定历史交易日和可控日历/证券状态 Provider，不依赖当前是否交易日或真实上游 Key。真实 Provider 对停牌、临停、复牌的历史样本仍需在真实环境验收中采集；合成样例只证明 Service 上下文解析与状态映射链路。
