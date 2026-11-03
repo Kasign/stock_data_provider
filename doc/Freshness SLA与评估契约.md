@@ -1,5 +1,7 @@
 # Freshness SLA 与评估契约
 
+> 状态说明：第 6、8 节及第 9 节中的“尚未接入/尚未执行”属于早期实施阶段的历史记录。Freshness Evaluator、策略注册表、Probe freshness 检查映射和 Quote 证券级停复牌上下文已在后续章节记录实现；当前策略覆盖范围以第 16 节为准。本文不再将已完成的 Evaluator/Probe 接入列为待开发。
+
 更新日期：2026-11-03
 
 ## 1. 目标与边界
@@ -66,7 +68,7 @@ Freshness 描述数据相对于其更新预期是否及时，是独立于 `Quali
 1. 为 quote、index、market breadth、sector、fund flow 建立集中 SLA 策略注册表，并接入真实源端时间字段。
 2. 增加日 K 的最近已完成交易日策略，覆盖收盘、非交易日、节假日和 Provider 延迟发布。
 3. 为财务、公告、估值定义基于 `available_at`、报告期及发布节奏的策略。
-4. 将 Freshness 证据和结果加入统一数据诊断逐 Provider 明细及 OpenAPI。
+4. [已完成，见第 9 节] 将 Freshness 证据和结果加入统一数据诊断逐 Provider 明细及 OpenAPI。
 5. 通过固定时间输入、特殊交易日样例和 Provider 实际数据完成端到端验收。
 
 ## 7. 测试覆盖
@@ -97,7 +99,7 @@ Freshness 描述数据相对于其更新预期是否及时，是独立于 `Quali
 1. Quote/Index 的 Provider 适配层必须稳定填充时间语义；缺失时 Evaluator 返回 unknown。
 2. 市场宽度使用最旧成分时间作为保守聚合证据；还需在诊断明细中展示覆盖数量及最旧/最新时间。
 3. 板块与资金流要从 Provider 原始响应补充可信的精确更新时间，或明确改为基于交易日/报告周期的独立策略；在此之前不能按 5 分钟 SLA 输出 fresh/stale。
-4. 当前策略注册表尚未接入诊断 API，也没有完成 Go 测试、gofmt、Race、Vet 或构建验证。
+4. （历史状态，已被第 9 节及第 16 节覆盖）策略注册表已接入 Provider Probe；后续测试状态以对应 HEAD 的 GitHub Actions 为准。
 
 
 ## 9. 接入统一 Provider Probe 诊断

@@ -1,6 +1,6 @@
 # 数据源真实环境验收记录
 
-> 当前状态核对（2026-11-03，基线 `0a9af43e`）：本文早期记录是对应日期的历史运行证据，不代表当前 HEAD 的实时状态。统一 Probe、Reporter、字段诊断、Freshness 接入、DailyBar 跨 Provider 比较和可选多复权口径探测已有代码实现；真实 Provider 是否通过必须查看对应 HEAD 的最新 Live workflow 单项结果。CI 的 `continue-on-error` 或 workflow 总体 success 不能替代逐 Provider 结果。当前代码任务与优先级以 `doc/国内A股数据层阶段五统一验收计划.md` 为准。多复权口径 Probe 的 CI 和真实 Provider 复权结果尚未在本记录中判定通过。
+> 当前状态核对（2026-11-03，基线 `b423c1ef`）：本文早期记录是对应日期的历史运行证据，不代表当前 HEAD 的实时状态。统一 Probe、Reporter、字段诊断、Freshness 接入、DailyBar 跨 Provider 比较和可选多复权口径探测已有代码实现；真实 Provider 是否通过必须查看对应 HEAD 的最新 Live workflow 单项结果。CI 的 `continue-on-error` 或 workflow 总体 success 不能替代逐 Provider 结果。当前代码任务与优先级以 `doc/国内A股数据层阶段五统一验收计划.md` 为准。多复权口径 Probe 的 CI 和真实 Provider 复权结果尚未在本记录中判定通过。
 
 - 适用分支：`feat/full-go-data-providers-api-switch`
 - 文档更新日期：2026-10-30

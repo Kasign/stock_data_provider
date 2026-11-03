@@ -2,7 +2,7 @@
 
 - 目标分支：`feat/full-go-data-providers-api-switch`
 - 阶段定位：阶段五统一验收，不以“代码已实现”替代真实数据验收。
-- 当前状态（2026-11-03，代码基线 `0a9af43eddab8e1068983ff189d3851d58b4f4bc`）：统一诊断框架、Quote 字段诊断、DailyBar 字段 Reporter、Probe 历史存储、DailyBar 跨 Provider 比较及多复权口径 Probe 请求参数/结果字段已有代码实现。多复权口径实现已提交，等待当前 HEAD 的 Go Suite、OpenAPI/HTTP 契约和 parity CI 验证；真实 Provider 复权能力仍需单项证据。阶段五继续只处理增量规则与真实数据验收。较早章节的待办表属于历史快照，不得作为当前任务重复执行。
+- 当前状态（2026-11-03，代码基线 `b423c1ef6585924163d3d30a775e7b7713df3c59`）：统一诊断框架、Quote 字段诊断、DailyBar 字段 Reporter、Probe 历史存储、DailyBar 跨 Provider 比较及多复权口径 Probe 请求参数/结果字段已有代码实现。多复权口径实现已提交，等待当前 HEAD 的 Go Suite、OpenAPI/HTTP 契约和 parity CI 验证；真实 Provider 复权能力仍需单项证据。阶段五继续只处理增量规则与真实数据验收。较早章节的待办表属于历史快照，不得作为当前任务重复执行。
 - 原则：每项结论必须绑定代码 SHA、样本范围、原始响应证据和质量判定；凭据不得进入文档或日志。
 
 ## 当前有效执行计划（2026-11-03；覆盖下文历史批次状态）
@@ -11,7 +11,7 @@
 
 | 优先级 | 当前任务 | 已有代码基础 | 实际剩余工作 | 验收边界 |
 |---|---|---|---|---|
-| P0 | DailyBar 复权口径 Probe | 已在 `0a9af43e` 增加可选 `daily_bar_adjustments`、默认 none、独立结果 `adjustment_basis` 和跨源按口径隔离；HTTP/Service 测试已补 | 等待 CI 验证；复核各 Provider 对“不支持复权”的错误表达是否能稳定映射为 `not_supported`，再补真实复权样本 | 不改 Provider 复权算法；CI 通过不代表真实复权验收通过 |
+| P0 | DailyBar 复权口径 Probe | 已在 `b423c1ef` 增加可选 `daily_bar_adjustments`、默认 none、独立结果 `adjustment_basis` 和跨源按口径隔离；HTTP/Service 测试已补 | 等待 CI 验证；已补充 Sina/NetEase 英文错误、Hithink 中文错误及其他 Provider 常见 unsupported 表达的分类测试；等待最新 CI 确认。随后只需对真实 Provider 结果逐项验收 | 不改 Provider 复权算法；CI 通过不代表真实复权验收通过 |
 | P0 | DailyBar 交易边界与计数 | Validator、Reporter、交易日历覆盖率、当前日 Partial 判定、Adapter 过滤前诊断已存在 | 仅针对未覆盖的停牌/临停/新股/非交易日漏数判断、日期边界和重复计数补测试或修复 | 正常 limit 截断不算质量错误；无状态证据不推断漏数 |
 | P1 | Fundamentals 字段级诊断 | Probe 已调用 `validateFundamentalsSnapshot`；业务校验含报告期、公告日期、available_at、分区、指标、来源版本及采集时间 | 将现有校验结果映射到请求级 Reporter，补齐字段路径、单位/口径、修订与 PIT 边界证据 | 不重写 Validator、Reporter 或财务服务 |
 | P1 | Valuations 字段级诊断 | Probe 已调用 `validateValuationSnapshot`；已有身份、来源、时间、覆盖、缺失字段、有限数值和部分比例检查 | 将现有校验结果结构化；补齐 PE/PB/PS/PCF 口径、单位、TTM/静态差异和 PIT 证据 | 不重建估值模型或服务 |
