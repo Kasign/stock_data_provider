@@ -511,6 +511,7 @@ try {
       await page.waitForFunction(() => document.querySelector('[data-sector-direction="down"]')?.getAttribute("aria-pressed") === "true");
       assert.equal(sectorRequests.at(-1)?.direction, "down");
       assert.equal(sectorRequests.at(-1)?.sort_by, "change_5d");
+      await page.waitForFunction(() => document.querySelector("#market-sector-meta")?.textContent.includes("从低到高"));
       assert.match(await page.locator("#market-sector-meta").textContent(), /从低到高/);
 
       const beforeUnsupported = sectorRequests.length;
