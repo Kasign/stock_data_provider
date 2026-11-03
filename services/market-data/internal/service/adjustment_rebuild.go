@@ -23,7 +23,8 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 	}
 	groups := make(map[factorKey]map[string]model.AdjustmentFactor)
 	for _, factor := range factors {
-		if factor.Factor <= 0 || factor.AvailableAt == nil || factor.SystemObservedAt == nil ||
+		if factor.Factor <= 0 || (factor.QualityStatus != model.QualityValid && factor.QualityStatus != model.QualityDegraded) ||
+			factor.AvailableAt == nil || factor.SystemObservedAt == nil ||
 			factor.AvailableAt.IsZero() || factor.SystemObservedAt.IsZero() {
 			continue
 		}
@@ -109,6 +110,10 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 		}
 		bar.AdjustmentFactorSource = factor.Source
 		bar.AdjustmentFactorSourceVersion = factor.SourceVersion
+		applyAdjustmentFactorQuality(&bar, factor, "bar")
+		if basis == model.AdjustmentForward {
+			applyAdjustmentFactorQuality(&bar, reference, "reference")
+		}
 		observed := *factor.SystemObservedAt
 		bar.AdjustmentFactorSystemObservedAt = &observed
 		out[i] = bar
@@ -120,4 +125,17 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 		}
 	}
 	return out, nil
+}
+
+func applyAdjustmentFactorQuality(bar *model.DailyBar, factor model.AdjustmentFactor, role string) {
+	if bar == nil || factor.QualityStatus != model.QualityDegraded {
+		return
+	}
+	degradeQualityStatus(&bar.QualityStatus)
+	appendReasonOnce(&bar.QualityReasons, "adjustment_factor_"+role+"_quality_degraded")
+	for _, reason := range factor.QualityReasons {
+		if reason != "" {
+			appendReasonOnce(&bar.QualityReasons, "adjustment_factor_"+role+":"+reason)
+		}
+	}
 }

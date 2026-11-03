@@ -29,7 +29,7 @@ func TestDailyBarsAsOfRejectsFutureTimestampWithoutProviderFallback(t *testing.T
 func TestRebuildAdjustedDailyBarsUsesAsOfFactorReferenceAndProvenance(t *testing.T) {
 	observed := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
 	bars := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 100, High: 110, Low: 90, Close: 100, AdjustmentBasis: model.AdjustmentNone}, {Symbol: "600519.SH", TradeDate: "2026-09-30", Open: 110, High: 120, Low: 100, Close: 110, AdjustmentBasis: model.AdjustmentNone}}
-	factors := []model.AdjustmentFactor{{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed}, {Symbol: "600519.SH", TradeDate: "2026-09-30", Factor: 4, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed}}
+	factors := []model.AdjustmentFactor{{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityValid}, {Symbol: "600519.SH", TradeDate: "2026-09-30", Factor: 4, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityValid}}
 	got, err := rebuildAdjustedDailyBars(bars, factors, model.AdjustmentForward, "2026-09-30")
 	if err != nil {
 		t.Fatal(err)
@@ -55,8 +55,39 @@ func TestRebuildAdjustedDailyBarsUsesAsOfFactorReferenceAndProvenance(t *testing
 func TestRebuildAdjustedDailyBarsRejectsUnprovenFactor(t *testing.T) {
 	observed := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
 	bars := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 10, High: 11, Low: 9, Close: 10, AdjustmentBasis: model.AdjustmentNone}}
-	factors := []model.AdjustmentFactor{{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "p", SourceVersion: "v1", SystemObservedAt: &observed}}
+	factors := []model.AdjustmentFactor{{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "p", SourceVersion: "v1", SystemObservedAt: &observed, QualityStatus: model.QualityValid}}
 	if _, err := rebuildAdjustedDailyBars(bars, factors, model.AdjustmentForward, "2026-09-29"); err == nil {
 		t.Fatal("factor without available_at must be rejected")
 	}
+}
+
+func TestRebuildAdjustedDailyBarsPropagatesDegradedFactorQuality(t *testing.T) {
+	observed := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
+	bars := []model.DailyBar{
+		{Symbol: "600519.SH", TradeDate: "2026-09-29", Open: 100, High: 110, Low: 90, Close: 100, AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2026-09-30", Open: 110, High: 120, Low: 100, Close: 110, AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid},
+	}
+	factors := []model.AdjustmentFactor{
+		{Symbol: "600519.SH", TradeDate: "2026-09-29", Factor: 2, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityValid},
+		{Symbol: "600519.SH", TradeDate: "2026-09-30", Factor: 4, Source: "factor-provider", SourceVersion: "v1", SystemObservedAt: &observed, AvailableAt: &observed, QualityStatus: model.QualityDegraded, QualityReasons: []string{"factor_revision_incomplete"}},
+	}
+	got, err := rebuildAdjustedDailyBars(bars, factors, model.AdjustmentForward, "2026-09-30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].QualityStatus != model.QualityDegraded || !dailyBarsPITContainsQualityReason(got[0].QualityReasons, "adjustment_factor_reference_quality_degraded") || !dailyBarsPITContainsQualityReason(got[0].QualityReasons, "adjustment_factor_reference:factor_revision_incomplete") {
+		t.Fatalf("reference-factor quality was not propagated to every qfq bar: %+v", got[0])
+	}
+	if got[1].QualityStatus != model.QualityDegraded || !dailyBarsPITContainsQualityReason(got[1].QualityReasons, "adjustment_factor_bar_quality_degraded") {
+		t.Fatalf("bar-factor quality was not propagated: %+v", got[1])
+	}
+}
+
+func dailyBarsPITContainsQualityReason(reasons []string, want string) bool {
+	for _, reason := range reasons {
+		if reason == want {
+			return true
+		}
+	}
+	return false
 }
