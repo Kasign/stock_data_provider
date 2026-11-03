@@ -1159,7 +1159,7 @@ func TestCoherentStoredSeriesNeverMixesProvidersAndRejectsUnknownAdjustedReferen
 	if reason != "" || len(series) != 1 || series[0].Source == "" {
 		t.Fatalf("should return a single source series, got %+v reason=%s", series, reason)
 	}
-	_, reason = coherentStoredSeries([]model.DailyBar{{SourceVersion: "test-v1", Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward, NormalizationVer: normalize.Version}}, model.AdjustmentForward)
+	_, reason = coherentStoredSeries([]model.DailyBar{{SourceVersion: "test-v1", Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward, AdjustmentMethod: "eastmoney_qfq", NormalizationVer: normalize.Version}}, model.AdjustmentForward)
 	if reason == "" {
 		t.Fatal("adjusted series with unknown reference date must be rejected")
 	}
@@ -2846,5 +2846,41 @@ func TestCurrentIncompleteDailyBarRespectsExchangeTradingCalendar(t *testing.T) 
 	}
 	if !isCurrentIncompleteSessionBarOnTradingDay(date, now, true) {
 		t.Fatal("an active trading day before close must be marked as potentially incomplete")
+	}
+}
+
+func TestCoherentStoredSeriesSeparatesAdjustmentMethods(t *testing.T) {
+	base := model.DailyBar{
+		SourceVersion: "test-v1", Source: "yahoo", AdjustmentBasis: model.AdjustmentForward,
+		AdjustmentRefDate: "2026-10-22", NormalizationVer: normalize.Version,
+	}
+	first := base
+	first.TradeDate = "2026-10-20"
+	first.AdjustmentMethod = "yahoo_adjclose_ratio_rebased_to_end_v1"
+	second := first
+	second.TradeDate = "2026-10-21"
+	third := base
+	third.TradeDate = "2026-10-22"
+	third.AdjustmentMethod = "yahoo_adjclose_ratio_rebased_to_end_v2"
+	series, reason := coherentStoredSeries([]model.DailyBar{first, second, third}, model.AdjustmentForward)
+	if reason != "" || len(series) != 2 {
+		t.Fatalf("different adjustment methods must not be merged: series=%+v reason=%s", series, reason)
+	}
+	for _, bar := range series {
+		if bar.AdjustmentMethod != first.AdjustmentMethod {
+			t.Fatalf("coherent series contains a mixed adjustment method: %+v", series)
+		}
+	}
+}
+
+func TestCoherentStoredSeriesRejectsAdjustedBarsWithoutMethod(t *testing.T) {
+	bar := model.DailyBar{
+		SourceVersion: "test-v1", Source: "yahoo", TradeDate: "2026-10-20",
+		AdjustmentBasis: model.AdjustmentForward, AdjustmentRefDate: "2026-10-22",
+		NormalizationVer: normalize.Version,
+	}
+	series, reason := coherentStoredSeries([]model.DailyBar{bar}, model.AdjustmentForward)
+	if reason == "" || len(series) != 0 {
+		t.Fatalf("adjusted series without a method must be rejected: series=%+v reason=%s", series, reason)
 	}
 }

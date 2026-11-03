@@ -3348,11 +3348,22 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 		if source == "" || !hasIdentifiableSourceVersion(sourceVersion) {
 			continue
 		}
+		method := strings.TrimSpace(bar.AdjustmentMethod)
 		refDate := strings.TrimSpace(bar.AdjustmentRefDate)
-		if basis != model.AdjustmentNone && refDate == "" {
-			continue
+		if basis != model.AdjustmentNone {
+			if method == "" || refDate == "" {
+				continue
+			}
+			parsedReference, parseErr := time.Parse("2006-01-02", refDate)
+			if parseErr != nil || parsedReference.Format("2006-01-02") != refDate {
+				continue
+			}
+			if (basis == model.AdjustmentForward && refDate < bar.TradeDate) ||
+				(basis == model.AdjustmentBackward && refDate > bar.TradeDate) {
+				continue
+			}
 		}
-		key := source + "|" + sourceVersion + "|" + refDate + "|" + bar.NormalizationVer
+		key := source + "|" + sourceVersion + "|" + method + "|" + refDate + "|" + bar.NormalizationVer
 		g := groups[key]
 		if g == nil {
 			g = &group{key: key}
@@ -3378,7 +3389,7 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 	}
 	if best == nil {
 		if basis != model.AdjustmentNone {
-			return nil, "adjusted bars have no verified adjustment reference date; refusing to mix unknown historical adjustment snapshots"
+			return nil, "adjusted bars have no verified adjustment method/reference date; refusing to mix unknown historical adjustment snapshots"
 		}
 		return nil, "stored bars do not contain a source-coherent normalized series"
 	}

@@ -1160,3 +1160,5 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 尚未完成：逐 Provider 核实请求参数、响应实际复权口径、参考日及来源版本；重点检查 Tencent、Eastmoney、BaoStock、Hithink、TickFlow、Pytdx 和 Yahoo。未核实前不统一推断参考日，也不放宽 adjusted MariaDB fallback 门禁。
 
 - 复权因子质量状态也纳入重建结果：因子为 degraded 时，受影响日线必须同步降级并携带带角色前缀的原始质量原因；前复权参考因子质量降级会影响整组输出，后复权只受各交易日自身因子质量影响。新增回归测试，避免 PIT 调整因子质量被静默抹平。
+
+- PIT/MariaDB 复权序列一致性进一步收紧：调整序列按 Provider、SourceVersion、AdjustmentMethod、AdjustmentRefDate、NormalizationVer 分组；缺少方法或参考日、参考日格式错误、参考日方向与前/后复权语义冲突的记录不参与同一序列重建，避免同源不同复权算法被拼接。新增方法混合和缺失方法测试。
