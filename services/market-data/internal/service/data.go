@@ -2798,8 +2798,9 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				if len(validated) > 0 {
 					if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
 						s.logger.Info("daily-bar cache has today's partial candle after close; refreshing provider", "symbol", symbol, "trade_date", validated[len(validated)-1].TradeDate)
-					} else if coverageSufficient(start, end, limit, len(validated)) {
+					} else if coverageOK, coverageWarnings := s.dailyBarCoverageSufficient(ctx, start, end, limit, len(validated)); coverageOK {
 						mergedWarnings := append(append([]string(nil), v.Warnings...), warnings...)
+						mergedWarnings = append(mergedWarnings, coverageWarnings...)
 						return validated, true, dedupeStrings(mergedWarnings), nil
 					} else {
 						s.logger.Warn("daily-bar cache coverage is insufficient; refreshing providers", "symbol", symbol, "requested", limit, "returned", len(validated))
@@ -2950,8 +2951,10 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				break
 			}
 		}
+		coverageOK, coverageWarnings := s.dailyBarCoverageSufficient(ctx, start, end, limit, len(bars))
+		warnings = append(warnings, coverageWarnings...)
 		warnings = dedupeStrings(warnings)
-		if !coverageSufficient(start, end, limit, len(bars)) {
+		if !coverageOK {
 			s.breaker.Failure(breakerKey)
 			warning := fmt.Sprintf("%s returned partial daily-bar coverage: requested %d bars, validated %d; tried fallback providers before using this degraded series", p.Name(), limit, len(bars))
 			warnings = append(warnings, warning)
@@ -3197,6 +3200,44 @@ func preferPartialBars(candidate, current []model.DailyBar) bool {
 		return false
 	}
 	return candidate[len(candidate)-1].TradeDate > current[len(current)-1].TradeDate
+}
+
+func (s *DataService) dailyBarCoverageSufficient(ctx context.Context, start, end string, requested, returned int) (bool, []string) {
+	if strings.TrimSpace(start) == "" {
+		return coverageSufficient(start, end, requested, returned), nil
+	}
+	calendar, _, err := s.TradingCalendar(ctx, start, end)
+	if err != nil || calendar == nil {
+		return coverageSufficient(start, end, requested, returned), []string{"daily_bar_coverage_uses_weekday_estimate_calendar_unavailable"}
+	}
+	if calendar.TradingDays <= 0 {
+		return false, []string{"daily_bar_coverage_calendar_has_no_trading_days"}
+	}
+	minimum := minimumDailyBarCoverage(calendar.TradingDays, requested)
+	warnings := []string{}
+
+	if calendar.QualityStatus != model.QualityValid {
+		warnings = append(warnings, "daily_bar_coverage_uses_degraded_trading_calendar")
+	}
+	return returned >= minimum, warnings
+}
+
+func minimumDailyBarCoverage(expected, requested int) int {
+	if requested > 0 && expected > requested {
+		expected = requested
+	}
+	minimum := (expected*65 + 99) / 100
+	if minimum < 1 && expected > 0 {
+		minimum = 1
+	}
+	return minimum
+}
+
+func coverageSufficientForTradingDays(expected, requested, returned int) bool {
+	if returned <= 0 || expected <= 0 {
+		return false
+	}
+	return returned >= minimumDailyBarCoverage(expected, requested)
 }
 
 func coverageSufficient(start, end string, requested, returned int) bool {
@@ -3617,7 +3658,9 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 	if basis != model.AdjustmentNone {
 		warnings = append(warnings, "daily_bars_adjustment_rebuilt_from_point_in_time_factors")
 	}
-	if !coverageSufficient(start, end, limit, len(bars)) {
+	coverageOK, coverageWarnings := s.dailyBarCoverageSufficient(ctx, start, end, limit, len(bars))
+	warnings = append(warnings, coverageWarnings...)
+	if !coverageOK {
 		warnings = append(warnings, "point_in_time_daily_bar_coverage_below_requested_threshold")
 		for i := range bars {
 			if bars[i].QualityStatus == model.QualityValid {

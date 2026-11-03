@@ -2822,3 +2822,17 @@ func TestValidateSectorRankingSnapshotRejectsDroppedRowsWhenTotalWasMissing(t *t
 		t.Fatalf("sector ranking that discarded malformed source rows must be rejected for provider fallback, got %v", err)
 	}
 }
+
+
+func TestDailyBarCoverageUsesTradingCalendarSessionCount(t *testing.T) {
+	if got := minimumDailyBarCoverage(15, 20); got != 10 {
+		t.Fatalf("65%% threshold for 15 actual trading sessions = %d, want 10", got)
+	}
+	if coverageSufficientForTradingDays(15, 20, 11) {
+		t.Fatal("11 rows must fail the old weekday estimate threshold for 20 weekdays")
+	}
+	if !coverageSufficientForTradingDays(15, 20, 10) {
+		t.Fatal("10 rows should satisfy the 65%% threshold for 15 exchange sessions")
+	}
+}
+
