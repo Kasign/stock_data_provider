@@ -135,6 +135,14 @@ func TestValidateFundamentalsSnapshotRequiresSourceVersion(t *testing.T) {
 	}
 }
 
+func TestValidateFundamentalsSnapshotRejectsFutureFetchedAt(t *testing.T) {
+	snapshot := validFundamentalsSnapshotForTest()
+	snapshot.FetchedAt = time.Now().UTC().Add(10 * time.Minute)
+	if err := validateFundamentalsSnapshot(snapshot.Symbol, snapshot.Year, snapshot.Quarter, snapshot); err == nil || !strings.Contains(err.Error(), "fetched_at is in the future") {
+		t.Fatalf("future fundamentals fetched_at must be rejected, got %v", err)
+	}
+}
+
 func TestValidateFundamentalsSnapshotRejectsFuturePublicationDate(t *testing.T) {
 	snapshot := validFundamentalsSnapshotForTest()
 	snapshot.Sections[0].PublicationDate = time.Now().In(marketLocation()).AddDate(0, 0, 1).Format("2006-01-02")
