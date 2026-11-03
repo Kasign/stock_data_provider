@@ -85,12 +85,20 @@ export function bindMarketStocks(getSettings, onSelectStock) {
       qualityPill.setAttribute("aria-label", qualityLabel(quality) + "：" + qualityPill.title);
       qualityCell.append(qualityPill);
       row.append(qualityCell);
-      const actionCell = element("td"), action = element("button", "button button-secondary market-stocks-row-action", "查看详情");
-      action.type = "button";
-      action.dataset.marketStockSymbol = symbol;
-      action.dataset.marketStockName = name;
-      action.disabled = !symbol;
-      actionCell.append(action);
+      const actionCell = element("td"), actions = element("div", "market-stocks-row-actions");
+      [
+        ["stocks", "查看行情"],
+        ["research", "深度研究"]
+      ].forEach(([target, label]) => {
+        const action = element("button", "button button-secondary market-stocks-row-action", label);
+        action.type = "button";
+        action.dataset.marketStockSymbol = symbol;
+        action.dataset.marketStockName = name;
+        action.dataset.marketStockAction = target;
+        action.disabled = !symbol;
+        actions.append(action);
+      });
+      actionCell.append(actions);
       row.append(actionCell);
       body.append(row);
     });
@@ -183,7 +191,8 @@ export function bindMarketStocks(getSettings, onSelectStock) {
   $("#market-stocks-body")?.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-market-stock-symbol]");
     if (!button || !button.dataset.marketStockSymbol || typeof onSelectStock !== "function") return;
-    onSelectStock({ symbol: button.dataset.marketStockSymbol, name: button.dataset.marketStockName || button.dataset.marketStockSymbol }, "全市场行情");
+    const targetView = button.dataset.marketStockAction === "research" ? "research" : "stocks";
+    onSelectStock({ symbol: button.dataset.marketStockSymbol, name: button.dataset.marketStockName || button.dataset.marketStockSymbol }, "全市场行情", targetView);
   });
   setBusy(false);
   return {

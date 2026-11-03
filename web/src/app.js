@@ -214,7 +214,7 @@ const marketActivity = bindMarketActivity(
 );
 const marketStocks = bindMarketStocks(
   () => state.settings,
-  (item) => selectStockFromMarket(item, "全市场行情")
+  (item, source, targetView) => selectStockFromMarket(item, source, targetView)
 );
 
 function setText(selector, value) {
@@ -222,10 +222,10 @@ function setText(selector, value) {
   if (target) target.textContent = value == null || value === "" ? "—" : String(value);
 }
 
-function selectStockFromMarket(item, source = "市场榜单") {
+function selectStockFromMarket(item, source = "市场榜单", targetView = "stocks") {
   const symbol = String(item?.symbol || "").trim();
   if (!symbol) return;
-  setView("stocks");
+  setView(targetView === "research" ? "research" : "stocks");
   $("#symbol-input").value = symbol;
   state.selectedStockSearchItem = { symbol, name: item.name || symbol };
   cancelStockSearchRequest();
