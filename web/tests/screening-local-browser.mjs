@@ -113,6 +113,7 @@ try {
   await page.locator("#screening-condition-add").click();
   assert.match(await summary.textContent(), /筛选条件已变化/);
   assert.match(await page.locator("#screening-local-results-body").textContent(), /尚未执行当前页筛选/);
+  await page.locator("#screening-apply-current-page").click();
 
   // 全市场分页刷新后，即使页码/页大小相同，也必须使上一批结果失效。
   await page.locator('.nav-link[data-view="stocks"]').click();
