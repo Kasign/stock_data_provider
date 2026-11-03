@@ -56,7 +56,7 @@ test("容量已满时只给仍在自选股中的已选股票分组", () => {
   assert.equal(result.duplicates.length, 1);
   assert.equal(result.capacitySkipped, 1);
   assert.equal(result.assignedCount, 1);
-  assert.equal(readWatchlistGroups(db).assignments["000001.SH"], "重点观察");
+  assert.equal(readWatchlistGroups(db).assignments["000001.SZ"], "重点观察");
   assert.equal(readWatchlistGroups(db).assignments["999999.SZ"], undefined);
   assert.equal(readWatchlistState(db).items.length, MAX_WATCHLIST_ITEMS);
 });
