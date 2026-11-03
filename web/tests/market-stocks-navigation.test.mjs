@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [marketStocks, app] = await Promise.all([
+const [marketStocks, app, browserAcceptance] = await Promise.all([
   readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/app.js", import.meta.url), "utf8")
+  readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+  readFile(new URL("./stock-research-browser.mjs", import.meta.url), "utf8")
 ]);
 
 test("全市场分页行情同时提供行情详情和深度研究入口", () => {
@@ -13,6 +14,11 @@ test("全市场分页行情同时提供行情详情和深度研究入口", () =>
   assert.match(marketStocks, /button\.dataset\.marketStockAction === "research" \? "research" : "stocks"/);
   assert.match(app, /function selectStockFromMarket\(item, source = "市场榜单", targetView = "stocks"\)/);
   assert.match(app, /setView\(targetView === "research" \? "research" : "stocks"\)/);
+});
+
+test("Chromium 专项覆盖全市场直达研究入口", () => {
+  assert.match(browserAcceptance, /button\[data-market-stock-action="research"\]/);
+  assert.match(browserAcceptance, /#research-overview-symbol/);
 });
 
 test("全市场入口继续通过统一行情查询建立研究上下文", () => {

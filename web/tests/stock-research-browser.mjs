@@ -57,6 +57,23 @@ try {
   oldRequestStarted = new Promise(resolve => {
     page.route("**/*", async route => {
       const url = new URL(route.request().url());
+      if (url.pathname.includes("/api/v1/market/stocks")) {
+        await route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify({
+            items: [{
+              symbol: "600519.SH", name: "贵州茅台", quality_status: "valid",
+              quote: { symbol: "600519.SH", name: "贵州茅台", current_price: 1500, change_percent: 1.2, quality_status: "valid" },
+              ma5: 1490, ma20: 1480
+            }],
+            page: 1, page_size: 50, total: 1, total_is_lower_bound: false,
+            coverage_ratio: 1, quote_succeeded: 1, quote_failed: 0, quality_status: "valid",
+            universe_source: "browser-fixture", universe_source_version: "test", universe_fetched_at: "2026-11-03T03:00:00Z",
+            fetched_at: "2026-11-03T03:00:00Z", ma_adjustment_basis: "forward_adjusted"
+          })
+        });
+        return;
+      }
       if (url.pathname.includes("/api/v1/stocks/600519.SH/fundamentals")) {
         resolve();
         await new Promise(done => { releaseOldRequest = done; });
@@ -88,6 +105,19 @@ try {
   });
 
   await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
+
+  // 全市场分页结果应能直接进入研究工作区，并同步当前证券代码。
+  await page.locator('.nav-link[data-view="stocks"]').click();
+  await page.locator("#load-market-stocks").click();
+  await page.locator('#market-stocks-body button[data-market-stock-action="research"]').waitFor({ state: "visible" });
+  await page.locator('#market-stocks-body button[data-market-stock-action="research"]').click();
+  await page.locator("#research-view").waitFor({ state: "visible" });
+  await page.waitForFunction(() =>
+    document.querySelector("#symbol-input")?.value === "600519.SH" &&
+    document.querySelector("#research-overview-symbol")?.textContent.includes("600519.SH")
+  );
+  assert.equal(await page.locator("#research-overview-symbol").textContent().then(value => value.includes("600519.SH")), true);
+
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#symbol-input").fill("600519.SH");
   await page.locator('.nav-link[data-view="research"]').click();
