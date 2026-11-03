@@ -1608,7 +1608,9 @@ test("季度财务指标读取的报告期校验与成功提示异常不会向�
 });
 
 test("个股研究准备阶段异常与 finally 异常不会遗留按钮锁", () => {
-  assert.match(stockResearch, /function safeResearchButton\(button,disabled,label\)[\s\S]*?catch\{return false;\}/);
+  assert.match(stockResearch, /function safeResearchButton\(button,disabled,label(?:,busy=false)?\)[\s\S]*?catch\{return false;\}/);
+  assert.match(stockResearch, /if\(busy\)button\.setAttribute\("aria-busy","true"\);else button\.removeAttribute\("aria-busy"\)/);
+  assert.match(stockResearch, /\]\s*\.forEach\(\(\[selector,label\]\)=>safeResearchButton\(\$\(selector\),false,label\)\)/);
   assert.match(stockResearch, /async function fetchOne\(key,request,render\)[\s\S]*?try\{\s*abort\(key\);[\s\S]*?await request\(settings,symbol,ctl\.signal\)[\s\S]*?finally\{/);
   assert.match(stockResearch, /async function loadResearch\(\)[\s\S]*?safeResearchButton\(button,true,"正在加载…"[\s\S]*?finally\{[\s\S]*?safeResearchButton\(button,false,"重新加载公司资料"\)/);
   assert.match(stockResearch, /async function runSupplementRequest\([\s\S]*?let symbol="",button=null,generation=null,ownsButton=false;[\s\S]*?try\{[\s\S]*?const operation=fetchOne\(key,request,render\)[\s\S]*?finally\{[\s\S]*?safeResearchButton\(button,false,idleText\)/);
