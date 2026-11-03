@@ -100,3 +100,92 @@ func TestEvaluateRequiresExplicitTimeSemantics(t *testing.T) {
 		t.Fatalf("unexpected result: %+v", got)
 	}
 }
+
+
+// TestEvaluateSpecialTradingScenarios keeps quote freshness behavior explicit at
+// exchange-session boundaries and for security-level trading events.
+func TestEvaluateSpecialTradingScenarios(t *testing.T) {
+	now := time.Date(2026, 11, 3, 10, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	policy := Policy{
+		Domain: "quote", MaxAge: 90 * time.Second, MaxFutureSkew: 2 * time.Minute,
+		ActivePhases: []string{"opening_auction", "continuous_morning", "continuous_afternoon", "closing_auction"},
+		RequireTradingCalendar: true, IgnoreWhenSecurityPaused: true,
+	}
+	tests := []struct {
+		name       string
+		offset     time.Duration
+		context    Context
+		want       Status
+		wantReason string
+	}{
+		{
+			name: "opening auction uses quote SLA", offset: -30 * time.Second,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "opening_auction", SecurityTradingStatus: "normal"},
+			want: StatusFresh, wantReason: ReasonWithinSLA,
+		},
+		{
+			name: "auction pause does not age quote", offset: -10 * time.Minute,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "auction_pause", SecurityTradingStatus: "normal"},
+			want: StatusNotApplicable, wantReason: ReasonMarketNotUpdating,
+		},
+		{
+			name: "lunch break does not age quote", offset: -10 * time.Minute,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "lunch_break", SecurityTradingStatus: "normal"},
+			want: StatusNotApplicable, wantReason: ReasonMarketNotUpdating,
+		},
+		{
+			name: "non trading day", offset: -24 * time.Hour,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: false,
+				MarketPhase: "non_trading_day", SecurityTradingStatus: "normal"},
+			want: StatusNotApplicable, wantReason: ReasonNonTradingDay,
+		},
+		{
+			name: "full day suspension", offset: -24 * time.Hour,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "continuous_morning", SecurityTradingStatus: "suspended"},
+			want: StatusNotApplicable, wantReason: ReasonSecuritySuspended,
+		},
+		{
+			name: "intraday suspension", offset: -10 * time.Minute,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "continuous_morning", SecurityTradingStatus: "intraday_suspension"},
+			want: StatusNotApplicable, wantReason: ReasonSecuritySuspended,
+		},
+		{
+			name: "resumed security follows ordinary quote SLA", offset: -30 * time.Second,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "continuous_morning", SecurityTradingStatus: "normal"},
+			want: StatusFresh, wantReason: ReasonWithinSLA,
+		},
+		{
+			name: "new listing follows ordinary quote SLA without fabricated grace period", offset: -30 * time.Second,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "continuous_morning", SecurityTradingStatus: "normal"},
+			want: StatusFresh, wantReason: ReasonWithinSLA,
+		},
+		{
+			name: "source time within allowed future skew", offset: time.Minute,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "continuous_morning", SecurityTradingStatus: "normal"},
+			want: StatusFresh, wantReason: ReasonWithinSLA,
+		},
+		{
+			name: "source time beyond allowed future skew", offset: 3 * time.Minute,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "continuous_morning", SecurityTradingStatus: "normal"},
+			want: StatusUnknown, wantReason: ReasonSourceTimeInFuture,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dataTime := now.Add(tc.offset)
+			got := Evaluate(policy, Evidence{DataTime: &dataTime, DataTimeType: "provider_snapshot_time"}, tc.context)
+			if got.Status != tc.want || got.Reason != tc.wantReason {
+				t.Fatalf("Evaluate() = %s/%s, want %s/%s", got.Status, got.Reason, tc.want, tc.wantReason)
+			}
+		})
+	}
+}

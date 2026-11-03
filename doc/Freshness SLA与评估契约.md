@@ -130,3 +130,23 @@ Provider Probe 的每条 freshness check 现在直接携带可独立解释的证
 Quote、Index、Market Breadth 的采集时间分别取对应响应对象的 `FetchedAt`；没有明确响应采集时间的能力不填充该字段。CheckResult 自身携带时间语义与采集时间，避免前端跨数组 join。历史 JSON 未包含这些新增可选字段时，Go JSON 解码保持兼容。
 
 本轮测试增加了 check result 时间证据直传断言，并扩展市场宽度 Freshness 测试，验证源端时间语义、采集时间、日历已知和交易日证据均可在同一条检查结果中读取。
+
+
+## 11. 特殊交易阶段与证券状态回归样例
+
+Freshness Evaluator 的特殊交易样例采用显式上下文输入，不在 evaluator 内读取系统时钟或查询交易日历：
+
+| 场景 | 市场/证券上下文 | 预期 |
+|---|---|---|
+| 开盘集合竞价 | 交易日、opening_auction、正常交易 | Quote 按 90 秒 SLA 判断 |
+| 竞价结束至连续竞价前 | auction_pause | not_applicable，不累计更新 SLA |
+| 午休 | lunch_break | not_applicable，不累计更新 SLA |
+| 非交易日 | 已确认非交易日 | not_applicable |
+| 全天停牌 | 证券状态 suspended | not_applicable |
+| 盘中临停 | 证券状态 intraday_suspension | not_applicable |
+| 复牌 | 证券状态 normal | 恢复普通 Quote SLA，不额外放宽 |
+| 新股首日 | 当前模型无可靠的首日交易状态证据 | 不虚构首日宽限期，按普通 Quote SLA；后续如接入上市日期/首日状态，再单独定义策略 |
+| 源端时间在未来 2 分钟内 | 未超过 MaxFutureSkew | 年龄按 0 处理，仍按普通 SLA 判断 |
+| 源端时间超前超过 2 分钟 | 超过 MaxFutureSkew | unknown，原因 source_time_in_future |
+
+以上规则覆盖纯函数的边界行为。Service 层负责将有效交易日历、市场阶段和证券级停复牌状态解析为上下文；解析失败保持 unknown，不能因为请求成功或采集时间很新就判定 fresh。集合竞价属于可更新阶段，竞价暂停与午休不属于可更新阶段。收盘集合竞价继续使用 Quote/Index 实时 SLA。
