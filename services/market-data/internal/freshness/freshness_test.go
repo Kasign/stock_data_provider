@@ -101,14 +101,13 @@ func TestEvaluateRequiresExplicitTimeSemantics(t *testing.T) {
 	}
 }
 
-
 // TestEvaluateSpecialTradingScenarios keeps quote freshness behavior explicit at
 // exchange-session boundaries and for security-level trading events.
 func TestEvaluateSpecialTradingScenarios(t *testing.T) {
 	now := time.Date(2026, 11, 3, 10, 0, 0, 0, time.FixedZone("CST", 8*3600))
 	policy := Policy{
 		Domain: "quote", MaxAge: 90 * time.Second, MaxFutureSkew: 2 * time.Minute,
-		ActivePhases: []string{"opening_auction", "continuous_morning", "continuous_afternoon", "closing_auction"},
+		ActivePhases:           []string{"opening_auction", "continuous_morning", "continuous_afternoon", "closing_auction"},
 		RequireTradingCalendar: true, IgnoreWhenSecurityPaused: true,
 	}
 	tests := []struct {
@@ -161,9 +160,15 @@ func TestEvaluateSpecialTradingScenarios(t *testing.T) {
 			want: StatusFresh, wantReason: ReasonWithinSLA,
 		},
 		{
-			name: "new listing follows ordinary quote SLA without fabricated grace period", offset: -30 * time.Second,
+			name: "new listing receives no unconfigured freshness grace period", offset: -2 * time.Minute,
 			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
 				MarketPhase: "continuous_morning", SecurityTradingStatus: "normal"},
+			want: StatusStale, wantReason: ReasonExceedsSLA,
+		},
+		{
+			name: "closing auction uses quote SLA", offset: -30 * time.Second,
+			context: Context{Now: now, CalendarKnown: true, IsTradingDay: true,
+				MarketPhase: "closing_auction", SecurityTradingStatus: "normal"},
 			want: StatusFresh, wantReason: ReasonWithinSLA,
 		},
 		{
