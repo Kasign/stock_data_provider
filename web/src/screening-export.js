@@ -18,7 +18,7 @@ const CSV_COLUMNS = Object.freeze([
 function csvCell(value) {
   if (value === null || value === undefined) return "";
   let text = String(value);
-  if (/^[\\s]*[=+\\-@]/.test(text)) text = "'" + text;
+  if (/^[\s]*[=+\-@]/.test(text)) text = "'" + text;
   return '"' + text.replace(/"/g, '""') + '"';
 }
 
@@ -57,5 +57,5 @@ export function buildScreeningCSV({ rows = [], page, pageSize, adjustment, logic
       String(item.field || "") + " " + String(item.operator || "") + " " + String(item.value ?? "")).join("；")],
     ["说明", "仅为本次已加载分页的本地筛选结果，不代表全市场扫描；缺失数值保持为空。"]
   ].map(row => row.map(csvCell).join(","));
-  return [...meta, "", header, ...records].join("\\r\\n") + "\\r\\n";
+  return [...meta, "", header, ...records].join("\r\n") + "\r\n";
 }
