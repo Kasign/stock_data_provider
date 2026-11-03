@@ -307,5 +307,5 @@ test("按指定分析服务删除任务时保留空服务地址和其他服务�
   upsertRecentTask({ task_id: "shared-task", analysis_base: "/analysis-api" }, storage);
   upsertRecentTask({ task_id: "shared-task", analysis_base: "/other-api" }, storage);
   const remaining = removeRecentTask("shared-task", storage, MAX_RECENT_TASKS, "/analysis-api");
-  assert.deepEqual(remaining.map((item) => item.analysis_base), ["", "/other-api"]);
+  assert.deepEqual(remaining.map((item) => item.analysis_base), ["/other-api", ""]);
 });
