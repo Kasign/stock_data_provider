@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -22,11 +22,12 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../../services/market-data/internal/httpapi/server.go", import.meta.url), "utf8"),
   readFile(new URL("../../services/market-data/openapi.yaml", import.meta.url), "utf8"),
   readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/notification-preferences.js", import.meta.url), "utf8")
+  readFile(new URL("../src/notification-preferences.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/task-workflow.js", import.meta.url), "utf8")
 ]);
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
-const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule].join("\n");
+const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow].join("\n");
 
 function finalCssRuleBody(selector) {
   const start = stylesheet.lastIndexOf(selector);
@@ -1638,14 +1639,13 @@ test("主行情、日 K 与统一快照拒绝证券代码不匹配的响应", ()
 test("分析任务、阶段事件与 Run 响应必须匹配当前请求标识", () => {
   assert.match(app, /function responseIdentityError\(message\)[\s\S]*?error\.responseIdentityMismatch = true/);
   assert.match(app, /candidate\.task_id !== taskId[\s\S]*?任务状态接口未返回 task_id/);
-  assert.match(app, /eventPayload\.task_id !== taskId[\s\S]*?阶段事件接口未返回 task_id/);
+  assert.match(taskWorkflow, /payload\.task_id !== taskId[\s\S]*?阶段事件接口未返回 task_id/);
   assert.match(app, /if \(taskError && \(!isRetryableApiError\(taskError\) \|\| taskError\.responseContractError\)\)/);
   assert.match(app, /if \(isRetryableApiError\(eventError\) && !eventError\.responseContractError\)/);
   assert.match(app, /if \(result\?\.run_id !== runId\) \{[\s\S]*?Run 结果接口未返回 run_id/);
   assert.match(app, /!error\.responseContractError && isRetryableApiError\(error\)/);
 });
 
- 
 test("mobile navigation drawer moves focus inside and traps Tab navigation", () => {
   assert.match(app, /if \(!wasOpen && isOpen\) \$\("\.sidebar"\)\.querySelector\("\.nav-link:not\(\[disabled\]\)"\)\?\.focus\(\)/);
   assert.match(app, /if \(event\.key !== "Tab"\) return;[\s\S]*?if \(window\.innerWidth > 600\) return;[\s\S]*?const firstFocusable = focusable\[0\];[\s\S]*?const lastFocusable = focusable\[focusable\.length - 1\]/);
@@ -1687,13 +1687,12 @@ test("任务状态和阶段事件响应结构无效时暂停重试，未知状�
   assert.match(app, /typeof candidate\.run_id !== "string" \|\| !candidate\.run_id\.trim\(\)/);
   assert.match(app, /state\.runId && candidate\.run_id !== state\.runId[\s\S]*?当前任务已关联的 Run 不一致/);
   assert.match(app, /任务状态接口返回了未支持的状态/);
-  assert.match(app, /taskError = responseContractError\("任务状态接口返回了无法识别的响应结构。"\)/);
-  assert.match(app, /eventError = responseContractError\("阶段事件接口返回的数据结构无效。"\)/);
+  assert.match(taskWorkflow, /阶段事件接口返回的数据结构无效/);
+  assert.match(app, /eventError = eventPage\.identityMismatch[\s\S]*?eventPage\.error/);
   assert.match(app, /if \(!isRetryableApiError\(eventError\) \|\| eventError\.responseContractError\) state\.taskEventsUnavailable = true/);
   assert.match(app, /if \(delay !== undefined && !error\.responseContractError && isRetryableApiError\(error\)\)/);
 });
 
- 
 test("Run 结果必须与当前任务标的集合一致后才允许渲染", () => {
   assert.match(app, /function runResultSymbolMismatch\(result\)/);
   assert.match(app, /const expectedRaw = Array\.isArray\(state\.taskSymbols\) \? state\.taskSymbols : \[\]/);
@@ -1736,26 +1735,26 @@ test("自选股报价和任务引用的股票代码比较兼容交易所后缀�
 
  
 test("阶段事件严格校验数值序号与 event 对象结构", () => {
-  assert.match(app, /const sequence = typeof item\?\.sequence === "number" \? item\.sequence : NaN/);
-  assert.match(app, /!Number\.isSafeInteger\(sequence\) \|\| sequence < 1/);
-  assert.match(app, /!item\.event \|\| typeof item\.event !== "object" \|\| Array\.isArray\(item\.event\)/);
+  assert.match(taskWorkflow, /const sequence = typeof item\?\.sequence === "number" \? item\.sequence : NaN/);
+  assert.match(taskWorkflow, /!Number\.isSafeInteger\(sequence\) \|\| sequence < 1/);
+  assert.match(taskWorkflow, /!isRecord\(item\.event\)/);
   assert.match(app, /字段无效的阶段事件（序号或 event 结构不符合契约），已忽略/);
-  assert.doesNotMatch(app, /const sequence = Number\(item\?\.sequence\)/, "boolean sequence must not coerce to integer 1");
+  assert.doesNotMatch(taskWorkflow, /const sequence = Number\(item\?\.sequence\)/, "boolean sequence must not coerce to integer 1");
 });
 
- 
-test("阶段事件的 run_id 必须匹配当前任务关联的 Run", () => {
-  assert.match(app, /const expectedEventRunId = state\.runId \|\| task\?\.run_id \|\| ""/);
-  assert.match(app, /const eventRunId = typeof item\.event\.run_id === "string" \? item\.event\.run_id\.trim\(\) : ""/);
-  assert.match(app, /!expectedEventRunId \|\| !eventRunId \|\| eventRunId !== expectedEventRunId/);
+test("阶段事件的 Run ID 若存在必须匹配当前任务关联的 Run", () => {
+  assert.match(taskWorkflow, /Object\.prototype\.hasOwnProperty\.call\(item\.event, "run_id"\)/);
+  assert.match(taskWorkflow, /const eventRunId = typeof item\.event\.run_id === "string" \? item\.event\.run_id\.trim\(\) : ""/);
+  assert.match(taskWorkflow, /!runId \|\| !eventRunId \|\| eventRunId !== runId/);
+  assert.match(taskWorkflow, /domain\.StageEvent 的 run_id 并非必填字段/);
   assert.match(app, /Run ID 缺失或与当前任务关联的 Run 不一致，已忽略/);
-  assert.match(app, /字段无效的阶段事件（序号或 event 结构不符合契约），已忽略/);
+  assert.match(taskWorkflow, /rejected\.mismatchedRun \+= 1/);
 });
 
 test("增量阶段事件不会覆盖已读取的相同或更旧序号", () => {
-  assert.match(app, /const previousSequence = state\.taskSequence/);
-  assert.match(app, /sequence <= previousSequence \|\| state\.taskEvents\.has\(sequence\)/);
-  assert.match(app, /state\.taskEvents\.set\(sequence, normalized\)/);
+  assert.match(taskWorkflow, /sequence <= highestSequence \|\| seenSequences\.has\(sequence\) \|\| knownSequences\.has\(sequence\)/);
+  assert.match(taskWorkflow, /events\.push\(\{ \.\.\.item, sequence \}\)/);
+  assert.match(app, /state\.taskEvents\.set\(item\.sequence, item\)/);
   assert.match(app, /重复或旧序号的阶段事件，已忽略/);
 });
 
@@ -1766,9 +1765,9 @@ test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 R
   const poller = pollStart >= 0 && pollEnd > pollStart ? app.slice(pollStart, pollEnd) : "";
   assert.match(poller, /const requestedEventCursor = state\.taskEventCursor/);
   assert.match(poller, /getAnalysisTaskEvents\(requestSettings, taskId, requestedEventCursor\)/);
-  assert.match(poller, /!Number\.isSafeInteger\(nextAfterSequence\)/);
-  assert.match(poller, /state\.taskEventCursor = nextAfterSequence/);
-  assert.match(poller, /eventPageHasMore = eventPayload\.events\.length >= TASK_EVENT_PAGE_SIZE &&[\s\S]*?nextAfterSequence > requestedEventCursor/);
+  assert.match(taskWorkflow, /!Number\.isSafeInteger\(nextAfterSequence\)/);
+  assert.match(poller, /state\.taskEventCursor = eventPage\.nextAfterSequence/);
+  assert.match(taskWorkflow, /hasMore: payload\.events\.length >= TASK_EVENT_PAGE_SIZE && nextAfterSequence > afterSequence/);
   assert.match(poller, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?if \(eventPageHasMore && !eventError && !eventsSkipped\) \{[\s\S]*?正在继续读取剩余阶段事件[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 0\)[\s\S]*?return;[\s\S]*?stopTaskPolling\(\)[\s\S]*?loadTaskRunResult/);
   assert.match(poller, /if \(eventError && isRetryableApiError\(eventError\) && !eventError\.responseContractError\) \{[\s\S]*?5 秒后自动重试[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\)/);
   const refreshStart = app.indexOf('$("#refresh-task").addEventListener("click"');
