@@ -89,11 +89,25 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 			return nil, fmt.Errorf("tencent quote symbol mismatch: requested %s got %q", symbol, reportedSymbol)
 		}
 	}
+	quoteFieldNames := map[int]string{3: "current_price", 4: "prev_close", 5: "open", 6: "volume", 31: "change", 32: "change_percent", 33: "high", 34: "low"}
 	val := func(i int) (float64, error) {
+		field := quoteFieldNames[i]
+		providerField := fmt.Sprintf("f%d", i)
 		if i >= len(fields) || strings.TrimSpace(fields[i]) == "" || strings.TrimSpace(fields[i]) == "-" {
+			addQuoteStringParseIssue(ctx, field, providerField, "", "finite number", nil)
 			return 0, fmt.Errorf("Tencent field %d is missing", i)
 		}
-		return strconv.ParseFloat(strings.TrimSpace(fields[i]), 64)
+		raw := strings.TrimSpace(fields[i])
+		parsed, parseErr := strconv.ParseFloat(raw, 64)
+		if parseErr != nil {
+			addQuoteStringParseIssue(ctx, field, providerField, raw, "finite number", parseErr)
+			return 0, parseErr
+		}
+		if !finiteNumber(parsed) {
+			addProviderQuoteFieldIssue(ctx, field, providerField, "invalid_value", "finite number", "string", raw, "Tencent quote field must be a finite number", validation.SeverityError)
+			return 0, fmt.Errorf("Tencent field %d is not finite", i)
+		}
+		return parsed, nil
 	}
 	price, e := val(3)
 	if e != nil {

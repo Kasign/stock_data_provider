@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -267,4 +268,51 @@ func TestNeteaseDailyBarParseIssuesIncludeCSVRowAndField(t *testing.T) {
 	if !found {
 		t.Fatalf("expected close issue at CSV row 0, got %+v", reporter.Snapshot().Issues)
 	}
+}
+
+func TestNeteaseQuoteParseFailuresReportRawJSONTypes(t *testing.T) {
+	tests := []struct {
+		name, raw, wantType, wantCode string
+	}{
+		{name: "missing", raw: "", wantType: "missing", wantCode: "missing"},
+		{name: "null", raw: "null", wantType: "null", wantCode: "missing"},
+		{name: "object", raw: `{"value":42}`, wantType: "object", wantCode: "type_mismatch"},
+		{name: "array", raw: `[42]`, wantType: "array", wantCode: "type_mismatch"},
+		{name: "boolean", raw: "true", wantType: "boolean", wantCode: "type_mismatch"},
+		{name: "invalid string", raw: `"not-a-number"`, wantType: "string", wantCode: "invalid_value"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reporter := validation.NewReporter(10)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			_, err := parseNeteaseQuoteNumber(ctx, "current_price", "price", json.RawMessage(tc.raw))
+			if err == nil { t.Fatal("invalid raw quote value must fail") }
+			report := reporter.Snapshot()
+			for _, issue := range report.Issues {
+				if issue.Field == "current_price" && issue.ProviderField == "price" && issue.ActualType == tc.wantType && issue.Code == tc.wantCode && issue.Stage == validation.StageParse && issue.Severity == validation.SeverityError {
+					return
+				}
+			}
+			t.Fatalf("expected type=%s code=%s, got %+v", tc.wantType, tc.wantCode, report.Issues)
+		})
+	}
+}
+
+func TestNeteaseFetchQuoteParseFailureKeepsReporterWhenProviderReturnsError(t *testing.T) {
+	payload := `_ntes_quote_callback({"0600036":{"code":"0600036","symbol":"600036","name":"招商银行","price":null,"percent":0.0127,"updown":0.53,"open":41.70,"high":42.38,"low":41.57,"yestclose":41.82,"volume":56829700,"turnover":2386858667,"time":"2026/10/23 11:07:58"}});`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(payload)) }))
+	defer server.Close()
+	provider := NewNeteaseConfigured(2*time.Second, server.URL, "http://127.0.0.1:1/history")
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, err := provider.FetchQuote(ctx, "600036.SH"); err == nil {
+		t.Fatal("null required price must reject provider quote")
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "current_price" && issue.ProviderField == "price" && issue.ActualType == "null" && issue.Code == "missing" {
+			found = true
+		}
+	}
+	if !found { t.Fatalf("expected reporter issue despite provider error, got %+v", reporter.Snapshot().Issues) }
 }

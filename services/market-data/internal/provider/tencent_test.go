@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 func TestTencentQuoteNormalizesVolumeAndAmount(t *testing.T) {
@@ -504,4 +505,30 @@ func TestParseTencentTimeTreatsProviderTimestampAsChinaLocalTime(t *testing.T) {
 	if !got.Equal(want) {
 		t.Fatalf("parsed timestamp = %s, want %s", got.Format(time.RFC3339), want.Format(time.RFC3339))
 	}
+}
+
+func TestTencentQuoteParseFailureReportsProviderField(t *testing.T) {
+	fields := make([]string, 60)
+	for i := range fields { fields[i] = "0" }
+	fields[1], fields[2] = "贵州茅台", "600519"
+	fields[3], fields[4], fields[5], fields[6] = "NaN", "99", "99", "1000"
+	fields[30], fields[31], fields[32], fields[33], fields[34] = "20261021112802", "1", "1.01", "101", "98"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, "v_sh600519=%q;", strings.Join(fields, "~"))
+	}))
+	defer server.Close()
+	p := NewTencent(2 * time.Second)
+	p.quoteURL = server.URL + "/quote"
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, err := p.FetchQuote(ctx, "600519.SH"); err == nil {
+		t.Fatal("non-finite quote price must be rejected")
+	}
+	report := reporter.Snapshot()
+	for _, issue := range report.Issues {
+		if issue.Field == "current_price" && issue.ProviderField == "f3" && issue.Code == "invalid_value" && issue.Stage == validation.StageParse && issue.Severity == validation.SeverityError {
+			return
+		}
+	}
+	t.Fatalf("expected structured Tencent parse issue for f3, got %+v", report.Issues)
 }

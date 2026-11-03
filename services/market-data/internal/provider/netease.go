@@ -120,31 +120,31 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if reported := strings.TrimSpace(row.Symbol); reported != "" && reported != symbol[:6] {
 		return nil, fmt.Errorf("Netease quote symbol mismatch: requested %s got %q", symbol, reported)
 	}
-	price, err := parseNeteaseNumber(string(row.Price))
+	price, err := parseNeteaseQuoteNumber(ctx, "current_price", "price", row.Price)
 	if err != nil || price <= 0 {
 		return nil, errors.New("Netease quote current price is missing or invalid")
 	}
-	openV, err := parseNeteaseNumber(string(row.Open))
+	openV, err := parseNeteaseQuoteNumber(ctx, "open", "open", row.Open)
 	if err != nil || openV <= 0 {
 		return nil, errors.New("Netease quote open price is missing or invalid")
 	}
-	highV, err := parseNeteaseNumber(string(row.High))
+	highV, err := parseNeteaseQuoteNumber(ctx, "high", "high", row.High)
 	if err != nil || highV <= 0 {
 		return nil, errors.New("Netease quote high price is missing or invalid")
 	}
-	lowV, err := parseNeteaseNumber(string(row.Low))
+	lowV, err := parseNeteaseQuoteNumber(ctx, "low", "low", row.Low)
 	if err != nil || lowV <= 0 {
 		return nil, errors.New("Netease quote low price is missing or invalid")
 	}
-	prevClose, err := parseNeteaseNumber(string(row.YestClose))
+	prevClose, err := parseNeteaseQuoteNumber(ctx, "prev_close", "yestclose", row.YestClose)
 	if err != nil || prevClose <= 0 {
 		return nil, errors.New("Netease quote previous close is missing or invalid")
 	}
-	change, err := parseNeteaseNumber(string(row.Updown))
+	change, err := parseNeteaseQuoteNumber(ctx, "change", "updown", row.Updown)
 	if err != nil {
 		return nil, errors.New("Netease quote change is missing or invalid")
 	}
-	percentRatio, err := parseNeteaseNumber(string(row.Percent))
+	percentRatio, err := parseNeteaseQuoteNumber(ctx, "change_percent", "percent", row.Percent)
 	if err != nil {
 		return nil, errors.New("Netease quote percent is missing or invalid")
 	}
@@ -223,6 +223,39 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		return nil, fmt.Errorf("Netease quote data contract: %w", err)
 	}
 	return q, nil
+}
+
+// parseNeteaseQuoteNumber 在 JSON RawMessage 尚未丢失类型信息时生成字段级 Parse 诊断。
+func parseNeteaseQuoteNumber(ctx context.Context, field, providerField string, raw json.RawMessage) (float64, error) {
+	actualType := providerJSONValueType(raw)
+	preview := strings.TrimSpace(string(raw))
+	if actualType == "missing" || actualType == "null" {
+		addProviderQuoteFieldIssue(ctx, field, providerField, "missing", "number or numeric string", actualType, preview, "NetEase quote field is missing or null", validation.SeverityError)
+		return 0, errors.New("NetEase quote field is missing")
+	}
+	if actualType != "number" && actualType != "string" {
+		addProviderQuoteFieldIssue(ctx, field, providerField, "type_mismatch", "number or numeric string", actualType, preview, "NetEase quote field has an unsupported JSON type", validation.SeverityError)
+		return 0, errors.New("NetEase quote field has an unsupported JSON type")
+	}
+	var value string
+	if actualType == "string" {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			addProviderQuoteFieldIssue(ctx, field, providerField, "type_mismatch", "number or numeric string", actualType, preview, "NetEase quote field cannot be decoded as a string", validation.SeverityError)
+			return 0, err
+		}
+	} else {
+		value = string(raw)
+	}
+	number, err := parseNeteaseNumber(value)
+	if err != nil {
+		code := "invalid_value"
+		if strings.TrimSpace(value) == "" || strings.TrimSpace(value) == "-" {
+			code = "missing"
+		}
+		addProviderQuoteFieldIssue(ctx, field, providerField, code, "finite number", actualType, preview, "NetEase quote field is not a finite numeric value", validation.SeverityError)
+		return 0, err
+	}
+	return number, nil
 }
 
 type neteaseQuoteRow struct {

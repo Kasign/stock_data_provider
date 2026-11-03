@@ -933,3 +933,17 @@ ProviderTime 仍表示源端时间，FetchedAt 仍表示本服务采集时间，
 - Sina Quote 必填数值字段解析失败时，按请求级 Reporter 上报 parse 阶段 FieldIssue，包含规范字段、源字段索引、缺失/格式错误分类及限长原始值摘要。
 - 缺失值与无法解析/非有限数值分开编码；Provider 原有错误返回和业务拒绝策略保持不变。
 - 新增回归测试验证字段名、源字段索引、错误级别和 Reporter 传递；Tencent、NetEase 的同类字段解析诊断仍待后续批次完成。
+
+
+## Quote Provider 原始字段解析诊断：Tencent / NetEase（2026-11-03）
+
+本批补齐两类 Quote 原始解析边界，保留原有 Provider 拒绝策略和数据质量硬门禁：
+
+| Provider | 字段 | 原始字段 | 诊断内容 | 失败处理 |
+|---|---|---|---|---|
+| Tencent | current_price / prev_close / open / volume / change / change_percent / high / low | f3 / f4 / f5 / f6 / f31 / f32 / f33 / f34 | 缺失、格式错误、NaN/Inf；记录原始字段索引与限长摘要 | error 级 Parse Issue，维持原有失败返回 |
+| NetEase | current_price / open / high / low / prev_close / change / change_percent | price / open / high / low / yestclose / updown / percent | 区分 missing、null、number、string、object、array、boolean；非法数值记录类型和限长摘要 | error 级 Parse Issue，维持原有失败返回 |
+
+Reporter 为请求级上下文容器；Provider 即使返回 error，已追加的字段问题仍可由调用方读取。摘要复用 160 字符上限和控制字符清理，不保存完整响应、Header 或认证信息。
+
+本批不改变 NetEase volume/amount 的降级语义，不放宽 Tencent 成交量单位确认要求，也不重复执行公共 Quote Validator。Sina、Tencent、NetEase Quote 的必填原始数值字段已覆盖；Yahoo Quote 及其他 Quote 能力 Provider 仍需按实际能力清单继续审计。
