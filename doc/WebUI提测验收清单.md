@@ -326,15 +326,18 @@
 
 ### 本轮实现范围
 
-- [ ] 数据中心接入 POST /api/v1/data-sources/probe，支持全部/核心能力范围、六类诊断维度、单项超时、可选市场板块和标准股票样本。
-- [ ] 分别展示批次统计、Provider 能力状态、数据质量原因、可验证总体覆盖率、源端时间和错误阶段。
-- [ ] 展示连通性、契约、质量、新鲜度、跨 Provider 对账和存储诊断；字段比较保留不可比较语义。
-- [ ] 接入 GET /api/v1/data-sources/probe/history，支持读取最近 20 批、展开查看历史批次。
-- [ ] 无行情服务 API Key 时不发起探测/历史请求；未配置、不支持、跳过不误报为失败。
-- [ ] 历史存储 503 与本次探测结果分开处理；连接配置变更时取消旧请求并清空过期结果。
-- [ ] API 参数校验单测和 Chromium 专项浏览器验收通过。
+- [x] 数据中心接入 POST /api/v1/data-sources/probe，支持全部/核心能力范围、六类诊断维度、单项超时、可选市场板块和标准股票样本。
+- [x] 分别展示批次统计、Provider 能力状态、数据质量原因、可验证总体覆盖率、源端时间和错误阶段。
+- [x] 展示连通性、契约、质量、新鲜度、跨 Provider 对账和存储诊断；字段比较保留不可比较语义。
+- [x] 接入 GET /api/v1/data-sources/probe/history，支持读取最近 20 批、展开查看历史批次。
+- [x] 无行情服务 API Key 时不发起探测/历史请求；未配置、不支持、跳过不误报为失败。
+- [x] 历史存储 503 与本次探测结果分开处理；连接配置变更时取消旧请求并清空过期结果。
+- [x] API 参数校验单测和 Chromium 专项浏览器验收通过。
 
 ### 验收边界
 
 - 浏览器专项使用隔离模拟 API，只验证请求契约、页面呈现、错误隔离和按钮恢复，不代表真实 Provider 质量已验收。
 - 真实 Provider 权限、跨源黄金样例、覆盖分母证据、MariaDB 历史写入/读取仍需部署环境验证。
+
+- WebUI Checks 成功（338/338 单元测试、JS 语法检查、Compose 校验、Nginx 镜像构建）：[运行记录 #41571522418](https://github.com/Kasign/stock_data_provider/actions/runs/41571522418)。
+- Chromium Browser Smoke 成功（响应式布局、Run Flow 两组专项、个股研究两组专项、Provider 主动探测专项）：[运行记录 #41571522336](https://github.com/Kasign/stock_data_provider/actions/runs/41571522336)，截图 Artifact [#13200999451](https://github.com/Kasign/stock_data_provider/actions/runs/41571522336/artifacts/13200999451)。
