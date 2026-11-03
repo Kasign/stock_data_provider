@@ -67,13 +67,9 @@
 | POST | /api/v1/analysis/tasks | 创建分析任务；可附加 Idempotency-Key | createAnalysisTask |
 | GET | /api/v1/analysis/tasks/{task_id} | 查询任务状态 | getAnalysisTask |
 | GET | /api/v1/analysis/tasks/{task_id}/events | 按 after_sequence 续读阶段事件，前端每页最多 100 条 | getAnalysisTaskEvents |
-| GET | /api/v1/analysis/runs/{run_id} | 查询分析运行结果 | getAnalysisRun |\n| GET | /api/v1/analysis/tasks | 服务端任务历史分页（当前未提供） | 暂无；需服务端补充分页、状态/类型/股票/日期过滤与总数语义 |
+| GET | /api/v1/analysis/runs/{run_id} | 查询分析运行结果 | getAnalysisRun |\n| — | /api/v1/analysis/tasks | 服务端任务历史分页需求（当前无此路由，非现有 API） | 暂无；需服务端补充分页、状态/类型/股票/日期过滤与总数语义 |
 
-<<<<<<< HEAD:doc/数据层API清单.md
 分析任务请求/响应的完整字段契约以 doc/api/分析任务.openapi.yaml 和分析服务当前实现为准。当前没有服务端研究报告列表/详情/归档 API；WebUI 直接使用已校验的 Run 结果在浏览器本地归档，不新增服务端接口。当前 OpenAPI 仅定义创建、单任务状态、事件与 Run 结果查询，没有服务端任务列表分页接口；WebUI 的“最近分析”只保留本地最多 10 条任务引用，不应称为服务端历史。
-=======
-分析任务请求/响应的完整字段契约以 分析任务.openapi.yaml 和分析服务当前实现为准。
->>>>>>> feat/full-go-data-providers-api-switch:doc/api/数据层API清单.md
 
 ## 4. 页面与接口对应关系
 
@@ -92,15 +88,14 @@
 
 1. /api/v1/market/quotes?symbols=... 只查询调用方明确提供的最多 50 只股票，不是全市场扫描；逐项返回失败码，整体质量可降级。
 2. WebUI 本地选股只对 `/api/v1/market/stocks` 最近一次成功加载的当前分页执行条件判断；不自动翻页、不宣称全市场扫描。涨跌幅、换手率、成交额取自该页 quote，MA5/MA20 取自该页均线字段；null 按未知处理。
-2. /api/v1/data-sources 是 Provider 注册与能力声明；不能证明某个 Provider 当前可请求成功。
-3. /api/v1/data-sources/diagnostics 来源于真实 quote/daily_bars 请求形成的进程内熔断器状态，不会主动探测全部 Provider，服务重启后历史计数会重置。
-4. 日 K as_of 是系统观察时间点查询，只读取本地记录的历史版本；不是把当前 Provider 数据伪装成历史数据。
-5. 指数目录、指数行情、指数成分、指数历史日线是不同数据域，不能互相替代。
-6. 市场宽度、涨跌停池、龙虎榜等接口的空数据可能是 unknown/degraded；不得将未知转换为 0 或“无事件”。
-7. 行业/概念排行服务端支持 type、direction、sort_by（change_percent/amount/change_5d）和 limit；WebUI 当前已封装并传递 sort_by/direction，页面可切换今日涨幅、成交额和近 5 日涨幅及排序方向。
-8. 前端只负责展示服务端单位和质量字段，不猜测成交量/成交额单位，不把成交额当作资金净流入。
-9. 行业/概念板块排行的 `SectorRanking.leading_stock` 当前仅为领涨股票名称，接口未提供领涨股证券代码；WebUI 不得将该名称作为代码或通过模糊名称反查证券身份。若要支持板块领涨股直达研究，数据层需新增并在 OpenAPI 明确声明标准 A 股证券代码字段（建议 `leading_stock_symbol`），再由 WebUI 按证券代码格式校验后开放入口。
-
+3. /api/v1/data-sources 是 Provider 注册与能力声明；不能证明某个 Provider 当前可请求成功。
+4. /api/v1/data-sources/diagnostics 来源于真实 quote/daily_bars 请求形成的进程内熔断器状态，不会主动探测全部 Provider，服务重启后历史计数会重置。
+5. 日 K as_of 是系统观察时间点查询，只读取本地记录的历史版本；不是把当前 Provider 数据伪装成历史数据。
+6. 指数目录、指数行情、指数成分、指数历史日线是不同数据域，不能互相替代。
+7. 市场宽度、涨跌停池、龙虎榜等接口的空数据可能是 unknown/degraded；不得将未知转换为 0 或“无事件”。
+8. 行业/概念排行服务端支持 type、direction、sort_by（change_percent/amount/change_5d）和 limit；WebUI 当前已封装并传递 sort_by/direction，页面可切换今日涨幅、成交额和近 5 日涨幅及排序方向。
+9. 前端只负责展示服务端单位和质量字段，不猜测成交量/成交额单位，不把成交额当作资金净流入。
+10. 行业/概念板块排行的 `SectorRanking.leading_stock` 当前仅为领涨股票名称，接口未提供领涨股证券代码；WebUI 不得将该名称作为代码或通过模糊名称反查证券身份。若要支持板块领涨股直达研究，数据层需新增并在 OpenAPI 明确声明标准 A 股证券代码字段（建议 `leading_stock_symbol`），再由 WebUI 按证券代码格式校验后开放入口。
 ## 6. 统一字段与错误语义
 
 - 质量状态：valid、degraded、stale、invalid、unknown。
@@ -122,13 +117,8 @@
 ## 8. 权威接口定义
 
 - 行情服务 OpenAPI：services/market-data/openapi.yaml（代码内权威协议，不迁移到文档目录）。
-<<<<<<< HEAD:doc/数据层API清单.md
 - 分析任务 OpenAPI：doc/api/分析任务.openapi.yaml。
 - Python 桥接 OpenAPI：doc/api/Python桥接.openapi.yaml。
-=======
-- 分析任务 OpenAPI：doc/接口规范/分析任务.openapi.yaml。
-- Python 桥接 OpenAPI：Python桥接.openapi.yaml。
->>>>>>> feat/full-go-data-providers-api-switch:doc/api/数据层API清单.md
 - WebUI 实际请求实现：web/src/api.js。
 - 行情服务路由注册：services/market-data/internal/httpapi/server.go。
 
