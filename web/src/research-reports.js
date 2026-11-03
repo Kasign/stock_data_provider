@@ -29,6 +29,7 @@ export function readResearchReports(storage) {
   try {
     const target = safeStorage(storage); if (!target) return { items: [], readable: false, valid: false };
     const raw = target.getItem(RESEARCH_REPORTS_KEY); if (raw === null) return { items: [], readable: true, valid: true };
+    if (typeof raw === "string" && raw.length > MAX_TOTAL_CHARS) return { items: [], readable: true, valid: false };
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length > MAX_RESEARCH_REPORTS) return { items: [], readable: true, valid: false };
     const items = parsed.map(normalizeReport);

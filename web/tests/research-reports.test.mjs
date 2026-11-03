@@ -20,3 +20,14 @@ test("拒绝异常或超长标的列表，不能静默截断归档内容", () =>
 });
 
 test("拒绝重复归档 ID，避免写入后才发现存储无效",()=>{const s=memory();const item={id:"same",runId:"run-1",result:result("run-1")};assert.equal(writeResearchReports([item,{...item,runId:"run-2",result:result("run-2")}],s).reason,"invalid");assert.equal(s.getItem(RESEARCH_REPORTS_KEY),null);});
+
+test("读取时同样执行归档总容量限制，超限原始内容不被覆盖", () => {
+  const s = memory();
+  const raw = " ".repeat(4000001);
+  s.setItem(RESEARCH_REPORTS_KEY, raw);
+  const state = readResearchReports(s);
+  assert.equal(state.readable, true);
+  assert.equal(state.valid, false);
+  assert.equal(writeResearchReports([], s).reason, "invalid-storage");
+  assert.equal(s.getItem(RESEARCH_REPORTS_KEY), raw);
+});

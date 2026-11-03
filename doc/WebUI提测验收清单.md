@@ -614,3 +614,11 @@
 - [x] 新增容量边界回归测试。
 - [x] WebUI Checks 成功（[运行记录 #41611121300](https://github.com/Kasign/stock_data_provider/actions/runs/41611121300)）。
 - [x] Chromium Browser Smoke 成功（[运行记录 #41611121355](https://github.com/Kasign/stock_data_provider/actions/runs/41611121355)）。
+
+
+## 2026-11-03 全站代码审查：研究报告归档容量保护
+
+- [x] 读取归档时执行与写入一致的 4 MB 总容量校验。
+- [x] 超限数据拒绝后续写入，保留原始存储。
+- [x] 新增超限容量回归测试。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 待本次提交 CI 验证。
