@@ -4,6 +4,7 @@ import {
   analysisHealth,
   createAnalysisTask,
   getAnalysisRun,
+  getAnalysisTask,
   getAnalysisTaskEvents,
   getDailyBars,
   getChipDistribution,
