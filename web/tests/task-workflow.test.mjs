@@ -27,7 +27,7 @@ test("rejects malformed envelopes, task identity mismatches, and non-advancing c
   assert.match(wrongTask.error, /其他任务/);
   assert.match(validateTaskEventPage(page([event(2)], 1), {
     taskId: "task-1", runId: "run-1", afterSequence: 1
-  }).error, /游标无效/);
+  }).error, /next_after_sequence 无效或未前进/);
 });
 
 test("rejects event rows with invalid structure or a mismatched Run ID without blocking cursor progress", () => {
