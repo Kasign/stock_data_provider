@@ -5091,3 +5091,14 @@ button:disabled {
 @media(max-width:640px){.research-note-form,.research-note-toolbar,.research-report-toolbar{grid-template-columns:1fr}.research-note-form .field:nth-child(6){grid-column:auto}}
 
 .market-stock-entry-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.market-stock-entry-action{min-height:26px;padding:3px 8px;font-size:11px;white-space:nowrap}
+
+
+/* 当前页本地筛选结果 */
+.screening-local-filter-actions { display:flex; align-items:flex-end; justify-content:flex-end; gap:10px; flex-wrap:wrap; }
+.screening-local-filter-actions .field { min-width:132px; margin:0; }
+.screening-quality-reason { display:inline-block; max-width:220px; color:var(--text-dim); font-size:10px; line-height:1.4; white-space:normal; }
+@media(max-width:640px) {
+  .screening-local-filter-actions { width:100%; flex-direction:column; align-items:stretch; }
+  .screening-local-filter-actions .field { width:100%; }
+  .screening-local-filter-actions .button { width:100%; }
+}

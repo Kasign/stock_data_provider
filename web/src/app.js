@@ -4,7 +4,7 @@ import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.j
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
 import { resolveScreeningCapability, resolveScreeningTaskState, resolveScreeningCollectionState } from "./screening-state.js";
-import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, readScreeningPlans, saveScreeningPlan } from "./screening-draft.js";
+import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, readScreeningPlans, saveScreeningPlan, selectScreeningResultRows } from "./screening-draft.js";
 import { resolveAlertCapability, resolveAlertEvaluationState, resolveAlertCollectionState } from "./alert-state.js";
 import {
   analysisHealth,
@@ -1618,6 +1618,19 @@ function syncChatStockContextFromMarket() {
 const screeningDraftConditions = [];
 let screeningDraftLogic = "and";
 let selectedScreeningPlanId = "";
+let screeningLocalEvaluation = null;
+
+function invalidateScreeningLocalResults(message = "筛选条件已变化，请重新应用到当前页。") {
+  screeningLocalEvaluation = null;
+  const summary = $("#screening-local-results-summary"), body = $("#screening-local-results-body");
+  if (summary) summary.textContent = message;
+  if (body) {
+    body.replaceChildren();
+    const row = document.createElement("tr"), cell = document.createElement("td");
+    cell.className = "table-empty"; cell.colSpan = 8; cell.textContent = "尚未执行当前页筛选。";
+    row.append(cell); body.append(row);
+  }
+}
 
 function renderScreeningDraftConditions() {
   const root = $("#screening-condition-list"), summary = buildScreeningDraftSummary(screeningDraftConditions, screeningDraftLogic);
@@ -1664,6 +1677,7 @@ function loadScreeningPlan(id) {
   if (!state.readable || !state.valid || !plan) return false;
   screeningDraftConditions.splice(0, screeningDraftConditions.length, ...plan.conditions);
   screeningDraftLogic = plan.logic; selectedScreeningPlanId = plan.id;
+  invalidateScreeningLocalResults("已载入新方案，请重新应用条件到当前页。");
   $("#screening-condition-logic").value = plan.logic; $("#screening-plan-name").value = plan.name;
   $("#screening-condition-feedback").textContent = "已载入本地方案“" + plan.name + "”；编辑后需点击保存才会更新方案。";
   $("#screening-condition-feedback").dataset.state = "success";
@@ -1686,18 +1700,32 @@ function removeScreeningPlan(id) {
   if (selectedScreeningPlanId === id) { selectedScreeningPlanId = ""; $("#screening-plan-name").value = ""; }
   $("#screening-condition-feedback").textContent = "已删除本地筛选方案。"; $("#screening-condition-feedback").dataset.state = "success"; renderScreeningPlans();
 }
-$("#screening-condition-logic").addEventListener("change", (event) => { screeningDraftLogic = event.target.value === "or" ? "or" : "and"; renderScreeningDraftConditions(); });
+$("#screening-condition-logic").addEventListener("change", (event) => {
+  screeningDraftLogic = event.target.value === "or" ? "or" : "and";
+  invalidateScreeningLocalResults(); renderScreeningDraftConditions();
+});
 $("#screening-condition-add").addEventListener("click", () => {
   const result = createScreeningCondition($("#screening-condition-field").value, $("#screening-condition-operator").value, $("#screening-condition-value").value);
   const feedback = $("#screening-condition-feedback");
   if (!result.valid) { feedback.textContent = result.reason === "range" ? "数值超出该指标允许范围，请调整后重试。" : "请选择有效指标并输入有效数值。"; feedback.dataset.state = "error"; return; }
   screeningDraftConditions.push(result.condition); $("#screening-condition-value").value = "";
+  invalidateScreeningLocalResults();
   feedback.textContent = "已添加条件。当前为本地条件草稿，不会执行扫描。"; feedback.dataset.state = "success"; renderScreeningDraftConditions();
 });
 $("#screening-condition-list").addEventListener("click", (event) => {
   const button = event.target.closest("[data-screening-condition-remove]"); if (!button) return;
   const index = Number(button.dataset.screeningConditionRemove); if (!Number.isInteger(index) || index < 0 || index >= screeningDraftConditions.length) return;
-  screeningDraftConditions.splice(index, 1); $("#screening-condition-feedback").textContent = "已移除条件。"; renderScreeningDraftConditions();
+  screeningDraftConditions.splice(index, 1); invalidateScreeningLocalResults();
+  $("#screening-condition-feedback").textContent = "已移除条件。"; renderScreeningDraftConditions();
+});
+$("#screening-condition-clear")?.addEventListener("click", () => {
+  screeningDraftConditions.splice(0, screeningDraftConditions.length);
+  screeningDraftLogic = "and"; selectedScreeningPlanId = "";
+  $("#screening-condition-logic").value = "and"; $("#screening-plan-name").value = "";
+  invalidateScreeningLocalResults("条件已清空。添加新条件后，可重新应用到当前页。");
+  $("#screening-condition-feedback").textContent = "已清空当前条件草稿；已保存的本地方案不会被删除。";
+  $("#screening-condition-feedback").dataset.state = "success";
+  renderScreeningDraftConditions(); renderScreeningPlans();
 });
 $("#screening-plan-save").addEventListener("click", () => saveCurrentScreeningPlan(false));
 $("#screening-plan-save-as").addEventListener("click", () => saveCurrentScreeningPlan(true));
@@ -1707,35 +1735,39 @@ $("#screening-saved-plan-list").addEventListener("click", (event) => {
 });
 renderScreeningDraftConditions(); renderScreeningPlans();
 
-function renderScreeningLocalResults() {
+function isCurrentScreeningSnapshot(snapshot) {
+  const current = marketStocks.getCurrentPageSnapshot();
+  return current.hasResult && snapshot.hasResult && current.page === snapshot.page &&
+    current.pageSize === snapshot.pageSize && current.adjustment === snapshot.adjustment &&
+    current.items.length === snapshot.items.length &&
+    current.items.every((item, index) => item === snapshot.items[index]);
+}
+
+function renderScreeningLocalResultRows() {
   const body = $("#screening-local-results-body"), summary = $("#screening-local-results-summary");
-  if (!body || !summary) return;
-  const snapshot = marketStocks.getCurrentPageSnapshot();
-  if (!snapshot.hasResult) {
-    summary.textContent = "尚未加载全市场分页行情。请先在“个股行情”页加载一页真实数据，再返回应用条件。";
-    body.replaceChildren();
-    const row = document.createElement("tr"), cell = document.createElement("td");
-    cell.className = "table-empty"; cell.colSpan = 7; cell.textContent = "当前没有可用于本地筛选的行情页。";
-    row.append(cell); body.append(row); return;
+  if (!body || !summary || !screeningLocalEvaluation) return;
+  const { snapshot, result } = screeningLocalEvaluation;
+  if (!isCurrentScreeningSnapshot(snapshot)) {
+    invalidateScreeningLocalResults("全市场行情分页已变化或重新加载，请重新应用条件，避免查看旧页结果。");
+    return;
   }
-  const result = evaluateScreeningConditions(snapshot.items, screeningDraftConditions, screeningDraftLogic);
-  if (!result.valid) {
-    summary.textContent = "请先添加至少一条有效条件；当前页 " + snapshot.items.length + " 条数据尚未筛选。";
-    body.replaceChildren();
-    const row = document.createElement("tr"), cell = document.createElement("td");
-    cell.className = "table-empty"; cell.colSpan = 7; cell.textContent = "暂无筛选条件。";
-    row.append(cell); body.append(row); return;
-  }
+  const filter = $("#screening-local-result-filter")?.value || "matched";
+  const rows = selectScreeningResultRows(result, filter);
+  const filterLabels = { matched: "命中", unmatched: "未命中", unknown: "待判断", all: "全部判断" };
   summary.textContent = "当前页范围：第 " + snapshot.page + " 页 / 每页 " + snapshot.pageSize + " 条 / 复权 " + snapshot.adjustment +
     "；检查 " + result.examinedCount + " 条，命中 " + result.matchedItems.length + " 条，未命中 " +
-    result.unmatchedItems.length + " 条，因字段缺失无法判断 " + result.unknownItems.length + " 条。此结果仅限当前页，不代表全市场扫描。";
+    result.unmatchedItems.length + " 条，因字段缺失无法判断 " + result.unknownItems.length + " 条；当前显示" +
+    filterLabels[filter] + " " + rows.length + " 条。结果仅限本页，不代表全市场扫描。";
   body.replaceChildren();
-  if (!result.matchedItems.length) {
+  if (!rows.length) {
     const row = document.createElement("tr"), cell = document.createElement("td");
-    cell.className = "table-empty"; cell.colSpan = 7; cell.textContent = "当前页没有可确认命中的股票；请同时检查无法判断数量。";
+    cell.className = "table-empty"; cell.colSpan = 8;
+    cell.textContent = filter === "matched" ? "当前页没有可确认命中的股票；请检查待判断数量。" :
+      filter === "unknown" ? "当前页没有因字段缺失而待判断的股票。" :
+      filter === "unmatched" ? "当前页没有明确未命中的股票。" : "当前页没有可展示的筛选记录。";
     row.append(cell); body.append(row); return;
   }
-  result.matchedItems.forEach(item => {
+  rows.forEach(({ item, status }) => {
     const quote = item?.quote || {}, symbol = String(item?.symbol || item?.code || quote.symbol || "").trim();
     const name = String(item?.name || quote.name || symbol || "未报告");
     const row = document.createElement("tr"), stockCell = document.createElement("td");
@@ -1751,11 +1783,41 @@ function renderScreeningLocalResults() {
     ].forEach(value => { const cell = document.createElement("td"); cell.textContent = value; row.append(cell); });
     const qualityCell = document.createElement("td"), quality = item.quality_status || quote.quality_status || "unknown";
     qualityCell.textContent = qualityLabel(quality);
-    qualityCell.title = [...(Array.isArray(item.quality_reasons) ? item.quality_reasons : []), ...(Array.isArray(quote.quality_reasons) ? quote.quality_reasons : [])].join("；");
-    row.append(qualityCell); body.append(row);
+    const reasons = [...(Array.isArray(item.quality_reasons) ? item.quality_reasons : []), ...(Array.isArray(quote.quality_reasons) ? quote.quality_reasons : [])].filter(Boolean);
+    qualityCell.title = reasons.join("；") || "服务端未提供详细质量原因";
+    const reason = document.createElement("small"); reason.className = "screening-quality-reason";
+    reason.textContent = reasons.length ? reasons.join("；").slice(0, 100) : "质量原因未报告";
+    qualityCell.append(document.createElement("br"), reason); row.append(qualityCell);
+    const judgmentCell = document.createElement("td"); judgmentCell.textContent = status; row.append(judgmentCell);
+    body.append(row);
   });
 }
+
+function renderScreeningLocalResults() {
+  const body = $("#screening-local-results-body"), summary = $("#screening-local-results-summary");
+  if (!body || !summary) return;
+  const snapshot = marketStocks.getCurrentPageSnapshot();
+  if (!snapshot.hasResult) {
+    invalidateScreeningLocalResults("尚未加载全市场分页行情。请先在“个股行情”页加载一页真实数据，再返回应用条件。");
+    return;
+  }
+  const result = evaluateScreeningConditions(snapshot.items, screeningDraftConditions, screeningDraftLogic);
+  if (!result.valid) {
+    invalidateScreeningLocalResults("请先添加至少一条有效条件；当前页 " + snapshot.items.length + " 条数据尚未筛选。");
+    return;
+  }
+  screeningLocalEvaluation = { snapshot, result };
+  renderScreeningLocalResultRows();
+}
 $("#screening-apply-current-page")?.addEventListener("click", renderScreeningLocalResults);
+$("#screening-local-result-filter")?.addEventListener("change", renderScreeningLocalResultRows);
+document.querySelectorAll('.nav-link[data-view="screening"]').forEach((button) => {
+  button.addEventListener("click", () => {
+    if (screeningLocalEvaluation && !isCurrentScreeningSnapshot(screeningLocalEvaluation.snapshot)) {
+      invalidateScreeningLocalResults("全市场行情分页已变化或重新加载，请重新应用条件，避免查看旧页结果。");
+    }
+  });
+});
 $("#screening-local-results-body")?.addEventListener("click", event => {
   const button = event.target.closest("button[data-screening-local-symbol]");
   if (!button || !button.dataset.screeningLocalSymbol) return;

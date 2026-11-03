@@ -71,6 +71,21 @@ export function evaluateScreeningConditions(items = [], conditions = [], logic =
     examinedCount: rows.length, matchedItems, unmatchedItems, unknownItems };
 }
 
+export function selectScreeningResultRows(result, filter = "matched") {
+  if (!result?.valid) return [];
+  const groups = {
+    matched: ["命中", result.matchedItems],
+    unmatched: ["未命中", result.unmatchedItems],
+    unknown: ["待判断", result.unknownItems]
+  };
+  if (filter === "all") {
+    return Object.entries(groups).flatMap(([, [label, items]]) =>
+      (Array.isArray(items) ? items : []).map((item) => ({ item, status: label })));
+  }
+  const selected = groups[filter] || groups.matched;
+  return (Array.isArray(selected[1]) ? selected[1] : []).map((item) => ({ item, status: selected[0] }));
+}
+
 export function buildScreeningDraftSummary(conditions = [], logic = "and") {
   const normalized = normalizeScreeningConditions(conditions), normalizedLogic = logic === "or" ? "or" : "and";
   return {

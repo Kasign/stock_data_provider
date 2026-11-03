@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, normalizeScreeningConditions, readScreeningPlans, saveScreeningPlan, SCREENING_PLANS_KEY } from "../src/screening-draft.js";
+import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, normalizeScreeningConditions, readScreeningPlans, saveScreeningPlan, selectScreeningResultRows, SCREENING_PLANS_KEY } from "../src/screening-draft.js";
 function makeStorage(seed = null) { let value = seed; return { getItem() { return value; }, setItem(_key, next) { value = String(next); }, removeItem() { value = null; } }; }
 test("accepts bounded numeric conditions for supported market fields", () => {
   assert.deepEqual(createScreeningCondition("change_pct", "gte", "2.5"), { valid: true, condition: { field: "change_pct", operator: "gte", value: 2.5 } });
@@ -107,6 +107,19 @@ test("filters only supplied page rows and preserves unknown values under AND/OR 
   assert.equal(andResult.examinedCount, 3);
   assert.equal(andResult.conditionCount, 2);
   assert.deepEqual(rows.map(item => item.symbol), ["A", "B", "C"], "filtering must not mutate the loaded page");
+});
+
+test("screening result view selects matched, unmatched, unknown and combined rows without mutation", () => {
+  const matched = { symbol: "A" }, unmatched = { symbol: "B" }, unknown = { symbol: "C" };
+  const result = { valid: true, matchedItems: [matched], unmatchedItems: [unmatched], unknownItems: [unknown] };
+  assert.deepEqual(selectScreeningResultRows(result, "matched"), [{ item: matched, status: "命中" }]);
+  assert.deepEqual(selectScreeningResultRows(result, "unmatched"), [{ item: unmatched, status: "未命中" }]);
+  assert.deepEqual(selectScreeningResultRows(result, "unknown"), [{ item: unknown, status: "待判断" }]);
+  assert.deepEqual(selectScreeningResultRows(result, "all"), [
+    { item: matched, status: "命中" }, { item: unmatched, status: "未命中" }, { item: unknown, status: "待判断" }
+  ]);
+  assert.deepEqual(selectScreeningResultRows({ valid: false }, "all"), []);
+  assert.deepEqual(result.matchedItems, [matched]);
 });
 
 test("OR logic can match on a known condition while another field is missing", () => {

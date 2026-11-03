@@ -65,6 +65,10 @@ jobs:
         working-directory: web
         run: node tests/data-center-probe-browser.mjs
 
+      - name: Run local screening interaction acceptance
+        working-directory: web
+        run: node tests/screening-local-browser.mjs
+
       - name: Upload browser screenshots
         if: always()
         uses: actions/upload-artifact@v4
