@@ -57,6 +57,10 @@ jobs:
         working-directory: web
         run: node tests/stock-research-browser.mjs
 
+      - name: Run Stock Research data quality acceptance
+        working-directory: web
+        run: node tests/stock-research-data-browser.mjs
+
       - name: Upload browser screenshots
         if: always()
         uses: actions/upload-artifact@v4

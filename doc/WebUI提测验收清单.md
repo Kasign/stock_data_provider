@@ -298,3 +298,23 @@
 - WebUI Checks 成功：[运行记录 #41565853021](https://github.com/Kasign/stock_data_provider/actions/runs/41565853021)。
 - Chromium Browser Smoke 成功：[运行记录 #41565852967](https://github.com/Kasign/stock_data_provider/actions/runs/41565852967)，7 个响应式视口、Run Flow 两组专项及个股研究请求生命周期验收全部通过；截图 Artifact [#13199150984](https://github.com/Kasign/stock_data_provider/actions/runs/41565852967/artifacts/13199150984)。
 - 个股研究真实 API 联调、报告期数据完整性、估值/筹码/资金流口径仍需在部署环境核验。
+
+
+## 13. 2026-11-03 个股研究数据质量与分页验收
+
+### 本轮自动化覆盖
+
+- [ ] 上市档案展示 stale 状态、源端质量原因和更新时间。
+- [ ] 板块接口成功但无数据时明确显示“未确认”，不把空列表解释为没有所属板块。
+- [ ] 公告分页按服务端 has_more 读取；公告链接仅允许 HTTPS Eastmoney 域名，非白名单链接只展示标题。
+- [ ] 财务指标保留报告期、披露日期、分类质量和单位；null 不补零。
+- [ ] 估值指标保留 stale 状态、供应商时间，缺失指标不补零，负值不改写。
+- [ ] 筹码分布展示成本区间、获利比例和集中度；比例按分数转百分比，数据日期和质量原因可见。
+- [ ] 个股资金流展示人民币金额、观测数量和质量原因；缺失的 5/10 日汇总不补零。
+- [ ] 资金流重试返回 503 时清除上一轮成功快照，显示 Provider 错误并恢复按钮。
+- [ ] 新增 `web/tests/stock-research-data-browser.mjs` 并接入 Chromium Browser Smoke。
+
+### 验收边界
+
+- 本轮使用隔离模拟 API 验证页面字段、质量状态、空数据、分页和错误恢复，不代表真实 Provider 返回值。
+- 真实估值、财务、资金流和筹码口径仍需与部署环境数据源进行黄金样例对账。
