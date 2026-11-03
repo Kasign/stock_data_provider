@@ -1233,3 +1233,63 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 
 **下一步执行顺序：** 先进入 Batch 1，盘点 DailyBar 实际注册 Provider、各 Provider 的复权请求参数/响应证据和当前测试覆盖，形成逐 Provider 口径矩阵；不重复已完成的 Quote 字段诊断，也不提前改造 Fundamentals/Valuations。
 
+## 十四、DailyBar Provider 复权能力矩阵首轮盘点（2026-11-03）
+
+**盘点基线：** 本节基于代码 SHA `e1fda735f06a9b97d766a1cbea40a73b6c2027d2` 对应代码树；仅为代码与测试静态核对，不代表真实上游复权结果已完成验收。
+
+**一、DailyBar 实际能力注册**
+
+默认配置中启用 DailyBar 的 Provider：
+- Eastmoney、BaoStock、Tencent、Sina、NetEase、TickFlow、Pytdx。
+
+代码实现了 DailyBar 能力、但默认关闭的 Provider：
+- Hithink、Tushare、Yahoo Finance。
+
+未发现 Miaoxiang、Xueqiu 实现个股 DailyBarProvider；不纳入本次 DailyBar 复权矩阵。最终启用状态仍以部署时 providers.json 和环境变量覆盖结果为准。
+
+**二、复权实现矩阵**
+
+| Provider | 默认状态 | none | 前复权 | 后复权 | 复权实现与证据边界 |
+|---|---|---|---|---|---|
+| Eastmoney | 启用 | 支持，fqt=0 | 支持，fqt=1 | 支持，fqt=2 | 直接请求 K 线接口；AdjustmentMethod 记录 eastmoney_fqt 参数值。该值是请求证据，不是源端响应回显；响应未提供可独立验证的参考日期 |
+| BaoStock | 启用 | adjustflag=3 | adjustflag=2 | adjustflag=1 | 直接请求接口并校验每行返回的 AdjustFlag 与请求一致；方法标记 baostock_pct_change。需要用真实样本确认不同复权口径和参考基准 |
+| Tencent | 启用 | day | qfqday | hfqday | 按请求口径切换 endpoint/响应数组 key；记录实际使用的响应 key，不能把请求参数误写成源端回显的参考日期 |
+| Sina | 启用 | 支持 | 不支持 | 不支持 | 仅接受 none；方法 sina_raw_ohlc_no_adjustment；端点没有可验证复权参数，调整请求明确拒绝 |
+| NetEase | 启用 | 支持 | 不支持 | 不支持 | 仅接受 none；方法 netease_raw_ohlc_no_adjustment；调整请求明确拒绝 |
+| TickFlow | 启用 | adjust=none | adjust=forward | adjust=backward | 根据是否配置 API Key 选择认证/免费端点；方法 tickflow_api_{adjust}。日 K 可走免费端点，不能把无 Key 等同于不可用 |
+| Pytdx | 启用 | 原始 OHLC | 本地 ApplyQFQ | 本地 ApplyHFQ | 从 TDX 获取原始日 K 和 GBBQ 除权除息事件，再本地计算复权；依赖公司行动数据完整性、分页完整性和事件因子计算正确性 |
+| Hithink | 默认关闭，需 Key | 支持 | 支持 | 支持 | API 参数 none/forward/backward，按请求区间分段获取；方法 hithink_api_{adjust}。真实账号权限和源端口径尚待验证 |
+| Tushare | 默认关闭，需 Token | daily 原始 OHLC | adj_factor 本地换算 | adj_factor 本地换算 | daily 接口原始 OHLC；复权时另取 adj_factor，前复权按当日因子/参考日因子，后复权按累计因子；因子缺失或不完整拒绝结果 |
+| Yahoo Finance | 默认关闭 | 支持 | adjclose ratio rebased to request end | adjclose ratio rebased to request start | 使用 adjclose/close 计算因子，再按请求边界重定基准；前复权参考日期为区间末端，后复权为区间起始；成交额保持 unknown/degraded |
+
+**三、当前统一 Probe 的关键缺口**
+
+- `ProbeProviderCapabilitiesWithOptions` 的 DailyBar 探测固定调用 `FetchDailyBars(..., model.AdjustmentNone)`。
+- 当前跨 Provider 日线比较也固定以 `AdjustmentNone` 标记快照。
+- 因此统一 Probe 目前只能验证各 Provider 的未复权日 K 请求和基础数据质量，**不能据此宣称前复权/后复权已通过统一诊断**。
+- 对只支持 none 的 Sina、NetEase，调整口径应报告 not_supported/skipped，而不是失败。
+- 对支持 qfq/hfq 的 Provider，后续需要按能力声明执行对应口径，并校验实际返回的 AdjustmentBasis、AdjustmentMethod、AdjustmentRefDate、SourceVersion 和因子/公司行动证据。
+- 不应把不同 Provider 未对齐参考基准的 adjusted bars 直接进行数值差分；必须先建立可比基准，否则结果为 not_comparable。
+
+**四、现有测试覆盖初步判断**
+
+- Eastmoney：已有日 K 归一化、重复/越界/非法行和证券身份测试；尚需补充三种 fqt 参数分别映射及响应元数据证据测试。
+- BaoStock：已有复权元数据、调整标记不一致拒绝测试；需要确认 none/qfq/hfq 三种标记均有独立用例和真实样本。
+- Tencent：已有请求 endpoint / payload key 选择、缺少指定 adjusted series 拒绝测试；还需覆盖三个口径输出元数据与参考基准边界。
+- Sina、NetEase：已有 adjusted request 拒绝测试；这是正确的能力边界，不需要伪造复权支持。
+- TickFlow：已有日 K 单位、排序、可选数组长度测试；本次静态测试名盘点未看到完整 none/forward/backward 复权矩阵用例。
+- Pytdx：代码使用 GBBQ 事件和本地 QFQ/HFQ；现有测试目录主要覆盖单位/字段质量，需单独核对复权事件排序、边界和缺失事件回归。
+- Hithink：已有日 K 解析问题测试；需补充三种调整参数、分段拼接和参考基准元数据测试。
+- Tushare：已有累计因子、前后复权和复权元数据相关测试；本批不重复已有因子公式测试，后续只补统一 Probe 接入与真实权限证据。
+- Yahoo：已有前复权按请求结束日重定基准、后复权按请求开始日重定基准、缺失 adjclose 拒绝测试；后续检查统一 Probe 是否能触达可选 Provider。
+
+**五、Batch 1 后续执行项**
+
+1. 为 DailyBar Provider 增加明确的复权能力声明/矩阵来源，避免仅凭 Provider 名称推断能力。
+2. 扩展统一 Probe 的 DailyBar 口径选择，使 none、forward、backward 可独立选择；对不支持的口径显式返回 not_supported。
+3. 将每个口径的实际请求/响应证据写入诊断结果；无源端参考日证据时保留 unknown，不推断。
+4. 增加 Provider 复权元数据统一断言和测试；跨 Provider 只比较基准一致的序列。
+5. 用真实 Provider 样本复验前后复权结果；需要凭据但未配置的 Provider 标记 skipped，不把 Mock/CI 结果当真实数据通过。
+
+**当前结论：** Provider 复权实现并非统一口径：部分源端直接返回调整序列，部分由 Go 本地使用因子/公司行动计算，Sina/NetEase 只支持未复权。统一 Probe 当前只测 none，这是明确的能力缺口。下一步应先实现“能力声明 + Probe 口径选择 + 不支持状态”，再逐个 Provider 补齐矩阵断言；不要重写现有复权算法。
+
