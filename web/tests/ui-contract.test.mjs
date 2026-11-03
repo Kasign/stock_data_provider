@@ -1888,7 +1888,7 @@ test("清空或导入本地任务历史会隔离在途创建请求的晚到响�
   assert.match(clearBody, /state\.taskHistoryGeneration \+= 1;\s*state\.taskContextGeneration \+= 1;/);
   const importBody = sourceBetween(
     app,
-    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups, strategy) {",
+    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups, strategy, previewStorageSnapshot) {",
     "\n\nsyncThemeControl(readTheme());",
     "工作区导入"
   );
