@@ -776,3 +776,11 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - [x] 主动诊断使用允许部分总体覆盖的结构校验，正常业务 `MarketBreadth` 仍使用严格校验，部分总体覆盖不能进入业务快照/缓存。
 - [x] 覆盖率口径：`coverage_returned=covered_securities`；`coverage_missing=total_securities-covered_securities`；`coverage_excluded=unclassified_count`；`coverage_validated=coverage_returned-coverage_excluded`。该 validated 仅表示身份和必需价格字段可用于涨跌分类，不代表成交额、时间戳、涨跌停等所有字段均完整。
 - [ ] 完成 Service 回归、Go/race/vet、OpenAPI 和 Docker 验收后，再标记本批通过。
+
+
+### 2026-11-03：跨 Provider 对账来源证据补齐
+
+- Cross Provider 日 K check result 除兼容保留的组合 `provider` 字段外，新增 compared_symbol、left/right provider、left/right source_version、adjustment_basis 和双方 quality_status。
+- 每条字段比较现在能独立定位两侧数据来源、版本、证券和复权口径，不需要通过组合字符串解析或再与 ProviderProbeItem 跨数组关联。
+- 字段级左右值、差值、容差和 not_comparable 原因维持原语义；degraded/unknown 输入仍然拒绝作为 matched 基准。
+- 对应模型、OpenAPI 和 Service 回归测试已同步；以新 SHA 的 market-data test/race/vet、OpenAPI 和 Docker 检查为准。

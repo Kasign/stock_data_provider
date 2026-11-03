@@ -1241,12 +1241,20 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 			}
 			comparison := provider.CompareCrossProviderDailyBars(*left, *right)
 			result := model.ProviderProbeCheckResult{
-				Check:         "cross_provider",
-				Provider:      left.Provider + "+" + right.Provider,
-				Capability:    "daily_bars",
-				CheckedAt:     checkedAt,
-				ComparedDates: append([]string(nil), comparison.ComparedDates...),
-				FieldCount:    len(comparison.Fields),
+				Check:              "cross_provider",
+				Provider:           left.Provider + "+" + right.Provider,
+				Capability:         "daily_bars",
+				CheckedAt:          checkedAt,
+				ComparedSymbol:     left.Symbol,
+				LeftProvider:       left.Provider,
+				RightProvider:      right.Provider,
+				LeftSourceVersion:  left.SourceVersion,
+				RightSourceVersion: right.SourceVersion,
+				AdjustmentBasis:    left.AdjustmentBasis,
+				LeftQualityStatus:  model.QualityStatus(left.QualityStatus),
+				RightQualityStatus: model.QualityStatus(right.QualityStatus),
+				ComparedDates:      append([]string(nil), comparison.ComparedDates...),
+				FieldCount:         len(comparison.Fields),
 			}
 			switch comparison.Status {
 			case provider.CrossProviderDailyMatched:

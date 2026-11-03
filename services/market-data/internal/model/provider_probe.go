@@ -112,6 +112,14 @@ type ProviderProbeCheckResult struct {
 	FreshnessDomain        string                         `json:"freshness_domain,omitempty"`
 	FreshnessMaxAgeSeconds *int64                         `json:"freshness_max_age_seconds,omitempty"`
 	MarketPhase            string                         `json:"market_phase,omitempty"`
+	ComparedSymbol         string                         `json:"compared_symbol,omitempty"`
+	LeftProvider           string                         `json:"left_provider,omitempty"`
+	RightProvider          string                         `json:"right_provider,omitempty"`
+	LeftSourceVersion      string                         `json:"left_source_version,omitempty"`
+	RightSourceVersion     string                         `json:"right_source_version,omitempty"`
+	AdjustmentBasis        string                         `json:"adjustment_basis,omitempty"`
+	LeftQualityStatus      QualityStatus                  `json:"left_quality_status,omitempty"`
+	RightQualityStatus     QualityStatus                  `json:"right_quality_status,omitempty"`
 	ComparedDates          []string                       `json:"compared_dates,omitempty"`
 	FieldCount             int                            `json:"field_count,omitempty"`
 	MismatchCount          int                            `json:"mismatch_count,omitempty"`

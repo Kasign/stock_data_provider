@@ -572,6 +572,12 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 	if len(results) != 1 || results[0].Status != "skipped" || results[0].ErrorCode != "comparison_not_comparable" {
 		t.Fatalf("degraded snapshots must not be reported as cross-provider pass: %+v", results)
 	}
+	if results[0].ComparedSymbol != "600036.SH" || results[0].LeftProvider != "left" ||
+		results[0].RightProvider != "right" || results[0].LeftSourceVersion != "left-v1" ||
+		results[0].RightSourceVersion != "right-v1" || results[0].LeftQualityStatus != model.QualityDegraded ||
+		results[0].RightQualityStatus != model.QualityValid {
+		t.Fatalf("not-comparable result must preserve both input evidence states: %+v", results[0])
+	}
 }
 
 func TestProviderProbeFieldIssueJSONContainsSafeDiagnosticFields(t *testing.T) {

@@ -609,6 +609,14 @@ components:
         freshness_domain: {type: string, description: Applied SLA policy domain}
         freshness_max_age_seconds: {type: integer, minimum: 0, description: Configured maximum source-data age for the policy}
         market_phase: {type: string, description: Market session phase used by the evaluator}
+        compared_symbol: {type: string, description: Normalized security symbol compared across providers}
+        left_provider: {type: string}
+        right_provider: {type: string}
+        left_source_version: {type: string}
+        right_source_version: {type: string}
+        adjustment_basis: {type: string, enum: [none, forward_adjusted, backward_adjusted, unknown]}
+        left_quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        right_quality_status: {$ref: '#/components/schemas/QualityStatus'}
         compared_dates: {type: array, items: {type: string, format: date}}
         field_count: {type: integer, minimum: 0}
         mismatch_count: {type: integer, minimum: 0, description: Number of fields whose values exceed the comparison tolerance}
