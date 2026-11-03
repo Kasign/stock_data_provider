@@ -72,3 +72,29 @@ Freshness 描述数据相对于其更新预期是否及时，是独立于 `Quali
 ## 7. 测试覆盖
 
 核心单元测试覆盖 SLA 内外、未来源端时间、采集时间不可替代源端时间、缺失时间语义、交易日历缺失、非交易日、午休/非更新阶段、停牌和证券状态未知。
+
+
+## 8. SLA 策略注册表与首批模型映射
+
+集中策略入口位于 `internal/freshness.PolicyForDomain`，当前初始配置：
+
+| 数据域 | SLA | 更新阶段 | 当前时间证据 |
+|---|---:|---|---|
+| quote | 90 秒 | 开盘竞价、连续交易、收盘竞价 | `Quote.QuoteTime` + `QuoteTimeSemantics` |
+| index | 120 秒 | 开盘竞价、连续交易、收盘竞价 | `MarketIndexQuote.QuoteTime` + `QuoteTimeSemantics` |
+| market_breadth | 5 分钟 | 上午/下午连续交易 | 使用覆盖成分中最旧的 `OldestQuoteTime`，避免最新时间掩盖陈旧成分 |
+| sector | 5 分钟 | 上午/下午连续交易 | 当前只有 `ProviderReportDate`，不具备精确源端更新时间，判定保持 unknown |
+| fund_flow | 5 分钟 | 上午/下午连续交易 | 当前模型只有业务日期，未暴露精确源端更新时间，判定保持 unknown |
+
+策略返回值会复制阶段切片，避免调用方修改全局策略。首批证据映射函数：
+
+- `QuoteEvidence`、`IndexQuoteEvidence`：只读取明确的 Provider 行情时间及时间语义。
+- `MarketBreadthEvidence`：使用最旧成分行情时间；`FetchedAt` 只保留作诊断展示。
+- `SectorEvidence`、`FundFlowEvidence`：只携带 `FetchedAt`，不把报告日期、交易日期或采集时间伪装成源端时间。
+
+### 当前限制与下一步
+
+1. Quote/Index 的 Provider 适配层必须稳定填充时间语义；缺失时 Evaluator 返回 unknown。
+2. 市场宽度使用最旧成分时间作为保守聚合证据；还需在诊断明细中展示覆盖数量及最旧/最新时间。
+3. 板块与资金流要从 Provider 原始响应补充可信的精确更新时间，或明确改为基于交易日/报告周期的独立策略；在此之前不能按 5 分钟 SLA 输出 fresh/stale。
+4. 当前策略注册表尚未接入诊断 API，也没有完成 Go 测试、gofmt、Race、Vet 或构建验证。
