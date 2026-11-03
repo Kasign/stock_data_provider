@@ -464,3 +464,17 @@
 ### 验收边界
 - 使用隔离模拟 API 验证页面工作流与身份关联，不代表真实分析服务部署联调或 Provider 数据质量验收。
 - 报告与研究笔记保存在当前浏览器，不是服务端报告/笔记历史。
+
+
+## 22. 2026-11-03 市场板块排行增强验收
+
+- [x] 行业/概念排行请求传递 `sort_by` 和 `direction`。
+- [x] 今日涨幅、成交额、近 5 日涨幅三种维度可切换；服务端响应的排序维度同步到表头。
+- [x] 成交额仅在 `amount_unit=CNY` 时显示人民币单位；未知单位明确显示“单位未确认”。
+- [x] 从高到低、从低到高均通过浏览器交互验收。
+- [x] 资金净流入仍显示真实能力缺口，不发送虚假请求，不使用成交额替代。
+- [x] WebUI Checks：356/356 单测、JS 语法、Compose 配置和 Nginx 构建通过（[运行记录 #41585701328](https://github.com/Kasign/stock_data_provider/actions/runs/41585701328)）。
+- [x] Chromium Browser Smoke：7 个响应式视口及板块排行交互通过，其他既有浏览器专项通过（[运行记录 #41585701271](https://github.com/Kasign/stock_data_provider/actions/runs/41585701271)）。
+
+### API 契约说明
+- `change_percent_5d` 已由当前 Go 模型提供，但正式 OpenAPI 尚未声明；WebUI 测试对 Go JSON tag 做了契约断言。后续数据层应补齐 OpenAPI 字段定义。
