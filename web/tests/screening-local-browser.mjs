@@ -120,6 +120,7 @@ try {
   assert.equal(await page.locator("#screening-local-select-count").textContent(), "已选择 0 只");
   assert.equal(marketStocksRequests, 1, "batch watchlist actions must not re-fetch market data");
 
+
   await page.locator("#screening-plan-name").fill("浏览器筛选方案");
   await page.locator("#screening-plan-save").click();
   const storedBeforeClear = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]"));
