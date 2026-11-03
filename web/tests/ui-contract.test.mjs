@@ -1405,7 +1405,7 @@ test("导入浏览器工作区不会把导入前的活动任务重新写回任�
   );
   const importBody = sourceBetween(
     app,
-    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups, strategy) {",
+    "async function applyBrowserDataImport(imported, currentWatchlist, currentRecentTasks, currentWatchlistGroups, strategy, previewStorageSnapshot) {",
     "\n\nsyncThemeControl(readTheme());",
     "工作区导入"
   );
