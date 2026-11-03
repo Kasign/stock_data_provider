@@ -16,15 +16,15 @@ test("batch add preserves existing groups and skips duplicates by default", () =
   db.setItem(WATCHLIST_GROUPS_KEY, JSON.stringify(groups));
   const result = addScreeningResultsToWatchlist([{ symbol: "600519", name: "贵州茅台" }, { symbol: "000001.SZ", name: "平安银行" }], db);
   assert.equal(result.persisted, true); assert.equal(result.added.length, 1); assert.deepEqual(result.duplicates, ["600519"]);
-  assert.equal(readWatchlistGroups(db).assignments["600519"], "长期观察"); assert.equal(readWatchlistState(db).items.length, 2);
+  assert.equal(readWatchlistGroups(db).assignments["600519.SH"], "长期观察"); assert.equal(readWatchlistState(db).items.length, 2);
 });
 
 test("explicit target group moves both new and existing selected stocks", () => {
   const db = storage(); addWatchlistSymbol("600519.SH", "贵州茅台", db); createWatchlistGroup("重点观察", db);
   const result = addScreeningResultsToWatchlist([{ symbol: "600519.SH" }, { symbol: "000001.SZ" }], db, "重点观察");
   assert.equal(result.persisted, true); assert.equal(result.assignedCount, 2);
-  assert.equal(readWatchlistGroups(db).assignments["600519"], "重点观察");
-  assert.equal(readWatchlistGroups(db).assignments["000001"], "重点观察");
+  assert.equal(readWatchlistGroups(db).assignments["600519.SH"], "重点观察");
+  assert.equal(readWatchlistGroups(db).assignments["000001.SZ"], "重点观察");
 });
 
 test("invalid group rejects before modifying the watchlist", () => {
