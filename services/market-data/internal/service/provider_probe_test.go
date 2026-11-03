@@ -303,8 +303,9 @@ func TestProviderProbeMarksUnsupportedBeijingProviderWithoutFailure(t *testing.T
 func TestRecordProviderProbeCoverageCountsPreservesDenominator(t *testing.T) {
 	evidence := &providerProbeEvidence{}
 	ctx := context.WithValue(context.Background(), providerProbeEvidenceContextKey{}, evidence)
-	recordProviderProbeCoverageCounts(ctx, 100, 90, 88, 10, 2)
+	recordProviderProbeCoverageCounts(ctx, 100, 90, 88, 10, 2, "provider_universe", "fixture.total")
 	if evidence.coverageTotal == nil || *evidence.coverageTotal != 100 ||
+		evidence.coveragePopulation != "provider_universe" || evidence.coverageSource != "fixture.total" ||
 		evidence.coverageReturned == nil || *evidence.coverageReturned != 90 ||
 		evidence.coverageValidated == nil || *evidence.coverageValidated != 88 ||
 		evidence.coverageMissing == nil || *evidence.coverageMissing != 10 ||
@@ -313,7 +314,7 @@ func TestRecordProviderProbeCoverageCountsPreservesDenominator(t *testing.T) {
 		t.Fatalf("coverage denominator evidence is incomplete: %+v", evidence)
 	}
 
-	recordProviderProbeCoverageCounts(ctx, 100, 90, 89, 10, 2)
+	recordProviderProbeCoverageCounts(ctx, 100, 90, 89, 10, 2, "provider_universe", "fixture.total")
 	if *evidence.coverageValidated != 88 || *evidence.coverageRatio != 0.88 {
 		t.Fatalf("inconsistent coverage counts must not overwrite valid evidence: %+v", evidence)
 	}
