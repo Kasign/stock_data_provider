@@ -1049,3 +1049,19 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - Eastmoney f48 成交额在当前 Quote 契约中属于必需字段：Quote 仍标记 valid 且 amount 缺失时，公共 Validator 会硬失败。
 - 因此 f48 missing/null 也必须在 Parse 阶段结构化上报，而不能只依赖后续 Validate 阶段报错；数字 0 仍是合法数值，不等同于缺失。
 - 增加 f48 missing/null 回归，保留 volume_ratio、turnover_rate 等真正可选字段的缺失语义。
+
+## 2026-11-03 紧急构建日志核验与 Go 模块路径清理
+
+### Tencent 测试失败日志核验
+
+- 曾出现 `TestTencentQuoteRejectsInvalidPriceContract/non-finite current price` 断言失败：Provider 在原始字段解析阶段已拒绝 NaN，实际错误为 `not finite`，旧测试却期待公共 Quote 契约校验错误。
+- 该问题已由提交 `16e5a957404c822a0ec0542dda9fbe2813762dae` 修正：测试按解析阶段与公共校验阶段分别声明错误文本，不修改行情校验逻辑和质量门禁。
+- 2026-11-03 当前 HEAD `986162438824f895d50fbe31ac24225c10c9548b` 的 Go test suite（含 market-data、race、vet）、Docker 构建、Go/Python 质量契约、Live Provider probe 和 WebUI checks 均已通过。用户提供的同类失败日志不能代表该 HEAD 的当前构建状态。
+
+### Go 模块路径清理（待执行，独立任务）
+
+- `services/market-data/go.mod` 声明的模块路径仍为 `github.com/ZhuLinsen/daily_stock_analysis/services/market-data`；`go-core/go.mod` 也沿用 `github.com/ZhuLinsen/daily_stock_analysis/go-core`。
+- 这是 Go 模块标识和包导入路径，不是 Docker 文件系统路径；它会直接显示在 Go test/build 输出中。
+- 当前仓库归属为 `github.com/Kasign/stock_data_provider`，旧路径来自上游/旧项目代码沿用，不应继续作为本仓库的模块身份。
+- 后续应先完整盘点两个独立 Go module 的源码 import、CI、Docker 构建、脚本和文档引用，再统一迁移为当前仓库路径；不得只改 go.mod 的 module 行，也不得遗漏跨模块依赖。
+- 此项与 Tencent 测试失败无关，不影响当前已通过的构建；完成全量引用盘点和迁移回归后再关闭。
