@@ -559,3 +559,85 @@ test("reads bounded persisted Provider probe history with API key and cancellati
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("forwards cancellation signals to task status, event and Run result requests", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), signal: init.signal });
+    return jsonResponse({ task_id: "task-1", run_id: "run-1", status: "running" });
+  };
+  try {
+    await getAnalysisTask({ analysisBase: "/analysis-api" }, "task-1", {
+      signal: controller.signal,
+      timeoutMs: 0
+    });
+    await getAnalysisTaskEvents({ analysisBase: "/analysis-api" }, "task-1", 12, {
+      signal: controller.signal,
+      timeoutMs: 0
+    });
+    await getAnalysisRun({ analysisBase: "/analysis-api" }, "run-1", {
+      signal: controller.signal,
+      timeoutMs: 0
+    });
+    assert.equal(requests.length, 3);
+    assert.ok(requests.every((item) => item.signal === controller.signal));
+    assert.match(requests[0].url, /\/tasks\/task-1$/);
+    assert.match(requests[1].url, /after_sequence=12/);
+    assert.match(requests[2].url, /\/runs\/run-1$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("times out stalled analysis requests and aborts their underlying fetch", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestSignal;
+  globalThis.fetch = async (_url, init) => {
+    requestSignal = init.signal;
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+  };
+  try {
+    await assert.rejects(
+      getAnalysisTask({ analysisBase: "/analysis-api" }, "task-stalled", { timeoutMs: 5 }),
+      (error) => {
+        assert.equal(error.code, "request_timeout");
+        assert.equal(error.timeout, true);
+        assert.match(error.message, /请求超过/);
+        return true;
+      }
+    );
+    assert.equal(requestSignal.aborted, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("marks a timed-out task creation as an unknown outcome instead of a safe failure", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+  });
+  try {
+    await assert.rejects(
+      createAnalysisTask(
+        { analysisBase: "/analysis-api" },
+        { task_type: "post_market_scan", symbols: ["600519"] },
+        "idempotency-timeout",
+        { timeoutMs: 5 }
+      ),
+      (error) => {
+        assert.equal(error.code, "request_timeout");
+        assert.equal(error.creationOutcomeUnknown, true);
+        assert.match(error.message, /不要盲目重复提交/);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

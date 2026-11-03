@@ -341,3 +341,22 @@
 
 - WebUI Checks 成功（338/338 单元测试、JS 语法检查、Compose 校验、Nginx 镜像构建）：[运行记录 #41571522418](https://github.com/Kasign/stock_data_provider/actions/runs/41571522418)。
 - Chromium Browser Smoke 成功（响应式布局、Run Flow 两组专项、个股研究两组专项、Provider 主动探测专项）：[运行记录 #41571522336](https://github.com/Kasign/stock_data_provider/actions/runs/41571522336)，截图 Artifact [#13200999451](https://github.com/Kasign/stock_data_provider/actions/runs/41571522336/artifacts/13200999451)。
+
+
+## 15. 2026-11-03 分析任务工作流请求生命周期复核
+
+### 本轮复核结论与修复
+
+- [x] 任务状态与阶段事件读取增加 15 秒请求超时；Run 结果读取增加 20 秒请求超时；创建任务 POST 增加 30 秒等待上限。超时会中止底层 fetch，并返回明确的 `request_timeout` 错误，不会被转换成空数据。
+- [x] 轮询周期使用同一个 AbortController 并行读取 Task 状态与阶段事件；停止轮询、切换任务和切换分析 API 地址时取消在途请求。
+- [x] Run 结果读取使用独立 AbortController；开始新的结果读取、创建/恢复其他任务或切换分析 API 地址时取消旧结果请求。
+- [x] 保留任务轮询代际、分析 API 连接代际、Task ID、Run ID 与标的集合校验；取消机制不替代响应身份校验。
+- [x] 创建任务 POST 不因页面切换而盲目中止；超时明确提示“创建结果未知”，避免用户把网络超时当作服务端未创建并重复提交。
+- [x] API 单测补充 AbortSignal 透传、底层 fetch 超时中止和创建结果未知场景。
+- [x] 既有 Chromium Run Flow 专项继续覆盖任务切换迟到响应隔离、终态事件排空、失败/部分成功与事件接口恢复；本轮 API 生命周期断言由 WebUI Checks 执行。
+
+### 明确边界
+
+- 请求超时是前端等待上限，不代表服务端任务被取消；任务本身仍由分析服务持久化并继续执行。
+- 服务端任务历史分页 API 仍未提供；最近 10 条仅为当前浏览器任务引用。
+- 真实部署环境的反向代理超时、分析 API 鉴权及真实任务事件数据仍需部署联调。

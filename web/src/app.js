@@ -171,6 +171,8 @@ const state = {
   taskEventFilter: "all",
   pollTimer: null,
   pollGeneration: 0,
+  pollController: null,
+  runResultController: null,
   isQuerying: false,
   quoteQueryGeneration: 0,
   quoteQueryController: null,
@@ -3767,6 +3769,9 @@ async function loadTaskRunResult(runId, expectedTaskId) {
   const analysisBase = state.taskAnalysisBase || state.settings.analysisBase;
   if (analysisBase !== state.settings.analysisBase || state.taskId !== expectedTaskId) return;
   if ($("#reload-run-result")?.disabled && ["loading", "retrying"].includes(state.runResultReadStatus)) return;
+  abortRunResultRequest();
+  const controller = new AbortController();
+  state.runResultController = controller;
   const requestSettings = { ...state.settings, analysisBase };
   const endpointGeneration = state.analysisConnectionGeneration;
   const generation = ++state.runResultGeneration;
@@ -3791,7 +3796,7 @@ async function loadTaskRunResult(runId, expectedTaskId) {
           state.settings.analysisBase !== analysisBase) return;
 
       try {
-        const result = await getAnalysisRun(requestSettings, runId);
+        const result = await getAnalysisRun(requestSettings, runId, { signal: controller.signal });
         if (generation !== state.runResultGeneration || state.taskId !== expectedTaskId ||
             endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase ||
             state.settings.analysisBase !== analysisBase) return;
@@ -3877,6 +3882,7 @@ async function loadTaskRunResult(runId, expectedTaskId) {
       }
     }
   } finally {
+    if (state.runResultController === controller) state.runResultController = null;
     // 旧任务的迟到 finally 不能解锁新任务的读取按钮；解锁异常也不得向外传播。
     if (generation === state.runResultGeneration) {
       try {
@@ -3894,11 +3900,31 @@ async function loadTaskRunResult(runId, expectedTaskId) {
     }
   }
 }
+function abortRunResultRequest() {
+  const controller = state.runResultController;
+  state.runResultController = null;
+  try {
+    controller?.abort();
+  } catch {
+    // 取消旧结果请求失败不能阻断任务上下文切换。
+  }
+}
+
 function stopTaskPolling() {
   const timer = state.pollTimer;
+  const controller = state.pollController;
   state.pollTimer = null;
-  // 先失效当前代际，再进行定时器与按钮清理；UI 故障不能让旧回包继续生效。
+  state.pollController = null;
+  // 先失效当前代际，再取消旧请求；迟到回包仍由代际校验兜底。
   state.pollGeneration += 1;
+  try {
+    controller?.abort();
+  } catch (error) {
+    try {
+      state.taskStatusError = [state.taskStatusError, "取消旧任务请求失败：" + (error?.message || "未知异常")]
+        .filter(Boolean).join("；");
+    } catch {}
+  }
   try {
     if (timer) window.clearTimeout(timer);
   } catch (error) {
@@ -3929,13 +3955,16 @@ async function pollTask(generation = state.pollGeneration) {
   const requestSettings = { ...state.settings, analysisBase };
   const endpointGeneration = state.analysisConnectionGeneration;
   const requestedEventCursor = state.taskEventCursor;
+  const controller = new AbortController();
+  state.pollController = controller;
   const eventRequest = state.taskEventsUnavailable
     ? Promise.resolve({ skipped: true })
-    : getAnalysisTaskEvents(requestSettings, taskId, requestedEventCursor);
+    : getAnalysisTaskEvents(requestSettings, taskId, requestedEventCursor, { signal: controller.signal });
   const [taskResult, eventResult] = await Promise.allSettled([
-    getAnalysisTask(requestSettings, taskId),
+    getAnalysisTask(requestSettings, taskId, { signal: controller.signal }),
     eventRequest
   ]);
+  if (state.pollController === controller) state.pollController = null;
   if (generation !== state.pollGeneration || taskId !== state.taskId || endpointGeneration !== state.analysisConnectionGeneration || state.taskAnalysisBase !== analysisBase || state.settings.analysisBase !== analysisBase) return;
 
   let task = null;
@@ -4235,6 +4264,7 @@ async function createTask(event) {
   state.taskContextGeneration += 1;
   creationContextGeneration = state.taskContextGeneration;
   creationHistoryGeneration = state.taskHistoryGeneration;
+  abortRunResultRequest();
   state.runResultGeneration += 1;
   releaseRunResultReloadBusy();
   stopTaskPolling();
@@ -4483,6 +4513,7 @@ function activateTaskReference(record) {
   state.suppressedHistoryTaskId = "";
   state.suppressedHistoryTaskBase = "";
   state.taskContextGeneration += 1;
+  abortRunResultRequest();
   state.runResultGeneration += 1;
   releaseRunResultReloadBusy();
   stopTaskPolling();
@@ -4768,6 +4799,7 @@ function safelyUpdateTaskContextUi(label, update) {
 function invalidateActiveTaskForAnalysisBaseChange(previousBase, nextBase) {
   state.taskContextGeneration += 1;
   state.analysisConnectionGeneration += 1;
+  abortRunResultRequest();
   state.runResultGeneration += 1;
   releaseRunResultReloadBusy();
   stopTaskPolling();
