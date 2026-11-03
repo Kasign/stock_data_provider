@@ -486,3 +486,8 @@
 - [x] 历史日期可联动龙虎榜，日期控件、请求参数和返回元信息保持一致。
 - [x] 日期缺失或格式异常时不展示联动按钮。
 - [ ] 板块成分股联动等待数据层提供标准证券代码/成分股 API。
+
+### P1 市场观察日期联动自动化结果（2026-11-03）
+
+- [x] WebUI Checks：356/356 单元测试通过；语法、Compose 和 Nginx 镜像构建通过（[运行记录 #41588477842](https://github.com/Kasign/stock_data_provider/actions/runs/41588477842)）。
+- [x] Chromium Browser Smoke：七种视口全部通过；验证情绪历史日期分别传递到涨跌停池类型/日期及龙虎榜日期（[运行记录 #41588477806](https://github.com/Kasign/stock_data_provider/actions/runs/41588477806)）。
