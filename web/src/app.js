@@ -39,7 +39,7 @@ import { bindNotificationPreferences } from "./notification-preferences.js";
 import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
 import { bindExistingApiTools } from "./existing-api-tools.js";
-import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
+import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel, recentTaskIdentity, mergeRecentTaskReferences, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, removeWatchlistSymbols, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { addScreeningResultsToWatchlist } from "./watchlist-batch.js";
 import { sortWatchlistItems } from "./watchlist-sort.js";
@@ -5450,9 +5450,9 @@ async function importBrowserDataFile(file) {
   const currentRecentTaskItems = currentRecentTasks.storageReadable && currentRecentTasks.storageValid ? currentRecentTasks.items : [];
   const watchlistIdentity = (record) => comparableMarketSymbol(record.symbol);
   const existingSymbols = new Set(currentWatchlistItems.map(watchlistIdentity));
-  const existingTaskIds = new Set(currentRecentTaskItems.map((record) => record.task_id));
+  const existingTaskIdentities = new Set(currentRecentTaskItems.map(recentTaskIdentity));
   const watchlistConflicts = imported.watchlist.filter((record) => existingSymbols.has(watchlistIdentity(record))).length;
-  const taskConflicts = imported.recentTasks.filter((record) => existingTaskIds.has(record.task_id)).length;
+  const taskConflicts = imported.recentTasks.filter((record) => existingTaskIdentities.has(recentTaskIdentity(record))).length;
   $("#browser-data-import-summary").textContent = "文件包含自选股 " + imported.watchlist.length + " 条（冲突 " + watchlistConflicts + " 条），最近任务 " + imported.recentTasks.length + " 条（冲突 " + taskConflicts + " 条）。";
   $("#browser-data-import-settings").textContent = "主题、本地偏好和 API 路径将采用文件中的设置；当前行情 API Key 保留。";
   $("#browser-data-import-current").textContent = "当前浏览器：" + (currentWatchlist.storageReadable && currentWatchlist.storageValid ? currentWatchlistItems.length : "不可读取") + " 条自选股，" + (currentRecentTasks.storageReadable && currentRecentTasks.storageValid ? currentRecentTaskItems.length : "不可读取") + " 条最近任务。";
@@ -5478,8 +5478,7 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
     }
     const mergedWatchlist = new Map(currentWatchlistItems.map((record) => [watchlistIdentity(record), record]));
     imported.watchlist.forEach((record) => mergedWatchlist.set(watchlistIdentity(record), record));
-    const mergedRecentTasks = new Map(currentRecentTaskItems.map((record) => [record.task_id, record]));
-    imported.recentTasks.forEach((record) => mergedRecentTasks.set(record.task_id, record));
+    const mergedRecentTasks = mergeRecentTaskReferences(currentRecentTaskItems, imported.recentTasks);
     if (mergedWatchlist.size > MAX_WATCHLIST_ITEMS || mergedRecentTasks.size > MAX_RECENT_TASKS) {
       setBrowserDataFeedback("合并失败：合并后自选股 " + mergedWatchlist.size + " 条、最近任务 " + mergedRecentTasks.size + " 条，超过本地上限（" + MAX_WATCHLIST_ITEMS + " / " + MAX_RECENT_TASKS + "）。未写入任何数据。", "error");
       return;
@@ -5494,7 +5493,7 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
       assignments: { ...currentWatchlistGroups.assignments, ...imported.watchlistGroups.assignments }
     };
     imported.watchlist = [...mergedWatchlist.values()];
-    imported.recentTasks = [...mergedRecentTasks.values()];
+    imported.recentTasks = mergedRecentTasks;
   }
 
   const storageKeys = [SETTINGS_KEY, THEME_STORAGE_KEY, PREFERENCES_KEY, WATCHLIST_KEY, WATCHLIST_GROUPS_KEY, RECENT_TASKS_KEY, TASK_REFERENCE_KEY];

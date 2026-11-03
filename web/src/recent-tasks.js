@@ -68,6 +68,22 @@ export function readRecentTasksState(storage, limit = MAX_RECENT_TASKS) {
   };
 }
 
+// 最近任务的全局身份由服务端任务 ID 与分析服务地址共同组成。
+export function recentTaskIdentity(record) {
+  return JSON.stringify([
+    String(record?.task_id ?? "").trim(),
+    String(record?.analysis_base ?? "").trim()
+  ]);
+}
+
+// 导入合并时仅覆盖同一分析服务中的同一任务，保留其他服务的同 ID 任务。
+export function mergeRecentTaskReferences(current = [], incoming = []) {
+  const merged = new Map();
+  (Array.isArray(current) ? current : []).forEach((record) => merged.set(recentTaskIdentity(record), record));
+  (Array.isArray(incoming) ? incoming : []).forEach((record) => merged.set(recentTaskIdentity(record), record));
+  return [...merged.values()];
+}
+
 export function readRecentTasks(storage, limit = MAX_RECENT_TASKS) {
   return readRecentTasksState(storage, limit).items;
 }

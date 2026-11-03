@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearRecentTasks, filterRecentTasks, MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel } from "../src/recent-tasks.js";
+import { clearRecentTasks, filterRecentTasks, MAX_RECENT_TASKS, RECENT_TASKS_KEY, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel, recentTaskIdentity, mergeRecentTaskReferences } from "../src/recent-tasks.js";
 
 function makeStorage(seed = {}) {
   const values = new Map(Object.entries(seed));
@@ -266,4 +266,25 @@ test("labels historical task types and preserves unknown server task types", () 
   assert.equal(recentTaskTypeLabel("position_review"), "持仓复核");
   assert.equal(recentTaskTypeLabel("future_task"), "其他类型：future_task");
   assert.equal(recentTaskTypeLabel(""), "任务类型未报告");
+});
+
+
+test("merges imported task references by task ID and analysis service identity", () => {
+  const current = [
+    { task_id: "same-task", analysis_base: "/analysis-a", run_id: "run-a-old" },
+    { task_id: "same-task", analysis_base: "/analysis-b", run_id: "run-b" }
+  ];
+  const incoming = [
+    { task_id: "same-task", analysis_base: "/analysis-a", run_id: "run-a-new" },
+    { task_id: "same-task", analysis_base: "/analysis-c", run_id: "run-c" }
+  ];
+  const merged = mergeRecentTaskReferences(current, incoming);
+  assert.equal(merged.length, 3);
+  assert.deepEqual(merged.map((item) => [item.task_id, item.analysis_base, item.run_id]), [
+    ["same-task", "/analysis-a", "run-a-new"],
+    ["same-task", "/analysis-b", "run-b"],
+    ["same-task", "/analysis-c", "run-c"]
+  ]);
+  assert.equal(recentTaskIdentity({ task_id: " same-task ", analysis_base: " /analysis-a " }),
+    recentTaskIdentity({ task_id: "same-task", analysis_base: "/analysis-a" }));
 });

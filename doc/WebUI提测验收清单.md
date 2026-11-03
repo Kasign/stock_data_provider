@@ -580,3 +580,10 @@
 - [x] 导出前校验行情快照，分页失效后不可导出旧结果。
 - [x] WebUI Checks：368/368 单元测试、JavaScript 语法、Compose 校验及 Nginx 镜像构建通过（[运行记录 #41603864213](https://github.com/Kasign/stock_data_provider/actions/runs/41603864213)）。
 - [x] Chromium Browser Smoke：筛选结果 CSV 实际下载、UTF-8 BOM、命中/未命中/待判断记录及质量原因断言通过；全站既有浏览器专项通过（[运行记录 #41603864255](https://github.com/Kasign/stock_data_provider/actions/runs/41603864255)）。
+
+
+## 2026-11-03 全站代码审查补充
+
+- [x] 浏览器数据导入的最近任务冲突判断与合并统一按 `task_id + analysis_base` 识别，避免不同分析服务的同 ID 任务相互覆盖。
+- [x] 增加跨分析服务同 ID 保留、同服务同 ID 覆盖的回归测试。
+- [ ] 本次修复的 WebUI Checks 与 Chromium Browser Smoke 待执行；通过前不标记自动化验收完成。
