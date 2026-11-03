@@ -60,7 +60,7 @@
 - 检查行情服务 live/ready、分析服务 healthz/readyz。
 - 读取 Provider 注册和静态能力清单。
 - 区分服务健康、Provider 注册、能力声明、实际业务请求结果；当前数据中心不直连 MariaDB/Redis。
-- 后端 diagnostics API 已有，但仅提供 quote/daily_bars 熔断器观测，当前页面尚未接入。
+- 后端已有两类诊断：`GET /api/v1/data-sources/diagnostics` 提供真实业务请求熔断观测；`POST /api/v1/data-sources/probe` 与 `/probe/history` 提供主动探测及历史。当前 WebUI 数据中心尚未接入主动 Probe，仍以健康检查和 Provider 静态能力展示为主。
 
 ## 4. 设置中心
 
