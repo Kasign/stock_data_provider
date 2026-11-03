@@ -4006,7 +4006,7 @@ async function pollTask(generation = state.pollGeneration) {
         ignoredReasons.push("字段无效的阶段事件（序号或 event 结构不符合契约），已忽略 " + eventPage.rejected.invalidStructure + " 条");
       }
       if (eventPage.rejected.mismatchedRun) {
-        ignoredReasons.push("Run ID 缺失或与当前任务关联的 Run 不一致，已忽略 " + eventPage.rejected.mismatchedRun + " 条");
+        ignoredReasons.push("Run ID 与当前任务关联的 Run 不一致，已忽略 " + eventPage.rejected.mismatchedRun + " 条");
       }
       if (eventPage.rejected.ignoredSequence) {
         ignoredReasons.push("重复或旧序号的阶段事件，已忽略 " + eventPage.rejected.ignoredSequence + " 条");
@@ -4059,9 +4059,13 @@ async function pollTask(generation = state.pollGeneration) {
     if (eventError) {
       $("#task-poll-label").textContent =
         "任务已结束；阶段事件读取失败：" + errorMessage(eventError) +
-        "。可点击“立即刷新状态”重新尝试读取事件。";
-    } else if (eventsSkipped) {
-      $("#task-poll-label").textContent = "任务已结束；阶段事件读取此前被暂停，可手动刷新重试。";
+        "。Run 报告暂不加载；可点击“立即刷新状态”重新尝试读取事件。";
+      return;
+    }
+    if (eventsSkipped) {
+      $("#task-poll-label").textContent =
+        "任务已结束；阶段事件读取此前被暂停，Run 报告暂不加载；可手动刷新重试。";
+      return;
     }
     const runId = task.run_id || state.runId;
     if (runId) void loadTaskRunResult(runId, taskId);

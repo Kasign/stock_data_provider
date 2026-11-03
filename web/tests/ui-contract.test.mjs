@@ -1747,7 +1747,7 @@ test("阶段事件的 Run ID 若存在必须匹配当前任务关联的 Run", ()
   assert.match(taskWorkflow, /const eventRunId = typeof item\.event\.run_id === "string" \? item\.event\.run_id\.trim\(\) : ""/);
   assert.match(taskWorkflow, /!runId \|\| !eventRunId \|\| eventRunId !== runId/);
   assert.match(taskWorkflow, /domain\.StageEvent 的 run_id 并非必填字段/);
-  assert.match(app, /Run ID 缺失或与当前任务关联的 Run 不一致，已忽略/);
+  assert.match(app, /Run ID 与当前任务关联的 Run 不一致，已忽略/);
   assert.match(taskWorkflow, /rejected\.mismatchedRun \+= 1/);
 });
 
@@ -1770,6 +1770,8 @@ test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 R
   assert.match(taskWorkflow, /hasMore: payload\.events\.length >= TASK_EVENT_PAGE_SIZE && nextAfterSequence > afterSequence/);
   assert.match(poller, /if \(task && TERMINAL_TASK_STATUSES\.has\(task\.status\)\) \{[\s\S]*?if \(eventPageHasMore && !eventError && !eventsSkipped\) \{[\s\S]*?正在继续读取剩余阶段事件[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 0\)[\s\S]*?return;[\s\S]*?stopTaskPolling\(\)[\s\S]*?loadTaskRunResult/);
   assert.match(poller, /if \(eventError && isRetryableApiError\(eventError\) && !eventError\.responseContractError\) \{[\s\S]*?5 秒后自动重试[\s\S]*?setTimeout\(\(\) => pollTaskSafely\(generation\), 5000\)/);
+  assert.match(poller, /if \(eventError\) \{[\s\S]*?Run 报告暂不加载[\s\S]*?return;[\s\S]*?if \(eventsSkipped\) \{[\s\S]*?Run 报告暂不加载[\s\S]*?return;[\s\S]*?loadTaskRunResult/,
+    "阶段事件读取失败或被跳过时，不得提前读取 Run 报告");
   const refreshStart = app.indexOf('$("#refresh-task").addEventListener("click"');
   const refreshEnd = app.indexOf('$("#recent-analysis-search")', refreshStart);
   const refreshHandler = refreshStart >= 0 && refreshEnd > refreshStart ? app.slice(refreshStart, refreshEnd) : "";
