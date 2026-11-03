@@ -1448,7 +1448,7 @@ test("仅板块资金净流入保留能力占位，已接入维度透传真实�
   );
   assert.match(
     marketOverview,
-    /getMarketSectors\(settings,\{type:sectorType,limit:10,direction:sectorDirection,sortBy:sectorMetricSortBy\(sectorMetric\),signal:ctl\.signal\}\)/
+    /getMarketSectors\(settings,\{type:sectorType,limit:sectorLimit,direction:sectorDirection,sortBy:sectorMetricSortBy\(sectorMetric\),signal:ctl\.signal\}\)/
   );
   assert.match(
     marketOverview,
@@ -1459,6 +1459,9 @@ test("仅板块资金净流入保留能力占位，已接入维度透传真实�
     /sectorMetric=\["change","amount","five-day","flow"\][\s\S]*?void load\("sectors"\)/
   );
   assert.match(marketOverview, /data-sector-direction/);
+  assert.match(marketOverview, /sectorLimit=10/);
+  assert.match(marketOverview, /sectorLimit=\[10,20,50,100\]\.includes\(value\)\?value:10/);
+  assert.match(marketOverview, /sectorLimitControl\?\.addEventListener\("change"/);
 });
 
 test("快照来源、估值与补充指标使用可读的 12px 辅助文字", () => {
