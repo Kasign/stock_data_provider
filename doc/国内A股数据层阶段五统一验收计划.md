@@ -784,3 +784,27 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - 每条字段比较现在能独立定位两侧数据来源、版本、证券和复权口径，不需要通过组合字符串解析或再与 ProviderProbeItem 跨数组关联。
 - 字段级左右值、差值、容差和 not_comparable 原因维持原语义；degraded/unknown 输入仍然拒绝作为 matched 基准。
 - 对应模型、OpenAPI 和 Service 回归测试已同步；以新 SHA 的 market-data test/race/vet、OpenAPI 和 Docker 检查为准。
+
+
+### 2026-11-03：统一诊断第一批收口与验收状态
+
+**代码侧完成：**
+
+- Freshness SLA：纯函数 Evaluator、按数据域策略、市场交易阶段上下文解析和 Provider Probe 接入已完成；`provider_time` 与 `fetched_at` 分离，采集时间不参与 freshness 年龄计算。
+- 特殊交易边界：覆盖开盘/收盘集合竞价、竞价暂停、午休、非交易日、全天停牌、盘中临停、复牌、源端时间超前；Service 层使用 fake TradingCalendar/SecurityTradingStatus Provider 验证停牌、临停、复牌、无停牌事件及证券状态缺失映射。
+- 新股首日：当前没有足够可信的首日交易状态输入，不设置隐式 freshness 宽限期；测试要求超出普通 Quote SLA 时仍为 stale。
+- P0-7 覆盖率：Market Breadth 输出四个字段级维度（quote_response、price_classification、quote_timestamp、amount），每项包含 total/returned/validated/missing/excluded/ratio；所有维度共享证券池权威分母。其他能力尚无可证明总体分母时继续不输出比例。
+- P0-8 Cross Provider：日 K 对账结果包含证券、左右 Provider、双方 SourceVersion、复权口径、双方 QualityStatus；字段比较保留左右值、差值、容差和不可比较原因，历史 JSON 兼容。
+
+**最新验收 SHA：** `76fd6f2fc683c05869c224ec6328564eca0c84c1`
+
+**Run 41573144555 / 41573144564 / 41573144577 / 41573144590：**
+- Go test suite：通过；market-data 和 go-core 的 gofmt、tests、race、vet 均通过。
+- MariaDB Migration / PIT persistence：通过。
+- Docker Compose、Go market-data 与 analysis API 镜像构建：通过。
+- Live Provider probe、WebUI checks、Go/Python parity：通过。
+- 真实 Provider 工作流通过只表示本轮在线探测流程完成，不等于取得停牌/临停/复牌的历史真实样例；真实特殊交易事件仍需真实源数据验收。
+
+**第一批状态：** 代码实现与自动化检查完成；真实特殊交易样例属于外部数据验收待办，不阻塞进入第二批。
+
+**第二批下一任务：Quote 与 Daily Bars 边界收口。** 先审计现有 Normalize/Validate/Service 三层对字段边界、跨字段关系、日期区间、复权口径、单位和缺失字段的处理，再补齐边界测试；发现行为缺陷后才修改业务规则，避免只为增加测试而改变现有数据契约。随后推进 Fundamentals/Valuations 校验。
