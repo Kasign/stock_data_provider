@@ -2068,7 +2068,13 @@ test("行情服务接口文档、Handler 与 WebUI 调用边界明确区分", ()
   assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/data-sources\/diagnostics"/);
   assert.match(marketHTTPServer, /mux\.Handle\("POST \/api\/v1\/data-sources\/probe"/);
   assert.match(apiClient, /getDataSourceDiagnostics/);
-  assert.doesNotMatch(apiClient, /data-sources\/probe/, "WebUI 不应为同花顺诊断调用主动探测接口");
+  assert.match(apiClient, /export function runDataSourceProbe/, "主动探测必须通过独立 API 客户端显式调用");
+  assert.match(apiClient, /export function getDataSourceProbeHistory/, "探测历史必须使用独立只读接口");
+  assert.match(dataCenter, /probeButton\?\.addEventListener\("click", \(\) => \{ void runProviderProbe\(\); \}\)/,
+    "只有用户点击主动探测按钮才发起 Provider 主动探测");
+  const passiveDataCenterCheck = dataCenter.slice(dataCenter.indexOf("async function refresh()"), dataCenter.indexOf("function invalidate("));
+  assert.doesNotMatch(passiveDataCenterCheck, /runDataSourceProbe/,
+    "普通数据中心检查不得隐式触发 Provider 上游探测");
   assert.match(marketOpenAPI, /\/api\/v1\/market\/capital-flow:/, "OpenAPI 当前声明了市场级资金流接口");
   assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/market\/capital-flow"/, "市场级资金流 Handler 已在合并后的数据分支注册");
   assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/stocks\/\{symbol\}\/capital-flow"/, "个股资金流 Handler 已注册");
