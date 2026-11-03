@@ -288,3 +288,24 @@ test("merges imported task references by task ID and analysis service identity",
   assert.equal(recentTaskIdentity({ task_id: " same-task ", analysis_base: " /analysis-a " }),
     recentTaskIdentity({ task_id: "same-task", analysis_base: "/analysis-a" }));
 });
+
+test("新增同 ID 但不同分析服务地址的任务时保留两条记录", () => {
+  const storage = makeStorage();
+  upsertRecentTask({ task_id: "shared-task", analysis_base: "", status: "running" }, storage);
+  const items = upsertRecentTask({ task_id: "shared-task", analysis_base: "/analysis-api", status: "queued" }, storage);
+  assert.deepEqual(items.map((item) => item.analysis_base), ["/analysis-api", ""]);
+  const updated = upsertRecentTask({ task_id: "shared-task", analysis_base: "/analysis-api", status: "succeeded", run_id: "run-new" }, storage);
+  assert.equal(updated.length, 2);
+  assert.equal(updated[0].run_id, "run-new");
+  assert.equal(updated[0].status, "succeeded");
+  assert.equal(updated[1].analysis_base, "");
+});
+
+test("按指定分析服务删除任务时保留空服务地址和其他服务的同 ID 记录", () => {
+  const storage = makeStorage();
+  upsertRecentTask({ task_id: "shared-task", analysis_base: "" }, storage);
+  upsertRecentTask({ task_id: "shared-task", analysis_base: "/analysis-api" }, storage);
+  upsertRecentTask({ task_id: "shared-task", analysis_base: "/other-api" }, storage);
+  const remaining = removeRecentTask("shared-task", storage, MAX_RECENT_TASKS, "/analysis-api");
+  assert.deepEqual(remaining.map((item) => item.analysis_base), ["", "/other-api"]);
+});

@@ -94,8 +94,9 @@ export function upsertRecentTask(record, storage, limit = MAX_RECENT_TASKS) {
 
   const normalized = normalizeRecord(record);
   if (!normalized) return currentState.items;
+  const identity = recentTaskIdentity(normalized);
   const records = [normalized, ...currentState.items.filter((item) =>
-    item.task_id !== normalized.task_id || (item.analysis_base && item.analysis_base !== normalized.analysis_base)
+    recentTaskIdentity(item) !== identity
   )].slice(0, normalizeLimit(limit));
 
   try {
@@ -128,8 +129,11 @@ export function removeRecentTask(taskId, storage, limit = MAX_RECENT_TASKS, anal
   if (!currentState.storageReadable || !currentState.storageValid) return currentState.items;
 
   const target = taskId.trim();
-  const records = currentState.items.filter((item) =>
-    item.task_id !== target || (analysisBase && item.analysis_base && item.analysis_base !== analysisBase)
+  const targetBase = String(analysisBase ?? "").trim();
+  const targetIdentity = recentTaskIdentity({ task_id: target, analysis_base: targetBase });
+  const records = currentState.items.filter((item) => targetBase
+    ? recentTaskIdentity(item) !== targetIdentity
+    : item.task_id !== target
   );
   try {
     storage.setItem(RECENT_TASKS_KEY, JSON.stringify(records));

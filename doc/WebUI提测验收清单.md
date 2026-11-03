@@ -622,3 +622,12 @@
 - [x] 超限数据拒绝后续写入，保留原始存储。
 - [x] 新增超限容量回归测试。
 - [ ] WebUI Checks 与 Chromium Browser Smoke 待本次提交 CI 验证。
+
+
+## 2026-11-03 全站代码审查：最近任务身份一致性
+
+- [x] 新增/更新使用 `task_id + analysis_base` 作为唯一身份。
+- [x] 指定服务删除时不会误删空服务地址或其他服务的同 ID 任务。
+- [x] 保留未指定服务时按 task_id 清理的原有行为。
+- [x] 增加任务身份回归测试。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 待本次提交 CI 验证。
