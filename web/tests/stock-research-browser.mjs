@@ -145,6 +145,7 @@ try {
     "#load-chip-distribution", "#load-capital-flow"
   ]) {
     assert.equal(await noKeyPage.locator(selector).isEnabled(), true, selector + " must remain retryable without API key");
+    assert.equal(await noKeyPage.locator(selector).getAttribute("aria-busy"), null, selector + " must not remain busy without an active request");
   }
   await noKeyContext.close();
   console.log("PASS stock research request cancellation and button recovery");

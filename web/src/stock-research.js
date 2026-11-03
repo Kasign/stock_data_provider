@@ -20,7 +20,7 @@ function makeDl(items){const dl=el("dl","supplemental-fields");items.forEach(([l
 function reasons(id,rows){const root=$("#"+id);if(!root)return;root.replaceChildren();if(!Array.isArray(rows)||!rows.length){root.append(el("p","","接口未返回质量原因；请结合状态与时间判断。"));return;}rows.forEach(v=>root.append(el("p","",v)));}
 function clearReasons(id){const root=$("#"+id);if(root)root.replaceChildren();}
 function formatNumber(value){const number=finiteNumberOrNull(value);return number===null?"—":new Intl.NumberFormat("zh-CN",{maximumFractionDigits:4}).format(number);}
-function safeResearchButton(button,disabled,label){try{if(!button)return false;button.disabled=Boolean(disabled);button.removeAttribute("aria-busy");if(disabled)button.setAttribute("aria-busy","true");if(label!==undefined)button.textContent=label;return true;}catch{return false;}}
+function safeResearchButton(button,disabled,label,busy=false){try{if(!button)return false;button.disabled=Boolean(disabled);if(busy)button.setAttribute("aria-busy","true");else button.removeAttribute("aria-busy");if(label!==undefined)button.textContent=label;return true;}catch{return false;}}
 function safeResearchFeedback(message){try{setText("stock-research-feedback",message);}catch{}}
 function safeResearchError(error){try{return responseError(error);}catch{return "未知异常";}}
 function responseError(err){if(Number(err?.status)===404)return "当前部署的 market-data 尚未提供该接口，请更新数据服务版本。";if(Number(err?.status)===503)return "对应数据源未启用或未配置，请检查 market-data 的 Provider 配置。";return describeApiError(err,"请求失败。");}
@@ -99,10 +99,7 @@ export function bindStockResearch(getSettings,getSymbol){
    ["#load-valuations","读取估值指标"],
    ["#load-chip-distribution","读取筹码分布"],
    ["#load-capital-flow","读取资金流"]
-  ].forEach(([selector,label])=>{
-   const button=$(selector);
-   if(button){button.disabled=false;button.textContent=label;}
-  });
+  ].forEach(([selector,label])=>safeResearchButton($(selector),false,label));
   $("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="加载更多公告";
  }
  function syncSymbol(){
@@ -177,7 +174,7 @@ export function bindStockResearch(getSettings,getSymbol){
     setQuality("announcements-quality","unknown","读取中…");
    }
    setError("announcements-error","");
-   safeResearchButton($("#load-more-announcements"),true,"正在加载…");
+   safeResearchButton($("#load-more-announcements"),true,"正在加载…",true);
 
    const data=await getStockAnnouncements(settings,symbol,{page:requestPage,pageSize:20,signal:ctl.signal});
    if(ctl.signal.aborted||seq!==state.generation.announcements||symbol!==state.symbol)return false;
@@ -226,7 +223,7 @@ export function bindStockResearch(getSettings,getSymbol){
    requestGeneration=++state.loadResearchGeneration;
    safeResearchFeedback("正在分别读取公司档案、所属板块和近期公告，各接口状态独立。");
    button=$("#load-stock-research");
-   safeResearchButton(button,true,"正在加载…");
+   safeResearchButton(button,true,"正在加载…",true);
    const results=await Promise.allSettled([
     fetchOne("profile",getStockProfile,renderProfile),
     fetchOne("boards",getStockBoards,renderBoards),
@@ -284,7 +281,7 @@ export function bindStockResearch(getSettings,getSymbol){
    symbol=syncSymbol();
    if(!symbol){safeResearchFeedback("请先选择一只有效股票。");return false;}
    button=$(buttonId);ownsButton=true;
-   safeResearchButton(button,true,"读取中…");
+   safeResearchButton(button,true,"读取中…",true);
    const operation=fetchOne(key,request,render);
    generation=state.generation[key];
    const ok=await operation;

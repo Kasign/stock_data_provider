@@ -164,6 +164,7 @@ try {
   await page.waitForFunction(() => document.querySelector("#announcement-list")?.textContent.includes("股东大会决议公告"));
   assert.equal(await page.locator("#announcement-list .stock-announcement-item").count(), 3);
   assert.equal(await page.locator("#load-more-announcements").isEnabled(), false);
+  assert.equal(await page.locator("#load-more-announcements").getAttribute("aria-busy"), null);
 
   await page.locator("#load-fundamentals").click();
   await page.waitForFunction(() => document.querySelector("#fundamentals-content")?.textContent.includes("营业收入"));
@@ -197,6 +198,7 @@ try {
   await page.waitForFunction(() => document.querySelector("#capital-flow-error")?.textContent.includes("未启用或未配置"));
   assert.doesNotMatch(await page.locator("#capital-flow-content").textContent(), /123,456/);
   assert.equal(await page.locator("#load-capital-flow").isEnabled(), true);
+  assert.equal(await page.locator("#load-capital-flow").getAttribute("aria-busy"), null);
   assert.deepEqual(pageErrors, [], pageErrors.join("\n"));
   await page.screenshot({
     path: path.join(screenshotDir, "1280x900-stock-research-data.png"),
