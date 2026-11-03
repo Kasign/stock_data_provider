@@ -1037,3 +1037,9 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 首轮检查发现测试文件结构体字段未按 gofmt 对齐，已修正。
 - 编译检查发现 Quote 解析闭包替换后，amount、volume_ratio、turnover_rate 仍引用旧 getNumber 闭包；已统一改为新的 RawMessage 解析器，并将错误聚合检查放在所有字段解析之后。
 - Go/Python 质量契约作业的失败由上述 Go 编译失败引起，不是样本差异或 Python 逻辑变化。修正后以新 SHA 的完整 CI 结果为准。
+
+
+**RawMessage 类型分类边界修正：**
+- 第二轮 CI 发现 object / array / boolean 的解析值为空字符串，旧 missing 判断将其错误分类为 missing。
+- missing 现在只覆盖字段不存在、JSON null、空字符串和 Eastmoney 的 "-" 哨兵值；object / array / boolean 保持 type_mismatch。
+- 该修正不改变必填字段门禁和可选字段缺失语义。

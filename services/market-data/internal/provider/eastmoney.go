@@ -600,7 +600,8 @@ func parseEastmoneyQuoteNumber(ctx context.Context, data map[string]json.RawMess
 			value = trimmed
 		}
 	}
-	missing := !exists || actualType == "missing" || actualType == "null" || value == "" || value == "-"
+	missing := !exists || actualType == "missing" || actualType == "null" ||
+		(actualType == "string" && (value == "" || value == "-"))
 	addIssue := func(code, expected, message string, severity validation.Severity) {
 		report := validation.NewReport(4)
 		report.Add(validation.FieldIssue{
