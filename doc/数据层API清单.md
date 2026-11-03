@@ -118,7 +118,7 @@
 ## 8. 权威接口定义
 
 - 行情服务 OpenAPI：services/market-data/openapi.yaml（代码内权威协议，不迁移到文档目录）。
-- 分析任务 OpenAPI：doc/接口规范/分析任务.openapi.yaml。
+- 分析任务 OpenAPI：doc/api/分析任务.openapi.yaml。
 - Python 桥接 OpenAPI：doc/api/Python桥接.openapi.yaml。
 - WebUI 实际请求实现：web/src/api.js。
 - 行情服务路由注册：services/market-data/internal/httpapi/server.go。
