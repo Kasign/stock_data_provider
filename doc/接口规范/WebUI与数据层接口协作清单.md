@@ -155,7 +155,7 @@
 
 | 编号 | 数据侧开发状态 | 已完成内容 / 当前进度 | 未完成内容 / 下一步 | 阻塞与依赖 | 数据侧 HEAD / 提交 SHA | 自动化测试证据 | 真实数据验证 | 跨端状态 |
 |---|---|---|---|---|---|---|---|---|
-| API-01 | 开发中 | 当前 HEAD 已有 OpenAPI、HTTP 路由和 WebUI API 清单；行情服务主要路由可在 `server.go` 对应到 Handler | 完成所有端点的 OpenAPI Schema、Handler、JSON 字段逐项核对；清理 API 清单冲突标记（本批修正文档） | 当前 OpenAPI 存在已登记字段缺口 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 通过；WebUI checks Run `41622693832` 通过 | 未执行全量真实接口对账 | 进行中 |
+| API-01 | 开发中 | 当前 HEAD 已有 OpenAPI、HTTP 路由和 WebUI API 清单；行情服务主要路由可在 `server.go` 对应到 Handler | 完成所有端点的 OpenAPI Schema、Handler、JSON 字段逐项核对；优先补齐 `SectorRanking.change_percent_5d` 与 `ProviderProbeItem.validation_*`、`coverage_dimensions` Schema | 当前 OpenAPI 存在已登记字段缺口 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 通过；WebUI checks Run `41622693832` 通过 | 未执行全量真实接口对账 | 进行中 |
 | API-02 | 已完成 | 指数目录、成分、指数日线、指数行情、交易日历、交易时段、证券交易状态、涨跌幅规则均有路由和 OpenAPI 定义；WebUI 已有对应请求封装 | 逐 Provider 补充真实数据覆盖和边界证据 | Provider 能力按源不同 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未完成逐 Provider 真实验收 | 待真实数据验收 |
 | API-03 | 已完成 | `/api/v1/market/stocks` 提供分页行情与 MA 参数；批量 quote 最多 50 只；WebUI 已封装并用于当前分页选股及自选股批量刷新 | 补全分页总数/覆盖边界、均线复权语义及真实样本质量验证；明确当前选股仅作用于已加载分页 | 不具备全市场筛选策略执行 API | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未执行全市场真实覆盖验收 | 待真实数据验收 |
 | API-04 | 开发中 | 市场情绪快照/历史和市场级资金流历史接口及 WebUI 请求封装已存在 | 核实市场情绪历史缺失交易日、幂等写入、保留策略和真实数据库数据；补专门集成证据 | 需要 MariaDB 持久化与真实历史数据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 的 MariaDB migration/PIT 集成通过；未证明 sentiment 专项全链路 | 未执行生产数据历史验收 | 待真实数据验收 |
