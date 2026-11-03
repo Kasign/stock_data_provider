@@ -3,6 +3,8 @@
 - 目标分支：`feat/webui-market-data-console`
 - 当前基线：`d1ad337d4ef8afd6b1242eaaea8869102bf81d65`
 - 更新日期：2026-11-03
+
+> 本文只保留诊断专项字段、展示和联调约束；当前是否推进以 [WebUI 整体规划](./整体规划.md) 为准。
 - 范围：仅修改当前 WebUI 分支的 `web/**` 与 `doc/**`；不创建新分支，不修改 main，不修改 Go Provider、服务端路由、数据库、OpenAPI 或部署配置。
 
 ## 1. 目标与边界
