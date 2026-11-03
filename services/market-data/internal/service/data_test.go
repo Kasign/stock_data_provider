@@ -2823,7 +2823,6 @@ func TestValidateSectorRankingSnapshotRejectsDroppedRowsWhenTotalWasMissing(t *t
 	}
 }
 
-
 func TestDailyBarCoverageUsesTradingCalendarSessionCount(t *testing.T) {
 	weekdayEstimate := minimumDailyBarCoverage(20, 20)
 	calendarEstimate := minimumDailyBarCoverage(15, 20)
@@ -2837,4 +2836,3 @@ func TestDailyBarCoverageUsesTradingCalendarSessionCount(t *testing.T) {
 		t.Fatalf("holiday-aware coverage threshold should be lower than weekday estimate: calendar=%d weekdays=%d", calendarEstimate, weekdayEstimate)
 	}
 }
-
