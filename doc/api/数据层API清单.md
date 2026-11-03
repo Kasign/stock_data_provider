@@ -68,7 +68,7 @@
 | GET | /api/v1/analysis/tasks/{task_id}/events | 按 after_sequence 续读阶段事件，前端每页最多 100 条 | getAnalysisTaskEvents |
 | GET | /api/v1/analysis/runs/{run_id} | 查询分析运行结果 | getAnalysisRun |
 
-分析任务请求/响应的完整字段契约以 doc/接口规范/分析任务.openapi.yaml 和分析服务当前实现为准。
+分析任务请求/响应的完整字段契约以 分析任务.openapi.yaml 和分析服务当前实现为准。
 
 ## 4. 页面与接口对应关系
 
@@ -115,6 +115,6 @@
 
 - 行情服务 OpenAPI：services/market-data/openapi.yaml（代码内权威协议，不迁移到文档目录）。
 - 分析任务 OpenAPI：doc/接口规范/分析任务.openapi.yaml。
-- Python 桥接 OpenAPI：doc/接口规范/Python桥接.openapi.yaml。
+- Python 桥接 OpenAPI：Python桥接.openapi.yaml。
 - WebUI 实际请求实现：web/src/api.js。
 - 行情服务路由注册：services/market-data/internal/httpapi/server.go。
