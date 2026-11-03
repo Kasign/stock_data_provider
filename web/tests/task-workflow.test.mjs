@@ -30,6 +30,15 @@ test("rejects malformed envelopes, task identity mismatches, and non-advancing c
   }).error, /next_after_sequence 无效或未前进/);
 });
 
+test("accepts task-scoped events when the optional nested Run ID is absent", () => {
+  const result = validateTaskEventPage(page([
+    { sequence: 1, event: { stage: "queued", status: "queued" } },
+    event(2)
+  ], 2), { taskId: "task-1", runId: "run-1", afterSequence: 0 });
+  assert.deepEqual(result.events.map((item) => item.sequence), [1, 2]);
+  assert.equal(result.rejected.mismatchedRun, 0);
+});
+
 test("rejects event rows with invalid structure or a mismatched Run ID without blocking cursor progress", () => {
   const result = validateTaskEventPage(page([
     null,

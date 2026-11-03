@@ -48,10 +48,14 @@ export function validateTaskEventPage(payload, {
       rejected.invalidStructure += 1;
       continue;
     }
-    const eventRunId = typeof item.event.run_id === "string" ? item.event.run_id.trim() : "";
-    if (!runId || !eventRunId || eventRunId !== runId) {
-      rejected.mismatchedRun += 1;
-      continue;
+    // 阶段事件接口按 Task ID 隔离；domain.StageEvent 的 run_id 并非必填字段。
+    // 若服务端提供了 run_id，再执行一致性校验，避免把可选字段缺失误判为跨 Run 事件。
+    if (Object.prototype.hasOwnProperty.call(item.event, "run_id")) {
+      const eventRunId = typeof item.event.run_id === "string" ? item.event.run_id.trim() : "";
+      if (!runId || !eventRunId || eventRunId !== runId) {
+        rejected.mismatchedRun += 1;
+        continue;
+      }
     }
     if (sequence <= highestSequence || seenSequences.has(sequence) || knownSequences.has(sequence)) {
       rejected.ignoredSequence += 1;
