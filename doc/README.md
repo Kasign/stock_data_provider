@@ -11,8 +11,14 @@
 5. 行情数据服务说明.md：服务职责、Provider 能力和运行诊断边界。
 6. 开发部署说明.md：仓库模块、连接路径、安全与运行边界。
 7. 样例数据管理说明.md：黄金样例数据的脱敏要求、目录约定和基准维护规则。
-7. 接口规范/：分析任务和 Python 桥接的机器可读 OpenAPI。
-8. 黄金样例数据说明.md：脱敏基准样例的组织方式与维护要求。
+8. 接口规范/：分析任务和 Python 桥接的机器可读 OpenAPI。
+9. 国内A股数据层阶段五统一验收计划.md：当前数据层剩余任务、优先级和统一验收入口。
+10. 字段校验与诊断体系实施方案.md：已建设的 Validation、Reporter、Adapter、Probe 架构及实施记录。
+11. 字段校验规则矩阵.md：Quote、DailyBar 等字段规则、Provider 覆盖和代码核对状态。
+12. Freshness SLA与评估契约.md：各数据域时间新鲜度策略和证据要求。
+13. 国内A股数据层黄金样例对账记录.md：真实样本、差异和回归证据。
+14. 数据源真实环境验收记录（接口规范/DATA_SOURCE_RUNTIME_ACCEPTANCE_LOG.md）：真实 Provider 请求与权限验收证据。
+15. Go 数据服务迁移状态（接口规范/GO_DATA_PROVIDER_SWITCH_STATUS.md）：Go Provider 迁移与遗留能力状态。
 
 ## 权威代码与契约
 

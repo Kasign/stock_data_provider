@@ -2,8 +2,42 @@
 
 - 目标分支：`feat/full-go-data-providers-api-switch`
 - 阶段定位：阶段五统一验收，不以“代码已实现”替代真实数据验收。
-- 当前状态：验收准备与文档基线；真实 Provider、Python/Go 差分和部署验证需在统一验收窗口执行。
+- 当前状态（2026-11-03，代码基线 `de0288015490a74b7724474a8ca8cc3129db2658`）：统一诊断框架、Quote 字段诊断、DailyBar 字段 Reporter、Probe 历史存储和 DailyBar 跨 Provider 比较已有代码实现；阶段五进入增量规则完善与真实数据验收。当前未完成项以本文“当前有效执行计划”及后续代码核对记录为准，本文较早章节中的待办表属于当时的历史快照，不得直接作为当前任务重复执行。
 - 原则：每项结论必须绑定代码 SHA、样本范围、原始响应证据和质量判定；凭据不得进入文档或日志。
+
+## 当前有效执行计划（2026-11-03；覆盖下文历史批次状态）
+
+本节依据当前分支代码、测试和文档交叉核对。只列当前仍有证据缺口的工作；已实现的框架和规则不重复建设。
+
+| 优先级 | 当前任务 | 已有代码基础 | 实际剩余工作 | 验收边界 |
+|---|---|---|---|---|
+| P0 | DailyBar 复权口径 Probe | Provider 已支持不同程度的 none/forward/backward；现有 Probe 固定传 `AdjustmentNone`；Probe item 尚无复权口径字段 | 增加可选 `daily_bar_adjustments` 请求参数；默认仅 none 保持兼容；按请求口径独立执行 Provider 探测；每项结果记录实际请求口径；不支持的 Provider/口径标记 `not_supported` | 不改 Provider 复权算法；请求参数、结果字段、OpenAPI、HTTP/Service 测试一致 |
+| P0 | DailyBar 交易边界与计数 | Validator、Reporter、交易日历覆盖率、当前日 Partial 判定、Adapter 过滤前诊断已存在 | 仅针对未覆盖的停牌/临停/新股/非交易日漏数判断、日期边界和重复计数补测试或修复 | 正常 limit 截断不算质量错误；无状态证据不推断漏数 |
+| P1 | Fundamentals 字段级诊断 | Probe 已调用 `validateFundamentalsSnapshot`；业务校验含报告期、公告日期、available_at、分区、指标、来源版本及采集时间 | 将现有校验结果映射到请求级 Reporter，补齐字段路径、单位/口径、修订与 PIT 边界证据 | 不重写 Validator、Reporter 或财务服务 |
+| P1 | Valuations 字段级诊断 | Probe 已调用 `validateValuationSnapshot`；已有身份、来源、时间、覆盖、缺失字段、有限数值和部分比例检查 | 将现有校验结果结构化；补齐 PE/PB/PS/PCF 口径、单位、TTM/静态差异和 PIT 证据 | 不重建估值模型或服务 |
+| P1 | Freshness 数据域扩展 | Evaluator、策略注册表和 Probe freshness 结果映射已存在；当前策略覆盖 Quote、Index、Market Breadth、Sector、Fund Flow | 按 DailyBar、Fundamentals、Valuations 的真实时间语义补 SLA；无源端时间证据保持 unknown/skipped | 不将 fetched_at 冒充 provider_time；不套用 Quote SLA |
+| P1 | 跨源与业务存储验收 | DailyBar 跨 Provider 比较器和 Probe 接入已存在；PIT 因子/公司行动/财务快照已有存储能力 | 扩展必要的可比性规则；验证业务表重复写入、历史修订、as_of 和重启恢复 | 不重建通用比较框架或 Probe storage 检查 |
+| P2 | 真实 Provider 与黄金样例 | 已有主板、创业板、科创板部分真实样例及 Go/Python 静态契约回归 | 补有效跨市场、停牌/新股/除权日样本；取得同证券同日期 Python/Go 双侧数据；补凭据 Provider 真实权限证据 | Mock/CI 不等于真实 Provider 通过；缺凭据标 skipped |
+| P2 | 最终统一验收 | Go Suite、Go/Python parity 等工作流存在 | 在代码任务完成后执行一次完整 CI、真实请求和部署验收，汇总迁移风险 | 不用旧 Actions Run 代表当前 HEAD |
+
+### 已完成且禁止重复立项的基础能力
+
+- 统一 Probe API、能力选择、并发/超时控制、错误脱敏、状态分类和 MariaDB 历史存储。
+- Validation 的 FieldIssue/Report、严重级别完整计数、截断、Merge、只读 Quote/DailyBar Validator。
+- 请求级 Reporter、Provider context 传递、Quote/DailyBar Adapter 结构化报告、Probe 聚合及避免重复累计。
+- Quote Provider 字段级 Parse/Validate 覆盖；DailyBar 多 Provider 的 Parse/Normalize/Validate 诊断基础。
+- DailyBar 交易日历覆盖率、当前日 Partial 判断、复权元数据质量门禁、PIT 因子质量状态传播和复权序列隔离。
+- Freshness Evaluator/策略注册表及其 Probe 接入；DailyBar 跨 Provider 比较器及 Probe 接入。
+
+### 执行约束
+
+1. 每个待办开始前先核对当前 HEAD 的实现和测试；已有实现只补真实缺口。
+2. 旧章节中的 Batch 0～8 是历史规划，不再作为独立任务队列；以上表格为当前唯一执行顺序。
+3. 文档状态必须由当前代码、测试或真实运行证据支撑；静态实现、CI、真实 Provider、生产部署分别记录。
+4. 复杂 API/数据模型/数据库改动先给出影响范围和方案；本次已获准的 Probe 复权口径参数除外。
+5. 仅修改 `feat/full-go-data-providers-api-switch`；PR #1 保持 Open / Draft；中文提交，按完整功能批次提交。
+
+---
 
 ## 一、验收工作包
 
