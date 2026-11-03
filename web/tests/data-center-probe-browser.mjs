@@ -67,7 +67,23 @@ const currentRun = {
       quality_status: "degraded", quality_reasons: ["部分行情字段未返回"]
     }),
     makeItem("Public", "market_breadth", "returned_unknown", {
-      quality_status: "unknown", quality_reasons: ["报告日期无法确认"]
+      quality_status: "unknown", quality_reasons: ["报告日期无法确认"],
+      coverage_dimensions: [
+        { dimension: "quote_response", population: "provider_universe", source: "quote_returned", total: 1000, returned: 990, validated: 990, missing: 10, excluded: 0, ratio: 0.99 },
+        { dimension: "price_classification", population: "provider_universe", source: "classified_price_count", total: 1000, returned: 990, validated: 970, missing: 10, excluded: 20, ratio: 0.97 },
+        { dimension: "quote_timestamp", population: "provider_universe", source: "timestamp_count", total: 1000, returned: 990, validated: 960, missing: 10, excluded: 30, ratio: 0.96 },
+        { dimension: "amount", population: "provider_universe", source: "amount_count", total: 1000, returned: 990, validated: 900, missing: 10, excluded: 90, ratio: 0.9 }
+      ]
+    }),
+    makeItem("Tencent", "quote", "returned_degraded", {
+      quality_status: "degraded",
+      validation_total_count: 3, validation_error_count: 1,
+      validation_warning_count: 1, validation_info_count: 1,
+      validation_truncated: true,
+      validation_issues: [
+        { stage: "parse", field: "current_price", provider_field: "f43", code: "invalid_number", expected: "有限数值", actual_type: "string", actual_preview: "NaN", severity: "error", message: "原始行情价格不是有限数值", row_index: 0, symbol: "600519.SH" },
+        { stage: "normalize", field: "amount", provider_field: "amount", code: "unit_mismatch", expected: "CNY", actual_type: "number", actual_preview: "unknown", severity: "warning", message: "成交额单位未确认" }
+      ]
     }),
     makeItem("Provider-A", "stock_search", "failed", {
       error_code: "provider_timeout", error_stage: "timeout", http_status: 504,
@@ -161,6 +177,16 @@ try {
   assert.match(probeText, /99\.3%/);
   assert.match(probeText, /provider_timeout/);
   assert.match(probeText, /上游请求超时/);
+  assert.match(probeText, /字段校验 3 项/);
+  assert.match(probeText, /错误 1/);
+  assert.match(probeText, /原始字段 f43/);
+  assert.match(probeText, /实际值 NaN/);
+  assert.match(probeText, /服务端明细已截断/);
+  for (const label of ["行情响应覆盖率", "价格分类覆盖率", "行情时间覆盖率", "成交额覆盖率"]) {
+    assert.ok(probeText.includes(label), "missing coverage dimension: " + label);
+  }
+  assert.match(probeText, /99\.0%/);
+  assert.match(probeText, /90\.0%/);
   const checkText = await page.locator("#data-center-probe-check-results").textContent();
   for (const label of ["接口连通性", "数据契约", "数据质量", "数据新鲜度", "跨 Provider 对账", "持久化存储", "已过期", "不一致"]) {
     assert.ok(checkText.includes(label), "missing check evidence: " + label);

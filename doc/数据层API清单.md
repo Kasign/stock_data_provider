@@ -139,3 +139,12 @@
 - `GET /api/v1/market/dragon-tiger?date=YYYY-MM-DD` 支持显式交易日期。
 - 以上联动只保证请求日期相同，不保证不同数据源为同一时刻的原子快照，需分别核验各响应质量与源端时间。
 - 板块排行的 `code` 为 BK 板块代码，当前 `leading_stock` 只有名称；尚无可靠的板块成分股查询映射，WebUI 不将 BK 代码传给指数成分接口。
+
+
+### Provider 主动探测字段级响应补充（2026-11-03）
+
+- `POST /api/v1/data-sources/probe` 的 `items[]` 实际由数据侧 `ProviderProbeItem` 返回，除基础状态/质量/时间字段外，还包含 `validation_total_count`、`validation_error_count`、`validation_warning_count`、`validation_info_count`、`validation_truncated`、`validation_issues` 和 `coverage_dimensions`。
+- `validation_issues[]` 字段包括 `stage`、`field`、`provider_field`、`code`、`expected`、`actual_type`、`actual_preview`、`severity`、`message`，以及可选的行号、证券代码和交易日期。实际值摘要由服务端脱敏并限长；WebUI 只按文本展示，不解释或重写规则。
+- `coverage_dimensions[]` 当前用于市场宽度，维度为 `quote_response`、`price_classification`、`quote_timestamp`、`amount`；ratio 是服务端按明确总体分母计算的覆盖率。它与 `coverage_ratio` 的总体有效证券覆盖率不是同一个指标。
+- **OpenAPI 文档缺口**：当前 `ProviderProbeItem` Schema 尚未声明上述 validation 与 coverage_dimensions 字段，但 Go 响应模型已包含。WebUI 以当前 Go JSON 响应模型和实际回包字段为接入依据；数据侧需后续补齐 OpenAPI，避免客户端只依据 Schema 生成时遗漏字段。本 WebUI 分支不修改服务端 OpenAPI/Go 代码。
+- 时间语义：`provider_time` 为源端时间，`fetched_at` 为服务端采集时间，`checked_at` 为诊断检查时间；任何字段缺失时均不得用其他时间字段补位。

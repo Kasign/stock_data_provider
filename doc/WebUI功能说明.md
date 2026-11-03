@@ -160,3 +160,14 @@
 ### 市场观察跨模块日期联动（2026-11-03）
 
 市场情绪历史记录提供同一交易日的涨停池、跌停池、炸板池和龙虎榜入口。联动使用历史快照的 `trade_date` 作为明确查询日期；涨跌停池日期控件同步更新，龙虎榜日期控件同步更新并重新请求。缺少合法交易日期时不生成联动入口。该联动只关联查询条件，不代表不同 Provider 的数据来自同一原子快照；各模块仍须分别检查来源、报告日期和质量状态。
+
+
+### 3.5.1 统一主动诊断明细展示（2026-11-03）
+
+- 主动探测结果直接消费数据侧 `ProviderProbeItem`，WebUI 不重新计算字段质量规则。
+- 展示字段校验总数、error/warning/info 计数，以及字段名、Provider 原始字段、解析/标准化/校验阶段、规则编码、严重级别、预期类型/值、实际类型和服务端脱敏后的实际值摘要。
+- 字段问题明细最多在页面展开 30 条；服务端 `validation_truncated=true` 时明确显示服务端截断提示和总问题数，不将返回明细条数误当作问题总数。
+- 市场宽度展示 quote_response、price_classification、quote_timestamp、amount 四个覆盖维度。百分比只使用服务端 `ratio`；没有合法 ratio 时显示未知，不使用前端计数重新推算。
+- 每条主动探测结果分别展示源端时间 `provider_time`、服务端采集时间 `fetched_at` 和检查时间 `checked_at`。缺失时间不相互替代。
+- Quality 仍由 `quality_status` / `quality_reasons` 表达；Freshness 仍由独立诊断维度的 `freshness_status` / SLA 字段表达，二者不合并。
+- `skipped`、`not_configured`、`not_supported` 保持非成功状态；不能因为探测批次整体完成而将单项跳过标为健康。

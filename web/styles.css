@@ -4105,6 +4105,9 @@ td {
 .data-center-probe-field-issues { display: grid; gap: 5px; margin-top: 7px; }
 .data-center-probe-field-issue { color: var(--warning); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 .data-center-probe-field-issue.is-error { color: var(--danger); }
+.data-center-probe-field-issue.is-warning { color: var(--warning); }
+.data-center-probe-validation > summary { color: var(--text-soft); cursor: pointer; font-weight: 600; }
+.data-center-probe-coverage-dimension { padding: 4px 0; border-top: 1px solid var(--border-soft); }
 .data-center-diagnostic-state.is-failed { color: var(--danger); }
 .data-center-diagnostic-state.is-readonly, .data-center-diagnostic-state.is-unknown { color: var(--text-dim); }
 .data-center-diagnostic-error { color: var(--danger); overflow-wrap: anywhere; }

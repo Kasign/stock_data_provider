@@ -436,6 +436,112 @@ function renderProbeCheckResults(results, root) {
   });
 }
 
+const PROBE_COVERAGE_DIMENSION_LABELS = Object.freeze({
+  quote_response: "行情响应覆盖率",
+  price_classification: "价格分类覆盖率",
+  quote_timestamp: "行情时间覆盖率",
+  amount: "成交额覆盖率"
+});
+
+function formatProbeCount(value) {
+  return Number.isInteger(value) && value >= 0 ? String(value) : "未知";
+}
+
+function renderProbeValidationEvidence(item, card) {
+  const countKeys = [
+    "validation_total_count", "validation_error_count",
+    "validation_warning_count", "validation_info_count"
+  ];
+  const hasCounts = countKeys.some((key) => item[key] !== undefined && item[key] !== null);
+  const issues = Array.isArray(item.validation_issues)
+    ? item.validation_issues.filter((issue) => issue && typeof issue === "object") : [];
+  if (!hasCounts && !issues.length && item.validation_truncated !== true) return;
+
+  const total = formatProbeCount(item.validation_total_count);
+  const errors = formatProbeCount(item.validation_error_count);
+  const warnings = formatProbeCount(item.validation_warning_count);
+  const infos = formatProbeCount(item.validation_info_count);
+  const evidence = document.createElement("details");
+  evidence.className = "data-center-probe-evidence data-center-probe-validation";
+  const summary = document.createElement("summary");
+  summary.textContent = "字段校验 " + total + " 项 · 错误 " + errors + " · 警告 " + warnings + " · 提示 " + infos;
+  evidence.append(summary);
+
+  if (issues.length) {
+    const list = document.createElement("div");
+    list.className = "data-center-probe-field-issues";
+    const visibleIssues = issues.slice(0, 30);
+    visibleIssues.forEach((issue) => {
+      const line = document.createElement("div");
+      const severity = String(issue.severity || "info");
+      line.className = "data-center-probe-field-issue"
+        + (severity === "error" ? " is-error" : severity === "warning" ? " is-warning" : "");
+      const identity = [
+        issue.field || "未知字段",
+        issue.provider_field ? "原始字段 " + issue.provider_field : "",
+        issue.stage ? "阶段 " + issue.stage : "",
+        issue.code ? "规则 " + issue.code : "",
+        issue.severity ? "级别 " + issue.severity : ""
+      ].filter(Boolean);
+      const context = [
+        issue.expected ? "预期 " + issue.expected : "",
+        issue.actual_type ? "实际类型 " + issue.actual_type : "",
+        issue.actual_preview ? "实际值 " + String(issue.actual_preview).slice(0, 160) : "",
+        issue.row_index !== undefined ? "行 " + issue.row_index : "",
+        issue.symbol ? "证券 " + issue.symbol : "",
+        issue.trade_date ? "交易日 " + issue.trade_date : ""
+      ].filter(Boolean);
+      line.textContent = identity.join(" · ") + (context.length ? "；" + context.join(" · ") : "")
+        + (issue.message ? "；" + String(issue.message).slice(0, 200) : "");
+      list.append(line);
+    });
+    evidence.append(list);
+    if (issues.length > visibleIssues.length) {
+      appendProbeText(evidence, "", "前端最多展示 30 条，另有 " + (issues.length - visibleIssues.length) + " 条未展开。");
+    }
+  }
+
+  if (item.validation_truncated === true) {
+    appendProbeText(evidence, "data-center-diagnostic-error",
+      "服务端明细已截断；总问题数为 " + total + "，当前仅返回 " + issues.length + " 条明细。");
+  } else if (hasCounts && Number.isInteger(item.validation_total_count) && item.validation_total_count > issues.length && issues.length) {
+    appendProbeText(evidence, "", "当前返回 " + issues.length + " 条明细，问题总数为 " + total + "。");
+  }
+  card.append(evidence);
+}
+
+function renderProbeCoverageDimensions(item, card) {
+  const dimensions = Array.isArray(item.coverage_dimensions)
+    ? item.coverage_dimensions.filter((dimension) => dimension && typeof dimension === "object") : [];
+  if (!dimensions.length) return;
+
+  const evidence = document.createElement("div");
+  evidence.className = "data-center-probe-evidence data-center-probe-coverage";
+  const title = document.createElement("strong");
+  title.textContent = "分项覆盖率证据";
+  evidence.append(title);
+  dimensions.forEach((dimension) => {
+    const line = document.createElement("div");
+    line.className = "data-center-probe-coverage-dimension";
+    const label = PROBE_COVERAGE_DIMENSION_LABELS[dimension.dimension] || String(dimension.dimension || "未知维度");
+    const ratio = typeof dimension.ratio === "number" && Number.isFinite(dimension.ratio)
+      && dimension.ratio >= 0 && dimension.ratio <= 1
+      ? (dimension.ratio * 100).toFixed(1) + "%" : "未知";
+    const counts = [
+      "分母 " + formatProbeCount(dimension.total),
+      "返回 " + formatProbeCount(dimension.returned),
+      "有效 " + formatProbeCount(dimension.validated),
+      "缺失 " + formatProbeCount(dimension.missing),
+      "排除 " + formatProbeCount(dimension.excluded)
+    ];
+    line.textContent = label + " · " + ratio + " · " + counts.join(" · ")
+      + (dimension.population ? " · 范围 " + dimension.population : "")
+      + (dimension.source ? " · 依据 " + dimension.source : "");
+    evidence.append(line);
+  });
+  card.append(evidence);
+}
+
 function renderProbeItems(items, root) {
   if (!root) return;
   root.replaceChildren();
@@ -496,10 +602,13 @@ function renderProbeItems(items, root) {
       item.coverage_source ? "分母依据 " + item.coverage_source : "",
       item.provider_time ? "源端时间 " + formatDateTime(item.provider_time) : "",
       item.provider_time_type ? "时间语义 " + item.provider_time_type : "",
-      item.source_version ? "版本 " + item.source_version : "",
-      item.checked_at ? "检查时间 " + formatDateTime(item.checked_at) : ""
+      item.fetched_at ? "采集时间 " + formatDateTime(item.fetched_at) : "",
+      item.checked_at ? "检查时间 " + formatDateTime(item.checked_at) : "",
+      item.source_version ? "版本 " + item.source_version : ""
     ].filter(Boolean);
     appendProbeText(card, "", metadata.join(" · "));
+    renderProbeValidationEvidence(item, card);
+    renderProbeCoverageDimensions(item, card);
     if (Array.isArray(item.quality_reasons) && item.quality_reasons.length) {
       appendProbeText(card, "data-center-probe-evidence", "质量原因：" + item.quality_reasons.map((value) => String(value)).join("；"));
     }

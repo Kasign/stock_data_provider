@@ -491,3 +491,22 @@
 
 - [x] WebUI Checks：356/356 单元测试通过；语法、Compose 和 Nginx 镜像构建通过（[运行记录 #41588477842](https://github.com/Kasign/stock_data_provider/actions/runs/41588477842)）。
 - [x] Chromium Browser Smoke：七种视口全部通过；验证情绪历史日期分别传递到涨跌停池类型/日期及龙虎榜日期（[运行记录 #41588477806](https://github.com/Kasign/stock_data_provider/actions/runs/41588477806)）。
+
+
+## 2026-11-03 数据中心统一诊断展示增强
+
+### 本批次实现
+
+- [x] 主动探测 Provider 能力卡片展示字段校验总数及 error / warning / info 计数。
+- [x] 展开字段级问题，展示标准字段、Provider 原始字段、阶段、规则编码、严重级别、期望值、实际类型、脱敏实际值摘要及可用的证券/日期上下文。
+- [x] 字段问题页面展示限制为最多 30 条；服务端截断标记和总问题数单独提示。
+- [x] 市场宽度按服务端 ratio 展示行情响应、价格分类、行情时间、成交额四类覆盖率；未知 ratio 不前端推算。
+- [x] 分开显示源端时间、服务端采集时间、检查时间；不使用 fetched_at 替代 provider_time。
+- [x] 保持 Quality 与 Freshness 独立；跳过、未配置、不支持均不显示为成功。
+- [ ] WebUI 单元测试、JS 语法检查及 Chromium Provider 诊断专项通过后，补录实际运行编号与测试数量。
+- [ ] 真实部署验收：核对市场宽度四类覆盖率、字段问题计数与服务端原始探测响应一致；验证未配置/跳过状态和 MariaDB 历史持久化降级。
+
+### 验收边界
+
+- 浏览器专项使用隔离模拟 API，只验证字段消费、状态表达和页面交互，不代表真实 Provider 数据质量通过。
+- `ProviderProbeItem` 的 validation 与 coverage_dimensions 字段尚未进入当前 OpenAPI Schema，数据侧后续需补齐；本批不修改服务端契约。
