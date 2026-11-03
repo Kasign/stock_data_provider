@@ -60,6 +60,28 @@ try {
   oldRequestStarted = new Promise(resolve => {
     page.route("**/*", async route => {
       const url = new URL(route.request().url());
+      if (url.pathname.includes("/api/v1/market/hot-stocks")) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          items: [{ symbol: "600519.SH", name: "贵州茅台", rank: 1, latest_price: 1500, change: 10, change_percent: 1.2, rank_change: 0 }],
+          quality_status: "valid", source: "browser-fixture", fetched_at: "2026-11-03T03:00:00Z"
+        }) });
+        return;
+      }
+      if (url.pathname.includes("/api/v1/market/limit-pools")) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          items: [{ symbol: "000001.SZ", name: "平安银行", change_percent: 10, consecutive_boards: 1 }],
+          type: "up", total: 1, trade_date: "2026-11-03", quality_status: "valid", source: "browser-fixture", fetched_at: "2026-11-03T03:00:00Z"
+        }) });
+        return;
+      }
+      if (url.pathname.includes("/api/v1/market/dragon-tiger")) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          items: [{ symbol: "300750.SZ", name: "宁德时代", change_percent: 2.1, net_buy_amount_cny: 1000000, deal_amount_cny: 5000000, quality_status: "valid" }],
+          trade_date: "2026-11-03", page: 1, returned: 1, source_returned: 1, excluded_non_a_share_count: 0,
+          has_more: false, quality_status: "valid", source: "browser-fixture", fetched_at: "2026-11-03T03:00:00Z"
+        }) });
+        return;
+      }
       if (url.pathname.includes("/api/v1/market/stocks")) {
         await route.fulfill({
           status: 200, contentType: "application/json",
@@ -108,6 +130,23 @@ try {
   });
 
   await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
+
+  // 市场人气榜、涨跌停池和龙虎榜均应能直达研究工作区。
+  await page.locator('.nav-link[data-view="market"]').click();
+  await page.locator('#market-hot-stocks-body button[data-hot-action="research"]').waitFor({ state: "visible" });
+  await page.locator('#market-hot-stocks-body button[data-hot-action="research"]').click();
+  await page.locator("#research-view").waitFor({ state: "visible" });
+  await page.waitForFunction(() => document.querySelector("#symbol-input")?.value === "600519.SH");
+  await page.locator('.nav-link[data-view="market"]').click();
+  await page.locator('#market-pool-body button[data-pool-action="research"]').waitFor({ state: "visible" });
+  await page.locator('#market-pool-body button[data-pool-action="research"]').click();
+  await page.locator("#research-view").waitFor({ state: "visible" });
+  await page.waitForFunction(() => document.querySelector("#symbol-input")?.value === "000001.SZ");
+  await page.locator('.nav-link[data-view="market"]').click();
+  await page.locator('#dragon-tiger-body button[data-dragon-action="research"]').waitFor({ state: "visible" });
+  await page.locator('#dragon-tiger-body button[data-dragon-action="research"]').click();
+  await page.locator("#research-view").waitFor({ state: "visible" });
+  await page.waitForFunction(() => document.querySelector("#symbol-input")?.value === "300750.SZ");
 
   // 全市场分页结果应能直接进入研究工作区，并同步当前证券代码。
   await page.locator('.nav-link[data-view="stocks"]').click();

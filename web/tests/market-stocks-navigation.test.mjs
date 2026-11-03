@@ -26,10 +26,10 @@ test("市场人气榜、涨跌停池和龙虎榜提供独立深度研究入口",
     readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
     readFile(new URL("../src/market-activity.js", import.meta.url), "utf8")
   ]);
-  assert.match(overview, /data-hot-action="research"|data\.hotAction="research"/);
-  assert.match(overview, /data-pool-action|poolAction/);
-  assert.match(overview, /targetView=button\.dataset\.hotAction==="research"\?"research":"stocks"/);
-  assert.match(activity, /data-dragon-action|dragonAction/);
+  assert.match(overview, /dataset\.hotAction="research"/);
+  assert.match(overview, /dataset\.poolAction=target/);
+  assert.match(overview, /button\.dataset\.hotAction==="research"\?"research":"stocks"/);
+  assert.match(activity, /dataset\.dragonAction=target/);
   assert.match(activity, /b\.dataset\.dragonAction==="research"\?"research":"stocks"/);
   assert.match(app, /\(item, source, targetView\) => selectStockFromMarket\(item, source, targetView\)/);
 });
