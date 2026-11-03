@@ -439,5 +439,12 @@
 - [x] 统一来源、源端版本、供应商时间、源端报告日期、供应商日期、数据日期、交易日期和获取时间的标签；不混淆不同时间语义。
 - [x] 来源、获取时间及明确要求展示的供应商时间/数据日期缺失时显示“未报告”，不将 null 转换为零。
 - [x] 模块特有查询范围、返回数量、报告期和未返回标的作为附加元信息保留。
-- [ ] 元信息纯函数单元测试及 WebUI Checks 待执行。
-- [ ] Chromium 集中验收待本批次完成后执行。
+- [x] 元信息纯函数 4 项专项单测通过；WebUI Checks：352/352 单测、JS 语法检查、Compose 校验和 Nginx 镜像构建通过（[运行记录 #41583715560](https://github.com/Kasign/stock_data_provider/actions/runs/41583715560)）。
+- [x] Chromium Browser Smoke：响应式布局、Run Flow、个股研究交互/数据质量、Provider 探测通过（[运行记录 #41583715571](https://github.com/Kasign/stock_data_provider/actions/runs/41583715571)）。
+
+
+### 20.1 市场研究入口证券代码校验验收补充
+
+- [x] WebUI Checks：348/348 单测通过，语法检查、Compose 校验和 Nginx 构建通过（[运行记录 #41583208934](https://github.com/Kasign/stock_data_provider/actions/runs/41583208934)）。
+- [x] Chromium Browser Smoke：通过（[运行记录 #41583208949](https://github.com/Kasign/stock_data_provider/actions/runs/41583208949)）。
+- [x] 板块领涨股代码缺失契约检查通过；当前不生成研究按钮，等待数据层明确提供证券代码字段。

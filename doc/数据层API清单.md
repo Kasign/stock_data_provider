@@ -95,6 +95,7 @@
 6. 市场宽度、涨跌停池、龙虎榜等接口的空数据可能是 unknown/degraded；不得将未知转换为 0 或“无事件”。
 7. 行业/概念排行服务端支持 type、direction、sort_by（change_percent/amount/change_5d）和 limit；WebUI 当前封装尚未暴露 sort_by/direction 时使用服务端默认值。
 8. 前端只负责展示服务端单位和质量字段，不猜测成交量/成交额单位，不把成交额当作资金净流入。
+9. 行业/概念板块排行的 `SectorRanking.leading_stock` 当前仅为领涨股票名称，接口未提供领涨股证券代码；WebUI 不得将该名称作为代码或通过模糊名称反查证券身份。若要支持板块领涨股直达研究，数据层需新增并在 OpenAPI 明确声明标准 A 股证券代码字段（建议 `leading_stock_symbol`），再由 WebUI 按证券代码格式校验后开放入口。
 
 ## 6. 统一字段与错误语义
 
