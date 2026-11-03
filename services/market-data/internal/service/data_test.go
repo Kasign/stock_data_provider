@@ -2836,3 +2836,16 @@ func TestDailyBarCoverageUsesTradingCalendarSessionCount(t *testing.T) {
 		t.Fatalf("holiday-aware coverage threshold should be lower than weekday estimate: calendar=%d weekdays=%d", calendarEstimate, weekdayEstimate)
 	}
 }
+
+func TestCurrentIncompleteDailyBarRespectsExchangeTradingCalendar(t *testing.T) {
+	loc := marketLocation()
+	now := time.Date(2026, 11, 3, 11, 0, 0, 0, loc)
+	date := now.Format("2006-01-02")
+	if isCurrentIncompleteSessionBarOnTradingDay(date, now, false) {
+		t.Fatal("a weekday exchange holiday must not be marked as an incomplete trading-session bar")
+	}
+	if !isCurrentIncompleteSessionBarOnTradingDay(date, now, true) {
+		t.Fatal("an active trading day before close must be marked as potentially incomplete")
+	}
+}
+

@@ -2900,10 +2900,14 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			bars[j].Source = p.Name()
 			bars[j].SourceVersion = strings.TrimSpace(bars[j].SourceVersion)
 			bars[j].RequestID = fetchID
-			if isCurrentIncompleteSessionBar(bars[j].TradeDate, time.Now()) {
+			isPartial, partialReason := s.currentDailyBarPartialState(ctx, bars[j].TradeDate, time.Now())
+			if isPartial {
 				bars[j].IsPartial = true
 				degradeQualityStatus(&bars[j].QualityStatus)
 				appendReasonOnce(&bars[j].QualityReasons, "current_daily_bar_may_be_incomplete")
+				if partialReason != "" {
+					appendReasonOnce(&bars[j].QualityReasons, partialReason)
+				}
 			}
 			bars[j].FetchedAt = receivedAt
 			if bars[j].NormalizationVer == "" {
@@ -3529,6 +3533,22 @@ func isTradingClock(t time.Time) bool {
 	}
 	m := t.Hour()*60 + t.Minute()
 	return (m >= 9*60+30 && m <= 11*60+30) || (m >= 13*60 && m <= 15*60)
+}
+
+func (s *DataService) currentDailyBarPartialState(ctx context.Context, tradeDate string, now time.Time) (bool, string) {
+	if !isCurrentIncompleteSessionBar(tradeDate, now) {
+		return false, ""
+	}
+	date := now.In(marketLocation()).Format("2006-01-02")
+	calendar, _, err := s.TradingCalendar(ctx, date, date)
+	if err != nil || calendar == nil || calendar.QualityStatus != model.QualityValid || len(calendar.Items) != 1 {
+		return true, "partial_bar_detection_uses_weekday_fallback_calendar_unavailable"
+	}
+	return isCurrentIncompleteSessionBarOnTradingDay(tradeDate, now, calendar.Items[0].IsTradingDay), ""
+}
+
+func isCurrentIncompleteSessionBarOnTradingDay(tradeDate string, now time.Time, isTradingDay bool) bool {
+	return isTradingDay && isCurrentIncompleteSessionBar(tradeDate, now)
 }
 
 func isCurrentIncompleteSessionBar(tradeDate string, now time.Time) bool {

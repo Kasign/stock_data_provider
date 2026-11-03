@@ -1136,3 +1136,12 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 交易日历不可用时保留原工作日估算作为兼容回退，并在响应 warnings 标明 `daily_bar_coverage_uses_weekday_estimate_calendar_unavailable`；交易日历为 degraded 时同样显式披露。
 - 未指定 start 的最近 N 根 K 线请求仍使用原 80% 条数门槛，不引入不必要的日历查询。
 - 该变更只调整覆盖率判断依据，不补造 K 线、不把停牌日误判为缺失、不修改单根 K 线质量门禁。后续仍需基于证券状态与交易日历区分停牌、非交易日和 Provider 漏数。
+
+
+
+### 2026-11-03：当前日线 Partial 判定结合交易日历
+
+- 当前日线是否可能未收盘，先按 Asia/Shanghai 日期及 15:05 发布缓冲窗口识别候选，再查询当日交易日历。
+- 交易日历为 Valid 且明确非交易日时，不再把周中节假日返回的日期误标为 Partial；确认是交易日时继续标记 `IsPartial` 并降级质量。
+- 交易日历不可用或为 Degraded 时保留原工作日兜底，并在质量原因写入 `partial_bar_detection_uses_weekday_fallback_calendar_unavailable`，明确这是保守推断而非确认交易日。
+- 新增交易日/非交易日 Partial 判定测试；不把停牌日与非交易日混为一谈。
