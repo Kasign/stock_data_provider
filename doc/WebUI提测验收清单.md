@@ -354,6 +354,8 @@
 - [x] 创建任务 POST 不因页面切换而盲目中止；超时明确提示“创建结果未知”，避免用户把网络超时当作服务端未创建并重复提交。
 - [x] API 单测补充 AbortSignal 透传、底层 fetch 超时中止和创建结果未知场景。
 - [x] 既有 Chromium Run Flow 专项继续覆盖任务切换迟到响应隔离、终态事件排空、失败/部分成功与事件接口恢复；本轮 API 生命周期断言由 WebUI Checks 执行。
+- [x] WebUI Checks 成功：341/341 单元测试、JavaScript 语法检查及容器镜像构建通过：[运行记录 #41573346832](https://github.com/Kasign/stock_data_provider/actions/runs/41573346832)。
+- [x] Chromium Browser Smoke 成功：响应式布局、Run Flow 交互/结果恢复、个股研究与 Provider 探测专项通过：[运行记录 #41573346824](https://github.com/Kasign/stock_data_provider/actions/runs/41573346824)，截图 Artifact [#13202720793](https://github.com/Kasign/stock_data_provider/actions/runs/41573346824/artifacts/13202720793)。
 
 ### 明确边界
 
