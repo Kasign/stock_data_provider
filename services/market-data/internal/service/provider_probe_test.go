@@ -560,7 +560,6 @@ func TestBuildProviderProbeCheckResultsMarksUnknownQualityAsDegraded(t *testing.
 	}
 }
 
-
 func TestBuildCrossProviderProbeCheckResultsExposesMismatchValuesAndTolerance(t *testing.T) {
 	left := &provider.CrossProviderDailySnapshot{
 		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",

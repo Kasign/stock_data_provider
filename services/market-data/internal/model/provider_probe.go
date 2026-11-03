@@ -53,6 +53,8 @@ type ProviderProbeItem struct {
 	RowsReturned           int                       `json:"rows_returned,omitempty"`
 	RowsValidated          int                       `json:"rows_validated,omitempty"`
 	CoverageTotal          *int                      `json:"coverage_total,omitempty"`
+	CoveragePopulation      string                    `json:"coverage_population,omitempty"`
+	CoverageSource          string                    `json:"coverage_source,omitempty"`
 	CoverageReturned       *int                      `json:"coverage_returned,omitempty"`
 	CoverageValidated      *int                      `json:"coverage_validated,omitempty"`
 	CoverageMissing        *int                      `json:"coverage_missing,omitempty"`
@@ -76,23 +78,22 @@ type ProviderProbeFieldComparison struct {
 
 // ProviderProbeCheckResult 是从一次 Provider 响应中提取的独立诊断维度。
 type ProviderProbeCheckResult struct {
-	Check         string     `json:"check"`
-	Provider      string     `json:"provider,omitempty"`
-	Capability    string     `json:"capability,omitempty"`
-	Status        string     `json:"status"`
-	ErrorCode     string     `json:"error_code,omitempty"`
-	ErrorMessage  string     `json:"error_message,omitempty"`
-	ProviderTime  *time.Time `json:"provider_time,omitempty"`
-	AgeSeconds    *int64     `json:"age_seconds,omitempty"`
-	ComparedDates []string   `json:"compared_dates,omitempty"`
-	FieldCount    int        `json:"field_count,omitempty"`
+	Check              string                         `json:"check"`
+	Provider           string                         `json:"provider,omitempty"`
+	Capability         string                         `json:"capability,omitempty"`
+	Status             string                         `json:"status"`
+	ErrorCode          string                         `json:"error_code,omitempty"`
+	ErrorMessage       string                         `json:"error_message,omitempty"`
+	ProviderTime       *time.Time                     `json:"provider_time,omitempty"`
+	AgeSeconds         *int64                         `json:"age_seconds,omitempty"`
+	ComparedDates      []string                       `json:"compared_dates,omitempty"`
+	FieldCount         int                            `json:"field_count,omitempty"`
 	MismatchCount      int                            `json:"mismatch_count,omitempty"`
 	MatchedFieldCount  int                            `json:"matched_field_count,omitempty"`
 	NotComparableCount int                            `json:"not_comparable_count,omitempty"`
 	FieldComparisons   []ProviderProbeFieldComparison `json:"field_comparisons,omitempty"`
 	CheckedAt          time.Time                      `json:"checked_at"`
 }
-
 // ProviderProbeRun 是隔离于业务流量的主动探测批次。
 type ProviderProbeRun struct {
 	RunID                 string                     `json:"run_id"`

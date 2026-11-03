@@ -753,3 +753,13 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - 首轮 Go test suite 与 Docker market-data 构建在 gofmt 前置检查发现 `internal/model/provider_probe.go` 中模型声明之间缺少一行空行；没有进入 market-data 编译和单元测试阶段。
 - 已按 gofmt 要求修复，并补充价格字段 mismatch 的左右值、差值和容差断言。
 - 修复后完整 Go test/race/vet、Docker 构建结果以新提交 SHA 的 Actions 为准。
+
+### 2026-11-03：覆盖率分母来源可追溯性（第二批）
+
+- [x] 诊断项新增 `coverage_population` 与 `coverage_source`，使分母不仅有数值，还能说明总体范围和证明来源。
+- [x] 当前唯一可证明的主动诊断分母为 `market_breadth`：`coverage_population=provider_universe`，`coverage_source=market_breadth.total_securities`。
+- [x] `coverage_total` 取 Provider 返回的 A 股证券全集数量；`coverage_returned` 取全集行情实际覆盖数量；`coverage_validated` 取经过市场广度快照契约校验的覆盖数量；`coverage_missing=total-returned`；当前 Provider 完整性契约不产生独立排除项，故 `coverage_excluded=0`。
+- [x] 新字段仅在总量与计数关系通过一致性校验、且分母来源非空时输出；未知总体继续省略全部覆盖率字段。
+- [ ] 其他能力不得复用该分母定义。后续必须分别找到全量证券主数据、指数成分、行业成分、财报应披露记录等权威总体来源，才能输出对应覆盖率。
+- [ ] 需继续检查 MarketBreadth 聚合 Provider 是否有能力在部分数据返回时返回降级快照；若只返回完整快照或整体失败，应在 Provider 级别明确记录这一限制。
+- 验收边界：当前字段是“市场广度快照覆盖率”，不是 quote Provider 的全市场逐字段质量率，也不是全市场证券目录覆盖率。

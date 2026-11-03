@@ -656,6 +656,8 @@ components:
         rows_returned: {type: integer, minimum: 0}
         rows_validated: {type: integer, minimum: 0}
         coverage_total: {type: integer, minimum: 0, description: Explicit expected population denominator; omitted when the source cannot prove it}
+        coverage_population: {type: string, enum: [provider_universe], description: Population represented by coverage_total; omitted when unknown}
+        coverage_source: {type: string, description: Source field or contract that proves the population denominator; omitted when unknown}
         coverage_returned: {type: integer, minimum: 0, description: Records returned within the declared denominator}
         coverage_validated: {type: integer, minimum: 0, description: Returned records passing identity and quality validation}
         coverage_missing: {type: integer, minimum: 0, description: Expected records not returned by the source}

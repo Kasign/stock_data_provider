@@ -39,8 +39,10 @@ type providerProbeEvidence struct {
 	sampleDate        string
 	rowsReturned      int
 	rowsValidated     int
-	coverageTotal     *int
-	coverageReturned  *int
+	coverageTotal      *int
+	coveragePopulation string
+	coverageSource     string
+	coverageReturned   *int
 	coverageValidated *int
 	coverageMissing   *int
 	coverageExcluded  *int
@@ -58,14 +60,17 @@ func recordProviderProbeCoverage(ctx context.Context, coverage float64) {
 	evidence.coverageRatio = &coverage
 }
 
-func recordProviderProbeCoverageCounts(ctx context.Context, total, returned, validated, missing, excluded int) {
+func recordProviderProbeCoverageCounts(ctx context.Context, total, returned, validated, missing, excluded int, population, source string) {
 	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
 	if !ok || evidence == nil || total <= 0 || returned < 0 || validated < 0 || missing < 0 || excluded < 0 ||
-		returned > total || validated > returned || returned != validated+excluded || total != validated+missing+excluded {
+		returned > total || validated > returned || returned != validated+excluded || total != validated+missing+excluded ||
+		strings.TrimSpace(population) == "" || strings.TrimSpace(source) == "" {
 		return
 	}
 	ratio := float64(validated) / float64(total)
 	evidence.coverageTotal = &total
+	evidence.coveragePopulation = population
+	evidence.coverageSource = source
 	evidence.coverageReturned = &returned
 	evidence.coverageValidated = &validated
 	evidence.coverageMissing = &missing
@@ -418,7 +423,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, snapshot.CoveredSecurities, snapshot.CoveredSecurities, snapshot.NewestQuoteTime)
 				if snapshot.TotalSecurities > 0 && snapshot.CoveredSecurities <= snapshot.TotalSecurities {
 					missing := snapshot.TotalSecurities - snapshot.CoveredSecurities
-					recordProviderProbeCoverageCounts(probeCtx, snapshot.TotalSecurities, snapshot.CoveredSecurities, snapshot.CoveredSecurities, missing, 0)
+					recordProviderProbeCoverageCounts(probeCtx, snapshot.TotalSecurities, snapshot.CoveredSecurities, snapshot.CoveredSecurities, missing, 0, "provider_universe", "market_breadth.total_securities")
 				}
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
@@ -789,6 +794,8 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.RowsReturned = evidence.rowsReturned
 			item.RowsValidated = evidence.rowsValidated
 			item.CoverageTotal = evidence.coverageTotal
+			item.CoveragePopulation = evidence.coveragePopulation
+			item.CoverageSource = evidence.coverageSource
 			item.CoverageReturned = evidence.coverageReturned
 			item.CoverageValidated = evidence.coverageValidated
 			item.CoverageMissing = evidence.coverageMissing
