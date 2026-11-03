@@ -52,7 +52,7 @@ try {
         page: 1, page_size: 50, total: 3, total_is_lower_bound: false, coverage_ratio: 1,
         quote_succeeded: 3, quote_failed: 0, quality_status: "degraded",
         universe_source: "browser-fixture", universe_source_version: "test",
-        universe_fetched_at: "2026-11-03T03:00:00Z", fetched_at: "2026-11-03T03:00:00Z",
+        universe_fetched_at: "2026-11-03T03:00:00Z", fetched_at: "2026-11-03T03:00:0" + marketStocksRequests + "Z",
         ma_adjustment_basis: "forward_adjusted"
       }) });
       return;
@@ -82,7 +82,7 @@ try {
   await page.waitForFunction(() => document.querySelector("#screening-local-results-summary")?.textContent.includes("命中 1 条"));
   assert.match(await summary.textContent(), /未命中 1 条/);
   assert.match(await summary.textContent(), /无法判断 1 条/);
-  assert.match(await summary.textContent(), /第 1 页 / 每页 50 条/);
+  assert.match(await summary.textContent(), /第 1 页 \/ 每页 50 条/);
   assert.equal(await page.locator("#screening-local-results-body tr").count(), 1);
   assert.match(await page.locator("#screening-local-results-body").textContent(), /测试命中/);
 
@@ -117,7 +117,7 @@ try {
   // 全市场分页刷新后，即使页码/页大小相同，也必须使上一批结果失效。
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#reload-market-stocks").click();
-  await page.waitForFunction(() => document.querySelector("#market-stocks-summary")?.textContent.includes("返回 3 条"));
+  await page.waitForFunction(() => document.querySelector("#market-stocks-meta")?.textContent.includes("2026-11-03T03:00:02Z"));
   await page.locator('.nav-link[data-view="screening"]').click();
   assert.match(await summary.textContent(), /分页已变化或重新加载/);
   assert.deepEqual(pageErrors, []);
