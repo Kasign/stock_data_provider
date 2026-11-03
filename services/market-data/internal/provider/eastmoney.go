@@ -711,7 +711,7 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		volume = &shares
 		volumePtr = rawVol
 	}
-	rawAmount := parseNumber("f48", "amount", false)
+	rawAmount := parseNumber("f48", "amount", true)
 	amount := rawAmount // Eastmoney quote amount is CNY
 	volumeRatio := parseNumber("f50", "volume_ratio", false)
 	turnoverRate := parseNumber("f168", "turnover_rate", false)

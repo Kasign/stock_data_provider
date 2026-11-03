@@ -1043,3 +1043,9 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 第二轮 CI 发现 object / array / boolean 的解析值为空字符串，旧 missing 判断将其错误分类为 missing。
 - missing 现在只覆盖字段不存在、JSON null、空字符串和 Eastmoney 的 "-" 哨兵值；object / array / boolean 保持 type_mismatch。
 - 该修正不改变必填字段门禁和可选字段缺失语义。
+
+
+**成交额字段诊断补齐：**
+- Eastmoney f48 成交额在当前 Quote 契约中属于必需字段：Quote 仍标记 valid 且 amount 缺失时，公共 Validator 会硬失败。
+- 因此 f48 missing/null 也必须在 Parse 阶段结构化上报，而不能只依赖后续 Validate 阶段报错；数字 0 仍是合法数值，不等同于缺失。
+- 增加 f48 missing/null 回归，保留 volume_ratio、turnover_rate 等真正可选字段的缺失语义。

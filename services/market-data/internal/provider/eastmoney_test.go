@@ -74,13 +74,17 @@ func TestEastmoneyQuoteAcceptsNumericStringFields(t *testing.T) {
 
 func TestEastmoneyQuoteReportsRawNumericFieldParseIssues(t *testing.T) {
 	cases := []struct {
-		name     string
-		remove   bool
-		value    any
-		wantCode string
-		wantType string
+		name          string
+		providerField string
+		field         string
+		remove        bool
+		value         any
+		wantCode      string
+		wantType      string
 	}{
 		{name: "missing", remove: true, wantCode: "missing", wantType: "missing"},
+		{name: "amount missing", providerField: "f48", field: "amount", remove: true, wantCode: "missing", wantType: "missing"},
+		{name: "amount null", providerField: "f48", field: "amount", value: nil, wantCode: "null_value", wantType: "null"},
 		{name: "null", value: nil, wantCode: "null_value", wantType: "null"},
 		{name: "object", value: map[string]any{"unexpected": 1}, wantCode: "type_mismatch", wantType: "object"},
 		{name: "array", value: []any{1}, wantCode: "type_mismatch", wantType: "array"},
@@ -96,10 +100,14 @@ func TestEastmoneyQuoteReportsRawNumericFieldParseIssues(t *testing.T) {
 				"f60": 1331.88, "f86": "202610211128", "f169": -18.57, "f170": -1.394,
 				"f50": 2.13, "f168": 0.2,
 			}
+			providerField, field := tc.providerField, tc.field
+			if providerField == "" {
+				providerField, field = "f43", "current_price"
+			}
 			if tc.remove {
-				delete(data, "f43")
+				delete(data, providerField)
 			} else {
-				data["f43"] = tc.value
+				data[providerField] = tc.value
 			}
 			body, err := json.Marshal(map[string]any{"rc": 0, "data": data})
 			if err != nil {
@@ -119,8 +127,8 @@ func TestEastmoneyQuoteReportsRawNumericFieldParseIssues(t *testing.T) {
 				t.Fatalf("expected one structured parse issue, got %+v", report)
 			}
 			issue := report.Issues[0]
-			if issue.Stage != validation.StageParse || issue.Field != "current_price" ||
-				issue.ProviderField != "f43" || issue.Code != tc.wantCode || issue.ActualType != tc.wantType ||
+			if issue.Stage != validation.StageParse || issue.Field != field ||
+				issue.ProviderField != providerField || issue.Code != tc.wantCode || issue.ActualType != tc.wantType ||
 				issue.Severity != validation.SeverityError {
 				t.Fatalf("unexpected parse issue: %+v", issue)
 			}
