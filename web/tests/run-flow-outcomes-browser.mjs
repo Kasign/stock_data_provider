@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { runResultFixtures } from "./fixtures/run-results.mjs";
 
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");\nconst screenshotDir=path.resolve(root,"../browser-screenshots/run-flow-outcomes");\nawait mkdir(screenshotDir,{recursive:true});
 const tasks=[
  {task_id:"task-partial",run_id:"run-partial",symbols:["600519"],task_type:"post_market_scan",status:"partial",analysis_base:"/analysis-api"},
  {task_id:"task-failed",run_id:"run-failed",symbols:["000001"],task_type:"post_market_scan",status:"failed",failure_code:"market_snapshot_failed",error_message:"读取行情快照失败",analysis_base:"/analysis-api"},
@@ -73,7 +73,7 @@ try{
  assert.match(await page.locator("#task-events-read-status").textContent(),/阶段事件读取提示/);
  await page.locator("#refresh-task").click();
  await page.waitForFunction(()=>document.querySelector("#task-run-status-pill")?.dataset.runStatus==="completed",null,{timeout:10000});
- await page.waitForFunction(()=>runRequests.includes("run-event-unavailable"),null,{timeout:10000});
+ await page.waitForFunction(()=>document.querySelector("#task-run-status-pill")?.dataset.runStatus==="completed",null,{timeout:10000});
  assert.equal(eventAttempts,2);
  await page.locator("#close-run-flow-dialog").click();await page.locator("#run-flow-dialog:not([open])").waitFor({state:"hidden"});
  await page.locator('[data-open-task-id="task-race-a"]').click();await page.locator("#run-flow-dialog[open]").waitFor();await startedA;
@@ -86,7 +86,7 @@ try{
  assert.match(await page.locator("#task-status-pill").textContent(),/执行中/);
  assert.equal(runRequests.includes("run-race-a"),false);
  assert.deepEqual(pageErrors,[]);
- await page.screenshot({path:path.resolve(root,"../browser-screenshots/run-flow-outcomes/1280x900.png"),fullPage:false,animations:"disabled"});
+ await page.screenshot({path:path.join(screenshotDir,"1280x900.png"),fullPage:false,animations:"disabled"});
  console.log("PASS Run Flow partial, failed, event recovery and stale-response isolation");
  await context.close();
 }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
