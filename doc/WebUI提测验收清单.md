@@ -594,4 +594,5 @@
 
 - [x] 历史情绪查询支持请求取消与代际隔离，连接配置和日期变化不再允许旧结果覆盖页面。
 - [x] 增加取消、请求代际变化回归测试。
-- [ ] 本次修复的 WebUI Checks 与 Chromium Browser Smoke 待执行；通过前不标记自动化验收完成。
+- [x] WebUI Checks 成功（[运行记录 #41608192143](https://github.com/Kasign/stock_data_provider/actions/runs/41608192143)）。
+- [x] Chromium Browser Smoke 成功（[运行记录 #41608192251](https://github.com/Kasign/stock_data_provider/actions/runs/41608192251)）。
