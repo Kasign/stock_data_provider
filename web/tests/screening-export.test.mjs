@@ -21,7 +21,7 @@ test("preserves numeric zero and neutralizes spreadsheet formulas in text fields
     symbol: "000001.SZ", name: '=HYPERLINK("https://bad.example","x"),A',
     quote: { change_percent: 0, turnover_rate: 0, amount: 0 }, ma5: 0, ma20: 0
   } }] });
-  assert.match(csv, /"'=HYPERLINK(""https:\/\/bad\.example"",""x""\),A"/);
+  assert.ok(csv.includes("\"'=HYPERLINK(\"\"https://bad.example\"\",\"\"x\"\"),A\""));
   assert.match(csv, /,"0","0","0",/);
 });
 
