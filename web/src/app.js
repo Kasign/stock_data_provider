@@ -1630,7 +1630,7 @@ function invalidateScreeningLocalResults(message = "筛选条件已变化，请�
   if (body) {
     body.replaceChildren();
     const row = document.createElement("tr"), cell = document.createElement("td");
-    cell.className = "table-empty"; cell.colSpan = 8; cell.textContent = "尚未执行当前页筛选。";
+    cell.className = "table-empty"; cell.colSpan = 9; cell.textContent = "尚未执行当前页筛选。";
     row.append(cell); body.append(row);
   }
   updateScreeningBatchControls();
