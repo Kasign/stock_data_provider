@@ -448,3 +448,19 @@
 - [x] WebUI Checks：348/348 单测通过，语法检查、Compose 校验和 Nginx 构建通过（[运行记录 #41583208934](https://github.com/Kasign/stock_data_provider/actions/runs/41583208934)）。
 - [x] Chromium Browser Smoke：通过（[运行记录 #41583208949](https://github.com/Kasign/stock_data_provider/actions/runs/41583208949)）。
 - [x] 板块领涨股代码缺失契约检查通过；当前不生成研究按钮，等待数据层明确提供证券代码字段。
+
+
+## 21. 2026-11-03 研究—分析—归档端到端验收
+
+### 本轮覆盖
+- [x] 从个股研究页直接发起分析任务，验证当前证券代码规范化后进入任务请求。
+- [x] 验证创建任务返回 Task ID / Run ID，状态与阶段事件按任务身份读取。
+- [x] 验证 Run 结果按 Run ID 读取，并与当前任务标的集合匹配。
+- [x] 归档报告保留 Task ID、Run ID、分析 API 地址和标的集合。
+- [x] 从报告创建研究笔记，自动继承股票代码、Task ID、Run ID；保存后回读本地存储断言关联一致。
+- [x] WebUI Checks：352/352 单元测试通过，JS 语法、Compose 配置及 Nginx 构建通过（[运行记录 #41584511577](https://github.com/Kasign/stock_data_provider/actions/runs/41584511577)）。
+- [x] Chromium Browser Smoke：全部步骤通过，包括 7 个响应式视口、Run Flow 交互/异常恢复、个股研究交互/数据质量、报告归档与笔记关联及 Provider 探测（[运行记录 #41584511616](https://github.com/Kasign/stock_data_provider/actions/runs/41584511616)；截图 Artifact [#13207001371](https://github.com/Kasign/stock_data_provider/actions/runs/41584511616/artifacts/13207001371)）。
+
+### 验收边界
+- 使用隔离模拟 API 验证页面工作流与身份关联，不代表真实分析服务部署联调或 Provider 数据质量验收。
+- 报告与研究笔记保存在当前浏览器，不是服务端报告/笔记历史。
