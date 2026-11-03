@@ -596,3 +596,11 @@
 - [x] 增加取消、请求代际变化回归测试。
 - [x] WebUI Checks 成功（[运行记录 #41608192143](https://github.com/Kasign/stock_data_provider/actions/runs/41608192143)）。
 - [x] Chromium Browser Smoke 成功（[运行记录 #41608192251](https://github.com/Kasign/stock_data_provider/actions/runs/41608192251)）。
+
+
+## 2026-11-03 全站代码审查：本地告警草稿校验
+
+- [x] 未知规则范围、未知告警级别和超长股票代码不再被静默规范化。
+- [x] 对已存储的异常记录标记为无效，写入操作拒绝覆盖原始内容。
+- [x] 缺失的历史可选字段仍按兼容默认值读取。
+- [ ] 本次修复的单元测试、WebUI Checks 与 Chromium Browser Smoke 待 CI 验证。
