@@ -240,6 +240,8 @@ try {
   await page.locator("#task-detail").waitFor({ state: "visible" });
   await page.waitForFunction(() => !document.querySelector("#task-result-section")?.hidden, null, { timeout: 15000 });
   await page.locator("#archive-run-report").click();
+  await page.locator('.nav-link[data-view="research"]').click();
+  await page.locator("#research-view").waitFor({ state: "visible" });
   await page.locator('#research-report-list [data-report-action="create-note"]').waitFor({ state: "visible" });
   await page.locator('#research-report-list [data-report-action="create-note"]').click();
   await page.waitForFunction(() =>
