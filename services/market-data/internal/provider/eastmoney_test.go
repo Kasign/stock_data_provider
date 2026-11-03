@@ -74,11 +74,11 @@ func TestEastmoneyQuoteAcceptsNumericStringFields(t *testing.T) {
 
 func TestEastmoneyQuoteReportsRawNumericFieldParseIssues(t *testing.T) {
 	cases := []struct {
-		name       string
-		remove     bool
-		value      any
-		wantCode   string
-		wantType   string
+		name     string
+		remove   bool
+		value    any
+		wantCode string
+		wantType string
 	}{
 		{name: "missing", remove: true, wantCode: "missing", wantType: "missing"},
 		{name: "null", value: nil, wantCode: "null_value", wantType: "null"},

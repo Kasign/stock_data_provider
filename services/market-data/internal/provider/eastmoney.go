@@ -700,9 +700,6 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 	change := parseNumber("f169", "change", false)
 	pct := parseNumber("f170", "change_percent", false)
 	rawVol := parseNumber("f47", "volume", true)
-	if len(parseErrors) > 0 {
-		return nil, fmt.Errorf("Eastmoney quote parse: %w", errors.Join(parseErrors...))
-	}
 	var volume *int64
 	var volumePtr *float64
 	if rawVol != nil {
@@ -713,18 +710,12 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		volume = &shares
 		volumePtr = rawVol
 	}
-	rawAmount, err := getNumber("f48")
-	if err != nil {
-		return nil, err
-	}
+	rawAmount := parseNumber("f48", "amount", false)
 	amount := rawAmount // Eastmoney quote amount is CNY
-	volumeRatio, err := getNumber("f50")
-	if err != nil {
-		return nil, err
-	}
-	turnoverRate, err := getNumber("f168")
-	if err != nil {
-		return nil, err
+	volumeRatio := parseNumber("f50", "volume_ratio", false)
+	turnoverRate := parseNumber("f168", "turnover_rate", false)
+	if len(parseErrors) > 0 {
+		return nil, fmt.Errorf("Eastmoney quote parse: %w", errors.Join(parseErrors...))
 	}
 	name := getString("f58")
 	fetchedAt := time.Now().UTC()

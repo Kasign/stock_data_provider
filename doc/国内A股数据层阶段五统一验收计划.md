@@ -1031,3 +1031,9 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - f169/change、f170/change_percent、f50/volume_ratio、f168/turnover_rate 仍按原有可选字段语义解析；不改变量额单位转换、涨跌交叉校验和 Quote 质量门禁。
 - 字段摘要限制 160 字符并清理控制字符；不记录完整响应。
 - 回归覆盖必需字段 missing、null、object、array、boolean、非法字符串和非有限数值。
+
+
+**本批 CI 复验问题与修正：**
+- 首轮检查发现测试文件结构体字段未按 gofmt 对齐，已修正。
+- 编译检查发现 Quote 解析闭包替换后，amount、volume_ratio、turnover_rate 仍引用旧 getNumber 闭包；已统一改为新的 RawMessage 解析器，并将错误聚合检查放在所有字段解析之后。
+- Go/Python 质量契约作业的失败由上述 Go 编译失败引起，不是样本差异或 Python 逻辑变化。修正后以新 SHA 的完整 CI 结果为准。
