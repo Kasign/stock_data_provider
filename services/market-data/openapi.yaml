@@ -659,10 +659,10 @@ components:
         coverage_population: {type: string, enum: [provider_universe], description: Population represented by coverage_total; omitted when unknown}
         coverage_source: {type: string, description: Source field or contract that proves the population denominator; omitted when unknown}
         coverage_returned: {type: integer, minimum: 0, description: Records returned within the declared denominator}
-        coverage_validated: {type: integer, minimum: 0, description: Returned records passing identity and quality validation}
+        coverage_validated: {type: integer, minimum: 0, description: Records covered by a snapshot that passed aggregate contract validation; not a per-field quality pass}
         coverage_missing: {type: integer, minimum: 0, description: Expected records not returned by the source}
         coverage_excluded: {type: integer, minimum: 0, description: Returned records explicitly excluded by validation}
-        coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: coverage_validated divided by coverage_total; omitted when the denominator is unknown}
+        coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: coverage_validated divided by coverage_total; describes population coverage only, not field-level quality; omitted when the denominator is unknown}
         provider_time: {type: string, format: date-time, nullable: true}
         checked_at: {type: string, format: date-time}
     ProviderProbeRequest:
