@@ -509,7 +509,9 @@ func TestParseTencentTimeTreatsProviderTimestampAsChinaLocalTime(t *testing.T) {
 
 func TestTencentQuoteParseFailureReportsProviderField(t *testing.T) {
 	fields := make([]string, 60)
-	for i := range fields { fields[i] = "0" }
+	for i := range fields {
+		fields[i] = "0"
+	}
 	fields[1], fields[2] = "贵州茅台", "600519"
 	fields[3], fields[4], fields[5], fields[6] = "NaN", "99", "99", "1000"
 	fields[30], fields[31], fields[32], fields[33], fields[34] = "20261021112802", "1", "1.01", "101", "98"

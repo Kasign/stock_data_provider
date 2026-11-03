@@ -286,7 +286,9 @@ func TestNeteaseQuoteParseFailuresReportRawJSONTypes(t *testing.T) {
 			reporter := validation.NewReporter(10)
 			ctx := validation.WithReporter(context.Background(), reporter)
 			_, err := parseNeteaseQuoteNumber(ctx, "current_price", "price", json.RawMessage(tc.raw))
-			if err == nil { t.Fatal("invalid raw quote value must fail") }
+			if err == nil {
+				t.Fatal("invalid raw quote value must fail")
+			}
 			report := reporter.Snapshot()
 			for _, issue := range report.Issues {
 				if issue.Field == "current_price" && issue.ProviderField == "price" && issue.ActualType == tc.wantType && issue.Code == tc.wantCode && issue.Stage == validation.StageParse && issue.Severity == validation.SeverityError {
@@ -314,5 +316,7 @@ func TestNeteaseFetchQuoteParseFailureKeepsReporterWhenProviderReturnsError(t *t
 			found = true
 		}
 	}
-	if !found { t.Fatalf("expected reporter issue despite provider error, got %+v", reporter.Snapshot().Issues) }
+	if !found {
+		t.Fatalf("expected reporter issue despite provider error, got %+v", reporter.Snapshot().Issues)
+	}
 }
