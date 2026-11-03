@@ -286,13 +286,15 @@
 
 ### 本轮修复与验收
 
-- [ ] 切换研究标的时，中止旧标的补充资料请求，并清理旧标的内容。
-- [ ] 财务指标请求被取消后，恢复财务指标按钮，避免因请求代际变化而永久禁用。
-- [ ] 缺少行情 API Key 时，统一显示配置提示，资料/财务/估值/筹码/资金流按钮保持可重试。
-- [ ] 补充资料接口返回 503 时显示 Provider 未启用/未配置错误，不把失败显示为空数据。
-- [ ] 新增 `web/tests/stock-research-browser.mjs` 并接入 Chromium Browser Smoke。
+- [x] 切换研究标的时，中止旧标的补充资料请求，并清理旧标的内容。
+- [x] 财务指标请求被取消后，恢复财务指标按钮，避免因请求代际变化而永久禁用。
+- [x] 缺少行情 API Key 时，统一显示配置提示，资料/财务/估值/筹码/资金流按钮保持可重试。
+- [x] 补充资料接口返回 503 时显示 Provider 未启用/未配置错误，不把失败显示为空数据。
+- [x] 新增 `web/tests/stock-research-browser.mjs` 并接入 Chromium Browser Smoke。
 
 ### 验收边界
 
 - 浏览器使用隔离模拟 API 和延迟响应，仅验证请求取消、状态清理及按钮恢复，不代表真实 Provider 数据质量。
+- WebUI Checks 成功：[运行记录 #41565853021](https://github.com/Kasign/stock_data_provider/actions/runs/41565853021)。
+- Chromium Browser Smoke 成功：[运行记录 #41565852967](https://github.com/Kasign/stock_data_provider/actions/runs/41565852967)，7 个响应式视口、Run Flow 两组专项及个股研究请求生命周期验收全部通过；截图 Artifact [#13199150984](https://github.com/Kasign/stock_data_provider/actions/runs/41565852967/artifacts/13199150984)。
 - 个股研究真实 API 联调、报告期数据完整性、估值/筹码/资金流口径仍需在部署环境核验。
