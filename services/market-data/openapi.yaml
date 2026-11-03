@@ -598,7 +598,12 @@ components:
         error_code: {type: string}
         error_message: {type: string}
         provider_time: {type: string, format: date-time, nullable: true}
-        age_seconds: {type: integer, description: Source timestamp age; does not imply freshness SLA passed}
+        age_seconds: {type: integer, description: Source timestamp age in seconds; populated only when the evaluator has enough evidence}
+        freshness_status: {type: string, enum: [fresh, stale, unknown, not_applicable], description: Independent freshness state; does not change QualityStatus}
+        freshness_reason: {type: string, description: Stable freshness reason code}
+        freshness_domain: {type: string, description: Applied SLA policy domain}
+        freshness_max_age_seconds: {type: integer, minimum: 0, description: Configured maximum source-data age for the policy}
+        market_phase: {type: string, description: Market session phase used by the evaluator}
         compared_dates: {type: array, items: {type: string, format: date}}
         field_count: {type: integer, minimum: 0}
         mismatch_count: {type: integer, minimum: 0, description: Number of fields whose values exceed the comparison tolerance}
@@ -664,6 +669,7 @@ components:
         coverage_excluded: {type: integer, minimum: 0, description: Returned records excluded from validated population coverage, for example records with invalid required price fields}
         coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: coverage_validated divided by coverage_total; describes population coverage only, not field-level quality; omitted when the denominator is unknown}
         provider_time: {type: string, format: date-time, nullable: true}
+        provider_time_type: {type: string, description: Explicit source timestamp semantics; never inferred from fetched_at}
         checked_at: {type: string, format: date-time}
     ProviderProbeRequest:
       type: object

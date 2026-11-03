@@ -98,3 +98,20 @@ Freshness 描述数据相对于其更新预期是否及时，是独立于 `Quali
 2. 市场宽度使用最旧成分时间作为保守聚合证据；还需在诊断明细中展示覆盖数量及最旧/最新时间。
 3. 板块与资金流要从 Provider 原始响应补充可信的精确更新时间，或明确改为基于交易日/报告周期的独立策略；在此之前不能按 5 分钟 SLA 输出 fresh/stale。
 4. 当前策略注册表尚未接入诊断 API，也没有完成 Go 测试、gofmt、Race、Vet 或构建验证。
+
+
+## 9. 接入统一 Provider Probe 诊断
+
+本轮已将 Freshness Evaluator 接入现有 `provider_probe` 的 freshness 检查维度，不增加第二套诊断接口。
+
+- 每个 Provider 检查结果新增 `freshness_status`、`freshness_reason`、`freshness_domain`、`freshness_max_age_seconds`、`market_phase`；原有 `age_seconds` 只在评估证据足够时填写。
+- Provider 行情源端时间语义通过 `provider_time_type` 传递，缺失时保持 unknown，不使用 `fetched_at` 补值。
+- Quote 使用 `QuoteTime` 和 `QuoteTimeSemantics`；Index 使用首个有效指数快照的 `QuoteTime` 和时间语义；Market Breadth 改用 `OldestQuoteTime`，并标记为 `oldest_component_quote_time`。
+- 每次诊断只解析一次市场日历/交易阶段；只有取得质量为 valid 的日历证据时，才向 Evaluator 提供已知交易上下文。
+- Quote 额外解析证券级停复牌状态；缺少有效证券状态时保持 unknown，不假设证券正在正常交易。
+- freshness 检查结果状态映射：fresh → passed，stale → degraded，unknown/not_applicable → skipped。该映射只表达新鲜度检查，不修改 Provider 的 `QualityStatus`。
+- Sector/Fund Flow 仍缺少精确源端时间，检查结果保持 unknown；日 K 暂不套用实时 SLA。
+
+### 本轮验证边界
+
+已增加策略接入测试，覆盖有效交易阶段的市场宽度 freshness 判定，以及缺失交易日历时不得误报 fresh。尚未在真实 Go 执行环境运行测试、gofmt、Race、Vet 或构建；提交前需继续做静态 Review，并在可执行环境完成验证。

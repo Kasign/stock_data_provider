@@ -657,3 +657,67 @@ func TestBuildCrossProviderProbeCheckResultsExposesMismatchValuesAndTolerance(t 
 		t.Fatalf("unexpected close mismatch evidence: %+v", closeField)
 	}
 }
+
+
+type providerProbeFreshnessCalendarFake struct{}
+
+func (providerProbeFreshnessCalendarFake) Name() string { return "probe-freshness-calendar" }
+func (providerProbeFreshnessCalendarFake) FetchTradingCalendar(_ context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error) {
+	fetchedAt := time.Now().UTC()
+	return &model.TradingCalendarSnapshot{
+		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
+		TotalDays: 1, TradingDays: 1,
+		Items: []model.TradingCalendarDay{{Date: startDate, IsTradingDay: true}},
+		Source: "probe-freshness-calendar", SourceVersion: "calendar-v1",
+		FetchedAt: fetchedAt, QualityStatus: model.QualityValid,
+	}, nil
+}
+
+func TestApplyFreshnessProbeResultsUsesPolicyAndMarketSession(t *testing.T) {
+	location := marketLocation()
+	checkedAt := time.Date(2026, 11, 3, 10, 0, 0, 0, location).UTC()
+	sourceTime := checkedAt.Add(-30 * time.Second)
+	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	ds.SetTradingCalendarProviders([]provider.TradingCalendarProvider{providerProbeFreshnessCalendarFake{}})
+	run := &model.ProviderProbeRun{
+		FinishedAt: checkedAt,
+		Items: []model.ProviderProbeItem{{
+			Provider: "breadth-provider", Capability: "market_breadth",
+			ProviderTime: &sourceTime, ProviderTimeType: "oldest_component_quote_time",
+		}},
+		CheckResults: []model.ProviderProbeCheckResult{{
+			Check: "freshness", Provider: "breadth-provider", Capability: "market_breadth",
+			ProviderTime: &sourceTime, CheckedAt: checkedAt,
+		}},
+	}
+	ds.applyFreshnessProbeResults(context.Background(), run)
+	result := run.CheckResults[0]
+	if result.Status != "passed" || result.FreshnessStatus != "fresh" ||
+		result.FreshnessReason != "within_sla" || result.FreshnessDomain != "market_breadth" ||
+		result.MarketPhase != model.MarketSessionContinuousAM || result.AgeSeconds == nil || *result.AgeSeconds != 30 {
+		t.Fatalf("freshness check did not use the domain SLA and market session: %+v", result)
+	}
+}
+
+func TestApplyFreshnessProbeResultsKeepsMissingMarketEvidenceUnknown(t *testing.T) {
+	checkedAt := time.Date(2026, 11, 3, 10, 0, 0, 0, marketLocation()).UTC()
+	sourceTime := checkedAt.Add(-30 * time.Second)
+	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run := &model.ProviderProbeRun{
+		FinishedAt: checkedAt,
+		Items: []model.ProviderProbeItem{{
+			Provider: "index-provider", Capability: "index_quotes",
+			ProviderTime: &sourceTime, ProviderTimeType: "provider_snapshot_time",
+		}},
+		CheckResults: []model.ProviderProbeCheckResult{{
+			Check: "freshness", Provider: "index-provider", Capability: "index_quotes",
+			ProviderTime: &sourceTime, CheckedAt: checkedAt,
+		}},
+	}
+	ds.applyFreshnessProbeResults(context.Background(), run)
+	result := run.CheckResults[0]
+	if result.Status != "skipped" || result.FreshnessStatus != "unknown" ||
+		result.FreshnessReason != "trading_calendar_evidence_missing" {
+		t.Fatalf("missing calendar evidence must not be reported fresh: %+v", result)
+	}
+}
