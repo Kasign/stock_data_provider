@@ -4,6 +4,7 @@ const $=(s)=>document.querySelector(s);
 const QUALITY=["valid","degraded","stale","invalid","unknown"];
 function el(tag,cls="",text=""){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined&&text!==null)n.textContent=String(text);return n;}
 function chinaParts(date=new Date()){const p=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);return Object.fromEntries(p.filter(x=>x.type!=="literal").map(x=>[x.type,x.value]));}
+function isValidTradeDate(value){const date=String(value??"");if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return false;const timestamp=Date.parse(date+"T00:00:00Z");return Number.isFinite(timestamp)&&new Date(timestamp).toISOString().slice(0,10)===date;}
 function dateKey(y,m,d){return String(y).padStart(4,"0")+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0");}
 function monthRange(offset=0){const p=chinaParts(),d=new Date(Date.UTC(Number(p.year),Number(p.month)-1+offset,1)),y=d.getUTCFullYear(),m=d.getUTCMonth()+1;return {start:dateKey(y,m,1),end:dateKey(y,m,new Date(Date.UTC(y,m,0)).getUTCDate())};}
 function badge(id,label,status="unknown"){const n=$("#"+id);if(!n)return;const q=QUALITY.includes(String(status).toLowerCase())?String(status).toLowerCase():"unknown";n.className="quality-pill quality-"+q;n.textContent=label||qualityLabel(q);}
@@ -246,7 +247,7 @@ function renderCalendar(data){
  const today=chinaParts();$("#dragon-tiger-date").value=dateKey(today.year,today.month,today.day);setMonth(0);
  $("#load-dragon-tiger").addEventListener("click",()=>void loadDragon());$("#dragon-tiger-next").addEventListener("click",()=>{if(dragonHasMore)void loadDragon({append:true});});
  $("#dragon-tiger-date").addEventListener("change",invalidateDragonFilter);
-  window.addEventListener("market-date-selected",event=>{const date=String(event.detail?.date||"");if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return;$("#dragon-tiger-date").value=date;invalidateDragonFilter();void loadDragon();});
+  window.addEventListener("market-date-selected",event=>{const date=String(event.detail?.date||"");if(!isValidTradeDate(date))return;$("#dragon-tiger-date").value=date;invalidateDragonFilter();void loadDragon();});
  $("#dragon-tiger-date").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();void loadDragon();}});
  $("#load-trading-calendar").addEventListener("click",()=>void loadCalendar());
  $("#calendar-start-date").addEventListener("change",invalidateCalendarFilter);

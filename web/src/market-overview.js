@@ -19,6 +19,12 @@ export function summarizeMarketOverviewRefresh(outcomes, configured = true) {
  return parts.join("；");
 }
 function el(tag, cls = "", text = "") { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined&&text!==null)n.textContent=String(text); return n; }
+function isValidTradeDate(value) {
+ const date=String(value??"");
+ if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return false;
+ const timestamp=Date.parse(date+"T00:00:00Z");
+ return Number.isFinite(timestamp)&&new Date(timestamp).toISOString().slice(0,10)===date;
+}
 function count(v) { const n=finiteNumberOrNull(v); return n!==null&&n>=0?Math.trunc(n).toLocaleString("zh-CN"):"—"; }
 function signed(v, fmt) { const n=finiteNumberOrNull(v); if(n===null)return "—";return (n>0?"+":"")+fmt(n); }
 function dir(v) { const n=finiteNumberOrNull(v); if(n===null)return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat"; }
@@ -321,7 +327,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
      row.append(el("td","",item.trade_date||"未报告"));
      [count(item.advancing_count),count(item.declining_count),count(item.unchanged_count),count(item.limit_up_count),count(item.limit_down_count),qualityLabel(item.quality_status)].forEach(value=>row.append(el("td","",value)));
      const actions=el("td","market-date-drilldown-actions"),tradeDate=String(item.trade_date||"");
-     if(/^\\d{4}-\\d{2}-\\d{2}$/.test(tradeDate)){
+     if(isValidTradeDate(tradeDate)){
       [["pool","up","涨停池"],["pool","down","跌停池"],["pool","broken","炸板池"],["dragon-tiger","","龙虎榜"]].forEach(([target,type,label])=>{const action=el("button","button button-secondary market-stock-entry-action",label);action.type="button";action.dataset.marketDate=tradeDate;action.dataset.marketDateTarget=target;if(type)action.dataset.marketDateType=type;actions.append(action);});
      }else actions.textContent="日期未报告，无法联动";
      row.append(actions);body.append(row);
@@ -339,7 +345,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  $("#load-market-sentiment-history")?.addEventListener("click",()=>{void loadSentimentHistory();});
  $("#market-sentiment-history-body")?.addEventListener("click",event=>{
   const button=event.target.closest("button[data-market-date-target]");if(!button)return;
-  const date=String(button.dataset.marketDate||"");if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return;
+  const date=String(button.dataset.marketDate||"");if(!isValidTradeDate(date))return;
   if(button.dataset.marketDateTarget==="pool"){
    poolDate=date;const dateInput=$("#market-pool-date");if(dateInput)dateInput.value=date;
    poolType=["up","down","broken"].includes(button.dataset.marketDateType)?button.dataset.marketDateType:"up";
