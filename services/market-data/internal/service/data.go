@@ -2763,7 +2763,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 	if basis != model.AdjustmentNone && basis != model.AdjustmentForward && basis != model.AdjustmentBackward {
 		return nil, false, nil, fmt.Errorf("unsupported adjustment basis %q", basis)
 	}
-	key := fmt.Sprintf("md:v4:bars:%s:%s:%s:%s:%d", symbol, start, end, basis, limit)
+	key := fmt.Sprintf("md:v5:bars:%s:%s:%s:%s:%d", symbol, start, end, basis, limit)
 	if data, ok, e := s.cache.Get(ctx, key); e == nil && ok {
 		var v struct {
 			Bars     []model.DailyBar `json:"bars"`
@@ -2796,11 +2796,15 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			if !contractMismatch {
 				validated, warnings := normalize.ValidateAndSortBars(symbol, candidates, start, end, limit)
 				if len(validated) > 0 {
-					if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
+					adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(validated, basis, end)
+					if adjustmentErr != nil {
+						contractMismatch = true
+					} else if dailyBarsCacheNeedsPostCloseRefresh(validated, time.Now()) {
 						s.logger.Info("daily-bar cache has today's partial candle after close; refreshing provider", "symbol", symbol, "trade_date", validated[len(validated)-1].TradeDate)
 					} else if coverageOK, coverageWarnings := s.dailyBarCoverageSufficient(ctx, start, end, limit, len(validated)); coverageOK {
 						mergedWarnings := append(append([]string(nil), v.Warnings...), warnings...)
 						mergedWarnings = append(mergedWarnings, coverageWarnings...)
+						mergedWarnings = append(mergedWarnings, adjustmentWarnings...)
 						return validated, true, dedupeStrings(mergedWarnings), nil
 					} else {
 						s.logger.Warn("daily-bar cache coverage is insufficient; refreshing providers", "symbol", symbol, "requested", limit, "returned", len(validated))
@@ -2937,6 +2941,13 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			errs = append(errs, p.Name()+" response failed bar validation")
 			continue
 		}
+		adjustmentWarnings, adjustmentErr := applyDailyBarAdjustmentMetadataQuality(bars, basis, end)
+		if adjustmentErr != nil {
+			s.breaker.Failure(breakerKey)
+			errs = append(errs, p.Name()+": "+adjustmentErr.Error())
+			continue
+		}
+		warnings = append(warnings, adjustmentWarnings...)
 		normalizedAt := time.Now().UTC()
 		for index := range bars {
 			bars[index].NormalizedAt = normalizedAt
@@ -3708,4 +3719,48 @@ func (s *DataService) DailyBarsAsOf(ctx context.Context, rawSymbol, start, end s
 		}
 	}
 	return bars, dedupeStrings(warnings), nil
+}
+
+func applyDailyBarAdjustmentMetadataQuality(bars []model.DailyBar, basis model.AdjustmentBasis, requestedEnd string) ([]string, error) {
+	if basis == model.AdjustmentNone || len(bars) == 0 {
+		return nil, nil
+	}
+	method := strings.TrimSpace(bars[0].AdjustmentMethod)
+	referenceDate := strings.TrimSpace(bars[0].AdjustmentRefDate)
+	for _, bar := range bars {
+		if strings.TrimSpace(bar.AdjustmentMethod) != method || strings.TrimSpace(bar.AdjustmentRefDate) != referenceDate {
+			return nil, errors.New("provider returned daily bars with mixed adjustment method/reference date")
+		}
+		if referenceDate == "" {
+			continue
+		}
+		parsed, err := time.Parse("2006-01-02", referenceDate)
+		if err != nil || parsed.Format("2006-01-02") != referenceDate {
+			return nil, fmt.Errorf("provider returned invalid adjustment reference date %q", referenceDate)
+		}
+		if basis == model.AdjustmentForward {
+			if referenceDate < bar.TradeDate {
+				return nil, fmt.Errorf("forward-adjustment reference date %s precedes bar date %s", referenceDate, bar.TradeDate)
+			}
+			if requestedEnd != "" && referenceDate > requestedEnd {
+				return nil, fmt.Errorf("forward-adjustment reference date %s exceeds requested end date %s", referenceDate, requestedEnd)
+			}
+		} else if basis == model.AdjustmentBackward && referenceDate > bar.TradeDate {
+			return nil, fmt.Errorf("backward-adjustment reference date %s follows bar date %s", referenceDate, bar.TradeDate)
+		}
+	}
+	var warnings []string
+	for index := range bars {
+		if method == "" {
+			degradeQualityStatus(&bars[index].QualityStatus)
+			appendReasonOnce(&bars[index].QualityReasons, "daily_bar_adjustment_method_unreported")
+			warnings = append(warnings, "daily_bar_adjustment_method_unreported")
+		}
+		if basis == model.AdjustmentForward && referenceDate == "" {
+			degradeQualityStatus(&bars[index].QualityStatus)
+			appendReasonOnce(&bars[index].QualityReasons, "daily_bar_adjustment_reference_date_unverified")
+			warnings = append(warnings, "daily_bar_adjustment_reference_date_unverified")
+		}
+	}
+	return dedupeStrings(warnings), nil
 }

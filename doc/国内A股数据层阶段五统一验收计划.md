@@ -1164,3 +1164,5 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - PIT/MariaDB 复权序列一致性进一步收紧：调整序列按 Provider、SourceVersion、AdjustmentMethod、AdjustmentRefDate、NormalizationVer 分组；缺少方法或参考日、参考日格式错误、参考日方向与前/后复权语义冲突的记录不参与同一序列重建，避免同源不同复权算法被拼接。新增方法混合和缺失方法测试。
 
 - MariaDB 复权序列筛选修正：前复权仍要求明确合法参考日期；后复权在方法明确时允许参考日期为空，以兼容累计复权因子算法。新增累计因子 HFQ fallback 回归测试；后复权若显式提供参考日期仍校验格式和方向。
+
+- Provider 复权元数据质量门禁：调整方法缺失时降级；前复权参考日缺失时降级；混合方法/参考日、非法参考日或参考日方向与请求结束边界错误时拒绝整组数据。Tencent 记录实际使用的 day/qfqday/hfqday 响应键，Eastmoney 记录请求 fqt 参数；不将请求参数伪装成源端回显。

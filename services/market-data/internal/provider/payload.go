@@ -73,6 +73,22 @@ func normalizeProviderDailyBarsWithReport(ctx context.Context, symbol, startDate
 	normalized, warnings, report := normalize.ValidateAndSortBarsWithReport(symbol, bars, startDate, endDate, limit)
 	hasSourceContractIssue := rejectedRows > 0
 	seenDates := make(map[string]int, len(bars))
+	for index := range normalized {
+		bar := &normalized[index]
+		if bar.AdjustmentBasis == model.AdjustmentNone {
+			continue
+		}
+		if strings.TrimSpace(bar.AdjustmentMethod) == "" {
+			degradeProviderDailyBarQuality(bar, "daily_bar_adjustment_method_unreported")
+			warnings = appendProviderWarningOnce(warnings, "daily_bar_adjustment_method_unreported")
+			report.Add(validation.FieldIssue{Stage: validation.StageValidate, Field: "adjustment_method", ProviderField: "adjustment_method", Code: "adjustment_method_unreported", Expected: "adjusted daily bars identify their adjustment method", ActualType: "missing", Severity: validation.SeverityWarning, Message: "adjusted daily bar did not report its adjustment method", Symbol: bar.Symbol, TradeDate: bar.TradeDate})
+		}
+		if bar.AdjustmentBasis == model.AdjustmentForward && strings.TrimSpace(bar.AdjustmentRefDate) == "" {
+			degradeProviderDailyBarQuality(bar, "daily_bar_adjustment_reference_date_unverified")
+			warnings = appendProviderWarningOnce(warnings, "daily_bar_adjustment_reference_date_unverified")
+			report.Add(validation.FieldIssue{Stage: validation.StageValidate, Field: "adjustment_reference_date", ProviderField: "adjustment_reference_date", Code: "adjustment_reference_date_unverified", Expected: "forward-adjusted daily bars identify their reference date", ActualType: "missing", Severity: validation.SeverityWarning, Message: "forward-adjusted daily bar did not report a verifiable reference date", Symbol: bar.Symbol, TradeDate: bar.TradeDate})
+		}
+	}
 	for rowIndex, bar := range bars {
 		if _, err := time.Parse("2006-01-02", bar.TradeDate); err != nil {
 			hasSourceContractIssue = true
@@ -240,4 +256,28 @@ func providerJSONPreview(raw json.RawMessage) string {
 		}
 	}
 	return string(value)
+}
+
+func degradeProviderDailyBarQuality(bar *model.DailyBar, reason string) {
+	if bar == nil {
+		return
+	}
+	if bar.QualityStatus == "" || bar.QualityStatus == model.QualityUnknown || bar.QualityStatus == model.QualityValid {
+		bar.QualityStatus = model.QualityDegraded
+	}
+	for _, existing := range bar.QualityReasons {
+		if existing == reason {
+			return
+		}
+	}
+	bar.QualityReasons = append(bar.QualityReasons, reason)
+}
+
+func appendProviderWarningOnce(warnings []string, warning string) []string {
+	for _, existing := range warnings {
+		if existing == warning {
+			return warnings
+		}
+	}
+	return append(warnings, warning)
 }
