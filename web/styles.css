@@ -1798,6 +1798,27 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-overview-widget-heading>div {
   min-width:0
 }
+.market-sector-limit-control {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0 0 10px;
+  color:var(--text-muted);
+  font-size:12px
+}
+.market-sector-limit-control select {
+  min-height:30px;
+  padding:4px 28px 4px 9px;
+  border:1px solid var(--border);
+  border-radius:7px;
+  color:var(--text);
+  background:var(--panel-raised);
+  font:inherit
+}
+.market-sector-limit-control select:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:2px
+}
 .market-overview-tabs {
   display:flex;
   flex-wrap:wrap;

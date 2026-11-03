@@ -2,10 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [overview, html, apiSource] = await Promise.all([
+const [overview, html, apiSource, styles] = await Promise.all([
   readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
   readFile(new URL("../index.html", import.meta.url), "utf8"),
-  readFile(new URL("../src/api.js", import.meta.url), "utf8")
+  readFile(new URL("../src/api.js", import.meta.url), "utf8"),
+  readFile(new URL("../styles.css", import.meta.url), "utf8")
 ]);
 
 test("板块排行接入服务端成交额、五日涨幅和排序方向", () => {
@@ -27,6 +28,8 @@ test("板块排行接入服务端成交额、五日涨幅和排序方向", () =>
   assert.match(overview, /limit:sectorLimit/);
   assert.match(overview, /请求上限/);
   assert.match(overview, /实际返回/);
+  assert.match(styles, /\.market-sector-limit-control/);
+  assert.match(styles, /\.market-sector-limit-control select:focus-visible/);
 });
 
 test("板块资金净流入仍明确标记为未接入，不以成交额代替", () => {
