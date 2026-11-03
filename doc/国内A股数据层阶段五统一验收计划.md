@@ -980,3 +980,12 @@ CI 复核发现 `TestTencentQuoteRejectsInvalidPriceContract` 对两类拒绝阶
 1. 完成 Yahoo Quote 原始 JSON 字段解析诊断，区分 missing、null、number、string、object、array、boolean，并对非有限/非法数值生成结构化 Parse Issue。
 2. 对照 Provider 能力注册表检查 Quote Provider 的 Reporter 传递、重复校验和重复计数。
 3. 完成 Quote Provider 全覆盖后，再进入 DailyBar 边界质量审计及 Fundamentals / Valuations 字段质量审计。
+
+
+## Yahoo Quote 原始字段解析诊断（2026-11-03）
+
+Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上游字段类型错误会导致整段 JSON Decode 失败，无法定位具体字段。本批将 `regularMarketTime`、`regularMarketPrice`、`regularMarketDayHigh`、`regularMarketDayLow`、`regularMarketVolume`、`chartPreviousClose` 和分时 `open` 改为 RawMessage 逐字段解析，并写入请求级 Reporter。
+
+诊断区分 missing、null_value、type_mismatch、invalid_number、invalid_integer、越界及身份不匹配；Quote 必需字段仍硬失败。成交额继续保持 null/unknown/degraded，不推断、不补零；不改变 Yahoo Provider 默认关闭策略或数据路由。
+
+新增回归覆盖 meta 字段 string/null/object 类型错误，以及分时 open 类型错误，验证字段路径、错误码、严重级别和行索引。最终以最新 SHA 的 Go test/race/vet、质量契约及 Docker 构建通过为验收依据。

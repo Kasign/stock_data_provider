@@ -159,6 +159,30 @@ func TestYahooFinanceFetchQuoteParsesIntradayChart(t *testing.T) {
 	}
 }
 
+
+func TestYahooFinanceQuoteParseDiagnosticsIdentifyRawMetaFields(t *testing.T) {
+	cases:=[]struct{name,from,to,field,providerField,code string}{
+		{name:"price string",from:`"regularMarketPrice":42.35`,to:`"regularMarketPrice":"42.35"`,field:"current_price",providerField:"meta.regularMarketPrice",code:"type_mismatch"},
+		{name:"high null",from:`"regularMarketDayHigh":42.38`,to:`"regularMarketDayHigh":null`,field:"high",providerField:"meta.regularMarketDayHigh",code:"null_value"},
+		{name:"volume object",from:`"regularMarketVolume":56829700`,to:`"regularMarketVolume":{"value":56829700}`,field:"volume",providerField:"meta.regularMarketVolume",code:"type_mismatch"},
+	}
+	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){
+		payload,_:=yahooQuoteFixture(t,"600036.SS",true);payload=[]byte(strings.Replace(string(payload),tc.from,tc.to,1))
+		server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,_ *http.Request){_,_=w.Write(payload)}));defer server.Close()
+		reporter:=validation.NewReporter(20);ctx:=validation.WithReporter(context.Background(),reporter);provider:=NewYahooFinance(2*time.Second,server.URL)
+		if _,err:=provider.FetchQuote(ctx,"600036.SH");err==nil{t.Fatal("invalid Yahoo Quote field must be rejected")}
+		for _,issue:=range reporter.Snapshot().Issues {if issue.Stage==validation.StageParse&&issue.Field==tc.field&&issue.ProviderField==tc.providerField&&issue.Code==tc.code&&issue.Severity==validation.SeverityError&&issue.RowIndex==nil{return}}
+		t.Fatalf("expected response-level parse issue for %s, got %+v",tc.field,reporter.Snapshot().Issues)
+	})}
+}
+func TestYahooFinanceQuoteParseDiagnosticsIdentifyIntradayOpen(t *testing.T) {
+	payload,_:=yahooQuoteFixture(t,"600036.SS",true);payload=[]byte(strings.Replace(string(payload),`"open":[41.7,42.1]`,`"open":["bad",42.1]`,1))
+	server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,_ *http.Request){_,_=w.Write(payload)}));defer server.Close()
+	reporter:=validation.NewReporter(20);ctx:=validation.WithReporter(context.Background(),reporter);provider:=NewYahooFinance(2*time.Second,server.URL)
+	if _,err:=provider.FetchQuote(ctx,"600036.SH");err!=nil{t.Fatal(err)}
+	for _,issue:=range reporter.Snapshot().Issues {if issue.Stage==validation.StageParse&&issue.Field=="open"&&issue.ProviderField=="indicators.quote[0].open"&&issue.Code=="type_mismatch"&&issue.Severity==validation.SeverityError&&issue.RowIndex!=nil&&*issue.RowIndex==0{return}}
+	t.Fatalf("expected row-level Yahoo Quote open parse issue, got %+v",reporter.Snapshot().Issues)
+}
 func TestYahooFinanceFetchQuoteRejectsWrongTickerAndMissingIntradayOpen(t *testing.T) {
 	for name, fixture := range map[string]struct {
 		symbol string

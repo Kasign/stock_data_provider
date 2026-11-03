@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
@@ -93,97 +94,92 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 		return nil, fmt.Errorf("read Yahoo Finance quote payload: %w", err)
 	}
 
+	type quoteMeta struct {
+		Symbol string `json:"symbol"`
+		LongName string `json:"longName"`
+		ShortName string `json:"shortName"`
+		RegularMarketTime json.RawMessage `json:"regularMarketTime"`
+		RegularMarketPrice json.RawMessage `json:"regularMarketPrice"`
+		RegularMarketDayHigh json.RawMessage `json:"regularMarketDayHigh"`
+		RegularMarketDayLow json.RawMessage `json:"regularMarketDayLow"`
+		RegularMarketVolume json.RawMessage `json:"regularMarketVolume"`
+		ChartPreviousClose json.RawMessage `json:"chartPreviousClose"`
+	}
 	var payload struct {
 		Chart struct {
 			Result []struct {
-				Meta struct {
-					Symbol               string  `json:"symbol"`
-					LongName             string  `json:"longName"`
-					ShortName            string  `json:"shortName"`
-					RegularMarketTime    int64   `json:"regularMarketTime"`
-					RegularMarketPrice   float64 `json:"regularMarketPrice"`
-					RegularMarketDayHigh float64 `json:"regularMarketDayHigh"`
-					RegularMarketDayLow  float64 `json:"regularMarketDayLow"`
-					RegularMarketVolume  *int64  `json:"regularMarketVolume"`
-					ChartPreviousClose   float64 `json:"chartPreviousClose"`
-				} `json:"meta"`
-				Timestamp  []int64 `json:"timestamp"`
-				Indicators struct {
-					Quote []struct {
-						Open []*float64 `json:"open"`
-					} `json:"quote"`
-				} `json:"indicators"`
+				Meta quoteMeta `json:"meta"`
+				Timestamp []int64 `json:"timestamp"`
+				Indicators struct { Quote []struct { Open []json.RawMessage `json:"open"` } `json:"quote"` } `json:"indicators"`
 			} `json:"result"`
-			Error *struct {
-				Code        string `json:"code"`
-				Description string `json:"description"`
-			} `json:"error"`
+			Error *struct { Code string `json:"code"`; Description string `json:"description"` } `json:"error"`
 		} `json:"chart"`
 	}
 	if err := decodeSingleJSON(body, &payload); err != nil {
+		addYahooQuoteParseIssue(ctx, -1, "chart_response", "chart", "decode_error", "valid Yahoo Finance chart JSON", "invalid", "", "Yahoo Finance Quote JSON 解码失败")
 		return nil, fmt.Errorf("decode Yahoo Finance quote JSON: %w", err)
 	}
-	if payload.Chart.Error != nil {
-		return nil, fmt.Errorf("Yahoo Finance quote provider error %s: %s", payload.Chart.Error.Code, payload.Chart.Error.Description)
-	}
+	if payload.Chart.Error != nil { return nil, fmt.Errorf("Yahoo Finance quote provider error %s: %s", payload.Chart.Error.Code, payload.Chart.Error.Description) }
 	if len(payload.Chart.Result) != 1 {
+		addYahooQuoteParseIssue(ctx, -1, "result", "chart.result", "invalid_result_count", "exactly one quote result", "array", strconv.Itoa(len(payload.Chart.Result)), "Yahoo Finance Quote 结果数量不符合契约")
 		return nil, errors.New("Yahoo Finance returned no single quote result")
 	}
 	result := payload.Chart.Result[0]
 	if reported := strings.TrimSpace(result.Meta.Symbol); reported != "" && !strings.EqualFold(reported, ticker) {
+		addYahooQuoteParseIssue(ctx, -1, "symbol", "meta.symbol", "identity_mismatch", ticker, "string", reported, "Yahoo Finance Quote 返回证券代码与请求不一致")
 		return nil, fmt.Errorf("Yahoo Finance quote ticker mismatch: requested %s got %q", ticker, reported)
 	}
 	meta := result.Meta
-	if meta.RegularMarketTime <= 0 || !finiteNumber(meta.RegularMarketPrice) || meta.RegularMarketPrice <= 0 ||
-		!finiteNumber(meta.RegularMarketDayHigh) || meta.RegularMarketDayHigh <= 0 ||
-		!finiteNumber(meta.RegularMarketDayLow) || meta.RegularMarketDayLow <= 0 ||
-		!finiteNumber(meta.ChartPreviousClose) || meta.ChartPreviousClose <= 0 {
-		return nil, errors.New("Yahoo Finance quote is missing required finite price metadata")
+	marketTime, timeOK := parseYahooQuoteInt64Field(ctx, "quote_time", "meta.regularMarketTime", meta.RegularMarketTime, "positive Unix timestamp")
+	price, priceOK := parseYahooQuoteFloatField(ctx, "current_price", "meta.regularMarketPrice", meta.RegularMarketPrice, "finite positive price")
+	high, highOK := parseYahooQuoteFloatField(ctx, "high", "meta.regularMarketDayHigh", meta.RegularMarketDayHigh, "finite positive price")
+	low, lowOK := parseYahooQuoteFloatField(ctx, "low", "meta.regularMarketDayLow", meta.RegularMarketDayLow, "finite positive price")
+	prevClose, prevCloseOK := parseYahooQuoteFloatField(ctx, "prev_close", "meta.chartPreviousClose", meta.ChartPreviousClose, "finite positive price")
+	marketVolume, volumeOK := parseYahooQuoteInt64Field(ctx, "volume", "meta.regularMarketVolume", meta.RegularMarketVolume, "non-negative integer shares")
+	if !timeOK || !priceOK || !highOK || !lowOK || !prevCloseOK || !volumeOK { return nil, errors.New("Yahoo Finance quote has missing or invalid required metadata") }
+	if marketTime <= 0 || price <= 0 || high <= 0 || low <= 0 || prevClose <= 0 || marketVolume < 0 {
+		addYahooQuoteParseIssue(ctx, -1, "meta", "meta", "out_of_range", "positive prices/time and non-negative volume", "number", "", "Yahoo Finance Quote 必需字段超出有效范围")
+		return nil, errors.New("Yahoo Finance quote has out-of-range required metadata")
 	}
-	if meta.RegularMarketVolume == nil || *meta.RegularMarketVolume < 0 {
-		return nil, errors.New("Yahoo Finance quote has missing or invalid regular-market volume")
-	}
-	if meta.RegularMarketDayLow > meta.RegularMarketDayHigh {
+	if low > high {
+		addYahooQuoteParseIssue(ctx, -1, "low", "meta.regularMarketDayLow", "invalid_range", "low <= high", "number", fmt.Sprintf("%g", low), "Yahoo Finance Quote 最低价高于最高价")
 		return nil, errors.New("Yahoo Finance quote day low is greater than day high")
 	}
 
 	loc := yahooChinaLocation()
-	quoteTime := time.Unix(meta.RegularMarketTime, 0).UTC()
+	quoteTime := time.Unix(marketTime, 0).UTC()
 	quoteDay := quoteTime.In(loc).Format("2006-01-02")
 	openIndex := -1
 	var openPrice float64
 	if len(result.Indicators.Quote) > 0 {
 		openValues := result.Indicators.Quote[0].Open
 		for i, timestamp := range result.Timestamp {
-			if i >= len(openValues) || openValues[i] == nil {
+			if time.Unix(timestamp, 0).In(loc).Format("2006-01-02") != quoteDay { continue }
+			if i >= len(openValues) {
+				addYahooQuoteParseIssue(ctx, i, "open", "indicators.quote[0].open", "missing_field", "finite positive intraday open", "missing", "", "Yahoo Finance Quote 分时开盘价缺失")
 				continue
 			}
-			if time.Unix(timestamp, 0).In(loc).Format("2006-01-02") != quoteDay {
+			value, valid := parseYahooQuoteFloatFieldAtRow(ctx, i, "open", "indicators.quote[0].open", openValues[i], "finite positive intraday open")
+			if !valid || value <= 0 {
+				if valid { addYahooQuoteParseIssue(ctx, i, "open", "indicators.quote[0].open", "out_of_range", "positive price", "number", fmt.Sprintf("%g", value), "Yahoo Finance Quote 分时开盘价必须大于零") }
 				continue
 			}
-			value := *openValues[i]
-			if !finiteNumber(value) || value <= 0 {
-				continue
-			}
-			if openIndex < 0 || timestamp < result.Timestamp[openIndex] {
-				openIndex = i
-				openPrice = value
-			}
+			if openIndex < 0 || timestamp < result.Timestamp[openIndex] { openIndex = i; openPrice = value }
 		}
 	}
 	if openIndex < 0 {
 		return nil, fmt.Errorf("Yahoo Finance quote has no valid intraday open for provider quote date %s", quoteDay)
 	}
-	change := meta.RegularMarketPrice - meta.ChartPreviousClose
-	changePercent := change / meta.ChartPreviousClose * 100
+	change := price - prevClose
+	changePercent := change / prevClose * 100
 	if !finiteNumber(changePercent) || math.Abs(changePercent) > 1000 {
 		return nil, errors.New("Yahoo Finance quote percent change is outside a plausible numeric range")
 	}
 
 	var volume *int64
 	var rawVolume *float64
-	if meta.RegularMarketVolume != nil && *meta.RegularMarketVolume >= 0 {
-		v := *meta.RegularMarketVolume
+	if marketVolume >= 0 {
+		v := marketVolume
 		volume = &v
 		raw := float64(v)
 		rawVolume = &raw
@@ -195,9 +191,9 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 	now := time.Now().UTC()
 	q := &model.Quote{
 		Symbol: symbol, Name: name,
-		CurrentPrice: &meta.RegularMarketPrice, Change: &change, ChangePercent: &changePercent,
-		Open: &openPrice, High: &meta.RegularMarketDayHigh, Low: &meta.RegularMarketDayLow,
-		PrevClose: &meta.ChartPreviousClose, Volume: volume, Amount: nil,
+		CurrentPrice: &price, Change: &change, ChangePercent: &changePercent,
+		Open: &openPrice, High: &high, Low: &low,
+		PrevClose: &prevClose, Volume: volume, Amount: nil,
 		QuoteTime: &quoteTime, QuoteTimeSemantics: "provider_snapshot_time",
 		FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: yahooFinanceQuoteVersion,
 		RawVolume: rawVolume, RawVolumeUnit: optionalVolumeUnit(volume, "shares"),
@@ -468,6 +464,31 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		bars = append(bars, bar)
 	}
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, bars, rejectedRows)
+}
+
+
+func parseYahooQuoteFloatField(ctx context.Context, field, providerField string, raw json.RawMessage, expected string) (float64, bool) {
+	return parseYahooQuoteFloatFieldAtRow(ctx, -1, field, providerField, raw, expected)
+}
+func parseYahooQuoteFloatFieldAtRow(ctx context.Context, rowIndex int, field, providerField string, raw json.RawMessage, expected string) (float64, bool) {
+	valueType := providerJSONValueType(raw)
+	if valueType == "missing" || valueType == "null" { code := "missing_field"; if valueType == "null" { code = "null_value" }; addYahooQuoteParseIssue(ctx,rowIndex,field,providerField,code,expected,valueType,"","Yahoo Finance Quote 数值字段缺失或为空"); return 0,false }
+	if valueType != "number" { addYahooQuoteParseIssue(ctx,rowIndex,field,providerField,"type_mismatch",expected,valueType,providerJSONPreview(raw),"Yahoo Finance Quote 字段类型不符合数值契约"); return 0,false }
+	var value float64
+	if err:=json.Unmarshal(raw,&value); err!=nil || !finiteNumber(value) { addYahooQuoteParseIssue(ctx,rowIndex,field,providerField,"invalid_number",expected,valueType,providerJSONPreview(raw),"Yahoo Finance Quote 字段不是有限数值"); return 0,false }
+	return value,true
+}
+func parseYahooQuoteInt64Field(ctx context.Context, field, providerField string, raw json.RawMessage, expected string) (int64, bool) {
+	valueType:=providerJSONValueType(raw)
+	if valueType=="missing" || valueType=="null" { code:="missing_field"; if valueType=="null" { code="null_value" }; addYahooQuoteParseIssue(ctx,-1,field,providerField,code,expected,valueType,"","Yahoo Finance Quote 整数字段缺失或为空"); return 0,false }
+	if valueType!="number" { addYahooQuoteParseIssue(ctx,-1,field,providerField,"type_mismatch",expected,valueType,providerJSONPreview(raw),"Yahoo Finance Quote 字段类型不符合整数契约"); return 0,false }
+	value,err:=strconv.ParseInt(string(bytes.TrimSpace(raw)),10,64); if err!=nil { addYahooQuoteParseIssue(ctx,-1,field,providerField,"invalid_integer",expected,valueType,providerJSONPreview(raw),"Yahoo Finance Quote 字段不是有效 64 位整数"); return 0,false }; return value,true
+}
+func addYahooQuoteParseIssue(ctx context.Context,rowIndex int,field,providerField,code,expected,actualType,preview,message string) {
+	preview=strings.ToValidUTF8(preview,"�"); preview=strings.Map(func(r rune)rune{if r<0x20||r==0x7f{return ' '};return r},preview)
+	if utf8.RuneCountInString(preview)>160 { preview=string([]rune(preview)[:160]) }
+	var row *int; if rowIndex>=0 { value:=rowIndex; row=&value }
+	report:=validation.NewReport(validation.DefaultMaxIssues); report.Add(validation.FieldIssue{Stage:validation.StageParse,Field:field,ProviderField:providerField,Code:code,Expected:expected,ActualType:actualType,ActualPreview:preview,Severity:validation.SeverityError,Message:message,RowIndex:row}); validation.AddContextReport(ctx,report)
 }
 
 func rawYahooArrayValue(values []json.RawMessage, index int) json.RawMessage {
