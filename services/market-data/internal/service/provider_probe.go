@@ -913,7 +913,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	run.CheckResults = buildProviderProbeCheckResults(run.Items, requestedChecks)
 	if selectedChecks["freshness"] {
 		s.applyFreshnessProbeResults(ctx, run)
-}
+	}
 	if selectedChecks["cross_provider"] {
 		if selected["daily_bars"] {
 			run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.FinishedAt)...)

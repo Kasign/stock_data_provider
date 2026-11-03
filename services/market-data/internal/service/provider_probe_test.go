@@ -658,7 +658,6 @@ func TestBuildCrossProviderProbeCheckResultsExposesMismatchValuesAndTolerance(t 
 	}
 }
 
-
 type providerProbeFreshnessCalendarFake struct{}
 
 func (providerProbeFreshnessCalendarFake) Name() string { return "probe-freshness-calendar" }
