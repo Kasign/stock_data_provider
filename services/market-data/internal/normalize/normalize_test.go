@@ -196,6 +196,108 @@ func TestValidateAndSortBarsRejectsNonFiniteChangePercentAndDegradesMissingAmoun
 	}
 }
 
+func TestValidateAndSortBarsRejectsVolumeAmountAndContractBoundaries(t *testing.T) {
+	tests := []struct {
+		name        string
+		mutate      func(*model.DailyBar)
+		wantWarning string
+	}{
+		{
+			name: "missing volume",
+			mutate: func(bar *model.DailyBar) { bar.Volume = nil },
+			wantWarning: "bar_with_unknown_volume_dropped",
+		},
+		{
+			name: "negative volume",
+			mutate: func(bar *model.DailyBar) { bar.Volume = ptrInt64(-1) },
+			wantWarning: "bar_with_unknown_volume_dropped",
+		},
+		{
+			name: "non share volume unit",
+			mutate: func(bar *model.DailyBar) { bar.VolumeUnit = "hands" },
+			wantWarning: "bar_with_nonstandard_volume_unit_dropped",
+		},
+		{
+			name: "negative amount",
+			mutate: func(bar *model.DailyBar) { bar.Amount = ptrFloat(-1) },
+			wantWarning: "bar_with_invalid_amount_dropped",
+		},
+		{
+			name: "zero amount with nonzero volume",
+			mutate: func(bar *model.DailyBar) { bar.Amount = ptrFloat(0) },
+			wantWarning: "bar_amount_volume_zero_mismatch_dropped",
+		},
+		{
+			name: "nonzero amount with zero volume",
+			mutate: func(bar *model.DailyBar) { bar.Volume = ptrInt64(0) },
+			wantWarning: "bar_amount_volume_zero_mismatch_dropped",
+		},
+		{
+			name: "non CNY amount unit",
+			mutate: func(bar *model.DailyBar) { bar.AmountUnit = "USD" },
+			wantWarning: "bar_with_nonstandard_amount_unit_dropped",
+		},
+		{
+			name: "unknown adjustment basis",
+			mutate: func(bar *model.DailyBar) { bar.AdjustmentBasis = model.AdjustmentUnknown },
+			wantWarning: "bar_with_unknown_or_unsupported_adjustment_dropped",
+		},
+		{
+			name: "unsupported period",
+			mutate: func(bar *model.DailyBar) { bar.Period = "1m" },
+			wantWarning: "bar_with_unsupported_period_dropped",
+		},
+		{
+			name: "non finite change percent",
+			mutate: func(bar *model.DailyBar) { bar.ChangePercent = ptrFloat(math.NaN()) },
+			wantWarning: "bar_with_invalid_change_percent_dropped",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bar := validDailyBarForNormalizationTest()
+			tc.mutate(&bar)
+			got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{bar}, "2026-10-20", "2026-10-20", 10)
+			if len(got) != 0 || !containsWarning(warnings, tc.wantWarning) {
+				t.Fatalf("invalid bar must be rejected with %q: bars=%+v warnings=%v", tc.wantWarning, got, warnings)
+			}
+		})
+	}
+}
+
+func TestValidateAndSortBarsUsesInclusiveDateBoundsDeduplicatesAndKeepsNewestLimit(t *testing.T) {
+	before := validDailyBarForNormalizationTest()
+	before.TradeDate = "2026-10-19"
+	first := validDailyBarForNormalizationTest()
+	first.TradeDate = "2026-10-20"
+	duplicate := first
+	next := validDailyBarForNormalizationTest()
+	next.TradeDate = "2026-10-21"
+	last := validDailyBarForNormalizationTest()
+	last.TradeDate = "2026-10-22"
+
+	got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{before, first, duplicate, next, last}, "2026-10-20", "2026-10-22", 2)
+	if len(got) != 2 || got[0].TradeDate != "2026-10-21" || got[1].TradeDate != "2026-10-22" {
+		t.Fatalf("date bounds must be inclusive and limit must retain newest bars: %+v", got)
+	}
+	if !containsWarning(warnings, "duplicate_trade_date_dropped") || !containsWarning(warnings, "bars_truncated_to_limit") {
+		t.Fatalf("expected duplicate and truncation evidence, got %v", warnings)
+	}
+}
+
+func validDailyBarForNormalizationTest() model.DailyBar {
+	volume := int64(1000)
+	amount := 10000.0
+	return model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, VolumeUnit: "shares", Amount: &amount, AmountUnit: "CNY",
+		AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", QualityStatus: model.QualityValid,
+	}
+}
+
+func ptrInt64(value int64) *int64 { return &value }
+
 func validQuoteForNormalizationTest() *model.Quote {
 	now := time.Now().UTC()
 	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 100.0/9.0, 9.0, 11.0, 8.0, 9.0, 100000.0

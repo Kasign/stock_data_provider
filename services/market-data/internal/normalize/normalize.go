@@ -95,17 +95,43 @@ func ValidateQuote(q *model.Quote) error {
 	default:
 		return fmt.Errorf("quote adjustment basis %q is missing or unsupported", q.AdjustmentBasis)
 	}
-	for name, p := range map[string]*float64{"current_price": q.CurrentPrice, "open": q.Open, "high": q.High, "low": q.Low, "prev_close": q.PrevClose} {
-		if p == nil || !finite(*p) || *p <= 0 {
-			return fmt.Errorf("quote %s must be a positive finite value", name)
+	requiredPrices := []struct {
+		name  string
+		value *float64
+	}{
+		{"current_price", q.CurrentPrice},
+		{"open", q.Open},
+		{"high", q.High},
+		{"low", q.Low},
+		{"prev_close", q.PrevClose},
+	}
+	for _, item := range requiredPrices {
+		if item.value == nil || !finite(*item.value) || *item.value <= 0 {
+			return fmt.Errorf("quote %s must be a positive finite value", item.name)
 		}
 	}
 	if *q.Low > *q.High || *q.Open < *q.Low || *q.Open > *q.High || *q.CurrentPrice < *q.Low || *q.CurrentPrice > *q.High {
 		return errors.New("quote OHLC invariant failed")
 	}
-	for name, p := range map[string]*float64{"change": q.Change, "change_percent": q.ChangePercent, "volume_ratio": q.VolumeRatio, "turnover_rate": q.TurnoverRate} {
-		if p != nil && (!finite(*p) || ((name == "volume_ratio" || name == "turnover_rate") && *p < 0)) {
-			return fmt.Errorf("quote %s must be finite and non-negative when present", name)
+	optionalNumbers := []struct {
+		name        string
+		value       *float64
+		nonNegative bool
+	}{
+		{"change", q.Change, false},
+		{"change_percent", q.ChangePercent, false},
+		{"volume_ratio", q.VolumeRatio, true},
+		{"turnover_rate", q.TurnoverRate, true},
+	}
+	for _, item := range optionalNumbers {
+		if item.value == nil {
+			continue
+		}
+		if !finite(*item.value) {
+			return fmt.Errorf("quote %s must be finite when present", item.name)
+		}
+		if item.nonNegative && *item.value < 0 {
+			return fmt.Errorf("quote %s must be non-negative when present", item.name)
 		}
 	}
 	expectedChange := *q.CurrentPrice - *q.PrevClose
