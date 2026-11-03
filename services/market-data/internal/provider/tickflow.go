@@ -17,6 +17,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 const tickflowVersion = "tickflow-rest-v1"
@@ -79,103 +80,32 @@ func NewTickFlowConfigured(timeout time.Duration, apiURL, freeAPIURL, apiKey str
 
 func (p *TickFlow) Name() string { return "tickflow" }
 
-func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
-	if p == nil || p.client == nil {
-		return nil, errors.New("TickFlow HTTP client is not configured")
-	}
-	if p.apiKey == "" {
-		return nil, errors.New("TickFlow real-time quotes require TICKFLOW_API_KEY")
-	}
-	symbol, err := tickflowDomesticSymbol(rawSymbol)
-	if err != nil {
-		return nil, err
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	raw, err := p.getJSON(ctx, p.apiURL, "/v1/quotes", url.Values{"symbols": []string{symbol}}, true)
-	if err != nil {
-		return nil, fmt.Errorf("TickFlow quote request: %w", err)
-	}
-	data, err := tickflowResponseData(raw)
-	if err != nil {
-		return nil, err
-	}
-	var quotes []tickflowQuotePayload
-	if err := json.Unmarshal(data, &quotes); err != nil {
-		return nil, fmt.Errorf("decode TickFlow quote data: %w", err)
-	}
-	var q *tickflowQuotePayload
-	for i := range quotes {
-		if strings.EqualFold(strings.TrimSpace(quotes[i].Symbol), symbol) {
-			q = &quotes[i]
-			break
-		}
-	}
-	if q == nil {
-		return nil, fmt.Errorf("TickFlow quote response did not contain requested symbol %s", symbol)
-	}
-	if q.LastPrice == nil || !tickflowPositiveFinite(*q.LastPrice) {
-		return nil, errors.New("TickFlow quote has missing or invalid last_price")
-	}
-	if q.PrevClose == nil || !tickflowPositiveFinite(*q.PrevClose) {
-		return nil, errors.New("TickFlow quote has missing or invalid prev_close")
-	}
-	if q.Open == nil || q.High == nil || q.Low == nil ||
-		!tickflowPositiveFinite(*q.Open) || !tickflowPositiveFinite(*q.High) || !tickflowPositiveFinite(*q.Low) ||
-		*q.Low > *q.High || *q.Open < *q.Low || *q.Open > *q.High || *q.LastPrice < *q.Low || *q.LastPrice > *q.High {
-		return nil, errors.New("TickFlow quote violates OHLC invariants")
-	}
-	if q.Volume == nil || math.IsNaN(*q.Volume) || math.IsInf(*q.Volume, 0) || *q.Volume < 0 || math.Trunc(*q.Volume) != *q.Volume {
-		return nil, errors.New("TickFlow quote has invalid volume")
-	}
-	volume, err := normalize.RawSharesToInt64(*q.Volume)
-	if err != nil {
-		return nil, fmt.Errorf("normalize TickFlow quote volume in shares: %w", err)
-	}
-	change := *q.LastPrice - *q.PrevClose
-	changePercent := change / *q.PrevClose * 100
-	now := time.Now().UTC()
-	var quoteTime *time.Time
-	quality := model.QualityValid
-	var reasons []string
-	if value := tickflowProviderQuoteTime(q.Timestamp, now); value != nil {
-		quoteTime = value
-	} else {
-		quality = model.QualityDegraded
-		reasons = append(reasons, "provider_quote_timestamp_missing_or_invalid")
-	}
-	var amount, rawAmount *float64
-	amountUnit, rawAmountUnit, amountField := "unknown", "", ""
-	if q.Amount != nil && !math.IsNaN(*q.Amount) && !math.IsInf(*q.Amount, 0) && *q.Amount >= 0 {
-		value := *q.Amount
-		amount, rawAmount = &value, &value
-		amountUnit, rawAmountUnit, amountField = "CNY", "CNY", "amount"
-	} else {
-		quality = model.QualityDegraded
-		reasons = append(reasons, "amount_missing_from_provider", "amount_unit_unknown_because_amount_missing")
-	}
-	rawVolume := *q.Volume
-	var turnover *float64
-	if raw, ok := q.Ext["turnover_rate"]; ok {
-		if value, parseErr := tickflowFloat(raw); parseErr == nil && value >= 0 && !math.IsNaN(value) && !math.IsInf(value, 0) {
-			value *= 100
-			turnover = &value
-		}
-	}
-	return &model.Quote{
-		Symbol: symbol, Name: strings.TrimSpace(q.Name),
-		CurrentPrice: q.LastPrice, Change: &change, ChangePercent: &changePercent,
-		Open: q.Open, High: q.High, Low: q.Low, PrevClose: q.PrevClose,
-		Volume: &volume, Amount: amount, TurnoverRate: turnover,
-		QuoteTime: quoteTime, QuoteTimeSemantics: "provider_snapshot_time",
-		FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: tickflowVersion,
-		RawVolume: &rawVolume, RawVolumeUnit: "shares",
-		RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField,
-		VolumeUnit: "shares", AmountUnit: amountUnit,
-		AdjustmentBasis: model.AdjustmentNone, QualityStatus: quality, QualityReasons: reasons,
-		NormalizationVer: normalize.Version,
-	}, nil
+func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote,error) {
+ if p==nil || p.client==nil{return nil,errors.New("TickFlow HTTP client is not configured")}; if p.apiKey==""{return nil,errors.New("TickFlow real-time quotes require TICKFLOW_API_KEY")}
+ symbol,err:=tickflowDomesticSymbol(rawSymbol);if err!=nil{return nil,err};if ctx==nil{ctx=context.Background()}
+ raw,err:=p.getJSON(ctx,p.apiURL,"/v1/quotes",url.Values{"symbols":[]string{symbol}},true);if err!=nil{return nil,fmt.Errorf("TickFlow quote request: %w",err)}
+ data,err:=tickflowResponseData(raw);if err!=nil{return nil,err}
+ var rows []struct{Symbol string `json:"symbol"`;Name string `json:"name"`;Last json.RawMessage `json:"last_price"`;Prev json.RawMessage `json:"prev_close"`;Open json.RawMessage `json:"open"`;High json.RawMessage `json:"high"`;Low json.RawMessage `json:"low"`;Volume json.RawMessage `json:"volume"`;Amount json.RawMessage `json:"amount"`;Timestamp int64 `json:"timestamp"`;Ext map[string]json.RawMessage `json:"ext"`}
+ if err=json.Unmarshal(data,&rows);err!=nil{return nil,fmt.Errorf("decode TickFlow quote data: %w",err)}
+ var q *struct{Symbol string `json:"symbol"`;Name string `json:"name"`;Last json.RawMessage `json:"last_price"`;Prev json.RawMessage `json:"prev_close"`;Open json.RawMessage `json:"open"`;High json.RawMessage `json:"high"`;Low json.RawMessage `json:"low"`;Volume json.RawMessage `json:"volume"`;Amount json.RawMessage `json:"amount"`;Timestamp int64 `json:"timestamp"`;Ext map[string]json.RawMessage `json:"ext"`}
+ for i:=range rows {if !strings.EqualFold(strings.TrimSpace(rows[i].Symbol),symbol){continue};if q!=nil{addProviderQuoteIssue(ctx,validation.StageValidate,"symbol","symbol","duplicate_identity","exactly one requested security","string",symbol,"TickFlow quote response contains duplicate requested symbol",validation.SeverityError);return nil,fmt.Errorf("TickFlow quote response contains duplicate requested symbol %s",symbol)};q=&rows[i]}
+ if q==nil{code,actual:="missing_quote","empty";if len(rows)>0{code,actual="identity_mismatch","no row matched "+symbol};addProviderQuoteIssue(ctx,validation.StageValidate,"symbol","symbol",code,symbol,"string",actual,"TickFlow quote response did not contain requested symbol",validation.SeverityError);return nil,fmt.Errorf("TickFlow quote response did not contain requested symbol %s",symbol)}
+ fields:=[]struct{name,provider string;raw json.RawMessage;required bool}{{"current_price","last_price",q.Last,true},{"prev_close","prev_close",q.Prev,true},{"open","open",q.Open,true},{"high","high",q.High,true},{"low","low",q.Low,true},{"volume","volume",q.Volume,true},{"amount","amount",q.Amount,false}}
+ values:=map[string]*float64{};errs:=[]error{};for _,f:=range fields{v,e:=parseProviderQuoteNumber(ctx,p.Name(),f.provider,f.name,f.raw,len(f.raw)>0,f.required);values[f.name]=v;if e!=nil{errs=append(errs,e)}};if len(errs)>0{return nil,fmt.Errorf("TickFlow quote field parsing failed: %w",errors.Join(errs...))}
+ price,prev,open,high,low,rawVolume:=values["current_price"],values["prev_close"],values["open"],values["high"],values["low"],values["volume"]
+ for _,f:=range []struct{name string;v *float64}{{"current_price",price},{"prev_close",prev},{"open",open},{"high",high},{"low",low}}{if f.v==nil||!tickflowPositiveFinite(*f.v){addProviderQuoteIssue(ctx,validation.StageValidate,f.name,f.name,"invalid_price","finite positive price","number","","TickFlow quote price must be positive and finite",validation.SeverityError);return nil,fmt.Errorf("TickFlow quote has invalid %s",f.name)}}
+ if *low>*high||*open<*low||*open>*high||*price<*low||*price>*high{addProviderQuoteIssue(ctx,validation.StageValidate,"ohlc","open/high/low/last_price","ohlc_invariant_violation","low <= open/current <= high","number","","TickFlow quote OHLC invariant failed",validation.SeverityError);return nil,errors.New("TickFlow quote violates OHLC invariants")}
+ if rawVolume==nil||*rawVolume<0||math.Trunc(*rawVolume)!=*rawVolume{addProviderQuoteIssue(ctx,validation.StageValidate,"volume","volume","invalid_integer","non-negative integer shares","number","","TickFlow quote volume must be a non-negative integer",validation.SeverityError);return nil,errors.New("TickFlow quote has invalid volume")}
+ volume,err:=normalize.RawSharesToInt64(*rawVolume);if err!=nil{addProviderQuoteIssue(ctx,validation.StageValidate,"volume","volume","normalization_error","convertible integer shares","number",fmt.Sprintf("%g",*rawVolume),"TickFlow quote volume cannot be normalized",validation.SeverityError);return nil,fmt.Errorf("normalize TickFlow quote volume: %w",err)}
+ change:=*price-*prev;changePct:=change / *prev * 100;now:=time.Now().UTC();var quoteTime *time.Time;quality:=model.QualityValid;reasons:=[]string{}
+ if v:=tickflowProviderQuoteTime(q.Timestamp,now);v!=nil{quoteTime=v}else{quality=model.QualityDegraded;reasons=append(reasons,"provider_quote_timestamp_missing_or_invalid")}
+ var amount,rawAmount *float64;amountUnit,rawAmountUnit,amountField:="unknown","",""
+ if v:=values["amount"];v!=nil&&tickflowNonNegativeFinite(*v){copy:=*v;amount=&copy;rawAmount=&copy;amountUnit,rawAmountUnit,amountField="CNY","CNY","amount"}else{quality=model.QualityDegraded;reasons=append(reasons,"amount_missing_from_provider","amount_unit_unknown_because_amount_missing");if v:=values["amount"];v!=nil{addProviderQuoteIssue(ctx,validation.StageValidate,"amount","amount","invalid_optional_number","finite non-negative CNY amount","number",fmt.Sprintf("%g",*v),"TickFlow amount invalid and omitted",validation.SeverityWarning)}}
+ var turnover *float64;if rawExt,ok:=q.Ext["turnover_rate"];ok{v,e:=parseProviderQuoteNumber(ctx,p.Name(),"ext.turnover_rate","turnover_rate",rawExt,true,false);if e==nil&&v!=nil&&*v>=0{x:=*v*100;turnover=&x}else if e==nil&&v!=nil{addProviderQuoteIssue(ctx,validation.StageValidate,"turnover_rate","ext.turnover_rate","invalid_optional_number","non-negative ratio","number",fmt.Sprintf("%g",*v),"TickFlow turnover rate invalid and omitted",validation.SeverityWarning)}}
+ rawVolumeCopy:=*rawVolume
+ quote:=&model.Quote{Symbol:symbol,Name:strings.TrimSpace(q.Name),CurrentPrice:price,Change:&change,ChangePercent:&changePct,Open:open,High:high,Low:low,PrevClose:prev,Volume:&volume,Amount:amount,TurnoverRate:turnover,QuoteTime:quoteTime,QuoteTimeSemantics:"provider_snapshot_time",FetchedAt:now,NormalizedAt:now,Source:p.Name(),SourceVersion:tickflowVersion,RawVolume:&rawVolumeCopy,RawVolumeUnit:"shares",RawAmount:rawAmount,RawAmountUnit:rawAmountUnit,RawAmountField:amountField,VolumeUnit:"shares",AmountUnit:amountUnit,AdjustmentBasis:model.AdjustmentNone,QualityStatus:quality,QualityReasons:reasons,NormalizationVer:normalize.Version}
+ report,validationErr:=normalize.ValidateQuoteWithReport(quote);validation.AddContextReport(ctx,report);if validationErr!=nil{return nil,fmt.Errorf("TickFlow quote data contract: %w",validationErr)}
+ return quote,nil
 }
 
 func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnapshot, error) {

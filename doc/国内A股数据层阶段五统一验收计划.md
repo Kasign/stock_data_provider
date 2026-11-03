@@ -1074,3 +1074,13 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 当前价、昨收、开高低价的非正/非有限值、OHLC 区间异常、成交量非法值及股数归一化失败均生成 error 级字段问题；成交额是可选字段，非有限或零值异常时保留空值并降级，生成 warning，不伪造金额。
 - 成功映射后执行公共 `normalize.ValidateQuoteWithReport`，将完整报告写入请求级 Reporter；避免仅凭局部 StageValidate Issue 让 Probe 跳过公共 Quote Validator。
 - 新增可独立测试的 Quote 映射函数，回归覆盖非有限价格、OHLC 越界、非整数手数和可选成交额异常。实时 TDX 服务连通性仍由在线 Probe 单独验收。
+
+
+
+### 2026-11-03：Hithink / TickFlow Quote 原始字段诊断补齐
+
+- 新增共享 Provider Quote RawMessage 数值字段解析器，区分 missing、null、type_mismatch、invalid_number；兼容数字字符串，Issue 记录 Provider 原始字段、标准字段、类型和限长摘要。
+- Hithink Quote 的必需价格字段逐项解析；成交量、成交额及源端涨跌扩展字段按可选字段处理，异常保留降级语义并生成 warning。证券重复、未匹配、OHLC 与涨跌交叉校验失败生成结构化 Validate Issue。
+- TickFlow Quote 独立使用 RawMessage 响应结构，不改变 Index Quote、Market Breadth 等共享 payload；价格与成交量必需字段异常硬失败，成交额及换手率异常保留空值/降级并生成 warning。证券重复、未匹配、OHLC 和成交量归一化失败生成 Validate Issue。
+- 两个 Provider 成功映射后执行公共 `normalize.ValidateQuoteWithReport` 并合并请求级 Reporter；不改变单位、质量门禁和实时接口授权要求。
+- 新增 Hithink object 类型错误和 TickFlow NaN 字段回归。以本批最新 SHA 的完整 Go 测试、race、vet、Docker 构建及质量契约复验结果为准。
