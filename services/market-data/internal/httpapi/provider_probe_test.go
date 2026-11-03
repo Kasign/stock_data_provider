@@ -142,7 +142,7 @@ func TestProviderProbeEndpointAcceptsDailyBarAdjustmentSelection(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("daily-bar adjustment probe status=%d body=%s", response.Code, response.Body.String())
 	}
-	for _, expected := range []string{`"requested_daily_bar_adjustments":["none","forward_adjusted","backward_adjusted"]`} {
+	for _, expected := range []string{`"requested_daily_bar_adjustments":["none","forward_adjusted","backward_adjusted"]`, `"adjustment_basis":"none"`, `"adjustment_basis":"forward_adjusted"`, `"adjustment_basis":"backward_adjusted"`} {
 		if !strings.Contains(response.Body.String(), expected) {
 			t.Fatalf("probe response missing %s: %s", expected, response.Body.String())
 		}

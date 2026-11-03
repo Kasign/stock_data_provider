@@ -676,6 +676,7 @@ components:
         status: {type: string, enum: [returned, returned_degraded, returned_unknown, failed, skipped, not_configured, not_supported]}
         elapsed_ms: {type: integer, minimum: 0}
         source_version: {type: string}
+        adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
         error_code: {type: string, description: Stable machine-readable failure classification}
@@ -1261,6 +1262,7 @@ paths:
       description: >-
         默认空请求体执行全部能力。scope=core 执行核心能力；capabilities 非空时仅执行指定能力。
         timeout_seconds 为单项 Provider 请求超时，范围 1 到 30 秒，默认 12 秒。
+        daily_bar_adjustments 仅用于 daily_bars，支持 none、forward_adjusted、backward_adjusted；省略时仅探测 none，每种口径独立生成结果。
         探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。
       security:
         - ApiKey: []

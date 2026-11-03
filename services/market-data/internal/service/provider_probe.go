@@ -944,7 +944,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if err != nil {
 				setProbeFailure(&item, err)
-				if (selectedMarket == "BSE" || strings.HasSuffix(probeSymbol, ".BJ")) && isUnsupportedBeijingProbeError(err) {
+				if job.capability == "daily_bars" && isUnsupportedDailyBarAdjustmentError(err) {
+					item.Status = "not_supported"
+					item.ErrorCode = "daily_bar_adjustment_not_supported"
+					item.ErrorStage = "configuration"
+				} else if (selectedMarket == "BSE" || strings.HasSuffix(probeSymbol, ".BJ")) && isUnsupportedBeijingProbeError(err) {
 					item.Status = "not_supported"
 					item.ErrorCode = "market_not_supported"
 					item.ErrorStage = "configuration"
@@ -1375,6 +1379,18 @@ func providerProbeCheckMessage(code string) string {
 	default:
 		return ""
 	}
+}
+
+func isUnsupportedDailyBarAdjustmentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "adjustment not supported") ||
+		strings.Contains(message, "adjustment is not supported") ||
+		strings.Contains(message, "unsupported adjustment") ||
+		strings.Contains(message, "does not support adjustment") ||
+		strings.Contains(message, "only supports unadjusted")
 }
 
 func isUnsupportedBeijingProbeError(err error) bool {

@@ -679,6 +679,44 @@ func TestProviderProbeRunsRequestedDailyBarAdjustmentsIndependently(t *testing.T
 	}
 }
 
+func TestProviderProbeDailyBarCrossComparisonSeparatesAdjustmentBases(t *testing.T) {
+	left := providerProbeDailyBarsFake{name: "probe-adjustment-left", close: 10.5, quality: model.QualityValid}
+	right := providerProbeDailyBarsFake{name: "probe-adjustment-right", close: 10.5, quality: model.QualityValid}
+	ds := NewWithCapabilities(
+		[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
+	)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward},
+		Checks: []string{"cross_provider"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	if len(run.CheckResults) != 3 {
+		t.Fatalf("expected one cross-provider comparison per adjustment basis, got %+v", run.CheckResults)
+	}
+	seen := map[string]bool{}
+	for _, result := range run.CheckResults {
+		if result.Check != "cross_provider" || result.AdjustmentBasis == "" || seen[result.AdjustmentBasis] {
+			t.Fatalf("unexpected or duplicated adjustment comparison: %+v", result)
+		}
+		seen[result.AdjustmentBasis] = true
+	}
+}
+
+func TestProviderProbeClassifiesExplicitUnsupportedAdjustment(t *testing.T) {
+	for _, message := range []string{"adjustment not supported", "unsupported adjustment", "provider does not support adjustment"} {
+		if !isUnsupportedDailyBarAdjustmentError(errors.New(message)) {
+			t.Errorf("expected unsupported adjustment classification for %q", message)
+		}
+	}
+	if isUnsupportedDailyBarAdjustmentError(errors.New("upstream timeout")) {
+		t.Fatal("ordinary upstream failures must not be classified as unsupported")
+	}
+}
+
 func TestProviderProbeRejectsInvalidDailyBarAdjustments(t *testing.T) {
 	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
 	cases := []ProviderProbeOptions{
