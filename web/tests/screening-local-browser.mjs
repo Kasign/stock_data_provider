@@ -95,6 +95,31 @@ try {
   assert.equal(await page.locator("#screening-local-results-body tr").count(), 3);
   assert.equal(marketStocksRequests, 1, "switching local result views must not re-fetch market data");
 
+  // 批量加入只作用于当前命中视图；重复加入不重复插入，明确选组时才调整既有归属。
+  await page.locator("#screening-local-result-filter").selectOption("matched");
+  await page.locator("#screening-local-results-body input[data-screening-local-select-symbol]").check();
+  assert.equal(await page.locator("#screening-local-select-count").textContent(), "已选择 1 只");
+  await page.locator("#screening-local-add-watchlist").click();
+  let watchlist = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.watchlist.v1") || "[]"));
+  assert.equal(watchlist.length, 1);
+  assert.equal(watchlist[0].symbol, "600001.SH");
+  assert.match(await page.locator("#screening-local-batch-feedback").textContent(), /新增 1 只/);
+  await page.evaluate(() => localStorage.setItem("stock-provider-webui.watchlist-groups.v1", JSON.stringify({
+    groups: ["未分组", "重点观察"], assignments: {}
+  })));
+  await page.locator("#screening-local-group").focus();
+  await page.locator("#screening-local-group").selectOption("重点观察");
+  await page.locator("#screening-local-results-body input[data-screening-local-select-symbol]").check();
+  await page.locator("#screening-local-add-watchlist").click();
+  watchlist = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.watchlist.v1") || "[]"));
+  const groups = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.watchlist-groups.v1") || "{}"));
+  assert.equal(watchlist.length, 1, "adding an existing result must not create a duplicate");
+  assert.equal(groups.assignments["600001.SH"], "重点观察");
+  assert.match(await page.locator("#screening-local-batch-feedback").textContent(), /重复跳过 1 只/);
+  assert.match(await page.locator("#screening-local-batch-feedback").textContent(), /调整分组 1 只/);
+  assert.equal(await page.locator("#screening-local-select-count").textContent(), "已选择 0 只");
+  assert.equal(marketStocksRequests, 1, "batch watchlist actions must not re-fetch market data");
+
   await page.locator("#screening-plan-name").fill("浏览器筛选方案");
   await page.locator("#screening-plan-save").click();
   const storedBeforeClear = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]"));
