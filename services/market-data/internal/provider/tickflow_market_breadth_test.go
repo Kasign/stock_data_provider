@@ -153,13 +153,40 @@ func TestTickFlowFetchMarketBreadthDegradesWideQuoteTimestampSpread(t *testing.T
 	}
 }
 
-func TestTickFlowFetchMarketBreadthRejectsIncompleteQuoteCoverage(t *testing.T) {
+func TestTickFlowFetchMarketBreadthReturnsPartialCoverageEvidence(t *testing.T) {
 	server := newTickFlowBreadthFixture(t, tickflowBreadthFixtureSymbols[:2], "", "")
 	defer server.Close()
 
 	client := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
-	if _, err := client.FetchMarketBreadth(context.Background()); err == nil || !strings.Contains(err.Error(), "coverage mismatch") {
-		t.Fatalf("incomplete universe quote coverage must fail for fallback, got %v", err)
+	got, err := client.FetchMarketBreadth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalSecurities != 3 || got.CoveredSecurities != 2 ||
+		got.AdvancingCount+got.DecliningCount+got.UnchangedCount+got.UnclassifiedCount != 2 {
+		t.Fatalf("partial coverage evidence is inconsistent: %+v", got)
+	}
+	if got.QualityStatus != model.QualityDegraded ||
+		!containsTickFlowReason(got.QualityReasons, "provider_quote_coverage_incomplete") {
+		t.Fatalf("partial population coverage must be degraded: %+v", got)
+	}
+	if got.TotalAmountCNY != nil {
+		t.Fatalf("partial population must not expose a market-wide amount: %+v", got)
+	}
+}
+
+func TestTickFlowFetchMarketBreadthPreservesZeroReturnedCoverage(t *testing.T) {
+	server := newTickFlowBreadthFixture(t, nil, "", "")
+	defer server.Close()
+
+	client := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	got, err := client.FetchMarketBreadth(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalSecurities != 3 || got.CoveredSecurities != 0 ||
+		got.QualityStatus != model.QualityDegraded || got.ProviderReportDate != "" {
+		t.Fatalf("zero returned rows must preserve denominator without inventing a report date: %+v", got)
 	}
 }
 

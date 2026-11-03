@@ -18,6 +18,59 @@ import (
 type providerProbeQuoteFake struct{}
 
 func (providerProbeQuoteFake) Name() string { return "probe-test" }
+type providerProbePartialMarketBreadthFake struct {
+	snapshot *model.MarketBreadthSnapshot
+}
+
+func (p providerProbePartialMarketBreadthFake) Name() string { return "probe-partial-market-breadth" }
+
+func (p providerProbePartialMarketBreadthFake) FetchMarketBreadth(context.Context) (*model.MarketBreadthSnapshot, error) {
+	return p.snapshot, nil
+}
+
+func TestProviderProbePreservesPartialMarketBreadthCoverageWithoutBusinessAcceptance(t *testing.T) {
+	now := time.Now().UTC()
+	reportDate := now.In(marketLocation()).Format("2006-01-02")
+	snapshot := &model.MarketBreadthSnapshot{
+		Market: "cn_a_share", TotalSecurities: 3, CoveredSecurities: 2,
+		AdvancingCount: 1, UnclassifiedCount: 1,
+		AmountCoverageCount: 2, QuoteTimestampCoverageCount: 2,
+		OldestQuoteTime: &now, NewestQuoteTime: &now,
+		Source: "probe-test", SourceVersion: "probe-market-breadth-v1",
+		ProviderReportDate: reportDate, FetchedAt: now,
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_quote_coverage_incomplete"},
+	}
+	if err := validateMarketBreadthProbeSnapshot(snapshot); err != nil {
+		t.Fatalf("diagnostic validator should accept structurally valid partial evidence: %v", err)
+	}
+	if err := validateMarketBreadth(snapshot); err == nil {
+		t.Fatal("business validator must reject partial population coverage")
+	}
+
+	p := providerProbePartialMarketBreadthFake{snapshot: snapshot}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	ds.SetMarketBreadthProviders([]provider.MarketBreadthProvider{p})
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"market_breadth"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "market_breadth")
+	if !found || item.Status != "returned_degraded" {
+		t.Fatalf("partial market-breadth probe should be degraded, got %+v", run.Items)
+	}
+	if item.CoverageTotal == nil || *item.CoverageTotal != 3 ||
+		item.CoverageReturned == nil || *item.CoverageReturned != 2 ||
+		item.CoverageValidated == nil || *item.CoverageValidated != 1 ||
+		item.CoverageMissing == nil || *item.CoverageMissing != 1 ||
+		item.CoverageExcluded == nil || *item.CoverageExcluded != 1 ||
+		item.CoverageRatio == nil || *item.CoverageRatio < 0.333333 || *item.CoverageRatio > 0.333334 {
+		t.Fatalf("partial market-breadth coverage evidence is incomplete: %+v", item)
+	}
+}
+
 func (providerProbeQuoteFake) FetchQuote(_ context.Context, symbol string) (*model.Quote, error) {
 	now := time.Now().UTC()
 	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 11.111111, 9.0, 11.0, 8.0, 9.0, 100000.0

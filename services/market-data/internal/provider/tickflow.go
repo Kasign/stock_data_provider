@@ -380,9 +380,6 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	if err := json.Unmarshal(quotesData, &quotes); err != nil {
 		return nil, fmt.Errorf("decode TickFlow A-share universe quotes: %w", err)
 	}
-	if len(quotes) != universe.SymbolCount {
-		return nil, fmt.Errorf("TickFlow A-share quotes coverage mismatch: returned=%d universe=%d", len(quotes), universe.SymbolCount)
-	}
 	quotesBySymbol := make(map[string]tickflowQuotePayload, len(quotes))
 	for _, quote := range quotes {
 		symbol, normalizeErr := tickflowDomesticSymbol(quote.Symbol)
@@ -397,14 +394,6 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 		}
 		quotesBySymbol[symbol] = quote
 	}
-	if len(quotesBySymbol) != universe.SymbolCount {
-		return nil, fmt.Errorf("TickFlow A-share unique quote coverage mismatch: returned=%d universe=%d", len(quotesBySymbol), universe.SymbolCount)
-	}
-	for _, symbol := range symbols {
-		if _, ok := quotesBySymbol[symbol]; !ok {
-			return nil, fmt.Errorf("TickFlow A-share quote is missing universe member %s", symbol)
-		}
-	}
 
 	fetchedAt := time.Now().UTC()
 	location, err := time.LoadLocation("Asia/Shanghai")
@@ -412,7 +401,7 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 		location = time.FixedZone("CST", 8*60*60)
 	}
 	snapshot := &model.MarketBreadthSnapshot{
-		Market: "cn_a_share", TotalSecurities: universe.SymbolCount, CoveredSecurities: universe.SymbolCount,
+		Market: "cn_a_share", TotalSecurities: universe.SymbolCount, CoveredSecurities: len(quotesBySymbol),
 		Source: p.Name(), SourceVersion: tickflowVersion + "-market-breadth-v1",
 		FetchedAt: fetchedAt, QualityStatus: model.QualityValid,
 	}
@@ -426,10 +415,16 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	var oldestQuoteTime, newestQuoteTime *time.Time
 	reportDate := ""
 	limitUpCount, limitDownCount := 0, 0
-	limitCountsComplete := true
+	limitCountsComplete := snapshot.CoveredSecurities == snapshot.TotalSecurities
+	if snapshot.CoveredSecurities < snapshot.TotalSecurities {
+		degrade("provider_quote_coverage_incomplete")
+	}
 
 	for _, symbol := range symbols {
-		quote := quotesBySymbol[symbol]
+		quote, exists := quotesBySymbol[symbol]
+		if !exists {
+			continue
+		}
 		quoteTime := tickflowProviderQuoteTime(quote.Timestamp, fetchedAt)
 		if quoteTime == nil {
 			degrade("provider_quote_timestamp_missing_or_invalid")
@@ -510,7 +505,7 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 		}
 	}
 	if reportDate == "" {
-		return nil, errors.New("TickFlow A-share quotes contain no valid provider timestamp for a report date")
+		degrade("provider_quote_timestamp_missing_or_invalid")
 	}
 	snapshot.QuoteTimestampCoverageCount = timestampCoverage
 	snapshot.OldestQuoteTime = oldestQuoteTime
@@ -526,7 +521,7 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 	snapshot.ProviderReportDate = reportDate
 	snapshot.AmountCoverageCount = amountCoverage
-	if amountCoverage == snapshot.CoveredSecurities {
+	if amountCoverage == snapshot.TotalSecurities && snapshot.CoveredSecurities == snapshot.TotalSecurities {
 		snapshot.TotalAmountCNY = &amountTotal
 	} else {
 		// 金额有缺失时不把部分累加值暴露为全市场成交额。

@@ -765,3 +765,14 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - [ ] 其他能力不得复用该分母定义。后续必须分别找到全量证券主数据、指数成分、行业成分、财报应披露记录等权威总体来源，才能输出对应覆盖率。
 - [ ] 需继续检查 MarketBreadth 聚合 Provider 是否有能力在部分数据返回时返回降级快照；若只返回完整快照或整体失败，应在 Provider 级别明确记录这一限制。
 - 验收边界：当前字段是“市场广度快照覆盖率”，不是 quote Provider 的全市场逐字段质量率，也不是全市场证券目录覆盖率。
+
+### 2026-11-03：市场广度部分覆盖证据（第三批）
+
+- [x] TickFlow 市场广度 Provider 不再因报价数量少于证券池总量而丢弃整份响应；仍严格拒绝重复证券、证券池外证券及不合法证券代码。
+- [x] `covered_securities` 表示实际返回且通过证券身份校验的唯一证券数；`total_securities` 来自 `CN_Equity_A` 证券池元数据。
+- [x] 缺失证券不参与涨跌分类，分类计数只对实际返回证券求和；未分类证券计入 `unclassified_count`，不补零、不推测涨跌。
+- [x] 零返回也保留可信证券池分母，允许 Provider 报告日期缺失；该结果仅供诊断，不代表业务数据可用。
+- [x] 部分总体覆盖标记为 degraded，并且不暴露部分成交额作为全市场成交额。
+- [x] 主动诊断使用允许部分总体覆盖的结构校验，正常业务 `MarketBreadth` 仍使用严格校验，部分总体覆盖不能进入业务快照/缓存。
+- [x] 覆盖率口径：`coverage_returned=covered_securities`；`coverage_missing=total_securities-covered_securities`；`coverage_excluded=unclassified_count`；`coverage_validated=coverage_returned-coverage_excluded`。该 validated 仅表示身份和必需价格字段可用于涨跌分类，不代表成交额、时间戳、涨跌停等所有字段均完整。
+- [ ] 完成 Service 回归、Go/race/vet、OpenAPI 和 Docker 验收后，再标记本批通过。

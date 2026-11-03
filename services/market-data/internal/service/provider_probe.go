@@ -416,15 +416,15 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			if err := validateMarketBreadth(snapshot); err != nil {
+			if err := validateMarketBreadthProbeSnapshot(snapshot); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
 			if snapshot != nil {
-				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, snapshot.CoveredSecurities, snapshot.CoveredSecurities, snapshot.NewestQuoteTime)
-				if snapshot.TotalSecurities > 0 && snapshot.CoveredSecurities <= snapshot.TotalSecurities {
-					missing := snapshot.TotalSecurities - snapshot.CoveredSecurities
-					recordProviderProbeCoverageCounts(probeCtx, snapshot.TotalSecurities, snapshot.CoveredSecurities, snapshot.CoveredSecurities, missing, 0, "provider_universe", "market_breadth.total_securities")
-				}
+				missing := snapshot.TotalSecurities - snapshot.CoveredSecurities
+				excluded := snapshot.UnclassifiedCount
+				validated := snapshot.CoveredSecurities - excluded
+				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, snapshot.CoveredSecurities, validated, snapshot.NewestQuoteTime)
+				recordProviderProbeCoverageCounts(probeCtx, snapshot.TotalSecurities, snapshot.CoveredSecurities, validated, missing, excluded, "provider_universe", "market_breadth.total_securities")
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})

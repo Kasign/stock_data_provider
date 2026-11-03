@@ -416,14 +416,30 @@ func (s *DataService) PriceLimitEventProviders() []provider.PriceLimitEventProvi
 }
 
 func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
+	return validateMarketBreadthSnapshot(snapshot, true)
+}
+
+// validateMarketBreadthProbeSnapshot validates evidence structure while allowing incomplete population coverage.
+// Business endpoints must continue to use validateMarketBreadth and reject partial population snapshots.
+func validateMarketBreadthProbeSnapshot(snapshot *model.MarketBreadthSnapshot) error {
+	return validateMarketBreadthSnapshot(snapshot, false)
+}
+
+func validateMarketBreadthSnapshot(snapshot *model.MarketBreadthSnapshot, requireFullCoverage bool) error {
 	if snapshot == nil {
 		return errors.New("market-breadth provider returned an empty snapshot")
 	}
 	if snapshot.Market != "cn_a_share" {
 		return fmt.Errorf("unsupported market-breadth market %q", snapshot.Market)
 	}
-	if snapshot.TotalSecurities <= 0 || snapshot.CoveredSecurities != snapshot.TotalSecurities {
+	if snapshot.TotalSecurities <= 0 || snapshot.CoveredSecurities < 0 || snapshot.CoveredSecurities > snapshot.TotalSecurities {
+		return fmt.Errorf("market-breadth coverage counts are invalid: covered=%d total=%d", snapshot.CoveredSecurities, snapshot.TotalSecurities)
+	}
+	if requireFullCoverage && snapshot.CoveredSecurities != snapshot.TotalSecurities {
 		return fmt.Errorf("market-breadth coverage mismatch: covered=%d total=%d", snapshot.CoveredSecurities, snapshot.TotalSecurities)
+	}
+	if snapshot.CoveredSecurities < snapshot.TotalSecurities && snapshot.QualityStatus != model.QualityDegraded {
+		return errors.New("partial market-breadth population coverage must have degraded quality")
 	}
 	if (snapshot.LimitUpCount != nil && (*snapshot.LimitUpCount < 0 || *snapshot.LimitUpCount > snapshot.CoveredSecurities)) ||
 		(snapshot.LimitDownCount != nil && (*snapshot.LimitDownCount < 0 || *snapshot.LimitDownCount > snapshot.CoveredSecurities)) {
@@ -472,7 +488,7 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 			return errors.New("market-breadth cannot be valid when quote timestamp spread exceeds 10 minutes")
 		}
 	}
-	if snapshot.AmountCoverageCount == snapshot.CoveredSecurities {
+	if snapshot.AmountCoverageCount == snapshot.CoveredSecurities && snapshot.CoveredSecurities == snapshot.TotalSecurities {
 		if snapshot.TotalAmountCNY == nil || math.IsNaN(*snapshot.TotalAmountCNY) || math.IsInf(*snapshot.TotalAmountCNY, 0) || *snapshot.TotalAmountCNY < 0 {
 			return errors.New("market-breadth amount invalid despite complete amount coverage")
 		}
@@ -489,12 +505,18 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 		return errors.New("market-breadth source, source_version or fetched_at is missing")
 	}
 	reportDate := strings.TrimSpace(snapshot.ProviderReportDate)
-	parsedReportDate, reportDateErr := time.Parse("2006-01-02", reportDate)
-	if reportDateErr != nil || parsedReportDate.Format("2006-01-02") != reportDate {
-		return errors.New("market-breadth provider_report_date is missing or invalid")
-	}
-	if reportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
-		return fmt.Errorf("market-breadth provider_report_date %s is in the future", reportDate)
+	if reportDate == "" {
+		if requireFullCoverage || snapshot.CoveredSecurities == snapshot.TotalSecurities {
+			return errors.New("market-breadth provider_report_date is missing or invalid")
+		}
+	} else {
+		parsedReportDate, reportDateErr := time.Parse("2006-01-02", reportDate)
+		if reportDateErr != nil || parsedReportDate.Format("2006-01-02") != reportDate {
+			return errors.New("market-breadth provider_report_date is missing or invalid")
+		}
+		if reportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+			return fmt.Errorf("market-breadth provider_report_date %s is in the future", reportDate)
+		}
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("market-breadth quality status %q is unsupported", snapshot.QualityStatus)
