@@ -317,6 +317,6 @@
 ### 验收边界
 
 - 本轮使用隔离模拟 API 验证页面字段、质量状态、空数据、分页和错误恢复，不代表真实 Provider 返回值。
-- WebUI Checks 成功：[运行记录 #41566298328](https://github.com/Kasign/stock_data_provider/actions/runs/41566298328)。
-- Chromium Browser Smoke 成功：[运行记录 #41566298689](https://github.com/Kasign/stock_data_provider/actions/runs/41566298689)，包含 7 个响应式视口、两组 Run Flow 专项、个股研究请求生命周期及数据质量/公告分页验收；截图 Artifact [#13198897287](https://github.com/Kasign/stock_data_provider/actions/runs/41566298689/artifacts/13198897287)。
+- 最新 WebUI Checks 成功：[运行记录 #41566856911](https://github.com/Kasign/stock_data_provider/actions/runs/41566856911)，335 项单元测试全部通过，JS 语法检查、Compose 校验和 Nginx 镜像构建通过。
+- 最新 Chromium Browser Smoke 成功：[运行记录 #41566856933](https://github.com/Kasign/stock_data_provider/actions/runs/41566856933)，7 个响应式视口、两组 Run Flow 专项、个股研究请求生命周期及数据质量/公告分页验收全部通过；截图 Artifact [#13199821933](https://github.com/Kasign/stock_data_provider/actions/runs/41566856933/artifacts/13199821933)。
 - 真实估值、财务、资金流和筹码口径仍需与部署环境数据源进行黄金样例对账。
