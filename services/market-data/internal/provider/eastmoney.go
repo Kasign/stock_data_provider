@@ -663,6 +663,7 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		return nil, fmt.Errorf("Eastmoney quote provider error rc=%d", *payload.RC)
 	}
 	if payload.Data == nil {
+		addProviderQuoteIssue(ctx, validation.StageParse, "quote", "data", "required_data_missing", "quote data object", "null", "", "Eastmoney returned an empty quote object", validation.SeverityError)
 		return nil, errors.New("eastmoney returned an empty quote")
 	}
 	getString := func(key string) string {
@@ -682,6 +683,7 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 	if reportedSymbol != "" {
 		canonical, canonicalErr := normalize.NormalizeSymbol(reportedSymbol)
 		if canonicalErr != nil || canonical != symbol {
+			addProviderQuoteIssue(ctx, validation.StageValidate, "symbol", "f57", "identity_mismatch", symbol, "string", reportedSymbol, "Eastmoney quote response symbol does not match requested security", validation.SeverityError)
 			return nil, fmt.Errorf("Eastmoney quote symbol mismatch: requested %s got %q", symbol, reportedSymbol)
 		}
 	}
@@ -734,8 +736,10 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		quote.QualityReasons = append(quote.QualityReasons, "name_missing")
 		quote.QualityStatus = model.QualityDegraded
 	}
-	if err := normalize.ValidateQuote(quote); err != nil {
-		return nil, fmt.Errorf("Eastmoney quote data contract: %w", err)
+	report, validationErr := normalize.ValidateQuoteWithReport(quote)
+	validation.AddContextReport(ctx, report)
+	if validationErr != nil {
+		return nil, fmt.Errorf("Eastmoney quote data contract: %w", validationErr)
 	}
 	// 源端涨跌字段已通过容差校验；输出值统一以最新价和昨收价计算。
 	canonicalChange := *quote.CurrentPrice - *quote.PrevClose

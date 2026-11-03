@@ -1084,3 +1084,28 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - TickFlow Quote 独立使用 RawMessage 响应结构，不改变 Index Quote、Market Breadth 等共享 payload；价格与成交量必需字段异常硬失败，成交额及换手率异常保留空值/降级并生成 warning。证券重复、未匹配、OHLC 和成交量归一化失败生成 Validate Issue。
 - 两个 Provider 成功映射后执行公共 `normalize.ValidateQuoteWithReport` 并合并请求级 Reporter；不改变单位、质量门禁和实时接口授权要求。
 - 新增 Hithink object 类型错误和 TickFlow NaN 字段回归。以本批最新 SHA 的完整 Go 测试、race、vet、Docker 构建及质量契约复验结果为准。
+
+
+
+### 2026-11-03：Quote Provider 全覆盖复核（Pytdx、Hithink、TickFlow 批次后）
+
+按当前实现逐一核对八个具备 Quote 能力的 Provider：
+
+| Provider | 原始字段诊断 | 公共 Quote Validator | 处理边界 |
+|---|---|---|---|
+| Sina | 已完成，RawMessage 逐字段解析 | ValidateQuoteWithReport | 必填行情字段硬失败，可选字段按原语义降级 |
+| Tencent | 已完成，原始字段 Parse Issue | ValidateQuoteWithReport | 非有限价格在解析阶段拒绝；业务契约错误由公共 Validator 处理 |
+| NetEase | 已完成，原始 CSV 字段 Parse Issue | ValidateQuoteWithReport | 缺失、类型/数值错误保留字段定位 |
+| Yahoo | 已完成，Quote Meta/Chart 字段 Parse Issue | ValidateQuoteWithReport | 必需字段错误硬失败，成交额保持未知/降级 |
+| Eastmoney | 已完成，f43/f44/f45/f46/f47/f48 等逐字段 RawMessage 诊断 | 本次改为 ValidateQuoteWithReport | 补齐证券身份 mismatch 与空 data 诊断；不改 f48 必需字段门禁 |
+| Pytdx | 已完成，SDK 结构化字段 Validate Issue | buildPytdxQuote 内执行 ValidateQuoteWithReport | 非正价格、OHLC、手数异常硬失败；成交额异常 warning/降级 |
+| Hithink | 已完成，RawMessage 字段级 Parse Issue | ValidateQuoteWithReport | 必需价格硬失败；成交量/成交额及扩展字段按可选契约降级 |
+| TickFlow | 已完成，RawMessage 字段级 Parse Issue | ValidateQuoteWithReport | 必需价格/成交量硬失败；成交额、换手率按可选契约降级 |
+
+**Probe / Reporter 约束复核：**
+- 请求级 Reporter 不在 Provider 实例上持久化；每次调用通过 context 传递。
+- 只含 StageParse 的报告不能阻止 Probe 执行公共 Quote Validator；已有 StageValidate 报告时才复用，避免重复计数。
+- Provider 原始字段错误与公共数据契约错误分阶段记录；必需字段仍硬失败，可选字段仅在既有契约允许时降级。
+- 本批最新 SHA 的 Go test suite（含 gofmt、单测、race、vet）、Go/Python 质量契约、MariaDB/PIT 集成、Docker 两镜像构建和 WebUI checks 通过；Live Provider probe 因 Eastmoney 多个接口 HTTP 502 失败，NetEase 网络异常被跳过，属于外部源可用性问题，不代表代码验收失败。
+
+**剩余工作：** Quote Provider 字段诊断覆盖已完成；下一阶段转入 DailyBar 边界质量审计（复权基准、停牌、非交易日、部分 K 线、日期边界、重复问题计数），再审计 Fundamentals / Valuations。Go 模块路径迁移仍作为独立待办，不与本批混做。
