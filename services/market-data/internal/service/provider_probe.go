@@ -400,71 +400,71 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		for _, adjustment := range options.DailyBarAdjustments {
 			adjustment := adjustment
 			add(p.Name(), "daily_bars", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
-			bars, err := p.FetchDailyBars(probeCtx, barsSymbol, "", "", 5, adjustment)
-			if err != nil {
-				return model.QualityUnknown, "", nil, err
-			}
-			var validated []model.DailyBar
-			var warnings []string
-			// 仅当 Adapter 已上报 Validate 阶段结果时复用该报告；Parse-only 报告不能跳过公共字段校验。
-			reporter := validation.ReporterFromContext(probeCtx)
-			if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
-				validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
-			} else {
-				var report validation.Report
-				validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, "", "", 5)
-				validation.AddContextReport(probeCtx, report)
-			}
-			latestDate := ""
-			var providerTime *time.Time
-			if len(validated) > 0 {
-				latest := validated[len(validated)-1]
-				latestDate = latest.TradeDate
-				providerTime = latest.ProviderTime
-			}
-			recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
-			if len(validated) == 0 {
-				return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned no valid bars")
-			}
-			quality := model.QualityValid
-			version := ""
-			reasons := append([]string(nil), warnings...)
-			for _, bar := range validated {
-				if version == "" {
-					version = bar.SourceVersion
+				bars, err := p.FetchDailyBars(probeCtx, barsSymbol, "", "", 5, adjustment)
+				if err != nil {
+					return model.QualityUnknown, "", nil, err
 				}
-				if bar.QualityStatus != model.QualityValid {
+				var validated []model.DailyBar
+				var warnings []string
+				// 仅当 Adapter 已上报 Validate 阶段结果时复用该报告；Parse-only 报告不能跳过公共字段校验。
+				reporter := validation.ReporterFromContext(probeCtx)
+				if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
+					validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
+				} else {
+					var report validation.Report
+					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, "", "", 5)
+					validation.AddContextReport(probeCtx, report)
+				}
+				latestDate := ""
+				var providerTime *time.Time
+				if len(validated) > 0 {
+					latest := validated[len(validated)-1]
+					latestDate = latest.TradeDate
+					providerTime = latest.ProviderTime
+				}
+				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
+				if len(validated) == 0 {
+					return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned no valid bars")
+				}
+				quality := model.QualityValid
+				version := ""
+				reasons := append([]string(nil), warnings...)
+				for _, bar := range validated {
+					if version == "" {
+						version = bar.SourceVersion
+					}
+					if bar.QualityStatus != model.QualityValid {
+						quality = model.QualityDegraded
+					}
+					for _, reason := range bar.QualityReasons {
+						reasons = appendReason(reasons, reason)
+					}
+				}
+				if len(warnings) > 0 {
 					quality = model.QualityDegraded
 				}
-				for _, reason := range bar.QualityReasons {
-					reasons = appendReason(reasons, reason)
+				if version == "" {
+					return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing")
 				}
-			}
-			if len(warnings) > 0 {
-				quality = model.QualityDegraded
-			}
-			if version == "" {
-				return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing")
-			}
-			snapshotBars := make([]provider.CrossProviderDailyBar, 0, len(validated))
-			for _, bar := range validated {
-				if bar.Volume == nil {
-					snapshotBars = nil
-					break
+				snapshotBars := make([]provider.CrossProviderDailyBar, 0, len(validated))
+				for _, bar := range validated {
+					if bar.Volume == nil {
+						snapshotBars = nil
+						break
+					}
+					snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
+						TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
+						Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+					})
 				}
-				snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
-					TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
-					Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
-				})
-			}
-			if len(snapshotBars) == len(validated) {
-				recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
-					Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
-					AdjustmentBasis: string(adjustment), QualityStatus: string(quality), Bars: snapshotBars,
-				})
-			}
-			return quality, version, reasons, nil
-		}, adjustment)
+				if len(snapshotBars) == len(validated) {
+					recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
+						Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
+						AdjustmentBasis: string(adjustment), QualityStatus: string(quality), Bars: snapshotBars,
+					})
+				}
+				return quality, version, reasons, nil
+			}, adjustment)
 		}
 	}
 	for _, p := range s.stockBasicProviders {

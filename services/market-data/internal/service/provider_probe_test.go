@@ -671,10 +671,16 @@ func TestProviderProbeRunsRequestedDailyBarAdjustmentsIndependently(t *testing.T
 	if run.Total != len(adjustments) || len(run.RequestedDailyBarAdjustments) != len(adjustments) {
 		t.Fatalf("expected one independent probe per adjustment: %+v", run)
 	}
-	for i, adjustment := range adjustments {
-		item := run.Items[i]
-		if item.AdjustmentBasis != adjustment || item.Status != "returned" {
-			t.Fatalf("unexpected adjustment result for %s: %+v", adjustment, item)
+	seen := map[model.AdjustmentBasis]bool{}
+	for _, item := range run.Items {
+		if item.Status != "returned" || item.AdjustmentBasis == "" || seen[item.AdjustmentBasis] {
+			t.Fatalf("unexpected or duplicate adjustment result: %+v", item)
+		}
+		seen[item.AdjustmentBasis] = true
+	}
+	for _, adjustment := range adjustments {
+		if !seen[adjustment] {
+			t.Fatalf("missing adjustment result for %s: %+v", adjustment, run.Items)
 		}
 	}
 }
