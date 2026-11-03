@@ -917,3 +917,12 @@ ProviderTime 仍表示源端时间，FetchedAt 仍表示本服务采集时间，
 ### 验收状态
 - 代码与回归测试已提交；Go 测试、race、vet 和构建以该提交对应的 GitHub Actions 结果为准。
 - 在线 Provider 502 / DNS 问题不作为放宽证券身份门禁的理由。
+
+
+### Quote 主动诊断证券身份问题结构化补齐（2026-11-03）
+
+- Quote Provider 主动探测在返回证券代码与请求证券不一致时，原先只返回普通错误；该分支早于通用 Quote Validator，导致诊断项虽失败却没有字段级问题。
+- 现对证券身份不匹配生成 stage=validate、field=symbol、provider_field=symbol、code=identity_mismatch 的结构化错误，并保留期望证券代码、实际返回值及严重级别。
+- Quote source 缺失同样生成 required 结构化问题，避免关键契约失败只留下普通错误文本。
+- 新增 Probe 回归测试，验证错误证券仍然失败，且诊断响应的 validation_total_count、validation_error_count 和 validation_issues 完整反映身份问题。
+- 本修复只补齐诊断证据，不放宽 Quote 证券身份门禁，不改变正常行情服务的 Provider fallback、缓存和质量策略。

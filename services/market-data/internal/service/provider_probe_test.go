@@ -195,6 +195,39 @@ func (providerProbeMissingIdentityFake) FetchQuote(ctx context.Context, symbol s
 	return quote, nil
 }
 
+func TestProviderProbeReportsQuoteIdentityMismatch(t *testing.T) {
+	p := providerProbeMismatchedIdentityFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilities(context.Background())
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilities() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "quote")
+	if !found || item.Status != "failed" || item.ErrorCode != "contract_invalid" {
+		t.Fatalf("expected mismatched quote identity to fail, got %+v", run)
+	}
+	if item.ValidationTotalCount != 1 || item.ValidationErrorCount != 1 || len(item.ValidationIssues) != 1 {
+		t.Fatalf("expected one structured identity issue, got %+v", item)
+	}
+	issue := item.ValidationIssues[0]
+	if issue.Field != "symbol" || issue.ProviderField != "symbol" || issue.Code != "identity_mismatch" ||
+		issue.Expected != "600519.SH" || issue.ActualPreview != "000001.SZ" || issue.Severity != string(validation.SeverityError) {
+		t.Fatalf("unexpected identity issue: %+v", issue)
+	}
+}
+
+type providerProbeMismatchedIdentityFake struct{}
+
+func (providerProbeMismatchedIdentityFake) Name() string { return "probe-mismatched-identity" }
+func (providerProbeMismatchedIdentityFake) FetchQuote(ctx context.Context, symbol string) (*model.Quote, error) {
+	quote, err := (providerProbeQuoteFake{}).FetchQuote(ctx, symbol)
+	if err != nil {
+		return nil, err
+	}
+	quote.Symbol = "000001.SZ"
+	return quote, nil
+}
+
 func TestProviderProbeRejectsQuoteWithoutIdentity(t *testing.T) {
 	p := providerProbeMissingIdentityFake{}
 	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)

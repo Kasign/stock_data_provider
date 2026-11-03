@@ -330,9 +330,25 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			recordProviderProbeTimeSemantics(probeCtx, q.QuoteTimeSemantics)
 			recordProviderProbeFetchedAt(probeCtx, q.FetchedAt)
 			if q.Symbol != quoteSymbol {
+				report := validation.NewReport(validation.DefaultMaxIssues)
+				report.Add(validation.FieldIssue{
+					Stage: validation.StageValidate, Field: "symbol", ProviderField: "symbol",
+					Code: "identity_mismatch", Expected: quoteSymbol, ActualType: "string",
+					ActualPreview: q.Symbol, Severity: validation.SeverityError,
+					Message: "quote symbol does not match requested security",
+				})
+				validation.AddContextReport(probeCtx, report)
 				return model.QualityInvalid, q.SourceVersion, nil, fmt.Errorf("quote contract invalid: symbol mismatch, got %q, want %q", q.Symbol, quoteSymbol)
 			}
 			if q.Source == "" {
+				report := validation.NewReport(validation.DefaultMaxIssues)
+				report.Add(validation.FieldIssue{
+					Stage: validation.StageValidate, Field: "source", ProviderField: "source",
+					Code: "required", Expected: "non-empty provider identifier",
+					ActualType: "string", Severity: validation.SeverityError,
+					Message: "quote source is missing",
+				})
+				validation.AddContextReport(probeCtx, report)
 				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote source missing")
 			}
 			reporter := validation.ReporterFromContext(probeCtx)
