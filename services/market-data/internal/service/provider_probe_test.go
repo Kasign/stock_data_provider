@@ -18,6 +18,7 @@ import (
 type providerProbeQuoteFake struct{}
 
 func (providerProbeQuoteFake) Name() string { return "probe-test" }
+
 type providerProbePartialMarketBreadthFake struct {
 	snapshot *model.MarketBreadthSnapshot
 }
@@ -38,7 +39,7 @@ func TestProviderProbePreservesPartialMarketBreadthCoverageWithoutBusinessAccept
 		OldestQuoteTime: &now, NewestQuoteTime: &now,
 		Source: "probe-test", SourceVersion: "probe-market-breadth-v1",
 		ProviderReportDate: reportDate, FetchedAt: now,
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_quote_coverage_incomplete"},
 	}
 	if err := validateMarketBreadthProbeSnapshot(snapshot); err != nil {
