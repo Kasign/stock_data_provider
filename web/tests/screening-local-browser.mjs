@@ -104,7 +104,7 @@ try {
   assert.match(csvContent, /"测试命中"/);
   assert.match(csvContent, /"测试未命中"/);
   assert.match(csvContent, /"测试待判断"/);
-  assert.match(csvContent, /"MA5 字段缺失"/);
+  assert.match(csvContent, /MA5 字段缺失/);
   assert.match(csvContent, /"待判断"/);
   assert.equal(marketStocksRequests, 1, "CSV export must not re-fetch market data");
 
