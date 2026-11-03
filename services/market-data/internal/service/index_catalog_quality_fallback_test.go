@@ -296,3 +296,43 @@ func TestHistoricalConstituentSnapshotRejectsIntervalNotCoveringAsOfDate(t *test
 		t.Fatalf("interval starting after as_of must be degraded, got %s", snapshot.QualityStatus)
 	}
 }
+
+func TestIndexCatalogRejectsFutureFetchedAt(t *testing.T) {
+	snapshot := indexCatalogDegradedDataForTest("eastmoney", "cn_concept")
+	snapshot.FetchedAt = time.Now().UTC().Add(10 * time.Minute)
+	if err := validateIndexCatalogSnapshot("cn_concept", snapshot); err == nil {
+		t.Fatal("future index catalog fetched_at must be rejected")
+	}
+}
+
+func TestIndexConstituentsRejectFutureFetchedAt(t *testing.T) {
+	snapshot := indexConstituentsDegradedDataForTest("tushare")
+	snapshot.FetchedAt = time.Now().UTC().Add(10 * time.Minute)
+	if err := validateIndexConstituentsSnapshot("000300.SH", snapshot); err == nil {
+		t.Fatal("future index constituents fetched_at must be rejected")
+	}
+}
+
+func TestIndexDailyBarsRejectFutureFetchedAt(t *testing.T) {
+	now := time.Now().UTC()
+	snapshot := &model.IndexDailyBarsSnapshot{
+		IndexSymbol: "000300.SH", StartDate: "2026-10-29", EndDate: "2026-10-29", Total: 1,
+		Source: "eastmoney", SourceVersion: "test-v1",
+		FetchedAt: now.Add(10 * time.Minute), QualityStatus: model.QualityDegraded,
+		Items: []model.IndexDailyBar{{
+			IndexSymbol: "000300.SH", TradeDate: "2026-10-29",
+			Open: 100, High: 102, Low: 99, Close: 101,
+			VolumeUnit: "unknown", AmountUnit: "unknown",
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
+			QualityStatus: model.QualityDegraded,
+		}},
+	}
+	if err := validateIndexDailyBarsSnapshot("000300.SH", "2026-10-29", "2026-10-29", snapshot); err == nil {
+		t.Fatal("future index daily-bars snapshot fetched_at must be rejected")
+	}
+	snapshot.FetchedAt = now
+	snapshot.Items[0].FetchedAt = now.Add(10 * time.Minute)
+	if err := validateIndexDailyBarsSnapshot("000300.SH", "2026-10-29", "2026-10-29", snapshot); err == nil {
+		t.Fatal("future index daily-bar item fetched_at must be rejected")
+	}
+}

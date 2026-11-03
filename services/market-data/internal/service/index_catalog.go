@@ -83,6 +83,9 @@ func validateIndexCatalogSnapshot(tag string, snapshot *model.IndexCatalogSnapsh
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index catalog snapshot source, source_version, timestamp or quality invalid")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("index catalog fetched_at is in the future")
+	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
 		return errors.New("index catalog provider_time is zero or in the future")
 	}
@@ -112,6 +115,9 @@ func validateIndexConstituentsSnapshot(indexSymbol string, snapshot *model.Index
 	}
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index constituent snapshot source, source_version, timestamp or quality invalid")
+	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("index constituent fetched_at is in the future")
 	}
 	if snapshot.ProviderReturned < 0 || snapshot.ExcludedCount < 0 ||
 		(snapshot.ProviderReturned > 0 && snapshot.ProviderReturned != snapshot.Total+snapshot.ExcludedCount) ||
@@ -224,6 +230,9 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() || !validSnapshotQuality(snapshot.QualityStatus) {
 		return errors.New("index daily-bars snapshot source, source_version, timestamp or quality invalid")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("index daily-bars fetched_at is in the future")
+	}
 	if snapshot.ProviderTime != nil && (snapshot.ProviderTime.IsZero() || snapshot.ProviderTime.After(time.Now().Add(5*time.Minute))) {
 		return errors.New("index daily-bars provider_time is zero or in the future")
 	}
@@ -236,6 +245,9 @@ func validateIndexDailyBarsSnapshot(indexSymbol, startDate, endDate string, snap
 	for _, item := range snapshot.Items {
 		if item.IndexSymbol != indexSymbol || item.TradeDate < startDate || item.TradeDate > endDate || item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return errors.New("index daily bar identity, date or source/version invalid")
+		}
+		if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+			return fmt.Errorf("index daily bar %s fetched_at is in the future", item.TradeDate)
 		}
 		parsedDate, dateErr := time.Parse("2006-01-02", item.TradeDate)
 		if dateErr != nil || parsedDate.Format("2006-01-02") != item.TradeDate {

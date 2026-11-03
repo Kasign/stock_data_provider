@@ -1154,6 +1154,9 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("sector-ranking source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("sector-ranking fetched_at is in the future")
+	}
 	if snapshot.QualityStatus == model.QualityValid {
 		return errors.New("sector-ranking snapshot cannot be valid without a provider snapshot timestamp")
 	}
@@ -1202,6 +1205,9 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 		}
 		if item.FetchedAt.IsZero() || item.QualityStatus != model.QualityDegraded {
 			return errors.New("sector-ranking item has invalid retrieval time or quality status")
+		}
+		if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+			return fmt.Errorf("sector-ranking item %s fetched_at is in the future", item.Code)
 		}
 		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.ChangePercent5D, item.Amount, item.LeaderChangePercent} {
 			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
