@@ -28,6 +28,19 @@ type ProviderProbeFieldIssue struct {
 	TradeDate     string `json:"trade_date,omitempty"`
 }
 
+// ProviderProbeCoverageDimension describes a field-specific coverage denominator.
+type ProviderProbeCoverageDimension struct {
+	Dimension  string  `json:"dimension"`
+	Population string  `json:"population"`
+	Source     string  `json:"source"`
+	Total      int     `json:"total"`
+	Returned   int     `json:"returned"`
+	Validated  int     `json:"validated"`
+	Missing    int     `json:"missing"`
+	Excluded   int     `json:"excluded"`
+	Ratio      float64 `json:"ratio"`
+}
+
 // ProviderProbeItem 是一次主动能力探测结果。错误信息经过脱敏和长度限制，不回传凭据或完整查询 URL。
 type ProviderProbeItem struct {
 	Provider               string                    `json:"provider"`
@@ -52,15 +65,16 @@ type ProviderProbeItem struct {
 	SampleDate             string                    `json:"sample_date,omitempty"`
 	RowsReturned           int                       `json:"rows_returned,omitempty"`
 	RowsValidated          int                       `json:"rows_validated,omitempty"`
-	CoverageTotal          *int                      `json:"coverage_total,omitempty"`
-	CoveragePopulation     string                    `json:"coverage_population,omitempty"`
-	CoverageSource         string                    `json:"coverage_source,omitempty"`
-	CoverageReturned       *int                      `json:"coverage_returned,omitempty"`
-	CoverageValidated      *int                      `json:"coverage_validated,omitempty"`
-	CoverageMissing        *int                      `json:"coverage_missing,omitempty"`
-	CoverageExcluded       *int                      `json:"coverage_excluded,omitempty"`
-	CoverageRatio          *float64                  `json:"coverage_ratio,omitempty"`
-	ProviderTime           *time.Time                `json:"provider_time,omitempty"`
+	CoverageTotal      *int                             `json:"coverage_total,omitempty"`
+	CoveragePopulation string                           `json:"coverage_population,omitempty"`
+	CoverageSource     string                           `json:"coverage_source,omitempty"`
+	CoverageReturned   *int                             `json:"coverage_returned,omitempty"`
+	CoverageValidated  *int                             `json:"coverage_validated,omitempty"`
+	CoverageMissing    *int                             `json:"coverage_missing,omitempty"`
+	CoverageExcluded   *int                             `json:"coverage_excluded,omitempty"`
+	CoverageRatio      *float64                         `json:"coverage_ratio,omitempty"`
+	CoverageDimensions []ProviderProbeCoverageDimension `json:"coverage_dimensions,omitempty"`
+	ProviderTime       *time.Time                       `json:"provider_time,omitempty"`
 	ProviderTimeType       string                    `json:"provider_time_type,omitempty"`
 	FetchedAt              *time.Time                `json:"fetched_at,omitempty"`
 	CheckedAt              time.Time                 `json:"checked_at"`

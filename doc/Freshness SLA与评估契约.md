@@ -165,3 +165,25 @@ Freshness Evaluator 的特殊交易样例采用显式上下文输入，不在 ev
 - 这两个能力仍不提供可证明的精确源端更新时间：行业报告日期、资金流交易日期属于业务日期，不会提升为 `provider_time`；因此 Freshness 仍应为 unknown（source_time_missing），而不是因刚刚采集就判 fresh。
 - 增加采集时间记录器单测，确保 FetchedAt 不会被提升为 provider_time，零值也不会覆盖已有有效采集时间。
 - 当前明确可记录采集时间的响应域包括 Quote、Index、Market Breadth、Sector Rankings、Market Capital Flow；没有响应级采集时间字段的能力继续留空。
+
+
+## 14. 市场广度字段级覆盖率维度
+
+主动诊断的总体覆盖率不能代替每个字段的完整度。本轮在不改变业务快照质量门禁的前提下，为 Market Breadth 增加四个可追溯维度，统一使用证券池 `total_securities` 作为分母：
+
+| 维度 | returned | validated | excluded | source |
+|---|---:|---:|---:|---|
+| quote_response | covered_securities | covered_securities | 0 | market_breadth.covered_securities |
+| price_classification | covered_securities | covered - unclassified | unclassified | market_breadth.unclassified_count |
+| quote_timestamp | covered_securities | quote_timestamp_coverage_count | covered - timestamp coverage | market_breadth.quote_timestamp_coverage_count |
+| amount | covered_securities | amount_coverage_count | covered - amount coverage | market_breadth.amount_coverage_count |
+
+每个维度均返回 total、returned、validated、missing、excluded 和 validated/total。各计数必须满足：
+
+- `total = returned + missing`
+- `returned = validated + excluded`
+- 所有计数非负，且 validated/excluded 不超过 returned。
+
+任一输入计数不满足约束时，整组字段级覆盖率不输出；不会把无效计数修正成看似合理的比例。维度覆盖率描述的是各字段证据的可用数量，不等同于字段值的完整业务正确性；例如 amount 维度仅表示金额存在且通过 Provider 聚合前的金额有效性筛选。
+
+其他能力仍不输出字段覆盖率，除非能够证明对应权威总体分母。分页条数、抽样条数、当前返回页数均不能作为全量分母。

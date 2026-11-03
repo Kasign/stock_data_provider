@@ -70,6 +70,46 @@ func TestProviderProbePreservesPartialMarketBreadthCoverageWithoutBusinessAccept
 		item.CoverageRatio == nil || *item.CoverageRatio < 0.333333 || *item.CoverageRatio > 0.333334 {
 		t.Fatalf("partial market-breadth coverage evidence is incomplete: %+v", item)
 	}
+	if len(item.CoverageDimensions) != 4 {
+		t.Fatalf("expected four field-specific coverage dimensions, got %+v", item.CoverageDimensions)
+	}
+	dimensions := make(map[string]model.ProviderProbeCoverageDimension, len(item.CoverageDimensions))
+	for _, dimension := range item.CoverageDimensions {
+		dimensions[dimension.Dimension] = dimension
+		if dimension.Total != 3 || dimension.Returned != 2 || dimension.Missing != 1 ||
+			dimension.Population != "provider_universe" || dimension.Source == "" {
+			t.Fatalf("invalid field-specific denominator evidence: %+v", dimension)
+		}
+	}
+	if dimensions["quote_response"].Validated != 2 || dimensions["quote_response"].Excluded != 0 ||
+		dimensions["price_classification"].Validated != 1 || dimensions["price_classification"].Excluded != 1 ||
+		dimensions["quote_timestamp"].Validated != 2 || dimensions["quote_timestamp"].Excluded != 0 ||
+		dimensions["amount"].Validated != 2 || dimensions["amount"].Excluded != 0 {
+		t.Fatalf("field-specific coverage counters do not match snapshot evidence: %+v", dimensions)
+	}
+}
+
+func TestBuildMarketBreadthCoverageDimensionsPreservesZeroAndRejectsInvalidEvidence(t *testing.T) {
+	zero := buildMarketBreadthCoverageDimensions(&model.MarketBreadthSnapshot{
+		TotalSecurities: 3, CoveredSecurities: 0,
+		UnclassifiedCount: 0, QuoteTimestampCoverageCount: 0, AmountCoverageCount: 0,
+	})
+	if len(zero) != 4 {
+		t.Fatalf("zero-return snapshot must retain its proven denominator: %+v", zero)
+	}
+	for _, dimension := range zero {
+		if dimension.Total != 3 || dimension.Returned != 0 || dimension.Validated != 0 ||
+			dimension.Missing != 3 || dimension.Excluded != 0 || dimension.Ratio != 0 {
+			t.Fatalf("unexpected zero-return dimension: %+v", dimension)
+		}
+	}
+	invalid := buildMarketBreadthCoverageDimensions(&model.MarketBreadthSnapshot{
+		TotalSecurities: 3, CoveredSecurities: 2,
+		UnclassifiedCount: 0, QuoteTimestampCoverageCount: 4, AmountCoverageCount: 2,
+	})
+	if len(invalid) != 0 {
+		t.Fatalf("invalid field coverage counters must not produce ratios: %+v", invalid)
+	}
 }
 
 func (providerProbeQuoteFake) FetchQuote(_ context.Context, symbol string) (*model.Quote, error) {
@@ -724,7 +764,6 @@ func TestApplyFreshnessProbeResultsKeepsMissingMarketEvidenceUnknown(t *testing.
 		t.Fatalf("missing calendar evidence must not be reported fresh: %+v", result)
 	}
 }
-
 
 // TestRecordProviderProbeFetchedAtKeepsCollectionTimeSeparateFromSourceTime.
 func TestRecordProviderProbeFetchedAtKeepsCollectionTimeSeparateFromSourceTime(t *testing.T) {

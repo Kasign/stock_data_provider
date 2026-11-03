@@ -645,6 +645,19 @@ components:
         row_index: {type: integer, minimum: 0}
         symbol: {type: string}
         trade_date: {type: string, format: date}
+    ProviderProbeCoverageDimension:
+      type: object
+      required: [dimension, population, source, total, returned, validated, missing, excluded, ratio]
+      properties:
+        dimension: {type: string, enum: [quote_response, price_classification, quote_timestamp, amount]}
+        population: {type: string, enum: [provider_universe]}
+        source: {type: string, description: Evidence field that provides the dimension numerator or exclusion count}
+        total: {type: integer, minimum: 1}
+        returned: {type: integer, minimum: 0}
+        validated: {type: integer, minimum: 0}
+        missing: {type: integer, minimum: 0}
+        excluded: {type: integer, minimum: 0}
+        ratio: {type: number, minimum: 0, maximum: 1, description: validated divided by total}
     ProviderProbeItem:
       type: object
       required: [provider, capability, status, elapsed_ms, quality_status, checked_at]
@@ -673,6 +686,7 @@ components:
         coverage_missing: {type: integer, minimum: 0, description: Expected records not returned by the source}
         coverage_excluded: {type: integer, minimum: 0, description: Returned records excluded from validated population coverage, for example records with invalid required price fields}
         coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: coverage_validated divided by coverage_total; describes population coverage only, not field-level quality; omitted when the denominator is unknown}
+        coverage_dimensions: {type: array, description: Field-specific coverage dimensions with the same provider-universe denominator; currently emitted only for market_breadth, items: {$ref: '#/components/schemas/ProviderProbeCoverageDimension'}}
         provider_time: {type: string, format: date-time, nullable: true}
         provider_time_type: {type: string, description: Explicit source timestamp semantics; never inferred from fetched_at}
         fetched_at: {type: string, format: date-time, nullable: true, description: Service collection time; never used as source data time}

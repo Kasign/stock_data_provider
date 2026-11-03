@@ -48,6 +48,7 @@ type providerProbeEvidence struct {
 	coverageMissing    *int
 	coverageExcluded   *int
 	coverageRatio      *float64
+	coverageDimensions []model.ProviderProbeCoverageDimension
 	providerTime       *time.Time
 	providerTimeType   string
 	fetchedAt          *time.Time
@@ -79,6 +80,40 @@ func recordProviderProbeCoverageCounts(ctx context.Context, total, returned, val
 	evidence.coverageMissing = &missing
 	evidence.coverageExcluded = &excluded
 	evidence.coverageRatio = &ratio
+}
+
+func buildMarketBreadthCoverageDimensions(snapshot *model.MarketBreadthSnapshot) []model.ProviderProbeCoverageDimension {
+	if snapshot == nil || snapshot.TotalSecurities <= 0 ||
+		snapshot.CoveredSecurities < 0 || snapshot.CoveredSecurities > snapshot.TotalSecurities ||
+		snapshot.UnclassifiedCount < 0 || snapshot.UnclassifiedCount > snapshot.CoveredSecurities ||
+		snapshot.QuoteTimestampCoverageCount < 0 || snapshot.QuoteTimestampCoverageCount > snapshot.CoveredSecurities ||
+		snapshot.AmountCoverageCount < 0 || snapshot.AmountCoverageCount > snapshot.CoveredSecurities {
+		return nil
+	}
+
+	total, returned := snapshot.TotalSecurities, snapshot.CoveredSecurities
+	build := func(dimension, source string, validated, excluded int) model.ProviderProbeCoverageDimension {
+		missing := total - returned
+		return model.ProviderProbeCoverageDimension{
+			Dimension: dimension, Population: "provider_universe", Source: source,
+			Total: total, Returned: returned, Validated: validated,
+			Missing: missing, Excluded: excluded, Ratio: float64(validated) / float64(total),
+		}
+	}
+	return []model.ProviderProbeCoverageDimension{
+		build("quote_response", "market_breadth.covered_securities", returned, 0),
+		build("price_classification", "market_breadth.unclassified_count", returned-snapshot.UnclassifiedCount, snapshot.UnclassifiedCount),
+		build("quote_timestamp", "market_breadth.quote_timestamp_coverage_count", snapshot.QuoteTimestampCoverageCount, returned-snapshot.QuoteTimestampCoverageCount),
+		build("amount", "market_breadth.amount_coverage_count", snapshot.AmountCoverageCount, returned-snapshot.AmountCoverageCount),
+	}
+}
+
+func recordProviderProbeCoverageDimensions(ctx context.Context, dimensions []model.ProviderProbeCoverageDimension) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil || len(dimensions) == 0 {
+		return
+	}
+	evidence.coverageDimensions = append([]model.ProviderProbeCoverageDimension(nil), dimensions...)
 }
 
 func recordProviderProbeTimeSemantics(ctx context.Context, semantics string) {
@@ -458,6 +493,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				recordProviderProbeTimeSemantics(probeCtx, "oldest_component_quote_time")
 				recordProviderProbeFetchedAt(probeCtx, snapshot.FetchedAt)
 				recordProviderProbeCoverageCounts(probeCtx, snapshot.TotalSecurities, snapshot.CoveredSecurities, validated, missing, excluded, "provider_universe", "market_breadth.total_securities")
+				recordProviderProbeCoverageDimensions(probeCtx, buildMarketBreadthCoverageDimensions(snapshot))
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
@@ -838,6 +874,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.CoverageMissing = evidence.coverageMissing
 			item.CoverageExcluded = evidence.coverageExcluded
 			item.CoverageRatio = evidence.coverageRatio
+			item.CoverageDimensions = evidence.coverageDimensions
 			item.ProviderTime = evidence.providerTime
 			item.ProviderTimeType = evidence.providerTimeType
 			item.FetchedAt = evidence.fetchedAt
