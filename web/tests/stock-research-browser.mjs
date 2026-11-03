@@ -88,14 +88,17 @@ try {
   });
 
   await page.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
+  await page.locator('.nav-link[data-view="stocks"]').click();
+  await page.locator("#symbol-input").fill("600519.SH");
   await page.locator('.nav-link[data-view="research"]').click();
   await page.locator("#research-view").waitFor({ state: "visible" });
-  await page.locator("#symbol-input").fill("600519.SH");
   await page.locator("#load-fundamentals").click();
   await oldRequestStarted;
 
   // 切换标的后必须中止旧请求，并恢复所有请求按钮，包括财务指标按钮。
+  await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#symbol-input").fill("000001.SZ");
+  await page.locator('.nav-link[data-view="research"]').click();
   await page.waitForFunction(() => {
     const button = document.querySelector("#load-fundamentals");
     return button && !button.disabled && button.textContent.includes("读取财务指标");
@@ -132,8 +135,9 @@ try {
     body: JSON.stringify({ error: { message: "not configured" } })
   }));
   await noKeyPage.goto(baseUrl, { waitUntil: "load", timeout: 30000 });
-  await noKeyPage.locator('.nav-link[data-view="research"]').click();
+  await noKeyPage.locator('.nav-link[data-view="stocks"]').click();
   await noKeyPage.locator("#symbol-input").fill("600519.SH");
+  await noKeyPage.locator('.nav-link[data-view="research"]').click();
   await noKeyPage.locator("#load-valuations").click();
   await noKeyPage.waitForFunction(() => document.querySelector("#valuations-quality")?.textContent === "需配置 Key");
   for (const selector of [
