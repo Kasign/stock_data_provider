@@ -648,6 +648,9 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("limit-pool source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("limit-pool fetched_at is in the future")
+	}
 	if snapshot.ProviderReportDate != "" {
 		parsed, dateErr := time.Parse("2006-01-02", snapshot.ProviderReportDate)
 		if dateErr != nil || parsed.Format("2006-01-02") != snapshot.ProviderReportDate {
@@ -685,6 +688,9 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			}
 			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 				return errors.New("limit-pool item source/version or fetched_at mismatch")
+			}
+			if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+				return fmt.Errorf("limit-pool item %s fetched_at is in the future", item.Symbol)
 			}
 			if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 				return fmt.Errorf("limit-pool item %s has unsupported quality %q", item.Symbol, item.QualityStatus)
@@ -906,6 +912,9 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("dragon-tiger source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("dragon-tiger fetched_at is in the future")
+	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.SourceReturned < 0 ||
 		snapshot.ExcludedNonAShareCount < 0 || snapshot.Returned != len(snapshot.Items) ||
 		snapshot.Returned > snapshot.SourceReturned ||
@@ -949,6 +958,9 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 			}
 			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
 				return errors.New("dragon-tiger item source/version, fetched_at, or quality is invalid")
+			}
+			if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+				return errors.New("dragon-tiger item fetched_at is in the future")
 			}
 			if item.QualityStatus == model.QualityDegraded {
 				hasDegradedItem = true

@@ -65,6 +65,9 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("announcement source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("announcement fetched_at is in the future")
+	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.Returned != len(snapshot.Items) || snapshot.Returned > pageSize {
 		return errors.New("announcement total/pages/returned count is invalid")
 	}
@@ -95,6 +98,9 @@ func validateStockAnnouncementSnapshot(symbol, startDate, endDate string, page, 
 		if strings.TrimSpace(item.ArticleID) == "" || strings.TrimSpace(item.Title) == "" ||
 			item.Symbol != symbol || item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return errors.New("announcement item is missing ID/title or has mismatched symbol/source/version")
+		}
+		if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+			return errors.New("announcement item fetched_at is in the future")
 		}
 		if _, ok := seen[item.ArticleID]; ok {
 			return fmt.Errorf("announcement item has duplicate article ID %q", item.ArticleID)

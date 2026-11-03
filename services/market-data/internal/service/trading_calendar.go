@@ -62,6 +62,9 @@ func validateTradingCalendarSnapshot(snapshot *model.TradingCalendarSnapshot, st
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("trading-calendar source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("trading-calendar fetched_at is in the future")
+	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("trading-calendar quality status %q is unsupported", snapshot.QualityStatus)
 	}
