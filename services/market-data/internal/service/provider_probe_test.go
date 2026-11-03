@@ -663,7 +663,7 @@ func TestProviderProbeRunsRequestedDailyBarAdjustmentsIndependently(t *testing.T
 	adjustments := []model.AdjustmentBasis{model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward}
 	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
 		Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarAdjustments: adjustments,
-		Checks: []string{"cross_provider"}, TimeoutSeconds: 5,
+		Checks:              []string{"cross_provider"}, TimeoutSeconds: 5,
 	})
 	if err != nil {
 		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
