@@ -50,6 +50,9 @@ try {
     localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
       marketBase: "/market-api", analysisBase: "/analysis-api", apiKey: "research-browser-key"
     }));
+    localStorage.setItem("stock-provider-webui.watchlist.v1", JSON.stringify([
+      { symbol: "000001.SZ", name: "平安银行", updated_at: "2026-11-03T00:00:00Z" }
+    ]));
   });
   const page = await context.newPage();
   const pageErrors = [];
@@ -117,6 +120,16 @@ try {
     document.querySelector("#research-overview-symbol")?.textContent.includes("600519.SH")
   );
   assert.equal(await page.locator("#research-overview-symbol").textContent().then(value => value.includes("600519.SH")), true);
+
+  // 本地自选股应提供独立研究入口，并保留自选名称与代码上下文。
+  await page.locator('.nav-link[data-view="watchlist"]').click();
+  await page.locator('#watchlist-list button[data-watchlist-action="research"]').click();
+  await page.locator("#research-view").waitFor({ state: "visible" });
+  await page.waitForFunction(() =>
+    document.querySelector("#symbol-input")?.value === "000001.SZ" &&
+    document.querySelector("#research-overview-symbol")?.textContent.includes("000001.SZ")
+  );
+  assert.equal(await page.locator("#research-overview-symbol").textContent().then(value => value.includes("000001.SZ")), true);
 
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#symbol-input").fill("600519.SH");

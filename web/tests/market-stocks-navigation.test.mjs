@@ -21,6 +21,14 @@ test("Chromium 专项覆盖全市场直达研究入口", () => {
   assert.match(browserAcceptance, /#research-overview-symbol/);
 });
 
+test("自选股列表提供直达研究入口并同步标的名称", async () => {
+  const appSource = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(appSource, /\["query", "查行情"\], \["research", "研究"\]/);
+  assert.match(appSource, /action === "query" \|\| action === "research"/);
+  assert.match(appSource, /setView\(action === "research" \? "research" : "stocks"\)/);
+  assert.match(browserAcceptance, /button\[data-watchlist-action="research"\]/);
+});
+
 test("全市场入口继续通过统一行情查询建立研究上下文", () => {
   assert.match(app, /stockResearch\.syncSymbol\(\);\s*setText\("#query-hint"/);
   assert.match(app, /void runQuoteQuery\(\);/);

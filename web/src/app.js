@@ -1043,14 +1043,16 @@ function renderWatchlist(records, storageReadable, storageValid) {
 
     const actions = document.createElement("div");
     actions.className = "watchlist-actions";
-    for (const [action, label] of [["query", "查行情"], ["analyze", "分析"], ["remove", "移除"]]) {
+    for (const [action, label] of [["query", "查行情"], ["research", "研究"], ["analyze", "分析"], ["remove", "移除"]]) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "watchlist-action" + (action === "remove" ? " watchlist-action-muted" : "");
       button.dataset.watchlistAction = action;
       button.dataset.symbol = record.symbol;
+      button.dataset.name = record.name || record.symbol;
       button.textContent = label;
       if (action === "remove") button.setAttribute("aria-label", "移除自选 " + record.symbol);
+      if (action === "research") button.setAttribute("aria-label", "研究自选股 " + record.symbol);
       actions.append(button);
     }
     const groupSelect = document.createElement("select");
@@ -1286,9 +1288,11 @@ function handleWatchlistAction(event) {
     return;
   }
 
-  if (action === "query") {
+  if (action === "query" || action === "research") {
     $("#symbol-input").value = symbol;
-    setView("stocks");
+    state.selectedStockSearchItem = { symbol, name: button.dataset.name || symbol };
+    setView(action === "research" ? "research" : "stocks");
+    stockResearch.syncSymbol();
     void runQuoteQuery();
     return;
   }
