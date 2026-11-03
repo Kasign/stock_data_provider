@@ -21,7 +21,7 @@ export function summarizeMarketOverviewRefresh(outcomes, configured = true) {
 function el(tag, cls = "", text = "") { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined&&text!==null)n.textContent=String(text); return n; }
 function isValidTradeDate(value) {
  const date=String(value??"");
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return false;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return false;
  const timestamp=Date.parse(date+"T00:00:00Z");
  return Number.isFinite(timestamp)&&new Date(timestamp).toISOString().slice(0,10)===date;
 }
