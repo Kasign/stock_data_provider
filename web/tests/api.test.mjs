@@ -21,6 +21,7 @@ import {
   getDataSourceProbeHistory,
   runDataSourceProbe,
   getMarketQuotes,
+  getMarketSectors,
   getMarketCapitalFlow,
   getQuote,
   searchStocks,
@@ -638,6 +639,27 @@ test("marks a timed-out task creation as an unknown outcome instead of a safe fa
         return true;
       }
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("板块排行请求透传排序维度、方向与行业/概念类别", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url: String(url), ...init };
+    return jsonResponse({ category: "industry", direction: "down", sort_by: "change_5d", items: [] });
+  };
+  try {
+    const result = await getMarketSectors(
+      { marketBase: "/market-api", apiKey: "market-secret" },
+      { type: "concept", limit: 20, direction: "down", sortBy: "change_5d" }
+    );
+    assert.equal(result.sort_by, "change_5d");
+    assert.equal(request.url, "/market-api/api/v1/market/sectors?type=concept&limit=20&direction=down&sort_by=change_5d");
+    assert.equal(request.headers["X-API-Key"], "market-secret");
   } finally {
     globalThis.fetch = originalFetch;
   }

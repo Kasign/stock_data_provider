@@ -41,7 +41,7 @@
 | GET | /api/v1/stocks/{symbol}/capital-flow | 单股资金流摘要 | 无额外参数；详见 OpenAPI | getCapitalFlow | 是 |
 | GET | /api/v1/stocks/{symbol}/boards | 单股所属行业/概念板块 | 无额外参数；详见 OpenAPI | getStockBoards | 是 |
 | GET | /api/v1/market/valuations | 最多 100 只股票估值快照 | symbols 必填，最多 100 个代码 | getMarketValuations | 是 |
-| GET | /api/v1/market/sectors | 行业/概念板块实时排行 | type（industry/concept）、direction（up/down）、sort_by（change_percent/amount/change_5d）、limit（1–100） | getMarketSectors | 是 |
+| GET | /api/v1/market/sectors | 行业/概念板块排行 | type（industry/concept）、direction（up/down）、sort_by（change_percent/amount/change_5d）、limit（1–100）；返回 amount/amount_unit、change_percent_5d、leading_stock 等字段 | getMarketSectors | 是 |
 | GET | /api/v1/market/capital-flow | 市场级每日资金流历史序列（Tushare moneyflow_mkt_dc） | start、end 必填；闭区间，最长 2000 个自然日；需启用并配置有权限的 Tushare Token | getMarketCapitalFlow | 是 |
 | GET | /api/v1/market/index-catalog | 国内指数/板块目录 | tag（cn_concept/region/tszs/industry/tushare） | getIndexCatalog | 是 |
 | GET | /api/v1/market/indices/{symbol}/constituents | 指定指数成分及权重快照 | 路径参数 symbol；source、as_of 可选 | getIndexConstituents | 是 |
@@ -122,3 +122,11 @@
 - Python 桥接 OpenAPI：doc/接口规范/Python桥接.openapi.yaml。
 - WebUI 实际请求实现：web/src/api.js。
 - 行情服务路由注册：services/market-data/internal/httpapi/server.go。
+
+
+### 板块排行字段补充说明（2026-11-03）
+
+- WebUI 使用 `amount` + `amount_unit` 展示成交额；仅 `amount_unit=CNY` 时显示人民币单位，unknown 不推断。
+- 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。当前 Go 模型包含该 JSON 字段，但 `services/market-data/openapi.yaml` 的 `SectorRanking` 属性清单尚未声明它，属于 OpenAPI 文档缺口；本分支不修改服务端 OpenAPI，已记录待数据层补齐。
+- `direction=up` 表示按所选指标从高到低，`direction=down` 表示从低到高。
+- 板块资金净流入没有独立服务端接口，WebUI 继续显示未接入，不以成交额替代。
