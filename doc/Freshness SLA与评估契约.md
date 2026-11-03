@@ -190,3 +190,4 @@ Freshness Evaluator 的特殊交易样例采用显式上下文输入，不在 ev
 
 
 本批首次 CI 的 market-data gofmt 前置检查发现 `ProviderProbeItem` 新增字段后，原有字段标签未按最长类型重新对齐；因此测试和镜像构建尚未进入编译阶段。已根据 CI 的 gofmt diff 对整个结构体统一格式，修复后必须以新 SHA 重新跑 market-data test、race、vet 和 Docker 构建。
+第二轮 CI 复核又发现该结构体与后续类型声明之间缺少 gofmt 要求的空行；已补齐。前两次失败均停留在格式检查阶段，没有进入 market-data 编译和单测，本批最终验收以再次触发的完整工作流为准。

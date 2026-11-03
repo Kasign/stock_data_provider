@@ -79,6 +79,7 @@ type ProviderProbeItem struct {
 	FetchedAt              *time.Time                       `json:"fetched_at,omitempty"`
 	CheckedAt              time.Time                        `json:"checked_at"`
 }
+
 // ProviderProbeFieldComparison 是跨 Provider 对账的单字段证据。
 // 不可比较字段不输出数值，避免把缺失值误展示为 0。
 type ProviderProbeFieldComparison struct {
