@@ -98,7 +98,7 @@
 - 检查行情服务 live/ready、分析服务 healthz/readyz。
 - 读取 Provider 注册和静态能力清单。
 - 区分服务健康、Provider 注册、能力声明、实际业务请求结果；当前数据中心不直连 MariaDB/Redis。
-- 页面接入只读 `GET /api/v1/data-sources/diagnostics`，展示真实业务请求形成的进程内熔断统计；该接口只覆盖服务端已纳入统计的能力，不主动探测 Provider。
+- 页面接入只读 `GET /api/v1/data-sources/diagnostics`，展示 `quote`、`daily_bars` 两类真实业务请求形成的进程内熔断统计；该接口只覆盖这两类服务端观测，不主动探测 Provider。
 - 页面另接入 `POST /api/v1/data-sources/probe` 主动探测。用户显式点击后，可选择全部/核心能力、连通性/契约/质量/新鲜度/跨源对账/存储六类诊断维度、单项超时，以及可选市场板块和单只股票样本；不在打开数据中心或执行普通健康检查时自动访问上游。
 - 主动探测逐项展示 Provider/能力状态、质量原因、HTTP/错误阶段、源端时间、可验证的总体覆盖率和跨源字段比较。未配置、不支持、跳过与失败分开显示；缺少可验证覆盖分母时不推算总体覆盖率。
 - 页面接入 `GET /api/v1/data-sources/probe/history`，展示最近 20 批持久化探测结果。MariaDB 未配置或历史存储不可用时，历史读取会单独提示；历史接口 503 不会覆盖本次探测结果。
