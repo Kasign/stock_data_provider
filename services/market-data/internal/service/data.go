@@ -3351,16 +3351,23 @@ func coherentStoredSeries(bars []model.DailyBar, basis model.AdjustmentBasis) ([
 		method := strings.TrimSpace(bar.AdjustmentMethod)
 		refDate := strings.TrimSpace(bar.AdjustmentRefDate)
 		if basis != model.AdjustmentNone {
-			if method == "" || refDate == "" {
+			if method == "" {
 				continue
 			}
-			parsedReference, parseErr := time.Parse("2006-01-02", refDate)
-			if parseErr != nil || parsedReference.Format("2006-01-02") != refDate {
-				continue
-			}
-			if (basis == model.AdjustmentForward && refDate < bar.TradeDate) ||
-				(basis == model.AdjustmentBackward && refDate > bar.TradeDate) {
-				continue
+			// 前复权必须有明确的基准日；累计因子后复权没有单一参考日，允许为空。
+			if refDate == "" {
+				if basis == model.AdjustmentForward {
+					continue
+				}
+			} else {
+				parsedReference, parseErr := time.Parse("2006-01-02", refDate)
+				if parseErr != nil || parsedReference.Format("2006-01-02") != refDate {
+					continue
+				}
+				if (basis == model.AdjustmentForward && refDate < bar.TradeDate) ||
+					(basis == model.AdjustmentBackward && refDate > bar.TradeDate) {
+					continue
+				}
 			}
 		}
 		key := source + "|" + sourceVersion + "|" + method + "|" + refDate + "|" + bar.NormalizationVer

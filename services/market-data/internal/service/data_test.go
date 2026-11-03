@@ -2873,6 +2873,18 @@ func TestCoherentStoredSeriesSeparatesAdjustmentMethods(t *testing.T) {
 	}
 }
 
+func TestCoherentStoredSeriesAllowsBackwardCumulativeFactorWithoutReferenceDate(t *testing.T) {
+	bar := model.DailyBar{
+		SourceVersion: "tushare-daily-bars-v1", Source: "tushare", TradeDate: "2026-10-20",
+		AdjustmentBasis: model.AdjustmentBackward, AdjustmentMethod: "cumulative_adj_factor_v1",
+		NormalizationVer: normalize.Version,
+	}
+	series, reason := coherentStoredSeries([]model.DailyBar{bar}, model.AdjustmentBackward)
+	if reason != "" || len(series) != 1 {
+		t.Fatalf("backward cumulative-factor series without a reference date is valid: series=%+v reason=%s", series, reason)
+	}
+}
+
 func TestCoherentStoredSeriesRejectsAdjustedBarsWithoutMethod(t *testing.T) {
 	bar := model.DailyBar{
 		SourceVersion: "test-v1", Source: "yahoo", TradeDate: "2026-10-20",
