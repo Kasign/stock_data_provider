@@ -21,6 +21,19 @@ test("Chromium 专项覆盖全市场直达研究入口", () => {
   assert.match(browserAcceptance, /#research-overview-symbol/);
 });
 
+test("市场人气榜、涨跌停池和龙虎榜提供独立深度研究入口", async () => {
+  const [overview, activity] = await Promise.all([
+    readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/market-activity.js", import.meta.url), "utf8")
+  ]);
+  assert.match(overview, /data-hot-action="research"|data\.hotAction="research"/);
+  assert.match(overview, /data-pool-action|poolAction/);
+  assert.match(overview, /targetView=button\.dataset\.hotAction==="research"\?"research":"stocks"/);
+  assert.match(activity, /data-dragon-action|dragonAction/);
+  assert.match(activity, /b\.dataset\.dragonAction==="research"\?"research":"stocks"/);
+  assert.match(app, /\(item, source, targetView\) => selectStockFromMarket\(item, source, targetView\)/);
+});
+
 test("自选股列表提供直达研究入口并同步标的名称", async () => {
   const appSource = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   assert.match(appSource, /\["query", "查行情"\], \["research", "研究"\]/);

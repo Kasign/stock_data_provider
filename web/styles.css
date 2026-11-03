@@ -5065,3 +5065,5 @@ button:disabled {
 .research-report-markdown{max-height:440px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:var(--panel);border-radius:8px;font-size:11px;line-height:1.6}
 .research-report-actions{display:flex;gap:7px;flex-wrap:wrap}
 @media(max-width:640px){.research-note-form,.research-note-toolbar,.research-report-toolbar{grid-template-columns:1fr}.research-note-form .field:nth-child(6){grid-column:auto}}
+
+.market-stock-entry-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.market-stock-entry-action{min-height:26px;padding:3px 8px;font-size:11px;white-space:nowrap}

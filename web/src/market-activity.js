@@ -47,7 +47,9 @@ export function bindMarketActivity(getSettings,onSelectStock){
    const symbol=String(item.symbol||item.code||"").trim();
    stock.append(el("strong","market-table-primary",item.name||"股票名称未报告"),el("small","market-table-secondary",symbol||"代码未报告"));
    if(symbol){
-    const button=el("button","activity-stock-link","查看行情");button.type="button";button.dataset.dragonSymbol=symbol;button.dataset.dragonName=item.name||symbol;stock.append(button);
+    const actions=el("div","market-stock-entry-actions");
+    [["stocks","查看行情"],["research","深度研究"]].forEach(([target,label])=>{const button=el("button","button button-secondary market-stock-entry-action",label);button.type="button";button.dataset.dragonSymbol=symbol;button.dataset.dragonName=item.name||symbol;button.dataset.dragonAction=target;actions.append(button);});
+    stock.append(actions);
    }
    tr.append(stock);
    cell(tr,formatPercent(item.change_percent),direction(item.change_percent));cell(tr,amount(item.net_buy_amount_cny),direction(item.net_buy_amount_cny));cell(tr,amount(item.deal_amount_cny));
@@ -251,6 +253,6 @@ function renderCalendar(data){
  $("#calendar-previous-month").addEventListener("click",()=>{setMonth(monthOffset-1);void loadCalendar();});
  $("#calendar-current-month").addEventListener("click",()=>{setMonth(0);void loadCalendar();});
  $("#calendar-next-month").addEventListener("click",()=>{setMonth(monthOffset+1);void loadCalendar();});
- $("#dragon-tiger-body").addEventListener("click",event=>{const b=event.target.closest("button[data-dragon-symbol]");if(b&&b.dataset.dragonSymbol&&typeof onSelectStock==="function")onSelectStock({symbol:b.dataset.dragonSymbol,name:b.dataset.dragonName||b.dataset.dragonSymbol});});
+ $("#dragon-tiger-body").addEventListener("click",event=>{const b=event.target.closest("button[data-dragon-symbol]");if(b&&b.dataset.dragonSymbol&&typeof onSelectStock==="function")onSelectStock({symbol:b.dataset.dragonSymbol,name:b.dataset.dragonName||b.dataset.dragonSymbol},"龙虎榜",b.dataset.dragonAction==="research"?"research":"stocks");});
  return {refresh:()=>Promise.all([loadDragon(),loadCalendar()]),invalidateConnection};
 }

@@ -200,7 +200,7 @@ const state = {
   watchlistImportPreview: null
 };
 
-const marketOverview = bindMarketOverview(() => state.settings, (item, source) => selectStockFromMarket(item, source));
+const marketOverview = bindMarketOverview(() => state.settings, (item, source, targetView) => selectStockFromMarket(item, source, targetView));
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
 const dataCenter = bindDataCenter(() => state.settings);
 bindLocalAlertDrafts({ root: document.querySelector("#alerts-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
@@ -210,7 +210,7 @@ bindNotificationPreferences({ root: document.querySelector("#settings-notificati
 bindExistingApiTools(() => state.settings);
 const marketActivity = bindMarketActivity(
   () => state.settings,
-  (item) => selectStockFromMarket(item, "龙虎榜")
+  (item, source, targetView) => selectStockFromMarket(item, source || "龙虎榜", targetView)
 );
 const marketStocks = bindMarketStocks(
   () => state.settings,
