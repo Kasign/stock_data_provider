@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { runResultFixtures } from "./fixtures/run-results.mjs";
 
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");\nconst screenshotDir=path.resolve(root,"../browser-screenshots/run-flow-outcomes");\nawait mkdir(screenshotDir,{recursive:true});
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
+const screenshotDir=path.resolve(root,"../browser-screenshots/run-flow-outcomes");
+await mkdir(screenshotDir,{recursive:true});
 const tasks=[
  {task_id:"task-partial",run_id:"run-partial",symbols:["600519"],task_type:"post_market_scan",status:"partial",analysis_base:"/analysis-api"},
  {task_id:"task-failed",run_id:"run-failed",symbols:["000001"],task_type:"post_market_scan",status:"failed",failure_code:"market_snapshot_failed",error_message:"读取行情快照失败",analysis_base:"/analysis-api"},
