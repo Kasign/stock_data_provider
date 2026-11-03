@@ -53,8 +53,8 @@ type ProviderProbeItem struct {
 	RowsReturned           int                       `json:"rows_returned,omitempty"`
 	RowsValidated          int                       `json:"rows_validated,omitempty"`
 	CoverageTotal          *int                      `json:"coverage_total,omitempty"`
-	CoveragePopulation      string                    `json:"coverage_population,omitempty"`
-	CoverageSource          string                    `json:"coverage_source,omitempty"`
+	CoveragePopulation     string                    `json:"coverage_population,omitempty"`
+	CoverageSource         string                    `json:"coverage_source,omitempty"`
 	CoverageReturned       *int                      `json:"coverage_returned,omitempty"`
 	CoverageValidated      *int                      `json:"coverage_validated,omitempty"`
 	CoverageMissing        *int                      `json:"coverage_missing,omitempty"`
@@ -94,6 +94,7 @@ type ProviderProbeCheckResult struct {
 	FieldComparisons   []ProviderProbeFieldComparison `json:"field_comparisons,omitempty"`
 	CheckedAt          time.Time                      `json:"checked_at"`
 }
+
 // ProviderProbeRun 是隔离于业务流量的主动探测批次。
 type ProviderProbeRun struct {
 	RunID                 string                     `json:"run_id"`
