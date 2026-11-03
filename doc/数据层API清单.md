@@ -130,3 +130,12 @@
 - 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。当前 Go 模型包含该 JSON 字段，但 `services/market-data/openapi.yaml` 的 `SectorRanking` 属性清单尚未声明它，属于 OpenAPI 文档缺口；本分支不修改服务端 OpenAPI，已记录待数据层补齐。
 - `direction=up` 表示按所选指标从高到低，`direction=down` 表示从低到高。
 - 板块资金净流入没有独立服务端接口，WebUI 继续显示未接入，不以成交额替代。
+
+
+### 市场观察联动接口核对（2026-11-03）
+
+- `GET /api/v1/market/sentiment/history` 返回已持久化的 `trade_date`，WebUI 用该日期作为联动查询条件。
+- `GET /api/v1/market/limit-pools?type=up|down|broken&date=YYYY-MM-DD` 支持显式交易日期。
+- `GET /api/v1/market/dragon-tiger?date=YYYY-MM-DD` 支持显式交易日期。
+- 以上联动只保证请求日期相同，不保证不同数据源为同一时刻的原子快照，需分别核验各响应质量与源端时间。
+- 板块排行的 `code` 为 BK 板块代码，当前 `leading_stock` 只有名称；尚无可靠的板块成分股查询映射，WebUI 不将 BK 代码传给指数成分接口。

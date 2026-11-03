@@ -362,7 +362,12 @@ export function getStockTradingStatus(settings, symbol, date, { asOf = "", signa
 
 export function getMarketBreadth(settings, signal) { return request(settings.marketBase, "/api/v1/market/breadth", { apiKey: settings.apiKey, signal }); }
 export function getMarketSectors(settings, { type = "industry", limit = 10, direction = "up", sortBy = "change_percent", signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit),direction:String(direction),sort_by:String(sortBy)});return request(settings.marketBase,"/api/v1/market/sectors?"+query.toString(),{apiKey:settings.apiKey,signal}); }
-export function getMarketLimitPool(settings, { type = "up", limit = 30, date = "", signal } = {}) { const query=new URLSearchParams({type:String(type),limit:String(limit)});if(date)query.set("date",date);return request(settings.marketBase,"/api/v1/market/limit-pools?"+query.toString(),{apiKey:settings.apiKey,signal}); }
+export function getMarketLimitPool(settings, { type = "up", limit = 30, date = "", signal } = {}) {
+  if (date && !isValidISODate(date)) return Promise.reject(new Error("涨跌停池查询日期必须是有效日期。"));
+  const query = new URLSearchParams({ type: String(type), limit: String(limit) });
+  if (date) query.set("date", date);
+  return request(settings.marketBase, "/api/v1/market/limit-pools?" + query.toString(), { apiKey: settings.apiKey, signal });
+}
 
 export function getMarketDragonTiger(settings,{date="",page=1,pageSize=50,signal}={}){const query=new URLSearchParams({page:String(page),page_size:String(pageSize)});if(date)query.set("date",date);return request(settings.marketBase,"/api/v1/market/dragon-tiger?"+query.toString(),{apiKey:settings.apiKey,signal});}
 export function getTradingCalendar(settings,{start,end,signal}={}){if(!isValidISODate(start)||!isValidISODate(end))return Promise.reject(new Error("交易日历需要有效的开始和结束日期。"));if(start>end)return Promise.reject(new Error("交易日历开始日期不能晚于结束日期。"));const query=new URLSearchParams({start:String(start),end:String(end)});return request(settings.marketBase,"/api/v1/market/trading-calendar?"+query.toString(),{apiKey:settings.apiKey,signal});}

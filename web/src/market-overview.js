@@ -116,7 +116,7 @@ function renderPool(data) {
  else{items.forEach(item=>{const tr=document.createElement("tr"),stock=el("td"),symbol=String(item.symbol||item.code||"").trim(),name=String(item.name||symbol||"名称未报告");stock.append(el("strong","market-table-primary",name),el("small","market-table-secondary",symbol||"代码未报告"));if(symbol){const actions=el("div","market-stock-entry-actions");[["stocks","查看行情"],["research","深度研究"]].forEach(([target,label])=>{const button=el("button","button button-secondary market-stock-entry-action",label);button.type="button";button.dataset.poolSymbol=symbol;button.dataset.poolName=name;button.dataset.poolAction=target;actions.append(button);});stock.append(actions);}tr.append(stock);cell(tr,formatPercent(item.change_percent),dir(item.change_percent));cell(tr,item.consecutive_boards===null||item.consecutive_boards===undefined?"—":count(item.consecutive_boards)+" 板");cell(tr,(item.first_touch_time||"—")+" / "+(item.last_touch_time||"—"),"market-touch-time");cell(tr,item.industry||"—");root.append(tr);});badge("market-pool-status",qualityLabel(data.quality_status),"quality",data.quality_status);}
  const label=data?.type==="down"?"跌停池":data?.type==="broken"?"炸板池":"涨停池";
  if($("#market-sentiment-pool"))$("#market-sentiment-pool").textContent=data?.has_data===false?"数据未确认":label+" · "+count(data?.total)+" 只";
- meta("market-pool-meta",[label,"交易日期 "+(data?.trade_date||"未报告"),"源端数量 "+count(data?.total),"当前返回 "+count(items.length)+" 条","来源 "+(data?.source||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);qualityReasons("market-pool-reasons",data?.quality_reasons);
+ meta("market-pool-meta",[label,"交易日期 "+(data?.trade_date||poolDate||"中国时区当日（默认）"),"源端数量 "+count(data?.total),"当前返回 "+count(items.length)+" 条","来源 "+(data?.source||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);qualityReasons("market-pool-reasons",data?.quality_reasons);
 }
 function renderHotStocks(data) {
  const root=$("#market-hot-stocks-body"),items=Array.isArray(data?.items)?data.items.filter(item=>item&&typeof item==="object"):[];
@@ -162,7 +162,7 @@ function renderMarketCapitalFlow(data) {
  qualityReasons("market-capital-flow-reasons",data?.quality_reasons);
 }
 export function bindMarketOverview(getSettings,onSelectStock) {
- const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",sectorDirection="up",poolType="up",hotType="popular",refreshGenerations=Object.create(null);
+ const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",sectorDirection="up",poolType="up",poolDate="",hotType="popular",refreshGenerations=Object.create(null);
  let capitalFlowController=null,capitalFlowGeneration=0;
  function showSectorMetricUnavailable(metric=sectorMetric){
   const root=$("#market-sector-body");
@@ -185,7 +185,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    if(key==="indices")data=await getMarketIndices(settings,ctl.signal);
    else if(key==="breadth")data=await getMarketBreadth(settings,ctl.signal);
    else if(key==="sectors")data=await getMarketSectors(settings,{type:sectorType,limit:10,direction:sectorDirection,sortBy:sectorMetricSortBy(sectorMetric),signal:ctl.signal});
-   else if(key==="pool")data=await getMarketLimitPool(settings,{type:poolType,limit:30,signal:ctl.signal});
+   else if(key==="pool")data=await getMarketLimitPool(settings,{type:poolType,limit:30,date:poolDate,signal:ctl.signal});
    else if(key==="hot")data=await getMarketHotStocks(settings,{type:hotType,limit:20,signal:ctl.signal});
    else return "failed";
    if(ctl.signal.aborted||generation[key]!==seq)return "cancelled";
@@ -249,6 +249,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  document.querySelectorAll("[data-sector-metric]").forEach(button=>button.addEventListener("click",()=>{sectorMetric=["change","amount","five-day","flow"].includes(button.dataset.sectorMetric)?button.dataset.sectorMetric:"change";document.querySelectorAll("[data-sector-metric]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("sectors");}));
  document.querySelectorAll("[data-sector-direction]").forEach(button=>button.addEventListener("click",()=>{sectorDirection=button.dataset.sectorDirection==="down"?"down":"up";document.querySelectorAll("[data-sector-direction]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("sectors");}));
  document.querySelectorAll("[data-pool-type]").forEach(button=>button.addEventListener("click",()=>{poolType=["up","down","broken"].includes(button.dataset.poolType)?button.dataset.poolType:"up";document.querySelectorAll("[data-pool-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("pool");}));
+ $("#market-pool-date")?.addEventListener("change",event=>{poolDate=String(event.target.value||"");void load("pool");});
  document.querySelectorAll("[data-hot-type]").forEach(button=>button.addEventListener("click",()=>{hotType=["popular","surge"].includes(button.dataset.hotType)?button.dataset.hotType:"popular";document.querySelectorAll("[data-hot-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("hot");}));
 
  async function loadMarketCapitalFlow() {
@@ -317,8 +318,13 @@ export function bindMarketOverview(getSettings,onSelectStock) {
     if(!items.length){const row=document.createElement("tr"),cell=el("td","table-empty","该日期范围内没有已保存的情绪快照；不会用当前行情补造历史。");cell.colSpan=7;row.append(cell);body.append(row);}
     items.forEach(item=>{
      const row=document.createElement("tr");
-     [item.trade_date,count(item.advancing_count),count(item.declining_count),count(item.unchanged_count),count(item.limit_up_count),count(item.limit_down_count),qualityLabel(item.quality_status)].forEach(value=>row.append(el("td","",value)));
-     body.append(row);
+     row.append(el("td","",item.trade_date||"未报告"));
+     [count(item.advancing_count),count(item.declining_count),count(item.unchanged_count),count(item.limit_up_count),count(item.limit_down_count),qualityLabel(item.quality_status)].forEach(value=>row.append(el("td","",value)));
+     const actions=el("td","market-date-drilldown-actions"),tradeDate=String(item.trade_date||"");
+     if(/^\\d{4}-\\d{2}-\\d{2}$/.test(tradeDate)){
+      [["pool","up","涨停池"],["pool","down","跌停池"],["pool","broken","炸板池"],["dragon-tiger","","龙虎榜"]].forEach(([target,type,label])=>{const action=el("button","button button-secondary market-stock-entry-action",label);action.type="button";action.dataset.marketDate=tradeDate;action.dataset.marketDateTarget=target;if(type)action.dataset.marketDateType=type;actions.append(action);});
+     }else actions.textContent="日期未报告，无法联动";
+     row.append(actions);body.append(row);
     });
    }
    if(status)status.textContent="已读取 "+items.length+"/"+count(data?.total)+" 条持久化快照";
@@ -331,6 +337,19 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   }
  }
  $("#load-market-sentiment-history")?.addEventListener("click",()=>{void loadSentimentHistory();});
+ $("#market-sentiment-history-body")?.addEventListener("click",event=>{
+  const button=event.target.closest("button[data-market-date-target]");if(!button)return;
+  const date=String(button.dataset.marketDate||"");if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return;
+  if(button.dataset.marketDateTarget==="pool"){
+   poolDate=date;const dateInput=$("#market-pool-date");if(dateInput)dateInput.value=date;
+   poolType=["up","down","broken"].includes(button.dataset.marketDateType)?button.dataset.marketDateType:"up";
+   document.querySelectorAll("[data-pool-type]").forEach(item=>item.setAttribute("aria-pressed",String(item.dataset.poolType===poolType)));
+   void load("pool");$("#market-lists-panel")?.scrollIntoView({behavior:"smooth",block:"start"});
+  }else if(button.dataset.marketDateTarget==="dragon-tiger"){
+   window.dispatchEvent(new CustomEvent("market-date-selected",{detail:{date}}));
+   $("#market-activity-panel")?.scrollIntoView({behavior:"smooth",block:"start"});
+  }
+ });
 
  $("#market-hot-stocks-body")?.addEventListener("click",event=>{const button=event.target.closest("button[data-hot-symbol]");if(!button||!button.dataset.hotSymbol||typeof onSelectStock!=="function")return;const targetView=button.dataset.hotAction==="research"?"research":"stocks";onSelectStock({symbol:button.dataset.hotSymbol,name:button.dataset.hotName||button.dataset.hotSymbol},"人气/飙升榜",targetView);});
  $("#market-pool-body")?.addEventListener("click",event=>{const button=event.target.closest("button[data-pool-symbol]");if(!button||!button.dataset.poolSymbol||typeof onSelectStock!=="function")return;const targetView=button.dataset.poolAction==="research"?"research":"stocks";onSelectStock({symbol:button.dataset.poolSymbol,name:button.dataset.poolName||button.dataset.poolSymbol},"涨跌停池",targetView);});

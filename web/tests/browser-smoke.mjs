@@ -127,6 +127,9 @@ try {
     let marketScenario = "503";
     let marketIndexRequestCount = 0;
     const sectorRequests = [];
+    const limitPoolRequests = [];
+    const dragonTigerRequests = [];
+    let sentimentHistoryRequestCount = 0;
     let capitalFlowScenario = "success";
     let capitalFlowRequestCount = 0;
     let capitalFlowRequest = null;
@@ -339,6 +342,24 @@ try {
         });
       }
 
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/sentiment/history")) {
+        sentimentHistoryRequestCount += 1;
+        return json(200, { start_date: "2026-10-01", end_date: "2026-10-30", total: 1,
+          items: [{ trade_date: "2026-10-29", advancing_count: 3200, declining_count: 1800, unchanged_count: 100, limit_up_count: 55, limit_down_count: 12, quality_status: "degraded" }] });
+      }
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/limit-pools")) {
+        const query = new URL(route.request().url()).searchParams;
+        limitPoolRequests.push({ date: query.get("date") || "", type: query.get("type") || "" });
+        return json(200, { type: query.get("type") || "up", trade_date: query.get("date") || "2026-10-30",
+          total: 1, has_data: true, items: [], source: "browser-pool-fixture", fetched_at: "2026-10-30T08:00:00Z", quality_status: "valid", quality_reasons: [] });
+      }
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/dragon-tiger")) {
+        const query = new URL(route.request().url()).searchParams;
+        dragonTigerRequests.push({ date: query.get("date") || "" });
+        return json(200, { date: query.get("date") || "2026-10-30", trade_date: query.get("date") || "2026-10-30",
+          page: Number(query.get("page") || 1), returned: 0, total: 0, has_data: false, items: [], source: "browser-dragon-fixture",
+          fetched_at: "2026-10-30T08:00:00Z", quality_status: "unknown", quality_reasons: [] });
+      }
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/capital-flow")) {
         capitalFlowRequestCount += 1;
         capitalFlowRequest = { url: route.request().url(), headers: route.request().headers() };
@@ -522,6 +543,19 @@ try {
     assert.notEqual(skipLinkState.outlineWidth, "0px", "the focused skip link outline must be non-zero");
 
     if (viewport.width === 320) {
+      await page.locator("#market-sentiment-history-start").fill("2026-10-01");
+      await page.locator("#market-sentiment-history-end").fill("2026-10-30");
+      await page.locator("#load-market-sentiment-history").click();
+      await page.waitForFunction(() => document.querySelector("#market-sentiment-history-body button[data-market-date-target='pool']") !== null);
+      assert.equal(sentimentHistoryRequestCount, 1, "historical sentiment must come from persisted API records");
+      await page.locator("#market-sentiment-history-body button[data-market-date-target='pool'][data-market-date-type='down']").click();
+      await page.waitForFunction(() => document.querySelector("#market-pool-meta")?.textContent.includes("2026-10-29"));
+      assert.deepEqual(limitPoolRequests.at(-1), { date: "2026-10-29", type: "down" }, "sentiment history must drill into the same-date selected limit pool");
+      assert.equal(await page.locator("#market-pool-date").inputValue(), "2026-10-29");
+      await page.locator("#market-sentiment-history-body button[data-market-date-target='dragon-tiger']").click();
+      await page.waitForFunction(() => document.querySelector("#dragon-tiger-meta")?.textContent.includes("2026-10-29"));
+      assert.equal(dragonTigerRequests.at(-1)?.date, "2026-10-29", "sentiment history must open same-date dragon-tiger data");
+
       await page.locator('[data-sector-metric="amount"]').click();
       await page.waitForFunction(() => document.querySelector("#market-sector-metric-heading")?.textContent === "成交额");
       assert.equal(sectorRequests.at(-1)?.sort_by, "amount");

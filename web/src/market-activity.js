@@ -246,6 +246,7 @@ function renderCalendar(data){
  const today=chinaParts();$("#dragon-tiger-date").value=dateKey(today.year,today.month,today.day);setMonth(0);
  $("#load-dragon-tiger").addEventListener("click",()=>void loadDragon());$("#dragon-tiger-next").addEventListener("click",()=>{if(dragonHasMore)void loadDragon({append:true});});
  $("#dragon-tiger-date").addEventListener("change",invalidateDragonFilter);
+  window.addEventListener("market-date-selected",event=>{const date=String(event.detail?.date||"");if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return;$("#dragon-tiger-date").value=date;invalidateDragonFilter();void loadDragon();});
  $("#dragon-tiger-date").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();void loadDragon();}});
  $("#load-trading-calendar").addEventListener("click",()=>void loadCalendar());
  $("#calendar-start-date").addEventListener("change",invalidateCalendarFilter);
