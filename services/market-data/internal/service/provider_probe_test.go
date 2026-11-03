@@ -120,6 +120,86 @@ func (providerProbeQuoteFake) FetchQuote(_ context.Context, symbol string) (*mod
 	return &model.Quote{Symbol: symbol, Name: "测试", CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: &amount, QuoteTime: &now, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: now, NormalizedAt: now, Source: "probe-test", SourceVersion: "probe-quote-v1", VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}, nil
 }
 
+type providerProbeParseOnlyQuoteFake struct{}
+
+func (providerProbeParseOnlyQuoteFake) Name() string { return "probe-parse-only-quote" }
+
+func (providerProbeParseOnlyQuoteFake) FetchQuote(ctx context.Context, symbol string) (*model.Quote, error) {
+	quote, err := (providerProbeQuoteFake{}).FetchQuote(ctx, symbol)
+	if err != nil {
+		return nil, err
+	}
+	quote.CurrentPrice = nil
+	report := validation.NewReport(10)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: "raw_price", ProviderField: "meta.regularMarketPrice",
+		Code: "optional_parse_warning", Expected: "numeric source field",
+		Severity: validation.SeverityWarning, Message: "adapter retained a parse warning",
+	})
+	validation.AddContextReport(ctx, report)
+	return quote, nil
+}
+
+type providerProbeValidatedQuoteReportedFake struct{}
+
+func (providerProbeValidatedQuoteReportedFake) Name() string { return "probe-validated-quote" }
+
+func (providerProbeValidatedQuoteReportedFake) FetchQuote(ctx context.Context, symbol string) (*model.Quote, error) {
+	quote, err := (providerProbeQuoteFake{}).FetchQuote(ctx, symbol)
+	if err != nil {
+		return nil, err
+	}
+	quote.Amount = nil
+	quote.AmountUnit = "unknown"
+	quote.QualityStatus = model.QualityDegraded
+	quote.QualityReasons = []string{"provider_amount_unavailable"}
+	report, validationErr := normalize.ValidateQuoteWithReport(quote)
+	validation.AddContextReport(ctx, report)
+	if validationErr != nil {
+		return nil, validationErr
+	}
+	return quote, nil
+}
+
+func TestProviderProbeStillValidatesQuoteWhenAdapterOnlyReportsParseIssues(t *testing.T) {
+	p := providerProbeParseOnlyQuoteFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "quote")
+	if !found || item.Status != "failed" || item.ValidationTotalCount != 2 ||
+		item.ValidationWarningCount != 1 || item.ValidationErrorCount != 1 {
+		t.Fatalf("parse-only report must not bypass common quote validation: %+v", run.Items)
+	}
+	stages := map[string]bool{}
+	for _, issue := range item.ValidationIssues {
+		stages[string(issue.Stage)] = true
+	}
+	if !stages[string(validation.StageParse)] || !stages[string(validation.StageValidate)] {
+		t.Fatalf("expected both parse and validate issues, got %+v", item.ValidationIssues)
+	}
+}
+
+func TestProviderProbeDoesNotDuplicateAdapterQuoteValidationIssues(t *testing.T) {
+	p := providerProbeValidatedQuoteReportedFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "quote")
+	if !found || item.Status != "returned_degraded" || item.ValidationTotalCount != 1 ||
+		item.ValidationWarningCount != 1 || len(item.ValidationIssues) != 1 {
+		t.Fatalf("adapter validation report must be reused without duplicate counting: %+v", run.Items)
+	}
+}
+
 func TestProviderActiveProbeRunsOutsideBusinessCircuitBreaker(t *testing.T) {
 	p := providerProbeQuoteFake{}
 	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
@@ -552,6 +632,51 @@ func (p providerProbeDailyBarsReportedFake) FetchDailyBars(ctx context.Context, 
 	})
 	validation.AddContextReport(ctx, report)
 	return bars, nil
+}
+
+type providerProbeParseOnlyDailyBarsFake struct {
+	providerProbeDailyBarsFake
+}
+
+func (p providerProbeParseOnlyDailyBarsFake) FetchDailyBars(ctx context.Context, symbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	bars, err := p.providerProbeDailyBarsFake.FetchDailyBars(ctx, symbol, startDate, endDate, limit, adjustment)
+	if err != nil {
+		return nil, err
+	}
+	if len(bars) > 0 {
+		invalidAmount := -1.0
+		bars[0].Amount = &invalidAmount
+	}
+	report := validation.NewReport(10)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: "raw_amount", ProviderField: "amount",
+		Code: "optional_parse_warning", Expected: "numeric source field",
+		Severity: validation.SeverityWarning, Message: "adapter retained a parse warning",
+	})
+	validation.AddContextReport(ctx, report)
+	return bars, nil
+}
+
+func TestProviderProbeStillValidatesDailyBarsWhenAdapterOnlyReportsParseIssues(t *testing.T) {
+	p := providerProbeParseOnlyDailyBarsFake{providerProbeDailyBarsFake{name: "probe-parse-only-bars", close: 10.5, quality: model.QualityValid}}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found || item.Status != "failed" || item.ValidationWarningCount != 1 || item.ValidationErrorCount == 0 {
+		t.Fatalf("parse-only report must not bypass daily-bar validation: %+v", run.Items)
+	}
+	stages := map[string]bool{}
+	for _, issue := range item.ValidationIssues {
+		stages[string(issue.Stage)] = true
+	}
+	if !stages[string(validation.StageParse)] || !stages[string(validation.StageValidate)] {
+		t.Fatalf("expected both parse and validate issues, got %+v", item.ValidationIssues)
+	}
 }
 
 func TestProviderProbeDoesNotDuplicateAdapterDailyBarIssues(t *testing.T) {

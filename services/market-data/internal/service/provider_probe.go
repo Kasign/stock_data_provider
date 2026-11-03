@@ -352,13 +352,14 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote source missing")
 			}
 			reporter := validation.ReporterFromContext(probeCtx)
-			if reporter == nil || reporter.Snapshot().TotalCount == 0 {
+			if reporter == nil || !reporter.Snapshot().HasStage(validation.StageValidate) {
 				report, validationErr := normalize.ValidateQuoteWithReport(q)
 				validation.AddContextReport(probeCtx, report)
 				if validationErr != nil {
 					return model.QualityInvalid, q.SourceVersion, nil, validationErr
 				}
-			} else if reporter.Snapshot().HasErrors() {
+			}
+			if reporter != nil && reporter.Snapshot().HasErrors() {
 				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote adapter reported field validation errors")
 			}
 			if q.SourceVersion == "" {
@@ -378,8 +379,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			var validated []model.DailyBar
 			var warnings []string
-			// Adapter 已在过滤前通过同一 Reporter 上报字段问题时，Probe 只复用旧校验结果，避免重复累计同一批字段问题。
-			if reporter := validation.ReporterFromContext(probeCtx); reporter != nil && reporter.Snapshot().TotalCount > 0 {
+			// 仅当 Adapter 已上报 Validate 阶段结果时复用该报告；Parse-only 报告不能跳过公共字段校验。
+			reporter := validation.ReporterFromContext(probeCtx)
+			if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
 				validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
 			} else {
 				var report validation.Report

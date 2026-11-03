@@ -997,3 +997,28 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - Yahoo Quote 原始字段诊断提交：`95670d70deec537f68f436a9d78dbe206f0c1bcc`；首轮 CI 的 market-data gofmt 检查发现新增代码格式问题，Docker market-data 镜像构建因此未继续。
 - 格式修正提交：`5fd3c79b13eda2c209d1e8632719ac32bba78630`；复验仍发现两个文件在新增函数前多一个空行，已再次清理。
 - 当前最新 SHA 的完整 Go 测试、race、vet、Docker 构建及 Go/Python 质量契约仍待最终复验；不得将前一 SHA 的成功结果当作最新代码通过。
+
+
+### 2026-11-03：Quote Provider 注册与 Reporter 聚合审计
+
+**注册链路核对：**
+- 配置加载阶段会校验 provider_priority 中的 Provider 名称唯一；重复名称直接拒绝，不会重复注册或重复生成 Probe 项。
+- market-data 启动时按优先级、启用状态和能力开关构建 quoteProviders；配置启用 Quote 但实现未满足 QuoteProvider 接口时启动失败。
+- 当前默认启用 Quote 的 Provider 为 Eastmoney、Tencent、Sina、NetEase、Pytdx；Yahoo、Hithink、TickFlow 默认未启用 Quote。是否启用仍以实际配置为准。
+
+**Reporter 接入盘点：**
+- Sina、Tencent、NetEase、Yahoo：已使用请求级 Reporter 上报原始字段 Parse Issue，并在 Provider 内执行 ValidateQuoteWithReport。
+- Eastmoney：使用 RawMessage map 读取源字段，但解析失败目前只返回普通错误；Provider 内执行普通 ValidateQuote，尚未把源字段解析错误结构化写入 Reporter。
+- Pytdx：通过 SDK 结构化对象映射，Provider 内有 OHLC/成交量硬校验；未接入 Reporter。
+- Hithink、TickFlow：当前采用结构化响应映射和 Provider 内字段校验；未接入 Reporter。它们默认 Quote 关闭，但可由配置启用。
+- 对于未接入 Reporter 的 Provider，Probe 应执行统一 Quote Validator 并生成结构化 Validate 报告；已在 Adapter 内生成 Validate 阶段报告的 Provider，Probe 复用该报告，不重复计数。
+
+**本批发现并修复：**
+- 旧逻辑将 Reporter TotalCount 大于 0 当作 Adapter 已完成公共校验的信号。只有 Parse 阶段问题时会错误跳过 Validate，造成质量问题漏报。
+- 新增 Report.HasStage，Quote / DailyBar Probe 仅在已有 StageValidate 报告时复用；只有 Parse 报告时仍执行公共 Validator。
+- 增加 Parse-only 与 Adapter 已完成 Validate 两组回归，分别验证不会漏报、不会重复累计。
+
+**当前边界与后续：**
+- 当前修复解决 Reporter 阶段判断和 Probe 重复校验问题，不代表所有 Quote Provider 都已完成字段级 Parse Reporter 接入。
+- 下一批优先补齐默认启用的 Eastmoney Quote 原始字段诊断；再评估 Pytdx 等 SDK Provider 的结构化字段问题表达，避免把 SDK 映射错误误写成 JSON 类型错误。
+- 只有 Quote Provider 的默认启用能力与可选启用能力均有明确诊断边界后，才进入 DailyBar Provider 全覆盖审计。
