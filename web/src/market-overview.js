@@ -124,7 +124,7 @@ function renderPool(data) {
  if($("#market-sentiment-pool"))$("#market-sentiment-pool").textContent=data?.has_data===false?"数据未确认":label+" · "+count(data?.total)+" 只";
  meta("market-pool-meta",[label,"交易日期 "+(data?.trade_date||poolDate||"中国时区当日（默认）"),"源端数量 "+count(data?.total),"当前返回 "+count(items.length)+" 条","来源 "+(data?.source||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);qualityReasons("market-pool-reasons",data?.quality_reasons);
 }
-function renderHotStocks(data) {
+function renderHotStocks(data,requestedLimit=20) {
  const root=$("#market-hot-stocks-body"),items=Array.isArray(data?.items)?data.items.filter(item=>item&&typeof item==="object"):[];
  root.replaceChildren();
  if(!items.length) {
@@ -147,7 +147,7 @@ function renderHotStocks(data) {
   });
   badge("market-hot-stocks-status",qualityLabel(data.quality_status),"quality",data.quality_status);
  }
- meta("market-hot-stocks-meta",[(data?.type==="surge"?"飙升榜":"人气榜"),"请求上限 "+count(hotLimit)+" 条","实际返回 "+count(items.length)+" 条（非全市场总数）","来源 "+(data?.source||"未报告"),"采集时间 "+formatDateTime(data?.fetched_at),"源端未提供可独立核验的行情快照时间"]);
+ meta("market-hot-stocks-meta",[(data?.type==="surge"?"飙升榜":"人气榜"),"请求上限 "+count(requestedLimit)+" 条","实际返回 "+count(items.length)+" 条（非全市场总数）","来源 "+(data?.source||"未报告"),"采集时间 "+formatDateTime(data?.fetched_at),"源端未提供可独立核验的行情快照时间"]);
  qualityReasons("market-hot-stocks-reasons",data?.quality_reasons);
 }
 function renderMarketCapitalFlow(data) {
@@ -195,7 +195,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    else if(key==="hot")data=await getMarketHotStocks(settings,{type:hotType,limit:hotLimit,signal:ctl.signal});
    else return "failed";
    if(ctl.signal.aborted||generation[key]!==seq)return "cancelled";
-   if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data,sectorMetric,sectorDirection,sectorLimit);else if(key==="pool")renderPool(data);else renderHotStocks(data);
+   if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data,sectorMetric,sectorDirection,sectorLimit);else if(key==="pool")renderPool(data);else renderHotStocks(data,hotLimit);
    return "received";
   }catch(error){
    if(ctl?.signal.aborted||(seq!==null&&generation[key]!==seq))return "cancelled";

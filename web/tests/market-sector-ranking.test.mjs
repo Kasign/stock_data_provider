@@ -48,6 +48,9 @@ test("人气榜和飙升榜支持服务端结果数量选择", () => {
   assert.match(html, /value="20" selected/);
   assert.match(overview, /hotLimit=20/);
   assert.match(overview, /limit:hotLimit/);
+  assert.match(overview, /function renderHotStocks\(data,requestedLimit=20\)/);
+  assert.match(overview, /renderHotStocks\(data,hotLimit\)/);
+  assert.match(overview, /请求上限 "\+count\(requestedLimit\)/);
   assert.match(overview, /请求上限/);
   assert.match(overview, /实际返回/);
   assert.match(overview, /hotLimit=\[10,20,50,100\]\.includes\(value\)\?value:20/);
