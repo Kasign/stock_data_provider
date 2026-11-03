@@ -926,3 +926,10 @@ ProviderTime 仍表示源端时间，FetchedAt 仍表示本服务采集时间，
 - Quote source 缺失同样生成 required 结构化问题，避免关键契约失败只留下普通错误文本。
 - 新增 Probe 回归测试，验证错误证券仍然失败，且诊断响应的 validation_total_count、validation_error_count 和 validation_issues 完整反映身份问题。
 - 本修复只补齐诊断证据，不放宽 Quote 证券身份门禁，不改变正常行情服务的 Provider fallback、缓存和质量策略。
+
+
+### Quote Provider 原始字段解析诊断第一批：Sina（2026-11-03）
+
+- Sina Quote 必填数值字段解析失败时，按请求级 Reporter 上报 parse 阶段 FieldIssue，包含规范字段、源字段索引、缺失/格式错误分类及限长原始值摘要。
+- 缺失值与无法解析/非有限数值分开编码；Provider 原有错误返回和业务拒绝策略保持不变。
+- 新增回归测试验证字段名、源字段索引、错误级别和 Reporter 传递；Tencent、NetEase 的同类字段解析诊断仍待后续批次完成。

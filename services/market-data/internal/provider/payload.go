@@ -173,6 +173,37 @@ func addProviderParseIssue(ctx context.Context, rowIndex int, field, providerFie
 	validation.AddContextReport(ctx, report)
 }
 
+func addProviderQuoteFieldIssue(ctx context.Context, field, providerField, code, expected, actualType, preview, message string, severity validation.Severity) {
+	preview = strings.ToValidUTF8(preview, "�")
+	preview = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, preview)
+	if utf8.RuneCountInString(preview) > 160 {
+		preview = string([]rune(preview)[:160])
+	}
+	report := validation.NewReport(validation.DefaultMaxIssues)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: field, ProviderField: providerField,
+		Code: code, Expected: expected, ActualType: actualType, ActualPreview: preview,
+		Severity: severity, Message: message,
+	})
+	validation.AddContextReport(ctx, report)
+}
+
+func addQuoteStringParseIssue(ctx context.Context, field, providerField, raw, expected string, parseErr error) {
+	trimmed := strings.TrimSpace(raw)
+	code, message := "invalid_value", "provider quote field is not a valid finite number"
+	if trimmed == "" || trimmed == "-" {
+		code, message = "missing", "provider quote field is missing"
+	} else if parseErr != nil {
+		code, message = "type_or_format_mismatch", "provider quote field cannot be parsed as a number"
+	}
+	addProviderQuoteFieldIssue(ctx, field, providerField, code, expected, "string", trimmed, message, validation.SeverityError)
+}
+
 func providerJSONValueType(raw json.RawMessage) string {
 	value := bytes.TrimSpace(raw)
 	if len(value) == 0 {

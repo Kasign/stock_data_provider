@@ -68,6 +68,30 @@ func TestSinaFetchQuoteNormalizesSharesAndAmount(t *testing.T) {
 	}
 }
 
+func TestSinaQuoteParseFailureReportsProviderField(t *testing.T) {
+	fields := make([]string, 32)
+	fields[0], fields[1], fields[2], fields[3] = "SinaTest", "", "9.8", "10.2"
+	fields[4], fields[5], fields[8], fields[9] = "10.5", "9.5", "10000", "102000"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, "var hq_str_sh600519=\"%s\";", strings.Join(fields, ","))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, err := NewSina(0, server.URL+"/list=").FetchQuote(ctx, "600519.SH"); err == nil {
+		t.Fatal("missing required open price must fail")
+	}
+	report := reporter.Snapshot()
+	if report.ErrorCount != 1 || len(report.Issues) != 1 {
+		t.Fatalf("expected one parse error, got %+v", report)
+	}
+	issue := report.Issues[0]
+	if issue.Stage != validation.StageParse || issue.Field != "open" || issue.ProviderField != "field_1" ||
+		issue.Code != "missing" || issue.ActualType != "string" {
+		t.Fatalf("unexpected parse issue: %+v", issue)
+	}
+}
+
 func TestSinaFetchQuoteRejectsResponseVariableSymbolMismatch(t *testing.T) {
 	fields := make([]string, 32)
 	fields[0] = "WrongSymbol"

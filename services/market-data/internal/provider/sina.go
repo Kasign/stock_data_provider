@@ -369,10 +369,12 @@ func (p *Sina) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, 
 	parseRequired := func(index int, field string) (float64, error) {
 		raw := strings.TrimSpace(fields[index])
 		if raw == "" || raw == "-" {
+			addQuoteStringParseIssue(ctx, field, fmt.Sprintf("field_%d", index), raw, "finite number", nil)
 			return 0, fmt.Errorf("Sina quote field %s is missing", field)
 		}
 		value, parseErr := strconv.ParseFloat(raw, 64)
 		if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+			addQuoteStringParseIssue(ctx, field, fmt.Sprintf("field_%d", index), raw, "finite number", parseErr)
 			return 0, fmt.Errorf("Sina quote field %s is not a finite number", field)
 		}
 		return value, nil
