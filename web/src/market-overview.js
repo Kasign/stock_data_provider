@@ -3,6 +3,9 @@ import { describeApiError, finiteNumberOrNull, formatCompact, formatDateTime, fo
 const $ = (s) => document.querySelector(s);
 const KEYS = ["indices", "breadth", "sectors", "pool", "hot"];
 const REFRESH_OUTCOMES = new Set(["received", "unsupported", "provider_unavailable", "auth_failed", "failed", "needs_key", "cancelled"]);
+export function isCurrentSentimentHistoryRequest(sequence, currentSequence, signal) {
+ return sequence === currentSequence && signal?.aborted !== true;
+}
 export function summarizeMarketOverviewRefresh(outcomes, configured = true) {
  if (!configured) return "请先配置行情 API Key 后刷新市场概况";
  const normalized = (Array.isArray(outcomes) ? outcomes : []).map(value => REFRESH_OUTCOMES.has(value) ? value : "failed");
@@ -169,7 +172,7 @@ function renderMarketCapitalFlow(data) {
 }
 export function bindMarketOverview(getSettings,onSelectStock) {
  const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",sectorDirection="up",sectorLimit=10,poolType="up",poolDate="",poolLimit=30,hotType="popular",hotLimit=20,refreshGenerations=Object.create(null);
- let capitalFlowController=null,capitalFlowGeneration=0;
+ let capitalFlowController=null,capitalFlowGeneration=0,sentimentHistoryController=null,sentimentHistoryGeneration=0;
  function showSectorMetricUnavailable(metric=sectorMetric){
   const root=$("#market-sector-body");
   if(root)tableMessage(root,"板块资金净流入需要真实板块级资金流接口，当前尚未接入；不会用成交额替代资金净流入。");
@@ -227,6 +230,18 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    return [];
   }
  }
+ function invalidateSentimentHistory(message="查询条件已变化，旧的历史情绪请求已取消；请重新读取。") {
+  sentimentHistoryGeneration++;
+  try{sentimentHistoryController?.abort();}catch{}
+  sentimentHistoryController=null;
+  const button=$("#load-market-sentiment-history");
+  if(button){button.disabled=false;button.textContent="读取历史";}
+  const status=$("#market-sentiment-history-status");
+  if(status)status.textContent=message;
+  const body=$("#market-sentiment-history-body");
+  if(body){body.replaceChildren();const row=document.createElement("tr"),cell=el("td","table-empty",message);cell.colSpan=7;row.append(cell);body.append(row);}
+  meta("market-sentiment-history-meta",[]);
+ }
  function invalidateConnection(){
   Object.keys(refreshGenerations).forEach(selector=>{refreshGenerations[selector]+=1;});
   KEYS.forEach(key=>{
@@ -235,6 +250,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   });
   capitalFlowGeneration++;
   try{capitalFlowController?.abort();}catch{}
+  invalidateSentimentHistory("行情连接配置已变更，旧的历史情绪请求已取消；请使用新配置重新读取。");
   capitalFlowController=null;
   safeOverviewUi(()=>{
    const status=$("#market-capital-flow-status"),body=$("#market-capital-flow-body");
@@ -318,12 +334,15 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   const settings=typeof getSettings==="function"?getSettings():null;
   if(!settings?.apiKey){if(status)status.textContent="请先配置行情 API Key";return;}
   const button=$("#load-market-sentiment-history");
-  const previous=button?.textContent;
-  if(button){button.disabled=true;button.textContent="读取中…";}
+  const sequence=++sentimentHistoryGeneration;
+  try{sentimentHistoryController?.abort();}catch{}
   const controller=new AbortController();
+  sentimentHistoryController=controller;
+  if(button){button.disabled=true;button.textContent="读取中…";}
   try{
    if(status)status.textContent="正在读取已持久化的情绪快照…";
    const data=await getMarketSentimentHistory(settings,{start,end,limit:120,signal:controller.signal});
+   if(!isCurrentSentimentHistoryRequest(sequence,sentimentHistoryGeneration,controller.signal))return;
    const items=Array.isArray(data?.items)?data.items:[];
    if(body){
     body.replaceChildren();
@@ -342,12 +361,19 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    if(status)status.textContent="已读取 "+items.length+"/"+count(data?.total)+" 条持久化快照";
    meta("market-sentiment-history-meta",["请求 "+(data?.start_date||start)+" 至 "+(data?.end_date||end),"数据条数 "+count(data?.total),"按服务端已保存记录展示"]);
   }catch(error){
+   if(!isCurrentSentimentHistoryRequest(sequence,sentimentHistoryGeneration,controller.signal))return;
    if(status)status.textContent="读取失败："+safeOverviewError(error);
    if(body){body.replaceChildren();const row=document.createElement("tr"),cell=el("td","table-empty","历史快照读取失败；请检查数据库历史存储与行情服务状态。");cell.colSpan=7;row.append(cell);body.append(row);}
   }finally{
-   if(button){button.disabled=false;button.textContent=previous||"读取历史";}
+   if(sequence===sentimentHistoryGeneration){
+    if(sentimentHistoryController===controller)sentimentHistoryController=null;
+    if(button){button.disabled=false;button.textContent="读取历史";}
+   }
   }
  }
+ ["#market-sentiment-history-start","#market-sentiment-history-end"].forEach(selector=>{
+  $(selector)?.addEventListener("change",()=>invalidateSentimentHistory());
+ });
  $("#load-market-sentiment-history")?.addEventListener("click",()=>{void loadSentimentHistory();});
  $("#market-sentiment-history-body")?.addEventListener("click",event=>{
   const button=event.target.closest("button[data-market-date-target]");if(!button)return;

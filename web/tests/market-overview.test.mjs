@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultMarketCapitalFlowDateRange, describeMarketOverviewError } from "../src/market-overview.js";
+import { defaultMarketCapitalFlowDateRange, describeMarketOverviewError, isCurrentSentimentHistoryRequest } from "../src/market-overview.js";
 
 test("market overview keeps authentication, permission, missing-route and provider errors distinct", () => {
   const cases = [
@@ -35,4 +35,13 @@ test("market capital-flow defaults to exactly 90 China calendar dates", () => {
   assert.deepEqual(defaultMarketCapitalFlowDateRange(new Date("2026-11-02T16:30:00Z")), {
     start: "2026-08-06", end: "2026-11-03"
   });
+});
+
+
+test("sentiment history requests are rejected after cancellation or supersession", () => {
+  const controller = new AbortController();
+  assert.equal(isCurrentSentimentHistoryRequest(3, 3, controller.signal), true);
+  assert.equal(isCurrentSentimentHistoryRequest(2, 3, controller.signal), false);
+  controller.abort();
+  assert.equal(isCurrentSentimentHistoryRequest(3, 3, controller.signal), false);
 });
