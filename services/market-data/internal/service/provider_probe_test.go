@@ -714,7 +714,7 @@ func TestApplyFreshnessProbeResultsKeepsMissingMarketEvidenceUnknown(t *testing.
 		}},
 		CheckResults: []model.ProviderProbeCheckResult{{
 			Check: "freshness", Provider: "index-provider", Capability: "index_quotes",
-			ProviderTime: &sourceTime, CheckedAt: checkedAt,
+			ProviderTime: &sourceTime, ProviderTimeType: "provider_snapshot_time", CheckedAt: checkedAt,
 		}},
 	}
 	ds.applyFreshnessProbeResults(context.Background(), run)
