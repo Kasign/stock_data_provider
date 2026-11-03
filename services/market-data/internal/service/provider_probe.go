@@ -27,9 +27,10 @@ var (
 
 type providerProbeFunc func(context.Context) (model.QualityStatus, string, []string, error)
 type providerProbeJob struct {
-	provider   string
-	capability string
-	run        providerProbeFunc
+	provider        string
+	capability      string
+	adjustmentBasis model.AdjustmentBasis
+	run             providerProbeFunc
 }
 
 type providerProbeEvidenceContextKey struct{}
@@ -169,6 +170,7 @@ type ProviderProbeOptions struct {
 	Checks         []string
 	Markets        []string
 	Symbols        []string
+	DailyBarAdjustments []model.AdjustmentBasis
 	TimeoutSeconds int
 }
 
@@ -251,6 +253,25 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if len(selected) == 0 {
 		return nil, errors.New("provider-probe capabilities must not be empty")
 	}
+	if selected["daily_bars"] {
+		if len(options.DailyBarAdjustments) == 0 {
+			options.DailyBarAdjustments = []model.AdjustmentBasis{model.AdjustmentNone}
+		}
+		seenAdjustments := make(map[model.AdjustmentBasis]bool, len(options.DailyBarAdjustments))
+		for _, adjustment := range options.DailyBarAdjustments {
+			switch adjustment {
+			case model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward:
+			default:
+				return nil, fmt.Errorf("provider-probe daily_bar_adjustments value %q is not supported", adjustment)
+			}
+			if seenAdjustments[adjustment] {
+				return nil, fmt.Errorf("provider-probe daily_bar_adjustments value %q is duplicated", adjustment)
+			}
+			seenAdjustments[adjustment] = true
+		}
+	} else if len(options.DailyBarAdjustments) > 0 {
+		return nil, errors.New("provider-probe daily_bar_adjustments requires daily_bars capability")
+	}
 	if len(options.Markets) > 1 || len(options.Symbols) > 1 {
 		return nil, errors.New("provider-probe currently accepts at most one market and one symbol per request")
 	}
@@ -303,10 +324,14 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		requested = append(requested, capability)
 	}
 	sort.Strings(requested)
-	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
+	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), RequestedDailyBarAdjustments: append([]model.AdjustmentBasis(nil), options.DailyBarAdjustments...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
 	jobs := make([]providerProbeJob, 0)
-	add := func(name, capability string, fn providerProbeFunc) {
-		jobs = append(jobs, providerProbeJob{provider: name, capability: capability, run: fn})
+	add := func(name, capability string, fn providerProbeFunc, adjustment ...model.AdjustmentBasis) {
+		job := providerProbeJob{provider: name, capability: capability, run: fn}
+		if len(adjustment) > 0 {
+			job.adjustmentBasis = adjustment[0]
+		}
+		jobs = append(jobs, job)
 	}
 	quoteSymbol := "600519.SH"
 	barsSymbol := "600036.SH"
@@ -372,8 +397,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 	for _, p := range s.barProviders {
 		p := p
-		add(p.Name(), "daily_bars", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
-			bars, err := p.FetchDailyBars(probeCtx, barsSymbol, "", "", 5, model.AdjustmentNone)
+		for _, adjustment := range options.DailyBarAdjustments {
+			adjustment := adjustment
+			add(p.Name(), "daily_bars", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+			bars, err := p.FetchDailyBars(probeCtx, barsSymbol, "", "", 5, adjustment)
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
@@ -433,11 +460,12 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if len(snapshotBars) == len(validated) {
 				recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
 					Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
-					AdjustmentBasis: string(model.AdjustmentNone), QualityStatus: string(quality), Bars: snapshotBars,
+					AdjustmentBasis: string(adjustment), QualityStatus: string(quality), Bars: snapshotBars,
 				})
 			}
 			return quality, version, reasons, nil
-		})
+		}, adjustment)
+		}
 	}
 	for _, p := range s.stockBasicProviders {
 		p := p
@@ -858,7 +886,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		wg.Add(1)
 		go func(index int, job providerProbeJob) {
 			defer wg.Done()
-			item := model.ProviderProbeItem{Provider: job.provider, Capability: job.capability, Status: "failed", QualityStatus: model.QualityUnknown}
+			item := model.ProviderProbeItem{Provider: job.provider, Capability: job.capability, AdjustmentBasis: job.adjustmentBasis, Status: "failed", QualityStatus: model.QualityUnknown}
 			checkedAt := time.Now().UTC()
 			select {
 			case sem <- struct{}{}:
@@ -948,7 +976,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		if results[i].Provider != results[j].Provider {
 			return results[i].Provider < results[j].Provider
 		}
-		return results[i].Capability < results[j].Capability
+		if results[i].Capability != results[j].Capability {
+			return results[i].Capability < results[j].Capability
+		}
+		return results[i].AdjustmentBasis < results[j].AdjustmentBasis
 	})
 	run.Items = results
 	for _, item := range results {
@@ -1254,7 +1285,7 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 	for leftIndex := 0; leftIndex < len(validSnapshots); leftIndex++ {
 		for rightIndex := leftIndex + 1; rightIndex < len(validSnapshots); rightIndex++ {
 			left, right := validSnapshots[leftIndex], validSnapshots[rightIndex]
-			if left.Provider == right.Provider || left.Symbol != right.Symbol {
+			if left.Provider == right.Provider || left.Symbol != right.Symbol || left.AdjustmentBasis != right.AdjustmentBasis {
 				continue
 			}
 			comparison := provider.CompareCrossProviderDailyBars(*left, *right)

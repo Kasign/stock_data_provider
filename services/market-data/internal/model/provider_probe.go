@@ -48,6 +48,7 @@ type ProviderProbeItem struct {
 	Status                 string                           `json:"status"`
 	ElapsedMS              int64                            `json:"elapsed_ms"`
 	SourceVersion          string                           `json:"source_version,omitempty"`
+	AdjustmentBasis        AdjustmentBasis                  `json:"adjustment_basis,omitempty"`
 	QualityStatus          QualityStatus                    `json:"quality_status"`
 	QualityReasons         []string                         `json:"quality_reasons,omitempty"`
 	ValidationTotalCount   int                              `json:"validation_total_count,omitempty"`
@@ -138,6 +139,7 @@ type ProviderProbeRun struct {
 	CheckResults          []ProviderProbeCheckResult `json:"check_results,omitempty"`
 	RequestedMarkets      []string                   `json:"requested_markets,omitempty"`
 	RequestedSymbols      []string                   `json:"requested_symbols,omitempty"`
+	RequestedDailyBarAdjustments []AdjustmentBasis `json:"requested_daily_bar_adjustments,omitempty"`
 	TimeoutSeconds        int                        `json:"timeout_seconds,omitempty"`
 	Status                string                     `json:"status"`
 	Persisted             bool                       `json:"persisted"`

@@ -657,6 +657,42 @@ func (p providerProbeParseOnlyDailyBarsFake) FetchDailyBars(ctx context.Context,
 	return bars, nil
 }
 
+func TestProviderProbeRunsRequestedDailyBarAdjustmentsIndependently(t *testing.T) {
+	p := providerProbeDailyBarsFake{name: "probe-adjustment-bars", close: 10.5, quality: model.QualityValid}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	adjustments := []model.AdjustmentBasis{model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward}
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarAdjustments: adjustments,
+		Checks: []string{"cross_provider"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	if run.Total != len(adjustments) || len(run.RequestedDailyBarAdjustments) != len(adjustments) {
+		t.Fatalf("expected one independent probe per adjustment: %+v", run)
+	}
+	for i, adjustment := range adjustments {
+		item := run.Items[i]
+		if item.AdjustmentBasis != adjustment || item.Status != "returned" {
+			t.Fatalf("unexpected adjustment result for %s: %+v", adjustment, item)
+		}
+	}
+}
+
+func TestProviderProbeRejectsInvalidDailyBarAdjustments(t *testing.T) {
+	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	cases := []ProviderProbeOptions{
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarAdjustments: []model.AdjustmentBasis{"unknown"}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone, model.AdjustmentNone}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"quote"}, DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone}, TimeoutSeconds: 5},
+	}
+	for i, options := range cases {
+		if _, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), options); err == nil {
+			t.Errorf("case %d should reject invalid daily-bar adjustments: %+v", i, options)
+		}
+	}
+}
+
 func TestProviderProbeStillValidatesDailyBarsWhenAdapterOnlyReportsParseIssues(t *testing.T) {
 	p := providerProbeParseOnlyDailyBarsFake{providerProbeDailyBarsFake{name: "probe-parse-only-bars", close: 10.5, quality: model.QualityValid}}
 	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)

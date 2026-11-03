@@ -98,6 +98,9 @@ func TestProviderProbeEndpointRejectsInvalidRequests(t *testing.T) {
 		{name: "invalid scope", body: `{"scope":"everything"}`},
 		{name: "unknown capability", body: `{"capabilities":["unknown_capability"]}`},
 		{name: "duplicate capability", body: `{"capabilities":["quote","quote"]}`},
+		{name: "adjustments without daily bars", body: `{"capabilities":["quote"],"daily_bar_adjustments":["none"]}`},
+		{name: "unsupported adjustment", body: `{"capabilities":["daily_bars"],"daily_bar_adjustments":["unknown"]}`},
+		{name: "duplicate adjustment", body: `{"capabilities":["daily_bars"],"daily_bar_adjustments":["none","none"]}`},
 		{name: "capability outside core", body: `{"scope":"core","capabilities":["stock_universe"]}`},
 		{name: "timeout zero", body: `{"timeout_seconds":0}`},
 		{name: "timeout too small", body: `{"timeout_seconds":0.5}`},
@@ -130,6 +133,18 @@ func TestProviderProbeEndpointAcceptsMarketAndSymbolFilters(t *testing.T) {
 	for _, expected := range []string{`"requested_markets":["CHINEXT"]`, `"requested_symbols":["300750.SZ"]`} {
 		if !strings.Contains(response.Body.String(), expected) {
 			t.Fatalf("filtered probe response missing %s: %s", expected, response.Body.String())
+		}
+	}
+}
+
+func TestProviderProbeEndpointAcceptsDailyBarAdjustmentSelection(t *testing.T) {
+	response := performProviderProbeRequest(newProviderProbeHTTPTestHandler(), `{"scope":"all","capabilities":["daily_bars"],"daily_bar_adjustments":["none","forward_adjusted","backward_adjusted"]}`, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("daily-bar adjustment probe status=%d body=%s", response.Code, response.Body.String())
+	}
+	for _, expected := range []string{`"requested_daily_bar_adjustments":["none","forward_adjusted","backward_adjusted"]`} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Fatalf("probe response missing %s: %s", expected, response.Body.String())
 		}
 	}
 }
