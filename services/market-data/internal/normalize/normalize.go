@@ -272,8 +272,10 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 		}
 		if b.Source == "" {
 			b.Source = "unknown"
-			b.QualityStatus = model.QualityUnknown
-			b.QualityReasons = append(b.QualityReasons, "source_missing")
+			if b.QualityStatus == "" || b.QualityStatus == model.QualityValid {
+				b.QualityStatus = model.QualityUnknown
+			}
+			b.QualityReasons = appendReasonUnique(b.QualityReasons, "source_missing")
 		}
 		b.Symbol = symbol
 		if b.Amount == nil {

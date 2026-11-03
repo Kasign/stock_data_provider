@@ -827,3 +827,4 @@ Quote/Daily Bars 边界审计补充：Service 层 DailyBars 对 Provider 返回�
 
 
 质量状态门禁补充：Quote/Daily Bars 在使用 Provider fallback、补齐请求 Symbol、标记缺失成交额或标记当日未完成 K 线时，统一只允许将空值/valid 提升为 degraded；已有 unknown、stale、invalid 不得被覆盖，尤其不能把 invalid 通过 fallback 逻辑降成 degraded 后继续接纳。新增 Quote 与 DailyBars 回归测试，使用 fallback + 缺失 Symbol + 缺失 Amount 的 invalid 输入，确认仍然拒绝。
+Normalize 层另发现一个相同类别的边界：DailyBar 缺失 Source 时会将 QualityStatus 无条件改为 unknown，可能把 invalid 行恢复为可接纳状态。现调整为只对空值/valid 设置 unknown，保留 degraded/stale/unknown/invalid 原状态，并增加 invalid + source_missing 的丢弃回归测试。

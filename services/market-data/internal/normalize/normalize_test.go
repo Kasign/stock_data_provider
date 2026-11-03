@@ -265,6 +265,16 @@ func TestValidateAndSortBarsRejectsVolumeAmountAndContractBoundaries(t *testing.
 	}
 }
 
+func TestValidateAndSortBarsDoesNotOverrideInvalidQualityWhenSourceIsMissing(t *testing.T) {
+	bar := validDailyBarForNormalizationTest()
+	bar.Source = ""
+	bar.QualityStatus = model.QualityInvalid
+	got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{bar}, "2026-10-20", "2026-10-20", 10)
+	if len(got) != 0 || !containsWarning(warnings, "invalid_quality_status_bar_dropped") {
+		t.Fatalf("missing source must not downgrade invalid quality into an accepted unknown bar: bars=%+v warnings=%v", got, warnings)
+	}
+}
+
 func TestValidateAndSortBarsUsesInclusiveDateBoundsDeduplicatesAndKeepsNewestLimit(t *testing.T) {
 	before := validDailyBarForNormalizationTest()
 	before.TradeDate = "2026-10-19"
