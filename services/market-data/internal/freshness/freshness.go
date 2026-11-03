@@ -10,26 +10,26 @@ import (
 type Status string
 
 const (
-	StatusFresh          Status = "fresh"
-	StatusStale          Status = "stale"
-	StatusUnknown        Status = "unknown"
-	StatusNotApplicable  Status = "not_applicable"
+	StatusFresh         Status = "fresh"
+	StatusStale         Status = "stale"
+	StatusUnknown       Status = "unknown"
+	StatusNotApplicable Status = "not_applicable"
 )
 
 // Reason codes are stable machine-readable explanations for a freshness decision.
 const (
-	ReasonWithinSLA                 = "within_sla"
-	ReasonExceedsSLA                = "exceeds_sla"
-	ReasonMissingDataTime           = "source_time_missing"
-	ReasonMissingTimeSemantics      = "source_time_semantics_missing"
-	ReasonMissingEvaluationTime     = "evaluation_time_missing"
-	ReasonMissingCalendarEvidence   = "trading_calendar_evidence_missing"
-	ReasonNonTradingDay             = "non_trading_day"
-	ReasonMarketNotUpdating         = "market_not_updating"
-	ReasonSecuritySuspended         = "security_suspended"
-	ReasonSecurityStatusUnknown     = "security_trading_status_unknown"
-	ReasonSourceTimeInFuture        = "source_time_in_future"
-	ReasonInvalidPolicy             = "freshness_policy_invalid"
+	ReasonWithinSLA               = "within_sla"
+	ReasonExceedsSLA              = "exceeds_sla"
+	ReasonMissingDataTime         = "source_time_missing"
+	ReasonMissingTimeSemantics    = "source_time_semantics_missing"
+	ReasonMissingEvaluationTime   = "evaluation_time_missing"
+	ReasonMissingCalendarEvidence = "trading_calendar_evidence_missing"
+	ReasonNonTradingDay           = "non_trading_day"
+	ReasonMarketNotUpdating       = "market_not_updating"
+	ReasonSecuritySuspended       = "security_suspended"
+	ReasonSecurityStatusUnknown   = "security_trading_status_unknown"
+	ReasonSourceTimeInFuture      = "source_time_in_future"
+	ReasonInvalidPolicy           = "freshness_policy_invalid"
 )
 
 // Policy defines the expected update cadence for a data domain.
@@ -47,18 +47,18 @@ type Policy struct {
 // Evidence distinguishes source data time from service collection time.
 // FetchedAt is returned for diagnostics only and is never used as the data timestamp.
 type Evidence struct {
-	DataTime      *time.Time
-	DataTimeType  string
-	FetchedAt     *time.Time
+	DataTime     *time.Time
+	DataTimeType string
+	FetchedAt    *time.Time
 }
 
 // Context is supplied by the caller; Evaluate does not read clocks or services.
 type Context struct {
-	Now                    time.Time
-	MarketPhase            string
-	CalendarKnown          bool
-	IsTradingDay           bool
-	SecurityTradingStatus  string
+	Now                   time.Time
+	MarketPhase           string
+	CalendarKnown         bool
+	IsTradingDay          bool
+	SecurityTradingStatus string
 }
 
 // Result is a deterministic freshness decision with the evidence used.
@@ -79,14 +79,14 @@ type Result struct {
 // callers must resolve calendar/session/security context before invoking it.
 func Evaluate(policy Policy, evidence Evidence, context Context) Result {
 	result := Result{
-		Status:      StatusUnknown,
-		Domain:      strings.TrimSpace(policy.Domain),
-		DataTime:    evidence.DataTime,
+		Status:       StatusUnknown,
+		Domain:       strings.TrimSpace(policy.Domain),
+		DataTime:     evidence.DataTime,
 		DataTimeType: strings.TrimSpace(evidence.DataTimeType),
-		FetchedAt:   evidence.FetchedAt,
-		CheckedAt:   context.Now,
-		MaxAge:      policy.MaxAge,
-		MarketPhase: strings.TrimSpace(context.MarketPhase),
+		FetchedAt:    evidence.FetchedAt,
+		CheckedAt:    context.Now,
+		MaxAge:       policy.MaxAge,
+		MarketPhase:  strings.TrimSpace(context.MarketPhase),
 	}
 
 	if policy.MaxAge <= 0 || strings.TrimSpace(policy.Domain) == "" {

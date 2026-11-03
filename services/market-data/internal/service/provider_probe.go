@@ -82,7 +82,9 @@ func recordProviderProbeCoverageCounts(ctx context.Context, total, returned, val
 
 func recordProviderProbeTimeSemantics(ctx context.Context, semantics string) {
 	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
-	if !ok || evidence == nil { return }
+	if !ok || evidence == nil {
+		return
+	}
 	evidence.providerTimeType = strings.TrimSpace(semantics)
 }
 
@@ -416,7 +418,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 				var sourceTime *time.Time
 				semantics := ""
-				if len(snapshot.Items) > 0 { sourceTime = snapshot.Items[0].QuoteTime; semantics = snapshot.Items[0].QuoteTimeSemantics }
+				if len(snapshot.Items) > 0 {
+					sourceTime = snapshot.Items[0].QuoteTime
+					semantics = snapshot.Items[0].QuoteTimeSemantics
+				}
 				recordProviderProbeEvidence(probeCtx, symbol, "", len(snapshot.Items), len(snapshot.Items), sourceTime)
 				recordProviderProbeTimeSemantics(probeCtx, semantics)
 			}
@@ -906,7 +911,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		run.Status = "no_capabilities_configured"
 	}
 	run.CheckResults = buildProviderProbeCheckResults(run.Items, requestedChecks)
-	if selectedChecks["freshness"] { s.applyFreshnessProbeResults(ctx, run) }
+	if selectedChecks["freshness"] {
+		s.applyFreshnessProbeResults(ctx, run)
+}
 	if selectedChecks["cross_provider"] {
 		if selected["daily_bars"] {
 			run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.FinishedAt)...)
@@ -956,17 +963,31 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 }
 
 func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model.ProviderProbeRun) {
-	if s == nil || run == nil { return }
+	if s == nil || run == nil {
+		return
+	}
 	hasPolicy, needsQuote := false, false
 	for _, result := range run.CheckResults {
-		if result.Check != "freshness" { continue }
-		if _, ok := freshnessDomainForCapability(result.Capability); ok { hasPolicy = true }
-		if result.Capability == "quote" { needsQuote = true }
+		if result.Check != "freshness" {
+			continue
+		}
+		if _, ok := freshnessDomainForCapability(result.Capability); ok {
+			hasPolicy = true
+		}
+		if result.Capability == "quote" {
+			needsQuote = true
+		}
 	}
-	if !hasPolicy { return }
-	if ctx == nil { ctx = context.Background() }
+	if !hasPolicy {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	contextTimeout := time.Duration(run.TimeoutSeconds) * time.Second
-	if contextTimeout <= 0 { contextTimeout = 12 * time.Second }
+	if contextTimeout <= 0 {
+		contextTimeout = 12 * time.Second
+	}
 	contextCtx, cancel := context.WithTimeout(ctx, contextTimeout)
 	defer cancel()
 	now := run.FinishedAt
@@ -977,50 +998,88 @@ func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model
 	}
 	if needsQuote {
 		symbol := "600519.SH"
-		for _, item := range run.Items { if item.Capability == "quote" && item.SampleSymbol != "" { symbol = item.SampleSymbol; break } }
-		if len(run.RequestedSymbols) == 1 { symbol = run.RequestedSymbols[0] }
+		for _, item := range run.Items {
+			if item.Capability == "quote" && item.SampleSymbol != "" {
+				symbol = item.SampleSymbol
+				break
+			}
+		}
+		if len(run.RequestedSymbols) == 1 {
+			symbol = run.RequestedSymbols[0]
+		}
 		status, statusErr := s.SecurityTradingStatus(contextCtx, symbol, now.In(marketLocation()).Format("2006-01-02"))
 		if statusErr != nil || status == nil || status.QualityStatus != model.QualityValid || !status.TradingDayKnown {
 			market.SecurityTradingStatus = "unknown"
 		} else {
 			switch status.SuspensionStatus {
-			case model.SuspensionStatusSuspended: market.SecurityTradingStatus = "suspended"
-			case model.SuspensionStatusIntraday: market.SecurityTradingStatus = "intraday_suspension"
-			case model.SuspensionStatusNoEvent, model.SuspensionStatusResumed: market.SecurityTradingStatus = "normal"
-			default: market.SecurityTradingStatus = "unknown"
+			case model.SuspensionStatusSuspended:
+				market.SecurityTradingStatus = "suspended"
+			case model.SuspensionStatusIntraday:
+				market.SecurityTradingStatus = "intraday_suspension"
+			case model.SuspensionStatusNoEvent, model.SuspensionStatusResumed:
+				market.SecurityTradingStatus = "normal"
+			default:
+				market.SecurityTradingStatus = "unknown"
 			}
 		}
 	}
 	for i := range run.CheckResults {
 		check := &run.CheckResults[i]
-		if check.Check != "freshness" { continue }
+		if check.Check != "freshness" {
+			continue
+		}
 		domain, ok := freshnessDomainForCapability(check.Capability)
-		if !ok { check.Status, check.ErrorCode = "skipped", "freshness_policy_not_configured"; continue }
+		if !ok {
+			check.Status, check.ErrorCode = "skipped", "freshness_policy_not_configured"
+			continue
+		}
 		policy, ok := freshness.PolicyForDomain(domain)
-		if !ok { check.Status, check.ErrorCode = "skipped", "freshness_policy_not_configured"; continue }
+		if !ok {
+			check.Status, check.ErrorCode = "skipped", "freshness_policy_not_configured"
+			continue
+		}
 		evidence := freshness.Evidence{DataTime: check.ProviderTime}
-		for _, item := range run.Items { if item.Provider == check.Provider && item.Capability == check.Capability { evidence.DataTimeType = item.ProviderTimeType; break } }
+		for _, item := range run.Items {
+			if item.Provider == check.Provider && item.Capability == check.Capability {
+				evidence.DataTimeType = item.ProviderTimeType
+				break
+			}
+		}
 		result := freshness.Evaluate(policy, evidence, market)
 		check.FreshnessStatus, check.FreshnessReason, check.FreshnessDomain, check.MarketPhase = string(result.Status), result.Reason, result.Domain, result.MarketPhase
-		maxAge := int64(result.MaxAge.Seconds()); check.FreshnessMaxAgeSeconds = &maxAge
-		if result.Status == freshness.StatusFresh || result.Status == freshness.StatusStale { age := int64(result.Age.Seconds()); check.AgeSeconds = &age }
+		maxAge := int64(result.MaxAge.Seconds())
+		check.FreshnessMaxAgeSeconds = &maxAge
+		if result.Status == freshness.StatusFresh || result.Status == freshness.StatusStale {
+			age := int64(result.Age.Seconds())
+			check.AgeSeconds = &age
+		}
 		switch result.Status {
-		case freshness.StatusFresh: check.Status, check.ErrorCode, check.ErrorMessage = "passed", "", ""
-		case freshness.StatusStale: check.Status, check.ErrorCode, check.ErrorMessage = "degraded", result.Reason, "Provider source data exceeds the configured freshness SLA"
-		case freshness.StatusUnknown: check.Status, check.ErrorCode, check.ErrorMessage = "skipped", result.Reason, "Freshness cannot be determined from source-time or market-context evidence"
-		case freshness.StatusNotApplicable: check.Status, check.ErrorCode, check.ErrorMessage = "skipped", result.Reason, "Freshness SLA is not applicable in the current market or security state"
+		case freshness.StatusFresh:
+			check.Status, check.ErrorCode, check.ErrorMessage = "passed", "", ""
+		case freshness.StatusStale:
+			check.Status, check.ErrorCode, check.ErrorMessage = "degraded", result.Reason, "Provider source data exceeds the configured freshness SLA"
+		case freshness.StatusUnknown:
+			check.Status, check.ErrorCode, check.ErrorMessage = "skipped", result.Reason, "Freshness cannot be determined from source-time or market-context evidence"
+		case freshness.StatusNotApplicable:
+			check.Status, check.ErrorCode, check.ErrorMessage = "skipped", result.Reason, "Freshness SLA is not applicable in the current market or security state"
 		}
 	}
 }
 
 func freshnessDomainForCapability(capability string) (string, bool) {
 	switch capability {
-	case "quote": return freshness.DomainQuote, true
-	case "index_quotes": return freshness.DomainIndex, true
-	case "market_breadth": return freshness.DomainMarketBreadth, true
-	case "sector_rankings": return freshness.DomainSector, true
-	case "market_capital_flow", "capital_flow": return freshness.DomainFundFlow, true
-	default: return "", false
+	case "quote":
+		return freshness.DomainQuote, true
+	case "index_quotes":
+		return freshness.DomainIndex, true
+	case "market_breadth":
+		return freshness.DomainMarketBreadth, true
+	case "sector_rankings":
+		return freshness.DomainSector, true
+	case "market_capital_flow", "capital_flow":
+		return freshness.DomainFundFlow, true
+	default:
+		return "", false
 	}
 }
 func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedChecks []string) []model.ProviderProbeCheckResult {

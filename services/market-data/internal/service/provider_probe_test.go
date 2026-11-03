@@ -667,7 +667,7 @@ func (providerProbeFreshnessCalendarFake) FetchTradingCalendar(_ context.Context
 	return &model.TradingCalendarSnapshot{
 		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
 		TotalDays: 1, TradingDays: 1,
-		Items: []model.TradingCalendarDay{{Date: startDate, IsTradingDay: true}},
+		Items:  []model.TradingCalendarDay{{Date: startDate, IsTradingDay: true}},
 		Source: "probe-freshness-calendar", SourceVersion: "calendar-v1",
 		FetchedAt: fetchedAt, QualityStatus: model.QualityValid,
 	}, nil

@@ -10,7 +10,7 @@ import (
 func TestPolicyForDomain(t *testing.T) {
 	tests := []struct {
 		domain string
-		age time.Duration
+		age    time.Duration
 	}{
 		{DomainQuote, 90 * time.Second}, {DomainIndex, 120 * time.Second},
 		{DomainMarketBreadth, 5 * time.Minute}, {DomainSector, 5 * time.Minute},
