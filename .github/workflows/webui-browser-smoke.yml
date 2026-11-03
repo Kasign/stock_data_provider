@@ -49,6 +49,10 @@ jobs:
         working-directory: web
         run: node tests/run-flow-browser.mjs
 
+      - name: Run Run Flow outcome and recovery acceptance
+        working-directory: web
+        run: node tests/run-flow-outcomes-browser.mjs
+
       - name: Upload browser screenshots
         if: always()
         uses: actions/upload-artifact@v4
