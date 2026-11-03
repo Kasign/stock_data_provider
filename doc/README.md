@@ -4,7 +4,8 @@
 
 ## WebUI 文档
 
-- [WebUI 文档索引](./web/README.md)
+- [WebUI 整体规划](./web/整体规划.md)：WebUI 任务、优先级和进度的唯一入口。
+- [WebUI 文档索引](./web/README.md)：功能说明、专项契约与验收记录。
 
 ## 数据层与公共文档
 
