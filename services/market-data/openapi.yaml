@@ -73,6 +73,12 @@ components:
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
+        validation_total_count: {type: integer, minimum: 0, description: Total number of field validation issues before detail truncation}
+        validation_error_count: {type: integer, minimum: 0}
+        validation_warning_count: {type: integer, minimum: 0}
+        validation_info_count: {type: integer, minimum: 0}
+        validation_truncated: {type: boolean, description: True when validation_issues contains only a bounded subset of all issues}
+        validation_issues: {type: array, items: {$ref: '#/components/schemas/ProviderProbeFieldIssue'}, maxItems: 100}
         fallback_from: {type: string}
         fallback_reason: {type: string}
         normalization_version: {type: string}
@@ -581,6 +587,85 @@ components:
           type: array
           items: {type: string}
 
+    ProviderProbeCheckResult:
+      type: object
+      required: [check, status, checked_at]
+      properties:
+        check: {type: string, enum: [connectivity, contract, quality, freshness, cross_provider, storage]}
+        provider: {type: string}
+        capability: {type: string}
+        status: {type: string, enum: [passed, degraded, skipped, failed, not_configured, not_supported]}
+        error_code: {type: string}
+        error_message: {type: string}
+        provider_time: {type: string, format: date-time, nullable: true}
+        provider_time_type: {type: string, description: Explicit source timestamp semantics; never inferred from fetched_at}
+        fetched_at: {type: string, format: date-time, nullable: true, description: Service collection time; never used as source data time}
+        calendar_known: {type: boolean, description: Whether valid trading-calendar evidence was available for the evaluation}
+        is_trading_day: {type: boolean, description: Trading-day value from valid calendar evidence}
+        security_trading_status: {type: string, enum: [normal, suspended, intraday_suspension, unknown], description: Security-level trading status used for quote freshness}
+        age_seconds: {type: integer, description: Source timestamp age in seconds; populated only when the evaluator has enough evidence}
+        freshness_status: {type: string, enum: [fresh, stale, unknown, not_applicable], description: Independent freshness state; does not change QualityStatus}
+        freshness_reason: {type: string, description: Stable freshness reason code}
+        freshness_domain: {type: string, description: Applied SLA policy domain}
+        freshness_max_age_seconds: {type: integer, minimum: 0, description: Configured maximum source-data age for the policy}
+        market_phase: {type: string, description: Market session phase used by the evaluator}
+        compared_symbol: {type: string, description: Normalized security symbol compared across providers}
+        left_provider: {type: string}
+        right_provider: {type: string}
+        left_source_version: {type: string}
+        right_source_version: {type: string}
+        adjustment_basis: {type: string, enum: [none, forward_adjusted, backward_adjusted, unknown]}
+        left_quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        right_quality_status: {$ref: '#/components/schemas/QualityStatus'}
+        compared_dates: {type: array, items: {type: string, format: date}}
+        field_count: {type: integer, minimum: 0}
+        mismatch_count: {type: integer, minimum: 0, description: Number of fields whose values exceed the comparison tolerance}
+        matched_field_count: {type: integer, minimum: 0}
+        not_comparable_count: {type: integer, minimum: 0, description: Number of fields excluded from value comparison because required values or units are unavailable}
+        field_comparisons:
+          type: array
+          description: Bounded field-level evidence for each compared date; non-comparable fields omit numeric values rather than exposing default zeroes
+          items:
+            type: object
+            required: [field, status]
+            properties:
+              field: {type: string, description: Normalized field path, for example 2026-10-29.close}
+              status: {type: string, enum: [matched, mismatch, not_comparable]}
+              left: {type: number, nullable: true}
+              right: {type: number, nullable: true}
+              difference: {type: number, nullable: true}
+              tolerance: {type: number, nullable: true}
+              reason: {type: string}
+        checked_at: {type: string, format: date-time}
+    ProviderProbeFieldIssue:
+      type: object
+      required: [stage, field, code, expected, severity, message]
+      properties:
+        stage: {type: string, enum: [parse, normalize, validate]}
+        field: {type: string}
+        provider_field: {type: string}
+        code: {type: string}
+        expected: {type: string}
+        actual_type: {type: string}
+        actual_preview: {type: string, maxLength: 160, description: Sanitized and length-limited value summary; must not contain credentials or full payloads}
+        severity: {type: string, enum: [error, warning, info]}
+        message: {type: string}
+        row_index: {type: integer, minimum: 0}
+        symbol: {type: string}
+        trade_date: {type: string, format: date}
+    ProviderProbeCoverageDimension:
+      type: object
+      required: [dimension, population, source, total, returned, validated, missing, excluded, ratio]
+      properties:
+        dimension: {type: string, enum: [quote_response, price_classification, quote_timestamp, amount]}
+        population: {type: string, enum: [provider_universe]}
+        source: {type: string, description: Evidence field that provides the dimension numerator or exclusion count}
+        total: {type: integer, minimum: 1}
+        returned: {type: integer, minimum: 0}
+        validated: {type: integer, minimum: 0}
+        missing: {type: integer, minimum: 0}
+        excluded: {type: integer, minimum: 0}
+        ratio: {type: number, minimum: 0, maximum: 1, description: validated divided by total}
     ProviderProbeItem:
       type: object
       required: [provider, capability, status, elapsed_ms, quality_status, checked_at]
@@ -601,8 +686,18 @@ components:
         sample_date: {type: string, format: date}
         rows_returned: {type: integer, minimum: 0}
         rows_validated: {type: integer, minimum: 0}
-        coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: Coverage of securities with usable data when applicable}
+        coverage_total: {type: integer, minimum: 0, description: Explicit expected population denominator; omitted when the source cannot prove it}
+        coverage_population: {type: string, enum: [provider_universe], description: Population represented by coverage_total; omitted when unknown}
+        coverage_source: {type: string, description: Source field or contract that proves the population denominator; omitted when unknown}
+        coverage_returned: {type: integer, minimum: 0, description: Records returned within the declared denominator}
+        coverage_validated: {type: integer, minimum: 0, description: Returned records with valid identity and required price fields; excludes returned records counted in coverage_excluded}
+        coverage_missing: {type: integer, minimum: 0, description: Expected records not returned by the source}
+        coverage_excluded: {type: integer, minimum: 0, description: Returned records excluded from validated population coverage, for example records with invalid required price fields}
+        coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: coverage_validated divided by coverage_total; describes population coverage only, not field-level quality; omitted when the denominator is unknown}
+        coverage_dimensions: {type: array, description: Field-specific coverage dimensions with the same provider-universe denominator; currently emitted only for market_breadth, items: {$ref: '#/components/schemas/ProviderProbeCoverageDimension'}}
         provider_time: {type: string, format: date-time, nullable: true}
+        provider_time_type: {type: string, description: Explicit source timestamp semantics; never inferred from fetched_at}
+        fetched_at: {type: string, format: date-time, nullable: true, description: Service collection time; never used as source data time}
         checked_at: {type: string, format: date-time}
     ProviderProbeRequest:
       type: object
@@ -619,6 +714,11 @@ components:
           maxItems: 1
           description: One explicit A-share symbol per request, format 600519.SH/000001.SZ/920001.BJ
           items: {type: string, pattern: '^\d{6}\.(SH|SZ|BJ)$'}
+        checks:
+          type: array
+          uniqueItems: true
+          description: Diagnostic dimensions to return. Empty means all dimensions; provider fetches are reused and are not repeated per check.
+          items: {type: string, enum: [connectivity, contract, quality, freshness, cross_provider, storage]}
         capabilities:
           type: array
           uniqueItems: true
@@ -633,6 +733,8 @@ components:
         run_id: {type: string}
         scope: {type: string, enum: [all, core]}
         requested_capabilities: {type: array, items: {type: string}}
+        requested_checks: {type: array, items: {type: string, enum: [connectivity, contract, quality, freshness, cross_provider, storage]}}
+        check_results: {type: array, items: {$ref: '#/components/schemas/ProviderProbeCheckResult'}}
         requested_markets: {type: array, items: {type: string, enum: [SH_MAIN, SZ_MAIN, CHINEXT, STAR, BSE]}}
         requested_symbols: {type: array, items: {type: string}}
         timeout_seconds: {type: integer, minimum: 1, maximum: 30}

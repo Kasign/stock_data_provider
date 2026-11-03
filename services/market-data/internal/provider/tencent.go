@@ -15,6 +15,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 const tencentVersion = "tencent-finance-api-v1"
@@ -88,11 +89,25 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 			return nil, fmt.Errorf("tencent quote symbol mismatch: requested %s got %q", symbol, reportedSymbol)
 		}
 	}
+	quoteFieldNames := map[int]string{3: "current_price", 4: "prev_close", 5: "open", 6: "volume", 31: "change", 32: "change_percent", 33: "high", 34: "low"}
 	val := func(i int) (float64, error) {
+		field := quoteFieldNames[i]
+		providerField := fmt.Sprintf("f%d", i)
 		if i >= len(fields) || strings.TrimSpace(fields[i]) == "" || strings.TrimSpace(fields[i]) == "-" {
+			addQuoteStringParseIssue(ctx, field, providerField, "", "finite number", nil)
 			return 0, fmt.Errorf("Tencent field %d is missing", i)
 		}
-		return strconv.ParseFloat(strings.TrimSpace(fields[i]), 64)
+		raw := strings.TrimSpace(fields[i])
+		parsed, parseErr := strconv.ParseFloat(raw, 64)
+		if parseErr != nil {
+			addQuoteStringParseIssue(ctx, field, providerField, raw, "finite number", parseErr)
+			return 0, parseErr
+		}
+		if !finiteNumber(parsed) {
+			addProviderQuoteFieldIssue(ctx, field, providerField, "invalid_value", "finite number", "string", raw, "Tencent quote field must be a finite number", validation.SeverityError)
+			return 0, fmt.Errorf("Tencent field %d is not finite", i)
+		}
+		return parsed, nil
 	}
 	price, e := val(3)
 	if e != nil {
@@ -169,7 +184,9 @@ func (p *Tencent) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		q.QualityReasons = append(q.QualityReasons, "provider_timestamp_missing")
 	}
 	q.QualityReasons = append(q.QualityReasons, "volume_ratio_unsupported_by_tencent_quote_contract")
-	if err := normalize.ValidateQuote(q); err != nil {
+	report, err := normalize.ValidateQuoteWithReport(q)
+	validation.AddContextReport(ctx, report)
+	if err != nil {
 		return nil, fmt.Errorf("Tencent quote data contract: %w", err)
 	}
 	if !volumeVerified {
@@ -270,9 +287,10 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	}
 	out := make([]model.DailyBar, 0, len(rows))
 	rejectedRows := 0
-	for _, row := range rows {
+	for rowIndex, row := range rows {
 		if len(row) < 6 {
 			rejectedRows++
+			addProviderParseIssue(ctx, rowIndex, "row", "kline_row", "insufficient_columns", "at least 6 columns", "array", strconv.Itoa(len(row)), "Tencent K-line row has fewer than six required columns")
 			continue
 		}
 		// Only the first six columns are mandatory and stable across Tencent
@@ -294,7 +312,8 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 				vals[i] = number.String()
 			} else {
 				valid = false
-				break
+				fieldNames := []string{"trade_date", "open", "close", "high", "low", "volume"}
+				addProviderParseIssue(ctx, rowIndex, fieldNames[i], fmt.Sprintf("kline_row[%d]", i), "type_mismatch", "string or number", providerJSONValueType(row[i]), providerJSONPreview(row[i]), "Tencent K-line field has an unsupported JSON type")
 			}
 		}
 		if !valid {
@@ -306,8 +325,25 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		high, e3 := strconv.ParseFloat(vals[3], 64)
 		low, e4 := strconv.ParseFloat(vals[4], 64)
 		rawVol, e5 := strconv.ParseFloat(vals[5], 64)
-		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || !finiteNumber(open) || !finiteNumber(closeV) || !finiteNumber(high) || !finiteNumber(low) {
+		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || !finiteNumber(open) || !finiteNumber(closeV) || !finiteNumber(high) || !finiteNumber(low) || !finiteNumber(rawVol) {
 			rejectedRows++
+			values := []struct {
+				field string
+				raw   string
+				err   error
+				value float64
+			}{
+				{"open", vals[1], e1, open},
+				{"close", vals[2], e2, closeV},
+				{"high", vals[3], e3, high},
+				{"low", vals[4], e4, low},
+				{"volume", vals[5], e5, rawVol},
+			}
+			for _, value := range values {
+				if value.err != nil || !finiteNumber(value.value) {
+					addProviderParseIssue(ctx, rowIndex, value.field, "kline_row", "invalid_number", "finite numeric value", "string", value.raw, "Tencent K-line numeric field must be finite and parseable")
+				}
+			}
 			continue
 		}
 		shares, conversionErr := tencentDailyVolumeToShares(rawVol, symbol)
@@ -334,7 +370,7 @@ func (p *Tencent) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 		out = append(out, b)
 	}
 
-	return normalizeProviderDailyBars(symbol, start, end, limit, out, rejectedRows)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, start, end, limit, out, rejectedRows)
 }
 
 // Tencent quote payloads expose turnover at field 35's price/volume/amount

@@ -1724,7 +1724,7 @@ func (p *Hithink) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			all[i].QualityReasons = append(all[i].QualityReasons, "change_percent_unavailable_for_first_bar")
 		}
 	}
-	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, all, 0)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, all, 0)
 }
 
 // FetchFundamentals 使用同花顺财务指标端点读取单个报告期的能力指标。
@@ -2088,16 +2088,17 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 		var data struct {
 			Timestamp *int64 `json:"timestamp"`
 			Item      []struct {
-				DateMS     *int64   `json:"date_ms"`
-				OpenPrice  *float64 `json:"open_price"`
-				HighPrice  *float64 `json:"high_price"`
-				LowPrice   *float64 `json:"low_price"`
-				ClosePrice *float64 `json:"close_price"`
-				Volume     *float64 `json:"volume"`
-				Turnover   *float64 `json:"turnover"`
+				DateMS     json.RawMessage `json:"date_ms"`
+				OpenPrice  json.RawMessage `json:"open_price"`
+				HighPrice  json.RawMessage `json:"high_price"`
+				LowPrice   json.RawMessage `json:"low_price"`
+				ClosePrice json.RawMessage `json:"close_price"`
+				Volume     json.RawMessage `json:"volume"`
+				Turnover   json.RawMessage `json:"turnover"`
 			} `json:"item"`
 		}
 		if err := json.Unmarshal(dataRaw, &data); err != nil {
+			addProviderParseIssue(ctx, -1, "daily_bar_response", "data.item", "decode_error", "object containing item rows", providerJSONValueType(dataRaw), "", "同花顺历史 K 线数据结构无法解析")
 			return nil, fmt.Errorf("解析同花顺历史 K 线失败: %w", err)
 		}
 		if len(data.Item) == 0 {
@@ -2105,10 +2106,36 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 		}
 		fetchedAt := time.Now().UTC()
 		for rowIndex, item := range data.Item {
-			if item.DateMS == nil || item.OpenPrice == nil || item.HighPrice == nil || item.LowPrice == nil || item.ClosePrice == nil {
-				return nil, fmt.Errorf("同花顺日 K 第 %d 行缺少日期或 OHLC", rowIndex)
+			absoluteRowIndex := offset + rowIndex
+			dateMS, datePresent, parseErr := parseHithinkDailyInt64(ctx, absoluteRowIndex, "trade_date", "date_ms", item.DateMS, true)
+			if parseErr != nil || !datePresent {
+				return nil, fmt.Errorf("同花顺日 K 第 %d 行缺少或包含无效日期", absoluteRowIndex)
 			}
-			tradeDate := time.UnixMilli(*item.DateMS).In(loc).Format("2006-01-02")
+			open, openPresent, parseErr := parseHithinkDailyFloat(ctx, absoluteRowIndex, "open", "open_price", item.OpenPrice, true)
+			if parseErr != nil || !openPresent {
+				return nil, fmt.Errorf("同花顺日 K 第 %d 行开盘价缺失或无效", absoluteRowIndex)
+			}
+			high, highPresent, parseErr := parseHithinkDailyFloat(ctx, absoluteRowIndex, "high", "high_price", item.HighPrice, true)
+			if parseErr != nil || !highPresent {
+				return nil, fmt.Errorf("同花顺日 K 第 %d 行最高价缺失或无效", absoluteRowIndex)
+			}
+			low, lowPresent, parseErr := parseHithinkDailyFloat(ctx, absoluteRowIndex, "low", "low_price", item.LowPrice, true)
+			if parseErr != nil || !lowPresent {
+				return nil, fmt.Errorf("同花顺日 K 第 %d 行最低价缺失或无效", absoluteRowIndex)
+			}
+			closePrice, closePresent, parseErr := parseHithinkDailyFloat(ctx, absoluteRowIndex, "close", "close_price", item.ClosePrice, true)
+			if parseErr != nil || !closePresent {
+				return nil, fmt.Errorf("同花顺日 K 第 %d 行收盘价缺失或无效", absoluteRowIndex)
+			}
+			volumeValue, volumePresent, parseErr := parseHithinkDailyFloat(ctx, absoluteRowIndex, "volume", "volume", item.Volume, false)
+			if parseErr != nil {
+				return nil, fmt.Errorf("同花顺日 K 第 %d 行成交量类型无效", absoluteRowIndex)
+			}
+			turnoverValue, turnoverPresent, parseErr := parseHithinkDailyFloat(ctx, absoluteRowIndex, "amount", "turnover", item.Turnover, false)
+			if parseErr != nil {
+				return nil, fmt.Errorf("同花顺日 K 第 %d 行成交额类型无效", absoluteRowIndex)
+			}
+			tradeDate := time.UnixMilli(dateMS).In(loc).Format("2006-01-02")
 			if tradeDate < start.Format("2006-01-02") || tradeDate > end.Format("2006-01-02") {
 				return nil, fmt.Errorf("同花顺日 K 日期 %s 超出请求区间", tradeDate)
 			}
@@ -2116,7 +2143,6 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s", tradeDate)
 			}
 			seen[tradeDate] = struct{}{}
-			open, high, low, closePrice := *item.OpenPrice, *item.HighPrice, *item.LowPrice, *item.ClosePrice
 			if !hithinkPositiveFinite(open) || !hithinkPositiveFinite(high) || !hithinkPositiveFinite(low) || !hithinkPositiveFinite(closePrice) ||
 				low > high || open < low || open > high || closePrice < low || closePrice > high {
 				return nil, fmt.Errorf("同花顺日 K %s 的 OHLC 不满足数据约束", tradeDate)
@@ -2125,23 +2151,33 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			var rawVolume *float64
 			quality := model.QualityValid
 			var reasons []string
-			v, volumeOK := hithinkNonNegativeInt64(item.Volume)
+			var volumeInput *float64
+			if volumePresent {
+				volumeInput = &volumeValue
+			}
+			v, volumeOK := hithinkNonNegativeInt64(volumeInput)
 			if !volumeOK {
 				quality = model.QualityDegraded
 				reasons = append(reasons, "volume_missing_or_invalid")
+				if volumePresent {
+					addProviderParseIssue(ctx, absoluteRowIndex, "volume", "volume", "invalid_number", "finite non-negative integer", "number", providerJSONPreview(item.Volume), "同花顺成交量必须是非负整数")
+				}
 			} else {
 				volume = &v
-				raw := *item.Volume
+				raw := volumeValue
 				rawVolume = &raw
 			}
 			var amount *float64
 			var rawAmount *float64
 			amountUnit, rawAmountUnit, rawAmountField := "unknown", "", ""
-			if item.Turnover == nil || !hithinkNonNegativeFinite(*item.Turnover) {
+			if !turnoverPresent || !hithinkNonNegativeFinite(turnoverValue) {
 				quality = model.QualityDegraded
 				reasons = append(reasons, "amount_missing_or_invalid")
+				if turnoverPresent {
+					addProviderParseIssue(ctx, absoluteRowIndex, "amount", "turnover", "invalid_number", "finite non-negative numeric value", "number", providerJSONPreview(item.Turnover), "同花顺成交额必须是非负有限数值")
+				}
 			} else {
-				v := *item.Turnover
+				v := turnoverValue
 				amount, rawAmount = &v, &v
 				amountUnit, rawAmountUnit, rawAmountField = "CNY", "CNY", "turnover"
 			}
@@ -2165,6 +2201,44 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 		offset += len(data.Item)
 	}
 	return nil, fmt.Errorf("同花顺在 %d 页内未结束分页，拒绝返回可能不完整的 K 线", hithinkMaxPagesPerRange)
+}
+
+func parseHithinkDailyInt64(ctx context.Context, rowIndex int, field, providerField string, raw json.RawMessage, required bool) (int64, bool, error) {
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "null" {
+		if required {
+			addProviderParseIssue(ctx, rowIndex, field, providerField, "required_missing", "integer timestamp", providerJSONValueType(raw), providerJSONPreview(raw), "同花顺日 K 必需日期字段缺失")
+			return 0, false, errors.New("required timestamp is missing")
+		}
+		return 0, false, nil
+	}
+	var parsed int64
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		addProviderParseIssue(ctx, rowIndex, field, providerField, "type_mismatch", "integer timestamp", providerJSONValueType(raw), providerJSONPreview(raw), "同花顺日 K 日期字段类型无效")
+		return 0, false, err
+	}
+	return parsed, true, nil
+}
+
+func parseHithinkDailyFloat(ctx context.Context, rowIndex int, field, providerField string, raw json.RawMessage, required bool) (float64, bool, error) {
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "null" {
+		if required {
+			addProviderParseIssue(ctx, rowIndex, field, providerField, "required_missing", "numeric value", providerJSONValueType(raw), providerJSONPreview(raw), "同花顺日 K 必需数值字段缺失")
+			return 0, false, errors.New("required numeric field is missing")
+		}
+		return 0, false, nil
+	}
+	var parsed float64
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		addProviderParseIssue(ctx, rowIndex, field, providerField, "type_mismatch", "number", providerJSONValueType(raw), providerJSONPreview(raw), "同花顺日 K 数值字段类型无效")
+		return 0, false, err
+	}
+	if !hithinkFinite(parsed) {
+		addProviderParseIssue(ctx, rowIndex, field, providerField, "invalid_number", "finite numeric value", providerJSONValueType(raw), providerJSONPreview(raw), "同花顺日 K 数值字段不是有限数值")
+		return 0, false, errors.New("numeric field is not finite")
+	}
+	return parsed, true, nil
 }
 
 func (p *Hithink) get(ctx context.Context, path string, query url.Values) ([]byte, error) {

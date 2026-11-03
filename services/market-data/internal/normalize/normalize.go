@@ -4,12 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/symbol"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 const Version = "4"
@@ -19,38 +20,8 @@ const (
 	quoteChangePercentTolerancePP = 0.15
 )
 
-var symbolPattern = regexp.MustCompile(`^[0-9]{6}(\.(SH|SZ|BJ))?$`)
-
 func NormalizeSymbol(raw string) (string, error) {
-	s := strings.ToUpper(strings.TrimSpace(raw))
-	if !symbolPattern.MatchString(s) {
-		return "", fmt.Errorf("invalid A-share symbol %q", raw)
-	}
-	parts := strings.Split(s, ".")
-	code := parts[0]
-	// This service's normalized monetary contract is CNY and its lot conversion
-	// rules are for A-shares. Shanghai 900xxx and Shenzhen 200xxx are B-shares;
-	// accepting them would silently misstate their currency/volume semantics.
-	if strings.HasPrefix(code, "900") || strings.HasPrefix(code, "200") {
-		return "", fmt.Errorf("B-share code %q is outside the supported A-share data contract", code)
-	}
-	exchange := ""
-	switch {
-	case strings.HasPrefix(code, "92"):
-		exchange = "BJ"
-	case strings.HasPrefix(code, "4"), strings.HasPrefix(code, "8"):
-		exchange = "BJ"
-	case strings.HasPrefix(code, "6"), strings.HasPrefix(code, "5"), strings.HasPrefix(code, "9"):
-		exchange = "SH"
-	case strings.HasPrefix(code, "0"), strings.HasPrefix(code, "1"), strings.HasPrefix(code, "2"), strings.HasPrefix(code, "3"):
-		exchange = "SZ"
-	default:
-		return "", fmt.Errorf("cannot infer exchange for %q", raw)
-	}
-	if len(parts) == 2 && parts[1] != exchange {
-		return "", fmt.Errorf("symbol %q has exchange suffix %s but code prefix maps to %s", raw, parts[1], exchange)
-	}
-	return code + "." + exchange, nil
+	return symbol.Normalize(raw)
 }
 
 func Adjustment(v string) (model.AdjustmentBasis, error) {
@@ -124,17 +95,43 @@ func ValidateQuote(q *model.Quote) error {
 	default:
 		return fmt.Errorf("quote adjustment basis %q is missing or unsupported", q.AdjustmentBasis)
 	}
-	for name, p := range map[string]*float64{"current_price": q.CurrentPrice, "open": q.Open, "high": q.High, "low": q.Low, "prev_close": q.PrevClose} {
-		if p == nil || !finite(*p) || *p <= 0 {
-			return fmt.Errorf("quote %s must be a positive finite value", name)
+	requiredPrices := []struct {
+		name  string
+		value *float64
+	}{
+		{"current_price", q.CurrentPrice},
+		{"open", q.Open},
+		{"high", q.High},
+		{"low", q.Low},
+		{"prev_close", q.PrevClose},
+	}
+	for _, item := range requiredPrices {
+		if item.value == nil || !finite(*item.value) || *item.value <= 0 {
+			return fmt.Errorf("quote %s must be a positive finite value", item.name)
 		}
 	}
 	if *q.Low > *q.High || *q.Open < *q.Low || *q.Open > *q.High || *q.CurrentPrice < *q.Low || *q.CurrentPrice > *q.High {
 		return errors.New("quote OHLC invariant failed")
 	}
-	for name, p := range map[string]*float64{"change": q.Change, "change_percent": q.ChangePercent, "volume_ratio": q.VolumeRatio, "turnover_rate": q.TurnoverRate} {
-		if p != nil && (!finite(*p) || ((name == "volume_ratio" || name == "turnover_rate") && *p < 0)) {
-			return fmt.Errorf("quote %s must be finite and non-negative when present", name)
+	optionalNumbers := []struct {
+		name        string
+		value       *float64
+		nonNegative bool
+	}{
+		{"change", q.Change, false},
+		{"change_percent", q.ChangePercent, false},
+		{"volume_ratio", q.VolumeRatio, true},
+		{"turnover_rate", q.TurnoverRate, true},
+	}
+	for _, item := range optionalNumbers {
+		if item.value == nil {
+			continue
+		}
+		if !finite(*item.value) {
+			return fmt.Errorf("quote %s must be finite when present", item.name)
+		}
+		if item.nonNegative && *item.value < 0 {
+			return fmt.Errorf("quote %s must be non-negative when present", item.name)
 		}
 	}
 	expectedChange := *q.CurrentPrice - *q.PrevClose
@@ -200,10 +197,28 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			return nil, []string{"invalid_end_date"}
 		}
 	}
+	canonicalRequestedSymbol, symbolErr := NormalizeSymbol(symbol)
+	if symbolErr != nil || canonicalRequestedSymbol != symbol {
+		return nil, []string{"invalid_requested_symbol"}
+	}
+
 	seen := map[string]bool{}
 	valid := make([]model.DailyBar, 0, len(bars))
 	ohlcDiagnosticCount := 0
 	for _, b := range bars {
+		if strings.TrimSpace(b.Symbol) == "" {
+			warnings = append(warnings, "bar_with_missing_symbol_dropped")
+			continue
+		}
+		canonicalBarSymbol, barSymbolErr := NormalizeSymbol(b.Symbol)
+		if barSymbolErr != nil || canonicalBarSymbol != b.Symbol {
+			warnings = append(warnings, "bar_with_invalid_symbol_dropped")
+			continue
+		}
+		if canonicalBarSymbol != canonicalRequestedSymbol {
+			warnings = append(warnings, "bar_symbol_mismatch_dropped")
+			continue
+		}
 		parsedTradeDate, err := time.Parse("2006-01-02", b.TradeDate)
 		if err != nil || parsedTradeDate.Format("2006-01-02") != b.TradeDate {
 			warnings = append(warnings, "invalid_trade_date_dropped")
@@ -275,8 +290,10 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 		}
 		if b.Source == "" {
 			b.Source = "unknown"
-			b.QualityStatus = model.QualityUnknown
-			b.QualityReasons = append(b.QualityReasons, "source_missing")
+			if b.QualityStatus == "" || b.QualityStatus == model.QualityValid {
+				b.QualityStatus = model.QualityUnknown
+			}
+			b.QualityReasons = appendReasonUnique(b.QualityReasons, "source_missing")
 		}
 		b.Symbol = symbol
 		if b.Amount == nil {
@@ -346,4 +363,45 @@ func unique(in []string) []string {
 		}
 	}
 	return out
+}
+
+// ValidateQuoteWithReport collects structured issues before invoking the legacy
+// validator. The legacy validator remains authoritative for historical errors
+// and amount-missing mutations.
+func ValidateQuoteWithReport(q *model.Quote) (validation.Report, error) {
+	report := validation.ValidateQuote(q)
+	err := ValidateQuote(q)
+	return report, err
+}
+
+// ValidateAndSortBarsWithReport collects row diagnostics before running the
+// legacy filtering/sorting pipeline. Returned data and warnings stay compatible.
+func ValidateAndSortBarsWithReport(symbolValue string, bars []model.DailyBar, start, end string, limit int) ([]model.DailyBar, []string, validation.Report) {
+	report := validation.NewReport(validation.DefaultMaxIssues)
+	ctx := validation.DailyBarContext{RequestedSymbol: symbolValue, StartDate: start, EndDate: end, Period: "1d"}
+	for index, bar := range bars {
+		rowReport := validation.ValidateDailyBar(bar, ctx)
+		for _, item := range rowReport.Issues {
+			rowIndex := index
+			item.RowIndex = &rowIndex
+			report.Add(item)
+		}
+		report.TotalCount += rowReport.TotalCount - len(rowReport.Issues)
+		report.ErrorCount += rowReport.ErrorCount - countSeverity(rowReport.Issues, validation.SeverityError)
+		report.WarningCount += rowReport.WarningCount - countSeverity(rowReport.Issues, validation.SeverityWarning)
+		report.InfoCount += rowReport.InfoCount - countSeverity(rowReport.Issues, validation.SeverityInfo)
+		report.Truncated = report.Truncated || rowReport.Truncated
+	}
+	normalized, warnings := ValidateAndSortBars(symbolValue, bars, start, end, limit)
+	return normalized, warnings, report
+}
+
+func countSeverity(issues []validation.FieldIssue, severity validation.Severity) int {
+	count := 0
+	for _, item := range issues {
+		if item.Severity == severity {
+			count++
+		}
+	}
+	return count
 }

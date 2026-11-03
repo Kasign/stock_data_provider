@@ -416,14 +416,30 @@ func (s *DataService) PriceLimitEventProviders() []provider.PriceLimitEventProvi
 }
 
 func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
+	return validateMarketBreadthSnapshot(snapshot, true)
+}
+
+// validateMarketBreadthProbeSnapshot validates evidence structure while allowing incomplete population coverage.
+// Business endpoints must continue to use validateMarketBreadth and reject partial population snapshots.
+func validateMarketBreadthProbeSnapshot(snapshot *model.MarketBreadthSnapshot) error {
+	return validateMarketBreadthSnapshot(snapshot, false)
+}
+
+func validateMarketBreadthSnapshot(snapshot *model.MarketBreadthSnapshot, requireFullCoverage bool) error {
 	if snapshot == nil {
 		return errors.New("market-breadth provider returned an empty snapshot")
 	}
 	if snapshot.Market != "cn_a_share" {
 		return fmt.Errorf("unsupported market-breadth market %q", snapshot.Market)
 	}
-	if snapshot.TotalSecurities <= 0 || snapshot.CoveredSecurities != snapshot.TotalSecurities {
+	if snapshot.TotalSecurities <= 0 || snapshot.CoveredSecurities < 0 || snapshot.CoveredSecurities > snapshot.TotalSecurities {
+		return fmt.Errorf("market-breadth coverage counts are invalid: covered=%d total=%d", snapshot.CoveredSecurities, snapshot.TotalSecurities)
+	}
+	if requireFullCoverage && snapshot.CoveredSecurities != snapshot.TotalSecurities {
 		return fmt.Errorf("market-breadth coverage mismatch: covered=%d total=%d", snapshot.CoveredSecurities, snapshot.TotalSecurities)
+	}
+	if snapshot.CoveredSecurities < snapshot.TotalSecurities && snapshot.QualityStatus != model.QualityDegraded {
+		return errors.New("partial market-breadth population coverage must have degraded quality")
 	}
 	if (snapshot.LimitUpCount != nil && (*snapshot.LimitUpCount < 0 || *snapshot.LimitUpCount > snapshot.CoveredSecurities)) ||
 		(snapshot.LimitDownCount != nil && (*snapshot.LimitDownCount < 0 || *snapshot.LimitDownCount > snapshot.CoveredSecurities)) {
@@ -472,7 +488,7 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 			return errors.New("market-breadth cannot be valid when quote timestamp spread exceeds 10 minutes")
 		}
 	}
-	if snapshot.AmountCoverageCount == snapshot.CoveredSecurities {
+	if snapshot.AmountCoverageCount == snapshot.CoveredSecurities && snapshot.CoveredSecurities == snapshot.TotalSecurities {
 		if snapshot.TotalAmountCNY == nil || math.IsNaN(*snapshot.TotalAmountCNY) || math.IsInf(*snapshot.TotalAmountCNY, 0) || *snapshot.TotalAmountCNY < 0 {
 			return errors.New("market-breadth amount invalid despite complete amount coverage")
 		}
@@ -489,12 +505,18 @@ func validateMarketBreadth(snapshot *model.MarketBreadthSnapshot) error {
 		return errors.New("market-breadth source, source_version or fetched_at is missing")
 	}
 	reportDate := strings.TrimSpace(snapshot.ProviderReportDate)
-	parsedReportDate, reportDateErr := time.Parse("2006-01-02", reportDate)
-	if reportDateErr != nil || parsedReportDate.Format("2006-01-02") != reportDate {
-		return errors.New("market-breadth provider_report_date is missing or invalid")
-	}
-	if reportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
-		return fmt.Errorf("market-breadth provider_report_date %s is in the future", reportDate)
+	if reportDate == "" {
+		if requireFullCoverage || snapshot.CoveredSecurities == snapshot.TotalSecurities {
+			return errors.New("market-breadth provider_report_date is missing or invalid")
+		}
+	} else {
+		parsedReportDate, reportDateErr := time.Parse("2006-01-02", reportDate)
+		if reportDateErr != nil || parsedReportDate.Format("2006-01-02") != reportDate {
+			return errors.New("market-breadth provider_report_date is missing or invalid")
+		}
+		if reportDate > time.Now().In(marketLocation()).Format("2006-01-02") {
+			return fmt.Errorf("market-breadth provider_report_date %s is in the future", reportDate)
+		}
 	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded {
 		return fmt.Errorf("market-breadth quality status %q is unsupported", snapshot.QualityStatus)
@@ -626,6 +648,9 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("limit-pool source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("limit-pool fetched_at is in the future")
+	}
 	if snapshot.ProviderReportDate != "" {
 		parsed, dateErr := time.Parse("2006-01-02", snapshot.ProviderReportDate)
 		if dateErr != nil || parsed.Format("2006-01-02") != snapshot.ProviderReportDate {
@@ -663,6 +688,9 @@ func validateLimitPoolSnapshot(poolType, tradeDate string, limit int, snapshot *
 			}
 			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 				return errors.New("limit-pool item source/version or fetched_at mismatch")
+			}
+			if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+				return fmt.Errorf("limit-pool item %s fetched_at is in the future", item.Symbol)
 			}
 			if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 				return fmt.Errorf("limit-pool item %s has unsupported quality %q", item.Symbol, item.QualityStatus)
@@ -884,6 +912,9 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("dragon-tiger source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("dragon-tiger fetched_at is in the future")
+	}
 	if snapshot.Total < 0 || snapshot.Pages < 0 || snapshot.SourceReturned < 0 ||
 		snapshot.ExcludedNonAShareCount < 0 || snapshot.Returned != len(snapshot.Items) ||
 		snapshot.Returned > snapshot.SourceReturned ||
@@ -927,6 +958,9 @@ func validateDragonTigerSnapshot(tradeDate string, page, pageSize int, snapshot 
 			}
 			if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() || (item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded) {
 				return errors.New("dragon-tiger item source/version, fetched_at, or quality is invalid")
+			}
+			if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+				return errors.New("dragon-tiger item fetched_at is in the future")
 			}
 			if item.QualityStatus == model.QualityDegraded {
 				hasDegradedItem = true
@@ -1132,6 +1166,9 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("sector-ranking source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("sector-ranking fetched_at is in the future")
+	}
 	if snapshot.QualityStatus == model.QualityValid {
 		return errors.New("sector-ranking snapshot cannot be valid without a provider snapshot timestamp")
 	}
@@ -1180,6 +1217,9 @@ func validateSectorRankingSnapshot(category string, limit int, snapshot *model.S
 		}
 		if item.FetchedAt.IsZero() || item.QualityStatus != model.QualityDegraded {
 			return errors.New("sector-ranking item has invalid retrieval time or quality status")
+		}
+		if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+			return fmt.Errorf("sector-ranking item %s fetched_at is in the future", item.Code)
 		}
 		for _, value := range []*float64{item.LatestPrice, item.Change, item.ChangePercent, item.ChangePercent5D, item.Amount, item.LeaderChangePercent} {
 			if value != nil && (math.IsNaN(*value) || math.IsInf(*value, 0)) {
@@ -2133,6 +2173,9 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 	if strings.TrimSpace(item.Source) == "" || !hasIdentifiableSourceVersion(item.SourceVersion) || item.FetchedAt.IsZero() {
 		return errors.New("chip-distribution source/source_version is missing or unidentifiable, or fetched_at is missing")
 	}
+	if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("chip-distribution fetched_at is in the future")
+	}
 	if item.QualityStatus == model.QualityValid {
 		return errors.New("chip-distribution cannot be valid without verified publication availability time")
 	}
@@ -2493,6 +2536,15 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 	}
 	return nil, false, fmt.Errorf("all capital-flow providers failed: %s", strings.Join(failures, " | "))
 }
+func degradeQualityStatus(status *model.QualityStatus) {
+	if status == nil {
+		return
+	}
+	if *status == "" || *status == model.QualityValid {
+		*status = model.QualityDegraded
+	}
+}
+
 func appendReason(reasons []string, value string) []string {
 	for _, reason := range reasons {
 		if reason == value {
@@ -2602,7 +2654,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 				continue
 			}
 		} else {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 			appendReasonOnce(&q.QualityReasons, "provider_symbol_missing_assumed_from_request")
 		}
 		q.Symbol = symbol
@@ -2618,13 +2670,13 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			continue
 		}
 		if i > 0 {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 			appendReasonOnce(&q.QualityReasons, "provider_fallback_used")
 			q.FallbackFrom = s.quoteProviders[0].Name()
 			q.FallbackReason = strings.Join(errs, "; ")
 		}
 		if q.Amount == nil {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 			appendReasonOnce(&q.QualityReasons, "amount_missing_from_provider")
 		}
 		if e = normalize.ValidateQuote(q); e != nil {
@@ -2648,7 +2700,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 				s.logger.Error("persist quote failed", "symbol", symbol, "source", q.Source, "error", e)
 				appendReasonOnce(&q.QualityReasons, "persistence_write_failed")
 				if q.QualityStatus == model.QualityValid {
-					q.QualityStatus = model.QualityDegraded
+					degradeQualityStatus(&q.QualityStatus)
 				}
 			}
 		}
@@ -2836,14 +2888,20 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			continue // Never salvage only part of a provider response with a mixed contract.
 		}
 		accepted := make([]model.DailyBar, 0, len(bars))
+		missingProviderSymbol := false
 		for j := range bars {
+			if strings.TrimSpace(bars[j].Symbol) == "" {
+				missingProviderSymbol = true
+				degradeQualityStatus(&bars[j].QualityStatus)
+				appendReasonOnce(&bars[j].QualityReasons, "provider_symbol_missing_assumed_from_request")
+			}
 			bars[j].Symbol = symbol
 			bars[j].Source = p.Name()
 			bars[j].SourceVersion = strings.TrimSpace(bars[j].SourceVersion)
 			bars[j].RequestID = fetchID
 			if isCurrentIncompleteSessionBar(bars[j].TradeDate, time.Now()) {
 				bars[j].IsPartial = true
-				bars[j].QualityStatus = model.QualityDegraded
+				degradeQualityStatus(&bars[j].QualityStatus)
 				appendReasonOnce(&bars[j].QualityReasons, "current_daily_bar_may_be_incomplete")
 			}
 			bars[j].FetchedAt = receivedAt
@@ -2851,11 +2909,11 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				bars[j].NormalizationVer = normalize.Version
 			}
 			if bars[j].Amount == nil {
-				bars[j].QualityStatus = model.QualityDegraded
+				degradeQualityStatus(&bars[j].QualityStatus)
 				appendReasonOnce(&bars[j].QualityReasons, "amount_missing_from_provider")
 			}
 			if i > 0 {
-				bars[j].QualityStatus = model.QualityDegraded
+				degradeQualityStatus(&bars[j].QualityStatus)
 				bars[j].FallbackFrom = s.barProviders[0].Name()
 				bars[j].FallbackReason = strings.Join(errs, "; ")
 				appendReasonOnce(&bars[j].QualityReasons, "provider_fallback_used")
@@ -2883,6 +2941,9 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		if i > 0 {
 			warnings = append(warnings, "daily_bar_provider_fallback_used")
 		}
+		if missingProviderSymbol {
+			warnings = append(warnings, "daily_bar_provider_symbol_missing_assumed_from_request")
+		}
 		for _, bar := range bars {
 			if bar.Amount == nil {
 				warnings = append(warnings, "daily_bar_amount_missing_from_selected_provider")
@@ -2896,7 +2957,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			warnings = append(warnings, warning)
 			for j := range bars {
 				if bars[j].QualityStatus == model.QualityValid {
-					bars[j].QualityStatus = model.QualityDegraded
+					degradeQualityStatus(&bars[j].QualityStatus)
 				}
 				appendReasonOnce(&bars[j].QualityReasons, "daily_bar_coverage_below_threshold")
 			}
@@ -2915,7 +2976,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				for j := range bars {
 					appendReasonOnce(&bars[j].QualityReasons, "persistence_write_failed")
 					if bars[j].QualityStatus == model.QualityValid {
-						bars[j].QualityStatus = model.QualityDegraded
+						degradeQualityStatus(&bars[j].QualityStatus)
 					}
 				}
 			}
@@ -3308,7 +3369,7 @@ func applyQuoteFreshness(q *model.Quote, now time.Time) {
 	}
 	if q.QuoteTime == nil {
 		if q.QualityStatus == model.QualityValid || q.QualityStatus == "" {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 		}
 		appendReasonOnce(&q.QualityReasons, "provider_timestamp_missing")
 		return
@@ -3317,7 +3378,7 @@ func applyQuoteFreshness(q *model.Quote, now time.Time) {
 	// Clock skew is suspicious regardless of whether the market is open.
 	if age < -60*time.Second {
 		if q.QualityStatus != model.QualityStale {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 		}
 		appendReasonOnce(&q.QualityReasons, "provider_timestamp_more_than_60_seconds_in_future")
 		return

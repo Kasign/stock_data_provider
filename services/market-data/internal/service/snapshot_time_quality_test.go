@@ -115,3 +115,40 @@ func TestSectorRankingCannotClaimValidWithoutProviderSnapshotTime(t *testing.T) 
 		t.Fatalf("missing provider snapshot time must degrade sector rankings: %+v", got)
 	}
 }
+
+func TestSectorRankingRejectsFutureFetchedAt(t *testing.T) {
+	now := time.Now().UTC()
+	change := 1.2
+	snapshot := &model.SectorRankingSnapshot{
+		Category: "industry", Direction: "up", SortBy: "change_percent", Total: 1,
+		Source: "eastmoney", SourceVersion: "test-v1",
+		FetchedAt: now.Add(10 * time.Minute), QualityStatus: model.QualityDegraded,
+		Items: []model.SectorRanking{{
+			Rank: 1, Code: "BK0477", Name: "酿酒行业", Category: "industry",
+			ChangePercent: &change, AmountUnit: "unknown",
+			Source: "eastmoney", SourceVersion: "test-v1", FetchedAt: now,
+			QualityStatus: model.QualityDegraded,
+		}},
+	}
+	if err := validateSectorRankingSnapshot("industry", 10, snapshot); err == nil {
+		t.Fatal("future sector snapshot fetched_at must be rejected")
+	}
+	snapshot.FetchedAt = now
+	snapshot.Items[0].FetchedAt = now.Add(10 * time.Minute)
+	if err := validateSectorRankingSnapshot("industry", 10, snapshot); err == nil {
+		t.Fatal("future sector item fetched_at must be rejected")
+	}
+}
+
+func TestHotRankingRejectsFutureFetchedAt(t *testing.T) {
+	snapshot := populatedHotRankingForFallbackTest("eastmoney")
+	snapshot.FetchedAt = time.Now().UTC().Add(10 * time.Minute)
+	if err := validateHotRankingSnapshot("popular", snapshot); err == nil {
+		t.Fatal("future hot-ranking snapshot fetched_at must be rejected")
+	}
+	snapshot.FetchedAt = time.Now().UTC()
+	snapshot.Items[0].FetchedAt = time.Now().UTC().Add(10 * time.Minute)
+	if err := validateHotRankingSnapshot("popular", snapshot); err == nil {
+		t.Fatal("future hot-ranking item fetched_at must be rejected")
+	}
+}

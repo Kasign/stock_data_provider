@@ -35,6 +35,10 @@ func validateFundamentalsSnapshot(symbol string, year, quarter int, snapshot *mo
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("fundamentals source, source_version or fetched_at is missing")
 	}
+	// FetchedAt 是 Provider 侧采集时间；未来时间通常意味着时钟/单位错误，不能进入缓存或 PIT。
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("fundamentals snapshot fetched_at is in the future")
+	}
 	// 六个标准指标分区始终必需；同花顺可额外返回三张独立财务报表。
 	if len(snapshot.Sections) < 6 || len(snapshot.Sections) > 9 {
 		return fmt.Errorf("fundamentals snapshot has %d sections, expected six indicator groups and up to three statement groups", len(snapshot.Sections))

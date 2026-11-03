@@ -29,6 +29,9 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("hot-ranking source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("hot-ranking fetched_at is in the future")
+	}
 	if snapshot.QualityStatus != model.QualityValid && snapshot.QualityStatus != model.QualityDegraded && snapshot.QualityStatus != model.QualityUnknown {
 		return fmt.Errorf("unsupported hot-ranking quality %q", snapshot.QualityStatus)
 	}
@@ -65,6 +68,9 @@ func validateHotRankingSnapshot(rankingType string, snapshot *model.HotRankingSn
 		previousRank = item.Rank
 		if item.Source != snapshot.Source || item.SourceVersion != snapshot.SourceVersion || item.FetchedAt.IsZero() {
 			return errors.New("hot-ranking item source/version/fetched_at mismatch")
+		}
+		if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+			return fmt.Errorf("hot-ranking item %s fetched_at is in the future", item.Symbol)
 		}
 		if item.QualityStatus != model.QualityValid && item.QualityStatus != model.QualityDegraded {
 			return fmt.Errorf("hot-ranking item has unsupported quality %q", item.QualityStatus)

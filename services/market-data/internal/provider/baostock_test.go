@@ -9,6 +9,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/baostock"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 type fakeBaostockClient struct {
@@ -204,5 +205,27 @@ func TestBaostockRejectsDuplicateTradeDates(t *testing.T) {
 	_, err := p.FetchDailyBars(context.Background(), "600519.SH", "2026-10-01", "2026-10-21", 20, model.AdjustmentForward)
 	if err == nil || !strings.Contains(err.Error(), "duplicate trade date") {
 		t.Fatalf("重复交易日必须被拒绝，实际错误：%v", err)
+	}
+}
+
+func TestBaostockParseIssueIncludesRowAndField(t *testing.T) {
+	client := &fakeBaostockClient{rows: []baostock.DailyKLine{{
+		Date: "2026-10-21", Code: "sh.600519", Open: "1331.88", High: "1331.98",
+		Low: "1302.36", Close: "bad", Volume: "3351400", Amount: "4403823070", AdjustFlag: "2",
+	}}}
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewBaostock(client)
+	if _, err := provider.FetchDailyBars(ctx, "600519.SH", "2026-10-21", "2026-10-21", 10, model.AdjustmentForward); err == nil {
+		t.Fatal("expected invalid close to reject the BaoStock response")
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "close" && issue.Code == "invalid_number" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected close parse issue at row 0, got %+v", reporter.Snapshot().Issues)
 	}
 }

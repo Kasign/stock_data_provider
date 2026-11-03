@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 func TestNormalizeSymbol(t *testing.T) {
@@ -28,7 +29,7 @@ func TestNormalizeSymbol(t *testing.T) {
 func TestValidateAndSortBars(t *testing.T) {
 	v1 := int64(100)
 	v2 := int64(200)
-	bars := []model.DailyBar{{TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 12, Low: 9, Close: 11, Volume: &v1, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}, {TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 12, Low: 9, Close: 11, Volume: &v2, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}, {TradeDate: "2026-10-21", Period: "1d", Open: 10, High: 8, Low: 9, Close: 11, Volume: &v2, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}}
+	bars := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 12, Low: 9, Close: 11, Volume: &v1, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}, {Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 12, Low: 9, Close: 11, Volume: &v2, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}, {Symbol: "600519.SH", TradeDate: "2026-10-21", Period: "1d", Open: 10, High: 8, Low: 9, Close: 11, Volume: &v2, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}}
 	got, warnings := ValidateAndSortBars("600519.SH", bars, "2026-10-19", "2026-10-20", 10)
 	if len(got) != 2 {
 		t.Fatalf("wanted 2 valid bars, got %d", len(got))
@@ -41,6 +42,38 @@ func TestValidateAndSortBars(t *testing.T) {
 	}
 }
 
+func TestValidateAndSortBarsRejectsMissingInvalidAndMismatchedSymbols(t *testing.T) {
+	volume := int64(1000)
+	base := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume,
+		AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+	}
+	mismatched := base
+	mismatched.Symbol = "000001.SZ"
+	mismatched.TradeDate = "2026-10-21"
+	missing := base
+	missing.Symbol = ""
+	missing.TradeDate = "2026-10-22"
+	invalid := base
+	invalid.Symbol = "AAPL"
+	invalid.TradeDate = "2026-10-23"
+
+	got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{base, mismatched, missing, invalid}, "", "", 10)
+	if len(got) != 1 || got[0].TradeDate != base.TradeDate || got[0].Symbol != "600519.SH" {
+		t.Fatalf("only the matching security row should survive, got bars=%+v warnings=%v", got, warnings)
+	}
+	for _, warning := range []string{
+		"bar_symbol_mismatch_dropped",
+		"bar_with_missing_symbol_dropped",
+		"bar_with_invalid_symbol_dropped",
+	} {
+		if !containsWarning(warnings, warning) {
+			t.Errorf("missing warning %q in %v", warning, warnings)
+		}
+	}
+}
 func TestInvalidOHLCWarningIncludesDroppedRowContext(t *testing.T) {
 	volume := int64(1000)
 	bad := model.DailyBar{
@@ -195,6 +228,118 @@ func TestValidateAndSortBarsRejectsNonFiniteChangePercentAndDegradesMissingAmoun
 	}
 }
 
+func TestValidateAndSortBarsRejectsVolumeAmountAndContractBoundaries(t *testing.T) {
+	tests := []struct {
+		name        string
+		mutate      func(*model.DailyBar)
+		wantWarning string
+	}{
+		{
+			name:        "missing volume",
+			mutate:      func(bar *model.DailyBar) { bar.Volume = nil },
+			wantWarning: "bar_with_unknown_volume_dropped",
+		},
+		{
+			name:        "negative volume",
+			mutate:      func(bar *model.DailyBar) { bar.Volume = ptrInt64(-1) },
+			wantWarning: "bar_with_unknown_volume_dropped",
+		},
+		{
+			name:        "non share volume unit",
+			mutate:      func(bar *model.DailyBar) { bar.VolumeUnit = "hands" },
+			wantWarning: "bar_with_nonstandard_volume_unit_dropped",
+		},
+		{
+			name:        "negative amount",
+			mutate:      func(bar *model.DailyBar) { bar.Amount = ptrFloat(-1) },
+			wantWarning: "bar_with_invalid_amount_dropped",
+		},
+		{
+			name:        "zero amount with nonzero volume",
+			mutate:      func(bar *model.DailyBar) { bar.Amount = ptrFloat(0) },
+			wantWarning: "bar_amount_volume_zero_mismatch_dropped",
+		},
+		{
+			name:        "nonzero amount with zero volume",
+			mutate:      func(bar *model.DailyBar) { bar.Volume = ptrInt64(0) },
+			wantWarning: "bar_amount_volume_zero_mismatch_dropped",
+		},
+		{
+			name:        "non CNY amount unit",
+			mutate:      func(bar *model.DailyBar) { bar.AmountUnit = "USD" },
+			wantWarning: "bar_with_nonstandard_amount_unit_dropped",
+		},
+		{
+			name:        "unknown adjustment basis",
+			mutate:      func(bar *model.DailyBar) { bar.AdjustmentBasis = model.AdjustmentUnknown },
+			wantWarning: "bar_with_unknown_or_unsupported_adjustment_dropped",
+		},
+		{
+			name:        "unsupported period",
+			mutate:      func(bar *model.DailyBar) { bar.Period = "1m" },
+			wantWarning: "bar_with_unsupported_period_dropped",
+		},
+		{
+			name:        "non finite change percent",
+			mutate:      func(bar *model.DailyBar) { bar.ChangePercent = ptrFloat(math.NaN()) },
+			wantWarning: "bar_with_invalid_change_percent_dropped",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bar := validDailyBarForNormalizationTest()
+			tc.mutate(&bar)
+			got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{bar}, "2026-10-20", "2026-10-20", 10)
+			if len(got) != 0 || !containsWarning(warnings, tc.wantWarning) {
+				t.Fatalf("invalid bar must be rejected with %q: bars=%+v warnings=%v", tc.wantWarning, got, warnings)
+			}
+		})
+	}
+}
+
+func TestValidateAndSortBarsDoesNotOverrideInvalidQualityWhenSourceIsMissing(t *testing.T) {
+	bar := validDailyBarForNormalizationTest()
+	bar.Source = ""
+	bar.QualityStatus = model.QualityInvalid
+	got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{bar}, "2026-10-20", "2026-10-20", 10)
+	if len(got) != 0 || !containsWarning(warnings, "invalid_quality_status_bar_dropped") {
+		t.Fatalf("missing source must not downgrade invalid quality into an accepted unknown bar: bars=%+v warnings=%v", got, warnings)
+	}
+}
+
+func TestValidateAndSortBarsUsesInclusiveDateBoundsDeduplicatesAndKeepsNewestLimit(t *testing.T) {
+	before := validDailyBarForNormalizationTest()
+	before.TradeDate = "2026-10-19"
+	first := validDailyBarForNormalizationTest()
+	first.TradeDate = "2026-10-20"
+	duplicate := first
+	next := validDailyBarForNormalizationTest()
+	next.TradeDate = "2026-10-21"
+	last := validDailyBarForNormalizationTest()
+	last.TradeDate = "2026-10-22"
+
+	got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{before, first, duplicate, next, last}, "2026-10-20", "2026-10-22", 2)
+	if len(got) != 2 || got[0].TradeDate != "2026-10-21" || got[1].TradeDate != "2026-10-22" {
+		t.Fatalf("date bounds must be inclusive and limit must retain newest bars: %+v", got)
+	}
+	if !containsWarning(warnings, "duplicate_trade_date_dropped") || !containsWarning(warnings, "bars_truncated_to_limit") {
+		t.Fatalf("expected duplicate and truncation evidence, got %v", warnings)
+	}
+}
+
+func validDailyBarForNormalizationTest() model.DailyBar {
+	volume := int64(1000)
+	amount := 10000.0
+	return model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, VolumeUnit: "shares", Amount: &amount, AmountUnit: "CNY",
+		AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney", QualityStatus: model.QualityValid,
+	}
+}
+
+func ptrInt64(value int64) *int64 { return &value }
+
 func validQuoteForNormalizationTest() *model.Quote {
 	now := time.Now().UTC()
 	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 100.0/9.0, 9.0, 11.0, 8.0, 9.0, 100000.0
@@ -255,4 +400,60 @@ func TestValidateAndSortBarsRejectsNonCanonicalDates(t *testing.T) {
 	if got, warnings := ValidateAndSortBars("600519.SH", bars, "", "2026-10-2", 10); len(got) != 0 || !containsWarning(warnings, "invalid_end_date") {
 		t.Fatalf("non-canonical end date must be rejected: bars=%+v warnings=%v", got, warnings)
 	}
+}
+
+func TestValidateQuoteWithReportPreservesLegacyAmountMutation(t *testing.T) {
+	quote := validQuoteForNormalizationTest()
+	quote.Amount = nil
+	quote.AmountUnit = "CNY"
+	quote.QualityStatus = model.QualityDegraded
+	report, err := ValidateQuoteWithReport(quote)
+	if err != nil {
+		t.Fatalf("legacy validation should accept degraded quote with missing amount: %v", err)
+	}
+	if !containsValidationIssue(report.Issues, "amount", "missing_optional") {
+		t.Fatalf("expected structured missing amount warning, got %+v", report)
+	}
+	if quote.AmountUnit != "unknown" || len(quote.QualityReasons) == 0 {
+		t.Fatalf("legacy amount-missing mutation was not preserved: %+v", quote)
+	}
+}
+
+func TestValidateAndSortBarsWithReportPreservesLegacyOutputAndAddsRowIndex(t *testing.T) {
+	volume := int64(100)
+	valid := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10, Volume: &volume,
+		VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward,
+		Source: "eastmoney", QualityStatus: model.QualityValid,
+	}
+	invalid := valid
+	invalid.TradeDate = "2026-10-21"
+	invalid.High = 8
+	legacyBars, legacyWarnings := ValidateAndSortBars("600519.SH", []model.DailyBar{valid, invalid}, "", "2026-10-22", 10)
+	reportedBars, reportedWarnings, report := ValidateAndSortBarsWithReport("600519.SH", []model.DailyBar{valid, invalid}, "", "2026-10-22", 10)
+	if len(legacyBars) != len(reportedBars) || len(legacyWarnings) != len(reportedWarnings) {
+		t.Fatalf("reporting changed legacy result shape: legacy=%+v/%v reported=%+v/%v", legacyBars, legacyWarnings, reportedBars, reportedWarnings)
+	}
+	if len(reportedBars) != 1 || reportedBars[0].TradeDate != "2026-10-20" {
+		t.Fatalf("legacy filtering behavior changed: %+v", reportedBars)
+	}
+	found := false
+	for _, item := range report.Issues {
+		if item.Field == "open,high,low,close" && item.RowIndex != nil && *item.RowIndex == 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected row-indexed OHLC issue, got %+v", report.Issues)
+	}
+}
+
+func containsValidationIssue(issues []validation.FieldIssue, field, code string) bool {
+	for _, item := range issues {
+		if item.Field == field && item.Code == code {
+			return true
+		}
+	}
+	return false
 }

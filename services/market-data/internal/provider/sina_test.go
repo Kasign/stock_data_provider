@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 	"golang.org/x/text/encoding/htmlindex"
 )
 
@@ -64,6 +65,30 @@ func TestSinaFetchQuoteNormalizesSharesAndAmount(t *testing.T) {
 	}
 	if quote.QuoteTimeSemantics != "provider_snapshot_time" {
 		t.Fatalf("Sina quote must label source time semantics, got %q", quote.QuoteTimeSemantics)
+	}
+}
+
+func TestSinaQuoteParseFailureReportsProviderField(t *testing.T) {
+	fields := make([]string, 32)
+	fields[0], fields[1], fields[2], fields[3] = "SinaTest", "", "9.8", "10.2"
+	fields[4], fields[5], fields[8], fields[9] = "10.5", "9.5", "10000", "102000"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, "var hq_str_sh600519=\"%s\";", strings.Join(fields, ","))
+	}))
+	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, err := NewSina(0, server.URL+"/list=").FetchQuote(ctx, "600519.SH"); err == nil {
+		t.Fatal("missing required open price must fail")
+	}
+	report := reporter.Snapshot()
+	if report.ErrorCount != 1 || len(report.Issues) != 1 {
+		t.Fatalf("expected one parse error, got %+v", report)
+	}
+	issue := report.Issues[0]
+	if issue.Stage != validation.StageParse || issue.Field != "open" || issue.ProviderField != "field_1" ||
+		issue.Code != "missing" || issue.ActualType != "string" {
+		t.Fatalf("unexpected parse issue: %+v", issue)
 	}
 }
 
@@ -273,5 +298,34 @@ func TestSinaFetchDailyBarsRejectsUnverifiedAdjustmentAndDateRange(t *testing.T)
 	}
 	if _, _, err := sinaDailyDateRange("2026-10-20", "bad-date", 8, time.Now()); err == nil {
 		t.Fatal("invalid end date must be rejected")
+	}
+}
+
+func TestSinaDailyBarParseIssuesPreserveOriginalJSONRowIndex(t *testing.T) {
+	payload := []byte(`[{"day":"2026-10-21","open":"bad","high":"11","low":"9","close":"10.5","volume":"10000"},{"day":"2026-10-20","open":10,"high":11,"low":9,"close":10.2,"volume":5000}]`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewSinaConfigured(0, "http://127.0.0.1:1/unused", server.URL)
+	bars, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bars) != 1 {
+		t.Fatalf("expected one valid bar, got %d", len(bars))
+	}
+	found := false
+	for _, issue := range reporter.Snapshot().Issues {
+		if issue.Field == "open" && issue.Code == "invalid_number" && issue.RowIndex != nil && *issue.RowIndex == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected open issue at original JSON row 0, got %+v", reporter.Snapshot().Issues)
 	}
 }

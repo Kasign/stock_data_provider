@@ -428,7 +428,7 @@
 
 当前边界与后续工作：
 
-1. 已支持请求体 `scope=all/core`、`capabilities` 白名单和 `timeout_seconds=1..30`（默认 12 秒）；显式能力列表会精确收窄探测范围，core 与白名单冲突时返回参数错误。`markets`、`symbols`、`checks` 仍未实现。
+1. 已支持请求体 `scope=all/core`、`capabilities` 白名单和 `timeout_seconds=1..30`（默认 12 秒）；显式能力列表会精确收窄探测范围，core 与白名单冲突时返回参数错误。`markets`、`symbols` 已实现单板块/单证券定向过滤；`checks` 仍未实现。
 2. 已新增真实 HTTP Handler 的 `httptest` 覆盖：API Key 鉴权、空请求体兼容、core 范围、能力白名单、非法 JSON/字段/能力/超时、重复能力、超大请求体和响应汇总。OpenAPI 同步声明请求体及安全要求。
 3. Provider 级逐项结果仍需补充请求摘要、返回行数/覆盖率、样本证券和数据时效证据；当前仍以状态、质量原因和脱敏错误证据为主。
 4. 对未注册 Provider 的能力标记为 not_configured；凭据已配置但授权不足、限流等情况必须继续走真实错误分类。无凭据 Provider 不发请求。
@@ -499,7 +499,7 @@
 ### 当前基线
 
 - 目标分支：`feat/full-go-data-providers-api-switch`。
-- 本节整理时远端 HEAD：`b2a08820e41c4afffdf320e172670421b014f68f`。
+- 本节初始整理基线为 `b2a08820e41c4afffdf320e172670421b014f68f`；本轮接续时远端 HEAD 为 `04932a7aed4bcc4bac45ef2c5f2042833e2a4708`。
 - PR #1：Open Draft，未合并；禁止合并或改动 PR 目标分支。
 - 上一提交的 Go test suite、WebUI checks、Go/Python quality parity 均通过；Live provider probe 的探测 Job 失败，不能把 workflow 的 continue-on-error/最终状态当作 Provider 全部可用。
 - 现有新浪/腾讯 600036.SH 日 K 黄金样例两侧均为 degraded，成交额缺失；只可做质量降级回归，不可作为 matched 证据。
@@ -508,13 +508,13 @@
 
 | 顺序 | 任务 | 当前状态 | 完成标准 |
 |---|---|---|---|
-| P0-1 | 跨 Provider 日 K 比较器接入黄金夹具 | 进行中 | 真实黄金夹具调用统一比较器；降级样例明确得到 not_comparable；独立 valid 合成契约样例验证 matched/partial/mismatch |
-| P0-2 | 比较器输入边界校验 | 待完成 | 拒绝非正/NaN/Inf OHLC、OHLC 关系错误、负成交量、负/非有限成交额；日期重复/非法和空集合状态明确 |
-| P0-3 | 跨市场黄金样例 | 待完成 | 创业板 300750.SZ、科创板 688981.SH 有真实有效样例后固化；按 Provider 分别验证代码映射、成交量单位和质量状态 |
-| P0-4 | 北交所支持矩阵 | 待完成 | 逐 Provider 记录 BJ 代码映射和能力支持；新浪、腾讯、网易、BaoStock 当前明确不支持时标记 not_supported，不发请求、不计失败；至少一个真实支持源返回有效样本后再固化黄金夹具 |
+| P0-1 | 跨 Provider 日 K 比较器接入黄金夹具 | 已完成（真实降级夹具调用路径已接入；真实 matched 证据仍待） | 真实黄金夹具调用统一比较器；降级样例明确得到 not_comparable；独立 valid 合成契约样例验证 matched/partial/mismatch |
+| P0-2 | 比较器输入边界校验 | 已完成（静态契约边界与单测已补齐） | 拒绝非正/NaN/Inf OHLC、OHLC 关系错误、负成交量、负/非有限成交额；日期重复/非法和空集合状态明确 |
+| P0-3 | 跨市场黄金样例 | 部分完成（创业板/科创板 Sina/Tencent 真实降级样例已归档；有效 matched 样例待取得） | 创业板 300750.SZ、科创板 688981.SH 有真实有效样例后固化；按 Provider 分别验证代码映射、成交量单位和质量状态 |
+| P0-4 | 北交所支持矩阵 | 部分完成（代码映射矩阵和 not_supported 诊断分类已补齐；真实在线样本待验） | 逐 Provider 记录 BJ 代码映射和能力支持；新浪、腾讯、网易、BaoStock 当前明确不支持时标记 not_supported，不发请求、不计失败；至少一个真实支持源返回有效样本后再固化黄金夹具 |
 | P0-5 | 特殊交易样例 | 待完成 | 停牌、新股上市、除权除息、非交易日各有固定样本与预期行为；不得用工作日推断交易日 |
 | P0-6 | 统一诊断 checks 过滤 | 待完成 | `POST /api/v1/data-sources/probe` 支持 connectivity、contract、quality、freshness、cross_provider、storage；未知/重复/冲突值明确 400，空值保持旧请求行为 |
-| P0-7 | 覆盖率分母契约 | 待完成 | 明确 total、returned、validated、missing、excluded、coverage_ratio；分母来源可追溯，分母未知时 ratio=null，禁止用返回数自作分母 |
+| P0-7 | 覆盖率分母契约 | 部分完成（市场广度已有 total/returned/validated/missing/excluded/ratio；其他能力待扩展） | 明确 total、returned、validated、missing、excluded、coverage_ratio；分母来源可追溯，分母未知时 ratio=null，禁止用返回数自作分母 |
 | P0-8 | 诊断逐项证据 | 部分完成 | 每项记录脱敏 request_summary、返回/有效记录数、源端时间、质量原因、错误阶段；不适用字段为空，不用 FetchedAt 冒充 ProviderTime |
 | P0-9 | 历史诊断与兼容 | 待完成 | MariaDB 保存/查询新字段；旧历史 JSON 可读；存储未配置/故障明确 storage 状态，不伪装诊断通过 |
 | P0-10 | 统一诊断端到端 | 待完成 | HTTP Handler → Service → Provider → 标准化/质量校验 → MariaDB 持久化/查询的集成测试覆盖成功、降级、失败、跳过和不支持 |
@@ -599,3 +599,351 @@
 | Eastmoney | 映射为 `0.######` | 已映射 | 公共端点在线可用性待复验 |
 
 代码映射不等于供应商承诺支持，也不等于真实请求成功。BSE 定向诊断遇到 Sina/Tencent/NetEase/BaoStock 明确的交易所不支持错误时，结果应标记 `not_supported`，而不是 `failed`；适配器必须在发出上游 HTTP 请求前拒绝该证券。其他映射支持 Provider 仍需真实核对权限、代码身份、交易日期、OHLC、成交量单位和质量状态。
+
+
+### 北交所诊断分类回归的格式检查修复（2026-10-30）
+
+- 提交 `bdc3e8820e188926cdb4ea17172c5ce5b80b9831` 的 Go suite 未进入编译/测试阶段，market-data Job 的 gofmt 发现 `provider_probe_test.go` 新增类型前有多余空行。
+- 同步的 Docker market-data 镜像在相同 gofmt 前置步骤停止，不是代码编译或镜像运行问题。
+- 已清理测试文件格式；下一 SHA 重新执行 Go suite 和镜像构建。
+
+
+### 覆盖率分母契约首批落地（2026-10-30）
+
+主动诊断结果新增可选字段 `coverage_total`、`coverage_returned`、`coverage_validated`、`coverage_missing`、`coverage_excluded`。字段定义：
+
+- total：可证明的预期样本总量。
+- returned：该分母范围内源端实际返回数量。
+- validated：返回且通过身份/质量校验的数量。
+- missing：预期但源端未返回的数量。
+- excluded：已返回但被明确排除的数量。
+- ratio = validated / total；分母未知或为 0 时不输出比例和分母字段。
+
+当前先在市场广度探测落地：total 使用快照的 TotalSecurities，returned/validated 使用 CoveredSecurities，missing 为两者差值，excluded 为 0。其他能力未取得可信分母时继续不输出，不以分页数或样本数冒充全市场覆盖率。后续按各业务快照的真实总数/排除数逐项扩展。
+
+
+### 最新代码推进状态（2026-10-30）
+
+- 比较器接入和边界校验：P0-1/P0-2 已完成代码侧工作；真实跨 Provider valid 黄金样例仍未取得，不能宣布真实 matched 验收通过。
+- 北交所：已复核现有映射矩阵，并将明确不支持的 BJ Provider 探测归类为 not_supported；在线权限和数据样本仍待验。
+- 覆盖率：市场广度已输出 total/returned/validated/missing/excluded 与 validated/total；其他能力只在获得可信分母后逐项扩展。
+- 最近相关代码提交：`35d442f`、`7e3b6c2`、`8226d6d`、`bdc3e88`、`5cc765d`、`69736d1`。其中部分中间提交因 gofmt 失败或被后续提交取消；最终验收只看分支最新 SHA。
+
+
+### 覆盖率字段提交的格式检查修复（2026-10-30）
+
+- `69736d1baaf8ef8dffe9b373d6edbcb5ba02d9c5` 的 Go suite 在 gofmt 阶段失败，涉及 ProviderProbeItem 与 providerProbeEvidence 字段对齐，以及 Service 测试函数前多余空行。
+- 已按 gofmt 输出统一字段对齐并清理空行；本次失败未进入编译、单测或 Docker 镜像实际构建阶段。
+
+
+### 北交所证券代码直指定路径补齐（2026-10-30）
+
+BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols=["920001.BJ"]` 两种请求形式。比较器 NaN/Inf/负金额边界测试按 gofmt 规范排版。对应新提交以最新 HEAD 为准。
+
+
+### 创业板/科创板真实样例采集（2026-10-30，Run 41042950111）
+
+从 Live provider probe artifact 固化了创业板 `300750.SZ` 和科创板 `688981.SH` 的真实报价与日 K 样例，新增 `testdata/live_market_cross_market_golden_20261030.json`：
+
+- Sina/Tencent 在两个板块的 quote 和 daily_bars 均返回；Sina quote 为 valid，Tencent quote 为 degraded（成交量单位推断/volume_ratio 不支持）。
+- Sina/Tencent 日 K 均为 degraded：成交额缺失且 amount_unit=unknown；Sina 另有 Provider 日 K 响应未回显证券代码的契约告警。
+- 两侧日 K 成交量单位均为 shares，复权口径均为 none；样例覆盖 2026-10-27 至 2026-10-29 三个交易日。
+- 新测试把这些真实样例送入统一比较器，要求结果为 `not_comparable / quality_status_must_be_valid`。这证明拒绝降级数据的链路，不代表日 K 已对账成功。
+- 采集来源：commit `720f2fc685376e29452ce3742ba398ff79089a03`，GitHub Actions Live provider probe Run `41042950111`。原始脱敏报告作为 workflow artifact 保存。
+
+本轮同一 Run 的其他真实 Provider 结论：Eastmoney stock_search/quote/delayed quote 返回 HTTP 502；NetEase quote DNS 失败、历史 CSV HTTP 502 后按现有策略 skipped。此类公共源故障不归因于缺少 Key/Token。
+
+
+### 接续检查与本轮修复（2026-11-02）
+
+**当前远端基线（修复前）：** `04932a7aed4bcc4bac45ef2c5f2042833e2a4708`。PR #1 仍为 Open Draft，未合并。
+
+已确认前序开发结果：
+- 比较器真实夹具入口和输入边界校验已存在；600036.SH、300750.SZ、688981.SH 的 Sina/Tencent 日 K 因 amount 缺失、amount_unit unknown 保持 degraded，测试要求 not_comparable。
+- 创业板、科创板真实样例来源为 Live provider probe Run `41042950111`，源提交 `720f2fc685376e29452ce3742ba398ff79089a03`。两市场 quote 返回，但 Tencent quote degraded；两侧日 K 均 degraded。没有真实 matched 证据。
+- 北交所明确不支持 Provider 的诊断状态已覆盖 markets=BSE 与 symbols=920001.BJ 两种入口；Sina/Tencent/NetEase/BaoStock not_supported，其他代码映射不代表在线能力通过。
+- 覆盖率字段已在模型和 OpenAPI 声明：coverage_total/returned/validated/missing/excluded/ratio。当前只有 market_breadth 提供可证明的全市场分母；其他能力继续省略，不能以分页行数替代总数。
+
+**Run 41043889122（SHA 04932a7）检查结果：**
+- Go test suite：失败在 market-data 的 gofmt 检查，唯一文件为 `internal/provider/live_market_golden_test.go`，新增测试函数前存在多余空行；没有进入该模块的编译/单测阶段。
+- Docker market-data image：同一 gofmt 前置检查失败，未进入镜像编译阶段。
+- Go 根模块、go-core、MariaDB migration/PIT persistence：通过。
+- WebUI checks、Go/Python data quality parity：通过。
+- Live provider probe workflow：success，但真实探测内部仍记录 Eastmoney HTTP 502、NetEase DNS/HTTP 502；不能视为所有 Provider 可用。
+- 已移除 `live_market_golden_test.go` 的多余空行；本次修复 SHA 的完整 Go suite 与 Docker 结果待新 Actions 确认。
+
+**下一开发项：** 实现统一诊断 checks 过滤。先完成请求校验、响应回显、向后兼容和独立检查结果模型设计，再按 connectivity/contract/quality/freshness/cross_provider/storage 拆分执行，不能只增加一个未生效的请求字段，也不能为每个 check 重复请求上游。
+
+
+### 2026-11-02：统一诊断 checks 过滤首批实现
+
+- `POST /api/v1/data-sources/probe` 新增 `checks` 白名单：connectivity、contract、quality、freshness、cross_provider、storage。
+- 空 checks 保持兼容，默认选择全部六类；未知值、重复值返回 400；响应回显排序后的 requested_checks，并输出 check_results。
+- 单次 Provider 请求结果被多个检查维度复用，不会按 check 数量重复请求上游。
+- connectivity/contract/quality 根据已有 Provider 结果和错误阶段分类；storage 在 MariaDB 写入成功后标记 passed，未配置存储标记 not_configured。
+- freshness 当前只记录 ProviderTime 和 age_seconds；尚未定义各能力的 freshness SLA，因此即使有时间戳也保持 skipped（freshness_sla_not_configured），不能将“有时间戳”当作“数据新鲜”。
+- cross_provider 当前明确 skipped（cross_provider_snapshot_not_captured）：线上诊断 job 尚未把逐日 K 线样本传入比较器。固定黄金夹具仍独立覆盖比较器，不伪装成在线跨源诊断。
+- 当前 checks 是诊断结果维度过滤，不会减少所选 capability 的 Provider 请求；后续可在异步诊断任务中按 check 精确规划数据采集范围。
+- 新增 Service/HTTP 测试覆盖默认/指定 checks、未知/重复值、分类和未实现能力显式 skipped。完整 Go suite 与 Docker 结果以本提交 SHA 的 Actions 为准。
+
+
+### 2026-11-02：checks 在线跨 Provider 对账接入
+
+- 日 K 探测在一次 Provider 请求中捕获归一化 snapshot（仅在所有样本成交量存在时），请求结束后按相同证券两两调用 `CompareCrossProviderDailyBars`。
+- check_results 记录参与 Provider、状态、比较日期、字段数量和 mismatch 数量；degraded/unknown 样本由比较器拒绝，输出 skipped，不计为通过。
+- 若不足两个不同 Provider 返回同证券日 K，则输出 `cross_provider_pair_unavailable`，不会伪造 matched。
+- 本轮只比较同一请求样本和 `AdjustmentNone` 口径；其他复权口径、跨市场与多证券异步对账仍待扩展。
+
+
+### checks 首批实现编译修复（2026-11-02）
+
+- 提交 `ce4fdd76400d157ee4169481097f2ef438a65309` 因模型编辑时遗漏 `type ProviderProbeRun struct {` 声明，Go 编译与 market-data Docker 构建失败；MariaDB PIT Job 也因同一编译错误终止，不是数据库迁移故障。
+- 已恢复 ProviderProbeRun 结构体声明。修复 SHA 的 CI 结果待确认。
+- 此次失败不作为功能测试通过证据；后续需重新验证 Go suite、MariaDB PIT、Docker 和 Go/Python parity。
+
+
+### checks 在线对账阶段的格式修复（2026-11-02）
+
+- `ce17ac11cd559385de24d4e0aa284904d1c6ab5a` 的 market-data gofmt 检查发现 4 个 Go 文件仅有结构体字段对齐和测试函数前多余空行问题；Go test、Docker 构建因此在 gofmt 前置步骤停止。
+- MariaDB PIT persistence 在该 SHA 已通过，说明此前模型语法错误已修复。
+- 已统一 gofmt 格式，后续以最新 SHA 的完整 Go suite、Docker 和 parity 结果验收。
+
+
+### 在线 cross_provider 测试样本修正（2026-11-02）
+
+- 检查 Service 测试夹具后发现：测试日 K 原先 amount 为 nil，Normalize 会按契约将其降级并把 amount_unit 设为 unknown；这会触发比较器 not_comparable，与测试预期 matched 冲突。
+- 已为合成 valid fixture 补充单位为 CNY、与 OHLC/成交量量级一致的成交额；该数据只用于验证比较器链路，不代表真实行情。
+- 最新 SHA 的 CI 仍待确认。
+
+
+### checks 过滤边界修正（2026-11-02）
+
+- 发现只请求 quote capability、但默认 checks 包含 cross_provider 时，系统仍会输出一条 capability=daily_bars 的 cross_provider skipped 项，破坏 capability 白名单语义。
+- 已调整为：只有同一批次显式请求 daily_bars 时才执行跨源比较；否则返回不带 capability 的 skipped 结果（daily_bars_capability_not_requested）。
+- 对应回归测试补齐；最新 SHA CI 待确认。
+
+
+### 2026-11-02：能力白名单回归后的格式修复
+
+- Run `41376039461`（SHA `7a8104a`）的 market-data Job 在 gofmt 阶段仅发现 `provider_probe.go` 一个结果结构体字面对齐和 `provider_probe_test.go` 文件尾多余空行。
+- 已按 gofmt 规范修正；未进入该 Job 的编译/单测阶段。MariaDB PIT、根模块和 go-core 在该 SHA 均通过。
+
+
+### 2026-11-03：统一诊断体系收口（第一批）
+
+本轮以当前 Go 诊断实现为基线，继续完善诊断结果的可解释性，不扩大 Provider 请求数量，也不改变业务数据质量门禁。
+
+- [x] 质量状态为 `unknown` 时，quality check 显式返回 `degraded / quality_unknown`，不再与未执行的 `skipped` 混淆。
+- [x] Cross Provider 日 K 对账新增字段级证据：字段路径、比较状态、左右值、差值、容差和不可比较原因。
+- [x] 对 amount 缺失或单位不是 CNY 的字段，只返回 `not_comparable` 与原因，不把 Go 默认零值作为左右金额暴露。
+- [x] Cross Provider 汇总新增 matched / mismatch / not_comparable 字段计数；既有 `field_count` 仍表示参与结果的字段总数。
+- [x] 同步 OpenAPI 字段契约和 Service 回归测试。
+
+本轮边界与未完成项：
+- Freshness 仍只输出源端时间和 age_seconds，并明确 `freshness_sla_not_configured`。暂不设置统一固定阈值：报价、日 K、财务披露、资金流和筹码数据具有不同更新语义；交易时段、非交易日、盘后及节假日也必须纳入策略，否则会制造错误过期告警。下一步应先定义按 capability + 时间语义 + 市场交易阶段的 SLA 策略，再启用 passed/degraded 判定。
+- Coverage 分母仍只在有可证明总体数量的市场广度能力上输出。分页返回数、抽样数和当前页行数不得冒充全市场分母；其他能力需逐项确认 total、returned、validated、missing、excluded 的来源契约。
+- 当前在线 Cross Provider 仍只覆盖同轮、同证券、同复权基准的日 K 快照；字段级证据完善不代表多证券、跨复权基准或真实 Provider 已对账通过。
+- 本轮不调整 Python 迁移矩阵，不新增 Python 代码清理工作。
+
+本轮代码改动待本提交 SHA 的 Go test/race/vet、OpenAPI 契约测试和 Docker market-data 构建验证；未完成的检查不得提前标记通过。
+
+
+### 2026-11-03：统一诊断字段证据格式修复记录
+
+- 首轮 Go test suite 与 Docker market-data 构建在 gofmt 前置检查发现 `internal/model/provider_probe.go` 中模型声明之间缺少一行空行；没有进入 market-data 编译和单元测试阶段。
+- 已按 gofmt 要求修复，并补充价格字段 mismatch 的左右值、差值和容差断言。
+- 修复后完整 Go test/race/vet、Docker 构建结果以新提交 SHA 的 Actions 为准。
+
+### 2026-11-03：覆盖率分母来源可追溯性（第二批）
+
+- [x] 诊断项新增 `coverage_population` 与 `coverage_source`，使分母不仅有数值，还能说明总体范围和证明来源。
+- [x] 当前唯一可证明的主动诊断分母为 `market_breadth`：`coverage_population=provider_universe`，`coverage_source=market_breadth.total_securities`。
+- [x] `coverage_total` 取 Provider 返回的 A 股证券全集数量；`coverage_returned` 取全集行情覆盖数量；`coverage_validated` 表示通过市场广度聚合快照契约校验的覆盖数量；`coverage_excluded=0`。
+- [ ] 当前 `validateMarketBreadth` 要求 `CoveredSecurities == TotalSecurities`，只有完整覆盖快照能进入计数逻辑，因此成功结果的 `coverage_missing` 必然为 0、`coverage_ratio` 必然为 1。部分覆盖目前会作为能力失败返回，无法在失败项中保留部分计数。
+- [ ] 下一步需让 Provider/诊断路径传递可验证的部分覆盖证据，同时不放宽正常业务接口质量门禁；诊断输出还需区分总体覆盖率与字段级质量。聚合快照通过校验不代表每个字段均有效。
+- [x] 新字段仅在总量与计数关系通过一致性校验、且分母来源非空时输出；未知总体继续省略全部覆盖率字段。
+- [ ] 其他能力不得复用该分母定义。后续必须分别找到全量证券主数据、指数成分、行业成分、财报应披露记录等权威总体来源，才能输出对应覆盖率。
+- [ ] 需继续检查 MarketBreadth 聚合 Provider 是否有能力在部分数据返回时返回降级快照；若只返回完整快照或整体失败，应在 Provider 级别明确记录这一限制。
+- 验收边界：当前字段是“市场广度快照覆盖率”，不是 quote Provider 的全市场逐字段质量率，也不是全市场证券目录覆盖率。
+
+### 2026-11-03：市场广度部分覆盖证据（第三批）
+
+- [x] TickFlow 市场广度 Provider 不再因报价数量少于证券池总量而丢弃整份响应；仍严格拒绝重复证券、证券池外证券及不合法证券代码。
+- [x] `covered_securities` 表示实际返回且通过证券身份校验的唯一证券数；`total_securities` 来自 `CN_Equity_A` 证券池元数据。
+- [x] 缺失证券不参与涨跌分类，分类计数只对实际返回证券求和；未分类证券计入 `unclassified_count`，不补零、不推测涨跌。
+- [x] 零返回也保留可信证券池分母，允许 Provider 报告日期缺失；该结果仅供诊断，不代表业务数据可用。
+- [x] 部分总体覆盖标记为 degraded，并且不暴露部分成交额作为全市场成交额。
+- [x] 主动诊断使用允许部分总体覆盖的结构校验，正常业务 `MarketBreadth` 仍使用严格校验，部分总体覆盖不能进入业务快照/缓存。
+- [x] 覆盖率口径：`coverage_returned=covered_securities`；`coverage_missing=total_securities-covered_securities`；`coverage_excluded=unclassified_count`；`coverage_validated=coverage_returned-coverage_excluded`。该 validated 仅表示身份和必需价格字段可用于涨跌分类，不代表成交额、时间戳、涨跌停等所有字段均完整。
+- [ ] 完成 Service 回归、Go/race/vet、OpenAPI 和 Docker 验收后，再标记本批通过。
+
+
+### 2026-11-03：跨 Provider 对账来源证据补齐
+
+- Cross Provider 日 K check result 除兼容保留的组合 `provider` 字段外，新增 compared_symbol、left/right provider、left/right source_version、adjustment_basis 和双方 quality_status。
+- 每条字段比较现在能独立定位两侧数据来源、版本、证券和复权口径，不需要通过组合字符串解析或再与 ProviderProbeItem 跨数组关联。
+- 字段级左右值、差值、容差和 not_comparable 原因维持原语义；degraded/unknown 输入仍然拒绝作为 matched 基准。
+- 对应模型、OpenAPI 和 Service 回归测试已同步；以新 SHA 的 market-data test/race/vet、OpenAPI 和 Docker 检查为准。
+
+
+### 2026-11-03：统一诊断第一批收口与验收状态
+
+**代码侧完成：**
+
+- Freshness SLA：纯函数 Evaluator、按数据域策略、市场交易阶段上下文解析和 Provider Probe 接入已完成；`provider_time` 与 `fetched_at` 分离，采集时间不参与 freshness 年龄计算。
+- 特殊交易边界：覆盖开盘/收盘集合竞价、竞价暂停、午休、非交易日、全天停牌、盘中临停、复牌、源端时间超前；Service 层使用 fake TradingCalendar/SecurityTradingStatus Provider 验证停牌、临停、复牌、无停牌事件及证券状态缺失映射。
+- 新股首日：当前没有足够可信的首日交易状态输入，不设置隐式 freshness 宽限期；测试要求超出普通 Quote SLA 时仍为 stale。
+- P0-7 覆盖率：Market Breadth 输出四个字段级维度（quote_response、price_classification、quote_timestamp、amount），每项包含 total/returned/validated/missing/excluded/ratio；所有维度共享证券池权威分母。其他能力尚无可证明总体分母时继续不输出比例。
+- P0-8 Cross Provider：日 K 对账结果包含证券、左右 Provider、双方 SourceVersion、复权口径、双方 QualityStatus；字段比较保留左右值、差值、容差和不可比较原因，历史 JSON 兼容。
+
+**最新验收 SHA：** `76fd6f2fc683c05869c224ec6328564eca0c84c1`
+
+**Run 41573144555 / 41573144564 / 41573144577 / 41573144590：**
+- Go test suite：通过；market-data 和 go-core 的 gofmt、tests、race、vet 均通过。
+- MariaDB Migration / PIT persistence：通过。
+- Docker Compose、Go market-data 与 analysis API 镜像构建：通过。
+- Live Provider probe、WebUI checks、Go/Python parity：通过。
+- 真实 Provider 工作流通过只表示本轮在线探测流程完成，不等于取得停牌/临停/复牌的历史真实样例；真实特殊交易事件仍需真实源数据验收。
+
+**第一批状态：** 代码实现与自动化检查完成；真实特殊交易样例属于外部数据验收待办，不阻塞进入第二批。
+
+**第二批下一任务：Quote 与 Daily Bars 边界收口。** 先审计现有 Normalize/Validate/Service 三层对字段边界、跨字段关系、日期区间、复权口径、单位和缺失字段的处理，再补齐边界测试；发现行为缺陷后才修改业务规则，避免只为增加测试而改变现有数据契约。随后推进 Fundamentals/Valuations 校验。
+
+
+### 第二批进度：Quote / Daily Bars 边界收口（2026-11-03）
+
+**本轮审计发现并修正：**
+
+- `normalize.ValidateQuote` 原先用 map 遍历必填价格和可选数值字段，导致多个字段同时异常时，返回的第一个错误不稳定；改为固定字段顺序，保持校验规则不变。
+- Quote 可选数值错误信息此前对所有字段都写“非负”，但 change/change_percent 允许负值；现拆分为“必须有限”与“必须非负”两类准确错误。
+- 增加负涨跌额/负涨跌幅合法性、负量比/换手率非法性和确定性首错回归测试。
+- Daily Bars 增加缺失/负成交量、成交量单位、负金额、金额/成交量零值不匹配、金额单位、复权口径、周期、非有限涨跌幅等边界测试；并覆盖日期区间包含端点、重复交易日丢弃和 limit 保留最新数据的行为。
+- 本轮只修正确定性和错误描述，不改变现有数据接纳/丢弃规则。
+
+后续继续检查 Service/Provider 层的源字段身份、复权基准、时间戳、当日未收盘 K 线和停牌日行为，避免 Normalize 单测通过但 Service 流程覆盖不足。
+
+
+Quote/Daily Bars 边界审计补充：Service 层 DailyBars 对 Provider 返回空 Symbol 的处理原先只根据请求参数补齐 Symbol，但没有同步降低质量；这与 Quote 的缺失身份降级策略不一致。现改为补齐请求 Symbol 的同时标记 QualityDegraded，并在行级 QualityReasons 和响应 warnings 中明确记录 `provider_symbol_missing_assumed_from_request`。非空但错误/不匹配的 Symbol 仍然触发 Provider 整体契约失败，不会被覆盖。
+
+
+质量状态门禁补充：Quote/Daily Bars 在使用 Provider fallback、补齐请求 Symbol、标记缺失成交额或标记当日未完成 K 线时，统一只允许将空值/valid 提升为 degraded；已有 unknown、stale、invalid 不得被覆盖，尤其不能把 invalid 通过 fallback 逻辑降成 degraded 后继续接纳。新增 Quote 与 DailyBars 回归测试，使用 fallback + 缺失 Symbol + 缺失 Amount 的 invalid 输入，确认仍然拒绝。
+Normalize 层另发现一个相同类别的边界：DailyBar 缺失 Source 时会将 QualityStatus 无条件改为 unknown，可能把 invalid 行恢复为可接纳状态。现调整为只对空值/valid 设置 unknown，保留 degraded/stale/unknown/invalid 原状态，并增加 invalid + source_missing 的丢弃回归测试。
+
+
+### 第二批补充：Fundamentals 采集时间边界
+
+- Fundamentals snapshot 已要求 source、source_version 和 fetched_at 非空，但此前缺少 fetched_at 未来时间校验；这与 Valuations 已有的未来采集时间门禁不一致。
+- 现增加 5 分钟时钟偏差容忍：超过当前 UTC 时间 5 分钟的 fetched_at 拒绝；不使用 Provider 报告期末、公告日期或 available_at 替代采集时间。
+- 增加未来 fetched_at 回归测试。该校验只约束采集时间，不改变财报报告期、披露日期及 PIT 可用时间的独立语义。
+
+
+### 第二批补充：资金流与筹码数据采集时间边界（2026-11-03）
+
+本轮审计已确认个股资金流已有以下校验：证券身份、Provider 日期格式与未来日期、来源/版本、采集时间未来偏差、观测数量与 1/5/10 日指标关系、有限金额，以及缺少可验证发布时间时禁止标记 valid。
+
+新增补齐两处一致性缺口：
+
+- 筹码分布快照此前检查了日期、成本区间、比例范围、来源版本和采集时间非空，但未拒绝未来 fetched_at。新增 5 分钟时钟偏差容忍，避免缓存中的异常采集时间被接受；服务实时回包仍以本服务收到响应的时间重写 fetched_at。
+- 市场级资金流历史此前检查日期区间、日期唯一且升序、金额有限、来源版本和必须 degraded，但未拒绝未来 fetched_at。新增相同的 5 分钟时钟偏差门禁，保护 Provider 回包及缓存读取。
+
+两项均不推断 Provider 发布时刻，不将 fetched_at 当作 available_at；市场资金流在缺少可验证源端快照时间时仍保持 degraded。新增未来时间回归测试。
+
+
+### 本轮 CI 格式检查修正（2026-11-03）
+
+提交 `763fb8bd9eaeacde764523171fdc44039d72f260` 的首次 Go 工作流在 market-data 的 gofmt 检查中发现新增测试结构体字段对齐格式不符合 gofmt。已按 CI 输出修正测试文件格式；该失败不涉及编译或业务断言，修正后以新 SHA 重新执行完整工作流。
+
+
+### 市场级资金流未来采集时间校验补正（2026-11-03）
+
+前一轮只增加了未来 fetched_at 测试，CI 明确发现 `validateMarketCapitalFlowSnapshot` 尚未实现对应门禁，说明前一轮记录不准确。现已在该校验函数中增加 5 分钟时钟偏差容忍，测试覆盖未来 10 分钟采集时间。以本补正提交及其 CI 结果作为完成依据。
+
+
+市场级资金流测试格式复验补充：CI 第二轮仍指出测试文件原有的复合字段对齐也被前次批量替换影响，已按 gofmt 对两个位置分别恢复正确对齐；业务校验代码本身未再变更。本次以完整 market-data gofmt/test 结果为准。
+
+
+测试文件 gofmt 第三次校准：CI 指出未来时间测试中的 Items 字段需与同一结构体的最长字段名对齐（双空格），而另一个复合字面量的内联字段应保持单空格。现按两个结构体各自上下文修正，避免全局替换造成反复回归。
+
+
+### 第二批补充：指数、板块及热门排行采集时间边界（2026-11-03）
+
+本轮继续统一快照采集时间校验。此前相关校验普遍要求 fetched_at 非空，但未统一拒绝明显超前的采集时间，异常缓存因此可能通过结构校验。
+
+新增 5 分钟时钟偏差容忍，覆盖：
+- 指数目录、指数成分、指数日K快照 fetched_at；
+- 指数日K行级 fetched_at；
+- 板块排行快照及行级 fetched_at；
+- 热门排行快照及行级 fetched_at。
+
+ProviderTime 仍表示源端时间，FetchedAt 仍表示本服务采集时间，两者不互相替代；本次不改变指数/板块现有 QualityStatus 规则、排序指标、覆盖率口径或缓存 TTL。新增指数目录、指数成分、指数日K（含行级）、板块排行（含行级）和热门排行（含行级）未来时间回归测试。
+
+
+## 第二批补充：公告、龙虎榜、涨跌停池与交易日历采集时间边界（2026-11-03）
+
+本轮统一收口以下快照的采集时间校验：
+
+- 公告快照及公告条目：`fetched_at` 必须存在，且不得超过当前 UTC 时间 5 分钟以上。
+- 龙虎榜快照及条目：执行相同的 5 分钟未来时间容忍边界。
+- 涨跌停池快照及条目：执行相同的 5 分钟未来时间容忍边界。
+- 交易日历快照：执行相同的 5 分钟未来时间容忍边界。
+
+边界说明：
+
+1. 该规则只约束服务采集时间 `fetched_at`，不替代公告发布时间、龙虎榜报告日期、涨跌停池交易日期等业务时间字段。
+2. 5 分钟仅作为机器时钟偏差容忍，不代表允许数据在业务时间上超前。
+3. 快照级和条目级分别校验，避免父快照时间正常但行级数据携带未来采集时间。
+4. 不改变现有 `QualityStatus`、空结果 unknown 语义、分页计数、缓存 TTL 和 Provider fallback 策略。
+5. 回归测试覆盖四类数据的快照级边界，以及公告、龙虎榜、涨跌停池的条目级边界。
+
+
+## 2026-11-03 Quote / DailyBar 证券身份校验闭环修复
+
+### 本批目标
+修复 Provider 日 K 记录的证券身份校验与实际过滤不一致问题，避免错误证券的数据被覆盖成请求证券代码后继续返回。
+
+### 问题与修复
+- 原 ValidateAndSortBarsWithReport 已生成 identity_mismatch 结构化问题，但后续旧归一化流程仍会无条件将记录的 Symbol 覆盖为请求证券。
+- 在旧归一化过滤链路中增加证券身份硬门禁：请求证券必须是规范 A 股代码；Provider 记录必须携带规范证券代码，且必须与请求证券一致。
+- 缺失、非法、错证券记录分别输出稳定 warning code，并在覆盖 Symbol、去重、排序前丢弃。
+- 不改变日期范围、OHLC、成交量/额、复权、质量状态、排序、去重和 limit 的既有处理顺序（证券身份校验前置）。
+
+### 回归测试
+- 正常证券记录继续保留。
+- Go/Python 质量契约回归中的 DailyBar fixture 显式提供规范 Symbol，确保测试验证业务质量规则而不是绕过证券身份硬门禁。
+- 错证券记录即使交易日期不同也必须丢弃，不能依赖重复日期逻辑偶然过滤。
+- 缺失证券代码和非法证券代码分别丢弃并输出 warning。
+- Provider payload 请求级 Reporter 仍保留原始 row_index 的 identity_mismatch 和重复记录诊断。
+
+### 验收状态
+- 代码与回归测试已提交；Go 测试、race、vet 和构建以该提交对应的 GitHub Actions 结果为准。
+- 在线 Provider 502 / DNS 问题不作为放宽证券身份门禁的理由。
+
+
+### Quote 主动诊断证券身份问题结构化补齐（2026-11-03）
+
+- Quote Provider 主动探测在返回证券代码与请求证券不一致时，原先只返回普通错误；该分支早于通用 Quote Validator，导致诊断项虽失败却没有字段级问题。
+- 现对证券身份不匹配生成 stage=validate、field=symbol、provider_field=symbol、code=identity_mismatch 的结构化错误，并保留期望证券代码、实际返回值及严重级别。
+- Quote source 缺失同样生成 required 结构化问题，避免关键契约失败只留下普通错误文本。
+- 新增 Probe 回归测试，验证错误证券仍然失败，且诊断响应的 validation_total_count、validation_error_count 和 validation_issues 完整反映身份问题。
+- 本修复只补齐诊断证据，不放宽 Quote 证券身份门禁，不改变正常行情服务的 Provider fallback、缓存和质量策略。
+
+
+### Quote Provider 原始字段解析诊断第一批：Sina（2026-11-03）
+
+- Sina Quote 必填数值字段解析失败时，按请求级 Reporter 上报 parse 阶段 FieldIssue，包含规范字段、源字段索引、缺失/格式错误分类及限长原始值摘要。
+- 缺失值与无法解析/非有限数值分开编码；Provider 原有错误返回和业务拒绝策略保持不变。
+- 新增回归测试验证字段名、源字段索引、错误级别和 Reporter 传递；Tencent、NetEase 的同类字段解析诊断仍待后续批次完成。
+
+
+## Quote Provider 原始字段解析诊断：Tencent / NetEase（2026-11-03）
+
+本批补齐两类 Quote 原始解析边界，保留原有 Provider 拒绝策略和数据质量硬门禁：
+
+| Provider | 字段 | 原始字段 | 诊断内容 | 失败处理 |
+|---|---|---|---|---|
+| Tencent | current_price / prev_close / open / volume / change / change_percent / high / low | f3 / f4 / f5 / f6 / f31 / f32 / f33 / f34 | 缺失、格式错误、NaN/Inf；记录原始字段索引与限长摘要 | error 级 Parse Issue，维持原有失败返回 |
+| NetEase | current_price / open / high / low / prev_close / change / change_percent | price / open / high / low / yestclose / updown / percent | 区分 missing、null、number、string、object、array、boolean；非法数值记录类型和限长摘要 | error 级 Parse Issue，维持原有失败返回 |
+
+Reporter 为请求级上下文容器；Provider 即使返回 error，已追加的字段问题仍可由调用方读取。摘要复用 160 字符上限和控制字符清理，不保存完整响应、Header 或认证信息。
+
+本批不改变 NetEase volume/amount 的降级语义，不放宽 Tencent 成交量单位确认要求，也不重复执行公共 Quote Validator。Sina、Tencent、NetEase Quote 的必填原始数值字段已覆盖；Yahoo Quote 及其他 Quote 能力 Provider 仍需按实际能力清单继续审计。

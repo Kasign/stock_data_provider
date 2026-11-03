@@ -136,3 +136,16 @@ func TestMarketCapitalFlowRejectsUnorderedOrOutOfRangeRows(t *testing.T) {
 		t.Fatal("out-of-range trade date must be rejected")
 	}
 }
+
+func TestMarketCapitalFlowRejectsFutureFetchedAt(t *testing.T) {
+	amount := 1.0
+	snapshot := &model.MarketCapitalFlowSnapshot{
+		StartDate: "2026-10-29", EndDate: "2026-10-29", Total: 1,
+		Items:  []model.MarketCapitalFlowItem{{TradeDate: "2026-10-29", NetAmountCNY: &amount}},
+		Source: "tushare", SourceVersion: "tushare-moneyflow-mkt-dc-v1",
+		FetchedAt: time.Now().UTC().Add(10 * time.Minute), QualityStatus: model.QualityDegraded,
+	}
+	if err := validateMarketCapitalFlowSnapshot("2026-10-29", "2026-10-29", snapshot); err == nil {
+		t.Fatal("future fetched_at must be rejected")
+	}
+}

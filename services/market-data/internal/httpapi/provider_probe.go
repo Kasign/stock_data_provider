@@ -15,6 +15,7 @@ import (
 type providerProbeRequest struct {
 	Scope          string   `json:"scope"`
 	Capabilities   []string `json:"capabilities"`
+	Checks         []string `json:"checks"`
 	Markets        []string `json:"markets"`
 	Symbols        []string `json:"symbols"`
 	TimeoutSeconds *int     `json:"timeout_seconds"`
@@ -62,6 +63,22 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "timeout_seconds must be between 1 and 30", requestID(r))
 		return
 	}
+	knownChecks := map[string]bool{
+		"connectivity": true, "contract": true, "quality": true,
+		"freshness": true, "cross_provider": true, "storage": true,
+	}
+	seenChecks := make(map[string]bool, len(request.Checks))
+	for _, check := range request.Checks {
+		if !knownChecks[check] {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "unsupported check: "+check, requestID(r))
+			return
+		}
+		if seenChecks[check] {
+			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "checks must not contain duplicates", requestID(r))
+			return
+		}
+		seenChecks[check] = true
+	}
 	known := make(map[string]bool)
 	for _, capability := range model.ProviderProbeCapabilities() {
 		known[capability] = true
@@ -91,7 +108,7 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	run, err := s.svc.ProbeProviderCapabilitiesWithOptions(r.Context(), service.ProviderProbeOptions{
-		Scope: request.Scope, Capabilities: request.Capabilities, Markets: request.Markets, Symbols: request.Symbols, TimeoutSeconds: timeoutSeconds,
+		Scope: request.Scope, Capabilities: request.Capabilities, Checks: request.Checks, Markets: request.Markets, Symbols: request.Symbols, TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), requestID(r))

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 func yahooFixture(t *testing.T, includeAdjusted bool, reportedSymbol string) (*httptest.Server, []int64) {
@@ -246,9 +247,15 @@ func TestYahooFinanceUnadjustedDoesNotRequireAdjustedClose(t *testing.T) {
 func TestYahooFinanceRejectsAdjustedRequestWithoutAdjustedClose(t *testing.T) {
 	server, _ := yahooFixture(t, false, "600036.SS")
 	defer server.Close()
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
 	p := NewYahooFinance(2*time.Second, server.URL)
-	if _, err := p.FetchDailyBars(context.Background(), "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "adjusted-close series is required") {
+	if _, err := p.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentForward); err == nil || !strings.Contains(err.Error(), "adjusted-close series is required") {
 		t.Fatalf("expected adjusted-close contract error, got %v", err)
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Field != "adjusted_close" || issues[0].Code != "missing_field" || issues[0].RowIndex != nil {
+		t.Fatalf("expected response-level missing adjclose diagnostic, got %+v", issues)
 	}
 }
 
@@ -286,4 +293,94 @@ func TestYahooDateRangeAndEndpointShape(t *testing.T) {
 		t.Fatalf("start Unix timestamp round trip failed: %v", err)
 	}
 	_ = fmt.Sprintf("end timestamp=%d", end.Unix())
+}
+
+func TestYahooDailyBarDecodeFailureAddsStructuredParseIssue(t *testing.T) {
+	payload := []byte(`{"chart":`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewYahooFinance(2*time.Second, server.URL)
+	if _, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone); err == nil {
+		t.Fatal("expected malformed Yahoo chart JSON to be rejected")
+	}
+	report := reporter.Snapshot()
+	if report.TotalCount != 1 || len(report.Issues) != 1 {
+		t.Fatalf("expected one response-level parse issue, got %+v", report)
+	}
+	issue := report.Issues[0]
+	if issue.Stage != validation.StageParse || issue.Field != "chart_response" || issue.Code != "decode_error" || issue.RowIndex != nil {
+		t.Fatalf("unexpected Yahoo parse issue: %+v", issue)
+	}
+}
+
+func TestYahooFieldParsersReportTypeNullAndInvalidValues(t *testing.T) {
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, ok := parseYahooFloatField(ctx, 4, "close", "indicators.quote[0].close", json.RawMessage(`"bad"`), "finite positive price"); ok {
+		t.Fatal("string close must be rejected")
+	}
+	if _, ok := parseYahooFloatField(ctx, 5, "high", "indicators.quote[0].high", json.RawMessage(`null`), "finite positive price"); ok {
+		t.Fatal("null high must be rejected")
+	}
+	if _, ok := parseYahooInt64Field(ctx, 6, "volume", "indicators.quote[0].volume", json.RawMessage(`1.5`), "non-negative integer shares"); ok {
+		t.Fatal("fractional volume must be rejected")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 3 {
+		t.Fatalf("expected 3 field issues, got %+v", issues)
+	}
+	want := []struct {
+		field string
+		code  string
+		row   int
+	}{{"close", "type_mismatch", 4}, {"high", "null_value", 5}, {"volume", "invalid_integer", 6}}
+	for i, item := range want {
+		got := issues[i]
+		if got.Stage != validation.StageParse || got.Field != item.field || got.Code != item.code || got.RowIndex == nil || *got.RowIndex != item.row {
+			t.Fatalf("issue[%d] = %+v, want field=%s code=%s row=%d", i, got, item.field, item.code, item.row)
+		}
+	}
+}
+
+func TestYahooFloatParserRejectsNonFiniteOverflow(t *testing.T) {
+	reporter := validation.NewReporter(10)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	if _, ok := parseYahooFloatField(ctx, 1, "open", "indicators.quote[0].open", json.RawMessage(`1e999`), "finite positive price"); ok {
+		t.Fatal("overflowing number must be rejected")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Code != "invalid_number" || issues[0].RowIndex == nil || *issues[0].RowIndex != 1 {
+		t.Fatalf("unexpected overflow diagnostic: %+v", issues)
+	}
+}
+
+func TestYahooDailyBarInvalidFieldReportsRowAndProviderPath(t *testing.T) {
+	payload := []byte(`{"chart":{"result":[{"meta":{"symbol":"600036.SS"},"timestamp":[1792454400],"indicators":{"quote":[{"open":["bad"],"high":[11],"low":[9],"close":[10],"volume":[1000]}]}}],"error":null}}`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	provider := NewYahooFinance(2*time.Second, server.URL)
+	if _, err := provider.FetchDailyBars(ctx, "600036.SH", "2026-10-20", "2026-10-21", 8, model.AdjustmentNone); err == nil {
+		t.Fatal("expected invalid Yahoo open value to be rejected")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 {
+		t.Fatalf("expected one field-level issue, got %+v", issues)
+	}
+	issue := issues[0]
+	if issue.Stage != validation.StageParse || issue.Field != "open" || issue.ProviderField != "indicators.quote[0].open" ||
+		issue.Code != "type_mismatch" || issue.RowIndex == nil || *issue.RowIndex != 0 {
+		t.Fatalf("unexpected Yahoo field issue: %+v", issue)
+	}
 }

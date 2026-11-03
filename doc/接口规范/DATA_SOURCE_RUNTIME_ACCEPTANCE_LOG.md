@@ -286,3 +286,94 @@ ProviderProbeItem 新增 `sample_symbol`、`sample_market`、`sample_date`、`ro
 现有 Provider 代码映射测试确认：Sina、Tencent、NetEase、BaoStock 不接受 BJ 代码；Pytdx、Hithink、TickFlow、Tushare、Eastmoney 有代码级映射。代码级映射不代表上游在线能力已验收。
 
 统一诊断对 BSE 样本遇到明确的交易所不支持错误时，现标记 `not_supported / market_not_supported`，计入 NotSupported，不计入 Failed。此分类仅针对适配器在请求前明确拒绝的 BJ 代码；DNS、EOF、HTTP 5xx、权限问题仍按原错误分类。新增 Service 单测覆盖该状态汇总。
+
+
+## 17. 北交所诊断测试 gofmt 修复（2026-10-30）
+
+提交 `bdc3e8820e188926cdb4ea17172c5ce5b80b9831` 的 Go suite 仅因 `provider_probe_test.go` 新增类型前多一行空白而在 gofmt 检查失败；Docker 镜像构建在相同前置检查处中止。已移除多余空行，后续需以新 SHA 的 Go test/race/vet 和镜像构建结果确认。
+
+
+## 18. 覆盖率分母字段首批实现（2026-10-30）
+
+主动诊断 ProviderProbeItem 与 OpenAPI 新增 coverage_total/returned/validated/missing/excluded。当前仅市场广度有明确总体证券数，按 TotalSecurities 与 CoveredSecurities 计算；其他能力无可信分母时保持字段缺失。ratio 使用 validated/total，不用 returned/total 替代质量覆盖率。新增 Service 单测校验分母、缺失、排除和比例关系。
+
+
+## 19. 比较器与覆盖率任务状态更新（2026-10-30）
+
+- 比较器已接入真实 600036.SH 黄金夹具；夹具 degraded 时得到 not_comparable；合成 valid 输入测试覆盖 matched/partial/mismatch。
+- 输入边界覆盖正数/有限 OHLC、OHLC 关系、负成交量、负/NaN/Inf 成交额、空/非法/重复日期集合。
+- 市场广度诊断新增明确覆盖分母字段；其他能力尚未确认分母时不输出 coverage_ratio。
+- 北交所映射矩阵已落到既有测试；不支持 Provider 在 BSE 定向探测中归类为 not_supported。
+- 当前最新提交与 CI 结论以后续远端 HEAD 和对应 Actions 为准。
+
+
+## 20. 覆盖率字段 gofmt 修复（2026-10-30）
+
+提交 `69736d1baaf8ef8dffe9b373d6edbcb5ba02d9c5` 的 market-data gofmt 检查发现两个结构体字段对齐不符合 gofmt，以及测试函数前存在多余空行。已修复格式，需以新 SHA 的完整 Go suite 与 Docker 构建结果复核。
+
+
+## 21. 北交所证券代码直指定路径补充
+
+BSE 不支持 Provider 的诊断分类同时覆盖市场过滤与证券代码过滤；仅指定 `920001.BJ` 时也应输出 `not_supported`，不能误计 failed。测试使用本地 fake，不触发上游请求。
+
+
+## 22. 创业板/科创板真实黄金样例（Run 41042950111）
+
+- 已将 `300750.SZ`（创业板）和 `688981.SH`（科创板）的 Sina/Tencent quote 与日 K 脱敏样例固化至 `live_market_cross_market_golden_20261030.json`。
+- Sina/Tencent 两侧日 K 均返回 8 条记录，artifact 中保留 3 条样本行；两边质量状态均 degraded，成交额缺失、金额单位 unknown，不能作为 matched 基准。
+- 新增回归测试逐市场调用统一比较器，必须返回 not_comparable；不把 quote returned 或 daily bars returned 等同于 quality valid。
+- Run 41042950111 真实探测失败项：Eastmoney stock_search、quote、delayed quote HTTP 502；NetEase quote DNS 失败、daily CSV HTTP 502 并按策略 skipped。不是凭据缺失。
+
+
+## 23. 2026-11-02 接续检查与 gofmt 修复
+
+- 接续时远端 HEAD：`04932a7aed4bcc4bac45ef2c5f2042833e2a4708`；PR #1 Open Draft，未合并。
+- Run `41043889122` 的 Go suite 失败仅由 `live_market_golden_test.go` 多余空行触发 gofmt；Docker market-data image 在同一 gofmt 前置步骤失败。根模块、go-core、MariaDB migration/PIT persistence、WebUI checks、Go/Python parity 均通过。
+- 已清理该文件空行，等待修复 SHA 的 Actions 结果。
+- 创业板/科创板固定样例来源 Run `41042950111`；日 K 两侧均 degraded，成交额缺失，不可作为 matched 证据。
+- 当前覆盖率字段在 market_breadth 有显式总体分母；其他能力无可信分母时省略。
+- Live probe workflow 的最终 success 不等于所有 Provider 成功：同一批记录 Eastmoney HTTP 502、NetEase DNS/HTTP 502。
+
+
+## 24. 统一诊断 checks 过滤首批实现（2026-11-02）
+
+- 请求体新增 checks；允许 connectivity、contract、quality、freshness、cross_provider、storage；空值默认全部，未知或重复值 400。
+- 响应新增 requested_checks、check_results；历史记录通过 JSON metadata 保存新字段，旧记录缺字段仍可反序列化。
+- connectivity、contract、quality 从已有 ProviderProbeItem 和错误阶段归类；storage 根据 MariaDB 实际写入结果归类。
+- freshness 尚无按 capability 的 SLA，只记录源端时间/age_seconds，状态保持 skipped；cross_provider 尚未接入在线逐日 bars snapshot，状态保持 skipped。
+- 一个 Provider 响应被多个检查维度复用，不会按 check 数量重复调用上游。
+- 新增 HTTP/Service 单测；CI 待最新 SHA 确认。
+
+
+## 25. 在线诊断跨 Provider 日 K 对账
+
+- 日 K Provider 单次请求返回后，Service 将标准化 bars snapshot 放入本轮 evidence，不重复请求。
+- 同一证券至少两个 Provider 返回快照时，调用统一比较器；比较结果映射到 cross_provider check_results。
+- matched → passed；partial → degraded；mismatch → failed；not_comparable → skipped。
+- 结果附 compared_dates、field_count、mismatch_count；无双源样本时明确 skipped。
+- 质量门禁保持不变：degraded/unknown 不作为可信对账基准。
+
+
+## 26. checks 首批实现编译问题
+
+提交 `ce4fdd76400d157ee4169481097f2ef438a65309` 的 Go 编译失败源于 `provider_probe.go` 模型文件缺少 `type ProviderProbeRun struct {` 声明。Go suite、Docker market-data build、MariaDB PIT 集成及 Go/Python parity 均因同一语法错误失败，非数据库/质量算法独立故障。已恢复结构体声明，待新 SHA CI 验证。
+
+
+## 27. checks 跨源接入格式修复（2026-11-02）
+
+`ce17ac11cd559385de24d4e0aa284904d1c6ab5a` 的 market-data Go suite 和 Docker image build 在 gofmt 阶段失败，涉及 model/service 字段对齐及两个测试文件的多余空行。MariaDB PIT persistence、根模块和 go-core 已通过；修复格式后等待新 SHA 验收。
+
+
+## 28. cross_provider 合成测试夹具质量修正（2026-11-02）
+
+Service 级 matched 测试的合成日 K 原先缺少成交额；Normalize 按既有契约将其标记 degraded，导致比较器应当拒绝。测试夹具已补充 CNY 成交额（仅合成测试），以验证 valid 输入下在线探测链路的 matched 分支；不作为真实 Provider 证据。
+
+
+## 29. checks 与 capability 白名单边界修正
+
+当请求只包含 quote 而默认 checks 包含 cross_provider 时，cross_provider 结果不应伪造 daily_bars capability 项。现要求同批次显式选择 daily_bars 才能执行跨源比较；否则返回 capability 为空的 skipped 结果，保持 capability 白名单响应边界。
+
+
+## 30. 能力白名单回归格式检查修复
+
+Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对齐和 Service 测试文件尾多余空行。已修复；该 Run 的 MariaDB PIT、根模块、go-core 通过，market-data Go suite/Docker 尚未进入编译阶段。

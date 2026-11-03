@@ -116,3 +116,25 @@ func TestOpenAPIDataRoutesDeclareValidAPIKeySecurity(t *testing.T) {
 	}
 
 }
+
+func TestProviderProbeValidationSchemaIsDocumented(t *testing.T) {
+	spec, err := os.ReadFile("../../openapi.yaml")
+	if err != nil {
+		t.Fatalf("read OpenAPI specification: %v", err)
+	}
+	text := string(spec)
+	for _, required := range []string{
+		"    ProviderProbeFieldIssue:",
+		"        validation_total_count:",
+		"        validation_error_count:",
+		"        validation_warning_count:",
+		"        validation_info_count:",
+		"        validation_truncated:",
+		"        validation_issues:",
+		"maxItems: 100",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("Provider Probe validation schema is missing %q", required)
+		}
+	}
+}

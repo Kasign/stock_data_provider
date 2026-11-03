@@ -17,6 +17,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 	"golang.org/x/text/encoding/htmlindex"
 )
 
@@ -119,31 +120,31 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if reported := strings.TrimSpace(row.Symbol); reported != "" && reported != symbol[:6] {
 		return nil, fmt.Errorf("Netease quote symbol mismatch: requested %s got %q", symbol, reported)
 	}
-	price, err := parseNeteaseNumber(string(row.Price))
+	price, err := parseNeteaseQuoteNumber(ctx, "current_price", "price", row.Price)
 	if err != nil || price <= 0 {
 		return nil, errors.New("Netease quote current price is missing or invalid")
 	}
-	openV, err := parseNeteaseNumber(string(row.Open))
+	openV, err := parseNeteaseQuoteNumber(ctx, "open", "open", row.Open)
 	if err != nil || openV <= 0 {
 		return nil, errors.New("Netease quote open price is missing or invalid")
 	}
-	highV, err := parseNeteaseNumber(string(row.High))
+	highV, err := parseNeteaseQuoteNumber(ctx, "high", "high", row.High)
 	if err != nil || highV <= 0 {
 		return nil, errors.New("Netease quote high price is missing or invalid")
 	}
-	lowV, err := parseNeteaseNumber(string(row.Low))
+	lowV, err := parseNeteaseQuoteNumber(ctx, "low", "low", row.Low)
 	if err != nil || lowV <= 0 {
 		return nil, errors.New("Netease quote low price is missing or invalid")
 	}
-	prevClose, err := parseNeteaseNumber(string(row.YestClose))
+	prevClose, err := parseNeteaseQuoteNumber(ctx, "prev_close", "yestclose", row.YestClose)
 	if err != nil || prevClose <= 0 {
 		return nil, errors.New("Netease quote previous close is missing or invalid")
 	}
-	change, err := parseNeteaseNumber(string(row.Updown))
+	change, err := parseNeteaseQuoteNumber(ctx, "change", "updown", row.Updown)
 	if err != nil {
 		return nil, errors.New("Netease quote change is missing or invalid")
 	}
-	percentRatio, err := parseNeteaseNumber(string(row.Percent))
+	percentRatio, err := parseNeteaseQuoteNumber(ctx, "change_percent", "percent", row.Percent)
 	if err != nil {
 		return nil, errors.New("Netease quote percent is missing or invalid")
 	}
@@ -216,10 +217,45 @@ func (p *Netease) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		q.QualityStatus = model.QualityDegraded
 		q.QualityReasons = append(q.QualityReasons, "provider_name_missing")
 	}
-	if err := normalize.ValidateQuote(q); err != nil {
+	report, err := normalize.ValidateQuoteWithReport(q)
+	validation.AddContextReport(ctx, report)
+	if err != nil {
 		return nil, fmt.Errorf("Netease quote data contract: %w", err)
 	}
 	return q, nil
+}
+
+// parseNeteaseQuoteNumber 在 JSON RawMessage 尚未丢失类型信息时生成字段级 Parse 诊断。
+func parseNeteaseQuoteNumber(ctx context.Context, field, providerField string, raw json.RawMessage) (float64, error) {
+	actualType := providerJSONValueType(raw)
+	preview := strings.TrimSpace(string(raw))
+	if actualType == "missing" || actualType == "null" {
+		addProviderQuoteFieldIssue(ctx, field, providerField, "missing", "number or numeric string", actualType, preview, "NetEase quote field is missing or null", validation.SeverityError)
+		return 0, errors.New("NetEase quote field is missing")
+	}
+	if actualType != "number" && actualType != "string" {
+		addProviderQuoteFieldIssue(ctx, field, providerField, "type_mismatch", "number or numeric string", actualType, preview, "NetEase quote field has an unsupported JSON type", validation.SeverityError)
+		return 0, errors.New("NetEase quote field has an unsupported JSON type")
+	}
+	var value string
+	if actualType == "string" {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			addProviderQuoteFieldIssue(ctx, field, providerField, "type_mismatch", "number or numeric string", actualType, preview, "NetEase quote field cannot be decoded as a string", validation.SeverityError)
+			return 0, err
+		}
+	} else {
+		value = string(raw)
+	}
+	number, err := parseNeteaseNumber(value)
+	if err != nil {
+		code := "invalid_value"
+		if strings.TrimSpace(value) == "" || strings.TrimSpace(value) == "-" {
+			code = "missing"
+		}
+		addProviderQuoteFieldIssue(ctx, field, providerField, code, "finite number", actualType, preview, "NetEase quote field is not a finite numeric value", validation.SeverityError)
+		return 0, err
+	}
+	return number, nil
 }
 
 type neteaseQuoteRow struct {
@@ -386,16 +422,20 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 	rows := make([]model.DailyBar, 0, 256)
 	rejectedRows := 0
 	now := time.Now().UTC()
+	rowIndex := 0
 	for {
 		record, readErr := reader.Read()
 		if errors.Is(readErr, io.EOF) {
 			break
 		}
 		if readErr != nil {
+			addProviderParseIssue(ctx, rowIndex, "row", "csv_record", "invalid_csv_record", "valid CSV record", "string", "", "Netease CSV record could not be decoded")
 			rejectedRows++
+			rowIndex++
 			continue
 		}
 		if len(record) == 0 || (len(record) == 1 && strings.TrimSpace(record[0]) == "") {
+			rowIndex++
 			continue
 		}
 		get := func(name string) string {
@@ -405,14 +445,49 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			}
 			return strings.TrimSpace(record[index])
 		}
-		date, dateErr := time.Parse("2006-01-02", get("date"))
-		rowCode := neteaseCleanCode(get("code"))
-		openV, openErr := parseNeteaseNumber(get("open"))
-		highV, highErr := parseNeteaseNumber(get("high"))
-		lowV, lowErr := parseNeteaseNumber(get("low"))
-		closeV, closeErr := parseNeteaseNumber(get("close"))
-		rawVolume, volumeErr := parseNeteaseNumber(get("volume"))
-		rawAmount, amountErr := parseNeteaseNumber(get("amount"))
+		dateRaw, codeRaw := get("date"), get("code")
+		date, dateErr := time.Parse("2006-01-02", dateRaw)
+		rowCode := neteaseCleanCode(codeRaw)
+		openRaw, highRaw, lowRaw := get("open"), get("high"), get("low")
+		closeRaw, volumeRaw, amountRaw := get("close"), get("volume"), get("amount")
+		openV, openErr := parseNeteaseNumber(openRaw)
+		highV, highErr := parseNeteaseNumber(highRaw)
+		lowV, lowErr := parseNeteaseNumber(lowRaw)
+		closeV, closeErr := parseNeteaseNumber(closeRaw)
+		rawVolume, volumeErr := parseNeteaseNumber(volumeRaw)
+		rawAmount, amountErr := parseNeteaseNumber(amountRaw)
+		if dateErr != nil {
+			addProviderParseIssue(ctx, rowIndex, "trade_date", "日期", "invalid_date", "YYYY-MM-DD", "string", dateRaw, "Netease CSV trade date is invalid")
+		}
+		if rowCode == "" || rowCode != symbol[:6] {
+			addProviderParseIssue(ctx, rowIndex, "symbol", "股票代码", "symbol_mismatch", symbol[:6], "string", codeRaw, "Netease CSV security code is missing or does not match the request")
+		}
+		numericFields := []struct {
+			field         string
+			providerField string
+			raw           string
+			err           error
+			value         float64
+		}{
+			{"open", "开盘价", openRaw, openErr, openV},
+			{"high", "最高价", highRaw, highErr, highV},
+			{"low", "最低价", lowRaw, lowErr, lowV},
+			{"close", "收盘价", closeRaw, closeErr, closeV},
+			{"volume", "成交量", volumeRaw, volumeErr, rawVolume},
+			{"amount", "成交金额", amountRaw, amountErr, rawAmount},
+		}
+		for _, field := range numericFields {
+			invalid := field.err != nil || !finiteNumber(field.value)
+			if field.field != "amount" && field.field != "volume" && field.value <= 0 {
+				invalid = true
+			}
+			if (field.field == "amount" || field.field == "volume") && field.value < 0 {
+				invalid = true
+			}
+			if invalid {
+				addProviderParseIssue(ctx, rowIndex, field.field, field.providerField, "invalid_number", "finite non-negative numeric value", "string", field.raw, "Netease CSV numeric field is invalid")
+			}
+		}
 		if dateErr != nil || rowCode == "" || rowCode != symbol[:6] ||
 			openErr != nil || highErr != nil || lowErr != nil || closeErr != nil ||
 			volumeErr != nil || amountErr != nil || !finiteNumber(openV) || !finiteNumber(highV) ||
@@ -420,11 +495,13 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			!finiteNumber(rawAmount) || openV <= 0 || highV <= 0 || lowV <= 0 || closeV <= 0 ||
 			rawVolume < 0 || rawAmount < 0 {
 			rejectedRows++
+			rowIndex++
 			continue
 		}
 		tradeDate := date.Format("2006-01-02")
 		if tradeDate < startISO || tradeDate > endISO {
 			rejectedRows++
+			rowIndex++
 			continue
 		}
 		shares, volumeUnit, amount, amountUnit, quality, reasons := neteaseValidateTradingUnits(rawVolume, rawAmount, lowV, highV)
@@ -447,11 +524,12 @@ func (p *Netease) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			}
 		}
 		rows = append(rows, bar)
+		rowIndex++
 	}
 	if len(rows) == 0 {
 		return nil, errors.New("Netease returned no valid daily bars in the requested date range")
 	}
-	return normalizeProviderDailyBars(symbol, startISO, endISO, limit, rows, rejectedRows)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, rows, rejectedRows)
 }
 
 func neteaseCSVColumns(header []string) map[string]int {

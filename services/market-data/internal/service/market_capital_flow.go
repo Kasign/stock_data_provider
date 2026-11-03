@@ -103,6 +103,9 @@ func validateMarketCapitalFlowSnapshot(startDate, endDate string, snapshot *mode
 	if strings.TrimSpace(snapshot.Source) == "" || !hasIdentifiableSourceVersion(snapshot.SourceVersion) || snapshot.FetchedAt.IsZero() {
 		return errors.New("market-capital-flow source, source_version or fetched_at is missing")
 	}
+	if snapshot.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("market-capital-flow fetched_at is in the future")
+	}
 	if snapshot.QualityStatus != model.QualityDegraded {
 		return errors.New("market-capital-flow must remain degraded without a verifiable provider snapshot timestamp")
 	}

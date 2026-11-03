@@ -14,7 +14,7 @@ func TestLegacyPythonBridgeAndGoQualityContract(t *testing.T) {
 	t.Run("Go rejects legacy unknown metadata rather than guessing", func(t *testing.T) {
 		volume := int64(1000)
 		bar := model.DailyBar{
-			TradeDate: "2026-10-20", Period: "1d",
+			Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 			Open: 10, High: 11, Low: 9, Close: 10.5,
 			Volume: &volume, VolumeUnit: "unknown", AmountUnit: "unknown",
 			AdjustmentBasis: model.AdjustmentUnknown, Source: "legacy-python",
@@ -32,7 +32,7 @@ func TestLegacyPythonBridgeAndGoQualityContract(t *testing.T) {
 	t.Run("missing amount remains null and degraded", func(t *testing.T) {
 		volume := int64(1000)
 		bar := model.DailyBar{
-			TradeDate: "2026-10-20", Period: "1d",
+			Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 			Open: 10, High: 11, Low: 9, Close: 10.5,
 			Volume: &volume, VolumeUnit: "shares", AmountUnit: "CNY",
 			AdjustmentBasis: model.AdjustmentNone, Source: "tencent",
@@ -53,7 +53,7 @@ func TestLegacyPythonBridgeAndGoQualityContract(t *testing.T) {
 	t.Run("invalid OHLC and duplicate dates are visible", func(t *testing.T) {
 		volume := int64(1000)
 		base := model.DailyBar{
-			TradeDate: "2026-10-20", Period: "1d",
+			Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 			Open: 10, High: 11, Low: 9, Close: 10.5,
 			Volume: &volume, Amount: ptrFloat(10000), VolumeUnit: "shares", AmountUnit: "CNY",
 			AdjustmentBasis: model.AdjustmentNone, Source: "eastmoney",
@@ -82,7 +82,7 @@ func TestLegacyPythonBridgeAndGoQualityContract(t *testing.T) {
 		volume := int64(1000)
 		amount := 100000.0
 		bar := model.DailyBar{
-			TradeDate: "2026-10-20", Period: "1d",
+			Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
 			Open: 10, High: 11, Low: 9, Close: 10.5,
 			Volume: &volume, Amount: &amount, VolumeUnit: "shares", AmountUnit: "CNY",
 			AdjustmentBasis: model.AdjustmentNone, Source: "tencent",

@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 const yahooFinanceVersion = "yahoo-finance-chart-v1"
@@ -206,7 +209,9 @@ func (p *YahooFinance) FetchQuote(ctx context.Context, rawSymbol string) (*model
 	if name == "" {
 		q.QualityReasons = append(q.QualityReasons, "provider_name_missing")
 	}
-	if err := normalize.ValidateQuote(q); err != nil {
+	report, err := normalize.ValidateQuoteWithReport(q)
+	validation.AddContextReport(ctx, report)
+	if err != nil {
 		return nil, fmt.Errorf("Yahoo Finance quote data contract: %w", err)
 	}
 	return q, nil
@@ -280,17 +285,17 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 				Meta struct {
 					Symbol string `json:"symbol"`
 				} `json:"meta"`
-				Timestamp  []int64 `json:"timestamp"`
+				Timestamp  []json.RawMessage `json:"timestamp"`
 				Indicators struct {
 					Quote []struct {
-						Open   []*float64 `json:"open"`
-						High   []*float64 `json:"high"`
-						Low    []*float64 `json:"low"`
-						Close  []*float64 `json:"close"`
-						Volume []*int64   `json:"volume"`
+						Open   []json.RawMessage `json:"open"`
+						High   []json.RawMessage `json:"high"`
+						Low    []json.RawMessage `json:"low"`
+						Close  []json.RawMessage `json:"close"`
+						Volume []json.RawMessage `json:"volume"`
 					} `json:"quote"`
 					AdjClose []struct {
-						Values []*float64 `json:"adjclose"`
+						Values []json.RawMessage `json:"adjclose"`
 					} `json:"adjclose"`
 				} `json:"indicators"`
 			} `json:"result"`
@@ -301,6 +306,7 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		} `json:"chart"`
 	}
 	if err := decodeSingleJSON(body, &payload); err != nil {
+		addProviderParseIssue(ctx, -1, "chart_response", "chart.result[0].indicators.quote[0]", "decode_error", "valid Yahoo Finance chart JSON with numeric OHLCV arrays", providerJSONValueType(body), "", "Yahoo Finance chart response could not be decoded against the expected field contract")
 		return nil, fmt.Errorf("decode Yahoo Finance chart JSON: %w", err)
 	}
 	if payload.Chart.Error != nil {
@@ -313,11 +319,23 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 	if reported := strings.TrimSpace(result.Meta.Symbol); reported != "" && !strings.EqualFold(reported, yahooTicker) {
 		return nil, fmt.Errorf("Yahoo Finance ticker mismatch: requested %s got %q", yahooTicker, reported)
 	}
-	if len(result.Timestamp) == 0 || len(result.Indicators.Quote) == 0 {
-		return nil, errors.New("Yahoo Finance returned empty daily bars")
+	if len(result.Timestamp) == 0 {
+		addProviderParseIssue(ctx, -1, "timestamp", "chart.result[0].timestamp", "missing_field", "non-empty Unix timestamp array", "missing", "", "Yahoo Finance chart response 缺少交易时间数组")
+	}
+	if len(result.Indicators.Quote) == 0 {
+		addProviderParseIssue(ctx, -1, "quote", "chart.result[0].indicators.quote[0]", "missing_field", "one quote object containing OHLCV arrays", "missing", "", "Yahoo Finance chart response 缺少日 K 报价字段")
+	}
+	if len(result.Timestamp) == 0 {
+		addProviderParseIssue(ctx, -1, "timestamp", "chart.result[0].timestamp", "missing_or_empty_field", "non-empty Unix timestamp array", "missing_or_empty", "", "Yahoo Finance 响应缺少有效时间戳数组")
+		return nil, errors.New("Yahoo Finance returned empty daily-bar timestamps")
+	}
+	if len(result.Indicators.Quote) == 0 {
+		addProviderParseIssue(ctx, -1, "quote", "chart.result[0].indicators.quote", "missing_or_empty_field", "at least one quote object", "missing_or_empty", "", "Yahoo Finance 响应缺少日 K quote 对象")
+		return nil, errors.New("Yahoo Finance returned no daily quote object")
 	}
 	quote := result.Indicators.Quote[0]
 	if adjustment != model.AdjustmentNone && len(result.Indicators.AdjClose) == 0 {
+		addProviderParseIssue(ctx, -1, "adjusted_close", "chart.result[0].indicators.adjclose", "missing_field", "adjusted-close array for adjusted requests", "missing", "", "Yahoo Finance 复权请求缺少 adjclose 数组")
 		return nil, errors.New("Yahoo Finance adjusted-close series is required for an adjusted request")
 	}
 
@@ -331,27 +349,17 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 	}
 	rawBars := make([]rawYahooBar, 0, len(result.Timestamp))
 	rejectedRows := 0
-	var adjclose []*float64
+	var adjclose []json.RawMessage
 	if len(result.Indicators.AdjClose) > 0 {
 		adjclose = result.Indicators.AdjClose[0].Values
 	}
 
-	for index, timestamp := range result.Timestamp {
-		if index >= len(quote.Open) || index >= len(quote.High) || index >= len(quote.Low) ||
-			index >= len(quote.Close) || index >= len(quote.Volume) {
-			rejectedRows++
-			continue
-		}
-		if quote.Open[index] == nil || quote.High[index] == nil || quote.Low[index] == nil ||
-			quote.Close[index] == nil || quote.Volume[index] == nil {
-			// Null OHLCV points are not trading bars; record omissions for quality diagnostics.
-			rejectedRows++
-			continue
-		}
-		openV, highV, lowV, closeV := *quote.Open[index], *quote.High[index], *quote.Low[index], *quote.Close[index]
-		volume := *quote.Volume[index]
-		if !finiteNumber(openV) || !finiteNumber(highV) || !finiteNumber(lowV) || !finiteNumber(closeV) ||
-			openV <= 0 || highV <= 0 || lowV <= 0 || closeV <= 0 || volume < 0 {
+	for index, rawTimestamp := range result.Timestamp {
+		timestamp, ok := parseYahooInt64Field(ctx, index, "timestamp", "timestamp", rawTimestamp, "Unix timestamp in seconds")
+		if !ok || timestamp <= 0 {
+			if ok {
+				addProviderParseIssue(ctx, index, "trade_date", "timestamp", "invalid_timestamp", "positive Unix timestamp in seconds", "number", providerJSONPreview(rawTimestamp), "Yahoo Finance 日 K 时间戳必须为正整数")
+			}
 			rejectedRows++
 			continue
 		}
@@ -360,13 +368,42 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 			rejectedRows++
 			continue
 		}
+		openV, openOK := parseYahooFloatField(ctx, index, "open", "indicators.quote[0].open", rawYahooArrayValue(quote.Open, index), "finite positive price")
+		highV, highOK := parseYahooFloatField(ctx, index, "high", "indicators.quote[0].high", rawYahooArrayValue(quote.High, index), "finite positive price")
+		lowV, lowOK := parseYahooFloatField(ctx, index, "low", "indicators.quote[0].low", rawYahooArrayValue(quote.Low, index), "finite positive price")
+		closeV, closeOK := parseYahooFloatField(ctx, index, "close", "indicators.quote[0].close", rawYahooArrayValue(quote.Close, index), "finite positive price")
+		volume, volumeOK := parseYahooInt64Field(ctx, index, "volume", "indicators.quote[0].volume", rawYahooArrayValue(quote.Volume, index), "non-negative integer shares")
+		if !openOK || !highOK || !lowOK || !closeOK || !volumeOK {
+			rejectedRows++
+			continue
+		}
+		if volume < 0 {
+			addProviderParseIssue(ctx, index, "volume", "indicators.quote[0].volume", "out_of_range", "non-negative integer shares", "number", fmt.Sprintf("%d", volume), "Yahoo Finance 成交量不能为负数")
+			rejectedRows++
+			continue
+		}
+		if openV <= 0 || highV <= 0 || lowV <= 0 || closeV <= 0 {
+			for field, value := range map[string]float64{"open": openV, "high": highV, "low": lowV, "close": closeV} {
+				if value <= 0 {
+					addProviderParseIssue(ctx, index, field, "indicators.quote[0]."+field, "out_of_range", "positive price", "number", fmt.Sprintf("%g", value), "Yahoo Finance 日 K 价格必须大于零")
+				}
+			}
+			rejectedRows++
+			continue
+		}
 		factor := 1.0
 		if adjustment != model.AdjustmentNone {
-			if index >= len(adjclose) || adjclose[index] == nil || !finiteNumber(*adjclose[index]) || *adjclose[index] <= 0 {
+			adjRaw := rawYahooArrayValue(adjclose, index)
+			adjValue, adjOK := parseYahooFloatField(ctx, index, "adjusted_close", "indicators.adjclose[0].adjclose", adjRaw, "finite positive adjusted close")
+			if !adjOK || adjValue <= 0 {
+				if adjOK {
+					addProviderParseIssue(ctx, index, "adjusted_close", "indicators.adjclose[0].adjclose", "out_of_range", "positive adjusted close", "number", fmt.Sprintf("%g", adjValue), "Yahoo Finance 复权收盘价必须大于零")
+				}
 				return nil, fmt.Errorf("Yahoo Finance adjusted close missing or invalid at %s", date)
 			}
-			factor = *adjclose[index] / closeV
+			factor = adjValue / closeV
 			if !finiteNumber(factor) || factor <= 0 {
+				addProviderParseIssue(ctx, index, "adjustment_factor", "adjclose/close", "invalid_adjustment_factor", "finite positive adjustment factor", "number", fmt.Sprintf("%g", factor), "Yahoo Finance 复权因子无效")
 				return nil, fmt.Errorf("Yahoo Finance adjustment factor invalid at %s", date)
 			}
 		}
@@ -430,7 +467,58 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 		}
 		bars = append(bars, bar)
 	}
-	return normalizeProviderDailyBars(symbol, startISO, endISO, limit, bars, rejectedRows)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, bars, rejectedRows)
+}
+
+func rawYahooArrayValue(values []json.RawMessage, index int) json.RawMessage {
+	if index < 0 || index >= len(values) {
+		return nil
+	}
+	return values[index]
+}
+
+func parseYahooFloatField(ctx context.Context, rowIndex int, field, providerField string, raw json.RawMessage, expected string) (float64, bool) {
+	valueType := providerJSONValueType(raw)
+	if valueType == "missing" || valueType == "null" {
+		code := "missing_field"
+		if valueType == "null" {
+			code = "null_value"
+		}
+		addProviderParseIssue(ctx, rowIndex, field, providerField, code, expected, valueType, "", "Yahoo Finance 日 K 字段缺失或为空")
+		return 0, false
+	}
+	if valueType != "number" {
+		addProviderParseIssue(ctx, rowIndex, field, providerField, "type_mismatch", expected, valueType, providerJSONPreview(raw), "Yahoo Finance 日 K 字段类型不符合数值契约")
+		return 0, false
+	}
+	var value float64
+	if err := json.Unmarshal(raw, &value); err != nil || !finiteNumber(value) {
+		addProviderParseIssue(ctx, rowIndex, field, providerField, "invalid_number", expected, valueType, providerJSONPreview(raw), "Yahoo Finance 日 K 字段不是有限数值")
+		return 0, false
+	}
+	return value, true
+}
+
+func parseYahooInt64Field(ctx context.Context, rowIndex int, field, providerField string, raw json.RawMessage, expected string) (int64, bool) {
+	valueType := providerJSONValueType(raw)
+	if valueType == "missing" || valueType == "null" {
+		code := "missing_field"
+		if valueType == "null" {
+			code = "null_value"
+		}
+		addProviderParseIssue(ctx, rowIndex, field, providerField, code, expected, valueType, "", "Yahoo Finance 日 K 字段缺失或为空")
+		return 0, false
+	}
+	if valueType != "number" {
+		addProviderParseIssue(ctx, rowIndex, field, providerField, "type_mismatch", expected, valueType, providerJSONPreview(raw), "Yahoo Finance 日 K 字段类型不符合整数契约")
+		return 0, false
+	}
+	value, err := strconv.ParseInt(string(bytes.TrimSpace(raw)), 10, 64)
+	if err != nil {
+		addProviderParseIssue(ctx, rowIndex, field, providerField, "invalid_integer", expected, valueType, providerJSONPreview(raw), "Yahoo Finance 日 K 字段不是有效 64 位整数")
+		return 0, false
+	}
+	return value, true
 }
 
 func yahooFinanceTicker(symbol string) (string, error) {

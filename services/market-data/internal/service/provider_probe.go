@@ -12,9 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/freshness"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
 	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
+	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
 )
 
 var (
@@ -33,13 +35,25 @@ type providerProbeJob struct {
 type providerProbeEvidenceContextKey struct{}
 
 type providerProbeEvidence struct {
-	sampleSymbol  string
-	sampleMarket  string
-	sampleDate    string
-	rowsReturned  int
-	rowsValidated int
-	coverageRatio *float64
-	providerTime  *time.Time
+	sampleSymbol       string
+	sampleMarket       string
+	sampleDate         string
+	rowsReturned       int
+	rowsValidated      int
+	coverageTotal      *int
+	coveragePopulation string
+	coverageSource     string
+	coverageReturned   *int
+	coverageValidated  *int
+	coverageMissing    *int
+	coverageExcluded   *int
+	coverageRatio      *float64
+	coverageDimensions []model.ProviderProbeCoverageDimension
+	providerTime       *time.Time
+	providerTimeType   string
+	fetchedAt          *time.Time
+	dailySnapshot      *provider.CrossProviderDailySnapshot
+	validationReport   validation.Report
 }
 
 func recordProviderProbeCoverage(ctx context.Context, coverage float64) {
@@ -48,6 +62,83 @@ func recordProviderProbeCoverage(ctx context.Context, coverage float64) {
 		return
 	}
 	evidence.coverageRatio = &coverage
+}
+
+func recordProviderProbeCoverageCounts(ctx context.Context, total, returned, validated, missing, excluded int, population, source string) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil || total <= 0 || returned < 0 || validated < 0 || missing < 0 || excluded < 0 ||
+		returned > total || validated > returned || returned != validated+excluded || total != validated+missing+excluded ||
+		strings.TrimSpace(population) == "" || strings.TrimSpace(source) == "" {
+		return
+	}
+	ratio := float64(validated) / float64(total)
+	evidence.coverageTotal = &total
+	evidence.coveragePopulation = population
+	evidence.coverageSource = source
+	evidence.coverageReturned = &returned
+	evidence.coverageValidated = &validated
+	evidence.coverageMissing = &missing
+	evidence.coverageExcluded = &excluded
+	evidence.coverageRatio = &ratio
+}
+
+func buildMarketBreadthCoverageDimensions(snapshot *model.MarketBreadthSnapshot) []model.ProviderProbeCoverageDimension {
+	if snapshot == nil || snapshot.TotalSecurities <= 0 ||
+		snapshot.CoveredSecurities < 0 || snapshot.CoveredSecurities > snapshot.TotalSecurities ||
+		snapshot.UnclassifiedCount < 0 || snapshot.UnclassifiedCount > snapshot.CoveredSecurities ||
+		snapshot.QuoteTimestampCoverageCount < 0 || snapshot.QuoteTimestampCoverageCount > snapshot.CoveredSecurities ||
+		snapshot.AmountCoverageCount < 0 || snapshot.AmountCoverageCount > snapshot.CoveredSecurities {
+		return nil
+	}
+
+	total, returned := snapshot.TotalSecurities, snapshot.CoveredSecurities
+	build := func(dimension, source string, validated, excluded int) model.ProviderProbeCoverageDimension {
+		missing := total - returned
+		return model.ProviderProbeCoverageDimension{
+			Dimension: dimension, Population: "provider_universe", Source: source,
+			Total: total, Returned: returned, Validated: validated,
+			Missing: missing, Excluded: excluded, Ratio: float64(validated) / float64(total),
+		}
+	}
+	return []model.ProviderProbeCoverageDimension{
+		build("quote_response", "market_breadth.covered_securities", returned, 0),
+		build("price_classification", "market_breadth.unclassified_count", returned-snapshot.UnclassifiedCount, snapshot.UnclassifiedCount),
+		build("quote_timestamp", "market_breadth.quote_timestamp_coverage_count", snapshot.QuoteTimestampCoverageCount, returned-snapshot.QuoteTimestampCoverageCount),
+		build("amount", "market_breadth.amount_coverage_count", snapshot.AmountCoverageCount, returned-snapshot.AmountCoverageCount),
+	}
+}
+
+func recordProviderProbeCoverageDimensions(ctx context.Context, dimensions []model.ProviderProbeCoverageDimension) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil || len(dimensions) == 0 {
+		return
+	}
+	evidence.coverageDimensions = append([]model.ProviderProbeCoverageDimension(nil), dimensions...)
+}
+
+func recordProviderProbeTimeSemantics(ctx context.Context, semantics string) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil {
+		return
+	}
+	evidence.providerTimeType = strings.TrimSpace(semantics)
+}
+
+func recordProviderProbeFetchedAt(ctx context.Context, fetchedAt time.Time) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil || fetchedAt.IsZero() {
+		return
+	}
+	value := fetchedAt
+	evidence.fetchedAt = &value
+}
+
+func recordProviderProbeDailySnapshot(ctx context.Context, snapshot *provider.CrossProviderDailySnapshot) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil || snapshot == nil {
+		return
+	}
+	evidence.dailySnapshot = snapshot
 }
 
 func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string, rowsReturned, rowsValidated int, providerTime *time.Time) {
@@ -75,6 +166,7 @@ func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string,
 type ProviderProbeOptions struct {
 	Scope          string
 	Capabilities   []string
+	Checks         []string
 	Markets        []string
 	Symbols        []string
 	TimeoutSeconds int
@@ -103,6 +195,32 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if options.TimeoutSeconds < 1 || options.TimeoutSeconds > 30 {
 		return nil, errors.New("provider-probe timeout_seconds must be between 1 and 30")
 	}
+	allowedChecks := map[string]bool{
+		"connectivity": true, "contract": true, "quality": true,
+		"freshness": true, "cross_provider": true, "storage": true,
+	}
+	selectedChecks := make(map[string]bool, len(options.Checks))
+	if len(options.Checks) == 0 {
+		for check := range allowedChecks {
+			selectedChecks[check] = true
+		}
+	} else {
+		for _, check := range options.Checks {
+			if !allowedChecks[check] {
+				return nil, fmt.Errorf("provider-probe check %q is not supported", check)
+			}
+			if selectedChecks[check] {
+				return nil, fmt.Errorf("provider-probe check %q is duplicated", check)
+			}
+			selectedChecks[check] = true
+		}
+	}
+	requestedChecks := make([]string, 0, len(selectedChecks))
+	for check := range selectedChecks {
+		requestedChecks = append(requestedChecks, check)
+	}
+	sort.Strings(requestedChecks)
+
 	allowed := make(map[string]bool, len(model.ProviderProbeCapabilities()))
 	for _, capability := range model.ProviderProbeCapabilities() {
 		allowed[capability] = true
@@ -185,7 +303,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		requested = append(requested, capability)
 	}
 	sort.Strings(requested)
-	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
+	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
 	jobs := make([]providerProbeJob, 0)
 	add := func(name, capability string, fn providerProbeFunc) {
 		jobs = append(jobs, providerProbeJob{provider: name, capability: capability, run: fn})
@@ -209,19 +327,45 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				return model.QualityUnknown, "", nil, errors.New("empty quote response")
 			}
 			recordProviderProbeEvidence(probeCtx, quoteSymbol, "", 1, 0, q.QuoteTime)
+			recordProviderProbeTimeSemantics(probeCtx, q.QuoteTimeSemantics)
+			recordProviderProbeFetchedAt(probeCtx, q.FetchedAt)
 			if q.Symbol != quoteSymbol {
+				report := validation.NewReport(validation.DefaultMaxIssues)
+				report.Add(validation.FieldIssue{
+					Stage: validation.StageValidate, Field: "symbol", ProviderField: "symbol",
+					Code: "identity_mismatch", Expected: quoteSymbol, ActualType: "string",
+					ActualPreview: q.Symbol, Severity: validation.SeverityError,
+					Message: "quote symbol does not match requested security",
+				})
+				validation.AddContextReport(probeCtx, report)
 				return model.QualityInvalid, q.SourceVersion, nil, fmt.Errorf("quote contract invalid: symbol mismatch, got %q, want %q", q.Symbol, quoteSymbol)
 			}
 			if q.Source == "" {
+				report := validation.NewReport(validation.DefaultMaxIssues)
+				report.Add(validation.FieldIssue{
+					Stage: validation.StageValidate, Field: "source", ProviderField: "source",
+					Code: "required", Expected: "non-empty provider identifier",
+					ActualType: "string", Severity: validation.SeverityError,
+					Message: "quote source is missing",
+				})
+				validation.AddContextReport(probeCtx, report)
 				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote source missing")
 			}
-			if err := normalize.ValidateQuote(q); err != nil {
-				return model.QualityInvalid, q.SourceVersion, nil, err
+			reporter := validation.ReporterFromContext(probeCtx)
+			if reporter == nil || reporter.Snapshot().TotalCount == 0 {
+				report, validationErr := normalize.ValidateQuoteWithReport(q)
+				validation.AddContextReport(probeCtx, report)
+				if validationErr != nil {
+					return model.QualityInvalid, q.SourceVersion, nil, validationErr
+				}
+			} else if reporter.Snapshot().HasErrors() {
+				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote adapter reported field validation errors")
 			}
 			if q.SourceVersion == "" {
 				return model.QualityInvalid, "", nil, errors.New("quote source version missing")
 			}
 			recordProviderProbeEvidence(probeCtx, quoteSymbol, "", 1, 1, q.QuoteTime)
+			recordProviderProbeTimeSemantics(probeCtx, q.QuoteTimeSemantics)
 			return q.QualityStatus, q.SourceVersion, append([]string(nil), q.QualityReasons...), nil
 		})
 	}
@@ -232,7 +376,16 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			validated, warnings := normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
+			var validated []model.DailyBar
+			var warnings []string
+			// Adapter 已在过滤前通过同一 Reporter 上报字段问题时，Probe 只复用旧校验结果，避免重复累计同一批字段问题。
+			if reporter := validation.ReporterFromContext(probeCtx); reporter != nil && reporter.Snapshot().TotalCount > 0 {
+				validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
+			} else {
+				var report validation.Report
+				validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, "", "", 5)
+				validation.AddContextReport(probeCtx, report)
+			}
 			latestDate := ""
 			var providerTime *time.Time
 			if len(validated) > 0 {
@@ -263,6 +416,23 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if version == "" {
 				return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing")
+			}
+			snapshotBars := make([]provider.CrossProviderDailyBar, 0, len(validated))
+			for _, bar := range validated {
+				if bar.Volume == nil {
+					snapshotBars = nil
+					break
+				}
+				snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
+					TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
+					Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+				})
+			}
+			if len(snapshotBars) == len(validated) {
+				recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
+					Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
+					AdjustmentBasis: string(model.AdjustmentNone), QualityStatus: string(quality), Bars: snapshotBars,
+				})
 			}
 			return quality, version, reasons, nil
 		})
@@ -308,7 +478,15 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if len(snapshot.Items) > 0 {
 					symbol = snapshot.Items[0].Symbol
 				}
-				recordProviderProbeEvidence(probeCtx, symbol, "", len(snapshot.Items), len(snapshot.Items), nil)
+				var sourceTime *time.Time
+				semantics := ""
+				if len(snapshot.Items) > 0 {
+					sourceTime = snapshot.Items[0].QuoteTime
+					semantics = snapshot.Items[0].QuoteTimeSemantics
+				}
+				recordProviderProbeEvidence(probeCtx, symbol, "", len(snapshot.Items), len(snapshot.Items), sourceTime)
+				recordProviderProbeTimeSemantics(probeCtx, semantics)
+				recordProviderProbeFetchedAt(probeCtx, snapshot.FetchedAt)
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
@@ -320,14 +498,18 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			if err != nil {
 				return model.QualityUnknown, "", nil, err
 			}
-			if err := validateMarketBreadth(snapshot); err != nil {
+			if err := validateMarketBreadthProbeSnapshot(snapshot); err != nil {
 				return model.QualityInvalid, "", nil, err
 			}
 			if snapshot != nil {
-				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, snapshot.CoveredSecurities, snapshot.CoveredSecurities, snapshot.NewestQuoteTime)
-				if snapshot.TotalSecurities > 0 {
-					recordProviderProbeCoverage(probeCtx, float64(snapshot.CoveredSecurities)/float64(snapshot.TotalSecurities))
-				}
+				missing := snapshot.TotalSecurities - snapshot.CoveredSecurities
+				excluded := snapshot.UnclassifiedCount
+				validated := snapshot.CoveredSecurities - excluded
+				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, snapshot.CoveredSecurities, validated, snapshot.OldestQuoteTime)
+				recordProviderProbeTimeSemantics(probeCtx, "oldest_component_quote_time")
+				recordProviderProbeFetchedAt(probeCtx, snapshot.FetchedAt)
+				recordProviderProbeCoverageCounts(probeCtx, snapshot.TotalSecurities, snapshot.CoveredSecurities, validated, missing, excluded, "provider_universe", "market_breadth.total_securities")
+				recordProviderProbeCoverageDimensions(probeCtx, buildMarketBreadthCoverageDimensions(snapshot))
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
@@ -344,6 +526,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if snapshot != nil {
 				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, len(snapshot.Items), len(snapshot.Items), nil)
+				recordProviderProbeFetchedAt(probeCtx, snapshot.FetchedAt)
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
@@ -360,6 +543,9 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if err := validateMarketCapitalFlowSnapshot(start.Format("2006-01-02"), end.Format("2006-01-02"), snapshot); err != nil {
 				return model.QualityInvalid, "", nil, err
+			}
+			if snapshot != nil {
+				recordProviderProbeFetchedAt(probeCtx, snapshot.FetchedAt)
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, []string{"market_capital_flow_history_probe"}, nil
 		})
@@ -663,6 +849,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 	run.Total = len(jobs)
 	results := make([]model.ProviderProbeItem, len(jobs))
+	dailySnapshots := make([]*provider.CrossProviderDailySnapshot, len(jobs))
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
 	for i, job := range jobs {
@@ -683,8 +870,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			// 等待并发槽位的时间不计入单项 Provider 超时，避免排队任务被误报为超时。
 			probeCtx, cancel := context.WithTimeout(ctx, time.Duration(options.TimeoutSeconds)*time.Second)
 			evidence := &providerProbeEvidence{}
+			reporter := validation.NewReporter(validation.DefaultMaxIssues)
 			probeCtx = context.WithValue(probeCtx, providerProbeEvidenceContextKey{}, evidence)
+			probeCtx = validation.WithReporter(probeCtx, reporter)
 			quality, version, reasons, err := job.run(probeCtx)
+			evidence.validationReport = reporter.Snapshot()
 			cancel()
 			<-sem
 			item.SampleSymbol = evidence.sampleSymbol
@@ -692,15 +882,39 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.SampleDate = evidence.sampleDate
 			item.RowsReturned = evidence.rowsReturned
 			item.RowsValidated = evidence.rowsValidated
+			item.CoverageTotal = evidence.coverageTotal
+			item.CoveragePopulation = evidence.coveragePopulation
+			item.CoverageSource = evidence.coverageSource
+			item.CoverageReturned = evidence.coverageReturned
+			item.CoverageValidated = evidence.coverageValidated
+			item.CoverageMissing = evidence.coverageMissing
+			item.CoverageExcluded = evidence.coverageExcluded
 			item.CoverageRatio = evidence.coverageRatio
+			item.CoverageDimensions = evidence.coverageDimensions
 			item.ProviderTime = evidence.providerTime
+			item.ProviderTimeType = evidence.providerTimeType
+			item.FetchedAt = evidence.fetchedAt
+			dailySnapshots[index] = evidence.dailySnapshot
 			item.ElapsedMS = time.Since(checkedAt).Milliseconds()
 			item.CheckedAt = time.Now().UTC()
 			item.SourceVersion = version
 			item.QualityReasons = reasons
+			item.ValidationTotalCount = evidence.validationReport.TotalCount
+			item.ValidationErrorCount = evidence.validationReport.ErrorCount
+			item.ValidationWarningCount = evidence.validationReport.WarningCount
+			item.ValidationInfoCount = evidence.validationReport.InfoCount
+			item.ValidationTruncated = evidence.validationReport.Truncated
+			for _, issue := range evidence.validationReport.Issues {
+				item.ValidationIssues = append(item.ValidationIssues, model.ProviderProbeFieldIssue{
+					Stage: string(issue.Stage), Field: issue.Field, ProviderField: issue.ProviderField,
+					Code: issue.Code, Expected: issue.Expected, ActualType: issue.ActualType,
+					ActualPreview: issue.ActualPreview, Severity: string(issue.Severity), Message: issue.Message,
+					RowIndex: issue.RowIndex, Symbol: issue.Symbol, TradeDate: issue.TradeDate,
+				})
+			}
 			if err != nil {
 				setProbeFailure(&item, err)
-				if selectedMarket == "BSE" && isUnsupportedBeijingProbeError(err) {
+				if (selectedMarket == "BSE" || strings.HasSuffix(probeSymbol, ".BJ")) && isUnsupportedBeijingProbeError(err) {
 					item.Status = "not_supported"
 					item.ErrorCode = "market_not_supported"
 					item.ErrorStage = "configuration"
@@ -767,14 +981,367 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if len(jobs) == 0 {
 		run.Status = "no_capabilities_configured"
 	}
+	run.CheckResults = buildProviderProbeCheckResults(run.Items, requestedChecks)
+	if selectedChecks["freshness"] {
+		s.applyFreshnessProbeResults(ctx, run)
+	}
+	if selectedChecks["cross_provider"] {
+		if selected["daily_bars"] {
+			run.CheckResults = append(run.CheckResults, buildCrossProviderProbeCheckResults(dailySnapshots, run.FinishedAt)...)
+		} else {
+			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+				Check:        "cross_provider",
+				Provider:     "system",
+				Status:       "skipped",
+				ErrorCode:    "daily_bars_capability_not_requested",
+				ErrorMessage: "Cross-provider comparison requires daily_bars capability in the same probe run",
+				CheckedAt:    run.FinishedAt,
+			})
+		}
+	}
+	if selectedChecks["storage"] && s.store == nil {
+		run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+			Check: "storage", Provider: "system", Capability: "provider_probe_history",
+			Status: "not_configured", ErrorCode: "storage_not_configured",
+			ErrorMessage: "MariaDB provider-probe history storage is not enabled", CheckedAt: run.FinishedAt,
+		})
+	}
 	if s.store != nil {
 		run.Persisted = true
 		if err := s.store.SaveProviderProbeRun(ctx, run); err != nil {
 			run.Persisted = false
+			if selectedChecks["storage"] {
+				run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+					Check: "storage", Provider: "system", Capability: "provider_probe_history",
+					Status: "failed", ErrorCode: "storage_write_failed",
+					ErrorMessage: sanitizeProbeError(err), CheckedAt: time.Now().UTC(),
+				})
+			}
 			return run, fmt.Errorf("persist provider-probe run: %w", err)
+		}
+		if selectedChecks["storage"] {
+			run.CheckResults = append(run.CheckResults, model.ProviderProbeCheckResult{
+				Check: "storage", Provider: "system", Capability: "provider_probe_history",
+				Status: "passed", CheckedAt: time.Now().UTC(),
+			})
+			if err := s.store.SaveProviderProbeRun(ctx, run); err != nil {
+				run.Persisted = false
+				return run, fmt.Errorf("persist provider-probe storage check result: %w", err)
+			}
 		}
 	}
 	return run, nil
+}
+
+func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model.ProviderProbeRun) {
+	if s == nil || run == nil {
+		return
+	}
+	hasPolicy, needsQuote := false, false
+	for _, result := range run.CheckResults {
+		if result.Check != "freshness" {
+			continue
+		}
+		if _, ok := freshnessDomainForCapability(result.Capability); ok {
+			hasPolicy = true
+		}
+		if result.Capability == "quote" {
+			needsQuote = true
+		}
+	}
+	if !hasPolicy {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	contextTimeout := time.Duration(run.TimeoutSeconds) * time.Second
+	if contextTimeout <= 0 {
+		contextTimeout = 12 * time.Second
+	}
+	contextCtx, cancel := context.WithTimeout(ctx, contextTimeout)
+	defer cancel()
+	now := run.FinishedAt
+	market := freshness.Context{Now: now, SecurityTradingStatus: "normal"}
+	session, err := s.MarketSession(contextCtx, now)
+	if err == nil && session != nil && session.QualityStatus == model.QualityValid {
+		market.CalendarKnown, market.IsTradingDay, market.MarketPhase = true, session.IsTradingDay, session.Phase
+	}
+	calendarKnown := market.CalendarKnown
+	isTradingDay := market.IsTradingDay
+	if needsQuote {
+		symbol := "600519.SH"
+		for _, item := range run.Items {
+			if item.Capability == "quote" && item.SampleSymbol != "" {
+				symbol = item.SampleSymbol
+				break
+			}
+		}
+		if len(run.RequestedSymbols) == 1 {
+			symbol = run.RequestedSymbols[0]
+		}
+		status, statusErr := s.SecurityTradingStatus(contextCtx, symbol, now.In(marketLocation()).Format("2006-01-02"))
+		if statusErr != nil || status == nil || status.QualityStatus != model.QualityValid || !status.TradingDayKnown {
+			market.SecurityTradingStatus = "unknown"
+		} else {
+			switch status.SuspensionStatus {
+			case model.SuspensionStatusSuspended:
+				market.SecurityTradingStatus = "suspended"
+			case model.SuspensionStatusIntraday:
+				market.SecurityTradingStatus = "intraday_suspension"
+			case model.SuspensionStatusNoEvent, model.SuspensionStatusResumed:
+				market.SecurityTradingStatus = "normal"
+			default:
+				market.SecurityTradingStatus = "unknown"
+			}
+		}
+	}
+	for i := range run.CheckResults {
+		check := &run.CheckResults[i]
+		if check.Check != "freshness" {
+			continue
+		}
+		domain, ok := freshnessDomainForCapability(check.Capability)
+		if !ok {
+			check.Status, check.ErrorCode = "skipped", "freshness_policy_not_configured"
+			continue
+		}
+		policy, ok := freshness.PolicyForDomain(domain)
+		if !ok {
+			check.Status, check.ErrorCode = "skipped", "freshness_policy_not_configured"
+			continue
+		}
+		evidence := freshness.Evidence{DataTime: check.ProviderTime, FetchedAt: check.FetchedAt, DataTimeType: check.ProviderTimeType}
+		check.CalendarKnown = &calendarKnown
+		check.IsTradingDay = &isTradingDay
+		if check.Capability == "quote" {
+			check.SecurityTradingStatus = market.SecurityTradingStatus
+		}
+		result := freshness.Evaluate(policy, evidence, market)
+		check.FreshnessStatus, check.FreshnessReason, check.FreshnessDomain, check.MarketPhase = string(result.Status), result.Reason, result.Domain, result.MarketPhase
+		maxAge := int64(result.MaxAge.Seconds())
+		check.FreshnessMaxAgeSeconds = &maxAge
+		if result.Status == freshness.StatusFresh || result.Status == freshness.StatusStale {
+			age := int64(result.Age.Seconds())
+			check.AgeSeconds = &age
+		}
+		switch result.Status {
+		case freshness.StatusFresh:
+			check.Status, check.ErrorCode, check.ErrorMessage = "passed", "", ""
+		case freshness.StatusStale:
+			check.Status, check.ErrorCode, check.ErrorMessage = "degraded", result.Reason, "Provider source data exceeds the configured freshness SLA"
+		case freshness.StatusUnknown:
+			check.Status, check.ErrorCode, check.ErrorMessage = "skipped", result.Reason, "Freshness cannot be determined from source-time or market-context evidence"
+		case freshness.StatusNotApplicable:
+			check.Status, check.ErrorCode, check.ErrorMessage = "skipped", result.Reason, "Freshness SLA is not applicable in the current market or security state"
+		}
+	}
+}
+
+func freshnessDomainForCapability(capability string) (string, bool) {
+	switch capability {
+	case "quote":
+		return freshness.DomainQuote, true
+	case "index_quotes":
+		return freshness.DomainIndex, true
+	case "market_breadth":
+		return freshness.DomainMarketBreadth, true
+	case "sector_rankings":
+		return freshness.DomainSector, true
+	case "market_capital_flow", "capital_flow":
+		return freshness.DomainFundFlow, true
+	default:
+		return "", false
+	}
+}
+func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedChecks []string) []model.ProviderProbeCheckResult {
+	results := make([]model.ProviderProbeCheckResult, 0, len(items)*len(requestedChecks))
+	for _, item := range items {
+		for _, check := range requestedChecks {
+			if check == "storage" || check == "cross_provider" {
+				continue
+			}
+			result := model.ProviderProbeCheckResult{
+				Check: check, Provider: item.Provider, Capability: item.Capability,
+				Status: "skipped", CheckedAt: item.CheckedAt, ProviderTime: item.ProviderTime,
+				ProviderTimeType: item.ProviderTimeType, FetchedAt: item.FetchedAt,
+			}
+			switch check {
+			case "connectivity":
+				switch item.Status {
+				case "returned", "returned_degraded", "returned_unknown":
+					result.Status = "passed"
+				case "not_configured":
+					result.Status, result.ErrorCode = "not_configured", item.ErrorCode
+				case "not_supported":
+					result.Status, result.ErrorCode = "not_supported", item.ErrorCode
+				case "skipped":
+					result.Status, result.ErrorCode = "skipped", item.ErrorCode
+				default:
+					if item.ErrorStage == "contract" || item.ErrorCode == "contract_invalid" {
+						result.Status = "passed"
+					} else {
+						result.Status, result.ErrorCode = "failed", item.ErrorCode
+					}
+				}
+			case "contract":
+				switch {
+				case item.Status == "returned" || item.Status == "returned_degraded" || item.Status == "returned_unknown":
+					result.Status = "passed"
+				case item.Status == "failed" && (item.ErrorStage == "contract" || item.ErrorCode == "contract_invalid"):
+					result.Status, result.ErrorCode = "failed", item.ErrorCode
+				case item.Status == "not_configured":
+					result.Status, result.ErrorCode = "not_configured", item.ErrorCode
+				case item.Status == "not_supported":
+					result.Status, result.ErrorCode = "not_supported", item.ErrorCode
+				default:
+					result.ErrorCode = "provider_response_unavailable"
+				}
+			case "quality":
+				switch item.Status {
+				case "returned":
+					result.Status = "passed"
+				case "returned_degraded":
+					result.Status = "degraded"
+				case "returned_unknown":
+					result.Status, result.ErrorCode = "degraded", "quality_unknown"
+				case "failed":
+					if item.ErrorStage == "contract" || item.ErrorCode == "contract_invalid" {
+						result.ErrorCode = "contract_failed_before_quality_check"
+					} else {
+						result.Status, result.ErrorCode = "failed", item.ErrorCode
+					}
+				case "not_configured":
+					result.Status, result.ErrorCode = "not_configured", item.ErrorCode
+				case "not_supported":
+					result.Status, result.ErrorCode = "not_supported", item.ErrorCode
+				default:
+					result.ErrorCode = item.ErrorCode
+				}
+			case "freshness":
+				if item.ProviderTime == nil || item.ProviderTime.IsZero() {
+					result.ErrorCode = "provider_time_unavailable"
+					break
+				}
+				age := int64(item.CheckedAt.Sub(*item.ProviderTime).Seconds())
+				result.AgeSeconds = &age
+				if age < 0 {
+					result.Status, result.ErrorCode = "degraded", "provider_time_in_future"
+				} else {
+					// 没有按能力定义 freshness SLA 前，只报告时间证据，不宣称数据新鲜。
+					result.ErrorCode = "freshness_sla_not_configured"
+				}
+			}
+			if result.Status == "skipped" && result.ErrorMessage == "" {
+				result.ErrorMessage = providerProbeCheckMessage(result.ErrorCode)
+			}
+			results = append(results, result)
+		}
+	}
+	return results
+}
+
+func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDailySnapshot, checkedAt time.Time) []model.ProviderProbeCheckResult {
+	results := make([]model.ProviderProbeCheckResult, 0)
+	validSnapshots := make([]*provider.CrossProviderDailySnapshot, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		if snapshot != nil {
+			validSnapshots = append(validSnapshots, snapshot)
+		}
+	}
+	for leftIndex := 0; leftIndex < len(validSnapshots); leftIndex++ {
+		for rightIndex := leftIndex + 1; rightIndex < len(validSnapshots); rightIndex++ {
+			left, right := validSnapshots[leftIndex], validSnapshots[rightIndex]
+			if left.Provider == right.Provider || left.Symbol != right.Symbol {
+				continue
+			}
+			comparison := provider.CompareCrossProviderDailyBars(*left, *right)
+			result := model.ProviderProbeCheckResult{
+				Check:              "cross_provider",
+				Provider:           left.Provider + "+" + right.Provider,
+				Capability:         "daily_bars",
+				CheckedAt:          checkedAt,
+				ComparedSymbol:     left.Symbol,
+				LeftProvider:       left.Provider,
+				RightProvider:      right.Provider,
+				LeftSourceVersion:  left.SourceVersion,
+				RightSourceVersion: right.SourceVersion,
+				AdjustmentBasis:    left.AdjustmentBasis,
+				LeftQualityStatus:  model.QualityStatus(left.QualityStatus),
+				RightQualityStatus: model.QualityStatus(right.QualityStatus),
+				ComparedDates:      append([]string(nil), comparison.ComparedDates...),
+				FieldCount:         len(comparison.Fields),
+			}
+			switch comparison.Status {
+			case provider.CrossProviderDailyMatched:
+				result.Status = "passed"
+			case provider.CrossProviderDailyPartial:
+				result.Status, result.ErrorCode = "degraded", "comparison_partial"
+			case provider.CrossProviderDailyMismatch:
+				result.Status, result.ErrorCode = "failed", "comparison_mismatch"
+			default:
+				result.Status, result.ErrorCode = "skipped", "comparison_not_comparable"
+			}
+			if comparison.Reason != "" {
+				result.ErrorMessage = comparison.Reason
+			}
+			for _, field := range comparison.Fields {
+				switch field.Status {
+				case "matched":
+					result.MatchedFieldCount++
+				case "mismatch":
+					result.MismatchCount++
+				case "not_comparable":
+					result.NotComparableCount++
+				}
+				fieldEvidence := model.ProviderProbeFieldComparison{
+					Field: field.Field, Status: field.Status, Reason: field.Reason,
+				}
+				// 数值只对可比较字段输出；amount 缺失/单位未知时不能输出默认零值。
+				if field.Status != "not_comparable" {
+					left, right := field.Left, field.Right
+					difference, tolerance := field.Difference, field.Tolerance
+					fieldEvidence.Left = &left
+					fieldEvidence.Right = &right
+					fieldEvidence.Difference = &difference
+					fieldEvidence.Tolerance = &tolerance
+				}
+				result.FieldComparisons = append(result.FieldComparisons, fieldEvidence)
+			}
+			results = append(results, result)
+		}
+	}
+	if len(results) == 0 {
+		results = append(results, model.ProviderProbeCheckResult{
+			Check:        "cross_provider",
+			Provider:     "system",
+			Capability:   "daily_bars",
+			Status:       "skipped",
+			ErrorCode:    "cross_provider_pair_unavailable",
+			ErrorMessage: "No two distinct providers returned comparable daily-bar snapshots for the same symbol",
+			CheckedAt:    checkedAt,
+		})
+	}
+	return results
+}
+
+func providerProbeCheckMessage(code string) string {
+	switch code {
+	case "provider_response_unavailable":
+		return "Provider response unavailable; contract check was not run"
+	case "quality_unknown":
+		return "Provider quality is unknown"
+	case "provider_time_unavailable":
+		return "Provider did not supply a source timestamp"
+	case "freshness_sla_not_configured":
+		return "Source timestamp is recorded, but no capability-specific freshness SLA is configured"
+	case "provider_time_in_future":
+		return "Provider timestamp is later than the local check time"
+	case "contract_failed_before_quality_check":
+		return "Quality check was not run because the response contract failed"
+	default:
+		return ""
+	}
 }
 
 func isUnsupportedBeijingProbeError(err error) bool {
