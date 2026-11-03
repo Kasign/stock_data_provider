@@ -126,6 +126,7 @@ try {
     let quoteRequestCount = 0;
     let marketScenario = "503";
     let marketIndexRequestCount = 0;
+    const sectorRequests = [];
     let capitalFlowScenario = "success";
     let capitalFlowRequestCount = 0;
     let capitalFlowRequest = null;
@@ -270,6 +271,40 @@ try {
       if (viewport.width === 320 && pathname.includes("/api/v1/bundles/")) {
         // Exercise the supported legacy fallback so the successful quote can seed a prior snapshot.
         return json(404, { error: { code: "route_not_found", message: "bundle endpoint unavailable" } });
+      }
+
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/sectors")) {
+        const query = new URL(route.request().url()).searchParams;
+        const request = {
+          type: query.get("type"),
+          direction: query.get("direction"),
+          sort_by: query.get("sort_by"),
+          limit: query.get("limit")
+        };
+        sectorRequests.push(request);
+        return json(200, {
+          category: request.type,
+          direction: request.direction,
+          sort_by: request.sort_by,
+          total: 2,
+          items: [
+            {
+              rank: 1, code: "BK0001", name: "测试行业一",
+              change_percent: 1.2, change_percent_5d: 5.6,
+              amount: 123456789, amount_unit: "CNY",
+              leading_stock: "贵州茅台", leader_change_percent: 2.3
+            },
+            {
+              rank: 2, code: "BK0002", name: "测试行业二",
+              change_percent: -0.8, change_percent_5d: -2.1,
+              amount: 456789, amount_unit: "unknown",
+              leading_stock: "平安银行", leader_change_percent: -1.1
+            }
+          ],
+          source: "browser-sector-fixture", source_version: "fixture-v1",
+          provider_report_date: "2026-10-30", fetched_at: "2026-10-30T08:00:00Z",
+          quality_status: "degraded", quality_reasons: ["浏览器合成数据"]
+        });
       }
 
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/indices")) {
@@ -456,6 +491,34 @@ try {
       { timeout: 10000 }
     );
     assert.equal(await page.locator("#market-view").isVisible(), true, "market overview must be the initial view");
+
+    if (viewport.width === 320) {
+      await page.locator('[data-sector-metric="amount"]').click();
+      await page.waitForFunction(() => document.querySelector("#market-sector-metric-heading")?.textContent === "成交额");
+      assert.equal(sectorRequests.at(-1)?.sort_by, "amount");
+      assert.equal(sectorRequests.at(-1)?.direction, "up");
+      const amountCells = await page.locator("#market-sector-body tr").first().textContent();
+      const unknownAmountCell = await page.locator("#market-sector-body tr").nth(1).textContent();
+      assert.match(amountCells, /元/, "verified CNY amount should show yuan unit");
+      assert.match(unknownAmountCell, /单位未确认/, "unknown amount unit must not be guessed");
+
+      await page.locator('[data-sector-metric="five-day"]').click();
+      await page.waitForFunction(() => document.querySelector("#market-sector-metric-heading")?.textContent === "近 5 日涨幅");
+      assert.equal(sectorRequests.at(-1)?.sort_by, "change_5d");
+      assert.match(await page.locator("#market-sector-body tr").first().textContent(), /5\.6/);
+
+      await page.locator('[data-sector-direction="down"]').click();
+      await page.waitForFunction(() => document.querySelector('[data-sector-direction="down"]')?.getAttribute("aria-pressed") === "true");
+      assert.equal(sectorRequests.at(-1)?.direction, "down");
+      assert.equal(sectorRequests.at(-1)?.sort_by, "change_5d");
+      assert.match(await page.locator("#market-sector-meta").textContent(), /从低到高/);
+
+      const beforeUnsupported = sectorRequests.length;
+      await page.locator('[data-sector-metric="flow"]').click();
+      await page.waitForFunction(() => document.querySelector("#market-sector-meta")?.textContent.includes("资金净流入"));
+      assert.equal(sectorRequests.length, beforeUnsupported, "unsupported board capital flow must not issue a fake request");
+      assert.match(await page.locator("#market-sector-body").textContent(), /不会用成交额替代资金净流入/);
+    }
 
     // Keyboard users must be able to reveal and activate the skip link before traversing the dashboard.
     await page.keyboard.press("Tab");
