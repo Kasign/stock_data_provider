@@ -64,7 +64,14 @@ export function bindStockResearch(getSettings,getSymbol){
   });
   setText("stock-research-target",state.symbol?"当前标的："+state.symbol:"请先输入代码，或从中文名称搜索结果中选择股票");
   setText("stock-research-feedback","请先在连接与密钥设置中配置行情 API Key。");
-  $("#load-more-announcements").disabled=true;$("#load-more-announcements").textContent="加载更多公告";
+  $("#load-more-announcements").disabled=true;$("#load-more-announcements").removeAttribute("aria-busy");$("#load-more-announcements").textContent="加载更多公告";
+  [
+   ["#load-stock-research", "加载公司资料"],
+   ["#load-fundamentals", "读取财务指标"],
+   ["#load-valuations", "读取估值指标"],
+   ["#load-chip-distribution", "读取筹码分布"],
+   ["#load-capital-flow", "读取资金流"]
+  ].forEach(([selector, label]) => safeResearchButton($(selector), false, label));
  }
  function reset(symbol){
   state.loadResearchGeneration+=1;
@@ -88,6 +95,7 @@ export function bindStockResearch(getSettings,getSymbol){
   setText("stock-research-feedback",symbol?"标的已切换；请重新加载对应资料，避免沿用上一只股票的结果。":"请先输入代码，或从中文名称搜索结果中选择股票。");
   [
    ["#load-stock-research",symbol?"重新加载公司资料":"加载公司资料"],
+   ["#load-fundamentals","读取财务指标"],
    ["#load-valuations","读取估值指标"],
    ["#load-chip-distribution","读取筹码分布"],
    ["#load-capital-flow","读取资金流"]

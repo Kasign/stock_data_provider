@@ -280,3 +280,19 @@
 - 事件接口 404 用于验证永久性错误后的人工恢复；5xx 自动重试另有轮询逻辑与单元测试覆盖。真实部署仍需联调。
 - WebUI Checks 成功：[运行记录 #41563759227](https://github.com/Kasign/stock_data_provider/actions/runs/41563759227)。
 - Chromium Browser Smoke 成功：[运行记录 #41563759314](https://github.com/Kasign/stock_data_provider/actions/runs/41563759314)，响应式布局、Run Flow 交互及本节四类结果/恢复场景均通过。
+
+
+## 12. 2026-11-03 个股研究请求生命周期回归
+
+### 本轮修复与验收
+
+- [ ] 切换研究标的时，中止旧标的补充资料请求，并清理旧标的内容。
+- [ ] 财务指标请求被取消后，恢复财务指标按钮，避免因请求代际变化而永久禁用。
+- [ ] 缺少行情 API Key 时，统一显示配置提示，资料/财务/估值/筹码/资金流按钮保持可重试。
+- [ ] 补充资料接口返回 503 时显示 Provider 未启用/未配置错误，不把失败显示为空数据。
+- [ ] 新增 `web/tests/stock-research-browser.mjs` 并接入 Chromium Browser Smoke。
+
+### 验收边界
+
+- 浏览器使用隔离模拟 API 和延迟响应，仅验证请求取消、状态清理及按钮恢复，不代表真实 Provider 数据质量。
+- 个股研究真实 API 联调、报告期数据完整性、估值/筹码/资金流口径仍需在部署环境核验。

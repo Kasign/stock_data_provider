@@ -53,6 +53,10 @@ jobs:
         working-directory: web
         run: node tests/run-flow-outcomes-browser.mjs
 
+      - name: Run Stock Research interaction acceptance
+        working-directory: web
+        run: node tests/stock-research-browser.mjs
+
       - name: Upload browser screenshots
         if: always()
         uses: actions/upload-artifact@v4
