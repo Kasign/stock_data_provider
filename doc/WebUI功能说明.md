@@ -1,6 +1,6 @@
 # WebUI 功能与页面说明
 
-更新日期：2026-11-02
+更新日期：2026-11-03
 开发分支：feat/webui-market-data-console
 技术栈：原生 HTML、CSS、JavaScript ES Modules；不使用 React。页面不伪造行情或服务端配置。
 
@@ -98,8 +98,11 @@
 - 检查行情服务 live/ready、分析服务 healthz/readyz。
 - 读取 Provider 注册和静态能力清单。
 - 区分服务健康、Provider 注册、能力声明、实际业务请求结果；当前数据中心不直连 MariaDB/Redis。
-- 页面已接入只读 `GET /api/v1/data-sources/diagnostics`，展示 `quote`、`daily_bars`、`index_quotes`、`market_breadth`、`sector_rankings` 五类真实业务请求形成的进程内熔断统计；接口本身不主动探测 Provider。
-- 同花顺只展示服务端注册/启用状态和静态能力声明，不执行上游真实请求测试，不验证第三方 API Key；未配置 Key 不等同 Provider 故障。读取诊断快照所需的 WebUI 行情服务 API Key 与同花顺第三方 API Key 是两种不同凭据。
+- 页面接入只读 `GET /api/v1/data-sources/diagnostics`，展示真实业务请求形成的进程内熔断统计；该接口只覆盖服务端已纳入统计的能力，不主动探测 Provider。
+- 页面另接入 `POST /api/v1/data-sources/probe` 主动探测。用户显式点击后，可选择全部/核心能力、连通性/契约/质量/新鲜度/跨源对账/存储六类诊断维度、单项超时，以及可选市场板块和单只股票样本；不在打开数据中心或执行普通健康检查时自动访问上游。
+- 主动探测逐项展示 Provider/能力状态、质量原因、HTTP/错误阶段、源端时间、可验证的总体覆盖率和跨源字段比较。未配置、不支持、跳过与失败分开显示；缺少可验证覆盖分母时不推算总体覆盖率。
+- 页面接入 `GET /api/v1/data-sources/probe/history`，展示最近 20 批持久化探测结果。MariaDB 未配置或历史存储不可用时，历史读取会单独提示；历史接口 503 不会覆盖本次探测结果。
+- 同花顺仍只由服务端管理第三方 API Key。WebUI 可通过主动探测检查服务端已启用的同花顺能力，但不会读取、保存或回显第三方 API Key；未配置凭据/被跳过不能直接判定为 Provider 故障。WebUI 行情服务 API Key 与同花顺第三方 API Key 是两种不同凭据。
 
 ## 4. 设置中心
 
@@ -134,7 +137,7 @@
 - web/src/market-overview.js：指数、市场宽度、市场级资金流历史、板块、涨跌停池、人气榜。
 - web/src/market-activity.js：龙虎榜、交易日历。
 - web/src/stock-research.js：个股研究补充数据。
-- web/src/data-center.js：服务检查与 Provider 能力清单。
+- web/src/data-center.js：服务检查、Provider 能力清单、被动熔断诊断、主动探测结果与历史批次。
 - web/src/preferences.js：浏览器展示/查询偏好。
 - web/src/watchlist.js、web/src/recent-tasks.js：本地自选与任务引用。
 - web/src/task-workflow.js：分析任务阶段事件分页响应校验、Run 身份校验、事件去重与续读判断。
