@@ -182,12 +182,13 @@ func TestTencentQuoteRejectsUnverifiedVolumeUnits(t *testing.T) {
 
 func TestTencentQuoteRejectsInvalidPriceContract(t *testing.T) {
 	tests := []struct {
-		name  string
-		price string
-		high  string
+		name          string
+		price         string
+		high          string
+		wantErrorText string
 	}{
-		{name: "non-finite current price", price: "NaN", high: "10.5"},
-		{name: "current price above high", price: "10.8", high: "10.5"},
+		{name: "non-finite current price", price: "NaN", high: "10.5", wantErrorText: "not finite"},
+		{name: "current price above high", price: "10.8", high: "10.5", wantErrorText: "quote data contract"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -205,8 +206,8 @@ func TestTencentQuoteRejectsInvalidPriceContract(t *testing.T) {
 			defer server.Close()
 			p := NewTencent(2 * time.Second)
 			p.quoteURL = server.URL + "/quote"
-			if _, err := p.FetchQuote(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), "quote data contract") {
-				t.Fatalf("expected invalid quote contract error, got %v", err)
+			if _, err := p.FetchQuote(context.Background(), "600519.SH"); err == nil || !strings.Contains(err.Error(), tc.wantErrorText) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantErrorText, err)
 			}
 		})
 	}

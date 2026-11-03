@@ -947,3 +947,36 @@ ProviderTime 仍表示源端时间，FetchedAt 仍表示本服务采集时间，
 Reporter 为请求级上下文容器；Provider 即使返回 error，已追加的字段问题仍可由调用方读取。摘要复用 160 字符上限和控制字符清理，不保存完整响应、Header 或认证信息。
 
 本批不改变 NetEase volume/amount 的降级语义，不放宽 Tencent 成交量单位确认要求，也不重复执行公共 Quote Validator。Sina、Tencent、NetEase Quote 的必填原始数值字段已覆盖；Yahoo Quote 及其他 Quote 能力 Provider 仍需按实际能力清单继续审计。
+
+
+## Tencent Quote 非有限数值回归断言修正（2026-11-03）
+
+最新代码基线：`4d3a69cdeff1d2d4af3e168a1dde7399cf67e105`。
+
+CI 复核发现 `TestTencentQuoteRejectsInvalidPriceContract` 对两类拒绝阶段使用了同一错误文本断言，导致非有限数值用例失败：
+
+- `NaN` 在 Tencent 原始字段解析阶段立即拒绝，错误为字段级 `not finite`；该路径同时写入 error 级 Parse Issue。
+- 合法数值但违反 Quote 业务契约（例如 current_price 高于 high）才进入公共 Validator，错误包含 `quote data contract`。
+
+本次仅修正测试表，为不同失败阶段分别声明预期错误文本；不修改 Provider 解析、Reporter 上报、公共 Validator 或数据质量门禁。
+
+### 4d3a69c CI 结果复核
+
+| 工作流/Job | 结果 | 说明 |
+|---|---|---|
+| Go test suite：go-core | 通过 | gofmt、test、race、vet 全部通过 |
+| Go test suite：根模块 | 通过 | gofmt、test、race、vet 全部通过 |
+| Go test suite：market-data | 失败 | 仅 `TestTencentQuoteRejectsInvalidPriceContract/non-finite current price` 的错误文本断言不匹配 |
+| Go test suite：MariaDB/PIT | 通过 | 迁移与 PIT 持久化集成通过 |
+| Docker market-data 镜像构建 | 失败 | 构建阶段执行的 market-data 全量测试遇到同一断言失败，镜像构建未进入后续步骤 |
+| Go/Python 质量契约 | 失败 | Python 工具与 parity contract 通过；market-data Go 测试遇到同一断言失败，旧 Python marker 检查因此跳过 |
+| Live Provider probe | 通过 | 仅表示本次实时探测工作流成功，不替代各 Provider 的字段级验收 |
+| WebUI checks | 通过 | 本轮未修改 WebUI |
+
+失败根因已定位为测试断言与解析阶段错误语义不一致，不是解析逻辑回归。修正后必须重新执行 Go test suite、Go/Python 质量契约及 Docker 构建；只有最新 SHA 对应结果全部通过，才能关闭该回归项。
+
+### 后续统一诊断顺序
+
+1. 完成 Yahoo Quote 原始 JSON 字段解析诊断，区分 missing、null、number、string、object、array、boolean，并对非有限/非法数值生成结构化 Parse Issue。
+2. 对照 Provider 能力注册表检查 Quote Provider 的 Reporter 传递、重复校验和重复计数。
+3. 完成 Quote Provider 全覆盖后，再进入 DailyBar 边界质量审计及 Fundamentals / Valuations 字段质量审计。
