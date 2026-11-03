@@ -223,15 +223,22 @@ function setText(selector, value) {
 }
 
 function selectStockFromMarket(item, source = "市场榜单", targetView = "stocks") {
-  const symbol = String(item?.symbol || "").trim();
-  if (!symbol) return;
+  let symbol = "";
+  try {
+    symbol = normalizeSymbol(item?.symbol || "");
+  } catch {
+    setNotice("市场入口未返回有效 A 股证券代码，未执行跳转。", "danger");
+    return;
+  }
+  const name = String(item?.name || "").trim() || symbol;
+  const origin = String(source || "市场榜单").trim() || "市场榜单";
   setView(targetView === "research" ? "research" : "stocks");
   $("#symbol-input").value = symbol;
-  state.selectedStockSearchItem = { symbol, name: item.name || symbol };
+  state.selectedStockSearchItem = { symbol, name };
   cancelStockSearchRequest();
   hideStockSearch();
   stockResearch.syncSymbol();
-  setText("#query-hint", "已从" + source + "选择 " + (item.name || symbol) + "，正在加载实时行情与日 K。");
+  setText("#query-hint", "已从" + origin + "选择 " + name + "，正在加载实时行情与日 K。");
   void runQuoteQuery();
 }
 

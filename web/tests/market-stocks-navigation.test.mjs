@@ -46,3 +46,22 @@ test("全市场入口继续通过统一行情查询建立研究上下文", () =>
   assert.match(app, /stockResearch\.syncSymbol\(\);\s*setText\("#query-hint"/);
   assert.match(app, /void runQuoteQuery\(\);/);
 });
+
+test("市场入口拒绝无效证券代码，并统一规范化有效代码", () => {
+  assert.match(app, /function selectStockFromMarket\(item, source = "市场榜单", targetView = "stocks"\) \{\s*let symbol = "";\s*try \{\s*symbol = normalizeSymbol\(item\?\.symbol \|\| ""\);/);
+  assert.match(app, /市场入口未返回有效 A 股证券代码，未执行跳转/);
+  assert.match(app, /const origin = String\(source \|\| "市场榜单"\)\.trim\(\) \|\| "市场榜单"/);
+  assert.match(app, /state\.selectedStockSearchItem = \{ symbol, name \}/);
+});
+
+test("板块领涨股仅展示名称；API 未提供证券代码时不得伪造研究入口", async () => {
+  const [overview, openApi] = await Promise.all([
+    readFile(new URL("../src/market-overview.js", import.meta.url), "utf8"),
+    readFile(new URL("../../services/market-data/openapi.yaml", import.meta.url), "utf8")
+  ]);
+  const sectorSchema = openApi.slice(openApi.indexOf("    SectorRanking:"), openApi.indexOf("    SectorRankingSnapshot:"));
+  assert.match(sectorSchema, /leading_stock: \{type: string\}/);
+  assert.doesNotMatch(sectorSchema, /leading_stock_(?:symbol|code)/);
+  assert.match(overview, /cell\(tr,item\.leading_stock\|\|"—"\)/);
+  assert.doesNotMatch(overview, /data-sector-leading-stock/);
+});
