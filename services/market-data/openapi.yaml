@@ -601,7 +601,23 @@ components:
         age_seconds: {type: integer, description: Source timestamp age; does not imply freshness SLA passed}
         compared_dates: {type: array, items: {type: string, format: date}}
         field_count: {type: integer, minimum: 0}
-        mismatch_count: {type: integer, minimum: 0}
+        mismatch_count: {type: integer, minimum: 0, description: Number of fields whose values exceed the comparison tolerance}
+        matched_field_count: {type: integer, minimum: 0}
+        not_comparable_count: {type: integer, minimum: 0, description: Number of fields excluded from value comparison because required values or units are unavailable}
+        field_comparisons:
+          type: array
+          description: Bounded field-level evidence for each compared date; non-comparable fields omit numeric values rather than exposing default zeroes
+          items:
+            type: object
+            required: [field, status]
+            properties:
+              field: {type: string, description: Normalized field path, for example 2026-10-29.close}
+              status: {type: string, enum: [matched, mismatch, not_comparable]}
+              left: {type: number, nullable: true}
+              right: {type: number, nullable: true}
+              difference: {type: number, nullable: true}
+              tolerance: {type: number, nullable: true}
+              reason: {type: string}
         checked_at: {type: string, format: date-time}
     ProviderProbeFieldIssue:
       type: object

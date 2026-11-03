@@ -727,3 +727,22 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 
 - Run `41376039461`（SHA `7a8104a`）的 market-data Job 在 gofmt 阶段仅发现 `provider_probe.go` 一个结果结构体字面对齐和 `provider_probe_test.go` 文件尾多余空行。
 - 已按 gofmt 规范修正；未进入该 Job 的编译/单测阶段。MariaDB PIT、根模块和 go-core 在该 SHA 均通过。
+
+
+### 2026-11-03：统一诊断体系收口（第一批）
+
+本轮以当前 Go 诊断实现为基线，继续完善诊断结果的可解释性，不扩大 Provider 请求数量，也不改变业务数据质量门禁。
+
+- [x] 质量状态为 `unknown` 时，quality check 显式返回 `degraded / quality_unknown`，不再与未执行的 `skipped` 混淆。
+- [x] Cross Provider 日 K 对账新增字段级证据：字段路径、比较状态、左右值、差值、容差和不可比较原因。
+- [x] 对 amount 缺失或单位不是 CNY 的字段，只返回 `not_comparable` 与原因，不把 Go 默认零值作为左右金额暴露。
+- [x] Cross Provider 汇总新增 matched / mismatch / not_comparable 字段计数；既有 `field_count` 仍表示参与结果的字段总数。
+- [x] 同步 OpenAPI 字段契约和 Service 回归测试。
+
+本轮边界与未完成项：
+- Freshness 仍只输出源端时间和 age_seconds，并明确 `freshness_sla_not_configured`。暂不设置统一固定阈值：报价、日 K、财务披露、资金流和筹码数据具有不同更新语义；交易时段、非交易日、盘后及节假日也必须纳入策略，否则会制造错误过期告警。下一步应先定义按 capability + 时间语义 + 市场交易阶段的 SLA 策略，再启用 passed/degraded 判定。
+- Coverage 分母仍只在有可证明总体数量的市场广度能力上输出。分页返回数、抽样数和当前页行数不得冒充全市场分母；其他能力需逐项确认 total、returned、validated、missing、excluded 的来源契约。
+- 当前在线 Cross Provider 仍只覆盖同轮、同证券、同复权基准的日 K 快照；字段级证据完善不代表多证券、跨复权基准或真实 Provider 已对账通过。
+- 本轮不调整 Python 迁移矩阵，不新增 Python 代码清理工作。
+
+本轮代码改动待本提交 SHA 的 Go test/race/vet、OpenAPI 契约测试和 Docker market-data 构建验证；未完成的检查不得提前标记通过。

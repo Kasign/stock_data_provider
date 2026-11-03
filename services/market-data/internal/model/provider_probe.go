@@ -62,20 +62,35 @@ type ProviderProbeItem struct {
 	CheckedAt              time.Time                 `json:"checked_at"`
 }
 
+// ProviderProbeFieldComparison 是跨 Provider 对账的单字段证据。
+// 不可比较字段不输出数值，避免把缺失值误展示为 0。
+type ProviderProbeFieldComparison struct {
+	Field      string   `json:"field"`
+	Status     string   `json:"status"`
+	Left       *float64 `json:"left,omitempty"`
+	Right      *float64 `json:"right,omitempty"`
+	Difference *float64 `json:"difference,omitempty"`
+	Tolerance  *float64 `json:"tolerance,omitempty"`
+	Reason     string   `json:"reason,omitempty"`
+}
+
 // ProviderProbeCheckResult 是从一次 Provider 响应中提取的独立诊断维度。
 type ProviderProbeCheckResult struct {
-	Check         string     `json:"check"`
-	Provider      string     `json:"provider,omitempty"`
-	Capability    string     `json:"capability,omitempty"`
-	Status        string     `json:"status"`
-	ErrorCode     string     `json:"error_code,omitempty"`
-	ErrorMessage  string     `json:"error_message,omitempty"`
-	ProviderTime  *time.Time `json:"provider_time,omitempty"`
-	AgeSeconds    *int64     `json:"age_seconds,omitempty"`
-	ComparedDates []string   `json:"compared_dates,omitempty"`
-	FieldCount    int        `json:"field_count,omitempty"`
-	MismatchCount int        `json:"mismatch_count,omitempty"`
-	CheckedAt     time.Time  `json:"checked_at"`
+	Check              string                         `json:"check"`
+	Provider           string                         `json:"provider,omitempty"`
+	Capability         string                         `json:"capability,omitempty"`
+	Status             string                         `json:"status"`
+	ErrorCode          string                         `json:"error_code,omitempty"`
+	ErrorMessage       string                         `json:"error_message,omitempty"`
+	ProviderTime       *time.Time                     `json:"provider_time,omitempty"`
+	AgeSeconds         *int64                         `json:"age_seconds,omitempty"`
+	ComparedDates      []string                       `json:"compared_dates,omitempty"`
+	FieldCount         int                            `json:"field_count,omitempty"`
+	MismatchCount      int                            `json:"mismatch_count,omitempty"`
+	MatchedFieldCount  int                            `json:"matched_field_count,omitempty"`
+	NotComparableCount int                            `json:"not_comparable_count,omitempty"`
+	FieldComparisons   []ProviderProbeFieldComparison `json:"field_comparisons,omitempty"`
+	CheckedAt          time.Time                      `json:"checked_at"`
 }
 
 // ProviderProbeRun 是隔离于业务流量的主动探测批次。

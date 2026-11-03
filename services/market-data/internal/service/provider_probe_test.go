@@ -507,3 +507,55 @@ func TestProviderProbeFieldIssueJSONContainsSafeDiagnosticFields(t *testing.T) {
 		t.Fatalf("validation issue details missing from probe response: %s", data)
 	}
 }
+
+// TestBuildCrossProviderProbeCheckResultsIncludesFieldLevelEvidence 确保对账结果可追溯到具体字段。
+func TestBuildCrossProviderProbeCheckResultsIncludesFieldLevelEvidence(t *testing.T) {
+	left := &provider.CrossProviderDailySnapshot{
+		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "none", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{
+			TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10.5,
+			Volume: 100, VolumeUnit: "shares",
+		}},
+	}
+	right := &provider.CrossProviderDailySnapshot{
+		Provider: "right", SourceVersion: "right-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "none", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{
+			TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10.5,
+			Volume: 100, VolumeUnit: "shares",
+		}},
+	}
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	if len(results) != 1 {
+		t.Fatalf("expected one comparison result, got %+v", results)
+	}
+	result := results[0]
+	if result.Status != "degraded" || result.FieldCount != 6 || result.MatchedFieldCount != 5 ||
+		result.NotComparableCount != 1 || result.MismatchCount != 0 || len(result.FieldComparisons) != 6 {
+		t.Fatalf("unexpected field-level comparison summary: %+v", result)
+	}
+	var amount *model.ProviderProbeFieldComparison
+	for i := range result.FieldComparisons {
+		if strings.HasSuffix(result.FieldComparisons[i].Field, ".amount") {
+			amount = &result.FieldComparisons[i]
+			break
+		}
+	}
+	if amount == nil || amount.Status != "not_comparable" || amount.Reason != "amount_missing_or_unit_not_cny" {
+		t.Fatalf("missing amount evidence should remain explicitly not comparable: %+v", result.FieldComparisons)
+	}
+	if amount.Left != nil || amount.Right != nil || amount.Difference != nil {
+		t.Fatalf("non-comparable amount must not be serialized as zero values: %+v", amount)
+	}
+}
+
+func TestBuildProviderProbeCheckResultsMarksUnknownQualityAsDegraded(t *testing.T) {
+	results := buildProviderProbeCheckResults([]model.ProviderProbeItem{{
+		Provider: "unknown-quality", Capability: "quote", Status: "returned_unknown",
+		QualityStatus: model.QualityUnknown, CheckedAt: time.Now().UTC(),
+	}}, []string{"quality"})
+	if len(results) != 1 || results[0].Status != "degraded" || results[0].ErrorCode != "quality_unknown" {
+		t.Fatalf("unknown quality must not be confused with a skipped check: %+v", results)
+	}
+}

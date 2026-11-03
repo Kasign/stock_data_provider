@@ -980,7 +980,7 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 				case "returned_degraded":
 					result.Status = "degraded"
 				case "returned_unknown":
-					result.ErrorCode = "quality_unknown"
+					result.Status, result.ErrorCode = "degraded", "quality_unknown"
 				case "failed":
 					if item.ErrorStage == "contract" || item.ErrorCode == "contract_invalid" {
 						result.ErrorCode = "contract_failed_before_quality_check"
@@ -1054,9 +1054,27 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 				result.ErrorMessage = comparison.Reason
 			}
 			for _, field := range comparison.Fields {
-				if field.Status == "mismatch" {
+				switch field.Status {
+				case "matched":
+					result.MatchedFieldCount++
+				case "mismatch":
 					result.MismatchCount++
+				case "not_comparable":
+					result.NotComparableCount++
 				}
+				fieldEvidence := model.ProviderProbeFieldComparison{
+					Field: field.Field, Status: field.Status, Reason: field.Reason,
+				}
+				// 数值只对可比较字段输出；amount 缺失/单位未知时不能输出默认零值。
+				if field.Status != "not_comparable" {
+					left, right := field.Left, field.Right
+					difference, tolerance := field.Difference, field.Tolerance
+					fieldEvidence.Left = &left
+					fieldEvidence.Right = &right
+					fieldEvidence.Difference = &difference
+					fieldEvidence.Tolerance = &tolerance
+				}
+				result.FieldComparisons = append(result.FieldComparisons, fieldEvidence)
 			}
 			results = append(results, result)
 		}
