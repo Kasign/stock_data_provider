@@ -279,7 +279,7 @@ test("任务切换与分析 API 切换不会被按钮解锁异常中断", () => 
   const stop = app.match(/function stopTaskPolling\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(stop, "停止轮询共用函数必须存在");
   assert.match(stop, /state\.pollGeneration \+= 1;[\s\S]*?try \{[\s\S]*?setTaskRefreshBusy\(false\);[\s\S]*?catch/);
-  assert.match(stop, /const timer = state\.pollTimer;\s*state\.pollTimer = null/);
+  assert.match(stop, /const timer = state\\.pollTimer;[\\s\\S]*?state\\.pollTimer = null/);
 
   const contexts = [
     ["创建任务", "async function createTask(event) {", "function startAnalysisForSymbol("],
@@ -1766,7 +1766,7 @@ test("终态任务按 next_after_sequence 排空阶段事件分页后才读取 R
   const pollEnd = app.indexOf("\nasync function createTask(", pollStart);
   const poller = pollStart >= 0 && pollEnd > pollStart ? app.slice(pollStart, pollEnd) : "";
   assert.match(poller, /const requestedEventCursor = state\.taskEventCursor/);
-  assert.match(poller, /getAnalysisTaskEvents\(requestSettings, taskId, requestedEventCursor\)/);
+  assert.match(poller, /getAnalysisTaskEvents\\(requestSettings, taskId, requestedEventCursor, \\{ signal: controller\\.signal \\}\\)/);
   assert.match(taskWorkflow, /!Number\.isSafeInteger\(nextAfterSequence\)/);
   assert.match(poller, /state\.taskEventCursor = eventPage\.nextAfterSequence/);
   assert.match(taskWorkflow, /hasMore: payload\.events\.length >= TASK_EVENT_PAGE_SIZE && nextAfterSequence > afterSequence/);
