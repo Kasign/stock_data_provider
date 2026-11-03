@@ -47,6 +47,9 @@ func TestRebuildAdjustedDailyBarsUsesAsOfFactorReferenceAndProvenance(t *testing
 	if back[0].Close != 200 || back[1].Close != 440 {
 		t.Fatalf("unexpected hfq values: %+v", back)
 	}
+	if back[0].AdjustmentRefDate != "" || back[1].AdjustmentRefDate != "" {
+		t.Fatalf("cumulative-factor backward adjustment must not claim a request-end reference date: %+v", back)
+	}
 }
 
 func TestRebuildAdjustedDailyBarsRejectsUnprovenFactor(t *testing.T) {

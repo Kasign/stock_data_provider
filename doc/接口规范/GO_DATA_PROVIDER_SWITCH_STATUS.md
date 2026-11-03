@@ -117,4 +117,12 @@ Go 原生行情服务已覆盖国内 A 股多个主要数据域，具有独立 P
 - 根模块 `example.com/stock-analysis-flow` 与两个独立模块没有模块依赖关系，本次不修改根模块声明。
 - Docker 构建上下文分别位于独立模块目录，现有 Dockerfile 无需因模块路径变化调整。
 - 迁移验收脚本增加旧模块路径扫描和新模块声明检查。
-- 当前状态：代码与文档已整理，等待提交后 CI 全量验收；在最新 SHA 的测试、静态检查和镜像构建全部通过前，不宣布迁移最终完成。
+- 当前状态：迁移提交 `f802dde3384697d35d8b22e2a8067d3afbe1d6bf` 的 Go test/race/vet、Go/Python 质量契约、Docker Compose、两个 Go 镜像构建及 WebUI checks 均通过。Live Provider probe 仍有外部网络故障，不影响模块迁移构建验收。
+
+
+## 9. DailyBar 复权基准审计（2026-11-03）
+
+- PIT 累计因子重建的前复权参考日来自不晚于请求结束日的最新可用因子；后复权使用累计因子本身，不应填写请求结束日为复权参考日。
+- 已修正 `rebuildAdjustedDailyBars`：仅前复权设置 `AdjustmentRefDate`；后复权保持空值。OHLC 缩放公式和因子来源/版本/系统观察时间不变。
+- Tushare `daily.pct_chg` 按除权昨收计算，当前调整后序列保留该字段有官方口径依据，不在本轮重算。
+- 其他 Provider 的实际复权参考日和返回口径仍在逐项核验，未完成整体复权质量验收。

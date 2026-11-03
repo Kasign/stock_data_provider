@@ -1058,7 +1058,7 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 该问题已由提交 `16e5a957404c822a0ec0542dda9fbe2813762dae` 修正：测试按解析阶段与公共校验阶段分别声明错误文本，不修改行情校验逻辑和质量门禁。
 - 2026-11-03 当前 HEAD `986162438824f895d50fbe31ac24225c10c9548b` 的 Go test suite（含 market-data、race、vet）、Docker 构建、Go/Python 质量契约、Live Provider probe 和 WebUI checks 均已通过。用户提供的同类失败日志不能代表该 HEAD 的当前构建状态。
 
-### Go 模块路径清理（代码迁移已完成，等待构建验收）
+### Go 模块路径清理（已完成代码迁移与 CI 验收）
 
 - `go-core/go.mod` 已迁移为 `github.com/Kasign/stock_data_provider/go-core`。
 - `services/market-data/go.mod` 已迁移为 `github.com/Kasign/stock_data_provider/services/market-data`。
@@ -1068,7 +1068,7 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - Dockerfile、Compose、GitHub Actions 和部署脚本未发现旧模块路径硬编码；现有 CI 已分别覆盖根模块、go-core、market-data 的测试、race、vet，并构建两个 Go 镜像。
 - `scripts/verify-go-migration.sh` 增加旧 Go 模块路径残留检查及新 module 声明断言。
 - 文档中对原 Python 项目 `Kasign/daily_stock_analysis` 的历史来源说明保留，不将项目历史名称误判为 Go module import。
-- 本记录对应迁移代码批次；提交后仍须以最新 SHA 的 Go test/race/vet、质量契约和 Docker 构建结果作为最终验收依据。
+- 迁移提交 `f802dde3384697d35d8b22e2a8067d3afbe1d6bf` 的 Go test suite（含三个 module 的 test/race/vet）、Go/Python 质量契约、Docker Compose、两个 Go 镜像构建及 WebUI checks 均通过。Live Provider probe 的工作流成功结束，但探测 Job 有 Eastmoney EOF、BaoStock TCP timeout、NetEase DNS/HTTP 502 等外部失败；不能据此认定所有 Provider 可用。
 
 
 ## 2026-11-03 Pytdx Quote 原始结构化字段诊断补齐
@@ -1149,3 +1149,12 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 交易日历为 Valid 且明确非交易日时，不再把周中节假日返回的日期误标为 Partial；确认是交易日时继续标记 `IsPartial` 并降级质量。
 - 交易日历不可用或为 Degraded 时保留原工作日兜底，并在质量原因写入 `partial_bar_detection_uses_weekday_fallback_calendar_unavailable`，明确这是保守推断而非确认交易日。
 - 新增交易日/非交易日 Partial 判定测试；不把停牌日与非交易日混为一谈。
+
+
+### 2026-11-03：DailyBar 复权基准首轮审计
+
+- 已核对 Tushare 累计复权因子的计算语义：前复权使用当日因子除以参考日因子；后复权直接使用累计因子。后复权不应把请求结束日伪装成因子基准日。
+- `rebuildAdjustedDailyBars` 此前对前、后复权都写入 `AdjustmentRefDate`，与 Tushare Provider 的 HFQ 路径（不设置该字段）不一致。本轮将其修正为仅前复权写入实际参考因子日期；后复权保留空值，不改变 OHLC 计算。
+- 新增 PIT 后复权元数据断言，确保计算结果不变且不再产生错误参考日期。
+- Tushare `daily.pct_chg` 官方定义为基于除权昨收计算，不能简单按“未复权涨跌幅”清空或重算；本轮保留现有百分比处理。
+- 尚未完成：逐 Provider 核实请求参数、响应实际复权口径、参考日及来源版本；重点检查 Tencent、Eastmoney、BaoStock、Hithink、TickFlow、Pytdx 和 Yahoo。未核实前不统一推断参考日，也不放宽 adjusted MariaDB fallback 门禁。

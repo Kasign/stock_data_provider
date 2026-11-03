@@ -101,7 +101,12 @@ func rebuildAdjustedDailyBars(raw []model.DailyBar, factors []model.AdjustmentFa
 		bar.ChangePercent = nil
 		bar.AdjustmentBasis = basis
 		bar.AdjustmentMethod = "cumulative_adj_factor_v1"
-		bar.AdjustmentRefDate = reference.TradeDate
+		if basis == model.AdjustmentForward {
+			// 前复权必须暴露实际采用的参考因子日期；累计因子后复权使用固定基准，不冒充请求结束日。
+			bar.AdjustmentRefDate = reference.TradeDate
+		} else {
+			bar.AdjustmentRefDate = ""
+		}
 		bar.AdjustmentFactorSource = factor.Source
 		bar.AdjustmentFactorSourceVersion = factor.SourceVersion
 		observed := *factor.SystemObservedAt
