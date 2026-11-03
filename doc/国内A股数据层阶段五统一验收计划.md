@@ -847,3 +847,8 @@ Normalize 层另发现一个相同类别的边界：DailyBar 缺失 Source 时�
 - 市场级资金流历史此前检查日期区间、日期唯一且升序、金额有限、来源版本和必须 degraded，但未拒绝未来 fetched_at。新增相同的 5 分钟时钟偏差门禁，保护 Provider 回包及缓存读取。
 
 两项均不推断 Provider 发布时刻，不将 fetched_at 当作 available_at；市场资金流在缺少可验证源端快照时间时仍保持 degraded。新增未来时间回归测试。
+
+
+### 本轮 CI 格式检查修正（2026-11-03）
+
+提交 `763fb8bd9eaeacde764523171fdc44039d72f260` 的首次 Go 工作流在 market-data 的 gofmt 检查中发现新增测试结构体字段对齐格式不符合 gofmt。已按 CI 输出修正测试文件格式；该失败不涉及编译或业务断言，修正后以新 SHA 重新执行完整工作流。

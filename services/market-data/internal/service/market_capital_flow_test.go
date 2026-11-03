@@ -98,7 +98,7 @@ func TestMarketCapitalFlowCacheIsScopedToConfiguredProviderChain(t *testing.T) {
 		return &marketCapitalFlowFake{
 			name: name,
 			snapshot: &model.MarketCapitalFlowSnapshot{
-				Total: 1, Items: []model.MarketCapitalFlowItem{{TradeDate: "2026-10-29", NetAmountCNY: &amount}},
+				Total: 1, Items:  []model.MarketCapitalFlowItem{{TradeDate: "2026-10-29", NetAmountCNY: &amount}},
 				Source: name, SourceVersion: name + "-market-flow-v1",
 				FetchedAt: time.Now().UTC(), QualityStatus: model.QualityDegraded,
 			},
