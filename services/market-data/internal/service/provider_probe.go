@@ -1390,7 +1390,9 @@ func isUnsupportedDailyBarAdjustmentError(err error) bool {
 		strings.Contains(message, "adjustment is not supported") ||
 		strings.Contains(message, "unsupported adjustment") ||
 		strings.Contains(message, "does not support adjustment") ||
-		strings.Contains(message, "only supports unadjusted")
+		strings.Contains(message, "only supports unadjusted") ||
+		strings.Contains(message, "only supports verified adjustment basis") ||
+		(strings.Contains(message, "不支持") && strings.Contains(message, "复权"))
 }
 
 func isUnsupportedBeijingProbeError(err error) bool {

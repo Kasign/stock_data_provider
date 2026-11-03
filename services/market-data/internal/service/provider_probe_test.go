@@ -713,7 +713,14 @@ func TestProviderProbeDailyBarCrossComparisonSeparatesAdjustmentBases(t *testing
 }
 
 func TestProviderProbeClassifiesExplicitUnsupportedAdjustment(t *testing.T) {
-	for _, message := range []string{"adjustment not supported", "unsupported adjustment", "provider does not support adjustment"} {
+	for _, message := range []string{
+		"adjustment not supported",
+		"unsupported adjustment",
+		"provider does not support adjustment",
+		"Sina historical K-line endpoint only supports verified adjustment basis \"none\"",
+		"Netease historical CSV only supports verified adjustment basis \"none\"",
+		"不支持的同花顺复权口径",
+	} {
 		if !isUnsupportedDailyBarAdjustmentError(errors.New(message)) {
 			t.Errorf("expected unsupported adjustment classification for %q", message)
 		}
