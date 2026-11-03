@@ -603,7 +603,8 @@
 - [x] 未知规则范围、未知告警级别和超长股票代码不再被静默规范化。
 - [x] 对已存储的异常记录标记为无效，写入操作拒绝覆盖原始内容。
 - [x] 缺失的历史可选字段仍按兼容默认值读取。
-- [ ] 本次修复的单元测试、WebUI Checks 与 Chromium Browser Smoke 待 CI 验证。
+- [x] WebUI Checks 成功（[运行记录 #41610312628](https://github.com/Kasign/stock_data_provider/actions/runs/41610312628)）。
+- [x] Chromium Browser Smoke 成功（[运行记录 #41610312394](https://github.com/Kasign/stock_data_provider/actions/runs/41610312394)）。
 
 
 ## 2026-11-03 全站代码审查：批量自选股分组一致性
@@ -621,7 +622,8 @@
 - [x] 读取归档时执行与写入一致的 4 MB 总容量校验。
 - [x] 超限数据拒绝后续写入，保留原始存储。
 - [x] 新增超限容量回归测试。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待本次提交 CI 验证。
+- [x] WebUI Checks 成功（[运行记录 #41611950327](https://github.com/Kasign/stock_data_provider/actions/runs/41611950327)）。
+- [x] Chromium Browser Smoke 成功（[运行记录 #41611950291](https://github.com/Kasign/stock_data_provider/actions/runs/41611950291)）。
 
 
 ## 2026-11-03 全站代码审查：最近任务身份一致性

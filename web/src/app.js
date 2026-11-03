@@ -498,7 +498,7 @@ function removeRecentTaskReference(taskId, analysisBase = "") {
   // 先清理兼容旧版本的单任务引用，确认成功后再删除历史列表，避免刷新后旧任务重新出现。
   try {
     const last = JSON.parse(localStorage.getItem(TASK_REFERENCE_KEY) || "null");
-    if (last?.task_id === taskId && (!analysisBase || !last.analysis_base || last.analysis_base === analysisBase)) {
+    if (last?.task_id === taskId && (!analysisBase || last.analysis_base === analysisBase)) {
       localStorage.removeItem(TASK_REFERENCE_KEY);
       if (localStorage.getItem(TASK_REFERENCE_KEY) !== null) throw new Error("旧任务引用仍存在");
     }
