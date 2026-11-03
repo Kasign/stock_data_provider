@@ -97,7 +97,7 @@ try {
   const exportButton = page.locator("#screening-local-export-csv");
   assert.equal(await exportButton.isEnabled(), true);
   const [csvDownload] = await Promise.all([page.waitForEvent("download"), exportButton.click()]);
-  assert.match(csvDownload.suggestedFilename(), /^当前页筛选-全部-\\d{8}-\\d{6}\\.csv$/);
+  assert.match(csvDownload.suggestedFilename(), /^当前页筛选-全部-\d{8}-\d{6}\.csv$/);
   const csvPath = await csvDownload.path();
   const csvContent = await readFile(csvPath, "utf8");
   assert.ok(csvContent.startsWith("\\uFEFF"), "CSV must include UTF-8 BOM");
