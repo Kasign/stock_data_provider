@@ -612,4 +612,5 @@
 - [x] 已存在股票仍可在显式选择目标分组时移动归属。
 - [x] 因容量不足未加入的股票不再产生孤立分组记录。
 - [x] 新增容量边界回归测试。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待本次提交 CI 验证。
+- [x] WebUI Checks 成功（[运行记录 #41611121300](https://github.com/Kasign/stock_data_provider/actions/runs/41611121300)）。
+- [x] Chromium Browser Smoke 成功（[运行记录 #41611121355](https://github.com/Kasign/stock_data_provider/actions/runs/41611121355)）。
