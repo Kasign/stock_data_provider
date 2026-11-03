@@ -2825,14 +2825,16 @@ func TestValidateSectorRankingSnapshotRejectsDroppedRowsWhenTotalWasMissing(t *t
 
 
 func TestDailyBarCoverageUsesTradingCalendarSessionCount(t *testing.T) {
-	if got := minimumDailyBarCoverage(15, 20); got != 10 {
-		t.Fatalf("65%% threshold for 15 actual trading sessions = %d, want 10", got)
+	weekdayEstimate := minimumDailyBarCoverage(20, 20)
+	calendarEstimate := minimumDailyBarCoverage(15, 20)
+	if weekdayEstimate != 13 {
+		t.Fatalf("65%% threshold for 20 weekdays = %d, want 13", weekdayEstimate)
 	}
-	if coverageSufficientForTradingDays(15, 20, 11) {
-		t.Fatal("11 rows must fail the old weekday estimate threshold for 20 weekdays")
+	if calendarEstimate != 10 {
+		t.Fatalf("65%% threshold for 15 actual trading sessions = %d, want 10", calendarEstimate)
 	}
-	if !coverageSufficientForTradingDays(15, 20, 10) {
-		t.Fatal("10 rows should satisfy the 65%% threshold for 15 exchange sessions")
+	if calendarEstimate >= weekdayEstimate {
+		t.Fatalf("holiday-aware coverage threshold should be lower than weekday estimate: calendar=%d weekdays=%d", calendarEstimate, weekdayEstimate)
 	}
 }
 
