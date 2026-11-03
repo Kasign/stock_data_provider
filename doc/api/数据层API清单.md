@@ -69,7 +69,11 @@
 | GET | /api/v1/analysis/tasks/{task_id}/events | 按 after_sequence 续读阶段事件，前端每页最多 100 条 | getAnalysisTaskEvents |
 | GET | /api/v1/analysis/runs/{run_id} | 查询分析运行结果 | getAnalysisRun |\n| GET | /api/v1/analysis/tasks | 服务端任务历史分页（当前未提供） | 暂无；需服务端补充分页、状态/类型/股票/日期过滤与总数语义 |
 
+<<<<<<< HEAD:doc/数据层API清单.md
 分析任务请求/响应的完整字段契约以 doc/api/分析任务.openapi.yaml 和分析服务当前实现为准。当前没有服务端研究报告列表/详情/归档 API；WebUI 直接使用已校验的 Run 结果在浏览器本地归档，不新增服务端接口。当前 OpenAPI 仅定义创建、单任务状态、事件与 Run 结果查询，没有服务端任务列表分页接口；WebUI 的“最近分析”只保留本地最多 10 条任务引用，不应称为服务端历史。
+=======
+分析任务请求/响应的完整字段契约以 分析任务.openapi.yaml 和分析服务当前实现为准。
+>>>>>>> feat/full-go-data-providers-api-switch:doc/api/数据层API清单.md
 
 ## 4. 页面与接口对应关系
 
@@ -118,8 +122,13 @@
 ## 8. 权威接口定义
 
 - 行情服务 OpenAPI：services/market-data/openapi.yaml（代码内权威协议，不迁移到文档目录）。
+<<<<<<< HEAD:doc/数据层API清单.md
 - 分析任务 OpenAPI：doc/api/分析任务.openapi.yaml。
 - Python 桥接 OpenAPI：doc/api/Python桥接.openapi.yaml。
+=======
+- 分析任务 OpenAPI：doc/接口规范/分析任务.openapi.yaml。
+- Python 桥接 OpenAPI：Python桥接.openapi.yaml。
+>>>>>>> feat/full-go-data-providers-api-switch:doc/api/数据层API清单.md
 - WebUI 实际请求实现：web/src/api.js。
 - 行情服务路由注册：services/market-data/internal/httpapi/server.go。
 
