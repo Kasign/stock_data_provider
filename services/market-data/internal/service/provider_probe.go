@@ -34,22 +34,22 @@ type providerProbeJob struct {
 type providerProbeEvidenceContextKey struct{}
 
 type providerProbeEvidence struct {
-	sampleSymbol      string
-	sampleMarket      string
-	sampleDate        string
-	rowsReturned      int
-	rowsValidated     int
+	sampleSymbol       string
+	sampleMarket       string
+	sampleDate         string
+	rowsReturned       int
+	rowsValidated      int
 	coverageTotal      *int
 	coveragePopulation string
 	coverageSource     string
 	coverageReturned   *int
-	coverageValidated *int
-	coverageMissing   *int
-	coverageExcluded  *int
-	coverageRatio     *float64
-	providerTime      *time.Time
-	dailySnapshot     *provider.CrossProviderDailySnapshot
-	validationReport  validation.Report
+	coverageValidated  *int
+	coverageMissing    *int
+	coverageExcluded   *int
+	coverageRatio      *float64
+	providerTime       *time.Time
+	dailySnapshot      *provider.CrossProviderDailySnapshot
+	validationReport   validation.Report
 }
 
 func recordProviderProbeCoverage(ctx context.Context, coverage float64) {
