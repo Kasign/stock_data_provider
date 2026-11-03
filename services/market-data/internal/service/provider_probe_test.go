@@ -676,24 +676,28 @@ func TestApplyFreshnessProbeResultsUsesPolicyAndMarketSession(t *testing.T) {
 	location := marketLocation()
 	checkedAt := time.Date(2026, 11, 3, 10, 0, 0, 0, location).UTC()
 	sourceTime := checkedAt.Add(-30 * time.Second)
+	fetchedAt := checkedAt.Add(-time.Second)
 	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
 	ds.SetTradingCalendarProviders([]provider.TradingCalendarProvider{providerProbeFreshnessCalendarFake{}})
 	run := &model.ProviderProbeRun{
 		FinishedAt: checkedAt,
 		Items: []model.ProviderProbeItem{{
 			Provider: "breadth-provider", Capability: "market_breadth",
-			ProviderTime: &sourceTime, ProviderTimeType: "oldest_component_quote_time",
+			ProviderTime: &sourceTime, ProviderTimeType: "oldest_component_quote_time", FetchedAt: &fetchedAt,
 		}},
 		CheckResults: []model.ProviderProbeCheckResult{{
 			Check: "freshness", Provider: "breadth-provider", Capability: "market_breadth",
-			ProviderTime: &sourceTime, CheckedAt: checkedAt,
+			ProviderTime: &sourceTime, ProviderTimeType: "oldest_component_quote_time",
+			FetchedAt: &fetchedAt, CheckedAt: checkedAt,
 		}},
 	}
 	ds.applyFreshnessProbeResults(context.Background(), run)
 	result := run.CheckResults[0]
 	if result.Status != "passed" || result.FreshnessStatus != "fresh" ||
 		result.FreshnessReason != "within_sla" || result.FreshnessDomain != "market_breadth" ||
-		result.MarketPhase != model.MarketSessionContinuousAM || result.AgeSeconds == nil || *result.AgeSeconds != 30 {
+		result.MarketPhase != model.MarketSessionContinuousAM || result.AgeSeconds == nil || *result.AgeSeconds != 30 ||
+		result.ProviderTimeType != "oldest_component_quote_time" || result.FetchedAt == nil ||
+		result.CalendarKnown == nil || !*result.CalendarKnown || result.IsTradingDay == nil || !*result.IsTradingDay {
 		t.Fatalf("freshness check did not use the domain SLA and market session: %+v", result)
 	}
 }

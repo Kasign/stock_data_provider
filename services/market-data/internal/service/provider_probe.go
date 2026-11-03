@@ -50,6 +50,7 @@ type providerProbeEvidence struct {
 	coverageRatio      *float64
 	providerTime       *time.Time
 	providerTimeType   string
+	fetchedAt          *time.Time
 	dailySnapshot      *provider.CrossProviderDailySnapshot
 	validationReport   validation.Report
 }
@@ -86,6 +87,15 @@ func recordProviderProbeTimeSemantics(ctx context.Context, semantics string) {
 		return
 	}
 	evidence.providerTimeType = strings.TrimSpace(semantics)
+}
+
+func recordProviderProbeFetchedAt(ctx context.Context, fetchedAt time.Time) {
+	evidence, ok := ctx.Value(providerProbeEvidenceContextKey{}).(*providerProbeEvidence)
+	if !ok || evidence == nil || fetchedAt.IsZero() {
+		return
+	}
+	value := fetchedAt
+	evidence.fetchedAt = &value
 }
 
 func recordProviderProbeDailySnapshot(ctx context.Context, snapshot *provider.CrossProviderDailySnapshot) {
@@ -283,6 +293,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			recordProviderProbeEvidence(probeCtx, quoteSymbol, "", 1, 0, q.QuoteTime)
 			recordProviderProbeTimeSemantics(probeCtx, q.QuoteTimeSemantics)
+			recordProviderProbeFetchedAt(probeCtx, q.FetchedAt)
 			if q.Symbol != quoteSymbol {
 				return model.QualityInvalid, q.SourceVersion, nil, fmt.Errorf("quote contract invalid: symbol mismatch, got %q, want %q", q.Symbol, quoteSymbol)
 			}
@@ -424,6 +435,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 				recordProviderProbeEvidence(probeCtx, symbol, "", len(snapshot.Items), len(snapshot.Items), sourceTime)
 				recordProviderProbeTimeSemantics(probeCtx, semantics)
+				recordProviderProbeFetchedAt(probeCtx, snapshot.FetchedAt)
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
 		})
@@ -444,6 +456,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				validated := snapshot.CoveredSecurities - excluded
 				recordProviderProbeEvidence(probeCtx, "", snapshot.ProviderReportDate, snapshot.CoveredSecurities, validated, snapshot.OldestQuoteTime)
 				recordProviderProbeTimeSemantics(probeCtx, "oldest_component_quote_time")
+				recordProviderProbeFetchedAt(probeCtx, snapshot.FetchedAt)
 				recordProviderProbeCoverageCounts(probeCtx, snapshot.TotalSecurities, snapshot.CoveredSecurities, validated, missing, excluded, "provider_universe", "market_breadth.total_securities")
 			}
 			return snapshot.QualityStatus, snapshot.SourceVersion, append([]string(nil), snapshot.QualityReasons...), nil
@@ -823,6 +836,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			item.CoverageRatio = evidence.coverageRatio
 			item.ProviderTime = evidence.providerTime
 			item.ProviderTimeType = evidence.providerTimeType
+			item.FetchedAt = evidence.fetchedAt
 			dailySnapshots[index] = evidence.dailySnapshot
 			item.ElapsedMS = time.Since(checkedAt).Milliseconds()
 			item.CheckedAt = time.Now().UTC()
@@ -996,6 +1010,8 @@ func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model
 	if err == nil && session != nil && session.QualityStatus == model.QualityValid {
 		market.CalendarKnown, market.IsTradingDay, market.MarketPhase = true, session.IsTradingDay, session.Phase
 	}
+	calendarKnown := market.CalendarKnown
+	isTradingDay := market.IsTradingDay
 	if needsQuote {
 		symbol := "600519.SH"
 		for _, item := range run.Items {
@@ -1038,12 +1054,11 @@ func (s *DataService) applyFreshnessProbeResults(ctx context.Context, run *model
 			check.Status, check.ErrorCode = "skipped", "freshness_policy_not_configured"
 			continue
 		}
-		evidence := freshness.Evidence{DataTime: check.ProviderTime}
-		for _, item := range run.Items {
-			if item.Provider == check.Provider && item.Capability == check.Capability {
-				evidence.DataTimeType = item.ProviderTimeType
-				break
-			}
+		evidence := freshness.Evidence{DataTime: check.ProviderTime, FetchedAt: check.FetchedAt, DataTimeType: check.ProviderTimeType}
+		check.CalendarKnown = &calendarKnown
+		check.IsTradingDay = &isTradingDay
+		if check.Capability == "quote" {
+			check.SecurityTradingStatus = market.SecurityTradingStatus
 		}
 		result := freshness.Evaluate(policy, evidence, market)
 		check.FreshnessStatus, check.FreshnessReason, check.FreshnessDomain, check.MarketPhase = string(result.Status), result.Reason, result.Domain, result.MarketPhase
@@ -1092,6 +1107,7 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 			result := model.ProviderProbeCheckResult{
 				Check: check, Provider: item.Provider, Capability: item.Capability,
 				Status: "skipped", CheckedAt: item.CheckedAt, ProviderTime: item.ProviderTime,
+				ProviderTimeType: item.ProviderTimeType, FetchedAt: item.FetchedAt,
 			}
 			switch check {
 			case "connectivity":

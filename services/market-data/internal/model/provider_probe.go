@@ -62,6 +62,7 @@ type ProviderProbeItem struct {
 	CoverageRatio          *float64                  `json:"coverage_ratio,omitempty"`
 	ProviderTime           *time.Time                `json:"provider_time,omitempty"`
 	ProviderTimeType       string                    `json:"provider_time_type,omitempty"`
+	FetchedAt              *time.Time                `json:"fetched_at,omitempty"`
 	CheckedAt              time.Time                 `json:"checked_at"`
 }
 
@@ -86,6 +87,11 @@ type ProviderProbeCheckResult struct {
 	ErrorCode              string                         `json:"error_code,omitempty"`
 	ErrorMessage           string                         `json:"error_message,omitempty"`
 	ProviderTime           *time.Time                     `json:"provider_time,omitempty"`
+	ProviderTimeType       string                         `json:"provider_time_type,omitempty"`
+	FetchedAt              *time.Time                     `json:"fetched_at,omitempty"`
+	CalendarKnown          *bool                          `json:"calendar_known,omitempty"`
+	IsTradingDay           *bool                          `json:"is_trading_day,omitempty"`
+	SecurityTradingStatus  string                         `json:"security_trading_status,omitempty"`
 	AgeSeconds             *int64                         `json:"age_seconds,omitempty"`
 	FreshnessStatus        string                         `json:"freshness_status,omitempty"`
 	FreshnessReason        string                         `json:"freshness_reason,omitempty"`

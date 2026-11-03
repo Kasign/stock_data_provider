@@ -598,6 +598,11 @@ components:
         error_code: {type: string}
         error_message: {type: string}
         provider_time: {type: string, format: date-time, nullable: true}
+        provider_time_type: {type: string, description: Explicit source timestamp semantics; never inferred from fetched_at}
+        fetched_at: {type: string, format: date-time, nullable: true, description: Service collection time; never used as source data time}
+        calendar_known: {type: boolean, description: Whether valid trading-calendar evidence was available for the evaluation}
+        is_trading_day: {type: boolean, description: Trading-day value from valid calendar evidence}
+        security_trading_status: {type: string, enum: [normal, suspended, intraday_suspension, unknown], description: Security-level trading status used for quote freshness}
         age_seconds: {type: integer, description: Source timestamp age in seconds; populated only when the evaluator has enough evidence}
         freshness_status: {type: string, enum: [fresh, stale, unknown, not_applicable], description: Independent freshness state; does not change QualityStatus}
         freshness_reason: {type: string, description: Stable freshness reason code}

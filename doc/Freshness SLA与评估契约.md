@@ -115,3 +115,18 @@ Freshness 描述数据相对于其更新预期是否及时，是独立于 `Quali
 ### 本轮验证边界
 
 已增加策略接入测试，覆盖有效交易阶段的市场宽度 freshness 判定，以及缺失交易日历时不得误报 fresh。尚未在真实 Go 执行环境运行测试、gofmt、Race、Vet 或构建；提交前需继续做静态 Review，并在可执行环境完成验证。
+
+
+## 10. 诊断逐项时间与市场上下文证据
+
+Provider Probe 的每条 freshness check 现在直接携带可独立解释的证据，不再要求 WebUI 通过 `provider`、`capability` 跨数组关联：
+
+- `provider_time`：源端数据时间。
+- `provider_time_type`：源端时间语义；缺失时保持空值，不能推断。
+- `fetched_at`：服务采集时间，只用于排查 Provider 延迟，不参与 SLA 年龄计算。
+- `calendar_known`、`is_trading_day`：来自有效交易日历/市场阶段解析；日历未知时两个布尔值仍会明确显示为 false，并由 `calendar_known=false` 区分“未知”与“已确认非交易日”。
+- `security_trading_status`：Quote 检查使用证券级停复牌证据，取值为 normal、suspended、intraday_suspension 或 unknown。
+
+Quote、Index、Market Breadth 的采集时间分别取对应响应对象的 `FetchedAt`；没有明确响应采集时间的能力不填充该字段。CheckResult 自身携带时间语义与采集时间，避免前端跨数组 join。历史 JSON 未包含这些新增可选字段时，Go JSON 解码保持兼容。
+
+本轮测试增加了 check result 时间证据直传断言，并扩展市场宽度 Freshness 测试，验证源端时间语义、采集时间、日历已知和交易日证据均可在同一条检查结果中读取。
