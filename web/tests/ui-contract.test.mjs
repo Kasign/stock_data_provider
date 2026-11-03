@@ -903,7 +903,7 @@ test("run-flow keeps cached events explicit during read errors and exports diagn
 
 
 test("market hot-rank actions accept the symbol or code field as the stock identifier", () => {
-  assert.match(marketOverview, /const stock=el\("td"\),button=el\("button","market-hot-stock-link"\),symbol=String\(item\.symbol\|\|item\.code\|\|""\)\.trim\(\),name=String\(item\.name\|\|symbol\|\|""\)/);
+  assert.match(marketOverview, /const stock=el\("td"\),button=el\("button","market-hot-stock-link"\),symbol=String\(item\.symbol\|\|item\.code\|\|""\)\.trim\(\),name=String\(item\.name\|\|symbol\|\|"名称未报告"\)/);
   assert.match(marketOverview, /button\.dataset\.hotSymbol=symbol;button\.dataset\.hotName=name;button\.dataset\.hotAction="stocks";button\.disabled=!symbol/);
   assert.match(marketOverview, /research\.dataset\.hotSymbol=symbol;research\.dataset\.hotName=name;research\.dataset\.hotAction="research"/);
 });
