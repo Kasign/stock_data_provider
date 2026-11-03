@@ -1065,3 +1065,12 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 - 当前仓库归属为 `github.com/Kasign/stock_data_provider`，旧路径来自上游/旧项目代码沿用，不应继续作为本仓库的模块身份。
 - 后续应先完整盘点两个独立 Go module 的源码 import、CI、Docker 构建、脚本和文档引用，再统一迁移为当前仓库路径；不得只改 go.mod 的 module 行，也不得遗漏跨模块依赖。
 - 此项与 Tencent 测试失败无关，不影响当前已通过的构建；完成全量引用盘点和迁移回归后再关闭。
+
+
+## 2026-11-03 Pytdx Quote 原始结构化字段诊断补齐
+
+- Pytdx SDK 返回结构化对象，不将其错误描述为 JSON 解析问题；诊断字段使用 SDK 字段名（Close、Last、Open、High、Low、Volume、Amount）。
+- Quote 证券身份缺失、错证券、重复记录及缺少 Kline 数据时，生成结构化 Validate Issue，并保留 Provider 原有硬失败行为。
+- 当前价、昨收、开高低价的非正/非有限值、OHLC 区间异常、成交量非法值及股数归一化失败均生成 error 级字段问题；成交额是可选字段，非有限或零值异常时保留空值并降级，生成 warning，不伪造金额。
+- 成功映射后执行公共 `normalize.ValidateQuoteWithReport`，将完整报告写入请求级 Reporter；避免仅凭局部 StageValidate Issue 让 Probe 跳过公共 Quote Validator。
+- 新增可独立测试的 Quote 映射函数，回归覆盖非有限价格、OHLC 越界、非整数手数和可选成交额异常。实时 TDX 服务连通性仍由在线 Probe 单独验收。

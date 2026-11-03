@@ -153,75 +153,29 @@ func (p *Pytdx) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote,
 	}
 	found, err := pytdxFindUniqueQuote(response, symbol)
 	if err != nil {
+		code := "invalid_quote_identity"
+		if strings.Contains(err.Error(), "duplicate records") {
+			code = "duplicate_identity"
+		}
+		addPytdxValidationIssue(ctx, 0, "symbol", "Code/Exchange", code, symbol, "tdx_quote_records", pytdxQuoteIdentityPreview(response), err.Error(), validation.SeverityError)
 		return nil, err
 	}
-	if found == nil || found.Kline == nil {
+	if found == nil {
+		code, message := "missing_quote", "Go 通达信协议响应未返回报价记录"
+		actual := "empty"
+		if len(response) > 0 {
+			code, message = "identity_mismatch", "Go 通达信协议返回的证券代码或交易所与请求不一致"
+			actual = pytdxQuoteIdentityPreview(response)
+		}
+		addPytdxValidationIssue(ctx, 0, "symbol", "Code/Exchange", code, symbol, "tdx_quote_records", actual, message, validation.SeverityError)
 		return nil, fmt.Errorf("Pytdx quote response did not contain requested symbol %s", symbol)
 	}
+	if found.Kline == nil {
+		addPytdxValidationIssue(ctx, 0, "quote", "Kline", "required_data_missing", "quote K-line values", "nil", "", "Go 通达信协议报价记录缺少行情字段", validation.SeverityError)
+		return nil, fmt.Errorf("Pytdx quote response for %s has no K-line values", symbol)
+	}
 	bar := found.Kline
-	current := bar.Close.Float64()
-	prevClose := bar.Last.Float64()
-	open := bar.Open.Float64()
-	high := bar.High.Float64()
-	low := bar.Low.Float64()
-	if !pytdxPositiveFinite(current) || !pytdxPositiveFinite(prevClose) ||
-		!pytdxPositiveFinite(open) || !pytdxPositiveFinite(high) || !pytdxPositiveFinite(low) ||
-		low > high || open < low || open > high || current < low || current > high {
-		return nil, errors.New("Pytdx quote violates positive-price/OHLC invariants")
-	}
-	rawVolume := float64(bar.Volume)
-	if !pytdxNonNegativeFinite(rawVolume) || math.Trunc(rawVolume) != rawVolume {
-		return nil, errors.New("Pytdx quote contains an invalid volume in hands")
-	}
-	volume, err := normalize.HandsToShares(rawVolume)
-	if err != nil {
-		return nil, fmt.Errorf("normalize Pytdx quote volume: %w", err)
-	}
-	change := current - prevClose
-	changePercent := change / prevClose * 100
-	now := time.Now().UTC()
-	amountValue := bar.Amount.Float64()
-	var amount, rawAmount *float64
-	amountUnit, rawAmountUnit, rawAmountField := "unknown", "", ""
-	quality := model.QualityDegraded
-	reasons := []string{
-		"provider_quote_timestamp_not_exposed",
-		"provider_name_not_exposed_by_quote_contract",
-	}
-	if pytdxNonNegativeFinite(amountValue) && amountValue > 0 {
-		amount, rawAmount = &amountValue, &amountValue
-		amountUnit, rawAmountUnit, rawAmountField = "CNY", "CNY", "amount"
-	} else {
-		reasons = append(reasons, "amount_missing_or_zero_in_quote")
-	}
-	rawVolumeCopy := rawVolume
-	return &model.Quote{
-		Symbol:           symbol,
-		CurrentPrice:     &current,
-		Change:           &change,
-		ChangePercent:    &changePercent,
-		Open:             &open,
-		High:             &high,
-		Low:              &low,
-		PrevClose:        &prevClose,
-		Volume:           &volume,
-		Amount:           amount,
-		FetchedAt:        now,
-		NormalizedAt:     now,
-		Source:           p.Name(),
-		SourceVersion:    pytdxVersion,
-		RawVolume:        &rawVolumeCopy,
-		RawVolumeUnit:    "hands",
-		RawAmount:        rawAmount,
-		RawAmountUnit:    rawAmountUnit,
-		RawAmountField:   rawAmountField,
-		VolumeUnit:       "shares",
-		AmountUnit:       amountUnit,
-		AdjustmentBasis:  model.AdjustmentNone,
-		QualityStatus:    quality,
-		QualityReasons:   reasons,
-		NormalizationVer: normalize.Version,
-	}, nil
+	return buildPytdxQuote(ctx, symbol, bar.Close.Float64(), bar.Last.Float64(), bar.Open.Float64(), bar.High.Float64(), bar.Low.Float64(), float64(bar.Volume), bar.Amount.Float64())
 }
 
 func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
@@ -431,6 +385,109 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		})
 	}
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
+}
+
+func buildPytdxQuote(ctx context.Context, symbol string, current, prevClose, open, high, low, rawVolume, amountValue float64) (*model.Quote, error) {
+	prices := []struct {
+		field         string
+		providerField string
+		value         float64
+	}{
+		{field: "current_price", providerField: "Close", value: current},
+		{field: "prev_close", providerField: "Last", value: prevClose},
+		{field: "open", providerField: "Open", value: open},
+		{field: "high", providerField: "High", value: high},
+		{field: "low", providerField: "Low", value: low},
+	}
+	for _, item := range prices {
+		if !pytdxPositiveFinite(item.value) {
+			addPytdxValidationIssue(ctx, 0, item.field, item.providerField, "invalid_number", "finite positive price", "number", fmt.Sprintf("%g", item.value), "Go 通达信协议报价价格字段不是正有限数值", validation.SeverityError)
+			return nil, fmt.Errorf("Pytdx quote %s is not a positive finite number", item.field)
+		}
+	}
+	if low > high || open < low || open > high || current < low || current > high {
+		addPytdxValidationIssue(ctx, 0, "ohlc", "Open/High/Low/Close", "ohlc_invariant_violation", "low <= open/current <= high", "number", fmt.Sprintf("open=%g; high=%g; low=%g; current=%g", open, high, low, current), "Go 通达信协议报价 OHLC 区间关系异常", validation.SeverityError)
+		return nil, errors.New("Pytdx quote violates OHLC invariants")
+	}
+	if !pytdxNonNegativeFinite(rawVolume) || math.Trunc(rawVolume) != rawVolume {
+		addPytdxValidationIssue(ctx, 0, "volume", "Volume", "invalid_number", "finite non-negative integer number of hands", "number", fmt.Sprintf("%g", rawVolume), "Go 通达信协议报价成交量必须是非负整数手", validation.SeverityError)
+		return nil, errors.New("Pytdx quote contains an invalid volume in hands")
+	}
+	volume, err := normalize.HandsToShares(rawVolume)
+	if err != nil {
+		addPytdxValidationIssue(ctx, 0, "volume", "Volume", "normalization_error", "convertible non-negative integer number of hands", "number", fmt.Sprintf("%g", rawVolume), "Go 通达信协议报价成交量无法转换为标准股数", validation.SeverityError)
+		return nil, fmt.Errorf("normalize Pytdx quote volume: %w", err)
+	}
+
+	change := current - prevClose
+	changePercent := change / prevClose * 100
+	now := time.Now().UTC()
+	var amount, rawAmount *float64
+	amountUnit, rawAmountUnit, rawAmountField := "unknown", "", ""
+	quality := model.QualityDegraded
+	reasons := []string{
+		"provider_quote_timestamp_not_exposed",
+		"provider_name_not_exposed_by_quote_contract",
+	}
+	if pytdxNonNegativeFinite(amountValue) && amountValue > 0 {
+		amount, rawAmount = &amountValue, &amountValue
+		amountUnit, rawAmountUnit, rawAmountField = "CNY", "CNY", "amount"
+	} else {
+		reasons = append(reasons, "amount_missing_or_invalid_in_quote")
+		if !pytdxNonNegativeFinite(amountValue) {
+			addPytdxValidationIssue(ctx, 0, "amount", "Amount", "invalid_optional_number", "finite non-negative amount in CNY", "number", fmt.Sprintf("%g", amountValue), "Go 通达信协议报价成交额不是非负有限数值，已置空并降级", validation.SeverityWarning)
+		} else if rawVolume > 0 {
+			addPytdxValidationIssue(ctx, 0, "amount", "Amount", "amount_missing_or_zero", "positive amount when volume is positive", "number", fmt.Sprintf("%g", amountValue), "Go 通达信协议报价成交额为零但成交量非零，已置空并降级", validation.SeverityWarning)
+		}
+	}
+	rawVolumeCopy := rawVolume
+	quote := &model.Quote{
+		Symbol:           symbol,
+		CurrentPrice:     &current,
+		Change:           &change,
+		ChangePercent:    &changePercent,
+		Open:             &open,
+		High:             &high,
+		Low:              &low,
+		PrevClose:        &prevClose,
+		Volume:           &volume,
+		Amount:           amount,
+		FetchedAt:        now,
+		NormalizedAt:     now,
+		Source:           "pytdx",
+		SourceVersion:    pytdxVersion,
+		RawVolume:        &rawVolumeCopy,
+		RawVolumeUnit:    "hands",
+		RawAmount:        rawAmount,
+		RawAmountUnit:    rawAmountUnit,
+		RawAmountField:   rawAmountField,
+		VolumeUnit:       "shares",
+		AmountUnit:       amountUnit,
+		AdjustmentBasis:  model.AdjustmentNone,
+		QualityStatus:    quality,
+		QualityReasons:   reasons,
+		NormalizationVer: normalize.Version,
+	}
+	report, validationErr := normalize.ValidateQuoteWithReport(quote)
+	validation.AddContextReport(ctx, report)
+	if validationErr != nil {
+		return nil, fmt.Errorf("Pytdx quote data contract: %w", validationErr)
+	}
+	return quote, nil
+}
+
+func pytdxQuoteIdentityPreview(response []*protocol.Quote) string {
+	for _, item := range response {
+		if item == nil {
+			continue
+		}
+		preview := strings.TrimSpace(item.Code + "." + item.Exchange.String())
+		if len(preview) > 160 {
+			return preview[:160]
+		}
+		return preview
+	}
+	return ""
 }
 
 func addPytdxValidationIssue(ctx context.Context, rowIndex int, field, providerField, code, expected, actualType, actualPreview, message string, severity validation.Severity) {
