@@ -516,7 +516,7 @@
 ## 10. 2026-11-03 后续开发顺序调整
 
 - [ ] **暂缓：数据中心统一诊断深化与真实接口验收**。等待数据侧完成接口开发、OpenAPI 契约同步、真实 Provider 验证及诊断历史持久化验证。当前已实现的诊断展示保留，不继续扩展；不以模拟 API 测试代替数据侧验收。
-- [ ] **下一批：板块排行结果数量控制**。新增 10/20/50/100 条档位，使用现有 GET /api/v1/market/sectors?limit=；切换只触发板块请求，和行业/概念、排序指标、排序方向组合验证。服务端总数、请求 limit、实际返回条数分别展示，不做前端补齐或伪分页。
+- [x] **板块排行结果数量控制已完成**。10/20/50/100 档位使用现有 `GET /api/v1/market/sectors?limit=`；切换只触发板块请求，并保留类别、排序指标、排序方向。WebUI Checks 与 Chromium Browser Smoke 通过（[Checks #41595037137](https://github.com/Kasign/stock_data_provider/actions/runs/41595037137)、[Browser #41595037090](https://github.com/Kasign/stock_data_provider/actions/runs/41595037090)）。
 - [ ] 后续依赖数据侧的板块领涨股代码、板块成分股、板块资金流和服务端任务历史继续列为接口依赖，不在 WebUI 侧反向猜测或模拟。
 
 
