@@ -675,6 +675,7 @@ components:
         coverage_ratio: {type: number, minimum: 0, maximum: 1, nullable: true, description: coverage_validated divided by coverage_total; describes population coverage only, not field-level quality; omitted when the denominator is unknown}
         provider_time: {type: string, format: date-time, nullable: true}
         provider_time_type: {type: string, description: Explicit source timestamp semantics; never inferred from fetched_at}
+        fetched_at: {type: string, format: date-time, nullable: true, description: Service collection time; never used as source data time}
         checked_at: {type: string, format: date-time}
     ProviderProbeRequest:
       type: object
