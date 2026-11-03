@@ -742,13 +742,13 @@ func TestApplyFreshnessProbeResultsUsesSecurityTradingStatusEvidence(t *testing.
 	sourceTime := checkedAt.Add(-30 * time.Second)
 	fetchedAt := checkedAt.Add(-time.Second)
 	tests := []struct {
-		name           string
-		status         model.SuspensionStatus
-		fail           bool
-		wantStatus     string
-		wantFreshness  string
-		wantReason     string
-		wantSecurity   string
+		name          string
+		status        model.SuspensionStatus
+		fail          bool
+		wantStatus    string
+		wantFreshness string
+		wantReason    string
+		wantSecurity  string
 	}{
 		{name: "full suspension", status: model.SuspensionStatusSuspended, wantStatus: "skipped", wantFreshness: "not_applicable", wantReason: freshness.ReasonSecuritySuspended, wantSecurity: "suspended"},
 		{name: "intraday suspension", status: model.SuspensionStatusIntraday, wantStatus: "skipped", wantFreshness: "not_applicable", wantReason: freshness.ReasonSecuritySuspended, wantSecurity: "intraday_suspension"},

@@ -204,3 +204,4 @@ Service 层新增 fake Provider 集成测试，验证 `applyFreshnessProbeResult
 - 证券状态 Provider 失败：状态为 unknown，Freshness 为 `unknown/security_trading_status_unknown`，不能默认为正常交易。
 
 测试使用固定历史交易日和可控日历/证券状态 Provider，不依赖当前是否交易日或真实上游 Key。真实 Provider 对停牌、临停、复牌的历史样本仍需在真实环境验收中采集；合成样例只证明 Service 上下文解析与状态映射链路。
+本轮 Service 层停复牌回归测试首次 CI 仅因测试表格字段对齐未通过 gofmt，未进入 market-data 编译和单测；已按 gofmt diff 修正，后续以新 SHA 的完整工作流验收。
