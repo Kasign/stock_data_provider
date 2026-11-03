@@ -141,7 +141,7 @@ func TestMarketCapitalFlowRejectsFutureFetchedAt(t *testing.T) {
 	amount := 1.0
 	snapshot := &model.MarketCapitalFlowSnapshot{
 		StartDate: "2026-10-29", EndDate: "2026-10-29", Total: 1,
-		Items: []model.MarketCapitalFlowItem{{TradeDate: "2026-10-29", NetAmountCNY: &amount}},
+		Items:  []model.MarketCapitalFlowItem{{TradeDate: "2026-10-29", NetAmountCNY: &amount}},
 		Source: "tushare", SourceVersion: "tushare-moneyflow-mkt-dc-v1",
 		FetchedAt: time.Now().UTC().Add(10 * time.Minute), QualityStatus: model.QualityDegraded,
 	}
