@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/baostock"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/baostock"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 type fakeBaostockClient struct {
@@ -57,8 +57,11 @@ func TestBaostockDailyBarsNormalizesAmountsAndAdjustmentMetadata(t *testing.T) {
 	if bar.AdjustmentBasis != model.AdjustmentForward || bar.AdjustmentMethod != "baostock_pct_change" {
 		t.Fatalf("adjustment metadata=%s/%s", bar.AdjustmentBasis, bar.AdjustmentMethod)
 	}
-	if bar.ChangePercent == nil || *bar.ChangePercent != -1.66 || bar.QualityStatus != model.QualityValid {
-		t.Fatalf("invalid normalized bar: %+v", bar)
+	if bar.ChangePercent == nil || *bar.ChangePercent != -1.66 || bar.QualityStatus != model.QualityDegraded {
+		t.Fatalf("forward-adjusted BaoStock bars without a reference date must be degraded: %+v", bar)
+	}
+	if !containsReason(bar.QualityReasons, "daily_bar_adjustment_reference_date_unverified") {
+		t.Fatalf("missing adjustment reference reason: %+v", bar.QualityReasons)
 	}
 }
 
@@ -112,8 +115,11 @@ func TestBaostockDailyBarsSortsAndRespectsLimitWithExplicitRange(t *testing.T) {
 		t.Fatalf("expected newest two bars sorted ascending, got %s, %s", bars[0].TradeDate, bars[1].TradeDate)
 	}
 	for _, bar := range bars {
-		if bar.QualityStatus != model.QualityValid {
-			t.Fatalf("intentional limit truncation must not degrade otherwise valid data, got %+v", bar)
+		if bar.QualityStatus != model.QualityDegraded || !containsReason(bar.QualityReasons, "daily_bar_adjustment_reference_date_unverified") {
+			t.Fatalf("forward-adjusted BaoStock bars without a reference date must be degraded: %+v", bar)
+		}
+		if containsReason(bar.QualityReasons, "bars_truncated_to_limit") {
+			t.Fatalf("intentional limit truncation must not add a quality reason: %+v", bar.QualityReasons)
 		}
 	}
 }
@@ -228,4 +234,13 @@ func TestBaostockParseIssueIncludesRowAndField(t *testing.T) {
 	if !found {
 		t.Fatalf("expected close parse issue at row 0, got %+v", reporter.Snapshot().Issues)
 	}
+}
+
+func containsReason(reasons []string, want string) bool {
+	for _, reason := range reasons {
+		if reason == want {
+			return true
+		}
+	}
+	return false
 }

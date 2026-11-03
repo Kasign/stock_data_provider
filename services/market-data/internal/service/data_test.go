@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/cache"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/cache"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/provider"
 )
 
 type fakeProvider struct {
@@ -682,7 +682,7 @@ func TestDailyBarsRejectsCacheWithWrongAdjustmentBasis(t *testing.T) {
 	amt := float64(100000)
 	cached := []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &vol, Amount: &amt, AdjustmentBasis: model.AdjustmentBackward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}
 	payload, _ := json.Marshal(map[string]any{"bars": cached, "warnings": []string{}})
-	mem.values["md:v4:bars:600519.SH:::forward_adjusted:120"] = payload
+	mem.values["md:v5:bars:600519.SH:::forward_adjusted:120"] = payload
 	providerVol := int64(20000)
 	providerAmt := float64(200000)
 	p := fakeProvider{name: "eastmoney", bars: []model.DailyBar{{SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &providerVol, Amount: &providerAmt, AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid}}}
@@ -780,7 +780,7 @@ func TestDailyBarsCacheWithoutSourceVersionIsBypassed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem.values["md:v4:bars:600519.SH:2026-10-20:2026-10-20:forward_adjusted:1"] = payload
+	mem.values["md:v5:bars:600519.SH:2026-10-20:2026-10-20:forward_adjusted:1"] = payload
 	fresh := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
 	svc := New([]provider.Provider{fakeProvider{name: "tencent", bars: []model.DailyBar{fresh}}}, mem, nil,
 		time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -992,7 +992,7 @@ func TestDailyBarsCacheWithOldNormalizationVersionIsBypassed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem.values["md:v4:bars:600519.SH:::forward_adjusted:120"] = payload
+	mem.values["md:v5:bars:600519.SH:::forward_adjusted:120"] = payload
 	providerBar := old
 	providerBar.Source = "tencent"
 	providerBar.NormalizationVer = normalize.Version
@@ -1159,7 +1159,7 @@ func TestCoherentStoredSeriesNeverMixesProvidersAndRejectsUnknownAdjustedReferen
 	if reason != "" || len(series) != 1 || series[0].Source == "" {
 		t.Fatalf("should return a single source series, got %+v reason=%s", series, reason)
 	}
-	_, reason = coherentStoredSeries([]model.DailyBar{{SourceVersion: "test-v1", Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward, NormalizationVer: normalize.Version}}, model.AdjustmentForward)
+	_, reason = coherentStoredSeries([]model.DailyBar{{SourceVersion: "test-v1", Source: "eastmoney", TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward, AdjustmentMethod: "eastmoney_qfq", NormalizationVer: normalize.Version}}, model.AdjustmentForward)
 	if reason == "" {
 		t.Fatal("adjusted series with unknown reference date must be rejected")
 	}
@@ -2692,7 +2692,7 @@ func TestDailyBarsCacheWithFutureServiceTimestampsIsBypassed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem.values["md:v4:bars:600519.SH:2026-10-20:2026-10-20:forward_adjusted:1"] = payload
+	mem.values["md:v5:bars:600519.SH:2026-10-20:2026-10-20:forward_adjusted:1"] = payload
 
 	providerBar := cached
 	providerBar.Source = "tencent"
@@ -2820,5 +2820,168 @@ func TestValidateSectorRankingSnapshotRejectsDroppedRowsWhenTotalWasMissing(t *t
 	}
 	if err := validateSectorRankingSnapshot("industry", 10, snapshot); err == nil || !strings.Contains(err.Error(), "dropped source rows") {
 		t.Fatalf("sector ranking that discarded malformed source rows must be rejected for provider fallback, got %v", err)
+	}
+}
+
+func TestDailyBarCoverageUsesTradingCalendarSessionCount(t *testing.T) {
+	weekdayEstimate := minimumDailyBarCoverage(20, 20)
+	calendarEstimate := minimumDailyBarCoverage(15, 20)
+	if weekdayEstimate != 13 {
+		t.Fatalf("65%% threshold for 20 weekdays = %d, want 13", weekdayEstimate)
+	}
+	if calendarEstimate != 10 {
+		t.Fatalf("65%% threshold for 15 actual trading sessions = %d, want 10", calendarEstimate)
+	}
+	if calendarEstimate >= weekdayEstimate {
+		t.Fatalf("holiday-aware coverage threshold should be lower than weekday estimate: calendar=%d weekdays=%d", calendarEstimate, weekdayEstimate)
+	}
+}
+
+func TestCurrentIncompleteDailyBarRespectsExchangeTradingCalendar(t *testing.T) {
+	loc := marketLocation()
+	now := time.Date(2026, 11, 3, 11, 0, 0, 0, loc)
+	date := now.Format("2006-01-02")
+	if isCurrentIncompleteSessionBarOnTradingDay(date, now, false) {
+		t.Fatal("a weekday exchange holiday must not be marked as an incomplete trading-session bar")
+	}
+	if !isCurrentIncompleteSessionBarOnTradingDay(date, now, true) {
+		t.Fatal("an active trading day before close must be marked as potentially incomplete")
+	}
+}
+
+func TestCoherentStoredSeriesSeparatesAdjustmentMethods(t *testing.T) {
+	base := model.DailyBar{
+		SourceVersion: "test-v1", Source: "yahoo", AdjustmentBasis: model.AdjustmentForward,
+		AdjustmentRefDate: "2026-10-22", NormalizationVer: normalize.Version,
+	}
+	first := base
+	first.TradeDate = "2026-10-20"
+	first.AdjustmentMethod = "yahoo_adjclose_ratio_rebased_to_end_v1"
+	second := first
+	second.TradeDate = "2026-10-21"
+	third := base
+	third.TradeDate = "2026-10-22"
+	third.AdjustmentMethod = "yahoo_adjclose_ratio_rebased_to_end_v2"
+	series, reason := coherentStoredSeries([]model.DailyBar{first, second, third}, model.AdjustmentForward)
+	if reason != "" || len(series) != 2 {
+		t.Fatalf("different adjustment methods must not be merged: series=%+v reason=%s", series, reason)
+	}
+	for _, bar := range series {
+		if bar.AdjustmentMethod != first.AdjustmentMethod {
+			t.Fatalf("coherent series contains a mixed adjustment method: %+v", series)
+		}
+	}
+}
+
+func TestCoherentStoredSeriesAllowsBackwardCumulativeFactorWithoutReferenceDate(t *testing.T) {
+	bar := model.DailyBar{
+		SourceVersion: "tushare-daily-bars-v1", Source: "tushare", TradeDate: "2026-10-20",
+		AdjustmentBasis: model.AdjustmentBackward, AdjustmentMethod: "cumulative_adj_factor_v1",
+		NormalizationVer: normalize.Version,
+	}
+	series, reason := coherentStoredSeries([]model.DailyBar{bar}, model.AdjustmentBackward)
+	if reason != "" || len(series) != 1 {
+		t.Fatalf("backward cumulative-factor series without a reference date is valid: series=%+v reason=%s", series, reason)
+	}
+}
+
+func TestCoherentStoredSeriesRejectsAdjustedBarsWithoutMethod(t *testing.T) {
+	bar := model.DailyBar{
+		SourceVersion: "test-v1", Source: "yahoo", TradeDate: "2026-10-20",
+		AdjustmentBasis: model.AdjustmentForward, AdjustmentRefDate: "2026-10-22",
+		NormalizationVer: normalize.Version,
+	}
+	series, reason := coherentStoredSeries([]model.DailyBar{bar}, model.AdjustmentForward)
+	if reason == "" || len(series) != 0 {
+		t.Fatalf("adjusted series without a method must be rejected: series=%+v reason=%s", series, reason)
+	}
+}
+
+func TestDailyBarAdjustmentMetadataDegradesUnverifiedForwardReference(t *testing.T) {
+	bars := []model.DailyBar{{
+		TradeDate:        "2026-10-20",
+		AdjustmentBasis:  model.AdjustmentForward,
+		AdjustmentMethod: "eastmoney_fqt_1",
+		QualityStatus:    model.QualityValid,
+	}}
+	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentForward, "2026-10-20")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bars[0].QualityStatus != model.QualityDegraded ||
+		!containsTestWarning(warnings, "daily_bar_adjustment_reference_date_unverified") ||
+		!containsTestWarning(bars[0].QualityReasons, "daily_bar_adjustment_reference_date_unverified") {
+		t.Fatalf("forward adjustment without a verified reference date must be degraded: bars=%+v warnings=%v", bars, warnings)
+	}
+}
+
+func TestDailyBarAdjustmentMetadataRejectsMixedMethodsAndReferences(t *testing.T) {
+	base := model.DailyBar{
+		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward,
+		AdjustmentMethod: "method-a", AdjustmentRefDate: "2026-10-22", QualityStatus: model.QualityValid,
+	}
+	other := base
+	other.TradeDate = "2026-10-21"
+	other.AdjustmentMethod = "method-b"
+	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward, "2026-10-22"); err == nil {
+		t.Fatal("mixed adjustment methods must reject the provider response")
+	}
+	other = base
+	other.TradeDate = "2026-10-21"
+	other.AdjustmentRefDate = "2026-10-23"
+	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{base, other}, model.AdjustmentForward, "2026-10-23"); err == nil {
+		t.Fatal("mixed adjustment reference dates must reject the provider response")
+	}
+}
+
+func TestDailyBarAdjustmentMetadataRejectsReferenceOutsideRequestedRange(t *testing.T) {
+	bar := model.DailyBar{
+		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentForward,
+		AdjustmentMethod: "method-a", AdjustmentRefDate: "2026-10-22", QualityStatus: model.QualityValid,
+	}
+	if _, err := applyDailyBarAdjustmentMetadataQuality([]model.DailyBar{bar}, model.AdjustmentForward, "2026-10-21"); err == nil {
+		t.Fatal("forward adjustment reference date after requested end must be rejected")
+	}
+}
+
+func TestDailyBarAdjustmentMetadataAllowsCumulativeHFQWithoutReferenceDate(t *testing.T) {
+	bars := []model.DailyBar{{
+		TradeDate: "2026-10-20", AdjustmentBasis: model.AdjustmentBackward,
+		AdjustmentMethod: "tushare_adj_factor_hfq_v1", QualityStatus: model.QualityValid,
+	}}
+	warnings, err := applyDailyBarAdjustmentMetadataQuality(bars, model.AdjustmentBackward, "2026-10-20")
+	if err != nil || len(warnings) != 0 || bars[0].QualityStatus != model.QualityValid {
+		t.Fatalf("cumulative-factor HFQ without reference date: bars=%+v warnings=%v err=%v", bars, warnings, err)
+	}
+}
+
+func TestDailyBarsCacheDegradesForwardSeriesWithoutReferenceDate(t *testing.T) {
+	mem := newMemoryCache()
+	volume := int64(1000)
+	amount := 10500.0
+	now := time.Now().UTC()
+	bar := model.DailyBar{
+		SourceVersion: "test-v1", Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
+		AdjustmentBasis: model.AdjustmentForward, AdjustmentMethod: "eastmoney_fqt_1", Source: "eastmoney",
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+		NormalizationVer: normalize.Version, FetchedAt: now, NormalizedAt: now,
+	}
+	payload, err := json.Marshal(map[string]any{"bars": []model.DailyBar{bar}, "warnings": []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	end := time.Now().In(marketLocation()).Format("2006-01-02")
+	cacheKey := "md:v5:bars:600519.SH::" + end + ":forward_adjusted:1"
+	mem.values[cacheKey] = payload
+	s := New(nil, mem, nil, time.Second, time.Minute, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, hit, warnings, err := s.DailyBars(context.Background(), "600519.SH", "", end, 1, model.AdjustmentForward)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hit || len(bars) != 1 || bars[0].QualityStatus != model.QualityDegraded ||
+		!containsTestWarning(bars[0].QualityReasons, "daily_bar_adjustment_reference_date_unverified") ||
+		!containsTestWarning(warnings, "daily_bar_adjustment_reference_date_unverified") {
+		t.Fatalf("cached forward bars without a verified reference date must be degraded: hit=%t bars=%+v warnings=%v", hit, bars, warnings)
 	}
 }

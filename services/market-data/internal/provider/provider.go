@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 // NamedProvider 是数据源发现与诊断所需的最小接口。新增 Provider 不需要实现与自身无关的数据能力。

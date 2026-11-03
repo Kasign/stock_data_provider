@@ -9,8 +9,8 @@ import (
 
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 func TestReadBoundedBodyRejectsOversizedPayload(t *testing.T) {
@@ -110,5 +110,44 @@ func TestProviderJSONValueTypeAndPreview(t *testing.T) {
 	}
 	if got := providerJSONPreview(json.RawMessage("{\"secret\":\"not-exposed\"}")); got != "" {
 		t.Fatalf("object preview must be omitted, got %q", got)
+	}
+}
+
+func TestNormalizeProviderDailyBarsDegradesUnverifiedForwardAdjustment(t *testing.T) {
+	volume := int64(1000)
+	amount := 105000.0
+	bars := []model.DailyBar{{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 100, High: 110, Low: 90, Close: 105, Volume: &volume, Amount: &amount,
+		VolumeUnit: "shares", AmountUnit: "CNY", Source: "test-provider", SourceVersion: "test-v1",
+		AdjustmentBasis: model.AdjustmentForward, QualityStatus: model.QualityValid,
+	}}
+	got, err := normalizeProviderDailyBars("600519.SH", "2026-10-20", "2026-10-20", 10, bars, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].QualityStatus != model.QualityDegraded {
+		t.Fatalf("forward adjustment without method/reference must be degraded: %+v", got)
+	}
+	if !strings.Contains(strings.Join(got[0].QualityReasons, ","), "daily_bar_adjustment_method_unreported") || !strings.Contains(strings.Join(got[0].QualityReasons, ","), "daily_bar_adjustment_reference_date_unverified") {
+		t.Fatalf("missing adjustment metadata reasons: %+v", got[0].QualityReasons)
+	}
+}
+
+func TestNormalizeProviderDailyBarsAllowsCumulativeHFQWithoutReferenceDate(t *testing.T) {
+	volume := int64(1000)
+	amount := 105000.0
+	bars := []model.DailyBar{{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 100, High: 110, Low: 90, Close: 105, Volume: &volume, Amount: &amount,
+		VolumeUnit: "shares", AmountUnit: "CNY", Source: "test-provider", SourceVersion: "test-v1",
+		AdjustmentBasis: model.AdjustmentBackward, AdjustmentMethod: "tushare_adj_factor_hfq_v1", QualityStatus: model.QualityValid,
+	}}
+	got, err := normalizeProviderDailyBars("600519.SH", "2026-10-20", "2026-10-20", 10, bars, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].QualityStatus != model.QualityValid {
+		t.Fatalf("cumulative HFQ without request reference date should remain valid: %+v", got)
 	}
 }

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 type domesticMarketRoundTripper func(*http.Request) (*http.Response, error)

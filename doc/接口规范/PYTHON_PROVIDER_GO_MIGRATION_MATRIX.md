@@ -2,7 +2,7 @@
 
 - 适用分支：`feat/full-go-data-providers-api-switch`
 - 静态检查基线：`4c603172448102058f95e6bc625494436a8402c9`
-- 更新日期：2026-10-30
+- 更新日期：2026-11-03
 - 检查范围：当前仓库中的 Go Provider 接口、Provider 实现、启动注册、`providers.json`、Python bridge 适配代码。
 - 证据限制：当前仓库没有完整包含原始 Python `DataFetcherManager`、Efinance、AkShare 的全部实现；本矩阵不能证明旧系统每个函数的来源和字段契约。
 
@@ -102,8 +102,7 @@ Python bridge 还包含 search、LLM、notification、persistence 等非行情�
 - [ ] 市场情绪历史快照（当前市场宽度快照不等于历史序列）。
 - [ ] 市场级资金流及历史序列（个股资金流不等于市场资金流）。
 - [ ] 板块多维排行：今日涨幅、成交额、近 5 日涨幅、资金净流入，需分别定义完整候选集和排序口径。
-- [ ] Provider 主动探测及逐 Provider、逐 capability 健康检查。
-- [ ] 诊断历史持久化。
+以上两项已在当前分支实现：统一 Probe API、逐 Provider/capability 探测、超时/并发控制、状态分类、checks 过滤、字段级 Reporter、MariaDB 诊断历史持久化。后续只做数据域规则与真实运行验收，不重复建设。
 - [ ] 严格 PIT：财报修订、指数成分历史生效区间、公司行动/复权因子和 publication/available_at。
 
 ## 6. 对账验收规则

@@ -2,6 +2,14 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+
+printf '\n== Go module path references ==\n'
+if grep -R -nE 'github\.com/ZhuLinsen/daily_stock_analysis/(go-core|services/market-data)' --include='*.go' --include='go.mod' "$ROOT"; then
+  echo "发现旧 Go 模块路径引用，请先完成迁移。"
+  exit 1
+fi
+grep -Fxq 'module github.com/Kasign/stock_data_provider/go-core' "$ROOT/go-core/go.mod"
+grep -Fxq 'module github.com/Kasign/stock_data_provider/services/market-data' "$ROOT/services/market-data/go.mod"
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 printf '\n== go-core: test/vet/build ==\n'

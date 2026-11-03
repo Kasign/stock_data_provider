@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
 )
 
 const tushareVersion = "tushare-pro-daily-v2-adjustment-factor"
@@ -324,7 +324,7 @@ func (p *Tushare) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endD
 			return nil, factorErr
 		}
 	}
-	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
 }
 
 func (p *Tushare) fetchAdjustmentFactors(ctx context.Context, symbol, startDate, endDate string) (map[string]float64, error) {

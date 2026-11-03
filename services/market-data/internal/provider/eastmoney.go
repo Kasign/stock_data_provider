@@ -16,8 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 const eastmoneyVersion = "eastmoney-stock-api-v1"
@@ -558,6 +559,81 @@ func parseEastmoneyProfileDate(value string) (string, error) {
 	return "", fmt.Errorf("eastmoney stock-basic date %q has an unsupported format", value)
 }
 
+func parseEastmoneyQuoteNumber(ctx context.Context, data map[string]json.RawMessage, providerField, field string, required bool) (*float64, error) {
+	raw, exists := data[providerField]
+	actualType := "missing"
+	preview := ""
+	value := ""
+	if exists {
+		trimmed := strings.TrimSpace(string(raw))
+		preview = trimmed
+		if len(preview) > 160 {
+			preview = preview[:160]
+		}
+		preview = strings.Map(func(r rune) rune {
+			if r < 0x20 || r == 0x7f {
+				return ' '
+			}
+			return r
+		}, preview)
+		switch {
+		case len(trimmed) == 0:
+			actualType = "missing"
+		case trimmed == "null":
+			actualType = "null"
+		case strings.HasPrefix(trimmed, "{"):
+			actualType = "object"
+		case strings.HasPrefix(trimmed, "["):
+			actualType = "array"
+		case trimmed == "true" || trimmed == "false":
+			actualType = "boolean"
+		case strings.HasPrefix(trimmed, "\""):
+			actualType = "string"
+		default:
+			actualType = "number"
+		}
+		if actualType == "string" {
+			if err := json.Unmarshal(raw, &value); err != nil {
+				actualType = "invalid"
+			}
+		} else if actualType == "number" {
+			value = trimmed
+		}
+	}
+	missing := !exists || actualType == "missing" || actualType == "null" ||
+		(actualType == "string" && (value == "" || value == "-"))
+	addIssue := func(code, expected, message string, severity validation.Severity) {
+		report := validation.NewReport(4)
+		report.Add(validation.FieldIssue{
+			Stage: validation.StageParse, Field: field, ProviderField: providerField,
+			Code: code, Expected: expected, ActualType: actualType,
+			ActualPreview: preview, Severity: severity, Message: message,
+		})
+		validation.AddContextReport(ctx, report)
+	}
+	if missing {
+		if required {
+			code := "missing"
+			if actualType == "null" {
+				code = "null_value"
+			}
+			addIssue(code, "required finite number", "Eastmoney quote source field is missing or null", validation.SeverityError)
+			return nil, fmt.Errorf("Eastmoney quote field %s (%s) is missing", field, providerField)
+		}
+		return nil, nil
+	}
+	if actualType != "number" && actualType != "string" {
+		addIssue("type_mismatch", "number or numeric string", "Eastmoney quote source field has an unsupported JSON type", validation.SeverityError)
+		return nil, fmt.Errorf("Eastmoney quote field %s (%s) has type %s", field, providerField, actualType)
+	}
+	number, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || math.IsNaN(number) || math.IsInf(number, 0) {
+		addIssue("invalid_number", "finite number", "Eastmoney quote source field is not a finite number", validation.SeverityError)
+		return nil, fmt.Errorf("Eastmoney quote field %s (%s) is not a finite number", field, providerField)
+	}
+	return &number, nil
+}
+
 func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quote, error) {
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
@@ -587,6 +663,7 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		return nil, fmt.Errorf("Eastmoney quote provider error rc=%d", *payload.RC)
 	}
 	if payload.Data == nil {
+		addProviderQuoteIssue(ctx, validation.StageParse, "quote", "data", "required_data_missing", "quote data object", "null", "", "Eastmoney returned an empty quote object", validation.SeverityError)
 		return nil, errors.New("eastmoney returned an empty quote")
 	}
 	getString := func(key string) string {
@@ -606,52 +683,26 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 	if reportedSymbol != "" {
 		canonical, canonicalErr := normalize.NormalizeSymbol(reportedSymbol)
 		if canonicalErr != nil || canonical != symbol {
+			addProviderQuoteIssue(ctx, validation.StageValidate, "symbol", "f57", "identity_mismatch", symbol, "string", reportedSymbol, "Eastmoney quote response symbol does not match requested security", validation.SeverityError)
 			return nil, fmt.Errorf("Eastmoney quote symbol mismatch: requested %s got %q", symbol, reportedSymbol)
 		}
 	}
-	getNumber := func(key string) (*float64, error) {
-		s := getString(key)
-		if s == "" || s == "-" || s == "null" {
-			return nil, nil
+	parseErrors := make([]error, 0)
+	parseNumber := func(key, field string, required bool) *float64 {
+		value, parseErr := parseEastmoneyQuoteNumber(ctx, payload.Data, key, field, required)
+		if parseErr != nil {
+			parseErrors = append(parseErrors, parseErr)
 		}
-		v, e := strconv.ParseFloat(s, 64)
-		if e != nil || math.IsNaN(v) || math.IsInf(v, 0) {
-			return nil, fmt.Errorf("invalid Eastmoney numeric field %s", key)
-		}
-		return &v, nil
+		return value
 	}
-	price, err := getNumber("f43")
-	if err != nil {
-		return nil, err
-	}
-	high, err := getNumber("f44")
-	if err != nil {
-		return nil, err
-	}
-	low, err := getNumber("f45")
-	if err != nil {
-		return nil, err
-	}
-	open, err := getNumber("f46")
-	if err != nil {
-		return nil, err
-	}
-	prev, err := getNumber("f60")
-	if err != nil {
-		return nil, err
-	}
-	change, err := getNumber("f169")
-	if err != nil {
-		return nil, err
-	}
-	pct, err := getNumber("f170")
-	if err != nil {
-		return nil, err
-	}
-	rawVol, err := getNumber("f47")
-	if err != nil {
-		return nil, err
-	}
+	price := parseNumber("f43", "current_price", true)
+	high := parseNumber("f44", "high", true)
+	low := parseNumber("f45", "low", true)
+	open := parseNumber("f46", "open", true)
+	prev := parseNumber("f60", "prev_close", true)
+	change := parseNumber("f169", "change", false)
+	pct := parseNumber("f170", "change_percent", false)
+	rawVol := parseNumber("f47", "volume", true)
 	var volume *int64
 	var volumePtr *float64
 	if rawVol != nil {
@@ -662,18 +713,12 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		volume = &shares
 		volumePtr = rawVol
 	}
-	rawAmount, err := getNumber("f48")
-	if err != nil {
-		return nil, err
-	}
+	rawAmount := parseNumber("f48", "amount", true)
 	amount := rawAmount // Eastmoney quote amount is CNY
-	volumeRatio, err := getNumber("f50")
-	if err != nil {
-		return nil, err
-	}
-	turnoverRate, err := getNumber("f168")
-	if err != nil {
-		return nil, err
+	volumeRatio := parseNumber("f50", "volume_ratio", false)
+	turnoverRate := parseNumber("f168", "turnover_rate", false)
+	if len(parseErrors) > 0 {
+		return nil, fmt.Errorf("Eastmoney quote parse: %w", errors.Join(parseErrors...))
 	}
 	name := getString("f58")
 	fetchedAt := time.Now().UTC()
@@ -691,8 +736,10 @@ func (p *Eastmoney) FetchQuote(ctx context.Context, rawSymbol string) (*model.Qu
 		quote.QualityReasons = append(quote.QualityReasons, "name_missing")
 		quote.QualityStatus = model.QualityDegraded
 	}
-	if err := normalize.ValidateQuote(quote); err != nil {
-		return nil, fmt.Errorf("Eastmoney quote data contract: %w", err)
+	report, validationErr := normalize.ValidateQuoteWithReport(quote)
+	validation.AddContextReport(ctx, report)
+	if validationErr != nil {
+		return nil, fmt.Errorf("Eastmoney quote data contract: %w", validationErr)
 	}
 	// 源端涨跌字段已通过容差校验；输出值统一以最新价和昨收价计算。
 	canonicalChange := *quote.CurrentPrice - *quote.PrevClose
@@ -1249,6 +1296,9 @@ func calculateEastmoneyChipMetrics(rows []eastmoneyChipKline) (eastmoneyChipMetr
 }
 
 func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	symbol, err := normalize.NormalizeSymbol(rawSymbol)
 	if err != nil {
 		return nil, err
@@ -1345,7 +1395,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 		amountValue := amount
 		rawVolume := rawVol
 		rawAmount := amount
-		bar := model.DailyBar{Symbol: symbol, TradeDate: parts[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: &amountValue, AdjustmentBasis: basis, Source: p.Name(), SourceVersion: eastmoneyVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rawVolume, RawVolumeUnit: "hands", RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "kline_field_6", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
+		bar := model.DailyBar{Symbol: symbol, TradeDate: parts[0], Period: "1d", Open: open, High: high, Low: low, Close: closeV, Volume: &shares, Amount: &amountValue, AdjustmentBasis: basis, AdjustmentMethod: "eastmoney_fqt_" + fqt, Source: p.Name(), SourceVersion: eastmoneyVersion, FetchedAt: time.Now().UTC(), NormalizedAt: time.Now().UTC(), RawVolume: &rawVolume, RawVolumeUnit: "hands", RawAmount: &rawAmount, RawAmountUnit: "CNY", RawAmountField: "kline_field_6", VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}
 		if len(parts) > 8 {
 			if pct, e := strconv.ParseFloat(parts[8], 64); e == nil {
 				bar.ChangePercent = &pct
@@ -1356,7 +1406,7 @@ func (p *Eastmoney) FetchDailyBars(ctx context.Context, rawSymbol, startDate, en
 	// 使用实际发给上游的查询区间（包括自动计算的回溯起始日）过滤结果。
 	startISO := beg[:4] + "-" + beg[4:6] + "-" + beg[6:]
 	endISO := end[:4] + "-" + end[4:6] + "-" + end[6:]
-	bars, normalizeErr := normalizeProviderDailyBars(symbol, startISO, endISO, limit, out, rejectedRows)
+	bars, normalizeErr := normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, out, rejectedRows)
 	if normalizeErr != nil {
 		return nil, normalizeErr
 	}

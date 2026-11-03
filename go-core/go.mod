@@ -1,3 +1,3 @@
-module github.com/ZhuLinsen/daily_stock_analysis/go-core
+module github.com/Kasign/stock_data_provider/go-core
 
 go 1.23

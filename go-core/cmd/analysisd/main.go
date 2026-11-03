@@ -13,11 +13,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/marketdatahttp"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/newssearch"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/adapters/pythonbridge"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/application"
-	httptransport "github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/transport/http"
+	"github.com/Kasign/stock_data_provider/go-core/internal/adapters/marketdatahttp"
+	"github.com/Kasign/stock_data_provider/go-core/internal/adapters/newssearch"
+	"github.com/Kasign/stock_data_provider/go-core/internal/adapters/pythonbridge"
+	"github.com/Kasign/stock_data_provider/go-core/internal/application"
+	httptransport "github.com/Kasign/stock_data_provider/go-core/internal/transport/http"
 )
 
 func main() {

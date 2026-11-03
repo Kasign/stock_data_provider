@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/freshness"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/freshness"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/provider"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 var (
@@ -27,9 +27,10 @@ var (
 
 type providerProbeFunc func(context.Context) (model.QualityStatus, string, []string, error)
 type providerProbeJob struct {
-	provider   string
-	capability string
-	run        providerProbeFunc
+	provider        string
+	capability      string
+	adjustmentBasis model.AdjustmentBasis
+	run             providerProbeFunc
 }
 
 type providerProbeEvidenceContextKey struct{}
@@ -164,12 +165,13 @@ func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string,
 
 // ProviderProbeOptions 控制主动诊断的执行范围和单项超时。
 type ProviderProbeOptions struct {
-	Scope          string
-	Capabilities   []string
-	Checks         []string
-	Markets        []string
-	Symbols        []string
-	TimeoutSeconds int
+	Scope               string
+	Capabilities        []string
+	Checks              []string
+	Markets             []string
+	Symbols             []string
+	DailyBarAdjustments []model.AdjustmentBasis
+	TimeoutSeconds      int
 }
 
 // ProbeProviderCapabilities 保留旧调用方式，默认执行全部诊断能力。
@@ -251,6 +253,25 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	if len(selected) == 0 {
 		return nil, errors.New("provider-probe capabilities must not be empty")
 	}
+	if selected["daily_bars"] {
+		if len(options.DailyBarAdjustments) == 0 {
+			options.DailyBarAdjustments = []model.AdjustmentBasis{model.AdjustmentNone}
+		}
+		seenAdjustments := make(map[model.AdjustmentBasis]bool, len(options.DailyBarAdjustments))
+		for _, adjustment := range options.DailyBarAdjustments {
+			switch adjustment {
+			case model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward:
+			default:
+				return nil, fmt.Errorf("provider-probe daily_bar_adjustments value %q is not supported", adjustment)
+			}
+			if seenAdjustments[adjustment] {
+				return nil, fmt.Errorf("provider-probe daily_bar_adjustments value %q is duplicated", adjustment)
+			}
+			seenAdjustments[adjustment] = true
+		}
+	} else if len(options.DailyBarAdjustments) > 0 {
+		return nil, errors.New("provider-probe daily_bar_adjustments requires daily_bars capability")
+	}
 	if len(options.Markets) > 1 || len(options.Symbols) > 1 {
 		return nil, errors.New("provider-probe currently accepts at most one market and one symbol per request")
 	}
@@ -303,10 +324,14 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		requested = append(requested, capability)
 	}
 	sort.Strings(requested)
-	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
+	run := &model.ProviderProbeRun{RunID: newFetchID(), Scope: options.Scope, RequestedCapabilities: requested, RequestedChecks: requestedChecks, RequestedMarkets: append([]string(nil), options.Markets...), RequestedSymbols: append([]string(nil), options.Symbols...), RequestedDailyBarAdjustments: append([]model.AdjustmentBasis(nil), options.DailyBarAdjustments...), TimeoutSeconds: options.TimeoutSeconds, StartedAt: startedAt, Items: make([]model.ProviderProbeItem, 0)}
 	jobs := make([]providerProbeJob, 0)
-	add := func(name, capability string, fn providerProbeFunc) {
-		jobs = append(jobs, providerProbeJob{provider: name, capability: capability, run: fn})
+	add := func(name, capability string, fn providerProbeFunc, adjustment ...model.AdjustmentBasis) {
+		job := providerProbeJob{provider: name, capability: capability, run: fn}
+		if len(adjustment) > 0 {
+			job.adjustmentBasis = adjustment[0]
+		}
+		jobs = append(jobs, job)
 	}
 	quoteSymbol := "600519.SH"
 	barsSymbol := "600036.SH"
@@ -352,13 +377,14 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote source missing")
 			}
 			reporter := validation.ReporterFromContext(probeCtx)
-			if reporter == nil || reporter.Snapshot().TotalCount == 0 {
+			if reporter == nil || !reporter.Snapshot().HasStage(validation.StageValidate) {
 				report, validationErr := normalize.ValidateQuoteWithReport(q)
 				validation.AddContextReport(probeCtx, report)
 				if validationErr != nil {
 					return model.QualityInvalid, q.SourceVersion, nil, validationErr
 				}
-			} else if reporter.Snapshot().HasErrors() {
+			}
+			if reporter != nil && reporter.Snapshot().HasErrors() {
 				return model.QualityInvalid, q.SourceVersion, nil, errors.New("quote adapter reported field validation errors")
 			}
 			if q.SourceVersion == "" {
@@ -371,71 +397,75 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 	for _, p := range s.barProviders {
 		p := p
-		add(p.Name(), "daily_bars", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
-			bars, err := p.FetchDailyBars(probeCtx, barsSymbol, "", "", 5, model.AdjustmentNone)
-			if err != nil {
-				return model.QualityUnknown, "", nil, err
-			}
-			var validated []model.DailyBar
-			var warnings []string
-			// Adapter 已在过滤前通过同一 Reporter 上报字段问题时，Probe 只复用旧校验结果，避免重复累计同一批字段问题。
-			if reporter := validation.ReporterFromContext(probeCtx); reporter != nil && reporter.Snapshot().TotalCount > 0 {
-				validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
-			} else {
-				var report validation.Report
-				validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, "", "", 5)
-				validation.AddContextReport(probeCtx, report)
-			}
-			latestDate := ""
-			var providerTime *time.Time
-			if len(validated) > 0 {
-				latest := validated[len(validated)-1]
-				latestDate = latest.TradeDate
-				providerTime = latest.ProviderTime
-			}
-			recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
-			if len(validated) == 0 {
-				return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned no valid bars")
-			}
-			quality := model.QualityValid
-			version := ""
-			reasons := append([]string(nil), warnings...)
-			for _, bar := range validated {
-				if version == "" {
-					version = bar.SourceVersion
+		for _, adjustment := range options.DailyBarAdjustments {
+			adjustment := adjustment
+			add(p.Name(), "daily_bars", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
+				bars, err := p.FetchDailyBars(probeCtx, barsSymbol, "", "", 5, adjustment)
+				if err != nil {
+					return model.QualityUnknown, "", nil, err
 				}
-				if bar.QualityStatus != model.QualityValid {
+				var validated []model.DailyBar
+				var warnings []string
+				// 仅当 Adapter 已上报 Validate 阶段结果时复用该报告；Parse-only 报告不能跳过公共字段校验。
+				reporter := validation.ReporterFromContext(probeCtx)
+				if reporter != nil && reporter.Snapshot().HasStage(validation.StageValidate) {
+					validated, warnings = normalize.ValidateAndSortBars(barsSymbol, bars, "", "", 5)
+				} else {
+					var report validation.Report
+					validated, warnings, report = normalize.ValidateAndSortBarsWithReport(barsSymbol, bars, "", "", 5)
+					validation.AddContextReport(probeCtx, report)
+				}
+				latestDate := ""
+				var providerTime *time.Time
+				if len(validated) > 0 {
+					latest := validated[len(validated)-1]
+					latestDate = latest.TradeDate
+					providerTime = latest.ProviderTime
+				}
+				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
+				if len(validated) == 0 {
+					return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned no valid bars")
+				}
+				quality := model.QualityValid
+				version := ""
+				reasons := append([]string(nil), warnings...)
+				for _, bar := range validated {
+					if version == "" {
+						version = bar.SourceVersion
+					}
+					if bar.QualityStatus != model.QualityValid {
+						quality = model.QualityDegraded
+					}
+					for _, reason := range bar.QualityReasons {
+						reasons = appendReason(reasons, reason)
+					}
+				}
+				if len(warnings) > 0 {
 					quality = model.QualityDegraded
 				}
-				for _, reason := range bar.QualityReasons {
-					reasons = appendReason(reasons, reason)
+				if version == "" {
+					return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing")
 				}
-			}
-			if len(warnings) > 0 {
-				quality = model.QualityDegraded
-			}
-			if version == "" {
-				return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing")
-			}
-			snapshotBars := make([]provider.CrossProviderDailyBar, 0, len(validated))
-			for _, bar := range validated {
-				if bar.Volume == nil {
-					snapshotBars = nil
-					break
+				snapshotBars := make([]provider.CrossProviderDailyBar, 0, len(validated))
+				for _, bar := range validated {
+					if bar.Volume == nil {
+						snapshotBars = nil
+						break
+					}
+					snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
+						TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
+						Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+					})
 				}
-				snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
-					TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
-					Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
-				})
-			}
-			if len(snapshotBars) == len(validated) {
-				recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
-					Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
-					AdjustmentBasis: string(model.AdjustmentNone), QualityStatus: string(quality), Bars: snapshotBars,
-				})
-			}
-			return quality, version, reasons, nil
-		})
+				if len(snapshotBars) == len(validated) {
+					recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
+						Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
+						AdjustmentBasis: string(adjustment), QualityStatus: string(quality), Bars: snapshotBars,
+					})
+				}
+				return quality, version, reasons, nil
+			}, adjustment)
+		}
 	}
 	for _, p := range s.stockBasicProviders {
 		p := p
@@ -856,7 +886,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		wg.Add(1)
 		go func(index int, job providerProbeJob) {
 			defer wg.Done()
-			item := model.ProviderProbeItem{Provider: job.provider, Capability: job.capability, Status: "failed", QualityStatus: model.QualityUnknown}
+			item := model.ProviderProbeItem{Provider: job.provider, Capability: job.capability, AdjustmentBasis: job.adjustmentBasis, Status: "failed", QualityStatus: model.QualityUnknown}
 			checkedAt := time.Now().UTC()
 			select {
 			case sem <- struct{}{}:
@@ -914,7 +944,11 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 			}
 			if err != nil {
 				setProbeFailure(&item, err)
-				if (selectedMarket == "BSE" || strings.HasSuffix(probeSymbol, ".BJ")) && isUnsupportedBeijingProbeError(err) {
+				if job.capability == "daily_bars" && isUnsupportedDailyBarAdjustmentError(err) {
+					item.Status = "not_supported"
+					item.ErrorCode = "daily_bar_adjustment_not_supported"
+					item.ErrorStage = "configuration"
+				} else if (selectedMarket == "BSE" || strings.HasSuffix(probeSymbol, ".BJ")) && isUnsupportedBeijingProbeError(err) {
 					item.Status = "not_supported"
 					item.ErrorCode = "market_not_supported"
 					item.ErrorStage = "configuration"
@@ -946,7 +980,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		if results[i].Provider != results[j].Provider {
 			return results[i].Provider < results[j].Provider
 		}
-		return results[i].Capability < results[j].Capability
+		if results[i].Capability != results[j].Capability {
+			return results[i].Capability < results[j].Capability
+		}
+		return results[i].AdjustmentBasis < results[j].AdjustmentBasis
 	})
 	run.Items = results
 	for _, item := range results {
@@ -1252,7 +1289,7 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 	for leftIndex := 0; leftIndex < len(validSnapshots); leftIndex++ {
 		for rightIndex := leftIndex + 1; rightIndex < len(validSnapshots); rightIndex++ {
 			left, right := validSnapshots[leftIndex], validSnapshots[rightIndex]
-			if left.Provider == right.Provider || left.Symbol != right.Symbol {
+			if left.Provider == right.Provider || left.Symbol != right.Symbol || left.AdjustmentBasis != right.AdjustmentBasis {
 				continue
 			}
 			comparison := provider.CompareCrossProviderDailyBars(*left, *right)
@@ -1342,6 +1379,20 @@ func providerProbeCheckMessage(code string) string {
 	default:
 		return ""
 	}
+}
+
+func isUnsupportedDailyBarAdjustmentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "adjustment not supported") ||
+		strings.Contains(message, "adjustment is not supported") ||
+		strings.Contains(message, "unsupported adjustment") ||
+		strings.Contains(message, "does not support adjustment") ||
+		strings.Contains(message, "only supports unadjusted") ||
+		strings.Contains(message, "only supports verified adjustment basis") ||
+		(strings.Contains(message, "不支持") && strings.Contains(message, "复权"))
 }
 
 func isUnsupportedBeijingProbeError(err error) bool {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
 )
 
 // PriceLimitEventEvidence 获取并验证指定证券、指定交易日的特殊涨跌幅事件证据。

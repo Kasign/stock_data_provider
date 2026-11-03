@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 var tickflowBreadthFixtureSymbols = []string{"600000.SH", "000001.SZ", "300001.SZ"}

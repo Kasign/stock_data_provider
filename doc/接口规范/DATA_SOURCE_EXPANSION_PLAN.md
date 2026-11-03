@@ -1,7 +1,7 @@
 # 国内 A 股数据源扩展计划
 
 - 适用分支：`feat/full-go-data-providers-api-switch`
-- 更新日期：2026-10-30
+- 更新日期：2026-11-03
 - 依据：当前分支 Provider 接口、实现、启动注册、默认配置及 Python/Go 迁移矩阵。
 - 范围：国内 A 股；海外数据源暂缓。
 
@@ -20,7 +20,7 @@
 2. [已实现，待真实负载验收] 全市场批量股票概览：分页读取证券池并做并发受控行情与 MA 汇总，覆盖不足时只返回 lower-bound/degraded。
 3. [已实现代码路径，待真实权限验收] 市场级资金流历史：新增 Tushare `moneyflow_mkt_dc` 日期区间查询、服务层质量校验和 `/api/v1/market/capital-flow` 路由；不从个股资金流求和。Tushare 默认关闭，真实 Token/120 积分权限及金额单位仍需验收。
 4. [部分实现] 板块多维排行：已支持今日涨幅、成交额、近 5 日涨幅；近五日排行的 HTTP/服务参数校验已补齐。资金净流入维度仍等待可信字段语义、单位和完整候选集证据。
-5. [已实现，待 MariaDB 环境验收] Provider 主动诊断与诊断历史：Provider/capability 两级状态，主动探测与业务流量隔离，并持久化安全摘要。
+5. [代码与 CI 持久化集成已实现；生产部署待验收] Provider 主动诊断与诊断历史：Provider/capability 两级状态、主动探测、checks 过滤、超时/并发控制、脱敏、结构化字段诊断、MariaDB 历史持久化均已有实现；真实 Provider 与生产 MariaDB 验收单独记录。
 
 ## 2. 第一批：验证已有但默认关闭的能力
 
@@ -74,15 +74,11 @@
 
 每种排序都必须明确候选板块全集、缺失值处理、分页、排名并列和覆盖率。仅对截断样本排序不能声明为全市场 Top。
 
-### P1 Provider 主动诊断
+### Provider 主动诊断（已实现，不再作为新增开发任务）
 
-现有诊断主要记录实际 quote/daily_bars 请求形成的熔断状态。扩展时需要：
-- Provider 与 capability 两级状态；
-- 主动探测超时和并发限制；
-- 冷却、限频和探测频率；
-- 最近成功/失败时间及安全错误摘要；
-- 探测结果与真实业务请求结果分开；
-- 诊断历史持久化。
+当前分支已提供 `POST /api/v1/data-sources/probe`、`GET /api/v1/data-sources/probe/history`，支持 Provider/capability 探测、超时与并发限制、错误脱敏、状态分类、checks 过滤、结构化字段诊断和 MariaDB 历史持久化。`GET /api/v1/data-sources/diagnostics` 继续承担业务请求熔断观测，两者职责不同。
+
+剩余工作不再是建设诊断入口，而是补充 DailyBar 复权口径、交易边界、财务/估值字段规则、数据域 Freshness/PIT 和真实 Provider 证据。唯一任务顺序见 `doc/国内A股数据层阶段五统一验收计划.md`。
 
 ## 4. 第三批：历史可用性和 PIT
 

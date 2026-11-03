@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/cache"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/freshness"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/provider"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/cache"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/freshness"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/provider"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 type providerProbeQuoteFake struct{}
@@ -118,6 +118,86 @@ func (providerProbeQuoteFake) FetchQuote(_ context.Context, symbol string) (*mod
 	price, change, pct, open, high, low, prev, amount := 10.0, 1.0, 11.111111, 9.0, 11.0, 8.0, 9.0, 100000.0
 	volume := int64(10000)
 	return &model.Quote{Symbol: symbol, Name: "测试", CurrentPrice: &price, Change: &change, ChangePercent: &pct, Open: &open, High: &high, Low: &low, PrevClose: &prev, Volume: &volume, Amount: &amount, QuoteTime: &now, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: now, NormalizedAt: now, Source: "probe-test", SourceVersion: "probe-quote-v1", VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentNone, QualityStatus: model.QualityValid, NormalizationVer: normalize.Version}, nil
+}
+
+type providerProbeParseOnlyQuoteFake struct{}
+
+func (providerProbeParseOnlyQuoteFake) Name() string { return "probe-parse-only-quote" }
+
+func (providerProbeParseOnlyQuoteFake) FetchQuote(ctx context.Context, symbol string) (*model.Quote, error) {
+	quote, err := (providerProbeQuoteFake{}).FetchQuote(ctx, symbol)
+	if err != nil {
+		return nil, err
+	}
+	quote.CurrentPrice = nil
+	report := validation.NewReport(10)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: "raw_price", ProviderField: "meta.regularMarketPrice",
+		Code: "optional_parse_warning", Expected: "numeric source field",
+		Severity: validation.SeverityWarning, Message: "adapter retained a parse warning",
+	})
+	validation.AddContextReport(ctx, report)
+	return quote, nil
+}
+
+type providerProbeValidatedQuoteReportedFake struct{}
+
+func (providerProbeValidatedQuoteReportedFake) Name() string { return "probe-validated-quote" }
+
+func (providerProbeValidatedQuoteReportedFake) FetchQuote(ctx context.Context, symbol string) (*model.Quote, error) {
+	quote, err := (providerProbeQuoteFake{}).FetchQuote(ctx, symbol)
+	if err != nil {
+		return nil, err
+	}
+	quote.Amount = nil
+	quote.AmountUnit = "unknown"
+	quote.QualityStatus = model.QualityDegraded
+	quote.QualityReasons = []string{"provider_amount_unavailable"}
+	report, validationErr := normalize.ValidateQuoteWithReport(quote)
+	validation.AddContextReport(ctx, report)
+	if validationErr != nil {
+		return nil, validationErr
+	}
+	return quote, nil
+}
+
+func TestProviderProbeStillValidatesQuoteWhenAdapterOnlyReportsParseIssues(t *testing.T) {
+	p := providerProbeParseOnlyQuoteFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "quote")
+	if !found || item.Status != "failed" || item.ValidationTotalCount != 2 ||
+		item.ValidationWarningCount != 1 || item.ValidationErrorCount != 1 {
+		t.Fatalf("parse-only report must not bypass common quote validation: %+v", run.Items)
+	}
+	stages := map[string]bool{}
+	for _, issue := range item.ValidationIssues {
+		stages[string(issue.Stage)] = true
+	}
+	if !stages[string(validation.StageParse)] || !stages[string(validation.StageValidate)] {
+		t.Fatalf("expected both parse and validate issues, got %+v", item.ValidationIssues)
+	}
+}
+
+func TestProviderProbeDoesNotDuplicateAdapterQuoteValidationIssues(t *testing.T) {
+	p := providerProbeValidatedQuoteReportedFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, []provider.QuoteProvider{p}, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"quote"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "quote")
+	if !found || item.Status != "returned_degraded" || item.ValidationTotalCount != 1 ||
+		item.ValidationWarningCount != 1 || len(item.ValidationIssues) != 1 {
+		t.Fatalf("adapter validation report must be reused without duplicate counting: %+v", run.Items)
+	}
 }
 
 func TestProviderActiveProbeRunsOutsideBusinessCircuitBreaker(t *testing.T) {
@@ -552,6 +632,138 @@ func (p providerProbeDailyBarsReportedFake) FetchDailyBars(ctx context.Context, 
 	})
 	validation.AddContextReport(ctx, report)
 	return bars, nil
+}
+
+type providerProbeParseOnlyDailyBarsFake struct {
+	providerProbeDailyBarsFake
+}
+
+func (p providerProbeParseOnlyDailyBarsFake) FetchDailyBars(ctx context.Context, symbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	bars, err := p.providerProbeDailyBarsFake.FetchDailyBars(ctx, symbol, startDate, endDate, limit, adjustment)
+	if err != nil {
+		return nil, err
+	}
+	if len(bars) > 0 {
+		invalidAmount := -1.0
+		bars[0].Amount = &invalidAmount
+	}
+	report := validation.NewReport(10)
+	report.Add(validation.FieldIssue{
+		Stage: validation.StageParse, Field: "raw_amount", ProviderField: "amount",
+		Code: "optional_parse_warning", Expected: "numeric source field",
+		Severity: validation.SeverityWarning, Message: "adapter retained a parse warning",
+	})
+	validation.AddContextReport(ctx, report)
+	return bars, nil
+}
+
+func TestProviderProbeRunsRequestedDailyBarAdjustmentsIndependently(t *testing.T) {
+	p := providerProbeDailyBarsFake{name: "probe-adjustment-bars", close: 10.5, quality: model.QualityValid}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	adjustments := []model.AdjustmentBasis{model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward}
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarAdjustments: adjustments,
+		Checks: []string{"cross_provider"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	if run.Total != len(adjustments) || len(run.RequestedDailyBarAdjustments) != len(adjustments) {
+		t.Fatalf("expected one independent probe per adjustment: %+v", run)
+	}
+	seen := map[model.AdjustmentBasis]bool{}
+	for _, item := range run.Items {
+		if item.Status != "returned" || item.AdjustmentBasis == "" || seen[item.AdjustmentBasis] {
+			t.Fatalf("unexpected or duplicate adjustment result: %+v", item)
+		}
+		seen[item.AdjustmentBasis] = true
+	}
+	for _, adjustment := range adjustments {
+		if !seen[adjustment] {
+			t.Fatalf("missing adjustment result for %s: %+v", adjustment, run.Items)
+		}
+	}
+}
+
+func TestProviderProbeDailyBarCrossComparisonSeparatesAdjustmentBases(t *testing.T) {
+	left := providerProbeDailyBarsFake{name: "probe-adjustment-left", close: 10.5, quality: model.QualityValid}
+	right := providerProbeDailyBarsFake{name: "probe-adjustment-right", close: 10.5, quality: model.QualityValid}
+	ds := NewWithCapabilities(
+		[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
+	)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone, model.AdjustmentForward, model.AdjustmentBackward},
+		Checks:              []string{"cross_provider"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	if len(run.CheckResults) != 3 {
+		t.Fatalf("expected one cross-provider comparison per adjustment basis, got %+v", run.CheckResults)
+	}
+	seen := map[string]bool{}
+	for _, result := range run.CheckResults {
+		if result.Check != "cross_provider" || result.AdjustmentBasis == "" || seen[result.AdjustmentBasis] {
+			t.Fatalf("unexpected or duplicated adjustment comparison: %+v", result)
+		}
+		seen[result.AdjustmentBasis] = true
+	}
+}
+
+func TestProviderProbeClassifiesExplicitUnsupportedAdjustment(t *testing.T) {
+	for _, message := range []string{
+		"adjustment not supported",
+		"unsupported adjustment",
+		"provider does not support adjustment",
+		"Sina historical K-line endpoint only supports verified adjustment basis \"none\"",
+		"Netease historical CSV only supports verified adjustment basis \"none\"",
+		"不支持的同花顺复权口径",
+	} {
+		if !isUnsupportedDailyBarAdjustmentError(errors.New(message)) {
+			t.Errorf("expected unsupported adjustment classification for %q", message)
+		}
+	}
+	if isUnsupportedDailyBarAdjustmentError(errors.New("upstream timeout")) {
+		t.Fatal("ordinary upstream failures must not be classified as unsupported")
+	}
+}
+
+func TestProviderProbeRejectsInvalidDailyBarAdjustments(t *testing.T) {
+	ds := NewWithCapabilities(nil, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	cases := []ProviderProbeOptions{
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarAdjustments: []model.AdjustmentBasis{"unknown"}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone, model.AdjustmentNone}, TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"quote"}, DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone}, TimeoutSeconds: 5},
+	}
+	for i, options := range cases {
+		if _, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), options); err == nil {
+			t.Errorf("case %d should reject invalid daily-bar adjustments: %+v", i, options)
+		}
+	}
+}
+
+func TestProviderProbeStillValidatesDailyBarsWhenAdapterOnlyReportsParseIssues(t *testing.T) {
+	p := providerProbeParseOnlyDailyBarsFake{providerProbeDailyBarsFake{name: "probe-parse-only-bars", close: 10.5, quality: model.QualityValid}}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found || item.Status != "failed" || item.ValidationWarningCount != 1 || item.ValidationErrorCount == 0 {
+		t.Fatalf("parse-only report must not bypass daily-bar validation: %+v", run.Items)
+	}
+	stages := map[string]bool{}
+	for _, issue := range item.ValidationIssues {
+		stages[string(issue.Stage)] = true
+	}
+	if !stages[string(validation.StageParse)] || !stages[string(validation.StageValidate)] {
+		t.Fatalf("expected both parse and validate issues, got %+v", item.ValidationIssues)
+	}
 }
 
 func TestProviderProbeDoesNotDuplicateAdapterDailyBarIssues(t *testing.T) {

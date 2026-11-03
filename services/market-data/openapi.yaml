@@ -237,6 +237,7 @@ components:
         effective_to: {type: string, format: date}
         source: {type: string}
         source_version: {type: string}
+        adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
         source_url: {type: string, format: uri}
@@ -675,6 +676,7 @@ components:
         status: {type: string, enum: [returned, returned_degraded, returned_unknown, failed, skipped, not_configured, not_supported]}
         elapsed_ms: {type: integer, minimum: 0}
         source_version: {type: string}
+        adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
         error_code: {type: string, description: Stable machine-readable failure classification}
@@ -725,6 +727,12 @@ components:
           items:
             type: string
             enum: [quote, daily_bars, stock_basic, stock_search, stock_universe, index_quotes, index_catalog, market_breadth, sector_rankings, market_capital_flow, limit_pool, dragon_tiger, announcements, trading_calendar, security_trading_status, price_limit_event, stock_boards, fundamentals, valuations, hot_ranking, capital_flow, chip_distribution]
+        daily_bar_adjustments:
+          type: array
+          uniqueItems: true
+          maxItems: 3
+          description: DailyBar adjustment bases to probe independently; defaults to none when omitted and requires daily_bars capability.
+          items: {$ref: '#/components/schemas/RequestAdjustmentBasis'}
         timeout_seconds: {type: integer, minimum: 1, maximum: 30, default: 12}
     ProviderProbeRun:
       type: object
@@ -737,6 +745,7 @@ components:
         check_results: {type: array, items: {$ref: '#/components/schemas/ProviderProbeCheckResult'}}
         requested_markets: {type: array, items: {type: string, enum: [SH_MAIN, SZ_MAIN, CHINEXT, STAR, BSE]}}
         requested_symbols: {type: array, items: {type: string}}
+        requested_daily_bar_adjustments: {type: array, items: {$ref: '#/components/schemas/RequestAdjustmentBasis'}}
         timeout_seconds: {type: integer, minimum: 1, maximum: 30}
         status: {type: string, enum: [success, degraded, failed, not_configured, no_capabilities_configured]}
         persisted: {type: boolean, description: False when MariaDB storage is not configured}
@@ -1253,6 +1262,7 @@ paths:
       description: >-
         默认空请求体执行全部能力。scope=core 执行核心能力；capabilities 非空时仅执行指定能力。
         timeout_seconds 为单项 Provider 请求超时，范围 1 到 30 秒，默认 12 秒。
+        daily_bar_adjustments 仅用于 daily_bars，支持 none、forward_adjusted、backward_adjusted；省略时仅探测 none，每种口径独立生成结果。
         探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。
       security:
         - ApiKey: []
@@ -1321,7 +1331,7 @@ paths:
                             type: object
                             required: [capability, status, consecutive_failures, total_success, total_failure]
                             properties:
-                              capability: {type: string, enum: [quote, daily_bars, index_quotes, market_breadth, sector_rankings]}
+                              capability: {type: string, enum: [quote, daily_bars]}
                               status: {type: string, enum: [not_observed, healthy, degraded, open, half_open]}
                               consecutive_failures: {type: integer}
                               total_success: {type: integer, format: int64}

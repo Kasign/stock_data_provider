@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/domain"
+	"github.com/Kasign/stock_data_provider/go-core/internal/domain"
 )
 
 func TestFilterNewsByReference(t *testing.T) {

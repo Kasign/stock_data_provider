@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/validation"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 func TestNormalizePytdxDailyAmountPreservesConsistentValues(t *testing.T) {
@@ -96,5 +96,71 @@ func TestValidatePytdxDailyBarValuesReportsAmountVolumeMismatch(t *testing.T) {
 	issues := reporter.Snapshot().Issues
 	if len(issues) != 1 || issues[0].Code != "amount_volume_mismatch" || issues[0].RowIndex == nil || *issues[0].RowIndex != 2 {
 		t.Fatalf("expected amount/volume mismatch at row 2, got %+v", issues)
+	}
+}
+
+func TestBuildPytdxQuoteReportsInvalidPrice(t *testing.T) {
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err := buildPytdxQuote(ctx, "600519.SH", math.NaN(), 9.8, 10, 10.5, 9.5, 100, 10000)
+	if err == nil {
+		t.Fatal("expected non-finite current price to fail")
+	}
+	issues := reporter.Snapshot().Issues
+	if len(issues) != 1 || issues[0].Stage != validation.StageValidate || issues[0].Field != "current_price" || issues[0].ProviderField != "Close" || issues[0].Code != "invalid_number" {
+		t.Fatalf("expected structured current-price issue, got %+v", issues)
+	}
+}
+
+func TestBuildPytdxQuoteReportsOHLCAndVolumeIssues(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		current   float64
+		prevClose float64
+		open      float64
+		high      float64
+		low       float64
+		volume    float64
+		wantField string
+		wantCode  string
+	}{
+		{name: "ohlc range", current: 12, prevClose: 10, open: 10, high: 11, low: 9, volume: 100, wantField: "ohlc", wantCode: "ohlc_invariant_violation"},
+		{name: "fractional hands", current: 10, prevClose: 9, open: 9.5, high: 11, low: 9, volume: 1.5, wantField: "volume", wantCode: "invalid_number"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reporter := validation.NewReporter(20)
+			ctx := validation.WithReporter(context.Background(), reporter)
+			_, err := buildPytdxQuote(ctx, "600519.SH", tc.current, tc.prevClose, tc.open, tc.high, tc.low, tc.volume, 10000)
+			if err == nil {
+				t.Fatal("expected invalid quote values to fail")
+			}
+			issues := reporter.Snapshot().Issues
+			if len(issues) != 1 || issues[0].Field != tc.wantField || issues[0].Code != tc.wantCode {
+				t.Fatalf("expected %s/%s issue, got %+v", tc.wantField, tc.wantCode, issues)
+			}
+		})
+	}
+}
+
+func TestBuildPytdxQuoteReportsInvalidOptionalAmountAndDegrades(t *testing.T) {
+	reporter := validation.NewReporter(20)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	quote, err := buildPytdxQuote(ctx, "600519.SH", 10, 9.8, 9.9, 10.5, 9.5, 100, math.NaN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quote.Amount != nil || quote.QualityStatus != model.QualityDegraded {
+		t.Fatalf("invalid optional amount must remain null and degraded: %+v", quote)
+	}
+	issues := reporter.Snapshot().Issues
+	foundInvalidAmount := false
+	for _, issue := range issues {
+		if issue.Field == "amount" && issue.Code == "invalid_optional_number" && issue.Severity == validation.SeverityWarning {
+			foundInvalidAmount = true
+			break
+		}
+	}
+	if !foundInvalidAmount {
+		t.Fatalf("expected warning for invalid optional amount, got %+v", issues)
 	}
 }

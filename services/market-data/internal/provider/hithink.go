@@ -14,8 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/normalize"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 const (
@@ -1479,9 +1480,9 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	query := url.Values{}
-	query.Set("thscodes", symbol)
-	raw, err := p.get(ctx, "/api/a-share/prices/snapshot", query)
+	q := url.Values{}
+	q.Set("thscodes", symbol)
+	raw, err := p.get(ctx, "/api/a-share/prices/snapshot", q)
 	if err != nil {
 		return nil, fmt.Errorf("同花顺行情请求失败: %w", err)
 	}
@@ -1490,149 +1491,162 @@ func (p *Hithink) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quot
 		return nil, err
 	}
 	var data struct {
-		Timestamp *int64 `json:"timestamp"`
+		Timestamp json.RawMessage `json:"timestamp"`
 		Item      []struct {
-			THSCode       string   `json:"thscode"`
-			Name          string   `json:"name"`
-			LastPrice     *float64 `json:"last_price"`
-			PriceChange   *float64 `json:"price_change"`
-			ChangeRatio   *float64 `json:"price_change_ratio_pct"`
-			OpenPrice     *float64 `json:"open_price"`
-			HighPrice     *float64 `json:"high_price"`
-			LowPrice      *float64 `json:"low_price"`
-			PreviousPrice *float64 `json:"prev_price"`
-			Volume        *float64 `json:"volume"`
-			Turnover      *float64 `json:"turnover"`
+			THSCode   string          `json:"thscode"`
+			Name      string          `json:"name"`
+			Last      json.RawMessage `json:"last_price"`
+			Change    json.RawMessage `json:"price_change"`
+			ChangePct json.RawMessage `json:"price_change_ratio_pct"`
+			Open      json.RawMessage `json:"open_price"`
+			High      json.RawMessage `json:"high_price"`
+			Low       json.RawMessage `json:"low_price"`
+			Prev      json.RawMessage `json:"prev_price"`
+			Volume    json.RawMessage `json:"volume"`
+			Amount    json.RawMessage `json:"turnover"`
 		} `json:"item"`
 	}
-	if err := json.Unmarshal(dataRaw, &data); err != nil {
+	if err = json.Unmarshal(dataRaw, &data); err != nil {
 		return nil, fmt.Errorf("解析同花顺行情数据失败: %w", err)
 	}
 	var item *struct {
-		THSCode       string   `json:"thscode"`
-		Name          string   `json:"name"`
-		LastPrice     *float64 `json:"last_price"`
-		PriceChange   *float64 `json:"price_change"`
-		ChangeRatio   *float64 `json:"price_change_ratio_pct"`
-		OpenPrice     *float64 `json:"open_price"`
-		HighPrice     *float64 `json:"high_price"`
-		LowPrice      *float64 `json:"low_price"`
-		PreviousPrice *float64 `json:"prev_price"`
-		Volume        *float64 `json:"volume"`
-		Turnover      *float64 `json:"turnover"`
+		THSCode   string          `json:"thscode"`
+		Name      string          `json:"name"`
+		Last      json.RawMessage `json:"last_price"`
+		Change    json.RawMessage `json:"price_change"`
+		ChangePct json.RawMessage `json:"price_change_ratio_pct"`
+		Open      json.RawMessage `json:"open_price"`
+		High      json.RawMessage `json:"high_price"`
+		Low       json.RawMessage `json:"low_price"`
+		Prev      json.RawMessage `json:"prev_price"`
+		Volume    json.RawMessage `json:"volume"`
+		Amount    json.RawMessage `json:"turnover"`
 	}
 	for i := range data.Item {
 		if !strings.EqualFold(strings.TrimSpace(data.Item[i].THSCode), symbol) {
 			continue
 		}
 		if item != nil {
-			// 单证券报价响应也必须保持证券身份唯一；重复行不能静默采用第一条。
+			addProviderQuoteIssue(ctx, validation.StageValidate, "symbol", "thscode", "duplicate_identity", "exactly one requested security", "string", symbol, "同花顺行情响应包含重复请求证券", validation.SeverityError)
 			return nil, fmt.Errorf("同花顺行情响应包含重复请求证券 %s", symbol)
 		}
 		item = &data.Item[i]
 	}
 	if item == nil {
+		code, actual := "missing_quote", "empty"
+		if len(data.Item) > 0 {
+			code, actual = "identity_mismatch", "no row matched "+symbol
+		}
+		addProviderQuoteIssue(ctx, validation.StageValidate, "symbol", "thscode", code, symbol, "string", actual, "同花顺行情响应未包含请求证券", validation.SeverityError)
 		return nil, fmt.Errorf("同花顺行情响应未包含请求证券 %s", symbol)
 	}
-	if item.LastPrice == nil || !hithinkPositiveFinite(*item.LastPrice) ||
-		item.PreviousPrice == nil || !hithinkPositiveFinite(*item.PreviousPrice) ||
-		item.OpenPrice == nil || item.HighPrice == nil || item.LowPrice == nil ||
-		!hithinkPositiveFinite(*item.OpenPrice) || !hithinkPositiveFinite(*item.HighPrice) || !hithinkPositiveFinite(*item.LowPrice) ||
-		*item.LowPrice > *item.HighPrice || *item.OpenPrice < *item.LowPrice || *item.OpenPrice > *item.HighPrice ||
-		*item.LastPrice < *item.LowPrice || *item.LastPrice > *item.HighPrice {
+	fields := []struct {
+		name, provider string
+		raw            json.RawMessage
+		required       bool
+	}{
+		{"current_price", "last_price", item.Last, true}, {"prev_close", "prev_price", item.Prev, true}, {"open", "open_price", item.Open, true}, {"high", "high_price", item.High, true}, {"low", "low_price", item.Low, true},
+		{"change", "price_change", item.Change, false}, {"change_percent", "price_change_ratio_pct", item.ChangePct, false}, {"volume", "volume", item.Volume, false}, {"amount", "turnover", item.Amount, false},
+	}
+	values := map[string]*float64{}
+	parseErrors := []error{}
+	for _, f := range fields {
+		v, e := parseProviderQuoteNumber(ctx, p.Name(), f.provider, f.name, f.raw, len(f.raw) > 0, f.required)
+		values[f.name] = v
+		if e != nil {
+			parseErrors = append(parseErrors, e)
+		}
+	}
+	if len(parseErrors) > 0 {
+		return nil, fmt.Errorf("同花顺行情字段解析失败: %w", errors.Join(parseErrors...))
+	}
+	price, prev, open, high, low := values["current_price"], values["prev_close"], values["open"], values["high"], values["low"]
+	for _, f := range []struct {
+		name string
+		v    *float64
+	}{{"current_price", price}, {"prev_close", prev}, {"open", open}, {"high", high}, {"low", low}} {
+		if f.v == nil || !hithinkPositiveFinite(*f.v) {
+			addProviderQuoteIssue(ctx, validation.StageValidate, f.name, f.name, "invalid_price", "finite positive price", "number", "", "同花顺行情价格必须为正有限数值", validation.SeverityError)
+			return nil, fmt.Errorf("同花顺行情价格字段 %s 无效", f.name)
+		}
+	}
+	if *low > *high || *open < *low || *open > *high || *price < *low || *price > *high {
+		addProviderQuoteIssue(ctx, validation.StageValidate, "ohlc", "open/high/low/last_price", "ohlc_invariant_violation", "low <= open/current <= high", "number", "", "同花顺行情 OHLC 区间关系异常", validation.SeverityError)
 		return nil, errors.New("同花顺行情 OHLC/价格字段不满足数据契约")
 	}
-
-	// 涨跌额与涨跌幅始终以最新价、昨收价计算；源端扩展值只用于交叉校验。
-	change := *item.LastPrice - *item.PreviousPrice
-	changePercent := change / *item.PreviousPrice * 100
-	if item.PriceChange != nil &&
-		(!hithinkFinite(*item.PriceChange) || math.Abs(*item.PriceChange-change) > hithinkChangeTolerance) {
+	change := *price - *prev
+	changePct := change / *prev * 100
+	if v := values["change"]; v != nil && (!hithinkFinite(*v) || math.Abs(*v-change) > hithinkChangeTolerance) {
+		addProviderQuoteIssue(ctx, validation.StageValidate, "change", "price_change", "cross_field_mismatch", "last_price - prev_price", "number", fmt.Sprintf("%g", *v), "同花顺行情涨跌额与最新价/昨收价不一致", validation.SeverityError)
 		return nil, errors.New("同花顺行情涨跌额与最新价/昨收价不一致")
 	}
-	if item.ChangeRatio != nil &&
-		(!hithinkFinite(*item.ChangeRatio) || math.Abs(*item.ChangeRatio-changePercent) > hithinkChangePercentTolerancePP) {
+	if v := values["change_percent"]; v != nil && (!hithinkFinite(*v) || math.Abs(*v-changePct) > hithinkChangePercentTolerancePP) {
+		addProviderQuoteIssue(ctx, validation.StageValidate, "change_percent", "price_change_ratio_pct", "cross_field_mismatch", "calculated percentage points", "number", fmt.Sprintf("%g", *v), "同花顺行情涨跌幅与最新价/昨收价不一致", validation.SeverityError)
 		return nil, errors.New("同花顺行情涨跌幅与最新价/昨收价不一致")
 	}
-
 	now := time.Now().UTC()
 	var quoteTime *time.Time
 	quoteTimeSemantics := ""
-	if data.Timestamp != nil && *data.Timestamp > 0 {
-		value := time.UnixMilli(*data.Timestamp).UTC()
-		if !value.After(now.Add(5 * time.Minute)) {
-			quoteTime = &value
+	var timestamp int64
+	if len(data.Timestamp) > 0 && json.Unmarshal(data.Timestamp, &timestamp) == nil && timestamp > 0 {
+		v := time.UnixMilli(timestamp).UTC()
+		if !v.After(now.Add(5 * time.Minute)) {
+			quoteTime = &v
 			quoteTimeSemantics = "provider_snapshot_time"
 		}
 	}
-	var volume *int64
-	var rawVolume *float64
-	var amount, rawAmount *float64
 	quality := model.QualityValid
 	reasons := []string{}
 	if quoteTime == nil {
 		quality = model.QualityDegraded
 		reasons = append(reasons, "provider_snapshot_timestamp_missing_or_invalid")
 	}
-	if v, ok := hithinkNonNegativeInt64(item.Volume); ok {
-		volume = &v
-		vRaw := *item.Volume
-		rawVolume = &vRaw
+	var volume *int64
+	var rawVolume *float64
+	if v := values["volume"]; v != nil {
+		if n, ok := hithinkNonNegativeInt64(v); ok {
+			volume = &n
+			copy := *v
+			rawVolume = &copy
+		} else {
+			quality = model.QualityDegraded
+			reasons = append(reasons, "volume_missing_or_invalid")
+			addProviderQuoteIssue(ctx, validation.StageValidate, "volume", "volume", "invalid_optional_integer", "non-negative integer shares", "number", fmt.Sprintf("%g", *v), "同花顺成交量不是非负整数，已置空并降级", validation.SeverityWarning)
+		}
 	} else {
 		quality = model.QualityDegraded
 		reasons = append(reasons, "volume_missing_or_invalid")
 	}
-	if item.Turnover != nil && hithinkNonNegativeFinite(*item.Turnover) {
-		v := *item.Turnover
-		amount, rawAmount = &v, &v
+	var amount, rawAmount *float64
+	amountUnit, rawAmountUnit, rawAmountField := "unknown", "", ""
+	if v := values["amount"]; v != nil && hithinkNonNegativeFinite(*v) {
+		copy := *v
+		amount = &copy
+		rawAmount = &copy
+		amountUnit, rawAmountUnit, rawAmountField = "CNY", "CNY", "turnover"
 	} else {
 		quality = model.QualityDegraded
 		reasons = append(reasons, "amount_missing_or_invalid")
+		if v := values["amount"]; v != nil {
+			addProviderQuoteIssue(ctx, validation.StageValidate, "amount", "turnover", "invalid_optional_number", "finite non-negative CNY amount", "number", fmt.Sprintf("%g", *v), "同花顺成交额无效，已置空并降级", validation.SeverityWarning)
+		}
+	}
+	if values["change"] == nil || values["change_percent"] == nil {
+		quality = model.QualityDegraded
+		reasons = append(reasons, "provider_change_extension_missing_or_invalid")
 	}
 	name := strings.TrimSpace(item.Name)
 	if name == "" {
 		quality = model.QualityDegraded
 		reasons = append(reasons, "provider_quote_name_missing")
 	}
-	qualityReason := []string(nil)
-	if len(reasons) > 0 {
-		qualityReason = append(qualityReason, reasons...)
+	quote := &model.Quote{Symbol: symbol, Name: name, CurrentPrice: price, Change: &change, ChangePercent: &changePct, Open: open, High: high, Low: low, PrevClose: prev, QuoteTime: quoteTime, QuoteTimeSemantics: quoteTimeSemantics, Volume: volume, Amount: amount, FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: hithinkVersion, RawVolume: rawVolume, RawVolumeUnit: "shares", RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField, VolumeUnit: "shares", AmountUnit: amountUnit, AdjustmentBasis: model.AdjustmentNone, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version}
+	report, validationErr := normalize.ValidateQuoteWithReport(quote)
+	validation.AddContextReport(ctx, report)
+	if validationErr != nil {
+		return nil, fmt.Errorf("同花顺行情数据契约校验失败: %w", validationErr)
 	}
-	volumeUnit, amountUnit := "shares", "CNY"
-	rawAmountUnit, rawAmountField := "CNY", "turnover"
-	if amount == nil {
-		amountUnit, rawAmountUnit, rawAmountField = "unknown", "", ""
-	}
-	return &model.Quote{
-		Symbol:             symbol,
-		Name:               name,
-		CurrentPrice:       item.LastPrice,
-		Change:             &change,
-		ChangePercent:      &changePercent,
-		Open:               item.OpenPrice,
-		High:               item.HighPrice,
-		Low:                item.LowPrice,
-		PrevClose:          item.PreviousPrice,
-		QuoteTime:          quoteTime,
-		QuoteTimeSemantics: quoteTimeSemantics,
-		Volume:             volume,
-		Amount:             amount,
-		FetchedAt:          now,
-		NormalizedAt:       now,
-		Source:             p.Name(),
-		SourceVersion:      hithinkVersion,
-		RawVolume:          rawVolume,
-		RawVolumeUnit:      volumeUnit,
-		RawAmount:          rawAmount,
-		RawAmountUnit:      rawAmountUnit,
-		RawAmountField:     rawAmountField,
-		VolumeUnit:         volumeUnit,
-		AmountUnit:         amountUnit,
-		AdjustmentBasis:    model.AdjustmentNone,
-		QualityStatus:      quality,
-		QualityReasons:     qualityReason,
-		NormalizationVer:   normalize.Version,
-	}, nil
+	return quote, nil
 }
 
 func (p *Hithink) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {

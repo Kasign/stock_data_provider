@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/contextpack"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/domain"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/indicators"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/marketdata"
-	"github.com/ZhuLinsen/daily_stock_analysis/go-core/internal/ports"
+	"github.com/Kasign/stock_data_provider/go-core/internal/contextpack"
+	"github.com/Kasign/stock_data_provider/go-core/internal/domain"
+	"github.com/Kasign/stock_data_provider/go-core/internal/indicators"
+	"github.com/Kasign/stock_data_provider/go-core/internal/marketdata"
+	"github.com/Kasign/stock_data_provider/go-core/internal/ports"
 )
 
 type StockFlow struct {

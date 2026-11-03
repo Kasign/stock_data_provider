@@ -8,17 +8,18 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/service"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/service"
 )
 
 type providerProbeRequest struct {
-	Scope          string   `json:"scope"`
-	Capabilities   []string `json:"capabilities"`
-	Checks         []string `json:"checks"`
-	Markets        []string `json:"markets"`
-	Symbols        []string `json:"symbols"`
-	TimeoutSeconds *int     `json:"timeout_seconds"`
+	Scope               string                  `json:"scope"`
+	Capabilities        []string                `json:"capabilities"`
+	Checks              []string                `json:"checks"`
+	Markets             []string                `json:"markets"`
+	Symbols             []string                `json:"symbols"`
+	DailyBarAdjustments []model.AdjustmentBasis `json:"daily_bar_adjustments"`
+	TimeoutSeconds      *int                    `json:"timeout_seconds"`
 }
 
 func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +109,7 @@ func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	run, err := s.svc.ProbeProviderCapabilitiesWithOptions(r.Context(), service.ProviderProbeOptions{
-		Scope: request.Scope, Capabilities: request.Capabilities, Checks: request.Checks, Markets: request.Markets, Symbols: request.Symbols, TimeoutSeconds: timeoutSeconds,
+		Scope: request.Scope, Capabilities: request.Capabilities, Checks: request.Checks, Markets: request.Markets, Symbols: request.Symbols, DailyBarAdjustments: request.DailyBarAdjustments, TimeoutSeconds: timeoutSeconds,
 	})
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), requestID(r))

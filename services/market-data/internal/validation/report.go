@@ -79,6 +79,15 @@ func (r *Report) Add(item FieldIssue) {
 	r.Issues = append(r.Issues, item)
 }
 
+func (r Report) HasStage(stage Stage) bool {
+	for _, item := range r.Issues {
+		if item.Stage == stage {
+			return true
+		}
+	}
+	return false
+}
+
 func (r Report) HasErrors() bool {
 	if r.ErrorCount > 0 {
 		return true

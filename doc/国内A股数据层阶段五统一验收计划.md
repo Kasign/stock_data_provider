@@ -2,8 +2,42 @@
 
 - 目标分支：`feat/full-go-data-providers-api-switch`
 - 阶段定位：阶段五统一验收，不以“代码已实现”替代真实数据验收。
-- 当前状态：验收准备与文档基线；真实 Provider、Python/Go 差分和部署验证需在统一验收窗口执行。
+- 当前状态（2026-11-03，代码基线 `b423c1ef6585924163d3d30a775e7b7713df3c59`）：统一诊断框架、Quote 字段诊断、DailyBar 字段 Reporter、Probe 历史存储、DailyBar 跨 Provider 比较及多复权口径 Probe 请求参数/结果字段已有代码实现。多复权口径实现已提交，等待当前 HEAD 的 Go Suite、OpenAPI/HTTP 契约和 parity CI 验证；真实 Provider 复权能力仍需单项证据。阶段五继续只处理增量规则与真实数据验收。较早章节的待办表属于历史快照，不得作为当前任务重复执行。
 - 原则：每项结论必须绑定代码 SHA、样本范围、原始响应证据和质量判定；凭据不得进入文档或日志。
+
+## 当前有效执行计划（2026-11-03；覆盖下文历史批次状态）
+
+本节依据当前分支代码、测试和文档交叉核对。只列当前仍有证据缺口的工作；已实现的框架和规则不重复建设。
+
+| 优先级 | 当前任务 | 已有代码基础 | 实际剩余工作 | 验收边界 |
+|---|---|---|---|---|
+| P0 | DailyBar 复权口径 Probe | 已在 `b423c1ef` 增加可选 `daily_bar_adjustments`、默认 none、独立结果 `adjustment_basis` 和跨源按口径隔离；HTTP/Service 测试已补 | 等待 CI 验证；已补充 Sina/NetEase 英文错误、Hithink 中文错误及其他 Provider 常见 unsupported 表达的分类测试；等待最新 CI 确认。随后只需对真实 Provider 结果逐项验收 | 不改 Provider 复权算法；CI 通过不代表真实复权验收通过 |
+| P0 | DailyBar 交易边界与计数 | Validator、Reporter、交易日历覆盖率、当前日 Partial 判定、Adapter 过滤前诊断已存在 | 仅针对未覆盖的停牌/临停/新股/非交易日漏数判断、日期边界和重复计数补测试或修复 | 正常 limit 截断不算质量错误；无状态证据不推断漏数 |
+| P1 | Fundamentals 字段级诊断 | Probe 已调用 `validateFundamentalsSnapshot`；业务校验含报告期、公告日期、available_at、分区、指标、来源版本及采集时间 | 将现有校验结果映射到请求级 Reporter，补齐字段路径、单位/口径、修订与 PIT 边界证据 | 不重写 Validator、Reporter 或财务服务 |
+| P1 | Valuations 字段级诊断 | Probe 已调用 `validateValuationSnapshot`；已有身份、来源、时间、覆盖、缺失字段、有限数值和部分比例检查 | 将现有校验结果结构化；补齐 PE/PB/PS/PCF 口径、单位、TTM/静态差异和 PIT 证据 | 不重建估值模型或服务 |
+| P1 | Freshness 数据域扩展 | Evaluator、策略注册表和 Probe freshness 结果映射已存在；当前策略覆盖 Quote、Index、Market Breadth、Sector、Fund Flow | 按 DailyBar、Fundamentals、Valuations 的真实时间语义补 SLA；无源端时间证据保持 unknown/skipped | 不将 fetched_at 冒充 provider_time；不套用 Quote SLA |
+| P1 | 跨源与业务存储验收 | DailyBar 跨 Provider 比较器和 Probe 接入已存在；PIT 因子/公司行动/财务快照已有存储能力 | 扩展必要的可比性规则；验证业务表重复写入、历史修订、as_of 和重启恢复 | 不重建通用比较框架或 Probe storage 检查 |
+| P2 | 真实 Provider 与黄金样例 | 已有主板、创业板、科创板部分真实样例及 Go/Python 静态契约回归 | 补有效跨市场、停牌/新股/除权日样本；取得同证券同日期 Python/Go 双侧数据；补凭据 Provider 真实权限证据 | Mock/CI 不等于真实 Provider 通过；缺凭据标 skipped |
+| P2 | 最终统一验收 | Go Suite、Go/Python parity 等工作流存在 | 在代码任务完成后执行一次完整 CI、真实请求和部署验收，汇总迁移风险 | 不用旧 Actions Run 代表当前 HEAD |
+
+### 已完成且禁止重复立项的基础能力
+
+- 统一 Probe API、能力选择、并发/超时控制、错误脱敏、状态分类和 MariaDB 历史存储。
+- Validation 的 FieldIssue/Report、严重级别完整计数、截断、Merge、只读 Quote/DailyBar Validator。
+- 请求级 Reporter、Provider context 传递、Quote/DailyBar Adapter 结构化报告、Probe 聚合及避免重复累计。
+- Quote Provider 字段级 Parse/Validate 覆盖；DailyBar 多 Provider 的 Parse/Normalize/Validate 诊断基础。
+- DailyBar 交易日历覆盖率、当前日 Partial 判断、复权元数据质量门禁、PIT 因子质量状态传播和复权序列隔离。
+- Freshness Evaluator/策略注册表及其 Probe 接入；DailyBar 跨 Provider 比较器及 Probe 接入。
+
+### 执行约束
+
+1. 每个待办开始前先核对当前 HEAD 的实现和测试；已有实现只补真实缺口。
+2. 旧章节中的 Batch 0～8 是历史规划，不再作为独立任务队列；以上表格为当前唯一执行顺序。
+3. 文档状态必须由当前代码、测试或真实运行证据支撑；静态实现、CI、真实 Provider、生产部署分别记录。
+4. 复杂 API/数据模型/数据库改动先给出影响范围和方案；本次已获准的 Probe 复权口径参数除外。
+5. 仅修改 `feat/full-go-data-providers-api-switch`；PR #1 保持 Open / Draft；中文提交，按完整功能批次提交。
+
+---
 
 ## 一、验收工作包
 
@@ -947,3 +981,349 @@ ProviderTime 仍表示源端时间，FetchedAt 仍表示本服务采集时间，
 Reporter 为请求级上下文容器；Provider 即使返回 error，已追加的字段问题仍可由调用方读取。摘要复用 160 字符上限和控制字符清理，不保存完整响应、Header 或认证信息。
 
 本批不改变 NetEase volume/amount 的降级语义，不放宽 Tencent 成交量单位确认要求，也不重复执行公共 Quote Validator。Sina、Tencent、NetEase Quote 的必填原始数值字段已覆盖；Yahoo Quote 及其他 Quote 能力 Provider 仍需按实际能力清单继续审计。
+
+
+## Tencent Quote 非有限数值回归断言修正（2026-11-03）
+
+最新代码基线：`4d3a69cdeff1d2d4af3e168a1dde7399cf67e105`。
+
+CI 复核发现 `TestTencentQuoteRejectsInvalidPriceContract` 对两类拒绝阶段使用了同一错误文本断言，导致非有限数值用例失败：
+
+- `NaN` 在 Tencent 原始字段解析阶段立即拒绝，错误为字段级 `not finite`；该路径同时写入 error 级 Parse Issue。
+- 合法数值但违反 Quote 业务契约（例如 current_price 高于 high）才进入公共 Validator，错误包含 `quote data contract`。
+
+本次仅修正测试表，为不同失败阶段分别声明预期错误文本；不修改 Provider 解析、Reporter 上报、公共 Validator 或数据质量门禁。
+
+### 4d3a69c CI 结果复核
+
+| 工作流/Job | 结果 | 说明 |
+|---|---|---|
+| Go test suite：go-core | 通过 | gofmt、test、race、vet 全部通过 |
+| Go test suite：根模块 | 通过 | gofmt、test、race、vet 全部通过 |
+| Go test suite：market-data | 失败 | 仅 `TestTencentQuoteRejectsInvalidPriceContract/non-finite current price` 的错误文本断言不匹配 |
+| Go test suite：MariaDB/PIT | 通过 | 迁移与 PIT 持久化集成通过 |
+| Docker market-data 镜像构建 | 失败 | 构建阶段执行的 market-data 全量测试遇到同一断言失败，镜像构建未进入后续步骤 |
+| Go/Python 质量契约 | 失败 | Python 工具与 parity contract 通过；market-data Go 测试遇到同一断言失败，旧 Python marker 检查因此跳过 |
+| Live Provider probe | 通过 | 仅表示本次实时探测工作流成功，不替代各 Provider 的字段级验收 |
+| WebUI checks | 通过 | 本轮未修改 WebUI |
+
+失败根因已定位为测试断言与解析阶段错误语义不一致，不是解析逻辑回归。修正后必须重新执行 Go test suite、Go/Python 质量契约及 Docker 构建；只有最新 SHA 对应结果全部通过，才能关闭该回归项。
+
+### 后续统一诊断顺序
+
+1. 完成 Yahoo Quote 原始 JSON 字段解析诊断，区分 missing、null、number、string、object、array、boolean，并对非有限/非法数值生成结构化 Parse Issue。
+2. 对照 Provider 能力注册表检查 Quote Provider 的 Reporter 传递、重复校验和重复计数。
+3. 完成 Quote Provider 全覆盖后，再进入 DailyBar 边界质量审计及 Fundamentals / Valuations 字段质量审计。
+
+
+## Yahoo Quote 原始字段解析诊断（2026-11-03）
+
+Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上游字段类型错误会导致整段 JSON Decode 失败，无法定位具体字段。本批将 `regularMarketTime`、`regularMarketPrice`、`regularMarketDayHigh`、`regularMarketDayLow`、`regularMarketVolume`、`chartPreviousClose` 和分时 `open` 改为 RawMessage 逐字段解析，并写入请求级 Reporter。
+
+诊断区分 missing、null_value、type_mismatch、invalid_number、invalid_integer、越界及身份不匹配；Quote 必需字段仍硬失败。成交额继续保持 null/unknown/degraded，不推断、不补零；不改变 Yahoo Provider 默认关闭策略或数据路由。
+
+新增回归覆盖 meta 字段 string/null/object 类型错误，以及分时 open 类型错误，验证字段路径、错误码、严重级别和行索引。最终以最新 SHA 的 Go test/race/vet、质量契约及 Docker 构建通过为验收依据。
+
+
+### Yahoo Quote 诊断代码格式复验记录（2026-11-03）
+
+- Tencent 非有限价格断言修正提交：`16e5a957404c822a0ec0542dda9fbe2813762dae`；该 SHA 的 Go test suite 全部 Job 通过，Go/Python 质量契约、Live Provider probe、WebUI checks 均通过。
+- Yahoo Quote 原始字段诊断提交：`95670d70deec537f68f436a9d78dbe206f0c1bcc`；首轮 CI 的 market-data gofmt 检查发现新增代码格式问题，Docker market-data 镜像构建因此未继续。
+- 格式修正提交：`5fd3c79b13eda2c209d1e8632719ac32bba78630`；复验仍发现两个文件在新增函数前多一个空行，已再次清理。
+- 当前最新 SHA 的完整 Go 测试、race、vet、Docker 构建及 Go/Python 质量契约仍待最终复验；不得将前一 SHA 的成功结果当作最新代码通过。
+
+
+### 2026-11-03：Quote Provider 注册与 Reporter 聚合审计
+
+**注册链路核对：**
+- 配置加载阶段会校验 provider_priority 中的 Provider 名称唯一；重复名称直接拒绝，不会重复注册或重复生成 Probe 项。
+- market-data 启动时按优先级、启用状态和能力开关构建 quoteProviders；配置启用 Quote 但实现未满足 QuoteProvider 接口时启动失败。
+- 当前默认启用 Quote 的 Provider 为 Eastmoney、Tencent、Sina、NetEase、Pytdx；Yahoo、Hithink、TickFlow 默认未启用 Quote。是否启用仍以实际配置为准。
+
+**Reporter 接入盘点：**
+- Sina、Tencent、NetEase、Yahoo：已使用请求级 Reporter 上报原始字段 Parse Issue，并在 Provider 内执行 ValidateQuoteWithReport。
+- Eastmoney：使用 RawMessage map 读取源字段，但解析失败目前只返回普通错误；Provider 内执行普通 ValidateQuote，尚未把源字段解析错误结构化写入 Reporter。
+- Pytdx：通过 SDK 结构化对象映射，Provider 内有 OHLC/成交量硬校验；未接入 Reporter。
+- Hithink、TickFlow：当前采用结构化响应映射和 Provider 内字段校验；未接入 Reporter。它们默认 Quote 关闭，但可由配置启用。
+- 对于未接入 Reporter 的 Provider，Probe 应执行统一 Quote Validator 并生成结构化 Validate 报告；已在 Adapter 内生成 Validate 阶段报告的 Provider，Probe 复用该报告，不重复计数。
+
+**本批发现并修复：**
+- 旧逻辑将 Reporter TotalCount 大于 0 当作 Adapter 已完成公共校验的信号。只有 Parse 阶段问题时会错误跳过 Validate，造成质量问题漏报。
+- 新增 Report.HasStage，Quote / DailyBar Probe 仅在已有 StageValidate 报告时复用；只有 Parse 报告时仍执行公共 Validator。
+- 增加 Parse-only 与 Adapter 已完成 Validate 两组回归，分别验证不会漏报、不会重复累计。
+
+**当前边界与后续：**
+- 当前修复解决 Reporter 阶段判断和 Probe 重复校验问题，不代表所有 Quote Provider 都已完成字段级 Parse Reporter 接入。
+- 下一批优先补齐默认启用的 Eastmoney Quote 原始字段诊断；再评估 Pytdx 等 SDK Provider 的结构化字段问题表达，避免把 SDK 映射错误误写成 JSON 类型错误。
+- 只有 Quote Provider 的默认启用能力与可选启用能力均有明确诊断边界后，才进入 DailyBar Provider 全覆盖审计。
+
+
+### 2026-11-03：Eastmoney Quote 原始数值字段诊断
+
+- Eastmoney Quote 的数值字段从 RawMessage 逐字段解析，保留 Provider 字段名与标准字段名映射。
+- 必需数值字段覆盖 f43/current_price、f44/high、f45/low、f46/open、f60/prev_close、f47/volume；缺失、null、对象/数组/布尔类型、非法数值及 NaN/Inf 均写入请求级 Reporter 的 Parse Issue，并保持硬失败。
+- f169/change、f170/change_percent、f50/volume_ratio、f168/turnover_rate 仍按原有可选字段语义解析；不改变量额单位转换、涨跌交叉校验和 Quote 质量门禁。
+- 字段摘要限制 160 字符并清理控制字符；不记录完整响应。
+- 回归覆盖必需字段 missing、null、object、array、boolean、非法字符串和非有限数值。
+
+
+**本批 CI 复验问题与修正：**
+- 首轮检查发现测试文件结构体字段未按 gofmt 对齐，已修正。
+- 编译检查发现 Quote 解析闭包替换后，amount、volume_ratio、turnover_rate 仍引用旧 getNumber 闭包；已统一改为新的 RawMessage 解析器，并将错误聚合检查放在所有字段解析之后。
+- Go/Python 质量契约作业的失败由上述 Go 编译失败引起，不是样本差异或 Python 逻辑变化。修正后以新 SHA 的完整 CI 结果为准。
+
+
+**RawMessage 类型分类边界修正：**
+- 第二轮 CI 发现 object / array / boolean 的解析值为空字符串，旧 missing 判断将其错误分类为 missing。
+- missing 现在只覆盖字段不存在、JSON null、空字符串和 Eastmoney 的 "-" 哨兵值；object / array / boolean 保持 type_mismatch。
+- 该修正不改变必填字段门禁和可选字段缺失语义。
+
+
+**成交额字段诊断补齐：**
+- Eastmoney f48 成交额在当前 Quote 契约中属于必需字段：Quote 仍标记 valid 且 amount 缺失时，公共 Validator 会硬失败。
+- 因此 f48 missing/null 也必须在 Parse 阶段结构化上报，而不能只依赖后续 Validate 阶段报错；数字 0 仍是合法数值，不等同于缺失。
+- 增加 f48 missing/null 回归，保留 volume_ratio、turnover_rate 等真正可选字段的缺失语义。
+
+## 2026-11-03 紧急构建日志核验与 Go 模块路径清理
+
+### Tencent 测试失败日志核验
+
+- 曾出现 `TestTencentQuoteRejectsInvalidPriceContract/non-finite current price` 断言失败：Provider 在原始字段解析阶段已拒绝 NaN，实际错误为 `not finite`，旧测试却期待公共 Quote 契约校验错误。
+- 该问题已由提交 `16e5a957404c822a0ec0542dda9fbe2813762dae` 修正：测试按解析阶段与公共校验阶段分别声明错误文本，不修改行情校验逻辑和质量门禁。
+- 2026-11-03 当前 HEAD `986162438824f895d50fbe31ac24225c10c9548b` 的 Go test suite（含 market-data、race、vet）、Docker 构建、Go/Python 质量契约、Live Provider probe 和 WebUI checks 均已通过。用户提供的同类失败日志不能代表该 HEAD 的当前构建状态。
+
+### Go 模块路径清理（已完成代码迁移与 CI 验收）
+
+- `go-core/go.mod` 已迁移为 `github.com/Kasign/stock_data_provider/go-core`。
+- `services/market-data/go.mod` 已迁移为 `github.com/Kasign/stock_data_provider/services/market-data`。
+- 根模块 `go.mod` 使用独立的 `example.com/stock-analysis-flow` 标识，不属于本次两个独立模块的迁移范围，保持不变。
+- 基于 GitHub Git Trees API 获取完整递归 Tree：475 个条目，`truncated=false`；扫描全部 275 个 Go 文件及 128 个非 Go 文件。
+- 已统一替换 182 个 Go 源码/测试文件中的旧模块 import；两个 go.mod 已更新。go.sum 无自引用模块记录，无需修改。
+- Dockerfile、Compose、GitHub Actions 和部署脚本未发现旧模块路径硬编码；现有 CI 已分别覆盖根模块、go-core、market-data 的测试、race、vet，并构建两个 Go 镜像。
+- `scripts/verify-go-migration.sh` 增加旧 Go 模块路径残留检查及新 module 声明断言。
+- 文档中对原 Python 项目 `Kasign/daily_stock_analysis` 的历史来源说明保留，不将项目历史名称误判为 Go module import。
+- 迁移提交 `f802dde3384697d35d8b22e2a8067d3afbe1d6bf` 的 Go test suite（含三个 module 的 test/race/vet）、Go/Python 质量契约、Docker Compose、两个 Go 镜像构建及 WebUI checks 均通过。Live Provider probe 的工作流成功结束，但探测 Job 有 Eastmoney EOF、BaoStock TCP timeout、NetEase DNS/HTTP 502 等外部失败；不能据此认定所有 Provider 可用。
+
+
+## 2026-11-03 Pytdx Quote 原始结构化字段诊断补齐
+
+- Pytdx SDK 返回结构化对象，不将其错误描述为 JSON 解析问题；诊断字段使用 SDK 字段名（Close、Last、Open、High、Low、Volume、Amount）。
+- Quote 证券身份缺失、错证券、重复记录及缺少 Kline 数据时，生成结构化 Validate Issue，并保留 Provider 原有硬失败行为。
+- 当前价、昨收、开高低价的非正/非有限值、OHLC 区间异常、成交量非法值及股数归一化失败均生成 error 级字段问题；成交额是可选字段，非有限或零值异常时保留空值并降级，生成 warning，不伪造金额。
+- 成功映射后执行公共 `normalize.ValidateQuoteWithReport`，将完整报告写入请求级 Reporter；避免仅凭局部 StageValidate Issue 让 Probe 跳过公共 Quote Validator。
+- 新增可独立测试的 Quote 映射函数，回归覆盖非有限价格、OHLC 越界、非整数手数和可选成交额异常。实时 TDX 服务连通性仍由在线 Probe 单独验收。
+
+
+
+### 2026-11-03：Hithink / TickFlow Quote 原始字段诊断补齐
+
+- 新增共享 Provider Quote RawMessage 数值字段解析器，区分 missing、null、type_mismatch、invalid_number；兼容数字字符串，Issue 记录 Provider 原始字段、标准字段、类型和限长摘要。
+- Hithink Quote 的必需价格字段逐项解析；成交量、成交额及源端涨跌扩展字段按可选字段处理，异常保留降级语义并生成 warning。证券重复、未匹配、OHLC 与涨跌交叉校验失败生成结构化 Validate Issue。
+- TickFlow Quote 独立使用 RawMessage 响应结构，不改变 Index Quote、Market Breadth 等共享 payload；价格与成交量必需字段异常硬失败，成交额及换手率异常保留空值/降级并生成 warning。证券重复、未匹配、OHLC 和成交量归一化失败生成 Validate Issue。
+- 两个 Provider 成功映射后执行公共 `normalize.ValidateQuoteWithReport` 并合并请求级 Reporter；不改变单位、质量门禁和实时接口授权要求。
+- 新增 Hithink object 类型错误和 TickFlow NaN 字段回归。以本批最新 SHA 的完整 Go 测试、race、vet、Docker 构建及质量契约复验结果为准。
+
+
+
+### 2026-11-03：Quote Provider 全覆盖复核（Pytdx、Hithink、TickFlow 批次后）
+
+按当前实现逐一核对八个具备 Quote 能力的 Provider：
+
+| Provider | 原始字段诊断 | 公共 Quote Validator | 处理边界 |
+|---|---|---|---|
+| Sina | 已完成，RawMessage 逐字段解析 | ValidateQuoteWithReport | 必填行情字段硬失败，可选字段按原语义降级 |
+| Tencent | 已完成，原始字段 Parse Issue | ValidateQuoteWithReport | 非有限价格在解析阶段拒绝；业务契约错误由公共 Validator 处理 |
+| NetEase | 已完成，原始 CSV 字段 Parse Issue | ValidateQuoteWithReport | 缺失、类型/数值错误保留字段定位 |
+| Yahoo | 已完成，Quote Meta/Chart 字段 Parse Issue | ValidateQuoteWithReport | 必需字段错误硬失败，成交额保持未知/降级 |
+| Eastmoney | 已完成，f43/f44/f45/f46/f47/f48 等逐字段 RawMessage 诊断 | 本次改为 ValidateQuoteWithReport | 补齐证券身份 mismatch 与空 data 诊断；不改 f48 必需字段门禁 |
+| Pytdx | 已完成，SDK 结构化字段 Validate Issue | buildPytdxQuote 内执行 ValidateQuoteWithReport | 非正价格、OHLC、手数异常硬失败；成交额异常 warning/降级 |
+| Hithink | 已完成，RawMessage 字段级 Parse Issue | ValidateQuoteWithReport | 必需价格硬失败；成交量/成交额及扩展字段按可选契约降级 |
+| TickFlow | 已完成，RawMessage 字段级 Parse Issue | ValidateQuoteWithReport | 必需价格/成交量硬失败；成交额、换手率按可选契约降级 |
+
+**Probe / Reporter 约束复核：**
+- 请求级 Reporter 不在 Provider 实例上持久化；每次调用通过 context 传递。
+- 只含 StageParse 的报告不能阻止 Probe 执行公共 Quote Validator；已有 StageValidate 报告时才复用，避免重复计数。
+- Provider 原始字段错误与公共数据契约错误分阶段记录；必需字段仍硬失败，可选字段仅在既有契约允许时降级。
+- 本批最新 SHA 的 Go test suite（含 gofmt、单测、race、vet）、Go/Python 质量契约、MariaDB/PIT 集成、Docker 两镜像构建和 WebUI checks 通过；Live Provider probe 因 Eastmoney 多个接口 HTTP 502 失败，NetEase 网络异常被跳过，属于外部源可用性问题，不代表代码验收失败。
+
+**剩余工作：** Quote Provider 字段诊断覆盖已完成；下一阶段转入 DailyBar 边界质量审计（复权基准、停牌、非交易日、部分 K 线、日期边界、重复问题计数），再审计 Fundamentals / Valuations。Go 模块路径迁移仍作为独立待办，不与本批混做。
+
+
+
+### 2026-11-03：DailyBar 统一诊断边界审计启动
+
+**当前公共校验链路：**
+- `normalize.ValidateAndSortBarsWithReport` 在去重、过滤、排序前，对原始行执行 `validation.ValidateDailyBar`，报告证券身份、交易日期、请求区间、周期、OHLC、成交量/成交额单位与质量状态问题。
+- `normalizeProviderDailyBarsWithReport` 额外记录重复交易日、Provider 解析阶段拒绝行数量，并把问题合并到请求级 Reporter；仅超过 limit 的正常截断不降级。
+- 已核对 BaoStock、Tencent、Sina、NetEase、Yahoo、Pytdx、Hithink 等适配器存在上下文报告归一化路径；Eastmoney 和 Tushare 此前调用无 context 的兼容包装，导致诊断报告未进入当前请求 Reporter。本批已切换为传递请求 context 的 WithReport 入口，不改变返回数据和既有硬失败策略。
+
+**下一步重点核查：**
+1. 复权基准：请求口径、Provider 实际返回口径、调整因子来源/参考日/观测时间是否一致；禁止把未知复权数据标记为已复权。
+2. 停牌与非交易日：必须结合交易日历/证券状态判断；不能把无 K 线行直接认定为停牌，也不能把正常周末/节假日当缺失交易日。
+3. 部分 K 线：检查 `IsPartial` 与当日未收盘行情的处理；历史日线不能误把盘中未完成 bar 当完整日线。
+4. 日期边界：Asia/Shanghai 本地日期、开始/结束包含语义、自动回溯范围、Provider 超界返回和未来日期拒绝保持一致。
+5. 重复问题计数：区分解析拒绝、重复交易日、规范化丢弃和 limit 截断，避免重复统计同一行或漏掉原始行索引。
+
+当前只完成 Eastmoney/Tushare Reporter context 接入；上述边界审计尚未完成，不宣布 DailyBar 质量验收通过。
+
+
+
+### 2026-11-03：DailyBar 覆盖率按交易日历计算
+
+- 明确日期范围的日线覆盖率不再只按自然工作日估算；优先使用已校验的 A 股交易日历统计实际交易日，再按原 65% 覆盖门槛判断，避免春节等长假导致工作日估算过高。
+- 交易日历不可用时保留原工作日估算作为兼容回退，并在响应 warnings 标明 `daily_bar_coverage_uses_weekday_estimate_calendar_unavailable`；交易日历为 degraded 时同样显式披露。
+- 未指定 start 的最近 N 根 K 线请求仍使用原 80% 条数门槛，不引入不必要的日历查询。
+- 该变更只调整覆盖率判断依据，不补造 K 线、不把停牌日误判为缺失、不修改单根 K 线质量门禁。后续仍需基于证券状态与交易日历区分停牌、非交易日和 Provider 漏数。
+
+
+
+### 2026-11-03：当前日线 Partial 判定结合交易日历
+
+- 当前日线是否可能未收盘，先按 Asia/Shanghai 日期及 15:05 发布缓冲窗口识别候选，再查询当日交易日历。
+- 交易日历为 Valid 且明确非交易日时，不再把周中节假日返回的日期误标为 Partial；确认是交易日时继续标记 `IsPartial` 并降级质量。
+- 交易日历不可用或为 Degraded 时保留原工作日兜底，并在质量原因写入 `partial_bar_detection_uses_weekday_fallback_calendar_unavailable`，明确这是保守推断而非确认交易日。
+- 新增交易日/非交易日 Partial 判定测试；不把停牌日与非交易日混为一谈。
+
+
+### 2026-11-03：DailyBar 复权基准首轮审计
+
+- 已核对 Tushare 累计复权因子的计算语义：前复权使用当日因子除以参考日因子；后复权直接使用累计因子。后复权不应把请求结束日伪装成因子基准日。
+- `rebuildAdjustedDailyBars` 此前对前、后复权都写入 `AdjustmentRefDate`，与 Tushare Provider 的 HFQ 路径（不设置该字段）不一致。本轮将其修正为仅前复权写入实际参考因子日期；后复权保留空值，不改变 OHLC 计算。
+- 新增 PIT 后复权元数据断言，确保计算结果不变且不再产生错误参考日期。
+- Tushare `daily.pct_chg` 官方定义为基于除权昨收计算，不能简单按“未复权涨跌幅”清空或重算；本轮保留现有百分比处理。
+- 尚未完成：逐 Provider 核实请求参数、响应实际复权口径、参考日及来源版本；重点检查 Tencent、Eastmoney、BaoStock、Hithink、TickFlow、Pytdx 和 Yahoo。未核实前不统一推断参考日，也不放宽 adjusted MariaDB fallback 门禁。
+
+- 复权因子质量状态也纳入重建结果：因子为 degraded 时，受影响日线必须同步降级并携带带角色前缀的原始质量原因；前复权参考因子质量降级会影响整组输出，后复权只受各交易日自身因子质量影响。新增回归测试，避免 PIT 调整因子质量被静默抹平。
+
+- PIT/MariaDB 复权序列一致性进一步收紧：调整序列按 Provider、SourceVersion、AdjustmentMethod、AdjustmentRefDate、NormalizationVer 分组；缺少方法或参考日、参考日格式错误、参考日方向与前/后复权语义冲突的记录不参与同一序列重建，避免同源不同复权算法被拼接。新增方法混合和缺失方法测试。
+
+- MariaDB 复权序列筛选修正：前复权仍要求明确合法参考日期；后复权在方法明确时允许参考日期为空，以兼容累计复权因子算法。新增累计因子 HFQ fallback 回归测试；后复权若显式提供参考日期仍校验格式和方向。
+
+- Provider 复权元数据质量门禁：调整方法缺失时降级；前复权参考日缺失时降级；混合方法/参考日、非法参考日或参考日方向与请求结束边界错误时拒绝整组数据。Tencent 记录实际使用的 day/qfqday/hfqday 响应键，Eastmoney 记录请求 fqt 参数；不将请求参数伪装成源端回显。
+
+## 十三、统一诊断覆盖盘点与后续实施基线（2026-11-03）
+
+**盘点基线：**
+- 分支：`feat/full-go-data-providers-api-switch`
+- 代码 SHA：`1331f6644374f6d10282ef118e67d4a938920fc0`
+- Git Tree：递归获取 475 个条目，`truncated=false`。
+- PR #1：Open / Draft，未合并。
+- 本节是代码静态盘点与现有测试/工作流盘点，不代表本轮已执行生产环境真实 Provider 请求。
+
+**一、现有统一诊断入口（已存在，禁止重复建设）**
+
+- `POST /api/v1/data-sources/probe`：统一主动探测入口，受 market-data API Key 鉴权；支持 scope、capabilities、checks、markets、symbols、daily_bar_adjustments、timeout_seconds。省略 daily_bar_adjustments 时保持默认 none；每个请求口径独立产生 ProviderProbeItem，记录 adjustment_basis；跨 Provider 日 K 比较只在相同口径内执行。
+- `GET /api/v1/data-sources/probe/history`：查询已持久化的诊断批次。
+- 已有能力维度：quote、daily_bars、stock_basic、stock_search、stock_universe、index_quotes、index_catalog、market_breadth、sector_rankings、market_capital_flow、limit_pool、dragon_tiger、announcements、trading_calendar、security_trading_status、price_limit_event、stock_boards、fundamentals、valuations、hot_ranking、capital_flow、chip_distribution。
+- 已有检查维度：connectivity、contract、quality、freshness、cross_provider、storage。
+- 已有请求级 `validation.Reporter`，支持 parse / normalize / validate 分阶段问题、错误/警告计数、截断标记；Quote、DailyBar Probe 会采集 Reporter 结果。
+- Probe 有并发上限、单项超时、错误脱敏、样本/覆盖率/时间证据、MariaDB 诊断历史持久化。
+- 当前状态分类已有 returned、returned_degraded、returned_unknown、failed、skipped、not_configured、not_supported；不需要另起状态体系，但后续需补齐凭据状态和执行证据表达。
+
+**二、按数据域的接入矩阵**
+
+| 数据域/能力 | 统一 Probe 接入 | 现有质量检查 | 当前缺口/边界 |
+|---|---|---|---|
+| Quote | 已接入 | 八家 Quote Provider 字段级 Parse/Validate 覆盖；公共 Validator 与 Reporter 聚合 | 不代表每次真实上游请求均成功；按运行结果判断 |
+| DailyBar | 已接入 | 公共 DailyBar Validator、Reporter、覆盖率/交易日历、复权元数据和跨 Provider 日线字段对比已有基础 | Probe 当前不是完整复权矩阵；停牌/漏数、日期边界、特殊交易样例和计数口径仍需收尾 |
+| Fundamentals | 已接入 | Probe 调用 `validateFundamentalsSnapshot`；业务层已有报告期、公告日期、available_at、分区/指标、来源版本和 fetched_at 等校验；已有 PIT 查询/持久化 | 当前 Probe 校验以整体 error 为主，未接入字段级 Reporter；修订版本、公告前不可见、单位/字段映射和跨源差分尚未形成完整诊断项 |
+| Valuations | 已接入 | Probe 调用 `validateValuationSnapshot`；业务层已有证券身份、来源版本、时间、覆盖、缺失字段、有限数值及部分比例范围校验 | 当前 Probe 未接入字段级 Reporter；PE/PB/PS/PCF 口径、单位、TTM/静态/动态定义、PIT 和跨源可比性尚未完整诊断 |
+| Freshness | 部分接入 | 当前 SLA 注册覆盖 quote、index、market_breadth、sector、fund_flow | DailyBar、Fundamentals、Valuations 没有独立 freshness SLA；缺失源时间时应明确 skipped/unknown，不得宣称 fresh |
+| Cross-provider | 部分接入 | 当前有 DailyBar 同证券/日期/复权口径的字段比较 | Quote、Fundamentals、Valuations 等跨源对账未形成统一比较检查 |
+| Storage | 部分接入 | 当前 storage 检查验证 Provider Probe 历史是否可持久化 | 不等于行情/财务/估值业务数据表的写入、读取、重复写入和 PIT 历史还原验收 |
+| 交易日历/证券状态/公司行动 | 已有独立能力并被部分 Probe 使用 | 日历、证券交易状态、涨跌停事件等有响应契约检查 | 需组合用于 DailyBar 停牌、非交易日、漏数和特殊交易判定，不能把单一缺 K 线等同停牌 |
+
+**三、凭据与真实请求路径**
+
+- market-data 配置从环境变量读取 Tushare、Hithink、TickFlow、妙想等凭据；配置校验会在启用部分需凭据 Provider 且缺少凭据时阻止服务启动。凭据值不得进入诊断响应、日志或文档。
+- 当前 Live Provider workflow 为手动触发并上传脱敏报告；Hithink、Tushare、妙想有显式开关和 Secret 注入。
+- 当前 workflow 未发现 TickFlow API Key 的 Secret 注入，TickFlow 真实探测入口需单独核对/补齐。
+- Live workflow 设置 `continue-on-error: true`，因此 workflow 最终成功不等于 Provider 全部通过；必须读取报告中的每项状态。
+- 无凭据或未启用能力不应伪装成失败或通过。下一轮需区分“未配置凭据”“能力未启用”“已配置但未执行”“已执行失败”；对用户报告只展示配置状态，不展示 Secret。
+- 当前没有证据证明助手可直接读取部署服务器 Secret 或触发生产环境服务；生产真实请求只能通过部署端诊断 API 或有权限的 Actions 运行完成。未触发时必须记录未执行/阻塞。
+
+**四、统一诊断能力补齐原则**
+
+1. 保留现有 API、Probe 调度、Reporter、历史存储和状态模型；只补实际缺口。
+2. 数据域 Validator 继续归属各自业务包；统一 Probe 负责调用、汇总和持久化，不复制业务规则。
+3. Fundamentals / Valuations 后续补齐字段级诊断问题和结构化证据，避免只返回一条整体错误。
+4. 为 DailyBar、Fundamentals、Valuations 建立可配置质量检查项和独立 freshness / PIT / cross-provider 结果；没有可靠证据时返回 skipped 或 inconclusive，不得通过。
+5. 每项诊断保留代码 SHA、Provider、能力、样本、请求区间/报告期、来源版本、执行时间、行数/覆盖率、问题明细和状态。
+6. 真实 Provider、Mock/黄金样例、静态代码/单测三类证据分开记录；CI 通过不替代真实 Provider 验收。
+
+**五、调整后的批次与状态**
+
+| 批次 | 内容 | 状态 |
+|---|---|---|
+| Batch 0 | 统一诊断入口、能力注册、Reporter、凭据配置和 Live workflow 盘点 | 已完成静态盘点；待将 TickFlow Secret 入口及凭据状态表达纳入后续实现任务 |
+| Batch 1 | DailyBar 复权 Provider 矩阵和真实口径诊断 | 未完成 |
+| Batch 2 | DailyBar 停牌/非交易日/漏数、特殊交易和覆盖率诊断 | 未完成 |
+| Batch 3 | DailyBar 解析拒绝/重复/规范化丢弃/limit 截断计数及日期边界 | 未完成 |
+| Batch 4 | Fundamentals 字段级 Reporter、公告时间/PIT/修订/单位/覆盖诊断 | 未完成 |
+| Batch 5 | Valuations 字段级 Reporter、口径/单位/时间/PIT/跨源诊断 | 未完成 |
+| Batch 6 | 跨数据域、跨 Provider、数据库/API 与 PIT 对账 | 未完成 |
+| Batch 7 | 凭据可用 Provider 的真实请求、黄金样例、CI/部署验收 | 未完成 |
+| Batch 8 | 最终统一诊断验收报告与遗留风险 | 未完成 |
+
+**下一步执行顺序：** 先进入 Batch 1，盘点 DailyBar 实际注册 Provider、各 Provider 的复权请求参数/响应证据和当前测试覆盖，形成逐 Provider 口径矩阵；不重复已完成的 Quote 字段诊断，也不提前改造 Fundamentals/Valuations。
+
+## 十四、DailyBar Provider 复权能力矩阵首轮盘点（2026-11-03）
+
+**盘点基线：** 本节基于代码 SHA `e1fda735f06a9b97d766a1cbea40a73b6c2027d2` 对应代码树；仅为代码与测试静态核对，不代表真实上游复权结果已完成验收。
+
+**一、DailyBar 实际能力注册**
+
+默认配置中启用 DailyBar 的 Provider：
+- Eastmoney、BaoStock、Tencent、Sina、NetEase、TickFlow、Pytdx。
+
+代码实现了 DailyBar 能力、但默认关闭的 Provider：
+- Hithink、Tushare、Yahoo Finance。
+
+未发现 Miaoxiang、Xueqiu 实现个股 DailyBarProvider；不纳入本次 DailyBar 复权矩阵。最终启用状态仍以部署时 providers.json 和环境变量覆盖结果为准。
+
+**二、复权实现矩阵**
+
+| Provider | 默认状态 | none | 前复权 | 后复权 | 复权实现与证据边界 |
+|---|---|---|---|---|---|
+| Eastmoney | 启用 | 支持，fqt=0 | 支持，fqt=1 | 支持，fqt=2 | 直接请求 K 线接口；AdjustmentMethod 记录 eastmoney_fqt 参数值。该值是请求证据，不是源端响应回显；响应未提供可独立验证的参考日期 |
+| BaoStock | 启用 | adjustflag=3 | adjustflag=2 | adjustflag=1 | 直接请求接口并校验每行返回的 AdjustFlag 与请求一致；方法标记 baostock_pct_change。需要用真实样本确认不同复权口径和参考基准 |
+| Tencent | 启用 | day | qfqday | hfqday | 按请求口径切换 endpoint/响应数组 key；记录实际使用的响应 key，不能把请求参数误写成源端回显的参考日期 |
+| Sina | 启用 | 支持 | 不支持 | 不支持 | 仅接受 none；方法 sina_raw_ohlc_no_adjustment；端点没有可验证复权参数，调整请求明确拒绝 |
+| NetEase | 启用 | 支持 | 不支持 | 不支持 | 仅接受 none；方法 netease_raw_ohlc_no_adjustment；调整请求明确拒绝 |
+| TickFlow | 启用 | adjust=none | adjust=forward | adjust=backward | 根据是否配置 API Key 选择认证/免费端点；方法 tickflow_api_{adjust}。日 K 可走免费端点，不能把无 Key 等同于不可用 |
+| Pytdx | 启用 | 原始 OHLC | 本地 ApplyQFQ | 本地 ApplyHFQ | 从 TDX 获取原始日 K 和 GBBQ 除权除息事件，再本地计算复权；依赖公司行动数据完整性、分页完整性和事件因子计算正确性 |
+| Hithink | 默认关闭，需 Key | 支持 | 支持 | 支持 | API 参数 none/forward/backward，按请求区间分段获取；方法 hithink_api_{adjust}。真实账号权限和源端口径尚待验证 |
+| Tushare | 默认关闭，需 Token | daily 原始 OHLC | adj_factor 本地换算 | adj_factor 本地换算 | daily 接口原始 OHLC；复权时另取 adj_factor，前复权按当日因子/参考日因子，后复权按累计因子；因子缺失或不完整拒绝结果 |
+| Yahoo Finance | 默认关闭 | 支持 | adjclose ratio rebased to request end | adjclose ratio rebased to request start | 使用 adjclose/close 计算因子，再按请求边界重定基准；前复权参考日期为区间末端，后复权为区间起始；成交额保持 unknown/degraded |
+
+**三、当前统一 Probe 的关键缺口**
+
+- `ProbeProviderCapabilitiesWithOptions` 的 DailyBar 探测固定调用 `FetchDailyBars(..., model.AdjustmentNone)`。
+- 当前跨 Provider 日线比较也固定以 `AdjustmentNone` 标记快照。
+- 因此统一 Probe 目前只能验证各 Provider 的未复权日 K 请求和基础数据质量，**不能据此宣称前复权/后复权已通过统一诊断**。
+- 对只支持 none 的 Sina、NetEase，调整口径应报告 not_supported/skipped，而不是失败。
+- 对支持 qfq/hfq 的 Provider，后续需要按能力声明执行对应口径，并校验实际返回的 AdjustmentBasis、AdjustmentMethod、AdjustmentRefDate、SourceVersion 和因子/公司行动证据。
+- 不应把不同 Provider 未对齐参考基准的 adjusted bars 直接进行数值差分；必须先建立可比基准，否则结果为 not_comparable。
+
+**四、现有测试覆盖初步判断**
+
+- Eastmoney：已有日 K 归一化、重复/越界/非法行和证券身份测试；尚需补充三种 fqt 参数分别映射及响应元数据证据测试。
+- BaoStock：已有复权元数据、调整标记不一致拒绝测试；需要确认 none/qfq/hfq 三种标记均有独立用例和真实样本。
+- Tencent：已有请求 endpoint / payload key 选择、缺少指定 adjusted series 拒绝测试；还需覆盖三个口径输出元数据与参考基准边界。
+- Sina、NetEase：已有 adjusted request 拒绝测试；这是正确的能力边界，不需要伪造复权支持。
+- TickFlow：已有日 K 单位、排序、可选数组长度测试；本次静态测试名盘点未看到完整 none/forward/backward 复权矩阵用例。
+- Pytdx：代码使用 GBBQ 事件和本地 QFQ/HFQ；现有测试目录主要覆盖单位/字段质量，需单独核对复权事件排序、边界和缺失事件回归。
+- Hithink：已有日 K 解析问题测试；需补充三种调整参数、分段拼接和参考基准元数据测试。
+- Tushare：已有累计因子、前后复权和复权元数据相关测试；本批不重复已有因子公式测试，后续只补统一 Probe 接入与真实权限证据。
+- Yahoo：已有前复权按请求结束日重定基准、后复权按请求开始日重定基准、缺失 adjclose 拒绝测试；后续检查统一 Probe 是否能触达可选 Provider。
+
+**五、Batch 1 后续执行项**
+
+1. 为 DailyBar Provider 增加明确的复权能力声明/矩阵来源，避免仅凭 Provider 名称推断能力。
+2. 扩展统一 Probe 的 DailyBar 口径选择，使 none、forward、backward 可独立选择；对不支持的口径显式返回 not_supported。
+3. 将每个口径的实际请求/响应证据写入诊断结果；无源端参考日证据时保留 unknown，不推断。
+4. 增加 Provider 复权元数据统一断言和测试；跨 Provider 只比较基准一致的序列。
+5. 用真实 Provider 样本复验前后复权结果；需要凭据但未配置的 Provider 标记 skipped，不把 Mock/CI 结果当真实数据通过。
+
+**当前结论：** Provider 复权实现并非统一口径：部分源端直接返回调整序列，部分由 Go 本地使用因子/公司行动计算，Sina/NetEase 只支持未复权。统一 Probe 当前只测 none，这是明确的能力缺口。下一步应先实现“能力声明 + Probe 口径选择 + 不支持状态”，再逐个 Provider 补齐矩阵断言；不要重写现有复权算法。
+

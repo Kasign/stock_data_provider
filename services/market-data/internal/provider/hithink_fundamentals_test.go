@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ZhuLinsen/daily_stock_analysis/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
 func newHithinkFundamentalsTestServer(t *testing.T, abilitiesJSON string) (*httptest.Server, *atomic.Int32) {
