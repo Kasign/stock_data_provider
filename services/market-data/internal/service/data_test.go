@@ -2848,4 +2848,3 @@ func TestCurrentIncompleteDailyBarRespectsExchangeTradingCalendar(t *testing.T) 
 		t.Fatal("an active trading day before close must be marked as potentially incomplete")
 	}
 }
-
