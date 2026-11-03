@@ -1,5 +1,6 @@
 import { getCapitalFlow, getChipDistribution, getMarketValuations, getStockAnnouncements, getStockBoards, getStockFundamentals, getStockProfile } from "./api.js";
 import { comparableMarketSymbol, describeApiError, finiteNumberOrNull, formatDateTime, formatPercent, normalizeSymbol, qualityLabel } from "./format.js";
+import { buildResearchMetaText } from "./research-meta.js";
 const $=(s)=>document.querySelector(s);
 const QUALITY=["valid","degraded","stale","invalid","unknown"];
 const CATEGORY={profitability:"盈利能力",operating:"营运能力",growth:"成长能力",solvency:"偿债能力",cash_flow:"现金流",dupont:"杜邦分析"};
@@ -141,16 +142,16 @@ export function bindStockResearch(getSettings,getSymbol){
  function renderProfile(data,symbol){
   setText("stock-profile-symbol",data.symbol||symbol);setQuality("profile-quality",data.quality_status);
   $("#stock-profile-fields").replaceChildren(makeDl([
-   ["证券代码",data.symbol],["证券名称",data.name],["证券类型",data.security_type_label],["上市状态",data.listing_status_label],["上市日期",data.ipo_date],["退市日期",data.out_date],["数据源",data.source],["标准化版本",data.normalization_version],["获取时间",formatDateTime(data.fetched_at)]
+   ["证券代码",data.symbol],["证券名称",data.name],["证券类型",data.security_type_label],["上市状态",data.listing_status_label],["上市日期",data.ipo_date],["退市日期",data.out_date],["标准化版本",data.normalization_version]
   ]));
-  reasons("stock-profile-reasons",data.quality_reasons);setText("stock-profile-meta","来源 "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+   reasons("stock-profile-reasons",data.quality_reasons);setText("stock-profile-meta",buildResearchMetaText(data));
  }
  function renderBoards(data,symbol){
   setText("stock-boards-symbol",data.symbol||symbol);setQuality("boards-quality",data.quality_status);
   const root=$("#stock-board-list"),items=Array.isArray(data.items)?data.items:[ ];root.replaceChildren();
   if(!items.length)root.append(el("p","stock-research-empty",data.has_data===false?"数据源未确认该股票的所属板块，不能解释为确实没有板块。":"接口未返回板块记录。"));
   else items.forEach(item=>{const card=el("article","stock-board-item"),top=el("div","stock-board-item-top"),name=el("strong","",item.name||"板块名称未报告"),code=el("small","",item.code||"代码未报告");top.append(name,code);card.append(top);const metaLine=el("div","stock-board-item-meta");metaLine.append(el("span","",item.change_percent===null||item.change_percent===undefined?"涨跌幅 —":"涨跌幅 "+formatPercent(item.change_percent)),el("span","",item.provider_report_date?"源端日期 "+item.provider_report_date:"源端日期未报告"));card.append(metaLine);root.append(card);});
-  setText("stock-boards-meta","源端返回 "+(data.total??items.length)+" 条 · "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));reasons("stock-boards-reasons",data.quality_reasons);
+   setText("stock-boards-meta",buildResearchMetaText(data,{details:[["源端返回",(data.total??items.length)+" 条"]]}));reasons("stock-boards-reasons",data.quality_reasons);
  }
  async function loadAnnouncements(append=false){
   let symbol="",settings=null,seq=null,requestPage=1,ctl=null;
@@ -194,7 +195,7 @@ export function bindStockResearch(getSettings,getSymbol){
    state.announcementPage=requestPage;state.announcementHasMore=Boolean(data.has_more);
    setQuality("announcements-quality",data.quality_status);
    setText("announcements-symbol",data.symbol||symbol);
-   setText("announcements-meta","查询范围 "+(data.start_date||"默认起始日")+" 至 "+(data.end_date||"默认结束日")+" · 已返回 "+(data.returned??items.length)+" 条 / 源端总量 "+(data.total??"未报告")+" · "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+    setText("announcements-meta",buildResearchMetaText(data,{details:[["查询范围",(data.start_date||"默认起始日")+" 至 "+(data.end_date||"默认结束日")],["已返回",(data.returned??items.length)+" 条 / 源端总量 "+(data.total??"未报告")+" 条"]]}));
    reasons("announcements-reasons",data.quality_reasons);
    if(!items.length&&append)root.append(el("p","stock-research-empty","本页未返回新记录。"));
    return true;
@@ -331,7 +332,7 @@ export function bindStockResearch(getSettings,getSymbol){
    reasons("valuations-reasons",Array.isArray(item.quality_reasons)&&item.quality_reasons.length?item.quality_reasons:data.quality_reasons);
   }
   const missing=Array.isArray(data.missing_symbols)&&data.missing_symbols.length?" · 未返回："+data.missing_symbols.join("、"):"";
-  setText("valuations-meta","来源 "+(item?.source||data.source||"未报告")+" · 供应商时间 "+(data.provider_timestamp?formatDateTime(data.provider_timestamp):"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at)+missing);
+   setText("valuations-meta",buildResearchMetaText(data,{source:item?.source||data.source,details:missing?[["未返回标的",missing]]:[],includeProviderTimestamp:true}));
   if(!item)reasons("valuations-reasons",data.quality_reasons);
  }
  function fractionPercent(value){
@@ -359,7 +360,7 @@ export function bindStockResearch(getSettings,getSymbol){
   const values=[data.average_cost,data.cost_90_low,data.cost_90_high,data.cost_70_low,data.cost_70_high,data.profit_ratio,data.concentration_90,data.concentration_70];
   if(data.has_data===false||!values.some(value=>finiteNumberOrNull(value)!==null)){
    root.append(el("p","stock-research-empty",data.has_data===false?"服务端未确认可用筹码数据；该状态不代表筹码指标为 0。":"接口请求成功，但没有返回可展示的筹码指标。"));
-   setText("chip-meta","来源 "+(data.source||"未报告")+" · 数据日期 "+(data.date||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+   setText("chip-meta",buildResearchMetaText(data,{includeDataDate:true,includeProviderDate:true}));
    reasons("chip-reasons",data.quality_reasons);return;
   }
   const metrics=[
@@ -373,7 +374,7 @@ export function bindStockResearch(getSettings,getSymbol){
   const grid=el("div","stock-supplement-metric-grid");
   metrics.forEach(([label,value])=>{const item=el("div","stock-supplement-metric");item.append(el("span","",label),el("strong","",value));grid.append(item);});
   root.append(grid);
-  setText("chip-meta","来源 "+(data.source||"未报告")+" · 数据日期 "+(data.date||"未报告")+" · 供应商日期 "+(data.provider_date||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+   setText("chip-meta",buildResearchMetaText(data,{includeDataDate:true,includeProviderDate:true}));
   reasons("chip-reasons",data.quality_reasons);
  }
  async function loadCapitalFlow(){
@@ -388,7 +389,7 @@ export function bindStockResearch(getSettings,getSymbol){
   const flowValues=[data.main_net_inflow_yuan,data.inflow_5d_yuan,data.inflow_10d_yuan];
   if(data.has_data===false||(!flowValues.some(value=>finiteNumberOrNull(value)!==null)&&!(Number.isFinite(observations)&&observations>0))){
    root.append(el("p","stock-research-empty",data.has_data===false?"服务端未确认可用个股资金流数据；缺失值不解释为 0。":"接口请求成功，但没有返回可展示的资金流指标。"));
-   setText("capital-flow-meta","来源 "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+    setText("capital-flow-meta",buildResearchMetaText(data));
    reasons("capital-flow-reasons",data.quality_reasons);return;
   }
   const metrics=[
@@ -400,7 +401,7 @@ export function bindStockResearch(getSettings,getSymbol){
   const grid=el("div","stock-supplement-metric-grid");
   metrics.forEach(([label,value])=>{const item=el("div","stock-supplement-metric");item.append(el("span","",label),el("strong","",value));grid.append(item);});
   root.append(grid);
-  setText("capital-flow-meta","来源 "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+    setText("capital-flow-meta",buildResearchMetaText(data));
   reasons("capital-flow-reasons",data.quality_reasons);
  }
  function renderFundamentals(data,symbol){
@@ -418,7 +419,7 @@ export function bindStockResearch(getSettings,getSymbol){
    if(Array.isArray(section.quality_reasons)&&section.quality_reasons.length){const details=el("details","stock-research-quality-reasons"),summary=el("summary","","该分类质量说明");details.append(summary);const list=el("ul");section.quality_reasons.forEach(reason=>list.append(el("li","",reason)));details.append(list);card.append(details);}
    root.append(card);
   });
-  setText("fundamentals-meta","报告期 "+data.year+" Q"+data.quarter+" · 来源 "+(data.source||"未报告")+" · 获取时间 "+formatDateTime(data.fetched_at));
+   setText("fundamentals-meta",buildResearchMetaText(data,{details:[["报告期",data.year&&data.quarter?data.year+" Q"+data.quarter:"未报告"]]}));
   reasons("fundamentals-reasons",data.quality_reasons);
  }
  async function refresh(){
