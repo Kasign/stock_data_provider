@@ -989,3 +989,11 @@ Yahoo Quote 此前直接将关键行情元数据解码为 Go 标量类型，上�
 诊断区分 missing、null_value、type_mismatch、invalid_number、invalid_integer、越界及身份不匹配；Quote 必需字段仍硬失败。成交额继续保持 null/unknown/degraded，不推断、不补零；不改变 Yahoo Provider 默认关闭策略或数据路由。
 
 新增回归覆盖 meta 字段 string/null/object 类型错误，以及分时 open 类型错误，验证字段路径、错误码、严重级别和行索引。最终以最新 SHA 的 Go test/race/vet、质量契约及 Docker 构建通过为验收依据。
+
+
+### Yahoo Quote 诊断代码格式复验记录（2026-11-03）
+
+- Tencent 非有限价格断言修正提交：`16e5a957404c822a0ec0542dda9fbe2813762dae`；该 SHA 的 Go test suite 全部 Job 通过，Go/Python 质量契约、Live Provider probe、WebUI checks 均通过。
+- Yahoo Quote 原始字段诊断提交：`95670d70deec537f68f436a9d78dbe206f0c1bcc`；首轮 CI 的 market-data gofmt 检查发现新增代码格式问题，Docker market-data 镜像构建因此未继续。
+- 格式修正提交：`5fd3c79b13eda2c209d1e8632719ac32bba78630`；复验仍发现两个文件在新增函数前多一个空行，已再次清理。
+- 当前最新 SHA 的完整 Go 测试、race、vet、Docker 构建及 Go/Python 质量契约仍待最终复验；不得将前一 SHA 的成功结果当作最新代码通过。

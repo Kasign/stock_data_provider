@@ -484,7 +484,6 @@ func (p *YahooFinance) FetchDailyBars(ctx context.Context, rawSymbol, startDate,
 	return normalizeProviderDailyBarsWithReport(ctx, symbol, startISO, endISO, limit, bars, rejectedRows)
 }
 
-
 func parseYahooQuoteFloatField(ctx context.Context, field, providerField string, raw json.RawMessage, expected string) (float64, bool) {
 	return parseYahooQuoteFloatFieldAtRow(ctx, -1, field, providerField, raw, expected)
 }

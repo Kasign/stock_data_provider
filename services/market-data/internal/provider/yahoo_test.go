@@ -159,7 +159,6 @@ func TestYahooFinanceFetchQuoteParsesIntradayChart(t *testing.T) {
 	}
 }
 
-
 func TestYahooFinanceQuoteParseDiagnosticsIdentifyRawMetaFields(t *testing.T) {
 	cases := []struct {
 		name, from, to, field, providerField, code string
