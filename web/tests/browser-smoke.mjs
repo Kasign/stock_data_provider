@@ -492,6 +492,35 @@ try {
     );
     assert.equal(await page.locator("#market-view").isVisible(), true, "market overview must be the initial view");
 
+    // Keyboard users must be able to reveal and activate the skip link before traversing the dashboard.
+    await page.keyboard.press("Tab");
+    const skipLinkState = await page.locator(".skip-link").evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        focused: document.activeElement === element,
+        top: rect.top,
+        outlineStyle: style.outlineStyle,
+        outlineWidth: style.outlineWidth
+      };
+    });
+    await page.waitForFunction(() => {
+      const element = document.querySelector(".skip-link");
+      if (!element || document.activeElement !== element) return false;
+      const top = element.getBoundingClientRect().top;
+      return top >= 0 && top < 60;
+    }, null, { timeout: 2000 });
+    const visibleSkipLinkState = await page.locator(".skip-link").evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return { top: rect.top, outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+    });
+    assert.equal(skipLinkState.focused, true, "the first keyboard tab stop should be the skip-to-content link");
+    assert.ok(visibleSkipLinkState.top >= 0 && visibleSkipLinkState.top < 60, "the skip link must become visible when focused");
+    assert.notEqual(visibleSkipLinkState.outlineStyle, "none", "the focused skip link must have a visible outline");
+    assert.notEqual(visibleSkipLinkState.outlineWidth, "0px", "the focused skip link outline must be non-zero");
+    assert.notEqual(skipLinkState.outlineWidth, "0px", "the focused skip link outline must be non-zero");
+
     if (viewport.width === 320) {
       await page.locator('[data-sector-metric="amount"]').click();
       await page.waitForFunction(() => document.querySelector("#market-sector-metric-heading")?.textContent === "成交额");
@@ -521,34 +550,6 @@ try {
       assert.match(await page.locator("#market-sector-body").textContent(), /不会用成交额替代资金净流入/);
     }
 
-    // Keyboard users must be able to reveal and activate the skip link before traversing the dashboard.
-    await page.keyboard.press("Tab");
-    const skipLinkState = await page.locator(".skip-link").evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      return {
-        focused: document.activeElement === element,
-        top: rect.top,
-        outlineStyle: style.outlineStyle,
-        outlineWidth: style.outlineWidth
-      };
-    });
-    await page.waitForFunction(() => {
-      const element = document.querySelector(".skip-link");
-      if (!element || document.activeElement !== element) return false;
-      const top = element.getBoundingClientRect().top;
-      return top >= 0 && top < 60;
-    }, null, { timeout: 2000 });
-    const visibleSkipLinkState = await page.locator(".skip-link").evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      return { top: rect.top, outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
-    });
-    assert.equal(skipLinkState.focused, true, "the first keyboard tab stop should be the skip-to-content link");
-    assert.ok(visibleSkipLinkState.top >= 0 && visibleSkipLinkState.top < 60, "the skip link must become visible when focused");
-    assert.notEqual(visibleSkipLinkState.outlineStyle, "none", "the focused skip link must have a visible outline");
-    assert.notEqual(visibleSkipLinkState.outlineWidth, "0px", "the focused skip link outline must be non-zero");
-    assert.notEqual(skipLinkState.outlineWidth, "0px", "the focused skip link outline must be non-zero");
 
     // Each browser context starts with isolated storage; verify both theme directions and their accessible state.
     const themeToggle = page.locator("#theme-toggle");
