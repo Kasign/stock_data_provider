@@ -203,53 +203,53 @@ func TestValidateAndSortBarsRejectsVolumeAmountAndContractBoundaries(t *testing.
 		wantWarning string
 	}{
 		{
-			name: "missing volume",
-			mutate: func(bar *model.DailyBar) { bar.Volume = nil },
+			name:        "missing volume",
+			mutate:      func(bar *model.DailyBar) { bar.Volume = nil },
 			wantWarning: "bar_with_unknown_volume_dropped",
 		},
 		{
-			name: "negative volume",
-			mutate: func(bar *model.DailyBar) { bar.Volume = ptrInt64(-1) },
+			name:        "negative volume",
+			mutate:      func(bar *model.DailyBar) { bar.Volume = ptrInt64(-1) },
 			wantWarning: "bar_with_unknown_volume_dropped",
 		},
 		{
-			name: "non share volume unit",
-			mutate: func(bar *model.DailyBar) { bar.VolumeUnit = "hands" },
+			name:        "non share volume unit",
+			mutate:      func(bar *model.DailyBar) { bar.VolumeUnit = "hands" },
 			wantWarning: "bar_with_nonstandard_volume_unit_dropped",
 		},
 		{
-			name: "negative amount",
-			mutate: func(bar *model.DailyBar) { bar.Amount = ptrFloat(-1) },
+			name:        "negative amount",
+			mutate:      func(bar *model.DailyBar) { bar.Amount = ptrFloat(-1) },
 			wantWarning: "bar_with_invalid_amount_dropped",
 		},
 		{
-			name: "zero amount with nonzero volume",
-			mutate: func(bar *model.DailyBar) { bar.Amount = ptrFloat(0) },
+			name:        "zero amount with nonzero volume",
+			mutate:      func(bar *model.DailyBar) { bar.Amount = ptrFloat(0) },
 			wantWarning: "bar_amount_volume_zero_mismatch_dropped",
 		},
 		{
-			name: "nonzero amount with zero volume",
-			mutate: func(bar *model.DailyBar) { bar.Volume = ptrInt64(0) },
+			name:        "nonzero amount with zero volume",
+			mutate:      func(bar *model.DailyBar) { bar.Volume = ptrInt64(0) },
 			wantWarning: "bar_amount_volume_zero_mismatch_dropped",
 		},
 		{
-			name: "non CNY amount unit",
-			mutate: func(bar *model.DailyBar) { bar.AmountUnit = "USD" },
+			name:        "non CNY amount unit",
+			mutate:      func(bar *model.DailyBar) { bar.AmountUnit = "USD" },
 			wantWarning: "bar_with_nonstandard_amount_unit_dropped",
 		},
 		{
-			name: "unknown adjustment basis",
-			mutate: func(bar *model.DailyBar) { bar.AdjustmentBasis = model.AdjustmentUnknown },
+			name:        "unknown adjustment basis",
+			mutate:      func(bar *model.DailyBar) { bar.AdjustmentBasis = model.AdjustmentUnknown },
 			wantWarning: "bar_with_unknown_or_unsupported_adjustment_dropped",
 		},
 		{
-			name: "unsupported period",
-			mutate: func(bar *model.DailyBar) { bar.Period = "1m" },
+			name:        "unsupported period",
+			mutate:      func(bar *model.DailyBar) { bar.Period = "1m" },
 			wantWarning: "bar_with_unsupported_period_dropped",
 		},
 		{
-			name: "non finite change percent",
-			mutate: func(bar *model.DailyBar) { bar.ChangePercent = ptrFloat(math.NaN()) },
+			name:        "non finite change percent",
+			mutate:      func(bar *model.DailyBar) { bar.ChangePercent = ptrFloat(math.NaN()) },
 			wantWarning: "bar_with_invalid_change_percent_dropped",
 		},
 	}

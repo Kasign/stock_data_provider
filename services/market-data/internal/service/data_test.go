@@ -321,6 +321,62 @@ func TestQuoteFallsBackFromPlaceholderSourceVersion(t *testing.T) {
 	}
 }
 
+func TestDailyBarsMarksMissingProviderSymbolAsDegraded(t *testing.T) {
+	bar := dailyBarForVersionContractTest("eastmoney-daily-bars-v1", "2026-10-20")
+	bar.Symbol = ""
+	bar.QualityStatus = model.QualityValid
+	svc := New([]provider.Provider{fakeProvider{name: "eastmoney", bars: []model.DailyBar{bar}}},
+		cache.NewDisabled(), nil, time.Second, time.Minute, 120, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	bars, hit, warnings, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err != nil || hit {
+		t.Fatalf("DailyBars hit=%v err=%v", hit, err)
+	}
+	if len(bars) != 1 || bars[0].Symbol != "600519.SH" || bars[0].QualityStatus != model.QualityDegraded {
+		t.Fatalf("missing provider symbol must be assumed from request and degraded: %+v", bars)
+	}
+	foundReason := false
+	for _, reason := range bars[0].QualityReasons {
+		foundReason = foundReason || reason == "provider_symbol_missing_assumed_from_request"
+	}
+	if !foundReason || !containsTestWarning(warnings, "daily_bar_provider_symbol_missing_assumed_from_request") {
+		t.Fatalf("missing provider symbol evidence must be surfaced in row and response: reasons=%v warnings=%v", bars[0].QualityReasons, warnings)
+	}
+}
+
+func TestQuoteFallbackDoesNotOverrideInvalidProviderQuality(t *testing.T) {
+	invalid := validQuote("tencent")
+	invalid.Symbol = ""
+	invalid.Amount = nil
+	invalid.QualityStatus = model.QualityInvalid
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", quoteErr: errors.New("primary unavailable")},
+		fakeProvider{name: "tencent", quote: invalid},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Second, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if _, _, err := svc.Quote(context.Background(), "600519.SH"); err == nil {
+		t.Fatal("fallback, missing symbol, or missing amount must not downgrade invalid quote quality into usable degraded data")
+	}
+}
+
+func TestDailyBarsFallbackDoesNotOverrideInvalidProviderQuality(t *testing.T) {
+	invalid := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")
+	invalid.Symbol = ""
+	invalid.Amount = nil
+	invalid.QualityStatus = model.QualityInvalid
+	providers := []provider.Provider{
+		fakeProvider{name: "eastmoney", barsErr: errors.New("primary unavailable")},
+		fakeProvider{name: "tencent", bars: []model.DailyBar{invalid}},
+	}
+	svc := New(providers, cache.NewDisabled(), nil, time.Second, time.Minute, 120,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bars, _, _, err := svc.DailyBars(context.Background(), "600519.SH", "2026-10-20", "2026-10-20", 1, model.AdjustmentForward)
+	if err == nil || len(bars) != 0 {
+		t.Fatalf("fallback, missing symbol, or missing amount must not downgrade invalid bar quality into usable degraded data: bars=%+v err=%v", bars, err)
+	}
+}
+
 func TestDailyBarsFallsBackFromPlaceholderSourceVersion(t *testing.T) {
 	invalid := dailyBarForVersionContractTest("unknown", "2026-10-20")
 	fallbackBar := dailyBarForVersionContractTest("tencent-daily-bars-v1", "2026-10-20")

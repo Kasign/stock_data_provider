@@ -821,3 +821,9 @@ BSE 的 not_supported 识别同时覆盖 `markets=["BSE"]` 和仅指定 `symbols
 - 本轮只修正确定性和错误描述，不改变现有数据接纳/丢弃规则。
 
 后续继续检查 Service/Provider 层的源字段身份、复权基准、时间戳、当日未收盘 K 线和停牌日行为，避免 Normalize 单测通过但 Service 流程覆盖不足。
+
+
+Quote/Daily Bars 边界审计补充：Service 层 DailyBars 对 Provider 返回空 Symbol 的处理原先只根据请求参数补齐 Symbol，但没有同步降低质量；这与 Quote 的缺失身份降级策略不一致。现改为补齐请求 Symbol 的同时标记 QualityDegraded，并在行级 QualityReasons 和响应 warnings 中明确记录 `provider_symbol_missing_assumed_from_request`。非空但错误/不匹配的 Symbol 仍然触发 Provider 整体契约失败，不会被覆盖。
+
+
+质量状态门禁补充：Quote/Daily Bars 在使用 Provider fallback、补齐请求 Symbol、标记缺失成交额或标记当日未完成 K 线时，统一只允许将空值/valid 提升为 degraded；已有 unknown、stale、invalid 不得被覆盖，尤其不能把 invalid 通过 fallback 逻辑降成 degraded 后继续接纳。新增 Quote 与 DailyBars 回归测试，使用 fallback + 缺失 Symbol + 缺失 Amount 的 invalid 输入，确认仍然拒绝。

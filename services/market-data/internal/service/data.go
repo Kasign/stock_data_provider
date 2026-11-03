@@ -2515,6 +2515,15 @@ func (s *DataService) CapitalFlow(ctx context.Context, rawSymbol string) (*model
 	}
 	return nil, false, fmt.Errorf("all capital-flow providers failed: %s", strings.Join(failures, " | "))
 }
+func degradeQualityStatus(status *model.QualityStatus) {
+	if status == nil {
+		return
+	}
+	if *status == "" || *status == model.QualityValid {
+		*status = model.QualityDegraded
+	}
+}
+
 func appendReason(reasons []string, value string) []string {
 	for _, reason := range reasons {
 		if reason == value {
@@ -2624,7 +2633,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 				continue
 			}
 		} else {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 			appendReasonOnce(&q.QualityReasons, "provider_symbol_missing_assumed_from_request")
 		}
 		q.Symbol = symbol
@@ -2640,13 +2649,13 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 			continue
 		}
 		if i > 0 {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 			appendReasonOnce(&q.QualityReasons, "provider_fallback_used")
 			q.FallbackFrom = s.quoteProviders[0].Name()
 			q.FallbackReason = strings.Join(errs, "; ")
 		}
 		if q.Amount == nil {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 			appendReasonOnce(&q.QualityReasons, "amount_missing_from_provider")
 		}
 		if e = normalize.ValidateQuote(q); e != nil {
@@ -2670,7 +2679,7 @@ func (s *DataService) Quote(ctx context.Context, rawSymbol string) (*model.Quote
 				s.logger.Error("persist quote failed", "symbol", symbol, "source", q.Source, "error", e)
 				appendReasonOnce(&q.QualityReasons, "persistence_write_failed")
 				if q.QualityStatus == model.QualityValid {
-					q.QualityStatus = model.QualityDegraded
+					degradeQualityStatus(&q.QualityStatus)
 				}
 			}
 		}
@@ -2858,14 +2867,20 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			continue // Never salvage only part of a provider response with a mixed contract.
 		}
 		accepted := make([]model.DailyBar, 0, len(bars))
+		missingProviderSymbol := false
 		for j := range bars {
+			if strings.TrimSpace(bars[j].Symbol) == "" {
+				missingProviderSymbol = true
+				degradeQualityStatus(&bars[j].QualityStatus)
+				appendReasonOnce(&bars[j].QualityReasons, "provider_symbol_missing_assumed_from_request")
+			}
 			bars[j].Symbol = symbol
 			bars[j].Source = p.Name()
 			bars[j].SourceVersion = strings.TrimSpace(bars[j].SourceVersion)
 			bars[j].RequestID = fetchID
 			if isCurrentIncompleteSessionBar(bars[j].TradeDate, time.Now()) {
 				bars[j].IsPartial = true
-				bars[j].QualityStatus = model.QualityDegraded
+				degradeQualityStatus(&bars[j].QualityStatus)
 				appendReasonOnce(&bars[j].QualityReasons, "current_daily_bar_may_be_incomplete")
 			}
 			bars[j].FetchedAt = receivedAt
@@ -2873,11 +2888,11 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				bars[j].NormalizationVer = normalize.Version
 			}
 			if bars[j].Amount == nil {
-				bars[j].QualityStatus = model.QualityDegraded
+				degradeQualityStatus(&bars[j].QualityStatus)
 				appendReasonOnce(&bars[j].QualityReasons, "amount_missing_from_provider")
 			}
 			if i > 0 {
-				bars[j].QualityStatus = model.QualityDegraded
+				degradeQualityStatus(&bars[j].QualityStatus)
 				bars[j].FallbackFrom = s.barProviders[0].Name()
 				bars[j].FallbackReason = strings.Join(errs, "; ")
 				appendReasonOnce(&bars[j].QualityReasons, "provider_fallback_used")
@@ -2905,6 +2920,9 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 		if i > 0 {
 			warnings = append(warnings, "daily_bar_provider_fallback_used")
 		}
+		if missingProviderSymbol {
+			warnings = append(warnings, "daily_bar_provider_symbol_missing_assumed_from_request")
+		}
 		for _, bar := range bars {
 			if bar.Amount == nil {
 				warnings = append(warnings, "daily_bar_amount_missing_from_selected_provider")
@@ -2918,7 +2936,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 			warnings = append(warnings, warning)
 			for j := range bars {
 				if bars[j].QualityStatus == model.QualityValid {
-					bars[j].QualityStatus = model.QualityDegraded
+					degradeQualityStatus(&bars[j].QualityStatus)
 				}
 				appendReasonOnce(&bars[j].QualityReasons, "daily_bar_coverage_below_threshold")
 			}
@@ -2937,7 +2955,7 @@ func (s *DataService) DailyBars(ctx context.Context, rawSymbol, start, end strin
 				for j := range bars {
 					appendReasonOnce(&bars[j].QualityReasons, "persistence_write_failed")
 					if bars[j].QualityStatus == model.QualityValid {
-						bars[j].QualityStatus = model.QualityDegraded
+						degradeQualityStatus(&bars[j].QualityStatus)
 					}
 				}
 			}
@@ -3330,7 +3348,7 @@ func applyQuoteFreshness(q *model.Quote, now time.Time) {
 	}
 	if q.QuoteTime == nil {
 		if q.QualityStatus == model.QualityValid || q.QualityStatus == "" {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 		}
 		appendReasonOnce(&q.QualityReasons, "provider_timestamp_missing")
 		return
@@ -3339,7 +3357,7 @@ func applyQuoteFreshness(q *model.Quote, now time.Time) {
 	// Clock skew is suspicious regardless of whether the market is open.
 	if age < -60*time.Second {
 		if q.QualityStatus != model.QualityStale {
-			q.QualityStatus = model.QualityDegraded
+			degradeQualityStatus(&q.QualityStatus)
 		}
 		appendReasonOnce(&q.QualityReasons, "provider_timestamp_more_than_60_seconds_in_future")
 		return
