@@ -197,10 +197,28 @@ func ValidateAndSortBars(symbol string, bars []model.DailyBar, start, end string
 			return nil, []string{"invalid_end_date"}
 		}
 	}
+	canonicalRequestedSymbol, symbolErr := NormalizeSymbol(symbol)
+	if symbolErr != nil || canonicalRequestedSymbol != symbol {
+		return nil, []string{"invalid_requested_symbol"}
+	}
+
 	seen := map[string]bool{}
 	valid := make([]model.DailyBar, 0, len(bars))
 	ohlcDiagnosticCount := 0
 	for _, b := range bars {
+		if strings.TrimSpace(b.Symbol) == "" {
+			warnings = append(warnings, "bar_with_missing_symbol_dropped")
+			continue
+		}
+		canonicalBarSymbol, barSymbolErr := NormalizeSymbol(b.Symbol)
+		if barSymbolErr != nil || canonicalBarSymbol != b.Symbol {
+			warnings = append(warnings, "bar_with_invalid_symbol_dropped")
+			continue
+		}
+		if canonicalBarSymbol != canonicalRequestedSymbol {
+			warnings = append(warnings, "bar_symbol_mismatch_dropped")
+			continue
+		}
 		parsedTradeDate, err := time.Parse("2006-01-02", b.TradeDate)
 		if err != nil || parsedTradeDate.Format("2006-01-02") != b.TradeDate {
 			warnings = append(warnings, "invalid_trade_date_dropped")

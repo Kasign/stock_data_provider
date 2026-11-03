@@ -894,3 +894,26 @@ ProviderTime 仍表示源端时间，FetchedAt 仍表示本服务采集时间，
 3. 快照级和条目级分别校验，避免父快照时间正常但行级数据携带未来采集时间。
 4. 不改变现有 `QualityStatus`、空结果 unknown 语义、分页计数、缓存 TTL 和 Provider fallback 策略。
 5. 回归测试覆盖四类数据的快照级边界，以及公告、龙虎榜、涨跌停池的条目级边界。
+
+
+## 2026-11-03 Quote / DailyBar 证券身份校验闭环修复
+
+### 本批目标
+修复 Provider 日 K 记录的证券身份校验与实际过滤不一致问题，避免错误证券的数据被覆盖成请求证券代码后继续返回。
+
+### 问题与修复
+- 原 ValidateAndSortBarsWithReport 已生成 identity_mismatch 结构化问题，但后续旧归一化流程仍会无条件将记录的 Symbol 覆盖为请求证券。
+- 在旧归一化过滤链路中增加证券身份硬门禁：请求证券必须是规范 A 股代码；Provider 记录必须携带规范证券代码，且必须与请求证券一致。
+- 缺失、非法、错证券记录分别输出稳定 warning code，并在覆盖 Symbol、去重、排序前丢弃。
+- 不改变日期范围、OHLC、成交量/额、复权、质量状态、排序、去重和 limit 的既有处理顺序（证券身份校验前置）。
+
+### 回归测试
+- 正常证券记录继续保留。
+- Go/Python 质量契约回归中的 DailyBar fixture 显式提供规范 Symbol，确保测试验证业务质量规则而不是绕过证券身份硬门禁。
+- 错证券记录即使交易日期不同也必须丢弃，不能依赖重复日期逻辑偶然过滤。
+- 缺失证券代码和非法证券代码分别丢弃并输出 warning。
+- Provider payload 请求级 Reporter 仍保留原始 row_index 的 identity_mismatch 和重复记录诊断。
+
+### 验收状态
+- 代码与回归测试已提交；Go 测试、race、vet 和构建以该提交对应的 GitHub Actions 结果为准。
+- 在线 Provider 502 / DNS 问题不作为放宽证券身份门禁的理由。

@@ -71,8 +71,9 @@ func TestNormalizeProviderDailyBarsWithReportKeepsOriginalRows(t *testing.T) {
 	}
 	mismatch := valid
 	mismatch.Symbol = "000001.SZ"
+	mismatch.TradeDate = "2026-10-29" // 不同交易日，确保身份错误行不能靠重复日期过滤掩盖
 	bars := []model.DailyBar{valid, mismatch, valid}
-	got, err := normalizeProviderDailyBarsWithReport(ctx, "600000.SH", "2026-10-30", "2026-10-30", 10, bars, 0)
+	got, err := normalizeProviderDailyBarsWithReport(ctx, "600000.SH", "2026-10-29", "2026-10-30", 10, bars, 0)
 	if err != nil {
 		t.Fatalf("normalizeProviderDailyBarsWithReport() error = %v", err)
 	}

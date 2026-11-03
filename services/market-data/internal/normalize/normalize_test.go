@@ -29,7 +29,7 @@ func TestNormalizeSymbol(t *testing.T) {
 func TestValidateAndSortBars(t *testing.T) {
 	v1 := int64(100)
 	v2 := int64(200)
-	bars := []model.DailyBar{{TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 12, Low: 9, Close: 11, Volume: &v1, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}, {TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 12, Low: 9, Close: 11, Volume: &v2, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}, {TradeDate: "2026-10-21", Period: "1d", Open: 10, High: 8, Low: 9, Close: 11, Volume: &v2, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}}
+	bars := []model.DailyBar{{Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d", Open: 10, High: 12, Low: 9, Close: 11, Volume: &v1, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}, {Symbol: "600519.SH", TradeDate: "2026-10-19", Period: "1d", Open: 10, High: 12, Low: 9, Close: 11, Volume: &v2, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}, {Symbol: "600519.SH", TradeDate: "2026-10-21", Period: "1d", Open: 10, High: 8, Low: 9, Close: 11, Volume: &v2, VolumeUnit: "shares", AmountUnit: "CNY", AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney"}}
 	got, warnings := ValidateAndSortBars("600519.SH", bars, "2026-10-19", "2026-10-20", 10)
 	if len(got) != 2 {
 		t.Fatalf("wanted 2 valid bars, got %d", len(got))
@@ -42,6 +42,38 @@ func TestValidateAndSortBars(t *testing.T) {
 	}
 }
 
+func TestValidateAndSortBarsRejectsMissingInvalidAndMismatchedSymbols(t *testing.T) {
+	volume := int64(1000)
+	base := model.DailyBar{
+		Symbol: "600519.SH", TradeDate: "2026-10-20", Period: "1d",
+		Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume,
+		AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+	}
+	mismatched := base
+	mismatched.Symbol = "000001.SZ"
+	mismatched.TradeDate = "2026-10-21"
+	missing := base
+	missing.Symbol = ""
+	missing.TradeDate = "2026-10-22"
+	invalid := base
+	invalid.Symbol = "AAPL"
+	invalid.TradeDate = "2026-10-23"
+
+	got, warnings := ValidateAndSortBars("600519.SH", []model.DailyBar{base, mismatched, missing, invalid}, "", "", 10)
+	if len(got) != 1 || got[0].TradeDate != base.TradeDate || got[0].Symbol != "600519.SH" {
+		t.Fatalf("only the matching security row should survive, got bars=%+v warnings=%v", got, warnings)
+	}
+	for _, warning := range []string{
+		"bar_symbol_mismatch_dropped",
+		"bar_with_missing_symbol_dropped",
+		"bar_with_invalid_symbol_dropped",
+	} {
+		if !containsWarning(warnings, warning) {
+			t.Errorf("missing warning %q in %v", warning, warnings)
+		}
+	}
+}
 func TestInvalidOHLCWarningIncludesDroppedRowContext(t *testing.T) {
 	volume := int64(1000)
 	bad := model.DailyBar{
