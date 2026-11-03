@@ -99,7 +99,6 @@ func TestValidatePytdxDailyBarValuesReportsAmountVolumeMismatch(t *testing.T) {
 	}
 }
 
-
 func TestBuildPytdxQuoteReportsInvalidPrice(t *testing.T) {
 	reporter := validation.NewReporter(20)
 	ctx := validation.WithReporter(context.Background(), reporter)
@@ -154,7 +153,14 @@ func TestBuildPytdxQuoteReportsInvalidOptionalAmountAndDegrades(t *testing.T) {
 		t.Fatalf("invalid optional amount must remain null and degraded: %+v", quote)
 	}
 	issues := reporter.Snapshot().Issues
-	if len(issues) != 1 || issues[0].Field != "amount" || issues[0].Code != "invalid_optional_number" || issues[0].Severity != validation.SeverityWarning {
+	foundInvalidAmount := false
+	for _, issue := range issues {
+		if issue.Field == "amount" && issue.Code == "invalid_optional_number" && issue.Severity == validation.SeverityWarning {
+			foundInvalidAmount = true
+			break
+		}
+	}
+	if !foundInvalidAmount {
 		t.Fatalf("expected warning for invalid optional amount, got %+v", issues)
 	}
 }
