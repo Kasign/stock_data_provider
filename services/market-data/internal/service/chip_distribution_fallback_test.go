@@ -166,3 +166,11 @@ func TestChipDistributionLegacyUnknownCacheDoesNotBlockFallback(t *testing.T) {
 		t.Fatalf("expected fallback provider after bypassing unknown cache, got %+v calls=%d", got, fallback.calls)
 	}
 }
+
+func TestValidateChipDistributionRejectsFutureFetchedAt(t *testing.T) {
+	item := chipFallbackItem("eastmoney", model.QualityDegraded)
+	item.FetchedAt = time.Now().UTC().Add(10 * time.Minute)
+	if err := validateChipDistributionSnapshot("600519.SH", item); err == nil {
+		t.Fatal("future fetched_at must be rejected")
+	}
+}

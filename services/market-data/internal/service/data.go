@@ -2155,6 +2155,9 @@ func validateChipDistributionSnapshot(symbol string, item *model.ChipDistributio
 	if strings.TrimSpace(item.Source) == "" || !hasIdentifiableSourceVersion(item.SourceVersion) || item.FetchedAt.IsZero() {
 		return errors.New("chip-distribution source/source_version is missing or unidentifiable, or fetched_at is missing")
 	}
+	if item.FetchedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return errors.New("chip-distribution fetched_at is in the future")
+	}
 	if item.QualityStatus == model.QualityValid {
 		return errors.New("chip-distribution cannot be valid without verified publication availability time")
 	}
