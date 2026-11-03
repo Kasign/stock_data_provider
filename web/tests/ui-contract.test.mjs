@@ -1930,7 +1930,10 @@ test("数据中心读取并展示真实 Provider 运行诊断，且不将未观�
   assert.match(html, /id="data-center-hithink-title"/);
   assert.match(html, /MARKET_DATA_HITHINK_API_KEY/);
   assert.match(html, /id="data-center-diagnostics-list"/);
-  assert.match(html, /不主动调用同花顺接口，不验证第三方 API Key/);
+  assert.match(html, /主动探测由下方独立操作触发/);
+  assert.match(html, /WebUI 不读取、不保存或回显第三方 API Key/);
+  assert.match(html, /id="data-center-probe-run"/);
+  assert.match(html, /id="data-center-probe-history-refresh"/);
   assert.match(html, /发送测试（待接入）/);
   assert.match(html, /通知渠道管理、订阅配置和发送测试接口/);
   assert.doesNotMatch(html, /当前没有逐 Provider \/ capability 的受控真实探测 API/);
