@@ -521,7 +521,7 @@ function removeRecentTaskReference(taskId, analysisBase = "") {
   // removeRecentTask 会尽量处理存储异常；必须回读确认目标记录确实不再存在，才能反馈成功。
   const persistedState = safeReadRecentTasksState();
   const targetStillExists = persistedState.items.some((item) =>
-    item.task_id === taskId && (!analysisBase || !item.analysis_base || item.analysis_base === analysisBase)
+    item.task_id === taskId && (!analysisBase || item.analysis_base === analysisBase)
   );
   if (!persistedState.storageReadable || !persistedState.storageValid || targetStillExists) {
     renderRecentTasks();
