@@ -118,6 +118,44 @@ try {
         }
         return;
       }
+      const json = (status, body) => route.fulfill({
+        status, contentType: "application/json", body: JSON.stringify(body)
+      });
+      if (url.pathname === "/analysis-api/api/v1/analysis/tasks" && route.request().method() === "POST") {
+        const payload = route.request().postDataJSON();
+        assert.deepEqual(payload.symbols, ["000001"], "研究页创建任务必须使用规范化后的当前标的");
+        assert.equal(payload.task_type, "post_market_scan");
+        return json(202, { task: {
+          task_id: "task-research-archive", run_id: "run-research-archive",
+          status: "queued", task_type: "post_market_scan", symbols: ["000001"],
+          created_at: "2026-11-03T03:00:00Z"
+        }, status_url: "/api/v1/analysis/tasks/task-research-archive",
+        events_url: "/api/v1/analysis/tasks/task-research-archive/events" });
+      }
+      if (url.pathname === "/analysis-api/api/v1/analysis/tasks/task-research-archive") {
+        return json(200, { task: {
+          task_id: "task-research-archive", run_id: "run-research-archive",
+          status: "succeeded", task_type: "post_market_scan", symbols: ["000001"],
+          created_at: "2026-11-03T03:00:00Z", completed_stages: 1
+        } });
+      }
+      if (url.pathname === "/analysis-api/api/v1/analysis/tasks/task-research-archive/events") {
+        return json(200, { task_id: "task-research-archive", next_after_sequence: 1, events: [{
+          sequence: 1, event: {
+            run_id: "run-research-archive", stage: "研究任务完成", status: "completed",
+            message: "浏览器归档闭环专项", at: "2026-11-03T03:00:01Z"
+          }
+        }] });
+      }
+      if (url.pathname === "/analysis-api/api/v1/analysis/runs/run-research-archive") {
+        return json(200, {
+          run_id: "run-research-archive", status: "completed",
+          request: { symbols: ["000001"], task_type: "post_market_scan", as_of: "2026-11-03T03:00:00Z" },
+          quality: { core_pass: true, checked_at: "2026-11-03T03:00:01Z", issues: [] },
+          factors: [], signals: [], plans: [], warnings: [],
+          market_state: { regime: "unknown", evidence: [] }
+        });
+      }
       if (url.pathname.includes("/api/")) {
         await route.fulfill({
           status: 503, contentType: "application/json",
@@ -196,6 +234,33 @@ try {
   await page.waitForFunction(() => document.querySelector("#stock-profile-error")?.textContent.includes("未启用或未配置"));
   assert.equal(await page.locator("#stock-profile-symbol").textContent(), "000001.SZ");
   assert.equal(await page.locator("#load-stock-research").isEnabled(), true);
+
+  // 从研究页创建分析任务，读取真实 Run 回包，再归档并从报告创建关联笔记。
+  await page.locator("#research-start-analysis").click();
+  await page.locator("#task-detail").waitFor({ state: "visible" });
+  await page.waitForFunction(() => !document.querySelector("#task-result-section")?.hidden, null, { timeout: 15000 });
+  await page.locator("#archive-run-report").click();
+  await page.locator('#research-report-list [data-report-action="create-note"]').waitFor({ state: "visible" });
+  await page.locator('#research-report-list [data-report-action="create-note"]').click();
+  await page.waitForFunction(() =>
+    document.querySelector("#research-note-task")?.value === "task-research-archive" &&
+    document.querySelector("#research-note-run")?.value === "run-research-archive"
+  );
+  assert.equal(await page.locator("#research-note-symbol").inputValue(), "000001");
+  await page.locator("#research-note-content").fill("浏览器专项：报告与任务关联一致。");
+  await page.locator("#research-note-save").click();
+  await page.locator("#research-note-list .research-note-card").filter({ hasText: "task-research-archive" }).waitFor({ state: "visible" });
+  const archived = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.research-reports.v1") || "[]"));
+  assert.equal(archived.length, 1);
+  assert.equal(archived[0].taskId, "task-research-archive");
+  assert.equal(archived[0].runId, "run-research-archive");
+  assert.equal(archived[0].analysisBase, "/analysis-api");
+  assert.deepEqual(archived[0].symbols, ["000001"]);
+  const notes = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.research-notes.v1") || "[]"));
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].taskId, "task-research-archive");
+  assert.equal(notes[0].runId, "run-research-archive");
+  assert.equal(notes[0].symbol, "000001");
   assert.deepEqual(pageErrors, [], pageErrors.join("\n"));
   await page.screenshot({
     path: path.join(screenshotDir, "1280x900-stock-research.png"),
