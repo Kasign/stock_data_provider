@@ -147,7 +147,7 @@ function renderHotStocks(data) {
   });
   badge("market-hot-stocks-status",qualityLabel(data.quality_status),"quality",data.quality_status);
  }
- meta("market-hot-stocks-meta",[(data?.type==="surge"?"飙升榜":"人气榜"),"当前返回 "+count(items.length)+" 条（非全市场总数）","来源 "+(data?.source||"未报告"),"采集时间 "+formatDateTime(data?.fetched_at),"源端未提供可独立核验的行情快照时间"]);
+ meta("market-hot-stocks-meta",[(data?.type==="surge"?"飙升榜":"人气榜"),"请求上限 "+count(hotLimit)+" 条","实际返回 "+count(items.length)+" 条（非全市场总数）","来源 "+(data?.source||"未报告"),"采集时间 "+formatDateTime(data?.fetched_at),"源端未提供可独立核验的行情快照时间"]);
  qualityReasons("market-hot-stocks-reasons",data?.quality_reasons);
 }
 function renderMarketCapitalFlow(data) {
@@ -168,7 +168,7 @@ function renderMarketCapitalFlow(data) {
  qualityReasons("market-capital-flow-reasons",data?.quality_reasons);
 }
 export function bindMarketOverview(getSettings,onSelectStock) {
- const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",sectorDirection="up",sectorLimit=10,poolType="up",poolDate="",hotType="popular",refreshGenerations=Object.create(null);
+ const controllers={},generation={indices:0,breadth:0,sectors:0,pool:0,hot:0};let sectorType="industry",sectorMetric="change",sectorDirection="up",sectorLimit=10,poolType="up",poolDate="",hotType="popular",hotLimit=20,refreshGenerations=Object.create(null);
  let capitalFlowController=null,capitalFlowGeneration=0;
  function showSectorMetricUnavailable(metric=sectorMetric){
   const root=$("#market-sector-body");
@@ -192,7 +192,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    else if(key==="breadth")data=await getMarketBreadth(settings,ctl.signal);
    else if(key==="sectors")data=await getMarketSectors(settings,{type:sectorType,limit:sectorLimit,direction:sectorDirection,sortBy:sectorMetricSortBy(sectorMetric),signal:ctl.signal});
    else if(key==="pool")data=await getMarketLimitPool(settings,{type:poolType,limit:30,date:poolDate,signal:ctl.signal});
-   else if(key==="hot")data=await getMarketHotStocks(settings,{type:hotType,limit:20,signal:ctl.signal});
+   else if(key==="hot")data=await getMarketHotStocks(settings,{type:hotType,limit:hotLimit,signal:ctl.signal});
    else return "failed";
    if(ctl.signal.aborted||generation[key]!==seq)return "cancelled";
    if(key==="indices")renderIndices(data);else if(key==="breadth")renderBreadth(data);else if(key==="sectors")renderSectors(data,sectorMetric,sectorDirection,sectorLimit);else if(key==="pool")renderPool(data);else renderHotStocks(data);
@@ -259,6 +259,8 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  document.querySelectorAll("[data-pool-type]").forEach(button=>button.addEventListener("click",()=>{poolType=["up","down","broken"].includes(button.dataset.poolType)?button.dataset.poolType:"up";document.querySelectorAll("[data-pool-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("pool");}));
  $("#market-pool-date")?.addEventListener("change",event=>{poolDate=String(event.target.value||"");void load("pool");});
  document.querySelectorAll("[data-hot-type]").forEach(button=>button.addEventListener("click",()=>{hotType=["popular","surge"].includes(button.dataset.hotType)?button.dataset.hotType:"popular";document.querySelectorAll("[data-hot-type]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));void load("hot");}));
+ const hotLimitControl=$("#market-hot-stocks-limit");
+ hotLimitControl?.addEventListener("change",event=>{const value=Number(event.target.value);hotLimit=[10,20,50,100].includes(value)?value:20;if(hotLimitControl.value!==String(hotLimit))hotLimitControl.value=String(hotLimit);void load("hot");});
 
  async function loadMarketCapitalFlow() {
   const status=$("#market-capital-flow-status"),body=$("#market-capital-flow-body");

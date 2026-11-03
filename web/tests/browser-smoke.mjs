@@ -127,6 +127,7 @@ try {
     let marketScenario = "503";
     let marketIndexRequestCount = 0;
     const sectorRequests = [];
+    const hotStockRequests = [];
     const limitPoolRequests = [];
     const dragonTigerRequests = [];
     let sentimentHistoryRequestCount = 0;
@@ -308,6 +309,15 @@ try {
           provider_report_date: "2026-10-30", fetched_at: "2026-10-30T08:00:00Z",
           quality_status: "degraded", quality_reasons: ["浏览器合成数据"]
         });
+      }
+
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/hot-stocks")) {
+        const query = new URL(route.request().url()).searchParams;
+        hotStockRequests.push({ type: query.get("type"), limit: query.get("limit") });
+        return json(200, { type: query.get("type") || "popular", total: 2, items: [
+          { rank: 1, symbol: "600519.SH", name: "贵州茅台", latest_price: 123.45, change: 1.2, change_percent: 1.01, rank_change: 2 },
+          { rank: 2, symbol: "000001.SZ", name: "平安银行", latest_price: 10.25, change: -0.2, change_percent: -1.9, rank_change: -1 }
+        ], source: "browser-hot-fixture", fetched_at: "2026-10-30T08:00:00Z", quality_status: "degraded", quality_reasons: ["浏览器合成数据"] });
       }
 
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/indices")) {
@@ -586,6 +596,16 @@ try {
       assert.equal(sectorRequests.at(-1)?.direction, "down");
       assert.equal(sectorRequests.at(-1)?.sort_by, "change_5d");
       assert.match(await page.locator("#market-sector-meta").textContent(), /实际返回 2 条/);
+
+      const hotCountBefore = hotStockRequests.length;
+      await page.locator("#market-hot-stocks-limit").selectOption("50");
+      await page.waitForFunction(() => document.querySelector("#market-hot-stocks-meta")?.textContent.includes("请求上限 50 条"));
+      assert.equal(hotStockRequests.length, hotCountBefore + 1, "changing hot ranking limit must only issue one hot ranking request");
+      assert.deepEqual(hotStockRequests.at(-1), { type: "popular", limit: "50" });
+      assert.match(await page.locator("#market-hot-stocks-meta").textContent(), /实际返回 2 条/);
+      await page.locator('[data-hot-type="surge"]').click();
+      await page.waitForFunction(() => document.querySelector("#market-hot-stocks-meta")?.textContent.includes("飙升榜"));
+      assert.deepEqual(hotStockRequests.at(-1), { type: "surge", limit: "50" }, "switching ranking type must preserve selected result count");
 
       const beforeUnsupported = sectorRequests.length;
       await page.locator('[data-sector-metric="flow"]').click();
