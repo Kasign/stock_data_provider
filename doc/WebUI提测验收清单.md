@@ -578,4 +578,5 @@
 - [x] 缺失值为空、数值零保留为 0；CSV 引号/逗号转义及公式注入防护。
 - [x] UTF-8 BOM、CRLF、带结果范围和本地时间的文件名。
 - [x] 导出前校验行情快照，分页失效后不可导出旧结果。
-- [ ] WebUI Checks 与 Chromium Browser Smoke：待运行。
+- [x] WebUI Checks：368/368 单元测试、JavaScript 语法、Compose 校验及 Nginx 镜像构建通过（[运行记录 #41603864213](https://github.com/Kasign/stock_data_provider/actions/runs/41603864213)）。
+- [x] Chromium Browser Smoke：筛选结果 CSV 实际下载、UTF-8 BOM、命中/未命中/待判断记录及质量原因断言通过；全站既有浏览器专项通过（[运行记录 #41603864255](https://github.com/Kasign/stock_data_provider/actions/runs/41603864255)）。
