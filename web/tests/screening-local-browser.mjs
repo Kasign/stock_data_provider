@@ -100,7 +100,7 @@ try {
   assert.match(csvDownload.suggestedFilename(), /^当前页筛选-全部-\d{8}-\d{6}\.csv$/);
   const csvPath = await csvDownload.path();
   const csvContent = await readFile(csvPath, "utf8");
-  assert.ok(csvContent.startsWith("\\uFEFF"), "CSV must include UTF-8 BOM");
+  assert.equal(csvContent.charCodeAt(0), 0xFEFF, "CSV must include UTF-8 BOM");
   assert.match(csvContent, /"测试命中"/);
   assert.match(csvContent, /"测试未命中"/);
   assert.match(csvContent, /"测试待判断"/);
