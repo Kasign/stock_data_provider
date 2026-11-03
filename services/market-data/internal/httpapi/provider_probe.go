@@ -13,13 +13,13 @@ import (
 )
 
 type providerProbeRequest struct {
-	Scope          string   `json:"scope"`
-	Capabilities   []string `json:"capabilities"`
-	Checks         []string `json:"checks"`
-	Markets        []string `json:"markets"`
-	Symbols        []string               `json:"symbols"`
-	DailyBarAdjustments []model.AdjustmentBasis `json:"daily_bar_adjustments"`
-	TimeoutSeconds *int     `json:"timeout_seconds"`
+	Scope               string                   `json:"scope"`
+	Capabilities        []string                 `json:"capabilities"`
+	Checks              []string                 `json:"checks"`
+	Markets             []string                 `json:"markets"`
+	Symbols             []string                 `json:"symbols"`
+	DailyBarAdjustments []model.AdjustmentBasis  `json:"daily_bar_adjustments"`
+	TimeoutSeconds      *int                     `json:"timeout_seconds"`
 }
 
 func (s *Server) dataSourceProbe(w http.ResponseWriter, r *http.Request) {

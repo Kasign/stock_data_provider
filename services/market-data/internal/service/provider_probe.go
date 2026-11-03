@@ -165,13 +165,13 @@ func recordProviderProbeEvidence(ctx context.Context, symbol, sampleDate string,
 
 // ProviderProbeOptions 控制主动诊断的执行范围和单项超时。
 type ProviderProbeOptions struct {
-	Scope          string
-	Capabilities   []string
-	Checks         []string
-	Markets        []string
-	Symbols        []string
+	Scope               string
+	Capabilities        []string
+	Checks              []string
+	Markets             []string
+	Symbols             []string
 	DailyBarAdjustments []model.AdjustmentBasis
-	TimeoutSeconds int
+	TimeoutSeconds      int
 }
 
 // ProbeProviderCapabilities 保留旧调用方式，默认执行全部诊断能力。
