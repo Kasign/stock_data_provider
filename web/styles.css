@@ -4077,6 +4077,37 @@ td {
   font-size: 12px;
   line-height: 1.7;
 }
+.data-center-probe-panel { margin-top: 14px; padding: 18px 19px; }
+.data-center-probe-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.data-center-probe-controls .field { min-width: 150px; max-width: 220px; }
+.data-center-probe-controls .button { min-height: 38px; }
+.data-center-probe-symbol-field { flex: 1 1 170px; }
+.data-center-probe-checks { display: flex; flex-wrap: wrap; gap: 9px 18px; margin: 12px 0; padding: 11px 13px; border: 1px solid var(--border-soft); border-radius: 8px; }
+.data-center-probe-checks legend { padding: 0 5px; color: var(--text-dim); font-size: 12px; }
+.data-center-probe-checks label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: 12px; cursor: pointer; }
+.data-center-probe-checks input { accent-color: var(--accent); }
+.data-center-probe-summary { margin: 10px 0; color: var(--text-dim); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.data-center-probe-check-results, .data-center-probe-list, .data-center-probe-history-list { display: grid; gap: 10px; }
+.data-center-probe-check-results { margin: 12px 0; }
+.data-center-probe-history-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-soft); }
+.data-center-probe-history-heading h3 { margin: 0; color: var(--text); font-size: 14px; }
+.data-center-probe-history-heading p { margin: 4px 0 0; color: var(--text-dim); font-size: 12px; line-height: 1.6; }
+.data-center-probe-history-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.data-center-probe-history-item { min-width: 0; padding: 11px 13px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--panel-raised); }
+.data-center-probe-history-item summary { display: flex; align-items: center; justify-content: space-between; gap: 9px; cursor: pointer; color: var(--text); font-size: 12px; font-weight: 650; }
+.data-center-probe-history-item summary span { color: var(--text-dim); font-weight: 500; text-align: right; }
+.data-center-probe-history-meta { margin: 8px 0; color: var(--text-dim); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.data-center-probe-list .data-center-diagnostic-provider, .data-center-probe-history-list .data-center-diagnostic-provider { background: var(--panel-raised); }
+.data-center-probe-evidence { display: grid; gap: 5px; margin-top: 7px; padding: 8px 9px; border-left: 2px solid var(--border); background: var(--panel); color: var(--text-dim); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.data-center-probe-evidence strong { color: var(--text-soft); font-weight: 600; }
+.data-center-probe-comparison { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 6px 0; border-top: 1px solid var(--border-soft); }
+.data-center-probe-comparison.is-mismatch { color: var(--danger); }
+.data-center-probe-field-issues { display: grid; gap: 5px; margin-top: 7px; }
+.data-center-probe-field-issue { color: var(--warning); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.data-center-probe-field-issue.is-error { color: var(--danger); }
+.data-center-diagnostic-state.is-failed { color: var(--danger); }
+.data-center-diagnostic-state.is-readonly, .data-center-diagnostic-state.is-unknown { color: var(--text-dim); }
+.data-center-diagnostic-error { color: var(--danger); overflow-wrap: anywhere; }
 .data-center-diagnostics-panel { margin-top: 14px; padding: 18px 19px; }
 .data-center-diagnostics-summary { margin: 11px 0; color: var(--text-dim); font-size: 12px; line-height: 1.7; }
 .data-center-diagnostics-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

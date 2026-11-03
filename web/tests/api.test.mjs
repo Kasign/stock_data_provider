@@ -17,6 +17,8 @@ import {
   getTradingCalendar,
   getDataSources,
   getDataSourceDiagnostics,
+  getDataSourceProbeHistory,
+  runDataSourceProbe,
   getMarketQuotes,
   getMarketCapitalFlow,
   getQuote,
@@ -476,4 +478,84 @@ test("queries market-wide capital-flow history with validated date range and aut
     await getMarketCapitalFlow({ marketBase: "/market-api", apiKey: "market-secret" }, { start: startFor2000Days, end: "2026-10-30" });
     await assert.rejects(getMarketCapitalFlow({}, { start: startFor2001Days, end: "2026-10-30" }), /不能超过 2000/);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+
+test("runs validated Provider probes with selected checks and only attaches the market API key", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url: String(url), ...init };
+    return jsonResponse({ run_id: "probe-1", status: "degraded", items: [] });
+  };
+  try {
+    const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+    const controller = new AbortController();
+    const result = await runDataSourceProbe(settings, {
+      scope: "core",
+      timeoutSeconds: 8,
+      checks: ["connectivity", "contract", "quality", "freshness", "cross_provider", "storage"],
+      markets: ["SH_MAIN"],
+      symbols: ["600519.sh"],
+      capabilities: ["quote", "daily_bars"]
+    }, controller.signal);
+    assert.equal(result.run_id, "probe-1");
+    assert.equal(request.url, "/market-api/api/v1/data-sources/probe");
+    assert.equal(request.method, "POST");
+    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.signal, controller.signal);
+    assert.deepEqual(JSON.parse(request.body), {
+      scope: "core", timeout_seconds: 8,
+      checks: ["connectivity", "contract", "quality", "freshness", "cross_provider", "storage"],
+      markets: ["SH_MAIN"], symbols: ["600519.SH"], capabilities: ["quote", "daily_bars"]
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("validates Provider probe dimensions, scope, timeout, capabilities, market and symbol before network access", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return jsonResponse({}); };
+  try {
+    const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+    const invalid = [
+      { scope: "unknown" }, { timeoutSeconds: 0 }, { timeoutSeconds: 31 },
+      { checks: ["quality", "quality"] }, { checks: ["made_up"] },
+      { capabilities: [] }, { capabilities: ["made_up"] },
+      { markets: ["SH_MAIN", "SZ_MAIN"] }, { markets: ["HK"] },
+      { symbols: ["600519"] }, { symbols: ["600519.SH", "000001.SZ"] }
+    ];
+    for (const options of invalid) {
+      await assert.rejects(runDataSourceProbe(settings, options));
+    }
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("reads bounded persisted Provider probe history with API key and cancellation", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url: String(url), ...init };
+    return jsonResponse({ total: 1, items: [{ run_id: "probe-history-1" }] });
+  };
+  try {
+    const controller = new AbortController();
+    const result = await getDataSourceProbeHistory(
+      { marketBase: "/market-api", apiKey: "market-secret" },
+      { limit: 20, signal: controller.signal }
+    );
+    assert.equal(result.items[0].run_id, "probe-history-1");
+    assert.equal(request.url, "/market-api/api/v1/data-sources/probe/history?limit=20");
+    assert.equal(request.headers["X-API-Key"], "market-secret");
+    assert.equal(request.signal, controller.signal);
+    await assert.rejects(getDataSourceProbeHistory({ marketBase: "/market-api" }, { limit: 0 }));
+    await assert.rejects(getDataSourceProbeHistory({ marketBase: "/market-api" }, { limit: 101 }));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

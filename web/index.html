@@ -855,6 +855,37 @@
             <p class="data-center-diagnostics-summary" id="data-center-diagnostics-summary">执行数据中心检查后读取诊断记录；未观测不代表健康或故障。</p>
             <div class="data-center-diagnostics-list" id="data-center-diagnostics-list"><div class="empty-row">尚未读取运行诊断。</div></div>
           </section>
+          <section class="panel data-center-probe-panel" aria-labelledby="data-center-probe-title">
+            <div class="panel-heading">
+              <div><h2 id="data-center-probe-title">Provider 主动探测</h2><p>主动请求已启用 Provider，检查接口连通性、数据契约、质量、新鲜度、跨源一致性与存储状态；不修改 Provider 配置。</p></div>
+              <span class="availability-pill is-readonly" id="data-center-probe-status">尚未执行</span>
+            </div>
+            <div class="data-center-probe-controls">
+              <label class="field"><span>探测范围</span><select id="data-center-probe-scope"><option value="all">全部能力</option><option value="core">核心能力</option></select></label>
+              <label class="field"><span>单项超时（秒）</span><input id="data-center-probe-timeout" type="number" min="1" max="30" step="1" value="12" /></label>
+              <label class="field"><span>抽样市场（可选）</span><select id="data-center-probe-market"><option value="">服务端默认</option><option value="SH_MAIN">沪市主板</option><option value="SZ_MAIN">深市主板</option><option value="CHINEXT">创业板</option><option value="STAR">科创板</option><option value="BSE">北交所</option></select></label>
+              <label class="field data-center-probe-symbol-field"><span>抽样股票（可选）</span><input id="data-center-probe-symbol" type="text" maxlength="10" placeholder="600519.SH" autocomplete="off" /></label>
+              <button class="button button-primary" id="data-center-probe-run" type="button">开始主动探测</button>
+            </div>
+            <fieldset class="data-center-probe-checks">
+              <legend>诊断维度</legend>
+              <label><input type="checkbox" name="data-center-probe-check" value="connectivity" checked /> 连通性</label>
+              <label><input type="checkbox" name="data-center-probe-check" value="contract" checked /> 数据契约</label>
+              <label><input type="checkbox" name="data-center-probe-check" value="quality" checked /> 数据质量</label>
+              <label><input type="checkbox" name="data-center-probe-check" value="freshness" checked /> 数据新鲜度</label>
+              <label><input type="checkbox" name="data-center-probe-check" value="cross_provider" checked /> 跨 Provider 对账</label>
+              <label><input type="checkbox" name="data-center-probe-check" value="storage" checked /> 持久化存储</label>
+            </fieldset>
+            <p class="data-center-probe-summary" id="data-center-probe-summary" role="status" aria-live="polite">需要行情服务 API Key。未配置凭据、不支持能力、跳过项和真实失败分别展示；覆盖率只有存在可验证分母时才显示。</p>
+            <div class="data-center-probe-check-results" id="data-center-probe-check-results"><div class="empty-row">尚未执行诊断维度检查。</div></div>
+            <div class="data-center-probe-list" id="data-center-probe-list"><div class="empty-row">尚未执行主动探测。</div></div>
+            <div class="data-center-probe-history-heading">
+              <div><h3>最近探测批次</h3><p>历史记录由行情服务持久化；MariaDB 未配置或历史存储不可用时会明确提示。</p></div>
+              <div class="data-center-probe-history-actions"><span class="availability-pill is-readonly" id="data-center-probe-history-status">尚未读取</span><button class="text-button" id="data-center-probe-history-refresh" type="button">刷新历史</button></div>
+            </div>
+            <p class="data-center-probe-summary" id="data-center-probe-history-summary">执行数据中心检查或点击“刷新历史”读取最近 20 个探测批次。</p>
+            <div class="data-center-probe-history-list" id="data-center-probe-history-list"><div class="empty-row">尚未读取探测历史。</div></div>
+          </section>
           <section class="panel source-panel" id="source-panel">
               <div class="panel-heading"><div><h2>数据源能力</h2><p>后端注册的 Provider 与能力声明</p></div><button class="text-button" id="reload-sources" type="button">刷新 ↻</button></div>
               <div class="source-summary"><strong id="source-count">—</strong><span>个已注册来源</span><span class="source-version" id="normalization-version">归一化版本 —</span></div>

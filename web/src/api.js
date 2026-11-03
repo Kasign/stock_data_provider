@@ -112,6 +112,87 @@ export function getMarketQuotes(settings, symbols, signal) {
 export function getDataSourceDiagnostics(settings, signal) {
   return request(settings.marketBase, "/api/v1/data-sources/diagnostics", { apiKey: settings.apiKey, signal });
 }
+
+const PROVIDER_PROBE_CHECKS = new Set([
+  "connectivity", "contract", "quality", "freshness", "cross_provider", "storage"
+]);
+const PROVIDER_PROBE_CAPABILITIES = new Set([
+  "quote", "daily_bars", "stock_basic", "stock_search", "stock_universe",
+  "index_quotes", "index_catalog", "market_breadth", "sector_rankings",
+  "market_capital_flow", "limit_pool", "dragon_tiger", "announcements",
+  "trading_calendar", "security_trading_status", "price_limit_event", "stock_boards",
+  "fundamentals", "valuations", "hot_ranking", "capital_flow", "chip_distribution"
+]);
+const PROVIDER_PROBE_MARKETS = new Set(["SH_MAIN", "SZ_MAIN", "CHINEXT", "STAR", "BSE"]);
+
+export function runDataSourceProbe(settings, options = {}, signal) {
+  const scope = String(options.scope ?? "all");
+  const timeoutSeconds = Number(options.timeoutSeconds ?? 12);
+  if (!["all", "core"].includes(scope)) {
+    return Promise.reject(new Error("Provider 探测范围只能是 all 或 core。"));
+  }
+  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 30) {
+    return Promise.reject(new Error("Provider 单项探测超时必须为 1–30 秒。"));
+  }
+
+  const body = { scope, timeout_seconds: timeoutSeconds };
+  if (options.checks !== undefined) {
+    if (!Array.isArray(options.checks)) {
+      return Promise.reject(new Error("Provider 诊断维度必须是数组。"));
+    }
+    const checks = options.checks.map((value) => String(value ?? "").trim());
+    if (checks.some((value) => !PROVIDER_PROBE_CHECKS.has(value))
+      || new Set(checks).size !== checks.length) {
+      return Promise.reject(new Error("Provider 诊断维度包含不支持或重复的值。"));
+    }
+    body.checks = checks;
+  }
+  if (options.capabilities !== undefined) {
+    if (!Array.isArray(options.capabilities)) {
+      return Promise.reject(new Error("Provider 探测能力必须是数组。"));
+    }
+    const capabilities = options.capabilities.map((value) => String(value ?? "").trim());
+    if (!capabilities.length || capabilities.some((value) => !PROVIDER_PROBE_CAPABILITIES.has(value))
+      || new Set(capabilities).size !== capabilities.length) {
+      return Promise.reject(new Error("Provider 探测能力列表为空、重复或包含不支持的能力。"));
+    }
+    body.capabilities = capabilities;
+  }
+  if (options.markets !== undefined) {
+    if (!Array.isArray(options.markets)) {
+      return Promise.reject(new Error("Provider 探测市场必须是数组。"));
+    }
+    const markets = options.markets.map((value) => String(value ?? "").trim());
+    if (markets.length > 1 || markets.some((value) => !PROVIDER_PROBE_MARKETS.has(value))) {
+      return Promise.reject(new Error("Provider 探测市场最多选择一个有效市场板块。"));
+    }
+    if (markets.length) body.markets = markets;
+  }
+  if (options.symbols !== undefined) {
+    if (!Array.isArray(options.symbols)) {
+      return Promise.reject(new Error("Provider 探测股票代码必须是数组。"));
+    }
+    const symbols = options.symbols.map((value) => String(value ?? "").trim().toUpperCase());
+    if (symbols.length > 1 || symbols.some((value) => !/^\d{6}\.(SH|SZ|BJ)$/.test(value))) {
+      return Promise.reject(new Error("Provider 探测股票代码最多填写一个标准 A 股代码。"));
+    }
+    if (symbols.length) body.symbols = symbols;
+  }
+  return request(settings.marketBase, "/api/v1/data-sources/probe", {
+    apiKey: settings.apiKey, method: "POST", body, signal
+  });
+}
+
+export function getDataSourceProbeHistory(settings, { limit = 20, signal } = {}) {
+  const value = Number(limit);
+  if (!Number.isInteger(value) || value < 1 || value > 100) {
+    return Promise.reject(new Error("Provider 探测历史条数必须为 1–100。"));
+  }
+  const query = new URLSearchParams({ limit: String(value) });
+  return request(settings.marketBase, "/api/v1/data-sources/probe/history?" + query.toString(), {
+    apiKey: settings.apiKey, signal
+  });
+}
 export function getMarketValuations(settings, symbols, signal) {
   const normalizedSymbols = Array.isArray(symbols) ? symbols.map((item) => String(item ?? "").trim()).filter(Boolean) : [];
   if (!normalizedSymbols.length || normalizedSymbols.length > 100) {

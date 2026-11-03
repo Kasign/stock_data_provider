@@ -1,6 +1,6 @@
 # 数据层 API 接口清单与 WebUI 接入映射
 
-更新日期：2026-11-02
+更新日期：2026-11-03
 适用分支：feat/full-go-data-providers-api-switch（已包含 feat/webui-market-data-console 的 WebUI 合并内容）
 核对依据：当前目标分支 services/market-data/openapi.yaml、services/market-data/internal/httpapi/server.go、web/src/api.js 及页面模块。服务端路由与 OpenAPI 已逐项核对。字段类型、完整响应 Schema 和状态码以 OpenAPI 为准。
 
@@ -28,8 +28,8 @@
 | GET | /api/v1/bars/{symbol}/daily | 单只股票日 K（支持日期范围、复权及 as_of 历史观察时点） | 路径参数 symbol；start、end、limit（1–2000）、adjustment、as_of | getDailyBars | 是 |
 | GET | /api/v1/bundles/{symbol} | 单只股票行情与日 K 统一快照 | 路径参数 symbol；lookback_days（20–2000）、adjustment、as_of | getMarketBundle | 是 |
 | GET | /api/v1/data-sources/diagnostics | Provider 业务请求熔断诊断（进程内真实请求观测） | 无额外参数；详见 OpenAPI | getDataSourceDiagnostics | 是 |
-| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | 无请求体；单项超时和并发受限 | 未接入 WebUI | 是 |
-| GET | /api/v1/data-sources/probe/history | 主动探测历史批次 | limit（1–100，默认 20）；依赖 MariaDB | 未接入 WebUI | 是 |
+| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | scope（all/core）、checks（connectivity/contract/quality/freshness/cross_provider/storage）、capabilities、markets（最多 1 个）、symbols（最多 1 个标准代码）、timeout_seconds（1–30，默认 12）；请求体可选 | runDataSourceProbe | 是 |
+| GET | /api/v1/data-sources/probe/history | 最近已持久化的主动探测批次 | limit（1–100，默认 20）；依赖 MariaDB，存储不可用返回 503 | getDataSourceProbeHistory | 是 |
 | GET | /api/v1/data-sources | Provider 注册信息与静态能力声明 | 无额外参数；详见 OpenAPI | getDataSources | 是 |
 | GET | /api/v1/stocks/search | A 股证券名称/代码搜索 | q 必填（1–64 字符）；limit（1–50，默认 10） | searchStocks | 是 |
 | GET | /api/v1/stocks/{symbol}/announcements | 单股公告分页 | 路径参数 symbol；start_date、end_date、page、page_size | getStockAnnouncements | 是 |
@@ -81,7 +81,7 @@
 | 个股研究 | 档案、估值、财务、所属板块、公告、筹码分布、个股资金流 | 已封装/按需加载；具体 Provider 能力和数据质量依回包判断 |
 | 自选股 | 浏览器本地清单；`getMarketQuotes` 批量刷新最多 50 只；研究列表复用已加载行情 | 已支持真实批量行情刷新和行情字段排序；没有跨设备服务端自选持久化 |
 | 数据中心 | WebUI 页面检查、行情 live/ready、分析 healthz/readyz、Provider 静态能力清单 | 不直连数据库；能力声明不是实时健康 |
-|  Provider 运行诊断 | /api/v1/data-sources/diagnostics、/probe、/probe/history | 被动熔断诊断与主动能力探测分离；探测历史依赖 MariaDB；当前页面尚未调用 |
+| Provider 运行诊断与主动探测 | /api/v1/data-sources/diagnostics、/probe、/probe/history | 被动熔断诊断、主动能力探测和持久化历史分开展示；探测历史依赖 MariaDB |
 | 选股、告警、通知、问股 | 当前为前端入口/状态能力 | 不能把 UI 状态当作服务端任务、规则或投递记录；后端闭环仍需补齐 |
 
 ## 5. 数据层接口的重要约束
@@ -111,7 +111,7 @@
 - 自选股批量概览（批量 quote 已由 WebUI `getMarketQuotes` 封装并用于自选股刷新；MA/资金等扩展字段仍需明确是否纳入批量接口，不能将单股研究字段当作批量 quote 已返回）。
 - 选股规则执行、策略保存/扫描任务/候选结果/历史记录；当前 `/api/v1/market/stocks` 是分页行情，不包含筛选表达式和执行语义。
 - 告警规则/评估/触发记录、通知渠道与投递结果。
-- Provider 主动探测与逐能力健康检查已有独立 API；仍需在 MariaDB 环境验收探测历史，并补齐可视化接入。
+- Provider 主动探测与逐能力诊断已有独立 API 和 WebUI 接入；仍需在真实部署环境验收 Provider 权限、数据质量对账及 MariaDB 探测历史持久化。
 - 全球市场联动数据。
 
 ## 8. 权威接口定义

@@ -1,4 +1,4 @@
-import { analysisHealth, analysisLiveness, getDataSources, getDataSourceDiagnostics, marketHealth, marketLiveness } from "./api.js";
+import { analysisHealth, analysisLiveness, getDataSources, getDataSourceDiagnostics, getDataSourceProbeHistory, marketHealth, marketLiveness, runDataSourceProbe } from "./api.js";
 import { runHealthCheck } from "./health-check.js";
 import { describeApiError, formatDateTime } from "./format.js";
 
@@ -312,10 +312,442 @@ function showProviderDiagnosticsFailure(result) {
   }
 }
 
+const PROBE_STATUS_LABELS = Object.freeze({
+  returned: "已返回", returned_degraded: "返回但质量降级", returned_unknown: "返回但质量未知",
+  failed: "失败", skipped: "跳过", not_configured: "未配置", not_supported: "不支持"
+});
+const PROBE_RUN_STATUS_LABELS = Object.freeze({
+  success: "探测完成", degraded: "存在降级/未知项", failed: "存在失败项",
+  not_configured: "未配置可探测 Provider", no_capabilities_configured: "未配置探测能力"
+});
+const PROBE_CHECK_LABELS = Object.freeze({
+  connectivity: "接口连通性", contract: "数据契约", quality: "数据质量",
+  freshness: "数据新鲜度", cross_provider: "跨 Provider 对账", storage: "持久化存储"
+});
+const PROBE_CAPABILITY_LABELS = Object.freeze({
+  quote: "实时行情", daily_bars: "日 K", stock_basic: "证券档案", stock_search: "股票搜索",
+  stock_universe: "全市场证券目录", index_quotes: "指数行情", index_catalog: "指数目录",
+  market_breadth: "市场广度", sector_rankings: "板块排行", market_capital_flow: "市场级资金流",
+  limit_pool: "涨跌停池", dragon_tiger: "龙虎榜", announcements: "公告",
+  trading_calendar: "交易日历", security_trading_status: "证券交易状态",
+  price_limit_event: "涨跌幅事件", stock_boards: "所属板块", fundamentals: "财务指标",
+  valuations: "估值指标", hot_ranking: "人气/飙升榜", capital_flow: "个股资金流",
+  chip_distribution: "筹码分布"
+});
+const PROBE_ERROR_STAGE_LABELS = Object.freeze({
+  timeout: "超时", cancellation: "取消", rate_limit: "限流", provider_auth: "Provider 认证",
+  provider_permission: "Provider 权限", contract: "数据契约", connect: "连接",
+  http: "HTTP", provider: "Provider", configuration: "配置"
+});
+const PROBE_CHECK_STATUS_LABELS = Object.freeze({
+  passed: "通过", degraded: "降级", skipped: "跳过", failed: "失败",
+  not_configured: "未配置", not_supported: "不支持"
+});
+const PROBE_FRESHNESS_LABELS = Object.freeze({
+  fresh: "新鲜", stale: "已过期", unknown: "未知", not_applicable: "不适用"
+});
+
+function probeStatusTone(status) {
+  if (["returned", "passed", "success"].includes(status)) return "healthy";
+  if (["returned_degraded", "degraded"].includes(status)) return "degraded";
+  if (status === "returned_unknown" || status === "unknown") return "unknown";
+  if (status === "failed") return "failed";
+  return "readonly";
+}
+
+function appendProbeText(parent, className, value) {
+  if (value === null || value === undefined || value === "") return null;
+  const node = document.createElement("small");
+  if (className) node.className = className;
+  node.textContent = String(value);
+  parent.append(node);
+  return node;
+}
+
+function renderProbeCheckResults(results, root) {
+  if (!root) return;
+  root.replaceChildren();
+  const values = Array.isArray(results) ? results.filter((item) => item && typeof item === "object") : [];
+  if (!values.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = "服务端没有返回独立诊断维度结果；请以 Provider 能力明细为准。";
+    root.append(empty);
+    return;
+  }
+  values.forEach((result) => {
+    const row = document.createElement("article");
+    row.className = "data-center-diagnostic-capability";
+    const top = document.createElement("div");
+    top.className = "data-center-diagnostic-capability-heading";
+    const label = document.createElement("strong");
+    label.textContent = PROBE_CHECK_LABELS[result.check] || String(result.check || "未知诊断维度");
+    const state = document.createElement("span");
+    state.className = "data-center-diagnostic-state is-" + probeStatusTone(result.status);
+    state.textContent = PROBE_CHECK_STATUS_LABELS[result.status] || String(result.status || "未知");
+    top.append(label, state);
+    row.append(top);
+    const metadata = [
+      result.provider ? "Provider " + result.provider : "",
+      result.capability ? "能力 " + (PROBE_CAPABILITY_LABELS[result.capability] || result.capability) : "",
+      result.checked_at ? "检查时间 " + formatDateTime(result.checked_at) : "",
+      result.freshness_status ? "新鲜度 " + (PROBE_FRESHNESS_LABELS[result.freshness_status] || result.freshness_status) : "",
+      result.age_seconds !== undefined ? "数据年龄 " + result.age_seconds + " 秒" : "",
+      result.freshness_max_age_seconds !== undefined ? "最大允许年龄 " + result.freshness_max_age_seconds + " 秒" : "",
+      result.market_phase ? "市场阶段 " + result.market_phase : "",
+      result.freshness_domain ? "策略 " + result.freshness_domain : "",
+      Array.isArray(result.compared_dates) && result.compared_dates.length ? "对账日期 " + result.compared_dates.join("、") : "",
+      result.field_count !== undefined ? "字段 " + result.field_count : "",
+      result.matched_field_count !== undefined ? "匹配 " + result.matched_field_count : "",
+      result.mismatch_count !== undefined ? "不一致 " + result.mismatch_count : "",
+      result.not_comparable_count !== undefined ? "不可比较 " + result.not_comparable_count : ""
+    ].filter(Boolean);
+    appendProbeText(row, "", metadata.join(" · "));
+    if (result.error_code || result.error_message || result.freshness_reason) {
+      appendProbeText(row, "data-center-diagnostic-error", [
+        result.error_code || "", result.freshness_reason || "",
+        result.error_message ? String(result.error_message).slice(0, 240) : ""
+      ].filter(Boolean).join(" · "));
+    }
+    const comparisons = Array.isArray(result.field_comparisons) ? result.field_comparisons.slice(0, 30) : [];
+    if (comparisons.length) {
+      const evidence = document.createElement("div");
+      evidence.className = "data-center-probe-evidence";
+      const title = document.createElement("strong");
+      title.textContent = "字段对账明细（最多展示 30 项）";
+      evidence.append(title);
+      comparisons.forEach((comparison) => {
+        const line = document.createElement("div");
+        line.className = "data-center-probe-comparison" + (comparison.status === "mismatch" ? " is-mismatch" : "");
+        const field = document.createElement("span");
+        field.textContent = String(comparison.field || "未命名字段") + " · "
+          + ({ matched: "一致", mismatch: "不一致", not_comparable: "不可比较" }[comparison.status] || comparison.status || "未知");
+        const values = [comparison.left, comparison.right, comparison.difference]
+          .map((value) => value === null || value === undefined ? "—" : String(value));
+        const numbers = document.createElement("span");
+        numbers.textContent = "来源值 " + values[0] + " / " + values[1] + " · 差值 " + values[2];
+        line.append(field, numbers);
+        if (comparison.reason) appendProbeText(line, "", comparison.reason);
+        evidence.append(line);
+      });
+      row.append(evidence);
+    }
+    root.append(row);
+  });
+}
+
+function renderProbeItems(items, root) {
+  if (!root) return;
+  root.replaceChildren();
+  const values = Array.isArray(items) ? items.filter((item) => item && typeof item === "object") : [];
+  const groups = new Map();
+  values.forEach((item) => {
+    const provider = String(item.provider || "未命名 Provider");
+    if (!groups.has(provider)) {
+      const row = document.createElement("article");
+      row.className = "data-center-diagnostic-provider";
+      const heading = document.createElement("div");
+      heading.className = "data-center-diagnostic-provider-heading";
+      const name = document.createElement("strong");
+      name.textContent = provider;
+      const count = document.createElement("small");
+      count.textContent = "探测结果";
+      heading.append(name, count);
+      const list = document.createElement("div");
+      list.className = "data-center-diagnostic-capabilities";
+      row.append(heading, list);
+      root.append(row);
+      groups.set(provider, { count, list, total: 0 });
+    }
+    const group = groups.get(provider);
+    group.total += 1;
+    group.count.textContent = group.total + " 项能力";
+    const card = document.createElement("div");
+    card.className = "data-center-diagnostic-capability";
+    const top = document.createElement("div");
+    top.className = "data-center-diagnostic-capability-heading";
+    const label = document.createElement("strong");
+    const capability = String(item.capability || "");
+    label.textContent = PROBE_CAPABILITY_LABELS[capability] || capability || "未命名能力";
+    const status = String(item.status || "skipped");
+    const state = document.createElement("span");
+    state.className = "data-center-diagnostic-state is-" + probeStatusTone(status);
+    state.textContent = PROBE_STATUS_LABELS[status] || status || "未知";
+    top.append(label, state);
+    card.append(top);
+
+    const metadata = [
+      Number.isFinite(Number(item.elapsed_ms)) ? "耗时 " + Number(item.elapsed_ms) + " ms" : "",
+      item.quality_status ? "质量 " + item.quality_status : "",
+      item.http_status ? "HTTP " + item.http_status : "",
+      item.sample_symbol ? "样本 " + item.sample_symbol : "",
+      item.sample_market ? "市场 " + item.sample_market : "",
+      item.sample_date ? "日期 " + item.sample_date : "",
+      item.rows_returned !== undefined ? "返回行 " + item.rows_returned : "",
+      item.rows_validated !== undefined ? "有效行 " + item.rows_validated : "",
+      item.coverage_total !== undefined ? "覆盖分母 " + item.coverage_total : "",
+      item.coverage_validated !== undefined ? "覆盖有效 " + item.coverage_validated : "",
+      item.coverage_missing !== undefined ? "缺失 " + item.coverage_missing : "",
+      item.coverage_excluded !== undefined ? "排除 " + item.coverage_excluded : "",
+      item.coverage_ratio !== undefined && item.coverage_ratio !== null
+        ? "总体覆盖率 " + (Number(item.coverage_ratio) * 100).toFixed(1) + "%" : "",
+      item.coverage_ratio === null || (item.coverage_ratio === undefined && item.coverage_total === undefined) ? "覆盖率不可确认" : "",
+      item.coverage_population ? "分母范围 " + item.coverage_population : "",
+      item.coverage_source ? "分母依据 " + item.coverage_source : "",
+      item.provider_time ? "源端时间 " + formatDateTime(item.provider_time) : "",
+      item.provider_time_type ? "时间语义 " + item.provider_time_type : "",
+      item.source_version ? "版本 " + item.source_version : "",
+      item.checked_at ? "检查时间 " + formatDateTime(item.checked_at) : ""
+    ].filter(Boolean);
+    appendProbeText(card, "", metadata.join(" · "));
+    if (Array.isArray(item.quality_reasons) && item.quality_reasons.length) {
+      appendProbeText(card, "data-center-probe-evidence", "质量原因：" + item.quality_reasons.map((value) => String(value)).join("；"));
+    }
+    if (item.error_code || item.error_stage || item.error_message) {
+      appendProbeText(card, "data-center-diagnostic-error", [
+        item.error_code ? "错误码 " + item.error_code : "",
+        item.error_stage ? "阶段 " + (PROBE_ERROR_STAGE_LABELS[item.error_stage] || item.error_stage) : "",
+        item.error_message ? String(item.error_message).slice(0, 240) : ""
+      ].filter(Boolean).join(" · "));
+    }
+    group.list.append(card);
+  });
+  if (!values.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = "本批次没有返回 Provider 能力明细。";
+    root.append(empty);
+  }
+}
+
+function renderProviderProbeRun(payload) {
+  const run = payload && typeof payload === "object" ? payload : {};
+  const status = String(run.status || "unknown");
+  const tone = status === "success" ? "healthy" : status === "degraded" ? "degraded"
+    : status === "failed" ? "failed" : "unknown";
+  setBadge("#data-center-probe-status", tone, PROBE_RUN_STATUS_LABELS[status] || "状态未知");
+  setText("#data-center-probe-summary", [
+    run.run_id ? "批次 " + run.run_id : "",
+    "总计 " + Number(run.total || 0), "已返回 " + Number(run.returned || 0),
+    "降级 " + Number(run.degraded || 0), "未知 " + Number(run.unknown || 0),
+    "失败 " + Number(run.failed || 0), "跳过 " + Number(run.skipped || 0),
+    "未配置 " + Number(run.not_configured || 0), "不支持 " + Number(run.not_supported || 0),
+    run.started_at ? "开始 " + formatDateTime(run.started_at) : "",
+    run.finished_at ? "结束 " + formatDateTime(run.finished_at) : "",
+    run.persisted ? "已持久化" : "本次结果未持久化，历史记录不可恢复",
+    run.timeout_seconds ? "单项超时 " + run.timeout_seconds + " 秒" : "",
+    Array.isArray(run.requested_checks) && run.requested_checks.length
+      ? "维度 " + run.requested_checks.map((value) => PROBE_CHECK_LABELS[value] || value).join("、") : ""
+  ].filter(Boolean).join(" · "));
+  renderProbeCheckResults(run.check_results, $("#data-center-probe-check-results"));
+  renderProbeItems(run.items, $("#data-center-probe-list"));
+}
+
+function renderProviderProbeHistory(payload) {
+  const root = $("#data-center-probe-history-list");
+  if (!root) return;
+  const runs = Array.isArray(payload?.items)
+    ? payload.items.filter((item) => item && typeof item === "object") : [];
+  root.replaceChildren();
+  setBadge("#data-center-probe-history-status", "unknown", "已读取 " + runs.length + " 批");
+  setText("#data-center-probe-history-summary",
+    "服务端记录 " + Number(payload?.total || 0) + " 批；当前展示最近 " + runs.length + " 批。");
+  if (!runs.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = "没有已持久化的探测批次。首次成功保存后会显示在这里。";
+    root.append(empty);
+    return;
+  }
+  runs.forEach((run) => {
+    const details = document.createElement("details");
+    details.className = "data-center-probe-history-item";
+    const summary = document.createElement("summary");
+    const title = document.createElement("strong");
+    title.textContent = (run.run_id ? "#" + run.run_id + " · " : "")
+      + (PROBE_RUN_STATUS_LABELS[run.status] || run.status || "状态未知");
+    const counts = document.createElement("span");
+    counts.textContent = Number(run.returned || 0) + "/" + Number(run.total || 0)
+      + " 已返回 · 降级 " + Number(run.degraded || 0) + " · 失败 " + Number(run.failed || 0);
+    summary.append(title, counts);
+    const meta = document.createElement("p");
+    meta.className = "data-center-probe-history-meta";
+    meta.textContent = [
+      run.started_at ? "开始 " + formatDateTime(run.started_at) : "",
+      run.finished_at ? "结束 " + formatDateTime(run.finished_at) : "",
+      run.persisted ? "已持久化" : "未持久化",
+      run.scope ? "范围 " + (run.scope === "core" ? "核心能力" : "全部能力") : "",
+      Array.isArray(run.requested_symbols) && run.requested_symbols.length ? "标的 " + run.requested_symbols.join("、") : "",
+      Array.isArray(run.requested_markets) && run.requested_markets.length ? "市场 " + run.requested_markets.join("、") : ""
+    ].filter(Boolean).join(" · ");
+    const checkList = document.createElement("div");
+    checkList.className = "data-center-probe-check-results";
+    renderProbeCheckResults(run.check_results, checkList);
+    const itemList = document.createElement("div");
+    itemList.className = "data-center-probe-list";
+    renderProbeItems(run.items, itemList);
+    details.append(summary, meta, checkList, itemList);
+    root.append(details);
+  });
+}
+
+function showProviderProbeFailure(error, skipped = false) {
+  setBadge("#data-center-probe-status", skipped ? "unknown" : "failed",
+    skipped ? "需要行情服务 API Key" : "主动探测失败");
+  setText("#data-center-probe-summary", skipped
+    ? "未发起主动探测。请先配置行情服务 API Key；此凭据不是第三方 Provider API Key。"
+    : "主动探测请求失败：" + safeError(error));
+  renderProbeCheckResults([], $("#data-center-probe-check-results"));
+  renderProbeItems([], $("#data-center-probe-list"));
+}
+
+function showProviderProbeHistoryFailure(error, skipped = false) {
+  setBadge("#data-center-probe-history-status", skipped ? "unknown" : "failed",
+    skipped ? "需要 API Key" : "历史读取失败");
+  setText("#data-center-probe-history-summary", skipped
+    ? "配置行情服务 API Key 后才能读取探测历史。"
+    : "探测历史读取失败：" + safeError(error)
+      + "；当前探测结果仍可能已返回，历史存储不可用不会覆盖本次结果。");
+  const root = $("#data-center-probe-history-list");
+  if (root) {
+    root.replaceChildren();
+    const empty = document.createElement("div");
+    empty.className = "empty-row";
+    empty.textContent = skipped ? "未执行历史读取。" : "历史暂不可读；不推断 Provider 健康状态。";
+    root.append(empty);
+  }
+}
+
 export function bindDataCenter(getSettings) {
   let checking = false;
   let generation = 0;
+  let probing = false;
+  let probeGeneration = 0;
+  let probeController = null;
+  let historyLoading = false;
+  let historyGeneration = 0;
+  let historyController = null;
   const button = $("#data-center-check");
+  const probeButton = $("#data-center-probe-run");
+  const historyButton = $("#data-center-probe-history-refresh");
+
+  async function loadProbeHistory(settingsOverride = null, force = false) {
+    if (historyLoading && !force) return false;
+    let current = null;
+    let controller = null;
+    try {
+      const settings = settingsOverride || (typeof getSettings === "function" ? getSettings() : null);
+      if (!settings?.apiKey) {
+        showProviderProbeHistoryFailure(new Error("需先配置行情服务 API Key"), true);
+        return false;
+      }
+      historyLoading = true;
+      current = ++historyGeneration;
+      historyController?.abort();
+      controller = new AbortController();
+      historyController = controller;
+      if (historyButton) {
+        historyButton.disabled = true;
+        historyButton.textContent = "读取中…";
+        historyButton.setAttribute("aria-busy", "true");
+      }
+      setBadge("#data-center-probe-history-status", "unknown", "读取中");
+      setText("#data-center-probe-history-summary", "正在读取最近 20 个已持久化探测批次…");
+      const payload = await getDataSourceProbeHistory(settings, { limit: 20, signal: controller.signal });
+      if (current !== historyGeneration) return false;
+      if (!payload || typeof payload !== "object" || !Array.isArray(payload.items)
+        || !Number.isInteger(Number(payload.total)) || Number(payload.total) < 0) {
+        throw new Error("探测历史响应不符合 ProviderProbeHistory 契约。");
+      }
+      renderProviderProbeHistory(payload);
+      return true;
+    } catch (error) {
+      if (controller?.signal.aborted || current !== historyGeneration) return false;
+      showProviderProbeHistoryFailure(error);
+      return false;
+    } finally {
+      if (current === historyGeneration) {
+        historyLoading = false;
+        if (historyButton) {
+          historyButton.disabled = false;
+          historyButton.textContent = "刷新历史";
+          historyButton.removeAttribute("aria-busy");
+        }
+      }
+    }
+  }
+
+  async function runProviderProbe() {
+    if (probing) return false;
+    let current = null;
+    let controller = null;
+    try {
+      const settings = typeof getSettings === "function" ? getSettings() : null;
+      if (!settings?.apiKey) {
+        showProviderProbeFailure(new Error("需先配置行情服务 API Key"), true);
+        return false;
+      }
+      const checks = Array.from(document.querySelectorAll('input[name="data-center-probe-check"]:checked'))
+        .map((input) => input.value);
+      if (!checks.length) {
+        showProviderProbeFailure(new Error("至少选择一个诊断维度。"));
+        return false;
+      }
+      const scope = $("#data-center-probe-scope")?.value || "all";
+      const timeoutSeconds = Number($("#data-center-probe-timeout")?.value || 12);
+      const market = $("#data-center-probe-market")?.value || "";
+      const symbol = String($("#data-center-probe-symbol")?.value || "").trim().toUpperCase();
+      const options = { scope, timeoutSeconds, checks };
+      if (market) options.markets = [market];
+      if (symbol) options.symbols = [symbol];
+      probing = true;
+      current = ++probeGeneration;
+      probeController?.abort();
+      controller = new AbortController();
+      probeController = controller;
+      if (probeButton) {
+        probeButton.disabled = true;
+        probeButton.textContent = "探测中…";
+        probeButton.setAttribute("aria-busy", "true");
+      }
+      setBadge("#data-center-probe-status", "unknown", "探测中");
+      setText("#data-center-probe-summary", "正在执行 " + (scope === "core" ? "核心能力" : "全部能力")
+        + " 主动探测；单项超时 " + timeoutSeconds + " 秒。");
+      renderProbeCheckResults([], $("#data-center-probe-check-results"));
+      renderProbeItems([], $("#data-center-probe-list"));
+      const payload = await runDataSourceProbe(settings, options, controller.signal);
+      if (current !== probeGeneration) return false;
+      const requiredCounts = ["total", "returned", "degraded", "unknown", "failed", "skipped", "not_configured", "not_supported"];
+      if (!payload || typeof payload !== "object" || typeof payload.run_id !== "string"
+        || !["success", "degraded", "failed", "not_configured", "no_capabilities_configured"].includes(payload.status)
+        || typeof payload.persisted !== "boolean" || !Array.isArray(payload.items)
+        || requiredCounts.some((key) => !Number.isInteger(Number(payload[key])))) {
+        throw new Error("主动探测响应不符合 ProviderProbeRun 契约。");
+      }
+      renderProviderProbeRun(payload);
+      if (payload.persisted) {
+        await loadProbeHistory(settings, true);
+      } else {
+        setBadge("#data-center-probe-history-status", "unknown", "本次未持久化");
+        setText("#data-center-probe-history-summary",
+          "本次探测结果未写入历史存储；当前结果仍可查看，但刷新页面后无法从历史恢复。请检查 MariaDB 配置。");
+      }
+      return true;
+    } catch (error) {
+      if (controller?.signal.aborted || current !== probeGeneration) return false;
+      showProviderProbeFailure(error);
+      return false;
+    } finally {
+      if (current === probeGeneration) {
+        probing = false;
+        if (probeButton) {
+          probeButton.disabled = false;
+          probeButton.textContent = "开始主动探测";
+          probeButton.removeAttribute("aria-busy");
+        }
+      }
+    }
+  }
 
   async function refresh() {
     if (checking) return;
@@ -424,6 +856,7 @@ export function bindDataCenter(getSettings) {
       } else {
         showProviderDiagnosticsFailure(diagnostics);
       }
+      void loadProbeHistory(settings);
 
       const serviceStates = [webUiState, marketLiveState, marketReadyState, analysisLiveState, analysisReadyState];
       const healthyServices = serviceStates.filter((status) => status === "healthy").length;
@@ -486,6 +919,20 @@ export function bindDataCenter(getSettings) {
   function invalidate(message = "连接配置已变更，之前的检查结果已作废。请重新检查。") {
     generation += 1;
     checking = false;
+    probeGeneration += 1;
+    historyGeneration += 1;
+    probing = false;
+    historyLoading = false;
+    probeController?.abort();
+    historyController?.abort();
+    probeController = null;
+    historyController = null;
+    [[probeButton, "开始主动探测"], [historyButton, "刷新历史"]].forEach(([control, label]) => {
+      if (!control) return;
+      control.disabled = false;
+      control.textContent = label;
+      control.removeAttribute("aria-busy");
+    });
     try {
       if (button) {
         button.disabled = false;
@@ -515,15 +962,27 @@ export function bindDataCenter(getSettings) {
     safeInvalidateStep(() => setText("#data-center-provider-summary", "连接配置已变更，尚未重新读取 Provider 能力清单。"));
     safeInvalidateStep(() => setBadge("#data-center-diagnostics-status", "unknown", "需重新检查"));
     safeInvalidateStep(() => setText("#data-center-diagnostics-summary", "连接配置已变更，尚未重新读取运行诊断。"));
+    safeInvalidateStep(() => setBadge("#data-center-probe-status", "unknown", "需重新探测"));
+    safeInvalidateStep(() => setText("#data-center-probe-summary", "连接配置已变更，之前的探测结果已作废。"));
+    safeInvalidateStep(() => setBadge("#data-center-probe-history-status", "unknown", "需重新读取"));
+    safeInvalidateStep(() => setText("#data-center-probe-history-summary", "连接配置已变更，尚未重新读取探测历史。"));
     safeInvalidateStep(() => {
       const providerList = $("#data-center-provider-list");
       if (providerList) providerList.replaceChildren();
       const diagnosticsList = $("#data-center-diagnostics-list");
       if (diagnosticsList) diagnosticsList.replaceChildren();
+      const probeList = $("#data-center-probe-list");
+      if (probeList) probeList.replaceChildren();
+      const probeCheckList = $("#data-center-probe-check-results");
+      if (probeCheckList) probeCheckList.replaceChildren();
+      const probeHistoryList = $("#data-center-probe-history-list");
+      if (probeHistoryList) probeHistoryList.replaceChildren();
     });
     ["#data-center-count-healthy", "#data-center-count-failed", "#data-center-count-unknown"]
       .forEach((selector) => safeInvalidateStep(() => setText(selector, "—")));
   }
   button?.addEventListener("click", () => { void refresh(); });
+  probeButton?.addEventListener("click", () => { void runProviderProbe(); });
+  historyButton?.addEventListener("click", () => { void loadProbeHistory(); });
   return { refresh, invalidate };
 }

@@ -1,6 +1,6 @@
 # WebUI 功能提测与集中验收清单
 
-更新日期：2026-11-02
+更新日期：2026-11-03
 目标分支：feat/webui-market-data-console
 验收策略：先完成页面和接口闭环开发，再集中进行一次完整浏览器验收；开发期间不反复进行零碎浏览器检查。
 
@@ -320,3 +320,21 @@
 - 最新 WebUI Checks 成功：[运行记录 #41566856911](https://github.com/Kasign/stock_data_provider/actions/runs/41566856911)，335 项单元测试全部通过，JS 语法检查、Compose 校验和 Nginx 镜像构建通过。
 - 最新 Chromium Browser Smoke 成功：[运行记录 #41566856933](https://github.com/Kasign/stock_data_provider/actions/runs/41566856933)，7 个响应式视口、两组 Run Flow 专项、个股研究请求生命周期及数据质量/公告分页验收全部通过；截图 Artifact [#13199821933](https://github.com/Kasign/stock_data_provider/actions/runs/41566856933/artifacts/13199821933)。
 - 真实估值、财务、资金流和筹码口径仍需与部署环境数据源进行黄金样例对账。
+
+
+## 14. 2026-11-03 Provider 主动探测与历史记录
+
+### 本轮实现范围
+
+- [ ] 数据中心接入 POST /api/v1/data-sources/probe，支持全部/核心能力范围、六类诊断维度、单项超时、可选市场板块和标准股票样本。
+- [ ] 分别展示批次统计、Provider 能力状态、数据质量原因、可验证总体覆盖率、源端时间和错误阶段。
+- [ ] 展示连通性、契约、质量、新鲜度、跨 Provider 对账和存储诊断；字段比较保留不可比较语义。
+- [ ] 接入 GET /api/v1/data-sources/probe/history，支持读取最近 20 批、展开查看历史批次。
+- [ ] 无行情服务 API Key 时不发起探测/历史请求；未配置、不支持、跳过不误报为失败。
+- [ ] 历史存储 503 与本次探测结果分开处理；连接配置变更时取消旧请求并清空过期结果。
+- [ ] API 参数校验单测和 Chromium 专项浏览器验收通过。
+
+### 验收边界
+
+- 浏览器专项使用隔离模拟 API，只验证请求契约、页面呈现、错误隔离和按钮恢复，不代表真实 Provider 质量已验收。
+- 真实 Provider 权限、跨源黄金样例、覆盖分母证据、MariaDB 历史写入/读取仍需部署环境验证。
