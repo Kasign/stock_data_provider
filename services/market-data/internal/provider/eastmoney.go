@@ -587,7 +587,7 @@ func parseEastmoneyQuoteNumber(ctx context.Context, data map[string]json.RawMess
 			actualType = "array"
 		case trimmed == "true" || trimmed == "false":
 			actualType = "boolean"
-		case strings.HasPrefix(trimmed, "`"):
+		case strings.HasPrefix(trimmed, "\""):
 			actualType = "string"
 		default:
 			actualType = "number"

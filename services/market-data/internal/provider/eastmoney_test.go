@@ -54,6 +54,24 @@ func TestEastmoneyQuoteNormalizesUnitsAndProviderTime(t *testing.T) {
 		t.Fatalf("volume ratio/turnover rate must survive the provider contract: ratio=%v turnover=%v", q.VolumeRatio, q.TurnoverRate)
 	}
 }
+func TestEastmoneyQuoteAcceptsNumericStringFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"rc":0,"data":{"f43":"1313.31","f44":"1331.98","f45":"1312.00","f46":"1331.88","f47":"34136","f48":"4525398959","f57":"600519","f58":"贵州茅台","f60":"1331.88","f86":"202610211128","f169":"-18.57","f170":"-1.394","f50":"2.13","f168":"0.2"}}`)
+	}))
+	defer server.Close()
+	ctx := validation.WithReporter(context.Background(), validation.NewReporter(20))
+	quote, err := NewEastmoney(2*time.Second, server.URL, server.URL).FetchQuote(ctx, "600519.SH")
+	if err != nil {
+		t.Fatalf("numeric strings are part of the Eastmoney quote contract: %v", err)
+	}
+	if quote.CurrentPrice == nil || *quote.CurrentPrice != 1313.31 {
+		t.Fatalf("unexpected parsed current price: %+v", quote.CurrentPrice)
+	}
+	if report := validation.ReporterFromContext(ctx).Snapshot(); report.TotalCount != 0 {
+		t.Fatalf("valid numeric strings must not create parse issues: %+v", report)
+	}
+}
+
 func TestEastmoneyQuoteReportsRawNumericFieldParseIssues(t *testing.T) {
 	cases := []struct {
 		name       string
