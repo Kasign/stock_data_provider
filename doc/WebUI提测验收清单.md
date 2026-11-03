@@ -503,7 +503,8 @@
 - [x] 市场宽度按服务端 ratio 展示行情响应、价格分类、行情时间、成交额四类覆盖率；未知 ratio 不前端推算。
 - [x] 分开显示源端时间、服务端采集时间、检查时间；不使用 fetched_at 替代 provider_time。
 - [x] 保持 Quality 与 Freshness 独立；跳过、未配置、不支持均不显示为成功。
-- [ ] WebUI 单元测试、JS 语法检查及 Chromium Provider 诊断专项通过后，补录实际运行编号与测试数量。
+- [x] WebUI Checks：356/356 单元测试通过，JS 语法检查及 Nginx 镜像构建通过（[运行记录 #41592118649](https://github.com/Kasign/stock_data_provider/actions/runs/41592118649)）。
+- [x] Chromium Browser Smoke：七视口响应式布局、Run Flow、个股研究及 Provider 诊断专项通过（[运行记录 #41592118635](https://github.com/Kasign/stock_data_provider/actions/runs/41592118635)）。
 - [ ] 真实部署验收：核对市场宽度四类覆盖率、字段问题计数与服务端原始探测响应一致；验证未配置/跳过状态和 MariaDB 历史持久化降级。
 
 ### 验收边界
