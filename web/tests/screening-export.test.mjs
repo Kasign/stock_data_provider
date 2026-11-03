@@ -27,5 +27,8 @@ test("preserves numeric zero and neutralizes spreadsheet formulas in text fields
 
 test("does not fabricate data rows for an empty result set", () => {
   const csv = buildScreeningCSV({ rows: [] });
-  assert.equal(csv.split("\\r\\n").filter(Boolean).length, 5);
+  const lines = csv.split(/\r?\n/);
+  const headerIndex = lines.findIndex(line => line.startsWith("\"证券代码\""));
+  assert.ok(headerIndex >= 0);
+  assert.equal(lines.slice(headerIndex + 1).filter(Boolean).length, 0);
 });
