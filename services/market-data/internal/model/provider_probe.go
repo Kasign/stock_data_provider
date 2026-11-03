@@ -132,15 +132,15 @@ type ProviderProbeCheckResult struct {
 
 // ProviderProbeRun 是隔离于业务流量的主动探测批次。
 type ProviderProbeRun struct {
-	RunID                       string                     `json:"run_id"`
-	Scope                       string                     `json:"scope,omitempty"`
-	RequestedCapabilities       []string                   `json:"requested_capabilities,omitempty"`
-	RequestedChecks             []string                   `json:"requested_checks,omitempty"`
-	CheckResults                []ProviderProbeCheckResult `json:"check_results,omitempty"`
-	RequestedMarkets            []string                   `json:"requested_markets,omitempty"`
-	RequestedSymbols            []string                   `json:"requested_symbols,omitempty"`
+	RunID                        string                     `json:"run_id"`
+	Scope                        string                     `json:"scope,omitempty"`
+	RequestedCapabilities        []string                   `json:"requested_capabilities,omitempty"`
+	RequestedChecks              []string                   `json:"requested_checks,omitempty"`
+	CheckResults                 []ProviderProbeCheckResult `json:"check_results,omitempty"`
+	RequestedMarkets             []string                   `json:"requested_markets,omitempty"`
+	RequestedSymbols             []string                   `json:"requested_symbols,omitempty"`
 	RequestedDailyBarAdjustments []AdjustmentBasis          `json:"requested_daily_bar_adjustments,omitempty"`
-	TimeoutSeconds              int                        `json:"timeout_seconds,omitempty"`
+	TimeoutSeconds               int                        `json:"timeout_seconds,omitempty"`
 	Status                string                     `json:"status"`
 	Persisted             bool                       `json:"persisted"`
 	StartedAt             time.Time                  `json:"started_at"`
