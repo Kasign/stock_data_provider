@@ -485,7 +485,12 @@ test("browser-local watchlist is wired to existing query/analysis flows and stor
   assert.match(app, /function renderWatchlist\(/);
   assert.match(app, /addWatchlistSymbol\(symbol, defaultName, localStorage\)/);
   assert.match(app, /removeWatchlistSymbol\(symbol, localStorage\)/);
-  assert.match(appSource, /function handleWatchlistNameChange\(aliasInput\)/);\n  assert.match(appSource, /renameWatchlistSymbol\(symbol, aliasInput\.value, localStorage\)/);\n  assert.match(appSource, /input\[data-watchlist-name-symbol\]/);\n  assert.match(appSource, /buildWatchlistItemNode\(/);\n  assert.match(watchlistItemView, /export function buildWatchlistItemNode\(/);\n  assert.doesNotMatch(watchlistItemView, /state\\.|localStorage|fetch\\(|addEventListener|querySelector/);
+  assert.match(appSource, /function handleWatchlistNameChange\(aliasInput\)/);
+  assert.match(appSource, /renameWatchlistSymbol\(symbol, aliasInput\.value, localStorage\)/);
+  assert.match(appSource, /input\[data-watchlist-name-symbol\]/);
+  assert.match(appSource, /buildWatchlistItemNode\(/);
+  assert.match(watchlistItemView, /export function buildWatchlistItemNode\(/);
+  assert.doesNotMatch(watchlistItemView, /state[.]|localStorage|fetch[(]|addEventListener|querySelector/);
   assert.match(app, /function startAnalysisForSymbol\(input\)/);
   assert.match(app, /function startAnalysisForSymbol\(input\) \{[\s\S]*?symbol = normalizeAnalysisSymbol\(input\);[\s\S]*?\$\("#task-symbols"\)\.value = symbol;[\s\S]*?setView\("tasks"\);[\s\S]*?\$\("#task-form"\)\.requestSubmit\(\);/);
   assert.match(watchlistModule, /WATCHLIST_KEY/);
