@@ -103,3 +103,50 @@ export function resetPreferences(storage) {
   // 用户显式触发恢复默认值时，允许替换无法解析的旧偏好数据。
   return persistPreferences(DEFAULT_PREFERENCES, storage, true);
 }
+
+export function normalizeImportedPreferences(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("本地偏好字段必须是对象。");
+  }
+  const allowed = new Set(["watchlistSort", "watchlistSortDirection", "watchlistDisplayFields", "watchlistDisplayOrder", "marketColorScheme", "priceDigits", "percentDigits", "amountDisplayUnit", "dailyBarLimit", "dailyAdjustment"]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new Error("本地偏好包含不支持的字段。");
+  }
+  if (value.watchlistSort !== undefined && !["updated", "symbol", "name"].includes(value.watchlistSort)) {
+    throw new Error("自选股默认排序字段无效。");
+  }
+  if (value.watchlistSortDirection !== undefined && !["asc", "desc"].includes(value.watchlistSortDirection)) {
+    throw new Error("自选股排序方向无效。");
+  }
+  if (value.watchlistDisplayFields !== undefined && (!Array.isArray(value.watchlistDisplayFields)
+    || value.watchlistDisplayFields.some((field) => !WATCHLIST_DISPLAY_FIELDS.includes(field)))) {
+    throw new Error("自选股展示字段配置无效。");
+  }
+  if (value.watchlistDisplayOrder !== undefined && (!Array.isArray(value.watchlistDisplayOrder)
+    || value.watchlistDisplayOrder.length !== WATCHLIST_DISPLAY_FIELDS.length
+    || new Set(value.watchlistDisplayOrder).size !== WATCHLIST_DISPLAY_FIELDS.length
+    || value.watchlistDisplayOrder.some((field) => !WATCHLIST_DISPLAY_FIELDS.includes(field)))) {
+    throw new Error("自选股字段顺序配置无效。");
+  }
+  if (value.marketColorScheme !== undefined && !["cn", "reverse"].includes(value.marketColorScheme)) throw new Error("涨跌颜色方案无效。");
+  if (value.priceDigits !== undefined && ![2, 3].includes(value.priceDigits)) throw new Error("价格精度无效。");
+  if (value.percentDigits !== undefined && ![2, 3].includes(value.percentDigits)) throw new Error("涨跌幅精度无效。");
+  if (value.amountDisplayUnit !== undefined && !["compact", "raw"].includes(value.amountDisplayUnit)) throw new Error("成交额单位显示无效。");
+  if (value.dailyBarLimit !== undefined && ![60, 120, 250].includes(Number(value.dailyBarLimit))) throw new Error("默认日 K 条数无效。");
+  if (value.dailyAdjustment !== undefined && !["forward_adjusted", "backward_adjusted", "none"].includes(value.dailyAdjustment)) throw new Error("默认复权方式无效。");
+  return {
+    watchlistSort: value.watchlistSort || DEFAULT_PREFERENCES.watchlistSort,
+    watchlistSortDirection: value.watchlistSortDirection || DEFAULT_PREFERENCES.watchlistSortDirection,
+    watchlistDisplayFields: value.watchlistDisplayFields === undefined
+      ? [...DEFAULT_PREFERENCES.watchlistDisplayFields]
+      : WATCHLIST_DISPLAY_FIELDS.filter((field) => value.watchlistDisplayFields.includes(field)),
+    watchlistDisplayOrder: Array.isArray(value.watchlistDisplayOrder) ? [...value.watchlistDisplayOrder] : [...DEFAULT_PREFERENCES.watchlistDisplayOrder],
+    marketColorScheme: value.marketColorScheme || DEFAULT_PREFERENCES.marketColorScheme,
+    priceDigits: value.priceDigits || DEFAULT_PREFERENCES.priceDigits,
+    percentDigits: value.percentDigits || DEFAULT_PREFERENCES.percentDigits,
+    amountDisplayUnit: value.amountDisplayUnit || DEFAULT_PREFERENCES.amountDisplayUnit,
+    dailyBarLimit: [60, 120, 250].includes(Number(value.dailyBarLimit)) ? Number(value.dailyBarLimit) : DEFAULT_PREFERENCES.dailyBarLimit,
+    dailyAdjustment: value.dailyAdjustment || DEFAULT_PREFERENCES.dailyAdjustment
+  };
+}
+

@@ -2179,3 +2179,11 @@ test("run-flow event node builder only constructs DOM and leaves state/event wir
   assert.match(taskEventNode, /textContent = event\.message \|\| "服务端事件未提供描述"/);
   assert.match(taskEventNode, /diagnostic\.textContent = "错误代码：" \+ String\(event\.error_code\)/);
 });
+
+
+test("导入偏好规范化由 preferences 领域模块负责，不留在 app 协调层", async () => {
+  const preferencesModule = await readFile(new URL("../src/preferences.js", import.meta.url), "utf8");
+  assert.match(preferencesModule, /export function normalizeImportedPreferences\(/);
+  assert.match(appSource, /normalizeImportedPreferences/);
+  assert.doesNotMatch(appSource, /function normalizeImportedPreferences\(/);
+});
