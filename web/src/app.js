@@ -1626,6 +1626,8 @@ let screeningSelectedSymbols = new Set();
 function invalidateScreeningLocalResults(message = "筛选条件已变化，请重新应用到当前页。") {
   screeningLocalEvaluation = null;
   screeningSelectedSymbols.clear();
+  const exportButton = $("#screening-local-export-csv");
+  if (exportButton) exportButton.disabled = true;
   const summary = $("#screening-local-results-summary"), body = $("#screening-local-results-body");
   if (summary) summary.textContent = message;
   if (body) {
@@ -1759,6 +1761,8 @@ function renderScreeningLocalResultRows() {
   }
   const filter = $("#screening-local-result-filter")?.value || "matched";
   const rows = selectScreeningResultRows(result, filter);
+  const exportButton = $("#screening-local-export-csv");
+  if (exportButton) exportButton.disabled = rows.length === 0;
   const filterLabels = { matched: "命中", unmatched: "未命中", unknown: "待判断", all: "全部判断" };
   summary.textContent = "当前页范围：第 " + snapshot.page + " 页 / 每页 " + snapshot.pageSize + " 条 / 复权 " + snapshot.adjustment +
     "；检查 " + result.examinedCount + " 条，命中 " + result.matchedItems.length + " 条，未命中 " +
@@ -1803,7 +1807,6 @@ function renderScreeningLocalResultRows() {
     body.append(row);
   });
   updateScreeningBatchControls();
-  const exportButton = $("#screening-local-export-csv"); if (exportButton) exportButton.disabled = rows.length === 0;
 }
 
 function renderScreeningLocalResults() {
