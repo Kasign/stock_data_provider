@@ -1,6 +1,6 @@
 # 数据层 API 接口清单与 WebUI 接入映射
 
-更新日期：2026-11-03
+更新日期：2026-11-04
 适用分支：feat/full-go-data-providers-api-switch（已包含 feat/webui-market-data-console 的 WebUI 合并内容）
 核对依据：当前目标分支 services/market-data/openapi.yaml、services/market-data/internal/httpapi/server.go、web/src/api.js 及页面模块。服务端路由与 OpenAPI 已逐项核对。字段类型、完整响应 Schema 和状态码以 OpenAPI 为准。
 
@@ -67,7 +67,7 @@
 | POST | /api/v1/analysis/tasks | 创建分析任务；可附加 Idempotency-Key | createAnalysisTask |
 | GET | /api/v1/analysis/tasks/{task_id} | 查询任务状态 | getAnalysisTask |
 | GET | /api/v1/analysis/tasks/{task_id}/events | 按 after_sequence 续读阶段事件，前端每页最多 100 条 | getAnalysisTaskEvents |
-| GET | /api/v1/analysis/runs/{run_id} | 查询分析运行结果 | getAnalysisRun |\n| — | /api/v1/analysis/tasks | 服务端任务历史分页需求（当前无此路由，非现有 API） | 暂无；需服务端补充分页、状态/类型/股票/日期过滤与总数语义 |
+| GET | /api/v1/analysis/runs/{run_id} | 查询分析运行结果 | getAnalysisRun |\n\n| — | /api/v1/analysis/tasks | 服务端任务历史分页需求（当前无此路由，非现有 API） | 暂无；需服务端补充分页、状态/类型/股票/日期过滤与总数语义 |
 
 分析任务请求/响应的完整字段契约以 doc/api/分析任务.openapi.yaml 和分析服务当前实现为准。当前没有服务端研究报告列表/详情/归档 API；WebUI 直接使用已校验的 Run 结果在浏览器本地归档，不新增服务端接口。当前 OpenAPI 仅定义创建、单任务状态、事件与 Run 结果查询，没有服务端任务列表分页接口；WebUI 的“最近分析”只保留本地最多 10 条任务引用，不应称为服务端历史。
 
@@ -126,7 +126,7 @@
 ### 板块排行字段补充说明（2026-11-03）
 
 - WebUI 使用 `amount` + `amount_unit` 展示成交额；仅 `amount_unit=CNY` 时显示人民币单位，unknown 不推断。
-- 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。当前 Go 模型包含该 JSON 字段，但 `services/market-data/openapi.yaml` 的 `SectorRanking` 属性清单尚未声明它，属于 OpenAPI 文档缺口；本分支不修改服务端 OpenAPI，已记录待数据层补齐。
+- 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。当前 Go 模型包含该 JSON 字段，但 `services/market-data/openapi.yaml` 的 `SectorRanking` 属性清单尚未声明它，属于 OpenAPI 文档缺口；数据侧后续按主计划补齐。
 - `direction=up` 表示按所选指标从高到低，`direction=down` 表示从低到高。
 - 板块资金净流入没有独立服务端接口，WebUI 继续显示未接入，不以成交额替代。
 
@@ -140,10 +140,10 @@
 - 板块排行的 `code` 为 BK 板块代码，当前 `leading_stock` 只有名称；尚无可靠的板块成分股查询映射，WebUI 不将 BK 代码传给指数成分接口。
 
 
-### Provider 主动探测字段级响应补充（2026-11-03）
+### Provider 主动探测字段级响应补充（2026-11-04）
 
 - `POST /api/v1/data-sources/probe` 的 `items[]` 实际由数据侧 `ProviderProbeItem` 返回，除基础状态/质量/时间字段外，还包含 `validation_total_count`、`validation_error_count`、`validation_warning_count`、`validation_info_count`、`validation_truncated`、`validation_issues` 和 `coverage_dimensions`。
 - `validation_issues[]` 字段包括 `stage`、`field`、`provider_field`、`code`、`expected`、`actual_type`、`actual_preview`、`severity`、`message`，以及可选的行号、证券代码和交易日期。实际值摘要由服务端脱敏并限长；WebUI 只按文本展示，不解释或重写规则。
 - `coverage_dimensions[]` 当前用于市场宽度，维度为 `quote_response`、`price_classification`、`quote_timestamp`、`amount`；ratio 是服务端按明确总体分母计算的覆盖率。它与 `coverage_ratio` 的总体有效证券覆盖率不是同一个指标。
-- **OpenAPI 文档缺口**：当前 `ProviderProbeItem` Schema 尚未声明上述 validation 与 coverage_dimensions 字段，但 Go 响应模型已包含。WebUI 以当前 Go JSON 响应模型和实际回包字段为接入依据；数据侧需后续补齐 OpenAPI，避免客户端只依据 Schema 生成时遗漏字段。本 WebUI 分支不修改服务端 OpenAPI/Go 代码。
+- **OpenAPI 文档缺口**：当前 `ProviderProbeItem` Schema 尚未声明上述 validation 与 coverage_dimensions 字段，但 Go 响应模型已包含。WebUI 以当前 Go JSON 响应模型和实际回包字段为接入依据；数据侧需后续补齐 OpenAPI，避免客户端只依据 Schema 生成时遗漏字段。数据侧需按主计划补齐 OpenAPI；WebUI 只消费正式契约，不自行维护服务端 Schema。
 - 时间语义：`provider_time` 为源端时间，`fetched_at` 为服务端采集时间，`checked_at` 为诊断检查时间；任何字段缺失时均不得用其他时间字段补位。
