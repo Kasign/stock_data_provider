@@ -67,6 +67,9 @@ const server = createServer(async (request, response) => {
 });
 
 await mkdir(screenshotDir, { recursive: true });
+const uiReviewScreenshotDir = path.join(screenshotDir, "ui-review");
+await mkdir(uiReviewScreenshotDir, { recursive: true });
+const uiReviewScreenshotWidths = new Set([320, 768, 1280, 1600]);
 await new Promise((resolve, reject) => {
   server.once("error", reject);
   server.listen(0, "127.0.0.1", resolve);
@@ -1688,6 +1691,13 @@ try {
         "navigation should mark " + viewName + " as the current page"
       );
       await assertNoHorizontalOverflow("view " + viewName);
+      if (uiReviewScreenshotWidths.has(viewport.width)) {
+        await page.screenshot({
+          path: path.join(uiReviewScreenshotDir, viewport.width + "x" + viewport.height + "-" + viewName + ".png"),
+          fullPage: true,
+          animations: "disabled"
+        });
+      }
       if (viewName === "market" && viewport.width === 320) {
         const range = await page.evaluate(() => ({
           start: document.querySelector("#market-capital-flow-start")?.value || "",
