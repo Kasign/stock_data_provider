@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +35,34 @@ func logOptionalProviderProbe(t *testing.T, results []optionalProviderProbeResul
 	t.Logf("LIVE_OPTIONAL_PROVIDER_RESULT %s", encoded)
 	if len(failures) > 0 {
 		t.Fatalf("optional provider live acceptance failed: %v", failures)
+	}
+}
+
+func isTusharePermissionRequired(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "code=40203") || strings.Contains(message, "权限不足") || strings.Contains(message, "无接口访问权限")
+}
+
+func TestIsTusharePermissionRequired(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "permission code", err: errors.New("Tushare daily 错误 code=40203: 接口权限不足"), want: true},
+		{name: "permission message", err: errors.New("当前账号无接口访问权限"), want: true},
+		{name: "invalid token", err: errors.New("Tushare token invalid"), want: false},
+		{name: "network error", err: errors.New("connection timeout"), want: false},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			if got := isTusharePermissionRequired(item.err); got != item.want {
+				t.Fatalf("isTusharePermissionRequired()=%v want %v", got, item.want)
+			}
+		})
 	}
 }
 
@@ -68,8 +98,14 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		item := optionalProviderProbeResult{Provider: "tushare", Capability: capability, Status: "passed", ElapsedMS: time.Since(started).Milliseconds(), Rows: rows, Quality: string(quality), QualityNote: notes}
 		if err != nil {
 			_, safeMessage := liveProbeErrorSummary(err)
-			item.Status, item.Error = "failed", safeMessage
-			failures = append(failures, capability+": "+safeMessage)
+			item.Error = safeMessage
+			if isTusharePermissionRequired(err) {
+				// Tushare 接口权限受账号积分档位和单接口权限约束；权限不足不能等同于 Token 无效或 Provider 不可用。
+				item.Status = "permission_required"
+			} else {
+				item.Status = "failed"
+				failures = append(failures, capability+": "+safeMessage)
+			}
 		}
 		results = append(results, item)
 	}
