@@ -171,7 +171,7 @@ try {
   await page.locator("#load-stock-research").click();
   await page.waitForFunction(() =>
     document.querySelector("#stock-profile-fields")?.textContent.includes("平安银行") &&
-    document.querySelector("#stock-board-list")?.textContent.includes("不能解释为确实没有板块") &&
+    document.querySelector("#stock-board-list")?.textContent.includes("银行板块") &&
     document.querySelector("#announcement-list")?.textContent.includes("第三季度报告")
   );
   assert.equal(await page.locator("#announcement-list .stock-announcement-item").count(), 1);

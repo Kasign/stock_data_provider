@@ -468,3 +468,6 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - [ ] WebUI Checks 与 Chromium Browser Smoke 待本批代码提交后验收。
 
 验收边界：仅展示数据侧已返回的 `available_at`、`quality_status`、`quality_reasons`，不补造时间或质量原因。
+
+
+CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质量脚本等待旧的“无板块”空状态文案时超时；原因是测试夹具已调整为包含真实板块记录，但等待条件未同步。已将等待条件改为等待板块名称，随后重新执行完整浏览器验收。该失败属于测试条件不一致，不是页面运行时异常。
