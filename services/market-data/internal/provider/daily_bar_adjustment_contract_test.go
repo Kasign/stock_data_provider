@@ -29,7 +29,7 @@ func TestEastmoneyDailyBarAdjustmentRequestAndMetadata(t *testing.T) {
 				if got := r.URL.Query().Get("fqt"); got != tc.fqt {
 					t.Errorf("fqt=%q, want %q", got, tc.fqt)
 				}
-				fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":["2026-10-20,10,10.2,10.3,9.9,100,1020000,1.42,0.81,10.87,0.23"]}}`)
+				fmt.Fprint(w, `{"rc":0,"data":{"code":"600519","name":"贵州茅台","klines":["2026-10-20,10,10.2,10.3,9.9,100,102000,1.42,0.81,10.87,0.23"]}}`)
 			}))
 			defer server.Close()
 			p := NewEastmoney(2*time.Second, server.URL, server.URL)
