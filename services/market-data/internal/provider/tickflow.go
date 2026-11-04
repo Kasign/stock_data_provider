@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -1272,7 +1273,7 @@ func (p *TickFlow) getJSON(ctx context.Context, baseURL, path string, query url.
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP status %d", resp.StatusCode)
+		return nil, p.tickflowHTTPStatusError(resp)
 	}
 	return readBoundedBody(resp.Body, maxProviderPayloadBytes)
 }
@@ -1305,9 +1306,32 @@ func (p *TickFlow) postJSON(ctx context.Context, baseURL, path string, payload a
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("HTTP status %d", resp.StatusCode)
+		return nil, p.tickflowHTTPStatusError(resp)
 	}
 	return readBoundedBody(resp.Body, maxProviderPayloadBytes)
+}
+
+func (p *TickFlow) tickflowHTTPStatusError(resp *http.Response) error {
+	if resp == nil {
+		return errors.New("TickFlow HTTP request failed without a response")
+	}
+	const maxErrorBodyBytes = 2048
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes+1))
+	truncated := len(body) > maxErrorBodyBytes
+	if truncated {
+		body = body[:maxErrorBodyBytes]
+	}
+	sample := strings.TrimSpace(string(body))
+	if p != nil && p.apiKey != "" {
+		sample = strings.ReplaceAll(sample, p.apiKey, "[REDACTED]")
+	}
+	if sample == "" {
+		return fmt.Errorf("HTTP status %d", resp.StatusCode)
+	}
+	if truncated {
+		sample += "…[truncated]"
+	}
+	return fmt.Errorf("HTTP status %d: %s", resp.StatusCode, sample)
 }
 
 func (p *TickFlow) waitForFreeRateLimit(ctx context.Context) error {
