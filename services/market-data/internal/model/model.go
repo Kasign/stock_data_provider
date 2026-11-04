@@ -224,14 +224,14 @@ type SectorRankingSnapshot struct {
 	ProviderReturned        int             `json:"provider_returned,omitempty"`
 	ExcludedRows            int             `json:"excluded_rows,omitempty"`
 	ExcludedNonAShareCount  int             `json:"excluded_non_a_share_count,omitempty"`
-	TotalIsLowerBound  bool            `json:"total_is_lower_bound,omitempty"`
-	ProviderReportDate string          `json:"provider_report_date,omitempty"`
-	Items              []SectorRanking `json:"items"`
-	Source             string          `json:"source"`
-	SourceVersion      string          `json:"source_version,omitempty"`
-	FetchedAt          time.Time       `json:"fetched_at"`
-	QualityStatus      QualityStatus   `json:"quality_status"`
-	QualityReasons     []string        `json:"quality_reasons,omitempty"`
+	TotalIsLowerBound       bool            `json:"total_is_lower_bound,omitempty"`
+	ProviderReportDate      string          `json:"provider_report_date,omitempty"`
+	Items                   []SectorRanking `json:"items"`
+	Source                  string          `json:"source"`
+	SourceVersion           string          `json:"source_version,omitempty"`
+	FetchedAt               time.Time       `json:"fetched_at"`
+	QualityStatus           QualityStatus   `json:"quality_status"`
+	QualityReasons          []string        `json:"quality_reasons,omitempty"`
 }
 
 // MarketIndexQuote is an index snapshot, not an equity quote. Index symbols use an independent allow-listed namespace.
