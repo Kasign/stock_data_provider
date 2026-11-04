@@ -64,7 +64,7 @@ func TestAssessDailyBarTradingContextKeepsUnknownStateNotComparable(t *testing.T
 }
 
 func TestAssessDailyBarTradingContextAcceptsNonTradingDayAndReturnedBar(t *testing.T) {
-	calendar := &model.TradingCalendarSnapshot{Items: []model.TradingCalendarDay{
+	calendar := &model.TradingCalendarSnapshot{QualityStatus: model.QualityValid, Items: []model.TradingCalendarDay{
 		{Date: "2026-10-20", IsTradingDay: true},
 		{Date: "2026-10-21", IsTradingDay: false},
 	}}
