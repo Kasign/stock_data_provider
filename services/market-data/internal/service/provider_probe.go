@@ -481,7 +481,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 						snapshotBars = nil
 						break
 					}
- 					snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
+					snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
 						TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
 						Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
 						AdjustmentMethod: bar.AdjustmentMethod, AdjustmentRefDate: bar.AdjustmentRefDate,
