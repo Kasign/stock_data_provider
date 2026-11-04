@@ -687,3 +687,19 @@
 - [x] WebUI Checks：通过（[运行记录 #41756141508](https://github.com/Kasign/stock_data_provider/actions/runs/41756141508)）。
 - [x] Chromium Browser Smoke：通过，包含新增设置中心主题/存储失败专项和全量既有浏览器回归（[运行记录 #41756321232](https://github.com/Kasign/stock_data_provider/actions/runs/41756321232)）。
 - [x] P0-B3 最终验收代码 SHA：`f86170981421ad1408d80c666f06c428ad8f7421`。
+
+
+## 2026-11-04 格式偏好影响范围审查（P0-B4）
+
+- [x] 审查 `formatCompact`：调用范围为成交额、成交量、市场净流入/净买入等金额数据；与“成交额/成交量单位”设置语义一致。
+- [x] 审查 `formatPrice`：用于最新价、涨跌额、开高低收、均线价格；未用于百分比、排名或时间字段。
+- [x] 审查 `formatPercent`：用于涨跌幅、换手率、覆盖率和资金比例等百分比字段。
+- [x] 修复自选股列表和全市场列表显式传入固定 2 位小数，导致“价格小数位”偏好失效的问题；统一改为读取已保存价格精度。
+- [x] 新增格式偏好单元测试，覆盖价格精度、百分比精度、成交额/成交量紧凑与完整数字两种模式。
+- [x] WebUI Checks：通过（[运行记录 #41757033765](https://github.com/Kasign/stock_data_provider/actions/runs/41757033765)）。
+- [ ] Chromium Browser Smoke：等待本次代码提交 SHA 对应运行完成（[运行记录 #41757033471](https://github.com/Kasign/stock_data_provider/actions/runs/41757033471)）。
+- [ ] 浏览器验收通过后关闭 P0-B，并将下一阶段切换为 P0-C。
+
+代码提交 SHA：`8822ab29a3ea21e1516e6097c515ff3600e59c6b`。
+
+验收边界：本轮验证的是 WebUI 本地格式偏好与展示调用边界，不改变服务端数值、单位、行情精度或 API 契约。
