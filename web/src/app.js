@@ -1,5 +1,5 @@
 import { applyTheme, persistTheme, readTheme, THEME_STORAGE_KEY } from "./theme.js";
-import { DEFAULT_PREFERENCES, PREFERENCES_KEY, WATCHLIST_DISPLAY_FIELDS, readPreferences, resetPreferences, savePreferences } from "./preferences.js";
+import { DEFAULT_PREFERENCES, PREFERENCES_KEY, WATCHLIST_DISPLAY_FIELDS, readPreferences, readPreferencesState, resetPreferences, savePreferences } from "./preferences.js";
 import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.js";
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
@@ -5321,7 +5321,12 @@ function handleLocalStorageChange(event) {
   }
 
   if (cleared || event.key === PREFERENCES_KEY) {
-    const preferences = readPreferences();
+    const preferenceState = readPreferencesState();
+    if (!preferenceState.readable || !preferenceState.valid) {
+      $("#local-preferences-feedback").textContent = "其他标签页写入的本地偏好不可读取或格式异常；当前页面偏好未改变，原始数据未覆盖。";
+      return;
+    }
+    const preferences = preferenceState.value;
     try {
       syncWatchlistPreferenceControls(preferences);
       renderWatchlist();
@@ -5588,13 +5593,17 @@ function persistLocalPreferences() {
     $("#local-preferences-feedback").textContent = "本地展示与查询偏好已保存到当前浏览器。";
     return preferences;
   } catch (error) {
-    const persistedPreferences = readPreferences();
+    const persistedState = readPreferencesState();
+    const persistedPreferences = persistedState.valid ? persistedState.value : { ...DEFAULT_PREFERENCES };
     try {
       syncWatchlistPreferenceControls(persistedPreferences);
     } catch {
       // 存储失败时优先保留错误反馈；控件同步异常不能覆盖原始存储错误。
     }
-    $("#local-preferences-feedback").textContent = "偏好保存失败，控件已恢复为当前可读取的已保存值：" + (error?.message || "浏览器存储不可用。");
+    const prefix = persistedState.readable && !persistedState.valid
+      ? "本地偏好格式异常，原始数据已保留；请明确执行“恢复默认值”后再修改。"
+      : "偏好保存失败，控件已恢复为当前可读取的已保存值：";
+    $("#local-preferences-feedback").textContent = prefix + (error?.message || "浏览器存储不可用。");
     return persistedPreferences;
   }
 }

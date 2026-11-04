@@ -52,20 +52,41 @@ function resolveStorage(storage) {
   }
 }
 
-export function readPreferences(storage) {
+export function readPreferencesState(storage) {
   const target = resolveStorage(storage);
+  if (!target) return { readable: false, valid: false, value: null, reason: "unavailable" };
+  let raw;
   try {
-    const raw = target?.getItem(PREFERENCES_KEY);
-    return normalizePreferences(raw ? JSON.parse(raw) : {});
+    raw = target.getItem(PREFERENCES_KEY);
   } catch {
-    return { ...DEFAULT_PREFERENCES };
+    return { readable: false, valid: false, value: null, reason: "unavailable" };
+  }
+  if (raw === null) return { readable: true, valid: true, value: normalizePreferences({}), reason: "" };
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { readable: true, valid: false, value: null, reason: "invalid" };
+    }
+    return { readable: true, valid: true, value: normalizePreferences(parsed), reason: "" };
+  } catch {
+    return { readable: true, valid: false, value: null, reason: "invalid" };
   }
 }
 
-export function savePreferences(value, storage) {
-  const preferences = normalizePreferences(value);
+export function readPreferences(storage) {
+  const state = readPreferencesState(storage);
+  return state.valid ? state.value : { ...DEFAULT_PREFERENCES };
+}
+
+function persistPreferences(value, storage, allowInvalidStorage = false) {
   const target = resolveStorage(storage);
   if (!target) throw new Error("浏览器本地存储不可用。");
+  const current = readPreferencesState(target);
+  if (!current.readable) throw new Error("浏览器本地存储不可用。");
+  if (!current.valid && !allowInvalidStorage) {
+    throw new Error("本地展示偏好格式异常，为保护原始数据未覆盖；如需恢复，请明确执行“恢复默认值”。");
+  }
+  const preferences = normalizePreferences(value);
   const serialized = JSON.stringify(preferences);
   target.setItem(PREFERENCES_KEY, serialized);
   if (target.getItem(PREFERENCES_KEY) !== serialized) {
@@ -74,6 +95,11 @@ export function savePreferences(value, storage) {
   return preferences;
 }
 
+export function savePreferences(value, storage) {
+  return persistPreferences(value, storage);
+}
+
 export function resetPreferences(storage) {
-  return savePreferences(DEFAULT_PREFERENCES, storage);
+  // 用户显式触发恢复默认值时，允许替换无法解析的旧偏好数据。
+  return persistPreferences(DEFAULT_PREFERENCES, storage, true);
 }

@@ -120,6 +120,16 @@ try {
   );
   assert.equal(await first.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--positive").trim()), "#07875c");
 
+  const savedPreferencesBeforeCorruption = await first.evaluate(() => localStorage.getItem("stock-provider-webui.preferences.v1"));
+  await second.evaluate(() => localStorage.setItem("stock-provider-webui.preferences.v1", "{invalid-json"));
+  await first.waitForFunction(() => document.querySelector("#local-preferences-feedback").textContent.includes("格式异常"));
+  assert.equal(await first.locator("#settings-price-digits").inputValue(), "3",
+    "malformed cross-tab preference data must not replace the current rendered settings");
+  assert.equal(await first.evaluate(() => localStorage.getItem("stock-provider-webui.preferences.v1")), "{invalid-json",
+    "malformed preference data must not be silently overwritten");
+  await second.evaluate((value) => localStorage.setItem("stock-provider-webui.preferences.v1", value), savedPreferencesBeforeCorruption);
+  await first.waitForFunction(() => document.querySelector("#local-preferences-feedback").textContent.includes("已从其他标签页同步"));
+
   await first.locator("#market-base-input").fill("/draft-market");
   await first.locator("#analysis-base-input").fill("/draft-analysis");
   await first.locator("#market-key-input").fill("unsaved-local-secret");
