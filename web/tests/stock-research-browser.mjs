@@ -55,6 +55,7 @@ let releaseCrossTabResearchRequest;
 let markCrossTabResearchRequestStarted;
 let markCrossTabResearchRequestSettled;
 let crossTabResearchRouteFinished = false;
+let crossTabProfileRequestCount = 0;
 try {
   browser = await chromium.launch({ headless: true });
 
@@ -127,6 +128,14 @@ try {
         return;
       }
       if (url.pathname.endsWith("/api/v1/stocks/000001.SZ/profile")) {
+        crossTabProfileRequestCount += 1;
+        if (crossTabProfileRequestCount > 1) {
+          await route.fulfill({
+            status: 503, contentType: "application/json",
+            body: JSON.stringify({ error: { message: "Provider 未启用或未配置" } })
+          });
+          return;
+        }
         markCrossTabResearchRequestStarted?.();
         await new Promise(done => { releaseCrossTabResearchRequest = done; });
         try {
