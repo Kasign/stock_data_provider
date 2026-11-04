@@ -73,11 +73,11 @@ jobs:
           MARKET_DATA_LIVE_PROVIDER_TESTS: "1"
           LIVE_PROVIDER_REPORT_PATH: ${{ github.workspace }}/live-provider-report.json
           LIVE_PROBE_QUOTE_SYMBOL: ${{ github.event.inputs.quote_symbol || '600519.SH' }}
-          MARKET_DATA_LIVE_MX_TESTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.include_mx) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_mx]')) && '1' || '0' }}
-          MARKET_DATA_LIVE_NETEASE_TESTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.include_netease) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_netease]')) && '1' || '0' }}
-          MARKET_DATA_LIVE_HITHINK_TESTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.include_hithink) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_hithink]')) && '1' || '0' }}
-          MARKET_DATA_LIVE_TUSHARE_TESTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.include_tushare) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_tushare]')) && '1' || '0' }}
-          MARKET_DATA_LIVE_TICKFLOW_TESTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.include_tickflow) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_tickflow]')) && '1' || '0' }}
+          MARKET_DATA_LIVE_MX_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_mx) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_mx]'))) && '1' || '0' }}
+          MARKET_DATA_LIVE_NETEASE_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_netease) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_netease]'))) && '1' || '0' }}
+          MARKET_DATA_LIVE_HITHINK_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_hithink) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_hithink]'))) && '1' || '0' }}
+          MARKET_DATA_LIVE_TUSHARE_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_tushare) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_tushare]'))) && '1' || '0' }}
+          MARKET_DATA_LIVE_TICKFLOW_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_tickflow) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_tickflow]'))) && '1' || '0' }}
           MARKET_DATA_TICKFLOW_API_KEY: ${{ secrets.TICKFLOW_API_KEY }}
           MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           MARKET_DATA_HITHINK_API_KEY: ${{ secrets.HITHINK_FINANCE_API_KEY }}
