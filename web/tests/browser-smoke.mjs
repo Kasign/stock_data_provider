@@ -373,7 +373,11 @@ try {
         if (await delayMarketLifecycleResponse({ start_date: "2026-10-01", end_date: "2026-10-30", total: 1,
           items: [{ trade_date: "2026-10-29", advancing_count: 909090, declining_count: 0, unchanged_count: 0, limit_up_count: 0, limit_down_count: 0, quality_status: "valid" }] })) return;
         return json(200, { start_date: "2026-10-01", end_date: "2026-10-30", total: 1,
-          items: [{ trade_date: "2026-10-29", advancing_count: 3200, declining_count: 1800, unchanged_count: 100, limit_up_count: 55, limit_down_count: 12, quality_status: "degraded" }] });
+          items: [{ trade_date: "2026-10-29", provider_report_date: "2026-10-29", total_securities: 5000, covered_securities: 4900,
+            advancing_count: 3200, declining_count: 1800, unchanged_count: 100, limit_up_count: 55, limit_down_count: 12, broken_board_count: 9,
+            limit_up_count_is_lower_bound: true, limit_down_count_is_lower_bound: false, broken_board_count_is_lower_bound: true,
+            source: "browser-sentiment-fixture", source_version: "fixture-v2", fetched_at: "2026-10-29T08:00:00Z",
+            quality_status: "degraded", quality_reasons: ["样本覆盖未达到完整市场"] }] });
       }
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/limit-pools")) {
         const query = new URL(route.request().url()).searchParams;
@@ -591,6 +595,18 @@ try {
       await page.locator("#load-market-sentiment-history").click();
       await page.waitForFunction(() => document.querySelector("#market-sentiment-history-body button[data-market-date-target='pool']") !== null);
       assert.equal(sentimentHistoryRequestCount, 1, "historical sentiment must come from persisted API records");
+      const sentimentHistoryHeader = await page.locator("#market-sentiment-panel table thead").textContent();
+      assert.match(sentimentHistoryHeader, /炸板.*质量与来源/);
+      const sentimentHistoryRow = page.locator("#market-sentiment-history-body tr").first();
+      const sentimentHistoryText = await sentimentHistoryRow.textContent();
+      assert.match(sentimentHistoryText, /≥55/, "lower-bound limit-up count must retain its lower-bound marker");
+      assert.match(sentimentHistoryText, /12/, "exact limit-down count must not be marked as a lower bound");
+      assert.match(sentimentHistoryText, /≥9/, "lower-bound broken-board count must retain its lower-bound marker");
+      assert.match(sentimentHistoryText, /覆盖 4,900 \/ 5,000/);
+      assert.match(sentimentHistoryText, /源端日期 2026-10-29/);
+      assert.match(sentimentHistoryText, /browser-sentiment-fixture/);
+      assert.match(sentimentHistoryText, /数据质量说明（1）/);
+      assert.match(await sentimentHistoryRow.locator("details").textContent(), /样本覆盖未达到完整市场/);
       await page.locator("#market-sentiment-history-body button[data-market-date-target='pool'][data-market-date-type='down']").click();
       await page.waitForFunction(() => document.querySelector("#market-pool-meta")?.textContent.includes("2026-10-29"));
       assert.deepEqual(limitPoolRequests.at(-1), { date: "2026-10-29", type: "down", limit: "30" }, "sentiment history must drill into the same-date selected limit pool");

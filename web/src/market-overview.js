@@ -40,6 +40,10 @@ export function validateMarketDateRange(start,end,maxCalendarDays=null) {
  return "";
 }
 function count(v) { const n=finiteNumberOrNull(v); return n!==null&&n>=0?Math.trunc(n).toLocaleString("zh-CN"):"—"; }
+export function formatMarketSentimentCount(value,isLowerBound=false) {
+ const formatted=count(value);
+ return isLowerBound&&formatted!=="—"?"≥"+formatted:formatted;
+}
 function signed(v, fmt) { const n=finiteNumberOrNull(v); if(n===null)return "—";return (n>0?"+":"")+fmt(n); }
 function dir(v) { const n=finiteNumberOrNull(v); if(n===null)return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat"; }
 function badge(id,label,tone="pending",quality="") { const n=$("#"+id);if(!n)return;n.textContent=label;if(tone==="quality"){const q=["valid","degraded","stale","invalid","unknown"].includes(String(quality).toLowerCase())?String(quality).toLowerCase():"unknown";n.className="quality-pill quality-"+q;}else n.className="availability-pill "+(tone==="error"||tone==="warning"?"is-unavailable":tone==="success"?"is-local":"is-readonly"); }
@@ -250,7 +254,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   const status=$("#market-sentiment-history-status");
   if(status)status.textContent=message;
   const body=$("#market-sentiment-history-body");
-  if(body){body.replaceChildren();const row=document.createElement("tr"),cell=el("td","table-empty",message);cell.colSpan=7;row.append(cell);body.append(row);}
+  if(body){body.replaceChildren();const row=document.createElement("tr"),cell=el("td","table-empty",message);cell.colSpan=9;row.append(cell);body.append(row);}
   meta("market-sentiment-history-meta",[]);
  }
  function invalidateCapitalFlow(statusMessage,bodyMessage=statusMessage){
@@ -350,7 +354,7 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   const rangeError=validateMarketDateRange(start,end);
   if(rangeError){
    if(status)status.textContent=rangeError;
-   if(body){body.replaceChildren();const row=document.createElement("tr"),cell=el("td","table-empty",rangeError+" 本次未发起请求。");cell.colSpan=8;row.append(cell);body.append(row);}
+   if(body){body.replaceChildren();const row=document.createElement("tr"),cell=el("td","table-empty",rangeError+" 本次未发起请求。");cell.colSpan=9;row.append(cell);body.append(row);}
    meta("market-sentiment-history-meta",[]);
    return;
   }
@@ -369,11 +373,32 @@ export function bindMarketOverview(getSettings,onSelectStock) {
    const items=Array.isArray(data?.items)?data.items:[];
    if(body){
     body.replaceChildren();
-    if(!items.length){const row=document.createElement("tr"),cell=el("td","table-empty","该日期范围内没有已保存的情绪快照；不会用当前行情补造历史。");cell.colSpan=7;row.append(cell);body.append(row);}
+    if(!items.length){const row=document.createElement("tr"),cell=el("td","table-empty","该日期范围内没有已保存的情绪快照；不会用当前行情补造历史。");cell.colSpan=9;row.append(cell);body.append(row);}
     items.forEach(item=>{
      const row=document.createElement("tr");
      row.append(el("td","",item.trade_date||"未报告"));
-     [count(item.advancing_count),count(item.declining_count),count(item.unchanged_count),count(item.limit_up_count),count(item.limit_down_count),qualityLabel(item.quality_status)].forEach(value=>row.append(el("td","",value)));
+     [count(item.advancing_count),count(item.declining_count),count(item.unchanged_count),
+      formatMarketSentimentCount(item.limit_up_count,item.limit_up_count_is_lower_bound),
+      formatMarketSentimentCount(item.limit_down_count,item.limit_down_count_is_lower_bound),
+      formatMarketSentimentCount(item.broken_board_count,item.broken_board_count_is_lower_bound)
+     ].forEach(value=>row.append(el("td","",value)));
+     const qualityCell=el("td","market-sentiment-history-quality");
+     const quality=["valid","degraded","stale","invalid","unknown"].includes(String(item.quality_status||"").toLowerCase())?String(item.quality_status).toLowerCase():"unknown";
+     qualityCell.append(el("span","quality-pill quality-"+quality,qualityLabel(quality)));
+     const evidence=[];
+     if(item.covered_securities!==null&&item.covered_securities!==undefined&&item.total_securities!==null&&item.total_securities!==undefined)evidence.push("覆盖 "+count(item.covered_securities)+" / "+count(item.total_securities));
+     if(item.provider_report_date)evidence.push("源端日期 "+item.provider_report_date);
+     if(item.source)evidence.push("来源 "+item.source);
+     if(item.source_version)evidence.push("版本 "+item.source_version);
+     if(item.fetched_at)evidence.push("采集 "+formatDateTime(item.fetched_at));
+     if(evidence.length)qualityCell.append(el("small","market-table-secondary",evidence.join(" · ")));
+     const reasons=Array.isArray(item.quality_reasons)?item.quality_reasons.filter(value=>String(value??"").trim()):[];
+     if(reasons.length){
+      const details=el("details","market-quality-reasons"),summary=el("summary","","数据质量说明（"+reasons.length+"）"),list=el("ul");
+      reasons.forEach(reason=>list.append(el("li","",reason)));
+      details.append(summary,list);qualityCell.append(details);
+     }
+     row.append(qualityCell);
      const actions=el("td","market-date-drilldown-actions"),tradeDate=String(item.trade_date||"");
      if(isValidTradeDate(tradeDate)){
       [["pool","up","涨停池"],["pool","down","跌停池"],["pool","broken","炸板池"],["dragon-tiger","","龙虎榜"]].forEach(([target,type,label])=>{const action=el("button","button button-secondary market-stock-entry-action",label);action.type="button";action.dataset.marketDate=tradeDate;action.dataset.marketDateTarget=target;if(type)action.dataset.marketDateType=type;actions.append(action);});

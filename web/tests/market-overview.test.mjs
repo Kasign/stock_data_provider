@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultMarketCapitalFlowDateRange, describeMarketOverviewError, isCurrentSentimentHistoryRequest, validateMarketDateRange } from "../src/market-overview.js";
+import { defaultMarketCapitalFlowDateRange, describeMarketOverviewError, formatMarketSentimentCount, isCurrentSentimentHistoryRequest, validateMarketDateRange } from "../src/market-overview.js";
 
 test("market overview keeps authentication, permission, missing-route and provider errors distinct", () => {
   const cases = [
@@ -58,4 +58,12 @@ test("market observation date ranges validate dates, order, and inclusive natura
 
   // 情绪历史接口没有 2000 自然日上限，不能把资金流接口限制错误复用到该查询。
   assert.equal(validateMarketDateRange(start, afterDays(2000)), "");
+});
+
+test("market sentiment counts retain lower-bound semantics without formatting missing values as zero", () => {
+  assert.equal(formatMarketSentimentCount(55, true), "≥55");
+  assert.equal(formatMarketSentimentCount(0, true), "≥0");
+  assert.equal(formatMarketSentimentCount(12, false), "12");
+  assert.equal(formatMarketSentimentCount(null, true), "—");
+  assert.equal(formatMarketSentimentCount(undefined, false), "—");
 });
