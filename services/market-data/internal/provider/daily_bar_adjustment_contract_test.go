@@ -158,8 +158,8 @@ func TestTickFlowDailyBarAdjustmentRequestAndMetadata(t *testing.T) {
 
 func TestHithinkAdjustmentBasisMetadataMapping(t *testing.T) {
 	cases := map[string]model.AdjustmentBasis{
-		"none": model.AdjustmentNone,
-		"forward": model.AdjustmentForward,
+		"none":     model.AdjustmentNone,
+		"forward":  model.AdjustmentForward,
 		"backward": model.AdjustmentBackward,
 	}
 	for input, want := range cases {
