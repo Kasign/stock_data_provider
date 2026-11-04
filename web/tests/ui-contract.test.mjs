@@ -1073,6 +1073,11 @@ test("screening workbench distinguishes unavailable capability from disabled and
   assert.match(app, /renderScreeningHistory\(\{ supported: false \}\)/);
   assert.match(screeningView, /id="screening-submit" type="button" disabled/);
   assert.match(screeningView, /当前页本地筛选/);
+  assert.match(screeningView, /id="screening-ma-capability-hint"/);
+  for (const period of ["ma60", "ma120", "ma250"]) {
+    assert.match(screeningView, new RegExp(`<option value="${period}" disabled>.*待数据侧支持`), period + " must remain disabled until the market page API provides it");
+  }
+  assert.match(screeningView, /不会为每只股票额外请求日 K/);
   for (const id of ["screening-condition-logic", "screening-condition-field", "screening-condition-operator", "screening-condition-value", "screening-condition-add", "screening-plan-save", "screening-plan-save-as", "screening-saved-plan-list"]) {
     assert.match(screeningView, new RegExp('id="' + id + '"'), "missing local screening control: " + id);
   }
