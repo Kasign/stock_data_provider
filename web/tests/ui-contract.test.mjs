@@ -1951,10 +1951,13 @@ test("数据中心读取并展示真实 Provider 运行诊断，且不将未观�
 
 
 test("自选股批量行情只请求当前本地清单并在连接变更时清除旧快照", () => {
-  assert.match(apiClient, /export function getMarketQuotes\(settings, symbols, signal\)/);
+  assert.match(apiClient, /export function getMarketQuotes\(settings, symbols, signal, \{ timeoutMs = 30000 \} = \{\}\)/);
+  assert.match(apiClient, /timeoutMs = 30000/);
   assert.match(app, /function refreshWatchlistQuotes\(\)/);
   assert.match(app, /getMarketQuotes\(state\.settings, symbols, controller\.signal\)/);
   assert.match(app, /state\.watchlistQuotes = nextQuotes/);
+  assert.match(app, /state\.watchlistQuoteSymbols = new Set\(requestedSymbols\)/);
+  assert.match(app, /function syncWatchlistQuoteMembership\(records\)/);
   assert.match(app, /invalidateWatchlistQuotes\(\)/);
   assert.match(html, /id="refresh-watchlist-quotes"/);
   assert.match(html, /id="watchlist-quote-refresh-status"/);
