@@ -725,8 +725,19 @@ func TestProviderProbeClassifiesExplicitUnsupportedAdjustment(t *testing.T) {
 			t.Errorf("expected unsupported adjustment classification for %q", message)
 		}
 	}
-	if isUnsupportedDailyBarAdjustmentError(errors.New("upstream timeout")) {
-		t.Fatal("ordinary upstream failures must not be classified as unsupported")
+	for _, message := range []string{
+		"upstream timeout",
+		"Eastmoney daily-bars provider error rc=-1",
+		"BaoStock adjustment mismatch: requested flag 2, got \\"3\\"",
+		"TickFlow daily K-line request: HTTP status 503",
+		"同花顺历史 K 线区间请求失败: HTTP 状态码 401",
+		"Pytdx ex-rights/ex-dividend data required for forward_adjusted: connection refused",
+		"Pytdx ex-rights/ex-dividend data required for backward_adjusted: context deadline exceeded",
+		"adj_factor missing for requested date range",
+	} {
+		if isUnsupportedDailyBarAdjustmentError(errors.New(message)) {
+			t.Errorf("provider/network/data failures must not be classified as unsupported: %q", message)
+		}
 	}
 }
 
