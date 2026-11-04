@@ -155,7 +155,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 			}
 		}
 
-	
+
 	}
 
 	run("daily_bars", func() (int, model.QualityStatus, []string, error) {

@@ -64,32 +64,31 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 	}
 
 	if !indexOnly {
-				run("quote", func() (int, string, []string, error) {
-				item, err := client.FetchQuote(ctx, "600519.SH")
-				if err != nil {
-					return 0, "", nil, err
-				}
-				if item == nil || item.Symbol != "600519.SH" || item.Source != "tickflow" || item.FetchedAt.IsZero() || item.CurrentPrice == nil {
-					return 0, "", nil, errLiveProbeContract("quote identity/source/time/price mismatch")
-				}
-				return 1, string(item.QualityStatus), item.QualityReasons, nil
-			})
-
-		}
-
-		run("index_quotes", func() (int, string, []string, error) {
-			item, err := client.FetchIndexQuotes(ctx)
+		run("quote", func() (int, string, []string, error) {
+			item, err := client.FetchQuote(ctx, "600519.SH")
 			if err != nil {
 				return 0, "", nil, err
 			}
-			if item == nil || item.Source != "tickflow" || item.FetchedAt.IsZero() || len(item.Items) != len(tickflowCoreIndexDefinitions) {
-				return 0, "", nil, errLiveProbeContract("core index snapshot coverage mismatch")
+			if item == nil || item.Symbol != "600519.SH" || item.Source != "tickflow" || item.FetchedAt.IsZero() || item.CurrentPrice == nil {
+				return 0, "", nil, errLiveProbeContract("quote identity/source/time/price mismatch")
 			}
-			return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
+			return 1, string(item.QualityStatus), item.QualityReasons, nil
 		})
+	}
 
-		if !indexOnly {
-			run("market_breadth", func() (int, string, []string, error) {
+	run("index_quotes", func() (int, string, []string, error) {
+		item, err := client.FetchIndexQuotes(ctx)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		if item == nil || item.Source != "tickflow" || item.FetchedAt.IsZero() || len(item.Items) != len(tickflowCoreIndexDefinitions) {
+			return 0, "", nil, errLiveProbeContract("core index snapshot coverage mismatch")
+		}
+		return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
+	})
+
+	if !indexOnly {
+		run("market_breadth", func() (int, string, []string, error) {
 			item, err := client.FetchMarketBreadth(ctx)
 			if err != nil {
 				return 0, "", nil, err
@@ -117,9 +116,7 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 			}
 			return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
 		})
-
 	}
-
 	encoded, _ := json.Marshal(results)
 	t.Logf("LIVE_TICKFLOW_RESULT %s", encoded)
 	if len(failures) > 0 {
