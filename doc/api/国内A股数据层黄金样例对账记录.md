@@ -219,3 +219,30 @@ Run `41771896984` 的 workflow conclusion 为 success，但实际 Job conclusion
 ### 14.3 验收结论
 
 本批新增了四家 Provider 的真实 HFQ 请求和返回样本，但尚未证明参考基准一致，也未形成可用于严格 matched 的有效样本。后续需补齐参考日期/因子语义、同基准数值差分、交易上下文真实日期矩阵和 Probe 历史 MariaDB 部署验收。阶段 B 未关闭。
+
+
+## 15. 跨 Provider 复权基准误比较风险（2026-11-04）
+
+代码审查基线：`88eac9e70bb77dd02d05ed868daf9d6ca41dffa5`。
+
+### 15.1 审查证据
+
+- Provider 的 `DailyBar` 已包含 `AdjustmentBasis`、`AdjustmentMethod`、`AdjustmentRefDate`。
+- Probe 生成跨源快照时只复制 `AdjustmentBasis`，没有复制 method/ref date。
+- 比较器只判断双方 `AdjustmentBasis` 是否相同，随后比较 OHLC/Volume/Amount。
+- 服务层也按相同 adjustment enum 配对，没有额外参考基准门禁。
+- 当前测试 matched 样例为 none 口径，尚无 adjusted 不同基准反例测试。
+
+### 15.2 影响范围与当前结论
+
+这是 adjusted 日 K 对账的潜在误判入口，不是已经证实发生的错误匹配。当前 600036.SH HFQ 真实样本仍未形成 matched；此前文档中记录的价格尺度差异不能直接判定为某个 Provider 的算法错误。
+
+### 15.3 后续验收
+
+1. 快照必须完整传递复权方法和参考日期。
+2. adjusted 比较必须有可验证的同基准证据；未知参考基准保持 not_comparable。
+3. 为同 enum 不同 method、不同/缺失参考日、快照内部元数据不一致增加单测。
+4. none 比较现有行为不回退。
+5. CI 通过后重新执行受控 HFQ 矩阵，再判断是否能形成严格 matched。
+
+本次只完成代码审查与风险登记，未修改 Provider 或比较器实现；阶段 B 未关闭。
