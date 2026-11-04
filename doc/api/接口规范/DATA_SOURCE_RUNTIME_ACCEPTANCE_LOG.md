@@ -557,3 +557,39 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 跳过 quote、qfq/hfq、跨市场样本、股票搜索、公告、行业、市场广度、新闻、妙想等其他请求。
 - 通过提交标记 `[include_public] [public_daily_only]` 触发；不改变常规 Provider 探测行为。
 - 当前仅为探测入口实现，Go CI 和真实 Provider 结果待验收。
+
+
+## 43. 2026-11-04 公共源未复权日 K 最小探测真实结果
+
+### 43.1 执行证据
+
+- Live Workflow Run：`41815545410`；实际 Job：`126525230010`；Job 最终 success。
+- 代码基线：`5d21d0cd4228d8c0a88fec323b3d5c608c6259a5`。
+- 日志明确记录 `MARKET_DATA_LIVE_PROVIDER_TESTS=1`、`MARKET_DATA_LIVE_PUBLIC_DAILY_ONLY=1`；本次不再是此前 marker 缺失导致的 skipped。
+- 唯一探测证券为 `600036.SH`，复权口径 `none`；Sina、Tencent、Eastmoney、Yahoo 各发起一次日线请求，四个上游 HTTP 均返回 200。
+- 每家返回 8 条日 K。日志结果样本展示最近三条交易日：2026-10-30、2026-11-02、2026-11-03；本节不将三条展示样本误写为完整 8 条逐日核对。
+
+### 43.2 Provider 结果
+
+| Provider | 返回条数 | 结果状态 | 样本质量 | 成交额 | 成交量单位 | 结论 |
+|---|---:|---|---|---|---|---|
+| Sina | 8 | returned | degraded | 缺失 | shares | 可返回日 K，但缺少成交额，不满足完整日 K 质量要求 |
+| Tencent | 8 | returned | degraded | 缺失 | shares | 可返回日 K，但缺少已验证成交额字段，不满足完整日 K 质量要求 |
+| Eastmoney | 8 | returned | valid | CNY | shares | 本次样本满足当前统一日 K 质量契约 |
+| Yahoo | 8 | returned | degraded | 缺失 | shares | 可返回日 K，但缺少成交额，不满足完整日 K 质量要求 |
+
+### 43.3 字段对照与质量观察
+
+- 最近三条样本的 OHLC 在四家之间一致（浮点表示存在微小精度差异）；成交量单位均规范化为 shares。Sina/Yahoo 原始成交量为 shares；Tencent/Eastmoney 原始成交量为 hands，规范化后乘以 100，与其他源样本基本一致。
+- Sina 的降级原因包括上游日 K 未提供 amount、未回显 symbol，以及响应契约警告；Tencent 的降级原因是日 K 未提供经过验证的 amount 字段；Yahoo 的降级原因是 amount 缺失且单位未知。
+- Eastmoney 样本 amount 字段来自 K 线字段 6，原始单位 CNY，规范化单位 CNY；最近三条样本成交额分别为 4,441,649,958、5,564,635,011、7,095,698,519 CNY。
+- Sina、Tencent、Yahoo 的成交额缺失不得用 close × volume 推算填补，也不得将其 quality 提升为 valid。Provider 返回成功与数据质量通过是两个独立结论。
+- 本次只对单只证券、有限窗口、未复权日 K 做最小探测；未验证全历史覆盖、停牌/非交易日边界、复权因子和其他证券适用性。
+
+### 43.4 结论与后续
+
+- 本次四家公共源真实请求均成功返回，但只有 Eastmoney 在本次样本上达到 `valid`；Sina、Tencent、Yahoo 均保持 `degraded`，不计为完整可信日 K 数据源。
+- 不因本次结果修改统一质量门禁，不增加自动成交额推算，不新增 Provider。
+- 下一步优先只读核对 Sina/Tencent/Yahoo 是否存在可稳定、可追溯且同口径的成交额字段；若 Provider 的日 K 接口本身不提供成交额，应明确标注能力限制，不以额外高配额请求反复试错。
+- 后续再进行同证券同交易日的字段对账、交易日边界与分页完整性核验；比较时仅使用质量有效且单位/复权口径一致的数据。
+
