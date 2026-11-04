@@ -655,6 +655,7 @@ components:
         row_index: {type: integer, minimum: 0}
         symbol: {type: string}
         trade_date: {type: string, format: date}
+        count: {type: integer, minimum: 1, description: Number of affected rows represented by this issue; omitted means one issue}
     ProviderProbeCoverageDimension:
       type: object
       required: [dimension, population, source, total, returned, validated, missing, excluded, ratio]

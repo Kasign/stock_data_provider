@@ -457,3 +457,44 @@ func containsValidationIssue(issues []validation.FieldIssue, field, code string)
 	}
 	return false
 }
+
+func TestValidateAndSortBarsWithReportCountsDuplicateAndLimitRows(t *testing.T) {
+	volume := int64(1000)
+	amount := 10000.0
+	makeBar := func(date string) model.DailyBar {
+		return model.DailyBar{
+			Symbol: "600519.SH", TradeDate: date, Period: "1d",
+			Open: 10, High: 11, Low: 9, Close: 10.5, Volume: &volume, Amount: &amount,
+			AdjustmentBasis: model.AdjustmentForward, Source: "eastmoney",
+			VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+		}
+	}
+	bars := []model.DailyBar{
+		makeBar("2026-10-19"),
+		makeBar("2026-10-19"),
+		makeBar("2026-10-20"),
+		makeBar("2026-10-21"),
+	}
+	got, _, report := ValidateAndSortBarsWithReport("600519.SH", bars, "2026-10-19", "2026-10-21", 1)
+	if len(got) != 1 || got[0].TradeDate != "2026-10-21" {
+		t.Fatalf("unexpected normalized bars: %+v", got)
+	}
+	if report.WarningCount != 1 {
+		t.Fatalf("warning_count=%d, want 1 (duplicate row only)", report.WarningCount)
+	}
+	if report.InfoCount != 2 || report.TotalCount != 3 {
+		t.Fatalf("report counts total=%d warning=%d info=%d, want 3/1/2", report.TotalCount, report.WarningCount, report.InfoCount)
+	}
+	foundDuplicate, foundLimit := false, false
+	for _, issue := range report.Issues {
+		switch issue.Code {
+		case "duplicate_trade_date_dropped":
+			foundDuplicate = issue.Stage == validation.StageNormalize && issue.RowIndex != nil && *issue.RowIndex == 1
+		case "bars_truncated_to_limit":
+			foundLimit = issue.Stage == validation.StageNormalize && issue.Count == 2 && issue.Severity == validation.SeverityInfo
+		}
+	}
+	if !foundDuplicate || !foundLimit {
+		t.Fatalf("missing structured duplicate/limit diagnostics: %+v", report.Issues)
+	}
+}

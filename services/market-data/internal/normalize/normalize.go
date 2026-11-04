@@ -374,13 +374,15 @@ func ValidateQuoteWithReport(q *model.Quote) (validation.Report, error) {
 	return report, err
 }
 
-// ValidateAndSortBarsWithReport collects row diagnostics before running the
-// legacy filtering/sorting pipeline. Returned data and warnings stay compatible.
+// ValidateAndSortBarsWithReport combines field validation and normalization diagnostics.
+// Count is the number of affected rows for aggregate issues; Issues remains bounded.
 func ValidateAndSortBarsWithReport(symbolValue string, bars []model.DailyBar, start, end string, limit int) ([]model.DailyBar, []string, validation.Report) {
 	report := validation.NewReport(validation.DefaultMaxIssues)
 	ctx := validation.DailyBarContext{RequestedSymbol: symbolValue, StartDate: start, EndDate: end, Period: "1d"}
+	rowHasErrors := make([]bool, len(bars))
 	for index, bar := range bars {
 		rowReport := validation.ValidateDailyBar(bar, ctx)
+		rowHasErrors[index] = rowReport.HasErrors()
 		for _, item := range rowReport.Issues {
 			rowIndex := index
 			item.RowIndex = &rowIndex
@@ -392,8 +394,49 @@ func ValidateAndSortBarsWithReport(symbolValue string, bars []model.DailyBar, st
 		report.InfoCount += rowReport.InfoCount - countSeverity(rowReport.Issues, validation.SeverityInfo)
 		report.Truncated = report.Truncated || rowReport.Truncated
 	}
+
+	// Duplicate-date rejection is a normalization-stage event, not a second
+	// field-validation error. Only rows that passed field validation participate.
+	seenDates := make(map[string]bool, len(bars))
+	for index, bar := range bars {
+		if rowHasErrors[index] || !validISOTradeDate(bar.TradeDate) {
+			continue
+		}
+		if start != "" && bar.TradeDate < start || end != "" && bar.TradeDate > end {
+			continue // range violations are already reported by ValidateDailyBar.
+		}
+		if seenDates[bar.TradeDate] {
+			rowIndex := index
+			report.Add(validation.FieldIssue{
+				Stage: validation.StageNormalize, Field: "trade_date",
+				Code: "duplicate_trade_date_dropped", Expected: "one daily bar per trade date",
+				Severity: validation.SeverityWarning, Message: "duplicate daily bar was dropped during normalization",
+				RowIndex: &rowIndex, Symbol: bar.Symbol, TradeDate: bar.TradeDate,
+			})
+			continue
+		}
+		seenDates[bar.TradeDate] = true
+	}
+
 	normalized, warnings := ValidateAndSortBars(symbolValue, bars, start, end, limit)
+	if limit > 0 {
+		unlimited, _ := ValidateAndSortBars(symbolValue, bars, start, end, 0)
+		truncatedCount := len(unlimited) - len(normalized)
+		if truncatedCount > 0 {
+			report.Add(validation.FieldIssue{
+				Stage: validation.StageNormalize, Field: "rows",
+				Code: "bars_truncated_to_limit", Expected: "all valid rows within requested limit",
+				Severity: validation.SeverityInfo, Message: "valid daily bars were truncated to the requested limit",
+				Count: truncatedCount,
+			})
+		}
+	}
 	return normalized, warnings, report
+}
+
+func validISOTradeDate(value string) bool {
+	parsed, err := time.Parse("2006-01-02", value)
+	return err == nil && parsed.Format("2006-01-02") == value
 }
 
 func countSeverity(issues []validation.FieldIssue, severity validation.Severity) int {

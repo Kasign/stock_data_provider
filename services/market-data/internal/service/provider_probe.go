@@ -939,7 +939,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					Stage: string(issue.Stage), Field: issue.Field, ProviderField: issue.ProviderField,
 					Code: issue.Code, Expected: issue.Expected, ActualType: issue.ActualType,
 					ActualPreview: issue.ActualPreview, Severity: string(issue.Severity), Message: issue.Message,
-					RowIndex: issue.RowIndex, Symbol: issue.Symbol, TradeDate: issue.TradeDate,
+					RowIndex: issue.RowIndex, Symbol: issue.Symbol, TradeDate: issue.TradeDate, Count: issue.Count,
 				})
 			}
 			if err != nil {

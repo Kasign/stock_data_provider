@@ -29,11 +29,12 @@ const (
 // Pytdx 使用通达信协议的 Go 客户端获取国内 A 股行情和日 K。
 // 使用原生 Go 客户端，不在生产请求路径中启动 Python。
 type Pytdx struct {
-	timeout   time.Duration
-	rateMu    sync.Mutex
-	lastCall  time.Time
-	hosts     []string
-	hostIndex int
+	timeout            time.Duration
+	dailyClientFactory func(context.Context) (pytdxDailyClient, error)
+	rateMu             sync.Mutex
+	lastCall           time.Time
+	hosts              []string
+	hostIndex          int
 }
 
 func NewPytdx(timeout time.Duration, configuredHosts ...string) *Pytdx {
@@ -53,6 +54,20 @@ func NewPytdx(timeout time.Duration, configuredHosts ...string) *Pytdx {
 }
 
 func (p *Pytdx) Name() string { return "pytdx" }
+
+// pytdxDailyClient 仅抽象日线复权链路依赖的方法，生产环境仍使用原生 tdx.Client。
+type pytdxDailyClient interface {
+	Close() error
+	GetKlineDay(code string, start, count uint16) (*protocol.KlineResp, error)
+	GetGbbq(code string) (*protocol.GbbqResp, error)
+}
+
+func (p *Pytdx) dailyClient(ctx context.Context) (pytdxDailyClient, error) {
+	if p.dailyClientFactory != nil {
+		return p.dailyClientFactory(ctx)
+	}
+	return p.dial(ctx)
+}
 
 func (p *Pytdx) dial(ctx context.Context) (*tdx.Client, error) {
 	if ctx == nil {
@@ -221,7 +236,7 @@ func (p *Pytdx) FetchDailyBars(ctx context.Context, rawSymbol, startDate, endDat
 		return nil, err
 	}
 
-	client, err := p.dial(ctx)
+	client, err := p.dailyClient(ctx)
 	if err != nil {
 		return nil, err
 	}

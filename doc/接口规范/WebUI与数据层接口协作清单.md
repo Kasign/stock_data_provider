@@ -241,3 +241,13 @@
 - 已有 Normalize 测试覆盖日期包含边界、非法日期、重复交易日过滤和 limit 截断；已有 DailyBar Validator/Reporter 基础测试。当前首轮审计发现重复记录与 limit 截断尚未完整映射为结构化 Reporter 计数，开始日期前记录存在静默过滤路径。
 - Pytdx GetGbbq 失败路径尚无确定性端到端测试；生产代码直接依赖具体 `*tdx.Client`。下一步先评估最小内部客户端注入方案，不改变公开 API 或生产请求行为。
 - 本轮未执行真实 Provider × 复权口径请求；CI Live Probe 通过不替代真实逐口径验收。
+
+## 12. 2026-11-04 DailyBar 诊断实现进度
+
+- 数据侧当前待发布代码基于 95f23fdc；本轮代码提交链包括 DailyBar Reporter 计数、Probe 字段映射、Pytdx 日线客户端注入及回归测试。文档随最终提交同步。
+- Reporter 已支持 FieldIssue.count 聚合计数；Normalize 阶段重复日期和 limit 截断已纳入结构化报告，日期范围问题由 Validate 阶段 out_of_range 统一表达，避免双计。
+- limit 截断使用 Info 级诊断，count 为实际截断行数；诊断明细仍受报告 maxIssues 限制，总计数不受明细截断影响。
+- Pytdx 日线复权客户端新增内部注入接口，覆盖 GBBQ 超时、连接失败和空事件列表；Probe 测试锁定网络超时不能被分类为 not_supported。
+- 本轮没有执行 Go 测试命令，所有新增测试等待当前分支 CI 验证；真实 Provider × 复权口径请求仍未执行。WebUI 无需修改业务代码，当前接口响应的 validation_issues[].count 仅为诊断聚合字段，不改变既有路由或业务参数。
+
+- 2026-11-04：诊断 FieldIssue 增加可选 count 聚合字段并同步 OpenAPI Schema；首次 CI 检查发现新增文件 gofmt 格式问题，已按日志修正，最新 SHA 的 Go test suite 待重新验证。WebUI checks 在 SHA 24013849、eefdeb19 均通过；其余工作流状态以最新 SHA 的 Actions 为准。

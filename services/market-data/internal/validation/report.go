@@ -35,6 +35,7 @@ type FieldIssue struct {
 	RowIndex      *int     `json:"row_index,omitempty"`
 	Symbol        string   `json:"symbol,omitempty"`
 	TradeDate     string   `json:"trade_date,omitempty"`
+	Count         int      `json:"count,omitempty"`
 }
 
 type Report struct {

@@ -26,6 +26,7 @@ type ProviderProbeFieldIssue struct {
 	RowIndex      *int   `json:"row_index,omitempty"`
 	Symbol        string `json:"symbol,omitempty"`
 	TradeDate     string `json:"trade_date,omitempty"`
+	Count         int    `json:"count,omitempty"`
 }
 
 // ProviderProbeCoverageDimension describes a field-specific coverage denominator.

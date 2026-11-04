@@ -149,3 +149,12 @@ func TestReporterIsContextScopedAndMergesConcurrentReports(t *testing.T) {
 		t.Fatal("reporter leaked into unrelated context")
 	}
 }
+
+func TestReportAddCountsAggregatedRows(t *testing.T) {
+	report := NewReport(1)
+	report.Add(FieldIssue{Stage: StageNormalize, Code: "bars_truncated_to_limit", Severity: SeverityInfo, Count: 7})
+	report.Add(FieldIssue{Stage: StageNormalize, Code: "duplicate_trade_date_dropped", Severity: SeverityWarning})
+	if report.TotalCount != 8 || report.InfoCount != 7 || report.WarningCount != 1 || len(report.Issues) != 1 || !report.Truncated {
+		t.Fatalf("unexpected aggregated report: %+v", report)
+	}
+}

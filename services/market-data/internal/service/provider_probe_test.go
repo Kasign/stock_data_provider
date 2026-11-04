@@ -1110,3 +1110,36 @@ func TestRecordProviderProbeFetchedAtKeepsCollectionTimeSeparateFromSourceTime(t
 		t.Fatalf("zero collection timestamp must not erase valid evidence: %+v", evidence)
 	}
 }
+
+type providerProbePytdxDailyBarFailureFake struct {
+	err error
+}
+
+func (p providerProbePytdxDailyBarFailureFake) Name() string { return "pytdx" }
+
+func (p providerProbePytdxDailyBarFailureFake) FetchDailyBars(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, error) {
+	return nil, p.err
+}
+
+func TestProviderProbeDoesNotClassifyPytdxTransportFailureAsNotSupported(t *testing.T) {
+	transportErr := errors.New("Pytdx ex-rights/ex-dividend data required for forward_adjusted adjustment: dial tcp 127.0.0.1:7709: i/o timeout")
+	p := providerProbePytdxDailyBarFailureFake{err: transportErr}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	ds.SetDailyBarProviders([]provider.DailyBarProvider{p})
+
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600519.SH"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentForward}, Checks: []string{"connectivity", "contract"},
+		TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found {
+		t.Fatalf("missing Pytdx daily-bar probe item: %+v", run.Items)
+	}
+	if item.Status == "not_supported" || item.Status != "failed" {
+		t.Fatalf("transport failure must remain failed, not not_supported: %+v", item)
+	}
+}
