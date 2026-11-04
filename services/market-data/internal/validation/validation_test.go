@@ -159,7 +159,6 @@ func TestReportAddCountsAggregatedRows(t *testing.T) {
 	}
 }
 
-
 func TestReportMergePreservesAggregatedCountsWithoutMarkingTruncated(t *testing.T) {
 	left := NewReport(10)
 	left.Add(FieldIssue{Stage: StageNormalize, Code: "bars_truncated_to_limit", Severity: SeverityInfo, Count: 7})
