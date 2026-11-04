@@ -158,8 +158,43 @@ try {
 
   await page.locator("#screening-plan-name").fill("浏览器筛选方案");
   await page.locator("#screening-plan-save").click();
-  const storedBeforeClear = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]"));
+  let storedBeforeClear = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]"));
   assert.equal(storedBeforeClear.length, 1);
+
+  // 双标签页：远端修改/删除已载入方案时，保留本地草稿并阻止旧版本覆盖或复活。
+  const planId = storedBeforeClear[0].id;
+  await page.locator('[data-screening-plan-load="' + planId + '"]').click();
+  await page.locator("#screening-condition-field").selectOption("ma5");
+  await page.locator("#screening-condition-value").fill("11");
+  await page.locator("#screening-condition-add").click();
+  const planPeer = await context.newPage();
+  await planPeer.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await planPeer.evaluate((id) => {
+    const key = "stock-provider-webui.screening-plans.v1";
+    const plans = JSON.parse(localStorage.getItem(key) || "[]");
+    const index = plans.findIndex((item) => item.id === id);
+    plans[index] = { ...plans[index], name: "远端修改方案", updated_at: "2026-11-04T04:00:00Z" };
+    localStorage.setItem(key, JSON.stringify(plans));
+  }, planId);
+  await page.waitForFunction(() => document.querySelector("#screening-condition-feedback")?.textContent.includes("已在其他标签页修改"));
+  await page.locator("#screening-plan-save").click();
+  assert.match(await page.locator("#screening-condition-feedback").textContent(), /未覆盖远端版本/);
+  assert.equal(await page.evaluate((id) => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]").find(item => item.id === id)?.name, planId), "远端修改方案");
+
+  await planPeer.evaluate((id) => {
+    const key = "stock-provider-webui.screening-plans.v1";
+    const plans = JSON.parse(localStorage.getItem(key) || "[]").filter(item => item.id !== id);
+    localStorage.setItem(key, JSON.stringify(plans));
+  }, planId);
+  await page.waitForFunction(() => document.querySelector("#screening-condition-feedback")?.textContent.includes("已在其他标签页删除"));
+  await page.locator("#screening-plan-name").fill("冲突后另存方案");
+  await page.locator("#screening-plan-save-as").click();
+  assert.match(await page.locator("#screening-condition-feedback").textContent(), /已另存为新方案/);
+  storedBeforeClear = await page.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.screening-plans.v1") || "[]"));
+  assert.equal(storedBeforeClear.length, 1);
+  assert.equal(storedBeforeClear[0].name, "冲突后另存方案");
+  await planPeer.close();
+
   await page.locator("#screening-condition-clear").click();
   assert.match(await summary.textContent(), /条件已清空/);
   assert.match(await page.locator("#screening-local-results-body").textContent(), /尚未执行当前页筛选/);

@@ -103,6 +103,10 @@ function normalizePlan(value) {
   if (!id || !name || !logic || !conditions.length || conditions.length !== value.conditions.length || !value.created_at || !value.updated_at) return null;
   return { id, name, logic, conditions, created_at: String(value.created_at), updated_at: String(value.updated_at) };
 }
+export function screeningPlanSnapshot(plan) {
+  const normalized = normalizePlan(plan);
+  return normalized ? JSON.stringify(normalized) : "";
+}
 export function readScreeningPlans(storage) {
   const target = resolveStorage(storage);
   if (!target) return { plans: [], readable: false, valid: false, reason: "unavailable" };
@@ -135,7 +139,7 @@ function persistPlans(plans, storage) {
     return false;
   }
 }
-export function saveScreeningPlan({ id = "", name, conditions, logic = "and" } = {}, storage, now = new Date().toISOString()) {
+export function saveScreeningPlan({ id = "", name, conditions, logic = "and", expectedSnapshot = null } = {}, storage, now = new Date().toISOString()) {
   const state = readScreeningPlans(storage);
   if (!state.readable || !state.valid) return { saved: false, reason: "storage-invalid", plans: state.plans };
   const normalizedName = cleanPlanName(name), normalizedConditions = normalizeScreeningConditions(conditions);
@@ -146,7 +150,8 @@ export function saveScreeningPlan({ id = "", name, conditions, logic = "and" } =
   if (normalizedConditions.length !== conditions.length) return { saved: false, reason: "invalid-conditions", plans: state.plans };
   if (!normalizedLogic) return { saved: false, reason: "invalid-logic", plans: state.plans };
   const existing = id ? state.plans.find((item) => item.id === id) : null;
-  if (id && !existing) return { saved: false, reason: "not-found", plans: state.plans };
+  if (id && !existing) return { saved: false, reason: expectedSnapshot !== null ? "conflict-deleted" : "not-found", plans: state.plans };
+  if (id && expectedSnapshot !== null && screeningPlanSnapshot(existing) !== expectedSnapshot) return { saved: false, reason: "conflict-modified", plans: state.plans };
   if (state.plans.some((item) => item.id !== id && item.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase())) return { saved: false, reason: "duplicate-name", plans: state.plans };
   if (!existing && state.plans.length >= MAX_SCREENING_PLANS) return { saved: false, reason: "limit", plans: state.plans };
   let nextId = id;
@@ -156,11 +161,13 @@ export function saveScreeningPlan({ id = "", name, conditions, logic = "and" } =
   const persisted = persistPlans(plans, storage);
   return { saved: persisted, reason: persisted ? "" : "persistence-failed", plan: persisted ? plan : null, plans: persisted ? plans : state.plans };
 }
-export function deleteScreeningPlan(id, storage) {
+export function deleteScreeningPlan(id, storage, expectedSnapshot = null) {
   const state = readScreeningPlans(storage);
   if (!state.readable || !state.valid) return { deleted: false, reason: "storage-invalid", plans: state.plans };
   const plans = state.plans.filter((item) => item.id !== id);
-  if (plans.length === state.plans.length) return { deleted: false, reason: "not-found", plans: state.plans };
+  if (plans.length === state.plans.length) return { deleted: false, reason: expectedSnapshot !== null ? "conflict-deleted" : "not-found", plans: state.plans };
+  const existing = state.plans.find((item) => item.id === id);
+  if (expectedSnapshot !== null && screeningPlanSnapshot(existing) !== expectedSnapshot) return { deleted: false, reason: "conflict-modified", plans: state.plans };
   const persisted = persistPlans(plans, storage);
   return { deleted: persisted, reason: persisted ? "" : "persistence-failed", plans: persisted ? plans : state.plans };
 }

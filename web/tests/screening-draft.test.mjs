@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, normalizeScreeningConditions, readScreeningPlans, saveScreeningPlan, selectScreeningResultRows, SCREENING_PLANS_KEY } from "../src/screening-draft.js";
+import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, normalizeScreeningConditions, readScreeningPlans, saveScreeningPlan, screeningPlanSnapshot, selectScreeningResultRows, SCREENING_PLANS_KEY } from "../src/screening-draft.js";
 function makeStorage(seed = null) { let value = seed; return { getItem() { return value; }, setItem(_key, next) { value = String(next); }, removeItem() { value = null; } }; }
 test("accepts bounded numeric conditions for supported market fields", () => {
   assert.deepEqual(createScreeningCondition("change_pct", "gte", "2.5"), { valid: true, condition: { field: "change_pct", operator: "gte", value: 2.5 } });
@@ -135,4 +135,28 @@ test("rejects an empty condition set instead of returning every page row", () =>
   assert.equal(result.valid, false);
   assert.equal(result.reason, "empty-conditions");
   assert.equal(result.unknownItems.length, 1);
+});
+
+test("blocks stale screening-plan updates and deletes after a remote modification", () => {
+  const storage = makeStorage();
+  const condition = [{ field: "ma5", operator: "gte", value: 10 }];
+  const created = saveScreeningPlan({ name: "原始方案", conditions: condition }, storage, "2026-11-04T01:00:00Z");
+  const baseline = screeningPlanSnapshot(created.plan);
+  const remote = saveScreeningPlan({ id: created.plan.id, name: "远端新版本", conditions: condition, expectedSnapshot: baseline }, storage, "2026-11-04T02:00:00Z");
+  assert.equal(remote.saved, true);
+  assert.equal(saveScreeningPlan({ id: created.plan.id, name: "旧标签页草稿", conditions: condition, expectedSnapshot: baseline }, storage).reason, "conflict-modified");
+  assert.equal(deleteScreeningPlan(created.plan.id, storage, baseline).reason, "conflict-modified");
+  assert.equal(readScreeningPlans(storage).plans[0].name, "远端新版本");
+});
+
+test("does not revive a remotely deleted screening plan and permits save-as", () => {
+  const storage = makeStorage();
+  const condition = [{ field: "ma20", operator: "lte", value: 20 }];
+  const created = saveScreeningPlan({ name: "待删除方案", conditions: condition }, storage, "2026-11-04T01:00:00Z");
+  const baseline = screeningPlanSnapshot(created.plan);
+  assert.equal(deleteScreeningPlan(created.plan.id, storage, baseline).deleted, true);
+  assert.equal(saveScreeningPlan({ id: created.plan.id, name: "旧草稿", conditions: condition, expectedSnapshot: baseline }, storage).reason, "conflict-deleted");
+  const savedAs = saveScreeningPlan({ name: "另存为", conditions: condition }, storage);
+  assert.equal(savedAs.saved, true);
+  assert.notEqual(savedAs.plan.id, created.plan.id);
 });

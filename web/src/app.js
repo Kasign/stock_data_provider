@@ -4,7 +4,7 @@ import { connectionDraftChanged, mergeConnectionDraft } from "./settings-draft.j
 import { resolveNotificationViewState } from "./notification-state.js";
 import { resolveChatViewState } from "./chat-state.js";
 import { resolveScreeningCapability, resolveScreeningTaskState, resolveScreeningCollectionState } from "./screening-state.js";
-import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, readScreeningPlans, saveScreeningPlan, selectScreeningResultRows } from "./screening-draft.js";
+import { buildScreeningDraftSummary, createScreeningCondition, deleteScreeningPlan, evaluateScreeningConditions, formatScreeningCondition, readScreeningPlans, saveScreeningPlan, screeningPlanSnapshot, selectScreeningResultRows } from "./screening-draft.js";
 import { buildScreeningCSV } from "./screening-export.js";
 import { resolveAlertCapability, resolveAlertEvaluationState, resolveAlertCollectionState } from "./alert-state.js";
 import {
@@ -1684,6 +1684,7 @@ function syncChatStockContextFromMarket() {
 const screeningDraftConditions = [];
 let screeningDraftLogic = "and";
 let selectedScreeningPlanId = "";
+let selectedScreeningPlanSnapshot = null;
 let screeningLocalEvaluation = null;
 let screeningSelectedSymbols = new Set();
 
@@ -1748,6 +1749,7 @@ function loadScreeningPlan(id) {
   if (!state.readable || !state.valid || !plan) return false;
   screeningDraftConditions.splice(0, screeningDraftConditions.length, ...plan.conditions);
   screeningDraftLogic = plan.logic; selectedScreeningPlanId = plan.id;
+  selectedScreeningPlanSnapshot = screeningPlanSnapshot(plan);
   invalidateScreeningLocalResults("已载入新方案，请重新应用条件到当前页。");
   $("#screening-condition-logic").value = plan.logic; $("#screening-plan-name").value = plan.name;
   $("#screening-condition-feedback").textContent = "已载入本地方案“" + plan.name + "”；编辑后需点击保存才会更新方案。";
@@ -1755,20 +1757,23 @@ function loadScreeningPlan(id) {
   renderScreeningDraftConditions(); renderScreeningPlans(); return true;
 }
 function saveCurrentScreeningPlan(asNew = false) {
-  const result = saveScreeningPlan({ id: asNew ? "" : selectedScreeningPlanId, name: $("#screening-plan-name").value, conditions: screeningDraftConditions, logic: screeningDraftLogic });
+  const result = saveScreeningPlan({ id: asNew ? "" : selectedScreeningPlanId, name: $("#screening-plan-name").value, conditions: screeningDraftConditions, logic: screeningDraftLogic, expectedSnapshot: asNew ? null : selectedScreeningPlanSnapshot });
   const feedback = $("#screening-condition-feedback");
   if (!result.saved) {
-    const messages = { "storage-invalid": "本地筛选方案存储不可用或格式异常，未保存。", "invalid-name": "请输入方案名称，最多 40 个字符。", "empty-conditions": "至少添加一条有效条件后才能保存方案。", "invalid-conditions": "条件中包含无效指标或超出范围的数值，请检查后再保存。", "invalid-logic": "请选择 AND 或 OR 组合关系。", "duplicate-name": "已有同名方案；请修改名称或载入原方案后更新。", limit: "本地最多保存 30 个筛选方案。", "persistence-failed": "保存失败，浏览器未能确认方案写入。" };
+    const messages = { "storage-invalid": "本地筛选方案存储不可用或格式异常，未保存。", "invalid-name": "请输入方案名称，最多 40 个字符。", "empty-conditions": "至少添加一条有效条件后才能保存方案。", "invalid-conditions": "条件中包含无效指标或超出范围的数值，请检查后再保存。", "invalid-logic": "请选择 AND 或 OR 组合关系。", "duplicate-name": "已有同名方案；请修改名称或载入原方案后更新。", limit: "本地最多保存 30 个筛选方案。", "persistence-failed": "保存失败，浏览器未能确认方案写入。", "conflict-modified": "方案已在其他标签页修改，当前草稿未覆盖远端版本。请重新载入或另存为新方案。", "conflict-deleted": "方案已在其他标签页删除，当前草稿未复活原方案；可另存为新方案。" };
     feedback.textContent = messages[result.reason] || "保存筛选方案失败。"; feedback.dataset.state = "error"; return;
   }
   selectedScreeningPlanId = result.plan.id;
+  selectedScreeningPlanSnapshot = screeningPlanSnapshot(result.plan);
   feedback.textContent = (asNew ? "已另存为新方案：" : "已保存方案：") + result.plan.name + "。仅保存在当前浏览器。";
   feedback.dataset.state = "success"; renderScreeningPlans();
 }
 function removeScreeningPlan(id) {
-  const result = deleteScreeningPlan(id);
-  if (!result.deleted) { $("#screening-condition-feedback").textContent = "删除方案失败；请检查本地存储状态。"; $("#screening-condition-feedback").dataset.state = "error"; return; }
-  if (selectedScreeningPlanId === id) { selectedScreeningPlanId = ""; $("#screening-plan-name").value = ""; }
+  const current = readScreeningPlans();
+  const expected = id === selectedScreeningPlanId ? selectedScreeningPlanSnapshot : screeningPlanSnapshot(current.plans.find((item) => item.id === id));
+  const result = deleteScreeningPlan(id, undefined, expected || null);
+  if (!result.deleted) { $("#screening-condition-feedback").textContent = result.reason === "conflict-modified" ? "方案已在其他标签页修改，未删除远端新版本。请刷新方案列表后重试。" : result.reason === "conflict-deleted" ? "方案已在其他标签页删除。" : "删除方案失败；请检查本地存储状态。"; $("#screening-condition-feedback").dataset.state = "error"; renderScreeningPlans(); return; }
+  if (selectedScreeningPlanId === id) { selectedScreeningPlanId = ""; selectedScreeningPlanSnapshot = null; $("#screening-plan-name").value = ""; }
   $("#screening-condition-feedback").textContent = "已删除本地筛选方案。"; $("#screening-condition-feedback").dataset.state = "success"; renderScreeningPlans();
 }
 $("#screening-condition-logic").addEventListener("change", (event) => {
@@ -1791,7 +1796,7 @@ $("#screening-condition-list").addEventListener("click", (event) => {
 });
 $("#screening-condition-clear")?.addEventListener("click", () => {
   screeningDraftConditions.splice(0, screeningDraftConditions.length);
-  screeningDraftLogic = "and"; selectedScreeningPlanId = "";
+  screeningDraftLogic = "and"; selectedScreeningPlanId = ""; selectedScreeningPlanSnapshot = null;
   $("#screening-condition-logic").value = "and"; $("#screening-plan-name").value = "";
   invalidateScreeningLocalResults("条件已清空。添加新条件后，可重新应用到当前页。");
   $("#screening-condition-feedback").textContent = "已清空当前条件草稿；已保存的本地方案不会被删除。";
@@ -5277,6 +5282,26 @@ function handleLocalStorageChange(event) {
   // 告警草稿与通知偏好由各自模块处理同步和编辑冲突；不在此处复制存储逻辑。
   localAlertDrafts?.handleStorageChange(event);
   notificationPreferences?.handleStorageChange(event);
+
+  if (cleared || event.key === "stock-provider-webui.screening-plans.v1") {
+    const plansState = readScreeningPlans();
+    renderScreeningPlans();
+    const feedback = $("#screening-condition-feedback");
+    if (!plansState.readable || !plansState.valid) {
+      if (feedback) { feedback.textContent = "其他标签页的筛选方案存储不可读取或格式异常；当前草稿已保留，保存与删除已暂停。"; feedback.dataset.state = "error"; }
+    } else if (selectedScreeningPlanId && selectedScreeningPlanSnapshot) {
+      const remotePlan = plansState.plans.find((item) => item.id === selectedScreeningPlanId);
+      if (screeningPlanSnapshot(remotePlan) !== selectedScreeningPlanSnapshot && feedback) {
+        feedback.textContent = remotePlan
+          ? "方案已在其他标签页修改；当前未保存草稿已保留，保存将被阻止。请重新载入或另存为新方案。"
+          : "方案已在其他标签页删除；当前未保存草稿已保留，不能复活原方案，可另存为新方案。";
+        feedback.dataset.state = "error";
+      }
+    } else if (feedback) {
+      feedback.textContent = cleared ? "本地筛选方案存储已清空。" : "其他标签页已更新筛选方案列表。";
+      feedback.dataset.state = "info";
+    }
+  }
 
   if (cleared || event.key === THEME_STORAGE_KEY) {
     const theme = readTheme();
