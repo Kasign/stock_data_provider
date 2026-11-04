@@ -168,6 +168,9 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 			results[len(results)-1].HTTP = httpResponses
 		}
 	}
+	if dailyOnly && (len(results) == 0 || results[len(results)-1].Validation == nil) {
+		t.Fatal("TickFlow daily-only probe must retain its structured validation report")
+	}
 	if !quoteOnly && !dailyOnly {
 		run("index_quotes", func() (int, string, []string, error) {
 			item, err := client.FetchIndexQuotes(ctx)
