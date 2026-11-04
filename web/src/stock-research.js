@@ -190,7 +190,13 @@ export function bindStockResearch(getSettings,getSymbol){
     header.append(el("span","supplement-quality supplement-quality-"+(QUALITY.includes(String(item.quality_status).toLowerCase())?String(item.quality_status).toLowerCase():"unknown"),qualityLabel(item.quality_status)));
     article.append(header);
     const detail=el("p","stock-announcement-detail"),published=item.published_at?"发布时间 "+formatDateTime(item.published_at):"源端未提供精确发布时间";
-    detail.textContent=(item.announcement_date||"公告日期未报告")+" · "+published+" · "+(item.category||item.category_code||"分类未报告");article.append(detail);root.append(article);
+    detail.textContent=(item.announcement_date||"公告日期未报告")+" · "+published+" · "+(item.category||item.category_code||"分类未报告");article.append(detail);
+    if(Array.isArray(item.quality_reasons)&&item.quality_reasons.length){
+     const qualityDetails=el("details","stock-research-quality-reasons"),summary=el("summary","","该公告质量说明");
+     qualityDetails.append(summary);const list=el("ul");item.quality_reasons.forEach(reason=>list.append(el("li","",reason)));
+     qualityDetails.append(list);article.append(qualityDetails);
+    }
+    root.append(article);
    });
    state.announcementPage=requestPage;state.announcementHasMore=Boolean(data.has_more);
    setQuality("announcements-quality",data.quality_status);

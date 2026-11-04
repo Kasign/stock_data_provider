@@ -96,7 +96,7 @@ try {
         : "平安银行 2026 年第三季度报告";
       const items = pageNumber === 1
         ? [{ title_chinese: pageOneCount, source_url: "https://www.eastmoney.com/report/1",
-            quality_status: "valid", announcement_date: "2026-10-28", published_at: "2026-10-28T18:00:00Z", category: "定期报告" }]
+            quality_status: "degraded", quality_reasons: ["公告标题使用回退语言字段"], announcement_date: "2026-10-28", published_at: "2026-10-28T18:00:00Z", category: "定期报告" }]
         : [{ title_chinese: "平安银行股东大会决议公告", source_url: "https://notice.eastmoney.com/report/3",
             quality_status: "valid", announcement_date: "2026-10-15", category: "公司公告" }];
       return json(200, {
@@ -171,6 +171,8 @@ try {
     document.querySelector("#announcement-list")?.textContent.includes("第三季度报告")
   );
   assert.equal(await page.locator("#announcement-list .stock-announcement-item").count(), 1);
+   assert.equal(await page.locator("#announcement-list .stock-announcement-item .supplement-quality").textContent(), "质量降级");
+   assert.match(await page.locator("#announcement-list .stock-announcement-item").textContent(), /公告标题使用回退语言字段/);
 
   // 公告第 2 页在途时触发整组刷新：旧分页响应必须失效，不能追加到新第 1 页。
   await page.locator("#load-more-announcements").click();
