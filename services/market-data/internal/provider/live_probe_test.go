@@ -1096,10 +1096,16 @@ func TestLiveProviderProbe(t *testing.T) {
 	runDaily("baostock", "baostock", dailySymbol, model.AdjustmentBackward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
 		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentBackward)
 	})
-	dailyProbePassed := len(report.Results) > beforeBaoStockDaily &&
-		report.Results[len(report.Results)-1].Provider == "baostock" &&
-		report.Results[len(report.Results)-1].Capability == "daily_bars" &&
-		report.Results[len(report.Results)-1].Status == "returned"
+	dailyProbePassed := false
+	for _, result := range report.Results[beforeBaoStockDaily:] {
+		if result.Provider == "baostock" &&
+			result.Capability == "daily_bars" &&
+			result.Adjustment == model.AdjustmentForward &&
+			result.Status == "returned" {
+			dailyProbePassed = true
+			break
+		}
+	}
 	calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
 	calendarEnd := now.Format("2006-01-02")
 	calendarResult := liveProbeResult{Provider: "baostock", Capability: "trading_calendar"}
