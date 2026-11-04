@@ -481,3 +481,10 @@ Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对�
 - 本次仅触发 TickFlow `index_only` 真实探测，验证 6 个核心指数按每批最多 5 个标的拆分请求、合并后覆盖完整且通过原有质量校验。
 - 探测仍由 `continue-on-error` 隔离，不以 Workflow 顶层 success 代替实际 Job/步骤和 `LIVE_TICKFLOW_RESULT` 报告。
 - 该记录仅表示启动复测，不代表线上验收已通过。
+
+
+## 39. Tushare 普通日线最小权限基线复测安排
+
+- 当前已具备 `MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY=1` 模式：只请求 `600519.SH` 的未复权日线，跳过 stock_basic、交易日历、估值和指数接口。
+- 本次独立触发 `[include_tushare] [tushare_daily_only]`，仅核验普通 `daily` 的账号权限、返回数据和日 K 契约；40203 将报告为 `permission_required`，不会误判为 Token 无效或 Provider 故障。
+- 本节为探测安排，不代表账号日线权限已通过。
