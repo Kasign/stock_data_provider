@@ -217,4 +217,4 @@
 
 **当前执行任务：P0-C 请求生命周期统一审查（首批修复及自动化验收已完成）。**
 
-P0-B1～P0-B4 已全部完成，验收记录见提测清单。P0-C 首批已修复全市场刷新期间旧筛选快照仍可操作、自选股批量行情快照未绑定成员集合、市场行情请求缺少超时保护等问题；最终验收代码提交 `f05c962a5a932278f47bf717e1d3f49c25d4c301`（含测试引用修正）的 WebUI Checks 与 Chromium Browser Smoke 均通过（[Checks #41759135829](https://github.com/Kasign/stock_data_provider/actions/runs/41759135829)，[Browser Smoke #41759135864](https://github.com/Kasign/stock_data_provider/actions/runs/41759135864)）。下一批检查单股行情、股票搜索、个股研究缓存复用及 API 地址变化时的取消与晚到响应隔离。若发现需要改变服务端契约或大规模重构请求层，先记录方案，不擅自扩展。P0-D 只输出设计方案，未经确认不开发；数据中心诊断深化继续等待数据侧真实验收。
+P0-B1～P0-B4 已全部完成，验收记录见提测清单。P0-C 首批已修复全市场刷新期间旧筛选快照仍可操作、自选股批量行情快照未绑定成员集合、市场行情请求缺少超时保护等问题；最终验收代码提交 `f05c962a5a932278f47bf717e1d3f49c25d4c301`（含测试引用修正）的 WebUI Checks 与 Chromium Browser Smoke 均通过（[Checks #41759135829](https://github.com/Kasign/stock_data_provider/actions/runs/41759135829)，[Browser Smoke #41759135864](https://github.com/Kasign/stock_data_provider/actions/runs/41759135864)）。下一批继续检查个股研究补充接口的请求超时、缓存复用和 API 地址变化时的取消与晚到响应隔离。单股行情 Bundle/兼容 Quote/日 K 已增加 30 秒超时，股票搜索增加 15 秒超时；对应单元测试通过，浏览器全量回归仍在运行。若发现需要改变服务端契约或大规模重构请求层，先记录方案，不擅自扩展。P0-D 只输出设计方案，未经确认不开发；数据中心诊断深化继续等待数据侧真实验收。

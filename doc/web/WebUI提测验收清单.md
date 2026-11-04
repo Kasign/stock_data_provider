@@ -723,3 +723,18 @@
 - [x] 最终验收代码提交 SHA：`f05c962a5a932278f47bf717e1d3f49c25d4c301`。
 
 本批次不修改服务端 API、Provider 或数据质量口径。
+
+## 2026-11-04 P0-C 第二批：单股行情与股票搜索超时
+
+代码提交：`8978c7047d09cc69e4a67aabf8e32d3b64a2da49`；测试修正提交：`30a9f10327cafed1eef81d10e92a234668bd14e1`。
+
+- [x] 统一行情 Bundle 请求默认 30 秒超时。
+- [x] 兼容模式实时行情 Quote 请求默认 30 秒超时。
+- [x] 日 K 请求默认 30 秒超时。
+- [x] 股票搜索请求默认 15 秒超时。
+- [x] 超时仍使用统一 request 层错误语义：`code=request_timeout`、`timeout=true`，并终止底层 fetch。
+- [x] 增加四类接口的超时单测。
+- [x] WebUI Checks：通过（[运行记录 #41759661837](https://github.com/Kasign/stock_data_provider/actions/runs/41759661837)）。
+- [ ] Chromium Browser Smoke：运行中（[运行记录 #41759661836](https://github.com/Kasign/stock_data_provider/actions/runs/41759661836)）。
+
+说明：首次单测失败是因为测试要求调用方 AbortSignal 与内部超时组合信号为同一对象；修正为显式关闭测试超时后，单独验证调用方取消信号透传。生产默认超时保持启用。
