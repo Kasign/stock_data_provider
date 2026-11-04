@@ -725,3 +725,40 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - DailyBar 质量：因缺少 prev_close 保持 degraded；不伪造 prev_close，不从其他 Provider 回填。
 - Market breadth 和 sector rankings：本轮未执行，仍未验收。
 - 下一 P0 转为现有公共源 none 日 K 的单位/口径复核；只复用历史证据或在有必要时单次定向请求。
+
+
+## 51. 2026-11-04 公共 Provider 未复权日 K 复核收口
+
+### 51.1 证据基线
+
+- 分支代码基线：f17c9645744d79b5e16cb5469c46d62194bbb3de。
+- 复用 Live Probe Run：41815545410；Job：126525230010。
+- 标的：600036.SH；复权：none；Sina、Tencent、Eastmoney、Yahoo 各一次请求；每家 8 条；四家 HTTP 200。
+- 本轮为历史证据与当前代码只读复核，没有再次请求上游，也没有消耗 Provider 配额。
+
+### 51.2 样本结论
+
+| Provider | 原始成交量口径 | 标准成交量 | 成交额 | 样本质量 |
+|---|---|---|---|---|
+| Sina | shares | shares | 缺失 | degraded |
+| Tencent | hands | shares（×100） | 缺失 | degraded |
+| Eastmoney | hands | shares（×100） | CNY | valid |
+| Yahoo | shares | shares | 缺失 | degraded |
+
+- 四家最近三个共同交易日 OHLC 一致（仅存在浮点表示精度差异），标准成交量基本一致。
+- Sina/Tencent/Yahoo 的历史接口当前没有可验证的逐日成交额字段；不得用实时 Quote 成交额回填历史日期，也不得从 OHLCV 推算成交额。
+- Eastmoney 当前样本的成交额来自 K 线字段 6，单位 CNY；当前样本通过统一日 K 字段质量检查。
+- BaoStock 代码路径解析成交量为 shares，成交额字段存在时按 CNY 处理；历史真实连接拒绝记录仍有效，本批次未重新请求，因此真实可用性仍未通过。
+- returned 与 valid 分开判定：HTTP 200/返回行数只证明请求返回，不代表字段质量通过。
+
+### 51.3 代码审查与变更边界
+
+- 已复核当前 HEAD 的 sina.go、tencent.go、eastmoney.go、yahoo.go、baostock.go。
+- 未发现 Sina/Tencent/Yahoo 历史成交额字段存在可直接修复的解析遗漏；Eastmoney amount 解析与单位声明已有实现。
+- 本批次无代码缺陷需要修复，无新增字段/API/Provider；不调整 amount 缺失降级规则。
+- 通过：本次 Eastmoney 有限样本满足当前字段质量规则。降级：其他三家有日 K 返回但缺少可信 amount。失败：BaoStock 历史连接拒绝。不可比较：不同复权基准或字段单位/质量不满足严格比较前置条件。
+- 本节不证明全历史完整性、交易边界正确性、复权准确性或阶段 B 完成。
+
+### 51.4 下一步
+
+转入现有 DailyBar 交易上下文能力核对：检查实际 Fetch/Probe 调用链是否接入交易日历与证券交易状态诊断，并通过本地测试验证停牌、临停、上市前、未知状态、交易日缺失日 K 等边界。真实事件窗口数据缺失继续保持 blocked；不重复运行近期行情 Probe 来替代事件样本。
