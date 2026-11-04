@@ -615,5 +615,28 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 唯一能力为 `daily_bars_none`。真实错误：重复交易日 `2026-10-08`，首次位置 `first_page=1 first_offset=0 first_row=0`，重复位置 `duplicate_page=2 duplicate_offset=20 duplicate_row=0`。
 - 客户端每页请求均显式设置 `offset`，并在收到非空响应后按 `len(data.Item)` 递增；本次从 offset 0 到 offset 20，第二页首行仍与第一页首行日期相同。现有证据可确认跨页重叠，但尚不足以断定服务端忽略 offset，也不能排除上游分页排序/快照变化。
 - 现有本地 HTTP fixture 已验证客户端 offset 随响应行数递增、跨页重复拒绝整次结果并输出首次/重复位置；fixture 不能证明真实上游对 offset 的实现语义。
-- 不自动去重、不放宽重复日期门禁、不把 Hithink 日线标记可用。下一步先补充页级 item count、每页首尾日期和请求 offset 的诊断证据，再判断是否需要一次额外真实请求；不扩展到复权或其他 Hithink 能力。
+- 不自动去重、不放宽重复日期门禁、不把 Hithink 日线标记可用。后续代码已补充页级 item count、每页首尾日期；见第 46 节。当前不再重复真实请求，待后续必要验证时再观察新诊断输出。
+
+
+
+## 46. Hithink 历史日 K 分页契约与诊断增强
+
+### 46.1 官方公开契约核对
+
+- HiThink-Tech/Financial-API 的历史行情端点文档列出 `offset` 参数，默认值为 0，并定义单标的、毫秒时间戳区间和 `adjust` 参数。
+- 该文档未定义历史日 K 的 `limit/page_size` 参数、固定页大小、排序字段/方向、分页终止条件或跨请求稳定快照语义。不能把其他端点的 `limit/offset` 或 `page/size` 规则套用到历史日 K。
+- 参考：[HiThink-Tech 历史行情端点文档](https://github.com/HiThink-Tech/Financial-API/blob/main/skills/hithink-finance/references/api/endpoints-prices.md)。
+
+### 46.2 代码诊断增强
+
+- 提交 `775d139` 新增重复日期所在两页的 item count、首日期和末日期诊断；辅助解析兼容数值/字符串 `date_ms`。
+- 本地 fixture 验证第一页/第二页边界元数据、offset 按实际返回条数递增，以及重复日期仍然拒绝整次结果。
+- 提交 `775d139` 的首次 CI 仅因 gofmt 失败；提交 `c557a83` 修正格式后，Go CI Run `41816944944` 全部通过：根模块、go-core、market-data gofmt/tests/race/vet、MariaDB migration/PIT 集成、Compose 校验及两个 Go Docker 镜像构建。
+- 此次增强尚未再次真实请求 Hithink，因此页级诊断字段的线上输出待下次必要复测确认；不为验证日志而额外消耗 API 配额。
+
+### 46.3 当前判断
+
+- 已确认真实响应跨页重复：第一页 offset 0 的 row 0 与第二页 offset 20 的 row 0 同为 `2026-10-08`。
+- 客户端确实在请求中设置 offset，并按上一页返回条数递增；官方文档未提供足以判断服务端稳定分页行为的契约。
+- 当前不能断言服务端忽略 offset，也不能确认是否因排序变化或服务端分页窗口重叠。保持失败，不自动去重，不标记 Hithink 日 K 可用。
 
