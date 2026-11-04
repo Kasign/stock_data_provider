@@ -935,7 +935,7 @@ test("run-flow events expose only server-provided durations and diagnostics", ()
   assert.match(taskEventNode, /event\.error_code/);
   assert.match(taskEventNode, /parts\.join\(" · "\)/);
   assert.match(apiClient, /after_sequence/);
-  assert.match(app, /\.sort\(\(a, b\) => Number\(a\.sequence\) - Number\(b\.sequence\)\)/);
+  assert.match(taskEventListViewModel, /\.sort\(\(a, b\) => Number\(a\.sequence\) - Number\(b\.sequence\)\)/);
   assert.doesNotMatch(app, /completed_stages\s*\/\s*total_stages|progressPercent|fakeDAG/i);
 });
 
@@ -944,7 +944,7 @@ test("run-flow keeps cached events explicit during read errors and exports diagn
   assert.match(html, /id="task-events-read-status"[^>]*role="status"[^>]*aria-live="polite"/);
   assert.match(app, /const readStatus = \$\("#task-events-read-status"\)/);
   assert.match(app, /已保留当前可用事件/);
-  assert.match(app, /eventsCount\.textContent = state\.taskEventsError[\s\S]*?读取失败/);
+  assert.match(taskFlowSummaryViewModel, /taskEventsError[\s\S]*?读取失败/);
   assert.match(app, /task_error:\s*\$\("#task-error"\)\.textContent\.trim\(\) \|\| null/);
   assert.match(app, /task_poll_status:\s*\$\("#task-poll-label"\)\.textContent \|\| null/);
   assert.match(app, /event_read_status:\s*\{[\s\S]*?last_error:\s*state\.taskEventsError \|\| null[\s\S]*?known_event_count:\s*state\.taskEvents\.size/);
@@ -1216,8 +1216,8 @@ test("Run Flow summary and event diagnostics remain grounded in persisted Task, 
   assert.match(app, /state\.taskEventsLoaded/);
   assert.match(taskEventNode, /event\.duration_ms/);
   assert.match(taskEventNode, /event\.error_code/);
-  assert.match(app, /result\?\.quality\?\.core_pass/);
-  assert.match(app, /Array\.isArray\(warnings\)/);
+  assert.match(taskFlowSummaryViewModel, /lastRunResult\?\.quality\?\.core_pass/);
+  assert.match(taskFlowSummaryViewModel, /Array\.isArray\(warnings\)/);
   assert.match(stylesheet, /\.run-flow-summary/);
   assert.match(stylesheet, /\.event-row\[aria-pressed="true"\]/);
   assert.doesNotMatch(app, /completed_stages\s*\/\s*\w+|progressPercent|100\s*\*\s*.*completed_stages/i,
