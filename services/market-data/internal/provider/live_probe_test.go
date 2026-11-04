@@ -1019,6 +1019,9 @@ func TestLiveProviderProbe(t *testing.T) {
 	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentForward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
+	runDaily("tencent", "tencent", dailySymbol, model.AdjustmentBackward, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentBackward)
+	})
 
 	// Cross-market coverage: Shenzhen ChiNext and Shanghai STAR Market are probed
 	// independently so a Shanghai Main Board success cannot stand in for them.
@@ -1080,12 +1083,18 @@ func TestLiveProviderProbe(t *testing.T) {
 	runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentForward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
 	})
+	runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentBackward, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentBackward)
+	})
 
 	baostockClient := baostock.NewClient(baostock.Config{ConnectTimeout: 8 * time.Second, RequestTimeout: 20 * time.Second})
 	baostockProvider := NewBaostock(baostockClient)
 	beforeBaoStockDaily := len(report.Results)
 	runDaily("baostock", "baostock", dailySymbol, model.AdjustmentForward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
 		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
+	})
+	runDaily("baostock", "baostock", dailySymbol, model.AdjustmentBackward, nil, func(ctx context.Context) ([]model.DailyBar, error) {
+		return baostockProvider.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentBackward)
 	})
 	dailyProbePassed := len(report.Results) > beforeBaoStockDaily &&
 		report.Results[len(report.Results)-1].Provider == "baostock" &&
@@ -1127,6 +1136,9 @@ func TestLiveProviderProbe(t *testing.T) {
 	})
 	runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentForward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
 		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentForward)
+	})
+	runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentBackward, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+		return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentBackward)
 	})
 
 	if os.Getenv("MARKET_DATA_LIVE_NETEASE_TESTS") == "1" {
