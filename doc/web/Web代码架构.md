@@ -423,3 +423,17 @@ JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js�
 - app.js 仍负责导入文件解析、预览/确认、跨存储写入、失败保护和 API Key 保留。
 - 新增测试覆盖默认值、未知字段、对象类型、枚举、展示字段合法性、顺序完整性/重复项、数字精度、成交额单位、日 K 条数与复权方式。
 - 验收：提交 `360ac1a` 的 WebUI Checks #41825039555、Chromium Browser Smoke #41825039554 均通过。
+
+
+### 12.14 JSR-4C 偏好控件 DOM adapter
+
+新增 `settings-preferences-view.js`，导出 `syncPreferencesControls(document, preferences)`，集中执行：
+- 自选排序方式/方向控件回填；
+- 自选展示字段勾选状态回填；
+- 自选字段顺序 DOM 调整和上下移动按钮禁用状态；
+- 行情颜色方案、价格/涨跌幅精度、成交额单位回填；
+- 默认日 K 条数/复权方式及行情查询控件初始值回填。
+
+`app.js` 保留原有 `syncWatchlistPreferenceControls` 兼容入口，仅向 adapter 传入 document 和偏好对象。偏好采集、`savePreferences`、存储异常恢复、反馈文案、页面重绘、跨标签页 storage 事件仍由 app.js 管理。adapter 不读 localStorage、不保存偏好、不请求 API、不读取全局 state，也不绑定业务事件。
+
+验收：WebUI Checks #41825675059、Chromium Browser Smoke #41825675232 均通过。此前 JSR-4A #41824691276/#41824691228、JSR-4B #41825039555/#41825039554 也均通过。

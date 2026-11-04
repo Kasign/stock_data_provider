@@ -914,7 +914,7 @@ JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验�
 JSR-3E 实施进展（提交 `7e7d9d40`，CI 待验收）：已新增 `watchlist-list-view-model.js`，把关键字过滤、分组归属过滤、过滤计数文案、空态文案和排序列表投影从 `renderWatchlist` 抽离为纯函数。排序继续复用 `watchlist-sort.js`，不复制排序算法；app.js 负责提供行情 getter、DOM 控件值和分组状态，并继续负责请求成员失效、DOM 挂载、tracking 字段和研究列表刷新。新增单测覆盖关键字匹配、带后缀分组归属、未分组默认值、分组筛选计数语义、行情缺失排序及空态文案。验收：WebUI Checks #41823493089 通过；Chromium Browser Smoke #41823492859 通过。首轮测试暴露分组测试夹具键值不符合 `comparableMarketSymbol` 规则，以及 app 调用点未实际替换旧投影代码；两处均已修正并通过完整复测。
 
 
-## JSR-4 设置中心模块边界审查（JSR-4A、4B 已完成）
+## JSR-4 设置中心模块边界审查（JSR-4A、4B、4C 已完成）
 
 本轮只完成边界审查与分批设计，不直接迁移设置逻辑。设置中心不是单一设置表单：连接配置、浏览器偏好、主题、通知偏好、告警草稿、浏览器数据备份和设置分组导航有不同的数据所有权与同步语义。
 
@@ -930,9 +930,9 @@ JSR-3E 实施进展（提交 `7e7d9d40`，CI 待验收）：已新增 `watchlist
 分批顺序：
 1. [x] JSR-4A：`setupSettingsNavigation` 已拆到 `settings-navigation.js`，app.js 保留初始化入口；独立测试与 UI contract 已通过。
 2. [x] JSR-4B：导入偏好校验/规范化已迁入现有 `preferences.js`；未知字段、字段范围、默认值、重复顺序和日 K 参数测试已通过，不改变导入事务。
-3. JSR-4C：待执行偏好控件 DOM adapter 边界评估；只有能隔离控件同步/采集而不接管保存、渲染和跨页刷新时才实施。
+3. [x] JSR-4C：已将偏好控件回填/同步拆到 `settings-preferences-view.js`；app.js 保留偏好保存、异常恢复、页面重绘和 storage 事件处理。
 4. 连接配置 `applySettings`、storage event 总路由、浏览器数据导入/导出暂不拆；它们承担请求失效、任务状态与跨页面一致性，不为降低 app.js 行数而拆分。
 
-JSR-4A、4B 验收：提交 `360ac1a` 的 WebUI Checks #41825039555 与 Chromium Browser Smoke #41825039554 均通过；JSR-4A 单独提交 `83ea462` 的 WebUI Checks #41824691276 与 Chromium Browser Smoke #41824691228 也均通过。
+JSR-4A、4B 验收：提交 `360ac1a` 的 WebUI Checks #41825039555 与 Chromium Browser Smoke #41825039554 均通过；JSR-4A 单独提交 `83ea462` 的 WebUI Checks #41824691276 与 Chromium Browser Smoke #41824691228 也均通过。JSR-4C 最新代码提交 `ef6cb11` 的 WebUI Checks #41825675059、Chromium Browser Smoke #41825675232 均通过。
 
 验收约束：保留 API Key 不回显/留空不覆盖、草稿跨标签页变更保护、连接变更失效请求、坏偏好原始数据保护、偏好 reset 不影响主题/连接/自选/任务、浏览器数据导入保留 API Key，以及 storage event 只处理当前 localStorage 的既有行为。JSR-4A 不改 CSS、API、Go、数据库和存储 schema。

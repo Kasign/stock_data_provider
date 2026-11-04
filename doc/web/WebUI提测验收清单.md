@@ -1513,4 +1513,5 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 导入偏好 schema 校验测试覆盖未知字段、非法枚举、展示字段/顺序、精度、单位、日 K 条数和复权方式。
 - [x] JSR-4A WebUI Checks #41824691276、Chromium Browser Smoke #41824691228 通过。
 - [x] JSR-4B WebUI Checks #41825039555、Chromium Browser Smoke #41825039554 通过。
-- [ ] JSR-4C：偏好控件 DOM adapter 边界评估。
+- [x] JSR-4C：新增 `settings-preferences-view.js`，隔离偏好控件回填/同步；保存、异常恢复和页面刷新仍由 app.js 负责。
+- [x] JSR-4C WebUI Checks #41825675059、Chromium Browser Smoke #41825675232 通过。
