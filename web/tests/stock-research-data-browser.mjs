@@ -71,9 +71,13 @@ try {
     }
     if (pathname.endsWith("/boards")) {
       return json(200, {
-        symbol: "000001.SZ", items: [], total: 0, has_data: false,
+        symbol: "000001.SZ", items: [{
+          code: "BK001", name: "银行板块", change_percent: 0.8, source: "browser-fixture",
+          source_version: "boards-v2", fetched_at: "2026-11-03T01:00:00Z",
+          quality_status: "degraded", quality_reasons: ["板块记录来源字段不完整"]
+        }], total: 1, has_data: true,
         source: "browser-fixture", fetched_at: "2026-11-03T01:00:00Z",
-        quality_status: "degraded", quality_reasons: ["板块 Provider 未返回记录"]
+        quality_status: "degraded", quality_reasons: ["板块快照存在降级记录"]
       });
     }
     if (pathname.endsWith("/announcements")) {
@@ -189,8 +193,10 @@ try {
   assert.match(await page.locator("#stock-profile-reasons").textContent(), /源端更新时间较旧/);
   assert.equal(await page.locator("#boards-quality").textContent(), "质量降级");
   assert.equal(await page.locator("#stock-board-list .supplement-quality").textContent(), "质量降级");
-  assert.match(await page.locator("#stock-board-list").textContent(), /板块记录来源日期缺失/);
-  assert.match(await page.locator("#stock-board-list").textContent(), /不能解释为确实没有板块/);
+  assert.match(await page.locator("#stock-board-list").textContent(), /板块记录来源字段不完整/);
+  assert.match(await page.locator("#stock-board-list").textContent(), /boards-v2/);
+  assert.match(await page.locator("#stock-board-list").textContent(), /记录采集时间/);
+  assert.match(await page.locator("#stock-board-list").textContent(), /银行板块/);
   assert.equal(await page.locator("#announcement-list a").count(), 1, "only allowlisted HTTPS Eastmoney links are clickable");
   assert.equal(await page.locator("#load-more-announcements").isEnabled(), true);
   await page.locator("#load-more-announcements").click();
