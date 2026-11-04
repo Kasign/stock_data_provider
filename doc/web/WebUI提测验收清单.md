@@ -717,6 +717,8 @@
 - [x] 请求失败保留上次成功行情时，行内继续明确标记“上次成功快照”。
 - [x] 全市场分页和自选股批量行情设置 30 秒请求超时，超时中止底层 fetch。
 - [x] 新增筛选刷新竞态、自选股成员变化浏览器专项及 API 超时单元测试。
-- [ ] WebUI Checks 与 Chromium Browser Smoke：等待本次代码提交对应运行完成。
+- [x] WebUI Checks：通过（[运行记录 #41759135829](https://github.com/Kasign/stock_data_provider/actions/runs/41759135829)）。
+- [x] Chromium Browser Smoke：通过（[运行记录 #41759135864](https://github.com/Kasign/stock_data_provider/actions/runs/41759135864)）。
+- [x] 最终代码提交 SHA：`cf6c0b6d0b9631456b32f4617da1a33e0c3879b5`。
 
 本批次不修改服务端 API、Provider 或数据质量口径。
