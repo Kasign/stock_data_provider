@@ -741,6 +741,8 @@ components:
           maxItems: 3
           description: DailyBar adjustment bases to probe independently; defaults to none when omitted and requires daily_bars capability.
           items: {$ref: '#/components/schemas/RequestAdjustmentBasis'}
+        daily_bar_start_date: {type: string, format: date, description: Optional inclusive historical DailyBar window start in Asia/Shanghai; must be paired with daily_bar_end_date and requires daily_bars capability.}
+        daily_bar_end_date: {type: string, format: date, description: Optional inclusive historical DailyBar window end in Asia/Shanghai; must be paired with daily_bar_start_date, not be in the future, and the range must not exceed 31 calendar days.}
         timeout_seconds: {type: integer, minimum: 1, maximum: 30, default: 12}
     ProviderProbeRun:
       type: object
@@ -754,6 +756,8 @@ components:
         requested_markets: {type: array, items: {type: string, enum: [SH_MAIN, SZ_MAIN, CHINEXT, STAR, BSE]}}
         requested_symbols: {type: array, items: {type: string}}
         requested_daily_bar_adjustments: {type: array, items: {$ref: '#/components/schemas/RequestAdjustmentBasis'}}
+        requested_daily_bar_start_date: {type: string, format: date, description: Inclusive requested historical DailyBar window start; echoes the request, not a Provider publication timestamp.}
+        requested_daily_bar_end_date: {type: string, format: date, description: Inclusive requested historical DailyBar window end; echoes the request, not a Provider publication timestamp.}
         timeout_seconds: {type: integer, minimum: 1, maximum: 30}
         status: {type: string, enum: [success, degraded, failed, not_configured, no_capabilities_configured]}
         persisted: {type: boolean, description: False when MariaDB storage is not configured}
@@ -1271,6 +1275,7 @@ paths:
         默认空请求体执行全部能力。scope=core 执行核心能力；capabilities 非空时仅执行指定能力。
         timeout_seconds 为单项 Provider 请求超时，范围 1 到 30 秒，默认 12 秒。
         daily_bar_adjustments 仅用于 daily_bars，支持 none、forward_adjusted、backward_adjusted；省略时仅探测 none，每种口径独立生成结果。
+        daily_bar_start_date 与 daily_bar_end_date 必须同时提供，仅用于 daily_bars 的显式历史窗口；首尾包含，按 Asia/Shanghai 交易日解释，最多 31 个自然日，结束日期不能晚于今日。省略时保持原有近期 5 条探测行为。
         探测与业务熔断统计隔离，并发上限为 4；敏感错误信息会脱敏。
       security:
         - ApiKey: []

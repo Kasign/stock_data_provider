@@ -392,6 +392,11 @@ func TestProviderProbeOptionsValidateScopeCapabilityAndTimeout(t *testing.T) {
 		{Scope: "all", Capabilities: []string{"unknown"}, TimeoutSeconds: 5},
 		{Scope: "all", Capabilities: []string{"quote", "quote"}, TimeoutSeconds: 5},
 		{Scope: "all", Capabilities: []string{"quote"}, TimeoutSeconds: 31},
+		{Scope: "all", Capabilities: []string{"quote"}, DailyBarStartDate: "2025-07-07", DailyBarEndDate: "2025-07-17", TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "2025-07-07", TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "bad-date", DailyBarEndDate: "2025-07-17", TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "2025-07-07", DailyBarEndDate: "2025-08-08", TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "2027-01-01", DailyBarEndDate: "2027-01-02", TimeoutSeconds: 5},
 	}
 	for i, options := range cases {
 		if _, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), options); err == nil {
@@ -673,6 +678,47 @@ func (p providerProbeParseOnlyDailyBarsFake) FetchDailyBars(ctx context.Context,
 	})
 	validation.AddContextReport(ctx, report)
 	return bars, nil
+}
+
+type providerProbeHistoricalDailyBarsFake struct {
+	name      string
+	startDate string
+	endDate   string
+	limit     int
+}
+
+func (p *providerProbeHistoricalDailyBarsFake) Name() string { return p.name }
+func (p *providerProbeHistoricalDailyBarsFake) FetchDailyBars(_ context.Context, symbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	p.startDate, p.endDate, p.limit = startDate, endDate, limit
+	now := time.Now().UTC()
+	volume := int64(10000)
+	amount := 100000.0
+	return []model.DailyBar{{
+		Symbol: symbol, TradeDate: startDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
+		Volume: &volume, Amount: &amount, AdjustmentBasis: adjustment, AdjustmentMethod: "historical-test-none",
+		Source: p.name, SourceVersion: p.name + "-v1", ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
+		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+	}}, nil
+}
+
+func TestProviderProbePassesExplicitHistoricalRangeToDailyBarProvider(t *testing.T) {
+	p := &providerProbeHistoricalDailyBarsFake{name: "historical-bars"}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600036.SH"},
+		DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
+		DailyBarStartDate: "2025-07-07", DailyBarEndDate: "2025-07-17",
+		Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("historical Probe failed: %v", err)
+	}
+	if p.startDate != "2025-07-07" || p.endDate != "2025-07-17" || p.limit != 2000 {
+		t.Fatalf("historical range not passed to Provider: start=%q end=%q limit=%d", p.startDate, p.endDate, p.limit)
+	}
+	if run.RequestedDailyBarStartDate != "2025-07-07" || run.RequestedDailyBarEndDate != "2025-07-17" {
+		t.Fatalf("historical request range not echoed in run: %+v", run)
+	}
 }
 
 func TestProviderProbeRunsRequestedDailyBarAdjustmentsIndependently(t *testing.T) {

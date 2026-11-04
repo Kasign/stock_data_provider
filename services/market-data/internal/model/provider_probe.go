@@ -145,6 +145,8 @@ type ProviderProbeRun struct {
 	RequestedMarkets             []string                   `json:"requested_markets,omitempty"`
 	RequestedSymbols             []string                   `json:"requested_symbols,omitempty"`
 	RequestedDailyBarAdjustments []AdjustmentBasis          `json:"requested_daily_bar_adjustments,omitempty"`
+	RequestedDailyBarStartDate  string                     `json:"requested_daily_bar_start_date,omitempty"`
+	RequestedDailyBarEndDate    string                     `json:"requested_daily_bar_end_date,omitempty"`
 	TimeoutSeconds               int                        `json:"timeout_seconds,omitempty"`
 	Status                       string                     `json:"status"`
 	Persisted                    bool                       `json:"persisted"`

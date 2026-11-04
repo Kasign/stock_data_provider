@@ -861,3 +861,30 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 下一步先只读核对现有 Provider 的历史日期范围、复权支持和公司行为能力，确认可采集后再安排最小真实请求。
 - 若开展采集，复用现有 Provider、Normalize、Validator、Reporter、TradingCalendar、SecurityTradingStatus 和 CrossProviderDailyCompare；不另建诊断体系。
 - 无 API/Schema 变化，WebUI 与数据层接口协作清单无需更新。
+
+## 55. 2026-11-04 Probe 历史日 K 日期窗口能力实现
+
+### 55.1 现有能力核对
+
+- Provider 的 DailyBar 接口已统一接受 startDate/endDate/limit/adjustment；Eastmoney、Tencent、Yahoo、TickFlow、Hithink、Tushare 具备显式历史日期请求实现；Sina 仅接受 none，且历史返回受源端 K 线条数上限约束。
+- 旧 Probe 固定调用空日期、limit=5，不能通过既有诊断入口针对历史事件窗口执行完整日期校验和交易上下文核验。
+- 业务 DailyBars API 已有日期参数，但它是聚合业务读取，不能替代 Provider × 复权口径独立 Probe 和历史诊断结果。
+
+### 55.2 本批次变更
+
+- 扩展既有 `POST /api/v1/data-sources/probe`，无新增路由。
+- 请求新增 `daily_bar_start_date`、`daily_bar_end_date`，必须成对、仅 daily_bars 使用、Asia/Shanghai 闭区间、最多 31 个自然日、结束日期不得晚于今日。
+- 响应新增 `requested_daily_bar_start_date`、`requested_daily_bar_end_date`，仅回显请求日期，不代表源端发布时间或 PIT available_at。
+- 不传日期时保持原有近期 5 条 Probe；传日期时使用指定区间和 2000 条安全 limit，并将同一日期边界传给 Provider、Validator 和交易上下文诊断。
+- 测试新增 HTTP 参数校验、历史日期回显及 Service 向 Provider 传递日期范围/limit 的回归覆盖。
+
+### 55.3 真实数据状态
+
+- 本批次只扩展诊断入口，不触发真实 Provider 请求。
+- 两个 2025 事件窗口仍 blocked；不得将历史窗口参数测试或 CI 成功标记为真实行情、公司行为或复权验收通过。
+- 下一步先按 Provider 核对目标窗口是否支持、凭据是否配置、已知权限状态是否变化，再执行最小必要真实请求。
+
+### 55.4 跨端契约
+
+- 更新 `services/market-data/openapi.yaml`、`doc/api/数据层API清单.md` 和 `doc/接口规范/WebUI与数据层接口协作清单.md`。
+- WebUI 当前不使用历史 Probe 参数，不要求改动页面；API-06 仍待真实数据验收。
