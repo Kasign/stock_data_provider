@@ -790,3 +790,10 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 不改变普通 DailyBars 的请求行为；交易上下文仍用于 Provider Probe 诊断链路。普通日 K 获取维持现有字段校验和交易日历覆盖率判断，避免历史大范围查询逐日追加证券状态请求。
 - 不新增 API、字段、Provider 或 WebUI 契约；接口协作清单无需更新 API 进度。
 - 本修复只保证降级日历不会产出 valid 上下文，不构成真实停牌、新股、除权事件窗口验收；阶段 B 继续开放。
+
+
+### 2026-11-04 CI 结果补记
+
+- 代码提交 d346f209fc46c56992302025b8608aa3b2e91b6b 对应 GitHub Actions Run 41830773041：根模块测试、go-core 测试、market-data gofmt/tests/race/vet、MariaDB migration/PIT 与 Probe HTTP E2E、Compose 配置及两个 Go Docker 镜像构建均通过；Data quality contract regression Run 41830782245 通过；WebUI checks Run 41830782914 通过。
+- 以上 CI 对应代码提交 d346f209，后续仅文档提交不改变代码。自动触发的公共 Provider Probe Run 41830782109 成功，但不将其视为新的真实行情验收证据。
+- 因此本次交易上下文代码修复的自动化验证通过；真实交易边界样本仍未齐备，阶段 B 不关闭。
