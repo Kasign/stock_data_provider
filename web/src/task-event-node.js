@@ -1,4 +1,6 @@
-import { taskEventDurationLabel } from "./task-event-format.js";\n\nexport function buildTaskEventNode({
+import { taskEventDurationLabel } from "./task-event-format.js";
+
+export function buildTaskEventNode({
   document,
   item,
   selected = false,

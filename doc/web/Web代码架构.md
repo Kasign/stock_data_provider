@@ -489,3 +489,6 @@ app.js 的 `renderTaskFlowSummary` 继续管理 DOM 查询和更新；ViewModel 
 JSR-5C/5D 审查没有发现值得迁移的独立详情 ViewModel 或事件 Controller。仅将此前在节点和详情两处重复的 `duration_ms` 有效性判断及格式化收敛到 `taskEventDurationLabel(value)`：无值、非数值、负数返回空文案；小于 1000 按毫秒展示；大于等于 1000 按秒保留两位小数。测试覆盖 0、999、1000、浮点值、数字字符串和无效值。
 
 不迁移 `state.expandedTaskEventSequences`、筛选按钮事件、详情选中、任务事件读取错误处理、轮询、AbortController/generation、Task/Run 身份校验及分页游标。后续只审查 task workflow 的跨模块调用和状态所有权；没有明确收益时保留现状。
+
+
+JSR-5C/5D 首轮静态检查在 `node --check` 阶段发现 `task-event-node.js`、`task-event-view.js` 的 import 声明后存在字面量 `\\n`，由本次文件写入转义错误导致。已在后续修正提交中改为真实换行；首轮失败记录保留，最终状态以修正提交 CI 为准。

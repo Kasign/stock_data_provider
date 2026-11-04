@@ -968,3 +968,6 @@ JSR-5B 已实施：将任务流程摘要计算迁入 `task-flow-summary-view-mod
 - [ ] WebUI Checks 与 Chromium Browser Smoke：本批提交后执行，结果以当前提交对应 Actions 为准。
 
 后续 JSR-5E：仅审查 `task-workflow.js` 与 app.js 的事件分页、身份校验、轮询和请求代际边界；禁止迁移任务请求生命周期或改变状态所有权，先审查再决定是否有安全拆分收益。
+
+
+JSR-5C/5D 首轮 CI 纠正记录：提交 `1ffd8ac9` 的 WebUI Checks #41829804138 在 `node --check` 阶段发现两个展示模块 import 后写入了字面量转义换行，属于本次 GitHub API 写入文本转义错误。已定位并修正 `task-event-node.js` 与 `task-event-view.js`；以修正提交对应的 CI 结果作为最终验收依据，首轮失败记录保留，不覆盖历史。

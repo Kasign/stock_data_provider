@@ -1,4 +1,6 @@
-import { taskEventDurationLabel } from "./task-event-format.js";\n\nexport function renderRunStatusView({ target, status = "", runId = "", runStatusLabel }) {
+import { taskEventDurationLabel } from "./task-event-format.js";
+
+export function renderRunStatusView({ target, status = "", runId = "", runStatusLabel }) {
   const normalized = String(status || "").toLowerCase();
   const label = normalized ? runStatusLabel(normalized) : runId ? "等待 Run 结果" : "尚未关联 Run";
   const tone = normalized === "completed"
