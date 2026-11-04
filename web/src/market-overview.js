@@ -28,6 +28,16 @@ function isValidTradeDate(value) {
  const timestamp=Date.parse(date+"T00:00:00Z");
  return Number.isFinite(timestamp)&&new Date(timestamp).toISOString().slice(0,10)===date;
 }
+export function validateMarketDateRange(start,end,maxCalendarDays=null) {
+ if(!isValidTradeDate(start)||!isValidTradeDate(end))return "请选择有效的开始和结束日期。";
+ if(start>end)return "开始日期不能晚于结束日期。";
+ if(Number.isInteger(maxCalendarDays)&&maxCalendarDays>0){
+  const startTime=Date.parse(start+"T00:00:00Z"),endTime=Date.parse(end+"T00:00:00Z");
+  const days=Math.floor((endTime-startTime)/86400000)+1;
+  if(days>maxCalendarDays)return "日期范围不能超过 "+maxCalendarDays+" 个自然日。";
+ }
+ return "";
+}
 function count(v) { const n=finiteNumberOrNull(v); return n!==null&&n>=0?Math.trunc(n).toLocaleString("zh-CN"):"—"; }
 function signed(v, fmt) { const n=finiteNumberOrNull(v); if(n===null)return "—";return (n>0?"+":"")+fmt(n); }
 function dir(v) { const n=finiteNumberOrNull(v); if(n===null)return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat"; }
@@ -283,9 +293,10 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  async function loadMarketCapitalFlow() {
   const status=$("#market-capital-flow-status"),body=$("#market-capital-flow-body");
   const start=$("#market-capital-flow-start")?.value||"",end=$("#market-capital-flow-end")?.value||"",button=$("#load-market-capital-flow");
-  if(!start||!end){
-   if(status){status.textContent="请选择开始和结束日期";status.className="availability-pill is-readonly";}
-   if(body)tableMessage(body,"请选择开始和结束日期；本次未发起请求。");
+  const rangeError=validateMarketDateRange(start,end,2000);
+  if(rangeError){
+   if(status){status.textContent=rangeError;status.className="availability-pill is-unavailable";}
+   if(body)tableMessage(body,rangeError+" 本次未发起请求。");
    meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
    return;
   }
@@ -330,7 +341,13 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   const body=$("#market-sentiment-history-body");
   const start=$("#market-sentiment-history-start")?.value || "";
   const end=$("#market-sentiment-history-end")?.value || "";
-  if(!start||!end){if(status)status.textContent="请选择开始和结束日期";return;}
+  const rangeError=validateMarketDateRange(start,end);
+  if(rangeError){
+   if(status)status.textContent=rangeError;
+   if(body){body.replaceChildren();const row=document.createElement("tr"),cell=el("td","table-empty",rangeError+" 本次未发起请求。");cell.colSpan=8;row.append(cell);body.append(row);}
+   meta("market-sentiment-history-meta",[]);
+   return;
+  }
   const settings=typeof getSettings==="function"?getSettings():null;
   if(!settings?.apiKey){if(status)status.textContent="请先配置行情 API Key";return;}
   const button=$("#load-market-sentiment-history");
