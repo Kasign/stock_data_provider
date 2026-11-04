@@ -1398,7 +1398,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] 通过后才评估 JSR-2C2 事件节点列表是否可安全拆分。
 
 
-### JSR-2C2 单个任务事件节点构建（待 CI）
+### JSR-2C2 单个任务事件节点构建（已验收）
 
 - [x] 新增 `task-event-node.js`，仅构建单个事件节点 DOM。
 - [x] 显式传入事件、选中/展开状态、document 和格式化/状态映射函数。
@@ -1406,3 +1406,17 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 增加契约测试，验证模块无全局 state/storage/API/事件监听依赖。
 - [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
 - [ ] 验收后再评估列表协调器拆分。
+
+
+### 2026-11-04 最新 UI 样式复核与 JSR-2C2 验收
+
+- [x] 当前 HEAD `b6781f2cae649390f658d43de74e74307fd40710` 的 WebUI Checks #41810819659 通过。
+- [x] 当前 HEAD 的 Chromium Browser Smoke #41810819828 通过；截图 Artifact `webui-browser-screenshots`（Artifact ID `13312606496`）已复核。
+- [x] 复核 11 个一级页面 × 320/768/1280/1600px 共 44 张页面截图；Browser Smoke 另覆盖 375/600/900px 的横向溢出检查。
+- [x] 当前截图未确认新的横向溢出或明显容器破版问题；不因留白观感单独推断固定高度缺陷，本轮无 CSS 代码修改。
+- [x] 确认 CI 缺少 CJK 字体，截图中文为方框；中文字宽、换行和截断必须在 macOS/带 CJK 字体环境验收。
+- [x] 更新 CSS 静态基线：5,252 行、115 个媒体查询、18 个不同断点值、约 101 个重复选择器组；发现 1 个空的 max-width:900px 媒体规则。重复规则先保留，避免无证据批量合并。
+- [x] JSR-2C2 WebUI Checks #41810819659、Chromium Browser Smoke #41810819828 均通过。
+- [ ] UIR-3/4 后续如出现明确组件或页面缺陷，再按截图证据分批修复。
+- [ ] UIR-5 CSS 级联收敛需在页面样式稳定后单独执行，不与 JS 模块化混合。
+- [ ] 中文排版仍需本地 CJK 字体环境实机复核。

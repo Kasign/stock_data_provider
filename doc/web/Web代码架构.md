@@ -146,10 +146,11 @@ app.js  (启动、全局 state、页面协调)
 
 ## 8. 当前迁移基线
 
-- 当前入口 `app.js` 约 6,400 行，仍承担大量页面业务与任务生命周期。
-- 当前已存在三十余个 ES Module，领域拆分基础已经具备。
-- 2026-11-04 提交 `6a2090d0`：将任务事件状态 key、标签和展示色调纯函数抽离到 `task-event-format.js`，并增加单元测试；后续 `8cc1e675` 删除了 `app.js` 中的重复实现。模块代码已迁移，但 WebUI Checks 曾因 `ui-contract.test.mjs` 仍从 `app.js` 查找旧函数定义而失败；Browser Smoke 已通过。测试契约已在 `b6efe2e8` 修正，等待新 CI 结果。
-- 任务运行流相关函数仍集中在 `app.js`，包括任务详情/事件渲染、Run 结果加载、轮询控制、任务上下文切换和最近任务恢复。迁移前需进一步建立函数调用与 state 读写映射。
+- 当前入口 `app.js` 为 6,256 行；仍承担全局 state、页面装配、多个领域页面协调和任务/行情请求生命周期。
+- 当前已存在三十余个 ES Module；任务展示已逐步抽离为 `task-event-format.js`、`task-event-view.js`、`task-event-node.js`，最近任务列表 DOM 由 `recent-task-view.js` 构建。
+- 当前基线提交为 `b6781f2cae649390f658d43de74e74307fd40710`。WebUI Checks #41810819659 与 Chromium Browser Smoke #41810819828 均通过。
+- JSR-2C2 只迁移单个任务事件节点 DOM 构建；列表排序、筛选、选中/展开状态、事件监听、详情联动和异步请求生命周期仍由 `app.js` 管理，不将 `renderTaskEvents` 整体搬迁。
+- 下一阶段转向自选股领域。现有 `watchlist.js`、`watchlist-groups.js`、`watchlist-sort.js`、`watchlist-batch.js` 已分别承担本地 CRUD/校验/存储、分组、排序和批量事务；页面 DOM、交互、批量行情请求生命周期和跨页协调仍集中在 `app.js`。迁移前必须建立完整调用图和 state 读写映射。
 
 ## 9. 变更维护规则
 
@@ -239,3 +240,39 @@ JSR-2C1 迁移实现：`task-event-view.js` 负责 Run 状态徽标和选中事�
 
 
 JSR-2C2（第一步）实现：新增 `task-event-node.js`，仅负责根据显式输入构建单个阶段事件 `<details>` 节点。模块接收 document、事件记录、selected/expanded 状态、日期格式化和状态映射函数；返回 DOM 节点，不绑定 toggle/click 事件、不读取全局状态、不请求 API。`app.js` 继续负责排序、筛选计数、默认选中、toggle 状态集合维护、列表挂载和详情联动。
+
+
+## 12. JSR-2C2 验收与 JSR-3 自选股迁移预审
+
+### 12.1 任务事件节点构建验收
+
+当前提交 `b6781f2cae649390f658d43de74e74307fd40710` 的 WebUI Checks #41810819659 和 Chromium Browser Smoke #41810819828 均通过。新增 `task-event-node.js` 只接收 document、事件数据、选中/展开状态和格式化/状态映射函数，返回单个 `<details>` 节点。
+
+`app.js` 继续持有事件列表排序、过滤、计数、默认选中、展开状态集合、toggle/click 监听、列表挂载、详情联动及请求生命周期。没有迁移整个 `renderTaskEvents`，也没有拆分 poll/generation/AbortController。
+
+### 12.2 自选股模块当前职责
+
+| 模块/位置 | 已有职责 | 迁移约束 |
+|---|---|---|
+| `watchlist.js` | 本地自选 CRUD、记录规范化、读写回读确认、损坏数据保护、50 条上限 | 不在 controller 重复实现存储规则或修改 storage key/schema |
+| `watchlist-groups.js` | 分组读取/规范化/创建/删除/单条和批量归属 | 分组 key 与异常存储保护保持不变 |
+| `watchlist-sort.js` | 按更新时间、代码、名称、价格、涨跌幅、成交额、换手率排序；缺失行情排末尾 | 排序规则保持纯函数，缺失值排序语义不变 |
+| `watchlist-batch.js` | 从选股结果批量加入自选，可选分组；失败时回滚自选与分组两个 storage key | 两键事务与回滚必须保留整体 |
+| `app.js` | `renderWatchlist`、导入预览/确认、反馈、行操作、批量选择/删除/分组、筛选控件、分组控件、自选行情刷新及跨页联动 | 先划分纯 DOM 构建与协调边界，不直接搬迁整个函数簇 |
+
+### 12.3 自选股状态与跨域边界
+
+- 批量行情状态：`watchlistQuotes`、`watchlistQuoteSymbols`、`watchlistQuoteRequestSymbols`、`watchlistQuoteStatus`、`watchlistQuoteMessage`、`watchlistQuoteGeneration`、`watchlistQuoteController`。
+- 批量行情请求需校验请求 generation、AbortController、请求前后自选成员集合、API 配置及迟到响应；连接变更和成员变更必须使旧快照失效。
+- 自选数据还被研究标的列表、分析任务创建、选股批量加入、设置页显示字段偏好、浏览器数据导入/导出使用。不能将跨页协调逻辑隐藏进自选页面模块。
+- `watchlistImportPreview` 是页面导入流程状态；预览和确认之间需防止旧预览覆盖当前存储状态，需在专项测试中核验。
+- 自选页 DOM 模块优先通过显式数据和回调工作；不得读取 app 全局 state、直接访问 localStorage 或自行发起行情请求。
+
+### 12.4 JSR-3 执行门禁
+
+1. 先补齐自选股函数调用关系、DOM 事件入口、state 读写方及失效触发点清单。
+2. 先评估从 `renderWatchlist` 抽离单条自选 DOM 节点构建的可行性；传入完整 view model、分组列表、当前选中状态和格式化结果，不让新模块反向 import app.js。
+3. 单条节点构建模块不负责本地存储、筛选、排序、行情请求、跨页导航或批量事务；事件监听是否迁移必须明确约定，不能同时在 app.js 和新模块重复绑定。
+4. 先覆盖空列表、损坏存储、名称编辑、分组选择、过滤/排序、行情缺失/失败/旧快照、批量选择与操作、导入预览/确认、任务页导入自选、连接变更及迟到响应。
+5. WebUI Checks 与 Chromium Browser Smoke 均通过后才进入下一小批；异步行情生命周期未完成整体设计前，禁止创建一个声称拥有完整自选页面的 controller。
+

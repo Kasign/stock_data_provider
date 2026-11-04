@@ -817,6 +817,31 @@ JSR-2C 不整体搬迁 `renderTaskEvents`。先执行 JSR-2C1，将 `renderRunSt
 JSR-2C1 代码迁移已提交，当前等待 WebUI Checks 与 Chromium Browser Smoke。此次仅迁移 Run 状态徽标及选中事件详情；`renderTaskEvents`、`renderTaskFlowSummary`、`renderTask`、`renderTaskResult` 均未迁移，避免混入筛选/展开/选中状态和业务副作用。
 
 
-### JSR-2C2 第一小步：单个事件节点构建（待 CI）
+### JSR-2C2 第一小步：单个事件节点构建（已验收）
 
 已从 `renderTaskEvents` 抽离单个事件节点的纯 DOM 构建，新增 `task-event-node.js`。列表排序、过滤、筛选计数、默认选中、展开状态集合、toggle 监听、点击委托、选中详情和摘要刷新均保留在 `app.js`。本次不将 `renderTaskEvents` 整体迁移；验收通过后再评估是否拆列表协调器。另计划在任务运行流拆分阶段完成后，对 Run Flow 视觉层级与全站关键页面做一次整体样式 review，不与本次结构迁移混在一起。
+
+
+### 2026-11-04 最新验收与 UI Review 复核
+
+**JSR-2C2 已验收：**
+- 当前分支 HEAD：`b6781f2cae649390f658d43de74e74307fd40710`。
+- WebUI Checks：运行 `41810819659`，成功。
+- Chromium Browser Smoke：运行 `41810819828`，成功；Run Flow、跨标签页配置、研究记录、通知/告警、自选行情、选股和数据中心相关步骤均通过。
+- 事件节点构建迁移不触及列表筛选/排序、选中/展开状态、事件监听和任务请求生命周期。下一步不继续拆 `renderTaskEvents` 协调逻辑，优先进入自选股领域边界审查。
+
+**UIR-1/2 当前复核：**
+- 使用最新 Browser Smoke Artifact（运行 `41810819828`）复核 11 个一级页面在 320、768、1280、1600px 的 44 张页面截图；Browser Smoke 的全页面横向溢出断言还覆盖 375、600、900px。
+- 当前截图未确认新的横向溢出、明显卡片越界或共用容器破版问题；本轮不为凑修复数量修改 CSS。
+- 320px 下导航、面板纵向堆叠与操作按钮整体可见；768px 下侧栏切换为图标导航；1280/1600px 页面容器与双列布局整体稳定。Run Flow 另有交互截图覆盖窄屏与桌面。
+- 中文文字显示仍无法在 CI 截图中验收：Runner 缺少 CJK 字体，中文呈方框。此截图只用于结构/间距/滚动观察，中文字宽、换行、截断需在 macOS 或具备 CJK 字体环境复核。
+- 当前 `web/styles.css` 为 5,252 行、115 个媒体查询；max-width/min-width 合计 18 个不同断点值；静态扫描约 101 个重复选择器组，另有 1 个空的 max-width:900px 媒体规则。重复选择器不直接视为缺陷，暂不批量合并；留待 UIR-5 在逐组件回归后收敛。
+- 900px 已包含在 Browser Smoke 横向溢出及 Run Flow 布局检查中，但本次 44 张逐页面截图未包含 900px；若后续发现断点问题，再补充专项截图，不扩大当前截图矩阵。
+
+**JSR-3 自选股领域预审（仅盘点，未迁移代码）：**
+- 现有纯领域模块已覆盖自选股 CRUD/校验/存储（`watchlist.js`）、分组及归属（`watchlist-groups.js`）、排序（`watchlist-sort.js`）、选股结果批量加入及跨两个 storage key 的回滚（`watchlist-batch.js`）。
+- `app.js` 仍负责自选页面渲染、导入预览/确认、单条和批量操作、筛选/排序控件、分组控件、批量行情状态与请求生命周期，以及与研究列表/任务创建/选股/设置/浏览器数据导入导出的跨页联动。
+- 批量行情的 `watchlistQuoteGeneration`、`watchlistQuoteController`、请求标的集合、旧快照及连接变更失效必须作为完整生命周期保留；不能在视图拆分时拆散。
+- 下一批先建立自选股函数调用与 state 读写表，确认 `renderWatchlist` 的数据准备、DOM 构建、交互处理边界，再选择低副作用 DOM 节点构建作为首个迁移点。不得重复实现已有存储/分组/排序/批量事务能力。
+
+下一步执行顺序：完成 JSR-3 自选股边界和回归基线 → 小批抽离纯 DOM 展示 → WebUI Checks 与 Browser Smoke 通过 → 再评估页面控制器迁移；UIR-5 CSS 收敛继续独立排期，不与 JS 拆分混合提交。
