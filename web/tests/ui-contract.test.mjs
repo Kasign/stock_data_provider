@@ -25,7 +25,8 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/notification-preferences.js", import.meta.url), "utf8"),
   readFile(new URL("../src/task-workflow.js", import.meta.url), "utf8"),
   readFile(new URL("../src/local-alert-drafts.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/task-event-format.js", import.meta.url), "utf8")
+  readFile(new URL("../src/task-event-format.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/task-event-view.js", import.meta.url), "utf8")
 ]);
 const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
 
@@ -878,11 +879,11 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
   assert.match(app, /function openRunFlowDrawer\(\)[\s\S]*?dialog\.show\(\)/);
   assert.match(stylesheet, /\.run-flow-dialog\[open\]\s*\{[^}]*pointer-events:\s*none/);
   assert.match(stylesheet, /\.run-flow-dialog\[open\]\s*\.task-status-panel\s*\{[^}]*pointer-events:\s*auto/);
-  assert.match(app, /function renderSelectedTaskEvent\(item\)[\s\S]*?detailLayout\?\.classList\.remove\("has-selected-event"\)[\s\S]*?detailLayout\?\.classList\.add\("has-selected-event"\)/);
+  assert.match(app, /function renderSelectedTaskEvent\(item\)[\s\S]*?renderSelectedTaskEventView\(/);\n  assert.match(taskEventView, /export function renderSelectedTaskEventView\([\s\S]*?detailLayout\?\.classList\.remove\("has-selected-event"\)[\s\S]*?detailLayout\?\.classList\.add\("has-selected-event"\)/);
   assert.match(stylesheet, /\.run-flow-dialog #task-detail:not\(\[hidden\]\):not\(\.has-selected-event\)\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\);\s*\}/);
   assert.match(app, /function activateTaskReference\(record\)[\s\S]*?openRunFlowDrawer\(\)[\s\S]*?pollTaskSafely\(state\.pollGeneration\)/);
   assert.match(app, /function renderTask\(task\)[\s\S]*?task\.started_at[\s\S]*?task\.finished_at/);
-  assert.match(app, /function renderRunStatus\(status = ""\)[\s\S]*?runStatusLabel\(normalized\)/);
+  assert.match(app, /function renderRunStatus\(status = ""\)[\s\S]*?renderRunStatusView\(/);\n  assert.match(taskEventView, /export function renderRunStatusView\([\s\S]*?runStatusLabel\(normalized\)/);
   assert.match(app, /function renderTaskResult\(result\)[\s\S]*?renderRunStatus\(result\.status \|\| ""\)/);
   assert.match(app, /close-run-flow-dialog/);
 });

@@ -233,3 +233,6 @@ JSR-2C 采用两层推进，禁止一口气迁移整个事件列表：
 3. `renderTaskFlowSummary` 依赖 taskEvents Map、加载/错误状态和 lastRunResult；本批暂留 app.js。`renderTask` 与 `renderTaskResult` 会更新业务 state、持久化引用并触发其他页面刷新，不属于纯展示 helper，本批不迁移。
 
 JSR-2C1 验收必须覆盖：无选中事件时隐藏详情并移除布局 class；选中事件时标题/序号/状态徽标/时间/错误代码/耗时/JSON 详情一致；缺字段不生成空字段；非法耗时不展示；状态未知值仍按既有映射展示；Run 状态无值、未知值和四类 tone 映射一致。DOM ID、CSS class、data 属性、ARIA 属性和 textContent 安全写入保持不变。
+
+
+JSR-2C1 迁移实现：`task-event-view.js` 负责 Run 状态徽标和选中事件详情 DOM；通过显式参数接收目标节点、数据和格式化/状态映射函数。`app.js` 的同名函数保留为协调包装，只负责查找页面节点、传递当前 runId 和依赖函数。该模块不访问全局 state/document/localStorage，不绑定事件、不发请求。

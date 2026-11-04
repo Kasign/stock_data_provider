@@ -1386,3 +1386,13 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] 补齐无选中事件、未知状态、缺失字段、非法耗时和 Run 状态 tone 的契约测试。
 - [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
 - [ ] 通过后才评估 JSR-2C2 事件节点列表是否可安全拆分。
+
+
+### JSR-2C1 任务事件低风险展示 helper（待 CI）
+
+- [x] 新增 `task-event-view.js`，迁移 `renderRunStatus` 与 `renderSelectedTaskEvent`。
+- [x] 通过显式 DOM 节点/数据/格式化函数参数，不访问全局 state、全局 document 或 localStorage。
+- [x] 保持 DOM ID、CSS class、data 属性、ARIA 属性和 textContent 写入方式。
+- [x] 更新 UI 契约测试，断言 app 协调入口和视图模块实际职责。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
+- [ ] 通过后才评估 JSR-2C2 事件节点列表是否可安全拆分。
