@@ -422,6 +422,7 @@ components:
         latest_price: {type: number, nullable: true}
         change: {type: number, nullable: true}
         change_percent: {type: number, nullable: true, description: Percentage points, not a ratio}
+        change_percent_5d: {type: number, nullable: true, description: Five-trading-session return derived from six daily closes; percentage points}
         amount: {type: number, nullable: true}
         amount_unit: {type: string, enum: [CNY, unknown]}
         advancing_count: {type: integer, nullable: true}
@@ -679,6 +680,12 @@ components:
         adjustment_basis: {$ref: '#/components/schemas/AdjustmentBasis'}
         quality_status: {$ref: '#/components/schemas/QualityStatus'}
         quality_reasons: {type: array, items: {type: string}}
+        validation_total_count: {type: integer, minimum: 0, description: Total number of field validation issues before detail truncation}
+        validation_error_count: {type: integer, minimum: 0}
+        validation_warning_count: {type: integer, minimum: 0}
+        validation_info_count: {type: integer, minimum: 0}
+        validation_truncated: {type: boolean, description: True when validation_issues contains only a bounded subset of all issues}
+        validation_issues: {type: array, items: {$ref: '#/components/schemas/ProviderProbeFieldIssue'}, maxItems: 100}
         error_code: {type: string, description: Stable machine-readable failure classification}
         error_stage: {type: string, enum: [timeout, cancellation, rate_limit, provider_auth, provider_permission, contract, connect, http, provider, configuration]}
         error_message: {type: string, description: Sanitized and length-limited actionable failure summary; credentials and URL queries are redacted}
