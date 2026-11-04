@@ -462,6 +462,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if len(warnings) > 0 {
 					quality = model.QualityDegraded
 				}
+				barDataQuality := quality
 				if len(validated) > 0 {
 					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, validated[0].TradeDate, dailyBarEndDate)
 					if contextResult.QualityStatus != model.QualityValid {
@@ -488,7 +489,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if len(snapshotBars) == len(validated) {
 					recordProviderProbeDailySnapshot(probeCtx, &provider.CrossProviderDailySnapshot{
 						Provider: p.Name(), SourceVersion: version, Symbol: barsSymbol,
-						AdjustmentBasis: string(adjustment), QualityStatus: string(quality), Bars: snapshotBars,
+						AdjustmentBasis: string(adjustment), QualityStatus: string(barDataQuality), Bars: snapshotBars,
 					})
 				}
 				return quality, version, reasons, nil
