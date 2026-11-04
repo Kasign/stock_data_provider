@@ -96,7 +96,7 @@ func TestAssessDailyBarTradingContextMissingCalendarIsUnknown(t *testing.T) {
 func TestAssessDailyBarTradingContextDoesNotUseConflictingCalendarToConfirmMissingBars(t *testing.T) {
 	calendar := &model.TradingCalendarSnapshot{
 		QualityReasons: []string{"provider_trading_calendar_sources_disagree"},
-		Items: []model.TradingCalendarDay{{Date: "2026-10-20", IsTradingDay: true}},
+		Items:          []model.TradingCalendarDay{{Date: "2026-10-20", IsTradingDay: true}},
 	}
 	statuses := map[string]*model.SecurityTradingStatusSnapshot{
 		"2026-10-20": dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent),
