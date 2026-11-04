@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。当前业务代码复核基线为 `428878fc0a0606f8939637eb960c4ca7afa5c46d`，当前分支最新文档/配置 HEAD 以本次同步提交为准（2026-11-04）；本批未修改 WebUI 业务代码。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。当前数据侧分支 HEAD 为 `ed18e0642f777646eb778f8b9521abb7fed4d518`（2026-11-04）；当前批次完成 DailyBar 复权/边界首轮代码审计，未修改 WebUI 业务代码。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。
@@ -160,7 +160,7 @@
 | API-03 | 已完成 | `/api/v1/market/stocks` 提供分页行情与 MA 参数；批量 quote 最多 50 只；WebUI 已封装并用于当前分页选股及自选股批量刷新 | 补全分页总数/覆盖边界、均线复权语义及真实样本质量验证；明确当前选股仅作用于已加载分页 | 不具备全市场筛选策略执行 API | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未执行全市场真实覆盖验收 | 待真实数据验收 |
 | API-04 | 开发中 | 市场情绪快照/历史和市场级资金流历史接口及 WebUI 请求封装已存在 | 核实市场情绪历史缺失交易日、幂等写入、保留策略和真实数据库数据；补专门集成证据 | 需要 MariaDB 持久化与真实历史数据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 的 MariaDB migration/PIT 集成通过；未证明 sentiment 专项全链路 | 未执行生产数据历史验收 | 待真实数据验收 |
 | API-05 | 已完成 | `/api/v1/market/capital-flow` 已提供，使用 Tushare `moneyflow_mkt_dc`；WebUI 已封装 | 核对 Token 权限、字段单位、交易日覆盖、源端时间和历史数据准确性 | 依赖 Tushare 权限与凭据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 通过 | 真实权限/历史值验收未完成；未配置凭据时应跳过 | 阻塞真实验收 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；validation/coverage Schema、DailyBar 多复权口径 Probe 契约和 Provider 专项测试已推进 | 完成当前 HEAD Go suite；补 Pytdx GetGbbq 请求失败端到端覆盖评估；验证 MariaDB 探测历史持久化和真实复权口径请求 | Provider 凭据影响真实探测；默认关闭 Provider 不生成逐项 Probe 结果；Pytdx 当前依赖具体 `*tdx.Client` | `24f6e24da44dd81d541f84b56316b65503534ea8`（业务代码基线 `e245c100`） | `e771284b` 的 Go test suite Run `41757355037` 通过；当前 HEAD Go test suite Run `41757748059` 待结果；Live probe 不等于逐口径真实验收 | Provider × 复权口径真实请求未执行；历史持久化仍需部署验收 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；validation/coverage Schema、DailyBar 多复权口径 Probe 契约及 Provider 专项测试已推进；首轮审计发现 Reporter 对重复/截断/部分过滤计数尚未完整结构化 | 补 Pytdx GetGbbq 请求失败确定性测试；完成 DailyBar 过滤/丢弃计数闭环；验证 MariaDB 探测历史持久化和逐 Provider 真实复权口径请求 | Provider 凭据影响真实探测；默认关闭 Provider 不生成逐项 Probe 结果；Pytdx 当前直接依赖具体 `*tdx.Client`，需要评估内部注入测试缝隙 | `ed18e0642f777646eb778f8b9521abb7fed4d518` | Go test suite Run `41758382946`、Parity Run `41758383176`、Live provider probe Run `41758383404`、WebUI checks Run `41758382953` 全部通过；Normalize/Validator 既有测试覆盖日期、重复、limit 和字段规则 | Provider × 复权口径真实请求未执行；Probe 历史持久化仍需部署验收 | 接口层已接入，待真实验收 |
 | API-07 | 开发中 | 板块排行支持涨幅、成交额、近 5 日涨幅排序；`change_percent_5d` OpenAPI Schema 已补齐；WebUI 已封装并支持排序切换 | 评估真实资金净流入来源和完整候选集；补领涨股标准证券代码字段前不开放跳转 | 当前没有独立资金净流入 API；`leading_stock_symbol` 缺失 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811`、WebUI checks Run `41755222944` 通过 | 板块资金净流入真实来源未验收 | 部分联调完成 |
 | API-08 | 暂缓 | 当前没有服务端通知渠道、订阅和投递记录闭环 | 需要先形成服务端安全设计与 API 方案 | 用户确认复杂方案后再实施 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
 | API-09 | 暂缓 | 当前分页行情不等同于服务端策略执行或全市场扫描 | 先定义策略 schema、异步任务、结果快照和可追溯理由 | 需先确认产品/API 设计 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
@@ -232,3 +232,12 @@
 - Probe 错误分类增加 Eastmoney、BaoStock、HiThink、TickFlow、Pytdx 和 Tushare 的失败负向样例，避免 HTTP、鉴权、连接、超时和因子缺失误报 `not_supported`。
 - `e771284b` Go test suite Run `41757355037` 通过；当前 HEAD `e245c100` 的 Go test suite Run `41757748059` 尚待结果。
 - 真实 Provider × 复权口径请求未执行；Pytdx 适配器的 GetGbbq 网络失败端到端模拟仍未完成。WebUI 本轮未修改业务代码，跨端状态保持待真实数据验收。
+
+
+## 11. 2026-11-04 数据侧 DailyBar 诊断进度
+
+- 数据侧 HEAD：`ed18e0642f777646eb778f8b9521abb7fed4d518`。
+- 当前 HEAD 的 Go test suite Run `41758382946`、Go-Python parity Run `41758383176`、Live provider probe Run `41758383404`、WebUI checks Run `41758382953` 均通过。
+- 已有 Normalize 测试覆盖日期包含边界、非法日期、重复交易日过滤和 limit 截断；已有 DailyBar Validator/Reporter 基础测试。当前首轮审计发现重复记录与 limit 截断尚未完整映射为结构化 Reporter 计数，开始日期前记录存在静默过滤路径。
+- Pytdx GetGbbq 失败路径尚无确定性端到端测试；生产代码直接依赖具体 `*tdx.Client`。下一步先评估最小内部客户端注入方案，不改变公开 API 或生产请求行为。
+- 本轮未执行真实 Provider × 复权口径请求；CI Live Probe 通过不替代真实逐口径验收。
