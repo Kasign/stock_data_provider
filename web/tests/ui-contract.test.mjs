@@ -982,9 +982,9 @@ test("run-flow event details share normalized status labels and tones with the t
   assert.match(taskEventFormat, /export function taskEventStatusKey\(status\)/);
   assert.match(taskEventFormat, /export function taskEventStatusLabel\(status, statusKey = taskEventStatusKey\(status\)\)/);
   assert.match(taskEventFormat, /export function taskEventStatusTone\(statusKey\)/);
-  assert.match(app, /status\.textContent = statusLabel/);
-  assert.match(app, /\["事件状态", statusLabel\]/);
-  assert.match(app, /const statusKey = taskEventStatusKey\(event\.status\)/);
+  assert.match(taskEventView, /status\.textContent = statusText/);
+  assert.match(taskEventView, /\["事件状态", statusText\]/);
+  assert.match(taskEventView, /const statusKey = taskEventStatusKey\(event\.status\)/);
   assert.match(stylesheet, /\.availability-pill\.is-error/);
   assert.match(stylesheet, /\.availability-pill\.is-warning/);
 });
