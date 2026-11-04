@@ -593,3 +593,16 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 下一步优先只读核对 Sina/Tencent/Yahoo 是否存在可稳定、可追溯且同口径的成交额字段；若 Provider 的日 K 接口本身不提供成交额，应明确标注能力限制，不以额外高配额请求反复试错。
 - 后续再进行同证券同交易日的字段对账、交易日边界与分页完整性核验；比较时仅使用质量有效且单位/复权口径一致的数据。
 
+
+
+## 44. 公共源日 K 成交额缺失的代码审查结论
+
+代码基线：`d83e2135d8cae3fded8ebdf0377520bcf153862e`。
+
+- Sina（`sina.go`）：历史日 K 使用 `CN_MarketData.getKLineData`。解析结构只包含 day/open/high/low/close/volume；代码注释明确该端点没有可验证的成交额字段和复权参数。当前将 Amount 保持 nil 并降级，未发现解析遗漏。
+- Tencent（`tencent.go`）：未复权日 K 使用 `appstock/app/kline/kline`，解析已观察到的六个字段 date/open/close/high/low/volume。代码明确拒绝推断额外的 row[6] 字段，因为没有公开、可验证的字段契约。Tencent 实时 quote 的另一个响应结构可从 field 35/37 读取成交额，但它是当前快照，不是历史日 K 各交易日的 amount，不能用于回填历史日 K。
+- Yahoo（`yahoo.go`）：历史日 K 使用 Chart API 的 `indicators.quote`，当前响应结构只有 OHLCV 数组和 adjclose；没有 amount/turnover 数组。代码将 Amount 保持 nil 并降级，未发现解析遗漏。实时 quote 的 meta.regularMarketVolume 同样不提供历史逐日成交额。
+- 因此三家当前缺失成交额属于所用历史接口字段能力限制，不是已发现的解析 bug。不能把 Tencent 实时 quote 成交额或任何当前行情快照映射到历史日期，也不能用 OHLCV 推算成交额。
+- 本轮不修改 Provider 解析逻辑，不增加请求，不新增数据源；维持 `amount_missing` → `degraded` 的既有质量门禁。
+- 后续若要提升这三家历史日 K 的成交额完整性，必须先找到官方/稳定的历史成交额字段或独立历史接口，并用可追溯样本验证日期、单位和复权口径后再设计接入；在此之前，Eastmoney 是本轮四家中唯一通过未复权日 K 质量检查的 Provider。
+
