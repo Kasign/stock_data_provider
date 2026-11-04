@@ -1546,3 +1546,12 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 单元测试：WebUI Checks #41831466097，447/447 通过。
 - [x] Chromium Browser Smoke #41831466212 通过，Run Flow 交互与结果恢复专项通过。
 - [x] 不修改 API、Go、Provider、数据库、报告归档和 CSS。
+
+
+### JSR-6B 当前页选股结果 DOM adapter（待 CI）
+
+- [x] 结果表格 DOM 构建迁入 `screening-result-view.js`，筛选/快照/选择/导出/批量事务仍由 app.js 管理。
+- [x] 新增 `screening-result-view.test.mjs`，覆盖结果行、非法证券代码、质量原因缺失和空态。
+- [x] UI contract 检查 DOM adapter 不访问状态、存储、API 或事件监听。
+- [ ] WebUI Checks 全量单测、语法检查、Compose 校验及镜像构建通过。
+- [ ] Chromium Browser Smoke 选股交互与全市场分页生命周期通过。

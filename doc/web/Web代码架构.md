@@ -537,3 +537,16 @@ app.js 的 `renderTaskResult` 保留状态协调：更新 `lastRunResult/runId/r
 adapter 只接收 document、服务端 result、runStatusLabel 和 fallback Run ID，不访问 app state、localStorage、API、AbortController 或事件监听。单测覆盖完整章节、空/缺失字段和 warning；UI contract 验证 app/adapter 职责边界。
 
 验收：WebUI Checks #41831466097（447/447 tests、语法检查、Compose 校验、镜像构建通过）；Chromium Browser Smoke #41831466212（全部执行步骤通过）。
+
+
+### 12.21 JSR-6B 当前页选股结果 DOM adapter（待 CI 验收）
+
+新增 `screening-result-view.js`，导出 `renderScreeningLocalResultRowsView`。模块只负责将 app 已筛选的 rows 构建为结果表格行，包括选择 checkbox、证券跳转按钮、行情字段、质量原因和命中状态；不计算筛选结果、不验证行情快照、不持有选中集合、不执行导出或自选股批量写入。
+
+app.js 继续负责：
+- `isCurrentScreeningSnapshot` 对 generation/page/pageSize/adjustment/当前页成员身份进行完整校验；
+- 当前筛选条件与结果快照、筛选器状态及结果摘要；
+- `screeningSelectedSymbols` 清空/增删、全选和批量按钮状态；
+- CSV 构建/下载、加入自选事务、行情分页变化后的结果失效。
+
+adapter 通过显式传入格式化函数避免依赖 app.js 或全局状态；文本仍使用 textContent。单测覆盖正常行、无效证券代码、缺失质量原因和空态；UI contract 检查 adapter 无 state/storage/API/事件依赖。

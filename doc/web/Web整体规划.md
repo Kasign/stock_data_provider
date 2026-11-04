@@ -1024,3 +1024,15 @@ app.js 的 `renderTaskResult` 同时承担两类职责：更新当前 Run 状态
 - [x] 验收代码/测试提交：`83c97057729952422639f4d1ae041b956285d2c0`。
 
 中间验收曾发现 UI contract 仍读取旧 app.js renderer 实现，以及断言表达式写法错误；已将契约改为检查新 adapter，并在最终提交的 447 项单测和完整 Browser Smoke 中通过。失败记录不作为最终验收依据。
+
+
+### 2026-11-04 JSR-6B：当前页选股结果 DOM adapter（实施中）
+
+- [x] 审查当前页筛选结果的计算、快照、渲染、选择、导出和批量加入自选职责。
+- [x] 确认 `isCurrentScreeningSnapshot`、筛选条件/结果、选中证券集合、CSV 导出和自选批量事务继续由 app.js 管理。
+- [x] 将纯表格行构建迁入 `screening-result-view.js`；adapter 只接收 document、DOM root、已筛选 rows、filter、snapshot 和格式化函数。
+- [x] 保留缺失质量原因、非法证券代码禁用选择、证券跳转 data 属性和筛选空态。
+- [x] 新增视图单测和 UI contract，覆盖表格结构、数据属性、质量原因及职责边界。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 通过后完成验收。
+- [ ] 后续复核市场行情/个股研究展示层，不按函数长度机械拆分。
+
