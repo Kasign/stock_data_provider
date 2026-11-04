@@ -129,15 +129,16 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 	}
 	if !quoteOnly && !dailyOnly {
 		run("index_quotes", func() (int, string, []string, error) {
-		item, err := client.FetchIndexQuotes(ctx)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Source != "tickflow" || item.FetchedAt.IsZero() || len(item.Items) != len(tickflowCoreIndexDefinitions) {
-			return 0, "", nil, errLiveProbeContract("core index snapshot coverage mismatch")
-		}
-		return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
-	})
+			item, err := client.FetchIndexQuotes(ctx)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Source != "tickflow" || item.FetchedAt.IsZero() || len(item.Items) != len(tickflowCoreIndexDefinitions) {
+				return 0, "", nil, errLiveProbeContract("core index snapshot coverage mismatch")
+			}
+			return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
+		})
+	}
 
 	if !indexOnly && !quoteOnly && !dailyOnly {
 		run("market_breadth", func() (int, string, []string, error) {
