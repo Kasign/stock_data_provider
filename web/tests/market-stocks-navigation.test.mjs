@@ -75,3 +75,14 @@ test("全市场请求刷新期间使旧筛选快照失效", () => {
   assert.match(screeningBrowserAcceptance, /holdSecondMarketStocksResponse/);
   assert.match(screeningBrowserAcceptance, /旧快照不得继续用于筛选、导出或批量加入/);
 });
+
+test("全市场刷新保留旧快照时明确标记，连接切换后清空旧摘要和元数据", () => {
+  assert.match(marketStocks, /正在刷新 · 保留上次成功快照/);
+  assert.match(marketStocks, /表格暂时保留第 .* 页的上次成功快照/);
+  assert.match(marketStocks, /旧连接下的全市场行情快照已清除/);
+  assert.match(marketStocks, /旧连接下的分页行情元数据已失效/);
+  assert.match(marketStocks, /state\.controller\?\.abort\(\)/);
+  assert.match(marketStocks, /generation !== state\.generation/);
+  assert.match(screeningBrowserAcceptance, /holdThirdMarketStocksResponse/);
+  assert.match(screeningBrowserAcceptance, /旧连接下的分页行情元数据已失效/);
+});

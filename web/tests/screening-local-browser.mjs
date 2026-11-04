@@ -44,6 +44,11 @@ try {
   let markSecondMarketStocksStarted;
   const secondMarketStocksStarted = new Promise(resolve => { markSecondMarketStocksStarted = resolve; });
   const secondMarketStocksResponseGate = new Promise(resolve => { releaseSecondMarketStocksResponse = resolve; });
+  let holdThirdMarketStocksResponse = false;
+  let releaseThirdMarketStocksResponse;
+  let markThirdMarketStocksStarted;
+  const thirdMarketStocksStarted = new Promise(resolve => { markThirdMarketStocksStarted = resolve; });
+  const thirdMarketStocksResponseGate = new Promise(resolve => { releaseThirdMarketStocksResponse = resolve; });
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
     if (url.pathname === "/market-api/api/v1/market/stocks") {
@@ -52,7 +57,12 @@ try {
         markSecondMarketStocksStarted();
         await secondMarketStocksResponseGate;
       }
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      if (marketStocksRequests === 3 && holdThirdMarketStocksResponse) {
+        markThirdMarketStocksStarted();
+        await thirdMarketStocksResponseGate;
+      }
+      try {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
         items: [
           { symbol: "600001.SH", name: "测试命中", quality_status: "valid", quote: { symbol: "600001.SH", change_percent: 3, turnover_rate: 2, amount: 20000000, quality_status: "valid" }, ma5: 12, ma20: 11 },
           { symbol: "600002.SH", name: "测试未命中", quality_status: "valid", quote: { symbol: "600002.SH", change_percent: -1, turnover_rate: 5, amount: 5000000, quality_status: "valid" }, ma5: 8, ma20: 9 },
@@ -64,6 +74,9 @@ try {
         universe_fetched_at: "2026-11-03T03:00:00Z", fetched_at: "2026-11-03T03:00:0" + marketStocksRequests + "Z",
         ma_adjustment_basis: "forward_adjusted"
       }) });
+      } catch {
+        // 连接变更后旧请求应已被取消，不能再提交旧连接响应。
+      }
       return;
     }
     if (url.pathname.includes("/api/")) {
@@ -168,6 +181,9 @@ try {
   holdSecondMarketStocksResponse = true;
   await page.locator("#reload-market-stocks").click();
   await secondMarketStocksStarted;
+  assert.match(await page.locator("#market-stocks-status").textContent(), /正在刷新/);
+  assert.match(await page.locator("#market-stocks-summary").textContent(), /上次成功快照/);
+  assert.match(await page.locator("#market-stocks-page-label").textContent(), /当前快照第 1 页/);
   await page.locator('.nav-link[data-view="screening"]').click();
   assert.match(await summary.textContent(), /分页已变化或重新加载/);
   await page.locator("#screening-apply-current-page").click();
@@ -180,6 +196,26 @@ try {
   assert.equal(await exportButton.isEnabled(), false, "refresh completion must not silently revive the previous screening result");
   await page.locator("#screening-apply-current-page").click();
   await page.waitForFunction(() => document.querySelector("#screening-local-results-summary")?.textContent.includes("命中 1 条"));
+
+  // 行情连接变化必须清空全市场旧快照及元数据，并隔离取消请求的晚到响应。
+  await page.locator('.nav-link[data-view="stocks"]').click();
+  holdThirdMarketStocksResponse = true;
+  await page.locator("#reload-market-stocks").click();
+  await thirdMarketStocksStarted;
+  const settingsPage = await context.newPage();
+  await settingsPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await settingsPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
+    marketBase: "/market-api-v2", analysisBase: "/analysis-api", apiKey: "screening-browser-key-v2"
+  })));
+  await page.waitForFunction(() => document.querySelector("#market-stocks-status")?.textContent === "连接已变化");
+  assert.match(await page.locator("#market-stocks-summary").textContent(), /旧连接下的全市场行情快照已清除/);
+  assert.match(await page.locator("#market-stocks-meta").textContent(), /旧连接下的分页行情元数据已失效/);
+  assert.equal(await page.locator("#market-stocks-body tr").count(), 1);
+  releaseThirdMarketStocksResponse();
+  await page.waitForTimeout(100);
+  assert.doesNotMatch(await page.locator("#market-stocks-body").textContent(), /测试命中|测试未命中|测试待判断/);
+  await settingsPage.close();
+
   assert.deepEqual(pageErrors, []);
   await page.screenshot({ path: path.join(screenshotDir, "screening-local-results.png"), fullPage: true });
   console.log("Screening local filter browser acceptance passed: result views, tri-state quality, stale-result invalidation, draft clearing and saved-plan preservation.");

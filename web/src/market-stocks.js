@@ -156,8 +156,16 @@ export function bindMarketStocks(getSettings, onSelectStock) {
     const controller = new AbortController();
     state.controller = controller;
     setBusy(true);
+    const previousLoadedPage = state.loadedPage;
+    const hadPreviousResult = state.hasResult;
     const status = $("#market-stocks-status");
-    if (status) status.textContent = "正在读取";
+    if (status) status.textContent = hadPreviousResult ? "正在刷新 · 保留上次成功快照" : "正在读取";
+    if (hadPreviousResult) {
+      const summary = $("#market-stocks-summary");
+      if (summary) summary.textContent = "正在读取第 " + state.page + " 页；表格暂时保留第 " + previousLoadedPage + " 页的上次成功快照。";
+      const pageLabel = $("#market-stocks-page-label");
+      if (pageLabel) pageLabel.textContent = "请求第 " + state.page + " 页 · 当前快照第 " + previousLoadedPage + " 页";
+    }
     try {
       const data = await getMarketStocks(settings, { page: state.page, pageSize: state.pageSize, includeMA: true, adjustment: state.adjustment, signal: controller.signal });
       if (controller.signal.aborted || generation !== state.generation) return;
@@ -211,9 +219,16 @@ export function bindMarketStocks(getSettings, onSelectStock) {
       state.loadedPageSize = null;
       state.loadedAdjustment = "";
       state.hasNext = false;
+      state.page = 1;
       renderEmpty("行情连接配置已变化，请重新加载。");
       const status = $("#market-stocks-status");
       if (status) status.textContent = "连接已变化";
+      const summary = $("#market-stocks-summary");
+      if (summary) summary.textContent = "旧连接下的全市场行情快照已清除，请重新加载。";
+      const meta = $("#market-stocks-meta");
+      if (meta) meta.textContent = "旧连接下的分页行情元数据已失效。";
+      const pageLabel = $("#market-stocks-page-label");
+      if (pageLabel) pageLabel.textContent = "第 1 页 · 每页 " + state.pageSize + " 条";
       setBusy(false);
     }
   };
