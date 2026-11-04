@@ -337,8 +337,12 @@ try {
   assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
   await researchSettingsSyncPage.close();
 
+  // 跨标签页场景使用 000001.SZ；恢复到旧标的后再执行原有的迟到财务响应测试。
+  await page.locator('.nav-link[data-view="stocks"]').click();
+  await page.locator("#symbol-input").fill("600519.SH");
+  await page.locator('.nav-link[data-view="research"]').click();
   await page.locator("#load-fundamentals").click();
-  await oldRequestStarted;
+  await waitWithTimeout(oldRequestStarted, 10000, "等待旧标的财务请求启动超时");
 
   // 切换标的后必须中止旧请求，并恢复所有请求按钮，包括财务指标按钮。
   await page.locator('.nav-link[data-view="stocks"]').click();
@@ -356,7 +360,7 @@ try {
 
   // 财务报告期切换会取消当前请求，但必须立即恢复读取按钮，允许按新报告期重试。
   await page.locator("#load-fundamentals").click();
-  await periodRequestStarted;
+  await waitWithTimeout(periodRequestStarted, 10000, "等待财务报告期请求启动超时");
   await page.locator("#fundamentals-quarter").selectOption("2");
   await page.waitForFunction(() => {
     const button = document.querySelector("#load-fundamentals");
