@@ -300,9 +300,10 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 
 **下一步执行顺序：**
 1. JSR-3C：自选股导入预览 DOM 构建已完成，WebUI Checks #41816369613 与 Chromium Browser Smoke #41816369953 均通过。
-2. 验收通过后，审查 JSR-3D：自选股 tracking 辅助字段 ViewModel，先梳理字段来源、质量状态、任务/Run 关联和格式化依赖，再确定最小迁移范围。
-3. JSR-3E：在 JSR-3C/3D 稳定后评估页面协调边界；不预设必须新增 controller。
-4. JSR-3 完成后再排期设置中心及其他高耦合页面模块拆分。
+2. JSR-3D 预审：盘点 tracking 字段的数据来源、行情快照质量语义、最近/今日任务关联、当前任务与 Run 结果匹配条件、展示字段顺序/可见配置和格式化依赖。
+3. 预审后只抽离纯 ViewModel 计算；由 app.js 显式组装输入，模块不读取全局 state、storage、DOM 或 API。先覆盖各状态分支，再运行全量回归。
+4. JSR-3E：在 JSR-3C/3D 稳定后评估页面协调边界；不预设必须新增 controller。
+5. JSR-3 完成后再排期设置中心及其他高耦合页面模块拆分。
 
 **不可拆散的状态所有权：**
 - 自选批量行情 generation、AbortController、请求成员集合、成员变化/连接变化失效和旧快照清理继续由 app.js 协调。

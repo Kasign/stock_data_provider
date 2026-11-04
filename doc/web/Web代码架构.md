@@ -307,3 +307,37 @@ JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 
 `app.js` 继续拥有 `watchlistImportPreview` 状态、根节点挂载、摘要更新、确认按钮状态、导入确认和存储回读事务。视图模块不访问全局 state、localStorage、选择器、事件监听或 API。该批不修改导入解析算法、存储 key/schema、导入事务或 CSS。
 
 验收结果：WebUI Checks #41816369613 通过；Chromium Browser Smoke #41816369953 通过（全部 17 个执行步骤成功）。本批验收提交为 `6be95a434cce07f11710c3417d1d456be490fa9d`；后续仅有总体规划文档修复/状态同步提交。
+
+
+### 12.8 JSR-3D 预审：自选股 tracking 辅助字段 ViewModel
+
+当前 `renderWatchlist` 中，单条自选项的 tracking 展示数据由多类状态共同生成，尚不适合直接把整段 `renderWatchlist` 迁入视图模块。预审确认的输入来源如下：
+
+| 输入域 | 当前来源 | 需要保留的语义 |
+|---|---|---|
+| 自选记录 | `record` | 添加/更新时间，不改变 CRUD 与存储所有权 |
+| 行情快照 | `state.watchlistQuotes`、当前 `state.quote`、`state.watchlistQuoteStatus` | 批量错误、旧快照、缺失项、未加载及行情质量原因必须区分 |
+| 最近任务 | `safeReadRecentTasks()` | 本地没有任务引用不等于服务端从未分析；旧任务缺少创建时间时今日状态未知 |
+| 当前任务 | `state.taskId/taskSymbols/taskStatus/taskStatusLoading/taskStatusError` | 只在当前任务确实包含该证券且处于有效状态时显示当前任务 |
+| Run 结果 | `state.lastRunResult` 与 `runResultReadStatus/error` | 必须匹配同一任务、Run、分析连接和证券；重读/失败时保留旧结果但明确未确认 |
+| 展示偏好 | `preferences.watchlistDisplayOrder/watchlistDisplayFields` | 字段顺序与可见性由现有偏好决定，不在新模块读 storage |
+
+建议模块：`watchlist-tracking-view-model.js`，仅导出纯函数 `buildWatchlistTrackingFields(input)`，返回已排序且已过滤的 trackingFields 数组，供现有 `buildWatchlistItemNode` 使用。
+
+建议输入边界：
+- `record`、当前证券的 `batchQuote/currentQuote` 与行情状态；
+- 已读取的 `recentTasks`；
+- 显式传入的当前任务上下文、Run 结果及读取状态；
+- 当前分析 API 地址、展示字段顺序和可见字段集合；
+- `now`，避免测试依赖真实系统时钟；
+- 显式传入的纯格式化/标识函数：证券比较、日期 key、日期时间/价格/涨跌幅格式化、质量/任务/Run 状态标签。
+
+模块负责：按证券关联最近/今日任务；判断当前任务和 Run 结果是否匹配；生成 quote/today/task/result/updated 展示文案；应用字段顺序和可见性配置。
+
+模块不负责：读取 recent tasks 或 preferences；访问 app 全局 state；请求行情/任务/Run API；取消请求或管理 generation；读写 localStorage；创建 DOM 或绑定事件；修改跨页联动和自选请求生命周期。
+
+迁移门禁：
+1. 先为现有 tracking 文案建立特征测试，覆盖批量行情错误、旧快照、缺失行情、无本地任务引用、今日任务、缺失创建时间、旧分析 API、当前任务状态读取中/失败、Run 结果重读/失败和不同证券/连接不匹配。
+2. ViewModel 输出需与现有字段 key、className、text、title 一致；不得弱化“未知”“未确认”“旧连接”等提示。
+3. app.js 只负责从全局状态组装 input 并传入 formatter，不把请求控制器或 storage 对象传入模块。
+4. 新模块完成后再考虑进一步拆分分组/筛选事件协调；不得将其与本批混合。
