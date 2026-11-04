@@ -129,6 +129,7 @@ try {
     let quoteRequestCount = 0;
     let marketScenario = "503";
     let marketIndexRequestCount = 0;
+    let marketBreadthScenario = "success";
     const sectorRequests = [];
     const hotStockRequests = [];
     const limitPoolRequests = [];
@@ -334,6 +335,17 @@ try {
           { rank: 1, symbol: "600519.SH", name: "贵州茅台", latest_price: 123.45, change: 1.2, change_percent: 1.01, rank_change: 2 },
           { rank: 2, symbol: "000001.SZ", name: "平安银行", latest_price: 10.25, change: -0.2, change_percent: -1.9, rank_change: -1 }
         ], source: "browser-hot-fixture", fetched_at: "2026-10-30T08:00:00Z", quality_status: "degraded", quality_reasons: ["浏览器合成数据"] });
+      }
+
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/breadth")) {
+        if (marketBreadthScenario === "missing-fields") {
+          return json(200, { source: "browser-breadth-fixture", fetched_at: "2026-10-30T08:00:00Z",
+            quality_status: "degraded", quality_reasons: ["上涨/下跌家数未返回，当前样本不完整"] });
+        }
+        return json(200, { advancing_count: 3200, declining_count: 1800, unchanged_count: 100, unclassified_count: 5,
+          total_securities: 5000, covered_securities: 4900, total_amount_cny: 123456789, amount_coverage_count: 4900,
+          source: "browser-breadth-fixture", fetched_at: "2026-10-30T08:00:00Z",
+          quality_status: "valid", quality_reasons: [] });
       }
 
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/indices")) {
@@ -1145,6 +1157,22 @@ try {
       );
       assert.equal(marketIndexRequestCount, seedRequestCount + 1, "market overview success seed should request indices once");
       assert.match(await page.locator("#market-index-grid").textContent(), /测试指数/);
+
+      // Missing breadth fields must not hide the server's quality reasons.
+      marketBreadthScenario = "missing-fields";
+      await page.locator("#refresh-market-overview").click();
+      await page.waitForFunction(() =>
+        document.querySelector("#market-breadth-values")?.textContent.includes("接口未返回可展示的涨跌分布字段") &&
+        document.querySelector("#market-breadth-reasons")?.textContent.includes("上涨/下跌家数未返回")
+      , null, { timeout: 8000 });
+      assert.equal(await page.locator("#market-breadth-reasons").isVisible(), true,
+        "quality reasons must remain visible when breadth values are incomplete");
+      marketBreadthScenario = "success";
+      await page.locator("#refresh-market-overview").click();
+      await page.waitForFunction(() =>
+        document.querySelector("#market-breadth-values")?.textContent.includes("上涨") &&
+        document.querySelector("#market-breadth-reasons")?.hidden === true
+      , null, { timeout: 8000 });
 
       // Home-market errors must preserve HTTP meaning instead of asserting every 401/403 is an API-key fault.
       for (const scenario of ["401", "403", "404", "503", "network"]) {
