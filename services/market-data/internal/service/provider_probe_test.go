@@ -673,7 +673,7 @@ func TestProviderProbeRunsRequestedDailyBarAdjustmentsIndependently(t *testing.T
 	}
 	seen := map[model.AdjustmentBasis]bool{}
 	for _, item := range run.Items {
-		if item.Status != "returned" || item.AdjustmentBasis == "" || seen[item.AdjustmentBasis] {
+		if item.Status != "returned_degraded" || item.AdjustmentBasis == "" || seen[item.AdjustmentBasis] {
 			t.Fatalf("unexpected or duplicate adjustment result: %+v", item)
 		}
 		seen[item.AdjustmentBasis] = true
