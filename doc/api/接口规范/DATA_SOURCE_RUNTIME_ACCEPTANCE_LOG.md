@@ -827,3 +827,37 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 本节是自动化模拟链路覆盖，不是真实停牌/临停/上市前行情验收。
 - 不修改 WebUI API 协作清单，因为没有 API 或 Schema 变化。
 - 下一步等待最终 Go suite；通过后再以已有历史证据或必要的单次真实样本核验停牌/临停与上市边界。不得重复消耗 Provider 配额来替代缺失的事件证据。
+
+## 54. 2026-11-04 P0 批次 3 最终 CI 结果校正
+
+### 54.1 代码基线
+
+- 当前分支文档 HEAD：`b85507f2b8cd3d03a21448b08c682f227feb59f3`。
+- 对应本批次代码 SHA：`efd1409237547b387a2cbd6b490aa1c2b8455687`。
+- `b85507f2` 为文档提交，未改变 P0 批次 3 的代码。
+
+### 54.2 最终自动化验证结果
+
+| 检查 | Run | 结果 |
+|---|---:|---|
+| Go test suite（Push） | 41833418185 | passed，全部 Job 成功 |
+| Go test suite（PR） | 41833428826 | passed，全部 Job 成功 |
+| Data quality contract regression | 41833428871 | passed |
+| WebUI checks | 41833428940 | passed |
+| Live Provider Probe | 41833428913 | Workflow/Job success |
+
+Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、MariaDB migration/PIT、Compose 校验及 Docker 镜像构建。上述 CI 证明自动化测试和构建链路通过，不代表真实历史交易边界或复权数据验收通过。
+
+### 54.3 真实数据边界
+
+- Live Provider Probe Run 41833428913 成功，不等于取得 600036.SH（2025-07-07 至 2025-07-17）和 002982.SZ（2025-05-26 至 2025-06-06）的完整目标样本。
+- 本批次没有新的目标事件窗口原始数据、公司行为或因子证据；两个窗口继续 blocked。
+- 停牌、临停、新股上市边界仍只有本地 Fake/自动化链路覆盖，真实样本未验收。
+- 不将 Workflow success、HTTP 200 或模拟测试提升为真实数据 passed。
+
+### 54.4 后续
+
+- 不重复执行本批次 Go suite、Parity、WebUI checks 或近期公共 Provider Probe。
+- 下一步先只读核对现有 Provider 的历史日期范围、复权支持和公司行为能力，确认可采集后再安排最小真实请求。
+- 若开展采集，复用现有 Provider、Normalize、Validator、Reporter、TradingCalendar、SecurityTradingStatus 和 CrossProviderDailyCompare；不另建诊断体系。
+- 无 API/Schema 变化，WebUI 与数据层接口协作清单无需更新。
