@@ -17,7 +17,7 @@ test("关键字仅匹配证券代码和名称，忽略大小写与首尾空白",
 });
 
 test("全部分组包含未分组证券，指定分组兼容带后缀证券代码", () => {
-  const assignments = { "600519": "核心观察" };
+  const assignments = { "600519.SH": "核心观察" };
   const all = buildWatchlistListViewModel({ items, assignments });
   const selected = buildWatchlistListViewModel({ items, assignments, selectedGroup: "核心观察" });
   const unassigned = buildWatchlistListViewModel({ items, assignments, selectedGroup: "未分组" });
