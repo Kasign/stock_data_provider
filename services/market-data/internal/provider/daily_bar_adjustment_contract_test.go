@@ -10,6 +10,7 @@ import (
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/baostock"
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/injoyai/tdx/protocol"
 )
 
 // 这些测试锁定 Provider 请求参数与返回 metadata 的对应关系，
@@ -166,5 +167,38 @@ func TestHithinkAdjustmentBasisMetadataMapping(t *testing.T) {
 		if got := model.AdjustmentBasis(hithinkAdjustmentBasis(input)); got != want {
 			t.Errorf("hithinkAdjustmentBasis(%q)=%q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestPytdxQFQAndHFQApplyGbbqCorporateAction(t *testing.T) {
+	loc := time.FixedZone("CST", 8*60*60)
+	previousDate := time.Date(2026, 10, 19, 15, 0, 0, 0, loc)
+	exDate := time.Date(2026, 10, 21, 15, 0, 0, 0, loc)
+	raw := protocol.Klines{
+		{Time: previousDate, Open: protocol.Price(10000), High: protocol.Price(10100), Low: protocol.Price(9900), Close: protocol.Price(10000)},
+		{Time: exDate, Open: protocol.Price(9000), High: protocol.Price(9100), Low: protocol.Price(8900), Close: protocol.Price(9000)},
+	}
+	// 通达信 GBBQ category=1：每 10 股派 1 元，折合每股 0.1 元。
+	gbbq := &protocol.Gbbq{Code: "sh600519", Time: time.Date(2026, 10, 20, 15, 0, 0, 0, loc), Category: 1, C1: 1}
+	if !gbbq.IsXRXD() {
+		t.Fatal("category=1 must be recognized as an ex-rights/ex-dividend event")
+	}
+	events := protocol.XRXDs{gbbq.XRXD()}
+	factors := events.Pre(raw).Factors()
+
+	qfq := protocol.ApplyQFQ(raw, factors)
+	if got := qfq[0].Close.Float64(); got < 9.899 || got > 9.901 {
+		t.Fatalf("QFQ historical close=%v, want 9.90", got)
+	}
+	if got := qfq[1].Close.Float64(); got != 9 {
+		t.Fatalf("QFQ ex-date close=%v, want 9", got)
+	}
+
+	hfq := protocol.ApplyHFQ(raw, factors)
+	if got := hfq[0].Close.Float64(); got != 10 {
+		t.Fatalf("HFQ first-date close=%v, want 10", got)
+	}
+	if got := hfq[1].Close.Float64(); got < 9.099 || got > 9.101 {
+		t.Fatalf("HFQ ex-date close=%v, want 9.10", got)
 	}
 }
