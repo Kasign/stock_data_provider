@@ -609,6 +609,24 @@ func (p providerProbeDailyBarsFake) FetchDailyBars(_ context.Context, symbol, _,
 	}}, nil
 }
 
+type providerProbeAdjustedDailyBarsFake struct {
+	providerProbeDailyBarsFake
+	method  string
+	refDate string
+}
+
+func (p providerProbeAdjustedDailyBarsFake) FetchDailyBars(ctx context.Context, symbol, startDate, endDate string, limit int, adjustment model.AdjustmentBasis) ([]model.DailyBar, error) {
+	bars, err := p.providerProbeDailyBarsFake.FetchDailyBars(ctx, symbol, startDate, endDate, limit, adjustment)
+	if err != nil {
+		return nil, err
+	}
+	for i := range bars {
+		bars[i].AdjustmentMethod = p.method
+		bars[i].AdjustmentRefDate = p.refDate
+	}
+	return bars, nil
+}
+
 type providerProbeDailyBarsReportedFake struct {
 	providerProbeDailyBarsFake
 }
@@ -811,6 +829,58 @@ func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {
 	result := run.CheckResults[0]
 	if result.Status != "passed" || result.Provider != "probe-left+probe-right" || result.FieldCount != 6 || len(result.ComparedDates) != 1 {
 		t.Fatalf("unexpected cross-provider comparison result: %+v", result)
+	}
+}
+
+func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testing.T) {
+	cases := []struct {
+		name       string
+		leftMethod string
+		rightMethod string
+		leftRefDate string
+		rightRefDate string
+		wantStatus string
+		wantReason string
+	}{
+		{name: "different methods", leftMethod: "eastmoney_fqt_2", rightMethod: "baostock_pct_change", leftRefDate: "2026-11-03", rightRefDate: "2026-11-03", wantStatus: "skipped", wantReason: "adjustment_method_mismatch"},
+		{name: "missing reference date", leftMethod: "same_hfq_v1", rightMethod: "same_hfq_v1", leftRefDate: "2026-11-03", wantStatus: "skipped", wantReason: "right_adjustment_reference_date_missing"},
+		{name: "different reference dates", leftMethod: "same_hfq_v1", rightMethod: "same_hfq_v1", leftRefDate: "2026-11-03", rightRefDate: "2026-10-30", wantStatus: "skipped", wantReason: "adjustment_reference_date_mismatch"},
+		{name: "compatible metadata", leftMethod: "shared_hfq_v1", rightMethod: "shared_hfq_v1", leftRefDate: "2026-11-03", rightRefDate: "2026-11-03", wantStatus: "passed"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			left := providerProbeAdjustedDailyBarsFake{
+				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "probe-adjusted-left", close: 10.5, quality: model.QualityValid},
+				method: test.leftMethod, refDate: test.leftRefDate,
+			}
+			right := providerProbeAdjustedDailyBarsFake{
+				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "probe-adjusted-right", close: 10.5, quality: model.QualityValid},
+				method: test.rightMethod, refDate: test.rightRefDate,
+			}
+			ds := NewWithCapabilities(
+				[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
+				cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil,
+			)
+			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+				Scope: "all", Capabilities: []string{"daily_bars"},
+				DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentBackward},
+				Checks: []string{"cross_provider"}, TimeoutSeconds: 5,
+			})
+			if err != nil {
+				t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+			}
+			if len(run.CheckResults) != 1 {
+				t.Fatalf("expected one cross-provider result, got %+v", run.CheckResults)
+			}
+			result := run.CheckResults[0]
+			if result.Status != test.wantStatus || result.ErrorMessage != test.wantReason {
+				t.Fatalf("unexpected adjustment gate result: %+v", result)
+			}
+			if result.LeftAdjustmentMethod != test.leftMethod || result.RightAdjustmentMethod != test.rightMethod ||
+				result.LeftAdjustmentRefDate != test.leftRefDate || result.RightAdjustmentRefDate != test.rightRefDate {
+				t.Fatalf("probe did not preserve both providers' adjustment evidence: %+v", result)
+			}
+		})
 	}
 }
 
