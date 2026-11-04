@@ -424,7 +424,18 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				}
 				recordProviderProbeEvidence(probeCtx, barsSymbol, latestDate, len(bars), len(validated), providerTime)
 				if len(validated) == 0 {
-					return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned no valid bars")
+					if len(bars) > 0 {
+						return model.QualityInvalid, "", warnings, errors.New("daily-bars probe returned rows but none passed validation")
+					}
+					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, calendarStart, dailyBarEndDate)
+					reasons := []string{"daily_bar_empty_response"}
+					for _, reason := range contextResult.Reasons {
+						reasons = appendReason(reasons, reason)
+					}
+					if contextResult.QualityStatus == model.QualityValid {
+						reasons = appendReason(reasons, "daily_bar_empty_response_explained_by_security_context")
+					}
+					return model.QualityUnknown, "", reasons, nil
 				}
 				quality := model.QualityValid
 				version := ""

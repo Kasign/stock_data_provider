@@ -1111,6 +1111,42 @@ func TestRecordProviderProbeFetchedAtKeepsCollectionTimeSeparateFromSourceTime(t
 	}
 }
 
+func containsProbeReason(reasons []string, expected string) bool {
+	for _, reason := range reasons {
+		if reason == expected {
+			return true
+		}
+	}
+	return false
+}
+
+type providerProbeEmptyDailyBarsFake struct{}
+
+func (providerProbeEmptyDailyBarsFake) Name() string { return "probe-empty-bars" }
+
+func (providerProbeEmptyDailyBarsFake) FetchDailyBars(context.Context, string, string, string, int, model.AdjustmentBasis) ([]model.DailyBar, error) {
+	return nil, nil
+}
+
+func TestProviderProbeKeepsEmptyDailyBarResponseUnknownWhenContextUnavailable(t *testing.T) {
+	p := providerProbeEmptyDailyBarsFake{}
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
+	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
+		Scope: "all", Capabilities: []string{"daily_bars"}, Checks: []string{"quality"}, TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+	}
+	item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
+	if !found || item.Status != "returned_unknown" {
+		t.Fatalf("empty response without context must remain unknown, not failed: %+v", run.Items)
+	}
+	if !containsProbeReason(item.QualityReasons, "daily_bar_empty_response") ||
+		!containsProbeReason(item.QualityReasons, "daily_bar_context_calendar_unavailable") {
+		t.Fatalf("empty response context reasons are missing: %+v", item)
+	}
+}
+
 type providerProbePytdxDailyBarFailureFake struct {
 	err error
 }
