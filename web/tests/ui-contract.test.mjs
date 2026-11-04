@@ -933,16 +933,20 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
 });
 
 test("Run result DOM adapter owns structured result rendering while app retains task state", () => {
-  const renderer = app.match(/function renderTaskResult\\(result\\) \\{[\\s\\S]*?\\n\\}/)?.[0] || "";
-  assert.match(renderer, /state\\.lastRunResult = result/);
-  assert.match(renderer, /state\\.runResultReadStatus = ""/);
-  assert.match(renderer, /persistTaskReference\\(\\)/);
-  assert.match(renderer, /renderRunStatus\\(result\\.status \\|\\| ""\\)/);
-  assert.match(renderer, /renderTaskResultView\\(\\{ document, result, runStatusLabel, fallbackRunId: state\\.runId \\}\\)/);
-  assert.match(renderer, /if \\(state\\.view === "watchlist"\\) renderWatchlist\\(\\)/);
-  assert.match(taskResultView, /export function renderTaskResultView\\(/);
-  assert.match(taskResultView, /document\\.querySelector\\("#task-result-structured"\\)/);
-  assert.doesNotMatch(taskResultView, /\\bstate\\b|localStorage|fetch\\(/);
+  const rendererStart = app.indexOf("function renderTaskResult(result) {");
+  const rendererEnd = app.indexOf("\nfunction normalizedTaskSymbolSet(", rendererStart);
+  const renderer = rendererStart >= 0 && rendererEnd > rendererStart
+    ? app.slice(rendererStart, rendererEnd)
+    : "";
+  assert.ok(renderer.includes("state.lastRunResult = result"));
+  assert.ok(renderer.includes('state.runResultReadStatus = ""'));
+  assert.ok(renderer.includes("persistTaskReference()"));
+  assert.ok(renderer.includes('renderRunStatus(result.status || "")'));
+  assert.ok(renderer.includes("renderTaskResultView({ document, result, runStatusLabel, fallbackRunId: state.runId })"));
+  assert.ok(renderer.includes('if (state.view === "watchlist") renderWatchlist()'));
+  assert.ok(taskResultView.includes("export function renderTaskResultView("));
+  assert.ok(taskResultView.includes('document.querySelector("#task-result-structured")'));
+  assert.doesNotMatch(taskResultView, /\bstate\b|localStorage|fetch\(/);
 });
 
 test("run-flow events expose only server-provided durations and diagnostics", () => {
