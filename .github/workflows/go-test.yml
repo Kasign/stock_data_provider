@@ -56,6 +56,16 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+      - name: Verify legacy Go module paths in source and build configuration
+        run: |
+          if grep -R -nE 'github\\.com/ZhuLinsen/daily_stock_analysis/(go-core|services/market-data)' \
+            --include='*.go' --include='go.mod' --include='Dockerfile' \
+            --include='*.yml' --include='*.yaml' --include='*.sh' --include='Makefile' .; then
+            echo "::error::发现旧 Go 模块路径残留"
+            exit 1
+          fi
+          grep -Fxq 'module github.com/Kasign/stock_data_provider/go-core' go-core/go.mod
+          grep -Fxq 'module github.com/Kasign/stock_data_provider/services/market-data' services/market-data/go.mod
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
