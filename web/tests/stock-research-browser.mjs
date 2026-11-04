@@ -39,13 +39,6 @@ await new Promise((resolve, reject) => {
 const address = server.address();
 assert.ok(address && typeof address === "object");
 const baseUrl = "http://127.0.0.1:" + address.port;
-function waitWithTimeout(promise, timeoutMs, message) {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); })
-  ]).finally(() => clearTimeout(timer));
-}
 let browser;
 let releaseOldRequest;
 let oldRequestStarted;
@@ -314,7 +307,7 @@ try {
   await page.locator('.nav-link[data-view="research"]').click();
   // 请求进入路由后再切换连接；用延迟响应验证旧结果不会覆盖当前研究状态。
   await page.locator("#load-stock-research").click();
-  await waitWithTimeout(crossTabResearchRequestStarted, 10000, "等待跨标签页研究档案请求启动超时");
+  await crossTabResearchRequestStarted;
   const researchSettingsSyncPage = await context.newPage();
   await researchSettingsSyncPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
   await researchSettingsSyncPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
@@ -332,7 +325,10 @@ try {
   assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
   // 先释放被测试路由挂起的旧连接响应，再确认它无法覆盖当前标的的研究内容。
   releaseCrossTabResearchRequest?.();
-  await waitWithTimeout(crossTabResearchRequestSettled, 5000, "等待旧档案路由结束超时");
+  await Promise.race([
+    crossTabResearchRequestSettled,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("等待旧档案路由结束超时")), 5000))
+  ]);
   assert.equal(crossTabResearchRouteFinished, true);
   assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
   await researchSettingsSyncPage.close();

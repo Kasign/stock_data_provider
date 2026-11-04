@@ -1162,7 +1162,10 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 释放被 Playwright 路由挂起的旧连接响应后，验证旧资料内容未覆盖当前页面。
 - [ ] WebUI Checks：[运行记录 #41797556875](https://github.com/Kasign/stock_data_provider/actions/runs/41797556875) 已通过。
 - [ ] Chromium Browser Smoke：[运行记录 #41797557059](https://github.com/Kasign/stock_data_provider/actions/runs/41797557059) 运行中，最终结果待回填。
-- [ ] 对应代码提交：`60a23f76f71cee8e84fbf4f0c6fd6cdd5b544193`；需等待 Browser Smoke 通过后标记验收完成。
+- [x] 组合场景实现提交：`60a23f76f71cee8e84fbf4f0c6fd6cdd5b544193`。
+- [x] 请求启动/路由结束等待超时保护提交：`0e7721075794b4b091fc7a67bba878af64124e74`。
+- [x] WebUI Checks #41797556875、#41798082510 均通过。
+- [ ] Browser Smoke #41797557059 与 #41798082682 待最终结果；不将运行中状态记为通过。
 
 说明：此前版本使用 `page.waitForEvent("requestfailed")` 作为唯一取消证据，导致测试步骤可能无限等待并使 15 分钟工作流被取消。修正版改为验证 UI 恢复与延迟旧响应不回填，并为路由处理结束增加 5 秒上限。此测试不声称 Playwright 路由结束时序等同于真实网络取消。
 
@@ -1189,3 +1192,32 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] 每批修复执行截图前后对比、横向溢出检查和相关浏览器回归。
 
 执行顺序：UIR-1 页面盘点与截图基线 → UIR-2 统一布局基础 → UIR-3 高频共用组件 → UIR-4 页面专项修复 → UIR-5 CSS 收敛 → UIR-6 全站验收。
+
+
+### UI 样式 Review 页面盘点（UIR-1 进行中）
+
+已确认当前一级页面共 11 个：
+
+| 页面 | 主要视觉检查对象 |
+|---|---|
+| 市场总览 | 指数/市场宽度指标卡、图表、板块排行、资金流和活动表格 |
+| 个股行情 | 搜索条件、行情摘要、全市场分页表格、K 线区域 |
+| 自选与观察 | 分组工具栏、股票列表、批量操作、字段配置 |
+| 个股深度研究 | 研究摘要、图表、技术指标、公司资料/财务/估值/筹码/资金流/公告 |
+| 分析任务 | 创建表单、任务状态、阶段事件、结果和详情弹窗 |
+| 选股与筛选 | 条件编辑器、方案列表、结果表格、批量操作 |
+| 告警 | 规则草稿、评估状态、触发记录和投递尝试 |
+| 问股 | 会话/侧栏、输入区、回答内容、策略问股结果 |
+| 通知中心 | 筛选器、收件箱、通知详情和未接入空态 |
+| 数据中心 | 检查摘要、服务状态、Provider 能力和探测历史 |
+| 设置中心 | 10 个分组导航、分组表单、连接配置和本地数据工具 |
+
+共享样式优先检查：
+- 主内容区与侧栏：`.main-area`、`.sidebar`。
+- 页面标题与说明：`.page-heading`、`.page-subtitle`、`.last-updated`。
+- 面板标题和操作区：`.panel-heading`、`.section-heading`。
+- 指标卡网格：`.metric-grid`、`.metric-card`、`.metric-value`。
+- 表格容器：全局表格 `white-space: nowrap`、`.table-scroll`、`.table-footer`。
+- 文案约束：`.button` 单行规则、多个 `text-overflow: ellipsis` 和 `overflow: hidden` 使用点。
+
+上述项目为 Review 热点，不代表已确认缺陷。需要结合实际截图、DOM 尺寸与不同视口行为逐项判定。
