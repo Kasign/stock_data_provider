@@ -392,7 +392,7 @@ func TestProviderProbeOptionsValidateScopeCapabilityAndTimeout(t *testing.T) {
 		{Scope: "all", Capabilities: []string{"unknown"}, TimeoutSeconds: 5},
 		{Scope: "all", Capabilities: []string{"quote", "quote"}, TimeoutSeconds: 5},
 		{Scope: "all", Capabilities: []string{"quote"}, TimeoutSeconds: 31},
-		{Scope: "all", Capabilities: []string{"quote"}, DailyBarStartDate: "2025-07-07", DailyBarEndDate: "2025-07-17", TimeoutSeconds: 5},
+		{Scope: "all", Capabilities: []string{"quote"}, DailyBarStartDate:   "2025-07-07", DailyBarEndDate: "2025-07-17", TimeoutSeconds: 5},
 		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "2025-07-07", TimeoutSeconds: 5},
 		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "bad-date", DailyBarEndDate: "2025-07-17", TimeoutSeconds: 5},
 		{Scope: "all", Capabilities: []string{"daily_bars"}, DailyBarStartDate: "2025-07-07", DailyBarEndDate: "2025-08-08", TimeoutSeconds: 5},
