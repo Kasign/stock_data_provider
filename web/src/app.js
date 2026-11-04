@@ -798,7 +798,7 @@ async function refreshWatchlistQuotes() {
       const item = responseBySymbol.get(key);
       nextQuotes.set(key, {
         quote: item?.quote && typeof item.quote === "object" ? item.quote : null,
-        errorCode: String(item?.error_code || (item ? "quote_unavailable" : "missing_response_item")),
+        errorCode: item?.quote && typeof item.quote === "object" ? "" : String(item?.error_code || (item ? "quote_unavailable" : "missing_response_item")),
         qualityStatus: String(item?.quality_status || item?.quote?.quality_status || "unknown"),
         qualityReasons: [
           ...(Array.isArray(item?.quality_reasons) ? item.quality_reasons : []),
