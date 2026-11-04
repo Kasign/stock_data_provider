@@ -922,6 +922,22 @@
 - [x] 通知偏好编辑期间外部修改：保留未保存表单，提示冲突，保存前快照比较阻止覆盖。
 - [x] localStorage.clear() 后告警草稿列表和通知偏好恢复默认状态。
 - [x] 通知偏好损坏数据进入禁用/错误状态，不覆盖原始存储。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 等待当前提交 SHA 验收。
+- [x] WebUI Checks：通过（[运行记录 #41776710579](https://github.com/Kasign/stock_data_provider/actions/runs/41776710579)）。
+- [x] Chromium Browser Smoke：通过，告警与通知专项以及全量既有浏览器步骤均成功（[运行记录 #41776710548](https://github.com/Kasign/stock_data_provider/actions/runs/41776710548)）。
+- [x] 验收代码提交：`14f8a47005b9e7b7bed8884f0ccea89bfdc41ca5`；当前分支 HEAD `b32e10c3c8074153bd010cc803716d8c0e814e74` 与验收提交 Tree SHA 一致。
 
 验收边界：仅验证同源浏览器本地存储同步与冲突保护，不代表服务端告警执行、通知订阅或真实消息投递。
+
+
+## P1 告警与通知跨标签页同步最终验收（2026-11-04）
+
+- [x] 告警草稿跨标签页新增、修改、启停、删除同步。
+- [x] 告警规则编辑期间远端修改/删除冲突保护，保存时再次比较快照。
+- [x] 通知偏好跨标签页同步；编辑期间保留本地未保存内容并阻止覆盖。
+- [x] `localStorage.clear()` 后告警草稿空状态与通知偏好默认值恢复。
+- [x] 损坏通知偏好数据进入禁用/错误状态，清空后恢复。
+- [x] Chromium Browser Smoke 全量步骤通过：[运行记录 #41776710548](https://github.com/Kasign/stock_data_provider/actions/runs/41776710548)。
+- [x] WebUI Checks 通过：[运行记录 #41776710579](https://github.com/Kasign/stock_data_provider/actions/runs/41776710579)。
+- [x] 验收代码提交：`14f8a47005b9e7b7bed8884f0ccea89bfdc41ca5`。
+
+验收边界：本批仅验证同源浏览器 localStorage 同步与前端冲突保护，不代表服务端告警执行、通知订阅、真实渠道投递或生产环境联调。localStorage 不具备原子 CAS/事务能力，快照比较无法消除最后比较与写入之间的并发窗口。
