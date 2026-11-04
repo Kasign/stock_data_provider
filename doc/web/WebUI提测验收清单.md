@@ -738,3 +738,19 @@
 - [x] Chromium Browser Smoke：通过（[运行记录 #41759661836](https://github.com/Kasign/stock_data_provider/actions/runs/41759661836)）。
 
 说明：首次单测失败是因为测试要求调用方 AbortSignal 与内部超时组合信号为同一对象；修正为显式关闭测试超时后，单独验证调用方取消信号透传。生产默认超时保持启用。
+
+
+## 2026-11-04 P0-C 第三批：个股研究接口超时保护
+
+实现提交：`6d365607d55361435ff61b6d0dedc94407d5d211`；测试导入修正提交：`1e93c69ff50723065e5611f4f94baeaf6cfde160`。
+
+- [x] 公司档案与所属板块接口默认 30 秒超时。
+- [x] 财务指标与估值接口默认 30 秒超时。
+- [x] 公告分页接口默认 30 秒超时。
+- [x] 筹码分布与个股资金流接口默认 30 秒超时。
+- [x] 超时会终止底层 fetch，返回统一 `request_timeout` 错误；原有 AbortController 取消与标的代际校验保持不变。
+- [x] 新增 7 类个股研究接口超时单元测试。
+- [x] WebUI Checks：通过（[运行记录 #41760297299](https://github.com/Kasign/stock_data_provider/actions/runs/41760297299)）。
+- [x] Chromium Browser Smoke：通过（[运行记录 #41760297284](https://github.com/Kasign/stock_data_provider/actions/runs/41760297284)）。
+
+本批次仅增加客户端超时保护，不改变服务端接口、请求参数和数据语义。
