@@ -496,3 +496,55 @@ Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对�
 - 分页重复错误现在同时附带首次出现和重复出现的页码、offset、页内行号，便于判断是否为相邻页边界重叠；重复仍然拒绝整次结果，不自动去重、不放宽质量门禁。
 - 新增本地 HTTP fixture 模拟相邻页重复，验证请求 offset 递增和错误诊断字段；该测试不调用真实 Provider。
 - 下一次单次日线探测仅用于取得重复发生的页码/offset 证据，再据此核对服务端分页语义；不扩大到复权、指数、财务或特色接口。
+
+
+## 41. 2026-11-04 现有 Provider 校验结果汇总
+
+### 41.1 TickFlow 指数行情修复线上通过
+
+- 线上 Live Probe Run：`41812823875`；实际 Job：`126516047955`。
+- 日志报告：`LIVE_TICKFLOW_RESULT [{"capability":"index_quotes","status":"passed","quality":"valid","rows":6}]`。
+- 6 个核心指数完整返回，质量为 valid；说明每批最多 5 个标的的拆分请求已解决此前 TOO_MANY_SYMBOLS 问题。
+- 本次使用 index-only 模式，没有探测 quote、market breadth、行业排名或日 K；不得扩大结论范围。
+
+### 41.2 Hithink 未复权日线仍失败
+
+- Live Probe Run：`41813388423`；实际 Job：`126517966406`，Job 失败。
+- 唯一请求能力为 `daily_bars_none`；返回错误：重复交易日 `2026-10-08`，第 2 页、offset=20、页内 row=0。
+- 该请求发生在首次位置诊断字段合入前；报告只包含重复位置，尚不能从本次日志确定同一交易日首次出现在哪一页/offset。
+- 当前代码已扩展错误信息，记录首次与重复出现的 page/offset/row；本地 HTTP fixture 覆盖相邻页重复，仍拒绝整次结果，不去重。
+- 最新 Go CI Run `41813766294` 已通过，包含 market-data gofmt、tests、race detector 和 vet。诊断字段扩展已完成代码验证，但尚未使用该版本再次调用真实 Hithink。
+- 下一步先核对分页接口语义；只有在能明确解释请求边界且确有必要时，才进行一次 daily-only 复测。
+
+### 41.3 Tushare 普通日线权限结果
+
+- Live Probe Run：`41813259182`，只调用一次 `600519.SH` 的未复权日线。
+- 上游返回 `40203`，探针归类为 `permission_required`。
+- 当前账号普通 `daily` 权限未通过；不能据此认定 Token 无效，也不能将 Tushare 日线列为可用。
+- 不再请求 stock_basic、trade_cal、daily_basic、index_daily 或其它接口，避免无意义配额消耗。
+
+### 41.4 最新代码 CI 全部通过
+
+Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
+- `Test .`、`Test go-core`、`Test services/market-data`：gofmt、tests、race detector、go vet 全部 success。
+- MariaDB migration/PIT persistence 与 Probe HTTP end-to-end Job success。
+- Docker Compose validation 和 Go 镜像构建 success。
+- 此结果只代表代码与模拟集成验证通过，不代表真实 Provider 全部可用。
+
+### 41.5 现有公共源历史日 K 基线
+
+经核对相关 Provider 实现文件在当前 HEAD 与此前探测基线之间未变化，历史探测结果仍可作为当前实现的参考：
+- Sina：none 8 条，成交额缺失，degraded。
+- Tencent：none/qfq/hfq 各 8 条，成交额缺失，degraded。
+- Eastmoney：qfq 因复权参考日未验证而 degraded；hfq 样本 valid。
+- BaoStock：TCP 连接被拒绝。
+- Yahoo：qfq/hfq 各 8 条，成交额缺失，degraded。
+- 这些只是有限日期窗口的历史样本，不能推断完整历史覆盖、停牌边界或所有复权语义均通过。
+
+### 41.6 下一步
+
+1. 核对 Hithink historical daily endpoint 的 offset/排序/分页语义，不先改成自动去重。
+2. 独立核对现有公共源的 none 日 K、成交额字段和单位；真实请求按 Provider 和接口最小化。
+3. TickFlow 仅指数行情已通过；先盘点其余能力的接口与低成本探测方式，不触发全量市场广度/行业排名请求。
+4. 继续阶段 B 交易边界和黄金事件样本工作；2025 事件窗口没有可追溯源数据前保持 blocked。
+5. 妙想暂不重复请求；先保证请求认证元信息可验证，再决定是否做单次真实诊断。
