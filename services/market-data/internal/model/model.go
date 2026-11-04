@@ -217,12 +217,13 @@ type SectorRanking struct {
 }
 
 type SectorRankingSnapshot struct {
-	Category           string          `json:"category"`
-	Direction          string          `json:"direction"`
-	SortBy             string          `json:"sort_by,omitempty"`
-	Total              int             `json:"total"`
-	ProviderReturned   int             `json:"provider_returned,omitempty"`
-	ExcludedRows       int             `json:"excluded_rows,omitempty"`
+	Category                string          `json:"category"`
+	Direction               string          `json:"direction"`
+	SortBy                  string          `json:"sort_by,omitempty"`
+	Total                   int             `json:"total"`
+	ProviderReturned        int             `json:"provider_returned,omitempty"`
+	ExcludedRows            int             `json:"excluded_rows,omitempty"`
+	ExcludedNonAShareCount  int             `json:"excluded_non_a_share_count,omitempty"`
 	TotalIsLowerBound  bool            `json:"total_is_lower_bound,omitempty"`
 	ProviderReportDate string          `json:"provider_report_date,omitempty"`
 	Items              []SectorRanking `json:"items"`
@@ -269,6 +270,7 @@ type MarketBreadthSnapshot struct {
 	Market                      string        `json:"market"`
 	TotalSecurities             int           `json:"total_securities"`
 	CoveredSecurities           int           `json:"covered_securities"`
+	ExcludedNonAShareCount      int           `json:"excluded_non_a_share_count,omitempty"`
 	AdvancingCount              int           `json:"advancing_count"`
 	DecliningCount              int           `json:"declining_count"`
 	UnchangedCount              int           `json:"unchanged_count"`
