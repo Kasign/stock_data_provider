@@ -191,7 +191,7 @@ func TestTickFlowFetchDailyBarsReportsNormalizationRejections(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
 			"timestamp": []int64{timestamp},
-			"open": []float64{100}, "high": []float64{102}, "low": []float64{99}, "close": []float64{101},
+			"open":      []float64{100}, "high": []float64{102}, "low": []float64{99}, "close": []float64{101},
 			"volume": []float64{tickflowVolumeFixture}, "amount": []float64{12345678900},
 			"prev_close": []float64{100},
 		}})
