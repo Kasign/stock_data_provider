@@ -894,3 +894,18 @@ JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验�
 - [x] Chromium Browser Smoke #41821760065 通过；自选行情快照、Run Flow、数据中心、选股和分页生命周期回归均通过。
 - [x] 首轮浏览器回归发现并修正 `visibleTrackingFields` 旧变量引用，修正后完整 smoke 通过。
 - [ ] JSR-3E 页面协调边界评估不与本批混合，后续独立排期。
+
+
+### JSR-3E：自选股页面协调边界复审（已完成盘点，待决定是否实施列表投影拆分）
+
+本轮按最新代码复核 `renderWatchlist(records, storageReadable, storageValid)`、相关状态和事件入口。结论：**不新增自选页面 Controller，也不迁移整段 renderWatchlist**。该函数并非单纯 DOM renderer，仍承担数据读取、请求失效同步、持久化可用性保护、筛选排序、tracking ViewModel 组装、DOM 挂载及研究列表跨页刷新；把它整体搬走会扩大依赖面并掩盖状态所有权。
+
+职责边界：
+- `app.js` 保留：读取自选存储与全局 state；调用 `syncWatchlistQuoteMembership` 使请求/快照按成员变化失效；设置页面级状态与计数；读取最近任务和偏好；调用 tracking ViewModel；创建 DOM 并挂载；刷新研究列表；跨页联动。
+- 现有领域模块继续负责：`watchlist.js` CRUD/校验/存储；`watchlist-groups.js` 分组读写/事务；`watchlist-sort.js` 排序及行情缺失项排序规则；`watchlist-batch.js` 选股结果批量加入及回滚；`watchlist-import-preview*.js` 导入预览解析/DOM；`watchlist-tracking-view-model.js` 单条 tracking 字段。
+- DOM 事件仍由 app 绑定：列表 click/change 委托、全选、批量操作、筛选/排序/分组控件、展示偏好变更。事件处理器包含持久化或刷新行为，不属于纯展示模块。
+- 行情请求的 `watchlistQuoteGeneration`、`watchlistQuoteController`、请求标的集合、快照成员集合、旧快照清理及迟到响应检查继续整体留在 app；`syncWatchlistQuoteMembership` 是带副作用的协调入口，禁止迁入纯 ViewModel。
+
+可安全考虑的最小后续拆分只有“列表投影”纯计算：将关键字过滤、分组归属过滤、过滤计数以及排序输入组装成纯函数，显式接收 items、keyword、group assignments、selectedGroup、sort mode/direction 和 getQuote；复用现有 `sortWatchlistItems`，不得复制排序算法。该函数不读取 DOM/state/storage，不触发研究列表刷新，也不负责 tracking 字段和 DOM。实施前先补充现有过滤/排序行为基线，尤其分组默认归属、关键字只匹配代码/名称、行情排序缺失值置底、过滤计数当前仅按关键字显示的既有语义。
+
+当前结论：JSR-3E 盘点完成；建议下一批仅实施列表投影纯函数（可命名 `watchlist-list-view-model.js`），不创建 controller。若测试显示该拆分无法显著降低 app 复杂度，则保留现状，不为追求模块数量而拆分。

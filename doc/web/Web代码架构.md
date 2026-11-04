@@ -352,3 +352,25 @@ JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 
 本批保留批量行情错误/旧快照/缺项/未加载的区别；保留本地任务缺失不代表服务端从未分析、旧任务缺少创建时间时今日状态未知、旧分析 API 提示；当前任务与 Run 结果继续按证券、任务、Run 和分析连接核验；Run 重读/重试/失败时保留旧结果并明确标记未确认。单测固定时间并覆盖上述边界，避免依赖真实系统时钟。
 
 验收：WebUI Checks #41821760275 通过；Chromium Browser Smoke #41821760065 通过，包含自选行情快照、Run Flow、数据中心、选股和分页生命周期等浏览器回归。迁移过程中 Browser Smoke 曾捕获一次旧变量名残留，已修正为新 ViewModel 输出并通过完整复测。
+
+
+### 12.10 JSR-3E：自选股页面协调边界复审
+
+复审对象为 `renderWatchlist(records, storageReadable, storageValid)` 及其事件/请求入口。该函数同时处理：根节点清空与 bulk controls 更新、自选存储读取及异常保护、行情成员变化失效同步、行情状态与数量文案、关键字/分组过滤、排序、最近任务读取、tracking ViewModel 组装、DOM 构建挂载，以及研究列表刷新。因此不应把整段函数搬入新模块，也不应创建拥有全局状态的页面 Controller。
+
+| 职责 | 当前归属 | 后续边界 |
+|---|---|---|
+| 自选 CRUD、存储校验与回读 | `watchlist.js` / app 协调 | 保持不变 |
+| 分组、归属和分组事务 | `watchlist-groups.js` / app 事件处理 | 保持不变 |
+| 排序与缺失行情置底 | `watchlist-sort.js` | 复用，不复制 |
+| 批量加入及回滚 | `watchlist-batch.js` | 保持不变 |
+| 导入预览解析/DOM | `watchlist-import-preview.js`、`watchlist-import-preview-view.js` | 保持不变 |
+| 单条 tracking 字段 | `watchlist-tracking-view-model.js` | 保持不变 |
+| 单条 DOM 节点 | `watchlist-item-view.js` | 保持不变 |
+| 行情请求 generation/AbortController/成员快照失效 | app.js | 必须整体保留 |
+| 页面状态、DOM 挂载、跨页研究列表刷新 | app.js | 必须整体保留 |
+| click/change 委托及筛选/排序/分组控件 | app.js | 保留事件和持久化所有权 |
+
+后续仅建议评估一个纯函数模块 `watchlist-list-view-model.js`：输入已读取的 items、关键字、分组 assignments/selectedGroup、sort mode/direction 和行情 getter；输出过滤后的计数与排序列表，并复用 `sortWatchlistItems`。它不能读取 DOM、全局 state 或 storage，不能调用 `syncWatchlistQuoteMembership`，不能创建 DOM、绑定事件或刷新研究列表。
+
+迁移门禁：先为关键字仅匹配代码/名称、分组默认归属、全部分组、无匹配空态、行情排序升降序、缺失行情始终置底及过滤计数文案建立测试。尤其注意当前计数文案在有关键字时显示“匹配 x / 全部 items”，未输入关键字时显示“显示全部 items”；分组筛选目前不改变该文案的分支条件，不应在拆分时擅自改变。通过 UI 契约和 Browser Smoke 后再决定是否继续拆事件协调；不预设 controller。
