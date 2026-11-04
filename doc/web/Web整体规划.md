@@ -526,11 +526,13 @@ CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后�
 验收边界：WebUI 只消费接口已返回的单位与复权口径，不自行换算、不推断缺失单位、不重算均线；数据侧标准化正确性不属于本批验收范围。
 
 
-### 2026-11-04 P1 本地选股异常数值类型保护（开发中）
+### 2026-11-04 P1 本地选股异常数值类型保护（已验收）
 
 - [x] 筛选数值读取只接受 number 或非空数字字符串；布尔值、空白字符串、对象和非法数值均归入“待判断”。
 - [x] CSV 数值列采用相同类型边界；不把 `false`、`true` 或空白字符串导出为 0/1。
 - [x] 单元测试覆盖合法零值、数字字符串、布尔值和空白字符串。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待提交后验收。
+- [x] WebUI Checks：[运行记录 #41791879636](https://github.com/Kasign/stock_data_provider/actions/runs/41791879636)。
+- [x] Chromium Browser Smoke：[运行记录 #41791879634](https://github.com/Kasign/stock_data_provider/actions/runs/41791879634)，全量步骤通过。
+- [x] 实现提交：`9078c82b945db88d2deeecb6c7dbe7f071180542`；测试断言修正：`7f1255b384aac4d629451c6c39dd72382d9a76ea`。
 
 验收边界：只处理 WebUI 数值类型转换，不替代服务端 JSON Schema 或 Provider 数据校验。

@@ -1093,13 +1093,14 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 验收边界：仅验证 WebUI 消费数据侧明确返回的字段，不代表 Provider 源数据单位或均线计算结果准确性。
 
 
-## 2026-11-04 P1 本地选股异常数值类型保护（开发中）
+## 2026-11-04 P1 本地选股异常数值类型保护（已验收）
 
 - [x] 筛选条件不把布尔值和空白字符串强制转换成数值 0/1。
 - [x] CSV 数值列不把布尔值和空白字符串导出成 0/1。
 - [x] 保留真正数值 0 与合法数字字符串。
 - [x] 单元测试覆盖上述类型边界。
-- [ ] WebUI Checks：待提交后验收。
-- [ ] Chromium Browser Smoke：待提交后验收。
+- [x] WebUI Checks：[运行记录 #41791879636](https://github.com/Kasign/stock_data_provider/actions/runs/41791879636)。
+- [x] Chromium Browser Smoke：[运行记录 #41791879634](https://github.com/Kasign/stock_data_provider/actions/runs/41791879634)，全量步骤通过。
+- [x] 实现提交：`9078c82b945db88d2deeecb6c7dbe7f071180542`；测试断言修正：`7f1255b384aac4d629451c6c39dd72382d9a76ea`。
 
 验收边界：仅验证 WebUI 对异常数值类型的处理，不代表数据侧 Provider 输入校验完成。
