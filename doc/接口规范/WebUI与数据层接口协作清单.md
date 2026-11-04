@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；TickFlow DailyBar 已接通请求级 Reporter 和有界原始摘要；现有 Probe 增加可选历史日期窗口，复用原 Provider/Validator/Reporter/交易上下文诊断；未增加新路由 | 使用历史窗口对 2025 两个事件样本执行 none/qfq/hfq 定向真实验收；完成 MariaDB Probe 历史部署验收 | 目标窗口真实行情、公司行为与因子证据尚未取得；无凭据/不支持的 Provider 单独 skipped/not_supported | `5cee71bce3c95d0a66754feb457adcf148583de7` | 历史窗口参数与请求回显自动化测试待当前提交 CI；原有 CI 证据见验收日志第 54 节 | 新增日期窗口能力尚未触发真实 Provider 请求；不标记真实数据通过 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；现有 Probe 支持显式历史日 K 窗口，复用原 Provider/Validator/Reporter/TradingCalendar/SecurityTradingStatus/CrossProviderDailyCompare；未新增路由 | 使用历史窗口对 2025 两个事件样本执行 none/qfq/hfq 定向真实验收；完成 MariaDB Probe 历史部署验收 | 目标窗口真实行情、公司行为与因子证据尚未取得；无凭据/不支持的 Provider 单独 skipped/not_supported | `331930f4274b8b7b30adc1a1dc7951cbead4790b` | Go suite Run `41836528814` 全部 5 个 Job 通过；Parity Run `41836540034`、WebUI Run `41836540427` 通过 | 新增日期窗口能力尚未触发真实 Provider 请求；常规 Live Probe 不作为历史数据证据 | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。当前数据侧分支 HEAD 为 `fb0bc1aa59faa905ef491ca00240bf98897473af`（2026-11-04）；本批次完成 TickFlow A 股日 K 手转股修复和单股 8 条真实复测；未新增 API 路由/Schema，未修改 WebUI 业务代码。Go test suite Run `41825777135`、Parity Run `41825788560`、WebUI checks Run `41825788574` 通过；TickFlow daily-only Run `41825777178` 返回 passed/degraded。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。当前数据侧分支 HEAD 为 `331930f4274b8b7b30adc1a1dc7951cbead4790b`（2026-11-04）；本批次扩展既有 Probe 的历史日 K 日期窗口参数，无新增路由，WebUI 未修改页面请求。Go suite Run `41836528814`、Parity Run `41836540034`、WebUI checks Run `41836540427` 通过；Live Provider Probe Run `41836540261` 为常规近期探测，不代表历史窗口真实验收。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。

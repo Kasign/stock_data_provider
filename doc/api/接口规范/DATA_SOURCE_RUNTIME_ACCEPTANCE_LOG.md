@@ -866,7 +866,8 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 
 ### 55.1 现有能力核对
 
-- Provider 的 DailyBar 接口已统一接受 startDate/endDate/limit/adjustment；Eastmoney、Tencent、Yahoo、TickFlow、Hithink、Tushare 具备显式历史日期请求实现；Sina 仅接受 none，且历史返回受源端 K 线条数上限约束。
+- Provider 的 DailyBar 接口已统一接受 startDate/endDate/limit/adjustment；BaoStock、Eastmoney、Hithink、Pytdx、Tencent、TickFlow、Tushare、Yahoo 具备显式历史日期请求实现；Sina、Netease 仅接受 none，且历史返回受源端 K 线条数上限约束。Xueqiu 当前不是 DailyBar Provider。
+- 代码支持日期范围不等于目标历史数据可用；Provider 权限、源端历史保留、成交字段质量和复权算法仍需独立真实验收。Pytdx 复权依赖 GBBQ，公司行为事件缺失/连接失败必须保留原始错误分类。
 - 旧 Probe 固定调用空日期、limit=5，不能通过既有诊断入口针对历史事件窗口执行完整日期校验和交易上下文核验。
 - 业务 DailyBars API 已有日期参数，但它是聚合业务读取，不能替代 Provider × 复权口径独立 Probe 和历史诊断结果。
 
@@ -888,3 +889,11 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 
 - 更新 `services/market-data/openapi.yaml`、`doc/api/数据层API清单.md` 和 `doc/接口规范/WebUI与数据层接口协作清单.md`。
 - WebUI 当前不使用历史 Probe 参数，不要求改动页面；API-06 仍待真实数据验收。
+
+### 55.5 自动化验收
+
+- 最终代码 SHA：`331930f4274b8b7b30adc1a1dc7951cbead4790b`。
+- Go test suite Push Run `41836528814` 全部 5 个 Job 通过，包括 market-data gofmt/tests/race/vet、MariaDB migration/PIT、Compose 和 Docker 镜像构建。
+- Go-Python data quality parity Run `41836540034`、WebUI checks Run `41836540427` 通过；Live Provider Probe Run `41836540261` Workflow success。
+- Live Provider Probe 为常规近期探测，没有使用历史日期窗口，不构成 2025 事件窗口真实数据验收。
+- 初轮 CI 仅发现 gofmt 格式问题，已根据 CI diff 修正；最终 SHA 自动化验证通过。真实历史数据尚未请求，阶段 B 不关闭。
