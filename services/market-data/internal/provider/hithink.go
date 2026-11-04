@@ -2075,12 +2075,12 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 }
 
 type hithinkDailyRowPosition struct {
-	page            int
-	offset          int
-	row             int
-	pageItemCount   int
-	pageFirstDate   string
-	pageLastDate    string
+	page          int
+	offset        int
+	row           int
+	pageItemCount int
+	pageFirstDate string
+	pageLastDate  string
 }
 
 func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, end time.Time, adjust string, loc *time.Location) ([]model.DailyBar, error) {
@@ -2233,7 +2233,6 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 	}
 	return nil, fmt.Errorf("同花顺在 %d 页内未结束分页，拒绝返回可能不完整的 K 线", hithinkMaxPagesPerRange)
 }
-
 
 func hithinkDailyDateForDiagnostic(raw json.RawMessage, loc *time.Location) string {
 	var timestamp int64
