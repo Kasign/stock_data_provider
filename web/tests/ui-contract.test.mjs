@@ -35,6 +35,7 @@ const recentTaskView = await readFile(new URL("../src/recent-task-view.js", impo
 const watchlistImportPreviewView = await readFile(new URL("../src/watchlist-import-preview-view.js", import.meta.url), "utf8");
 const watchlistTrackingViewModel = await readFile(new URL("../src/watchlist-tracking-view-model.js", import.meta.url), "utf8");
 const watchlistListViewModel = await readFile(new URL("../src/watchlist-list-view-model.js", import.meta.url), "utf8");
+const taskEventListViewModel = await readFile(new URL("../src/task-event-list-view-model.js", import.meta.url), "utf8");
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
 const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView, watchlistImportPreviewView, watchlistTrackingViewModel, watchlistListViewModel].join("\n");
@@ -2196,4 +2197,12 @@ test("偏好控件同步由独立 DOM adapter 管理，持久化仍留在 app �
   assert.doesNotMatch(preferencesView, /localStorage|savePreferences|fetch\(|\bstate\./);
   assert.doesNotMatch(preferencesView, /\$\(/);
   assert.match(appSource, /function persistLocalPreferences\(/);
+});
+
+
+test("task event list projection is pure and app retains DOM/state coordination", () => {
+  assert.match(appSource, /buildTaskEventListViewModel\(/);
+  assert.match(appSource, /node\.addEventListener\("toggle"/);
+  assert.match(taskEventListViewModel, /export function buildTaskEventListViewModel\(/);
+  assert.doesNotMatch(taskEventListViewModel, /\bstate\.|localStorage|document\.|addEventListener|fetch\(/);
 });

@@ -30,7 +30,7 @@ import {
 import { calculateTechnicalIndicators, normalizeDailyBars, renderCandlestickVolumeChart, renderCloseChart, renderMACDChart, renderRSIChart } from "./chart.js";
 import { bindMarketOverview } from "./market-overview.js";
 import { bindMarketStocks } from "./market-stocks.js";
-import { taskEventMatchesFilter } from "./task-event-filter.js";
+import { buildTaskEventListViewModel } from "./task-event-list-view-model.js";
 import { validateTaskEventPage, TASK_EVENT_PAGE_SIZE } from "./task-workflow.js";
 import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
@@ -3173,26 +3173,19 @@ function renderTaskEvents() {
   }
   const list = $("#task-events");
   list.replaceChildren();
-  const allEvents = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
-  const filterLabels = { all: "全部", issues: "异常 / 降级", active: "运行中", completed: "成功 / 跳过" };
-  if (!Object.prototype.hasOwnProperty.call(filterLabels, state.taskEventFilter)) state.taskEventFilter = "all";
-  const statusKeyFor = (item) => {
-    const event = item?.event && typeof item.event === "object" ? item.event : item;
-    return taskEventStatusKey(event?.status);
-  };
-  const filterCounts = { all: allEvents.length, issues: 0, active: 0, completed: 0 };
-  allEvents.forEach((item) => {
-    for (const key of ["issues", "active", "completed"]) {
-      if (taskEventMatchesFilter(statusKeyFor(item), key)) filterCounts[key]++;
-    }
+  const viewModel = buildTaskEventListViewModel({
+    items: [...state.taskEvents.values()],
+    filter: state.taskEventFilter,
+    selectedSequence: state.selectedTaskEventSequence
   });
+  state.taskEventFilter = viewModel.filter;
+  const { allEvents, events, filterCounts, filterLabels } = viewModel;
   document.querySelectorAll("[data-task-event-filter]").forEach((button) => {
     const key = button.dataset.taskEventFilter || "all";
     button.setAttribute("aria-pressed", String(key === state.taskEventFilter));
     const count = button.querySelector("[data-filter-count]");
     if (count) count.textContent = String(filterCounts[key] ?? 0);
   });
-  const events = allEvents.filter((item) => taskEventMatchesFilter(statusKeyFor(item), state.taskEventFilter));
   const summary = $("#task-event-filter-summary");
   if (summary) summary.textContent = "筛选：" + filterLabels[state.taskEventFilter] + " · 显示 " + events.length + "/" + allEvents.length + " 条阶段事件";
   if (!allEvents.length) {
@@ -3218,15 +3211,7 @@ function renderTaskEvents() {
     return;
   }
 
-  const hasSelected = events.some((item) => Number(item.sequence) === Number(state.selectedTaskEventSequence));
-  if (!hasSelected) {
-    const priority = [...events].reverse().find((item) => {
-      const event = item.event && typeof item.event === "object" ? item.event : item;
-      const status = taskEventStatusKey(event.status);
-      return ["failed", "error", "blocked", "rejected", "degraded", "partial", "running", "started", "in-progress", "in_progress", "processing"].includes(status);
-    });
-    state.selectedTaskEventSequence = Number((priority || events[events.length - 1]).sequence);
-  }
+  state.selectedTaskEventSequence = viewModel.selectedSequence;
 
   events.forEach((item) => {
     const sequence = Number(item.sequence);
