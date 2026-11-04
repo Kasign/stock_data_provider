@@ -1083,11 +1083,20 @@ try {
         };
       }, watchlistStorageKey);
       await page.locator("#add-to-watchlist-button").click();
-      await page.waitForFunction(
-        () => document.querySelector("#watchlist-feedback")?.textContent.includes("已在当前页面临时加入自选，但浏览器存储不可用，刷新后可能丢失"),
-        null,
-        { timeout: 5000 }
-      );
+      try {
+        await page.waitForFunction(
+          () => document.querySelector("#watchlist-feedback")?.textContent.includes("已在当前页面临时加入自选，但浏览器存储不可用，刷新后可能丢失"),
+          null,
+          { timeout: 5000 }
+        );
+      } catch (error) {
+        console.error("Watchlist quota-failure diagnostic", {
+          pageErrors,
+          consoleErrors,
+          feedback: await page.locator("#watchlist-feedback").textContent()
+        });
+        throw error;
+      }
       const failedWatchlistWrite = await page.evaluate((key) => ({
         stored: localStorage.getItem(key),
         count: document.querySelector("#watchlist-count")?.textContent.trim() || "",
