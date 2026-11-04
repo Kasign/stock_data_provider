@@ -111,7 +111,7 @@ try {
   });
   await first.locator(".local-alert-draft-card").filter({ hasText: "外部启停规则" }).waitFor();
   await second.evaluate(key => localStorage.removeItem(key), alertKey);
-  await first.locator("#local-alert-draft-list").getByText("尚无本地规则草稿。").waitFor();
+  await first.waitForFunction(() => document.querySelector("#local-alert-draft-list")?.textContent.includes("尚无本地规则草稿。"));
 
   await first.locator('.nav-link[data-view="settings"]').click();
   await first.locator('[data-settings-target="settings-notification-section"]').click();
@@ -154,12 +154,12 @@ try {
   await second.evaluate(() => localStorage.clear());
   await first.waitForFunction(() => document.querySelector("#notification-quiet-start").value === "22:00"
     && document.querySelector("#notification-quiet-end").value === "08:00");
-  await first.locator("#local-alert-draft-list").getByText("尚无本地规则草稿。").waitFor();
+  await first.waitForFunction(() => document.querySelector("#local-alert-draft-list")?.textContent.includes("尚无本地规则草稿。"));
   assert.equal(await first.locator("#notification-preferences-save").isDisabled(), false,
     "localStorage.clear must restore editable defaults instead of leaving stale disabled controls");
 
   await second.evaluate(key => localStorage.setItem(key, "{"), preferenceKey);
-  await first.locator("#notification-preferences-save").waitFor({ state: "disabled" });
+  await first.waitForFunction(() => document.querySelector("#notification-preferences-save")?.disabled === true);
   assert.match(await first.locator("#notification-preferences-feedback").textContent(), /格式异常/);
   await second.evaluate(() => localStorage.clear());
   await first.waitForFunction(() => !document.querySelector("#notification-preferences-save").disabled);
