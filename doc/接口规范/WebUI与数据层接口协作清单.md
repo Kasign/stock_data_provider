@@ -160,7 +160,7 @@
 | API-03 | 已完成 | `/api/v1/market/stocks` 提供分页行情与 MA 参数；批量 quote 最多 50 只；WebUI 已封装并用于当前分页选股及自选股批量刷新 | 补全分页总数/覆盖边界、均线复权语义及真实样本质量验证；明确当前选股仅作用于已加载分页 | 不具备全市场筛选策略执行 API | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未执行全市场真实覆盖验收 | 待真实数据验收 |
 | API-04 | 开发中 | 市场情绪快照/历史和市场级资金流历史接口及 WebUI 请求封装已存在 | 核实市场情绪历史缺失交易日、幂等写入、保留策略和真实数据库数据；补专门集成证据 | 需要 MariaDB 持久化与真实历史数据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 的 MariaDB migration/PIT 集成通过；未证明 sentiment 专项全链路 | 未执行生产数据历史验收 | 待真实数据验收 |
 | API-05 | 已完成 | `/api/v1/market/capital-flow` 已提供，使用 Tushare `moneyflow_mkt_dc`；WebUI 已封装 | 核对 Token 权限、字段单位、交易日覆盖、源端时间和历史数据准确性 | 依赖 Tushare 权限与凭据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 通过 | 真实权限/历史值验收未完成；未配置凭据时应跳过 | 阻塞真实验收 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；validation/coverage Schema 和 DailyBar 多复权口径 Probe 契约已核对 | 验证 MariaDB 探测历史持久化、逐 Provider 状态及真实复权口径请求 | Provider 凭据影响真实探测；默认关闭 Provider 不生成逐项 Probe 结果 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811`、WebUI checks Run `41755222944` 通过；Live probe Run `41755222948` 工作流通过 | Provider × 复权口径真实请求未执行；历史持久化仍需部署验收 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；validation/coverage Schema、DailyBar 多复权口径 Probe 契约和 Provider 专项测试已推进 | 完成当前 HEAD Go suite；补 Pytdx GetGbbq 请求失败端到端覆盖评估；验证 MariaDB 探测历史持久化和真实复权口径请求 | Provider 凭据影响真实探测；默认关闭 Provider 不生成逐项 Probe 结果；Pytdx 当前依赖具体 `*tdx.Client` | `e245c100a9d94a4c41a01f97327561b14ab0f1b8` | `e771284b` 的 Go test suite Run `41757355037` 通过；当前 HEAD Go test suite Run `41757748059` 待结果；Live probe 不等于逐口径真实验收 | Provider × 复权口径真实请求未执行；历史持久化仍需部署验收 | 接口层已接入，待真实验收 |
 | API-07 | 开发中 | 板块排行支持涨幅、成交额、近 5 日涨幅排序；`change_percent_5d` OpenAPI Schema 已补齐；WebUI 已封装并支持排序切换 | 评估真实资金净流入来源和完整候选集；补领涨股标准证券代码字段前不开放跳转 | 当前没有独立资金净流入 API；`leading_stock_symbol` 缺失 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811`、WebUI checks Run `41755222944` 通过 | 板块资金净流入真实来源未验收 | 部分联调完成 |
 | API-08 | 暂缓 | 当前没有服务端通知渠道、订阅和投递记录闭环 | 需要先形成服务端安全设计与 API 方案 | 用户确认复杂方案后再实施 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
 | API-09 | 暂缓 | 当前分页行情不等同于服务端策略执行或全市场扫描 | 先定义策略 schema、异步任务、结果快照和可追溯理由 | 需先确认产品/API 设计 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
@@ -223,3 +223,12 @@
 - WebUI checks Run `41755222944`、Live provider probe Run `41755222948` 均通过；Live workflow 通过不代表所有 Provider/能力真实验收通过。
 - Go-Python parity Run `41755222861` 在当前 HEAD 通过；旧文档路径问题已由 `437af45c` 修复。
 - 已发现 OpenAPI Schema 缺口：`SectorRanking.change_percent_5d` 及 `ProviderProbeItem.validation_*`、`coverage_dimensions`。数据侧按协作清单和整体规划优先补齐，WebUI 不复制服务端质量规则。
+
+
+## 11. 2026-11-04 DailyBar 复权专项测试进度
+
+- 数据侧 HEAD：`e245c100a9d94a4c41a01f97327561b14ab0f1b8`。
+- 已增加 Eastmoney、BaoStock、HiThink、TickFlow 的三种复权参数与 metadata 对应测试；Pytdx 增加 GBBQ 公司行动事件驱动的 QFQ/HFQ 协议级样例。
+- Probe 错误分类增加 Eastmoney、BaoStock、HiThink、TickFlow、Pytdx 和 Tushare 的失败负向样例，避免 HTTP、鉴权、连接、超时和因子缺失误报 `not_supported`。
+- `e771284b` Go test suite Run `41757355037` 通过；当前 HEAD `e245c100` 的 Go test suite Run `41757748059` 尚待结果。
+- 真实 Provider × 复权口径请求未执行；Pytdx 适配器的 GetGbbq 网络失败端到端模拟仍未完成。WebUI 本轮未修改业务代码，跨端状态保持待真实数据验收。
