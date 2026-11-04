@@ -49,6 +49,13 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 		result.Reasons = append(result.Reasons, "daily_bar_context_calendar_unavailable")
 		return result
 	}
+	for _, reason := range calendar.QualityReasons {
+		if reason == "provider_trading_calendar_sources_disagree" {
+			result.QualityStatus = model.QualityDegraded
+			result.Reasons = append(result.Reasons, "daily_bar_context_calendar_sources_disagree")
+			return result
+		}
+	}
 	barDates := make(map[string]struct{}, len(bars))
 	for _, bar := range bars {
 		barDates[bar.TradeDate] = struct{}{}

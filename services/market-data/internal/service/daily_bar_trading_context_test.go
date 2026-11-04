@@ -92,3 +92,19 @@ func TestAssessDailyBarTradingContextMissingCalendarIsUnknown(t *testing.T) {
 		t.Fatalf("missing calendar must not be interpreted as a clean result, got %+v", result)
 	}
 }
+
+func TestAssessDailyBarTradingContextDoesNotUseConflictingCalendarToConfirmMissingBars(t *testing.T) {
+	calendar := &model.TradingCalendarSnapshot{
+		QualityReasons: []string{"provider_trading_calendar_sources_disagree"},
+		Items: []model.TradingCalendarDay{{Date: "2026-10-20", IsTradingDay: true}},
+	}
+	statuses := map[string]*model.SecurityTradingStatusSnapshot{
+		"2026-10-20": dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusNoEvent),
+	}
+	result := assessDailyBarTradingContext(calendar, nil, statuses, nil)
+	if result.QualityStatus != model.QualityDegraded ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_sources_disagree") ||
+		hasDailyBarContextReason(result.Reasons, "daily_bar_missing_on_confirmed_trading_day:2026-10-20") {
+		t.Fatalf("conflicting calendar must not confirm provider missing data: %+v", result)
+	}
+}
