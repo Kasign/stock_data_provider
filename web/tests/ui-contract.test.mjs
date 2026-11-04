@@ -27,6 +27,7 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/local-alert-drafts.js", import.meta.url), "utf8"),
   readFile(new URL("../src/task-event-format.js", import.meta.url), "utf8")
 ]);
+const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
 const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow].join("\n");
@@ -796,7 +797,7 @@ test("recent analysis history supports search, single removal and local-only cle
   for (const id of ["recent-analysis-search", "clear-recent-analysis", "recent-analysis-feedback", "recent-analysis-list"]) {
     assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);
   }
-  assert.match(app, /function renderRecentTasks\([\s\S]*?recent-analysis-search[\s\S]*?record\.task_id[\s\S]*?taskStatusLabel\(record\.status\)/);
+  assert.match(app, /function renderRecentTasks\(records\)[\s\S]*?renderRecentTaskList\([\s\S]*?renderResearchStockList\(\)/);\n  assert.match(recentTaskView, /export function renderRecentTaskList\(/);\n  assert.match(recentTaskView, /record\.task_id[\s\S]*?taskStatusLabel\(record\.status\)/);
   assert.match(app, /function removeRecentTaskReference\(taskId, analysisBase = ""\)[\s\S]*?removeRecentTask\(taskId, localStorage, undefined, analysisBase\)[\s\S]*?const persistedState = safeReadRecentTasksState\(\)[\s\S]*?targetStillExists[\s\S]*?服务端任务和报告不会被删除/);
   assert.match(app, /function removeRecentTaskReference[\s\S]*?无法确认最近任务引用已移除/);
   assert.match(app, /function clearRecentTaskHistory\(\)[\s\S]*?clearRecentTasks\(localStorage\)[\s\S]*?const clearedState = safeReadRecentTasksState\(\)[\s\S]*?未能确认最近任务历史已清空[\s\S]*?服务端记录未删除/);
@@ -1575,7 +1576,7 @@ test("最近任务本地存储不可读或损坏时不覆盖原始历史，导�
   assert.match(recentTaskModule, /export function readRecentTasksState\(storage, limit = MAX_RECENT_TASKS\)/);
   assert.match(recentTaskModule, /if \(!currentState\.storageReadable \|\| !currentState\.storageValid\) return currentState\.items/);
   assert.match(app, /function safeReadRecentTasksState\(\)/);
-  assert.match(app, /function renderRecentTasks\(records\)[\s\S]*?historyState\.storageReadable[\s\S]*?historyState\.storageValid[\s\S]*?历史修改已暂停/);
+  assert.match(recentTaskView, /historyState\.storageReadable[\s\S]*?historyState\.storageValid[\s\S]*?历史修改已暂停/);
   assert.match(app, /recent_tasks: \(\(\) => \{[\s\S]*?recentTasksState\.storageReadable[\s\S]*?recentTasksState\.storageValid[\s\S]*?导出已取消/);
 });
 

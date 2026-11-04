@@ -795,3 +795,10 @@ Web 数据中心已接入被动 Provider 运行诊断、主动 Probe、六个诊
 - WebUI Checks 与对应 Browser Smoke 必须通过后，才进入下一子批次。
 
 当前执行状态：JSR-1 代码迁移已完成，原 CI 失败原因已定位并修正，等待复验；JSR-2 尚未迁移业务代码。下一步先确认 JSR-1 CI 全部通过，再决定 JSR-2B 的最小迁移范围。
+
+
+### JSR-2B：最近任务列表展示边界（2026-11-04）
+
+已将最近任务 DOM 列表构建迁移至 `web/src/recent-task-view.js`。本次仅迁移展示函数，`recent-tasks.js` 的存储层不变；`app.js` 保留协调包装，负责读取全局 state/表单值、更新反馈和触发研究标的列表刷新。活动任务引用、移除/清空操作、历史 generation 和任务恢复均未迁移。
+
+验收门禁：WebUI Checks、Chromium Browser Smoke 通过；专项核对存储不可用/损坏、空态、筛选、旧分析 API 地址、失败信息、data 属性和 ARIA 标签。CI 未完成前不进入 JSR-2C。

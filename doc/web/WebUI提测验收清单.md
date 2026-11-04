@@ -1350,3 +1350,12 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 记录任务状态和 generation/AbortController 保护边界，详见 [Web代码架构.md](./Web代码架构.md)。
 - [ ] 补充任务各子批次迁移前后行为基线与专项浏览器断言。
 - [ ] 在 JSR-1 CI 全部通过前，不开始 JSR-2 业务代码迁移。
+
+
+### JSR-2B 最近任务列表展示迁移（待 CI）
+
+- [x] 新增 `recent-task-view.js`，仅负责最近任务列表 DOM 构建。
+- [x] `app.js` 保留协调包装，不改变任务历史存储和操作流程。
+- [x] 更新 UI 契约测试，断言迁移后真实模块职责。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
+- [ ] 浏览器核对最近任务空态、异常存储、筛选、旧 API 地址、打开/移除入口。
