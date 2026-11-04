@@ -754,3 +754,17 @@
 - [x] Chromium Browser Smoke：通过（[运行记录 #41760297284](https://github.com/Kasign/stock_data_provider/actions/runs/41760297284)）。
 
 本批次仅增加客户端超时保护，不改变服务端接口、请求参数和数据语义。
+
+
+## 2026-11-04 P0-C 第四批：研究页行情缓存与连接切换
+
+用户提交：`a15845e8f5358086e98586903b4acb9a9d5a4d0d`；本轮修复提交：`fd4556937df7cd047081dab237bc3dc16a27c398`。
+
+- [x] 研究列表复用自选股批量行情快照时，行情连接配置从其它标签页变更会立即清除旧批量行情缓存。
+- [x] 修复连接变化后研究页列表 DOM 未即时刷新的问题；旧 API 地址的行情不再残留显示，列表回到未加载状态。
+- [x] 新增 Chromium 双标签页回归：先加载批量行情，再从另一标签页修改行情 API 地址和 Key，验证当前研究页立即清除旧价格。
+- [x] 保留用户新增的财务报告期切换修复：取消在途财务请求后立即恢复“读取财务指标”按钮，允许按新报告期重试。
+- [x] 财务报告期切换浏览器回归通过（[Checks #41760787560](https://github.com/Kasign/stock_data_provider/actions/runs/41760787560)，[Browser Smoke #41760787564](https://github.com/Kasign/stock_data_provider/actions/runs/41760787564)）。
+- [x] 本轮连接切换与研究列表缓存回归通过（[Checks #41760974466](https://github.com/Kasign/stock_data_provider/actions/runs/41760974466)，[Browser Smoke #41760974521](https://github.com/Kasign/stock_data_provider/actions/runs/41760974521)）。
+
+验收边界：仅验证 WebUI 浏览器本地快照、请求取消和连接切换，不代表 Provider 实际数据可用性。
