@@ -599,9 +599,10 @@ try {
       assert.match(sentimentHistoryHeader, /炸板.*质量与来源/);
       const sentimentHistoryRow = page.locator("#market-sentiment-history-body tr").first();
       const sentimentHistoryText = await sentimentHistoryRow.textContent();
-      assert.match(sentimentHistoryText, /≥55/, "lower-bound limit-up count must retain its lower-bound marker");
-      assert.match(sentimentHistoryText, /12/, "exact limit-down count must not be marked as a lower bound");
-      assert.match(sentimentHistoryText, /≥9/, "lower-bound broken-board count must retain its lower-bound marker");
+      const sentimentHistoryCells = sentimentHistoryRow.locator("td");
+      assert.equal(await sentimentHistoryCells.nth(4).textContent(), "≥55", "lower-bound limit-up count must retain its lower-bound marker");
+      assert.equal(await sentimentHistoryCells.nth(5).textContent(), "12", "exact limit-down count must not be marked as a lower bound");
+      assert.equal(await sentimentHistoryCells.nth(6).textContent(), "≥9", "lower-bound broken-board count must retain its lower-bound marker");
       assert.match(sentimentHistoryText, /覆盖 4,900 \/ 5,000/);
       assert.match(sentimentHistoryText, /源端日期 2026-10-29/);
       assert.match(sentimentHistoryText, /browser-sentiment-fixture/);
