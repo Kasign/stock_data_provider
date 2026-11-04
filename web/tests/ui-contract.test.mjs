@@ -36,6 +36,7 @@ const watchlistImportPreviewView = await readFile(new URL("../src/watchlist-impo
 const watchlistTrackingViewModel = await readFile(new URL("../src/watchlist-tracking-view-model.js", import.meta.url), "utf8");
 const watchlistListViewModel = await readFile(new URL("../src/watchlist-list-view-model.js", import.meta.url), "utf8");
 const taskEventListViewModel = await readFile(new URL("../src/task-event-list-view-model.js", import.meta.url), "utf8");
+const taskFlowSummaryViewModel = await readFile(new URL("../src/task-flow-summary-view-model.js", import.meta.url), "utf8");
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
 const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView, watchlistImportPreviewView, watchlistTrackingViewModel, watchlistListViewModel].join("\n");
