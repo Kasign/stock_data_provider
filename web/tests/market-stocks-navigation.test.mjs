@@ -2,10 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [marketStocks, app, browserAcceptance] = await Promise.all([
+const [marketStocks, app, browserAcceptance, screeningBrowserAcceptance] = await Promise.all([
   readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
-  readFile(new URL("./stock-research-browser.mjs", import.meta.url), "utf8")
+  readFile(new URL("./stock-research-browser.mjs", import.meta.url), "utf8"),
+  readFile(new URL("./screening-local-browser.mjs", import.meta.url), "utf8")
 ]);
 
 test("全市场分页行情同时提供行情详情和深度研究入口", () => {
@@ -71,6 +72,6 @@ test("全市场请求刷新期间使旧筛选快照失效", () => {
   assert.match(app, /!current\.busy && !snapshot\.busy/);
   assert.match(app, /current\.generation === snapshot\.generation/);
   assert.match(app, /全市场行情正在刷新，暂不能应用筛选条件/);
-  assert.match(browserAcceptance, /holdSecondMarketStocksResponse/);
-  assert.match(browserAcceptance, /旧快照不得继续用于筛选、导出或批量加入/);
+  assert.match(screeningBrowserAcceptance, /holdSecondMarketStocksResponse/);
+  assert.match(screeningBrowserAcceptance, /旧快照不得继续用于筛选、导出或批量加入/);
 });
