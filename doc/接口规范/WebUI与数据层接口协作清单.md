@@ -1,6 +1,6 @@
 # WebUI 与数据层接口协作清单
 
-更新时间：2026-11-03
+更新时间：2026-11-04
 适用分支：
 - WebUI：feat/webui-market-data-console
 - 数据侧：feat/full-go-data-providers-api-switch
@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。当前代码核对基线为 `05949306eba5c4cbb5b9c62bc2d656a1efc24db9`（2026-11-03；本次提交仅更新文档）。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。当前业务代码核对基线为 `05949306eba5c4cbb5b9c62bc2d656a1efc24db9`（2026-11-03）；当前分支 HEAD 已推进至 `437af45c4feee9e6ed424875b705ab18c9b1f936`，该提交只修复 parity workflow 文档路径，不包含业务代码变化。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。
@@ -221,5 +221,5 @@
 - 数据侧代码核对基线：`05949306eba5c4cbb5b9c62bc2d656a1efc24db9`。
 - Go test suite Run `41622693853`：根模块、go-core、market-data 的 gofmt/go test/race/vet，MariaDB migration/PIT 集成，Compose 校验、部署脚本语法和两个 Go 镜像构建均通过。
 - WebUI checks Run `41622693832` 通过；Live provider probe Run `41622693835` 工作流通过，但不代表所有 Provider/能力真实验收通过。
-- Go-Python parity Run `41622693855` 前三步通过，最后一步因 workflow 仍引用迁移前的 `doc/接口规范/GO_PYTHON_DATA_QUALITY_PARITY_REPORT.md` 而失败；实际文件已位于 `doc/api/接口规范/`。由数据侧修复 workflow 的 paths 过滤器和校验路径后重跑。
+- Go-Python parity Run `41622693855` 前三步通过，最后一步因 workflow 引用迁移前的文档路径而失败。已在 `437af45c` 修复 push/PR paths 过滤器和 marker/report 校验路径；修复后的新运行结果待确认。
 - 已发现 OpenAPI Schema 缺口：`SectorRanking.change_percent_5d` 及 `ProviderProbeItem.validation_*`、`coverage_dimensions`。数据侧按协作清单和整体规划优先补齐，WebUI 不复制服务端质量规则。
