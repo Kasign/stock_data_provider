@@ -128,7 +128,7 @@
 ### 板块排行字段补充说明（2026-11-03）
 
 - WebUI 使用 `amount` + `amount_unit` 展示成交额；仅 `amount_unit=CNY` 时显示人民币单位，unknown 不推断。
-- 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。`SectorRanking.change_percent_5d` 已在 `services/market-data/openapi.yaml` 中声明为可空数值，说明其为六个日收盘价计算的五交易日涨幅，单位为百分点。
+- 五日排序由服务端 `sort_by=change_5d` 执行，返回值字段为 `change_percent_5d`。`SectorRanking.change_percent_5d` 已在 `services/market-data/openapi.yaml` 中声明为可空数值，说明其为六个日收盘价计算的五交易日涨幅，单位为百分点；对应 Schema 契约测试已验证字段归属。
 - `direction=up` 表示按所选指标从高到低，`direction=down` 表示从低到高。
 - 板块资金净流入没有独立服务端接口，WebUI 继续显示未接入，不以成交额替代。
 
