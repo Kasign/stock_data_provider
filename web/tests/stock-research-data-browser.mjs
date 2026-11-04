@@ -117,7 +117,7 @@ try {
         quality_reasons: ["部分财务指标缺失"],
         sections: [{
           category: "profitability", quality_status: "degraded", report_date: "2026-09-30",
-          publication_date: "2026-10-25", has_data: true, quality_reasons: ["每股收益未返回"],
+          publication_date: "2026-10-25", available_at: "2026-10-30T01:30:00Z", has_data: true, quality_reasons: ["每股收益未返回"],
           metrics: [
             { name: "营业收入", key: "revenue", value: 123.45, unit: "亿元" },
             { name: "每股收益", key: "eps", value: null, unit: "元/股" }
@@ -211,7 +211,7 @@ try {
   assert.match(await page.locator("#fundamentals-content").textContent(), /123\.45 亿元/);
   assert.match(await page.locator("#fundamentals-content").textContent(), /— 元\/股/);
   assert.match(await page.locator("#fundamentals-meta").textContent(), /Q/);
-  assert.match(await page.locator("#fundamentals-content").textContent(), /可用时间 2026-10-30 09:30:00/);
+  assert.match(await page.locator("#fundamentals-content").textContent(), /可用时间 10\/30 09:30/);
 
   await page.locator("#load-valuations").click();
   await page.waitForFunction(() => document.querySelector("#valuation-content")?.textContent.includes("市盈率 TTM"));
