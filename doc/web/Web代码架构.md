@@ -276,3 +276,14 @@ JSR-2C2（第一步）实现：新增 `task-event-node.js`，仅负责根据显�
 4. 先覆盖空列表、损坏存储、名称编辑、分组选择、过滤/排序、行情缺失/失败/旧快照、批量选择与操作、导入预览/确认、任务页导入自选、连接变更及迟到响应。
 5. WebUI Checks 与 Chromium Browser Smoke 均通过后才进入下一小批；异步行情生命周期未完成整体设计前，禁止创建一个声称拥有完整自选页面的 controller。
 
+
+
+### 12.5 JSR-3A：自选股单项视图构建
+
+新增 `watchlist-item-view.js`，导出 `buildWatchlistItemNode`。参数为 document、record、trackingFields、groups、selectedGroup；返回完整自选项 DOM。模块只负责节点创建与 class/data/ARIA 属性，不读取全局状态、不读写 localStorage、不请求 API、不绑定事件。
+
+`app.js` 负责把行情/任务/Run 状态计算成 trackingFields，再按用户配置的顺序与可见字段筛选，调用视图模块。列表根节点继续委托 click/change 事件；名称编辑通过 `data-watchlist-name-symbol` 识别并交由 app 的 `handleWatchlistNameChange` 处理。现有浏览器验收验证了重命名持久化路径，且保留分组、批量选择和 action 按钮 data 属性。
+
+JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 均通过（提交 `6570f798`）。本次没有修改自选存储 schema、分组事务、筛选/排序规则、行情 API、请求 generation 或跨页联动。
+
+后续拆分顺序应优先评估导入预览解析/展示和辅助字段 view model；不得把批量行情请求生命周期或浏览器数据导入/导出事务搬入 view 模块。

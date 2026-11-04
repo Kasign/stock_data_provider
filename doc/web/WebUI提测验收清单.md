@@ -1420,3 +1420,18 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] UIR-3/4 后续如出现明确组件或页面缺陷，再按截图证据分批修复。
 - [ ] UIR-5 CSS 级联收敛需在页面样式稳定后单独执行，不与 JS 模块化混合。
 - [ ] 中文排版仍需本地 CJK 字体环境实机复核。
+
+
+### JSR-3A 自选股单项视图迁移（已验收）
+
+- [x] 新增 `web/src/watchlist-item-view.js`，只构建单条自选 DOM 节点。
+- [x] 显式传入 document、股票记录、辅助字段展示模型、分组列表和当前分组。
+- [x] 新模块不访问全局 state/localStorage、不发请求、不绑定事件。
+- [x] 自定义名称输入改用 data 属性，由 `#watchlist-list` 根节点统一委托 change 事件；原有名称持久化确认与错误反馈保持不变。
+- [x] 保留原有 `.watchlist-item`、子节点 class、action data 属性、checkbox、ARIA label 和分组 select 语义。
+- [x] package check 加入新模块语法检查；更新 UI 契约和市场入口契约，断言真实模块边界。
+- [x] WebUI Checks #41813659508（提交 `6570f798`）通过。
+- [x] Chromium Browser Smoke #41813659580（提交 `6570f798`）通过。
+- [x] 自选页 320/768/1280/1600px 截图已复核；CI 缺少 CJK 字体，中文排版仍需实机复核。
+- [ ] JSR-3B：继续评估导入预览/辅助字段格式化的纯函数或 DOM 边界，不迁移整个页面控制器。
+- [ ] 自选批量行情 generation、AbortController、成员变化和连接变更失效机制不得拆散。

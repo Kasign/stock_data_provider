@@ -845,3 +845,20 @@ JSR-2C1 代码迁移已提交，当前等待 WebUI Checks 与 Chromium Browser S
 - 下一批先建立自选股函数调用与 state 读写表，确认 `renderWatchlist` 的数据准备、DOM 构建、交互处理边界，再选择低副作用 DOM 节点构建作为首个迁移点。不得重复实现已有存储/分组/排序/批量事务能力。
 
 下一步执行顺序：完成 JSR-3 自选股边界和回归基线 → 小批抽离纯 DOM 展示 → WebUI Checks 与 Browser Smoke 通过 → 再评估页面控制器迁移；UIR-5 CSS 收敛继续独立排期，不与 JS 拆分混合提交。
+
+
+### JSR-3A：自选股单项 DOM 构建迁移（已验收）
+
+本批从 `renderWatchlist` 抽离单条自选股 DOM 构建，新增 `web/src/watchlist-item-view.js`。模块通过显式参数接收 document、股票记录、已格式化的辅助字段、分组列表和当前分组，返回完整 `.watchlist-item` 节点；不访问全局 state、localStorage、API，不绑定事件。
+
+`app.js` 保留行情/任务/Run 状态聚合、字段可见顺序计算、筛选排序、页面渲染协调、跨页联动和批量行情请求生命周期。自定义名称编辑改为 `#watchlist-list` 根节点的 change 委托，避免每次重绘为每个输入框单独绑定监听；既有点击委托和分组/选择 change 逻辑保留。
+
+验收结果：
+- WebUI Checks：#41813659508，提交 `6570f798`，通过。
+- Chromium Browser Smoke：#41813659580，提交 `6570f798`，通过。
+- 同一运行覆盖 320/375/600/768/900/1280/1600px 页面布局；自选股现有专项验收覆盖名称修改、分组、筛选、批量选择/删除、导入预览/确认和批量行情快照。
+- Browser Smoke Artifact：#41813528730（提交 `63f59a08`，运行时代码与最终提交相同，后续仅更新测试契约）已检查 320/768/1280/1600px 自选页截图。CI 中文字体限制仍然存在。
+
+本批中途由 CI 揭示的旧契约问题均已修正：测试原先要求 action 按钮和辅助字段节点必须直接写在 app.js；现在改为检查新视图模块及 app 的协调边界。没有修改 API、存储 key/schema、CSS 或行情请求行为。
+
+下一步 JSR-3B 不直接抽取整个页面 controller。先对导入预览、辅助字段格式化和分组/筛选交互做独立边界评估，选择副作用最低的一项继续；批量行情 generation/AbortController 与跨页联动仍留在 app.js。
