@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-04（当前分支基线：`e5e78db7fe20023f06a5564439d56739bb94394f`）
+更新时间：2026-11-04（当前代码/测试基线：`910ad361139333879bfb5dfa7f13b89dca0868c4`；最新文档提交以分支 HEAD 为准）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -965,7 +965,8 @@ JSR-5B 已实施：将任务流程摘要计算迁入 `task-flow-summary-view-mod
 - [x] 核对 `buildTaskEventNode`：`task-event-node.js` 已独立负责节点 DOM 构建；节点展开状态仍由 app.js 的 `expandedTaskEventSequences` 持有，避免把页面交互状态转移到展示模块。
 - [x] 筛选按钮绑定、详情选中和节点 toggle 仍由 app.js 统一协调；不新增 task-event Controller。
 - [x] 发现节点摘要与详情面板重复实现 duration_ms 校验/格式化；统一迁入 `task-event-format.js` 的 `taskEventDurationLabel`，避免两处展示口径漂移。
-- [ ] WebUI Checks 与 Chromium Browser Smoke：本批提交后执行，结果以当前提交对应 Actions 为准。
+- [x] WebUI Checks #41830356255 通过：`npm run check`、`npm test`（444/444）、Compose 配置校验和镜像构建均通过。
+- [x] Chromium Browser Smoke #41830355993 通过：响应式布局、设置/研究记录/告警跨标签页、自选行情、Run Flow 交互与恢复、个股研究、数据中心、选股和全市场分页生命周期全部通过。
 
 后续 JSR-5E：仅审查 `task-workflow.js` 与 app.js 的事件分页、身份校验、轮询和请求代际边界；禁止迁移任务请求生命周期或改变状态所有权，先审查再决定是否有安全拆分收益。
 
@@ -974,3 +975,23 @@ JSR-5C/5D 首轮 CI 纠正记录：提交 `1ffd8ac9` 的 WebUI Checks #418298041
 
 
 JSR-5C/5D 第二轮 CI 纠正记录：修正换行后，WebUI Checks 的 444 项测试中 443 项通过，唯一失败为旧 UI contract 仍要求 `task-event-node.js` 内联判断 `duration_ms`。该断言与本次抽取共享格式化函数后的新职责冲突。已改为校验共享 formatter 存在且节点/详情两侧均调用它；未修改运行时行为。后续提交重新运行全量 CI。
+
+
+### 2026-11-04 JSR-5C/5D 最终验收
+
+- 代码与契约修正提交：`7305145f`、`910ad361`；本批代码变更集中在共享耗时格式化、节点/详情 adapter 调用和 UI contract 更新。
+- WebUI Checks #41830356255：通过；`npm run check` 通过，`npm test` 444/444 通过，Compose 配置校验和 Nginx 镜像构建通过。
+- Chromium Browser Smoke #41830355993：通过；响应式布局、设置/研究记录/告警跨标签页、自选行情、Run Flow 交互与恢复、个股研究交互及数据质量、Provider 探测、选股和全市场分页生命周期均通过。
+- 首轮检查曾发现写入换行错误；第二轮检查发现 UI contract 仍固定旧的内联实现。两项均已修正并保留失败记录，最终通过证据仅引用本批最终提交对应的 Actions。
+
+### 2026-11-04 JSR-5E：任务工作流与请求生命周期边界审查（审查完成，无代码迁移）
+
+审查对象：`task-workflow.js`、`validateTaskEventPage`、app.js 的 `pollTask`、`loadTaskRunResult`、`stopTaskPolling`、`abortRunResultRequest`。
+
+- [x] `validateTaskEventPage` 已是独立纯函数：负责 Task ID、事件结构、可选 Run ID、分页游标推进、sequence 去重和 hasMore 判定；现有 `task-workflow.test.mjs` 覆盖有效页、错误 envelope、身份不匹配、可选 run_id、无效事件、重复序号和满页续读。
+- [x] `pollTask` 仍负责组合 Task 状态与阶段事件并行请求、连接代际/Task ID/分析地址校验、事件分页游标推进、错误分类、终态续读、Run 结果加载时机和轮询间隔。它是跨状态协调流程，不适合整体搬入纯模块。
+- [x] `loadTaskRunResult` 负责 Run 读取重试、AbortController、runResultGeneration、Task/Run/连接身份校验、证券集合校验、旧结果保留及按钮 busy 收尾；必须继续由 app 协调层持有。
+- [x] `stopTaskPolling` 先递增 pollGeneration 再 abort 请求并清理 timer；旧请求的迟到回包由 generation 校验兜底。此顺序不可拆散。
+- [x] 当前未发现足够独立且不增加参数耦合的下一块纯逻辑。继续抽取 poll controller、task controller 或统一请求状态机，会把状态所有权从 app 转移出去并扩大回归面，本轮不做。
+
+结论：JSR-5A～5E 的任务工作流审查完成。现有任务领域模块已覆盖可安全独立的纯验证、列表投影、摘要计算和 DOM adapter；Task/Run 请求生命周期及跨模块协调保留在 app.js。后续应转向全站 app.js 剩余职责盘点，按业务域识别真正独立的边界，不再围绕 Run Flow 为拆分而拆分。

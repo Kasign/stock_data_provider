@@ -495,3 +495,20 @@ JSR-5C/5D 首轮静态检查在 `node --check` 阶段发现 `task-event-node.js`
 
 
 JSR-5C/5D UI contract 同步：耗时格式化迁入 `task-event-format.js` 后，静态契约不再要求节点 builder 内联实现校验；改为验证共享 formatter 的定义，以及节点与详情 adapter 均调用该函数。该调整使契约测试跟随模块职责边界，而不是锁定旧实现位置。
+
+
+### 12.18 JSR-5E 任务工作流与请求生命周期边界审查
+
+| 能力 | 当前归属 | 审查结论 |
+|---|---|---|
+| 单页阶段事件 envelope/身份/游标/去重校验 | `task-workflow.js` | 已独立为纯函数并有专项单测 |
+| Task 与事件并行读取、错误分类、续页和终态调度 | app.js 的 `pollTask` | 保留 app 协调层，跨状态/跨请求职责较多 |
+| Run 结果重试、连接代际、Task/Run/证券身份校验 | app.js 的 `loadTaskRunResult` | 保留请求生命周期所有权 |
+| 轮询取消、代际递增和 timer 清理 | app.js 的 `stopTaskPolling` | 必须先递增 generation，再 abort/清 timer |
+| Run 请求取消 | app.js 的 `abortRunResultRequest` | 与当前 Run generation 和结果读取按钮收尾绑定 |
+
+`task-workflow.js` 已负责纯分页事件验证，单测覆盖 envelope、Task 身份、可选 Run ID、事件结构、游标推进、重复 sequence 和满页续读。app.js 的 `pollTask` 同时编排 Task 与事件请求、连接/任务上下文校验、事件 Map 更新、错误恢复、终态事件续读和 Run 结果加载时机；`loadTaskRunResult` 则管理重试、取消、代际、身份校验和旧结果保留。两者都不是可安全迁移的单一职责函数。
+
+本轮未创建 Task Controller、Polling Controller 或请求状态机。JSR-5A～5E 的任务流程模块边界审查完成；后续回到全站 app.js 剩余业务域盘点，按真实职责收益选择下一模块。
+
+JSR-5C/5D 验收：WebUI Checks #41830356255（444/444 tests、语法检查、Compose 校验、镜像构建通过）；Chromium Browser Smoke #41830355993（全部执行步骤通过）。
