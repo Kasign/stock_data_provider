@@ -679,3 +679,11 @@
 - [x] 顶部主题切换后，同步设置页主题按钮的选中状态。
 - [x] 主题持久化失败时，当前页面仍可切换主题；设置页选中状态跟随当前会话主题，顶部按钮明确显示未保存警告。
 - [ ] 本补充用例的 WebUI Checks 与 Chromium Browser Smoke 等待本次提交 SHA 验收。
+
+
+### P0-B3 最终补充验收结果
+
+- [x] 主题初始化、顶部主题切换、设置页主题选中状态一致；主题写入失败时仍保持会话切换并明确提示未持久化。
+- [x] WebUI Checks：通过（[运行记录 #41756141508](https://github.com/Kasign/stock_data_provider/actions/runs/41756141508)）。
+- [x] Chromium Browser Smoke：通过，包含新增设置中心主题/存储失败专项和全量既有浏览器回归（[运行记录 #41756321232](https://github.com/Kasign/stock_data_provider/actions/runs/41756321232)）。
+- [x] P0-B3 最终验收代码 SHA：`f86170981421ad1408d80c666f06c428ad8f7421`。
