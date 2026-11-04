@@ -39,6 +39,6 @@ test("exports malformed numeric values as blank instead of coercing them to zero
     quote: { change_percent: false, turnover_rate: "   ", amount: true, amount_unit: "CNY" },
     ma5: false, ma20: " "
   } }] });
-  assert.match(csv, /"600001.SH","类型异常",,,,,,,/);
+  assert.match(csv, /"600001.SH","类型异常",,,,"CNY",,,"unknown"/);
   assert.doesNotMatch(csv, /"类型异常",0,0,1/);
 });
