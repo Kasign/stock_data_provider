@@ -939,7 +939,7 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
-	// public-daily-only 用于低成本核验现有公共源的未复权日 K；不触发 quote、复权、Universe、新闻或其他高成本能力。
+	// public-daily-only 对 Sina、Tencent、Eastmoney、Yahoo 各执行一次未复权日 K 请求；跳过 quote、复权、Universe、新闻及其他高成本能力。
 	if os.Getenv("MARKET_DATA_LIVE_PUBLIC_DAILY_ONLY") == "1" {
 		sina := NewSina(12*time.Second, "")
 		runDaily("sina", "sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
