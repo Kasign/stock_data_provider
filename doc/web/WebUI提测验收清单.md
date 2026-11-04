@@ -1163,11 +1163,11 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] WebUI Checks：[运行记录 #41797556875](https://github.com/Kasign/stock_data_provider/actions/runs/41797556875) 已通过。
 - [ ] Chromium Browser Smoke：[运行记录 #41797557059](https://github.com/Kasign/stock_data_provider/actions/runs/41797557059) 运行中，最终结果待回填。
 - [x] 组合场景实现提交：`60a23f76f71cee8e84fbf4f0c6fd6cdd5b544193`。
-- [x] 请求启动/路由结束等待超时保护提交：`0e7721075794b4b091fc7a67bba878af64124e74`。
-- [x] WebUI Checks #41797556875、#41798082510 均通过。
-- [ ] Browser Smoke #41797557059 与 #41798082682 待最终结果；不将运行中状态记为通过。
+- [x] 请求启动/路由结束等待超时保护已加入；发现并修正跨标签页场景后未恢复 `600519.SH`、导致旧测试等待错误请求的问题。
+- [x] 最终测试修正提交：`3d84e3a18ee615c1888aa26dca50fcac9921499e`；WebUI Checks 待回填。
+- [ ] 旧 Browser Smoke #41797557059、#41798082682、#41798354435、#41798494008 均不作为通过证据；等待最终修正版本 CI。
 
-说明：此前版本使用 `page.waitForEvent("requestfailed")` 作为唯一取消证据，导致测试步骤可能无限等待并使 15 分钟工作流被取消。修正版改为验证 UI 恢复与延迟旧响应不回填，并为路由处理结束增加 5 秒上限。此测试不声称 Playwright 路由结束时序等同于真实网络取消。
+说明：此前版本使用 `page.waitForEvent("requestfailed")` 作为唯一取消证据，导致测试步骤可能无限等待并使 15 分钟工作流被取消。修正版改为验证 UI 恢复与延迟旧响应不回填，并为路由处理结束增加 5 秒上限。此测试不声称 Playwright 路由结束时序等同于真实网络取消。后续复核发现跨标签页场景改变标的后，原有 `oldRequestStarted` 仍只由 `600519.SH/fundamentals` 路由分支触发；修正为先恢复原标的再继续旧用例，并给三个路由启动等待设置超时。
 
 ## 2026-11-04 全站 UI 样式一致性 Review（计划）
 
