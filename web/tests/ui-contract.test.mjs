@@ -932,7 +932,9 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
 });
 
 test("run-flow events expose only server-provided durations and diagnostics", () => {
-  assert.match(taskEventNode, /event\.duration_ms !== undefined && event\.duration_ms !== null/);
+  assert.match(taskEventFormat, /export function taskEventDurationLabel\(value\)/);
+  assert.match(taskEventNode, /taskEventDurationLabel\(event\.duration_ms\)/);
+  assert.match(taskEventView, /taskEventDurationLabel\(event\.duration_ms\)/);
   assert.match(taskEventNode, /event\.error_code/);
   assert.match(taskEventNode, /parts\.join\(" · "\)/);
   assert.match(apiClient, /after_sequence/);

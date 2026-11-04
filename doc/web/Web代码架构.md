@@ -492,3 +492,6 @@ JSR-5C/5D 审查没有发现值得迁移的独立详情 ViewModel 或事件 Cont
 
 
 JSR-5C/5D 首轮静态检查在 `node --check` 阶段发现 `task-event-node.js`、`task-event-view.js` 的 import 声明后存在字面量 `\\n`，由本次文件写入转义错误导致。已在后续修正提交中改为真实换行；首轮失败记录保留，最终状态以修正提交 CI 为准。
+
+
+JSR-5C/5D UI contract 同步：耗时格式化迁入 `task-event-format.js` 后，静态契约不再要求节点 builder 内联实现校验；改为验证共享 formatter 的定义，以及节点与详情 adapter 均调用该函数。该调整使契约测试跟随模块职责边界，而不是锁定旧实现位置。

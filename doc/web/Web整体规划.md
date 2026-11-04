@@ -971,3 +971,6 @@ JSR-5B 已实施：将任务流程摘要计算迁入 `task-flow-summary-view-mod
 
 
 JSR-5C/5D 首轮 CI 纠正记录：提交 `1ffd8ac9` 的 WebUI Checks #41829804138 在 `node --check` 阶段发现两个展示模块 import 后写入了字面量转义换行，属于本次 GitHub API 写入文本转义错误。已定位并修正 `task-event-node.js` 与 `task-event-view.js`；以修正提交对应的 CI 结果作为最终验收依据，首轮失败记录保留，不覆盖历史。
+
+
+JSR-5C/5D 第二轮 CI 纠正记录：修正换行后，WebUI Checks 的 444 项测试中 443 项通过，唯一失败为旧 UI contract 仍要求 `task-event-node.js` 内联判断 `duration_ms`。该断言与本次抽取共享格式化函数后的新职责冲突。已改为校验共享 formatter 存在且节点/详情两侧均调用它；未修改运行时行为。后续提交重新运行全量 CI。
