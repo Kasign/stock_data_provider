@@ -46,7 +46,9 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		Quality      string   `json:"quality,omitempty"`
 		QualityNotes []string `json:"quality_notes,omitempty"`
 		Rows         int      `json:"rows,omitempty"`
-		Error        string   `json:"error,omitempty"`
+		Error        string                   `json:"error,omitempty"`
+		HTTP         []liveProbeHTTPResponse    `json:"http_responses,omitempty"`
+		QuoteFields  *tickflowQuoteRawDiagnostic `json:"quote_fields,omitempty"`
 	}
 
 	results := make([]result, 0, 4)
@@ -76,6 +78,8 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 	}
 
 	runQuote := func() {
+		capture := &liveProbeCapture{}
+		client.client.Transport = capture.transport()
 		run("quote", func() (int, string, []string, error) {
 			item, err := client.FetchQuote(ctx, "600519.SH")
 			if err != nil {
@@ -86,6 +90,21 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 			}
 			return 1, string(item.QualityStatus), item.QualityReasons, nil
 		})
+		if len(results) > 0 {
+			httpResponses := capture.snapshot()
+			if len(httpResponses) > 0 {
+				var envelope struct {
+					Data []tickflowQuoteRawDiagnostic `json:"data"`
+				}
+				if json.Unmarshal([]byte(httpResponses[0].BodySample), &envelope) == nil && len(envelope.Data) > 0 {
+					results[len(results)-1].QuoteFields = &envelope.Data[0]
+				}
+				for i := range httpResponses {
+					httpResponses[i].BodySample = ""
+				}
+			}
+			results[len(results)-1].HTTP = httpResponses
+		}
 	}
 	if quoteOnly || (!indexOnly && !dailyOnly) {
 		runQuote()
@@ -175,6 +194,19 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 	if len(failures) > 0 {
 		t.Fatalf("TickFlow live capability acceptance failed: %v", failures)
 	}
+}
+
+
+type tickflowQuoteRawDiagnostic struct {
+	Symbol    string          `json:"symbol,omitempty"`
+	LastPrice json.RawMessage `json:"last_price,omitempty"`
+	PrevClose json.RawMessage `json:"prev_close,omitempty"`
+	Open      json.RawMessage `json:"open,omitempty"`
+	High      json.RawMessage `json:"high,omitempty"`
+	Low       json.RawMessage `json:"low,omitempty"`
+	Volume    json.RawMessage `json:"volume,omitempty"`
+	Amount    json.RawMessage `json:"amount,omitempty"`
+	Timestamp json.RawMessage `json:"timestamp,omitempty"`
 }
 
 func errLiveProbeContract(message string) error {

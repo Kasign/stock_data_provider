@@ -165,7 +165,7 @@ func (t liveProbeCaptureTransport) RoundTrip(request *http.Request) (*http.Respo
 		RequestMethod:       request.Method,
 		RequestContentType:  request.Header.Get("Content-Type"),
 		RequestBodyBytes:    request.ContentLength,
-		APIKeyHeaderPresent: strings.TrimSpace(request.Header.Get("apikey")) != "",
+		APIKeyHeaderPresent: strings.TrimSpace(request.Header.Get("apikey")) != "" || strings.TrimSpace(request.Header.Get("x-api-key")) != "",
 	}
 	t.capture.add(record)
 
@@ -321,6 +321,7 @@ func TestLiveProbeCaptureRecordsRequestMetadataWithoutSecrets(t *testing.T) {
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("apikey", "must-never-appear-in-report")
+	request.Header.Set("x-api-key", "must-also-never-appear-in-report")
 	response, err := client.Do(request)
 	if err != nil {
 		t.Fatalf("send request: %v", err)
@@ -342,7 +343,7 @@ func TestLiveProbeCaptureRecordsRequestMetadataWithoutSecrets(t *testing.T) {
 		t.Fatalf("request body length should be recorded: %+v", got)
 	}
 	encoded, _ := json.Marshal(got)
-	if strings.Contains(string(encoded), "must-never-appear-in-report") {
+	if strings.Contains(string(encoded), "must-never-appear-in-report") || strings.Contains(string(encoded), "must-also-never-appear-in-report") {
 		t.Fatalf("API key value leaked into probe report: %s", encoded)
 	}
 }
