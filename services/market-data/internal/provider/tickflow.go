@@ -23,6 +23,8 @@ import (
 
 const tickflowVersion = "tickflow-rest-v1"
 
+const tickflowMaxQuoteSymbolsPerRequest = 5
+
 type tickflowIndexDefinition struct {
 	Symbol string
 	Code   string
@@ -256,17 +258,26 @@ func (p *TickFlow) FetchIndexQuotes(ctx context.Context) (*model.IndexQuoteSnaps
 		symbols = append(symbols, definition.Symbol)
 		definitions[definition.Symbol] = definition
 	}
-	raw, err := p.getJSON(ctx, p.apiURL, "/v1/quotes", url.Values{"symbols": []string{strings.Join(symbols, ",")}}, true)
-	if err != nil {
-		return nil, fmt.Errorf("TickFlow index quote request: %w", err)
-	}
-	data, err := tickflowResponseData(raw)
-	if err != nil {
-		return nil, err
-	}
-	var quotes []tickflowQuotePayload
-	if err := json.Unmarshal(data, &quotes); err != nil {
-		return nil, fmt.Errorf("decode TickFlow index quote data: %w", err)
+	quotes := make([]tickflowQuotePayload, 0, len(symbols))
+	for start := 0; start < len(symbols); start += tickflowMaxQuoteSymbolsPerRequest {
+		end := start + tickflowMaxQuoteSymbolsPerRequest
+		if end > len(symbols) {
+			end = len(symbols)
+		}
+		batch := symbols[start:end]
+		raw, err := p.getJSON(ctx, p.apiURL, "/v1/quotes", url.Values{"symbols": []string{strings.Join(batch, ",")}}, true)
+		if err != nil {
+			return nil, fmt.Errorf("TickFlow index quote request (%s): %w", strings.Join(batch, ","), err)
+		}
+		data, err := tickflowResponseData(raw)
+		if err != nil {
+			return nil, err
+		}
+		var batchQuotes []tickflowQuotePayload
+		if err := json.Unmarshal(data, &batchQuotes); err != nil {
+			return nil, fmt.Errorf("decode TickFlow index quote data: %w", err)
+		}
+		quotes = append(quotes, batchQuotes...)
 	}
 
 	fetchedAt := time.Now().UTC()

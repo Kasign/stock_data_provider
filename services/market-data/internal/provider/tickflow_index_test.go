@@ -38,16 +38,19 @@ func TestTickFlowHTTPStatusErrorPreservesSafeProviderMessage(t *testing.T) {
 }
 
 func TestTickFlowFetchIndexQuotesParsesAllowlistedCoreIndexes(t *testing.T) {
+	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/quotes" {
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
-		if got := r.URL.Query().Get("symbols"); got != strings.Join(tickflowTestIndexSymbols(), ",") {
-			t.Errorf("symbols query = %q", got)
+		requestCount++
+		requestedSymbols := strings.Split(r.URL.Query().Get("symbols"), ",")
+		if len(requestedSymbols) == 0 || len(requestedSymbols) > tickflowMaxQuoteSymbolsPerRequest {
+			t.Errorf("request symbol count = %d, want 1..%d", len(requestedSymbols), tickflowMaxQuoteSymbolsPerRequest)
 		}
 		now := time.Now().UTC().Add(-time.Minute).UnixMilli()
 		rows := make([]map[string]any, 0, len(tickflowCoreIndexDefinitions))
-		for _, def := range tickflowCoreIndexDefinitions {
+		for _, def := range tickflowTestRequestedIndexDefinitions(r) {
 			rows = append(rows, map[string]any{
 				"symbol": def.Symbol, "name": def.Name, "last_price": 101.0, "prev_close": 100.0,
 				"open": 99.0, "high": 102.0, "low": 98.0, "amount": 123456.0, "timestamp": now,
@@ -61,6 +64,9 @@ func TestTickFlowFetchIndexQuotesParsesAllowlistedCoreIndexes(t *testing.T) {
 	got, err := p.FetchIndexQuotes(context.Background())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if requestCount != 2 {
+		t.Fatalf("expected two batched index requests, got %d", requestCount)
 	}
 	if len(got.Items) != len(tickflowCoreIndexDefinitions) || got.QualityStatus != model.QualityValid {
 		t.Fatalf("unexpected index quote snapshot: %+v", got)
@@ -83,7 +89,7 @@ func TestTickFlowFetchIndexQuotesDegradesMissingOptionalFields(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC().Add(-time.Minute).UnixMilli()
 		rows := make([]map[string]any, 0, len(tickflowCoreIndexDefinitions))
-		for _, def := range tickflowCoreIndexDefinitions {
+		for _, def := range tickflowTestRequestedIndexDefinitions(r) {
 			rows = append(rows, map[string]any{"symbol": def.Symbol, "last_price": 101.0, "prev_close": 100.0,
 				"open": 99.0, "high": 102.0, "low": 98.0, "timestamp": now})
 		}
@@ -197,4 +203,18 @@ func TestTickFlowFetchIndexQuotesDropsInconsistentChangeExtensions(t *testing.T)
 	if !containsTickFlowReason(got.QualityReasons, "provider_index_change_fields_inconsistent") {
 		t.Fatalf("snapshot must disclose contradictory index change fields: %+v", got.QualityReasons)
 	}
+}
+
+func tickflowTestRequestedIndexDefinitions(r *http.Request) []tickflowIndexDefinition {
+	requested := strings.Split(r.URL.Query().Get("symbols"), ",")
+	definitions := make([]tickflowIndexDefinition, 0, len(requested))
+	for _, symbol := range requested {
+		for _, definition := range tickflowCoreIndexDefinitions {
+			if definition.Symbol == symbol {
+				definitions = append(definitions, definition)
+				break
+			}
+		}
+	}
+	return definitions
 }

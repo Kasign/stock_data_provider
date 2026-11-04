@@ -465,3 +465,11 @@ Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对�
 - 工作流改为显式标记：`[include_public]` 才执行通用公共 Provider 探测；`[include_news]` 才执行新闻检索；TickFlow 可用 `[tickflow_index_only]` 仅调用指数行情；Tushare 可用 `[tushare_daily_only]` 仅调用普通 A 股日线。
 - Tushare daily-only 模式跳过基础资料、交易日历、估值和指数等高权限接口，只发起一次日线能力请求；TickFlow index-only 模式只发起一次指数行情请求。常规测试仍保留完整能力探测。
 - 这些模式只缩小请求范围，不改变 Provider 请求参数、数据校验和质量门禁。提交需同时带对应 Provider include 标记，例如 `[include_tickflow] [tickflow_index_only]`。
+
+
+## 37. 2026-11-04 TickFlow 指数行情单次标的数量限制修复
+
+- 定向线上探测 Run 41809379496 的实际 Job 126504567940 失败；上游明确返回 TOO_MANY_SYMBOLS，请求 6 个指数，单次最多 5 个。该问题不是 Key、网络或权限故障。
+- FetchIndexQuotes 已调整为每批最多 5 个标的，6 个核心指数分两次 GET 获取，再合并结果进入原有白名单、重复项、缺失项、价格、涨跌幅、时间戳和金额质量校验；不降低质量门禁。
+- 单测覆盖每次请求标的数上限、6 个指数拆为两批及合并后的完整快照；异常字段测试夹具按每次请求的 symbols 返回对应行，避免模拟出重复数据。
+- 本节记录代码修复，线上复测仍待执行，不代表 TickFlow 指数行情已验收通过。
