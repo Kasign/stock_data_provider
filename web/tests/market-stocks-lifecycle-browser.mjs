@@ -99,7 +99,7 @@ try {
 
   // 翻页必须使用当前页大小和复权口径，且仅更新一次请求。
   await page.locator("#market-stocks-next").click();
-  await page.waitForFunction(() => document.querySelector("#market-stocks-page-label")?.textContent.includes("第 2 页"));
+  await page.waitForFunction(() => document.querySelector("#market-stocks-summary")?.textContent.includes("第 2 页 · 返回 10 条"));
   assert.deepEqual(requests[1], { page: 2, pageSize: 50, adjustment: "forward_adjusted" });
   assert.equal(await page.locator("#market-stocks-body tr").count(), 10);
   assert.equal(await page.locator("#market-stocks-next").isEnabled(), false);
