@@ -1359,3 +1359,11 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 更新 UI 契约测试，断言迁移后真实模块职责。
 - [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
 - [ ] 浏览器核对最近任务空态、异常存储、筛选、旧 API 地址、打开/移除入口。
+
+
+### JSR-2B 首轮 CI 失败与修复
+
+- [x] Browser Smoke 定位视图模块未定义 `filterRecentTasks`；已改为由 app 协调层筛选后传入展示数据，避免视图模块反向依赖数据层。
+- [x] WebUI Checks 定位 UI 契约测试断言换行转义导致测试文件语法错误；已修复断言结构。
+- [ ] 修复后 WebUI Checks 通过。
+- [ ] 修复后 Chromium Browser Smoke 通过。

@@ -802,3 +802,6 @@ Web 数据中心已接入被动 Provider 运行诊断、主动 Probe、六个诊
 已将最近任务 DOM 列表构建迁移至 `web/src/recent-task-view.js`。本次仅迁移展示函数，`recent-tasks.js` 的存储层不变；`app.js` 保留协调包装，负责读取全局 state/表单值、更新反馈和触发研究标的列表刷新。活动任务引用、移除/清空操作、历史 generation 和任务恢复均未迁移。
 
 验收门禁：WebUI Checks、Chromium Browser Smoke 通过；专项核对存储不可用/损坏、空态、筛选、旧分析 API 地址、失败信息、data 属性和 ARIA 标签。CI 未完成前不进入 JSR-2C。
+
+
+JSR-2B 验证复盘：首轮 CI 暴露两处迁移遗漏：视图模块误直接调用了未导入的 `filterRecentTasks`，以及 UI 契约测试替换时换行转义导致测试文件语法错误。已调整为由 app 协调层完成筛选并向视图模块传入结果，修正测试断言结构后重新运行 CI。该轮 Browser Smoke 发现了真实运行时错误，因此本批尚未验收通过。

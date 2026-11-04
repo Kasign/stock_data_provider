@@ -3,7 +3,7 @@ export function renderRecentTaskList({
   countElement,
   historyState,
   records,
-  filters = {},
+  totalCount = Array.isArray(records) ? records.length : 0,
   analysisBase = "",
   formatDateTime,
   taskStatusLabel,
@@ -27,14 +27,13 @@ export function renderRecentTaskList({
     };
   }
 
-  const allItems = Array.isArray(records) ? records : historyState.items;
-  const items = filterRecentTasks(allItems, filters);
-  countElement.textContent = items.length + " / " + allItems.length + "（最多 10）";
+  const items = Array.isArray(records) ? records : [];
+  countElement.textContent = items.length + " / " + totalCount + "（最多 10）";
 
-  if (!allItems.length || !items.length) {
+  if (!totalCount || !items.length) {
     const empty = document.createElement("div");
     empty.className = "empty-row";
-    empty.textContent = !allItems.length
+    empty.textContent = !totalCount
       ? "完成一次分析后，这里会显示最近任务。"
       : "没有匹配项，请调整关键词或清除搜索。";
     root.append(empty);

@@ -313,18 +313,21 @@ function persistTaskReference() {
 }
 
 function renderRecentTasks(records) {
+  const historyState = safeReadRecentTasksState();
+  const allItems = Array.isArray(records) ? records : historyState.items;
+  const filteredItems = filterRecentTasks(allItems, {
+    search: $("#recent-analysis-search").value,
+    status: $("#recent-analysis-status").value,
+    taskType: $("#recent-analysis-type").value,
+    from: $("#recent-analysis-from").value,
+    to: $("#recent-analysis-to").value
+  });
   const result = renderRecentTaskList({
     root: $("#recent-analysis-list"),
     countElement: $("#recent-analysis-count"),
-    historyState: safeReadRecentTasksState(),
-    records,
-    filters: {
-      search: $("#recent-analysis-search").value,
-      status: $("#recent-analysis-status").value,
-      taskType: $("#recent-analysis-type").value,
-      from: $("#recent-analysis-from").value,
-      to: $("#recent-analysis-to").value
-    },
+    historyState,
+    records: filteredItems,
+    totalCount: allItems.length,
     analysisBase: state.settings.analysisBase,
     formatDateTime,
     taskStatusLabel,

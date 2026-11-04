@@ -797,7 +797,9 @@ test("recent analysis history supports search, single removal and local-only cle
   for (const id of ["recent-analysis-search", "clear-recent-analysis", "recent-analysis-feedback", "recent-analysis-list"]) {
     assert.match(html, new RegExp('id="' + id + '"'), "recent-history control must exist: " + id);
   }
-  assert.match(app, /function renderRecentTasks\(records\)[\s\S]*?renderRecentTaskList\([\s\S]*?renderResearchStockList\(\)/);\n  assert.match(recentTaskView, /export function renderRecentTaskList\(/);\n  assert.match(recentTaskView, /record\.task_id[\s\S]*?taskStatusLabel\(record\.status\)/);
+  assert.match(app, /function renderRecentTasks\\(records\\)[\\s\\S]*?renderRecentTaskList\\([\\s\\S]*?renderResearchStockList\\(\\)/);
+  assert.match(recentTaskView, /export function renderRecentTaskList\\(/);
+  assert.match(recentTaskView, /record\\.task_id[\\s\\S]*?taskStatusLabel\\(record\\.status\\)/);
   assert.match(app, /function removeRecentTaskReference\(taskId, analysisBase = ""\)[\s\S]*?removeRecentTask\(taskId, localStorage, undefined, analysisBase\)[\s\S]*?const persistedState = safeReadRecentTasksState\(\)[\s\S]*?targetStillExists[\s\S]*?服务端任务和报告不会被删除/);
   assert.match(app, /function removeRecentTaskReference[\s\S]*?无法确认最近任务引用已移除/);
   assert.match(app, /function clearRecentTaskHistory\(\)[\s\S]*?clearRecentTasks\(localStorage\)[\s\S]*?const clearedState = safeReadRecentTasksState\(\)[\s\S]*?未能确认最近任务历史已清空[\s\S]*?服务端记录未删除/);
