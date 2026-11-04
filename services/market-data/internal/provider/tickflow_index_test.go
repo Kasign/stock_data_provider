@@ -12,6 +12,32 @@ import (
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
+
+func TestTickFlowHTTPStatusErrorPreservesSafeProviderMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid index symbol","echo":"test-api-key"}`))
+	}))
+	defer server.Close()
+
+	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	_, getErr := provider.getJSON(context.Background(), server.URL, "/v1/quotes", nil, true)
+	if getErr == nil || !strings.Contains(getErr.Error(), "invalid index symbol") {
+		t.Fatalf("GET error should preserve provider diagnostic body, got %v", getErr)
+	}
+	if strings.Contains(getErr.Error(), "test-api-key") {
+		t.Fatalf("GET error leaked API key: %v", getErr)
+	}
+
+	_, postErr := provider.postJSON(context.Background(), server.URL, "/v1/universes/batch", map[string]any{"ids": []string{"x"}}, true)
+	if postErr == nil || !strings.Contains(postErr.Error(), "invalid index symbol") {
+		t.Fatalf("POST error should preserve provider diagnostic body, got %v", postErr)
+	}
+	if strings.Contains(postErr.Error(), "test-api-key") {
+		t.Fatalf("POST error leaked API key: %v", postErr)
+	}
+}
+
 func TestTickFlowFetchIndexQuotesParsesAllowlistedCoreIndexes(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/quotes" {
