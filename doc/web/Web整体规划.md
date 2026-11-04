@@ -772,3 +772,10 @@ Web 数据中心已接入被动 Provider 运行诊断、主动 Probe、六个诊
 - [ ] WebUI Checks 与 Browser Smoke 通过后标记验收完成。
 
 迁移边界：本次仅抽离任务事件状态展示，不迁移任务请求、轮询、事件分页或 generation 状态；这些仍留在 app.js，后续 JSR-2 按请求生命周期整体规划迁移。
+
+
+### Web 代码架构文档独立化（2026-11-04）
+
+已新增 `doc/web/Web代码架构.md`，用于长期维护当前模块职责、依赖方向、状态所有权、异步生命周期约束、目标分层和迁移规则。总体规划继续作为唯一任务进度入口；提测清单只维护验收证据，避免架构说明和任务进度重复。
+
+当前 JSR-2 迁移前盘点范围：任务事件/详情渲染、Run 结果加载、轮询、任务上下文切换、最近任务历史恢复。重点核对 `taskContextGeneration`、`taskHistoryGeneration`、`analysisConnectionGeneration`、`pollGeneration`、`runResultGeneration` 与对应 AbortController 的读写链；未完成调用图和状态读写表前不搬迁任务生命周期。

@@ -1327,3 +1327,10 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 新增 `web/tests/task-event-format.test.mjs`，覆盖已知、未知及空状态。
 - [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
 - [ ] 确认任务详情、事件列表、筛选统计显示与迁移前一致。
+
+
+### Web 代码架构文档
+
+- [x] 新增 `doc/web/Web代码架构.md`，记录当前模块职责、依赖方向、状态所有权、异步生命周期约束和目标分层。
+- [x] 更新 `doc/web/README.md` 文档索引，明确架构文档与总体规划/验收清单的职责边界。
+- [ ] 补齐全量模块依赖图、循环依赖扫描及 app.js 业务函数调用/state 读写清单。
