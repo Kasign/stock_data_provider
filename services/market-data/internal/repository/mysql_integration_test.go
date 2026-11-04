@@ -194,6 +194,19 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 	if err := reopened.Close(); err != nil {
 		t.Fatalf("close MariaDB before unavailable check: %v", err)
 	}
+	probeReopened, err := OpenMySQL(ctx, dsn)
+	if err != nil {
+		t.Fatalf("reopen MariaDB for provider-probe history: %v", err)
+	}
+	persistedProbeHistory, err := probeReopened.ListProviderProbeRuns(ctx, 10)
+	if err != nil {
+		probeReopened.Close()
+		t.Fatalf("read provider-probe history after connection restart: %v", err)
+	}
+	assertProbeAdjustmentEvidence(persistedProbeHistory)
+	if err := probeReopened.Close(); err != nil {
+		t.Fatalf("close MariaDB after provider-probe history verification: %v", err)
+	}
 	if _, err := reopened.ListAdjustmentFactorsAsOf(ctx, symbol, "", "", secondAsOf); err == nil {
 		t.Fatal("closed database connection must return an explicit storage error")
 	}
