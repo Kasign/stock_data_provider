@@ -779,3 +779,19 @@ Web 数据中心已接入被动 Provider 运行诊断、主动 Probe、六个诊
 已新增 `doc/web/Web代码架构.md`，用于长期维护当前模块职责、依赖方向、状态所有权、异步生命周期约束、目标分层和迁移规则。总体规划继续作为唯一任务进度入口；提测清单只维护验收证据，避免架构说明和任务进度重复。
 
 当前 JSR-2 迁移前盘点范围：任务事件/详情渲染、Run 结果加载、轮询、任务上下文切换、最近任务历史恢复。重点核对 `taskContextGeneration`、`taskHistoryGeneration`、`analysisConnectionGeneration`、`pollGeneration`、`runResultGeneration` 与对应 AbortController 的读写链；未完成调用图和状态读写表前不搬迁任务生命周期。
+
+
+### JSR-2 拆分前安全审查与执行门禁（2026-11-04）
+
+最新代码基线：`8cc1e6753118ae590f30e6bdc999fb551616c0b1`。`app.js` 当前 6,391 行、167 个具名函数、69 个顶层 state 字段。任务相关函数已按最近任务历史、任务展示、Run 结果请求、轮询分页、创建/恢复/连接失效五组完成初步函数级盘点；详细边界见 [Web代码架构.md](./Web代码架构.md)。
+
+**发现并优先处理的验证问题：** JSR-1 将状态映射函数迁移到 `task-event-format.js` 后，`ui-contract.test.mjs` 仍断言函数定义必须位于 app.js，导致 WebUI Checks 399 项中 398 项通过、1 项失败。该失败是测试契约未随模块迁移更新，不是页面运行时失败；Browser Smoke #41807213922 通过。测试断言已在 `b6efe2e8` 修正，等待新 CI。
+
+**JSR-2 执行门禁：**
+- 先完成最近任务历史、任务展示簇和请求生命周期的函数调用/状态读写映射。
+- 先迁移无网络副作用的展示边界；异步请求、轮询、分页、AbortController 和 generation 不拆开。
+- 每个子批次独立修改、独立测试；禁止将展示迁移与请求生命周期迁移混在同一提交。
+- 迁移前后对照 DOM ID/class、事件监听、localStorage key/schema、API 路径/参数、加载/错误/空态、键盘与窄屏行为。
+- WebUI Checks 与对应 Browser Smoke 必须通过后，才进入下一子批次。
+
+当前执行状态：JSR-1 代码迁移已完成，原 CI 失败原因已定位并修正，等待复验；JSR-2 尚未迁移业务代码。下一步先确认 JSR-1 CI 全部通过，再决定 JSR-2B 的最小迁移范围。

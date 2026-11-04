@@ -1334,3 +1334,19 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 新增 `doc/web/Web代码架构.md`，记录当前模块职责、依赖方向、状态所有权、异步生命周期约束和目标分层。
 - [x] 更新 `doc/web/README.md` 文档索引，明确架构文档与总体规划/验收清单的职责边界。
 - [ ] 补齐全量模块依赖图、循环依赖扫描及 app.js 业务函数调用/state 读写清单。
+
+
+### JavaScript 模块化 JSR-1 CI 问题与修正（2026-11-04）
+
+- [x] 查明 WebUI Checks 失败原因：`ui-contract.test.mjs` 仍从 app.js 查找已迁出的三个任务事件状态函数。
+- [x] 将测试改为读取 `task-event-format.js` 实际源码，并继续检查 app.js 调用点和状态展示 CSS class。
+- [ ] 修正后的 WebUI Checks 通过。
+- [x] Browser Smoke #41807213922 已通过；修正后仍需复核。
+
+### JSR-2 拆分前安全审查
+
+- [x] 统计 app.js 当前规模：6,391 行、167 个具名函数、69 个顶层 state 字段。
+- [x] 将任务函数初步分为最近任务历史、展示簇、Run 结果请求、轮询分页、创建/恢复/连接失效。
+- [x] 记录任务状态和 generation/AbortController 保护边界，详见 [Web代码架构.md](./Web代码架构.md)。
+- [ ] 补充任务各子批次迁移前后行为基线与专项浏览器断言。
+- [ ] 在 JSR-1 CI 全部通过前，不开始 JSR-2 业务代码迁移。

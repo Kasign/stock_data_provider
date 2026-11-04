@@ -148,7 +148,7 @@ app.js  (启动、全局 state、页面协调)
 
 - 当前入口 `app.js` 约 6,400 行，仍承担大量页面业务与任务生命周期。
 - 当前已存在三十余个 ES Module，领域拆分基础已经具备。
-- 2026-11-04 提交 `6a2090d0`：将任务事件状态 key、标签和展示色调纯函数抽离到 `task-event-format.js`，并增加单元测试。该提交对应 CI 尚待确认，不能视为已验收。
+- 2026-11-04 提交 `6a2090d0`：将任务事件状态 key、标签和展示色调纯函数抽离到 `task-event-format.js`，并增加单元测试；后续 `8cc1e675` 删除了 `app.js` 中的重复实现。模块代码已迁移，但 WebUI Checks 曾因 `ui-contract.test.mjs` 仍从 `app.js` 查找旧函数定义而失败；Browser Smoke 已通过。测试契约已在 `b6efe2e8` 修正，等待新 CI 结果。
 - 任务运行流相关函数仍集中在 `app.js`，包括任务详情/事件渲染、Run 结果加载、轮询控制、任务上下文切换和最近任务恢复。迁移前需进一步建立函数调用与 state 读写映射。
 
 ## 9. 变更维护规则
@@ -157,3 +157,53 @@ app.js  (启动、全局 state、页面协调)
 - 任务排期、当前执行阶段和下一步只更新 [Web整体规划.md](./Web整体规划.md)。
 - 测试用例、CI 运行链接、人工验收结果只更新 [WebUI提测验收清单.md](./WebUI提测验收清单.md)。
 - Web 专属文档统一放在 `doc/web/`；跨模块公共 API 契约仍维护在上级 `doc/`。
+
+
+## 10. 任务工作流拆分前的函数与状态边界（2026-11-04）
+
+本节是下一阶段迁移的审查基线，不代表下列函数已经迁出 `app.js`。当前 `app.js` 为 6,391 行、167 个具名函数；任务相关函数按调用职责分组如下。
+
+### 10.1 最近任务历史
+
+| 函数 | 主要职责 | 关键状态/调用 |
+|---|---|---|
+| `safeReadRecentTasksState`、`safeReadRecentTasks` | 读取并校验本地最近任务 | 不写入任务运行状态 |
+| `renderRecentTasks` | 最近任务列表渲染 | 读取 settings；调用历史读取和反馈 |
+| `persistRecentTaskHistory` | 保存历史并刷新列表 | 调用 render/read/feedback |
+| `persistTaskReference`、`removeRecentTaskReference`、`clearRecentTaskHistory` | 当前任务引用与历史增删 | 读取/更新 taskId、taskAnalysisBase、suppressedHistoryTaskId/Base；清空历史还会推进 taskHistoryGeneration、taskContextGeneration |
+
+### 10.2 任务展示簇
+
+| 函数 | 主要职责 | 关键状态/调用 |
+|---|---|---|
+| `renderRunStatus` | Run 状态展示 | 读取 runId |
+| `renderTaskFlowSummary` | 事件摘要/节点概览 | 读取 taskEventsLoaded、taskId、taskEvents、taskEventsError、lastRunResult |
+| `renderSelectedTaskEvent` | 当前选中事件详情 | 与事件列表展示协作 |
+| `renderTaskEvents` | 事件列表、过滤和展开状态 | 读取 taskEvents、taskEventFilter、selectedTaskEventSequence、expandedTaskEventSequences；调用摘要和选中事件渲染 |
+| `renderTask` | 任务状态与任务主体展示 | 读取任务身份、类型、状态、标的、结果和页面 view；调用任务引用持久化、Run 状态及摘要 |
+| `renderTaskResult` | Run 结果状态展示 | 读取 lastRunResult、runResultReadStatus/Error、runId、view；调用任务引用持久化、Run 状态及摘要 |
+
+展示簇不是无状态纯函数：包含 DOM 更新并读取共享 state。迁移时应作为同一个视图边界设计接口，不能只搬一个 render 函数后让新模块反向 import app.js。
+
+### 10.3 异步请求与轮询生命周期
+
+| 函数 | 主要职责 | 必须共同保护的状态 |
+|---|---|---|
+| `loadTaskRunResult`、`abortRunResultRequest` | Run 结果加载/取消 | runResultController、runResultGeneration、analysisConnectionGeneration、taskId/runId、taskAnalysisBase、lastRunResult、runResultReadStatus/Error |
+| `stopTaskPolling`、`pollTask`、`pollTaskSafely` | 轮询、事件分页、状态恢复 | pollTimer、pollController、pollGeneration、taskContextGeneration、analysisConnectionGeneration、taskEventCursor、taskEvents、taskStatusLoading/Error/Retrying |
+| `createTask` | 创建任务并初始化完整任务上下文 | isCreatingTask、taskContextGeneration、taskHistoryGeneration、runResultGeneration、pollGeneration 及全部任务/事件状态 |
+| `activateTaskReference`、`restoreLastTask` | 历史任务恢复和切换 | 任务上下文、事件分页、轮询代次；restoreLastTask 委托 activateTaskReference |
+| `invalidateActiveTaskForAnalysisBaseChange` | 分析连接变更时统一失效 | taskContextGeneration、analysisConnectionGeneration、runResultGeneration、任务上下文、事件和轮询状态 |
+
+### 10.4 迁移顺序与阻断条件
+
+1. **JSR-2A：任务展示契约测试修复。** 测试应读取 `task-event-format.js` 的实际模块源码，不再要求已删除的 app.js 旧实现存在；同时保留 app.js 调用点和 CSS class 契约断言。
+2. **JSR-2B：最近任务历史边界。** 先核对 `recent-tasks.js` 已有 API，迁移前只补调用关系和存储读写契约，不重复实现存储工具；优先拆无异步请求的列表展示/反馈接口。
+3. **JSR-2C：任务事件展示簇。** 将摘要、列表、选中事件和任务主体的 DOM 边界整体设计；状态读写通过窄接口注入，保持 DOM ID、过滤、展开、选中和空态行为。
+4. **JSR-2D：Run 结果请求。** 将请求取消、generation、连接代次、任务身份校验和按钮恢复作为一个整体迁移；不得拆成独立 fetch helper。
+5. **JSR-2E：任务轮询与事件分页。** 将 pollTimer、AbortController、pollGeneration、taskEventCursor、去重和分页校验作为一个生命周期迁移。
+6. **JSR-2F：创建/恢复/连接失效协调。** 最后处理 createTask、activateTaskReference、restoreLastTask 与连接变更失效，避免先拆生命周期再补协调。
+
+每个子批次必须先有迁移前后行为基线，并至少覆盖：任务创建、运行中轮询、终态停止、事件分页与去重、切换历史任务、清空历史、切换分析 API 地址、旧请求迟到响应、Run 结果重载失败/取消后的按钮恢复。禁止将 fixture 测试当作真实 API 联调；本阶段不需要真实 Provider Key。
+
+任何一项出现 DOM 结构/交互变化、请求重复、旧响应回填、轮询未停止、取消被显示为失败或按钮未恢复，立即回退该子批次，不继续叠加迁移。
