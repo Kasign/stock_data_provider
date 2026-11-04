@@ -762,3 +762,31 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 ### 51.4 下一步
 
 转入现有 DailyBar 交易上下文能力核对：检查实际 Fetch/Probe 调用链是否接入交易日历与证券交易状态诊断，并通过本地测试验证停牌、临停、上市前、未知状态、交易日缺失日 K 等边界。真实事件窗口数据缺失继续保持 blocked；不重复运行近期行情 Probe 来替代事件样本。
+
+
+## 52. 2026-11-04 DailyBar 交易上下文降级日历修复
+
+### 52.1 问题与根因
+
+- 既有 assessDailyBarTradingContext 仅识别 provider_trading_calendar_sources_disagree，未统一处理日历 QualityStatus=degraded。
+- BaoStock 完整日期日历明确带有 provider_snapshot_timestamp_not_exposed，QualityStatus=degraded；在证券状态字段完整时，旧逻辑仍可能把交易上下文结果保留为 valid，丢失日历证据本身的降级信息。
+
+### 52.2 修复
+
+- 提交 92ae3d849822aa20405bbeca904f549594d8adf1：日历质量非 valid 时，追加 daily_bar_context_calendar_degraded 并将上下文至少降级；继续检查证券状态，保留 suspended/intraday/pre-listing 等可解释原因。
+- 多来源日历冲突仍按原逻辑返回 daily_bar_context_calendar_sources_disagree，不据冲突日历确认缺失日 K。
+- 新增回归测试覆盖“日历 degraded + 证券状态已知停牌”：整体上下文 degraded，同时保留 daily_bar_excluded_suspended 证据。
+- 修正原有有效日历测试夹具，显式设置 QualityValid；避免零值 QualityStatus 被当成有效证据。
+
+### 52.3 自动化验证状态
+
+- 修复提交：92ae3d849822aa20405bbeca904f549594d8adf1；格式修正：3eac25678f3c5198530dfc15cd83af1a6ff5a1f9；测试夹具修正：d346f209fc46c56992302025b8608aa3b2e91b6b。
+- 对应 SHA 的 gofmt 与 market-data 单元测试已通过；race detector、vet、Docker 构建当时仍在执行中，不能提前记为全套 CI 通过。
+- MariaDB migration/PIT 与 Probe HTTP/MariaDB E2E、Data quality contract regression、WebUI checks 已通过。
+- 自动触发的公共 Provider Probe Job 已结束 success；本次没有将其作为新 Provider 数据验收证据，也没有因该结果改变 Provider 状态。
+
+### 52.4 范围与未完成项
+
+- 不改变普通 DailyBars 的请求行为；交易上下文仍用于 Provider Probe 诊断链路。普通日 K 获取维持现有字段校验和交易日历覆盖率判断，避免历史大范围查询逐日追加证券状态请求。
+- 不新增 API、字段、Provider 或 WebUI 契约；接口协作清单无需更新 API 进度。
+- 本修复只保证降级日历不会产出 valid 上下文，不构成真实停牌、新股、除权事件窗口验收；阶段 B 继续开放。
