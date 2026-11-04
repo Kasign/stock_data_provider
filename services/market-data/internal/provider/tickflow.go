@@ -1182,9 +1182,9 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 		if err != nil || rawVolume < 0 || math.Trunc(rawVolume) != rawVolume {
 			return nil, fmt.Errorf("TickFlow has invalid volume on %s", tradeDate)
 		}
-		volume, err := normalize.RawSharesToInt64(rawVolume)
+		volume, err := normalize.HandsToShares(rawVolume)
 		if err != nil {
-			return nil, fmt.Errorf("normalize TickFlow volume in shares on %s: %w", tradeDate, err)
+			return nil, fmt.Errorf("normalize TickFlow daily volume from hands on %s: %w", tradeDate, err)
 		}
 
 		var amount, rawAmount *float64
@@ -1224,7 +1224,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			AdjustmentMethod: "tickflow_api_" + adjust,
 			Source:           p.Name(), SourceVersion: tickflowVersion,
 			FetchedAt: fetchedAt, NormalizedAt: time.Now().UTC(),
-			RawVolume: &rawVolumeCopy, RawVolumeUnit: "shares",
+			RawVolume: &rawVolumeCopy, RawVolumeUnit: "hands",
 			RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: rawAmountField,
 			VolumeUnit: "shares", AmountUnit: amountUnit, QualityStatus: quality, QualityReasons: reasons,
 			NormalizationVer: normalize.Version,

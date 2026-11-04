@@ -52,7 +52,7 @@ func TestTickFlowFetchQuoteNormalizesVolumeFromHands(t *testing.T) {
 	}
 }
 
-func TestTickFlowFetchDailyBarsKeepsVolumeInShares(t *testing.T) {
+func TestTickFlowFetchDailyBarsNormalizesVolumeFromHands(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		t.Fatal(err)
@@ -86,11 +86,11 @@ func TestTickFlowFetchDailyBarsKeepsVolumeInShares(t *testing.T) {
 	if len(bars) != 1 {
 		t.Fatalf("expected one daily bar, got %+v", bars)
 	}
-	if bars[0].Volume == nil || *bars[0].Volume != int64(tickflowVolumeFixture) {
-		t.Fatalf("TickFlow daily volume should stay in shares: %+v", bars[0].Volume)
+	if bars[0].Volume == nil || *bars[0].Volume != int64(tickflowVolumeFixture*100) {
+		t.Fatalf("TickFlow daily volume should convert hands to shares: %+v", bars[0].Volume)
 	}
 	if bars[0].RawVolume == nil || *bars[0].RawVolume != tickflowVolumeFixture ||
-		bars[0].RawVolumeUnit != "shares" || bars[0].VolumeUnit != "shares" {
+		bars[0].RawVolumeUnit != "hands" || bars[0].VolumeUnit != "shares" {
 		t.Fatalf("TickFlow daily volume metadata is inconsistent: raw=%v raw_unit=%q unit=%q", bars[0].RawVolume, bars[0].RawVolumeUnit, bars[0].VolumeUnit)
 	}
 	if bars[0].QualityStatus != model.QualityValid {
@@ -114,7 +114,7 @@ func TestTickFlowDailyBarsDerivesChangeAfterChronologicalSort(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
 			"timestamp": []int64{latestDay.UnixMilli(), previousDay.UnixMilli()},
 			"open":      []float64{108, 99}, "high": []float64{112, 102}, "low": []float64{107, 98}, "close": []float64{110, 100},
-			"volume": []float64{1000, 2000}, "amount": []float64{110000, 100000},
+			"volume": []float64{1000, 2000}, "amount": []float64{11000000, 10000000},
 		}})
 	}))
 	defer server.Close()

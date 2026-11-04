@@ -686,3 +686,20 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 本节记录实现范围；TickFlow daily-only 真实复测仍待执行。
 - 真实 TickFlow 日 K 的成交量单位尚未重新验收；本次不把 Quote 的 hands→shares 结论推广到 `/v1/klines`。下一次仅执行一次 `600519.SH`、8 条、none 口径 daily-only 请求。
 - 在取得真实响应并完成 OHLC/amount/volume 交叉核验前，日 K 单位维持“待证实”；质量无法比较时标记 `not_comparable`，不擅自调整单位。
+
+
+## 49. 2026-11-04 TickFlow A 股日 K 成交量单位真实根因
+
+### 49.1 真实响应证据
+
+- Live Workflow Run：`41824457415`；Job：`126555518622`；仅执行 `daily_bars_none`；证券 `600519.SH`；HTTP 200；返回 8 条。
+- 请求级 Validation 报告：`total_count=8`、`error_count=8`；8 条全部命中 `field=amount,volume`、`code=unit_mismatch`，日期覆盖 2026-10-23 至 2026-11-03。
+- 有界原始摘要：第一条 OHLC 1310.00～1343.88、close 1335.00、volume 57686、amount 7677216283 CNY；末条 OHLC 1435.10～1480.00、close 1480.00、volume 74121、amount 10825780463 CNY。所有 8 条的 amount/volume 隐含均价约为 OHLC 的 100 倍。
+- 例如首条按原始 volume 计算约 133,100 元/股；volume 乘以 100 后约 1,331 元/股，落在 OHLC 区间。末条也同样成立。
+
+### 49.2 根因与修复边界
+
+- 结论限于 TickFlow A 股 `/v1/klines` 当前真实样本：volume 按手返回；原代码误用 `RawSharesToInt64`，导致 8 条均因 amount/volume 交叉校验被拒绝。
+- 修复复用既有 `normalize.HandsToShares`；RawVolume 原值保留，RawVolumeUnit 改为 `hands`，规范 Volume 乘以 100 且 VolumeUnit 为 `shares`。
+- 不修改 `/v1/quotes`（其手转股已另有真实证据）；不改 amount CNY、OHLC、复权口径、标准化门禁；不把结论扩展到非 A 股市场。
+- 本节为真实根因定位记录。代码修复、自动化验证和修复后真实复测必须分别记录，未完成前不得标记 TickFlow DailyBar 真实验收通过。
