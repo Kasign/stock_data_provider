@@ -17,7 +17,7 @@ on:
       - 'docker-compose.yml'
       - 'scripts/**'
   push:
-    branches: [main]
+    branches: [main, feat/full-go-data-providers-api-switch]
     paths:
       - 'go.mod'
       - 'go.sum'
