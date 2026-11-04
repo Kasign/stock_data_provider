@@ -334,6 +334,13 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		jobs = append(jobs, job)
 	}
 
+	loc := marketLocation()
+	nowLocal := time.Now().In(loc)
+	probeDate := nowLocal.Format("2006-01-02")
+	dailyBarEndDate := nowLocal.AddDate(0, 0, -1).Format("2006-01-02")
+	calendarStart := nowLocal.AddDate(0, 0, -14).Format("2006-01-02")
+	calendarEnd := nowLocal.AddDate(0, 0, 14).Format("2006-01-02")
+
 	quoteSymbol := "600519.SH"
 	barsSymbol := "600036.SH"
 	searchSymbol := "600519"
@@ -603,12 +610,6 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	}
 
 	// 以下检查覆盖非行情类的重要业务能力。探测只校验返回契约，不把空数据自动视为成功。
-	loc := marketLocation()
-	nowLocal := time.Now().In(loc)
-	probeDate := nowLocal.Format("2006-01-02")
-	dailyBarEndDate := nowLocal.AddDate(0, 0, -1).Format("2006-01-02")
-	calendarStart := nowLocal.AddDate(0, 0, -14).Format("2006-01-02")
-	calendarEnd := nowLocal.AddDate(0, 0, 14).Format("2006-01-02")
 	for _, p := range s.indexCatalogProviders {
 		p := p
 		add(p.Name(), "index_catalog", func(probeCtx context.Context) (model.QualityStatus, string, []string, error) {
