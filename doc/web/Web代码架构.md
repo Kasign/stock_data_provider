@@ -176,10 +176,10 @@ app.js  (启动、全局 state、页面协调)
 
 | 函数 | 主要职责 | 关键状态/调用 |
 |---|---|---|
-| `renderRunStatus` | Run 状态展示 | 读取 runId |
-| `renderTaskFlowSummary` | 事件摘要/节点概览 | 读取 taskEventsLoaded、taskId、taskEvents、taskEventsError、lastRunResult |
-| `renderSelectedTaskEvent` | 当前选中事件详情 | 与事件列表展示协作 |
-| `renderTaskEvents` | 事件列表、过滤和展开状态 | 读取 taskEvents、taskEventFilter、selectedTaskEventSequence、expandedTaskEventSequences；调用摘要和选中事件渲染 |
+| `renderRunStatus` | Run 状态展示 | 读取 runId；目标迁移为显式传入目标节点、状态和标签函数 |
+| `renderTaskFlowSummary` | 事件摘要/节点概览 | 读取 taskEventsLoaded、taskId、taskEvents、taskEventsError、lastRunResult；暂留 app.js |
+| `renderSelectedTaskEvent` | 当前选中事件详情 | 使用事件对象、DOM 节点和格式化函数；首批迁移候选 |
+| `renderTaskEvents` | 事件列表、过滤和展开状态 | 读取 taskEvents、taskEventFilter、selectedTaskEventSequence、expandedTaskEventSequences；更新 selected/expanded 状态并绑定 toggle；暂留 app.js |
 | `renderTask` | 任务状态与任务主体展示 | 读取任务身份、类型、状态、标的、结果和页面 view；调用任务引用持久化、Run 状态及摘要 |
 | `renderTaskResult` | Run 结果状态展示 | 读取 lastRunResult、runResultReadStatus/Error、runId、view；调用任务引用持久化、Run 状态及摘要 |
 
@@ -221,3 +221,15 @@ app.js  (启动、全局 state、页面协调)
 ### 11.1 依赖方向修正
 
 筛选仍由 `app.js` 调用既有的 `filterRecentTasks` 完成，再把筛选后的记录及总数传入视图模块。这样 `recent-task-view.js` 不反向依赖存储/数据模块，保持纯 DOM 展示边界；它只接收展示数据，不读取筛选控件或全局状态。
+
+
+### 10.2.1 JSR-2C 迁移边界（先拆纯展示，不拆事件状态）
+
+JSR-2B 已完成：`recent-task-view.js` 只接收 app.js 计算好的过滤记录和总数，负责最近任务列表 DOM 构建；`recent-tasks.js` 仍负责本地存储、筛选与历史记录操作。提交 `72cff581` 的 WebUI Checks（运行 `41809117356`）和 Chromium Browser Smoke（运行 `41809117453`）均通过。
+
+JSR-2C 采用两层推进，禁止一口气迁移整个事件列表：
+1. **JSR-2C1：低风险展示 helper。** 新增 `task-event-view.js`，先迁移 `renderRunStatus` 与 `renderSelectedTaskEvent`。模块只接收 DOM 节点、事件/状态值、`runId`、日期格式化函数及 `task-event-format.js` 导出的状态映射函数；不得读取 app.js state、查询全局 DOM、绑定事件、写 localStorage 或发 API 请求。
+2. **JSR-2C2：事件节点列表评估（不预先承诺迁移）。** `renderTaskEvents` 目前会读取并修改 `taskEventFilter`、`selectedTaskEventSequence`、`expandedTaskEventSequences`，计算筛选计数、选择默认事件并绑定 details toggle。只有先把这些状态转成显式输入/回调并证明展开/选中行为一致，才允许单独迁移列表 DOM 构建；否则继续留在 app.js。
+3. `renderTaskFlowSummary` 依赖 taskEvents Map、加载/错误状态和 lastRunResult；本批暂留 app.js。`renderTask` 与 `renderTaskResult` 会更新业务 state、持久化引用并触发其他页面刷新，不属于纯展示 helper，本批不迁移。
+
+JSR-2C1 验收必须覆盖：无选中事件时隐藏详情并移除布局 class；选中事件时标题/序号/状态徽标/时间/错误代码/耗时/JSON 详情一致；缺字段不生成空字段；非法耗时不展示；状态未知值仍按既有映射展示；Run 状态无值、未知值和四类 tone 映射一致。DOM ID、CSS class、data 属性、ARIA 属性和 textContent 安全写入保持不变。

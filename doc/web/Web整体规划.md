@@ -805,3 +805,10 @@ Web 数据中心已接入被动 Provider 运行诊断、主动 Probe、六个诊
 
 
 JSR-2B 验证复盘：首轮 CI 暴露两处迁移遗漏：视图模块误直接调用了未导入的 `filterRecentTasks`，以及 UI 契约测试替换时换行转义导致测试文件语法错误。已调整为由 app 协调层完成筛选并向视图模块传入结果，修正测试断言结构后重新运行 CI。该轮 Browser Smoke 发现了真实运行时错误，因此本批尚未验收通过。
+
+
+### JSR-2B 验收完成与 JSR-2C 规划（2026-11-04）
+
+JSR-2B 已验收完成：提交 `72cff581` 的 WebUI Checks（`41809117356`）和 Chromium Browser Smoke（`41809117453`）均通过。首轮失败及修复过程保留为历史记录，不再作为当前阻断项。
+
+JSR-2C 不整体搬迁 `renderTaskEvents`。先执行 JSR-2C1，将 `renderRunStatus`、`renderSelectedTaskEvent` 两个低副作用展示 helper 迁移到 `task-event-view.js`，使用显式 DOM 节点和数据参数，不读取全局 state、不绑定事件、不发请求。摘要函数、事件列表、任务主体和 Run 结果仍留在 app.js。JSR-2C2 是否迁移事件列表，需在单独完成状态输入/回调设计及展开/选中行为基线后再评估。
