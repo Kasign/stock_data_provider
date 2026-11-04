@@ -110,16 +110,20 @@ type liveProbeResult struct {
 }
 
 type liveProbeHTTPResponse struct {
-	Endpoint          string   `json:"endpoint"`
-	StatusCode        int      `json:"status_code,omitempty"`
-	ContentType       string   `json:"content_type,omitempty"`
-	TransportError    string   `json:"transport_error,omitempty"`
-	RedirectEndpoint  string   `json:"redirect_endpoint,omitempty"`
-	RedirectQueryKeys []string `json:"redirect_query_keys,omitempty"`
-	BodyBytesObserved int64    `json:"body_bytes_observed,omitempty"`
-	BodyTruncated     bool     `json:"body_truncated,omitempty"`
-	BodySample        string   `json:"body_sample,omitempty"`
-	rawSample         []byte
+	Endpoint              string   `json:"endpoint"`
+	RequestMethod         string   `json:"request_method,omitempty"`
+	RequestContentType    string   `json:"request_content_type,omitempty"`
+	RequestBodyBytes      int64    `json:"request_body_bytes,omitempty"`
+	APIKeyHeaderPresent   bool     `json:"api_key_header_present,omitempty"`
+	StatusCode            int      `json:"status_code,omitempty"`
+	ContentType           string   `json:"content_type,omitempty"`
+	TransportError        string   `json:"transport_error,omitempty"`
+	RedirectEndpoint      string   `json:"redirect_endpoint,omitempty"`
+	RedirectQueryKeys     []string `json:"redirect_query_keys,omitempty"`
+	BodyBytesObserved     int64    `json:"body_bytes_observed,omitempty"`
+	BodyTruncated         bool     `json:"body_truncated,omitempty"`
+	BodySample            string   `json:"body_sample,omitempty"`
+	rawSample             []byte
 }
 
 type liveProbeCapture struct {
@@ -156,7 +160,13 @@ type liveProbeCaptureTransport struct {
 
 func (t liveProbeCaptureTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	// Never record RawQuery: provider URLs may include public tokens or request parameters.
-	record := &liveProbeHTTPResponse{Endpoint: request.URL.Host + request.URL.EscapedPath()}
+	record := &liveProbeHTTPResponse{
+		Endpoint:            request.URL.Host + request.URL.EscapedPath(),
+		RequestMethod:       request.Method,
+		RequestContentType:  request.Header.Get("Content-Type"),
+		RequestBodyBytes:    request.ContentLength,
+		APIKeyHeaderPresent: strings.TrimSpace(request.Header.Get("apikey")) != "",
+	}
 	t.capture.add(record)
 
 	response, err := t.base.RoundTrip(request)
@@ -293,6 +303,47 @@ func TestLiveProbeDailyContractSeparatesDisplayLabelFromSource(t *testing.T) {
 	const startDate, endDate = "2026-10-28", "2026-10-30"
 	if got := liveProbeDailyContractError([]model.DailyBar{bar}, "sina-chinext", "sina", "300750.SZ", model.AdjustmentNone, startDate, endDate, 8); got != "" {
 		t.Fatalf("display label must not be compared with canonical source, got %q", got)
+	}
+}
+
+func TestLiveProbeCaptureRecordsRequestMetadataWithoutSecrets(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"status":0}`)
+	}))
+	defer server.Close()
+
+	capture := &liveProbeCapture{}
+	client := &http.Client{Transport: capture.transport()}
+	request, err := http.NewRequest(http.MethodPost, server.URL+"/query", strings.NewReader(`{"toolQuery":"600519 最新价"}`))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("apikey", "must-never-appear-in-report")
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("send request: %v", err)
+	}
+	_ = response.Body.Close()
+
+	responses := capture.snapshot()
+	if len(responses) != 1 {
+		t.Fatalf("captured response count=%d, want 1", len(responses))
+	}
+	got := responses[0]
+	if got.RequestMethod != http.MethodPost || got.RequestContentType != "application/json" {
+		t.Fatalf("request metadata mismatch: %+v", got)
+	}
+	if !got.APIKeyHeaderPresent {
+		t.Fatal("API key header presence should be recorded")
+	}
+	if got.RequestBodyBytes <= 0 {
+		t.Fatalf("request body length should be recorded: %+v", got)
+	}
+	encoded, _ := json.Marshal(got)
+	if strings.Contains(string(encoded), "must-never-appear-in-report") {
+		t.Fatalf("API key value leaked into probe report: %s", encoded)
 	}
 }
 
