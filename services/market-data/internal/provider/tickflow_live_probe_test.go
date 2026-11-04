@@ -46,7 +46,7 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		Quality      string   `json:"quality,omitempty"`
 		QualityNotes []string `json:"quality_notes,omitempty"`
 		Rows         int      `json:"rows,omitempty"`
-		Error        string                   `json:"error,omitempty"`
+		Error        string                      `json:"error,omitempty"`
 		HTTP         []liveProbeHTTPResponse    `json:"http_responses,omitempty"`
 		QuoteFields  *tickflowQuoteRawDiagnostic `json:"quote_fields,omitempty"`
 	}
