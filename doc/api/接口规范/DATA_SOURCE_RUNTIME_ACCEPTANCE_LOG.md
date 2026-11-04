@@ -473,3 +473,11 @@ Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对�
 - FetchIndexQuotes 已调整为每批最多 5 个标的，6 个核心指数分两次 GET 获取，再合并结果进入原有白名单、重复项、缺失项、价格、涨跌幅、时间戳和金额质量校验；不降低质量门禁。
 - 单测覆盖每次请求标的数上限、6 个指数拆为两批及合并后的完整快照；异常字段测试夹具按每次请求的 symbols 返回对应行，避免模拟出重复数据。
 - 本节记录代码修复，线上复测仍待执行，不代表 TickFlow 指数行情已验收通过。
+
+
+## 38. TickFlow 指数分批修复后的线上复测安排
+
+- 代码基线：`9dc5bfa8980b392d912903782e2af4b93c90cce0`；Go 全量 CI Run `41811940330` 的全部 5 个 Job 已通过，包含 market-data gofmt、tests、race detector、vet、MariaDB migration/PIT/Probe HTTP 集成及 Docker 构建。
+- 本次仅触发 TickFlow `index_only` 真实探测，验证 6 个核心指数按每批最多 5 个标的拆分请求、合并后覆盖完整且通过原有质量校验。
+- 探测仍由 `continue-on-error` 隔离，不以 Workflow 顶层 success 代替实际 Job/步骤和 `LIVE_TICKFLOW_RESULT` 报告。
+- 该记录仅表示启动复测，不代表线上验收已通过。
