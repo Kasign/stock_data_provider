@@ -814,6 +814,27 @@ func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {
 	}
 }
 
+func TestBuildCrossProviderProbeCheckResultsPreservesAdjustmentEvidence(t *testing.T) {
+	left := &provider.CrossProviderDailySnapshot{
+		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "backward_adjusted", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", AdjustmentMethod: "left_hfq", AdjustmentRefDate: "2026-11-03"}},
+	}
+	right := &provider.CrossProviderDailySnapshot{
+		Provider: "right", SourceVersion: "right-v1", Symbol: "600036.SH",
+		AdjustmentBasis: "backward_adjusted", QualityStatus: "valid",
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", AdjustmentMethod: "right_hfq", AdjustmentRefDate: "2026-11-03"}},
+	}
+	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
+	if len(results) != 1 { t.Fatalf("expected one adjusted comparison result, got %+v", results) }
+	result := results[0]
+	if result.Status != "skipped" || result.ErrorMessage != "adjustment_method_mismatch" ||
+		result.LeftAdjustmentMethod != "left_hfq" || result.RightAdjustmentMethod != "right_hfq" ||
+		result.LeftAdjustmentRefDate != "2026-11-03" || result.RightAdjustmentRefDate != "2026-11-03" {
+		t.Fatalf("adjustment evidence missing or incorrectly passed: %+v", result)
+	}
+}
+
 func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.T) {
 	left := &provider.CrossProviderDailySnapshot{
 		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",

@@ -21,6 +21,14 @@ func crossProviderBar(date string) CrossProviderDailyBar {
 	}
 }
 
+func crossProviderAdjustedSnapshot(provider, method, refDate string, bars ...CrossProviderDailyBar) CrossProviderDailySnapshot {
+	for i := range bars {
+		bars[i].AdjustmentMethod = method
+		bars[i].AdjustmentRefDate = refDate
+	}
+	return crossProviderSnapshot(provider, "backward_adjusted", "valid", bars...)
+}
+
 func TestCompareCrossProviderDailyBarsRequiresComparableIdentity(t *testing.T) {
 	left := crossProviderSnapshot("sina", "none", "valid", crossProviderBar("2026-10-29"))
 	right := crossProviderSnapshot("tencent", "forward", "valid", crossProviderBar("2026-10-29"))
@@ -133,5 +141,43 @@ func TestCompareCrossProviderDailyBarsRejectsEmptyAndInvalidDateSets(t *testing.
 	right.Bars = []CrossProviderDailyBar{crossProviderBar("2026-10-29")}
 	if got := CompareCrossProviderDailyBars(left, right); got.Status != CrossProviderDailyNotComparable || got.Reason != "left_duplicate_trade_date" {
 		t.Fatalf("duplicate trade date must be not comparable, got %+v", got)
+	}
+}
+
+
+func TestCompareCrossProviderDailyBarsRejectsDifferentAdjustedMethods(t *testing.T) {
+	left := crossProviderAdjustedSnapshot("eastmoney", "eastmoney_fqt_2", "2026-11-03", crossProviderBar("2026-10-29"))
+	right := crossProviderAdjustedSnapshot("baostock", "baostock_pct_change", "2026-11-03", crossProviderBar("2026-10-29"))
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyNotComparable || got.Reason != "adjustment_method_mismatch" {
+		t.Fatalf("different adjusted methods must not be compared: %+v", got)
+	}
+}
+
+func TestCompareCrossProviderDailyBarsRequiresAdjustedReferenceDate(t *testing.T) {
+	left := crossProviderAdjustedSnapshot("eastmoney", "same_method", "2026-11-03", crossProviderBar("2026-10-29"))
+	right := crossProviderAdjustedSnapshot("other", "same_method", "", crossProviderBar("2026-10-29"))
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyNotComparable || got.Reason != "right_adjustment_reference_date_missing" {
+		t.Fatalf("missing adjusted reference date must be rejected: %+v", got)
+	}
+}
+
+func TestCompareCrossProviderDailyBarsRequiresSameAdjustedReferenceDate(t *testing.T) {
+	left := crossProviderAdjustedSnapshot("eastmoney", "same_method", "2026-11-03", crossProviderBar("2026-10-29"))
+	right := crossProviderAdjustedSnapshot("other", "same_method", "2026-10-30", crossProviderBar("2026-10-29"))
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyNotComparable || got.Reason != "adjustment_reference_date_mismatch" {
+		t.Fatalf("different adjusted reference dates must be rejected: %+v", got)
+	}
+}
+
+func TestCompareCrossProviderDailyBarsRejectsInconsistentRowAdjustmentMetadata(t *testing.T) {
+	left := crossProviderAdjustedSnapshot("eastmoney", "same_method", "2026-11-03", crossProviderBar("2026-10-28"), crossProviderBar("2026-10-29"))
+	right := crossProviderAdjustedSnapshot("other", "same_method", "2026-11-03", crossProviderBar("2026-10-28"), crossProviderBar("2026-10-29"))
+	left.Bars[1].AdjustmentRefDate = "2026-10-30"
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyNotComparable || got.Reason != "left_adjustment_metadata_inconsistent" {
+		t.Fatalf("inconsistent row metadata must be rejected: %+v", got)
 	}
 }

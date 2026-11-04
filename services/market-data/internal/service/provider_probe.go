@@ -481,9 +481,10 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 						snapshotBars = nil
 						break
 					}
-					snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
+ 					snapshotBars = append(snapshotBars, provider.CrossProviderDailyBar{
 						TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
 						Volume: *bar.Volume, VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+						AdjustmentMethod: bar.AdjustmentMethod, AdjustmentRefDate: bar.AdjustmentRefDate,
 					})
 				}
 				if len(snapshotBars) == len(validated) {
@@ -1302,6 +1303,16 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 	return results
 }
 
+func firstCrossProviderAdjustmentMethod(snapshot *provider.CrossProviderDailySnapshot) string {
+	if snapshot == nil || len(snapshot.Bars) == 0 { return "" }
+	return snapshot.Bars[0].AdjustmentMethod
+}
+
+func firstCrossProviderAdjustmentRefDate(snapshot *provider.CrossProviderDailySnapshot) string {
+	if snapshot == nil || len(snapshot.Bars) == 0 { return "" }
+	return snapshot.Bars[0].AdjustmentRefDate
+}
+
 func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDailySnapshot, checkedAt time.Time) []model.ProviderProbeCheckResult {
 	results := make([]model.ProviderProbeCheckResult, 0)
 	validSnapshots := make([]*provider.CrossProviderDailySnapshot, 0, len(snapshots))
@@ -1328,6 +1339,10 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 				LeftSourceVersion:  left.SourceVersion,
 				RightSourceVersion: right.SourceVersion,
 				AdjustmentBasis:    left.AdjustmentBasis,
+				LeftAdjustmentMethod: firstCrossProviderAdjustmentMethod(left),
+				RightAdjustmentMethod: firstCrossProviderAdjustmentMethod(right),
+				LeftAdjustmentRefDate: firstCrossProviderAdjustmentRefDate(left),
+				RightAdjustmentRefDate: firstCrossProviderAdjustmentRefDate(right),
 				LeftQualityStatus:  model.QualityStatus(left.QualityStatus),
 				RightQualityStatus: model.QualityStatus(right.QualityStatus),
 				ComparedDates:      append([]string(nil), comparison.ComparedDates...),

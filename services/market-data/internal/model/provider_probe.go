@@ -120,6 +120,10 @@ type ProviderProbeCheckResult struct {
 	LeftSourceVersion      string                         `json:"left_source_version,omitempty"`
 	RightSourceVersion     string                         `json:"right_source_version,omitempty"`
 	AdjustmentBasis        string                         `json:"adjustment_basis,omitempty"`
+	LeftAdjustmentMethod   string                         `json:"left_adjustment_method,omitempty"`
+	RightAdjustmentMethod  string                         `json:"right_adjustment_method,omitempty"`
+	LeftAdjustmentRefDate  string                         `json:"left_adjustment_reference_date,omitempty"`
+	RightAdjustmentRefDate string                         `json:"right_adjustment_reference_date,omitempty"`
 	LeftQualityStatus      QualityStatus                  `json:"left_quality_status,omitempty"`
 	RightQualityStatus     QualityStatus                  `json:"right_quality_status,omitempty"`
 	ComparedDates          []string                       `json:"compared_dates,omitempty"`
