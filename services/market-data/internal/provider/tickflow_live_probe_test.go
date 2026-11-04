@@ -10,7 +10,7 @@ import (
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 )
 
-// 本测试支持 index-only 模式；线上复测通过提交标记 [include_tickflow] [tickflow_index_only] 显式触发。
+// 本测试支持 quote-only、daily-only、index-only 模式；线上复测通过 [include_tickflow] 加对应能力标记显式触发。
 // TestLiveTickFlowCapabilities 是 TickFlow 已实现但默认关闭能力的独立真实请求验收入口。
 // 仅在显式设置 MARKET_DATA_LIVE_TICKFLOW_TESTS=1 且提供 API Key 时执行，避免普通 CI 依赖外部服务。
 func TestLiveTickFlowCapabilities(t *testing.T) {
@@ -51,6 +51,17 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 
 	results := make([]result, 0, 4)
 	indexOnly := os.Getenv("MARKET_DATA_LIVE_TICKFLOW_INDEX_ONLY") == "1"
+	quoteOnly := os.Getenv("MARKET_DATA_LIVE_TICKFLOW_QUOTE_ONLY") == "1"
+	dailyOnly := os.Getenv("MARKET_DATA_LIVE_TICKFLOW_DAILY_ONLY") == "1"
+	selectedModes := 0
+	for _, enabled := range []bool{indexOnly, quoteOnly, dailyOnly} {
+		if enabled {
+			selectedModes++
+		}
+	}
+	if selectedModes > 1 {
+		t.Fatal("TickFlow live probe modes are mutually exclusive")
+	}
 	failures := make([]string, 0, 4)
 	run := func(name string, call func() (int, string, []string, error)) {
 		started := time.Now()
@@ -64,7 +75,7 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		results = append(results, item)
 	}
 
-	if !indexOnly {
+	runQuote := func() {
 		run("quote", func() (int, string, []string, error) {
 			item, err := client.FetchQuote(ctx, "600519.SH")
 			if err != nil {
@@ -76,8 +87,42 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 			return 1, string(item.QualityStatus), item.QualityReasons, nil
 		})
 	}
-
-	run("index_quotes", func() (int, string, []string, error) {
+	if quoteOnly || (!indexOnly && !dailyOnly) {
+		runQuote()
+	}
+	if dailyOnly {
+		run("daily_bars_none", func() (int, string, []string, error) {
+			location, err := time.LoadLocation("Asia/Shanghai")
+			if err != nil {
+				location = time.FixedZone("CST", 8*60*60)
+			}
+			end := time.Now().In(location).AddDate(0, 0, -1)
+			start := end.AddDate(0, 0, -30)
+			bars, err := client.FetchDailyBars(ctx, "600519.SH", start.Format("2006-01-02"), end.Format("2006-01-02"), 8, model.AdjustmentNone)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if len(bars) == 0 || len(bars) > 8 {
+				return len(bars), "", nil, errLiveProbeContract("daily K-line row count is empty or exceeds requested limit")
+			}
+			quality := model.QualityValid
+			notes := make([]string, 0)
+			previousDate := ""
+			for _, bar := range bars {
+				if bar.Symbol != "600519.SH" || bar.Source != "tickflow" || bar.AdjustmentBasis != model.AdjustmentNone || bar.TradeDate <= previousDate {
+					return len(bars), "", nil, errLiveProbeContract("daily K-line identity, adjustment or chronological order mismatch")
+				}
+				previousDate = bar.TradeDate
+				if bar.QualityStatus != model.QualityValid {
+					quality = model.QualityDegraded
+					notes = appendTickflowUniqueReason(notes, bar.QualityReasons...)
+				}
+			}
+			return len(bars), string(quality), notes, nil
+		})
+	}
+	if !quoteOnly && !dailyOnly {
+		run("index_quotes", func() (int, string, []string, error) {
 		item, err := client.FetchIndexQuotes(ctx)
 		if err != nil {
 			return 0, "", nil, err
@@ -88,7 +133,7 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
 	})
 
-	if !indexOnly {
+	if !indexOnly && !quoteOnly && !dailyOnly {
 		run("market_breadth", func() (int, string, []string, error) {
 			item, err := client.FetchMarketBreadth(ctx)
 			if err != nil {

@@ -83,6 +83,8 @@ jobs:
           MARKET_DATA_LIVE_TUSHARE_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_tushare) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_tushare]'))) && '1' || '0' }}
           MARKET_DATA_LIVE_TICKFLOW_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_tickflow) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_tickflow]'))) && '1' || '0' }}
           MARKET_DATA_LIVE_TICKFLOW_INDEX_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[tickflow_index_only]') && '1' || '0' }}
+          MARKET_DATA_LIVE_TICKFLOW_QUOTE_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[tickflow_quote_only]') && '1' || '0' }}
+          MARKET_DATA_LIVE_TICKFLOW_DAILY_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[tickflow_daily_only]') && '1' || '0' }}
           MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[tushare_daily_only]') && '1' || '0' }}
           MARKET_DATA_LIVE_HITHINK_DAILY_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[hithink_daily_only]') && '1' || '0' }}
           MARKET_DATA_TICKFLOW_API_KEY: ${{ secrets.TICKFLOW_API_KEY }}
