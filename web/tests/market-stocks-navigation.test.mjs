@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [marketStocks, app, browserAcceptance, screeningBrowserAcceptance] = await Promise.all([
+const [marketStocks, app, watchlistItemView, browserAcceptance, screeningBrowserAcceptance] = await Promise.all([
   readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/watchlist-item-view.js", import.meta.url), "utf8"),
   readFile(new URL("./stock-research-browser.mjs", import.meta.url), "utf8"),
   readFile(new URL("./screening-local-browser.mjs", import.meta.url), "utf8")
 ]);
@@ -37,7 +38,7 @@ test("市场人气榜、涨跌停池和龙虎榜提供独立深度研究入口",
 
 test("自选股列表提供直达研究入口并同步标的名称", async () => {
   const appSource = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  assert.match(appSource, /\["query", "查行情"\], \["research", "研究"\]/);
+  assert.match(watchlistItemView, /\["query", "查行情"\], \["research", "研究"\]/);
   assert.match(appSource, /action === "query" \|\| action === "research"/);
   assert.match(appSource, /setView\(action === "research" \? "research" : "stocks"\)/);
   assert.match(browserAcceptance, /button\[data-watchlist-action="research"\]/);
