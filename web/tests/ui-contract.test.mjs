@@ -1173,8 +1173,8 @@ test("当前页选股结果 DOM adapter 只构建行节点，分页快照与选�
   assert.match(app, /buildScreeningCSV\(/);
   assert.match(app, /addScreeningResultsToWatchlist\(/);
   assert.match(view, /export function renderScreeningLocalResultRowsView\(/);
-  assert.match(view, /data-screening-local-select-symbol/);
-  assert.match(view, /data-screening-local-symbol/);
+  assert.match(view, /screeningLocalSelectSymbol/);
+  assert.match(view, /screeningLocalSymbol/);
   assert.match(view, /质量原因未报告/);
   assert.doesNotMatch(view, /\bstate\.|localStorage|fetch\(|addEventListener|screeningSelectedSymbols|isCurrentScreeningSnapshot/);
 });

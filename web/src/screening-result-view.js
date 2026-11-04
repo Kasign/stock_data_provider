@@ -16,7 +16,7 @@ export function renderScreeningLocalResultRowsView({
     const quote = item?.quote || {}, symbol = String(item?.symbol || item?.code || quote.symbol || "").trim();
     const name = String(item?.name || quote.name || symbol || "未报告");
     const row = document.createElement("tr"), checkCell = document.createElement("td"), stockCell = document.createElement("td");
-    const validSymbol = /^\d{6}(?:\\.(?:SH|SZ|BJ))?$/.test(symbol.toUpperCase());
+    const validSymbol = /^\d{6}(?:\.(?:SH|SZ|BJ))?$/.test(symbol.toUpperCase());
     const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.value = symbol.toUpperCase();
     checkbox.dataset.screeningLocalSelectSymbol = symbol.toUpperCase(); checkbox.disabled = !validSymbol;
     checkbox.setAttribute("aria-label", "选择 " + name + " 加入自选股"); checkCell.append(checkbox); row.append(checkCell);
