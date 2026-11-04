@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。当前业务代码核对基线为 `05949306eba5c4cbb5b9c62bc2d656a1efc24db9`（2026-11-03）；最近工程修复提交为 `437af45c`（修复 parity workflow 文档路径）；后续均为文档同步提交，不包含业务代码变化。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。当前业务代码复核基线为 `428878fc0a0606f8939637eb960c4ca7afa5c46d`，当前分支 HEAD 为 `8decb2a8d796f54d6f1552928bb599889aa93c0a`（2026-11-04）。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。
@@ -155,13 +155,13 @@
 
 | 编号 | 数据侧开发状态 | 已完成内容 / 当前进度 | 未完成内容 / 下一步 | 阻塞与依赖 | 数据侧 HEAD / 提交 SHA | 自动化测试证据 | 真实数据验证 | 跨端状态 |
 |---|---|---|---|---|---|---|---|---|
-| API-01 | 开发中 | 当前 HEAD 已有 OpenAPI、HTTP 路由和 WebUI API 清单；行情服务主要路由可在 `server.go` 对应到 Handler | 完成所有端点的 OpenAPI Schema、Handler、JSON 字段逐项核对；已补齐 `SectorRanking.change_percent_5d`、`ProviderProbeItem.validation_*` Schema；`coverage_dimensions` 原已存在并完成复核 | 当前 OpenAPI 字段缺口已按当前批次补齐，待 CI 验证 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 通过；本次 Schema 契约测试更新待最新 HEAD CI 验证 | 未执行全量真实接口对账 | 进行中 |
+| API-01 | 开发中 | 当前 HEAD 已有 OpenAPI、HTTP 路由和 WebUI API 清单；已补齐 `SectorRanking.change_percent_5d`、`ProviderProbeItem.validation_*` Schema；`coverage_dimensions` 原已存在 | 继续完成所有端点的 OpenAPI Schema、Handler、JSON 字段逐项核对 | 剩余差异待逐接口复核 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811` 通过；Schema 契约测试检查字段归属 | 未执行全量真实接口对账 | 进行中 |
 | API-02 | 已完成 | 指数目录、成分、指数日线、指数行情、交易日历、交易时段、证券交易状态、涨跌幅规则均有路由和 OpenAPI 定义；WebUI 已有对应请求封装 | 逐 Provider 补充真实数据覆盖和边界证据 | Provider 能力按源不同 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未完成逐 Provider 真实验收 | 待真实数据验收 |
 | API-03 | 已完成 | `/api/v1/market/stocks` 提供分页行情与 MA 参数；批量 quote 最多 50 只；WebUI 已封装并用于当前分页选股及自选股批量刷新 | 补全分页总数/覆盖边界、均线复权语义及真实样本质量验证；明确当前选股仅作用于已加载分页 | 不具备全市场筛选策略执行 API | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未执行全市场真实覆盖验收 | 待真实数据验收 |
 | API-04 | 开发中 | 市场情绪快照/历史和市场级资金流历史接口及 WebUI 请求封装已存在 | 核实市场情绪历史缺失交易日、幂等写入、保留策略和真实数据库数据；补专门集成证据 | 需要 MariaDB 持久化与真实历史数据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 的 MariaDB migration/PIT 集成通过；未证明 sentiment 专项全链路 | 未执行生产数据历史验收 | 待真实数据验收 |
 | API-05 | 已完成 | `/api/v1/market/capital-flow` 已提供，使用 Tushare `moneyflow_mkt_dc`；WebUI 已封装 | 核对 Token 权限、字段单位、交易日覆盖、源端时间和历史数据准确性 | 依赖 Tushare 权限与凭据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 通过 | 真实权限/历史值验收未完成；未配置凭据时应跳过 | 阻塞真实验收 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装诊断、探测和历史查看 | 验证新增 validation 字段契约测试、MariaDB 历史持久化和逐 Provider 状态 | OpenAPI 的 validation/coverage 字段缺失；Provider 凭据影响真实探测 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 历史 Go test suite Run `41622693853`、WebUI checks Run `41622693832` 通过；Live probe Run `41622693835` 工作流通过；本批次新契约测试待验证 | 工作流通过不等于所有 Provider 通过；逐项结果仍需核验 | 接口层已接入，待真实验收 |
-| API-07 | 开发中 | 板块排行支持涨幅、成交额、近 5 日涨幅排序；WebUI 已封装并支持排序切换 | 补 `change_percent_5d` OpenAPI Schema；评估真实资金净流入来源和完整候选集；补领涨股标准证券代码字段前不开放跳转 | 当前没有独立资金净流入 API；`leading_stock_symbol` 缺失 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 通过 | 板块资金净流入真实来源未验收 | 部分联调完成 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；validation 与 coverage Schema 已对齐 | 验证 MariaDB 探测历史持久化和逐 Provider 状态 | Provider 凭据影响真实探测；CI 工作流通过不等于每个 Provider 真实通过 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811`、WebUI checks Run `41755222944` 通过；Live probe Run `41755222948` 工作流通过 | 逐 Provider 真实请求和历史持久化仍需核验 | 接口层已接入，待真实验收 |
+| API-07 | 开发中 | 板块排行支持涨幅、成交额、近 5 日涨幅排序；`change_percent_5d` OpenAPI Schema 已补齐；WebUI 已封装并支持排序切换 | 评估真实资金净流入来源和完整候选集；补领涨股标准证券代码字段前不开放跳转 | 当前没有独立资金净流入 API；`leading_stock_symbol` 缺失 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811`、WebUI checks Run `41755222944` 通过 | 板块资金净流入真实来源未验收 | 部分联调完成 |
 | API-08 | 暂缓 | 当前没有服务端通知渠道、订阅和投递记录闭环 | 需要先形成服务端安全设计与 API 方案 | 用户确认复杂方案后再实施 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
 | API-09 | 暂缓 | 当前分页行情不等同于服务端策略执行或全市场扫描 | 先定义策略 schema、异步任务、结果快照和可追溯理由 | 需先确认产品/API 设计 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
 | API-10 | 暂缓 | 国内 A 股主线优先 | 国内主线稳定后评估全球市场指数、日历、币种及时区 | 数据源授权和优先级 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
@@ -218,8 +218,8 @@
 
 ## 10. 2026-11-03 当前 HEAD 进度复核
 
-- 数据侧代码核对基线：`05949306eba5c4cbb5b9c62bc2d656a1efc24db9`。
-- Go test suite Run `41622693853`：根模块、go-core、market-data 的 gofmt/go test/race/vet，MariaDB migration/PIT 集成，Compose 校验、部署脚本语法和两个 Go 镜像构建均通过。
-- WebUI checks Run `41622693832` 通过；Live provider probe Run `41622693835` 工作流通过，但不代表所有 Provider/能力真实验收通过。
-- Go-Python parity Run `41622693855` 前三步通过，最后一步因 workflow 引用迁移前的文档路径而失败。已在 `437af45c` 修复 push/PR paths 过滤器和 marker/report 校验路径；修复后的新运行结果待确认。
+- 当前分支 HEAD：`8decb2a8d796f54d6f1552928bb599889aa93c0a`；业务 Schema/测试变更提交 `064707e2`、`428878fc`。
+- Go test suite Run `41755222811`：根模块、go-core、market-data 的 gofmt/go test/race/vet，MariaDB migration/PIT 集成，Compose 校验、部署脚本语法和两个 Go 镜像构建均通过；三个模块任务中的旧 Go 模块路径扫描均通过。
+- WebUI checks Run `41755222944`、Live provider probe Run `41755222948` 均通过；Live workflow 通过不代表所有 Provider/能力真实验收通过。
+- Go-Python parity Run `41755222861` 在当前 HEAD 通过；旧文档路径问题已由 `437af45c` 修复。
 - 已发现 OpenAPI Schema 缺口：`SectorRanking.change_percent_5d` 及 `ProviderProbeItem.validation_*`、`coverage_dimensions`。数据侧按协作清单和整体规划优先补齐，WebUI 不复制服务端质量规则。
