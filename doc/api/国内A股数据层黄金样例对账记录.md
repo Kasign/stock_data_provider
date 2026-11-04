@@ -183,3 +183,39 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 - 本次没有 HFQ 真实请求，没有同一证券/日期下满足 valid 质量门禁的跨 Provider matched 样本，也没有逐日交易状态上下文对账。
 
 **验收判定：** 本次新增真实降级样本和请求证据；不构成 none/qfq/hfq 全矩阵验收，不构成跨 Provider 完全一致证明，不关闭阶段 B。
+
+
+## 14. 2026-11-04 HFQ 真实样本与探测失败记录（Run 41771896984）
+
+- 代码基线：`444feef6c5ab7b8c1237d990fc9416c7309baa06`。
+- Live provider probe Run：`41771896984`；实际探测 Job：`126383286296`（failure）。
+- Artifact：`live-provider-report`，ID `13295471518`。
+- 证券：招商银行 `600036.SH`；请求区间：2026-09-30 至 2026-11-03；每个 Provider 返回 8 根 HFQ 日 K。
+
+### 14.1 HFQ 返回结果
+
+| Provider | HTTP | Status | Quality | Method | Reference date |
+|---|---:|---|---|---|---|
+| Tencent | 200 | returned | degraded | `tencent_hfqday` | 未提供 |
+| Eastmoney | 200 | returned | valid | `eastmoney_fqt_2` | 未提供 |
+| BaoStock | 报告未单列 | returned | valid | `baostock_pct_change` | 未提供 |
+| Yahoo Finance | 200 | returned | degraded | `yahoo_adjclose_ratio_rebased_to_start` | 2026-09-30 |
+
+2026-10-30 样本 close：Tencent 230.714、Eastmoney 232.1、BaoStock 250.0752488、Yahoo 43.549999。四家虽然都返回 `backward_adjusted`，但参考基准并未证明一致，不能以同一个 adjustment enum 直接比较价格。
+
+Tencent、Yahoo 的 amount 缺失保持 null/unknown/degraded；Eastmoney、BaoStock 的 quality valid 只说明字段质量规则通过，不等于复权基准或数值准确性通过。
+
+### 14.2 同批次其他失败
+
+Live Probe Job 中 5 项 Eastmoney 能力失败，均为 HTTP 502：
+- stock_search（600519.SH）
+- sector_rankings（industry）
+- sector_rankings（concept）
+- quote（600036.SH）
+- eastmoney-delay quote（600036.SH）
+
+Run `41771896984` 的 workflow conclusion 为 success，但实际 Job conclusion 为 failure（容错配置）；不得将该 Job 记为通过。
+
+### 14.3 验收结论
+
+本批新增了四家 Provider 的真实 HFQ 请求和返回样本，但尚未证明参考基准一致，也未形成可用于严格 matched 的有效样本。后续需补齐参考日期/因子语义、同基准数值差分、交易上下文真实日期矩阵和 Probe 历史 MariaDB 部署验收。阶段 B 未关闭。
