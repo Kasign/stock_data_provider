@@ -168,8 +168,18 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 			results[len(results)-1].HTTP = httpResponses
 		}
 	}
-	if dailyOnly && (len(results) == 0 || results[len(results)-1].Validation == nil) {
-		t.Fatal("TickFlow daily-only probe must retain its structured validation report")
+	if dailyOnly {
+		if len(results) == 0 {
+			t.Fatal("TickFlow daily-only probe did not produce a result")
+		}
+		result := results[len(results)-1]
+		if result.Validation == nil || result.DailyRaw == nil || result.DailyRaw.BodyTruncated ||
+			result.DailyRaw.TimestampCount != 8 || result.DailyRaw.OpenCount != 8 ||
+			result.DailyRaw.HighCount != 8 || result.DailyRaw.LowCount != 8 ||
+			result.DailyRaw.CloseCount != 8 || result.DailyRaw.VolumeCount != 8 ||
+			result.DailyRaw.AmountCount != 8 {
+			t.Fatalf("TickFlow daily-only probe must retain complete structured validation and raw field diagnostics: %+v", result)
+		}
 	}
 	if !quoteOnly && !dailyOnly {
 		run("index_quotes", func() (int, string, []string, error) {

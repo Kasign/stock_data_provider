@@ -154,6 +154,7 @@ func TestTickFlowDailyBarAdjustmentRequestAndMetadata(t *testing.T) {
 				t.Fatalf("unexpected TickFlow adjustment result: %+v", bars)
 			}
 			if bars[0].Volume == nil || *bars[0].Volume != 100000 ||
+				bars[0].RawVolume == nil || *bars[0].RawVolume != 1000 ||
 				bars[0].RawVolumeUnit != "hands" || bars[0].VolumeUnit != "shares" {
 				t.Fatalf("TickFlow adjustment response must preserve raw hands and normalize shares: %+v", bars[0])
 			}

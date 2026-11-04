@@ -114,7 +114,7 @@ func TestTickFlowDailyBarsDerivesChangeAfterChronologicalSort(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
 			"timestamp": []int64{latestDay.UnixMilli(), previousDay.UnixMilli()},
 			"open":      []float64{108, 99}, "high": []float64{112, 102}, "low": []float64{107, 98}, "close": []float64{110, 100},
-			"volume": []float64{1000, 2000}, "amount": []float64{11000000, 10000000},
+			"volume": []float64{1000, 2000}, "amount": []float64{11000000, 20000000},
 		}})
 	}))
 	defer server.Close()
