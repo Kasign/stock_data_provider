@@ -262,3 +262,22 @@ Run `41771896984` 的 workflow conclusion 为 success，但实际 Job conclusion
 当前规则有意偏保守：不同 Provider 的方法标识不同，即使其算法可能在经济含义上等价，也会被标记为不可比较。后续如需放宽，必须先建立有来源证据和回归样例的跨 Provider 基准映射；不得直接按 method 名称猜测语义，也不得用共同日期归一化替代绝对基准证明。
 
 本规则仅防止错误 matched，不代表已经证明各 Provider 的复权值彼此正确。真实 Provider 样本仍需分别记录来源算法、参考日期、因子来源及数据质量。CI 通过仅代表代码测试通过，不替代真实数据验收。
+
+
+### 最新代码验证与真实 Provider 探测（2026-11-04）
+
+代码提交 8b04a78a84193ae2840ed1fef73a834f9aaa7de8 的 Go test suite Run 41784710158 已全部通过：根 Go module、go-core、services/market-data（含 race detector 与 vet）、MariaDB migration/PIT persistence、Docker Compose 校验及两个 Go 镜像构建均成功。Parity Run 41784710203 与 WebUI checks Run 41784710186 成功。
+
+Live Provider Probe Run 41784710162 的 workflow conclusion 为 success，但内部 Job Probe real public provider responses 实际失败，不能作为全 Provider 通过：
+- Sina daily_bars/none：TLS handshake timeout。
+- Eastmoney stock_search、sector_rankings/industry、sector_rankings/concept：HTTP 502。
+- NetEase quote DNS 解析失败、历史 CSV HTTP 502，按 opt-in 规则 skipped。
+- 其他本轮未失败的 Provider 能力需按报告逐项看待，不能由 workflow conclusion 统一推断。
+
+本轮真实 HFQ 探测（600036.SH，2026-09-30 至 2026-11-03）：
+- Tencent：8 根，tencent_hfqday，未提供 adjustment_reference_date；成交额缺失，质量 degraded。
+- Eastmoney：8 根，eastmoney_fqt_2，未提供 adjustment_reference_date；样本质量 valid。
+- BaoStock：8 根，baostock_pct_change，未提供 adjustment_reference_date；样本质量 valid。
+- Yahoo Finance：8 根，yahoo_adjclose_ratio_rebased_to_start，参考日期为 2026-09-30；成交额缺失，质量 degraded。
+
+结论：本轮样本均不能证明四家 Provider 具有兼容的绝对复权基准；不同方法标识及缺失参考日期必须保持 not_comparable，不能生成 adjusted matched。样本收盘价差异不得通过简单缩放强行消除。真实 Provider 上游故障与代码 CI 结果分别记录，阶段 B 尚未关闭。
