@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | Provider 静态清单、被动诊断、主动 Probe、诊断历史的边界与字段对齐 | 待当前 HEAD 复核 | 数据侧主责，WebUI 配合 | 三类能力分离；OpenAPI、Handler、状态分类和持久化证据一致 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；DailyBar 交易上下文诊断复用既有能力；TickFlow DailyBar 已接通请求级标准化 Reporter，daily-only 探针已增加 Validation 报告和有限原始字段摘要；未新增 API 路由/Schema，未修改 WebUI 业务代码 | 仅执行一次 TickFlow none 日线真实复测并记录单位/字段证据；继续补齐其他 Provider none/qfq/hfq 请求证据；完成 MariaDB Probe 历史部署验收 | TickFlow `/v1/klines` 成交量单位仍待真实样本证明；真实样本不满足 OHLC/amount/volume 交叉校验时保持失败或不可比较 | `0e2eb661c2920c15a5066a208d388cae5f891d68` | Go test suite Run `41823789910` 全部 5 个 Job 通过；Parity Run `41823797220`、WebUI checks Run `41823797336` 通过；TickFlow daily-only 真实请求待触发 | 此前 TickFlow daily-only 失败于标准化后无有效行；本批次已修复 Reporter 上下文丢失，尚未复测真实日 K；Probe 历史部署验收未完成 | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。当前数据侧分支 HEAD 为 `bed1abe510527aead4c8c125f8fa894117f168c2`（2026-11-04）；本批次修复 TickFlow DailyBar 标准化诊断上下文丢失，并增强 daily-only 探针诊断输出；未新增 API 路由/Schema，未修改 WebUI 业务代码。Go suite 与 Live provider probe 正在执行，真实 TickFlow 日线复测尚未执行。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。当前数据侧分支 HEAD 为 `0e2eb661c2920c15a5066a208d388cae5f891d68`（2026-11-04）；本批次修复 TickFlow DailyBar 标准化诊断上下文丢失，并增强 daily-only 探针诊断输出；未新增 API 路由/Schema，未修改 WebUI 业务代码。Go test suite Run `41823789910`、Parity Run `41823797220`、WebUI checks Run `41823797336` 已通过；TickFlow daily-only 真实日线复测尚未执行。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。

@@ -679,8 +679,10 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 不记录 URL Query、API Key 或认证头值；HTTP 记录只保留端点、状态码和认证头是否存在。
 - 新增本地回归测试验证 amount/volume 隐含均价不一致导致整批过滤时，调用方 Reporter 能收到 `amount,volume/unit_mismatch` 诊断；新增 raw summary 解析测试。
 
-### 48.3 验收状态
+### 48.3 自动化验证与真实数据状态
 
-- 本节记录实现范围；Go CI、race、vet 和 Live daily-only 复测均以新提交对应的实际 Job 结果为准。
-- 真实 TickFlow 日 K 的成交量单位尚未重新验收；本次不把 Quote 的 hands→shares 结论推广到 `/v1/klines`。
+- 实现提交：`bed1abe510527aead4c8c125f8fa894117f168c2`；格式修正提交：`a6da06c3118edeac1979ff5258550198b26c2db8`、`0e2eb661c2920c15a5066a208d388cae5f891d68`。前两次 CI 仅因 gofmt 失败，修正后 Go test suite Run `41823789910` 全部 5 个 Job 通过：根模块、go-core、market-data gofmt/tests/race/vet、MariaDB migration/PIT 集成、Compose 校验和两个 Go Docker 镜像。
+- Go-Python parity Run `41823797220`、WebUI checks Run `41823797336` 通过。通用 Live Probe Run `41823797262` 通过，但未启用 TickFlow daily-only marker，不构成 TickFlow 日 K 真实验收。
+- 本节记录实现范围；TickFlow daily-only 真实复测仍待执行。
+- 真实 TickFlow 日 K 的成交量单位尚未重新验收；本次不把 Quote 的 hands→shares 结论推广到 `/v1/klines`。下一次仅执行一次 `600519.SH`、8 条、none 口径 daily-only 请求。
 - 在取得真实响应并完成 OHLC/amount/volume 交叉核验前，日 K 单位维持“待证实”；质量无法比较时标记 `not_comparable`，不擅自调整单位。
