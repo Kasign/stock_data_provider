@@ -40,14 +40,14 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 
 	client := NewTickFlowConfigured(25*time.Second, baseURL, freeURL, apiKey)
 	type result struct {
-		Capability   string   `json:"capability"`
-		Status       string   `json:"status"`
-		ElapsedMS    int64    `json:"elapsed_ms"`
-		Quality      string   `json:"quality,omitempty"`
-		QualityNotes []string `json:"quality_notes,omitempty"`
-		Rows         int      `json:"rows,omitempty"`
+		Capability   string                      `json:"capability"`
+		Status       string                      `json:"status"`
+		ElapsedMS    int64                       `json:"elapsed_ms"`
+		Quality      string                      `json:"quality,omitempty"`
+		QualityNotes []string                    `json:"quality_notes,omitempty"`
+		Rows         int                         `json:"rows,omitempty"`
 		Error        string                      `json:"error,omitempty"`
-		HTTP         []liveProbeHTTPResponse    `json:"http_responses,omitempty"`
+		HTTP         []liveProbeHTTPResponse     `json:"http_responses,omitempty"`
 		QuoteFields  *tickflowQuoteRawDiagnostic `json:"quote_fields,omitempty"`
 	}
 
