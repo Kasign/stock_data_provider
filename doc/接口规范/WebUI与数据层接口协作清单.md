@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。当前数据侧分支 HEAD 为 `c4438a9d1822c292eae4d4313011718ce2fd0c0a`（2026-11-04）；当前批次修复 DailyBar Reporter 聚合计数和 Pytdx Probe 测试注入方式，未修改 WebUI 业务代码。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。当前数据侧分支 HEAD 为 `bed1abe510527aead4c8c125f8fa894117f168c2`（2026-11-04）；本批次修复 TickFlow DailyBar 标准化诊断上下文丢失，并增强 daily-only 探针诊断输出；未新增 API 路由/Schema，未修改 WebUI 业务代码。Go suite 与 Live provider probe 正在执行，真实 TickFlow 日线复测尚未执行。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。
@@ -160,7 +160,7 @@
 | API-03 | 已完成 | `/api/v1/market/stocks` 提供分页行情与 MA 参数；批量 quote 最多 50 只；WebUI 已封装并用于当前分页选股及自选股批量刷新 | 补全分页总数/覆盖边界、均线复权语义及真实样本质量验证；明确当前选股仅作用于已加载分页 | 不具备全市场筛选策略执行 API | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未执行全市场真实覆盖验收 | 待真实数据验收 |
 | API-04 | 开发中 | 市场情绪快照/历史和市场级资金流历史接口及 WebUI 请求封装已存在 | 核实市场情绪历史缺失交易日、幂等写入、保留策略和真实数据库数据；补专门集成证据 | 需要 MariaDB 持久化与真实历史数据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 的 MariaDB migration/PIT 集成通过；未证明 sentiment 专项全链路 | 未执行生产数据历史验收 | 待真实数据验收 |
 | API-05 | 已完成 | `/api/v1/market/capital-flow` 已提供，使用 Tushare `moneyflow_mkt_dc`；WebUI 已封装 | 核对 Token 权限、字段单位、交易日覆盖、源端时间和历史数据准确性 | 依赖 Tushare 权限与凭据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 通过 | 真实权限/历史值验收未完成；未配置凭据时应跳过 | 阻塞真实验收 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；DailyBar 交易上下文关联诊断已实现并复用现有 TradingCalendar/SecurityTradingStatus；空数组、上下文 unknown 与字段校验失败已区分；跨 Provider 比较与上下文质量解耦 | 当前 HEAD Go suite / Parity / Live Probe 验证；补齐真实 Provider none/qfq/hfq 请求证据；完成 MariaDB Probe 历史部署验收 | 交易日历冲突、证券状态缺失/未知均只降级不可比较；空数组不直接判失败；当天未完成日 K 不参与缺口判断 | `37320c9e3dd1e2828b3b0216324561a6c65c924b` | 当前 SHA `37320c9e` 对应 Go suite Run `41770245835`、Parity Run `41770245834`、WebUI Run `41770245856`、Live Probe Run `41770245844`；结果待全部完成 | 真实 Provider 复权矩阵未完成；空数组/交易状态关联尚待真实数据验收；Probe 历史部署验收未完成 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；DailyBar 交易上下文关联诊断复用现有 TradingCalendar/SecurityTradingStatus；本批次修复 TickFlow DailyBar 标准化诊断上下文丢失，daily-only 探针增加结构化 Validation 报告和有界原始字段摘要；未新增 API 路由或响应契约字段 | 当前 HEAD Go suite / Parity / Live Probe 验证；CI 通过后仅复测一次 TickFlow none 日线；补齐真实 Provider none/qfq/hfq 请求证据；完成 MariaDB Probe 历史部署验收 | TickFlow `/v1/klines` 成交量单位仍待真实样本证明；交易日历冲突、证券状态缺失/未知只降级不可比较 | `bed1abe510527aead4c8c125f8fa894117f168c2` | Go test suite Run `41823327737`、Live provider probe Run `41823327752` 正在执行；Parity / WebUI checks 尚待确认 | TickFlow daily-only 此前失败于标准化后无有效行；本批次诊断修复尚未完成真实复测；Probe 历史部署验收未完成 | 接口层已接入，待真实验收 |
 | API-07 | 开发中 | 板块排行支持涨幅、成交额、近 5 日涨幅排序；`change_percent_5d` OpenAPI Schema 已补齐；WebUI 已封装并支持排序切换 | 评估真实资金净流入来源和完整候选集；补领涨股标准证券代码字段前不开放跳转 | 当前没有独立资金净流入 API；`leading_stock_symbol` 缺失 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811`、WebUI checks Run `41755222944` 通过 | 板块资金净流入真实来源未验收 | 部分联调完成 |
 | API-08 | 暂缓 | 当前没有服务端通知渠道、订阅和投递记录闭环 | 需要先形成服务端安全设计与 API 方案 | 用户确认复杂方案后再实施 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
 | API-09 | 暂缓 | 当前分页行情不等同于服务端策略执行或全市场扫描 | 先定义策略 schema、异步任务、结果快照和可追溯理由 | 需先确认产品/API 设计 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
