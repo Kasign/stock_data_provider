@@ -1525,4 +1525,4 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 单测覆盖嵌套/平铺事件、排序、计数、筛选、选择优先级、非法筛选和空列表。
 - [x] UI contract 验证模块纯计算边界。
 - [x] WebUI Checks #41826860829 通过。
-- [ ] Chromium Browser Smoke #41826860631。
+- [x] Chromium Browser Smoke #41826860631 通过。

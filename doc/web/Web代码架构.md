@@ -453,4 +453,4 @@ JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js�
 
 新增单测覆盖排序、平铺/嵌套状态、计数、筛选、当前选择保留、默认选择优先级、非法筛选及空列表。UI contract 验证 app 协调层和纯 ViewModel 边界。
 
-代码提交 `f4b5145`；WebUI Checks #41826860829 已通过，Chromium Browser Smoke #41826860631 尚在运行。
+代码提交 `f4b5145`；WebUI Checks #41826860829、Chromium Browser Smoke #41826860631 均通过。

@@ -951,6 +951,6 @@ JSR-5A 实施：
 - 视图模型不访问 DOM、全局 state、storage、API 或事件监听。
 - 测试覆盖排序、平铺/嵌套事件状态、全部计数、筛选计数、已选项保留、优先选择最近异常/运行事件、回退最后可见项、非法筛选回退和空列表保留旧选中值。
 
-代码提交：`f4b5145`。WebUI Checks #41826860829 已通过；Chromium Browser Smoke #41826860631 正在运行，最终验收以该提交对应的两个 CI 均通过为准。
+代码提交：`f4b5145`。WebUI Checks #41826860829、Chromium Browser Smoke #41826860631 均通过，JSR-5A 验收完成。
 
 后续审查方向：在 JSR-5A 通过后，复核任务事件详情/摘要与筛选控件是否仍有可独立测试的纯计算；不迁移 task polling、Run result reload、AbortController/generation、事件读取错误恢复或任务状态所有权。若后续拆分收益不足，保留 app.js 当前边界。
