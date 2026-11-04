@@ -148,3 +148,38 @@ Go/Python 字段级等价、同花顺真实账号权限和全市场样本覆盖�
 - 固定夹具路径：`services/market-data/internal/provider/testdata/live_market_cross_market_golden_20261030.json`。
 - 来源提交：`720f2fc685376e29452ce3742ba398ff79089a03`；Live provider probe Run：`41042950111`。
 - 自动化测试将两市场日 K 输入统一比较器，要求 `not_comparable / quality_status_must_be_valid`。这是质量门禁证据，不是跨 Provider 对账通过证据。
+
+
+## 13. 2026-11-04 Live Provider 样本补充（Run 41770474643）
+
+- 代码基线：`fc113a6f43bf6004b7591b10f0fc65f6b0b8c86a`。
+- GitHub Actions：Live provider probe Run `41770474643`。
+- 脱敏报告 Artifact：`live-provider-report`，ID `13294771958`。
+- 证据类型：托管 Runner 对真实公网 Provider 发起请求，保存规范化结果、HTTP 状态、有限长度脱敏响应片段；不是 Go/Python 双侧差分，也不是数据库生产部署验收。
+
+### 13.1 DailyBar 实际请求
+
+| Provider | Symbol | Adjustment | Bars | Quality |
+|---|---|---|---:|---|
+| Sina | 600036.SH | none | 8 | degraded |
+| Tencent | 600036.SH | none | 8 | degraded |
+| Tencent | 600036.SH | forward_adjusted | 8 | degraded |
+| Eastmoney | 600036.SH | forward_adjusted | 8 | degraded |
+| BaoStock | 600036.SH | forward_adjusted | 8 | degraded |
+| Yahoo Finance | 600036.SH | forward_adjusted | 8 | degraded |
+
+主要降级原因：
+- Sina：Provider 未提供成交额，且日 K 响应未回显证券代码。
+- Tencent：日 K 没有可验证成交额；前复权响应另有参考日期未验证和响应契约告警。
+- Eastmoney / BaoStock：前复权参考日期未验证，并有响应契约告警。
+- Yahoo：成交额缺失；前复权报告的参考日期为 2026-11-03。
+
+### 13.2 其他市场样本与结论
+
+- 600519.SH Quote：Sina valid；Tencent degraded（成交量单位推断、volume_ratio 不支持）。
+- 300750.SZ 与 688981.SH：Sina/Tencent Quote 和 none 日 K 有返回；两市场日 K 均 degraded。
+- NetEase：本次状态 skipped，报告记录托管 Runner DNS 失败/历史接口 HTTP 502，opt-in 未启用。
+- 妙想和原生新闻搜索：因未配置/启用所需凭据而 skipped；不得将其计为 Provider 成功。
+- 本次没有 HFQ 真实请求，没有同一证券/日期下满足 valid 质量门禁的跨 Provider matched 样本，也没有逐日交易状态上下文对账。
+
+**验收判定：** 本次新增真实降级样本和请求证据；不构成 none/qfq/hfq 全矩阵验收，不构成跨 Provider 完全一致证明，不关闭阶段 B。
