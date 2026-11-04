@@ -179,7 +179,7 @@ try {
   await page.locator('.nav-link[data-view="watchlist"]').click();
   await page.locator("#refresh-watchlist-quotes").click();
   await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 1 / 2"));
-  assert.match(await page.locator('.watchlist-item').filter({ hasText: "600519.SH" }).locator(".watchlist-tracking-line").textContent(), /行情快照：/);
+  assert.match(await page.locator('.watchlist-item').filter({ hasText: "600519.SH" }).locator(".watchlist-tracking-line").first().textContent(), /行情快照：/);
   assert.match(await page.locator('.watchlist-item').filter({ hasText: "000001.SZ" }).locator(".watchlist-tracking-line").textContent(), /批量行情不可用：quote_unavailable/);
   assert.match(await status.textContent(), /失败 1 只/);
 
@@ -188,7 +188,7 @@ try {
   await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 0 / 2"));
   assert.match(await status.textContent(), /失败 2 只/);
   for (const symbol of ["600519.SH", "000001.SZ"]) {
-    const line = page.locator('.watchlist-item').filter({ hasText: symbol }).locator(".watchlist-tracking-line");
+    const line = page.locator('.watchlist-item').filter({ hasText: symbol }).locator(".watchlist-tracking-line").first();
     assert.match(await line.textContent(), /批量行情不可用：missing_response_item/);
   }
   assert.deepEqual(pageErrors, []);
