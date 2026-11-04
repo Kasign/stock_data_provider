@@ -66,6 +66,7 @@ func TestIsTusharePermissionRequired(t *testing.T) {
 	}
 }
 
+// 最小权限探测通过提交标记 [include_tushare] [tushare_daily_only] 显式触发。
 func TestLiveTushareCapabilities(t *testing.T) {
 	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_TESTS") != "1" {
 		t.Skip("set MARKET_DATA_LIVE_TUSHARE_TESTS=1 to call Tushare Pro endpoints")
