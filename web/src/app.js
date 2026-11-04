@@ -33,8 +33,8 @@ import { validateTaskEventPage, TASK_EVENT_PAGE_SIZE } from "./task-workflow.js"
 import { bindStockResearch } from "./stock-research.js";
 import { bindDataCenter } from "./data-center.js";
 import { bindLocalAlertDrafts } from "./local-alert-drafts.js";
-import { bindResearchNotes } from "./research-notes.js";
-import { bindResearchReports } from "./research-reports.js";
+import { bindResearchNotes, RESEARCH_NOTES_KEY } from "./research-notes.js";
+import { bindResearchReports, RESEARCH_REPORTS_KEY } from "./research-reports.js";
 import { bindNotificationPreferences } from "./notification-preferences.js";
 import { runHealthCheck } from "./health-check.js";
 import { bindMarketActivity } from "./market-activity.js";
@@ -5301,6 +5301,30 @@ function handleLocalStorageChange(event) {
       $("#local-preferences-feedback").textContent = "本地展示与查询偏好已从其他标签页同步。";
     } catch (error) {
       $("#local-preferences-feedback").textContent = "已读取其他标签页的偏好，但页面刷新失败：" + (error?.message || "未知异常");
+    }
+  }
+
+  if (cleared || event.key === RESEARCH_NOTES_KEY) {
+    try {
+      researchNotes?.render?.();
+    } catch (error) {
+      const feedback = $("#research-note-feedback");
+      if (feedback) {
+        feedback.textContent = "已收到其他标签页的研究笔记变更，但列表刷新失败：" + (error?.message || "未知异常");
+        feedback.dataset.state = "error";
+      }
+    }
+  }
+
+  if (cleared || event.key === RESEARCH_REPORTS_KEY) {
+    try {
+      researchReports?.render?.();
+    } catch (error) {
+      const feedback = $("#research-report-feedback");
+      if (feedback) {
+        feedback.textContent = "已收到其他标签页的报告归档变更，但列表刷新失败：" + (error?.message || "未知异常");
+        feedback.dataset.state = "error";
+      }
     }
   }
 

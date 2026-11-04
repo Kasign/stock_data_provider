@@ -1,0 +1,99 @@
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { chromium } from "playwright";
+
+const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const contentTypes = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8" };
+const server = createServer(async (request, response) => {
+  const pathname = decodeURIComponent(new URL(request.url || "/", "http://127.0.0.1").pathname);
+  const target = path.resolve(webRoot, "." + (pathname === "/" ? "/index.html" : pathname));
+  if (target !== webRoot && !target.startsWith(webRoot + path.sep)) { response.writeHead(403); response.end("Forbidden"); return; }
+  try { const body = await readFile(target); response.writeHead(200, { "content-type": contentTypes[path.extname(target)] || "application/octet-stream", "cache-control": "no-store" }); response.end(body); }
+  catch { response.writeHead(404); response.end("Not found"); }
+});
+await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+const address = server.address();
+assert.ok(address && typeof address === "object");
+const baseUrl = "http://127.0.0.1:" + address.port;
+let browser;
+const noteKey = "stock-provider-webui.research-notes.v1";
+const reportKey = "stock-provider-webui.research-reports.v1";
+const note = (id, title, content, updatedAt = "2026-11-04T01:00:00.000Z") => ({ id, title, content, symbol: "600519.SH", taskId: "task-1", runId: "run-1", tags: ["基本面"], createdAt: "2026-11-03T01:00:00.000Z", updatedAt });
+const report = (id = "report-1", runId = "run-1") => ({ id, runId, taskId: "task-1", analysisBase: "/analysis-api", symbols: ["600519.SH"], status: "completed", corePass: true, asOf: "2026-11-04T09:30:00+08:00", createdAt: "2026-11-04T01:00:00.000Z", result: { run_id: runId, status: "completed", request: { symbols: ["600519.SH"], as_of: "2026-11-04T09:30:00+08:00" }, quality: { core_pass: true }, signals: [], warnings: [] } });
+
+try {
+  browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const first = await context.newPage();
+  const second = await context.newPage();
+  const errors = [];
+  first.on("pageerror", error => errors.push(error.stack || error.message));
+  for (const page of [first, second]) {
+    await page.route("**/*", async route => {
+      const url = new URL(route.request().url());
+      if (url.origin === baseUrl && (url.pathname.includes("/api/") || /\/(?:health\/(?:ready|live)|readyz|healthz)$/.test(url.pathname))) {
+        return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ status: "unavailable", error: "isolated browser fixture" }) });
+      }
+      return route.continue();
+    });
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.locator("#research-note-form").waitFor({ state: "attached" });
+    await page.locator('.nav-link[data-view="research"]').click();
+  }
+
+  await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: noteKey, item: note("note-1", "初始笔记", "初始内容") });
+  await first.locator(".research-note-card").filter({ hasText: "初始笔记" }).waitFor();
+  await first.locator('[data-note-action="edit"][data-note-id="note-1"]').click();
+  await first.locator("#research-note-title").fill("本地旧草稿");
+  await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: noteKey, item: note("note-1", "远端新版本", "远端内容", "2026-11-04T02:00:00.000Z") });
+  await first.locator(".research-note-card").filter({ hasText: "远端新版本" }).waitFor();
+  assert.equal(await first.locator("#research-note-title").inputValue(), "本地旧草稿", "cross-tab list refresh must not reset the editing draft");
+  await first.locator("#research-note-save").click();
+  await first.locator("#research-note-feedback").filter({ hasText: "已被其他标签页修改" }).waitFor();
+  assert.equal(await first.evaluate(key => JSON.parse(localStorage.getItem(key))[0].title, noteKey), "远端新版本", "stale draft must not overwrite remote update");
+  await first.getByRole("button", { name: "重新载入最新版本" }).click();
+  assert.equal(await first.locator("#research-note-title").inputValue(), "远端新版本");
+
+  await first.locator('[data-note-action="edit"][data-note-id="note-1"]').click();
+  await first.locator("#research-note-title").fill("删除后的旧草稿");
+  await second.evaluate(key => localStorage.setItem(key, "[]"), noteKey);
+  await first.locator(".research-note-list").getByText("尚无研究记录。").waitFor();
+  await first.locator("#research-note-save").click();
+  await first.locator("#research-note-feedback").filter({ hasText: "已被其他标签页删除" }).waitFor();
+  await first.getByRole("button", { name: "另存为新笔记" }).click();
+  await first.locator("#research-note-save").click();
+  const recreated = await first.evaluate(key => JSON.parse(localStorage.getItem(key)), noteKey);
+  assert.equal(recreated.length, 1);
+  assert.notEqual(recreated[0].id, "note-1", "deleted record must only be preserved as a new note with a new ID");
+
+  await second.evaluate(({ key, item }) => localStorage.setItem(key, JSON.stringify([item])), { key: reportKey, item: report() });
+  await first.locator(".research-report-card").filter({ hasText: "run-1" }).waitFor();
+  await second.evaluate(key => localStorage.removeItem(key), reportKey);
+  await first.locator("#research-report-list").getByText("尚无归档报告。").waitFor();
+
+  const clearNote = note("clear-note", "待清理笔记", "内容");
+  const clearReport = report();
+  await second.evaluate(({ noteKey, reportKey, clearNote, clearReport }) => {
+    localStorage.setItem(noteKey, JSON.stringify([clearNote]));
+    localStorage.setItem(reportKey, JSON.stringify([clearReport]));
+  }, { noteKey, reportKey, clearNote, clearReport });
+  await first.locator(".research-note-card").filter({ hasText: "待清理笔记" }).waitFor();
+  await first.locator(".research-report-card").filter({ hasText: "run-1" }).waitFor();
+  await second.evaluate(() => localStorage.clear());
+  await first.locator("#research-note-list").getByText("尚无研究记录。").waitFor();
+  await first.locator("#research-report-list").getByText("尚无归档报告。").waitFor();
+
+  for (const width of [320, 768, 1280, 1600]) {
+    await first.setViewportSize({ width, height: 900 });
+    await first.waitForTimeout(50);
+    assert.ok(await first.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "research records page must not overflow at viewport " + width);
+  }
+  assert.deepEqual(errors, [], "cross-tab research records flow must not raise page errors");
+  console.log("Research records cross-tab browser acceptance passed.");
+} finally {
+  if (browser) await browser.close();
+  await new Promise(resolve => server.close(resolve));
+}

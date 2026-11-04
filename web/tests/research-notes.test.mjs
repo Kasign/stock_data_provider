@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {buildResearchNoteContextFromReport,filterResearchNotes,readResearchNotes,writeResearchNotes,RESEARCH_NOTES_KEY} from "../src/research-notes.js";
+import {buildResearchNoteContextFromReport,filterResearchNotes,readResearchNotes,writeResearchNotes,researchNoteEditState,RESEARCH_NOTES_KEY} from "../src/research-notes.js";
 function memory(){const data=new Map();return {getItem:k=>data.has(k)?data.get(k):null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)};}
 const note=(id,title,content,symbol="600519.SH",tags=["基本面"])=>({id,title,content,symbol,tags,createdAt:"2026-01-01",updatedAt:"2026-01-02"});
 test("研究记录可写入并回读校验",()=>{const s=memory();assert.equal(writeResearchNotes([note("1","标题","内容")],s).ok,true);assert.equal(readResearchNotes(s).items.length,1);});
@@ -24,3 +24,11 @@ test("拒绝异常标签和超长关联字段，不静默截断研究记录", ()
 });
 
 test("拒绝重复笔记 ID，且不会覆盖重复或损坏的旧数据",()=>{const s=memory();const duplicate=[note("same","第一条","内容一"),note("same","第二条","内容二")];assert.equal(writeResearchNotes(duplicate,s).reason,"invalid");s.setItem(RESEARCH_NOTES_KEY,JSON.stringify(duplicate));const before=s.getItem(RESEARCH_NOTES_KEY);assert.equal(readResearchNotes(s).valid,false);assert.equal(writeResearchNotes([note("new","新记录","内容")],s).reason,"invalid-storage");assert.equal(s.getItem(RESEARCH_NOTES_KEY),before);});
+
+test("编辑快照可区分未变化、远端修改和远端删除", () => {
+  const original = note("edit-1", "原始标题", "原始内容");
+  const snapshot = JSON.stringify(original);
+  assert.equal(researchNoteEditState([original], "edit-1", snapshot), "unchanged");
+  assert.equal(researchNoteEditState([{ ...original, title: "远端新标题", updatedAt: "2026-02-01" }], "edit-1", snapshot), "changed");
+  assert.equal(researchNoteEditState([], "edit-1", snapshot), "missing");
+});

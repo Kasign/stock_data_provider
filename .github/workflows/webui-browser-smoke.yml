@@ -49,6 +49,10 @@ jobs:
         working-directory: web
         run: node tests/settings-storage-browser.mjs
 
+      - name: Run research records cross-tab synchronization acceptance
+        working-directory: web
+        run: node tests/research-records-cross-tab-browser.mjs
+
       - name: Run watchlist quote snapshot acceptance
         working-directory: web
         run: node tests/watchlist-quotes-browser.mjs
