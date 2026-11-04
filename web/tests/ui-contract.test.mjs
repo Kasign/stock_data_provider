@@ -33,9 +33,10 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
 const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
 const watchlistImportPreviewView = await readFile(new URL("../src/watchlist-import-preview-view.js", import.meta.url), "utf8");
 const watchlistTrackingViewModel = await readFile(new URL("../src/watchlist-tracking-view-model.js", import.meta.url), "utf8");
+const watchlistListViewModel = await readFile(new URL("../src/watchlist-list-view-model.js", import.meta.url), "utf8");
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
-const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView, watchlistImportPreviewView, watchlistTrackingViewModel].join("\n");
+const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView, watchlistImportPreviewView, watchlistTrackingViewModel, watchlistListViewModel].join("\n");
 
 function finalCssRuleBody(selector) {
   const start = stylesheet.lastIndexOf(selector);
@@ -493,6 +494,17 @@ test("structured analysis results use readable typography and mobile-safe layout
   assert.match(stylesheet, /overflow-wrap: anywhere/);
 });
 
+
+test("watchlist list projection is pure and reuses the existing sort domain", () => {
+  assert.match(appSource, /buildWatchlistListViewModel\(\{/);
+  assert.match(watchlistListViewModel, /import \{ sortWatchlistItems \} from "\.\/watchlist-sort\.js"/);
+  assert.match(watchlistListViewModel, /export function buildWatchlistListViewModel\(/);
+  assert.doesNotMatch(watchlistListViewModel, /\bstate\.|localStorage|document\.|querySelector|addEventListener|fetch\(/);
+  assert.match(watchlistListViewModel, /groupAssignments|assignments/);
+  assert.match(watchlistListViewModel, /filterCountText/);
+  assert.match(appSource, /syncWatchlistQuoteMembership\(records\)/);
+  assert.match(appSource, /renderResearchStockList\(\)/);
+});
 
 test("browser-local watchlist is wired to existing query/analysis flows and stores only references", () => {
   for (const id of ["add-to-watchlist-button", "watchlist-count", "watchlist-feedback", "watchlist-list"]) {

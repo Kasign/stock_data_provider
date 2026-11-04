@@ -42,7 +42,6 @@ import { bindExistingApiTools } from "./existing-api-tools.js";
 import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksState, removeRecentTask, upsertRecentTask, recentTaskTypeLabel, recentTaskIdentity, mergeRecentTaskReferences, RECENT_TASKS_KEY, MAX_RECENT_TASKS } from "./recent-tasks.js";
 import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, removeWatchlistSymbols, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { addScreeningResultsToWatchlist } from "./watchlist-batch.js";
-import { sortWatchlistItems } from "./watchlist-sort.js";
 import { buildWatchlistItemNode } from "./watchlist-item-view.js";
 import { buildWatchlistImportPreview } from "./watchlist-import-preview.js";
 import { buildWatchlistImportPreviewView } from "./watchlist-import-preview-view.js";
