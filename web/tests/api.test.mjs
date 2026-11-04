@@ -28,8 +28,6 @@ import {
   getStockBoards,
   getStockFundamentals,
   getStockAnnouncements,
-  getChipDistribution,
-  getCapitalFlow,
   getMarketSectors,
   getMarketCapitalFlow,
   getQuote,
