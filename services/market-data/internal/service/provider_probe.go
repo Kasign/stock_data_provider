@@ -333,6 +333,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 		}
 		jobs = append(jobs, job)
 	}
+
 	quoteSymbol := "600519.SH"
 	barsSymbol := "600036.SH"
 	searchSymbol := "600519"
