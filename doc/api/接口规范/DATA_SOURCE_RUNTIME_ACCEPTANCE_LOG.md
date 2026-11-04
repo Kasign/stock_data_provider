@@ -797,3 +797,33 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 代码提交 d346f209fc46c56992302025b8608aa3b2e91b6b 对应 GitHub Actions Run 41830773041：根模块测试、go-core 测试、market-data gofmt/tests/race/vet、MariaDB migration/PIT 与 Probe HTTP E2E、Compose 配置及两个 Go Docker 镜像构建均通过；Data quality contract regression Run 41830782245 通过；WebUI checks Run 41830782914 通过。
 - 以上 CI 对应代码提交 d346f209，后续仅文档提交不改变代码。自动触发的公共 Provider Probe Run 41830782109 成功，但不将其视为新的真实行情验收证据。
 - 因此本次交易上下文代码修复的自动化验证通过；真实交易边界样本仍未齐备，阶段 B 不关闭。
+
+
+## 53. 2026-11-04 日 K Probe 交易上下文端到端诊断复用
+
+### 53.1 复用范围
+
+- 新增测试从 `ProbeProviderCapabilitiesWithOptions` 入口触发日 K Probe，复用生产调用链中的 `ValidateAndSortBars`、`TradingCalendar`、`SecurityTradingStatus`、`assessDailyBarTradingContext`。
+- 未创建第二套状态判定逻辑；不增加 API、字段、Provider、表结构，也不改变普通 `DailyBars` 的逐日状态请求策略。
+
+### 53.2 覆盖场景与判定
+
+| 场景 | 预期结果 |
+|---|---|
+| 缺失日 K 对应证券状态为 Suspended | 解释为停牌排除，不确认 Provider 漏数 |
+| 缺失日 K 对应证券状态为 NoEvent | 标记 confirmed trading day missing，整体降级 |
+| 证券状态查询失败 | 标记 status unavailable，保持未知，不确认漏数 |
+| 日历 degraded 且证券状态为 Suspended | 整体降级，同时保留停牌解释 |
+| 多来源日历日期状态冲突 | 标记 calendar sources disagree，不确认漏数 |
+
+### 53.3 提交与验证
+
+- 测试提交：`a1b1ac889e07fc84dce0c1cb15c4014ee2b24129`；格式修正：`145003b99d47898a4601723c4004b61e52a66f27`、`efd1409237547b387a2cbd6b490aa1c2b8455687`。
+- 首轮 CI 检出新增测试文件 gofmt 不符合要求，已按 CI 的 gofmt diff 修正。最终格式修正提交的 Go test suite 当前仍在排队/执行，尚无完整通过结论。
+- 之前代码提交自动触发的 Live Provider Probe 为 success；不把自动探针成功等同于新增场景的真实数据验收，也不改变 Provider 能力状态。
+
+### 53.4 边界与后续
+
+- 本节是自动化模拟链路覆盖，不是真实停牌/临停/上市前行情验收。
+- 不修改 WebUI API 协作清单，因为没有 API 或 Schema 变化。
+- 下一步等待最终 Go suite；通过后再以已有历史证据或必要的单次真实样本核验停牌/临停与上市边界。不得重复消耗 Provider 配额来替代缺失的事件证据。
