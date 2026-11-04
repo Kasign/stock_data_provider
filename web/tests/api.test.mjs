@@ -268,7 +268,7 @@ test("searches stocks by Chinese name through the authenticated market API and f
     const result = await searchStocks(
       { marketBase: "/market-api", apiKey: "market-secret" },
       " 贵州茅台 ",
-      { limit: 10, signal: controller.signal }
+      { limit: 10, signal: controller.signal, timeoutMs: 0 }
     );
     assert.equal(request.url, "/market-api/api/v1/stocks/search?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&limit=10");
     assert.equal(request.headers["X-API-Key"], "market-secret");
