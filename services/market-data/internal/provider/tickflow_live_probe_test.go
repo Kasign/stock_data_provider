@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 // 本测试支持 quote-only、daily-only、index-only 模式；线上复测通过 [include_tickflow] 加对应能力标记显式触发。 daily-only 仅请求一只股票的 8 条未复权日 K。
@@ -50,6 +51,8 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		Error        string                      `json:"error,omitempty"`
 		HTTP         []liveProbeHTTPResponse     `json:"http_responses,omitempty"`
 		QuoteFields  *tickflowQuoteRawDiagnostic `json:"quote_fields,omitempty"`
+		Validation   *validation.Report          `json:"validation,omitempty"`
+		DailyRaw     *tickflowDailyRawDiagnostic `json:"daily_raw,omitempty"`
 	}
 
 	results := make([]result, 0, 4)
@@ -111,20 +114,21 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		runQuote()
 	}
 	if dailyOnly {
+		capture := &liveProbeCapture{}
+		client.client.Transport = capture.transport()
+		var dailyValidation *validation.Report
 		run("daily_bars_none", func() (int, string, []string, error) {
 			location, err := time.LoadLocation("Asia/Shanghai")
-			if err != nil {
-				location = time.FixedZone("CST", 8*60*60)
-			}
+			if err != nil { location = time.FixedZone("CST", 8*60*60) }
 			end := time.Now().In(location).AddDate(0, 0, -1)
 			start := end.AddDate(0, 0, -30)
-			bars, err := client.FetchDailyBars(ctx, "600519.SH", start.Format("2006-01-02"), end.Format("2006-01-02"), 8, model.AdjustmentNone)
-			if err != nil {
-				return 0, "", nil, err
-			}
-			if len(bars) == 0 || len(bars) > 8 {
-				return len(bars), "", nil, errLiveProbeContract("daily K-line row count is empty or exceeds requested limit")
-			}
+			reporter := validation.NewReporter(validation.DefaultMaxIssues)
+			dailyCtx := validation.WithReporter(ctx, reporter)
+			bars, err := client.FetchDailyBars(dailyCtx, "600519.SH", start.Format("2006-01-02"), end.Format("2006-01-02"), 8, model.AdjustmentNone)
+			report := reporter.Snapshot()
+			dailyValidation = &report
+			if err != nil { return 0, "", nil, err }
+			if len(bars) == 0 || len(bars) > 8 { return len(bars), "", nil, errLiveProbeContract("daily K-line row count is empty or exceeds requested limit") }
 			quality := model.QualityValid
 			notes := make([]string, 0)
 			previousDate := ""
@@ -137,15 +141,22 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 				case model.QualityValid:
 				case model.QualityDegraded:
 					quality = model.QualityDegraded
-					for _, reason := range bar.QualityReasons {
-						notes = appendTickflowUniqueReason(notes, reason)
-					}
+					for _, reason := range bar.QualityReasons { notes = appendTickflowUniqueReason(notes, reason) }
 				default:
 					return len(bars), "", nil, errLiveProbeContract("daily K-line quality is invalid or unknown")
 				}
 			}
 			return len(bars), string(quality), notes, nil
 		})
+		if len(results) > 0 {
+			results[len(results)-1].Validation = dailyValidation
+			httpResponses := capture.snapshot()
+			if len(httpResponses) > 0 {
+				results[len(results)-1].DailyRaw = summarizeTickFlowDailyRawResponse(httpResponses[0].BodySample, httpResponses[0].BodyTruncated)
+				for index := range httpResponses { httpResponses[index].BodySample = "" }
+			}
+			results[len(results)-1].HTTP = httpResponses
+		}
 	}
 	if !quoteOnly && !dailyOnly {
 		run("index_quotes", func() (int, string, []string, error) {

@@ -25,6 +25,68 @@ import (
 
 const liveProbeBodySampleLimit = 2048
 
+type tickflowDailyRawRowDiagnostic struct {
+	Index int `json:"index"`
+	Timestamp string `json:"timestamp,omitempty"`
+	Open string `json:"open,omitempty"`
+	High string `json:"high,omitempty"`
+	Low string `json:"low,omitempty"`
+	Close string `json:"close,omitempty"`
+	Volume string `json:"volume,omitempty"`
+	Amount string `json:"amount,omitempty"`
+	PrevClose string `json:"prev_close,omitempty"`
+}
+
+type tickflowDailyRawDiagnostic struct {
+	TimestampCount int `json:"timestamp_count"`
+	OpenCount int `json:"open_count"`
+	HighCount int `json:"high_count"`
+	LowCount int `json:"low_count"`
+	CloseCount int `json:"close_count"`
+	VolumeCount int `json:"volume_count"`
+	AmountCount int `json:"amount_count"`
+	PrevCloseCount int `json:"prev_close_count"`
+	BodyTruncated bool `json:"body_truncated"`
+	SampleRows []tickflowDailyRawRowDiagnostic `json:"sample_rows,omitempty"`
+}
+
+func summarizeTickFlowDailyRawResponse(body string, truncated bool) *tickflowDailyRawDiagnostic {
+	result := &tickflowDailyRawDiagnostic{BodyTruncated: truncated}
+	var envelope struct {
+		Data struct {
+			Timestamp []json.RawMessage `json:"timestamp"`
+			Open []json.RawMessage `json:"open"`
+			High []json.RawMessage `json:"high"`
+			Low []json.RawMessage `json:"low"`
+			Close []json.RawMessage `json:"close"`
+			Volume []json.RawMessage `json:"volume"`
+			Amount []json.RawMessage `json:"amount"`
+			PrevClose []json.RawMessage `json:"prev_close"`
+		} `json:"data"`
+	}
+	if json.Unmarshal([]byte(body), &envelope) != nil { return result }
+	d := envelope.Data
+	result.TimestampCount, result.OpenCount, result.HighCount = len(d.Timestamp), len(d.Open), len(d.High)
+	result.LowCount, result.CloseCount, result.VolumeCount = len(d.Low), len(d.Close), len(d.Volume)
+	result.AmountCount, result.PrevCloseCount = len(d.Amount), len(d.PrevClose)
+	valueAt := func(values []json.RawMessage, index int) string {
+		if index < 0 || index >= len(values) || string(bytesTrim(values[index])) == "null" { return "" }
+		return string(bytesTrim(values[index]))
+	}
+	indices := make([]int, 0, 4)
+	for index := 0; index < len(d.Timestamp) && index < 3; index++ { indices = append(indices, index) }
+	if len(d.Timestamp) > 3 { indices = append(indices, len(d.Timestamp)-1) }
+	for _, index := range indices {
+		result.SampleRows = append(result.SampleRows, tickflowDailyRawRowDiagnostic{
+			Index:index, Timestamp:valueAt(d.Timestamp,index), Open:valueAt(d.Open,index),
+			High:valueAt(d.High,index), Low:valueAt(d.Low,index), Close:valueAt(d.Close,index),
+			Volume:valueAt(d.Volume,index), Amount:valueAt(d.Amount,index), PrevClose:valueAt(d.PrevClose,index),
+		})
+	}
+	return result
+}
+
+
 var liveProbeURLQuery = regexp.MustCompile(`(?i)(https?://[^\s"?]+)\?[^\s"']*`)
 
 func liveProbeErrorSummary(err error) (string, string) {
@@ -264,6 +326,18 @@ func liveProbeDailyContractError(bars []model.DailyBar, providerLabel, sourceNam
 		}
 	}
 	return ""
+}
+
+func TestSummarizeTickFlowDailyRawResponse(t *testing.T) {
+	body := `{"code":0,"data":{"timestamp":[1000,2000],"open":[10,11],"high":[12,13],"low":[9,10],"close":[11,12],"volume":[100,200],"amount":[1100,2400],"prev_close":[10,11]}}`
+	got := summarizeTickFlowDailyRawResponse(body, false)
+	if got.TimestampCount != 2 || got.VolumeCount != 2 || got.AmountCount != 2 || got.BodyTruncated {
+		t.Fatalf("unexpected daily raw summary counts: %+v", got)
+	}
+	if len(got.SampleRows) != 2 || got.SampleRows[0].Volume != "100" || got.SampleRows[1].Amount != "2400" {
+		t.Fatalf("unexpected daily raw sample rows: %+v", got.SampleRows)
+	}
+	if !summarizeTickFlowDailyRawResponse(body, true).BodyTruncated { t.Fatal("truncated body marker must be retained") }
 }
 
 func TestLiveProbeDailyContractRejectsLimitAndUnsortedBars(t *testing.T) {

@@ -662,3 +662,25 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 
 - Go CI Run `41819900049`（HEAD `8f6dd66e`）全部通过：根模块、go-core、market-data gofmt/tests/race/vet、MariaDB migration/PIT 集成、Compose 校验及两个 Go Docker 镜像。
 - 单股 quote-only 通过不代表全市场广度或行业排名通过；两项仍保持未验收，避免触发大规模行情请求。
+
+
+## 48. 2026-11-04 TickFlow DailyBar 标准化诊断上下文修复
+
+### 48.1 当前问题与代码核验
+
+- 代码基线：`48a09a2b51d8d76baa72933db1cf3fdeb674551a`。
+- `normalizeProviderDailyBarsWithReport`、`normalize.ValidateAndSortBarsWithReport` 和 `validation.Reporter` 均已存在；不需要重新建设。
+- TickFlow `FetchDailyBars` 原来调用兼容入口 `normalizeProviderDailyBars`，该入口使用 `context.Background()`，因此标准化报告无法关联到调用方 Reporter。Live daily-only 也没有输出 Validation 报告，失败只留下泛化错误。
+
+### 48.2 本批次修复范围
+
+- TickFlow 日 K 只改为调用 `normalizeProviderDailyBarsWithReport(ctx, ...)`，使既有标准化诊断进入请求上下文；不改单位换算、OHLC 门禁、复权参数或返回字段。
+- daily-only 探针附带 `validation` 报告，并对响应提供有界摘要：各数组条数及最多 4 行原始 timestamp/OHLC/volume/amount/prev_close；HTTP BodySample 在写入结果前清空，避免输出完整响应。
+- 不记录 URL Query、API Key 或认证头值；HTTP 记录只保留端点、状态码和认证头是否存在。
+- 新增本地回归测试验证 amount/volume 隐含均价不一致导致整批过滤时，调用方 Reporter 能收到 `amount,volume/unit_mismatch` 诊断；新增 raw summary 解析测试。
+
+### 48.3 验收状态
+
+- 本节记录实现范围；Go CI、race、vet 和 Live daily-only 复测均以新提交对应的实际 Job 结果为准。
+- 真实 TickFlow 日 K 的成交量单位尚未重新验收；本次不把 Quote 的 hands→shares 结论推广到 `/v1/klines`。
+- 在取得真实响应并完成 OHLC/amount/volume 交叉核验前，日 K 单位维持“待证实”；质量无法比较时标记 `not_comparable`，不擅自调整单位。

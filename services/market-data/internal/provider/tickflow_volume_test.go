@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 )
 
 const tickflowVolumeFixture = 1234567.0
@@ -177,4 +178,39 @@ func TestTickFlowDailyBarsRejectsMismatchedOptionalArrays(t *testing.T) {
 			}
 		})
 	}
+}
+
+
+func TestTickFlowFetchDailyBarsReportsNormalizationRejections(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil { t.Fatal(err) }
+	date := time.Now().In(location).AddDate(0, 0, -1)
+	dateISO := date.Format("2006-01-02")
+	timestamp := time.Date(date.Year(), date.Month(), date.Day(), 12, 0, 0, 0, location).UnixMilli()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
+			"timestamp": []int64{timestamp},
+			"open": []float64{100}, "high": []float64{102}, "low": []float64{99}, "close": []float64{101},
+			"volume": []float64{tickflowVolumeFixture}, "amount": []float64{12345678900},
+			"prev_close": []float64{100},
+		}})
+	}))
+	defer server.Close()
+
+	provider := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
+	reporter := validation.NewReporter(validation.DefaultMaxIssues)
+	ctx := validation.WithReporter(context.Background(), reporter)
+	_, err = provider.FetchDailyBars(ctx, "600519.SH", dateISO, dateISO, 8, model.AdjustmentNone)
+	if err == nil || !strings.Contains(err.Error(), "no valid daily bars after normalization") {
+		t.Fatalf("expected all rows to be rejected by normalization, got %v", err)
+	}
+	report := reporter.Snapshot()
+	if report.ErrorCount == 0 || report.TotalCount == 0 {
+		t.Fatalf("normalization rejection must reach request reporter, got %+v", report)
+	}
+	found := false
+	for _, issue := range report.Issues {
+		if issue.Field == "amount,volume" && issue.Code == "unit_mismatch" { found = true; break }
+	}
+	if !found { t.Fatalf("expected amount/volume unit mismatch diagnostic, got %+v", report.Issues) }
 }

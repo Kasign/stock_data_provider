@@ -1259,7 +1259,7 @@ func (p *TickFlow) FetchDailyBars(ctx context.Context, rawSymbol, startDate, end
 			out[i].QualityReasons = appendTickflowUniqueReason(out[i].QualityReasons, "provider_change_percent_derived_from_previous_chronological_close")
 		}
 	}
-	return normalizeProviderDailyBars(symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
+	return normalizeProviderDailyBarsWithReport(ctx, symbol, start.Format("2006-01-02"), end.Format("2006-01-02"), limit, out, 0)
 }
 
 func (p *TickFlow) getJSON(ctx context.Context, baseURL, path string, query url.Values, authenticated bool) ([]byte, error) {
