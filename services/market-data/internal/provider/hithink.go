@@ -2075,9 +2075,12 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 }
 
 type hithinkDailyRowPosition struct {
-	page   int
-	offset int
-	row    int
+	page            int
+	offset          int
+	row             int
+	pageItemCount   int
+	pageFirstDate   string
+	pageLastDate    string
 }
 
 func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, end time.Time, adjust string, loc *time.Location) ([]model.DailyBar, error) {
@@ -2124,6 +2127,8 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 		if len(data.Item) == 0 {
 			return out, nil
 		}
+		pageFirstDate := hithinkDailyDateForDiagnostic(data.Item[0].DateMS, loc)
+		pageLastDate := hithinkDailyDateForDiagnostic(data.Item[len(data.Item)-1].DateMS, loc)
 		fetchedAt := time.Now().UTC()
 		for rowIndex, item := range data.Item {
 			absoluteRowIndex := offset + rowIndex
@@ -2160,11 +2165,15 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 				return nil, fmt.Errorf("同花顺日 K 日期 %s 超出请求区间", tradeDate)
 			}
 			if first, duplicate := seen[tradeDate]; duplicate {
-				// 保留重复项并拒绝整次结果；同时记录首次出现位置，区分页内重复与相邻页重叠。
-				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s (first_page=%d first_offset=%d first_row=%d duplicate_page=%d duplicate_offset=%d duplicate_row=%d)",
-					tradeDate, first.page, first.offset, first.row, page+1, offset, rowIndex)
+				// 保留重复项并拒绝整次结果；页级边界用于区分 offset 未生效与上游分页窗口重叠。
+				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s (first_page=%d first_offset=%d first_row=%d first_page_item_count=%d first_page_first_date=%s first_page_last_date=%s duplicate_page=%d duplicate_offset=%d duplicate_row=%d duplicate_page_item_count=%d duplicate_page_first_date=%s duplicate_page_last_date=%s)",
+					tradeDate, first.page, first.offset, first.row, first.pageItemCount, first.pageFirstDate, first.pageLastDate,
+					page+1, offset, rowIndex, len(data.Item), pageFirstDate, pageLastDate)
 			}
-			seen[tradeDate] = hithinkDailyRowPosition{page: page + 1, offset: offset, row: rowIndex}
+			seen[tradeDate] = hithinkDailyRowPosition{
+				page: page + 1, offset: offset, row: rowIndex,
+				pageItemCount: len(data.Item), pageFirstDate: pageFirstDate, pageLastDate: pageLastDate,
+			}
 			if !hithinkPositiveFinite(open) || !hithinkPositiveFinite(high) || !hithinkPositiveFinite(low) || !hithinkPositiveFinite(closePrice) ||
 				low > high || open < low || open > high || closePrice < low || closePrice > high {
 				return nil, fmt.Errorf("同花顺日 K %s 的 OHLC 不满足数据约束", tradeDate)
@@ -2223,6 +2232,23 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 		offset += len(data.Item)
 	}
 	return nil, fmt.Errorf("同花顺在 %d 页内未结束分页，拒绝返回可能不完整的 K 线", hithinkMaxPagesPerRange)
+}
+
+
+func hithinkDailyDateForDiagnostic(raw json.RawMessage, loc *time.Location) string {
+	var timestamp int64
+	if err := json.Unmarshal(raw, &timestamp); err != nil {
+		var text string
+		if stringErr := json.Unmarshal(raw, &text); stringErr != nil {
+			return "unknown"
+		}
+		parsed, parseErr := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
+		if parseErr != nil {
+			return "unknown"
+		}
+		timestamp = parsed
+	}
+	return time.UnixMilli(timestamp).In(loc).Format("2006-01-02")
 }
 
 func parseHithinkDailyInt64(ctx context.Context, rowIndex int, field, providerField string, raw json.RawMessage, required bool) (int64, bool, error) {

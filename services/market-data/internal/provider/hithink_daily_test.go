@@ -71,7 +71,7 @@ func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 
 	provider := NewHithinkConfigured(time.Second, server.URL, "test-key")
 	_, err := provider.FetchDailyBars(context.Background(), "600036.SH", "2026-10-07", "2026-10-09", 10, model.AdjustmentNone)
-	if err == nil || !strings.Contains(err.Error(), "first_page=1 first_offset=0 first_row=1 duplicate_page=2 duplicate_offset=2 duplicate_row=0") || !strings.Contains(err.Error(), "2026-10-08") {
+	if err == nil || !strings.Contains(err.Error(), "first_page=1 first_offset=0 first_row=1 first_page_item_count=2 first_page_first_date=2026-10-07 first_page_last_date=2026-10-08 duplicate_page=2 duplicate_offset=2 duplicate_row=0 duplicate_page_item_count=2 duplicate_page_first_date=2026-10-08 duplicate_page_last_date=2026-10-09") || !strings.Contains(err.Error(), "2026-10-08") {
 		t.Fatalf("expected page/offset/row duplicate diagnostic, got %v", err)
 	}
 	if len(offsets) != 2 || offsets[0] != "0" || offsets[1] != "2" {
