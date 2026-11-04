@@ -155,7 +155,7 @@ export function saveScreeningPlan({ id = "", name, conditions, logic = "and", ex
   if (state.plans.some((item) => item.id !== id && item.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase())) return { saved: false, reason: "duplicate-name", plans: state.plans };
   if (!existing && state.plans.length >= MAX_SCREENING_PLANS) return { saved: false, reason: "limit", plans: state.plans };
   let nextId = id;
-  if (!nextId) { const baseId = "screening-" + Date.now(); nextId = baseId; let suffix = 1; while (state.plans.some((item) => item.id === nextId)) nextId = baseId + "-" + suffix++; }
+  if (!nextId) { const baseId = "screening-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8); nextId = baseId; let suffix = 1; while (state.plans.some((item) => item.id === nextId)) nextId = baseId + "-" + suffix++; }
   const plan = { id: nextId, name: normalizedName, logic: normalizedLogic, conditions: normalizedConditions, created_at: existing?.created_at || now, updated_at: now };
   const plans = existing ? state.plans.map((item) => item.id === id ? plan : item) : [plan, ...state.plans];
   const persisted = persistPlans(plans, storage);
