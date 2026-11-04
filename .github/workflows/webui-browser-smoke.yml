@@ -53,6 +53,10 @@ jobs:
         working-directory: web
         run: node tests/research-records-cross-tab-browser.mjs
 
+      - name: Run alerts and notification preferences cross-tab synchronization acceptance
+        working-directory: web
+        run: node tests/alerts-notifications-cross-tab-browser.mjs
+
       - name: Run watchlist quote snapshot acceptance
         working-directory: web
         run: node tests/watchlist-quotes-browser.mjs

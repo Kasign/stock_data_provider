@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -23,7 +23,8 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../../services/market-data/openapi.yaml", import.meta.url), "utf8"),
   readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8"),
   readFile(new URL("../src/notification-preferences.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/task-workflow.js", import.meta.url), "utf8")
+  readFile(new URL("../src/task-workflow.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/local-alert-drafts.js", import.meta.url), "utf8")
 ]);
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
@@ -2101,4 +2102,17 @@ test("行情服务接口文档、Handler 与 WebUI 调用边界明确区分", ()
   assert.match(marketHTTPServer, /mux\.Handle\("GET \/api\/v1\/stocks\/\{symbol\}\/capital-flow"/, "个股资金流 Handler 已注册");
   assert.match(apiClient, /export function getCapitalFlow/);
   assert.match(apiClient, /export function getMarketCapitalFlow/, "已注册的市场级资金流接口应由 WebUI 显式封装");
+});
+
+test("告警草稿与通知偏好跨标签页同步，并在编辑冲突时阻止旧数据覆盖", () => {
+  assert.match(appSource, /const localAlertDrafts = bindLocalAlertDrafts/);
+  assert.match(appSource, /const notificationPreferences = bindNotificationPreferences/);
+  assert.match(appSource, /localAlertDrafts\?\.handleStorageChange\(event\)/);
+  assert.match(appSource, /notificationPreferences\?\.handleStorageChange\(event\)/);
+  assert.match(localAlertDrafts, /handleStorageChange\(event\)/);
+  assert.match(localAlertDrafts, /itemSnapshot\(latest\) !== editingSnapshot/);
+  assert.match(localAlertDrafts, /当前编辑未保存/);
+  assert.match(notificationPreferences, /canonical\(current\.value\) !== baselineSnapshot/);
+  assert.match(notificationPreferences, /当前表单已保留且未保存/);
+  assert.match(notificationPreferences, /if \(isDirty\(\)\)/);
 });

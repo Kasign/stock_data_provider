@@ -217,8 +217,10 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - [x] 核对 `web/src/notification-preferences.js`：关注事件与免打扰时段仅作为本地偏好草稿保存；不代表服务端订阅，不执行通知调度。
 - [x] 核对 `web/src/alert-state.js`、`web/src/notification-state.js` 与页面状态：已区分 unavailable、loading、error、empty、loaded，以及告警评估 triggered、not-triggered、evaluation-error、degraded、skipped 等状态；当前初始化明确使用 unsupported 状态。
 - [x] 核对 `doc/web/API_CONTRACT.md`：无告警规则 CRUD、后台评估、触发历史、投递尝试、通知收件箱、未读状态、渠道 CRUD、订阅管理和发送测试 API；相关 UI 保持禁用/待接入，没有伪造数据。
-- [ ] 待补齐：告警草稿与通知偏好尚未接入全局跨标签页存储同步。当前存储监听覆盖自选股、显示偏好、研究笔记和报告归档，但不处理 `stock-provider-webui.alert-drafts.v1` 与 `stock-provider-webui.notification-preferences.v1`。
-- [ ] 后续实施前需确定编辑冲突策略：编辑期间收到其他标签页修改时，保留当前表单并提示冲突；保存前比较编辑快照，防止旧草稿覆盖远端变更。通知偏好也需避免外部同步静默覆盖未保存表单。
+- [x] 已补齐告警草稿与通知偏好的全局跨标签页存储同步，覆盖新增、修改、启停、删除及 `localStorage.clear()`；编辑状态保留当前表单并检测远端冲突。
+- [x] 已实现告警草稿与通知偏好的跨标签页同步；编辑期间保留当前表单，检测到远端修改/删除时提示冲突，并在保存时再次比较快照，阻止旧数据覆盖。
+- [x] 已补充双标签页 Chromium 回归，覆盖告警外部新增/修改/删除、通知偏好同步/编辑冲突、保存前快照校验、损坏存储和 localStorage.clear()。
+- [ ] 服务端告警规则 CRUD、后台评估、通知渠道与投递记录仍待数据/API 侧提供真实契约。
 
 本轮仅完成现状核验与文档记录，不修改告警/通知业务代码，不虚构服务端能力；跨标签页同步作为下一项 Web-only 候选工作，按冲突保护方案实施。
 
@@ -336,3 +338,14 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - [x] 验证当前页收到连接配置 storage 事件后取消旧请求、清空旧分页结果和元数据、恢复按钮状态。
 - [x] 释放旧请求后验证旧响应不能回填，也不会自动向新连接隐式重试。
 - [x] WebUI Checks 与 Chromium Browser Smoke 均通过（[Checks #41764061839](https://github.com/Kasign/stock_data_provider/actions/runs/41764061839)，[Browser Smoke #41764061807](https://github.com/Kasign/stock_data_provider/actions/runs/41764061807)）。
+
+
+#### P1 告警与通知跨标签页同步实现（待 CI 验收）
+
+- [x] 告警草稿控制器响应对应 storage key 与 clear 事件；外部变化刷新列表，不重置正在编辑的表单。
+- [x] 编辑中的规则被远端修改或删除时进入冲突状态；保存前重新读取并比较当前规则快照，阻止旧版本覆盖或复活已删除规则。
+- [x] 通知偏好控制器响应对应 storage key 与 clear 事件；非编辑状态同步表单，编辑状态保留未保存输入。
+- [x] 通知偏好保存前比较基线快照；发现远端变化或损坏数据时阻止覆盖。
+- [x] 新增双标签页浏览器专项测试并纳入 Chromium Browser Smoke 工作流。
+- [ ] 等待当前提交对应 WebUI Checks 与 Chromium Browser Smoke 结果。
+

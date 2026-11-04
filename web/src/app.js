@@ -207,10 +207,10 @@ const state = {
 const marketOverview = bindMarketOverview(() => state.settings, (item, source, targetView) => selectStockFromMarket(item, source, targetView));
 const stockResearch = bindStockResearch(() => state.settings, () => getQuerySymbol());
 const dataCenter = bindDataCenter(() => state.settings);
-bindLocalAlertDrafts({ root: document.querySelector("#alerts-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
+const localAlertDrafts = bindLocalAlertDrafts({ root: document.querySelector("#alerts-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "" }) });
 const researchNotes = bindResearchNotes({ root: document.querySelector("#research-view"), getContext: () => ({ symbol: state.quote?.symbol || state.selectedStockSearchItem?.symbol || "", name: state.quote?.name || state.selectedStockSearchItem?.name || "", taskId: state.taskId, runId: state.runId }) });
 const researchReports = bindResearchReports({ root: document.querySelector("#research-view"), onCreateNote: (item) => { setView("research"); researchNotes.createFromReport(item); }, onOpenTask: (item) => { const record = safeReadRecentTasks().find((entry) => entry.task_id === item.taskId && String(entry.analysis_base || state.settings.analysisBase) === item.analysisBase); if (record) activateTaskReference(record); else { setView("tasks"); setText("#task-create-feedback", "本地最近任务中没有找到该报告关联的任务引用；报告内容仍可在研究记录中查看。"); } } });
-bindNotificationPreferences({ root: document.querySelector("#settings-notification-section") });
+const notificationPreferences = bindNotificationPreferences({ root: document.querySelector("#settings-notification-section") });
 bindExistingApiTools(() => state.settings);
 const marketActivity = bindMarketActivity(
   () => state.settings,
@@ -5273,6 +5273,10 @@ function handleLocalStorageChange(event) {
   }
 
   const cleared = event.key === null;
+
+  // 告警草稿与通知偏好由各自模块处理同步和编辑冲突；不在此处复制存储逻辑。
+  localAlertDrafts?.handleStorageChange(event);
+  notificationPreferences?.handleStorageChange(event);
 
   if (cleared || event.key === THEME_STORAGE_KEY) {
     const theme = readTheme();
