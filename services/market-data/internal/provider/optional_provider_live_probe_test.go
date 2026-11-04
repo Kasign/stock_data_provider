@@ -284,6 +284,24 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		results = append(results, item)
 	}
 
+	if os.Getenv("MARKET_DATA_LIVE_HITHINK_DAILY_ONLY") == "1" {
+		run("daily_bars_none", func() (int, model.QualityStatus, []string, error) {
+			bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, model.AdjustmentNone)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if len(bars) == 0 {
+				return 0, "", nil, errLiveProbeContract("daily_bars_none returned no rows in the recent date range")
+			}
+			if message := liveProbeDailyContractError(bars, "hithink", "hithink", symbol, model.AdjustmentNone, startDate, endDate, 40); message != "" {
+				return len(bars), "", nil, errLiveProbeContract(message)
+			}
+			return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
+		})
+		logOptionalProviderProbe(t, results, failures)
+		return
+	}
+
 	run("quote", func() (int, model.QualityStatus, []string, error) {
 		item, err := client.FetchQuote(ctx, symbol)
 		if err != nil {
