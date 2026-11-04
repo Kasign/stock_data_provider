@@ -1526,3 +1526,14 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 验证模块纯计算边界。
 - [x] WebUI Checks #41826860829 通过。
 - [x] Chromium Browser Smoke #41826860631 通过。
+
+
+### JSR-5B 任务流程摘要 ViewModel（验收中）
+
+- [x] 新增 `task-flow-summary-view-model.js`，抽离事件数量/最新时间、Run 质量与 Warning 数量计算。
+- [x] 保留未加载、无任务、无事件、事件读取异常和旧事件保留语义。
+- [x] app.js 保留 DOM 查询和更新，ViewModel 不访问全局 state/DOM/storage/API。
+- [x] 新增单测覆盖事件排序、嵌套事件、读取失败、Run 质量和 Warning 数量。
+- [x] UI contract 验证模块纯计算边界。
+- [ ] WebUI Checks #41827451515。
+- [ ] Chromium Browser Smoke #41827451500。

@@ -454,3 +454,20 @@ JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js�
 新增单测覆盖排序、平铺/嵌套状态、计数、筛选、当前选择保留、默认选择优先级、非法筛选及空列表。UI contract 验证 app 协调层和纯 ViewModel 边界。
 
 代码提交 `f4b5145`；WebUI Checks #41826860829、Chromium Browser Smoke #41826860631 均通过。
+
+
+### 12.16 JSR-5B 任务流程摘要 ViewModel（CI 验收中）
+
+新增 `task-flow-summary-view-model.js`，导出 `buildTaskFlowSummaryViewModel`。输入显式包含 task event loaded/id/list/error、last Run result 和日期格式化函数；输出事件数量、最新事件时间、Run 核心质量状态及 warning 数量。
+
+保留原有展示语义：
+- 事件未加载时区分“未选择任务”和“等待事件读取”；
+- 已加载但无事件时显示“暂无持久化事件”；
+- 事件读取异常时区分保留旧事件和无可用事件；
+- 最新事件按 sequence 最大项计算，支持嵌套 event.at；
+- Run core_pass 仅严格 true/false 分别映射通过/未通过，其他情况为未报告或等待；
+- warning 仅在 warnings 为数组时显示数量。
+
+app.js 的 `renderTaskFlowSummary` 继续管理 DOM 查询和更新；ViewModel 不访问全局 state、DOM、storage、API 或事件。新增单测覆盖上述状态和边界，UI contract 验证纯计算边界。
+
+代码提交 `ac02be0`；WebUI Checks #41827451515、Chromium Browser Smoke #41827451500 排队中。
