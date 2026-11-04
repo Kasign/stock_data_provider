@@ -45,7 +45,7 @@ function screeningFieldValue(item, field, expectedAdjustment) {
       item?.ma_adjustment_basis !== expectedAdjustment) return null;
   const raw = field === "change_pct" ? quote.change_percent : field === "turnover_rate" ? quote.turnover_rate
     : field === "amount" ? quote.amount : field === "ma5" ? item?.ma5 : field === "ma20" ? item?.ma20 : null;
-  if (raw === null || raw === undefined || raw === "") return null;
+  if (raw === null || raw === undefined || (typeof raw !== "number" && typeof raw !== "string") || (typeof raw === "string" && !raw.trim())) return null;
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;
 }

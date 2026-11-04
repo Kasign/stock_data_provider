@@ -186,3 +186,17 @@ test("treats MA values with missing or mismatched adjustment basis as unknown", 
   assert.deepEqual(result.matchedItems.map(item => item.symbol), ["A"]);
   assert.deepEqual(result.unknownItems.map(item => item.symbol), ["B", "C", "D"]);
 });
+
+test("does not coerce malformed boolean or blank-string market values to zero", () => {
+  const conditions = [{ field: "change_pct", operator: "gte", value: 0 }];
+  const rows = [
+    { symbol: "A", quote: { change_percent: 0 } },
+    { symbol: "B", quote: { change_percent: false } },
+    { symbol: "C", quote: { change_percent: true } },
+    { symbol: "D", quote: { change_percent: "   " } },
+    { symbol: "E", quote: { change_percent: "0" } }
+  ];
+  const result = evaluateScreeningConditions(rows, conditions);
+  assert.deepEqual(result.matchedItems.map(item => item.symbol), ["A", "E"]);
+  assert.deepEqual(result.unknownItems.map(item => item.symbol), ["B", "C", "D"]);
+});

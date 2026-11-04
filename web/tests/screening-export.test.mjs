@@ -32,3 +32,13 @@ test("does not fabricate data rows for an empty result set", () => {
   assert.ok(headerIndex >= 0);
   assert.equal(lines.slice(headerIndex + 1).filter(Boolean).length, 0);
 });
+
+test("exports malformed numeric values as blank instead of coercing them to zero or one", () => {
+  const csv = buildScreeningCSV({ rows: [{ status: "待判断", item: {
+    symbol: "600001.SH", name: "类型异常",
+    quote: { change_percent: false, turnover_rate: "   ", amount: true, amount_unit: "CNY" },
+    ma5: false, ma20: " "
+  } }] });
+  assert.match(csv, /"600001.SH","类型异常",,,,,,,/);
+  assert.doesNotMatch(csv, /"类型异常",0,0,1/);
+});
