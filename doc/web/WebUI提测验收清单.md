@@ -649,8 +649,9 @@
 - [x] 外部连接配置 JSON 损坏时保留当前运行配置并提示；删除连接配置时恢复默认路径。
 - [x] 新增独立 Chromium 双标签页专项：`web/tests/settings-storage-browser.mjs`。
 - [x] 将该专项加入 `.github/workflows/webui-browser-smoke.yml`。
-- [ ] WebUI Checks：等待本次提交 SHA 对应的单元测试、语法检查、Compose 校验及 Nginx 镜像构建结果。
-- [ ] Chromium Browser Smoke：等待本次提交 SHA 对应的双标签页专项和全量浏览器回归结果。
-- [ ] CI 通过后补录运行链接、提交 SHA 和最终测试数量；未完成前不标记自动化验收通过。
+- [x] WebUI Checks：通过，语法检查、单元测试、Compose 校验及 Nginx 镜像构建成功（[运行记录 #41755149937](https://github.com/Kasign/stock_data_provider/actions/runs/41755149937)）。
+- [x] Chromium Browser Smoke：双标签页专项及全量浏览器回归通过（[运行记录 #41755149979](https://github.com/Kasign/stock_data_provider/actions/runs/41755149979)）。
+- [x] 验收代码提交 SHA：`313a2b5d085bd3b15c8df355e85cc3f2291c0463`。
+- [x] 首次浏览器用例因测试未切换到设置页而尝试操作隐藏表单，属于测试准备问题；调整为先进入设置页后，最终整套浏览器流程通过。
 
 验收边界：双标签页测试使用同源独立页面和隔离 API 响应，验证浏览器存储事件、设置同步和草稿保护；不代表真实数据 Provider 或服务端连接验收。
