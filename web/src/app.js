@@ -1742,7 +1742,8 @@ renderScreeningDraftConditions(); renderScreeningPlans();
 
 function isCurrentScreeningSnapshot(snapshot) {
   const current = marketStocks.getCurrentPageSnapshot();
-  return current.hasResult && snapshot.hasResult && current.page === snapshot.page &&
+  return current.hasResult && snapshot.hasResult && !current.busy && !snapshot.busy &&
+    current.generation === snapshot.generation && current.page === snapshot.page &&
     current.pageSize === snapshot.pageSize && current.adjustment === snapshot.adjustment &&
     current.items.length === snapshot.items.length &&
     current.items.every((item, index) => item === snapshot.items[index]);
@@ -1809,6 +1810,10 @@ function renderScreeningLocalResults() {
   const body = $("#screening-local-results-body"), summary = $("#screening-local-results-summary");
   if (!body || !summary) return;
   const snapshot = marketStocks.getCurrentPageSnapshot();
+  if (snapshot.busy) {
+    invalidateScreeningLocalResults("全市场行情正在刷新，暂不能应用筛选条件；请等待刷新完成后重新应用。");
+    return;
+  }
   if (!snapshot.hasResult) {
     invalidateScreeningLocalResults("尚未加载全市场分页行情。请先在“个股行情”页加载一页真实数据，再返回应用条件。");
     return;

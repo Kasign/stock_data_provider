@@ -39,10 +39,19 @@ try {
   const page = await context.newPage(), pageErrors = [];
   page.on("pageerror", error => pageErrors.push(error.stack || error.message));
   let marketStocksRequests = 0;
+  let holdSecondMarketStocksResponse = false;
+  let releaseSecondMarketStocksResponse;
+  let markSecondMarketStocksStarted;
+  const secondMarketStocksStarted = new Promise(resolve => { markSecondMarketStocksStarted = resolve; });
+  const secondMarketStocksResponseGate = new Promise(resolve => { releaseSecondMarketStocksResponse = resolve; });
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
     if (url.pathname === "/market-api/api/v1/market/stocks") {
       marketStocksRequests += 1;
+      if (marketStocksRequests === 2 && holdSecondMarketStocksResponse) {
+        markSecondMarketStocksStarted();
+        await secondMarketStocksResponseGate;
+      }
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
         items: [
           { symbol: "600001.SH", name: "测试命中", quality_status: "valid", quote: { symbol: "600001.SH", change_percent: 3, turnover_rate: 2, amount: 20000000, quality_status: "valid" }, ma5: 12, ma20: 11 },
@@ -154,12 +163,23 @@ try {
   assert.match(await page.locator("#screening-local-results-body").textContent(), /尚未执行当前页筛选/);
   await page.locator("#screening-apply-current-page").click();
 
-  // 全市场分页刷新后，即使页码/页大小相同，也必须使上一批结果失效。
+  // 全市场刷新进行中时，旧快照不得继续用于筛选、导出或批量加入。
   await page.locator('.nav-link[data-view="stocks"]').click();
+  holdSecondMarketStocksResponse = true;
   await page.locator("#reload-market-stocks").click();
-  await page.waitForFunction(() => document.querySelector("#market-stocks-meta")?.textContent.includes("2026-11-03T03:00:02Z"));
+  await secondMarketStocksStarted;
   await page.locator('.nav-link[data-view="screening"]').click();
   assert.match(await summary.textContent(), /分页已变化或重新加载/);
+  await page.locator("#screening-apply-current-page").click();
+  assert.match(await summary.textContent(), /正在刷新，暂不能应用筛选条件/);
+  assert.equal(await exportButton.isEnabled(), false);
+  assert.equal(await page.locator("#screening-local-add-watchlist").isEnabled(), false);
+  assert.equal(await page.locator("#screening-local-results-body tr").count(), 1);
+  releaseSecondMarketStocksResponse();
+  await page.waitForFunction(() => document.querySelector("#market-stocks-meta")?.textContent.includes("2026-11-03T03:00:02Z"));
+  assert.equal(await exportButton.isEnabled(), false, "refresh completion must not silently revive the previous screening result");
+  await page.locator("#screening-apply-current-page").click();
+  await page.waitForFunction(() => document.querySelector("#screening-local-results-summary")?.textContent.includes("命中 1 条"));
   assert.deepEqual(pageErrors, []);
   await page.screenshot({ path: path.join(screenshotDir, "screening-local-results.png"), fullPage: true });
   console.log("Screening local filter browser acceptance passed: result views, tri-state quality, stale-result invalidation, draft clearing and saved-plan preservation.");

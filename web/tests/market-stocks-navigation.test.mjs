@@ -65,3 +65,12 @@ test("板块领涨股仅展示名称；API 未提供证券代码时不得伪造�
   assert.match(overview, /cell\(tr,item\.leading_stock\|\|"—"\)/);
   assert.doesNotMatch(overview, /data-sector-leading-stock/);
 });
+
+test("全市场请求刷新期间使旧筛选快照失效", () => {
+  assert.match(marketStocks, /hasResult: state\.hasResult, busy: state\.busy, generation: state\.generation/);
+  assert.match(app, /!current\.busy && !snapshot\.busy/);
+  assert.match(app, /current\.generation === snapshot\.generation/);
+  assert.match(app, /全市场行情正在刷新，暂不能应用筛选条件/);
+  assert.match(browserAcceptance, /holdSecondMarketStocksResponse/);
+  assert.match(browserAcceptance, /旧快照不得继续用于筛选、导出或批量加入/);
+});

@@ -197,7 +197,8 @@ export function bindMarketStocks(getSettings, onSelectStock) {
   setBusy(false);
   return {
     getCurrentPageSnapshot() {
-      return { hasResult: state.hasResult, page: state.loadedPage, pageSize: state.loadedPageSize,
+      return { hasResult: state.hasResult, busy: state.busy, generation: state.generation,
+        page: state.loadedPage, pageSize: state.loadedPageSize,
         adjustment: state.loadedAdjustment, items: state.items.slice() };
     },
     invalidate() {
