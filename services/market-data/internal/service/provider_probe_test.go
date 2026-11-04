@@ -728,7 +728,7 @@ func TestProviderProbeClassifiesExplicitUnsupportedAdjustment(t *testing.T) {
 	for _, message := range []string{
 		"upstream timeout",
 		"Eastmoney daily-bars provider error rc=-1",
-		"BaoStock adjustment mismatch: requested flag 2, got \\"3\\"",
+		"BaoStock adjustment mismatch: requested flag 2, got \"3\"",
 		"TickFlow daily K-line request: HTTP status 503",
 		"同花顺历史 K 线区间请求失败: HTTP 状态码 401",
 		"Pytdx ex-rights/ex-dividend data required for forward_adjusted: connection refused",
