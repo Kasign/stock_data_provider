@@ -718,6 +718,8 @@ try {
       await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
       await page.locator("#save-settings").click();
       await page.waitForFunction(() => (document.querySelector("#settings-feedback")?.textContent || "").includes("连接配置已保存"), null, { timeout: 5000 });
+      await clickNav(page, '.nav-link[data-view="market"]');
+      await page.locator("#market-view").waitFor({ state: "visible" });
 
       // Changing a capital-flow date alone must cancel its old request, even without clicking Read again.
       const lifecycleCountBeforeDateChange = marketLifecycleRequests.length;
