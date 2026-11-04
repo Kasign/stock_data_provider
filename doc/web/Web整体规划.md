@@ -457,3 +457,14 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - [ ] WebUI Checks 与 Chromium Browser Smoke 待本批代码提交后验收。
 
 验收边界：仅展示数据侧已返回的公告记录级质量原因，不修改公告数据、Provider 或 API 契约。
+
+
+#### P1 个股研究第二批：财务可用时间与所属板块记录质量（待 CI 验收）
+
+- [x] 核对数据侧模型：财务分区 `available_at` 是首次可供市场参与者使用的精确时间，不等同报告期、披露日期或服务端采集时间。
+- [x] 财务指标分类卡片增加可用时间；缺失时显示“未提供”，不推算时间。
+- [x] 所属板块逐条展示质量等级和记录级质量原因，避免只依赖快照级质量信息。
+- [x] 浏览器测试覆盖财务可用时间和板块记录质量降级原因。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 待本批代码提交后验收。
+
+验收边界：仅展示数据侧已返回的 `available_at`、`quality_status`、`quality_reasons`，不补造时间或质量原因。

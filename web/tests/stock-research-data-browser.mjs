@@ -188,6 +188,8 @@ try {
   assert.equal(await page.locator("#profile-quality").textContent(), "数据过期");
   assert.match(await page.locator("#stock-profile-reasons").textContent(), /源端更新时间较旧/);
   assert.equal(await page.locator("#boards-quality").textContent(), "质量降级");
+  assert.equal(await page.locator("#stock-board-list .supplement-quality").textContent(), "质量降级");
+  assert.match(await page.locator("#stock-board-list").textContent(), /板块记录来源日期缺失/);
   assert.match(await page.locator("#stock-board-list").textContent(), /不能解释为确实没有板块/);
   assert.equal(await page.locator("#announcement-list a").count(), 1, "only allowlisted HTTPS Eastmoney links are clickable");
   assert.equal(await page.locator("#load-more-announcements").isEnabled(), true);
@@ -203,6 +205,7 @@ try {
   assert.match(await page.locator("#fundamentals-content").textContent(), /123\.45 亿元/);
   assert.match(await page.locator("#fundamentals-content").textContent(), /— 元\/股/);
   assert.match(await page.locator("#fundamentals-meta").textContent(), /Q/);
+  assert.match(await page.locator("#fundamentals-content").textContent(), /可用时间 2026-10-30 09:30:00/);
 
   await page.locator("#load-valuations").click();
   await page.waitForFunction(() => document.querySelector("#valuation-content")?.textContent.includes("市盈率 TTM"));

@@ -150,7 +150,10 @@ export function bindStockResearch(getSettings,getSymbol){
   setText("stock-boards-symbol",data.symbol||symbol);setQuality("boards-quality",data.quality_status);
   const root=$("#stock-board-list"),items=Array.isArray(data.items)?data.items:[ ];root.replaceChildren();
   if(!items.length)root.append(el("p","stock-research-empty",data.has_data===false?"数据源未确认该股票的所属板块，不能解释为确实没有板块。":"接口未返回板块记录。"));
-  else items.forEach(item=>{const card=el("article","stock-board-item"),top=el("div","stock-board-item-top"),name=el("strong","",item.name||"板块名称未报告"),code=el("small","",item.code||"代码未报告");top.append(name,code);card.append(top);const metaLine=el("div","stock-board-item-meta");metaLine.append(el("span","",item.change_percent===null||item.change_percent===undefined?"涨跌幅 —":"涨跌幅 "+formatPercent(item.change_percent)),el("span","",item.provider_report_date?"源端日期 "+item.provider_report_date:"源端日期未报告"));card.append(metaLine);root.append(card);});
+  else items.forEach(item=>{const card=el("article","stock-board-item"),top=el("div","stock-board-item-top"),name=el("strong","",item.name||"板块名称未报告"),code=el("small","",item.code||"代码未报告");top.append(name,code);card.append(top);const metaLine=el("div","stock-board-item-meta");metaLine.append(el("span","",item.change_percent===null||item.change_percent===undefined?"涨跌幅 —":"涨跌幅 "+formatPercent(item.change_percent)),el("span","",item.provider_report_date?"源端日期 "+item.provider_report_date:"源端日期未报告"));card.append(metaLine);
+   card.append(el("span","supplement-quality supplement-quality-"+(QUALITY.includes(String(item.quality_status).toLowerCase())?String(item.quality_status).toLowerCase():"unknown"),qualityLabel(item.quality_status)));
+   if(Array.isArray(item.quality_reasons)&&item.quality_reasons.length){const details=el("details","stock-research-quality-reasons"),summary=el("summary","","该板块记录质量说明");details.append(summary);const list=el("ul");item.quality_reasons.forEach(reason=>list.append(el("li","",reason)));details.append(list);card.append(details);}
+   root.append(card);});
    setText("stock-boards-meta",buildResearchMetaText(data,{details:[["源端返回",(data.total??items.length)+" 条"]]}));reasons("stock-boards-reasons",data.quality_reasons);
  }
  async function loadAnnouncements(append=false){
@@ -419,7 +422,8 @@ export function bindStockResearch(getSettings,getSymbol){
   sections.forEach(section=>{
    const card=el("section","fundamental-section"),header=el("div","fundamental-section-heading");
    header.append(el("strong","",CATEGORY[section.category]||section.category||"财务指标"),el("span","supplement-quality supplement-quality-"+(QUALITY.includes(String(section.quality_status).toLowerCase())?String(section.quality_status).toLowerCase():"unknown"),qualityLabel(section.quality_status)));
-   const date=el("p","fundamental-period","报告期 "+(section.report_date||"未报告")+" · 披露日期 "+(section.publication_date||"未报告"));card.append(header,date);
+   const availableAt=section.available_at?formatDateTime(section.available_at):"未提供";
+   const date=el("p","fundamental-period","报告期 "+(section.report_date||"未报告")+" · 披露日期 "+(section.publication_date||"未报告")+" · 可用时间 "+availableAt);card.append(header,date);
    const metrics=Array.isArray(section.metrics)?section.metrics:[ ];
    if(!section.has_data||!metrics.length)card.append(el("p","stock-research-empty","该分类未返回指标。"));
    else{const grid=el("div","stock-research-metric-grid");metrics.forEach(metric=>{const item=el("div","stock-research-metric");item.append(el("span","",metric.name||metric.key||"指标"),el("strong","",formatNumber(metric.value)+(metric.unit?" "+metric.unit:"")));grid.append(item);});card.append(grid);}
