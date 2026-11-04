@@ -94,7 +94,10 @@ const currentRun = {
       error_code: "provider_not_configured", error_stage: "configuration",
       error_message: "未配置第三方凭据"
     }),
-    makeItem("Provider-C", "index_catalog", "not_supported")
+    makeItem("Provider-C", "index_catalog", "not_supported"),
+    makeItem("Provider-D", "daily_bars", "returned", {
+      elapsed_ms: null, coverage_total: 100, coverage_ratio: "not-a-number"
+    })
   ]
 };
 const oldRun = {
@@ -176,6 +179,10 @@ try {
   }
   assert.match(probeText, /99\.3%/);
   assert.match(probeText, /provider_timeout/);
+   assert.match(probeText, /Provider-D/);
+   assert.doesNotMatch(probeText, /Provider-D[\\s\\S]*?耗时 0 ms/);
+   assert.doesNotMatch(probeText, /Provider-D[\\s\\S]*?NaN%/);
+   assert.match(probeText, /Provider-D[\\s\\S]*?覆盖率不可确认/);
   assert.match(probeText, /上游请求超时/);
   assert.match(probeText, /字段校验 3 项/);
   assert.match(probeText, /错误 1/);

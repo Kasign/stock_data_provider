@@ -583,7 +583,8 @@ function renderProbeItems(items, root) {
     card.append(top);
 
     const metadata = [
-      Number.isFinite(Number(item.elapsed_ms)) ? "耗时 " + Number(item.elapsed_ms) + " ms" : "",
+      typeof item.elapsed_ms === "number" && Number.isFinite(item.elapsed_ms) && item.elapsed_ms >= 0
+        ? "耗时 " + item.elapsed_ms + " ms" : "",
       item.quality_status ? "质量 " + item.quality_status : "",
       item.http_status ? "HTTP " + item.http_status : "",
       item.sample_symbol ? "样本 " + item.sample_symbol : "",
@@ -595,9 +596,10 @@ function renderProbeItems(items, root) {
       item.coverage_validated !== undefined ? "覆盖有效 " + item.coverage_validated : "",
       item.coverage_missing !== undefined ? "缺失 " + item.coverage_missing : "",
       item.coverage_excluded !== undefined ? "排除 " + item.coverage_excluded : "",
-      item.coverage_ratio !== undefined && item.coverage_ratio !== null
-        ? "总体覆盖率 " + (Number(item.coverage_ratio) * 100).toFixed(1) + "%" : "",
-      item.coverage_ratio === null || (item.coverage_ratio === undefined && item.coverage_total === undefined) ? "覆盖率不可确认" : "",
+      typeof item.coverage_ratio === "number" && Number.isFinite(item.coverage_ratio)
+        && item.coverage_ratio >= 0 && item.coverage_ratio <= 1
+        ? "总体覆盖率 " + (item.coverage_ratio * 100).toFixed(1) + "%"
+        : (item.coverage_ratio !== undefined || item.coverage_total === undefined) ? "覆盖率不可确认" : "",
       item.coverage_population ? "分母范围 " + item.coverage_population : "",
       item.coverage_source ? "分母依据 " + item.coverage_source : "",
       item.provider_time ? "源端时间 " + formatDateTime(item.provider_time) : "",

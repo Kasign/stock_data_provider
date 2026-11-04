@@ -1291,3 +1291,11 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 桌面报告筛选三列、研究记录表单两列保持不变。
 - [ ] WebUI Checks 与 Browser Smoke 待本次提交 CI。
 - [ ] 中文字体下实机复核仍需用户本地截图。
+
+
+### 数据中心诊断展示与数据校验职责边界（2026-11-04）
+
+- [x] 核对 Web 已展示六个 Probe 维度、Provider 能力结果、字段级 validation_issues、覆盖率维度、跨 Provider 字段对账和历史记录。
+- [x] 明确 Web 仅做输入校验、结果展示和格式安全；行情/日 K/财务/估值/资金流质量规则由 API/数据侧产生。
+- [x] 修复 null 耗时被强制显示为 0 ms、非法覆盖率显示 NaN% 的展示边界；新增浏览器回归夹具。
+- [ ] WebUI Checks 与 Browser Smoke 待本次提交 CI。
