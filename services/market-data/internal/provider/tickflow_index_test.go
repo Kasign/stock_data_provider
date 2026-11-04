@@ -127,7 +127,7 @@ func tickflowTestIndexSymbols() []string {
 func TestTickFlowFetchIndexQuotesDegradesImpossibleProviderTimestamp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rows := make([]map[string]any, 0, len(tickflowCoreIndexDefinitions))
-		for _, def := range tickflowCoreIndexDefinitions {
+		for _, def := range tickflowTestRequestedIndexDefinitions(r) {
 			rows = append(rows, map[string]any{
 				"symbol": def.Symbol, "name": def.Name, "last_price": 101.0, "prev_close": 100.0,
 				"open": 99.0, "high": 102.0, "low": 98.0, "amount": 123456.0, "timestamp": int64(1),
@@ -168,7 +168,7 @@ func TestTickFlowFetchIndexQuotesDropsInconsistentChangeExtensions(t *testing.T)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC().Add(-time.Minute).UnixMilli()
 		rows := make([]map[string]any, 0, len(tickflowCoreIndexDefinitions))
-		for _, def := range tickflowCoreIndexDefinitions {
+		for _, def := range tickflowTestRequestedIndexDefinitions(r) {
 			changeAmount := 1.0
 			changePercent := 0.01
 			if def.Symbol == "000001.SH" {
