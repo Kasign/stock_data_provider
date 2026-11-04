@@ -444,7 +444,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 					quality = model.QualityDegraded
 				}
 				if len(validated) > 0 {
-					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, validated[0].TradeDate, probeDate)
+					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, validated[0].TradeDate, dailyBarEndDate)
 					if contextResult.QualityStatus != model.QualityValid {
 						quality = model.QualityDegraded
 					}
@@ -594,6 +594,7 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 	loc := marketLocation()
 	nowLocal := time.Now().In(loc)
 	probeDate := nowLocal.Format("2006-01-02")
+	dailyBarEndDate := nowLocal.AddDate(0, 0, -1).Format("2006-01-02")
 	calendarStart := nowLocal.AddDate(0, 0, -14).Format("2006-01-02")
 	calendarEnd := nowLocal.AddDate(0, 0, 14).Format("2006-01-02")
 	for _, p := range s.indexCatalogProviders {
