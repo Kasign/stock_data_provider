@@ -916,7 +916,7 @@ JSR-3E 实施进展（提交 `7e7d9d40`，CI 待验收）：已新增 `watchlist
 
 ## JSR-4 设置中心模块边界审查（JSR-4A、4B、4C 已完成）
 
-本轮只完成边界审查与分批设计，不直接迁移设置逻辑。设置中心不是单一设置表单：连接配置、浏览器偏好、主题、通知偏好、告警草稿、浏览器数据备份和设置分组导航有不同的数据所有权与同步语义。
+本轮先完成边界审查，再按 JSR-4A/4B/4C 分批实施；三批代码与浏览器回归均已验收。设置中心不是单一设置表单：连接配置、浏览器偏好、主题、通知偏好、告警草稿、浏览器数据备份和设置分组导航有不同的数据所有权与同步语义。
 
 初步结论：
 - 现有 `preferences.js` 已承担偏好 schema、默认值、规范化、存储读写、异常状态和显式 reset；不再重复创建第二套偏好仓储。
@@ -925,7 +925,7 @@ JSR-3E 实施进展（提交 `7e7d9d40`，CI 待验收）：已新增 `watchlist
 - 通知偏好、告警草稿已有独立模块和跨标签页冲突处理，不重复抽象。
 - 设置导航增强函数 `setupSettingsNavigation` 是闭合的 DOM 行为模块，不读取 app state/storage/API，最适合作为首个低风险拆分点。
 - 偏好控件同步/采集、偏好保存后的页面重绘、storage 事件路由和浏览器数据导入/导出仍与跨页面刷新/事务关联，不能整体迁入 ViewModel 或新 Controller。
-- `normalizeImportedPreferences` 是独立纯校验/规范化逻辑，可评估归入现有 `preferences.js` 并补齐测试，避免 app.js 保留第二份导入 schema 规则。
+- `normalizeImportedPreferences` 已作为独立纯校验/规范化逻辑迁入现有 `preferences.js` 并补齐测试，避免 app.js 保留第二份导入 schema 规则。
 
 分批顺序：
 1. [x] JSR-4A：`setupSettingsNavigation` 已拆到 `settings-navigation.js`，app.js 保留初始化入口；独立测试与 UI contract 已通过。
