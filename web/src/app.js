@@ -758,6 +758,26 @@ async function refreshWatchlistQuotes() {
   try {
     const payload = await getMarketQuotes(state.settings, symbols, controller.signal);
     if (controller.signal.aborted || generation !== state.watchlistQuoteGeneration) return;
+
+    // 自选股成员可能在请求期间增删；旧请求响应不能覆盖当前清单的行情快照。
+    const latestWatchlistState = safeReadWatchlistState();
+    if (!latestWatchlistState.storageReadable || !latestWatchlistState.storageValid) {
+      state.watchlistQuotes.clear();
+      state.watchlistQuoteStatus = "error";
+      state.watchlistQuoteMessage = "批量行情请求期间自选清单变为不可读取或格式异常，本次响应已丢弃。";
+      return;
+    }
+    const requestedSymbols = new Set(symbols.map(normalizeWatchlistQuoteSymbol));
+    const latestSymbols = new Set(latestWatchlistState.items.map((item) => normalizeWatchlistQuoteSymbol(item.symbol)));
+    const membershipUnchanged = requestedSymbols.size === latestSymbols.size
+      && [...requestedSymbols].every((symbol) => latestSymbols.has(symbol));
+    if (!membershipUnchanged) {
+      state.watchlistQuotes.clear();
+      state.watchlistQuoteStatus = "idle";
+      state.watchlistQuoteMessage = "自选股列表在批量行情请求期间发生变化，本次响应已丢弃，请按当前清单重新刷新。";
+      return;
+    }
+
     const nextQuotes = new Map();
     const items = Array.isArray(payload?.items) ? payload.items : [];
     items.forEach((item) => {

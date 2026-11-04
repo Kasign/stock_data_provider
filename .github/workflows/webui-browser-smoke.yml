@@ -49,6 +49,10 @@ jobs:
         working-directory: web
         run: node tests/settings-storage-browser.mjs
 
+      - name: Run watchlist quote snapshot acceptance
+        working-directory: web
+        run: node tests/watchlist-quotes-browser.mjs
+
       - name: Run Run Flow interaction acceptance
         working-directory: web
         run: node tests/run-flow-browser.mjs
