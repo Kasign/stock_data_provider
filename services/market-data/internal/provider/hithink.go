@@ -2154,7 +2154,8 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 				return nil, fmt.Errorf("同花顺日 K 日期 %s 超出请求区间", tradeDate)
 			}
 			if _, duplicate := seen[tradeDate]; duplicate {
-				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s", tradeDate)
+				// 保留重复项并拒绝整次结果；附带页码/offset/行号以区分上游页内重复与分页边界重叠。
+				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s (page=%d offset=%d row=%d)", tradeDate, page+1, offset, rowIndex)
 			}
 			seen[tradeDate] = struct{}{}
 			if !hithinkPositiveFinite(open) || !hithinkPositiveFinite(high) || !hithinkPositiveFinite(low) || !hithinkPositiveFinite(closePrice) ||

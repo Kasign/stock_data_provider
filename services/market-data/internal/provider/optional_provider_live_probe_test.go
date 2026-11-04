@@ -285,6 +285,7 @@ func TestLiveHithinkCapabilities(t *testing.T) {
 		results = append(results, item)
 	}
 
+	// 单次定向复测用于观察分页重复的具体 page/offset，不对重复记录做自动去重。
 	if os.Getenv("MARKET_DATA_LIVE_HITHINK_DAILY_ONLY") == "1" {
 		run("daily_bars_none", func() (int, model.QualityStatus, []string, error) {
 			bars, err := client.FetchDailyBars(ctx, symbol, startDate, endDate, 40, model.AdjustmentNone)
