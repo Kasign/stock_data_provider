@@ -114,6 +114,7 @@ try {
       return json(200, {
         symbol: "000001.SZ", year: Number(url.searchParams.get("year")), quarter: Number(url.searchParams.get("quarter")),
         quality_status: "degraded", source: "browser-fixture", fetched_at: "2026-11-03T01:00:00Z",
+        system_observed_at: "2026-11-03T02:00:00Z",
         quality_reasons: ["部分财务指标缺失"],
         sections: [{
           category: "profitability", quality_status: "degraded", report_date: "2026-09-30",
@@ -212,6 +213,7 @@ try {
   assert.match(await page.locator("#fundamentals-content").textContent(), /— 元\/股/);
   assert.match(await page.locator("#fundamentals-meta").textContent(), /Q/);
   assert.match(await page.locator("#fundamentals-content").textContent(), /可用时间 10\/30 09:30/);
+  assert.match(await page.locator("#fundamentals-meta").textContent(), /系统观测时间 11\/03 10:00/);
 
   await page.locator("#load-valuations").click();
   await page.waitForFunction(() => document.querySelector("#valuation-content")?.textContent.includes("市盈率 TTM"));

@@ -430,7 +430,7 @@ export function bindStockResearch(getSettings,getSymbol){
    if(Array.isArray(section.quality_reasons)&&section.quality_reasons.length){const details=el("details","stock-research-quality-reasons"),summary=el("summary","","该分类质量说明");details.append(summary);const list=el("ul");section.quality_reasons.forEach(reason=>list.append(el("li","",reason)));details.append(list);card.append(details);}
    root.append(card);
   });
-   setText("fundamentals-meta",buildResearchMetaText(data,{details:[["报告期",data.year&&data.quarter?data.year+" Q"+data.quarter:"未报告"]]}));
+   setText("fundamentals-meta",buildResearchMetaText(data,{details:[["报告期",data.year&&data.quarter?data.year+" Q"+data.quarter:"未报告"],["系统观测时间",data.system_observed_at?formatDateTime(data.system_observed_at):"未提供"]]}));
   reasons("fundamentals-reasons",data.quality_reasons);
  }
  async function refresh(){
