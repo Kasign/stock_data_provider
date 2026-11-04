@@ -195,6 +195,7 @@ const state = {
   // 用户主动清除后，禁止旧行情与页面切换重新注入股票上下文，直到开始新的行情查询。
   chatStockContextCleared: false,
   watchlistQuotes: new Map(),
+  watchlistQuoteSymbols: new Set(),
   watchlistQuoteStatus: "idle",
   watchlistQuoteMessage: "批量行情按需读取，不会在打开自选股时自动请求。",
   watchlistQuoteGeneration: 0,
@@ -708,6 +709,7 @@ function invalidateWatchlistQuotes() {
   try { state.watchlistQuoteController?.abort(); } catch {}
   state.watchlistQuoteController = null;
   state.watchlistQuotes.clear();
+  state.watchlistQuoteSymbols.clear();
   state.watchlistQuoteStatus = "idle";
   state.watchlistQuoteMessage = "行情连接配置已变更，旧批量快照已清除，请重新刷新。";
   const button = $("#refresh-watchlist-quotes");
@@ -763,6 +765,7 @@ async function refreshWatchlistQuotes() {
     const latestWatchlistState = safeReadWatchlistState();
     if (!latestWatchlistState.storageReadable || !latestWatchlistState.storageValid) {
       state.watchlistQuotes.clear();
+      state.watchlistQuoteSymbols.clear();
       state.watchlistQuoteStatus = "error";
       state.watchlistQuoteMessage = "批量行情请求期间自选清单变为不可读取或格式异常，本次响应已丢弃。";
       return;
@@ -773,6 +776,7 @@ async function refreshWatchlistQuotes() {
       && [...requestedSymbols].every((symbol) => latestSymbols.has(symbol));
     if (!membershipUnchanged) {
       state.watchlistQuotes.clear();
+      state.watchlistQuoteSymbols.clear();
       state.watchlistQuoteStatus = "idle";
       state.watchlistQuoteMessage = "自选股列表在批量行情请求期间发生变化，本次响应已丢弃，请按当前清单重新刷新。";
       return;
@@ -795,6 +799,7 @@ async function refreshWatchlistQuotes() {
       });
     });
     state.watchlistQuotes = nextQuotes;
+    state.watchlistQuoteSymbols = new Set(requestedSymbols);
     state.watchlistQuoteStatus = "loaded";
     state.watchlistQuoteMessage = "批量行情已返回 " + Number(payload.succeeded ?? items.filter((item) => item?.quote).length)
       + " / " + Number(payload.total ?? symbols.length) + " 只；失败 "
@@ -819,17 +824,32 @@ async function refreshWatchlistQuotes() {
   }
 }
 
+function syncWatchlistQuoteMembership(records) {
+  if (!state.watchlistQuoteSymbols.size) return;
+  const currentSymbols = new Set((Array.isArray(records) ? records : [])
+    .map((item) => normalizeWatchlistQuoteSymbol(item?.symbol)).filter(Boolean));
+  const unchanged = currentSymbols.size === state.watchlistQuoteSymbols.size
+    && [...state.watchlistQuoteSymbols].every((symbol) => currentSymbols.has(symbol));
+  if (unchanged) return;
+
+  state.watchlistQuotes.clear();
+  state.watchlistQuoteSymbols.clear();
+  state.watchlistQuoteStatus = "idle";
+  state.watchlistQuoteMessage = "自选股成员已变化，旧批量行情快照已失效，请重新刷新。";
+}
+
 function renderWatchlist(records, storageReadable, storageValid) {
   const root = $("#watchlist-list");
   root.replaceChildren();
   updateWatchlistBulkControls();
-  setText("#watchlist-quote-refresh-status", state.watchlistQuoteMessage);
   if (records === undefined) {
     const readState = safeReadWatchlistState();
     records = readState.items;
     storageReadable = readState.storageReadable;
     storageValid = readState.storageValid;
   }
+  syncWatchlistQuoteMembership(records);
+  setText("#watchlist-quote-refresh-status", state.watchlistQuoteMessage);
   const items = Array.isArray(records) ? records : [];
   const storageIsReadable = storageReadable !== false;
   const storageIsValid = storageValid !== false;

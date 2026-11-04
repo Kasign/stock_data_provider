@@ -69,7 +69,7 @@ try {
       quoteRequests += 1;
       if (quoteRequests === 1) { markFirstStarted(); await firstGate; }
       if (quoteRequests === 2) { markSecondStarted(); await secondGate; }
-      if (quoteRequests === 3) {
+      if (quoteRequests === 4) {
         return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "fixture unavailable" } }) });
       }
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(quotePayload()) });
@@ -116,6 +116,25 @@ try {
   await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 1 / 1"));
   assert.match(await list.textContent(), /批量采集/);
 
+  // 成功快照之后再增删股票，也必须使原成员集合的批量行情失效。
+  await page.evaluate(() => {
+    const key = "stock-provider-webui.watchlist.v1";
+    const items = JSON.parse(localStorage.getItem(key) || "[]");
+    items.push({ symbol: "000001.SZ", name: "后加入标的", updated_at: "2026-11-04T01:03:00Z" });
+    localStorage.setItem(key, JSON.stringify(items));
+  });
+  await page.locator("#watchlist-search").fill("测试标的");
+  await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("旧批量行情快照已失效"));
+  assert.doesNotMatch(await page.locator(".watchlist-tracking-line").first().textContent(), /批量采集/);
+
+  // 重新按当前成员集合成功刷新，再验证失败时保留快照的旧数据标识。
+  await page.evaluate(() => localStorage.setItem("stock-provider-webui.watchlist.v1", JSON.stringify([
+    { symbol: "600519.SH", name: "测试标的", updated_at: "2026-11-04T01:00:00Z" }
+  ])));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator('.nav-link[data-view="watchlist"]').click();
+  await page.locator("#refresh-watchlist-quotes").click();
+  await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 1 / 1"));
   // 刷新失败保留上次成功快照时，行内状态必须明确标记为旧数据。
   await page.locator("#refresh-watchlist-quotes").click();
   await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("标记为旧数据"));
