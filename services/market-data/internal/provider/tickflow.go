@@ -187,7 +187,7 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 		addProviderQuoteIssue(ctx, validation.StageValidate, "volume", "volume", "invalid_integer", "non-negative integer hands", "number", "", "TickFlow quote volume must be a non-negative integer", validation.SeverityError)
 		return nil, errors.New("TickFlow quote has invalid volume")
 	}
-	// TickFlow /v1/quotes 的 A 股快照成交量按手返回；日 K 端点使用独立字段口径。
+	// TickFlow /v1/quotes 与 /v1/klines 的 A 股成交量均按手返回；两条路径分别保留原始值并归一化为股。
 	volume, err := normalize.HandsToShares(*rawVolume)
 	if err != nil {
 		addProviderQuoteIssue(ctx, validation.StageNormalize, "volume", "volume", "normalization_error", "convertible integer hands", "number", fmt.Sprintf("%g", *rawVolume), "TickFlow quote volume cannot be normalized", validation.SeverityError)
