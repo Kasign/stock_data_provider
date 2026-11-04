@@ -5208,3 +5208,44 @@ button:disabled {
     width: 100%;
   }
 }
+
+
+/* UIR-2：共享文字边界与表单标签节奏，避免窄容器挤压时裁切。 */
+.field > span {
+  min-width: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.field-hint,
+.panel-muted,
+.page-subtitle,
+.panel-heading p {
+  min-width: 0;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.panel-heading h2 {
+  min-width: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.panel-heading {
+  min-width: 0;
+  align-items: flex-start;
+}
+
+@media (max-width: 640px) {
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .last-updated {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
