@@ -72,7 +72,7 @@ try {
       if (quoteRequests === 1) { markFirstStarted(); await firstGate; }
       if (quoteRequests === 2) { markSecondStarted(); await secondGate; }
       if (quoteRequests === 3) { markThirdStarted(); await thirdGate; }
-      if (quoteRequests === 4) {
+      if (quoteRequests === 5) {
         return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "fixture unavailable" } }) });
       }
       try { return await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(quotePayload()) }); }
