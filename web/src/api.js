@@ -126,7 +126,7 @@ export function analysisHealth(settings, signal) {
 export function getDataSources(settings, signal) {
   return request(settings.marketBase, "/api/v1/data-sources", { apiKey: settings.apiKey, signal });
 }
-export function getMarketQuotes(settings, symbols, signal) {
+export function getMarketQuotes(settings, symbols, signal, { timeoutMs = 30000 } = {}) {
   const values = Array.isArray(symbols) ? symbols.map((value) => String(value ?? "").trim().toUpperCase()) : [];
   if (!values.length || values.length > 50 || values.some((value) => !value)) {
     return Promise.reject(new Error("批量行情查询需要 1–50 个非空 A 股代码。"));
@@ -137,7 +137,8 @@ export function getMarketQuotes(settings, symbols, signal) {
   const query = new URLSearchParams({ symbols: values.join(",") });
   return request(settings.marketBase, "/api/v1/market/quotes?" + query.toString(), {
     apiKey: settings.apiKey,
-    signal
+    signal,
+    timeoutMs
   });
 }
 export function getDataSourceDiagnostics(settings, signal) {
@@ -243,7 +244,7 @@ export function getMarketHotStocks(settings, { type = "popular", limit = 10, sig
 }
 export function getMarketIndices(settings, signal) { return request(settings.marketBase, "/api/v1/market/indices", { apiKey: settings.apiKey, signal }); }
 
-export function getMarketStocks(settings, { page = 1, pageSize = 50, includeMA = true, adjustment = "forward_adjusted", signal } = {}) {
+export function getMarketStocks(settings, { page = 1, pageSize = 50, includeMA = true, adjustment = "forward_adjusted", signal, timeoutMs = 30000 } = {}) {
   const normalizedPage = Math.max(1, Math.min(10000, Math.trunc(Number(page) || 1)));
   const normalizedPageSize = Math.max(1, Math.min(100, Math.trunc(Number(pageSize) || 50)));
   const allowedAdjustments = new Set(["none", "forward_adjusted", "backward_adjusted"]);
@@ -256,7 +257,8 @@ export function getMarketStocks(settings, { page = 1, pageSize = 50, includeMA =
   });
   return request(settings.marketBase, "/api/v1/market/stocks?" + query.toString(), {
     apiKey: settings.apiKey,
-    signal
+    signal,
+    timeoutMs
   });
 }
 export function getMarketSentiment(settings, { date = "", signal } = {}) {

@@ -21,6 +21,7 @@ import {
   getDataSourceProbeHistory,
   runDataSourceProbe,
   getMarketQuotes,
+  getMarketStocks,
   getMarketSectors,
   getMarketCapitalFlow,
   getQuote,
@@ -438,7 +439,7 @@ test("requests the explicit watchlist symbols through the bounded batch-quote en
     const result = await getMarketQuotes({
       marketBase: "/market-api",
       apiKey: "market-secret"
-    }, ["600519.SH"], controller.signal);
+    }, ["600519.SH"], controller.signal, { timeoutMs: 0 });
     assert.equal(result.succeeded, 1);
     assert.equal(request.url, "/market-api/api/v1/market/quotes?symbols=600519.SH");
     assert.equal(request.headers["X-API-Key"], "market-secret");
@@ -660,6 +661,35 @@ test("板块排行请求透传排序维度、方向与行业/概念类别", asyn
     assert.equal(result.sort_by, "change_5d");
     assert.equal(request.url, "/market-api/api/v1/market/sectors?type=concept&limit=20&direction=down&sort_by=change_5d");
     assert.equal(request.headers["X-API-Key"], "market-secret");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("sets bounded timeouts for full-market pages and watchlist batch quotes", async () => {
+  const originalFetch = globalThis.fetch;
+  const signals = [];
+  globalThis.fetch = async (_url, init) => new Promise((_resolve, reject) => {
+    signals.push(init.signal);
+    init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+  });
+  const assertTimeout = (error) => {
+    assert.equal(error.code, "request_timeout");
+    assert.equal(error.timeout, true);
+    assert.match(error.message, /请求超过/);
+    return true;
+  };
+  try {
+    await assert.rejects(
+      getMarketStocks({ marketBase: "/market-api", apiKey: "market-secret" }, { page: 2, pageSize: 50, timeoutMs: 5 }),
+      assertTimeout
+    );
+    await assert.rejects(
+      getMarketQuotes({ marketBase: "/market-api", apiKey: "market-secret" }, ["600519.SH"], undefined, { timeoutMs: 5 }),
+      assertTimeout
+    );
+    assert.equal(signals.length, 2);
+    assert.ok(signals.every((signal) => signal.aborted), "timed-out market fetches must abort their underlying requests");
   } finally {
     globalThis.fetch = originalFetch;
   }
