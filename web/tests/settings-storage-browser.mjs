@@ -70,6 +70,9 @@ try {
     await page.locator("#settings-form").waitFor({ state: "attached" });
   }
 
+  await first.locator('.nav-link[data-view="settings"]').click();
+  await first.locator("#settings-form").waitFor({ state: "visible" });
+
   await second.evaluate(() => localStorage.setItem("stock-provider-webui.theme.v1", "light"));
   await first.waitForFunction(() => document.documentElement.dataset.theme === "light");
   assert.equal(await first.locator("#theme-toggle").getAttribute("aria-pressed"), "true");
