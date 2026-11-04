@@ -4810,6 +4810,7 @@ function syncConnectionDraftState() {
     ? "存在未保存的连接配置更改。保存只会修改当前浏览器连接配置，不会更改服务器 .env。"
     : "没有未保存的连接配置更改。";
   $("#save-settings").disabled = !dirty;
+  $("#cancel-settings").disabled = !dirty;
   return dirty;
 }
 
@@ -5167,6 +5168,20 @@ function saveSettingsFromForm() {
   }
 }
 
+function discardConnectionDraft() {
+  $("#market-base-input").value = state.settings.marketBase;
+  $("#analysis-base-input").value = state.settings.analysisBase;
+  $("#market-key-input").value = "";
+  setMarketKeyVisibility(false);
+  initialConnectionDraft = readConnectionDraft();
+  syncConnectionDraftState();
+  $("#settings-draft-connection-check").textContent = "尚未检查未保存配置。";
+  $("#settings-draft-connection-check").className = "settings-inline-status";
+  $("#settings-feedback").textContent = state.settings.apiKey
+    ? "已放弃未保存的连接配置更改；已保存的 API Key 不会回显。"
+    : "已放弃未保存的连接配置更改。";
+}
+
 function clearLocalSettings() {
   if (!window.confirm("确定清除当前浏览器保存的 API Key 与自定义 API 路径？这不会修改服务器 .env。")) return;
   try {
@@ -5438,8 +5453,14 @@ function persistLocalPreferences() {
     $("#local-preferences-feedback").textContent = "本地展示与查询偏好已保存到当前浏览器。";
     return preferences;
   } catch (error) {
-    $("#local-preferences-feedback").textContent = "偏好保存失败：" + (error?.message || "浏览器存储不可用。");
-    return readPreferences();
+    const persistedPreferences = readPreferences();
+    try {
+      syncWatchlistPreferenceControls(persistedPreferences);
+    } catch {
+      // 存储失败时优先保留错误反馈；控件同步异常不能覆盖原始存储错误。
+    }
+    $("#local-preferences-feedback").textContent = "偏好保存失败，控件已恢复为当前可读取的已保存值：" + (error?.message || "浏览器存储不可用。");
+    return persistedPreferences;
   }
 }
 
@@ -6076,6 +6097,7 @@ $("#refresh-button").addEventListener("click", async () => {
 });
 $("#open-settings").addEventListener("click", () => setView("settings"));
 $("#save-settings").addEventListener("click", saveSettingsFromForm);
+$("#cancel-settings").addEventListener("click", discardConnectionDraft);
 $("#settings-form").addEventListener("input", syncConnectionDraftState);
 $("#toggle-market-key-visibility").addEventListener("click", () => {
   setMarketKeyVisibility($("#market-key-input").type === "password");

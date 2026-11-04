@@ -124,6 +124,44 @@ try {
   assert.ok(observedRequests.some(url => new URL(url).pathname.startsWith("/market-api/")),
     "removing saved settings in another tab must restore default API paths");
 
+  await first.locator("#cancel-settings").click();
+  assert.equal(await first.locator("#market-base-input").inputValue(), "/market-api");
+  assert.equal(await first.locator("#analysis-base-input").inputValue(), "/analysis-api");
+  assert.equal(await first.locator("#market-key-input").inputValue(), "");
+  assert.equal(await first.locator("#save-settings").isEnabled(), false);
+  assert.equal(await first.locator("#cancel-settings").isEnabled(), false);
+
+  await first.locator("#market-base-input").fill("/saved-market");
+  await first.locator("#analysis-base-input").fill("/saved-analysis");
+  await first.locator("#market-key-input").fill("saved-local-secret");
+  await first.locator("#save-settings").click();
+  await first.waitForFunction(() => document.querySelector("#settings-feedback").textContent.includes("连接配置已保存"));
+  const savedSettings = await first.evaluate(() => JSON.parse(localStorage.getItem("stock-provider-webui.settings.v1")));
+  assert.deepEqual(savedSettings, {
+    marketBase: "/saved-market",
+    analysisBase: "/saved-analysis",
+    apiKey: "saved-local-secret"
+  });
+  assert.equal(await first.locator("#market-key-input").inputValue(), "");
+  assert.equal(await first.locator("#market-base-input").inputValue(), "/saved-market");
+  assert.equal(await first.locator("#save-settings").isEnabled(), false);
+  assert.equal(await first.evaluate(() => document.documentElement.innerHTML.includes("saved-local-secret")), false);
+
+  await first.evaluate(() => {
+    window.__originalStorageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "stock-provider-webui.preferences.v1") throw new DOMException("quota exceeded", "QuotaExceededError");
+      return window.__originalStorageSetItem.call(this, key, value);
+    };
+  });
+  await first.locator("#settings-price-digits").selectOption("2");
+  await first.waitForFunction(() => document.querySelector("#local-preferences-feedback").textContent.includes("偏好保存失败"));
+  assert.equal(await first.locator("#settings-price-digits").inputValue(), "3",
+    "failed preference persistence must restore the last readable saved value");
+  await first.evaluate(() => {
+    if (window.__originalStorageSetItem) Storage.prototype.setItem = window.__originalStorageSetItem;
+  });
+
   assert.deepEqual(pageErrors, [], "cross-tab settings synchronization must not raise page errors");
   await context.close();
   console.log("Settings cross-tab synchronization passed: theme, display preferences, reverse market colors, connection changes, invalid data, key removal, and unsaved draft preservation.");

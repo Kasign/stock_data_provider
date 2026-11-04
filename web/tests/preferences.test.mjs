@@ -16,3 +16,18 @@ test("blocked localStorage falls back to default preferences without crashing st
     else delete globalThis.localStorage;
   }
 });
+
+
+test("preference writes that throw or are silently ignored are reported", () => {
+  const throwingStorage = {
+    getItem() { return null; },
+    setItem() { throw new DOMException("quota exceeded", "QuotaExceededError"); }
+  };
+  assert.throws(() => savePreferences(DEFAULT_PREFERENCES, throwingStorage), /quota exceeded/);
+
+  const ignoredStorage = {
+    getItem() { return null; },
+    setItem() {}
+  };
+  assert.throws(() => savePreferences(DEFAULT_PREFERENCES, ignoredStorage), /偏好设置未能保存/);
+});
