@@ -8,6 +8,8 @@ on:
       - feat/full-go-data-providers-api-switch
     paths:
       - ".github/workflows/live-provider-smoke.yml"
+      - "services/market-data/internal/provider/tickflow_live_probe_test.go"
+      - "services/market-data/internal/provider/optional_provider_live_probe_test.go"
   workflow_dispatch:
     inputs:
       quote_symbol:
