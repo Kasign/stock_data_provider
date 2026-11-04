@@ -30,6 +30,7 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/task-event-node.js", import.meta.url), "utf8"),
   readFile(new URL("../src/watchlist-item-view.js", import.meta.url), "utf8")
 ]);
+const settingsNavigation = await readFile(new URL("../src/settings-navigation.js", import.meta.url), "utf8");
 const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
 const watchlistImportPreviewView = await readFile(new URL("../src/watchlist-import-preview-view.js", import.meta.url), "utf8");
 const watchlistTrackingViewModel = await readFile(new URL("../src/watchlist-tracking-view-model.js", import.meta.url), "utf8");
@@ -787,8 +788,11 @@ test("main quote query invalidates old snapshots when the symbol or filters chan
 
 test("dynamic API and browser-local data are not rendered through HTML strings", () => {
   assert.doesNotMatch(app, /\.innerHTML\s*=/, "dynamic views should build DOM nodes and use textContent");
-  assert.match(app, /document\.createElement\("label"\)[\s\S]*?settings-nav-search/);
-  assert.match(app, /textContent = "搜索设置分组"/);
+  assert.match(app, /setupSettingsNavigation\(document\)/);
+  assert.match(settingsNavigation, /settings-nav-search/);
+  assert.match(settingsNavigation, /settings-section-toggle/);
+  assert.doesNotMatch(app, /function setupSettingsNavigation\(/);
+  assert.doesNotMatch(settingsNavigation, /\bstate\.|localStorage|fetch\(|addEventListener\("storage"/);
 });
 test("analysis task submission prevents concurrent duplicate requests and releases the guard", () => {
   assert.match(app, /isCreatingTask: false/);
