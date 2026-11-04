@@ -787,16 +787,22 @@ async function refreshWatchlistQuotes() {
 
     const nextQuotes = new Map();
     const items = Array.isArray(payload?.items) ? payload.items : [];
+    const responseBySymbol = new Map();
     items.forEach((item) => {
       const key = normalizeWatchlistQuoteSymbol(item?.symbol);
-      if (!key) return;
+      if (!key || !requestedSymbols.has(key)) return;
+      responseBySymbol.set(key, item);
+    });
+    // 部分成功或空 items 时，也为每个请求标的建立明确记录；不把缺失项误显示成“未加载”。
+    requestedSymbols.forEach((key) => {
+      const item = responseBySymbol.get(key);
       nextQuotes.set(key, {
-        quote: item.quote && typeof item.quote === "object" ? item.quote : null,
-        errorCode: String(item.error_code || ""),
-        qualityStatus: String(item.quality_status || item.quote?.quality_status || "unknown"),
+        quote: item?.quote && typeof item.quote === "object" ? item.quote : null,
+        errorCode: String(item?.error_code || (item ? "quote_unavailable" : "missing_response_item")),
+        qualityStatus: String(item?.quality_status || item?.quote?.quality_status || "unknown"),
         qualityReasons: [
-          ...(Array.isArray(item.quality_reasons) ? item.quality_reasons : []),
-          ...(Array.isArray(item.quote?.quality_reasons) ? item.quote.quality_reasons : [])
+          ...(Array.isArray(item?.quality_reasons) ? item.quality_reasons : []),
+          ...(Array.isArray(item?.quote?.quality_reasons) ? item.quote.quality_reasons : [])
         ].filter(Boolean),
         fetchedAt: String(payload.fetched_at || "")
       });
@@ -804,9 +810,9 @@ async function refreshWatchlistQuotes() {
     state.watchlistQuotes = nextQuotes;
     state.watchlistQuoteSymbols = new Set(requestedSymbols);
     state.watchlistQuoteStatus = "loaded";
-    state.watchlistQuoteMessage = "批量行情已返回 " + Number(payload.succeeded ?? items.filter((item) => item?.quote).length)
-      + " / " + Number(payload.total ?? symbols.length) + " 只；失败 "
-      + Number(payload.failed ?? items.filter((item) => !item?.quote).length) + " 只"
+    state.watchlistQuoteMessage = "批量行情已返回 " + Number(payload.succeeded ?? [...nextQuotes.values()].filter((record) => record.quote).length)
+      + " / " + Number(payload.total ?? requestedSymbols.size) + " 只；失败 "
+      + Number(payload.failed ?? [...nextQuotes.values()].filter((record) => !record.quote).length) + " 只"
       + " · 整体质量 " + qualityLabel(payload.quality_status)
       + " · 快照 " + (payload.fetched_at ? formatDateTime(payload.fetched_at) : "时间未报告");
   } catch (error) {

@@ -75,6 +75,20 @@ try {
       if (quoteRequests === 5) {
         return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "fixture unavailable" } }) });
       }
+      if (quoteRequests === 6) {
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          items: [
+            { symbol: "600519.SH", quote: { symbol: "600519.SH", current_price: 1800, change_percent: 1.2, quote_time: "2026-11-04T01:00:00Z", quality_status: "valid" }, quality_status: "valid" },
+            { symbol: "000001.SZ", quote: null, error_code: "quote_unavailable", quality_status: "unknown" }
+          ],
+          succeeded: 1, total: 2, failed: 1, quality_status: "degraded", fetched_at: "2026-11-04T01:04:00Z"
+        }) });
+      }
+      if (quoteRequests === 7) {
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          items: [], succeeded: 0, total: 2, failed: 2, quality_status: "unavailable", fetched_at: "2026-11-04T01:05:00Z"
+        }) });
+      }
       try { return await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(quotePayload()) }); }
       catch { /* 跨标签页成员变化应中止旧请求，路由不再提交旧响应。 */ }
     }
@@ -155,6 +169,28 @@ try {
   await page.locator("#refresh-watchlist-quotes").click();
   await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("标记为旧数据"));
   assert.match(await page.locator(".watchlist-tracking-line").first().textContent(), /上次成功快照/);
+
+  // 部分成功：成功项正常展示，失败项显示明确错误码。
+  await page.evaluate(() => localStorage.setItem("stock-provider-webui.watchlist.v1", JSON.stringify([
+    { symbol: "600519.SH", name: "成功标的", updated_at: "2026-11-04T01:00:00Z" },
+    { symbol: "000001.SZ", name: "失败标的", updated_at: "2026-11-04T01:00:00Z" }
+  ])));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator('.nav-link[data-view="watchlist"]').click();
+  await page.locator("#refresh-watchlist-quotes").click();
+  await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 1 / 2"));
+  assert.match(await page.locator('.watchlist-item').filter({ hasText: "600519.SH" }).locator(".watchlist-tracking-line").textContent(), /行情快照：/);
+  assert.match(await page.locator('.watchlist-item').filter({ hasText: "000001.SZ" }).locator(".watchlist-tracking-line").textContent(), /批量行情不可用：quote_unavailable/);
+  assert.match(await status.textContent(), /失败 1 只/);
+
+  // 空 items：所有请求标的均须显示明确失败，不能退化为“未加载”。
+  await page.locator("#refresh-watchlist-quotes").click();
+  await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 0 / 2"));
+  assert.match(await status.textContent(), /失败 2 只/);
+  for (const symbol of ["600519.SH", "000001.SZ"]) {
+    const line = page.locator('.watchlist-item').filter({ hasText: symbol }).locator(".watchlist-tracking-line");
+    assert.match(await line.textContent(), /批量行情不可用：missing_response_item/);
+  }
   assert.deepEqual(pageErrors, []);
   await context.close();
   console.log("Watchlist quote snapshot acceptance passed: membership changes discard in-flight responses, group-only changes preserve quote scope, and failures label retained snapshots as old.");
