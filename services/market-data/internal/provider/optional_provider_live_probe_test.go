@@ -122,7 +122,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 			}
 			return 1, item.QualityStatus, item.QualityReasons, nil
 		})
-	
+
 		calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
 		calendar, calendarErr := client.FetchTradingCalendar(ctx, calendarStart, endDate)
 		run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
@@ -144,7 +144,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 			}
 			return len(calendar.Items), calendar.QualityStatus, calendar.QualityReasons, nil
 		})
-	
+
 		tradeDate = endDate
 		if calendarErr == nil && calendar != nil {
 			for i := len(calendar.Items) - 1; i >= 0; i-- {
@@ -154,7 +154,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 				}
 			}
 		}
-	
+
 	
 	}
 
@@ -183,7 +183,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 			}
 			return 1, item.QualityStatus, item.QualityReasons, nil
 		})
-	
+
 		run("fundamentals", func() (int, model.QualityStatus, []string, error) {
 			item, err := client.FetchFundamentals(ctx, symbol, 2025, 4)
 			if err != nil {
@@ -194,7 +194,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 			}
 			return len(item.Sections), item.QualityStatus, item.QualityReasons, nil
 		})
-	
+
 		run("valuations", func() (int, model.QualityStatus, []string, error) {
 			item, err := client.FetchValuations(ctx, []string{symbol})
 			if err != nil {
@@ -205,7 +205,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 			}
 			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
 		})
-	
+
 		run("index_catalog", func() (int, model.QualityStatus, []string, error) {
 			item, err := client.FetchIndexCatalog(ctx, "tushare")
 			if err != nil {
@@ -217,7 +217,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 			}
 			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
 		})
-	
+
 		run("index_constituents", func() (int, model.QualityStatus, []string, error) {
 			item, err := client.FetchIndexConstituents(ctx, "000300.SH")
 			if err != nil {
@@ -229,7 +229,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 			}
 			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
 		})
-	
+
 		run("index_daily_bars", func() (int, model.QualityStatus, []string, error) {
 			item, err := client.FetchIndexDailyBars(ctx, "000300.SH", startDate, endDate)
 			if err != nil {
