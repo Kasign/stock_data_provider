@@ -184,13 +184,14 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 		return nil, errors.New("TickFlow quote violates OHLC invariants")
 	}
 	if rawVolume == nil || *rawVolume < 0 || math.Trunc(*rawVolume) != *rawVolume {
-		addProviderQuoteIssue(ctx, validation.StageValidate, "volume", "volume", "invalid_integer", "non-negative integer shares", "number", "", "TickFlow quote volume must be a non-negative integer", validation.SeverityError)
+		addProviderQuoteIssue(ctx, validation.StageValidate, "volume", "volume", "invalid_integer", "non-negative integer hands", "number", "", "TickFlow quote volume must be a non-negative integer", validation.SeverityError)
 		return nil, errors.New("TickFlow quote has invalid volume")
 	}
-	volume, err := normalize.RawSharesToInt64(*rawVolume)
+	// TickFlow /v1/quotes 的 A 股快照成交量按手返回；日 K 端点使用独立字段口径。
+	volume, err := normalize.HandsToShares(*rawVolume)
 	if err != nil {
-		addProviderQuoteIssue(ctx, validation.StageValidate, "volume", "volume", "normalization_error", "convertible integer shares", "number", fmt.Sprintf("%g", *rawVolume), "TickFlow quote volume cannot be normalized", validation.SeverityError)
-		return nil, fmt.Errorf("normalize TickFlow quote volume: %w", err)
+		addProviderQuoteIssue(ctx, validation.StageNormalize, "volume", "volume", "normalization_error", "convertible integer hands", "number", fmt.Sprintf("%g", *rawVolume), "TickFlow quote volume cannot be normalized", validation.SeverityError)
+		return nil, fmt.Errorf("normalize TickFlow quote volume from hands: %w", err)
 	}
 	change := *price - *prev
 	changePct := change / *prev * 100
@@ -229,7 +230,7 @@ func (p *TickFlow) FetchQuote(ctx context.Context, rawSymbol string) (*model.Quo
 		}
 	}
 	rawVolumeCopy := *rawVolume
-	quote := &model.Quote{Symbol: symbol, Name: strings.TrimSpace(q.Name), CurrentPrice: price, Change: &change, ChangePercent: &changePct, Open: open, High: high, Low: low, PrevClose: prev, Volume: &volume, Amount: amount, TurnoverRate: turnover, QuoteTime: quoteTime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: tickflowVersion, RawVolume: &rawVolumeCopy, RawVolumeUnit: "shares", RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: amountUnit, AdjustmentBasis: model.AdjustmentNone, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version}
+	quote := &model.Quote{Symbol: symbol, Name: strings.TrimSpace(q.Name), CurrentPrice: price, Change: &change, ChangePercent: &changePct, Open: open, High: high, Low: low, PrevClose: prev, Volume: &volume, Amount: amount, TurnoverRate: turnover, QuoteTime: quoteTime, QuoteTimeSemantics: "provider_snapshot_time", FetchedAt: now, NormalizedAt: now, Source: p.Name(), SourceVersion: tickflowVersion, RawVolume: &rawVolumeCopy, RawVolumeUnit: "hands", RawAmount: rawAmount, RawAmountUnit: rawAmountUnit, RawAmountField: amountField, VolumeUnit: "shares", AmountUnit: amountUnit, AdjustmentBasis: model.AdjustmentNone, QualityStatus: quality, QualityReasons: reasons, NormalizationVer: normalize.Version}
 	report, validationErr := normalize.ValidateQuoteWithReport(quote)
 	validation.AddContextReport(ctx, report)
 	if validationErr != nil {

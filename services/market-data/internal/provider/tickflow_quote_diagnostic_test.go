@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
 	"net/http"
 	"net/http/httptest"
