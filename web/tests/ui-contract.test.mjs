@@ -127,9 +127,9 @@ test("structured result renderer uses fields declared by Go RunResult", () => {
   ];
   for (const field of requiredFields) {
     assert.match(domain, new RegExp('json:"' + field + '(?:,[^"]*)?"'), "Go domain model must declare " + field);
-    assert.ok(app.includes("result." + field), "WebUI must render result." + field);
+    assert.ok(taskResultView.includes("result." + field), "Run result adapter must render result." + field);
   }
-  assert.doesNotMatch(app, /signal\.(score|confidence|rationale|reason)\b/, "do not display fields absent from CandidateSignal");
+  assert.doesNotMatch(taskResultView, /signal\.(score|confidence|rationale|reason)\b/, "do not display fields absent from CandidateSignal");
   assert.doesNotMatch(app, /completed_stages\s*\?\?\s*0/, "missing stage counts must not be fabricated as zero");
   assert.match(html, /id="task-create-feedback"/, "task submission errors should be shown inline");
 });
@@ -2047,7 +2047,7 @@ test("运行流采用全屏双栏工作区，节点和质量诊断可折叠", ()
   assert.match(html, /class="run-flow-event-inspector"/);
   assert.match(app, /expandedTaskEventSequences/);
   assert.match(app, /node\.addEventListener\("toggle"/);
-  assert.match(app, /title === "数据质量与策略门禁"[\s\S]*?analysis-result-disclosure/);
+  assert.match(taskResultView, /title === "数据质量与策略门禁"[\s\S]*?analysis-result-disclosure/);
   assert.match(stylesheet, /grid-template-columns:minmax\(300px,\.82fr\) minmax\(0,1\.18fr\)/);
   assert.match(stylesheet, /\.run-flow-node\[open\]/);
   assert.match(stylesheet, /@media \(max-width:900px\)[\s\S]*?run-flow-workspace/);
