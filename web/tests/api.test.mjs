@@ -22,6 +22,7 @@ import {
   runDataSourceProbe,
   getMarketQuotes,
   getMarketStocks,
+  getMarketBundle,
   getMarketSectors,
   getMarketCapitalFlow,
   getQuote,
@@ -690,6 +691,32 @@ test("sets bounded timeouts for full-market pages and watchlist batch quotes", a
     );
     assert.equal(signals.length, 2);
     assert.ok(signals.every((signal) => signal.aborted), "timed-out market fetches must abort their underlying requests");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("sets timeouts for single-stock bundle, legacy quote, daily bars and stock search requests", async () => {
+  const originalFetch = globalThis.fetch;
+  const signals = [];
+  globalThis.fetch = async (_url, init) => new Promise((_resolve, reject) => {
+    signals.push(init.signal);
+    init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+  });
+  const assertTimeout = (error) => {
+    assert.equal(error.code, "request_timeout");
+    assert.equal(error.timeout, true);
+    assert.match(error.message, /请求超过/);
+    return true;
+  };
+  const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+  try {
+    await assert.rejects(getMarketBundle(settings, "600519.SH", { timeoutMs: 5 }), assertTimeout);
+    await assert.rejects(getQuote(settings, "600519.SH", undefined, { timeoutMs: 5 }), assertTimeout);
+    await assert.rejects(getDailyBars(settings, "600519.SH", { limit: 120, timeoutMs: 5 }), assertTimeout);
+    await assert.rejects(searchStocks(settings, "贵州茅台", { timeoutMs: 5 }), assertTimeout);
+    assert.equal(signals.length, 4);
+    assert.ok(signals.every((signal) => signal.aborted), "timed-out requests must abort their underlying fetches");
   } finally {
     globalThis.fetch = originalFetch;
   }

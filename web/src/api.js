@@ -379,11 +379,11 @@ export function getStockBoards(settings, symbol, signal) { return request(settin
 export function getStockFundamentals(settings, symbol, { year, quarter, signal } = {}) { const query=new URLSearchParams({year:String(year),quarter:String(quarter)});return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/fundamentals?" + query.toString(), { apiKey: settings.apiKey, signal }); }
 export function getStockAnnouncements(settings, symbol, { startDate="", endDate="", page=1, pageSize=20, signal } = {}) { const query=new URLSearchParams({page:String(page),page_size:String(pageSize)});if(startDate)query.set("start_date",startDate);if(endDate)query.set("end_date",endDate);return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/announcements?" + query.toString(), { apiKey: settings.apiKey, signal }); }
 
-export function searchStocks(settings, query, { limit = 10, signal } = {}) {
+export function searchStocks(settings, query, { limit = 10, signal, timeoutMs = 15000 } = {}) {
   const params = new URLSearchParams({ q: String(query ?? "").trim(), limit: String(limit) });
-  return request(settings.marketBase, `/api/v1/stocks/search?${params}`, { apiKey: settings.apiKey, signal });
+  return request(settings.marketBase, `/api/v1/stocks/search?${params}`, { apiKey: settings.apiKey, signal, timeoutMs });
 }
-export function getMarketBundle(settings, symbol, { lookbackDays = 120, adjustment = "forward_adjusted", asOf = "" } = {}, signal) {
+export function getMarketBundle(settings, symbol, { lookbackDays = 120, adjustment = "forward_adjusted", asOf = "", timeoutMs = 30000 } = {}, signal) {
   const query = new URLSearchParams({
     lookback_days: String(lookbackDays),
     adjustment
@@ -391,17 +391,18 @@ export function getMarketBundle(settings, symbol, { lookbackDays = 120, adjustme
   if (asOf) query.set("as_of", asOf);
   return request(settings.marketBase, `/api/v1/bundles/${encodeURIComponent(symbol)}?${query}`, {
     apiKey: settings.apiKey,
-    signal
+    signal,
+    timeoutMs
   });
 }
-export function getQuote(settings, symbol, signal) {
-  return request(settings.marketBase, `/api/v1/quotes/${encodeURIComponent(symbol)}`, { apiKey: settings.apiKey, signal });
+export function getQuote(settings, symbol, signal, { timeoutMs = 30000 } = {}) {
+  return request(settings.marketBase, `/api/v1/quotes/${encodeURIComponent(symbol)}`, { apiKey: settings.apiKey, signal, timeoutMs });
 }
-export function getDailyBars(settings, symbol, { limit = 120, adjustment = "forward_adjusted", start = "", end = "" } = {}, signal) {
+export function getDailyBars(settings, symbol, { limit = 120, adjustment = "forward_adjusted", start = "", end = "", timeoutMs = 30000 } = {}, signal) {
   const query = new URLSearchParams({ limit: String(limit), adjustment });
   if (start) query.set("start", start);
   if (end) query.set("end", end);
-  return request(settings.marketBase, `/api/v1/bars/${encodeURIComponent(symbol)}/daily?${query}`, { apiKey: settings.apiKey, signal });
+  return request(settings.marketBase, `/api/v1/bars/${encodeURIComponent(symbol)}/daily?${query}`, { apiKey: settings.apiKey, signal, timeoutMs });
 }
 export function createAnalysisTask(settings, payload, idempotencyKey = "", { timeoutMs = 30000 } = {}) {
   const headersKey = idempotencyKey.trim();
