@@ -1118,3 +1118,16 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 实现提交：`5be5a0d8a55594a4bcf783498b1758f4a9bab1b7`。
 
 验收边界：只涉及浏览器本地展示偏好，不修改连接密钥、API 或服务端设置。
+
+
+## 2026-11-04 P1 本地选股整体验收复核（已验收）
+
+- [x] 条件阈值边界、AND/OR、三态缺失字段判断。
+- [x] 当前分页限制、旧快照失效、复权口径核对。
+- [x] 成交额 CNY 单位校验与异常数值类型处理。
+- [x] CSV：UTF-8 BOM、质量原因、判断状态、分页/复权元数据、公式注入防护和异常数值留空。
+- [x] 批量加入自选股：重复项、无效代码、容量上限、分组调整和失败回滚。
+- [x] WebUI Checks：[运行记录 #41791879636](https://github.com/Kasign/stock_data_provider/actions/runs/41791879636)。
+- [x] Chromium Browser Smoke：[运行记录 #41791879634](https://github.com/Kasign/stock_data_provider/actions/runs/41791879634)，本地选股和分页生命周期步骤通过。
+
+验收边界：仅当前已加载分页的本地筛选，不代表全市场扫描；浏览器测试不代表真实 Provider 联调或源数据准确性。
