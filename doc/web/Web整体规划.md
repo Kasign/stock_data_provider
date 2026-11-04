@@ -347,7 +347,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - [x] 新增双标签页浏览器专项测试并纳入 Chromium Browser Smoke 工作流。
 - [x] WebUI Checks：通过（[运行记录 #41776710579](https://github.com/Kasign/stock_data_provider/actions/runs/41776710579)）。
 - [x] Chromium Browser Smoke：通过，新增告警/通知专项及全量既有浏览器步骤均成功（[运行记录 #41776710548](https://github.com/Kasign/stock_data_provider/actions/runs/41776710548)）。
-- [x] 验收代码提交：`14f8a47005b9e7b7bed8884f0ccea89bfdc41ca5`；当前分支 HEAD `b32e10c3c8074153bd010cc803716d8c0e814e74` 与该验收提交具有相同 Tree SHA `82bd354d646c27aeb58125104da94ae61f10848e`。
+- [x] 验收代码提交：`14f8a47005b9e7b7bed8884f0ccea89bfdc41ca5`；验收时分支 HEAD `b32e10c3c8074153bd010cc803716d8c0e814e74` 与该验收提交具有相同 Tree SHA `82bd354d646c27aeb58125104da94ae61f10848e`。
 
 
 
