@@ -665,8 +665,9 @@
 - [x] 偏好存储写入失败时，设置控件恢复为当前可读取的已保存值，不继续显示未持久化的新值。
 - [x] 增加偏好存储配额异常与静默忽略写入的单元测试。
 - [x] Chromium 双标签页专项增加连接配置保存/取消、Key 不回显及偏好写入失败回滚验证。
-- [ ] WebUI Checks：等待本次提交 SHA 对应的语法检查、单元测试、Compose 校验和 Nginx 镜像构建结果。
-- [ ] Chromium Browser Smoke：等待本次提交 SHA 对应的设置专项及全量浏览器回归结果。
+- [x] WebUI Checks：通过，语法检查、单元测试、Compose 校验和 Nginx 镜像构建成功（[运行记录 #41755762016](https://github.com/Kasign/stock_data_provider/actions/runs/41755762016)）。
+- [x] Chromium Browser Smoke：设置中心专项与全量浏览器回归通过（[运行记录 #41755762063](https://github.com/Kasign/stock_data_provider/actions/runs/41755762063)）。
+- [x] 验收代码提交 SHA：`ab8629452049174e58a27510c3721dd70363a7ba`。
 - [ ] 后续补充刷新恢复、重置边界和主题写入失败提示的专项验收。
 
 验收边界：当前测试验证浏览器本地存储交互与连接请求切换，不代表真实 Provider 数据能力或服务端配置持久化。
