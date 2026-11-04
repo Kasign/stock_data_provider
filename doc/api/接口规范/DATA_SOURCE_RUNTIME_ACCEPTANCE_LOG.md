@@ -606,3 +606,14 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 本轮不修改 Provider 解析逻辑，不增加请求，不新增数据源；维持 `amount_missing` → `degraded` 的既有质量门禁。
 - 后续若要提升这三家历史日 K 的成交额完整性，必须先找到官方/稳定的历史成交额字段或独立历史接口，并用可追溯样本验证日期、单位和复权口径后再设计接入；在此之前，Eastmoney 是本轮四家中唯一通过未复权日 K 质量检查的 Provider。
 
+
+
+## 45. 2026-11-04 Hithink 日 K 跨页重复首次位置复测
+
+- Live Workflow Run：`41816257453`；实际 Job：`126527637932`；Job 内 `Query market-data providers and capture sanitized responses` 步骤失败，Workflow 顶层 success 不能覆盖该失败结论。
+- 代码基线：`54663b4e7c12fff9b2257a885019977bc0b3adde`；环境变量确认 `MARKET_DATA_LIVE_HITHINK_TESTS=1`、`MARKET_DATA_LIVE_HITHINK_DAILY_ONLY=1`。
+- 唯一能力为 `daily_bars_none`。真实错误：重复交易日 `2026-10-08`，首次位置 `first_page=1 first_offset=0 first_row=0`，重复位置 `duplicate_page=2 duplicate_offset=20 duplicate_row=0`。
+- 客户端每页请求均显式设置 `offset`，并在收到非空响应后按 `len(data.Item)` 递增；本次从 offset 0 到 offset 20，第二页首行仍与第一页首行日期相同。现有证据可确认跨页重叠，但尚不足以断定服务端忽略 offset，也不能排除上游分页排序/快照变化。
+- 现有本地 HTTP fixture 已验证客户端 offset 随响应行数递增、跨页重复拒绝整次结果并输出首次/重复位置；fixture 不能证明真实上游对 offset 的实现语义。
+- 不自动去重、不放宽重复日期门禁、不把 Hithink 日线标记可用。下一步先补充页级 item count、每页首尾日期和请求 offset 的诊断证据，再判断是否需要一次额外真实请求；不扩展到复权或其他 Hithink 能力。
+
