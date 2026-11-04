@@ -2194,5 +2194,6 @@ test("偏好控件同步由独立 DOM adapter 管理，持久化仍留在 app �
   assert.match(appSource, /syncPreferencesControls\(document, preferences\)/);
   assert.match(preferencesView, /export function syncPreferencesControls\(/);
   assert.doesNotMatch(preferencesView, /localStorage|savePreferences|fetch\(|\bstate\./);
+  assert.doesNotMatch(preferencesView, /\$\(/);
   assert.match(appSource, /function persistLocalPreferences\(/);
 });
