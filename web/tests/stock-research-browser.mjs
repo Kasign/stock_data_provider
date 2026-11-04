@@ -85,6 +85,17 @@ try {
         }) });
         return;
       }
+      if (url.pathname === "/market-api/api/v1/market/quotes") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          items: [{
+            symbol: "000001.SZ",
+            quote: { symbol: "000001.SZ", name: "平安银行", current_price: 10.5, change_percent: 1.2, amount: 123456, quality_status: "valid", quote_time: "2026-11-04T01:00:00Z" },
+            quality_status: "valid"
+          }],
+          succeeded: 1, total: 1, failed: 0, quality_status: "valid", fetched_at: "2026-11-04T01:01:00Z"
+        }) });
+        return;
+      }
       if (url.pathname.includes("/api/v1/market/stocks")) {
         await route.fulfill({
           status: 200, contentType: "application/json",
@@ -226,6 +237,24 @@ try {
     document.querySelector("#research-overview-symbol")?.textContent.includes("000001.SZ")
   );
   assert.equal(await page.locator("#research-overview-symbol").textContent().then(value => value.includes("000001.SZ")), true);
+
+  // 研究列表复用自选股批量行情；连接配置从其它标签页变化后，当前研究页必须立即清除旧连接快照。
+  await page.locator('.nav-link[data-view="watchlist"]').click();
+  await page.locator("#refresh-watchlist-quotes").click();
+  await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 1 / 1"));
+  await page.locator('.nav-link[data-view="research"]').click();
+  await page.waitForFunction(() => document.querySelector("#research-stock-list-body")?.textContent.includes("10.50"));
+  const settingsSyncPage = await context.newPage();
+  await settingsSyncPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await settingsSyncPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
+    marketBase: "/market-api-v2", analysisBase: "/analysis-api", apiKey: "research-browser-key-v2"
+  })));
+  await page.waitForFunction(() => {
+    const text = document.querySelector("#research-stock-list-body")?.textContent || "";
+    return !text.includes("10.50") && text.includes("未加载");
+  });
+  assert.match(await page.locator("#research-list-scope").textContent(), /当前浏览器列表/);
+  await settingsSyncPage.close();
 
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#symbol-input").fill("600519.SH");

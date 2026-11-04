@@ -5150,6 +5150,7 @@ function applySettings(nextSettings, { persistPreviousActiveTask = true } = {}) 
     runSettingsApplyStep("关闭股票搜索面板失败：", () => hideStockSearch(), failures);
     runSettingsApplyStep("失效个股研究请求失败：", () =>
       stockResearch.invalidate("行情连接配置已变更，旧研究请求已作废，请重新加载对应资料。"), failures);
+    runSettingsApplyStep("刷新研究列表行情失败：", () => renderResearchStockList(), failures);
   }
 
   if (analysisBaseChanged || marketConnectionChanged) {
