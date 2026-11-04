@@ -244,10 +244,12 @@
 
 ## 12. 2026-11-04 DailyBar 诊断实现进度
 
-- 数据侧当前待发布代码基于 95f23fdc；本轮代码提交链包括 DailyBar Reporter 计数、Probe 字段映射、Pytdx 日线客户端注入及回归测试。文档随最终提交同步。
+- 数据侧本轮代码集中提交 1160d221，包含 DailyBar Reporter 计数、Probe 字段映射、OpenAPI Schema、Pytdx 日线客户端注入及回归测试。
 - Reporter 已支持 FieldIssue.count 聚合计数；Normalize 阶段重复日期和 limit 截断已纳入结构化报告，日期范围问题由 Validate 阶段 out_of_range 统一表达，避免双计。
 - limit 截断使用 Info 级诊断，count 为实际截断行数；诊断明细仍受报告 maxIssues 限制，总计数不受明细截断影响。
 - Pytdx 日线复权客户端新增内部注入接口，覆盖 GBBQ 超时、连接失败和空事件列表；Probe 测试锁定网络超时不能被分类为 not_supported。
 - 本轮没有执行 Go 测试命令，所有新增测试等待当前分支 CI 验证；真实 Provider × 复权口径请求仍未执行。WebUI 无需修改业务代码，当前接口响应的 validation_issues[].count 仅为诊断聚合字段，不改变既有路由或业务参数。
 
 - 2026-11-04：诊断 FieldIssue 增加可选 count 聚合字段并同步 OpenAPI Schema；首次 CI 检查发现新增文件 gofmt 格式问题，已按日志修正，最新 SHA 的 Go test suite 待重新验证。WebUI checks 在 SHA 24013849、eefdeb19 均通过；其余工作流状态以最新 SHA 的 Actions 为准。
+
+- 本轮代码功能按批次集中提交为 1160d221；PR #1 仍为 Open / Draft。最新 Go test suite、Parity 和 Live Probe 的结果以该 SHA 对应 Actions 为准；当前 Go test suite / Parity 尚未完成，WebUI checks 已通过。
