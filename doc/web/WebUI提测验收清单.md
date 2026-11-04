@@ -735,6 +735,6 @@
 - [x] 超时仍使用统一 request 层错误语义：`code=request_timeout`、`timeout=true`，并终止底层 fetch。
 - [x] 增加四类接口的超时单测。
 - [x] WebUI Checks：通过（[运行记录 #41759661837](https://github.com/Kasign/stock_data_provider/actions/runs/41759661837)）。
-- [ ] Chromium Browser Smoke：运行中（[运行记录 #41759661836](https://github.com/Kasign/stock_data_provider/actions/runs/41759661836)）。
+- [x] Chromium Browser Smoke：通过（[运行记录 #41759661836](https://github.com/Kasign/stock_data_provider/actions/runs/41759661836)）。
 
 说明：首次单测失败是因为测试要求调用方 AbortSignal 与内部超时组合信号为同一对象；修正为显式关闭测试超时后，单独验证调用方取消信号透传。生产默认超时保持启用。
