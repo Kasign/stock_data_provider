@@ -83,23 +83,6 @@ function responseIdentityError(message) {
   return error;
 }
 
-function taskEventStatusKey(status) {
-  const normalized = String(status || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
-  return Object.prototype.hasOwnProperty.call(TASK_EVENT_STATUS_LABELS, normalized)
-    ? normalized
-    : normalized ? "other" : "unknown";
-}
-
-function taskEventStatusLabel(status, statusKey = taskEventStatusKey(status)) {
-  return statusKey === "other" ? String(status) : TASK_EVENT_STATUS_LABELS[statusKey];
-}
-
-function taskEventStatusTone(statusKey) {
-  if (["succeeded", "success", "completed"].includes(statusKey)) return "is-local";
-  if (["failed", "error", "blocked", "rejected"].includes(statusKey)) return "is-error";
-  if (["degraded", "partial"].includes(statusKey)) return "is-warning";
-  return "is-readonly";
-}
 
 const RUN_RESULT_RETRY_DELAYS_MS = [1000, 2500, 5000];
 let initialConnectionDraft = null;
