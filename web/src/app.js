@@ -635,7 +635,7 @@ function renderResearchStockList() {
     const volumeRatio = hasQuote ? finiteNumberOrNull(itemQuote.volume_ratio) : null;
     const changeClass = changePercent !== null && changePercent > 0 ? "positive" : changePercent !== null && changePercent < 0 ? "negative" : "";
     tr.append(
-      makeCell(quoteValue(itemQuote?.current_price, (value) => formatPrice(value, 2))),
+      makeCell(quoteValue(itemQuote?.current_price, formatPrice)),
       makeCell(quoteValue(itemQuote?.change_percent, formatPercent), changeClass),
       makeCell(quoteValue(itemQuote?.amount, formatCompact)),
       makeCell(quoteValue(itemQuote?.turnover_rate, formatPercent)),
