@@ -416,7 +416,7 @@ Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对�
 - 市场广度新增 `excluded_non_a_share_count`，保留上游 `total_securities` 分母；`covered_securities` 只统计实际纳入分析的普通 A 股。排除成员会触发 degraded 原因 `provider_universe_contains_non_common_equities_excluded`，不会被静默算作覆盖。
 - 当存在排除成员时，不输出全市场成交额；涨跌停统计仍要求完整可计算，不放宽原质量门禁。
 - SW1 行业成分和行情回包复用同一排除名单；只有同时属于上游 A 股证券池排除名单的非普通 A 股成员才会被跳过，未知/池外证券仍然报错。行业排名快照同步输出排除数量和 degraded 原因。
-- 新增市场广度与 SW1 行业排名夹具用例，均覆盖 `302132.SZ` 这类上游池内、当前普通 A 股适配器不支持的成员；验证排除计数、原始覆盖分母和 degraded 原因。以 Run `41807290300` 为当前 CI 验收证据：market-data Go tests 已通过，Race Detector/Vet 仍待 Job 完成。
+- 新增市场广度与 SW1 行业排名夹具用例，均覆盖 `302132.SZ` 这类上游池内、当前普通 A 股适配器不支持的成员；验证排除计数、原始覆盖分母和 degraded 原因。Run `41807290300` 已在提交 `84b3f1d0` 上完整通过 Go tests、Race Detector、Vet、MariaDB 集成和 Docker 构建；该 Run 早于行业排名夹具提交 `aea927a2`，因此不能作为该新增用例的验证证据。
 - 本轮未重新请求 TickFlow，不消耗线上额度。指数行情 HTTP 400 尚未定位；仍需通过逐指数隔离的定向诊断确认具体代码/参数，不直接改为多次线上请求。
 
 ## 33. TickFlow HTTP 错误响应诊断信息保留

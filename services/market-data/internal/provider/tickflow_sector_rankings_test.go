@@ -138,7 +138,6 @@ func TestTickFlowFetchSectorRankingsBuildsSW1IndustryRanking(t *testing.T) {
 	}
 }
 
-
 func TestTickFlowFetchSectorRankingsExcludesKnownNonAShareUniverseMembers(t *testing.T) {
 	universeSymbols := []string{"600000.SH", "000001.SZ", "300001.SZ", "302132.SZ"}
 	server := newTickFlowSectorFixtureWithUniverse(t, universeSymbols, universeSymbols)
