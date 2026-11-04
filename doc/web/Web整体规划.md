@@ -896,7 +896,7 @@ JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验�
 - [ ] JSR-3E 页面协调边界评估不与本批混合，后续独立排期。
 
 
-### JSR-3E：自选股页面协调边界复审（已完成盘点，待决定是否实施列表投影拆分）
+### JSR-3E：自选股页面协调边界复审与列表投影拆分（已验收）
 
 本轮按最新代码复核 `renderWatchlist(records, storageReadable, storageValid)`、相关状态和事件入口。结论：**不新增自选页面 Controller，也不迁移整段 renderWatchlist**。该函数并非单纯 DOM renderer，仍承担数据读取、请求失效同步、持久化可用性保护、筛选排序、tracking ViewModel 组装、DOM 挂载及研究列表跨页刷新；把它整体搬走会扩大依赖面并掩盖状态所有权。
 
@@ -911,4 +911,4 @@ JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验�
 当前结论：JSR-3E 盘点完成；建议下一批仅实施列表投影纯函数（可命名 `watchlist-list-view-model.js`），不创建 controller。若测试显示该拆分无法显著降低 app 复杂度，则保留现状，不为追求模块数量而拆分。
 
 
-JSR-3E 实施进展（提交 `7e7d9d40`，CI 待验收）：已新增 `watchlist-list-view-model.js`，把关键字过滤、分组归属过滤、过滤计数文案、空态文案和排序列表投影从 `renderWatchlist` 抽离为纯函数。排序继续复用 `watchlist-sort.js`，不复制排序算法；app.js 负责提供行情 getter、DOM 控件值和分组状态，并继续负责请求成员失效、DOM 挂载、tracking 字段和研究列表刷新。新增单测覆盖关键字匹配、带后缀分组归属、未分组默认值、分组筛选计数语义、行情缺失排序及空态文案。当前 WebUI Checks #41822844387、Browser Smoke #41822844957 正在运行。
+JSR-3E 实施进展（提交 `7e7d9d40`，CI 待验收）：已新增 `watchlist-list-view-model.js`，把关键字过滤、分组归属过滤、过滤计数文案、空态文案和排序列表投影从 `renderWatchlist` 抽离为纯函数。排序继续复用 `watchlist-sort.js`，不复制排序算法；app.js 负责提供行情 getter、DOM 控件值和分组状态，并继续负责请求成员失效、DOM 挂载、tracking 字段和研究列表刷新。新增单测覆盖关键字匹配、带后缀分组归属、未分组默认值、分组筛选计数语义、行情缺失排序及空态文案。验收：WebUI Checks #41823493089 通过；Chromium Browser Smoke #41823492859 通过。首轮测试暴露分组测试夹具键值不符合 `comparableMarketSymbol` 规则，以及 app 调用点未实际替换旧投影代码；两处均已修正并通过完整复测。

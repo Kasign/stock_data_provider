@@ -382,4 +382,4 @@ JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 
 
 `app.js` 仍持有 DOM、state、storage、分组读取、行情 getter 组装、请求成员失效同步、tracking ViewModel、单项 DOM 构建和研究列表刷新。列表投影模块不访问 DOM、state、localStorage、API，不绑定事件。筛选计数保持原语义：仅关键字存在时显示匹配数；仅分组筛选时仍显示全部自选数量。无匹配空态也保留原文案。
 
-新增单测覆盖关键字、分组默认归属/交易所后缀、分组筛选计数、行情排序缺失值置底和空态。CI 验收结果待补。
+新增单测覆盖关键字、分组默认归属/交易所后缀、分组筛选计数、行情排序缺失值置底和空态。验收：WebUI Checks #41823493089 通过；Chromium Browser Smoke #41823492859 通过。测试中发现的 app 接入遗漏和测试夹具键值问题已修正；临时诊断代码已在验收后清理。

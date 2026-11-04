@@ -1482,12 +1482,12 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] 下一批建立列表投影特征测试并实施最小纯函数迁移；若收益不足则保留现状。
 
 
-### JSR-3E 列表投影 ViewModel（CI 待验收）
+### JSR-3E 列表投影 ViewModel（已验收）
 
 - [x] 新增 `watchlist-list-view-model.js`，抽离关键字/分组过滤、排序投影、计数和空态文案。
 - [x] 排序复用 `watchlist-sort.js`，不复制排序规则。
 - [x] app.js 保留 DOM、state、storage、行情请求生命周期、tracking、事件和跨页联动所有权。
 - [x] 新增单测覆盖关键字匹配、分组默认归属/后缀匹配、分组计数、行情缺失排序和空态。
 - [x] UI 契约检查新模块纯函数边界。
-- [ ] WebUI Checks #41822844387 通过。
-- [ ] Chromium Browser Smoke #41822844957 通过。
+- [x] WebUI Checks #41823493089 通过。
+- [x] Chromium Browser Smoke #41823492859 通过；自选行情快照、Run Flow、研究、数据中心、选股和行情分页生命周期专项均通过。
