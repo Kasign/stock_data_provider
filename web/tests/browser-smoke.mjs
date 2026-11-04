@@ -342,10 +342,13 @@ try {
           return json(200, { source: "browser-breadth-fixture", fetched_at: "2026-10-30T08:00:00Z",
             quality_status: "degraded", quality_reasons: ["上涨/下跌家数未返回，当前样本不完整"] });
         }
-        return json(200, { advancing_count: 3200, declining_count: 1800, unchanged_count: 100, unclassified_count: 5,
-          total_securities: 5000, covered_securities: 4900, total_amount_cny: 123456789, amount_coverage_count: 4900,
-          source: "browser-breadth-fixture", fetched_at: "2026-10-30T08:00:00Z",
-          quality_status: "valid", quality_reasons: [] });
+        if (marketBreadthScenario === "success") {
+          return json(200, { advancing_count: 3200, declining_count: 1800, unchanged_count: 100, unclassified_count: 5,
+            total_securities: 5000, covered_securities: 4900, total_amount_cny: 123456789, amount_coverage_count: 4900,
+            source: "browser-breadth-fixture", fetched_at: "2026-10-30T08:00:00Z",
+            quality_status: "valid", quality_reasons: [] });
+        }
+        return json(503, { error: { code: "provider_unavailable", message: "Market breadth Provider unavailable", request_id: "req-breadth-503" } });
       }
 
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/indices")) {
@@ -1148,6 +1151,7 @@ try {
 
       // Seed a visible prior success so every failure also proves the old market result is cleared.
       marketScenario = "success";
+      marketBreadthScenario = "success";
       const seedRequestCount = marketIndexRequestCount;
       await page.locator("#refresh-market-overview").click();
       await page.waitForFunction(
@@ -1175,6 +1179,7 @@ try {
       , null, { timeout: 8000 });
 
       // Home-market errors must preserve HTTP meaning instead of asserting every 401/403 is an API-key fault.
+      marketBreadthScenario = "503";
       for (const scenario of ["401", "403", "404", "503", "network"]) {
         const expected = marketOverviewErrors[scenario];
         const requestsBeforeFailure = marketIndexRequestCount;
@@ -1205,6 +1210,7 @@ try {
 
       // A manual refresh after any market error must restore a successful index response without a hidden duplicate request.
       marketScenario = "success";
+      marketBreadthScenario = "success";
       const marketRecoveryCount = marketIndexRequestCount;
       await page.waitForFunction(
         () => !document.querySelector("#refresh-market-overview")?.disabled,
