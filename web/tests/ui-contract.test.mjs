@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat, taskEventView, taskEventNode] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat, taskEventView, taskEventNode, watchlistItemView] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -27,12 +27,13 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/local-alert-drafts.js", import.meta.url), "utf8"),
   readFile(new URL("../src/task-event-format.js", import.meta.url), "utf8"),
   readFile(new URL("../src/task-event-view.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/task-event-node.js", import.meta.url), "utf8")
+  readFile(new URL("../src/task-event-node.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/watchlist-item-view.js", import.meta.url), "utf8")
 ]);
 const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
-const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow].join("\n");
+const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView].join("\n");
 
 function finalCssRuleBody(selector) {
   const start = stylesheet.lastIndexOf(selector);
@@ -484,7 +485,7 @@ test("browser-local watchlist is wired to existing query/analysis flows and stor
   assert.match(app, /function renderWatchlist\(/);
   assert.match(app, /addWatchlistSymbol\(symbol, defaultName, localStorage\)/);
   assert.match(app, /removeWatchlistSymbol\(symbol, localStorage\)/);
-  assert.match(app, /renameWatchlistSymbol\(record\.symbol, aliasInput\.value, localStorage\)/);
+  assert.match(appSource, /function handleWatchlistNameChange\(aliasInput\)/);\n  assert.match(appSource, /renameWatchlistSymbol\(symbol, aliasInput\.value, localStorage\)/);\n  assert.match(appSource, /input\[data-watchlist-name-symbol\]/);\n  assert.match(appSource, /buildWatchlistItemNode\(/);\n  assert.match(watchlistItemView, /export function buildWatchlistItemNode\(/);\n  assert.doesNotMatch(watchlistItemView, /state\\.|localStorage|fetch\\(|addEventListener|querySelector/);
   assert.match(app, /function startAnalysisForSymbol\(input\)/);
   assert.match(app, /function startAnalysisForSymbol\(input\) \{[\s\S]*?symbol = normalizeAnalysisSymbol\(input\);[\s\S]*?\$\("#task-symbols"\)\.value = symbol;[\s\S]*?setView\("tasks"\);[\s\S]*?\$\("#task-form"\)\.requestSubmit\(\);/);
   assert.match(watchlistModule, /WATCHLIST_KEY/);

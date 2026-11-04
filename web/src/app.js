@@ -43,6 +43,7 @@ import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksSt
 import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, removeWatchlistSymbols, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { addScreeningResultsToWatchlist } from "./watchlist-batch.js";
 import { sortWatchlistItems } from "./watchlist-sort.js";
+import { buildWatchlistItemNode } from "./watchlist-item-view.js";
 import { assignWatchlistGroup, assignWatchlistGroups, createWatchlistGroup, normalizeWatchlistGroups, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP, WATCHLIST_GROUPS_KEY } from "./watchlist-groups.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
@@ -489,6 +490,27 @@ function setWatchlistFeedback(message, kind = "info") {
   target.className = "watchlist-feedback" + (message ? " watchlist-feedback-" + kind : "");
 }
 
+function handleWatchlistNameChange(aliasInput) {
+  const symbol = aliasInput.dataset.watchlistNameSymbol;
+  try {
+    const result = renameWatchlistSymbol(symbol, aliasInput.value, localStorage);
+    renderWatchlist(result.items, result.storageReadable, result.storageValid);
+    if (!result.storageReadable || !result.storageValid) {
+      setWatchlistFeedback(!result.storageReadable
+        ? "无法读取浏览器自选股存储，未修改名称。为避免数据丢失，已暂停更改。"
+        : "本地自选数据格式异常，未修改名称；请先检查或备份浏览器数据。", "error");
+    } else if (!result.valid) {
+      setWatchlistFeedback("股票代码无效，未保存自定义名称。", "error");
+    } else if (result.persisted) {
+      setWatchlistFeedback("已保存 " + symbol + " 的自定义名称。");
+    } else {
+      setWatchlistFeedback(symbol + " 的名称已在当前页面临时更新，但浏览器存储不可用，刷新后可能丢失。", "warning");
+    }
+  } catch {
+    setWatchlistFeedback("自选名称更新失败，浏览器存储不可用。", "error");
+  }
+}
+
 function renderResearchStockList() {
   const root = $("#research-stock-list-body");
   if (!root) return;
@@ -848,88 +870,34 @@ function renderWatchlist(records, storageReadable, storageValid) {
 
   const recentTasks = safeReadRecentTasks();
   sortedItems.forEach((record) => {
-    const row = document.createElement("article");
-    row.className = "watchlist-item";
-    const main = document.createElement("div");
-    main.className = "watchlist-item-main";
-    const selectionLabel = document.createElement("label");
-    selectionLabel.className = "watchlist-select-label";
-    const selection = document.createElement("input");
-    selection.type = "checkbox"; selection.value = record.symbol; selection.dataset.watchlistSelectSymbol = "true";
-    selection.setAttribute("aria-label", "选择 " + record.symbol); selectionLabel.append(selection); main.append(selectionLabel);
-
-    const symbol = document.createElement("strong");
-    symbol.className = "watchlist-symbol";
-    symbol.textContent = record.symbol;
-
-    const aliasLabel = document.createElement("label");
-    aliasLabel.className = "watchlist-name-field";
-    const aliasCaption = document.createElement("span");
-    aliasCaption.textContent = "自定义名称";
-    const aliasInput = document.createElement("input");
-    aliasInput.type = "text";
-    aliasInput.className = "watchlist-name-input";
-    aliasInput.maxLength = 32;
-    aliasInput.value = record.name === record.symbol ? "" : record.name;
-    aliasInput.placeholder = "可选，最多 32 字";
-    aliasInput.setAttribute("aria-label", record.symbol + " 的自定义名称");
-    aliasInput.addEventListener("change", () => {
-      try {
-        const result = renameWatchlistSymbol(record.symbol, aliasInput.value, localStorage);
-        renderWatchlist(result.items, result.storageReadable, result.storageValid);
-        if (!result.storageReadable || !result.storageValid) {
-          setWatchlistFeedback(!result.storageReadable
-            ? "无法读取浏览器自选股存储，未修改名称。为避免数据丢失，已暂停更改。"
-            : "本地自选数据格式异常，未修改名称；请先检查或备份浏览器数据。", "error");
-        } else if (!result.valid) {
-          setWatchlistFeedback("股票代码无效，未保存自定义名称。", "error");
-        } else if (result.persisted) {
-          setWatchlistFeedback("已保存 " + record.symbol + " 的自定义名称。");
-        } else {
-          setWatchlistFeedback(record.symbol + " 的名称已在当前页面临时更新，但浏览器存储不可用，刷新后可能丢失。", "warning");
-        }
-      } catch {
-        setWatchlistFeedback("自选名称更新失败，浏览器存储不可用。", "error");
-      }
-    });
-
-    const meta = document.createElement("small");
-    meta.className = "watchlist-item-meta";
-    meta.textContent = "添加/更新于 " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录");
-    aliasLabel.append(aliasCaption, aliasInput);
-    main.append(symbol, aliasLabel);
-    // 更新时间与其他辅助字段统一按用户配置顺序渲染。
-
-    const tracking = document.createElement("div");
-    tracking.className = "watchlist-tracking-summary";
     const itemSymbol = normalizeLocalSymbol(record.symbol);
     const quoteMatches = Boolean(state.quote?.symbol) && normalizeLocalSymbol(state.quote.symbol) === itemSymbol;
     const batchQuote = state.watchlistQuotes.get(itemSymbol);
     const currentQuote = batchQuote?.quote || (quoteMatches ? state.quote : null);
-    const quoteLine = document.createElement("small");
-    quoteLine.className = "watchlist-tracking-line";
-    quoteLine.title = [
+    const quoteTitle = [
       batchQuote?.errorCode || "",
       ...(Array.isArray(batchQuote?.qualityReasons) ? batchQuote.qualityReasons : []),
       batchQuote?.fetchedAt ? "批量采集 " + formatDateTime(batchQuote.fetchedAt) : "",
       currentQuote?.quote_time ? "行情时间 " + formatDateTime(currentQuote.quote_time) : ""
     ].filter(Boolean).join("；") || "行情质量原因未报告";
+    let quoteText = "";
     if (batchQuote?.errorCode) {
-      quoteLine.textContent = "批量行情不可用：" + batchQuote.errorCode + " · " + qualityLabel(batchQuote.qualityStatus);
+      quoteText = "批量行情不可用：" + batchQuote.errorCode + " · " + qualityLabel(batchQuote.qualityStatus);
     } else if (currentQuote) {
       const oldSnapshot = ["error", "loading"].includes(state.watchlistQuoteStatus) && batchQuote;
-      quoteLine.textContent = (oldSnapshot ? "上次成功快照：" : "行情快照：")
+      quoteText = (oldSnapshot ? "上次成功快照：" : "行情快照：")
         + formatPrice(currentQuote.current_price) + " · " + formatPercent(currentQuote.change_percent)
         + " · " + (currentQuote.quote_time ? formatDateTime(currentQuote.quote_time) : "时间未报告")
         + " · " + qualityLabel(batchQuote?.qualityStatus || currentQuote.quality_status)
         + (batchQuote?.fetchedAt ? " · 批量采集 " + formatDateTime(batchQuote.fetchedAt) : "");
     } else if (state.watchlistQuoteStatus === "loading") {
-      quoteLine.textContent = "批量行情读取中…";
+      quoteText = "批量行情读取中…";
     } else if (state.watchlistQuoteStatus === "loaded") {
-      quoteLine.textContent = "本次批量响应未包含该证券，质量未知。";
+      quoteText = "本次批量响应未包含该证券，质量未知。";
     } else {
-      quoteLine.textContent = "当前行情：未加载（可刷新批量行情或点击“查行情”读取）";
+      quoteText = "当前行情：未加载（可刷新批量行情或点击“查行情”读取）";
     }
+
     const matchingTasks = recentTasks.filter((task) =>
       Array.isArray(task.symbols) && task.symbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
     );
@@ -946,21 +914,19 @@ function renderWatchlist(records, storageReadable, storageValid) {
       && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
       && (state.taskStatusLoading || Boolean(state.taskStatusError)
         || ["running", "started", "pending", "queued", "processing", "in-progress", "in_progress"].includes(String(state.taskStatus || "").toLowerCase()));
-    const todayLine = document.createElement("small");
-    todayLine.className = "watchlist-tracking-line" + (todayTask ? " is-today" : " is-unknown");
+
+    let todayText = "";
     if (todayTask) {
-      todayLine.textContent = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "") + " · " + taskStatusLabel(todayTask.status) + " · 创建于 " + formatDateTime(todayTask.created_at);
+      todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "") + " · " + taskStatusLabel(todayTask.status) + " · 创建于 " + formatDateTime(todayTask.created_at);
     } else if (!matchingTasks.length) {
-      todayLine.textContent = "今日分析：未知（当前浏览器没有该股票的任务引用）";
+      todayText = "今日分析：未知（当前浏览器没有该股票的任务引用）";
     } else if (matchingTasks.some((task) => !localCalendarDateKey(task.created_at))) {
-      todayLine.textContent = "今日分析：未知（部分旧任务缺少服务端创建时间）";
+      todayText = "今日分析：未知（部分旧任务缺少服务端创建时间）";
     } else {
-      todayLine.textContent = "今日分析：本地最近任务未发现今日创建记录（不代表服务端无分析）";
+      todayText = "今日分析：本地最近任务未发现今日创建记录（不代表服务端无分析）";
     }
 
-    const taskLine = document.createElement("small");
-    taskLine.className = "watchlist-tracking-line";
-    taskLine.textContent = activeTaskMatches
+    const taskText = activeTaskMatches
       ? state.taskStatusLoading
         ? "当前任务：正在确认服务端状态（上次状态：" + taskStatusLabel(state.taskStatus) + "） · " + state.taskId
         : state.taskStatusError
@@ -969,8 +935,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
       : recentTask
         ? "最近任务：" + taskStatusLabel(recentTask.status) + (recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "") + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
         : "最近任务：暂无本地任务记录（不代表从未分析）";
-    const resultLine = document.createElement("small");
-    resultLine.className = "watchlist-tracking-line";
+
     const latestResultMatches = Boolean(recentTask && state.lastRunResult
       && state.taskId === recentTask.task_id
       && recentTask.run_id
@@ -984,6 +949,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
       && Array.isArray(state.taskSymbols)
       && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
       && ["loading", "retrying", "error"].includes(state.runResultReadStatus));
+    let resultText = "";
     if (latestResultMatches) {
       const corePass = state.lastRunResult.quality?.core_pass;
       const qualityState = corePass === true ? "核心质量门禁通过" : corePass === false ? "核心质量门禁未通过" : "核心质量门禁未报告";
@@ -999,7 +965,7 @@ function renderWatchlist(records, storageReadable, storageValid) {
       const readError = ["retrying", "error"].includes(readState) && state.runResultReadError
         ? " · 重读提示：" + state.runResultReadError
         : "";
-      resultLine.textContent = readLabel + runStatusLabel(state.lastRunResult.status) + " · " + qualityState + warnings + readError;
+      resultText = readLabel + runStatusLabel(state.lastRunResult.status) + " · " + qualityState + warnings + readError;
     } else if (activeRunReadMatches) {
       const readState = state.runResultReadStatus;
       const readLabel = readState === "loading"
@@ -1008,52 +974,33 @@ function renderWatchlist(records, storageReadable, storageValid) {
           ? "当前 Run 结果：暂时不可读，正在自动重试"
           : "当前 Run 结果：读取失败";
       const readError = state.runResultReadError ? " · " + state.runResultReadError : "";
-      resultLine.textContent = readLabel + readError;
+      resultText = readLabel + readError;
     } else {
-      resultLine.textContent = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
-    }
-    const displayFieldNodes = {
-      updated: meta,
-      quote: quoteLine,
-      today: todayLine,
-      task: taskLine,
-      result: resultLine
-    };
-    const visibleTrackingNodes = (preferences.watchlistDisplayOrder || WATCHLIST_DISPLAY_FIELDS)
-      .filter((field) => preferences.watchlistDisplayFields.includes(field))
-      .map((field) => displayFieldNodes[field])
-      .filter(Boolean);
-    if (visibleTrackingNodes.length) {
-      tracking.append(...visibleTrackingNodes);
-      main.append(tracking);
+      resultText = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
     }
 
-    const actions = document.createElement("div");
-    actions.className = "watchlist-actions";
-    for (const [action, label] of [["query", "查行情"], ["research", "研究"], ["analyze", "分析"], ["remove", "移除"]]) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "watchlist-action" + (action === "remove" ? " watchlist-action-muted" : "");
-      button.dataset.watchlistAction = action;
-      button.dataset.symbol = record.symbol;
-      button.dataset.name = record.name || record.symbol;
-      button.textContent = label;
-      if (action === "remove") button.setAttribute("aria-label", "移除自选 " + record.symbol);
-      if (action === "research") button.setAttribute("aria-label", "研究自选股 " + record.symbol);
-      actions.append(button);
-    }
-    const groupSelect = document.createElement("select");
-    groupSelect.className = "watchlist-item-group";
-    groupSelect.dataset.watchlistGroupSymbol = record.symbol;
-    groupSelect.setAttribute("aria-label", record.symbol + " 所属分组");
-    groupState.groups.forEach((group) => {
-      const option = document.createElement("option");
-      option.value = group; option.textContent = group; groupSelect.append(option);
-    });
-    groupSelect.value = groupState.assignments[comparableMarketSymbol(record.symbol)] || groupState.assignments[record.symbol] || DEFAULT_WATCHLIST_GROUP;
-    actions.append(groupSelect);
-    row.append(main, actions);
-    root.append(row);
+    const displayFieldNodes = {
+      updated: { className: "watchlist-item-meta", text: "添加/更新于 " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") },
+      quote: { className: "watchlist-tracking-line", text: quoteText, title: quoteTitle },
+      today: { className: "watchlist-tracking-line" + (todayTask ? " is-today" : " is-unknown"), text: todayText },
+      task: { className: "watchlist-tracking-line", text: taskText },
+      result: { className: "watchlist-tracking-line", text: resultText }
+    };
+    const visibleTrackingFields = (preferences.watchlistDisplayOrder || WATCHLIST_DISPLAY_FIELDS)
+      .filter((field) => preferences.watchlistDisplayFields.includes(field))
+      .map((field) => displayFieldNodes[field] ? { key: field, ...displayFieldNodes[field] } : null)
+      .filter(Boolean);
+    const selectedGroup = groupState.assignments[comparableMarketSymbol(record.symbol)]
+      || groupState.assignments[record.symbol]
+      || DEFAULT_WATCHLIST_GROUP;
+
+    root.append(buildWatchlistItemNode({
+      document,
+      record,
+      trackingFields: visibleTrackingFields,
+      groups: groupState.groups,
+      selectedGroup
+    }));
   });
   renderResearchStockList();
   updateWatchlistBulkControls();
@@ -5930,6 +5877,8 @@ $("#watchlist-select-visible").addEventListener("change", (event) => { document.
 $("#watchlist-bulk-remove").addEventListener("click", handleWatchlistBulkRemove);
 $("#watchlist-bulk-assign").addEventListener("click", handleWatchlistBulkAssign);
 $("#watchlist-list").addEventListener("change", (event) => {
+  const aliasInput = event.target.closest("input[data-watchlist-name-symbol]");
+  if (aliasInput) { handleWatchlistNameChange(aliasInput); return; }
   if (event.target.closest("[data-watchlist-select-symbol]")) { updateWatchlistBulkControls(); return; }
   const select = event.target.closest("select[data-watchlist-group-symbol]");
   if (!select) return;
