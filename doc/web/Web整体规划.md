@@ -909,3 +909,6 @@ JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验�
 可安全考虑的最小后续拆分只有“列表投影”纯计算：将关键字过滤、分组归属过滤、过滤计数以及排序输入组装成纯函数，显式接收 items、keyword、group assignments、selectedGroup、sort mode/direction 和 getQuote；复用现有 `sortWatchlistItems`，不得复制排序算法。该函数不读取 DOM/state/storage，不触发研究列表刷新，也不负责 tracking 字段和 DOM。实施前先补充现有过滤/排序行为基线，尤其分组默认归属、关键字只匹配代码/名称、行情排序缺失值置底、过滤计数当前仅按关键字显示的既有语义。
 
 当前结论：JSR-3E 盘点完成；建议下一批仅实施列表投影纯函数（可命名 `watchlist-list-view-model.js`），不创建 controller。若测试显示该拆分无法显著降低 app 复杂度，则保留现状，不为追求模块数量而拆分。
+
+
+JSR-3E 实施进展（提交 `7e7d9d40`，CI 待验收）：已新增 `watchlist-list-view-model.js`，把关键字过滤、分组归属过滤、过滤计数文案、空态文案和排序列表投影从 `renderWatchlist` 抽离为纯函数。排序继续复用 `watchlist-sort.js`，不复制排序算法；app.js 负责提供行情 getter、DOM 控件值和分组状态，并继续负责请求成员失效、DOM 挂载、tracking 字段和研究列表刷新。新增单测覆盖关键字匹配、带后缀分组归属、未分组默认值、分组筛选计数语义、行情缺失排序及空态文案。当前 WebUI Checks #41822844387、Browser Smoke #41822844957 正在运行。

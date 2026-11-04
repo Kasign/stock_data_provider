@@ -374,3 +374,12 @@ JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 
 后续仅建议评估一个纯函数模块 `watchlist-list-view-model.js`：输入已读取的 items、关键字、分组 assignments/selectedGroup、sort mode/direction 和行情 getter；输出过滤后的计数与排序列表，并复用 `sortWatchlistItems`。它不能读取 DOM、全局 state 或 storage，不能调用 `syncWatchlistQuoteMembership`，不能创建 DOM、绑定事件或刷新研究列表。
 
 迁移门禁：先为关键字仅匹配代码/名称、分组默认归属、全部分组、无匹配空态、行情排序升降序、缺失行情始终置底及过滤计数文案建立测试。尤其注意当前计数文案在有关键字时显示“匹配 x / 全部 items”，未输入关键字时显示“显示全部 items”；分组筛选目前不改变该文案的分支条件，不应在拆分时擅自改变。通过 UI 契约和 Browser Smoke 后再决定是否继续拆事件协调；不预设 controller。
+
+
+### 12.11 JSR-3E 列表投影模块实施
+
+新增 `watchlist-list-view-model.js`，导出 `buildWatchlistListViewModel`。输入已读取的自选 items、关键字、分组 assignments/selectedGroup、排序模式/方向及行情 getter；输出 `visibleItems`、`sortedItems`、原过滤计数文案和空态文案。模块复用 `watchlist-sort.js`，不实现第二套排序。
+
+`app.js` 仍持有 DOM、state、storage、分组读取、行情 getter 组装、请求成员失效同步、tracking ViewModel、单项 DOM 构建和研究列表刷新。列表投影模块不访问 DOM、state、localStorage、API，不绑定事件。筛选计数保持原语义：仅关键字存在时显示匹配数；仅分组筛选时仍显示全部自选数量。无匹配空态也保留原文案。
+
+新增单测覆盖关键字、分组默认归属/交易所后缀、分组筛选计数、行情排序缺失值置底和空态。CI 验收结果待补。

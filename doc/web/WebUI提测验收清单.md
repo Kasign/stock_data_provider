@@ -1480,3 +1480,14 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 明确不迁移整段 `renderWatchlist`，不新增页面 Controller。
 - [x] 确定唯一值得继续评估的纯函数边界：关键字/分组过滤与排序列表投影；排序算法复用 `watchlist-sort.js`。
 - [ ] 下一批建立列表投影特征测试并实施最小纯函数迁移；若收益不足则保留现状。
+
+
+### JSR-3E 列表投影 ViewModel（CI 待验收）
+
+- [x] 新增 `watchlist-list-view-model.js`，抽离关键字/分组过滤、排序投影、计数和空态文案。
+- [x] 排序复用 `watchlist-sort.js`，不复制排序规则。
+- [x] app.js 保留 DOM、state、storage、行情请求生命周期、tracking、事件和跨页联动所有权。
+- [x] 新增单测覆盖关键字匹配、分组默认归属/后缀匹配、分组计数、行情缺失排序和空态。
+- [x] UI 契约检查新模块纯函数边界。
+- [ ] WebUI Checks #41822844387 通过。
+- [ ] Chromium Browser Smoke #41822844957 通过。
