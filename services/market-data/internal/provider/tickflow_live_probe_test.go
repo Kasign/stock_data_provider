@@ -113,9 +113,15 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 					return len(bars), "", nil, errLiveProbeContract("daily K-line identity, adjustment or chronological order mismatch")
 				}
 				previousDate = bar.TradeDate
-				if bar.QualityStatus != model.QualityValid {
+				switch bar.QualityStatus {
+				case model.QualityValid:
+				case model.QualityDegraded:
 					quality = model.QualityDegraded
-					notes = appendTickflowUniqueReason(notes, bar.QualityReasons...)
+					for _, reason := range bar.QualityReasons {
+						notes = appendTickflowUniqueReason(notes, reason)
+					}
+				default:
+					return len(bars), "", nil, errLiveProbeContract("daily K-line quality is invalid or unknown")
 				}
 			}
 			return len(bars), string(quality), notes, nil
