@@ -49,6 +49,10 @@ func assessDailyBarTradingContext(calendar *model.TradingCalendarSnapshot, bars 
 		result.Reasons = append(result.Reasons, "daily_bar_context_calendar_unavailable")
 		return result
 	}
+	if calendar.QualityStatus != model.QualityValid {
+		result.QualityStatus = model.QualityDegraded
+		result.Reasons = appendDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded")
+	}
 	for _, reason := range calendar.QualityReasons {
 		if reason == "provider_trading_calendar_sources_disagree" {
 			result.QualityStatus = model.QualityDegraded

@@ -108,3 +108,22 @@ func TestAssessDailyBarTradingContextDoesNotUseConflictingCalendarToConfirmMissi
 		t.Fatalf("conflicting calendar must not confirm provider missing data: %+v", result)
 	}
 }
+
+func TestAssessDailyBarTradingContextDegradesWhenCalendarQualityIsDegraded(t *testing.T) {
+	calendar := &model.TradingCalendarSnapshot{
+		QualityStatus: model.QualityDegraded,
+		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
+		Items: []model.TradingCalendarDay{
+			{Date: "2026-10-20", IsTradingDay: true},
+		},
+	}
+	statuses := map[string]*model.SecurityTradingStatusSnapshot{
+		"2026-10-20": dailyBarContextStatus("2026-10-20", "2026-10-01", true, model.SuspensionStatusSuspended),
+	}
+	result := assessDailyBarTradingContext(calendar, nil, statuses, nil)
+	if result.QualityStatus != model.QualityDegraded ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_context_calendar_degraded") ||
+		!hasDailyBarContextReason(result.Reasons, "daily_bar_excluded_suspended:2026-10-20") {
+		t.Fatalf("degraded calendar must degrade context while retaining security-status evidence: %+v", result)
+	}
+}
