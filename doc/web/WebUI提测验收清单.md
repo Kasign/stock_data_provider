@@ -1537,3 +1537,12 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 验证模块纯计算边界。
 - [x] WebUI Checks #41828190023 通过（最终验收提交 `7faa82c`）。
 - [x] Chromium Browser Smoke #41828189983 通过（最终验收提交 `7faa82c`）。
+
+
+## 2026-11-04 JSR-6A：Run 结果展示 adapter
+
+- [x] 新增 `task-result-view.js`，app.js 仅协调 Run 状态、任务引用和跨页刷新。
+- [x] 结构化报告所有章节、质量门禁折叠、缺失值、warnings 与 JSON 展示保持原语义。
+- [x] 单元测试：WebUI Checks #41831466097，447/447 通过。
+- [x] Chromium Browser Smoke #41831466212 通过，Run Flow 交互与结果恢复专项通过。
+- [x] 不修改 API、Go、Provider、数据库、报告归档和 CSS。

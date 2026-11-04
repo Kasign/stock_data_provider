@@ -521,3 +521,19 @@ JSR-5C/5D 验收：WebUI Checks #41830356255（444/444 tests、语法检查、Co
 app.js 保留当前 Run 状态写入、读取状态清理、Run ID、状态 pill、流程摘要、任务引用持久化及自选股卡片刷新。adapter 不访问全局 state、localStorage、API、AbortController 或事件监听。该拆分不改变服务端身份校验、Run 结果 schema、报告归档和 Markdown 导出。
 
 验收要求：完整章节/缺失字段/空数组/质量门禁折叠/warnings/JSON 的 adapter 单测；UI contract 检查状态所有权；Browser Smoke 覆盖 Run Flow 结果展示与恢复。
+
+
+### 12.20 JSR-6A Run 结果结构化展示 DOM adapter（已验收）
+
+新增 `task-result-view.js`，导出 `renderTaskResultView({ document, result, runStatusLabel, fallbackRunId })`。模块负责：
+- 将 Run result 映射为指标卡片和结构化报告章节；
+- 构建分析概况、市场状态、数据质量门禁、因子、候选信号、可交易性、风险、交易计划、拒绝原因、执行评估和失败信息；
+- 展示服务端 warnings、原始 JSON 和结果说明；
+- 对缺失数组/字段保留“未报告/未返回”语义，不补造结果；
+- 通过 `textContent` 写入服务端文本，不拼接 HTML。
+
+app.js 的 `renderTaskResult` 保留状态协调：更新 `lastRunResult/runId/runResultReadStatus/runResultReadError`，刷新 Run 状态和流程摘要，持久化任务引用，最后调用 DOM adapter；如果当前位于自选股页，仍由 app 刷新 tracking 卡片。
+
+adapter 只接收 document、服务端 result、runStatusLabel 和 fallback Run ID，不访问 app state、localStorage、API、AbortController 或事件监听。单测覆盖完整章节、空/缺失字段和 warning；UI contract 验证 app/adapter 职责边界。
+
+验收：WebUI Checks #41831466097（447/447 tests、语法检查、Compose 校验、镜像构建通过）；Chromium Browser Smoke #41831466212（全部执行步骤通过）。
