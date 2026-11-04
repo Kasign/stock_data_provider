@@ -1172,7 +1172,8 @@ test("Run Flow summary and event diagnostics remain grounded in persisted Task, 
   }
   assert.match(app, /function renderTaskFlowSummary\(\)/);
   assert.match(app, /function renderSelectedTaskEvent\(item\)/);
-  assert.match(taskEventNode, /select\.dataset\.taskEventSequence = String\(item\.sequence\)/);\n  assert.match(app, /button\[data-task-event-sequence\]/);
+  assert.match(taskEventNode, /select\.dataset\.taskEventSequence = String\(item\.sequence\)/);
+  assert.match(app, /button\[data-task-event-sequence\]/);
   assert.match(app, /state\.taskEventsLoaded/);
   assert.match(taskEventNode, /event\.duration_ms/);
   assert.match(taskEventNode, /event\.error_code/);
