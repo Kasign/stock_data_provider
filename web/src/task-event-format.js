@@ -24,3 +24,11 @@ export function taskEventStatusTone(statusKey) {
   if (["degraded", "partial"].includes(statusKey)) return "is-warning";
   return "is-readonly";
 }
+
+
+export function taskEventDurationLabel(value) {
+  if (value === undefined || value === null || value === "") return "";
+  const duration = Number(value);
+  if (!Number.isFinite(duration) || duration < 0) return "";
+  return duration >= 1000 ? (duration / 1000).toFixed(2) + " 秒" : duration + " 毫秒";
+}

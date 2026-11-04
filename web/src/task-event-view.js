@@ -1,4 +1,4 @@
-export function renderRunStatusView({ target, status = "", runId = "", runStatusLabel }) {
+import { taskEventDurationLabel } from "./task-event-format.js";\n\nexport function renderRunStatusView({ target, status = "", runId = "", runStatusLabel }) {
   const normalized = String(status || "").toLowerCase();
   const label = normalized ? runStatusLabel(normalized) : runId ? "等待 Run 结果" : "尚未关联 Run";
   const tone = normalized === "completed"
@@ -55,11 +55,8 @@ export function renderSelectedTaskEventView({
     ["服务端时间", event.at ? formatDateTime(event.at) : null],
     ["错误代码", event.error_code]
   ];
-  if (event.duration_ms !== undefined && event.duration_ms !== null && event.duration_ms !== "" &&
-      Number.isFinite(Number(event.duration_ms)) && Number(event.duration_ms) >= 0) {
-    const durationMs = Number(event.duration_ms);
-    fields.push(["服务端耗时", durationMs >= 1000 ? (durationMs / 1000).toFixed(2) + " 秒" : durationMs + " 毫秒"]);
-  }
+  const durationLabel = taskEventDurationLabel(event.duration_ms);
+  if (durationLabel) fields.push(["服务端耗时", durationLabel]);
 
   const document = fieldsRoot.ownerDocument;
   fieldsRoot.replaceChildren();

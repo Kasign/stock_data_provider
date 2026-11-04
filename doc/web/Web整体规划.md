@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-04（当前代码验收基线：`5be5a0d8a55594a4bcf783498b1758f4a9bab1b7`；最新文档/分支 HEAD 以 GitHub 分支为准）
+更新时间：2026-11-04（当前分支基线：`e5e78db7fe20023f06a5564439d56739bb94394f`）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -292,29 +292,30 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 
 ## 7. 当前下一步
 
-**当前主线：JavaScript 模块边界审查与渐进拆分（JSR-3）。**
+**当前主线：JSR-5 任务事件展示边界收口；JSR-5A、5B 已完成并通过 CI。**
 
 已完成：
-- JSR-3A：自选股单项 DOM 构建，WebUI Checks 与 Chromium Browser Smoke 通过。
-- JSR-3B：自选股导入预览解析，WebUI Checks 与 Chromium Browser Smoke 通过。
+- JSR-5A：任务事件列表投影 ViewModel，WebUI Checks #41826860829、Chromium Browser Smoke #41826860631 通过。
+- JSR-5B：任务流程摘要 ViewModel，最终验收提交 `7faa82c`；WebUI Checks #41828190023、Chromium Browser Smoke #41828189983 通过。
+- JSR-5C/5D 审查：事件详情面板和事件节点均已有独立 DOM adapter；不迁移筛选按钮事件、详情面板 DOM 操作、节点展开状态或 app 的事件状态所有权。发现节点与详情重复实现耗时格式化，采用共享纯函数收敛，不新建 Controller/ViewModel。
 
-**下一步执行顺序：**
-1. JSR-3C：自选股导入预览 DOM 构建已完成，WebUI Checks #41816369613 与 Chromium Browser Smoke #41816369953 均通过。
-2. JSR-3D 预审：盘点 tracking 字段的数据来源、行情快照质量语义、最近/今日任务关联、当前任务与 Run 结果匹配条件、展示字段顺序/可见配置和格式化依赖。
-3. 预审后只抽离纯 ViewModel 计算；由 app.js 显式组装输入，模块不读取全局 state、storage、DOM 或 API。先覆盖各状态分支，再运行全量回归。
-4. JSR-3E：在 JSR-3C/3D 稳定后评估页面协调边界；不预设必须新增 controller。
-5. JSR-3 完成后再排期设置中心及其他高耦合页面模块拆分。
+**当前实施批次：**
+1. JSR-5C/5D：将任务事件耗时格式化统一到 `task-event-format.js`，补充边界单测；保持现有 DOM adapter 和 app 协调边界。
+2. 更新《Web代码架构》中的 JSR-5A/5B 验收状态及最新模块边界记录。
+3. 集中运行 WebUI Checks、Chromium Browser Smoke；只有两者通过才标记本批完成。
+4. 验收后进入 JSR-5E：复核 task workflow 的事件分页、Task/Run 身份、轮询、请求代际和错误恢复边界；先做调用图与状态所有权审查，不预设代码迁移。
 
 **不可拆散的状态所有权：**
-- 自选批量行情 generation、AbortController、请求成员集合、成员变化/连接变化失效和旧快照清理继续由 app.js 协调。
-- 自选 CRUD、分组事务、排序规则和最终导入存储回读确认继续由现有领域模块负责。
-- 研究、分析、选股、设置和浏览器数据导入/导出之间的跨页面联动不迁入纯展示模块。
+- task polling、Run result reload、AbortController/generation、Task/Run 身份校验、阶段事件分页游标、事件读取错误恢复继续由 app.js/task-workflow 现有边界管理。
+- `state.taskEvents`、`taskEventFilter`、`selectedTaskEventSequence`、`expandedTaskEventSequences` 仍由 app.js 持有。
+- `task-event-list-view-model.js` 只负责纯列表投影；`task-event-view.js` 与 `task-event-node.js` 只负责 DOM 更新/构建；`task-event-format.js` 统一状态及耗时格式。
+- 若审查发现只是把少量 DOM 操作搬文件、却增加参数和模块耦合，则不拆。
 
 **独立工作线：**
-- UIR 样式 Review 与 JSR 拆分分开执行；不把 CSS 大规模收敛混入 JavaScript 模块化提交。
-- 市场数据、诊断、告警等 API 能力只在数据侧契约具备后接入；不以 Web 假数据替代服务端能力。
+- UIR 样式 Review 与 JSR 拆分分开执行，不混入本批 JavaScript 提交。
+- 数据侧真实接口和 Provider 验证只记录契约依赖，不在当前分支修改 Go/OpenAPI/数据库/部署文件。
 
-**验收门禁：** 每批先核对调用方与状态所有权，再迁移单一职责；新增单测和真实页面浏览器回归；WebUI Checks 与 Chromium Browser Smoke 均通过后才标记已完成。不得将 fixture 浏览器验收解释为真实 Provider 联调。
+**验收门禁：** 本批新增单测、UI contract、WebUI Checks 和 Chromium Browser Smoke；模拟 API 浏览器验收不代表真实 Provider 数据验收。
 ### 2026-11-04 P0-C 后续边界修复（当前开发批次）
 
 - [x] 全市场列表当前价、MA5、MA20 使用统一价格格式化函数，避免将格式化函数本身写入单元格；Chromium 研究入口用例增加 1,500 / 1,490 / 1,480 展示断言。
@@ -956,3 +957,14 @@ JSR-5A 实施：
 JSR-5B 已实施：将任务流程摘要计算迁入 `task-flow-summary-view-model.js`，app.js 仅读取状态并更新 DOM。新增测试覆盖未加载/无任务、事件排序与时间、读取异常、Run 质量和 Warning 数量。代码提交 `ac02be0`，最终验收提交 `7faa82c`：WebUI Checks #41828190023、Chromium Browser Smoke #41828189983 均通过。初轮 CI 揭示旧 UI contract 仍检查 app.js 内部实现；已将断言改为检查新的 ViewModel 模块，并补齐测试文件读取，不改变运行逻辑。
 
 后续审查方向：复核任务事件筛选按钮/详情视图是否还有明确纯逻辑边界；不迁移 task polling、Run result reload、AbortController/generation、事件读取错误恢复或任务状态所有权。若后续拆分收益不足，保留 app.js 当前边界。
+
+
+### 2026-11-04 JSR-5C/5D：任务事件详情与节点展示边界复核
+
+- [x] 核对 `renderSelectedTaskEvent`：app.js 只组装当前状态和 DOM 引用；`task-event-view.js` 已独立负责详情面板 DOM 更新。详情字段映射、状态标签和 JSON 展示与 DOM 写入紧密耦合，不再抽出低价值 ViewModel。
+- [x] 核对 `buildTaskEventNode`：`task-event-node.js` 已独立负责节点 DOM 构建；节点展开状态仍由 app.js 的 `expandedTaskEventSequences` 持有，避免把页面交互状态转移到展示模块。
+- [x] 筛选按钮绑定、详情选中和节点 toggle 仍由 app.js 统一协调；不新增 task-event Controller。
+- [x] 发现节点摘要与详情面板重复实现 duration_ms 校验/格式化；统一迁入 `task-event-format.js` 的 `taskEventDurationLabel`，避免两处展示口径漂移。
+- [ ] WebUI Checks 与 Chromium Browser Smoke：本批提交后执行，结果以当前提交对应 Actions 为准。
+
+后续 JSR-5E：仅审查 `task-workflow.js` 与 app.js 的事件分页、身份校验、轮询和请求代际边界；禁止迁移任务请求生命周期或改变状态所有权，先审查再决定是否有安全拆分收益。

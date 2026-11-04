@@ -1,4 +1,4 @@
-export function buildTaskEventNode({
+import { taskEventDurationLabel } from "./task-event-format.js";\n\nexport function buildTaskEventNode({
   document,
   item,
   selected = false,
@@ -37,11 +37,8 @@ export function buildTaskEventNode({
   titleLine.append(title, badge);
   const meta = document.createElement("small");
   const parts = ["#" + item.sequence, formatDateTime(event.at)];
-  if (event.duration_ms !== undefined && event.duration_ms !== null && event.duration_ms !== "" &&
-      Number.isFinite(Number(event.duration_ms)) && Number(event.duration_ms) >= 0) {
-    const duration = Number(event.duration_ms);
-    parts.push(duration >= 1000 ? (duration / 1000).toFixed(2) + " 秒" : duration + " 毫秒");
-  }
+  const durationLabel = taskEventDurationLabel(event.duration_ms);
+  if (durationLabel) parts.push(durationLabel);
   meta.textContent = parts.join(" · ");
   body.append(titleLine, meta);
   heading.append(icon, body);

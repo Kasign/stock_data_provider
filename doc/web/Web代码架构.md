@@ -439,7 +439,7 @@ JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js�
 验收：WebUI Checks #41825675059、Chromium Browser Smoke #41825675232 均通过。此前 JSR-4A #41824691276/#41824691228、JSR-4B #41825039555/#41825039554 也均通过。
 
 
-### 12.15 JSR-5A 任务事件列表投影 ViewModel（CI 验收中）
+### 12.15 JSR-5A 任务事件列表投影 ViewModel（已验收）
 
 新增 `task-event-list-view-model.js`，导出 `buildTaskEventListViewModel({ items, filter, selectedSequence })`。模块负责：
 - 按 sequence 数值升序整理事件；
@@ -456,7 +456,7 @@ JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js�
 代码提交 `f4b5145`；WebUI Checks #41826860829、Chromium Browser Smoke #41826860631 均通过。
 
 
-### 12.16 JSR-5B 任务流程摘要 ViewModel（CI 验收中）
+### 12.16 JSR-5B 任务流程摘要 ViewModel（已验收）
 
 新增 `task-flow-summary-view-model.js`，导出 `buildTaskFlowSummaryViewModel`。输入显式包含 task event loaded/id/list/error、last Run result 和日期格式化函数；输出事件数量、最新事件时间、Run 核心质量状态及 warning 数量。
 
@@ -471,3 +471,21 @@ JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js�
 app.js 的 `renderTaskFlowSummary` 继续管理 DOM 查询和更新；ViewModel 不访问全局 state、DOM、storage、API 或事件。新增单测覆盖上述状态和边界，UI contract 验证纯计算边界。
 
 代码提交 `ac02be0`；最终验收提交 `7faa82c` 的 WebUI Checks #41828190023、Chromium Browser Smoke #41828189983 均通过。首轮静态契约测试仍绑定旧 app.js 内部实现，已改为检查新 ViewModel 模块的真实职责边界；运行时代码未因该修正改变。
+
+
+### 12.17 JSR-5C/5D 任务事件详情与节点展示边界复核
+
+当前职责边界：
+
+| 能力 | 当前归属 | 复核结论 |
+|---|---|---|
+| 事件状态归一化、标签和色调 | `task-event-format.js` | 统一纯格式化入口 |
+| 事件耗时校验与展示文案 | `task-event-format.js` 的 `taskEventDurationLabel` | 节点摘要与详情面板共用，避免重复实现 |
+| 事件列表排序、筛选、计数和默认选中 | `task-event-list-view-model.js` | 纯投影，不持有页面状态 |
+| 事件节点 DOM 构建 | `task-event-node.js` | 保持独立 DOM builder；不持有展开状态 |
+| 选中事件详情 DOM 更新 | `task-event-view.js` | 保持 DOM adapter；字段映射直接服务于 DOM，不再抽取低价值 ViewModel |
+| 筛选按钮、选中事件、展开集合 | `app.js` | 页面交互状态与事件委托继续由 app 持有 |
+
+JSR-5C/5D 审查没有发现值得迁移的独立详情 ViewModel 或事件 Controller。仅将此前在节点和详情两处重复的 `duration_ms` 有效性判断及格式化收敛到 `taskEventDurationLabel(value)`：无值、非数值、负数返回空文案；小于 1000 按毫秒展示；大于等于 1000 按秒保留两位小数。测试覆盖 0、999、1000、浮点值、数字字符串和无效值。
+
+不迁移 `state.expandedTaskEventSequences`、筛选按钮事件、详情选中、任务事件读取错误处理、轮询、AbortController/generation、Task/Run 身份校验及分页游标。后续只审查 task workflow 的跨模块调用和状态所有权；没有明确收益时保留现状。
