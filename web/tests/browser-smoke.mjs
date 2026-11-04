@@ -718,6 +718,32 @@ try {
       await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
       await page.locator("#save-settings").click();
       await page.waitForFunction(() => (document.querySelector("#settings-feedback")?.textContent || "").includes("连接配置已保存"), null, { timeout: 5000 });
+
+      // Changing a capital-flow date alone must cancel its old request, even without clicking Read again.
+      const lifecycleCountBeforeDateChange = marketLifecycleRequests.length;
+      marketLifecycleScenario = "delayed";
+      await page.evaluate(() => { window.__marketLifecycleStarted = []; });
+      await page.locator("#market-capital-flow-start").fill("2026-10-01");
+      await page.locator("#market-capital-flow-end").fill("2026-10-30");
+      await page.locator("#load-market-capital-flow").click();
+      await page.waitForFunction(() => (window.__marketLifecycleStarted || []).length === 1, null, { timeout: 5000 });
+      assert.equal(marketLifecycleRequests.length, lifecycleCountBeforeDateChange + 1, "date-change race should start one capital-flow request");
+      await page.locator("#market-capital-flow-start").fill("2026-10-02");
+      await page.waitForFunction(() =>
+        (document.querySelector("#market-capital-flow-status")?.textContent || "").includes("日期范围已变更") &&
+        document.querySelector("#load-market-capital-flow")?.disabled === false,
+        null,
+        { timeout: 3000 }
+      );
+      await page.waitForTimeout(2100);
+      const staleCapitalFlowContent = await page.locator("#market-capital-flow-body").textContent();
+      assert.doesNotMatch(staleCapitalFlowContent, /2099-01-01|909090/,
+        "changing the capital-flow date must prevent the previous range response from repopulating the table");
+      assert.equal(marketLifecycleRequests.length, lifecycleCountBeforeDateChange + 1,
+        "changing the date must not trigger an implicit replacement request");
+      assert.ok(abortedMarketRequests.some(value => value.endsWith("/api/v1/market/capital-flow")),
+        "capital-flow request must be aborted when its date range changes");
+      marketLifecycleScenario = "default";
     }
 
 

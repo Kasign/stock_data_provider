@@ -253,24 +253,26 @@ export function bindMarketOverview(getSettings,onSelectStock) {
   if(body){body.replaceChildren();const row=document.createElement("tr"),cell=el("td","table-empty",message);cell.colSpan=7;row.append(cell);body.append(row);}
   meta("market-sentiment-history-meta",[]);
  }
+ function invalidateCapitalFlow(statusMessage,bodyMessage=statusMessage){
+  capitalFlowGeneration++;
+  try{capitalFlowController?.abort();}catch{}
+  capitalFlowController=null;
+  safeOverviewUi(()=>{
+   const status=$("#market-capital-flow-status"),body=$("#market-capital-flow-body"),button=$("#load-market-capital-flow");
+   if(status){status.textContent=statusMessage;status.className="availability-pill is-readonly";}
+   if(button){button.disabled=false;button.textContent="读取历史资金流";}
+   if(body)tableMessage(body,bodyMessage);
+   meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
+  });
+ }
  function invalidateConnection(){
   Object.keys(refreshGenerations).forEach(selector=>{refreshGenerations[selector]+=1;});
   KEYS.forEach(key=>{
    safeOverviewUi(()=>cancel(key));
    safeOverviewUi(()=>pending(key,"行情连接配置已变更，旧结果已清除，请重新刷新。","warning"));
   });
-  capitalFlowGeneration++;
-  try{capitalFlowController?.abort();}catch{}
+  invalidateCapitalFlow("连接已变更","行情连接配置已变更，请重新读取市场资金流。");
   invalidateSentimentHistory("行情连接配置已变更，旧的历史情绪请求已取消；请使用新配置重新读取。");
-  capitalFlowController=null;
-  safeOverviewUi(()=>{
-   const status=$("#market-capital-flow-status"),body=$("#market-capital-flow-body");
-   if(status){status.textContent="连接已变更";status.className="availability-pill is-readonly";}
-   const button=$("#load-market-capital-flow");
-   if(button){button.disabled=false;button.textContent="读取历史资金流";}
-   if(body)tableMessage(body,"行情连接配置已变更，请重新读取市场资金流。");
-   meta("market-capital-flow-meta",[]);qualityReasons("market-capital-flow-reasons",[]);
-  });
   ["#market-overview-updated","#market-data-updated"].forEach(selector=>safeOverviewUi(()=>{
    const node=$(selector);if(node)node.textContent="行情连接配置已变更，旧结果已清除，请重新刷新市场模块。";
   }));
@@ -335,6 +337,9 @@ export function bindMarketOverview(getSettings,onSelectStock) {
  const flowStart=$("#market-capital-flow-start"),flowEnd=$("#market-capital-flow-end");
  if(flowStart&&!flowStart.value)flowStart.value=defaultFlowRange.start;
  if(flowEnd&&!flowEnd.value)flowEnd.value=defaultFlowRange.end;
+ [flowStart,flowEnd].forEach(input=>input?.addEventListener("change",()=>{
+  invalidateCapitalFlow("日期范围已变更","日期范围已变更，旧结果已清除，请重新读取市场资金流。");
+ }));
  $("#load-market-capital-flow")?.addEventListener("click",()=>{void loadMarketCapitalFlow();});
 
  async function loadSentimentHistory() {
