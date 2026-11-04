@@ -2206,3 +2206,12 @@ test("task event list projection is pure and app retains DOM/state coordination"
   assert.match(taskEventListViewModel, /export function buildTaskEventListViewModel\(/);
   assert.doesNotMatch(taskEventListViewModel, /\bstate\.|localStorage|document\.|addEventListener|fetch\(/);
 });
+
+
+test("task flow summary projection is pure and render adapter only applies its output", async () => {
+  const summaryViewModel = await readFile(new URL("../src/task-flow-summary-view-model.js", import.meta.url), "utf8");
+  assert.match(appSource, /buildTaskFlowSummaryViewModel\(/);
+  assert.match(appSource, /quality\.className = "run-flow-summary-value " \+ viewModel\.qualityClass/);
+  assert.match(summaryViewModel, /export function buildTaskFlowSummaryViewModel\(/);
+  assert.doesNotMatch(summaryViewModel, /\bstate\.|localStorage|document\.|addEventListener|fetch\(/);
+});

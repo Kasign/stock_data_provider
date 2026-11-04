@@ -70,6 +70,7 @@ import {
   taskStatusLabel
 } from "./format.js";
 import { taskEventStatusKey, taskEventStatusLabel, taskEventStatusTone } from "./task-event-format.js";
+import { buildTaskFlowSummaryViewModel } from "./task-flow-summary-view-model.js";
 import { renderRecentTaskList } from "./recent-task-view.js";
 import { renderRunStatusView, renderSelectedTaskEventView } from "./task-event-view.js";
 import { buildTaskEventNode } from "./task-event-node.js";
@@ -3090,25 +3091,19 @@ function renderTaskFlowSummary() {
   const quality = $("#task-summary-quality");
   const warningCount = $("#task-summary-warning-count");
   if (!eventsCount || !latestEvent || !quality || !warningCount) return;
-
-  if (!state.taskEventsLoaded) {
-    eventsCount.textContent = state.taskId ? "等待事件读取" : "未选择任务";
-    latestEvent.textContent = "未报告";
-  } else {
-    const events = [...state.taskEvents.values()].sort((a, b) => Number(a.sequence) - Number(b.sequence));
-    eventsCount.textContent = state.taskEventsError
-      ? events.length ? `${events.length} 条（读取异常）` : "读取失败"
-      : events.length ? String(events.length) : "暂无持久化事件";
-    const last = events.length ? events[events.length - 1] : null;
-    const lastEvent = last?.event && typeof last.event === "object" ? last.event : last;
-    latestEvent.textContent = lastEvent?.at ? formatDateTime(lastEvent.at) : "未报告";
-  }
-  const result = state.lastRunResult;
-  const corePass = result?.quality?.core_pass;
-  quality.textContent = corePass === true ? "通过" : corePass === false ? "未通过" : result ? "未报告" : "等待 Run 结果";
-  quality.className = "run-flow-summary-value " + (corePass === true ? "is-valid" : corePass === false ? "is-invalid" : "is-unknown");
-  const warnings = result?.warnings;
-  warningCount.textContent = Array.isArray(warnings) ? String(warnings.length) : result ? "未报告" : "等待 Run 结果";
+  const viewModel = buildTaskFlowSummaryViewModel({
+    taskLoaded: state.taskEventsLoaded,
+    taskId: state.taskId,
+    taskEvents: [...state.taskEvents.values()],
+    taskEventsError: state.taskEventsError,
+    lastRunResult: state.lastRunResult,
+    formatDateTime
+  });
+  eventsCount.textContent = viewModel.eventsCount;
+  latestEvent.textContent = viewModel.latestEvent;
+  quality.textContent = viewModel.quality;
+  quality.className = "run-flow-summary-value " + viewModel.qualityClass;
+  warningCount.textContent = viewModel.warningCount;
 }
 
 function renderSelectedTaskEvent(item) {
