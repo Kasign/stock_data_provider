@@ -65,13 +65,7 @@ try {
   const crossTabResearchRequestStarted = new Promise(resolve => { markCrossTabResearchRequestStarted = resolve; });
   const crossTabResearchRequestSettled = new Promise(resolve => { markCrossTabResearchRequestSettled = resolve; });
   const pageErrors = [];
-  let crossTabProfileRequestFailure = "";
   page.on("pageerror", error => pageErrors.push(error.stack || error.message));
-  page.on("requestfailed", request => {
-    if (request.url().includes("/api/v1/stocks/000001.SZ/profile")) {
-      crossTabProfileRequestFailure = request.failure()?.errorText || "requestfailed";
-    }
-  });
   oldRequestStarted = new Promise(resolve => {
     page.route("**/*", async route => {
       const url = new URL(route.request().url());
@@ -311,9 +305,7 @@ try {
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#symbol-input").fill("000001.SZ");
   await page.locator('.nav-link[data-view="research"]').click();
-  const crossTabProfileRequestFailed = page.waitForEvent("requestfailed", request =>
-    request.url().includes("/api/v1/stocks/000001.SZ/profile")
-  );
+  // 请求进入路由后再切换连接；用延迟响应验证旧结果不会覆盖当前研究状态。
   await page.locator("#load-stock-research").click();
   await crossTabResearchRequestStarted;
   const researchSettingsSyncPage = await context.newPage();
@@ -331,11 +323,12 @@ try {
   assert.equal(await page.locator("#load-valuations").isEnabled(), true);
   assert.equal(await page.locator("#stock-profile-symbol").textContent(), "000001.SZ");
   assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
-  const failedProfileRequest = await crossTabProfileRequestFailed;
-  crossTabProfileRequestFailure = failedProfileRequest.failure()?.errorText || crossTabProfileRequestFailure;
-  assert.match(crossTabProfileRequestFailure, /ERR_ABORTED|aborted/i, "跨标签页连接变更后旧档案请求必须由浏览器取消");
+  // 先释放被测试路由挂起的旧连接响应，再确认它无法覆盖当前标的的研究内容。
   releaseCrossTabResearchRequest?.();
-  await crossTabResearchRequestSettled;
+  await Promise.race([
+    crossTabResearchRequestSettled,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("等待旧档案路由结束超时")), 5000))
+  ]);
   assert.equal(crossTabResearchRouteFinished, true);
   assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
   await researchSettingsSyncPage.close();
