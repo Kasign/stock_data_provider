@@ -437,3 +437,20 @@ JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js�
 `app.js` 保留原有 `syncWatchlistPreferenceControls` 兼容入口，仅向 adapter 传入 document 和偏好对象。偏好采集、`savePreferences`、存储异常恢复、反馈文案、页面重绘、跨标签页 storage 事件仍由 app.js 管理。adapter 不读 localStorage、不保存偏好、不请求 API、不读取全局 state，也不绑定业务事件。
 
 验收：WebUI Checks #41825675059、Chromium Browser Smoke #41825675232 均通过。此前 JSR-4A #41824691276/#41824691228、JSR-4B #41825039555/#41825039554 也均通过。
+
+
+### 12.15 JSR-5A 任务事件列表投影 ViewModel（CI 验收中）
+
+新增 `task-event-list-view-model.js`，导出 `buildTaskEventListViewModel({ items, filter, selectedSequence })`。模块负责：
+- 按 sequence 数值升序整理事件；
+- 复用 `task-event-format.js` 解析平铺或嵌套事件状态；
+- 复用 `task-event-filter.js` 计算 issues/active/completed 三类计数和当前过滤列表；
+- 非法筛选值回退 all；
+- 保留仍处于可见列表的当前选中事件；否则优先选中列表末尾最近一条异常/降级/运行事件，再回退最后一条可见事件；
+- 空列表不擅自清空旧 selected sequence，保持原 app 行为。
+
+`app.js` 的 `renderTaskEvents` 继续负责读取错误提示、空态 DOM、筛选按钮 aria 状态/计数、事件节点构建、toggle 展开集合、详情选择和流程摘要刷新。ViewModel 不接触 DOM/state/storage/API/事件。
+
+新增单测覆盖排序、平铺/嵌套状态、计数、筛选、当前选择保留、默认选择优先级、非法筛选及空列表。UI contract 验证 app 协调层和纯 ViewModel 边界。
+
+代码提交 `f4b5145`；WebUI Checks #41826860829 已通过，Chromium Browser Smoke #41826860631 尚在运行。

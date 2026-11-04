@@ -1515,3 +1515,14 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] JSR-4B WebUI Checks #41825039555、Chromium Browser Smoke #41825039554 通过。
 - [x] JSR-4C：新增 `settings-preferences-view.js`，隔离偏好控件回填/同步；保存、异常恢复和页面刷新仍由 app.js 负责。
 - [x] JSR-4C WebUI Checks #41825675059、Chromium Browser Smoke #41825675232 通过。
+
+
+### JSR-5A 任务事件列表投影 ViewModel（验收中）
+
+- [x] 新增 `task-event-list-view-model.js`，抽离排序、筛选、计数和默认选中项计算。
+- [x] 复用既有状态归一化与筛选规则，不复制分类表。
+- [x] app.js 保留事件状态、DOM 渲染、toggle 展开集合和跨模块详情刷新。
+- [x] 单测覆盖嵌套/平铺事件、排序、计数、筛选、选择优先级、非法筛选和空列表。
+- [x] UI contract 验证模块纯计算边界。
+- [x] WebUI Checks #41826860829 通过。
+- [ ] Chromium Browser Smoke #41826860631。

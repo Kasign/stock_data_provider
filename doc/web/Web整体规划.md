@@ -936,3 +936,21 @@ JSR-3E 实施进展（提交 `7e7d9d40`，CI 待验收）：已新增 `watchlist
 JSR-4A、4B 验收：提交 `360ac1a` 的 WebUI Checks #41825039555 与 Chromium Browser Smoke #41825039554 均通过；JSR-4A 单独提交 `83ea462` 的 WebUI Checks #41824691276 与 Chromium Browser Smoke #41824691228 也均通过。JSR-4C 最新代码提交 `ef6cb11` 的 WebUI Checks #41825675059、Chromium Browser Smoke #41825675232 均通过。
 
 验收约束：保留 API Key 不回显/留空不覆盖、草稿跨标签页变更保护、连接变更失效请求、坏偏好原始数据保护、偏好 reset 不影响主题/连接/自选/任务、浏览器数据导入保留 API Key，以及 storage event 只处理当前 localStorage 的既有行为。JSR-4A 不改 CSS、API、Go、数据库和存储 schema。
+
+
+## JSR-5 app.js 剩余职责审查与任务事件列表投影（进行中）
+
+JSR-4 完成后重新盘点 app.js（约 5.8k 行）及已拆出的领域模块。JSR-5 不以减少 app.js 行数为目标，按“纯计算先行、DOM 构建次之、状态/请求生命周期最后评估”的顺序推进；每批都必须明确状态所有权和跨模块契约。
+
+首批选择任务事件列表投影：现有 `task-event-filter.js` 只负责单个状态是否匹配筛选，`task-event-format.js` 负责状态归一化/标签/色调；`renderTaskEvents` 仍在 app.js 中承担事件排序、四类筛选计数、可见列表筛选和默认选中项选择。将这些可纯计算的列表投影合并为 ViewModel，避免 DOM 渲染函数同时承担投影计算。
+
+JSR-5A 实施：
+- 新增 `task-event-list-view-model.js`，接收事件数组、筛选值和当前选中 sequence，输出排序后的全量事件、过滤事件、过滤计数、规范筛选值/标签和选中 sequence。
+- 复用 `task-event-filter.js` 与 `task-event-format.js`，不重复维护状态分类表。
+- app.js 继续拥有事件 Map、读取错误/加载状态、选中 sequence 的持久页面状态、DOM 节点构建与挂载、toggle 展开集合、选中事件详情和流程摘要刷新。
+- 视图模型不访问 DOM、全局 state、storage、API 或事件监听。
+- 测试覆盖排序、平铺/嵌套事件状态、全部计数、筛选计数、已选项保留、优先选择最近异常/运行事件、回退最后可见项、非法筛选回退和空列表保留旧选中值。
+
+代码提交：`f4b5145`。WebUI Checks #41826860829 已通过；Chromium Browser Smoke #41826860631 正在运行，最终验收以该提交对应的两个 CI 均通过为准。
+
+后续审查方向：在 JSR-5A 通过后，复核任务事件详情/摘要与筛选控件是否仍有可独立测试的纯计算；不迁移 task polling、Run result reload、AbortController/generation、事件读取错误恢复或任务状态所有权。若后续拆分收益不足，保留 app.js 当前边界。
