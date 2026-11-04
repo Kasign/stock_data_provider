@@ -5171,3 +5171,40 @@ button:disabled {
     padding: 13px;
   }
 }
+
+
+/* UIR-2：研究表单与行情工具栏的中等视口布局收敛。 */
+@media (min-width: 641px) and (max-width: 900px) {
+  .research-report-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .research-report-toolbar > .field:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .market-stocks-toolbar .field {
+    flex: 1 1 145px;
+  }
+}
+
+.research-note-actions > span,
+#research-report-feedback {
+  min-width: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .research-note-actions {
+    align-items: stretch;
+  }
+
+  .research-note-actions .button {
+    width: 100%;
+  }
+
+  .research-note-actions > span {
+    width: 100%;
+  }
+}
