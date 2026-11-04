@@ -98,6 +98,7 @@ try {
     const pageErrors = [];
     const consoleErrors = [];
     const unexpectedNetworkFailures = [];
+    const abortedMarketRequests = [];
     page.on("pageerror", (error) => pageErrors.push(error.stack || error.message));
     page.on("console", (message) => {
       if (message.type() !== "error") return;
@@ -110,6 +111,8 @@ try {
       const pathname = new URL(request.url()).pathname;
       const expectedApiFailure = pathname.includes("/api/") ||
         /\/(?:health\/(?:ready|live)|readyz|healthz)$/.test(pathname);
+      if (/\/api\/v1\/market\/(?:capital-flow|sentiment\/history|dragon-tiger|trading-calendar)$/.test(pathname) &&
+          /ERR_ABORTED|aborted/i.test(request.failure()?.errorText || "")) abortedMarketRequests.push(pathname);
       if (!expectedApiFailure) unexpectedNetworkFailures.push(request.method() + " " + pathname + ": " + (request.failure()?.errorText || "request failed"));
     });
     page.on("response", (response) => {
@@ -134,6 +137,8 @@ try {
     let capitalFlowScenario = "success";
     let capitalFlowRequestCount = 0;
     let capitalFlowRequest = null;
+    let marketLifecycleScenario = "default";
+    const marketLifecycleRequests = [];
     let dataSourceScenario = "success";
     let dataSourcesRequestCount = 0;
     let batchQuotesRequestCount = 0;
@@ -247,6 +252,17 @@ try {
         contentType: "application/json",
         body: JSON.stringify(body)
       });
+      const delayMarketLifecycleResponse = async (body) => {
+        if (viewport.width !== 320 || marketLifecycleScenario !== "delayed") return false;
+        marketLifecycleRequests.push(pathname);
+        await page.evaluate((value) => {
+          window.__marketLifecycleStarted = window.__marketLifecycleStarted || [];
+          window.__marketLifecycleStarted.push(value);
+        }, pathname);
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        try { await json(200, body); } catch { /* AbortController 已取消浏览器请求。 */ }
+        return true;
+      };
 
       // Settings tests intentionally change API prefixes; saved and unsaved probes share this deterministic error matrix.
       if (viewport.width === 320 && settingsConnectionScenario !== "default" &&
@@ -354,6 +370,8 @@ try {
 
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/sentiment/history")) {
         sentimentHistoryRequestCount += 1;
+        if (await delayMarketLifecycleResponse({ start_date: "2026-10-01", end_date: "2026-10-30", total: 1,
+          items: [{ trade_date: "2026-10-29", advancing_count: 909090, declining_count: 0, unchanged_count: 0, limit_up_count: 0, limit_down_count: 0, quality_status: "valid" }] })) return;
         return json(200, { start_date: "2026-10-01", end_date: "2026-10-30", total: 1,
           items: [{ trade_date: "2026-10-29", advancing_count: 3200, declining_count: 1800, unchanged_count: 100, limit_up_count: 55, limit_down_count: 12, quality_status: "degraded" }] });
       }
@@ -366,13 +384,28 @@ try {
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/dragon-tiger")) {
         const query = new URL(route.request().url()).searchParams;
         dragonTigerRequests.push({ date: query.get("date") || "" });
+        if (await delayMarketLifecycleResponse({ date: query.get("date") || "2026-10-30", trade_date: query.get("date") || "2026-10-30",
+          page: Number(query.get("page") || 1), returned: 1, total: 1, has_data: true,
+          items: [{ symbol: "600000.SH", name: "过期龙虎榜数据", change_percent: 1, net_buy_amount_cny: 999999, deal_amount_cny: 999999, quality_status: "valid" }],
+          source: "browser-lifecycle-stale-dragon", fetched_at: "2026-10-30T08:00:00Z", quality_status: "valid", quality_reasons: [] })) return;
         return json(200, { date: query.get("date") || "2026-10-30", trade_date: query.get("date") || "2026-10-30",
           page: Number(query.get("page") || 1), returned: 0, total: 0, has_data: false, items: [], source: "browser-dragon-fixture",
           fetched_at: "2026-10-30T08:00:00Z", quality_status: "unknown", quality_reasons: [] });
       }
+      if (viewport.width === 320 && pathname.endsWith("/api/v1/market/trading-calendar")) {
+        const query = new URL(route.request().url()).searchParams;
+        if (await delayMarketLifecycleResponse({ start_date: query.get("start"), end_date: query.get("end"), total_days: 1, trading_days: 1,
+          items: [{ date: query.get("start"), is_trading_day: true, reason: "过期交易日历数据" }],
+          source: "browser-lifecycle-stale-calendar", fetched_at: "2026-10-30T08:00:00Z", quality_status: "valid", quality_reasons: [] })) return;
+        return json(200, { start_date: query.get("start"), end_date: query.get("end"), total_days: 0, trading_days: 0, items: [],
+          source: "browser-calendar-fixture", quality_status: "unknown", quality_reasons: [] });
+      }
       if (viewport.width === 320 && pathname.endsWith("/api/v1/market/capital-flow")) {
         capitalFlowRequestCount += 1;
         capitalFlowRequest = { url: route.request().url(), headers: route.request().headers() };
+        if (await delayMarketLifecycleResponse({ start_date: "2026-10-01", end_date: "2026-10-30", total: 1,
+          items: [{ trade_date: "2099-01-01", close_sh: 1, close_sz: 1, net_amount_cny: 909090, net_amount_rate_percent: 99 }],
+          source: "browser-lifecycle-stale-capital-flow", fetched_at: "2026-10-30T08:00:00Z", quality_status: "valid", quality_reasons: [] })) return;
         if (capitalFlowScenario === "network") return route.abort("failed");
         if (capitalFlowScenario === "503") return json(503, { error: { code: "provider_unavailable", message: "Tushare Provider unavailable", request_id: "req-market-flow-503" } });
         return json(200, {
@@ -624,6 +657,67 @@ try {
       await page.waitForFunction(() => document.querySelector("#market-sector-meta")?.textContent.includes("资金净流入"));
       assert.equal(sectorRequests.length, beforeUnsupported, "unsupported board capital flow must not issue a fake request");
       assert.match(await page.locator("#market-sector-body").textContent(), /不会用成交额替代资金净流入/);
+
+      // Start all historical market requests, then change the market API while every response is delayed.
+      marketLifecycleScenario = "delayed";
+      await page.evaluate(() => { window.__marketLifecycleStarted = []; });
+      await page.locator("#market-capital-flow-start").fill("2026-10-01");
+      await page.locator("#market-capital-flow-end").fill("2026-10-30");
+      await page.locator("#load-market-capital-flow").click();
+      await page.locator("#market-sentiment-history-start").fill("2026-10-01");
+      await page.locator("#market-sentiment-history-end").fill("2026-10-30");
+      await page.locator("#load-market-sentiment-history").click();
+      await page.locator("#load-dragon-tiger").click();
+      await page.locator("#load-trading-calendar").click();
+      await page.waitForFunction(() => (window.__marketLifecycleStarted || []).length === 4, null, { timeout: 5000 });
+      assert.equal(marketLifecycleRequests.length, 4, "capital flow, sentiment history, dragon-tiger and calendar should each start exactly once");
+      assert.deepEqual(
+        marketLifecycleRequests.map((value) => value.split("/api/v1/")[1]).sort(),
+        ["market/capital-flow", "market/dragon-tiger", "market/sentiment/history", "market/trading-calendar"].sort(),
+        "all four market observation endpoints must be in flight before connection changes"
+      );
+
+      await page.locator("#open-settings").click();
+      await page.locator("#settings-view").waitFor({ state: "visible" });
+      await page.locator("#market-base-input").fill("/market-lifecycle-api");
+      await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
+      await page.locator("#save-settings").click();
+      await page.waitForFunction(() => {
+        const text = (selector) => document.querySelector(selector)?.textContent || "";
+        return text("#market-capital-flow-status").includes("连接已变更") &&
+          text("#market-sentiment-history-status").includes("行情连接配置已变更") &&
+          text("#dragon-tiger-meta").includes("连接配置已变更") &&
+          text("#trading-calendar-meta").includes("连接配置已变更");
+      }, null, { timeout: 5000 });
+      assert.equal(await page.locator("#load-market-capital-flow").isDisabled(), false, "capital-flow button must recover after cancellation");
+      assert.equal(await page.locator("#load-market-sentiment-history").isDisabled(), false, "sentiment-history button must recover after cancellation");
+      assert.equal(await page.locator("#dragon-tiger-next").isHidden(), true, "dragon-tiger pagination must reset after cancellation");
+
+      await page.waitForTimeout(2100);
+      const staleMarketContent = await page.evaluate(() => [
+        document.querySelector("#market-capital-flow-body")?.textContent || "",
+        document.querySelector("#market-sentiment-history-body")?.textContent || "",
+        document.querySelector("#dragon-tiger-body")?.textContent || "",
+        document.querySelector("#trading-calendar-grid")?.textContent || ""
+      ].join(" "));
+      assert.doesNotMatch(staleMarketContent, /2099-01-01|909090|过期龙虎榜数据|过期交易日历数据/,
+        "late responses from the old connection must never repopulate market observation views");
+      assert.deepEqual(
+        marketLifecycleRequests.map((value) => value.split("/api/v1/")[1]).sort(),
+        ["market/capital-flow", "market/dragon-tiger", "market/sentiment/history", "market/trading-calendar"].sort(),
+        "connection invalidation must not silently retry any cancelled market request"
+      );
+      const cancelledMarketPaths = abortedMarketRequests.map((value) => value.split("/api/v1/")[1]);
+      for (const suffix of ["market/capital-flow", "market/sentiment/history", "market/dragon-tiger", "market/trading-calendar"]) {
+        assert.ok(cancelledMarketPaths.includes(suffix), suffix + " should be aborted when market connection changes");
+      }
+
+      // Restore the original API base so later acceptance scenarios remain independent.
+      marketLifecycleScenario = "default";
+      await page.locator("#market-base-input").fill("/market-api");
+      await page.waitForFunction(() => !document.querySelector("#save-settings")?.disabled, null, { timeout: 3000 });
+      await page.locator("#save-settings").click();
+      await page.waitForFunction(() => (document.querySelector("#settings-feedback")?.textContent || "").includes("连接配置已保存"), null, { timeout: 5000 });
     }
 
 
