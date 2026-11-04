@@ -383,3 +383,27 @@ JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 
 `app.js` 仍持有 DOM、state、storage、分组读取、行情 getter 组装、请求成员失效同步、tracking ViewModel、单项 DOM 构建和研究列表刷新。列表投影模块不访问 DOM、state、localStorage、API，不绑定事件。筛选计数保持原语义：仅关键字存在时显示匹配数；仅分组筛选时仍显示全部自选数量。无匹配空态也保留原文案。
 
 新增单测覆盖关键字、分组默认归属/交易所后缀、分组筛选计数、行情排序缺失值置底和空态。验收：WebUI Checks #41823493089 通过；Chromium Browser Smoke #41823492859 通过。测试中发现的 app 接入遗漏和测试夹具键值问题已修正；临时诊断代码已在验收后清理。
+
+
+### 12.12 JSR-4 设置中心模块边界审查
+
+设置中心当前由多个已分离模块和 app 协调逻辑共同组成：
+
+| 能力 | 当前归属 | 边界结论 |
+|---|---|---|
+| 偏好 schema/defaults/normalize/read/save/reset | `preferences.js` | 已有领域模块，继续作为唯一偏好存储入口 |
+| 连接配置读写 | `api.js` | 保持存储所有权 |
+| 连接草稿比较/合并 | `settings-draft.js` | 已是纯函数模块 |
+| 通知偏好及 storage 冲突 | `notification-preferences.js` | 保持独立 |
+| 告警草稿及 storage 冲突 | `local-alert-drafts.js` | 保持独立 |
+| 设置分组搜索/折叠/展开 | app.js 的 `setupSettingsNavigation` | 闭合 DOM 行为，可独立迁移 |
+| 偏好控件同步/采集 | app.js 的 `syncWatchlistPreferenceControls`、`persistLocalPreferences` | 暂留；与页面控件、渲染和持久化反馈耦合 |
+| 连接配置应用 | app.js 的 `applySettings` | 必须留在协调层，负责行情/分析请求失效与跨模块刷新 |
+| localStorage 事件路由 | app.js 的 `handleLocalStorageChange` | 暂留总路由；各业务模块继续接收对应事件 |
+| 浏览器工作区导入/导出 | app.js | 暂留，涉及多存储校验、回滚/合并和 API Key 排除规则 |
+
+JSR-4A 首批只迁移 `setupSettingsNavigation` 至 `settings-navigation.js`，由 app.js 调用模块入口。模块可拥有设置导航内部的 DOM 事件委托，但不能读取全局 app state、localStorage、API 或绑定业务表单事件。测试需覆盖搜索命中/清空、分组折叠、全部展开/收起、重复初始化防护和缺少导航节点的安全退出。
+
+JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js，但只依赖 `DEFAULT_PREFERENCES` 和 `WATCHLIST_DISPLAY_FIELDS`，属于纯校验/规范化。优先并入 `preferences.js` 并增加单测；浏览器导入预览、确认、跨存储写入和 API Key 保留继续由 app 负责。
+
+禁止将 `applySettings`、`handleLocalStorageChange` 或浏览器数据导入/导出整体迁入设置 Controller。连接变更涉及 AbortController/generation/任务上下文和市场模块失效；storage event 是多个独立业务模块的总路由；导入/导出涉及多种本地数据的保护边界。只拆纯职责，不改变状态所有权。

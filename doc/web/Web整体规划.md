@@ -893,7 +893,7 @@ JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验�
 - [x] WebUI Checks #41821760275 通过。
 - [x] Chromium Browser Smoke #41821760065 通过；自选行情快照、Run Flow、数据中心、选股和分页生命周期回归均通过。
 - [x] 首轮浏览器回归发现并修正 `visibleTrackingFields` 旧变量引用，修正后完整 smoke 通过。
-- [ ] JSR-3E 页面协调边界评估不与本批混合，后续独立排期。
+- [x] JSR-3E 页面协调边界评估及列表投影拆分已独立完成；最终提交 `5438e37` 的 WebUI Checks #41823853071、Chromium Browser Smoke #41823852998 均通过。
 
 
 ### JSR-3E：自选股页面协调边界复审与列表投影拆分（已验收）
@@ -912,3 +912,25 @@ JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验�
 
 
 JSR-3E 实施进展（提交 `7e7d9d40`，CI 待验收）：已新增 `watchlist-list-view-model.js`，把关键字过滤、分组归属过滤、过滤计数文案、空态文案和排序列表投影从 `renderWatchlist` 抽离为纯函数。排序继续复用 `watchlist-sort.js`，不复制排序算法；app.js 负责提供行情 getter、DOM 控件值和分组状态，并继续负责请求成员失效、DOM 挂载、tracking 字段和研究列表刷新。新增单测覆盖关键字匹配、带后缀分组归属、未分组默认值、分组筛选计数语义、行情缺失排序及空态文案。验收：WebUI Checks #41823493089 通过；Chromium Browser Smoke #41823492859 通过。首轮测试暴露分组测试夹具键值不符合 `comparableMarketSymbol` 规则，以及 app 调用点未实际替换旧投影代码；两处均已修正并通过完整复测。
+
+
+## JSR-4 设置中心模块边界审查（当前阶段：盘点完成）
+
+本轮只完成边界审查与分批设计，不直接迁移设置逻辑。设置中心不是单一设置表单：连接配置、浏览器偏好、主题、通知偏好、告警草稿、浏览器数据备份和设置分组导航有不同的数据所有权与同步语义。
+
+初步结论：
+- 现有 `preferences.js` 已承担偏好 schema、默认值、规范化、存储读写、异常状态和显式 reset；不再重复创建第二套偏好仓储。
+- 现有 `settings-draft.js` 已承担连接草稿比较和合并；不迁移连接密钥或 API 地址的存储所有权。
+- `api.js` 负责连接配置 localStorage 读写；`app.js` 的 `applySettings` 负责连接变化后的请求失效、任务上下文清理、数据中心失效及页面刷新，必须留在 app 协调层。
+- 通知偏好、告警草稿已有独立模块和跨标签页冲突处理，不重复抽象。
+- 设置导航增强函数 `setupSettingsNavigation` 是闭合的 DOM 行为模块，不读取 app state/storage/API，最适合作为首个低风险拆分点。
+- 偏好控件同步/采集、偏好保存后的页面重绘、storage 事件路由和浏览器数据导入/导出仍与跨页面刷新/事务关联，不能整体迁入 ViewModel 或新 Controller。
+- `normalizeImportedPreferences` 是独立纯校验/规范化逻辑，可评估归入现有 `preferences.js` 并补齐测试，避免 app.js 保留第二份导入 schema 规则。
+
+分批顺序：
+1. JSR-4A：将 `setupSettingsNavigation` 拆到 `settings-navigation.js`，保留 app.js 初始化入口；增加独立行为测试与 UI contract。
+2. JSR-4B：把导入偏好校验/规范化迁入现有 `preferences.js`（或紧邻纯模块），建立未知字段、字段范围、默认值和版本兼容测试；不改变导入事务。
+3. JSR-4C：评估偏好控件 DOM adapter 的边界，只有当能隔离控件同步/采集而不接管保存、渲染和跨页刷新时才实施。
+4. 连接配置 `applySettings`、storage event 总路由、浏览器数据导入/导出暂不拆；它们承担请求失效、任务状态与跨页面一致性，不为降低 app.js 行数而拆分。
+
+验收约束：保留 API Key 不回显/留空不覆盖、草稿跨标签页变更保护、连接变更失效请求、坏偏好原始数据保护、偏好 reset 不影响主题/连接/自选/任务、浏览器数据导入保留 API Key，以及 storage event 只处理当前 localStorage 的既有行为。JSR-4A 不改 CSS、API、Go、数据库和存储 schema。

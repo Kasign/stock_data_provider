@@ -1479,7 +1479,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 明确行情 generation、AbortController、请求标的集合、快照成员集合和迟到响应保护必须留在 app 协调层。
 - [x] 明确不迁移整段 `renderWatchlist`，不新增页面 Controller。
 - [x] 确定唯一值得继续评估的纯函数边界：关键字/分组过滤与排序列表投影；排序算法复用 `watchlist-sort.js`。
-- [ ] 下一批建立列表投影特征测试并实施最小纯函数迁移；若收益不足则保留现状。
+- [x] 列表投影特征测试及最小纯函数迁移完成；最终提交 `5438e37` 的 WebUI Checks #41823853071、Chromium Browser Smoke #41823852998 均通过。
 
 
 ### JSR-3E 列表投影 ViewModel（已验收）
@@ -1491,3 +1491,14 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI 契约检查新模块纯函数边界。
 - [x] WebUI Checks #41823493089 通过。
 - [x] Chromium Browser Smoke #41823492859 通过；自选行情快照、Run Flow、研究、数据中心、选股和行情分页生命周期专项均通过。
+
+
+### JSR-4 设置中心模块边界审查（盘点完成）
+
+- [x] 核对现有 preferences、settings-draft、api settings storage、notification preferences 和告警草稿模块。
+- [x] 明确连接配置应用、storage 总路由、工作区导入/导出继续由 app.js 协调。
+- [x] 确认首个低风险拆分点为闭合的设置导航增强函数 `setupSettingsNavigation`。
+- [x] 确认导入偏好规范化属于纯逻辑，后续优先并入现有 preferences 模块，不新建第二套仓储。
+- [ ] JSR-4A：设置导航 DOM 模块拆分及测试。
+- [ ] JSR-4B：导入偏好纯校验迁移及测试。
+- [ ] JSR-4C：偏好控件 adapter 边界评估；收益不足则保持现状。
