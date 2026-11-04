@@ -42,6 +42,8 @@ const baseUrl = "http://127.0.0.1:" + address.port;
 let browser;
 let releaseOldRequest;
 let oldRequestStarted;
+let releasePeriodRequest;
+let markPeriodRequestStarted;
 try {
   browser = await chromium.launch({ headless: true });
 
@@ -55,6 +57,7 @@ try {
     ]));
   });
   const page = await context.newPage();
+  const periodRequestStarted = new Promise(resolve => { markPeriodRequestStarted = resolve; });
   const pageErrors = [];
   page.on("pageerror", error => pageErrors.push(error.stack || error.message));
   oldRequestStarted = new Promise(resolve => {
@@ -97,6 +100,22 @@ try {
             fetched_at: "2026-11-03T03:00:00Z", ma_adjustment_basis: "forward_adjusted"
           })
         });
+        return;
+      }
+      if (url.pathname.includes("/api/v1/stocks/000001.SZ/fundamentals")) {
+        markPeriodRequestStarted?.();
+        await new Promise(done => { releasePeriodRequest = done; });
+        try {
+          await route.fulfill({
+            status: 200, contentType: "application/json",
+            body: JSON.stringify({
+              symbol: "000001.SZ", year: 2026, quarter: 3, quality_status: "valid",
+              source: "browser-fixture", sections: []
+            })
+          });
+        } catch {
+          // 财务报告期切换后旧请求应已被取消。
+        }
         return;
       }
       if (url.pathname.includes("/api/v1/stocks/600519.SH/fundamentals")) {
@@ -228,6 +247,19 @@ try {
   assert.equal(await page.locator("#fundamentals-symbol").textContent(), "000001.SZ");
   assert.doesNotMatch(await page.locator("#fundamentals-content").textContent(), /延迟旧标的指标|999/);
   assert.equal(await page.locator("#load-fundamentals").isEnabled(), true);
+
+  // 财务报告期切换会取消当前请求，但必须立即恢复读取按钮，允许按新报告期重试。
+  await page.locator("#load-fundamentals").click();
+  await periodRequestStarted;
+  await page.locator("#fundamentals-quarter").selectOption("2");
+  await page.waitForFunction(() => {
+    const button = document.querySelector("#load-fundamentals");
+    return button && !button.disabled && button.textContent.includes("读取财务指标");
+  });
+  releasePeriodRequest();
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator("#load-fundamentals").isEnabled(), true);
+  assert.doesNotMatch(await page.locator("#fundamentals-content").textContent(), /2026 Q3/);
 
   // 其它补充模块的 503 状态应清楚展示，且不锁死主资料按钮。
   await page.locator("#load-stock-research").click();

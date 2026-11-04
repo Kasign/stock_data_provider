@@ -251,6 +251,7 @@ export function bindStockResearch(getSettings,getSymbol){
   abort("fundamentals");
   clearPanel("fundamentals","财务报告期已变更，请重新加载财务指标。",state.symbol);
   setQuality("fundamentals-quality","unknown","待重新加载");
+  safeResearchButton($("#load-fundamentals"),false,"读取财务指标");
   setText("stock-research-feedback","财务报告期已变更，旧结果已清除；请重新加载。");
  }
  async function loadFundamentals(){
