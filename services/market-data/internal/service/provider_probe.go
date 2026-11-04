@@ -443,6 +443,15 @@ func (s *DataService) ProbeProviderCapabilitiesWithOptions(ctx context.Context, 
 				if len(warnings) > 0 {
 					quality = model.QualityDegraded
 				}
+				if len(validated) > 0 {
+					contextResult := s.assessDailyBarTradingContext(probeCtx, barsSymbol, validated, validated[0].TradeDate, probeDate)
+					if contextResult.QualityStatus != model.QualityValid {
+						quality = model.QualityDegraded
+					}
+					for _, reason := range contextResult.Reasons {
+						reasons = appendReason(reasons, reason)
+					}
+				}
 				if version == "" {
 					return model.QualityInvalid, "", reasons, errors.New("daily-bars source version missing")
 				}
