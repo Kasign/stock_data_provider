@@ -180,10 +180,11 @@ func TestTickFlowDailyBarsRejectsMismatchedOptionalArrays(t *testing.T) {
 	}
 }
 
-
 func TestTickFlowFetchDailyBarsReportsNormalizationRejections(t *testing.T) {
 	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	date := time.Now().In(location).AddDate(0, 0, -1)
 	dateISO := date.Format("2006-01-02")
 	timestamp := time.Date(date.Year(), date.Month(), date.Day(), 12, 0, 0, 0, location).UnixMilli()
@@ -210,7 +211,12 @@ func TestTickFlowFetchDailyBarsReportsNormalizationRejections(t *testing.T) {
 	}
 	found := false
 	for _, issue := range report.Issues {
-		if issue.Field == "amount,volume" && issue.Code == "unit_mismatch" { found = true; break }
+		if issue.Field == "amount,volume" && issue.Code == "unit_mismatch" {
+			found = true
+			break
+		}
 	}
-	if !found { t.Fatalf("expected amount/volume unit mismatch diagnostic, got %+v", report.Issues) }
+	if !found {
+		t.Fatalf("expected amount/volume unit mismatch diagnostic, got %+v", report.Issues)
+	}
 }

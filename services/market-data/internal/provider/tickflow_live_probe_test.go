@@ -119,7 +119,9 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		var dailyValidation *validation.Report
 		run("daily_bars_none", func() (int, string, []string, error) {
 			location, err := time.LoadLocation("Asia/Shanghai")
-			if err != nil { location = time.FixedZone("CST", 8*60*60) }
+			if err != nil {
+				location = time.FixedZone("CST", 8*60*60)
+			}
 			end := time.Now().In(location).AddDate(0, 0, -1)
 			start := end.AddDate(0, 0, -30)
 			reporter := validation.NewReporter(validation.DefaultMaxIssues)
@@ -127,8 +129,12 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 			bars, err := client.FetchDailyBars(dailyCtx, "600519.SH", start.Format("2006-01-02"), end.Format("2006-01-02"), 8, model.AdjustmentNone)
 			report := reporter.Snapshot()
 			dailyValidation = &report
-			if err != nil { return 0, "", nil, err }
-			if len(bars) == 0 || len(bars) > 8 { return len(bars), "", nil, errLiveProbeContract("daily K-line row count is empty or exceeds requested limit") }
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if len(bars) == 0 || len(bars) > 8 {
+				return len(bars), "", nil, errLiveProbeContract("daily K-line row count is empty or exceeds requested limit")
+			}
 			quality := model.QualityValid
 			notes := make([]string, 0)
 			previousDate := ""
@@ -141,7 +147,9 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 				case model.QualityValid:
 				case model.QualityDegraded:
 					quality = model.QualityDegraded
-					for _, reason := range bar.QualityReasons { notes = appendTickflowUniqueReason(notes, reason) }
+					for _, reason := range bar.QualityReasons {
+						notes = appendTickflowUniqueReason(notes, reason)
+					}
 				default:
 					return len(bars), "", nil, errLiveProbeContract("daily K-line quality is invalid or unknown")
 				}
@@ -153,7 +161,9 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 			httpResponses := capture.snapshot()
 			if len(httpResponses) > 0 {
 				results[len(results)-1].DailyRaw = summarizeTickFlowDailyRawResponse(httpResponses[0].BodySample, httpResponses[0].BodyTruncated)
-				for index := range httpResponses { httpResponses[index].BodySample = "" }
+				for index := range httpResponses {
+					httpResponses[index].BodySample = ""
+				}
 			}
 			results[len(results)-1].HTTP = httpResponses
 		}
