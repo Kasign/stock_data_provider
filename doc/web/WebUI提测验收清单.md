@@ -1074,3 +1074,18 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] Chromium Browser Smoke：待本批代码提交后验收。
 
 验收边界：仅验证同源 localStorage 跨标签页通知与尽力冲突保护。localStorage 不具备原子 CAS/事务，最后比较与写入之间仍存在竞态窗口；不代表跨设备同步或服务端一致性。
+
+
+## 2026-11-04 P1 本地选股字段口径保护（开发中）
+
+- [x] 成交额条件只对 `amount_unit=CNY` 的数值进行比较。
+- [x] 成交额单位缺失或 `unknown` 时归入“待判断”，不按人民币元误判。
+- [x] MA5/MA20 条件核对逐条 `ma_adjustment_basis` 与当前分页请求复权口径。
+- [x] 均线复权口径缺失或不一致时归入“待判断”。
+- [x] 筛选结果成交额显示遵循单位字段；未知单位不添加“元”。
+- [x] 单元测试覆盖成交额单位与均线复权口径边界。
+- [x] Chromium 浏览器 fixture 使用 CNY 与实际请求复权口径字段。
+- [ ] WebUI Checks：待本批提交后验收。
+- [ ] Chromium Browser Smoke：待本批提交后验收。
+
+验收边界：仅验证 WebUI 消费数据侧明确返回的字段，不代表 Provider 源数据单位或均线计算结果准确性。

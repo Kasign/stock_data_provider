@@ -160,3 +160,29 @@ test("does not revive a remotely deleted screening plan and permits save-as", ()
   assert.equal(savedAs.saved, true);
   assert.notEqual(savedAs.plan.id, created.plan.id);
 });
+
+test("treats amount with missing or non-CNY unit as unknown", () => {
+  const conditions = [{ field: "amount", operator: "gte", value: 10000000 }];
+  const rows = [
+    { symbol: "A", quote: { amount: 20000000, amount_unit: "CNY" } },
+    { symbol: "B", quote: { amount: 20000000, amount_unit: "unknown" } },
+    { symbol: "C", quote: { amount: 20000000 } },
+    { symbol: "D", quote: { amount: null, amount_unit: "unknown" } }
+  ];
+  const result = evaluateScreeningConditions(rows, conditions);
+  assert.deepEqual(result.matchedItems.map(item => item.symbol), ["A"]);
+  assert.deepEqual(result.unknownItems.map(item => item.symbol), ["B", "C", "D"]);
+});
+
+test("treats MA values with missing or mismatched adjustment basis as unknown", () => {
+  const conditions = [{ field: "ma5", operator: "gte", value: 10 }];
+  const rows = [
+    { symbol: "A", ma5: 12, ma_adjustment_basis: "forward_adjusted" },
+    { symbol: "B", ma5: 12, ma_adjustment_basis: "backward_adjusted" },
+    { symbol: "C", ma5: 12 },
+    { symbol: "D", ma5: null, ma_adjustment_basis: "forward_adjusted" }
+  ];
+  const result = evaluateScreeningConditions(rows, conditions, "and", { expectedAdjustment: "forward_adjusted" });
+  assert.deepEqual(result.matchedItems.map(item => item.symbol), ["A"]);
+  assert.deepEqual(result.unknownItems.map(item => item.symbol), ["B", "C", "D"]);
+});

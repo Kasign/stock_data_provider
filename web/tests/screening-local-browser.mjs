@@ -64,9 +64,9 @@ try {
       try {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
         items: [
-          { symbol: "600001.SH", name: "测试命中", quality_status: "valid", quote: { symbol: "600001.SH", change_percent: 3, turnover_rate: 2, amount: 20000000, quality_status: "valid" }, ma5: 12, ma20: 11 },
-          { symbol: "600002.SH", name: "测试未命中", quality_status: "valid", quote: { symbol: "600002.SH", change_percent: -1, turnover_rate: 5, amount: 5000000, quality_status: "valid" }, ma5: 8, ma20: 9 },
-          { symbol: "600003.SH", name: "测试待判断", quality_status: "degraded", quality_reasons: ["MA5 字段缺失"], quote: { symbol: "600003.SH", change_percent: null, turnover_rate: 3, amount: 30000000, quality_status: "degraded", quality_reasons: ["行情涨跌幅未报告"] }, ma5: null, ma20: 10 }
+          { symbol: "600001.SH", name: "测试命中", ma_adjustment_basis: "forward_adjusted", quality_status: "valid", quote: { symbol: "600001.SH", change_percent: 3, turnover_rate: 2, amount: 20000000, amount_unit: "CNY", quality_status: "valid" }, ma5: 12, ma20: 11 },
+          { symbol: "600002.SH", name: "测试未命中", ma_adjustment_basis: "forward_adjusted", quality_status: "valid", quote: { symbol: "600002.SH", change_percent: -1, turnover_rate: 5, amount: 5000000, amount_unit: "CNY", quality_status: "valid" }, ma5: 8, ma20: 9 },
+          { symbol: "600003.SH", name: "测试待判断", ma_adjustment_basis: "forward_adjusted", quality_status: "degraded", quality_reasons: ["MA5 字段缺失"], quote: { symbol: "600003.SH", change_percent: null, turnover_rate: 3, amount: 30000000, amount_unit: "CNY", quality_status: "degraded", quality_reasons: ["行情涨跌幅未报告"] }, ma5: null, ma20: 10 }
         ],
         page: 1, page_size: 50, total: 3, total_is_lower_bound: false, coverage_ratio: 1,
         quote_succeeded: 3, quote_failed: 0, quality_status: "degraded",

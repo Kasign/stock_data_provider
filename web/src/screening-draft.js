@@ -38,8 +38,11 @@ export function formatScreeningCondition(condition) {
   const digits = condition.field === "amount" ? 0 : 2;
   return field.label + " " + operator.symbol + " " + Number(condition.value).toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }) + (field.unit ? " " + field.unit : "");
 }
-function screeningFieldValue(item, field) {
+function screeningFieldValue(item, field, expectedAdjustment) {
   const quote = item?.quote && typeof item.quote === "object" ? item.quote : {};
+  if (field === "amount" && quote.amount_unit !== "CNY") return null;
+  if ((field === "ma5" || field === "ma20") && expectedAdjustment &&
+      item?.ma_adjustment_basis !== expectedAdjustment) return null;
   const raw = field === "change_pct" ? quote.change_percent : field === "turnover_rate" ? quote.turnover_rate
     : field === "amount" ? quote.amount : field === "ma5" ? item?.ma5 : field === "ma20" ? item?.ma20 : null;
   if (raw === null || raw === undefined || raw === "") return null;
@@ -48,7 +51,7 @@ function screeningFieldValue(item, field) {
 }
 
 // Tri-state evaluation keeps missing market fields unknown instead of coercing them to zero.
-export function evaluateScreeningConditions(items = [], conditions = [], logic = "and") {
+export function evaluateScreeningConditions(items = [], conditions = [], logic = "and", options = {}) {
   const normalized = normalizeScreeningConditions(conditions), rows = Array.isArray(items) ? items : [];
   const normalizedLogic = logic === "or" ? "or" : "and";
   if (!normalized.length) return { valid: false, reason: "empty-conditions", logic: normalizedLogic,
@@ -56,7 +59,7 @@ export function evaluateScreeningConditions(items = [], conditions = [], logic =
   const matchedItems = [], unmatchedItems = [], unknownItems = [];
   rows.forEach(item => {
     const outcomes = normalized.map(condition => {
-      const value = screeningFieldValue(item, condition.field);
+      const value = screeningFieldValue(item, condition.field, options.expectedAdjustment);
       if (value === null) return null;
       return condition.operator === "gte" ? value >= condition.value : value <= condition.value;
     });

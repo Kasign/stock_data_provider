@@ -1861,7 +1861,7 @@ function renderScreeningLocalResultRows() {
     const code = document.createElement("small"); code.textContent = symbol || "代码未报告"; select.append(code); stockCell.append(select); row.append(stockCell);
     [
       formatPercent(quote.change_percent), formatPercent(quote.turnover_rate),
-      finiteNumberOrNull(quote.amount) === null ? "—" : formatCompact(quote.amount) + " 元",
+      finiteNumberOrNull(quote.amount) === null || quote.amount_unit !== "CNY" ? "—" : formatCompact(quote.amount) + " 元",
       finiteNumberOrNull(item.ma5) === null ? "—" : formatPrice(item.ma5),
       finiteNumberOrNull(item.ma20) === null ? "—" : formatPrice(item.ma20)
     ].forEach(value => { const cell = document.createElement("td"); cell.textContent = value; row.append(cell); });
@@ -1890,7 +1890,7 @@ function renderScreeningLocalResults() {
     invalidateScreeningLocalResults("尚未加载全市场分页行情。请先在“个股行情”页加载一页真实数据，再返回应用条件。");
     return;
   }
-  const result = evaluateScreeningConditions(snapshot.items, screeningDraftConditions, screeningDraftLogic);
+  const result = evaluateScreeningConditions(snapshot.items, screeningDraftConditions, screeningDraftLogic, { expectedAdjustment: snapshot.adjustment });
   if (!result.valid) {
     invalidateScreeningLocalResults("请先添加至少一条有效条件；当前页 " + snapshot.items.length + " 条数据尚未筛选。");
     return;
