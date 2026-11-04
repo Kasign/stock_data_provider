@@ -1167,7 +1167,7 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 最终测试修正提交：`3d84e3a18ee615c1888aa26dca50fcac9921499e`；WebUI Checks 待回填。
 - [ ] 旧 Browser Smoke #41797557059、#41798082682、#41798354435、#41798494008 均不作为通过证据；等待最终修正版本 CI。
 
-说明：此前版本使用 `page.waitForEvent("requestfailed")` 作为唯一取消证据，导致测试步骤可能无限等待并使 15 分钟工作流被取消。修正版改为验证 UI 恢复与延迟旧响应不回填，并为路由处理结束增加 5 秒上限。此测试不声称 Playwright 路由结束时序等同于真实网络取消。后续复核发现跨标签页场景改变标的后，原有 `oldRequestStarted` 仍只由 `600519.SH/fundamentals` 路由分支触发；修正为先恢复原标的再继续旧用例，并给三个路由启动等待设置超时。
+说明：此前版本使用 `page.waitForEvent("requestfailed")` 作为唯一取消证据，导致测试步骤可能无限等待并使 15 分钟工作流被取消。修正版改为验证 UI 恢复与延迟旧响应不回填，并为路由处理结束增加 5 秒上限。此测试不声称 Playwright 路由结束时序等同于真实网络取消。后续复核修正了跨标签页场景后恢复原标的、延迟档案路由只延迟首次请求的问题；最终完整通过 #41799063112。
 
 ## 2026-11-04 全站 UI 样式一致性 Review（计划）
 
@@ -1221,3 +1221,17 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - 文案约束：`.button` 单行规则、多个 `text-overflow: ellipsis` 和 `overflow: hidden` 使用点。
 
 上述项目为 Review 热点，不代表已确认缺陷。需要结合实际截图、DOM 尺寸与不同视口行为逐项判定。
+
+
+### UI 样式 Review 截图基线与 CSS 静态审查（UIR-1 已完成）
+
+- [x] 11 个一级页面均纳入页面截图：市场总览、个股行情、自选与观察、个股研究、分析任务、选股、告警、问股、通知中心、数据中心、设置中心。
+- [x] 生成 44 张截图：320、768、1280、1600px × 11 页面；截图 Artifact：[Browser Smoke #41799607178](https://github.com/Kasign/stock_data_provider/actions/runs/41799607178/artifacts/13307246730)。
+- [x] 同一运行的全站横向溢出检查覆盖 320、375、600、768、900、1280、1600px；WebUI Checks #41799607060、Browser Smoke #41799607178 均通过。
+- [x] 静态记录 CSS 结构：约 5,118 行、103 个媒体查询、17 个断点宽度值。
+- [x] 记录全局字号/控件尺寸冲突：body 13/15/14px 多次覆盖；按钮 min-height 37/40px、字号 11/12/13px 多套规则并存；部分旧规则使用 `!important`。
+- [x] 记录共享布局覆盖热点：`.main-area`、`.view`、`.page-heading`、`.panel-heading`、`.sidebar` 多处重复定义；全局 table nowrap 依赖 `.table-scroll`；多个字段存在 nowrap/ellipsis/overflow hidden。
+
+限制：GitHub Linux Runner 未安装 CJK 字体，截图中的中文字符显示为方框；该 Artifact 可用于观察容器和间距，但不作为中文字宽/换行/截断的最终验收。中文排版需在 macOS 或具备 CJK 字体的环境复核。当前没有修改 `web/styles.css`，避免在没有有效中文视觉证据前盲目调整。
+
+下一阶段 UIR-2：先制定统一 typography、spacing、容器宽度和断点规则，再分批调整共享组件；不得通过新增全局 `!important` 覆盖来掩盖问题。

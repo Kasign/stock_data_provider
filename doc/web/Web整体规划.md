@@ -657,4 +657,14 @@ CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后�
 - 先统一 spacing/token 和容器规则，再调整具体页面；每批只覆盖有限模块并保留截图证据。
 - 只修改当前 WebUI 分支的 `web/**` 与 `doc/web/**`；不改数据侧接口、Go、Provider 或部署配置。
 
-当前状态：**UIR-1 进行中**。已盘点 11 个一级页面：市场总览、个股行情、自选与观察、个股深度研究、分析任务、选股与筛选、告警、问股、通知中心、数据中心、设置中心。共享样式高风险观察点包括：主内容区/侧栏（`.main-area`、`.sidebar`）、页面标题（`.page-heading`、`.page-subtitle`）、面板标题（`.panel-heading`）、指标卡（`.metric-grid`/`.metric-card`）、表格（全局 `table { white-space: nowrap }` 与 `.table-scroll`）、按钮单行规则及多个 `text-overflow: ellipsis`。这些是截图 Review 的优先检查对象，不代表已经确认每处都存在视觉缺陷。下一步需要建立页面 × 视口截图基线并逐项登记问题。
+当前状态：**UIR-1 页面盘点与截图基线已完成，UIR-2 统一布局基础待开始**。已盘点 11 个一级页面，并由 `web/tests/browser-smoke.mjs` 生成 44 张页面截图（320、768、1280、1600px × 11 页面）；Browser Smoke #41799607178、WebUI Checks #41799607060 均通过。现有全站横向溢出检查仍覆盖 320、375、600、768、900、1280、1600px。
+
+静态 CSS 审查发现以下确定的级联维护问题（尚不等同于每个页面都有视觉缺陷）：
+- `web/styles.css` 约 5,118 行、103 个媒体查询，断点分散在 17 个宽度值。
+- 全局 `body` 字号先后出现 13px、15px、14px 三套定义；按钮高度/字号也有 37px/40px、11px/12px/13px 多套覆盖，部分早期规则使用 `!important`，后续又追加常规覆盖。
+- `.main-area`、`.view`、`.page-heading`、`.panel-heading`、`.sidebar` 等共享布局选择器在多个区域重复定义，断点覆盖次序不直观。
+- 全局 `table` 使用 `white-space: nowrap`，必须逐页核对 `.table-scroll` 包裹；`.last-updated`、`.button`、质量徽标等存在单行约束，多个字段使用 ellipsis/overflow hidden，需要区分合理省略和误裁切。
+
+截图限制：GitHub Linux Runner 未安装可用的中文字体，当前截图中的中文显示为方框；截图可用于核对容器/间距/滚动结构，但不能作为中文文字换行、字宽和截断的最终证据。当前分支范围不包含 `.github/workflows/**`，因此不擅自修改 Runner 字体安装步骤；中文排版最终验收需要实际 macOS/带 CJK 字体环境截图，或另行批准调整 CI 环境。
+
+下一步：先建立统一 typography/spacing/container 规则建议，再按高频共用组件和页面分批修复；每批使用相同视口截图对比，禁止直接全文件重写 CSS。
