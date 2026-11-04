@@ -14,7 +14,7 @@ import (
 
 const tickflowVolumeFixture = 1234567.0
 
-func TestTickFlowFetchQuoteKeepsVolumeInShares(t *testing.T) {
+func TestTickFlowFetchQuoteNormalizesVolumeFromHands(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/quotes" || r.URL.Query().Get("symbols") != "600519.SH" {
 			t.Errorf("unexpected quote request: %s %s", r.Method, r.URL.String())
@@ -26,7 +26,7 @@ func TestTickFlowFetchQuoteKeepsVolumeInShares(t *testing.T) {
 			"symbol": "600519.SH", "name": "贵州茅台",
 			"last_price": 101.0, "prev_close": 100.0,
 			"open": 100.0, "high": 102.0, "low": 99.0,
-			"volume": tickflowVolumeFixture, "amount": 123456789.0,
+			"volume": tickflowVolumeFixture, "amount": 12345678900.0,
 			"timestamp": time.Now().UTC().Add(-time.Minute).UnixMilli(),
 			"ext":       map[string]any{"change_amount": 1.0, "change_pct": 0.01},
 		}
@@ -39,11 +39,11 @@ func TestTickFlowFetchQuoteKeepsVolumeInShares(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Volume == nil || *got.Volume != int64(tickflowVolumeFixture) {
-		t.Fatalf("TickFlow quote volume should stay in shares: %+v", got.Volume)
+	if got.Volume == nil || *got.Volume != int64(tickflowVolumeFixture*100) {
+		t.Fatalf("TickFlow quote volume should convert hands to shares: %+v", got.Volume)
 	}
 	if got.RawVolume == nil || *got.RawVolume != tickflowVolumeFixture ||
-		got.RawVolumeUnit != "shares" || got.VolumeUnit != "shares" {
+		got.RawVolumeUnit != "hands" || got.VolumeUnit != "shares" {
 		t.Fatalf("TickFlow quote volume metadata is inconsistent: raw=%v raw_unit=%q unit=%q", got.RawVolume, got.RawVolumeUnit, got.VolumeUnit)
 	}
 	if got.QualityStatus != model.QualityValid {
