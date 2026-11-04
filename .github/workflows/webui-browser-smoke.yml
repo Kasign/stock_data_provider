@@ -77,6 +77,10 @@ jobs:
         working-directory: web
         run: node tests/screening-local-browser.mjs
 
+      - name: Run market stocks pagination lifecycle acceptance
+        working-directory: web
+        run: node tests/market-stocks-lifecycle-browser.mjs
+
       - name: Upload browser screenshots
         if: always()
         uses: actions/upload-artifact@v4
