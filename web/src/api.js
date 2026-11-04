@@ -225,7 +225,7 @@ export function getDataSourceProbeHistory(settings, { limit = 20, signal } = {})
     apiKey: settings.apiKey, signal
   });
 }
-export function getMarketValuations(settings, symbols, signal) {
+export function getMarketValuations(settings, symbols, signal, { timeoutMs = 30000 } = {}) {
   const normalizedSymbols = Array.isArray(symbols) ? symbols.map((item) => String(item ?? "").trim()).filter(Boolean) : [];
   if (!normalizedSymbols.length || normalizedSymbols.length > 100) {
     return Promise.reject(new Error("估值查询需要 1–100 个规范 A 股代码。"));
@@ -233,7 +233,8 @@ export function getMarketValuations(settings, symbols, signal) {
   const query = new URLSearchParams({ symbols: normalizedSymbols.join(",") });
   return request(settings.marketBase, `/api/v1/market/valuations?${query}`, {
     apiKey: settings.apiKey,
-    signal
+    signal,
+    timeoutMs
   });
 }
 export function getMarketHotStocks(settings, { type = "popular", limit = 10, signal } = {}) {
@@ -374,10 +375,10 @@ export function getMarketLimitPool(settings, { type = "up", limit = 30, date = "
 export function getMarketDragonTiger(settings,{date="",page=1,pageSize=50,signal}={}){const query=new URLSearchParams({page:String(page),page_size:String(pageSize)});if(date)query.set("date",date);return request(settings.marketBase,"/api/v1/market/dragon-tiger?"+query.toString(),{apiKey:settings.apiKey,signal});}
 export function getTradingCalendar(settings,{start,end,signal}={}){if(!isValidISODate(start)||!isValidISODate(end))return Promise.reject(new Error("交易日历需要有效的开始和结束日期。"));if(start>end)return Promise.reject(new Error("交易日历开始日期不能晚于结束日期。"));const query=new URLSearchParams({start:String(start),end:String(end)});return request(settings.marketBase,"/api/v1/market/trading-calendar?"+query.toString(),{apiKey:settings.apiKey,signal});}
 
-export function getStockProfile(settings, symbol, signal) { return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/profile", { apiKey: settings.apiKey, signal }); }
-export function getStockBoards(settings, symbol, signal) { return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/boards", { apiKey: settings.apiKey, signal }); }
-export function getStockFundamentals(settings, symbol, { year, quarter, signal } = {}) { const query=new URLSearchParams({year:String(year),quarter:String(quarter)});return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/fundamentals?" + query.toString(), { apiKey: settings.apiKey, signal }); }
-export function getStockAnnouncements(settings, symbol, { startDate="", endDate="", page=1, pageSize=20, signal } = {}) { const query=new URLSearchParams({page:String(page),page_size:String(pageSize)});if(startDate)query.set("start_date",startDate);if(endDate)query.set("end_date",endDate);return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/announcements?" + query.toString(), { apiKey: settings.apiKey, signal }); }
+export function getStockProfile(settings, symbol, signal, { timeoutMs = 30000 } = {}) { return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/profile", { apiKey: settings.apiKey, signal, timeoutMs }); }
+export function getStockBoards(settings, symbol, signal, { timeoutMs = 30000 } = {}) { return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/boards", { apiKey: settings.apiKey, signal, timeoutMs }); }
+export function getStockFundamentals(settings, symbol, { year, quarter, signal, timeoutMs = 30000 } = {}) { const query=new URLSearchParams({year:String(year),quarter:String(quarter)});return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/fundamentals?" + query.toString(), { apiKey: settings.apiKey, signal, timeoutMs }); }
+export function getStockAnnouncements(settings, symbol, { startDate="", endDate="", page=1, pageSize=20, signal, timeoutMs = 30000 } = {}) { const query=new URLSearchParams({page:String(page),page_size:String(pageSize)});if(startDate)query.set("start_date",startDate);if(endDate)query.set("end_date",endDate);return request(settings.marketBase, "/api/v1/stocks/" + encodeURIComponent(symbol) + "/announcements?" + query.toString(), { apiKey: settings.apiKey, signal, timeoutMs }); }
 
 export function searchStocks(settings, query, { limit = 10, signal, timeoutMs = 15000 } = {}) {
   const params = new URLSearchParams({ q: String(query ?? "").trim(), limit: String(limit) });
@@ -430,16 +431,18 @@ export function getAnalysisTaskEvents(settings, taskId, afterSequence = 0, { sig
   return request(settings.analysisBase, `/api/v1/analysis/tasks/${encodeURIComponent(taskId)}/events?${query}`, { signal, timeoutMs });
 }
 
-export function getChipDistribution(settings, symbol, signal) {
+export function getChipDistribution(settings, symbol, signal, { timeoutMs = 30000 } = {}) {
   return request(settings.marketBase, `/api/v1/stocks/${encodeURIComponent(symbol)}/chip-distribution`, {
     apiKey: settings.apiKey,
-    signal
+    signal,
+    timeoutMs
   });
 }
 
-export function getCapitalFlow(settings, symbol, signal) {
+export function getCapitalFlow(settings, symbol, signal, { timeoutMs = 30000 } = {}) {
   return request(settings.marketBase, `/api/v1/stocks/${encodeURIComponent(symbol)}/capital-flow`, {
     apiKey: settings.apiKey,
-    signal
+    signal,
+    timeoutMs
   });
 }

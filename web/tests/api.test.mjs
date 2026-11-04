@@ -23,6 +23,13 @@ import {
   getMarketQuotes,
   getMarketStocks,
   getMarketBundle,
+  getMarketValuations,
+  getStockProfile,
+  getStockBoards,
+  getStockFundamentals,
+  getStockAnnouncements,
+  getChipDistribution,
+  getCapitalFlow,
   getMarketSectors,
   getMarketCapitalFlow,
   getQuote,
@@ -717,6 +724,34 @@ test("sets timeouts for single-stock bundle, legacy quote, daily bars and stock 
     await assert.rejects(searchStocks(settings, "贵州茅台", { timeoutMs: 5 }), assertTimeout);
     assert.equal(signals.length, 4);
     assert.ok(signals.every((signal) => signal.aborted), "timed-out requests must abort their underlying fetches");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("sets timeouts for all individual stock research data endpoints", async () => {
+  const originalFetch = globalThis.fetch;
+  const signals = [];
+  globalThis.fetch = async (_url, init) => new Promise((_resolve, reject) => {
+    signals.push(init.signal);
+    init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+  });
+  const assertTimeout = (error) => {
+    assert.equal(error.code, "request_timeout");
+    assert.equal(error.timeout, true);
+    return true;
+  };
+  const settings = { marketBase: "/market-api", apiKey: "market-secret" };
+  try {
+    await assert.rejects(getMarketValuations(settings, ["600519.SH"], undefined, { timeoutMs: 5 }), assertTimeout);
+    await assert.rejects(getStockProfile(settings, "600519.SH", undefined, { timeoutMs: 5 }), assertTimeout);
+    await assert.rejects(getStockBoards(settings, "600519.SH", undefined, { timeoutMs: 5 }), assertTimeout);
+    await assert.rejects(getStockFundamentals(settings, "600519.SH", { year: 2025, quarter: 3, timeoutMs: 5 }), assertTimeout);
+    await assert.rejects(getStockAnnouncements(settings, "600519.SH", { page: 1, pageSize: 20, timeoutMs: 5 }), assertTimeout);
+    await assert.rejects(getChipDistribution(settings, "600519.SH", undefined, { timeoutMs: 5 }), assertTimeout);
+    await assert.rejects(getCapitalFlow(settings, "600519.SH", undefined, { timeoutMs: 5 }), assertTimeout);
+    assert.equal(signals.length, 7);
+    assert.ok(signals.every((signal) => signal.aborted), "timed-out research fetches must abort their underlying requests");
   } finally {
     globalThis.fetch = originalFetch;
   }
