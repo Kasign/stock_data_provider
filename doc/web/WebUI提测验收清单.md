@@ -776,7 +776,7 @@
 - [x] 自选股成员变化通过 `WATCHLIST_KEY` 的跨标签页 storage 事件同步到当前页面。
 - [x] 批量行情请求期间记录请求成员集合；外部标签页增删成员后立即中止请求、使 generation 失效、清理旧快照并恢复按钮。
 - [x] Chromium 双标签页专项覆盖在途请求取消、成员列表刷新、旧行情不回填及按钮状态恢复。
-- [ ] 全市场分页连续刷新、页码/页大小/复权切换、页面离开/返回生命周期仍待专项验收。
+- [x] 全市场分页、页大小/复权切换、页面离开/返回及双标签页连接切换专项验收通过（Browser Smoke #41764061807）。
 
 
 
@@ -785,7 +785,7 @@
 - [x] 新增 `web/tests/market-stocks-lifecycle-browser.mjs`，覆盖第一页/下一页、页大小变化回到第一页、复权变化回到第一页。
 - [x] 覆盖请求期间刷新/页大小/复权控件禁用，以及离开全市场页面后请求完成、返回页面仍显示最新快照。
 - [x] 覆盖刷新只发起一次请求，避免重复点击造成重复请求。
-- [ ] 等待 Chromium Browser Smoke 执行结果；通过后回填运行记录。
+- [x] Chromium Browser Smoke 通过（[运行记录 #41764061807](https://github.com/Kasign/stock_data_provider/actions/runs/41764061807)）；WebUI Checks 通过（[运行记录 #41764061839](https://github.com/Kasign/stock_data_provider/actions/runs/41764061839)）。
 
 
 ## 2026-11-04 P0-C 自选股部分成功与空响应验收
@@ -793,11 +793,23 @@
 - [x] 对批量行情返回项按请求成员过滤，忽略请求范围外标的。
 - [x] 对服务端未返回的成员补充 `missing_response_item`，对显式无行情成员保留其服务端错误码。
 - [x] 浏览器专项覆盖部分成功 1/2、空 items 0/2，并断言每个成员都显示明确行情失败状态。
-- [ ] 等待本次提交 SHA 对应 CI 结果。
+- [x] WebUI Checks 与 Chromium Browser Smoke 均通过（[Checks #41764061839](https://github.com/Kasign/stock_data_provider/actions/runs/41764061839)，[Browser Smoke #41764061807](https://github.com/Kasign/stock_data_provider/actions/runs/41764061807)）。
 
 
 ## 2026-11-04 全市场连接切换在途请求验收补充
 
 - [x] 双标签页模拟连接配置变化发生在全市场分页请求期间。
 - [x] 验证旧请求取消、快照清空、按钮恢复、迟到响应隔离及无隐式重试。
-- [ ] 等待本次提交 SHA 的 CI 结果。
+- [x] WebUI Checks 与 Chromium Browser Smoke 均通过（[Checks #41764061839](https://github.com/Kasign/stock_data_provider/actions/runs/41764061839)，[Browser Smoke #41764061807](https://github.com/Kasign/stock_data_provider/actions/runs/41764061807)）。
+
+
+## 2026-11-04 P0-C 最终验收结论
+
+- [x] 全市场价格格式化修复、自选股跨标签页同步和在途请求失效。
+- [x] 自选股部分成功、空 items、缺失成员及失败旧快照状态边界。
+- [x] 全市场分页、页大小/复权切换、页面离开/返回、连接变化和晚到响应隔离。
+- [x] WebUI Checks：通过（[运行记录 #41764061839](https://github.com/Kasign/stock_data_provider/actions/runs/41764061839)）。
+- [x] Chromium Browser Smoke：通过（[运行记录 #41764061807](https://github.com/Kasign/stock_data_provider/actions/runs/41764061807)）。
+- [x] 最终验收代码 SHA：`dc1f59876d3abe2631d97e1ef198cfc7d967214f`。
+
+验收边界：以上为 WebUI 本地状态、请求生命周期及模拟 API 响应验证；不代表真实 Provider 可用性或数据准确性。

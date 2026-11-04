@@ -216,9 +216,26 @@
 
 ## 7. 当前下一步
 
-**当前执行任务：P0-C 全市场分页与研究页缓存边界验收。**
+**P0-C 全市场分页与研究页缓存边界验收：已完成。**
 
-P0-C 已完成全市场筛选快照、自选股批量行情成员一致性、行情/搜索/研究接口超时，以及研究页连接切换后的旧行情缓存清理。研究页缓存修复代码提交 `fd4556937df7cd047081dab237bc3dc16a27c398` 的 WebUI Checks 与 Chromium Browser Smoke 均通过（[Checks #41760974466](https://github.com/Kasign/stock_data_provider/actions/runs/41760974466)，[Browser Smoke #41760974521](https://github.com/Kasign/stock_data_provider/actions/runs/41760974521)）。同时保留并验收了最新提交 `a15845e8f5358086e98586903b4acb9a9d5a4d0d` 对财务报告期切换后恢复读取按钮的修复（[Checks #41760787560](https://github.com/Kasign/stock_data_provider/actions/runs/41760787560)，[Browser Smoke #41760787564](https://github.com/Kasign/stock_data_provider/actions/runs/41760787564)）。下一步检查全市场分页连续刷新、页码/页大小/复权切换、页面离开/返回及连接变化时的取消和晚到响应隔离；并完成自选股部分成功、无返回项和失败旧快照边界验收。若发现需要改变服务端契约或大规模重构请求层，先记录方案，不擅自扩展。P0-D 只输出设计方案，未经确认不开发；数据中心诊断深化继续等待数据侧真实验收。
+本轮在原分支完成全市场价格格式化、自选股跨标签页成员同步、批量行情请求成员集合失效、部分成功/空响应显式失败状态，以及全市场分页与连接切换请求隔离。关键验收记录：
+
+- WebUI Checks：通过（[运行记录 #41764061839](https://github.com/Kasign/stock_data_provider/actions/runs/41764061839)）。
+- Chromium Browser Smoke：通过（[运行记录 #41764061807](https://github.com/Kasign/stock_data_provider/actions/runs/41764061807)）。
+- 最终验收代码提交：`dc1f59876d3abe2631d97e1ef198cfc7d967214f`。
+
+浏览器专项覆盖全市场分页、页大小/复权切换、刷新期间控件状态、页面离开/返回、双标签页连接切换取消在途请求及晚到响应隔离；自选股覆盖成员变化、分组变化、部分成功、空 items、失败后旧快照标识。以上均为隔离 API fixture 的 WebUI 行为验收，不代表真实 Provider 数据可用性。
+
+**下一阶段：P0-D 研究笔记与报告归档跨标签页一致性——仅做设计评估。**
+
+先梳理当前笔记/报告的数据结构、持久化入口、写入时机和删除路径，再比较三种方案：
+1. localStorage + storage event 最小同步：改动小、兼容现有存储；需要明确同一条记录并发编辑时的覆盖策略。
+2. BroadcastChannel + 版本号/更新时间：提供更及时的同源标签页通知；仍需 localStorage 作为持久化事实来源，并处理消息丢失、重复和旧版本。
+3. IndexedDB/统一仓储：适合事务、较大数据和多记录一致性，但迁移成本、失败恢复和回滚复杂度明显更高。
+
+设计输出必须明确冲突策略、删除传播、并发编辑、损坏恢复、浏览器兼容、数据迁移、测试范围和回滚策略。**本阶段不改代码、不改数据 schema、不迁移存储；方案提交后等待用户确认再实施。**
+
+数据中心统一诊断深化仍等待数据侧真实验收；不因 P0-C 完成而扩大到 Go/API/Provider 范围。
 
 
 ### 2026-11-04 P0-C 后续边界修复（当前开发批次）
@@ -236,7 +253,7 @@ P0-C 已完成全市场筛选快照、自选股批量行情成员一致性、行
 - [x] 批量行情响应按请求成员集合建立快照，忽略未请求标的，避免服务端额外返回项污染当前快照。
 - [x] 对未返回的请求标的补齐 `missing_response_item` 失败记录；显式无行情项补齐 `quote_unavailable`，避免失败项显示成“未加载”。
 - [x] 新增浏览器回归覆盖部分成功（1 成功、1 失败）及空 `items`（0 成功、2 失败），核对每只股票行内状态。
-- [ ] 等待 WebUI Checks 与 Chromium Browser Smoke 对本次提交 SHA 验收。
+- [x] WebUI Checks 与 Chromium Browser Smoke 均通过（[Checks #41764061839](https://github.com/Kasign/stock_data_provider/actions/runs/41764061839)，[Browser Smoke #41764061807](https://github.com/Kasign/stock_data_provider/actions/runs/41764061807)），最终验收 SHA：`dc1f59876d3abe2631d97e1ef198cfc7d967214f`。
 
 
 ### 2026-11-04 P0-C 全市场连接切换在途请求验收补充
@@ -244,4 +261,4 @@ P0-C 已完成全市场筛选快照、自选股批量行情成员一致性、行
 - [x] 新增双标签页浏览器用例：全市场分页请求挂起期间，另一标签页修改行情 API 地址和 Key。
 - [x] 验证当前页收到连接配置 storage 事件后取消旧请求、清空旧分页结果和元数据、恢复按钮状态。
 - [x] 释放旧请求后验证旧响应不能回填，也不会自动向新连接隐式重试。
-- [ ] 等待 CI 验收。
+- [x] WebUI Checks 与 Chromium Browser Smoke 均通过（[Checks #41764061839](https://github.com/Kasign/stock_data_provider/actions/runs/41764061839)，[Browser Smoke #41764061807](https://github.com/Kasign/stock_data_provider/actions/runs/41764061807)）。
