@@ -815,3 +815,8 @@ JSR-2C 不整体搬迁 `renderTaskEvents`。先执行 JSR-2C1，将 `renderRunSt
 
 
 JSR-2C1 代码迁移已提交，当前等待 WebUI Checks 与 Chromium Browser Smoke。此次仅迁移 Run 状态徽标及选中事件详情；`renderTaskEvents`、`renderTaskFlowSummary`、`renderTask`、`renderTaskResult` 均未迁移，避免混入筛选/展开/选中状态和业务副作用。
+
+
+### JSR-2C2 第一小步：单个事件节点构建（待 CI）
+
+已从 `renderTaskEvents` 抽离单个事件节点的纯 DOM 构建，新增 `task-event-node.js`。列表排序、过滤、筛选计数、默认选中、展开状态集合、toggle 监听、点击委托、选中详情和摘要刷新均保留在 `app.js`。本次不将 `renderTaskEvents` 整体迁移；验收通过后再评估是否拆列表协调器。另计划在任务运行流拆分阶段完成后，对 Run Flow 视觉层级与全站关键页面做一次整体样式 review，不与本次结构迁移混在一起。

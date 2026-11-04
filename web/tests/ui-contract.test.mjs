@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat, taskEventView] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat, taskEventView, taskEventNode] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -26,7 +26,8 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/task-workflow.js", import.meta.url), "utf8"),
   readFile(new URL("../src/local-alert-drafts.js", import.meta.url), "utf8"),
   readFile(new URL("../src/task-event-format.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/task-event-view.js", import.meta.url), "utf8")
+  readFile(new URL("../src/task-event-view.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/task-event-node.js", import.meta.url), "utf8")
 ]);
 const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
 
@@ -891,11 +892,11 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
 });
 
 test("run-flow events expose only server-provided durations and diagnostics", () => {
-  assert.match(app, /event\.duration_ms !== undefined && event\.duration_ms !== null/);
-  assert.match(app, /event\.error_code/);
-  assert.match(app, /parts\.join\(" · "\)/);
+  assert.match(taskEventNode, /event\.duration_ms !== undefined && event\.duration_ms !== null/);
+  assert.match(taskEventNode, /event\.error_code/);
+  assert.match(taskEventNode, /parts\.join\(" · "\)/);
   assert.match(apiClient, /after_sequence/);
-  assert.match(app, /\.sort\(\(a, b\) => a\.sequence - b\.sequence\)/);
+  assert.match(app, /\.sort\(\(a, b\) => Number\(a\.sequence\) - Number\(b\.sequence\)\)/);
   assert.doesNotMatch(app, /completed_stages\s*\/\s*total_stages|progressPercent|fakeDAG/i);
 });
 
@@ -1171,7 +1172,7 @@ test("Run Flow summary and event diagnostics remain grounded in persisted Task, 
   }
   assert.match(app, /function renderTaskFlowSummary\(\)/);
   assert.match(app, /function renderSelectedTaskEvent\(item\)/);
-  assert.match(app, /button\[data-task-event-sequence\]/);
+  assert.match(taskEventNode, /select\.dataset\.taskEventSequence = String\(item\.sequence\)/);\n  assert.match(app, /button\[data-task-event-sequence\]/);
   assert.match(app, /state\.taskEventsLoaded/);
   assert.match(app, /event\.duration_ms/);
   assert.match(app, /event\.error_code/);
@@ -2124,4 +2125,18 @@ test("告警草稿与通知偏好跨标签页同步，并在编辑冲突时阻�
   assert.match(notificationPreferences, /canonical\(current\.value\) !== baselineSnapshot/);
   assert.match(notificationPreferences, /当前表单已保留且未保存/);
   assert.match(notificationPreferences, /if \(isDirty\(\)\)/);
+});
+
+
+test("run-flow event node builder only constructs DOM and leaves state/event wiring to app", () => {
+  assert.match(appSource, /buildTaskEventNode\(\{[\s\S]*?expanded: state\.expandedTaskEventSequences\.has\(sequence\)/);
+  assert.match(appSource, /node\.addEventListener\("toggle"/);
+  assert.match(appSource, /state\.selectedTaskEventSequence = Number\(row\.dataset\.taskEventSequence\)/);
+  assert.match(taskEventNode, /export function buildTaskEventNode\(/);
+  assert.match(taskEventNode, /node\.dataset\.eventSequence = String\(item\.sequence\)/);
+  assert.match(taskEventNode, /node\.setAttribute\("aria-pressed", String\(selected\)\)/);
+  assert.match(taskEventNode, /node\.open = selected \|\| expanded/);
+  assert.doesNotMatch(taskEventNode, /\bstate\.|localStorage|addEventListener|querySelector|fetch\(/);
+  assert.match(taskEventNode, /textContent = event\.message \|\| "服务端事件未提供描述"/);
+  assert.match(taskEventNode, /diagnostic\.textContent = "错误代码：" \+ String\(event\.error_code\)/);
 });

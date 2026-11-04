@@ -1396,3 +1396,13 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 更新 UI 契约测试，断言 app 协调入口和视图模块实际职责。
 - [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
 - [ ] 通过后才评估 JSR-2C2 事件节点列表是否可安全拆分。
+
+
+### JSR-2C2 单个任务事件节点构建（待 CI）
+
+- [x] 新增 `task-event-node.js`，仅构建单个事件节点 DOM。
+- [x] 显式传入事件、选中/展开状态、document 和格式化/状态映射函数。
+- [x] toggle 监听、点击委托、状态集合和列表筛选仍由 app.js 管理。
+- [x] 增加契约测试，验证模块无全局 state/storage/API/事件监听依赖。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
+- [ ] 验收后再评估列表协调器拆分。

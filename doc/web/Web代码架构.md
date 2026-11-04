@@ -236,3 +236,6 @@ JSR-2C1 验收必须覆盖：无选中事件时隐藏详情并移除布局 class
 
 
 JSR-2C1 迁移实现：`task-event-view.js` 负责 Run 状态徽标和选中事件详情 DOM；通过显式参数接收目标节点、数据和格式化/状态映射函数。`app.js` 的同名函数保留为协调包装，只负责查找页面节点、传递当前 runId 和依赖函数。该模块不访问全局 state/document/localStorage，不绑定事件、不发请求。
+
+
+JSR-2C2（第一步）实现：新增 `task-event-node.js`，仅负责根据显式输入构建单个阶段事件 `<details>` 节点。模块接收 document、事件记录、selected/expanded 状态、日期格式化和状态映射函数；返回 DOM 节点，不绑定 toggle/click 事件、不读取全局状态、不请求 API。`app.js` 继续负责排序、筛选计数、默认选中、toggle 状态集合维护、列表挂载和详情联动。
