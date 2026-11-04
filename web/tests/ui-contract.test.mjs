@@ -789,7 +789,7 @@ test("watchlist bulk selection keeps select-all checked and indeterminate state 
 
 test("recent analysis history exposes historical-only task types", () => {
   assert.match(html, /<option value="position_review">持仓复核（历史记录）<\/option>/);
-  assert.match(app, /recentTaskTypeLabel\(record\.task_type\)/);
+  assert.ok(recentTaskView.includes("recentTaskTypeLabel(record.task_type)"));
   assert.match(recentTaskModule, /export function recentTaskTypeLabel\(/);
 });
 
