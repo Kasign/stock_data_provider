@@ -48,6 +48,14 @@ function signed(v, fmt) { const n=finiteNumberOrNull(v); if(n===null)return "—
 function dir(v) { const n=finiteNumberOrNull(v); if(n===null)return "market-data-unknown";return n>0?"market-data-positive":n<0?"market-data-negative":"market-data-flat"; }
 function badge(id,label,tone="pending",quality="") { const n=$("#"+id);if(!n)return;n.textContent=label;if(tone==="quality"){const q=["valid","degraded","stale","invalid","unknown"].includes(String(quality).toLowerCase())?String(quality).toLowerCase():"unknown";n.className="quality-pill quality-"+q;}else n.className="availability-pill "+(tone==="error"||tone==="warning"?"is-unavailable":tone==="success"?"is-local":"is-readonly"); }
 function meta(id,parts) { const n=$("#"+id);if(n)n.textContent=parts.filter(v=>v!==null&&v!==undefined&&String(v).trim()).join(" · "); }
+export function marketSnapshotEvidence(data,{reportDate=false,providerTime=false}={}) {
+ const parts=["来源 "+(data?.source||"未报告")];
+ if(reportDate)parts.push("源端报告日期 "+(data?.provider_report_date||"未提供"));
+ parts.push("来源版本 "+(data?.source_version||"未报告"));
+ if(providerTime)parts.push("源端准备时间 "+formatDateTime(data?.provider_time));
+ parts.push("服务端采集时间 "+formatDateTime(data?.fetched_at));
+ return parts;
+}
 function qualityReasons(id,values) { const d=$("#"+id),ul=d?.querySelector("ul");if(!d||!ul)return;ul.replaceChildren();const rows=Array.isArray(values)?values.filter(v=>String(v??"").trim()):[];d.hidden=!rows.length;rows.forEach(v=>ul.append(el("li","",v)));const s=d.querySelector("summary");if(s&&rows.length)s.textContent="数据质量说明（"+rows.length+"）"; }
 function empty(root,msg) { root.replaceChildren(el("p","market-empty-state",msg)); }
 function tableMessage(root,msg) { root.replaceChildren();const tr=document.createElement("tr"),td=el("td","table-empty",msg);td.colSpan=5;tr.append(td);root.append(tr); }
@@ -55,7 +63,7 @@ function cell(tr,value,cls="") { tr.append(el("td",cls,value===null||value===und
 function pending(key,msg,tone="pending") {
  const ids={indices:"market-indices-status",breadth:"market-breadth-status",sectors:"market-sector-status",pool:"market-pool-status",hot:"market-hot-stocks-status"};
  const mids={indices:"market-indices-meta",breadth:"market-breadth-meta",sectors:"market-sector-meta",pool:"market-pool-meta",hot:"market-hot-stocks-meta"};
- const rids={breadth:"market-breadth-reasons",sectors:"market-sector-reasons",pool:"market-pool-reasons",hot:"market-hot-stocks-reasons"};
+ const rids={indices:"market-indices-reasons",breadth:"market-breadth-reasons",sectors:"market-sector-reasons",pool:"market-pool-reasons",hot:"market-hot-stocks-reasons"};
  const label=tone==="error"?"读取失败":tone==="warning"&&/API Key/.test(msg)?"需配置 Key":tone==="pending"?"加载中":"不可用";
  badge(ids[key],label,tone);meta(mids[key],[]);if(rids[key])qualityReasons(rids[key],[]);
  if(key==="indices")empty($("#market-index-grid"),msg);
@@ -87,7 +95,7 @@ export function defaultMarketCapitalFlowDateRange(now = new Date()) {
 function errorMessage(err) { return describeMarketOverviewError(err); }
 function renderIndices(data) {
  const root=$("#market-index-grid"),items=Array.isArray(data?.items)?data.items.filter(v=>v&&typeof v==="object"):[ ];root.replaceChildren();
- if(!items.length){empty(root,"接口已响应，但未返回可展示的指数明细。");badge("market-indices-status","未返回指数明细","warning");meta("market-indices-meta",["来源 "+(data?.source||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);return;}
+ if(!items.length){empty(root,"接口已响应，但未返回可展示的指数明细。");badge("market-indices-status",qualityLabel(data?.quality_status),"quality",data?.quality_status);meta("market-indices-meta",marketSnapshotEvidence(data));qualityReasons("market-indices-reasons",data?.quality_reasons);return;}
  items.forEach(item=>{const card=el("article","market-index-card"),head=el("div","market-index-card-heading"),identity=el("div","market-index-identity");
  identity.append(el("h4","",item.name||item.code||item.symbol||"指数名称未报告"),el("small","",item.code||item.symbol||"代码未报告"));
  const q=["valid","degraded","stale","invalid","unknown"].includes(String(item.quality_status||"").toLowerCase())?String(item.quality_status).toLowerCase():"unknown";
@@ -96,7 +104,7 @@ function renderIndices(data) {
  const footer=el("div","market-index-card-footer"),foot=[];if(item.quote_time)foot.push("行情时间 "+formatDateTime(item.quote_time));foot.push("来源 "+(item.source||data.source||"未报告"));footer.append(el("small","",foot.join(" · ")));
  if(Array.isArray(item.quality_reasons)&&item.quality_reasons.length)footer.append(el("small","market-index-reasons",item.quality_reasons.join("；")));
  card.append(head,el("div","market-index-price",formatPrice(item.latest_price)),changes,footer);root.append(card);});
- badge("market-indices-status",qualityLabel(data.quality_status),"quality",data.quality_status);meta("market-indices-meta",["来源 "+(data.source||"未报告"),"快照时间 "+formatDateTime(data.fetched_at),"版本 "+(data.source_version||"未报告")]);
+ badge("market-indices-status",qualityLabel(data.quality_status),"quality",data.quality_status);meta("market-indices-meta",marketSnapshotEvidence(data));qualityReasons("market-indices-reasons",data?.quality_reasons);
 }
 function renderBreadth(data) {
  const root=$("#market-breadth-values"),fields=[["上涨",data?.advancing_count,"market-data-positive"],["下跌",data?.declining_count,"market-data-negative"],["平盘",data?.unchanged_count,"market-data-flat"],["未分类",data?.unclassified_count,"market-data-unknown"]];
@@ -106,12 +114,12 @@ function renderBreadth(data) {
  if($("#market-sentiment-unchanged"))$("#market-sentiment-unchanged").textContent=count(data?.unchanged_count);
  if($("#market-money-turnover"))$("#market-money-turnover").textContent=data?.total_amount_cny===null||data?.total_amount_cny===undefined?"未提供":formatCompact(data.total_amount_cny)+" 元";
  if($("#market-money-turnover-note"))$("#market-money-turnover-note").textContent="金额覆盖 "+count(data?.amount_coverage_count)+" / "+count(data?.covered_securities)+" 只 · 仅为成交额汇总";
- if($("#market-sentiment-meta"))$("#market-sentiment-meta").textContent="报告样本 "+count(data?.total_securities)+" 只 · 覆盖 "+count(data?.covered_securities)+" 只 · 来源 "+(data?.source||"未报告")+" · 快照 "+formatDateTime(data?.fetched_at);
+ if($("#market-sentiment-meta"))$("#market-sentiment-meta").textContent=["报告样本 "+count(data?.total_securities)+" 只","覆盖 "+count(data?.covered_securities)+" 只",...marketSnapshotEvidence(data,{reportDate:true})].join(" · ");
  if(!data||!fields.some(([,v])=>v!==null&&v!==undefined&&v!=="")){empty(root,"接口未返回可展示的涨跌分布字段。");badge("market-breadth-status","数据字段不完整","warning");return;}
  root.replaceChildren();fields.forEach(([label,value,cls])=>{const m=el("div","market-breadth-metric");m.append(el("small","",label),el("strong",cls,count(value)));root.append(m);});
  badge("market-breadth-status",qualityLabel(data.quality_status),"quality",data.quality_status);
  const amount=data.total_amount_cny===null||data.total_amount_cny===undefined?"全市场成交额未由此接口提供":"成交额 "+formatCompact(data.total_amount_cny)+" 元";
- meta("market-breadth-meta",["报告样本 "+count(data.total_securities)+" 只","覆盖样本 "+count(data.covered_securities)+" 只",amount,"来源 "+(data.source||"未报告"),"快照时间 "+formatDateTime(data.fetched_at)]);
+ meta("market-breadth-meta",["报告样本 "+count(data.total_securities)+" 只","覆盖样本 "+count(data.covered_securities)+" 只",amount,...marketSnapshotEvidence(data,{reportDate:true})]);
 }
 function sectorMetricSortBy(metric) {
  return metric==="amount"?"amount":metric==="five-day"?"change_5d":"change_percent";
@@ -131,24 +139,24 @@ function renderSectors(data,metric="change",direction="up",requestedLimit=10) {
  const sortBy=["change_percent","amount","change_5d"].includes(data?.sort_by)?data.sort_by:sectorMetricSortBy(metric);
  const sortLabel=sectorMetricLabel(sortBy),directionLabel=(data?.direction||direction)==="down"?"从低到高":"从高到低";
  const heading=$("#market-sector-metric-heading");if(heading)heading.textContent=sortLabel;
- if(!items.length){tableMessage(root,"接口已响应，但没有返回板块记录；这不代表市场不存在相关板块。");badge("market-sector-status","暂无板块明细","warning");}
+ if(!items.length){tableMessage(root,"接口已响应，但没有返回板块记录；这不代表市场不存在相关板块。");badge("market-sector-status",qualityLabel(data?.quality_status),"quality",data?.quality_status);}
  else{items.forEach(item=>{const tr=document.createElement("tr");cell(tr,item.rank===null||item.rank===undefined?"—":count(item.rank),"market-rank-cell");const name=el("td");name.append(el("strong","market-table-primary",item.name||"名称未报告"),el("small","market-table-secondary",item.code||"代码未报告"));tr.append(name);const metricValue=sortBy==="amount"?finiteNumberOrNull(item.amount):sortBy==="change_5d"?item.change_percent_5d:item.change_percent;cell(tr,sectorMetricValue(item,sortBy),sortBy==="amount"?"market-rank-cell":dir(metricValue));cell(tr,item.leading_stock||"—");cell(tr,formatPercent(item.leader_change_percent),dir(item.leader_change_percent));root.append(tr);});badge("market-sector-status",qualityLabel(data.quality_status),"quality",data.quality_status);}
- meta("market-sector-meta",[(data?.category==="concept"?"概念":"行业")+"排行","排序维度 "+sortLabel,directionLabel,"请求上限 "+count(requestedLimit)+" 条","实际返回 "+count(items.length)+" 条","源端总数 "+count(data?.total),"来源 "+(data?.source||"未报告"),"源端日期 "+(data?.provider_report_date||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);qualityReasons("market-sector-reasons",data?.quality_reasons);
+ meta("market-sector-meta",[(data?.category==="concept"?"概念":"行业")+"排行","排序维度 "+sortLabel,directionLabel,"请求上限 "+count(requestedLimit)+" 条","实际返回 "+count(items.length)+" 条","源端总数 "+count(data?.total),...marketSnapshotEvidence(data,{reportDate:true})]);qualityReasons("market-sector-reasons",data?.quality_reasons);
 }
 function renderPool(data,requestedLimit=30) {
  const root=$("#market-pool-body"),items=Array.isArray(data?.items)?data.items.filter(v=>v&&typeof v==="object"):[ ];root.replaceChildren();
- if(!items.length){tableMessage(root,data?.has_data===false?"服务端未确认此池有可用数据；不能把当前空列表当作 0 只。":"接口未返回列表记录。");badge("market-pool-status",data?.has_data===false?"数据未确认":"暂无列表记录","warning");}
+ if(!items.length){tableMessage(root,data?.has_data===false?"服务端未确认此池有可用数据；不能把当前空列表当作 0 只。":"接口未返回列表记录。");badge("market-pool-status",qualityLabel(data?.quality_status),"quality",data?.quality_status);}
  else{items.forEach(item=>{const tr=document.createElement("tr"),stock=el("td"),symbol=String(item.symbol||item.code||"").trim(),name=String(item.name||symbol||"名称未报告");stock.append(el("strong","market-table-primary",name),el("small","market-table-secondary",symbol||"代码未报告"));if(symbol){const actions=el("div","market-stock-entry-actions");[["stocks","查看行情"],["research","深度研究"]].forEach(([target,label])=>{const button=el("button","button button-secondary market-stock-entry-action",label);button.type="button";button.dataset.poolSymbol=symbol;button.dataset.poolName=name;button.dataset.poolAction=target;actions.append(button);});stock.append(actions);}tr.append(stock);cell(tr,formatPercent(item.change_percent),dir(item.change_percent));cell(tr,item.consecutive_boards===null||item.consecutive_boards===undefined?"—":count(item.consecutive_boards)+" 板");cell(tr,(item.first_touch_time||"—")+" / "+(item.last_touch_time||"—"),"market-touch-time");cell(tr,item.industry||"—");root.append(tr);});badge("market-pool-status",qualityLabel(data.quality_status),"quality",data.quality_status);}
  const label=data?.type==="down"?"跌停池":data?.type==="broken"?"炸板池":"涨停池";
  if($("#market-sentiment-pool"))$("#market-sentiment-pool").textContent=data?.has_data===false?"数据未确认":label+" · "+count(data?.total)+" 只";
- meta("market-pool-meta",[label,"交易日期 "+(data?.trade_date||poolDate||"中国时区当日（默认）"),"源端数量 "+count(data?.total),"请求上限 "+count(requestedLimit)+" 条","当前返回 "+count(items.length)+" 条","来源 "+(data?.source||"未报告"),"快照时间 "+formatDateTime(data?.fetched_at)]);qualityReasons("market-pool-reasons",data?.quality_reasons);
+ meta("market-pool-meta",[label,"交易日期 "+(data?.trade_date||poolDate||"中国时区当日（默认）"),"源端数量 "+count(data?.total),"请求上限 "+count(requestedLimit)+" 条","当前返回 "+count(items.length)+" 条",...marketSnapshotEvidence(data,{reportDate:true})]);qualityReasons("market-pool-reasons",data?.quality_reasons);
 }
 function renderHotStocks(data,requestedLimit=20) {
  const root=$("#market-hot-stocks-body"),items=Array.isArray(data?.items)?data.items.filter(item=>item&&typeof item==="object"):[];
  root.replaceChildren();
  if(!items.length) {
   tableMessage(root,"接口未返回人气榜/飙升榜记录；当前列表不是全市场证券的完整清单。");
-  badge("market-hot-stocks-status","暂无列表记录","warning");
+  badge("market-hot-stocks-status",qualityLabel(data?.quality_status),"quality",data?.quality_status);
  } else {
   items.forEach(item=>{
    const tr=document.createElement("tr");
@@ -166,7 +174,7 @@ function renderHotStocks(data,requestedLimit=20) {
   });
   badge("market-hot-stocks-status",qualityLabel(data.quality_status),"quality",data.quality_status);
  }
- meta("market-hot-stocks-meta",[(data?.type==="surge"?"飙升榜":"人气榜"),"请求上限 "+count(requestedLimit)+" 条","实际返回 "+count(items.length)+" 条（非全市场总数）","来源 "+(data?.source||"未报告"),"采集时间 "+formatDateTime(data?.fetched_at),"源端未提供可独立核验的行情快照时间"]);
+ meta("market-hot-stocks-meta",[(data?.type==="surge"?"飙升榜":"人气榜"),"请求上限 "+count(requestedLimit)+" 条","实际返回 "+count(items.length)+" 条（非全市场总数）",...marketSnapshotEvidence(data,{providerTime:true}),"源端未提供可独立核验的行情快照时间"]);
  qualityReasons("market-hot-stocks-reasons",data?.quality_reasons);
 }
 function renderMarketCapitalFlow(data) {

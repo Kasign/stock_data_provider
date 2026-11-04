@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultMarketCapitalFlowDateRange, describeMarketOverviewError, formatMarketSentimentCount, isCurrentSentimentHistoryRequest, validateMarketDateRange } from "../src/market-overview.js";
+import { defaultMarketCapitalFlowDateRange, describeMarketOverviewError, formatMarketSentimentCount, isCurrentSentimentHistoryRequest, marketSnapshotEvidence, validateMarketDateRange } from "../src/market-overview.js";
 
 test("market overview keeps authentication, permission, missing-route and provider errors distinct", () => {
   const cases = [
@@ -66,4 +66,21 @@ test("market sentiment counts retain lower-bound semantics without formatting mi
   assert.equal(formatMarketSentimentCount(12, false), "12");
   assert.equal(formatMarketSentimentCount(null, true), "—");
   assert.equal(formatMarketSentimentCount(undefined, false), "—");
+});
+
+
+test("market snapshot evidence separates provider report/preparation time from server fetch time", () => {
+  const data = {
+    source: "eastmoney",
+    source_version: "v2026-11",
+    provider_report_date: "2026-11-03",
+    provider_time: "2026-11-03T15:00:00+08:00",
+    fetched_at: "2026-11-04T01:00:00Z"
+  };
+  const evidence = marketSnapshotEvidence(data, { reportDate: true, providerTime: true });
+  assert.ok(evidence.includes("源端报告日期 2026-11-03"));
+  assert.ok(evidence.includes("来源版本 v2026-11"));
+  assert.ok(evidence.some(value => value.startsWith("源端准备时间 ")));
+  assert.ok(evidence.some(value => value.startsWith("服务端采集时间 ")));
+  assert.equal(marketSnapshotEvidence({ source: "provider" }).some(value => value.includes("源端报告日期")), false);
 });
