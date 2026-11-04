@@ -834,13 +834,13 @@ func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {
 
 func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testing.T) {
 	cases := []struct {
-		name       string
-		leftMethod string
-		rightMethod string
-		leftRefDate string
+		name         string
+		leftMethod   string
+		rightMethod  string
+		leftRefDate  string
 		rightRefDate string
-		wantStatus string
-		wantReason string
+		wantStatus   string
+		wantReason   string
 	}{
 		{name: "different methods", leftMethod: "eastmoney_fqt_2", rightMethod: "baostock_pct_change", leftRefDate: "2026-11-03", rightRefDate: "2026-11-03", wantStatus: "skipped", wantReason: "adjustment_method_mismatch"},
 		{name: "missing reference date", leftMethod: "same_hfq_v1", rightMethod: "same_hfq_v1", leftRefDate: "2026-11-03", wantStatus: "skipped", wantReason: "right_adjustment_reference_date_missing"},
@@ -851,11 +851,11 @@ func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testi
 		t.Run(test.name, func(t *testing.T) {
 			left := providerProbeAdjustedDailyBarsFake{
 				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "probe-adjusted-left", close: 10.5, quality: model.QualityValid},
-				method: test.leftMethod, refDate: test.leftRefDate,
+				method:                     test.leftMethod, refDate: test.leftRefDate,
 			}
 			right := providerProbeAdjustedDailyBarsFake{
 				providerProbeDailyBarsFake: providerProbeDailyBarsFake{name: "probe-adjusted-right", close: 10.5, quality: model.QualityValid},
-				method: test.rightMethod, refDate: test.rightRefDate,
+				method:                     test.rightMethod, refDate: test.rightRefDate,
 			}
 			ds := NewWithCapabilities(
 				[]provider.NamedProvider{left, right}, nil, []provider.DailyBarProvider{left, right},
@@ -864,7 +864,7 @@ func TestProviderProbeDailyBarCrossComparisonEnforcesAdjustmentMetadata(t *testi
 			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
 				Scope: "all", Capabilities: []string{"daily_bars"},
 				DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentBackward},
-				Checks: []string{"cross_provider"}, TimeoutSeconds: 5,
+				Checks:              []string{"cross_provider"}, TimeoutSeconds: 5,
 			})
 			if err != nil {
 				t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
