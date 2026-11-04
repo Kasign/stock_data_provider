@@ -11,6 +11,7 @@ import (
 )
 
 // 本测试支持 quote-only、daily-only、index-only 模式；线上复测通过 [include_tickflow] 加对应能力标记显式触发。
+// quote-only 会记录认证头是否存在及必要报价字段，不输出 API Key 值或完整响应体。
 // TestLiveTickFlowCapabilities 是 TickFlow 已实现但默认关闭能力的独立真实请求验收入口。
 // 仅在显式设置 MARKET_DATA_LIVE_TICKFLOW_TESTS=1 且提供 API Key 时执行，避免普通 CI 依赖外部服务。
 func TestLiveTickFlowCapabilities(t *testing.T) {
@@ -195,7 +196,6 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		t.Fatalf("TickFlow live capability acceptance failed: %v", failures)
 	}
 }
-
 
 type tickflowQuoteRawDiagnostic struct {
 	Symbol    string          `json:"symbol,omitempty"`
