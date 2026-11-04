@@ -2187,3 +2187,12 @@ test("导入偏好规范化由 preferences 领域模块负责，不留在 app �
   assert.match(appSource, /normalizeImportedPreferences/);
   assert.doesNotMatch(appSource, /function normalizeImportedPreferences\(/);
 });
+
+
+test("偏好控件同步由独立 DOM adapter 管理，持久化仍留在 app 协调层", async () => {
+  const preferencesView = await readFile(new URL("../src/settings-preferences-view.js", import.meta.url), "utf8");
+  assert.match(appSource, /syncPreferencesControls\(document, preferences\)/);
+  assert.match(preferencesView, /export function syncPreferencesControls\(/);
+  assert.doesNotMatch(preferencesView, /localStorage|savePreferences|fetch\(|\bstate\./);
+  assert.match(appSource, /function persistLocalPreferences\(/);
+});
