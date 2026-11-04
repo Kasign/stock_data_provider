@@ -50,6 +50,7 @@ test("market observation date ranges validate dates, order, and inclusive natura
   const start = "2024-01-01";
   const afterDays = days => new Date(Date.parse(start + "T00:00:00Z") + days * 86400000).toISOString().slice(0, 10);
 
+  assert.equal(validateMarketDateRange("", start, 2000), "请选择开始和结束日期。");
   assert.equal(validateMarketDateRange(start, afterDays(1999), 2000), "");
   assert.equal(validateMarketDateRange(start, afterDays(2000), 2000), "日期范围不能超过 2000 个自然日。");
   assert.equal(validateMarketDateRange("2024-02-30", "2024-03-01"), "请选择有效的开始和结束日期。");

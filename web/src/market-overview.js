@@ -29,6 +29,7 @@ function isValidTradeDate(value) {
  return Number.isFinite(timestamp)&&new Date(timestamp).toISOString().slice(0,10)===date;
 }
 export function validateMarketDateRange(start,end,maxCalendarDays=null) {
+ if(!start||!end)return "请选择开始和结束日期。";
  if(!isValidTradeDate(start)||!isValidTradeDate(end))return "请选择有效的开始和结束日期。";
  if(start>end)return "开始日期不能晚于结束日期。";
  if(Number.isInteger(maxCalendarDays)&&maxCalendarDays>0){
