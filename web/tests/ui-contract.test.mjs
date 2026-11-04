@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -24,7 +24,8 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/market-stocks.js", import.meta.url), "utf8"),
   readFile(new URL("../src/notification-preferences.js", import.meta.url), "utf8"),
   readFile(new URL("../src/task-workflow.js", import.meta.url), "utf8"),
-  readFile(new URL("../src/local-alert-drafts.js", import.meta.url), "utf8")
+  readFile(new URL("../src/local-alert-drafts.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/task-event-format.js", import.meta.url), "utf8")
 ]);
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
@@ -970,9 +971,9 @@ test("provider capability definitions expose each backend capability once", () =
 });
 
 test("run-flow event details share normalized status labels and tones with the timeline", () => {
-  assert.match(app, /function taskEventStatusKey\(status\)/);
-  assert.match(app, /function taskEventStatusLabel\(status, statusKey = taskEventStatusKey\(status\)\)/);
-  assert.match(app, /function taskEventStatusTone\(statusKey\)/);
+  assert.match(taskEventFormat, /export function taskEventStatusKey\(status\)/);
+  assert.match(taskEventFormat, /export function taskEventStatusLabel\(status, statusKey = taskEventStatusKey\(status\)\)/);
+  assert.match(taskEventFormat, /export function taskEventStatusTone\(statusKey\)/);
   assert.match(app, /status\.textContent = statusLabel/);
   assert.match(app, /\["事件状态", statusLabel\]/);
   assert.match(app, /const statusKey = taskEventStatusKey\(event\.status\)/);
