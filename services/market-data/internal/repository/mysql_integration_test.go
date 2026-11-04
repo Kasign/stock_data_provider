@@ -130,6 +130,67 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 	if err != nil || len(persisted) != 1 || persisted[0].Factor != 1.5 {
 		t.Fatalf("revision must persist across connection restart: rows=%+v err=%v", persisted, err)
 	}
+	probeRun := &model.ProviderProbeRun{
+		RunID: fmt.Sprintf("probe-%d", time.Now().UnixNano()),
+		Scope: "all", Status: "completed", Persisted: true,
+		StartedAt: time.Now().UTC().Add(-time.Second), FinishedAt: time.Now().UTC(),
+		RequestedCapabilities: []string{"daily_bars"},
+		RequestedChecks: []string{"cross_provider"},
+		CheckResults: []model.ProviderProbeCheckResult{{
+			Check: "cross_provider", Status: "skipped",
+			AdjustmentBasis: "backward_adjusted",
+			LeftProvider: "eastmoney", RightProvider: "baostock",
+			LeftAdjustmentMethod: "eastmoney_fqt_2",
+			RightAdjustmentMethod: "baostock_pct_change",
+			LeftAdjustmentRefDate: "2026-11-03",
+			RightAdjustmentRefDate: "2026-11-03",
+			NotComparableCount: 1,
+			FieldComparisons: []model.ProviderProbeFieldComparison{{
+				Field: "close", Status: "not_comparable",
+				Reason: "adjustment_method_mismatch",
+			}},
+			CheckedAt: time.Now().UTC(),
+		}},
+		Items: []model.ProviderProbeItem{{
+			Provider: "eastmoney", Capability: "daily_bars",
+			Status: "returned", AdjustmentBasis: model.AdjustmentBackward,
+			QualityStatus: model.QualityValid, CheckedAt: time.Now().UTC(),
+		}},
+	}
+	if err := reopened.SaveProviderProbeRun(ctx, probeRun); err != nil {
+		t.Fatalf("save provider-probe run: %v", err)
+	}
+	probeHistory, err := reopened.ListProviderProbeRuns(ctx, 10)
+	if err != nil {
+		t.Fatalf("read provider-probe history: %v", err)
+	}
+	assertProbeAdjustmentEvidence := func(items []model.ProviderProbeRun) {
+		t.Helper()
+		for _, item := range items {
+			if item.RunID != probeRun.RunID {
+				continue
+			}
+			if len(item.CheckResults) != 1 {
+				t.Fatalf("persisted probe check results were lost: %+v", item)
+			}
+			check := item.CheckResults[0]
+			if check.LeftAdjustmentMethod != "eastmoney_fqt_2" ||
+				check.RightAdjustmentMethod != "baostock_pct_change" ||
+				check.LeftAdjustmentRefDate != "2026-11-03" ||
+				check.RightAdjustmentRefDate != "2026-11-03" ||
+				len(check.FieldComparisons) != 1 ||
+				check.FieldComparisons[0].Reason != "adjustment_method_mismatch" {
+				t.Fatalf("persisted adjustment evidence changed: %+v", check)
+			}
+			if len(item.Items) != 1 || item.Items[0].AdjustmentBasis != model.AdjustmentBackward {
+				t.Fatalf("persisted provider probe items changed: %+v", item.Items)
+			}
+			return
+		}
+		t.Fatalf("provider-probe run %q was not returned in history: %+v", probeRun.RunID, items)
+	}
+	assertProbeAdjustmentEvidence(probeHistory)
+
 	if err := reopened.Close(); err != nil {
 		t.Fatalf("close MariaDB before unavailable check: %v", err)
 	}
