@@ -1459,3 +1459,13 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] WebUI Checks #41816369613 通过。
 - [x] Chromium Browser Smoke #41816369953 通过，全部 17 个执行步骤成功。
 - [ ] 下一步 JSR-3D 先审查 tracking 字段 ViewModel 的数据来源和格式化依赖，不直接迁移整个 renderWatchlist。
+
+
+### JSR-3D 自选股 tracking ViewModel（待 CI）
+
+- [x] 新增 `web/src/watchlist-tracking-view-model.js`，纯函数输出原 trackingFields 数据结构。
+- [x] `app.js` 负责状态组装和 formatter 注入，不再内嵌单条自选 tracking 文案计算。
+- [x] 新增单测覆盖批量行情错误/旧快照/缺项/未加载、今日任务/旧任务时间缺失、旧 API、当前任务状态读取中/失败、Run 结果重读/失败及任务/Run/连接/证券不匹配。
+- [x] UI 契约测试检查 app 协调边界及 ViewModel 无 DOM/storage/API/事件依赖。
+- [x] `web/package.json` check 纳入新模块语法检查。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 通过后验收。

@@ -78,8 +78,10 @@ test("自选股辅助字段顺序与工作区导入预览契约完整", () => {
   assert.equal([...html.matchAll(/data-watchlist-field-order="/g)].length, 5);
   assert.equal([...html.matchAll(/data-watchlist-field-order-move="(?:up|down)"/g)].length, 10);
   assert.match(app, /watchlistDisplayOrder: \[\.\.\.document\.querySelectorAll\("\[data-watchlist-field-order\]"\)\]/);
-  assert.match(app, /const visibleTrackingFields = \(preferences\.watchlistDisplayOrder/);
-  assert.match(app, /updated: \{ className: "watchlist-item-meta"/);
+  assert.match(app, /buildWatchlistTrackingFields\(\{/);
+  assert.match(watchlistTrackingViewModel, /const displayFieldNodes = \{/);
+  assert.match(watchlistTrackingViewModel, /updated: \{ className: "watchlist-item-meta"/);
+  assert.match(watchlistTrackingViewModel, /\.filter\(\(field\) => Array\.isArray\(displayFields\) && displayFields\.includes\(field\)\)/);
   assert.match(watchlistItemView, /trackingFields\.forEach\(\(field\)/);
   assert.match(watchlistItemView, /className = "watchlist-tracking-summary"/);
   assert.match(app, /const BROWSER_DATA_VERSION = 3/);

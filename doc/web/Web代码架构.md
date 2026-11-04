@@ -341,3 +341,12 @@ JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 
 2. ViewModel 输出需与现有字段 key、className、text、title 一致；不得弱化“未知”“未确认”“旧连接”等提示。
 3. app.js 只负责从全局状态组装 input 并传入 formatter，不把请求控制器或 storage 对象传入模块。
 4. 新模块完成后再考虑进一步拆分分组/筛选事件协调；不得将其与本批混合。
+
+
+### 12.9 JSR-3D：自选股 tracking 辅助字段 ViewModel
+
+新增 `watchlist-tracking-view-model.js`，导出纯函数 `buildWatchlistTrackingFields(input)`。该模块负责单条自选记录的 quote/today/task/result/updated 辅助字段计算、任务/Run 身份匹配及展示顺序/可见性过滤；返回值继续使用现有 `key/className/text/title` 结构，直接交给 `watchlist-item-view.js` 构建 DOM。
+
+`app.js` 仍负责从全局状态组装单证券行情快照、最近任务、当前任务、Run 结果、分析连接和偏好，并显式注入证券比较、日期 key、格式化及状态标签函数。ViewModel 不访问全局 state、DOM、localStorage、API，不负责请求生命周期或跨页协调。
+
+本批保留批量行情错误/旧快照/缺项/未加载的区别；保留本地任务缺失不代表服务端从未分析、旧任务缺少创建时间时今日状态未知、旧分析 API 提示；当前任务与 Run 结果继续按证券、任务、Run 和分析连接核验；Run 重读/重试/失败时保留旧结果并明确标记未确认。单测固定时间并覆盖上述边界，避免依赖真实系统时钟。

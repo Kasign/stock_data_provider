@@ -879,3 +879,16 @@ JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验�
 - [x] 新增视图模块单测，覆盖正常表格、异常存储文本节点、无可导入行和 textContent 安全写入。
 - [x] UI 契约测试覆盖 app 协调职责及视图模块依赖边界。
 - [x] WebUI Checks #41816369613 通过；Chromium Browser Smoke #41816369953 通过，全部 17 个执行步骤成功。
+
+
+### JSR-3D 自选股 tracking 辅助字段 ViewModel（代码已迁移，待 CI）
+
+- [x] 新增 `watchlist-tracking-view-model.js`，以纯函数生成既有 trackingFields 数据结构。
+- [x] `app.js` 只组装单证券输入并注入格式化/标识函数；全局 state、DOM、storage、API 和请求生命周期仍由原协调层管理。
+- [x] 保留批量行情错误、旧快照、缺失行情、未加载、质量原因及批量采集/行情时间提示。
+- [x] 保留今日任务未知语义、旧任务缺少创建时间、旧分析 API 地址提示和当前任务状态读取中/失败提示。
+- [x] Run 结果按任务、Run、分析连接和证券匹配；重读/重试/失败时保留旧结果并明确未确认。
+- [x] 新增 ViewModel 单测，固定 `now`，覆盖行情、任务、Run 身份与展示偏好边界。
+- [x] 更新 UI 契约测试及 `web/package.json` 语法检查入口。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
+- [ ] CI 通过后再将本节标记为已验收；JSR-3E 页面协调边界评估不与本批混合。

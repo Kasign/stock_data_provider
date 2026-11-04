@@ -46,6 +46,7 @@ import { sortWatchlistItems } from "./watchlist-sort.js";
 import { buildWatchlistItemNode } from "./watchlist-item-view.js";
 import { buildWatchlistImportPreview } from "./watchlist-import-preview.js";
 import { buildWatchlistImportPreviewView } from "./watchlist-import-preview-view.js";
+import { buildWatchlistTrackingFields } from "./watchlist-tracking-view-model.js";
 import { assignWatchlistGroup, assignWatchlistGroups, createWatchlistGroup, normalizeWatchlistGroups, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP, WATCHLIST_GROUPS_KEY } from "./watchlist-groups.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
@@ -876,122 +877,40 @@ function renderWatchlist(records, storageReadable, storageValid) {
     const quoteMatches = Boolean(state.quote?.symbol) && normalizeLocalSymbol(state.quote.symbol) === itemSymbol;
     const batchQuote = state.watchlistQuotes.get(itemSymbol);
     const currentQuote = batchQuote?.quote || (quoteMatches ? state.quote : null);
-    const quoteTitle = [
-      batchQuote?.errorCode || "",
-      ...(Array.isArray(batchQuote?.qualityReasons) ? batchQuote.qualityReasons : []),
-      batchQuote?.fetchedAt ? "批量采集 " + formatDateTime(batchQuote.fetchedAt) : "",
-      currentQuote?.quote_time ? "行情时间 " + formatDateTime(currentQuote.quote_time) : ""
-    ].filter(Boolean).join("；") || "行情质量原因未报告";
-    let quoteText = "";
-    if (batchQuote?.errorCode) {
-      quoteText = "批量行情不可用：" + batchQuote.errorCode + " · " + qualityLabel(batchQuote.qualityStatus);
-    } else if (currentQuote) {
-      const oldSnapshot = ["error", "loading"].includes(state.watchlistQuoteStatus) && batchQuote;
-      quoteText = (oldSnapshot ? "上次成功快照：" : "行情快照：")
-        + formatPrice(currentQuote.current_price) + " · " + formatPercent(currentQuote.change_percent)
-        + " · " + (currentQuote.quote_time ? formatDateTime(currentQuote.quote_time) : "时间未报告")
-        + " · " + qualityLabel(batchQuote?.qualityStatus || currentQuote.quality_status)
-        + (batchQuote?.fetchedAt ? " · 批量采集 " + formatDateTime(batchQuote.fetchedAt) : "");
-    } else if (state.watchlistQuoteStatus === "loading") {
-      quoteText = "批量行情读取中…";
-    } else if (state.watchlistQuoteStatus === "loaded") {
-      quoteText = "本次批量响应未包含该证券，质量未知。";
-    } else {
-      quoteText = "当前行情：未加载（可刷新批量行情或点击“查行情”读取）";
-    }
-
-    const matchingTasks = recentTasks.filter((task) =>
-      Array.isArray(task.symbols) && task.symbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
-    );
-    const recentTask = [...matchingTasks]
-      .sort((a, b) => (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0))[0] || null;
-    const todayKey = localCalendarDateKey(new Date());
-    const todayTask = [...matchingTasks]
-      .filter((task) => Boolean(todayKey) && localCalendarDateKey(task.created_at) === todayKey)
-      .sort((a, b) => (Date.parse(b.created_at || "") || 0) - (Date.parse(a.created_at || "") || 0))[0] || null;
-    const isOtherAnalysisBase = (task) => Boolean(task && String(task.analysis_base || state.settings.analysisBase) !== String(state.settings.analysisBase));
-    const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask);
-    const recentTaskUsesOtherEndpoint = isOtherAnalysisBase(recentTask);
-    const activeTaskMatches = Boolean(state.taskId) && Array.isArray(state.taskSymbols)
-      && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
-      && (state.taskStatusLoading || Boolean(state.taskStatusError)
-        || ["running", "started", "pending", "queued", "processing", "in-progress", "in_progress"].includes(String(state.taskStatus || "").toLowerCase()));
-
-    let todayText = "";
-    if (todayTask) {
-      todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "") + " · " + taskStatusLabel(todayTask.status) + " · 创建于 " + formatDateTime(todayTask.created_at);
-    } else if (!matchingTasks.length) {
-      todayText = "今日分析：未知（当前浏览器没有该股票的任务引用）";
-    } else if (matchingTasks.some((task) => !localCalendarDateKey(task.created_at))) {
-      todayText = "今日分析：未知（部分旧任务缺少服务端创建时间）";
-    } else {
-      todayText = "今日分析：本地最近任务未发现今日创建记录（不代表服务端无分析）";
-    }
-
-    const taskText = activeTaskMatches
-      ? state.taskStatusLoading
-        ? "当前任务：正在确认服务端状态（上次状态：" + taskStatusLabel(state.taskStatus) + "） · " + state.taskId
-        : state.taskStatusError
-          ? "当前任务：状态读取异常（上次状态：" + taskStatusLabel(state.taskStatus) + (state.taskStatusErrorRetrying ? "，自动重试中" : "，自动刷新已暂停") + "） · " + state.taskId
-          : "当前任务：" + taskStatusLabel(state.taskStatus) + " · " + state.taskId
-      : recentTask
-        ? "最近任务：" + taskStatusLabel(recentTask.status) + (recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "") + " · " + (recentTask.updated_at ? formatDateTime(recentTask.updated_at) : "时间未记录")
-        : "最近任务：暂无本地任务记录（不代表从未分析）";
-
-    const latestResultMatches = Boolean(recentTask && state.lastRunResult
-      && state.taskId === recentTask.task_id
-      && recentTask.run_id
-      && state.lastRunResult.run_id === recentTask.run_id
-      && String(recentTask.analysis_base || state.settings.analysisBase) === String(state.taskAnalysisBase || state.settings.analysisBase)
-      && Array.isArray(state.taskSymbols)
-      && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol));
-    const activeRunReadMatches = Boolean(recentTask
-      && state.taskId === recentTask.task_id
-      && String(recentTask.analysis_base || state.settings.analysisBase) === String(state.taskAnalysisBase || state.settings.analysisBase)
-      && Array.isArray(state.taskSymbols)
-      && state.taskSymbols.some((value) => normalizeLocalSymbol(value) === itemSymbol)
-      && ["loading", "retrying", "error"].includes(state.runResultReadStatus));
-    let resultText = "";
-    if (latestResultMatches) {
-      const corePass = state.lastRunResult.quality?.core_pass;
-      const qualityState = corePass === true ? "核心质量门禁通过" : corePass === false ? "核心质量门禁未通过" : "核心质量门禁未报告";
-      const warnings = Array.isArray(state.lastRunResult.warnings) ? " · 警告 " + state.lastRunResult.warnings.length + " 项" : "";
-      const readState = state.runResultReadStatus;
-      const readLabel = readState === "loading"
-        ? "本页保留旧结果（正在重读，尚未确认）："
-        : readState === "retrying"
-          ? "本页保留旧结果（重试中，尚未确认）："
-          : readState === "error"
-            ? "本页保留旧结果（本次读取失败）："
-            : "本页已载入结果：";
-      const readError = ["retrying", "error"].includes(readState) && state.runResultReadError
-        ? " · 重读提示：" + state.runResultReadError
-        : "";
-      resultText = readLabel + runStatusLabel(state.lastRunResult.status) + " · " + qualityState + warnings + readError;
-    } else if (activeRunReadMatches) {
-      const readState = state.runResultReadStatus;
-      const readLabel = readState === "loading"
-        ? "当前 Run 结果：正在读取服务端结果"
-        : readState === "retrying"
-          ? "当前 Run 结果：暂时不可读，正在自动重试"
-          : "当前 Run 结果：读取失败";
-      const readError = state.runResultReadError ? " · " + state.runResultReadError : "";
-      resultText = readLabel + readError;
-    } else {
-      resultText = recentTask ? "结果详情：尚未载入当前页面" : "分析结果：未知";
-    }
-
-    const displayFieldNodes = {
-      updated: { className: "watchlist-item-meta", text: "添加/更新于 " + (record.updated_at ? formatDateTime(record.updated_at) : "时间未记录") },
-      quote: { className: "watchlist-tracking-line", text: quoteText, title: quoteTitle },
-      today: { className: "watchlist-tracking-line" + (todayTask ? " is-today" : " is-unknown"), text: todayText },
-      task: { className: "watchlist-tracking-line", text: taskText },
-      result: { className: "watchlist-tracking-line", text: resultText }
-    };
-    const visibleTrackingFields = (preferences.watchlistDisplayOrder || WATCHLIST_DISPLAY_FIELDS)
-      .filter((field) => preferences.watchlistDisplayFields.includes(field))
-      .map((field) => displayFieldNodes[field] ? { key: field, ...displayFieldNodes[field] } : null)
-      .filter(Boolean);
+    const trackingFields = buildWatchlistTrackingFields({
+      record,
+      batchQuote,
+      currentQuote,
+      quoteStatus: state.watchlistQuoteStatus,
+      recentTasks,
+      currentTask: {
+        taskId: state.taskId,
+        runId: state.runId,
+        analysisBase: state.taskAnalysisBase,
+        symbols: state.taskSymbols,
+        status: state.taskStatus,
+        statusLoading: state.taskStatusLoading,
+        statusError: state.taskStatusError,
+        statusErrorRetrying: state.taskStatusErrorRetrying
+      },
+      runResult: state.lastRunResult,
+      runResultReadStatus: state.runResultReadStatus,
+      runResultReadError: state.runResultReadError,
+      currentAnalysisBase: state.settings.analysisBase,
+      displayOrder: preferences.watchlistDisplayOrder || WATCHLIST_DISPLAY_FIELDS,
+      displayFields: preferences.watchlistDisplayFields,
+      now: new Date(),
+      formatters: {
+        normalizeSymbol: normalizeLocalSymbol,
+        dateKey: localCalendarDateKey,
+        formatDateTime,
+        formatPrice,
+        formatPercent,
+        qualityLabel,
+        taskStatusLabel,
+        runStatusLabel
+      }
+    });
     const selectedGroup = groupState.assignments[comparableMarketSymbol(record.symbol)]
       || groupState.assignments[record.symbol]
       || DEFAULT_WATCHLIST_GROUP;
