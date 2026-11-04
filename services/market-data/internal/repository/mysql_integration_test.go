@@ -139,7 +139,7 @@ func TestMariaDBRevisionPersistenceAndPointInTimeQueries(t *testing.T) {
 		CheckResults: []model.ProviderProbeCheckResult{{
 			Check: "cross_provider", Status: "skipped",
 			AdjustmentBasis: "backward_adjusted",
-			LeftProvider:          "eastmoney", RightProvider: "baostock",
+			LeftProvider:    "eastmoney", RightProvider: "baostock",
 			LeftAdjustmentMethod:   "eastmoney_fqt_2",
 			RightAdjustmentMethod:  "baostock_pct_change",
 			LeftAdjustmentRefDate:  "2026-11-03",
