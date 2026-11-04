@@ -43,6 +43,7 @@ import { clearRecentTasks, filterRecentTasks, readRecentTasks, readRecentTasksSt
 import { addWatchlistSymbol, importWatchlistSymbols, MAX_WATCHLIST_ITEMS, readWatchlistState, removeWatchlistSymbol, removeWatchlistSymbols, renameWatchlistSymbol, WATCHLIST_KEY } from "./watchlist.js";
 import { addScreeningResultsToWatchlist } from "./watchlist-batch.js";
 import { buildWatchlistItemNode } from "./watchlist-item-view.js";
+import { buildWatchlistListViewModel } from "./watchlist-list-view-model.js";
 import { buildWatchlistImportPreview } from "./watchlist-import-preview.js";
 import { buildWatchlistImportPreviewView } from "./watchlist-import-preview-view.js";
 import { buildWatchlistTrackingFields } from "./watchlist-tracking-view-model.js";
@@ -843,14 +844,13 @@ function renderWatchlist(records, storageReadable, storageValid) {
   const groupState = readWatchlistGroups(safeWatchlistGroupStorage());
   const selectedGroup = $("#watchlist-group-filter")?.value || "all";
   const normalizeLocalSymbol = normalizeWatchlistQuoteSymbol;
-  const visibleItems = items.filter((record) => {
-    const matchesKeyword = !keyword || String(record.symbol || "").toLocaleLowerCase().includes(keyword)
-      || String(record.name || "").toLocaleLowerCase().includes(keyword);
-    return matchesKeyword && (selectedGroup === "all" || (groupState.assignments[comparableMarketSymbol(record.symbol)] || groupState.assignments[record.symbol] || DEFAULT_WATCHLIST_GROUP) === selectedGroup);
-  });
-  const sortedItems = sortWatchlistItems(visibleItems, {
-    mode: sortMode,
-    direction: preferences.watchlistSortDirection,
+  const listView = buildWatchlistListViewModel({
+    items,
+    keyword,
+    assignments: groupState.assignments,
+    selectedGroup,
+    sortMode,
+    sortDirection: preferences.watchlistSortDirection,
     getQuote: (record) => {
       const key = normalizeLocalSymbol(record.symbol);
       const batchQuote = state.watchlistQuotes.get(key);
@@ -858,13 +858,12 @@ function renderWatchlist(records, storageReadable, storageValid) {
       return state.quote?.symbol && normalizeLocalSymbol(state.quote.symbol) === key ? state.quote : null;
     }
   });
-  setText("#watchlist-filter-count", keyword
-    ? "匹配 " + visibleItems.length + " / " + items.length + " 只"
-    : "显示全部 " + items.length + " 只");
+  const { visibleItems, sortedItems } = listView;
+  setText("#watchlist-filter-count", listView.filterCountText);
   if (!visibleItems.length) {
     const empty = document.createElement("div");
     empty.className = "empty-row";
-    empty.textContent = keyword ? "没有匹配的自选股。可尝试股票代码或自定义名称。" : "暂无自选股。";
+    empty.textContent = listView.emptyMessage;
     root.append(empty);
     renderResearchStockList();
     return;
