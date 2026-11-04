@@ -28,7 +28,7 @@
 | GET | /api/v1/bars/{symbol}/daily | 单只股票日 K（支持日期范围、复权及 as_of 历史观察时点） | 路径参数 symbol；start、end、limit（1–2000）、adjustment、as_of | getDailyBars | 是 |
 | GET | /api/v1/bundles/{symbol} | 单只股票行情与日 K 统一快照 | 路径参数 symbol；lookback_days（20–2000）、adjustment、as_of | getMarketBundle | 是 |
 | GET | /api/v1/data-sources/diagnostics | Provider 业务请求熔断诊断（进程内真实请求观测） | 无额外参数；详见 OpenAPI | getDataSourceDiagnostics | 是 |
-| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | scope（all/core）、checks（connectivity/contract/quality/freshness/cross_provider/storage）、capabilities、markets（最多 1 个）、symbols（最多 1 个标准代码）、timeout_seconds（1–30，默认 12）；请求体可选 | runDataSourceProbe | 是 |
+| POST | /api/v1/data-sources/probe | 主动探测已启用 Provider 的各项能力 | scope（all/core）、checks（connectivity/contract/quality/freshness/cross_provider/storage）、capabilities、daily_bar_adjustments（仅 daily_bars；none/forward_adjusted/backward_adjusted，最多 3 个且不重复；省略默认 none）、markets（最多 1 个）、symbols（最多 1 个标准代码）、timeout_seconds（1–30，默认 12）；请求体可选 | runDataSourceProbe | 是 |
 | GET | /api/v1/data-sources/probe/history | 最近已持久化的主动探测批次 | limit（1–100，默认 20）；依赖 MariaDB，存储不可用返回 503 | getDataSourceProbeHistory | 是 |
 | GET | /api/v1/data-sources | Provider 注册信息与静态能力声明 | 无额外参数；详见 OpenAPI | getDataSources | 是 |
 | GET | /api/v1/stocks/search | A 股证券名称/代码搜索 | q 必填（1–64 字符）；limit（1–50，默认 10） | searchStocks | 是 |
@@ -143,6 +143,9 @@
 
 
 ### Provider 主动探测字段级响应补充（2026-11-04）
+
+- DailyBar Probe 请求可通过 `daily_bar_adjustments` 指定 `none`、`forward_adjusted`、`backward_adjusted`，仅在选择 `daily_bars` capability 时有效；省略时默认只探测 `none`。每个 Provider × 复权口径独立生成结果，响应批次通过 `requested_daily_bar_adjustments` 回显请求口径，单项通过 `adjustment_basis` 标明实际口径。明确不支持的口径返回 `not_supported`，不与真实请求失败混淆；跨 Provider 对账仅比较相同口径。Provider 实现和默认启用矩阵见 `字段校验规则矩阵.md` 第 19 节。
+
 
 - `POST /api/v1/data-sources/probe` 的 `items[]` 实际由数据侧 `ProviderProbeItem` 返回，除基础状态/质量/时间字段外，还包含 `validation_total_count`、`validation_error_count`、`validation_warning_count`、`validation_info_count`、`validation_truncated`、`validation_issues` 和 `coverage_dimensions`。
 - `validation_issues[]` 字段包括 `stage`、`field`、`provider_field`、`code`、`expected`、`actual_type`、`actual_preview`、`severity`、`message`，以及可选的行号、证券代码和交易日期。实际值摘要由服务端脱敏并限长；WebUI 只按文本展示，不解释或重写规则。
