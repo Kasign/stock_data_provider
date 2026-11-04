@@ -31,9 +31,10 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/watchlist-item-view.js", import.meta.url), "utf8")
 ]);
 const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
+const watchlistImportPreviewView = await readFile(new URL("../src/watchlist-import-preview-view.js", import.meta.url), "utf8");
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
-const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView].join("\n");
+const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView, watchlistImportPreviewView].join("\n");
 
 function finalCssRuleBody(selector) {
   const start = stylesheet.lastIndexOf(selector);
@@ -91,6 +92,16 @@ test("自选股辅助字段顺序与工作区导入预览契约完整", () => {
   assert.match(app, /rollbackFailures/);
   assert.match(app, /apiKey: state\.settings\.apiKey/);
   assert.doesNotMatch(app, /window\.prompt\(preview/);
+});
+
+test("自选股导入预览视图模块只构建 DOM，不接管页面状态或存储", () => {
+  assert.match(appSource, /import \{ buildWatchlistImportPreviewView \} from "\.\/watchlist-import-preview-view\.js"/);
+  assert.match(appSource, /buildWatchlistImportPreviewView\(\{ document, preview \}\)/);
+  assert.match(appSource, /root\.replaceChildren\(\.\.\.view\.nodes\)/);
+  assert.match(appSource, /state\.watchlistImportPreview = preview/);
+  assert.match(watchlistImportPreviewView, /document\.createElement\("table"\)/);
+  assert.match(watchlistImportPreviewView, /cell\.textContent = String\(value\)/);
+  assert.doesNotMatch(watchlistImportPreviewView, /localStorage|document\.querySelector|addEventListener|fetch\s*\(/);
 });
 
 test("structured result renderer uses fields declared by Go RunResult", () => {

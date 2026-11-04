@@ -45,6 +45,7 @@ import { addScreeningResultsToWatchlist } from "./watchlist-batch.js";
 import { sortWatchlistItems } from "./watchlist-sort.js";
 import { buildWatchlistItemNode } from "./watchlist-item-view.js";
 import { buildWatchlistImportPreview } from "./watchlist-import-preview.js";
+import { buildWatchlistImportPreviewView } from "./watchlist-import-preview-view.js";
 import { assignWatchlistGroup, assignWatchlistGroups, createWatchlistGroup, normalizeWatchlistGroups, readWatchlistGroups, removeWatchlistGroup, DEFAULT_WATCHLIST_GROUP, WATCHLIST_GROUPS_KEY } from "./watchlist-groups.js";
 import { buildRunResultFilename, buildRunResultMarkdown } from "./report.js";
 import {
@@ -1012,38 +1013,11 @@ function renderWatchlistImportPreview(preview) {
   const root = $("#watchlist-import-preview");
   const confirm = $("#watchlist-import-confirm");
   if (!root || !confirm) return;
-  root.replaceChildren();
   state.watchlistImportPreview = preview;
-  if (preview.error) {
-    root.textContent = preview.error;
-    confirm.disabled = true;
-    setText("#watchlist-import-summary", preview.error);
-    return;
-  }
-  const counts = preview.counts;
-  setText("#watchlist-import-summary", "可导入 " + counts.ready + " 只 · 重复 " + counts.duplicate
-    + " 只 · 无效 " + counts.invalid + " 条 · 超出上限 " + counts.limit + " 只");
-  const table = document.createElement("table");
-  const head = document.createElement("thead");
-  const headerRow = document.createElement("tr");
-  ["行", "代码", "名称", "结果"].forEach((label) => {
-    const cell = document.createElement("th");
-    cell.textContent = label;
-    headerRow.append(cell);
-  });
-  head.append(headerRow);
-  table.append(head);
-  const body = document.createElement("tbody");
-  preview.rows.forEach((item) => {
-    const row = document.createElement("tr");
-    [item.line, item.symbol, item.name || "—", item.message].forEach((value) => {
-      const cell = document.createElement("td"); cell.textContent = String(value); row.append(cell);
-    });
-    body.append(row);
-  });
-  table.append(body);
-  root.append(table);
-  confirm.disabled = counts.ready === 0;
+  const view = buildWatchlistImportPreviewView({ document, preview });
+  root.replaceChildren(...view.nodes);
+  setText("#watchlist-import-summary", view.summary);
+  confirm.disabled = view.confirmDisabled;
 }
 
 function previewWatchlistImport() {

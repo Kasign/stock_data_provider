@@ -296,3 +296,12 @@ JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 
 模块不自行读取 localStorage；当前存储可读性/有效性由 app.js 通过 `safeReadWatchlistState` 得出并传入。模块不构建 DOM、不维护 `watchlistImportPreview` state、不执行持久化。最终确认仍由 `importWatchlistSymbols` 负责回读确认与异常存储保护。
 
 验收：`watchlist-import-preview.test.mjs` 覆盖分隔符、引号、BOM、空行、表头、证券代码规范化、重复、无效、容量和异常存储；`watchlist-import.test.mjs` 保留真实存储导入事务测试。WebUI Checks #41814352763、Chromium Browser Smoke #41814352767 均通过。
+
+
+### 12.7 JSR-3C：自选股导入预览 DOM 构建
+
+新增 `watchlist-import-preview-view.js`，导出 `buildWatchlistImportPreviewView({ document, preview })`。模块只负责把预览结果转换为 DOM 节点，并返回 `nodes`、摘要文本 `summary` 与确认按钮状态 `confirmDisabled`。
+
+成功预览构建原有 table/thead/tbody/tr/th/td 结构，所有单元格继续使用 `textContent` 写入，不使用 HTML 字符串拼接。存储不可读或格式异常时返回文本节点，不创建表格，并要求禁用确认按钮。
+
+`app.js` 继续拥有 `watchlistImportPreview` 状态、根节点挂载、摘要更新、确认按钮状态、导入确认和存储回读事务。视图模块不访问全局 state、localStorage、选择器、事件监听或 API。该批不修改导入解析算法、存储 key/schema、导入事务或 CSS。

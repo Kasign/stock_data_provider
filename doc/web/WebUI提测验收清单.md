@@ -1447,3 +1447,14 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] Chromium Browser Smoke #41814352767 通过，自选导入预览/确认交互通过。
 - [ ] JSR-3C：评估预览表格 DOM 构建或 tracking 字段 view model 的进一步拆分。
 - [ ] 继续保留批量行情 generation/AbortController、跨页联动和最终存储事务在 app/领域模块的明确所有权内。
+
+
+### JSR-3C 自选股导入预览 DOM 构建（待 CI 验收）
+
+- [x] 新增 `watchlist-import-preview-view.js`，只根据显式传入的 document 和 preview 构建预览节点。
+- [x] 保留原 table/thead/tbody/tr/th/td 结构、列顺序、摘要文案和确认按钮禁用规则。
+- [x] 单元测试覆盖正常表格、异常存储文本节点、无可导入行，以及单元格按 textContent 写入。
+- [x] app.js 继续持有预览 state、根节点挂载、摘要和确认按钮协调；导入解析及最终存储确认事务不变。
+- [x] UI 契约测试检查模块依赖边界，不允许视图模块访问 localStorage、全局 DOM 查询、事件或 API。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 通过后标记验收完成。
+- [ ] 下一步 JSR-3D 先审查 tracking 字段 ViewModel 的数据来源和格式化依赖，不直接迁移整个 renderWatchlist。
