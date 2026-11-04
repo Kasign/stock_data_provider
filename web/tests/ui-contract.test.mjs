@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat, taskEventView, taskEventNode, watchlistItemView] = await Promise.all([
+const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, watchlistModule, apiClient, taskQueue, marketActivity, stockResearch, marketOverview, serviceWiring, dataCenter, healthCheck, marketHTTPServer, marketOpenAPI, marketStocksModule, notificationPreferences, taskWorkflow, localAlertDrafts, taskEventFormat, taskEventView, taskEventNode, taskResultView, watchlistItemView] = await Promise.all([
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   readFile(new URL("../src/format.js", import.meta.url), "utf8"),
@@ -28,6 +28,7 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
   readFile(new URL("../src/task-event-format.js", import.meta.url), "utf8"),
   readFile(new URL("../src/task-event-view.js", import.meta.url), "utf8"),
   readFile(new URL("../src/task-event-node.js", import.meta.url), "utf8"),
+  readFile(new URL("../src/task-result-view.js", import.meta.url), "utf8"),
   readFile(new URL("../src/watchlist-item-view.js", import.meta.url), "utf8")
 ]);
 const settingsNavigation = await readFile(new URL("../src/settings-navigation.js", import.meta.url), "utf8");
@@ -929,6 +930,19 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
   assert.match(taskEventView, /export function renderRunStatusView\([\s\S]*?runStatusLabel\(normalized\)/);
   assert.match(app, /function renderTaskResult\(result\)[\s\S]*?renderRunStatus\(result\.status \|\| ""\)/);
   assert.match(app, /close-run-flow-dialog/);
+});
+
+test("Run result DOM adapter owns structured result rendering while app retains task state", () => {
+  const renderer = app.match(/function renderTaskResult\\(result\\) \\{[\\s\\S]*?\\n\\}/)?.[0] || "";
+  assert.match(renderer, /state\\.lastRunResult = result/);
+  assert.match(renderer, /state\\.runResultReadStatus = ""/);
+  assert.match(renderer, /persistTaskReference\\(\\)/);
+  assert.match(renderer, /renderRunStatus\\(result\\.status \\|\\| ""\\)/);
+  assert.match(renderer, /renderTaskResultView\\(\\{ document, result, runStatusLabel, fallbackRunId: state\\.runId \\}\\)/);
+  assert.match(renderer, /if \\(state\\.view === "watchlist"\\) renderWatchlist\\(\\)/);
+  assert.match(taskResultView, /export function renderTaskResultView\\(/);
+  assert.match(taskResultView, /document\\.querySelector\\("#task-result-structured"\\)/);
+  assert.doesNotMatch(taskResultView, /\\bstate\\b|localStorage|fetch\\(/);
 });
 
 test("run-flow events expose only server-provided durations and diagnostics", () => {

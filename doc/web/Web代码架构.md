@@ -512,3 +512,12 @@ JSR-5C/5D UI contract 同步：耗时格式化迁入 `task-event-format.js` 后�
 本轮未创建 Task Controller、Polling Controller 或请求状态机。JSR-5A～5E 的任务流程模块边界审查完成；后续回到全站 app.js 剩余业务域盘点，按真实职责收益选择下一模块。
 
 JSR-5C/5D 验收：WebUI Checks #41830356255（444/444 tests、语法检查、Compose 校验、镜像构建通过）；Chromium Browser Smoke #41830355993（全部执行步骤通过）。
+
+
+### 12.19 JSR-6A Run 结果结构化展示 DOM adapter（实施中）
+
+当前 `renderTaskResult` 混合了 app 状态协调和结构化报告 DOM 构建。计划将纯展示部分迁入 `task-result-view.js`：接收 document、真实 Run result、状态标签 formatter 和 fallback Run ID，负责指标、概况、市场状态、质量门禁、因子、信号、交易性/风险决策、交易计划、拒绝原因、执行评估、失败信息、warnings、JSON 和结果说明。
+
+app.js 保留当前 Run 状态写入、读取状态清理、Run ID、状态 pill、流程摘要、任务引用持久化及自选股卡片刷新。adapter 不访问全局 state、localStorage、API、AbortController 或事件监听。该拆分不改变服务端身份校验、Run 结果 schema、报告归档和 Markdown 导出。
+
+验收要求：完整章节/缺失字段/空数组/质量门禁折叠/warnings/JSON 的 adapter 单测；UI contract 检查状态所有权；Browser Smoke 覆盖 Run Flow 结果展示与恢复。

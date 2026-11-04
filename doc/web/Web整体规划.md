@@ -995,3 +995,24 @@ JSR-5C/5D 第二轮 CI 纠正记录：修正换行后，WebUI Checks 的 444 项
 - [x] 当前未发现足够独立且不增加参数耦合的下一块纯逻辑。继续抽取 poll controller、task controller 或统一请求状态机，会把状态所有权从 app 转移出去并扩大回归面，本轮不做。
 
 结论：JSR-5A～5E 的任务工作流审查完成。现有任务领域模块已覆盖可安全独立的纯验证、列表投影、摘要计算和 DOM adapter；Task/Run 请求生命周期及跨模块协调保留在 app.js。后续应转向全站 app.js 剩余职责盘点，按业务域识别真正独立的边界，不再围绕 Run Flow 为拆分而拆分。
+
+
+## JSR-6A：Run 结果结构化展示 DOM adapter（实施中）
+
+### 审查结论
+
+app.js 的 `renderTaskResult` 同时承担两类职责：更新当前 Run 状态、摘要和本地任务引用；以及构建约 200 行结构化报告 DOM。前者依赖 app state 与任务生命周期，必须留在 app；后者只依赖服务端 Run result、document 和状态标签格式化函数，可安全抽取为 DOM adapter。
+
+### 实施范围
+
+- 新增 `web/src/task-result-view.js`，迁移结果展示专用的 section/card/empty/value/pair helper 和结构化报告 DOM 构建。
+- app.js 保留 `lastRunResult`、Run ID、读取状态清理、`renderRunStatus`、`renderTaskFlowSummary`、`persistTaskReference` 及自选股页刷新。
+- 新 adapter 只接收 `document`、服务端 `result`、`runStatusLabel` 和当前 fallback Run ID；不访问 app state、storage、API、请求控制器或事件监听。
+- 保留所有报告章节、空态、质量门禁折叠、warning、JSON 原文、状态说明和 textContent 安全写入。
+- 不改变 Run 结果 schema、身份校验、报告归档、Markdown 导出或 CSS。
+
+### 验收门禁
+
+- 单测验证完整报告章节、空数组/缺失字段、质量门禁折叠、警告和 JSON 展示。
+- UI contract 验证 app 仍拥有状态/持久化/跨页刷新，adapter 不读取 state/storage/API。
+- WebUI Checks 与 Chromium Browser Smoke 的 Run Flow 交互/结果/恢复场景全部通过后完成。
