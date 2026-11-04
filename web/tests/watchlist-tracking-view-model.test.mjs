@@ -4,7 +4,7 @@ import { buildWatchlistTrackingFields } from "../src/watchlist-tracking-view-mod
 
 const fixedNow = new Date("2026-11-04T09:00:00");
 const formatters = {
-  normalizeSymbol: (value) => String(value || "").trim().toUpperCase(),
+  normalizeSymbol: (value) => String(value || "").trim().toUpperCase().replace(/\.(SH|SZ|BJ)$/i, ""),
   dateKey: (value) => {
     const date = value instanceof Date ? value : new Date(String(value || ""));
     if (!Number.isFinite(date.getTime())) return "";

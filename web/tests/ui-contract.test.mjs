@@ -32,9 +32,10 @@ const [html, appSource, format, domain, openapi, recentTaskModule, stylesheet, w
 ]);
 const recentTaskView = await readFile(new URL("../src/recent-task-view.js", import.meta.url), "utf8");
 const watchlistImportPreviewView = await readFile(new URL("../src/watchlist-import-preview-view.js", import.meta.url), "utf8");
+const watchlistTrackingViewModel = await readFile(new URL("../src/watchlist-tracking-view-model.js", import.meta.url), "utf8");
 
 // UI 控制器和功能模块分拆后，跨模块契约应检查实际参与运行的源码集合。
-const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView, watchlistImportPreviewView].join("\n");
+const app = [appSource, recentTaskModule, watchlistModule, marketOverview, marketActivity, stockResearch, dataCenter, healthCheck, marketStocksModule, taskWorkflow, watchlistItemView, watchlistImportPreviewView, watchlistTrackingViewModel].join("\n");
 
 function finalCssRuleBody(selector) {
   const start = stylesheet.lastIndexOf(selector);
@@ -193,18 +194,18 @@ test("watchlist marks a retained Run result when re-reading fails and refreshes 
   const watchlistStart = app.indexOf("function renderWatchlist(");
   const watchlistEnd = app.indexOf("\nfunction addCurrentSymbolToWatchlist(", watchlistStart);
   const watchlist = app.slice(watchlistStart, watchlistEnd);
-  assert.match(watchlist, /readState === "loading"[\s\S]*?正在重读，尚未确认/);
-  assert.match(watchlist, /readState === "retrying"[\s\S]*?重试中，尚未确认/);
-  assert.match(watchlist, /readState === "error"[\s\S]*?本次读取失败/);
+  assert.match(watchlistTrackingViewModel, /正在重读，尚未确认/);
+  assert.match(watchlistTrackingViewModel, /重试中，尚未确认/);
+  assert.match(watchlistTrackingViewModel, /本次读取失败/);
   const resultStart = app.indexOf("function renderTaskResult(result) {");
   const resultEnd = app.indexOf("\nfunction ", resultStart + 10);
   assert.match(app.slice(resultStart, resultEnd), /state\.runResultReadStatus = "";[\s\S]*?state\.runResultReadError = ""/);
   const loaderStart = app.indexOf("async function loadTaskRunResult(runId, expectedTaskId) {");
   const loaderEnd = app.indexOf("\nfunction stopTaskPolling()", loaderStart);
   const loader = app.slice(loaderStart, loaderEnd);
-  assert.match(watchlist, /activeRunReadMatches[\s\S]*?当前 Run 结果：正在读取服务端结果/);
-  assert.match(watchlist, /当前 Run 结果：暂时不可读，正在自动重试/);
-  assert.match(watchlist, /当前 Run 结果：读取失败/);
+  assert.match(watchlistTrackingViewModel, /当前 Run 结果：正在读取服务端结果/);
+  assert.match(watchlistTrackingViewModel, /当前 Run 结果：暂时不可读，正在自动重试/);
+  assert.match(watchlistTrackingViewModel, /当前 Run 结果：读取失败/);
   assert.match(loader, /state\.runResultReadStatus = "loading"/);
   assert.match(loader, /state\.runResultReadStatus = "retrying"[\s\S]*?if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
   assert.match(loader, /state\.runResultReadStatus = "error"[\s\S]*?if \(state\.view === "watchlist"\) renderWatchlist\(\)/);
@@ -232,8 +233,8 @@ test("task restoration and manual refresh mark cached status as unconfirmed", ()
   const watchStart = app.indexOf("function renderWatchlist(");
   const watchEnd = app.indexOf("\nfunction addCurrentSymbolToWatchlist(", watchStart);
   const watchlist = app.slice(watchStart, watchEnd);
-  assert.match(watchlist, /state\.taskStatusLoading \|\| Boolean\(state\.taskStatusError\)/);
-  assert.match(watchlist, /正在确认服务端状态（上次状态：/);
+  assert.match(watchlistTrackingViewModel, /currentTask\.statusLoading \|\| Boolean\(currentTask\.statusError\)/);
+  assert.match(watchlistTrackingViewModel, /正在确认服务端状态（上次状态：/);
   const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
   const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
   const manual = app.slice(manualStart, manualEnd);
@@ -415,8 +416,8 @@ test("task polling errors mark last-known status stale and successful refresh cl
   assert.ok(poller.includes('state.taskStatusError = "";'), "下一次有效 Task 回包清除旧错误");
   assert.ok(poller.includes('setQualityPill($("#task-status-pill"), "unknown", state.taskStatusErrorRetrying ? "状态刷新失败" : "状态读取失败")'), "任务状态徽标不得继续冒充为已确认的 running/succeeded");
   const watchlistRenderer = app.slice(app.indexOf("function renderWatchlist("), app.indexOf("\nfunction addCurrentSymbolToWatchlist("));
-  assert.ok(watchlistRenderer.includes("状态读取异常（上次状态："), "自选卡片应将上次状态标为未验证");
-  assert.ok(watchlistRenderer.includes("自动重试中") && watchlistRenderer.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
+  assert.ok(watchlistTrackingViewModel.includes("状态读取异常（上次状态："), "自选卡片应将上次状态标为未验证");
+  assert.ok(watchlistTrackingViewModel.includes("自动重试中") && watchlistTrackingViewModel.includes("自动刷新已暂停"), "自选卡片应区分临时错误与永久错误");
   const manualStart = app.indexOf('$("#refresh-task").addEventListener("click"');
   const manualEnd = app.indexOf('$("#recent-analysis-search")', manualStart);
   const manualRefresh = app.slice(manualStart, manualEnd);
@@ -580,11 +581,11 @@ test("restoring a task resets the previous stage-event selection", () => {
 });
 
 test("watchlist labels task history from a different analysis API address", () => {
-  assert.ok(app.includes('const isOtherAnalysisBase = (task) => Boolean(task && String(task.analysis_base || state.settings.analysisBase) !== String(state.settings.analysisBase));'));
-  assert.ok(app.includes('todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "")'));
-  assert.ok(app.includes('(recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "")'));
-  const todayTaskDeclaration = app.indexOf("const todayTask = [...matchingTasks]");
-  const todayEndpointUse = app.indexOf("const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask)");
+  assert.ok(watchlistTrackingViewModel.includes("function isOtherAnalysisBase(task, currentAnalysisBase)"));
+  assert.ok(watchlistTrackingViewModel.includes('todayText = "今日分析：有本地记录" + (todayTaskUsesOtherEndpoint ? "（旧分析 API 地址）" : "")'));
+  assert.ok(watchlistTrackingViewModel.includes('(recentTaskUsesOtherEndpoint ? " · 旧分析 API 地址" : "")'));
+  const todayTaskDeclaration = watchlistTrackingViewModel.indexOf("const todayTask = [...matchingTasks]");
+  const todayEndpointUse = watchlistTrackingViewModel.indexOf("const todayTaskUsesOtherEndpoint = isOtherAnalysisBase(todayTask");
   assert.ok(todayTaskDeclaration >= 0 && todayTaskDeclaration < todayEndpointUse, "必须先计算 todayTask 再读取其来源地址，避免暂时性死区");
 });
 
@@ -1778,8 +1779,8 @@ test("自选股报价和任务引用的股票代码比较兼容交易所后缀�
   assert.match(app, /function normalizeWatchlistQuoteSymbol\(value\) \{\s*try \{ return comparableMarketSymbol\(value\);/);
   assert.match(app, /const normalizeLocalSymbol = normalizeWatchlistQuoteSymbol/);
   assert.match(app, /const quoteMatches = Boolean\(state\.quote\?\.symbol\) && normalizeLocalSymbol\(state\.quote\.symbol\) === itemSymbol/);
-  assert.match(app, /task\.symbols\.some\(\(value\) => normalizeLocalSymbol\(value\) === itemSymbol\)/);
-  assert.match(app, /state\.taskSymbols\.some\(\(value\) => normalizeLocalSymbol\(value\) === itemSymbol\)/);
+  assert.match(watchlistTrackingViewModel, /task\.symbols\.some\(\(value\) => normalizeSymbol\(value\) === itemSymbol\)/);
+  assert.match(watchlistTrackingViewModel, /currentTask\.symbols\.some\(\(value\) => normalizeSymbol\(value\) === itemSymbol\)/);
   assert.match(app, /state\.quote\?\.name && state\.quote\?\.symbol && sameMarketSymbol\(state\.quote\.symbol, symbol\)/);
 });
 
