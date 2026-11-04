@@ -115,7 +115,7 @@ function renderBreadth(data) {
  if($("#market-money-turnover"))$("#market-money-turnover").textContent=data?.total_amount_cny===null||data?.total_amount_cny===undefined?"未提供":formatCompact(data.total_amount_cny)+" 元";
  if($("#market-money-turnover-note"))$("#market-money-turnover-note").textContent="金额覆盖 "+count(data?.amount_coverage_count)+" / "+count(data?.covered_securities)+" 只 · 仅为成交额汇总";
  if($("#market-sentiment-meta"))$("#market-sentiment-meta").textContent=["报告样本 "+count(data?.total_securities)+" 只","覆盖 "+count(data?.covered_securities)+" 只",...marketSnapshotEvidence(data,{reportDate:true})].join(" · ");
- if(!data||!fields.some(([,v])=>v!==null&&v!==undefined&&v!=="")){empty(root,"接口未返回可展示的涨跌分布字段。");badge("market-breadth-status","数据字段不完整","warning");return;}
+ if(!data||!fields.some(([,v])=>v!==null&&v!==undefined&&v!=="")){empty(root,"接口未返回可展示的涨跌分布字段。");badge("market-breadth-status",data?.quality_status?"数据字段不完整 · "+qualityLabel(data.quality_status):"数据字段不完整",data?.quality_status?"quality":"warning",data?.quality_status);return;}
  root.replaceChildren();fields.forEach(([label,value,cls])=>{const m=el("div","market-breadth-metric");m.append(el("small","",label),el("strong",cls,count(value)));root.append(m);});
  badge("market-breadth-status",qualityLabel(data.quality_status),"quality",data.quality_status);
  const amount=data.total_amount_cny===null||data.total_amount_cny===undefined?"全市场成交额未由此接口提供":"成交额 "+formatCompact(data.total_amount_cny)+" 元";
