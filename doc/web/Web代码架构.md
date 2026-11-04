@@ -407,3 +407,19 @@ JSR-4A 首批只迁移 `setupSettingsNavigation` 至 `settings-navigation.js`，
 JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js，但只依赖 `DEFAULT_PREFERENCES` 和 `WATCHLIST_DISPLAY_FIELDS`，属于纯校验/规范化。优先并入 `preferences.js` 并增加单测；浏览器导入预览、确认、跨存储写入和 API Key 保留继续由 app 负责。
 
 禁止将 `applySettings`、`handleLocalStorageChange` 或浏览器数据导入/导出整体迁入设置 Controller。连接变更涉及 AbortController/generation/任务上下文和市场模块失效；storage event 是多个独立业务模块的总路由；导入/导出涉及多种本地数据的保护边界。只拆纯职责，不改变状态所有权。
+
+
+### 12.13 JSR-4A / JSR-4B 设置中心拆分实施
+
+**JSR-4A：设置导航交互模块**
+- 新增 `settings-navigation.js`，导出 `setupSettingsNavigation(document)`。
+- `app.js` 仅保留模块初始化调用；设置导航搜索、分组折叠/展开、全部展开/收起及其内部 DOM 事件委托由模块管理。
+- 模块不读取 app state、localStorage、API，不负责连接配置或偏好业务表单。
+- 新增缺少导航节点安全退出、重复初始化幂等测试；UI contract 验证 app/module 边界。
+- 验收：提交 `83ea462` 的 WebUI Checks #41824691276、Chromium Browser Smoke #41824691228 均通过。Browser Smoke 覆盖设置分组搜索、搜索清空、全部折叠/展开及十个分组链接。
+
+**JSR-4B：导入偏好规范化**
+- 将原本位于 app.js 的纯函数 `normalizeImportedPreferences` 迁入现有 `preferences.js` 并导出；不创建第二套偏好仓储。
+- app.js 仍负责导入文件解析、预览/确认、跨存储写入、失败保护和 API Key 保留。
+- 新增测试覆盖默认值、未知字段、对象类型、枚举、展示字段合法性、顺序完整性/重复项、数字精度、成交额单位、日 K 条数与复权方式。
+- 验收：提交 `360ac1a` 的 WebUI Checks #41825039555、Chromium Browser Smoke #41825039554 均通过。

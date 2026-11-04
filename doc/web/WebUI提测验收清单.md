@@ -1502,3 +1502,15 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] JSR-4A：设置导航 DOM 模块拆分及测试。
 - [ ] JSR-4B：导入偏好纯校验迁移及测试。
 - [ ] JSR-4C：偏好控件 adapter 边界评估；收益不足则保持现状。
+
+
+### JSR-4A / JSR-4B 设置中心模块拆分（已验收）
+
+- [x] 新增 `settings-navigation.js`，app.js 保留初始化入口；搜索、折叠/展开交互及 DOM 事件委托独立管理。
+- [x] 设置导航缺少节点安全退出、重复初始化幂等测试通过。
+- [x] Browser Smoke 覆盖十个设置分组、搜索过滤/清空和全部折叠/展开。
+- [x] 将 `normalizeImportedPreferences` 迁入现有 `preferences.js`，未新增重复偏好仓储。
+- [x] 导入偏好 schema 校验测试覆盖未知字段、非法枚举、展示字段/顺序、精度、单位、日 K 条数和复权方式。
+- [x] JSR-4A WebUI Checks #41824691276、Chromium Browser Smoke #41824691228 通过。
+- [x] JSR-4B WebUI Checks #41825039555、Chromium Browser Smoke #41825039554 通过。
+- [ ] JSR-4C：偏好控件 DOM adapter 边界评估。
