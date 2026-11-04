@@ -220,6 +220,11 @@ try {
   await page.locator('.nav-link[data-view="stocks"]').click();
   await page.locator("#load-market-stocks").click();
   await page.locator('#market-stocks-body button[data-market-stock-action="research"]').waitFor({ state: "visible" });
+  const marketRowText = await page.locator("#market-stocks-body tr").first().textContent();
+  assert.match(marketRowText, /1,500/);
+  assert.match(marketRowText, /1,490/);
+  assert.match(marketRowText, /1,480/);
+  assert.doesNotMatch(marketRowText, /function formatPrice/);
   await page.locator('#market-stocks-body button[data-market-stock-action="research"]').click();
   await page.locator("#research-view").waitFor({ state: "visible" });
   await page.waitForFunction(() =>

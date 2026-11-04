@@ -768,3 +768,13 @@
 - [x] 本轮连接切换与研究列表缓存回归通过（[Checks #41760974466](https://github.com/Kasign/stock_data_provider/actions/runs/41760974466)，[Browser Smoke #41760974521](https://github.com/Kasign/stock_data_provider/actions/runs/41760974521)）。
 
 验收边界：仅验证 WebUI 浏览器本地快照、请求取消和连接切换，不代表 Provider 实际数据可用性。
+
+
+## 2026-11-04 P0-C 价格格式化与自选股跨标签页成员同步
+
+- [x] 全市场当前价、MA5、MA20 均通过 `formatPrice` 格式化；Chromium 用例断言展示 1,500、1,490、1,480，且不出现函数源码。
+- [x] 自选股成员变化通过 `WATCHLIST_KEY` 的跨标签页 storage 事件同步到当前页面。
+- [x] 批量行情请求期间记录请求成员集合；外部标签页增删成员后立即中止请求、使 generation 失效、清理旧快照并恢复按钮。
+- [x] Chromium 双标签页专项覆盖在途请求取消、成员列表刷新、旧行情不回填及按钮状态恢复。
+- [ ] 全市场分页连续刷新、页码/页大小/复权切换、页面离开/返回生命周期仍待专项验收。
+

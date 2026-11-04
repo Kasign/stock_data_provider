@@ -66,13 +66,13 @@ export function bindMarketStocks(getSettings, onSelectStock) {
       const change = finiteNumberOrNull(quote?.change_percent);
       const changeClass = change === null ? "" : change > 0 ? "positive" : change < 0 ? "negative" : "";
       [
-        displayNumber(quote?.current_price, (value) => formatPrice),
+        displayNumber(quote?.current_price, formatPrice),
         displayNumber(quote?.change_percent, formatPercent),
         displayNumber(quote?.amount, formatCompact),
         displayNumber(quote?.turnover_rate, formatPercent),
         displayNumber(quote?.volume_ratio, (value) => value.toFixed(2)),
-        displayNumber(item?.ma5, (value) => formatPrice),
-        displayNumber(item?.ma20, (value) => formatPrice)
+        displayNumber(item?.ma5, formatPrice),
+        displayNumber(item?.ma20, formatPrice)
       ].forEach((value, index) => row.append(element("td", index === 1 ? changeClass : "", value)));
       const quality = item?.quality_status || quote?.quality_status || "unknown";
       const qualityCell = element("td");

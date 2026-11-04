@@ -196,6 +196,7 @@ const state = {
   chatStockContextCleared: false,
   watchlistQuotes: new Map(),
   watchlistQuoteSymbols: new Set(),
+  watchlistQuoteRequestSymbols: new Set(),
   watchlistQuoteStatus: "idle",
   watchlistQuoteMessage: "批量行情按需读取，不会在打开自选股时自动请求。",
   watchlistQuoteGeneration: 0,
@@ -708,6 +709,7 @@ function invalidateWatchlistQuotes() {
   state.watchlistQuoteGeneration += 1;
   try { state.watchlistQuoteController?.abort(); } catch {}
   state.watchlistQuoteController = null;
+  state.watchlistQuoteRequestSymbols.clear();
   state.watchlistQuotes.clear();
   state.watchlistQuoteSymbols.clear();
   state.watchlistQuoteStatus = "idle";
@@ -748,6 +750,7 @@ async function refreshWatchlistQuotes() {
   const controller = new AbortController();
   const generation = ++state.watchlistQuoteGeneration;
   state.watchlistQuoteController = controller;
+  state.watchlistQuoteRequestSymbols = new Set(symbols.map(normalizeWatchlistQuoteSymbol));
   state.watchlistQuoteStatus = "loading";
   state.watchlistQuoteMessage = "正在请求 " + symbols.length + " 只自选股的批量行情…";
   if (button) {
@@ -814,6 +817,7 @@ async function refreshWatchlistQuotes() {
   } finally {
     if (generation === state.watchlistQuoteGeneration) {
       state.watchlistQuoteController = null;
+      state.watchlistQuoteRequestSymbols.clear();
       if (button) {
         button.disabled = false;
         button.textContent = "刷新批量行情";
@@ -825,17 +829,31 @@ async function refreshWatchlistQuotes() {
 }
 
 function syncWatchlistQuoteMembership(records) {
-  if (!state.watchlistQuoteSymbols.size) return;
   const currentSymbols = new Set((Array.isArray(records) ? records : [])
     .map((item) => normalizeWatchlistQuoteSymbol(item?.symbol)).filter(Boolean));
-  const unchanged = currentSymbols.size === state.watchlistQuoteSymbols.size
-    && [...state.watchlistQuoteSymbols].every((symbol) => currentSymbols.has(symbol));
-  if (unchanged) return;
+  const matches = (expected) => expected.size === currentSymbols.size
+    && [...expected].every((symbol) => currentSymbols.has(symbol));
+  const requestChanged = Boolean(state.watchlistQuoteController)
+    && !matches(state.watchlistQuoteRequestSymbols);
+  const snapshotChanged = state.watchlistQuoteSymbols.size > 0
+    && !matches(state.watchlistQuoteSymbols);
+  if (!requestChanged && !snapshotChanged) return;
 
+  // 成员变化时立即使请求代际失效并中止在途请求，不能等待旧响应返回后再判断。
+  state.watchlistQuoteGeneration += 1;
+  try { state.watchlistQuoteController?.abort(); } catch {}
+  state.watchlistQuoteController = null;
+  state.watchlistQuoteRequestSymbols.clear();
   state.watchlistQuotes.clear();
   state.watchlistQuoteSymbols.clear();
   state.watchlistQuoteStatus = "idle";
-  state.watchlistQuoteMessage = "自选股成员已变化，旧批量行情快照已失效，请重新刷新。";
+  state.watchlistQuoteMessage = "自选股成员已变化，旧批量行情快照及在途请求已失效，请重新刷新。";
+  const button = $("#refresh-watchlist-quotes");
+  if (button) {
+    button.disabled = false;
+    button.textContent = "刷新批量行情";
+    button.removeAttribute("aria-busy");
+  }
 }
 
 function renderWatchlist(records, storageReadable, storageValid) {
@@ -5256,6 +5274,15 @@ function handleLocalStorageChange(event) {
     syncThemeControl(theme);
     syncSettingsThemeButtons(theme);
     if (!cleared) $("#settings-feedback").textContent = "主题偏好已从其他标签页同步。";
+  }
+
+  if (cleared || event.key === WATCHLIST_KEY) {
+    try {
+      renderWatchlist();
+      if (state.view === "research") renderResearchOverview();
+    } catch (error) {
+      setWatchlistFeedback("已同步其他标签页的自选股变更，但页面刷新失败：" + (error?.message || "未知异常"), "error");
+    }
   }
 
   if (cleared || event.key === PREFERENCES_KEY) {

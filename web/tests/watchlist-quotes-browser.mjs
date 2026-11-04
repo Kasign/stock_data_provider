@@ -46,11 +46,13 @@ try {
   });
 
   let quoteRequests = 0;
-  let markFirstStarted, markSecondStarted, releaseFirst, releaseSecond;
+  let markFirstStarted, markSecondStarted, markThirdStarted, releaseFirst, releaseSecond, releaseThird;
   const firstStarted = new Promise(resolve => { markFirstStarted = resolve; });
   const secondStarted = new Promise(resolve => { markSecondStarted = resolve; });
+  const thirdStarted = new Promise(resolve => { markThirdStarted = resolve; });
   const firstGate = new Promise(resolve => { releaseFirst = resolve; });
   const secondGate = new Promise(resolve => { releaseSecond = resolve; });
+  const thirdGate = new Promise(resolve => { releaseThird = resolve; });
   const quotePayload = () => ({
     items: [{
       symbol: "600519.SH",
@@ -69,10 +71,12 @@ try {
       quoteRequests += 1;
       if (quoteRequests === 1) { markFirstStarted(); await firstGate; }
       if (quoteRequests === 2) { markSecondStarted(); await secondGate; }
+      if (quoteRequests === 3) { markThirdStarted(); await thirdGate; }
       if (quoteRequests === 4) {
         return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "fixture unavailable" } }) });
       }
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(quotePayload()) });
+      try { return await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(quotePayload()) }); }
+      catch { /* 跨标签页成员变化应中止旧请求，路由不再提交旧响应。 */ }
     }
     if (url.pathname.includes("/api/") || /\/(?:health\/(?:ready|live)|readyz|healthz)$/.test(url.pathname)) {
       return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "isolated browser fixture" } }) });
@@ -116,16 +120,28 @@ try {
   await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 1 / 1"));
   assert.match(await list.textContent(), /批量采集/);
 
-  // 成功快照之后再增删股票，也必须使原成员集合的批量行情失效。
-  await page.evaluate(() => {
+  // 第二个标签页修改自选股成员时，当前页应立即同步列表并中止在途批量行情。
+  const otherPage = await context.newPage();
+  await otherPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await page.locator("#refresh-watchlist-quotes").click();
+  await thirdStarted;
+  await otherPage.evaluate(() => {
     const key = "stock-provider-webui.watchlist.v1";
     const items = JSON.parse(localStorage.getItem(key) || "[]");
-    items.push({ symbol: "000001.SZ", name: "后加入标的", updated_at: "2026-11-04T01:03:00Z" });
+    items.push({ symbol: "000001.SZ", name: "跨标签新增", updated_at: "2026-11-04T01:03:00Z" });
     localStorage.setItem(key, JSON.stringify(items));
   });
-  await page.locator("#watchlist-search").fill("测试标的");
-  await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("旧批量行情快照已失效"));
-  assert.doesNotMatch(await page.locator(".watchlist-tracking-line").first().textContent(), /批量采集/);
+  await page.waitForFunction(() =>
+    document.querySelector("#watchlist-count")?.textContent.includes("2 /") &&
+    document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("在途请求已失效")
+  );
+  assert.match(await list.textContent(), /000001\.SZ/);
+  assert.equal(await refresh.isEnabled(), true, "cross-tab membership change must restore the refresh button");
+  assert.equal(await refresh.getAttribute("aria-busy"), null);
+  releaseThird();
+  await page.waitForTimeout(100);
+  assert.doesNotMatch(await list.textContent(), /批量采集/);
+  await otherPage.close();
 
   // 重新按当前成员集合成功刷新，再验证失败时保留快照的旧数据标识。
   await page.evaluate(() => localStorage.setItem("stock-provider-webui.watchlist.v1", JSON.stringify([
