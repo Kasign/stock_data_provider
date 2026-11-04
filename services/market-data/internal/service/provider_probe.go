@@ -1311,7 +1311,9 @@ func firstCrossProviderAdjustmentMethod(snapshot *provider.CrossProviderDailySna
 }
 
 func firstCrossProviderAdjustmentRefDate(snapshot *provider.CrossProviderDailySnapshot) string {
-	if snapshot == nil || len(snapshot.Bars) == 0 { return "" }
+	if snapshot == nil || len(snapshot.Bars) == 0 {
+		return ""
+	}
 	return snapshot.Bars[0].AdjustmentRefDate
 }
 
