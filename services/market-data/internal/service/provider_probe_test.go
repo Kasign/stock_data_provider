@@ -1287,7 +1287,9 @@ func (p providerProbeContextCalendarFake) FetchTradingCalendar(_ context.Context
 		return nil, err
 	}
 	end, err := time.Parse("2006-01-02", endDate)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	items := make([]model.TradingCalendarDay, 0, int(end.Sub(start).Hours()/24)+1)
 	tradingDays := 0
 	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
