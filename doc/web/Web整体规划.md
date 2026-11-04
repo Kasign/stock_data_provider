@@ -538,7 +538,7 @@ CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后�
 验收边界：只处理 WebUI 数值类型转换，不替代服务端 JSON Schema 或 Provider 数据校验。
 
 
-### 2026-11-04 P1 设置中心本地偏好损坏数据保护（开发中）
+### 2026-11-04 P1 设置中心本地偏好损坏数据保护（已验收）
 
 - [x] 增加偏好存储状态读取，区分存储不可读、JSON/根结构损坏和有效偏好。
 - [x] 普通偏好变更遇到损坏数据时拒绝覆盖，保留原始 localStorage 内容。
@@ -546,6 +546,8 @@ CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后�
 - [x] 显式“恢复默认值”允许用户主动替换损坏数据。
 - [x] 单元测试覆盖损坏数据保护与显式恢复。
 - [x] 双标签页浏览器测试覆盖外部损坏数据通知与原始值保留。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待提交后验收。
+- [x] WebUI Checks：[运行记录 #41792467744](https://github.com/Kasign/stock_data_provider/actions/runs/41792467744)。
+- [x] Chromium Browser Smoke：[运行记录 #41792467673](https://github.com/Kasign/stock_data_provider/actions/runs/41792467673)，全量步骤通过。
+- [x] 实现提交：`5be5a0d8a55594a4bcf783498b1758f4a9bab1b7`。
 
 验收边界：仅保护本地展示/查询偏好存储；不涉及连接 API Key、服务端配置或跨设备同步。

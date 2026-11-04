@@ -1106,14 +1106,15 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 验收边界：仅验证 WebUI 对异常数值类型的处理，不代表数据侧 Provider 输入校验完成。
 
 
-## 2026-11-04 P1 设置中心本地偏好损坏数据保护（开发中）
+## 2026-11-04 P1 设置中心本地偏好损坏数据保护（已验收）
 
 - [x] 识别本地偏好 JSON 损坏或根结构异常。
 - [x] 普通偏好保存不覆盖损坏的原始数据。
 - [x] 跨标签页同步不把损坏数据静默解释为默认偏好。
 - [x] 显式恢复默认值可以修复损坏偏好。
 - [x] 单元测试和双标签页浏览器测试覆盖上述边界。
-- [ ] WebUI Checks：待提交后验收。
-- [ ] Chromium Browser Smoke：待提交后验收。
+- [x] WebUI Checks：[运行记录 #41792467744](https://github.com/Kasign/stock_data_provider/actions/runs/41792467744)。
+- [x] Chromium Browser Smoke：[运行记录 #41792467673](https://github.com/Kasign/stock_data_provider/actions/runs/41792467673)，全量步骤通过。
+- [x] 实现提交：`5be5a0d8a55594a4bcf783498b1758f4a9bab1b7`。
 
 验收边界：只涉及浏览器本地展示偏好，不修改连接密钥、API 或服务端设置。
