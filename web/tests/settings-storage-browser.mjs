@@ -67,7 +67,7 @@ try {
       return route.continue();
     });
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-    await page.locator("#settings-form").waitFor();
+    await page.locator("#settings-form").waitFor({ state: "attached" });
   }
 
   await second.evaluate(() => localStorage.setItem("stock-provider-webui.theme.v1", "light"));
