@@ -5177,6 +5177,81 @@ function clearLocalSettings() {
   }
 }
 
+function handleLocalStorageChange(event) {
+  try {
+    if (event.storageArea && event.storageArea !== window.localStorage) return;
+  } catch {
+    return;
+  }
+
+  const cleared = event.key === null;
+
+  if (cleared || event.key === THEME_STORAGE_KEY) {
+    const theme = readTheme();
+    applyTheme(theme);
+    syncThemeControl(theme);
+    syncSettingsThemeButtons(theme);
+    if (!cleared) $("#settings-feedback").textContent = "主题偏好已从其他标签页同步。";
+  }
+
+  if (cleared || event.key === PREFERENCES_KEY) {
+    const preferences = readPreferences();
+    try {
+      syncWatchlistPreferenceControls(preferences);
+      renderWatchlist();
+      if (state.quote) renderQuote(state.quote);
+      if (state.view === "research") renderResearchOverview();
+      $("#local-preferences-feedback").textContent = "本地展示与查询偏好已从其他标签页同步。";
+    } catch (error) {
+      $("#local-preferences-feedback").textContent = "已读取其他标签页的偏好，但页面刷新失败：" + (error?.message || "未知异常");
+    }
+  }
+
+  if (cleared || event.key === SETTINGS_KEY) {
+    if (!cleared && event.newValue !== null) {
+      try {
+        const externalSettings = JSON.parse(event.newValue);
+        if (!externalSettings || typeof externalSettings !== "object" || Array.isArray(externalSettings)) {
+          throw new Error("连接配置必须是对象。");
+        }
+      } catch (error) {
+        $("#settings-feedback").textContent = "其他标签页写入的连接配置格式无效，当前配置未改变：" + (error?.message || "无法解析配置。");
+        return;
+      }
+    }
+
+    let draft;
+    let preserveDraft = false;
+    try {
+      draft = readConnectionDraft();
+      preserveDraft = connectionDraftIsDirty();
+    } catch {
+      // 设置表单尚不可用时仍同步已保存连接配置；不读取或回显 API Key。
+    }
+
+    const nextSettings = loadSettings();
+    const changed = nextSettings.marketBase !== state.settings.marketBase ||
+      nextSettings.analysisBase !== state.settings.analysisBase ||
+      nextSettings.apiKey !== state.settings.apiKey;
+    if (!changed) return;
+
+    try {
+      applySettings(nextSettings);
+      if (preserveDraft && draft) {
+        $("#market-base-input").value = draft.marketBase;
+        $("#analysis-base-input").value = draft.analysisBase;
+        $("#market-key-input").value = draft.apiKey;
+        syncConnectionDraftState();
+        $("#settings-feedback").textContent = "已同步其他标签页保存的连接配置；当前未保存草稿已保留，请核对后再保存。";
+      } else {
+        $("#settings-feedback").textContent = "已同步其他标签页保存的连接配置。";
+      }
+    } catch (error) {
+      $("#settings-feedback").textContent = "其他标签页的连接配置已变更，但当前页面应用失败：" + (error?.message || "未知异常");
+    }
+  }
+}
+
 
 function setBrowserDataFeedback(message, kind = "info") {
   const output = $("#browser-data-feedback");
@@ -5611,6 +5686,7 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
 
 syncThemeControl(readTheme());
 syncWatchlistPreferenceControls();
+window.addEventListener("storage", handleLocalStorageChange);
 $("#theme-toggle").addEventListener("click", () => {
   const nextTheme = readTheme() === "dark" ? "light" : "dark";
   const result = persistTheme(nextTheme);

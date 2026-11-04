@@ -1,6 +1,6 @@
 # WebUI 功能提测与集中验收清单
 
-更新日期：2026-11-03
+更新日期：2026-11-04
 目标分支：feat/webui-market-data-console
 验收策略：先完成页面和接口闭环开发，再集中进行一次完整浏览器验收；开发期间不反复进行零碎浏览器检查。
 
@@ -637,3 +637,20 @@
 - [x] 增加任务身份回归测试。
 - [x] WebUI Checks 成功（[运行记录 #41613627437](https://github.com/Kasign/stock_data_provider/actions/runs/41613627437)）。
 - [x] Chromium Browser Smoke 成功（[运行记录 #41613627591](https://github.com/Kasign/stock_data_provider/actions/runs/41613627591)）。
+
+
+## 2026-11-04 设置中心跨标签页同步专项（P0-B1 / P0-B2）
+
+- [x] 复核涨跌颜色方案：`syncWatchlistPreferenceControls()` 已同步 `data-market-color-scheme` 根节点属性；不重复修改已有逻辑。
+- [x] 新增跨标签页主题同步：主题值变化后同步根节点主题、顶部切换按钮和设置页主题按钮状态。
+- [x] 新增跨标签页展示偏好同步：更新设置控件、涨跌颜色方案、自选股展示和当前已加载个股/研究视图。
+- [x] 新增跨标签页连接配置同步：外部已保存配置应用到当前运行状态，触发旧连接请求失效和新连接刷新。
+- [x] 连接配置同步保留本标签页未保存草稿，不将外部 API Key 回显到输入框或页面文本。
+- [x] 外部连接配置 JSON 损坏时保留当前运行配置并提示；删除连接配置时恢复默认路径。
+- [x] 新增独立 Chromium 双标签页专项：`web/tests/settings-storage-browser.mjs`。
+- [x] 将该专项加入 `.github/workflows/webui-browser-smoke.yml`。
+- [ ] WebUI Checks：等待本次提交 SHA 对应的单元测试、语法检查、Compose 校验及 Nginx 镜像构建结果。
+- [ ] Chromium Browser Smoke：等待本次提交 SHA 对应的双标签页专项和全量浏览器回归结果。
+- [ ] CI 通过后补录运行链接、提交 SHA 和最终测试数量；未完成前不标记自动化验收通过。
+
+验收边界：双标签页测试使用同源独立页面和隔离 API 响应，验证浏览器存储事件、设置同步和草稿保护；不代表真实数据 Provider 或服务端连接验收。

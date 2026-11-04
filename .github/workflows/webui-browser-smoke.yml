@@ -45,6 +45,10 @@ jobs:
         working-directory: web
         run: node tests/browser-smoke.mjs
 
+      - name: Run settings cross-tab synchronization acceptance
+        working-directory: web
+        run: node tests/settings-storage-browser.mjs
+
       - name: Run Run Flow interaction acceptance
         working-directory: web
         run: node tests/run-flow-browser.mjs
