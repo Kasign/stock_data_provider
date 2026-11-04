@@ -1124,8 +1124,7 @@ func (p providerProbePytdxDailyBarFailureFake) FetchDailyBars(context.Context, s
 func TestProviderProbeDoesNotClassifyPytdxTransportFailureAsNotSupported(t *testing.T) {
 	transportErr := errors.New("Pytdx ex-rights/ex-dividend data required for forward_adjusted adjustment: dial tcp 127.0.0.1:7709: i/o timeout")
 	p := providerProbePytdxDailyBarFailureFake{err: transportErr}
-	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, nil, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
-	ds.SetDailyBarProviders([]provider.DailyBarProvider{p})
+	ds := NewWithCapabilities([]provider.NamedProvider{p}, nil, []provider.DailyBarProvider{p}, cache.NewDisabled(), nil, time.Second, time.Minute, 120, 2000, ResilienceConfig{}, nil)
 
 	run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
 		Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600519.SH"},

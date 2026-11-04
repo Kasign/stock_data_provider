@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。当前数据侧分支 HEAD 为 `ed18e0642f777646eb778f8b9521abb7fed4d518`（2026-11-04）；当前批次完成 DailyBar 复权/边界首轮代码审计，未修改 WebUI 业务代码。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。当前数据侧分支 HEAD 为 `c4438a9d1822c292eae4d4313011718ce2fd0c0a`（2026-11-04）；当前批次修复 DailyBar Reporter 聚合计数和 Pytdx Probe 测试注入方式，未修改 WebUI 业务代码。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。
@@ -160,7 +160,7 @@
 | API-03 | 已完成 | `/api/v1/market/stocks` 提供分页行情与 MA 参数；批量 quote 最多 50 只；WebUI 已封装并用于当前分页选股及自选股批量刷新 | 补全分页总数/覆盖边界、均线复权语义及真实样本质量验证；明确当前选股仅作用于已加载分页 | 不具备全市场筛选策略执行 API | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853`；WebUI checks Run `41622693832` 均通过 | 未执行全市场真实覆盖验收 | 待真实数据验收 |
 | API-04 | 开发中 | 市场情绪快照/历史和市场级资金流历史接口及 WebUI 请求封装已存在 | 核实市场情绪历史缺失交易日、幂等写入、保留策略和真实数据库数据；补专门集成证据 | 需要 MariaDB 持久化与真实历史数据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 的 MariaDB migration/PIT 集成通过；未证明 sentiment 专项全链路 | 未执行生产数据历史验收 | 待真实数据验收 |
 | API-05 | 已完成 | `/api/v1/market/capital-flow` 已提供，使用 Tushare `moneyflow_mkt_dc`；WebUI 已封装 | 核对 Token 权限、字段单位、交易日覆盖、源端时间和历史数据准确性 | 依赖 Tushare 权限与凭据 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | Go test suite Run `41622693853` 通过 | 真实权限/历史值验收未完成；未配置凭据时应跳过 | 阻塞真实验收 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；validation/coverage Schema、DailyBar 多复权口径 Probe 契约及 Provider 专项测试已推进；首轮审计发现 Reporter 对重复/截断/部分过滤计数尚未完整结构化 | 补 Pytdx GetGbbq 请求失败确定性测试；完成 DailyBar 过滤/丢弃计数闭环；验证 MariaDB 探测历史持久化和逐 Provider 真实复权口径请求 | Provider 凭据影响真实探测；默认关闭 Provider 不生成逐项 Probe 结果；Pytdx 当前直接依赖具体 `*tdx.Client`，需要评估内部注入测试缝隙 | `ed18e0642f777646eb778f8b9521abb7fed4d518` | Go test suite Run `41758382946`、Parity Run `41758383176`、Live provider probe Run `41758383404`、WebUI checks Run `41758382953` 全部通过；Normalize/Validator 既有测试覆盖日期、重复、limit 和字段规则 | Provider × 复权口径真实请求未执行；Probe 历史持久化仍需部署验收 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；validation/coverage Schema、DailyBar 多复权口径 Probe 契约、Provider 专项测试及 Pytdx GBBQ 故障注入代码已提交；`c4438a9d` 修复 Reporter 对 FieldIssue.Count 的聚合统计和 Merge 截断语义，并修正 Probe 测试注入方式 | 验证修复后当前 HEAD 的 Go test/race/vet、Parity、Docker 构建；验证 MariaDB 探测历史持久化和逐 Provider 真实复权口径请求 | 当前 HEAD 尚无 Actions 运行记录；Provider 凭据影响真实探测；默认关闭 Provider 不生成逐项 Probe 结果 | `c4438a9d1822c292eae4d4313011718ce2fd0c0a` | 父提交 `e1e61f68` Go suite / Parity 失败，失败涉及 Count 聚合和 Probe 测试编译；修复后 HEAD 尚未执行 CI，不引用父提交结果作为通过证据 | Provider × 复权口径真实请求未执行；Probe 历史持久化仍需部署验收 | 接口层已接入，待真实验收 |
 | API-07 | 开发中 | 板块排行支持涨幅、成交额、近 5 日涨幅排序；`change_percent_5d` OpenAPI Schema 已补齐；WebUI 已封装并支持排序切换 | 评估真实资金净流入来源和完整候选集；补领涨股标准证券代码字段前不开放跳转 | 当前没有独立资金净流入 API；`leading_stock_symbol` 缺失 | `8decb2a8d796f54d6f1552928bb599889aa93c0a` | Go test suite Run `41755222811`、WebUI checks Run `41755222944` 通过 | 板块资金净流入真实来源未验收 | 部分联调完成 |
 | API-08 | 暂缓 | 当前没有服务端通知渠道、订阅和投递记录闭环 | 需要先形成服务端安全设计与 API 方案 | 用户确认复杂方案后再实施 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
 | API-09 | 暂缓 | 当前分页行情不等同于服务端策略执行或全市场扫描 | 先定义策略 schema、异步任务、结果快照和可追溯理由 | 需先确认产品/API 设计 | `05949306eba5c4cbb5b9c62bc2d656a1efc24db9` | 不适用 | 不适用 | 暂不适用 |
@@ -242,7 +242,7 @@
 - Pytdx GetGbbq 失败路径尚无确定性端到端测试；生产代码直接依赖具体 `*tdx.Client`。下一步先评估最小内部客户端注入方案，不改变公开 API 或生产请求行为。
 - 本轮未执行真实 Provider × 复权口径请求；CI Live Probe 通过不替代真实逐口径验收。
 
-## 12. 2026-11-04 DailyBar 诊断实现进度
+## 12. 2026-11-04 DailyBar 诊断实现进度（历史快照，以第 13 节为准）
 
 - 数据侧本轮代码集中提交 1160d221，包含 DailyBar Reporter 计数、Probe 字段映射、OpenAPI Schema、Pytdx 日线客户端注入及回归测试。
 - Reporter 已支持 FieldIssue.count 聚合计数；Normalize 阶段重复日期和 limit 截断已纳入结构化报告，日期范围问题由 Validate 阶段 out_of_range 统一表达，避免双计。
@@ -253,3 +253,14 @@
 - 2026-11-04：诊断 FieldIssue 增加可选 count 聚合字段并同步 OpenAPI Schema；首次 CI 检查发现新增文件 gofmt 格式问题，已按日志修正，最新 SHA 的 Go test suite 待重新验证。WebUI checks 在 SHA 24013849、eefdeb19 均通过；其余工作流状态以最新 SHA 的 Actions 为准。
 
 - 本轮代码功能按批次集中提交为 1160d221；PR #1 仍为 Open / Draft。最新 Go test suite、Parity 和 Live Probe 的结果以该 SHA 对应 Actions 为准；当前 Go test suite / Parity 尚未完成，WebUI checks 已通过。
+
+
+## 13. 2026-11-04 DailyBar Reporter 回归修复
+
+- 当前数据侧 HEAD：`c4438a9d1822c292eae4d4313011718ce2fd0c0a`。
+- 修复 `Report.Add` 未按 `FieldIssue.Count` 加权累计的问题；Count 缺省/非正数按 1 兼容，TotalCount 与 Error/Warning/Info 计数保持一致。
+- 修复 `Report.Merge` 将聚合记录数量误判为明细 Truncated 的问题；只传播显式截断或合并时实际触发的明细截断。
+- 修复 Pytdx Probe 测试使用不存在的 `SetDailyBarProviders`；改为在 `NewWithCapabilities` 构造时传入 DailyBarProvider，不增加生产 API。
+- 新增聚合 Merge 和兼容回退测试。父提交 `e1e61f68` 的 Go suite、Parity 失败；修复后 HEAD 尚无 Actions 运行记录，当前 CI 状态为未验证。
+- WebUI 请求封装、响应字段和路由未变化，无需 WebUI 修改；API-06 跨端状态仍为“接口层已接入，待真实验收”。
+- 真实 Provider × 复权口径请求和 MariaDB Probe 历史部署验收未执行。
