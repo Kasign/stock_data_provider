@@ -409,19 +409,27 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 	symbols := make([]string, 0, len(universe.Symbols))
 	expected := make(map[string]struct{}, len(universe.Symbols))
+	excluded := make(map[string]struct{})
 	for _, rawSymbol := range universe.Symbols {
-		symbol, normalizeErr := tickflowDomesticSymbol(rawSymbol)
+		symbol, supported, normalizeErr := tickflowClassifyUniverseSymbol(rawSymbol)
 		if normalizeErr != nil {
-			return nil, fmt.Errorf("TickFlow A-share universe contains an unsupported symbol %q: %w", rawSymbol, normalizeErr)
+			return nil, fmt.Errorf("TickFlow A-share universe contains an invalid symbol %q: %w", rawSymbol, normalizeErr)
 		}
 		if _, duplicate := expected[symbol]; duplicate {
 			return nil, fmt.Errorf("TickFlow A-share universe contains duplicate symbol %s", symbol)
 		}
+		if _, duplicate := excluded[symbol]; duplicate {
+			return nil, fmt.Errorf("TickFlow A-share universe contains duplicate symbol %s", symbol)
+		}
+		if !supported {
+			excluded[symbol] = struct{}{}
+			continue
+		}
 		expected[symbol] = struct{}{}
 		symbols = append(symbols, symbol)
 	}
-	if len(expected) != universe.SymbolCount {
-		return nil, fmt.Errorf("TickFlow A-share universe normalized symbol count mismatch: expected=%d actual=%d", universe.SymbolCount, len(expected))
+	if len(expected)+len(excluded) != universe.SymbolCount {
+		return nil, fmt.Errorf("TickFlow A-share universe normalized symbol count mismatch: expected=%d actual=%d", universe.SymbolCount, len(expected)+len(excluded))
 	}
 
 	// 全市场实时行情需授权 Key；免费日 K endpoint 不提供此能力。
@@ -439,9 +447,15 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 	quotesBySymbol := make(map[string]tickflowQuotePayload, len(quotes))
 	for _, quote := range quotes {
-		symbol, normalizeErr := tickflowDomesticSymbol(quote.Symbol)
+		symbol, supported, normalizeErr := tickflowClassifyUniverseSymbol(quote.Symbol)
 		if normalizeErr != nil {
-			return nil, fmt.Errorf("TickFlow A-share quote has an unsupported symbol %q: %w", quote.Symbol, normalizeErr)
+			return nil, fmt.Errorf("TickFlow A-share quote has an invalid symbol %q: %w", quote.Symbol, normalizeErr)
+		}
+		if !supported {
+			if _, knownExcluded := excluded[symbol]; !knownExcluded {
+				return nil, fmt.Errorf("TickFlow returned unsupported symbol %s outside the declared exclusion set", symbol)
+			}
+			continue
 		}
 		if _, ok := expected[symbol]; !ok {
 			return nil, fmt.Errorf("TickFlow returned quote for symbol %s outside CN_Equity_A", symbol)
@@ -459,12 +473,16 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	}
 	snapshot := &model.MarketBreadthSnapshot{
 		Market: "cn_a_share", TotalSecurities: universe.SymbolCount, CoveredSecurities: len(quotesBySymbol),
+		ExcludedNonAShareCount: len(excluded),
 		Source: p.Name(), SourceVersion: tickflowVersion + "-market-breadth-v1",
 		FetchedAt: fetchedAt, QualityStatus: model.QualityValid,
 	}
 	degrade := func(reason string) {
 		snapshot.QualityStatus = model.QualityDegraded
 		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, reason)
+	}
+	if len(excluded) > 0 {
+		degrade("provider_universe_contains_non_common_equities_excluded")
 	}
 	amountTotal := 0.0
 	amountCoverage := 0
@@ -473,7 +491,7 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	reportDate := ""
 	limitUpCount, limitDownCount := 0, 0
 	limitCountsComplete := snapshot.CoveredSecurities == snapshot.TotalSecurities
-	if snapshot.CoveredSecurities < snapshot.TotalSecurities {
+	if snapshot.CoveredSecurities+snapshot.ExcludedNonAShareCount < snapshot.TotalSecurities {
 		degrade("provider_quote_coverage_incomplete")
 	}
 
@@ -688,19 +706,27 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 			shareUniverse.SymbolCount, maxUniverseSecurities)
 	}
 	expectedSymbols := make(map[string]struct{}, len(shareUniverse.Symbols))
+	excludedSymbols := make(map[string]struct{})
 	for _, rawSymbol := range shareUniverse.Symbols {
-		symbol, normalizeErr := tickflowDomesticSymbol(rawSymbol)
+		symbol, supported, normalizeErr := tickflowClassifyUniverseSymbol(rawSymbol)
 		if normalizeErr != nil {
-			return nil, fmt.Errorf("TickFlow A-share universe contains unsupported symbol %q: %w", rawSymbol, normalizeErr)
+			return nil, fmt.Errorf("TickFlow A-share universe contains invalid symbol %q: %w", rawSymbol, normalizeErr)
 		}
 		if _, duplicate := expectedSymbols[symbol]; duplicate {
 			return nil, fmt.Errorf("TickFlow A-share universe contains duplicate symbol %s", symbol)
 		}
+		if _, duplicate := excludedSymbols[symbol]; duplicate {
+			return nil, fmt.Errorf("TickFlow A-share universe contains duplicate symbol %s", symbol)
+		}
+		if !supported {
+			excludedSymbols[symbol] = struct{}{}
+			continue
+		}
 		expectedSymbols[symbol] = struct{}{}
 	}
-	if len(expectedSymbols) != shareUniverse.SymbolCount {
+	if len(expectedSymbols)+len(excludedSymbols) != shareUniverse.SymbolCount {
 		return nil, fmt.Errorf("TickFlow A-share universe unique count mismatch: expected=%d actual=%d",
-			shareUniverse.SymbolCount, len(expectedSymbols))
+			shareUniverse.SymbolCount, len(expectedSymbols)+len(excludedSymbols))
 	}
 
 	batchRaw, err := p.postJSON(ctx, p.apiURL, "/v1/universes/batch", map[string]any{"ids": sw1IDs}, true)
@@ -756,9 +782,15 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 		}
 		seenIndustrySymbols := make(map[string]struct{}, len(detail.Symbols))
 		for _, rawSymbol := range detail.Symbols {
-			symbol, normalizeErr := tickflowDomesticSymbol(rawSymbol)
+			symbol, supported, normalizeErr := tickflowClassifyUniverseSymbol(rawSymbol)
 			if normalizeErr != nil {
-				return nil, fmt.Errorf("TickFlow SW1 universe %s contains unsupported symbol %q: %w", id, rawSymbol, normalizeErr)
+				return nil, fmt.Errorf("TickFlow SW1 universe %s contains invalid symbol %q: %w", id, rawSymbol, normalizeErr)
+			}
+			if !supported {
+				if _, knownExcluded := excludedSymbols[symbol]; !knownExcluded {
+					return nil, fmt.Errorf("TickFlow SW1 universe %s includes unsupported symbol %s outside CN_Equity_A exclusion set", id, symbol)
+				}
+				continue
 			}
 			if _, duplicate := seenIndustrySymbols[symbol]; duplicate {
 				return nil, fmt.Errorf("TickFlow SW1 universe %s contains duplicate constituent %s", id, symbol)
@@ -792,9 +824,9 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	if err := json.Unmarshal(quotesData, &quotes); err != nil {
 		return nil, fmt.Errorf("decode TickFlow A-share quotes: %w", err)
 	}
-	if len(quotes) != shareUniverse.SymbolCount {
-		return nil, fmt.Errorf("TickFlow A-share quotes coverage mismatch: returned=%d universe=%d",
-			len(quotes), shareUniverse.SymbolCount)
+	if len(quotes) < len(expectedSymbols) {
+		return nil, fmt.Errorf("TickFlow A-share quotes coverage mismatch: returned=%d supported_universe=%d",
+			len(quotes), len(expectedSymbols))
 	}
 	quotesBySymbol := make(map[string]tickflowQuotePayload, len(quotes))
 	reportDate := ""
@@ -805,9 +837,15 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	}
 	timestampIncomplete := false
 	for _, quote := range quotes {
-		symbol, normalizeErr := tickflowDomesticSymbol(quote.Symbol)
+		symbol, supported, normalizeErr := tickflowClassifyUniverseSymbol(quote.Symbol)
 		if normalizeErr != nil {
-			return nil, fmt.Errorf("TickFlow A-share quote has unsupported symbol %q: %w", quote.Symbol, normalizeErr)
+			return nil, fmt.Errorf("TickFlow A-share quote has invalid symbol %q: %w", quote.Symbol, normalizeErr)
+		}
+		if !supported {
+			if _, knownExcluded := excludedSymbols[symbol]; !knownExcluded {
+				return nil, fmt.Errorf("TickFlow returned unsupported symbol %s outside CN_Equity_A exclusion set", symbol)
+			}
+			continue
 		}
 		if _, allowed := expectedSymbols[symbol]; !allowed {
 			return nil, fmt.Errorf("TickFlow returned quote for %s outside CN_Equity_A", symbol)
@@ -828,9 +866,9 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 			return nil, fmt.Errorf("TickFlow A-share quotes span multiple report dates: %s and %s", reportDate, date)
 		}
 	}
-	if len(quotesBySymbol) != shareUniverse.SymbolCount {
-		return nil, fmt.Errorf("TickFlow A-share unique quote coverage mismatch: returned=%d universe=%d",
-			len(quotesBySymbol), shareUniverse.SymbolCount)
+	if len(quotesBySymbol) != len(expectedSymbols) {
+		return nil, fmt.Errorf("TickFlow A-share unique quote coverage mismatch: returned=%d supported_universe=%d",
+			len(quotesBySymbol), len(expectedSymbols))
 	}
 	if reportDate == "" {
 		return nil, errors.New("TickFlow A-share quotes contain no valid provider timestamp for an industry report date")
@@ -906,6 +944,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 	snapshot := &model.SectorRankingSnapshot{
 		Category: category, Total: len(industrySymbols),
 		ProviderReturned: len(industrySymbols), ExcludedRows: industriesWithoutUsableChanges,
+		ExcludedNonAShareCount: len(excludedSymbols),
 		Source: p.Name(), SourceVersion: tickflowVersion + "-sw1-sector-rankings-v1", FetchedAt: fetchedAt,
 		QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{
@@ -914,6 +953,9 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 			"sector_rankings_collected_non_atomically",
 		},
 		Items: make([]model.SectorRanking, 0, min(limit, len(industries))),
+	}
+	if len(excludedSymbols) > 0 {
+		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, "provider_universe_contains_non_common_equities_excluded")
 	}
 	if timestampIncomplete {
 		snapshot.QualityReasons = appendTickflowUniqueReason(snapshot.QualityReasons, "one_or_more_quote_timestamps_missing_or_invalid")
@@ -1285,6 +1327,19 @@ func (p *TickFlow) waitForFreeRateLimit(ctx context.Context) error {
 	}
 	p.lastFreeCall = time.Now()
 	return nil
+}
+
+// tickflowClassifyUniverseSymbol 区分无效代码与上游证券池中可识别但非普通 A 股的成员。
+func tickflowClassifyUniverseSymbol(raw string) (string, bool, error) {
+	symbol, err := normalize.NormalizeSymbol(raw)
+	if err != nil {
+		return "", false, err
+	}
+	parts := strings.Split(symbol, ".")
+	if len(parts) != 2 || (parts[1] != "SH" && parts[1] != "SZ" && parts[1] != "BJ") {
+		return "", false, fmt.Errorf("unsupported domestic exchange symbol %q", raw)
+	}
+	return symbol, isTushareAShareSymbol(symbol), nil
 }
 
 func tickflowDomesticSymbol(raw string) (string, error) {
