@@ -1061,7 +1061,7 @@
 CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质量脚本等待旧的“无板块”空状态文案时超时；原因是测试夹具已调整为包含真实板块记录，但等待条件未同步。已将等待条件改为等待板块名称，随后重新执行完整浏览器验收。该失败属于测试条件不一致，不是页面运行时异常。
 
 
-## 2026-11-04 P1 本地选股方案跨标签页同步与冲突保护（开发中）
+## 2026-11-04 P1 本地选股方案跨标签页同步与冲突保护（已验收）
 
 - [x] 监听筛选方案存储键；外部新增、修改、删除和 `localStorage.clear()` 后刷新方案列表。
 - [x] 载入方案时记录规范化快照；保存更新前比较远端当前版本。
@@ -1070,13 +1070,14 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 删除操作比较目标快照，避免基于旧列表删除远端更新版本。
 - [x] 单元测试覆盖远端修改冲突、删除冲突和另存为恢复。
 - [x] Chromium 浏览器专项增加双标签页修改/删除冲突场景。
-- [ ] WebUI Checks：待本批代码提交后验收。
-- [ ] Chromium Browser Smoke：待本批代码提交后验收。
+- [x] WebUI Checks：[运行记录 #41790542072](https://github.com/Kasign/stock_data_provider/actions/runs/41790542072)。
+- [x] Chromium Browser Smoke：[运行记录 #41790541954](https://github.com/Kasign/stock_data_provider/actions/runs/41790541954)，全量步骤通过。
+- [x] 代码提交：`3738f33b4cf49e022806362bb8a7f5f86b36276f`；ID 冲突修正：`4833120e64053f2eccf67695387aa010cfb02648`。
 
 验收边界：仅验证同源 localStorage 跨标签页通知与尽力冲突保护。localStorage 不具备原子 CAS/事务，最后比较与写入之间仍存在竞态窗口；不代表跨设备同步或服务端一致性。
 
 
-## 2026-11-04 P1 本地选股字段口径保护（开发中）
+## 2026-11-04 P1 本地选股字段口径保护（已验收）
 
 - [x] 成交额条件只对 `amount_unit=CNY` 的数值进行比较。
 - [x] 成交额单位缺失或 `unknown` 时归入“待判断”，不按人民币元误判。
@@ -1085,7 +1086,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 筛选结果成交额显示遵循单位字段；未知单位不添加“元”。
 - [x] 单元测试覆盖成交额单位与均线复权口径边界。
 - [x] Chromium 浏览器 fixture 使用 CNY 与实际请求复权口径字段。
-- [ ] WebUI Checks：待本批提交后验收。
-- [ ] Chromium Browser Smoke：待本批提交后验收。
+- [x] WebUI Checks：[运行记录 #41791316665](https://github.com/Kasign/stock_data_provider/actions/runs/41791316665)。
+- [x] Chromium Browser Smoke：[运行记录 #41791316641](https://github.com/Kasign/stock_data_provider/actions/runs/41791316641)，全量步骤通过。
+- [x] 代码提交：`bd694979e1987f3fa43aeab2adde2fc6caaaee22`；静态契约断言修正：`85dca9f359b16e7330734c568b2768afdc38dc71`。
 
 验收边界：仅验证 WebUI 消费数据侧明确返回的字段，不代表 Provider 源数据单位或均线计算结果准确性。

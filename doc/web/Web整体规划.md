@@ -475,7 +475,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后，等待条件仍检查旧空状态文案而超时；已修正等待条件，并在最终验收提交中通过完整 Chromium Browser Smoke。该失败属于测试条件不一致，不是页面运行时异常。
 
 
-### 2026-11-04 P1 本地选股方案跨标签页一致性（开发中）
+### 2026-11-04 P1 本地选股方案跨标签页一致性（已验收）
 
 #### 现状复核
 
@@ -493,7 +493,9 @@ CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后�
 - [x] 保存旧版本时阻止覆盖远端修改；远端删除后阻止复活原方案，允许另存为新方案。
 - [x] 删除方案前比较目标快照，避免旧列表操作误删远端新版本。
 - [x] 增加单元测试和双标签页浏览器测试。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待本批提交后验收。
+- [x] WebUI Checks：[运行记录 #41790542072](https://github.com/Kasign/stock_data_provider/actions/runs/41790542072)。
+- [x] Chromium Browser Smoke：[运行记录 #41790541954](https://github.com/Kasign/stock_data_provider/actions/runs/41790541954)，全量步骤通过。
+- [x] 代码提交：`3738f33b4cf49e022806362bb8a7f5f86b36276f`；ID 冲突修正：`4833120e64053f2eccf67695387aa010cfb02648`。
 
 #### 验收边界
 
@@ -502,7 +504,7 @@ CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后�
 - 不修改方案存储结构、不接入服务端、不提供跨设备同步。
 
 
-### 2026-11-04 P1 本地选股字段口径保护（开发中）
+### 2026-11-04 P1 本地选股字段口径保护（已验收）
 
 #### 审查结论
 
@@ -517,6 +519,8 @@ CI 复核记录：首次浏览器验收因测试夹具切换为板块记录后�
 - [x] 筛选结果成交额展示也遵循 CNY 单位契约，不把未知单位的数值标为人民币元。
 - [x] 单元测试覆盖 CNY、unknown、缺失单位及均线复权口径匹配/不匹配。
 - [x] 浏览器 fixture 补充接口真实单位和复权字段。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 待提交后验收。
+- [x] WebUI Checks：[运行记录 #41791316665](https://github.com/Kasign/stock_data_provider/actions/runs/41791316665)。
+- [x] Chromium Browser Smoke：[运行记录 #41791316641](https://github.com/Kasign/stock_data_provider/actions/runs/41791316641)，全量步骤通过。
+- [x] 代码提交：`bd694979e1987f3fa43aeab2adde2fc6caaaee22`；静态契约断言修正：`85dca9f359b16e7330734c568b2768afdc38dc71`。
 
 验收边界：WebUI 只消费接口已返回的单位与复权口径，不自行换算、不推断缺失单位、不重算均线；数据侧标准化正确性不属于本批验收范围。
