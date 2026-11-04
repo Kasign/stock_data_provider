@@ -5136,3 +5136,38 @@ button:disabled {
 #screening-local-batch-feedback { min-height: 1.5em; margin: 4px 0 8px; }
 #screening-local-results-body input[type="checkbox"] { accent-color: var(--accent); }
 @media (max-width: 640px) { .screening-local-batch-toolbar { align-items: stretch; } .screening-local-batch-toolbar > * { width: 100%; } }
+
+
+/* UIR-2：按真实页面截图修复缺少内边距的内容面板。 */
+#market-stocks-panel,
+#research-view > .research-notes-panel,
+#research-view > .research-reports-panel {
+  padding: 18px 20px 20px;
+}
+
+#market-stocks-panel > .panel-heading,
+#research-view > .research-notes-panel > .panel-heading,
+#research-view > .research-reports-panel > .panel-heading {
+  margin-bottom: 12px;
+}
+
+#market-stocks-panel .market-stocks-summary,
+#research-view > .research-reports-panel > .field-hint {
+  line-height: 1.65;
+}
+
+@media (max-width: 900px) {
+  #market-stocks-panel,
+  #research-view > .research-notes-panel,
+  #research-view > .research-reports-panel {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  #market-stocks-panel,
+  #research-view > .research-notes-panel,
+  #research-view > .research-reports-panel {
+    padding: 13px;
+  }
+}
