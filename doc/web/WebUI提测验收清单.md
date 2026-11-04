@@ -707,7 +707,7 @@
 
 ## 2026-11-04 P0-C 首批：全市场筛选与自选股行情快照
 
-代码基线：`cf6c0b6d0b9631456b32f4617da1a33e0c3879b5`。
+实现提交：`cf6c0b6d0b9631456b32f4617da1a33e0c3879b5`；最终验收代码提交：`f05c962a5a932278f47bf717e1d3f49c25d4c301`。
 
 - [x] 全市场分页快照暴露 `busy` 与 `generation`，筛选侧拒绝加载中或代际已变化的快照。
 - [x] 全市场刷新期间，已有筛选结果立即失效；禁止导出和批量加入，刷新完成后要求重新应用筛选。
@@ -719,6 +719,7 @@
 - [x] 新增筛选刷新竞态、自选股成员变化浏览器专项及 API 超时单元测试。
 - [x] WebUI Checks：通过（[运行记录 #41759135829](https://github.com/Kasign/stock_data_provider/actions/runs/41759135829)）。
 - [x] Chromium Browser Smoke：通过（[运行记录 #41759135864](https://github.com/Kasign/stock_data_provider/actions/runs/41759135864)）。
-- [x] 最终代码提交 SHA：`cf6c0b6d0b9631456b32f4617da1a33e0c3879b5`。
+- [x] 修正单元测试对浏览器测试文件的错误引用，并在后续提交完成整套 CI 验收。
+- [x] 最终验收代码提交 SHA：`f05c962a5a932278f47bf717e1d3f49c25d4c301`。
 
 本批次不修改服务端 API、Provider 或数据质量口径。
