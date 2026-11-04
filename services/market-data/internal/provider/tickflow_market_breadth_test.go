@@ -14,12 +14,11 @@ import (
 var tickflowBreadthFixtureSymbols = []string{"600000.SH", "000001.SZ", "300001.SZ"}
 
 func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFor, omitNameFor string, timestampSkew ...time.Duration) *httptest.Server {
+	return newTickFlowBreadthFixtureWithUniverse(t, quoteSymbols, omitAmountFor, omitNameFor, tickflowBreadthFixtureSymbols, timestampSkew...)
+}
+
+func newTickFlowBreadthFixtureWithUniverse(t *testing.T, quoteSymbols []string, omitAmountFor, omitNameFor string, universeSymbols []string, timestampSkew ...time.Duration) *httptest.Server {
 	t.Helper()
-	universeSymbols := tickflowBreadthFixtureSymbols
-	if len(timestampSkew) > 1 {
-		universeSymbols = timestampSkew[1].([]string)
-		timestampSkew = timestampSkew[:1]
-	}
 	now := time.Now().UTC()
 	timestampTime := now.Add(-time.Minute)
 	var skewMillis int64
@@ -111,7 +110,7 @@ func newTickFlowBreadthFixture(t *testing.T, quoteSymbols []string, omitAmountFo
 
 func TestTickFlowFetchMarketBreadthExcludesUnsupportedUniverseMembersWithEvidence(t *testing.T) {
 	universeSymbols := []string{"600000.SH", "000001.SZ", "300001.SZ", "302132.SZ"}
-	server := newTickFlowBreadthFixture(t, universeSymbols, "", "", time.Duration(0), universeSymbols)
+	server := newTickFlowBreadthFixtureWithUniverse(t, universeSymbols, "", "", universeSymbols)
 	defer server.Close()
 
 	client := NewTickFlowConfigured(2*time.Second, server.URL, "", "test-api-key")
