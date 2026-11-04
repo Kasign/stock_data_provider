@@ -844,19 +844,33 @@
 本轮结论：自选股与全市场行情生命周期专项通过；P0-C 尚未整体结束，待剩余研究缓存消费边界核验后再决定是否进入 P0-D。
 
 
-## 17. 研究列表批量行情快照成员失效专项（待 CI 验收）
+## 17. 研究列表批量行情快照成员失效专项
 
-- [ ] 在研究页已有自选股批量行情快照时，从另一标签页清空自选股，研究列表必须立即清除不再属于当前清单的旧批量行情。
-- [ ] 先切换研究标的，再发生自选股成员变更；旧批量行情不得因当前标的切换而继续显示为有效行情。
-- [ ] 保留研究页当前标的独立实时行情与自选股批量行情的来源边界：当前标的仍有匹配的实时行情时，不因自选股批量快照失效而误清除当前实时行情。
+- [x] 在研究页已有自选股批量行情快照时，从另一标签页清空自选股，研究列表立即清除不再属于当前清单的旧批量行情。
+- [x] 先切换研究标的，再发生自选股成员变更；旧批量行情不会继续显示为有效行情。
+- [x] 当前标的独立实时行情与自选股批量行情来源边界保持独立。
 - 测试脚本：`web/tests/stock-research-browser.mjs`。
-- 当前状态：已补充自动化用例，等待 WebUI Checks 与 Chromium Browser Smoke 验收；通过后回填运行记录。
+- Chromium Browser Smoke：通过（[运行记录 #41767109690](https://github.com/Kasign/stock_data_provider/actions/runs/41767109690)，Stock Research interaction acceptance 成功）。
+- WebUI Checks：通过（[运行记录 #41767109808](https://github.com/Kasign/stock_data_provider/actions/runs/41767109808)）。
 
 
-## 18. 公告分页与整组刷新竞态专项（待 CI 验收）
+## 18. 公告分页与整组刷新竞态专项
 
-- [ ] 公告第 2 页请求在途时触发“重新加载公司资料”，新第 1 页结果替换旧列表。
-- [ ] 释放已取消的旧第 2 页响应后，不得将旧公告追加到新列表，不得覆盖新分页状态。
-- [ ] 新第 1 页仍允许继续加载第 2 页，验证刷新后分页状态恢复正常。
+- [x] 公告第 2 页请求在途时触发整组刷新，新第 1 页结果替换旧列表。
+- [x] 释放已取消的旧第 2 页响应后，旧公告不会追加到新列表，也不会覆盖新分页状态。
+- [x] 新第 1 页仍允许继续加载第 2 页，刷新后分页状态正常。
 - 测试脚本：`web/tests/stock-research-data-browser.mjs`。
-- 当前状态：自动化用例已补充，等待 WebUI Checks 与 Chromium Browser Smoke。
+- Chromium Browser Smoke：通过（[运行记录 #41767674229](https://github.com/Kasign/stock_data_provider/actions/runs/41767674229)，Stock Research data quality acceptance 成功）。
+- WebUI Checks：通过（[运行记录 #41767674232](https://github.com/Kasign/stock_data_provider/actions/runs/41767674232)，语法检查、单元测试及 Nginx 镜像构建成功）。
+
+## P0-C 最终验收结论（2026-11-04，最新代码基线）
+
+- [x] 自选股/研究列表跨标签页成员变化后，旧批量行情快照失效。
+- [x] 全市场分页、页大小/复权切换、连接变化、请求取消和旧响应隔离。
+- [x] 个股研究标的切换、财务报告期切换、接口超时和按钮恢复。
+- [x] 公告分页与整组刷新竞态：旧分页晚到响应不能污染新列表。
+- [x] WebUI Checks：[运行记录 #41767674232](https://github.com/Kasign/stock_data_provider/actions/runs/41767674232)。
+- [x] Chromium Browser Smoke：[运行记录 #41767674229](https://github.com/Kasign/stock_data_provider/actions/runs/41767674229)，全部 16 个步骤成功。
+- [x] 最新验收代码 SHA：`037dfc2455659a369647fc6f5b6db1fd8e09a865`。
+
+验收边界：自动化测试使用隔离模拟 API，证明前端行为和状态隔离，不代表真实 Provider 数据准确性或生产环境联调通过。
