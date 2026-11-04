@@ -96,7 +96,7 @@ try {
   await first.waitForFunction(() => document.documentElement.dataset.theme === "light");
   assert.equal(await first.locator('[data-theme-value="light"]').getAttribute("aria-pressed"), "true",
     "theme buttons must follow the session theme when persistence fails");
-  assert.match(await first.locator("#theme-toggle").getAttribute("title"), /未能保存/,
+  assert.match(await first.locator("#theme-toggle").getAttribute("title"), /未能确认主题偏好已保存/,
     "theme toggle must expose a persistence warning");
   await first.evaluate(() => {
     if (window.__originalStorageSetItem) {
