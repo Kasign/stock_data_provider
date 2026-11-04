@@ -1304,7 +1304,9 @@ func buildProviderProbeCheckResults(items []model.ProviderProbeItem, requestedCh
 }
 
 func firstCrossProviderAdjustmentMethod(snapshot *provider.CrossProviderDailySnapshot) string {
-	if snapshot == nil || len(snapshot.Bars) == 0 { return "" }
+	if snapshot == nil || len(snapshot.Bars) == 0 {
+		return ""
+	}
 	return snapshot.Bars[0].AdjustmentMethod
 }
 
@@ -1329,24 +1331,24 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 			}
 			comparison := provider.CompareCrossProviderDailyBars(*left, *right)
 			result := model.ProviderProbeCheckResult{
-				Check:              "cross_provider",
-				Provider:           left.Provider + "+" + right.Provider,
-				Capability:         "daily_bars",
-				CheckedAt:          checkedAt,
-				ComparedSymbol:     left.Symbol,
-				LeftProvider:       left.Provider,
-				RightProvider:      right.Provider,
-				LeftSourceVersion:  left.SourceVersion,
-				RightSourceVersion: right.SourceVersion,
-				AdjustmentBasis:    left.AdjustmentBasis,
-				LeftAdjustmentMethod: firstCrossProviderAdjustmentMethod(left),
-				RightAdjustmentMethod: firstCrossProviderAdjustmentMethod(right),
-				LeftAdjustmentRefDate: firstCrossProviderAdjustmentRefDate(left),
+				Check:                  "cross_provider",
+				Provider:               left.Provider + "+" + right.Provider,
+				Capability:             "daily_bars",
+				CheckedAt:              checkedAt,
+				ComparedSymbol:         left.Symbol,
+				LeftProvider:           left.Provider,
+				RightProvider:          right.Provider,
+				LeftSourceVersion:      left.SourceVersion,
+				RightSourceVersion:     right.SourceVersion,
+				AdjustmentBasis:        left.AdjustmentBasis,
+				LeftAdjustmentMethod:   firstCrossProviderAdjustmentMethod(left),
+				RightAdjustmentMethod:  firstCrossProviderAdjustmentMethod(right),
+				LeftAdjustmentRefDate:  firstCrossProviderAdjustmentRefDate(left),
 				RightAdjustmentRefDate: firstCrossProviderAdjustmentRefDate(right),
-				LeftQualityStatus:  model.QualityStatus(left.QualityStatus),
-				RightQualityStatus: model.QualityStatus(right.QualityStatus),
-				ComparedDates:      append([]string(nil), comparison.ComparedDates...),
-				FieldCount:         len(comparison.Fields),
+				LeftQualityStatus:      model.QualityStatus(left.QualityStatus),
+				RightQualityStatus:     model.QualityStatus(right.QualityStatus),
+				ComparedDates:          append([]string(nil), comparison.ComparedDates...),
+				FieldCount:             len(comparison.Fields),
 			}
 			switch comparison.Status {
 			case provider.CrossProviderDailyMatched:

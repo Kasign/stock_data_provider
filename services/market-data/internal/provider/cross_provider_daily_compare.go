@@ -27,17 +27,17 @@ type CrossProviderDailySnapshot struct {
 
 // CrossProviderDailyBar 表示一个交易日的标准化日 K。
 type CrossProviderDailyBar struct {
-	TradeDate  string
-	Open       float64
-	High       float64
-	Low        float64
-	Close      float64
-	Volume     int64
-	VolumeUnit string
-	Amount             *float64
-	AmountUnit         string
-	AdjustmentMethod   string
-	AdjustmentRefDate  string
+	TradeDate         string
+	Open              float64
+	High              float64
+	Low               float64
+	Close             float64
+	Volume            int64
+	VolumeUnit        string
+	Amount            *float64
+	AmountUnit        string
+	AdjustmentMethod  string
+	AdjustmentRefDate string
 }
 
 // CrossProviderFieldResult 记录字段级对账结果。
@@ -183,7 +183,6 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 	}
 	return result
 }
-
 
 func validateCrossProviderAdjustmentCompatibility(left, right CrossProviderDailySnapshot) string {
 	if left.AdjustmentBasis == "none" {

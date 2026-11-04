@@ -826,7 +826,9 @@ func TestBuildCrossProviderProbeCheckResultsPreservesAdjustmentEvidence(t *testi
 		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", AdjustmentMethod: "right_hfq", AdjustmentRefDate: "2026-11-03"}},
 	}
 	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
-	if len(results) != 1 { t.Fatalf("expected one adjusted comparison result, got %+v", results) }
+	if len(results) != 1 {
+		t.Fatalf("expected one adjusted comparison result, got %+v", results)
+	}
 	result := results[0]
 	if result.Status != "skipped" || result.ErrorMessage != "adjustment_method_mismatch" ||
 		result.LeftAdjustmentMethod != "left_hfq" || result.RightAdjustmentMethod != "right_hfq" ||

@@ -144,7 +144,6 @@ func TestCompareCrossProviderDailyBarsRejectsEmptyAndInvalidDateSets(t *testing.
 	}
 }
 
-
 func TestCompareCrossProviderDailyBarsRejectsDifferentAdjustedMethods(t *testing.T) {
 	left := crossProviderAdjustedSnapshot("eastmoney", "eastmoney_fqt_2", "2026-11-03", crossProviderBar("2026-10-29"))
 	right := crossProviderAdjustedSnapshot("baostock", "baostock_pct_change", "2026-11-03", crossProviderBar("2026-10-29"))
