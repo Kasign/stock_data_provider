@@ -46,6 +46,11 @@ try {
   let releaseFifthResponse;
   const fifthStarted = new Promise(resolve => { markFifthStarted = resolve; });
   const fifthGate = new Promise(resolve => { releaseFifthResponse = resolve; });
+  let holdSixthResponse = false;
+  let markSixthStarted;
+  let releaseSixthResponse;
+  const sixthStarted = new Promise(resolve => { markSixthStarted = resolve; });
+  const sixthGate = new Promise(resolve => { releaseSixthResponse = resolve; });
 
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
@@ -58,6 +63,10 @@ try {
       if (requestNumber === 5 && holdFifthResponse) {
         markFifthStarted();
         await fifthGate;
+      }
+      if (requestNumber === 6 && holdSixthResponse) {
+        markSixthStarted();
+        await sixthGate;
       }
       const total = 60;
       const count = Math.max(0, Math.min(pageSize, total - (pageNumber - 1) * pageSize));
@@ -130,10 +139,33 @@ try {
   assert.equal(await page.locator("#reload-market-stocks").isEnabled(), true);
   assert.deepEqual(requests[4], { page: 1, pageSize: 20, adjustment: "backward_adjusted" });
   assert.equal(requests.length, 5, "one refresh must issue exactly one request");
+
+  // 另一个标签页切换行情连接时，当前页必须取消在途分页请求并清空旧快照。
+  const otherPage = await context.newPage();
+  await otherPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  holdSixthResponse = true;
+  await page.locator("#reload-market-stocks").click();
+  await sixthStarted;
+  assert.equal(await page.locator("#reload-market-stocks").isDisabled(), true);
+  await otherPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
+    marketBase: "/market-api-new", analysisBase: "/analysis-api", apiKey: "new-market-stocks-lifecycle-key"
+  })));
+  await page.waitForFunction(() =>
+    document.querySelector("#market-stocks-summary")?.textContent.includes("旧连接下的全市场行情快照已清除")
+  );
+  assert.equal(await page.locator("#reload-market-stocks").isEnabled(), false);
+  assert.equal(await page.locator("#market-stocks-body .market-stocks-stock-symbol").count(), 0);
+  releaseSixthResponse();
+  await page.waitForTimeout(100);
+  assert.match(await page.locator("#market-stocks-meta").textContent(), /旧连接下的分页行情元数据已失效/);
+  assert.equal(await page.locator("#market-stocks-body .market-stocks-stock-symbol").count(), 0);
+  assert.deepEqual(requests[5], { page: 1, pageSize: 20, adjustment: "backward_adjusted" });
+  assert.equal(requests.length, 6, "connection invalidation must not trigger an implicit retry");
+  await otherPage.close();
   assert.deepEqual(pageErrors, []);
 
   await context.close();
-  console.log("Market stocks lifecycle browser acceptance passed: pagination, page size, adjustment, busy controls and leave/return response state.");
+  console.log("Market stocks lifecycle browser acceptance passed: pagination, page size, adjustment, busy controls, leave/return and cross-tab connection invalidation.");
 } finally {
   if (browser) await browser.close();
   await new Promise(resolve => server.close(resolve));
