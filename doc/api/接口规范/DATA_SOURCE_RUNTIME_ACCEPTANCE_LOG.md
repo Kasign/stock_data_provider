@@ -640,3 +640,25 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 客户端确实在请求中设置 offset，并按上一页返回条数递增；官方文档未提供足以判断服务端稳定分页行为的契约。
 - 当前不能断言服务端忽略 offset，也不能确认是否因排序变化或服务端分页窗口重叠。保持失败，不自动去重，不标记 Hithink 日 K 可用。
 
+
+
+## 47. 2026-11-04 TickFlow 单股实时报价成交量单位修复与线上复测
+
+### 47.1 线上证据
+
+- Live Workflow Run：`41819666046`；实际 Job：`126539361088`；仅执行 `quote` 能力，`MARKET_DATA_LIVE_TICKFLOW_QUOTE_ONLY=1`。
+- 实际只发起一次 `GET https://api.tickflow.org/v1/quotes`，请求标的 `600519.SH`；HTTP 200，日志确认 `x-api-key` 认证头存在，未记录 Key 值。
+- Live 结果：`status=passed`、`quality=valid`、`rows=1`。
+- 必要响应字段：last_price=1446.44、prev_close=1480、open=1470、high=1480.6、low=1439、volume=65434、amount=9536448000 CNY。
+
+### 47.2 单位判断与代码修复
+
+- 若把原始 volume=65,434 当作 shares，则 amount/volume 约为 145,741 CNY/股，明显超出 OHLC 区间。
+- 按 A 股常用手单位换算为 6,543,400 shares 后，amount/volume 约为 1,457.41 CNY/股，落在 [1439, 1480.6] 区间，满足统一报价交叉校验。
+- `FetchQuote` 已改用 `normalize.HandsToShares`；RawVolume 保留 65,434、RawVolumeUnit=`hands`，Volume 归一化为 6,543,400、VolumeUnit=`shares`。只修改 `/v1/quotes` 快照路径；日 K `/v1/klines` 暂保留独立 shares 口径，等待 daily-only 真实样本。
+- 新增回归 fixture 覆盖 quote hands→shares 与日 K shares 保持原样。该实测仅为单只 A 股样本；官方 SDK Quote 类型列出 amount/volume 字段但未声明单位，参考 [TickFlow SDK Quote model](https://github.com/tickflow-org/tickflow/blob/main/tickflow/generated_model.py)。因此本节结论限于当前 A 股快照实现和样本交叉校验，不把它扩展为所有市场/所有 endpoint 的单位契约。
+
+### 47.3 CI 状态
+
+- Go CI Run `41819900049`（HEAD `8f6dd66e`）全部通过：根模块、go-core、market-data gofmt/tests/race/vet、MariaDB migration/PIT 集成、Compose 校验及两个 Go Docker 镜像。
+- 单股 quote-only 通过不代表全市场广度或行业排名通过；两项仍保持未验收，避免触发大规模行情请求。
