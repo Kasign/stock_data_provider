@@ -299,7 +299,7 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - JSR-3B：自选股导入预览解析，WebUI Checks 与 Chromium Browser Smoke 通过。
 
 **下一步执行顺序：**
-1. JSR-3C：自选股导入预览 DOM 构建已完成代码迁移，当前等待 WebUI Checks 与 Chromium Browser Smoke 验收。
+1. JSR-3C：自选股导入预览 DOM 构建已完成，WebUI Checks #41816369613 与 Chromium Browser Smoke #41816369953 均通过。
 2. 验收通过后，审查 JSR-3D：自选股 tracking 辅助字段 ViewModel，先梳理字段来源、质量状态、任务/Run 关联和格式化依赖，再确定最小迁移范围。
 3. JSR-3E：在 JSR-3C/3D 稳定后评估页面协调边界；不预设必须新增 controller。
 4. JSR-3 完成后再排期设置中心及其他高耦合页面模块拆分。
@@ -866,7 +866,7 @@ JSR-2C1 代码迁移已提交，当前等待 WebUI Checks 与 Chromium Browser S
 JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验收；后续进入 JSR-3D 辅助字段 ViewModel 边界审查。不得直接迁移整个自选页面 controller。
 
 
-### JSR-3C：自选股导入预览 DOM 构建（代码已迁移，待 CI 验收）
+### JSR-3C：自选股导入预览 DOM 构建（已验收）
 
 新增 `web/src/watchlist-import-preview-view.js`，导出 `buildWatchlistImportPreviewView({ document, preview })`。模块只负责把预览结果转换为 DOM 节点，并返回 `nodes`、摘要文本 `summary` 与确认按钮状态 `confirmDisabled`。
 
@@ -877,4 +877,4 @@ JSR-3A/3B 均已通过 CI。JSR-3C 已完成代码迁移，当前等待 CI 验�
 验收待办：
 - [x] 新增视图模块单测，覆盖正常表格、异常存储文本节点、无可导入行和 textContent 安全写入。
 - [x] UI 契约测试覆盖 app 协调职责及视图模块依赖边界。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
+- [x] WebUI Checks #41816369613 通过；Chromium Browser Smoke #41816369953 通过，全部 17 个执行步骤成功。

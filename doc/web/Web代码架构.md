@@ -305,3 +305,5 @@ JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 
 成功预览构建原有 table/thead/tbody/tr/th/td 结构，所有单元格继续使用 `textContent` 写入，不使用 HTML 字符串拼接。存储不可读或格式异常时返回文本节点，不创建表格，并要求禁用确认按钮。
 
 `app.js` 继续拥有 `watchlistImportPreview` 状态、根节点挂载、摘要更新、确认按钮状态、导入确认和存储回读事务。视图模块不访问全局 state、localStorage、选择器、事件监听或 API。该批不修改导入解析算法、存储 key/schema、导入事务或 CSS。
+
+验收结果：WebUI Checks #41816369613 通过；Chromium Browser Smoke #41816369953 通过（全部 17 个执行步骤成功）。本批验收提交为 `6be95a434cce07f11710c3417d1d456be490fa9d`；后续仅有总体规划文档修复/状态同步提交。
