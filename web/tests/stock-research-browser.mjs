@@ -265,6 +265,17 @@ try {
   await page.locator("#symbol-input").fill("600519.SH");
   await page.locator('.nav-link[data-view="research"]').click();
   await page.locator("#research-view").waitFor({ state: "visible" });
+
+  // 当前研究标的切换后，批量行情只能继续用于仍属于当前自选清单的成员。
+  const membershipSyncPage = await context.newPage();
+  await membershipSyncPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await membershipSyncPage.evaluate(() => localStorage.setItem("stock-provider-webui.watchlist.v1", "[]"));
+  await page.waitForFunction(() => {
+    const text = document.querySelector("#research-stock-list-body")?.textContent || "";
+    return !text.includes("10.50") && text.includes("当前没有自选股");
+  });
+  await membershipSyncPage.close();
+
   await page.locator("#load-fundamentals").click();
   await oldRequestStarted;
 
