@@ -44,6 +44,10 @@ let releaseOldRequest;
 let oldRequestStarted;
 let releasePeriodRequest;
 let markPeriodRequestStarted;
+let releaseCrossTabResearchRequest;
+let markCrossTabResearchRequestStarted;
+let markCrossTabResearchRequestSettled;
+let crossTabResearchAborted = false;
 try {
   browser = await chromium.launch({ headless: true });
 
@@ -58,6 +62,8 @@ try {
   });
   const page = await context.newPage();
   const periodRequestStarted = new Promise(resolve => { markPeriodRequestStarted = resolve; });
+  const crossTabResearchRequestStarted = new Promise(resolve => { markCrossTabResearchRequestStarted = resolve; });
+  const crossTabResearchRequestSettled = new Promise(resolve => { markCrossTabResearchRequestSettled = resolve; });
   const pageErrors = [];
   page.on("pageerror", error => pageErrors.push(error.stack || error.message));
   oldRequestStarted = new Promise(resolve => {
@@ -111,6 +117,24 @@ try {
             fetched_at: "2026-11-03T03:00:00Z", ma_adjustment_basis: "forward_adjusted"
           })
         });
+        return;
+      }
+      if (url.pathname.endsWith("/api/v1/stocks/000001.SZ/profile")) {
+        markCrossTabResearchRequestStarted?.();
+        await new Promise(done => { releaseCrossTabResearchRequest = done; });
+        try {
+          await route.fulfill({
+            status: 200, contentType: "application/json",
+            body: JSON.stringify({
+              symbol: "000001.SZ", name: "延迟旧连接档案", quality_status: "valid",
+              source: "browser-fixture", normalization_version: "stale-connection",
+            })
+          });
+        } catch {
+          crossTabResearchAborted = true;
+        } finally {
+          markCrossTabResearchRequestSettled?.();
+        }
         return;
       }
       if (url.pathname.includes("/api/v1/stocks/000001.SZ/fundamentals")) {
@@ -276,6 +300,33 @@ try {
   });
   await membershipSyncPage.close();
 
+  // 个股研究资料在途时，另一标签页切换行情连接；必须取消旧请求并恢复整组加载按钮。
+  await page.locator('.nav-link[data-view="stocks"]').click();
+  await page.locator("#symbol-input").fill("000001.SZ");
+  await page.locator('.nav-link[data-view="research"]').click();
+  await page.locator("#load-stock-research").click();
+  await crossTabResearchRequestStarted;
+  const researchSettingsSyncPage = await context.newPage();
+  await researchSettingsSyncPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await researchSettingsSyncPage.evaluate(() => localStorage.setItem("stock-provider-webui.settings.v1", JSON.stringify({
+    marketBase: "/market-api-v3", analysisBase: "/analysis-api", apiKey: "research-browser-key-v3"
+  })));
+  await page.waitForFunction(() => {
+    const button = document.querySelector("#load-stock-research");
+    return button && !button.disabled && button.textContent.includes("重新加载公司资料");
+  });
+  await page.waitForFunction(() => document.querySelector("#stock-research-feedback")?.textContent.includes("行情连接配置已变更"));
+  assert.equal(await page.locator("#load-stock-research").isEnabled(), true);
+  assert.equal(await page.locator("#load-fundamentals").isEnabled(), true);
+  assert.equal(await page.locator("#load-valuations").isEnabled(), true);
+  assert.equal(await page.locator("#stock-profile-symbol").textContent(), "000001.SZ");
+  assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
+  releaseCrossTabResearchRequest?.();
+  await crossTabResearchRequestSettled;
+  assert.equal(crossTabResearchAborted, true, "跨标签页连接变更后旧档案响应必须被取消");
+  assert.doesNotMatch(await page.locator("#stock-profile-fields").textContent(), /延迟旧连接档案|stale-connection/);
+  await researchSettingsSyncPage.close();
+
   await page.locator("#load-fundamentals").click();
   await oldRequestStarted;
 
@@ -377,6 +428,7 @@ try {
   console.log("PASS stock research request cancellation and button recovery");
 } finally {
   if (releaseOldRequest) releaseOldRequest();
+  if (releaseCrossTabResearchRequest) releaseCrossTabResearchRequest();
   if (browser) await browser.close();
   await new Promise(resolve => server.close(resolve));
 }
