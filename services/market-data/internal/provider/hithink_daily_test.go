@@ -41,7 +41,6 @@ func TestHithinkDailyBarParseIssuesIncludeRowAndProviderField(t *testing.T) {
 	}
 }
 
-
 func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 	loc := time.FixedZone("CST", 8*60*60)
 	dateMS := func(day int) int64 {
