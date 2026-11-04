@@ -210,6 +210,18 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 - 选股：继续完善本地筛选体验；服务端策略表达式、全市场扫描、候选理由和历史能力属于数据/API 依赖，未提供前不得伪装成已实现。
   - 本批次：核对 `MarketStocksSnapshot` 仅声明 MA5/MA20；MA60、MA120（半年）和 MA250（全年）暂列为不可用字段，在 WebUI 明确禁用并说明依赖，不逐只补发日 K 请求。待数据侧扩展全市场分页字段和 OpenAPI 后，再开放本地筛选。
 - 告警/通知：当前本地规则草稿与偏好不代表后台监控或消息投递；服务端 CRUD、评估、渠道和投递接口未具备前保持明确待接入状态。
+
+#### P1 告警与通知现状核验（2026-11-04）
+
+- [x] 核对 `web/src/local-alert-drafts.js`：本地规则草稿支持新增、编辑、启停、删除、参数校验和最多 100 条限制；数据仅保存在当前浏览器，不会读取行情、执行后台监控或发送通知。
+- [x] 核对 `web/src/notification-preferences.js`：关注事件与免打扰时段仅作为本地偏好草稿保存；不代表服务端订阅，不执行通知调度。
+- [x] 核对 `web/src/alert-state.js`、`web/src/notification-state.js` 与页面状态：已区分 unavailable、loading、error、empty、loaded，以及告警评估 triggered、not-triggered、evaluation-error、degraded、skipped 等状态；当前初始化明确使用 unsupported 状态。
+- [x] 核对 `doc/web/API_CONTRACT.md`：无告警规则 CRUD、后台评估、触发历史、投递尝试、通知收件箱、未读状态、渠道 CRUD、订阅管理和发送测试 API；相关 UI 保持禁用/待接入，没有伪造数据。
+- [ ] 待补齐：告警草稿与通知偏好尚未接入全局跨标签页存储同步。当前存储监听覆盖自选股、显示偏好、研究笔记和报告归档，但不处理 `stock-provider-webui.alert-drafts.v1` 与 `stock-provider-webui.notification-preferences.v1`。
+- [ ] 后续实施前需确定编辑冲突策略：编辑期间收到其他标签页修改时，保留当前表单并提示冲突；保存前比较编辑快照，防止旧草稿覆盖远端变更。通知偏好也需避免外部同步静默覆盖未保存表单。
+
+本轮仅完成现状核验与文档记录，不修改告警/通知业务代码，不虚构服务端能力；跨标签页同步作为下一项 Web-only 候选工作，按冲突保护方案实施。
+
 - 市场观察：板块资金净流入、板块成分映射等缺失能力不在前端推算。
 - 个股研究：保持按需加载、数据质量和空/错/过期状态一致；不为补字段逐只发起隐式请求。
 - 设置中心：仅展示真实可保存的能力；未接入服务端的设置项禁用或明确标记待接入。
