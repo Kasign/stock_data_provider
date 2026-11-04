@@ -709,3 +709,8 @@ Web 数据中心已接入被动 Provider 运行诊断、主动 Probe、六个诊
 本次代码审查发现诊断响应数值展示存在 JS 强制转换边界：Number(null) 与 Number("") 会得到 0，非法覆盖率字符串会显示为 NaN%。现将耗时和覆盖率展示改为严格有限数值校验，覆盖率限定在 0–1；缺失或非法值不伪造为 0，明确显示“覆盖率不可确认”或不显示耗时。新增浏览器回归夹具覆盖 null 耗时和非法覆盖率。
 
 数据侧只读核对基线：feat/full-go-data-providers-api-switch HEAD 0a2263bf。其字段诊断实施方案仍记录 DailyBar Adapter 被过滤原始行的完整 Parse/Validate 报告、部分原始解码边界和 Probe OpenAPI validation/coverage 字段契约存在待完善项；财务/估值业务校验已有，但字段级 Reporter 映射及单位/PIT 语义仍需增量完善。真实 Provider 质量和 MariaDB 部署验收必须与 CI/模拟样例分开记录。Web 不在本分支实现这些服务端规则。
+
+
+### 诊断展示测试断言修正（2026-11-04）
+
+7d09cab8 的 WebUI Checks 通过；Browser Smoke 的前 13 个步骤通过，数据中心 Probe 测试失败。失败原因是新增断言的正则表达式字符类被多转义一层，导致按字面量匹配反斜杠而非跨行匹配；不是页面展示逻辑失败。已修正断言转义，等待重新执行完整 Browser Smoke。此前同批新增的 null 耗时和非法覆盖率保护逻辑保留。

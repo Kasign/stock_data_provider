@@ -175,14 +175,14 @@ try {
   });
   const probeText = await page.locator("#data-center-probe-list").textContent();
   for (const label of ["已返回", "返回但质量降级", "返回但质量未知", "失败", "跳过", "未配置", "不支持"]) {
-    assert.ok(probeText.includes(label), "missing probe status: " + label);
+   assert.ok(probeText.includes(label), "missing probe status: " + label);
   }
   assert.match(probeText, /99\.3%/);
   assert.match(probeText, /provider_timeout/);
    assert.match(probeText, /Provider-D/);
-   assert.doesNotMatch(probeText, /Provider-D[\\s\\S]*?耗时 0 ms/);
-   assert.doesNotMatch(probeText, /Provider-D[\\s\\S]*?NaN%/);
-   assert.match(probeText, /Provider-D[\\s\\S]*?覆盖率不可确认/);
+   assert.doesNotMatch(probeText, /Provider-D[\s\S]*?耗时 0 ms/);
+   assert.doesNotMatch(probeText, /Provider-D[\s\S]*?NaN%/);
+   assert.match(probeText, /Provider-D[\s\S]*?覆盖率不可确认/);
   assert.match(probeText, /上游请求超时/);
   assert.match(probeText, /字段校验 3 项/);
   assert.match(probeText, /错误 1/);
@@ -190,13 +190,13 @@ try {
   assert.match(probeText, /实际值 NaN/);
   assert.match(probeText, /服务端明细已截断/);
   for (const label of ["行情响应覆盖率", "价格分类覆盖率", "行情时间覆盖率", "成交额覆盖率"]) {
-    assert.ok(probeText.includes(label), "missing coverage dimension: " + label);
+   assert.ok(probeText.includes(label), "missing coverage dimension: " + label);
   }
   assert.match(probeText, /99\.0%/);
   assert.match(probeText, /90\.0%/);
   const checkText = await page.locator("#data-center-probe-check-results").textContent();
   for (const label of ["接口连通性", "数据契约", "数据质量", "数据新鲜度", "跨 Provider 对账", "持久化存储", "已过期", "不一致"]) {
-    assert.ok(checkText.includes(label), "missing check evidence: " + label);
+   assert.ok(checkText.includes(label), "missing check evidence: " + label);
   }
   await page.waitForFunction(() => document.querySelector("#data-center-probe-history-list")?.textContent.includes("probe-current"));
   assert.match(await page.locator("#data-center-probe-history-list").textContent(), /probe-history-old/);

@@ -1279,7 +1279,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 根据用户提供的个股深度研究截图，修复研究记录、研究报告归档面板内容贴边问题。
 - [x] 桌面面板内边距 18px/20px；≤900px 为 16px；≤640px 为 13px。
 - [x] 统一三个目标面板的标题下方间距，未全局修改所有 .panel，避免破坏已有布局。
-- [ ] WebUI Checks 与 Browser Smoke 待本次提交 CI。
+- [x] WebUI Checks 通过；Browser Smoke 前 13 个步骤通过，Probe 步骤曾因测试正则转义失败。
+- [ ] 修正断言后的完整 Browser Smoke 复测。
 - [ ] 用户本地环境复核中文换行、真实字体下字段边界和不同窗口宽度；表单列数调整暂不凭单张桌面截图决定。
 
 
@@ -1298,4 +1299,5 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 核对 Web 已展示六个 Probe 维度、Provider 能力结果、字段级 validation_issues、覆盖率维度、跨 Provider 字段对账和历史记录。
 - [x] 明确 Web 仅做输入校验、结果展示和格式安全；行情/日 K/财务/估值/资金流质量规则由 API/数据侧产生。
 - [x] 修复 null 耗时被强制显示为 0 ms、非法覆盖率显示 NaN% 的展示边界；新增浏览器回归夹具。
+- [x] 定位并修正 Browser Smoke 中跨行断言的正则转义错误；等待复测。
 - [ ] WebUI Checks 与 Browser Smoke 待本次提交 CI。
