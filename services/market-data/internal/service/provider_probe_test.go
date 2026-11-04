@@ -1272,11 +1272,10 @@ func TestProviderProbeDoesNotClassifyPytdxTransportFailureAsNotSupported(t *test
 	}
 }
 
-
 type providerProbeContextCalendarFake struct {
-	quality model.QualityStatus
-	reasons []string
-	conflictDate string
+	quality         model.QualityStatus
+	reasons         []string
+	conflictDate    string
 	conflictTrading bool
 }
 
@@ -1284,16 +1283,22 @@ func (p providerProbeContextCalendarFake) Name() string { return "probe-context-
 
 func (p providerProbeContextCalendarFake) FetchTradingCalendar(_ context.Context, startDate, endDate string) (*model.TradingCalendarSnapshot, error) {
 	start, err := time.Parse("2006-01-02", startDate)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	end, err := time.Parse("2006-01-02", endDate)
 	if err != nil { return nil, err }
 	items := make([]model.TradingCalendarDay, 0, int(end.Sub(start).Hours()/24)+1)
 	tradingDays := 0
 	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
 		isTrading := day.Weekday() != time.Saturday && day.Weekday() != time.Sunday
-		if p.conflictDate == day.Format("2006-01-02") { isTrading = p.conflictTrading }
+		if p.conflictDate == day.Format("2006-01-02") {
+			isTrading = p.conflictTrading
+		}
 		items = append(items, model.TradingCalendarDay{Date: day.Format("2006-01-02"), IsTradingDay: isTrading})
-		if isTrading { tradingDays++ }
+		if isTrading {
+			tradingDays++
+		}
 	}
 	return &model.TradingCalendarSnapshot{
 		Market: "cn_a_share", StartDate: startDate, EndDate: endDate,
@@ -1303,7 +1308,7 @@ func (p providerProbeContextCalendarFake) FetchTradingCalendar(_ context.Context
 	}, nil
 }
 
-type providerProbeContextDailyBarsFake struct { tradeDate string }
+type providerProbeContextDailyBarsFake struct{ tradeDate string }
 
 func (providerProbeContextDailyBarsFake) Name() string { return "probe-context-bars" }
 
@@ -1321,13 +1326,15 @@ func (p providerProbeContextDailyBarsFake) FetchDailyBars(_ context.Context, sym
 
 type providerProbeContextSecurityStatusFake struct {
 	status model.SuspensionStatus
-	fail bool
+	fail   bool
 }
 
 func (p providerProbeContextSecurityStatusFake) Name() string { return "probe-context-security-status" }
 
 func (p providerProbeContextSecurityStatusFake) FetchSecurityTradingStatus(_ context.Context, symbol, tradeDate string) (*model.SecurityTradingStatusSnapshot, error) {
-	if p.fail { return nil, errors.New("security status unavailable") }
+	if p.fail {
+		return nil, errors.New("security status unavailable")
+	}
 	return &model.SecurityTradingStatusSnapshot{
 		Symbol: symbol, TradeDate: tradeDate, SecurityName: "测试证券",
 		NameEffectiveFrom: "2020-01-01", ListingDate: "2020-01-01", ListingTradingDayNumber: 1,
@@ -1341,43 +1348,45 @@ func (p providerProbeContextSecurityStatusFake) FetchSecurityTradingStatus(_ con
 func TestProviderProbeDailyBarsReusesTradingContextDiagnosticsEndToEnd(t *testing.T) {
 	location := marketLocation()
 	barDay := time.Now().In(location).AddDate(0, 0, -7)
-	for barDay.Weekday() == time.Saturday || barDay.Weekday() == time.Sunday { barDay = barDay.AddDate(0, 0, -1) }
+	for barDay.Weekday() == time.Saturday || barDay.Weekday() == time.Sunday {
+		barDay = barDay.AddDate(0, 0, -1)
+	}
 	barDate := barDay.Format("2006-01-02")
 	cases := []struct {
-		name string
+		name            string
 		calendarQuality model.QualityStatus
 		calendarReasons []string
-		status model.SuspensionStatus
-		statusFail bool
-		conflict bool
-		wantStatus string
-		wantReasons []string
-		forbidReasons []string
+		status          model.SuspensionStatus
+		statusFail      bool
+		conflict        bool
+		wantStatus      string
+		wantReasons     []string
+		forbidReasons   []string
 	}{
 		{
-			name: "suspended missing dates are excluded",
+			name:            "suspended missing dates are excluded",
 			calendarQuality: model.QualityValid, status: model.SuspensionStatusSuspended,
 			wantStatus: "returned", wantReasons: []string{"daily_bar_excluded_suspended:"},
 			forbidReasons: []string{"daily_bar_missing_on_confirmed_trading_day:"},
 		},
 		{
-			name: "confirmed trading dates missing bars are diagnosed",
+			name:            "confirmed trading dates missing bars are diagnosed",
 			calendarQuality: model.QualityValid, status: model.SuspensionStatusNoEvent,
 			wantStatus: "returned_degraded", wantReasons: []string{"daily_bar_missing_on_confirmed_trading_day:"},
 		},
 		{
-			name: "unavailable security status remains unknown",
+			name:            "unavailable security status remains unknown",
 			calendarQuality: model.QualityValid, statusFail: true,
 			wantStatus: "returned_degraded", wantReasons: []string{"daily_bar_context_security_status_unavailable:"},
 			forbidReasons: []string{"daily_bar_missing_on_confirmed_trading_day:"},
 		},
 		{
-			name: "degraded calendar degrades context but retains suspension evidence",
+			name:            "degraded calendar degrades context but retains suspension evidence",
 			calendarQuality: model.QualityDegraded, status: model.SuspensionStatusSuspended,
 			wantStatus: "returned_degraded", wantReasons: []string{"daily_bar_context_calendar_degraded", "daily_bar_excluded_suspended:"},
 		},
 		{
-			name: "conflicting calendars do not confirm missing bars",
+			name:            "conflicting calendars do not confirm missing bars",
 			calendarQuality: model.QualityValid, status: model.SuspensionStatusNoEvent, conflict: true,
 			wantStatus: "returned_degraded", wantReasons: []string{"daily_bar_context_calendar_sources_disagree"},
 			forbidReasons: []string{"daily_bar_missing_on_confirmed_trading_day:"},
@@ -1389,7 +1398,9 @@ func TestProviderProbeDailyBarsReusesTradingContextDiagnosticsEndToEnd(t *testin
 			calendars := []provider.TradingCalendarProvider{calendar}
 			if tc.conflict {
 				conflictDay := barDay.AddDate(0, 0, 1)
-				for conflictDay.Weekday() == time.Saturday || conflictDay.Weekday() == time.Sunday { conflictDay = conflictDay.AddDate(0, 0, 1) }
+				for conflictDay.Weekday() == time.Saturday || conflictDay.Weekday() == time.Sunday {
+					conflictDay = conflictDay.AddDate(0, 0, 1)
+				}
 				conflictDate := conflictDay.Format("2006-01-02")
 				calendars = append(calendars, providerProbeContextCalendarFake{
 					quality: model.QualityValid, conflictDate: conflictDate, conflictTrading: false,
@@ -1405,21 +1416,32 @@ func TestProviderProbeDailyBarsReusesTradingContextDiagnosticsEndToEnd(t *testin
 			run, err := ds.ProbeProviderCapabilitiesWithOptions(context.Background(), ProviderProbeOptions{
 				Scope: "all", Capabilities: []string{"daily_bars"}, Symbols: []string{"600036.SH"},
 				DailyBarAdjustments: []model.AdjustmentBasis{model.AdjustmentNone},
-				Checks: []string{"quality"}, TimeoutSeconds: 5,
+				Checks:              []string{"quality"}, TimeoutSeconds: 5,
 			})
-			if err != nil { t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err) }
+			if err != nil {
+				t.Fatalf("ProbeProviderCapabilitiesWithOptions() error = %v", err)
+			}
 			item, found := findProbeItem(run.Items, p.Name(), "daily_bars")
 			if !found || item.Status != tc.wantStatus {
 				t.Fatalf("unexpected daily-bars probe status: found=%v item=%+v", found, item)
 			}
 			for _, expected := range tc.wantReasons {
 				matched := false
-				for _, actual := range item.QualityReasons { if strings.HasPrefix(actual, expected) { matched = true; break } }
-				if !matched { t.Errorf("missing reason prefix %q in %+v", expected, item.QualityReasons) }
+				for _, actual := range item.QualityReasons {
+					if strings.HasPrefix(actual, expected) {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					t.Errorf("missing reason prefix %q in %+v", expected, item.QualityReasons)
+				}
 			}
 			for _, forbidden := range tc.forbidReasons {
 				for _, actual := range item.QualityReasons {
-					if strings.HasPrefix(actual, forbidden) { t.Errorf("unexpected reason prefix %q in %+v", forbidden, item.QualityReasons) }
+					if strings.HasPrefix(actual, forbidden) {
+						t.Errorf("unexpected reason prefix %q in %+v", forbidden, item.QualityReasons)
+					}
 				}
 			}
 		})
