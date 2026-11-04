@@ -939,6 +939,41 @@ func TestLiveProviderProbe(t *testing.T) {
 		t.Logf("LIVE_PROVIDER_RESULT %s", encoded)
 	}
 
+	// public-daily-only 用于低成本核验现有公共源的未复权日 K；不触发 quote、复权、Universe、新闻或其他高成本能力。
+	if os.Getenv("MARKET_DATA_LIVE_PUBLIC_DAILY_ONLY") == "1" {
+		sina := NewSina(12*time.Second, "")
+		runDaily("sina", "sina", dailySymbol, model.AdjustmentNone, sina.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return sina.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+		tencent := NewTencent(12 * time.Second)
+		runDaily("tencent", "tencent", dailySymbol, model.AdjustmentNone, tencent.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return tencent.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+		eastmoney := NewEastmoney(12*time.Second, "", "")
+		runDaily("eastmoney", "eastmoney", dailySymbol, model.AdjustmentNone, eastmoney.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return eastmoney.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+		yahoo := NewYahooFinance(12*time.Second, "")
+		runDaily("yahoo", "yahoo", dailySymbol, model.AdjustmentNone, yahoo.client, func(ctx context.Context) ([]model.DailyBar, error) {
+			return yahoo.FetchDailyBars(ctx, dailySymbol, startDate, endDate, 8, model.AdjustmentNone)
+		})
+		report.Failures = failures
+		encoded, marshalErr := json.MarshalIndent(report, "", "  ")
+		if marshalErr != nil {
+			t.Errorf("marshal public daily-only report: %v", marshalErr)
+		} else {
+			t.Logf("LIVE_PROVIDER_REPORT_BEGIN\n%s\nLIVE_PROVIDER_REPORT_END", encoded)
+			if outputPath := strings.TrimSpace(os.Getenv("LIVE_PROVIDER_REPORT_PATH")); outputPath != "" {
+				if writeErr := os.WriteFile(outputPath, append(encoded, '\n'), 0o644); writeErr != nil {
+					t.Errorf("write public daily-only report: %v", writeErr)
+				}
+			}
+		}
+		if len(failures) > 0 {
+			t.Errorf("%d public daily-only probe(s) failed; inspect LIVE_PROVIDER_RESULT records", len(failures))
+		}
+		return
+	}
 	runChip := func(mx *MiaoXiang, symbol string) {
 		capture := &liveProbeCapture{}
 		mx.client.Transport = capture.transport()

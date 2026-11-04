@@ -548,3 +548,12 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 3. TickFlow 仅指数行情已通过；先盘点其余能力的接口与低成本探测方式，不触发全量市场广度/行业排名请求。
 4. 继续阶段 B 交易边界和黄金事件样本工作；2025 事件窗口没有可追溯源数据前保持 blocked。
 5. 妙想暂不重复请求；先保证请求认证元信息可验证，再决定是否做单次真实诊断。
+
+
+## 42. 公共 Provider 未复权日 K 最小探测模式
+
+- 新增 `MARKET_DATA_LIVE_PUBLIC_DAILY_ONLY=1`：仅对 Sina、Tencent、Eastmoney、Yahoo 的 `600036.SH` 发起一次 `AdjustmentNone` 日线请求。
+- 模式复用统一日 K 契约检查和脱敏 HTTP 报告；只输出请求的四个 Provider 结果。
+- 跳过 quote、qfq/hfq、跨市场样本、股票搜索、公告、行业、市场广度、新闻、妙想等其他请求。
+- 通过提交标记 `[include_public] [public_daily_only]` 触发；不改变常规 Provider 探测行为。
+- 当前仅为探测入口实现，Go CI 和真实 Provider 结果待验收。
