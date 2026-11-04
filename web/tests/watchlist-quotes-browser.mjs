@@ -180,7 +180,7 @@ try {
   await page.locator("#refresh-watchlist-quotes").click();
   await page.waitForFunction(() => document.querySelector("#watchlist-quote-refresh-status")?.textContent.includes("批量行情已返回 1 / 2"));
   assert.match(await page.locator('.watchlist-item').filter({ hasText: "600519.SH" }).locator(".watchlist-tracking-line").first().textContent(), /行情快照：/);
-  assert.match(await page.locator('.watchlist-item').filter({ hasText: "000001.SZ" }).locator(".watchlist-tracking-line").textContent(), /批量行情不可用：quote_unavailable/);
+  assert.match(await page.locator('.watchlist-item').filter({ hasText: "000001.SZ" }).locator(".watchlist-tracking-line").first().textContent(), /批量行情不可用：quote_unavailable/);
   assert.match(await status.textContent(), /失败 1 只/);
 
   // 空 items：所有请求标的均须显示明确失败，不能退化为“未加载”。
