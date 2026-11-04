@@ -5,9 +5,9 @@
 - 盘点日期：2026-11-04
 - 任务编号：MIG-001（阶段性静态盘点）
 - 当前状态：**完成：否**
-- 对应总规划：整体任务规划总览.md v1.1
+- 对应总规划：整体任务规划总览.md v1.2
 
-> 本文是基于 GitHub 当前分支和固定 Python 上游源码的静态盘点，不是生产运行时清点，也不代表任何 Python 能力已经迁移完成。进程、容器、真实环境变量、生产调用量、实际数据库和 Redis Key 等仍需在目标环境只读补证。
+> 本文是基于 GitHub 固定代码基线的静态盘点，不是生产运行时清点，也不代表任何 Python 能力已经迁移完成。进程、容器、真实环境变量、生产调用量、实际数据库和 Redis Key 等仍需在目标环境只读补证。本文中的“存在/已实现”默认仅说明源码证据，不自动代表生产已部署或正在使用。
 
 ---
 
@@ -22,6 +22,19 @@
 数据侧分支完整 Git Tree 共 447 个路径。本轮只通过 GitHub 接口读取分支、Tree 和文件；未 clone，未修改数据侧、WebUI 分支、代码、测试、部署文件或 PR。
 
 固定旧 Python 上游提交 Git Tree 共 1,217 个路径，其中 656 个 Python 文件。主要目录：
+### 1.1 证据等级与状态解释
+
+| 证据等级 | 含义 | 可支持的结论 | 不能据此推出 |
+|---|---|---|---|
+| 源码已确认 | 固定 SHA 的 Git Tree/文件中存在定义或实现 | 代码路径、函数、配置、模型/表定义存在 | 代码已部署、功能可用或仍被调用 |
+| Go 实现已确认 | 固定 Go SHA 中存在对应 Go 代码/测试 | Go 侧有候选实现或部分能力 | 行为等价、生产流量已切换 |
+| 调用链已确认 | 静态调用关系、装配或路由能连通 | 某入口在代码路径上调用另一组件 | 该链路在生产实际触发及调用量 |
+| 运行时已确认 | 目标环境只读进程/容器/日志/指标/配置证据 | 指定环境和时间窗口内实际运行/调用情况 | 其他环境、其他时间窗口也相同 |
+| 使用情况未知 | 缺少运行时、流量或调用方证据 | 只能标记待核验 | 不得标记为未使用或可删除 |
+| 待验收 | 有候选 Go 实现，但契约/质量/真实数据等验收不足 | 可列为迁移候选 | 不得标记迁移完成 |
+
+本盘点主要证据为“源码已确认”“Go 实现已确认”和“调用链已确认”；生产运行时证据尚未取得。表格中的“Go 覆盖较多/部分实现”等均为静态实现判断，不代表迁移验收通过。
+
 
 | 上游目录 | 可见职责 | Go 目标模块 |
 |---|---|---|
@@ -161,11 +174,29 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 
 ---
 
+
+### 4.1 迁移对象编号映射
+
+| 迁移对象 | 主要旧源码范围 | 对应任务 |
+|---|---|---|
+| 行情、财务、估值、市场与证券基础 | data_provider/**、src/data/**、src/services/stock_profile_service.py | MIG-004 |
+| 新闻搜索、采集与原始证据 | src/search_service.py、src/services/intelligence_service.py | MIG-005 |
+| 事件、热点和证券/行业关联 | src/agent/events.py、src/services/market_hotspot_service.py | MIG-006 |
+| 模型后端、Agent、Skills、Tools、研究编排 | src/llm/**、src/agent/**、src/analyzer.py、src/core/pipeline.py | MIG-007 |
+| SQLite ORM、Repository、历史与业务数据 | src/storage.py、src/repositories/** | MIG-008 |
+| 告警规则、触发、通知渠道 | src/services/alert_*.py、src/notification* | MIG-009 |
+| 组合、交易、现金、持仓、批次、公司行为和汇率 | src/services/portfolio_*.py、src/repositories/portfolio_repo.py | MIG-010 |
+| 筛选器、因子、策略、回测与评估 | src/core/market_strategy.py、src/services/screening/**、src/core/backtest_engine.py、src/services/backtest_service.py | MIG-011 |
+| REST API、Bot、SSE、任务队列、调度和后台 Worker | api/v1/**、bot/**、src/services/task_queue.py、src/services/runtime_scheduler.py、src/scheduler.py、src/services/alert_worker.py | MIG-012 |
+| 固定样本、差异分类和行为验收 | 迁移对象的冻结输入/输出及 Go 测试样例 | MIG-013 |
+| Bridge、旧 Python API Adapter 和兼容入口删除 | python_bridge/**、internal/adapters/pythonapi/**、go-core/internal/adapters/pythonbridge/** | MIG-014 |
+| Python 容器、运行时、依赖和 CI 残留退役 | Dockerfile、Compose、requirements、CI、迁移脚本 | MIG-015 |
+
 ## 5. Python 数据持久化
 
 ### 5.1 固定上游 SQLite ORM 表
 
-固定上游 src/storage.py 中可检索到 31 个 __tablename__：
+固定上游 `src/storage.py`（commit `7a21cd76952c7fe44a7fc5a6113a5b2b8a16bb32`）通过正则提取并逐项核对到 32 个 `__tablename__`：
 
 | 分组 | 表名 |
 |---|---|
@@ -178,7 +209,7 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 | 告警 | alert_rules、alert_triggers、alert_notifications、alert_cooldowns |
 | 决策与技能评估 | decision_signals、decision_signal_outcomes、decision_signal_feedback、skill_opinion_samples、skill_opinion_outcomes |
 
-这 31 张表是固定上游 ORM 源码定义，不代表目标生产 SQLite 实例一定拥有全部表或全部仍在使用。MIG-008 前必须在目标环境只读核对真实 schema、行数、最近写入时间、索引、外键和数据库文件位置。
+这 32 张表是固定上游 ORM 源码定义，不代表目标生产 SQLite 实例一定拥有全部表或全部仍在使用。MIG-008 前必须在目标环境只读核对真实 schema、行数、最近写入时间、索引、外键和数据库文件位置。
 
 ### 5.2 Go 当前可见持久化基础
 
@@ -287,6 +318,8 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 
 ## 9. MIG-002 契约冻结建议
 
+MIG-001 的职责是回答“旧系统有什么、源码在哪里、静态调用关系是什么、Go 当前有什么候选实现”；MIG-002 才逐项冻结 Go 目标模块、公共接口、字段/单位/时间/空值/错误语义、数据所有权、切换、回滚、验收和删除条件。MIG-001 的初步映射不得视为契约已冻结。
+
 | 顺序 | 模块组 | 必须冻结的契约 | 主要依赖 |
 |---|---|---|---|
 | 1 | 行情/证券/财务/估值/筹码/行业 | 证券身份、单位、复权、时间/PIT、质量状态、来源和分页 | DATA-001~012 |
@@ -301,24 +334,39 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 
 ---
 
-## 10. 后续迁移顺序
+## 10. 差分验收原则（MIG-013）
+
+Go/Python 对照不是要求逐字节或所有数值完全一致。每项差异必须归类并给出证据：
+
+| 分类 | 判定规则 | 验收处理 |
+|---|---|---|
+| 必须一致 | 证券身份、字段语义、交易日/报告期边界、时间可用性规则、基础业务规则和状态含义 | 不一致即失败，先修正契约或实现 |
+| 允许差异 | 数据源不同导致的合理取值差、精度/舍入差、质量等级差异 | 必须说明来源、口径、误差范围和影响，不得掩盖 |
+| Go 更严格 | Go 对 null/0/unknown、非法单位、异常 OHLC、未来数据、缺失时间和质量状态做更严格拒绝或降级 | 可接受，必须记录为预期差异；不得为了贴合 Python 而放宽 |
+| 不允许接受 | 未来数据泄漏、错误复权、错误单位、错误证券关联、错误交易日、把缺失补成真实 0、把未知标记为通过 | 阻断迁移验收，不得以平均误差或模型评分抵消 |
+
+固定样本必须冻结输入快照、证券身份、日期/报告期、请求参数、算法/规则版本和期望分类；差异需可重复定位。旧 Python 的已知缺陷不得成为 Go 的黄金期望值。
+
+## 11. 后续迁移顺序
 
 1. MIG-001 补齐运行时只读清点、外部调用方、SQLite 实例、Redis Key、生产配置和容器 SHA。
-2. MIG-002 冻结逐函数/路由/表级映射，区分复用已有 Go 实现和必须新增的能力。
-3. MIG-003 记录现存 Python fallback 的调用点、触发条件、日志和开关；禁止新增 Python 生产依赖，但不在替代验收前强制关闭必要链路。
-4. MIG-004 收口行情/财务/估值/市场数据；Go shares/CNY、null/zero、复权和质量诊断改进必须保留。
+2. MIG-002 冻结逐函数/路由/表级契约，明确 Go 复用项、新增项、数据所有权、切流和回滚。
+3. MIG-003 治理存量 Python 生产依赖，禁止新增调用，记录观测、负责人和替换期限。
+4. MIG-004 收口行情/财务/估值/市场数据；保留 Go shares/CNY、null/zero、复权和质量诊断改进。
 5. MIG-005/006 迁移新闻采集、原始证据、去重、事件生命周期和历史关联。
-6. MIG-007 迁移模型适配、提示词、工具调用、结构化输出、旧结果后处理、任务状态机和失败恢复。
+6. MIG-007 迁移模型适配、Agent/Skills/Tools、提示词、结构化输出、任务状态机和失败恢复。
 7. MIG-008 迁移持久化；先做旧表到 Go Repository/新表映射和数据迁移演练，再读写切换。
-8. MIG-009 迁移通知渠道、订阅、模板、幂等、重试和投递记录。
-9. 依据 MIG-002 冻结结果迁移仍需保留的 API、Bot、Scheduler、Worker 等入口。
-10. MIG-010 固定样本差分；Python 的补零、未知单位等缺陷不得成为 Go 回归标准。
-11. MIG-011 逐模块确认生产调用量为零、调用方已切 Go、回滚窗口关闭后，拆除 Bridge Adapter。
-12. MIG-012 删除 Python 生产容器、requirements/锁文件、部署配置、Python CI 依赖和不再需要的脚本；保留脱离 Python 运行时的黄金 JSON 样例。
+8. MIG-009 迁移通知与告警规则、订阅、模板、幂等、重试和投递记录。
+9. MIG-010 迁移组合/持仓/交易/现金/公司行为等业务对象，不接券商交易。
+10. MIG-011 迁移筛选/策略/回测，逐项完成策略语义和样本外验收。
+11. MIG-012 迁移仍需保留的旧 API、Bot、SSE、调度、队列和后台 Worker 入口。
+12. MIG-013 执行固定样本差分，按差异分类验收。
+13. MIG-014 确认生产调用量为零、调用方已切 Go、回滚窗口关闭后拆除 Bridge/兼容 Adapter。
+14. MIG-015 删除 Python 运行时、生产部署和 CI 依赖；保留脱离 Python 运行时的黄金 JSON 样例。
 
 ---
 
-## 11. 必须保留的 Go 数据质量改进
+## 12. 必须保留的 Go 数据质量改进
 
 - 成交量统一为标准 shares，成交额统一为标准 CNY；无供应商证据时保持 unknown/degraded。
 - null、真实 0、未知值必须区分；不得把缺失成交量/成交额补成 0。
@@ -330,7 +378,7 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 
 ---
 
-## 12. 参考文件
+## 13. 参考文件
 
 ### 当前 Go 仓库（数据侧基线 d91b2abf1fbc2a55e5db07ac06097a42e3436342）
 
@@ -356,6 +404,7 @@ python_bridge/go_core_client.py 是供旧 Python API/CLI/Bot/Scheduler 使用的
 
 ---
 
-## 13. 更新记录
+## 14. 更新记录
 
-- 2026-11-04：首次静态盘点；核对当前数据侧 HEAD、Git Tree、Go/Python Bridge 调用拓扑、固定旧 Python 上游、业务模块、SQLite ORM 表、依赖、部署和 CI；MIG-001 保持未完成，等待目标运行环境补证。
+- 2026-11-04：首次静态盘点；核对固定代码基线、Go/Python Bridge 调用拓扑、旧上游业务模块、SQLite ORM 表、依赖、部署和 CI；MIG-001 保持未完成，等待目标运行环境补证。
+- 2026-11-04：按总规划 v1.2 修订；新增证据等级、明确 MIG-001/002 边界、补齐组合持仓/筛选回测/旧入口迁移对象，增加 MIG-013 差分分类原则；依据固定上游 storage.py 重新核验为 32 张 ORM 表。
