@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
-	"strings"
 
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/model"
 	"github.com/Kasign/stock_data_provider/services/market-data/internal/validation"
@@ -41,7 +41,7 @@ func TestHithinkDailyBarParseIssuesIncludeRowAndProviderField(t *testing.T) {
 	}
 }
 
- 
+
 func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 	loc := time.FixedZone("CST", 8*60*60)
 	dateMS := func(day int) int64 {
@@ -72,7 +72,7 @@ func TestHithinkDailyPaginationDuplicateReportsPageOffsetAndRow(t *testing.T) {
 
 	provider := NewHithinkConfigured(time.Second, server.URL, "test-key")
 	_, err := provider.FetchDailyBars(context.Background(), "600036.SH", "2026-10-07", "2026-10-09", 10, model.AdjustmentNone)
-	if err == nil || !strings.Contains(err.Error(), "page=2 offset=2 row=0") || !strings.Contains(err.Error(), "2026-10-08") {
+	if err == nil || !strings.Contains(err.Error(), "first_page=1 first_offset=0 first_row=1 duplicate_page=2 duplicate_offset=2 duplicate_row=0") || !strings.Contains(err.Error(), "2026-10-08") {
 		t.Fatalf("expected page/offset/row duplicate diagnostic, got %v", err)
 	}
 	if len(offsets) != 2 || offsets[0] != "0" || offsets[1] != "2" {

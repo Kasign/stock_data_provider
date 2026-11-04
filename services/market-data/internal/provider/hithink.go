@@ -2074,12 +2074,18 @@ func (p *Hithink) fetchFinancialStatementSection(ctx context.Context, symbol str
 	return section, nil
 }
 
+type hithinkDailyRowPosition struct {
+	page   int
+	offset int
+	row    int
+}
+
 func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, end time.Time, adjust string, loc *time.Location) ([]model.DailyBar, error) {
 	startMS := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc).UnixMilli()
 	endMS := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), loc).UnixMilli()
 	offset := 0
 	out := make([]model.DailyBar, 0, 1000)
-	seen := make(map[string]struct{})
+	seen := make(map[string]hithinkDailyRowPosition)
 	for page := 0; page < hithinkMaxPagesPerRange; page++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -2153,11 +2159,12 @@ func (p *Hithink) fetchDailySegment(ctx context.Context, symbol string, start, e
 			if tradeDate < start.Format("2006-01-02") || tradeDate > end.Format("2006-01-02") {
 				return nil, fmt.Errorf("同花顺日 K 日期 %s 超出请求区间", tradeDate)
 			}
-			if _, duplicate := seen[tradeDate]; duplicate {
-				// 保留重复项并拒绝整次结果；附带页码/offset/行号以区分上游页内重复与分页边界重叠。
-				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s (page=%d offset=%d row=%d)", tradeDate, page+1, offset, rowIndex)
+			if first, duplicate := seen[tradeDate]; duplicate {
+				// 保留重复项并拒绝整次结果；同时记录首次出现位置，区分页内重复与相邻页重叠。
+				return nil, fmt.Errorf("同花顺分页返回重复交易日 %s (first_page=%d first_offset=%d first_row=%d duplicate_page=%d duplicate_offset=%d duplicate_row=%d)",
+					tradeDate, first.page, first.offset, first.row, page+1, offset, rowIndex)
 			}
-			seen[tradeDate] = struct{}{}
+			seen[tradeDate] = hithinkDailyRowPosition{page: page + 1, offset: offset, row: rowIndex}
 			if !hithinkPositiveFinite(open) || !hithinkPositiveFinite(high) || !hithinkPositiveFinite(low) || !hithinkPositiveFinite(closePrice) ||
 				low > high || open < low || open > high || closePrice < low || closePrice > high {
 				return nil, fmt.Errorf("同花顺日 K %s 的 OHLC 不满足数据约束", tradeDate)
