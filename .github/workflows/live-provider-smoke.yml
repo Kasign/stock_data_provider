@@ -70,7 +70,7 @@ jobs:
           go-version: "1.23.x"
       - name: Query market-data providers and capture sanitized responses
         env:
-          MARKET_DATA_LIVE_PROVIDER_TESTS: "1"
+          MARKET_DATA_LIVE_PROVIDER_TESTS: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_public]'))) && '1' || '0' }}
           LIVE_PROVIDER_REPORT_PATH: ${{ github.workspace }}/live-provider-report.json
           LIVE_PROBE_QUOTE_SYMBOL: ${{ github.event.inputs.quote_symbol || '600519.SH' }}
           MARKET_DATA_LIVE_MX_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_mx) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_mx]'))) && '1' || '0' }}
@@ -78,6 +78,8 @@ jobs:
           MARKET_DATA_LIVE_HITHINK_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_hithink) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_hithink]'))) && '1' || '0' }}
           MARKET_DATA_LIVE_TUSHARE_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_tushare) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_tushare]'))) && '1' || '0' }}
           MARKET_DATA_LIVE_TICKFLOW_TESTS: ${{ ((github.event_name == 'workflow_dispatch' && inputs.include_tickflow) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[include_tickflow]'))) && '1' || '0' }}
+          MARKET_DATA_LIVE_TICKFLOW_INDEX_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[tickflow_index_only]') && '1' || '0' }}
+          MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[tushare_daily_only]') && '1' || '0' }}
           MARKET_DATA_TICKFLOW_API_KEY: ${{ secrets.TICKFLOW_API_KEY }}
           MARKET_DATA_TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           MARKET_DATA_HITHINK_API_KEY: ${{ secrets.HITHINK_FINANCE_API_KEY }}
@@ -103,7 +105,7 @@ jobs:
           if-no-files-found: warn
       - name: Probe native news search when credentials are available
         env:
-          GO_NATIVE_NEWS_LIVE_TESTS: "1"
+          GO_NATIVE_NEWS_LIVE_TESTS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[include_news]') && '1' || '0' }}
           GO_NEWS_LIVE_REPORT_PATH: ${{ github.workspace }}/live-news-report.json
           BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
           SEARXNG_BASE_URLS: ${{ secrets.SEARXNG_BASE_URLS }}

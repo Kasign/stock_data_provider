@@ -49,6 +49,7 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 	}
 
 	results := make([]result, 0, 4)
+	indexOnly := os.Getenv("MARKET_DATA_LIVE_TICKFLOW_INDEX_ONLY") == "1"
 	failures := make([]string, 0, 4)
 	run := func(name string, call func() (int, string, []string, error)) {
 		started := time.Now()
@@ -62,7 +63,8 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		results = append(results, item)
 	}
 
-	run("quote", func() (int, string, []string, error) {
+	if !indexOnly {
+		run("quote", func() (int, string, []string, error) {
 		item, err := client.FetchQuote(ctx, "600519.SH")
 		if err != nil {
 			return 0, "", nil, err
@@ -72,6 +74,8 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		}
 		return 1, string(item.QualityStatus), item.QualityReasons, nil
 	})
+
+	}
 
 	run("index_quotes", func() (int, string, []string, error) {
 		item, err := client.FetchIndexQuotes(ctx)
@@ -84,7 +88,8 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
 	})
 
-	run("market_breadth", func() (int, string, []string, error) {
+	if !indexOnly {
+		run("market_breadth", func() (int, string, []string, error) {
 		item, err := client.FetchMarketBreadth(ctx)
 		if err != nil {
 			return 0, "", nil, err
@@ -112,6 +117,8 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 		}
 		return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
 	})
+
+	}
 
 	encoded, _ := json.Marshal(results)
 	t.Logf("LIVE_TICKFLOW_RESULT %s", encoded)

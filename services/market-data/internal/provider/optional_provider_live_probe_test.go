@@ -110,47 +110,51 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		results = append(results, item)
 	}
 
-	run("stock_basic", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchStockBasic(ctx, symbol)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Symbol != symbol || item.Source != "tushare" || item.FetchedAt.IsZero() {
-			return 0, "", nil, errLiveProbeContract("stock_basic identity/source/fetched_at mismatch")
-		}
-		return 1, item.QualityStatus, item.QualityReasons, nil
-	})
-
-	calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
-	calendar, calendarErr := client.FetchTradingCalendar(ctx, calendarStart, endDate)
-	run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
-		if calendarErr != nil {
-			return 0, "", nil, calendarErr
-		}
-		if calendar == nil || calendar.Market != "cn_a_share" || calendar.StartDate != calendarStart ||
-			calendar.EndDate != endDate || calendar.Source != "tushare" || calendar.FetchedAt.IsZero() {
-			return 0, "", nil, errLiveProbeContract("trading_calendar identity/source/date-range/fetched_at mismatch")
-		}
-		start, startErr := time.Parse("2006-01-02", calendarStart)
-		end, endErr := time.Parse("2006-01-02", endDate)
-		if startErr != nil || endErr != nil {
-			return 0, "", nil, errLiveProbeContract("trading_calendar probe date range invalid")
-		}
-		expectedDays := int(end.Sub(start)/(24*time.Hour)) + 1
-		if calendar.TotalDays != expectedDays || len(calendar.Items) != expectedDays {
-			return len(calendar.Items), "", nil, errLiveProbeContract("trading_calendar returned incomplete natural-day coverage")
-		}
-		return len(calendar.Items), calendar.QualityStatus, calendar.QualityReasons, nil
-	})
-
-	tradeDate := endDate
-	if calendarErr == nil && calendar != nil {
-		for i := len(calendar.Items) - 1; i >= 0; i-- {
-			if calendar.Items[i].IsTradingDay {
-				tradeDate = calendar.Items[i].Date
-				break
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY") != "1" {
+		run("stock_basic", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchStockBasic(ctx, symbol)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Symbol != symbol || item.Source != "tushare" || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("stock_basic identity/source/fetched_at mismatch")
+			}
+			return 1, item.QualityStatus, item.QualityReasons, nil
+		})
+	
+		calendarStart := now.AddDate(0, 0, -14).Format("2006-01-02")
+		calendar, calendarErr := client.FetchTradingCalendar(ctx, calendarStart, endDate)
+		run("trading_calendar", func() (int, model.QualityStatus, []string, error) {
+			if calendarErr != nil {
+				return 0, "", nil, calendarErr
+			}
+			if calendar == nil || calendar.Market != "cn_a_share" || calendar.StartDate != calendarStart ||
+				calendar.EndDate != endDate || calendar.Source != "tushare" || calendar.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("trading_calendar identity/source/date-range/fetched_at mismatch")
+			}
+			start, startErr := time.Parse("2006-01-02", calendarStart)
+			end, endErr := time.Parse("2006-01-02", endDate)
+			if startErr != nil || endErr != nil {
+				return 0, "", nil, errLiveProbeContract("trading_calendar probe date range invalid")
+			}
+			expectedDays := int(end.Sub(start)/(24*time.Hour)) + 1
+			if calendar.TotalDays != expectedDays || len(calendar.Items) != expectedDays {
+				return len(calendar.Items), "", nil, errLiveProbeContract("trading_calendar returned incomplete natural-day coverage")
+			}
+			return len(calendar.Items), calendar.QualityStatus, calendar.QualityReasons, nil
+		})
+	
+		tradeDate := endDate
+		if calendarErr == nil && calendar != nil {
+			for i := len(calendar.Items) - 1; i >= 0; i-- {
+				if calendar.Items[i].IsTradingDay {
+					tradeDate = calendar.Items[i].Date
+					break
+				}
 			}
 		}
+	
+	
 	}
 
 	run("daily_bars", func() (int, model.QualityStatus, []string, error) {
@@ -167,81 +171,83 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		return len(bars), bars[len(bars)-1].QualityStatus, bars[len(bars)-1].QualityReasons, nil
 	})
 
-	run("security_trading_status", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchSecurityTradingStatus(ctx, symbol, tradeDate)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Symbol != symbol || item.TradeDate != tradeDate || item.Source != "tushare" || item.FetchedAt.IsZero() {
-			return 0, "", nil, errLiveProbeContract("security_trading_status identity/source/fetched_at mismatch")
-		}
-		return 1, item.QualityStatus, item.QualityReasons, nil
-	})
-
-	run("fundamentals", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchFundamentals(ctx, symbol, 2025, 4)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Symbol != symbol || item.Year != 2025 || item.Quarter != 4 || item.Source != "tushare" || item.FetchedAt.IsZero() {
-			return 0, "", nil, errLiveProbeContract("fundamentals identity/period/source/fetched_at mismatch")
-		}
-		return len(item.Sections), item.QualityStatus, item.QualityReasons, nil
-	})
-
-	run("valuations", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchValuations(ctx, []string{symbol})
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Source != "tushare" || item.FetchedAt.IsZero() || len(item.RequestedSymbols) != 1 || item.RequestedSymbols[0] != symbol {
-			return 0, "", nil, errLiveProbeContract("valuations request/source/fetched_at mismatch")
-		}
-		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
-	})
-
-	run("index_catalog", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchIndexCatalog(ctx, "tushare")
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Tag != "tushare" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
-			item.Total != len(item.Items) || len(item.Items) == 0 {
-			return 0, "", nil, errLiveProbeContract("index_catalog identity/source/count/fetched_at mismatch")
-		}
-		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
-	})
-
-	run("index_constituents", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchIndexConstituents(ctx, "000300.SH")
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
-			item.ProviderReportDate == "" || item.Total != len(item.Items) || len(item.Items) == 0 {
-			return 0, "", nil, errLiveProbeContract("index_constituents identity/report-date/count/fetched_at mismatch")
-		}
-		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
-	})
-
-	run("index_daily_bars", func() (int, model.QualityStatus, []string, error) {
-		item, err := client.FetchIndexDailyBars(ctx, "000300.SH", startDate, endDate)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
-			item.StartDate != startDate || item.EndDate != endDate || item.Total != len(item.Items) || len(item.Items) == 0 {
-			return 0, "", nil, errLiveProbeContract("index_daily_bars identity/date-range/count/fetched_at mismatch")
-		}
-		for _, bar := range item.Items {
-			if bar.IndexSymbol != "000300.SH" || bar.TradeDate < startDate || bar.TradeDate > endDate ||
-				bar.Open <= 0 || bar.High <= 0 || bar.Low <= 0 || bar.Close <= 0 || bar.Low > bar.High ||
-				bar.Open < bar.Low || bar.Open > bar.High || bar.Close < bar.Low || bar.Close > bar.High {
-				return len(item.Items), "", nil, errLiveProbeContract("index_daily_bars row contract mismatch")
+	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY") != "1" {
+		run("security_trading_status", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchSecurityTradingStatus(ctx, symbol, tradeDate)
+			if err != nil {
+				return 0, "", nil, err
 			}
-		}
-		return len(item.Items), item.QualityStatus, item.QualityReasons, nil
-	})
+			if item == nil || item.Symbol != symbol || item.TradeDate != tradeDate || item.Source != "tushare" || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("security_trading_status identity/source/fetched_at mismatch")
+			}
+			return 1, item.QualityStatus, item.QualityReasons, nil
+		})
+	
+		run("fundamentals", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchFundamentals(ctx, symbol, 2025, 4)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Symbol != symbol || item.Year != 2025 || item.Quarter != 4 || item.Source != "tushare" || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("fundamentals identity/period/source/fetched_at mismatch")
+			}
+			return len(item.Sections), item.QualityStatus, item.QualityReasons, nil
+		})
+	
+		run("valuations", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchValuations(ctx, []string{symbol})
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Source != "tushare" || item.FetchedAt.IsZero() || len(item.RequestedSymbols) != 1 || item.RequestedSymbols[0] != symbol {
+				return 0, "", nil, errLiveProbeContract("valuations request/source/fetched_at mismatch")
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
+	
+		run("index_catalog", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchIndexCatalog(ctx, "tushare")
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Tag != "tushare" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+				item.Total != len(item.Items) || len(item.Items) == 0 {
+				return 0, "", nil, errLiveProbeContract("index_catalog identity/source/count/fetched_at mismatch")
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
+	
+		run("index_constituents", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchIndexConstituents(ctx, "000300.SH")
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+				item.ProviderReportDate == "" || item.Total != len(item.Items) || len(item.Items) == 0 {
+				return 0, "", nil, errLiveProbeContract("index_constituents identity/report-date/count/fetched_at mismatch")
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
+	
+		run("index_daily_bars", func() (int, model.QualityStatus, []string, error) {
+			item, err := client.FetchIndexDailyBars(ctx, "000300.SH", startDate, endDate)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.IndexSymbol != "000300.SH" || item.Source != "tushare" || item.FetchedAt.IsZero() ||
+				item.StartDate != startDate || item.EndDate != endDate || item.Total != len(item.Items) || len(item.Items) == 0 {
+				return 0, "", nil, errLiveProbeContract("index_daily_bars identity/date-range/count/fetched_at mismatch")
+			}
+			for _, bar := range item.Items {
+				if bar.IndexSymbol != "000300.SH" || bar.TradeDate < startDate || bar.TradeDate > endDate ||
+					bar.Open <= 0 || bar.High <= 0 || bar.Low <= 0 || bar.Close <= 0 || bar.Low > bar.High ||
+					bar.Open < bar.Low || bar.Open > bar.High || bar.Close < bar.Low || bar.Close > bar.High {
+					return len(item.Items), "", nil, errLiveProbeContract("index_daily_bars row contract mismatch")
+				}
+			}
+			return len(item.Items), item.QualityStatus, item.QualityReasons, nil
+		})
+	}
 	logOptionalProviderProbe(t, results, failures)
 }
 

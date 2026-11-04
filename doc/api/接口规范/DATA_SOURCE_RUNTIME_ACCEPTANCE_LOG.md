@@ -458,3 +458,10 @@ Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对�
 当前 Live Probe 已将明确的 40203/权限不足响应归类为 `permission_required`，但测试入口仍会依次探测多项能力（含基础资料、日历、日线、估值、指数等），不适合作为低配额账号的“单接口最小探测”。后续应提供可选的 daily-only 探测模式，先以单次日线请求建立最低权限基线，再按用户明确授权逐项扩展；不应为了减少失败数量而跳过权限分类或降低数据校验。
 
 本节为官方权限规则核对，不代表用户账号的当前积分或 `daily` 线上请求已经验证。
+
+## 36. 真实 Provider 探测按能力缩小范围
+
+- Live Probe 之前在启用任一凭据型 Provider 时仍会同时执行通用公共 Provider 探测和新闻检索，容易产生无关请求与额外配额消耗。
+- 工作流改为显式标记：`[include_public]` 才执行通用公共 Provider 探测；`[include_news]` 才执行新闻检索；TickFlow 可用 `[tickflow_index_only]` 仅调用指数行情；Tushare 可用 `[tushare_daily_only]` 仅调用普通 A 股日线。
+- Tushare daily-only 模式跳过基础资料、交易日历、估值和指数等高权限接口，只发起一次日线能力请求；TickFlow index-only 模式只发起一次指数行情请求。常规测试仍保留完整能力探测。
+- 这些模式只缩小请求范围，不改变 Provider 请求参数、数据校验和质量门禁。提交需同时带对应 Provider include 标记，例如 `[include_tickflow] [tickflow_index_only]`。
