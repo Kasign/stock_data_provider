@@ -427,3 +427,15 @@ Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对�
 - 现在保留最多 2 KiB 的错误响应摘要；超长内容明确标记截断。若上游响应体意外回显当前 API Key，会在错误文本中替换为 `[REDACTED]`。
 - 新增本地 HTTP fixture，覆盖 GET/POST 错误体可诊断且 API Key 不泄露。
 - 未重新调用 TickFlow。下一次定向探测可据上游错误正文定位指数请求问题；本次代码和单测尚未由 Go suite/CI 验证。
+
+## 34. TickFlow 指数行情请求协议与官方 SDK 交叉核对
+
+核对基线：`efa423fcc5fcb7d440f1c12163681b6ce2983968`。
+
+- 官方 Python SDK 的 `Quotes.get` 实现：1–20 个 symbols 使用 GET `/v1/quotes`，Query 参数为 `symbols`，多个代码以英文逗号拼接；超过 20 个才使用 POST JSON。当前项目 6 个指数使用 GET + 逗号拼接，与官方 SDK 实现一致。
+- 官方 SDK 认证使用 `x-api-key` Header；当前项目同样使用该 Header。指数代码格式 `代码.市场后缀` 也与 SDK 文档示例一致。
+- 因此目前没有证据支持“GET/POST 方法、symbols 参数拼接或指数代码后缀错误”这一判断。不能仅凭 HTTP 400 擅自切换 POST 或修改代码格式。
+- 官方参考：`https://github.com/tickflow-org/tickflow/blob/main/tickflow/resources/quotes.py`、`https://github.com/tickflow-org/tickflow/blob/main/tickflow/_base_client.py`。
+- 尚未取得本项目线上 400 的实际错误响应正文；现有代码已保留最多 2 KiB 的脱敏错误体。下一步应使用单次定向请求取得错误正文，再按响应信息决定是否逐指数隔离；未取得错误正文前不批量增加请求次数。
+
+本节是官方 SDK 源码协议核对，不代表 TickFlow 指数行情线上验收通过。
