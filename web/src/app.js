@@ -996,7 +996,8 @@ function addCurrentSymbolToWatchlist() {
       return;
     }
     setWatchlistFeedback(result.added ? "已将 " + symbol + " 加入本地自选。" : symbol + " 已在自选列表中，已更新时间。");
-  } catch {
+  } catch (error) {
+    console.error("自选股添加或列表渲染失败：", error);
     setWatchlistFeedback("浏览器本地存储不可用，无法保存自选股。", "error");
   }
 }
