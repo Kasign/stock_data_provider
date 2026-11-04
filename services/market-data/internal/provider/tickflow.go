@@ -475,7 +475,7 @@ func (p *TickFlow) FetchMarketBreadth(ctx context.Context) (*model.MarketBreadth
 	snapshot := &model.MarketBreadthSnapshot{
 		Market: "cn_a_share", TotalSecurities: universe.SymbolCount, CoveredSecurities: len(quotesBySymbol),
 		ExcludedNonAShareCount: len(excluded),
-		Source: p.Name(), SourceVersion: tickflowVersion + "-market-breadth-v1",
+		Source:                 p.Name(), SourceVersion: tickflowVersion + "-market-breadth-v1",
 		FetchedAt: fetchedAt, QualityStatus: model.QualityValid,
 	}
 	degrade := func(reason string) {
@@ -946,7 +946,7 @@ func (p *TickFlow) FetchSectorRankings(ctx context.Context, rawCategory string, 
 		Category: category, Total: len(industrySymbols),
 		ProviderReturned: len(industrySymbols), ExcludedRows: industriesWithoutUsableChanges,
 		ExcludedNonAShareCount: len(excludedSymbols),
-		Source: p.Name(), SourceVersion: tickflowVersion + "-sw1-sector-rankings-v1", FetchedAt: fetchedAt,
+		Source:                 p.Name(), SourceVersion: tickflowVersion + "-sw1-sector-rankings-v1", FetchedAt: fetchedAt,
 		QualityStatus: model.QualityDegraded,
 		QualityReasons: []string{
 			"provider_snapshot_time_not_exposed_for_aggregated_sector",

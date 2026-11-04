@@ -110,20 +110,20 @@ type liveProbeResult struct {
 }
 
 type liveProbeHTTPResponse struct {
-	Endpoint              string   `json:"endpoint"`
-	RequestMethod         string   `json:"request_method,omitempty"`
-	RequestContentType    string   `json:"request_content_type,omitempty"`
-	RequestBodyBytes      int64    `json:"request_body_bytes,omitempty"`
-	APIKeyHeaderPresent   bool     `json:"api_key_header_present,omitempty"`
-	StatusCode            int      `json:"status_code,omitempty"`
-	ContentType           string   `json:"content_type,omitempty"`
-	TransportError        string   `json:"transport_error,omitempty"`
-	RedirectEndpoint      string   `json:"redirect_endpoint,omitempty"`
-	RedirectQueryKeys     []string `json:"redirect_query_keys,omitempty"`
-	BodyBytesObserved     int64    `json:"body_bytes_observed,omitempty"`
-	BodyTruncated         bool     `json:"body_truncated,omitempty"`
-	BodySample            string   `json:"body_sample,omitempty"`
-	rawSample             []byte
+	Endpoint            string   `json:"endpoint"`
+	RequestMethod       string   `json:"request_method,omitempty"`
+	RequestContentType  string   `json:"request_content_type,omitempty"`
+	RequestBodyBytes    int64    `json:"request_body_bytes,omitempty"`
+	APIKeyHeaderPresent bool     `json:"api_key_header_present,omitempty"`
+	StatusCode          int      `json:"status_code,omitempty"`
+	ContentType         string   `json:"content_type,omitempty"`
+	TransportError      string   `json:"transport_error,omitempty"`
+	RedirectEndpoint    string   `json:"redirect_endpoint,omitempty"`
+	RedirectQueryKeys   []string `json:"redirect_query_keys,omitempty"`
+	BodyBytesObserved   int64    `json:"body_bytes_observed,omitempty"`
+	BodyTruncated       bool     `json:"body_truncated,omitempty"`
+	BodySample          string   `json:"body_sample,omitempty"`
+	rawSample           []byte
 }
 
 type liveProbeCapture struct {

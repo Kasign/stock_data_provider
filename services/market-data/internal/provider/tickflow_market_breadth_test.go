@@ -107,7 +107,6 @@ func newTickFlowBreadthFixtureWithUniverse(t *testing.T, quoteSymbols []string, 
 	}))
 }
 
-
 func TestTickFlowFetchMarketBreadthExcludesUnsupportedUniverseMembersWithEvidence(t *testing.T) {
 	universeSymbols := []string{"600000.SH", "000001.SZ", "300001.SZ", "302132.SZ"}
 	server := newTickFlowBreadthFixtureWithUniverse(t, universeSymbols, "", "", universeSymbols)
