@@ -5706,6 +5706,7 @@ async function applyBrowserDataImport(imported, currentWatchlist, currentRecentT
 }
 
 syncThemeControl(readTheme());
+syncSettingsThemeButtons(readTheme());
 syncWatchlistPreferenceControls();
 window.addEventListener("storage", handleLocalStorageChange);
 $("#theme-toggle").addEventListener("click", () => {
@@ -5713,6 +5714,7 @@ $("#theme-toggle").addEventListener("click", () => {
   const result = persistTheme(nextTheme);
   applyTheme(result.theme);
   syncThemeControl(result.theme, !result.persisted);
+  syncSettingsThemeButtons(result.theme);
 });
 $("#mobile-menu-toggle").addEventListener("click", () => {
   setMobileNavigationOpen(!$(".sidebar").classList.contains("is-open"));

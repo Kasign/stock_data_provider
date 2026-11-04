@@ -72,11 +72,38 @@ try {
 
   await first.locator('.nav-link[data-view="settings"]').click();
   await first.locator("#settings-form").waitFor({ state: "visible" });
+  assert.equal(await first.locator('[data-theme-value="dark"]').getAttribute("aria-pressed"), "true",
+    "settings theme buttons must reflect the persisted theme during initialization");
 
   await second.evaluate(() => localStorage.setItem("stock-provider-webui.theme.v1", "light"));
   await first.waitForFunction(() => document.documentElement.dataset.theme === "light");
   assert.equal(await first.locator("#theme-toggle").getAttribute("aria-pressed"), "true");
   assert.equal(await first.locator('[data-theme-value="light"]').getAttribute("aria-pressed"), "true");
+
+  await first.locator("#theme-toggle").click();
+  await first.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+  assert.equal(await first.locator('[data-theme-value="dark"]').getAttribute("aria-pressed"), "true",
+    "top-bar theme changes must synchronize settings theme buttons");
+
+  await first.evaluate(() => {
+    window.__originalStorageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "stock-provider-webui.theme.v1") throw new DOMException("storage denied", "SecurityError");
+      return window.__originalStorageSetItem.call(this, key, value);
+    };
+  });
+  await first.locator("#theme-toggle").click();
+  await first.waitForFunction(() => document.documentElement.dataset.theme === "light");
+  assert.equal(await first.locator('[data-theme-value="light"]').getAttribute("aria-pressed"), "true",
+    "theme buttons must follow the session theme when persistence fails");
+  assert.match(await first.locator("#theme-toggle").getAttribute("title"), /未能保存/,
+    "theme toggle must expose a persistence warning");
+  await first.evaluate(() => {
+    if (window.__originalStorageSetItem) {
+      Storage.prototype.setItem = window.__originalStorageSetItem;
+      window.__originalStorageSetItem.call(localStorage, "stock-provider-webui.theme.v1", "light");
+    }
+  });
 
   await second.evaluate(() => localStorage.setItem("stock-provider-webui.preferences.v1", JSON.stringify({
     marketColorScheme: "reverse",
