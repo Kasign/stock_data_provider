@@ -379,3 +379,30 @@ Service 级 matched 测试的合成日 K 原先缺少成交额；Normalize 按�
 ## 30. 能力白名单回归格式检查修复
 
 Run `41376039461` 的 gofmt 检查发现 cross_provider skipped 结果字面对齐和 Service 测试文件尾多余空行。已修复；该 Run 的 MariaDB PIT、根模块、go-core 通过，market-data Go suite/Docker 尚未进入编译阶段。
+
+## 31. 2026-11-04 凭据型 Provider 真实探测复核与诊断增强
+
+真实探测基线：
+- Workflow Run：`41802232526`；对应 Job 的 Provider 探测失败。Workflow 顶层显示 success 是因为该诊断 Job 配置了 `continue-on-error: true`，不能据此认定 Provider 全部通过。
+- 分支探测提交：`0a2263bf146ff75cec9f596a6f487d70dd55edb7`。
+- 本节只复核 TickFlow、Tushare、妙想三个凭据型 Provider；不重新发起线上请求，不消耗额外 API 配额。
+
+### 31.1 请求协议与 Secret 传递核对
+
+- Tushare：代码使用 POST + JSON body，包含 `api_name/token/params/fields`，与官方 HTTP 接口协议一致。当前真实探测的多个能力返回权限错误（含 code 40203）；权限不足不能直接推断 Token 错误，也不能将所有接口都要求通过。账号积分档位和单接口权限需分别判断。
+- TickFlow：代码的 GET 行情请求、POST 批量 Universe 请求及 `x-api-key` 认证方式与官方 SDK 的调用方式一致。当前失败集中在指数行情请求、行情字段一致性及证券池过滤；尚无证据证明是请求方法错误。
+- 妙想：Workflow 将仓库 Secret `MX_APIKEY` 映射为 `MARKET_DATA_MX_API_KEY`；探测代码读取该变量并传入 Provider。Provider 使用 POST `/finskillshub/api/claw/query`、`apikey` Header、JSON `toolQuery`，与公开调用示例一致。上次回包提示 Key 不存在或失效，但目前没有请求侧 Header 证据，不能直接要求用户更换 Key。
+
+### 31.2 已提交的诊断改进
+
+- 提交 `46f58f9dde658e20cd22fe263d7db18e9ac90d8e`：Live Probe HTTP 记录新增 request_method、request_content_type、request_body_bytes、api_key_header_present；只记录 Key 是否存在，不记录 Key 值。新增测试验证请求元信息可见且 Secret 不会进入报告。
+- 提交 `bed3a03f1cc0cd540161c6e10eeeda503c3dad24`：Tushare Live Probe 将明确的接口权限错误标记为 `permission_required`，不再与网络故障、Token 错误或 Provider 全局不可用混为 `failed`；其他错误仍按失败处理。新增权限错误分类单测。
+- 上述提交通过 GitHub Contents API 写入当前功能分支；本轮没有触发线上 Provider 探测，也没有执行完整 Go suite。代码测试结果仍待可运行的 CI/本地测试环境确认。
+
+### 31.3 下一步
+
+1. 先运行本地/CI 单测，确认两个诊断改动通过编译、gofmt 和测试。
+2. 下一次妙想探测只在用户确认可继续消耗两次查询额度后执行；重点核对报告中的 POST、JSON Content-Type、请求体长度和 apikey_header_present，再结合响应状态判断是否发生重定向或上游认证拒绝。
+3. Tushare 按账号实际权限建立基线：先单独核验普通日线接口，再把有明确权限要求的能力标记为 permission_required；不得将未授权能力计入 Provider 可用能力。
+4. TickFlow 分别隔离指数代码请求、报价单位校验和 Universe 非普通 A 股成员过滤；不降低 OHLC/金额/覆盖率质量门禁。
+5. 本轮未确认任何一个凭据型 Provider 的全部能力通过；代码协议正确不等于线上凭据、接口权限和数据质量已验收。
