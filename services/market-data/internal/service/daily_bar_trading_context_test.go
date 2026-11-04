@@ -111,7 +111,7 @@ func TestAssessDailyBarTradingContextDoesNotUseConflictingCalendarToConfirmMissi
 
 func TestAssessDailyBarTradingContextDegradesWhenCalendarQualityIsDegraded(t *testing.T) {
 	calendar := &model.TradingCalendarSnapshot{
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_snapshot_timestamp_not_exposed"},
 		Items: []model.TradingCalendarDay{
 			{Date: "2026-10-20", IsTradingDay: true},
