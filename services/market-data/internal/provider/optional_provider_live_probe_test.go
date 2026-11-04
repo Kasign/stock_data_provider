@@ -110,6 +110,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 		results = append(results, item)
 	}
 
+	tradeDate := endDate
 	if os.Getenv("MARKET_DATA_LIVE_TUSHARE_DAILY_ONLY") != "1" {
 		run("stock_basic", func() (int, model.QualityStatus, []string, error) {
 			item, err := client.FetchStockBasic(ctx, symbol)
@@ -144,7 +145,7 @@ func TestLiveTushareCapabilities(t *testing.T) {
 			return len(calendar.Items), calendar.QualityStatus, calendar.QualityReasons, nil
 		})
 	
-		tradeDate := endDate
+		tradeDate = endDate
 		if calendarErr == nil && calendar != nil {
 			for i := len(calendar.Items) - 1; i >= 0; i-- {
 				if calendar.Items[i].IsTradingDay {

@@ -64,59 +64,59 @@ func TestLiveTickFlowCapabilities(t *testing.T) {
 	}
 
 	if !indexOnly {
-		run("quote", func() (int, string, []string, error) {
-		item, err := client.FetchQuote(ctx, "600519.SH")
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Symbol != "600519.SH" || item.Source != "tickflow" || item.FetchedAt.IsZero() || item.CurrentPrice == nil {
-			return 0, "", nil, errLiveProbeContract("quote identity/source/time/price mismatch")
-		}
-		return 1, string(item.QualityStatus), item.QualityReasons, nil
-	})
+				run("quote", func() (int, string, []string, error) {
+				item, err := client.FetchQuote(ctx, "600519.SH")
+				if err != nil {
+					return 0, "", nil, err
+				}
+				if item == nil || item.Symbol != "600519.SH" || item.Source != "tickflow" || item.FetchedAt.IsZero() || item.CurrentPrice == nil {
+					return 0, "", nil, errLiveProbeContract("quote identity/source/time/price mismatch")
+				}
+				return 1, string(item.QualityStatus), item.QualityReasons, nil
+			})
 
-	}
+		}
 
-	run("index_quotes", func() (int, string, []string, error) {
-		item, err := client.FetchIndexQuotes(ctx)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Source != "tickflow" || item.FetchedAt.IsZero() || len(item.Items) != len(tickflowCoreIndexDefinitions) {
-			return 0, "", nil, errLiveProbeContract("core index snapshot coverage mismatch")
-		}
-		return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
-	})
+		run("index_quotes", func() (int, string, []string, error) {
+			item, err := client.FetchIndexQuotes(ctx)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Source != "tickflow" || item.FetchedAt.IsZero() || len(item.Items) != len(tickflowCoreIndexDefinitions) {
+				return 0, "", nil, errLiveProbeContract("core index snapshot coverage mismatch")
+			}
+			return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
+		})
 
-	if !indexOnly {
-		run("market_breadth", func() (int, string, []string, error) {
-		item, err := client.FetchMarketBreadth(ctx)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Market != "cn_a_share" || item.Source != "tickflow" ||
-			item.TotalSecurities <= 0 || item.CoveredSecurities != item.TotalSecurities ||
-			item.AdvancingCount+item.DecliningCount+item.UnchangedCount+item.UnclassifiedCount != item.CoveredSecurities {
-			return 0, "", nil, errLiveProbeContract("market breadth universe/coverage/count contract mismatch")
-		}
-		return item.CoveredSecurities, string(item.QualityStatus), item.QualityReasons, nil
-	})
+		if !indexOnly {
+			run("market_breadth", func() (int, string, []string, error) {
+			item, err := client.FetchMarketBreadth(ctx)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Market != "cn_a_share" || item.Source != "tickflow" ||
+				item.TotalSecurities <= 0 || item.CoveredSecurities != item.TotalSecurities ||
+				item.AdvancingCount+item.DecliningCount+item.UnchangedCount+item.UnclassifiedCount != item.CoveredSecurities {
+				return 0, "", nil, errLiveProbeContract("market breadth universe/coverage/count contract mismatch")
+			}
+			return item.CoveredSecurities, string(item.QualityStatus), item.QualityReasons, nil
+		})
 
-	run("sector_rankings_industry", func() (int, string, []string, error) {
-		item, err := client.FetchSectorRankings(ctx, "industry", 10)
-		if err != nil {
-			return 0, "", nil, err
-		}
-		if item == nil || item.Category != "industry" || item.Source != "tickflow" ||
-			item.Total <= 0 || len(item.Items) == 0 || item.FetchedAt.IsZero() {
-			return 0, "", nil, errLiveProbeContract("industry ranking identity/coverage mismatch")
-		}
-		// 当前 TickFlow 行业涨幅由申万一级成分股行情聚合计算，预期为 degraded，不得标记为源端完整排名。
-		if item.QualityStatus != model.QualityDegraded {
-			return 0, "", nil, errLiveProbeContract("constituent-derived industry ranking must remain degraded")
-		}
-		return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
-	})
+		run("sector_rankings_industry", func() (int, string, []string, error) {
+			item, err := client.FetchSectorRankings(ctx, "industry", 10)
+			if err != nil {
+				return 0, "", nil, err
+			}
+			if item == nil || item.Category != "industry" || item.Source != "tickflow" ||
+				item.Total <= 0 || len(item.Items) == 0 || item.FetchedAt.IsZero() {
+				return 0, "", nil, errLiveProbeContract("industry ranking identity/coverage mismatch")
+			}
+			// 当前 TickFlow 行业涨幅由申万一级成分股行情聚合计算，预期为 degraded，不得标记为源端完整排名。
+			if item.QualityStatus != model.QualityDegraded {
+				return 0, "", nil, errLiveProbeContract("constituent-derived industry ranking must remain degraded")
+			}
+			return len(item.Items), string(item.QualityStatus), item.QualityReasons, nil
+		})
 
 	}
 
