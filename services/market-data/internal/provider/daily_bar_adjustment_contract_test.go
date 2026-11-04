@@ -142,7 +142,7 @@ func TestTickFlowDailyBarAdjustmentRequestAndMetadata(t *testing.T) {
 				if got := r.URL.Query().Get("adjust"); got != tc.adjust {
 					t.Errorf("adjust=%q, want %q", got, tc.adjust)
 				}
-				fmt.Fprintf(w, `{"code":0,"data":{"timestamp":[%d],"open":[10],"high":[10.2],"low":[9.8],"close":[10.1],"volume":[1000],"amount":[10000],"prev_close":[10]}}`, timestamp)
+				fmt.Fprintf(w, `{"code":0,"data":{"timestamp":[%d],"open":[10],"high":[10.2],"low":[9.8],"close":[10.1],"volume":[1000],"amount":[1000000],"prev_close":[10]}}`, timestamp)
 			}))
 			defer server.Close()
 			p := NewTickFlowConfigured(2*time.Second, server.URL, server.URL, "test-key")
@@ -152,6 +152,10 @@ func TestTickFlowDailyBarAdjustmentRequestAndMetadata(t *testing.T) {
 			}
 			if len(bars) != 1 || bars[0].AdjustmentBasis != tc.basis || bars[0].AdjustmentMethod != tc.method {
 				t.Fatalf("unexpected TickFlow adjustment result: %+v", bars)
+			}
+			if bars[0].Volume == nil || *bars[0].Volume != 100000 ||
+				bars[0].RawVolumeUnit != "hands" || bars[0].VolumeUnit != "shares" {
+				t.Fatalf("TickFlow adjustment response must preserve raw hands and normalize shares: %+v", bars[0])
 			}
 		})
 	}
