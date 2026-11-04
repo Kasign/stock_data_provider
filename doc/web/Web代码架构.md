@@ -470,4 +470,4 @@ JSR-4B 再评估 `normalizeImportedPreferences`：该函数目前位于 app.js�
 
 app.js 的 `renderTaskFlowSummary` 继续管理 DOM 查询和更新；ViewModel 不访问全局 state、DOM、storage、API 或事件。新增单测覆盖上述状态和边界，UI contract 验证纯计算边界。
 
-代码提交 `ac02be0`；WebUI Checks #41827451515、Chromium Browser Smoke #41827451500 排队中。
+代码提交 `ac02be0`；最终验收提交 `7faa82c` 的 WebUI Checks #41828190023、Chromium Browser Smoke #41828189983 均通过。首轮静态契约测试仍绑定旧 app.js 内部实现，已改为检查新 ViewModel 模块的真实职责边界；运行时代码未因该修正改变。

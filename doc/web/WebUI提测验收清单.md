@@ -1535,5 +1535,5 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] app.js 保留 DOM 查询和更新，ViewModel 不访问全局 state/DOM/storage/API。
 - [x] 新增单测覆盖事件排序、嵌套事件、读取失败、Run 质量和 Warning 数量。
 - [x] UI contract 验证模块纯计算边界。
-- [ ] WebUI Checks #41827451515。
-- [ ] Chromium Browser Smoke #41827451500。
+- [x] WebUI Checks #41828190023 通过（最终验收提交 `7faa82c`）。
+- [x] Chromium Browser Smoke #41828189983 通过（最终验收提交 `7faa82c`）。

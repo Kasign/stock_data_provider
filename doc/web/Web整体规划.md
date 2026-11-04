@@ -953,6 +953,6 @@ JSR-5A 实施：
 
 代码提交：`f4b5145`。WebUI Checks #41826860829、Chromium Browser Smoke #41826860631 均通过，JSR-5A 验收完成。
 
-JSR-5B 已实施：将任务流程摘要计算迁入 `task-flow-summary-view-model.js`，app.js 仅读取状态并更新 DOM。新增测试覆盖未加载/无任务、事件排序与时间、读取异常、Run 质量和 Warning 数量。代码提交 `ac02be0`，WebUI Checks #41827451515、Chromium Browser Smoke #41827451500 排队中。
+JSR-5B 已实施：将任务流程摘要计算迁入 `task-flow-summary-view-model.js`，app.js 仅读取状态并更新 DOM。新增测试覆盖未加载/无任务、事件排序与时间、读取异常、Run 质量和 Warning 数量。代码提交 `ac02be0`，最终验收提交 `7faa82c`：WebUI Checks #41828190023、Chromium Browser Smoke #41828189983 均通过。初轮 CI 揭示旧 UI contract 仍检查 app.js 内部实现；已将断言改为检查新的 ViewModel 模块，并补齐测试文件读取，不改变运行逻辑。
 
 后续审查方向：复核任务事件筛选按钮/详情视图是否还有明确纯逻辑边界；不迁移 task polling、Run result reload、AbortController/generation、事件读取错误恢复或任务状态所有权。若后续拆分收益不足，保留 app.js 当前边界。
