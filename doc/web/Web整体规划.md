@@ -270,9 +270,9 @@ localStorage + storage event 方案能解决“另一个标签页完成写入后
 
 本轮在原分支完成全市场价格格式化、自选股跨标签页成员同步、批量行情请求成员集合失效、部分成功/空响应显式失败状态、全市场分页与连接切换请求隔离，以及研究列表缓存成员失效和公告分页刷新竞态。最新代码基线 `037dfc2455659a369647fc6f5b6db1fd8e09a865` 的验收记录：
 
-- WebUI Checks：通过（[运行记录 #41764061839](https://github.com/Kasign/stock_data_provider/actions/runs/41764061839)）。
-- Chromium Browser Smoke：通过（[运行记录 #41764061807](https://github.com/Kasign/stock_data_provider/actions/runs/41764061807)）。
-- 最终验收代码提交：`dc1f59876d3abe2631d97e1ef198cfc7d967214f`。
+- WebUI Checks：通过（[运行记录 #41767674232](https://github.com/Kasign/stock_data_provider/actions/runs/41767674232)）。
+- Chromium Browser Smoke：通过（[运行记录 #41767674229](https://github.com/Kasign/stock_data_provider/actions/runs/41767674229)，16 个步骤全部成功）。
+- 最新验收代码提交：`037dfc2455659a369647fc6f5b6db1fd8e09a865`；验收文档归档提交：`7bcbb18a6db84f298ea03acc15ef0bd547b5a093`。
 
 浏览器专项覆盖全市场分页、页大小/复权切换、刷新期间控件状态、页面离开/返回、双标签页连接切换取消在途请求及晚到响应隔离；自选股覆盖成员变化、分组变化、部分成功、空 items、失败后旧快照标识。以上均为隔离 API fixture 的 WebUI 行为验收，不代表真实 Provider 数据可用性。
 
