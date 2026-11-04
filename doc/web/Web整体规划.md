@@ -862,3 +862,18 @@ JSR-2C1 代码迁移已提交，当前等待 WebUI Checks 与 Chromium Browser S
 本批中途由 CI 揭示的旧契约问题均已修正：测试原先要求 action 按钮和辅助字段节点必须直接写在 app.js；现在改为检查新视图模块及 app 的协调边界。没有修改 API、存储 key/schema、CSS 或行情请求行为。
 
 下一步 JSR-3B 不直接抽取整个页面 controller。先对导入预览、辅助字段格式化和分组/筛选交互做独立边界评估，选择副作用最低的一项继续；批量行情 generation/AbortController 与跨页联动仍留在 app.js。
+
+
+### JSR-3B：自选股导入预览解析模块（已验收）
+
+新增 `web/src/watchlist-import-preview.js`，负责 CSV/制表符/分号行解析和导入预览数据计算：代码规范化、表头跳过、已有/文件内重复识别、无效代码提示、50 条容量限制及计数汇总。模块接收原始文本和当前自选存储状态，不自行读取/写入 localStorage，不访问 DOM、不绑定事件、不发 API 请求。
+
+`app.js` 仍负责调用 `safeReadWatchlistState`、把结果传入预览模块、维护 `watchlistImportPreview` 状态、渲染预览表格，以及调用 `importWatchlistSymbols` 完成最终持久化确认。预览解析与实际写入仍然分离，未改变 storage key/schema。
+
+验收：
+- 新增 `watchlist-import-preview.test.mjs`，覆盖 CSV/Tab/分号、引号字段、表头、BOM、空行、已有重复、文件内重复、非法代码、容量上限和损坏/不可读存储。
+- 原有 `watchlist-import.test.mjs` 继续验证最终导入的去重、一次性写入、回读确认、容量上限和损坏存储保护。
+- WebUI Checks：#41814352763，通过。
+- Chromium Browser Smoke：#41814352767，通过；其中自选页导入预览/确认与全站多视口回归均通过。
+
+JSR-3A/3B 均已通过 CI。下一批先评估 `renderWatchlistImportPreview` 的纯 DOM 边界，或把辅助字段格式化模型从 `renderWatchlist` 中抽出；必须先确认参数边界和现有契约，不直接迁移整个自选页面 controller。

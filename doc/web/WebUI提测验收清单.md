@@ -1435,3 +1435,15 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 自选页 320/768/1280/1600px 截图已复核；CI 缺少 CJK 字体，中文排版仍需实机复核。
 - [ ] JSR-3B：继续评估导入预览/辅助字段格式化的纯函数或 DOM 边界，不迁移整个页面控制器。
 - [ ] 自选批量行情 generation、AbortController、成员变化和连接变更失效机制不得拆散。
+
+
+### JSR-3B 自选股导入预览解析模块（已验收）
+
+- [x] 新增 `watchlist-import-preview.js`，拆出 CSV/Tab/分号解析与预览数据计算。
+- [x] 通过显式传入原始文本和当前自选状态，模块不直接访问 localStorage、DOM、全局 state、事件或 API。
+- [x] 保持 app.js 管理 storage 读取、预览状态、DOM 表格展示和最终导入写入；预览不等同于持久化成功。
+- [x] 新增单元测试覆盖引号字段、BOM、空行、表头、代码规范化、重复/无效/超限和异常存储。
+- [x] WebUI Checks #41814352763 通过。
+- [x] Chromium Browser Smoke #41814352767 通过，自选导入预览/确认交互通过。
+- [ ] JSR-3C：评估预览表格 DOM 构建或 tracking 字段 view model 的进一步拆分。
+- [ ] 继续保留批量行情 generation/AbortController、跨页联动和最终存储事务在 app/领域模块的明确所有权内。

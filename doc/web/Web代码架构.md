@@ -287,3 +287,12 @@ JSR-2C2（第一步）实现：新增 `task-event-node.js`，仅负责根据显�
 JSR-3A 验收：WebUI Checks #41813659508、Chromium Browser Smoke #41813659580 均通过（提交 `6570f798`）。本次没有修改自选存储 schema、分组事务、筛选/排序规则、行情 API、请求 generation 或跨页联动。
 
 后续拆分顺序应优先评估导入预览解析/展示和辅助字段 view model；不得把批量行情请求生命周期或浏览器数据导入/导出事务搬入 view 模块。
+
+
+### 12.6 JSR-3B：自选股导入预览解析
+
+新增 `watchlist-import-preview.js`，负责 `parseWatchlistImportLine` 和 `buildWatchlistImportPreview`。输入为导入原始文本与当前自选状态；输出预览 rows、accepted、remaining 和 counts。它负责字段分隔符/引号处理、证券代码格式与交易所后缀规范化、已有/文件内重复识别、无效行和容量上限判断。
+
+模块不自行读取 localStorage；当前存储可读性/有效性由 app.js 通过 `safeReadWatchlistState` 得出并传入。模块不构建 DOM、不维护 `watchlistImportPreview` state、不执行持久化。最终确认仍由 `importWatchlistSymbols` 负责回读确认与异常存储保护。
+
+验收：`watchlist-import-preview.test.mjs` 覆盖分隔符、引号、BOM、空行、表头、证券代码规范化、重复、无效、容量和异常存储；`watchlist-import.test.mjs` 保留真实存储导入事务测试。WebUI Checks #41814352763、Chromium Browser Smoke #41814352767 均通过。
