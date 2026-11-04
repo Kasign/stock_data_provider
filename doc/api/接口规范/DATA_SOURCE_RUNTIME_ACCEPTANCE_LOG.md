@@ -703,3 +703,25 @@ Run `41813766294` 对应 HEAD `a3f64cf740b30bdba4cbb0fda89067cd9cd93212`：
 - 修复复用既有 `normalize.HandsToShares`；RawVolume 原值保留，RawVolumeUnit 改为 `hands`，规范 Volume 乘以 100 且 VolumeUnit 为 `shares`。
 - 不修改 `/v1/quotes`（其手转股已另有真实证据）；不改 amount CNY、OHLC、复权口径、标准化门禁；不把结论扩展到非 A 股市场。
 - 本节为真实根因定位记录。代码修复、自动化验证和修复后真实复测必须分别记录，未完成前不得标记 TickFlow DailyBar 真实验收通过。
+
+
+## 50. 2026-11-04 TickFlow 日 K 手转股修复后真实复测
+
+### 50.1 修复提交与自动化验证
+
+- 单位修复：`211a58da787561227b62cbc2432534ee728cd0f0`，将 A 股 `/v1/klines` 的 raw volume 由按股误解改为按手解释，复用 `normalize.HandsToShares`；RawVolume 保留原值，RawVolumeUnit=`hands`，VolumeUnit=`shares`。
+- 回归测试覆盖普通日 K、none/forward/backward 复权元数据、标准化失败 Reporter。修正历史 fixture 后，Go test suite Run `41825777135` 全部 5 个 Job 通过；Parity Run `41825788560`、WebUI checks Run `41825788574` 通过。
+ 
+### 50.2 修复后真实证据
+
+- Live Run：`41825777178`；Job：`126560000555`；能力：`daily_bars_none`；证券：`600519.SH`；请求 8 条；HTTP 200；API Key Header 存在。
+- 结果：`status=passed`、`quality=degraded`、`rows=8`；Validation `total_count=0`、`error_count=0`；timestamp/OHLC/volume/amount 数组长度均为 8；body_truncated=false。
+- 原始响应未返回 `prev_close`（数组长度 0）。因此第一条涨跌幅无可用基准，后续记录使用排序后的前一交易日收盘价回算；所有受影响记录按既有规则降级。不得将本次结果标为全量 valid。
+- 8 条日 K 的 amount/volume 在 volume×100 后均通过 OHLC 宽区间交叉校验。样本首条 57,686 手→5,768,600 股，隐含均价约 1,330.86 元；末条 74,121 手→7,412,100 股，隐含均价约 1,460.56 元。
+ 
+### 50.3 当前能力边界
+
+- TickFlow A 股 `/v1/klines` 手转股修复：当前 600519.SH、8 条样本通过；不推广到其他市场。
+- DailyBar 质量：因缺少 prev_close 保持 degraded；不伪造 prev_close，不从其他 Provider 回填。
+- Market breadth 和 sector rankings：本轮未执行，仍未验收。
+- 下一 P0 转为现有公共源 none 日 K 的单位/口径复核；只复用历史证据或在有必要时单次定向请求。
