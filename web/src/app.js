@@ -63,6 +63,7 @@ import {
   runStatusLabel,
   taskStatusLabel
 } from "./format.js";
+import { taskEventStatusKey, taskEventStatusLabel, taskEventStatusTone } from "./task-event-format.js";
 
 const $ = (selector) => document.querySelector(selector);
 const TASK_REFERENCE_KEY = "stock-provider-webui.last-analysis-task.v1";
@@ -70,28 +71,6 @@ const BROWSER_DATA_FORMAT = "stock-provider-webui-browser-data";
 const BROWSER_DATA_VERSION = 3;
 const TERMINAL_TASK_STATUSES = new Set(["succeeded", "partial", "failed"]);
 const TASK_STATUSES = new Set(["queued", "running", "succeeded", "partial", "failed"]);
-const TASK_EVENT_STATUS_LABELS = Object.freeze({
-  succeeded: "已完成",
-  success: "已完成",
-  completed: "已完成",
-  failed: "失败",
-  error: "异常",
-  blocked: "已阻断",
-  rejected: "已拒绝",
-  degraded: "已降级",
-  partial: "部分完成",
-  running: "运行中",
-  started: "已启动",
-  "in-progress": "运行中",
-  in_progress: "运行中",
-  processing: "处理中",
-  queued: "排队中",
-  pending: "等待中",
-  skipped: "已跳过",
-  unknown: "状态未报告",
-  other: "其他状态"
-});
-
 function responseContractError(message) {
   const error = new Error(message);
   error.responseContractError = true;

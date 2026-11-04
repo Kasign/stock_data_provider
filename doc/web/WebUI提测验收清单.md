@@ -1319,3 +1319,11 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [ ] 建立 app.js 依赖图、全局 state 读写表和候选函数迁移清单。
 - [ ] 执行 JSR-1 共享纯工具抽离。
 - [ ] 后续按业务域逐批拆分并通过浏览器回归。
+
+
+### JavaScript 模块化 JSR-1 首批迁移（待 CI）
+
+- [x] 抽离任务事件状态 key/中文标签/展示色调纯函数至 `web/src/task-event-format.js`。
+- [x] 新增 `web/tests/task-event-format.test.mjs`，覆盖已知、未知及空状态。
+- [ ] WebUI Checks 与 Chromium Browser Smoke 通过。
+- [ ] 确认任务详情、事件列表、筛选统计显示与迁移前一致。
