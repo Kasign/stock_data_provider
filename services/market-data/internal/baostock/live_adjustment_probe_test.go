@@ -69,10 +69,11 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 		EndDate:            endDate,
 		DateSemanticsNote:  "OperateDate is tested as a candidate effective date by matching raw, forward-adjusted and backward-adjusted K-lines; a successful price match is evidence for reconstruction semantics, not proof of the upstream field's legal/business definition.",
 		AvailabilityAtNote: "BaoStock query_adjust_factor does not expose a verified first-publication timestamp in this response; AvailableAt must remain unknown.",
-		Items:              make([]liveBaoStockAdjustmentItem, 0, 2),
+		Items:              make([]liveBaoStockAdjustmentItem, 0, 8),
 	}
 	var failures []string
-	for _, symbol := range []string{"sh.600036", "sz.002982"} {
+	// Include older listed securities so the probe can find a genuine raw-K window before the first factor event.
+\tfor _, symbol := range []string{"sz.000001", "sz.000002", "sz.000858", "sh.600000", "sh.600016", "sh.600601", "sh.600036", "sz.002982"} {
 		item := liveBaoStockAdjustmentItem{Symbol: symbol}
 		factors, factorErr := client.QueryAdjustmentFactors(ctx, symbol, "2000-01-01", factorEndDate)
 		if factorErr != nil {

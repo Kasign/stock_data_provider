@@ -285,3 +285,12 @@
 - `sh.600036` 首因子事件日 `2002-04-09`，因子 30 条；`sz.002982` 首因子事件日 `2020-04-24`，因子 8 条。两者 raw/qfq/hfq 均各 9 条，样本区间没有 OHLC mismatch。
 - 两只证券首事件前都没有 raw 日 K，`pre_first_event_status=not_applicable`。因此官方 latest-factor fallback 没有被真实数据验证；生产 helper 继续 fail closed，不采用未来因子。
 - AvailableAt 仍未知；当前复权 OHLC 匹配不等于 PIT 可见性证明。
+
+
+## 2026-11-05 P0 批次 35：扩展 BaoStock 首事件前 fallback 真实样本候选
+
+- 批次 34 的两个样本均为 `not_applicable`，没有真实首事件前 raw 日 K，不能验证官方 latest-factor fallback。当前不改变生产 helper 的 fail-closed 行为。
+- 扩展独立 Live Probe 候选至 `000001.SZ`、`000002.SZ`、`000858.SZ`、`600000.SH`、`600016.SH`、`600601.SH`，并保留 `600036.SH`、`002982.SZ` 作为既有对照样本。候选只是待探测集合，不代表已确认存在适用窗口。
+- 对每只候选仍查询 2000-01-01 至探测当天的因子历史，并查询首个因子事件日前 raw/qfq 日 K；只有存在真实 raw 交易日且日期严格早于首事件，才进入 latest-factor × raw OHLC 对账。
+- 每只证券独立输出 matched/mismatch/not_applicable/unavailable；网络或数据不可用不得记为 not_applicable，not_applicable 不计为通过。至少两个独立证券得到 matched，才进入公式评审；任何 mismatch 都维持 fail-closed 并调查。
+- 本批仅扩展测试候选，不新增 API、字段、数据库结构，不修改生产复权算法。真实运行结果以带 `[historical_baostock_factors]` 标记的 Push Live Probe 报告为准。
