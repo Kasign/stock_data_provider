@@ -449,3 +449,27 @@ type ResearchEvidenceQuery interface {
 5. 契约测试进入 Data CI；OpenAPI lint、Go 测试、Handler 测试和契约测试全部通过后，才允许 Data Schema 进入 GOV-004 冻结评审。
 
 本轮没有修改 Data 分支、OpenAPI 或 Go 业务代码；没有创建模块分支。
+
+
+### 13.6 News → Research 只读证据查询 Facade 契约
+
+新增目标契约文档：[News → Research 只读证据查询契约](./News-Research只读证据查询契约.md)。
+
+本轮重新读取 `feat/research-news-ingestion` 的 Application / Domain 文件，并将分支与既有核查 SHA `ea697fe437d44afffbd60874ad144adc4313e469` 比较：当前分支 ahead 1 个提交，变化集中在新闻关系文档、领域类型与测试。当前 Application 仍只有 SearchCandidates、IngestCandidate、ApplyResearchUpdate 等能力，没有 Research 只读 Query Facade。
+
+**当前已实现与未实现的边界：**
+- 已有 Candidate/Observation/NewsItemVersion、来源/入口/Provider 授权策略、Identity 和追加式 Relation 模型，以及写入事务端口。
+- 尚无 ResearchEvidenceQuery、GetEvidence/ListEvidence DTO、Repository 查询实现、system_as_of 历史知识过滤、稳定分页、不可变授权决策引用和完整内容引用。
+- PolicyDecision 当前只包含 Allowed/ReasonCode/MaxRetention；策略模型没有可用于历史审计的不可变版本引用。
+- SecurityIdentity/IndustryClassification 虽保存 ObservedAt，现有 Resolver 只按业务有效时间解析；ResolveCurrentRelations 也不是历史知识时点查询。
+
+**目标契约已明确：**
+1. News Application 提供 GetEvidence/ListEvidence 只读 Facade；Research 不访问 News Domain/Repository/SQL。
+2. 请求明确传入 system_as_of、purpose、requested_content_level、可信 caller_ref；不接受任意 URL 或任意 SQL 过滤。
+3. 返回 DTO 保留主体/Observation/版本/指纹/来源/Provider/身份/质量/时间/授权引用；只有获得许可才提供摘要、正文或 content_ref。
+4. PublishedAt、AvailableAt、ObservedAt、FetchedAt、NormalizedAt 分开；available_at 只允许由可验证来源证据产生。
+5. 历史查询先按 system_as_of 过滤 Observation、Version、Identity、Classification、Relation，再按 valid_at / published_at 解析业务事实。
+6. 授权交集覆盖 Source、Endpoint、Provider；新增不可变 AuthorizationDecisionRef，历史授权审计与当前内容读取授权分离。
+7. ListEvidence Cursor 绑定固定 system_as_of、过滤条件、排序版本和快照，禁止 OFFSET 并发分页导致漏项/重复。
+
+本轮只在 `feat/design_doc` 增加契约文档；News 分支未修改。News N6 Repository/Migration 仍等待 Platform Storage 真实 MariaDB 验收。GOV-004 未冻结。
