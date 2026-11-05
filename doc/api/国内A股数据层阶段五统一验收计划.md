@@ -302,3 +302,11 @@
 - 已将循环恢复为正常 Go 缩进语法，不改探测逻辑、候选集合、生产复权算法或数据契约。
 - 该 SHA 的通用 Go suite、race/vet、MariaDB PIT/fallback 集成和 WebUI checks 通过；但因 market-data 包无法解析，不能将整体验收视为通过。Push Live BaoStock 专项未能执行到请求阶段，因此没有八只证券的真实报告；不得将空报告或 workflow 后续打印步骤成功解释为 matched/not_applicable。
 - 修复后的新 SHA 必须重新通过 gofmt、market-data tests、race/vet、Docker build 与 parity；Push Live Probe 必须实际产出 BaoStock 报告后，才评估八只证券的 matched/mismatch/not_applicable/unavailable。阶段 B 继续 in_progress，生产 helper 继续 fail-closed。
+
+
+## 2026-11-05 P0 批次 37：BaoStock 探测历史窗口边界修正
+
+- 当前专项因子历史与首事件前 raw/qfq 查询起点由 2000-01-01 调整为 1990-01-01；2025-07-07 至 2025-07-17 的 none/qfq/hfq 主对账窗口不变。
+- 报告新增 `history_start_date`，仅表示请求窗口起点，不代表 Provider 最早可用日期或证券上市日期。
+- 首事件不晚于请求起点才可判 `not_applicable`；无效日期、请求失败，以及首事件晚于起点但 raw 查询为空且无法区分覆盖缺口时均为 `unavailable`。
+- 新增窗口分类边界单测。此项为探测方法修正，不产生真实复权匹配证据；八只证券真实报告待带标记 Push workflow 执行。AvailableAt 仍未知，PIT 不可用。

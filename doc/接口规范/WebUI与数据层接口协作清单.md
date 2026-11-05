@@ -120,7 +120,7 @@
 | API-03 | 全市场分页与批量行情的范围、总数下限、覆盖率、MA 和复权语义 | 待当前 HEAD 复核 | 双方 | 服务端分页与字段质量可验证，WebUI 不将页内结果解释为全市场排名 |
 | API-04 | 市场情绪当前快照与历史快照的持久化、缺失交易日和覆盖语义 | 待真实验收 | 数据侧主责，WebUI 配合 | 有真实历史数据、数据库读写证据和无数据/缺日契约 |
 | API-05 | 市场级资金流真实数据与 Provider 权限验收 | 依赖凭据/权限 | 数据侧主责 | 真实请求可复现；权限缺失、Provider 不可用和空数据状态可区分 |
-| API-06 | 开发中 | Provider 静态清单、被动诊断、主动 Probe、Probe 历史均有 API；WebUI 已封装；DailyBar 交易上下文与日期边界诊断复用现有 Validator/Reporter/TradingCalendar/SecurityTradingStatus；重复无效行优先级、请求级参数单次计数、Reporter 截断计数已补回归；MariaDB fallback 标准化 warnings 已保留，来源序列选择改为最新交易日优先；缓存历史 warnings 与本次标准化 warnings 已补回归 | 本轮提交 CI 通过后，继续真实 MariaDB fallback / 日内停牌样本验收；Eastmoney/Tencent 复权锚点仍需有限真实样本 | TickFlow `/v1/klines` 成交量单位仍待真实样本证明；日内停牌真实样本未验；Eastmoney/Tencent 响应未提供可独立确认的 ref date；Tushare adj_factor/dividend 40203 权限阻塞 | `6b46bf0c4fa8388468a48105fbb4cd7fe7a7e8d6`（本轮变更前基线） | 基线 Go suite、Parity、WebUI checks 通过；Live Probe 工作流成功但真实 Provider 测试状态需查看本轮 job 日志；本轮新增测试 CI 待验收 | BaoStock/Pytdx 既有样本证据保持；Eastmoney/Tencent 锚点未验证；日内停牌缺失日 K 仅自动化规则已修复，真实样本待验 | 接口层已接入，待真实验收 |
+| API-06 | 开发中 | Provider 清单、诊断、Probe 与 Probe 历史已有 API；DailyBar 日期边界、交易上下文和 MariaDB fallback warnings 已有回归；BaoStock 因子与 qfq/hfq 主窗口已有专项探测；批次 37 将首事件前历史查询起点统一为 1990-01-01，并修正空样本判定 | 新提交 CI 通过后执行八只证券 BaoStock 专项真实探测；继续验证 TickFlow 成交量单位、日内停牌真实样本、MariaDB Probe 历史部署；Eastmoney/Tencent 参考日期仍需独立锚点 | BaoStock AvailableAt 未知，PIT 继续排除；TickFlow 单位、日内停牌真实样本未验；Tushare adj_factor/dividend 40203 权限阻塞 | `687b49a190e661bed0855ab3f5bfd367bf9bd4c1` | 基线 Go suite Push `42012433189`、PR `42012445022`；Parity `42012445049`；WebUI `42012444875` 通过；新提交 CI 待验 | 既有 BaoStock/Pytdx 样本证据保留；本轮八只证券报告尚未执行，不计真实验收 | 接口层已接入，待真实验收 |
 | API-07 | 板块多维排行（近 5 日涨幅、资金净流入等） | 待能力评估 | 数据侧主责，WebUI 配合 | 有真实来源、完整候选范围、排序/分页契约及质量证据；不以成交额冒充净流入 |
 | API-08 | 通知渠道、订阅、发送测试与投递记录服务端能力 | 未提供服务端接口 | 数据侧主责；WebUI 后续接入 | 服务端安全存储、鉴权、审计、重试和投递查询契约完整 |
 | API-09 | 服务端选股策略、全市场扫描、候选理由与历史记录 | 待产品/API 设计 | 双方 | 明确策略 schema、扫描范围、异步任务、结果快照和可追溯理由 |
@@ -139,7 +139,7 @@
 
 ### 6.2 数据侧 API 开发进度（由数据侧维护）
 
-本节是数据侧更新 API 开发进度的固定区域。当前数据侧业务代码复核基线为 `cf69ccc4e8d81cfa44b11a9a61cde3666ee4d50f`（2026-11-05）。该代码基线的 Go suite Run `41960803425`、Parity Run `41960803760`、WebUI checks Run `41960803407`、Live Provider Probe Run `41960803434` 均通过。Live Provider Probe 的工作流成功不代表每个 Provider 的每种复权口径均已真实验收。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
+本节是数据侧更新 API 开发进度的固定区域。已复核代码基线为 `c22470bec87beb89961b76ad9856d5c8709aac73`（2026-11-05）；Go suite Push Run `42012433189`、PR Run `42012445022`、Parity Run `42012445049`、WebUI checks Run `42012444875` 通过。Live Provider Probe Push Run `42012433230` 外层成功，但 BaoStock 专项因未携带 `[historical_baostock_factors]` 而 skipped，不计真实复权验收。当前最新提交 `687b49a190e661bed0855ab3f5bfd367bf9bd4c1` 的 CI 待验。数据侧每完成一个开发节点、测试节点或真实数据验证节点，都应更新对应行；不需要等待 WebUI 联调完成才更新。
 
 **填写规则：**
 1. 只更新自己负责的 API 任务行，不覆盖 WebUI 接入状态。
@@ -306,3 +306,11 @@
 - MariaDB 来源组选择调整为最新交易日优先，其次比较覆盖行数、采集时间和稳定 key；仍禁止跨来源、版本、复权 method/ref date 或 normalization version 混合。
 - 缓存命中路径增加回归覆盖，确保缓存写入时 warnings 与本次重新标准化 warnings 均保留。
 - 无 API、Schema、数据库结构、Provider 请求或 WebUI 变更；本轮 CI 待验收。
+
+
+## 15. 2026-11-05 API-06 BaoStock 专项探测窗口修正
+
+- 数据侧变更基线：`c22470bec87beb89961b76ad9856d5c8709aac73`；本批代码提交：`687b49a190e661bed0855ab3f5bfd367bf9bd4c1`。仅调整 BaoStock 专项测试探测，不涉及 WebUI 调用或 API Schema。
+- 因子历史与首事件前 raw/qfq 请求统一从 1990-01-01 起查；报告 `history_start_date` 仅代表请求窗口起点。
+- 首事件不晚于请求起点可判 `not_applicable`；首事件晚于起点但无 raw 行不能据此断言无历史，改为 `unavailable`；无效日期同样 `unavailable`。
+- 新提交 CI 待验；八只证券真实报告尚未执行。WebUI 无需改动；API-06 继续“接口层已接入，待真实验收”。BaoStock AvailableAt 仍未知，不改变 PIT 门禁。
