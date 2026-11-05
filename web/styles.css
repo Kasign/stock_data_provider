@@ -2214,8 +2214,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-activity-heading p {
   margin:5px 0 0;
   color:var(--text-dim);
-  font-size:11px;
-  line-height:1.6
+  font-size:12px;
+  line-height:1.65
 }
 .market-activity-controls {
   display:flex;
@@ -3294,7 +3294,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 
 .market-overview-actions .button { min-height: 38px; font-size: 12px; }
 
-.market-activity-heading p { font-size: 12px; line-height: 1.65; }
 .market-activity-controls label { font-size: 12px; line-height: 1.4; }
 .market-activity-controls input { min-height: 38px; }
 .market-activity-controls .button { min-height: 38px; font-size: 12px; }
