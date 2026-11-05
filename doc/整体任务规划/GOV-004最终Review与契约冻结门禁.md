@@ -312,3 +312,14 @@ Data 分支最新 HEAD 已更新为 `4ff4359178be7a055fb81756a5099adb9fcf3f31`�
 详细 Operation 映射、包装/内联对象、nil/empty 边界和 DATA-CONTRACT-001~006 执行拆分见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.9 节。
 
 **GOV-004 Data 阻断维持打开**：当前没有 Schema 修复，没有双向 Go/OpenAPI 契约 CI，也没有完整真实 Handler Golden；本轮未运行 Data Go 测试。整体结论仍为 **NO-GO**，不冻结共同契约，不创建五个模块分支。
+
+
+## 12. Data 最新 HEAD / CI 复核（2026-11-05）
+
+Data 最新 HEAD 更新为 `c22470bec87beb89961b76ad9856d5c8709aac73`。相较 Operation 映射核查 SHA `4ff4359178be7a055fb81756a5099adb9fcf3f31` ahead 1 / behind 0；该提交只修复 BaoStock 探测测试中的转义字符，并更新两份 `doc/api/**` 文档，没有修改 OpenAPI、HTTP Handler 或 Model。
+
+最新 SHA 的 Go test suite run `42012445022` 已 completed / success，包含 market-data gofmt、tests、race、vet、MariaDB/PIT/Probe 集成和 Docker market-data image build；Parity run `42012445049`、WebUI checks run `42012444875` 也 completed / success。Live provider probe run `42012444966` 整体 success，但 BaoStock historical adjustment-factor consistency 专项步骤为 skipped，不能视为八只证券真实探测通过。
+
+因此最新 CI 只证明修复后的现有构建/测试门禁通过，不代表 OpenAPI ↔ Go JSON 契约差异已修复。Data 的 15 个 Go-only 字段、9 个无来源 Schema 字段、15 处 required 差异、122 个过宽 nullable、23 个潜在 null 字段，以及完整 Handler Golden/双向契约测试仍待处理。
+
+详细映射与执行拆分见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.9 节。**GOV-004 继续 NO-GO**；不冻结共同基线、不创建五个模块分支。
