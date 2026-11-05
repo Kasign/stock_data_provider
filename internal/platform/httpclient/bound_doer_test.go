@@ -73,7 +73,7 @@ func TestBoundDoerRejectsNilRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	bound, err := client.Bind(DestinationPolicy{
-		Dependency:  "news.provider.bocha",
+		Dependency:   "news.provider.bocha",
 		AllowedHosts: []string{"api.example.com"},
 	})
 	if err != nil {
