@@ -112,7 +112,6 @@ func dailyBarsPITContainsQualityReason(reasons []string, want string) bool {
 	return false
 }
 
-
 func TestRebuildAdjustedDailyBarsCurrentAcceptsObservedBaoStockFactorWithoutAvailableAt(t *testing.T) {
 	observed := time.Date(2025, 7, 8, 8, 0, 0, 0, time.UTC)
 	bars := []model.DailyBar{{
@@ -124,7 +123,7 @@ func TestRebuildAdjustedDailyBarsCurrentAcceptsObservedBaoStockFactorWithoutAvai
 		Symbol: "600036.SH", TradeDate: "2025-07-07", Factor: 2,
 		Basis: model.AdjustmentFactorForward, Source: "baostock", SourceVersion: "baostock-public-tcp-v1",
 		AvailableAt: nil, SystemObservedAt: &observed,
-		QualityStatus: model.QualityDegraded,
+		QualityStatus:  model.QualityDegraded,
 		QualityReasons: []string{"provider_available_at_not_exposed_by_query_adjust_factor"},
 	}}
 
