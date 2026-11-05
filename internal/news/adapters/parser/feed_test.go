@@ -212,6 +212,8 @@ func TestAtomContentFormatMapping(t *testing.T) {
 	}{
 		{name: "default text", content: `<content>纯文本</content>`, want: "纯文本", format: domain.ContentFormatPlainText},
 		{name: "html", content: `<content type="html">&lt;p&gt;HTML&lt;/p&gt;</content>`, want: "<p>HTML</p>", format: domain.ContentFormatHTMLFragment},
+		{name: "html media type with parameters", content: `<content type="text/html; charset=UTF-8">&lt;p&gt;HTML 参数&lt;/p&gt;</content>`, want: "<p>HTML 参数</p>", format: domain.ContentFormatHTMLFragment},
+		{name: "plain text media type with parameters", content: `<content type="text/plain; charset=UTF-8">纯文本 参数</content>`, want: "纯文本 参数", format: domain.ContentFormatPlainText},
 		{name: "xhtml", content: `<content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>XHTML</p></div></content>`, want: `<div xmlns="http://www.w3.org/1999/xhtml"><p>XHTML</p></div>`, format: domain.ContentFormatHTMLFragment},
 		{name: "invalid xhtml root", content: `<content type="xhtml"><span xmlns="http://www.w3.org/1999/xhtml">bad</span></content>`, want: `<span xmlns="http://www.w3.org/1999/xhtml">bad</span>`, format: domain.ContentFormatUnknown},
 		{name: "external", content: `<content type="html" src="https://publisher.example/body"/>`, want: "", wantSrc: "https://publisher.example/body", format: domain.ContentFormatUnknown},
@@ -334,5 +336,32 @@ func TestAtomFeedBodyAndAttachmentRemainSeparate(t *testing.T) {
 	}
 	if !equalStrings(entry.Attachments[0].ValidationIssues, []string{"missing_url"}) {
 		t.Fatalf("attachment issues=%v", entry.Attachments[0].ValidationIssues)
+	}
+}
+
+func TestFeedEmptyPayloadDoesNotCreateBody(t *testing.T) {
+	cases := []struct {
+		name, payload string
+	}{
+		{name: "rss empty content", payload: `<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item><title>空正文</title><content:encoded><![CDATA[   ]]></content:encoded></item></channel></rss>`},
+		{name: "atom empty content", payload: `<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>empty</id><title>空正文</title><content type="html">   </content></entry></feed>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := ParseFeed([]byte(tc.payload), time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			entry := doc.Entries[0]
+			if entry.ContentLayers("").Body != nil {
+				t.Fatalf("empty payload created body: %+v", entry)
+			}
+			if !equalStrings(entry.MissingFields, []string{"id", "title", "link", "published_at", "content"}) && tc.name == "rss empty content" {
+				t.Fatalf("missing fields=%v", entry.MissingFields)
+			}
+			if !equalStrings(entry.MissingFields, []string{"published_at", "content"}) && tc.name == "atom empty content" {
+				t.Fatalf("missing fields=%v", entry.MissingFields)
+			}
+		})
 	}
 }
