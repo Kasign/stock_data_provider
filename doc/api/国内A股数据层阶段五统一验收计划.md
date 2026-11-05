@@ -134,3 +134,12 @@
 - 真实 MariaDB CI 已执行批次 19 新增的 Service PIT 测试，暴露测试夹具使用随机字符串而非合法 A 股证券代码的问题；生产代码校验正确，不应放宽。
 - 两项测试改用合法证券代码 `600519.SH`，继续验证因子与公司行动在 Service 层回退到 as_of 可见的 v1 revision。
 - 批次 19 CI 结果为失败，不能将 Job success 或 Repository 测试通过误报为 Service PIT 通过。批次 20 等待新 SHA 的真实 MariaDB 结果。
+
+
+## 2026-11-05 P0 批次 21：Service PIT 回退真实 MariaDB 验收通过
+
+- 验收 SHA：`c938d7b5f2c0e690eb70d3246f2b0ad91eb67578`。
+- 专用 MariaDB Job `127144202157` 的 Service PIT 步骤中，复权因子与公司行动两项版本回退测试均明确 PASS，未发生 SKIP。
+- 测试证券代码夹具已修正为合法的 `600519.SH`；生产代码的证券校验保持不变。
+- 同一 SHA 的 5 个 workflow 全部完成且 success：Go test suite push `41997386635`、Go test suite PR `41997394765`、Go-Python parity `41997394676`、Live provider probe `41997394766`、WebUI checks `41997394719`。
+- PR #1 保持 Open / Draft，未合并。Service PIT 回退验收通过；阶段 B 仍 in_progress，后续继续复权口径、交易边界和诊断计数审查。
