@@ -1787,7 +1787,8 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 表格元信息、质量状态标记、表格底部说明、页面底部说明和柔和徽标迁移至组件基础字号。
 - [x] 删除对应 5 条全局 `!important` 字号覆盖，保留状态颜色、浅色主题语义色和移动端排列。
 - [x] UI contract 锁定五组组件字号及移动端/浅色主题规则。
-- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [x] 定位并修正两项历史 UI contract：旧断言仍要求 `.panel-muted` 与 `.settings-feedback` 保留 `!important`，现已改为验证组件基础字号。
+- [ ] 在修正后的最终提交 SHA 上重新运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke；人工核验表格横向滚动、质量标记和底部辅助信息在多分辨率下的实际可读性。
 
 ## 2026-11-05 UIR-2 第四十批：任务空态、标识与边界说明字号收敛

@@ -2551,7 +2551,8 @@ test("UIR-2 typography roles use semantic tokens without changing their baseline
   assert.match(stylesheet, /--font-size-control:\s*13px/);
   assert.match(stylesheet, /--font-size-input:\s*14px/);
   assert.match(stylesheet, /\.page-subtitle \{ font-size: var\(--font-size-secondary\) !important; \}/);
-  assert.match(stylesheet, /\.panel-muted \{ font-size: var\(--font-size-support\) !important; \}/);
+  assert.match(baseCssDeclarationBlock(".panel-muted"), /font-size:\s*12px\s*;/);
+  assert.doesNotMatch(baseCssDeclarationBlock(".panel-muted"), /!important/);
   assert.match(stylesheet, /\.button \{ font-size: var\(--font-size-control\) !important; \}/);
   assert.match(stylesheet, /\.field input, \.field select, \.field textarea, \.recent-analysis-search input \{ font-size: var\(--font-size-input\); \}/);
 });
@@ -2624,7 +2625,8 @@ test("UIR-2 settings feedback layout constraints are consolidated", () => {
   assert.ok(stylesheet.includes(".settings-feedback { min-height: 1.5em; margin: 9px 0 0; overflow-wrap: anywhere;"));
   assert.ok(!stylesheet.includes(".settings-feedback { min-height: 1.5em; overflow-wrap: anywhere; }"));
   assert.ok(stylesheet.includes(".settings-connection-form .settings-feedback { margin: 0; }"));
-  assert.ok(stylesheet.includes(".settings-feedback { font-size: 12px !important; }"));
+  assert.match(baseCssDeclarationBlock(".settings-feedback"), /font-size:\s*12px\s*;/);
+  assert.doesNotMatch(baseCssDeclarationBlock(".settings-feedback"), /!important/);
   assert.ok(stylesheet.includes(":root[data-theme=\"light\"] .settings-feedback"));
   const inlineStatus = exactCssDeclarationBlock(".settings-inline-status");
   assert.match(inlineStatus, /margin:\s*11px 0 0\s*;/);

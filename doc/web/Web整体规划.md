@@ -1603,3 +1603,8 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 将 `.eyebrow`、`.panel-muted`、`.query-hint`、`.security-note`、`.settings-feedback` 的最终字号迁回组件基础规则，统一为 12px，删除全局可读性规则中对应 5 条重复 `!important`。保留设置安全提示的警示色、设置反馈错误色及浅色主题错误色，保留查询辅助文字在 1200px 以下取消左侧缩进的响应式布局。新增 UI contract 锁定字号、语义颜色和响应式行为。
 
 第四十四批修正提交 `0a6e05375c0fa1c0358365108aa9a914d75bf3e2` 的 WebUI Checks 已通过（语法检查、Compose 校验、485 项单元测试和 Nginx 镜像构建均通过）；Chromium Browser Smoke 当时仍在运行，最终状态以该提交的 workflow 记录为准。
+
+
+#### 第四十五批 UI contract 兼容性修正
+
+第四十五批首次 WebUI Checks 在 485 项测试中出现 2 项历史 contract 断言失败：旧断言仍要求 `.panel-muted` 和 `.settings-feedback` 必须保留全局 `!important`，与本批将字号迁回组件基础规则的目标冲突。已更新两项旧断言，改为检查组件基础字号 12px 且不含 `!important`。本次失败属于测试契约未同步，不是页面脚本语法、Compose 或样式构建失败；修正后的最终 SHA 需重新验收。
