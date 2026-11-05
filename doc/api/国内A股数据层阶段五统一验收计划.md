@@ -181,3 +181,10 @@
 - 完整路径现对全部配置样本执行 Sina raw、Tencent none/qfq/hfq、Eastmoney qfq/hfq、BaoStock qfq/hfq、Yahoo qfq/hfq；可选 NetEase raw 同样遍历。Quote、公告等非日 K 能力仍只使用首只样本。
 - 增加样本证券列表解析测试，验证多证券、默认值、空项与重复项。
 - 新 SHA 待两只样本真实探测和完整 CI 验证。
+
+
+## 2026-11-05 P0 批次 27：执行 Pytdx 与 Service 真实历史诊断
+
+- Pytdx 前复权参考日测试改名并补充契约注释，明确参考日可晚于请求结束日，但输出 K 线仍受请求日期范围约束。
+- 通过 live-provider-smoke 提交标记触发 Pytdx 两只证券 raw/qfq/hfq + GBBQ 真实探测，以及生产 DataService Probe 两证券、三复权口径的 MariaDB 持久化诊断。
+- 结果待真实运行完成后核验。
