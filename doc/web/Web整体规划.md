@@ -1269,3 +1269,13 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 在第六批浏览器验收通过后，继续处理 `.panel-heading` 与 `.panel-heading h2` 的全局重复覆盖。将面板标题布局最终值（gap 14px、min-width 0、align-items flex-start）合并进基础规则；将标题文字的 letter-spacing、line-height 和 overflow-wrap 合并进基础规则。移除后置同选择器覆盖，不改变最终计算值。保留 `.panel-heading p` 的可读性规则、状态徽标约束、子元素 max-width 以及媒体查询覆盖。
 
 增加 UI contract 检查合并后的关键声明与旧覆盖片段移除情况。等待本批 WebUI Checks 和 Chromium Browser Smoke。
+
+### UIR-2 第八批：设置分区标题级联收敛（2026-11-05）
+
+本批集中整理设置中心 `.settings-section`、`.settings-section-heading`、标题 h2 与说明 p 的重复全局声明：
+- 分区外边距最终值统一到基础声明（底部 22px）。
+- 标题布局基础规则直接采用最终桌面值（居中对齐、gap 14px、底部 11px），保留 `flex-wrap`；删除后置同选择器覆盖。
+- h2 的颜色与字号合并进基础规则；p 的最终字号和行高提升为独立基础规则，保留公共说明文字组提供的颜色、外边距和自动换行。
+- 保留 640px 下标题恢复顶部对齐的媒体查询，以及标题子容器和折叠交互规则。
+
+增加 UI contract 锁定合并后的声明、被移除的覆盖片段和窄屏例外。目标是保持最终计算样式不变；本批代码提交后需通过 WebUI Checks 与 Chromium Browser Smoke。

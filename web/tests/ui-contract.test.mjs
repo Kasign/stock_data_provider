@@ -2351,3 +2351,15 @@ test("UIR-2 panel heading base rules include their final shared layout constrain
   assert.ok(!stylesheet.includes([".panel-heading h2 {", "  letter-spacing: -.2px;", "}"].join(newline)));
   assert.ok(!stylesheet.includes([".panel-heading h2 {", "  min-width: 0;", "  line-height: 1.4;"].join(newline)));
 });
+
+test("UIR-2 settings section heading final values are consolidated", () => {
+  const newline = String.fromCharCode(10);
+  assert.ok(stylesheet.includes([".settings-section-heading {", "  display: flex;", "  align-items: center;", "  justify-content: space-between;", "  flex-wrap: wrap;", "  gap: 14px;", "  margin: 0 0 11px;", "}"].join(newline)));
+  assert.ok(stylesheet.includes([".settings-section-heading h2 {", "  margin: 0 0 5px;", "  color: var(--text);", "  font-size: 17px;", "}"].join(newline)));
+  assert.ok(stylesheet.includes([".settings-section-heading p {", "  font-size: 12px;", "  line-height: 1.65;", "}"].join(newline)));
+  assert.ok(stylesheet.includes(".settings-section { margin: 0 0 22px; }"));
+  assert.ok(!stylesheet.includes(".settings-section-heading { display:flex;"));
+  assert.ok(!stylesheet.includes(".settings-section-heading { align-items:center; }"));
+  assert.ok(!stylesheet.includes(".settings-section { margin-bottom:22px; }"));
+  assert.ok(stylesheet.includes("@media (max-width:640px) {\\n  .settings-section-heading { align-items:flex-start; }"));
+});
