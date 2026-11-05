@@ -1262,4 +1262,10 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - `.view`：将 max-width、min-width、width 和居中规则合并到初始页面容器声明，保留页面上下 padding。
 - `.panel`：将最终阴影值与过渡声明合并到基础规则，删除中间及末尾的重复过渡/阴影规则。
 
-新增 UI contract，锁定合并后的全局基础声明，并检查被移除的重复全局覆盖不再出现；保留媒体查询中的 `.main-area` 响应式覆盖。未触碰媒体查询中的局部规则、页面特有样式、主题覆盖和组件状态。该批属于级联结构清理，目标是保持计算样式不变。首次 WebUI Checks 暴露新增契约测试的选择器统计正则写法错误（测试未正确匹配换行），已改为逐行统计顶层选择器；不是运行时 CSS 行为失败，修正后重新验收。
+新增 UI contract，锁定合并后的全局基础声明，并检查被移除的重复全局覆盖不再出现；保留媒体查询中的 `.main-area` 响应式覆盖。未触碰媒体查询中的局部规则、页面特有样式、主题覆盖和组件状态。该批属于级联结构清理，目标是保持计算样式不变。首次 WebUI Checks 暴露新增契约测试的选择器统计写法错误，已改为精确检查合并前后的规则片段；不是运行时 CSS 行为失败。最终提交 WebUI Checks #41959226504 与 Chromium Browser Smoke #41959226345 均通过。
+
+### UIR-2 第七批：面板标题共享规则合并（2026-11-05）
+
+在第六批浏览器验收通过后，继续处理 `.panel-heading` 与 `.panel-heading h2` 的全局重复覆盖。将面板标题布局最终值（gap 14px、min-width 0、align-items flex-start）合并进基础规则；将标题文字的 letter-spacing、line-height 和 overflow-wrap 合并进基础规则。移除后置同选择器覆盖，不改变最终计算值。保留 `.panel-heading p` 的可读性规则、状态徽标约束、子元素 max-width 以及媒体查询覆盖。
+
+增加 UI contract 检查合并后的关键声明与旧覆盖片段移除情况。等待本批 WebUI Checks 和 Chromium Browser Smoke。

@@ -2341,3 +2341,13 @@ test("UIR-2 shared page frame rules merge only redundant global overrides", () =
   assert.ok(stylesheet.includes("--space-page: clamp(16px, 2.1vw, 30px);"));
   assert.ok(stylesheet.includes("transition: border-color .16s ease, box-shadow .16s ease;"));
 });
+
+test("UIR-2 panel heading base rules include their final shared layout constraints", () => {
+  const newline = String.fromCharCode(10);
+  assert.ok(stylesheet.includes(["  gap: 14px;", "  min-width: 0;"].join(newline)));
+  assert.ok(stylesheet.includes(["  letter-spacing: -.2px;", "  line-height: 1.4;", "  overflow-wrap: anywhere;"].join(newline)));
+  assert.ok(!stylesheet.includes(".panel-heading { min-width: 0; }"));
+  assert.ok(!stylesheet.includes([".panel-heading {", "  gap: 14px;", "}"].join(newline)));
+  assert.ok(!stylesheet.includes([".panel-heading h2 {", "  letter-spacing: -.2px;", "}"].join(newline)));
+  assert.ok(!stylesheet.includes([".panel-heading h2 {", "  min-width: 0;", "  line-height: 1.4;"].join(newline)));
+});
