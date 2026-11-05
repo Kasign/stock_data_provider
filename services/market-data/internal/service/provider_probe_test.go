@@ -876,7 +876,7 @@ func TestProviderProbeRunsCrossProviderDailyBarComparison(t *testing.T) {
 		t.Fatalf("expected one cross-provider result, got %+v", run.CheckResults)
 	}
 	result := run.CheckResults[0]
-	if result.Status != "passed" || result.Provider != "baostock+pytdx" || result.FieldCount != 6 || len(result.ComparedDates) != 1 {
+	if result.Status != "passed" || result.Provider != "pytdx+baostock" || result.FieldCount != 6 || len(result.ComparedDates) != 1 {
 		t.Fatalf("unexpected cross-provider comparison result: %+v", result)
 	}
 }
