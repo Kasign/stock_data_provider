@@ -14,7 +14,7 @@ import (
 
 type sourceCatalogStub struct {
 	registration SourceEndpointRegistration
-	err error
+	err          error
 }
 
 func (s sourceCatalogStub) LookupEndpoint(context.Context, string, string) (SourceEndpointRegistration, error) {
@@ -22,10 +22,10 @@ func (s sourceCatalogStub) LookupEndpoint(context.Context, string, string) (Sour
 }
 
 type sourceTransportStub struct {
-	response *http.Response
-	err error
-	calls int
-	sourceID string
+	response   *http.Response
+	err        error
+	calls      int
+	sourceID   string
 	endpointID string
 }
 
@@ -45,12 +45,12 @@ func approvedSourceRegistration() SourceEndpointRegistration {
 		URL: "https://publisher.example/feed.xml", PublisherName: "登记媒体",
 		PublisherDomain: "publisher.example", AccessMethod: domain.AccessRSS,
 		SourcePolicy: domain.SourcePolicy{
-			Status: domain.AuthorizationApproved,
+			Status:               domain.AuthorizationApproved,
 			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
-			AllowedPurposes: []domain.Purpose{domain.PurposeInternalPersonalResearch},
-			AllowedContentKinds: []domain.ContentKind{domain.ContentMetadata, domain.ContentFullText},
-			AllowedStorageModes: []domain.StorageMode{domain.StorageTransient},
-			MaxRetention: time.Minute, EffectiveAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			AllowedPurposes:      []domain.Purpose{domain.PurposeInternalPersonalResearch},
+			AllowedContentKinds:  []domain.ContentKind{domain.ContentMetadata, domain.ContentFullText},
+			AllowedStorageModes:  []domain.StorageMode{domain.StorageTransient},
+			MaxRetention:         time.Minute, EffectiveAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 			ExpiresAt: &expires, EvidenceRef: "license-source-1",
 		},
 		URLPolicy: domain.SourceURLPolicy{AllowedSchemes: []string{"https"}, AllowedHosts: []string{"publisher.example"}},
@@ -136,7 +136,7 @@ func TestCollectSourceRejectsContentTypeAndFormatMismatch(t *testing.T) {
 	body := `<?xml version="1.0"?><rss version="2.0"><channel/></rss>`
 	for _, testCase := range []struct {
 		contentType string
-		code string
+		code        string
 	}{
 		{"text/xml", "source_content_type_unsupported"},
 		{"application/atom+xml", "source_feed_format_mismatch"},
@@ -189,7 +189,7 @@ func TestCollectSourceSkipsCatalogFailure(t *testing.T) {
 
 func TestCollectSourceUnknownTransportErrorIsNotRetryable(t *testing.T) {
 	for _, testCase := range []struct {
-		err error
+		err       error
 		retryable bool
 	}{
 		{errors.New("connection refused"), false},

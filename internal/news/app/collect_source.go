@@ -23,22 +23,22 @@ const (
 
 var (
 	ErrSourceCollectionRequest = errors.New("news: invalid source collection request")
-	ErrSourceEndpointNotFound = errors.New("news: source endpoint not found")
+	ErrSourceEndpointNotFound  = errors.New("news: source endpoint not found")
 )
 
 // SourceEndpointRegistration 是组合根提供的已登记来源入口快照。
 // SourcePolicy 是发布者级默认授权；EndpointPolicy 仅表达入口级差异。
 type SourceEndpointRegistration struct {
-	SourceID       string
-	EndpointID     string
-	Enabled        bool
-	URL            string
-	PublisherName  string
-	PublisherDomain string
-	AccessMethod   domain.AccessMethod
-	SourcePolicy   domain.SourcePolicy
-	EndpointPolicy *domain.EndpointPolicy
-	URLPolicy      domain.SourceURLPolicy
+	SourceID         string
+	EndpointID       string
+	Enabled          bool
+	URL              string
+	PublisherName    string
+	PublisherDomain  string
+	AccessMethod     domain.AccessMethod
+	SourcePolicy     domain.SourcePolicy
+	EndpointPolicy   *domain.EndpointPolicy
+	URLPolicy        domain.SourceURLPolicy
 	MaxResponseBytes int64
 }
 
@@ -73,12 +73,12 @@ type CollectedSourceEntry struct {
 
 // CollectSourceResult 是单个 Source Endpoint 的在线 Feed 采集结果。
 type CollectSourceResult struct {
-	SourceID    string
-	EndpointID  string
-	FeedFormat  parser.FeedFormat
-	FeedTitle   string
-	ObservedAt  time.Time
-	Entries     []CollectedSourceEntry
+	SourceID   string
+	EndpointID string
+	FeedFormat parser.FeedFormat
+	FeedTitle  string
+	ObservedAt time.Time
+	Entries    []CollectedSourceEntry
 }
 
 // SourceCollectionError 是可安全暴露的新闻业务错误，不包含 URL、响应体或底层错误文本。
@@ -144,10 +144,10 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 	policyRequest := domain.CollectionPolicyRequest{
 		AccessMethod: registration.AccessMethod,
-		Purpose: request.Purpose,
-		ContentKind: request.ContentKind,
-		StorageMode: request.StorageMode,
-		Retention: request.Retention,
+		Purpose:      request.Purpose,
+		ContentKind:  request.ContentKind,
+		StorageMode:  request.StorageMode,
+		Retention:    request.Retention,
 	}
 	decision := domain.EvaluateSourceCollectionPolicy(registration.SourcePolicy, registration.EndpointPolicy, policyRequest, u.now())
 	if !decision.Allowed {
@@ -176,7 +176,7 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return CollectSourceResult{}, &SourceCollectionError{
-			Code: "source_http_status_" + strconv.Itoa(response.StatusCode),
+			Code:      "source_http_status_" + strconv.Itoa(response.StatusCode),
 			Retryable: response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500,
 		}
 	}
@@ -222,7 +222,7 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		}
 		result.Entries = append(result.Entries, CollectedSourceEntry{
 			Candidate: candidate,
-			Content: entry.ContentLayers(""),
+			Content:   entry.ContentLayers(""),
 		})
 	}
 	return result, nil
@@ -242,7 +242,6 @@ func SourceCollectionErrorCode(err error) string {
 	}
 	return "internal_error"
 }
-
 
 // sourceTransportRetryable only marks explicit timeout failures as retry candidates.
 // Unknown transport errors remain non-retryable until a domain policy classifies them.
