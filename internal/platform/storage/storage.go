@@ -10,8 +10,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"sort"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -349,4 +349,3 @@ func migrationLockName(namespace string) string {
 	sum := sha256.Sum256([]byte(namespace))
 	return "platform:migrate:" + hex.EncodeToString(sum[:16])
 }
-
