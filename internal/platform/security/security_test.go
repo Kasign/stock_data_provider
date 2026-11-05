@@ -291,3 +291,43 @@ func TestRouterRejectsDuplicatePatterns(t *testing.T) {
 		t.Fatal("expected duplicate route registration to fail")
 	}
 }
+
+func TestAuthenticatorCredentialSnapshotIsImmutableToCallers(t *testing.T) {
+	makeSecret := func(value string) config.Secret {
+		return config.NewEnvWithLookup(func(string) (string, bool) { return value, true }).Secret("TOKEN")
+	}
+
+	serviceScopes := []string{ScopeDataRead}
+	auth, err := NewAuthenticator(makeSecret(ownerToken), []ServiceCredential{{
+		Name: "snapshot-service",
+		Secret: makeSecret(dataToken),
+		Scopes: serviceScopes,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Mutating the caller-owned configuration after construction must not
+	// change the authenticator's credential or authorization snapshot.
+	serviceScopes[0] = ScopeResearchRun
+	serviceScopes = append(serviceScopes, ScopeResearchRead)
+
+	principal, err := auth.Authenticate(requestWithToken(dataToken))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if principal.Subject != "snapshot-service" || !contains(principal.Scopes, ScopeDataRead) || contains(principal.Scopes, ScopeResearchRun) {
+		t.Fatalf("authenticator changed with caller-owned scopes: %+v", principal)
+	}
+
+	// A caller may mutate its returned Principal without changing later
+	// authentication results.
+	principal.Scopes[0] = ScopeResearchRun
+	next, err := auth.Authenticate(requestWithToken(dataToken))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(next.Scopes, ScopeDataRead) || contains(next.Scopes, ScopeResearchRun) {
+		t.Fatalf("returned principal mutated authenticator state: %+v", next)
+	}
+}
