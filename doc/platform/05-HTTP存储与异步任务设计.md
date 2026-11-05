@@ -257,3 +257,12 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - 不采用 LRU/TTL 淘汰 semaphore：淘汰仍被请求持有的 channel 会创建同名新池，破坏同一依赖的并发上限。
 
 该设计将运行期 semaphore 数量从“请求期间出现过的不同 Dependency 数量”收敛为“启动时配置的 Dependency 数量 + 1”，避免高基数输入导致无界内存增长。
+
+
+### 7.10 HTTP Client 并发与连接生命周期补充（2026-11-05）
+
+- `MaxConcurrent` 仅是未显式配置 Dependency 的共享 fallback 池容量，不是 Client 全局并发上限。
+- `DependencyLimits` 中每个显式依赖拥有独立 semaphore；多个显式依赖的并发总和可以超过 `MaxConcurrent`。如需真正全局并发上限，应另行设计全局调度，不得将现有配置误读为全局限制。
+- 依赖槽位覆盖上游请求和响应体缓冲读取。响应体读取完成后，上游 Body 已关闭，返回给调用方的是有界内存 Body；调用方仍应关闭返回 Body，但不会因忘记关闭而占用依赖槽位。
+- `CloseIdleConnections` 只关闭空闲连接，不取消活动请求；调用后 Client 仍可继续使用。它不是 Client 的永久 Close，也不替代服务退出时的请求 Context 取消与生命周期管理。
+- 慢速响应体必须验证在读取完成前占用依赖槽位；关闭空闲连接必须验证不影响活动请求且后续请求仍可执行。
