@@ -1393,7 +1393,9 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(marketActivityControlLabelBase, /color:\s*var\(--text-soft\)\s*;?/);
   assert.match(marketActivityControlLabelBase, /font-size:\s*12px\s*;/);
   assert.match(marketActivityControlLabelBase, /line-height:\s*1\.4\s*;?/);
-  assert.equal((stylesheet.match(/\.market-activity-controls label\s*\{/g) || []).length, 2, "market activity control labels should have one base rule and one mobile layout rule");
+  assert.equal((stylesheet.match(/\.market-activity-controls label\s*\{/g) || []).length, 3, "market activity control labels should have one base rule and two responsive layout rules");
+  assert.match(stylesheet, /\.market-activity-controls label \{\s*flex:1;\s*min-width:130px\s*\}/);
+  assert.match(stylesheet, /\.market-activity-controls label \{ min-width: 0; flex: 1 1 140px; \}/);
   const mobileActivityControlLabelRule = stylesheet.match(/@media \(max-width: 600px\)\s*\{([^}]*)\}/)?.[1] || "";
   assert.match(mobileActivityControlLabelRule, /\.market-activity-controls label\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 140px;/);
   assert.doesNotMatch(mobileActivityControlLabelRule, /\.market-activity-controls label\s*\{[^}]*font-size:/);
