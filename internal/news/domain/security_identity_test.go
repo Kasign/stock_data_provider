@@ -46,6 +46,7 @@ func TestResolveSecurityIdentityDoesNotMergeSameCodeAcrossMarkets(t *testing.T) 
 	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	shanghai := securityIdentityRecord("000001", "甲证券", string(SecuritySymbolActive), at, time.Time{})
 	shenzhen := securityIdentityRecord("000001", "乙证券", string(SecuritySymbolActive), at, time.Time{})
+	shenzhen.Market = "XSHE"
 	shenzhen.IdentityValue = "instrument-sz-000001"
 
 	got, err := ResolveSecurityIdentity([]SecurityIdentityRecord{shanghai, shenzhen}, "XSHE", "000001", at)
