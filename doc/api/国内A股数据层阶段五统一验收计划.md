@@ -211,3 +211,12 @@
 
 
 - CI 修正记录：SHA `11e742e5e89df4776798a8622f12d68ed246fc84` 的 Go test suite 在 `Check gofmt` 发现新增测试文件三处字段对齐不符合 gofmt，属于格式检查失败；已在本提交修正格式，并通过提交标记重新触发生产 DataService 历史 Probe。该 SHA 不作为通过验收的依据。
+
+
+## 2026-11-05 P0 批次 30：历史交易日历质量边界真实复验
+
+- 验收 SHA：`a27067dbdc1ae288afeb75b2fbc60f471e9087cc`；Go push/PR、Parity、WebUI、Live push/PR 六个 workflow 全部 success。旧 SHA `11e742...` 的 gofmt 失败已修复，不作为通过结果。
+- 生产 Service Probe 两只证券各 15 项：4 returned、9 degraded、2 not_supported、0 failed，均持久化成功；connectivity/contract 通过，storage 通过。
+- 历史日历时间戳缺失只保留 warning；剩余降级来自成交额缺失、前复权参考日未知和 Provider contract warning。
+- 每只证券 Eastmoney raw 与 BaoStock raw 9 日 × 6 字段 54/54 matched；其余 21 项 cross-provider 比较 skipped，无 mismatch；adjusted 跨源一致性仍未验收。
+- PR #1 Open / Draft，未合并。批次 29 关闭；下一步评估 BaoStock 因子与同源 raw K 的 current 重建证据链，Eastmoney/Tencent 不推断锚点，Tushare 40203 不重复请求。阶段 B 继续 in_progress。
