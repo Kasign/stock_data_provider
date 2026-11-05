@@ -490,3 +490,20 @@ type ResearchEvidenceQuery interface {
 **依赖规则：** Platform 不得反向依赖业务领域；Data 独立 Go Module 不得 import 根模块 Platform internal。模块分支不得提前修改根 DI、HTTP 路由、cmd 或 Migration 总注册入口。
 
 本轮只更新规划文档，不修改 Platform 分支。GOV-004 仍未冻结。
+
+
+### 13.8 Data API Key 与 Platform Service Secret 边界
+
+新增设计文档：[Data 服务间认证映射与 Secret 注入设计](./Data服务间认证映射与Secret注入设计.md)。
+
+本轮重新读取 Data OpenAPI：
+- `ApiKey` 定义为 `X-API-Key`；
+- `BearerAuth` 是另一个独立 Security Scheme；
+- 全局 Security 声明两者 OR 关系，但业务 API Operation 显式使用 ApiKey；
+- `/health/live` 与 `/health/ready` 显式无认证。
+
+因此，不能因为 OpenAPI 顶层还声明 BearerAuth，就推断业务 Data API 已接受 Platform Service Secret。首期推荐保持 Data 当前认证协议：根 Server 服务端持有 Data 专用 Key，由 Quant/Data Adapter 注入 `X-API-Key`；WebUI 不接触该 Key。Data Provider Token、Data API Key、Root Server Owner Token、Platform Service Secret 各自独立。
+
+文档明确 Secret 注入、Header 覆盖、固定 DestinationPolicy、健康接口、环境隔离、轮换/撤销、日志脱敏和未来统一服务身份的迁移门槛。Data 独立 Go Module 不 import 根模块 Platform internal。
+
+本轮只更新规划文档，不修改 Data/Platform/Server 代码。该设计待 Server/Data 负责人确认后成为实现契约；GOV-004 仍未冻结。
