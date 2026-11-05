@@ -220,3 +220,12 @@
 - 历史日历时间戳缺失只保留 warning；剩余降级来自成交额缺失、前复权参考日未知和 Provider contract warning。
 - 每只证券 Eastmoney raw 与 BaoStock raw 9 日 × 6 字段 54/54 matched；其余 21 项 cross-provider 比较 skipped，无 mismatch；adjusted 跨源一致性仍未验收。
 - PR #1 Open / Draft，未合并。批次 29 关闭；下一步评估 BaoStock 因子与同源 raw K 的 current 重建证据链，Eastmoney/Tencent 不推断锚点，Tushare 40203 不重复请求。阶段 B 继续 in_progress。
+
+
+## 2026-11-05 P0 批次 31：复权事件因子向后对齐与同源约束
+
+- BaoStock `query_adjust_factor` 返回除权除息事件日期 `dividOperateDate`，不是逐交易日因子；重建时按每根 raw K 日期选择最近的 `OperateDate <= trade_date` 事件因子。首根 K 之前无可用事件时拒绝重建，不回退到未来因子。
+- 强制 raw K 与因子同证券、同 Provider、同 source_version，且 raw K 必须为 none basis；禁止跨源拼接。
+- 前复权参考因子按 `OperateDate <= requestedReferenceDate` 选最新事件，参考日期不得早于最新 raw K；后复权按每根 K 的最近事件因子计算。
+- current 仍允许 AvailableAt nil，但必须有持久化 SystemObservedAt，输出保留 degraded；PIT 仍要求 AvailableAt 有证据。
+- 新增事件因子日期向后对齐、跨源/跨证券拒绝、首因子之前日期拒绝及 current/PIT 可见性测试。当前 helper 未接入普通 DailyBars，等待 CI 与真实复权对账。
