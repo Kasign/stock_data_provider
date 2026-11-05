@@ -536,6 +536,28 @@ test("分析结果与诊断文本字号由组件基础规则负责", () => {
   assert.ok(!stylesheet.includes(':root[data-theme="light"] .task-result-metric small'));
 });
 
+test("最近分析与自选股文字字号由组件基础规则负责", () => {
+  const expected = [
+    [".recent-analysis-item-main strong", "12px"],
+    [".recent-analysis-item-main small", "12px"],
+    [".recent-analysis-item-status", "12px"],
+    [".watchlist-panel .panel-heading p", "13px"],
+    [".watchlist-name-field", "13px"],
+    [".watchlist-item-meta", "12px"],
+    [".watchlist-action", "13px"],
+    [".watchlist-feedback", "13px"]
+  ];
+
+  for (const [selector, size] of expected) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should own its readability baseline");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  assert.ok(!stylesheet.includes(".recent-analysis-item-main strong { font-size: 12px !important; }"));
+  assert.ok(!stylesheet.includes(".watchlist-panel .panel-heading p { font-size: 13px !important; }"));
+});
+
 test("structured analysis results use readable typography and mobile-safe layouts", () => {
   assert.match(stylesheet, /\.task-result-metric small \{[^}]*font-size: 13px/);
   assert.match(stylesheet, /\.task-result-metric strong \{[^}]*font-size: 14px/);

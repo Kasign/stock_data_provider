@@ -531,9 +531,9 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 }
 .recent-analysis-item:hover { border-color: #527084; background: #152330; }
 .recent-analysis-item-main { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
-.recent-analysis-item-main strong { color: #d5e2e9; font-size: 10px; overflow-wrap: anywhere; }
-.recent-analysis-item-main small { color: var(--text-dim); font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
-.recent-analysis-item-status { flex: 0 0 auto; max-width: 100px; color: #a2b7c6; font-size: 9px; text-align: right; overflow-wrap: anywhere; }
+.recent-analysis-item-main strong { color: #d5e2e9; font-size: 12px; overflow-wrap: anywhere; }
+.recent-analysis-item-main small { color: var(--text-dim); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.recent-analysis-item-status { flex: 0 0 auto; max-width: 100px; color: #a2b7c6; font-size: 12px; text-align: right; overflow-wrap: anywhere; }
 @media (max-width: 800px) { .recent-analysis-list { grid-template-columns: minmax(0, 1fr); } }
 
 
@@ -541,20 +541,20 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .query-watchlist-button { flex: 0 0 auto; min-width: 112px; }
 .watchlist-panel { margin-top: 13px; padding: 16px 18px; }
 .watchlist-panel .panel-heading { margin-bottom: 12px; }
-.watchlist-panel .panel-heading p { margin: 5px 0 0; color: var(--text-dim); font-size: 11px; line-height: 1.6; }
+.watchlist-panel .panel-heading p { margin: 5px 0 0; color: var(--text-dim); font-size: 13px; line-height: 1.6; }
 .watchlist-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .watchlist-item { display: flex; align-items: flex-start; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--border-soft); border-radius: 9px; background: var(--panel-raised); }
 .watchlist-item-main { display: flex; flex: 1; flex-direction: column; gap: 8px; min-width: 0; }
 .watchlist-symbol { color: var(--text); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
-.watchlist-name-field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; color: var(--text-dim); font-size: 11px; }
+.watchlist-name-field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px; }
 .watchlist-name-input { width: 100%; min-width: 0; min-height: 31px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--panel); font: inherit; }
 .watchlist-name-input:focus { border-color: var(--accent); outline: none; }
-.watchlist-item-meta { color: var(--text-dim); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.watchlist-item-meta { color: var(--text-dim); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .watchlist-actions { display: flex; flex: 0 0 auto; flex-direction: column; gap: 6px; }
-.watchlist-action { min-height: 29px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--panel); font-size: 11px; cursor: pointer; }
+.watchlist-action { min-height: 29px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--panel); font-size: 13px; cursor: pointer; }
 .watchlist-action:hover { border-color: var(--accent); background: var(--panel-raised); }
 .watchlist-action-muted { color: var(--text-dim); border-color: var(--border-soft); background: transparent; }
-.watchlist-feedback { margin: 0 0 10px; color: var(--text-dim); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.watchlist-feedback { margin: 0 0 10px; color: var(--text-dim); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .watchlist-feedback-error { color: var(--negative); }
 .watchlist-feedback-warning { color: var(--warning); }
 .watchlist-storage-unavailable {
@@ -762,14 +762,6 @@ td { font-size: 12px !important; }
 .security-note { font-size: 12px !important; }
 .settings-feedback { font-size: 12px !important; }
 .quote-heading-actions .button { font-size: 12px !important; }
-.recent-analysis-item-main strong { font-size: 12px !important; }
-.recent-analysis-item-main small { font-size: 12px !important; }
-.recent-analysis-item-status { font-size: 12px !important; }
-.watchlist-panel .panel-heading p { font-size: 13px !important; }
-.watchlist-name-field { font-size: 13px !important; }
-.watchlist-item-meta { font-size: 12px !important; }
-.watchlist-action { font-size: 13px !important; }
-.watchlist-feedback { font-size: 13px !important; }
 .chart-view-button { font-size: 13px !important; }
 .chart-volume-unavailable { font-size: 12px !important; }
 .supplemental-heading p { font-size: 13px !important; }
