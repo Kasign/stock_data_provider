@@ -2898,13 +2898,9 @@ func TestCoherentStoredSeriesSeparatesAdjustmentMethods(t *testing.T) {
 	third.TradeDate = "2026-10-22"
 	third.AdjustmentMethod = "yahoo_adjclose_ratio_rebased_to_end_v2"
 	series, reason := coherentStoredSeries([]model.DailyBar{first, second, third}, model.AdjustmentForward)
-	if reason != "" || len(series) != 2 {
-		t.Fatalf("different adjustment methods must not be merged: series=%+v reason=%s", series, reason)
-	}
-	for _, bar := range series {
-		if bar.AdjustmentMethod != first.AdjustmentMethod {
-			t.Fatalf("coherent series contains a mixed adjustment method: %+v", series)
-		}
+	if reason != "" || len(series) != 1 || series[0].TradeDate != third.TradeDate ||
+		series[0].AdjustmentMethod != third.AdjustmentMethod {
+		t.Fatalf("newest trade-date group must win without mixing adjustment methods: series=%+v reason=%s", series, reason)
 	}
 }
 
