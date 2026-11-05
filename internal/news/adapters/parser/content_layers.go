@@ -21,6 +21,17 @@ func (entry FeedEntry) ToCandidate(publisherName, publisherDomain string) domain
 // Feed 内容格式尚未可靠识别时标记 unknown，不擅自按全文或 HTML 处理。
 func (entry FeedEntry) ContentLayers(providerSummary string) domain.ContentLayers {
 	layers := domain.ContentLayers{ProviderSummary: providerSummary}
+	if len(entry.Attachments) > 0 {
+		layers.Attachments = make([]domain.ContentAttachment, 0, len(entry.Attachments))
+		for _, attachment := range entry.Attachments {
+			layers.Attachments = append(layers.Attachments, domain.ContentAttachment{
+				URL: attachment.URL, RawURL: attachment.RawURL,
+				MediaType: attachment.MediaType, RawMediaType: attachment.RawMediaType,
+				RawLength: attachment.RawLength, Length: attachment.Length,
+				Title: attachment.Title, ValidationIssues: append([]string(nil), attachment.ValidationIssues...),
+			})
+		}
+	}
 	if entry.Summary != "" {
 		layers.SourceSummary = entry.Summary
 		layers.SourceSummaryOrigin = domain.ContentOriginFeedSummary

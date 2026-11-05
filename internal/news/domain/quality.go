@@ -73,7 +73,17 @@ func AssessBusinessQuality(candidate Candidate, content ContentLayers, sourceSta
 		contentResult.Issues = append(contentResult.Issues, QualityIssue{Code: "source_content_missing_provider_summary_only", Dimension: contentResult.Dimension})
 	default:
 		contentResult.Status = BusinessQualityDegraded
-		contentResult.Issues = append(contentResult.Issues, QualityIssue{Code: "content_missing", Dimension: contentResult.Dimension})
+		if len(content.Attachments) > 0 {
+			contentResult.Issues = append(contentResult.Issues, QualityIssue{Code: "attachment_only_no_body", Dimension: contentResult.Dimension})
+		} else {
+			contentResult.Issues = append(contentResult.Issues, QualityIssue{Code: "content_missing", Dimension: contentResult.Dimension})
+		}
+	}
+	for _, attachment := range content.Attachments {
+		for _, issue := range attachment.ValidationIssues {
+			contentResult.Status = degradeQuality(contentResult.Status)
+			contentResult.Issues = append(contentResult.Issues, QualityIssue{Code: "attachment_" + issue, Dimension: contentResult.Dimension})
+		}
 	}
 
 	source := QualityDimensionResult{Dimension: QualityDimensionSource, Status: BusinessQualityUnknown}

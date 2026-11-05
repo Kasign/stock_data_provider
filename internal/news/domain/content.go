@@ -22,6 +22,17 @@ const (
 )
 
 // ContentPayload 保存来源正文/片段。Kind 未确定时保持空值，不推断为全文。
+type ContentAttachment struct {
+	URL              string
+	RawURL           string
+	MediaType        string
+	RawMediaType     string
+	RawLength        string
+	Length           *int64
+	Title            string
+	ValidationIssues []string
+}
+
 type ContentPayload struct {
 	Origin ContentOrigin
 	Format ContentFormat
@@ -35,6 +46,7 @@ type ContentLayers struct {
 	SourceSummary       string
 	SourceSummaryOrigin ContentOrigin
 	Body                *ContentPayload
+	Attachments         []ContentAttachment
 }
 
 // ContentLayersFromCandidate 只把 Provider 的搜索摘要放入 Provider 层，不提升为来源摘要或正文。
@@ -46,6 +58,18 @@ func ContentLayersFromCandidate(candidate Candidate) ContentLayers {
 func NormalizeContentLayers(layers ContentLayers) ContentLayers {
 	layers.ProviderSummary = normalizeCandidateText(layers.ProviderSummary)
 	layers.SourceSummary = normalizeCandidateText(layers.SourceSummary)
+	if len(layers.Attachments) > 0 {
+		attachments := make([]ContentAttachment, len(layers.Attachments))
+		for i, attachment := range layers.Attachments {
+			attachments[i] = attachment
+			attachments[i].ValidationIssues = append([]string(nil), attachment.ValidationIssues...)
+			if attachment.Length != nil {
+				length := *attachment.Length
+				attachments[i].Length = &length
+			}
+		}
+		layers.Attachments = attachments
+	}
 	if layers.Body != nil {
 		body := *layers.Body
 		body.Text = strings.TrimSpace(body.Text)

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"hash"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -23,6 +24,21 @@ func BuildVersionFingerprint(candidate Candidate, content ContentLayers) string 
 	writeFingerprintField(digest, publishedTimeFingerprint(candidate))
 	writeFingerprintField(digest, normalizeCandidateText(content.SourceSummary))
 	writeFingerprintField(digest, string(content.SourceSummaryOrigin))
+	writeFingerprintField(digest, strconv.Itoa(len(content.Attachments)))
+	for _, attachment := range content.Attachments {
+		writeFingerprintField(digest, attachment.RawURL)
+		writeFingerprintField(digest, attachment.URL)
+		writeFingerprintField(digest, attachment.RawMediaType)
+		writeFingerprintField(digest, attachment.MediaType)
+		writeFingerprintField(digest, attachment.RawLength)
+		if attachment.Length == nil {
+			writeFingerprintField(digest, "length:none")
+		} else {
+			writeFingerprintField(digest, "length:"+strconv.FormatInt(*attachment.Length, 10))
+		}
+		writeFingerprintField(digest, normalizeCandidateText(attachment.Title))
+		writeFingerprintField(digest, strings.Join(attachment.ValidationIssues, ","))
+	}
 
 	if content.Body == nil {
 		writeFingerprintField(digest, "body:none")

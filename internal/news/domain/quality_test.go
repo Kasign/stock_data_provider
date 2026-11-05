@@ -57,6 +57,20 @@ func TestAssessBusinessQualityMarksMissingTitleInvalidAndIdentityConflictInvalid
 	}
 }
 
+func TestAssessBusinessQualityTreatsAttachmentsAsMetadataNotBody(t *testing.T) {
+	result := AssessBusinessQuality(Candidate{Title: "标题", RawURL: "https://news.example/item"}, ContentLayers{Attachments: []ContentAttachment{{URL: "https://news.example/file.pdf"}}}, SourceIdentityResolved)
+	if result.Dimensions[1].Status != BusinessQualityDegraded || len(result.Dimensions[1].Issues) != 1 || result.Dimensions[1].Issues[0].Code != "attachment_only_no_body" {
+		t.Fatalf("content quality=%+v", result.Dimensions[1])
+	}
+}
+
+func TestAssessBusinessQualityDegradesInvalidAttachmentMetadata(t *testing.T) {
+	result := AssessBusinessQuality(Candidate{Title: "标题", RawURL: "https://news.example/item"}, ContentLayers{Body: &ContentPayload{Text: "正文"}, Attachments: []ContentAttachment{{ValidationIssues: []string{"missing_url", "invalid_length"}}}}, SourceIdentityResolved)
+	if result.Dimensions[1].Status != BusinessQualityDegraded || len(result.Dimensions[1].Issues) != 2 {
+		t.Fatalf("content quality=%+v", result.Dimensions[1])
+	}
+}
+
 func TestAssessBusinessQualityDoesNotPromoteProviderSummaryToSourceContent(t *testing.T) {
 	result := AssessBusinessQuality(
 		Candidate{Title: "标题", RawURL: "https://news.example/item"},

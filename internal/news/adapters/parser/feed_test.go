@@ -130,6 +130,20 @@ func TestFeedEntryToCandidateKeepsSourceIdentityAndAuthorSeparate(t *testing.T) 
 	}
 }
 
+func TestFeedEntryContentLayersKeepAttachmentsSeparateFromBody(t *testing.T) {
+	payload := []byte(`<rss version="2.0"><channel><item><title>公告</title><enclosure url="" type="bad mime" length="-1"/></item></channel></rss>`)
+	doc, err := ParseFeed(payload, time.Now())
+	if err != nil { t.Fatal(err) }
+	layers := doc.Entries[0].ContentLayers("")
+	if layers.Body != nil || len(layers.Attachments) != 1 {
+		t.Fatalf("layers=%+v", layers)
+	}
+	attachment := layers.Attachments[0]
+	if attachment.RawURL != "" || len(attachment.ValidationIssues) != 3 || attachment.ValidationIssues[0] != "missing_url" {
+		t.Fatalf("attachment=%+v", attachment)
+	}
+}
+
 func TestFeedEntryContentLayersKeepSummaryAndBodySeparate(t *testing.T) {
 	doc, err := ParseFeed([]byte(`<rss><channel><item>
 		<title>标题</title><description>来源摘要</description>
