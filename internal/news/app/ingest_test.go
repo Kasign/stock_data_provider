@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"example.com/stock-analysis-flow/internal/news/domain"
 )
@@ -223,5 +224,63 @@ func TestIngestCandidateRejectsIdempotencyKeyPayloadReuse(t *testing.T) {
 	}
 	if len(repository.items) != 1 || len(repository.observations) != 1 {
 		t.Fatalf("repository=%+v", repository)
+	}
+}
+
+func TestIngestCandidatePersistsSourcePolicyTrace(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := NewIngestCandidate(repository, func() string { return "observation-policy-trace" })
+	evaluatedAt := time.Date(2026, 11, 5, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
+	trace := ObservationPolicyTrace{
+		SourcePolicyVersionID:   "source-policy-v3",
+		EndpointPolicyVersionID: "endpoint-policy-v2",
+		PolicyEvaluatedAt:       evaluatedAt,
+	}
+	observation, err := usecase.ExecuteWithPolicyTrace(
+		context.Background(), "source-1", "feed-run-1/item-1",
+		domain.Candidate{SourceItemID: "item-1", Title: "headline"},
+		domain.SourceURLPolicy{}, trace,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observation.SourcePolicyVersionID != trace.SourcePolicyVersionID ||
+		observation.EndpointPolicyVersionID != trace.EndpointPolicyVersionID ||
+		!observation.PolicyEvaluatedAt.Equal(evaluatedAt.UTC()) {
+		t.Fatalf("policy trace was not persisted: %+v", observation)
+	}
+}
+
+func TestIngestCandidatePolicyTraceIsPartOfIdempotencyPayload(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := NewIngestCandidate(repository, func() string { return "observation-policy-idempotency" })
+	candidate := domain.Candidate{SourceItemID: "item-1", Title: "headline"}
+	firstTrace := ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v3",
+		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
+	}
+	secondTrace := ObservationPolicyTrace{
+		SourcePolicyVersionID: "source-policy-v4",
+		PolicyEvaluatedAt:     time.Date(2026, 11, 5, 10, 1, 0, 0, time.UTC),
+	}
+	if _, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, firstTrace); err != nil {
+		t.Fatal(err)
+	}
+	_, err := usecase.ExecuteWithPolicyTrace(context.Background(), "source-1", "feed-run-1/item-1", candidate, domain.SourceURLPolicy{}, secondTrace)
+	if !errors.Is(err, ErrIdentityTransaction) || !errors.Is(err, ErrObservationIdempotencyConflict) {
+		t.Fatalf("changed policy version should conflict on idempotency key reuse, got %v", err)
+	}
+}
+
+func TestIngestCandidateRejectsIncompletePolicyTrace(t *testing.T) {
+	repository := &memoryIdentityRepository{}
+	usecase := NewIngestCandidate(repository, func() string { return "observation-invalid-policy-trace" })
+	_, err := usecase.ExecuteWithPolicyTrace(
+		context.Background(), "source-1", "feed-run-1/item-1",
+		domain.Candidate{SourceItemID: "item-1"}, domain.SourceURLPolicy{},
+		ObservationPolicyTrace{SourcePolicyVersionID: "source-policy-v3"},
+	)
+	if !errors.Is(err, ErrInvalidRequest) || len(repository.observations) != 0 {
+		t.Fatalf("error=%v repository=%+v", err, repository)
 	}
 }

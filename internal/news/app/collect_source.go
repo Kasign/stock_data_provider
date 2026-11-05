@@ -269,3 +269,11 @@ func sourceTransportRetryable(err error) bool {
 	var networkError net.Error
 	return errors.As(err, &networkError) && networkError.Timeout()
 }
+
+func (r CollectSourceResult) ObservationPolicyTrace() ObservationPolicyTrace {
+	return ObservationPolicyTrace{
+		SourcePolicyVersionID:   r.SourcePolicyVersionID,
+		EndpointPolicyVersionID: r.EndpointPolicyVersionID,
+		PolicyEvaluatedAt:       r.PolicyEvaluatedAt,
+	}
+}

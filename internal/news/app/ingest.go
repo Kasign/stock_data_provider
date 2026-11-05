@@ -47,7 +47,30 @@ func NewIngestCandidate(repository IdentityRepository, newID func() string) *Ing
 
 // Execute 在同一事务内解析身份、必要时创建主体、保存身份凭据并幂等追加 Observation。
 // IdempotencyKey 必须由上游按一次采集操作稳定生成；重试同一操作必须复用该值。
+// ObservationPolicyTrace 将在线采集时使用的授权策略版本传递给 Observation。
+type ObservationPolicyTrace struct {
+	SourcePolicyVersionID   string
+	EndpointPolicyVersionID string
+	PolicyEvaluatedAt       time.Time
+}
+
+// Execute 保留 Provider 候选等无 Source 策略版本场景的既有入口。
 func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy) (domain.Observation, error) {
+	return u.execute(ctx, sourceID, idempotencyKey, candidate, policy, ObservationPolicyTrace{})
+}
+
+// ExecuteWithPolicyTrace 用于 CollectSource 等已完成 Source/Endpoint 授权评估的候选。
+func (u *IngestCandidate) ExecuteWithPolicyTrace(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
+	trace.SourcePolicyVersionID = strings.TrimSpace(trace.SourcePolicyVersionID)
+	trace.EndpointPolicyVersionID = strings.TrimSpace(trace.EndpointPolicyVersionID)
+	if trace.SourcePolicyVersionID == "" || trace.PolicyEvaluatedAt.IsZero() {
+		return domain.Observation{}, ErrInvalidRequest
+	}
+	trace.PolicyEvaluatedAt = trace.PolicyEvaluatedAt.UTC()
+	return u.execute(ctx, sourceID, idempotencyKey, candidate, policy, trace)
+}
+
+func (u *IngestCandidate) execute(ctx context.Context, sourceID, idempotencyKey string, candidate domain.Candidate, policy domain.SourceURLPolicy, trace ObservationPolicyTrace) (domain.Observation, error) {
 	if u == nil || u.repository == nil || u.newID == nil || ctx == nil {
 		return domain.Observation{}, ErrInvalidRequest
 	}
@@ -72,9 +95,12 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey 
 		IdempotencyKey: idempotencyKey,
 		SourceID:       sourceID,
 		ProviderCode:   candidate.ProviderCode,
-		QueryDimension: candidate.QueryDimension,
-		Candidate:      candidate,
-		ObservedAt:     observedAt,
+		QueryDimension:          candidate.QueryDimension,
+		SourcePolicyVersionID:   trace.SourcePolicyVersionID,
+		EndpointPolicyVersionID: trace.EndpointPolicyVersionID,
+		PolicyEvaluatedAt:       trace.PolicyEvaluatedAt,
+		Candidate:               candidate,
+		ObservedAt:              observedAt,
 	}
 	if observation.ID == "" {
 		return domain.Observation{}, ErrInvalidRequest
@@ -177,5 +203,7 @@ func SameObservationPayload(a, b domain.Observation) bool {
 		a.SourceID == b.SourceID &&
 		a.ProviderCode == b.ProviderCode &&
 		a.QueryDimension == b.QueryDimension &&
+		a.SourcePolicyVersionID == b.SourcePolicyVersionID &&
+		a.EndpointPolicyVersionID == b.EndpointPolicyVersionID &&
 		reflect.DeepEqual(aCandidate, bCandidate)
 }
