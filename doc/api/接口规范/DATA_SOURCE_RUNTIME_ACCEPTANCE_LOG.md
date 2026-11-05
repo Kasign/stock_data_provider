@@ -1006,3 +1006,30 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - Pytdx none：样本级 valid；qfq degraded；hfq valid 但绝对参考基准未证实。
 - CrossProviderDailyCompare：not_comparable，保持原门禁。
 - 阶段 B 继续 in_progress。下一步执行 Tushare 历史复权因子/公司行为专项探测，并将 Pytdx 与独立公司行为证据对齐；不凭 qfq/hfq 名称做跨源比较。
+
+
+## 60. 2026-11-05 Tushare 复权证据权限核验与生产 Probe 复验
+
+### 60.1 生产 Probe + MariaDB
+
+- GitHub Actions Live Provider Probe Push Run：`41955543025`，生产历史 Probe 步骤 success。
+- 两只股票各生成一条历史 Probe Run，均 `persisted=true`；storage check passed；测试通过历史查询读回对应 RunID。
+- 每只股票 12 项：10 项 returned_degraded、2 项 Sina adjusted not_supported、0 failed。
+- 四家日 K Provider 在本次服务层窗口均返回 9 条。Eastmoney 本轮恢复成功；此前 EOF 作为瞬时网络失败保留历史记录。
+- BaoStock 日历参与上下文检查，但快照质量 degraded，原因仍为源端未提供可验证快照时间。
+- CrossProviderDailyCompare 仍因 `quality_status_must_be_valid` skipped，没有 matched。数据质量门禁未调整。
+
+### 60.2 Tushare adj_factor / dividend 权限核验
+
+- 同一 Run 的 Tushare 历史证据专项步骤 success（报告成功生成，不代表数据接口成功）。
+- 600036.SH、002982.SZ 在 2025-07-07..2025-07-17 的 `adj_factor` 均返回权限错误 code `40203`。
+- 两只股票的 `dividend` 公司行为查询同样返回权限错误 code `40203`。
+- 结果明确记为 `permission_required`；没有复权因子行或公司行为记录可供计算。不能将空数据解释为“无公司行为”，也不能继续重试同一权限受限接口。
+- 只有在 Tushare 账号权限变更后才重新核验；当前不将 Tushare 作为可用复权基准。
+
+### 60.3 当前结论
+
+- 生产 Probe 诊断执行和 MariaDB 持久化/读回：passed（Probe 总体状态仍 degraded）。
+- none 的 OHLC 样本跨源一致性仍保持样本级结论。
+- qfq/hfq 的绝对基准仍未被独立公司行为/因子证据确认；Tushare 当前权限不足。
+- 阶段 B 保持 in_progress；不放宽比较器、不将权限不足记作 Provider 网络失败。

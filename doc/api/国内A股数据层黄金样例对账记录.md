@@ -396,3 +396,21 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - BaoStock 日历已装配并参与窗口校验，但因源端快照时间未暴露而为 degraded；日 K 上下文随之 degraded。
 - Eastmoney 本次三个 adjustment 请求均遇到 EOF；其他 Provider 返回的质量状态仍按原规则保留。
 - CrossProviderDailyCompare 因 `quality_status_must_be_valid` skipped，没有 matched。
+
+
+## 18. 2026-11-05：Tushare 权限证据与生产 Probe 复验
+
+### 18.1 Tushare 权限核验
+
+- GitHub Actions Live Provider Probe Run：`41955543025`。
+- 对 600036.SH、002982.SZ 的 2025-07-07..2025-07-17 窗口，Tushare `adj_factor` 均返回 code 40203；`dividend` 也均返回 code 40203。
+- 当前账号没有这两个接口的访问权限；报告标记 `permission_required`。没有拿到因子或公司行为数据，不得把空响应解释为无事件。
+- 当前不再重试，除非账号权限发生变化。
+
+### 18.2 生产 Probe 结果
+
+- 同一 Run 的服务层历史 Probe 步骤成功执行。
+- 两只股票 Probe 均持久化到 MariaDB，并通过历史接口读回 RunID。
+- 四家 Provider 各返回 9 条；Eastmoney 本轮成功。每只股票 10 项 degraded、2 项 Sina adjusted not_supported、0 failed。
+- BaoStock 日历参与上下文检查但 quality degraded；跨源比较按 valid 门禁 skipped。
+- 本次服务链路通过不改变数据质量结论，Probe run 状态仍为 degraded。
