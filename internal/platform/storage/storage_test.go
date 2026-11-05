@@ -416,7 +416,6 @@ func TestApplyMigrationsRejectsConcurrentMigrationLock(t *testing.T) {
 	}
 }
 
-
 func TestApplyMigrationsRejectsMissingVersionBeforeAppliedVersion(t *testing.T) {
 	migrations := []Migration{
 		{Version: 1, Description: "first", Statements: []string{"CREATE TABLE first_table (id INT)"}},
@@ -427,7 +426,7 @@ func TestApplyMigrationsRejectsMissingVersionBeforeAppliedVersion(t *testing.T) 
 		t.Fatal(err)
 	}
 	state := &migrationTestState{
-		applied: map[uint64]string{2: checksums[2]},
+		applied:      map[uint64]string{2: checksums[2]},
 		lockAcquired: true,
 	}
 	db := sql.OpenDB(migrationTestConnector{state: state})
