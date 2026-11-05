@@ -109,7 +109,7 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - 所有 DTO/Port 仍待各模块 Owner Review；本轮规划 Review 不能代替 Owner 签字。
 - Quant 数值精度、Indicator/Factor 首批参数仍待 CONTRACT-001~003。
 - Research AuthorizationRef 与统一 system_as_of 仍待 CONTRACT-004/005。
-- Researchflow partial/degraded 和 cancel 迁移细节仍待 CONTRACT-006/007。
+- Researchflow CONTRACT-006/007 的规划侧状态机 Review 已完成，传播矩阵、硬风险门禁策略和取消/deadline 竞争语义仍待 Owner 签字；实现和集成验收未完成。
 - LLM-001 静态盘点已完成，当前部署本地 llama.cpp Responses JSON/SSE 在线 E2E、structured output 和工具调用能力仍待真实验收。
 - Notification recipient_scope、幂等唯一键和 Payload Schema 注册仍待 CONTRACT-009/010。
 - 根 DI、HTTP、Worker、Migration 注册及真实 DB/渠道验收均属于 Integration，不在本轮完成。
