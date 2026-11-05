@@ -62,6 +62,24 @@ Redis 仅承担缓存和可丢失的短期辅助状态。所有缓存有 TTL 和
 
 首期按单实例执行，不建设多实例租约、fencing token、通用工作流和 Outbox。若部署拓扑变为多实例，PLAT-010 必须重新评审任务领取和恢复方案。
 
+
+### 5.1 任务能力所有权与当前实现边界
+
+平台只拥有经多个领域验证确实可复用的技术原语，不拥有 Research/Analysis 的任务语义、Run/Stage 事件、领域请求 DTO 或业务 Runner。
+
+当前 `internal/platform/taskqueue/queue.go` 直接依赖 `internal/analysis/domain`，其 Runner、RunRequest、RunResult、StageEvent、`analysis_tasks` 和 `analysis_stage_events` 均属于分析领域。该实现具有领域耦合，不能作为平台通用 Task Queue 的完成证据，也不得继续向其中加入 News、Notification 或其他领域类型。
+
+合并后的 Research 设计将 `go-core` 明确为独立 Go Module，并规定首期不引入分布式队列；只有跨进程 Worker、持久租约或恢复需求经验证后才接入平台 Task 能力。因此：
+
+- Research/Analysis 分支负责确定 Analysis Run/Task/Stage 的领域模型、状态机、事件和持久化所有权；领域 Worker 与 Runner 也由该分支维护。
+- Platform 分支不迁移或重写领域队列，不让 `internal/platform` 依赖 `internal/analysis`、`go-core/internal` 或其他领域包。
+- Platform 只有在至少两个实际调用方出现相同需求后，才抽取最小的存储/执行原语；接口不得包含领域 DTO、领域状态枚举或领域表名。
+- 首期单实例下优先使用领域自己的 MariaDB 持久化与有界 Worker。未证明多实例竞争前，不引入租约、fencing、分布式锁或通用工作流。
+- 旧 `internal/platform/taskqueue` 暂列为待归属/迁移的历史分析实现；在 Research 分支确认新方案和集成切换前，不删除、不搬迁、不扩大其使用范围。
+
+PLAT-010 的退出条件不只是队列代码可运行，还必须先完成领域归属评审、单实例恢复语义和副作用重放策略确认。若最终没有跨领域公共调用方，PLAT-010 应收敛为平台契约与领域接入约定，不为完成任务而制造通用队列包。
+
+
 ## 6. 性能与可靠性基线
 
 - 所有网络和数据库操作必须有超时/取消边界。
