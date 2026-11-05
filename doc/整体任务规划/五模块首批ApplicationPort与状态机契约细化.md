@@ -241,29 +241,25 @@ CreateRun 必须固定 template_id/version/fingerprint、system_as_of、输入�
 
 ## 5. LLM 首批 Port 的冻结边界
 
-LLM-001 先盘点现有 Gateway 协议，不在调查前冻结完整 DTO。盘点表至少覆盖：
+LLM-001 已完成现有 Gateway 静态协议盘点：客户端主协议为 OpenAI Responses，调用入口 POST /v1/responses。当前本地 llama.cpp/Qwen 真实端到端尚未验收；详细证据见 doc/llm/03-现有模型Gateway协议盘点.md。
 
-- endpoint/path 与 wire protocol；
-- 认证 Header/Secret 读取方式；
-- model 名称和模型别名；
-- messages/input 的实际结构；
-- temperature/top_p/max_tokens 等参数支持情况；
-- JSON Schema / structured output 支持程度；
-- streaming 事件类型、结束标记和异常中断；
-- tool call 返回结构及其是否仅为请求；
-- usage 字段、计费单位和缺失语义；
-- 429/5xx/timeout/connection reset/invalid response 错误；
-- deadline、客户端取消和服务端取消行为；
-- provider request ID、model version 和响应时间；
-- 最大输入/输出、响应体大小和并发限制。
+当前已确认的协议边界：
+- Base URL 以 /v1 结尾；调用路径为 /responses；调用方使用 Gateway API Key，Secret 通过服务端 SecretRef 注入。
+- ModelRequest 使用 instructions + input_text；首批不把 Chat Completions messages 作为内部默认结构。
+- 输出 token 参数使用 max_output_tokens；temperature/top_p/reasoning_effort 仅在当前 Model Capability=supported 时发送。
+- Responses JSON 需解析 output item 类型、status、incomplete_details 和 usage；usage 缺失保持 unknown/null。
+- Responses SSE 需识别文本 delta、completed/incomplete/failed/error 等 terminal event；断流且没有 terminal event 不算成功。
+- text.format 目前只能确认可透传，不能认定本地模型 structured output 已通过；Adapter 必须本地 Schema 校验。
+- tools 可以透传，但 LLM 不执行；Researchflow 负责授权、参数校验、预算、执行和结果回填。
+- 当前 Gateway 本地路径会合并 instructions 与 input 中 system/developer 项，并可能注入 stream_options.include_usage；Adapter Fixture 必须覆盖这些改写。
 
-协议调查输出后，再冻结最小 ModelRequest/ModelResponse。LLM-002 当前建议签名为：
+LLM-002 当前建议接口：
 - Generate(ctx, ModelRequest) -> ModelResponse
 - Stream(ctx, ModelRequest, onEvent func(ModelEvent) error) -> error
 
-Stream 使用同步回调提供背压；回调错误或 Context 取消必须停止读取上游。详细 DTO、Responses SSE event、能力状态和错误分类见 doc/llm/04-ProviderPort与DTO字段级契约.md。
+Stream 使用同步回调提供背压；回调错误或 Context 取消必须停止读取上游。详细 DTO、CapabilityState、Responses SSE event、Error Contract 和 Owner 未决项见 doc/llm/04-ProviderPort与DTO字段级契约.md。
 
-当前 Gateway 已有 Responses JSON/SSE 转发代码与远程 Provider Mock 测试，但当前部署的本地 llama.cpp Responses 真实链路未验收。LLM-002 的 Provider Port 与 DTO 字段建议已整理，待 LLM/Platform Owner Review。静态协议盘点见 doc/llm/03-现有模型Gateway协议盘点.md。Stream 的生产可用状态必须由实际本地上游 E2E 决定；若不支持应标记 unsupported，不得通过一次性响应伪装增量事件。Tool Call 作为结构化输出返回，不由 LLM 执行。
+LLM-001 静态盘点已完成，在线真实调用未执行；LLM-002 Port/DTO 草案待 LLM/Platform Owner Review。Stream 的生产可用状态必须由实际本地上游 E2E 决定；若不支持应标记 unsupported，不得通过一次性响应伪装增量事件。Tool Call 作为结构化输出返回，不由 LLM 执行。
 
 ## 6. Notification 首批 Application Port
 

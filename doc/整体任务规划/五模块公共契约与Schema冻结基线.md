@@ -149,16 +149,26 @@ ResearchAttempt {
 
 ```text
 ModelRequest {
-  request_id, purpose, model, messages[], response_format?,
-  max_output_tokens?, deadline, metadata_allowlist
+  request_id, model, instructions, input_text,
+  max_output_tokens, temperature?, top_p?, reasoning_effort?,
+  response_schema?, tools[], deadline_at, correlation_id?, trace_id?
 }
 ModelResponse {
-  request_id, provider, model, output, finish_reason,
-  usage?, latency, provider_request_id?
+  response_id?, status, output_items[], output_text?,
+  structured_json?, tool_calls[], usage?,
+  model_requested, model_actual?, gateway_request_id?,
+  incomplete_reason?, error?, started_at, finished_at, duration_ms
+}
+ModelEvent {
+  type, sequence_number?, response_id?, output_index?,
+  item_id?, call_id?, delta?, usage?, error?, received_at
+}
+Usage {
+  input_tokens?, output_tokens?, total_tokens?, source
 }
 ```
 
-LLM 只实现模型协议和 Adapter，不执行工具、不持有研究领域事实、不编排工作流。Tool Call 是模型返回的请求，由 Researchflow 授权、校验和执行。Structured Output 必须按调用方 Schema 校验；解析失败不能伪装成功。Prompt 正文默认不持久化。首期不要求多模型路由/自动降级。
+首批协议以 OpenAI Responses 为基线，内部 ModelRequest 暂定单轮 input_text + instructions；复杂 input item、多模态和多协议路由 deferred。ModelResponse 必须保留 output item 类型与 completed/incomplete/failed 状态；Usage 缺失保持 unknown/null。Stream 使用 Responses SSE ModelEvent，必须有 terminal event；无 terminal 的 EOF 视为 stream_interrupted。LLM 只实现模型协议和 Adapter，不执行工具、不持有研究领域事实、不编排工作流。Tool Call 是模型返回的请求，由 Researchflow 授权、校验和执行。Structured Output 必须按调用方 Schema 本地校验；解析失败不能伪装成功。Prompt 正文默认不持久化。首期不要求多模型路由/自动降级。字段细节见 doc/llm/04-ProviderPort与DTO字段级契约.md。
 
 ## 8. Notification：事件与投递
 
