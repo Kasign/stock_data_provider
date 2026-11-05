@@ -626,7 +626,7 @@ func TestClientRevalidatesDNSForRedirectTargetBeforeDial(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		requests.Add(1)
 		if request.URL.Path == "/start" {
-			http.Redirect(w, request, "http://redirect.example:"+request.URL.Query().Get("port")+"/private", http.StatusFound)
+			http.Redirect(w, request, "http://example.com:"+request.URL.Query().Get("port")+"/private", http.StatusFound)
 			return
 		}
 		t.Fatal("redirect target must not be reached")
@@ -642,6 +642,7 @@ func TestClientRevalidatesDNSForRedirectTargetBeforeDial(t *testing.T) {
 		{netip.MustParseAddr("10.0.0.8")},
 	}}
 	client := newLocalTestClient(t, server, resolver, 1024, 0)
+	client.transport.DisableKeepAlives = true // 强制重定向新建连接，验证 DNS 结果会重新校验。
 	var dialCalls atomic.Int32
 	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
 		dialCalls.Add(1)
@@ -653,7 +654,7 @@ func TestClientRevalidatesDNSForRedirectTargetBeforeDial(t *testing.T) {
 		t.Fatal(err)
 	}
 	policy := localPolicy(server)
-	policy.AllowedHosts = []string{"example.com", "redirect.example"}
+	policy.AllowedHosts = []string{"example.com"}
 	policy.AllowRedirects = true
 	policy.MaxRedirects = 1
 
@@ -1132,7 +1133,7 @@ func TestBoundDoerDoesNotAllowRequestToReplaceDestination(t *testing.T) {
 	request.URL.Host = "attacker.example:" + request.URL.Port()
 	_, err = bound.Do(request)
 	var platformFault *fault.Fault
-	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.destination_rejected" {
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.custom_host_rejected" {
 		t.Fatalf("expected bound destination rejection, got %v", err)
 	}
 }
