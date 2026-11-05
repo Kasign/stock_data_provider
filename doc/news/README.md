@@ -33,7 +33,7 @@
 - [x] 建立专项设计文档骨架
 - [x] N1-A：完成新闻领域模型、时间/身份/版本/关联证据、Provider 与 Application 契约及跨文档内部评审
 - [x] N2：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试已提交；根模块 gofmt、test、race、vet 和分析服务镜像构建通过
-- [x] N3 首批：Provider/Source/Endpoint 授权交集评估、用途/保留期限限制、离线 URL 规范化与精确主机/端口 allowlist；固定测试通过
+- [x] N3 首批：Provider/Source/Endpoint 授权交集评估、用途/保留期限限制、内容类型与存储模式一致性、HTTP(S) URL 规范化与精确主机/端口 allowlist；固定测试通过
 - [ ] N3 后续：DNS/IP 与重定向安全由 PLAT-008 执行；Feed/HTML 解析、正文标准化和时间解析继续开发
 - [ ] N4：实现身份识别、去重、版本和证券关联业务规则
 - [ ] N5：按冻结契约接入 Config/Secret、Logger/Error/Trace、HTTP Client
@@ -56,7 +56,7 @@
 
 已完成第一轮静态代码盘点，部署归属已确认：新闻作为根 Go 模块内部业务模块随 `stock-analysis-server:8092` 部署。当前没有新闻独立对外 API 或独立服务计划；HTTP 路由不属于本阶段交付。详见《新闻模块总体设计》N1 章节。
 
-N1 已追加核对固定旧 Python 上游的三类新闻/情报持久化对象及旧 intelligence API、Bot /research 入口，并从整体规划分支核对 DATA-016、MIG-005、MIG-006、MIG-008、RESEARCH-004 的原始任务边界。最终架构评审材料已形成，当前仅等待用户确认，详见《N1-A新闻基础设施架构评审报告》。
+N1 已完成固定旧 Python 上游的三类新闻/情报持久化对象、旧 intelligence API、Bot /research 入口及整体规划任务边界核对。N1-A 架构评审已获确认，详见《N1-A新闻基础设施架构评审报告》。
 
 ### N1-A 最终收口（2026-11-05）
 
