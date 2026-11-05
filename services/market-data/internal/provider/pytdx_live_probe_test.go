@@ -121,13 +121,23 @@ func crossProviderSnapshotFromDailyBars(bars []model.DailyBar) CrossProviderDail
 		}
 		snapshot.Bars = append(snapshot.Bars, CrossProviderDailyBar{
 			TradeDate: bar.TradeDate, Open: bar.Open, High: bar.High, Low: bar.Low, Close: bar.Close,
-			Volume: valueOrZero(bar.Volume), VolumeUnit: bar.VolumeUnit, Amount: bar.Amount, AmountUnit: bar.AmountUnit,
+			Volume: valueOrZero(bar.Volume), VolumeUnit: bar.VolumeUnit, VolumeGranularity: dailyBarVolumeGranularity(bar), Amount: bar.Amount, AmountUnit: bar.AmountUnit,
 			AdjustmentMethod: bar.AdjustmentMethod, AdjustmentRefDate: bar.AdjustmentRefDate,
 		})
 	}
 	return snapshot
 }
 
+func dailyBarVolumeGranularity(bar model.DailyBar) int64 {
+	switch strings.ToLower(strings.TrimSpace(bar.RawVolumeUnit)) {
+	case "hands", "hands_inferred":
+		return 100
+	case "shares":
+		return 1
+	default:
+		return 0
+	}
+}
 func valueOrZero(value *int64) int64 {
 	if value == nil {
 		return -1

@@ -64,6 +64,43 @@ func TestCompareCrossProviderDailyBarsComparesCommonContract(t *testing.T) {
 	}
 }
 
+func TestCompareCrossProviderDailyBarsUsesRawVolumeGranularity(t *testing.T) {
+	leftBar := crossProviderBar("2026-10-29")
+	rightBar := crossProviderBar("2026-10-29")
+	leftBar.Volume, rightBar.Volume = 100000, 100096
+	leftBar.VolumeGranularity, rightBar.VolumeGranularity = 100, 1
+	amount := 1000000.0
+	leftBar.Amount, rightBar.Amount = &amount, &amount
+	leftBar.AmountUnit, rightBar.AmountUnit = "CNY", "CNY"
+	left := crossProviderSnapshot("pytdx", "none", "valid", leftBar)
+	right := crossProviderSnapshot("baostock", "none", "valid", rightBar)
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyMatched {
+		t.Fatalf("one TDX lot (100 shares) must be within source granularity: %+v", got)
+	}
+	for _, field := range got.Fields {
+		if field.Field == "2026-10-29.volume" && (field.Status != "matched" || field.Tolerance != 100) {
+			t.Fatalf("volume comparison must expose 100-share source granularity: %+v", field)
+		}
+	}
+	right.Bars[0].Volume = 100101
+	got = CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyMismatch {
+		t.Fatalf("difference above one TDX lot must remain mismatch: %+v", got)
+	}
+}
+
+func TestCompareCrossProviderDailyBarsRequiresVolumeGranularity(t *testing.T) {
+	leftBar := crossProviderBar("2026-10-29")
+	rightBar := crossProviderBar("2026-10-29")
+	leftBar.VolumeGranularity = 0
+	left := crossProviderSnapshot("left", "none", "valid", leftBar)
+	right := crossProviderSnapshot("right", "none", "valid", rightBar)
+	got := CompareCrossProviderDailyBars(left, right)
+	if got.Status != CrossProviderDailyNotComparable || got.Reason != "volume_granularity_missing" {
+		t.Fatalf("missing source volume granularity must be not_comparable: %+v", got)
+	}
+}
 func TestCompareCrossProviderDailyBarsKeepsMissingAmountPartial(t *testing.T) {
 	leftBar, rightBar := crossProviderBar("2026-10-29"), crossProviderBar("2026-10-29")
 	left := crossProviderSnapshot("sina", "none", "valid", leftBar)

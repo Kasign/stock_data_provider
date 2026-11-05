@@ -34,6 +34,7 @@ type CrossProviderDailyBar struct {
 	Close             float64
 	Volume            int64
 	VolumeUnit        string
+	VolumeGranularity int64
 	Amount            *float64
 	AmountUnit        string
 	AdjustmentMethod  string
@@ -115,6 +116,17 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 			result.Reason = "volume_unit_must_be_shares"
 			return result
 		}
+		if a.VolumeGranularity <= 0 || b.VolumeGranularity <= 0 {
+			result.Reason = "volume_granularity_missing"
+			return result
+		}
+		volumeTolerance := int64(50)
+		if a.VolumeGranularity > volumeTolerance {
+			volumeTolerance = a.VolumeGranularity
+		}
+		if b.VolumeGranularity > volumeTolerance {
+			volumeTolerance = b.VolumeGranularity
+		}
 		if reason := validateCrossProviderDailyBar(a); reason != "" {
 			result.Reason = "left_" + date + "_" + reason
 			return result
@@ -132,7 +144,7 @@ func CompareCrossProviderDailyBars(left, right CrossProviderDailySnapshot) Cross
 			{"high", a.High, b.High, 0.001},
 			{"low", a.Low, b.Low, 0.001},
 			{"close", a.Close, b.Close, 0.001},
-			{"volume", float64(a.Volume), float64(b.Volume), 50},
+			{"volume", float64(a.Volume), float64(b.Volume), float64(volumeTolerance)},
 		} {
 			difference := math.Abs(field.left - field.right)
 			status := "matched"
