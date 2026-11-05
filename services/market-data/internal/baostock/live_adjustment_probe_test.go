@@ -254,8 +254,8 @@ func TestLiveAdjustmentFactorBoundsFindsEarliestAndLatestEvent(t *testing.T) {
 
 func TestLatestLiveAdjustmentFactorUsesLatestEffectiveEvent(t *testing.T) {
 	factors := []AdjustmentFactor{
-		{OperateDate: "2024-06-01", ForwardFactor: 0.8, BackwardFactor: 1.25},
 		{OperateDate: "2025-06-01", ForwardFactor: 0.9, BackwardFactor: 1.4},
+		{OperateDate: "2024-06-01", ForwardFactor: 0.8, BackwardFactor: 1.25},
 		{OperateDate: "2026-06-01", ForwardFactor: 1, BackwardFactor: 1.55},
 	}
 	tests := []struct {
@@ -299,11 +299,10 @@ func latestLiveAdjustmentFactor(factors []AdjustmentFactor, tradeDate string) (A
 	var selected AdjustmentFactor
 	found := false
 	for _, factor := range factors {
-		if factor.OperateDate > tradeDate {
-			break
+		if factor.OperateDate <= tradeDate && (!found || factor.OperateDate > selected.OperateDate) {
+			selected = factor
+			found = true
 		}
-		selected = factor
-		found = true
 	}
 	return selected, found
 }
