@@ -60,10 +60,10 @@ type SecurityRelationSubject struct {
 
 // IndustryRelationSubject 保留分类体系和行业代码/名称快照，不依赖尚未统一的 industry_id。
 type IndustryRelationSubject struct {
-	ClassificationSystem string
+	ClassificationSystem  string
 	ClassificationVersion string
-	IndustryCode         string
-	IndustryName         string
+	IndustryCode          string
+	IndustryName          string
 }
 
 // RelationAssertion 是追加式关系断言；修正/撤销通过新断言 supersedes 旧断言。

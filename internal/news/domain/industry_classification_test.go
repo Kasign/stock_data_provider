@@ -8,16 +8,16 @@ import (
 
 func industryClassificationRecord(version, code, name, parent string, from, to time.Time) IndustryClassificationRecord {
 	record := IndustryClassificationRecord{
-		ClassificationSystem: "CSRC",
+		ClassificationSystem:  "CSRC",
 		ClassificationVersion: version,
-		IndustryCode: code,
-		IndustryName: name,
-		ParentCode: parent,
-		ValidFrom: from,
-		ObservedAt: time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
-		Source: "official-classification",
-		EvidenceRef: "classification-snapshot-2026",
-		Status: IndustryClassificationActive,
+		IndustryCode:          code,
+		IndustryName:          name,
+		ParentCode:            parent,
+		ValidFrom:             from,
+		ObservedAt:            time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
+		Source:                "official-classification",
+		EvidenceRef:           "classification-snapshot-2026",
+		Status:                IndustryClassificationActive,
 	}
 	if !to.IsZero() {
 		record.ValidTo = &to
