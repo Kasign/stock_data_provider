@@ -195,6 +195,7 @@ func TestParseFeedRejectsInvalidAndUnsupportedDocuments(t *testing.T) {
 		{name: "malformed", data: "<rss><channel>", want: ErrInvalidFeed},
 		{name: "missing rss channel", data: "<rss/>", want: ErrInvalidFeed},
 		{name: "multiple roots", data: "<rss><channel/></rss><rss><channel/></rss>", want: ErrInvalidFeed},
+		{name: "external entity is not expanded", data: `<!DOCTYPE rss [<!ENTITY x SYSTEM "file:///etc/passwd">]><rss><channel><item><title>&x;</title></item></channel></rss>`, want: ErrInvalidFeed},
 		{name: "unsupported", data: "<html/>", want: ErrUnsupportedFeed},
 		{name: "rss wrong namespace", data: `<rss xmlns="urn:unexpected"><channel/></rss>`, want: ErrUnsupportedFeed},
 		{name: "atom missing namespace", data: "<feed><entry/></feed>", want: ErrUnsupportedFeed},
