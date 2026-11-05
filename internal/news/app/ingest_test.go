@@ -107,6 +107,9 @@ func TestIngestCandidateMatchesExistingItemAndAddsOnlyNewAlias(t *testing.T) {
 	if observation.IdentityStatus != domain.ObservationMatched || observation.NewsID != "news-existing" {
 		t.Fatalf("observation=%+v", observation)
 	}
+	if observation.Candidate.CanonicalURL != "https://news.example/new-url" {
+		t.Fatalf("canonical URL was not retained on the observation candidate: %+v", observation.Candidate)
+	}
 	if len(repository.items) != 0 || len(repository.credentials) != 2 {
 		t.Fatalf("repository=%+v", repository)
 	}

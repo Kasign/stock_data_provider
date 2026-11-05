@@ -13,6 +13,7 @@ type Candidate struct {
 	Title           string
 	ProviderSummary string
 	RawURL          string
+	CanonicalURL    string
 	PublishedAtRaw  string
 	PublishedAt     *time.Time
 	ObservedAt      time.Time

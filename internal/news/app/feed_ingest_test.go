@@ -67,7 +67,7 @@ func TestFeedIngestionMappingToVersionOffline(t *testing.T) {
 	research := NewApplyResearchUpdate(researchRepository, func() string { return "feed-version-1" })
 	research.now = func() time.Time { return observedAt }
 	result, err := research.Execute(context.Background(), ResearchUpdateRequest{
-		NewsID: observation.NewsID, Candidate: candidate, Content: content, ObservationID: observation.ID,
+		NewsID: observation.NewsID, Candidate: observation.Candidate, Content: content, ObservationID: observation.ID,
 	})
 	if err != nil {
 		t.Fatal(err)

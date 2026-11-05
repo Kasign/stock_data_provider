@@ -59,6 +59,12 @@ func (u *IngestCandidate) Execute(ctx context.Context, sourceID, idempotencyKey 
 
 	observedAt := u.now().UTC()
 	candidate = domain.NormalizeCandidate(candidate, observedAt, candidate.QueryDimension)
+	if candidate.RawURL != "" {
+		decision := domain.EvaluateSourceURL(candidate.RawURL, policy)
+		if decision.Allowed {
+			candidate.CanonicalURL = decision.CanonicalURL
+		}
+	}
 	observation := domain.Observation{
 		ID:             strings.TrimSpace(u.newID()),
 		IdempotencyKey: idempotencyKey,
