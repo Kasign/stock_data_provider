@@ -38,6 +38,7 @@ func CrossProviderVolumeGranularity(rawVolumeUnit string) int64 {
 		return 0
 	}
 }
+
 // CrossProviderDailyBar 表示一个交易日的标准化日 K。
 type CrossProviderDailyBar struct {
 	TradeDate         string
