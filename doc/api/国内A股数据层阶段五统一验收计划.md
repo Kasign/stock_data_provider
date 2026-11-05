@@ -399,4 +399,4 @@
 
 - Pytdx 协议解码将 float32 成交额乘以 1000 后转为 `Price`（厘），Go 整数转换会截断不足 0.001 CNY 的部分。因此 Pytdx 绝对误差上界应为半个 float32 ULP + 0.001 CNY；BaoStock 4 位小数且舍入方式未明确，保守取 0.0001 CNY。
 - 内部字段改为 `AmountErrorBound`，比较容差改为两侧绝对误差上界之和。新增 100,000 CNY 小额边界测试，Pytdx error bound=0.00490625 CNY；真实样本两证券仍各 54/54 字段 matched。
-- 代码 SHA `95383503` 的 Push/PR Go suite、Parity 待复验；WebUI 契约无变化。
+- 代码 SHA `95383503` 的 Push Go suite `42027994789`、PR Go suite `42028409432`、Parity `42028409433`、WebUI checks `42028409422` 均 success。PR Live Provider Probe `42028409554` 外层 success，但历史专项均 skipped；WebUI 契约无变化。
