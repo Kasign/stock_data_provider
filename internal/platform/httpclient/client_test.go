@@ -3,12 +3,20 @@ package httpclient
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 	"sync"
+	"sync/atomic"
 	"testing"
+
+	"example.com/stock-analysis-flow/internal/platform/fault"
 )
 
 type staticResolver struct {
@@ -210,5 +218,169 @@ func TestRedirectRejectsHTTPSDowngrade(t *testing.T) {
 	next := (&http.Request{URL: nextURL, Header: make(http.Header)}).WithContext(ctx)
 	if err := validateRedirect(next, []*http.Request{previous}); !errors.Is(err, errRedirectRejected) {
 		t.Fatalf("expected HTTPS downgrade to be rejected, got %v", err)
+	}
+}
+
+func newLocalTestClient(t *testing.T, server *httptest.Server, resolver Resolver, maxResponseBytes int64, maxRetries int) *Client {
+	t.Helper()
+	client, err := New(Config{
+		Resolver: resolver, MaxResponseBytes: maxResponseBytes,
+		MaxRetries: maxRetries, Timeout: 2 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	t.Cleanup(client.CloseIdleConnections)
+	return client
+}
+
+func localRequest(t *testing.T, server *httptest.Server, path string) *http.Request {
+	t.Helper()
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestURL := "http://example.com:" + serverURL.Port() + path
+	request, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return request
+}
+
+func localPolicy(server *httptest.Server) DestinationPolicy {
+	serverURL, _ := url.Parse(server.URL)
+	port, _ := strconv.Atoi(serverURL.Port())
+	return DestinationPolicy{
+		Dependency: "news.fetch", AllowedHosts: []string{"example.com"},
+		AllowedPorts: []uint16{uint16(port)}, AllowHTTP: true,
+	}
+}
+
+func TestClientExecutesRequestThroughValidatedIPDial(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
+	response, err := client.Do(context.Background(), localRequest(t, server, "/ok"), localPolicy(server))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != "ok" {
+		t.Fatalf("unexpected response body %q, err=%v", body, err)
+	}
+}
+
+func TestClientRejectsOversizedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("12345"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 4, 0)
+	_, err := client.Do(context.Background(), localRequest(t, server, "/large"), localPolicy(server))
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.response_too_large" {
+		t.Fatalf("expected response size fault, got %v", err)
+	}
+}
+
+func TestClientDeniesRedirectUnlessExplicitlyEnabled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/start" {
+			http.Redirect(w, request, "/next", http.StatusFound)
+			return
+		}
+		_, _ = w.Write([]byte("next"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
+	_, err := client.Do(context.Background(), localRequest(t, server, "/start"), localPolicy(server))
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.destination_rejected" {
+		t.Fatalf("expected redirect rejection fault, got %v", err)
+	}
+}
+
+func TestClientAllowsRedirectOnlyWithinExplicitPolicy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/start" {
+			http.Redirect(w, request, "/next", http.StatusFound)
+			return
+		}
+		_, _ = w.Write([]byte("next"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 0)
+	policy := localPolicy(server)
+	policy.AllowRedirects = true
+	policy.MaxRedirects = 1
+	response, err := client.Do(context.Background(), localRequest(t, server, "/start"), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+	if string(body) != "next" {
+		t.Fatalf("unexpected redirect response %q", body)
+	}
+}
+
+func TestClientRevalidatesDNSAfterConnectionClose(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Connection", "close")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	resolver := &sequenceResolver{addresses: [][]netip.Addr{
+		{netip.MustParseAddr("8.8.8.8")},
+		{netip.MustParseAddr("10.0.0.8")},
+	}}
+	client := newLocalTestClient(t, server, resolver, 1024, 0)
+	policy := localPolicy(server)
+	response, err := client.Do(context.Background(), localRequest(t, server, "/first"), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+
+	_, err = client.Do(context.Background(), localRequest(t, server, "/second"), policy)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.destination_rejected" {
+		t.Fatalf("expected second DNS resolution to be rejected, got %v", err)
+	}
+}
+
+func TestClientRetriesOnlyExplicitlyIdempotentRequests(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client := newLocalTestClient(t, server, staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}}, 1024, 1)
+	policy := localPolicy(server)
+	policy.Idempotent = true
+	response, err := client.Do(context.Background(), localRequest(t, server, "/retry"), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if calls.Load() != 2 {
+		t.Fatalf("expected one retry, got %d requests", calls.Load())
 	}
 }

@@ -68,7 +68,7 @@ type DestinationPolicy struct {
 type Client struct {
 	config      Config
 	resolver    Resolver
-	dialer      *net.Dialer
+	dial        func(context.Context, string, string) (net.Conn, error)
 	httpClient  *http.Client
 	transport   *http.Transport
 	limits      map[string]int
@@ -121,10 +121,11 @@ func New(config Config) (*Client, error) {
 		resolver = net.DefaultResolver
 	}
 
+	dialer := &net.Dialer{Timeout: config.DialTimeout, KeepAlive: 30 * time.Second}
 	client := &Client{
 		config:     config,
 		resolver:   resolver,
-		dialer:     &net.Dialer{Timeout: config.DialTimeout, KeepAlive: 30 * time.Second},
+		dial:       dialer.DialContext,
 		limits:     limits,
 		semaphores: make(map[string]chan struct{}),
 	}
@@ -263,7 +264,7 @@ func (c *Client) dialContext(ctx context.Context, network, address string) (net.
 
 	var lastErr error
 	for _, ip := range addresses {
-		connection, dialErr := c.dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+		connection, dialErr := c.dial(ctx, network, net.JoinHostPort(ip.String(), port))
 		if dialErr == nil {
 			return connection, nil
 		}
