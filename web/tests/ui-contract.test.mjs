@@ -2955,3 +2955,16 @@ test("UIR-2 settings navigation uses a two-column grid on narrow screens", () =>
   assert.match(stylesheet, /\.settings-nav \{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/);
   assert.match(html, /<nav class="settings-nav" aria-label="设置分组">[\s\S]*?data-settings-target="settings-security-section"/);
 });
+
+
+test("UIR-2 technical chart legends wrap without forcing narrow chart panels wider", () => {
+  const legendStart = stylesheet.indexOf(".technical-chart-legend {");
+  assert.notEqual(legendStart, -1);
+  const legendRule = stylesheet.slice(legendStart, stylesheet.indexOf("}", legendStart) + 1);
+  assert.match(legendRule, /display:\s*flex;/);
+  assert.match(legendRule, /flex-wrap:\s*wrap;/);
+  assert.match(legendRule, /gap:\s*12px;/);
+  assert.match(stylesheet, /\.technical-chart-panel\s*\{[^}]*min-width:\s*0;/);
+  assert.match(stylesheet, /\.technical-chart\s*\{[^}]*width:\s*100%;[^}]*height:\s*auto;/);
+  assert.match(html, /class="technical-chart-legend"><span class="technical-legend-dif">DIF<\/span><span class="technical-legend-signal">DEA<\/span><span>柱体<\/span>/);
+});

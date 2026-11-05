@@ -1725,3 +1725,11 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 在 600px 以下明确切换为 CSS Grid 双列布局；桌面端和 900px 以下平板端仍保留纵向导航。
 - [x] 新增 UI contract，锁定移动端导航布局模式及 10 个设置分组的导航入口。
 - [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；真实 iOS Safari / 触屏设备仍需人工验收。
+
+## 2026-11-05 UIR-2 第五十七批：技术指标图例窄屏换行
+
+- [x] 复核日 K 主图收盘线/K 线切换、均线叠加控件及技术指标 SVG 的最终响应式规则；主图控制区已有容器换行与 600px 以下全宽布局，SVG 按容器宽度缩放。
+- [x] 确认技术指标图例 `.technical-chart-legend` 虽采用 Flex 布局，但缺少 `flex-wrap`；当前 DIF、DEA、柱体三项可容纳，后续增加图例时可能挤压 320px 窄屏图表面板。
+- [x] 为技术指标图例增加换行能力，保持桌面端右对齐、项目顺序和颜色语义不变。
+- [x] 新增 UI contract，锁定图例换行、图表面板 `min-width: 0` 及 SVG 自适应宽度。
+- [ ] 当前提交 SHA 的 WebUI Checks 与 Chromium Browser Smoke 尚待运行；图表触控、缩放及真实 iOS Safari 手势仍需设备验收。
