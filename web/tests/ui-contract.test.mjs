@@ -1567,7 +1567,7 @@ test("market overview and activity use readable secondary text and touch-sized c
   assert.match(finalCssRuleBody(".trading-calendar-day span"), /font-size:\s*10px/);
   assert.match(stylesheet, /@media \(max-width: 700px\) \{[\s\S]*?\.market-overview-actions \.button \{ width: 100%; min-height: 40px; \}/);
   assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.trading-calendar-day span \{ font-size: 10px; \}/);
-  assert.match(finalCssRuleBody(".market-activity-table"), /-webkit-overflow-scrolling: touch/);
+  assert.match(baseCssDeclarationBlock(".table-scroll"), /-webkit-overflow-scrolling:\s*touch\s*;/);
 });
 
 
@@ -2887,7 +2887,6 @@ test("UIR-2 shared table scrollers contain horizontal chaining and enable touch 
   assert.match(tableScroller, /overflow-x:\s*auto\s*;/);
   assert.match(tableScroller, /overscroll-behavior-x:\s*contain\s*;/);
   assert.match(tableScroller, /-webkit-overflow-scrolling:\s*touch\s*;/);
-  const activityScroller = baseCssDeclarationBlock(".market-activity-table");
-  assert.match(activityScroller, /overscroll-behavior:\s*contain\s*;/);
-  assert.doesNotMatch(activityScroller, /-webkit-overflow-scrolling:/);
+  assert.match(stylesheet, /\.market-activity-table \{\s*overscroll-behavior: contain;\s*\}/);
+  assert.doesNotMatch(stylesheet, /\.market-activity-table \{[^}]*-webkit-overflow-scrolling:/);
 });

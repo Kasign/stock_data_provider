@@ -1661,3 +1661,11 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 新增 UI contract 锁定共享滚动行为及市场活动容器的额外隔离规则。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JavaScript 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke，并在触屏设备及 320/375/600px 视口检查行情总览、全市场列表、研究列表、数据中心结果表格的横向滚动与页面纵向滚动是否互不干扰。
+
+
+## 2026-11-05 UIR-2 第五十批 CI 断言修正
+
+- [x] 根据 WebUI Checks 首轮结果定位 2 处 UI contract 失败：旧市场活动断言仍要求组件独立声明触控滚动；新断言错误地读取 `.market-activity-table` 的首个规则块。
+- [x] 将旧断言改为验证共享 `.table-scroll` 触控滚动基线；将市场活动附加隔离规则改为精确 CSS 规则匹配。
+- [ ] 在修正后的最终提交 SHA 上重新运行全部单元测试、Compose 校验、JavaScript 语法检查与 Nginx 镜像构建。
+- [ ] 复核 Chromium Browser Smoke 结果；当前提交的首轮浏览器验收仍在运行。
