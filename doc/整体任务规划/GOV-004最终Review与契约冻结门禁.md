@@ -235,3 +235,20 @@ GOV-005 可以先做**规划设计**，包括：
 6. Quant/Research/Researchflow 三方示例 JSON、golden 和契约测试。
 
 **当前状态保持 NO-GO。** 本次只更新设计文档，不代表 Data、News、Platform 的实现阻断项已经解决。
+
+
+## 9. News 最新源码复核更新（2026-11-05）
+
+News 分支当前 HEAD：`cefbbbb10ef418f8bca1d2ff3d6a1fef8ce203b6`，提交 `test(news): 修复证据归属校验格式并覆盖跨新闻版本`。相较前一核查点 `ea697fe437d44afffbd60874ad144adc4313e469`，ahead 4 / behind 0。
+
+本轮确认：
+- 新增跨 News Item 的 SourceVersion 证据归属拒绝测试和事务回滚断言，提升写入证据完整性。
+- SecurityIdentity / IndustryClassification Resolver 仍只按业务有效时间解析，没有 `system_as_of` 知识过滤。
+- Relation 的 `ResolveCurrentRelations` 仍是当前关系解析，不可用于历史 Run。
+- `PolicyDecision` 仍只有 Allowed/ReasonCode/MaxRetention；没有不可变授权决策记录和策略快照引用。
+- Application 中未发现 ResearchEvidenceQuery / GetEvidence / ListEvidence 只读 Facade；没有稳定分页快照/Cursor 查询实现。
+- News README 仍将 N6 Repository/Migration 等列为待完成；本轮没有持久化闭环或真实 MariaDB 验收证据。
+
+因此 News 阻断仍为：Facade/DTO、Repository/Migration、Observation/Version/Identity/Classification/Relation 的知识时间过滤、授权决策快照、当前撤销检查、稳定分页和受控内容读取。最新写入校验测试不能替代上述查询与历史复现验收。
+
+**状态不变：GOV-004 NO-GO。** 本轮未修改 News 业务分支，也未创建模块分支。
