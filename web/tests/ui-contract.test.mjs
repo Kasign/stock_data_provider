@@ -2316,3 +2316,14 @@ test("UIR-2 typography roles use semantic tokens without changing their baseline
   assert.match(stylesheet, /\.button \{ font-size: var\(--font-size-control\) !important; \}/);
   assert.match(stylesheet, /\.field input, \.field select, \.field textarea, \.recent-analysis-search input \{ font-size: var\(--font-size-input\); \}/);
 });
+
+
+test("UIR-2 正文与常规控件使用统一的最终计算基线", () => {
+  assert.match(stylesheet, /--control-height-base:\\s*40px/);
+  assert.match(stylesheet, /--font-size-body-readable:\\s*14px/);
+  assert.match(stylesheet, /--line-height-body:\\s*1\\.55/);
+  assert.match(stylesheet, /body \\{\\s*font-size: var\\(--font-size-body-readable\\);\\s*line-height: var\\(--line-height-body\\);\\s*\\}/);
+  assert.match(stylesheet, /\\.button \\{\\s*min-height: var\\(--control-height-base\\);/);
+  assert.match(stylesheet, /\\.field input,\\s*\\.field select,\\s*\\.field textarea \\{\\s*min-height: var\\(--control-height-base\\);/);
+  assert.match(stylesheet, /\\.settings-dialog \\.field input \\{ min-height: var\\(--control-height-base\\); \\}/);
+});

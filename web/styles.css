@@ -38,14 +38,14 @@
   --layout-panel-gap: 14px;
   --layout-panel-padding-y: 18px;
   --layout-panel-padding-x: 19px;
-  --control-height-base: 37px;
+  --control-height-base: 40px;
   --font-size-body-base: 13px;
-  --font-size-body-readable: 15px;
+  --font-size-body-readable: 14px;
   --font-size-support: 12px;
   --font-size-secondary: 13px;
   --font-size-control: 13px;
   --font-size-input: 14px;
-  --line-height-body: 1.65;
+  --line-height-body: 1.55;
   font-family: Inter, "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-synthesis: none; text-rendering: optimizeLegibility;
 }
@@ -390,7 +390,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .dialog-heading .eyebrow { margin-bottom: 7px; }
 .dialog-intro { margin: 18px 0; color: #879bad; font-size: 11px; line-height: 1.8; }
 .settings-dialog .field { margin-top: 14px; }
-.settings-dialog .field input { min-height: 40px; }
+.settings-dialog .field input { min-height: var(--control-height-base); }
 .security-note {
    margin-top: 18px;
    padding: 11px 12px;
@@ -3347,13 +3347,13 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 
 /* 全站易用性优化：清晰层级与更容易点击的常用控件。 */
 body {
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: var(--font-size-body-readable);
+  line-height: var(--line-height-body);
 }
 
 /* Common controls: improve scanability without changing dense numeric emphasis. */
 .button {
-  min-height: 40px;
+  min-height: var(--control-height-base);
   font-size: 12px;
 }
 
@@ -3366,7 +3366,7 @@ body {
 .field input,
 .field select,
 .field textarea {
-  min-height: 40px;
+  min-height: var(--control-height-base);
 }
 
 .panel-heading p,
