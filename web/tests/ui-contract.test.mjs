@@ -2373,3 +2373,11 @@ test("UIR-2 text button height is consolidated with responsive and task-action e
   assert.ok(stylesheet.includes(".task-result-actions .text-button { min-height: 30px; font-size: 11px; }"));
   assert.ok(stylesheet.includes(".task-result-actions .text-button { font-size: 13px !important; }"));
 });
+
+test("UIR-2 settings feedback layout constraints are consolidated", () => {
+  assert.ok(stylesheet.includes(".settings-feedback { min-height: 1.5em; margin: 9px 0 0; overflow-wrap: anywhere;"));
+  assert.ok(!stylesheet.includes(".settings-feedback { min-height: 1.5em; overflow-wrap: anywhere; }"));
+  assert.ok(stylesheet.includes(".settings-connection-form .settings-feedback { margin: 0; }"));
+  assert.ok(stylesheet.includes(".settings-feedback { font-size: 12px !important; }"));
+  assert.ok(stylesheet.includes(":root[data-theme=\"light\"] .settings-feedback"));
+});

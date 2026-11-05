@@ -1283,3 +1283,7 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 ### UIR-2 第九批：文本按钮高度基线归并（2026-11-05）
 
 将 `.text-button` 桌面最终高度 32px 前移到基础规则，删除后置重复声明。保留 600px 以下 36px 触控高度，以及 `.task-result-actions .text-button` 的任务操作布局和字号特例。字号优先级仍由现有可读性规则及任务操作特例决定，本批不调整 `!important`。新增 UI contract 锁定基础高度和两类例外。
+
+### UIR-2 第十批：设置反馈布局约束归并（2026-11-05）
+
+将 `.settings-feedback` 的最终 `min-height: 1.5em` 与 `overflow-wrap: anywhere` 前移至基础规则，删除后置重复布局声明。保留全局可读性字号覆盖、浅色主题错误色覆盖，以及连接表单的 `margin: 0` 特例；不改变反馈状态语义和主题色。新增 UI contract 锁定基础布局、字号覆盖与表单特例。
