@@ -366,3 +366,12 @@ Data 分支最新 HEAD 为 `bc55db99fc6908c77c3c0ec6a213651373a857b2`（`docs(ap
 最新基线、Workflow 状态及 11.9/11.11/11.12 复核细节见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md)。
 
 GOV-004 仍为 NO-GO。不得因非契约文档更新或部分 Workflow 成功关闭 Data 契约门禁。
+
+
+## 16. LimitPoolItem.change_percent 可达性复核（2026-11-05）
+
+此前 23 个 Go 可 null、Schema 未 nullable 的字段中，LimitPoolItem.change_percent 虽为非 omitempty 指针，但真实 Service Validator 在 HasData=true 时强制 ChangePercent 非 nil；HasData=false 时又要求 Items 为空。因此该字段在当前 DataService → Handler 成功路径上不可达 null，不应计入运行时契约阻断。
+
+此前 23 项应修正为：22 个 slice/map 字段按第 13 节和 Data 修正清单 11.11 继续处理；LimitPoolItem.change_percent 保留 Validator nil 拒绝测试即可。若将来出现绕过 DataService Validator 的 Handler 路径，必须重新审查。
+
+详见 Data 修正清单第 11.14 节。此结论同样说明 Go 类型静态可空不等于 HTTP 响应可达 null。
