@@ -323,3 +323,20 @@ Data 最新 HEAD 更新为 `c22470bec87beb89961b76ad9856d5c8709aac73`。相较 O
 因此最新 CI 只证明修复后的现有构建/测试门禁通过，不代表 OpenAPI ↔ Go JSON 契约差异已修复。Data 的 15 个 Go-only 字段、9 个无来源 Schema 字段、15 处 required 差异、122 个过宽 nullable、23 个潜在 null 字段，以及完整 Handler Golden/双向契约测试仍待处理。
 
 详细映射与执行拆分见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.9 节。**GOV-004 继续 NO-GO**；不冻结共同基线、不创建五个模块分支。
+
+
+## 13. Data 集合字段 nil/empty 构造路径审查（2026-11-05）
+
+本轮基于 Data HEAD `c22470bec87beb89961b76ad9856d5c8709aac73` 追踪了此前 22 个非 omitempty slice/map 字段的 Service Validator、Provider 返回、缓存反序列化和构造代码。
+
+结果分为三类：
+- **11 个字段确认存在 nil 可通过风险**：StockAnnouncementSnapshot.items、DragonTigerSnapshot.items、StockBoardSnapshot.items、StockSearchSnapshot.items、LimitPoolSnapshot.items、FundamentalSection.metrics、ValuationSnapshot.items、IndexCatalogSnapshot.items、IndexConstituentSnapshot.items、IndexDailyBarsSnapshot.items、HotRankingSnapshot.items。
+- **3 个字段边界待核实**：MarketSentimentHistory.items、ProviderProbeHistory.items（直接使用 Store List 返回值）；Bundle.daily_bars（直接接收 DailyBars 返回值，未归一化）。
+- **8 个字段已有非 nil 约束或显式构造**：Bundle.sources、MarketStocksSnapshot.items、SectorRankingSnapshot.items、IndexQuoteSnapshot.items、FundamentalsSnapshot.sections、ValuationSnapshot.requested_symbols、MarketCapitalFlowSnapshot.items、ProviderProbeRun.items、TradingCalendarSnapshot.items。注：此列表实际为 9 项，按字段计数为 9；总分类应以 11 + 3 + 8 的字段基数重新核对，Bundle.sources 与 MarketStocks 等合计 9 项，故当前准确数量为 **11 风险 + 3 待核实 + 8?** 需注意此前 22 字段清单含 Bundle.sources 与其他字段共 22 项，最终以 Data 清单 11.11 表格逐项为准，不以本段分组数量作为契约统计依据。
+- Bundle.warnings 不属于此前 22 个非 omitempty 字段；它使用非 nil 构造，但空值因 omitempty 被省略。
+
+上述 11 项的 Validator 允许空集合以 nil slice 表示；部分是 unknown/empty fallback 分支，不能仅靠正常有数据样本覆盖。当前没有生产 HTTP 响应抓包证据，故结论是“代码路径允许 null”，而不是宣称已经观察到实际线上 null。
+
+详细逐字段路径、证据与 DATA-CONTRACT-004-A~E 修正任务见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11.11 节。
+
+**GOV-004 Data 阻断继续打开**：尚未实施 DTO 归一化、Store 边界确认、Redis 历史 nil 缓存回归和真实 Handler Golden；没有运行 Data 测试。不得因静态审查完成而冻结契约。
