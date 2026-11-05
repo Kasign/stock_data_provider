@@ -407,3 +407,5 @@
 - P0-50 Pytdx Artifact `13416024033`：600036.SH、002982.SZ 的 raw/qfq/hfq 各返回 9 行，quality valid；qfq ref date=2026-11-05，hfq ref date 分别 2002-04-09、2020-04-24。Pytdx 日 K 专项通过；BaoStock TCP timeout 导致 raw cross-provider not_comparable，BaoStock 因子/公司行为一致性测试失败，不能宣称跨源复权通过。
 - 生产 Probe Artifact `13416895510` 已完成 MariaDB 持久化和回读，但 Provider 返回数据均为 degraded 或 failed；storage 通过不等于业务行情质量通过。P0-49 旧 Run 配对条数不再作为准确证券级统计，修复后待重新验证。
 - 提交 `d236cacc` 首轮 Go suite 的 gofmt 检查因测试函数前多余空行失败，已在后续提交修正并等待 CI 复验。API-06 继续“接口层已接入，待真实数据验收”；WebUI 无需修改；PIT fail-closed 不变。阶段 B 继续，不进入 Fundamentals。
+
+- 最终 CI 复验：修正格式后的 SHA `72844f1de090cd3f91b173a0d1efa412cc115f10`，Push Go suite Run `42033189429` success（根模块、go-core、market-data gofmt/tests/race/vet、MariaDB migration/PIT、Compose 与两个 Docker 镜像构建均通过）；PR Go suite Run `42033199234`、Parity Run `42033199221`、WebUI checks Run `42033199193` 均 success。PR Live Provider Probe Run `42033198981` success，但没有 commit marker 启用专项历史请求，不计真实数据验收。
