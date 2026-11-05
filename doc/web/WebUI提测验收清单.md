@@ -1555,3 +1555,22 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 检查 DOM adapter 不访问状态、存储、API 或事件监听。
 - [ ] WebUI Checks 全量单测、语法检查、Compose 校验及镜像构建通过。
 - [ ] Chromium Browser Smoke 选股交互与全市场分页生命周期通过。
+
+
+## 2026-11-05 JSR-6B：当前页选股结果 DOM adapter（已验收）
+
+- [x] 结果表格 DOM 构建迁入 `screening-result-view.js`，筛选/快照/选择/导出/批量事务仍由 app.js 管理。
+- [x] 新增 `screening-result-view.test.mjs`，覆盖结果行、非法证券代码、质量原因缺失和空态。
+- [x] UI contract 检查 DOM adapter 不访问状态、存储、API 或事件监听。
+- [x] WebUI Checks #41834018795：451/451 tests、语法检查、Compose 校验和 Nginx 镜像构建通过。
+- [x] Chromium Browser Smoke #41834018922：响应式布局、跨标签页、自选行情、Run Flow、个股研究、数据中心、选股交互及全市场分页生命周期全部通过。
+- [x] 最终修复提交：`98ad08b4bedd53294c7923a4752b38509d86d423`；代码实施提交：`ddf48fde8f314ecc82b1d0bcea2f53d5697b0492`。
+
+## 2026-11-05 JSR-6C：市场行情与个股研究展示层边界复核（无代码迁移）
+
+- [x] 复核 `market-overview.js` 的市场总览展示、接口字段、质量语义和请求生命周期；不拆通用 ViewModel。
+- [x] 复核 `market-stocks.js` 的分页、旧快照、请求代际和行 DOM；分页生命周期保留在领域模块。
+- [x] 复核 `market-activity.js` 的日期筛选、分页和跨模块日期联动；不迁移闭合业务流程。
+- [x] 复核 `stock-research.js` 多面板的标的身份校验、generation、AbortController、格式化与展示边界；不创建 Controller。
+- [x] 确认 `chart.js` 已独立负责指标计算与 SVG 构建。
+- [x] 本轮无运行时代码变更；未发现收益足以抵消参数耦合与回归风险的拆分点。

@@ -1,6 +1,6 @@
 # WebUI 整体规划
 
-更新时间：2026-11-04（当前代码/测试基线：`83c97057729952422639f4d1ae041b956285d2c0`；最新文档提交以分支 HEAD 为准）
+更新时间：2026-11-05（当前代码基线：`98ad08b4bedd53294c7923a4752b38509d86d423`；JSR-6B 验收证据对应此提交）
 目标分支：`feat/webui-market-data-console`
 适用范围：仅规划和管理 WebUI（`web/**`）及其专属文档（`doc/web/**`）。除明确获批的文档路径修正外，不修改 Go、Provider、数据库、服务端 API、OpenAPI 实现和部署配置。
 
@@ -1026,13 +1026,27 @@ app.js 的 `renderTaskResult` 同时承担两类职责：更新当前 Run 状态
 中间验收曾发现 UI contract 仍读取旧 app.js renderer 实现，以及断言表达式写法错误；已将契约改为检查新 adapter，并在最终提交的 447 项单测和完整 Browser Smoke 中通过。失败记录不作为最终验收依据。
 
 
-### 2026-11-04 JSR-6B：当前页选股结果 DOM adapter（实施中）
+### 2026-11-04/05 JSR-6B：当前页选股结果 DOM adapter（已验收）
 
 - [x] 审查当前页筛选结果的计算、快照、渲染、选择、导出和批量加入自选职责。
 - [x] 确认 `isCurrentScreeningSnapshot`、筛选条件/结果、选中证券集合、CSV 导出和自选批量事务继续由 app.js 管理。
 - [x] 将纯表格行构建迁入 `screening-result-view.js`；adapter 只接收 document、DOM root、已筛选 rows、filter、snapshot 和格式化函数。
 - [x] 保留缺失质量原因、非法证券代码禁用选择、证券跳转 data 属性和筛选空态。
 - [x] 新增视图单测和 UI contract，覆盖表格结构、数据属性、质量原因及职责边界。
-- [ ] WebUI Checks 与 Chromium Browser Smoke 通过后完成验收。
-- [ ] 后续复核市场行情/个股研究展示层，不按函数长度机械拆分。
+- [x] 代码提交：`ddf48fde8f314ecc82b1d0bcea2f53d5697b0492`；修复提交：`98ad08b4bedd53294c7923a4752b38509d86d423`。
+- [x] WebUI Checks #41834018795 通过：451/451 单测、语法检查、Compose 配置校验和镜像构建通过。
+- [x] Chromium Browser Smoke #41834018922 通过：响应式、跨标签页、自选行情、Run Flow、个股研究、数据中心、选股和全市场分页生命周期全部通过。
+- [x] 首轮 CI 的证券代码正则及 UI contract 断言问题已在修复提交中纠正；最终验收以修复提交对应的两项 Actions 为准。
+
+### 2026-11-05 JSR-6C：市场行情与个股研究展示层边界复核（审查完成，无代码迁移）
+
+审查对象：`market-overview.js`、`market-stocks.js`、`market-activity.js`、`stock-research.js`、`chart.js`，以及 app.js 中对应模块的装配和跨页跳转入口。
+
+- [x] 市场概览 renderer 与指数/涨跌分布/板块/涨跌停池/人气榜/资金流各自的数据字段、质量提示和 DOM 结构紧密耦合；请求 generation、AbortController、筛选条件及连接失效也由模块统一管理，本轮不拆成通用 ViewModel。
+- [x] 全市场行情的分页状态、旧快照保留、下一页判断、请求代际和取消必须保持在 `bindMarketStocks`；不迁移分页协调器。
+- [x] 个股研究的多个面板共享标的身份校验、请求代际、取消、质量状态和错误反馈；renderer 依赖模块内格式化函数及面板配置，不抽取通用 renderer/controller。
+- [x] 图表计算与 SVG 构建已由 `chart.js` 独立承担，不再重复拆分。
+- [x] 未发现收益足以抵消参数耦合和回归风险的独立纯展示边界；运行时代码保持不变，不为减少文件长度而拆分。
+
+下一步：对 app.js 剩余全局事件、页面切换和跨业务域协调进行一次职责盘点；只迁移可验证的纯逻辑或闭合 DOM 行为，不迁移状态所有权、请求生命周期和跨页事务。真实 Provider 联调仍以数据侧可用环境和真实凭据为前提，不使用模拟响应代替验收。
 

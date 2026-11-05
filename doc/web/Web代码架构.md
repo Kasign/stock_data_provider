@@ -550,3 +550,24 @@ app.js 继续负责：
 - CSV 构建/下载、加入自选事务、行情分页变化后的结果失效。
 
 adapter 通过显式传入格式化函数避免依赖 app.js 或全局状态；文本仍使用 textContent。单测覆盖正常行、无效证券代码、缺失质量原因和空态；UI contract 检查 adapter 无 state/storage/API/事件依赖。
+
+
+### 12.22 JSR-6B 当前页选股结果 DOM adapter（已验收）
+
+新增 `screening-result-view.js`，导出 `renderScreeningLocalResultRowsView`。该模块只接收 app 已筛选的 rows、filter、snapshot、DOM root、document 和格式化函数，负责构建结果表格行、选择 checkbox、证券跳转按钮、质量原因及空态。
+
+app.js 继续拥有筛选条件和结果快照、`isCurrentScreeningSnapshot`、选中证券集合、全选/批量按钮状态、CSV 构建下载、加入自选事务及行情分页变化后的结果失效。adapter 不计算筛选结果、不读取 app state/storage/API、不绑定事件。非法证券代码仍禁用选择，服务端文本仍通过 `textContent` 写入。
+
+验收：提交 `98ad08b4bedd53294c7923a4752b38509d86d423` 对应 WebUI Checks #41834018795（451/451 tests、语法检查、Compose 校验、镜像构建通过）和 Chromium Browser Smoke #41834018922（全部步骤通过）均成功。首次检查发现的证券代码正则与 UI contract 断言错误已在修复提交中纠正。
+
+### 12.23 JSR-6C 市场行情与个股研究展示层边界复核
+
+| 模块 | 当前职责 | 边界结论 |
+|---|---|---|
+| `market-overview.js` | 市场总览多个板块的 DOM 展示、请求、筛选和连接失效 | renderer 与各接口字段/质量语义紧密耦合；请求状态留在模块，不抽通用 ViewModel |
+| `market-stocks.js` | 全市场分页、快照保留、请求代际、分页 DOM 和行内跳转 | 分页与旧快照生命周期必须整体保留；当前行构建依赖模块格式化、空态和 data 属性约定，暂不单独迁移 |
+| `market-activity.js` | 龙虎榜分页、交易日历、日期联动和请求取消 | 日期筛选、分页和跨模块日期事件属于闭合业务流程，不迁入通用展示层 |
+| `stock-research.js` | 公司资料、公告、财务、估值、筹码、资金流的按需读取与展示 | 多面板共用标的身份、generation、AbortController、质量/错误反馈；renderer 依赖内部 formatter 与面板配置，不创建 Controller |
+| `chart.js` | 日 K 归一化、技术指标和 SVG 图表构建 | 已是独立图表领域模块，不重复拆分 |
+
+本轮审查没有迁移运行时代码。后续只有在出现可独立测试、参数边界稳定且不接管请求/页面状态的纯计算或 DOM builder 时才实施拆分；不以文件长度或函数长度作为拆分依据。
