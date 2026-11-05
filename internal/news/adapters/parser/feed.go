@@ -92,12 +92,12 @@ type atomLink struct {
 
 // FeedAttachment 仅保存 Feed 声明的附件元信息，不下载或信任附件 URL。
 type FeedAttachment struct {
-	URL        string
+	URL          string
 	MediaType    string
 	RawMediaType string
 	RawLength    string
-	Length     *int64
-	Title      string
+	Length       *int64
+	Title        string
 }
 
 type atomEntry struct {
@@ -208,7 +208,12 @@ func ParseFeed(data []byte, observedAt time.Time) (FeedDocument, error) {
 }
 
 func newFeedAttachment(rawURL, rawType, rawLength, title string) FeedAttachment {
-	attachment := FeedAttachment{URL: strings.TrimSpace(rawURL), RawMediaType: strings.TrimSpace(rawType), RawLength: strings.TrimSpace(rawLength), Title: normalizeText(title)}
+	attachment := FeedAttachment{
+		URL:          strings.TrimSpace(rawURL),
+		RawMediaType: strings.TrimSpace(rawType),
+		RawLength:    strings.TrimSpace(rawLength),
+		Title:        normalizeText(title),
+	}
 	if mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(rawType)); err == nil {
 		attachment.MediaType = strings.ToLower(mediaType)
 	}
