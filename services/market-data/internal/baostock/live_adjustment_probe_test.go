@@ -30,6 +30,12 @@ type liveBaoStockAdjustmentItem struct {
 	BackwardRows int                      `json:"backward_rows"`
 	Mismatches   []liveAdjustmentMismatch `json:"mismatches,omitempty"`
 	Error        string                   `json:"error,omitempty"`
+
+	PreFirstEventStatus      string                   `json:"pre_first_event_status,omitempty"`
+	PreFirstEventRows        int                      `json:"pre_first_event_rows,omitempty"`
+	PreFirstEventFactorDate  string                   `json:"pre_first_event_factor_date,omitempty"`
+	PreFirstEventMismatches  []liveAdjustmentMismatch `json:"pre_first_event_mismatches,omitempty"`
+	PreFirstEventError       string                   `json:"pre_first_event_error,omitempty"`
 }
 
 type liveAdjustmentMismatch struct {
@@ -137,6 +143,72 @@ func TestLiveBaoStockAdjustmentFactorConsistency(t *testing.T) {
 				break
 			}
 		}
+		if firstFactor, latestFactor, ok := liveAdjustmentFactorBounds(factors); ok {
+			preEnd, parseErr := time.Parse("2006-01-02", firstFactor.OperateDate)
+			if parseErr != nil {
+				item.PreFirstEventStatus = "unavailable"
+				item.PreFirstEventError = "invalid first factor event date: " + parseErr.Error()
+			} else {
+				preEnd = preEnd.AddDate(0, 0, -1)
+				if !preEnd.Before(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)) {
+					preEndDate := preEnd.Format("2006-01-02")
+					preRaw, preRawErr := client.QueryDailyKLines(ctx, symbol, "2000-01-01", preEndDate, "3")
+					preForward, preForwardErr := client.QueryDailyKLines(ctx, symbol, "2000-01-01", preEndDate, "2")
+					if preRawErr != nil || preForwardErr != nil {
+						item.PreFirstEventStatus = "unavailable"
+						item.PreFirstEventError = strings.TrimSpace(strings.Join([]string{
+							formatLiveBaoStockError("pre-first-event raw", preRawErr),
+							formatLiveBaoStockError("pre-first-event qfq", preForwardErr),
+						}, "; "))
+					} else if len(preRaw) == 0 {
+						item.PreFirstEventStatus = "not_applicable"
+						item.PreFirstEventError = "no raw trading bars exist before the first factor event"
+					} else if len(preRaw) != len(preForward) {
+						item.PreFirstEventStatus = "mismatch"
+						item.PreFirstEventError = "pre-first-event raw/qfq row counts differ"
+					} else {
+						probeItem := liveBaoStockAdjustmentItem{Symbol: symbol}
+						start := len(preRaw) - 5
+						if start < 0 {
+							start = 0
+						}
+					for index := start; index < len(preRaw); index++ {
+						if preRaw[index].Date != preForward[index].Date || preRaw[index].Date >= firstFactor.OperateDate {
+							item.PreFirstEventStatus = "mismatch"
+							item.PreFirstEventError = "pre-first-event raw/qfq dates are inconsistent with the first factor event"
+							break
+						}
+						for _, field := range []string{"open", "high", "low", "close"} {
+							rawValue, rawValueErr := parseLiveBaoStockPrice(preRaw[index], field)
+							forwardValue, forwardValueErr := parseLiveBaoStockPrice(preForward[index], field)
+							if rawValueErr != nil || forwardValueErr != nil {
+								item.PreFirstEventStatus = "unavailable"
+								item.PreFirstEventError = strings.TrimSpace(strings.Join([]string{errorText(rawValueErr), errorText(forwardValueErr)}, "; "))
+								break
+							}
+							compareLiveAdjustment(&probeItem, preRaw[index].Date, "qfq_pre_first_event_latest_factor_fallback", field, rawValue*latestFactor.ForwardFactor, forwardValue)
+						}
+						if item.PreFirstEventError != "" {
+							break
+						}
+					}
+					item.PreFirstEventRows = len(preRaw) - start
+					item.PreFirstEventFactorDate = latestFactor.OperateDate
+					item.PreFirstEventMismatches = probeItem.Mismatches
+					if item.PreFirstEventStatus == "" {
+						if len(item.PreFirstEventMismatches) > 0 {
+							item.PreFirstEventStatus = "mismatch"
+						} else {
+							item.PreFirstEventStatus = "matched"
+						}
+					}
+				}
+				}
+			}
+		} else {
+			item.PreFirstEventStatus = "unavailable"
+			item.PreFirstEventError = "no valid first/latest adjustment-factor event dates"
+		}
 		if item.Error != "" {
 			failures = append(failures, symbol+": "+item.Error)
 		}
@@ -186,6 +258,22 @@ func TestLatestLiveAdjustmentFactorUsesLatestEffectiveEvent(t *testing.T) {
 			}
 		})
 	}
+}
+
+func liveAdjustmentFactorBounds(factors []AdjustmentFactor) (AdjustmentFactor, AdjustmentFactor, bool) {
+	var first, latest AdjustmentFactor
+	for _, factor := range factors {
+		if _, err := time.Parse("2006-01-02", factor.OperateDate); err != nil {
+			continue
+		}
+		if first.OperateDate == "" || factor.OperateDate < first.OperateDate {
+			first = factor
+		}
+		if latest.OperateDate == "" || factor.OperateDate > latest.OperateDate {
+			latest = factor
+		}
+	}
+	return first, latest, first.OperateDate != "" && latest.OperateDate != ""
 }
 
 func latestLiveAdjustmentFactor(factors []AdjustmentFactor, tradeDate string) (AdjustmentFactor, bool) {

@@ -258,3 +258,10 @@
 - 两个中间 SHA 分别出现编译参数错误和旧测试夹具缺少来源元数据，已修复；只有最终 SHA 全量 CI 计通过。
 - current helper 未接入 DailyBars：当前没有不要求 AvailableAt 的 Repository current factor read；RefreshAdjustmentFactors 返回的值缺 SystemObservedAt，且会选择第一个 factor Provider，不能保证和 raw K 同源。明确业务场景出现前不新增 current 查询 API 或接入普通行情。
 - 阶段 B 仍 in_progress；BaoStock AvailableAt 未知意味着 PIT 仍不可用。
+
+
+## 2026-11-05 P0 批次 33：BaoStock 首因子事件前 qfq fallback 真实探测
+
+- 官方本地复权示例在 trade_date 早于首个 `dividOperateDate` 时，使用因子序列最新的 `foreAdjustFactor` 作为 qfq fallback；本项目当前 helper 选择 fail-closed。两者存在明确语义差异，不能凭代码推断谁正确。
+- 新增真实探测：两只样本证券的首个因子事件日前，抽取最多 5 根 raw 日 K，以最新 fore factor 直接乘 raw OHLC，与同源 qfq OHLC 对账；结果单独报告，不自动改变生产算法。
+- 只有真实对账匹配后才考虑为 BaoStock forward basis 增加首事件前 fallback；不影响 backward/shared 因子。
