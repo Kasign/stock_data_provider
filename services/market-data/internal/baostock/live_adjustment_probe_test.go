@@ -13,12 +13,12 @@ import (
 )
 
 type liveBaoStockAdjustmentReport struct {
-	GeneratedAt         string                       `json:"generated_at"`
-	StartDate           string                       `json:"start_date"`
-	EndDate             string                       `json:"end_date"`
-	DateSemanticsNote   string                       `json:"date_semantics_note"`
-	AvailabilityAtNote  string                       `json:"available_at_note"`
-	Items               []liveBaoStockAdjustmentItem `json:"items"`
+	GeneratedAt        string                       `json:"generated_at"`
+	StartDate          string                       `json:"start_date"`
+	EndDate            string                       `json:"end_date"`
+	DateSemanticsNote  string                       `json:"date_semantics_note"`
+	AvailabilityAtNote string                       `json:"available_at_note"`
+	Items              []liveBaoStockAdjustmentItem `json:"items"`
 }
 
 type liveBaoStockAdjustmentItem struct {
