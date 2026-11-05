@@ -1919,8 +1919,9 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-table-secondary {
   margin-top:4px;
   color:var(--text-dim);
-  font-size:10px;
-  font-variant-numeric:tabular-nums
+  font-size:12px;
+  font-variant-numeric:tabular-nums;
+  line-height:1.45
 }
 .market-rank-cell {
   color:var(--text-dim);
@@ -3290,7 +3291,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .market-overview-updated { max-width: 340px; font-size: 12px; line-height: 1.6; }
 
 
-.market-table-secondary { font-size: 12px; line-height: 1.45; }
 .market-touch-time { font-size: 12px; line-height: 1.5; }
 .market-quality-reasons { font-size: 12px; line-height: 1.7; }
 .market-overview-actions .button { min-height: 38px; font-size: 12px; }
