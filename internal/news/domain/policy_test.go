@@ -105,14 +105,14 @@ func durationPointer(value time.Duration) *time.Duration {
 
 func validProviderOutputPolicy() ProviderOutputPolicy {
 	return ProviderOutputPolicy{
-		Status:                   AuthorizationApproved,
-		AllowedPurposes:          []Purpose{PurposeInternalPersonalResearch},
-		AllowedContentKinds:      []ContentKind{ContentMetadata},
+		Status:                  AuthorizationApproved,
+		AllowedPurposes:         []Purpose{PurposeInternalPersonalResearch},
+		AllowedContentKinds:     []ContentKind{ContentMetadata},
 		AllowRequestProcessing:  true,
 		MaxRequestRetention:     time.Hour,
 		AllowedStorageModes:     []StorageMode{StoragePersistentMetadata},
 		MaxPersistenceRetention: 7 * 24 * time.Hour,
-		EvidenceRef:              "provider-terms:tavily:v1",
+		EvidenceRef:             "provider-terms:tavily:v1",
 	}
 }
 
