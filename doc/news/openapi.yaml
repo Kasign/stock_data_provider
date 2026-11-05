@@ -3,15 +3,15 @@ info:
   title: News Data API
   version: 0.1.0-draft
   description: |
-    新闻模块 API 草案。路由由根 stock-analysis-server:8092 统一注册；新闻模块不独立部署或实现认证，
-    对外请求继承 Server 的认证与权限边界，内部 Application 调用不经过 HTTP。
-    当前 Server 静态盘点未发现认证中间件；管理类路由在 Server 级认证/管理员授权落地前不得无保护开放。
-    本文件仍为草案，不代表接口已经实现。
+    未来 HTTP API 评估草案。当前没有新闻独立对外 API 计划，本文件中的 paths 不得注册或作为当前实现任务。
+    新闻模块作为 stock-analysis-server:8092 进程内业务模块，由同进程 Application 接口提供能力。
+    若未来既有 Server API 需要输出新闻数据，由该既有 API 负责认证、授权和限流；不新增新闻独立服务或独立入口。
+    本文件仅保留未来评估参考，不代表接口已经实现。
 servers:
   - url: /
 tags:
   - name: News
-    description: 新闻查询与来源诊断
+    description: 未来可能的新闻 HTTP 契约（当前不注册、不对外提供）
 paths:
   /api/v1/news:
     get:
@@ -72,7 +72,7 @@ paths:
       tags: [News]
       summary: 搜索候选新闻
       operationId: searchNews
-      description: 由根 Server 统一认证与授权；搜索默认只返回候选，不隐式入库。复杂查询参数放在请求体中，避免进入 URL 日志。
+      description: 未来候选接口；当前不注册。若未来由既有 Server API 承载，认证授权由该 API 负责。搜索默认只返回候选，不隐式入库。
       requestBody:
         required: true
         content:
@@ -131,7 +131,7 @@ paths:
       tags: [News]
       summary: 查询新闻来源
       operationId: listNewsSources
-      description: 来源目录查询由 Server 统一授权；任何来源写操作或主动采集操作均要求管理员权限，当前不定义新闻专属认证方案。
+      description: 未来候选接口；当前不注册。来源写操作和主动采集属于内部运维能力，不应直接暴露为公网接口。
       responses:
         '200':
           description: 来源列表和状态
@@ -145,7 +145,7 @@ paths:
       tags: [News]
       summary: 查询新闻来源诊断
       operationId: getNewsDiagnostics
-      description: 由 Server 统一授权；响应必须脱敏内部地址、密钥和敏感错误细节。
+      description: 未来候选接口；当前不注册。若未来由既有 Server API 输出诊断信息，必须脱敏内部地址、密钥和敏感错误细节。
       responses:
         '200':
           description: 来源可用性和质量诊断
