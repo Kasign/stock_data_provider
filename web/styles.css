@@ -475,7 +475,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
    color: #b5c7d3;
    background: #091119;
    font-size: 9px;
-   line-height: 1.6;
+   line-height: 1.7;
    white-space: pre-wrap;
    overflow-wrap: anywhere;
 }
@@ -812,8 +812,6 @@ td { font-size: 12px !important; }
 .table-scroll td { font-size: 13px !important; }
 .analysis-result-fields dt { font-size: 12px !important; }
 
-
-.raw-result pre { font-size: 12px !important; line-height: 1.7; }
 @media (max-width: 600px) {
   .main-area { padding-left: 12px; padding-right: 12px; }
   .search-panel { gap: 15px; }
