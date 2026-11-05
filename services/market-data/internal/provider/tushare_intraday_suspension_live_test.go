@@ -32,6 +32,7 @@ type liveTushareIntradaySuspensionSample struct {
 	Status          string `json:"status"`
 	Error           string `json:"error,omitempty"`
 }
+
 // TestLiveTushareIntradaySuspensionSamples checks official exchange intraday
 // suspension announcements against Tushare suspend_d and the same-day Pytdx bar.
 // The test performs at most four suspend_d requests and stops immediately on 40203.
