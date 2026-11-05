@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 	"sync/atomic"
-	"strings"
 	"testing"
 	"time"
 
