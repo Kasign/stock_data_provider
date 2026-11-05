@@ -27,6 +27,7 @@ const (
 	maxResponseBytesLimit        = int64(16 << 20)
 	defaultMaxConcurrent         = 4
 	maxConcurrentLimit           = 32
+	maxDependencyLimitEntries   = 64
 	maxRetryLimit                = 2
 )
 
@@ -104,6 +105,10 @@ func New(config Config) (*Client, error) {
 	}
 	if config.MaxConcurrent > maxConcurrentLimit {
 		return nil, fmt.Errorf("max concurrent requests cannot exceed %d", maxConcurrentLimit)
+	}
+
+	if len(config.DependencyLimits) > maxDependencyLimitEntries {
+		return nil, fmt.Errorf("dependency limits cannot exceed %d entries", maxDependencyLimitEntries)
 	}
 
 	limits := make(map[string]int, len(config.DependencyLimits))
