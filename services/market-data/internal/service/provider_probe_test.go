@@ -610,7 +610,7 @@ func (p providerProbeDailyBarsFake) FetchDailyBars(_ context.Context, symbol, _,
 		Open: 10, High: 11, Low: 9, Close: p.close, Volume: &volume, Amount: &amount,
 		AdjustmentBasis: adjustment, Source: p.name, SourceVersion: p.name + "-v1",
 		ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
-		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: p.quality,
+		VolumeUnit: "shares", RawVolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: p.quality,
 	}}, nil
 }
 
@@ -697,7 +697,7 @@ func (p *providerProbeHistoricalDailyBarsFake) FetchDailyBars(_ context.Context,
 		Symbol: symbol, TradeDate: startDate, Period: "1d", Open: 10, High: 11, Low: 9, Close: 10.5,
 		Volume: &volume, Amount: &amount, AdjustmentBasis: adjustment, AdjustmentMethod: "historical-test-none",
 		Source: p.name, SourceVersion: p.name + "-v1", ProviderTime: &now, FetchedAt: now, NormalizedAt: now,
-		VolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
+		VolumeUnit: "shares", RawVolumeUnit: "shares", AmountUnit: "CNY", QualityStatus: model.QualityValid,
 	}}, nil
 }
 
@@ -934,12 +934,12 @@ func TestBuildCrossProviderProbeCheckResultsPreservesAdjustmentEvidence(t *testi
 	left := &provider.CrossProviderDailySnapshot{
 		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",
 		AdjustmentBasis: "backward_adjusted", QualityStatus: "valid",
-		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", AdjustmentMethod: "left_hfq", AdjustmentRefDate: "2026-11-03"}},
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1, AdjustmentMethod: "left_hfq", AdjustmentRefDate: "2026-11-03"}},
 	}
 	right := &provider.CrossProviderDailySnapshot{
 		Provider: "right", SourceVersion: "right-v1", Symbol: "600036.SH",
 		AdjustmentBasis: "backward_adjusted", QualityStatus: "valid",
-		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", AdjustmentMethod: "right_hfq", AdjustmentRefDate: "2026-11-03"}},
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1, AdjustmentMethod: "right_hfq", AdjustmentRefDate: "2026-11-03"}},
 	}
 	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
 	if len(results) != 1 {
@@ -957,12 +957,12 @@ func TestBuildCrossProviderProbeCheckResultsRejectsDegradedSnapshots(t *testing.
 	left := &provider.CrossProviderDailySnapshot{
 		Provider: "left", SourceVersion: "left-v1", Symbol: "600036.SH",
 		AdjustmentBasis: "none", QualityStatus: "degraded",
-		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares"}},
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1}},
 	}
 	right := &provider.CrossProviderDailySnapshot{
 		Provider: "right", SourceVersion: "right-v1", Symbol: "600036.SH",
 		AdjustmentBasis: "none", QualityStatus: "valid",
-		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares"}},
+		Bars: []provider.CrossProviderDailyBar{{TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10, Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1}},
 	}
 	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
 	if len(results) != 1 || results[0].Status != "skipped" || results[0].ErrorCode != "comparison_not_comparable" {
@@ -1006,7 +1006,7 @@ func TestBuildCrossProviderProbeCheckResultsIncludesFieldLevelEvidence(t *testin
 		AdjustmentBasis: "none", QualityStatus: "valid",
 		Bars: []provider.CrossProviderDailyBar{{
 			TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10.5,
-			Volume: 100, VolumeUnit: "shares",
+			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
 		}},
 	}
 	right := &provider.CrossProviderDailySnapshot{
@@ -1014,7 +1014,7 @@ func TestBuildCrossProviderProbeCheckResultsIncludesFieldLevelEvidence(t *testin
 		AdjustmentBasis: "none", QualityStatus: "valid",
 		Bars: []provider.CrossProviderDailyBar{{
 			TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10.5,
-			Volume: 100, VolumeUnit: "shares",
+			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
 		}},
 	}
 	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())
@@ -1057,7 +1057,7 @@ func TestBuildCrossProviderProbeCheckResultsExposesMismatchValuesAndTolerance(t 
 		AdjustmentBasis: "none", QualityStatus: "valid",
 		Bars: []provider.CrossProviderDailyBar{{
 			TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10.5,
-			Volume: 100, VolumeUnit: "shares",
+			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
 		}},
 	}
 	right := &provider.CrossProviderDailySnapshot{
@@ -1065,7 +1065,7 @@ func TestBuildCrossProviderProbeCheckResultsExposesMismatchValuesAndTolerance(t 
 		AdjustmentBasis: "none", QualityStatus: "valid",
 		Bars: []provider.CrossProviderDailyBar{{
 			TradeDate: "2026-10-29", Open: 10, High: 11, Low: 9, Close: 10.7,
-			Volume: 100, VolumeUnit: "shares",
+			Volume: 100, VolumeUnit: "shares", VolumeGranularity: 1,
 		}},
 	}
 	results := buildCrossProviderProbeCheckResults([]*provider.CrossProviderDailySnapshot{left, right}, time.Now().UTC())

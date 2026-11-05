@@ -25,6 +25,19 @@ type CrossProviderDailySnapshot struct {
 	Bars            []CrossProviderDailyBar
 }
 
+// CrossProviderVolumeGranularity 根据原始成交量单位返回归一化股数粒度。
+// hands/hands_inferred 的源值以手计，每手 100 股；shares 的源值以股计，粒度为 1。
+// 未知原始单位返回 0，比较器据此判定 not_comparable。
+func CrossProviderVolumeGranularity(rawVolumeUnit string) int64 {
+	switch strings.ToLower(strings.TrimSpace(rawVolumeUnit)) {
+	case "hands", "hands_inferred":
+		return 100
+	case "shares":
+		return 1
+	default:
+		return 0
+	}
+}
 // CrossProviderDailyBar 表示一个交易日的标准化日 K。
 type CrossProviderDailyBar struct {
 	TradeDate         string
