@@ -2319,11 +2319,11 @@ test("UIR-2 typography roles use semantic tokens without changing their baseline
 
 
 test("UIR-2 正文与常规控件使用统一的最终计算基线", () => {
-  assert.match(stylesheet, /--control-height-base:\\s*40px/);
-  assert.match(stylesheet, /--font-size-body-readable:\\s*14px/);
-  assert.match(stylesheet, /--line-height-body:\\s*1\\.55/);
-  assert.match(stylesheet, /body \\{\\s*font-size: var\\(--font-size-body-readable\\);\\s*line-height: var\\(--line-height-body\\);\\s*\\}/);
-  assert.match(stylesheet, /\\.button \\{\\s*min-height: var\\(--control-height-base\\);/);
-  assert.match(stylesheet, /\\.field input,\\s*\\.field select,\\s*\\.field textarea \\{\\s*min-height: var\\(--control-height-base\\);/);
-  assert.match(stylesheet, /\\.settings-dialog \\.field input \\{ min-height: var\\(--control-height-base\\); \\}/);
+  assert.ok(stylesheet.includes("--control-height-base: 40px;"));
+  assert.ok(stylesheet.includes("--font-size-body-readable: 14px;"));
+  assert.ok(stylesheet.includes("--line-height-body: 1.55;"));
+  assert.ok(stylesheet.includes("body {\\n  font-size: var(--font-size-body-readable);\\n  line-height: var(--line-height-body);\\n}"));
+  assert.ok(stylesheet.includes(".button {\\n  min-height: var(--control-height-base);"));
+  assert.ok(stylesheet.includes(".field input,\\n.field select,\\n.field textarea {\\n  min-height: var(--control-height-base);"));
+  assert.ok(stylesheet.includes(".settings-dialog .field input { min-height: var(--control-height-base); }"));
 });
