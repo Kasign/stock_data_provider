@@ -464,3 +464,24 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - 两只股票 none/qfq/hfq 各 9 条，均 9/9 valid，method/ref-date 断言通过。
 - Go test suite Run `41960406782` 全部通过。
 - 该元数据描述 Pytdx 自身复权锚点；与 BaoStock 的方法不同，不能据此直接跨源比较 adjusted OHLC。
+
+
+## 23. 2026-11-05：BaoStock 八只证券真实复权与上市日期对账
+
+- 代码 SHA：`687b49a190e661bed0855ab3f5bfd367bf9bd4c1`；Push Live Provider Probe Run `42017059794` success，BaoStock 专项 `TestLiveBaoStockAdjustmentFactorConsistency` 实际运行并产出 Artifact `live-baostock-adjustment-report`（ID `13409567542`）。
+- 请求窗口：因子历史 `1990-01-01` 至探测日；OHLC 主窗口 `2025-07-07` 至 `2025-07-17`。
+
+| 证券 | 因子行数 | 首因子日期 | raw/qfq/hfq 行数 | OHLC mismatch |
+|---|---:|---|---:|---:|
+| 000001.SZ | 42 | 1991-04-03 | 9/9/9 | 0 |
+| 000002.SZ | 46 | 1991-01-29 | 9/9/9 | 0 |
+| 000858.SZ | 31 | 1998-04-27 | 9/9/9 | 0 |
+| 600000.SH | 27 | 1999-11-10 | 9/9/9 | 0 |
+| 600016.SH | 40 | 2000-12-19 | 9/9/9 | 0 |
+| 600601.SH | 29 | 1990-12-19 | 9/9/9 | 0 |
+| 600036.SH | 30 | 2002-04-09 | 9/9/9 | 0 |
+| 002982.SZ | 8 | 2020-04-24 | 9/9/9 | 0 |
+
+- 八只证券首因子日期均与独立上市日期核验一致：000001（公司资料）、000002（巨潮/发行人文件）、000858（公司资料）、600000/600601（上交所公司概况）、600016（公司资料）、600036（发行人上市文件）、002982（深交所上市公告）。上市日期是独立证据，不由 BaoStock 因子推断。
+- 旧报告八只 `pre_first_event_status=unavailable`，因为 1990 至首事件前一天 raw 查询为空。结合上市日期证据，这八只均不存在上市交易日前的交易日，适用性应为 `not_applicable`，不能计为 matched，也不能据此证明 fallback 公式。
+- 本批仅证明 2025 主窗口 BaoStock 自身 raw × 因子与自身 qfq/hfq OHLC 一致；不证明跨 Provider parity、AvailableAt 或 PIT 可见性。生产 helper 继续 fail-closed。

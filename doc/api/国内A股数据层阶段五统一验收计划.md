@@ -310,3 +310,17 @@
 - 报告新增 `history_start_date`，仅表示请求窗口起点，不代表 Provider 最早可用日期或证券上市日期。
 - 首事件不晚于请求起点才可判 `not_applicable`；无效日期、请求失败，以及首事件晚于起点但 raw 查询为空且无法区分覆盖缺口时均为 `unavailable`。
 - 新增窗口分类边界单测。此项为探测方法修正，不产生真实复权匹配证据；八只证券真实报告待带标记 Push workflow 执行。AvailableAt 仍未知，PIT 不可用。
+
+
+## 2026-11-05 P0 批次 38：BaoStock 八只证券真实报告
+
+- 代码 SHA `687b49a190e661bed0855ab3f5bfd367bf9bd4c1`；Push Live Probe Run `42017059794` success，BaoStock 专项测试实际执行并上传 Artifact `13409567542`；Push Go suite Run `42017059947` success。
+- `1990-01-01` 起查询因子；2025-07-07 至 2025-07-17 主窗口八只证券 raw/qfq/hfq 均各 9 行，OHLC mismatches 均为 0；因子数量依次为 42、46、31、27、40、29、30、8。
+- 八只证券首因子日期与独立核验的 A 股上市日期一致。首事件前无上市交易日，旧报告 `pre_first_event_status=unavailable` 仅代表空查询不能单独区分覆盖缺口；结合上市日期证据后，本次八个样本对首事件前 fallback 均为 `not_applicable`，不计 matched。
+- 不再盲目扩大同类候选，不开放生产 fallback。AvailableAt 未知，PIT fail-closed。
+
+## 2026-11-05 P0 批次 39：上市日期驱动的首事件前分类
+
+- 专项测试候选增加独立上市日期和来源 URL；报告增加 `listing_date`、`listing_date_source`，仅属于测试证据，不是生产 API 字段。
+- 首因子早于上市日为 mismatch；等于上市日为 not_applicable；晚于上市日才请求首事件前 raw/qfq，空样本为 unavailable。
+- 新增分类边界单测。代码 SHA `2c3fb0b0373d72a45ee408a8ccc09a5d1ded170d` 的 CI/专项报告待验。
