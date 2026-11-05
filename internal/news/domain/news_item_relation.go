@@ -12,6 +12,7 @@ const (
 )
 
 // NewsItemRelation 表示不同发布来源之间的转载/再发布关系，不合并两条新闻主体。
+// FromVersionID/ToVersionID 固定关系证据所依据的双方内容版本，不随最新版本自动漂移。
 type NewsItemRelation struct {
 	ID                  string
 	FromNewsID          string
@@ -20,12 +21,23 @@ type NewsItemRelation struct {
 	ToSourceID          string
 	Kind                NewsItemRelationKind
 	EvidenceObservation string
-	EvidenceVersion     string
+	FromVersionID       string
+	ToVersionID         string
 }
+
+type NewsItemRelationEvidenceStatus string
+
+const (
+	NewsItemRelationEvidenceUnversioned NewsItemRelationEvidenceStatus = "unversioned"
+	NewsItemRelationEvidenceCurrent     NewsItemRelationEvidenceStatus = "current"
+	NewsItemRelationEvidenceStale       NewsItemRelationEvidenceStatus = "stale"
+)
 
 var ErrNewsItemRelationInvalid = errors.New("news.item_relation.invalid")
 
 func ValidateNewsItemRelation(relation NewsItemRelation) error {
+	fromVersionID := strings.TrimSpace(relation.FromVersionID)
+	toVersionID := strings.TrimSpace(relation.ToVersionID)
 	if strings.TrimSpace(relation.ID) == "" ||
 		strings.TrimSpace(relation.FromNewsID) == "" ||
 		strings.TrimSpace(relation.ToNewsID) == "" ||
@@ -34,10 +46,34 @@ func ValidateNewsItemRelation(relation NewsItemRelation) error {
 		strings.TrimSpace(relation.ToSourceID) == "" ||
 		relation.FromSourceID == relation.ToSourceID ||
 		relation.Kind != NewsItemRelationRepostOf ||
-		(relation.EvidenceObservation == "" && relation.EvidenceVersion == "") {
+		(strings.TrimSpace(relation.EvidenceObservation) == "" && (fromVersionID == "" || toVersionID == "")) ||
+		((fromVersionID == "") != (toVersionID == "")) {
 		return ErrNewsItemRelationInvalid
 	}
 	return nil
+}
+
+// AssessNewsItemRelationEvidence 比较关系证据绑定的双方版本与各自最新版本。
+// 内容任一侧发生修订即返回 stale，要求重新评估；不会自动把历史证据改绑到新版本。
+func AssessNewsItemRelationEvidence(
+	relation NewsItemRelation,
+	fromCurrentVersionID, toCurrentVersionID string,
+) (NewsItemRelationEvidenceStatus, error) {
+	if err := ValidateNewsItemRelation(relation); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(relation.FromVersionID) == "" || strings.TrimSpace(relation.ToVersionID) == "" {
+		return NewsItemRelationEvidenceUnversioned, nil
+	}
+	fromCurrentVersionID = strings.TrimSpace(fromCurrentVersionID)
+	toCurrentVersionID = strings.TrimSpace(toCurrentVersionID)
+	if fromCurrentVersionID == "" || toCurrentVersionID == "" {
+		return "", ErrNewsItemRelationInvalid
+	}
+	if relation.FromVersionID != fromCurrentVersionID || relation.ToVersionID != toCurrentVersionID {
+		return NewsItemRelationEvidenceStale, nil
+	}
+	return NewsItemRelationEvidenceCurrent, nil
 }
 
 // ValidateNewsItemRelationGraph 拒绝重复边和循环转载链；FromNewsID 指转载方，ToNewsID 指原始来源项。
