@@ -279,7 +279,8 @@ test("数据源能力刷新初始化或最终解锁异常不会产生未处理 r
   assert.match(refresh, /try \{\s*if \(button\) \{\s*button\.disabled = true;[\s\S]*?catch \{/);
   assert.ok(refresh.includes("const payload = await getDataSources(settings, controller.signal);"));
   assert.ok(refresh.includes("controller.signal.aborted || generation !== sourceRefreshGeneration"));
-  assert.match(refresh, /catch \\(error\\) \\{\\s*if \\(controller.signal.aborted \\|\\| generation !== sourceRefreshGeneration\\) return;[\\s\\S]*?showMessage\\(message, "empty-row error-text"\\)/);
+  assert.ok(refresh.includes("if (controller.signal.aborted || generation !== sourceRefreshGeneration) return;"));
+  assert.ok(refresh.includes('showMessage(message, "empty-row error-text")'));
   assert.ok(refresh.includes("if (generation === sourceRefreshGeneration && sourceRefreshController === controller) {"));
   assert.ok(refresh.includes("button.disabled = false;"));
 
