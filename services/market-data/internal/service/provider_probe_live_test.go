@@ -38,7 +38,7 @@ func TestLiveHistoricalProviderProbe(t *testing.T) {
 	defer func() { _ = baoClient.Close() }()
 
 	all := []provider.NamedProvider{sina, tencent, eastmoney, yahoo, bao}
-	bars := []provider.DailyBarProvider{sina, tencent, eastmoney, yahoo}
+	bars := []provider.DailyBarProvider{sina, tencent, eastmoney, yahoo, bao}
 	calendarProviders := []provider.TradingCalendarProvider{bao}
 	var statusProviders []provider.SecurityTradingStatusProvider
 	if token := strings.TrimSpace(os.Getenv("MARKET_DATA_TUSHARE_TOKEN")); token != "" {
