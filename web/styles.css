@@ -484,7 +484,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 
 /* Single-stock analysis and structured RunResult presentation. */
 .quote-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
-.quote-heading-actions .button { min-height: 34px; padding: 0 12px; font-size: 10px; }
+.quote-heading-actions .button { min-height: 34px; padding: 0 12px; font-size: 12px; }
 .analysis-result-sections { display: grid; gap: 14px; margin-top: 15px; }
 .analysis-result-block { min-width: 0; padding: 16px; border: 1px solid #253541; border-radius: 10px; background: rgba(10, 18, 26, .45); }
 .analysis-result-block > h3 { margin: 0 0 12px; color: var(--text); font-size: 14px; font-weight: 650; line-height: 1.45; }
@@ -662,11 +662,11 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 
 /* Recent-analysis local history controls: searchable references, not server-side history. */
 .recent-analysis-tools { display: flex; align-items: end; gap: 10px; margin: 0 0 12px; }
-.recent-analysis-search { display: flex; flex: 1; flex-direction: column; gap: 5px; min-width: 0; color: #9db0bf; font-size: 11px; }
+.recent-analysis-search { display: flex; flex: 1; flex-direction: column; gap: 5px; min-width: 0; color: #9db0bf; font-size: 13px; }
 .recent-analysis-search input { width: 100%; min-height: 36px; padding: 8px 10px; border: 1px solid #2b3c4a; border-radius: 7px; outline: none; background: #0c151e; color: #e3edf3; font: inherit; }
 .recent-analysis-search input:focus { border-color: #648ca7; box-shadow: 0 0 0 2px rgb(100 140 167 / 16%); }
 .recent-analysis-clear { flex: 0 0 auto; min-height: 36px; }
-.recent-analysis-feedback { margin: 0 0 10px; color: var(--text-dim); font-size: 11px; line-height: 1.6; }
+.recent-analysis-feedback { margin: 0 0 10px; color: var(--text-dim); font-size: 13px; line-height: 1.6; }
 .recent-analysis-feedback.is-error { color: #f0a2a9; }
 .recent-analysis-item { display: flex; align-items: stretch; min-width: 0; padding: 0; overflow: hidden; }
 .recent-analysis-open {
@@ -692,7 +692,7 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
    border-radius: 6px;
    color: #a8bac7;
    background: #17212b;
-   font-size: 10px;
+   font-size: 12px;
    cursor: pointer;
 }
 .recent-analysis-remove:hover { border-color: #8d5c65; color: #f1b4ba; background: #2a1b21; }
@@ -735,10 +735,6 @@ td { font-size: 12px !important; }
 .dialog-intro { font-size: 13px !important; }
 .security-note { font-size: 12px !important; }
 .settings-feedback { font-size: 12px !important; }
-.quote-heading-actions .button { font-size: 12px !important; }
-.recent-analysis-search { font-size: 13px !important; }
-.recent-analysis-feedback { font-size: 13px !important; }
-.recent-analysis-remove { font-size: 12px !important; }
 
 .field input, .field select, .field textarea, .recent-analysis-search input { font-size: var(--font-size-input); }
 .button { font-size: 13px; }

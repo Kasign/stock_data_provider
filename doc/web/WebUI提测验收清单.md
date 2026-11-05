@@ -1797,3 +1797,12 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 锁定基础字号、错误/警示颜色及 Run Flow 紧凑字号边界。
 - [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
 - [ ] 执行 Chromium Browser Smoke；人工核验任务空态、任务详情、服务边界说明和表单提示在多分辨率下的实际可读性。
+
+## 2026-11-05 UIR-2 第四十一批：最近分析与结果操作字号收敛
+
+- [x] 最近分析搜索标签、反馈、移除操作和分析结果标题操作按钮迁移至组件基础字号。
+- [x] 删除 4 条全局 `!important` 字号覆盖；保留输入继承、错误语义色和键盘焦点。
+- [x] 保留 600px 下工具区纵向排列及操作按钮紧凑内边距。
+- [x] UI contract 锁定基础字号、语义反馈、焦点和移动端布局。
+- [ ] 在本批最终提交 SHA 上运行 WebUI Checks、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke；人工核验最近分析搜索/反馈、移除操作和分析结果标题按钮在多分辨率下的实际可读性。

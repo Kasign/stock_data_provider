@@ -2723,3 +2723,23 @@ test("UIR-2 任务空态、任务标识与边界说明使用组件基础字号",
   assert.match(stylesheet, /\.task-facts small \{[^}]*font-size:\s*9px;/, "Run Flow compact fact labels retain their component-specific sizing");
   assert.match(stylesheet, /\.run-flow-dialog \.task-facts strong \{\s*font-size:\s*12px;/, "Run Flow compact fact values retain their component-specific sizing");
 });
+
+
+test("UIR-2 最近分析搜索、反馈和移除操作使用组件基础字号", () => {
+  const expectedSizes = [
+    [".recent-analysis-search", /font-size:\s*13px\s*;/],
+    [".recent-analysis-feedback", /font-size:\s*13px\s*;/],
+    [".recent-analysis-remove", /font-size:\s*12px\s*;/],
+    [".quote-heading-actions .button", /font-size:\s*12px\s*;/]
+  ];
+  for (const [selector, sizePattern] of expectedSizes) {
+    const declaration = baseCssDeclarationBlock(selector);
+    assert.match(declaration, sizePattern, selector + " must own its readable base font size");
+    assert.doesNotMatch(declaration, /!important/);
+  }
+  assert.match(stylesheet, /\.recent-analysis-search input \{[^}]*font: inherit;/, "search input keeps inheriting the label font family and size");
+  assert.match(stylesheet, /\.recent-analysis-feedback\.is-error \{ color: #f0a2a9; \}/, "error feedback retains its semantic color");
+  assert.match(stylesheet, /\.recent-analysis-open:focus-visible, \.recent-analysis-remove:focus-visible \{ outline: 2px solid #8fb6cf;/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.recent-analysis-tools \{ align-items: stretch; flex-direction: column; \}/);
+  assert.match(stylesheet, /@media \(max-width: 600px\) \{[\s\S]*?\.quote-heading-actions \.button \{ padding: 0 9px; \}/);
+});
