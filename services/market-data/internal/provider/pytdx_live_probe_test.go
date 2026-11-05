@@ -24,16 +24,16 @@ type pytdxRawCrossProviderField struct {
 }
 
 type pytdxRawCrossProviderResult struct {
-	Status                 string                        `json:"status"`
-	Reason                 string                        `json:"reason,omitempty"`
-	PytdxQualityStatus     string                        `json:"pytdx_quality_status,omitempty"`
-	BaoStockQualityStatus string                        `json:"baostock_quality_status,omitempty"`
-	BaoStockRows           int                           `json:"baostock_rows,omitempty"`
-	BaoStockFirstDate      string                        `json:"baostock_first_date,omitempty"`
-	BaoStockLastDate       string                        `json:"baostock_last_date,omitempty"`
-	ComparedDates          []string                      `json:"compared_dates,omitempty"`
-	Fields                 []pytdxRawCrossProviderField `json:"fields,omitempty"`
-	Error                  string                        `json:"error,omitempty"`
+	Status                string                       `json:"status"`
+	Reason                string                       `json:"reason,omitempty"`
+	PytdxQualityStatus    string                       `json:"pytdx_quality_status,omitempty"`
+	BaoStockQualityStatus string                       `json:"baostock_quality_status,omitempty"`
+	BaoStockRows          int                          `json:"baostock_rows,omitempty"`
+	BaoStockFirstDate     string                       `json:"baostock_first_date,omitempty"`
+	BaoStockLastDate      string                       `json:"baostock_last_date,omitempty"`
+	ComparedDates         []string                     `json:"compared_dates,omitempty"`
+	Fields                []pytdxRawCrossProviderField `json:"fields,omitempty"`
+	Error                 string                       `json:"error,omitempty"`
 }
 type pytdxHistoricalProbeItem struct {
 	Symbol             string                `json:"symbol"`
@@ -45,9 +45,9 @@ type pytdxHistoricalProbeItem struct {
 	AdjustmentMethods  []string              `json:"adjustment_methods,omitempty"`
 	AdjustmentRefDates []string              `json:"adjustment_reference_dates,omitempty"`
 	QualityCounts      map[string]int        `json:"quality_counts,omitempty"`
-	Error              string                        `json:"error,omitempty"`
+	Error              string                       `json:"error,omitempty"`
 	RawCrossProvider   *pytdxRawCrossProviderResult `json:"raw_cross_provider,omitempty"`
-	Bars               []model.DailyBar              `json:"bars,omitempty"`
+	Bars               []model.DailyBar             `json:"bars,omitempty"`
 }
 
 type pytdxHistoricalProbeReport struct {
