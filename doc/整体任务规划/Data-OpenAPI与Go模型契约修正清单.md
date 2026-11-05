@@ -702,7 +702,7 @@ Data 分支最新 HEAD 已推进至 `266ac21f5c840207f79aae8984021dac74185652`�
 
 #### 本轮结论与剩余门禁
 
-- 13 个应补 Schema 的字段分布在 7 个 Schema：ProviderProbeCheckResult（4）、MarketBreadthSnapshot（1）、LimitPoolItem（2）、FundamentalSection（1）、IndexConstituent（4）、SourceStatus（1）——实际为 **6 个 Schema、13 个字段**。其中 4 + 1 + 2 + 1 + 4 + 1 = 13。
+- 13 个应补 Schema 的字段分布在 6 个 Schema：ProviderProbeCheckResult（4）、MarketBreadthSnapshot（1）、LimitPoolItem（2）、FundamentalSection（1）、IndexConstituent（4）、SourceStatus（1）——实际为 **6 个 Schema、13 个字段**。其中 4 + 1 + 2 + 1 + 4 + 1 = 13。
 - 2 个无赋值/重复字段建议从 Go Model 删除，不应新增 OpenAPI 属性。
 - 当前 HTTP Handler 对上述父响应对象均直接调用 `writeJSON`，没有独立 Response DTO 转换层；因此 Model 的 JSON Tag 就是实际 HTTP 输出结构的一部分。
 - 这仍是静态追踪，没有修改 Data 代码，也没有为这 13 个字段运行真实 Handler Golden。应在 Data 分支实施时补 Schema、删除死字段，并覆盖有值/缺值/零值的 JSON 输出。
