@@ -194,6 +194,8 @@ func TestApplyNewsItemRelationSupportsProposedToConfirmedReplacement(t *testing.
 	r, u := relationAppFixture()
 	old := relationAppRequest().Relation
 	old.ID = "rel-old"
+	old.AssertedAt = u.now().UTC()
+	old.ObservedAt = u.now().UTC()
 	r.relations["news-from"] = []domain.NewsItemRelation{old}
 
 	proposal := relationAppRequest()
@@ -219,6 +221,8 @@ func TestApplyNewsItemRelationRechecksStaleEvidenceWithNewVersions(t *testing.T)
 	r, u := relationAppFixture()
 	old := relationAppRequest().Relation
 	old.ID = "rel-stale"
+	old.AssertedAt = u.now().UTC()
+	old.ObservedAt = u.now().UTC()
 	r.relations["news-from"] = []domain.NewsItemRelation{old}
 	r.versions["from-v2"] = domain.NewsItemVersion{
 		ID: "from-v2", NewsID: "news-from", VersionNo: 2, ObservationID: "from-obs",
