@@ -110,6 +110,33 @@ try {
     key: alertKey, item: alertDraft({ id: "alert-2", name: "外部启停规则", enabled: false })
   });
   await first.locator(".local-alert-draft-card").filter({ hasText: "外部启停规则" }).waitFor();
+  await second.evaluate(({ key, items }) => localStorage.setItem(key, JSON.stringify(items)), {
+    key: alertKey,
+    items: [
+      alertDraft({ id: "switch-1", name: "待切换规则一" }),
+      alertDraft({ id: "switch-2", name: "待切换规则二", symbol: "000001.SZ" })
+    ]
+  });
+  await first.locator(".local-alert-draft-card").filter({ hasText: "待切换规则一" }).waitFor();
+  await first.locator(".local-alert-draft-card").filter({ hasText: "待切换规则一" }).locator('[data-action="edit"]').click();
+  await first.locator("#alert-rule-name").fill("尚未保存的规则一修改");
+  first.once("dialog", dialog => dialog.dismiss());
+  await first.locator(".local-alert-draft-card").filter({ hasText: "待切换规则二" }).locator('[data-action="edit"]').click();
+  assert.equal(await first.locator("#alert-rule-name").inputValue(), "尚未保存的规则一修改",
+    "dismissing the editor-switch confirmation must preserve unsaved values");
+  first.once("dialog", dialog => dialog.accept());
+  await first.locator(".local-alert-draft-card").filter({ hasText: "待切换规则二" }).locator('[data-action="edit"]').click();
+  assert.equal(await first.locator("#alert-rule-name").inputValue(), "待切换规则二",
+    "accepting the editor-switch confirmation must load the selected saved draft");
+  await first.locator("#alert-rule-name").fill("未保存后放弃新建");
+  first.once("dialog", dialog => dialog.dismiss());
+  await first.locator("#alert-new-rule").click();
+  assert.equal(await first.locator("#alert-rule-name").inputValue(), "未保存后放弃新建",
+    "dismissing the new-draft confirmation must preserve the active editor");
+  first.once("dialog", dialog => dialog.accept());
+  await first.locator("#alert-new-rule").click();
+  assert.equal(await first.locator("#alert-rule-cancel").isHidden(), true,
+    "accepting the new-draft confirmation must leave edit mode");
   await second.evaluate(key => localStorage.removeItem(key), alertKey);
   await first.waitForFunction(() => document.querySelector("#local-alert-draft-list")?.textContent.includes("尚无本地规则草稿。"));
 

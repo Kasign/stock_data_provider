@@ -113,7 +113,20 @@ export function bindLocalAlertDrafts({ root = document, storage } = {}) {
 
   let editing = "";
   let editingSnapshot = "null";
+  let editorBaselineSnapshot = "";
   let conflict = false;
+
+  const currentEditorSnapshot = () => JSON.stringify({
+    name: $("#alert-rule-name").value,
+    type: $("#alert-rule-type").value,
+    threshold: $("#alert-rule-threshold").value,
+    scope: $("#alert-rule-scope").value,
+    symbol: $("#alert-rule-symbol").value,
+    severity: $("#alert-rule-severity").value,
+    enabled: $("#alert-rule-enabled").value
+  });
+
+  const hasUnsavedEditorChanges = () => currentEditorSnapshot() !== editorBaselineSnapshot;
 
   const feedback = (message, error = false) => {
     const node = $("#local-alert-draft-feedback");
@@ -130,6 +143,7 @@ export function bindLocalAlertDrafts({ root = document, storage } = {}) {
     $("#alert-rule-submit").textContent = "保存本地草稿";
     syncScope();
     syncThreshold();
+    editorBaselineSnapshot = currentEditorSnapshot();
   };
 
   const render = () => {
@@ -262,6 +276,7 @@ export function bindLocalAlertDrafts({ root = document, storage } = {}) {
   });
   $("#alert-new-rule").addEventListener("click", () => {
     if (editing) {
+      if (hasUnsavedEditorChanges() && !globalThis.confirm("当前规则有未保存的修改，确定放弃并新建草稿？")) return;
       resetEditor();
       feedback("已退出原规则编辑；可以新建草稿。");
     }
@@ -276,6 +291,7 @@ export function bindLocalAlertDrafts({ root = document, storage } = {}) {
     const item = result.items.find((entry) => entry.id === button.dataset.id);
     if (!item) return;
     if (button.dataset.action === "edit") {
+      if (hasUnsavedEditorChanges() && !globalThis.confirm("当前规则有未保存的修改，确定放弃并切换编辑对象？")) return;
       editing = item.id;
       editingSnapshot = itemSnapshot(item);
       conflict = false;
@@ -290,6 +306,7 @@ export function bindLocalAlertDrafts({ root = document, storage } = {}) {
       syncThreshold();
       $("#alert-rule-cancel").hidden = false;
       $("#alert-rule-submit").textContent = "更新本地草稿";
+      editorBaselineSnapshot = currentEditorSnapshot();
       feedback("正在编辑本地规则草稿。");
       form.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
