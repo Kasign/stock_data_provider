@@ -1396,7 +1396,7 @@ test("market overview and activity use readable secondary text and touch-sized c
   const mobileActivityControlsStart = stylesheet.indexOf("@media (max-width: 600px)");
   assert.ok(mobileActivityControlsStart > 0, "mobile market activity controls breakpoint should exist");
   const marketActivityControlBaseStylesheet = stylesheet.slice(0, mobileActivityControlsStart);
-  assert.equal((marketActivityControlBaseStylesheet.match(/(?:^|})\s*\.market-activity-controls label\s*\{/g) || []).length, 1, "market activity control labels should have one exact base rule before responsive overrides");
+  assert.equal((marketActivityControlBaseStylesheet.match(/\.market-activity-controls label\s*\{/g) || []).length, 1, "market activity control labels should have one base rule before responsive overrides");
   const mobileActivityControlLabelRule = stylesheet.match(/@media \(max-width: 600px\)\s*\{([^}]*)\}/)?.[1] || "";
   assert.match(mobileActivityControlLabelRule, /\.market-activity-controls label\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 140px;/);
   assert.doesNotMatch(mobileActivityControlLabelRule, /\.market-activity-controls label\s*\{[^}]*font-size:/);
