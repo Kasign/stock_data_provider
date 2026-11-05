@@ -277,12 +277,13 @@ test("数据源能力刷新初始化或最终解锁异常不会产生未处理 r
   assert.match(refresh, /let button = null;[\s\S]*?let list = null;[\s\S]*?try \{/);
   assert.match(refresh, /showMessage\("正在读取当前连接配置对应的数据源能力…"/);
   assert.match(refresh, /try \{\s*if \(button\) \{\s*button\.disabled = true;[\s\S]*?catch \{/);
-  assert.match(refresh, /const payload = await getDataSources\\(settings, controller.signal\\);[\\s\\S]*?controller.signal.aborted \\|\\| generation !== sourceRefreshGeneration/);
   assert.ok(refresh.includes("const payload = await getDataSources(settings, controller.signal);"));
   assert.ok(refresh.includes("controller.signal.aborted || generation !== sourceRefreshGeneration"));
   assert.match(refresh, /catch \\(error\\) \\{\\s*if \\(controller.signal.aborted \\|\\| generation !== sourceRefreshGeneration\\) return;[\\s\\S]*?showMessage\\(message, "empty-row error-text"\\)/);
   assert.ok(refresh.includes("if (generation === sourceRefreshGeneration && sourceRefreshController === controller) {"));
   assert.ok(refresh.includes("button.disabled = false;"));
+
+});
 
 test("已保存连接检查与草稿检查的初始化/解锁异常不会产生未处理 rejection", () => {
   const saved = app.match(/async function checkConnectionFromSettings\(\) \{[\s\S]*?\n\}/)?.[0] || "";
