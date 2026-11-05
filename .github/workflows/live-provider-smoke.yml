@@ -18,6 +18,7 @@ on:
       - "services/market-data/internal/provider/pytdx_daily_client_test.go"
       - "services/market-data/internal/provider/pytdx_baostock_event_live_test.go"
       - "services/market-data/internal/provider/tushare_intraday_suspension_live_test.go"
+      - "services/market-data/internal/provider/pytdx_official_intraday_suspension_daily_live_test.go"
       - "services/market-data/internal/baostock/**"
       - "services/market-data/internal/service/provider_probe_live_test.go"
   workflow_dispatch:
@@ -248,6 +249,28 @@ jobs:
           LIVE_TUSHARE_SUSPENSION_REPORT_PATH: ${{ github.workspace }}/live-tushare-suspension-report.json
         working-directory: services/market-data
         run: go test -run '^TestLiveTushareIntradaySuspensionSamples$' -count=1 -v ./internal/provider
+      - name: Run Pytdx daily bars for official intraday-suspension dates
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[historical_intraday_daily_bars]')
+        env:
+          MARKET_DATA_LIVE_PYTDX_OFFICIAL_SUSPENSION_TESTS: "1"
+          LIVE_PYTDX_OFFICIAL_SUSPENSION_REPORT_PATH: ${{ github.workspace }}/live-pytdx-official-suspension-report.json
+        working-directory: services/market-data
+        run: go test -run '^TestLivePytdxOfficialIntradaySuspensionDailyBars$' -count=1 -v ./internal/provider
+      - name: Print Pytdx official intraday-suspension daily-bar report
+        if: always()
+        run: |
+          if [[ -f live-pytdx-official-suspension-report.json ]]; then
+            cat live-pytdx-official-suspension-report.json
+          else
+            echo "No Pytdx official suspension daily-bar report was produced."
+          fi
+      - name: Upload Pytdx official intraday-suspension daily-bar report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytdx-official-suspension-daily-report
+          path: live-pytdx-official-suspension-report.json
+          if-no-files-found: warn
       - name: Print Tushare intraday suspension report
         if: always()
         run: |
