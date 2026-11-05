@@ -145,3 +145,41 @@ Domain/Contract 不得因为无关模块的 Adapter/Integration 未完成而被�
 - decimal string 是 JSON 边界表达，不要求所有内部算法使用字符串运算；内部必须选择可证明精度的十进制/定点策略，统计算法可用浮点但必须给出误差预算。
 - AuthorizationRef 是审计引用，不是访问令牌；历史允许不代表当前允许。
 - system_as_of 是知识截止时间，不得伪造 observed_at，也不能替代 trade_date。
+
+## 8. Researchflow 状态机契约 Review（CONTRACT-006 / 007，2026-11-05）
+
+本轮对 Application Port、公共 Schema、Researchflow 设计和 FLOW-001~004 验收项进行一致性 Review，发现 Run 状态枚举存在三处不一致：旧设计文档使用 degraded/timed_out 作为 Run 终态，而首批 Port 与公共 Schema 使用 partial/failed。该差异会导致结果聚合、持久化枚举和 API 状态解释不一致。
+
+### 8.1 决议建议
+
+| 决策 | 统一建议 | 验收影响 |
+|---|---|---|
+| CONTRACT-006 | Run 只表达完成度：succeeded/partial/failed/cancelled；Stage/Attempt 承载 degraded/timed_out。Template 显式定义每种 Stage 结果传播策略 | FLOW-001~003 状态和聚合测试；FLOW-002 Template fingerprint |
+| CONTRACT-007 | Run 增加 cancelling 中间态；cancel/deadline/retry 使用 CAS 与绝对 deadline；在途 Attempt 收敛后才允许 Run 终态 | FLOW-003 竞态测试；FLOW-004 队列/租约/恢复测试 |
+
+### 8.2 本轮发现及修正
+
+1. Run.degraded 混淆完成度和质量：一个 Run 可以完整完成但某个 Stage 输出质量降级；模板接受该输出时 Run 应 succeeded，同时结果质量标记 degraded。只有覆盖范围不完整才是 partial。
+2. Run.timed_out 混淆单次 Attempt/Stage 预算耗尽和整个 Run 结果：Stage/Attempt timed_out 后按模板传播策略归并，不增加 Run.timed_out。
+3. 原 Stage 状态遗漏 blocked，却在其他章节把 blocked 当作调度结果；现统一 blocked 为无 Attempt 的调度终态，skipped 仅表示模板裁剪/不适用。
+4. 原取消语义允许 Run 终态时仍存在运行中 Attempt；现增加 cancelling，禁止新派发，等待在途执行收敛后才进入终态。
+5. cancel 与正常完成竞争通过事务/CAS 决定先后；Attempt 终态只允许一次写入，迟到 Worker 通过 fencing token 防止覆盖。
+6. 原 Executor 只提并发和 deadline，缺少队列容量、租约和重启恢复；现补入容量拒绝、持久化队列、租约回收与 fencing 约束。
+7. 重试仅由 Researchflow Application 统一计数和决策，避免 Adapter/Executor 多层重试造成实际次数不可控。
+
+### 8.3 FLOW-001~004 验收矩阵补充
+
+- FLOW-001：Run/Stage/Attempt 枚举、termination_reason、deadline_at、传播策略、result_summary、lease/fencing 字段具有契约测试。
+- FLOW-002：每个 Stage 的传播策略随 Template 版本化并参与 fingerprint；必需风险门禁禁止配置为可忽略失败/降级。
+- FLOW-003：覆盖状态合法迁移、blocked/skipped 区分、失败重试新 Attempt、partial 聚合、Run cancelling、deadline、CAS 竞争与迟到结果拒绝。
+- FLOW-004：覆盖容量满拒绝、并发上限、单 Run 并行上限、queued 恢复、租约过期回收、fencing token、单层重试和进程重启恢复。
+
+### 8.4 尚待 Researchflow Owner 确认
+
+- Stage 传播策略是否采用本轮五项枚举，以及是否需要针对特定 reason_code 增加更细粒度规则。
+- 硬风险门禁 Stage 的识别方式（Template 元数据标记或受控 stage_code Registry）；建议两者校验，不能仅靠自由文本。
+- 取消宽限期、Worker lease/heartbeat 周期、队列容量与并发默认值，需结合部署资源压测确定，不在公共契约中写死数值。
+- deadline 到达时 optional Stage 的传播策略是否默认 partial；建议默认 partial，Owner 可在明确无影响时配置 no_impact，但不能放宽 required/risk gate。
+- 数据库 CAS、租约和 fencing token 的具体字段/唯一约束属于 FLOW-007 Repository/Schema 评审，当前为逻辑契约建议。
+
+**本轮结论：规划侧 CONTRACT-006/007 建议决议已形成，文档间状态语义已统一；仍待 Researchflow Owner Review，不代表实现、契约冻结或 L2 Module Ready。**

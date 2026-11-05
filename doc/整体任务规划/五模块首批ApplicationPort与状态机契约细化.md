@@ -149,63 +149,85 @@ News Evidence Query 仍由 News 提供来源事实和内容；Research Evidence 
 
 ## 4. Researchflow 首批 Application Port 与状态机
 
-### 4.1 状态枚举建议
+### 4.1 状态枚举与职责
 
 Run：
-- created
-- queued
-- running
-- succeeded
-- partial
-- failed
-- cancelled
+- 非终态：created、queued、running、cancelling。
+- 终态：succeeded、partial、failed、cancelled。
+- 不设置 Run.degraded 或 Run.timed_out：degraded 是阶段输出质量，timed_out 是一次执行结果；Run 只表达整体完成度/最终控制结果。
 
 Stage：
-- pending
-- ready
-- running
-- succeeded
-- degraded
-- skipped
-- failed
-- timed_out
-- cancelled
-- blocked
+- pending、ready、running、succeeded、degraded、skipped、failed、timed_out、cancelled、blocked。
+- blocked 表示调度前置条件或依赖输出不满足，且本次 Run 内不再具备启动条件；它不是一次 Attempt，也不创建 Attempt。
+- skipped 仅表示模板明确裁剪/判定不适用的阶段，必须有 reason_code；运行期依赖失败不得伪装为 skipped。
 
 Attempt：
-- running
-- succeeded
-- degraded
-- failed
-- timed_out
-- cancelled
-
-Attempt 是不可变执行历史；重试创建 attempt_no + 1。不得将 Attempt 的 timed_out 直接映射成 Run timed_out，Run 的最终状态由必需/可选阶段策略和取消语义决定。
+- running、succeeded、degraded、failed、timed_out、cancelled。
+- Attempt 记录一次真实执行，创建后只允许从 running 写入一次终态；终态记录不可修改或重开。
+- Stage 的 failed/timed_out 在仍有重试预算时属于可重试中间结果；耗尽预算后才参与 Run 最终归并。
 
 ### 4.2 合法迁移约束
 
 | 对象 | 起始状态 | 允许迁移 |
 |---|---|---|
 | Run | created | queued / cancelled |
-| Run | queued | running / cancelled |
-| Run | running | succeeded / partial / failed / cancelled |
-| Stage | pending | ready / skipped / blocked / cancelled |
-| Stage | ready | running / cancelled |
+| Run | queued | running / cancelling / cancelled |
+| Run | running | cancelling / succeeded / partial / failed |
+| Run | cancelling | cancelled / succeeded / partial / failed（仅 deadline_exceeded 收敛） |
+| Stage | pending | ready / skipped / blocked / cancelled / timed_out |
+| Stage | ready | running / cancelled / blocked / timed_out |
 | Stage | running | succeeded / degraded / failed / timed_out / cancelled |
+| Stage | failed / timed_out | ready（仅 RetryStage 校验通过后） |
 | Attempt | running | succeeded / degraded / failed / timed_out / cancelled |
 
-终态不可直接重开。重试必须由新的 Attempt 表达；Stage 从失败/超时进入下一次执行前，Application 必须校验重试策略、剩余 deadline 和次数上限，并记录新的 Attempt。若需要重新运行已终态 Run，应创建新的 Run 并引用原 Run。
+约束：
+- Run、Stage、Attempt 的状态写入必须通过带前置状态条件的原子更新；重复请求返回已提交状态，不重复产生副作用。
+- Stage 的 skipped/blocked/cancelled 为本次 Run 的终态；failed/timed_out 在重试预算尚有剩余且 Run deadline 未到达时可通过显式 RetryStage 回到 ready。Run deadline 到达产生的 timed_out 不得重试。
+- Stage degraded 表示本次执行有可用输出但质量受限，默认不自动重试；是否重试必须由模板策略显式允许。
+- RetryStage 必须校验 Run=running、未进入 cancelling、Run deadline 尚未到达、Stage 具备可重试失败结果、依赖输出仍有效、重试次数/总预算未耗尽。每次重试创建 attempt_no + 1，复用原 Run.as_of 和输入快照。
+- 不允许对已终态 Run 重开；需要重新研究时创建新 Run，并可通过 parent_run_ref 关联原 Run。
 
-### 4.3 Run 结果归并
+### 4.3 Stage 结果到 Run 的归并（CONTRACT-006）
 
-- 必需 Stage failed/timed_out/blocked：Run failed，除非显式的模板策略定义了可恢复路径。
-- 可选 Stage skipped/degraded/failed：允许 Run partial；必须列出 stage_code、reason_code 和缺失输出。
-- 主动取消：Run cancelled；未开始 Stage 标记 cancelled 或按策略保留 pending 并在 Run 结束时封存，规则需统一。
-- 所有必需阶段成功且无可选阶段缺失：Run succeeded。
-- Stage degraded 是否导致 Run partial，由 Template 对该 Stage 的质量传播策略显式决定，不能靠通用默认值隐藏。
-- timeout 是执行预算耗尽；cancel 是外部取消请求；两者 reason_code 不同。
+模板必须为每个 Stage 显式声明结果传播策略，至少包括：
+- on_degraded：accept / partial / fail；
+- on_skipped：no_impact / partial / fail；
+- on_failed：partial / fail；
+- on_timed_out：partial / fail；
+- on_blocked：partial / fail。
+策略按 stage_code + template_version 固定并纳入 fingerprint；不得使用运行时隐式默认值。required Stage 不允许配置 on_skipped=no_impact；若创建 Run 前判定不适用，应从本次 DAG 中裁剪并在 resolved_template_snapshot 中记录 excluded_stage_code 与 reason_code。
 
-### 4.4 最小 Researchflow Facade
+归并规则：
+1. 先确定每个 Stage 的最终状态；failed 只有重试预算耗尽后才作为最终结果，deadline 到达产生的 timed_out 直接参与归并。
+2. 任一 Stage 的传播结果为 fail，Run=failed。
+3. 没有 fail、但至少一个 Stage 传播结果为 partial，Run=partial。
+4. 所有 Stage 均完成且传播结果均为 accept/no_impact，Run=succeeded。
+5. Run 的 result_summary 必须同时包含 stage_outcomes、missing_stage_codes、degraded_stage_codes、blocked_stage_codes、reason_codes 和 coverage；partial 不能只用布尔值表达。
+6. Stage degraded 不等于 Run partial：模板可选择 accept，此时 Run 可 succeeded，但 Run/结果质量摘要仍必须标记 degraded；选择 partial 时才影响 Run 完成度。
+7. 可选 Stage skipped 只有模板明确声明 no_impact 时才不降低完成度；因运行期依赖不可用而跳过必须用 blocked 或 failed，并按传播策略归并。
+8. 硬风险门禁阶段不得配置可忽略失败/降级的策略；RiskDecision=unknown 或门禁未执行不得被归并为通过。
+
+### 4.4 取消、deadline 与竞争语义（CONTRACT-007）
+
+- Run deadline_at 是绝对 UTC 时间；所有 Stage deadline 为 min(stage_budget_deadline, Run.deadline_at)，所有重试共用同一 Run deadline，不得续期。
+- 显式取消在 Run 尚未到 deadline 且 Run 非终态时，以原子状态迁移进入 cancelling，并设置 termination_reason=user_cancelled。进入 cancelling 后立即拒绝新 Stage/Attempt 和 RetryStage，未开始 Stage 标记 cancelled，向运行中 Attempt 传播 context cancellation。
+- Run deadline 到达且尚未有更早被接受的 user_cancelled 请求时，设置 termination_reason=deadline_exceeded，停止派发并取消在途执行；达到预算的 Attempt/Stage 记录 timed_out。
+- 若 user_cancelled 在 deadline 前先被原子接受，则取消原因保持不变；deadline 之后只负责强制收敛超时 Worker，不得把 Run 的取消原因改写为 deadline_exceeded。
+- Run 进入 cancelling 后，等待运行中 Attempt 完成收敛；Attempt 通过原子终态写入记录 cancelled，或保留在取消线性化点前已提交的真实完成结果。已写入终态的 Attempt 不得被覆盖；取消后迟到的输出不得回写为成功结果。
+- termination_reason=user_cancelled 时，所有在途 Attempt 收敛、Stage 封存后 Run 转为 cancelled；termination_reason=deadline_exceeded 时，按 CONTRACT-006 的模板策略归并为 failed 或 partial。不得出现 Run 已终态但仍有 running Attempt。
+- 取消与正常完成竞态采用数据库原子 CAS/事务作为线性化点：先成功提交 Run 终态或 cancelling 的操作获胜。若正常归并先提交，后续 Cancel 返回 terminal_conflict；若 cancel 先进入 cancelling，则正常归并不得提交 succeeded/partial/failed。deadline 检查在控制操作和最终归并时执行。
+- context cancellation 只是协作信号，不代表 Attempt 已停止；Worker 必须在有界 grace period 内确认结束。超过 grace period 由租约/看门狗回收，旧 Worker 的迟到写入通过 fencing token 拒绝。
+
+### 4.5 Executor 容量、租约与恢复约束
+
+- Executor 必须配置全局 worker 上限、全局排队容量、单 Run 并行 Stage 上限、单 Stage 执行预算和 Run 总 deadline。
+- 排队容量已满时 CreateRun 返回明确可重试的 capacity_exceeded，不创建 queued Run；相同 idempotency_key + 相同请求指纹返回原 Run，不同指纹返回冲突。
+- queued Run/Stage 状态必须持久化；进程重启后可重新派发。running Attempt 使用带 owner/fencing token/lease_expires_at 的执行租约，Worker 定期续租。
+- 租约过期后由唯一回收者原子收敛旧 Attempt，按重试策略创建新 Attempt；旧 Worker 的完成写入因 fencing token 过期而被拒绝，避免双执行覆盖。
+- 重试只由 Researchflow Application 统一决策和计数；Executor/Adapter 不得再叠加业务重试。网络客户端仅允许其明确安全的有限传输重试。
+- DAG 无环；就绪 Stage 按稳定优先级/创建序排序，容量不足时保持 ready/queued，不得无界创建 goroutine 或无限内存队列。
+
+### 4.6 最小 Researchflow Facade
 
 逻辑签名建议：
 
@@ -296,8 +318,8 @@ payload 不允许无约束 map 直接进入模板。事件版本升级不得静�
 | CONTRACT-003 | Factor 首批因子、母体和标准化参数 | Quant | QNT-003 |
 | CONTRACT-004 | AuthorizationRef 字段和当前撤销检查责任 | Research + News | Research Evidence、News Query |
 | CONTRACT-005 | system_as_of 在 Context/Evidence/Run 的唯一传递规则 | Research + Researchflow | 历史研究一致性 |
-| CONTRACT-006 | Run partial 与 Stage degraded 的模板传播矩阵 | Researchflow | 状态机和结果归并 |
-| CONTRACT-007 | Cancel 时未开始 Stage 的封存状态 | Researchflow | Run 终态一致性 |
+| CONTRACT-006 | Stage 结果传播矩阵、Run partial/degraded 语义与硬风险门禁策略 | Researchflow | 状态机和结果归并 |
+| CONTRACT-007 | cancel/deadline/retry 竞争、cancelling 收敛、租约与 fencing 语义 | Researchflow | Run 终态一致性 |
 | CONTRACT-008 | LLM Gateway 真实协议调查 | LLM | ModelRequest/Response |
 | CONTRACT-009 | Notification recipient_scope 与投递幂等唯一键 | Notification | Subscription/Delivery |
 | CONTRACT-010 | 事件 Payload Schema 注册与兼容策略 | Notification | PublishEvent |
