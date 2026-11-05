@@ -91,13 +91,19 @@ func (u *ApplyNewsItemRelation) Execute(ctx context.Context, request NewsItemRel
 		}
 		if relation.FromVersionID != "" {
 			latest, ok, err := tx.LatestNewsItemVersion(ctx, relation.FromNewsID)
-			if err != nil { return err }
-			if !ok || latest.ID != relation.FromVersionID { return ErrNewsItemRelationEvidence }
+			if err != nil {
+				return err
+			}
+			if !ok || latest.ID != relation.FromVersionID {
+				return ErrNewsItemRelationEvidence
+			}
 		}
 		if relation.ToVersionID != "" {
 			latest, ok, err := tx.LatestNewsItemVersion(ctx, relation.ToNewsID)
 			if err != nil { return err }
-			if !ok || latest.ID != relation.ToVersionID { return ErrNewsItemRelationEvidence }
+			if !ok || latest.ID != relation.ToVersionID {
+				return ErrNewsItemRelationEvidence
+			}
 		}
 
 		history, err := tx.ListAllNewsItemRelations(ctx)
