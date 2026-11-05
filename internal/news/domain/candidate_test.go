@@ -55,7 +55,7 @@ func TestNormalizeCandidateRebuildsMissingFieldsInStableOrder(t *testing.T) {
 	publishedAt := time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC)
 	got := NormalizeCandidate(Candidate{
 		MissingFields: []string{"stale", "title"},
-		PublishedAt: &publishedAt,
+		PublishedAt:   &publishedAt,
 	}, time.Time{}, "")
 	want := []string{"title", "url", "publisher"}
 	if len(got.MissingFields) != len(want) {
