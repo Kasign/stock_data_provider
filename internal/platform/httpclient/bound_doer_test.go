@@ -50,8 +50,10 @@ func TestBoundDoerKeepsDestinationPolicyAndUsesRequestContext(t *testing.T) {
 	}
 	_ = response.Body.Close()
 
-	attackerRequest := localRequest(t, server, "/denied")
-	attackerRequest.URL.Host = "attacker.example:" + request.URL.Port()
+	attackerRequest, err := http.NewRequest(http.MethodGet, "http://attacker.example:"+request.URL.Port()+"/denied", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = bound.Do(attackerRequest)
 	var platformFault *fault.Fault
 	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.destination_rejected" {
