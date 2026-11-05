@@ -415,3 +415,27 @@ func TestApplyMigrationsRejectsConcurrentMigrationLock(t *testing.T) {
 		t.Fatalf("migration ran without owning lock: %+v", state)
 	}
 }
+
+
+func TestApplyMigrationsRejectsMissingVersionBeforeAppliedVersion(t *testing.T) {
+	migrations := []Migration{
+		{Version: 1, Description: "first", Statements: []string{"CREATE TABLE first_table (id INT)"}},
+		{Version: 2, Description: "second", Statements: []string{"CREATE TABLE second_table (id INT)"}},
+	}
+	_, checksums, err := prepareMigrations("analysis", migrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := &migrationTestState{
+		applied: map[uint64]string{2: checksums[2]},
+		lockAcquired: true,
+	}
+	db := sql.OpenDB(migrationTestConnector{state: state})
+	defer db.Close()
+	if err := ApplyMigrations(context.Background(), db, "analysis", migrations); err == nil {
+		t.Fatal("missing earlier migration must not be applied after a later version")
+	}
+	if len(state.statements) != 0 {
+		t.Fatalf("migration statements ran despite out-of-order history: %v", state.statements)
+	}
+}

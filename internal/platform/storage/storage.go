@@ -266,9 +266,25 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		return fmt.Errorf("close migration history rows: %w", err)
 	}
 
+	lastAppliedIndex := -1
 	for version := range applied {
-		if _, exists := checksums[version]; !exists {
+		index := -1
+		for migrationIndex, migration := range ordered {
+			if migration.Version == version {
+				index = migrationIndex
+				break
+			}
+		}
+		if index < 0 {
 			return fmt.Errorf("%w: database contains unregistered version %d", errMigrationHistoryMismatch, version)
+		}
+		if index > lastAppliedIndex {
+			lastAppliedIndex = index
+		}
+	}
+	for index := 0; index <= lastAppliedIndex; index++ {
+		if _, exists := applied[ordered[index].Version]; !exists {
+			return fmt.Errorf("%w: migration version %d is missing before an applied version", errMigrationHistoryMismatch, ordered[index].Version)
 		}
 	}
 	for _, migration := range ordered {
