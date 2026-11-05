@@ -179,18 +179,18 @@ func normalizeFault(err error, contextErr error) *fault.Fault {
 	if errors.Is(contextErr, context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 		return &fault.Fault{
 			Class: fault.ClassTimeout, Code: "platform.diagnostics.check_timeout",
-			SafeMessage: "check timed out", Dependency: dependency, Retryable: true, Cause: err,
+			SafeMessage: "check timed out", Retryable: true, Cause: err,
 		}
 	}
 	if errors.Is(contextErr, context.Canceled) || errors.Is(err, context.Canceled) {
 		return &fault.Fault{
 			Class: fault.ClassUnavailable, Code: "platform.diagnostics.check_canceled",
-			SafeMessage: "check was canceled", Dependency: dependency, Cause: err,
+			SafeMessage: "check was canceled", Cause: err,
 		}
 	}
 	return &fault.Fault{
 		Class: fault.ClassInternal, Code: "platform.diagnostics.check_failed",
-		SafeMessage: "check failed", Dependency: dependency, Cause: err,
+		SafeMessage: "check failed", Cause: err,
 	}
 }
 
