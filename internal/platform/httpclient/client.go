@@ -215,9 +215,10 @@ func (c *Client) Do(ctx context.Context, request *http.Request, policy Destinati
 
 		if retryEnabled && attempt < c.config.MaxRetries && retryableStatus(response.StatusCode) {
 			_ = response.Body.Close()
-			if waitErr := waitRetry(requestCtx, attempt); waitErr == nil {
-				continue
+			if waitErr := waitRetry(requestCtx, attempt); waitErr != nil {
+				return nil, c.faultFor(waitErr, policy.Dependency)
 			}
+			continue
 		}
 
 		body, readErr := readLimitedBody(response.Body, c.config.MaxResponseBytes)

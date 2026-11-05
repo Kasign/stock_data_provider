@@ -579,3 +579,30 @@ func TestDialContextRequiresRequestPolicyContext(t *testing.T) {
 		t.Fatalf("expected no dial, got %d", dialCalls.Load())
 	}
 }
+
+func TestClientReturnsTimeoutWhenRetryBackoffExceedsDeadline(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		Timeout: 20 * time.Millisecond, MaxRetries: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	t.Cleanup(client.CloseIdleConnections)
+
+	policy := localPolicy(server)
+	policy.Idempotent = true
+	_, err = client.Do(context.Background(), localRequest(t, server, "/retry-timeout"), policy)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.timeout" {
+		t.Fatalf("expected timeout fault after retry deadline, got %v", err)
+	}
+}
