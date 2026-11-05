@@ -201,3 +201,16 @@ Provider 输出策略必须在缓存和持久化之前执行。Brave 只允许�
 - HTTPDoer 由外部注入；当前没有生产 HTTP Client、连接池、通用重试器、通用限流器、跨请求缓存或真实网络验收。传输层响应大小、Deadline、TLS、重定向和 DNS/IP 安全由公共平台能力负责。
 
 当前已有 fake Transport 测试代码覆盖各 Provider 的基本字段/鉴权语义、429 Retryable 候选、响应结构错误路径等；测试尚未执行，不得据此报告编译或 CI 通过。
+
+
+## 9. N3 Provider / Source / Endpoint 授权评估实现
+
+- 新闻 Domain 已提供纯函数策略评估，不依赖数据库、Redis、平台 Diagnostics 或真实 HTTP。
+- Provider 输出策略独立表达允许用途、允许内容类型、请求内处理、跨请求缓存、持久化模式及各自最大保留期限。
+- Source 策略是发布者默认规则，必须明确访问方式、用途、内容类型、存储模式、最大保留期限和授权证据。
+- Endpoint 策略通过 nil 继承 Source；非 nil 空集合代表明确禁止；已有 Endpoint 策略只能缩小 Source 权限或保留期限。当前未实现扩权授权流程，任何扩权声明均拒绝。
+- 最终候选使用决策取 Provider 输出权利、Source 和 Endpoint 约束的交集；Provider 获准保存输出不代表原始发布者允许抓取/保存正文。
+- Pending、Revoked、未知状态、缺少授权证据、过期策略均默认拒绝；Restricted 只允许显式列出的范围。
+- EvaluateSourceURL 只执行离线 URL 结构、协议、精确主机和端口校验；不执行 DNS 解析、IP 特殊地址判断、重定向或实际拨号。DNS rebinding 和逐跳网络安全仍由 PLAT-008 负责。
+
+Brave/Bocha/Tavily 等具体 Provider 的策略值必须按实际账号套餐、书面协议和本项目核验记录配置，不能仅凭 Provider 名称默认批准。

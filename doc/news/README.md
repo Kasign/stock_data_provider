@@ -33,7 +33,8 @@
 - [x] 建立专项设计文档骨架
 - [x] N1-A：完成新闻领域模型、时间/身份/版本/关联证据、Provider 与 Application 契约及跨文档内部评审
 - [x] N2：Domain、Application Port、Bocha/Tavily/Brave/SearXNG Adapter 与 fake 测试已提交；根模块 gofmt、test、race、vet 和分析服务镜像构建通过
-- [ ] N3：来源授权策略评估、URL 安全约束、正文解析和标准化（当前先实施纯 Domain 规则）
+- [x] N3 首批：Provider/Source/Endpoint 授权交集评估、用途/保留期限限制、离线 URL 规范化与精确主机/端口 allowlist；固定测试通过
+- [ ] N3 后续：DNS/IP 与重定向安全由 PLAT-008 执行；Feed/HTML 解析、正文标准化和时间解析继续开发
 - [ ] N4：实现身份识别、去重、版本和证券关联业务规则
 - [ ] N5：按冻结契约接入 Config/Secret、Logger/Error/Trace、HTTP Client
 - [ ] N6：公共存储能力就绪后实现新闻自有 Repository/SQL/Migration；Redis 按需
