@@ -901,7 +901,9 @@ test("light/dark theme is accessible, persisted locally, and independent of back
   assert.match(rawResultPreBase, /line-height:\s*1\.7\s*;/);
   assert.doesNotMatch(rawResultPreBase, /line-height:\s*1\.6\s*;/);
   assert.match(stylesheet, /\.raw-result pre\s*\{[^}]*font-size:\s*12px\s*!important\s*;/);
-  assert.doesNotMatch(stylesheet, /\.raw-result pre\s*\{[^}]*line-height:\s*1\.7\s*;/);
+  const rawResultPreLineHeightRules = [...stylesheet.matchAll(/\.raw-result pre\s*\{([^}]*)\}/g)]
+    .filter((match) => /line-height:\s*1\.7\s*;/.test(match[1]));
+  assert.equal(rawResultPreLineHeightRules.length, 1, "raw result pre line-height must be declared once in the base rule");
   assert.match(stylesheet, /:root\[data-theme="light"\] \.raw-result pre\s*\{[^}]*color:\s*#334b5a[^}]*background:\s*#f5f8fa[^}]*border-color:\s*#d6e1e8/);
   assert.match(module, /stock-provider-webui\.theme\.v1/);
   assert.doesNotMatch(module, /fetch\(|\/api\//, "theme preference must not call backend APIs");
