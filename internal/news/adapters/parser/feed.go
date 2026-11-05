@@ -97,12 +97,14 @@ type atomLink struct {
 
 // FeedAttachment 仅保存 Feed 声明的附件元信息，不下载或信任附件 URL。
 type FeedAttachment struct {
-	URL          string
-	MediaType    string
-	RawMediaType string
-	RawLength    string
-	Length       *int64
-	Title        string
+	URL              string
+	RawURL           string
+	MediaType        string
+	RawMediaType     string
+	RawLength        string
+	Length           *int64
+	Title            string
+	ValidationIssues []string
 }
 
 type atomContent struct {
@@ -259,15 +261,27 @@ func normalizeAtomContent(content atomContent) (string, domain.ContentFormat) {
 func newFeedAttachment(rawURL, rawType, rawLength, title string) FeedAttachment {
 	attachment := FeedAttachment{
 		URL:          strings.TrimSpace(rawURL),
+		RawURL:       rawURL,
 		RawMediaType: strings.TrimSpace(rawType),
 		RawLength:    strings.TrimSpace(rawLength),
 		Title:        normalizeText(title),
 	}
-	if mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(rawType)); err == nil {
-		attachment.MediaType = strings.ToLower(mediaType)
+	if attachment.URL == "" {
+		attachment.ValidationIssues = append(attachment.ValidationIssues, "missing_url")
 	}
-	if length, err := strconv.ParseInt(attachment.RawLength, 10, 64); err == nil && length >= 0 {
-		attachment.Length = &length
+	if attachment.RawMediaType != "" {
+		if mediaType, _, err := mime.ParseMediaType(attachment.RawMediaType); err == nil {
+			attachment.MediaType = strings.ToLower(mediaType)
+		} else {
+			attachment.ValidationIssues = append(attachment.ValidationIssues, "invalid_media_type")
+		}
+	}
+	if attachment.RawLength != "" {
+		if length, err := strconv.ParseInt(attachment.RawLength, 10, 64); err == nil && length >= 0 {
+			attachment.Length = &length
+		} else {
+			attachment.ValidationIssues = append(attachment.ValidationIssues, "invalid_length")
+		}
 	}
 	return attachment
 }

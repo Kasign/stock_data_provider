@@ -238,3 +238,59 @@ func TestAtomContentFormatMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestFeedAttachmentMetadataBoundaries(t *testing.T) {
+	cases := []struct {
+		name, rawURL, rawType, rawLength string
+		wantURL, wantMediaType          string
+		wantLength                      *int64
+		wantIssues                      []string
+	}{
+		{name: "valid zero", rawURL: "https://publisher.example/a", rawType: "application/pdf", rawLength: "0", wantURL: "https://publisher.example/a", wantMediaType: "application/pdf", wantLength: int64Pointer(0)},
+		{name: "valid positive", rawURL: "https://publisher.example/a", rawType: "audio/mpeg", rawLength: "2048", wantURL: "https://publisher.example/a", wantMediaType: "audio/mpeg", wantLength: int64Pointer(2048)},
+		{name: "optional length absent", rawURL: "https://publisher.example/a", rawType: "audio/mpeg", wantURL: "https://publisher.example/a", wantMediaType: "audio/mpeg"},
+		{name: "negative length", rawURL: "https://publisher.example/a", rawLength: "-1", wantURL: "https://publisher.example/a", wantIssues: []string{"invalid_length"}},
+		{name: "invalid length", rawURL: "https://publisher.example/a", rawLength: "many", wantURL: "https://publisher.example/a", wantIssues: []string{"invalid_length"}},
+		{name: "overflow length", rawURL: "https://publisher.example/a", rawLength: "9223372036854775808", wantURL: "https://publisher.example/a", wantIssues: []string{"invalid_length"}},
+		{name: "invalid mime", rawURL: "https://publisher.example/a", rawType: "not a mime", wantURL: "https://publisher.example/a", wantIssues: []string{"invalid_media_type"}},
+		{name: "empty url retained", rawURL: "  ", rawType: "application/pdf", wantMediaType: "application/pdf", wantIssues: []string{"missing_url"}},
+		{name: "all invalid", rawURL: "", rawType: "bad mime", rawLength: "-2", wantIssues: []string{"missing_url", "invalid_media_type", "invalid_length"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := newFeedAttachment(tc.rawURL, tc.rawType, tc.rawLength, "")
+			if got.URL != tc.wantURL || got.MediaType != tc.wantMediaType || !sameOptionalInt64(got.Length, tc.wantLength) {
+				t.Fatalf("attachment=%+v", got)
+			}
+			if got.RawURL != tc.rawURL || got.RawMediaType != tc.rawType || got.RawLength != tc.rawLength {
+				t.Fatalf("raw declaration not retained: %+v", got)
+			}
+			if !equalStrings(got.ValidationIssues, tc.wantIssues) {
+				t.Fatalf("issues=%v want=%v", got.ValidationIssues, tc.wantIssues)
+			}
+		})
+	}
+}
+
+func int64Pointer(value int64) *int64 { return &value }
+
+func sameOptionalInt64(left, right *int64) bool {
+	if left == nil || right == nil { return left == nil && right == nil }
+	return *left == *right
+}
+
+func equalStrings(left, right []string) bool {
+	if len(left) != len(right) { return false }
+	for i := range left { if left[i] != right[i] { return false } }
+	return true
+}
+
+func TestFeedBodyAndAttachmentRemainSeparate(t *testing.T) {
+	payload := []byte(`<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item><title>公告</title><description>摘要</description><content:encoded><![CDATA[<p>正文</p>]]></content:encoded><enclosure url="https://publisher.example/report.pdf" type="application/pdf" length="10"/></item></channel></rss>`)
+	doc, err := ParseFeed(payload, time.Now())
+	if err != nil { t.Fatal(err) }
+	entry := doc.Entries[0]
+	layers := entry.ContentLayers("")
+	if layers.Body == nil || layers.Body.Text != "<p>正文</p>" || layers.SourceSummary != "摘要" { t.Fatalf("layers=%+v", layers) }
+	if len(entry.Attachments) != 1 || entry.Attachments[0].URL != "https://publisher.example/report.pdf" { t.Fatalf("attachments=%+v", entry.Attachments) }
+}
