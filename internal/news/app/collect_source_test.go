@@ -44,6 +44,7 @@ func approvedSourceRegistration() SourceEndpointRegistration {
 		SourceID: "source-1", EndpointID: "rss-main", Enabled: true,
 		URL: "https://publisher.example/feed.xml", PublisherName: "登记媒体",
 		PublisherDomain: "publisher.example", AccessMethod: domain.AccessRSS,
+		SourcePolicyVersionID: "source-policy-v3",
 		SourcePolicy: domain.SourcePolicy{
 			Status:               domain.AuthorizationApproved,
 			AllowedAccessMethods: []domain.AccessMethod{domain.AccessRSS},
@@ -84,6 +85,10 @@ func TestCollectSourceFeedSuccessUsesRegisteredEndpointAndPolicy(t *testing.T) {
 	}
 	if transport.calls != 1 || transport.sourceID != "source-1" || transport.endpointID != "rss-main" {
 		t.Fatalf("transport selection=%+v", transport)
+	}
+	if result.SourcePolicyVersionID != "source-policy-v3" || result.EndpointPolicyVersionID != "" ||
+		!result.PolicyEvaluatedAt.Equal(time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("policy trace=%+v", result)
 	}
 	if result.FeedFormat != "rss" || result.FeedTitle != "媒体 Feed" || len(result.Entries) != 1 {
 		t.Fatalf("result=%+v", result)
@@ -202,5 +207,68 @@ func TestCollectSourceUnknownTransportErrorIsNotRetryable(t *testing.T) {
 		if !errors.As(err, &collectionErr) || collectionErr.Retryable != testCase.retryable {
 			t.Errorf("transport error %v: result=%+v", testCase.err, collectionErr)
 		}
+	}
+}
+
+
+func TestCollectSourceRequiresImmutablePolicyVersionReferences(t *testing.T) {
+	testCases := []struct {
+		name   string
+		mutate func(*SourceEndpointRegistration)
+	}{
+		{
+			name: "missing source policy version",
+			mutate: func(registration *SourceEndpointRegistration) {
+				registration.SourcePolicyVersionID = ""
+			},
+		},
+		{
+			name: "endpoint policy without version",
+			mutate: func(registration *SourceEndpointRegistration) {
+				registration.EndpointPolicy = &domain.EndpointPolicy{Status: domain.AuthorizationApproved}
+			},
+		},
+		{
+			name: "endpoint version without policy",
+			mutate: func(registration *SourceEndpointRegistration) {
+				registration.EndpointPolicyVersionID = "endpoint-policy-v2"
+			},
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			registration := approvedSourceRegistration()
+			testCase.mutate(&registration)
+			transport := &sourceTransportStub{}
+			useCase := NewCollectSource(sourceCatalogStub{registration: registration}, transport)
+
+			_, err := useCase.Execute(context.Background(), validCollectRequest())
+			if SourceCollectionErrorCode(err) != "source_policy_version_reference_invalid" || transport.calls != 0 {
+				t.Fatalf("error=%v calls=%d", err, transport.calls)
+			}
+		})
+	}
+}
+
+func TestCollectSourceReturnsEndpointPolicyVersionWhenApplied(t *testing.T) {
+	registration := approvedSourceRegistration()
+	registration.EndpointPolicy = &domain.EndpointPolicy{
+		Status:      domain.AuthorizationApproved,
+		EvidenceRef: "endpoint-license-1",
+	}
+	registration.EndpointPolicyVersionID = "endpoint-policy-v2"
+	body := "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>媒体 Feed</title></channel></rss>"
+	transport := &sourceTransportStub{
+		response: feedResponse(body, "application/rss+xml", http.StatusOK),
+	}
+	useCase := NewCollectSource(sourceCatalogStub{registration: registration}, transport)
+
+	result, err := useCase.Execute(context.Background(), validCollectRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SourcePolicyVersionID != "source-policy-v3" ||
+		result.EndpointPolicyVersionID != "endpoint-policy-v2" {
+		t.Fatalf("policy trace=%+v", result)
 	}
 }

@@ -29,17 +29,19 @@ var (
 // SourceEndpointRegistration 是组合根提供的已登记来源入口快照。
 // SourcePolicy 是发布者级默认授权；EndpointPolicy 仅表达入口级差异。
 type SourceEndpointRegistration struct {
-	SourceID         string
-	EndpointID       string
-	Enabled          bool
-	URL              string
-	PublisherName    string
-	PublisherDomain  string
-	AccessMethod     domain.AccessMethod
-	SourcePolicy     domain.SourcePolicy
-	EndpointPolicy   *domain.EndpointPolicy
-	URLPolicy        domain.SourceURLPolicy
-	MaxResponseBytes int64
+	SourceID                string
+	EndpointID              string
+	Enabled                 bool
+	URL                     string
+	PublisherName           string
+	PublisherDomain         string
+	AccessMethod            domain.AccessMethod
+	SourcePolicy            domain.SourcePolicy
+	SourcePolicyVersionID   string
+	EndpointPolicy          *domain.EndpointPolicy
+	EndpointPolicyVersionID string
+	URLPolicy               domain.SourceURLPolicy
+	MaxResponseBytes        int64
 }
 
 // SourceCatalog 只解析已登记的 Source/Endpoint，不接受调用方提供任意 URL。
@@ -73,12 +75,15 @@ type CollectedSourceEntry struct {
 
 // CollectSourceResult 是单个 Source Endpoint 的在线 Feed 采集结果。
 type CollectSourceResult struct {
-	SourceID   string
-	EndpointID string
-	FeedFormat parser.FeedFormat
-	FeedTitle  string
-	ObservedAt time.Time
-	Entries    []CollectedSourceEntry
+	SourceID                string
+	EndpointID              string
+	SourcePolicyVersionID   string
+	EndpointPolicyVersionID string
+	PolicyEvaluatedAt       time.Time
+	FeedFormat              parser.FeedFormat
+	FeedTitle               string
+	ObservedAt              time.Time
+	Entries                 []CollectedSourceEntry
 }
 
 // SourceCollectionError 是可安全暴露的新闻业务错误，不包含 URL、响应体或底层错误文本。
@@ -138,6 +143,11 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	if registration.AccessMethod != domain.AccessRSS && registration.AccessMethod != domain.AccessLicensedFeed {
 		return CollectSourceResult{}, &SourceCollectionError{Code: "source_access_method_unsupported", Skipped: true}
 	}
+	if strings.TrimSpace(registration.SourcePolicyVersionID) == "" ||
+		(registration.EndpointPolicy != nil && strings.TrimSpace(registration.EndpointPolicyVersionID) == "") ||
+		(registration.EndpointPolicy == nil && strings.TrimSpace(registration.EndpointPolicyVersionID) != "") {
+		return CollectSourceResult{}, &SourceCollectionError{Code: "source_policy_version_reference_invalid"}
+	}
 	urlDecision := domain.EvaluateSourceURL(registration.URL, registration.URLPolicy)
 	if !urlDecision.Allowed {
 		return CollectSourceResult{}, &SourceCollectionError{Code: urlDecision.ReasonCode, Skipped: true}
@@ -149,7 +159,8 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 		StorageMode:  request.StorageMode,
 		Retention:    request.Retention,
 	}
-	decision := domain.EvaluateSourceCollectionPolicy(registration.SourcePolicy, registration.EndpointPolicy, policyRequest, u.now())
+	policyEvaluatedAt := u.now().UTC()
+	decision := domain.EvaluateSourceCollectionPolicy(registration.SourcePolicy, registration.EndpointPolicy, policyRequest, policyEvaluatedAt)
 	if !decision.Allowed {
 		return CollectSourceResult{}, &SourceCollectionError{Code: decision.ReasonCode, Skipped: true}
 	}
@@ -205,9 +216,15 @@ func (u *CollectSource) Execute(ctx context.Context, request CollectSourceReques
 	}
 
 	result := CollectSourceResult{
-		SourceID: request.SourceID, EndpointID: request.EndpointID,
-		FeedFormat: feed.Format, FeedTitle: feed.Title, ObservedAt: observedAt,
-		Entries: make([]CollectedSourceEntry, 0, min(len(feed.Entries), request.MaxEntries)),
+		SourceID:                request.SourceID,
+		EndpointID:              request.EndpointID,
+		SourcePolicyVersionID:   registration.SourcePolicyVersionID,
+		EndpointPolicyVersionID: registration.EndpointPolicyVersionID,
+		PolicyEvaluatedAt:       policyEvaluatedAt,
+		FeedFormat:              feed.Format,
+		FeedTitle:               feed.Title,
+		ObservedAt:              observedAt,
+		Entries:                 make([]CollectedSourceEntry, 0, min(len(feed.Entries), request.MaxEntries)),
 	}
 	for _, entry := range feed.Entries {
 		if len(result.Entries) >= request.MaxEntries {
