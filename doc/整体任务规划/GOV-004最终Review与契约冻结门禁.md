@@ -645,3 +645,79 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 - 本节不把 GOV-004 自动改为 GO，也不授权创建分支；它只修正门禁范围，防止把实现集成阻断误判为全局开工阻断。
 
 **后续执行顺序：** 完成首批最小 DTO/Port 的字段级 Review → 按模块逐个确认 L2 Module Ready → 用户确认共同基线并授权后创建分支 → 模块独立 CI → 按明确参与 SHA 进行集成验收。
+
+
+## 31. 五模块首批开工契约预审
+
+本节只审查第一批任务实际需要的契约，不把后续高级能力或提供方生产实现作为全局开工条件。结论属于规划侧预审，必须由模块 Owner Review 后才能冻结。
+
+### 31.1 首批开发范围
+
+| 模块 | 首批任务 | 可独立开发的内容 | 当前必须明确的契约 |
+|---|---|---|---|
+| Quant | QNT-001~003 | 计算上下文、Indicator、Factor、固定样本和纯计算 Domain | 输入时间/单位/复权/质量；Indicator/Factor typed parameters；Metric 单位和精度 |
+| Research | RSC-001~002 | Context、Evidence Domain、来源引用、事实/推断分类和版本规则 | Evidence 类型、source_ref/source_version、双时间轴、授权引用、质量摘要 |
+| Researchflow | FLOW-001~003 | Run/Stage/Attempt、模板、状态机、DAG 纯逻辑 | 状态迁移、必需/可选阶段、Attempt 重试、deadline/cancel/partial |
+| LLM | LLM-001 | 现有模型服务协议盘点和调用样本 | 本批先形成协议调查；LLM-002 再按真实协议冻结 Adapter Port |
+| Notification | NTF-001 | Event、Subscription、Delivery 领域模型和幂等规则 | event_type/schema_version/idempotency_key/recipient_scope/payload Schema/status |
+
+### 31.2 Quant 首批字段缺口
+
+- QuantAnalysisRequest.parameters 仍是 typed object 占位。QNT-001 必须先定义 IndicatorRequest 的指标代码、周期、窗口、输入引用和用例参数；Factor 参数需定义母体、分类版本、标准化和异常值策略。
+- QuantMetric.value 目前为 number/null，价格/金额的公开精度和 JSON 表达仍待 Owner 决定。不得在不同指标中随意混用浮点和 decimal string。
+- Data 百分比使用百分点，Quant 内部比例计算必须通过明确 unit 区分 percentage_point 与 ratio。
+- MarketDataSnapshotRef 的 payload_ref 应是不透明引用；输入快照必须保留 PIT、复权、来源版本和质量语义。
+- Data OpenAPI/Go JSON 未完成的字段只阻断对应 Data Adapter 和真实 Data 集成；不阻断 Indicator/Factor 纯计算实现。
+
+### 31.3 Research 首批字段缺口
+
+- Evidence.authorization_ref 当前只是字符串占位。建议定义不透明 AuthorizationRef DTO，至少可追溯授权决策引用、策略引用、允许的内容级别和评估时间；具体授权规则仍归 Data/News。
+- source_ref 应保持 owner namespace 下的不透明引用，Research 不解析或拼接其他模块内部 ID。
+- ResearchContext/Evidence 的知识时间字段统一使用 system_as_of；业务有效时间独立使用 valid_time，避免多个 as_of 混义。
+- 首批 Research 只存 metadata、必要摘要、fingerprint 和授权引用；全文由来源模块按当前授权按需读取。
+- News Query Facade/Repository 尚未生产实现，只阻断 News 生产 Adapter、历史查询和内容读取，不阻断 Research Context/Evidence Domain 与契约测试。
+
+### 31.4 Researchflow 首批字段缺口
+
+- Run/Stage/Attempt 已有主要字段，但需要补合法状态迁移表，特别是 timeout、cancel、retry 和终态之间的关系。
+- timeout 是一次 Attempt 的执行结果；主动 cancel 是取消请求，两者不得合并为同一语义。
+- 必需 Stage 失败时 Run 不得成功；可选 Stage 失败可形成 partial/degraded，并列出缺失阶段和原因。
+- Run 必须固定 workflow_template_id、template_version 和模板指纹，保证历史流程可还原。
+- FLOW-001~003 可先通过纯领域/内存测试验收，不依赖 Platform Task Queue 或其他模块生产 Facade。
+
+### 31.5 LLM 首批范围
+
+- LLM-001 可立即独立执行：核实现有模型服务请求/响应、认证、超时、流式事件、错误、usage 和结构化输出行为。
+- 在协议盘点完成前，不冻结完整 ModelRequest/ModelResponse 字段，不建设多模型路由。
+- LLM Adapter 不执行工具调用；工具授权、预算和执行属于 Researchflow。
+- 真实模型凭据缺失只阻断真实调用验收，不阻断协议解析和 Fixture 测试。
+
+### 31.6 Notification 首批字段缺口
+
+- NTF-001 可独立定义 Event、Subscription、Delivery 领域对象和状态迁移。
+- payload 必须由 event_type + schema_version 对应的明确 Schema 约束，不能使用任意 map 直接渲染发送。
+- recipient_scope 必须是受控范围类型，不允许任意字符串成为真实发送目标。
+- Delivery 的重试必须保留 Attempt 历史；永久错误不无限重试。
+- Platform Secret/HTTP 和真实渠道凭据只阻断真实 Channel Adapter 验收，不阻断领域模型、幂等和状态机测试。
+
+### 31.7 首批 Owner Review 状态
+
+| 契约 | 参与 Owner | 当前状态 | 待确认 |
+|---|---|---|---|
+| Quant Request/Metric/ResultRef | Quant + Researchflow | 待 Review | typed parameters、数值精度、单位 |
+| Research Context/Evidence | Research + Researchflow | 待 Review | system_as_of、AuthorizationRef、内容策略 |
+| News Evidence Query Port | News + Research + Researchflow | 目标契约已写，待确认 | DTO、知识时间过滤、当前授权、Cursor、错误 |
+| Researchflow Run/Stage/Attempt | Researchflow + Platform | 待 Review | 状态迁移、deadline、cancel、partial、模板版本 |
+| LLM Model Adapter | LLM + Platform | 协议盘点前 | 先完成 LLM-001 |
+| Notification Event/Delivery | Notification + Platform | 待 Review | payload Schema、recipient_scope、幂等和 Attempt |
+| Data Snapshot Input | Data + Quant | 总体语义已定义，字段映射待 Review | PIT、单位、复权、quality、source version |
+
+规划侧提出建议不等于模块 Owner 批准。未记录 Owner 结论的契约不得标记冻结。
+
+### 31.8 当前结论
+
+- 五模块均已达到 Design Ready；是否达到 Module Ready 必须按模块、按首批任务分别确认。
+- LLM-001 是当前唯一无需等待其他模块接口实现即可直接推进的首批任务。
+- Quant、Research、Researchflow、Notification 可继续完善各自不依赖未决字段的领域设计和测试方案；相关跨模块 Adapter/调用点待 Owner Review 后实现。
+- Data/News/Platform 的真实实现、真实环境和 CI 仅在对应 Adapter/Integration 批次验收，不作为无关模块的共同前置条件。
+- 本节不宣称 GOV-004 已冻结，不自动创建任何模块分支。
