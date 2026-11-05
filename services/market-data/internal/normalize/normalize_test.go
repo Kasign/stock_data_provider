@@ -26,6 +26,25 @@ func TestNormalizeSymbol(t *testing.T) {
 		}
 	}
 }
+func TestValidateAndSortBarsKeepsNewestInputFirstForDuplicateTradeDate(t *testing.T) {
+	newest := validDailyBarForNormalizationTest()
+	newest.Close = 10.8
+	older := newest
+	older.Close = 10.2
+	bars := []model.DailyBar{newest, older}
+
+	got, warnings := ValidateAndSortBars("600519.SH", bars, "", "", 0)
+	if len(got) != 1 {
+		t.Fatalf("same-date duplicates must keep exactly one valid bar, got=%+v warnings=%v", got, warnings)
+	}
+	if got[0].Close != newest.Close {
+		t.Fatalf("same-date input priority must be preserved (newest fetched row first): kept close=%v, want=%v", got[0].Close, newest.Close)
+	}
+	if !containsWarning(warnings, "duplicate_trade_date_dropped") {
+		t.Fatalf("expected duplicate-date warning, got %v", warnings)
+	}
+}
+
 func TestValidateAndSortBars(t *testing.T) {
 	v1 := int64(100)
 	v2 := int64(200)

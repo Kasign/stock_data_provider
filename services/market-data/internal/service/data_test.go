@@ -830,7 +830,7 @@ func TestCoherentStoredSeriesUsesStableTieBreakers(t *testing.T) {
 		{Source: "tencent", SourceVersion: "tencent-bars-v1", TradeDate: "2026-10-21", FetchedAt: newFetch, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
 		{Source: "tencent", SourceVersion: "tencent-bars-v1", TradeDate: "2026-10-22", FetchedAt: newFetch, AdjustmentBasis: model.AdjustmentNone, NormalizationVer: normalize.Version},
 	}
-	got, reason = coherentStoredSeries(append(append([]model.DailyBar(nil), olderLong...), newerShort...), model.AdjustmentNone)
+	got, reason := coherentStoredSeries(append(append([]model.DailyBar(nil), olderLong...), newerShort...), model.AdjustmentNone)
 	if reason != "" || len(got) != 2 || got[0].Source != "tencent" {
 		t.Fatalf("newest coherent series must win over older series with more rows: bars=%+v reason=%s", got, reason)
 	}
