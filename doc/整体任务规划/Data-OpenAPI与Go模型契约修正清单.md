@@ -630,3 +630,21 @@ Live provider probe 整体 success 仅表示 Workflow 成功；如需确认专�
 因此，原始 15 处 required 差异不能全部算作 15 个运行时错误。当前已确认需要实施修复的重点是 Bundle.warnings；HotRanking 两项由 Validator 保证非空，需用测试固化此约束。
 
 **DATA-CONTRACT-003-C**：修正 Bundle.warnings 的 JSON Tag，或调整 Schema required（优先保持其作为稳定数组字段，建议去掉 omitempty）；补充 Bundle 无警告/有警告两种 Handler Golden。另对 HotRanking 两项增加空 source_version 必须被 Validator 拒绝的测试。
+
+
+### 11.16 Data 最新 HEAD 再次更新（2026-11-05）
+
+Data 分支最新 HEAD 已推进至 `266ac21f5c840207f79aae8984021dac74185652`：
+
+- 提交：`docs(api): 记录 BaoStock 八证券复权证据 [historical_baostock_factors]`
+- 相较上一基线 `bc55db99fc6908c77c3c0ec6a213651373a857b2` ahead 2 / behind 0。
+- Compare 变化：三份 `doc/api/**` 文档、一份 WebUI/数据接口协作文档和 BaoStock Live Probe 测试；没有修改 `services/market-data/openapi.yaml`、HTTP Handler 或 Model。
+- 因此 11.9 Operation 映射、11.11 集合字段、11.12 nullable + omitempty、11.14 LimitPool 可达性、11.15 required 交叉结论继续适用于最新业务实现。
+
+最新 SHA 关联 Workflow 在本次复核时全部未完成：
+- Live provider probe run `42017899688`：in_progress。
+- WebUI checks run `42017899766`：in_progress。
+- Go-Python parity run `42017899832`：pending。
+- Go test suite run `42017899888`：in_progress。
+
+不得沿用前一 SHA 的 CI 结果作为本次最新 SHA 的验收结论。待 Workflow 完成后再更新状态；当前只确认静态代码文件未变化。
