@@ -953,3 +953,25 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 - 下一步优先核对 Tencent/Eastmoney 源端复权定义和可追溯参考日期证据；如果源端不暴露，应明确标记缺失并保持 not_comparable。再评估是否有可信公司行为/复权因子源可作为独立基准。
 - 本轮生产 Probe 测试只注入四家日 K Provider，未注入生产日历 Provider，也未连接 MariaDB；交易上下文和历史持久化仍需单独联验。
 - 当前代码 HEAD：`e3a0bbb2ba973abe3317f26fe4bd4f0e250a7d4c`。Live Provider Probe Run `41952778969` 成功；Go test suite Run `41952778933` 在记录时 Go 格式检查及普通测试已通过，race/vet 和 Docker 构建仍在执行。
+
+
+## 58. 2026-11-05 生产历史 Probe 测试装配修正
+
+### 58.1 上轮问题复核
+
+- 上轮 GitHub Actions 服务层历史 Probe Run `41951967119` 执行成功，但测试构造的 DataService 没有注入生产使用的交易日历/证券状态 Provider，也没有 MariaDB Store。
+- 结果为两只股票各 12 项诊断：10 项 returned_degraded、2 项 Sina adjusted not_supported、0 failed；交易日历上下文不可用，CrossProviderDailyCompare 因 `quality_status_must_be_valid` 全部 skipped；`persisted=false` 是测试未配置 Store 的结果。
+- 这不是 Provider 硬失败，也不是跨源 mismatch，更不能作为交易上下文或持久化验收通过。
+
+### 58.2 测试入口修正
+
+- 历史 Probe opt-in 测试现在按生产装配方式注入 BaoStock TradingCalendarProvider。
+- 当 GitHub Secret `TUSHARE_TOKEN` 存在时，注入 Tushare SecurityTradingStatusProvider；不把 Tushare 加入本轮日 K Provider 列表，避免扩大请求范围。
+- Live Provider Probe job 增加临时 MariaDB 11.4 service；测试启动后执行既有 `Store.Migrate`，Probe 执行 storage check，随后通过 `ProviderProbeHistory` 读回并核对 RunID。
+- 不修改生产 Probe 业务逻辑、不放宽质量门禁、不增加生产 API。
+- 最近一次 Go test suite 中 market-data 的 gofmt 与普通测试已通过；race/vet 和 MariaDB 集成仍以完整 Run 结论为准。
+
+### 58.3 下一轮真实验收
+
+- 通过提交标记 `[historical_service_probe]` 重新触发相同历史窗口，检查 BaoStock 日历是否真实可用、Tushare 状态证据是否返回，以及 MariaDB 是否成功持久化并读回。
+- 只有实际结果支持时才更新交易上下文、cross-provider、storage 结论；若 BaoStock/Tushare 无法提供证据，按 unavailable/degraded 记录，不将缺失上下文误标通过。
