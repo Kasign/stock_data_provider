@@ -277,3 +277,11 @@
 
 
 - CI 语法修正：SHA `6537f685d0c0ca6c14c6636d840b72f8b1fce40d` 暴露 pre-event 探测嵌套分支少一个闭合括号，已按完整 if/else 结构重写该段；上一 SHA 不作为通过依据。
+
+
+## 2026-11-05 P0 批次 34：BaoStock 首因子事件前 fallback 探测结果
+
+- Push Live probe Run `42009726295` 实际执行 BaoStock 因子专项，Push Go suite `42009726404`、PR Go suite `42009734363`、PR Live probe `42009734302`、Parity `42009734410`、WebUI `42009734375` 全部 success，均关联代码 SHA `f12522e93713bb42ccd38f278e76a8f58b9fb003`。
+- `sh.600036` 首因子事件日 `2002-04-09`，因子 30 条；`sz.002982` 首因子事件日 `2020-04-24`，因子 8 条。两者 raw/qfq/hfq 均各 9 条，样本区间没有 OHLC mismatch。
+- 两只证券首事件前都没有 raw 日 K，`pre_first_event_status=not_applicable`。因此官方 latest-factor fallback 没有被真实数据验证；生产 helper 继续 fail closed，不采用未来因子。
+- AvailableAt 仍未知；当前复权 OHLC 匹配不等于 PIT 可见性证明。
