@@ -150,9 +150,10 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 - `ApplyMigrations(ctx, db, namespace, migrations)` 必须由服务启动/部署的显式迁移步骤调用；OpenSQL 不自动执行 Migration。
 - namespace 限制为小写字母、数字、点、下划线和连字符，最多 64 字符。
 - 通过同一专用 SQL Conn 执行 MariaDB/MySQL `GET_LOCK`、Migration 和 `RELEASE_LOCK`，避免数据库连接池切换会话导致 advisory lock 失效。
-- 历史表 `platform_schema_migrations` 按 namespace/version 唯一记录 description、SQL SHA-256 checksum 和 applied_at。
-- 执行前验证完整 Migration 清单；拒绝重复版本、空 SQL、无效 namespace、历史 checksum 漂移和数据库存在未登记版本。
-- 每条 SQL 单独执行；MariaDB DDL 可能隐式提交，因此不能假设整个 Migration 可事务回滚。部分失败不写成功记录，迁移 SQL 必须可重入或通过新的前向 Migration 修复。
+- 历史表 `platform_schema_migrations` 按 namespace/version 唯一记录 description、SQL SHA-256 checksum、status、失败语句序号和 applied_at。
+- Migration 先写入 running，再逐条执行 SQL，成功后更新 applied；SQL 失败时尽最大努力写入 failed 和失败语句序号。历史中存在 running/failed 时拒绝自动重跑，必须先人工检查部分 DDL 结果并恢复。
+- 执行前验证完整 Migration 清单；拒绝重复版本、空 SQL、无效 namespace、历史 checksum 漂移、数据库存在未登记版本和历史版本缺口。
+- 每条 SQL 单独执行；MariaDB DDL 可能隐式提交，因此不能假设整个 Migration 可事务回滚。失败记录写入本身也可能因数据库不可用而失败，此时错误仍保持安全摘要，但需要通过数据库侧检查确认实际执行状态。修复应采用新的前向 Migration，不得修改已发布版本。
 
 ### 9.4 当前验收边界
 

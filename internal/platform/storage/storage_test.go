@@ -242,6 +242,9 @@ var _ driver.Connector = (*testConnector)(nil)
 
 type migrationTestState struct {
 	applied        map[uint64]string
+	pending        map[uint64]string
+	failed         map[uint64]int
+	failStatement  bool
 	statements     []string
 	lockAcquired   bool
 	lockReleased   bool
@@ -293,17 +296,24 @@ func (c migrationTestConn) QueryContext(_ context.Context, query string, _ []dri
 	case strings.Contains(query, "RELEASE_LOCK"):
 		c.state.lockReleased = true
 		return &migrationTestRows{columns: []string{"released"}, values: [][]driver.Value{{int64(1)}}}, nil
-	case strings.Contains(query, "SELECT version, checksum"):
-		versions := make([]uint64, 0, len(c.state.applied))
+	case strings.Contains(query, "SELECT version, checksum, status, failure_statement"):
+		versions := make([]uint64, 0, len(c.state.applied)+len(c.state.failed))
 		for version := range c.state.applied {
+			versions = append(versions, version)
+		}
+		for version := range c.state.failed {
 			versions = append(versions, version)
 		}
 		sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
 		values := make([][]driver.Value, 0, len(versions))
 		for _, version := range versions {
-			values = append(values, []driver.Value{int64(version), c.state.applied[version]})
+			if failureStatement, failed := c.state.failed[version]; failed {
+				values = append(values, []driver.Value{int64(version), c.state.pending[version], "failed", int64(failureStatement)})
+				continue
+			}
+			values = append(values, []driver.Value{int64(version), c.state.applied[version], "applied", int64(0)})
 		}
-		return &migrationTestRows{columns: []string{"version", "checksum"}, values: values}, nil
+		return &migrationTestRows{columns: []string{"version", "checksum", "status", "failure_statement"}, values: values}, nil
 	default:
 		return nil, fmt.Errorf("unexpected query: %s", query)
 	}
@@ -322,8 +332,20 @@ func (c migrationTestConn) ExecContext(_ context.Context, query string, args []d
 		if !ok {
 			return nil, fmt.Errorf("unexpected migration checksum argument: %T", args[3].Value)
 		}
-		c.state.applied[uint64(version)] = checksum
+		c.state.pending[uint64(version)] = checksum
+	case strings.Contains(query, "UPDATE platform_schema_migrations"):
+		version := uint64(args[len(args)-1].Value.(int64))
+		if strings.Contains(query, "status = 'failed'") {
+			c.state.failed[version] = int(args[0].Value.(int64))
+		} else if strings.Contains(query, "status = 'applied'") {
+			c.state.applied[version] = c.state.pending[version]
+			delete(c.state.pending, version)
+			delete(c.state.failed, version)
+		}
 	default:
+		if c.state.failStatement && strings.Contains(query, "CREATE TABLE failing_table") {
+			return nil, errors.New("private migration SQL failure detail")
+		}
 		c.state.statements = append(c.state.statements, query)
 	}
 	return driver.RowsAffected(1), nil
@@ -347,7 +369,7 @@ func (r *migrationTestRows) Next(destination []driver.Value) error {
 }
 
 func TestApplyMigrationsAppliesInOrderAndIsIdempotent(t *testing.T) {
-	state := &migrationTestState{applied: make(map[uint64]string), lockAcquired: true}
+	state := &migrationTestState{applied: make(map[uint64]string), pending: make(map[uint64]string), failed: make(map[uint64]int), lockAcquired: true}
 	db := sql.OpenDB(migrationTestConnector{state: state})
 	defer db.Close()
 	migrations := []Migration{
@@ -384,7 +406,7 @@ func TestApplyMigrationsRejectsChecksumDriftAndUnknownHistory(t *testing.T) {
 		{1: "different-checksum"},
 		{2: "unknown-version"},
 	} {
-		state := &migrationTestState{applied: applied, lockAcquired: true}
+		state := &migrationTestState{applied: applied, pending: make(map[uint64]string), failed: make(map[uint64]int), lockAcquired: true}
 		db := sql.OpenDB(migrationTestConnector{state: state})
 		err := ApplyMigrations(context.Background(), db, "analysis", []Migration{migration})
 		_ = db.Close()
@@ -401,7 +423,7 @@ func TestApplyMigrationsRejectsChecksumDriftAndUnknownHistory(t *testing.T) {
 }
 
 func TestApplyMigrationsRejectsConcurrentMigrationLock(t *testing.T) {
-	state := &migrationTestState{applied: make(map[uint64]string), lockAcquired: false}
+	state := &migrationTestState{applied: make(map[uint64]string), pending: make(map[uint64]string), failed: make(map[uint64]int), lockAcquired: false}
 	db := sql.OpenDB(migrationTestConnector{state: state})
 	defer db.Close()
 	err := ApplyMigrations(context.Background(), db, "analysis", []Migration{{
@@ -427,6 +449,8 @@ func TestApplyMigrationsRejectsMissingVersionBeforeAppliedVersion(t *testing.T) 
 	}
 	state := &migrationTestState{
 		applied:      map[uint64]string{2: checksums[2]},
+		pending:      make(map[uint64]string),
+		failed:       make(map[uint64]int),
 		lockAcquired: true,
 	}
 	db := sql.OpenDB(migrationTestConnector{state: state})
@@ -436,5 +460,41 @@ func TestApplyMigrationsRejectsMissingVersionBeforeAppliedVersion(t *testing.T) 
 	}
 	if len(state.statements) != 0 {
 		t.Fatalf("migration statements ran despite out-of-order history: %v", state.statements)
+	}
+}
+
+
+func TestApplyMigrationsRecordsFailureAndRequiresManualRecovery(t *testing.T) {
+	state := &migrationTestState{
+		applied: make(map[uint64]string),
+		pending: make(map[uint64]string),
+		failed: make(map[uint64]int),
+		lockAcquired: true,
+		failStatement: true,
+	}
+	db := sql.OpenDB(migrationTestConnector{state: state})
+	defer db.Close()
+	migrations := []Migration{{
+		Version: 1, Description: "failing migration",
+		Statements: []string{"CREATE TABLE failing_table (id INT)"},
+	}}
+	err := ApplyMigrations(context.Background(), db, "analysis", migrations)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_apply_failed" {
+		t.Fatalf("expected safe migration failure fault, got %v", err)
+	}
+	if strings.Contains(err.Error(), "private migration SQL failure detail") {
+		t.Fatal("migration fault must not expose internal SQL error")
+	}
+	if state.failed[1] != 1 {
+		t.Fatalf("expected failed migration statement 1 to be recorded, got %+v", state.failed)
+	}
+	state.failStatement = false
+	err = ApplyMigrations(context.Background(), db, "analysis", migrations)
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.storage.migration_requires_recovery" {
+		t.Fatalf("expected manual recovery conflict, got %v", err)
+	}
+	if len(state.statements) != 0 {
+		t.Fatalf("failed migration must not be retried automatically: %v", state.statements)
 	}
 }

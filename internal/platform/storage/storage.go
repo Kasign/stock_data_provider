@@ -225,9 +225,9 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		releaseErr := conn.QueryRowContext(releaseCtx, "SELECT RELEASE_LOCK(?)", lockName).Scan(&released)
 		if resultErr == nil && (releaseErr != nil || !released.Valid || released.Int64 != 1) {
 			if releaseErr != nil {
-				resultErr = fmt.Errorf("release migration lock: %w", releaseErr)
+				resultErr = dependencyFault("sql", "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", releaseErr)
 			} else {
-				resultErr = errors.New("release migration lock did not confirm ownership")
+				resultErr = fault.New(fault.ClassInternal, "platform.storage.migration_lock_release_failed", "migration lock release could not be confirmed", nil)
 			}
 		}
 	}()
@@ -237,33 +237,42 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 		version BIGINT UNSIGNED NOT NULL,
 		description VARCHAR(255) NOT NULL,
 		checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+		status VARCHAR(16) NOT NULL DEFAULT 'applied',
+		failure_statement INT UNSIGNED NOT NULL DEFAULT 0,
 		applied_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 		PRIMARY KEY (namespace, version)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
 	if _, err := conn.ExecContext(ctx, createHistory); err != nil {
-		return fmt.Errorf("create migration history: %w", err)
+		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history storage is unavailable", err)
 	}
 
 	applied := make(map[uint64]string)
-	rows, err := conn.QueryContext(ctx, "SELECT version, checksum FROM platform_schema_migrations WHERE namespace = ?", namespace)
+	rows, err := conn.QueryContext(ctx, "SELECT version, checksum, status, failure_statement FROM platform_schema_migrations WHERE namespace = ?", namespace)
 	if err != nil {
-		return fmt.Errorf("read migration history: %w", err)
+		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history storage is unavailable", err)
 	}
 	for rows.Next() {
 		var version uint64
 		var checksum string
-		if err := rows.Scan(&version, &checksum); err != nil {
+		var status string
+		var failureStatement uint32
+		if err := rows.Scan(&version, &checksum, &status, &failureStatement); err != nil {
 			_ = rows.Close()
-			return fmt.Errorf("decode migration history: %w", err)
+			return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history could not be read", err)
+		}
+		if status != "applied" {
+			_ = rows.Close()
+			return fault.New(fault.ClassConflict, "platform.storage.migration_requires_recovery",
+				"migration history contains an incomplete migration; manual recovery is required", nil)
 		}
 		applied[version] = checksum
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return fmt.Errorf("iterate migration history: %w", err)
+		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history could not be read", err)
 	}
 	if err := rows.Close(); err != nil {
-		return fmt.Errorf("close migration history rows: %w", err)
+		return dependencyFault("sql", "platform.storage.migration_history_failed", "migration history could not be read", err)
 	}
 
 	lastAppliedIndex := -1
@@ -295,15 +304,40 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 			}
 			continue
 		}
+		if _, err := conn.ExecContext(ctx, `INSERT INTO platform_schema_migrations
+			(namespace, version, description, checksum, status, failure_statement)
+			VALUES (?, ?, ?, ?, 'running', 0)`,
+			namespace, migration.Version, migration.Description, checksum); err != nil {
+			return dependencyFault("sql", "platform.storage.migration_history_failed", "migration execution could not be recorded", err)
+		}
 		for index, statement := range migration.Statements {
 			if _, err := conn.ExecContext(ctx, statement); err != nil {
-				return fmt.Errorf("apply migration %s version %d statement %d: %w", namespace, migration.Version, index+1, err)
+				recordCtx, recordCancel := context.WithTimeout(context.Background(), defaultPingTimeout)
+				_, recordErr := conn.ExecContext(recordCtx, `UPDATE platform_schema_migrations
+					SET status = 'failed', failure_statement = ?
+					WHERE namespace = ? AND version = ? AND status = 'running'`,
+					index+1, namespace, migration.Version)
+				recordCancel()
+				cause := err
+				if recordErr != nil {
+					cause = errors.Join(err, recordErr)
+				}
+				return &fault.Fault{
+					Class: fault.ClassInternal, Code: "platform.storage.migration_apply_failed",
+					SafeMessage: "migration failed; manual recovery is required",
+					Dependency: "sql", Retryable: false, Cause: cause,
+				}
 			}
 		}
-		if _, err := conn.ExecContext(ctx, `INSERT INTO platform_schema_migrations
-			(namespace, version, description, checksum) VALUES (?, ?, ?, ?)`,
-			namespace, migration.Version, migration.Description, checksum); err != nil {
-			return fmt.Errorf("record migration %s version %d: %w", namespace, migration.Version, err)
+		if _, err := conn.ExecContext(ctx, `UPDATE platform_schema_migrations
+			SET status = 'applied', failure_statement = 0
+			WHERE namespace = ? AND version = ? AND status = 'running'`,
+			namespace, migration.Version); err != nil {
+			return &fault.Fault{
+				Class: fault.ClassInternal, Code: "platform.storage.migration_record_failed",
+				SafeMessage: "migration statements completed but history update failed; inspect the database before retrying",
+				Dependency: "sql", Retryable: false, Cause: err,
+			}
 		}
 	}
 	return nil
