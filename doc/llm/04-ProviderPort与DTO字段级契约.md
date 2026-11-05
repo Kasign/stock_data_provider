@@ -48,8 +48,9 @@
 | 字段 | 类型 | 必需 | 约束 |
 |---|---|---:|---|
 | request_id | string | 是 | LLM 内部调用 ID，不承载 Secret |
+| purpose_code | string | 是 | 稳定调用用途代码，不写自由文本 Prompt |
 | model | string | 是 | 明确模型 ID，不依赖任意模型路由 |
-| instructions | string | 是 | 序列化到 Responses instructions |
+| instructions | string | 是 | 序列化到 Responses instructions；允许空字符串 |
 | input_text | string | 是 | 首批只支持单轮文本，序列化为 Responses input string |
 | max_output_tokens | integer | 是 | 正整数，受调用预算限制 |
 | temperature | *number | 否 | 仅 capability=supported 时发送 |
@@ -60,6 +61,7 @@
 | tool_choice | enum? | 否 | 首批限制 none/auto；required/指定工具延后 |
 | deadline_at | UTC timestamp | 是 | 绝对截止时间，不得晚于调用方 Context deadline |
 | correlation_id | string | 否 | 跨模块关联 ID，不承载领域对象 |
+
 | trace_id | string | 否 | 受控追踪标识 |
 
 首批不接收任意 map、任意 JSON 或完整 Responses input item 数组。多轮对话、多模态、background response、previous_response_id、conversation_id 等 deferred；出现时返回 unsupported_capability，不得静默丢弃。
@@ -96,17 +98,21 @@ ToolDefinition 是 Researchflow Registry 筛选后的只读声明。LLM 只序�
 
 | 字段 | 类型 | 必需 | 约束 |
 |---|---|---:|---|
+| request_id | string | 是 | 回显 ModelRequest.request_id |
+| provider_id | string | 是 | 实际选用的 Provider 配置 ID |
 | response_id | string | 条件必需 | 上游 Responses id；缺失需标记契约异常 |
 | status | enum | 是 | completed / incomplete / failed |
 | output_items | OutputItem[] | 是 | 保留 item 类型和顺序；空数组必须有状态/错误解释 |
-| output_text | string | 否 | 从 message/output_text item 聚合的便捷字段 |
+| output_text | string | 否 | 按 output item 顺序聚合 message/output_text part 的便捷字段 |
 | structured_json | json.RawMessage? | 否 | 仅本地 Schema 校验成功后提供 |
 | tool_calls | ModelToolCall[] | 否 | 仅解析，不执行 |
 | usage | Usage? | 否 | 缺失为 nil，不伪造 0 |
 | model_requested | string | 是 | 请求模型 ID |
 | model_actual | string? | 否 | 上游响应 model 或 Gateway 实际模型 |
+| model_version | string? | 否 | 上游明确返回才设置 |
 | gateway_request_id | string? | 否 | 从响应头读取，缺失允许 |
 | incomplete_reason | string? | 否 | Responses incomplete_details.reason |
+
 | error | ModelErrorInfo? | 否 | 稳定错误码和安全摘要 |
 | started_at / finished_at | UTC timestamp | 是 | 调用时间边界 |
 | duration_ms | integer | 是 | 非负 |
@@ -147,7 +153,7 @@ ModelEvent 字段：type、sequence_number?、response_id?、output_index?、con
 首批识别 response.created、response.output_text.delta、response.output_text.done、response.completed、response.incomplete、response.failed、error。其他事件作为 UnknownEvent 保留类型和顺序，不执行副作用。上列是 Adapter parser 契约，不代表当前本地模型已产生所有事件。
 
 流结束规则：
-- 必须收到明确 terminal event（completed/incomplete/failed/error）才算正常结束。
+- 必须收到明确 terminal event（completed/incomplete/failed/error）才算终止；只有 completed 是成功，incomplete/failed/error 都必须按非成功结果返回。
 - EOF 前没有 terminal event，返回 stream_interrupted；不得把连接关闭当成功。
 - sequence_number 不得倒退；缺号/重号策略由 Fixture 固定并经 Owner Review。
 - 首字节、首个文本 delta、首个 reasoning delta 分别记录；Responses TTFT 不能用首字节时间冒充。

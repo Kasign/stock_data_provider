@@ -149,15 +149,15 @@ ResearchAttempt {
 
 ```text
 ModelRequest {
-  request_id, model, instructions, input_text,
+  request_id, purpose_code, model, instructions, input_text,
   max_output_tokens, temperature?, top_p?, reasoning_effort?,
   response_schema?, tools[], deadline_at, correlation_id?, trace_id?
 }
 ModelResponse {
-  response_id?, status, output_items[], output_text?,
-  structured_json?, tool_calls[], usage?,
-  model_requested, model_actual?, gateway_request_id?,
-  incomplete_reason?, error?, started_at, finished_at, duration_ms
+  request_id, provider_id, response_id?, status, output_items[], output_text?,
+  structured_json?, tool_calls[], usage?, model_requested, model_actual?,
+  model_version?, gateway_request_id?, incomplete_reason?, error?,
+  started_at, finished_at, duration_ms
 }
 ModelEvent {
   type, sequence_number?, response_id?, output_index?,
