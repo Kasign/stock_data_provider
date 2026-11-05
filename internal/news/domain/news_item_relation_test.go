@@ -3,14 +3,21 @@ package domain
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
-func TestValidateNewsItemRelationPreservesCrossSourceRepost(t *testing.T) {
-	relation := NewsItemRelation{
-		ID: "rel-1", FromNewsID: "news-repost", FromSourceID: "source-repost",
-		ToNewsID: "news-original", ToSourceID: "source-original",
-		Kind: NewsItemRelationRepostOf, EvidenceObservation: "observation-1",
+func relationFixture(id, from, to string) NewsItemRelation {
+	now := time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC)
+	return NewsItemRelation{
+		ID: id, FromNewsID: from, FromSourceID: "source-" + from,
+		ToNewsID: to, ToSourceID: "source-" + to,
+		Kind: NewsItemRelationRepostOf, Status: NewsItemRelationConfirmed,
+		EvidenceObservation: "obs-" + id, AssertedAt: now, ObservedAt: now,
 	}
+}
+
+func TestValidateNewsItemRelationPreservesCrossSourceRepost(t *testing.T) {
+	relation := relationFixture("rel-1", "news-repost", "news-original")
 	if err := ValidateNewsItemRelation(relation); err != nil {
 		t.Fatal(err)
 	}
@@ -20,11 +27,8 @@ func TestValidateNewsItemRelationPreservesCrossSourceRepost(t *testing.T) {
 }
 
 func TestValidateNewsItemRelationRequiresPairedVersionEvidence(t *testing.T) {
-	relation := NewsItemRelation{
-		ID: "rel-1", FromNewsID: "news-repost", FromSourceID: "source-repost",
-		ToNewsID: "news-original", ToSourceID: "source-original",
-		Kind: NewsItemRelationRepostOf, FromVersionID: "from-v1",
-	}
+	relation := relationFixture("rel-1", "news-repost", "news-original")
+	relation.FromVersionID = "from-v1"
 	if !errors.Is(ValidateNewsItemRelation(relation), ErrNewsItemRelationInvalid) {
 		t.Fatal("version evidence must identify both sides")
 	}
@@ -35,12 +39,8 @@ func TestValidateNewsItemRelationRequiresPairedVersionEvidence(t *testing.T) {
 }
 
 func TestAssessNewsItemRelationEvidenceTracksBothContentVersions(t *testing.T) {
-	relation := NewsItemRelation{
-		ID: "rel-1", FromNewsID: "news-repost", FromSourceID: "source-repost",
-		ToNewsID: "news-original", ToSourceID: "source-original",
-		Kind: NewsItemRelationRepostOf, EvidenceObservation: "obs-1",
-		FromVersionID: "from-v1", ToVersionID: "to-v1",
-	}
+	relation := relationFixture("rel-1", "news-repost", "news-original")
+	relation.FromVersionID, relation.ToVersionID = "from-v1", "to-v1"
 	status, err := AssessNewsItemRelationEvidence(relation, "from-v1", "to-v1")
 	if err != nil || status != NewsItemRelationEvidenceCurrent {
 		t.Fatalf("status=%q err=%v", status, err)
@@ -59,11 +59,7 @@ func TestAssessNewsItemRelationEvidenceTracksBothContentVersions(t *testing.T) {
 }
 
 func TestAssessNewsItemRelationEvidenceMarksObservationOnlyAsUnversioned(t *testing.T) {
-	relation := NewsItemRelation{
-		ID: "rel-1", FromNewsID: "news-repost", FromSourceID: "source-repost",
-		ToNewsID: "news-original", ToSourceID: "source-original",
-		Kind: NewsItemRelationRepostOf, EvidenceObservation: "obs-1",
-	}
+	relation := relationFixture("rel-1", "news-repost", "news-original")
 	status, err := AssessNewsItemRelationEvidence(relation, "from-v1", "to-v1")
 	if err != nil || status != NewsItemRelationEvidenceUnversioned {
 		t.Fatalf("status=%q err=%v", status, err)
@@ -71,22 +67,16 @@ func TestAssessNewsItemRelationEvidenceMarksObservationOnlyAsUnversioned(t *test
 }
 
 func TestAssessNewsItemRelationEvidenceRequiresCurrentVersionIDs(t *testing.T) {
-	relation := NewsItemRelation{
-		ID: "rel-1", FromNewsID: "news-repost", FromSourceID: "source-repost",
-		ToNewsID: "news-original", ToSourceID: "source-original",
-		Kind: NewsItemRelationRepostOf, FromVersionID: "from-v1", ToVersionID: "to-v1",
-	}
+	relation := relationFixture("rel-1", "news-repost", "news-original")
+	relation.FromVersionID, relation.ToVersionID = "from-v1", "to-v1"
 	if _, err := AssessNewsItemRelationEvidence(relation, "from-v1", ""); !errors.Is(err, ErrNewsItemRelationInvalid) {
 		t.Fatalf("err=%v", err)
 	}
 }
 
 func TestValidateNewsItemRelationRejectsSameSourceOrSelfRelation(t *testing.T) {
-	relation := NewsItemRelation{
-		ID: "rel-1", FromNewsID: "news-1", FromSourceID: "source-1",
-		ToNewsID: "news-2", ToSourceID: "source-1",
-		Kind: NewsItemRelationRepostOf, FromVersionID: "from-v1", ToVersionID: "to-v1",
-	}
+	relation := relationFixture("rel-1", "news-1", "news-2")
+	relation.ToSourceID = relation.FromSourceID
 	if !errors.Is(ValidateNewsItemRelation(relation), ErrNewsItemRelationInvalid) {
 		t.Fatal("same-source repost must not be classified as cross-source repost")
 	}
@@ -97,24 +87,55 @@ func TestValidateNewsItemRelationRejectsSameSourceOrSelfRelation(t *testing.T) {
 	}
 }
 
+func TestValidateNewsItemRelationGraphAllowsMultipleOriginalItems(t *testing.T) {
+	a := relationFixture("rel-a", "news-repost", "news-original-a")
+	b := relationFixture("rel-b", "news-repost", "news-original-b")
+	if err := ValidateNewsItemRelationGraph([]NewsItemRelation{a, b}); err != nil {
+		t.Fatalf("one repost item may reference multiple originals: %v", err)
+	}
+}
+
 func TestValidateNewsItemRelationGraphRejectsCyclesAndDuplicateEdges(t *testing.T) {
-	a := NewsItemRelation{
-		ID: "rel-a", FromNewsID: "news-a", FromSourceID: "source-a",
-		ToNewsID: "news-b", ToSourceID: "source-b",
-		Kind: NewsItemRelationRepostOf, EvidenceObservation: "obs-a",
-	}
-	b := NewsItemRelation{
-		ID: "rel-b", FromNewsID: "news-b", FromSourceID: "source-b",
-		ToNewsID: "news-a", ToSourceID: "source-a",
-		Kind: NewsItemRelationRepostOf, EvidenceObservation: "obs-b",
-	}
+	a := relationFixture("rel-a", "news-a", "news-b")
+	b := relationFixture("rel-b", "news-b", "news-a")
 	if !errors.Is(ValidateNewsItemRelationGraph([]NewsItemRelation{a, b}), ErrNewsItemRelationInvalid) {
 		t.Fatal("cyclic repost graph must be rejected")
 	}
-	b.ID = "rel-b-duplicate"
-	b.FromNewsID, b.FromSourceID = a.FromNewsID, a.FromSourceID
-	b.ToNewsID, b.ToSourceID = a.ToNewsID, a.ToSourceID
+	b = relationFixture("rel-b-duplicate", "news-a", "news-b")
 	if !errors.Is(ValidateNewsItemRelationGraph([]NewsItemRelation{a, b}), ErrNewsItemRelationInvalid) {
 		t.Fatal("duplicate repost edge must be rejected")
+	}
+}
+
+func TestValidateNewsItemRelationHistoryRequiresAppendOnlyReplacement(t *testing.T) {
+	old := relationFixture("rel-old", "news-repost", "news-original")
+	next := relationFixture("rel-new", "news-repost", "news-original")
+	next.SupersedesRelationID = old.ID
+	next.EvidenceObservation = "obs-rechecked"
+	if err := ValidateNewsItemRelationHistory([]NewsItemRelation{old, next}); err != nil {
+		t.Fatal(err)
+	}
+
+	retracted := relationFixture("rel-retracted", "news-repost", "news-original")
+	retracted.Status = NewsItemRelationRetracted
+	retracted.SupersedesRelationID = old.ID
+	if err := ValidateNewsItemRelationHistory([]NewsItemRelation{old, retracted}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateNewsItemRelationHistoryRejectsMissingParentAndMultipleSuccessors(t *testing.T) {
+	orphan := relationFixture("rel-orphan", "news-repost", "news-original")
+	orphan.SupersedesRelationID = "missing"
+	if !errors.Is(ValidateNewsItemRelationHistory([]NewsItemRelation{orphan}), ErrNewsItemRelationInvalid) {
+		t.Fatal("missing superseded assertion must be rejected")
+	}
+	old := relationFixture("rel-old", "news-repost", "news-original")
+	first := relationFixture("rel-first", "news-repost", "news-original")
+	first.SupersedesRelationID = old.ID
+	second := relationFixture("rel-second", "news-repost", "news-original")
+	second.SupersedesRelationID = old.ID
+	if !errors.Is(ValidateNewsItemRelationHistory([]NewsItemRelation{old, first, second}), ErrNewsItemRelationInvalid) {
+		t.Fatal("an assertion must have at most one direct successor")
 	}
 }

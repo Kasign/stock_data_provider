@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"strings"
+	"time"
 )
 
 type NewsItemRelationKind string
@@ -11,8 +12,15 @@ const (
 	NewsItemRelationRepostOf NewsItemRelationKind = "repost_of"
 )
 
-// NewsItemRelation 表示不同发布来源之间的转载/再发布关系，不合并两条新闻主体。
-// FromVersionID/ToVersionID 固定关系证据所依据的双方内容版本，不随最新版本自动漂移。
+type NewsItemRelationStatus string
+
+const (
+	NewsItemRelationProposed  NewsItemRelationStatus = "proposed"
+	NewsItemRelationConfirmed NewsItemRelationStatus = "confirmed"
+	NewsItemRelationRetracted NewsItemRelationStatus = "retracted"
+)
+
+// NewsItemRelation 是不可变的转载关系断言。修订或撤销必须追加新断言并指向被替代断言。
 type NewsItemRelation struct {
 	ID                  string
 	FromNewsID          string
@@ -20,9 +28,13 @@ type NewsItemRelation struct {
 	ToNewsID            string
 	ToSourceID          string
 	Kind                NewsItemRelationKind
+	Status              NewsItemRelationStatus
+	SupersedesRelationID string
 	EvidenceObservation string
 	FromVersionID       string
 	ToVersionID         string
+	AssertedAt          time.Time
+	ObservedAt          time.Time
 }
 
 type NewsItemRelationEvidenceStatus string
@@ -46,15 +58,109 @@ func ValidateNewsItemRelation(relation NewsItemRelation) error {
 		strings.TrimSpace(relation.ToSourceID) == "" ||
 		relation.FromSourceID == relation.ToSourceID ||
 		relation.Kind != NewsItemRelationRepostOf ||
+		(relation.Status != NewsItemRelationProposed && relation.Status != NewsItemRelationConfirmed && relation.Status != NewsItemRelationRetracted) ||
+		relation.AssertedAt.IsZero() || relation.ObservedAt.IsZero() ||
+		(relation.Status == NewsItemRelationRetracted && strings.TrimSpace(relation.SupersedesRelationID) == "") ||
 		(strings.TrimSpace(relation.EvidenceObservation) == "" && (fromVersionID == "" || toVersionID == "")) ||
 		((fromVersionID == "") != (toVersionID == "")) {
+		return ErrNewsItemRelationInvalid
+	}
+	if strings.TrimSpace(relation.SupersedesRelationID) == relation.ID {
 		return ErrNewsItemRelationInvalid
 	}
 	return nil
 }
 
+// ValidateNewsItemRelationHistory 校验追加式断言链和当前确认关系构成的 DAG。
+// 同一转载主体可以指向多个原始主体；只拒绝重复当前边、替代链异常和有向环。
+func ValidateNewsItemRelationHistory(relations []NewsItemRelation) error {
+	byID := make(map[string]NewsItemRelation, len(relations))
+	successor := make(map[string]string, len(relations))
+	for _, relation := range relations {
+		if err := ValidateNewsItemRelation(relation); err != nil {
+			return err
+		}
+		if _, exists := byID[relation.ID]; exists {
+			return ErrNewsItemRelationInvalid
+		}
+		byID[relation.ID] = relation
+	}
+	for _, relation := range relations {
+		parentID := strings.TrimSpace(relation.SupersedesRelationID)
+		if parentID == "" {
+			continue
+		}
+		parent, exists := byID[parentID]
+		if !exists || parent.ID == relation.ID ||
+			parent.FromNewsID != relation.FromNewsID ||
+			parent.FromSourceID != relation.FromSourceID ||
+			parent.Kind != relation.Kind ||
+			parent.Status == NewsItemRelationRetracted {
+			return ErrNewsItemRelationInvalid
+		}
+		if _, exists := successor[parentID]; exists {
+			return ErrNewsItemRelationInvalid
+		}
+		successor[parentID] = relation.ID
+	}
+	for id := range byID {
+		seen := make(map[string]struct{})
+		current := id
+		for current != "" {
+			if _, exists := seen[current]; exists {
+				return ErrNewsItemRelationInvalid
+			}
+			seen[current] = struct{}{}
+			current = successor[current]
+		}
+	}
+
+	edges := make(map[string]struct{})
+	adjacency := make(map[string][]string)
+	for id, relation := range byID {
+		if _, replaced := successor[id]; replaced || relation.Status != NewsItemRelationConfirmed {
+			continue
+		}
+		key := relation.FromNewsID + "\x00" + relation.ToNewsID
+		if _, exists := edges[key]; exists {
+			return ErrNewsItemRelationInvalid
+		}
+		edges[key] = struct{}{}
+		adjacency[relation.FromNewsID] = append(adjacency[relation.FromNewsID], relation.ToNewsID)
+	}
+	state := make(map[string]uint8)
+	var visit func(string) bool
+	visit = func(node string) bool {
+		if state[node] == 1 {
+			return false
+		}
+		if state[node] == 2 {
+			return true
+		}
+		state[node] = 1
+		for _, next := range adjacency[node] {
+			if !visit(next) {
+				return false
+			}
+		}
+		state[node] = 2
+		return true
+	}
+	for node := range adjacency {
+		if !visit(node) {
+			return ErrNewsItemRelationInvalid
+		}
+	}
+	return nil
+}
+
+// ValidateNewsItemRelationGraph 保留原有调用名，按完整断言历史规则校验。
+func ValidateNewsItemRelationGraph(relations []NewsItemRelation) error {
+	return ValidateNewsItemRelationHistory(relations)
+}
+
 // AssessNewsItemRelationEvidence 比较关系证据绑定的双方版本与各自最新版本。
-// 内容任一侧发生修订即返回 stale，要求重新评估；不会自动把历史证据改绑到新版本。
+// 内容任一侧发生修订即返回 stale；不会自动改写历史证据引用。
 func AssessNewsItemRelationEvidence(
 	relation NewsItemRelation,
 	fromCurrentVersionID, toCurrentVersionID string,
@@ -74,43 +180,4 @@ func AssessNewsItemRelationEvidence(
 		return NewsItemRelationEvidenceStale, nil
 	}
 	return NewsItemRelationEvidenceCurrent, nil
-}
-
-// ValidateNewsItemRelationGraph 拒绝重复边和循环转载链；FromNewsID 指转载方，ToNewsID 指原始来源项。
-func ValidateNewsItemRelationGraph(relations []NewsItemRelation) error {
-	byID := make(map[string]NewsItemRelation, len(relations))
-	edges := make(map[string]string, len(relations))
-	for _, relation := range relations {
-		if err := ValidateNewsItemRelation(relation); err != nil {
-			return err
-		}
-		if _, exists := byID[relation.ID]; exists {
-			return ErrNewsItemRelationInvalid
-		}
-		byID[relation.ID] = relation
-		edgeKey := relation.FromNewsID + "\x00" + relation.ToNewsID
-		if _, exists := edges[edgeKey]; exists {
-			return ErrNewsItemRelationInvalid
-		}
-		edges[edgeKey] = relation.ID
-	}
-	parents := make(map[string]string, len(relations))
-	for _, relation := range relations {
-		if existing, exists := parents[relation.FromNewsID]; exists && existing != relation.ToNewsID {
-			return ErrNewsItemRelationInvalid
-		}
-		parents[relation.FromNewsID] = relation.ToNewsID
-	}
-	for itemID := range parents {
-		seen := make(map[string]struct{})
-		current := itemID
-		for current != "" {
-			if _, exists := seen[current]; exists {
-				return ErrNewsItemRelationInvalid
-			}
-			seen[current] = struct{}{}
-			current = parents[current]
-		}
-	}
-	return nil
 }

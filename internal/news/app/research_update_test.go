@@ -279,7 +279,7 @@ func TestApplyResearchUpdateRejectsVersionEvidenceFromAnotherNewsItem(t *testing
 	request.Relations = []domain.RelationAssertion{{
 		ID: "relation-foreign-version", SubjectType: domain.RelationSubjectSecurity,
 		Security: &domain.SecurityRelationSubject{Market: "XSHG", Symbol: "600000"},
-		Kind: domain.RelationMentions, Method: domain.RelationContentMatch, Status: domain.RelationConfirmed,
+		Kind:     domain.RelationMentions, Method: domain.RelationContentMatch, Status: domain.RelationConfirmed,
 	}}
 	request.Evidence = map[string][]domain.RelationEvidence{
 		"relation-foreign-version": {{Type: domain.RelationEvidenceContentSpan, SourceVersionID: "foreign-version"}},
