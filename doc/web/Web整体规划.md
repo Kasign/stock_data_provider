@@ -1948,3 +1948,16 @@ JSR-6L 补充：连接配置变更取消草稿检查后，旧代际 finally 按�
 - [x] 已确认移动导航状态是额外布局变量，纳入截图验收维度。
 - [ ] 仍需有设计稿或截图基线才能判断 34/20/13px 与 6px 阴影是否符合设计意图。
 - [x] 本轮仅更新 doc/web/ 文档，不改 CSS、HTML、JavaScript 或其他目录。
+
+## 2026-11-05 Chromium 视觉基线采集补齐
+
+复核现有 .github/workflows/webui-browser-smoke.yml 与 web/tests/browser-smoke.mjs：现有 Playwright 已覆盖 320/375/600/768/900/1280/1600px、主题切换、页面导航和横向溢出检查；截图上传为 7 天保留的 workflow artifact，无需另建浏览器测试框架。
+
+本轮补齐视觉基线采集维度：
+- [x] 专项 UI Review 截图宽度扩展到 320/600/768/900/1280/1600px，与框架验收目标一致。
+- [x] 对上述六种宽度增加首页亮色主题截图；截图前后断言主题状态，并恢复暗色主题，避免影响后续导航交互测试。
+- [x] 对 320/600px 增加移动导航展开状态截图，截图后关闭导航并断言状态复位。
+- [x] 保留原有首页、各业务视图及 Run Flow 截图和所有既有行为断言；不引入截图像素阈值或脆弱的全图 diff。
+- [ ] 新提交的 Chromium Browser Smoke 需在 CI 中执行成功，并检查 artifact 内新增的 light/mobile-nav 截图是否齐全；CI 结果未返回前不标记验收完成。
+
+截图目录仍为 workflow artifact 的 webui-browser-screenshots/ui-review；当前只建立可人工对照的基线，不自动判定视觉像素差异。

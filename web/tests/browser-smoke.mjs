@@ -69,7 +69,7 @@ const server = createServer(async (request, response) => {
 await mkdir(screenshotDir, { recursive: true });
 const uiReviewScreenshotDir = path.join(screenshotDir, "ui-review");
 await mkdir(uiReviewScreenshotDir, { recursive: true });
-const uiReviewScreenshotWidths = new Set([320, 768, 1280, 1600]);
+const uiReviewScreenshotWidths = new Set([320, 600, 768, 900, 1280, 1600]);
 await new Promise((resolve, reject) => {
   server.once("error", reject);
   server.listen(0, "127.0.0.1", resolve);
@@ -1668,7 +1668,33 @@ try {
       animations: "disabled"
     });
 
+    // Keep a compact, repeatable visual baseline for the framework across all target widths.
+    if (uiReviewScreenshotWidths.has(viewport.width)) {
+      await page.locator("#theme-toggle").click();
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "light",
+        "light-theme screenshot must use the active light theme");
+      await page.screenshot({
+        path: path.join(uiReviewScreenshotDir, viewport.width + "x" + viewport.height + "-home-light.png"),
+        fullPage: true,
+        animations: "disabled"
+      });
+      await page.locator("#theme-toggle").click();
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark",
+        "visual baseline must restore dark theme before navigation checks");
+    }
+
     const menu = page.locator("#mobile-menu-toggle");
+    if (viewport.width <= 600 && await menu.isVisible()) {
+      await menu.click();
+      await page.waitForFunction(() => document.querySelector("#mobile-menu-toggle")?.getAttribute("aria-expanded") === "true");
+      await page.screenshot({
+        path: path.join(uiReviewScreenshotDir, viewport.width + "x" + viewport.height + "-mobile-nav-open.png"),
+        fullPage: false,
+        animations: "disabled"
+      });
+      await menu.click();
+      await page.waitForFunction(() => document.querySelector("#mobile-menu-toggle")?.getAttribute("aria-expanded") === "false");
+    }
     for (const entry of viewNavigation) {
       const viewName = entry.name;
       if (entry.selector.startsWith(".nav-link") &&
