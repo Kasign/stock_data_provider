@@ -24,6 +24,8 @@ func BuildVersionFingerprint(candidate Candidate, content ContentLayers) string 
 	writeFingerprintField(digest, publishedTimeFingerprint(candidate))
 	writeFingerprintField(digest, normalizeCandidateText(content.SourceSummary))
 	writeFingerprintField(digest, string(content.SourceSummaryOrigin))
+	writeFingerprintField(digest, content.BodyDeclaredTypeRaw)
+	writeFingerprintField(digest, content.ExternalBodyReference)
 	writeFingerprintField(digest, strconv.Itoa(len(content.Attachments)))
 	for _, attachment := range content.Attachments {
 		writeFingerprintField(digest, attachment.RawURL)

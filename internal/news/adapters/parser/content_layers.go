@@ -20,7 +20,10 @@ func (entry FeedEntry) ToCandidate(publisherName, publisherDomain string) domain
 // ContentLayers 将 Feed 的 Provider 摘要、来源摘要和正文映射到独立层。
 // Feed 内容格式尚未可靠识别时标记 unknown，不擅自按全文或 HTML 处理。
 func (entry FeedEntry) ContentLayers(providerSummary string) domain.ContentLayers {
-	layers := domain.ContentLayers{ProviderSummary: providerSummary}
+	layers := domain.ContentLayers{
+		ProviderSummary: providerSummary, BodyDeclaredTypeRaw: entry.ContentTypeRaw,
+		ExternalBodyReference: entry.ContentSrc,
+	}
 	if len(entry.Attachments) > 0 {
 		layers.Attachments = make([]domain.ContentAttachmentMetadata, 0, len(entry.Attachments))
 		for _, attachment := range entry.Attachments {
@@ -41,6 +44,7 @@ func (entry FeedEntry) ContentLayers(providerSummary string) domain.ContentLayer
 			Origin: domain.ContentOriginFeedBody,
 			Format: feedContentFormat(entry),
 			Text:   entry.Content,
+			DeclaredTypeRaw: entry.ContentTypeRaw,
 		}
 	}
 	return domain.NormalizeContentLayers(layers)

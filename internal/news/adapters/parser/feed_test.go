@@ -146,6 +146,19 @@ func TestFeedEntryContentLayersKeepAttachmentsSeparateFromBody(t *testing.T) {
 	}
 }
 
+func TestFeedEntryContentLayersPreserveExternalContentReference(t *testing.T) {
+	payload := []byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>id</id><title>标题</title><summary>来源摘要</summary><content type="html" src=" https://publisher.example/body "/></entry></feed>`)
+	doc, err := ParseFeed(payload, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := doc.Entries[0]
+	layers := entry.ContentLayers("")
+	if entry.ContentSrc != " https://publisher.example/body " || layers.Body != nil || layers.ExternalBodyReference != entry.ContentSrc || layers.BodyDeclaredTypeRaw != "html" {
+		t.Fatalf("entry=%+v layers=%+v", entry, layers)
+	}
+}
+
 func TestFeedEntryContentLayersKeepSummaryAndBodySeparate(t *testing.T) {
 	doc, err := ParseFeed([]byte(`<rss><channel><item>
 		<title>标题</title><description>来源摘要</description>

@@ -79,6 +79,14 @@ func TestBuildVersionFingerprintTreatsEmptyBodyAsAbsent(t *testing.T) {
 	}
 }
 
+func TestBuildVersionFingerprintChangesWithExternalBodyReference(t *testing.T) {
+	first := ContentLayers{BodyDeclaredTypeRaw: "html", ExternalBodyReference: "https://publisher.example/body-a"}
+	second := ContentLayers{BodyDeclaredTypeRaw: "html", ExternalBodyReference: "https://publisher.example/body-b"}
+	if BuildVersionFingerprint(Candidate{Title: "标题"}, first) == BuildVersionFingerprint(Candidate{Title: "标题"}, second) {
+		t.Fatal("external body reference change must produce a new version fingerprint")
+	}
+}
+
 func TestBuildVersionFingerprintChangesWithAttachmentMetadata(t *testing.T) {
 	first := ContentLayers{Attachments: []ContentAttachmentMetadata{{URL: "https://news.example/file.pdf", MediaType: "application/pdf"}}}
 	second := ContentLayers{Attachments: []ContentAttachmentMetadata{{URL: "https://news.example/file.pdf", MediaType: "application/octet-stream"}}}

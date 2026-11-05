@@ -35,6 +35,7 @@ type ContentAttachmentMetadata struct {
 
 // ContentPayload 保存来源正文/片段。Kind 未确定时保持空值，不推断为全文。
 type ContentPayload struct {
+	DeclaredTypeRaw string
 	Origin ContentOrigin
 	Format ContentFormat
 	Kind   ContentKind
@@ -46,8 +47,10 @@ type ContentLayers struct {
 	ProviderSummary     string
 	SourceSummary       string
 	SourceSummaryOrigin ContentOrigin
-	Body                *ContentPayload
-	Attachments         []ContentAttachmentMetadata
+	Body                   *ContentPayload
+	BodyDeclaredTypeRaw    string
+	ExternalBodyReference string
+	Attachments            []ContentAttachmentMetadata
 }
 
 // ContentLayersFromCandidate 只把 Provider 的搜索摘要放入 Provider 层，不提升为来源摘要或正文。

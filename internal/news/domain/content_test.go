@@ -41,6 +41,15 @@ func TestNormalizeContentLayersClonesAttachmentMetadata(t *testing.T) {
 	}
 }
 
+func TestNormalizeContentLayersPreservesRawExternalBodyMetadata(t *testing.T) {
+	layers := NormalizeContentLayers(ContentLayers{
+		BodyDeclaredTypeRaw: " html ", ExternalBodyReference: " https://publisher.example/body ",
+	})
+	if layers.Body != nil || layers.BodyDeclaredTypeRaw != " html " || layers.ExternalBodyReference != " https://publisher.example/body " {
+		t.Fatalf("external reference metadata=%+v", layers)
+	}
+}
+
 func TestNormalizeContentLayersDoesNotPromoteSummaryToBody(t *testing.T) {
 	layers := NormalizeContentLayers(ContentLayers{SourceSummary: "来源摘要"})
 	if layers.Body != nil || layers.ProviderSummary != "" {
