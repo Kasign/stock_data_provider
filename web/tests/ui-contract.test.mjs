@@ -2331,7 +2331,7 @@ test("UIR-2 正文与常规控件使用统一的最终计算基线", () => {
 
 
 test("UIR-2 shared page frame selectors have one canonical base rule", () => {
-  const count = selector => stylesheet.split("\\n").filter(line => line.trim().startsWith(selector + " {")).length;
+  const count = selector => stylesheet.split(String.fromCharCode(10)).filter(line => line.trim().startsWith(selector + " {")).length;
   assert.equal(count(".main-area"), 1);
   assert.equal(count(".view"), 1);
   assert.equal(count(".panel"), 1);
