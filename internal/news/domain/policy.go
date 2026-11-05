@@ -6,7 +6,7 @@ import "time"
 type AuthorizationStatus string
 
 const (
-	AuthorizationApproved  AuthorizationStatus = "approved"
+	AuthorizationApproved   AuthorizationStatus = "approved"
 	AuthorizationRestricted AuthorizationStatus = "restricted"
 	AuthorizationPending    AuthorizationStatus = "pending"
 	AuthorizationRevoked    AuthorizationStatus = "revoked"
@@ -27,11 +27,11 @@ const (
 type ContentKind string
 
 const (
-	ContentMetadata  ContentKind = "metadata"
-	ContentTitle     ContentKind = "title"
-	ContentSnippet   ContentKind = "snippet"
-	ContentAbstract  ContentKind = "abstract"
-	ContentFullText  ContentKind = "full_text"
+	ContentMetadata   ContentKind = "metadata"
+	ContentTitle      ContentKind = "title"
+	ContentSnippet    ContentKind = "snippet"
+	ContentAbstract   ContentKind = "abstract"
+	ContentFullText   ContentKind = "full_text"
 	ContentAttachment ContentKind = "attachment"
 )
 
@@ -39,10 +39,10 @@ const (
 type StorageMode string
 
 const (
-	StorageNone             StorageMode = "none"
-	StorageTransient        StorageMode = "transient"
+	StorageNone               StorageMode = "none"
+	StorageTransient          StorageMode = "transient"
 	StoragePersistentMetadata StorageMode = "persistent_metadata"
-	StoragePersistentExcerpt StorageMode = "persistent_excerpt"
+	StoragePersistentExcerpt  StorageMode = "persistent_excerpt"
 	StoragePersistentFullText StorageMode = "persistent_full_text"
 )
 
