@@ -104,7 +104,7 @@ func OpenRedis(ctx context.Context, options redis.Options, pingTimeout time.Dura
 	if err != nil {
 		return nil, fault.New(fault.ClassValidation, "platform.storage.invalid_redis_config", "Redis connection configuration is invalid", err)
 	}
-	pingTimeout, err := normalizePingTimeout(pingTimeout)
+	pingTimeout, err = normalizePingTimeout(pingTimeout)
 	if err != nil {
 		return nil, fault.New(fault.ClassValidation, "platform.storage.invalid_redis_config", "Redis connection configuration is invalid", err)
 	}
