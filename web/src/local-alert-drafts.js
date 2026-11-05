@@ -33,6 +33,7 @@ function normalize(item) {
     || !["symbol", "watchlist"].includes(scope)
     || !["info", "warning", "critical"].includes(severity)) return null;
   if ((type === "change_above" || type === "change_below") && (threshold < -100 || threshold > 100)) return null;
+  if (validateLocalAlertDraft({ name, type, threshold, symbol, scope })) return null;
   return {
     id, name, type, threshold, symbol, scope, severity,
     enabled: item.enabled === true,
