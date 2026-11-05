@@ -157,7 +157,7 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 
 ### 9.4 当前验收边界
 
-代码提交 `70e780bcbaaf8c3a084534ba5214a6fcec35ee7c` 对应 Platform Go checks 已通过 gofmt、平台包单测、race test 和 vet，CI：[41997989479](https://github.com/Kasign/stock_data_provider/actions/runs/41997989479)。
+最终验证提交 `86429e008d53f3208e0a414583cbcfe9c5635f8d` 对应 Platform Go checks 已通过 gofmt、平台包单测、race test 和 vet，CI：[42002814937](https://github.com/Kasign/stock_data_provider/actions/runs/42002814937)。
 
 测试使用 fake SQL Connector/Driver 和注入 Redis Dialer，不依赖外部数据库服务。真实 MariaDB/Redis 集成、故障恢复和现有分析 Store 的平台化接入尚未验收；服务入口和领域 Migration 总注册仍由集成分支负责。
 
@@ -167,3 +167,17 @@ HTTP Client 必须区分固定 Provider API Endpoint 与不可信来源 URL。�
 执行前不仅检查未知版本和 checksum 漂移，还检查已应用版本必须构成当前注册清单的有序前缀。若数据库记录了较新版本，但更早版本缺失，直接拒绝执行，防止旧 Migration 被补跑到新 Schema 上。
 
 验证提交：`b63c2ca64d165f3fb207070190821da76a02dedb`；CI：[41998916359](https://github.com/Kasign/stock_data_provider/actions/runs/41998916359)，全部专项检查通过。
+
+
+### 9.6 Migration 失败人工恢复步骤
+
+Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处理步骤：
+
+1. 停止该服务的自动启动迁移流程，避免持续重试；保留数据库备份和错误日志中的 namespace/version/失败语句序号。
+2. 查询 `platform_schema_migrations` 对应 namespace/version，核对 checksum、status、failure_statement；checksum 必须与当前发布的 Migration 清单一致。
+3. 按 Migration 原始语句逐项检查实际 Schema。MariaDB DDL 可能已经部分提交，不能仅凭失败语句序号推断此前语句都未执行。
+4. 如果决定回滚，先人工恢复到该版本执行前的 Schema 状态，确认无该 Migration 的残留对象后，才允许删除对应的 failed/running 历史行，再重新执行同一版本。
+5. 如果决定前向修复，人工补齐并验证该 Migration 的全部预期 Schema 变更后，将历史行状态更新为 applied；后续结构调整必须新增更高版本 Migration，不能改写原版本 SQL。
+6. 记录恢复人、时间、数据库实例、namespace/version、执行的修复 SQL 和验证结果，再恢复服务启动流程。
+
+不得在未检查真实 Schema 的情况下直接删除失败记录或将状态改为 applied。若历史行无法写入（例如数据库在失败时不可用），先检查 Schema，再决定补建历史状态；不能假设该版本完全未执行。
