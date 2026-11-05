@@ -22,6 +22,8 @@ type ResearchUpdateRepository interface {
 // ResearchUpdateTransaction 只暴露新闻版本和关联断言所需的最小存储能力。
 type ResearchUpdateTransaction interface {
 	LatestNewsItemVersion(context.Context, string) (domain.NewsItemVersion, bool, error)
+	NewsItemVersionByID(context.Context, string) (domain.NewsItemVersion, bool, error)
+	ObservationByID(context.Context, string) (domain.Observation, bool, error)
 	AppendNewsItemVersion(context.Context, domain.NewsItemVersion) error
 	ListRelationAssertions(context.Context, string) ([]domain.RelationAssertion, error)
 	AppendRelationAssertion(context.Context, domain.RelationAssertion, []domain.RelationEvidence) error
@@ -137,6 +139,9 @@ func (u *ApplyResearchUpdate) Execute(ctx context.Context, request ResearchUpdat
 				if err := domain.ValidateRelationEvidence(assertion, evidence[i]); err != nil {
 					return err
 				}
+				if err := validateRelationEvidenceOwnership(ctx, tx, request.NewsID, evidence[i]); err != nil {
+					return err
+				}
 			}
 			allRelations = append(allRelations, assertion)
 			if _, err := domain.ResolveCurrentRelations(allRelations); err != nil {
@@ -157,4 +162,34 @@ func (u *ApplyResearchUpdate) Execute(ctx context.Context, request ResearchUpdat
 		return ResearchUpdateResult{}, errors.Join(ErrResearchUpdateTransaction, err)
 	}
 	return result, nil
+}
+
+ 
+// validateRelationEvidenceOwnership 确保证据引用真实存在且属于当前新闻主体。
+// 引用归属读取与版本/关系写入处于同一事务，避免跨新闻证据污染。
+func validateRelationEvidenceOwnership(
+	ctx context.Context,
+	tx ResearchUpdateTransaction,
+	newsID string,
+	evidence domain.RelationEvidence,
+) error {
+	if versionID := strings.TrimSpace(evidence.SourceVersionID); versionID != "" {
+		version, exists, err := tx.NewsItemVersionByID(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		if !exists || version.ID != versionID || version.NewsID != newsID {
+			return domain.ErrRelationEvidenceInvalid
+		}
+	}
+	if observationID := strings.TrimSpace(evidence.ObservationID); observationID != "" {
+		observation, exists, err := tx.ObservationByID(ctx, observationID)
+		if err != nil {
+			return err
+		}
+		if !exists || observation.ID != observationID || observation.NewsID != newsID {
+			return domain.ErrRelationEvidenceInvalid
+		}
+	}
+	return nil
 }

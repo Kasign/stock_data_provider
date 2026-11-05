@@ -10,6 +10,7 @@ import (
 )
 
 type memoryResearchRepository struct {
+	observations map[string]domain.Observation
 	versions   map[string][]domain.NewsItemVersion
 	relations  map[string][]domain.RelationAssertion
 	evidence   map[string][][]domain.RelationEvidence
@@ -25,10 +26,14 @@ func (r *memoryResearchRepository) WithinResearchUpdateTransaction(ctx context.C
 		return err
 	}
 	working := &memoryResearchRepository{
+		observations: map[string]domain.Observation{},
 		versions:   map[string][]domain.NewsItemVersion{},
 		relations:  map[string][]domain.RelationAssertion{},
 		evidence:   map[string][][]domain.RelationEvidence{},
 		failAppend: r.failAppend,
+	}
+	for key, value := range r.observations {
+		working.observations[key] = value
 	}
 	for key, values := range r.versions {
 		working.versions[key] = append([]domain.NewsItemVersion(nil), values...)
@@ -52,6 +57,22 @@ func (tx memoryResearchTransaction) LatestNewsItemVersion(_ context.Context, new
 		return domain.NewsItemVersion{}, false, nil
 	}
 	return versions[len(versions)-1], true, nil
+}
+
+func (tx memoryResearchTransaction) NewsItemVersionByID(_ context.Context, versionID string) (domain.NewsItemVersion, bool, error) {
+	for _, versions := range tx.repository.versions {
+		for _, version := range versions {
+			if version.ID == versionID {
+				return version, true, nil
+			}
+		}
+	}
+	return domain.NewsItemVersion{}, false, nil
+}
+
+func (tx memoryResearchTransaction) ObservationByID(_ context.Context, observationID string) (domain.Observation, bool, error) {
+	observation, exists := tx.repository.observations[observationID]
+	return observation, exists, nil
 }
 
 func (tx memoryResearchTransaction) AppendNewsItemVersion(_ context.Context, version domain.NewsItemVersion) error {
@@ -93,6 +114,12 @@ func (tx memoryResearchTransaction) AppendRelationAssertion(_ context.Context, a
 }
 
 func newResearchUseCase(r *memoryResearchRepository) *ApplyResearchUpdate {
+	if r.observations == nil {
+		r.observations = map[string]domain.Observation{}
+	}
+	for _, id := range []string{"obs-1", "obs-2", "obs-3"} {
+		r.observations[id] = domain.Observation{ID: id, NewsID: "news-1"}
+	}
 	u := NewApplyResearchUpdate(r, func() string { return "version-next" })
 	u.now = func() time.Time { return time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC) }
 	return u
@@ -196,6 +223,49 @@ func TestApplyResearchUpdateModelProposalMustBeManuallySuperseded(t *testing.T) 
 	}
 	if len(result.CurrentRelations) != 1 || result.CurrentRelations[0].ID != "manual-1" {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestApplyResearchUpdateRejectsEvidenceFromAnotherNewsItem(t *testing.T) {
+	repository := &memoryResearchRepository{
+		versions: map[string][]domain.NewsItemVersion{},
+		observations: map[string]domain.Observation{
+			"foreign-observation": {ID: "foreign-observation", NewsID: "news-foreign"},
+		},
+	}
+	request := baseResearchRequest()
+	request.Relations = []domain.RelationAssertion{{
+		ID: "relation-foreign", SubjectType: domain.RelationSubjectSecurity,
+		Security: &domain.SecurityRelationSubject{Market: "XSHG", Symbol: "600000"},
+		Kind: domain.RelationMentions, Method: domain.RelationSourceExplicit, Status: domain.RelationConfirmed,
+	}}
+	request.Evidence = map[string][]domain.RelationEvidence{
+		"relation-foreign": {{Type: domain.RelationEvidenceSourceField, FieldPath: "related_securities", ObservationID: "foreign-observation"}},
+	}
+	if _, err := newResearchUseCase(repository).Execute(context.Background(), request); !errors.Is(err, ErrResearchUpdateTransaction) {
+		t.Fatalf("expected foreign observation rejection, got %v", err)
+	}
+	if len(repository.versions["news-1"]) != 0 || len(repository.relations["news-1"]) != 0 {
+		t.Fatalf("foreign evidence must rollback all writes: %+v", repository)
+	}
+}
+
+func TestApplyResearchUpdateRejectsUnknownVersionEvidence(t *testing.T) {
+	repository := &memoryResearchRepository{versions: map[string][]domain.NewsItemVersion{}}
+	request := baseResearchRequest()
+	request.Relations = []domain.RelationAssertion{{
+		ID: "relation-missing-version", SubjectType: domain.RelationSubjectSecurity,
+		Security: &domain.SecurityRelationSubject{Market: "XSHG", Symbol: "600000"},
+		Kind: domain.RelationMentions, Method: domain.RelationContentMatch, Status: domain.RelationConfirmed,
+	}}
+	request.Evidence = map[string][]domain.RelationEvidence{
+		"relation-missing-version": {{Type: domain.RelationEvidenceContentSpan, SourceVersionID: "missing-version"}},
+	}
+	if _, err := newResearchUseCase(repository).Execute(context.Background(), request); !errors.Is(err, ErrResearchUpdateTransaction) {
+		t.Fatalf("expected missing version rejection, got %v", err)
+	}
+	if len(repository.versions["news-1"]) != 0 {
+		t.Fatalf("invalid evidence must rollback version append: %+v", repository.versions)
 	}
 }
 
