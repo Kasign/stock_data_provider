@@ -2853,3 +2853,21 @@ test("UIR-2 form field labels use a readable component baseline without forced p
   assert.match(stylesheet, /\.field > span \{\s*font-size: 12px;\s*line-height: 1\.5;/);
   assert.match(stylesheet, /:root\[data-theme="light"\] \.field \{ color: #536879; \}/);
 });
+
+
+test("UIR-2 table typography uses component baselines and scoped readable table overrides", () => {
+  const header = baseCssDeclarationBlock("th");
+  const cell = baseCssDeclarationBlock("td");
+  assert.match(header, /font-size:\s*11px\s*;/);
+  assert.match(header, /padding-block:\s*11px\s*;/);
+  assert.doesNotMatch(header, /!important/);
+  assert.match(cell, /font-size:\s*12px\s*;/);
+  assert.match(cell, /line-height:\s*1\.5\s*;/);
+  assert.doesNotMatch(cell, /!important/);
+  assert.match(stylesheet, /\.table-scroll th \{ font-size: 12px; \}/);
+  assert.match(stylesheet, /\.table-scroll td \{ font-size: 13px; \}/);
+  assert.doesNotMatch(stylesheet, /(?:^|\n)th \{ font-size: 12px !important; \}/);
+  assert.doesNotMatch(stylesheet, /(?:^|\n)td \{ font-size: 12px !important; \}/);
+  assert.match(stylesheet, /\.watchlist-import-preview th, \.watchlist-import-preview td \{[^}]*font-size: 12px;/);
+  assert.match(stylesheet, /@media \(max-width: 600px\)[\s\S]*?th, td \{ padding: 9px 10px; \}/);
+});

@@ -315,9 +315,9 @@ h2 { margin: 0; color: #e5edf3; font-size: 14px; font-weight: 650; letter-spacin
 .table-scroll { margin-top: 15px; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; white-space: nowrap; font-variant-numeric: tabular-nums; }
 thead { background: #0e161f; }
-th { padding: 10px 12px; color: #758a9e; text-align: right; font-size: 9px; font-weight: 650; }
+th { padding: 10px 12px; padding-block: 11px; color: #758a9e; text-align: right; font-size: 11px; font-weight: 650; }
 th:first-child, td:first-child { text-align: left; }
-td { padding: 10px 12px; border-top: 1px solid #1f2b37; color: #adbdca; text-align: right; font-size: 10px; }
+td { padding: 10px 12px; border-top: 1px solid #1f2b37; color: #adbdca; text-align: right; font-size: 12px; line-height: 1.5; }
 td.date-cell { color: #d1dde6; }
 td.close-cell { color: #eff5f8; font-weight: 650; }
 tbody tr:hover { background: rgba(79, 112, 135, .06); }
@@ -712,8 +712,6 @@ body { font-size: var(--font-size-body-readable); line-height: var(--line-height
 .section-heading h2 span { font-size: var(--font-size-secondary) !important; }
 .section-heading p, .panel-heading p { font-size: var(--font-size-support) !important; }
 .text-button { font-size: 12px !important; }
-th { font-size: 12px !important; }
-td { font-size: 12px !important; }
 .task-facts small { font-size: 12px !important; }
 .task-facts strong { font-size: 13px !important; }
 .dialog-intro { font-size: 13px !important; }
@@ -721,8 +719,8 @@ td { font-size: 12px !important; }
 .field input, .field select, .field textarea, .recent-analysis-search input { font-size: var(--font-size-input); }
 .button { font-size: 13px; }
 .text-button { font-size: 12px; }
-.table-scroll th { font-size: 12px !important; }
-.table-scroll td { font-size: 13px !important; }
+.table-scroll th { font-size: 12px; }
+.table-scroll td { font-size: 13px; }
 
 @media (max-width: 600px) {
   .main-area { padding-left: 12px; padding-right: 12px; }
@@ -3307,15 +3305,6 @@ body {
   line-height: 1.4;
 }
 
-th {
-  padding-block: 11px;
-  font-size: 11px;
-}
-
-td {
-  font-size: 12px;
-  line-height: 1.5;
-}
 
 
 @media (max-width: 900px) {
