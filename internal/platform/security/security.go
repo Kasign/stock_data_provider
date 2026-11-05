@@ -29,6 +29,7 @@ const (
 )
 
 const minimumTokenBytes = 32
+const maximumTokenBytes = 256
 
 type Principal struct {
 	Kind    IdentityKind
@@ -126,8 +127,8 @@ func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*
 	if !ownerToken.Configured() {
 		return nil, errors.New("owner credential is required")
 	}
-	if len(ownerToken.Value()) < minimumTokenBytes {
-		return nil, errors.New("owner credential must contain at least 32 bytes")
+	if !validToken(ownerToken.Value()) {
+		return nil, errors.New("owner credential must be a 32-256 byte URL-safe token")
 	}
 
 	auth := &Authenticator{}
@@ -143,8 +144,8 @@ func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*
 		if name == "" || !service.Secret.Configured() {
 			return nil, errors.New("service credential name and secret are required")
 		}
-		if len(service.Secret.Value()) < minimumTokenBytes {
-			return nil, errors.New("service credential must contain at least 32 bytes")
+		if !validToken(service.Secret.Value()) {
+			return nil, errors.New("service credential must be a 32-256 byte URL-safe token")
 		}
 		if _, exists := seenNames[name]; exists {
 			return nil, errors.New("service credential names must be unique")
@@ -174,6 +175,24 @@ func NewAuthenticator(ownerToken config.Secret, services []ServiceCredential) (*
 		})
 	}
 	return auth, nil
+}
+
+// validToken accepts unpadded URL-safe tokens and bounds the work performed
+// for every authentication attempt. Generate credentials from cryptographic
+// random bytes; this syntax check does not prove their entropy.
+func validToken(token string) bool {
+	if len(token) < minimumTokenBytes || len(token) > maximumTokenBytes {
+		return false
+	}
+	for _, char := range []byte(token) {
+		if (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '-' || char == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func normalizeScopes(scopes []string) ([]string, error) {
@@ -209,7 +228,7 @@ func (a *Authenticator) Authenticate(request *http.Request) (Principal, error) {
 		return Principal{}, errors.New("invalid authorization header")
 	}
 	parts := strings.Fields(values[0])
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" {
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || !validToken(parts[1]) {
 		return Principal{}, errors.New("invalid authorization header")
 	}
 

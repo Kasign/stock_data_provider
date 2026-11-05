@@ -208,3 +208,35 @@
 | P2 | Request ID Middleware 收敛到平台实现 | Server | 重复 Header 与跨服务传播测试 |
 
 以上属于当前代码可复现的静态风险，优先级高于新增平台抽象。修复应在 Server/Analysis 集成分支完成；Platform 分支不越界修改领域 Handler、Adapter 或启动装配。
+
+
+## 8. 第三轮安全审计：Bearer Token 输入约束与快照边界
+
+审查基线：635022c5a0447bc1e4b7d323d0a6d25648441b70。
+
+### 8.1 已确认的实现边界
+
+- Authenticator 对配置凭证计算 SHA-256 摘要；认证时遍历全部已配置摘要，不在首个匹配处提前返回。
+- ServiceCredential.Scopes 在构造时规范化并复制；调用方修改原始切片不会改变 Authenticator。
+- Authenticate 返回 Principal 时复制 Scope 切片；调用方修改本次 Principal 不会改变后续认证结果。
+- RoutePolicy 构造函数复制调用方传入的 Scope 切片；Router 注册时将策略绑定到 Handler。
+- Authorization 重复 Header 会被拒绝；认证失败响应不回显凭证。
+
+### 8.2 本轮发现并修复：Bearer Token 缺少字符集和长度上限
+
+此前仅检查 Token 非空和配置长度至少 32 字节；认证入口通过 strings.Fields 解析后直接计算 SHA-256。因此，异常标点、Unicode 字符和过长 Token 也会进入摘要路径；配置端和请求端没有明确的共同 Token 格式约束。
+
+本轮将配置和请求统一限制为 32–256 字节的 URL-safe 无填充 Token：[A-Za-z0-9_-]。新增配置非法格式/超长拒绝测试，以及认证请求非法标点、Unicode、超长输入拒绝测试。
+
+该修复不替代密码学随机数生成；长度与字符集校验不能证明熵。部署生成流程仍需生成至少 256 bit 随机数据，再进行 Base64URL 无填充编码。
+
+### 8.3 本轮未发现需要修改的边界
+
+- 未发现 Scope 快照可被外部调用方修改的路径；已有回归测试覆盖构造输入和 Authenticate 返回值的切片隔离。
+- 未发现 Principal 能跨请求共享的全局可变状态。
+- 未发现常量时间比较只检查首个凭证的提前返回。
+- 凭证数量随配置变化，比较循环总耗时仍与配置条目数相关；首期调用方数量有限，不引入固定槽位或复杂恒时查表机制。
+
+### 8.4 验收限制
+
+本轮只完成平台认证原语的静态审查和回归测试代码。需以新提交 SHA 的 Platform Go checks 验证 gofmt、单测、race test 和 vet；仍未完成实际服务路由接入、Gateway 入口隔离、部署 Secret 随机生成与凭证轮换演练。

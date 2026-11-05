@@ -177,11 +177,28 @@ func TestNewAuthenticatorRejectsWeakDuplicateAndUnknownScopes(t *testing.T) {
 	}
 	for _, services := range [][]ServiceCredential{
 		{{Name: "weak", Secret: makeSecret("short"), Scopes: []string{ScopeDataRead}}},
+		{{Name: "invalid-format", Secret: makeSecret("token.with.invalid.punctuation-0123456789"), Scopes: []string{ScopeDataRead}}},
+		{{Name: "too-long", Secret: makeSecret(strings.Repeat("a", maximumTokenBytes+1)), Scopes: []string{ScopeDataRead}}},
 		{{Name: "duplicate", Secret: makeSecret(ownerToken), Scopes: []string{ScopeDataRead}}},
 		{{Name: "unknown-scope", Secret: makeSecret(dataToken), Scopes: []string{"admin:*"}}},
 	} {
 		if _, err := NewAuthenticator(makeSecret(ownerToken), services); err == nil {
 			t.Fatal("expected invalid credentials configuration")
+		}
+	}
+}
+
+
+func TestAuthenticateRejectsInvalidTokenSyntaxAndOversizedToken(t *testing.T) {
+	auth := newTestAuthenticator(t)
+	for _, token := range []string{
+		"invalid.token-0123456789-0123456789",
+		"invalid+token-0123456789-0123456789",
+		"令牌令牌令牌令牌令牌令牌令牌令牌令牌令牌令牌令牌",
+		strings.Repeat("a", maximumTokenBytes+1),
+	} {
+		if _, err := auth.Authenticate(requestWithToken(token)); err == nil {
+			t.Errorf("expected token syntax rejection for %q", token)
 		}
 	}
 }
