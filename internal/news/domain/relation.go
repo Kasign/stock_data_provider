@@ -83,20 +83,20 @@ type RelationAssertion struct {
 
 // RelationEvidence 只保存可定位证据引用和摘要指纹，不复制正文或大段 snippet。
 type RelationEvidence struct {
-	RelationID       string
-	Type             RelationEvidenceType
-	SourceVersionID  string
-	ObservationID    string
-	RuleVersion      string
-	ModelVersion     string
-	FieldPath        string
-	EvidenceHash     string
+	RelationID      string
+	Type            RelationEvidenceType
+	SourceVersionID string
+	ObservationID   string
+	RuleVersion     string
+	ModelVersion    string
+	FieldPath       string
+	EvidenceHash    string
 }
 
 var (
-	ErrRelationInvalid          = errors.New("news.relation.invalid")
-	ErrRelationEvidenceInvalid  = errors.New("news.relation.evidence_invalid")
-	ErrRelationHistoryConflict  = errors.New("news.relation.history_conflict")
+	ErrRelationInvalid         = errors.New("news.relation.invalid")
+	ErrRelationEvidenceInvalid = errors.New("news.relation.evidence_invalid")
+	ErrRelationHistoryConflict = errors.New("news.relation.history_conflict")
 )
 
 func ValidateRelationAssertion(assertion RelationAssertion) error {

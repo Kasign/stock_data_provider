@@ -10,7 +10,7 @@ func validSecurityRelation(id, status string) RelationAssertion {
 	return RelationAssertion{
 		ID: id, NewsID: "news-1", SubjectType: RelationSubjectSecurity,
 		Security: &SecurityRelationSubject{Market: "XSHG", Symbol: "600000", Name: "浦发银行"},
-		Kind: RelationMentions, Method: RelationSourceExplicit, Status: RelationStatus(status),
+		Kind:     RelationMentions, Method: RelationSourceExplicit, Status: RelationStatus(status),
 		ObservedAt: time.Date(2026, 11, 5, 10, 0, 0, 0, time.UTC),
 	}
 }
