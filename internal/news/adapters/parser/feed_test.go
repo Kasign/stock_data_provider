@@ -184,5 +184,5 @@ func TestParseAtomFeedExtractsEnclosureAndIgnoresInvalidLength(t *testing.T) {
 	attachments := doc.Entries[0].Attachments
 	if len(attachments) != 1 { t.Fatalf("attachments=%+v", attachments) }
 	got := attachments[0]
-	if got.URL != "https://publisher.example/audio.mp3" || got.MediaType != "audio/mpeg" || got.Length != nil || got.RawLength != "-1" || got.Title != "音频" { t.Fatalf("attachment=%+v", got) }
+	if got.URL != "https://publisher.example/audio.mp3" || got.MediaType != "audio/mpeg" || got.RawMediaType != "audio/mpeg" || got.Length != nil || got.RawLength != "-1" || got.Title != "音频" { t.Fatalf("attachment=%+v", got) }
 }
