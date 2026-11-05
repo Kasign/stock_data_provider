@@ -2362,7 +2362,9 @@ Artifact 核验结果：
 - [x] Selector 空白归一化已由 CI 实际执行。
 - [x] Browser Smoke 全部步骤通过，包含 CSS AST 分析。
 - [x] WebUI Checks 全部通过。
-- [ ] 下一步补齐 at-rule 条件、selector specificity 和源码顺序联合审查，再确定低耦合 feature 迁移单元。
+- [x] 当前 HEAD CSS AST 分析通过：1,857 rules、5,511 declarations、113 at-rules、1,648 unique selectors、386 repeated selectors、25 exact duplicate groups。
+- [x] 同 selector + 完全相同 at-rule 条件的声明覆盖候选为 144 项（最多展示前 100 项）；已校正 !important 优先级标签及 ::slotted() specificity。
+- [ ] 跨 selector DOM 重叠、@layer、主题和响应式关系仍需人工审查；下一步先做低耦合组件 CSSOM computed-style 基线，不直接拆分或删除 CSS。
 
 
 ## 2026-11-05 Selector Specificity 与同条件覆盖候选分析

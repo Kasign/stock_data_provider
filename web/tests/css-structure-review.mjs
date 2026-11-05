@@ -32,6 +32,8 @@ function specificityForSelector(selector) {
         else if ([":is", ":not", ":has", ":matches", ":any"].includes(name)) part = maximum;
         else if (name === ":nth-child" || name === ":nth-last-child") {
           part = [maximum[0], 1 + maximum[1], maximum[2]];
+        } else if (name === "::slotted") {
+          part = [maximum[0], maximum[1], 1 + maximum[2]];
         } else if (name.startsWith("::") || [":before", ":after", ":first-line", ":first-letter"].includes(name)) {
           part = [0, 0, 1];
         } else {
@@ -120,7 +122,11 @@ for (const [selector, entries] of selectorRules) {
             property,
             earlier: { line: earlier.source, value: before.value, important: before.important },
             later: { line: later.source, value: after.value, important: after.important },
-            expectedWinner: before.important && !after.important ? "earlier-important" : "later-source-order",
+            expectedWinner: before.important && !after.important
+              ? "earlier-important"
+              : !before.important && after.important
+                ? "later-important"
+                : "later-source-order",
             context
           });
         }

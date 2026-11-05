@@ -2142,5 +2142,7 @@ CSS AST 检查器进一步扩展：
 
 - [x] Selector specificity 计算已加入 AST 检查器。
 - [x] 同 selector、同 at-rule 上下文的属性覆盖候选已加入报告。
-- [ ] 等待新 CI 实际结果，检查伪类 specificity 解析与候选数量。
-- [ ] 人工审查跨 selector 重叠和 @layer / 主题 / 响应式关系。
+- [x] 当前 HEAD 的 CSS AST CI 通过：1,857 rules、5,511 declarations、113 at-rules、1,648 unique selectors、386 repeated selectors、25 exact duplicate groups。
+- [x] 同 selector、同 at-rule 条件的声明覆盖候选共 144 项（报告截取前 100 项）；候选仅用于人工定位，不直接删除。
+- [x] 校正覆盖候选的优先级标签：分别区分 earlier-important、later-important 和同重要性下的 later-source-order；补齐 `::slotted()` 参数 specificity。
+- [ ] 人工审查跨 selector 重叠和 @layer / 主题 / 响应式关系；再建立低耦合组件 CSSOM computed-style 基线。
