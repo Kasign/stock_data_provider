@@ -147,7 +147,7 @@ market-data Probe 的 connectivity、contract、quality、freshness、cross_prov
 
 当前 go-core 的 Searcher 会把多个 Provider 结果合并并映射为旧 NewsItem，最终 DTO 不保留搜索 Provider 身份；NewsItem.Source 是发布来源字段，不是 Provider。当前 10 分钟缓存也会缓存混合 Provider 输出。因此现有 Searcher 不能直接作为新闻持久化入口。新模块必须在 Provider Adapter 边界保留 provider_code，不得先映射旧 DTO 再补身份。
 
-根服务与 go-core 是两个独立 Go module，根模块不能直接 import `go-core/internal/**`。不允许复制现有 Provider HTTP 实现。建议将 Provider 协议适配抽取到中立共享 Go library module，由根新闻模块和 go-core 各自适配自己的业务 DTO。
+【已废弃的历史方案，不得实施】根服务与 go-core 是两个独立 Go module，根模块不能直接 import `go-core/internal/**`。当时因此建议抽取中立共享 Go library module，由根新闻模块和 go-core 双向适配。用户已明确不兼容未上线旧服务，该共享方案已取消；当前按第 13 节直接将必要协议处理重构到根模块。
 
 （以下共享候选设计已废弃，仅保留历史背景，不再建设共享 Go Module。）
 
