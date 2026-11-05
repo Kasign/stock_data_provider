@@ -1101,7 +1101,7 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 | Provider | AdjustmentMethod | AdjustmentRefDate | 当前证据/限制 |
 |---|---|---|---|
 | BaoStock | `baostock_pct_change` | 未填 | 原生 adjustflag；本轮验证了自身因子与 qfq/hfq OHLC 内部一致，但源接口未直接返回明确参考日期 |
-| Pytdx | `pytdx_qfq` / `pytdx_hfq` | 未填 | v0.0.86 GBBQ 仿射模型；qfq 锚定本次加载历史的最新交易日，hfq 锚定加载历史的最早交易日，代码尚未把锚点写入 Bar |
+| Pytdx | `pytdx_qfq` / `pytdx_hfq` | 已填 | qfq 记录实际加载历史的最新交易日；hfq 记录完整历史扫描的最早交易日；已通过单测和真实窗口探测验证 |
 | Eastmoney | `eastmoney_fqt_{fqt}` | 未填 | 原生 fqt 参数，当前适配器未声明参考日期 |
 | Tencent | `tencent_{key}` | 未填 | 原生 kline 复权 key，当前适配器未声明参考日期 |
 | Tushare | `tushare_adj_factor_qfq_v1` / `tushare_adj_factor_hfq_v1` | 仅 qfq 填 | qfq 参考日期取本次因子集合最大交易日；hfq 使用原始累计因子，但当前未填锚点日期 |
@@ -1116,7 +1116,32 @@ Go suite 覆盖根模块、go-core、market-data 的格式/测试/race/vet、Mar
 
 ### 63.3 后续设计任务
 
-- 优先评估 Pytdx：其算法明确使用加载历史的最新/最早 K 线作为 qfq/hfq 锚点，可从当前已加载数据精确得出；但要先评估历史分页完整性和 limit 截断对锚点的影响。
+- Pytdx 锚点已实现并验证：qfq 取实际加载历史的最新交易日，hfq 取完整历史扫描的最早交易日；锚点计算不受最终返回 limit 截断影响。
 - BaoStock、Eastmoney、Tencent 的参考日期需要来源文档或额外真实请求证据；不得直接把请求 endDate 当作服务端实际参考日。
 - Tushare hfq 的锚点日期需核实接口因子归一化语义后再填。
 - 在元数据来源确认前维持 not_comparable，不改生产行为。
+
+
+## 64. 2026-11-05 Pytdx 原生复权参考日期元数据补齐
+
+### 64.1 实现
+
+- `FetchDailyBars` 对 forward-adjusted Bar 写入实际参与 GBBQ 复权计算的最新加载交易日作为 `AdjustmentRefDate`。
+- 对 backward-adjusted Bar 写入完整历史扫描的最早交易日作为 `AdjustmentRefDate`；backward 路径本身要求历史扫描完整，不使用返回 limit 或请求窗口首日冒充锚点。
+- none 不填 `AdjustmentRefDate`。
+- 增加单测覆盖：请求窗口早于最新源数据时 qfq 仍引用最新加载日；请求窗口晚于最早历史日时 hfq 仍引用完整历史最早日。
+
+### 64.2 GitHub Actions 实测
+
+- Live Provider Probe Push Run：`41960406846` success，Pytdx 历史探测的 method/ref-date 断言全部通过。
+- 600036.SH：qfq ref date `2026-11-05`；hfq ref date `2002-04-09`。
+- 002982.SZ：qfq ref date `2026-11-05`；hfq ref date `2020-04-24`。
+- 两只股票 none/qfq/hfq 均返回 9 条；质量统计均为 9/9 valid。
+- Go test suite Push Run：`41960406782` 全部 5 个 Job success，包含 market-data gofmt/unit/race/vet、MariaDB migration/PIT、根模块、go-core、Compose/Docker。
+- 同一 Live Run 的 Pytdx/BaoStock 2025 公司行为事件仍为 3/3 matched。
+
+### 64.3 结论边界
+
+- Pytdx ref date 现在有明确算法锚点和真实数据证据，元数据完整性改善。
+- 这不会改变 Pytdx 与 BaoStock 的原生复权算法差异；比较器仍要求 method/ref date 同时一致，不会因此把两边 adjusted OHLC 判为 matched。
+- BaoStock、Eastmoney、Tencent 和 Tushare hfq 的 ref date 仍按 section 63 所列状态处理，不补猜测值。

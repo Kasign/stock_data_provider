@@ -454,3 +454,13 @@ Live Provider Probe Run `41788725692` 的 workflow conclusion 为 success，但�
 - Yahoo qfq/hfq 分别重基准到请求窗口末日/首日，并记录日期。
 - 生产比较器对 adjusted basis 要求 method 与 ref date 同时相同；缺失/不一致时 not_comparable。
 - 不将请求窗口日期冒充源端参考日期。Pytdx 锚点可从实际加载历史推导，其他 Provider 需要源端证据后再补。
+
+
+## 22. 2026-11-05：Pytdx 复权参考日期元数据
+
+- Pytdx qfq 的 `AdjustmentRefDate` 取实际加载历史的最新交易日；hfq 取完整历史扫描的最早交易日；none 为空。
+- GitHub Actions Live Provider Probe Run `41960406846` success。
+- 600036.SH：qfq 2026-11-05，hfq 2002-04-09；002982.SZ：qfq 2026-11-05，hfq 2020-04-24。
+- 两只股票 none/qfq/hfq 各 9 条，均 9/9 valid，method/ref-date 断言通过。
+- Go test suite Run `41960406782` 全部通过。
+- 该元数据描述 Pytdx 自身复权锚点；与 BaoStock 的方法不同，不能据此直接跨源比较 adjusted OHLC。
