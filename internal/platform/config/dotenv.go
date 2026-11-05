@@ -83,7 +83,7 @@ func stripInlineComment(s string) string {
 func unquote(s string) (string, error) {
 	if len(s) >= 2 {
 		if s[0] == '"' && s[len(s)-1] == '"' {
-			return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(s[1:len(s)-1], `\\n`, "\n"), `\\t`, "\t"), `\\"`, "\""), nil
+			return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(s[1:len(s)-1], `\n`, "\n"), `\t`, "\t"), `\"`, "\""), nil
 		}
 		if s[0] == '\'' && s[len(s)-1] == '\'' {
 			return s[1 : len(s)-1], nil
