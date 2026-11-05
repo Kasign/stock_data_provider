@@ -971,6 +971,35 @@ test("task detail opens an accessible run-flow drawer with separate Task and Run
   assert.match(app, /close-run-flow-dialog/);
 });
 
+test("Run Flow 字号覆盖由组件级联负责，不依赖全局 important", () => {
+  for (const [selector, size] of [
+    [".event-heading h3", "13px"],
+    [".event-heading span", "12px"],
+    [".event-status", "12px"],
+    [".event-body strong", "12px"],
+    [".event-body p", "12px"],
+    [".event-row > small", "12px"]
+  ]) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should own its readable base font size");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  for (const [selector, size] of [
+    [".run-flow-dialog .event-heading h3", "14px"],
+    [".run-flow-dialog .event-heading span", "12px"],
+    [".run-flow-dialog .event-row > small", "11px"],
+    [".run-flow-dialog .event-row-message", "12px"]
+  ]) {
+    const declarations = exactCssDeclarationBlock(selector);
+    assert.ok(declarations.includes("font-size: " + size + ";"), selector + " should retain its component font size");
+    assert.doesNotMatch(declarations, /!important/);
+  }
+
+  assert.match(stylesheet, /\.run-flow-dialog \.event-row > small \{ grid-column: 2; max-width: none; font-size: 11px; \}/);
+  assert.doesNotMatch(stylesheet, /\.run-flow-dialog \.event-row > small \{[^}]*!important/);
+});
+
 test("Run result DOM adapter owns structured result rendering while app retains task state", () => {
   const rendererStart = app.indexOf("function renderTaskResult(result) {");
   const rendererEnd = app.indexOf("\nfunction normalizedTaskSymbolSet(", rendererStart);

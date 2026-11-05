@@ -365,17 +365,17 @@ tbody tr:hover { background: rgba(79, 112, 135, .06); }
 .task-facts strong { overflow-wrap: anywhere; color: var(--text); font-size: 11px; font-weight: 600; }
 .task-error { margin-top: 11px; padding: 10px; border-radius: 7px; color: #f0a2a9; background: rgba(240, 129, 138, .07); font-size: 10px; line-height: 1.6; }
 .event-heading { display: flex; align-items: baseline; gap: 9px; margin-top: 22px; padding-bottom: 10px; border-bottom: 1px solid #263440; }
-.event-heading h3 { margin: 0; color: #d6e1e9; font-size: 11px; }
-.event-heading span { color: #6e8396; font-size: 9px; }
+.event-heading h3 { margin: 0; color: #d6e1e9; font-size: 13px; }
+.event-heading span { color: #6e8396; font-size: 12px; }
 .event-list { display: flex; flex-direction: column; }
 .event-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: start; gap: 9px; padding: 13px 0; border-bottom: 1px solid #1f2c38; }
-.event-status { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: #9db0c0; background: #263340; font-size: 10px; }
+.event-status { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: #9db0c0; background: #263340; font-size: 12px; }
 .event-status-succeeded { color: #6fe0ba; background: rgba(71, 214, 173, .1); }
 .event-status-failed { color: #f59da5; background: rgba(240, 129, 138, .1); }
 .event-body { min-width: 0; }
-.event-body strong { color: var(--text); font-size: 10px; font-weight: 600; }
-.event-body p { margin: 5px 0 0; color: var(--text-dim); font-size: 9px; line-height: 1.6; overflow-wrap: anywhere; }
-.event-row > small { color: var(--text-dim); font-size: 9px; white-space: nowrap; }
+.event-body strong { color: var(--text); font-size: 12px; font-weight: 600; }
+.event-body p { margin: 5px 0 0; color: var(--text-dim); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.event-row > small { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
 .task-actions { display: flex; align-items: center; gap: 11px; padding-top: 14px; }
 .task-actions > span { color: var(--text-dim); font-size: 9px; }
 .contract-panel { margin-top: 15px; padding: 18px 19px; }
@@ -753,12 +753,6 @@ td { font-size: 12px !important; }
 .task-facts small { font-size: 12px !important; }
 .task-facts strong { font-size: 13px !important; }
 .task-error { font-size: 12px !important; }
-.event-heading h3 { font-size: 13px !important; }
-.event-heading span { font-size: 12px !important; }
-.event-status { font-size: 12px !important; }
-.event-body strong { font-size: 12px !important; }
-.event-body p { font-size: 12px !important; }
-.event-row > small { font-size: 12px !important; }
 .task-actions > span { font-size: 12px !important; }
 .boundary-grid span { font-size: 12px !important; }
 .boundary-grid strong { font-size: 13px !important; }
@@ -2603,7 +2597,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   display: block;
   margin-top: 5px;
   color: var(--text-soft);
-  font-size: 12px !important;
+  font-size: 12px;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
@@ -2624,19 +2618,19 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   max-width: none;
   margin-top: 8px;
   color: var(--text-dim);
-  font-size: 11px !important;
+  font-size: 11px;
   line-height: 1.5;
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
 }
 .run-flow-dialog .event-heading { align-items: center; justify-content: space-between; gap: 12px; }
-.run-flow-dialog .event-heading h3 { font-size: 14px !important; }
-.run-flow-dialog .event-heading span { color: var(--text-soft); font-size: 12px !important; }
+.run-flow-dialog .event-heading h3 { font-size: 14px; }
+.run-flow-dialog .event-heading span { color: var(--text-soft); font-size: 12px; }
 @media (max-width: 600px) {
   .run-flow-dialog .event-row { grid-template-columns: 24px minmax(0, 1fr); gap: 0 9px; padding: 12px 6px 12px 2px; }
   .run-flow-dialog .event-row:not(:last-child)::before { left: 13px; top: 29px; bottom: -15px; }
-  .run-flow-dialog .event-row > small { grid-column: 2; max-width: none; font-size: 11px !important; }
+  .run-flow-dialog .event-row > small { grid-column: 2; max-width: none; font-size: 11px; }
   .run-flow-dialog .event-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
 }
 

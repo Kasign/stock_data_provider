@@ -1703,3 +1703,15 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] UI contract 锁定基础状态提示声明无 !important，以及面板 margin/错误颜色覆盖声明。
 - [ ] WebUI Checks、语法检查、容器构建及 Chromium Browser Smoke 需在本批最终提交 SHA 上验收。
 - [ ] 人工核验设置中心连接检查、导入导出反馈在深色/浅色主题及窄屏下的间距和状态颜色。
+
+
+
+## 2026-11-05 UIR-2 第三十三批：Run Flow 事件字号级联收敛
+
+- [x] 将事件标题、时间、状态图标、正文和辅助信息的通用可读字号归并到组件基础规则。
+- [x] 删除全局可读性区段中对应的 6 条 `!important` 字号覆盖。
+- [x] Run Flow 标题 14px、时间/消息 12px、辅助信息 11px 由组件级联覆盖，不再依赖局部 `!important`。
+- [x] 保留 600px 以下辅助信息 11px 的布局与字号行为。
+- [x] UI contract 增加通用基础字号、Run Flow 桌面/窄屏覆盖及无 `!important` 断言。
+- [ ] 在本批最终提交 SHA 上运行 UI contract、JS 语法检查、Compose 校验和 Nginx 镜像构建。
+- [ ] 执行 Chromium Browser Smoke，并人工核验 Run Flow 事件节点在 320/375/600/768/900/1280/1600px 下的标题层级、辅助信息换行与节点布局。
