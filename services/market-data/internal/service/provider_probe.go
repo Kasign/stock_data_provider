@@ -1486,9 +1486,9 @@ func buildCrossProviderProbeCheckResults(snapshots []*provider.CrossProviderDail
 				Capability: "daily_bars", Status: "failed", ErrorCode: crossProviderProbeFailureCode(item),
 				ErrorMessage: message, CheckedAt: checkedAt,
 				ComparedSymbol: snapshot.Symbol,
-				LeftProvider: snapshot.Provider, RightProvider: item.Provider,
+				LeftProvider:   snapshot.Provider, RightProvider: item.Provider,
 				LeftSourceVersion: snapshot.SourceVersion, RightSourceVersion: item.SourceVersion,
-				AdjustmentBasis: snapshot.AdjustmentBasis,
+				AdjustmentBasis:   snapshot.AdjustmentBasis,
 				LeftQualityStatus: model.QualityStatus(snapshot.QualityStatus),
 			})
 		}

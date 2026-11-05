@@ -387,3 +387,5 @@
 - 当前分支 HEAD：`ee3726312ef78cc8d5b08541952312e69f79a6e4`。代码审查确认：一侧 daily_bars Provider 失败、另一侧成功时，原 cross_provider builder 仅遍历成功快照，最终可能只生成系统级 `cross_provider_pair_unavailable`；失败侧虽在普通 Provider 检查中存在，但未与成功侧形成配对诊断。
 - 数据侧补充 Service 内部配对结果，复用现有字段记录左右 Provider、证券、复权口径、失败分类及原始错误摘要；网络/超时/HTTP/Provider 故障为 `provider_unavailable`，限流、鉴权/权限、契约错误分别分类。未新增 API、Schema、数据库字段，WebUI 无需修改。
 - 新增连接失败回归测试；本批 CI 待验。没有执行真实 Provider 请求，不改变 API-06“待真实数据验收”状态。下一步 P0-50 使用当前提交执行 BaoStock/Pytdx raw 双源真实验收。
+- 首轮 Push Go suite Run `42030476834` 的 market-data gofmt 检查发现新增结构体字面量两行字段未对齐，尚未进入测试阶段；已按 gofmt 输出修正，不涉及逻辑变化。PR Go suite `42030490186`、Parity `42030489938`、WebUI checks `42030490023`、PR Live Probe `42030489937` 当时仍在执行；修正后的 SHA 需重新验收。
+
