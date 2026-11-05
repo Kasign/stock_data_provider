@@ -23,12 +23,12 @@ const (
 )
 
 type IdentityCredential struct {
-	SourceID        string
-	Type            IdentifierType
-	Value           string
-	Hash            string
-	Status          IdentifierStatus
-	NewsID          string
+	SourceID string
+	Type     IdentifierType
+	Value    string
+	Hash     string
+	Status   IdentifierStatus
+	NewsID   string
 }
 
 type IdentityResolutionStatus string
@@ -70,14 +70,18 @@ func BuildIdentityCredentials(sourceID, sourceNativeID, rawURL string, policy So
 }
 
 func newIdentityCredential(sourceID string, kind IdentifierType, value string) IdentityCredential {
-	sum := sha256.Sum256([]byte(value))
 	return IdentityCredential{
 		SourceID: sourceID,
 		Type:     kind,
 		Value:    value,
-		Hash:     hex.EncodeToString(sum[:]),
+		Hash:     identityValueHash(value),
 		Status:   IdentifierActive,
 	}
+}
+
+func identityValueHash(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
 
 // ResolveIdentity 仅在同一来源内匹配凭据。Hash 命中后比较原文；任何多主体命中均隔离为冲突。
@@ -89,11 +93,12 @@ func ResolveIdentity(sourceID string, candidate, existing []IdentityCredential) 
 
 	matchedNewsIDs := make(map[string]struct{})
 	for _, wanted := range candidate {
-		if wanted.SourceID != sourceID || wanted.Value == "" || wanted.Hash == "" {
+		if wanted.SourceID != sourceID || wanted.Value == "" || wanted.Hash != identityValueHash(wanted.Value) ||
+			(wanted.Type != IdentifierSourceNativeID && wanted.Type != IdentifierNormalizedURL) {
 			return IdentityResolution{Status: IdentityConflict, Reason: "news.identity.candidate_invalid"}
 		}
 		for _, stored := range existing {
-			if stored.SourceID != sourceID || stored.Status == IdentifierInvalid {
+			if stored.SourceID != sourceID || (stored.Status != IdentifierActive && stored.Status != IdentifierHistorical) {
 				continue
 			}
 			if stored.Type != wanted.Type || stored.Hash != wanted.Hash {

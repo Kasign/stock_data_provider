@@ -70,6 +70,7 @@ func TestResolveIdentityMatchesHistoricalURLAndIgnoresInvalidIdentifier(t *testi
 	existing := []IdentityCredential{
 		{SourceID: candidate.SourceID, Type: candidate.Type, Value: candidate.Value, Hash: candidate.Hash, Status: IdentifierHistorical, NewsID: "news-1"},
 		{SourceID: candidate.SourceID, Type: candidate.Type, Value: candidate.Value, Hash: candidate.Hash, Status: IdentifierInvalid, NewsID: "news-2"},
+		{SourceID: candidate.SourceID, Type: candidate.Type, Value: candidate.Value, Hash: candidate.Hash, Status: IdentifierStatus("unknown"), NewsID: "news-3"},
 	}
 	got := ResolveIdentity("source-1", []IdentityCredential{candidate}, existing)
 	if got.Status != IdentityMatched || got.NewsID != "news-1" {
@@ -79,6 +80,15 @@ func TestResolveIdentityMatchesHistoricalURLAndIgnoresInvalidIdentifier(t *testi
 
 func TestResolveIdentityRejectsCandidateFromDifferentSource(t *testing.T) {
 	candidate := newIdentityCredential("source-2", IdentifierSourceNativeID, "id")
+	got := ResolveIdentity("source-1", []IdentityCredential{candidate}, nil)
+	if got.Status != IdentityConflict || got.Reason != "news.identity.candidate_invalid" {
+		t.Fatalf("resolution=%+v", got)
+	}
+}
+
+func TestResolveIdentityRejectsTamperedCandidateHash(t *testing.T) {
+	candidate := newIdentityCredential("source-1", IdentifierSourceNativeID, "id")
+	candidate.Hash = "not-the-value-hash"
 	got := ResolveIdentity("source-1", []IdentityCredential{candidate}, nil)
 	if got.Status != IdentityConflict || got.Reason != "news.identity.candidate_invalid" {
 		t.Fatalf("resolution=%+v", got)
