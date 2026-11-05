@@ -23,8 +23,9 @@ func BuildVersionFingerprint(candidate Candidate, content ContentLayers) string 
 
 	if content.Body == nil {
 		writeFingerprintField(digest, "body:none")
+	} else if body := NormalizeContentLayers(ContentLayers{Body: content.Body}).Body; body == nil {
+		writeFingerprintField(digest, "body:none")
 	} else {
-		body := NormalizeContentLayers(ContentLayers{Body: content.Body}).Body
 		writeFingerprintField(digest, "body:present")
 		writeFingerprintField(digest, string(body.Origin))
 		writeFingerprintField(digest, string(body.Format))

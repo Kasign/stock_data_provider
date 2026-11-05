@@ -69,3 +69,12 @@ func TestBuildVersionFingerprintExcludesProviderSummaryLayer(t *testing.T) {
 		t.Fatal("provider search summary must not create source content versions")
 	}
 }
+
+func TestBuildVersionFingerprintTreatsEmptyBodyAsAbsent(t *testing.T) {
+	candidate := Candidate{Title: "标题"}
+	withoutBody := ContentLayers{}
+	emptyBody := ContentLayers{Body: &ContentPayload{Origin: ContentOriginFeedBody, Format: ContentFormatUnknown}}
+	if BuildVersionFingerprint(candidate, withoutBody) != BuildVersionFingerprint(candidate, emptyBody) {
+		t.Fatal("empty normalized body must be treated as absent")
+	}
+}
