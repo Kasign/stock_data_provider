@@ -2233,7 +2233,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
   line-height:1.4
 }
 .market-activity-controls input {
-  min-height:33px;
+  min-height:38px;
   max-width:170px;
   padding:6px 8px;
   border:1px solid var(--border);
@@ -3295,7 +3295,6 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 
 .market-overview-actions .button { min-height: 38px; font-size: 12px; }
 
-.market-activity-controls input { min-height: 38px; }
 .market-activity-controls .button { min-height: 38px; font-size: 12px; }
 .market-activity-table { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .activity-stock-link { min-height: 38px; padding: 5px 0; font-size: 12px; }
