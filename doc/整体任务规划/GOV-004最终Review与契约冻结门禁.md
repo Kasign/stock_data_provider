@@ -271,3 +271,21 @@ News 分支当前 HEAD：`cefbbbb10ef418f8bca1d2ff3d6a1fef8ce203b6`，提交 `te
 - 这些是公共原语进展；真实服务路由、领域 Adapter、真实 MariaDB/Redis、Migration 故障演练和生产出口 SSRF 验收仍未完成。
 
 详细差异分别见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 和 [Platform 五模块公共依赖与集成验收清单](./Platform-五模块公共依赖与集成验收清单.md)。GOV-004 保持 NO-GO。
+
+
+## 11. Data OpenAPI ↔ Go JSON 完整静态复核更新（2026-11-05）
+
+基于 Data 最新 HEAD `fd39c663c4ad59836acdf963d5fb8b2f9227abe8`，重新静态扫描 11 个 Model 文件（57 个 struct，51 个同名 Schema），并检查关键 Handler 和现有 `openapi_contract_test.go`。
+
+最新字段级结果：
+- Go 有、Schema 缺失：15 个字段，8 个 Schema；
+- Schema 多出 Go 无来源字段：9 个字段，3 个 Schema；
+- required 不一致：15 个字段；
+- nullable：122 个 `omitempty` 字段被 Schema 允许 null；另有 23 个字段在 Go 模型层可能输出 null，但 Schema 未允许（22 个非 omitempty slice/map + `LimitPoolItem.change_percent`）。
+- AdjustmentBasis 响应枚举和 RequestAdjustmentBasis 请求枚举与 Go 解析器一致。
+
+现有 `openapi_contract_test.go` 仅做 YAML、路由安全和少量字段字符串断言，没有 Go JSON Tag ↔ OpenAPI 的双向自动化检查，也没有完整 Handler JSON golden。关键 Handler 直接输出 Go Model，确认 Quote、StockBoard、PriceLimitEventEvidence 的部分 Schema 字段没有真实 Model 来源。
+
+详细字段清单、6 个内部/内联类型分类、required/nullable 语义和自动化门禁见 [Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md) 第 11 节。
+
+**结论：Data Schema 阻断项比此前记录更完整，但没有被修复；GOV-004 继续 NO-GO。** 本次只在规划分支更新审查文档，没有修改 Data 业务分支，也没有运行 Data Go 测试。
