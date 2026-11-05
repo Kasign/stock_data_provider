@@ -13,7 +13,7 @@ func NormalizeCandidate(candidate Candidate, observedAt time.Time, queryDimensio
 	candidate.PublisherName = strings.TrimSpace(candidate.PublisherName)
 	candidate.PublisherDomain = strings.ToLower(strings.TrimSpace(candidate.PublisherDomain))
 	candidate.Title = normalizeCandidateText(candidate.Title)
-	candidate.Summary = normalizeCandidateText(candidate.Summary)
+	candidate.ProviderSummary = normalizeCandidateText(candidate.ProviderSummary)
 	candidate.RawURL = strings.TrimSpace(candidate.RawURL)
 	candidate.PublishedAtRaw = strings.TrimSpace(candidate.PublishedAtRaw)
 	candidate.QueryDimension = strings.TrimSpace(candidate.QueryDimension)
