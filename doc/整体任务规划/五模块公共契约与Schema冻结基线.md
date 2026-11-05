@@ -427,3 +427,25 @@ type ResearchEvidenceQuery interface {
 5. 结合以上结果修订模块 DTO，完成 Quant/Research 的公开契约字段表与 Schema 版本策略。
 
 因此 GOV-004 状态更新为：**Data / News / Platform 重点字段级 Review 已完成；全量 Schema 对照和未决契约补齐仍待完成，尚未冻结。**
+
+
+### 13.5 Data OpenAPI ↔ Go JSON 修正执行清单
+
+已将已知字段差异整理为独立执行文档：[Data OpenAPI 与 Go 模型契约修正清单](./Data-OpenAPI与Go模型契约修正清单.md)。该清单只在 `feat/design_doc` 维护，实际 Data Schema/Model/测试修改归 Data 分支。
+
+本轮把已知差异拆成四类：
+- Go JSON Tag 已有、OpenAPI 缺失：15 个字段，需按真实响应路径补齐。
+- Required：已知差异清单为 15 项，其中 12 项是 Go 始终输出但 Schema 未列 required，3 项是 Go `omitempty` 但 Schema 列 required。
+- Nullable：原审查摘要记录 10 处不准确，但可逐项明确的 Go `string + omitempty` 字段目前只有 9 项；另有 `LimitPoolItem.change_percent` 应补 nullable。不得凭猜测补出第 10 个字段。
+- OpenAPI 多余字段：9 个，需证明由真实 Handler 输出，否则从 Schema 移除。
+
+**重要校正：** 既有 Review 的 required/nullable 汇总数量与逐字段列表存在计数差异。当前不把“15/10”直接视为已经穷尽的最终差异；Data 分支必须通过双向契约脚本从最新 Go JSON Tag、Handler 实际 JSON 和 OpenAPI 响应引用路径重新生成差异报告。字段表中的已知项必须全部核验，新增差异也必须补录。该校正避免把审查摘要误当作准确的机器核对结果。
+
+执行门禁：
+1. 先核对实际 Handler 序列化来源，再修 OpenAPI；不为 Schema 虚构 Go 字段。
+2. 双向比较 Go 可输出字段与 OpenAPI 声明字段，并处理嵌入结构、自定义 MarshalJSON、内联对象和 Handler 包装 DTO。
+3. 用 JSON golden/fixture 验证 required、omitempty、nullable、零值和 null。
+4. 对枚举、单位、日期/时间、精度、范围、嵌套引用和分页约束做契约验证。
+5. 契约测试进入 Data CI；OpenAPI lint、Go 测试、Handler 测试和契约测试全部通过后，才允许 Data Schema 进入 GOV-004 冻结评审。
+
+本轮没有修改 Data 分支、OpenAPI 或 Go 业务代码；没有创建模块分支。
