@@ -334,7 +334,8 @@ func (c migrationTestConn) ExecContext(_ context.Context, query string, args []d
 		}
 		c.state.pending[uint64(version)] = checksum
 	case strings.Contains(query, "UPDATE platform_schema_migrations"):
-		version := uint64(args[len(args)-1].Value.(int64))
+		versionArg := args[len(args)-1].Value.(int64)
+		version := uint64(versionArg)
 		if strings.Contains(query, "status = 'failed'") {
 			c.state.failed[version] = int(args[0].Value.(int64))
 		} else if strings.Contains(query, "status = 'applied'") {
@@ -463,13 +464,12 @@ func TestApplyMigrationsRejectsMissingVersionBeforeAppliedVersion(t *testing.T) 
 	}
 }
 
-
 func TestApplyMigrationsRecordsFailureAndRequiresManualRecovery(t *testing.T) {
 	state := &migrationTestState{
-		applied: make(map[uint64]string),
-		pending: make(map[uint64]string),
-		failed: make(map[uint64]int),
-		lockAcquired: true,
+		applied:       make(map[uint64]string),
+		pending:       make(map[uint64]string),
+		failed:        make(map[uint64]int),
+		lockAcquired:  true,
 		failStatement: true,
 	}
 	db := sql.OpenDB(migrationTestConnector{state: state})
@@ -496,5 +496,21 @@ func TestApplyMigrationsRecordsFailureAndRequiresManualRecovery(t *testing.T) {
 	}
 	if len(state.statements) != 0 {
 		t.Fatalf("failed migration must not be retried automatically: %v", state.statements)
+	}
+}
+
+
+func TestNormalizeSQLConfigAppliesCompleteDefaults(t *testing.T) {
+	config, err := normalizeSQLConfig(SQLConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaults := DefaultSQLConfig()
+	if config.MaxOpenConns != defaults.MaxOpenConns ||
+		config.MaxIdleConns != defaults.MaxIdleConns ||
+		config.ConnMaxLifetime != defaults.ConnMaxLifetime ||
+		config.ConnMaxIdleTime != defaults.ConnMaxIdleTime ||
+		config.PingTimeout != defaults.PingTimeout {
+		t.Fatalf("zero-value SQL config did not receive complete defaults: got %+v want %+v", config, defaults)
 	}
 }

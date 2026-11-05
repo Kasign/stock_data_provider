@@ -135,6 +135,9 @@ func normalizeSQLConfig(config SQLConfig) (SQLConfig, error) {
 	if config.MaxOpenConns == 0 {
 		config.MaxOpenConns = defaults.MaxOpenConns
 	}
+	if config.MaxIdleConns == 0 {
+		config.MaxIdleConns = defaults.MaxIdleConns
+	}
 	if config.ConnMaxLifetime == 0 {
 		config.ConnMaxLifetime = defaults.ConnMaxLifetime
 	}
@@ -325,7 +328,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 				return &fault.Fault{
 					Class: fault.ClassInternal, Code: "platform.storage.migration_apply_failed",
 					SafeMessage: "migration failed; manual recovery is required",
-					Dependency: "sql", Retryable: false, Cause: cause,
+					Dependency:  "sql", Retryable: false, Cause: cause,
 				}
 			}
 		}
@@ -336,7 +339,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB, namespace string, migratio
 			return &fault.Fault{
 				Class: fault.ClassInternal, Code: "platform.storage.migration_record_failed",
 				SafeMessage: "migration statements completed but history update failed; inspect the database before retrying",
-				Dependency: "sql", Retryable: false, Cause: err,
+				Dependency:  "sql", Retryable: false, Cause: err,
 			}
 		}
 	}
