@@ -184,3 +184,22 @@ Platform 只负责：
 Platform 已提供可复用的基础技术包，但“包存在/包级测试通过”不等于五模块可直接认为所有平台能力已生产就绪。五模块可以按本文件使用稳定技术原语；真实 Storage、Migration、生产出口安全、Diagnostics 路由/领域 Adapter 和 Worker Request ID 接入仍需各自验收。
 
 本文件不修改 Platform 代码，不将未验收能力描述为完成；GOV-004 仍未冻结。
+
+
+## 追加：最新 Platform 分支源码复核（2026-11-05）
+
+- 当前 Platform HEAD：`eb5361172c524f098fc9b26c08e9c45753b76d23`，提交 `docs(platform/diagnostics): define route access matrix`。
+- 相较前次核查基线 `a30ee12130d2a50bc3db672d9d12d1e14040e34f`，compare ahead 9 / behind 0；本次变更覆盖 Config dotenv、Diagnostics Runner、Security Router/认证及其测试和接入文档。
+
+新增/调整的公共原语能力：
+- Diagnostics Runner 单次最多 128 个 Check，默认并发 4、上限 32、默认总超时 30 秒；校验 Check ID 唯一；捕获 Check panic；required Check 返回 skipped 时转为 failed。
+- Security 增加显式 RoutePolicy 和 Router；拒绝根 catch-all 路由；Owner Token/Service Secret 至少 32 字节；Service scopes 必须非空且唯一；Service 不可获得 `platform:admin`；认证比较遍历全部已配置凭据摘要。
+- 当前 scope 包括 platform admin、data read/diagnose、research run/read；没有独立 News/Notification diagnose scope，现有建议为其详细诊断先 owner-only。
+
+接入边界没有因此完成：
+- Runner 不提供 HTTP 路由，也不负责授权；Security Router 原语不等于服务已注册真实路由。
+- 目前没有 Server/Data/News/Research 的统一诊断路由和真实领域 Adapter 接入验收证据。
+- 本次 compare 未显示 Storage、HTTP Client 生产出口安全或真实 MariaDB/Redis 集成验收完成。
+- 平台文档《10-服务接入统一验收清单》明确：包级 CI 只证明公共原语测试边界，不代表服务入口、领域 Adapter、生产网络或部署配置已接入。
+
+因此，GOV-004 仍需保留真实 MariaDB/Redis、Migration 故障演练、HTTP Client 生产出口 SSRF、路由权限和领域 Adapter 接入门禁。不能因新增 Router/Runner 就将 PLAT-007 或 Platform 集成标记为完成。
