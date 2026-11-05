@@ -214,3 +214,14 @@ Migration 状态为 `running` 或 `failed` 时，Runner 不会自动重跑。处
 - DNS/IP 校验发生在新建连接的 DialContext 阶段。Transport 复用已建立连接时不会为每个 HTTP 请求重新解析 DNS；安全验收应区分“每次新建连接校验”与“每次请求解析”，不得混淆。
 - 当前 DestinationPolicy 的目标约束为精确 Host/Port 与公共 IP 校验，没有独立的目标 IP allowlist。若未来增加按 Provider/租户区分的 IP 范围策略，必须重新评审连接池隔离，不能直接共享跨策略连接池。
 - HTTP/2 连接合并是否可能发生，需通过目标 Go 版本与 Transport 行为专项验证；当前不把未经验证的连接合并当作已发生漏洞。
+
+
+### 7.7 HTTP/2 连接池隔离审查（2026-11-05）
+
+仓库 go.mod 声明最低 Go 版本为 1.22，Transport 显式启用 ForceAttemptHTTP2。对 Go 1.22 标准库实现的源码审查结论：
+
+- net/http.Transport 的 HTTP/1 连接池 key 包含 proxy、scheme、authority；本 Client 禁用 Proxy，因此连接池按 scheme/目标 authority 区分。
+- Go 1.22 bundled HTTP/2 client connection pool 以规范化后的 host:port 作为连接池 key；源码明确将“按证书名称共享不同 host 的连接”列为未实现 TODO。因此该版本实现不会仅凭证书 SAN 将 api.example.com 的 HTTP/2 连接合并给 cdn.example.com。
+- 同一 host:port 的 HTTP/2 连接仍会复用；这与同源策略一致。当前策略没有独立 IP allowlist，不存在两个策略对同一 authority 施加不同 IP 范围后误复用的问题。
+- go.mod 的 go 1.22 是最低语言/模块版本声明，不代表生产运行时一定是 Go 1.22。升级 Go 运行时后，应重新核对对应版本 net/http 与 bundled HTTP/2 连接池 key；不能把上述源码结论无条件外推到未来版本。
+- 不因未经证实的跨 authority HTTP/2 合并而关闭 HTTP/2。若未来加入策略级 IP/出口约束，应采用按策略隔离 Transport/连接池或其他可证明的连接隔离方案，并补充运行时集成测试。

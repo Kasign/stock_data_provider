@@ -437,6 +437,68 @@ func TestClientReleasesDependencySlotDuringRetryBackoff(t *testing.T) {
 	}
 }
 
+func TestClientCancellationWhileWaitingForDependencySlotDoesNotLeak(t *testing.T) {
+	entered := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/hold" {
+			close(entered)
+			select {
+			case <-releaseFirst:
+			case <-request.Context().Done():
+			}
+		}
+		calls.Add(1)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		Resolver: staticResolver{addresses: []netip.Addr{netip.MustParseAddr("8.8.8.8")}},
+		MaxConcurrent: 1, DependencyLimits: map[string]int{"news.fetch": 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	t.Cleanup(client.CloseIdleConnections)
+	policy := localPolicy(server)
+
+	firstDone := make(chan error, 1)
+	go func() {
+		response, err := client.Do(context.Background(), localRequest(t, server, "/hold"), policy)
+		if err == nil {
+			_ = response.Body.Close()
+		}
+		firstDone <- err
+	}()
+	<-entered
+
+	waitingCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = client.Do(waitingCtx, localRequest(t, server, "/waiting"), policy)
+	var platformFault *fault.Fault
+	if !errors.As(err, &platformFault) || platformFault.Code != "platform.httpclient.canceled" {
+		t.Fatalf("expected canceled request while waiting for slot, got %v", err)
+	}
+
+	close(releaseFirst)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first request failed: %v", err)
+	}
+	response, err := client.Do(context.Background(), localRequest(t, server, "/after-cancel"), policy)
+	if err != nil {
+		t.Fatalf("slot was not available after cancellation: %v", err)
+	}
+	_ = response.Body.Close()
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("canceled waiter should not reach server; got %d handler calls", got)
+	}
+}
+
 func TestClientRetriesOnlyExplicitlyIdempotentRequests(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
