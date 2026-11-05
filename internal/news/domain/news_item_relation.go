@@ -95,7 +95,9 @@ func ValidateNewsItemRelationHistory(relations []NewsItemRelation) error {
 			parent.FromNewsID != relation.FromNewsID ||
 			parent.FromSourceID != relation.FromSourceID ||
 			parent.Kind != relation.Kind ||
-			parent.Status == NewsItemRelationRetracted {
+			parent.Status == NewsItemRelationRetracted ||
+			(relation.Status == NewsItemRelationRetracted &&
+				(parent.ToNewsID != relation.ToNewsID || parent.ToSourceID != relation.ToSourceID)) {
 			return ErrNewsItemRelationInvalid
 		}
 		if _, exists := successor[parentID]; exists {

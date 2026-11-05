@@ -141,6 +141,16 @@ func TestValidateNewsItemRelationHistoryRetractionReplacesConfirmedEdge(t *testi
 	}
 }
 
+func TestValidateNewsItemRelationHistoryRetractionMustMatchWithdrawnEdge(t *testing.T) {
+	old := relationFixture("rel-old", "news-repost", "news-original-a")
+	retracted := relationFixture("rel-retracted", "news-repost", "news-original-b")
+	retracted.Status = NewsItemRelationRetracted
+	retracted.SupersedesRelationID = old.ID
+	if !errors.Is(ValidateNewsItemRelationHistory([]NewsItemRelation{old, retracted}), ErrNewsItemRelationInvalid) {
+		t.Fatal("retraction must identify the same edge it withdraws")
+	}
+}
+
 func TestValidateNewsItemRelationHistoryConfirmedDescendantReplacesProposedChain(t *testing.T) {
 	old := relationFixture("rel-old", "news-repost", "news-original")
 	proposal := relationFixture("rel-proposal", "news-repost", "news-original")
