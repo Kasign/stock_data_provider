@@ -677,13 +677,13 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 - 首批 Research 只存 metadata、必要摘要、fingerprint 和授权引用；全文由来源模块按当前授权按需读取。
 - News Query Facade/Repository 尚未生产实现，只阻断 News 生产 Adapter、历史查询和内容读取，不阻断 Research Context/Evidence Domain 与契约测试。
 
-### 31.4 Researchflow 首批字段缺口
+### 31.4 Researchflow 首批字段缺口（状态机部分由第 32 节更新）
 
-- Run/Stage/Attempt 已有主要字段，但需要补合法状态迁移表，特别是 timeout、cancel、retry 和终态之间的关系。
-- timeout 是一次 Attempt 的执行结果；主动 cancel 是取消请求，两者不得合并为同一语义。
-- 必需 Stage 失败时 Run 不得成功；可选 Stage 失败可形成 partial/degraded，并列出缺失阶段和原因。
-- Run 必须固定 workflow_template_id、template_version 和模板指纹，保证历史流程可还原。
-- FLOW-001~003 可先通过纯领域/内存测试验收，不依赖 Platform Task Queue 或其他模块生产 Facade。
+- Run/Stage/Attempt 的基础字段已形成草案；状态迁移、结果归并、取消竞态和 Executor 恢复语义由第 32 节 CONTRACT-006/007 Review 细化。
+- timeout 是 Stage/Attempt 的执行结果；主动 cancel 是 Run 控制请求，两者不得合并。
+- Run 仅使用 succeeded/partial/failed/cancelled 作为终态；Stage degraded 是否传播为 Run.partial，由版本化 Template 策略决定，Run 质量摘要仍保留 degraded。
+- Run 固定 workflow_template_id、template_version、fingerprint、system_as_of 和 deadline；重试不得改变原 Run 的知识时点和输入快照。
+- FLOW-001~003 可通过纯领域/内存测试独立验收，不依赖 Platform Task Queue 或其他模块生产 Facade。
 
 ### 31.5 LLM 首批范围
 
@@ -707,7 +707,7 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 | Quant Request/Metric/ResultRef | Quant + Researchflow | 待 Review | typed parameters、数值精度、单位 |
 | Research Context/Evidence | Research + Researchflow | 待 Review | system_as_of、AuthorizationRef、内容策略 |
 | News Evidence Query Port | News + Research + Researchflow | 目标契约已写，待确认 | DTO、知识时间过滤、当前授权、Cursor、错误 |
-| Researchflow Run/Stage/Attempt | Researchflow + Platform | 待 Review | 状态迁移、deadline、cancel、partial、模板版本 |
+| Researchflow Run/Stage/Attempt | Researchflow + Platform | 规划侧 CONTRACT-006/007 Review 已完成，待 Owner Review | 传播矩阵、硬风险门禁标记、取消宽限期、租约/并发参数、Repository CAS/fencing 约束 |
 | LLM Model Adapter | LLM + Platform | 协议盘点前 | 先完成 LLM-001 |
 | Notification Event/Delivery | Notification + Platform | 待 Review | payload Schema、recipient_scope、幂等和 Attempt |
 | Data Snapshot Input | Data + Quant | 总体语义已定义，字段映射待 Review | PIT、单位、复权、quality、source version |
@@ -721,3 +721,37 @@ DATA-CONTRACT-001 的 gofmt 子项已恢复；完整 CI 阻断转为测试编译
 - Quant、Research、Researchflow、Notification 可继续完善各自不依赖未决字段的领域设计和测试方案；相关跨模块 Adapter/调用点待 Owner Review 后实现。
 - Data/News/Platform 的真实实现、真实环境和 CI 仅在对应 Adapter/Integration 批次验收，不作为无关模块的共同前置条件。
 - 本节不宣称 GOV-004 已冻结，不自动创建任何模块分支。
+
+
+## 32. Researchflow CONTRACT-006 / 007 状态机 Review 更新（2026-11-05）
+
+本轮已同步更新《五模块首批ApplicationPort与状态机契约细化》《五模块公共契约与Schema冻结基线》《Researchflow研究流程与状态机设计》《Researchflow任务拆分与验收》和五模块交叉 Review 记录。
+
+### 32.1 统一状态语义
+
+- Run 非终态：created、queued、running、cancelling；终态：succeeded、partial、failed、cancelled。
+- Run 不设置 degraded/timed_out。degraded 表示 Stage 输出质量，timed_out 表示 Stage/Attempt 执行预算耗尽。
+- Stage 包含 blocked；blocked 不创建 Attempt。skipped 仅用于模板预先裁剪或明确不适用，运行期依赖失败不得伪装 skipped。
+- Stage/Attempt 的 failed/timed_out 可在 Run deadline 前按预算重试；每次重试创建新 Attempt，历史记录不可覆盖。
+
+### 32.2 CONTRACT-006 结果传播
+
+Workflow Template 按 stage_code + template_version 固定 on_degraded、on_skipped、on_failed、on_timed_out、on_blocked 策略，并纳入 fingerprint。传播优先级为 fail > partial > succeeded。Stage degraded 可被模板接受，Run 仍可 succeeded，但结果质量必须标记 degraded；只有传播策略明确要求不完整时 Run 才 partial。Run partial 必须携带缺失阶段、降级/阻断原因和 coverage。硬风险门禁不能忽略失败、降级或未执行。
+
+### 32.3 CONTRACT-007 取消与执行控制
+
+- Run 增加 cancelling 中间态；用户取消先原子进入 cancelling，停止新派发并等待在途 Attempt 收敛后才进入 cancelled。
+- deadline 是硬边界；deadline_exceeded 与 user_cancelled 使用 termination_reason 区分。deadline 到期的 Stage/Attempt 按传播策略归并为 failed/partial，不增加 Run.timed_out。
+- cancel 与正常完成通过事务/CAS 决胜；Attempt 终态不可覆盖，迟到 Worker 通过 lease/fencing token 被拒绝。
+- Executor 必须限制全局并发、队列容量、单 Run 并行数，持久化 queued 状态，并支持租约续期、过期回收和进程重启恢复。
+- 重试由 Researchflow Application 单点负责；不得在 Executor/Adapter 重复叠加业务重试。
+
+### 32.4 尚未通过的门禁
+
+- 本轮是规划侧 Review 建议，不是 Researchflow Owner 签字；CONTRACT-006/007 仍待 Owner Review。
+- Stage 传播策略与 reason_code 的细粒度规则、硬风险门禁 Registry、取消 grace period、Worker lease/heartbeat、队列和并发默认值仍需 Owner 决策或压测。
+- FLOW-007 的 SQL CAS、租约唯一约束、fencing token 单调性和恢复事务仍需 Repository/Schema 设计评审。
+- 未实现状态机、Executor、持久化或竞态测试；不宣称 FLOW-001~004 已完成。
+- GOV-004 整体仍为 NO-GO；不冻结共同契约，不创建模块分支。
+
+**本轮结论：Researchflow 的状态机草案已达到可供 Owner 逐项确认的粒度；FLOW-001~003 仍可独立进行领域开发准备，FLOW-004 需在 Executor 资源与租约契约确认后进入实现。**
