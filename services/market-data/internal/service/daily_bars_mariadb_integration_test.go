@@ -74,12 +74,20 @@ func TestDailyBarsMariaDBFallbackPreservesNormalizationWarnings(t *testing.T) {
 	if len(bars) != 1 || bars[0].TradeDate != valid.TradeDate || bars[0].QualityStatus != model.QualityStale {
 		t.Fatalf("fallback must return only the valid stored bar as stale: bars=%+v", bars)
 	}
+	hasWarning := func(expected string) bool {
+		for _, warning := range warnings {
+			if warning == expected {
+				return true
+			}
+		}
+		return false
+	}
 	for _, expected := range []string{
 		"provider_unavailable_served_from_mariadb",
 		"mariadb_bars_use_one_coherent_source_and_adjustment_reference",
 		"invalid_ohlc_bar_dropped",
 	} {
-		if !containsWarning(warnings, expected) {
+		if !hasWarning(expected) {
 			t.Errorf("fallback response is missing warning %q: %v", expected, warnings)
 		}
 	}
