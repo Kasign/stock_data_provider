@@ -1122,3 +1122,25 @@ app.js 仅负责两处初始化装配；页面路由 `setView`、hashchange、�
 - [x] 本轮只读审查，无运行时代码修改，不新增通用连接管理器。
 
 结论：当前连接切换失效链路覆盖完整，app.js 的 `applySettings` 作为配置变更协调入口合理。下一步转向页面恢复/跨页切换时的刷新触发审查，重点检查同一页面进入、返回、设置保存和手动刷新是否可能重复发起相同请求；只在存在可复现重复请求或竞态时修改。
+
+
+### 2026-11-05 JSR-6I：页面刷新触发与重复请求审查（已验收）
+
+复核应用初始化、`setView`/hashchange、工具栏手动刷新、设置应用、各页面模块刷新入口及其请求并发控制。
+
+- [x] 应用启动显式调用 `setView("market", { refreshData: false })`，随后只启动一次服务健康检查和市场工作台刷新；没有重复走页面切换刷新分支。
+- [x] `setView` 仅在实际 view 变化时触发进入页面刷新；hashchange 回到当前 view 不重复刷新。
+- [x] 市场总览按模块 key 取消前一请求并使用 generation 保护汇总状态；市场活动刷新会取消同域旧请求；全市场行情以 busy 锁阻止重复分页请求；个股研究按 panel abort 旧请求；数据中心以 checking 锁避免并发 refresh。
+- [x] 发现数据源能力列表 `refreshSources` 只有 generation 防旧回包，没有 AbortController；重复触发会留下无效网络请求，且市场连接切换时如果不重新进入 Stocks 页，旧请求没有被主动取消。
+- [x] 为 `refreshSources` 增加请求 controller：新刷新先 abort 旧请求，调用 `getDataSources(settings, signal)`，响应/异常/finally 均同时校验 signal、generation 和 controller 所有权。
+- [x] 增加 `invalidateSourceRefresh`：行情连接配置变化时递增 generation、abort 旧请求、清理旧连接数据源能力展示并恢复刷新按钮；随后若当前在 Stocks 页，再按新配置启动刷新。
+- [x] 服务健康检查仍采用 generation 丢弃旧结果；手动刷新按钮 busy 锁避免连续点击。连接设置应用触发的新健康检查是预期刷新，不合并成全局缓存。
+- [x] 不新增统一请求缓存/全局刷新管理器；不在页面隐藏时强制刷新，也不把普通 DOM 重绘误判成网络请求。
+
+验收：
+- 代码提交：`b399077ad6d85cdb84981e40b4c44dd5d6797916`。
+- 契约测试修订提交：`e360ed1c3feda57425e74183218731d1f7415e53`。
+- WebUI Checks #41951798439：458/458 tests、语法检查及镜像构建通过。
+- Chromium Browser Smoke #41951798471：响应式布局、跨标签同步、自选行情、Run Flow、个股研究、数据中心、选股和全市场分页验收全部通过。
+
+下一步：JSR-6J 对刷新/请求生命周期的边界做收尾复核，重点检查页面恢复（BFCache/pageshow）与离开页面时的请求行为是否需要明确策略；不默认引入定时刷新或页面可见性刷新。

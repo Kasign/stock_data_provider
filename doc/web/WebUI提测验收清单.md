@@ -1617,3 +1617,16 @@ CI 复核记录：本批首次 Chromium Browser Smoke 在个股研究数据质�
 - [x] 核对 API client 调用方 AbortSignal 与请求超时 controller 的合并传递。
 - [x] 核对异步响应的 generation、signal、Task/Run 身份与当前输入校验。
 - [x] 未发现明确旧连接响应回写问题；本轮无运行时代码变更。
+
+
+## 2026-11-05 JSR-6I：页面刷新触发与重复请求审查（已验收）
+
+- [x] 核对应用初始化只启动一次首页刷新链路。
+- [x] 核对 setView/hashchange 仅在实际页面变化时触发页面进入刷新。
+- [x] 核对市场总览、市场活动、全市场分页、个股研究和数据中心的并发/取消策略。
+- [x] 修复数据源能力列表缺少 AbortController 的问题；重复刷新会取消旧请求。
+- [x] 行情连接变化时主动失效数据源能力请求，清理旧连接结果并恢复按钮。
+- [x] 请求 signal、generation、controller 所有权与 finally 收尾契约通过测试。
+- [x] WebUI Checks #41951798439：458/458 tests、语法检查和镜像构建通过。
+- [x] Chromium Browser Smoke #41951798471：所有浏览器验收步骤通过。
+- [x] 代码提交 `b399077ad6d85cdb84981e40b4c44dd5d6797916`；最终测试提交 `e360ed1c3feda57425e74183218731d1f7415e53`。

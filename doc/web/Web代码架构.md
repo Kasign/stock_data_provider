@@ -639,3 +639,23 @@ app.js 继续负责结果集合与活动索引状态、输入防抖、请求 Abo
 API client 会把调用方 AbortSignal 与超时 controller 合并，再传给 fetch。各模块在响应后还会检查 signal/generation；Task/Run 额外检查 taskId、runId 和 analysisBase 等身份。
 
 审查未发现旧连接响应回写当前 UI 的明确漏洞。保持现有按领域分开的取消机制，不抽象成单一全局连接管理器；否则会模糊市场/分析两个独立 endpoint 的失效范围。
+
+
+### 12.29 JSR-6I 页面刷新触发与重复请求审查
+
+刷新入口与防重复策略：
+
+| 入口/模块 | 当前行为 | 结论 |
+|---|---|---|
+| 应用启动 | `setView("market", { refreshData: false })` 后分别启动一次健康检查和市场工作台刷新 | 无双重初始化刷新 |
+| 页面切换/hashchange | 只有 view 实际变化时触发进入页刷新 | 同页 hash 变化不重复请求 |
+| 市场总览 | 按模块 key abort 旧请求，generation 保护刷新汇总 | 保留模块级请求所有权 |
+| 龙虎榜/交易日历 | 新请求取消同域旧请求；连接变更统一 invalidate | 保留现有策略 |
+| 全市场行情 | busy 锁、generation、AbortController | 重复点击不会并发分页请求 |
+| 个股研究 | 每个 panel 独立 controller/generation | 重刷仅替换相同 panel 的旧请求 |
+| 数据中心 | `checking` 锁阻止并发 refresh；invalidate 取消检查/探测/历史请求 | 保留现有策略 |
+| 数据源能力列表 | 原先只有 generation，不能取消旧网络请求 | 本轮修复为 AbortController + generation |
+
+`refreshSources` 现在在启动新读取时先 abort 旧 controller，并将 signal 传给 `getDataSources`。响应和错误处理均检查 aborted/generation；finally 仅由当前 generation 且仍持有 controller 的请求恢复按钮。行情连接变化调用 `invalidateSourceRefresh`，先递增 generation 并 abort，再清理旧能力列表/计数和 busy 状态，防止旧连接结果回写。
+
+本轮没有建立全局缓存或统一刷新队列。手动刷新按钮已有 busy 锁；设置应用触发的健康检查和当前页刷新属于显式配置生效动作，不视为无意义重复。最终验收 458/458 tests；WebUI Checks #41951798439、Chromium Browser Smoke #41951798471 均通过。代码提交 `b399077ad6d85cdb84981e40b4c44dd5d6797916`，最终契约测试基线 `e360ed1c3feda57425e74183218731d1f7415e53`。
