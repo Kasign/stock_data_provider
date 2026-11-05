@@ -210,7 +210,7 @@
 - [ ] Go JSON Tag 与 OpenAPI 的 required/optional/nullable 一致。
 - [ ] 15 个已知缺失字段全部补齐，且没有重复或错误归属。
 - [ ] 15 处 required 不一致经自动化重算后归零；最终数量与差异报告一致。
-- [ ] 10 处 nullable 不准确经自动化重算后归零；额外发现的 nullable 缺口也已修正。
+- [ ] Go `omitempty` 与 OpenAPI nullable 的 122 处宽松声明完成复核；Go 可输出 null 但 Schema 未允许的 23 处字段完成修正或由 Handler 非空约束和 JSON 测试证明。
 - [ ] 9 个已知多余字段删除或由真实 Handler DTO 提供并有测试证明。
 - [ ] 枚举、单位、时间、格式、范围、嵌套引用完成核对。
 - [ ] 双向契约测试纳入 CI，新增字段无法绕过测试。
@@ -222,7 +222,7 @@
 既有 Review 摘要中的数量不能直接当作最终基线：
 
 - Required：摘要记为 15 处；当前逐项列出的字段为 12 个 Go 始终输出字段 + 3 个 Go omitempty 字段，共 15 项。第一组的 12 项均应在实际 JSON 输出验证后列入 required。
-- Nullable：摘要记为 10 处错误；当前逐项列出的 Go string 不应 nullable 字段为 9 项，另有 1 个应增加 nullable 的字段。必须补出缺失的第 10 个错误项，或修正摘要计数。
+- Nullable：旧摘要中的 10 处仅覆盖部分标量字段，并非完整统计。完整模型级扫描结果以第 11 节为准；必须区分 `omitempty` 的省略语义与非 `omitempty` nil 指针/切片/Map 的 null 语义。
 - 缺失字段：按当前列表为 15 项；执行时逐字段核验实际 API 可达性。
 - 多余字段：按当前列表为 9 项。
 
@@ -237,3 +237,151 @@
 - 因此本清单既有 OpenAPI ↔ Go JSON 字段、required/nullable 和多余字段差异仍未被本次提交修复；此前字段级结论在该 SHA 上仍适用。
 
 本次新增的 BaoStock 实测说明两只证券首个因子事件日前没有 raw 日 K，`pre_first_event_status=not_applicable`，所以没有验证 latest-factor fallback；生产逻辑继续 fail closed，不采用未来因子。因子 `AvailableAt` 仍未知，当前 qfq/hfq OHLC 匹配不能证明历史 PIT 可见性。该实测是复权重建样本证据，不应被误读为 OpenAPI Schema 修复或 Data 全量 PIT 验收。
+
+
+## 11. Data 最新 HEAD 字段级完整静态复核（2026-11-05）
+
+### 11.1 核查基线与方法
+
+- Data 分支：`feat/full-go-data-providers-api-switch`
+- HEAD：`fd39c663c4ad59836acdf963d5fb8b2f9227abe8`
+- OpenAPI：`services/market-data/openapi.yaml`，Blob `9a15f7810a07c60887a574d82e1f84d56a8c9964`
+- Model：`services/market-data/internal/model/*.go` 下 11 个 Go 文件。
+- 逐个解析 Go struct JSON Tag，并与同名 OpenAPI Schema 的 properties、required、nullable 做静态比较；另检查现有 `openapi_contract_test.go` 和关键 Handler 的实际返回对象。
+
+本次统计得到 57 个 Model struct，其中 51 个存在同名 OpenAPI Schema；6 个未同名映射类型分类如下：
+
+| Go 类型 | 分类 |
+|---|---|
+| `AdjustmentFactor`、`CorporateAction` | 内部历史模型；当前没有对应 HTTP Handler 路由 |
+| `StockUniverseSnapshot` | MarketStocks 证券池构建中间结果 |
+| `MarketStockOverviewItem` | `MarketStocksSnapshot.items` 内联对象 |
+| `ProviderProbeFieldComparison` | `ProviderProbeCheckResult.field_comparisons` 内联对象 |
+| `PriceLimitRuleSnapshot` | 价格涨跌幅规则 Handler 的响应对象，OpenAPI 采用内联响应结构 |
+
+这 6 个类型不能简单按“缺少同名 Schema”判为 API 漏字段；应继续按真实 Operation response 引用/内联结构验证。
+
+### 11.2 Go 有字段、OpenAPI 缺字段：15 项
+
+| Schema | 缺失字段 |
+|---|---|
+| `ProviderProbeCheckResult` | `left_adjustment_method`、`right_adjustment_method`、`left_adjustment_reference_date`、`right_adjustment_reference_date` |
+| `SectorRanking` | `provider_report_date` |
+| `SectorRankingSnapshot` | `excluded_non_a_share_count` |
+| `MarketBreadthSnapshot` | `excluded_non_a_share_count` |
+| `LimitPoolItem` | `seal_money`、`max_seal_money` |
+| `FundamentalSection` | `available_at` |
+| `IndexConstituent` | `effective_from`、`effective_to`、`available_at`、`system_observed_at` |
+| `SourceStatus` | `market_capital_flow_capable` |
+
+字段存在于 Go Model 不代表它们一定已被 Handler 返回；仍需沿真实 Handler 的结果对象确认。本次列表是同名 Model/Schema 差异清单，Data 实施时应按 Operation response 路径裁定。
+
+### 11.3 OpenAPI 有字段、Go 无字段：9 项
+
+| Schema | OpenAPI 多余字段 |
+|---|---|
+| `Quote` | `validation_total_count`、`validation_error_count`、`validation_warning_count`、`validation_info_count`、`validation_truncated`、`validation_issues` |
+| `StockBoard` | `change_percent_5d`、`provider_report_date` |
+| `PriceLimitEventEvidence` | `adjustment_basis` |
+
+关键 Handler 核对：
+- `Server.quote` 将 `svc.Quote` 返回的 `model.Quote` 直接写入 JSON；Quote Schema 中 6 个 validation 字段没有 Go Model 来源。
+- `Server.stockBoards` 将 Service 返回的 StockBoards 结果直接写入 JSON；`model.StockBoard` 不包含上述两个多余字段。
+- `Server.priceLimitRule` 将 `ResolvePriceLimitRuleFromTradingStatus` 返回的 `PriceLimitRuleSnapshot` 直接写入 JSON；其 `PriceLimitEventEvidence` Go 类型没有 `adjustment_basis`。
+
+因此不应为了迁就当前 OpenAPI 而向 Go Model 凭空增加字段。若业务确实要求这些数据，应先在真实 Handler DTO/领域来源中定义，再同步更新 Schema 和响应测试。
+
+### 11.4 required 不一致：15 项
+
+Go 非 `omitempty` 字段应始终序列化，OpenAPI 应列入 required；Go `omitempty` 字段在零值时可能省略，OpenAPI 不应强制 required。
+
+| Schema | 差异字段 | Go | OpenAPI |
+|---|---|---|---|
+| `StockAnnouncementSnapshot` | `source_version` | required | optional |
+| `DragonTigerSnapshot` | `source_version` | required | optional |
+| `MarketSentimentSnapshot` | `limit_up_count`、`limit_down_count`、`broken_board_count` | required（指针可输出 null） | optional |
+| `Quote` | `change`、`change_percent`、`amount` | required（指针可输出 null） | optional |
+| `DailyBar` | `amount`、`change_percent` | required（指针可输出 null） | optional |
+| `Bundle` | `warnings` | optional（omitempty） | required |
+| `MarketBreadthSnapshot` | `total_amount_cny` | required（指针可输出 null） | optional |
+| `HotRankingItem` | `source_version` | optional（omitempty） | required |
+| `HotRankingSnapshot` | `source_version` | optional（omitempty） | required |
+| `SourceStatus` | `historical_index_constituents_capable` | required | optional |
+
+合计 15 个字段。对于 required 指针字段，required 与 nullable 必须同时正确：字段必须存在，但值允许为 null；不能把 required 误解为非空。
+
+### 11.5 nullable 与 JSON 序列化语义
+
+按 Go 标准 `encoding/json` 和当前 JSON Tag：
+
+**A. OpenAPI 声明 nullable，但 Go 使用 omitempty：122 项**
+
+- 112 个 `*T + omitempty` 指针字段；
+- 9 个 `string + omitempty` 字段；
+- 1 个 `slice + omitempty` 字段（`ProviderProbeCheckResult.field_comparisons`）。
+
+这些字段的 nil/零值会被省略，而不是输出 JSON null。OpenAPI nullable 在此是过宽的响应契约。9 个标量字符串字段为：
+`DragonTigerItem.provider_amount_unit`、`DragonTigerSnapshot.provider_report_date`、`StockBasic.industry`、`StockBasic.board_code`、`LimitPoolSnapshot.provider_report_date`、`HotRankingItem.name`、`HotRankingItem.rank_trend`、`ChipDistribution.date`、`ChipDistribution.provider_date`。
+
+112 个指针字段不逐项复制在本文；自动化测试应以 Go JSON Tag 生成完整字段级报告，不能只修字符串字段。
+
+**B. Go Model 允许输出 null，但 OpenAPI 未声明 nullable：23 项**
+
+- 22 个没有 `omitempty` 的 slice/map 字段，若其运行时值为 nil，标准 JSON 编码会输出 null；如果 API 契约要求永远输出数组/对象，则 Handler/Service 必须保证初始化为非 nil，并由真实响应测试证明。
+- 1 个非 `omitempty` 指针字段：`LimitPoolItem.change_percent`，Go nil 时会输出 null，Schema 应允许 nullable。
+
+22 个复合字段为：
+- `StockAnnouncementSnapshot.items`
+- `DragonTigerSnapshot.items`
+- `MarketSentimentHistory.items`
+- `Bundle.daily_bars`、`Bundle.sources`
+- `StockBoardSnapshot.items`
+- `StockSearchSnapshot.items`
+- `SectorRankingSnapshot.items`
+- `IndexQuoteSnapshot.items`
+- `LimitPoolSnapshot.items`
+- `FundamentalSection.metrics`
+- `FundamentalsSnapshot.sections`
+- `ValuationSnapshot.requested_symbols`、`ValuationSnapshot.items`
+- `IndexCatalogSnapshot.items`
+- `IndexConstituentSnapshot.items`
+- `IndexDailyBarsSnapshot.items`
+- `HotRankingSnapshot.items`
+- `MarketCapitalFlowSnapshot.items`
+- `ProviderProbeRun.items`
+- `ProviderProbeHistory.items`
+- `TradingCalendarSnapshot.items`
+
+这些复合字段的最终处理不应机械地把所有数组改成 nullable：优先明确 API 约定为空集合时返回 `[]` / `{}`，在所有 Handler 输出边界保证非 nil，并增加真实 JSON 测试；只有确实允许 null 时才在 Schema 标记 nullable。
+
+### 11.6 AdjustmentBasis 枚举核对
+
+Go `model.AdjustmentBasis` 响应值为 `none`、`forward_adjusted`、`backward_adjusted`、`unknown`；OpenAPI `AdjustmentBasis` 与之相同。
+
+请求参数使用 `RequestAdjustmentBasis`，只允许前三项；`normalize.Adjustment` 对 `unknown` 返回错误。OpenAPI 查询参数和 ProviderProbeRequest 的请求数组均引用 `RequestAdjustmentBasis`。本项通过静态核对，无需改动。
+
+### 11.7 当前自动化测试覆盖不足
+
+当前 `internal/httpapi/openapi_contract_test.go`：
+- 解析 YAML 并检查 API Key 安全声明；
+- 检查部分路径存在、选定 Schema 字段存在；
+- 对 MarketSession、IndexConstituentSnapshot、ProviderProbeItem、SectorRanking 等做少量字符串断言。
+
+但没有：
+- 反射所有 Go JSON Tag 与 OpenAPI properties 的双向对照；
+- 对所有 Schema 自动校验 required/optional/nullable；
+- 按真实 Operation response 路径关联 Handler 返回类型；
+- 全量枚举、format、边界和嵌套对象自动校验。
+
+现有测试中的少量人工断言不能替代完整契约测试；测试文件名含 contract 也不代表已实现双向字段契约。
+
+### 11.8 更新后的实施与验收门禁
+
+1. 先按真实 Operation response 路径建立响应 DTO ↔ Schema 映射，明确 6 个无同名 Schema 类型的归属。
+2. 补齐 15 个缺失字段；删除 9 个没有实际输出来源的 Schema 字段，或由真实响应 DTO/Handler 实现后提供 JSON 测试。
+3. 修正 15 个 required 差异。
+4. 对 122 个 `omitempty` nullable 声明逐项校正；对 23 个可能输出 null 的字段，明确是统一保证空集合/对象，还是在 Schema 允许 null。
+5. 增加 Go 反射 + OpenAPI 解析的双向契约测试，并用真实 Handler JSON golden 覆盖包装 DTO、nil slice/map、nil pointer 和实际响应结构。
+6. 把测试加入 Data Module CI；以最终自动生成报告归零作为验收依据。
+
+**本节是当前 HEAD 的静态字段核对结果，不是 Data 分支已修复或 CI 已通过的声明。** 本次未在 Data 分支修改任何文件，也未执行 Go 测试；Data OpenAPI 契约仍为未冻结状态。
